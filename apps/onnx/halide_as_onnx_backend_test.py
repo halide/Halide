@@ -16,24 +16,21 @@ exclude_test_patterns = (
     r'(test_hardsigmoid'  # Does not support Hardsigmoid.
      '|test_hardmax'  # Does not support Hardmax.
      '|test_depthtospace.*'  # Does not support DepthToSpace.
-     '|test_.*rnn.*'  # Does not support RNN
-     '|test_.*gru.*'  # Does not support GRU
-     '|test_.*PReLU.*'  # prelu activations not supported yet
-     '|test_.*prelu.*'  # prelu activations not supported yet
      '|test_.*pool_with_argmax.*'  # argmax not yet supported
      '|test_.*pool.*same.*'  # same padding not yet supported
-     '|test_.*averagepool.*'  # AvgPool not fully supported
-     '|test_.*AvgPool.*'  # AvgPool not fully supported
      '|test_.*unpool.*'  # unpool not yet supported
      '|test_.*convtranspose.*'   # Not supported yet
      '|test_.*ConvTranspose.*'   # Not supported yet
      '|test_.*Conv.*_dilated.*'  # Not supported yet
      '|test_maxpool.*dilation.*'  # MaxPool doesn't support dilation yet
      '|test_.*mvn.*'  # MeanVarianceNormalization is not supported.
-     '|test_slice.*'  # opset 10 is not supported yet
      '|test_.*pool.*ceil.*'  # ceil mode is not supported yet
      '|test_.*like.*'  # Needs implementation
      '|test_.*instancenorm.*'  # not supported yet
+     '|test_reshape.*'
+     '|test_shrink.*'
+     '|test_tile.*'
+     '|test_dynamic_slice.*'  # not supported yet
      '|test_arg.*'  # not supported yet
      '|test_top.*'  # not supported yet
      '|test_resize.*'  # opset 10 is not supported yet
@@ -44,25 +41,28 @@ exclude_test_patterns = (
      '|test_cast_STRING_to_FLOAT.*'  # not supported yet
      '|test_.*scatter.*'  # not supported yet
      '|test_.*upsample.*'  # not supported yet
-     '|test_.*lrn.*'  # not supported yet
+     '|test_.*qlinear.*'  # skip quantized op test
+     '|test_.*quantize.*'  # skip quantized op test
+     '|test_.*matmulinteger.*'  # skip quantized op test
+     '|test_.*convinteger.*'  # skip quantized op test
+     '|test_mod_.*'  # not supported yet
+     '|test_cumsum_.*'  # not supported yet
+     '|test_bitshift_.*'  # not supported yet
+     '|test_nonmaxsuppression.*'  # not supported yet
+     '|test_reversesequence.*'  # not supported yet
+     '|test_roialign.*'  # not supported yet
+     '|test_round.*'  # not supported yet
      '|test_scan.*'  # Scan not supported yet
-     '|test_strnorm.*'  # Scan not supported yet
-     '|test_operator_pow.*'  # Nan not handled properly
-     '|test_.*Linear_no_bias.*'  # MatMul not supported yet
+     '|test_strnorm.*'  # not supported yet
      '|test_.*index.*'  # Indexing not supported
      '|test_.*chunk.*'  # chunk not supported
      '|test_operator_symbolic_override.*'  # InstanceNormalization not supported yet
      '|test_.*FLOAT16*'  # FLOAT16 not supported yet
-     '|test_.*alexnet.*'   # LRN not supported yet
-     '|test_vgg.*'  # results are not accurate enough
-     '|test_zfnet.*'      # LRN not supported yet
      '|test_densenet.*'   # Times out
-     '|test_shufflenet.*'  # Padding type not supported for pooling
-     '|test_squeezenet.*'   # Results are not accurate enough
-     '|test_inception_v1.*'   # LRN not supported yet
      '|test_inception_v2.*'  # Padding type not supported for pooling
      ')'
 )
+
 
 backend_test.exclude(exclude_test_patterns)
 

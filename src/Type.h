@@ -463,6 +463,9 @@ inline Type type_of() {
     return Type(halide_type_of<T>(), halide_handle_traits<T>::type_info());
 }
 
+/** Halide type to a C++ type */
+std::string type_to_c_type(Type type, bool include_space, bool c_plus_plus = true);
+
 }  // namespace Halide
 
 #endif

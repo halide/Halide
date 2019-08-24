@@ -130,7 +130,13 @@ Outputs compute_outputs(const Target &target,
         }
     }
     if (options.emit_schedule) {
-        output_files.schedule_name = base_path + get_extension(".schedule", options);
+        output_files.schedule_name = base_path + get_extension(".schedule.h", options);
+    }
+    if (options.emit_featurization) {
+        output_files.featurization_name = base_path + get_extension(".featurization", options);
+    }
+    if (options.emit_pytorch_wrapper) {
+        output_files.pytorch_wrapper_name = base_path + get_extension(".pytorch", options);
     }
     return output_files;
 }
@@ -809,7 +815,7 @@ int generate_filter_main_inner(int argc, char **argv, std::ostream &cerr) {
         "\n"
         " -e  A comma separated list of files to emit. Accepted values are:\n"
         "     [assembly, bitcode, cpp, h, html, o, static_library,\n"
-        "      stmt, cpp_stub, schedule, registration].\n"
+        "      stmt, cpp_stub, schedule, registration, featurization, pytorch_wrapper].\n"
         "     If omitted, default value is [static_library, h, registration].\n"
         "\n"
         " -x  A comma separated list of file extension pairs to substitute during\n"
@@ -982,11 +988,15 @@ int generate_filter_main_inner(int argc, char **argv, std::ostream &cerr) {
                 emit_options.emit_cpp_stub = true;
             } else if (opt == "schedule") {
                 emit_options.emit_schedule = true;
+            } else if (opt == "pytorch_wrapper") {
+                emit_options.emit_pytorch_wrapper = true;
+            } else if (opt == "featurization") {
+                emit_options.emit_featurization = true;
             } else if (opt == "registration") {
                 emit_options.emit_registration = true;
             } else if (!opt.empty()) {
                 cerr << "Unrecognized emit option: " << opt
-                     << " not one of [assembly, bitcode, cpp, h, html, o, static_library, stmt, cpp_stub, registration], ignoring.\n";
+                     << " not one of [assembly, bitcode, cpp, h, html, o, static_library, stmt, cpp_stub, registration, pytorch_wrapper], ignoring.\n";
             }
         }
     }
@@ -1487,11 +1497,11 @@ Pipeline GeneratorBase::get_pipeline() {
 
 Module GeneratorBase::build_module(const std::string &function_name,
                                    const LinkageType linkage_type) {
-    std::string auto_schedule_result;
+    AutoSchedulerResults auto_schedule_results;
     call_configure();
     Pipeline pipeline = build_pipeline();
     if (get_auto_schedule()) {
-        auto_schedule_result = pipeline.auto_schedule(get_target(), get_machine_params());
+        auto_schedule_results = pipeline.auto_schedule(get_target(), get_machine_params());
     }
 
     GeneratorParamInfo &pi = param_info();
@@ -1521,7 +1531,7 @@ Module GeneratorBase::build_module(const std::string &function_name,
         }
     }
 
-    result.set_auto_schedule(auto_schedule_result);
+    result.set_auto_scheduler_results(auto_schedule_results);
 
     return result;
 }
@@ -1837,11 +1847,11 @@ void GeneratorInputBase::set_inputs(const std::vector<StubInput> &inputs) {
     verify_internals();
 }
 
-void GeneratorInputBase::estimate_impl(Var var, Expr min, Expr extent) {
+void GeneratorInputBase::set_estimate_impl(Var var, Expr min, Expr extent) {
     internal_assert(exprs_.empty() && funcs_.size() > 0 && parameters_.size() == funcs_.size());
     for (size_t i = 0; i < funcs_.size(); ++i) {
         Func &f = funcs_[i];
-        f.estimate(var, min, extent);
+        f.set_estimate(var, min, extent);
         // Propagate the estimate into the Parameter as well, just in case
         // we end up compiling this for toplevel.
         std::vector<Var> args = f.args();
@@ -1856,6 +1866,21 @@ void GeneratorInputBase::estimate_impl(Var var, Expr min, Expr extent) {
         Parameter &p = parameters_[i];
         p.set_min_constraint_estimate(dim, min);
         p.set_extent_constraint_estimate(dim, extent);
+    }
+}
+
+void GeneratorInputBase::set_estimates_impl(const std::vector<std::pair<Expr, Expr>> &estimates) {
+    internal_assert(exprs_.empty() && funcs_.size() > 0 && parameters_.size() == funcs_.size());
+    for (size_t i = 0; i < funcs_.size(); ++i) {
+        Func &f = funcs_[i];
+        f.set_estimates(estimates);
+        // Propagate the estimate into the Parameter as well, just in case
+        // we end up compiling this for toplevel.
+        for (size_t dim = 0; dim < estimates.size(); ++dim) {
+            Parameter &p = parameters_[i];
+            p.set_min_constraint_estimate(dim, estimates[dim].first);
+            p.set_extent_constraint_estimate(dim, estimates[dim].second);
+        }
     }
 }
 

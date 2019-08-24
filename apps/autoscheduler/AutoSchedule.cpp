@@ -27,7 +27,9 @@
   "Choose-your-own-schedule". If set to 1, lets you navigate the search tree by hand in the terminal. Whee! This is for debugging the autoscheduler.
 
   HL_FEATURE_FILE -> output
-  Write out a training sample for the selected schedule into this file. Needs to be augmented with the runtime using augment_sample before it can be used to train.
+  *** DEPRECATED *** use the 'featurization' output from Generator instead
+  Write out a training featurization for the selected schedule into this file.
+  Needs to be converted to a sample file with the runtime using featurization_to_sample before it can be used to train.
 
   HL_MACHINE_PARAMS
   An architecture description string. Used by Halide master to configure the cost model. We only use the first term. Set it to the number of cores to target.
@@ -36,7 +38,8 @@
   Set to 1 to tell Halide not to freak out if we try to unroll a loop that doesn't have a constant extent. Should generally not be necessary, but sometimes the autoscheduler's model for what will and will not turn into a constant during lowering is inaccurate, because Halide isn't perfect at constant-folding.
 
   HL_SCHEDULE_FILE
-  Write out a human-and-machine readable block of scheduling source code for the selected schedule into this file.
+    *** DEPRECATED *** use the 'schedule' output from Generator instead
+    Write out a human-and-machine readable block of scheduling source code for the selected schedule into this file.
 
   HL_RANDOM_DROPOUT
   percent chance of accepting each state in the beam. Normalized by the number of decisions made, so 5 would be there's a 5 percent chance of never rejecting any states.
@@ -45,10 +48,8 @@
   Random seed used by the random dropout.
 
   HL_WEIGHTS_DIR
-  When training or schedule, read weights from this directory
-
-  HL_WEIGHTS_OUT_DIR
-  When training, output updated weights here
+  When training or schedule, read weights from this directory or file
+  (if path ends in `.weights` it is written as a single file, otherwise a directory of files)
 
   HL_NO_SUBTILING
   If set to 1, limits the search space to that of Mullapudi et al.
@@ -74,6 +75,7 @@
 #include "Halide.h"
 #include "ASLog.h"
 #include "CostModel.h"
+#include "DefaultCostModel.h"
 #include "Featurization.h"
 #include "FunctionDAG.h"
 #include "PerfectHashMap.h"
@@ -100,6 +102,41 @@ using std::vector;
 using std::map;
 using std::set;
 using std::pair;
+
+struct ProgressBar {
+    void set(double progress) {
+        if (!draw_progress_bar) return;
+        counter++;
+        const int bits = 11;
+        if (counter & ((1 << bits) - 1)) return;
+        const int pos = (int) (progress * 78);
+        aslog(0) << '[';
+        for (int j = 0; j < 78; j++) {
+            if (j < pos) {
+                aslog(0) << '.';
+            } else if (j - 1 < pos) {
+                aslog(0) << "/-\\|"[(counter >> bits) % 4];
+            } else {
+                aslog(0) << ' ';
+            }
+        }
+        aslog(0) << ']';
+        for (int j = 0; j < 80; j++) {
+            aslog(0) << '\b';
+        }
+    }
+
+    void clear() {
+        if (counter) {
+            for (int j = 0; j < 80; j++) aslog(0) << ' ';
+            for (int j = 0; j < 80; j++) aslog(0) << '\b';
+        }
+    }
+private:
+    uint32_t counter = 0;
+    const bool draw_progress_bar = isatty(2);
+};
+
 
 // Get the HL_RANDOM_DROPOUT environment variable. Purpose of this is described above.
 uint32_t get_dropout_threshold() {
@@ -2200,7 +2237,9 @@ struct State {
                 const LoopNest *l = consumer_site.innermost;
                 if (!l) l = consumer_site.compute;
                 if (!l) {
-                    dump();
+                    if (aslog::aslog_level() > 0) {
+                        dump();
+                    }
                     internal_error << e->producer->func.name() << " -> " << e->consumer->name << "\n";
                 }
                 if (loop) {
@@ -2230,11 +2269,10 @@ struct State {
         }
     }
 
-    void save_featurization(const FunctionDAG &dag, const MachineParams &params, const std::string &feature_file) {
+    void save_featurization(const FunctionDAG &dag, const MachineParams &params, std::ostream &out) {
         StageMap<ScheduleFeatures> features;
         compute_featurization(dag, params, &features);
 
-        std::ofstream binfile(feature_file, std::ios::binary | std::ios_base::trunc);
         for (const auto &n : dag.nodes) {
             if (n.is_input) continue;
             for (size_t stage_idx = n.stages.size(); stage_idx > 0; stage_idx--) {
@@ -2253,11 +2291,9 @@ struct State {
                     buf[i + num_schedule_features] = s.features[i];
                 }
 
-                binfile.write((const char *)buf, sizeof(buf));
+                out.write((const char *)buf, sizeof(buf));
             }
         }
-        binfile.close();
-        internal_assert(!binfile.fail()) << "Failed to write " << feature_file;
     }
 
     bool calculate_cost(const FunctionDAG &dag, const MachineParams &params, CostModel *cost_model, bool verbose = false) {
@@ -2667,7 +2703,7 @@ struct State {
         int i = (int)(dag.nodes.size() - 1);
         for (const auto &n : dag.nodes) {
             if (!n.is_input) {
-                src << "Func " << n.func.name() << " = get_pipeline().get_func(" << i << ");\n";
+                src << "Func " << n.func.name() << " = pipeline.get_func(" << i << ");\n";
             }
             i--;
         }
@@ -2909,6 +2945,7 @@ IntrusivePtr<State> optimal_schedule_pass(FunctionDAG &dag,
                                           int beam_size,
                                           int pass_idx,
                                           int num_passes,
+                                          ProgressBar &tick,
                                           std::unordered_set<uint64_t> &permitted_hashes) {
 
     if (cost_model) {
@@ -2923,31 +2960,6 @@ IntrusivePtr<State> optimal_schedule_pass(FunctionDAG &dag,
         initial->root = new LoopNest;
         q.emplace(std::move(initial));
     }
-
-    // A progress bar.
-    uint32_t counter = 0;
-    bool draw_progress_bar = isatty(2);
-    auto tick = [&](double progress) {
-        if (!draw_progress_bar) return;
-        counter++;
-        const int bits = 11;
-        if (counter & ((1 << bits) - 1)) return;
-        progress *= 78;
-        aslog(0) << '[';
-        for (int j = 0; j < 78; j++) {
-            if (j < progress) {
-                aslog(0) << '.';
-            } else if (j - 1 < progress) {
-                aslog(0) << "/-\\|"[(counter >> bits) % 4];
-            } else {
-                aslog(0) << ' ';
-            }
-        }
-        aslog(0) << ']';
-        for (int j = 0; j < 80; j++) {
-            aslog(0) << '\b';
-        }
-    };
 
     int expanded = 0;
 
@@ -2965,7 +2977,7 @@ IntrusivePtr<State> optimal_schedule_pass(FunctionDAG &dag,
         size_t max_progress = dag.nodes.size() * beam_size * 2;
 
         // Update the progress bar
-        tick(double(progress) / max_progress);
+        tick.set(double(progress) / max_progress);
         s->penalized = false;
 
         // Add the state to the list of states to evaluate
@@ -2992,6 +3004,7 @@ IntrusivePtr<State> optimal_schedule_pass(FunctionDAG &dag,
                                              beam_size * 2,
                                              pass_idx,
                                              num_passes,
+                                             tick,
                                              permitted_hashes);
             } else {
                 internal_error << "Ran out of legal states with beam size " << beam_size << "\n";
@@ -3149,10 +3162,19 @@ IntrusivePtr<State> optimal_schedule(FunctionDAG &dag,
     }
 
     for (int i = 0; i < num_passes; i++) {
-        auto pass = optimal_schedule_pass(dag, outputs, params, cost_model, rng, beam_size, i, num_passes, permitted_hashes);
+        ProgressBar tick;
 
-        aslog(0) << "\nPass " << i << " result:\n";
-        pass->dump();
+        auto pass = optimal_schedule_pass(dag, outputs, params, cost_model,
+            rng, beam_size, i, num_passes, tick, permitted_hashes);
+
+        tick.clear();
+
+        if (aslog::aslog_level() == 0) {
+            aslog(0) << "Pass " << i << " of " << num_passes << ", cost: " << pass->cost << "\n";
+        } else {
+            aslog(0) << "Pass " << i << " result: ";
+            pass->dump();
+        }
 
         if (i == 0 || pass->cost < best->cost) {
             // Track which pass produced the lowest-cost state. It's
@@ -3167,9 +3189,12 @@ IntrusivePtr<State> optimal_schedule(FunctionDAG &dag,
 }
 
 // The main entrypoint to generate a schedule for a pipeline.
-std::string generate_schedule(const std::vector<Function> &outputs,
+void generate_schedule(const std::vector<Function> &outputs,
                               const Target &target,
-                              const MachineParams &params) {
+                              const MachineParams &params,
+                              AutoSchedulerResults *auto_scheduler_results) {
+    aslog(0) << "generate_schedule for target=" << target.to_string() << "\n";
+
     // Start a timer
     HALIDE_TIC;
 
@@ -3182,7 +3207,7 @@ std::string generate_schedule(const std::vector<Function> &outputs,
     if (!seed_str.empty()) {
         seed = atoi(seed_str.c_str());
     }
-    aslog(0) << "Dropout seed = " << seed << '\n';
+    aslog(1) << "Dropout seed = " << seed << '\n';
     std::mt19937 rng((uint32_t) seed);
 
     // Get the beam size
@@ -3193,24 +3218,22 @@ std::string generate_schedule(const std::vector<Function> &outputs,
         beam_size = atoi(beam_size_str.c_str());
     }
 
-    string weights_in_dir = get_env_variable("HL_WEIGHTS_DIR");
-    string weights_out_dir = get_env_variable("HL_WEIGHTS_OUT_DIR");
-    if (weights_out_dir.empty()) {
-        weights_out_dir = weights_in_dir;
-    }
+    string weights_in_path = get_env_variable("HL_WEIGHTS_DIR");
+    string weights_out_path;  // deliberately empty
 
     string randomize_weights_str = get_env_variable("HL_RANDOMIZE_WEIGHTS");
     bool randomize_weights = randomize_weights_str == "1";
 
     // Analyse the Halide algorithm and construct our abstract representation of it
     FunctionDAG dag(outputs, params, target);
-    dag.dump();
+    if (aslog::aslog_level() > 0) {
+        dag.dump();
+    }
 
     // Construct a cost model to use to evaluate states. Currently we
     // just have the one, but it's an abstract interface, so others
     // can be slotted in for experimentation.
-    std::unique_ptr<CostModel> cost_model;
-    cost_model = CostModel::make_default(weights_in_dir, weights_out_dir, randomize_weights);
+    std::unique_ptr<CostModel> cost_model = make_default_cost_model(weights_in_path, weights_out_path, randomize_weights);
 
     IntrusivePtr<State> optimal;
 
@@ -3219,23 +3242,26 @@ std::string generate_schedule(const std::vector<Function> &outputs,
 
     HALIDE_TOC;
 
-    aslog(0) << "Cost evaluated this many times: " << State::cost_calculations << '\n';
+    aslog(1) << "Cost evaluated this many times: " << State::cost_calculations << '\n';
 
     // Dump the schedule found
-    aslog(0) << "** Optimal schedule:\n";
+    aslog(1) << "** Optimal schedule:\n";
 
     // Just to get the debugging prints to fire
-    optimal->calculate_cost(dag, params, cost_model.get(), true);
+    optimal->calculate_cost(dag, params, cost_model.get(), aslog::aslog_level() > 0);
 
     // Apply the schedules to the pipeline
     optimal->apply_schedule(dag, params);
 
     // Print out the schedule
-    optimal->dump();
+    if (aslog::aslog_level() > 0) {
+        optimal->dump();
+    }
 
     string schedule_file = get_env_variable("HL_SCHEDULE_FILE");
     if (!schedule_file.empty()) {
-        aslog(0) << "Writing schedule to " << schedule_file << "...\n";
+        user_warning << "HL_SCHEDULE_FILE is deprecated; use the schedule output from Generator instead\n";
+        aslog(1) << "Writing schedule to " << schedule_file << "...\n";
         std::ofstream f(schedule_file);
         f << "// --- BEGIN machine-generated schedule\n"
           << optimal->schedule_source
@@ -3248,11 +3274,23 @@ std::string generate_schedule(const std::vector<Function> &outputs,
     // training data (once we've benchmarked it).
     string feature_file = get_env_variable("HL_FEATURE_FILE");
     if (!feature_file.empty()) {
-        optimal->save_featurization(dag, params, feature_file);
+        user_warning << "HL_FEATURE_FILE is deprecated; use the featurization output from Generator instead\n";
+        std::ofstream binfile(feature_file, std::ios::binary | std::ios_base::trunc);
+        optimal->save_featurization(dag, params, binfile);
+        binfile.close();
+        internal_assert(!binfile.fail()) << "Failed to write " << feature_file;
     }
 
-    // Return the schedule as a valid Halide source.
-    return optimal->schedule_source;
+    if (auto_scheduler_results) {
+        auto_scheduler_results->scheduler_name = "apps/autoscheduler/AutoSchedule";  // TODO: find a better name (https://github.com/halide/Halide/issues/4057)
+        auto_scheduler_results->schedule_source = optimal->schedule_source;
+        {
+            std::ostringstream out;
+            optimal->save_featurization(dag, params, out);
+            auto_scheduler_results->featurization.resize(out.str().size());
+            memcpy(auto_scheduler_results->featurization.data(), out.str().data(), out.str().size());
+        }
+    }
 }
 
 // Halide uses a plugin architecture for registering custom
@@ -3260,16 +3298,16 @@ std::string generate_schedule(const std::vector<Function> &outputs,
 // constructor.
 struct RegisterAutoscheduler {
     RegisterAutoscheduler() {
-        aslog(0) << "Registering autoscheduler...\n";
+        aslog(1) << "Registering autoscheduler...\n";
         Pipeline::set_custom_auto_scheduler(*this);
     }
 
-    string operator()(Pipeline p, const Target &target, const MachineParams &params) {
+    void operator()(Pipeline p, const Target &target, const MachineParams &params, AutoSchedulerResults *results) {
         std::vector<Function> outputs;
         for (Func f : p.outputs()) {
             outputs.push_back(f.function());
         }
-        return Autoscheduler::generate_schedule(outputs, target, params);
+        Autoscheduler::generate_schedule(outputs, target, params, results);
     }
 } register_auto_scheduler;
 

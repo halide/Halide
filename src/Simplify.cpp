@@ -302,20 +302,7 @@ bool can_prove(Expr e, const Scope<Interval> &bounds) {
     internal_assert(e.type().is_bool())
         << "Argument to can_prove is not a boolean Expr: " << e << "\n";
 
-    // Remove likelies
-    struct RemoveLikelies : public IRMutator {
-        using IRMutator::visit;
-        Expr visit(const Call *op) override {
-            if (op->is_intrinsic(Call::likely) ||
-                op->is_intrinsic(Call::likely_if_innermost)) {
-                return mutate(op->args[0]);
-            } else {
-                return IRMutator::visit(op);
-            }
-        }
-    };
-    e = RemoveLikelies().mutate(e);
-
+    e = remove_likelies(e);
     e = common_subexpression_elimination(e);
 
     Expr orig = e;

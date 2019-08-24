@@ -2,6 +2,7 @@
 #include "IRPrinter.h"
 #include "CodeGen_X86.h"
 #include "CodeGen_C.h"
+#include "CodeGen_PyTorch.h"
 #include "CPlusPlusMangle.h"
 #include "Func.h"
 #include "Bounds.h"
@@ -24,6 +25,7 @@ using namespace Halide::Internal;
 int main(int argc, const char **argv) {
     IRPrinter::test();
     CodeGen_C::test();
+    CodeGen_PyTorch::test();
     ir_equality_test();
     bounds_test();
     expr_match_test();

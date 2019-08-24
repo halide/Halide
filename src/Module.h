@@ -78,6 +78,8 @@ namespace Internal {
 struct ModuleContents;
 }
 
+struct AutoSchedulerResults;
+
 /** A halide module. This represents IR containing lowered function
  * definitions and buffers. */
 class Module {
@@ -93,9 +95,9 @@ public:
      * for output operations. */
     const std::string &name() const;
 
-    /** If this Module had an auto-generated schedule, this is the C++ source
-     * for that schedule. */
-    const std::string &auto_schedule() const;
+    /** If this Module had an auto-generated schedule, return a read-only pointer
+     * to the AutoSchedulerResults. If not, return nullptr. */
+    const AutoSchedulerResults *get_auto_scheduler_results() const;
 
     /** Return whether this module uses strict floating-point anywhere. */
     bool any_strict_float() const;
@@ -141,9 +143,9 @@ public:
     /** Retrieve the metadata name map. */
     std::map<std::string, std::string> get_metadata_name_map() const;
 
-    /** Set the auto_schedule text for the Module. It is an error to call this
+    /** Set the AutoSchedulerResults for the Module. It is an error to call this
      * multiple times for a given Module. */
-    void set_auto_schedule(const std::string &auto_schedule);
+    void set_auto_scheduler_results(const AutoSchedulerResults &results);
 
     /** Set whether this module uses strict floating-point directives anywhere. */
     void set_any_strict_float(bool any_strict_float);

@@ -56,11 +56,10 @@ void test_case_1() {
     g(x, y) = f1(x, y) + f2(x, y);
 
     // Provide estimates on the pipeline output
-    g.estimate(x, 0, 1000).estimate(y, 0, 1000);
+    g.set_estimates({{0, 1000}, {0, 1000}});
 
     // Provide estimates on the ImageParam
-    input.dim(0).set_bounds_estimate(0, 1000);
-    input.dim(1).set_bounds_estimate(0, 1000);
+    input.set_estimates({{0, 1000}, {0, 1000}});
 
     // Auto-schedule the pipeline
     Target target = get_jit_target_from_environment();
@@ -89,9 +88,8 @@ void test_case_2() {
 
     g(x, y) = f2(x, y);
 
-    g.estimate(x, 0, 10).estimate(y, 0, 10);
-    input.dim(0).set_bounds_estimate(0, 10);
-    input.dim(1).set_bounds_estimate(0, 10);
+    g.set_estimates({{0, 10}, {0, 10}});
+    input.set_estimates({{0, 10}, {0, 10}});
 
     // Auto-schedule the pipeline
     Target target = get_jit_target_from_environment();
@@ -122,9 +120,8 @@ void test_case_3() {
 
     g(x, y) = f2(x, y);
 
-    g.estimate(x, 0, 10).estimate(y, 0, 10);
-    input.dim(0).set_bounds_estimate(0, 10);
-    input.dim(1).set_bounds_estimate(0, 10);
+    g.set_estimates({{0, 10}, {0, 10}});
+    input.set_estimates({{0, 10}, {0, 10}});
 
     // Auto-schedule the pipeline
     Target target = get_jit_target_from_environment();

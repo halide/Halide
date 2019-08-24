@@ -55,11 +55,7 @@ WASM_SHELL ?= d8
 PREFIX ?= /usr/local
 LLVM_CONFIG ?= llvm-config
 LLVM_COMPONENTS= $(shell $(LLVM_CONFIG) --components)
-# Since LLVM5, the LLVM version always uses a major.zero.patch format
-# (ie there is no 'minor' version). We ignore the patch version and
-# just use the major version. For historical reasons, we continue to multiply
-# by 10, to avoid changing all the ifdefs in our code.
-LLVM_VERSION = $(shell $(LLVM_CONFIG) --version | sed 's/\([0-9][0-9]*\)\.0.*/\10/')
+LLVM_VERSION = $(shell $(LLVM_CONFIG) --version | sed 's/\([0-9][0-9]*\)\.\([0-9]\).*/\1.\2/')
 
 LLVM_FULL_VERSION = $(shell $(LLVM_CONFIG) --version)
 LLVM_BINDIR = $(shell $(LLVM_CONFIG) --bindir | sed -e 's/\\/\//g' -e 's/\([a-zA-Z]\):/\/\1/g')
@@ -103,7 +99,9 @@ endif
 
 COMMON_LD_FLAGS += $(SANITIZER_FLAGS)
 
-LLVM_CXX_FLAGS += -DLLVM_VERSION=$(LLVM_VERSION)
+LLVM_VERSION_TIMES_10 = $(shell $(LLVM_CONFIG) --version | sed 's/\([0-9][0-9]*\)\.\([0-9]\).*/\1\2/')
+
+LLVM_CXX_FLAGS += -DLLVM_VERSION=$(LLVM_VERSION_TIMES_10)
 
 # All WITH_* flags are either empty or not-empty. They do not behave
 # like true/false values in most languages.  To turn one off, either
@@ -228,6 +226,11 @@ ifeq (1,$(shell expr $(GCC_MAJOR_VERSION) \> 5 \| $(GCC_MAJOR_VERSION) = 5 \& $(
 CXX_WARNING_FLAGS += -Wsuggest-override
 endif
 endif
+
+ifneq (,$(findstring clang,$(CXX_VERSION)))
+LLVM_CXX_FLAGS_LIBCPP := $(findstring -stdlib=libc++, $(LLVM_CXX_FLAGS))
+endif
+
 CXX_FLAGS = $(CXX_WARNING_FLAGS) $(RTTI_CXX_FLAGS) -Woverloaded-virtual $(FPIC) $(OPTIMIZE) -fno-omit-frame-pointer -DCOMPILING_HALIDE
 
 CXX_FLAGS += $(LLVM_CXX_FLAGS)
@@ -296,7 +299,7 @@ LLVM_SHARED_LIBS = -Wl,-rpath=$(LLVM_LIBDIR) -L $(LLVM_LIBDIR) -lLLVM
 
 LLVM_LIBS_FOR_SHARED_LIBHALIDE=$(if $(WITH_LLVM_INSIDE_SHARED_LIBHALIDE),$(LLVM_STATIC_LIBS),$(LLVM_SHARED_LIBS))
 
-TUTORIAL_CXX_FLAGS ?= -std=c++11 -g -fno-omit-frame-pointer $(RTTI_CXX_FLAGS) -I $(ROOT_DIR)/tools $(SANITIZER_FLAGS)
+TUTORIAL_CXX_FLAGS ?= -std=c++11 -g -fno-omit-frame-pointer $(RTTI_CXX_FLAGS) -I $(ROOT_DIR)/tools $(SANITIZER_FLAGS) $(LLVM_CXX_FLAGS_LIBCPP)
 # The tutorials contain example code with warnings that we don't want
 # to be flagged as errors, so the test flags are the tutorial flags
 # plus our warning flags.
@@ -476,6 +479,7 @@ SOURCE_FILES = \
   CodeGen_Posix.cpp \
   CodeGen_PowerPC.cpp \
   CodeGen_PTX_Dev.cpp \
+  CodeGen_PyTorch.cpp \
   CodeGen_RISCV.cpp \
   CodeGen_WebAssembly.cpp \
   CodeGen_X86.cpp \
@@ -644,6 +648,7 @@ HEADER_FILES = \
   CodeGen_Posix.h \
   CodeGen_PowerPC.h \
   CodeGen_PTX_Dev.h \
+  CodeGen_PyTorch.h \
   CodeGen_RISCV.h \
   CodeGen_WebAssembly.h \
   CodeGen_X86.h \
@@ -776,6 +781,7 @@ RUNTIME_CPP_COMPONENTS = \
   aarch64_cpu_features \
   alignment_128 \
   alignment_32 \
+  allocation_cache \
   alignment_64 \
   android_clock \
   android_host_cpu_count \
@@ -896,7 +902,9 @@ RUNTIME_EXPORTED_INCLUDES = $(INCLUDE_DIR)/HalideRuntime.h \
                             $(INCLUDE_DIR)/HalideRuntimeOpenGLCompute.h \
                             $(INCLUDE_DIR)/HalideRuntimeMetal.h	\
                             $(INCLUDE_DIR)/HalideRuntimeQurt.h \
-                            $(INCLUDE_DIR)/HalideBuffer.h
+                            $(INCLUDE_DIR)/HalideBuffer.h \
+                            $(INCLUDE_DIR)/HalidePyTorchHelpers.h \
+                            $(INCLUDE_DIR)/HalidePyTorchCudaHelpers.h
 
 INITIAL_MODULES = $(RUNTIME_CPP_COMPONENTS:%=$(BUILD_DIR)/initmod.%_32.o) \
                   $(RUNTIME_CPP_COMPONENTS:%=$(BUILD_DIR)/initmod.%_64.o) \
@@ -991,6 +999,16 @@ $(INCLUDE_DIR)/HalideRuntime%: $(SRC_DIR)/runtime/HalideRuntime%
 	cp $< $(INCLUDE_DIR)/
 
 $(INCLUDE_DIR)/HalideBuffer.h: $(SRC_DIR)/runtime/HalideBuffer.h
+	echo Copying $<
+	@mkdir -p $(@D)
+	cp $< $(INCLUDE_DIR)/
+
+$(INCLUDE_DIR)/HalidePyTorchHelpers.h: $(SRC_DIR)/runtime/HalidePyTorchHelpers.h
+	echo Copying $<
+	@mkdir -p $(@D)
+	cp $< $(INCLUDE_DIR)/
+
+$(INCLUDE_DIR)/HalidePyTorchCudaHelpers.h: $(SRC_DIR)/runtime/HalidePyTorchCudaHelpers.h
 	echo Copying $<
 	@mkdir -p $(@D)
 	cp $< $(INCLUDE_DIR)/
@@ -1935,6 +1953,12 @@ TEST_APPS=\
 	stencil_chain \
 	wavelet
 
+# TODO: apps/autoscheduler doesn't yet build properly for MinGW
+# (see https://github.com/halide/Halide/issues/4069)
+ifneq ($(OS), Windows_NT)
+	TEST_APPS += autoscheduler
+endif
+
 .PHONY: test_apps
 test_apps: distrib
 	@for APP in $(TEST_APPS); do \
@@ -1954,22 +1978,22 @@ BENCHMARK_APPS=\
 	nl_means \
 	stencil_chain
 
+$(BENCHMARK_APPS): distrib
+	$(eval SUFFIX=$(if $(findstring wasm-32-wasmrt,$(HL_TARGET)),_wasm,))
+	@echo Building $@ for ${HL_TARGET}...
+	@$(MAKE) -C $(ROOT_DIR)/apps/$@ \
+		$(CURDIR)/$(BIN_DIR)/apps/$@/bin/$(HL_TARGET)/$@.rungen${SUFFIX} \
+		HALIDE_DISTRIB_PATH=$(CURDIR)/$(DISTRIB_DIR) \
+		BIN_DIR=$(CURDIR)/$(BIN_DIR)/apps/$@/bin \
+		HL_TARGET=$(HL_TARGET) \
+		> /dev/null \
+		|| exit 1
+
 # TODO: we deliberately leave out the `|| exit 1` (for now) when *running*
 # the benchmarks, as some will currently crash at runtime when running in
 # wasm + wasm_simd128 due to a known bug in V8 v7.5
-.PHONY: benchmark_apps
-benchmark_apps: distrib
-	$(eval SUFFIX=$(if $(findstring wasm-32-wasmrt,$(HL_TARGET)),_wasm,))
-	@for APP in $(BENCHMARK_APPS); do \
-		echo Building $${APP} for ${HL_TARGET}... ; \
-		$(MAKE) -C $(ROOT_DIR)/apps/$${APP} \
-		    $(CURDIR)/$(BIN_DIR)/apps/$${APP}/bin/$(HL_TARGET)/$${APP}.rungen${SUFFIX} \
-			HALIDE_DISTRIB_PATH=$(CURDIR)/$(DISTRIB_DIR) \
-			BIN_DIR=$(CURDIR)/$(BIN_DIR)/apps/$${APP}/bin \
-			HL_TARGET=$(HL_TARGET) \
-			> /dev/null \
-			|| exit 1 ; \
-	done
+.PHONY: benchmark_apps $(BENCHMARK_APPS)
+benchmark_apps: $(BENCHMARK_APPS)
 	@for APP in $(BENCHMARK_APPS); do \
 		echo ;\
 		echo Benchmarking $${APP} for ${HL_TARGET}... ; \
@@ -2062,7 +2086,7 @@ $(BUILD_DIR)/clang_ok:
 	@exit 1
 endif
 
-ifneq (,$(findstring $(LLVM_VERSION), 70 80 90 100))
+ifneq (,$(findstring $(LLVM_VERSION_TIMES_10), 70 71 80 90 100))
 LLVM_OK=yes
 endif
 
@@ -2180,6 +2204,7 @@ $(DISTRIB_DIR)/halide.tgz: $(LIB_DIR)/libHalide.a \
 	cp $(INCLUDE_DIR)/Halide.h $(DISTRIB_DIR)/include
 	cp $(INCLUDE_DIR)/HalideBuffer.h $(DISTRIB_DIR)/include
 	cp $(INCLUDE_DIR)/HalideRuntim*.h $(DISTRIB_DIR)/include
+	cp $(INCLUDE_DIR)/HalidePyTorch*.h $(DISTRIB_DIR)/include
 	cp $(ROOT_DIR)/tutorial/images/*.png $(DISTRIB_DIR)/tutorial/images
 	cp $(ROOT_DIR)/tutorial/figures/*.gif $(DISTRIB_DIR)/tutorial/figures
 	cp $(ROOT_DIR)/tutorial/figures/*.jpg $(DISTRIB_DIR)/tutorial/figures
@@ -2212,6 +2237,7 @@ $(DISTRIB_DIR)/halide.tgz: $(LIB_DIR)/libHalide.a \
 		halide/halide.*
 	rm -rf halide
 	mv $(BUILD_DIR)/halide.tgz $(DISTRIB_DIR)/halide.tgz
+
 
 .PHONY: distrib
 distrib: $(DISTRIB_DIR)/halide.tgz

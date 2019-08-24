@@ -58,9 +58,7 @@ double run_test(bool auto_schedule) {
 
     if (auto_schedule) {
         // Provide estimates on the pipeline output
-        unsharp.estimate(x, 0, in.width())
-            .estimate(y, 0, in.height())
-            .estimate(c, 0, in.channels());
+        unsharp.set_estimates({{0, in.width()}, {0, in.height()}, {0, in.channels()}});
         // Auto-schedule the pipeline
         p.auto_schedule(target);
     } else if (target.has_gpu_feature()) {

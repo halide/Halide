@@ -12,6 +12,7 @@ set(RUNTIME_CPP
   aarch64_cpu_features
   alignment_128
   alignment_32
+  allocation_cache
   alignment_64
   android_clock
   android_host_cpu_count
@@ -263,6 +264,8 @@ set(RUNTIME_HEADER_FILES
   HalideRuntimeD3D12Compute.h
   HalideRuntimeQurt.h
   HalideBuffer.h
+  HalidePyTorchHelpers.h
+  HalidePyTorchCudaHelpers.h
 )
 
 foreach (i ${RUNTIME_HEADER_FILES})
@@ -312,6 +315,7 @@ set(HEADER_FILES
   CodeGen_Posix.h
   CodeGen_PowerPC.h
   CodeGen_PTX_Dev.h
+  CodeGen_PyTorch.h
   CodeGen_RISCV.h
   CodeGen_WebAssembly.h
   CodeGen_X86.h
@@ -489,6 +493,7 @@ add_library(Halide ${HALIDE_LIBRARY_TYPE}
   CodeGen_Posix.cpp
   CodeGen_PowerPC.cpp
   CodeGen_PTX_Dev.cpp
+  CodeGen_PyTorch.cpp
   CodeGen_RISCV.cpp
   CodeGen_WebAssembly.cpp
   CodeGen_X86.cpp
