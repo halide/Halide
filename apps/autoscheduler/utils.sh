@@ -67,3 +67,12 @@ function train_cost_model() {
     find ${samples_dir} | grep sample$ | HL_NUM_THREADS=${num_cores} HL_WEIGHTS_DIR=${weights_dir} HL_BEST_SCHEDULE_FILE=${best_schedule_file} PREDICTIONS_FILE=${predictions_file} ${autosched_bin}/train_cost_model ${num_epochs} 0.0001
 }
 
+function find_equal_predicted_pairs() {
+    local -r limit=$1
+    sort ${2} -k2 -n | awk -F', ' -f find_equal_predicted_pairs.awk | sort -k6 -n -r | head -n ${limit}
+}
+
+function find_similar_predicted_pairs() {
+    local -r limit=$1
+    sort ${2} -k2 -n | awk -F', ' -f find_similar_predicted_pairs.awk | sort -k9 -n -r | head -n ${limit}
+}
