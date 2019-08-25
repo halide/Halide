@@ -88,22 +88,7 @@ add_custom_command(TARGET demo_apps_autoscheduler POST_BUILD
 
 # =======================================================
 
-# included_schedule_file, included_schedule_file_none
-halide_generator(included_schedule_file_none.generator SRCS
-                 included_schedule_file_generator.cpp)
-target_compile_definitions(included_schedule_file_none.generator PUBLIC
-                           GENERATING_SCHEDULE)
-halide_library_from_generator(included_schedule_file_none
-                              FUNCTION_NAME
-                              included_schedule_file
-                              GENERATOR
-                              included_schedule_file_none.generator
-                              GENERATOR_ARGS
-                              auto_schedule=true
-                              -p
-                              $<TARGET_FILE:auto_schedule>)
-add_dependencies(included_schedule_file_none auto_schedule)
-
+# included_schedule_file
 halide_generator(included_schedule_file.generator SRCS
                  included_schedule_file_generator.cpp)
 halide_library_from_generator(included_schedule_file
