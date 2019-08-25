@@ -893,7 +893,10 @@ struct FunctionDAG {
                 }
 
                 // We'll take any existing reordering, but won't handle existing splits
-                internal_assert(sched.splits().empty());
+                user_assert(sched.splits().empty())
+                    << "The Func \"" << consumer.name() << "\" has scheduling directive(s) "
+                    << "applied to it; you must remove these, or conditionalize them "
+                    << "using `if (!auto_schedule)`, to use the autoscheduler on this pipeline.";
                 stage.loop_nest_all_common_cases = true;
                 for (size_t i = 0; i < sched.dims().size(); i++) {
                     const auto &d = sched.dims()[i];
@@ -1476,7 +1479,7 @@ struct FunctionDAG {
                 Definition def = node.func.definition();
                 if (stage_idx > 0) def = node.func.updates()[stage_idx - 1];
 
-                memset(&stage.features, 0, sizeof(stage.features));
+                stage.features = PipelineFeatures();
 
                 for (auto v : def.values()) {
                     featurizer.visit_store_args(node.func.name(), v.type(), def.args());

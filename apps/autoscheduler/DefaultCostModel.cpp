@@ -153,7 +153,7 @@ class DefaultCostModel : public CostModel {
             }
         }
 
-        train_cost_model(num_stages,
+        int result = train_cost_model(num_stages,
                          cursor,
                          num_cores,
                          pipeline_feat_queue,
@@ -169,6 +169,8 @@ class DefaultCostModel : public CostModel {
                          conv1_filter_update, conv1_bias_update,
                          dst,
                          loss);
+        (void) result;
+        assert(result == 0);
 
         bool any_nans = false;
         for (int i = 0; i < cursor; i++) {
@@ -219,7 +221,7 @@ class DefaultCostModel : public CostModel {
 
         auto loss = Buffer<float>::make_scalar();
 
-        cost_model(num_stages,
+        int result = cost_model(num_stages,
                    cursor,
                    num_cores,
                    pipeline_feat_queue,
@@ -229,6 +231,8 @@ class DefaultCostModel : public CostModel {
                    weights.conv1_filter, weights.conv1_bias,
                    0.0f, 0, 0, nullptr,
                    dst, loss);
+        (void) result;
+        assert(result == 0);
 
         for (int i = 0; i < cursor; i++) {
             assert(cost_ptrs(i));
@@ -297,18 +301,21 @@ class DefaultCostModel : public CostModel {
     }
 
     void save_weights() override {
-        if (weights_out_path.empty()) return;
+        if (weights_out_path.empty()) {
+            std::cerr << "Unable to save weights: no output path specified\n";
+            abort();
+        }
 
         if (ends_with(weights_out_path, ".weights")) {
             if (!weights.save_to_file(weights_out_path)) {
                 std::cerr << "Unable to save weights to file: " << weights_out_path << "\n";
-                assert(0);
+                abort();
             }
         } else {
             std::cerr << "Saving weights to a directory is deprecated; please convert to a .weights file\n";
             if (!weights.save_to_dir(weights_out_path)) {
                 std::cerr << "Unable to save weights to file: " << weights_out_path << "\n";
-                assert(0);
+                abort();
             }
         }
     }
