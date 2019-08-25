@@ -69,6 +69,7 @@ add_dependencies(demo auto_schedule)
 
 _halide_genfiles_dir(demo GENFILES_DIR)
 set(DEMO_REGISTRATION_FILE ${GENFILES_DIR}/demo.registration.cpp)
+
 add_executable(demo_apps_autoscheduler ${HALIDE_TOOLS_DIR}/RunGenMain.cpp
                ${DEMO_REGISTRATION_FILE})
 target_include_directories(
@@ -78,13 +79,81 @@ halide_use_image_io(demo_apps_autoscheduler)
 target_link_libraries(demo_apps_autoscheduler PRIVATE demo)
 add_dependencies(demo_apps_autoscheduler demo auto_schedule)
 
+add_custom_command(TARGET demo_apps_autoscheduler POST_BUILD
+                   COMMAND demo_apps_autoscheduler
+                           --benchmarks=all
+                           --benchmark_min_time=1
+                           --estimate_all
+                   WORKING_DIRECTORY ${CMAKE_RUNTIME_OUTPUT_DIRECTORY})
+
 # =======================================================
 
-# test_perfect_hash_map, test_apps_autoscheduler
-add_executable(test_perfect_hash_map test_perfect_hash_map.cpp)
+# included_schedule_file, included_schedule_file_none
+halide_generator(included_schedule_file_none.generator SRCS
+                 included_schedule_file_generator.cpp)
+target_compile_definitions(included_schedule_file_none.generator PUBLIC
+                           GENERATING_SCHEDULE)
+halide_library_from_generator(included_schedule_file_none
+                              FUNCTION_NAME
+                              included_schedule_file
+                              GENERATOR
+                              included_schedule_file_none.generator
+                              GENERATOR_ARGS
+                              auto_schedule=true
+                              -p
+                              $<TARGET_FILE:auto_schedule>)
+add_dependencies(included_schedule_file_none auto_schedule)
+
+halide_generator(included_schedule_file.generator SRCS
+                 included_schedule_file_generator.cpp)
+halide_library_from_generator(included_schedule_file
+                              FUNCTION_NAME
+                              included_schedule_file
+                              GENERATOR
+                              included_schedule_file.generator
+                              GENERATOR_ARGS
+                              auto_schedule=true
+                              -p
+                              $<TARGET_FILE:auto_schedule>)
+add_dependencies(included_schedule_file auto_schedule)
+
+_halide_genfiles_dir(included_schedule_file GENFILES_DIR)
+set(INCLUDED_SCHEDULE_FILE_REGISTRATION_FILE
+    ${GENFILES_DIR}/included_schedule_file.registration.cpp)
+
+add_executable(demo_included_schedule_file ${HALIDE_TOOLS_DIR}/RunGenMain.cpp
+               ${INCLUDED_SCHEDULE_FILE_REGISTRATION_FILE})
+target_include_directories(
+  demo_included_schedule_file
+  PRIVATE "${HALIDE_INCLUDE_DIR}" "${HALIDE_TOOLS_DIR}")
+halide_use_image_io(demo_included_schedule_file)
+target_link_libraries(demo_included_schedule_file
+                      PRIVATE included_schedule_file)
+add_dependencies(demo_included_schedule_file included_schedule_file
+                 auto_schedule)
+
+add_custom_command(TARGET demo_included_schedule_file POST_BUILD
+                   COMMAND demo_included_schedule_file
+                           --benchmarks=all
+                           --benchmark_min_time=1
+                           --estimate_all
+                   WORKING_DIRECTORY ${CMAKE_RUNTIME_OUTPUT_DIRECTORY})
+
+# =======================================================
+
+add_executable(featurization_to_sample featurization_to_sample.cpp)
+
+add_executable(get_host_target get_host_target.cpp)
+target_include_directories(get_host_target PRIVATE "${HALIDE_INCLUDE_DIR}")
+target_link_libraries(get_host_target PRIVATE Halide)
 
 add_executable(test_apps_autoscheduler test.cpp)
 target_include_directories(
   test_apps_autoscheduler
   PRIVATE "${HALIDE_INCLUDE_DIR}" "${HALIDE_TOOLS_DIR}")
 target_link_libraries(test_apps_autoscheduler PRIVATE Halide)
+
+add_executable(test_perfect_hash_map test_perfect_hash_map.cpp)
+
+add_executable(weightsdir_to_weightsfile weightsdir_to_weightsfile.cpp
+               Weights.cpp)
