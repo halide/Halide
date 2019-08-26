@@ -12,25 +12,29 @@ CUDA_OPS =
 else
 HAS_CUDA = 1
 CUDA_OPS = $(BIN)/$(HL_TARGET)/add_cuda_float32.a \
-	   $(BIN)/$(HL_TARGET)/add_cuda_float64.a \
+	       $(BIN)/$(HL_TARGET)/add_cuda_float64.a \
            $(BIN)/$(HL_TARGET)/add_grad_cuda_float32.a \
-	   $(BIN)/$(HL_TARGET)/add_grad_cuda_float64.a 
+	       $(BIN)/$(HL_TARGET)/add_grad_cuda_float64.a
 endif
+
+PYTHON ?= python3
 
 all: test
 
 # Run the PyTorch tests to verify the module is compiled correctly
 # .wrapper is a dummy file whose timestamps allow Make to track the dependency
-# on the Python side of the build 
+# on the Python side of the build
 test: .wrapper
-	@PYTHONPATH=lib:${PYTHONPATH} python test.py
+	@PYTHONPATH=lib:${PYTHONPATH} $(PYTHON) test.py
 
 # Build the python PyTorch extension that links against the Halide operators
 .wrapper: $(OPS) $(CUDA_OPS) setup.py
 	@mkdir -p lib
-	@HAS_CUDA=$(HAS_CUDA) HALIDE_DISTRIB_PATH=$(HALIDE_DISTRIB_PATH) \
-		BIN=$(BIN)/$(HL_TARGET) PYTHONPATH=lib:${PYTHONPATH} \
-		python setup.py build -b $(BIN)/python install --install-lib lib
+	@HAS_CUDA=$(HAS_CUDA) \
+		HALIDE_DISTRIB_PATH=$(HALIDE_DISTRIB_PATH) \
+		BIN=$(BIN)/$(HL_TARGET) \
+		PYTHONPATH=lib:${PYTHONPATH} \
+		$(PYTHON) setup.py build -b $(BIN)/python install --install-lib lib
 	@touch .wrapper
 
 # Generate the CPU version of the op ------------------------------------------
@@ -108,7 +112,7 @@ $(BIN)/%/add_grad_cuda_float64.a: $(GENERATOR_BIN)/add.generator
 # Build the Halide generator for the operator
 $(GENERATOR_BIN)/add.generator: src/add.cpp $(GENERATOR_DEPS)
 	@echo Building Generator
-	@mkdir -p $(@D) 
+	@mkdir -p $(@D)
 	@$(CXX) $(CXXFLAGS) $(filter-out %.h,$^) \
 		-o $@ $(LDFLAGS) $(HALIDE_SYSTEM_LIBS)
 
