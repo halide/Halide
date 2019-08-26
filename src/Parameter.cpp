@@ -38,7 +38,7 @@ struct ParameterContents {
 };
 
 template<>
-RefCount &ref_count<Halide::Internal::ParameterContents>(const ParameterContents *p) {return p->ref_count;}
+RefCount &ref_count<Halide::Internal::ParameterContents>(const ParameterContents *p) noexcept {return p->ref_count;}
 
 template<>
 void destroy<Halide::Internal::ParameterContents>(const ParameterContents *p) {delete p;}
@@ -97,7 +97,12 @@ Expr Parameter::scalar_expr() const {
     const Type t = type();
     if (t.is_float()) {
         switch (t.bits()) {
-        case 16: return Expr(scalar<float16_t>());
+        case 16:
+            if (t.is_bfloat()) {
+                return Expr(scalar<bfloat16_t>());
+            } else {
+                return Expr(scalar<float16_t>());
+            }
         case 32: return Expr(scalar<float>());
         case 64: return Expr(scalar<double>());
         }

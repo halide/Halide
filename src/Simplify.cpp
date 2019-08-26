@@ -351,8 +351,7 @@ bool can_prove(Expr e, const Scope<Interval> &bounds) {
     internal_assert(e.type().is_bool())
         << "Argument to can_prove is not a boolean Expr: " << e << "\n";
 
-    e = remove_likely_tags(e);
-
+    e = remove_likelies(e);
     e = common_subexpression_elimination(e);
 
     Expr orig = e;

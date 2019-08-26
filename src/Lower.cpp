@@ -86,6 +86,7 @@ Module lower(const vector<Function> &output_funcs,
              const vector<Argument> &args,
              const LinkageType linkage_type,
              const vector<Stmt> &requirements,
+             bool trace_pipeline,
              const vector<IRMutator *> &custom_passes) {
     std::vector<std::string> namespaces;
     std::string simple_pipeline_name = extract_namespaces(pipeline_name, namespaces);
@@ -142,7 +143,7 @@ Module lower(const vector<Function> &output_funcs,
     }
 
     debug(1) << "Injecting tracing...\n";
-    s = inject_tracing(s, pipeline_name, env, outputs, t);
+    s = inject_tracing(s, pipeline_name, trace_pipeline, env, outputs, t);
     debug(2) << "Lowering after injecting tracing:\n" << s << '\n';
 
     debug(1) << "Adding checks for parameters\n";
@@ -467,7 +468,7 @@ Module lower(const vector<Function> &output_funcs,
 
     // If we're in debug mode, add code that prints the args.
     if (t.has_feature(Target::Debug)) {
-        debug_arguments(&main_func);
+        debug_arguments(&main_func, t);
     }
 
     result_module.append(main_func);
@@ -486,6 +487,7 @@ Stmt lower_main_stmt(const std::vector<Function> &output_funcs,
                      const std::string &pipeline_name,
                      const Target &t,
                      const std::vector<Stmt> &requirements,
+                     bool trace_pipeline,
                      const std::vector<IRMutator *> &custom_passes) {
     // We really ought to start applying for appellation d'origine contrôlée
     // status on types representing arguments in the Halide compiler.
@@ -497,7 +499,7 @@ Stmt lower_main_stmt(const std::vector<Function> &output_funcs,
         }
     }
 
-    Module module = lower(output_funcs, pipeline_name, t, args, LinkageType::External, requirements, custom_passes);
+    Module module = lower(output_funcs, pipeline_name, t, args, LinkageType::External, requirements, trace_pipeline, custom_passes);
 
     return module.functions().front().body;
 }

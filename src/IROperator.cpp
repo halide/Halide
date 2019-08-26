@@ -6,6 +6,7 @@
 #include "CSE.h"
 #include "Debug.h"
 #include "IREquality.h"
+#include "IRMutator.h"
 #include "IROperator.h"
 #include "IRPrinter.h"
 #include "Var.h"
@@ -46,6 +47,7 @@ Expr evaluate_polynomial(const Expr &x, float *coeff, int n) {
         return odd_terms * std::move(x) + even_terms;
     }
 }
+
 }  // namespace
 
 namespace Internal {
@@ -818,7 +820,31 @@ Expr strided_ramp_base(Expr e, int stride) {
     return Expr();
 }
 
-} // namespace Internal
+namespace {
+
+struct RemoveLikelies : public IRMutator {
+    using IRMutator::visit;
+    Expr visit(const Call *op) override {
+        if (op->is_intrinsic(Call::likely) ||
+            op->is_intrinsic(Call::likely_if_innermost)) {
+            return mutate(op->args[0]);
+        } else {
+            return IRMutator::visit(op);
+        }
+    }
+};
+
+}  // namespace
+
+Expr remove_likelies(Expr e) {
+    return RemoveLikelies().mutate(e);
+}
+
+Stmt remove_likelies(Stmt s) {
+    return RemoveLikelies().mutate(s);
+}
+
+}  // namespace Internal
 
 Expr fast_log(Expr x) {
     user_assert(x.type() == Float(32)) << "fast_log only works for Float(32)";
@@ -842,6 +868,53 @@ Expr fast_log(Expr x) {
     result = result + cast<float>(exponent) * logf(2);
     result = common_subexpression_elimination(result);
     return result;
+}
+
+// A vectorizable sine and cosine implementation. Based on syrah fast vector math
+// https://github.com/boulos/syrah/blob/master/src/include/syrah/FixedVectorMath.h#L55
+Expr fast_sin_cos(Expr x_full, bool is_sin) {
+    const float two_over_pi = 0.636619746685028076171875f;
+    const float pi_over_two = 1.57079637050628662109375f;
+    Expr scaled = x_full * two_over_pi;
+    Expr k_real = floor(scaled);
+    Expr k = cast<int>(k_real);
+    Expr k_mod4 = k % 4;
+    Expr sin_usecos = is_sin ? ((k_mod4 == 1) || (k_mod4 == 3)) : ((k_mod4 == 0) || (k_mod4 == 2));
+    Expr flip_sign = is_sin ? (k_mod4 > 1) : ((k_mod4 == 1) || (k_mod4 == 2));
+
+    // Reduce the angle modulo pi/2.
+    Expr x = x_full - k_real * pi_over_two;
+
+    const float sin_c2 = -0.16666667163372039794921875f;
+    const float sin_c4 = 8.333347737789154052734375e-3;
+    const float sin_c6 = -1.9842604524455964565277099609375e-4;
+    const float sin_c8 = 2.760012648650445044040679931640625e-6;
+    const float sin_c10 = -2.50293279435709337121807038784027099609375e-8;
+
+    const float cos_c2 = -0.5f;
+    const float cos_c4 = 4.166664183139801025390625e-2;
+    const float cos_c6 = -1.388833043165504932403564453125e-3;
+    const float cos_c8 = 2.47562347794882953166961669921875e-5;
+    const float cos_c10 = -2.59630184018533327616751194000244140625e-7;
+
+    Expr outside = select(sin_usecos, 1, x);
+    Expr c2 = select(sin_usecos, cos_c2, sin_c2);
+    Expr c4 = select(sin_usecos, cos_c4, sin_c4);
+    Expr c6 = select(sin_usecos, cos_c6, sin_c6);
+    Expr c8 = select(sin_usecos, cos_c8, sin_c8);
+    Expr c10 = select(sin_usecos, cos_c10, sin_c10);
+
+    Expr x2 = x * x;
+    Expr tri_func = outside * (x2 * (x2 * (x2 * (x2 * (x2 * c10 + c8) + c6) + c4) + c2) + 1);
+    return select(flip_sign, -tri_func, tri_func);
+}
+
+Expr fast_sin(Expr x_full) {
+    return fast_sin_cos(x_full, true);
+}
+
+Expr fast_cos(Expr x_full) {
+    return fast_sin_cos(x_full, false);
 }
 
 Expr fast_exp(Expr x_full) {

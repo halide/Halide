@@ -32,8 +32,7 @@ int main(int argc, char **argv) {
     h(x, y) += g(r.x, r.y) + 3;
 
     // Provide estimates on the pipeline output
-    h.estimate(x, 0, 50);
-    h.estimate(y, 0, 50);
+    h.set_estimates({{0, 50}, {0, 50}});
 
     // Auto-schedule the pipeline
     Target target = get_jit_target_from_environment();

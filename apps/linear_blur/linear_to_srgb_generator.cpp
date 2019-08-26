@@ -21,15 +21,15 @@ struct LinearTosRGB : public Halide::Generator<LinearTosRGB> {
             const int W = 1536, H = 2560, C = 4;
             // Wart: Input<Func> are defined with Vars we don't know.
             // Might be x,y but might be _0,_1. Use the args() to work around.
-            linear.estimate(linear.args()[0], 0, W)
-                  .estimate(linear.args()[1], 0, H);
+            linear.set_estimate(linear.args()[0], 0, W)
+                  .set_estimate(linear.args()[1], 0, H);
             for (size_t i = 2; i < linear.args().size(); ++i) {
-                linear.estimate(linear.args()[i], 0, C);
+                linear.set_estimate(linear.args()[i], 0, C);
             }
-            srgb.estimate(x, 0, W)
-                .estimate(y, 0, H);
+            srgb.set_estimate(x, 0, W)
+                .set_estimate(y, 0, H);
             for (size_t i = 2; i < srgb.args().size(); ++i) {
-                srgb.estimate(srgb.args()[i], 0, C);
+                srgb.set_estimate(srgb.args()[i], 0, C);
             }
         } else {
             Var yi("yi");

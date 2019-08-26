@@ -12,7 +12,7 @@ $(GENERATOR_BIN)/halide_blur_glsl.generator: halide_blur_glsl_generator.cpp $(GE
 
 $(BIN)/%/halide_blur_glsl.a: $(GENERATOR_BIN)/halide_blur_glsl.generator
 	@mkdir -p $(@D)
-	$^ -g halide_blur_glsl -o $(@D) target=$*-opengl-debug
+	$^ -g halide_blur_glsl -e $(GENERATOR_OUTPUTS) -o $(@D) target=$*-opengl-debug
 
 $(GENERATOR_BIN)/halide_ycc_glsl.generator: halide_ycc_glsl_generator.cpp $(GENERATOR_DEPS)
 	@mkdir -p $(@D)
@@ -20,7 +20,7 @@ $(GENERATOR_BIN)/halide_ycc_glsl.generator: halide_ycc_glsl_generator.cpp $(GENE
 
 $(BIN)/%/halide_ycc_glsl.a: $(GENERATOR_BIN)/halide_ycc_glsl.generator
 	@mkdir -p $(@D)
-	$^ -g halide_ycc_glsl -o $(@D) target=$*-opengl-debug
+	$^ -g halide_ycc_glsl -e $(GENERATOR_OUTPUTS) -o $(@D) target=$*-opengl-debug
 
 $(BIN)/%/opengl_test: opengl_test.cpp $(BIN)/%/halide_blur_glsl.a $(BIN)/%/halide_ycc_glsl.a
 	@mkdir -p $(@D)

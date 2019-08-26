@@ -58,7 +58,7 @@ protected:
         std::vector<Expr> new_args = op->args;
 
         // Check to see if this call is a load
-        if (op->name == Call::glsl_texture_load) {
+        if (op->is_intrinsic(Call::glsl_texture_load)) {
             // Check if the texture coordinate arguments are linear wrt the GPU
             // loop variables
             internal_assert(loop_vars.size() > 0) << "No GPU loop variables found at texture load\n";
@@ -70,7 +70,7 @@ protected:
                     new_args[i] = tag_linear_expression(new_args[i]);
                 }
             }
-        } else if (op->name == Call::glsl_texture_store) {
+        } else if (op->is_intrinsic(Call::glsl_texture_store)) {
             // Check if the value expression is linear wrt the loop variables
             internal_assert(loop_vars.size() > 0) << "No GPU loop variables found at texture store\n";
 
@@ -390,7 +390,7 @@ public:
     using IRVisitor::visit;
 
     void visit(const Call *op) override {
-        if (op->name == Call::glsl_varying) {
+        if (op->is_intrinsic(Call::glsl_varying)) {
             std::string name = op->args[0].as<StringImm>()->value;
             varyings[name] = op->args[1];
         }
@@ -406,7 +406,7 @@ public:
     using IRMutator::visit;
 
     Expr visit(const Call *op) override {
-        if (op->name == Call::glsl_varying) {
+        if (op->is_intrinsic(Call::glsl_varying)) {
             // Replace the call expression with its wrapped argument expression
             return op->args[1];
         } else {
@@ -429,7 +429,7 @@ public:
     using IRMutator::visit;
 
     Expr visit(const Call *op) override {
-        if (op->name == Call::glsl_varying) {
+        if (op->is_intrinsic(Call::glsl_varying)) {
             // Replace the intrinsic tag wrapper with a variable the variable
             // name ends with the tag ".varying"
             std::string name = op->args[0].as<StringImm>()->value;
@@ -935,7 +935,7 @@ public:
 
         // Transform glsl_varying intrinsics into store operations to output the
         // vertex coordinate values.
-        if (op->name == Call::glsl_varying) {
+        if (op->is_intrinsic(Call::glsl_varying)) {
 
             // Construct an expression for the offset of the coordinate value in
             // terms of the current integer loop variables and the varying

@@ -26,9 +26,7 @@ int main(int argc, char **argv) {
                 + f(x+2, y, (y)%10, c);
 
     // Provide estimates on the pipeline output
-    g.estimate(x, 0, input.width() - 2)
-        .estimate(y, 0, input.height() - 2)
-        .estimate(c, 0, 3);
+    g.set_estimates({{0, input.width() - 2}, {0, input.height() - 2}, {0, 3}});
 
     // Auto-schedule the pipeline
     Target target = get_jit_target_from_environment();

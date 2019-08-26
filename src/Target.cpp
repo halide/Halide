@@ -330,6 +330,7 @@ const std::map<std::string, Target::Feature> feature_name_map = {
     {"cl_half", Target::CLHalf},
     {"opengl", Target::OpenGL},
     {"openglcompute", Target::OpenGLCompute},
+    {"egl", Target::EGL},
     {"user_context", Target::UserContext},
     {"matlab", Target::Matlab},
     {"profile", Target::Profile},
@@ -354,6 +355,7 @@ const std::map<std::string, Target::Feature> feature_name_map = {
     {"trace_loads", Target::TraceLoads},
     {"trace_stores", Target::TraceStores},
     {"trace_realizations", Target::TraceRealizations},
+    {"trace_pipeline", Target::TracePipeline},
     {"d3d12compute", Target::D3D12Compute},
     {"strict_float", Target::StrictFloat},
     {"legacy_buffer_wrappers", Target::LegacyBufferWrappers},
@@ -362,10 +364,12 @@ const std::map<std::string, Target::Feature> feature_name_map = {
     {"check_unsafe_promises", Target::CheckUnsafePromises},
     {"hexagon_dma", Target::HexagonDma},
     {"embed_bitcode", Target::EmbedBitcode},
-    {"disable_llvm_loop_vectorize", Target::DisableLLVMLoopVectorize},
-    {"disable_llvm_loop_unroll", Target::DisableLLVMLoopUnroll},
+    {"disable_llvm_loop_opt", Target::DisableLLVMLoopOpt},
+    {"enable_llvm_loop_opt", Target::EnableLLVMLoopOpt},
     {"wasm_simd128", Target::WasmSimd128},
     {"wasm_signext", Target::WasmSignExt},
+    {"sve", Target::SVE},
+    {"sve2", Target::SVE2},
     // NOTE: When adding features to this map, be sure to update
     // PyEnums.cpp and halide.cmake as well.
 };
@@ -573,6 +577,24 @@ bool Target::validate_target_string(const std::string &s) {
     return merge_string(t, s);
 }
 
+std::string Target::feature_to_name(Target::Feature feature) {
+    for (const auto &feature_entry : feature_name_map) {
+        if (feature == feature_entry.second) {
+            return feature_entry.first;
+        }
+    }
+    internal_assert(false);
+    return "";
+}
+
+Target::Feature Target::feature_from_name(const std::string &name) {
+    Target::Feature feature;
+    if (lookup_feature(name, feature)) {
+        return feature;
+    }
+    return Target::FeatureEnd;
+}
+
 std::string Target::to_string() const {
     string result;
     for (const auto &arch_entry : arch_name_map) {
@@ -622,7 +644,10 @@ bool Target::supported() const {
 #if !defined(WITH_HEXAGON)
     bad |= arch == Target::Hexagon;
 #endif
-#if !defined(WITH_WEBASSEMBLY)
+#if !defined(WITH_WEBASSEMBLY) || LLVM_VERSION < 90
+    // LLVM8 supports wasm, but there are fixes and improvements
+    // in trunk that may not be in 8 (or that we haven't tested with),
+    // so, for now, declare that wasm with LLVM < 9.0 is unsupported.
     bad |= arch == Target::WebAssembly;
 #endif
 #if !defined(WITH_RISCV)
@@ -642,12 +667,6 @@ bool Target::supported() const {
 #endif
 #if !defined(WITH_D3D12)
     bad |= has_feature(Target::D3D12Compute);
-#endif
-#if defined(WITH_WEBASSEMBLY) && LLVM_VERSION < 90
-    // LLVM8 supports wasm, but there are fixes and improvements
-    // in trunk that may not be in 8 (or that we haven't tested with),
-    // so, for now, declare that wasm with LLVM < 9.0 is unsupported.
-    bad = true;
 #endif
     return !bad;
 }

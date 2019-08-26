@@ -14,13 +14,11 @@ void define_image_param(py::module &m) {
         .def("stride", &Dimension::stride)
         .def("extent", &Dimension::extent)
         .def("max", &Dimension::max)
-        .def("min_estimate", &Dimension::min_estimate)
-        .def("extent_estimate", &Dimension::extent_estimate)
         .def("set_min", &Dimension::set_min, py::arg("min"))
         .def("set_extent", &Dimension::set_extent, py::arg("extent"))
         .def("set_stride", &Dimension::set_stride, py::arg("stride"))
         .def("set_bounds", &Dimension::set_bounds, py::arg("min"), py::arg("extent"))
-        .def("set_bounds_estimate", &Dimension::set_bounds_estimate, py::arg("min"), py::arg("extent"))
+        .def("set_estimate", &Dimension::set_estimate, py::arg("min"), py::arg("extent"))
         .def("dim", (Dimension (Dimension::*)(int)) &Dimension::dim, py::arg("dimension"), py::keep_alive<0, 1>())
     ;
 
@@ -32,6 +30,7 @@ void define_image_param(py::module &m) {
         .def("defined", &OutputImageParam::defined)
         .def("dim", (Dimension (OutputImageParam::*)(int)) &OutputImageParam::dim, py::arg("dimension"), py::keep_alive<0, 1>())
         .def("host_alignment", &OutputImageParam::host_alignment)
+        .def("set_estimates", &OutputImageParam::set_estimates, py::arg("estimates"))
         .def("set_host_alignment", &OutputImageParam::set_host_alignment)
         .def("dimensions", &OutputImageParam::dimensions)
         .def("left", &OutputImageParam::left)

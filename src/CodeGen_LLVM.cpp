@@ -17,6 +17,7 @@
 #include "CodeGen_X86.h"
 #include "Debug.h"
 #include "Deinterleave.h"
+#include "EmulateFloat16Math.h"
 #include "ExprUsesVar.h"
 #include "IROperator.h"
 #include "IRPrinter.h"
@@ -533,13 +534,13 @@ llvm::FunctionType *CodeGen_LLVM::signature_to_type(const ExternSignature &signa
     internal_assert(void_t != nullptr && buffer_t_type != nullptr);
     llvm::Type *ret_type = signature.is_void_return()
         ? void_t
-        : llvm_type_of(signature.ret_type());
+        : llvm_type_of(upgrade_type_for_argument_passing(signature.ret_type()));
     std::vector<llvm::Type *> llvm_arg_types;
     for (const Type &t : signature.arg_types()) {
         if (t == type_of<struct halide_buffer_t *>()) {
             llvm_arg_types.push_back(buffer_t_type->getPointerTo());
         } else {
-            llvm_arg_types.push_back(llvm_type_of(t));
+            llvm_arg_types.push_back(llvm_type_of(upgrade_type_for_argument_passing(t)));
         }
     }
 
@@ -680,7 +681,7 @@ void CodeGen_LLVM::begin_func(LinkageType linkage, const std::string& name,
         if (args[i].is_buffer()) {
             arg_types[i] = buffer_t_type->getPointerTo();
         } else {
-            arg_types[i] = llvm_type_of(args[i].type);
+            arg_types[i] = llvm_type_of(upgrade_type_for_argument_passing(args[i].type));
         }
     }
     FunctionType *func_t = FunctionType::get(i32_t, arg_types, false);
@@ -729,7 +730,13 @@ void CodeGen_LLVM::begin_func(LinkageType linkage, const std::string& name,
                 external_buffer.insert(args[i].name);
                 sym_push(args[i].name + ".buffer", &arg);
             } else {
-                sym_push(args[i].name, &arg);
+                Type passed_type = upgrade_type_for_argument_passing(args[i].type);
+                if (args[i].type != passed_type) {
+                    llvm::Value *a = builder->CreateBitCast(&arg, llvm_type_of(args[i].type));
+                    sym_push(args[i].name, a);
+                } else {
+                    sym_push(args[i].name, &arg);
+                }
             }
 
             i++;
@@ -1181,7 +1188,7 @@ llvm::Function *CodeGen_LLVM::embed_metadata_getter(const std::string &metadata_
     return metadata_getter;
 }
 
-llvm::Type *CodeGen_LLVM::llvm_type_of(Type t) {
+llvm::Type *CodeGen_LLVM::llvm_type_of(const Type &t) const {
     return Internal::llvm_type_of(context, t);
 }
 
@@ -1191,6 +1198,114 @@ void CodeGen_LLVM::optimize_module() {
     if (debug::debug_level() >= 3) {
         module->print(dbgs(), nullptr, false, true);
     }
+
+    std::unique_ptr<TargetMachine> tm = make_target_machine(*module);
+
+    // At present, we default to *enabling* LLVM loop optimization,
+    // unless DisableLLVMLoopOpt is set; we're going to flip this to defaulting
+    // to *not* enabling these optimizations (and removing the DisableLLVMLoopOpt feature).
+    // See https://github.com/halide/Halide/issues/4113 for more info.
+    // (Note that setting EnableLLVMLoopOpt always enables loop opt, regardless
+    // of the setting of DisableLLVMLoopOpt.)
+    const bool do_loop_opt = !get_target().has_feature(Target::DisableLLVMLoopOpt) ||
+                              get_target().has_feature(Target::EnableLLVMLoopOpt);
+
+// Temporarily disabled, see https://github.com/halide/Halide/issues/3957
+// #if LLVM_VERSION >= 90
+#if 0
+    PipelineTuningOptions pto;
+    pto.LoopInterleaving = do_loop_opt;
+    pto.LoopVectorization = do_loop_opt;
+    pto.LoopUnrolling = do_loop_opt;
+    // Clear ScEv info for all loops. Certain Halide applications spend a very
+    // long time compiling in forgetLoop, and prefer to forget everything
+    // and rebuild SCEV (aka "Scalar Evolution") from scratch.
+    // Sample difference in compile time reduction at the time of this change was
+    // 21.04 -> 14.78 using current ToT release build. (See also https://reviews.llvm.org/rL358304)
+    pto.ForgetAllSCEVInLoopUnroll = true;
+
+    // Note: pto exists only for LLVM_VERSION >= 90
+    llvm::PassBuilder pb(tm.get(), pto);
+
+    bool debug_pass_manager = false;
+    // These analysis managers have to be declared in this order.
+    llvm::LoopAnalysisManager lam(debug_pass_manager);
+    llvm::FunctionAnalysisManager fam(debug_pass_manager);
+    llvm::CGSCCAnalysisManager cgam(debug_pass_manager);
+    llvm::ModuleAnalysisManager mam(debug_pass_manager);
+
+    llvm::AAManager aa = pb.buildDefaultAAPipeline();
+    fam.registerPass([&] { return std::move(aa); });
+
+    // Register all the basic analyses with the managers.
+    pb.registerModuleAnalyses(mam);
+    pb.registerCGSCCAnalyses(cgam);
+    pb.registerFunctionAnalyses(fam);
+    pb.registerLoopAnalyses(lam);
+    pb.crossRegisterProxies(lam, fam, cgam, mam);
+    ModulePassManager mpm(debug_pass_manager);
+
+    PassBuilder::OptimizationLevel level = PassBuilder::OptimizationLevel::O3;
+
+    if (get_target().has_feature(Target::ASAN)) {
+        pb.registerPipelineStartEPCallback([&](ModulePassManager &mpm) {
+            mpm.addPass(
+                RequireAnalysisPass<ASanGlobalsMetadataAnalysis, llvm::Module>());
+        });
+        bool recover = true;
+        bool use_after_scope = true;
+        pb.registerOptimizerLastEPCallback(
+            [recover, use_after_scope](FunctionPassManager &fpm,
+                                     PassBuilder::OptimizationLevel level) {
+                fpm.addPass(AddressSanitizerPass(
+                    /*CompileKernel=*/false, recover, use_after_scope));
+            });
+        bool module_use_after_scope = false;
+        bool use_odr_indicator = true;
+        pb.registerPipelineStartEPCallback(
+            [recover, module_use_after_scope,
+             use_odr_indicator](ModulePassManager &mpm) {
+                mpm.addPass(ModuleAddressSanitizerPass(
+                    /*CompileKernel=*/false, recover, module_use_after_scope,
+                    use_odr_indicator));
+            });
+    }
+
+    if (get_target().has_feature(Target::TSAN)) {
+        pb.registerOptimizerLastEPCallback(
+            [](FunctionPassManager &fpm, PassBuilder::OptimizationLevel level) {
+                fpm.addPass(ThreadSanitizerPass());
+            });
+    }
+
+    for (llvm::Module::iterator i = module->begin(); i != module->end(); i++) {
+        if (get_target().has_feature(Target::ASAN)) {
+            i->addFnAttr(Attribute::SanitizeAddress);
+        }
+        if (get_target().has_feature(Target::TSAN)) {
+            // Do not annotate any of Halide's low-level synchronization code as it has
+            // tsan interface calls to mark its behavior and is much faster if
+            // it is not analyzed instruction by instruction.
+            if (!(i->getName().startswith("_ZN6Halide7Runtime8Internal15Synchronization") ||
+                  // TODO: this is a benign data race that re-initializes the detected features;
+                  // we should really fix it properly inside the implementation, rather than disabling
+                  // it here as a band-aid.
+                  i->getName().startswith("halide_default_can_use_target_features") ||
+                  i->getName().startswith("halide_mutex_") ||
+                  i->getName().startswith("halide_cond_"))) {
+                i->addFnAttr(Attribute::SanitizeThread);
+            }
+        }
+    }
+
+    mpm = pb.buildPerModuleDefaultPipeline(level, debug_pass_manager);
+    mpm.run(*module, mam);
+
+    if (llvm::verifyModule(*module, &errs()))
+      report_fatal_error("Transformation resulted in an invalid module\n");
+
+#else
+    // Keep the legacy pass manager for LLVM < 90
 
     // We override PassManager::add so that we have an opportunity to
     // blacklist problematic LLVM passes.
@@ -1214,15 +1329,14 @@ void CodeGen_LLVM::optimize_module() {
     MyFunctionPassManager function_pass_manager(module.get());
     MyModulePassManager module_pass_manager;
 
-    std::unique_ptr<TargetMachine> TM = make_target_machine(*module);
-    module_pass_manager.add(createTargetTransformInfoWrapperPass(TM ? TM->getTargetIRAnalysis() : TargetIRAnalysis()));
-    function_pass_manager.add(createTargetTransformInfoWrapperPass(TM ? TM->getTargetIRAnalysis() : TargetIRAnalysis()));
+    module_pass_manager.add(createTargetTransformInfoWrapperPass(tm ? tm->getTargetIRAnalysis() : TargetIRAnalysis()));
+    function_pass_manager.add(createTargetTransformInfoWrapperPass(tm ? tm->getTargetIRAnalysis() : TargetIRAnalysis()));
 
     PassManagerBuilder b;
     b.OptLevel = 3;
     b.Inliner = createFunctionInliningPass(b.OptLevel, 0, false);
-    b.LoopVectorize = !get_target().has_feature(Target::DisableLLVMLoopVectorize);
-    b.DisableUnrollLoops = get_target().has_feature(Target::DisableLLVMLoopUnroll);
+    b.LoopVectorize = do_loop_opt;
+    b.DisableUnrollLoops = !do_loop_opt;
     b.SLPVectorize = true;  // Note: SLP vectorization has no analogue in the Halide scheduling model
 #if LLVM_VERSION >= 90
     // Clear ScEv info for all loops. Certain Halide applications spend a very
@@ -1233,8 +1347,8 @@ void CodeGen_LLVM::optimize_module() {
     b.ForgetAllSCEVInLoopUnroll = true;
 #endif
 
-    if (TM) {
-        TM->adjustPassManager(b);
+    if (tm) {
+        tm->adjustPassManager(b);
     }
 
     if (get_target().has_feature(Target::ASAN)) {
@@ -1294,6 +1408,7 @@ void CodeGen_LLVM::optimize_module() {
     }
     function_pass_manager.doFinalization();
     module_pass_manager.run(*module);
+#endif
 
     debug(3) << "After LLVM optimizations:\n";
     if (debug::debug_level() >= 2) {
@@ -1342,6 +1457,12 @@ Value *CodeGen_LLVM::codegen(Expr e) {
     value = nullptr;
     e.accept(this);
     internal_assert(value) << "Codegen of an expr did not produce an llvm value\n";
+    internal_assert(e.type().is_handle() ||
+                    value->getType()->isVoidTy() ||
+                    value->getType() == llvm_type_of(e.type()))
+        << "Codegen of Expr " << e
+        << " of type " << e.type()
+        << " did not produce llvm IR of the corresponding llvm type.\n";
     return value;
 }
 
@@ -1350,6 +1471,34 @@ void CodeGen_LLVM::codegen(Stmt s) {
     debug(3) << "Codegen: " << s << "\n";
     value = nullptr;
     s.accept(this);
+}
+
+Type CodeGen_LLVM::upgrade_type_for_arithmetic(const Type &t) const {
+    if (t.is_bfloat() || (t.is_float() && t.bits() < 32)) {
+        return Float(32, t.lanes());
+    } else {
+        return t;
+    }
+}
+
+Type CodeGen_LLVM::upgrade_type_for_argument_passing(const Type &t) const {
+    if (t.is_bfloat() || (t.is_float() && t.bits() < 32)) {
+        return t.with_code(halide_type_uint);
+    } else {
+        return t;
+    }
+}
+
+Type CodeGen_LLVM::upgrade_type_for_storage(const Type &t) const {
+    if (t.is_bfloat() || (t.is_float() && t.bits() < 32)) {
+        return t.with_code(halide_type_uint);
+    } else if (t.is_bool()) {
+        return t.with_bits(8);
+    } else if (t.is_handle()) {
+        return UInt(64, t.lanes());
+    } else {
+        return t;
+    }
 }
 
 void CodeGen_LLVM::visit(const IntImm *op) {
@@ -1361,7 +1510,13 @@ void CodeGen_LLVM::visit(const UIntImm *op) {
 }
 
 void CodeGen_LLVM::visit(const FloatImm *op) {
-    value = ConstantFP::get(llvm_type_of(op->type), op->value);
+    if (op->type.is_bfloat()) {
+        codegen(reinterpret(BFloat(16), make_const(UInt(16), bfloat16_t(op->value).to_bits())));
+    } else if (op->type.bits() == 16) {
+        codegen(reinterpret(Float(16), make_const(UInt(16), bfloat16_t(op->value).to_bits())));
+    } else {
+        value = ConstantFP::get(llvm_type_of(op->type), op->value);
+    }
 }
 
 void CodeGen_LLVM::visit(const StringImm *op) {
@@ -1372,8 +1527,24 @@ void CodeGen_LLVM::visit(const Cast *op) {
     Halide::Type src = op->value.type();
     Halide::Type dst = op->type;
 
-    value = codegen(op->value);
+    if (upgrade_type_for_arithmetic(src) != src ||
+        upgrade_type_for_arithmetic(dst) != dst) {
+        // Handle casts to and from types for which we don't have native support.
+        debug(4) << "Emulating cast from " << src << " to " << dst << "\n";
+        if ((src.is_float() && src.bits() < 32) ||
+            (dst.is_float() && dst.bits() < 32)) {
+            Expr equiv = lower_float16_cast(op);
+            internal_assert(equiv.type() == op->type);
+            codegen(equiv);
+        } else {
+            internal_error << "Cast from type: " << src
+                           << " to " << dst
+                           << " unimplemented\n";
+        }
+        return;
+    }
 
+    value = codegen(op->value);
     llvm::Type *llvm_dst = llvm_type_of(dst);
 
     if (dst.is_handle() && src.is_handle()) {
@@ -1416,6 +1587,12 @@ void CodeGen_LLVM::visit(const Variable *op) {
 }
 
 void CodeGen_LLVM::visit(const Add *op) {
+    Type t = upgrade_type_for_arithmetic(op->type);
+    if (t != op->type) {
+        codegen(cast(op->type, Add::make(cast(t, op->a), cast(t, op->b))));
+        return;
+    }
+
     Value *a = codegen(op->a);
     Value *b = codegen(op->b);
     if (op->type.is_float()) {
@@ -1430,6 +1607,12 @@ void CodeGen_LLVM::visit(const Add *op) {
 }
 
 void CodeGen_LLVM::visit(const Sub *op) {
+    Type t = upgrade_type_for_arithmetic(op->type);
+    if (t != op->type) {
+        codegen(cast(op->type, Sub::make(cast(t, op->a), cast(t, op->b))));
+        return;
+    }
+
     Value *a = codegen(op->a);
     Value *b = codegen(op->b);
     if (op->type.is_float()) {
@@ -1444,6 +1627,12 @@ void CodeGen_LLVM::visit(const Sub *op) {
 }
 
 void CodeGen_LLVM::visit(const Mul *op) {
+    Type t = upgrade_type_for_arithmetic(op->type);
+    if (t != op->type) {
+        codegen(cast(op->type, Mul::make(cast(t, op->a), cast(t, op->b))));
+        return;
+    }
+
     Value *a = codegen(op->a);
     Value *b = codegen(op->b);
     if (op->type.is_float()) {
@@ -1460,6 +1649,12 @@ void CodeGen_LLVM::visit(const Mul *op) {
 void CodeGen_LLVM::visit(const Div *op) {
     user_assert(!is_zero(op->b)) << "Division by constant zero in expression: " << Expr(op) << "\n";
 
+    Type t = upgrade_type_for_arithmetic(op->type);
+    if (t != op->type) {
+        codegen(cast(op->type, Div::make(cast(t, op->a), cast(t, op->b))));
+        return;
+    }
+
     if (op->type.is_float()) {
         // Don't call codegen() multiple times within an argument list:
         // order-of-evaluation isn't guaranteed and can vary by compiler,
@@ -1474,6 +1669,12 @@ void CodeGen_LLVM::visit(const Div *op) {
 }
 
 void CodeGen_LLVM::visit(const Mod *op) {
+    Type t = upgrade_type_for_arithmetic(op->type);
+    if (t != op->type) {
+        codegen(cast(op->type, Mod::make(cast(t, op->a), cast(t, op->b))));
+        return;
+    }
+
     if (op->type.is_float()) {
         value = codegen(simplify(op->a - op->b * floor(op->a/op->b)));
     } else {
@@ -1482,6 +1683,12 @@ void CodeGen_LLVM::visit(const Mod *op) {
 }
 
 void CodeGen_LLVM::visit(const Min *op) {
+    Type t = upgrade_type_for_arithmetic(op->type);
+    if (t != op->type) {
+        codegen(cast(op->type, Min::make(cast(t, op->a), cast(t, op->b))));
+        return;
+    }
+
     string a_name = unique_name('a');
     string b_name = unique_name('b');
     Expr a = Variable::make(op->a.type(), a_name);
@@ -1492,6 +1699,12 @@ void CodeGen_LLVM::visit(const Min *op) {
 }
 
 void CodeGen_LLVM::visit(const Max *op) {
+    Type t = upgrade_type_for_arithmetic(op->type);
+    if (t != op->type) {
+        codegen(cast(op->type, Max::make(cast(t, op->a), cast(t, op->b))));
+        return;
+    }
+
     string a_name = unique_name('a');
     string b_name = unique_name('b');
     Expr a = Variable::make(op->a.type(), a_name);
@@ -1502,9 +1715,14 @@ void CodeGen_LLVM::visit(const Max *op) {
 }
 
 void CodeGen_LLVM::visit(const EQ *op) {
+    Type t = upgrade_type_for_arithmetic(op->a.type());
+    if (t != op->a.type()) {
+        codegen(EQ::make(cast(t, op->a), cast(t, op->b)));
+        return;
+    }
+
     Value *a = codegen(op->a);
     Value *b = codegen(op->b);
-    Halide::Type t = op->a.type();
     if (t.is_float()) {
         value = builder->CreateFCmpOEQ(a, b);
     } else {
@@ -1513,9 +1731,14 @@ void CodeGen_LLVM::visit(const EQ *op) {
 }
 
 void CodeGen_LLVM::visit(const NE *op) {
+    Type t = upgrade_type_for_arithmetic(op->a.type());
+    if (t != op->a.type()) {
+        codegen(NE::make(cast(t, op->a), cast(t, op->b)));
+        return;
+    }
+
     Value *a = codegen(op->a);
     Value *b = codegen(op->b);
-    Halide::Type t = op->a.type();
     if (t.is_float()) {
         value = builder->CreateFCmpONE(a, b);
     } else {
@@ -1524,9 +1747,14 @@ void CodeGen_LLVM::visit(const NE *op) {
 }
 
 void CodeGen_LLVM::visit(const LT *op) {
+    Type t = upgrade_type_for_arithmetic(op->a.type());
+    if (t != op->a.type()) {
+        codegen(LT::make(cast(t, op->a), cast(t, op->b)));
+        return;
+    }
+
     Value *a = codegen(op->a);
     Value *b = codegen(op->b);
-    Halide::Type t = op->a.type();
     if (t.is_float()) {
         value = builder->CreateFCmpOLT(a, b);
     } else if (t.is_int()) {
@@ -1537,9 +1765,14 @@ void CodeGen_LLVM::visit(const LT *op) {
 }
 
 void CodeGen_LLVM::visit(const LE *op) {
+    Type t = upgrade_type_for_arithmetic(op->a.type());
+    if (t != op->a.type()) {
+        codegen(LE::make(cast(t, op->a), cast(t, op->b)));
+        return;
+    }
+
     Value *a = codegen(op->a);
     Value *b = codegen(op->b);
-    Halide::Type t = op->a.type();
     if (t.is_float()) {
         value = builder->CreateFCmpOLE(a, b);
     } else if (t.is_int()) {
@@ -1550,9 +1783,15 @@ void CodeGen_LLVM::visit(const LE *op) {
 }
 
 void CodeGen_LLVM::visit(const GT *op) {
+    Type t = upgrade_type_for_arithmetic(op->a.type());
+    if (t != op->a.type()) {
+        codegen(GT::make(cast(t, op->a), cast(t, op->b)));
+        return;
+    }
+
     Value *a = codegen(op->a);
     Value *b = codegen(op->b);
-    Halide::Type t = op->a.type();
+
     if (t.is_float()) {
         value = builder->CreateFCmpOGT(a, b);
     } else if (t.is_int()) {
@@ -1563,9 +1802,14 @@ void CodeGen_LLVM::visit(const GT *op) {
 }
 
 void CodeGen_LLVM::visit(const GE *op) {
+    Type t = upgrade_type_for_arithmetic(op->a.type());
+    if (t != op->a.type()) {
+        codegen(GE::make(cast(t, op->a), cast(t, op->b)));
+        return;
+    }
+
     Value *a = codegen(op->a);
     Value *b = codegen(op->b);
-    Halide::Type t = op->a.type();
     if (t.is_float()) {
         value = builder->CreateFCmpOGE(a, b);
     } else if (t.is_int()) {
@@ -1631,13 +1875,7 @@ Value *CodeGen_LLVM::codegen_buffer_pointer(Value *base_address, Halide::Type ty
         index = promote_64(index);
     }
 
-    // Handles are always indexed as 64-bit.
-    if (type.is_handle()) {
-        return codegen_buffer_pointer(base_address, UInt(64, type.lanes()), index);
-    } else {
-        Value *i = codegen(index);
-        return codegen_buffer_pointer(base_address, type, i);
-    }
+    return codegen_buffer_pointer(base_address, type, codegen(index));
 }
 
 Value *CodeGen_LLVM::codegen_buffer_pointer(string buffer, Halide::Type type, Value *index) {
@@ -1649,6 +1887,8 @@ Value *CodeGen_LLVM::codegen_buffer_pointer(string buffer, Halide::Type type, Va
 Value *CodeGen_LLVM::codegen_buffer_pointer(Value *base_address, Halide::Type type, Value *index) {
     llvm::Type *base_address_type = base_address->getType();
     unsigned address_space = base_address_type->getPointerAddressSpace();
+
+    type = upgrade_type_for_storage(type);
 
     llvm::Type *load_type = llvm_type_of(type)->getPointerTo(address_space);
 
@@ -1747,9 +1987,10 @@ void CodeGen_LLVM::add_tbaa_metadata(llvm::Instruction *inst, string buffer, Exp
 }
 
 void CodeGen_LLVM::visit(const Load *op) {
-    // If it's a Handle, load it as a uint64_t and then cast
-    if (op->type.is_handle()) {
-        codegen(reinterpret(op->type, Load::make(UInt(64, op->type.lanes()), op->name,
+    // If the type should be stored as some other type, insert a reinterpret cast.
+    Type storage_type = upgrade_type_for_storage(op->type);
+    if (op->type != storage_type) {
+        codegen(reinterpret(op->type, Load::make(storage_type, op->name,
                                                  op->index, op->image,
                                                  op->param, op->predicate, op->alignment)));
         return;
@@ -2365,7 +2606,7 @@ void CodeGen_LLVM::visit(const Call *op) {
                               Let::make(b_name, op->args[1],
                                         Select::make(a_var < b_var, b_var - a_var, a_var - b_var))));
         }
-    } else if (op->is_intrinsic("div_round_to_zero")) {
+    } else if (op->is_intrinsic(Call::div_round_to_zero)) {
         internal_assert(op->args.size() == 2);
         Value *a = codegen(op->args[0]);
         Value *b = codegen(op->args[1]);
@@ -2376,7 +2617,7 @@ void CodeGen_LLVM::visit(const Call *op) {
         } else {
             internal_error << "div_round_to_zero of non-integer type.\n";
         }
-    } else if (op->is_intrinsic("mod_round_to_zero")) {
+    } else if (op->is_intrinsic(Call::mod_round_to_zero)) {
         internal_assert(op->args.size() == 2);
         Value *a = codegen(op->args[0]);
         Value *b = codegen(op->args[1]);
@@ -2389,7 +2630,7 @@ void CodeGen_LLVM::visit(const Call *op) {
         }
     } else if (op->is_intrinsic(Call::mulhi_shr)) {
         internal_assert(op->args.size() == 3);
-        
+
         Type ty = op->type;
         Type wide_ty = ty.with_bits(ty.bits() * 2);
 
@@ -2404,7 +2645,15 @@ void CodeGen_LLVM::visit(const Call *op) {
         value = codegen(op->args[0] + (op->args[1] - op->args[0])/2);
     } else if (op->is_intrinsic(Call::lerp)) {
         internal_assert(op->args.size() == 3);
-        value = codegen(lower_lerp(op->args[0], op->args[1], op->args[2]));
+        // If we need to upgrade the type, do the entire lerp in the
+        // upgraded type for better precision.
+        Type t = upgrade_type_for_arithmetic(op->type);
+        Type wt = upgrade_type_for_arithmetic(op->args[2].type());
+        Expr e = lower_lerp(cast(t, op->args[0]),
+                            cast(t, op->args[1]),
+                            cast(wt, op->args[2]));
+        e = cast(op->type, e);
+        codegen(e);
     } else if (op->is_intrinsic(Call::popcount)) {
         internal_assert(op->args.size() == 1);
         std::vector<llvm::Type*> arg_type(1);
@@ -2720,7 +2969,7 @@ void CodeGen_LLVM::visit(const Call *op) {
                 for (const auto &arg : function->args()) {
                      arg_types.push_back(arg.getType());
                 }
-                llvm::Type *result_type = llvm_type_of(op->type);
+                llvm::Type *result_type = llvm_type_of(upgrade_type_for_argument_passing(op->type));
                 FunctionType *func_t = FunctionType::get(result_type, arg_types, false);
                 sub_fn = llvm::Function::Create(func_t, llvm::Function::ExternalLinkage,
                                                 extern_sub_fn_name, module.get());
@@ -2848,13 +3097,26 @@ void CodeGen_LLVM::visit(const Call *op) {
         builder->setFastMathFlags(safe_flags);
         builder->setDefaultFPMathTag(strict_fp_math_md);
         value = codegen(op->args[0]);
+    } else if (is_float16_transcendental(op)) {
+        value = codegen(lower_float16_transcendental_to_float32_equivalent(op));
     } else if (op->is_intrinsic()) {
         internal_error << "Unknown intrinsic: " << op->name << "\n";
     } else if (op->call_type == Call::PureExtern && op->name == "pow_f32") {
         internal_assert(op->args.size() == 2);
         Expr x = op->args[0];
         Expr y = op->args[1];
-        Expr e = Internal::halide_exp(Internal::halide_log(x) * y);
+        Halide::Expr abs_x_pow_y = Internal::halide_exp(Internal::halide_log(abs(x)) * y);
+        Halide::Expr nan_expr = Call::make(x.type(), "nan_f32", {}, Call::PureExtern);
+        Expr iy = floor(y);
+        Expr one = make_one(x.type());
+        Expr zero = make_zero(x.type());
+        Expr e = select(x > 0, abs_x_pow_y,  // Strictly positive x
+                        y == 0.0f, one,  // x^0 == 1
+                        x == 0.0f, zero, // 0^y == 0
+                        y != iy, nan_expr,  // negative x to a non-integer power
+                        iy % 2 == 0, abs_x_pow_y,  // negative x to an even power
+                        -abs_x_pow_y);  // negative x to an odd power
+        e = common_subexpression_elimination(e);
         e.accept(this);
     } else if (op->call_type == Call::PureExtern && op->name == "log_f32") {
         internal_assert(op->args.size() == 1);
@@ -2914,7 +3176,7 @@ void CodeGen_LLVM::visit(const Call *op) {
 
         llvm::Function *fn = module->getFunction(name);
 
-        llvm::Type *result_type = llvm_type_of(op->type);
+        llvm::Type *result_type = llvm_type_of(upgrade_type_for_argument_passing(op->type));
 
         // Add a user context arg as needed. It's never a vector.
         bool takes_user_context = function_takes_user_context(op->name);
@@ -3609,10 +3871,10 @@ void CodeGen_LLVM::visit(const Fork *op) {
 }
 
 void CodeGen_LLVM::visit(const Store *op) {
-    // Even on 32-bit systems, Handles are treated as 64-bit in
-    // memory, so convert stores of handles to stores of uint64_ts.
-    if (op->value.type().is_handle()) {
-        Expr v = reinterpret(UInt(64, op->value.type().lanes()), op->value);
+    Halide::Type value_type = op->value.type();
+    Halide::Type storage_type = upgrade_type_for_storage(value_type);
+    if (value_type != storage_type) {
+        Expr v = reinterpret(storage_type, op->value);
         codegen(Store::make(op->name, v, op->index, op->param, op->predicate, op->alignment));
         return;
     }
@@ -3623,7 +3885,6 @@ void CodeGen_LLVM::visit(const Store *op) {
         return;
     }
 
-    Halide::Type value_type = op->value.type();
     Value *val = codegen(op->value);
     bool is_external = (external_buffer.find(op->name) != external_buffer.end());
     // Scalar
@@ -3739,7 +4000,14 @@ void CodeGen_LLVM::codegen_asserts(const vector<const AssertStmt *> &asserts) {
 
     // Now switch on the bitmask to the correct failure
     Expr case_idx = cast<int32_t>(count_trailing_zeros(bitmask));
-    auto *switch_inst = builder->CreateSwitch(codegen(case_idx), no_errors_bb, asserts.size(), very_likely_branch);
+    llvm::SmallVector<uint32_t, 64> weights;
+    weights.push_back(1<<30);
+    for (int i = 0; i < (int) asserts.size(); i++) {
+        weights.push_back(0);
+    }
+    llvm::MDBuilder md_builder(*context);
+    llvm::MDNode *switch_very_likely_branch = md_builder.createBranchWeights(weights);
+    auto *switch_inst = builder->CreateSwitch(codegen(case_idx), no_errors_bb, asserts.size(), switch_very_likely_branch);
     for (int i = 0; i < (int) asserts.size(); i++) {
         BasicBlock *fail_bb = BasicBlock::Create(*context, "assert_failed", function);
         switch_inst->addCase(ConstantInt::get(IntegerType::get(*context, 32), i), fail_bb);
@@ -3864,7 +4132,7 @@ Value *CodeGen_LLVM::get_user_context() const {
     return ctx;
 }
 
-Value *CodeGen_LLVM::call_intrin(Type result_type, int intrin_lanes,
+Value *CodeGen_LLVM::call_intrin(const Type &result_type, int intrin_lanes,
                                  const string &name, vector<Expr> args) {
     vector<Value *> arg_values(args.size());
     for (size_t i = 0; i < args.size(); i++) {

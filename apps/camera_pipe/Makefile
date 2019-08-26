@@ -10,11 +10,11 @@ $(GENERATOR_BIN)/camera_pipe.generator: camera_pipe_generator.cpp $(GENERATOR_DE
 
 $(BIN)/%/camera_pipe.a: $(GENERATOR_BIN)/camera_pipe.generator
 	@mkdir -p $(@D)
-	$^ -g camera_pipe -o $(@D) -f camera_pipe target=$* auto_schedule=false
+	$^ -g camera_pipe -e $(GENERATOR_OUTPUTS) -o $(@D) -f camera_pipe target=$* auto_schedule=false
 
 $(BIN)/%/camera_pipe_auto_schedule.a: $(GENERATOR_BIN)/camera_pipe.generator
 	@mkdir -p $(@D)
-	$^ -g camera_pipe -o $(@D) -f camera_pipe_auto_schedule target=$*-no_runtime auto_schedule=true
+	$^ -g camera_pipe -e $(GENERATOR_OUTPUTS) -o $(@D) -f camera_pipe_auto_schedule target=$*-no_runtime auto_schedule=true
 
 $(BIN)/%/process: process.cpp $(BIN)/%/camera_pipe.a $(BIN)/%/camera_pipe_auto_schedule.a
 	@mkdir -p $(@D)

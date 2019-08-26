@@ -62,7 +62,7 @@ double run_test(bool auto_schedule) {
 
     if (auto_schedule) {
         // Provide estimates on the pipeline output
-        color.estimate(x, 0, 1920).estimate(y, 0, 1024).estimate(c, 0, 3);
+        color.set_estimates({{0, 1920}, {0, 1024}, {0, 3}});
         // Auto-schedule the pipeline
         p.auto_schedule(target);
     } else if (target.has_gpu_feature()) {

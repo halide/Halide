@@ -1245,6 +1245,26 @@ void test_select_guard() {
     check(__LINE__, d_input_buf(1), -2.f + 0.5f - 0.5f + 1.f);
 }
 
+void test_param() {
+    Param<float> param("param", 2.f);
+    ImageParam buffer(Float(32), 1, "buffer");
+    Buffer<float> b(2);
+    b(0) = 1.f;
+    b(1) = 0.f;
+    buffer.set(b);
+    Func f("f");
+    // buffer.width() is a parameter, make sure we handle it correctly.
+    f() = param * param * buffer.width() * buffer(Expr(0));
+    Derivative d = propagate_adjoints(f);
+    Func d_param = d(param);
+    Buffer<float> d_param_buf = d_param.realize();
+    check(__LINE__, d_param_buf(), 8.f);
+    Func d_buffer = d(buffer);
+    Buffer<float> d_buffer_buf = d_buffer.realize(2);
+    check(__LINE__, d_buffer_buf(0), 8.f);
+    check(__LINE__, d_buffer_buf(1), 0.f);
+}
+
 int main(int argc, char **argv) {
     test_scalar<float>();
     test_scalar<double>();
@@ -1280,6 +1300,7 @@ int main(int argc, char **argv) {
     test_rdom_predicate();
     test_reverse_scan();
     test_select_guard();
+    test_param();
     printf("[autodiff] Success!\n");
     return 0;
 }

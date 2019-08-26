@@ -18,7 +18,7 @@ if __name__ == "__main__":
     net = resnet.resnet50(pretrained=True) 
     net.eval()
     result = net(image)
-    # Pytorch resnet50 model doesn't compute softmax of the output.
+    # PyTorch resnet50 model doesn't compute softmax of the output.
     softmax = nn.Softmax(dim=1)
     ref_output = softmax(result)
 

@@ -29,7 +29,7 @@ class ImageParam : public OutputImageParam {
 public:
 
     /** Construct a nullptr image parameter handle. */
-    ImageParam() : OutputImageParam() {}
+    ImageParam() = default;
 
     /** Construct an image parameter of the given type and
      * dimensionality, with an auto-generated unique name. */

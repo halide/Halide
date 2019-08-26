@@ -9,11 +9,11 @@ $(GENERATOR_BIN)/local_laplacian.generator: local_laplacian_generator.cpp $(GENE
 
 $(BIN)/%/local_laplacian.a: $(GENERATOR_BIN)/local_laplacian.generator
 	@mkdir -p $(@D)
-	$^ -g local_laplacian -o $(@D) -f local_laplacian target=$* auto_schedule=false
+	$^ -g local_laplacian -e $(GENERATOR_OUTPUTS) -o $(@D) -f local_laplacian target=$* auto_schedule=false
 
 $(BIN)/%/local_laplacian_auto_schedule.a: $(GENERATOR_BIN)/local_laplacian.generator
 	@mkdir -p $(@D)
-	$^ -g local_laplacian -o $(@D) -f local_laplacian_auto_schedule target=$*-no_runtime auto_schedule=true
+	$^ -g local_laplacian -e $(GENERATOR_OUTPUTS) -o $(@D) -f local_laplacian_auto_schedule target=$*-no_runtime auto_schedule=true
 
 $(BIN)/%/process: process.cpp $(BIN)/%/local_laplacian.a $(BIN)/%/local_laplacian_auto_schedule.a
 	@mkdir -p $(@D)

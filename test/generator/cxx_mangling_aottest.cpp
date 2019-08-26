@@ -4,6 +4,7 @@
 #include "HalideBuffer.h"
 #include <assert.h>
 #include <string.h>
+#include <string>
 
 #include "cxx_mangling.h"
 #ifdef TEST_CUDA

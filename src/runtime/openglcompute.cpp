@@ -41,7 +41,7 @@
     GLFUNC(PFNGLSHADERSOURCEPROC, ShaderSource); \
     GLFUNC(PFNGLUNIFORM1IPROC, Uniform1i); \
     GLFUNC(PFNGLUNIFORM1IPROC, Uniform1ui); \
-    GLFUNC(PFNGLUNIFORM1IPROC, Uniform1f); \
+    GLFUNC(PFNGLUNIFORM1FPROC, Uniform1f); \
     GLFUNC(PFNGLUNMAPBUFFERPROC, UnmapBuffer); \
     GLFUNC(PFNGLUSEPROGRAMPROC, UseProgram); \
     GLFUNC(PFNGLGETACTIVEUNIFORM, GetActiveUniform); \
@@ -204,10 +204,10 @@ WEAK int halide_openglcompute_device_release(void *user_context) {
 
     ModuleState *mod = state_list;
     while (mod) {
-        global_state.DeleteProgram(mod->kernel->program_id);
         KernelInfo *kernel = mod->kernel;
         while (kernel) {
             KernelInfo *next_kernel = kernel->next;
+            global_state.DeleteProgram(kernel->program_id);
             free(kernel->kernel_name);
             free(kernel);
             kernel = next_kernel;

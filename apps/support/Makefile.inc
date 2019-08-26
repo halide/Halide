@@ -2,6 +2,7 @@ HALIDE_DISTRIB_PATH ?= ../../distrib
 LDFLAGS ?=
 IMAGES ?= ../images
 UNAME ?= $(shell uname)
+SHELL = bash
 
 BIN_DIR ?= bin
 
@@ -19,6 +20,14 @@ HL_TARGET ?= host
 GENERATOR_BIN ?= $(BIN)/host
 
 SANITIZER_FLAGS ?=
+
+# The outputs to produce when running a Generator (ie the args to the -e flag).
+# If -e is unspecified, Halide normally defaults to the equivalent of
+# `-e static_library,h,registration`; we add assembly and stmt to the 'default'
+# outputs for the apps, since it makes casual inspection of the Generator output
+# easier to inspect and experiment with. (Production build systems wouldn't
+# normally do this, as it would just waste cycles and storage.)
+GENERATOR_OUTPUTS ?= static_library,h,registration,stmt,assembly
 
 # This pulls in the definition of HALIDE_SYSTEM_LIBS and HALIDE_RTTI
 include $(HALIDE_DISTRIB_PATH)/halide_config.make
@@ -77,6 +86,7 @@ CXX-host-cuda ?= $(CXX)
 CXX-host-metal ?= $(CXX)
 CXX-host-hvx_128 ?= $(CXX)
 CXX-host-hvx_64 ?= $(CXX)
+CXX-$(HL_TARGET) ?= $(CXX)
 CXX-arm-64-android ?= $(ANDROID_ARM64_TOOLCHAIN)/bin/aarch64-linux-android-c++
 CXX-arm-32-android ?= $(ANDROID_ARM_TOOLCHAIN)/bin/arm-linux-androideabi-c++
 
@@ -87,6 +97,7 @@ CXXFLAGS-host-cuda ?= $(CXXFLAGS)
 CXXFLAGS-host-metal ?= $(CXXFLAGS)
 CXXFLAGS-host-hvx_128 ?= $(CXXFLAGS)
 CXXFLAGS-host-hvx_64 ?= $(CXXFLAGS)
+CXXFLAGS-$(HL_TARGET) ?= $(CXXFLAGS)
 CXXFLAGS-arm-64-android ?= $(CXXFLAGS)
 CXXFLAGS-arm-32-android ?= $(CXXFLAGS)
 
@@ -97,6 +108,7 @@ LDFLAGS-host-cuda ?= $(LDFLAGS)
 LDFLAGS-host-metal ?= $(LDFLAGS)
 LDFLAGS-host-hvx_128 ?= $(LDFLAGS)
 LDFLAGS-host-hvx_64 ?= $(LDFLAGS)
+LDFLAGS-$(HL_TARGET) ?= $(LDFLAGS)
 LDFLAGS-arm-64-android ?= -llog -fPIE -pie
 LDFLAGS-arm-32-android ?= -llog -fPIE -pie
 
@@ -195,7 +207,7 @@ $(BIN)/%.run: $(BIN)/%.rungen
 .PHONY: %.benchmark
 %.benchmark: $(BIN)/$(HL_TARGET)/%.rungen
 	@[[ "$(HL_TARGET)" != "wasm-32-wasmrt"* ]] || (echo "HL_TARGET must NOT begin with wasm-32-wasmrt for target $@" && exit 1)
-	@$^ --benchmarks=all --default_input_buffers --default_input_scalars --output_extents=estimate --parsable_output
+	@$^ --benchmarks=all --estimate_all --parsable_output
 
 # ------- wasm support
 
@@ -262,4 +274,4 @@ $(BIN)/%.rungen_wasm: $(BIN)/%.rungen.js
 .PHONY: %.benchmark_wasm
 %.benchmark_wasm: $(BIN)/$(HL_TARGET)/%.rungen.js
 	@[[ "$(HL_TARGET)" == "wasm-32-wasmrt"* ]] || (echo "HL_TARGET must begin with wasm-32-wasmrt for target $@" && exit 1)
-	@cd $(<D); $(WASM_SHELL) $(<F) $(WASM_SHELL_ARG_SEP) --benchmarks=all --default_input_buffers --default_input_scalars --output_extents=estimate --parsable_output
+	@cd $(<D); $(WASM_SHELL) $(<F) $(WASM_SHELL_ARG_SEP) --benchmarks=all --estimate_all --parsable_output

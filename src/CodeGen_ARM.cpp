@@ -483,7 +483,9 @@ void CodeGen_ARM::visit(const Sub *op) {
     }
 
     // llvm will generate floating point negate instructions if we ask for (-0.0f)-x
-    if (op->type.is_float() && is_zero(op->a)) {
+    if (op->type.is_float() &&
+        op->type.bits() >= 32 &&
+        is_zero(op->a)) {
         Constant *a;
         if (op->type.bits() == 32) {
             a = ConstantFP::getNegativeZero(f32_t);
@@ -1031,10 +1033,18 @@ string CodeGen_ARM::mattrs() const {
             return "-neon";
         }
     } else {
+        // TODO: Should Halide's SVE flags be 64-bit only?
+        string arch_flags;
+        if (target.has_feature(Target::SVE2)) {
+            arch_flags = "+sve2";
+        } else if (target.has_feature(Target::SVE)) {
+            arch_flags = "+sve";
+        }
+
         if (target.os == Target::IOS || target.os == Target::OSX) {
-            return "+reserve-x18";
+            return arch_flags + "+reserve-x18";
         } else {
-            return "";
+            return arch_flags;
         }
     }
 }

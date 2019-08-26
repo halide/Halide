@@ -66,15 +66,13 @@ Then build it like so:
 then to point Halide to it:
 
     export LLVM_CONFIG=<path to llvm>/build/bin/llvm-config
-    export CLANG=<path to llvm>/build/bin/clang
 
 #### Building Halide with make
 
-With `LLVM_CONFIG` and `CLANG` set (or `llvm-config` and `clang` in your
-path), you should be able to just run `make` in the root directory of
-the Halide source tree. `make run_tests` will run the JIT test suite,
-and `make test_apps` will make sure all the apps compile and run (but
-won't check their output).
+With `LLVM_CONFIG` set (or `llvm-config` in your path), you should be
+able to just run `make` in the root directory of the Halide source tree.
+`make run_tests` will run the JIT test suite, and `make test_apps` will
+make sure all the apps compile and run (but won't check their output).
 
 There is no `make install` yet. If you want to make an install
 package, run `make distrib`.
@@ -173,10 +171,6 @@ tools with Apple clang 500.2.76. This means that we link against
 libc++ instead of libstdc++. You may need to adjust compiler options
 accordingly if you're using an older XCode which does not default to
 libc++.
-
-For parallelism, Halide automatically uses Apple's Grand Central
-Dispatch, so it is not possible to control the number of threads used
-without overriding the parallel runtime entirely.
 
 
 Halide OpenGL/GLSL backend
@@ -357,7 +351,6 @@ Clang/LLVM instead of 5.0.
     cmake -DLLVM_ENABLE_TERMINFO=OFF -DLLVM_TARGETS_TO_BUILD="X86;ARM;NVPTX;AArch64;Mips;PowerPC;Hexagon" -DLLVM_ENABLE_ASSERTIONS=ON -DCMAKE_BUILD_TYPE=Release ..
     make -j8
     export LLVM_CONFIG=<path to llvm>/build/bin/llvm-config
-    export CLANG=<path to llvm>/build/bin/clang
 
 #### 2. Download and install the Hexagon SDK and version 8.0 Hexagon Tools
 Go to https://developer.qualcomm.com/software/hexagon-dsp-sdk/tools

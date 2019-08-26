@@ -109,11 +109,13 @@ void CodeGen_X86::visit(const Sub *op) {
 }
 
 void CodeGen_X86::visit(const GT *op) {
-    if (op->type.is_vector()) {
+    Type t = op->a.type();
+
+    if (t.is_vector() &&
+        upgrade_type_for_arithmetic(t) == t) {
         // Non-native vector widths get legalized poorly by llvm. We
         // split it up ourselves.
 
-        Type t = op->a.type();
         int slice_size = vector_lanes_for_slice(t);
 
         Value *a = codegen(op->a), *b = codegen(op->b);
@@ -141,11 +143,13 @@ void CodeGen_X86::visit(const GT *op) {
 }
 
 void CodeGen_X86::visit(const EQ *op) {
-    if (op->type.is_vector()) {
+    Type t = op->a.type();
+
+    if (t.is_vector() &&
+        upgrade_type_for_arithmetic(t) == t) {
         // Non-native vector widths get legalized poorly by llvm. We
         // split it up ourselves.
 
-        Type t = op->a.type();
         int slice_size = vector_lanes_for_slice(t);
 
         Value *a = codegen(op->a), *b = codegen(op->b);
@@ -492,7 +496,7 @@ int CodeGen_X86::native_vector_bits() const {
     }
 }
 
-int CodeGen_X86::vector_lanes_for_slice(Type t) const {
+int CodeGen_X86::vector_lanes_for_slice(const Type &t) const {
     // We don't want to pad all the way out to natural_vector_size,
     // because llvm generates crappy code. Better to use a smaller
     // type if we can.
@@ -502,6 +506,21 @@ int CodeGen_X86::vector_lanes_for_slice(Type t) const {
                       (vec_bits > 128 && natural_vec_bits > 128) ? 256 :
                       128);
     return slice_bits / t.bits();
+}
+
+llvm::Type *CodeGen_X86::llvm_type_of(const Type &t) const {
+    if (t.is_float() && t.bits() < 32) {
+        // LLVM as of August 2019 has all sorts of issues in the x86
+        // backend for half types. It injects expensive calls to
+        // convert between float and half for seemingly no reason
+        // (e.g. to do a select), and bitcasting to int16 doesn't
+        // help, because it simplifies away the bitcast for you.
+        // See: https://bugs.llvm.org/show_bug.cgi?id=43065
+        // and: https://github.com/halide/Halide/issues/4166
+        return llvm_type_of(t.with_code(halide_type_uint));
+    } else {
+        return CodeGen_Posix::llvm_type_of(t);
+    }
 }
 
 }  // namespace Internal

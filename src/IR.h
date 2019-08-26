@@ -398,7 +398,7 @@ struct Free : public StmtNode<Free> {
  * (min + extent - 1) */
 struct Range {
     Expr min, extent;
-    Range() {}
+    Range() = default;
     Range(Expr min, Expr extent) : min(min), extent(extent) {
         internal_assert(min.type() == extent.type()) << "Region min and extent must have same type\n";
     }
@@ -496,58 +496,76 @@ struct Call : public ExprNode<Call> {
     // risking ambiguous initalization order; we use a typedef to simplify
     // declaration.
     typedef const char *const ConstString;
-    HALIDE_EXPORT static ConstString debug_to_file,
-        reinterpret,
-        bitwise_and,
-        bitwise_not,
-        bitwise_xor,
-        bitwise_or,
-        shift_left,
-        shift_right,
+
+    // enums for various well-known intrinsics. (It is not *required* that all
+    // intrinsics have an enum entry here, but as a matter of style, it is recommended.)
+    // Note that these are only used in the API; inside the node, they are translated
+    // into a name. (To recover the name, call get_intrinsic_name().)
+    //
+    // Please keep this list sorted alphabetically; the specific enum values
+    // are *not* guaranteed to be stable across time.
+    enum IntrinsicOp {
         abs,
         absd,
-        rewrite_buffer,
-        random,
-        lerp,
-        popcount,
+        alloca,
+        bitwise_and,
+        bitwise_not,
+        bitwise_or,
+        bitwise_xor,
+        bool_to_mask,
+        call_cached_indirect_function,
+        cast_mask,
         count_leading_zeros,
         count_trailing_zeros,
-        undef,
-        return_second,
-        if_then_else,
-        if_then_else_mask,
+        debug_to_file,
+        div_round_to_zero,
+        dynamic_shuffle,
+        extract_mask_element,
+        gather,
         glsl_texture_load,
         glsl_texture_store,
         glsl_varying,
+        gpu_thread_barrier,
+        if_then_else,
+        if_then_else_mask,
         image_load,
         image_store,
-        make_struct,
-        stringify,
-        memoize_expr,
-        alloca,
+        indeterminate_expression,
+        lerp,
         likely,
         likely_if_innermost,
-        register_destructor,
-        div_round_to_zero,
+        make_struct,
+        memoize_expr,
         mod_round_to_zero,
-        call_cached_indirect_function,
+        mulhi_shr, // Compute high_half(arg[0] * arg[1]) >> arg[3]. Note that this is a shift in addition to taking the upper half of multiply result. arg[3] must be an unsigned integer immediate.
+        popcount,
         prefetch,
-        signed_integer_overflow,
-        indeterminate_expression,
-        bool_to_mask,
-        cast_mask,
-        select_mask,
-        extract_mask_element,
-        require,
-        require_mask,
-        size_of_halide_buffer_t,
-        strict_float,
         quiet_div,
         quiet_mod,
+        random,
+        register_destructor,
+        reinterpret,
+        require,
+        require_mask,
+        return_second,
+        rewrite_buffer,
+        scatter,
+        scatter_acc,
+        scatter_release,
+        select_mask,
+        shift_left,
+        shift_right,
+        signed_integer_overflow,
+        size_of_halide_buffer_t,
+        sorted_avg, // Compute (arg[0] + arg[1]) / 2, assuming arg[0] < arg[1].
+        strict_float,
+        stringify,
+        undef,
         unsafe_promise_clamped,
-        gpu_thread_barrier,
-        mulhi_shr, // Compute high_half(arg[0] * arg[1]) >> arg[3]. Note that this is a shift in addition to taking the upper half of multiply result. arg[3] must be an unsigned integer immediate.
-        sorted_avg; // Compute (arg[0] + arg[1]) / 2, assuming arg[0] < arg[1].
+        IntrinsicOpCount // Sentinel: keep last.
+    };
+
+    static const char *get_intrinsic_name(IntrinsicOp op);
 
     // We also declare some symbolic names for some of the runtime
     // functions that we want to construct Call nodes to here to avoid
@@ -590,6 +608,10 @@ struct Call : public ExprNode<Call> {
     // pointer to that
     Parameter param;
 
+    static Expr make(Type type, IntrinsicOp op, const std::vector<Expr> &args, CallType call_type,
+                     FunctionPtr func = FunctionPtr(), int value_index = 0,
+                     Buffer<> image = Buffer<>(), Parameter param = Parameter());
+
     static Expr make(Type type, const std::string &name, const std::vector<Expr> &args, CallType call_type,
                      FunctionPtr func = FunctionPtr(), int value_index = 0,
                      Buffer<> image = Buffer<>(), Parameter param = Parameter());
@@ -624,8 +646,8 @@ struct Call : public ExprNode<Call> {
                 call_type == PureIntrinsic);
     }
 
-    bool is_intrinsic(ConstString intrin_name) const {
-        return is_intrinsic() && name == intrin_name;
+    bool is_intrinsic(IntrinsicOp op) const {
+        return is_intrinsic() && this->name == get_intrinsic_name(op);
     }
 
     bool is_extern() const {

@@ -71,7 +71,7 @@ struct DefinitionContents {
 };
 
 template<>
-RefCount &ref_count<DefinitionContents>(const DefinitionContents *d) {
+RefCount &ref_count<DefinitionContents>(const DefinitionContents *d) noexcept {
     return d->ref_count;
 }
 

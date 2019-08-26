@@ -1,0 +1,5 @@
+lib/
+build/
+halide_ops.egg-info
+.wrapper
+dist/

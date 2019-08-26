@@ -25,6 +25,8 @@ DECL_SOT(uint32_t);
 DECL_SOT(int32_t);
 DECL_SOT(float);
 DECL_SOT(double);
+DECL_SOT(float16_t);
+DECL_SOT(bfloat16_t);
 
 template<typename A>
 A mod(A x, A y);
@@ -37,6 +39,16 @@ float mod(float x, float y) {
 template<>
 double mod(double x, double y) {
     return fmod(x, y);
+}
+
+template<>
+float16_t mod(float16_t x, float16_t y) {
+    return float16_t(fmod(float(x), float(y)));
+}
+
+template<>
+bfloat16_t mod(bfloat16_t x, bfloat16_t y) {
+    return bfloat16_t(fmod(float(x), float(y)));
 }
 
 template<typename A>
@@ -59,6 +71,24 @@ bool close_enough<double>(double x, double y) {
     return fabs(x-y) < 1e-5;
 }
 
+template<>
+bool close_enough<float16_t>(float16_t x, float16_t y) {
+    if (x == y) return true;
+    float16_t upper = float16_t::make_from_bits(x.to_bits() + 2);
+    float16_t lower = float16_t::make_from_bits(x.to_bits() - 2);
+    if (lower > upper) std::swap(lower, upper);
+    return y >= lower && y <= upper;
+}
+
+template<>
+bool close_enough<bfloat16_t>(bfloat16_t x, bfloat16_t y) {
+    if (x == y) return true;
+    bfloat16_t upper = bfloat16_t::make_from_bits(x.to_bits() + 2);
+    bfloat16_t lower = bfloat16_t::make_from_bits(x.to_bits() - 2);
+    if (lower > upper) std::swap(lower, upper);
+    return (y >= lower) && (y <= upper);
+}
+
 template<typename T>
 T divide(T x, T y) {
     return (x - (((x % y) + y) % y)) / y;
@@ -71,6 +101,16 @@ float divide(float x, float y) {
 
 template<>
 double divide(double x, double y) {
+    return x/y;
+}
+
+template<>
+float16_t divide(float16_t x, float16_t y) {
+    return x/y;
+}
+
+template<>
+bfloat16_t divide(bfloat16_t x, bfloat16_t y) {
     return x/y;
 }
 
@@ -130,8 +170,8 @@ bool test(int lanes, int seed) {
             // We must ensure that the result of casting is not out-of-range:
             // float->int casts are UB if the result doesn't fit.
             input(x, y) = (A)(dis(rng)*0.0625 + 1.0);
-            if ((A)(-1) < 0) {
-                input(x, y) -= 10;
+            if ((A)(-1) < (A)(0)) {
+                input(x, y) -= (A)(10);
             }
         }
     }
@@ -444,7 +484,7 @@ bool test(int lanes, int seed) {
             for (int y = 0; y < H; y++) {
                 for (int x = 0; x < W; x++) {
                     A correct = input(x, y);
-                    if (correct <= 0) correct = -correct;
+                    if (correct <= A(0)) correct = -correct;
                     if (im14(x, y) != correct) {
                         printf("im14(%d, %d) = %f instead of %f\n", x, y, (double)(im14(x, y)), (double)(correct));
                     }
@@ -466,8 +506,8 @@ bool test(int lanes, int seed) {
             Buffer<int32_t> im16 = f16.realize(W, H);
             for (int y = 0; y < H; y++) {
                 for (int x = 0; x < W; x++) {
-                    int correct15 = input(x, y)*input(x, y+2) + input(x, y+1)*input(x, y+3);
-                    int correct16 = input(x, y)*input(x, y+2) - input(x, y+1)*input(x, y+3);
+                    int correct15 = int(input(x, y)*input(x, y+2) + input(x, y+1)*input(x, y+3));
+                    int correct16 = int(input(x, y)*input(x, y+2) - input(x, y+1)*input(x, y+3));
                     if (im15(x, y) != correct15) {
                         printf("im15(%d, %d) = %d instead of %d\n", x, y, im15(x, y), correct15);
                     }
@@ -525,8 +565,8 @@ bool test(int lanes, int seed) {
 
         for (int y = 0; y < H; y++) {
             for (int x = 0; x < W; x++) {
-                float a = input(x, y) * 0.5f;
-                float b = input((x+1)%W, y) * 0.5f;
+                float a = float(input(x, y)) * 0.5f;
+                float b = float(input((x+1)%W, y)) * 0.5f;
                 float correct_log = logf(a);
                 float correct_exp = expf(b);
                 float correct_pow = powf(a, b/16.0f);
@@ -658,7 +698,8 @@ bool test(int lanes, int seed) {
 
         for (int y = 0; y < H; y++) {
             for (int x = 0; x < W; x++) {
-                typename with_unsigned<A>::type correct = absd((double)input(x, y), (double)input(x+1, y));
+                using T = typename with_unsigned<A>::type;
+                T correct = T(absd((double)input(x, y), (double)input(x+1, y)));
                 if (im22(x, y) != correct) {
                     printf("im22(%d, %d) = %f instead of %f\n", x, y, (double)(im22(x, y)), (double)(correct));
                     return false;
@@ -687,7 +728,10 @@ int main(int argc, char **argv) {
     futures.push_back(pool.async(test<int16_t>, 8, seed));
     futures.push_back(pool.async(test<uint32_t>, 4, seed));
     futures.push_back(pool.async(test<int32_t>, 4, seed));
-
+    futures.push_back(pool.async(test<bfloat16_t>, 8, seed));
+    futures.push_back(pool.async(test<bfloat16_t>, 16, seed));
+    futures.push_back(pool.async(test<float16_t>, 8, seed));
+    futures.push_back(pool.async(test<float16_t>, 16, seed));
     bool ok = true;
     for (auto &f : futures) {
         ok &= f.get();

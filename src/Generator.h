@@ -353,8 +353,7 @@ std::string halide_type_to_c_type(const Type &t);
 
 /** generate_filter_main() is a convenient wrapper for GeneratorRegistry::create() +
  * compile_to_files(); it can be trivially wrapped by a "real" main() to produce a
- * command-line utility for ahead-of-time filter compilation.
- * Note that this function is not thread-safe because it resets global states.*/
+ * command-line utility for ahead-of-time filter compilation. */
 int generate_filter_main(int argc, char **argv, std::ostream &cerr);
 
 // select_type<> is to std::conditional as switch is to if:
@@ -1184,7 +1183,7 @@ class StubInputBuffer {
     }
 
 public:
-    StubInputBuffer() {}
+    StubInputBuffer() = default;
 
     // *not* explicit -- this ctor should only be used when you want
     // to pass a literal Buffer<> for a Stub Input; this Buffer<> will be
@@ -1203,7 +1202,7 @@ protected:
     Target get_target() const;
 
     explicit StubOutputBufferBase(const Func &f, std::shared_ptr<GeneratorBase> generator) : f(f), generator(generator) {}
-    StubOutputBufferBase() {}
+    StubOutputBufferBase() = default;
 
 public:
     Realization realize(std::vector<int32_t> sizes) {
@@ -1242,7 +1241,7 @@ class StubOutputBuffer : public StubOutputBufferBase {
     friend class GeneratorStub;
     explicit StubOutputBuffer(const Func &f, std::shared_ptr<GeneratorBase> generator) : StubOutputBufferBase(f, generator) {}
 public:
-    StubOutputBuffer() {}
+    StubOutputBuffer() = default;
 };
 
 // This is a union-like class that allows for convenient initialization of Stub Inputs
@@ -1424,7 +1423,8 @@ protected:
 
     const char *input_or_output() const override { return "Input"; }
 
-    void estimate_impl(Var var, Expr min, Expr extent);
+    void set_estimate_impl(Var var, Expr min, Expr extent);
+    void set_estimates_impl(const std::vector<std::pair<Expr, Expr>> &estimates);
 
 public:
     ~GeneratorInputBase() override;
@@ -1588,9 +1588,18 @@ public:
         return ExternFuncArgument(this->parameters_.at(0));
     }
 
-    GeneratorInput_Buffer<T> &estimate(Var var, Expr min, Expr extent) {
+    GeneratorInput_Buffer<T> &set_estimate(Var var, Expr min, Expr extent) {
         this->check_gio_access();
-        this->estimate_impl(var, min, extent);
+        this->set_estimate_impl(var, min, extent);
+        return *this;
+    }
+
+    HALIDE_ATTRIBUTE_DEPRECATED("Use set_estimate() instead")
+    GeneratorInput_Buffer<T> &estimate(Var var, Expr min, Expr extent) { return set_estimate(var, min, extent); }
+
+    GeneratorInput_Buffer<T> &set_estimates(const std::vector<std::pair<Expr, Expr>> &estimates) {
+        this->check_gio_access();
+        this->set_estimates_impl(estimates);
         return *this;
     }
 
@@ -1742,9 +1751,18 @@ public:
         return ExternFuncArgument(this->parameters_.at(0));
     }
 
-    GeneratorInput_Func<T> &estimate(Var var, Expr min, Expr extent) {
+    GeneratorInput_Func<T> &set_estimate(Var var, Expr min, Expr extent) {
         this->check_gio_access();
-        this->estimate_impl(var, min, extent);
+        this->set_estimate_impl(var, min, extent);
+        return *this;
+    }
+
+    HALIDE_ATTRIBUTE_DEPRECATED("Use set_estimate() instead")
+    GeneratorInput_Func<T> &estimate(Var var, Expr min, Expr extent) { return set_estimate(var, min, extent); }
+
+    GeneratorInput_Func<T> &set_estimates(const std::vector<std::pair<Expr, Expr>> &estimates) {
+        this->check_gio_access();
+        this->set_estimates_impl(estimates);
         return *this;
     }
 
@@ -1853,7 +1871,18 @@ public:
         return ExternFuncArgument(this->exprs().at(0));
     }
 
-    template <typename T2 = T, typename std::enable_if<!std::is_array<T2>::value>::type * = nullptr>
+    template <typename T2 = T, typename std::enable_if<std::is_pointer<T2>::value>::type * = nullptr>
+    void set_estimate(const TBase &value) {
+        this->check_gio_access();
+        user_assert(value == nullptr) << "nullptr is the only valid estimate for Input<PointerType>";
+        Expr e = reinterpret(type_of<T2>(), cast<uint64_t>(0));
+        for (Parameter &p : this->parameters_) {
+            p.set_estimate(e);
+        }
+    }
+
+
+    template <typename T2 = T, typename std::enable_if<!std::is_array<T2>::value && !std::is_pointer<T2>::value>::type * = nullptr>
     void set_estimate(const TBase &value) {
         this->check_gio_access();
         Expr e = Expr(value);
@@ -2042,6 +2071,12 @@ protected:
     }
 
 public:
+    HALIDE_ATTRIBUTE_DEPRECATED("Use set_estimate() instead")
+    GeneratorOutputBase &estimate(Var var, Expr min, Expr extent) {
+        this->as<Func>().set_estimate(var, min, extent);
+        return *this;
+    }
+
     /** Forward schedule-related methods to the underlying Func. */
     // @{
     HALIDE_FORWARD_METHOD(Func, add_trace_tag)
@@ -2058,7 +2093,6 @@ public:
     HALIDE_FORWARD_METHOD(Func, copy_to_host)
     HALIDE_FORWARD_METHOD(Func, define_extern)
     HALIDE_FORWARD_METHOD_CONST(Func, defined)
-    HALIDE_FORWARD_METHOD(Func, estimate)
     HALIDE_FORWARD_METHOD(Func, fold_storage)
     HALIDE_FORWARD_METHOD(Func, fuse)
     HALIDE_FORWARD_METHOD(Func, glsl)
@@ -2082,6 +2116,7 @@ public:
     HALIDE_FORWARD_METHOD(Func, reorder_storage)
     HALIDE_FORWARD_METHOD_CONST(Func, rvars)
     HALIDE_FORWARD_METHOD(Func, serial)
+    HALIDE_FORWARD_METHOD(Func, set_estimate)
     HALIDE_FORWARD_METHOD(Func, shader)
     HALIDE_FORWARD_METHOD(Func, specialize)
     HALIDE_FORWARD_METHOD(Func, specialize_fail)
@@ -2362,6 +2397,15 @@ public:
         return this->funcs_.at(0).output_buffer();
     }
 
+    // 'perfect forwarding' won't work with initializer lists,
+    // so hand-roll our own forwarding method for set_estimates,
+    // rather than using HALIDE_FORWARD_METHOD.
+    GeneratorOutput_Buffer<T> &set_estimates(const std::vector<std::pair<Expr, Expr>> &estimates) {
+        this->as<OutputImageParam>().set_estimates(estimates);
+        return *this;
+    }
+
+
     /** Forward methods to the OutputImageParam. */
     // @{
     HALIDE_FORWARD_METHOD(OutputImageParam, dim)
@@ -2434,11 +2478,23 @@ public:
         return Super::operator[](i);
     }
 
-    GeneratorOutput_Func<T> &estimate(Var var, Expr min, Expr extent) {
+    GeneratorOutput_Func<T> &set_estimate(Var var, Expr min, Expr extent) {
         this->check_gio_access();
         internal_assert(this->exprs_.empty() && this->funcs_.size() > 0);
         for (Func &f : this->funcs_) {
-            f.estimate(var, min, extent);
+            f.set_estimate(var, min, extent);
+        }
+        return *this;
+    }
+
+    HALIDE_ATTRIBUTE_DEPRECATED("Use set_estimate() instead")
+    GeneratorOutput_Func<T> &estimate(Var var, Expr min, Expr extent) { return set_estimate(var, min, extent); }
+
+    GeneratorOutput_Func<T> &set_estimates(const std::vector<std::pair<Expr, Expr>> &estimates) {
+        this->check_gio_access();
+        internal_assert(this->exprs_.empty() && this->funcs_.size() > 0);
+        for (Func &f : this->funcs_) {
+            f.set_estimates(estimates);
         }
         return *this;
     }
@@ -2844,7 +2900,9 @@ public:
         bool emit_static_library{true};
         bool emit_cpp_stub{false};
         bool emit_schedule{false};
+        bool emit_featurization{false};
         bool emit_registration{false};
+        bool emit_pytorch_wrapper{false};
 
         // This is an optional map used to replace the default extensions generated for
         // a file: if an key matches an output extension, emit those files with the
@@ -2988,6 +3046,10 @@ public:
     HALIDE_NO_USER_CODE_INLINE
     void add_requirement(Expr condition, Args&&... args) {
         get_pipeline().add_requirement(condition, std::forward<Args>(args)...);
+    }
+
+    void trace_pipeline() {
+        get_pipeline().trace_pipeline();
     }
 
 protected:
@@ -3259,7 +3321,7 @@ private:
 
     static GeneratorRegistry &get_registry();
 
-    GeneratorRegistry() {}
+    GeneratorRegistry() = default;
     GeneratorRegistry(const GeneratorRegistry &) = delete;
     void operator=(const GeneratorRegistry &) = delete;
 };

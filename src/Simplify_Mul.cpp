@@ -3,6 +3,20 @@
 namespace Halide {
 namespace Internal {
 
+namespace {
+int64_t saturating_mul(int64_t a, int64_t b) {
+    if (mul_would_overflow(64, a, b)) {
+        if ((a > 0) == (b > 0)) {
+            return INT64_MAX;
+        } else {
+            return INT64_MIN;
+        }
+    } else {
+        return a * b;
+    }
+}
+}
+
 Expr Simplify::visit(const Mul *op, ExprInfo *bounds) {
     ExprInfo a_bounds, b_bounds;
     Expr a = mutate(op->a, &a_bounds);

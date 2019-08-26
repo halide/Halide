@@ -113,7 +113,7 @@ void unpack_closure(const Closure& closure,
 
 llvm::Type *llvm_type_of(LLVMContext *c, Halide::Type t) {
     if (t.lanes() == 1) {
-        if (t.is_float()) {
+        if (t.is_float() && !t.is_bfloat()) {
             switch (t.bits()) {
             case 16:
                 return llvm::Type::getHalfTy(*c);
