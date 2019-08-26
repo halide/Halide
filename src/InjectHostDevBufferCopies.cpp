@@ -490,7 +490,7 @@ class InjectBufferCopies : public IRMutator {
             if (op->name == buffer) {
                 Expr buf = Variable::make(type_of<struct halide_buffer_t *>(), buffer);
                 Stmt destructor =
-                    Evaluate::make(Call::make(Int(32), Call::register_destructor,
+                    Evaluate::make(Call::make(Handle(), Call::register_destructor,
                                               {Expr("halide_device_free_as_destructor"), buf}, Call::Intrinsic));
                 Stmt body = Block::make(destructor, op->body);
                 return LetStmt::make(op->name, op->value, body);
@@ -523,7 +523,7 @@ class InjectBufferCopies : public IRMutator {
 
                 // Then the destructor
                 Stmt destructor =
-                    Evaluate::make(Call::make(Int(32), Call::register_destructor,
+                    Evaluate::make(Call::make(Handle(), Call::register_destructor,
                                               {Expr("halide_device_and_host_free_as_destructor"), buf},
                                               Call::Intrinsic));
                 body = Block::make(destructor, body);
