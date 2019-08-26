@@ -606,7 +606,7 @@ uint64_t System::id_counter = 0;
 // system and performing a backtracking search over substitutions
 // using beam search.
 bool can_disprove(Expr e, int beam_size) {
-    e = common_subexpression_elimination(simplify(remove_likely_tags(e)));
+    e = common_subexpression_elimination(simplify(remove_likelies(e)));
 
     // debug(0) << "*** Attempting disproof " << e << "\n";
 
