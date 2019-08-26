@@ -236,6 +236,9 @@ struct ScheduleFeatures {
 
     double working_set_at_thread = 0;
 
+    double shared_mem_occupancy = 0;
+    double shared_mem_block_limit_factor = 1;
+
     void dump() const {
         std::cerr << "    num_realizations:                      " << num_realizations << '\n'
                   << "    num_productions:                       " << num_productions << '\n'
@@ -296,7 +299,9 @@ struct ScheduleFeatures {
                   << "    global_mem_load_efficiency:            " << global_mem_load_efficiency << '\n'
                   << "    global_mem_store_coalesce_efficiency:  " << global_mem_store_coalesce_efficiency << '\n'
                   << "    global_mem_load_coalesce_efficiency:   " << global_mem_load_coalesce_efficiency << '\n'
-                  << "    working_set_at_thread:                 " << working_set_at_thread << '\n';
+                  << "    working_set_at_thread:                 " << working_set_at_thread << '\n'
+                  << "    shared_mem_occupancy:                  " << shared_mem_occupancy << '\n'
+                  << "    shared_mem_block_limit_factor:         " << shared_mem_block_limit_factor << '\n';
 
     }
 };

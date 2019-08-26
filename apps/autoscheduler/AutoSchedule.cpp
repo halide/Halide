@@ -104,6 +104,14 @@ int64_t get_shared_memory_limit() {
     return atoi(limit.c_str()) * 1024; // Convert to bytes
 }
 
+int64_t get_block_limit() {
+    std::string limit = get_env_variable("HL_BLOCK_LIMIT");
+    if (limit.empty()) {
+        return 32;
+    }
+    return atoi(limit.c_str());
+}
+
 bool compute_root_and_inline_only() {
     static bool only = get_env_variable("HL_COMPUTE_ROOT_AND_INLINE_ONLY") == "1";
     return only;
@@ -737,6 +745,14 @@ struct LoopNest {
 
     // Apply gpu threads to this loop nest
     mutable GPU_parallelism gpu_label = none;
+
+    bool is_thread(const Target& target) const {
+        return target.has_gpu_feature() && gpu_label == thread;
+    }
+
+    bool is_block(const Target& target) const {
+        return target.has_gpu_feature() && gpu_label == block;
+    }
 
     // given a newly inserted node f into this LoopNest, get union of thread counts in each dimension
     // across all siblings of f.
@@ -1387,6 +1403,22 @@ struct LoopNest {
         features.num_warps_per_block = thread_info.num_warps_per_block;
         features.num_blocks = block_extents;
         features.block_occupancy = thread_info.block_occupancy();
+    }
+
+    void compute_shared_mem_occupancy(const Target& target, int64_t working_set_here, ScheduleFeatures &feat) const {
+        if (!is_block(target)) {
+            return;
+        }
+
+        auto shared_mem_limit = get_shared_memory_limit();
+        auto block_limit = get_block_limit();
+
+        feat.shared_mem_occupancy = (double)working_set_here / (double)shared_mem_limit;
+
+        if (working_set_here > 0) {
+            auto shared_mem_block_limit = std::min(block_limit, shared_mem_limit / working_set_here);
+            feat.shared_mem_block_limit_factor = (double)shared_mem_block_limit / (double)block_limit;
+        }
     }
 
     void compute_features(const FunctionDAG &dag,
@@ -2194,6 +2226,8 @@ struct LoopNest {
             inlined_feat.inner_parallelism = 1;
             inlined_feat.outer_parallelism = parallelism;
         }
+
+        compute_shared_mem_occupancy(target, working_set_here, feat);
     }
 
     bool is_root() const {

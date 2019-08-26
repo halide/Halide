@@ -268,6 +268,9 @@ public:
 
         Expr working_set_at_thread = schedule_features(n, idx++, w);
 
+        Expr shared_mem_occupancy = schedule_features(n, idx++, w);
+        Expr shared_mem_block_limit_factor = schedule_features(n, idx++, w);
+
         assert(idx == head2_w);
 
 
