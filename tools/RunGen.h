@@ -1208,9 +1208,7 @@ public:
         }
     }
 
-    void run_for_benchmark(double benchmark_min_time,
-                           uint64_t benchmark_min_iters,
-                           uint64_t benchmark_max_iters) {
+    void run_for_benchmark(double benchmark_min_time) {
         std::vector<void*> filter_argv = build_filter_argv();
 
         const auto benchmark_inner = [this, &filter_argv]() {
@@ -1226,8 +1224,6 @@ public:
         Halide::Tools::BenchmarkConfig config;
         config.min_time = benchmark_min_time;
         config.max_time = benchmark_min_time * 4;
-        config.min_iters = benchmark_min_iters;
-        config.max_iters = benchmark_max_iters;
         auto result = Halide::Tools::benchmark(benchmark_inner, config);
 
         if (!parsable_output) {

@@ -139,14 +139,6 @@ Flags:
         Override the default minimum desired benchmarking time; ignored if
         --benchmarks is not also specified.
 
-    --benchmark_min_iters=NUM [default = 1]:
-        Override the default minimum number of benchmarking iterations; ignored
-        if --benchmarks is not also specified.
-
-    --benchmark_max_iters=NUM [default = 1000000000]:
-        Override the default maximum number of benchmarking iterations; ignored
-        if --benchmarks is not also specified.
-
     --track_memory:
         Override Halide memory allocator to track high-water mark of memory
         allocation during run; note that this may slow down execution, so
@@ -381,10 +373,9 @@ int main(int argc, char **argv) {
     bool track_memory = false;
     bool describe = false;
     double benchmark_min_time = BenchmarkConfig().min_time;
-    uint64_t benchmark_min_iters = BenchmarkConfig().min_iters;
-    uint64_t benchmark_max_iters = BenchmarkConfig().max_iters;
     std::string default_input_buffers;
     std::string default_input_scalars;
+    std::string benchmarks_flag_value;
     for (int i = 1; i < argc; ++i) {
         if (argv[i][0] == '-') {
             const char *p = argv[i] + 1; // skip -
@@ -439,20 +430,10 @@ int main(int argc, char **argv) {
                     fail() << "Invalid value for flag: " << flag_name;
                 }
             } else if (flag_name == "benchmarks") {
-                if (flag_value != "all") {
-                    fail() << "The only valid value for --benchmarks is 'all'";
-                }
+                benchmarks_flag_value = flag_value;
                 benchmark = true;
             } else if (flag_name == "benchmark_min_time") {
                 if (!parse_scalar(flag_value, &benchmark_min_time)) {
-                    fail() << "Invalid value for flag: " << flag_name;
-                }
-            } else if (flag_name == "benchmark_min_iters") {
-                if (!parse_scalar(flag_value, &benchmark_min_iters)) {
-                    fail() << "Invalid value for flag: " << flag_name;
-                }
-            } else if (flag_name == "benchmark_max_iters") {
-                if (!parse_scalar(flag_value, &benchmark_max_iters)) {
                     fail() << "Invalid value for flag: " << flag_name;
                 }
             } else if (flag_name == "default_input_buffers") {
@@ -527,7 +508,13 @@ int main(int argc, char **argv) {
     halide_reuse_device_allocations(nullptr, true);
 
     if (benchmark) {
-        r.run_for_benchmark(benchmark_min_time, benchmark_min_iters, benchmark_max_iters);
+        if (benchmarks_flag_value.empty()) {
+            benchmarks_flag_value = "all";
+        }
+        if (benchmarks_flag_value != "all") {
+            fail() << "The only valid value for --benchmarks is 'all'";
+        }
+        r.run_for_benchmark(benchmark_min_time);
     } else {
         r.run_for_output();
     }
