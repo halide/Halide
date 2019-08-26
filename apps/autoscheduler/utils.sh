@@ -93,6 +93,7 @@ function get_timeout_cmd() {
 
 function profile_gpu_sample() {
     local -r sample_dir=$1
+    local -r output_dir=$2
 
     local -r num_cores=80
     local -r timeout=60s
@@ -103,9 +104,13 @@ function profile_gpu_sample() {
         return 1
     fi
 
+    local -r batch_id=$(basename $(dirname ${sample_dir}))
+    local -r sample_id=$(basename ${sample_dir})
+    local -r prefix=${batch_id}_sample_${sample_id}
+
     nvprof_timeline_cmd="HL_NUM_THREADS=${num_cores} \
         ${timeout_cmd} -k ${timeout} ${timeout} \
-        nvprof -f --output-profile ${sample_dir}/timeline.nvprof \
+        nvprof -f --output-profile ${output_dir}/${prefix}_timeline.nvprof \
         ${sample_dir}/bench \
         --output_extents=estimate \
         --default_input_buffers=random:0:estimate_then_auto \
@@ -115,7 +120,7 @@ function profile_gpu_sample() {
 
     local -r nvprof_metrics_cmd="HL_NUM_THREADS=${num_cores} \
         ${timeout_cmd} -k ${timeout} ${timeout} \
-        nvprof -f --analysis-metrics -o ${sample_dir}/metrics.nvprof \
+        nvprof -f --analysis-metrics -o ${output_dir}/${prefix}_metrics.nvprof \
         ${sample_dir}/bench \
         --output_extents=estimate \
         --default_input_buffers=random:0:estimate_then_auto \
