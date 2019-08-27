@@ -2179,7 +2179,7 @@ void CodeGen_LLVM::visit(const Broadcast *op) {
 }
 
 Value *CodeGen_LLVM::interleave_vectors(const std::vector<Value *> &vecs) {
-    internal_assert(vecs.size() >= 1);
+    internal_assert(!vecs.empty());
     for (size_t i = 1; i < vecs.size(); i++) {
         internal_assert(vecs[0]->getType() == vecs[i]->getType());
     }
@@ -2866,7 +2866,7 @@ void CodeGen_LLVM::visit(const Call *op) {
         // Used as an annotation for caching, should be invisible to
         // codegen. Ignore arguments beyond the first as they are only
         // used in the cache key.
-        internal_assert(op->args.size() > 0);
+        internal_assert(!op->args.empty());
         value = codegen(op->args[0]);
     } else if (op->is_intrinsic(Call::alloca)) {
         // The argument is the number of bytes. For now it must be

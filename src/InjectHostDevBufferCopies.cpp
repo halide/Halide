@@ -53,7 +53,7 @@ class FindBufferUsage : public IRVisitor {
 
     void visit(const Call *op) override {
         if (op->is_intrinsic(Call::image_load)) {
-            internal_assert(op->args.size() >= 1);
+            internal_assert(!op->args.empty());
             if (is_buffer_var(op->args[1])) {
                 devices_touched.insert(current_device_api);
             }
@@ -62,7 +62,7 @@ class FindBufferUsage : public IRVisitor {
                 op->args[i].accept(this);
             }
         } else if (op->is_intrinsic(Call::image_store)) {
-            internal_assert(op->args.size() >= 1);
+            internal_assert(!op->args.empty());
             if (is_buffer_var(op->args[1])) {
                 devices_touched.insert(current_device_api);
                 devices_writing.insert(current_device_api);

@@ -1461,7 +1461,7 @@ Partitioner::choose_candidate_grouping(const vector<pair<string, string>> &cands
     for (const auto &g : best_grouping) {
         debug(3) << "  " << g.first;
     }
-    if (best_grouping.size() > 0) {
+    if (!best_grouping.empty()) {
         debug(3) << "Best benefit: " << best_benefit << '\n';
     }
 
@@ -2517,7 +2517,7 @@ void Partitioner::reorder_dims(Stage f_handle, int stage_num, Definition def,
     }
 
     // Iterate until all the dimensions have been assigned an order
-    while (strides.size() > 0) {
+    while (!strides.empty()) {
         // Find the pure dimension (can be vars or rvars) with the smallest stride
         bool found_pure_dim = false;
         Expr min_pure_stride = Int(64).max();
