@@ -16,7 +16,6 @@
 namespace Halide {
 namespace Internal {
 
-using std::endl;
 using std::map;
 using std::ostream;
 using std::ostringstream;

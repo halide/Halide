@@ -13,8 +13,6 @@ namespace Internal {
 using std::map;
 using std::pair;
 using std::string;
-using std::vector;
-using ConciseCasts::i16;
 
 namespace {
 

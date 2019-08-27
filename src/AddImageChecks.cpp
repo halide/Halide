@@ -7,7 +7,6 @@
 namespace Halide {
 namespace Internal {
 
-using std::make_pair;
 using std::map;
 using std::pair;
 using std::string;
