@@ -238,6 +238,8 @@ struct ScheduleFeatures {
 
     double shared_mem_occupancy = 0;
     double shared_mem_block_limit_factor = 1;
+    double max_warp_occupancy = 0;
+    double max_block_occupancy = 0;
 
     void dump() const {
         std::cerr << "    num_realizations:                      " << num_realizations << '\n'
@@ -301,7 +303,9 @@ struct ScheduleFeatures {
                   << "    global_mem_load_coalesce_efficiency:   " << global_mem_load_coalesce_efficiency << '\n'
                   << "    working_set_at_thread:                 " << working_set_at_thread << '\n'
                   << "    shared_mem_occupancy:                  " << shared_mem_occupancy << '\n'
-                  << "    shared_mem_block_limit_factor:         " << shared_mem_block_limit_factor << '\n';
+                  << "    shared_mem_block_limit_factor:         " << shared_mem_block_limit_factor << '\n'
+                  << "    max_warp_occupancy:                    " << max_warp_occupancy << '\n'
+                  << "    max_block_occupancy:                   " << max_block_occupancy << '\n';
 
     }
 };
