@@ -20,13 +20,6 @@ using std::vector;
 
 namespace {
 
-const Definition &get_stage_definition(const Function &f, int stage_num) {
-    if (stage_num == 0) {
-        return f.definition();
-    }
-    return f.update(stage_num - 1);
-}
-
 // Collect the bounds of all the externally referenced buffers in a stmt.
 class CollectExternalBufferBounds : public IRVisitor {
 public:
