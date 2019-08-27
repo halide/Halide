@@ -288,7 +288,7 @@ llvm::DataLayout get_data_layout_for_target(Target target) {
 #if LLVM_VERSION >= 100
                 return llvm::DataLayout("e-m:o-p270:32:32-p271:32:32-p272:64:64-i64:64-f80:128-n8:16:32:64-S128");
 #else
-               return llvm::DataLayout("e-m:o-i64:64-f80:128-n8:16:32:64-S128");
+                return llvm::DataLayout("e-m:o-i64:64-f80:128-n8:16:32:64-S128");
 #endif
             } else if (target.os == Target::Windows && !target.has_feature(Target::JIT)) {
                 return llvm::DataLayout("e-m:w-i64:64-f80:128-n8:16:32:64-S128");
