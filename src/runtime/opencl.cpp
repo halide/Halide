@@ -6,8 +6,6 @@
 #include "mini_cl.h"
 #include "scoped_mutex_lock.h"
 
-#include "runtime_internal.h"
-
 #define INLINE inline __attribute__((always_inline))
 
 namespace Halide { namespace Runtime { namespace Internal { namespace OpenCL {
@@ -829,7 +827,7 @@ WEAK int halide_opencl_device_malloc(void *user_context, halide_buffer_t* buf) {
     #ifdef DEBUG_RUNTIME
     uint64_t t_before = halide_current_time_ns(user_context);
     #endif
-    //cl_mem dev_ptr = 0;
+
     device_handle *dev_handle = NULL;
 
     FreeListItem *to_free = NULL;
