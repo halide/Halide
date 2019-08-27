@@ -2134,7 +2134,7 @@ void CodeGen_C::visit(const Call *op) {
         Expr a0 = op->args[0];
         rhs << print_expr(cast(op->type, select(a0 > 0, a0, -a0)));
     } else if (op->is_intrinsic(Call::memoize_expr)) {
-        internal_assert(op->args.size() >= 1);
+        internal_assert(!op->args.empty());
         string arg = print_expr(op->args[0]);
         rhs << "(" << arg << ")";
     } else if (op->is_intrinsic(Call::alloca)) {
@@ -2662,7 +2662,7 @@ void CodeGen_C::visit(const Allocate *op) {
         } else {
             // Check that the allocation is not scalar (if it were scalar
             // it would have constant size).
-            internal_assert(op->extents.size() > 0);
+            internal_assert(!op->extents.empty());
 
             size_id = print_assignment(Int(64), print_expr(op->extents[0]));
             size_id_type = Int(64);
@@ -2786,7 +2786,7 @@ void CodeGen_C::visit(const Evaluate *op) {
 }
 
 void CodeGen_C::visit(const Shuffle *op) {
-    internal_assert(op->vectors.size() >= 1);
+    internal_assert(!op->vectors.empty());
     internal_assert(op->vectors[0].type().is_vector());
     for (size_t i = 1; i < op->vectors.size(); i++) {
         internal_assert(op->vectors[0].type() == op->vectors[i].type());

@@ -1181,7 +1181,7 @@ private:
             }
             interval = Interval(min, max);
         } else if (op->is_intrinsic(Call::memoize_expr)) {
-            internal_assert(op->args.size() >= 1);
+            internal_assert(!op->args.empty());
             op->args[0].accept(this);
         } else if (op->call_type == Call::Halide) {
             bounds_of_func(op->name, op->value_index, op->type);

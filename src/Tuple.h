@@ -49,7 +49,7 @@ public:
 
     /** Construct a Tuple from a vector of Exprs */
     explicit HALIDE_NO_USER_CODE_INLINE Tuple(const std::vector<Expr> &e) : exprs(e) {
-        user_assert(e.size() > 0) << "Tuples must have at least one element\n";
+        user_assert(!e.empty()) << "Tuples must have at least one element\n";
     }
 
     /** Construct a Tuple from a function reference. */
@@ -103,7 +103,7 @@ public:
     /** Construct a Realization that refers to the buffers in an
      * existing vector of Buffer<> */
     explicit Realization(std::vector<Buffer<>> &e) : images(e) {
-        user_assert(e.size() > 0) << "Realizations must have at least one element\n";
+        user_assert(!e.empty()) << "Realizations must have at least one element\n";
     }
 
     /** Call device_sync() for all Buffers in the Realization.
