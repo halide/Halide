@@ -49,12 +49,9 @@ std::unique_ptr<llvm::Module> codegen_llvm(const Module &module, llvm::LLVMConte
 namespace Internal {
 
 using namespace llvm;
-using std::cout;
-using std::endl;
 using std::map;
 using std::ostringstream;
 using std::pair;
-using std::stack;
 using std::string;
 using std::vector;
 

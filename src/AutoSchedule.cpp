@@ -18,7 +18,6 @@
 namespace Halide {
 namespace Internal {
 
-using std::deque;
 using std::make_pair;
 using std::map;
 using std::pair;
