@@ -1464,6 +1464,8 @@ void check_and_condition(Expr orig, Expr result, Interval i) {
 }
 
 void solve_test() {
+    using ConciseCasts::i16;
+
     Expr x = Variable::make(Int(32), "x");
     Expr y = Variable::make(Int(32), "y");
     Expr z = Variable::make(Int(32), "z");
