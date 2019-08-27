@@ -12,6 +12,7 @@
 namespace Halide {
 namespace Internal {
 
+using std::set;
 using std::string;
 using std::vector;
 
