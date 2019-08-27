@@ -275,15 +275,6 @@ struct StageBounds {
         return (f_stage < other.f_stage) ||
                ((f_stage == other.f_stage) && (bounds.size() < other.bounds.size()));
     }
-    friend std::ostream& operator<<(std::ostream &stream, const StageBounds &s) {
-        stream << "Stage: " << s.f_stage << "\n";
-        stream << "Bounds:\n";
-        for (const auto &iter : s.bounds) {
-            stream << "\t" << iter.first << " -> [" << iter.second.min << ", " << iter.second.max << "]\n";
-        }
-        stream << "\n";
-        return stream;
-    }
 };
 
 // Helper function to queue regions that need to be traversed. 'fs_bounds' is
@@ -2303,41 +2294,6 @@ string get_base_name(string name) {
         return name.substr(dot_pos + 1);
     }
     return name;
-}
-
-// Return true if any of the values or args in 'def' refers to any of
-// the inputs or outputs, with access function which depends on 'var'.
-bool access_inputs_or_outputs(Definition def, VarOrRVar var,
-                              const map<string, Type> &inputs,
-                              const vector<Function> &outputs) {
-    FindAllCalls find;
-    def.accept(&find);
-
-    for (size_t i = 0; i < find.call_args.size(); ++i) {
-        const string &func = find.call_args[i].first;
-        const vector<Expr> &args = find.call_args[i].second;
-
-        if (inputs.find(func) == inputs.end()) {
-            // Check if 'func' is an output
-            bool is_output =
-                std::find_if(outputs.begin(), outputs.end(),
-                            [&func](const Function &f) { return (f.name() == func);})
-                != outputs.end();
-            if (!is_output) {
-                // 'func' is neither an input or an output
-                continue;
-            }
-        }
-
-        // Check if any of the accesses to 'func' depends on 'var'
-        for (const auto &arg : args) {
-            if (expr_uses_var(arg, var.name())) {
-                return true;
-            }
-        }
-    }
-
-    return false;
 }
 
 pair<VarOrRVar, VarOrRVar> Partitioner::split_dim(
