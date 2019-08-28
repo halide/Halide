@@ -218,7 +218,7 @@ struct device_handle {
 
 // A free list, used when allocations are being cached.
 WEAK struct FreeListItem {
-    device_handle* ptr;
+    device_handle *ptr;
     cl_context ctx;
     cl_command_queue stream;
     size_t size;
@@ -513,7 +513,7 @@ namespace Halide {
 namespace Runtime {
 namespace Internal {
 
-WEAK halide_device_allocation_pool opencl_allocation_pool;
+WEAK halide_device_allocation_pool opencl_allocation_pool = {NULL, NULL};
 
 __attribute__((constructor))
 WEAK void register_opencl_allocation_pool() {
@@ -531,6 +531,83 @@ WEAK uint64_t quantize_allocation_size(uint64_t sz) {
         sz = sz << (60 - z);
     }
     return sz;
+}
+
+void cache_allocation(void *user_context, ClContext& cl_ctx, halide_buffer_t *buf) {
+    cl_mem dev_ptr = ((device_handle *)buf->device)->mem;
+
+    debug(user_context) <<  "    caching allocation for later use: " << (void *)(dev_ptr) << "\n";
+    FreeListItem *item = (FreeListItem *)malloc(sizeof(FreeListItem));
+    item->ctx = cl_ctx.context;
+    item->size = quantize_allocation_size(buf->size_in_bytes());
+    item->ptr = (device_handle*)buf->device;
+    item->stream = cl_ctx.cmd_queue;
+    {
+        ScopedMutexLock lock(&free_list_lock);
+        item->next = free_list;
+        free_list = item;
+    }
+}
+
+device_handle *retrieve_allocation_from_cache(void *user_context, ClContext& cl_ctx, const size_t size) {
+    ScopedMutexLock lock(&free_list_lock);
+    // Best-fit allocation. There are three tunable constants
+    // here. A bucket is claimed if the size requested is at least
+    // 7/8 of the size of the bucket. We keep at most 32 unused
+    // allocations. We round up each allocation size to its top 4
+    // most significant bits (see quantize_allocation_size).
+    device_handle *result = NULL;
+
+    FreeListItem *best = NULL, *item = free_list;
+    FreeListItem **best_prev = NULL, **prev_ptr = &free_list;
+    FreeListItem *to_free = NULL;
+
+    int depth = 0;
+    while (item) {
+        if ((size <= item->size) && // Fits
+            (size >= (item->size / 8) * 7) && // Not too much slop
+            (cl_ctx.context == item->ctx) && // Same cuda context
+            (cl_ctx.cmd_queue == item->stream) && // Can only safely re-use on the same stream on which it was freed
+            ((best == NULL) || (best->size > item->size))) { // Better than previous best fit
+            best = item;
+            best_prev = prev_ptr;
+            prev_ptr = &item->next;
+            item = item->next;
+        } else if (depth > 32) {
+            // Allocations after here have not been used for a
+            // long time. Just detach the rest of the free list
+            // and defer the actual cuMemFree calls until after we
+            // release the free_list_lock.
+            to_free = item;
+            *prev_ptr = NULL;
+            item = NULL;
+            break;
+        } else {
+            prev_ptr = &item->next;
+            item = item->next;
+        }
+        depth++;
+    }
+
+    if (best) {
+        result = best->ptr;
+        *best_prev = best->next;
+        free(best);
+    }
+
+    while (to_free) {
+        FreeListItem *next = to_free->next;
+        debug(user_context) << "    clReleaseMemObject from allocation cache" << (void *)to_free->ptr->mem << "\n";
+        cl_int err = clReleaseMemObject((cl_mem)to_free->ptr->mem);
+        free(to_free->ptr);
+        if (err != CL_SUCCESS) {
+            debug(user_context) << "    Error during clReleaseMemObject. Error code: " << err << "\n";
+        }
+        free(to_free);
+        to_free = next;
+    }
+
+    return result;
 }
 
 }}}
@@ -565,17 +642,7 @@ WEAK int halide_opencl_device_free(void *user_context, halide_buffer_t* buf) {
 
     cl_int result = CL_SUCCESS;
     if (halide_can_reuse_device_allocations(user_context)) {
-        debug(user_context) <<  "    caching allocation for later use: " << (void *)(dev_ptr) << "\n";
-        FreeListItem *item = (FreeListItem *)malloc(sizeof(FreeListItem));
-        item->ctx = ctx.context;
-        item->size = quantize_allocation_size(buf->size_in_bytes());
-        item->ptr = (device_handle*)buf->device;
-        item->stream = ctx.cmd_queue;
-        {
-            ScopedMutexLock lock(&free_list_lock);
-            item->next = free_list;
-            free_list = item;
-        }
+        cache_allocation(user_context, ctx, buf);
     } else {
         debug(user_context) << "    clReleaseMemObject " << (void *)dev_ptr << "\n";
         result = clReleaseMemObject((cl_mem)dev_ptr);
@@ -821,7 +888,6 @@ WEAK int halide_opencl_device_malloc(void *user_context, halide_buffer_t* buf) {
         halide_assert(user_context, buf->dim[i].stride >= 0);
     }
 
-
     debug(user_context) << "    allocating " << *buf << "\n";
 
     #ifdef DEBUG_RUNTIME
@@ -829,61 +895,8 @@ WEAK int halide_opencl_device_malloc(void *user_context, halide_buffer_t* buf) {
     #endif
 
     device_handle *dev_handle = NULL;
-
-    FreeListItem *to_free = NULL;
     if (halide_can_reuse_device_allocations(user_context)) {
-        ScopedMutexLock lock(&free_list_lock);
-        // Best-fit allocation. There are three tunable constants
-        // here. A bucket is claimed if the size requested is at least
-        // 7/8 of the size of the bucket. We keep at most 32 unused
-        // allocations. We round up each allocation size to its top 4
-        // most significant bits (see quantize_allocation_size).
-        FreeListItem *best = NULL, *item = free_list;
-        FreeListItem **best_prev = NULL, **prev_ptr = &free_list;
-        int depth = 0;
-        while (item) {
-            if ((size <= item->size) && // Fits
-                (size >= (item->size / 8) * 7) && // Not too much slop
-                (ctx.context == item->ctx) && // Same cuda context
-                (ctx.cmd_queue == item->stream) && // Can only safely re-use on the same stream on which it was freed
-                ((best == NULL) || (best->size > item->size))) { // Better than previous best fit
-                best = item;
-                best_prev = prev_ptr;
-                prev_ptr = &item->next;
-                item = item->next;
-            } else if (depth > 32) {
-                // Allocations after here have not been used for a
-                // long time. Just detach the rest of the free list
-                // and defer the actual cuMemFree calls until after we
-                // release the free_list_lock.
-                to_free = item;
-                *prev_ptr = NULL;
-                item = NULL;
-                break;
-            } else {
-                prev_ptr = &item->next;
-                item = item->next;
-            }
-            depth++;
-        }
-
-        if (best) {
-            dev_handle = best->ptr;;
-            *best_prev = best->next;
-            free(best);
-        }
-    }
-
-    while (to_free) {
-        FreeListItem *next = to_free->next;
-        debug(user_context) << "    clReleaseMemObject from allocation cache" << (void *)to_free->ptr->mem << "\n";
-        cl_int err = clReleaseMemObject((cl_mem)to_free->ptr->mem);
-        free(to_free->ptr);
-        if (err != CL_SUCCESS) {
-            debug(user_context) << "    Error during clReleaseMemObject. Error code: " << err << "\n";
-        }
-        free(to_free);
-        to_free = next;
+        dev_handle = retrieve_allocation_from_cache(user_context, ctx, size);
     }
 
     if (!dev_handle) {
