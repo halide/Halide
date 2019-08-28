@@ -323,11 +323,12 @@ llvm::DataLayout get_data_layout_for_target(Target target) {
                 return llvm::DataLayout("e-m:e-i64:64-f80:128-n8:16:32:64-S128");
 #endif
             } else {
-#if LLVM_VERSION >= 100
-                return llvm::DataLayout("e-m:e-p270:32:32-p271:32:32-p272:64:64-i64:64-f80:128-n8:16:32:64-S128");
-#else
+// TODO: not just yet, but probably soon, so we'll leave it here, commented out.
+// #if LLVM_VERSION >= 100
+//              return llvm::DataLayout("e-m:e-p270:32:32-p271:32:32-p272:64:64-i64:64-f80:128-n8:16:32:64-S128");
+// #else
                 return llvm::DataLayout("e-m:e-i64:64-f80:128-n8:16:32:64-S128");
-#endif
+// #endif
             }
         }
     } else if (target.arch == Target::ARM) {
