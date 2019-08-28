@@ -34,6 +34,9 @@ ostream &operator<<(ostream &out, const Type &type) {
             out << "(void *)";
         }
         break;
+    case Type::BFloat:
+        out << "bfloat";
+        break;
     }
     if (!type.is_handle()) {
         out << type.bits();

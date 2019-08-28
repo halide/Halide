@@ -251,7 +251,11 @@ struct FloatImm : public ExprNode<FloatImm> {
         node->type = t;
         switch (t.bits()) {
         case 16:
-            node->value = (double)((float16_t)value);
+            if (t.is_bfloat()) {
+                node->value = (double)((bfloat16_t)value);
+            } else {
+                node->value = (double)((float16_t)value);
+            }
             break;
         case 32:
             node->value = (float)value;
@@ -299,17 +303,18 @@ struct Expr : public Internal::IRHandle {
 
     /** Make an expression representing numeric constants of various types. */
     // @{
-    explicit Expr(int8_t x)    : IRHandle(Internal::IntImm::make(Int(8), x)) {}
-    explicit Expr(int16_t x)   : IRHandle(Internal::IntImm::make(Int(16), x)) {}
-             Expr(int32_t x)   : IRHandle(Internal::IntImm::make(Int(32), x)) {}
-    explicit Expr(int64_t x)   : IRHandle(Internal::IntImm::make(Int(64), x)) {}
-    explicit Expr(uint8_t x)   : IRHandle(Internal::UIntImm::make(UInt(8), x)) {}
-    explicit Expr(uint16_t x)  : IRHandle(Internal::UIntImm::make(UInt(16), x)) {}
-    explicit Expr(uint32_t x)  : IRHandle(Internal::UIntImm::make(UInt(32), x)) {}
-    explicit Expr(uint64_t x)  : IRHandle(Internal::UIntImm::make(UInt(64), x)) {}
-             Expr(float16_t x) : IRHandle(Internal::FloatImm::make(Float(16), (double)x)) {}
-             Expr(float x)     : IRHandle(Internal::FloatImm::make(Float(32), x)) {}
-    explicit Expr(double x)    : IRHandle(Internal::FloatImm::make(Float(64), x)) {}
+    explicit Expr(int8_t x)     : IRHandle(Internal::IntImm::make(Int(8), x)) {}
+    explicit Expr(int16_t x)    : IRHandle(Internal::IntImm::make(Int(16), x)) {}
+             Expr(int32_t x)    : IRHandle(Internal::IntImm::make(Int(32), x)) {}
+    explicit Expr(int64_t x)    : IRHandle(Internal::IntImm::make(Int(64), x)) {}
+    explicit Expr(uint8_t x)    : IRHandle(Internal::UIntImm::make(UInt(8), x)) {}
+    explicit Expr(uint16_t x)   : IRHandle(Internal::UIntImm::make(UInt(16), x)) {}
+    explicit Expr(uint32_t x)   : IRHandle(Internal::UIntImm::make(UInt(32), x)) {}
+    explicit Expr(uint64_t x)   : IRHandle(Internal::UIntImm::make(UInt(64), x)) {}
+             Expr(float16_t x)  : IRHandle(Internal::FloatImm::make(Float(16), (double)x)) {}
+             Expr(bfloat16_t x) : IRHandle(Internal::FloatImm::make(BFloat(16), (double)x)) {}
+             Expr(float x)      : IRHandle(Internal::FloatImm::make(Float(32), x)) {}
+    explicit Expr(double x)     : IRHandle(Internal::FloatImm::make(Float(64), x)) {}
     // @}
 
     /** Make an expression representing a const string (i.e. a StringImm) */

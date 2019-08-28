@@ -34,8 +34,6 @@
 namespace Halide {
 
 using std::map;
-using std::max;
-using std::min;
 using std::ofstream;
 using std::pair;
 using std::string;

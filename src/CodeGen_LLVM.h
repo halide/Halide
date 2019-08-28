@@ -119,6 +119,18 @@ protected:
     /** What's the natural vector bit-width to use for loads, stores, etc. */
     virtual int native_vector_bits() const = 0;
 
+    /** Return the type in which arithmetic should be done for the
+     * given storage type. */
+    virtual Type upgrade_type_for_arithmetic(const Type &) const;
+
+    /** Return the type that a given Halide type should be
+     * stored/loaded from memory as. */
+    virtual Type upgrade_type_for_storage(const Type &) const;
+
+    /** Return the type that a Halide type should be passed in and out
+     * of functions as. */
+    virtual Type upgrade_type_for_argument_passing(const Type &) const;
+
     /** State needed by llvm for code generation, including the
      * current module, function, context, builder, and most recently
      * generated llvm value. */
@@ -321,7 +333,7 @@ protected:
     // @}
 
     /** Turn a Halide Type into an llvm::Value representing a constant halide_type_t */
-    llvm::Value *make_halide_type_t(Type);
+    llvm::Value *make_halide_type_t(const Type &);
 
     /** Mark a load or store with type-based-alias-analysis metadata
      * so that llvm knows it can reorder loads and stores across
@@ -405,7 +417,7 @@ protected:
 
     /** Get the llvm type equivalent to the given halide type in the
      * current context. */
-    llvm::Type *llvm_type_of(Type);
+    virtual llvm::Type *llvm_type_of(const Type &) const;
 
     /** Perform an alloca at the function entrypoint. Will be cleaned
      * on function exit. */
@@ -435,7 +447,7 @@ protected:
      * arguments must be specified explicitly as
      * 'called_lanes'. */
     // @{
-    llvm::Value *call_intrin(Type t, int intrin_lanes,
+    llvm::Value *call_intrin(const Type &t, int intrin_lanes,
                              const std::string &name, std::vector<Expr>);
     llvm::Value *call_intrin(llvm::Type *t, int intrin_lanes,
                              const std::string &name, std::vector<llvm::Value *>);

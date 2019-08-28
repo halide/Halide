@@ -56,6 +56,16 @@ Expr Simplify::visit(const Sub *op, ExprInfo *bounds) {
              rewrite(select(x, y, z) - z, select(x, y - z, 0)) ||
              rewrite(y - select(x, y, z), select(x, 0, y - z)) ||
              rewrite(z - select(x, y, z), select(x, z - y, 0)) ||
+
+             rewrite(select(x, y + w, z) - y, select(x, w, z - y)) ||
+             rewrite(select(x, w + y, z) - y, select(x, w, z - y)) ||
+             rewrite(select(x, y, z + w) - z, select(x, y - z, w)) ||
+             rewrite(select(x, y, w + z) - z, select(x, y - z, w)) ||
+             rewrite(y - select(x, y + w, z), 0 - select(x, w, z - y)) ||
+             rewrite(y - select(x, w + y, z), 0 - select(x, w, z - y)) ||
+             rewrite(z - select(x, y, z + w), 0 - select(x, y - z, w)) ||
+             rewrite(z - select(x, y, w + z), 0 - select(x, y - z, w)) ||
+
              rewrite((x + y) - x, y) ||
              rewrite((x + y) - y, x) ||
              rewrite(x - (x + y), -y) ||
@@ -89,6 +99,10 @@ Expr Simplify::visit(const Sub *op, ExprInfo *bounds) {
              rewrite(((y + x) + z) - x, y + z) ||
              rewrite((z + (x + y)) - x, z + y) ||
              rewrite((z + (y + x)) - x, z + y) ||
+
+             rewrite((x - y) - (x + z), 0 - y - z) ||
+             rewrite((x - y) - (z + x), 0 - y - z) ||
+
              (no_overflow(op->type) &&
               (rewrite(max(x, y) - x, max(0, y - x)) ||
                rewrite(min(x, y) - x, min(0, y - x)) ||

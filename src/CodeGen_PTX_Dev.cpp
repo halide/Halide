@@ -49,6 +49,11 @@ CodeGen_PTX_Dev::~CodeGen_PTX_Dev() {
     delete context;
 }
 
+Type CodeGen_PTX_Dev::upgrade_type_for_storage(const Type &t) const {
+    if (t.element_of() == Float(16)) return t;
+    return CodeGen_LLVM::upgrade_type_for_storage(t);
+}
+
 void CodeGen_PTX_Dev::add_kernel(Stmt stmt,
                                  const std::string &name,
                                  const std::vector<DeviceArgument> &args) {

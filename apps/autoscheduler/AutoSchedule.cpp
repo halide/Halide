@@ -51,10 +51,6 @@
   When training or schedule, read weights from this directory or file
   (if path ends in `.weights` it is written as a single file, otherwise a directory of files)
 
-  HL_WEIGHTS_OUT_DIR
-  When training, output updated weights here
-  (if path ends in `.weights` it is written as a single file, otherwise a directory of files)
-
   HL_NO_SUBTILING
   If set to 1, limits the search space to that of Mullapudi et al.
 
@@ -3223,10 +3219,7 @@ void generate_schedule(const std::vector<Function> &outputs,
     }
 
     string weights_in_path = get_env_variable("HL_WEIGHTS_DIR");
-    string weights_out_path = get_env_variable("HL_WEIGHTS_OUT_DIR");
-    if (weights_out_path.empty()) {
-        weights_out_path = weights_in_path;
-    }
+    string weights_out_path;  // deliberately empty
 
     string randomize_weights_str = get_env_variable("HL_RANDOMIZE_WEIGHTS");
     bool randomize_weights = randomize_weights_str == "1";

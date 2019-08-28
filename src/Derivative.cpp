@@ -415,7 +415,7 @@ void ReverseAccumulationVisitor::propagate_adjoints(
                     break;
                 }
             }
-            bool has_reduction_var = func.rvars(update_id).size() > 0;
+            bool has_reduction_var = !func.rvars(update_id).empty();
             if (!all_zero_or_one_self_adjoint && has_reduction_var) {
                 // a. is there any instance of reduction variable such that
                 // the self reference update overwrites itself?

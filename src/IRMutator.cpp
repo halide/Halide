@@ -3,7 +3,6 @@
 namespace Halide {
 namespace Internal {
 
-using std::pair;
 using std::vector;
 
 

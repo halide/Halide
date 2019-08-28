@@ -561,7 +561,6 @@ struct Call : public ExprNode<Call> {
         stringify,
         undef,
         unsafe_promise_clamped,
-
         IntrinsicOpCount // Sentinel: keep last.
     };
 

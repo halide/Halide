@@ -4,10 +4,7 @@
 namespace Halide {
 namespace Internal {
 
-using std::map;
-using std::pair;
 using std::string;
-using std::vector;
 
 Closure::Closure(Stmt s, const string &loop_variable) {
     if (!loop_variable.empty()) {
