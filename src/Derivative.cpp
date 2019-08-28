@@ -485,7 +485,7 @@ void ReverseAccumulationVisitor::propagate_adjoints(
         for (int d = 0; d < (int)bounds.size(); d++) {
             user_assert(bounds[d].is_bounded()) << "Access to function or buffer " <<
                 it.first << " at dimension " << d << " is not bounded. " <<
-                "We can only differentiate bounded functions.\n";
+                "We can only differentiate bounded accesses.\n";
         }
     }
 
