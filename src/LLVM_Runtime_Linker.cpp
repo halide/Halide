@@ -275,7 +275,11 @@ llvm::DataLayout get_data_layout_for_target(Target target) {
                 return llvm::DataLayout("e-m:e-p:32:32-i64:64-f80:32-n8:16:32-a:0:32-S32");
             } else {
                 // Linux/Android
+#if LLVM_VERSION >= 100
+                return llvm::DataLayout("e-m:e-p:32:32-p270:32:32-p271:32:32-p272:64:64-f64:32:64-f80:32-n8:16:32-S128");
+#else
                 return llvm::DataLayout("e-m:e-p:32:32-f64:32:64-f80:32-n8:16:32-S128");
+#endif
             }
         } else { // 64-bit
             if (target.os == Target::OSX) {
