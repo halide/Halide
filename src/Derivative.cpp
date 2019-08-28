@@ -480,6 +480,14 @@ void ReverseAccumulationVisitor::propagate_adjoints(
         output_box.push_back(Interval(p.first, p.second));
     }
     func_bounds = inference_bounds(output, output_box);
+    for (const auto &it : func_bounds) {
+        const Box &bounds = it.second;
+        for (int d = 0; d < (int)bounds.size(); d++) {
+            user_assert(bounds[d].is_bounded()) << "Access to function or buffer " <<
+                it.first << " at dimension " << d << " is not bounded. " <<
+                "We can only differentiate bounded functions.\n";
+        }
+    }
 
     // Create a stub for each function and each update to accumulate adjoints.
     for (int func_id = 0; func_id < (int) funcs.size(); func_id++) {
