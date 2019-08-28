@@ -262,40 +262,71 @@ DECLARE_NO_INITMOD(riscv_cpu_features)
 
 namespace {
 
+// These are temporarily backed out of trunk LLVM but will likely be back soon
+#define USE_NEW_X86_DATALAYOUT 0
+
 llvm::DataLayout get_data_layout_for_target(Target target) {
     if (target.arch == Target::X86) {
         if (target.bits == 32) {
             if (target.os == Target::OSX) {
+#if USE_NEW_X86_DATALAYOUT
+                return llvm::DataLayout("e-m:o-p:32:32-p270:32:32-p271:32:32-p272:64:64-f64:32:64-f80:128-n8:16:32-S128");
+#else
                 return llvm::DataLayout("e-m:o-p:32:32-f64:32:64-f80:128-n8:16:32-S128");
+#endif
             } else if (target.os == Target::IOS) {
+#if USE_NEW_X86_DATALAYOUT
+                return llvm::DataLayout("e-m:o-p:32:32-p270:32:32-p271:32:32-p272:64:64-f64:32:64-f80:128-n8:16:32-S128");
+#else
                 return llvm::DataLayout("e-m:o-p:32:32-f64:32:64-f80:128-n8:16:32-S128");
+#endif
             } else if (target.os == Target::Windows && !target.has_feature(Target::JIT)) {
+#if USE_NEW_X86_DATALAYOUT
+                return llvm::DataLayout("e-m:x-p:32:32-p270:32:32-p271:32:32-p272:64:64-i64:64-f80:32-n8:16:32-a:0:32-S32");
+#else
                 return llvm::DataLayout("e-m:x-p:32:32-i64:64-f80:32-n8:16:32-a:0:32-S32");
+#endif
             } else if (target.os == Target::Windows) {
+#if USE_NEW_X86_DATALAYOUT
+                return llvm::DataLayout("e-m:e-p:32:32-p270:32:32-p271:32:32-p272:64:64-i64:64-f80:32-n8:16:32-a:0:32-S32");
+#else
                 return llvm::DataLayout("e-m:e-p:32:32-i64:64-f80:32-n8:16:32-a:0:32-S32");
+#endif
             } else {
                 // Linux/Android
+#if USE_NEW_X86_DATALAYOUT
+                return llvm::DataLayout("e-m:e-p:32:32-p270:32:32-p271:32:32-p272:64:64-f64:32:64-f80:32-n8:16:32-S128");
+#else
                 return llvm::DataLayout("e-m:e-p:32:32-f64:32:64-f80:32-n8:16:32-S128");
+#endif
             }
         } else { // 64-bit
             if (target.os == Target::OSX) {
-#if LLVM_VERSION >= 100
+#if USE_NEW_X86_DATALAYOUT
                 return llvm::DataLayout("e-m:o-p270:32:32-p271:32:32-p272:64:64-i64:64-f80:128-n8:16:32:64-S128");
 #else
                 return llvm::DataLayout("e-m:o-i64:64-f80:128-n8:16:32:64-S128");
 #endif
             } else if (target.os == Target::IOS) {
-#if LLVM_VERSION >= 100
+#if USE_NEW_X86_DATALAYOUT
                 return llvm::DataLayout("e-m:o-p270:32:32-p271:32:32-p272:64:64-i64:64-f80:128-n8:16:32:64-S128");
 #else
                 return llvm::DataLayout("e-m:o-i64:64-f80:128-n8:16:32:64-S128");
 #endif
             } else if (target.os == Target::Windows && !target.has_feature(Target::JIT)) {
+#if USE_NEW_X86_DATALAYOUT
+                return llvm::DataLayout("e-m:w-p270:32:32-p271:32:32-p272:64:64-i64:64-f80:128-n8:16:32:64-S128");
+#else
                 return llvm::DataLayout("e-m:w-i64:64-f80:128-n8:16:32:64-S128");
+#endif
             } else if (target.os == Target::Windows) {
-               return llvm::DataLayout("e-m:e-i64:64-f80:128-n8:16:32:64-S128");
+#if USE_NEW_X86_DATALAYOUT
+                return llvm::DataLayout("e-m:e-p270:32:32-p271:32:32-p272:64:64-i64:64-f80:128-n8:16:32:64-S128");
+#else
+                return llvm::DataLayout("e-m:e-i64:64-f80:128-n8:16:32:64-S128");
+#endif
             } else {
-#if LLVM_VERSION >= 100
+#if USE_NEW_X86_DATALAYOUT
                 return llvm::DataLayout("e-m:e-p270:32:32-p271:32:32-p272:64:64-i64:64-f80:128-n8:16:32:64-S128");
 #else
                 return llvm::DataLayout("e-m:e-i64:64-f80:128-n8:16:32:64-S128");
