@@ -45,6 +45,7 @@ $(AUTOSCHED_BIN)/libauto_schedule.so: $(AUTOSCHED_SRC)/AutoSchedule.cpp \
 										$(AUTOSCHED_SRC)/Weights.h \
 										$(AUTOSCHED_SRC)/Weights.cpp \
 										$(AUTOSCHED_SRC)/FunctionDAG.h \
+										$(AUTOSCHED_SRC)/FunctionDAG.cpp \
 										$(AUTOSCHED_SRC)/Featurization.h \
 										$(AUTOSCHED_SRC)/CostModel.h \
 										$(AUTOSCHED_SRC)/PerfectHashMap.h \
