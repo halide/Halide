@@ -281,8 +281,9 @@ class Featurizer : public IRVisitor {
             if (e->producer->func.name() == name) {
                 // The same name can be encountered multiple times
                 // (e.g. a+a, where a is a trivial function),
-                // so we can't use std::move(matrix) here
-                e->add_load_jacobian(matrix);
+                // so we can't use std::move(matrix) here without making a copy
+                vector<vector<OptionalRational>> copy = matrix;
+                e->add_load_jacobian(std::move(copy));
             }
         }
     }
