@@ -35,6 +35,17 @@ CodeGen_WebAssembly::CodeGen_WebAssembly(Target t) : CodeGen_Posix(t) {
 }
 
 void CodeGen_WebAssembly::visit(const Cast *op) {
+    {
+        Halide::Type src = op->value.type();
+        Halide::Type dst = op->type;
+        if (upgrade_type_for_arithmetic(src) != src ||
+            upgrade_type_for_arithmetic(dst) != dst) {
+            // Handle casts to and from types for which we don't have native support.
+            CodeGen_Posix::visit(op);
+            return;
+        }
+    }
+
     if (!op->type.is_vector()) {
         // We only have peephole optimizations for vectors in here.
         CodeGen_Posix::visit(op);
