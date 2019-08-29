@@ -15,7 +15,6 @@ add_custom_command(OUTPUT ${WF_CPP}
 add_executable(retrain_cost_model_process
                ASLog.cpp
                DefaultCostModel.cpp
-               FunctionDAG.cpp
                Weights.cpp
                retrain_cost_model.cpp
                ${WF_CPP})
@@ -47,6 +46,7 @@ add_library(auto_schedule
             ASLog.cpp
             AutoSchedule.cpp
             DefaultCostModel.cpp
+            FunctionDAG.cpp
             Weights.cpp
             ${WF_CPP})
 
