@@ -180,18 +180,18 @@ void lowered_dims(const vector<int64_t> &size, int vector_loop_i, vector<int64_t
 
 
 
-// creates tilings for gpu blocks loops or gpu threads loops.
+// creates tilings for gpu threads loops.
 // Innermost thread loop is always the vectorized dim and its extent is a multiple of 32.
 // Other loop extents are sized to be powers of 2 such that total extent is < 1024
 // called either when we are creating parallel -> (blocks, threads) loop when computing at root
 // OR when we are creating none -> (threads, SIMD) loop when computing at a serial loop
-// threads_inner = True when we're generating block tilings, False when generating thread tilings
+// serial_inner = True when we're generating (thread, serial) tilings, False when generating (block,thread) tilings
 // max_s hold max gpu_thread counts of all siblings in each dimension. Used to make sure union of
 // thread counts is under 1024 threshold.
 vector<vector<int64_t>> generate_gpu_tilings(const vector<vector<int64_t>> &stage_sizes,
         const vector<vector<int>> &pure_dims,
         const vector<int64_t> &max_s,
-        int d, const vector<int> &vectorized_indices, bool threads_inner) {
+        int d, const vector<int> &vectorized_indices, bool serial_inner) {
     vector<vector<int64_t>> result;
     if (d == -1) {
         result.push_back(vector<int64_t>());
@@ -201,7 +201,7 @@ vector<vector<int64_t>> generate_gpu_tilings(const vector<vector<int64_t>> &stag
         int factor = 2, warp_width = 32, max_serial_ext = 8;
 
         vector<vector<int64_t>> v;
-        v = generate_gpu_tilings(stage_sizes, pure_dims, max_s, d - 1, vectorized_indices, threads_inner);
+        v = generate_gpu_tilings(stage_sizes, pure_dims, max_s, d - 1, vectorized_indices, serial_inner);
 
         for (auto t : v) {
             enum validity{ serial_count_err, thread_count_err, valid_tiling };
@@ -211,7 +211,7 @@ vector<vector<int64_t>> generate_gpu_tilings(const vector<vector<int64_t>> &stag
             std::function<validity()> is_valid_tiling = [&]() {
                 if (d == ((int)(stage_sizes[0].size()) - 1)) {
                     vector<int64_t> lowered_size, thread_t;
-                    if (threads_inner) {
+                    if (false) {
                         for (int dd = 0; dd < (int)(stage_sizes[0].size()); dd++) {
                             int64_t other_ext = (stage_sizes[0][dd] + t[dd] - 1) / t[dd];
                             thread_t.push_back(other_ext);
@@ -258,8 +258,7 @@ vector<vector<int64_t>> generate_gpu_tilings(const vector<vector<int64_t>> &stag
                     if (total_threads_used > total_threads_limit || not_ext1 > 3) {
                         return thread_count_err;
                     }
-                    if (!threads_inner) {
-                        bool valid = true;
+                    if (serial_inner) {
                         for (int dd = 0; dd < (int)(stage_sizes[0].size()); dd++) {
                             int64_t other_ext = (stage_sizes[0][dd] + t[dd] - 1) / t[dd];
                             if (other_ext > max_serial_ext) {
@@ -269,7 +268,7 @@ vector<vector<int64_t>> generate_gpu_tilings(const vector<vector<int64_t>> &stag
                     }
                 }
                 return valid_tiling;
-            }
+            };
 
             t.push_back(0);
 
@@ -280,7 +279,7 @@ vector<vector<int64_t>> generate_gpu_tilings(const vector<vector<int64_t>> &stag
                 if (threads_ext > max_threads_extent) {
                     break;
                 }
-                if (threads_inner) {
+                if (false) {
                     int64_t other_ext = (stage_sizes[0][d] + threads_ext - 1) / threads_ext;
                     t.back() = other_ext;
                 } else {
@@ -302,7 +301,7 @@ vector<vector<int64_t>> generate_gpu_tilings(const vector<vector<int64_t>> &stag
             int64_t threads16 = 16;
             int64_t other16 = (stage_sizes[0][d] + threads16 - 1) / threads16;
             if ((d == vectorized_indices[0]) && threads16 < stage_sizes[0][d] && other16 > 1) {
-                if (threads_inner)
+                if (false)
                     t.back() = other16;
                 else
                     t.back() = threads16;
@@ -595,11 +594,11 @@ struct ThreadInfo {
 
 private:
     void init_threads_in_this_block(const vector<int64_t>& max_thread_counts) {
-        int max_threads[3] = {1024, 1024, 64};
+        //int max_threads[3] = {1024, 1024, 64};
 
         int num_thread_loops = 0;
         for (auto c : max_thread_counts) {
-            internal_assert(c <= max_threads[num_thread_loops]);
+            //internal_assert(c <= max_threads[num_thread_loops]);
 
             if (c == 1) {
                 continue;
@@ -799,24 +798,14 @@ struct LoopNest {
         this->get_stage_sizes(f, stage_sizes, pure_dims, vectorized_indices);
         internal_assert(stage_sizes.size() != 0);
         //internal_assert(pure_size);
-        auto tilings = generate_gpu_tilings(stage_sizes, pure_dims, max_size, (int)(stage_sizes[0].size() - 1), vectorized_indices, false);
-        /**
-        debug(0) << "tilings for " << f->func.name() << "\n";
-        // printing out tilings generated
-        for (const auto &t : tilings) {
-            for (size_t i = 0; i < t.size(); i++) {
-                debug(0) << t[i] << ",";
-            }
-            debug(0) << "\n";
-        }
-        **/
+        auto tilings = generate_gpu_tilings(stage_sizes, pure_dims, max_size, (int)(stage_sizes[0].size() - 1), vectorized_indices, true);
         bool made_child = false;
         for (const auto &t : tilings) {
             LoopNest *new_parent = new LoopNest;
             new_parent->copy_from(*(this));
             for (auto &c : new_parent->children) {
                 if (c->node == f) {
-                    c = c->parallelize_in_tiles(params, t, new_parent, target);
+                    c = c->parallelize_in_tiles(params, t, new_parent, target, false, true);
                 }
             }
             result.emplace_back(new_parent);
@@ -2550,11 +2539,12 @@ struct LoopNest {
         }
     }
 
-    // Return all possible ways to parallelize this loop
     IntrusivePtr<const LoopNest> parallelize_in_tiles(const MachineParams &params,
                                                       const vector<int64_t> &tiling,
                                                       const LoopNest *parent,
-                                                      const Target& target) const {
+                                                      const Target& target, 
+                                                      bool inner_tiling,
+                                                      bool adjust_tiling) const {
 
         // Split this loop and move factors to the inner loop
         LoopNest *inner = new LoopNest, *outer = new LoopNest;
@@ -2608,18 +2598,32 @@ struct LoopNest {
             int l = stage->loop[i].pure_dim;
 
             int64_t outer_extent;
-            if (l >= 0) {
-                internal_assert(l < (int)tiling.size()) << l << " " << tiling.size() << "\n";
-                outer_extent = tiling[l];
+            if (inner_tiling) {
+                if (l >= 0) {
+                    internal_assert(l < (int)tiling.size()) << l << " " << tiling.size() << "\n";
+                    outer_extent = (outer->size[i] + tiling[l] - 1) / tiling[l];
+                    inner->size[i] = tiling[l];
+                } else {
+                    // RVars are moved inwards
+                    outer_extent = 1;
+                    inner->size[i] = outer->size[i];
+                }
+                if (adjust_tiling) {
+                    inner->size[i] = (outer->size[i] + outer_extent - 1) / outer_extent;
+                }
             } else {
-                // RVars are moved inwards
-                outer_extent = 1;
+                if (l >= 0) {
+                    internal_assert(l < (int)tiling.size()) << l << " " << tiling.size() << "\n";
+                    inner->size[i] = (outer->size[i] + tiling[l] - 1) / tiling[l];
+                    outer_extent = tiling[l];
+                } else {
+                    outer_extent = 1;
+                    inner->size[i] = outer->size[i];
+                }
+                if (adjust_tiling) {
+                    outer_extent = (outer->size[i] + inner->size[i] - 1) / inner->size[i];
+                }
             }
-
-            inner->size[i] = (outer->size[i] + outer_extent - 1) / outer_extent;
-            // Recompute the outer size given the selected inner size
-            outer_extent = (outer->size[i] + inner->size[i] - 1) / inner->size[i];
-
             outer->size[i] = outer_extent;
             const auto &p = parent_bounds->loops(stage_idx, i);
             int64_t min = p.min();
@@ -3508,7 +3512,7 @@ struct State {
 
                 // Mark as 'parallelized' so this loop is split into blocks and threads
                 c->gpu_label = parallelized;
-                c = c->parallelize_in_tiles(params, tiling, loop_nest, target);
+                c = c->parallelize_in_tiles(params, tiling, loop_nest, target, false, true);
             }
         }
 
@@ -3531,7 +3535,7 @@ struct State {
 
                 // Mark as 'thread' so this loop is split into threads
                 c->gpu_label = thread;
-                c = c->parallelize_in_tiles(params, tiling, loop_nest, target);
+                c = c->parallelize_in_tiles(params, tiling, loop_nest, target, false, true);
             }
         }
     };
@@ -4199,7 +4203,7 @@ struct State {
                         // step 1) parallelize all loop nests for this node into (parallel, serial) with given serial tiles
                         for (auto &c : parallel_root->children) {
                             if (c->node == node) { // c is a reference to a IntrusivePtr<const LoopNest>
-                                c = c->parallelize_in_tiles(params, parallel_t, parallel_root, target);
+                                c = c->parallelize_in_tiles(params, parallel_t, parallel_root, target, false, true);
                             }
                         }
                         // step 2) split all parallel loops for this node into to (blocks, thread) loop
@@ -4213,7 +4217,7 @@ struct State {
                         // at root level sibling thread counts are in separate blocks, extents are irrelevant
                         vector<int64_t> max_size((int)(stage_sizes[0].size()), 1);
 
-                        auto block_tilings = generate_gpu_tilings(stage_sizes, pure_dims, max_size, node->dimensions-1, vectorized_indices, true);
+                        auto block_tilings = generate_gpu_tilings(stage_sizes, pure_dims, max_size, node->dimensions-1, vectorized_indices, false);
 
                         // If no options, create a thread tiling as large as possible with block size (1,1,1).
                         // This can happen if the loops are too small to generate desired gpu tiles.
@@ -4224,7 +4228,7 @@ struct State {
                             for (auto &c : new_root->children) {
                                 if (c->node == node) {
                                     vector<int64_t> tiling((int)(c->size.size()), 1);
-                                    c = c->parallelize_in_tiles(params, tiling, new_root, target);
+                                    c = c->parallelize_in_tiles(params, tiling, new_root, target, false, true);
                                 }
                             }
                             child->root = new_root;
@@ -4242,7 +4246,7 @@ struct State {
                             new_root->copy_from(*parallel_root); // copies parallel_root's info and intrusive pointers for parallel_root's children
                             for (auto &c : new_root->children) {
                                 if (c->node == node) {
-                                    c = c->parallelize_in_tiles(params, block_t, new_root, target);
+                                    c = c->parallelize_in_tiles(params, block_t, new_root, target, true, false);
                                 }
                             }
                             child->root = new_root;
@@ -4250,6 +4254,21 @@ struct State {
                             if (child->calculate_cost(dag, params, target, cost_model)) {
                                 num_children++;
                                 accept_child(std::move(child));
+                            }
+                            // make another child where tiling is adjusted in case it doesn't evenly divide
+                            auto adjusted_child = make_child();
+                            LoopNest *new_adjusted_root = new LoopNest;
+                            new_adjusted_root->copy_from(*parallel_root); // copies parallel_root's info and intrusive pointers for parallel_root's children
+                            for (auto &c : new_adjusted_root->children) {
+                                if (c->node == node) {
+                                    c = c->parallelize_in_tiles(params, block_t, new_adjusted_root, target, true, true);
+                                }
+                            }
+                            adjusted_child->root = new_adjusted_root;
+                            adjusted_child->num_funcs_scheduled++;
+                            if (adjusted_child->calculate_cost(dag, params, target, cost_model)) {
+                                num_children++;
+                                accept_child(std::move(adjusted_child));
                             }
                         }
                         delete parallel_root;
@@ -4333,7 +4352,7 @@ struct State {
                         for (auto &c : new_root->children) {
                             if (c->node == node) {
                                 if (may_subtile()) {
-                                    c = c->parallelize_in_tiles(params, o.tiling, new_root, target);
+                                    c = c->parallelize_in_tiles(params, o.tiling, new_root, target, false, true);
                                 } else {
                                     // Emulate the single parallelization
                                     // option from the old autoscheduler's
@@ -4352,7 +4371,7 @@ struct State {
                                         }
                                         total *= tiling[i-1];
                                     }
-                                    c = c->parallelize_in_tiles(params, tiling, new_root, target);
+                                    c = c->parallelize_in_tiles(params, tiling, new_root, target, false, true);
                                 }
                             }
                         }
