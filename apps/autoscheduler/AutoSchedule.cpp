@@ -3546,23 +3546,44 @@ struct State {
                 return;
             }
 
-            for (auto& c : loop_nest->children) {
+            std::unordered_map<const FunctionDAG::Node*, std::vector<int64_t>> tilings;
+
+            for (auto it = loop_nest->children.rbegin(); it != loop_nest->children.rend(); ++it) {
+                auto& c = *it;
                 if (c->gpu_label != none) {
                     continue;
                 }
 
                 vector<int64_t> tiling = c->size;
+                if (tilings.count(c->node) == 0) {
+                    int vectorized_loop_index = std::max(c->vectorized_loop_index, 0);
 
-                int vectorized_loop_index = std::max(c->vectorized_loop_index, 0);
+                    // Make the vectorized dimension of the inner loop 32 (or as
+                    // close as possible)
+                    int64_t inner_extent = std::min(c->size[vectorized_loop_index], (int64_t)32);
+                    tiling[vectorized_loop_index] = (c->size[vectorized_loop_index] + inner_extent - 1) / inner_extent;
+                    // Mark as 'parallelized' so this loop is split into blocks and threads
+                    c->gpu_label = parallelized;
+                    c = c->parallelize_in_tiles(params, tiling, loop_nest, target);
+                    tilings[c->node] = tiling;
+                } else {
+                    vector<int64_t> tiling(c->stage->loop.size(), 1);
+                    for (size_t i = 0; i < c->stage->loop.size(); i++) {
+                        int l = c->stage->loop[i].pure_dim;
+                        if (l == -1) {
+                            continue;
+                        }
 
-                // Make the vectorized dimension of the inner loop 32 (or as
-                // close as possible)
-                int64_t inner_extent = std::min(c->size[vectorized_loop_index], (int64_t)32);
-                tiling[vectorized_loop_index] = (c->size[vectorized_loop_index] + inner_extent - 1) / inner_extent;
+                        tiling[l] = c->size[i];
+                    }
 
-                // Mark as 'parallelized' so this loop is split into blocks and threads
-                c->gpu_label = parallelized;
-                c = c->parallelize_in_tiles(params, tiling, loop_nest, target);
+                    // Split into blocks and serial
+                    c = c->parallelize_in_tiles(params, tiling, loop_nest, target);
+
+                    tiling = tilings[c->node];
+                    // Split blocks into blocks and threads
+                    c = c->parallelize_in_tiles(params, tiling, loop_nest, target);
+                }
             }
         }
 
