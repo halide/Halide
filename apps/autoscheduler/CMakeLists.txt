@@ -15,6 +15,7 @@ add_custom_command(OUTPUT ${WF_CPP}
 add_executable(retrain_cost_model_process
                ASLog.cpp
                DefaultCostModel.cpp
+               FunctionDAG.cpp
                Weights.cpp
                retrain_cost_model.cpp
                ${WF_CPP})
@@ -48,7 +49,29 @@ add_library(auto_schedule
             DefaultCostModel.cpp
             Weights.cpp
             ${WF_CPP})
-target_link_libraries(auto_schedule PRIVATE cost_model train_cost_model Halide)
+
+if(HALIDE_LIBRARY_TYPE STREQUAL STATIC)
+  target_link_libraries(auto_schedule PRIVATE cost_model train_cost_model)
+else()
+  target_link_libraries(auto_schedule
+                        PRIVATE cost_model train_cost_model Halide)
+endif()
+
+if(NOT MSVC)
+  set_target_properties(auto_schedule PROPERTIES LINK_FLAGS "-rdynamic")
+elseif(CMAKE_CXX_COMPILER_ID STREQUAL Clang)
+  set_target_properties(auto_schedule
+                        PROPERTIES LINK_FLAGS "-undefined dynamic_lookup")
+endif()
+
+if(NOT HALIDE_ENABLE_RTTI)
+  if(NOT MSVC)
+    target_compile_options(auto_schedule PUBLIC "-fno-rtti")
+  else()
+    target_compile_options(auto_schedule PUBLIC "/GR-")
+  endif()
+endif()
+
 add_dependencies(auto_schedule cost_model train_cost_model)
 install(TARGETS auto_schedule LIBRARY DESTINATION bin)
 
