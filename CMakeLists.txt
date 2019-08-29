@@ -59,11 +59,6 @@ if(${CMAKE_SYSTEM_NAME} MATCHES "Windows")
   message("Windows: setting CMAKE_OBJECT_PATH_MAX to ${CMAKE_OBJECT_PATH_MAX}")
 endif()
 
-# Require C++11 for everything.
-set(CMAKE_CXX_STANDARD 11)
-set(CMAKE_CXX_STANDARD_REQUIRED ON)
-set(CMAKE_CXX_EXTENSIONS OFF)
-
 set(CMAKE_MACOSX_RPATH ON)
 
 # Export all symbols
@@ -91,6 +86,21 @@ if("${HALIDE_SYSTEM_LIBS}" STREQUAL "")
   # aren't configured correctly.
   message(WARNING "'llvm-config --system-libs --link-static' is empty; this is possibly wrong.")
 endif()
+
+execute_process(COMMAND ${LLVM_CONFIG} --cxxflags OUTPUT_VARIABLE LLVM_CONFIG_CXXFLAGS)
+string(FIND "${LLVM_CONFIG_CXXFLAGS}" "-std=c++11" LLVM_CPP17)
+string(FIND "${LLVM_CONFIG_CXXFLAGS}" "-std=c++14" LLVM_CPP14)
+if (LLVM_CPP17 GREATER -1)
+  set(CMAKE_CXX_STANDARD 17)
+elseif (LLVM_CPP14 GREATER -1)
+  set(CMAKE_CXX_STANDARD 14)
+else()
+  # Require (at least) C++11 for everything.
+  set(CMAKE_CXX_STANDARD 11)
+endif()
+
+set(CMAKE_CXX_STANDARD_REQUIRED ON)
+set(CMAKE_CXX_EXTENSIONS OFF)
 
 # Check LLVM
 function(check_dir VARNAME PATH)
