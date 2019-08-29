@@ -837,7 +837,7 @@ FunctionDAG::FunctionDAG(const vector<Function> &outputs, const MachineParams &p
                     int64_t i_min = *as_const_int(b.min);
                     int64_t i_extent = *as_const_int(b.extent);
 
-                    if (/* DISABLES CODE */ (false)) {
+                    if ((false)) { // Intentional dead code. Extra parens to pacify clang-tidy.
                         // Some methods we compare to compile for
                         // statically known input/output sizes. We
                         // don't need to - we take estimates but
