@@ -1180,6 +1180,9 @@ bool save_mat(ImageType &im, const std::string &filename) {
         break;
     case halide_type_float:
         switch (im.raw_buffer()->type.bits) {
+        case 16:
+            check(false, "float16 not supported by .mat");
+            break;
         case 32:
             class_code = mxSINGLE_CLASS;
             type_code = miSINGLE;
@@ -1192,7 +1195,10 @@ bool save_mat(ImageType &im, const std::string &filename) {
             check(false, "unreachable");
         };
         break;
-    case halide_type_handle:
+    case halide_type_bfloat:
+        check(false, "bfloat not supported by .mat");
+        break;
+    default:
         check(false, "unreachable");
     }
 

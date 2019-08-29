@@ -61,7 +61,7 @@ protected:
         if (op->is_intrinsic(Call::glsl_texture_load)) {
             // Check if the texture coordinate arguments are linear wrt the GPU
             // loop variables
-            internal_assert(loop_vars.size() > 0) << "No GPU loop variables found at texture load\n";
+            internal_assert(!loop_vars.empty()) << "No GPU loop variables found at texture load\n";
 
             // Iterate over the texture coordinate arguments
             for (int i = 2; i != 4; ++i) {
@@ -72,7 +72,7 @@ protected:
             }
         } else if (op->is_intrinsic(Call::glsl_texture_store)) {
             // Check if the value expression is linear wrt the loop variables
-            internal_assert(loop_vars.size() > 0) << "No GPU loop variables found at texture store\n";
+            internal_assert(!loop_vars.empty()) << "No GPU loop variables found at texture store\n";
 
             // The value is the 5th argument to the intrinsic
             new_args[5] = mutate(new_args[5]);

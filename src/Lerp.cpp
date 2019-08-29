@@ -4,6 +4,7 @@
 #include "IROperator.h"
 #include "Lerp.h"
 #include "Simplify.h"
+#include "CSE.h"
 
 namespace Halide {
 namespace Internal {
@@ -13,7 +14,8 @@ Expr lower_lerp(Expr zero_val, Expr one_val, Expr weight) {
     Expr result;
 
     internal_assert(zero_val.type() == one_val.type());
-    internal_assert(weight.type().is_uint() || weight.type().is_float());
+    internal_assert(weight.type().is_uint() || weight.type().is_float())
+        << "Bad weight type: " << weight.type() << "\n";
 
     Type result_type = zero_val.type();
 
@@ -67,24 +69,15 @@ Expr lower_lerp(Expr zero_val, Expr one_val, Expr weight) {
                 }
                 inverse_typed_weight = computation_type.max() - typed_weight;
             } else {
-                inverse_typed_weight = 1.0f - typed_weight;
+                inverse_typed_weight = make_one(computation_type) - typed_weight;
             }
 
         } else {
             if (computation_type.is_float()) {
                 int weight_bits = weight.type().bits();
-                if (weight_bits == 32) {
-                    // Should use ldexp, but can't make Expr from result
-                    // that is double
-                    typed_weight =
-                        Cast::make(computation_type,
-                                   cast<double>(weight) / (pow(cast<double>(2), 32) - 1));
-                } else {
-                    typed_weight =
-                        Cast::make(computation_type,
-                                   weight / ((float)ldexp(1.0f, weight_bits) - 1));
-                }
-                inverse_typed_weight = 1.0f - typed_weight;
+                Expr denom = make_const(computation_type, (ldexp(1.0, weight_bits) - 1));
+                typed_weight = Cast::make(computation_type, weight) / denom;
+                inverse_typed_weight = make_one(computation_type) - typed_weight;
             } else {
                 // This code rescales integer weights to the right number of bits.
                 // It takes advantage of (2^n - 1) == (2^(n/2) - 1)(2^(n/2) + 1)
@@ -129,8 +122,8 @@ Expr lower_lerp(Expr zero_val, Expr one_val, Expr weight) {
         }
 
         if (computation_type.is_float()) {
-            result = zero_val * inverse_typed_weight +
-                one_val * typed_weight;
+            result = (zero_val * inverse_typed_weight +
+                      one_val * typed_weight);
         } else {
             int32_t bits = computation_type.bits();
             switch (bits) {
@@ -171,7 +164,7 @@ Expr lower_lerp(Expr zero_val, Expr one_val, Expr weight) {
         }
     }
 
-    return simplify(result);
+    return simplify(common_subexpression_elimination(result));
 }
 
 }  // namespace Internal

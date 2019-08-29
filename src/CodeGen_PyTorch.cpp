@@ -17,8 +17,6 @@
 namespace Halide {
 namespace Internal {
 
-using std::endl;
-using std::map;
 using std::ostream;
 using std::ostringstream;
 using std::string;
@@ -47,7 +45,7 @@ CodeGen_PyTorch::CodeGen_PyTorch(ostream &s, Target t, std::string cpp_header) :
               "UserContext feature to properly manage the GPU memory. "
               "Please add \"-user_context\" to the generator's target options.\n";
         }
-        stream << "#include \"ATen/cuda/CUDAContext.h\"\n";  
+        stream << "#include \"ATen/cuda/CUDAContext.h\"\n";
         stream << "#include \"HalidePyTorchCudaHelpers.h\"\n";
     }
 
@@ -92,7 +90,7 @@ void CodeGen_PyTorch::compile(const LoweredFunc &f, bool is_cuda) {
             continue;
         } else if (args[i].is_buffer()) {
             buffer_args.push_back(args[i]);
-            stream 
+            stream
               << type_to_pytorch_tensor(args[i].type, is_cuda)
               << " &"
               << c_print_name(args[i].name);
@@ -134,14 +132,14 @@ void CodeGen_PyTorch::compile(const LoweredFunc &f, bool is_cuda) {
         do_indent();
         stream
             << "HLPT_CHECK_CONTIGUOUS("
-            << c_print_name(buffer_args[i].name) 
+            << c_print_name(buffer_args[i].name)
             << ");\n";
 
         if (is_cuda) {
             do_indent();
             stream
                 << "HLPT_CHECK_DEVICE("
-                << c_print_name(buffer_args[i].name) 
+                << c_print_name(buffer_args[i].name)
                 << ", device_id);\n";
         }
     }
@@ -157,9 +155,9 @@ void CodeGen_PyTorch::compile(const LoweredFunc &f, bool is_cuda) {
         string tp = type_to_c_type(buffer_args[i].type, false);
         stream
             << "Buffer<" << tp << "> "
-            << c_print_name(buffer_args[i].name) 
+            << c_print_name(buffer_args[i].name)
             << "_buffer = Halide::PyTorch::wrap<" << tp << ">("
-            << c_print_name(buffer_args[i].name) 
+            << c_print_name(buffer_args[i].name)
             << ");\n"
             ;
     }
@@ -172,7 +170,7 @@ void CodeGen_PyTorch::compile(const LoweredFunc &f, bool is_cuda) {
     stream << "int err = " << simple_name << "(";
     for (size_t i = 0; i < args.size(); i++) {
         if (args[i].is_buffer()) {
-            stream 
+            stream
               << c_print_name(args[i].name)
               << "_buffer";
         } else {
@@ -194,7 +192,7 @@ void CodeGen_PyTorch::compile(const LoweredFunc &f, bool is_cuda) {
         for (size_t i = 0; i < buffer_args.size(); i++) {
             if (buffer_args[i].is_buffer()) {
                 do_indent();
-                stream 
+                stream
                     << "AT_ASSERTM(!"
                     << c_print_name(buffer_args[i].name) << "_buffer.host_dirty(),"
                     << "\"device not synchronized for buffer "
@@ -202,7 +200,7 @@ void CodeGen_PyTorch::compile(const LoweredFunc &f, bool is_cuda) {
                     << ", make sure all update stages are excplicitly computed on GPU."
                     <<"\");\n";
                 do_indent();
-                stream 
+                stream
                     << c_print_name(buffer_args[i].name) << "_buffer"
                     << ".device_detach_native();\n";
             }
@@ -260,7 +258,7 @@ void CodeGen_PyTorch::test() {
     {
         // TODO(mgharbi): test that Target("host-cuda") raises an exception since
         // we require the "user_context" feature when using CUDA
-        
+
         CodeGen_PyTorch cg(source, Target("host"), "PyTorchTestOp.h");
         cg.compile(m);
 
@@ -270,7 +268,7 @@ void CodeGen_PyTorch::test() {
     string src = source.str() + "\n" + source_cuda.str();
 
     // The correct source concatenates CPU and GPU headers
-    string correct_src = 
+    string correct_src =
 R"GOLDEN_CODE(#include "torch/extension.h"
 #include "HalideBuffer.h"
 #include "HalidePyTorchHelpers.h"

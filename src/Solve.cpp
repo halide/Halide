@@ -13,8 +13,6 @@ namespace Internal {
 using std::map;
 using std::pair;
 using std::string;
-using std::vector;
-using ConciseCasts::i16;
 
 namespace {
 
@@ -1466,10 +1464,12 @@ void check_and_condition(Expr orig, Expr result, Interval i) {
 }
 
 void solve_test() {
+    using ConciseCasts::i16;
+
     Expr x = Variable::make(Int(32), "x");
     Expr y = Variable::make(Int(32), "y");
     Expr z = Variable::make(Int(32), "z");
-    /*
+
     // Check some simple cases
     check_solve(3 - 4*x, x*(-4) + 3);
     check_solve(min(5, x), min(x, 5));
@@ -1627,8 +1627,6 @@ void solve_test() {
         Expr test = (x <= min(max((y - min(((z*x) + t), t)), 1), 0));
         Interval result = solve_for_outer_interval(test, "z");
     }
-
-    */
 
     {
         // This case caused exponential behavior

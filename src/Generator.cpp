@@ -259,7 +259,7 @@ public:
           inputs(inputs),
           outputs(outputs) {
        namespaces = split_string(generator_stub_name, "::");
-       internal_assert(namespaces.size() >= 1);
+       internal_assert(!namespaces.empty());
        if (namespaces[0].empty()) {
            // We have a name like ::foo::bar::baz; omit the first empty ns.
            namespaces.erase(namespaces.begin());
@@ -1848,7 +1848,7 @@ void GeneratorInputBase::set_inputs(const std::vector<StubInput> &inputs) {
 }
 
 void GeneratorInputBase::set_estimate_impl(Var var, Expr min, Expr extent) {
-    internal_assert(exprs_.empty() && funcs_.size() > 0 && parameters_.size() == funcs_.size());
+    internal_assert(exprs_.empty() && !funcs_.empty() && parameters_.size() == funcs_.size());
     for (size_t i = 0; i < funcs_.size(); ++i) {
         Func &f = funcs_[i];
         f.set_estimate(var, min, extent);
@@ -1870,7 +1870,7 @@ void GeneratorInputBase::set_estimate_impl(Var var, Expr min, Expr extent) {
 }
 
 void GeneratorInputBase::set_estimates_impl(const std::vector<std::pair<Expr, Expr>> &estimates) {
-    internal_assert(exprs_.empty() && funcs_.size() > 0 && parameters_.size() == funcs_.size());
+    internal_assert(exprs_.empty() && !funcs_.empty() && parameters_.size() == funcs_.size());
     for (size_t i = 0; i < funcs_.size(); ++i) {
         Func &f = funcs_[i];
         f.set_estimates(estimates);
