@@ -246,12 +246,20 @@ using JITExternMap = std::map<std::string, Halide::JITExtern>;
 
 #define V8_API_VERSION ((V8_MAJOR_VERSION * 10) + V8_MINOR_VERSION)
 
-static_assert(V8_API_VERSION >= 70,
-              "Halide requires V8 v7.0 or later when compiling WITH_V8.");
+static_assert(V8_API_VERSION >= 73,
+              "Halide requires V8 v7.3 or later when compiling WITH_V8.");
 
 namespace Halide {
 namespace Internal {
 namespace {
+
+v8::Local<v8::String> NewLocalString(v8::Isolate *isolate, const char* s) {
+#if V8_API_VERSION >= 76
+    return v8::String::NewFromUtf8(isolate, s).ToLocalChecked();
+#else
+    return v8::String::NewFromUtf8(isolate, s);
+#endif
+}
 
 using namespace v8;
 
@@ -434,7 +442,7 @@ wasm32_ptr_t v8_WasmMemoryObject_malloc(const Local<Context> &context, size_t si
 
         Local<Object> memory_value = context->GetEmbedderData(kWasmMemoryObject).As<Object>();  // really a WasmMemoryObject
         Local<Object> buffer_string = context->GetEmbedderData(kString_buffer).As<Object>();
-        Local<ArrayBuffer> wasm_memory = Local<ArrayBuffer>::Cast(memory_value->Get(buffer_string));
+        Local<ArrayBuffer> wasm_memory = Local<ArrayBuffer>::Cast(memory_value->Get(context, buffer_string).ToLocalChecked());
 
         wdebug(0) << "heap_base is: " << heap_base << "\n";
         wdebug(0) << "initial memory size is: " << wasm_memory->ByteLength() << "\n";
@@ -457,7 +465,7 @@ wasm32_ptr_t v8_WasmMemoryObject_malloc(const Local<Context> &context, size_t si
         internal_assert(result == (int) (bdmalloc->get_total_size() / kWasmPageSize));
 
         Local<Object> buffer_string = context->GetEmbedderData(kString_buffer).As<Object>();
-        Local<ArrayBuffer> wasm_memory = Local<ArrayBuffer>::Cast(memory_value->Get(buffer_string));
+        Local<ArrayBuffer> wasm_memory = Local<ArrayBuffer>::Cast(memory_value->Get(context, buffer_string).ToLocalChecked());
         wdebug(0) << "New ArrayBuffer size is: " << wasm_memory->ByteLength() << "\n";
 
         bdmalloc->grow_total_size(wasm_memory->ByteLength());
@@ -476,7 +484,7 @@ void v8_WasmMemoryObject_free(const Local<Context> &context, wasm32_ptr_t ptr) {
 
 uint8_t *get_wasm_memory_base(const Local<Context> &context) {
     Local<Object> memory_value = context->GetEmbedderData(kWasmMemoryObject).As<Object>();  // really a WasmMemoryObject
-    Local<ArrayBuffer> wasm_memory = Local<ArrayBuffer>::Cast(memory_value->Get(context->GetEmbedderData(kString_buffer)));
+    Local<ArrayBuffer> wasm_memory = Local<ArrayBuffer>::Cast(memory_value->Get(context, context->GetEmbedderData(kString_buffer)).ToLocalChecked());
     uint8_t *p = (uint8_t *) wasm_memory->GetContents().Data();
     return p;
 }
@@ -1109,10 +1117,11 @@ void add_extern_callbacks(const Local<Context> &context,
         wrapper_data->SetInternalField(kTrampolineWrap, trampoline_wrap);
         wrapper_data->SetInternalField(kArgTypesWrap, arg_types_wrap);
 
-        Local<v8::Function> f = FunctionTemplate::New(isolate, v8_extern_wrapper, wrapper_data)
+        Local<v8::String> key = NewLocalString(isolate, name.c_str());
+        Local<v8::Function> value = FunctionTemplate::New(isolate, v8_extern_wrapper, wrapper_data)
             ->GetFunction(context).ToLocalChecked();
 
-        (void) imports_dict->Set(context, String::NewFromUtf8(isolate, name.c_str()), f).ToChecked();
+        (void) imports_dict->Set(context, key, value).ToChecked();
     }
 }
 
@@ -1295,7 +1304,7 @@ WasmModuleContents::WasmModuleContents(
     try_catch.SetCaptureMessage(true);
     try_catch.SetVerbose(true);
 
-    auto fn_name_str = String::NewFromUtf8(isolate, fn_name.c_str());
+    Local<v8::String> fn_name_str = NewLocalString(isolate, fn_name.c_str());
 
     std::vector<char> final_wasm = compile_to_wasm(module, fn_name);
 
@@ -1325,8 +1334,9 @@ WasmModuleContents::WasmModuleContents(
         // Skip any leading :: nonsense that we needed to add
         // to disambiguate (say) ::sin() from Halide::sin()
         while (*name == ':') name++;
-        (void) imports_dict->Set(context, String::NewFromUtf8(isolate, name),
-                                 FunctionTemplate::New(isolate, f)->GetFunction(context).ToLocalChecked()).ToChecked();
+        Local<v8::String> key = NewLocalString(isolate, name);
+        Local<v8::Function> value = FunctionTemplate::New(isolate, f)->GetFunction(context).ToLocalChecked();
+        (void) imports_dict->Set(context, key, value).ToChecked();
     };
 
 #define ADD_CALLBACK(x) add_callback(#x, wasm_jit_##x##_callback);
@@ -1401,27 +1411,27 @@ WasmModuleContents::WasmModuleContents(
     add_extern_callbacks(context, jit_externs, trampolines, imports_dict);
 
     Local<Object> imports = Object::New(isolate);
-    (void) imports->Set(context, String::NewFromUtf8(isolate, "env"), imports_dict).ToChecked();
+    (void) imports->Set(context, NewLocalString(isolate, "env"), imports_dict).ToChecked();
 
     Local<Value> instance_args[2] = {compiled, imports};
 
     Local<Object> exports = context->Global()
-        ->Get(context, String::NewFromUtf8(isolate, "WebAssembly")).ToLocalChecked().As<Object>()
-        ->Get(context, String::NewFromUtf8(isolate, "Instance")).ToLocalChecked().As<Object>()
+        ->Get(context, NewLocalString(isolate, "WebAssembly")).ToLocalChecked().As<Object>()
+        ->Get(context, NewLocalString(isolate, "Instance")).ToLocalChecked().As<Object>()
         ->CallAsConstructor(context, 2, instance_args).ToLocalChecked().As<Object>()
-        ->Get(context, String::NewFromUtf8(isolate, "exports")).ToLocalChecked().As<Object>();
+        ->Get(context, NewLocalString(isolate, "exports")).ToLocalChecked().As<Object>();
 
-    Local<Value> function_value = exports->Get(fn_name_str);
+    Local<Value> function_value = exports->Get(context, fn_name_str).ToLocalChecked();
     Local<v8::Function> function = Local<v8::Function>::Cast(function_value);
     internal_assert(!function.IsEmpty());
     internal_assert(!function->IsNullOrUndefined());
     v8_function.Reset(isolate, function);
 
-    context->SetEmbedderData(kWasmMemoryObject, exports->Get(String::NewFromUtf8(isolate, "memory")).As<Object>());
+    context->SetEmbedderData(kWasmMemoryObject, exports->Get(context, NewLocalString(isolate, "memory")).ToLocalChecked().As<Object>());
     context->SetAlignedPointerInEmbedderData(kBDMallocPtr, &bdmalloc);
-    context->SetEmbedderData(kHeapBase, exports->Get(String::NewFromUtf8(isolate, "__heap_base")).As<Object>());
-    context->SetEmbedderData(kString_buffer, String::NewFromUtf8(isolate, "buffer"));
-    context->SetEmbedderData(kString_grow, String::NewFromUtf8(isolate, "grow"));
+    context->SetEmbedderData(kHeapBase, exports->Get(context, NewLocalString(isolate, "__heap_base")).ToLocalChecked().As<Object>());
+    context->SetEmbedderData(kString_buffer, NewLocalString(isolate, "buffer"));
+    context->SetEmbedderData(kString_grow, NewLocalString(isolate, "grow"));
 
     internal_assert(!try_catch.HasCaught());
 #endif
