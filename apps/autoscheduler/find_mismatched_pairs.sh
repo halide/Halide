@@ -3,7 +3,7 @@
 # Find pairs of schedules with equal/similar predicted run times but different
 # actual run times
 
-if [[ ($# -lt 4 && ${4} == 0) || ($# -ne 5 && ${4} == 1) ]]; then
+if [[ ! ((($# == 4 || $# == 5) && ${4} == 0) || ($# == 5 && ${4} == 1)) ]]; then
   echo "Usage: $0 predictions_file limit equal_mode profile_mode output_dir"
   exit
 fi
