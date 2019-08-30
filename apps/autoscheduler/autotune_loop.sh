@@ -8,6 +8,8 @@ if [ $# -lt 7 -o $# -gt 8 ]; then
   exit
 fi
 
+source $(dirname $0)/utils.sh
+
 set -eu
 
 #trap "exit" INT TERM
@@ -78,16 +80,9 @@ BATCH_SIZE=32
 NUM_CORES=80
 
 if [[ $TRAIN_ONLY != 1 ]]; then
-  TIMEOUT_CMD="timeout"
-  if [ $(uname -s) = "Darwin" ] && ! which $TIMEOUT_CMD 2>&1 >/dev/null; then
-      # OSX doesn't have timeout; gtimeout is equivalent and available via Homebrew
-      TIMEOUT_CMD="gtimeout"
-      if ! which $TIMEOUT_CMD 2>&1 >/dev/null; then
-          echo "Can't find the command 'gtimeout'. Run 'brew install coreutils' to install it."
-          exit 1
-      fi
-  fi
+  get_timeout_cmd TIMEOUT_CMD
 fi
+
 
 record_command() {
     BATCH=${1}

@@ -95,9 +95,14 @@ function profile_gpu_sample() {
     local -r sample_dir=$1
     local -r output_dir=$2
 
+    if [ -n $3 ]; then
+        local -r timeout_cmd=$3
+    else
+        get_timeout_cmd timeout_cmd
+    fi
+
     local -r num_cores=80
     local -r timeout=60s
-    get_timeout_cmd timeout_cmd
 
     if [ ! -f ${sample_dir}/bench ]; then
         echo "${sample_dir}/bench not found."
