@@ -9,6 +9,7 @@ if [ $# -lt 7 -o $# -gt 8 ]; then
 fi
 
 source $(dirname $0)/utils.sh
+find_halide HALIDE_ROOT
 
 set -eu
 
@@ -78,11 +79,11 @@ done
 # benchmarked serially.
 BATCH_SIZE=32
 NUM_CORES=80
+EPOCHS=${BATCH_SIZE}
 
 if [[ $TRAIN_ONLY != 1 ]]; then
   get_timeout_cmd TIMEOUT_CMD
 fi
-
 
 record_command() {
     BATCH=${1}
@@ -305,7 +306,8 @@ for ((BATCH_ID=$((FIRST+1));BATCH_ID<$((FIRST+1+NUM_BATCHES));BATCH_ID++)); do
 
     # retrain model weights on all samples seen so far
     echo Retraining model...
-    find ${SAMPLES} | grep sample$ | HL_NUM_THREADS=${NUM_CORES} HL_WEIGHTS_DIR=${WEIGHTS} HL_BEST_SCHEDULE_FILE=${SAMPLES}/best.txt ${AUTOSCHED_BIN}/train_cost_model ${BATCH_SIZE} 0.0001
+
+    train_cost_model ${HALIDE_ROOT} ${SAMPLES} ${WEIGHTS} ${NUM_CORES} ${EPOCHS} ${SAMPLES}/best.txt
 
     if [[ $TRAIN_ONLY == 1 ]]; then
       echo Batch ${BATCH_ID} took ${SECONDS} seconds to retrain

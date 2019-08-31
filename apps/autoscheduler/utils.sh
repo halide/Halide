@@ -60,7 +60,7 @@ function train_cost_model() {
     local -r num_cores=$4
     local -r num_epochs=$5
     local -r best_schedule_file=$6
-    local -r predictions_file=$7
+    local -r predictions_file=${7-""}
 
     get_autoscheduler_bin_dir ${halide_root} autosched_bin
 
