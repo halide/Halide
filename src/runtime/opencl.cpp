@@ -59,9 +59,8 @@ struct ScopedFile {
                 }
                 data = temp;
             }
-            debug(0) << "    used: " << (uint32_t)used << "\n";
+
             size_t n = fread(data + used, 1, CHUNK_SIZE, f);
-            debug(0) << "    fread.n: " << (uint32_t)n << "\n";
             if (n == 0) {
                 break;
             }
@@ -81,7 +80,6 @@ struct ScopedFile {
         }
         data = temp;
         data[used] = '\0';
-        debug(0) << (char*)data << "\n\n\n";
 
         *dataptr = data;
         *sizeptr = used;
@@ -180,11 +178,9 @@ using namespace Halide::Runtime::Internal::OpenCL;
 
 extern "C" {
 WEAK extern void halide_opencl_set_compiled_programs_cache_dir(const char *path) {
-    debug(0) << "halide_opencl_set_compiled_programs_cache_dir: \n";
     if (path) {
         strncpy(device_built_programs_cache_dir_name, path, 1024);
         device_built_programs_cache_dir_name_set = true;
-        debug(0) << "    device_built_programs_cache_dir_name_set: " << device_built_programs_cache_dir_name_set << "\n";
     } else {
         device_built_programs_cache_dir_name[0] = 0;
     }
@@ -573,7 +569,6 @@ WEAK int create_opencl_context(void *user_context, cl_context *ctx, cl_command_q
 }
 
 char *make_cached_program_filename(const char * const device_built_programs_cache_dir_name, const uint32_t src_hash) {
-    debug(0) << "make_cached_program_filename: " << device_built_programs_cache_dir_name << " " << src_hash << "\n";
     const size_t BUF_SIZE = 1024; // Max path size
 
     char *buf = (char*)malloc(BUF_SIZE);
@@ -583,7 +578,6 @@ char *make_cached_program_filename(const char * const device_built_programs_cach
 
     const int n = sprintf(buf, "%s/halide_opencl_program_binary_%x.bin", device_built_programs_cache_dir_name, src_hash);
     if (n > 0) {
-        debug(0) << "    path: " << buf << "\n";
         return buf;
     }
     free(buf);
@@ -600,7 +594,6 @@ cl_program cl_load_program_from_cache(void *user_context, ClContext ctx, cl_devi
         return NULL;
     }
 
-    debug(0) << "    open file\n";
     cl_program program_from_binary = NULL;
     ScopedFile file(cached_program_filename, "rb");
     free(cached_program_filename);
@@ -609,9 +602,6 @@ cl_program cl_load_program_from_cache(void *user_context, ClContext ctx, cl_devi
     size_t binary_size = 0;
 
     if (file.readall(&binary_buffer, &binary_size)) {
-        debug(0) << "    binary_size: " << (uint32_t) binary_size << "\n";
-        debug(0) << "    binary: " << (char *) binary_buffer;
-        debug(0) << "\n";
         cl_device_id devices[] = { dev };
         const unsigned char *binaries[] = { binary_buffer };
         cl_int err = CL_SUCCESS;
@@ -635,7 +625,6 @@ cl_program cl_load_program_from_cache(void *user_context, ClContext ctx, cl_devi
         free(binary_buffer);
     }
 
-    debug(0) << "    read done\n";
     return program_from_binary;
 }
 
@@ -827,7 +816,6 @@ WEAK int halide_opencl_initialize_kernels(void *user_context, void **state_ptr, 
         uint32_t src_hash = device_built_programs_cache_dir_name_set ? Halide::Runtime::Internal::djb_hash((const uint8_t *)src, size) : 0;
         cl_program program = device_built_programs_cache_dir_name_set ? cl_load_program_from_cache(user_context, ctx, dev, src_hash) : NULL;
 
-        debug(0) << "    program == NULL: " << (program == NULL) << "\n";
         if (program == NULL) {
             const char *sources[] = {src};
             debug(user_context) << "    clCreateProgramWithSource -> ";
