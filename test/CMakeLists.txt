@@ -304,6 +304,12 @@ if (WITH_TEST_GENERATOR)
                            HALIDE_TARGET_FEATURES debug)
   # endif()
 
+  if(TARGET_OPENCL)
+    add_definitions(-DTEST_OPENCL)
+    halide_define_aot_test(opencl_program_caching
+            HALIDE_TARGET_FEATURES opencl debug)
+  endif()
+
   halide_define_aot_test(old_buffer_t
                          HALIDE_TARGET_FEATURES legacy_buffer_wrappers)
 
