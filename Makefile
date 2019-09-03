@@ -984,7 +984,7 @@ $(LIB_DIR)/libHalide.a: $(OBJECTS) $(INITIAL_MODULES) $(BUILD_DIR)/llvm_objects/
 	ranlib $(LIB_DIR)/libHalide.a
 
 ifeq ($(UNAME), Linux)
-VERSION_SCRIPT=-Wl,--version-script,halide.expmap
+VERSION_SCRIPT=-Wl,--version-script,$(CURDIR)/halide.expmap
 else
 VERSION_SCRIPT=
 endif
