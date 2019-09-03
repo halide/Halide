@@ -313,6 +313,8 @@ auto dynamic_type_dispatch(const halide_type_t &type, Args&&... args) ->
 #define HANDLE_CASE(CODE, BITS, TYPE) \
     case halide_type_code(CODE, BITS): return Functor<TYPE>()(std::forward<Args>(args)...);
     switch (halide_type_code((halide_type_code_t) type.code, type.bits)) {
+        HANDLE_CASE(halide_type_bfloat, 16, bfloat16_t)
+        HANDLE_CASE(halide_type_float, 16, float16_t)
         HANDLE_CASE(halide_type_float, 32, float)
         HANDLE_CASE(halide_type_float, 64, double)
         HANDLE_CASE(halide_type_int, 8, int8_t)
@@ -343,6 +345,18 @@ struct ExtractAndStoreScalar {
 };
 
 template<>
+inline void ExtractAndStoreScalar<float16_t>::operator()(const Local<Context> &context, const Local<Value> &val, void *slot) {
+    float16_t f((double) val->NumberValue(context).ToChecked());
+    *(uint16_t *)slot = f.to_bits();
+}
+
+template<>
+inline void ExtractAndStoreScalar<bfloat16_t>::operator()(const Local<Context> &context, const Local<Value> &val, void *slot) {
+    bfloat16_t b((double) val->NumberValue(context).ToChecked());
+    *(uint16_t *)slot = b.to_bits();
+}
+
+template<>
 inline void ExtractAndStoreScalar<void*>::operator()(const Local<Context> &context, const Local<Value> &val, void *slot) {
     internal_error << "TODO: 64-bit slots aren't yet supported";
 }
@@ -365,6 +379,18 @@ struct LoadAndReturnScalar {
         val.Set(*(const T *)slot);
     }
 };
+
+template<>
+inline void LoadAndReturnScalar<float16_t>::operator()(const Local<Context> &context, const void *slot, ReturnValue<Value> val) {
+    float16_t f = float16_t::make_from_bits(*(const uint16_t *)slot);
+    val.Set((double) f);
+}
+
+template<>
+inline void LoadAndReturnScalar<bfloat16_t>::operator()(const Local<Context> &context, const void *slot, ReturnValue<Value> val) {
+    bfloat16_t b = bfloat16_t::make_from_bits(*(const uint16_t *)slot);
+    val.Set((double) b);
+}
 
 template<>
 inline void LoadAndReturnScalar<void*>::operator()(const Local<Context> &context, const void *slot, ReturnValue<Value> val) {
@@ -391,6 +417,20 @@ struct WrapScalar {
         return Number::New(isolate, val);
     }
 };
+
+template<>
+inline Local<Value> WrapScalar<float16_t>::operator()(const Local<Context> &context, const void *val_ptr) {
+    double val = (double) *(const uint16_t *)val_ptr;
+    Isolate *isolate = context->GetIsolate();
+    return Number::New(isolate, val);
+}
+
+template<>
+inline Local<Value> WrapScalar<bfloat16_t>::operator()(const Local<Context> &context, const void *val_ptr) {
+    double val = (double) *(const uint16_t *)val_ptr;
+    Isolate *isolate = context->GetIsolate();
+    return Number::New(isolate, val);
+}
 
 template<>
 inline Local<Value> WrapScalar<void*>::operator()(const Local<Context> &context, const void *val_ptr) {
