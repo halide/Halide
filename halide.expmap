@@ -1,0 +1,12 @@
+{
+    # Export everything in Halide namespace (including Halide::Internal, etc)
+    # and halide_ symbols. Hide everything else.
+    global: 
+        halide_*;
+        extern "C++" {
+          *Halide::*;   # typeinfo
+          Halide::*;
+        };
+    local:
+        *;
+};

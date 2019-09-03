@@ -64,6 +64,8 @@ std::unique_ptr<llvm::Module> parse_bitcode_file(llvm::StringRef buf, llvm::LLVM
 #define DECLARE_LL_INITMOD(mod) \
     DECLARE_INITMOD(mod ## _ll)
 
+namespace {
+
 // Universal CPP Initmods. Please keep sorted alphabetically.
 DECLARE_CPP_INITMOD(alignment_128)
 DECLARE_CPP_INITMOD(alignment_32)
@@ -259,8 +261,6 @@ DECLARE_CPP_INITMOD(riscv_cpu_features)
 //DECLARE_NO_INITMOD(riscv)
 DECLARE_NO_INITMOD(riscv_cpu_features)
 #endif  // WITH_RISCV
-
-namespace {
 
 // These are temporarily backed out of trunk LLVM but will likely be back soon
 #define USE_NEW_X86_DATALAYOUT 0
