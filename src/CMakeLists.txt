@@ -201,12 +201,12 @@ function(add_runtime_modules TARGET_RUNTIME_FILES TARGET_RUNTIME_DIR)
       add_custom_command(OUTPUT "${INITMOD_D}"
                          # COMMENT "${BC_D} -> ${INITMOD_D}"
                          DEPENDS "${BC_D}" binary2cpp
-                         COMMAND binary2cpp "halide_internal_initmod_${i}_${j}_debug" < "${BC_D}" > "${INITMOD_D}"
+                         COMMAND binary2cpp -hidden "halide_internal_initmod_${i}_${j}_debug" < "${BC_D}" > "${INITMOD_D}"
                          )
       add_custom_command(OUTPUT "${INITMOD}"
                          # COMMENT "${BC} -> ${INITMOD}"
                          DEPENDS "${BC}" binary2cpp
-                         COMMAND binary2cpp "halide_internal_initmod_${i}_${j}" < "${BC}" > "${INITMOD}"
+                         COMMAND binary2cpp -hidden "halide_internal_initmod_${i}_${j}" < "${BC}" > "${INITMOD}"
                          )
       list(APPEND INITIAL_MODULES ${INITMOD})
       list(APPEND INITIAL_MODULES ${INITMOD_D})
@@ -231,7 +231,7 @@ foreach (i ${RUNTIME_LL} )
   add_custom_command(OUTPUT "${INITMOD}"
                      # COMMENT "${BC} -> ${INITMOD}"
                      DEPENDS "${BC}" binary2cpp
-                     COMMAND binary2cpp "halide_internal_initmod_${i}_ll" < "${BC}" > "${INITMOD}"
+                     COMMAND binary2cpp -hidden "halide_internal_initmod_${i}_ll" < "${BC}" > "${INITMOD}"
                      )
   list(APPEND INITIAL_MODULES "${INITMOD}")
 endforeach()
@@ -240,7 +240,7 @@ foreach (i ${RUNTIME_BC} )
   add_custom_command(OUTPUT "${INITMOD}"
                      # COMMENT "Building initial module ptx_${i}..."
                      DEPENDS binary2cpp
-                     COMMAND binary2cpp "halide_internal_initmod_ptx_${i}_ll" < "${NATIVE_RUNTIME_DIR}nvidia_libdevice_bitcode/libdevice.${i}.10.bc" > "${INITMOD}"
+                     COMMAND binary2cpp -hidden "halide_internal_initmod_ptx_${i}_ll" < "${NATIVE_RUNTIME_DIR}nvidia_libdevice_bitcode/libdevice.${i}.10.bc" > "${INITMOD}"
                      VERBATIM)
   list(APPEND INITIAL_MODULES "${INITMOD}")
 endforeach()
@@ -248,7 +248,7 @@ endforeach()
 add_custom_command(OUTPUT "${INITMOD_PREFIX}inlined_c.cpp"
   # COMMENT "buffer_t.cpp -> ${INITMOD_PREFIX}inlined_c.cpp"
   DEPENDS "${NATIVE_RUNTIME_DIR}buffer_t.cpp" binary2cpp
-  COMMAND binary2cpp "halide_internal_initmod_inlined_c" < "${NATIVE_RUNTIME_DIR}buffer_t.cpp" > "${INITMOD_PREFIX}inlined_c.cpp"
+  COMMAND binary2cpp -hidden "halide_internal_initmod_inlined_c" < "${NATIVE_RUNTIME_DIR}buffer_t.cpp" > "${INITMOD_PREFIX}inlined_c.cpp"
   )
 list(APPEND INITIAL_MODULES "${INITMOD_PREFIX}inlined_c.cpp")
 
@@ -273,7 +273,7 @@ foreach (i ${RUNTIME_HEADER_FILES})
   add_custom_command(OUTPUT "${INITMOD_PREFIX}${SYM_NAME}.cpp"
     # COMMENT "${i} -> ${INITMOD_PREFIX}${SYM_NAME}.cpp"
     DEPENDS "${NATIVE_RUNTIME_DIR}${i}" binary2cpp
-    COMMAND binary2cpp "halide_internal_runtime_header_${SYM_NAME}" < "${NATIVE_RUNTIME_DIR}${i}" > "${INITMOD_PREFIX}${SYM_NAME}.cpp"
+    COMMAND binary2cpp -hidden "halide_internal_runtime_header_${SYM_NAME}" < "${NATIVE_RUNTIME_DIR}${i}" > "${INITMOD_PREFIX}${SYM_NAME}.cpp"
     )
   list(APPEND INITIAL_MODULES "${INITMOD_PREFIX}${SYM_NAME}.cpp")
 endforeach()
