@@ -590,6 +590,127 @@ char *make_cached_program_filename(const char * const device_built_programs_cach
     return NULL;
 }
 
+cl_program cl_load_program_from_cache(void *user_context, ClContext ctx, cl_device_id dev, const uint32_t src_hash) {
+    if (!device_built_programs_cache_dir_name_set) {
+        return NULL;
+    }
+
+    char *cached_program_filename = make_cached_program_filename(device_built_programs_cache_dir_name, src_hash);
+    if (!cached_program_filename) {
+        return NULL;
+    }
+
+    debug(0) << "    open file\n";
+    cl_program program_from_binary = NULL;
+    ScopedFile file(cached_program_filename, "rb");
+    free(cached_program_filename);
+
+    unsigned char *binary_buffer = NULL;
+    size_t binary_size = 0;
+
+    if (file.readall(&binary_buffer, &binary_size)) {
+        debug(0) << "    binary_size: " << (uint32_t) binary_size << "\n";
+        debug(0) << "    binary: " << (char *) binary_buffer;
+        debug(0) << "\n";
+        cl_device_id devices[] = { dev };
+        const unsigned char *binaries[] = { binary_buffer };
+        cl_int err = CL_SUCCESS;
+        cl_int load_errors[1];
+        program_from_binary = clCreateProgramWithBinary(ctx.context, 1, devices, &binary_size, binaries,
+                                                        load_errors, &err);
+        if (err != CL_SUCCESS) {
+            debug(user_context) << get_opencl_error_name(err) << "\n";
+            error(user_context) << "CL: clCreateProgramWithBinary failed: "
+                                << get_opencl_error_name(err);
+            return NULL;
+        } else {
+            debug(user_context) << "    program was loaded from cache file "
+                                << cached_program_filename
+                                << ": " << (void *) program_from_binary
+                                << "\n";
+        }
+    }
+
+    if (binary_buffer) {
+        free(binary_buffer);
+    }
+
+    debug(0) << "    read done\n";
+    return program_from_binary;
+}
+
+cl_int cl_cache_program_binary(void *user_context, cl_program program, const uint32_t src_hash) {
+    if (!device_built_programs_cache_dir_name_set) {
+        return CL_SUCCESS;
+    }
+
+    char *cached_program_filename = make_cached_program_filename(device_built_programs_cache_dir_name, src_hash);
+    if (!cached_program_filename) {
+        return CL_OUT_OF_HOST_MEMORY;
+    }
+    ScopedFile file(cached_program_filename, "wbx");
+    free(cached_program_filename);
+    if (!file.open()) {
+        debug(user_context) << "CL: cl_cache_program_binary: cache file exists, skip caching. \n";
+        return CL_SUCCESS;
+    }
+
+    cl_int err;
+    size_t bin_size;
+    size_t ret_size;
+
+    err = clGetProgramInfo(program, CL_PROGRAM_BINARY_SIZES, sizeof(size_t), &bin_size, &ret_size);
+    if (err != CL_SUCCESS) {
+        error(user_context) << "CL: clGetProgramInfo failed: " << get_opencl_error_name(err) << "\n";
+        return err;
+    }
+
+    if (file.open()) {
+        unsigned char *bin_buf = (unsigned char *)malloc(bin_size + 128);
+        if (!bin_buf) {
+            return CL_OUT_OF_HOST_MEMORY;
+        }
+        err = clGetProgramInfo(program, CL_PROGRAM_BINARIES, bin_size, &bin_buf, &ret_size);
+        if (err != CL_SUCCESS) {
+            free(bin_buf);
+            error(user_context) << "CL: clGetProgramInfo failed: " << get_opencl_error_name(err) << "\n";
+            return err;
+        }
+        file.write(bin_buf, bin_size);
+        free(bin_buf);
+    } else {
+        return CL_DEVICE_NOT_FOUND;
+    }
+    return CL_SUCCESS;
+}
+
+
+
+cl_int cl_build_program(void *user_context, cl_device_id dev, cl_program program, const char* options) {
+    debug(user_context) << "    clBuildProgram " << (void *)program
+                                                 << " " << options << "\n";
+    cl_device_id devices[] = { dev };
+    cl_int err = clBuildProgram(program, 1, devices, options, NULL, NULL );
+    if (err != CL_SUCCESS) {
+        // Allocate an appropriately sized buffer for the build log.
+        char buffer[8192];
+
+        // Get build log
+        if (clGetProgramBuildInfo(program, dev,
+                                  CL_PROGRAM_BUILD_LOG,
+                                  sizeof(buffer), buffer,
+                                  NULL) == CL_SUCCESS) {
+            error(user_context) << "CL: clBuildProgram failed: "
+                    << get_opencl_error_name(err)
+                    << "\nBuild Log:\n"
+                    << buffer << "\n";
+        } else {
+            error(user_context) << "clGetProgramBuildInfo failed";
+        }
+    }
+    return err;
+}
+
 }}}} // namespace Halide::Runtime::Internal::OpenCL
 
 extern "C" {
@@ -684,8 +805,6 @@ WEAK int halide_opencl_initialize_kernels(void *user_context, void **state_ptr, 
             return err;
         }
 
-        cl_device_id devices[] = { dev };
-
         // Get the max constant buffer size supported by this OpenCL implementation.
         cl_ulong max_constant_buffer_size = 0;
         err = clGetDeviceInfo(dev, CL_DEVICE_MAX_CONSTANT_BUFFER_SIZE, sizeof(max_constant_buffer_size), &max_constant_buffer_size, NULL);
@@ -705,51 +824,11 @@ WEAK int halide_opencl_initialize_kernels(void *user_context, void **state_ptr, 
 
         // Check if program was compiled before, then load it from cache.
         // @TODO It's possible to calculate src_hash at compile-time in CodeGen_GPU_Host<CodeGen_CPU>::compile_funcs
-        debug(0) << "calculate hash: \n";
         uint32_t src_hash = device_built_programs_cache_dir_name_set ? Halide::Runtime::Internal::djb_hash((const uint8_t *)src, size) : 0;
-        debug(0) << "    src_hash: " << src_hash << "\n";
-        cl_program program = NULL;
-        if (device_built_programs_cache_dir_name_set) {
-            char *cached_program_filename = make_cached_program_filename(device_built_programs_cache_dir_name, src_hash);
-            if (cached_program_filename != NULL) {
-                debug(0) << "    open file\n";
-                ScopedFile file(cached_program_filename, "rb");
-                unsigned char *binary_buffer = NULL;
-                size_t binary_size = 0;
-                if (file.readall(&binary_buffer, &binary_size)) {
-                    debug(0) << "    binary_size: " << (uint32_t)binary_size << "\n";
-                    debug(0) << "    binary: " << (char*)binary_buffer;
-                    debug(0) << "\n";
-                    const unsigned char *binaries[] = { binary_buffer };
-                    cl_int load_errors[1];
-                    cl_program program_from_binary = clCreateProgramWithBinary(ctx.context, 1, devices, &binary_size, binaries, load_errors, &err);
-                    if (err != CL_SUCCESS) {
-                        debug(user_context) << get_opencl_error_name(err) << "\n";
-                        error(user_context) << "CL: clCreateProgramWithBinary failed: "
-                                            << get_opencl_error_name(err);
-                        return err;
-                    } else {
-                        program = program_from_binary;
-                        debug(user_context) << "    program was loaded from binaries cache file " << cached_program_filename << ": "  << (void *) program << "\n";
-                    }
-                    free(binary_buffer);
-
-                    stringstream options(user_context);
-                    options << "-D MAX_CONSTANT_BUFFER_SIZE=" << max_constant_buffer_size
-                            << " -D MAX_CONSTANT_ARGS=" << max_constant_args;
-
-                    debug(user_context) << "    clBuildProgram " << (void *)program
-                                        << " " << options.str() << "\n";
-                    err = clBuildProgram(program, 1, devices, options.str(), NULL, NULL );
-                }
-                free(cached_program_filename);
-                debug(0) << "    read done\n";
-            }
-        }
+        cl_program program = device_built_programs_cache_dir_name_set ? cl_load_program_from_cache(user_context, ctx, dev, src_hash) : NULL;
 
         debug(0) << "    program == NULL: " << (program == NULL) << "\n";
         if (program == NULL) {
-            // Build the compile argument options.
             const char *sources[] = {src};
             debug(user_context) << "    clCreateProgramWithSource -> ";
             program = clCreateProgramWithSource(ctx.context, 1, &sources[0], NULL, &err);
@@ -761,34 +840,18 @@ WEAK int halide_opencl_initialize_kernels(void *user_context, void **state_ptr, 
             } else {
                 debug(user_context) << (void *) program << "\n";
             }
+        }
 
-            stringstream options(user_context);
-            options << "-D MAX_CONSTANT_BUFFER_SIZE=" << max_constant_buffer_size
-                    << " -D MAX_CONSTANT_ARGS=" << max_constant_args;
+        // Build the compile argument options.
+        stringstream options(user_context);
+        options << "-D MAX_CONSTANT_BUFFER_SIZE=" << max_constant_buffer_size
+                << " -D MAX_CONSTANT_ARGS=" << max_constant_args;
 
-            debug(user_context) << "    clBuildProgram " << (void *)program
-                                << " " << options.str() << "\n";
-            err = clBuildProgram(program, 1, devices, options.str(), NULL, NULL );
-
-            if (err != CL_SUCCESS) {
-                // Allocate an appropriately sized buffer for the build log.
-                char buffer[8192];
-
-                // Get build log
-                if (clGetProgramBuildInfo(program, dev,
-                                          CL_PROGRAM_BUILD_LOG,
-                                          sizeof(buffer), buffer,
-                                          NULL) == CL_SUCCESS) {
-                    error(user_context) << "CL: clBuildProgram failed: "
-                                        << get_opencl_error_name(err)
-                                        << "\nBuild Log:\n"
-                                        << buffer << "\n";
-                } else {
-                    error(user_context) << "clGetProgramBuildInfo failed";
-                }
-
-                return err;
-            }
+        debug(user_context) << "    clBuildProgram " << (void *)program
+                            << " " << options.str() << "\n";
+        err = cl_build_program(user_context, dev, program, options.str());
+        if (err != CL_SUCCESS) {
+            return err;
         }
 
         if (program == NULL) {
@@ -798,25 +861,7 @@ WEAK int halide_opencl_initialize_kernels(void *user_context, void **state_ptr, 
         (*state)->program = program;
 
         if (device_built_programs_cache_dir_name_set) {
-            size_t bin_size;
-            size_t ret_size;
-            //device_built_programs_cache_dir_name
-            err = clGetProgramInfo(program, CL_PROGRAM_BINARY_SIZES, sizeof(size_t), &bin_size, &ret_size);
-            if (err == CL_SUCCESS && bin_size) {
-                // I don't like manual memory handling. Why don't use shared_ptr?
-                char *cached_program_filename = make_cached_program_filename(device_built_programs_cache_dir_name, src_hash);
-                ScopedFile file(cached_program_filename, "wb");
-                free(cached_program_filename);
-
-                if (file.open()) {
-                    unsigned char *bin_buf = (unsigned char*)malloc(bin_size + 128);
-                    err = clGetProgramInfo(program, CL_PROGRAM_BINARIES, bin_size, &bin_buf, &ret_size);
-                    if (err == CL_SUCCESS) {
-                        file.write(bin_buf, bin_size);
-                    }
-                    free(bin_buf);
-                }
-            }
+            cl_cache_program_binary(user_context, program, src_hash);
         }
     }
 
