@@ -91,6 +91,9 @@ extern uintptr_t halide_opencl_get_cl_mem(void *user_context, struct halide_buff
 /** Returns the offset associated with the OpenCL memory allocation via device_crop or device_slice. */
 extern uint64_t halide_opencl_get_crop_offset(void *user_context, halide_buffer_t *buf);
 
+/** */
+extern void halide_opencl_set_compiled_programs_cache_dir(const char *n);
+
 #ifdef __cplusplus
 } // End extern "C"
 #endif

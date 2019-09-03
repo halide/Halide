@@ -5,10 +5,94 @@
 #include "printer.h"
 
 #include "mini_cl.h"
+#include "hashmap.h"
 
 #define INLINE inline __attribute__((always_inline))
 
 namespace Halide { namespace Runtime { namespace Internal { namespace OpenCL {
+
+/// Borrowed from write_debug_image.cpp. Is there good place to move definition?
+struct ScopedFile {
+    void *f;
+    ScopedFile(const char *filename, const char *mode) {
+        f = fopen(filename, mode);
+    }
+    ~ScopedFile() {
+        if (open()) {
+            fclose(f);
+        }
+    }
+    bool write(const void *ptr, size_t bytes) {
+        return fwrite(ptr, bytes, 1, f);
+    }
+
+    bool readall(unsigned char **dataptr, size_t *sizeptr) {
+        /* None of the parameters can be NULL. */
+        if (!open() || dataptr == NULL || sizeptr == NULL) {
+            return false;
+        }
+        unsigned char *data = NULL;
+        unsigned char *temp = NULL;
+
+        const size_t CHUNK_SIZE = 2048;
+
+        size_t size = 0;
+        size_t used = 0;
+
+        /* A read error already occurred? */
+        if (ferror(f)) {
+            return false;
+        }
+
+        while (true) {
+            if (used + CHUNK_SIZE + 1 > size) {
+                size = used + CHUNK_SIZE + 1;
+                /* Overflow check. */
+                if (size <= used) {
+                    free(data);
+                    return false;
+                }
+                temp = (unsigned char*)realloc(data, size);
+                if (temp == NULL) {
+                    free(data);
+                    return false;
+                }
+                data = temp;
+            }
+            debug(0) << "    used: " << (uint32_t)used << "\n";
+            size_t n = fread(data + used, 1, CHUNK_SIZE, f);
+            debug(0) << "    fread.n: " << (uint32_t)n << "\n";
+            if (n == 0) {
+                break;
+            }
+
+            used += n;
+        }
+
+        if (ferror(f)) {
+            free(data);
+            return false;
+        }
+
+        temp = (unsigned char*)realloc(data, used + 1);
+        if (temp == NULL) {
+            free(data);
+            return false;
+        }
+        data = temp;
+        data[used] = '\0';
+        debug(0) << (char*)data << "\n\n\n";
+
+        *dataptr = data;
+        *sizeptr = used;
+
+        return true;
+    }
+
+    bool open() const {
+        return f;
+    }
+};
 
 // Define the function pointers for the OpenCL API. OpenCL 1.2
 // currently disabled so we can work on build bots without it.
@@ -84,6 +168,9 @@ WEAK char device_type[256];
 WEAK int device_type_lock = 0;
 WEAK bool device_type_initialized = false;
 
+WEAK char device_built_programs_cache_dir_name[1024];
+WEAK bool device_built_programs_cache_dir_name_set = false;
+
 }}}} // namespace Halide::Runtime::Internal::OpenCL
 
 using namespace Halide::Runtime::Internal::OpenCL;
@@ -92,6 +179,16 @@ using namespace Halide::Runtime::Internal::OpenCL;
 #define ENABLE_OPENCL_11
 
 extern "C" {
+WEAK extern void halide_opencl_set_compiled_programs_cache_dir(const char *path) {
+    debug(0) << "halide_opencl_set_compiled_programs_cache_dir: \n";
+    if (path) {
+        strncpy(device_built_programs_cache_dir_name, path, 1024);
+        device_built_programs_cache_dir_name_set = true;
+        debug(0) << "    device_built_programs_cache_dir_name_set: " << device_built_programs_cache_dir_name_set << "\n";
+    } else {
+        device_built_programs_cache_dir_name[0] = 0;
+    }
+}
 
 WEAK void halide_opencl_set_platform_name(const char *n) {
     if (n) {
@@ -475,6 +572,24 @@ WEAK int create_opencl_context(void *user_context, cl_context *ctx, cl_command_q
     return err;
 }
 
+char *make_cached_program_filename(const char * const device_built_programs_cache_dir_name, const uint32_t src_hash) {
+    debug(0) << "make_cached_program_filename: " << device_built_programs_cache_dir_name << " " << src_hash << "\n";
+    const size_t BUF_SIZE = 1024; // Max path size
+
+    char *buf = (char*)malloc(BUF_SIZE);
+    if (buf == NULL) {
+        return NULL;
+    }
+
+    const int n = sprintf(buf, "%s/halide_opencl_program_binary_%x.bin", device_built_programs_cache_dir_name, src_hash);
+    if (n > 0) {
+        debug(0) << "    path: " << buf << "\n";
+        return buf;
+    }
+    free(buf);
+    return NULL;
+}
+
 }}}} // namespace Halide::Runtime::Internal::OpenCL
 
 extern "C" {
@@ -588,46 +703,120 @@ WEAK int halide_opencl_initialize_kernels(void *user_context, void **state_ptr, 
             return err;
         }
 
-        // Build the compile argument options.
-        stringstream options(user_context);
-        options << "-D MAX_CONSTANT_BUFFER_SIZE=" << max_constant_buffer_size
-                << " -D MAX_CONSTANT_ARGS=" << max_constant_args;
+        // Check if program was compiled before, then load it from cache.
+        // @TODO It's possible to calculate src_hash at compile-time in CodeGen_GPU_Host<CodeGen_CPU>::compile_funcs
+        debug(0) << "calculate hash: \n";
+        uint32_t src_hash = device_built_programs_cache_dir_name_set ? Halide::Runtime::Internal::djb_hash((const uint8_t *)src, size) : 0;
+        debug(0) << "    src_hash: " << src_hash << "\n";
+        cl_program program = NULL;
+        if (device_built_programs_cache_dir_name_set) {
+            char *cached_program_filename = make_cached_program_filename(device_built_programs_cache_dir_name, src_hash);
+            if (cached_program_filename != NULL) {
+                debug(0) << "    open file\n";
+                ScopedFile file(cached_program_filename, "rb");
+                unsigned char *binary_buffer = NULL;
+                size_t binary_size = 0;
+                if (file.readall(&binary_buffer, &binary_size)) {
+                    debug(0) << "    binary_size: " << (uint32_t)binary_size << "\n";
+                    debug(0) << "    binary: " << (char*)binary_buffer;
+                    debug(0) << "\n";
+                    const unsigned char *binaries[] = { binary_buffer };
+                    cl_int load_errors[1];
+                    cl_program program_from_binary = clCreateProgramWithBinary(ctx.context, 1, devices, &binary_size, binaries, load_errors, &err);
+                    if (err != CL_SUCCESS) {
+                        debug(user_context) << get_opencl_error_name(err) << "\n";
+                        error(user_context) << "CL: clCreateProgramWithBinary failed: "
+                                            << get_opencl_error_name(err);
+                        return err;
+                    } else {
+                        program = program_from_binary;
+                        debug(user_context) << "    program was loaded from binaries cache file " << cached_program_filename << ": "  << (void *) program << "\n";
+                    }
+                    free(binary_buffer);
 
-        const char * sources[] = { src };
-        debug(user_context) << "    clCreateProgramWithSource -> ";
-        cl_program program = clCreateProgramWithSource(ctx.context, 1, &sources[0], NULL, &err );
-        if (err != CL_SUCCESS) {
-            debug(user_context) << get_opencl_error_name(err) << "\n";
-            error(user_context) << "CL: clCreateProgramWithSource failed: "
-                                << get_opencl_error_name(err);
-            return err;
-        } else {
-            debug(user_context) << (void *)program << "\n";
+                    stringstream options(user_context);
+                    options << "-D MAX_CONSTANT_BUFFER_SIZE=" << max_constant_buffer_size
+                            << " -D MAX_CONSTANT_ARGS=" << max_constant_args;
+
+                    debug(user_context) << "    clBuildProgram " << (void *)program
+                                        << " " << options.str() << "\n";
+                    err = clBuildProgram(program, 1, devices, options.str(), NULL, NULL );
+                }
+                free(cached_program_filename);
+                debug(0) << "    read done\n";
+            }
+        }
+
+        debug(0) << "    program == NULL: " << (program == NULL) << "\n";
+        if (program == NULL) {
+            // Build the compile argument options.
+            const char *sources[] = {src};
+            debug(user_context) << "    clCreateProgramWithSource -> ";
+            program = clCreateProgramWithSource(ctx.context, 1, &sources[0], NULL, &err);
+            if (err != CL_SUCCESS) {
+                debug(user_context) << get_opencl_error_name(err) << "\n";
+                error(user_context) << "CL: clCreateProgramWithSource failed: "
+                                    << get_opencl_error_name(err);
+                return err;
+            } else {
+                debug(user_context) << (void *) program << "\n";
+            }
+
+            stringstream options(user_context);
+            options << "-D MAX_CONSTANT_BUFFER_SIZE=" << max_constant_buffer_size
+                    << " -D MAX_CONSTANT_ARGS=" << max_constant_args;
+
+            debug(user_context) << "    clBuildProgram " << (void *)program
+                                << " " << options.str() << "\n";
+            err = clBuildProgram(program, 1, devices, options.str(), NULL, NULL );
+
+            if (err != CL_SUCCESS) {
+                // Allocate an appropriately sized buffer for the build log.
+                char buffer[8192];
+
+                // Get build log
+                if (clGetProgramBuildInfo(program, dev,
+                                          CL_PROGRAM_BUILD_LOG,
+                                          sizeof(buffer), buffer,
+                                          NULL) == CL_SUCCESS) {
+                    error(user_context) << "CL: clBuildProgram failed: "
+                                        << get_opencl_error_name(err)
+                                        << "\nBuild Log:\n"
+                                        << buffer << "\n";
+                } else {
+                    error(user_context) << "clGetProgramBuildInfo failed";
+                }
+
+                return err;
+            }
+        }
+
+        if (program == NULL) {
+            error(user_context) << "CL: halide_opencl_initialize_kernels failed to compile program and load it from cache.";
+            return CL_BUILD_ERROR;
         }
         (*state)->program = program;
 
-        debug(user_context) << "    clBuildProgram " << (void *)program
-                            << " " << options.str() << "\n";
-        err = clBuildProgram(program, 1, devices, options.str(), NULL, NULL );
-        if (err != CL_SUCCESS) {
+        if (device_built_programs_cache_dir_name_set) {
+            size_t bin_size;
+            size_t ret_size;
+            //device_built_programs_cache_dir_name
+            err = clGetProgramInfo(program, CL_PROGRAM_BINARY_SIZES, sizeof(size_t), &bin_size, &ret_size);
+            if (err == CL_SUCCESS && bin_size) {
+                // I don't like manual memory handling. Why don't use shared_ptr?
+                char *cached_program_filename = make_cached_program_filename(device_built_programs_cache_dir_name, src_hash);
+                ScopedFile file(cached_program_filename, "wb");
+                free(cached_program_filename);
 
-            // Allocate an appropriately sized buffer for the build log.
-            char buffer[8192];
-
-            // Get build log
-            if (clGetProgramBuildInfo(program, dev,
-                                      CL_PROGRAM_BUILD_LOG,
-                                      sizeof(buffer), buffer,
-                                      NULL) == CL_SUCCESS) {
-                error(user_context) << "CL: clBuildProgram failed: "
-                                    << get_opencl_error_name(err)
-                                    << "\nBuild Log:\n"
-                                    << buffer << "\n";
-            } else {
-                error(user_context) << "clGetProgramBuildInfo failed";
+                if (file.open()) {
+                    unsigned char *bin_buf = (unsigned char*)malloc(bin_size + 128);
+                    err = clGetProgramInfo(program, CL_PROGRAM_BINARIES, bin_size, &bin_buf, &ret_size);
+                    if (err == CL_SUCCESS) {
+                        file.write(bin_buf, bin_size);
+                    }
+                    free(bin_buf);
+                }
             }
-
-            return err;
         }
     }
 

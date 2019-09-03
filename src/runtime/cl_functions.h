@@ -164,6 +164,16 @@ CL_FN(cl_program,
                                   const char **     /* strings */,
                                   const size_t *    /* lengths */,
                                   cl_int *          /* errcode_ret */));
+
+CL_FN(cl_program,
+      clCreateProgramWithBinary, (cl_context             /*context*/,
+                                  cl_uint                /*num_devices*/,
+                                  const cl_device_id *   /*device_list*/,
+                                  const size_t *         /*lengths*/,
+                                  const unsigned char ** /*binaries*/,
+                                  cl_int *               /*binary_status*/,
+                                  cl_int *               /*errcode_ret*/));
+
 CL_FN(cl_int,
       clRetainProgram, (cl_program /* program */));
 
@@ -185,6 +195,13 @@ CL_FN(cl_int,
                               size_t                /* param_value_size */,
                               void *                /* param_value */,
                               size_t *              /* param_value_size_ret */));
+
+CL_FN(cl_int,
+      clGetProgramInfo, (cl_program      /* program */,
+                         cl_program_info /* param_name */,
+                         size_t          /* param_value_size */,
+                         void *          /* param_value */,
+                         size_t *        /*param_value_size_ret */));
 
 /* Kernel Object APIs */
 CL_FN(cl_kernel,

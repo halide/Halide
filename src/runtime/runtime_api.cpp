@@ -141,6 +141,7 @@ extern "C" __attribute__((used)) void *halide_runtime_api_functions[] = {
     (void *)&halide_opencl_set_device_type,
     (void *)&halide_opencl_set_platform_name,
     (void *)&halide_opencl_wrap_cl_mem,
+    (void *)&halide_opencl_set_compiled_programs_cache_dir,
     (void *)&halide_opengl_context_lost,
     (void *)&halide_opengl_create_context,
     (void *)&halide_opengl_detach_texture,
