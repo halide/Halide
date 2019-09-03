@@ -835,8 +835,6 @@ WEAK int halide_opencl_initialize_kernels(void *user_context, void **state_ptr, 
         options << "-D MAX_CONSTANT_BUFFER_SIZE=" << max_constant_buffer_size
                 << " -D MAX_CONSTANT_ARGS=" << max_constant_args;
 
-        debug(user_context) << "    clBuildProgram " << (void *)program
-                            << " " << options.str() << "\n";
         err = cl_build_program(user_context, dev, program, options.str());
         if (err != CL_SUCCESS) {
             return err;
