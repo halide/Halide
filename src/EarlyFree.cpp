@@ -10,9 +10,7 @@ namespace Halide {
 namespace Internal {
 namespace {
 
-using std::map;
 using std::string;
-using std::vector;
 
 class FindLastUse : public IRVisitor {
 public:

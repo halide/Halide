@@ -16,7 +16,6 @@
 namespace Halide {
 namespace Internal {
 
-using std::map;
 using std::pair;
 using std::string;
 using std::vector;
@@ -75,20 +74,6 @@ class MarkClampedRampsAsLikely : public IRMutator {
     }
 
     bool in_index = false;
-};
-
-// Remove any 'likely' intrinsics.
-class RemoveLikelyTags : public IRMutator {
-    using IRMutator::visit;
-
-    Expr visit(const Call *op) override {
-        if (op->is_intrinsic(Call::likely)) {
-            internal_assert(op->args.size() == 1);
-            return mutate(op->args[0]);
-        } else {
-            return IRMutator::visit(op);
-        }
-    }
 };
 
 // Check if an expression or statement uses a likely tag
@@ -269,7 +254,7 @@ class FindSimplifications : public IRVisitor {
             // We should throw away the condition
             return;
         }
-        condition = RemoveLikelyTags().mutate(condition);
+        condition = remove_likelies(condition);
         Simplification s = {condition, old, likely_val, unlikely_val, true};
         if (s.condition.type().is_vector()) {
             s.condition = simplify(s.condition);
@@ -1070,7 +1055,7 @@ Stmt partition_loops(Stmt s) {
     } mutator;
     s = mutator.mutate(s);
 
-    s = RemoveLikelyTags().mutate(s);
+    s = remove_likelies(s);
     return s;
 }
 

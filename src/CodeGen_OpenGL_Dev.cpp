@@ -13,7 +13,6 @@
 namespace Halide {
 namespace Internal {
 
-using std::map;
 using std::ostringstream;
 using std::string;
 using std::vector;
@@ -105,6 +104,7 @@ void CodeGen_OpenGL_Dev::add_kernel(Stmt s, const string &name,
 void CodeGen_OpenGL_Dev::init_module() {
     src_stream.str("");
     src_stream.clear();
+    glc->add_common_macros(src_stream);
     cur_kernel_name = "";
 }
 
@@ -937,7 +937,7 @@ void CodeGen_GLSL::add_kernel(Stmt stmt, string name,
         "float _trunc_f32(float x) {\n"
         "  return floor(abs(x)) * sign(x);\n"
         "}\n";
-    
+
     stream << "void main() {\n";
     indent += 2;
 

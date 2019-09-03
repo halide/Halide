@@ -175,7 +175,7 @@ Stmt collect_strided_stores(Stmt stmt, const std::string &name, int stride, int 
     return collect.mutate(stmt);
 }
 
-class Deinterleaver : public IRGraphMutator2 {
+class Deinterleaver : public IRGraphMutator {
 public:
     Deinterleaver(int starting_lane, int lane_stride, int new_lanes, const Scope<> &lets)
         : starting_lane(starting_lane),

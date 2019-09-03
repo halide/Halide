@@ -24,8 +24,17 @@ if("${HALIDE_REQUIRE_LLVM_VERSION}" STREQUAL "")
   find_package(LLVM REQUIRED CONFIG)
 else()
   # Find a specific version.
-  string(SUBSTRING "${HALIDE_REQUIRE_LLVM_VERSION}" 0 1 MAJOR)
-  string(SUBSTRING "${HALIDE_REQUIRE_LLVM_VERSION}" 1 1 MINOR)
+  string(REGEX REPLACE
+    "^([0-9]+)([0-9])$"
+    "\\1"
+    MAJOR
+    "${HALIDE_REQUIRE_LLVM_VERSION}")
+  string(REGEX REPLACE
+    "^([0-9]+)([0-9])$"
+    "\\2"
+    MINOR
+    "${HALIDE_REQUIRE_LLVM_VERSION}")
+  message("HALIDE_REQUIRE_LLVM_VERSION ${HALIDE_REQUIRE_LLVM_VERSION}")
   message("Looking for LLVM version ${MAJOR}.${MINOR}")
   find_package(LLVM "${MAJOR}.${MINOR}" REQUIRED CONFIG)
   if(NOT "${LLVM_VERSION_MAJOR}${LLVM_VERSION_MINOR}" STREQUAL "${MAJOR}${MINOR}")
@@ -49,11 +58,6 @@ if(${CMAKE_SYSTEM_NAME} MATCHES "Windows")
   set(CMAKE_OBJECT_PATH_MAX 260)
   message("Windows: setting CMAKE_OBJECT_PATH_MAX to ${CMAKE_OBJECT_PATH_MAX}")
 endif()
-
-# Require C++11 for everything.
-set(CMAKE_CXX_STANDARD 11)
-set(CMAKE_CXX_STANDARD_REQUIRED ON)
-set(CMAKE_CXX_EXTENSIONS OFF)
 
 set(CMAKE_MACOSX_RPATH ON)
 
@@ -82,6 +86,21 @@ if("${HALIDE_SYSTEM_LIBS}" STREQUAL "")
   # aren't configured correctly.
   message(WARNING "'llvm-config --system-libs --link-static' is empty; this is possibly wrong.")
 endif()
+
+execute_process(COMMAND ${LLVM_CONFIG} --cxxflags OUTPUT_VARIABLE LLVM_CONFIG_CXXFLAGS)
+string(FIND "${LLVM_CONFIG_CXXFLAGS}" "-std=c++17" LLVM_CPP17)
+string(FIND "${LLVM_CONFIG_CXXFLAGS}" "-std=c++14" LLVM_CPP14)
+if (LLVM_CPP17 GREATER -1)
+  set(CMAKE_CXX_STANDARD 17)
+elseif (LLVM_CPP14 GREATER -1)
+  set(CMAKE_CXX_STANDARD 14)
+else()
+  # Require (at least) C++11 for everything.
+  set(CMAKE_CXX_STANDARD 11)
+endif()
+
+set(CMAKE_CXX_STANDARD_REQUIRED ON)
+set(CMAKE_CXX_EXTENSIONS OFF)
 
 # Check LLVM
 function(check_dir VARNAME PATH)
@@ -113,11 +132,14 @@ check_tool_exists(llvm-nm "${LLVM_NM}")
 check_tool_exists(clang "${CLANG}")
 
 # Check reported LLVM version
-if (NOT "${LLVM_VERSION}" MATCHES "^[0-9][0-9]$")
-  message(FATAL_ERROR "LLVM_VERSION not specified correctly. Must be <major><minor> E.g. LLVM 7.0 is \"70\"")
+if (NOT "${LLVM_VERSION}" MATCHES "^[0-9]+$")
+  message(FATAL_ERROR "LLVM_VERSION not specified correctly, must be LLVM version times 10.")
 endif()
 if (LLVM_VERSION LESS 70)
   message(FATAL_ERROR "LLVM version must be 7.0 or newer")
+endif()
+if (LLVM_VERSION GREATER 100)
+  message(FATAL_ERROR "LLVM version must be 10.0 or older")
 endif()
 
 function(check_llvm_target TARGET HAS_TARGET)
@@ -434,6 +456,8 @@ file(GLOB FILES "${CMAKE_BINARY_DIR}/include/HalideRuntime*.h")
 install(FILES
         "${CMAKE_BINARY_DIR}/include/Halide.h"
         "${CMAKE_BINARY_DIR}/include/HalideBuffer.h"
+        "${CMAKE_BINARY_DIR}/include/HalidePyTorchHelpers.h"
+        "${CMAKE_BINARY_DIR}/include/HalidePyTorchCudaHelpers.h"
         ${FILES}
         DESTINATION include)
 
@@ -483,17 +507,5 @@ foreach(F ${FILES})
           DESTINATION .)
 endforeach()
 
-if (NOT WIN32)
-  set(CPACK_PACKAGE_EXT "tar.gz")
-  set(DISTRIB_PACKAGE_EXT "tgz")
-else()
-  set(CPACK_PACKAGE_EXT "zip")
-  set(DISTRIB_PACKAGE_EXT ${CPACK_PACKAGE_EXT})
-endif()
-
 add_custom_target(distrib
-  COMMAND cmake --build . --config $<CONFIG> --target package
-  COMMAND cmake -E echo "${CPACK_PACKAGE_VENDOR}.${CPACK_PACKAGE_EXT} \"=>\" ${CPACK_PACKAGE_VENDOR}.${DISTRIB_PACKAGE_EXT}"
-  COMMAND cmake -E rename "${CPACK_PACKAGE_VENDOR}.${CPACK_PACKAGE_EXT}" "${CPACK_PACKAGE_VENDOR}.${DISTRIB_PACKAGE_EXT}"
-  BYPRODUCTS "${CPACK_PACKAGE_VENDOR}.${DISTRIB_PACKAGE_EXT}"
-  USES_TERMINAL)
+  COMMAND cmake -E echo "\\'make distrib\\' is not available under CMake. Use \\'make package\\' instead.")

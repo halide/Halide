@@ -18,7 +18,6 @@
 namespace Halide {
 namespace Internal {
 
-using std::deque;
 using std::make_pair;
 using std::map;
 using std::pair;
@@ -275,15 +274,6 @@ struct StageBounds {
         return (f_stage < other.f_stage) ||
                ((f_stage == other.f_stage) && (bounds.size() < other.bounds.size()));
     }
-    friend std::ostream& operator<<(std::ostream &stream, const StageBounds &s) {
-        stream << "Stage: " << s.f_stage << "\n";
-        stream << "Bounds:\n";
-        for (const auto &iter : s.bounds) {
-            stream << "\t" << iter.first << " -> [" << iter.second.min << ", " << iter.second.max << "]\n";
-        }
-        stream << "\n";
-        return stream;
-    }
 };
 
 // Helper function to queue regions that need to be traversed. 'fs_bounds' is
@@ -328,13 +318,13 @@ void queue_func_regions(map<FStage, DimBounds> &fs_bounds,
                         if (b_iter->second.has_lower_bound() && b.second.has_lower_bound()) {
                             b_iter->second.min = simplify(Interval::make_min(b_iter->second.min, b.second.min));
                         } else {
-                            b_iter->second.min = Interval::neg_inf;
+                            b_iter->second.min = Interval::neg_inf();
                         }
 
                         if (b_iter->second.has_upper_bound() && b.second.has_upper_bound()) {
                             b_iter->second.max = simplify(Interval::make_max(b_iter->second.max, b.second.max));
                         } else {
-                            b_iter->second.max = Interval::pos_inf;
+                            b_iter->second.max = Interval::pos_inf();
                         }
                     }
                 }
@@ -775,9 +765,6 @@ struct AutoSchedule {
     }
 
     friend std::ostream& operator<<(std::ostream &stream, const AutoSchedule &sched) {
-        stream << "// Delete this line if not using Generator\n";
-        stream << "Pipeline pipeline = get_pipeline();\n\n";
-
         for (const auto &iter : sched.internal_vars) {
             if (iter.second.is_rvar) {
                 stream << "RVar ";
@@ -1464,7 +1451,7 @@ Partitioner::choose_candidate_grouping(const vector<pair<string, string>> &cands
     for (const auto &g : best_grouping) {
         debug(3) << "  " << g.first;
     }
-    if (best_grouping.size() > 0) {
+    if (!best_grouping.empty()) {
         debug(3) << "Best benefit: " << best_benefit << '\n';
     }
 
@@ -2308,41 +2295,6 @@ string get_base_name(string name) {
     return name;
 }
 
-// Return true if any of the values or args in 'def' refers to any of
-// the inputs or outputs, with access function which depends on 'var'.
-bool access_inputs_or_outputs(Definition def, VarOrRVar var,
-                              const map<string, Type> &inputs,
-                              const vector<Function> &outputs) {
-    FindAllCalls find;
-    def.accept(&find);
-
-    for (size_t i = 0; i < find.call_args.size(); ++i) {
-        const string &func = find.call_args[i].first;
-        const vector<Expr> &args = find.call_args[i].second;
-
-        if (inputs.find(func) == inputs.end()) {
-            // Check if 'func' is an output
-            bool is_output =
-                std::find_if(outputs.begin(), outputs.end(),
-                            [&func](const Function &f) { return (f.name() == func);})
-                != outputs.end();
-            if (!is_output) {
-                // 'func' is neither an input or an output
-                continue;
-            }
-        }
-
-        // Check if any of the accesses to 'func' depends on 'var'
-        for (const auto &arg : args) {
-            if (expr_uses_var(arg, var.name())) {
-                return true;
-            }
-        }
-    }
-
-    return false;
-}
-
 pair<VarOrRVar, VarOrRVar> Partitioner::split_dim(
         const Group &g, Stage f_handle, int stage_num, Definition def,
         bool is_group_output, VarOrRVar v, const Expr &factor, string in_suffix,
@@ -2520,7 +2472,7 @@ void Partitioner::reorder_dims(Stage f_handle, int stage_num, Definition def,
     }
 
     // Iterate until all the dimensions have been assigned an order
-    while (strides.size() > 0) {
+    while (!strides.empty()) {
         // Find the pure dimension (can be vars or rvars) with the smallest stride
         bool found_pure_dim = false;
         Expr min_pure_stride = Int(64).max();
@@ -3514,9 +3466,6 @@ string generate_schedules(const vector<Function> &outputs, const Target &target,
     part.generate_cpu_schedule(target, sched);
 
     std::ostringstream oss;
-    oss << "// Target: " << target.to_string() << "\n";
-    oss << "// MachineParams: " << arch_params.to_string() << "\n";
-    oss << "\n";
     oss << sched;
     string sched_string = oss.str();
 

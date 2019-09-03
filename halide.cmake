@@ -468,6 +468,7 @@ function(_halide_runtime_target_name HALIDE_TARGET OUTVAR)
         cl_half
         opengl
         openglcompute
+        egl
         user_context
         matlab
         profile
@@ -500,8 +501,8 @@ function(_halide_runtime_target_name HALIDE_TARGET OUTVAR)
         check_unsafe_promises
         hexagon_dma
         embed_bitcode
-        disable_llvm_loop_vectorize
-        disable_llvm_loop_unroll
+        disable_llvm_loop_opt
+        enable_llvm_loop_opt
         wasm_simd128
         wasm_signext
         sve

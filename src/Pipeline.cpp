@@ -19,7 +19,6 @@ using namespace Halide::Internal;
 
 namespace Halide {
 
-using std::set;
 using std::string;
 using std::vector;
 
@@ -97,8 +96,10 @@ struct PipelineContents {
 
     std::vector<Stmt> requirements;
 
+    bool trace_pipeline;
+
     PipelineContents() :
-        module("", Target()) {
+        module("", Target()), trace_pipeline(false) {
         user_context_arg.arg = Argument("__user_context", Argument::InputScalar, type_of<const void*>(), 0, ArgumentEstimates{});
         user_context_arg.param = Parameter(Handle(), false, 0, "__user_context");
     }
@@ -157,24 +158,32 @@ vector<Func> Pipeline::outputs() const {
     return funcs;
 }
 
-std::function<std::string(Pipeline, const Target &, const MachineParams &)> *Pipeline::get_custom_auto_scheduler_ptr() {
-    static std::function<string(Pipeline, const Target &, const MachineParams &)> custom_auto_scheduler = nullptr;
+AutoSchedulerFn *Pipeline::get_custom_auto_scheduler_ptr() {
+    static AutoSchedulerFn custom_auto_scheduler = nullptr;
     return &custom_auto_scheduler;
 }
 
-string Pipeline::auto_schedule(const Target &target, const MachineParams &arch_params) {
+AutoSchedulerResults Pipeline::auto_schedule(const Target &target, const MachineParams &arch_params) {
+    AutoSchedulerResults results;
+    results.target = target;
+    results.machine_params_string = arch_params.to_string();
+
     auto custom_auto_scheduler = *get_custom_auto_scheduler_ptr();
     if (custom_auto_scheduler) {
-        return custom_auto_scheduler(*this, target, arch_params);
+        custom_auto_scheduler(*this, target, arch_params, &results);
+    } else {
+        user_assert(target.arch == Target::X86 || target.arch == Target::ARM ||
+                    target.arch == Target::POWERPC || target.arch == Target::MIPS)
+            << "Automatic scheduling is currently supported only on these architectures.";
+        results.scheduler_name = "src/AutoSchedule";  // TODO: find a better name (https://github.com/halide/Halide/issues/4057)
+        results.schedule_source = generate_schedules(contents->outputs, target, arch_params);
+        // this autoscheduler has no featurization
     }
 
-    user_assert(target.arch == Target::X86 || target.arch == Target::ARM ||
-                target.arch == Target::POWERPC || target.arch == Target::MIPS)
-        << "Automatic scheduling is currently supported only on these architectures.";
-    return generate_schedules(contents->outputs, target, arch_params);
+    return results;
 }
 
-void Pipeline::set_custom_auto_scheduler(std::function<string(Pipeline, const Target &, const MachineParams &)> auto_scheduler) {
+void Pipeline::set_custom_auto_scheduler(AutoSchedulerFn auto_scheduler) {
     *get_custom_auto_scheduler_ptr() = auto_scheduler;
 }
 
@@ -456,7 +465,8 @@ Module Pipeline::compile_to_module(const vector<Argument> &args,
         }
 
         contents->module = lower(contents->outputs, new_fn_name, target, lowering_args,
-                                 linkage_type, contents->requirements, custom_passes);
+                                 linkage_type, contents->requirements, contents->trace_pipeline,
+                                 custom_passes);
     }
 
     return contents->module;
@@ -710,6 +720,8 @@ Realization Pipeline::realize(const Target &target,
 }
 
 void Pipeline::add_requirement(Expr condition, std::vector<Expr> &error_args) {
+    user_assert(defined()) << "Pipeline is undefined\n";
+
     // It is an error for a requirement to reference a Func or a Var
     class Checker : public IRGraphVisitor {
         using IRGraphVisitor::visit;
@@ -736,6 +748,11 @@ void Pipeline::add_requirement(Expr condition, std::vector<Expr> &error_args) {
 
     Expr error = Internal::requirement_failed_error(condition, error_args);
     contents->requirements.emplace_back(Internal::AssertStmt::make(condition, error));
+}
+
+void Pipeline::trace_pipeline() {
+    user_assert(defined()) << "Pipeline is undefined\n";
+    contents->trace_pipeline = true;
 }
 
 namespace {
@@ -1105,9 +1122,12 @@ void Pipeline::realize(RealizationArg outputs, const Target &t,
 }
 
 void Pipeline::infer_input_bounds(RealizationArg outputs, const ParamMap &param_map) {
-    Target target = get_jit_target_from_environment();
-
-    compile_jit(target);
+    if (!contents->jit_module.compiled() ||
+        contents->jit_target.has_feature(Target::NoBoundsQuery)) {
+        Target target = get_jit_target_from_environment();
+        target.set_feature(Target::NoBoundsQuery, false);
+        compile_jit(target);
+    }
 
     // This has to happen after a runtime has been compiled in compile_jit.
     JITFuncCallContext jit_context(jit_handlers());
@@ -1115,7 +1135,7 @@ void Pipeline::infer_input_bounds(RealizationArg outputs, const ParamMap &param_
 
     size_t args_size = contents->inferred_args.size() + outputs.size();
     JITCallArgs args(args_size);
-    prepare_jit_call_arguments(outputs, target, param_map,
+    prepare_jit_call_arguments(outputs, contents->jit_target, param_map,
                                &user_context_storage, true, args);
 
     struct TrackedBuffer {
@@ -1157,7 +1177,7 @@ void Pipeline::infer_input_bounds(RealizationArg outputs, const ParamMap &param_
         }
 
         Internal::debug(2) << "Calling jitted function\n";
-        int exit_status = call_jit_code(target, args);
+        int exit_status = call_jit_code(contents->jit_target, args);
         jit_context.report_if_error(exit_status);
         Internal::debug(2) << "Back from jitted function\n";
         bool changed = false;

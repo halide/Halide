@@ -87,7 +87,7 @@ Stmt acquire_hvx_context(Stmt stmt, const Target &target) {
     // register a destructor to call halide_qurt_hvx_unlock.
     Stmt check_hvx_lock = call_halide_qurt_hvx_lock(target);
     Expr dummy_obj = reinterpret(Handle(), cast<uint64_t>(1));
-    Expr hvx_unlock = Call::make(Int(32), Call::register_destructor,
+    Expr hvx_unlock = Call::make(Handle(), Call::register_destructor,
                                  {Expr("halide_qurt_hvx_unlock_as_destructor"), dummy_obj}, Call::Intrinsic);
 
     stmt = Block::make(Evaluate::make(hvx_unlock), stmt);
@@ -833,7 +833,7 @@ Value *CodeGen_Hexagon::interleave_vectors(const vector<llvm::Value *> &v) {
                 if ((i + native_elements)*2 > result_elements) {
                     // This is the last vector, and it has some extra
                     // elements. Slice it down.
-                    ret_i = slice_vector(ret_i, 0, (i + native_elements)*2 - result_elements);
+                    ret_i = slice_vector(ret_i, 0, result_elements - i*2);
                 }
                 ret.push_back(ret_i);
             }
@@ -1070,7 +1070,7 @@ Value *CodeGen_Hexagon::shuffle_vectors(Value *a, Value *b,
             if (i + native_elements > result_elements) {
                 // This is the last vector, and it has a few extra
                 // elements. Slice it down.
-                ret_i = slice_vector(ret_i, 0, i + native_elements - result_elements);
+                ret_i = slice_vector(ret_i, 0, result_elements - i);
             }
             ret.push_back(ret_i);
         }

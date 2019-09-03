@@ -637,10 +637,11 @@ const char *const intrinsic_op_names[] = {
     "strict_float",
     "stringify",
     "undef",
-    "unsafe_promise_clamped"
+    "unsafe_promise_clamped",
 };
 
-static_assert(sizeof(intrinsic_op_names)/sizeof(intrinsic_op_names[0]) == Call::IntrinsicOpCount, "intrinsic_op_names needs attention");
+static_assert(sizeof(intrinsic_op_names)/sizeof(intrinsic_op_names[0]) == Call::IntrinsicOpCount,
+              "intrinsic_op_names needs attention");
 
 
 }  // namespace

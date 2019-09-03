@@ -164,6 +164,7 @@ HALIDE_DECLARE_EXTERN_SIMPLE_TYPE(uint32_t);
 HALIDE_DECLARE_EXTERN_SIMPLE_TYPE(int64_t);
 HALIDE_DECLARE_EXTERN_SIMPLE_TYPE(uint64_t);
 HALIDE_DECLARE_EXTERN_SIMPLE_TYPE(Halide::float16_t);
+HALIDE_DECLARE_EXTERN_SIMPLE_TYPE(Halide::bfloat16_t);
 HALIDE_DECLARE_EXTERN_SIMPLE_TYPE(float);
 HALIDE_DECLARE_EXTERN_SIMPLE_TYPE(double);
 HALIDE_DECLARE_EXTERN_STRUCT_TYPE(buffer_t);
@@ -276,6 +277,7 @@ struct Type {
     static const halide_type_code_t Int = halide_type_int;
     static const halide_type_code_t UInt = halide_type_uint;
     static const halide_type_code_t Float = halide_type_float;
+    static const halide_type_code_t BFloat = halide_type_bfloat;
     static const halide_type_code_t Handle = halide_type_handle;
     // @}
 
@@ -361,7 +363,11 @@ struct Type {
 
     /** Is this type a floating point type (float or double). */
     HALIDE_ALWAYS_INLINE
-    bool is_float() const {return code() == Float;}
+    bool is_float() const {return code() == Float || code() == BFloat;}
+
+    /** Is this type a floating point type (float or double). */
+    HALIDE_ALWAYS_INLINE
+    bool is_bfloat() const {return code() == BFloat;}
 
     /** Is this type a signed integer type? */
     HALIDE_ALWAYS_INLINE
@@ -447,6 +453,11 @@ inline Type Float(int bits, int lanes = 1) {
     return Type(Type::Float, bits, lanes);
 }
 
+/** Construct a floating-point type in the bfloat format. Only 16-bit currently supported. */
+inline Type BFloat(int bits, int lanes = 1) {
+    return Type(Type::BFloat, bits, lanes);
+}
+
 /** Construct a boolean type */
 inline Type Bool(int lanes = 1) {
     return UInt(1, lanes);
@@ -462,6 +473,9 @@ template<typename T>
 inline Type type_of() {
     return Type(halide_type_of<T>(), halide_handle_traits<T>::type_info());
 }
+
+/** Halide type to a C++ type */
+std::string type_to_c_type(Type type, bool include_space, bool c_plus_plus = true);
 
 }  // namespace Halide
 

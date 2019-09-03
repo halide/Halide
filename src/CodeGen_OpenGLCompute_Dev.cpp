@@ -13,7 +13,6 @@
 namespace Halide {
 namespace Internal {
 
-using std::map;
 using std::ostringstream;
 using std::string;
 using std::vector;
@@ -287,9 +286,12 @@ void CodeGen_OpenGLCompute_Dev::CodeGen_OpenGLCompute_C::add_kernel(Stmt s,
     if (target.os == Target::Android) {
         stream << "#version 310 es\n"
                << "#extension GL_ANDROID_extension_pack_es31a : require\n";
+    } else if (target.has_feature(Target::EGL)) {
+        stream << "#version 310 es\n";
     } else {
         stream << "#version 430\n";
     }
+    add_common_macros(stream);
     stream << "float float_from_bits(int x) { return intBitsToFloat(int(x)); }\n";
 
     for (size_t i = 0; i < args.size(); i++) {
@@ -353,7 +355,7 @@ void CodeGen_OpenGLCompute_Dev::CodeGen_OpenGLCompute_C::visit(const Allocate *o
     alloc.type = op->type;
     allocations.push(op->name, alloc);
 
-    internal_assert(op->extents.size() >= 1);
+    internal_assert(!op->extents.empty());
     Expr extent = 1;
     for (Expr e : op->extents) {
         extent *= e;

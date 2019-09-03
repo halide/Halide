@@ -40,7 +40,6 @@
 namespace Halide {
 namespace Internal {
 
-using std::map;
 using std::ostringstream;
 using std::string;
 using std::vector;
@@ -116,11 +115,6 @@ int unique_count(size_t h) {
     return unique_name_counters[h]++;
 }
 }  // namespace
-
-void reset_unique_name_counters() {
-    for (int i = 0; i < num_unique_name_counters; ++i)
-        unique_name_counters[i].store(0);
-}
 
 // There are three possible families of names returned by the methods below:
 // 1) char pattern: (char that isn't '$') + number (e.g. v234)
@@ -490,12 +484,34 @@ void halide_toc_impl(const char *file, int line) {
     std::chrono::duration<double> diff = t2 - t1.time;
     tick_stack.pop_back();
     for (size_t i = 0; i < tick_stack.size(); i++) {
-        debug(0) << "  ";
+        debug(1) << "  ";
     }
     string f = file;
     f = split_string(f, "/").back();
-    debug(0) << t1.file << ":" << t1.line << " ... " << f << ":" << line << " : " << diff.count() * 1000 << " ms\n";
+    debug(1) << t1.file << ":" << t1.line << " ... " << f << ":" << line << " : " << diff.count() * 1000 << " ms\n";
 }
+
+std::string c_print_name(const std::string &name) {
+    ostringstream oss;
+
+    // Prefix an underscore to avoid reserved words (e.g. a variable named "while")
+    if (isalpha(name[0])) {
+        oss << '_';
+    }
+
+    for (size_t i = 0; i < name.size(); i++) {
+        if (name[i] == '.') {
+            oss << '_';
+        } else if (name[i] == '$') {
+            oss << "__";
+        } else if (name[i] != '_' && !isalnum(name[i])) {
+            oss << "___";
+        }
+        else oss << name[i];
+    }
+    return oss.str();
+}
+
 
 }  // namespace Internal
 }  // namespace Halide

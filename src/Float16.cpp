@@ -1,4 +1,5 @@
 #include "Float16.h"
+#include "IRMutator.h"
 #include "Error.h"
 #include "Util.h"
 
@@ -8,15 +9,9 @@
 namespace Halide {
 namespace Internal {
 
-static const int mantissa_bits = 10;
-static const uint16_t sign_mask = 0x8000;
-static const uint16_t exponent_mask = 0x7c00;
-static const uint16_t mantissa_mask = 0x03ff;
-
 // Conversion routines to and from float cribbed from Christian Rau's
 // half library (half.sourceforge.net)
-
-uint16_t float_to_half(float value) {
+uint16_t float_to_float16(float value) {
     // Start by copying over the sign bit
     uint16_t bits = std::signbit(value) << 15;
 
@@ -24,9 +19,9 @@ uint16_t float_to_half(float value) {
     if (value == 0) {
         return bits;
     } else if (std::isnan(value)) {
-        return bits | exponent_mask | mantissa_mask;
+        return bits | float16_t::exponent_mask | float16_t::mantissa_mask;
     } else if (std::isinf(value)) {
-        return bits | exponent_mask;
+        return bits | float16_t::exponent_mask;
     }
 
     int exp;
@@ -40,7 +35,7 @@ uint16_t float_to_half(float value) {
     } else {
         // Move the exponent from the float into the half.
         value = std::ldexp(value, 11 - exp);
-        bits |= ((exp + 13) << mantissa_bits);
+        bits |= ((exp + 13) << float16_t::mantissa_bits);
     }
 
     // We've normalized value as much as possible. Put the integer
@@ -57,7 +52,7 @@ uint16_t float_to_half(float value) {
     return bits;
 }
 
-float half_to_float(const uint16_t& value) {
+float float16_to_float(const uint16_t& value) {
     // There aren't all that many float16_t values, so a few lookup tables suffice.
     static const uint32_t mantissa_table[2048] = {
         0x00000000, 0x33800000, 0x34000000, 0x34400000, 0x34800000, 0x34A00000, 0x34C00000, 0x34E00000,
@@ -331,29 +326,49 @@ float half_to_float(const uint16_t& value) {
            0, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024,
         1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024 };
 
-    int sign_and_exponent = value >> mantissa_bits;
-    int offset = offset_table[sign_and_exponent] + (value & mantissa_mask);
+    int sign_and_exponent = value >> float16_t::mantissa_bits;
+    int offset = offset_table[sign_and_exponent] + (value & float16_t::mantissa_mask);
     uint32_t bits = (mantissa_table[offset] + exponent_table[sign_and_exponent]);
     return reinterpret_bits<float>(bits);
 }
+
+// Similar routines for bfloat. It's somewhat simpler.
+uint16_t float_to_bfloat16(float f) {
+    uint32_t ret;
+    memcpy(&ret, &f, sizeof(float));
+    // Round towards even
+    ret += 0x7fff + ((ret >> 16) & 1);
+    return ret >> 16;
+}
+
+float bfloat16_to_float(uint16_t b) {
+    // Assume little-endian floats
+    uint16_t bits[2] = {0, b};
+    float ret;
+    memcpy(&ret, bits, sizeof(float));
+    return ret;
+}
+
 }  // namespace Internal
 
 using namespace Halide::Internal;
 
-float16_t::float16_t(float value) : data(float_to_half(value)) {}
+float16_t::float16_t(float value) : data(float_to_float16(value)) {}
 
-float16_t::float16_t(double value) : data(float_to_half(value)) {}
+float16_t::float16_t(double value) : data(float_to_float16(value)) {}
 
-float16_t::float16_t(int value) : data(float_to_half(value)) {}
-
-float16_t::float16_t() : data(0) {}
+float16_t::float16_t(int value) : data(float_to_float16(value)) {}
 
 float16_t::operator float() const {
-    return half_to_float(data);
+    return float16_to_float(data);
 }
 
 float16_t::operator double() const {
-    return half_to_float(data);
+    return float16_to_float(data);
+}
+
+float16_t::operator int() const {
+    return float16_to_float(data);
 }
 
 float16_t float16_t::make_from_bits(uint16_t bits) {
@@ -362,51 +377,57 @@ float16_t float16_t::make_from_bits(uint16_t bits) {
     return f;
 }
 
-float16_t float16_t::make_zero(bool positive) {
-    uint16_t bits = positive ? 0 : sign_mask;
-    return float16_t::make_from_bits(bits);
+
+float16_t float16_t::make_zero() {
+    return float16_t::make_from_bits(0);
 }
 
-float16_t float16_t::make_infinity(bool positive) {
-    uint16_t bits = exponent_mask | (positive ? 0 : sign_mask);
-    return float16_t::make_from_bits(bits);
+float16_t float16_t::make_negative_zero() {
+    return float16_t::make_from_bits(sign_mask);
+}
+
+float16_t float16_t::make_infinity() {
+    return float16_t::make_from_bits(exponent_mask);
+}
+
+float16_t float16_t::make_negative_infinity() {
+    return float16_t::make_from_bits(exponent_mask | sign_mask);
 }
 
 float16_t float16_t::make_nan() {
-    uint16_t bits = exponent_mask | mantissa_mask;
-    return float16_t::make_from_bits(bits);
+    return float16_t::make_from_bits(exponent_mask | mantissa_mask);
 }
 
 float16_t float16_t::operator-() const {
-    return float16_t(-half_to_float(data));
+    return float16_t(-float16_to_float(data));
 }
 
 float16_t float16_t::operator+(float16_t rhs) const {
-    return float16_t(half_to_float(data) + half_to_float(rhs.data));
+    return float16_t(float16_to_float(data) + float16_to_float(rhs.data));
 }
 
 float16_t float16_t::operator-(float16_t rhs) const {
-    return float16_t(half_to_float(data) - half_to_float(rhs.data));
+    return float16_t(float16_to_float(data) - float16_to_float(rhs.data));
 }
 
 float16_t float16_t::operator*(float16_t rhs) const {
-    return float16_t(half_to_float(data) * half_to_float(rhs.data));
+    return float16_t(float16_to_float(data) * float16_to_float(rhs.data));
 }
 
 float16_t float16_t::operator/(float16_t rhs) const {
-    return float16_t(half_to_float(data) / half_to_float(rhs.data));
+    return float16_t(float16_to_float(data) / float16_to_float(rhs.data));
 }
 
 bool float16_t::operator==(float16_t rhs) const {
-    return half_to_float(data) == half_to_float(rhs.data);
+    return float16_to_float(data) == float16_to_float(rhs.data);
 }
 
 bool float16_t::operator>(float16_t rhs) const {
-    return half_to_float(data) > half_to_float(rhs.data);
+    return float16_to_float(data) > float16_to_float(rhs.data);
 }
 
 bool float16_t::operator<(float16_t rhs) const {
-    return half_to_float(data) < half_to_float(rhs.data);
+    return float16_to_float(data) < float16_to_float(rhs.data);
 }
 
 bool float16_t::is_nan() const {
@@ -426,6 +447,103 @@ bool float16_t::is_zero() const {
 }
 
 uint16_t float16_t::to_bits() const {
+    return data;
+}
+
+
+bfloat16_t::bfloat16_t(float value) : data(float_to_bfloat16(value)) {}
+
+bfloat16_t::bfloat16_t(double value) : data(float_to_bfloat16(value)) {}
+
+bfloat16_t::bfloat16_t(int value) : data(float_to_bfloat16(value)) {}
+
+bfloat16_t::operator float() const {
+    return bfloat16_to_float(data);
+}
+
+bfloat16_t::operator double() const {
+    return bfloat16_to_float(data);
+}
+
+bfloat16_t::operator int() const {
+    return bfloat16_to_float(data);
+}
+
+bfloat16_t bfloat16_t::make_from_bits(uint16_t bits) {
+    bfloat16_t f;
+    f.data = bits;
+    return f;
+}
+
+bfloat16_t bfloat16_t::make_zero() {
+    return bfloat16_t::make_from_bits(0);
+}
+
+bfloat16_t bfloat16_t::make_negative_zero() {
+    return bfloat16_t::make_from_bits(sign_mask);
+}
+
+bfloat16_t bfloat16_t::make_infinity() {
+    return bfloat16_t::make_from_bits(exponent_mask);
+}
+
+bfloat16_t bfloat16_t::make_negative_infinity() {
+    return bfloat16_t::make_from_bits(exponent_mask | sign_mask);
+}
+
+bfloat16_t bfloat16_t::make_nan() {
+    return bfloat16_t::make_from_bits(exponent_mask | mantissa_mask);
+}
+
+bfloat16_t bfloat16_t::operator-() const {
+    return bfloat16_t(-bfloat16_to_float(data));
+}
+
+bfloat16_t bfloat16_t::operator+(bfloat16_t rhs) const {
+    return bfloat16_t(bfloat16_to_float(data) + bfloat16_to_float(rhs.data));
+}
+
+bfloat16_t bfloat16_t::operator-(bfloat16_t rhs) const {
+    return bfloat16_t(bfloat16_to_float(data) - bfloat16_to_float(rhs.data));
+}
+
+bfloat16_t bfloat16_t::operator*(bfloat16_t rhs) const {
+    return bfloat16_t(bfloat16_to_float(data) * bfloat16_to_float(rhs.data));
+}
+
+bfloat16_t bfloat16_t::operator/(bfloat16_t rhs) const {
+    return bfloat16_t(bfloat16_to_float(data) / bfloat16_to_float(rhs.data));
+}
+
+bool bfloat16_t::operator==(bfloat16_t rhs) const {
+    return bfloat16_to_float(data) == bfloat16_to_float(rhs.data);
+}
+
+bool bfloat16_t::operator>(bfloat16_t rhs) const {
+    return bfloat16_to_float(data) > bfloat16_to_float(rhs.data);
+}
+
+bool bfloat16_t::operator<(bfloat16_t rhs) const {
+    return bfloat16_to_float(data) < bfloat16_to_float(rhs.data);
+}
+
+bool bfloat16_t::is_nan() const {
+    return ((data & exponent_mask) == exponent_mask) && (data & mantissa_mask);
+}
+
+bool bfloat16_t::is_infinity() const {
+    return ((data & exponent_mask) == exponent_mask) && !(data & mantissa_mask);
+}
+
+bool bfloat16_t::is_negative() const {
+    return data & sign_mask;
+}
+
+bool bfloat16_t::is_zero() const {
+    return !(data & ~sign_mask);
+}
+
+uint16_t bfloat16_t::to_bits() const {
     return data;
 }
 

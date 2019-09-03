@@ -165,7 +165,9 @@ py::object generate_impl(FactoryFunc factory, const GeneratorContext &context, p
         }
         py_outputs[i] = o;
     }
-    return py_outputs;
+    // An explicit "std::move" is needed here because there's
+    // an implicit tuple->object conversion that inhibits it otherwise.
+    return std::move(py_outputs);
 }
 
 void pystub_init(pybind11::module &m, FactoryFunc factory) {

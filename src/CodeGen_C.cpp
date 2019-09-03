@@ -9,12 +9,13 @@
 #include "Param.h"
 #include "Simplify.h"
 #include "Substitute.h"
+#include "Type.h"
+#include "Util.h"
 #include "Var.h"
 
 namespace Halide {
 namespace Internal {
 
-using std::endl;
 using std::map;
 using std::ostream;
 using std::ostringstream;
@@ -39,6 +40,7 @@ const string headers =
     "#include <math.h>\n"
     "#include <float.h>\n"
     "#include <assert.h>\n"
+    "#include <limits.h>\n"
     "#include <string.h>\n"
     "#include <stdio.h>\n"
     "#include <stdint.h>\n";
@@ -194,7 +196,6 @@ public:
     }
 };
 } // namespace
-
 )INLINE_CODE";
 }  // namespace
 
@@ -334,6 +335,8 @@ CodeGen_C::CodeGen_C(ostream &s, Target t, OutputKind output_kind, const std::st
             << globals
             << halide_internal_runtime_header_HalideRuntime_h << '\n'
             << halide_internal_initmod_inlined_c << '\n';
+        add_common_macros(stream);
+        stream << '\n';
     }
 
     // Throw in a default (empty) definition of HALIDE_FUNCTION_ATTRS
@@ -403,111 +406,23 @@ CodeGen_C::~CodeGen_C() {
     }
 }
 
-namespace {
-string type_to_c_type(Type type, bool include_space, bool c_plus_plus = true) {
-    bool needs_space = true;
-    ostringstream oss;
-
-    if (type.is_float()) {
-        if (type.bits() == 32) {
-            oss << "float";
-        } else if (type.bits() == 64) {
-            oss << "double";
-        } else {
-            user_error << "Can't represent a float with this many bits in C: " << type << "\n";
-        }
-        if (type.is_vector()) {
-            oss << type.lanes();
-        }
-    } else if (type.is_handle()) {
-        needs_space = false;
-
-        // If there is no type info or is generating C (not C++) and
-        // the type is a class or in an inner scope, just use void *.
-        if (type.handle_type == NULL ||
-            (!c_plus_plus &&
-             (!type.handle_type->namespaces.empty() ||
-              !type.handle_type->enclosing_types.empty() ||
-              type.handle_type->inner_name.cpp_type_type == halide_cplusplus_type_name::Class))) {
-            oss << "void *";
-        } else {
-            if (type.handle_type->inner_name.cpp_type_type ==
-                halide_cplusplus_type_name::Struct) {
-                oss << "struct ";
-            }
-
-            if (!type.handle_type->namespaces.empty() ||
-                !type.handle_type->enclosing_types.empty()) {
-                oss << "::";
-                for (size_t i = 0; i < type.handle_type->namespaces.size(); i++) {
-                    oss << type.handle_type->namespaces[i] << "::";
-                }
-                for (size_t i = 0; i < type.handle_type->enclosing_types.size(); i++) {
-                    oss << type.handle_type->enclosing_types[i].name << "::";
-                }
-            }
-            oss << type.handle_type->inner_name.name;
-            if (type.handle_type->reference_type == halide_handle_cplusplus_type::LValueReference) {
-                oss << " &";
-            } else if (type.handle_type->reference_type == halide_handle_cplusplus_type::LValueReference) {
-                oss << " &&";
-            }
-            for (auto modifier : type.handle_type->cpp_type_modifiers) {
-                if (modifier & halide_handle_cplusplus_type::Const) {
-                    oss << " const";
-                }
-                if (modifier & halide_handle_cplusplus_type::Volatile) {
-                    oss << " volatile";
-                }
-                if (modifier & halide_handle_cplusplus_type::Restrict) {
-                    oss << " restrict";
-                }
-                if (modifier & halide_handle_cplusplus_type::Pointer) {
-                    oss << " *";
-                }
-            }
-        }
-    } else {
-        // This ends up using different type names than OpenCL does
-        // for the integer vector types. E.g. uint16x8_t rather than
-        // OpenCL's short8. Should be fine as CodeGen_C introduces
-        // typedefs for them and codegen always goes through this
-        // routine or its override in CodeGen_OpenCL to make the
-        // names. This may be the better bet as the typedefs are less
-        // likely to collide with built-in types (e.g. the OpenCL
-        // ones for a C compiler that decides to compile OpenCL).
-        // This code also supports arbitrary vector sizes where the
-        // OpenCL ones must be one of 2, 3, 4, 8, 16, which is too
-        // restrictive for already existing architectures.
-        switch (type.bits()) {
-        case 1:
-            // bool vectors are always emitted as uint8 in the C++ backend
-            if (type.is_vector()) {
-                oss << "uint8x" << type.lanes() << "_t";
-            } else {
-                oss << "bool";
-            }
-            break;
-        case 8: case 16: case 32: case 64:
-            if (type.is_uint()) {
-                oss << 'u';
-            }
-            oss << "int" << type.bits();
-            if (type.is_vector()) {
-                oss << "x" << type.lanes();
-            }
-            oss << "_t";
-            break;
-        default:
-            user_error << "Can't represent an integer with this many bits in C: " << type << "\n";
-        }
-    }
-    if (include_space && needs_space)
-        oss << " ";
-    return oss.str();
+void CodeGen_C::add_common_macros(std::ostream &dest) {
+    const char *macros = R"INLINE_CODE(
+// ll suffix in OpenCL is reserver for 128-bit integers.
+#if defined __OPENCL_VERSION__
+#define ADD_INT64_T_SUFFIX(x) x##l
+#define ADD_UINT64_T_SUFFIX(x) x##ul
+// HLSL doesn't have any suffixes.
+#elif defined HLSL_VERSION
+#define ADD_INT64_T_SUFFIX(x) x
+#define ADD_UINT64_T_SUFFIX(x) x
+#else
+#define ADD_INT64_T_SUFFIX(x) x##ll
+#define ADD_UINT64_T_SUFFIX(x) x##ull
+#endif
+)INLINE_CODE";
+    dest << macros;
 }
-
-}  // namespace
 
 void CodeGen_C::add_vector_typedefs(const std::set<Type> &vector_types) {
     if (!vector_types.empty()) {
@@ -1445,24 +1360,7 @@ string CodeGen_C::print_reinterpret(Type type, Expr e) {
 }
 
 string CodeGen_C::print_name(const string &name) {
-    ostringstream oss;
-
-    // Prefix an underscore to avoid reserved words (e.g. a variable named "while")
-    if (isalpha(name[0])) {
-        oss << '_';
-    }
-
-    for (size_t i = 0; i < name.size(); i++) {
-        if (name[i] == '.') {
-            oss << '_';
-        } else if (name[i] == '$') {
-            oss << "__";
-        } else if (name[i] != '_' && !isalnum(name[i])) {
-            oss << "___";
-        }
-        else oss << name[i];
-    }
-    return oss.str();
+    return c_print_name(name);
 }
 
 namespace {
@@ -2064,12 +1962,12 @@ void CodeGen_C::visit(const IntImm *op) {
     if (op->type == Int(32)) {
         id = std::to_string(op->value);
     } else {
-        print_assignment(op->type, "(" + print_type(op->type) + ")(" + std::to_string(op->value) + ")");
+        print_assignment(op->type, "(" + print_type(op->type) + ")(ADD_INT64_T_SUFFIX(" + std::to_string(op->value) + "))");
     }
 }
 
 void CodeGen_C::visit(const UIntImm *op) {
-    print_assignment(op->type, "(" + print_type(op->type) + ")(" + std::to_string(op->value) + ")");
+    print_assignment(op->type, "(" + print_type(op->type) + ")(ADD_UINT64_T_SUFFIX(" + std::to_string(op->value) + "))");
 }
 
 void CodeGen_C::visit(const StringImm *op) {
@@ -2235,7 +2133,7 @@ void CodeGen_C::visit(const Call *op) {
         Expr a0 = op->args[0];
         rhs << print_expr(cast(op->type, select(a0 > 0, a0, -a0)));
     } else if (op->is_intrinsic(Call::memoize_expr)) {
-        internal_assert(op->args.size() >= 1);
+        internal_assert(!op->args.empty());
         string arg = print_expr(op->args[0]);
         rhs << "(" << arg << ")";
     } else if (op->is_intrinsic(Call::alloca)) {
@@ -2763,7 +2661,7 @@ void CodeGen_C::visit(const Allocate *op) {
         } else {
             // Check that the allocation is not scalar (if it were scalar
             // it would have constant size).
-            internal_assert(op->extents.size() > 0);
+            internal_assert(!op->extents.empty());
 
             size_id = print_assignment(Int(64), print_expr(op->extents[0]));
             size_id_type = Int(64);
@@ -2887,7 +2785,7 @@ void CodeGen_C::visit(const Evaluate *op) {
 }
 
 void CodeGen_C::visit(const Shuffle *op) {
-    internal_assert(op->vectors.size() >= 1);
+    internal_assert(!op->vectors.empty());
     internal_assert(op->vectors[0].type().is_vector());
     for (size_t i = 1; i < op->vectors.size(); i++) {
         internal_assert(op->vectors[0].type() == op->vectors[i].type());
@@ -2947,17 +2845,20 @@ void CodeGen_C::test() {
     m.append(LoweredFunc("test1", args, s, LinkageType::External));
 
     ostringstream source;
+    ostringstream macros;
     {
         CodeGen_C cg(source, Target("host"), CodeGen_C::CImplementation);
         cg.compile(m);
+        cg.add_common_macros(macros);
     }
 
     string src = source.str();
     string correct_source =
         headers +
         globals +
-        string((const char *)halide_internal_runtime_header_HalideRuntime_h) + '\n' +
-        string((const char *)halide_internal_initmod_inlined_c) + R"GOLDEN_CODE(
+        string((const char *) halide_internal_runtime_header_HalideRuntime_h) + '\n' +
+        string((const char *) halide_internal_initmod_inlined_c) + '\n' +
+        macros.str() + R"GOLDEN_CODE(
 #ifndef HALIDE_FUNCTION_ATTRS
 #define HALIDE_FUNCTION_ATTRS
 #endif

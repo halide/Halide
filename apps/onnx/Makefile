@@ -77,10 +77,14 @@ test: $(BIN)/$(HL_TARGET)/onnx_converter_test $(BIN)/$(HL_TARGET)/onnx_converter
 	LD_LIBRARY_PATH=$(BIN) $(BIN)/$(HL_TARGET)/onnx_converter_generator_test
 
 PYTHON ?= python3
-PYBIND11_CFLAGS = $(shell $(PYTHON) -m pybind11 --includes) -frtti
+PYBIND11_CFLAGS = $(shell $(PYTHON)-config --includes) -frtti
+ifeq ($(UNAME), Darwin)
+    # Keep OS X builds from complaining about missing libpython symbols
+    PYBIND11_CFLAGS += -undefined dynamic_lookup
+endif
 PY_EXT = $(shell $(PYTHON)-config --extension-suffix)
 PY_MODEL_EXT = model_cpp$(PY_EXT)
-PYCXXFLAGS =  $(CXXFLAGS) $(PYBIND11_CFLAGS)
+PYCXXFLAGS =  $(CXXFLAGS) $(PYBIND11_CFLAGS) -Wno-deprecated-register -Wno-deprecated-declarations
 
 # Python extension for HalideModel
 $(BIN)/%/$(PY_MODEL_EXT): model.cpp $(BIN)/%/oclib.a
