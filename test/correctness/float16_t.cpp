@@ -3,11 +3,6 @@
 using namespace Halide;
 
 int main(int argc, char **argv) {
-    if (get_jit_target_from_environment().arch == Target::WebAssembly) {
-        printf("Skipping test for WebAssembly as it does not support float16 or bfloat16 yet.\n");
-        _halide_user_assert(0);
-    }
-
     Var x;
 
     Buffer<float16_t> in1 = lambda(x, cast<float16_t>(-0.5f) + cast<float16_t>(x) / (128)).realize(128);
