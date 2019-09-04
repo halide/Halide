@@ -12,8 +12,6 @@
 namespace Halide {
 namespace Internal {
 
-using std::map;
-using std::pair;
 using std::set;
 using std::string;
 using std::vector;
@@ -53,7 +51,7 @@ class FindBufferUsage : public IRVisitor {
 
     void visit(const Call *op) override {
         if (op->is_intrinsic(Call::image_load)) {
-            internal_assert(op->args.size() >= 1);
+            internal_assert(!op->args.empty());
             if (is_buffer_var(op->args[1])) {
                 devices_touched.insert(current_device_api);
             }
@@ -62,7 +60,7 @@ class FindBufferUsage : public IRVisitor {
                 op->args[i].accept(this);
             }
         } else if (op->is_intrinsic(Call::image_store)) {
-            internal_assert(op->args.size() >= 1);
+            internal_assert(!op->args.empty());
             if (is_buffer_var(op->args[1])) {
                 devices_touched.insert(current_device_api);
                 devices_writing.insert(current_device_api);
@@ -490,7 +488,7 @@ class InjectBufferCopies : public IRMutator {
             if (op->name == buffer) {
                 Expr buf = Variable::make(type_of<struct halide_buffer_t *>(), buffer);
                 Stmt destructor =
-                    Evaluate::make(Call::make(Int(32), Call::register_destructor,
+                    Evaluate::make(Call::make(Handle(), Call::register_destructor,
                                               {Expr("halide_device_free_as_destructor"), buf}, Call::Intrinsic));
                 Stmt body = Block::make(destructor, op->body);
                 return LetStmt::make(op->name, op->value, body);
@@ -523,7 +521,7 @@ class InjectBufferCopies : public IRMutator {
 
                 // Then the destructor
                 Stmt destructor =
-                    Evaluate::make(Call::make(Int(32), Call::register_destructor,
+                    Evaluate::make(Call::make(Handle(), Call::register_destructor,
                                               {Expr("halide_device_and_host_free_as_destructor"), buf},
                                               Call::Intrinsic));
                 body = Block::make(destructor, body);

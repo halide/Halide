@@ -11,8 +11,8 @@ As WebAssembly itself is still under active development, Halide's support has so
 
 # Additional Tooling Requirements:
 - In additional to the usual install of LLVM and Clang, you'll need wasm-ld (via LLVM/tools/lld). All should be v9.x+ (current trunk as of April 2019).
-- V8 library, v7.0+
-- d8 shell tool, v7.0+
+- V8 library, v7.3+
+- d8 shell tool, v7.3+
 - Emscripten, 1.38.28+
 
 Note that for all of the above, earlier versions might work, but have not been tested.
@@ -61,7 +61,7 @@ svn co https://llvm.org/svn/llvm-project/lld/trunk /path/to/llvm-trunk/tools/lld
 
 (You might have to do a clean build of LLVM for CMake to notice that you've added a tool.)
 
-- Install libv8 and the d8 shell tool (instructions omitted), or build from source if you prefer (instructions omitted). We are able to compile with v7.0+ (but not earlier versions), but there are SIMD-related bugs in versions prior to v7.5 that will cause many of our tests to fail; if you are going to test with `wasm_simd128` at all, you should really use V8 v7.5 or later.
+- Install libv8 and the d8 shell tool (instructions omitted), or build from source if you prefer (instructions omitted). We are able to compile with v7.3+ (but not earlier versions), but there are SIMD-related bugs in versions prior to v7.5 that will cause many of our tests to fail; if you are going to test with `wasm_simd128` at all, you should really use V8 v7.5 or later.
 
 Note that using shared-library builds of V8 may be problematic on some platforms (e.g. OSX) due to libc++ conflict issues; using a static-library version may be simpler for those. Also note that (as of this writing), libV8 v7.5+ may not be available in prebuilt form for your platform.
 

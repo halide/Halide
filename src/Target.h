@@ -116,8 +116,8 @@ struct Target {
         ASAN = halide_target_feature_asan,
         CheckUnsafePromises = halide_target_feature_check_unsafe_promises,
         EmbedBitcode = halide_target_feature_embed_bitcode,
-        DisableLLVMLoopVectorize = halide_target_feature_disable_llvm_loop_vectorize,
-        DisableLLVMLoopUnroll = halide_target_feature_disable_llvm_loop_unroll,
+        EnableLLVMLoopOpt = halide_target_feature_enable_llvm_loop_opt,
+        DisableLLVMLoopOpt = halide_target_feature_disable_llvm_loop_opt,
         WasmSimd128 = halide_target_feature_wasm_simd128,
         WasmSignExt = halide_target_feature_wasm_signext,
         SVE = halide_target_feature_sve,
@@ -155,6 +155,10 @@ struct Target {
     void set_features(std::vector<Feature> features_to_set, bool value = true);
 
     bool has_feature(Feature f) const;
+
+    inline bool has_feature(halide_target_feature_t f) const {
+        return has_feature((Feature) f);
+    }
 
     bool features_any_of(std::vector<Feature> test_features) const;
 
@@ -269,7 +273,12 @@ struct Target {
 
     /** Return the name corresponding to a given Feature, in the form
      * used to construct Target strings (e.g., Feature::Debug is "debug" and not "Debug"). */
-    static std::string feature_name(Target::Feature feature);
+    static std::string feature_to_name(Target::Feature feature);
+
+    /** Return the feature corresponding to a given name, in the form
+     * used to construct Target strings (e.g., Feature::Debug is "debug" and not "Debug").
+     * If the string is not a known feature name, return FeatureEnd. */
+    static Target::Feature feature_from_name(const std::string &name);
 
 private:
     /** A bitmask that stores the active features. */

@@ -270,6 +270,14 @@ template<> inline double div_imp<double>(double a, double b) {
     return a/b;
 }
 
+/** Return an Expr that is identical to the input Expr, but with
+ * all calls to likely() and likely_if_innermost() removed. */
+Expr remove_likelies(Expr e);
+
+/** Return a Stmt that is identical to the input Stmt, but with
+ * all calls to likely() and likely_if_innermost() removed. */
+Stmt remove_likelies(Stmt s);
+
 } // namespace Internal
 
 /** Cast an expression to the halide type corresponding to the C++ type T. */
@@ -975,9 +983,6 @@ inline Tuple tuple_select(const Expr &c0, const Tuple &v0, const Expr &c1, const
 // @}
 
 
-// TODO: Implement support for *_f16 external functions in various backends.
-// No backend supports these yet.
-
 /** Return the sine of a floating-point expression. If the argument is
  * not floating-point, it is cast to Float(32). Does not vectorize
  * well. */
@@ -1543,6 +1548,11 @@ inline Expr operator<<(Expr x, Expr y) {
         << "   (" << x << ") << (" << y << ")\n"
         << "   with types " << x.type() << " << " << y.type() << "\n"
         << "the RHS must be unsigned and losslessly castable to the same size as the LHS.\n";
+
+    if (y.type().is_vector() && !x.type().is_vector()) {
+        x = Internal::Broadcast::make(x, y.type().lanes());
+    }
+
     Type t = x.type();
     return Internal::Call::make(t, Internal::Call::shift_left, {std::move(x), std::move(unsigned_amount)}, Internal::Call::PureIntrinsic);
 }
@@ -1569,6 +1579,9 @@ inline Expr operator>>(Expr x, Expr y) {
         << "   (" << x << ") >> (" << y << ")\n"
         << "   with types " << x.type() << " >> " << y.type() << "\n"
         << "the RHS must be unsigned and losslessly castable to the same size as the LHS.\n";
+    if (y.type().is_vector() && !x.type().is_vector()) {
+        x = Internal::Broadcast::make(x, y.type().lanes());
+    }
     Type t = x.type();
     return Internal::Call::make(t, Internal::Call::shift_right, {std::move(x), std::move(unsigned_amount)}, Internal::Call::PureIntrinsic);
 }

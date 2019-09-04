@@ -379,8 +379,9 @@ typedef enum halide_type_code_t
 {
     halide_type_int = 0,   //!< signed integers
     halide_type_uint = 1,  //!< unsigned integers
-    halide_type_float = 2, //!< floating point numbers
-    halide_type_handle = 3 //!< opaque pointer type (void *)
+    halide_type_float = 2, //!< IEEE floating point numbers
+    halide_type_handle = 3, //!< opaque pointer type (void *)
+    halide_type_bfloat = 4, //!< floating point numbers in the bfloat format
 } halide_type_code_t;
 
 // Note that while __attribute__ can go before or after the declaration,
@@ -1268,8 +1269,8 @@ typedef enum halide_target_feature_t {
     halide_target_feature_check_unsafe_promises, ///< Insert assertions for promises.
     halide_target_feature_hexagon_dma, ///< Enable Hexagon DMA buffers.
     halide_target_feature_embed_bitcode,  ///< Emulate clang -fembed-bitcode flag.
-    halide_target_feature_disable_llvm_loop_vectorize,  ///< Disable loop vectorization in LLVM. (Ignored for non-LLVM targets.)
-    halide_target_feature_disable_llvm_loop_unroll,  ///< Disable loop unrolling in LLVM. (Ignored for non-LLVM targets.)
+    halide_target_feature_enable_llvm_loop_opt,  ///< Enable loop vectorization + unrolling in LLVM. Overrides halide_target_feature_disable_llvm_loop_opt. (Ignored for non-LLVM targets.)
+    halide_target_feature_disable_llvm_loop_opt,  ///< Disable loop vectorization + unrolling in LLVM. (Ignored for non-LLVM targets.)
     halide_target_feature_wasm_simd128,  ///< Enable +simd128 instructions for WebAssembly codegen.
     halide_target_feature_wasm_signext,  ///< Enable +sign-ext instructions for WebAssembly codegen.
     halide_target_feature_sve, ///< Enable ARM Scalable Vector Extensions
@@ -1820,6 +1821,52 @@ extern double halide_float16_bits_to_double(uint16_t);
 // TODO: Conversion functions to half
 
 //@}
+
+// Allocating and freeing device memory is often very slow. The
+// methods below give Halide's runtime permission to hold onto device
+// memory to service future requests instead of returning it to the
+// underlying device API. The API does not manage an allocation pool,
+// all it does is provide access to a shared counter that acts as a
+// limit on the unused memory not yet returned to the underlying
+// device API. It makes callbacks to participants when memory needs to
+// be released because the limit is about to be exceeded (either
+// because the limit has been reduced, or because the memory owned by
+// some participant becomes unused).
+
+/** Tell Halide whether or not it is permitted to hold onto device
+ * allocations to service future requests instead of returning them
+ * eagerly to the underlying device API. Many device allocators are
+ * quite slow, so it can be beneficial to set this to true. The
+ * default value for now is false.
+ *
+ * Note that if enabled, the eviction policy is very simplistic. The
+ * 32 most-recently used allocations are preserved, regardless of
+ * their size. Additionally, if a call to cuMalloc results in an
+ * out-of-memory error, the entire cache is flushed and the allocation
+ * is retried. See https://github.com/halide/Halide/issues/4093
+ *
+ * If set to false, releases all unused device allocations back to the
+ * underlying device APIs. For finer-grained control, see specific
+ * methods in each device api runtime. */
+extern int halide_reuse_device_allocations(void *user_context, bool);
+
+/** Determines whether on device_free the memory is returned
+ * immediately to the device API, or placed on a free list for future
+ * use. Override and switch based on the user_context for
+ * finer-grained control. By default just returns the value most
+ * recently set by the method above. */
+extern bool halide_can_reuse_device_allocations(void *user_context);
+
+struct halide_device_allocation_pool {
+    int (*release_unused)(void *user_context);
+    struct halide_device_allocation_pool *next;
+};
+
+/** Register a callback to be informed when
+ * halide_reuse_device_allocations(false) is called, and all unused
+ * device allocations must be released. The object passed should have
+ * global lifetime, and its next field will be clobbered. */
+extern void halide_register_device_allocation_pool(struct halide_device_allocation_pool *);
 
 #ifdef __cplusplus
 } // End extern "C"
