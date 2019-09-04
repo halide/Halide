@@ -621,7 +621,6 @@ public:
 };
 
 namespace Internal {
-struct ErrorBuffer;
 class IRMutator;
 }  // namespace Internal
 
