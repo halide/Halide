@@ -274,8 +274,9 @@ Expr apply_patterns(Expr x, const vector<Pattern> &patterns, const Target &targe
                 continue;
             }
 
-            // Don't apply pattern if it does not involve an
-            // interleave of double vector width.
+            // Don't apply pattern if it involves an interleave,
+            // and is not a multiple of two vectors.
+            // See https://github.com/halide/Halide/issues/1582
             if ((p.flags & Pattern::InterleaveResult) && !is_double_vector(x, target)) {
                 continue;
             }
