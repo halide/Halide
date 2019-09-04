@@ -373,10 +373,6 @@ constexpr halide_type_t u8v2 = u8v1.with_lanes(u8v1.lanes * 2);
 constexpr halide_type_t u16v2 = u16v1.with_lanes(u16v1.lanes * 2);
 constexpr halide_type_t u32v2 = u32v1.with_lanes(u32v1.lanes * 2);
 
-// LLVM's HVX vector intrinsics don't include the type of the
-// operands, they all operate on vectors of 32 bit integers. To make
-// it easier to generate code, we define wrapper intrinsics with
-// the correct type (plus the necessary bitcasts).
 static constexpr HvxIntrinsic intrinsic_wrappers[] = {
     // Zero/sign extension:
     { MAKE_ID_PAIR(Intrinsic::hexagon_V6_vzb), u16v2,  "zxt.vub", {u8v1} },
@@ -672,6 +668,19 @@ static constexpr HvxIntrinsic intrinsic_wrappers[] = {
 void CodeGen_Hexagon::init_module() {
     CodeGen_Posix::init_module();
 
+    // LLVM's HVX vector intrinsics don't include the type of the
+    // operands, they all operate on vectors of 32 bit integers. To make
+    // it easier to generate code, we define wrapper intrinsics with
+    // the correct type (plus the necessary bitcasts).
+
+    const auto fix_lanes = [&](const halide_type_t &t) -> halide_type_t {
+        if (t.lanes == 1) {
+            return t;
+        }
+        const int lanes_actual = ((int) t.lanes * native_vector_bits()) / kOneX;
+        return t.with_lanes(lanes_actual);
+    };
+
     const bool is_128B = target.has_feature(Halide::Target::HVX_128);
     vector<Type> arg_types;
     for (const HvxIntrinsic &i : intrinsic_wrappers) {
@@ -679,17 +688,15 @@ void CodeGen_Hexagon::init_module() {
         internal_assert(id != Intrinsic::not_intrinsic);
         // Get the real intrinsic.
         llvm::Function *intrin = Intrinsic::getDeclaration(module.get(), id);
+        halide_type_t ret_type = fix_lanes(i.ret_type);
         arg_types.clear();
         for (const auto &a : i.arg_types) {
             if (a.bits == 0) {
                 break;
             }
-            const int lanes_actual = a.lanes > 1 ?
-                ((int) a.lanes * native_vector_bits()) / kOneX :
-                1;
-            arg_types.push_back(a.with_lanes(lanes_actual));
+            arg_types.push_back(fix_lanes(a));
         }
-        define_hvx_intrinsic(intrin, i.ret_type, i.name, arg_types, i.flags);
+        define_hvx_intrinsic(intrin, ret_type, i.name, arg_types, i.flags);
     }
 }
 
