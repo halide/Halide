@@ -210,7 +210,7 @@ void load_samples(map<int, PipelineSample>& training_set, map<int, PipelineSampl
                 for (int x = 0; x < head2_w; x++) {
                     float f = scratch[i * features_per_stage + x];
                     if (f < 0 || f > 1e14 || std::isnan(f)) {
-                        std::cout << "Negative or implausibly large schedule feature: " << i << " " << x << " " << f << "\n";
+                        std::cout << "Negative or implausibly large schedule feature in " << s << ". Stage = " << i << "; feature = " << x << "; value = " << f << "\n";
                         // Something must have overflowed
                         ok = false;
                     }
