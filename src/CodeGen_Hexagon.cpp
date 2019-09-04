@@ -315,9 +315,12 @@ void CodeGen_Hexagon::compile_func(const LoweredFunc &f,
 
 namespace {
 
-struct IdPair {
+class IdPair {
     Intrinsic::ID i64 = Intrinsic::not_intrinsic;
     Intrinsic::ID i128 = Intrinsic::not_intrinsic;
+public:
+    constexpr IdPair() : i64(Intrinsic::not_intrinsic), i128(Intrinsic::not_intrinsic) {}
+    constexpr IdPair(Intrinsic::ID i64, Intrinsic::ID i128) : i64(i64), i128(i128) {}
 
     Intrinsic::ID get(bool is_128B) const { return is_128B ? i128 : i64; }
 };
