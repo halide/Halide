@@ -24,7 +24,7 @@ enum PrinterType {BasicPrinter = 0,
 // scope, which may print at a confusing time.
 
 namespace {
-template<int type, uint64_t length = 1024>
+template<int type, uint64_t length = 4096>
 class Printer {
 public:
     char *buf, *dst, *end;
