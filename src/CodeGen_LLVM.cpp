@@ -1459,7 +1459,12 @@ Value *CodeGen_LLVM::codegen(Expr e) {
     // (eg OpenCL, HVX); for now we're just ignoring the assert, but
     // in the long run we should improve the smarts. See https://github.com/halide/Halide/issues/4194.
     const bool is_bool_vector = e.type().is_bool() && e.type().lanes() > 1;
-    internal_assert(is_bool_vector ||
+    // TODO: skip this correctness check for prefetch, because the return type
+    // of prefetch indicates the type being prefetched, which does not match the
+    // implementation of prefetch.
+    // See https://github.com/halide/Halide/issues/4211.
+    const bool is_prefetch = e.as<Call>() && e.as<Call>()->is_intrinsic(Call::prefetch);
+    internal_assert(is_bool_vector || is_prefetch ||
                     e.type().is_handle() ||
                     value->getType()->isVoidTy() ||
                     value->getType() == llvm_type_of(e.type()))
