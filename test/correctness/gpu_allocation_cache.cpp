@@ -1,5 +1,4 @@
 #include "Halide.h"
-#include "HalideRuntimeOpenCL.h"
 #include "halide_benchmark.h"
 
 using namespace Halide;
@@ -120,14 +119,12 @@ int main(int argc, char **argv) {
     };
 
     // First run them serially (compilation of a Func isn't thread-safe).
-    printf("Serial test\n");
     test1(true);
     test2(true);
     test3(true);
 
     // Now run all at the same time to check for concurrency issues
     {
-        printf("Concurrency test\n");
         Halide::Internal::ThreadPool<void> pool;
         std::vector<std::future<void>> futures;
         futures.emplace_back(pool.async(test1, true));
@@ -142,7 +139,6 @@ int main(int argc, char **argv) {
     }
 
     // Now benchmark with and without, (just informational, as this isn't a performance test)
-    printf("Benchmark\n");
     double t1 = Tools::benchmark([&](){
             test1(true, false);
             test2(true, false);
