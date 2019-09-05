@@ -1,5 +1,7 @@
 """Verifies the Halide operator functions properly."""
 
+from __future__ import print_function
+
 import os
 import unittest
 
