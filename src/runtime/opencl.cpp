@@ -166,8 +166,9 @@ WEAK char device_type[256];
 WEAK int device_type_lock = 0;
 WEAK bool device_type_initialized = false;
 
-WEAK char device_built_programs_cache_dir_name[1024];
-WEAK bool device_built_programs_cache_dir_name_set = false;
+const int COMPILED_PROGRAMS_CACHE_DIR_NAME_SIZE = 1024;
+WEAK char compiled_programs_cache_dir_name[COMPILED_PROGRAMS_CACHE_DIR_NAME_SIZE];
+WEAK bool compiled_programs_cache_dir_name_set = false;
 
 }}}} // namespace Halide::Runtime::Internal::OpenCL
 
@@ -179,10 +180,10 @@ using namespace Halide::Runtime::Internal::OpenCL;
 extern "C" {
 WEAK extern void halide_opencl_set_compiled_programs_cache_dir(const char *path) {
     if (path) {
-        strncpy(device_built_programs_cache_dir_name, path, 1024);
-        device_built_programs_cache_dir_name_set = true;
+        strncpy(compiled_programs_cache_dir_name, path, COMPILED_PROGRAMS_CACHE_DIR_NAME_SIZE);
+        compiled_programs_cache_dir_name_set = true;
     } else {
-        device_built_programs_cache_dir_name[0] = 0;
+        compiled_programs_cache_dir_name[0] = 0;
     }
 }
 
@@ -568,15 +569,13 @@ WEAK int create_opencl_context(void *user_context, cl_context *ctx, cl_command_q
     return err;
 }
 
-char *make_cached_program_filename(const char * const device_built_programs_cache_dir_name, const uint32_t src_hash) {
-    const size_t BUF_SIZE = 1024; // Max path size
-
-    char *buf = (char*)malloc(BUF_SIZE);
+char *make_cached_program_filename(const char *const compiled_programs_cache_dir_name, const uint32_t src_hash) {
+    char *buf = (char*)malloc(COMPILED_PROGRAMS_CACHE_DIR_NAME_SIZE + 64); // 64 - size of file name
     if (buf == NULL) {
         return NULL;
     }
 
-    const int n = sprintf(buf, "%s/halide_opencl_program_binary_%x.bin", device_built_programs_cache_dir_name, src_hash);
+    const int n = sprintf(buf, "%s/halide_opencl_program_binary_%x.bin", compiled_programs_cache_dir_name, src_hash);
     if (n > 0) {
         return buf;
     }
@@ -585,11 +584,11 @@ char *make_cached_program_filename(const char * const device_built_programs_cach
 }
 
 cl_program cl_load_program_from_cache(void *user_context, ClContext ctx, cl_device_id dev, const uint32_t src_hash) {
-    if (!device_built_programs_cache_dir_name_set) {
+    if (!compiled_programs_cache_dir_name_set) {
         return NULL;
     }
 
-    char *cached_program_filename = make_cached_program_filename(device_built_programs_cache_dir_name, src_hash);
+    char *cached_program_filename = make_cached_program_filename(compiled_programs_cache_dir_name, src_hash);
     if (!cached_program_filename) {
         return NULL;
     }
@@ -605,7 +604,7 @@ cl_program cl_load_program_from_cache(void *user_context, ClContext ctx, cl_devi
         cl_device_id devices[] = { dev };
         const unsigned char *binaries[] = { binary_buffer };
         cl_int err = CL_SUCCESS;
-        cl_int load_errors[1];
+        cl_int load_errors[1];  // Size of load_errors have to be equal to size of binaries
         program_from_binary = clCreateProgramWithBinary(ctx.context, 1, devices, &binary_size, binaries,
                                                         load_errors, &err);
         if (err != CL_SUCCESS) {
@@ -629,11 +628,11 @@ cl_program cl_load_program_from_cache(void *user_context, ClContext ctx, cl_devi
 }
 
 cl_int cl_cache_program_binary(void *user_context, cl_program program, const uint32_t src_hash) {
-    if (!device_built_programs_cache_dir_name_set) {
+    if (!compiled_programs_cache_dir_name_set) {
         return CL_SUCCESS;
     }
 
-    char *cached_program_filename = make_cached_program_filename(device_built_programs_cache_dir_name, src_hash);
+    char *cached_program_filename = make_cached_program_filename(compiled_programs_cache_dir_name, src_hash);
     if (!cached_program_filename) {
         return CL_OUT_OF_HOST_MEMORY;
     }
@@ -648,14 +647,19 @@ cl_int cl_cache_program_binary(void *user_context, cl_program program, const uin
     size_t bin_size;
     size_t ret_size;
 
-    err = clGetProgramInfo(program, CL_PROGRAM_BINARY_SIZES, sizeof(size_t), &bin_size, &ret_size);
+    err = clGetProgramInfo(program, CL_PROGRAM_BINARY_SIZES, sizeof(size_t), &bin_size, NULL);
     if (err != CL_SUCCESS) {
         error(user_context) << "CL: clGetProgramInfo failed: " << get_opencl_error_name(err) << "\n";
         return err;
     }
+    if (bin_size == 0) {
+        error(user_context) << "CL: clGetProgramInfo failed: bin_size is zero\n";
+        return CL_INVALID_BUFFER_SIZE;
+    }
+
 
     if (file.open()) {
-        unsigned char *bin_buf = (unsigned char *)malloc(bin_size + 128);
+        unsigned char *bin_buf = (unsigned char *)malloc(bin_size);
         if (!bin_buf) {
             return CL_OUT_OF_HOST_MEMORY;
         }
@@ -813,8 +817,8 @@ WEAK int halide_opencl_initialize_kernels(void *user_context, void **state_ptr, 
 
         // Check if program was compiled before, then load it from cache.
         // @TODO It's possible to calculate src_hash at compile-time in CodeGen_GPU_Host<CodeGen_CPU>::compile_funcs
-        uint32_t src_hash = device_built_programs_cache_dir_name_set ? Halide::Runtime::Internal::djb_hash((const uint8_t *)src, size) : 0;
-        cl_program program = device_built_programs_cache_dir_name_set ? cl_load_program_from_cache(user_context, ctx, dev, src_hash) : NULL;
+        uint32_t src_hash = compiled_programs_cache_dir_name_set ? Halide::Runtime::Internal::djb_hash((const uint8_t *)src, size) : 0;
+        cl_program program = compiled_programs_cache_dir_name_set ? cl_load_program_from_cache(user_context, ctx, dev, src_hash) : NULL;
 
         if (program == NULL) {
             const char *sources[] = {src};
@@ -846,7 +850,7 @@ WEAK int halide_opencl_initialize_kernels(void *user_context, void **state_ptr, 
         }
         (*state)->program = program;
 
-        if (device_built_programs_cache_dir_name_set) {
+        if (compiled_programs_cache_dir_name_set) {
             cl_cache_program_binary(user_context, program, src_hash);
         }
     }
