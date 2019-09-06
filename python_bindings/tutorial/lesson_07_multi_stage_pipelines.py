@@ -24,8 +24,7 @@ import halide as hl
 
 # Support code for loading pngs.
 #include "image_io.h"
-from scipy.misc import imread, imsave
-
+from imageio import imread, imsave
 import os.path
 
 def main():
