@@ -29,17 +29,29 @@
 
 #pragma once
 
-#include <iostream>
-#include <sstream>
-#include <vector>
-#include <map>
-#include <string>
-#include <stdexcept>
-#include <typeinfo>
-#include <cstring>
 #include <algorithm>
-#include <cxxabi.h>
 #include <cstdlib>
+#include <cstring>
+#include <iostream>
+#include <map>
+#include <sstream>
+#include <stdexcept>
+#include <string>
+#include <typeinfo>
+#include <vector>
+
+#if defined(_MSC_VER) && !defined(NOMINMAX)
+#define NOMINMAX
+#endif
+
+#if !defined(_WIN32)
+#include <cxxabi.h>
+#else
+#include <windows.h>
+#pragma warning(disable : 4091)
+#include <dbghelp.h>
+#pragma comment(lib, "dbghelp.lib")
+#endif
 
 namespace cmdline{
 
@@ -106,11 +118,24 @@ Target lexical_cast(const Source &arg)
 
 static inline std::string demangle(const std::string &name)
 {
+#if !defined(_WIN32)
   int status=0;
   char *p=abi::__cxa_demangle(name.c_str(), 0, 0, &status);
   std::string ret(p);
   free(p);
   return ret;
+#else
+  char demangled_name[8192];
+  if (UnDecorateSymbolName(name.c_str(), demangled_name, sizeof(demangled_name),
+                           UNDNAME_COMPLETE)) {
+    std::string ret(demangled_name);
+    return ret;
+  } else {
+    DWORD error = GetLastError();
+    std::cout << "UnDecorateSymbolName error: " << error << std::endl;
+	return name;
+  }
+#endif
 }
 
 template <class T>
@@ -724,6 +749,7 @@ private:
         has=true;
       }
       catch(const std::exception &e){
+        std::cout << "Exception was caught: " << e.what() << std::endl;
         return false;
       }
       return true;

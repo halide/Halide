@@ -34,6 +34,8 @@ halide_library_from_generator(train_cost_model
                               train_cost_model
                               GENERATOR
                               train_cost_model.generator)
+target_include_directories(retrain_cost_model_process
+                           PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/../support)
 target_link_libraries(retrain_cost_model_process
                       PRIVATE cost_model train_cost_model)
 add_dependencies(retrain_cost_model_process cost_model train_cost_model)
