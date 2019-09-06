@@ -198,7 +198,7 @@ static __attribute__((unused)) int _convert_py_buffer_to_halide(
                      buf.len, buf.shape[0] * buf.strides[0]);
         return -1;
     }
-    memset(out, 0, sizeof(*out));
+    *out = halide_buffer_t();
     if (!buf.format) {
         out->type.code = halide_type_uint;
         out->type.bits = 8;
