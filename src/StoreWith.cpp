@@ -232,8 +232,8 @@ struct System {
             const Variable *vb = lt->b.as<Variable>();
             if (const Min *min_b = lt->b.as<Min>()) {
                 // x <= min(y, z) -> x <= y && x <= z
-                add_term(le->a < min_b->a);
-                add_term(le->a < min_b->b);
+                add_term(lt->a < min_b->a);
+                add_term(lt->a < min_b->b);
             } else if (const Max *max_a = lt->a.as<Max>()) {
                 // max(x, y) <= z -> x <= z && y <= z
                 add_term(max_a->a < le->b);
