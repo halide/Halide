@@ -45,6 +45,7 @@ $(AUTOSCHED_BIN)/libauto_schedule.so: $(AUTOSCHED_SRC)/AutoSchedule.cpp \
 										$(AUTOSCHED_SRC)/Weights.h \
 										$(AUTOSCHED_SRC)/Weights.cpp \
 										$(AUTOSCHED_SRC)/FunctionDAG.h \
+										$(AUTOSCHED_SRC)/FunctionDAG.cpp \
 										$(AUTOSCHED_SRC)/Featurization.h \
 										$(AUTOSCHED_SRC)/CostModel.h \
 										$(AUTOSCHED_SRC)/PerfectHashMap.h \
@@ -67,7 +68,7 @@ $(AUTOSCHED_BIN)/retrain_cost_model: $(AUTOSCHED_SRC)/retrain_cost_model.cpp \
 									$(AUTOSCHED_WEIGHT_OBJECTS) \
 									$(AUTOSCHED_BIN)/auto_schedule_runtime.a
 	@mkdir -p $(@D)
-	$(CXX) $(CXXFLAGS) -Wall -I $(AUTOSCHED_BIN)/cost_model $(OPTIMIZE) $(filter-out %.h,$^) -o $@ $(LDFLAGS) $(USE_OPEN_MP)
+	$(CXX) $(CXXFLAGS) -Wall -I ../support -I $(AUTOSCHED_BIN)/cost_model $(OPTIMIZE) $(filter-out %.h,$^) -o $@ $(LDFLAGS) $(USE_OPEN_MP)
 
 $(AUTOSCHED_BIN)/featurization_to_sample: $(AUTOSCHED_SRC)/featurization_to_sample.cpp
 	@mkdir -p $(@D)

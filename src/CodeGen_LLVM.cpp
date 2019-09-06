@@ -49,12 +49,9 @@ std::unique_ptr<llvm::Module> codegen_llvm(const Module &module, llvm::LLVMConte
 namespace Internal {
 
 using namespace llvm;
-using std::cout;
-using std::endl;
 using std::map;
 using std::ostringstream;
 using std::pair;
-using std::stack;
 using std::string;
 using std::vector;
 
@@ -157,13 +154,13 @@ llvm::GlobalValue::LinkageTypes llvm_linkage(LinkageType t) {
     // fail. Figure out why so we can remove this.
     return llvm::GlobalValue::ExternalLinkage;
 
-    switch (t) {
-    case LinkageType::ExternalPlusMetadata:
-    case LinkageType::External:
-        return llvm::GlobalValue::ExternalLinkage;
-    default:
-        return llvm::GlobalValue::PrivateLinkage;
-    }
+    // switch (t) {
+    // case LinkageType::ExternalPlusMetadata:
+    // case LinkageType::External:
+    //     return llvm::GlobalValue::ExternalLinkage;
+    // default:
+    //     return llvm::GlobalValue::PrivateLinkage;
+    // }
 }
 
 }
@@ -1180,7 +1177,7 @@ llvm::Function *CodeGen_LLVM::embed_metadata_getter(const std::string &metadata_
 
     llvm::FunctionType *func_t = llvm::FunctionType::get(metadata_t_type->getPointerTo(), false);
     llvm::Function *metadata_getter = llvm::Function::Create(func_t, llvm::GlobalValue::ExternalLinkage, metadata_name, module.get());
-    llvm::BasicBlock *block = llvm::BasicBlock::Create(module.get()->getContext(), "entry", metadata_getter);
+    llvm::BasicBlock *block = llvm::BasicBlock::Create(module->getContext(), "entry", metadata_getter);
     builder->SetInsertPoint(block);
     builder->CreateRet(metadata_storage);
     internal_assert(!verifyFunction(*metadata_getter, &llvm::errs()));
@@ -1457,7 +1454,18 @@ Value *CodeGen_LLVM::codegen(Expr e) {
     value = nullptr;
     e.accept(this);
     internal_assert(value) << "Codegen of an expr did not produce an llvm value\n";
-    internal_assert(e.type().is_handle() ||
+    // TODO: skip this correctness check for bool vectors,
+    // as eliminate_bool_vectors() will cause a discrepancy for some backends
+    // (eg OpenCL, HVX); for now we're just ignoring the assert, but
+    // in the long run we should improve the smarts. See https://github.com/halide/Halide/issues/4194.
+    const bool is_bool_vector = e.type().is_bool() && e.type().lanes() > 1;
+    // TODO: skip this correctness check for prefetch, because the return type
+    // of prefetch indicates the type being prefetched, which does not match the
+    // implementation of prefetch.
+    // See https://github.com/halide/Halide/issues/4211.
+    const bool is_prefetch = e.as<Call>() && e.as<Call>()->is_intrinsic(Call::prefetch);
+    internal_assert(is_bool_vector || is_prefetch ||
+                    e.type().is_handle() ||
                     value->getType()->isVoidTy() ||
                     value->getType() == llvm_type_of(e.type()))
         << "Codegen of Expr " << e
@@ -2102,7 +2110,7 @@ void CodeGen_LLVM::visit(const Load *op) {
                 value = builder->CreateInsertElement(value, val, lane);
                 ptr = builder->CreateInBoundsGEP(ptr, stride);
             }
-        } else if (false /* should_scalarize(op->index) */) {
+        } else if ((false)) {   /* should_scalarize(op->index) */
             // TODO: put something sensible in for
             // should_scalarize. Probably a good idea if there are no
             // loads in it, and it's all int32.
@@ -2179,7 +2187,7 @@ void CodeGen_LLVM::visit(const Broadcast *op) {
 }
 
 Value *CodeGen_LLVM::interleave_vectors(const std::vector<Value *> &vecs) {
-    internal_assert(vecs.size() >= 1);
+    internal_assert(!vecs.empty());
     for (size_t i = 1; i < vecs.size(); i++) {
         internal_assert(vecs[0]->getType() == vecs[i]->getType());
     }
@@ -2866,7 +2874,7 @@ void CodeGen_LLVM::visit(const Call *op) {
         // Used as an annotation for caching, should be invisible to
         // codegen. Ignore arguments beyond the first as they are only
         // used in the cache key.
-        internal_assert(op->args.size() > 0);
+        internal_assert(!op->args.empty());
         value = codegen(op->args[0]);
     } else if (op->is_intrinsic(Call::alloca)) {
         // The argument is the number of bytes. For now it must be

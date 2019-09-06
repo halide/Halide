@@ -1381,7 +1381,7 @@ Value *CodeGen_Hexagon::vdelta(Value *lut, const vector<int> &indices) {
                 control_elements[i] = ConstantInt::get(i8_t, switches[i]);
             }
             Value *control = ConstantVector::get(control_elements);
-            Intrinsic::ID vdelta_id = IPICK(is_128B, reverse ? Intrinsic::hexagon_V6_vrdelta : Intrinsic::hexagon_V6_vdelta);
+            Intrinsic::ID vdelta_id = reverse ? IPICK(is_128B, Intrinsic::hexagon_V6_vrdelta) : IPICK(is_128B, Intrinsic::hexagon_V6_vdelta);
             return call_intrin_cast(lut_ty, vdelta_id, {lut, control});
         }
     }

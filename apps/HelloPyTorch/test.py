@@ -4,6 +4,7 @@ from __future__ import print_function
 
 import os
 import unittest
+import warnings
 
 import torch as th
 import modules
@@ -57,7 +58,14 @@ class TestAdd(unittest.TestCase):
         # Test the gradient is correct
         self.a.requires_grad = True
         self.b.requires_grad = True
-        res = th.autograd.gradcheck(modules.Add(), [self.a, self.b], eps=1e-2)
+
+        with warnings.catch_warnings():
+            # Inputs are float, the gradient checker wants double inputs and
+            # will issue a warning.
+            warnings.filterwarnings(
+                "ignore", message="At least one of the inputs that requires "
+                "gradient is not of double precision")
+            res = th.autograd.gradcheck(modules.Add(), [self.a, self.b], eps=1e-2)
 
         print("  Test ran successfully: difference is", diff)
 

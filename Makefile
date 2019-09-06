@@ -928,6 +928,7 @@ endif
 endif
 
 V8_DEPS=
+V8_DEPS_LIBS=
 ifneq ($(WITH_V8), )
 ifeq ($(suffix $(V8_LIB_PATH)), .a)
 
@@ -940,10 +941,12 @@ ifeq ($(UNAME), Darwin)
 endif
 
 V8_DEPS=$(BIN_DIR)/libv8_halide.$(SHARED_EXT)
+V8_DEPS_LIBS=$(realpath $(BIN_DIR)/libv8_halide.$(SHARED_EXT))
 
 else
 
 V8_DEPS=$(V8_LIB_PATH)
+V8_DEPS_LIBS=$(V8_LIB_PATH)
 
 endif
 endif
@@ -982,7 +985,7 @@ $(LIB_DIR)/libHalide.a: $(OBJECTS) $(INITIAL_MODULES) $(BUILD_DIR)/llvm_objects/
 
 $(BIN_DIR)/libHalide.$(SHARED_EXT): $(OBJECTS) $(INITIAL_MODULES) $(V8_DEPS)
 	@mkdir -p $(@D)
-	@$(CXX) -shared $(OBJECTS) $(INITIAL_MODULES) $(LLVM_LIBS_FOR_SHARED_LIBHALIDE) $(LLVM_SYSTEM_LIBS) $(COMMON_LD_FLAGS) $(V8_DEPS) $(INSTALL_NAME_TOOL_LD_FLAGS) -o $(BIN_DIR)/libHalide.$(SHARED_EXT)
+	$(CXX) -shared $(OBJECTS) $(INITIAL_MODULES) $(LLVM_LIBS_FOR_SHARED_LIBHALIDE) $(LLVM_SYSTEM_LIBS) $(COMMON_LD_FLAGS) $(V8_DEPS_LIBS) $(INSTALL_NAME_TOOL_LD_FLAGS) -o $(BIN_DIR)/libHalide.$(SHARED_EXT)
 ifeq ($(UNAME), Darwin)
 	install_name_tool -id $(CURDIR)/$(BIN_DIR)/libHalide.$(SHARED_EXT) $(BIN_DIR)/libHalide.$(SHARED_EXT)
 endif
