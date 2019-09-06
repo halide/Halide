@@ -1207,9 +1207,7 @@ void CodeGen_LLVM::optimize_module() {
     const bool do_loop_opt = !get_target().has_feature(Target::DisableLLVMLoopOpt) ||
                               get_target().has_feature(Target::EnableLLVMLoopOpt);
 
-// Temporarily disabled, see https://github.com/halide/Halide/issues/3957
-// #if LLVM_VERSION >= 90
-#if 0
+#if LLVM_VERSION >= 90
     PipelineTuningOptions pto;
     pto.LoopInterleaving = do_loop_opt;
     pto.LoopVectorization = do_loop_opt;
