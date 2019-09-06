@@ -518,32 +518,23 @@ void match_types(Expr &a, Expr &b) {
 // Cast to the wider type of the two. Already guaranteed to leave
 // signed/unsigned on number of lanes unchanged.
 void match_bits(Expr &x, Expr &y) {
-    if (y.type().is_int() == x.type().is_int()) {
-        // The signedness matches, so do a full cast.
-        if (x.type().bits() < y.type().bits()) {
-            x = cast(y.type(), x);
-        } else if (y.type().bits() < x.type().bits()) {
-            y = cast(x.type(), y);
+    // The signedness doesn't match, so just match the bits.
+    if (x.type().bits() < y.type().bits()) {
+        Type t;
+        if (x.type().is_int()) {
+            t = Int(y.type().bits(), y.type().lanes());
+        } else {
+            t = UInt(y.type().bits(), y.type().lanes());
         }
-    } else {
-        // The signedness doesn't match, so just match the bits.
-        if (x.type().bits() < y.type().bits()) {
-            Type t;
-            if (x.type().is_int()) {
-              t = Int(y.type().bits(), y.type().lanes());
-            } else {
-              t = UInt(y.type().bits(), y.type().lanes());
-            }
-            x = cast(t, x);
-        } else if (y.type().bits() < x.type().bits()) {
-            Type t;
-            if (y.type().is_int()) {
-              t = Int(x.type().bits(), x.type().lanes());
-            } else {
-              t = UInt(x.type().bits(), x.type().lanes());
-            }
-            y = cast(t, y);
+        x = cast(t, x);
+     } else if (y.type().bits() < x.type().bits()) {
+        Type t;
+        if (y.type().is_int()) {
+            t = Int(x.type().bits(), x.type().lanes());
+        } else {
+            t = UInt(x.type().bits(), x.type().lanes());
         }
+        y = cast(t, y);
     }
 }
 
@@ -568,8 +559,13 @@ void match_types_bitwise(Expr &x, Expr &y, const char *op_name) {
         internal_assert(x.type().lanes() == y.type().lanes()) << "Can't match types of differing widths";
     }
 
-    // Cast to the wider type of the two.
-    match_bits(x, y);
+    // Cast to the wider type of the two. Already guaranteed to leave
+    // signed/unsigned on number of lanes unchanged.
+    if (x.type().bits() < y.type().bits()) {
+        x = cast(y.type(), x);
+    } else if (y.type().bits() < x.type().bits()) {
+        y = cast(x.type(), y);
+    }
 }
 
 // Fast math ops based on those from Syrah (http://github.com/boulos/syrah). Thanks, Solomon!
