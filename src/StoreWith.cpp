@@ -377,24 +377,45 @@ struct System {
 
     void make_children(std::deque<std::unique_ptr<System>> &result) {
 
+        size_t old_size = result.size();
+
         // Eliminate divs and mods by introducing new variables
         for (int i = 0; i < (int)equalities.size(); i++) {
             Expr lhs, rhs;
             for (auto &p : equalities[i].terms) {
                 const Mod *mod = p.first.as<Mod>();
                 const Div *div = p.first.as<Div>();
+                const Mul *mul = p.first.as<Mul>();
                 if (mod) {
                     lhs = mod->a;
                     rhs = mod->b;
                 } else if (div) {
                     lhs = div->a;
                     rhs = div->b;
+                } else if (mul) {
+                    lhs = mul->a;
+                    rhs = mul->b;
                 }
+
                 if (is_const(rhs)) {
+                    internal_assert(mul == nullptr);
                     break;
-                } else {
-                    lhs = rhs = Expr();
+                } else if (const Variable *v = rhs.as<Variable>()) {
+                    // HACK for constant vars
+                    if (mul) {
+                        div = mul->a.as<Div>();
+                        if (div) {
+                            lhs = div->a;
+                        }
+                    }
+                    if (starts_with(v->name, "c") &&
+                        (!mul || (div && equal(div->b, mul->b))) &&
+                        is_one(simplifier->mutate(rhs > 0, nullptr))) {
+                        break;
+                    }
                 }
+
+                lhs = rhs = Expr();
             }
             if (lhs.defined()) {
                 Expr k1 = aux(), k2 = aux();
@@ -413,10 +434,59 @@ struct System {
                 }
                 new_system->add_term(lhs == replacement);
                 simplifier->learn_true(-1 < k1);
-                simplifier->learn_true(k1 < rhs);
+                if (is_const(rhs)) {
+                    simplifier->learn_true(k1 < rhs);
+                } else {
+                    // TODO: only if we know RHS is positive.
+                    new_system->add_term(k1 < rhs);
+                }
                 new_system->finalize();
                 result.emplace_back(std::move(new_system));
                 return;
+            }
+        }
+
+        // Replace repeated non-linear terms with new variables
+        std::map<Expr, int, IRDeepCompare> nonlinear_terms;
+        for (int i = 0; i < (int)equalities.size(); i++) {
+            for (const auto &p : equalities[i].terms) {
+                if (!p.first.as<Variable>()) {
+                    nonlinear_terms[p.first]++;
+                }
+            }
+        }
+
+        for (auto p : nonlinear_terms) {
+            if (p.second > 1) {
+                // It's a repeated non-linearity. Replace it with an opaque variable.
+                Var t(unique_name('n'));
+
+                auto subs = [&](Expr e) {
+                    e = substitute(p.first, t, e);
+                    return e;
+                };
+
+                std::unique_ptr<System> new_system(new System(simplifier, t == p.first, id));
+                if (non_linear_term.defined()) {
+                    new_system->add_term(subs(non_linear_term));
+                }
+                for (int j = 0; j < (int)equalities.size(); j++) {
+                    // In the other equations, we replace the variable with the right-hand-side
+                    new_system->add_term(subs(equalities[j].to_expr()));
+                }
+
+                // Carry over any bounds on the non-linear term to a bound on the new variable.
+                Simplify::ExprInfo bounds;
+                simplifier->mutate(p.first, &bounds);
+                if (bounds.min_defined) {
+                    simplifier->learn_true(t >= (int)bounds.min);
+                }
+                if (bounds.max_defined) {
+                    simplifier->learn_true(t <= (int)bounds.max);
+                }
+
+                new_system->finalize();
+                result.emplace_back(std::move(new_system));
             }
         }
 
@@ -429,10 +499,17 @@ struct System {
         for (int i = 0; i < (int)equalities.size(); i++) {
             for (const auto &p : equalities[i].terms) {
                 const Variable *var = p.first.as<Variable>();
+                // HACK: forbid use of constant wildcards.
+                // if (var && starts_with(var->name, "c")) continue;
                 if (var && (p.second == 1 || p.second == -1)) {
                     eliminable_vars.insert(var->name);
                 }
             }
+        }
+
+        if (!equalities.empty() && eliminable_vars.empty()) {
+            debug(0) << "NO ELIMINABLE VARS:\n";
+            dump();
         }
 
         /*
@@ -480,6 +557,15 @@ struct System {
                 const Variable *var = p.first.as<Variable>();
 
                 if (var) {
+
+                    // HACK
+                    // if (starts_with(var->name, "c")) continue;
+
+                    // HACK: Don't eliminate positive slack variables
+                    /*
+                    if (starts_with(var->name, "k") &&
+                        is_one(simplifier->mutate(Expr(var) >= 0, nullptr))) continue;
+                    */
 
                     Expr rhs = 0, rhs_remainder = 0;
                     for (const auto &p2 : equalities[i].terms) {
@@ -597,6 +683,11 @@ struct System {
                 }
             }
         }
+
+        if (result.size() == old_size && !equalities.empty()) {
+            debug(0) << "NO CHILDREN:\n";
+            dump();
+        }
     }
 };
 
@@ -605,10 +696,10 @@ uint64_t System::id_counter = 0;
 // Attempt to disprove a boolean expr by constructing a constraint
 // system and performing a backtracking search over substitutions
 // using beam search.
-bool can_disprove(Expr e, int beam_size) {
+bool can_disprove(Expr e, int beam_size, std::set<Expr, IRDeepCompare> *implications = nullptr) {
     e = common_subexpression_elimination(simplify(remove_likelies(e)));
 
-    // debug(0) << "*** Attempting disproof " << e << "\n";
+    debug(0) << "*** Attempting disproof " << e << "\n";
 
     if (is_zero(e)) {
         // The simplifier was capable of doing the disproof by itself
@@ -632,10 +723,10 @@ bool can_disprove(Expr e, int beam_size) {
         std::unique_ptr<System> next = std::move(beam.front());
         beam.pop_front();
 
-        /*
+
           debug(0) << "Top of beam: " << next->complexity() << "\n";
           next->dump();
-        */
+
 
         if (next->infeasible()) {
             // We found that the initial constraint system
@@ -1066,8 +1157,222 @@ std::vector<Use> get_times_of_all_uses(const Stmt &s, string buf, const map<stri
 
 }  // namespace
 
+class BreakIntoConvexPieces : public IRMutator {
+    using IRMutator::visit;
+
+    IRMatcher::Wild<0> x;
+    IRMatcher::Wild<1> y;
+    IRMatcher::Wild<2> z;
+
+    Expr visit(const Add *op) override {
+        Expr a = mutate(op->a);
+        Expr b = mutate(op->b);
+        auto rewrite = IRMatcher::rewriter(IRMatcher::add(a, b), op->type, op->type);
+
+        if (rewrite(min(x, y) + z, min(x + z, y + z)) ||
+            rewrite(z + min(x, y), min(z + x, z + y))) {
+            return mutate(rewrite.result);
+        } else {
+            return a + b;
+        }
+    }
+
+    Expr visit(const Sub *op) override {
+        Expr a = mutate(op->a);
+        Expr b = mutate(op->b);
+        auto rewrite = IRMatcher::rewriter(IRMatcher::sub(a, b), op->type, op->type);
+
+        if (rewrite(min(x, y) - z, min(x - z, y - z)) ||
+            rewrite(z - min(x, y), min(z - x, z - y))) {
+            return mutate(rewrite.result);
+        } else {
+            return a - b;
+        }
+    }
+
+    Expr visit(const Mul *op) override {
+        Expr a = mutate(op->a);
+        Expr b = mutate(op->b);
+        auto rewrite = IRMatcher::rewriter(IRMatcher::mul(a, b), op->type, op->type);
+
+        if (rewrite(min(x, y) * z, min(x * z, y * z)) ||
+            rewrite(z * min(x, y), min(z * x, z * y))) {
+            return mutate(rewrite.result);
+        } else {
+            return a * b;
+        }
+    }
+
+    Expr visit(const Div *op) override {
+        Expr a = mutate(op->a);
+        Expr b = mutate(op->b);
+        auto rewrite = IRMatcher::rewriter(IRMatcher::div(a, b), op->type, op->type);
+
+        if (rewrite(min(x, y) / z, min(x / z, y / z)) ||
+            rewrite(z / min(x, y), min(z / x, z / y))) {
+            return mutate(rewrite.result);
+        } else {
+            return a / b;
+        }
+    }
+
+    Expr visit(const LT *op) override {
+        Expr a = mutate(op->a);
+        Expr b = mutate(op->b);
+        auto rewrite = IRMatcher::rewriter(IRMatcher::lt(a, b), op->type, a.type());
+
+        if (rewrite(min(x, y) < z, (x < z) || (y < z)) ||
+            rewrite(z < min(x, y), (z < x) && (z < y))) {
+            return mutate(rewrite.result);
+        } else {
+            return a < b;
+        }
+    }
+
+    Expr visit(const LE *op) override {
+        Expr a = mutate(op->a);
+        Expr b = mutate(op->b);
+        auto rewrite = IRMatcher::rewriter(IRMatcher::le(a, b), op->type, a.type());
+
+        if (rewrite(min(x, y) <= z, (x <= z) || (y <= z)) ||
+            rewrite(z <= min(x, y), (z <= x) && (z <= y))) {
+            return mutate(rewrite.result);
+        } else {
+            return a <= b;
+        }
+    }
+
+    // Also move ors outwards
+    Expr visit(const And *op) override {
+        Expr a = mutate(op->a);
+        Expr b = mutate(op->b);
+        auto rewrite = IRMatcher::rewriter(IRMatcher::and_op(a, b), op->type, op->type);
+
+        if (rewrite((x || y) && z, (x && z) || (y && z)) ||
+            rewrite(z && (x || y), (z && x) || (z && y))) {
+            return mutate(rewrite.result);
+        } else {
+            return a && b;
+        }
+    }
+
+};
+
+class ConvertRoundingToMod : public IRMutator {
+    using IRMutator::visit;
+
+    Expr visit(const Mul *op) {
+        Expr a = mutate(op->a);
+        Expr b = mutate(op->b);
+
+        const Div *d = a.as<Div>();
+        if (d && equal(d->b, b)) {
+            // Euclidean identity says: (a/b)*b + a % b == a. So:
+            // (x / y) * y -> x - x % y
+            return d->a - d->a % d->b;
+        } else {
+            return a * b;
+        }
+    }
+};
+
+bool can_disprove_nonconvex(Expr e, int beam_size, Expr *implication = nullptr) {
+
+    debug(0) << "Attempting to disprove non-convex expression: " << e << "\n";
+
+    // Canonicalize >, >=, and friends
+    e = simplify(e);
+
+    // Break it into convex pieces, and disprove every piece
+    e = BreakIntoConvexPieces().mutate(e);
+
+    //e = ConvertRoundingToMod().mutate(e);
+
+    vector<Expr> pieces, pending;
+    pending.push_back(e);
+    while (!pending.empty()) {
+        Expr next = pending.back();
+        pending.pop_back();
+        if (const Or *op = next.as<Or>()) {
+            pending.push_back(op->a);
+            pending.push_back(op->b);
+        } else {
+            pieces.push_back(next);
+        }
+    }
+
+    debug(0) << "Broken into convex pieces:\n";
+    int i = 0;
+    for (auto p : pieces) {
+        debug(0) << (++i) << ") " << p << "\n";
+    }
+
+    // Simplify each piece.
+    debug(0) << "Simplify each piece:\n";
+    i = 0;
+    for (auto &p : pieces) {
+        p = simplify(p);
+        debug(0) << (++i) << ") " << p << "\n";
+    }
+
+    for (auto p : pieces) {
+        if (is_one(p)) return false;
+        if (is_zero(p)) continue;
+
+        set<Expr, IRDeepCompare> implications;
+
+        debug(0) << "Attempting to disprove non-trivial term: " << p << "\n";
+        if (can_disprove(p, beam_size, &implications)) {
+            debug(0) << "Success!\n";
+            continue;
+        } else {
+            debug(0) << "Failure\n";
+            return false;
+        }
+
+        // TODO: mine the implications to build up a predicate
+    }
+
+    return true;
+}
+
 Stmt lower_store_with(const Stmt &s, const vector<Function> &outputs, const map<string, Function> &env) {
     debug(3) << "Checking legality of store_with on: " << s << "\n";
+
+    {
+        Var v0, v1, v2;
+        Var c0("c0"), c1("c1"), c2("c2"), c3("c3");
+        /*
+        Expr e = ((min(((((v0 + 13)/4)*4) + v1), (v2 + 10)) + 4) > min(((((min((((v0 + 17)/4)*4), (min((v2 - v1), v0) + 14)) + 3)/4)*4) + v1), (v2 + 14)));
+        debug(0) << can_disprove_nonconvex(e, 256) <<"\n";
+        */
+
+
+        debug(0) << can_disprove_nonconvex(c2 > 0 &&
+                                           ((v0 + c0) / c2) * c2 < ((v0 + c1) / c2) * c2, 1024);
+
+        /*
+        ((v0 + c0) / c1) * c1 < ((v0 + c2) / c3) * c3;
+
+        let k0 * c1 + k1 = v0 + c0;
+        let k2 * c3 + k3 = v0 + c2;
+        (k0 * c1 < k2 * c3);
+        */
+
+        // A strategy: Abstract a non-linear terms as a bounded variables. Hope that uses of it get cancelled???
+
+        /*
+        // Try with a symbolic constant instead of 4
+
+        e = ((min(((((v0 + 13)/c0)*c0) + v1), (v2 + 10)) + 4) > min(((((min((((v0 + 17)/c0)*c0), (min((v2 - v1), v0) + 14)) + 3)/c0)*c0) + v1), (v2 + 14)));
+        e = e && (c0 > 0);
+        debug(0) << can_disprove_nonconvex(e, 32) <<"\n";
+
+        */
+
+        exit(-1);
+    }
+
 
     // Remap the args on all accesses, but not the names, using the
     // additional args to store_with that specify the coordinate
