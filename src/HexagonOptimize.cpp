@@ -246,6 +246,11 @@ Expr replace_pattern(Expr x, const vector<Expr> &matches, const Pattern &p) {
     return x;
 }
 
+bool is_double_vector(Expr x, const Target &target) {
+    int native_vector_lanes = target.natural_vector_size(x.type());
+    return x.type().lanes() % (2 * native_vector_lanes) == 0;
+}
+
 // Attempt to apply one of the patterns to x. If a match is
 // successful, the expression is replaced with a call using the
 // matched operands. Prior to substitution, the matches are mutated
@@ -269,6 +274,12 @@ Expr apply_patterns(Expr x, const vector<Pattern> &patterns, const Target &targe
                 continue;
             }
 
+            // Don't apply pattern if it involves an interleave,
+            // and is not a multiple of two vectors.
+            // See https://github.com/halide/Halide/issues/1582
+            if ((p.flags & Pattern::InterleaveResult) && !is_double_vector(x, target)) {
+                continue;
+            }
             // Mutate the operands with the given mutator.
             for (Expr &op : matches) {
                 op = op_mutator->mutate(op);
