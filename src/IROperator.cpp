@@ -515,6 +515,29 @@ void match_types(Expr &a, Expr &b) {
     }
 }
 
+// Cast to the wider type of the two. Already guaranteed to leave
+// signed/unsigned on number of lanes unchanged.
+void match_bits(Expr &x, Expr &y) {
+    // The signedness doesn't match, so just match the bits.
+    if (x.type().bits() < y.type().bits()) {
+        Type t;
+        if (x.type().is_int()) {
+            t = Int(y.type().bits(), y.type().lanes());
+        } else {
+            t = UInt(y.type().bits(), y.type().lanes());
+        }
+        x = cast(t, x);
+     } else if (y.type().bits() < x.type().bits()) {
+        Type t;
+        if (y.type().is_int()) {
+            t = Int(x.type().bits(), x.type().lanes());
+        } else {
+            t = UInt(x.type().bits(), x.type().lanes());
+        }
+        y = cast(t, y);
+    }
+}
+
 void match_types_bitwise(Expr &x, Expr &y, const char *op_name) {
     user_assert(x.defined() && y.defined()) << op_name << " of undefined Expr\n";
     user_assert(x.type().is_int() || x.type().is_uint())
@@ -1954,43 +1977,31 @@ Expr operator~(Expr x) {
 }
 
 Expr operator<<(Expr x, Expr y) {
-    Expr unsigned_amount = lossless_cast(UInt(x.type().bits(), y.type().lanes()), y);
-    user_assert(unsigned_amount.defined())
-        << "In shift left expression:\n"
-        << "   (" << x << ") << (" << y << ")\n"
-        << "   with types " << x.type() << " << " << y.type() << "\n"
-        << "the RHS must be unsigned and losslessly castable to the same size as the LHS.\n";
-
     if (y.type().is_vector() && !x.type().is_vector()) {
         x = Internal::Broadcast::make(x, y.type().lanes());
     }
-
+    match_bits(x, y);
     Type t = x.type();
-    return Internal::Call::make(t, Internal::Call::shift_left, {std::move(x), std::move(unsigned_amount)}, Internal::Call::PureIntrinsic);
+    return Internal::Call::make(t, Internal::Call::shift_left, {std::move(x), std::move(y)}, Internal::Call::PureIntrinsic);
 }
 
 Expr operator<<(Expr x, int y) {
-    Type t = UInt(x.type().bits(), x.type().lanes());
+    Type t = Int(x.type().bits(), x.type().lanes());
     Internal::check_representable(t, y);
     return std::move(x) << Internal::make_const(t, y);
 }
 
 Expr operator>>(Expr x, Expr y) {
-    Expr unsigned_amount = lossless_cast(UInt(x.type().bits(), y.type().lanes()), y);
-    user_assert(unsigned_amount.defined())
-        << "In shift right expression:\n"
-        << "   (" << x << ") >> (" << y << ")\n"
-        << "   with types " << x.type() << " >> " << y.type() << "\n"
-        << "the RHS must be unsigned and losslessly castable to the same size as the LHS.\n";
     if (y.type().is_vector() && !x.type().is_vector()) {
         x = Internal::Broadcast::make(x, y.type().lanes());
     }
+    match_bits(x, y);
     Type t = x.type();
-    return Internal::Call::make(t, Internal::Call::shift_right, {std::move(x), std::move(unsigned_amount)}, Internal::Call::PureIntrinsic);
+    return Internal::Call::make(t, Internal::Call::shift_right, {std::move(x), std::move(y)}, Internal::Call::PureIntrinsic);
 }
 
 Expr operator>>(Expr x, int y) {
-    Type t = UInt(x.type().bits(), x.type().lanes());
+    Type t = Int(x.type().bits(), x.type().lanes());
     Internal::check_representable(t, y);
     return std::move(x) >> Internal::make_const(t, y);
 }
@@ -2161,3 +2172,4 @@ Expr undef(Type t) {
 }
 
 }  // namespace Halide
+
