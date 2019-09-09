@@ -1100,6 +1100,12 @@ struct LoopNest {
                         bytes_loaded += footprint;
                         lines_loaded += line_footprint;
                     }
+
+                    // We compute (but never use) these; computing them is cheap,
+                    // so let's leave in for future reference, but mark as 'ignore me'
+                    // to avoid clang-tidy warnings.
+                    (void) compute_line_footprint;
+                    (void) task_line_footprint;
                 }
             }
         }
@@ -2992,7 +2998,7 @@ IntrusivePtr<State> optimal_schedule_pass(FunctionDAG &dag,
         q.swap(pending);
 
         if (pending.empty()) {
-            if (false && beam_size < 1000) {
+            if ((false) && beam_size < 1000) {  // Intentional dead code. Extra parens to pacify clang-tidy.
                 // Total mortality. Double the beam size and
                 // restart. Disabled for now because total mortality
                 // may indicate a bug.
