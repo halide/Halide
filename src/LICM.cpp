@@ -95,6 +95,7 @@ class LiftLoopInvariants : public IRMutator {
             result = op->body;
         } while ((op = result.template as<T>()));
 
+        internal_assert(result.defined());
         result = mutate(result);
 
         for (auto it = frames.rbegin(); it != frames.rend(); it++) {
