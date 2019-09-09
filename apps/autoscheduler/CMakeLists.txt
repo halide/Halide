@@ -23,17 +23,12 @@ set_target_properties(retrain_cost_model_process
 
 set(COST_MODEL_GENERATOR_FILES cost_model_generator.cpp)
 halide_generator(cost_model.generator SRCS ${COST_MODEL_GENERATOR_FILES})
-halide_generator(train_cost_model.generator SRCS ${COST_MODEL_GENERATOR_FILES})
 halide_library_from_generator(cost_model
-                              FUNCTION_NAME
-                              cost_model
-                              GENERATOR
-                              cost_model.generator)
+                              FUNCTION_NAME cost_model
+                              GENERATOR cost_model.generator)
 halide_library_from_generator(train_cost_model
-                              FUNCTION_NAME
-                              train_cost_model
-                              GENERATOR
-                              train_cost_model.generator)
+                              FUNCTION_NAME train_cost_model
+                              GENERATOR cost_model.generator)
 target_include_directories(retrain_cost_model_process
                            PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/../support)
 target_link_libraries(retrain_cost_model_process
@@ -61,7 +56,7 @@ endif()
 
 if(NOT MSVC)
   set_target_properties(auto_schedule PROPERTIES LINK_FLAGS "-rdynamic")
-elseif(CMAKE_CXX_COMPILER_ID STREQUAL Clang)
+elseif(APPLE)
   set_target_properties(auto_schedule
                         PROPERTIES LINK_FLAGS "-undefined dynamic_lookup")
 endif()
@@ -79,17 +74,10 @@ install(TARGETS auto_schedule LIBRARY DESTINATION bin)
 
 # =======================================================
 
-# demo_apps_autoscheduler
-halide_generator(demo.generator SRCS demo_generator.cpp)
-halide_library_from_generator(demo
-                              FUNCTION_NAME
-                              demo
-                              GENERATOR
-                              demo.generator
-                              GENERATOR_ARGS
-                              auto_schedule=true
-                              -p
-                              $<TARGET_FILE:auto_schedule>)
+halide_library(demo
+               SRCS demo_generator.cpp
+               FUNCTION_NAME demo
+               GENERATOR_ARGS auto_schedule=true -p $<TARGET_FILE:auto_schedule>)
 add_dependencies(demo auto_schedule)
 
 _halide_genfiles_dir(demo GENFILES_DIR)
@@ -113,18 +101,10 @@ add_custom_command(TARGET demo_apps_autoscheduler POST_BUILD
 
 # =======================================================
 
-# included_schedule_file
-halide_generator(included_schedule_file.generator SRCS
-                 included_schedule_file_generator.cpp)
-halide_library_from_generator(included_schedule_file
-                              FUNCTION_NAME
-                              included_schedule_file
-                              GENERATOR
-                              included_schedule_file.generator
-                              GENERATOR_ARGS
-                              auto_schedule=true
-                              -p
-                              $<TARGET_FILE:auto_schedule>)
+halide_library(included_schedule_file
+               SRCS included_schedule_file_generator.cpp
+               FUNCTION_NAME included_schedule_file
+               GENERATOR_ARGS auto_schedule=true -p $<TARGET_FILE:auto_schedule>)
 add_dependencies(included_schedule_file auto_schedule)
 
 _halide_genfiles_dir(included_schedule_file GENFILES_DIR)
