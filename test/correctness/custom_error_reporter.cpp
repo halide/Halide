@@ -41,7 +41,8 @@ public:
         errors_occurred++;
 
         if (warnings_occurred != 1 || errors_occurred != 1 || evaluated != 1) {
-            printf("There should have been 1 warning and 1 error and 1 evaluated assertion argument\n");
+            printf("There should have been 1 warning and 1 error and 1 evaluated assertion argument %d %d %d\n",
+                warnings_occurred, errors_occurred, evaluated);
             exit(-1);
         }
 
@@ -60,7 +61,7 @@ int main(int argc, char **argv) {
     MyCustomErrorReporter reporter;
     set_custom_compile_time_error_reporter(&reporter);
 
-    Halide::Internal::ErrorReport("", 0, nullptr, Halide::Internal::ErrorReport::User | Halide::Internal::ErrorReport::Warning) << "Here is a warning.";
+    user_warning << "Here is a warning.";
 
     // This call should not return.
     _halide_user_assert(argc == 0) << should_be_evaluated();
