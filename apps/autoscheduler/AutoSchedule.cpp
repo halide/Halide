@@ -1255,8 +1255,7 @@ struct LoopNest {
     // Recursively print a loop nest representation to stderr
     void dump(string prefix, const LoopNest *parent) const {
         if (!is_root()) {
-            // code elsewhere in this clause assumes that non-root
-            // LoopNests have a parent
+            // Non-root nodes always have parents.
             internal_assert(parent != nullptr);
 
             aslog(0) << prefix << node->func.name();
@@ -1641,7 +1640,7 @@ struct LoopNest {
         }
 
         if (tileable) {
-            // Code elsewhere in this clause assumes we have a parent if we are tileable
+            // The root node is not tileable, so all tileable nodes have parents.
             internal_assert(parent != nullptr);
 
             // Generate a list of tile sizes to try
@@ -1882,7 +1881,7 @@ struct LoopNest {
                 }
             }
         } else {
-            // Code elsewhere in this clause assumes we have a parent if we are non-root
+            // Non-root nodes always have parents.
             internal_assert(parent != nullptr);
 
             if (parent->node != node) {
