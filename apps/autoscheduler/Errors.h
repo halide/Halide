@@ -8,7 +8,7 @@
 #endif
 
 #ifndef user_warning
-#define user_warning              Halide::Internal::ErrorReport(__FILE__, __LINE__, nullptr, Halide::Internal::ErrorReport::User | Halide::Internal::ErrorReport::Warning)
+#define user_warning              Halide::Internal::WarningReport(__FILE__, __LINE__, nullptr, Halide::Internal::ErrorReport::User)
 #endif
 
 #ifndef user_assert

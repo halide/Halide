@@ -15,7 +15,7 @@ namespace {
 
 CompileTimeErrorReporter* custom_error_reporter = nullptr;
 
-void error_abort() {
+[[ noreturn ]] void error_abort() {
 #ifdef _MSC_VER
     const std::string s = Internal::get_env_variable("HL_DISABLE_WINDOWS_ABORT_DIALOG");
     const int disable = !s.empty() ? atoi(s.c_str()) : 0;
@@ -67,9 +67,8 @@ namespace {
 CompileError _compile_error("");
 RuntimeError _runtime_error("");
 InternalError _internal_error("");
-}  // namespace
 
-ErrorReport::ErrorReport(const char *file, int line, const char *condition_string, int flags) : flags(flags) {
+void build_error_message(std::ostringstream &msg, const char *file, int line, const char *condition_string, int flags) {
     // Note that we deliberately try to put the entire message into a single line
     // (aside from newlines inserted by user code) to make it easy to filter
     // specific warnings or messages via (e.g.) grep.... unless we are likely to be
@@ -82,8 +81,8 @@ ErrorReport::ErrorReport(const char *file, int line, const char *condition_strin
     const char sep = use_newlines ? '\n' : ' ';
 
     const std::string &source_loc = Introspection::get_source_location();
-    const char *what = (flags & Warning) ? "Warning" : "Error";
-    if (flags & User) {
+    const char *what = (flags & WarningReport::Warning) ? "Warning" : "Error";
+    if (flags & ErrorReport::User) {
         // Only mention where inside of libHalide the error tripped if we have debug level > 0
         debug(1) << "User error triggered at " << file << ":" << line << "\n";
         if (condition_string) {
@@ -106,55 +105,70 @@ ErrorReport::ErrorReport(const char *file, int line, const char *condition_strin
     }
 }
 
+std::string end_with_newline(const std::ostringstream &msg) {
+    std::string s = msg.str();
+    if (!s.empty() && s.back() != '\n') {
+        s += '\n';
+    }
+    return s;
+}
+
+
+}  // namespace
+
+
+ErrorReport::ErrorReport(const char *file, int line, const char *condition_string, int flags) : flags(flags) {
+    build_error_message(msg, file, line, condition_string, flags);
+}
+
 ErrorReport::~ErrorReport()
-#if __cplusplus >= 201100 || _MSC_VER >= 1900
+#if (__cplusplus >= 201100 || _MSC_VER >= 1900) && defined(WITH_EXCEPTIONS)
     noexcept(false)
 #endif
 {
-    if (!msg.str().empty() && msg.str().back() != '\n') {
-        msg << '\n';
-    }
+    std::string s = end_with_newline(msg);
 
     if (custom_error_reporter != nullptr) {
-        if (flags & Warning) {
-            custom_error_reporter->warning(msg.str().c_str());
-            return;
-        } else {
-            custom_error_reporter->error(msg.str().c_str());
-            // error() should not have returned to us, but just in case
-            // it does, make sure we don't continue.
-            error_abort();
-        }
-    }
-
-    // TODO: Add an option to error out on warnings too
-    if (flags & Warning) {
-        std::cerr << msg.str();
-        return;
-    }
-
-#ifdef WITH_EXCEPTIONS
-    if (std::uncaught_exception()) {
-        // This should never happen - evaluating one of the arguments
-        // to the error message would have to throw an
-        // exception. Nonetheless, in case it does, preserve the
-        // exception already in flight and suppress this one.
-        return;
-    } else if (flags & Runtime) {
-        RuntimeError err(msg.str());
-        throw err;
-    } else if (flags & User) {
-        CompileError err(msg.str());
-        throw err;
+        custom_error_reporter->error(s.c_str());
     } else {
-        InternalError err(msg.str());
-        throw err;
-    }
+#ifdef WITH_EXCEPTIONS
+        if (std::uncaught_exception()) {
+            // This should never happen - evaluating one of the arguments
+            // to the error message would have to throw an
+            // exception. Nonetheless, in case it does, preserve the
+            // exception already in flight and suppress this one.
+            return;
+        } else if (flags & Runtime) {
+            RuntimeError err(s);
+            throw err;
+        } else if (flags & User) {
+            CompileError err(s);
+            throw err;
+        } else {
+            InternalError err(s);
+            throw err;
+        }
 #else
-    std::cerr << msg.str();
-    error_abort();
+        std::cerr << s;
 #endif
+    }
+    error_abort();
 }
+
+WarningReport::WarningReport(const char *file, int line, const char *condition_string, int flags) : flags(flags) {
+    build_error_message(msg, file, line, condition_string, flags | Halide::Internal::WarningReport::Warning);
+}
+
+WarningReport::~WarningReport() {
+    std::string s = end_with_newline(msg);
+
+    if (custom_error_reporter != nullptr) {
+        custom_error_reporter->warning(s.c_str());
+    } else {
+        std::cerr << s;
+    }
+}
+
 }  // namespace Internal
 
 }  // namespace Halide
