@@ -9,7 +9,7 @@ import time, sys
 import halide as hl
 
 from datetime import datetime
-from scipy.misc import imread, imsave
+from imageio import imread, imsave
 import numpy as np
 import os.path
 
