@@ -69,7 +69,7 @@ namespace Internal {
 struct ErrorReport {
     enum {
         User = 0x0001,
-        Warning = 0x0002,
+        Warningx = 0x0002,
         Runtime = 0x0004
     };
 

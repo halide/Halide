@@ -81,7 +81,7 @@ void build_error_message(std::ostringstream &msg, const char *file, int line, co
     const char sep = use_newlines ? '\n' : ' ';
 
     const std::string &source_loc = Introspection::get_source_location();
-    const char *what = (flags & ErrorReport::Warning) ? "Warning" : "Error";
+    const char *what = (flags & ErrorReport::Warningx) ? "Warning" : "Error";
     if (flags & ErrorReport::User) {
         // Only mention where inside of libHalide the error tripped if we have debug level > 0
         debug(1) << "User error triggered at " << file << ":" << line << "\n";
@@ -105,10 +105,12 @@ void build_error_message(std::ostringstream &msg, const char *file, int line, co
     }
 }
 
-void end_with_newline(std::ostringstream &msg) {
-    if (!msg.str().empty() && msg.str().back() != '\n') {
-        msg << '\n';
+std::string end_with_newline(const std::ostringstream &msg) {
+    std::string s = msg.str();
+    if (!s.empty() && s.back() != '\n') {
+        s += '\n';
     }
+    return s;
 }
 
 
@@ -124,9 +126,10 @@ ErrorReport::~ErrorReport()
     noexcept(false)
 #endif
 {
-    end_with_newline(msg);
+    std::string s = end_with_newline(msg);
+
     if (custom_error_reporter != nullptr) {
-        custom_error_reporter->error(msg.str().c_str());
+        custom_error_reporter->error(s.c_str());
     } else {
 #ifdef WITH_EXCEPTIONS
         if (std::uncaught_exception()) {
@@ -136,32 +139,33 @@ ErrorReport::~ErrorReport()
             // exception already in flight and suppress this one.
             return;
         } else if (flags & Runtime) {
-            RuntimeError err(msg.str());
+            RuntimeError err(s);
             throw err;
         } else if (flags & User) {
-            CompileError err(msg.str());
+            CompileError err(s);
             throw err;
         } else {
-            InternalError err(msg.str());
+            InternalError err(s);
             throw err;
         }
 #else
-        std::cerr << msg.str();
+        std::cerr << s;
 #endif
     }
     error_abort();
 }
 
 WarningReport::WarningReport(const char *file, int line, const char *condition_string, int flags) : flags(flags) {
-    build_error_message(msg, file, line, condition_string, flags | Halide::Internal::ErrorReport::Warning);
+    build_error_message(msg, file, line, condition_string, flags | Halide::Internal::ErrorReport::Warningx);
 }
 
 WarningReport::~WarningReport() {
-    end_with_newline(msg);
+    std::string s = end_with_newline(msg);
+
     if (custom_error_reporter != nullptr) {
-        custom_error_reporter->warning(msg.str().c_str());
+        custom_error_reporter->warning(s.c_str());
     } else {
-        std::cerr << msg.str();
+        std::cerr << s;
     }
 }
 
