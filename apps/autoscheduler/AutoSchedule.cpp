@@ -1255,6 +1255,10 @@ struct LoopNest {
     // Recursively print a loop nest representation to stderr
     void dump(string prefix, const LoopNest *parent) const {
         if (!is_root()) {
+            // code elsewhere in this clause assumes that non-root
+            // LoopNests have a parent
+            internal_assert(parent != nullptr);
+
             aslog(0) << prefix << node->func.name();
             prefix += " ";
 
@@ -1637,6 +1641,9 @@ struct LoopNest {
         }
 
         if (tileable) {
+            // Code elsewhere in this clause assumes we have a parent if we are tileable
+            internal_assert(parent != nullptr);
+
             // Generate a list of tile sizes to try
             auto tilings = generate_tilings(size, (int)(size.size() - 1), 2, !in_realization);
 
@@ -1875,7 +1882,10 @@ struct LoopNest {
                 }
             }
         } else {
-            if (parent && parent->node != node) {
+            // Code elsewhere in this clause assumes we have a parent if we are non-root
+            internal_assert(parent != nullptr);
+
+            if (parent->node != node) {
                 compute_site = this;
             }
 
@@ -3240,6 +3250,7 @@ void generate_schedule(const std::vector<Function> &outputs,
     // just have the one, but it's an abstract interface, so others
     // can be slotted in for experimentation.
     std::unique_ptr<CostModel> cost_model = make_default_cost_model(weights_in_path, weights_out_path, randomize_weights);
+    internal_assert(cost_model != nullptr);
 
     IntrusivePtr<State> optimal;
 
