@@ -23,12 +23,13 @@ set_target_properties(retrain_cost_model_process
 
 set(COST_MODEL_GENERATOR_FILES cost_model_generator.cpp)
 halide_generator(cost_model.generator SRCS ${COST_MODEL_GENERATOR_FILES})
+halide_generator(train_cost_model.generator SRCS ${COST_MODEL_GENERATOR_FILES})
 halide_library_from_generator(cost_model
                               FUNCTION_NAME cost_model
                               GENERATOR cost_model.generator)
 halide_library_from_generator(train_cost_model
                               FUNCTION_NAME train_cost_model
-                              GENERATOR cost_model.generator)
+                              GENERATOR train_cost_model.generator)
 target_include_directories(retrain_cost_model_process
                            PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/../support)
 target_link_libraries(retrain_cost_model_process
