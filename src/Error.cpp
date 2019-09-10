@@ -121,6 +121,13 @@ ErrorReport::ErrorReport(const char *file, int line, const char *condition_strin
     build_error_message(msg, file, line, condition_string, flags);
 }
 
+// Despite the fact that we marked this as [[noreturn]],
+// MSVC sees fit to warn us that it never returns (and we upgrade the
+// warning to an error). So disable it.
+#ifdef _MSC_VER
+#pragma warning(disable:4722)  // destructor never returns, potential memory leak
+#endif
+
 ErrorReport::~ErrorReport()
 #ifdef WITH_EXCEPTIONS
     noexcept(false)
@@ -135,7 +142,7 @@ ErrorReport::~ErrorReport()
 #ifdef WITH_EXCEPTIONS
         if (std::uncaught_exception()) {
             // This should never happen - evaluating one of the arguments
-            // to the error message would have to throw an exception. 
+            // to the error message would have to throw an exception.
             // Since we are declared 'noreturn', we can't return here and defer
             // to the exception in flight -- all we can do is abort.
             error_abort();
