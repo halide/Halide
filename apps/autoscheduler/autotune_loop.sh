@@ -79,7 +79,7 @@ done
 # benchmarked serially.
 BATCH_SIZE=32
 NUM_CORES=80
-EPOCHS=${BATCH_SIZE}
+EPOCHS=100
 
 if [[ $TRAIN_ONLY != 1 ]]; then
   get_timeout_cmd TIMEOUT_CMD
@@ -117,7 +117,7 @@ make_sample() {
         beam=32
     else
         # The other samples are random probes biased by the cost model
-        dropout=5  # 5% chance of operating entirely greedily
+        dropout=1  # 1% chance of operating entirely greedily
         beam=1
     fi
 
