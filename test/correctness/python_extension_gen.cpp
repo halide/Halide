@@ -40,7 +40,7 @@ int main(int argc, char **argv) {
     Target t = get_target_from_environment();
     t.set_feature(Target::CPlusPlusMangling);
 
-    std::string pyext_filename = Internal::get_test_tmp_dir() + "halide_python.py.c";
+    std::string pyext_filename = Internal::get_test_tmp_dir() + "halide_python.py.cpp";
     std::string header_filename = Internal::get_test_tmp_dir() + "halide_python.h";
     std::string c_filename = Internal::get_test_tmp_dir() + "halide_python.cc";
 
