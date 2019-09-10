@@ -129,24 +129,22 @@ ErrorReport::~ErrorReport()
     std::string s = end_with_newline(msg);
 
     if (custom_error_reporter != nullptr) {
+
         custom_error_reporter->error(s.c_str());
     } else {
 #ifdef WITH_EXCEPTIONS
         if (std::uncaught_exception()) {
             // This should never happen - evaluating one of the arguments
-            // to the error message would have to throw an
-            // exception. Nonetheless, in case it does, preserve the
-            // exception already in flight and suppress this one.
-            return;
+            // to the error message would have to throw an exception. 
+            // Since we are declared 'noreturn', we can't return here and defer
+            // to the exception in flight -- all we can do is abort.
+            error_abort();
         } else if (flags & Runtime) {
-            RuntimeError err(s);
-            throw err;
+            throw RuntimeError(s);
         } else if (flags & User) {
-            CompileError err(s);
-            throw err;
+            throw CompileError(s);
         } else {
-            InternalError err(s);
-            throw err;
+            throw InternalError(s);
         }
 #else
         std::cerr << s;
