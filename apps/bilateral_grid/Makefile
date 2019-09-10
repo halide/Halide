@@ -77,14 +77,21 @@ $(BIN)/viz_auto.mp4: $(BIN)/filter_viz ../support/viz_auto.sh ../../bin/HalideTr
 viz_auto: $(BIN)/viz_auto.mp4
 	$(HL_VIDEOPLAYER) $^
 
+BATCH_ID ?= 0
+TRAIN_ONLY ?= 0
+SAMPLES_DIR ?= autotuned_samples
 autotune: $(BIN)/bilateral_grid.generator $(AUTOSCHED_BIN)/augment_sample $(AUTOSCHED_BIN)/train_cost_model $(AUTOSCHED_BIN)/libauto_schedule.so $(AUTOSCHED_SRC)/autotune_loop.sh
-	HL_PERMIT_FAILED_UNROLL=1 \
+	HL_TARGET=host-cuda \
+	HL_MACHINE_PARAMS=80,1,1 \
+	SAMPLES_DIR=$(SAMPLES_DIR) \
 	HL_WEIGHTS_DIR=$(AUTOSCHED_SRC)/gpu_weights \
-	HL_DEBUG_CODEGEN=1 \
+	HL_DEBUG_CODEGEN=0 \
 	HL_SHARED_MEMORY_LIMIT=48 \
 	bash $(AUTOSCHED_SRC)/autotune_loop.sh \
 		$(BIN)/bilateral_grid.generator \
 		bilateral_grid \
-		$(HL_TARGET) \
+		host-cuda \
 		$(AUTOSCHED_SRC)/gpu_weights \
-		$(AUTOSCHED_BIN)
+		$(AUTOSCHED_BIN) \
+		$(BATCH_ID) \
+		$(TRAIN_ONLY)
