@@ -136,7 +136,6 @@ ErrorReport::~ErrorReport()
     std::string s = end_with_newline(msg);
 
     if (custom_error_reporter != nullptr) {
-
         custom_error_reporter->error(s.c_str());
     } else {
 #ifdef WITH_EXCEPTIONS
