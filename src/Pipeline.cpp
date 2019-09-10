@@ -258,7 +258,7 @@ void Pipeline::compile_to_c(const string &filename,
                             const string &fn_name,
                             const Target &target) {
     Module m = compile_to_module(args, fn_name, target);
-    m.compile(Outputs().c_source(output_name(filename, m, ".c")));
+    m.compile(Outputs().c_source(output_name(filename, m, ".halide_generated.cpp")));
 }
 
 void Pipeline::compile_to_python_extension(const string &filename,
