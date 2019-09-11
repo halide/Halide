@@ -30,10 +30,10 @@ halide_library_from_generator(cost_model
 halide_library_from_generator(train_cost_model
                               FUNCTION_NAME train_cost_model
                               GENERATOR train_cost_model.generator)
-if(MSVC AND (CMAKE_SIZEOF_VOID_P EQUAL 4))
-  set_target_properties(retrain_cost_model_process
-                        PROPERTIES LINK_FLAGS "/FORCE:MULTIPLE")
-endif()
+# if(MSVC AND (CMAKE_SIZEOF_VOID_P EQUAL 4))
+#   set_target_properties(retrain_cost_model_process
+#                         PROPERTIES LINK_FLAGS "/FORCE:MULTIPLE")
+# endif()
 target_include_directories(retrain_cost_model_process
                            PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/../support)
 target_link_libraries(retrain_cost_model_process
@@ -59,10 +59,11 @@ else()
                         PRIVATE cost_model train_cost_model Halide)
 endif()
 
-if(MSVC AND (CMAKE_SIZEOF_VOID_P EQUAL 4))
-  set_target_properties(auto_schedule
-                        PROPERTIES LINK_FLAGS "/FORCE:MULTIPLE")
-elseif(NOT MSVC)
+# if(MSVC AND (CMAKE_SIZEOF_VOID_P EQUAL 4))
+#   set_target_properties(auto_schedule
+#                         PROPERTIES LINK_FLAGS "/FORCE:MULTIPLE")
+# else
+if(NOT MSVC)
   set_target_properties(auto_schedule PROPERTIES LINK_FLAGS "-rdynamic")
 elseif(APPLE)
   set_target_properties(auto_schedule
