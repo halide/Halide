@@ -14,7 +14,7 @@ $(BIN)/%/pipeline_native.a: $(GENERATOR_BIN)/pipeline.generator
 	@mkdir -p $(@D)
 	$^ -g pipeline -o $(@D) -f pipeline_native -e $(GENERATOR_OUTPUTS) target=$*
 
-$(BIN)/%/pipeline_c.cpp: $(GENERATOR_BIN)/pipeline.generator
+$(BIN)/%/pipeline_c.halide_generated.cpp: $(GENERATOR_BIN)/pipeline.generator
 	@mkdir -p $(@D)
 	$^ -g pipeline -o $(@D) -f pipeline_c -e cpp,h target=$*
 
