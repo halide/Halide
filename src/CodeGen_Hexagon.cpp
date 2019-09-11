@@ -1690,9 +1690,7 @@ void CodeGen_Hexagon::visit(const Call *op) {
     };
 
     if (is_native_interleave(op) || is_native_deinterleave(op)) {
-        user_assert(op->type.lanes() % (native_vector_bits() * 2 / op->type.bits()) == 0)
-            << "Interleave or deinterleave will result in miscompilation, "
-            << "see https://github.com/halide/Halide/issues/1582\n" << Expr(op) << "\n";
+        internal_assert(op->type.lanes() % (native_vector_bits() * 2 / op->type.bits()) == 0);
     }
 
     if (starts_with(op->name, "halide.hexagon.")) {
@@ -1712,10 +1710,13 @@ void CodeGen_Hexagon::visit(const Call *op) {
             if (value) return;
         } else if (op->is_intrinsic(Call::shift_left) ||
                    op->is_intrinsic(Call::shift_right)) {
-
             internal_assert(op->args.size() == 2);
             string instr = op->is_intrinsic(Call::shift_left) ? "halide.hexagon.shl" : "halide.hexagon.shr";
             Expr b = maybe_scalar(op->args[1]);
+            if (b.type().is_int()) {
+                CodeGen_Posix::visit(op);
+                return;
+            }
             internal_assert(b.type().is_uint());
             value = call_intrin(op->type,
                                 instr + type_suffix(op->args[0], b),

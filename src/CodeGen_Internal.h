@@ -84,6 +84,13 @@ Expr lower_euclidean_div(Expr a, Expr b);
 Expr lower_euclidean_mod(Expr a, Expr b);
 ///@}
 
+/** Given a Halide shift operation with a signed shift amount (may be negative), define
+ * an equivalent expression using only shifts by unsigned amounts. */
+///@{
+Expr lower_signed_shift_left(Expr a, Expr b);
+Expr lower_signed_shift_right(Expr a, Expr b);
+///@}
+
 /** Replace predicated loads/stores with unpredicated equivalents
  * inside branches. */
 Stmt unpredicate_loads_stores(Stmt s);
@@ -110,3 +117,4 @@ void embed_bitcode(llvm::Module *M, const std::string &halide_command);
 }  // namespace Halide
 
 #endif
+

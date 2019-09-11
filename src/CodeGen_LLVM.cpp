@@ -1207,12 +1207,11 @@ void CodeGen_LLVM::optimize_module() {
     const bool do_loop_opt = !get_target().has_feature(Target::DisableLLVMLoopOpt) ||
                               get_target().has_feature(Target::EnableLLVMLoopOpt);
 
-// Temporarily disabled, see https://github.com/halide/Halide/issues/3957
-// #if LLVM_VERSION >= 90
-#if 0
+#if LLVM_VERSION >= 90
     PipelineTuningOptions pto;
     pto.LoopInterleaving = do_loop_opt;
     pto.LoopVectorization = do_loop_opt;
+    pto.SLPVectorization = true;  // Note: SLP vectorization has no analogue in the Halide scheduling model
     pto.LoopUnrolling = do_loop_opt;
     // Clear ScEv info for all loops. Certain Halide applications spend a very
     // long time compiling in forgetLoop, and prefer to forget everything
@@ -2546,21 +2545,25 @@ void CodeGen_LLVM::visit(const Call *op) {
         }
     } else if (op->is_intrinsic(Call::shift_left)) {
         internal_assert(op->args.size() == 2);
-        internal_assert(op->args[0].type().bits() == op->args[1].type().bits());
         Value *a = codegen(op->args[0]);
         Value *b = codegen(op->args[1]);
-        internal_assert(a->getType() == b->getType()) << "LLVM type mismatch on (" << op->args[0] << ") << (" << op->args[1] << ").\n";
-        value = builder->CreateShl(a, b);
+        if (op->args[1].type().is_uint()) {
+            value = builder->CreateShl(a, b);
+        } else {
+            value = codegen(lower_signed_shift_left(op->args[0], op->args[1]));
+        }
     } else if (op->is_intrinsic(Call::shift_right)) {
         internal_assert(op->args.size() == 2);
-        internal_assert(op->args[0].type().bits() == op->args[1].type().bits());
         Value *a = codegen(op->args[0]);
         Value *b = codegen(op->args[1]);
-        internal_assert(a->getType() == b->getType()) << "LLVM type mismatch on (" << op->args[0] << ") >> (" << op->args[1] << ").\n";
-        if (op->type.is_int()) {
-            value = builder->CreateAShr(a, b);
+        if (op->args[1].type().is_uint()) {
+            if (op->type.is_int()) {
+                value = builder->CreateAShr(a, b);
+            } else {
+                value = builder->CreateLShr(a, b);
+            }
         } else {
-            value = builder->CreateLShr(a, b);
+            value = codegen(lower_signed_shift_right(op->args[0], op->args[1]));
         }
     } else if (op->is_intrinsic(Call::abs)) {
 
@@ -4350,3 +4353,4 @@ bool CodeGen_LLVM::use_pic() const {
 
 }  // namespace Internal
 }  // namespace Halide
+
