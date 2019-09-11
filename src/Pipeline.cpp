@@ -266,7 +266,14 @@ void Pipeline::compile_to_python_extension(const string &filename,
                                            const string &fn_name,
                                            const Target &target) {
     Module m = compile_to_module(args, fn_name, target);
-    m.compile(Outputs().python_extension(output_name(filename, m, ".py.c")));
+    // Note that we deliberately default to ".py.cpp" (rather than .py.c) here;
+    // in theory, the Python extension file we generate can be compiled just
+    // fine as a plain-C file... but if we are building with cpp-name-mangling
+    // enabled in the target, we will include generated .h files that can't be compiled.
+    // We really don't want to vary the file extensions based on target flags,
+    // and in practice, it's extremely unlikely that anyone needs to rely on this
+    // being pure C output (vs possibly C++).
+    m.compile(Outputs().python_extension(output_name(filename, m, ".py.cpp")));
 }
 
 void Pipeline::print_loop_nest() {
