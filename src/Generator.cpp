@@ -1022,7 +1022,7 @@ int generate_filter_main_inner(int argc, char **argv, std::ostream &cerr) {
         if (emit_options.emit_cpp_stub) {
             // When generating cpp_stub, we ignore all generator args passed in, and supply a fake Target.
             auto gen = GeneratorRegistry::create(generator_name, GeneratorContext(Target()));
-            auto stub_file_path = base_path + get_extension(".stub.h", emit_options);
+            auto stub_file_path = base_path + ".stub.h";
             gen->emit_cpp_stub(stub_file_path);
         }
 
