@@ -156,8 +156,8 @@ function(halide_library_from_generator BASENAME)
 
   set(OUTPUTS static_library h registration)
   foreach(E ${args_EXTRA_OUTPUTS})
-    if("${E}" STREQUAL "cpp")
-      message(FATAL_ERROR "halide_library('${BASENAME}') doesn't support 'cpp' in EXTRA_OUTPUTS; please depend on '${BASENAME}_cc' instead.")
+    if("${E}" STREQUAL "c_source")
+      message(FATAL_ERROR "halide_library('${BASENAME}') doesn't support 'c_source' in EXTRA_OUTPUTS; please depend on '${BASENAME}_cc' instead.")
     endif()
     if("${E}" STREQUAL "cpp_stub")
       message(FATAL_ERROR "halide_library('${BASENAME}') doesn't support 'cpp_stub' in EXTRA_OUTPUTS; please depend on '${BASENAME}.generator' instead.")
@@ -240,7 +240,7 @@ function(halide_library_from_generator BASENAME)
   # A separate invocation for the generated .cpp file,
   # since it's rarely used, and some code will fail at Generation
   # time at present (e.g. code with predicated loads or stores).
-  set(ARGS_WITH_OUTPUTS "-e" "cpp" ${GENERATOR_EXEC_ARGS})
+  set(ARGS_WITH_OUTPUTS "-e" "c_source" ${GENERATOR_EXEC_ARGS})
   _halide_add_exec_generator_target(
     "${BASENAME}_cc_gen"
     GENERATOR_BINARY "${args_GENERATOR}_binary"

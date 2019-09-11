@@ -7,12 +7,14 @@
  */
 
 #include <functional>
+#include <map>
+#include <set>
+#include <string>
 
 #include "Argument.h"
 #include "ExternalCode.h"
 #include "IR.h"
 #include "ModulusRemainder.h"
-#include "Outputs.h"
 #include "Target.h"
 
 namespace Halide {
@@ -26,6 +28,8 @@ enum class LinkageType {
 };
 
 namespace Internal {
+
+std::map<std::string, std::string> get_output_extensions(const Target &target);
 
 /** Definition of an argument to a LoweredFunc. This is similar to
  * Argument, except it enables passing extra information useful to
@@ -125,7 +129,7 @@ public:
 
     /** Compile a halide Module to variety of outputs, depending on
      * the fields set in output_files. */
-    void compile(const Outputs &output_files_arg) const;
+    void compile(const std::map<std::string, std::string> &output_files) const;
 
     /** Compile a halide Module to in-memory object code. Currently
      * only supports LLVM based compilation, but should be extended to
@@ -162,18 +166,18 @@ void compile_standalone_runtime(const std::string &object_filename, Target t);
 /** Create an object and/or static library file containing the Halide runtime
  * for a given target. For use with Target::NoRuntime. Standalone runtimes are
  * only compatible with pipelines compiled by the same build of Halide used to
- * call this function. Return an Outputs with just the actual outputs filled in
- * (typically, object_name and/or static_library_name).
+ * call this function. Return a map with just the actual outputs filled in
+ * (typically, "object" and/or "static_library").
  */
-Outputs compile_standalone_runtime(const Outputs &output_files, Target t);
+std::map<std::string, std::string> compile_standalone_runtime(const std::map<std::string, std::string> &output_files, Target t);
 
 typedef std::function<Module(const std::string &, const Target &)> ModuleProducer;
 
 void compile_multitarget(const std::string &fn_name,
-                         const Outputs &output_files,
+                         const std::map<std::string, std::string> &output_files,
                          const std::vector<Target> &targets,
-                         ModuleProducer module_producer,
-                         const std::map<std::string, std::string> &suffixes = {});
+                         ModuleProducer module_producer);
+
 
 }  // namespace Halide
 
