@@ -1562,7 +1562,7 @@ $(FILTERS_DIR)/external_code.a: $(BIN_DIR)/external_code.generator
 	@mkdir -p $(@D)
 	$(CURDIR)/$< -g external_code -e static_library,h,registration -o $(CURDIR)/$(FILTERS_DIR) target=$(TARGET)-no_runtime external_code_is_bitcode=true
 
-$(FILTERS_DIR)/external_code.cpp: $(BIN_DIR)/external_code.generator
+$(FILTERS_DIR)/external_code.halide_generated.cpp: $(BIN_DIR)/external_code.generator
 	@mkdir -p $(@D)
 	$(CURDIR)/$< -g external_code -e cpp -o $(CURDIR)/$(FILTERS_DIR) target=$(TARGET)-no_runtime external_code_is_bitcode=false
 
