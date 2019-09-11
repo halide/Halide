@@ -1388,7 +1388,7 @@ $(FILTERS_DIR)/%.a: $(BIN_DIR)/%.generator
 $(FILTERS_DIR)/%.h: $(FILTERS_DIR)/%.a
 	@echo $@ produced implicitly by $^
 
-$(FILTERS_DIR)/%.cpp: $(FILTERS_DIR)/%.a
+$(FILTERS_DIR)/%.halide_generated.cpp: $(FILTERS_DIR)/%.a
 	@echo $@ produced implicitly by $^
 
 $(FILTERS_DIR)/%.registration.cpp: $(FILTERS_DIR)/%.a
