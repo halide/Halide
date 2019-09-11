@@ -76,10 +76,12 @@ void define_operators(py::module &m) {
     });
 
     m.def("tuple_select", [](py::args args) -> py::tuple {
-        _halide_user_assert(args.size() >= 3)
-            << "tuple_select() must have at least 3 arguments";
-        _halide_user_assert((args.size() % 2) != 0)
-            << "tuple_select() must have an odd number of arguments";
+        if (args.size() < 3) {
+            throw py::value_error("tuple_select() must have at least 3 arguments");
+        }
+        if ((args.size() % 2) == 0) {
+            throw py::value_error("tuple_select() must have an odd number of arguments");
+        }
 
         int pos = (int) args.size() - 1;
         Tuple false_value = args[pos--].cast<Tuple>();
@@ -104,8 +106,9 @@ void define_operators(py::module &m) {
                 false_value = tuple_select(tuple_cond, true_value, false_value);
             }
         }
-        _halide_user_assert(!(has_tuple_cond && has_expr_cond))
-            <<"tuple_select() may not mix Expr and Tuple for the condition elements.";
+        if (has_tuple_cond && has_expr_cond) {
+            throw py::value_error("tuple_select() may not mix Expr and Tuple for the condition elements.");
+        }
         return to_python_tuple(false_value);
     });
 
