@@ -123,13 +123,13 @@ target_features_bit=-no_runtime
 target_features_user_context=-user_context-legacy_buffer_wrappers-no_runtime
 
 # Make the generator generate a Python extension:
-$(BIN)/%.py.cpp $(BIN)/%.cpp $(BIN)/%.h: $(BIN)/%.gen
+$(BIN)/%.py.c $(BIN)/%.halide_generated.cpp $(BIN)/%.h: $(BIN)/%.gen
 	LD_LIBRARY_PATH=$(HALIDE_DISTRIB_PATH)/bin $< -e h,cpp,py.cpp \
 	    -g $(notdir $(basename $<)) -o $(BIN) \
 	    target=host$(target_features_$(notdir $(basename $<)))
 
 # Compile the generated Python extension(s):
-$(BIN)/%.o: $(BIN)/%.cpp
+$(BIN)/%.o: $(BIN)/%.halide_generated.cpp
 	$(CXX) -c $(FPIC) $(CCFLAGS) $^ -o $@
 $(BIN)/%.py.o: $(BIN)/%.py.cpp
 	$(CXX) -c $(FPIC) $(CCFLAGS) $^ -o $@

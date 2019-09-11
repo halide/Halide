@@ -1388,7 +1388,7 @@ $(FILTERS_DIR)/%.a: $(BIN_DIR)/%.generator
 $(FILTERS_DIR)/%.h: $(FILTERS_DIR)/%.a
 	@echo $@ produced implicitly by $^
 
-$(FILTERS_DIR)/%.cpp: $(FILTERS_DIR)/%.a
+$(FILTERS_DIR)/%.halide_generated.cpp: $(FILTERS_DIR)/%.a
 	@echo $@ produced implicitly by $^
 
 $(FILTERS_DIR)/%.registration.cpp: $(FILTERS_DIR)/%.a
@@ -1533,12 +1533,12 @@ $(BIN_DIR)/$(TARGET)/generator_aot_cxx_mangling_define_extern: $(FILTERS_DIR)/cx
 
 $(BIN_DIR)/$(TARGET)/generator_aotwasm_tiled_blur.js: $(FILTERS_DIR)/blur2x2.a
 
-$(BIN_DIR)/$(TARGET)/generator_aotcpp_tiled_blur: $(FILTERS_DIR)/blur2x2.cpp
+$(BIN_DIR)/$(TARGET)/generator_aotcpp_tiled_blur: $(FILTERS_DIR)/blur2x2.halide_generated.cpp
 ifneq ($(TEST_CUDA), )
-$(BIN_DIR)/$(TARGET)/generator_aotcpp_cxx_mangling: $(FILTERS_DIR)/cxx_mangling_gpu.cpp
+$(BIN_DIR)/$(TARGET)/generator_aotcpp_cxx_mangling: $(FILTERS_DIR)/cxx_mangling_gpu.halide_generated.cpp
 endif
 $(BIN_DIR)/$(TARGET)/generator_aotcpp_cxx_mangling: $(FILTERS_DIR)/cxx_mangling_externs.o
-$(BIN_DIR)/$(TARGET)/generator_aotcpp_cxx_mangling_define_extern: $(FILTERS_DIR)/cxx_mangling.cpp $(FILTERS_DIR)/cxx_mangling_externs.o $(FILTERS_DIR)/cxx_mangling_define_extern_externs.o
+$(BIN_DIR)/$(TARGET)/generator_aotcpp_cxx_mangling_define_extern: $(FILTERS_DIR)/cxx_mangling.halide_generated.cpp $(FILTERS_DIR)/cxx_mangling_externs.o $(FILTERS_DIR)/cxx_mangling_define_extern_externs.o
 
 $(BUILD_DIR)/stubuser_generator.o: $(FILTERS_DIR)/stubtest.stub.h $(FILTERS_DIR)/configure.stub.h
 $(BIN_DIR)/stubuser.generator: $(BUILD_DIR)/stubtest_generator.o $(BUILD_DIR)/configure_generator.o
@@ -1562,7 +1562,7 @@ $(FILTERS_DIR)/external_code.a: $(BIN_DIR)/external_code.generator
 	@mkdir -p $(@D)
 	$(CURDIR)/$< -g external_code -e static_library,h,registration -o $(CURDIR)/$(FILTERS_DIR) target=$(TARGET)-no_runtime external_code_is_bitcode=true
 
-$(FILTERS_DIR)/external_code.cpp: $(BIN_DIR)/external_code.generator
+$(FILTERS_DIR)/external_code.halide_generated.cpp: $(BIN_DIR)/external_code.generator
 	@mkdir -p $(@D)
 	$(CURDIR)/$< -g external_code -e cpp -o $(CURDIR)/$(FILTERS_DIR) target=$(TARGET)-no_runtime external_code_is_bitcode=false
 
@@ -1590,7 +1590,7 @@ $(BIN_DIR)/$(TARGET)/generator_aot_%: $(ROOT_DIR)/test/generator/%_aottest.cpp $
 	$(CXX) $(GEN_AOT_CXX_FLAGS) $(filter %.cpp %.o %.a,$^) $(GEN_AOT_INCLUDES) $(GEN_AOT_LD_FLAGS) -o $@
 
 # Also make AOT testing targets that depends on the .cpp output (rather than .a).
-$(BIN_DIR)/$(TARGET)/generator_aotcpp_%: $(ROOT_DIR)/test/generator/%_aottest.cpp $(FILTERS_DIR)/%.cpp $(FILTERS_DIR)/%.h $(RUNTIME_EXPORTED_INCLUDES) $(BIN_DIR)/$(TARGET)/runtime.a
+$(BIN_DIR)/$(TARGET)/generator_aotcpp_%: $(ROOT_DIR)/test/generator/%_aottest.cpp $(FILTERS_DIR)/%.halide_generated.cpp $(FILTERS_DIR)/%.h $(RUNTIME_EXPORTED_INCLUDES) $(BIN_DIR)/$(TARGET)/runtime.a
 	@mkdir -p $(@D)
 	$(CXX) $(GEN_AOT_CXX_FLAGS) $(filter %.cpp %.o %.a,$^) $(GEN_AOT_INCLUDES) $(GEN_AOT_LD_FLAGS) -o $@
 
@@ -1625,7 +1625,7 @@ $(BIN_DIR)/$(TARGET)/generator_aot_alias: $(ROOT_DIR)/test/generator/alias_aotte
 
 $(BIN_DIR)/$(TARGET)/generator_aotwasm_alias.js: $(FILTERS_DIR)/alias_with_offset_42.a
 
-$(BIN_DIR)/$(TARGET)/generator_aotcpp_alias: $(ROOT_DIR)/test/generator/alias_aottest.cpp $(FILTERS_DIR)/alias.cpp $(FILTERS_DIR)/alias_with_offset_42.cpp $(RUNTIME_EXPORTED_INCLUDES) $(BIN_DIR)/$(TARGET)/runtime.a
+$(BIN_DIR)/$(TARGET)/generator_aotcpp_alias: $(ROOT_DIR)/test/generator/alias_aottest.cpp $(FILTERS_DIR)/alias.halide_generated.cpp $(FILTERS_DIR)/alias_with_offset_42.halide_generated.cpp $(RUNTIME_EXPORTED_INCLUDES) $(BIN_DIR)/$(TARGET)/runtime.a
 	@mkdir -p $(@D)
 	$(CXX) $(GEN_AOT_CXX_FLAGS) $(filter %.cpp %.o %.a,$^) $(GEN_AOT_INCLUDES) $(GEN_AOT_LD_FLAGS) -o $@
 
@@ -1634,7 +1634,7 @@ $(BIN_DIR)/$(TARGET)/generator_aot_nested_externs: $(ROOT_DIR)/test/generator/ne
 	@mkdir -p $(@D)
 	$(CXX) $(GEN_AOT_CXX_FLAGS) $(filter %.cpp %.o %.a,$^) $(GEN_AOT_INCLUDES) $(GEN_AOT_LD_FLAGS) -o $@
 
-$(BIN_DIR)/$(TARGET)/generator_aotcpp_nested_externs: $(ROOT_DIR)/test/generator/nested_externs_aottest.cpp $(FILTERS_DIR)/nested_externs_root.cpp $(FILTERS_DIR)/nested_externs_inner.cpp $(FILTERS_DIR)/nested_externs_combine.cpp $(FILTERS_DIR)/nested_externs_leaf.cpp $(RUNTIME_EXPORTED_INCLUDES) $(BIN_DIR)/$(TARGET)/runtime.a
+$(BIN_DIR)/$(TARGET)/generator_aotcpp_nested_externs: $(ROOT_DIR)/test/generator/nested_externs_aottest.cpp $(FILTERS_DIR)/nested_externs_root.halide_generated.cpp $(FILTERS_DIR)/nested_externs_inner.halide_generated.cpp $(FILTERS_DIR)/nested_externs_combine.halide_generated.cpp $(FILTERS_DIR)/nested_externs_leaf.halide_generated.cpp $(RUNTIME_EXPORTED_INCLUDES) $(BIN_DIR)/$(TARGET)/runtime.a
 	@mkdir -p $(@D)
 	$(CXX) $(GEN_AOT_CXX_FLAGS) $(filter %.cpp %.o %.a,$^) $(GEN_AOT_INCLUDES) $(GEN_AOT_LD_FLAGS) -o $@
 
@@ -1643,7 +1643,7 @@ $(BIN_DIR)/$(TARGET)/generator_aot_matlab: $(ROOT_DIR)/test/generator/matlab_aot
 	@mkdir -p $(@D)
 	$(CXX) $(GEN_AOT_CXX_FLAGS) $(filter %.cpp %.o %.a,$^) $(GEN_AOT_INCLUDES) $(GEN_AOT_LD_FLAGS) $(TEST_LD_FLAGS) -o $@
 
-$(BIN_DIR)/$(TARGET)/generator_aotcpp_matlab: $(ROOT_DIR)/test/generator/matlab_aottest.cpp $(FILTERS_DIR)/matlab.cpp $(FILTERS_DIR)/matlab.h $(RUNTIME_EXPORTED_INCLUDES) $(BIN_DIR)/$(TARGET)-matlab/runtime.a
+$(BIN_DIR)/$(TARGET)/generator_aotcpp_matlab: $(ROOT_DIR)/test/generator/matlab_aottest.cpp $(FILTERS_DIR)/matlab.halide_generated.cpp $(FILTERS_DIR)/matlab.h $(RUNTIME_EXPORTED_INCLUDES) $(BIN_DIR)/$(TARGET)-matlab/runtime.a
 	@mkdir -p $(@D)
 	$(CXX) $(GEN_AOT_CXX_FLAGS) $(filter %.cpp %.o %.a,$^) $(GEN_AOT_INCLUDES) $(GEN_AOT_LD_FLAGS) $(TEST_LD_FLAGS) -o $@
 
@@ -1657,7 +1657,7 @@ $(BIN_DIR)/$(TARGET)/generator_aot_acquire_release: $(ROOT_DIR)/test/generator/a
 	@mkdir -p $(@D)
 	$(CXX) $(GEN_AOT_CXX_FLAGS) $(filter %.cpp %.o %.a,$^) $(GEN_AOT_INCLUDES) $(GEN_AOT_LD_FLAGS) $(OPENCL_LD_FLAGS) $(CUDA_LD_FLAGS) -o $@
 
-$(BIN_DIR)/$(TARGET)/generator_aotcpp_acquire_release: $(ROOT_DIR)/test/generator/acquire_release_aottest.cpp $(FILTERS_DIR)/acquire_release.cpp $(FILTERS_DIR)/acquire_release.h $(RUNTIME_EXPORTED_INCLUDES) $(BIN_DIR)/$(TARGET)/runtime.a
+$(BIN_DIR)/$(TARGET)/generator_aotcpp_acquire_release: $(ROOT_DIR)/test/generator/acquire_release_aottest.cpp $(FILTERS_DIR)/acquire_release.halide_generated.cpp $(FILTERS_DIR)/acquire_release.h $(RUNTIME_EXPORTED_INCLUDES) $(BIN_DIR)/$(TARGET)/runtime.a
 	@mkdir -p $(@D)
 	$(CXX) $(GEN_AOT_CXX_FLAGS) $(filter %.cpp %.o %.a,$^) $(GEN_AOT_INCLUDES) $(GEN_AOT_LD_FLAGS) $(OPENCL_LD_FLAGS) $(CUDA_LD_FLAGS) -o $@
 
@@ -1666,7 +1666,7 @@ $(BIN_DIR)/$(TARGET)/generator_aot_define_extern_opencl: $(ROOT_DIR)/test/genera
 	@mkdir -p $(@D)
 	$(CXX) $(GEN_AOT_CXX_FLAGS) $(filter %.cpp %.o %.a,$^) $(GEN_AOT_INCLUDES) $(GEN_AOT_LD_FLAGS) $(OPENCL_LD_FLAGS) -o $@
 
-$(BIN_DIR)/$(TARGET)/generator_aotcpp_define_extern_opencl: $(ROOT_DIR)/test/generator/define_extern_opencl_aottest.cpp $(FILTERS_DIR)/define_extern_opencl.cpp $(FILTERS_DIR)/define_extern_opencl.h $(RUNTIME_EXPORTED_INCLUDES) $(BIN_DIR)/$(TARGET)/runtime.a
+$(BIN_DIR)/$(TARGET)/generator_aotcpp_define_extern_opencl: $(ROOT_DIR)/test/generator/define_extern_opencl_aottest.cpp $(FILTERS_DIR)/define_extern_opencl.halide_generated.cpp $(FILTERS_DIR)/define_extern_opencl.h $(RUNTIME_EXPORTED_INCLUDES) $(BIN_DIR)/$(TARGET)/runtime.a
 	@mkdir -p $(@D)
 	$(CXX) $(GEN_AOT_CXX_FLAGS) $(filter %.cpp %.o %.a,$^) $(GEN_AOT_INCLUDES) $(GEN_AOT_LD_FLAGS) $(OPENCL_LD_FLAGS) -o $@
 

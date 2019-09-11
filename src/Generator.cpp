@@ -108,7 +108,7 @@ Outputs compute_outputs(const Target &target,
         output_files.c_header_name = base_path + get_extension(".h", options);
     }
     if (options.emit_cpp) {
-        output_files.c_source_name = base_path + get_extension(".cpp", options);
+        output_files.c_source_name = base_path + get_extension(".halide_generated.cpp", options);
     }
     if (options.emit_python_extension) {
         output_files.python_extension_name = base_path + get_extension(".py.cpp", options);
