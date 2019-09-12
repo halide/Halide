@@ -1,3 +1,5 @@
+import sys
+
 import halide as hl
 import numpy
 
@@ -7,8 +9,11 @@ def test():
         x = hl.Var("x")
         f = hl.Func("f")
         f[x] = x * c
-        for i, v in enumerate(numpy.asarray(f.realize(10))):
-            assert v == (i * c), "{}[{}]: {} != {}".format(i, c, v, (i * c))
+        for i, hl_value in enumerate(numpy.asarray(f.realize(10))):
+            py_value = (i * c)
+            delta = hl_value - py_value
+            check = delta < sys.float_info.epsilon
+            assert check, "{}[{}]: {} != {}".format(i, c, hl_value, py_value)
 
     test_pattern(0.123456789012345678)
     test_pattern(0.987654321098765432)
