@@ -18,6 +18,7 @@
 
 #include "IRVisitor.h"
 #include "Module.h"
+#include "Scope.h"
 
 namespace Halide {
 
@@ -113,6 +114,13 @@ protected:
 
     /** Emit spaces according to the current indentation level */
     void do_indent();
+
+    /** The symbols whose types can be inferred from values printed
+     * already. */
+    Scope<> known_type;
+
+    /** A helper for printing a chain of lets with line breaks */
+    void print_lets(const Let *let);
 
     void visit(const IntImm *) override;
     void visit(const UIntImm *) override;

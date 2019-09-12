@@ -933,6 +933,12 @@ int generate_filter_main_inner(int argc, char **argv, std::ostream &cerr) {
         }
     }
 
+    auto target_strings = split_string(generator_args["target"].string_value, ",");
+    std::vector<Target> targets;
+    for (const auto &s : target_strings) {
+        targets.emplace_back(s);
+    }
+
     if (!runtime_name.empty()) {
         std::string base_path = compute_base_path(output_dir, runtime_name, "");
 

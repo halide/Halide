@@ -178,7 +178,6 @@ void compile_multitarget(const std::string &fn_name,
                          const std::vector<Target> &targets,
                          ModuleProducer module_producer);
 
-
 }  // namespace Halide
 
 #endif
