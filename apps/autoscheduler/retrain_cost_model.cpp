@@ -45,7 +45,7 @@ struct Flags {
         a.add<string>("rates");
         a.add<string>("initial_weights", '\0', kNoDesc, kOptional, "");
         a.add<string>("weights_out");
-        a.add<bool>("randomize_weights", '\0', kNoDesc, kOptional, "0");
+        a.add<bool>("randomize_weights", '\0', kNoDesc, kOptional, false);
         a.add<int>("num_cores");
         a.add<string>("best_benchmark");
         a.add<string>("best_schedule");

@@ -1,4 +1,6 @@
 // GitHub source: from https://github.com/tanakh/cmdline
+// Modifications made in-place to remove the use of exceptions,
+// flagged with WITH_EXCEPTIONS
 
 /*
   Copyright (c) 2009, Hideyuki Tanaka
@@ -45,6 +47,14 @@ namespace cmdline{
 
 namespace detail{
 
+#ifdef WITH_EXCEPTIONS
+  inline void throw_bad_cast() { throw std::bad_cast(); }
+  inline void throw_cmdline_error(const std::string &s) { throw cmdline::cmdline_error(s); }
+#else
+  inline void throw_bad_cast() { std::cerr << "bad cast\n"; exit(1); }
+  inline void throw_cmdline_error(const std::string &s) { std::cerr << "error: " << s << "\n"; exit(1); }
+#endif
+
 template <typename Target, typename Source, bool Same>
 class lexical_cast_t{
 public:
@@ -52,7 +62,7 @@ public:
     Target ret;
     std::stringstream ss;
     if (!(ss<<arg && ss>>ret && ss.eof()))
-      throw std::bad_cast();
+      throw_bad_cast();
 
     return ret;
   }
@@ -83,7 +93,7 @@ public:
     Target ret;
     std::istringstream ss(arg);
     if (!(ss>>ret && ss.eof()))
-      throw std::bad_cast();
+      throw_bad_cast();
     return ret;
   }
 };
@@ -135,6 +145,7 @@ inline std::string readable_typename<std::string>()
 
 //-----
 
+#ifdef WITH_EXCEPTIONS
 class cmdline_error : public std::exception {
 public:
   cmdline_error(const std::string &msg): msg(msg){}
@@ -143,6 +154,7 @@ public:
 private:
   std::string msg;
 };
+#endif
 
 template <class T>
 struct default_reader{
@@ -156,7 +168,7 @@ struct range_reader{
   range_reader(const T &low, const T &high): low(low), high(high) {}
   T operator()(const std::string &s) const {
     T ret=default_reader<T>()(s);
-    if (!(ret>=low && ret<=high)) throw cmdline::cmdline_error("range_error");
+    if (!(ret>=low && ret<=high)) detail::throw_cmdline_error("range_error");
     return ret;
   }
 private:
@@ -174,7 +186,7 @@ struct oneof_reader{
   T operator()(const std::string &s){
     T ret=default_reader<T>()(s);
     if (std::find(alt.begin(), alt.end(), ret)==alt.end())
-      throw cmdline_error("");
+      detail::throw_cmdline_error("");
     return ret;
   }
   void add(const T &v){ alt.push_back(v); }
@@ -322,7 +334,7 @@ public:
   void add(const std::string &name,
            char short_name=0,
            const std::string &desc=""){
-    if (options.count(name)) throw cmdline_error("multiple definition: "+name);
+    if (options.count(name)) detail::throw_cmdline_error("multiple definition: "+name);
     options[name]=new option_without_value(name, short_name, desc);
     ordered.push_back(options[name]);
   }
@@ -343,7 +355,7 @@ public:
            bool need=true,
            const T def=T(),
            F reader=F()){
-    if (options.count(name)) throw cmdline_error("multiple definition: "+name);
+    if (options.count(name)) detail::throw_cmdline_error("multiple definition: "+name);
     options[name]=new option_with_value_with_reader<T, F>(name, short_name, need, def, desc, reader);
     ordered.push_back(options[name]);
   }
@@ -357,15 +369,15 @@ public:
   }
 
   bool exist(const std::string &name) const {
-    if (options.count(name)==0) throw cmdline_error("there is no flag: --"+name);
+    if (options.count(name)==0) detail::throw_cmdline_error("there is no flag: --"+name);
     return options.find(name)->second->has_set();
   }
 
   template <class T>
   const T &get(const std::string &name) const {
-    if (options.count(name)==0) throw cmdline_error("there is no flag: --"+name);
+    if (options.count(name)==0) detail::throw_cmdline_error("there is no flag: --"+name);
     const option_with_value<T> *p=dynamic_cast<const option_with_value<T>*>(options.find(name)->second);
-    if (p==NULL) throw cmdline_error("type mismatch flag '"+name+"'");
+    if (p==NULL) detail::throw_cmdline_error("type mismatch flag '"+name+"'");
     return p->get();
   }
 
@@ -719,6 +731,7 @@ private:
     }
 
     bool set(const std::string &value){
+#ifdef WITH_EXCEPTIONS
       try{
         actual=read(value);
         has=true;
@@ -727,6 +740,11 @@ private:
         return false;
       }
       return true;
+#else
+      actual=read(value);
+      has=true;
+      return true;
+#endif
     }
 
     bool has_set() const{

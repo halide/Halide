@@ -5,6 +5,8 @@
 #include "IRMutator.h"
 #include "IROperator.h"
 #include "LLVM_Headers.h"
+#include "Simplify.h"
+#include "Simplify_Internal.h"
 
 namespace Halide {
 namespace Internal {
@@ -405,6 +407,50 @@ Expr lower_euclidean_mod(Expr a, Expr b) {
     }
 }
 
+Expr lower_signed_shift_left(Expr a, Expr b) {
+    assert(b.type().is_int());
+    const int64_t *const_int_b = as_const_int(b);
+    if (const_int_b) {
+        Type t = UInt(a.type().bits(), a.type().lanes());
+        Expr val;
+        const uint64_t b_unsigned = std::abs(*const_int_b);
+        if (*const_int_b >= 0) {
+            val = a << make_const(t, b_unsigned);
+        } else if (*const_int_b < 0) {
+            val = a >> make_const(t, b_unsigned);
+        }
+        return common_subexpression_elimination(val);
+    } else {
+        // The abs() below uses Halide's abs operator. This eliminates the overflow
+        // case for the most negative value because its result is unsigned.
+        Expr b_unsigned = abs(b);
+        Expr val = select(b >= 0, a << b_unsigned, a >> b_unsigned);
+        return simplify(common_subexpression_elimination(val));
+    }
+}
+
+Expr lower_signed_shift_right(Expr a, Expr b) {
+    assert(b.type().is_int());
+    const int64_t *const_int_b = as_const_int(b);
+    if (const_int_b) {
+        Type t = UInt(a.type().bits(), a.type().lanes());
+        Expr val;
+        const uint64_t b_unsigned = std::abs(*const_int_b);
+        if (*const_int_b >= 0) {
+            val = a >> make_const(t, b_unsigned);
+        } else if (*const_int_b < 0) {
+            val = a << make_const(t, b_unsigned);
+        }
+        return common_subexpression_elimination(val);
+    } else {
+        // The abs() below uses Halide's abs operator. This eliminates the overflow
+        // case for the most negative value because its result is unsigned.
+        Expr b_unsigned = abs(b);
+        Expr val = select(b >= 0, a >> b_unsigned, a << b_unsigned);
+        return simplify(common_subexpression_elimination(val));
+    }
+}
+
 namespace {
 
 // This mutator rewrites predicated loads and stores as unpredicated
@@ -686,3 +732,4 @@ void embed_bitcode(llvm::Module *M, const string &halide_command) {
 
 }  // namespace Internal
 }  // namespace Halide
+

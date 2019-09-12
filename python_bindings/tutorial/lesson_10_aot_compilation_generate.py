@@ -14,9 +14,9 @@
 #    python tutorial_lesson_10_aot_compilation_run.py
 # in a shell with the Halide Python extension in your PYTHONPATH.
 
-# This will generate a file lesson_10_halide.py.c that still needs
+# This will generate a file lesson_10_halide.py.cpp that still needs
 # to be compiled. Use
-#   g++ -shared -fPIC lesson_10_halide.py.c lesson_10_halide.o \
+#   g++ -shared -fPIC lesson_10_halide.py.cpp lesson_10_halide.o \
 #       -lpthread -o lesson_10_halide.so
 # to generate a Python module called "lesson_10_halide".
 
@@ -63,7 +63,7 @@ def main():
     # arguments to the routine. This routine takes two. Arguments are
     # usually Params or ImageParams.
     brighter.compile_to_file("lesson_10_halide", [input, offset], "lesson_10_halide")
-    brighter.compile_to_python_extension("lesson_10_halide.py.c", [input, offset], "lesson_10_halide")
+    brighter.compile_to_python_extension("lesson_10_halide.py.cpp", [input, offset], "lesson_10_halide")
 
     print("Halide pipeline compiled, but not yet run.")
 

@@ -212,7 +212,7 @@ void CodeGen_OpenCL_Dev::CodeGen_OpenCL_C::visit(const Call *op) {
         print_assignment(op->type, "0");
     } else if (op->is_intrinsic(Call::shift_left) || op->is_intrinsic(Call::shift_right)) {
         // Some OpenCL implementations forbid mixing signed-and-unsigned shift values;
-        // we enforce RHS as unsigned, so quietly cast it back to int if the LHS is int
+        // if the RHS is uint, quietly cast it back to int if the LHS is int
         if (op->args[0].type().is_int() && op->args[1].type().is_uint()) {
             Type t = op->args[0].type().with_code(halide_type_int);
             Expr e = Call::make(op->type, op->name, {op->args[0], cast(t, op->args[1])}, op->call_type);
