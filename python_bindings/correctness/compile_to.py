@@ -40,7 +40,7 @@ def main():
         assert os.path.isfile(os.path.join(tmpdir, "f_all.o"))
 
         p = os.path.join(tmpdir, "f.html")
-        f.compile_to(hl.Outputs(stmt_html_name=p), args, "f")
+        f.compile_to({"stmt_html": p}, args, "f")
         assert os.path.isfile(p)
 
     finally:

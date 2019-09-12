@@ -720,7 +720,6 @@ HEADER_FILES = \
   Monotonic.h \
   ObjectInstanceRegistry.h \
   OutputImageParam.h \
-  Outputs.h \
   ParallelRVar.h \
   Param.h \
   Parameter.h \

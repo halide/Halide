@@ -94,21 +94,18 @@ check_file_exists my_first_generator_win32.h
 # -n file_base_name : Specifies the basename of the generated file(s). If
 # you omit this, it defaults to the name of the generated function.
 
-# -e static_library,o,h,assembly,bitcode,stmt,html: A list of
+# -e static_library,object,c_header,assembly,bitcode,stmt,stmt_html: A list of
 # comma-separated values specifying outputs to create. The default is
-# "static_library,h". "assembly" generates assembly equivalent to the
+# "static_library,c_header,registration". "assembly" generates assembly equivalent to the
 # generated object file. "bitcode" generates llvm bitcode for the pipeline.
 # "stmt" generates human-readable pseudocode for the pipeline (similar to
-# setting HL_DEBUG_CODEGEN). "html" generates an html version of the
+# setting HL_DEBUG_CODEGEN). "stmt_html" generates an html version of the
 # pseudocode, which can be much nicer to read than the raw .stmt file.
 
 # -r file_base_name : Specifies that the generator should create a
 # standalone file for just the runtime. For use when generating multiple
 # pipelines from a single generator, to be linked together in one
 # executable. See example below.
-
-# -x .old=new,.old2=.new2,... : A comma-separated list of file extension
-# pairs to substitute during file naming.
 
 # target=... : The target to compile for.
 
@@ -188,8 +185,8 @@ check_no_runtime()
 # with the no_runtime target flag. Let's generate and link several
 # different versions of the first pipeline for different x86 variants:
 
-# (Note that we'll ask the generators to just give us object files ("-e o"), 
-# instead of static libraries, so that we can easily link them all into a 
+# (Note that we'll ask the generators to just give us object files ("-e o"),
+# instead of static libraries, so that we can easily link them all into a
 # single static library.)
 
 ./lesson_15_generate \
@@ -229,9 +226,9 @@ check_symbol     my_first_generator_avx.o my_first_generator_avx
     target=host-x86-64
 check_runtime halide_runtime_x86.o
 
-# Linking the standalone runtime with the three generated object files     
-# gives us three versions of the pipeline for varying levels of x86,      
-# combined with a single runtime that will work on nearly all x86     
+# Linking the standalone runtime with the three generated object files
+# gives us three versions of the pipeline for varying levels of x86,
+# combined with a single runtime that will work on nearly all x86
 # processors.
 ar q my_first_generator_multi.a \
     my_first_generator_basic.o \
