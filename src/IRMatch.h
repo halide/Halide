@@ -170,6 +170,7 @@ Expr make_const_expr(halide_scalar_value_t val, halide_type_t ty) {
         e = UIntImm::make(scalar_type, val.u.u64);
         break;
     case halide_type_float:
+    case halide_type_bfloat:
         e = FloatImm::make(scalar_type, val.u.f64);
         break;
     default:
@@ -529,6 +530,7 @@ struct Const {
             val.u.u64 = (uint64_t)v;
             break;
         case halide_type_float:
+        case halide_type_bfloat:
             val.u.f64 = (double)v;
             break;
         default:
@@ -651,6 +653,7 @@ struct BinOp {
             val.u.u64 = constant_fold_bin_op<Op>(ty, val_a.u.u64, val_b.u.u64);
             break;
         case halide_type_float:
+        case halide_type_bfloat:
             val.u.f64 = constant_fold_bin_op<Op>(ty, val_a.u.f64, val_b.u.f64);
             break;
         default:
@@ -743,6 +746,7 @@ struct CmpOp {
             val.u.u64 = constant_fold_cmp_op<Op>(val_a.u.u64, val_b.u.u64);
             break;
         case halide_type_float:
+        case halide_type_bfloat:
             val.u.u64 = constant_fold_cmp_op<Op>(val_a.u.f64, val_b.u.f64);
             break;
         default:
@@ -1444,7 +1448,8 @@ struct NotOp {
         a.make_folded_const(val, ty, state);
         val.u.u64 = ~val.u.u64;
         val.u.u64 &= 1;
-        ty.lanes |= ((int)ty.code == (int)halide_type_float) ? MatcherState::indeterminate_expression : 0;
+        ty.lanes |= (((int)ty.code == (int)halide_type_float) ||
+                     ((int)ty.code == (int)halide_type_bfloat)) ? MatcherState::indeterminate_expression : 0;
     }
 };
 
@@ -1723,6 +1728,7 @@ struct NegateOp {
             val.u.u64 = ((-val.u.u64) << dead_bits) >> dead_bits;
             break;
         case halide_type_float:
+        case halide_type_bfloat:
             val.u.f64 = -val.u.f64;
             break;
         default:
@@ -2085,6 +2091,7 @@ void fuzz_test_rule(Before &&before, After &&after, Predicate &&pred,
                 }
                 break;
             case halide_type_float:
+            case halide_type_bfloat:
                 {
                     // Use a very narrow range of precise floats, so
                     // that none of the rules a human is likely to
@@ -2123,6 +2130,7 @@ void fuzz_test_rule(Before &&before, After &&after, Predicate &&pred,
                    constant_fold_bin_op<Add>(output_type, val_after.u.i64, 0));
             break;
         case halide_type_float:
+        case halide_type_bfloat:
             {
                 double error = std::abs(val_before.u.f64 - val_after.u.f64);
                 // We accept an equal bit pattern (e.g. inf vs inf),

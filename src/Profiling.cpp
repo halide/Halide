@@ -50,7 +50,7 @@ private:
     // Strip down the tuple name, e.g. f.0 into f
     string normalize_name(const string &name) {
         vector<string> v = split_string(name, ".");
-        internal_assert(v.size() > 0);
+        internal_assert(!v.empty());
         return v[0];
     }
 
@@ -89,7 +89,7 @@ private:
 
         // Check that the allocation is not scalar (if it were scalar
         // it would have constant size).
-        internal_assert(extents.size() > 0);
+        internal_assert(!extents.empty());
 
         on_stack = false;
         Expr size = cast<uint64_t>(extents[0]);
@@ -308,7 +308,7 @@ Stmt inject_profiling(Stmt s, string pipeline_name) {
 
     Expr profiler_token = Variable::make(Int(32), "profiler_token");
 
-    Expr stop_profiler = Call::make(Int(32), Call::register_destructor,
+    Expr stop_profiler = Call::make(Handle(), Call::register_destructor,
                                     {Expr("halide_profiler_pipeline_end"), get_state}, Call::Intrinsic);
 
     bool no_stack_alloc = profiling.func_stack_peak.empty();

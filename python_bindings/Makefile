@@ -123,15 +123,15 @@ target_features_bit=-no_runtime
 target_features_user_context=-user_context-legacy_buffer_wrappers-no_runtime
 
 # Make the generator generate a Python extension:
-$(BIN)/%.py.c $(BIN)/%.cpp $(BIN)/%.h: $(BIN)/%.gen
-	LD_LIBRARY_PATH=$(HALIDE_DISTRIB_PATH)/bin $< -e h,cpp,py.c \
+$(BIN)/%.py.c $(BIN)/%.halide_generated.cpp $(BIN)/%.h: $(BIN)/%.gen
+	LD_LIBRARY_PATH=$(HALIDE_DISTRIB_PATH)/bin $< -e h,cpp,py.cpp \
 	    -g $(notdir $(basename $<)) -o $(BIN) \
 	    target=host$(target_features_$(notdir $(basename $<)))
 
 # Compile the generated Python extension(s):
-$(BIN)/%.o: $(BIN)/%.cpp
+$(BIN)/%.o: $(BIN)/%.halide_generated.cpp
 	$(CXX) -c $(FPIC) $(CCFLAGS) $^ -o $@
-$(BIN)/%.py.o: $(BIN)/%.py.c
+$(BIN)/%.py.o: $(BIN)/%.py.cpp
 	$(CXX) -c $(FPIC) $(CCFLAGS) $^ -o $@
 
 # The Python extension of the generator is already in $(BIN), and is named
@@ -188,7 +188,7 @@ test_tutorial_lesson_10_aot_compilation_run: $(TEST_TMP)/lesson_10_halide.so
 
 $(TEST_TMP)/lesson_10_halide.so: test_tutorial_lesson_10_aot_compilation_generate
 	$(CXX) $(CCFLAGS) $(LDFLAGS) $(FPIC) -shared \
-		$(TEST_TMP)/lesson_10_halide.py.c \
+		$(TEST_TMP)/lesson_10_halide.py.cpp \
 		$(TEST_TMP)/lesson_10_halide.o \
 		-I $(TEST_TMP) -o $@
 

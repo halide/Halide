@@ -349,6 +349,7 @@ private:
             }
         }
 
+        // TODO: Consider generating a prefetch call for each tuple element.
         Stmt prefetch_call = Evaluate::make(Call::make(op->types[0], Call::prefetch, args, Call::Intrinsic));
         if (!is_one(condition)) {
             prefetch_call = IfThenElse::make(condition, prefetch_call);

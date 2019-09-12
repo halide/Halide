@@ -11,7 +11,7 @@ $(GENERATOR_BIN)/demo.generator: demo_generator.cpp $(GENERATOR_DEPS)
 # To use the autoscheduler, set a few environment variables and use the -p flag to the generator to load the autoscheduler as a plugin
 $(BIN)/%/demo.a: $(GENERATOR_BIN)/demo.generator $(AUTOSCHED_BIN)/libauto_schedule.so
 	@mkdir -p $(@D)
-	HL_PERMIT_FAILED_UNROLL=1 HL_WEIGHTS_DIR=weights \
+	HL_WEIGHTS_DIR=$(AUTOSCHED_SRC)/baseline.weights \
 	$(GENERATOR_BIN)/demo.generator -g demo -o $(@D) -f demo target=$* auto_schedule=true -p $(AUTOSCHED_BIN)/libauto_schedule.so
 
 $(BIN)/%/demo.rungen: $(BIN)/%/RunGenMain.o $(BIN)/%/demo.registration.cpp $(BIN)/%/demo.a
@@ -24,13 +24,14 @@ demo: $(BIN)/$(HL_TARGET)/demo.rungen $(AUTOSCHED_BIN)/libauto_schedule.so
 
 # demonstrates an autotuning loop
 # (using $(AUTOSCHED_BIN) and $(AUTOSCHED_SRC) here seems overkill, but makes copy-n-paste elsewhere easier)
-autotune: $(GENERATOR_BIN)/demo.generator $(AUTOSCHED_BIN)/featurization_to_sample $(AUTOSCHED_BIN)/train_cost_model $(AUTOSCHED_BIN)/libauto_schedule.so $(AUTOSCHED_SRC)/autotune_loop.sh
+autotune: $(GENERATOR_BIN)/demo.generator $(AUTOSCHED_BIN)/featurization_to_sample $(AUTOSCHED_BIN)/get_host_target $(AUTOSCHED_BIN)/retrain_cost_model $(AUTOSCHED_BIN)/libauto_schedule.so $(AUTOSCHED_SRC)/autotune_loop.sh
 	bash $(AUTOSCHED_SRC)/autotune_loop.sh \
 		$(GENERATOR_BIN)/demo.generator \
 		demo \
-		x86-64-avx2 \
-		$(AUTOSCHED_SRC)/weights \
-		$(AUTOSCHED_BIN)
+		"" \
+		$(AUTOSCHED_SRC)/baseline.weights \
+		$(AUTOSCHED_BIN) \
+		$(HALIDE_DISTRIB_PATH)
 
 $(BIN)/test_perfect_hash_map: test_perfect_hash_map.cpp PerfectHashMap.h
 	@mkdir -p $(@D)
@@ -48,7 +49,7 @@ test_perfect_hash_map: $(BIN)/test_perfect_hash_map
 # so it's important to try a little of each of the important paths here,
 # including single-shot and autotune-loop
 test: $(BIN)/$(HL_TARGET)/test test_perfect_hash_map demo autotune included_schedule_file
-	HL_WEIGHTS_DIR=weights LD_LIBRARY_PATH=$(AUTOSCHED_BIN) $<
+	HL_WEIGHTS_DIR=$(AUTOSCHED_SRC)/baseline.weights LD_LIBRARY_PATH=$(AUTOSCHED_BIN) $<
 
 clean:
 	rm -rf $(BIN)
@@ -74,7 +75,7 @@ $(GENERATOR_BIN)/included_schedule_file_none.generator: included_schedule_file_g
 # the Generator so that it can skip producing other outputs.)
 $(BIN)/%/included_schedule_file.schedule.h: $(GENERATOR_BIN)/included_schedule_file_none.generator $(AUTOSCHED_BIN)/libauto_schedule.so
 	@mkdir -p $(@D)
-	HL_PERMIT_FAILED_UNROLL=1 HL_WEIGHTS_DIR=weights \
+	HL_WEIGHTS_DIR=$(AUTOSCHED_SRC)/baseline.weights \
 	$< -g included_schedule_file -o $(@D) -f included_schedule_file target=$* auto_schedule=true -p $(AUTOSCHED_BIN)/libauto_schedule.so -e schedule
 
 # Note that this depends on included_schedule_file.schedule.h rather than $(BIN)/%/included_schedule_file.schedule.h --

@@ -13,7 +13,6 @@
 namespace Halide {
 namespace Internal {
 
-using std::map;
 using std::ostringstream;
 using std::string;
 using std::vector;
@@ -356,7 +355,7 @@ void CodeGen_OpenGLCompute_Dev::CodeGen_OpenGLCompute_C::visit(const Allocate *o
     alloc.type = op->type;
     allocations.push(op->name, alloc);
 
-    internal_assert(op->extents.size() >= 1);
+    internal_assert(!op->extents.empty());
     Expr extent = 1;
     for (Expr e : op->extents) {
         extent *= e;

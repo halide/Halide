@@ -51,7 +51,7 @@ public:
 
     // Indicates forward or inverse Fourier transform --
     // "samples_to_frequency" maps to a forward FFT. (Other packages sometimes call this a sign of -1)
-    // "frequency_to_samples" maps to a forward FFT. (Other packages sometimes call this a sign of +1)
+    // "frequency_to_samples" maps to a backward FFT. (Other packages sometimes call this a sign of +1)
     GeneratorParam<FFTDirection> direction{"direction", FFTDirection::SamplesToFrequency,
         fft_direction_enum_map() };
 

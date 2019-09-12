@@ -24,6 +24,14 @@ using ::Halide::Runtime::Buffer;
 // provide a typedef for it (and doesn't use a vector for it in any event).
 using Shape = std::vector<halide_dimension_t>;
 
+// A ShapePromise is a function that returns a Shape. If the Promise can't
+// return a valid Shape, it may fail. This allows us to defer error reporting
+// for situations until the Shape is actually needed; in particular, it allows
+// us to attempt doing bounds-query for the shape of input buffers early,
+// but to ignore the error unless we actually need it... which we won't if an
+// estimate is provided for the input in question.
+using ShapePromise = std::function<Shape()>;
+
 // Standard stream output for halide_type_t
 inline std::ostream &operator<<(std::ostream &stream, const halide_type_t &type) {
     if (type.code == halide_type_uint && type.bits == 1) {
@@ -655,10 +663,10 @@ struct ArgData {
     ArgData(size_t index, const std::string &name, const halide_filter_argument_t * metadata)
         : index(index), name(name), metadata(metadata) {}
 
-    Buffer<> load_buffer(const Shape &auto_shape, const halide_filter_argument_t *argument_metadata) {
+    Buffer<> load_buffer(ShapePromise shape_promise, const halide_filter_argument_t *argument_metadata) {
         const auto parse_optional_extents = [&](const std::string &s) -> Shape {
             if (s == "auto") {
-                return auto_shape;
+                return shape_promise();
             }
             if (s == "estimate") {
                 return parse_metadata_buffer_estimates(argument_metadata);
@@ -667,7 +675,7 @@ struct ArgData {
                 Shape shape;
                 if (!try_parse_metadata_buffer_estimates(argument_metadata, &shape)) {
                     info() << "Input " << argument_metadata->name << " has no estimates; using bounds-query result instead.";
-                    shape = auto_shape;
+                    shape = shape_promise();
                 }
                 return shape;
             }
@@ -715,6 +723,11 @@ struct ArgData {
         } else {
             return load_input_from_file(v[0], *metadata);
         }
+    }
+
+    Buffer<> load_buffer(Shape shape, const halide_filter_argument_t *argument_metadata) {
+        ShapePromise promise = [shape]() -> Shape { return shape; };
+        return load_buffer(promise, argument_metadata);
     }
 
     void adapt_input_buffer(const Shape &constrained_shape) {
@@ -910,7 +923,7 @@ public:
         assert(output_shapes.empty());
 
         Shape first_input_shape;
-        std::map<std::string, Shape> auto_input_shapes;
+        std::map<std::string, ShapePromise> auto_input_shape_promises;
 
         // First, set all the scalar inputs: we need those to be correct
         // in order to get useful values from the bound-query for input buffers.
@@ -985,7 +998,7 @@ public:
                     }
                 }
             }
-            auto_input_shapes = bounds_query_input_shapes();
+            auto_input_shape_promises = bounds_query_input_shapes();
         }
 
         for (auto &arg_pair : args) {
@@ -993,7 +1006,7 @@ public:
             auto &arg = arg_pair.second;
             switch (arg.metadata->kind) {
             case halide_argument_kind_input_buffer:
-                arg.buffer_value = arg.load_buffer(auto_input_shapes[arg_name], arg.metadata);
+                arg.buffer_value = arg.load_buffer(auto_input_shape_promises[arg_name], arg.metadata);
                 info() << "Input " << arg_name << ": Shape is " << get_shape(arg.buffer_value);
                 if (first_input_shape.empty()) {
                     first_input_shape = get_shape(arg.buffer_value);
@@ -1195,9 +1208,7 @@ public:
         }
     }
 
-    void run_for_benchmark(double benchmark_min_time,
-                           uint64_t benchmark_min_iters,
-                           uint64_t benchmark_max_iters) {
+    void run_for_benchmark(double benchmark_min_time) {
         std::vector<void*> filter_argv = build_filter_argv();
 
         const auto benchmark_inner = [this, &filter_argv]() {
@@ -1213,8 +1224,6 @@ public:
         Halide::Tools::BenchmarkConfig config;
         config.min_time = benchmark_min_time;
         config.max_time = benchmark_min_time * 4;
-        config.min_iters = benchmark_min_iters;
-        config.max_iters = benchmark_max_iters;
         auto result = Halide::Tools::benchmark(benchmark_inner, config);
 
         if (!parsable_output) {
@@ -1310,7 +1319,11 @@ public:
     }
 
 private:
-    std::map<std::string, Shape> bounds_query_input_shapes() const {
+    static void rungen_ignore_error(void *user_context, const char *message) {
+        // nothing
+    }
+
+    std::map<std::string, ShapePromise> bounds_query_input_shapes() const {
         assert(!output_shapes.empty());
         std::vector<void*> filter_argv(args.size(), nullptr);
         std::vector<Buffer<>> bounds_query_buffers(args.size());
@@ -1333,19 +1346,30 @@ private:
             }
         }
 
-        // Ignore result since our halide_error() should catch everything.
-        (void) halide_argv_call(&filter_argv[0]);
+        auto previous_error_handler = halide_set_error_handler(rungen_ignore_error);
+        int result = halide_argv_call(&filter_argv[0]);
+        halide_set_error_handler(previous_error_handler);
 
-        std::map<std::string, Shape> input_shapes;
+        std::map<std::string, ShapePromise> input_shape_promises;
         for (const auto &arg_pair : args) {
             auto &arg_name = arg_pair.first;
             auto &arg = arg_pair.second;
             if (arg.metadata->kind == halide_argument_kind_input_buffer) {
-                input_shapes[arg_name] = get_shape(bounds_query_buffers[arg.index]);
-                info() << "Input " << arg_name << " has a bounds-query shape of " << input_shapes[arg_name];
+                if (result == 0) {
+                    Shape shape = get_shape(bounds_query_buffers[arg.index]);
+                    input_shape_promises[arg_name] = [shape]() -> Shape { return shape; };
+                    info() << "Input " << arg_name << " has a bounds-query shape of " << shape;
+                } else {
+                    input_shape_promises[arg_name] = [arg_name]() -> Shape {
+                        fail() << "Input " << arg_name << " could not calculate a shape satisfying bounds-query constraints.\n"
+                               << "Try relaxing the constraints, or providing an explicit estimate for the input.\n";
+                        return Shape();
+                    };
+                    info() << "Input " << arg_name << " failed bounds-query\n";
+                }
             }
         }
-        return input_shapes;
+        return input_shape_promises;
     }
 
     // Replace the standard Halide runtime function to capture print output to stdout

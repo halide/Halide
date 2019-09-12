@@ -33,7 +33,7 @@ import halide as hl
 
 # Support code for loading pngs.
 #include "image_io.h"
-from scipy.misc import imread
+from imageio import imread
 import numpy as np
 import os.path
 

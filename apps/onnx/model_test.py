@@ -36,7 +36,7 @@ class ModelTest(unittest.TestCase):
         model.BuildFromOnnxModel(onnx_model)
         schedule = model.OptimizeSchedule()
         schedule = schedule.replace('\n', ' ')
-        expected_schedule = r'// Target: .+// MachineParams: .+// Delete this line if not using Generator Pipeline pipeline = get_pipeline\(\);.+Func OUT = pipeline.get_func\(1\);.+{.+}.+'
+        expected_schedule = r'// --- BEGIN machine-generated schedule // Target: .+// MachineParams: .+// Delete this line if not using Generator Pipeline pipeline = get_pipeline\(\);.+Func OUT = pipeline.get_func\(1\);.+{.+}.+'
         self.assertRegex(schedule, expected_schedule)
 
         input = np.random.rand(2, 3) - 0.5
@@ -64,7 +64,7 @@ class ModelTest(unittest.TestCase):
         model.BuildFromOnnxModel(onnx_model)
         schedule = model.OptimizeSchedule()
         schedule = schedule.replace('\n', ' ')
-        expected_schedule = r'// Target: .+// MachineParams: .+// Delete this line if not using Generator Pipeline pipeline = get_pipeline\(\);.+Func C = pipeline.get_func\(2\);.+{.+}.+'
+        expected_schedule = r'// --- BEGIN machine-generated schedule // Target: .+// MachineParams: .+// Delete this line if not using Generator Pipeline pipeline = get_pipeline\(\);.+Func C = pipeline.get_func\(2\);.+{.+}.+'
         self.assertRegex(schedule, expected_schedule)
 
         input1 = np.random.randint(-10, 10, size=())
@@ -92,7 +92,7 @@ class ModelTest(unittest.TestCase):
                                        producer_name='onnx-example')
         model = Model()
         model.BuildFromOnnxModel(onnx_model)
-        input_data = np.random.rand(3, 1)
+        input_data = np.random.rand(3, 1).astype(np.float32)
         outputs = model.run([input_data])
         expected = input_data * np.ones([2, 1, 6], dtype=np.float32)
         np.testing.assert_allclose(expected, outputs[0])
@@ -114,7 +114,7 @@ class ModelTest(unittest.TestCase):
                                        producer_name='onnx-example')
         model = Model()
         model.BuildFromOnnxModel(onnx_model)
-        input_data = np.random.rand(3, 2)
+        input_data = np.random.rand(3, 2).astype(np.float32)
         outputs = model.run([input_data])
         self.assertEqual(6, outputs[0])
         self.assertAlmostEqual(3.14, outputs[1])

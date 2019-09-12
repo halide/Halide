@@ -156,6 +156,10 @@ struct Target {
 
     bool has_feature(Feature f) const;
 
+    inline bool has_feature(halide_target_feature_t f) const {
+        return has_feature((Feature) f);
+    }
+
     bool features_any_of(std::vector<Feature> test_features) const;
 
     bool features_all_of(std::vector<Feature> test_features) const;
@@ -269,7 +273,12 @@ struct Target {
 
     /** Return the name corresponding to a given Feature, in the form
      * used to construct Target strings (e.g., Feature::Debug is "debug" and not "Debug"). */
-    static std::string feature_name(Target::Feature feature);
+    static std::string feature_to_name(Target::Feature feature);
+
+    /** Return the feature corresponding to a given name, in the form
+     * used to construct Target strings (e.g., Feature::Debug is "debug" and not "Debug").
+     * If the string is not a known feature name, return FeatureEnd. */
+    static Target::Feature feature_from_name(const std::string &name);
 
 private:
     /** A bitmask that stores the active features. */

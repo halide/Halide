@@ -1256,10 +1256,9 @@ class StubInput {
     const Expr expr_;
 public:
     // *not* explicit.
-    template<typename T2>
-      StubInput(const StubInputBuffer<T2> &b) : kind_(IOKind::Buffer), parameter_(b.parameter_), func_(), expr_() {}
-      StubInput(const Func &f) : kind_(IOKind::Function), parameter_(), func_(f), expr_() {}
-      StubInput(const Expr &e) : kind_(IOKind::Scalar), parameter_(), func_(), expr_(e) {}
+    StubInput(const StubInputBuffer<T2> &b) : kind_(IOKind::Buffer), parameter_(b.parameter_) {}
+    StubInput(const Func &f) : kind_(IOKind::Function), parameter_(), func_(f) {}
+    StubInput(const Expr &e) : kind_(IOKind::Scalar), parameter_(), expr_(e) {}
 
 private:
     friend class GeneratorInputBase;
@@ -2480,7 +2479,7 @@ public:
 
     GeneratorOutput_Func<T> &set_estimate(Var var, Expr min, Expr extent) {
         this->check_gio_access();
-        internal_assert(this->exprs_.empty() && this->funcs_.size() > 0);
+        internal_assert(this->exprs_.empty() && !this->funcs_.empty());
         for (Func &f : this->funcs_) {
             f.set_estimate(var, min, extent);
         }
@@ -2492,7 +2491,7 @@ public:
 
     GeneratorOutput_Func<T> &set_estimates(const std::vector<std::pair<Expr, Expr>> &estimates) {
         this->check_gio_access();
-        internal_assert(this->exprs_.empty() && this->funcs_.size() > 0);
+        internal_assert(this->exprs_.empty() && !this->funcs_.empty());
         for (Func &f : this->funcs_) {
             f.set_estimates(estimates);
         }
@@ -2902,6 +2901,7 @@ public:
         bool emit_schedule{false};
         bool emit_featurization{false};
         bool emit_registration{false};
+        bool emit_pytorch_wrapper{false};
 
         // This is an optional map used to replace the default extensions generated for
         // a file: if an key matches an output extension, emit those files with the
