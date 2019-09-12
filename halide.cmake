@@ -186,7 +186,6 @@ function(halide_library_from_generator BASENAME)
   set(GENERATOR_EXEC_ARGS "-o" "${GENFILES_DIR}")
   list(APPEND GENERATOR_EXEC_ARGS "-g" "${GENERATOR_NAME}")
   list(APPEND GENERATOR_EXEC_ARGS "-f" "${args_FUNCTION_NAME}" )
-  list(APPEND GENERATOR_EXEC_ARGS "-x" ".s=.s.txt")
   list(APPEND GENERATOR_EXEC_ARGS "target=${TARGET_WITH_FEATURES}")
   # GENERATOR_ARGS always come last
   list(APPEND GENERATOR_EXEC_ARGS ${args_GENERATOR_ARGS})
