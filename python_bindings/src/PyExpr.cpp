@@ -22,6 +22,7 @@ void define_expr(py::module &m) {
             // PyBind11 searches in declared order,
             // int should be tried before float conversion
             .def(py::init<int>())
+            .def(py::init<float>())
             .def(py::init<double>())
             .def(py::init<std::string>())
 
