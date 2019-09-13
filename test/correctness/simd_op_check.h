@@ -61,8 +61,7 @@ class SimdOpCheckTest {
             .with_feature(Target::NoBoundsQuery)
             .with_feature(Target::NoAsserts)
             .with_feature(Target::NoRuntime)
-            .with_feature(Target::DisableLLVMLoopUnroll)
-            .with_feature(Target::DisableLLVMLoopVectorize);
+            .with_feature(Target::DisableLLVMLoopOpt);
     }
 
     bool can_run_code() const {
