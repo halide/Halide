@@ -48,7 +48,7 @@ public:
         use_wasm_simd128 = target.has_feature(Target::WasmSimd128);
     }
 
-    void add_tests() {
+    void add_tests() override {
         // Queue up a bunch of tasks representing each test to run.
         if (target.arch == Target::X86) {
             check_sse_all();
