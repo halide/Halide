@@ -8,33 +8,33 @@ OPTIMIZE ?= -O3
 # android ndk to make a standalone toolchain to use for this app.
 CXX-arm-64-android ?= $(ANDROID_ARM64_TOOLCHAIN)/bin/aarch64-linux-android-c++
 CXX-arm-32-android ?= $(ANDROID_ARM_TOOLCHAIN)/bin/arm-linux-androideabi-c++
-CXX-hexagon-32-noos-hvx_v62-hvx_64 ?= $(HL_HEXAGON_TOOLS)/bin/hexagon-clang++
-CXX-hexagon-32-noos-hvx_v62-hvx_128 ?= $(HL_HEXAGON_TOOLS)/bin/hexagon-clang++
+CXX-hexagon-32-noos-hvx_64 ?= $(HL_HEXAGON_TOOLS)/bin/hexagon-clang++
+CXX-hexagon-32-noos-hvx_128 ?= $(HL_HEXAGON_TOOLS)/bin/hexagon-clang++
 
 CXXFLAGS-arm-64-android ?= -llog -fPIE -pie
 CXXFLAGS-arm-32-android ?= -llog -fPIE -pie
-CXXFLAGS-hexagon-32-noos-hvx_v62-hvx_64 ?= -mhvx -mhvx-length=128B -G0
-CXXFLAGS-hexagon-32-noos-hvx_v62-hvx_128 ?= -mhvx -mhvx-length=128B -G0
+CXXFLAGS-hexagon-32-noos-hvx_64 ?= -mhvx -mhvx-length=128B -G0
+CXXFLAGS-hexagon-32-noos-hvx_128 ?= -mhvx -mhvx-length=128B -G0
 
 LDFLAGS-host ?= -lpthread -ldl
-LDFLAGS-hexagon-32-noos-hvx_v62-hvx_64 ?= -L../../src/runtime/hexagon_remote/bin/v60/ -lsim_qurt
-LDFLAGS-hexagon-32-noos-hvx_v62-hvx_128 ?= -L../../src/runtime/hexagon_remote/bin/v60/ -lsim_qurt
+LDFLAGS-hexagon-32-noos-hvx_64 ?= -L../../src/runtime/hexagon_remote/bin/v60/ -lsim_qurt
+LDFLAGS-hexagon-32-noos-hvx_128 ?= -L../../src/runtime/hexagon_remote/bin/v60/ -lsim_qurt
 
 all: \
 	$(BIN)/driver-host \
 	$(BIN)/driver-arm-64-android \
 	$(BIN)/driver-arm-32-android \
-	$(BIN)/driver-hexagon-32-noos-hvx_v62-hvx_64 \
-	$(BIN)/driver-hexagon-32-noos-hvx_v62-hvx_128 \
+	$(BIN)/driver-hexagon-32-noos-hvx_64 \
+	$(BIN)/driver-hexagon-32-noos-hvx_128 \
 
-$(BIN)/hexagon-32-noos-hvx_v62-%/filters.h:
+$(BIN)/hexagon-32-noos-%/filters.h:
 	@mkdir -p $(@D)
 	make -C ../../ bin/correctness_simd_op_check_hvx
-	cd $(BIN)/hexagon-32-noos-hvx_v62-$* && HL_TARGET=hexagon-32-noos-hvx_v62-$* LD_LIBRARY_PATH=../../../../bin:$$LD_LIBRARY_PATH ../../../../bin/correctness_simd_op_check_hvx
-	cat $(BIN)/hexagon-32-noos-hvx_v62-$*/test_*.h > $(BIN)/hexagon-32-noos-hvx_v62-$*/filter_headers.h
-	echo "filter filters[] = {" > $(BIN)/hexagon-32-noos-hvx_v62-$*/filters.h
-	cd $(BIN)/hexagon-32-noos-hvx_v62-$*; for f in test_*.h; do n=$${f/.h/}; echo '{"'$${n}'", &'$${n}'},'; done >> filters.h
-	echo '{NULL, NULL}};' >> $(BIN)/hexagon-32-noos-hvx_v62-$*/filters.h
+	cd $(BIN)/hexagon-32-noos-$* && HL_TARGET=hexagon-32-noos-$* LD_LIBRARY_PATH=../../../../bin:$$LD_LIBRARY_PATH ../../../../bin/correctness_simd_op_check_hvx
+	cat $(BIN)/hexagon-32-noos-$*/test_*.h > $(BIN)/hexagon-32-noos-$*/filter_headers.h
+	echo "filter filters[] = {" > $(BIN)/hexagon-32-noos-$*/filters.h
+	cd $(BIN)/hexagon-32-noos-$*; for f in test_*.h; do n=$${f/.h/}; echo '{"'$${n}'", &'$${n}'},'; done >> filters.h
+	echo '{NULL, NULL}};' >> $(BIN)/hexagon-32-noos-$*/filters.h
 
 $(BIN)/%/filters.h:
 	@mkdir -p $(@D)
