@@ -13,7 +13,7 @@ CXX-hexagon-32-noos-hvx_128 ?= $(HL_HEXAGON_TOOLS)/bin/hexagon-clang++
 
 CXXFLAGS-arm-64-android ?= -llog -fPIE -pie
 CXXFLAGS-arm-32-android ?= -llog -fPIE -pie
-CXXFLAGS-hexagon-32-noos-hvx_64 ?= -mhvx -mhvx-length=128B -G0
+CXXFLAGS-hexagon-32-noos-hvx_64 ?= -mhvx -mhvx-length=64B -G0
 CXXFLAGS-hexagon-32-noos-hvx_128 ?= -mhvx -mhvx-length=128B -G0
 
 LDFLAGS-host ?= -lpthread -ldl
