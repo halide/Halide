@@ -27,6 +27,14 @@ all: \
 	$(BIN)/driver-hexagon-32-noos-hvx_64 \
 	$(BIN)/driver-hexagon-32-noos-hvx_128 \
 
+hvx_128: $(BIN)/driver-hexagon-32-noos-hvx_128
+hvx_64 : $(BIN)/driver-hexagon-32-noos-hvx_64
+
+arm_32: $(BIN)/driver-arm-32-android
+arm_64: $(BIN)/driver-arm-64-android
+
+host: $(BIN)/driver-host
+
 $(BIN)/hexagon-32-noos-%/filters.h:
 	@mkdir -p $(@D)
 	make -C ../../ bin/correctness_simd_op_check_hvx
