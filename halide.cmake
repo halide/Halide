@@ -154,7 +154,7 @@ function(halide_library_from_generator BASENAME)
     endif()
   endforeach()
 
-  set(OUTPUTS static_library h registration)
+  set(OUTPUTS static_library c_header registration)
   foreach(E ${args_EXTRA_OUTPUTS})
     if("${E}" STREQUAL "c_source")
       message(FATAL_ERROR "halide_library('${BASENAME}') doesn't support 'c_source' in EXTRA_OUTPUTS; please depend on '${BASENAME}_cc' instead.")
