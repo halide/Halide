@@ -2,93 +2,137 @@
 
 using namespace Halide;
 
+Expr next_float(Expr e) {
+    return reinterpret<float>(reinterpret<int32_t>(e) + 1);
+}
+
+Expr prev_float(Expr e) {
+    return reinterpret<float>(reinterpret<int32_t>(e) - 1);
+}
+
 int main(int argc, char **argv) {
     Var x, y;
-    Func ref("ref");
+
+    Func num_u, den_u;
+    num_u(x, y) = cast<uint16_t>(x);
+    den_u(x, y) = max(1, cast<uint16_t>(y));
+
+    Func num_s, den_s;
+    Expr n = cast<int16_t>(x);
+    Expr d = cast<int16_t>(y);
+    num_s(x, y) = select(n == -32768 && d == -1, 0, n);
+    den_s(x, y) = select(d == 0, 1, d);
+
+    num_u.compute_root();
+    den_u.compute_root();
+    num_s.compute_root();
+    den_s.compute_root();
+
+    Func ref_u("ref_u");
+    Func ref_s("ref_s");
     {
-        Func num, den;
-        num(x, y) = cast<uint16_t>(x);
-        den(x, y) = max(1, cast<uint16_t>(y));
-
-        num.compute_root();
-        den.compute_root();
-
-        ref(x, y) = cast<uint16_t>(num(x, y)) / cast<uint16_t>(den(x, y));
+        ref_u(x, y) = num_u(x, y) / den_u(x, y);
+        ref_s(x, y) = num_s(x, y) / den_s(x, y);
     }
 
-    Func f("f");
+    Func f_u("f_u"), f_s("f_s");
     {
-        Func num, den;
-        num(x, y) = cast<uint16_t>(x);
-        den(x, y) = max(1, cast<uint16_t>(y));
+        // Do the division as a float, then take the floor. If you
+        // move down to the previous floating point number before
+        // taking the floor you sometimes get the wrong answer
+        // (e.g. consider what happens with 1.0f / 1.0f). However if
+        // you move on to the next floating point number, or the one
+        // after that, it still works. We move onto the next floating
+        // point number to make sure that the division operation only
+        // has to be exact to within +/-1 in the last place.
+        n = num_u(x, y);
+        d = den_u(x, y);
 
-        Expr q = cast<uint16_t>(strict_float(cast<float>(num(x, y)) / cast<float>(den(x, y))));
+        Expr r = cast<float>(n) / cast<float>(d);
+        r = next_float(r);
+        r = floor(r);
+        f_u(x, y) = cast<uint16_t>(strict_float(r));
 
-        Expr quantized = q * den(x, y);
-        Expr m = num(x, y) - quantized;
-        Expr m_negative = num(x, y) < quantized;
+        n = num_s(x, y);
+        d = den_s(x, y);
 
-        // m >= 2^15 means that either it underflowed and is actually
-        // negative, or the numerator is >= 2^15 and the denominator is
-        // strictly larger.
+        r = cast<float>(n) / cast<float>(d);
 
-        Expr m_sign_mask = cast<uint16_t>(cast<int16_t>(m) >> 15);
-        m_sign_mask = m_sign_mask;
+        Expr d_sign_mask = cast<uint32_t>((cast<uint16_t>(d) & cast<uint16_t>(0x8000))) << 16;
+        Expr n_sign_adjust = 1 - cast<int32_t>((n >> 14) & cast<int16_t>(2));
 
-        // We may need to subtract one from the result if the modulus comes out negative.
-        /*
-        q -= select(m_negative, cast<uint16_t>(1), cast<uint16_t>(0));
-        m += select(m_negative, den(x, y), 0);
-        */
+        r = reinterpret<uint32_t>(r);
+        // Paranoid adjustment for stability. Slightly more
+        // complicated than above. Can safely be done zero times, one
+        // time, or two times, so we do it once.
+        //r += n_sign_adjust;
+        //r += n_sign_adjust;
 
-        q += m_negative;
+        r = r ^ d_sign_mask;
+        r = reinterpret<float>(r);
+        r = floor(r);
+        r = reinterpret<uint32_t>(r);
+        r = r ^ d_sign_mask;
 
-        //q -= ((den(x, y) - 1) & num(x, y)) >> 15;
+        r = reinterpret<float>(r);
+        r = strict_float(r);
+        r = cast<int16_t>(r);
+        f_s(x, y) = r;
+    }
 
-        // If the denominator was one and the numerator is large, we
-        // just made a mistake, and should add one to undo it
-        //q += (num(x, y) >> 15) & (select(den(x, y) == 1, cast<uint16_t>(1), cast<uint16_t>(0)));
-
-        m += select(m_negative, den(x, y), 0);
-
-        Expr worked = (num(x, y) == den(x, y) * q + m) && (m < den(x, y));
-
-        f(x, y) = q; //print_when(!worked, q, "num =", num(x, y), "den =", den(x, y), "q =", q, "m =", m);
-
-        num.compute_root();
-        den.compute_root();
+    // Check the stability of the above algorithm, by moving to the
+    // next or previous float before rounding.
+    {
 
     }
 
+    ref_u.vectorize(x, 16);
+    ref_s.vectorize(x, 16);
+    f_u.vectorize(x, 16);
+    f_s.vectorize(x, 16);
 
-    ref.vectorize(x, 16);
-    f.vectorize(x, 16);
-
-    ref.compile_to_assembly("/dev/stdout", {}, Target("x86-64-avx2-no_asserts-no_bounds_query-disable_llvm_loop_opt-no_runtime"));
-    f.compile_to_assembly("/dev/stdout", {}, Target("x86-64-avx2-no_asserts-no_bounds_query-disable_llvm_loop_opt-no_runtime"));
-    //f.compile_to_assembly("/dev/stdout", {}, Target("arm-64-linux-no_asserts-no_bounds_query-disable_llvm_loop_opt-no_runtime"));
+    ref_u.compile_to_assembly("/dev/stdout", {}, Target("x86-64-avx2-no_asserts-no_bounds_query-disable_llvm_loop_opt-no_runtime"));
+    ref_s.compile_to_assembly("/dev/stdout", {}, Target("x86-64-avx2-no_asserts-no_bounds_query-disable_llvm_loop_opt-no_runtime"));
+    f_u.compile_to_assembly("/dev/stdout", {}, Target("x86-64-avx2-no_asserts-no_bounds_query-disable_llvm_loop_opt-no_runtime"));
+    f_s.compile_to_assembly("/dev/stdout", {}, Target("x86-64-avx2-no_asserts-no_bounds_query-disable_llvm_loop_opt-no_runtime"));
 
     const int tile_bits = 14;
 
-    Buffer<uint16_t> ref_buf(1 << tile_bits, 1 << tile_bits);
-    Buffer<uint16_t> f_buf(1 << tile_bits, 1 << tile_bits);
+    Buffer<uint16_t> ref_u_buf(1 << tile_bits, 1 << tile_bits);
+    Buffer<int16_t> ref_s_buf(1 << tile_bits, 1 << tile_bits);
+    Buffer<uint16_t> f_u_buf(1 << tile_bits, 1 << tile_bits);
+    Buffer<int16_t> f_s_buf(1 << tile_bits, 1 << tile_bits);
 
     for (int ty = 0; ty < (1 << (16 - tile_bits)); ty++) {
         for (int tx = 0; tx < (1 << (16 - tile_bits)); tx++) {
             printf("%d %d\n", tx, ty);
-            ref_buf.set_min(tx << tile_bits, (ty << tile_bits) + 1);
-            f_buf.set_min(tx << tile_bits, (ty << tile_bits) + 1);
-            ref.realize(ref_buf);
-            f.realize(f_buf);
-            if (std::memcmp(f_buf.data(), ref_buf.data(), f_buf.size_in_bytes()) == 0) {
-                continue;
+            ref_u_buf.set_min(tx << tile_bits, (ty << tile_bits) + 1);
+            f_u_buf.set_min(tx << tile_bits, (ty << tile_bits) + 1);
+            ref_s_buf.set_min(tx << tile_bits, (ty << tile_bits) + 1);
+            f_s_buf.set_min(tx << tile_bits, (ty << tile_bits) + 1);
+            ref_u.realize(ref_u_buf);
+            ref_s.realize(ref_s_buf);
+            f_u.realize(f_u_buf);
+            f_s.realize(f_s_buf);
+            if (std::memcmp(f_u_buf.data(), ref_u_buf.data(), f_u_buf.size_in_bytes()) != 0) {
+                for (int y = ref_u_buf.dim(1).min(); y < ref_u_buf.dim(1).max(); y++) {
+                    for (int x = ref_u_buf.dim(0).min(); x < ref_u_buf.dim(0).max(); x++) {
+                        if (f_u_buf(x, y) != ref_u_buf(x, y)) {
+                            printf("(unsigned) %d / %d = %d instead of %d\n", x, y,
+                                   f_u_buf(x, y), ref_u_buf(x, y));
+                            return -1;
+                        }
+                    }
+                }
             }
-            for (int y = ref_buf.dim(1).min(); y < ref_buf.dim(1).max(); y++) {
-                for (int x = ref_buf.dim(0).min(); x < ref_buf.dim(0).max(); x++) {
-                    if (f_buf(x, y) != ref_buf(x, y)) {
-                        printf("(Method 1) %d / %d = %d instead of %d\n", x, y,
-                               f_buf(x, y), ref_buf(x, y));
-                        return -1;
+            if (std::memcmp(f_s_buf.data(), ref_s_buf.data(), f_s_buf.size_in_bytes()) != 0) {
+                for (int y = ref_s_buf.dim(1).min(); y < ref_s_buf.dim(1).max(); y++) {
+                    for (int x = ref_s_buf.dim(0).min(); x < ref_s_buf.dim(0).max(); x++) {
+                        if (f_s_buf(x, y) != ref_s_buf(x, y)) {
+                            printf("(signed) %d / %d = %d instead of %d\n", (int16_t)x, (int16_t)y,
+                                   f_s_buf(x, y), ref_s_buf(x, y));
+                            return -1;
+                        }
                     }
                 }
             }
