@@ -2903,14 +2903,6 @@ public:
         bool emit_featurization{false};
         bool emit_registration{false};
         bool emit_pytorch_wrapper{false};
-
-        // This is an optional map used to replace the default extensions generated for
-        // a file: if an key matches an output extension, emit those files with the
-        // corresponding value instead (e.g., ".s" -> ".assembly_text"). This is
-        // empty by default; it's mainly useful in build environments where the default
-        // extensions are problematic, and avoids the need to rename output files
-        // after the fact.
-        std::map<std::string, std::string> substitutions;
     };
 
     virtual ~GeneratorBase();
