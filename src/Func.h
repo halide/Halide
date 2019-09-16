@@ -933,7 +933,7 @@ public:
      * Deduces target files based on filenames specified in
      * output_files map.
      */
-    void compile_to(const std::map<std::string, std::string> &output_files,
+    void compile_to(const std::map<Output, std::string> &output_files,
                     const std::vector<Argument> &args,
                     const std::string &fn_name,
                     const Target &target = get_target_from_environment());

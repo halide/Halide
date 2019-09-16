@@ -73,12 +73,14 @@ std::string compute_base_path(const std::string &output_dir,
     return base_path;
 }
 
-std::map<std::string, std::string> compute_output_files(const Target &target,
-                                                        const std::string &base_path,
-                                                        const std::map<std::string, std::string> &outputs) {
-    std::map<std::string, std::string> output_files;
-    for (auto it : outputs) {
-        output_files[it.first] = base_path + it.second;
+std::map<Output, std::string> compute_output_files(const Target &target,
+                                                   const std::string &base_path,
+                                                   const std::set<Output> &outputs) {
+    std::map<Output, OutputInfo> output_info = get_output_info(target);
+
+    std::map<Output, std::string> output_files;
+    for (auto o : outputs) {
+        output_files[o] = base_path + output_info.at(o).extension;
     }
     return output_files;
 }
@@ -901,35 +903,40 @@ int generate_filter_main_inner(int argc, char **argv, std::ostream &cerr) {
     }
 
     // extensions won't vary across multitarget output
-    auto ext = get_output_extensions(targets[0]);
+    std::map<Output, OutputInfo> output_info = get_output_info(targets[0]);
 
-    std::map<std::string, std::string> outputs;
+    std::set<Output> outputs;
     if (emit_flags.empty() || (emit_flags.size() == 1 && emit_flags[0].empty())) {
         // If omitted or empty, assume .a and .h and registration.cpp
-        for (auto key : {"c_header", "registration", "static_library"}) {
-            outputs[key] = ext.at(key);
-        }
+        outputs.insert(Output::c_header);
+        outputs.insert(Output::registration);
+        outputs.insert(Output::static_library);
     } else {
+        // Build a reverse lookup table. Allow some legacy aliases on the command line,
+        // to allow legacy build systems to work more easily.
+        std::map<std::string, Output> output_name_to_enum = {
+            {"cpp", Output::c_source},
+            {"h", Output::c_header},
+            {"html", Output::stmt_html},
+            {"o", Output::object},
+            {"py.c", Output::python_extension},
+        };
+        for (auto it : output_info) {
+            output_name_to_enum[it.second.name] = it.first;
+        }
+
         for (std::string opt : emit_flags) {
-            // Allow some legacy aliases on the command line, to allow legacy
-            // build systems to work more easily. Only a handful, so don't bother
-            // with a lookup table.
-            if (opt == "cpp") opt = "c_source";
-            if (opt == "h") opt = "c_header";
-            if (opt == "html") opt = "stmt_html";
-            if (opt == "o") opt = "object";
-            if (opt == "py.c") opt = "python_extension";
-            auto it = ext.find(opt);
-            if (it == ext.end()) {
+            auto it = output_name_to_enum.find(opt);
+            if (it == output_name_to_enum.end()) {
                 cerr << "Unrecognized emit option: " << opt << " is not one of [";
-                for (auto k : ext) {
+                for (auto k : output_name_to_enum) {
                     cerr << k.first << " ";
                 }
                 cerr << "], ignoring.\n";
                 cerr << kUsage;
                 return 1;
             }
-            outputs[opt] = it->second;
+            outputs.insert(it->second);
         }
     }
 
@@ -957,10 +964,10 @@ int generate_filter_main_inner(int argc, char **argv, std::ostream &cerr) {
     if (!generator_name.empty()) {
         std::string base_path = compute_base_path(output_dir, function_name, file_base_name);
         debug(1) << "Generator " << generator_name << " has base_path " << base_path << "\n";
-        if (outputs.find("cpp_stub") != outputs.end()) {
+        if (outputs.count(Output::cpp_stub)) {
             // When generating cpp_stub, we ignore all generator args passed in, and supply a fake Target.
             auto gen = GeneratorRegistry::create(generator_name, GeneratorContext(Target()));
-            auto stub_file_path = base_path + outputs["cpp_stub"];
+            auto stub_file_path = base_path + output_info[Output::cpp_stub].extension;
             gen->emit_cpp_stub(stub_file_path);
         }
 

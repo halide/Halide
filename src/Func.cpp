@@ -2966,7 +2966,7 @@ Module Func::compile_to_module(const vector<Argument> &args, const std::string &
 }
 
 
-void Func::compile_to(const map<string, string> &output_files,
+void Func::compile_to(const map<Output, string> &output_files,
                       const vector<Argument> &args,
                       const string &fn_name,
                       const Target &target) {
