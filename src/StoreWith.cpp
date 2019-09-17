@@ -73,6 +73,27 @@ struct Equality {
             find_terms(sub->b, -c);
         } else if (mul && coeff) {
             find_terms(mul->a, c * (int)(*coeff));
+        } else if (mul) {
+            // Apply distributive law to non-linear terms
+            const Add *a_a = mul->a.as<Add>();
+            const Sub *s_a = mul->a.as<Sub>();
+            const Add *a_b = mul->b.as<Add>();
+            const Sub *s_b = mul->b.as<Sub>();
+            if (a_a) {
+                find_terms(a_a->a * mul->b, c);
+                find_terms(a_a->b * mul->b, c);
+            } else if (s_a) {
+                find_terms(s_a->a * mul->b, c);
+                find_terms(s_a->b * mul->b, -c);
+            } else if (a_b) {
+                find_terms(mul->a * a_b->a, c);
+                find_terms(mul->a * a_b->b, c);
+            } else if (s_b) {
+                find_terms(mul->a * s_b->a, c);
+                find_terms(mul->a * s_b->b, -c);
+            } else {
+                add_term(e, c);
+            }
         } else {
             add_term(e, c);
         }
@@ -331,12 +352,16 @@ struct System {
     void compute_complexity() {
         std::map<std::string, int> inequalities;
         int non_linear_terms = 0, num_terms = 0;
+        std::set<std::string> wild_constant_terms;
         for (auto &e : equalities) {
             for (auto &p : e.terms) {
                 Simplify::ExprInfo info;
                 simplifier->mutate(p.first, &info);
                 if (const Variable *var = p.first.as<Variable>()) {
                     inequalities[var->name] = (int)info.max_defined + (int)info.min_defined;
+                    if (var->name[0] == 'c') {
+                        wild_constant_terms.insert(var->name);
+                    }
                 } else if (!is_const(p.first)) {
                     non_linear_terms++;
                 }
@@ -369,6 +394,8 @@ struct System {
         for (int i = 0; i < 6; i++) {
             c += terms[i] * coeffs[i];
         }
+        // HACK
+        c -= (int)(wild_constant_terms.size());
     }
 
     float complexity() const {
@@ -419,7 +446,7 @@ struct System {
             }
             if (lhs.defined()) {
                 Expr k1 = aux(), k2 = aux();
-                Expr replacement = k1 + k2 * rhs;
+                Expr replacement = simplifier->mutate(k1 + k2 * rhs, nullptr);
                 auto subs = [&](Expr e) {
                     e = substitute(lhs % rhs, k1, e);
                     e = substitute(lhs / rhs, k2, e);
@@ -449,8 +476,8 @@ struct System {
         // Replace repeated non-linear terms with new variables
         std::map<Expr, int, IRDeepCompare> nonlinear_terms;
         for (int i = 0; i < (int)equalities.size(); i++) {
-            for (const auto &p : equalities[i].terms) {
-                if (!p.first.as<Variable>()) {
+            for (auto &p : equalities[i].terms) {
+                if (!p.first.as<Variable>() && !is_const(p.first)) {
                     nonlinear_terms[p.first]++;
                 }
             }
@@ -460,6 +487,8 @@ struct System {
             if (p.second > 1) {
                 // It's a repeated non-linearity. Replace it with an opaque variable.
                 Var t(unique_name('n'));
+
+                debug(0) << "Repeated non-linear term: " << t << " == " << p.first << "\n";
 
                 auto subs = [&](Expr e) {
                     e = substitute(p.first, t, e);
@@ -471,7 +500,6 @@ struct System {
                     new_system->add_term(subs(non_linear_term));
                 }
                 for (int j = 0; j < (int)equalities.size(); j++) {
-                    // In the other equations, we replace the variable with the right-hand-side
                     new_system->add_term(subs(equalities[j].to_expr()));
                 }
 
@@ -487,6 +515,7 @@ struct System {
 
                 new_system->finalize();
                 result.emplace_back(std::move(new_system));
+                return;
             }
         }
 
@@ -557,15 +586,6 @@ struct System {
                 const Variable *var = p.first.as<Variable>();
 
                 if (var) {
-
-                    // HACK
-                    // if (starts_with(var->name, "c")) continue;
-
-                    // HACK: Don't eliminate positive slack variables
-                    /*
-                    if (starts_with(var->name, "k") &&
-                        is_one(simplifier->mutate(Expr(var) >= 0, nullptr))) continue;
-                    */
 
                     Expr rhs = 0, rhs_remainder = 0;
                     for (const auto &p2 : equalities[i].terms) {
@@ -715,6 +735,40 @@ bool can_disprove(Expr e, int beam_size, std::set<Expr, IRDeepCompare> *implicat
     system->add_term(e);
     system->finalize();
 
+    class FilterImplications : public IRVisitor {
+        using IRVisitor::visit;
+
+        void visit(const Variable *op) {
+            // TODO: using var name prefixes here is a total hack
+            if (starts_with(op->name, "c")) {
+                return;
+            } else if (starts_with(op->name, "k")) {
+                if (simplifier->bounds_and_alignment_info.contains(op->name)) {
+                    auto info = simplifier->bounds_and_alignment_info.get(op->name);
+                    if (info.min_defined || info.max_defined) {
+                        return;
+                    }
+                }
+            }
+            useful = false;
+        }
+
+    public:
+        Simplify *simplifier;
+        bool useful = true;
+        FilterImplications(Simplify *s) : simplifier(s) {}
+    };
+
+    std::set<Expr, IRDeepCompare> local_implications;
+
+    auto consider_implication = [&](const Expr &e) {
+        FilterImplications f(&simplifier);
+        e.accept(&f);
+        if (f.useful) {
+            local_implications.insert(e);
+        }
+    };
+
     // Beam search time.
     std::deque<std::unique_ptr<System>> beam;
     beam.emplace_back(std::move(system));
@@ -723,15 +777,26 @@ bool can_disprove(Expr e, int beam_size, std::set<Expr, IRDeepCompare> *implicat
         std::unique_ptr<System> next = std::move(beam.front());
         beam.pop_front();
 
+        if (implications) {
+            for (const auto &eq : next->equalities) {
+                consider_implication(eq.to_expr());
+            }
+            if (next->non_linear_term.defined()) {
+                consider_implication(next->non_linear_term);
+            }
+        }
+
 
           debug(0) << "Top of beam: " << next->complexity() << "\n";
           next->dump();
-
 
         if (next->infeasible()) {
             // We found that the initial constraint system
             // eventually implied a falsehood, so we successfully
             // disproved the original expression.
+            if (implications) {
+                implications->insert(const_false());
+            }
             return true;
         }
 
@@ -751,6 +816,57 @@ bool can_disprove(Expr e, int beam_size, std::set<Expr, IRDeepCompare> *implicat
             beam.pop_back();
         }
     }
+
+    if (implications) {
+        Scope<Interval> scope;
+        const auto &info = simplifier.bounds_and_alignment_info;
+        for (auto it = info.cbegin(); it != info.cend(); ++it){
+            if (starts_with(it.name(), "c")) {
+                Var v(it.name());
+                if (it.value().min_defined) {
+                    consider_implication((int)it.value().min <= v);
+                }
+                if (it.value().max_defined) {
+                    consider_implication(v <= (int)it.value().max);
+                }
+            } else {
+                Interval i = Interval::everything();
+                if (it.value().min_defined) {
+                    i.min = (int)it.value().min;
+                }
+                if (it.value().max_defined) {
+                    i.max = (int)it.value().max;
+                }
+                debug(0) << it.name() << ": " << i.min << " " << i.max << "\n";
+                scope.push(it.name(), i);
+            }
+        }
+
+        // Now eliminate all the k's
+        for (Expr m : local_implications) {
+            debug(0) << m << " -> ";
+            if (const EQ *eq = m.as<EQ>()) {
+                Expr a = eq->a, b = eq->b;
+                Interval ia = bounds_of_expr_in_scope(a, scope);
+                Interval ib = bounds_of_expr_in_scope(b, scope);
+                if (ia.is_single_point() && ib.is_single_point()) {
+                    m = (ia.min == ib.min);
+                } else {
+                    m = const_true();
+                    if (ia.has_upper_bound() && ib.has_lower_bound()) {
+                        // Equality implies their ranges must overlap
+                        m = (ia.max >= ib.min);
+                    }
+                    if (ia.has_lower_bound() && ib.has_upper_bound()) {
+                        m = m && (ia.min <= ib.max);
+                    }
+                }
+            }
+            debug(0) << m << "\n";
+            implications->insert(m);
+        }
+    }
+
     return false;
 }
 
@@ -1242,6 +1358,14 @@ class BreakIntoConvexPieces : public IRMutator {
         }
     }
 
+    Expr visit(const NE *op) override {
+        if (!op->a.type().is_bool()) {
+            return mutate((op->a < op->b) || (op->b < op->a));
+        } else {
+            return IRMutator::visit(op);
+        }
+    }
+
     // Also move ors outwards
     Expr visit(const And *op) override {
         Expr a = mutate(op->a);
@@ -1315,25 +1439,39 @@ bool can_disprove_nonconvex(Expr e, int beam_size, Expr *implication = nullptr) 
         debug(0) << (++i) << ") " << p << "\n";
     }
 
-    for (auto p : pieces) {
-        if (is_one(p)) return false;
-        if (is_zero(p)) continue;
+    if (implication) {
+        // We're going to or together a term from each convex piece.
+        *implication = const_false();
+    }
 
+    bool failed = false;
+
+    for (auto p : pieces) {
         set<Expr, IRDeepCompare> implications;
 
         debug(0) << "Attempting to disprove non-trivial term: " << p << "\n";
         if (can_disprove(p, beam_size, &implications)) {
             debug(0) << "Success!\n";
-            continue;
         } else {
             debug(0) << "Failure\n";
-            return false;
+            failed = true;
         }
 
-        // TODO: mine the implications to build up a predicate
+        if (implication) {
+            Expr m = const_true(); // Could also set it to p, but that should be captured below.
+            for (auto i : implications) {
+                m = m && i;
+            }
+            *implication = *implication || m;
+        }
     }
 
-    return true;
+    if (implication) {
+        debug(0) << "Unsimplified implication: " << *implication << "\n";
+        *implication = simplify(*implication);
+    }
+
+    return !failed;
 }
 
 Stmt lower_store_with(const Stmt &s, const vector<Function> &outputs, const map<string, Function> &env) {
@@ -1341,15 +1479,171 @@ Stmt lower_store_with(const Stmt &s, const vector<Function> &outputs, const map<
 
     {
         Var v0, v1, v2;
-        Var c0("c0"), c1("c1"), c2("c2"), c3("c3");
+        Var c0("c0"), c1("c1"), c2("c2"), c3("c3"), c4("c4"), c5("c5"), c6("c6"), c7("c7"), c8("c8"), c9("c9"), c10("c10"), c11("c11"), c12("c12"), c13("c13"), c14("c14");
         /*
-        Expr e = ((min(((((v0 + 13)/4)*4) + v1), (v2 + 10)) + 4) > min(((((min((((v0 + 17)/4)*4), (min((v2 - v1), v0) + 14)) + 3)/4)*4) + v1), (v2 + 14)));
+          Expr e = ((min(((((v0 + 13)/4)*4) + v1), (v2 + 10)) + 4) > min(((((min((((v0 + 17)/4)*4), (min((v2 - v1), v0) + 14)) + 3)/4)*4) + v1), (v2 + 14)));
         debug(0) << can_disprove_nonconvex(e, 256) <<"\n";
         */
 
+        Expr m;
+        //Expr to_prove = ((v0 + c0) / c2) * c2 >= ((v0 + c1) / c2) * c2;
+        //Expr to_prove = ((min(((((v0 + c0)/c2)*c2) + v1), (v2 + c1)) + c3) > min(((((min((((v0 + c4)/c2)*c2), (min((v2 - v1), v0) + c5)) + c6)/c2)*c2) + v1), (v2 + c7)));
+        //Expr to_prove = ((((v0 + c0)/c2)*c2) + v1) > min(((((min((((v0 + c4)/c2)*c2), (min((v2 - v1), v0) + c5)) + c6)/c2)*c2) + v1), (v2 + c7));
+        /*Expr to_prove = (((((v0 + c0)/c2)*c2) + v1) >
+          min(((((min((v0 + c4), (min((v2 - v1), v0) + c5)) + c6)/c2)*c2) + v1), (v2 + c7)));
+        */
 
-        debug(0) << can_disprove_nonconvex(c2 > 0 &&
-                                           ((v0 + c0) / c2) * c2 < ((v0 + c1) / c2) * c2, 1024);
+        /*
+        Expr C0 = c0 * c2 + c1;
+        Expr C1 = c3 * c2 + c4;
+        Expr C3 = c5 * c2 + c6;
+        Expr C4 = c7 * c2 + c8;
+        Expr C5 = c9 * c2 + c10;
+        Expr C6 = c11 * c2 + c12;
+        Expr C7 = c13 * c2 + c14;
+
+        assumption = assumption && (c1 >= 0 && c1 < c2);
+        assumption = assumption && (c4 >= 0 && c4 < c2);
+        assumption = assumption && (c6 >= 0 && c6 < c2);
+        assumption = assumption && (c8 >= 0 && c8 < c2);
+        assumption = assumption && (c10 >= 0 && c10 < c2);
+        assumption = assumption && (c12 >= 0 && c12 < c2);
+        assumption = assumption && (c14 >= 0 && c14 < c2);
+        */
+
+        /*
+        Expr to_prove = (((((v0 + c0)/c2)*c2) + v1) >
+                         min(((((min((v0 + c4), (v0 + c5)) + c6)/c2)*c2) + v1), (v2 + c7)));
+        */
+
+        // Expr assumption = c2 >= 1;
+        Expr assumption = c2 != 0;
+        Expr to_prove = ((min(((((v0 + c0)/c2)*c2) + v1), (v2 + c1)) + c3) <= min(((((min((((v0 + c4)/c2)*c2), (min((v2 - v1), v0) + c5)) + c6)/c2)*c2) + v1), (v2 + c7)));
+        /*
+        Expr assumption = const_true();
+        Expr to_prove = ((min(((((v0 + 13)/4)*4) + v1), (v2 + 10)) + 4) <= min(((((min((((v0 + 17)/4)*4), (min((v2 - v1), v0) + 14)) + 3)/4)*4) + v1), (v2 + 14)));
+        */
+        /*
+        Expr to_prove = v0 * c0 - v1 * c1 == (v0 * (c0 / c1) - v1) * c1;
+        Expr assumption = c1 != 0;
+        */
+
+        assumption = simplify(assumption);
+        debug(0) << can_disprove_nonconvex(assumption && !to_prove, 1024*4, &m);
+
+        debug(0) << "\nImplication: " << m << "\n";
+
+        class NormalizePrecondition : public IRMutator {
+            using IRMutator::visit;
+            Expr visit(const Not *op) override {
+                if (const Or *o = op->a.as<Or>()) {
+                    return mutate(!o->a && !o->b);
+                } else if (const And *o = op->a.as<And>()) {
+                    return mutate(!o->a || !o->b);
+                } else {
+                    return IRMutator::visit(op);
+                }
+            }
+
+            Expr visit(const And *op) override {
+                Expr a = mutate(op->a);
+                Expr b = mutate(op->b);
+                vector<Expr> pending = {a, b};
+                set<Expr, IRDeepCompare> terms;
+                while (!pending.empty()) {
+                    Expr next = pending.back();
+                    pending.pop_back();
+                    if (const And *next_and = next.as<And>()) {
+                        pending.push_back(next_and->a);
+                        pending.push_back(next_and->b);
+                    } else {
+                        terms.insert(next);
+                    }
+                }
+                Expr result;
+                for (auto t : terms) {
+                    if (!result.defined()) {
+                        result = t;
+                    } else {
+                        result = result && t;
+                    }
+                }
+                return result;
+            }
+
+            Expr visit(const Or *op) override {
+                Expr a = mutate(op->a);
+                Expr b = mutate(op->b);
+                vector<Expr> pending = {a, b};
+                set<Expr, IRDeepCompare> terms;
+                while (!pending.empty()) {
+                    Expr next = pending.back();
+                    pending.pop_back();
+                    if (const Or *next_or = next.as<Or>()) {
+                        pending.push_back(next_or->a);
+                        pending.push_back(next_or->b);
+                    } else {
+                        terms.insert(next);
+                    }
+                }
+                Expr result;
+                for (auto t : terms) {
+                    if (!result.defined()) {
+                        result = t;
+                    } else {
+                        result = result || t;
+                    }
+                }
+                return result;
+            }
+        };
+
+        // Exploit the assumption to simplify the implications. Cleans
+        // up the expression a little.
+        Simplify simplifier(true, nullptr, nullptr);
+        simplifier.learn_true(assumption);
+        m = simplifier.mutate(m, nullptr);
+        debug(0) << "Assumption: " << assumption << "\n";
+        debug(0) << "Simplified implication using assumption: " << m << "\n";
+
+        Expr precondition = simplify(assumption && !m);
+        precondition = NormalizePrecondition().mutate(precondition);
+
+        // We probably have a big conjunction. Use each term in it to
+        // simplify all subsequent terms, to reduce the number of
+        // overlapping conditions.
+        vector<Expr> terms;
+        vector<Expr> pending = {precondition};
+        while (!pending.empty()) {
+            Expr next = pending.back();
+            pending.pop_back();
+            if (const And *next_and = next.as<And>()) {
+                pending.push_back(next_and->a);
+                pending.push_back(next_and->b);
+            } else {
+                terms.push_back(next);
+            }
+        }
+        precondition = Expr();
+        for (auto &t1 : terms) {
+            Simplify s(true, nullptr, nullptr);
+            for (const auto &t2 : terms) {
+                if (t1.same_as(t2)) continue;
+                s.learn_true(t2);
+            }
+            t1 = s.mutate(t1, nullptr);
+
+            if (!precondition.defined()) {
+                precondition = t1;
+            } else {
+                precondition = precondition && t1;
+            }
+        }
+
+        precondition = simplify(precondition);
+
+        debug(0) << "Precondition " << precondition << "\n"
+                 << "implies " << to_prove << "\n";
 
         /*
         ((v0 + c0) / c1) * c1 < ((v0 + c2) / c3) * c3;
