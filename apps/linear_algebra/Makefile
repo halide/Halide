@@ -6,7 +6,7 @@ CXXFLAGS += -Wall -march=native -I /opt/local/include
 HL_TARGET ?= host
 LIBHALIDE_BLAS = $(BIN)/libhalide_blas.a
 HALIDEBLAS_FLAGS ?= -DUSE_HALIDE
-EMIT_OPTIONS = stmt,assembly,object,h
+EMIT_OPTIONS = stmt,assembly,object,c_header
 
 EIGEN_INCLUDES ?= -I/usr/include/eigen3
 CBLAS_LIBS ?= -lblas
