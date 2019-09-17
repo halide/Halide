@@ -2010,7 +2010,7 @@ benchmark_apps: $(BENCHMARK_APPS)
 
 .PHONY: test_python2
 test_python2: distrib $(BIN_DIR)/host/runtime.a
-	make -C $(ROOT_DIR)/python_bindings \
+	$(MAKE) -C $(ROOT_DIR)/python_bindings \
 		-f $(ROOT_DIR)/python_bindings/Makefile \
 		test \
 		HALIDE_DISTRIB_PATH=$(CURDIR)/$(DISTRIB_DIR) \
@@ -2020,7 +2020,7 @@ test_python2: distrib $(BIN_DIR)/host/runtime.a
 
 .PHONY: test_python
 test_python: distrib $(BIN_DIR)/host/runtime.a
-	make -C $(ROOT_DIR)/python_bindings \
+	$(MAKE) -C $(ROOT_DIR)/python_bindings \
 		-f $(ROOT_DIR)/python_bindings/Makefile \
 		test \
 		HALIDE_DISTRIB_PATH=$(CURDIR)/$(DISTRIB_DIR) \
