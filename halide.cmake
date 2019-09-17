@@ -186,7 +186,6 @@ function(halide_library_from_generator BASENAME)
   set(GENERATOR_EXEC_ARGS "-o" "${GENFILES_DIR}")
   list(APPEND GENERATOR_EXEC_ARGS "-g" "${GENERATOR_NAME}")
   list(APPEND GENERATOR_EXEC_ARGS "-f" "${args_FUNCTION_NAME}" )
-  list(APPEND GENERATOR_EXEC_ARGS "-x" ".s=.s.txt,.cpp=.generated.cpp")
   list(APPEND GENERATOR_EXEC_ARGS "target=${TARGET_WITH_FEATURES}")
   # GENERATOR_ARGS always come last
   list(APPEND GENERATOR_EXEC_ARGS ${args_GENERATOR_ARGS})
@@ -245,10 +244,10 @@ function(halide_library_from_generator BASENAME)
     "${BASENAME}_cc_gen"
     GENERATOR_BINARY "${args_GENERATOR}_binary"
     GENERATOR_ARGS   "${ARGS_WITH_OUTPUTS}"
-    OUTPUTS          "${GENFILES_DIR}/${BASENAME}.generated.cpp"
+    OUTPUTS          "${GENFILES_DIR}/${BASENAME}.halide_generated.cpp"
   )
 
-  add_library("${BASENAME}_cc" STATIC "${GENFILES_DIR}/${BASENAME}.generated.cpp")
+  add_library("${BASENAME}_cc" STATIC "${GENFILES_DIR}/${BASENAME}.halide_generated.cpp")
   # Needs _lib_gen as well, to get the .h file
   add_dependencies("${BASENAME}_cc" "${BASENAME}_lib_gen" "${BASENAME}_cc_gen")
   target_link_libraries("${BASENAME}_cc" PRIVATE ${args_FILTER_DEPS})
