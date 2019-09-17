@@ -31,17 +31,29 @@
 
 #pragma once
 
-#include <iostream>
-#include <sstream>
-#include <vector>
-#include <map>
-#include <string>
-#include <stdexcept>
-#include <typeinfo>
-#include <cstring>
 #include <algorithm>
-#include <cxxabi.h>
 #include <cstdlib>
+#include <cstring>
+#include <iostream>
+#include <map>
+#include <sstream>
+#include <stdexcept>
+#include <string>
+#include <typeinfo>
+#include <vector>
+
+#if defined(_MSC_VER) && !defined(NOMINMAX)
+#define NOMINMAX
+#endif
+
+#if !defined(_WIN32)
+#include <cxxabi.h>
+#else
+#include <windows.h>
+#pragma warning(disable : 4091)
+#include <dbghelp.h>
+#pragma comment(lib, "dbghelp.lib")
+#endif
 
 namespace cmdline{
 
@@ -116,11 +128,24 @@ Target lexical_cast(const Source &arg)
 
 static inline std::string demangle(const std::string &name)
 {
+#if !defined(_WIN32)
   int status=0;
   char *p=abi::__cxa_demangle(name.c_str(), 0, 0, &status);
   std::string ret(p);
   free(p);
   return ret;
+#else
+  char demangled_name[8192];
+  if (UnDecorateSymbolName(name.c_str(), demangled_name, sizeof(demangled_name),
+                           UNDNAME_COMPLETE)) {
+    std::string ret(demangled_name);
+    return ret;
+  } else {
+    DWORD error = GetLastError();
+    std::cout << "UnDecorateSymbolName error: " << error << std::endl;
+    return name;
+  }
+#endif
 }
 
 template <class T>
@@ -150,7 +175,7 @@ class cmdline_error : public std::exception {
 public:
   cmdline_error(const std::string &msg): msg(msg){}
   ~cmdline_error() throw() {}
-  const char *what() const throw() { return msg.c_str(); }
+  const char *what() const throw() override { return msg.c_str(); }
 private:
   std::string msg;
 };
@@ -660,42 +685,42 @@ private:
     }
     ~option_without_value(){}
 
-    bool has_value() const { return false; }
+    bool has_value() const override { return false; }
 
-    bool set(){
+    bool set() override {
       has=true;
       return true;
     }
 
-    bool set(const std::string &){
+    bool set(const std::string &) override {
       return false;
     }
 
-    bool has_set() const {
+    bool has_set() const override {
       return has;
     }
 
-    bool valid() const{
+    bool valid() const override {
       return true;
     }
 
-    bool must() const{
+    bool must() const override {
       return false;
     }
 
-    const std::string &name() const{
+    const std::string &name() const override {
       return nam;
     }
 
-    char short_name() const{
+    char short_name() const override {
       return snam;
     }
 
-    const std::string &description() const {
+    const std::string &description() const override {
       return desc;
     }
 
-    std::string short_description() const{
+    std::string short_description() const override {
       return "--"+nam;
     }
 
@@ -724,19 +749,20 @@ private:
       return actual;
     }
 
-    bool has_value() const { return true; }
+    bool has_value() const override { return true; }
 
-    bool set(){
+    bool set() override {
       return false;
     }
 
-    bool set(const std::string &value){
+    bool set(const std::string &value) override {
 #ifdef WITH_EXCEPTIONS
       try{
         actual=read(value);
         has=true;
       }
       catch(const std::exception &e){
+        std::cout << "Exception was caught: " << e.what() << std::endl;
         return false;
       }
       return true;
@@ -747,32 +773,32 @@ private:
 #endif
     }
 
-    bool has_set() const{
+    bool has_set() const override {
       return has;
     }
 
-    bool valid() const{
+    bool valid() const override {
       if (need && !has) return false;
       return true;
     }
 
-    bool must() const{
+    bool must() const override {
       return need;
     }
 
-    const std::string &name() const{
+    const std::string &name() const override {
       return nam;
     }
 
-    char short_name() const{
+    char short_name() const override {
       return snam;
     }
 
-    const std::string &description() const {
+    const std::string &description() const override {
       return desc;
     }
 
-    std::string short_description() const{
+    std::string short_description() const override {
       return "--"+nam+"="+detail::readable_typename<T>();
     }
 
@@ -809,7 +835,7 @@ private:
     }
 
   private:
-    T read(const std::string &s){
+    T read(const std::string &s) override {
       return reader(s);
     }
 
