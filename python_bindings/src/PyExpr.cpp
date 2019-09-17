@@ -22,7 +22,17 @@ void define_expr(py::module &m) {
             // PyBind11 searches in declared order,
             // int should be tried before float conversion
             .def(py::init<int>())
-            .def(py::init<double>())
+            // Python float is implemented by double
+            // But Halide prohibits implicitly construct by double.
+            .def(py::init([](double v) {
+                float f = static_cast<float>(v);
+                double check = static_cast<double>(f);
+                if ( Internal::reinterpret_bits<uint64_t>(v) != Internal::reinterpret_bits<uint64_t>(check) ) {
+                    throw py::value_error("The halide.Expr(" + std::to_string(v) + ") loses precision."
+                        "If this error occurs construct by double-range float, consider construct by the `f32`/`f64` casts instead.");
+                }
+                return Expr(f);
+            }))
             .def(py::init<std::string>())
 
             // for implicitly_convertible
