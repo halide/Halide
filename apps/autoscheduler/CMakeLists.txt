@@ -11,16 +11,7 @@ add_custom_command(OUTPUT ${WF_CPP}
 
 # =======================================================
 
-# retrain_cost_model
-add_executable(retrain_cost_model_process
-               ASLog.cpp
-               DefaultCostModel.cpp
-               Weights.cpp
-               retrain_cost_model.cpp
-               ${WF_CPP})
-set_target_properties(retrain_cost_model_process
-                      PROPERTIES OUTPUT_NAME retrain_cost_model)
-
+# cost_model, train_cost_model
 set(COST_MODEL_GENERATOR_FILES cost_model_generator.cpp)
 halide_generator(cost_model.generator SRCS ${COST_MODEL_GENERATOR_FILES})
 halide_generator(train_cost_model.generator SRCS ${COST_MODEL_GENERATOR_FILES})
@@ -30,15 +21,22 @@ halide_library_from_generator(cost_model
 halide_library_from_generator(train_cost_model
                               FUNCTION_NAME train_cost_model
                               GENERATOR train_cost_model.generator)
-if(MSVC AND (CMAKE_SIZEOF_VOID_P EQUAL 4))
-  set_target_properties(retrain_cost_model_process
-                        PROPERTIES LINK_FLAGS "/FORCE:MULTIPLE")
-endif()
+
+# =======================================================
+
+# retrain_cost_model
+add_executable(retrain_cost_model_process
+               ASLog.cpp
+               DefaultCostModel.cpp
+               Weights.cpp
+               retrain_cost_model.cpp
+               ${WF_CPP})
+set_target_properties(retrain_cost_model_process
+                      PROPERTIES OUTPUT_NAME retrain_cost_model)
 target_include_directories(retrain_cost_model_process
                            PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/../support)
 target_link_libraries(retrain_cost_model_process
                       PRIVATE cost_model train_cost_model)
-add_dependencies(retrain_cost_model_process cost_model train_cost_model)
 
 # =======================================================
 
@@ -59,10 +57,7 @@ else()
                         PRIVATE cost_model train_cost_model Halide)
 endif()
 
-if(MSVC AND (CMAKE_SIZEOF_VOID_P EQUAL 4))
-  set_target_properties(auto_schedule
-                        PROPERTIES LINK_FLAGS "/FORCE:MULTIPLE")
-elseif(NOT MSVC)
+if(NOT MSVC)
   set_target_properties(auto_schedule PROPERTIES LINK_FLAGS "-rdynamic")
 elseif(APPLE)
   set_target_properties(auto_schedule
@@ -77,11 +72,11 @@ if(NOT HALIDE_ENABLE_RTTI)
   endif()
 endif()
 
-add_dependencies(auto_schedule cost_model train_cost_model)
 install(TARGETS auto_schedule LIBRARY DESTINATION bin)
 
 # =======================================================
 
+# demo_apps_autoscheduler
 halide_library(demo
                SRCS demo_generator.cpp
                FUNCTION_NAME demo
@@ -109,6 +104,7 @@ add_custom_command(TARGET demo_apps_autoscheduler POST_BUILD
 
 # =======================================================
 
+# demo_included_schedule_file
 halide_library(included_schedule_file
                SRCS included_schedule_file_generator.cpp
                FUNCTION_NAME included_schedule_file
