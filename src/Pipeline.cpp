@@ -223,7 +223,6 @@ void Pipeline::compile_to_bitcode(const string &filename,
                                   const string &fn_name,
                                   const Target &target) {
     Module m = compile_to_module(args, fn_name, target);
-    auto outputs = single_output(filename, m, Output::bitcode);
     m.compile(single_output(filename, m, Output::bitcode));
 }
 
