@@ -76,6 +76,14 @@ Expr Simplify::visit(const Mul *op, ExprInfo *bounds) {
             false) {
             return mutate(std::move(rewrite.result), bounds);
         }
+
+        #if USE_SYNTHESIZED_RULES
+        if ((no_overflow_int(op->type) &&
+             rewrite(((0 - x)*c1), (x*fold((0 - c1)))) ||
+             false)) {
+            return mutate(std::move(rewrite.result), bounds);
+        }
+        #endif
     }
 
     const Shuffle *shuffle_a = a.as<Shuffle>();
