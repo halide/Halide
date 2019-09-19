@@ -886,7 +886,7 @@ public:
                                  StmtOutputFormat fmt = Text,
                                  const Target &target = get_target_from_environment());
 
-    /** Emit a Python Extension glue .c file. */
+    /** Emit a Python Extension glue .py.cpp file. */
     void compile_to_python_extension(const std::string &filename_prefix,
                                      const std::vector<Argument> &args,
                                      const std::string &fn_name,

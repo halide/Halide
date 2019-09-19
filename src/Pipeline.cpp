@@ -239,8 +239,8 @@ void Pipeline::compile_to_object(const string &filename,
                                  const string &fn_name,
                                  const Target &target) {
     Module m = compile_to_module(args, fn_name, target);
-    const char* ext = target.os == Target::Windows && !target.has_feature(Target::MinGW) ? ".obj" : ".o";
-    m.compile({{Output::object, output_name(filename, m, ext)}});
+    auto ext = get_output_info(target);
+    m.compile({{Output::object, output_name(filename, m, ext.at(Output::object).extension)}});
 }
 
 void Pipeline::compile_to_header(const string &filename,
@@ -280,7 +280,12 @@ void Pipeline::compile_to_python_extension(const string &filename,
     // We really don't want to vary the file extensions based on target flags,
     // and in practice, it's extremely unlikely that anyone needs to rely on this
     // being pure C output (vs possibly C++).
-    m.compile(single_output(filename, m, Output::python_extension));
+    auto ext = get_output_info(target);
+    std::map<Output, std::string> outputs = {
+        { Output::c_header, output_name(filename, m, ext.at(Output::c_header).extension) },
+        { Output::python_extension, output_name(filename, m, ext.at(Output::python_extension).extension) },
+    };
+    m.compile(outputs);
 }
 
 void Pipeline::print_loop_nest() {

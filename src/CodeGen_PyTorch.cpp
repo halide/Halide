@@ -3,6 +3,7 @@
 #include "CodeGen_PyTorch.h"
 #include "IROperator.h"
 #include "Param.h"
+#include "Util.h"
 #include "Var.h"
 
 namespace Halide {
