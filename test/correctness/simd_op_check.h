@@ -1,42 +1,28 @@
 #ifndef SIMD_OP_CHECK_H
 #define SIMD_OP_CHECK_H
 
+#include <fstream>
 #include "Halide.h"
 #include "test/common/halide_test_dirs.h"
-#include "sys/time.h"
-#include <fstream>
 
-using namespace Halide;
-using namespace Halide::ConciseCasts;
-
-//namespace {
-
-// This tests that we can correctly generate all the simd ops
-using std::vector;
-using std::string;
-
-
-const Var x{"x"}, y{"y"};
-
+namespace Halide {
 struct TestResult {
-    string op;
-    string error_msg;
+    std::string op;
+    std::string error_msg;
 };
 
 struct Task {
-    string op;
-    string name;
+    std::string op;
+    std::string name;
     int vector_width;
     Expr expr;
 };
 
-size_t num_threads = Halide::Internal::ThreadPool<void>::num_processors_online();
-
 class SimdOpCheckTest {
  public:
-    string filter{"*"};
-    string output_directory{Internal::get_test_tmp_dir()};
-    vector<Task> tasks;
+    std::string filter{"*"};
+    std::string output_directory{Internal::get_test_tmp_dir()};
+    std::vector<Task> tasks;
 
     Target target;
 
@@ -51,8 +37,8 @@ class SimdOpCheckTest {
     ImageParam in_i64{Int(64), 1, "in_i64"};
     ImageParam in_u64{UInt(64), 1, "in_u64"};
 
-    const vector<ImageParam> image_params{in_f32, in_f64, in_i8, in_u8, in_i16, in_u16, in_i32, in_u32, in_i64, in_u64};
-    const vector<Argument> arg_types{in_f32, in_f64, in_i8, in_u8, in_i16, in_u16, in_i32, in_u32, in_i64, in_u64};
+    const std::vector<ImageParam> image_params{in_f32, in_f64, in_i8, in_u8, in_i16, in_u16, in_i32, in_u32, in_i64, in_u64};
+    const std::vector<Argument> arg_types{in_f32, in_f64, in_i8, in_u8, in_i16, in_u16, in_i32, in_u32, in_i64, in_u64};
     int W;
     int H;
 
@@ -62,15 +48,22 @@ class SimdOpCheckTest {
             .with_feature(Target::NoAsserts)
             .with_feature(Target::NoRuntime)
             .with_feature(Target::DisableLLVMLoopOpt);
+        num_threads = Internal::ThreadPool<void>::num_processors_online();
+    }
+    size_t get_num_threads() const {
+        return num_threads;
     }
 
+    void set_num_threads(size_t n) {
+        num_threads = n;
+    }
     bool can_run_code() const {
         // Assume we are configured to run wasm if requested
         // (we'll fail further downstream if not)
         if (target.arch == Target::WebAssembly) {
             return true;
         }
-        // If we can (target matches host), run the error checking Func.
+        // If we can (target matches host), run the error checking Halide::Func.
         Target host_target = get_host_target();
         bool can_run_the_code =
             (target.arch == host_target.arch &&
@@ -122,39 +115,39 @@ class SimdOpCheckTest {
         return !*p;
     }
 
-    bool wildcard_match(const string& p, const string& str) const {
+    bool wildcard_match(const std::string& p, const std::string& str) const {
         return wildcard_match(p.c_str(), str.c_str());
     }
 
     // Check if a substring of str matches a pattern p.
-    bool wildcard_search(const string& p, const string& str) const {
+    bool wildcard_search(const std::string& p, const std::string& str) const {
         return wildcard_match("*" + p + "*", str);
     }
 
-    TestResult check_one(const string &op, const string &name, int vector_width, Expr e) {
+    TestResult check_one(const std::string &op, const std::string &name, int vector_width, Expr e) {
         std::ostringstream error_msg;
 
-        // Define a vectorized Func that uses the pattern.
-        Func f(name);
+        // Define a vectorized Halide::Func that uses the pattern.
+        Halide::Func f(name);
         f(x, y) = e;
         f.bound(x, 0, W).vectorize(x, vector_width);
         f.compute_root();
 
         // Include a scalar version
-        Func f_scalar("scalar_" + name);
+        Halide::Func f_scalar("scalar_" + name);
         f_scalar(x, y) = e;
         f_scalar.bound(x, 0, W);
         f_scalar.compute_root();
 
         // The output to the pipeline is the maximum absolute difference as a double.
         RDom r(0, W, 0, H);
-        Func error("error_" + name);
-        error() = cast<double>(maximum(absd(f(r.x, r.y), f_scalar(r.x, r.y))));
+        Halide::Func error("error_" + name);
+        error() = Halide::cast<double>(maximum(absd(f(r.x, r.y), f_scalar(r.x, r.y))));
 
         setup_images();
         {
             // Compile just the vector Func to assembly.
-            string asm_filename = output_directory + "check_" + name + ".s";
+            std::string asm_filename = output_directory + "check_" + name + ".s";
             f.compile_to_assembly(asm_filename, arg_types, target);
 
             std::ifstream asm_file;
@@ -165,7 +158,7 @@ class SimdOpCheckTest {
             std::ostringstream msg;
             msg << op << " did not generate for target=" << target.to_string() << " vector_width=" << vector_width << ". Instead we got:\n";
 
-            string line;
+            std::string line;
             while (getline(asm_file, line)) {
                 msg << line << "\n";
 
@@ -181,7 +174,7 @@ class SimdOpCheckTest {
         }
 
         // Also compile the error checking Func (to be sure it compiles without error)
-        string fn_name = "test_" + name;
+        std::string fn_name = "test_" + name;
         error.compile_to_file(output_directory + fn_name, arg_types, fn_name, target);
 
         bool can_run_the_code = can_run_code();
@@ -196,7 +189,7 @@ class SimdOpCheckTest {
             // Fill the inputs with noise
             std::mt19937 rng(123);
             for (auto p : image_params) {
-                Buffer<> buf = p.get();
+                Halide::Buffer<> buf = p.get();
                 if (!buf.defined()) continue;
                 assert(buf.data());
                 Type t = buf.type();
@@ -228,14 +221,14 @@ class SimdOpCheckTest {
             if (e > 0.001) {
                 error_msg << "The vector and scalar versions of " << name << " disagree. Maximum error: " << e << "\n";
 
-                string error_filename = output_directory + "error_" + name + ".s";
+                std::string error_filename = output_directory + "error_" + name + ".s";
                 error.compile_to_assembly(error_filename, arg_types, target);
 
                 std::ifstream error_file;
                 error_file.open(error_filename);
 
                 error_msg << "Error assembly: \n";
-                string line;
+                std::string line;
                 while (getline(error_file, line)) {
                     error_msg << line << "\n";
                 }
@@ -247,9 +240,9 @@ class SimdOpCheckTest {
         return { op, error_msg.str() };
     }
 
-    void check(string op, int vector_width, Expr e) {
+    void check(std::string op, int vector_width, Expr e) {
         // Make a name for the test by uniquing then sanitizing the op name
-        string name = "op_" + op;
+        std::string name = "op_" + op;
         for (size_t i = 0; i < name.size(); i++) {
             if (!isalnum(name[i])) name[i] = '_';
         }
@@ -273,7 +266,7 @@ class SimdOpCheckTest {
     virtual bool test_all() {
         /* First add some tests based on the target */
         add_tests();
-        Halide::Internal::ThreadPool<TestResult> pool(num_threads);
+        Internal::ThreadPool<TestResult> pool(num_threads);
         std::vector<std::future<TestResult>> futures;
         for (const Task &task : tasks) {
             futures.push_back(pool.async([this, task]() {
@@ -293,9 +286,9 @@ class SimdOpCheckTest {
 
         return success;
     }
+private:
+    size_t num_threads;
+    const Halide::Var x{"x"}, y{"y"};
 };
-
-    //}  // namespace
-
-
-#endif
+} // Halide
+#endif // SIMD_OP_CHECK_H

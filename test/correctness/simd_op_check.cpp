@@ -1630,6 +1630,8 @@ private:
     bool use_ssse3{false};
     bool use_vsx{false};
     bool use_wasm_simd128{false};
+    const Var x{"x"}, y{"y"};
+
 };
 }  // namespace
 
@@ -1643,7 +1645,7 @@ int main(int argc, char **argv) {
 
     if (argc > 1) {
         test.filter = argv[1];
-        num_threads = 1;
+        test.set_num_threads(1);
     }
 
     // TODO: multithreading here is the cause of https://github.com/halide/Halide/issues/3669;
@@ -1658,7 +1660,7 @@ int main(int argc, char **argv) {
     // (Function.deep_copy() perhaps). Of course, it would also be desirable to allow Funcs, Exprs, etc
     // to be usable across multiple threads, but that is a major undertaking that is
     // definitely not worthwhile for present Halide usage patterns.
-    num_threads = 1;
+    test.set_num_threads(1);
 
     if (argc > 2) {
         // Don't forget: if you want to run the standard tests to a specific output

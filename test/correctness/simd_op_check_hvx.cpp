@@ -1,4 +1,3 @@
-// width and height of test images
 #include "Halide.h"
 #include "simd_op_check.h"
 
@@ -596,19 +595,23 @@ public:
         check("vnormamt(v*.w)", hvx_width/4, max(count_leading_zeros(i32_1), count_leading_zeros(~i32_1)));
         check("vpopcount(v*.h)", hvx_width/2, popcount(u16_1));
     }
+private:
+    const Var x{"x"}, y{"y"};
+
 };
 
 int main(int argc, char **argv) {
-
     Target host = get_host_target();
     Target hl_target = get_target_from_environment();
     printf("host is:      %s\n", host.to_string().c_str());
     printf("HL_TARGET is: %s\n", hl_target.to_string().c_str());
 
     Target t(Target::NoOS, Target::Hexagon, 32);
-    for (const auto &f : {Target::HVX_64, Target::HVX_128,
-                Target::HVX_v62, Target::HVX_v65,
-                Target::HVX_v66}) {
+    for (const auto &f : {Target::HVX_64,
+                          Target::HVX_128,
+                          Target::HVX_v62,
+                          Target::HVX_v65,
+                          Target::HVX_v66}) {
         if (hl_target.has_feature(f)) {
             t.set_feature(f);
         }
@@ -622,7 +625,7 @@ int main(int argc, char **argv) {
 
     if (argc > 1) {
         test_hvx.filter = argv[1];
-        num_threads = 1;
+        test_hvx.set_num_threads(1);
     }
     // Remove some features like simd_op_check.cpp used to do.
 
@@ -638,7 +641,7 @@ int main(int argc, char **argv) {
     // (Function.deep_copy() perhaps). Of course, it would also be desirable to allow Funcs, Exprs, etc
     // to be usable across multiple threads, but that is a major undertaking that is
     // definitely not worthwhile for present Halide usage patterns.
-    num_threads = 1;
+    test_hvx.set_num_threads(1);
 
     if (argc > 2) {
         // Don't forget: if you want to run the standard tests to a specific output
