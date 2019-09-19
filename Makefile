@@ -1963,16 +1963,18 @@ ifneq ($(OS), Windows_NT)
 	TEST_APPS += autoscheduler
 endif
 
-.PHONY: test_apps
-test_apps: distrib
-	@for APP in $(TEST_APPS); do \
-		echo Testing app $${APP}... ; \
-		make -C $(ROOT_DIR)/apps/$${APP} test \
-			HALIDE_DISTRIB_PATH=$(CURDIR)/$(DISTRIB_DIR) \
-			BIN_DIR=$(CURDIR)/$(BIN_DIR)/apps/$${APP}/bin \
-			HL_TARGET=$(HL_TARGET) \
-			|| exit 1 ; \
-	done
+TEST_APPS_DEPS=$(TEST_APPS:%=%_test_app)
+
+$(TEST_APPS_DEPS): distrib
+	@echo Testing app $(@:%_test_app=%) for ${HL_TARGET}...
+	@$(MAKE) -C $(ROOT_DIR)/apps/$(@:%_test_app=%) test \
+		HALIDE_DISTRIB_PATH=$(CURDIR)/$(DISTRIB_DIR) \
+		BIN_DIR=$(CURDIR)/$(BIN_DIR)/apps/$(@:%_test_app=%)/bin \
+		HL_TARGET=$(HL_TARGET) \
+		|| exit 1 ; \
+
+.PHONY: test_apps $(TEST_APPS_DEPS)
+test_apps: $(TEST_APPS_DEPS)
 
 BENCHMARK_APPS=\
 	bilateral_grid \
