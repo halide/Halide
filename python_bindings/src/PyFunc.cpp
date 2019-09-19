@@ -200,9 +200,6 @@ void define_func(py::module &m) {
         .def("compile_to_file", &Func::compile_to_file,
             py::arg("filename_prefix"), py::arg("arguments"), py::arg("fn_name") = "", py::arg("target") = get_target_from_environment())
 
-        .def("compile_to_python_extension", &Func::compile_to_python_extension,
-            py::arg("filename_prefix"), py::arg("arguments"), py::arg("fn_name") = "", py::arg("target") = get_target_from_environment())
-
         .def("compile_to_static_library", &Func::compile_to_static_library,
             py::arg("filename_prefix"), py::arg("arguments"), py::arg("fn_name") = "", py::arg("target") = get_target_from_environment())
 

@@ -886,12 +886,6 @@ public:
                                  StmtOutputFormat fmt = Text,
                                  const Target &target = get_target_from_environment());
 
-    /** Emit a Python Extension glue .py.cpp file. */
-    void compile_to_python_extension(const std::string &filename_prefix,
-                                     const std::vector<Argument> &args,
-                                     const std::string &fn_name,
-                                     const Target &target = get_target_from_environment());
-
     /** Write out the loop nests specified by the schedule for this
      * Function. Helpful for understanding what a schedule is
      * doing. */

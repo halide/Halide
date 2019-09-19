@@ -268,26 +268,6 @@ void Pipeline::compile_to_c(const string &filename,
     m.compile(single_output(filename, m, Output::c_source));
 }
 
-void Pipeline::compile_to_python_extension(const string &filename,
-                                           const vector<Argument> &args,
-                                           const string &fn_name,
-                                           const Target &target) {
-    Module m = compile_to_module(args, fn_name, target);
-    // Note that we deliberately default to ".py.cpp" (rather than .py.c) here;
-    // in theory, the Python extension file we generate can be compiled just
-    // fine as a plain-C file... but if we are building with cpp-name-mangling
-    // enabled in the target, we will include generated .h files that can't be compiled.
-    // We really don't want to vary the file extensions based on target flags,
-    // and in practice, it's extremely unlikely that anyone needs to rely on this
-    // being pure C output (vs possibly C++).
-    auto ext = get_output_info(target);
-    std::map<Output, std::string> outputs = {
-        { Output::c_header, output_name(filename, m, ext.at(Output::c_header).extension) },
-        { Output::python_extension, output_name(filename, m, ext.at(Output::python_extension).extension) },
-    };
-    m.compile(outputs);
-}
-
 void Pipeline::print_loop_nest() {
     user_assert(defined()) << "Can't print loop nest of undefined Pipeline.\n";
     debug(0) << Halide::Internal::print_loop_nest(contents->outputs);

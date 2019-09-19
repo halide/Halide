@@ -3020,13 +3020,6 @@ void Func::compile_to_lowered_stmt(const string &filename,
     pipeline().compile_to_lowered_stmt(filename, args, fmt, target);
 }
 
-void Func::compile_to_python_extension(const string &filename_prefix,
-                                       const vector<Argument> &args,
-                                       const string &fn_name,
-                                       const Target &target) {
-    pipeline().compile_to_python_extension(filename_prefix, args, fn_name, target);
-}
-
 void Func::print_loop_nest() {
     pipeline().print_loop_nest();
 }
