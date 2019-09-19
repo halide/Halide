@@ -105,7 +105,7 @@ public:
     static void test();
 
 protected:
-    /** The stream we're outputting on */
+    /** The stream on which we're outputting */
     std::ostream &stream;
 
     /** The current indentation level, useful for pretty-printing

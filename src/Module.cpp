@@ -40,7 +40,7 @@ std::map<Output, OutputInfo> get_output_info(const Target &target) {
         {Output::llvm_assembly, {"llvm_assembly", ".ll"}},
         {Output::object, {"object", is_windows_coff ? ".obj" : ".o"}},
         {Output::python_extension, {"python_extension", ".py.cpp"}},
-        {Output::pytorch_wrapper, {"pytorch_wrapper", ".pytorch"}},
+        {Output::pytorch_wrapper, {"pytorch_wrapper", ".pytorch.h"}},
         {Output::registration, {"registration", ".registration.cpp"}},
         {Output::schedule, {"schedule", ".schedule.h"}},
         {Output::static_library, {"static_library", is_windows_coff ? ".lib" : ".a"}},
@@ -114,20 +114,6 @@ std::string add_suffix(const std::string &path, const std::string &suffix) {
     }
 }
 
-// Given a pathname of the form /path/to/name.old, replace extension to produce /path/to/name.new.
-std::string replace_extension(const std::string &path, const std::string &new_ext) {
-    size_t last_path = std::min(path.rfind('/'), path.rfind('\\'));
-    if (last_path == std::string::npos) {
-        last_path = 0;
-    }
-    size_t dot = path.find('.', last_path);
-    if (dot == std::string::npos) {
-        return path + new_ext;
-    } else {
-        return path.substr(0, dot) + new_ext;
-    }
-}
-
 void validate_outputs(const std::map<Output, std::string> &in) {
     // We don't care about the extensions, so any Target will do
     auto known = get_output_info(Target());
@@ -146,6 +132,16 @@ std::map<Output, std::string> add_suffixes(const std::map<Output, std::string> &
         out[it.first] = add_suffix(it.second, suffix);
     }
     return out;
+}
+
+// Given a pathname of the form /path/to/name.ext, return the leaf (name.ext)
+std::string leaf(const std::string &path) {
+    size_t slash_pos = std::min(path.rfind('/'), path.rfind('\\'));
+    if (slash_pos != std::string::npos) {
+        return path.substr(slash_pos + 1);
+    } else {
+        return path;
+    }
 }
 
 void emit_registration(const Module &m, std::ostream &stream) {
@@ -637,12 +633,11 @@ void Module::compile(const std::map<Output, std::string> &output_files) const {
     }
     if (contains(output_files, Output::python_extension)) {
         debug(1) << "Module.compile(): python_extension " << output_files.at(Output::python_extension) << "\n";
-        std::string c_header = contains(output_files, Output::c_header) ?
-                          output_files.at(Output::c_header) :
-                          // If we we're not generating a header right now, guess the filename.
-                          replace_extension(output_files.at(Output::python_extension), ".h");
+        user_assert(contains(output_files, Output::c_header)) << "You must specify c_header when specifying python_extension.";
+        auto c_header_leaf = leaf(output_files.at(Output::c_header));
+
         std::ofstream file(output_files.at(Output::python_extension));
-        Internal::PythonExtensionGen python_extension_gen(file, c_header, target());
+        Internal::PythonExtensionGen python_extension_gen(file, c_header_leaf, target());
         python_extension_gen.compile(*this);
     }
     if (contains(output_files, Output::schedule)) {
@@ -674,10 +669,13 @@ void Module::compile(const std::map<Output, std::string> &output_files) const {
         internal_assert(!file.fail());
     }
     if (contains(output_files, Output::pytorch_wrapper)) {
-      debug(1) << "Module.compile(): pytorch_wrapper " << output_files.at(Output::pytorch_wrapper) << "\n" ;
-      std::ofstream file(output_files.at(Output::pytorch_wrapper)+".h");
-      Internal::CodeGen_PyTorch cg(file, target(), output_files.at(Output::c_header));
-      cg.compile(*this);
+        debug(1) << "Module.compile(): pytorch_wrapper " << output_files.at(Output::pytorch_wrapper) << "\n" ;
+        user_assert(contains(output_files, Output::c_header)) << "You must specify c_header when specifying pytorch_wrapper.";
+        auto c_header_leaf = leaf(output_files.at(Output::c_header));
+
+        std::ofstream file(output_files.at(Output::pytorch_wrapper));
+        Internal::CodeGen_PyTorch cg(file, target(), c_header_leaf);
+        cg.compile(*this);
     }
 }
 

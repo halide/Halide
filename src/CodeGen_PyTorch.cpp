@@ -11,7 +11,6 @@
 #include "Simplify.h"
 #include "Substitute.h"
 #include "Type.h"
-#include "Util.h"
 #include "Var.h"
 
 namespace Halide {
@@ -32,8 +31,8 @@ string type_to_pytorch_tensor(Type type, bool is_cuda) {
 } // namespace anon
 
 
-CodeGen_PyTorch::CodeGen_PyTorch(ostream &s, Target t, std::string cpp_header) :
-    IRPrinter(s), target(t), cpp_header(cpp_header)
+CodeGen_PyTorch::CodeGen_PyTorch(ostream &s, const Target &t, const std::string &cpp_header_path) :
+    IRPrinter(s), target(t)
 {
     stream << "#include \"torch/extension.h\"\n";
     stream << "#include \"HalideBuffer.h\"\n";
@@ -49,11 +48,7 @@ CodeGen_PyTorch::CodeGen_PyTorch(ostream &s, Target t, std::string cpp_header) :
         stream << "#include \"HalidePyTorchCudaHelpers.h\"\n";
     }
 
-  std::vector<std::string> header_path = split_string(cpp_header, "/");
-  std::string header = header_path.back();
-
-  stream << "\n#include \"" << header << "\"\n\n";
-  stream << "using Halide::Runtime::Buffer;\n\n";
+  stream << "\n#include \"" << cpp_header_path << "\"\n\n";
 }
 
 void CodeGen_PyTorch::compile(const Module &input) {
@@ -154,7 +149,7 @@ void CodeGen_PyTorch::compile(const LoweredFunc &f, bool is_cuda) {
         do_indent();
         string tp = type_to_c_type(buffer_args[i].type, false);
         stream
-            << "Buffer<" << tp << "> "
+            << "Halide::Runtime::Buffer<" << tp << "> "
             << c_print_name(buffer_args[i].name)
             << "_buffer = Halide::PyTorch::wrap<" << tp << ">("
             << c_print_name(buffer_args[i].name)
@@ -275,14 +270,12 @@ R"GOLDEN_CODE(#include "torch/extension.h"
 
 #include "PyTorchTestOp.h"
 
-using Halide::Runtime::Buffer;
-
 int test1_th_(at::Tensor &_buf, float _alpha, int32_t _beta) {
     // Check tensors have contiguous memory and are on the correct device
     HLPT_CHECK_CONTIGUOUS(_buf);
 
     // Wrap tensors in Halide buffers
-    Buffer<int32_t> _buf_buffer = Halide::PyTorch::wrap<int32_t>(_buf);
+    Halide::Runtime::Buffer<int32_t> _buf_buffer = Halide::PyTorch::wrap<int32_t>(_buf);
 
     // Run Halide pipeline
     int err = test1(_buf_buffer, _alpha, _beta);
@@ -299,8 +292,6 @@ int test1_th_(at::Tensor &_buf, float _alpha, int32_t _beta) {
 
 #include "PyTorchTestOp.h"
 
-using Halide::Runtime::Buffer;
-
 int test1_th_(at::Tensor &_buf, float _alpha, int32_t _beta) {
     // Setup CUDA
     int device_id = at::cuda::current_device();
@@ -316,7 +307,7 @@ int test1_th_(at::Tensor &_buf, float _alpha, int32_t _beta) {
     HLPT_CHECK_DEVICE(_buf, device_id);
 
     // Wrap tensors in Halide buffers
-    Buffer<int32_t> _buf_buffer = Halide::PyTorch::wrap<int32_t>(_buf);
+    Halide::Runtime::Buffer<int32_t> _buf_buffer = Halide::PyTorch::wrap<int32_t>(_buf);
 
     // Run Halide pipeline
     int err = test1(_buf_buffer, _alpha, _beta);
