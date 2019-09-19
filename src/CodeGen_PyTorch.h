@@ -15,12 +15,8 @@
 
 #include "IRPrinter.h"
 #include "Module.h"
-#include "Scope.h"
 
 namespace Halide {
-
-struct Argument;
-
 namespace Internal {
 
 /** This class emits C++ code to wrap a Halide pipeline so that it can
@@ -42,7 +38,7 @@ private:
     void compile(const LoweredFunc &func, bool is_cuda);
 };
 
-}
-}
+}  // namespace Internal
+}  // namespace Halide
 
-#endif
+#endif  // HALIDE_CODEGEN_PYTORCH_H
