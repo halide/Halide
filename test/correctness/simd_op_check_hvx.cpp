@@ -1,5 +1,19 @@
 #include "Halide.h"
 #include "simd_op_check.h"
+// simd_op_check is different from all/most other tests in the testsuite because
+// simd_op_check is not an 'offload' test. In other words, it runs SIMD tests
+// for the architecture that is the host architecture in HL_TARGET.
+// However, the buildbots are configured to test for HVX as an offload device
+// i.e HL_TARGET and HL_JIT_TARGET, for instance, are host-hvx_128. This works
+// fine for all the tests except simd_op_check because with HL_TARGET=host-hvx_128
+// we end up running host tests and not HVX tests.
+//
+// One way of fixing this is to change the buildbot recipe. However, this would
+// mean one exception for one test for one architecture. Instead, we refactor
+// simd_op_check into two tests, simd_op_check.cpp and simd_op_check_hvx.cpp
+// so that the latter is free to do its own thing - for simd_op_check_hvx.cpp
+// to run any tests, all that is needed is that HL_TARGET have a HVX related
+// target feature, i.e. one of HVX_64, HVX_128, HVX_v62, HVX_v65 and HVX_v66.
 
 using namespace Halide;
 using namespace Halide::ConciseCasts;
@@ -556,18 +570,20 @@ public:
         check("v*.w += vrmpy(v*.ub,v*.b)", hvx_width, i32_1 + i32(u8_1)*i8_1 + i32(u8_2)*i8_2 + i32(u8_3)*i8_3 + i32(u8_4)*i8_4);
         check("vrmpy(v*.ub,v*.b)", hvx_width, i16(u8_1)*i8_1 + i16(u8_2)*i8_2 + i16(u8_3)*i8_3 + i16(u8_4)*i8_4);
 #endif
+
+#if 0
         // Temporarily disabling this vrmpy test because of https://github.com/halide/Halide/issues/4248
         // These should also work with 16 bit results. However, it is
         // only profitable to do so if the interleave simplifies away.
-        // Expr u8_4x4[] = {
-        //     in_u8(4*x + 0),
-        //     in_u8(4*x + 1),
-        //     in_u8(4*x + 2),
-        //     in_u8(4*x + 3),
-        // };
-        // Disabling this test right now
-        // check("vrmpy(v*.ub,r*.b)", hvx_width/2, i16(u8_4x4[0])*127 + i16(u8_4x4[1])*126 + i16(u8_4x4[2])*-125 + i16(u8_4x4[3])*124);
+        Expr u8_4x4[] = {
+            in_u8(4*x + 0),
+            in_u8(4*x + 1),
+            in_u8(4*x + 2),
+            in_u8(4*x + 3),
+        };
+        check("vrmpy(v*.ub,r*.b)", hvx_width/2, i16(u8_4x4[0])*127 + i16(u8_4x4[1])*126 + i16(u8_4x4[2])*-125 + i16(u8_4x4[3])*124);
 
+#endif
         // Make sure it doesn't generate if the operands don't interleave.
         check("vmpa(v*.ub,r*.b)", hvx_width, i16(u8_1)*127 + i16(u8_2)*-126 + i16(u8_3)*125 + i16(u8_4)*124);
 
