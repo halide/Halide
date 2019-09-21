@@ -239,8 +239,8 @@ void Pipeline::compile_to_object(const string &filename,
                                  const string &fn_name,
                                  const Target &target) {
     Module m = compile_to_module(args, fn_name, target);
-    const char* ext = target.os == Target::Windows && !target.has_feature(Target::MinGW) ? ".obj" : ".o";
-    m.compile({{Output::object, output_name(filename, m, ext)}});
+    auto ext = get_output_info(target);
+    m.compile({{Output::object, output_name(filename, m, ext.at(Output::object).extension)}});
 }
 
 void Pipeline::compile_to_header(const string &filename,
@@ -266,21 +266,6 @@ void Pipeline::compile_to_c(const string &filename,
                             const Target &target) {
     Module m = compile_to_module(args, fn_name, target);
     m.compile(single_output(filename, m, Output::c_source));
-}
-
-void Pipeline::compile_to_python_extension(const string &filename,
-                                           const vector<Argument> &args,
-                                           const string &fn_name,
-                                           const Target &target) {
-    Module m = compile_to_module(args, fn_name, target);
-    // Note that we deliberately default to ".py.cpp" (rather than .py.c) here;
-    // in theory, the Python extension file we generate can be compiled just
-    // fine as a plain-C file... but if we are building with cpp-name-mangling
-    // enabled in the target, we will include generated .h files that can't be compiled.
-    // We really don't want to vary the file extensions based on target flags,
-    // and in practice, it's extremely unlikely that anyone needs to rely on this
-    // being pure C output (vs possibly C++).
-    m.compile(single_output(filename, m, Output::python_extension));
 }
 
 void Pipeline::print_loop_nest() {

@@ -62,8 +62,11 @@ def main():
     # For AOT-compiled code, we need to explicitly declare the
     # arguments to the routine. This routine takes two. Arguments are
     # usually Params or ImageParams.
-    brighter.compile_to_file("lesson_10_halide", [input, offset], "lesson_10_halide")
-    brighter.compile_to_python_extension("lesson_10_halide.py.cpp", [input, offset], "lesson_10_halide")
+    fname = "lesson_10_halide"
+    brighter.compile_to({hl.Output.object: "lesson_10_halide.o",
+                         hl.Output.c_header: "lesson_10_halide.h",
+                         hl.Output.python_extension: "lesson_10_halide.py.cpp"},
+                         [input, offset], "lesson_10_halide")
 
     print("Halide pipeline compiled, but not yet run.")
 
