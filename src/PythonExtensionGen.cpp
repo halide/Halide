@@ -1,6 +1,7 @@
 #include <iostream>
 #include <string>
 
+#include "CodeGen_C.h"
 #include "Module.h"
 #include "PythonExtensionGen.h"
 #include "Util.h"
@@ -122,14 +123,23 @@ void PythonExtensionGen::convert_buffer(string name, const LoweredArgument* arg)
     dest << "    }\n";
 }
 
-PythonExtensionGen::PythonExtensionGen(std::ostream &dest, const std::string &header_name, Target target)
-    : dest(dest), header_name(header_name), target(target) {
+PythonExtensionGen::PythonExtensionGen(std::ostream &dest) : dest(dest) {
 }
 
 void PythonExtensionGen::compile(const Module &module) {
-    dest << "#include \"" << header_name << "\"\n";
     dest << "#include \"Python.h\"\n";
     dest << "#include \"HalideRuntime.h\"\n\n";
+
+    // Emit extern decls of the Halide-generated functions we use directly
+    // into this file, so that we don't have to #include the relevant .h
+    // file directly; this simplifies certain compile/build setups (since
+    // we don't have to build files in tandem and/or get include paths right),
+    // and should be totally safe, since we are using the same codegen logic
+    // that would be in the .h file anyway.
+    {
+        CodeGen_C extern_decl_gen(dest, module.target(), CodeGen_C::CPlusPlusExternDecl);
+        extern_decl_gen.compile(module);
+    }
 
     dest << "#define MODULE_NAME \"" << module.name() << "\"\n";
 
@@ -238,7 +248,7 @@ static __attribute__((unused)) int _convert_py_buffer_to_halide(
 )INLINE_CODE";
 
     for (auto &f : module.functions()) {
-        if (!has_legacy_buffers(f)) {
+        if (!has_legacy_buffers(f) && f.linkage == LinkageType::ExternalPlusMetadata) {
             compile(f);
         }
     }
@@ -248,7 +258,7 @@ static __attribute__((unused)) int _convert_py_buffer_to_halide(
     for (auto &f : module.functions()) {
         /* With the legacy_buffer_wrappers feature, Halide stores every function
          * twice, once with new and once with old buffers. Ignore the latter. */
-        if (!has_legacy_buffers(f)) {
+        if (!has_legacy_buffers(f) && f.linkage == LinkageType::ExternalPlusMetadata) {
             const string basename = remove_namespaces(f.name);
             dest << "    {\"" << basename << "\", (PyCFunction)_f_" << basename
                  << ", METH_VARARGS|METH_KEYWORDS, NULL},\n";
@@ -305,7 +315,7 @@ void PythonExtensionGen::compile(const LoweredFunc &f) {
             return;
         }
     }
-    dest << "    static const char* kwlist[] = {";
+    dest << "    static const char* const kwlist[] = {";
     for (size_t i = 0; i < args.size(); i++) {
         dest << "\"" << arg_names[i] << "\", ";
     }
