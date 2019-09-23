@@ -146,6 +146,9 @@ target_include_directories(
   test_apps_autoscheduler
   PRIVATE "${HALIDE_INCLUDE_DIR}" "${HALIDE_TOOLS_DIR}")
 target_link_libraries(test_apps_autoscheduler PRIVATE Halide)
+if (NOT WIN32)
+  target_link_libraries(test_apps_autoscheduler PRIVATE dl)
+endif()
 
 add_executable(test_perfect_hash_map test_perfect_hash_map.cpp)
 
