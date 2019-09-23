@@ -1976,7 +1976,9 @@ Derivative propagate_adjoints(const Func &output,
 
     Internal::ReverseAccumulationVisitor visitor;
     visitor.propagate_adjoints(output, adjoint, output_bounds);
-    return Derivative{ std::move(visitor.get_adjoint_funcs()) };
+    // Since the return value of get_adjoint_funcs() is a temporary,
+    // we should *not* use std::move.
+    return Derivative{ visitor.get_adjoint_funcs() };
 }
 
 Derivative propagate_adjoints(const Func &output,
