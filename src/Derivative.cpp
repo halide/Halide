@@ -28,6 +28,7 @@ using std::vector;
 using FuncKey = Derivative::FuncKey;
 
 namespace Internal {
+namespace {
 
 bool is_float_extern(const string &op_name,
                      const string &func_name) {
@@ -1917,7 +1918,53 @@ void ReverseAccumulationVisitor::propagate_halide_function_call(
     }
 }
 
+}  // namespace
 }  // namespace Internal
+
+Func Derivative::get(const Func &func, int update_id, bool bounded) const {
+    std::string name = func.name();
+    if (!bounded) {
+        name += "_unbounded";
+    }
+    auto it = adjoints.find(FuncKey{ name, update_id });
+    if (!bounded && it == adjoints.end()) {
+        // No boundary condition applied, use the original function
+        name = func.name();
+        it = adjoints.find(FuncKey{ name, update_id });
+    }
+    internal_assert(it != adjoints.end()) << "Could not find Func " << name << "\n";
+    return it->second;
+}
+
+Func Derivative::get(const Buffer<> &buffer) const {
+    auto it = adjoints.find(FuncKey{ buffer.name(), -1 });
+    internal_assert(it != adjoints.end()) << "Could not find Buffer " << buffer.name() << "\n";
+    return it->second;
+}
+
+Func Derivative::get(const Param<> &param) const {
+    auto it = adjoints.find(FuncKey{ param.name(), -1 });
+    internal_assert(it != adjoints.end()) << "Could not find Param " << param.name() << "\n";
+    return it->second;
+}
+
+std::vector<Func> Derivative::funcs(const Func &func) const {
+    std::vector<Func> result;
+    FuncKey k{ func.name(), -1 };
+    FuncKey k_unbounded = k;
+    k_unbounded.first += "_unbounded";
+    for (int i = func.num_update_definitions() - 1; i >= -1; i--) {
+        k.second = k_unbounded.second = i;
+        auto it = adjoints.find(k);
+        internal_assert(it != adjoints.end()) << "Could not find derivative of " << k.first << " " << k.second << "\n";
+        result.push_back(it->second);
+        it = adjoints.find(k_unbounded);
+        if (it != adjoints.end()) {
+            result.push_back(it->second);
+        }
+    }
+    return result;
+}
 
 Derivative propagate_adjoints(const Func &output,
                               const Func &adjoint,
@@ -1929,7 +1976,7 @@ Derivative propagate_adjoints(const Func &output,
 
     Internal::ReverseAccumulationVisitor visitor;
     visitor.propagate_adjoints(output, adjoint, output_bounds);
-    return Derivative{ visitor.get_adjoint_funcs() };
+    return Derivative{ std::move(visitor.get_adjoint_funcs()) };
 }
 
 Derivative propagate_adjoints(const Func &output,
