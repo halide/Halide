@@ -31,15 +31,15 @@ public:
     Func get(const Buffer<> &buffer) const;
     Func get(const Param<> &param) const;
 
-    inline Func operator()(const Func &func, int update_id = -1, bool bounded = true) const {
+    Func operator()(const Func &func, int update_id = -1, bool bounded = true) const {
         return get(func, update_id, bounded);
     }
 
-    inline Func operator()(const Buffer<> &buffer) const {
+    Func operator()(const Buffer<> &buffer) const {
         return get(buffer);
     }
 
-    inline Func operator()(const Param<> &param) const {
+    Func operator()(const Param<> &param) const {
         return get(param);
     }
 
