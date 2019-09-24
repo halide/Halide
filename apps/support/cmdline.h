@@ -61,10 +61,8 @@ namespace detail{
 
 #ifdef WITH_EXCEPTIONS
   inline void throw_bad_cast() { throw std::bad_cast(); }
-  inline void throw_cmdline_error(const std::string &s) { throw cmdline::cmdline_error(s); }
 #else
   inline void throw_bad_cast() { std::cerr << "bad cast\n"; exit(1); }
-  inline void throw_cmdline_error(const std::string &s) { std::cerr << "error: " << s << "\n"; exit(1); }
 #endif
 
 template <typename Target, typename Source, bool Same>
@@ -179,6 +177,9 @@ public:
 private:
   std::string msg;
 };
+inline void throw_cmdline_error(const std::string &s) { throw cmdline::cmdline_error(s); }
+#else
+inline void throw_cmdline_error(const std::string &s) { std::cerr << "error: " << s << "\n"; exit(1); }
 #endif
 
 template <class T>
