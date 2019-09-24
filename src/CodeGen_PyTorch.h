@@ -15,40 +15,30 @@
 
 #include "IRPrinter.h"
 #include "Module.h"
-#include "Scope.h"
 
 namespace Halide {
-
-struct Argument;
-
 namespace Internal {
 
 /** This class emits C++ code to wrap a Halide pipeline so that it can
- * be used as a C++ extension operator in PyTorch. 
+ * be used as a C++ extension operator in PyTorch.
  */
 class CodeGen_PyTorch : public IRPrinter {
 public:
-    CodeGen_PyTorch(std::ostream &dest, Target target, std::string name);
+    CodeGen_PyTorch(std::ostream &dest, const Target &target, const std::string &cpp_header_path);
     ~CodeGen_PyTorch() = default;
 
     /** Emit the PyTorch C++ wrapper for the Halide pipeline. */
     void compile(const Module &module);
 
-    /** The target we're generating code for */
-    const Target &get_target() const { return target; }
-
     static void test();
 
-protected:
-    virtual void compile(const LoweredFunc &func, bool is_cuda);
+private:
+    const Target target;
 
-    /** The target being generated for. */
-    Target target;
-
-    std::string cpp_header;
+    void compile(const LoweredFunc &func, bool is_cuda);
 };
 
-}
-}
+}  // namespace Internal
+}  // namespace Halide
 
-#endif
+#endif  // HALIDE_CODEGEN_PYTORCH_H

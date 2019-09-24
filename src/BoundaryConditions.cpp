@@ -10,7 +10,7 @@ Func repeat_edge(const Func &source,
     user_assert(args.size() >= bounds.size()) <<
         "repeat_edge called with more bounds (" << bounds.size() <<
         ") than dimensions (" << args.size() << ") Func " <<
-        source.name() << "has.\n";
+        source.name() << " has.\n";
 
     std::vector<Expr> actuals;
     for (size_t i = 0; i < bounds.size(); i++) {
@@ -44,7 +44,7 @@ Func constant_exterior(const Func &source, Tuple value,
     user_assert(args.size() >= bounds.size()) <<
         "constant_exterior called with more bounds (" << bounds.size() <<
         ") than dimensions (" << source_args.size() << ") Func " <<
-        source.name() << "has.\n";
+        source.name() << " has.\n";
 
     Expr out_of_bounds = cast<bool>(false);
     for (size_t i = 0; i < bounds.size(); i++) {
@@ -88,7 +88,7 @@ Func repeat_image(const Func &source,
     user_assert(args.size() >= bounds.size()) <<
         "repeat_image called with more bounds (" << bounds.size() <<
         ") than dimensions (" << args.size() << ") Func " <<
-        source.name() << "has.\n";
+        source.name() << " has.\n";
 
     std::vector<Expr> actuals;
     for (size_t i = 0; i < bounds.size(); i++) {
@@ -129,7 +129,7 @@ Func mirror_image(const Func &source,
     user_assert(args.size() >= bounds.size()) <<
         "mirror_image called with more bounds (" << bounds.size() <<
         ") than dimensions (" << args.size() << ") Func " <<
-        source.name() << "has.\n";
+        source.name() << " has.\n";
 
     std::vector<Expr> actuals;
     for (size_t i = 0; i < bounds.size(); i++) {
@@ -170,7 +170,7 @@ Func mirror_interior(const Func &source,
     user_assert(args.size() >= bounds.size()) <<
         "mirror_interior called with more bounds (" << bounds.size() <<
         ") than dimensions (" << args.size() << ") Func " <<
-        source.name() << "has.\n";
+        source.name() << " has.\n";
 
     std::vector<Expr> actuals;
     for (size_t i = 0; i < bounds.size(); i++) {

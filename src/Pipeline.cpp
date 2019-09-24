@@ -8,7 +8,7 @@
 #include "LLVM_Headers.h"
 #include "LLVM_Output.h"
 #include "Lower.h"
-#include "Outputs.h"
+#include "Module.h"
 #include "ParamMap.h"
 #include "Pipeline.h"
 #include "PrintLoopNest.h"
@@ -24,21 +24,28 @@ using std::vector;
 
 namespace {
 
-std::string output_name(const string &filename, const string &fn_name, const char* ext) {
+std::string output_name(const string &filename, const string &fn_name, const string &ext) {
     return !filename.empty() ? filename : (fn_name + ext);
 }
 
-std::string output_name(const string &filename, const Module &m, const char* ext) {
+std::string output_name(const string &filename, const Module &m, const string &ext) {
     return output_name(filename, m.name(), ext);
 }
 
-Outputs static_library_outputs(const string &filename_prefix, const Target &target) {
-    Outputs outputs = Outputs().c_header(filename_prefix + ".h");
-    if (target.os == Target::Windows && !target.has_feature(Target::MinGW)) {
-        outputs = outputs.static_library(filename_prefix + ".lib");
-    } else {
-        outputs = outputs.static_library(filename_prefix + ".a");
-    }
+std::map<Output, std::string> single_output(const string &filename, const Module &m, Output output_type) {
+    auto ext = get_output_info(m.target());
+    std::map<Output, std::string> outputs = {
+        { output_type, output_name(filename, m, ext.at(output_type).extension) }
+    };
+    return outputs;
+}
+
+std::map<Output, std::string> static_library_outputs(const string &filename_prefix, const Target &target) {
+    auto ext = get_output_info(target);
+    std::map<Output, std::string> outputs = {
+        { Output::c_header, filename_prefix + ext.at(Output::c_header).extension },
+        { Output::static_library, filename_prefix + ext.at(Output::static_library).extension },
+    };
     return outputs;
 }
 
@@ -203,7 +210,7 @@ Func Pipeline::get_func(size_t index) {
     return Func(env.find(order[index])->second);
 }
 
-void Pipeline::compile_to(const Outputs &output_files,
+void Pipeline::compile_to(const std::map<Output, std::string> &output_files,
                           const vector<Argument> &args,
                           const string &fn_name,
                           const Target &target) {
@@ -216,7 +223,7 @@ void Pipeline::compile_to_bitcode(const string &filename,
                                   const string &fn_name,
                                   const Target &target) {
     Module m = compile_to_module(args, fn_name, target);
-    m.compile(Outputs().bitcode(output_name(filename, m, ".bc")));
+    m.compile(single_output(filename, m, Output::bitcode));
 }
 
 void Pipeline::compile_to_llvm_assembly(const string &filename,
@@ -224,7 +231,7 @@ void Pipeline::compile_to_llvm_assembly(const string &filename,
                                         const string &fn_name,
                                         const Target &target) {
     Module m = compile_to_module(args, fn_name, target);
-    m.compile(Outputs().llvm_assembly(output_name(filename, m, ".ll")));
+    m.compile(single_output(filename, m, Output::llvm_assembly));
 }
 
 void Pipeline::compile_to_object(const string &filename,
@@ -232,8 +239,8 @@ void Pipeline::compile_to_object(const string &filename,
                                  const string &fn_name,
                                  const Target &target) {
     Module m = compile_to_module(args, fn_name, target);
-    const char* ext = target.os == Target::Windows && !target.has_feature(Target::MinGW) ? ".obj" : ".o";
-    m.compile(Outputs().object(output_name(filename, m, ext)));
+    auto ext = get_output_info(target);
+    m.compile({{Output::object, output_name(filename, m, ext.at(Output::object).extension)}});
 }
 
 void Pipeline::compile_to_header(const string &filename,
@@ -241,7 +248,7 @@ void Pipeline::compile_to_header(const string &filename,
                                  const string &fn_name,
                                  const Target &target) {
     Module m = compile_to_module(args, fn_name, target);
-    m.compile(Outputs().c_header(output_name(filename, m, ".h")));
+    m.compile(single_output(filename, m, Output::c_header));
 }
 
 void Pipeline::compile_to_assembly(const string &filename,
@@ -249,7 +256,7 @@ void Pipeline::compile_to_assembly(const string &filename,
                                    const string &fn_name,
                                    const Target &target) {
     Module m = compile_to_module(args, fn_name, target);
-    m.compile(Outputs().assembly(output_name(filename, m, ".s")));
+    m.compile(single_output(filename, m, Output::assembly));
 }
 
 
@@ -258,22 +265,7 @@ void Pipeline::compile_to_c(const string &filename,
                             const string &fn_name,
                             const Target &target) {
     Module m = compile_to_module(args, fn_name, target);
-    m.compile(Outputs().c_source(output_name(filename, m, ".halide_generated.cpp")));
-}
-
-void Pipeline::compile_to_python_extension(const string &filename,
-                                           const vector<Argument> &args,
-                                           const string &fn_name,
-                                           const Target &target) {
-    Module m = compile_to_module(args, fn_name, target);
-    // Note that we deliberately default to ".py.cpp" (rather than .py.c) here;
-    // in theory, the Python extension file we generate can be compiled just
-    // fine as a plain-C file... but if we are building with cpp-name-mangling
-    // enabled in the target, we will include generated .h files that can't be compiled.
-    // We really don't want to vary the file extensions based on target flags,
-    // and in practice, it's extremely unlikely that anyone needs to rely on this
-    // being pure C output (vs possibly C++).
-    m.compile(Outputs().python_extension(output_name(filename, m, ".py.cpp")));
+    m.compile(single_output(filename, m, Output::c_source));
 }
 
 void Pipeline::print_loop_nest() {
@@ -286,13 +278,7 @@ void Pipeline::compile_to_lowered_stmt(const string &filename,
                                        StmtOutputFormat fmt,
                                        const Target &target) {
     Module m = compile_to_module(args, "", target);
-    Outputs outputs;
-    if (fmt == HTML) {
-        outputs = Outputs().stmt_html(output_name(filename, m, ".html"));
-    } else {
-        outputs = Outputs().stmt(output_name(filename, m, ".stmt"));
-    }
-    m.compile(outputs);
+    m.compile(single_output(filename, m, fmt == HTML ? Output::stmt_html : Output::stmt));
 }
 
 void Pipeline::compile_to_static_library(const string &filename_prefix,
@@ -300,8 +286,7 @@ void Pipeline::compile_to_static_library(const string &filename_prefix,
                                          const std::string &fn_name,
                                          const Target &target) {
     Module m = compile_to_module(args, fn_name, target);
-    Outputs outputs = static_library_outputs(filename_prefix, target);
-    m.compile(outputs);
+    m.compile(static_library_outputs(filename_prefix, target));
 }
 
 void Pipeline::compile_to_multitarget_static_library(const std::string &filename_prefix,
@@ -310,7 +295,7 @@ void Pipeline::compile_to_multitarget_static_library(const std::string &filename
     auto module_producer = [this, &args](const std::string &name, const Target &target) -> Module {
         return compile_to_module(args, name, target);
     };
-    Outputs outputs = static_library_outputs(filename_prefix, targets.back());
+    auto outputs = static_library_outputs(filename_prefix, targets.back());
     compile_multitarget(generate_function_name(), outputs, targets, module_producer);
 }
 
@@ -319,13 +304,11 @@ void Pipeline::compile_to_file(const string &filename_prefix,
                                const std::string &fn_name,
                                const Target &target) {
     Module m = compile_to_module(args, fn_name, target);
-    Outputs outputs = Outputs().c_header(filename_prefix + ".h");
-
-    if (target.os == Target::Windows && !target.has_feature(Target::MinGW)) {
-        outputs = outputs.object(filename_prefix + ".obj");
-    } else {
-        outputs = outputs.object(filename_prefix + ".o");
-    }
+    auto ext = get_output_info(target);
+    std::map<Output, std::string> outputs = {
+        { Output::c_header, filename_prefix + ext.at(Output::c_header).extension },
+        { Output::object, filename_prefix + ext.at(Output::object).extension },
+    };
     m.compile(outputs);
 }
 
@@ -582,7 +565,7 @@ void Pipeline::compile_jit(const Target &target_arg) {
         }
         string file_name = program_name + "_" + name + "_" + unique_name('g').substr(1) + ".bc";
         debug(4) << "Saving bitcode to: " << file_name << "\n";
-        module.compile(Outputs().bitcode(file_name));
+        module.compile({{Output::bitcode, file_name}});
     }
 
     contents->jit_module = jit_module;

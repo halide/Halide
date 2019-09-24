@@ -17,7 +17,7 @@ int main(int argc, char **argv) {
     if (argc > 1) {
         lib = argv[1];
     } else {
-        lib = "libauto_schedule.dll";
+        lib = "auto_schedule.dll";
     }
 
     if (!LoadLibraryA(lib.c_str())) {

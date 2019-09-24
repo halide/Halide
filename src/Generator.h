@@ -2888,23 +2888,6 @@ public:
 
 class GeneratorBase : public NamesInterface, public GeneratorContext {
 public:
-    struct EmitOptions {
-        bool emit_o{false};
-        bool emit_h{true};
-        bool emit_cpp{false};
-        bool emit_python_extension{false};
-        bool emit_assembly{false};
-        bool emit_bitcode{false};
-        bool emit_stmt{false};
-        bool emit_stmt_html{false};
-        bool emit_static_library{true};
-        bool emit_cpp_stub{false};
-        bool emit_schedule{false};
-        bool emit_featurization{false};
-        bool emit_registration{false};
-        bool emit_pytorch_wrapper{false};
-    };
-
     virtual ~GeneratorBase();
 
     void set_generator_param_values(const GeneratorParamsMap &params);
