@@ -142,16 +142,6 @@ std::map<Output, std::string> add_suffixes(const std::map<Output, std::string> &
     return out;
 }
 
-// Given a pathname of the form /path/to/name.ext, return the leaf (name.ext)
-std::string leaf(const std::string &path) {
-    size_t slash_pos = std::min(path.rfind('/'), path.rfind('\\'));
-    if (slash_pos != std::string::npos) {
-        return path.substr(slash_pos + 1);
-    } else {
-        return path;
-    }
-}
-
 void emit_registration(const Module &m, std::ostream &stream) {
     /*
         This relies on the filter library being linked in a way that doesn't
