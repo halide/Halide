@@ -64,7 +64,6 @@ def main():
     # usually Params or ImageParams.
     fname = "lesson_10_halide"
     brighter.compile_to({hl.Output.object: "lesson_10_halide.o",
-                         hl.Output.c_header: "lesson_10_halide.h",
                          hl.Output.python_extension: "lesson_10_halide.py.cpp"},
                          [input, offset], "lesson_10_halide")
 

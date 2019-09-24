@@ -40,14 +40,12 @@ int main(int argc, char **argv) {
     Target target = get_target_from_environment().with_feature(Target::CPlusPlusMangling);
 
     std::string pyext_filename = Internal::get_test_tmp_dir() + "halide_python.py.cpp";
-    std::string header_filename = Internal::get_test_tmp_dir() + "halide_python.h";
     std::string c_filename = Internal::get_test_tmp_dir() + "halide_python.cc";
     std::string function_name = "org::halide::halide_python::f";
 
     f.compile_to(
         {
             {Output::c_source, c_filename},
-            {Output::c_header, header_filename},
             {Output::python_extension, pyext_filename}
         },
         params,
@@ -55,7 +53,6 @@ int main(int argc, char **argv) {
         target
     );
 
-    Internal::assert_file_exists(header_filename);
     Internal::assert_file_exists(c_filename);
     Internal::assert_file_exists(pyext_filename);
 

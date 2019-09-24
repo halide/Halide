@@ -1,5 +1,6 @@
 #include <iostream>
 
+#include "CodeGen_C.h"
 #include "CodeGen_PyTorch.h"
 #include "IROperator.h"
 #include "Param.h"
@@ -9,9 +10,12 @@
 namespace Halide {
 namespace Internal {
 
-CodeGen_PyTorch::CodeGen_PyTorch(std::ostream &s, const Target &target, const std::string &cpp_header_path) :
-    IRPrinter(s), target(target)
-{
+CodeGen_PyTorch::CodeGen_PyTorch(std::ostream &s) : IRPrinter(s) {
+}
+
+void CodeGen_PyTorch::compile(const Module &module) {
+    const Target target = module.target();
+
     stream << "#include \"torch/extension.h\"\n";
     stream << "#include \"HalideBuffer.h\"\n";
     stream << "#include \"HalidePyTorchHelpers.h\"\n";
@@ -26,11 +30,20 @@ CodeGen_PyTorch::CodeGen_PyTorch(std::ostream &s, const Target &target, const st
         stream << "#include \"HalidePyTorchCudaHelpers.h\"\n";
     }
 
-    stream << "\n#include \"" << cpp_header_path << "\"\n\n";
-}
+    stream << "\n";
 
-void CodeGen_PyTorch::compile(const Module &input) {
-    for (const auto &f : input.functions()) {
+    // Emit extern decls of the Halide-generated functions we use directly
+    // into this file, so that we don't have to #include the relevant .h
+    // file directly; this simplifies certain compile/build setups (since
+    // we don't have to build files in tandem and/or get include paths right),
+    // and should be totally safe, since we are using the same codegen logic
+    // that would be in the .h file anyway.
+    {
+        CodeGen_C extern_decl_gen(stream, module.target(), CodeGen_C::CPlusPlusExternDecl);
+        extern_decl_gen.compile(module);
+    }
+
+    for (const auto &f : module.functions()) {
         if (f.name.find("old_buffer_t") != std::string::npos) {
             debug(1) << "ignoring " << f.name;
             continue;
@@ -222,20 +235,22 @@ void CodeGen_PyTorch::test() {
     Expr buf = Variable::make(Handle(), "buf.buffer");
     s = LetStmt::make("buf", Call::make(Handle(), Call::buffer_get_host, {buf}, Call::Extern), s);
 
-    Module m("", get_host_target());
-    m.append(LoweredFunc("test1", args, s, LinkageType::External));
-
     std::ostringstream source;
     std::ostringstream source_cuda;
     {
         // TODO(mgharbi): test that Target("host-cuda") raises an exception since
         // we require the "user_context" feature when using CUDA
 
-        CodeGen_PyTorch cg(source, Target("host"), "PyTorchTestOp.h");
-        cg.compile(m);
+        Module m("", Target("host"));
+        m.append(LoweredFunc("test1", args, s, LinkageType::External));
 
-        CodeGen_PyTorch cg_cuda(source_cuda, Target("host-cuda-user_context"), "PyTorchTestOp.h");
-        cg_cuda.compile(m);
+        CodeGen_PyTorch(source).compile(m);
+    }
+    {
+        Module m("", Target("host-cuda-user_context"));
+        m.append(LoweredFunc("test1", args, s, LinkageType::External));
+
+        CodeGen_PyTorch(source_cuda).compile(m);
     }
     std::string src = source.str() + "\n" + source_cuda.str();
 
@@ -245,7 +260,24 @@ R"GOLDEN_CODE(#include "torch/extension.h"
 #include "HalideBuffer.h"
 #include "HalidePyTorchHelpers.h"
 
-#include "PyTorchTestOp.h"
+struct halide_buffer_t;
+struct halide_filter_metadata_t;
+
+#ifndef HALIDE_FUNCTION_ATTRS
+#define HALIDE_FUNCTION_ATTRS
+#endif
+
+
+
+#ifdef __cplusplus
+extern "C" {
+#endif
+
+int test1(struct halide_buffer_t *_buf_buffer, float _alpha, int32_t _beta) HALIDE_FUNCTION_ATTRS;
+
+#ifdef __cplusplus
+}  // extern "C"
+#endif
 
 int test1_th_(at::Tensor &_buf, float _alpha, int32_t _beta) {
     // Check tensors have contiguous memory and are on the correct device
@@ -267,7 +299,24 @@ int test1_th_(at::Tensor &_buf, float _alpha, int32_t _beta) {
 #include "ATen/cuda/CUDAContext.h"
 #include "HalidePyTorchCudaHelpers.h"
 
-#include "PyTorchTestOp.h"
+struct halide_buffer_t;
+struct halide_filter_metadata_t;
+
+#ifndef HALIDE_FUNCTION_ATTRS
+#define HALIDE_FUNCTION_ATTRS
+#endif
+
+
+
+#ifdef __cplusplus
+extern "C" {
+#endif
+
+int test1(struct halide_buffer_t *_buf_buffer, float _alpha, int32_t _beta) HALIDE_FUNCTION_ATTRS;
+
+#ifdef __cplusplus
+}  // extern "C"
+#endif
 
 int test1_th_(at::Tensor &_buf, float _alpha, int32_t _beta) {
     // Setup CUDA
