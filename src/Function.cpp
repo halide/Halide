@@ -413,7 +413,7 @@ void Function::define(const vector<string> &args, vector<Expr> values) {
     }
 
     for (size_t i = 0; i < values.size(); i++) {
-        values[i] = common_subexpression_elimination(values[i]);
+        values[i] = common_subexpression_elimination_front_end(values[i]);
     }
 
     // Tag calls to random() with the free vars
@@ -522,12 +522,12 @@ void Function::define_update(const vector<Expr> &_args, vector<Expr> values) {
             err << values[i].type() << ", but pure definition has type " << pure_type;
             user_error << err.str() << "\n";
         }
-        values[i] = common_subexpression_elimination(values[i]);
+        values[i] = common_subexpression_elimination_front_end(values[i]);
     }
 
     vector<Expr> args(_args.size());
     for (size_t i = 0; i < args.size(); i++) {
-        args[i] = common_subexpression_elimination(_args[i]);
+        args[i] = common_subexpression_elimination_front_end(_args[i]);
     }
 
     // The pure args are those naked vars in the args that are not in

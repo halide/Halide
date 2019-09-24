@@ -4,6 +4,7 @@
 #include <ios>
 #include <iostream>
 #include <iomanip>
+#include "HalideBuffer.h"
 
 using namespace Halide;
 
@@ -285,6 +286,55 @@ int main(int argc, char **argv) {
     transposed = block_transposed_by_n(vals, 4);
     in.set(transposed);
     run_all_conditions("sorted descending transposed", transposed);
+
+    // TODO: This needs to be made in to a test. Currently it is not
+    // reproducing the reported failure however because both max_diff_offset and
+    // max_diff_strict_offset are zero.
+    //
+    // Check case from reported bug where CSE in frontend was breaking strict_float.
+    // (See: https://github.com/halide/Halide/issues/3813)
+    Var x, y;
+    Func f, f_offset, f_strict, f_strict_offset;
+    Expr sval_mul = 43758.5453123f * sin(y * 78.233f + x * 12.9898f);
+    Expr sval_mul_offset = 43758.5453123f * sin(y * 78.233f + (x + 1) * 12.9898f);
+    Expr rand_val = sval_mul - floor(sval_mul);
+    Expr rand_val_offset = sval_mul_offset - floor(sval_mul_offset);
+    f(x, y) = rand_val;
+    f_offset(x, y) = rand_val_offset;
+    f_strict(x, y) = strict_float(rand_val);
+    f_strict_offset(x, y) = strict_float(rand_val_offset);
+
+    Buffer<float> result = f.realize(513, 512);
+    Buffer<float> result_offset = f_offset.realize(512, 512);
+    Buffer<float> result_strict = f_strict.realize(513, 512);
+    Buffer<float> result_strict_offset = f_strict_offset.realize(512, 512);
+
+    float max_diff = 0.0f;
+    float max_diff_offset = 0.0f;
+    float max_diff_strict_offset = 0.0f;
+    for (int32_t y = 0; y < 512; y++) {
+      for (int32_t x = 0; x < 512; x++) {
+        float diff = fabs(result(x, y) - result_strict(x, y));
+        float diff_offset = fabs(result(x + 1, y) - result_offset(x, y));
+        float diff_strict_offset = fabs(result_strict(x + 1, y) - result_strict_offset(x, y));
+
+        if (diff > max_diff) {
+          max_diff = diff;
+        }
+        if (diff_offset > max_diff_offset) {
+          max_diff_offset = diff_offset;
+        }
+        if (diff_strict_offset > max_diff_strict_offset) {
+          max_diff_strict_offset = diff_strict_offset;
+        }
+      }
+    }
+    printf("Max diff %f max diff offset %f max diff strict offset %f.\n", max_diff, max_diff_offset, max_diff_strict_offset);
+
+    // TODO: Get first one to fail to demonstrate bug. Only second one
+    // should persist and it should get a tolerance.
+    assert(max_diff_offset == 0.0f);
+    assert(max_diff_strict_offset == 0.0f);
 
     printf("Success!\n");
     
