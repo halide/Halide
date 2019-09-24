@@ -641,11 +641,8 @@ void Module::compile(const std::map<Output, std::string> &output_files) const {
     }
     if (contains(output_files, Output::python_extension)) {
         debug(1) << "Module.compile(): python_extension " << output_files.at(Output::python_extension) << "\n";
-        user_assert(contains(output_files, Output::c_header)) << "You must specify c_header when specifying python_extension.";
-        auto c_header_leaf = leaf(output_files.at(Output::c_header));
-
         std::ofstream file(output_files.at(Output::python_extension));
-        Internal::PythonExtensionGen python_extension_gen(file, c_header_leaf, target());
+        Internal::PythonExtensionGen python_extension_gen(file);
         python_extension_gen.compile(*this);
     }
     if (contains(output_files, Output::schedule)) {
@@ -678,11 +675,9 @@ void Module::compile(const std::map<Output, std::string> &output_files) const {
     }
     if (contains(output_files, Output::pytorch_wrapper)) {
         debug(1) << "Module.compile(): pytorch_wrapper " << output_files.at(Output::pytorch_wrapper) << "\n" ;
-        user_assert(contains(output_files, Output::c_header)) << "You must specify c_header when specifying pytorch_wrapper.";
-        auto c_header_leaf = leaf(output_files.at(Output::c_header));
 
         std::ofstream file(output_files.at(Output::pytorch_wrapper));
-        Internal::CodeGen_PyTorch cg(file, target(), c_header_leaf);
+        Internal::CodeGen_PyTorch cg(file);
         cg.compile(*this);
     }
 }
