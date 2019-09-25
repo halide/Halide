@@ -225,10 +225,18 @@ public:
         check("vpacko(v*.h,v*.h)", hvx_width/1, u8(i16_1 >> 8));
         check("vpacko(v*.h,v*.h)", hvx_width/1, i8(u16_1 >> 8));
         check("vpacko(v*.h,v*.h)", hvx_width/1, i8(i16_1 >> 8));
-        check("vpacko(v*.w,v*.w)", hvx_width/2, u16(u32_1 >> 16));
-        check("vpacko(v*.w,v*.w)", hvx_width/2, u16(i32_1 >> 16));
-        check("vpacko(v*.w,v*.w)", hvx_width/2, i16(u32_1 >> 16));
-        check("vpacko(v*.w,v*.w)", hvx_width/2, i16(i32_1 >> 16));
+        check("vpacko(v*.w,v*.w)", hvx_width/2, u16(u32_1 >> cast<unsigned>(16)));
+        check("vpacko(v*.w,v*.w)", hvx_width/2, u16(u32_1 >> cast<int>(16)));
+        check("vpacko(v*.w,v*.w)", hvx_width/2, u16(u32_1 << cast<int>(-16)));
+        check("vpacko(v*.w,v*.w)", hvx_width/2, u16(i32_1 >> cast<unsigned>(16)));
+        check("vpacko(v*.w,v*.w)", hvx_width/2, u16(i32_1 >> cast<int>(16)));
+        check("vpacko(v*.w,v*.w)", hvx_width/2, u16(i32_1 << cast<int>(-16)));
+        check("vpacko(v*.w,v*.w)", hvx_width/2, i16(u32_1 >> cast<unsigned>(16)));
+        check("vpacko(v*.w,v*.w)", hvx_width/2, i16(u32_1 >> cast<int>(16)));
+        check("vpacko(v*.w,v*.w)", hvx_width/2, i16(u32_1 << cast<int>(-16)));
+        check("vpacko(v*.w,v*.w)", hvx_width/2, i16(i32_1 >> cast<unsigned>(16)));
+        check("vpacko(v*.w,v*.w)", hvx_width/2, i16(i32_1 >> cast<int>(16)));
+        check("vpacko(v*.w,v*.w)", hvx_width/2, i16(i32_1 << cast<int>(-16)));
 
         // vpack doesn't interleave its inputs, which means it doesn't
         // simplify with widening. This is preferable for when the

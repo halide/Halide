@@ -2370,12 +2370,14 @@ void CodeGen_Hexagon::visit(const Call *op) {
             internal_assert(op->args.size() == 2);
             string instr = op->is_intrinsic(Call::shift_left) ? "halide.hexagon.shl" : "halide.hexagon.shr";
             Expr b = maybe_scalar(op->args[1]);
-            if (b.type().is_int()) {
+            if (isa_version < 62) {
+              if (b.type().is_int()) {
                 CodeGen_Posix::visit(op);
                 return;
+              }
             }
-            internal_assert(b.type().is_uint());
-            value = call_intrin(op->type, instr + type_suffix(op->args[0], b),
+            value = call_intrin(op->type,
+                                instr + type_suffix(op->args[0], b),
                                 {op->args[0], b});
             return;
         } else if (op->is_intrinsic(Call::dynamic_shuffle)) {
