@@ -1921,28 +1921,28 @@ void ReverseAccumulationVisitor::propagate_halide_function_call(
 }  // namespace
 }  // namespace Internal
 
-Func Derivative::get(const Func &func, int update_id, bool bounded) const {
-    std::string name = func.name();
-    if (!bounded) {
-        name += "_unbounded";
-    }
-    auto it = adjoints.find(FuncKey{ name, update_id });
-    if (!bounded && it == adjoints.end()) {
-        // No boundary condition applied, use the original function
-        name = func.name();
-        it = adjoints.find(FuncKey{ name, update_id });
-    }
-    internal_assert(it != adjoints.end()) << "Could not find Func " << name << "\n";
+Func Derivative::operator()(const Func &func, int update_id) const {
+    auto it = adjoints.find(FuncKey{ func.name(), update_id });
+    internal_assert(it != adjoints.end()) << "Could not find Func " << func.name() << "\n";
     return it->second;
 }
 
-Func Derivative::get(const Buffer<> &buffer) const {
+Func Derivative::get_unbounded(const Func &func, int update_id) const {
+    auto it = adjoints.find(FuncKey{ func.name() + "_unbounded", update_id });
+    if (it != adjoints.end()) {
+        return it->second;
+    }
+    // No boundary condition applied; look for the original function
+    return (*this)(func, update_id);
+}
+
+Func Derivative::operator()(const Buffer<> &buffer) const {
     auto it = adjoints.find(FuncKey{ buffer.name(), -1 });
     internal_assert(it != adjoints.end()) << "Could not find Buffer " << buffer.name() << "\n";
     return it->second;
 }
 
-Func Derivative::get(const Param<> &param) const {
+Func Derivative::operator()(const Param<> &param) const {
     auto it = adjoints.find(FuncKey{ param.name(), -1 });
     internal_assert(it != adjoints.end()) << "Could not find Param " << param.name() << "\n";
     return it->second;

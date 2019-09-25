@@ -27,21 +27,13 @@ public:
     explicit Derivative(const std::map<FuncKey, Func> &adjoints_in) : adjoints(adjoints_in) {}
     explicit Derivative(std::map<FuncKey, Func> &&adjoints_in) : adjoints(std::move(adjoints_in)) {}
 
-    Func get(const Func &func, int update_id = -1, bool bounded = true) const;
-    Func get(const Buffer<> &buffer) const;
-    Func get(const Param<> &param) const;
+    Func operator()(const Func &func, int update_id = -1) const;
+    Func operator()(const Buffer<> &buffer) const;
+    Func operator()(const Param<> &param) const;
 
-    Func operator()(const Func &func, int update_id = -1, bool bounded = true) const {
-        return get(func, update_id, bounded);
-    }
-
-    Func operator()(const Buffer<> &buffer) const {
-        return get(buffer);
-    }
-
-    Func operator()(const Param<> &param) const {
-        return get(param);
-    }
+    /** Get the unbounded Func, if any. If no such Func (ie no boundary condition
+     * was applied), equivalent to just calling get(). */
+    Func get_unbounded(const Func &func, int update_id = -1) const;
 
     /** Get the entire chain of new synthesized Funcs that compute the
      * derivative of a given user-written Func for the purpose of
