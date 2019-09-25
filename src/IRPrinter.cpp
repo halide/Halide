@@ -5,8 +5,13 @@
 
 #include "AssociativeOpsTable.h"
 #include "Associativity.h"
+#include "DerivativeUtils.h"
+#include "FindCalls.h"
+#include "Func.h"
 #include "IROperator.h"
 #include "Module.h"
+#include "RealizationOrder.h"
+#include "Simplify.h"
 #include "Target.h"
 
 namespace Halide {
@@ -165,6 +170,71 @@ ostream &operator<<(ostream &stream, const Target &target) {
     return stream << "target(" << target.to_string() << ")";
 }
 
+namespace {
+
+template<typename T>
+void emit_with_commas(ostream &stream, const std::vector<T> &v) {
+    stream << "(";
+    const char *sep = "";
+    for (const T &t : v) {
+        stream << sep << t;
+        sep = ", ";
+    }
+    stream << ")";
+};
+
+}  // namespace
+
+ostream &operator<<(ostream &stream, const Func &func) {
+    using Internal::extract_rdom;
+    using Internal::ReductionDomain;
+    using Internal::simplify;
+
+    stream << "func " << func.name() << " = {\n";
+
+    // Topologically sort the functions
+    std::map<std::string, Internal::Function> env = find_transitive_calls(func.function());
+    std::vector<std::string> order = realization_order({ func.function() }, env).first;
+
+    for (int i = (int) order.size() - 1; i >= 0; i--) {
+        Func f(env[order[i]]);
+        for (int update_id = -1; update_id < f.num_update_definitions(); update_id++) {
+            std::vector<Expr> vals;
+            if (update_id >= 0) {
+                stream << "  " << f.name() << ".update[" << update_id << "]";
+                emit_with_commas(stream, f.update_args(update_id));
+                stream << " = ";
+                vals = f.update_values(update_id).as_vector();
+            } else {
+                stream << " " << f.name();
+                emit_with_commas(stream, f.args());
+                stream << " = ";
+                vals = f.values().as_vector();
+            }
+            if (vals.size() > 1) {
+                stream << "tuple<" << vals.size() << ">";
+            }
+            emit_with_commas(stream, vals);
+            // Assume that Tuples have the same (or no) RDom across all values.
+            ReductionDomain rdom = extract_rdom(vals.at(0));
+            if (rdom.defined()) {
+                stream << " with RDom: ";
+                std::vector<Expr> e;
+                for (const auto &d : rdom.domain()) {
+                    e.push_back(d.min);
+                    e.push_back(d.extent);
+                }
+                emit_with_commas(stream, e);
+            }
+            stream << "\n";
+        }
+    }
+
+    stream << "}\n";
+
+    return stream;
+}
+
 namespace Internal {
 
 IRPrinter::~IRPrinter() {
@@ -197,21 +267,46 @@ void IRPrinter::test() {
     Stmt allocate = Allocate::make("buf", f32, MemoryType::Stack, {1023}, const_true(), let_stmt);
 
     ostringstream source;
+    source << "\n";
     source << allocate;
-    std::string correct_source = \
-        "allocate buf[float32 * 1023] in Stack\n"
-        "let y = 17\n"
-        "assert((y >= 3), halide_error_param_too_small_i64(\"y\", y, 3))\n"
-        "produce buf {\n"
-        " parallel (x, -2, (y + 2)) {\n"
-        "  buf[(y - 1)] = ((x*17)/(x - 3))\n"
-        " }\n"
-        "}\n"
-        "consume buf {\n"
-        " vectorized (x, 0, y) {\n"
-        "  out[x] = (buf((x % 3)) + 1)\n"
-        " }\n"
-        "}\n";
+
+    Func f("some_func");
+    Var xx("xx");
+    RDom rr(1, 99, "rr");
+    f(xx) = 0;
+    f(rr) += rr;
+    f(rr) *= rr;
+    source << f;
+
+    Func g("tuple_func");
+    g(xx) = Tuple(0, 0);
+    g(rr) = Tuple(g(rr - 1)[0], g(rr)[1] + 1);
+    source << g;
+
+    std::string correct_source =  R"GOLDEN(
+allocate buf[float32 * 1023] in Stack
+let y = 17
+assert((y >= 3), halide_error_param_too_small_i64("y", y, 3))
+produce buf {
+ parallel (x, -2, (y + 2)) {
+  buf[(y - 1)] = ((x*17)/(x - 3))
+ }
+}
+consume buf {
+ vectorized (x, 0, y) {
+  out[x] = (buf((x % 3)) + 1)
+ }
+}
+func some_func = {
+ some_func(xx) = (0)
+  some_func.update[0](rr$x) = ((some_func(rr$x) + rr$x)) with RDom: (1, 99)
+  some_func.update[1](rr$x) = ((some_func(rr$x)*rr$x)) with RDom: (1, 99)
+}
+func tuple_func = {
+ tuple_func(xx) = tuple<2>(0, 0)
+  tuple_func.update[0](rr$x) = tuple<2>(tuple_func((rr$x - 1)), (tuple_func(rr$x) + 1)) with RDom: (1, 99)
+}
+)GOLDEN";
 
     if (source.str() != correct_source) {
         internal_error << "Correct output:\n" << correct_source
@@ -298,7 +393,7 @@ ostream &operator<<(ostream &stream, const Stmt &ir) {
 }
 
 
-ostream &operator <<(ostream &stream, const LoweredFunc &function) {
+ostream &operator<<(ostream &stream, const LoweredFunc &function) {
     stream << function.linkage << " func " << function.name << " (";
     for (size_t i = 0; i < function.args.size(); i++) {
         stream << function.args[i].name;

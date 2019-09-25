@@ -50,6 +50,10 @@ struct Target;
 /** Emit a halide Target in a human readable form */
 std::ostream &operator<<(std::ostream &stream, const Target &);
 
+/** Emit a halide Func in a human readable form. */
+class Func;
+std::ostream &operator<<(std::ostream &stream, const Func &);
+
 namespace Internal {
 
 struct AssociativePattern;
