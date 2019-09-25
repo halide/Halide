@@ -42,6 +42,7 @@
 #include "Profiling.h"
 #include "Qualify.h"
 #include "RealizationOrder.h"
+#include "RemoveAtomicMutexLock.h"
 #include "RemoveDeadAllocations.h"
 #include "RemoveExternLoops.h"
 #include "RemoveUndef.h"
@@ -57,7 +58,6 @@
 #include "StorageFolding.h"
 #include "StrictifyFloat.h"
 #include "Substitute.h"
-#include "SubstituteLetInAtomics.h"
 #include "Tracing.h"
 #include "TrimNoOps.h"
 #include "UnifyDuplicateLets.h"
@@ -221,6 +221,10 @@ Module lower(const vector<Function> &output_funcs,
     s = split_tuples(s, env);
     debug(2) << "Lowering after destructuring tuple-valued realizations:\n" << s << "\n\n";
 
+    debug(1) << "Removing unnecessary atomic mutex locks...\n";
+    s = remove_atomic_mutex_locks(s);
+    debug(2) << "Lowering after removing atomic mutex locks:\n" << s << "\n\n";
+
     // OpenGL relies on GPU var canonicalization occurring before
     // storage flattening.
     if (t.has_gpu_feature() ||
@@ -375,10 +379,6 @@ Module lower(const vector<Function> &output_funcs,
     } else {
         debug(1) << "Skipping Hexagon offload...\n";
     }
-
-    debug(1) << "Substituting let variables in atomic nodes...\n";
-    s = substitute_let_in_atomics(s);
-    debug(2) << "Lowering after substituting let variables in atomic nodes:\n" << s << '\n';
 
     if (!custom_passes.empty()) {
         for (size_t i = 0; i < custom_passes.size(); i++) {

@@ -483,13 +483,13 @@ template <typename T>
 void test_all(const Backend &backend) {
     test_parallel_hist<T>(backend);
     test_parallel_cas_update<T>(backend);
-    test_parallel_hist_tuple<T>(backend);
     if (backend != Backend::CPUVectorize) {
         // Doesn't support vectorized predicated store yet.
         test_predicated_hist<T>(backend);
     }
     if (backend == Backend::CPU) {
         // These require mutex locking which does not support vectorization and GPU
+        test_parallel_hist_tuple<T>(backend);
         test_parallel_hist_tuple2<T>(backend);
         test_tuple_reduction<T>(backend);
     }

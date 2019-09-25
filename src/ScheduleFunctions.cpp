@@ -319,45 +319,6 @@ Stmt build_loop_nest(
     return stmt;
 }
 
-// Do we need a mutex buffer for the Atomic node?
-// We only need mutex buffers if we are storing to more than one buffer within a loop nest
-bool atomic_need_mutex(const Function &func,
-                       const vector<Expr> &rhs) {
-    // If there is no tuple, we do not need mutex.
-    if (rhs.size() <= 1) {
-        return false;
-    }
-    // If there is a tuple, and if for tuple index i the call only reference to index i,
-    // we do not need mutex.
-    class CheckCallTupleIndex : public IRGraphVisitor {
-        using IRGraphVisitor::visit;
-        void visit(const Call *op) override {
-            if (op->func.defined()) {
-                if (op->func.same_as(func_ptr) && op->value_index != current_index) {
-                    call_different_index = true;
-                }
-            }
-            for (size_t i = 0; i < op->args.size(); i++) {
-                include(op->args[i]);
-            }
-        }
-    public:
-        CheckCallTupleIndex(int current_index, const FunctionPtr &func_ptr) :
-            current_index(current_index), func_ptr(func_ptr), call_different_index(false) {}
-        int current_index;
-        FunctionPtr func_ptr;
-        bool call_different_index;
-    };
-    for (size_t i = 0; i < rhs.size(); i++) {
-        CheckCallTupleIndex check((int)i, func.get_contents());
-        rhs[i].accept(&check);
-        if (check.call_different_index) {
-            return true;
-        }
-    }
-    return false;
-}
-
 std::string get_mutex_name(const std::string func_name) {
     return func_name + ".mutex";
 }
@@ -396,13 +357,9 @@ Stmt build_provide_loop_nest(const map<string, Function> &env,
     need_alloc_mutex = false;
     if (def.schedule().atomic()) {
         // Do we need to allocate a mutex buffer?
-        if (atomic_need_mutex(func, values)) {
-            // We will allocate a mutex buffer called get_mutex_name(func.name())
-            body = Atomic::make(get_mutex_name(func.name()), site, body);
-            need_alloc_mutex = true;
-        } else {
-            body = Atomic::make("", {}, body);
-        }
+        // We will allocate a mutex buffer called get_mutex_name(func.name())
+        body = Atomic::make(get_mutex_name(func.name()), site, body);
+        need_alloc_mutex = true;
     }
 
     // Default schedule/values if there is no specialization

@@ -557,6 +557,7 @@ SOURCE_FILES = \
   RealizationOrder.cpp \
   Reduction.cpp \
   RegionCosts.cpp \
+  RemoveAtomicMutexLocks.cpp \
   RemoveDeadAllocations.cpp \
   RemoveExternLoops.cpp \
   RemoveUndef.cpp \
@@ -594,7 +595,6 @@ SOURCE_FILES = \
   StorageFolding.cpp \
   StrictifyFloat.cpp \
   Substitute.cpp \
-  SubstituteLetInAtomics.cpp \
   Target.cpp \
   Tracing.cpp \
   TrimNoOps.cpp \
@@ -737,6 +737,7 @@ HEADER_FILES = \
   RealizationOrder.h \
   Reduction.h \
   RegionCosts.h \
+  RemoveAtomicMutexLocks.h \
   RemoveDeadAllocations.h \
   RemoveExternLoops.h \
   RemoveUndef.h \
@@ -758,7 +759,6 @@ HEADER_FILES = \
   StorageFolding.h \
   StrictifyFloat.h \
   Substitute.h \
-  SubstituteLetInAtomics.h \
   Target.h \
   ThreadPool.h \
   Tracing.h \

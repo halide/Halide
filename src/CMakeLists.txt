@@ -401,6 +401,7 @@ set(HEADER_FILES
   RealizationOrder.h
   Reduction.h
   RegionCosts.h
+  RemoveAtomicMutexLocks.h
   RemoveDeadAllocations.h
   RemoveExternLoops.h
   RemoveUndef.h
@@ -422,7 +423,6 @@ set(HEADER_FILES
   StorageFolding.h
   StrictifyFloat.h
   Substitute.h
-  SubstituteLetInAtomics.h
   Target.h
   ThreadPool.h
   Tracing.h
@@ -572,6 +572,7 @@ add_library(Halide ${HALIDE_LIBRARY_TYPE}
   RealizationOrder.cpp
   Reduction.cpp
   RegionCosts.cpp
+  RemoveAtomicMutexLocks.cpp
   RemoveDeadAllocations.cpp
   RemoveExternLoops.cpp
   RemoveUndef.cpp
@@ -609,7 +610,6 @@ add_library(Halide ${HALIDE_LIBRARY_TYPE}
   StorageFolding.cpp
   StrictifyFloat.cpp
   Substitute.cpp
-  SubstituteLetInAtomics.cpp
   Target.cpp
   Tracing.cpp
   TrimNoOps.cpp
