@@ -207,46 +207,6 @@ public:
         code_pages.push_back({result, size});
         return result;
     }
-
-#if LLVM_VERSION >= 80
-    // nothing
-#else
-    void work_around_llvm_bugs() {
-
-        for (auto p : code_pages) {
-            uint8_t *start = p.first;
-            uint8_t *end = p.first + p.second;
-
-            (void)start;
-            (void)end;
-#ifdef __arm__
-            // Flush each function from the dcache so that it gets pulled into
-            // the icache correctly.
-
-            // finalizeMemory should have done the trick, but as of Aug 28
-            // 2013, it doesn't work unless we also manually flush the
-            // cache. Otherwise the icache's view of the code is missing the
-            // relocations, which gets really confusing to debug, because
-            // gdb's view of the code uses the dcache, so the disassembly
-            // isn't right.
-            debug(2) << "Flushing cache from " << (void *)start
-                     << " to " << (void *)end << "\n";
-            __builtin___clear_cache((char*)start, (char*)end);
-#endif
-
-#ifndef _WIN32
-            // As of November 2016, llvm doesn't always mark the right pages
-            // as executable either.
-            // https://llvm.org/bugs/show_bug.cgi?id=30905
-
-            start = (uint8_t *)(((uintptr_t)start) & ~4095);
-            end = (uint8_t *)(((uintptr_t)end + 4095) & ~4095);
-            mprotect((void *)start, end - start, PROT_READ | PROT_EXEC);
-#endif
-        }
-    }
-#endif
-
 };
 
 }
@@ -264,9 +224,7 @@ JITModule::JITModule(const Module &m, const LoweredFunc &fn,
     deps_with_runtime.insert(deps_with_runtime.end(), shared_runtime.begin(), shared_runtime.end());
     compile_module(std::move(llvm_module), fn.name, m.target(), deps_with_runtime);
     // If -time-passes is in HL_LLVM_ARGS, this will print llvm passes time statstics otherwise its no-op.
-#if LLVM_VERSION >= 80
     llvm::reportAndResetTimings();
-#endif
 }
 
 void JITModule::compile_module(std::unique_ptr<llvm::Module> m, const string &function_name, const Target &target,
@@ -352,11 +310,6 @@ void JITModule::compile_module(std::unique_ptr<llvm::Module> m, const string &fu
 
     debug(2) << "Finalizing object\n";
     ee->finalizeObject();
-#if LLVM_VERSION >= 80
-    // nothing
-#else
-    memory_manager->work_around_llvm_bugs();
-#endif
     // Do any target-specific post-compilation module meddling
     for (size_t i = 0; i < listeners.size(); i++) {
         ee->UnregisterJITEventListener(listeners[i]);

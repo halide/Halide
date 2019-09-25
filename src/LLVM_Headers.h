@@ -1,10 +1,10 @@
 #ifndef HALIDE_LLVM_HEADERS_H
 #define HALIDE_LLVM_HEADERS_H
 
-#if LLVM_VERSION >= 70
+#if LLVM_VERSION >= 80
 // We're good to go
 #else
-#error "Compiling Halide requires LLVM 7.0 or newer"
+#error "Compiling Halide requires LLVM 8.0 or newer"
 #endif
 
 // This seems to be required by some LLVM header, which is likely an LLVM bug.
@@ -55,10 +55,8 @@
 #if LLVM_VERSION >= 90
 #include <llvm/Transforms/Instrumentation/AddressSanitizer.h>
 #endif
-#if LLVM_VERSION >= 80
 #include <llvm/Transforms/Instrumentation/ThreadSanitizer.h>
 #include <llvm/IR/PassTimingInfo.h>
-#endif
 #include "llvm/ADT/APFloat.h"
 #include "llvm/ADT/SmallVector.h"
 #include "llvm/ADT/StringRef.h"
