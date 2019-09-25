@@ -1,6 +1,5 @@
 #include <cmath>
 #include <fstream>
-#include <getopt.h>
 #include <iomanip>
 #include <iostream>
 #include <map>
@@ -9,6 +8,8 @@
 #include <sstream>
 #include <string>
 #include <vector>
+
+#include "cmdline.h"
 
 #include "CostModel.h"
 #include "DefaultCostModel.h"
@@ -35,60 +36,54 @@ struct Flags {
     string              best_schedule_path;
 
     Flags(int argc, char **argv) {
-        struct option long_options[] = {
-            { "epochs", required_argument,  nullptr, 'e' },
-            { "rates", required_argument,  nullptr, 't' },
-            { "initial_weights", required_argument,  nullptr, 'i' },
-            { "weights_out", required_argument,  nullptr, 'w' },
-            { "randomize_weights", optional_argument, nullptr, 'r' },
-            { "num_cores", required_argument, nullptr, 'n' },
-            { "best_benchmark", required_argument,  nullptr, 'b' },
-            { "best_schedule", required_argument,  nullptr, 's' },
-            { 0, 0, 0, 0}
-        };
+        cmdline::parser a;
 
-        string optstring;
-        for (auto &o : long_options) {
-            optstring += (char) o.val;
-        }
+        const char *kNoDesc = "";
 
-        for (;;) {
-            const int c = getopt_long(argc, argv, optstring.c_str(), long_options, nullptr);
-            if (c == -1)
-                break;
+        constexpr bool kOptional = false;
+        a.add<int>("epochs");
+        a.add<string>("rates");
+        a.add<string>("initial_weights", '\0', kNoDesc, kOptional, "");
+        a.add<string>("weights_out");
+        a.add<bool>("randomize_weights", '\0', kNoDesc, kOptional, false);
+        a.add<int>("num_cores");
+        a.add<string>("best_benchmark");
+        a.add<string>("best_schedule");
 
-            switch (c) {
-            case 'e': epochs = atoi(optarg); break;
-            case 't': rates = parse_floats(optarg); break;
-            case 'i': initial_weights_path = optarg; break;
-            case 'w': weights_out_path = optarg; break;
-            case 'r': randomize_weights = optarg ? (atoi(optarg) == 1) : true; break;
-            case 'n': num_cores = atoi(optarg); break;
-            case 'b': best_benchmark_path = optarg; break;
-            case 's': best_schedule_path = optarg; break;
-            default:
-                usage(argc, argv);
-           }
-        }
+        a.parse_check(argc, argv);  // exits if parsing fails
+
+        epochs = a.get<int>("epochs");
+        rates = parse_floats(a.get<string>("rates"));
+        initial_weights_path = a.get<string>("initial_weights");
+        weights_out_path = a.get<string>("weights_out");
+        randomize_weights = a.exist("randomize_weights") && a.get<bool>("randomize_weights");
+        best_benchmark_path = a.get<string>("best_benchmark");
+        best_schedule_path = a.get<string>("best_schedule");
+
         if (epochs <= 0) {
             std::cerr << "--epochs must be specified and > 0.\n";
-            usage(argc, argv);
+            std::cerr << a.usage();
+            exit(1);
         }
         if ((!initial_weights_path.empty()) == randomize_weights) {
             std::cerr << "You must specify exactly one of --initial_weights or --randomize_weights.\n";
-            usage(argc, argv);
+            std::cerr << a.usage();
+            exit(1);
         }
         if (weights_out_path.empty()) {
             std::cerr << "--weights_out must be specified.\n";
-            usage(argc, argv);
+            std::cerr << a.usage();
+            exit(1);
         }
         if (rates.empty()) {
             std::cerr << "--rates cannot be empty.\n";
-            usage(argc, argv);
+            std::cerr << a.usage();
+            exit(1);
         }
     }
 
-    std::vector<float> parse_floats(const char *c) {
+    std::vector<float> parse_floats(const std::string &s) {
+        const char *c = s.c_str();
         std::vector<float> v;
         while (isspace(*c)) ++c;
         while (*c) {
@@ -98,11 +93,6 @@ struct Flags {
             while (isspace(*c)) ++c;
         }
         return v;
-    }
-
-    void usage(int argc, char **argv) {
-        std::cerr << "Usage: " << argv[0] << " [...]\n";
-        exit(1);
     }
 };
 

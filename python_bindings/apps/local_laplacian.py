@@ -8,8 +8,7 @@ from __future__ import division
 import halide as hl
 
 import numpy as np
-from scipy.misc import imread, imsave
-
+from imageio import imread, imsave
 import os.path
 
 

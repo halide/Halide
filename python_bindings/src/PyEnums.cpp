@@ -157,6 +157,23 @@ void define_enums(py::module &m) {
         .value("UInt", Type::UInt)
         .value("Float", Type::Float)
         .value("Handle", Type::Handle);
+
+    py::enum_<Output>(m, "Output")
+        .value("assembly", Output::assembly)
+        .value("bitcode", Output::bitcode)
+        .value("c_header", Output::c_header)
+        .value("c_source", Output::c_source)
+        .value("cpp_stub", Output::cpp_stub)
+        .value("featurization", Output::featurization)
+        .value("llvm_assembly", Output::llvm_assembly)
+        .value("object", Output::object)
+        .value("python_extension", Output::python_extension)
+        .value("pytorch_wrapper", Output::pytorch_wrapper)
+        .value("registration", Output::registration)
+        .value("schedule", Output::schedule)
+        .value("static_library", Output::static_library)
+        .value("stmt", Output::stmt)
+        .value("stmt_html", Output::stmt_html);
 }
 
 }  // namespace PythonBindings

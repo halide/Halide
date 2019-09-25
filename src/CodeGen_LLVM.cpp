@@ -154,13 +154,13 @@ llvm::GlobalValue::LinkageTypes llvm_linkage(LinkageType t) {
     // fail. Figure out why so we can remove this.
     return llvm::GlobalValue::ExternalLinkage;
 
-    switch (t) {
-    case LinkageType::ExternalPlusMetadata:
-    case LinkageType::External:
-        return llvm::GlobalValue::ExternalLinkage;
-    default:
-        return llvm::GlobalValue::PrivateLinkage;
-    }
+    // switch (t) {
+    // case LinkageType::ExternalPlusMetadata:
+    // case LinkageType::External:
+    //     return llvm::GlobalValue::ExternalLinkage;
+    // default:
+    //     return llvm::GlobalValue::PrivateLinkage;
+    // }
 }
 
 }
@@ -1180,7 +1180,7 @@ llvm::Function *CodeGen_LLVM::embed_metadata_getter(const std::string &metadata_
 
     llvm::FunctionType *func_t = llvm::FunctionType::get(metadata_t_type->getPointerTo(), false);
     llvm::Function *metadata_getter = llvm::Function::Create(func_t, llvm::GlobalValue::ExternalLinkage, metadata_name, module.get());
-    llvm::BasicBlock *block = llvm::BasicBlock::Create(module.get()->getContext(), "entry", metadata_getter);
+    llvm::BasicBlock *block = llvm::BasicBlock::Create(module->getContext(), "entry", metadata_getter);
     builder->SetInsertPoint(block);
     builder->CreateRet(metadata_storage);
     internal_assert(!verifyFunction(*metadata_getter, &llvm::errs()));
@@ -1371,11 +1371,7 @@ void CodeGen_LLVM::optimize_module() {
 
     if (get_target().has_feature(Target::TSAN)) {
         auto addThreadSanitizerPass = [](const PassManagerBuilder &builder, legacy::PassManagerBase &pm) {
-#if LLVM_VERSION >= 80
             pm.add(createThreadSanitizerLegacyPassPass());
-#else
-            pm.add(createThreadSanitizerPass());
-#endif
         };
         b.addExtension(PassManagerBuilder::EP_OptimizerLast, addThreadSanitizerPass);
         b.addExtension(PassManagerBuilder::EP_EnabledOnOptLevel0, addThreadSanitizerPass);
@@ -1457,7 +1453,18 @@ Value *CodeGen_LLVM::codegen(Expr e) {
     value = nullptr;
     e.accept(this);
     internal_assert(value) << "Codegen of an expr did not produce an llvm value\n";
-    internal_assert(e.type().is_handle() ||
+    // TODO: skip this correctness check for bool vectors,
+    // as eliminate_bool_vectors() will cause a discrepancy for some backends
+    // (eg OpenCL, HVX); for now we're just ignoring the assert, but
+    // in the long run we should improve the smarts. See https://github.com/halide/Halide/issues/4194.
+    const bool is_bool_vector = e.type().is_bool() && e.type().lanes() > 1;
+    // TODO: skip this correctness check for prefetch, because the return type
+    // of prefetch indicates the type being prefetched, which does not match the
+    // implementation of prefetch.
+    // See https://github.com/halide/Halide/issues/4211.
+    const bool is_prefetch = e.as<Call>() && e.as<Call>()->is_intrinsic(Call::prefetch);
+    internal_assert(is_bool_vector || is_prefetch ||
+                    e.type().is_handle() ||
                     value->getType()->isVoidTy() ||
                     value->getType() == llvm_type_of(e.type()))
         << "Codegen of Expr " << e
@@ -2102,7 +2109,7 @@ void CodeGen_LLVM::visit(const Load *op) {
                 value = builder->CreateInsertElement(value, val, lane);
                 ptr = builder->CreateInBoundsGEP(ptr, stride);
             }
-        } else if (false /* should_scalarize(op->index) */) {
+        } else if ((false)) {   /* should_scalarize(op->index) */
             // TODO: put something sensible in for
             // should_scalarize. Probably a good idea if there are no
             // loads in it, and it's all int32.
@@ -2674,21 +2681,25 @@ void CodeGen_LLVM::visit(const Call *op) {
         }
     } else if (op->is_intrinsic(Call::shift_left)) {
         internal_assert(op->args.size() == 2);
-        internal_assert(op->args[0].type().bits() == op->args[1].type().bits());
         Value *a = codegen(op->args[0]);
         Value *b = codegen(op->args[1]);
-        internal_assert(a->getType() == b->getType()) << "LLVM type mismatch on (" << op->args[0] << ") << (" << op->args[1] << ").\n";
-        value = builder->CreateShl(a, b);
+        if (op->args[1].type().is_uint()) {
+            value = builder->CreateShl(a, b);
+        } else {
+            value = codegen(lower_signed_shift_left(op->args[0], op->args[1]));
+        }
     } else if (op->is_intrinsic(Call::shift_right)) {
         internal_assert(op->args.size() == 2);
-        internal_assert(op->args[0].type().bits() == op->args[1].type().bits());
         Value *a = codegen(op->args[0]);
         Value *b = codegen(op->args[1]);
-        internal_assert(a->getType() == b->getType()) << "LLVM type mismatch on (" << op->args[0] << ") >> (" << op->args[1] << ").\n";
-        if (op->type.is_int()) {
-            value = builder->CreateAShr(a, b);
+        if (op->args[1].type().is_uint()) {
+            if (op->type.is_int()) {
+                value = builder->CreateAShr(a, b);
+            } else {
+                value = builder->CreateLShr(a, b);
+            }
         } else {
-            value = builder->CreateLShr(a, b);
+            value = codegen(lower_signed_shift_right(op->args[0], op->args[1]));
         }
     } else if (op->is_intrinsic(Call::abs)) {
 
@@ -4522,3 +4533,4 @@ bool CodeGen_LLVM::use_pic() const {
 
 }  // namespace Internal
 }  // namespace Halide
+

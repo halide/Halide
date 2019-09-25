@@ -1,40 +1,21 @@
 #include <iostream>
-#include <limits>
 
-#include "CodeGen_Internal.h"
-#include "CodeGen_PyTorch.h"
 #include "CodeGen_C.h"
-#include "Deinterleave.h"
+#include "CodeGen_PyTorch.h"
 #include "IROperator.h"
-#include "Lerp.h"
 #include "Param.h"
-#include "Simplify.h"
-#include "Substitute.h"
-#include "Type.h"
 #include "Util.h"
 #include "Var.h"
 
 namespace Halide {
 namespace Internal {
 
-using std::ostream;
-using std::ostringstream;
-using std::string;
-using std::vector;
-
-namespace {
-
-/** Type to PyTorch Tensor type */
-string type_to_pytorch_tensor(Type type, bool is_cuda) {
-    return "at::Tensor";
+CodeGen_PyTorch::CodeGen_PyTorch(std::ostream &s) : IRPrinter(s) {
 }
 
-} // namespace anon
+void CodeGen_PyTorch::compile(const Module &module) {
+    const Target target = module.target();
 
-
-CodeGen_PyTorch::CodeGen_PyTorch(ostream &s, Target t, std::string cpp_header) :
-    IRPrinter(s), target(t), cpp_header(cpp_header)
-{
     stream << "#include \"torch/extension.h\"\n";
     stream << "#include \"HalideBuffer.h\"\n";
     stream << "#include \"HalidePyTorchHelpers.h\"\n";
@@ -42,22 +23,27 @@ CodeGen_PyTorch::CodeGen_PyTorch(ostream &s, Target t, std::string cpp_header) :
     if (target.has_feature(Target::CUDA)) {
         if (!target.has_feature(Target::UserContext)) {
             user_error << "Compile a PyTorch wrapper for a CUDA op requires the "
-              "UserContext feature to properly manage the GPU memory. "
-              "Please add \"-user_context\" to the generator's target options.\n";
+                "UserContext feature to properly manage the GPU memory. "
+                "Please add \"-user_context\" to the generator's target options.\n";
         }
         stream << "#include \"ATen/cuda/CUDAContext.h\"\n";
         stream << "#include \"HalidePyTorchCudaHelpers.h\"\n";
     }
 
-  std::vector<std::string> header_path = split_string(cpp_header, "/");
-  std::string header = header_path.back();
+    stream << "\n";
 
-  stream << "\n#include \"" << header << "\"\n\n";
-  stream << "using Halide::Runtime::Buffer;\n\n";
-}
+    // Emit extern decls of the Halide-generated functions we use directly
+    // into this file, so that we don't have to #include the relevant .h
+    // file directly; this simplifies certain compile/build setups (since
+    // we don't have to build files in tandem and/or get include paths right),
+    // and should be totally safe, since we are using the same codegen logic
+    // that would be in the .h file anyway.
+    {
+        CodeGen_C extern_decl_gen(stream, module.target(), CodeGen_C::CPlusPlusExternDecl);
+        extern_decl_gen.compile(module);
+    }
 
-void CodeGen_PyTorch::compile(const Module &input) {
-    for (const auto &f : input.functions()) {
+    for (const auto &f : module.functions()) {
         if (f.name.find("old_buffer_t") != std::string::npos) {
             debug(1) << "ignoring " << f.name;
             continue;
@@ -91,8 +77,7 @@ void CodeGen_PyTorch::compile(const LoweredFunc &f, bool is_cuda) {
         } else if (args[i].is_buffer()) {
             buffer_args.push_back(args[i]);
             stream
-              << type_to_pytorch_tensor(args[i].type, is_cuda)
-              << " &"
+              << "at::Tensor &"
               << c_print_name(args[i].name);
         } else {
             stream
@@ -152,9 +137,9 @@ void CodeGen_PyTorch::compile(const LoweredFunc &f, bool is_cuda) {
             continue;
 
         do_indent();
-        string tp = type_to_c_type(buffer_args[i].type, false);
+        std::string tp = type_to_c_type(buffer_args[i].type, false);
         stream
-            << "Buffer<" << tp << "> "
+            << "Halide::Runtime::Buffer<" << tp << "> "
             << c_print_name(buffer_args[i].name)
             << "_buffer = Halide::PyTorch::wrap<" << tp << ">("
             << c_print_name(buffer_args[i].name)
@@ -241,7 +226,7 @@ void CodeGen_PyTorch::test() {
     LoweredArgument buffer_arg("buf", Argument::OutputBuffer, Int(32), 3, ArgumentEstimates{});
     LoweredArgument float_arg("alpha", Argument::InputScalar, Float(32), 0, ArgumentEstimates{});
     LoweredArgument int_arg("beta", Argument::InputScalar, Int(32), 0, ArgumentEstimates{});
-    vector<LoweredArgument> args = { buffer_arg, float_arg, int_arg};
+    std::vector<LoweredArgument> args = { buffer_arg, float_arg, int_arg};
     Var x("x");
     Param<float> alpha("alpha");
     Param<int> beta("beta");
@@ -250,39 +235,56 @@ void CodeGen_PyTorch::test() {
     Expr buf = Variable::make(Handle(), "buf.buffer");
     s = LetStmt::make("buf", Call::make(Handle(), Call::buffer_get_host, {buf}, Call::Extern), s);
 
-    Module m("", get_host_target());
-    m.append(LoweredFunc("test1", args, s, LinkageType::External));
-
-    ostringstream source;
-    ostringstream source_cuda;
+    std::ostringstream source;
+    std::ostringstream source_cuda;
     {
         // TODO(mgharbi): test that Target("host-cuda") raises an exception since
         // we require the "user_context" feature when using CUDA
 
-        CodeGen_PyTorch cg(source, Target("host"), "PyTorchTestOp.h");
-        cg.compile(m);
+        Module m("", Target("host"));
+        m.append(LoweredFunc("test1", args, s, LinkageType::External));
 
-        CodeGen_PyTorch cg_cuda(source_cuda, Target("host-cuda-user_context"), "PyTorchTestOp.h");
-        cg_cuda.compile(m);
+        CodeGen_PyTorch(source).compile(m);
     }
-    string src = source.str() + "\n" + source_cuda.str();
+    {
+        Module m("", Target("host-cuda-user_context"));
+        m.append(LoweredFunc("test1", args, s, LinkageType::External));
+
+        CodeGen_PyTorch(source_cuda).compile(m);
+    }
+    std::string src = source.str() + "\n" + source_cuda.str();
 
     // The correct source concatenates CPU and GPU headers
-    string correct_src =
+    std::string correct_src =
 R"GOLDEN_CODE(#include "torch/extension.h"
 #include "HalideBuffer.h"
 #include "HalidePyTorchHelpers.h"
 
-#include "PyTorchTestOp.h"
+struct halide_buffer_t;
+struct halide_filter_metadata_t;
 
-using Halide::Runtime::Buffer;
+#ifndef HALIDE_FUNCTION_ATTRS
+#define HALIDE_FUNCTION_ATTRS
+#endif
+
+
+
+#ifdef __cplusplus
+extern "C" {
+#endif
+
+int test1(struct halide_buffer_t *_buf_buffer, float _alpha, int32_t _beta) HALIDE_FUNCTION_ATTRS;
+
+#ifdef __cplusplus
+}  // extern "C"
+#endif
 
 int test1_th_(at::Tensor &_buf, float _alpha, int32_t _beta) {
     // Check tensors have contiguous memory and are on the correct device
     HLPT_CHECK_CONTIGUOUS(_buf);
 
     // Wrap tensors in Halide buffers
-    Buffer<int32_t> _buf_buffer = Halide::PyTorch::wrap<int32_t>(_buf);
+    Halide::Runtime::Buffer<int32_t> _buf_buffer = Halide::PyTorch::wrap<int32_t>(_buf);
 
     // Run Halide pipeline
     int err = test1(_buf_buffer, _alpha, _beta);
@@ -297,9 +299,24 @@ int test1_th_(at::Tensor &_buf, float _alpha, int32_t _beta) {
 #include "ATen/cuda/CUDAContext.h"
 #include "HalidePyTorchCudaHelpers.h"
 
-#include "PyTorchTestOp.h"
+struct halide_buffer_t;
+struct halide_filter_metadata_t;
 
-using Halide::Runtime::Buffer;
+#ifndef HALIDE_FUNCTION_ATTRS
+#define HALIDE_FUNCTION_ATTRS
+#endif
+
+
+
+#ifdef __cplusplus
+extern "C" {
+#endif
+
+int test1(struct halide_buffer_t *_buf_buffer, float _alpha, int32_t _beta) HALIDE_FUNCTION_ATTRS;
+
+#ifdef __cplusplus
+}  // extern "C"
+#endif
 
 int test1_th_(at::Tensor &_buf, float _alpha, int32_t _beta) {
     // Setup CUDA
@@ -316,7 +333,7 @@ int test1_th_(at::Tensor &_buf, float _alpha, int32_t _beta) {
     HLPT_CHECK_DEVICE(_buf, device_id);
 
     // Wrap tensors in Halide buffers
-    Buffer<int32_t> _buf_buffer = Halide::PyTorch::wrap<int32_t>(_buf);
+    Halide::Runtime::Buffer<int32_t> _buf_buffer = Halide::PyTorch::wrap<int32_t>(_buf);
 
     // Run Halide pipeline
     int err = test1(_buf_buffer, _alpha, _beta);

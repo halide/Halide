@@ -15,7 +15,6 @@
 
 namespace llvm {
 class Module;
-class Type;
 }
 
 namespace Halide {

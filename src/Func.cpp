@@ -23,7 +23,6 @@
 #include "LLVM_Headers.h"
 #include "LLVM_Output.h"
 #include "Lower.h"
-#include "Outputs.h"
 #include "Param.h"
 #include "PrintLoopNest.h"
 #include "Simplify.h"
@@ -3001,7 +3000,7 @@ Module Func::compile_to_module(const vector<Argument> &args, const std::string &
 }
 
 
-void Func::compile_to(const Outputs &output_files,
+void Func::compile_to(const map<Output, string> &output_files,
                       const vector<Argument> &args,
                       const string &fn_name,
                       const Target &target) {
@@ -3053,13 +3052,6 @@ void Func::compile_to_lowered_stmt(const string &filename,
                                    StmtOutputFormat fmt,
                                    const Target &target) {
     pipeline().compile_to_lowered_stmt(filename, args, fmt, target);
-}
-
-void Func::compile_to_python_extension(const string &filename_prefix,
-                                       const vector<Argument> &args,
-                                       const string &fn_name,
-                                       const Target &target) {
-    pipeline().compile_to_python_extension(filename_prefix, args, fn_name, target);
 }
 
 void Func::print_loop_nest() {

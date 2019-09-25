@@ -28,6 +28,8 @@ public:
         CPlusPlusHeader,
         CImplementation,
         CPlusPlusImplementation,
+        CExternDecl,
+        CPlusPlusExternDecl,
     };
 
     /** Initialize a C code generator pointing at a particular output
@@ -120,10 +122,22 @@ protected:
                output_kind == CPlusPlusHeader;
     }
 
+    /** Return true if only generating an interface, which may be extern "C" or C++ */
+    bool is_extern_decl() {
+        return output_kind == CExternDecl ||
+               output_kind == CPlusPlusExternDecl;
+    }
+
+    /** Return true if only generating an interface, which may be extern "C" or C++ */
+    bool is_header_or_extern_decl() {
+        return is_header() || is_extern_decl();
+    }
+
     /** Return true if generating C++ linkage. */
     bool is_c_plus_plus_interface() {
         return output_kind == CPlusPlusHeader ||
-               output_kind == CPlusPlusImplementation;
+               output_kind == CPlusPlusImplementation ||
+               output_kind == CPlusPlusExternDecl;
     }
 
     /** Open a new C scope (i.e. throw in a brace, increase the indent) */

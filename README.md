@@ -37,27 +37,27 @@ Building Halide
 
 #### TL;DR
 
-Have llvm-7.0 (or greater) installed and run `make` in the root
+Have llvm-8.0 (or greater) installed and run `make` in the root
 directory of the repository (where this README is).
 
 #### Acquiring LLVM
 
-Building Halide requires at least LLVM 7.0, along with the matching
+Building Halide requires at least LLVM 8.0, along with the matching
 version of Clang; we recommend using the most recent stable version of LLVM for
-most users (LLVM 8.0 at the time of this writing). `llvm-config` and `clang`
-must be somewhere in the path. If your OS does not have packages for llvm-7.0
+most users (LLVM 9.0 at the time of this writing). `llvm-config` and `clang`
+must be somewhere in the path. If your OS does not have packages for llvm-8.0
 (or newer), you can find binaries for it at http://llvm.org/releases/download.html.
 Download an appropriate package and then either install it, or at least put the
 `bin` subdirectory in your path. (This works well on OS X and Ubuntu.)
 
 If you want to build it yourself, first check it out from subversion.
 
-    % svn co https://llvm.org/svn/llvm-project/llvm/branches/release_80 llvm8.0
-    % svn co https://llvm.org/svn/llvm-project/cfe/branches/release_80 llvm8.0/tools/clang
+    % svn co https://llvm.org/svn/llvm-project/llvm/branches/release_90 llvm9.0
+    % svn co https://llvm.org/svn/llvm-project/cfe/branches/release_90 llvm9.0/tools/clang
 
 Then build it like so:
 
-    % cd llvm8.0
+    % cd llvm9.0
     % mkdir build
     % cd build
     % cmake -DLLVM_ENABLE_TERMINFO=OFF -DLLVM_TARGETS_TO_BUILD="X86;ARM;NVPTX;AArch64;Mips;PowerPC" -DLLVM_ENABLE_ASSERTIONS=ON -DCMAKE_BUILD_TYPE=Release ..

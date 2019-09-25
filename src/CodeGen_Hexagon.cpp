@@ -1381,7 +1381,7 @@ Value *CodeGen_Hexagon::vdelta(Value *lut, const vector<int> &indices) {
                 control_elements[i] = ConstantInt::get(i8_t, switches[i]);
             }
             Value *control = ConstantVector::get(control_elements);
-            Intrinsic::ID vdelta_id = IPICK(is_128B, reverse ? Intrinsic::hexagon_V6_vrdelta : Intrinsic::hexagon_V6_vdelta);
+            Intrinsic::ID vdelta_id = reverse ? IPICK(is_128B, Intrinsic::hexagon_V6_vrdelta) : IPICK(is_128B, Intrinsic::hexagon_V6_vdelta);
             return call_intrin_cast(lut_ty, vdelta_id, {lut, control});
         }
     }
@@ -1690,9 +1690,7 @@ void CodeGen_Hexagon::visit(const Call *op) {
     };
 
     if (is_native_interleave(op) || is_native_deinterleave(op)) {
-        user_assert(op->type.lanes() % (native_vector_bits() * 2 / op->type.bits()) == 0)
-            << "Interleave or deinterleave will result in miscompilation, "
-            << "see https://github.com/halide/Halide/issues/1582\n" << Expr(op) << "\n";
+        internal_assert(op->type.lanes() % (native_vector_bits() * 2 / op->type.bits()) == 0);
     }
 
     if (starts_with(op->name, "halide.hexagon.")) {
@@ -1712,10 +1710,13 @@ void CodeGen_Hexagon::visit(const Call *op) {
             if (value) return;
         } else if (op->is_intrinsic(Call::shift_left) ||
                    op->is_intrinsic(Call::shift_right)) {
-
             internal_assert(op->args.size() == 2);
             string instr = op->is_intrinsic(Call::shift_left) ? "halide.hexagon.shl" : "halide.hexagon.shr";
             Expr b = maybe_scalar(op->args[1]);
+            if (b.type().is_int()) {
+                CodeGen_Posix::visit(op);
+                return;
+            }
             internal_assert(b.type().is_uint());
             value = call_intrin(op->type,
                                 instr + type_suffix(op->args[0], b),

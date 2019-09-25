@@ -837,7 +837,7 @@ FunctionDAG::FunctionDAG(const vector<Function> &outputs, const MachineParams &p
                     int64_t i_min = *as_const_int(b.min);
                     int64_t i_extent = *as_const_int(b.extent);
 
-                    if (false) {
+                    if ((false)) { // Intentional dead code. Extra parens to pacify clang-tidy.
                         // Some methods we compare to compile for
                         // statically known input/output sizes. We
                         // don't need to - we take estimates but
@@ -852,7 +852,8 @@ FunctionDAG::FunctionDAG(const vector<Function> &outputs, const MachineParams &p
                         // it affects the scheduling space.
                         Func(node.func).bound(b.var, b.min, b.extent);
                         estimates[b.var] = Span(i_min, i_min + i_extent - 1, true);
-                    } else {
+                    } else
+                    {
                         estimates[b.var] = Span(i_min, i_min + i_extent - 1, false);
                     }
                 }

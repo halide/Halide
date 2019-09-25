@@ -645,7 +645,7 @@ bool Target::supported() const {
 #if !defined(WITH_HEXAGON)
     bad |= arch == Target::Hexagon;
 #endif
-#if !defined(WITH_WEBASSEMBLY) || LLVM_VERSION < 90
+#if !defined(WITH_WEBASSEMBLY) || !(LLVM_VERSION >= 90)
     // LLVM8 supports wasm, but there are fixes and improvements
     // in trunk that may not be in 8 (or that we haven't tested with),
     // so, for now, declare that wasm with LLVM < 9.0 is unsupported.

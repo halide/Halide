@@ -328,6 +328,15 @@ CodeGen_C::CodeGen_C(ostream &s, Target t, OutputKind output_kind, const std::st
                    << "\n";
             forward_declared.insert(type_of<buffer_t *>().handle_type);
         }
+    } else if (is_extern_decl()) {
+        // Extern decls to be wrapped inside other code (eg python extensions);
+        // emit the forward decls with a minimum of noise. Note that we never
+        // mess with legacy buffer types in this case.
+        stream << "struct halide_buffer_t;\n"
+               << "struct halide_filter_metadata_t;\n"
+               << "\n";
+        forward_declared.insert(type_of<halide_buffer_t *>().handle_type);
+        forward_declared.insert(type_of<halide_filter_metadata_t *>().handle_type);
     } else {
         // Include declarations of everything generated C source might want
         stream
@@ -1563,7 +1572,7 @@ void CodeGen_C::compile(const Module &input) {
     }
     stream << "\n";
 
-    if (!is_header()) {
+    if (!is_header_or_extern_decl()) {
         // Emit any external-code blobs that are C++.
         for (const ExternalCode &code_blob : input.external_code()) {
             if (code_blob.is_c_plus_plus_source()) {
@@ -1612,7 +1621,7 @@ void CodeGen_C::compile(const Module &input) {
 
 void CodeGen_C::compile(const LoweredFunc &f) {
     // Don't put non-external function declarations in headers.
-    if (is_header() && f.linkage == LinkageType::Internal) {
+    if (is_header_or_extern_decl() && f.linkage == LinkageType::Internal) {
         return;
     }
 
@@ -1665,7 +1674,7 @@ void CodeGen_C::compile(const LoweredFunc &f) {
         if (i < args.size()-1) stream << ", ";
     }
 
-    if (is_header()) {
+    if (is_header_or_extern_decl()) {
         stream << ") HALIDE_FUNCTION_ATTRS;\n";
     } else {
         stream << ") HALIDE_FUNCTION_ATTRS {\n";
@@ -1682,12 +1691,10 @@ void CodeGen_C::compile(const LoweredFunc &f) {
         } else {
             // Emit a local user_context we can pass in all cases, either
             // aliasing __user_context or nullptr.
-            if (!is_header()) {
-                do_indent();
-                stream << "void * const _ucon = "
-                       << (have_user_context ? "const_cast<void *>(__user_context)" : "nullptr")
-                       << ";\n";
-            }
+            do_indent();
+            stream << "void * const _ucon = "
+                   << (have_user_context ? "const_cast<void *>(__user_context)" : "nullptr")
+                   << ";\n";
 
             // Emit the body
             print(f.body);
@@ -1701,7 +1708,7 @@ void CodeGen_C::compile(const LoweredFunc &f) {
         stream << "}\n";
     }
 
-    if (is_header() && f.linkage == LinkageType::ExternalPlusMetadata) {
+    if (is_header_or_extern_decl() && f.linkage == LinkageType::ExternalPlusMetadata) {
         // Emit the argv version
         stream << "int " << simple_name << "_argv(void **args) HALIDE_FUNCTION_ATTRS;\n";
 
@@ -1719,8 +1726,8 @@ void CodeGen_C::compile(const LoweredFunc &f) {
 }
 
 void CodeGen_C::compile(const Buffer<> &buffer) {
-    // Don't define buffers in headers.
-    if (is_header()) {
+    // Don't define buffers in headers or extern decls.
+    if (is_header_or_extern_decl()) {
         return;
     }
 

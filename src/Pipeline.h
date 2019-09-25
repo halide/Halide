@@ -24,7 +24,6 @@ namespace Halide {
 
 struct Argument;
 class Func;
-struct Outputs;
 struct PipelineContents;
 
 namespace Internal {
@@ -151,9 +150,9 @@ public:
 
     /** Compile and generate multiple target files with single call.
      * Deduces target files based on filenames specified in
-     * output_files struct.
+     * output_files map.
      */
-    void compile_to(const Outputs &output_files,
+    void compile_to(const std::map<Output, std::string> &output_files,
                     const std::vector<Argument> &args,
                     const std::string &fn_name,
                     const Target &target);
@@ -215,12 +214,6 @@ public:
                       const std::vector<Argument> &,
                       const std::string &fn_name,
                       const Target &target = get_target_from_environment());
-
-    /** Emit a Python extension glue .c file. */
-    void compile_to_python_extension(const std::string &filename,
-                                     const std::vector<Argument> &args,
-                                     const std::string &fn_name,
-                                     const Target &target = get_target_from_environment());
 
     /** Write out an internal representation of lowered code. Useful
      * for analyzing and debugging scheduling. Can emit html or plain
