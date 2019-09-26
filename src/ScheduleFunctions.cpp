@@ -1590,11 +1590,7 @@ class PrintUsesOfFunc : public IRVisitor {
     bool last_print_was_ellipsis = false;
     std::ostream &stream;
 
-    void do_indent() {
-        for (int i = 0; i < indent; i++) {
-            stream << "  ";
-        }
-    }
+    Indentation get_indent() const { return Indentation{indent}; }
 
     void visit(const For *op) override {
         if (ends_with(op->name, Var::outermost().name()) ||
@@ -1608,13 +1604,11 @@ class PrintUsesOfFunc : public IRVisitor {
             op->body.accept(&uses);
             if (!uses.result) {
                 if (!last_print_was_ellipsis) {
-                    do_indent();
-                    stream << "...\n";
+                    stream << get_indent() << "...\n";
                     last_print_was_ellipsis = true;
                 }
             } else {
-                do_indent();
-                stream << "for " << op->name << ":\n";
+                stream << get_indent() << "for " << op->name << ":\n";
                 last_print_was_ellipsis = false;
                 indent++;
             }
@@ -1637,8 +1631,7 @@ class PrintUsesOfFunc : public IRVisitor {
 
     void visit(const Call *op) override {
         if (op->name == func) {
-            do_indent();
-            stream << caller << " uses " << func << "\n";
+            stream << get_indent() << caller << " uses " << func << "\n";
             last_print_was_ellipsis = false;
         } else {
             IRVisitor::visit(op);
@@ -1649,8 +1642,7 @@ class PrintUsesOfFunc : public IRVisitor {
         if (op->type.is_handle() &&
             starts_with(op->name, func + ".") &&
             ends_with(op->name, ".buffer")) {
-            do_indent();
-            stream << caller << " uses " << func << "\n";
+            stream << get_indent() << caller << " uses " << func << "\n";
             last_print_was_ellipsis = false;
         } else {
             IRVisitor::visit(op);
