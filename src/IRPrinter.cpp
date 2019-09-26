@@ -226,7 +226,7 @@ ostream &operator<<(ostream &stream, const Func &func) {
                 }
                 emit_with_commas(stream, e);
                 Expr pred = rdom.predicate();
-                if (pred.defined()) {
+                if (pred.defined() && !is_one(pred)) {
                     stream << ".where(" << pred << ")";
                 }
             }
@@ -303,12 +303,12 @@ consume buf {
 }
 func some_func = {
  some_func(xx) = (0)
-  some_func.update[0](rr$x) = ((some_func(rr$x) + rr$x)) with RDom: (1, 99)
-  some_func.update[1](rr$x) = ((some_func(rr$x)*rr$x)) with RDom: (1, 99)
+  some_func.update[0](rr$x) = ((some_func(rr$x) + rr$x)) with RDom(1, 99)
+  some_func.update[1](rr$x) = ((some_func(rr$x)*rr$x)) with RDom(1, 99)
 }
 func tuple_func = {
  tuple_func(xx) = tuple<2>(0, 0)
-  tuple_func.update[0](rr$x) = tuple<2>(tuple_func((rr$x - 1)), (tuple_func(rr$x) + 1)) with RDom: (1, 99)
+  tuple_func.update[0](rr$x) = tuple<2>(tuple_func((rr$x - 1)), (tuple_func(rr$x) + 1)) with RDom(1, 99)
 }
 )GOLDEN";
 
