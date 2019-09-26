@@ -32,11 +32,7 @@ private:
 
     using IRVisitor::visit;
 
-    void do_indent() {
-        for (int i = 0; i < indent; i++) {
-            out << ' ';
-        }
-    }
+    Indentation get_indent() const { return Indentation{indent}; }
 
     string simplify_var_name(const string &s) {
         return simplify_name(s, false);
@@ -75,9 +71,7 @@ private:
     }
 
     void visit(const For *op) override {
-        do_indent();
-
-        out << op->for_type << ' ' << simplify_var_name(op->name);
+        out << get_indent() << op->for_type << ' ' << simplify_var_name(op->name);
 
         // If the min or extent are constants, print them. At this
         // stage they're all variables.
@@ -113,7 +107,7 @@ private:
         if (it != env.end() &&
             !(it->second.schedule().store_level() ==
               it->second.schedule().compute_level())) {
-            do_indent();
+            out << get_indent();
             out << "store " << simplify_func_name(op->name) << ":\n";
             indent += 2;
             op->body.accept(this);
@@ -124,7 +118,7 @@ private:
     }
 
     void visit(const ProducerConsumer *op) override {
-        do_indent();
+        out << get_indent();
         if (op->is_producer) {
             out << "produce " << simplify_func_name(op->name) << ":\n";
         } else {
@@ -136,8 +130,7 @@ private:
     }
 
     void visit(const Provide *op) override {
-        do_indent();
-        out << simplify_func_name(op->name) << "(...) = ...\n";
+        out << get_indent() << simplify_func_name(op->name) << "(...) = ...\n";
     }
 
     void visit(const LetStmt *op) override {

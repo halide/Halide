@@ -211,8 +211,7 @@ void CodeGen_D3D12Compute_Dev::CodeGen_D3D12Compute_C::visit(const For *loop)
         << "kernel loop must be either gpu block or gpu thread\n";
     internal_assert(is_zero(loop->min));
 
-    do_indent();
-    stream << print_type(Int(32)) << " " << print_name(loop->name)
+    stream << get_indent() << print_type(Int(32)) << " " << print_name(loop->name)
             << " = " << simt_intrinsic(loop->name) << ";\n";
 
     loop->body.accept(this);
@@ -260,8 +259,7 @@ void CodeGen_D3D12Compute_Dev::CodeGen_D3D12Compute_C::visit(const Call *op) {
         // NOTE(marcos): using "WithGroupSync" here just to be safe, as a
         // simple "GroupMemoryBarrier" is probably too relaxed for Halide
         // (also note we need to return an integer)
-        do_indent();
-        stream << "GroupMemoryBarrierWithGroupSync();\n";
+        stream << get_indent() << "GroupMemoryBarrierWithGroupSync();\n";
         print_assignment(op->type, "0");
     } else {
         CodeGen_C::visit(op);
@@ -439,13 +437,11 @@ void CodeGen_D3D12Compute_Dev::CodeGen_D3D12Compute_C::visit(const Load *op)
         id = unique_name('_');
         cache[rhs.str()] = id;
 
-        do_indent();
-        stream << print_type(op->type)
+        stream << get_indent() << print_type(op->type)
                << " " << id << ";\n";
 
         for (int i = 0; i < op->type.lanes(); ++i) {
-            do_indent();
-            stream << id << "[" << i << "] = "
+            stream << get_indent() << id << "[" << i << "] = "
                    << print_type(op->type.element_of())
                    << "("
                    << print_name(op->name)
@@ -472,8 +468,7 @@ void CodeGen_D3D12Compute_Dev::CodeGen_D3D12Compute_C::visit(const Store *op)
             << " = "
             << print_reinterpret(UInt(32), op->value)
             << ";\n";
-        do_indent();
-        stream << rhs.str();
+        stream << get_indent() << rhs.str();
 #if 0
         // NOTE(marcos): let's keep this block of code here (disabled) in case
         // we need to "emulate" byte/short packing in shared memory (recall that
@@ -515,10 +510,8 @@ void CodeGen_D3D12Compute_Dev::CodeGen_D3D12Compute_C::visit(const Store *op)
             // the performance impact of atomic operations on shared memory is
             // not well documented... here is something:
             // https://stackoverflow.com/a/19548723
-            do_indent();
-            stream << "InterlockedAnd(" << word.str() << ", " << "~" << mask.str() << ");\n";
-            do_indent();
-            stream << "InterlockedXor(" << word.str() << ", " << value.str() << ");\n";
+            stream << get_indent() << "InterlockedAnd(" << word.str() << ", " << "~" << mask.str() << ");\n";
+            stream << get_indent() << "InterlockedXor(" << word.str() << ", " << value.str() << ");\n";
         }
 #endif
         return;
@@ -545,8 +538,7 @@ void CodeGen_D3D12Compute_Dev::CodeGen_D3D12Compute_C::visit(const Store *op)
                 << i
                 << "]"
                 << ";\n";
-            do_indent();
-            stream << rhs.str();
+            stream << get_indent() << rhs.str();
         }
     } else if (op->index.type().is_vector()) {
         // If index is a vector, scatter vector elements.
@@ -560,8 +552,7 @@ void CodeGen_D3D12Compute_Dev::CodeGen_D3D12Compute_C::visit(const Store *op)
                 << "]"
                 << " = "
                 << print_expr(op->value) << "[" << i << "];\n";
-            do_indent();
-            stream << rhs.str();
+            stream << get_indent() << rhs.str();
         }
     } else {
         ostringstream rhs;
@@ -570,8 +561,7 @@ void CodeGen_D3D12Compute_Dev::CodeGen_D3D12Compute_C::visit(const Store *op)
             << " = "
             << print_expr(op->value)
             << ";\n";
-        do_indent();
-        stream << rhs.str();
+        stream << get_indent() << rhs.str();
     }
 
     cache.clear();
@@ -610,10 +600,9 @@ void CodeGen_D3D12Compute_Dev::CodeGen_D3D12Compute_C::visit(const Allocate *op)
             << "Only fixed-size allocations are supported on the gpu. "
             << "Try storing into shared memory instead.";
 
-        do_indent();
-        stream << print_storage_type(op->type) << ' '
+        stream << get_indent() << print_storage_type(op->type) << ' '
                << print_name(op->name) << "[" << size << "];\n";
-        do_indent();
+        stream << get_indent();
 
         Allocation alloc;
         alloc.type = op->type;
@@ -635,7 +624,7 @@ void CodeGen_D3D12Compute_Dev::CodeGen_D3D12Compute_C::visit(const Free *op) {
         // Should have been freed internally
         internal_assert(allocations.contains(op->name));
         allocations.pop(op->name);
-        do_indent();
+        stream << get_indent();
     }
 }
 

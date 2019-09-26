@@ -454,8 +454,7 @@ void CodeGen_GLSL::visit(const For *loop) {
         } else if (ends_with(loop->name, ".__block_id_y")) {
             idx = "int(_varyingf0[1])";
         }
-        do_indent();
-        stream << print_type(Int(32)) << " " << print_name(loop->name) << " = " << idx << ";\n";
+        stream << get_indent() << print_type(Int(32)) << " " << print_name(loop->name) << " = " << idx << ";\n";
         loop->body.accept(this);
     } else {
         user_assert(loop->for_type != ForType::Parallel) << "GLSL: parallel loops aren't allowed inside kernel.\n";
@@ -484,26 +483,21 @@ void CodeGen_GLSL::visit(const Select *op) {
     string id_value;
     if (op->condition.type().is_scalar()) {
         id_value = unique_name('_');
-        do_indent();
-        stream << print_type(op->type) << " " << id_value << ";\n";
+        stream << get_indent() << print_type(op->type) << " " << id_value << ";\n";
         string cond = print_expr(op->condition);
-        do_indent();
-        stream << "if (" << cond << ") ";
+        stream << get_indent() << "if (" << cond << ") ";
         open_scope();
         {
             string true_val = print_expr(op->true_value);
-            do_indent();
-            stream << id_value << " = " << true_val << ";\n";
+            stream << get_indent() << id_value << " = " << true_val << ";\n";
         }
         close_scope("");
 
-        do_indent();
-        stream << "else ";
+        stream << get_indent() << "else ";
         open_scope();
         {
             string false_val = print_expr(op->false_value);
-            do_indent();
-            stream << id_value << " = " << false_val<< ";\n";
+            stream << get_indent() << id_value << " = " << false_val<< ";\n";
         }
         close_scope("");
     } else {
@@ -519,8 +513,7 @@ void CodeGen_GLSL::visit(const Select *op) {
             ids[i] = print_expr(result[i]);
         }
         id_value = unique_name('_');
-        do_indent();
-        stream << print_type(op->type) << " " << id_value << " = "
+        stream << get_indent() << print_type(op->type) << " " << id_value << " = "
                << print_type(op->type) << "(";
         for (int i = 0; i < lanes; i++) {
             stream << ids[i] << ((i < lanes - 1) ? ", " : ");\n");
@@ -606,24 +599,20 @@ void CodeGen_GLSL::visit(const Store *op) {
     if (scalar_vars.contains(op->name)) {
         internal_assert(is_zero(op->index));
         string val = print_expr(op->value);
-        do_indent();
-        stream << print_name(op->name) << " = " << val << ";\n";
+        stream << get_indent() << print_name(op->name) << " = " << val << ";\n";
     } else if (vector_vars.contains(op->name)) {
         string val = print_expr(op->value);
-        do_indent();
-        stream << print_name(op->name) << get_vector_suffix(op->index)
+        stream << get_indent() << print_name(op->name) << get_vector_suffix(op->index)
                << " = " << val << ";\n";
     } else if (op->value.type().is_scalar()) {
         string val = print_expr(op->value);
         string idx = print_expr(op->index);
-        do_indent();
-        stream << print_name(op->name) << "[" << idx << "] = " << val << ";\n";
+        stream << get_indent() << print_name(op->name) << "[" << idx << "] = " << val << ";\n";
     } else {
         vector<string> indices = print_lanes(op->index);
         vector<string> values = print_lanes(op->value);
         for (int i = 0; i < op->value.type().lanes(); i++) {
-            do_indent();
-            stream << print_name(op->name)
+            stream << get_indent() << print_name(op->name)
                    << "[" << indices[i] << "] = "
                    << values[i] << ";\n";
         }
@@ -728,8 +717,7 @@ void CodeGen_GLSL::visit(const Call *op) {
         internal_assert(op->args.size() == 6);
         string sval = print_expr(op->args[5]);
         string suffix = get_vector_suffix(op->args[4]);
-        do_indent();
-        stream << "gl_FragColor" << suffix
+        stream << get_indent() << "gl_FragColor" << suffix
                << " = " << sval;
         if (op->args[5].type().is_uint()) {
             stream << " / " << print_expr(cast<float>(op->args[5].type().max()));
@@ -787,7 +775,7 @@ void CodeGen_GLSL::visit(const Allocate *op) {
     all_access_constant.buf = op->name;
     op->body.accept(&all_access_constant);
 
-    do_indent();
+    stream << get_indent();
     if (size == 1) {
         // We can use a variable
         stream << print_type(op->type) << " " << print_name(op->name) << ";\n";
@@ -946,19 +934,16 @@ void CodeGen_GLSL::add_kernel(Stmt stmt, string name,
         if (args[i].is_buffer) {
             continue;
         } else if (ends_with(args[i].name, ".varying")) {
-            do_indent();
-            stream << "float " << print_name(args[i].name)
+            stream << get_indent() << "float " << print_name(args[i].name)
                    << " = _varyingf" << args[i].packed_index/4
                    << "[" << args[i].packed_index%4 << "];\n";
         } else if (args[i].type.is_float()) {
-            do_indent();
-            stream << print_type(args[i].type) << " "
+            stream << get_indent() << print_type(args[i].type) << " "
                    << print_name(args[i].name)
                    << " = _uniformf" << args[i].packed_index/4
                    << "[" << args[i].packed_index%4 << "];\n";
         } else if (args[i].type.is_int()) {
-            do_indent();
-            stream << print_type(args[i].type) << " "
+            stream << get_indent() << print_type(args[i].type) << " "
                    << print_name(args[i].name)
                    << " = _uniformi" << args[i].packed_index/4
                    << "[" << args[i].packed_index%4 << "];\n";

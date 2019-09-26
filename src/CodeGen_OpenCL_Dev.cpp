@@ -121,8 +121,7 @@ void CodeGen_OpenCL_Dev::CodeGen_OpenCL_C::visit(const For *loop) {
             << "kernel loop must be either gpu block or gpu thread\n";
         internal_assert(is_zero(loop->min));
 
-        do_indent();
-        stream << print_type(Int(32)) << " " << print_name(loop->name)
+        stream << get_indent() << print_type(Int(32)) << " " << print_name(loop->name)
                << " = " << simt_intrinsic(loop->name) << ";\n";
 
         loop->body.accept(this);
@@ -207,8 +206,7 @@ void CodeGen_OpenCL_Dev::CodeGen_OpenCL_C::visit(const Call *op) {
         rhs << "abs_diff(" << print_expr(op->args[0]) << ", " << print_expr(op->args[1]) << ")";
         print_assignment(op->type, rhs.str());
     } else if (op->is_intrinsic(Call::gpu_thread_barrier)) {
-        do_indent();
-        stream << "barrier(CLK_LOCAL_MEM_FENCE);\n";
+        stream << get_indent() << "barrier(CLK_LOCAL_MEM_FENCE);\n";
         print_assignment(op->type, "0");
     } else if (op->is_intrinsic(Call::shift_left) || op->is_intrinsic(Call::shift_right)) {
         // Some OpenCL implementations forbid mixing signed-and-unsigned shift values;
@@ -284,12 +282,11 @@ void CodeGen_OpenCL_Dev::CodeGen_OpenCL_C::visit(const Load *op) {
         id = "_" + unique_name('V');
         cache[rhs.str()] = id;
 
-        do_indent();
-        stream << print_type(op->type)
+        stream << get_indent() << print_type(op->type)
                << " " << id << ";\n";
 
         for (int i = 0; i < op->type.lanes(); ++i) {
-            do_indent();
+            stream << get_indent();
             stream
                 << id << ".s" << vector_elements[i]
                 << " = ((" << get_memory_space(op->name) << " "
@@ -314,8 +311,7 @@ void CodeGen_OpenCL_Dev::CodeGen_OpenCL_C::visit(const Store *op) {
         internal_assert(op->value.type().is_vector());
         string id_ramp_base = print_expr(ramp_base);
 
-        do_indent();
-        stream << "vstore" << t.lanes() << "("
+        stream << get_indent() << "vstore" << t.lanes() << "("
                << id_value << ","
                << 0 << ", (" << get_memory_space(op->name) << " "
                << print_type(t.element_of()) << "*)"
@@ -329,8 +325,7 @@ void CodeGen_OpenCL_Dev::CodeGen_OpenCL_C::visit(const Store *op) {
         string id_index = print_expr(op->index);
 
         for (int i = 0; i < t.lanes(); ++i) {
-            do_indent();
-            stream << "((" << get_memory_space(op->name) << " "
+            stream << get_indent() << "((" << get_memory_space(op->name) << " "
                    << print_type(t.element_of()) << " *)"
                    << print_name(op->name)
                    << ")["
@@ -342,7 +337,7 @@ void CodeGen_OpenCL_Dev::CodeGen_OpenCL_C::visit(const Store *op) {
                                   allocations.get(op->name).type == t);
 
         string id_index = print_expr(op->index);
-        do_indent();
+        stream << get_indent();
 
         if (type_cast_needed) {
             stream << "(("
@@ -431,11 +426,9 @@ void CodeGen_OpenCL_Dev::CodeGen_OpenCL_C::visit(const Allocate *op) {
             << "Only fixed-size allocations are supported on the gpu. "
             << "Try storing into shared memory instead.";
 
-        do_indent();
-        stream << print_type(op->type) << ' '
+        stream << get_indent() << print_type(op->type) << ' '
                << print_name(op->name) << "[" << size << "];\n";
-        do_indent();
-        stream << "#define " << get_memory_space(op->name) << " __private\n";
+        stream << get_indent() << "#define " << get_memory_space(op->name) << " __private\n";
 
         Allocation alloc;
         alloc.type = op->type;
@@ -457,8 +450,7 @@ void CodeGen_OpenCL_Dev::CodeGen_OpenCL_C::visit(const Free *op) {
         // Should have been freed internally
         internal_assert(allocations.contains(op->name));
         allocations.pop(op->name);
-        do_indent();
-        stream << "#undef " << get_memory_space(op->name) << "\n";
+        stream << get_indent() << "#undef " << get_memory_space(op->name) << "\n";
     }
 }
 
@@ -484,12 +476,9 @@ void CodeGen_OpenCL_Dev::CodeGen_OpenCL_C::visit(const Shuffle *op) {
             string a1 = print_expr(op->vectors[0]);
             string a2 = print_expr(op->vectors[1]);
             id = unique_name('_');
-            do_indent();
-            stream << print_type(op->type) << " " << id << ";\n";
-            do_indent();
-            stream << id << ".even = " << a1 << ";\n";
-            do_indent();
-            stream << id << ".odd = " << a2 << ";\n";
+            stream << get_indent() << print_type(op->type) << " " << id << ";\n";
+            stream << get_indent() << id << ".even = " << a1 << ";\n";
+            stream << get_indent() << id << ".odd = " << a2 << ";\n";
         } else {
             // 3+ arguments, interleave via a vector literal
             // selecting the appropriate elements of the vectors
@@ -503,8 +492,7 @@ void CodeGen_OpenCL_Dev::CodeGen_OpenCL_C::visit(const Shuffle *op) {
             }
             internal_assert(num_vectors * arg_lanes >= dest_lanes);
             id = unique_name('_');
-            do_indent();
-            stream << print_type(op->type) << " " << id;
+            stream << get_indent() << print_type(op->type) << " " << id;
             stream << " = (" << print_type(op->type) << ")(";
             for (int i = 0; i < dest_lanes; i++) {
                 int arg = i % num_vectors;
