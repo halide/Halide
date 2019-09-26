@@ -28,6 +28,10 @@ inline void check(int line_number, float16_t x, float16_t target) {
     return check(line_number, (double)x, (double)target, 5e-3);
 }
 
+inline void check(int line_number, bfloat16_t x, bfloat16_t target) {
+    return check(line_number, (double)x, (double)target, 5e-3);
+}
+
 template<typename T,
          typename std::enable_if<std::is_integral<T>::value, int>::type* = nullptr>
 inline void check(int line_number, T x, T target) {
@@ -793,6 +797,8 @@ int main(int argc, char **argv) {
         test_all<float16_t>(Backend::CPU);
         test_all<float16_t>(Backend::CPUVectorize);
     }
+    test_all<bfloat16_t>(Backend::CPU);
+    test_all<bfloat16_t>(Backend::CPUVectorize);
     test_all<uint32_t>(Backend::CPU);
     test_all<uint32_t>(Backend::CPUVectorize);
     test_all<int32_t>(Backend::CPU);
