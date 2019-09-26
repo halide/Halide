@@ -1520,7 +1520,7 @@ void CodeGen_LLVM::visit(const FloatImm *op) {
     if (op->type.is_bfloat()) {
         codegen(reinterpret(BFloat(16), make_const(UInt(16), bfloat16_t(op->value).to_bits())));
     } else if (op->type.bits() == 16) {
-        codegen(reinterpret(Float(16), make_const(UInt(16), bfloat16_t(op->value).to_bits())));
+        codegen(reinterpret(Float(16), make_const(UInt(16), float16_t(op->value).to_bits())));
     } else {
         value = ConstantFP::get(llvm_type_of(op->type), op->value);
     }
@@ -4533,4 +4533,3 @@ bool CodeGen_LLVM::use_pic() const {
 
 }  // namespace Internal
 }  // namespace Halide
-
