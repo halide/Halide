@@ -356,7 +356,6 @@ Stmt build_provide_loop_nest(const map<string, Function> &env,
     Stmt body = Provide::make(func.name(), values, site);
     need_alloc_mutex = false;
     if (def.schedule().atomic()) {
-        // Do we need to allocate a mutex buffer?
         // We will allocate a mutex buffer called get_mutex_name(func.name())
         body = Atomic::make(get_mutex_name(func.name()), site, body);
         need_alloc_mutex = true;
@@ -1098,23 +1097,9 @@ private:
 
     Stmt build_realize(Stmt s, const Function &func, bool is_output) {
         const string &name = func.name();
-        if (!is_output) {
-            Region bounds;
-            const vector<string> &func_args = func.args();
-            for (int i = 0; i < func.dimensions(); i++) {
-                const string &arg = func_args[i];
-                Expr min = Variable::make(Int(32), name + "." + arg + ".min_realized");
-                Expr extent = Variable::make(Int(32), name + "." + arg + ".extent_realized");
-                bounds.emplace_back(min, extent);
-            }
-            
-            s = Realize::make(name, func.output_types(), func.schedule().memory_type(), bounds, const_true(), s);
-        }
-
         if (_funcs_need_alloc_mutex.find(func) != _funcs_need_alloc_mutex.end()) {
-            // Place an Allocate node here and a call to initialization to
-            // create a mutex buffer
-            debug(1) << "Injecting allocation of mutex buffer for " << func.name() << '\n';
+            // Place an Allocate node here and a call to initialization to create a mutex buffer
+            debug(1) << "Injecting allocation of mutex buffer for " << name << '\n';
             Type mutex_type = target.bits == 64 ? UInt(64) : UInt(32);
             Expr buffer_size = Expr(1);
             std::vector<Expr> extents(func.dimensions());
@@ -1146,6 +1131,19 @@ private:
                                   Variable::make(Int(32), name + stride_field + std::to_string(i)),
                                   s);
             }
+        }
+
+        if (!is_output) {
+            Region bounds;
+            const vector<string> &func_args = func.args();
+            for (int i = 0; i < func.dimensions(); i++) {
+                const string &arg = func_args[i];
+                Expr min = Variable::make(Int(32), name + "." + arg + ".min_realized");
+                Expr extent = Variable::make(Int(32), name + "." + arg + ".extent_realized");
+                bounds.emplace_back(min, extent);
+            }
+
+            s = Realize::make(name, func.output_types(), func.schedule().memory_type(), bounds, const_true(), s);
         }
 
         // This is also the point at which we inject explicit bounds

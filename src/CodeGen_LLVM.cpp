@@ -4256,6 +4256,7 @@ void CodeGen_LLVM::visit(const Atomic *op) {
         internal_assert(op->mutex_indices.size() <= 1) << "Atomic mutex access index should be flattened.";
         // Acquire mutex
         Type mutex_type = target.bits == 64 ? UInt(64) : UInt(32);
+        // op->mutex_indices.size() could be 0.
         Expr index = op->mutex_indices.size() == 1 ? op->mutex_indices[0] : Expr(0);
         user_assert(index.type().is_scalar()) << "The vectorized atomic operation in " <<
             op->mutex_name.substr(0, op->mutex_name.length() - strlen(".mutex")) <<
