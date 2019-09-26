@@ -42,7 +42,7 @@
 #include "Profiling.h"
 #include "Qualify.h"
 #include "RealizationOrder.h"
-#include "RemoveAtomicMutexLock.h"
+#include "RemoveAtomicMutexLocks.h"
 #include "RemoveDeadAllocations.h"
 #include "RemoveExternLoops.h"
 #include "RemoveUndef.h"

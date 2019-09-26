@@ -498,8 +498,7 @@ void test_hist_compute_at(const Backend &backend) {
     Type t = cast<T>(0).type();
     bool is_float_16 = t.is_float() && t.bits() == 16;
 
-    Var yo, yi;
-    final.compute_root();
+    final.compute_root().parallel(y);
     hist.compute_at(final, y);
     switch(backend) {
         case Backend::CPU: {
@@ -584,6 +583,74 @@ void test_hist_compute_at(const Backend &backend) {
 }
 
 template <typename T>
+void test_hist_tuple_compute_at(const Backend &backend) {
+    int img_size = 10000;
+    int hist_size = 7;
+
+    Func im, hist, final;
+    Var x, y;
+    RDom r(0, img_size);
+
+    im(x) = (x*x) % hist_size;
+
+    hist(x) = Tuple(cast<T>(0), cast<T>(0));
+    // Swap the tuple when updating.
+    hist(im(r)) = Tuple(hist(im(r))[1] + cast<T>(1),
+                        hist(im(r))[0] + cast<T>(2));
+
+    final(x, y) = hist((x + y) % hist_size);
+
+    final.compute_root().parallel(y);
+    hist.compute_at(final, y);
+    switch(backend) {
+        case Backend::CPU: {
+            // Halide cannot prove that this is associative.
+            // Set override_associativity_test to true to remove the check.
+            hist.update().atomic(true /*override_associativity_test*/).parallel(r);
+        } break;
+        default: {
+            // All other backends do not support mutex locking.
+            _halide_user_assert(false) << "Unsupported backend.\n";
+        }
+    }
+
+    Buffer<T> correct_hist0(hist_size);
+    Buffer<T> correct_hist1(hist_size);
+    correct_hist0.fill(T(0));
+    correct_hist1.fill(T(0));
+    for (int i = 0; i < img_size; i++) {
+        int idx = (i*i) % hist_size;
+        T new_c0 = correct_hist1(idx) + T(1);
+        T new_c1 = correct_hist0(idx) + T(2);
+        correct_hist0(idx) = new_c0;
+        correct_hist1(idx) = new_c1;
+    }
+    Buffer<T> correct_final0(100, 100);
+    Buffer<T> correct_final1(100, 100);
+    correct_final0.fill(T(0));
+    correct_final1.fill(T(0));
+    for (int i = 0; i < 100; i++) {
+        for (int j = 0; j < 100; j++) {
+            correct_final0(i, j) = correct_hist0((i + j) % hist_size);
+            correct_final1(i, j) = correct_hist1((i + j) % hist_size);
+        }
+    }
+
+    // Run 100 times to make sure race condition do happen
+    for (int iter = 0; iter < 100; iter++) {
+        Realization out = final.realize(100, 100);
+        Buffer<T> out0 = out[0];
+        Buffer<T> out1 = out[1];
+        for (int i = 0; i < 100; i++) {
+            for (int j = 0; j < 100; j++) {
+                check(__LINE__, out0(i, j), correct_final0(i, j));
+                check(__LINE__, out1(i, j), correct_final1(i, j));
+            }
+        }
+    }
+}
+
+template <typename T>
 void test_all(const Backend &backend) {
     test_parallel_hist<T>(backend);
     test_parallel_cas_update<T>(backend);
@@ -596,6 +663,7 @@ void test_all(const Backend &backend) {
         test_parallel_hist_tuple<T>(backend);
         test_parallel_hist_tuple2<T>(backend);
         test_tuple_reduction<T>(backend);
+        test_hist_tuple_compute_at<T>(backend);
     }
     test_hist_compute_at<T>(backend);
 }
