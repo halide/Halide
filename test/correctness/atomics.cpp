@@ -485,7 +485,7 @@ void test_tuple_reduction(const Backend &backend) {
 
 template <typename T>
 void test_hist_compute_at(const Backend &backend) {
-    int img_size = 10000;
+    int img_size = 1000;
     int hist_size = 53;
 
     Func im, hist, final;
@@ -564,31 +564,33 @@ void test_hist_compute_at(const Backend &backend) {
     }
 
     Buffer<T> correct_hist(hist_size);
-    Buffer<T> correct_final(100, 100);
+    Buffer<T> correct_final(10, 10);
     correct_hist.fill(T(0));
     correct_final.fill(T(0));
     for (int i = 0; i < img_size; i++) {
         int idx = (i*i) % hist_size;
         correct_hist(idx) = correct_hist(idx) + T(1);
     }
-    for (int i = 0; i < 100; i++) {
-        for (int j = 0; j < 100; j++) {
+    for (int i = 0; i < 10; i++) {
+        for (int j = 0; j < 10; j++) {
             correct_final(i, j) = correct_hist((i + j) % hist_size);
         }
     }
 
     // Run 100 times to make sure race condition do happen
     for (int iter = 0; iter < 100; iter++) {
-        Buffer<T> out = final.realize(100, 100);
-        for (int i = 0; i < hist_size; i++) {
-            check(__LINE__, out(i), correct_final(i));
+        Buffer<T> out = final.realize(10, 10);
+        for (int i = 0; i < 10; i++) {
+            for (int j = 0; j < 10; j++) {
+                check(__LINE__, out(i, j), correct_final(i, j));
+            }
         }
     }
 }
 
 template <typename T>
 void test_hist_tuple_compute_at(const Backend &backend) {
-    int img_size = 10000;
+    int img_size = 1000;
     int hist_size = 7;
 
     Func im, hist, final;
@@ -629,12 +631,12 @@ void test_hist_tuple_compute_at(const Backend &backend) {
         correct_hist0(idx) = new_c0;
         correct_hist1(idx) = new_c1;
     }
-    Buffer<T> correct_final0(100, 100);
-    Buffer<T> correct_final1(100, 100);
+    Buffer<T> correct_final0(10, 10);
+    Buffer<T> correct_final1(10, 10);
     correct_final0.fill(T(0));
     correct_final1.fill(T(0));
-    for (int i = 0; i < 100; i++) {
-        for (int j = 0; j < 100; j++) {
+    for (int i = 0; i < 10; i++) {
+        for (int j = 0; j < 10; j++) {
             correct_final0(i, j) = correct_hist0((i + j) % hist_size);
             correct_final1(i, j) = correct_hist1((i + j) % hist_size);
         }
@@ -642,13 +644,119 @@ void test_hist_tuple_compute_at(const Backend &backend) {
 
     // Run 100 times to make sure race condition do happen
     for (int iter = 0; iter < 100; iter++) {
-        Realization out = final.realize(100, 100);
+        Realization out = final.realize(10, 10);
         Buffer<T> out0 = out[0];
         Buffer<T> out1 = out[1];
-        for (int i = 0; i < 100; i++) {
-            for (int j = 0; j < 100; j++) {
+        for (int i = 0; i < 10; i++) {
+            for (int j = 0; j < 10; j++) {
                 check(__LINE__, out0(i, j), correct_final0(i, j));
                 check(__LINE__, out1(i, j), correct_final1(i, j));
+            }
+        }
+    }
+}
+
+template <typename T>
+void test_hist_store_at(const Backend &backend) {
+    int img_size = 1000;
+    int hist_size = 53;
+
+    Func im, hist, final;
+    Var x, y;
+    RDom r(0, img_size);
+
+    im(x) = (x*x) % hist_size;
+
+    hist(x) = cast<T>(0);
+    hist(im(r)) += cast<T>(1);
+
+    final(x, y) = hist((x + y) % hist_size);
+
+    Type t = cast<T>(0).type();
+    bool is_float_16 = t.is_float() && t.bits() == 16;
+
+    final.compute_root().parallel(y);
+    hist.store_at(final, y)
+        .compute_at(final, x);
+    switch(backend) {
+        case Backend::CPU: {
+            if (is_float_16) {
+                // Associativity prover doesn't support float16.
+                // Set override_associativity_test to true to remove the check.
+                hist.update().atomic(true /*override_associativity_test*/).parallel(r);
+            } else {
+                hist.update().atomic().parallel(r);
+            }
+        } break;
+        case Backend::CPUVectorize: {
+            RVar ro, ri;
+            if (is_float_16) {
+                // Associativity prover doesn't support float16.
+                // Set override_associativity_test to true to remove the check.
+                hist.update()
+                    .atomic(true /*override_associativity_test*/)
+                    .split(r, ro, ri, 8)
+                    .parallel(ro)
+                    .vectorize(ri);
+            } else {
+                hist.update()
+                    .atomic()
+                    .split(r, ro, ri, 8)
+                    .parallel(ro)
+                    .vectorize(ri);
+            }
+        } break;
+        case Backend::OpenCL: {
+            RVar ro, ri;
+            if (is_float_16) {
+                // Associativity prover doesn't support float16.
+                // Set override_associativity_test to true to remove the check.
+                hist.update().atomic(true /*override_associativity_test*/).split(r, ro, ri, 32)
+                    .gpu_blocks(ro, DeviceAPI::OpenCL)
+                    .gpu_threads(ri, DeviceAPI::OpenCL);
+            } else {
+                hist.update().atomic().split(r, ro, ri, 32)
+                    .gpu_blocks(ro, DeviceAPI::OpenCL)
+                    .gpu_threads(ri, DeviceAPI::OpenCL);
+            }
+        } break;
+        case Backend::CUDA: {
+            if (is_float_16) {
+                RVar ro, ri;
+                // Associativity prover doesn't support float16.
+                // Set override_associativity_test to true to remove the check.
+                hist.update().atomic(true /*override_associativity_test*/).split(r, ro, ri, 32)
+                    .gpu_blocks(ro, DeviceAPI::CUDA)
+                    .gpu_threads(ri, DeviceAPI::CUDA);
+            } else {
+                RVar ro, ri;
+                hist.update().atomic().split(r, ro, ri, 32)
+                    .gpu_blocks(ro, DeviceAPI::CUDA)
+                    .gpu_threads(ri, DeviceAPI::CUDA);
+            }
+        } break;
+    }
+
+    Buffer<T> correct_hist(hist_size);
+    Buffer<T> correct_final(10, 10);
+    correct_hist.fill(T(0));
+    correct_final.fill(T(0));
+    for (int i = 0; i < img_size; i++) {
+        int idx = (i*i) % hist_size;
+        correct_hist(idx) = correct_hist(idx) + T(1);
+    }
+    for (int i = 0; i < 10; i++) {
+        for (int j = 0; j < 10; j++) {
+            correct_final(i, j) = correct_hist((i + j) % hist_size);
+        }
+    }
+
+    // Run 100 times to make sure race condition do happen
+    for (int iter = 0; iter < 100; iter++) {
+        Buffer<T> out = final.realize(10, 10);
+        for (int i = 0; i < 10; i++) {
+            for (int j = 0; j < 10; j++) {
+                check(__LINE__, out(i, j), correct_final(i, j));
             }
         }
     }
@@ -670,6 +778,7 @@ void test_all(const Backend &backend) {
         test_hist_tuple_compute_at<T>(backend);
     }
     test_hist_compute_at<T>(backend);
+    test_hist_store_at<T>(backend);
 }
 
 extern "C" DLLEXPORT int extern_func(int x) {
