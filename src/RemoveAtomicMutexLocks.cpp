@@ -39,23 +39,6 @@ public:
 class RemoveAtomicMutexLocks : public IRMutator {
     using IRMutator::visit;
 
-    Stmt visit(const Allocate *op) override {
-        if (remove_mutex_lock_name != "" &&
-                op->name == remove_mutex_lock_name) {
-            // The mutex allocation's body is always a Block
-            const Block *block = op->body.as<Block>();
-            internal_assert(block != nullptr) <<
-                "This is a mutex lock allocation, where the body is expected to be a Block.";
-            const Call *call = block->first.as<Call>();
-            internal_assert(call != nullptr) <<
-                "This is a mutex lock allocation, where the body Block's first statement is expected to be a Call to memset.";
-            internal_assert(call->name == "memset");
-            return mutate(block->rest);
-        } else {
-            return IRMutator::visit(op);
-        }
-    }
-
     Stmt visit(const Atomic *op) override {
         // Search for atomic tuple Provide nodes
         FindAtomicTupleProvide finder;
@@ -64,20 +47,53 @@ class RemoveAtomicMutexLocks : public IRMutator {
             // Can't remove mutex lock. Leave the Stmt as is.
             return IRMutator::visit(op);
         } else {
-            remove_mutex_lock_name = op->mutex_name;
+            remove_mutex_lock_names.insert(op->mutex_name);
             Stmt body = mutate(op->body);
-            remove_mutex_lock_name = "";
             return Atomic::make("", {}, std::move(body));
         }
     }
 
-    string remove_mutex_lock_name;
+public:
+    std::set<string> remove_mutex_lock_names;
+};
+
+class RemoveAtomicMutexAllocation : public IRMutator {
+public:
+    using IRMutator::visit;
+
+    RemoveAtomicMutexAllocation(const std::set<string> &remove_mutex_lock_names)
+        : remove_mutex_lock_names(remove_mutex_lock_names) {}
+
+    Stmt visit(const Allocate *op) override {
+        std::cerr << "op->name:" << op->name << std::endl;
+        if (remove_mutex_lock_names.find(op->name) != remove_mutex_lock_names.end()) {
+            // The mutex allocation's body is always a Block
+            const Block *block = op->body.as<Block>();
+            internal_assert(block != nullptr) <<
+                "This is a mutex lock allocation, where the body is expected to be a Block.";
+            const Evaluate *eval = block->first.as<Evaluate>();
+            internal_assert(eval != nullptr) <<
+                "This is a mutex lock allocation, where the body Block's first statement is expected to be an Evaluate.";
+            const Call *call = eval->value.as<Call>();
+            internal_assert(call->name == "memset") <<
+                "This is a mutex lock allocation, where there should be a call to memset to initialize the locks.";
+            return mutate(block->rest);
+        } else {
+            return IRMutator::visit(op);
+        }
+    }
+
+    std::set<string> remove_mutex_lock_names;
 };
 
 }  // namespace
 
 Stmt remove_atomic_mutex_locks(Stmt s) {
-    s = RemoveAtomicMutexLocks().mutate(s);
+    RemoveAtomicMutexLocks mutator;
+    s = mutator.mutate(s);
+    if (mutator.remove_mutex_lock_names.size() > 0) {
+        s = RemoveAtomicMutexAllocation(mutator.remove_mutex_lock_names).mutate(s);
+    }
     return s;
 }
 

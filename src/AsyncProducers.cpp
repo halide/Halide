@@ -165,6 +165,11 @@ class GenerateProducerBody : public NoOpCollapsingMutator {
         }
     }
 
+    Stmt visit(const Allocate *op) override {
+        // Atomic mutex lock can generate an Allocate node to allocate the mutex buffer.
+        return Evaluate::make(0);
+    }
+
     Expr visit(const Call *op) override {
         if (op->name == "halide_semaphore_init") {
             internal_assert(op->args.size() == 2);
