@@ -106,8 +106,12 @@ inline double round_f64(double x) {return round(x);}
 inline float nan_f32() {return NAN;}
 inline float neg_inf_f32() {return -INFINITY;}
 inline float inf_f32() {return INFINITY;}
-inline bool is_nan_f32(float x) {return x != x;}
-inline bool is_nan_f64(double x) {return x != x;}
+inline bool is_nan_f32(float x) {return isnan(x);}
+inline bool is_nan_f64(double x) {return isnan(x);}
+inline bool is_inf_f32(float x) {return isinf(x);}
+inline bool is_inf_f64(double x) {return isinf(x);}
+inline bool is_finite_f32(float x) {return isfinite(x);}
+inline bool is_finite_f64(double x) {return isfinite(x);}
 
 template<typename A, typename B>
 inline A reinterpret(const B &b) {
@@ -1681,18 +1685,15 @@ void CodeGen_C::compile(const LoweredFunc &f) {
         indent += 1;
 
         if (uses_gpu_for_loops) {
-            do_indent();
-            stream << "halide_error("
+            stream << get_indent() << "halide_error("
                    << (have_user_context ? "__user_context_" : "nullptr")
                    << ", \"C++ Backend does not support gpu_blocks() or gpu_threads() yet, "
                    << "this function will always fail at runtime\");\n";
-            do_indent();
-            stream << "return halide_error_code_device_malloc_failed;\n";
+            stream << get_indent() << "return halide_error_code_device_malloc_failed;\n";
         } else {
             // Emit a local user_context we can pass in all cases, either
             // aliasing __user_context or nullptr.
-            do_indent();
-            stream << "void * const _ucon = "
+            stream << get_indent() << "void * const _ucon = "
                    << (have_user_context ? "const_cast<void *>(__user_context)" : "nullptr")
                    << ";\n";
 
@@ -1700,8 +1701,7 @@ void CodeGen_C::compile(const LoweredFunc &f) {
             print(f.body);
 
             // Return success.
-            do_indent();
-            stream << "return 0;\n";
+            stream << get_indent() << "return 0;\n";
         }
 
         indent -= 1;
@@ -1751,13 +1751,13 @@ void CodeGen_C::compile(const Buffer<> &buffer) {
 
     // Emit the data
     stream << "static " << (is_constant ? "const" : "") << " uint8_t " << name << "_data[] HALIDE_ATTRIBUTE_ALIGN(32) = {\n";
-    do_indent();
+    stream << get_indent();
     for (size_t i = 0; i < num_elems * b.type.bytes(); i++) {
         if (i > 0) {
             stream << ",";
             if (i % 16 == 0) {
                 stream << "\n";
-                do_indent();
+                stream << get_indent();
             } else {
                 stream << " ";
             }
@@ -1824,8 +1824,7 @@ string CodeGen_C::print_assignment(Type t, const std::string &rhs) {
     auto cached = cache.find(rhs);
     if (cached == cache.end()) {
         id = unique_name('_');
-        do_indent();
-        stream << print_type(t, AppendSpace) << (output_kind == CPlusPlusImplementation ? "const " : "") << id << " = " << rhs << ";\n";
+        stream << get_indent() << print_type(t, AppendSpace) << (output_kind == CPlusPlusImplementation ? "const " : "") << id << " = " << rhs << ";\n";
         cache[rhs] = id;
     } else {
         id = cached->second;
@@ -1835,7 +1834,7 @@ string CodeGen_C::print_assignment(Type t, const std::string &rhs) {
 
 void CodeGen_C::open_scope() {
     cache.clear();
-    do_indent();
+    stream << get_indent();
     indent++;
     stream << "{\n";
 }
@@ -1843,7 +1842,7 @@ void CodeGen_C::open_scope() {
 void CodeGen_C::close_scope(const std::string &comment) {
     cache.clear();
     indent--;
-    do_indent();
+    stream << get_indent();
     if (!comment.empty()) {
         stream << "} // " << comment << "\n";
     } else {
@@ -2105,25 +2104,20 @@ void CodeGen_C::visit(const Call *op) {
 
         string result_id = unique_name('_');
 
-        do_indent();
-        stream << print_type(op->args[1].type(), AppendSpace)
+        stream << get_indent() << print_type(op->args[1].type(), AppendSpace)
                << result_id << ";\n";
 
         string cond_id = print_expr(op->args[0]);
 
-        do_indent();
-        stream << "if (" << cond_id << ")\n";
+        stream << get_indent() << "if (" << cond_id << ")\n";
         open_scope();
         string true_case = print_expr(op->args[1]);
-        do_indent();
-        stream << result_id << " = " << true_case << ";\n";
+        stream << get_indent() << result_id << " = " << true_case << ";\n";
         close_scope("if " + cond_id);
-        do_indent();
-        stream << "else\n";
+        stream << get_indent() << "else\n";
         open_scope();
         string false_case = print_expr(op->args[2]);
-        do_indent();
-        stream << result_id << " = " << false_case << ";\n";
+        stream << get_indent() << result_id << " = " << false_case << ";\n";
         close_scope("if " + cond_id + " else");
 
         rhs << result_id;
@@ -2149,14 +2143,14 @@ void CodeGen_C::visit(const Call *op) {
         const Call *call = op->args[0].as<Call>();
         if (op->type == type_of<struct halide_buffer_t *>() &&
             call && call->is_intrinsic(Call::size_of_halide_buffer_t)) {
-            do_indent();
+            stream << get_indent();
             string buf_name = unique_name('b');
             stream << "halide_buffer_t " << buf_name << ";\n";
             rhs << "&" << buf_name;
         } else {
             // Make a stack of uint64_ts
             string size = print_expr(simplify((op->args[0] + 7) / 8));
-            do_indent();
+            stream << get_indent();
             string array_name = unique_name('a');
             stream << "uint64_t " << array_name << "[" << size << "];";
             rhs << "(" << print_type(op->type) << ")(&" << array_name << ")";
@@ -2175,29 +2169,24 @@ void CodeGen_C::visit(const Call *op) {
             for (size_t i = 0; i < op->args.size(); i++) {
                 values.push_back(print_expr(op->args[i]));
             }
-            do_indent();
-            stream << "struct {\n";
+            stream << get_indent() << "struct {\n";
             // List the types.
             indent++;
             for (size_t i = 0; i < op->args.size(); i++) {
-                do_indent();
-                stream << "const " << print_type(op->args[i].type()) << " f_" << i << ";\n";
+                stream << get_indent() << "const " << print_type(op->args[i].type()) << " f_" << i << ";\n";
             }
             indent--;
             string struct_name = unique_name('s');
-            do_indent();
-            stream << "} " << struct_name << " = {\n";
+            stream << get_indent() << "} " << struct_name << " = {\n";
             // List the values.
             indent++;
             for (size_t i = 0; i < op->args.size(); i++) {
-                do_indent();
-                stream << values[i];
+                stream << get_indent() << values[i];
                 if (i < op->args.size() - 1) stream << ",";
                 stream << "\n";
             }
             indent--;
-            do_indent();
-            stream << "};\n";
+            stream << get_indent() << "};\n";
             // Return a pointer to it of the appropriate type
             if (op->type.handle_type) {
                 rhs << "(" << print_type(op->type) << ")";
@@ -2231,10 +2220,8 @@ void CodeGen_C::visit(const Call *op) {
             }
         }
         string buf_name = unique_name('b');
-        do_indent();
-        stream << "char " << buf_name << "[1024];\n";
-        do_indent();
-        stream << "snprintf(" << buf_name << ", 1024, \"" << format_string << "\", " << with_commas(printf_args) << ");\n";
+        stream << get_indent() << "char " << buf_name << "[1024];\n";
+        stream << get_indent() << "snprintf(" << buf_name << ", 1024, \"" << format_string << "\", " << with_commas(printf_args) << ");\n";
         rhs << buf_name;
 
     } else if (op->is_intrinsic(Call::register_destructor)) {
@@ -2243,7 +2230,7 @@ void CodeGen_C::visit(const Call *op) {
         internal_assert(fn);
         string arg = print_expr(op->args[1]);
 
-        do_indent();
+        stream << get_indent();
         // Make a struct on the stack that calls the given function as a destructor
         string struct_name = unique_name('s');
         string instance_name = unique_name('d');
@@ -2307,8 +2294,7 @@ void CodeGen_C::visit(const Call *op) {
     // an ignored int, but as halide_print() has many overrides downstream (and in third-party
     // consumers), this is arguably a simpler fix for allowing halide_print() to work in the C++ backend.
     if (op->name == "halide_print") {
-        do_indent();
-        stream << rhs.str() << ";\n";
+        stream << get_indent() << rhs.str() << ";\n";
         // Make an innocuous assignment value for our caller (probably an Evaluate node) to ignore.
         print_assignment(op->type, "0");
     } else {
@@ -2320,8 +2306,7 @@ string CodeGen_C::print_scalarized_expr(Expr e) {
     Type t = e.type();
     internal_assert(t.is_vector());
     string v = unique_name('_');
-    do_indent();
-    stream << print_type(t, AppendSpace) << v << ";\n";
+    stream << get_indent() << print_type(t, AppendSpace) << v << ";\n";
     for (int lane = 0; lane < t.lanes(); lane++) {
         Expr e2 = extract_lane(e, lane);
         string elem = print_expr(e2);
@@ -2405,14 +2390,12 @@ void CodeGen_C::visit(const Store *op) {
     if (dense_ramp_base.defined()) {
         internal_assert(op->value.type().is_vector());
         string id_ramp_base = print_expr(dense_ramp_base);
-        do_indent();
-        stream << id_value + ".store(" << name << ", " << id_ramp_base << ");\n";
+        stream << get_indent() << id_value + ".store(" << name << ", " << id_ramp_base << ");\n";
     } else if (op->index.type().is_vector()) {
         // If index is a vector, scatter vector elements.
         internal_assert(t.is_vector());
         string id_index = print_expr(op->index);
-        do_indent();
-        stream << id_value + ".store(" << name << ", " << id_index << ");\n";
+        stream << get_indent() << id_value + ".store(" << name << ", " << id_index << ");\n";
     } else {
         bool type_cast_needed =
             t.is_handle() ||
@@ -2420,7 +2403,7 @@ void CodeGen_C::visit(const Store *op) {
             allocations.get(op->name).type != t;
 
         string id_index = print_expr(op->index);
-        do_indent();
+        stream << get_indent();
         if (type_cast_needed) {
             stream << "((" << print_type(t) << " *)" << name << ")";
         } else {
@@ -2437,8 +2420,7 @@ void CodeGen_C::visit(const Let *op) {
     if (op->value.type().is_handle()) {
         // The body might contain a Load that references this directly
         // by name, so we can't rewrite the name.
-        do_indent();
-        stream << print_type(op->value.type())
+        stream << get_indent() << print_type(op->value.type())
                << " " << print_name(op->name)
                << " = " << id_value << ";\n";
     } else {
@@ -2475,8 +2457,7 @@ void CodeGen_C::visit(const LetStmt *op) {
     if (op->value.type().is_handle()) {
         // The body might contain a Load or Store that references this
         // directly by name, so we can't rewrite the name.
-        do_indent();
-        stream << print_type(op->value.type())
+        stream << get_indent() << print_type(op->value.type())
                << " " << print_name(op->name)
                << " = " << id_value << ";\n";
     } else {
@@ -2493,11 +2474,9 @@ void CodeGen_C::visit(const LetStmt *op) {
 void CodeGen_C::create_assertion(const string &id_cond, const string &id_msg) {
     if (target.has_feature(Target::NoAsserts)) return;
 
-    do_indent();
-    stream << "if (!" << id_cond << ")\n";
+    stream << get_indent() << "if (!" << id_cond << ")\n";
     open_scope();
-    do_indent();
-    stream << "return " << id_msg << ";\n";
+    stream << get_indent() << "return " << id_msg << ";\n";
     close_scope("");
 }
 
@@ -2509,12 +2488,10 @@ void CodeGen_C::create_assertion(const string &id_cond, Expr message) {
 
     // don't call the create_assertion(string, string) version because
     // we don't want to force evaluation of 'message' unless the condition fails
-    do_indent();
-    stream << "if (!" << id_cond << ") ";
+    stream << get_indent() << "if (!" << id_cond << ") ";
     open_scope();
     string id_msg = print_expr(message);
-    do_indent();
-    stream << "return " << id_msg << ";\n";
+    stream << get_indent() << "return " << id_msg << ";\n";
     close_scope("");
 }
 
@@ -2527,7 +2504,7 @@ void CodeGen_C::visit(const AssertStmt *op) {
 }
 
 void CodeGen_C::visit(const ProducerConsumer *op) {
-    do_indent();
+    stream << get_indent();
     if (op->is_producer) {
         stream << "// produce " << op->name << '\n';
     } else {
@@ -2538,24 +2515,19 @@ void CodeGen_C::visit(const ProducerConsumer *op) {
 
 void CodeGen_C::visit(const Fork *op) {
     // TODO: This doesn't actually work with nested tasks
-    do_indent();
-    stream << "#pragma omp parallel\n";
+    stream << get_indent() << "#pragma omp parallel\n";
     open_scope();
-    do_indent();
-    stream << "#pragma omp single\n";
+    stream << get_indent() << "#pragma omp single\n";
     open_scope();
-    do_indent();
-    stream << "#pragma omp task\n";
+    stream << get_indent() << "#pragma omp task\n";
     open_scope();
     print_stmt(op->first);
     close_scope("");
-    do_indent();
-    stream << "#pragma omp task\n";
+    stream << get_indent() << "#pragma omp task\n";
     open_scope();
     print_stmt(op->rest);
     close_scope("");
-    do_indent();
-    stream << "#pragma omp taskwait\n";
+    stream << get_indent() << "#pragma omp taskwait\n";
     close_scope("");
     close_scope("");
 }
@@ -2564,11 +2536,9 @@ void CodeGen_C::visit(const Acquire *op) {
     string id_sem = print_expr(op->semaphore);
     string id_count = print_expr(op->count);
     open_scope();
-    do_indent();
-    stream << "while (!halide_semaphore_try_acquire(" << id_sem << ", " << id_count << "))\n";
+    stream << get_indent() << "while (!halide_semaphore_try_acquire(" << id_sem << ", " << id_count << "))\n";
     open_scope();
-    do_indent();
-    stream << "#pragma omp taskyield\n";
+    stream << get_indent() << "#pragma omp taskyield\n";
     close_scope("");
     op->body.accept(this);
     close_scope("");
@@ -2579,15 +2549,13 @@ void CodeGen_C::visit(const For *op) {
     string id_extent = print_expr(op->extent);
 
     if (op->for_type == ForType::Parallel) {
-        do_indent();
-        stream << "#pragma omp parallel for\n";
+        stream << get_indent() << "#pragma omp parallel for\n";
     } else {
         internal_assert(op->for_type == ForType::Serial)
             << "Can only emit serial or parallel for loops to C\n";
     }
 
-    do_indent();
-    stream << "for (int "
+    stream << get_indent() << "for (int "
            << print_name(op->name)
            << " = " << id_min
            << "; "
@@ -2682,16 +2650,17 @@ void CodeGen_C::visit(const Allocate *op) {
                 }
                 size_id = print_assignment(Int(64), new_size_id_rhs);
             }
-            do_indent();
-            stream << "if ((" << size_id << " > ((int64_t(1) << 31) - 1)) || ((" << size_id << " * sizeof(" << op_type << ")) > ((int64_t(1) << 31) - 1)))\n";
+            stream << get_indent() << "if (("
+                   << size_id << " > ((int64_t(1) << 31) - 1)) || (("
+                   << size_id << " * sizeof("
+                   << op_type << ")) > ((int64_t(1) << 31) - 1)))\n";
             open_scope();
-            do_indent();
+            stream << get_indent();
             // TODO: call halide_error_buffer_allocation_too_large() here instead
             // TODO: call create_assertion() so that NoAssertions works
             stream << "halide_error(_ucon, "
                    << "\"32-bit signed overflow computing size of allocation " << op->name << "\\n\");\n";
-            do_indent();
-            stream << "return -1;\n";
+            stream << get_indent() << "return -1;\n";
             close_scope("overflow test " + op->name);
         }
 
@@ -2711,8 +2680,7 @@ void CodeGen_C::visit(const Allocate *op) {
         alloc.type = op->type;
         allocations.push(op->name, alloc);
 
-        do_indent();
-        stream << op_type;
+        stream << get_indent() << op_type;
 
         if (on_stack) {
             stream << op_name
@@ -2732,7 +2700,7 @@ void CodeGen_C::visit(const Allocate *op) {
     if (!on_stack) {
         create_assertion(op_name, "halide_error_out_of_memory(_ucon)");
 
-        do_indent();
+        stream << get_indent();
         string free_function = op->free_function.empty() ? "halide_free" : op->free_function;
         stream << "HalideFreeHelper " << op_name << "_free(_ucon, "
                << op_name << ", " << free_function << ");\n";
@@ -2748,8 +2716,7 @@ void CodeGen_C::visit(const Allocate *op) {
 
 void CodeGen_C::visit(const Free *op) {
     if (heap_allocations.contains(op->name)) {
-        do_indent();
-        stream << print_name(op->name) << "_free.free();\n";
+        stream << get_indent() << print_name(op->name) << "_free.free();\n";
         heap_allocations.pop(op->name);
     }
     allocations.pop(op->name);
@@ -2766,15 +2733,13 @@ void CodeGen_C::visit(const Prefetch *op) {
 void CodeGen_C::visit(const IfThenElse *op) {
     string cond_id = print_expr(op->condition);
 
-    do_indent();
-    stream << "if (" << cond_id << ")\n";
+    stream << get_indent() << "if (" << cond_id << ")\n";
     open_scope();
     op->then_case.accept(this);
     close_scope("if " + cond_id);
 
     if (op->else_case.defined()) {
-        do_indent();
-        stream << "else\n";
+        stream << get_indent() << "else\n";
         open_scope();
         op->else_case.accept(this);
         close_scope("if " + cond_id + " else");
@@ -2784,8 +2749,7 @@ void CodeGen_C::visit(const IfThenElse *op) {
 void CodeGen_C::visit(const Evaluate *op) {
     if (is_const(op->value)) return;
     string id = print_expr(op->value);
-    do_indent();
-    stream << "(void)" << id << ";\n";
+    stream << get_indent() << "(void)" << id << ";\n";
 }
 
 void CodeGen_C::visit(const Shuffle *op) {
@@ -2808,8 +2772,7 @@ void CodeGen_C::visit(const Shuffle *op) {
     if (op->vectors.size() > 1) {
         ostringstream rhs;
         string storage_name = unique_name('_');
-        do_indent();
-        stream << "const " << print_type(op->vectors[0].type()) << " " << storage_name << "[] = { " << with_commas(vecs) << " };\n";
+        stream << get_indent() << "const " << print_type(op->vectors[0].type()) << " " << storage_name << "[] = { " << with_commas(vecs) << " };\n";
 
         rhs << print_type(op->type) << "::concat(" << op->vectors.size() << ", " << storage_name << ")";
         src = print_assignment(op->type, rhs.str());
@@ -2819,8 +2782,7 @@ void CodeGen_C::visit(const Shuffle *op) {
         rhs << src << "[" << op->indices[0] << "]";
     } else {
         string indices_name = unique_name('_');
-        do_indent();
-        stream << "const int32_t " << indices_name << "[" << op->indices.size() << "] = { " << with_commas(op->indices) << " };\n";
+        stream << get_indent() << "const int32_t " << indices_name << "[" << op->indices.size() << "] = { " << with_commas(op->indices) << " };\n";
         rhs << print_type(op->type) << "::shuffle(" << src << ", " << indices_name << ")";
     }
     print_assignment(op->type, rhs.str());

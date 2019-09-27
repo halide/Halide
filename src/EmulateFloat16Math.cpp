@@ -135,7 +135,9 @@ const std::map<std::string, std::string> transcendental_remapping =
      {"ceil_f16", "ceil_f32"},
      {"round_f16", "round_f32"},
      {"trunc_f16", "trunc_f32"},
-     {"is_nan_f16", "is_nan_f32"}};
+     {"is_nan_f16", "is_nan_f32"},
+     {"is_inf_f16", "is_inf_f32"},
+     {"is_finite_f16", "is_finite_f32"}};
 }  // anonymous namespace
 
 bool is_float16_transcendental(const Call *op) {

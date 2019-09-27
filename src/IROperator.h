@@ -932,6 +932,14 @@ Expr trunc(Expr x);
   * floating point argument.  Vectorizes cleanly. */
 Expr is_nan(Expr x);
 
+/** Returns true if the argument is Inf or -Inf. Requires a
+  * floating point argument.  Vectorizes cleanly. */
+Expr is_inf(Expr x);
+
+/** Returns true if the argument is a finite value (ie, neither NaN nor Inf).
+  * Requires a floating point argument.  Vectorizes cleanly. */
+Expr is_finite(Expr x);
+
 /** Return the fractional part of a floating-point expression. If the argument
  *  is not floating-point, it is cast to Float(32). The return value has the
  *  same sign as the original expression. Vectorizes cleanly. */

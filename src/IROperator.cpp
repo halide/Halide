@@ -1900,6 +1900,34 @@ Expr is_nan(Expr x) {
     }
 }
 
+Expr is_inf(Expr x) {
+    user_assert(x.defined()) << "is_inf of undefined Expr\n";
+    user_assert(x.type().is_float()) << "is_inf only works for float";
+    Type t = Bool(x.type().lanes());
+    if (x.type().element_of() == Float(64)) {
+        return Internal::Call::make(t, "is_inf_f64", {std::move(x)}, Internal::Call::PureExtern);
+    } else if (x.type().element_of() == Float(16)) {
+        return Internal::Call::make(t, "is_inf_f16", {std::move(x)}, Internal::Call::PureExtern);
+    } else {
+        Type ft = Float(32, t.lanes());
+        return Internal::Call::make(t, "is_inf_f32", {cast(ft, std::move(x))}, Internal::Call::PureExtern);
+    }
+}
+
+Expr is_finite(Expr x) {
+    user_assert(x.defined()) << "is_finite of undefined Expr\n";
+    user_assert(x.type().is_float()) << "is_finite only works for float";
+    Type t = Bool(x.type().lanes());
+    if (x.type().element_of() == Float(64)) {
+        return Internal::Call::make(t, "is_finite_f64", {std::move(x)}, Internal::Call::PureExtern);
+    } else if (x.type().element_of() == Float(16)) {
+        return Internal::Call::make(t, "is_finite_f16", {std::move(x)}, Internal::Call::PureExtern);
+    } else {
+        Type ft = Float(32, t.lanes());
+        return Internal::Call::make(t, "is_finite_f32", {cast(ft, std::move(x))}, Internal::Call::PureExtern);
+    }
+}
+
 Expr fract(Expr x) {
     user_assert(x.defined()) << "fract of undefined Expr\n";
     return x - trunc(x);

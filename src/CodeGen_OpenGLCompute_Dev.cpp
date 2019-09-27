@@ -136,8 +136,7 @@ void CodeGen_OpenGLCompute_Dev::CodeGen_OpenGLCompute_C::visit(const Cast *op) {
 
 void CodeGen_OpenGLCompute_Dev::CodeGen_OpenGLCompute_C::visit(const Call *op) {
     if (op->is_intrinsic(Call::gpu_thread_barrier)) {
-        do_indent();
-        stream << "barrier();\n";
+        stream << get_indent() << "barrier();\n";
         print_assignment(op->type, "0");
     } else {
         CodeGen_GLSLBase::visit(op);
@@ -167,8 +166,7 @@ void CodeGen_OpenGLCompute_Dev::CodeGen_OpenGLCompute_C::visit(const For *loop) 
             debug(4) << "Workgroup size for index " << index << " is " << workgroup_size[index] << "\n";
         }
 
-        do_indent();
-        stream << print_type(Int(32)) << " " << print_name(loop->name)
+        stream << get_indent() << print_type(Int(32)) << " " << print_name(loop->name)
                << " = int(" << simt_intrinsic(loop->name) << ");\n";
 
         loop->body.accept(this);
@@ -226,8 +224,7 @@ void CodeGen_OpenGLCompute_Dev::CodeGen_OpenGLCompute_C::visit(const Store *op) 
 
     string id_value = print_expr(op->value);
 
-    do_indent();
-    stream << print_name(op->name);
+    stream << get_indent() << print_name(op->name);
     if (!allocations.contains(op->name)) {
         stream << ".data";
     }
@@ -355,7 +352,7 @@ void CodeGen_OpenGLCompute_Dev::init_module() {
 void CodeGen_OpenGLCompute_Dev::CodeGen_OpenGLCompute_C::visit(const Allocate *op) {
     debug(2) << "OpenGLCompute: Allocate " << op->name << " of type " << op->type << " on device\n";
 
-    do_indent();
+    stream << get_indent();
     Allocation alloc;
     alloc.type = op->type;
     allocations.push(op->name, alloc);
@@ -371,7 +368,7 @@ void CodeGen_OpenGLCompute_Dev::CodeGen_OpenGLCompute_C::visit(const Allocate *o
     if (!starts_with(op->name, "__shared_")) {
         stream << "{\n";
         indent += 2;
-        do_indent();
+        stream << get_indent();
         // Shared allocations were already declared at global scope.
         stream << print_type(op->type) << " "
                << print_name(op->name) << "["
@@ -381,8 +378,7 @@ void CodeGen_OpenGLCompute_Dev::CodeGen_OpenGLCompute_C::visit(const Allocate *o
 
     if (!starts_with(op->name, "__shared_")) {
         indent -= 2;
-        do_indent();
-        stream << "}\n";
+        stream << get_indent() << "}\n";
     }
 }
 

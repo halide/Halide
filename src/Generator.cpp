@@ -12,6 +12,7 @@
 #endif
 
 #include "Generator.h"
+#include "IRPrinter.h"
 #include "Module.h"
 #include "Simplify.h"
 
@@ -245,64 +246,58 @@ private:
     }
 
     /** Emit spaces according to the current indentation level */
-    std::string indent();
+    Indentation get_indent() const {
+        return Indentation{indent_level};
+    }
 
     void emit_inputs_struct();
     void emit_generator_params_struct();
 };
 
-std::string StubEmitter::indent() {
-    std::ostringstream o;
-    for (int i = 0; i < indent_level; i++) {
-        o << "  ";
-    }
-    return o.str();
-}
-
 void StubEmitter::emit_generator_params_struct() {
     const auto &v = generator_params;
     std::string name = "GeneratorParams";
-    stream << indent() << "struct " << name << " final {\n";
+    stream << get_indent() << "struct " << name << " final {\n";
     indent_level++;
     if (!v.empty()) {
         for (auto p : v) {
-            stream << indent() << p->get_c_type() << " " << p->name << "{ " << p->get_default_value() << " };\n";
+            stream << get_indent() << p->get_c_type() << " " << p->name << "{ " << p->get_default_value() << " };\n";
         }
         stream << "\n";
     }
 
-    stream << indent() << name << "() {}\n";
+    stream << get_indent() << name << "() {}\n";
     stream << "\n";
 
     if (!v.empty()) {
-        stream << indent() << name << "(\n";
+        stream << get_indent() << name << "(\n";
         indent_level++;
         std::string comma = "";
         for (auto p : v) {
-            stream << indent() << comma << p->get_c_type() << " " << p->name << "\n";
+            stream << get_indent() << comma << p->get_c_type() << " " << p->name << "\n";
             comma = ", ";
         }
         indent_level--;
-        stream << indent() << ") : \n";
+        stream << get_indent() << ") : \n";
         indent_level++;
         comma = "";
         for (auto p : v) {
-            stream << indent() << comma << p->name << "(" << p->name << ")\n";
+            stream << get_indent() << comma << p->name << "(" << p->name << ")\n";
             comma = ", ";
         }
         indent_level--;
-        stream << indent() << "{\n";
-        stream << indent() << "}\n";
+        stream << get_indent() << "{\n";
+        stream << get_indent() << "}\n";
         stream << "\n";
     }
 
-    stream << indent() << "inline HALIDE_NO_USER_CODE_INLINE Halide::Internal::GeneratorParamsMap to_generator_params_map() const {\n";
+    stream << get_indent() << "inline HALIDE_NO_USER_CODE_INLINE Halide::Internal::GeneratorParamsMap to_generator_params_map() const {\n";
     indent_level++;
-    stream << indent() << "return {\n";
+    stream << get_indent() << "return {\n";
     indent_level++;
     std::string comma = "";
     for (auto p : v) {
-        stream << indent() << comma << "{\"" << p->name << "\", ";
+        stream << get_indent() << comma << "{\"" << p->name << "\", ";
         if (p->is_looplevel_param()) {
             stream << p->name << "}\n";
         } else {
@@ -311,12 +306,12 @@ void StubEmitter::emit_generator_params_struct() {
         comma = ", ";
     }
     indent_level--;
-    stream << indent() << "};\n";
+    stream << get_indent() << "};\n";
     indent_level--;
-    stream << indent() << "}\n";
+    stream << get_indent() << "}\n";
 
     indent_level--;
-    stream << indent() << "};\n";
+    stream << get_indent() << "};\n";
     stream << "\n";
 }
 
@@ -335,38 +330,38 @@ void StubEmitter::emit_inputs_struct() {
     }
 
     const std::string name = "Inputs";
-    stream << indent() << "struct " << name << " final {\n";
+    stream << get_indent() << "struct " << name << " final {\n";
     indent_level++;
     for (auto in : in_info) {
-        stream << indent() << in.c_type << " " << in.name << ";\n";
+        stream << get_indent() << in.c_type << " " << in.name << ";\n";
     }
     stream << "\n";
 
-    stream << indent() << name << "() {}\n";
+    stream << get_indent() << name << "() {}\n";
     stream << "\n";
     if (!in_info.empty()) {
-        stream << indent() << name << "(\n";
+        stream << get_indent() << name << "(\n";
         indent_level++;
         std::string comma = "";
         for (auto in : in_info) {
-            stream << indent() << comma << "const " << in.c_type << "& " << in.name << "\n";
+            stream << get_indent() << comma << "const " << in.c_type << "& " << in.name << "\n";
             comma = ", ";
         }
         indent_level--;
-        stream << indent() << ") : \n";
+        stream << get_indent() << ") : \n";
         indent_level++;
         comma = "";
         for (auto in : in_info) {
-            stream << indent() << comma << in.name << "(" << in.name << ")\n";
+            stream << get_indent() << comma << in.name << "(" << in.name << ")\n";
             comma = ", ";
         }
         indent_level--;
-        stream << indent() << "{\n";
-        stream << indent() << "}\n";
+        stream << get_indent() << "{\n";
+        stream << get_indent() << "}\n";
 
         indent_level--;
     }
-    stream << indent() << "};\n";
+    stream << get_indent() << "};\n";
     stream << "\n";
 }
 
@@ -414,21 +409,21 @@ void StubEmitter::emit() {
     }
     guard << "_" << class_name;
 
-    stream << indent() << "#ifndef " << guard.str() << "\n";
-    stream << indent() << "#define " << guard.str() << "\n";
+    stream << get_indent() << "#ifndef " << guard.str() << "\n";
+    stream << get_indent() << "#define " << guard.str() << "\n";
     stream << "\n";
 
-    stream << indent() << "/* MACHINE-GENERATED - DO NOT EDIT */\n";
+    stream << get_indent() << "/* MACHINE-GENERATED - DO NOT EDIT */\n";
     stream << "\n";
 
-    stream << indent() << "#include <cassert>\n";
-    stream << indent() << "#include <map>\n";
-    stream << indent() << "#include <memory>\n";
-    stream << indent() << "#include <string>\n";
-    stream << indent() << "#include <utility>\n";
-    stream << indent() << "#include <vector>\n";
+    stream << get_indent() << "#include <cassert>\n";
+    stream << get_indent() << "#include <map>\n";
+    stream << get_indent() << "#include <memory>\n";
+    stream << get_indent() << "#include <string>\n";
+    stream << get_indent() << "#include <utility>\n";
+    stream << get_indent() << "#include <vector>\n";
     stream << "\n";
-    stream << indent() << "#include \"Halide.h\"\n";
+    stream << get_indent() << "#include \"Halide.h\"\n";
     stream << "\n";
 
     stream << "namespace halide_register_generator {\n";
@@ -439,7 +434,7 @@ void StubEmitter::emit() {
     stream << "\n";
 
     for (const auto &ns : namespaces) {
-        stream << indent() << "namespace " << ns << " {\n";
+        stream << get_indent() << "namespace " << ns << " {\n";
     }
     stream << "\n";
 
@@ -449,23 +444,23 @@ void StubEmitter::emit() {
         stream << decl << "\n";
     }
 
-    stream << indent() << "class " << class_name << " final : public Halide::NamesInterface {\n";
-    stream << indent() << "public:\n";
+    stream << get_indent() << "class " << class_name << " final : public Halide::NamesInterface {\n";
+    stream << get_indent() << "public:\n";
     indent_level++;
 
     emit_inputs_struct();
     emit_generator_params_struct();
 
-    stream << indent() << "struct Outputs final {\n";
+    stream << get_indent() << "struct Outputs final {\n";
     indent_level++;
-    stream << indent() << "// Outputs\n";
+    stream << get_indent() << "// Outputs\n";
     for (const auto &out : out_info) {
-        stream << indent() << out.ctype << " " << out.name << ";\n";
+        stream << get_indent() << out.ctype << " " << out.name << ";\n";
     }
 
     stream << "\n";
-    stream << indent() << "// The Target used\n";
-    stream << indent() << "Target target;\n";
+    stream << get_indent() << "// The Target used\n";
+    stream << get_indent() << "Target target;\n";
 
     if (out_info.size() == 1) {
         stream << "\n";
@@ -473,179 +468,179 @@ void StubEmitter::emit() {
             std::string name = out_info.at(0).name;
             auto output = outputs[0];
             if (output->is_array()) {
-                stream << indent() << "operator std::vector<Halide::Func>() const {\n";
+                stream << get_indent() << "operator std::vector<Halide::Func>() const {\n";
                 indent_level++;
-                stream << indent() << "return " << name << ";\n";
+                stream << get_indent() << "return " << name << ";\n";
                 indent_level--;
-                stream << indent() << "}\n";
+                stream << get_indent() << "}\n";
 
-                stream << indent() << "Halide::Func operator[](size_t i) const {\n";
+                stream << get_indent() << "Halide::Func operator[](size_t i) const {\n";
                 indent_level++;
-                stream << indent() << "return " << name << "[i];\n";
+                stream << get_indent() << "return " << name << "[i];\n";
                 indent_level--;
-                stream << indent() << "}\n";
+                stream << get_indent() << "}\n";
 
-                stream << indent() << "Halide::Func at(size_t i) const {\n";
+                stream << get_indent() << "Halide::Func at(size_t i) const {\n";
                 indent_level++;
-                stream << indent() << "return " << name << ".at(i);\n";
+                stream << get_indent() << "return " << name << ".at(i);\n";
                 indent_level--;
-                stream << indent() << "}\n";
+                stream << get_indent() << "}\n";
 
-                stream << indent() << "// operator operator()() overloads omitted because the sole Output is array-of-Func.\n";
+                stream << get_indent() << "// operator operator()() overloads omitted because the sole Output is array-of-Func.\n";
             } else {
                 // If there is exactly one output, add overloads
                 // for operator Func and operator().
-                stream << indent() << "operator Halide::Func() const {\n";
+                stream << get_indent() << "operator Halide::Func() const {\n";
                 indent_level++;
-                stream << indent() << "return " << name << ";\n";
+                stream << get_indent() << "return " << name << ";\n";
                 indent_level--;
-                stream << indent() << "}\n";
+                stream << get_indent() << "}\n";
 
                 stream << "\n";
-                stream << indent() << "template <typename... Args>\n";
-                stream << indent() << "Halide::FuncRef operator()(Args&&... args) const {\n";
+                stream << get_indent() << "template <typename... Args>\n";
+                stream << get_indent() << "Halide::FuncRef operator()(Args&&... args) const {\n";
                 indent_level++;
-                stream << indent() << "return " << name << "(std::forward<Args>(args)...);\n";
+                stream << get_indent() << "return " << name << "(std::forward<Args>(args)...);\n";
                 indent_level--;
-                stream << indent() << "}\n";
+                stream << get_indent() << "}\n";
 
                 stream << "\n";
-                stream << indent() << "template <typename ExprOrVar>\n";
-                stream << indent() << "Halide::FuncRef operator()(std::vector<ExprOrVar> args) const {\n";
+                stream << get_indent() << "template <typename ExprOrVar>\n";
+                stream << get_indent() << "Halide::FuncRef operator()(std::vector<ExprOrVar> args) const {\n";
                 indent_level++;
-                stream << indent() << "return " << name << "()(args);\n";
+                stream << get_indent() << "return " << name << "()(args);\n";
                 indent_level--;
-                stream << indent() << "}\n";
+                stream << get_indent() << "}\n";
             }
         } else {
-            stream << indent() << "// operator Func() and operator()() overloads omitted because the sole Output is not Func.\n";
+            stream << get_indent() << "// operator Func() and operator()() overloads omitted because the sole Output is not Func.\n";
         }
     }
 
     stream << "\n";
     if (all_outputs_are_func) {
-        stream << indent() << "Halide::Pipeline get_pipeline() const {\n";
+        stream << get_indent() << "Halide::Pipeline get_pipeline() const {\n";
         indent_level++;
-        stream << indent() << "return Halide::Pipeline(std::vector<Halide::Func>{\n";
+        stream << get_indent() << "return Halide::Pipeline(std::vector<Halide::Func>{\n";
         indent_level++;
         int commas = (int)out_info.size() - 1;
         for (const auto &out : out_info) {
-            stream << indent() << out.name << (commas-- ? "," : "") << "\n";
+            stream << get_indent() << out.name << (commas-- ? "," : "") << "\n";
         }
         indent_level--;
-        stream << indent() << "});\n";
+        stream << get_indent() << "});\n";
         indent_level--;
-        stream << indent() << "}\n";
+        stream << get_indent() << "}\n";
 
         stream << "\n";
-        stream << indent() << "Halide::Realization realize(std::vector<int32_t> sizes) {\n";
+        stream << get_indent() << "Halide::Realization realize(std::vector<int32_t> sizes) {\n";
         indent_level++;
-        stream << indent() << "return get_pipeline().realize(sizes, target);\n";
+        stream << get_indent() << "return get_pipeline().realize(sizes, target);\n";
         indent_level--;
-        stream << indent() << "}\n";
+        stream << get_indent() << "}\n";
 
         stream << "\n";
-        stream << indent() << "template <typename... Args, typename std::enable_if<Halide::Internal::NoRealizations<Args...>::value>::type * = nullptr>\n";
-        stream << indent() << "Halide::Realization realize(Args&&... args) {\n";
+        stream << get_indent() << "template <typename... Args, typename std::enable_if<Halide::Internal::NoRealizations<Args...>::value>::type * = nullptr>\n";
+        stream << get_indent() << "Halide::Realization realize(Args&&... args) {\n";
         indent_level++;
-        stream << indent() << "return get_pipeline().realize(std::forward<Args>(args)..., target);\n";
+        stream << get_indent() << "return get_pipeline().realize(std::forward<Args>(args)..., target);\n";
         indent_level--;
-        stream << indent() << "}\n";
+        stream << get_indent() << "}\n";
 
         stream << "\n";
-        stream << indent() << "void realize(Halide::Realization r) {\n";
+        stream << get_indent() << "void realize(Halide::Realization r) {\n";
         indent_level++;
-        stream << indent() << "get_pipeline().realize(r, target);\n";
+        stream << get_indent() << "get_pipeline().realize(r, target);\n";
         indent_level--;
-        stream << indent() << "}\n";
+        stream << get_indent() << "}\n";
     } else {
-        stream << indent() << "// get_pipeline() and realize() overloads omitted because some Outputs are not Func.\n";
+        stream << get_indent() << "// get_pipeline() and realize() overloads omitted because some Outputs are not Func.\n";
     }
 
     indent_level--;
-    stream << indent() << "};\n";
+    stream << get_indent() << "};\n";
     stream << "\n";
 
-    stream << indent() << "HALIDE_NO_USER_CODE_INLINE static Outputs generate(\n";
+    stream << get_indent() << "HALIDE_NO_USER_CODE_INLINE static Outputs generate(\n";
     indent_level++;
-    stream << indent() << "const GeneratorContext& context,\n";
-    stream << indent() << "const Inputs& inputs,\n";
-    stream << indent() << "const GeneratorParams& generator_params = GeneratorParams()\n";
+    stream << get_indent() << "const GeneratorContext& context,\n";
+    stream << get_indent() << "const Inputs& inputs,\n";
+    stream << get_indent() << "const GeneratorParams& generator_params = GeneratorParams()\n";
     indent_level--;
-    stream << indent() << ")\n";
-    stream << indent() << "{\n";
+    stream << get_indent() << ")\n";
+    stream << get_indent() << "{\n";
     indent_level++;
-    stream << indent() << "using Stub = Halide::Internal::GeneratorStub;\n";
-    stream << indent() << "Stub stub(\n";
+    stream << get_indent() << "using Stub = Halide::Internal::GeneratorStub;\n";
+    stream << get_indent() << "Stub stub(\n";
     indent_level++;
-    stream << indent() << "context,\n";
-    stream << indent() << "halide_register_generator::" << generator_registered_name << "_ns::factory,\n";
-    stream << indent() << "generator_params.to_generator_params_map(),\n";
-    stream << indent() << "{\n";
+    stream << get_indent() << "context,\n";
+    stream << get_indent() << "halide_register_generator::" << generator_registered_name << "_ns::factory,\n";
+    stream << get_indent() << "generator_params.to_generator_params_map(),\n";
+    stream << get_indent() << "{\n";
     indent_level++;
     for (size_t i = 0; i < inputs.size(); ++i) {
-        stream << indent() << "Stub::to_stub_input_vector(inputs." << inputs[i]->name() << ")";
+        stream << get_indent() << "Stub::to_stub_input_vector(inputs." << inputs[i]->name() << ")";
         stream << ",\n";
     }
     indent_level--;
-    stream << indent() << "}\n";
+    stream << get_indent() << "}\n";
     indent_level--;
-    stream << indent() << ");\n";
+    stream << get_indent() << ");\n";
 
-    stream << indent() << "return {\n";
+    stream << get_indent() << "return {\n";
     indent_level++;
     for (const auto &out : out_info) {
-        stream << indent() << "stub." << out.getter << ",\n";
+        stream << get_indent() << "stub." << out.getter << ",\n";
     }
-    stream << indent() << "stub.generator->get_target()\n";
+    stream << get_indent() << "stub.generator->get_target()\n";
     indent_level--;
-    stream << indent() << "};\n";
+    stream << get_indent() << "};\n";
     indent_level--;
-    stream << indent() << "}\n";
+    stream << get_indent() << "}\n";
     stream << "\n";
 
-    stream << indent() << "// overload to allow GeneratorContext-pointer\n";
-    stream << indent() << "inline static Outputs generate(\n";
+    stream << get_indent() << "// overload to allow GeneratorContext-pointer\n";
+    stream << get_indent() << "inline static Outputs generate(\n";
     indent_level++;
-    stream << indent() << "const GeneratorContext* context,\n";
-    stream << indent() << "const Inputs& inputs,\n";
-    stream << indent() << "const GeneratorParams& generator_params = GeneratorParams()\n";
+    stream << get_indent() << "const GeneratorContext* context,\n";
+    stream << get_indent() << "const Inputs& inputs,\n";
+    stream << get_indent() << "const GeneratorParams& generator_params = GeneratorParams()\n";
     indent_level--;
-    stream << indent() << ")\n";
-    stream << indent() << "{\n";
+    stream << get_indent() << ")\n";
+    stream << get_indent() << "{\n";
     indent_level++;
-    stream << indent() << "return generate(*context, inputs, generator_params);\n";
+    stream << get_indent() << "return generate(*context, inputs, generator_params);\n";
     indent_level--;
-    stream << indent() << "}\n";
+    stream << get_indent() << "}\n";
     stream << "\n";
 
-    stream << indent() << "// overload to allow Target instead of GeneratorContext.\n";
-    stream << indent() << "inline static Outputs generate(\n";
+    stream << get_indent() << "// overload to allow Target instead of GeneratorContext.\n";
+    stream << get_indent() << "inline static Outputs generate(\n";
     indent_level++;
-    stream << indent() << "const Target& target,\n";
-    stream << indent() << "const Inputs& inputs,\n";
-    stream << indent() << "const GeneratorParams& generator_params = GeneratorParams()\n";
+    stream << get_indent() << "const Target& target,\n";
+    stream << get_indent() << "const Inputs& inputs,\n";
+    stream << get_indent() << "const GeneratorParams& generator_params = GeneratorParams()\n";
     indent_level--;
-    stream << indent() << ")\n";
-    stream << indent() << "{\n";
+    stream << get_indent() << ")\n";
+    stream << get_indent() << "{\n";
     indent_level++;
-    stream << indent() << "return generate(Halide::GeneratorContext(target), inputs, generator_params);\n";
+    stream << get_indent() << "return generate(Halide::GeneratorContext(target), inputs, generator_params);\n";
     indent_level--;
-    stream << indent() << "}\n";
+    stream << get_indent() << "}\n";
     stream << "\n";
 
-    stream << indent() << class_name << "() = delete;\n";
+    stream << get_indent() << class_name << "() = delete;\n";
 
     indent_level--;
-    stream << indent() << "};\n";
+    stream << get_indent() << "};\n";
     stream << "\n";
 
     for (int i = (int)namespaces.size() - 1; i >= 0; --i) {
-        stream << indent() << "}  // namespace " << namespaces[i] << "\n";
+        stream << get_indent() << "}  // namespace " << namespaces[i] << "\n";
     }
     stream << "\n";
 
-    stream << indent() << "#endif  // " << guard.str() << "\n";
+    stream << get_indent() << "#endif  // " << guard.str() << "\n";
 }
 
 GeneratorStub::GeneratorStub(const GeneratorContext &context,
