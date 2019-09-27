@@ -329,7 +329,9 @@ std::ostream &operator<<(std::ostream &stream, const LinkageType &type) {
 }
 
 std::ostream &operator<<(std::ostream &stream, const Indentation &indentation) {
-    for (int i = 0; i < indentation.indent; i++) stream << ' ';
+    for (int i = 0; i < indentation.indent; i++) {
+        stream << ' ';
+    }
     return stream;
 }
 
