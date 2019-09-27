@@ -3156,6 +3156,37 @@ void CodeGen_LLVM::visit(const Call *op) {
         builder->setDefaultFPMathTag(strict_fp_math_md);
 
         value = builder->CreateFCmpUNO(a, a);
+    } else if (op->call_type == Call::PureExtern &&
+               (op->name == "is_inf_f32" || op->name == "is_inf_f64")) {
+        internal_assert(op->args.size() == 1);
+
+        IRBuilder<llvm::ConstantFolder, llvm::IRBuilderDefaultInserter>::FastMathFlagGuard guard(*builder);
+        llvm::FastMathFlags safe_flags;
+        safe_flags.clear();
+        builder->setFastMathFlags(safe_flags);
+        builder->setDefaultFPMathTag(strict_fp_math_md);
+
+        // isinf(e) -> (fabs(e) == infinity)
+        Expr e = op->args[0];
+        internal_assert(e.type().is_float());
+        Expr inf = e.type().max();
+        codegen(abs(e) == inf);
+    } else if (op->call_type == Call::PureExtern &&
+               (op->name == "is_finite_f32" || op->name == "is_finite_f64")) {
+        internal_assert(op->args.size() == 1);
+        internal_assert(op->args[0].type().is_float());
+
+        IRBuilder<llvm::ConstantFolder, llvm::IRBuilderDefaultInserter>::FastMathFlagGuard guard(*builder);
+        llvm::FastMathFlags safe_flags;
+        safe_flags.clear();
+        builder->setFastMathFlags(safe_flags);
+        builder->setDefaultFPMathTag(strict_fp_math_md);
+
+        // isfinite(e) -> (fabs(e) != infinity && !isnan(e)) -> (fabs(e) != infinity && e == e)
+        Expr e = op->args[0];
+        internal_assert(e.type().is_float());
+        Expr inf = e.type().max();
+        codegen(abs(e) != inf && e == e);
     } else {
         // It's an extern call.
 

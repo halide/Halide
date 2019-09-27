@@ -1806,6 +1806,47 @@ int main(int argc, char **argv) {
         check(Halide::is_nan(Expr(std::nan("1"))), const_true());
     }
 
+    // Check that is_inf() returns a boolean result for constant inputs
+    {
+        constexpr float inf32 = std::numeric_limits<float>::infinity();
+        constexpr double inf64 = std::numeric_limits<double>::infinity();
+
+        check(Halide::is_inf(cast<float16_t>(Expr(0.f))), const_false());
+        check(Halide::is_inf(Expr(0.f)), const_false());
+        check(Halide::is_inf(Expr(0.0)), const_false());
+
+        check(Halide::is_inf(Expr(cast<float16_t>(inf32))), const_true());
+        check(Halide::is_inf(Expr(inf32)), const_true());
+        check(Halide::is_inf(Expr(inf64)), const_true());
+
+        check(Halide::is_inf(Expr(cast<float16_t>(-inf32))), const_true());
+        check(Halide::is_inf(Expr(-inf32)), const_true());
+        check(Halide::is_inf(Expr(-inf64)), const_true());
+    }
+
+    // Check that is_finite() returns a boolean result for constant inputs
+    {
+        constexpr float inf32 = std::numeric_limits<float>::infinity();
+        constexpr double inf64 = std::numeric_limits<double>::infinity();
+
+        check(Halide::is_finite(cast<float16_t>(Expr(0.f))), const_true());
+        check(Halide::is_finite(Expr(0.f)), const_true());
+        check(Halide::is_finite(Expr(0.0)), const_true());
+
+        check(Halide::is_finite(Expr(cast<float16_t>(std::nanf("1")))), const_false());
+        check(Halide::is_finite(Expr(std::nanf("1"))), const_false());
+        check(Halide::is_finite(Expr(std::nan("1"))), const_false());
+
+        check(Halide::is_finite(Expr(cast<float16_t>(inf32))), const_false());
+        check(Halide::is_finite(Expr(inf32)), const_false());
+        check(Halide::is_finite(Expr(inf64)), const_false());
+
+        check(Halide::is_finite(Expr(cast<float16_t>(-inf32))), const_false());
+        check(Halide::is_finite(Expr(-inf32)), const_false());
+        check(Halide::is_finite(Expr(-inf64)), const_false());
+    }
+
+
     {
         using ConciseCasts::i32;
 
