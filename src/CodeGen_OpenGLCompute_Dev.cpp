@@ -159,9 +159,12 @@ void CodeGen_OpenGLCompute_Dev::CodeGen_OpenGLCompute_C::visit(const For *loop) 
             const IntImm *int_limit = loop->extent.as<IntImm>();
             user_assert(int_limit != nullptr) << "For OpenGLCompute workgroup size must be a constant integer.\n";
             int new_workgroup_size = int_limit->value;
-            user_assert(workgroup_size[index] == 0 || workgroup_size[index] == new_workgroup_size) << "OpenGLCompute requires all gpu kernels have same workgroup size, "
-                                                                                                      "but two different ones were encountered "
-                                                                                                   << workgroup_size[index] << " and " << new_workgroup_size << " in dimension " << index << ".\n";
+            user_assert(workgroup_size[index] == 0 ||
+                        workgroup_size[index] == new_workgroup_size)
+                << "OpenGLCompute requires all gpu kernels have same workgroup size, "
+                << "but two different ones were encountered " << workgroup_size[index]
+                << " and " << new_workgroup_size
+                << " in dimension " << index << ".\n";
             workgroup_size[index] = new_workgroup_size;
             debug(4) << "Workgroup size for index " << index << " is " << workgroup_size[index] << "\n";
         }
@@ -172,7 +175,8 @@ void CodeGen_OpenGLCompute_Dev::CodeGen_OpenGLCompute_C::visit(const For *loop) 
         loop->body.accept(this);
 
     } else {
-        user_assert(loop->for_type != ForType::Parallel) << "Cannot use parallel loops inside OpenGLCompute kernel\n";
+        user_assert(loop->for_type != ForType::Parallel)
+            << "Cannot use parallel loops inside OpenGLCompute kernel\n";
         CodeGen_C::visit(loop);
     }
 }
