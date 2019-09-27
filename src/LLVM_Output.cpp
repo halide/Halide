@@ -132,9 +132,7 @@ void write_symbol_table(std::ostream &out,
                         std::map<size_t, std::vector<PatchInfo>> *patchers) {
     internal_assert(!members.empty());
 
-    EmitU32 emit_u32 = windows_coff_format
-                           ? emit_little_endian_u32
-                           : emit_big_endian_u32;
+    EmitU32 emit_u32 = windows_coff_format ? emit_little_endian_u32 : emit_big_endian_u32;
 
     // Write zero for sizes/offsets that will be patched later.
     const size_t kPatchLater = 0;
@@ -531,9 +529,7 @@ void create_static_library(const std::vector<std::string> &src_files_in, const T
     }
 
     const bool write_symtab = true;
-    const auto kind = Internal::get_triple_for_target(target).isOSDarwin()
-                          ? llvm::object::Archive::K_BSD
-                          : llvm::object::Archive::K_GNU;
+    const auto kind = Internal::get_triple_for_target(target).isOSDarwin() ? llvm::object::Archive::K_BSD : llvm::object::Archive::K_GNU;
     const bool thin = false;
     auto result = llvm::writeArchive(dst_file, new_members,
                                      write_symtab, kind,

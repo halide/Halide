@@ -30,7 +30,7 @@
 #ifdef _WIN32
 #include <windows.h>
 #include <Objbase.h>  // needed for CoCreateGuid
-#include <Shlobj.h>  // needed for SHGetFolderPath
+#include <Shlobj.h>   // needed for SHGetFolderPath
 #endif
 #ifdef __APPLE__
 #define CAN_GET_RUNNING_PROGRAM_NAME

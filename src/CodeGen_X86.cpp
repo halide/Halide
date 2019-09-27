@@ -458,8 +458,8 @@ int CodeGen_X86::vector_lanes_for_slice(const Type &t) const {
     int vec_bits = t.lanes() * t.bits();
     int natural_vec_bits = target.natural_vector_size(t) * t.bits();
     int slice_bits = ((vec_bits > 256 && natural_vec_bits > 256) ? 512 :
-                      (vec_bits > 128 && natural_vec_bits > 128) ? 256 :
-                      128);
+                                                                   (vec_bits > 128 && natural_vec_bits > 128) ? 256 :
+                                                                                                                128);
     return slice_bits / t.bits();
 }
 

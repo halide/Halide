@@ -1847,8 +1847,7 @@ Func get_wrapper(Function wrapped_fn, string wrapper_name, const vector<Func> &f
                 << "Cannot define the wrapper since " << fs[i].name()
                 << " already has a wrapper while " << fs[0].name() << " doesn't \n";
         }
-        Func wrapper = clone ? create_clone_wrapper(wrapped_fn, wrapper_name)
-                             : create_in_wrapper(wrapped_fn, wrapper_name);
+        Func wrapper = clone ? create_clone_wrapper(wrapped_fn, wrapper_name) : create_in_wrapper(wrapped_fn, wrapper_name);
         Function wrapper_fn = wrapper.function();
         if (fs.empty()) {
             // Add global wrapper

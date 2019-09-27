@@ -129,10 +129,7 @@ public:
  * when the assertion is true.
  */
 #define _halide_internal_assertion(condition, flags) \
-    (condition)                                      \
-        ? (void)0                                    \
-        : ::Halide::Internal::Voidifier() &          \
-              ::Halide::Internal::ErrorReport(__FILE__, __LINE__, #condition, flags).ref()
+    (condition) ? (void)0 : ::Halide::Internal::Voidifier() & ::Halide::Internal::ErrorReport(__FILE__, __LINE__, #condition, flags).ref()
 
 #define internal_error Halide::Internal::ErrorReport(__FILE__, __LINE__, nullptr, 0)
 #define user_error Halide::Internal::ErrorReport(__FILE__, __LINE__, nullptr, Halide::Internal::ErrorReport::User)

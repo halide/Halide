@@ -432,8 +432,7 @@ Cost RegionCosts::stage_region_cost(string func, int stage, const DimBounds &bou
     }
 
     // If there is nothing to be inlined, use the pre-computed function cost.
-    Cost cost = inlines.empty() ? get_element(func_cost, func)[stage]
-                                : get_func_stage_cost(curr_f, stage, inlines);
+    Cost cost = inlines.empty() ? get_element(func_cost, func)[stage] : get_func_stage_cost(curr_f, stage, inlines);
     if (!cost.defined()) {
         return Cost();
     }

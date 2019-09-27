@@ -532,9 +532,8 @@ MangledNames get_mangled_names(const LoweredFunc &f, const Target &target) {
 
 llvm::FunctionType *CodeGen_LLVM::signature_to_type(const ExternSignature &signature) {
     internal_assert(void_t != nullptr && buffer_t_type != nullptr);
-    llvm::Type *ret_type = signature.is_void_return()
-                               ? void_t
-                               : llvm_type_of(upgrade_type_for_argument_passing(signature.ret_type()));
+    llvm::Type *ret_type =
+        signature.is_void_return() ? void_t : llvm_type_of(upgrade_type_for_argument_passing(signature.ret_type()));
     std::vector<llvm::Type *> llvm_arg_types;
     for (const Type &t : signature.arg_types()) {
         if (t == type_of<struct halide_buffer_t *>()) {

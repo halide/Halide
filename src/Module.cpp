@@ -647,9 +647,7 @@ void Module::compile(const std::map<Output, std::string> &output_files) const {
         auto *r = contents->auto_scheduler_results.get();
         std::string scheduler = r ? r->scheduler_name : "(None)";
         std::string machine_params = r ? r->machine_params_string : "(None)";
-        std::string body = r && !r->schedule_source.empty()
-                               ? r->schedule_source
-                               : "// No autoscheduler has been run for this Generator.\n";
+        std::string body = r && !r->schedule_source.empty() ? r->schedule_source : "// No autoscheduler has been run for this Generator.\n";
         emit_schedule_file(name(), {target()}, scheduler, machine_params, body, file);
     }
     if (contains(output_files, Output::featurization)) {
