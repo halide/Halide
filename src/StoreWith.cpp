@@ -257,8 +257,8 @@ struct System {
                 add_term(lt->a < min_b->b);
             } else if (const Max *max_a = lt->a.as<Max>()) {
                 // max(x, y) <= z -> x <= z && y <= z
-                add_term(max_a->a < le->b);
-                add_term(max_a->b < le->b);
+                add_term(max_a->a < lt->b);
+                add_term(max_a->b < lt->b);
             } else if (is_const(lt->a) && vb) {
                 simplifier->learn_true(e);
             } else if (is_const(lt->b) && va) {
@@ -402,6 +402,26 @@ struct System {
         return c;
     }
 
+    Expr exact_divide(const Expr &e, const std::string &v) {
+        if (const Variable *var = e.as<Variable>()) {
+            if (var->name == v) {
+                return make_one(e.type());
+            } else {
+                return Expr();
+            }
+        } else if (const Mul *mul = e.as<Mul>()) {
+            Expr a = exact_divide(mul->a, v);
+            if (a.defined()) {
+                return a * mul->b;
+            }
+            Expr b = exact_divide(mul->b, v);
+            if (b.defined()) {
+                return mul->a * b;
+            }
+        }
+        return Expr();
+    }
+
     void make_children(std::deque<std::unique_ptr<System>> &result) {
 
         size_t old_size = result.size();
@@ -470,6 +490,65 @@ struct System {
                 new_system->finalize();
                 result.emplace_back(std::move(new_system));
                 return;
+            }
+        }
+
+        // Divide through by common factors
+        for (int i = 0; i < (int)equalities.size(); i++) {
+            std::map<std::string, int> factors;
+            for (auto &p : equalities[i].terms) {
+                vector<Expr> pending { p.first };
+                while (!pending.empty()) {
+                    Expr next = pending.back();
+                    pending.pop_back();
+                    if (const Mul *m = next.as<Mul>()) {
+                        pending.push_back(m->a);
+                        pending.push_back(m->b);
+                    } else if (const Variable *v = next.as<Variable>()) {
+                        factors[v->name]++;
+                    }
+                }
+            }
+            for (const auto &f : factors) {
+                /*
+                if (f.second == 1) {
+                    // Not a repeated factor
+                    continue;
+                }
+                */
+                debug(0) << "Attempting to eliminate: " << f.first << "\n";
+                Expr factor_expr = Variable::make(Int(32), f.first);
+                Expr terms_with_factor = 0;
+                Expr terms_without_factor = 0;
+                for (auto &p : equalities[i].terms) {
+                    Expr e = exact_divide(p.first, f.first);
+                    if (e.defined()) {
+                        terms_with_factor += e * p.second;
+                    } else {
+                        terms_without_factor += p.first * p.second;
+                    }
+                }
+                terms_with_factor = simplifier->mutate(terms_with_factor, nullptr);
+                debug(0) << "With/without: " << terms_with_factor << ", " << terms_without_factor << "\n";
+                if (is_zero(simplifier->mutate(terms_without_factor == 0, nullptr))) {
+                    // If the sum of the terms that do not reference
+                    // the factor can't be zero, then the factor can't
+                    // be zero either, so it's safe to divide
+                    // by. Furthermore, this implies that the terms
+                    // with the factor can't sum to zero.
+                    std::unique_ptr<System> new_system(new System(simplifier, Expr(), id));
+                    if (non_linear_term.defined()) {
+                        new_system->add_term(non_linear_term);
+                    }
+                    for (int j = 0; j < (int)equalities.size(); j++) {
+                        if (i != j) {
+                            new_system->add_term(equalities[j].to_expr());
+                        }
+                    }
+                    new_system->add_term(terms_with_factor != 0);
+                    new_system->finalize();
+                    result.emplace_back(std::move(new_system));
+                }
             }
         }
 
@@ -819,6 +898,7 @@ bool can_disprove(Expr e, int beam_size, std::set<Expr, IRDeepCompare> *implicat
 
     if (implications) {
         Scope<Interval> scope;
+        map<string, Expr> subs;
         const auto &info = simplifier.bounds_and_alignment_info;
         for (auto it = info.cbegin(); it != info.cend(); ++it){
             if (starts_with(it.name(), "c")) {
@@ -828,6 +908,21 @@ bool can_disprove(Expr e, int beam_size, std::set<Expr, IRDeepCompare> *implicat
                 }
                 if (it.value().max_defined) {
                     consider_implication(v <= (int)it.value().max);
+                }
+                if (it.value().min_defined || it.value().max_defined) {
+                    // We need a way to communicate the bounds of this to
+                    // the bounds machinery below without having the
+                    // bounds machinery eliminate this variable. Wrap it
+                    // in a clamp.
+                    Expr replacement = v;
+                    if (it.value().min_defined) {
+                        // TODO: assert min/max representable as int32
+                        replacement = max(replacement, (int)it.value().min);
+                    }
+                    if (it.value().max_defined) {
+                        replacement = min(replacement, (int)it.value().max);
+                    }
+                    subs[it.name()] = replacement;
                 }
             } else {
                 Interval i = Interval::everything();
@@ -844,6 +939,7 @@ bool can_disprove(Expr e, int beam_size, std::set<Expr, IRDeepCompare> *implicat
 
         // Now eliminate all the k's
         for (Expr m : local_implications) {
+            m = substitute(subs, m);
             debug(0) << m << " -> ";
             if (const EQ *eq = m.as<EQ>()) {
                 Expr a = eq->a, b = eq->b;
@@ -1279,6 +1375,23 @@ class BreakIntoConvexPieces : public IRMutator {
     IRMatcher::Wild<0> x;
     IRMatcher::Wild<1> y;
     IRMatcher::Wild<2> z;
+    IRMatcher::Wild<3> w;
+
+    enum class VarSign {
+        Positive,
+        NonNegative,
+        NonPositive,
+        Negative
+    };
+
+    Scope<VarSign> var_sign;
+
+    int indent_ = 0;
+    void indent() {
+        for (int i = 0; i < indent_; i++) {
+            debug(0) << ' ';
+        }
+    }
 
     Expr visit(const Add *op) override {
         Expr a = mutate(op->a);
@@ -1286,7 +1399,11 @@ class BreakIntoConvexPieces : public IRMutator {
         auto rewrite = IRMatcher::rewriter(IRMatcher::add(a, b), op->type, op->type);
 
         if (rewrite(min(x, y) + z, min(x + z, y + z)) ||
-            rewrite(z + min(x, y), min(z + x, z + y))) {
+            rewrite(z + min(x, y), min(z + x, z + y)) ||
+            rewrite(max(x, y) + z, max(x + z, y + z)) ||
+            rewrite(z + max(x, y), max(z + x, z + y)) ||
+            rewrite(select(x, y, z) + w, select(x, y + w, z + w)) ||
+            rewrite(w + select(x, y, z), select(x, w + y, w + z))) {
             return mutate(rewrite.result);
         } else {
             return a + b;
@@ -1299,7 +1416,12 @@ class BreakIntoConvexPieces : public IRMutator {
         auto rewrite = IRMatcher::rewriter(IRMatcher::sub(a, b), op->type, op->type);
 
         if (rewrite(min(x, y) - z, min(x - z, y - z)) ||
-            rewrite(z - min(x, y), min(z - x, z - y))) {
+            rewrite(z - min(x, y), max(z - x, z - y)) ||
+            rewrite(max(x, y) - z, max(x - z, y - z)) ||
+            rewrite(z - max(x, y), min(z - x, z - y)) ||
+            rewrite(select(x, y, z) - w, select(x, y - w, z - w)) ||
+            rewrite(w - select(x, y, z), select(x, w - y, w - z)) ||
+            false) {
             return mutate(rewrite.result);
         } else {
             return a - b;
@@ -1307,12 +1429,30 @@ class BreakIntoConvexPieces : public IRMutator {
     }
 
     Expr visit(const Mul *op) override {
+        debug(0) << "Mul\n";
         Expr a = mutate(op->a);
         Expr b = mutate(op->b);
         auto rewrite = IRMatcher::rewriter(IRMatcher::mul(a, b), op->type, op->type);
+        const Variable *var_b = b.as<Variable>();
 
-        if (rewrite(min(x, y) * z, min(x * z, y * z)) ||
-            rewrite(z * min(x, y), min(z * x, z * y))) {
+        if (false && var_b && !var_sign.contains(var_b->name)) {
+            indent();
+            debug(0) << "Sign of " << b << " is unknown. Expanding into cases...\n";
+            Expr zero = make_zero(b.type());
+            // Break it into two cases with known sign
+            Expr prod = a * b;
+            return mutate(select(zero < b, prod,
+                                 b < zero, prod,
+                                 zero));
+        } else if (rewrite(min(x, y) * z, select(x < y, x * z, y * z)) ||
+                   rewrite(z * min(x, y), select(x < y, z * x, z * y)) ||
+                   rewrite(max(x, y) * z, select(y < x, x * z, y * z)) ||
+                   rewrite(z * max(x, y), select(y < x, z * x, z * y)) ||
+                   rewrite(select(x, y, z) * w, select(x, y * w, z * w)) ||
+                   rewrite(w * select(x, y, z), select(x, w * y, w * z)) ||
+                   rewrite((x + y) * z, x * z + y * z) ||
+                   rewrite(z * (x + y), z * x + z * y) ||
+                   false) {
             return mutate(rewrite.result);
         } else {
             return a * b;
@@ -1320,12 +1460,27 @@ class BreakIntoConvexPieces : public IRMutator {
     }
 
     Expr visit(const Div *op) override {
+        debug(0) << "Div\n";
         Expr a = mutate(op->a);
         Expr b = mutate(op->b);
         auto rewrite = IRMatcher::rewriter(IRMatcher::div(a, b), op->type, op->type);
+        const Variable *var_b = b.as<Variable>();
 
-        if (rewrite(min(x, y) / z, min(x / z, y / z)) ||
-            rewrite(z / min(x, y), min(z / x, z / y))) {
+        if (false && var_b && !var_sign.contains(var_b->name)) {
+            indent();
+            debug(0) << "Sign of " << b << " is unknown. Expanding into cases...\n";
+            Expr zero = make_zero(b.type());
+            // Break it into two cases with known sign
+            Expr ratio = a / b;
+            return mutate(select(zero < b, ratio,
+                                 b < zero, ratio,
+                                 zero)); // This case is in fact unreachable
+        } else if (rewrite(min(x, y) / z, select(x < y, x / z, y / z)) ||
+            rewrite(z / min(x, y), select(x < y, z / x, z / y)) ||
+            rewrite(max(x, y) / z, select(y < x, x / z, y / z)) ||
+            rewrite(z / max(x, y), select(y < x, z / x, z / y)) ||
+            rewrite(select(x, y, z) / w, select(x, y / w, z / w)) ||
+            rewrite(w / select(x, y, z), select(x, w / y, w / z))) {
             return mutate(rewrite.result);
         } else {
             return a / b;
@@ -1333,12 +1488,20 @@ class BreakIntoConvexPieces : public IRMutator {
     }
 
     Expr visit(const LT *op) override {
+        debug(0) << "LT\n";
         Expr a = mutate(op->a);
         Expr b = mutate(op->b);
         auto rewrite = IRMatcher::rewriter(IRMatcher::lt(a, b), op->type, a.type());
 
         if (rewrite(min(x, y) < z, (x < z) || (y < z)) ||
-            rewrite(z < min(x, y), (z < x) && (z < y))) {
+            rewrite(z < min(x, y), (z < x) && (z < y)) ||
+            rewrite(max(x, y) < z, (x < z) && (y < z)) ||
+            rewrite(z < max(x, y), (z < x) || (z < y)) ||
+            //            rewrite(select(x, y, z) < w, (x && (y < w)) || (!x && (z < w))) ||
+            //rewrite(w < select(x, y, z), (x && (w < y)) || (!x && (w < z)))) {
+            rewrite(select(x, y, z) < w, select(x, y < w, z < w)) ||
+            rewrite(w < select(x, y, z), select(x, w < y, w < z)) ||
+            false) {
             return mutate(rewrite.result);
         } else {
             return a < b;
@@ -1351,7 +1514,14 @@ class BreakIntoConvexPieces : public IRMutator {
         auto rewrite = IRMatcher::rewriter(IRMatcher::le(a, b), op->type, a.type());
 
         if (rewrite(min(x, y) <= z, (x <= z) || (y <= z)) ||
-            rewrite(z <= min(x, y), (z <= x) && (z <= y))) {
+            rewrite(z <= min(x, y), (z <= x) && (z <= y)) ||
+            rewrite(max(x, y) <= z, (x <= z) && (y <= z)) ||
+            rewrite(z <= max(x, y), (z <= x) || (z <= y)) ||
+            //            rewrite(select(x, y, z) <= w, x && (y <= w) || !x && (z <= w)) ||
+            //            rewrite(w <= select(x, y, z), x && (w <= y) || !x && (w <= z)) ||
+            rewrite(select(x, y, z) <= w, select(x, y <= w, z <= w)) ||
+            rewrite(w <= select(x, y, z), select(x, w <= y, w <= z)) ||
+            false) {
             return mutate(rewrite.result);
         } else {
             return a <= b;
@@ -1362,24 +1532,112 @@ class BreakIntoConvexPieces : public IRMutator {
         if (!op->a.type().is_bool()) {
             return mutate((op->a < op->b) || (op->b < op->a));
         } else {
+            return mutate((op->a && !op->b) || (!op->a && op->b));
+        }
+    }
+
+    Expr visit(const Select *op) override {
+        indent();
+        debug(0) << "Mutating select: " << Expr(op) << "\n";
+        indent_++;
+
+        if (const LT *lt = op->condition.as<LT>()) {
+            const Variable *var_a = lt->a.as<Variable>();
+            const Variable *var_b = lt->b.as<Variable>();
+            if (is_zero(lt->a) && var_b) {
+                if (var_sign.contains(var_b->name)) {
+                    auto s = var_sign.get(var_b->name);
+                    if (s == VarSign::Positive) {
+                        return mutate(op->true_value);
+                    } else if (s == VarSign::Negative ||
+                               s == VarSign::NonPositive) {
+                        return mutate(op->false_value);
+                    }
+                }
+                indent();
+                debug(0) << "A\n";
+                Expr cond = mutate(op->condition);
+                Expr true_value, false_value;
+                {
+                indent();
+                    debug(0) << "Assuming " << lt->b << " positive\n";
+                    ScopedBinding<VarSign> bind(var_sign, var_b->name, VarSign::Positive);
+                    true_value = mutate(op->true_value);
+                }
+                {
+                indent();
+                    debug(0) << "Assuming " << lt->b << " non-positive\n";
+                    ScopedBinding<VarSign> bind(var_sign, var_b->name, VarSign::NonPositive);
+                    false_value = mutate(op->false_value);
+                }
+                indent_--;
+                indent();
+                debug(0) << "Returning\n";
+                return select(cond, true_value, false_value);
+            } else if (is_zero(lt->b) && var_a) {
+                if (var_sign.contains(var_a->name)) {
+                    auto s = var_sign.get(var_a->name);
+                    if (s == VarSign::Negative) {
+                        return mutate(op->true_value);
+                    } else if (s == VarSign::Positive ||
+                               s == VarSign::NonNegative) {
+                        return mutate(op->false_value);
+                    }
+                }
+                indent();
+                debug(0) << "B\n";
+                Expr cond = mutate(op->condition);
+                Expr true_value, false_value;
+                {
+                    ScopedBinding<VarSign> bind(var_sign, var_a->name, VarSign::Negative);
+                    true_value = mutate(op->true_value);
+                }
+                {
+                    ScopedBinding<VarSign> bind(var_sign, var_a->name, VarSign::NonNegative);
+                    false_value = mutate(op->false_value);
+                }
+                indent_--;
+                return select(cond, true_value, false_value);
+            }
+        }
+        indent_--;
+        return IRMutator::visit(op);
+    }
+
+};
+
+class ToDNF : public IRMutator {
+    using IRMutator::visit;
+    Expr visit(const Select *op) override {
+        if (!op->type.is_bool()) {
+            return IRMutator::visit(op);
+        }
+        return mutate(op->condition && op->true_value ||
+                      !op->condition && op->false_value);
+    }
+
+    Expr visit(const And *op) override {
+        Expr a = mutate(op->a);
+        Expr b = mutate(op->b);
+        if (const Or *or_a = a.as<Or>()) {
+            return mutate(or_a->a && b || or_a->b && b);
+        } else if (const Or *or_b = b.as<Or>()) {
+            return mutate(a && or_b->a || a && or_b->b);
+        } else {
             return IRMutator::visit(op);
         }
     }
 
-    // Also move ors outwards
-    Expr visit(const And *op) override {
+    Expr visit(const Not *op) override {
         Expr a = mutate(op->a);
-        Expr b = mutate(op->b);
-        auto rewrite = IRMatcher::rewriter(IRMatcher::and_op(a, b), op->type, op->type);
-
-        if (rewrite((x || y) && z, (x && z) || (y && z)) ||
-            rewrite(z && (x || y), (z && x) || (z && y))) {
-            return mutate(rewrite.result);
+        if (const And *and_a = a.as<And>()) {
+            return mutate(!and_a->a || !and_a->b);
+        } else if (const Or *or_a = a.as<Or>()) {
+            return mutate(!or_a->a && !or_a->b);
         } else {
-            return a && b;
+            return IRMutator::visit(op);
         }
     }
-
 };
 
 class ConvertRoundingToMod : public IRMutator {
@@ -1408,8 +1666,10 @@ bool can_disprove_nonconvex(Expr e, int beam_size, Expr *implication = nullptr) 
     e = simplify(e);
 
     // Break it into convex pieces, and disprove every piece
+    debug(0) << "Simplified: " << e << "\n";
     e = BreakIntoConvexPieces().mutate(e);
-
+    debug(0) << "Moved boolean operators outermost: " << e << "\n";
+    e = ToDNF().mutate(e);
     //e = ConvertRoundingToMod().mutate(e);
 
     vector<Expr> pieces, pending;
@@ -1478,7 +1738,7 @@ Stmt lower_store_with(const Stmt &s, const vector<Function> &outputs, const map<
     debug(3) << "Checking legality of store_with on: " << s << "\n";
 
     {
-        Var v0, v1, v2;
+        Var v0, v1, v2, v3;
         Var c0("c0"), c1("c1"), c2("c2"), c3("c3"), c4("c4"), c5("c5"), c6("c6"), c7("c7"), c8("c8"), c9("c9"), c10("c10"), c11("c11"), c12("c12"), c13("c13"), c14("c14");
         /*
           Expr e = ((min(((((v0 + 13)/4)*4) + v1), (v2 + 10)) + 4) > min(((((min((((v0 + 17)/4)*4), (min((v2 - v1), v0) + 14)) + 3)/4)*4) + v1), (v2 + 14)));
@@ -1517,16 +1777,52 @@ Stmt lower_store_with(const Stmt &s, const vector<Function> &outputs, const map<
         */
 
         // Expr assumption = c2 >= 1;
-        Expr assumption = c2 != 0;
-        Expr to_prove = ((min(((((v0 + c0)/c2)*c2) + v1), (v2 + c1)) + c3) <= min(((((min((((v0 + c4)/c2)*c2), (min((v2 - v1), v0) + c5)) + c6)/c2)*c2) + v1), (v2 + c7)));
+        //Expr assumption = c2 != 0;
+        //Expr to_prove = ((min(((((v0 + c0)/c2)*c2) + v1), (v2 + c1)) + c3) <= min(((((min((((v0 + c4)/c2)*c2), (min((v2 - v1), v0) + c5)) + c6)/c2)*c2) + v1), (v2 + c7)));
         /*
         Expr assumption = const_true();
         Expr to_prove = ((min(((((v0 + 13)/4)*4) + v1), (v2 + 10)) + 4) <= min(((((min((((v0 + 17)/4)*4), (min((v2 - v1), v0) + 14)) + 3)/4)*4) + v1), (v2 + 14)));
         */
+
         /*
         Expr to_prove = v0 * c0 - v1 * c1 == (v0 * (c0 / c1) - v1) * c1;
-        Expr assumption = c1 != 0;
+        Expr assumption = const_true(); //c1 != 0;
         */
+
+        /*
+        Expr to_prove = ((v0 * c0 + v1) % c1) == v1 % c1;
+        Expr assumption = c1 > 0; //const_true();
+        */
+        Expr x = v0, y = v1, z = v2, w = v3;
+        pair<Expr, Expr> exprs[] =
+            {
+                /*
+                {min((((x + c0)/c1)*c1), (x + c2)) == (x + c2), c1 > 0},
+                {min((((x + c0)/c1)*c1), (x + c2)) == (x + c2), c1 < 0},
+                {((x + ((y + c0)/c1)) <= ((y + c2)/c1)) == (x < c3), c1 > 0},
+                {((x + ((y + c0)/c1)) <= ((y + c2)/c1)) == (x < c3), c1 < 0},
+                {((x + ((y + c0)/c1)) <= ((y + c2)/c1)) == (x <= c2), c1 > 0},
+                {((x + ((y + c0)/c1)) <= ((y + c2)/c1)) == (x <= c2), c1 < 0},
+                {((x + (y*c0)) <= (((y*c1) + z)*c1)) == (x <= (z*c1)), const_true()},
+                {(((x*c0) + y) <= (((x*c1) - z)*c1)) == (y <= (z*c2)), const_true()},
+                {(((x - y)/c0) + (((y - x) + c1)/c0)) == c2, c0 > 0},
+                {(((x - y)/c0) + (((y - x) + c1)/c0)) == c2, c0 < 0},
+                {((((x*c0) + c1)/c2) <= max(((x*c0)/c2), y)), c2 > 0},
+                {((((x*c0) + c1)/c2) <= max(((x*c0)/c2), y)), c2 < 0},
+                */
+
+                {(((min(x, y)*c0) + c1) <= min((x*c0), c2)) == (min(x, y) < c2), c0 > 0},
+                /*
+                {(((min(x, y)*c0) + c1) <= min((x*c0), c2)) == (min(x, y) < c2), c0 < 0},
+                {((min((x*c0), c1)*y) <= min((x*c2), c3)) == (c4 <= y), const_true()},
+                */
+                //{((min((min(x, c0) + y), c1) + c2) <= min(y, c3)), const_true()},
+            };
+
+        Expr assumption = const_true();
+        for (auto p : exprs) {
+            Expr to_prove = p.first;
+            assumption = p.second;
 
         assumption = simplify(assumption);
         debug(0) << can_disprove_nonconvex(assumption && !to_prove, 1024*4, &m);
@@ -1644,7 +1940,7 @@ Stmt lower_store_with(const Stmt &s, const vector<Function> &outputs, const map<
 
         debug(0) << "Precondition " << precondition << "\n"
                  << "implies " << to_prove << "\n";
-
+    }
         /*
         ((v0 + c0) / c1) * c1 < ((v0 + c2) / c3) * c3;
 
