@@ -21,7 +21,7 @@ static string sanitize_name(const string &name) {
         } else if (!isalnum(name[i])) {
             oss << "_" << (int)name[i];
         } else {
-          oss << name[i];
+            oss << name[i];
         }
     }
     return oss.str();
@@ -36,7 +36,7 @@ static const string remove_namespaces(const string &name) {
     }
 }
 
-static bool has_legacy_buffers(const LoweredFunc& func) {
+static bool has_legacy_buffers(const LoweredFunc &func) {
     const std::vector<LoweredArgument> &args = func.args;
     auto legacy_buffer_type = type_of<buffer_t *>().handle_type;
     for (size_t i = 0; i < args.size(); i++) {
@@ -47,36 +47,36 @@ static bool has_legacy_buffers(const LoweredFunc& func) {
     return false;
 }
 
-static bool can_convert(const LoweredArgument* arg) {
-  if (arg->type.is_handle()) {
-      if (arg->name == "__user_context") {
-          /* __user_context is a void* pointer to a user supplied memory region.
+static bool can_convert(const LoweredArgument *arg) {
+    if (arg->type.is_handle()) {
+        if (arg->name == "__user_context") {
+            /* __user_context is a void* pointer to a user supplied memory region.
            * We allow the Python callee to pass PyObject* pointers to that. */
-          return true;
-      } else {
-          return false;
-      }
-  }
-  if (arg->type.is_vector()) {
-      return false;
-  }
-  if (arg->type.is_float() && arg->type.bits() != 32 && arg->type.bits() != 64) {
-      return false;
-  }
-  if (arg->is_buffer() && arg->type.bits() == 1) {
-      // The Python buffer API doesn't support bit arrays.
-      return false;
-  }
-  if ((arg->type.is_int() || arg->type.is_uint()) &&
-      arg->type.bits() != 1 &&
-      arg->type.bits() != 8 && arg->type.bits() != 16 &&
-      arg->type.bits() != 32 && arg->type.bits() != 64) {
-      return false;
-  }
-  return true;
+            return true;
+        } else {
+            return false;
+        }
+    }
+    if (arg->type.is_vector()) {
+        return false;
+    }
+    if (arg->type.is_float() && arg->type.bits() != 32 && arg->type.bits() != 64) {
+        return false;
+    }
+    if (arg->is_buffer() && arg->type.bits() == 1) {
+        // The Python buffer API doesn't support bit arrays.
+        return false;
+    }
+    if ((arg->type.is_int() || arg->type.is_uint()) &&
+        arg->type.bits() != 1 &&
+        arg->type.bits() != 8 && arg->type.bits() != 16 &&
+        arg->type.bits() != 32 && arg->type.bits() != 64) {
+        return false;
+    }
+    return true;
 }
 
-std::pair<string, string> print_type(const LoweredArgument* arg) {
+std::pair<string, string> print_type(const LoweredArgument *arg) {
     // Excluded by can_convert() above:
     assert(!arg->type.is_vector());
 
@@ -106,7 +106,7 @@ std::pair<string, string> print_type(const LoweredArgument* arg) {
     }
 }
 
-void PythonExtensionGen::convert_buffer(string name, const LoweredArgument* arg) {
+void PythonExtensionGen::convert_buffer(string name, const LoweredArgument *arg) {
     assert(arg->is_buffer());
     assert(arg->dimensions);
     dest << "    halide_buffer_t buffer_" << name << ";\n";
@@ -123,7 +123,8 @@ void PythonExtensionGen::convert_buffer(string name, const LoweredArgument* arg)
     dest << "    }\n";
 }
 
-PythonExtensionGen::PythonExtensionGen(std::ostream &dest) : dest(dest) {
+PythonExtensionGen::PythonExtensionGen(std::ostream &dest)
+    : dest(dest) {
 }
 
 void PythonExtensionGen::compile(const Module &module) {
@@ -368,5 +369,5 @@ void PythonExtensionGen::compile(const LoweredFunc &f) {
     dest << "}\n";
 }
 
-}
-}
+}  // namespace Internal
+}  // namespace Halide

@@ -13,7 +13,7 @@ uint64_t max_uint(int bits) {
 }
 
 int64_t max_int(int bits) {
-    int64_t  max_val = 0x7fffffffffffffffLL;
+    int64_t max_val = 0x7fffffffffffffffLL;
     return max_val >> (64 - bits);
 }
 
@@ -21,7 +21,7 @@ int64_t min_int(int bits) {
     return -max_int(bits) - 1;
 }
 
-}
+}  // namespace
 
 /** Return an expression which is the maximum value of this type */
 Halide::Expr Type::max() const {
@@ -221,17 +221,17 @@ bool Type::same_handle_type(const Type &other) const {
     }
 
     if (first == nullptr) {
-        first = halide_handle_traits<void*>::type_info();
+        first = halide_handle_traits<void *>::type_info();
     }
     if (second == nullptr) {
-        second = halide_handle_traits<void*>::type_info();
+        second = halide_handle_traits<void *>::type_info();
     }
 
     return first->inner_name == second->inner_name &&
-        first->namespaces == second->namespaces &&
-        first->enclosing_types == second->enclosing_types &&
-        first->cpp_type_modifiers == second->cpp_type_modifiers &&
-        first->reference_type == second->reference_type;
+           first->namespaces == second->namespaces &&
+           first->enclosing_types == second->enclosing_types &&
+           first->cpp_type_modifiers == second->cpp_type_modifiers &&
+           first->reference_type == second->reference_type;
 }
 
 std::string type_to_c_type(Type type, bool include_space, bool c_plus_plus) {
@@ -320,7 +320,10 @@ std::string type_to_c_type(Type type, bool include_space, bool c_plus_plus) {
                 oss << "bool";
             }
             break;
-        case 8: case 16: case 32: case 64:
+        case 8:
+        case 16:
+        case 32:
+        case 64:
             if (type.is_uint()) {
                 oss << 'u';
             }

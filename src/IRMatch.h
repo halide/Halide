@@ -190,9 +190,9 @@ HALIDE_ALWAYS_INLINE
 bool equal(const BaseExprNode &a, const BaseExprNode &b) noexcept {
     // Early out
     return (&a == &b) ||
-        ((a.type == b.type) &&
-         (a.node_type == b.node_type) &&
-         equal_helper(a, b));
+           ((a.type == b.type) &&
+            (a.node_type == b.node_type) &&
+            equal_helper(a, b));
 }
 
 // A pattern that matches a specific expression
@@ -1368,7 +1368,7 @@ struct Intrin {
         if (i + 1 < sizeof...(Args)) {
             s << ", ";
         }
-        print_args<i+1>(0, s);
+        print_args<i + 1>(0, s);
     }
 
     template<int i>
@@ -1395,7 +1395,9 @@ struct Intrin {
     constexpr static bool foldable = false;
 
     HALIDE_ALWAYS_INLINE
-    Intrin(Call::IntrinsicOp intrin, Args... args) noexcept : intrin(intrin), args(args...) {}
+    Intrin(Call::IntrinsicOp intrin, Args... args) noexcept
+        : intrin(intrin), args(args...) {
+    }
 };
 
 template<typename... Args>
@@ -1449,7 +1451,9 @@ struct NotOp {
         val.u.u64 = ~val.u.u64;
         val.u.u64 &= 1;
         ty.lanes |= (((int)ty.code == (int)halide_type_float) ||
-                     ((int)ty.code == (int)halide_type_bfloat)) ? MatcherState::indeterminate_expression : 0;
+                     ((int)ty.code == (int)halide_type_bfloat))
+                        ? MatcherState::indeterminate_expression
+                        : 0;
     }
 };
 
@@ -2072,38 +2076,32 @@ void fuzz_test_rule(Before &&before, After &&after, Predicate &&pred,
         for (int i = 0; i < max_wild; i++) {
             // Bind all the exprs and constants
             switch (wildcard_type.code) {
-            case halide_type_uint:
-                {
-                    // Normalize to the type's range by adding zero
-                    uint64_t val = constant_fold_bin_op<Add>(wildcard_type, (uint64_t)rng() >> shift, 0);
-                    state.set_bound_const(i, val, wildcard_type);
-                    val = constant_fold_bin_op<Add>(wildcard_type, (uint64_t)rng() >> shift, 0);
-                    exprs[i] = make_const(wildcard_type, val);
-                    state.set_binding(i, *exprs[i].get());
-                }
-                break;
-            case halide_type_int:
-                {
-                    int64_t val = constant_fold_bin_op<Add>(wildcard_type, (int64_t)rng() >> shift, 0);
-                    state.set_bound_const(i, val, wildcard_type);
-                    val = constant_fold_bin_op<Add>(wildcard_type, (int64_t)rng() >> shift, 0);
-                    exprs[i] = make_const(wildcard_type, val);
-                }
-                break;
+            case halide_type_uint: {
+                // Normalize to the type's range by adding zero
+                uint64_t val = constant_fold_bin_op<Add>(wildcard_type, (uint64_t)rng() >> shift, 0);
+                state.set_bound_const(i, val, wildcard_type);
+                val = constant_fold_bin_op<Add>(wildcard_type, (uint64_t)rng() >> shift, 0);
+                exprs[i] = make_const(wildcard_type, val);
+                state.set_binding(i, *exprs[i].get());
+            } break;
+            case halide_type_int: {
+                int64_t val = constant_fold_bin_op<Add>(wildcard_type, (int64_t)rng() >> shift, 0);
+                state.set_bound_const(i, val, wildcard_type);
+                val = constant_fold_bin_op<Add>(wildcard_type, (int64_t)rng() >> shift, 0);
+                exprs[i] = make_const(wildcard_type, val);
+            } break;
             case halide_type_float:
-            case halide_type_bfloat:
-                {
-                    // Use a very narrow range of precise floats, so
-                    // that none of the rules a human is likely to
-                    // write have instabilities.
-                    double val = ((int64_t)(rng() & 15) - 8) / 2.0;
-                    state.set_bound_const(i, val, wildcard_type);
-                    val = ((int64_t)(rng() & 15) - 8) / 2.0;
-                    exprs[i] = make_const(wildcard_type, val);
-                }
-                break;
+            case halide_type_bfloat: {
+                // Use a very narrow range of precise floats, so
+                // that none of the rules a human is likely to
+                // write have instabilities.
+                double val = ((int64_t)(rng() & 15) - 8) / 2.0;
+                state.set_bound_const(i, val, wildcard_type);
+                val = ((int64_t)(rng() & 15) - 8) / 2.0;
+                exprs[i] = make_const(wildcard_type, val);
+            } break;
             default:
-                return; // Don't care about handles
+                return;  // Don't care about handles
             }
             state.set_binding(i, *exprs[i].get());
         }
@@ -2392,14 +2390,13 @@ auto rewriter(const Expr &e, halide_type_t wildcard_type) noexcept -> Rewriter<d
     return {pattern_arg(e), e.type(), wildcard_type};
 }
 
-
 HALIDE_ALWAYS_INLINE
 auto rewriter(const Expr &e) noexcept -> Rewriter<decltype(pattern_arg(e))> {
     return {pattern_arg(e), e.type(), e.type()};
 }
 // @}
 
-}
+}  // namespace IRMatcher
 
 }  // namespace Internal
 }  // namespace Halide

@@ -5,7 +5,8 @@
 namespace Halide {
 namespace Internal {
 
-Dimension::Dimension(const Internal::Parameter &p, int d, Func f) : param(p), d(d), f(f) {
+Dimension::Dimension(const Internal::Parameter &p, int d, Func f)
+    : param(p), d(d), f(f) {
     user_assert(param.defined())
         << "Can't access the dimensions of an undefined Parameter\n";
     user_assert(param.is_buffer())

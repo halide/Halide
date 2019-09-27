@@ -157,8 +157,8 @@ std::ostream &operator<<(std::ostream &out, const TailStrategy &t) {
 
 ostream &operator<<(ostream &stream, const LoopLevel &loop_level) {
     return stream << "loop_level("
-        << (loop_level.defined() ? loop_level.to_string() : "undefined")
-        << ")";
+                  << (loop_level.defined() ? loop_level.to_string() : "undefined")
+                  << ")";
 }
 
 ostream &operator<<(ostream &stream, const Target &target) {
@@ -179,12 +179,13 @@ void IRPrinter::test() {
     expr_source << (x + 3) * (y / 2 + 17);
     internal_assert(expr_source.str() == "((x + 3)*((y/2) + 17))");
 
-    Stmt store = Store::make("buf", (x * 17) / (x - 3), y - 1,  Parameter(), const_true(), ModulusRemainder());
+    Stmt store = Store::make("buf", (x * 17) / (x - 3), y - 1, Parameter(), const_true(), ModulusRemainder());
     Stmt for_loop = For::make("x", -2, y + 2, ForType::Parallel, DeviceAPI::Host, store);
-    vector<Expr> args(1); args[0] = x % 3;
+    vector<Expr> args(1);
+    args[0] = x % 3;
     Expr call = Call::make(i32, "buf", args, Call::Extern);
     Stmt store2 = Store::make("out", call + 1, x, Parameter(), const_true(), ModulusRemainder(3, 5));
-    Stmt for_loop2 = For::make("x", 0, y, ForType::Vectorized , DeviceAPI::Host, store2);
+    Stmt for_loop2 = For::make("x", 0, y, ForType::Vectorized, DeviceAPI::Host, store2);
 
     Stmt producer = ProducerConsumer::make_produce("buf", for_loop);
     Stmt consumer = ProducerConsumer::make_consume("buf", for_loop2);
@@ -198,7 +199,7 @@ void IRPrinter::test() {
 
     ostringstream source;
     source << allocate;
-    std::string correct_source = \
+    std::string correct_source =
         "allocate buf[float32 * 1023] in Stack\n"
         "let y = 17\n"
         "assert((y >= 3), halide_error_param_too_small_i64(\"y\", y, 3))\n"
@@ -214,14 +215,15 @@ void IRPrinter::test() {
         "}\n";
 
     if (source.str() != correct_source) {
-        internal_error << "Correct output:\n" << correct_source
-                       << "Actual output:\n" << source.str();
-
+        internal_error << "Correct output:\n"
+                       << correct_source
+                       << "Actual output:\n"
+                       << source.str();
     }
     std::cout << "IRPrinter test passed\n";
 }
 
-ostream& operator<<(ostream &stream, const AssociativePattern &p) {
+ostream &operator<<(ostream &stream, const AssociativePattern &p) {
     stream << "{\n";
     for (size_t i = 0; i < p.ops.size(); ++i) {
         stream << "  op_" << i << " -> " << p.ops[i] << ", id_" << i << " -> " << p.identities[i] << "\n";
@@ -231,8 +233,9 @@ ostream& operator<<(ostream &stream, const AssociativePattern &p) {
     return stream;
 }
 
-ostream& operator<<(ostream &stream, const AssociativeOp &op) {
-    stream << "Pattern:\n" << op.pattern;
+ostream &operator<<(ostream &stream, const AssociativeOp &op) {
+    stream << "Pattern:\n"
+           << op.pattern;
     stream << "is associative? " << op.is_associative << "\n";
     for (size_t i = 0; i < op.xs.size(); ++i) {
         stream << "  " << op.xs[i].var << " -> " << op.xs[i].expr << "\n";
@@ -273,7 +276,7 @@ ostream &operator<<(ostream &out, const ForType &type) {
 }
 
 ostream &operator<<(ostream &out, const NameMangling &m) {
-    switch(m) {
+    switch (m) {
     case NameMangling::Default:
         out << "default";
         break;
@@ -297,8 +300,7 @@ ostream &operator<<(ostream &stream, const Stmt &ir) {
     return stream;
 }
 
-
-ostream &operator <<(ostream &stream, const LoweredFunc &function) {
+ostream &operator<<(ostream &stream, const LoweredFunc &function) {
     stream << function.linkage << " func " << function.name << " (";
     for (size_t i = 0; i < function.args.size(); i++) {
         stream << function.args[i].name;
@@ -311,7 +313,6 @@ ostream &operator <<(ostream &stream, const LoweredFunc &function) {
     stream << "}\n\n";
     return stream;
 }
-
 
 std::ostream &operator<<(std::ostream &stream, const LinkageType &type) {
     switch (type) {
@@ -328,7 +329,8 @@ std::ostream &operator<<(std::ostream &stream, const LinkageType &type) {
     return stream;
 }
 
-IRPrinter::IRPrinter(ostream &s) : stream(s), indent(0) {
+IRPrinter::IRPrinter(ostream &s)
+    : stream(s), indent(0) {
     s.setf(std::ios::fixed, std::ios::floatfield);
 }
 
@@ -350,7 +352,8 @@ void IRPrinter::print_list(const std::vector<Expr> &exprs) {
 }
 
 void IRPrinter::do_indent() {
-    for (int i = 0; i < indent; i++) stream << ' ';
+    for (int i = 0; i < indent; i++)
+        stream << ' ';
 }
 
 void IRPrinter::visit(const IntImm *op) {
@@ -366,7 +369,7 @@ void IRPrinter::visit(const UIntImm *op) {
 }
 
 void IRPrinter::visit(const FloatImm *op) {
-  switch (op->type.bits()) {
+    switch (op->type.bits()) {
     case 64:
         stream << op->value;
         break;
@@ -755,7 +758,7 @@ void IRPrinter::visit(const Allocate *op) {
     do_indent();
     stream << "allocate " << op->name << "[" << op->type;
     for (size_t i = 0; i < op->extents.size(); i++) {
-        stream  << " * ";
+        stream << " * ";
         print(op->extents[i]);
     }
     stream << "]";
@@ -904,7 +907,6 @@ void IRPrinter::visit(const IfThenElse *op) {
 
     do_indent();
     stream << "}\n";
-
 }
 
 void IRPrinter::visit(const Evaluate *op) {

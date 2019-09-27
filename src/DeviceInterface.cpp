@@ -19,7 +19,7 @@ bool lookup_runtime_routine(const std::string &name,
 
     for (size_t i = 0; i < runtime.size(); i++) {
         std::map<std::string, JITModule::Symbol>::const_iterator f =
-          runtime[i].exports().find(name);
+            runtime[i].exports().find(name);
         if (f != runtime[i].exports().end()) {
             result = reinterpret_bits<fn_type>(f->second.address);
             return true;
@@ -30,15 +30,20 @@ bool lookup_runtime_routine(const std::string &name,
 
 }  // namespace
 
-const halide_device_interface_t *get_device_interface_for_device_api(DeviceAPI d, const Target &t,
+const halide_device_interface_t *get_device_interface_for_device_api(DeviceAPI d,
+                                                                     const Target &t,
                                                                      const char *error_site) {
 
-  if (d == DeviceAPI::Default_GPU) {
+    if (d == DeviceAPI::Default_GPU) {
         d = get_default_device_api_for_target(t);
         if (d == DeviceAPI::Host) {
             if (error_site) {
-                user_error << "get_device_interface_for_device_api called from " << error_site <<
-                  " requested a default GPU but no GPU feature is specified in target (" << t.to_string() << ").\n";
+                user_error
+                    << "get_device_interface_for_device_api called from "
+                    << error_site
+                    << " requested a default GPU but no GPU feature is specified in target ("
+                    << t.to_string()
+                    << ").\n";
             }
             return nullptr;
         }
@@ -62,16 +67,26 @@ const halide_device_interface_t *get_device_interface_for_device_api(DeviceAPI d
         name = "d3d12compute";
     } else {
         if (error_site) {
-            user_error << "get_device_interface_for_device_api called from " << error_site <<
-                " requested unknown DeviceAPI (" << (int)d << ").\n";
+            user_error
+                << "get_device_interface_for_device_api called from "
+                << error_site
+                << " requested unknown DeviceAPI ("
+                << (int)d
+                << ").\n";
         }
         return nullptr;
     }
 
     if (!t.supports_device_api(d)) {
         if (error_site) {
-            user_error << "get_device_interface_for_device_api called from " << error_site <<
-                " DeviceAPI (" << name << ") is not supported by target (" << t.to_string() << ").\n";
+            user_error
+                << "get_device_interface_for_device_api called from "
+                << error_site
+                << " DeviceAPI ("
+                << name
+                << ") is not supported by target ("
+                << t.to_string()
+                << ").\n";
         }
         return nullptr;
     }
@@ -80,8 +95,12 @@ const halide_device_interface_t *get_device_interface_for_device_api(DeviceAPI d
         return (*fn)();
     } else {
         if (error_site) {
-              user_error << "get_device_interface_for_device_api called from " << error_site <<
-                  " cannot find runtime or device interface symbol for " << name << ".\n";
+            user_error
+                << "get_device_interface_for_device_api called from "
+                << error_site
+                << " cannot find runtime or device interface symbol for "
+                << name
+                << ".\n";
         }
         return nullptr;
     }

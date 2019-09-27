@@ -22,16 +22,17 @@ using std::vector;
           nodes for (eg) i16x8 and synthesize the right thing
 */
 
-CodeGen_WebAssembly::CodeGen_WebAssembly(Target t) : CodeGen_Posix(t) {
-    #if !defined(WITH_WEBASSEMBLY)
+CodeGen_WebAssembly::CodeGen_WebAssembly(Target t)
+    : CodeGen_Posix(t) {
+#if !defined(WITH_WEBASSEMBLY)
     user_error << "llvm build not configured with WebAssembly target enabled.\n";
-    #endif
+#endif
     user_assert(llvm_WebAssembly_enabled) << "llvm build not configured with WebAssembly target enabled.\n";
     user_assert(target.bits == 32) << "Only wasm32 is supported.";
-    #if LLVM_VERSION >= 90
-    #else
+#if LLVM_VERSION >= 90
+#else
     user_error << "WebAssembly output is only support in LLVM 9.0+";
-    #endif
+#endif
 }
 
 void CodeGen_WebAssembly::visit(const Cast *op) {
@@ -56,11 +57,11 @@ void CodeGen_WebAssembly::visit(const Cast *op) {
 
     struct Pattern {
         Target::Feature feature;
-        bool            wide_op;
-        Type            type;
-        int             min_lanes;
-        string          intrin;
-        Expr            pattern;
+        bool wide_op;
+        Type type;
+        int min_lanes;
+        string intrin;
+        Expr pattern;
     };
 
     static Pattern patterns[] = {
@@ -75,7 +76,7 @@ void CodeGen_WebAssembly::visit(const Cast *op) {
         {Target::WasmSimd128, true, UInt(16, 8), 0, "llvm.wasm.sub.saturate.unsigned.v8i16", u16_sat(wild_i32x_ - wild_i32x_)},
     };
 
-    for (size_t i = 0; i < sizeof(patterns)/sizeof(patterns[0]); i++) {
+    for (size_t i = 0; i < sizeof(patterns) / sizeof(patterns[0]); i++) {
         const Pattern &pattern = patterns[i];
 
         if (!target.has_feature(pattern.feature)) {
@@ -152,4 +153,5 @@ int CodeGen_WebAssembly::native_vector_bits() const {
     return 128;
 }
 
-}}
+}  // namespace Internal
+}  // namespace Halide

@@ -89,13 +89,14 @@
 #define NDEBUG
 #endif
 
-namespace Halide { namespace Internal {
-template <typename T>
+namespace Halide {
+namespace Internal {
+template<typename T>
 auto iterator_to_pointer(T iter) -> decltype(&*std::declval<T>()) {
     return &*iter;
 }
 
-}}
-
+}  // namespace Internal
+}  // namespace Halide
 
 #endif

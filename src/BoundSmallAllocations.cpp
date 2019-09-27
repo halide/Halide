@@ -20,9 +20,10 @@ class BoundSmallAllocations : public IRMutator {
         struct Frame {
             const T *op;
             ScopedBinding<Interval> binding;
-            Frame(const T *op, Scope<Interval> &scope) :
-                op(op),
-                binding(scope, op->name, find_constant_bounds(op->value, scope)) {}
+            Frame(const T *op, Scope<Interval> &scope)
+                : op(op),
+                  binding(scope, op->name, find_constant_bounds(op->value, scope)) {
+            }
         };
         std::vector<Frame> frames;
         Body result;
@@ -58,8 +59,10 @@ class BoundSmallAllocations : public IRMutator {
         b.min = simplify(b.min);
         b.max = simplify(b.max);
         ScopedBinding<Interval> bind(scope, op->name, b);
-        ScopedValue<bool> old_in_thread_loop(in_thread_loop, in_thread_loop ||
-                                             op->for_type == ForType::GPUThread);
+        bool new_in_thread_loop =
+            in_thread_loop || op->for_type == ForType::GPUThread;
+        ScopedValue<bool> old_in_thread_loop(in_thread_loop, new_in_thread_loop);
+
         return IRMutator::visit(op);
     }
 

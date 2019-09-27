@@ -72,7 +72,6 @@ Interval find_constant_bounds(const Expr &e, const Scope<Interval> &scope) {
     return interval;
 }
 
-
 class Bounds : public IRVisitor {
 public:
     Interval interval;
@@ -83,12 +82,12 @@ public:
     // unbounded.
     bool const_bound;
 
-    Bounds(const Scope<Interval> *s, const FuncValueBounds &fb, bool const_bound) :
-        func_bounds(fb), const_bound(const_bound) {
+    Bounds(const Scope<Interval> *s, const FuncValueBounds &fb, bool const_bound)
+        : func_bounds(fb), const_bound(const_bound) {
         scope.set_containing_scope(s);
     }
-private:
 
+private:
 #ifndef DO_TRACK_BOUNDS_INTERVALS
 #define DO_TRACK_BOUNDS_INTERVALS 0
 #endif
@@ -106,8 +105,8 @@ private:
         if (get_logging()) {
             std::string spaces(interval_log_indent, ' ');
             debug(0) << spaces << msg << "\n"
-                << spaces << "  mn=" << interval.min << "\n"
-                << spaces << "  mx=" << interval.max << "\n";
+                     << spaces << "  mn=" << interval.min << "\n"
+                     << spaces << "  mx=" << interval.max << "\n";
         }
     }
 
@@ -121,9 +120,10 @@ private:
     struct IntervalLogger {
         Bounds *self;
         std::string name;
-        IntervalLogger(Bounds *self, const char* pretty_function) : self(self) {
-            name = replace_all(pretty_function, "virtual void Halide::Internal::","");
-            name = replace_all(name, "(const Halide::Internal::","(");
+        IntervalLogger(Bounds *self, const char *pretty_function)
+            : self(self) {
+            name = replace_all(pretty_function, "virtual void Halide::Internal::", "");
+            name = replace_all(name, "(const Halide::Internal::", "(");
             self->log_interval_msg("Enter " + name);
             self->interval_log_indent++;
         }
@@ -133,11 +133,13 @@ private:
         }
     };
 
-    #define TRACK_BOUNDS_INTERVAL IntervalLogger log_me_here_(this, __PRETTY_FUNCTION__)
+#define TRACK_BOUNDS_INTERVAL IntervalLogger log_me_here_(this, __PRETTY_FUNCTION__)
 
 #else
 
-    #define TRACK_BOUNDS_INTERVAL do { } while (0)
+#define TRACK_BOUNDS_INTERVAL \
+    do {                      \
+    } while (0)
 
 #endif
 
@@ -146,7 +148,7 @@ private:
         // if we can't get a good bound from the function, fall back to the bounds of the type.
         bounds_of_type(t);
 
-        pair<string, int> key = { name, value_index };
+        pair<string, int> key = {name, value_index};
 
         FuncValueBounds::const_iterator iter = func_bounds.find(key);
 
@@ -594,7 +596,6 @@ private:
         }
     }
 
-
     void visit(const Max *op) override {
         TRACK_BOUNDS_INTERVAL;
         op->a.accept(this);
@@ -887,8 +888,7 @@ private:
         string var_name = unique_name('t');
         Expr var = Variable::make(op->base.type(), var_name);
         Expr lane = op->base + var * op->stride;
-        ScopedBinding<Interval> p(scope, var_name, Interval(make_const(var.type(), 0),
-                                                        make_const(var.type(), op->lanes-1)));
+        ScopedBinding<Interval> p(scope, var_name, Interval(make_const(var.type(), 0), make_const(var.type(), op->lanes - 1)));
         lane.accept(this);
     }
 
@@ -921,7 +921,6 @@ private:
             interval = Interval::everything();
             return;
         }
-
 
         if (!const_bound &&
             (op->call_type == Call::PureExtern || op->call_type == Call::Image)) {
@@ -1398,7 +1397,7 @@ void merge_boxes(Box &a, const Box &b) {
     bool b_maybe_unused = b.maybe_unused();
 
     bool complementary = a_maybe_unused && b_maybe_unused &&
-        (equal(a.used, !b.used) || equal(!a.used, b.used));
+                         (equal(a.used, !b.used) || equal(!a.used, b.used));
 
     for (size_t i = 0; i < a.size(); i++) {
         if (!a[i].min.same_as(b[i].min)) {
@@ -1557,7 +1556,8 @@ public:
     string innermost_var;
 
     FindInnermostVar(const Scope<int> &vars_depth)
-        : vars_depth(vars_depth) {}
+        : vars_depth(vars_depth) {
+    }
 
 private:
     using IRVisitor::visit;
@@ -1631,7 +1631,9 @@ public:
     string skipped_var;
     set<string> vars;
 
-    CollectVars(const string &v) : skipped_var(v) {}
+    CollectVars(const string &v)
+        : skipped_var(v) {
+    }
 
 private:
     using IRGraphVisitor::visit;
@@ -1647,19 +1649,20 @@ private:
 class BoxesTouched : public IRGraphVisitor {
 
 public:
-    BoxesTouched(bool calls, bool provides, string fn, const Scope<Interval> *s, const FuncValueBounds &fb) :
-        func(fn), consider_calls(calls), consider_provides(provides), func_bounds(fb) {
+    BoxesTouched(bool calls, bool provides, string fn, const Scope<Interval> *s, const FuncValueBounds &fb)
+        : func(fn), consider_calls(calls), consider_provides(provides), func_bounds(fb) {
         scope.set_containing_scope(s);
     }
 
     map<string, Box> boxes;
 
 private:
-
     struct VarInstance {
         string var;
         int instance;
-        VarInstance(const string &v, int i) : var(v), instance(i) {}
+        VarInstance(const string &v, int i)
+            : var(v), instance(i) {
+        }
         VarInstance() = default;
 
         bool operator==(const VarInstance &other) const {
@@ -1702,7 +1705,8 @@ private:
                 if (in_buf != nullptr && (in_buf->name == (func + ".buffer"))) {
                     internal_assert(mins_struct != nullptr && extents_struct != nullptr &&
                                     mins_struct->is_intrinsic(Call::make_struct) &&
-                                    extents_struct->is_intrinsic(Call::make_struct)) << "BoxesTouched::box_from_extended_crop -- unexpected buffer_crop form.\n";
+                                    extents_struct->is_intrinsic(Call::make_struct))
+                        << "BoxesTouched::box_from_extended_crop -- unexpected buffer_crop form.\n";
                     b.resize(mins_struct->args.size());
                     b.used = const_true();
                     for (size_t i = 0; i < mins_struct->args.size(); i++) {
@@ -1797,9 +1801,12 @@ private:
         void visit(const Variable *var) override {
             count++;
         }
+
     public:
         int count;
-        CountVars() : count(0) {}
+        CountVars()
+            : count(0) {
+        }
     };
 
     // We get better simplification if we directly substitute mins
@@ -1853,7 +1860,9 @@ private:
             CollectVars collect;
             string max_name, min_name;
             Interval value_bounds;
-            Frame(const LetOrLetStmt *op) : op(op), collect(op->name) {}
+            Frame(const LetOrLetStmt *op)
+                : op(op), collect(op->name) {
+            }
         };
 
         vector<Frame> frames;
@@ -1885,7 +1894,7 @@ private:
                     val.accept(&collect);
                     f.old_let_vars = collect.vars;
 
-                    VarInstance old_vi = VarInstance(f.vi.var, f.vi.instance-1);
+                    VarInstance old_vi = VarInstance(f.vi.var, f.vi.instance - 1);
                     for (const auto &v : f.old_let_vars) {
                         internal_assert(vars_renaming.count(v));
                         children[get_var_instance(v)].erase(old_vi);
@@ -1961,7 +1970,7 @@ private:
                 // stmt into the map.
                 if (!it->old_let_vars.empty()) {
                     internal_assert(it->vi.instance > 0);
-                    VarInstance old_vi = VarInstance(it->vi.var, it->vi.instance-1);
+                    VarInstance old_vi = VarInstance(it->vi.var, it->vi.instance - 1);
                     for (const auto &v : it->old_let_vars) {
                         internal_assert(vars_renaming.count(v));
                         children[get_var_instance(v)].insert(old_vi);
@@ -1990,7 +1999,8 @@ private:
     struct LetBound {
         string var, min_name, max_name;
         LetBound(const string &v, const string &min, const string &max)
-            : var(v), min_name(min), max_name(max) {}
+            : var(v), min_name(min), max_name(max) {
+        }
     };
 
     void trim_scope_push(const string &name, const Interval &bound, vector<LetBound> &let_bounds) {
@@ -2067,10 +2077,13 @@ private:
                     result.push_back(op);
                 }
             }
+
         public:
             const Scope<Interval> &scope;
             vector<const Variable *> result;
-            FindFreeVars(const Scope<Interval> &s) : scope(s) {}
+            FindFreeVars(const Scope<Interval> &s)
+                : scope(s) {
+            }
         } finder(scope);
         e.accept(&finder);
         return finder.result;
@@ -2128,11 +2141,22 @@ private:
                     const GE *ge = solved.as<GE>();
                     const EQ *eq = solved.as<EQ>();
                     Expr lhs, rhs;
-                    if (lt) {lhs = lt->a; rhs = lt->b;}
-                    else if (le) {lhs = le->a; rhs = le->b;}
-                    else if (gt) {lhs = gt->a; rhs = gt->b;}
-                    else if (ge) {lhs = ge->a; rhs = ge->b;}
-                    else if (eq) {lhs = eq->a; rhs = eq->b;}
+                    if (lt) {
+                        lhs = lt->a;
+                        rhs = lt->b;
+                    } else if (le) {
+                        lhs = le->a;
+                        rhs = le->b;
+                    } else if (gt) {
+                        lhs = gt->a;
+                        rhs = gt->b;
+                    } else if (ge) {
+                        lhs = ge->a;
+                        rhs = ge->b;
+                    } else if (eq) {
+                        lhs = eq->a;
+                        rhs = eq->b;
+                    }
 
                     if (!rhs.defined() || rhs.type() != Int(32)) {
                         continue;
@@ -2305,8 +2329,8 @@ map<string, Box> boxes_touched(Expr e, Stmt s, bool consider_calls, bool conside
         // access to the buffer in question.
 
         class Filter : public IRMutator {
-            using IRMutator::visit;
             using IRMutator::mutate;
+            using IRMutator::visit;
 
             bool relevant = false;
 
@@ -2336,7 +2360,6 @@ map<string, Box> boxes_touched(Expr e, Stmt s, bool consider_calls, bool conside
             }
 
         public:
-
             Stmt mutate(const Stmt &s) override {
                 bool old = relevant;
                 relevant = false;
@@ -2352,7 +2375,9 @@ map<string, Box> boxes_touched(Expr e, Stmt s, bool consider_calls, bool conside
             const string &fn;
             const string fn_buffer;
             Stmt no_op;
-            Filter(const string &fn) : fn(fn), fn_buffer(fn + ".buffer"), no_op(Evaluate::make(0)) {}
+            Filter(const string &fn)
+                : fn(fn), fn_buffer(fn + ".buffer"), no_op(Evaluate::make(0)) {
+            }
         } filter(fn);
 
         s = filter.mutate(s);
@@ -2467,7 +2492,7 @@ Box box_touched(Stmt s, string fn, const Scope<Interval> &scope, const FuncValue
 
 // Compute interval of all possible function's values (default + specialized values)
 Interval compute_pure_function_definition_value_bounds(
-        const Definition &def, const Scope<Interval>& scope, const FuncValueBounds &fb, int dim) {
+    const Definition &def, const Scope<Interval> &scope, const FuncValueBounds &fb, int dim) {
 
     Interval result = bounds_of_expr_in_scope(def.values()[dim], scope, fb);
 
@@ -2488,7 +2513,7 @@ FuncValueBounds compute_function_value_bounds(const vector<string> &order,
         Function f = env.find(order[i])->second;
         const vector<string> f_args = f.args();
         for (int j = 0; j < f.outputs(); j++) {
-            pair<string, int> key = { f.name(), j };
+            pair<string, int> key = {f.name(), j};
 
             Interval result;
 
@@ -2518,7 +2543,7 @@ FuncValueBounds compute_function_value_bounds(const vector<string> &order,
                 if ((t.is_uint() || t.is_int()) && t.bits() <= 16) {
                     result = Interval(t.min(), t.max());
                 } else {
-                  result = Interval::everything();
+                    result = Interval::everything();
                 }
                 fb[key] = result;
 
@@ -2596,12 +2621,12 @@ void constant_bound_test() {
 
         check_constant_bound(x + y, 15, 50);
         check_constant_bound(x - y, -20, 15);
-        check_constant_bound(x*y, 50, 600);
+        check_constant_bound(x * y, 50, 600);
         check_constant_bound(x / y, 0, 4);
 
-        check_constant_bound(select(x > 4, 3*x - y/2, max(x + y + 2, x - 20)), 15, 58);
-        check_constant_bound(select(x < 4, 3*x - y/2, max(x + y + 2, x - 20)), 17, 52);
-        check_constant_bound(select(x >= 11, 3*x - y/2, max(x + y + 2, x - 20)), 15, 58);
+        check_constant_bound(select(x > 4, 3 * x - y / 2, max(x + y + 2, x - 20)), 15, 58);
+        check_constant_bound(select(x < 4, 3 * x - y / 2, max(x + y + 2, x - 20)), 17, 52);
+        check_constant_bound(select(x >= 11, 3 * x - y / 2, max(x + y + 2, x - 20)), 15, 58);
     }
 
     {
@@ -2616,21 +2641,20 @@ void constant_bound_test() {
         check_constant_bound(x + y, Expr((uint8_t)15), Expr((uint8_t)50));
         check_constant_bound(x / y, Expr((uint8_t)0), Expr((uint8_t)4));
 
-        check_constant_bound(select(x > 4, 3*x - y/2, max(x + y + 2, x + 20)),
+        check_constant_bound(select(x > 4, 3 * x - y / 2, max(x + y + 2, x + 20)),
                              Expr((uint8_t)15), Expr((uint8_t)58));
-        check_constant_bound(select(x < 4, 3*x - y/2, max(x + y + 2, x + 20)),
+        check_constant_bound(select(x < 4, 3 * x - y / 2, max(x + y + 2, x + 20)),
                              Expr((uint8_t)30), Expr((uint8_t)52));
-        check_constant_bound(select(x >= 11, 3*x - y/2, max(x + y + 2, x + 20)),
+        check_constant_bound(select(x >= 11, 3 * x - y / 2, max(x + y + 2, x + 20)),
                              Expr((uint8_t)15), Expr((uint8_t)58));
 
         // These two overflow
         check_constant_bound(x - y, Expr((uint8_t)0), Expr((uint8_t)255));
-        check_constant_bound(x*y, Expr((uint8_t)0), Expr((uint8_t)255));
+        check_constant_bound(x * y, Expr((uint8_t)0), Expr((uint8_t)255));
 
         check_constant_bound(absd(x, y), Expr((uint8_t)0), Expr((uint8_t)20));
         check_constant_bound(absd(cast<int16_t>(x), cast<int16_t>(y)), Expr((uint16_t)0), Expr((uint16_t)20));
     }
-
 
     {
         Param<float> x("x"), y("y");
@@ -2651,7 +2675,6 @@ void constant_bound_test() {
         check_constant_bound(absd(cr, cl), Expr((uint16_t)0), Expr((uint16_t)509));
         check_constant_bound(i16(absd(cr, cl)), Expr((int16_t)0), Expr((int16_t)509));
     }
-
 
     check_constant_bound(Load::make(Int(32), "buf", 0, Buffer<>(), Parameter(), const_true(), ModulusRemainder()) * 20,
                          Interval::neg_inf(), Interval::pos_inf());
@@ -2729,7 +2752,7 @@ void boxes_touched_test() {
     }
 }
 
-} // anonymous namespace
+}  // anonymous namespace
 
 void bounds_test() {
     using namespace Halide::ConciseCasts;
@@ -2741,55 +2764,55 @@ void bounds_test() {
     scope.push("x", Interval(Expr(0), Expr(10)));
 
     check(scope, x, 0, 10);
-    check(scope, x+1, 1, 11);
-    check(scope, (x+1)*2, 2, 22);
-    check(scope, x*x, 0, 100);
-    check(scope, 5-x, -5, 5);
-    check(scope, x*(5-x), -50, 50); // We don't expect bounds analysis to understand correlated terms
-    check(scope, Select::make(x < 4, x, x+100), 0, 110);
-    check(scope, x+y, y, y+10);
-    check(scope, x*y, min(y, 0)*10, max(y, 0)*10);
-    check(scope, x/(x+y), Interval::neg_inf(), Interval::pos_inf());
-    check(scope, 11/(x+1), 1, 11);
+    check(scope, x + 1, 1, 11);
+    check(scope, (x + 1) * 2, 2, 22);
+    check(scope, x * x, 0, 100);
+    check(scope, 5 - x, -5, 5);
+    check(scope, x * (5 - x), -50, 50);  // We don't expect bounds analysis to understand correlated terms
+    check(scope, Select::make(x < 4, x, x + 100), 0, 110);
+    check(scope, x + y, y, y + 10);
+    check(scope, x * y, min(y, 0) * 10, max(y, 0) * 10);
+    check(scope, x / (x + y), Interval::neg_inf(), Interval::pos_inf());
+    check(scope, 11 / (x + 1), 1, 11);
     check(scope, Load::make(Int(8), "buf", x, Buffer<>(), Parameter(), const_true(), ModulusRemainder()),
-                 i8(-128), i8(127));
-    check(scope, y + (Let::make("y", x+3, y - x + 10)), y + 3, y + 23); // Once again, we don't know that y is correlated with x
-    check(scope, clamp(1/(x-2), x-10, x+10), -10, 20);
+          i8(-128), i8(127));
+    check(scope, y + (Let::make("y", x + 3, y - x + 10)), y + 3, y + 23);  // Once again, we don't know that y is correlated with x
+    check(scope, clamp(1 / (x - 2), x - 10, x + 10), -10, 20);
     check(scope, cast<uint16_t>(x / 2), u16(0), u16(5));
     check(scope, cast<uint16_t>((x + 10) / 2), u16(5), u16(10));
     check(scope, x < 20, make_bool(1), make_bool(1));
     check(scope, x < 5, make_bool(0), make_bool(1));
     check(scope, Broadcast::make(x >= 11, 3), make_bool(0), make_bool(0));
-    check(scope, Ramp::make(x+5, 1, 5) > Broadcast::make(2, 5), make_bool(1), make_bool(1));
+    check(scope, Ramp::make(x + 5, 1, 5) > Broadcast::make(2, 5), make_bool(1), make_bool(1));
 
     check(scope, print(x, y), 0, 10);
     check(scope, print_when(x > y, x, y), 0, 10);
 
     check(scope, select(y == 5, 0, 3), select(y == 5, 0, 3), select(y == 5, 0, 3));
-    check(scope, select(y == 5, x, -3*x + 8), select(y == 5, 0, -22), select(y == 5, 10, 8));
-    check(scope, select(y == x, x, -3*x + 8), -22, select(y <= 10 && 0 <= y, 10, 8));
+    check(scope, select(y == 5, x, -3 * x + 8), select(y == 5, 0, -22), select(y == 5, 10, 8));
+    check(scope, select(y == x, x, -3 * x + 8), -22, select(y <= 10 && 0 <= y, 10, 8));
 
-    check(scope, cast<int32_t>(abs(cast<int16_t>(x/y))), 0, 32768);
+    check(scope, cast<int32_t>(abs(cast<int16_t>(x / y))), 0, 32768);
     check(scope, cast<float>(x), 0.0f, 10.0f);
 
     check(scope, cast<int32_t>(abs(cast<float>(x))), 0, 10);
 
     // Check some vectors
-    check(scope, Ramp::make(x*2, 5, 5), 0, 40);
-    check(scope, Broadcast::make(x*2, 5), 0, 20);
+    check(scope, Ramp::make(x * 2, 5, 5), 0, 40);
+    check(scope, Broadcast::make(x * 2, 5), 0, 20);
     check(scope, Broadcast::make(3, 4), 3, 3);
 
     // Check some operations that may overflow
-    check(scope, (cast<uint8_t>(x)+250), u8(0), u8(255));
-    check(scope, (cast<uint8_t>(x)+10)*20, u8(0), u8(255));
-    check(scope, (cast<uint8_t>(x)+10)*(cast<uint8_t>(x)+5), u8(0), u8(255));
-    check(scope, (cast<uint8_t>(x)+10)-(cast<uint8_t>(x)+5), u8(0), u8(255));
+    check(scope, (cast<uint8_t>(x) + 250), u8(0), u8(255));
+    check(scope, (cast<uint8_t>(x) + 10) * 20, u8(0), u8(255));
+    check(scope, (cast<uint8_t>(x) + 10) * (cast<uint8_t>(x) + 5), u8(0), u8(255));
+    check(scope, (cast<uint8_t>(x) + 10) - (cast<uint8_t>(x) + 5), u8(0), u8(255));
 
     // Check some operations that we should be able to prove do not overflow
-    check(scope, (cast<uint8_t>(x)+240), u8(240), u8(250));
-    check(scope, (cast<uint8_t>(x)+10)*10, u8(100), u8(200));
-    check(scope, (cast<uint8_t>(x)+10)*(cast<uint8_t>(x)), u8(0), u8(200));
-    check(scope, (cast<uint8_t>(x)+20)-(cast<uint8_t>(x)+5), u8(5), u8(25));
+    check(scope, (cast<uint8_t>(x) + 240), u8(240), u8(250));
+    check(scope, (cast<uint8_t>(x) + 10) * 10, u8(100), u8(200));
+    check(scope, (cast<uint8_t>(x) + 10) * (cast<uint8_t>(x)), u8(0), u8(200));
+    check(scope, (cast<uint8_t>(x) + 20) - (cast<uint8_t>(x) + 5), u8(5), u8(25));
 
     // Check some bitwise ops.
     check(scope, (cast<uint8_t>(x) & cast<uint8_t>(7)), u8(0), u8(7));
@@ -2799,7 +2822,7 @@ void bounds_test() {
     check(scope, (~cast<uint8_t>(3)), u8(0xfc), u8(0xfc));
     check(scope, cast<uint8_t>(x + 5) & cast<uint8_t>(x + 3), u8(0), u8(13));
     check(scope, cast<int8_t>(x - 5) & cast<int8_t>(x + 3), i8(0), i8(13));
-    check(scope, cast<int8_t>(2*x - 5) & cast<int8_t>(x - 3), i8(-128), i8(15));
+    check(scope, cast<int8_t>(2 * x - 5) & cast<int8_t>(x - 3), i8(-128), i8(15));
     check(scope, cast<uint8_t>(x + 5) | cast<uint8_t>(x + 3), u8(5), u8(255));
     check(scope, cast<int8_t>(x + 5) | cast<int8_t>(x + 3), i8(3), i8(127));
     check(scope, ~cast<uint8_t>(x), u8(-11), u8(-1));
@@ -2809,22 +2832,22 @@ void bounds_test() {
     check(scope, (cast<uint8_t>(x + 3) << cast<uint8_t>(7)), u8(0), u8(255));  // Overflows
     check(scope, (cast<uint8_t>(5) << cast<uint8_t>(1)), u8(10), u8(10));
     check(scope, (x << 12), 0, 10 << 12);
-    check(scope, x & 4095, 0, 10); // LHS known to be positive
-    check(scope, x & 123, 0, 10); // Doesn't have to be a precise bitmask
-    check(scope, (x - 1) & 4095, 0, 4095); // LHS could be -1
+    check(scope, x & 4095, 0, 10);          // LHS known to be positive
+    check(scope, x & 123, 0, 10);           // Doesn't have to be a precise bitmask
+    check(scope, (x - 1) & 4095, 0, 4095);  // LHS could be -1
 
     check(scope,
-          cast<uint16_t>(clamp(cast<float>(x/y), 0.0f, 4095.0f)),
+          cast<uint16_t>(clamp(cast<float>(x / y), 0.0f, 4095.0f)),
           u16(0), u16(4095));
 
     check(scope,
-          cast<uint8_t>(clamp(cast<uint16_t>(x/y), cast<uint16_t>(0), cast<uint16_t>(128))),
+          cast<uint8_t>(clamp(cast<uint16_t>(x / y), cast<uint16_t>(0), cast<uint16_t>(128))),
           u8(0), u8(128));
 
     Expr u8_1 = cast<uint8_t>(Load::make(Int(8), "buf", x, Buffer<>(), Parameter(), const_true(), ModulusRemainder()));
     Expr u8_2 = cast<uint8_t>(Load::make(Int(8), "buf", x + 17, Buffer<>(), Parameter(), const_true(), ModulusRemainder()));
     check(scope, cast<uint16_t>(u8_1) + cast<uint16_t>(u8_2),
-          u16(0), u16(255*2));
+          u16(0), u16(255 * 2));
 
     {
         Scope<Interval> scope;
@@ -2833,7 +2856,7 @@ void bounds_test() {
         scope.push("x", Interval(u16(0), u16(10)));
         scope.push("y", Interval(u16(2), u16(4)));
 
-        Expr e = clamp(x/y, u16(0), u16(128));
+        Expr e = clamp(x / y, u16(0), u16(128));
         check(scope, e, u16(0), u16(5));
         check_constant_bound(scope, e, u16(0), u16(5));
     }
@@ -2864,15 +2887,15 @@ void bounds_test() {
         internal_assert(!i.has_upper_bound());
         scope.push("y", i);
         Var x("x"), y("y");
-        check(scope, select(x == y*2, y, y - 10),
+        check(scope, select(x == y * 2, y, y - 10),
               7, Interval::pos_inf());
-        check(scope, select(x == y*2, y - 10, y),
+        check(scope, select(x == y * 2, y - 10, y),
               7, Interval::pos_inf());
     }
 
-    vector<Expr> input_site_1 = {2*x};
-    vector<Expr> input_site_2 = {2*x+1};
-    vector<Expr> output_site = {x+1};
+    vector<Expr> input_site_1 = {2 * x};
+    vector<Expr> input_site_2 = {2 * x + 1};
+    vector<Expr> output_site = {x + 1};
 
     Buffer<int32_t> in(10);
     in.set_name("input");
@@ -2910,11 +2933,8 @@ void bounds_test() {
         Expr d = Variable::make(Int(32), "d");
         Expr x = Variable::make(Int(32), "x");
         Expr y = Variable::make(Int(32), "y");
-        Expr e1 = select(c >= Expr((uint16_t) 128), c - Expr((uint16_t) 128), c);
-        Expr e2 = Let::make("t44", (((((((((((((((((u16(0) << u16(1)) | u16((u8(d) & u8(1)))) << u16(1))
-            | u16(((u8(d) >> u8(1)) & u8(1)))) << u16(1)) | (u16(x) & u16(1))) << u16(1))
-            | (u16(y) & u16(1))) << u16(1)) | (a & u16(1))) << u16(1)) | (b & u16(1))) << u16(1))
-            | ((a >> u16(1)) & u16(1))) << u16(1)) | ((b >> u16(1)) & u16(1))) >> u16(1)), e1);
+        Expr e1 = select(c >= Expr((uint16_t)128), c - Expr((uint16_t)128), c);
+        Expr e2 = Let::make("t44", (((((((((((((((((u16(0) << u16(1)) | u16((u8(d) & u8(1)))) << u16(1)) | u16(((u8(d) >> u8(1)) & u8(1)))) << u16(1)) | (u16(x) & u16(1))) << u16(1)) | (u16(y) & u16(1))) << u16(1)) | (a & u16(1))) << u16(1)) | (b & u16(1))) << u16(1)) | ((a >> u16(1)) & u16(1))) << u16(1)) | ((b >> u16(1)) & u16(1))) >> u16(1)), e1);
         Expr e3 = Let::make("t43", u16(y) >> u16(1), e2);
         Expr e4 = Let::make("t42", u16(x) >> u16(1), e3);
 

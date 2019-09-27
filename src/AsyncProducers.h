@@ -13,6 +13,6 @@ namespace Internal {
 Stmt fork_async_producers(Stmt s, const std::map<std::string, Function> &env);
 
 }
-}
+}  // namespace Halide
 
 #endif

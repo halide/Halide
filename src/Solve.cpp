@@ -33,8 +33,9 @@ bool no_overflow_int(Type t) {
  */
 class SolveExpression : public IRMutator {
 public:
-    SolveExpression(const string &v, const Scope<Expr> &es) :
-        failed(false), var(v), uses_var(false), external_scope(es) {}
+    SolveExpression(const string &v, const Scope<Expr> &es)
+        : failed(false), var(v), uses_var(false), external_scope(es) {
+    }
 
     using IRMutator::mutate;
 
@@ -63,7 +64,6 @@ public:
     bool failed;
 
 private:
-
     // The variable we're solving for.
     string var;
 
@@ -90,12 +90,11 @@ private:
         internal_assert(!e.type().is_uint()) << "Negating unsigned is not legal\n";
         const Mul *mul = e.as<Mul>();
         if (mul && is_const(mul->b)) {
-            return mul->a * simplify(-1*mul->b);
+            return mul->a * simplify(-1 * mul->b);
         } else {
             return e * -1;
         }
     }
-
 
     // The invariant here is that for all the nodes we peephole
     // recognize in each visitor, recursively calling mutate has
@@ -154,7 +153,7 @@ private:
             }
         } else if (a_uses_var && b_uses_var) {
             if (equal(a, b)) {
-                expr = mutate(a*2);
+                expr = mutate(a * 2);
             } else if (add_a && !a_failed) {
                 // (f(x) + a) + g(x) -> (f(x) + g(x)) + a
                 expr = mutate((add_a->a + b) + add_a->b);
@@ -362,7 +361,7 @@ private:
         bool a_uses_var = uses_var;
         bool a_failed = failed;
         internal_assert(!is_const(op->a) || !a_uses_var)
-                << op->a << ", " << uses_var << "\n";
+            << op->a << ", " << uses_var << "\n";
         uses_var = false;
         failed = false;
         Expr b = mutate(op->b);
@@ -919,7 +918,7 @@ class SolveForInterval : public IRVisitor {
     void visit(const Variable *op) override {
         internal_assert(op->type.is_bool());
         if (scope.contains(op->name)) {
-            pair<string, bool> key = { op->name, target };
+            pair<string, bool> key = {op->name, target};
             auto it = solved_vars.find(key);
             if (it != solved_vars.end()) {
                 result = it->second;
@@ -1122,8 +1121,9 @@ class SolveForInterval : public IRVisitor {
 public:
     Interval result;
 
-    SolveForInterval(const string &v, bool o) : var(v), outer(o) {}
-
+    SolveForInterval(const string &v, bool o)
+        : var(v), outer(o) {
+    }
 };
 
 class AndConditionOverDomain : public IRMutator {
@@ -1275,7 +1275,6 @@ class AndConditionOverDomain : public IRMutator {
         } else {
             return op;
         }
-
     }
 
     Expr visit(const Let *op) override {
@@ -1366,9 +1365,7 @@ public:
     }
 };
 
-
-
-} // Anonymous namespace
+}  // Anonymous namespace
 
 SolverResult solve_expression(Expr e, const std::string &variable, const Scope<Expr> &scope) {
     SolveExpression solver(variable, scope);
@@ -1380,7 +1377,6 @@ SolverResult solve_expression(Expr e, const std::string &variable, const Scope<E
              << "  " << new_e << "\n";
     return {new_e, !solver.failed};
 }
-
 
 Interval solve_for_inner_interval(Expr c, const std::string &var) {
     SolveForInterval s(var, false);
@@ -1429,9 +1425,7 @@ void check_solve(Expr a, Expr b) {
 
 void check_interval(Expr a, Interval i, bool outer) {
     Interval result =
-        outer ?
-        solve_for_outer_interval(a, "x") :
-        solve_for_inner_interval(a, "x");
+        outer ? solve_for_outer_interval(a, "x") : solve_for_inner_interval(a, "x");
     result.min = simplify(result.min);
     result.max = simplify(result.max);
     internal_assert(equal(result.min, i.min) && equal(result.max, i.max))
@@ -1441,7 +1435,6 @@ void check_interval(Expr a, Interval i, bool outer) {
         << " instead of:\n"
         << "  min: " << i.min << "\n"
         << "  max: " << i.max << "\n";
-
 }
 
 void check_outer_interval(Expr a, Expr min, Expr max) {
@@ -1461,7 +1454,7 @@ void check_and_condition(Expr orig, Expr result, Interval i) {
         << " reduced to " << cond
         << " instead of " << result << "\n";
 }
-}
+}  // namespace
 
 void solve_test() {
     using ConciseCasts::i16;
@@ -1471,52 +1464,52 @@ void solve_test() {
     Expr z = Variable::make(Int(32), "z");
 
     // Check some simple cases
-    check_solve(3 - 4*x, x*(-4) + 3);
+    check_solve(3 - 4 * x, x * (-4) + 3);
     check_solve(min(5, x), min(x, 5));
-    check_solve(max(5, (5+x)*y), max(x*y + 5*y, 5));
-    check_solve(5*y + 3*x == 2, ((x == ((2 - (5*y))/3)) && (((2 - (5*y)) % 3) == 0)));
+    check_solve(max(5, (5 + x) * y), max(x * y + 5 * y, 5));
+    check_solve(5 * y + 3 * x == 2, ((x == ((2 - (5 * y)) / 3)) && (((2 - (5 * y)) % 3) == 0)));
     check_solve(min(min(z, x), min(x, y)), min(x, min(y, z)));
     check_solve(min(x + y, x + 5), x + min(y, 5));
 
     // Check solver with expressions containing division
-    check_solve(x + (x*2) / 2, x*2);
-    check_solve(x + (x*2 + y) / 2, x*2 + (y / 2));
-    check_solve(x + (x*2 - y) / 2, x*2 - (y / 2)) ;
-    check_solve(x + (-(x*2) / 2), x*0 + 0);
-    check_solve(x + (-(x*2 + -3)) / 2, x*0 + 1);
-    check_solve(x + (z - (x*2 + -3)) / 2, x*0 + (z - (-3)) / 2);
-    check_solve(x + (y*16 + (z - (x * 2 + -1))) / 2,
-                (x * 0) + (((z - -1) + (y*16)) / 2));
+    check_solve(x + (x * 2) / 2, x * 2);
+    check_solve(x + (x * 2 + y) / 2, x * 2 + (y / 2));
+    check_solve(x + (x * 2 - y) / 2, x * 2 - (y / 2));
+    check_solve(x + (-(x * 2) / 2), x * 0 + 0);
+    check_solve(x + (-(x * 2 + -3)) / 2, x * 0 + 1);
+    check_solve(x + (z - (x * 2 + -3)) / 2, x * 0 + (z - (-3)) / 2);
+    check_solve(x + (y * 16 + (z - (x * 2 + -1))) / 2,
+                (x * 0) + (((z - -1) + (y * 16)) / 2));
 
     // Check the solver doesn't perform transformations that change integer overflow behavior.
     check_solve(i16(x + y) * i16(2) / i16(2), i16(x + y) * i16(2) / i16(2));
 
     // A let statement
-    check_solve(Let::make("z", 3 + 5*x, y + z < 8),
-          x <= (((8 - (3 + y)) - 1)/5));
+    check_solve(Let::make("z", 3 + 5 * x, y + z < 8),
+                x <= (((8 - (3 + y)) - 1) / 5));
 
     // A let statement where the variable gets used twice.
-    check_solve(Let::make("z", 3 + 5*x, y + (z + z) < 8),
-          x <= (((8 - (6 + y)) - 1)/10));
+    check_solve(Let::make("z", 3 + 5 * x, y + (z + z) < 8),
+                x <= (((8 - (6 + y)) - 1) / 10));
 
     // Something where we expect a let in the output.
     {
-        Expr e = y+1;
+        Expr e = y + 1;
         for (int i = 0; i < 10; i++) {
             e *= (e + 1);
         }
-        SolverResult solved = solve_expression(x + e < e*e, "x");
+        SolverResult solved = solve_expression(x + e < e * e, "x");
         internal_assert(solved.fully_solved && solved.result.as<Let>());
     }
 
     // Solving inequalities for integers is a pain to get right with
     // all the rounding rules. Check we didn't make a mistake with
     // brute force.
-    for (int den = -3; den <= 3; den ++) {
+    for (int den = -3; den <= 3; den++) {
         if (den == 0) continue;
         for (int num = 5; num <= 10; num++) {
-            Expr in[] = {x*den < num, x*den <= num, x*den == num, x*den != num, x*den >= num, x*den > num,
-                         x/den < num, x/den <= num, x/den == num, x/den != num, x/den >= num, x/den > num};
+            Expr in[] = {x * den<num, x * den <= num, x * den == num, x * den != num, x * den >= num, x * den> num,
+                         x / den<num, x / den <= num, x / den == num, x / den != num, x / den >= num, x / den> num};
             for (int j = 0; j < 12; j++) {
                 SolverResult solved = solve_expression(in[j], "x");
                 internal_assert(solved.fully_solved) << "Error: failed to solve for x in " << in[j] << "\n";
@@ -1546,14 +1539,14 @@ void solve_test() {
     // Check some things that we don't expect to work.
 
     // Quadratics:
-    internal_assert(!solve_expression(x*x < 4, "x").fully_solved);
+    internal_assert(!solve_expression(x * x < 4, "x").fully_solved);
 
     // Function calls, cast nodes, or multiplications by unknown sign
     // don't get inverted, but the bit containing x still gets moved
     // leftwards.
     check_solve(4.0f > sqrt(x), sqrt(x) < 4.0f);
 
-    check_solve(4 > y*x, x*y < 4);
+    check_solve(4 > y * x, x * y < 4);
 
     // Now test solving for an interval
     check_inner_interval(x > 0, 1, Interval::pos_inf());
@@ -1574,14 +1567,14 @@ void solve_test() {
     check_inner_interval(!(x != 10), 10, 10);
     check_outer_interval(!(x != 10), 10, 10);
 
-    check_inner_interval(3*x + 4 < 27, Interval::neg_inf(), 7);
-    check_outer_interval(3*x + 4 < 27, Interval::neg_inf(), 7);
+    check_inner_interval(3 * x + 4 < 27, Interval::neg_inf(), 7);
+    check_outer_interval(3 * x + 4 < 27, Interval::neg_inf(), 7);
 
     check_inner_interval(min(x, y) > 17, 18, y);
     check_outer_interval(min(x, y) > 17, 18, Interval::pos_inf());
 
-    check_inner_interval(x/5 < 17, Interval::neg_inf(), 84);
-    check_outer_interval(x/5 < 17, Interval::neg_inf(), 84);
+    check_inner_interval(x / 5 < 17, Interval::neg_inf(), 84);
+    check_outer_interval(x / 5 < 17, Interval::neg_inf(), 84);
 
     // Test anding a condition over a domain
     check_and_condition(x > 0, const_true(), Interval(1, y));
@@ -1624,7 +1617,7 @@ void solve_test() {
     {
         // This cause use to cause infinite recursion:
         Expr t = Variable::make(Int(32), "t");
-        Expr test = (x <= min(max((y - min(((z*x) + t), t)), 1), 0));
+        Expr test = (x <= min(max((y - min(((z * x) + t), t)), 1), 0));
         Interval result = solve_for_outer_interval(test, "z");
     }
 
@@ -1641,18 +1634,18 @@ void solve_test() {
 
     // Check for partial results
     check_solve(max(min(y, x), x), max(min(x, y), x));
-    check_solve(min(y, x) + max(y, 2*x), min(x, y) + max(x*2, y));
-    check_solve((min(x, y) + min(y, x))*max(y, x), (min(x, y)*2)*max(x, y));
-    check_solve(max((min((y*x), x) + min((1 + y), x)), (y + 2*x)),
-                max((min((x*y), x) + min(x, (1 + y))), (x*2 + y)));
+    check_solve(min(y, x) + max(y, 2 * x), min(x, y) + max(x * 2, y));
+    check_solve((min(x, y) + min(y, x)) * max(y, x), (min(x, y) * 2) * max(x, y));
+    check_solve(max((min((y * x), x) + min((1 + y), x)), (y + 2 * x)),
+                max((min((x * y), x) + min(x, (1 + y))), (x * 2 + y)));
 
     {
         Expr x = Variable::make(UInt(32), "x");
         Expr y = Variable::make(UInt(32), "y");
         Expr z = Variable::make(UInt(32), "z");
-        check_solve(5 - (4 - 4*x), x*(4) + 1);
+        check_solve(5 - (4 - 4 * x), x * (4) + 1);
         check_solve(z - (y - x), x + (z - y));
-        check_solve(z - (y - x) == 2, x  == 2 - (z - y));
+        check_solve(z - (y - x) == 2, x == 2 - (z - y));
 
         check_solve(x - (x - y), (x - x) + y);
 

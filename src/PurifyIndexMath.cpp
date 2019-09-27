@@ -40,5 +40,5 @@ Expr purify_index_math(Expr s) {
     return PurifyIndexMath().mutate(s);
 }
 
-}
-}
+}  // namespace Internal
+}  // namespace Halide

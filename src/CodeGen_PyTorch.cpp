@@ -10,7 +10,8 @@
 namespace Halide {
 namespace Internal {
 
-CodeGen_PyTorch::CodeGen_PyTorch(std::ostream &s) : IRPrinter(s) {
+CodeGen_PyTorch::CodeGen_PyTorch(std::ostream &s)
+    : IRPrinter(s) {
 }
 
 void CodeGen_PyTorch::compile(const Module &module) {
@@ -23,8 +24,8 @@ void CodeGen_PyTorch::compile(const Module &module) {
     if (target.has_feature(Target::CUDA)) {
         if (!target.has_feature(Target::UserContext)) {
             user_error << "Compile a PyTorch wrapper for a CUDA op requires the "
-                "UserContext feature to properly manage the GPU memory. "
-                "Please add \"-user_context\" to the generator's target options.\n";
+                          "UserContext feature to properly manage the GPU memory. "
+                          "Please add \"-user_context\" to the generator's target options.\n";
         }
         stream << "#include \"ATen/cuda/CUDAContext.h\"\n";
         stream << "#include \"HalidePyTorchCudaHelpers.h\"\n";
@@ -77,15 +78,15 @@ void CodeGen_PyTorch::compile(const LoweredFunc &f, bool is_cuda) {
         } else if (args[i].is_buffer()) {
             buffer_args.push_back(args[i]);
             stream
-              << "at::Tensor &"
-              << c_print_name(args[i].name);
+                << "at::Tensor &"
+                << c_print_name(args[i].name);
         } else {
             stream
-              << type_to_c_type(args[i].type, true)
-              << c_print_name(args[i].name);
+                << type_to_c_type(args[i].type, true)
+                << c_print_name(args[i].name);
         }
 
-        if (i < args.size()-1)
+        if (i < args.size() - 1)
             stream << ", ";
     }
 
@@ -143,8 +144,7 @@ void CodeGen_PyTorch::compile(const LoweredFunc &f, bool is_cuda) {
             << c_print_name(buffer_args[i].name)
             << "_buffer = Halide::PyTorch::wrap<" << tp << ">("
             << c_print_name(buffer_args[i].name)
-            << ");\n"
-            ;
+            << ");\n";
     }
     stream << "\n";
 
@@ -156,12 +156,12 @@ void CodeGen_PyTorch::compile(const LoweredFunc &f, bool is_cuda) {
     for (size_t i = 0; i < args.size(); i++) {
         if (args[i].is_buffer()) {
             stream
-              << c_print_name(args[i].name)
-              << "_buffer";
+                << c_print_name(args[i].name)
+                << "_buffer";
         } else {
             stream << c_print_name(args[i].name);
         }
-        if (i < args.size()-1)
+        if (i < args.size() - 1)
             stream << ", ";
     }
     stream << ");\n";
@@ -183,7 +183,7 @@ void CodeGen_PyTorch::compile(const LoweredFunc &f, bool is_cuda) {
                     << "\"device not synchronized for buffer "
                     << c_print_name(buffer_args[i].name)
                     << ", make sure all update stages are excplicitly computed on GPU."
-                    <<"\");\n";
+                    << "\");\n";
                 do_indent();
                 stream
                     << c_print_name(buffer_args[i].name) << "_buffer"
@@ -215,7 +215,7 @@ void CodeGen_PyTorch::compile(const LoweredFunc &f, bool is_cuda) {
     if (!namespaces.empty()) {
         stream << "\n";
         for (size_t i = namespaces.size(); i > 0; i--) {
-            stream << "}  // namespace " << namespaces[i-1] << "\n";
+            stream << "}  // namespace " << namespaces[i - 1] << "\n";
         }
         stream << "\n";
     }
@@ -226,7 +226,7 @@ void CodeGen_PyTorch::test() {
     LoweredArgument buffer_arg("buf", Argument::OutputBuffer, Int(32), 3, ArgumentEstimates{});
     LoweredArgument float_arg("alpha", Argument::InputScalar, Float(32), 0, ArgumentEstimates{});
     LoweredArgument int_arg("beta", Argument::InputScalar, Int(32), 0, ArgumentEstimates{});
-    std::vector<LoweredArgument> args = { buffer_arg, float_arg, int_arg};
+    std::vector<LoweredArgument> args = {buffer_arg, float_arg, int_arg};
     Var x("x");
     Param<float> alpha("alpha");
     Param<int> beta("beta");
@@ -256,7 +256,7 @@ void CodeGen_PyTorch::test() {
 
     // The correct source concatenates CPU and GPU headers
     std::string correct_src =
-R"GOLDEN_CODE(#include "torch/extension.h"
+        R"GOLDEN_CODE(#include "torch/extension.h"
 #include "HalideBuffer.h"
 #include "HalidePyTorchHelpers.h"
 
@@ -349,14 +349,22 @@ int test1_th_(at::Tensor &_buf, float _alpha, int32_t _beta) {
 
     if (src != correct_src) {
         int diff = 0;
-        while (src[diff] == correct_src[diff]) diff++;
+        while (src[diff] == correct_src[diff]) {
+            diff++;
+        }
         int diff_end = diff + 1;
-        while (diff > 0 && src[diff] != '\n') diff--;
-        while (diff_end < (int)src.size() && src[diff_end] != '\n') diff_end++;
+        while (diff > 0 && src[diff] != '\n') {
+            diff--;
+        }
+        while (diff_end < (int)src.size() && src[diff_end] != '\n') {
+            diff_end++;
+        }
 
         internal_error
-            << "Correct source code:\n" << correct_src
-            << "Actual source code:\n" << src
+            << "Correct source code:\n"
+            << correct_src
+            << "Actual source code:\n"
+            << src
             << "Difference starts at:" << diff << "\n"
             << "Correct: " << correct_src.substr(diff, diff_end - diff) << "\n"
             << "Actual: " << src.substr(diff, diff_end - diff) << "\n";

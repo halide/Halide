@@ -38,7 +38,11 @@ void deregister_heap_object(const void *obj, size_t size);
  * information. */
 bool dump_stack_frame();
 
-#define HALIDE_DUMP_STACK_FRAME {static bool check = Halide::Internal::Introspection::dump_stack_frame(); (void)check;}
+#define HALIDE_DUMP_STACK_FRAME                                                  \
+    {                                                                            \
+        static bool check = Halide::Internal::Introspection::dump_stack_frame(); \
+        (void)check;                                                             \
+    }
 
 /** Return the address of a global with type T *. Call this to
  * generate something to pass as the last argument to
@@ -60,11 +64,10 @@ std::string get_source_location();
 void test_compilation_unit(bool (*test)(bool (*)(const void *, const std::string &)),
                            bool (*test_a)(const void *, const std::string &),
                            void (*calib)());
-}
+}  // namespace Introspection
 
-}
-}
-
+}  // namespace Internal
+}  // namespace Halide
 
 // This code verifies that introspection is working before relying on
 // it. The definitions must appear in Halide.h, but they should not
@@ -82,8 +85,8 @@ static bool check_introspection(const void *var, const std::string &type,
     std::string name = Introspection::get_variable_name(var, type);
     return name == correct_name && loc == correct_loc;
 }
-}
-}
+}  // namespace Internal
+}  // namespace Halide
 
 namespace HalideIntrospectionCanary {
 
@@ -100,10 +103,12 @@ struct A {
 
     class B {
         int private_member;
+
     public:
         float a_float;
         A *parent;
-        B() : private_member(17) {
+        B()
+            : private_member(17) {
             a_float = private_member * 2.0f;
         }
     };
@@ -120,11 +125,11 @@ struct A {
 static bool test_a(const void *a_ptr, const std::string &my_name) {
     const A *a = (const A *)a_ptr;
     bool success = true;
-    success &= Halide::Internal::check_introspection(&a->an_int, "int", my_name + ".an_int", __FILE__ , __LINE__);
-    success &= Halide::Internal::check_introspection(&a->a_b, "HalideIntrospectionCanary::A::B", my_name + ".a_b", __FILE__ , __LINE__);
-    success &= Halide::Internal::check_introspection(&a->a_b.parent, "HalideIntrospectionCanary::A \\*", my_name + ".a_b.parent", __FILE__ , __LINE__);
-    success &= Halide::Internal::check_introspection(&a->a_b.a_float, "float", my_name + ".a_b.a_float", __FILE__ , __LINE__);
-    success &= Halide::Internal::check_introspection(a->a_b.parent, "HalideIntrospectionCanary::A", my_name, __FILE__ , __LINE__);
+    success &= Halide::Internal::check_introspection(&a->an_int, "int", my_name + ".an_int", __FILE__, __LINE__);
+    success &= Halide::Internal::check_introspection(&a->a_b, "HalideIntrospectionCanary::A::B", my_name + ".a_b", __FILE__, __LINE__);
+    success &= Halide::Internal::check_introspection(&a->a_b.parent, "HalideIntrospectionCanary::A \\*", my_name + ".a_b.parent", __FILE__, __LINE__);
+    success &= Halide::Internal::check_introspection(&a->a_b.a_float, "float", my_name + ".a_b.a_float", __FILE__, __LINE__);
+    success &= Halide::Internal::check_introspection(a->a_b.parent, "HalideIntrospectionCanary::A", my_name, __FILE__, __LINE__);
     return success;
 }
 

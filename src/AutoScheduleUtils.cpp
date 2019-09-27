@@ -17,7 +17,7 @@ using std::string;
 using std::vector;
 
 namespace {
-class SubstituteVarEstimates: public IRMutator {
+class SubstituteVarEstimates : public IRMutator {
     using IRMutator::visit;
 
     Expr visit(const Variable *var) override {
@@ -27,17 +27,17 @@ class SubstituteVarEstimates: public IRMutator {
             // XXX.extent.[dim_index]
             std::vector<std::string> v = split_string(var->name, ".");
             user_assert(v.size() >= 3);
-            int d = string_to_int(v[v.size()-1]);
-            if (v[v.size()-2] == "min") {
+            int d = string_to_int(v[v.size() - 1]);
+            if (v[v.size() - 2] == "min") {
                 Expr est = var->param.min_constraint_estimate(d);
                 return est.defined() ? est : var;
             } else {
-                internal_assert(v[v.size()-2] == "extent");
+                internal_assert(v[v.size() - 2] == "extent");
                 Expr est = var->param.extent_constraint_estimate(d);
                 return est.defined() ? est : var;
             }
         } else if (var->param.defined() && !var->param.is_buffer() &&
-            var->param.estimate().defined()) {
+                   var->param.estimate().defined()) {
             // This is a var from a Param object
             return var->param.estimate();
         } else {
@@ -45,7 +45,7 @@ class SubstituteVarEstimates: public IRMutator {
         }
     }
 };
-} // anonymous namespace
+}  // anonymous namespace
 
 Expr subsitute_var_estimates(Expr e) {
     if (!e.defined()) return e;
@@ -176,12 +176,11 @@ Expr perform_inline(Expr e, const map<string, Function> &env,
         // if provided (i.e. last to be realized comes first).
         if (!order.empty()) {
             std::sort(calls.begin(), calls.end(),
-                [&order](const string &lhs, const string &rhs){
-                    const auto &iter_lhs = std::find(order.begin(), order.end(), lhs);
-                    const auto &iter_rhs = std::find(order.begin(), order.end(), rhs);
-                    return iter_lhs > iter_rhs;
-                }
-            );
+                      [&order](const string &lhs, const string &rhs) {
+                          const auto &iter_lhs = std::find(order.begin(), order.end(), lhs);
+                          const auto &iter_rhs = std::find(order.begin(), order.end(), rhs);
+                          return iter_lhs > iter_rhs;
+                      });
         }
 
         // Check if any of the calls are in the set of functions to be inlined.
@@ -268,7 +267,7 @@ void propagate_estimate_test() {
     Var x("x"), y("y");
     check(p + x + y, x + y + 10);
     check(img.dim(0).min() + img.dim(1).min() + x, x + 2);
-    check(img.dim(0).extent() + img.dim(1).min() + img.dim(1).extent()*x, 55*x + 38);
+    check(img.dim(0).extent() + img.dim(1).min() + img.dim(1).extent() * x, 55 * x + 38);
 
     std::cout << "Propagate estimate test passed" << std::endl;
 }

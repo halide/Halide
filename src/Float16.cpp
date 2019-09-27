@@ -52,7 +52,7 @@ uint16_t float_to_float16(float value) {
     return bits;
 }
 
-float float16_to_float(const uint16_t& value) {
+float float16_to_float(const uint16_t &value) {
     // There aren't all that many float16_t values, so a few lookup tables suffice.
     static const uint32_t mantissa_table[2048] = {
         0x00000000, 0x33800000, 0x34000000, 0x34400000, 0x34800000, 0x34A00000, 0x34C00000, 0x34E00000,
@@ -310,7 +310,7 @@ float float16_to_float(const uint16_t& value) {
         0x387C0000, 0x387C2000, 0x387C4000, 0x387C6000, 0x387C8000, 0x387CA000, 0x387CC000, 0x387CE000,
         0x387D0000, 0x387D2000, 0x387D4000, 0x387D6000, 0x387D8000, 0x387DA000, 0x387DC000, 0x387DE000,
         0x387E0000, 0x387E2000, 0x387E4000, 0x387E6000, 0x387E8000, 0x387EA000, 0x387EC000, 0x387EE000,
-        0x387F0000, 0x387F2000, 0x387F4000, 0x387F6000, 0x387F8000, 0x387FA000, 0x387FC000, 0x387FE000 };
+        0x387F0000, 0x387F2000, 0x387F4000, 0x387F6000, 0x387F8000, 0x387FA000, 0x387FC000, 0x387FE000};
     static const uint32_t exponent_table[64] = {
         0x00000000, 0x00800000, 0x01000000, 0x01800000, 0x02000000, 0x02800000, 0x03000000, 0x03800000,
         0x04000000, 0x04800000, 0x05000000, 0x05800000, 0x06000000, 0x06800000, 0x07000000, 0x07800000,
@@ -319,12 +319,12 @@ float float16_to_float(const uint16_t& value) {
         0x80000000, 0x80800000, 0x81000000, 0x81800000, 0x82000000, 0x82800000, 0x83000000, 0x83800000,
         0x84000000, 0x84800000, 0x85000000, 0x85800000, 0x86000000, 0x86800000, 0x87000000, 0x87800000,
         0x88000000, 0x88800000, 0x89000000, 0x89800000, 0x8A000000, 0x8A800000, 0x8B000000, 0x8B800000,
-        0x8C000000, 0x8C800000, 0x8D000000, 0x8D800000, 0x8E000000, 0x8E800000, 0x8F000000, 0xC7800000 };
+        0x8C000000, 0x8C800000, 0x8D000000, 0x8D800000, 0x8E000000, 0x8E800000, 0x8F000000, 0xC7800000};
     static const uint16_t offset_table[64] = {
-           0, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024,
+        0, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024,
         1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024,
-           0, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024,
-        1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024 };
+        0, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024,
+        1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024};
 
     int sign_and_exponent = value >> float16_t::mantissa_bits;
     int offset = offset_table[sign_and_exponent] + (value & float16_t::mantissa_mask);
@@ -353,11 +353,17 @@ float bfloat16_to_float(uint16_t b) {
 
 using namespace Halide::Internal;
 
-float16_t::float16_t(float value) : data(float_to_float16(value)) {}
+float16_t::float16_t(float value)
+    : data(float_to_float16(value)) {
+}
 
-float16_t::float16_t(double value) : data(float_to_float16(value)) {}
+float16_t::float16_t(double value)
+    : data(float_to_float16(value)) {
+}
 
-float16_t::float16_t(int value) : data(float_to_float16(value)) {}
+float16_t::float16_t(int value)
+    : data(float_to_float16(value)) {
+}
 
 float16_t::operator float() const {
     return float16_to_float(data);
@@ -376,7 +382,6 @@ float16_t float16_t::make_from_bits(uint16_t bits) {
     f.data = bits;
     return f;
 }
-
 
 float16_t float16_t::make_zero() {
     return float16_t::make_from_bits(0);
@@ -450,12 +455,17 @@ uint16_t float16_t::to_bits() const {
     return data;
 }
 
+bfloat16_t::bfloat16_t(float value)
+    : data(float_to_bfloat16(value)) {
+}
 
-bfloat16_t::bfloat16_t(float value) : data(float_to_bfloat16(value)) {}
+bfloat16_t::bfloat16_t(double value)
+    : data(float_to_bfloat16(value)) {
+}
 
-bfloat16_t::bfloat16_t(double value) : data(float_to_bfloat16(value)) {}
-
-bfloat16_t::bfloat16_t(int value) : data(float_to_bfloat16(value)) {}
+bfloat16_t::bfloat16_t(int value)
+    : data(float_to_bfloat16(value)) {
+}
 
 bfloat16_t::operator float() const {
     return bfloat16_to_float(data);

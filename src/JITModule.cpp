@@ -22,7 +22,6 @@
 #include "LLVM_Runtime_Linker.h"
 #include "Pipeline.h"
 
-
 namespace Halide {
 namespace Internal {
 
@@ -30,7 +29,7 @@ using std::string;
 
 #ifdef _WIN32
 void *get_symbol_address(const char *s) {
-    return (void *) GetProcAddress(GetModuleHandle(nullptr), s);
+    return (void *)GetProcAddress(GetModuleHandle(nullptr), s);
 }
 #else
 void *get_symbol_address(const char *s) {
@@ -56,7 +55,8 @@ struct SharedCudaContext {
     volatile int lock;
 
     // Will be created on first use by a jitted kernel that uses it
-    SharedCudaContext() : ptr(0), lock(0) {
+    SharedCudaContext()
+        : ptr(0), lock(0) {
     }
 
     // Note that we never free the context, because static destructor
@@ -75,7 +75,8 @@ struct SharedOpenCLContext {
     cl_command_queue command_queue;
     volatile int lock;
 
-    SharedOpenCLContext() : context(nullptr), command_queue(nullptr), lock(0) {
+    SharedOpenCLContext()
+        : context(nullptr), command_queue(nullptr), lock(0) {
     }
 
     // We never free the context, for the same reason as above.
@@ -133,7 +134,8 @@ public:
     mutable RefCount ref_count;
 
     // Just construct a module with symbols to import into other modules.
-    JITModuleContents() : execution_engine(nullptr) {
+    JITModuleContents()
+        : execution_engine(nullptr) {
     }
 
     ~JITModuleContents() {
@@ -153,11 +155,15 @@ public:
     std::string name;
 };
 
-template <>
-RefCount &ref_count<JITModuleContents>(const JITModuleContents *f) noexcept { return f->ref_count; }
+template<>
+RefCount &ref_count<JITModuleContents>(const JITModuleContents *f) noexcept {
+    return f->ref_count;
+}
 
-template <>
-void destroy<JITModuleContents>(const JITModuleContents *f) { delete f; }
+template<>
+void destroy<JITModuleContents>(const JITModuleContents *f) {
+    delete f;
+}
 
 namespace {
 
@@ -166,7 +172,7 @@ JITModule::Symbol compile_and_get_function(ExecutionEngine &ee, const string &na
     debug(2) << "JIT Compiling " << name << "\n";
     llvm::Function *fn = ee.FindFunctionNamed(name.c_str());
     internal_assert(fn->getName() == name);
-    void *f = (void *) ee.getFunctionAddress(name);
+    void *f = (void *)ee.getFunctionAddress(name);
     if (!f) {
         internal_error << "Compiling " << name << " returned nullptr\n";
     }
@@ -185,8 +191,9 @@ class HalideJITMemoryManager : public SectionMemoryManager {
     std::vector<std::pair<uint8_t *, size_t>> code_pages;
 
 public:
-
-    HalideJITMemoryManager(const std::vector<JITModule> &modules) : modules(modules) {}
+    HalideJITMemoryManager(const std::vector<JITModule> &modules)
+        : modules(modules) {
+    }
 
     uint64_t getSymbolAddress(const std::string &name) override {
         for (size_t i = 0; i < modules.size(); i++) {
@@ -209,7 +216,7 @@ public:
     }
 };
 
-}
+}  // namespace
 
 JITModule::JITModule() {
     jit_module = new JITModuleContents();
@@ -389,7 +396,7 @@ JITModule::Symbol JITModule::argv_entrypoint_symbol() const {
     return jit_module->argv_entrypoint;
 }
 
-static bool module_already_in_graph(const JITModuleContents *start, const JITModuleContents *target, std::set <const JITModuleContents *> &already_seen) {
+static bool module_already_in_graph(const JITModuleContents *start, const JITModuleContents *target, std::set<const JITModuleContents *> &already_seen) {
     if (start == target) {
         return true;
     }
@@ -439,7 +446,7 @@ void JITModule::reuse_device_allocations(bool b) const {
 }
 
 bool JITModule::compiled() const {
-  return jit_module->execution_engine != nullptr;
+    return jit_module->execution_engine != nullptr;
 }
 
 namespace {
@@ -559,7 +566,7 @@ void *get_library_symbol_handler(void *lib, const char *name) {
     return (*active_handlers.custom_get_library_symbol)(lib, name);
 }
 
-template <typename function_t>
+template<typename function_t>
 function_t hook_function(const std::map<std::string, JITModule::Symbol> &exports, const char *hook_name, function_t hook) {
     auto iter = exports.find(hook_name);
     internal_assert(iter != exports.end()) << "Failed to find function " << hook_name << "\n";
@@ -715,9 +722,9 @@ JITModule &make_module(llvm::Module *for_module, Target target,
         case D3D12Compute:
             one_gpu.set_feature(Target::D3D12Compute);
             module_name += "d3d12compute";
-            #if !defined(_WIN32)
-                internal_error << "JIT support for Direct3D 12 is only implemented on Windows 10 and above.\n";
-            #endif
+#if !defined(_WIN32)
+            internal_error << "JIT support for Direct3D 12 is only implemented on Windows 10 and above.\n";
+#endif
             break;
         default:
             module_name = "shared runtime";
@@ -725,8 +732,11 @@ JITModule &make_module(llvm::Module *for_module, Target target,
         }
 
         // This function is protected by a mutex so this is thread safe.
-        std::unique_ptr<llvm::Module> module(get_initial_module_for_target(one_gpu,
-            &runtime.jit_module->context, true, runtime_kind != MainShared));
+        auto module =
+            get_initial_module_for_target(one_gpu,
+                                          &runtime.jit_module->context,
+                                          true,
+                                          runtime_kind != MainShared);
         if (for_module) {
             clone_target_options(*for_module, *module);
         }

@@ -21,19 +21,20 @@ using std::vector;
 
 class InjectProfiling : public IRMutator {
 public:
-    map<string, int> indices;   // maps from func name -> index in buffer.
+    map<string, int> indices;  // maps from func name -> index in buffer.
 
-    vector<int> stack; // What produce nodes are we currently inside of.
+    vector<int> stack;  // What produce nodes are we currently inside of.
 
     string pipeline_name;
 
-    InjectProfiling(const string &pipeline_name) : pipeline_name(pipeline_name) {
+    InjectProfiling(const string &pipeline_name)
+        : pipeline_name(pipeline_name) {
         indices["overhead"] = 0;
         stack.push_back(0);
     }
 
-    map<int, uint64_t> func_stack_current; // map from func id -> current stack allocation
-    map<int, uint64_t> func_stack_peak; // map from func id -> peak stack allocation
+    map<int, uint64_t> func_stack_current;  // map from func id -> current stack allocation
+    map<int, uint64_t> func_stack_peak;     // map from func id -> peak stack allocation
 
 private:
     using IRMutator::visit;
@@ -75,14 +76,14 @@ private:
         on_stack = true;
 
         Expr cond = simplify(condition);
-        if (is_zero(cond)) { // Condition always false
+        if (is_zero(cond)) {  // Condition always false
             return make_zero(UInt(64));
         }
 
         int32_t constant_size = Allocate::constant_allocation_size(extents, name);
         if (constant_size > 0) {
             int64_t stack_bytes = constant_size * type.bytes();
-            if (can_allocation_fit_on_stack(stack_bytes)) { // Allocation on stack
+            if (can_allocation_fit_on_stack(stack_bytes)) {  // Allocation on stack
                 return make_const(UInt(64), stack_bytes);
             }
         }
@@ -121,7 +122,7 @@ private:
         // inject_profiling() so this is a possible scenario.
         if (!is_zero(size) && on_stack) {
             const uint64_t *int_size = as_const_uint(size);
-            internal_assert(int_size != NULL); // Stack size is always a const int
+            internal_assert(int_size != NULL);  // Stack size is always a const int
             func_stack_current[idx] += *int_size;
             func_stack_peak[idx] = std::max(func_stack_peak[idx], func_stack_current[idx]);
             debug(3) << "  Allocation on stack: " << op->name << "(" << size << ") in pipeline " << pipeline_name
@@ -215,7 +216,7 @@ private:
     Stmt incr_active_threads() {
         Expr state = Variable::make(Handle(), "profiler_state");
         return Evaluate::make(Call::make(Int(32), "halide_profiler_incr_active_threads",
-                                  {state}, Call::Extern));
+                                         {state}, Call::Extern));
     }
 
     Stmt decr_active_threads() {
@@ -317,7 +318,7 @@ Stmt inject_profiling(Stmt s, string pipeline_name) {
 
         Expr profiler_pipeline_state = Variable::make(Handle(), "profiler_pipeline_state");
         Stmt update_stack = Evaluate::make(Call::make(Int(32), "halide_profiler_stack_peak_update",
-                                           {profiler_pipeline_state, func_stack_peak_buf}, Call::Extern));
+                                                      {profiler_pipeline_state, func_stack_peak_buf}, Call::Extern));
         s = Block::make(update_stack, s);
     }
 
@@ -339,10 +340,11 @@ Stmt inject_profiling(Stmt s, string pipeline_name) {
     s = LetStmt::make("profiler_token", start_profiler, s);
 
     if (!no_stack_alloc) {
-        for (int i = num_funcs-1; i >= 0; --i) {
+        for (int i = num_funcs - 1; i >= 0; --i) {
             s = Block::make(Store::make("profiling_func_stack_peak_buf",
                                         make_const(UInt(64), profiling.func_stack_peak[i]),
-                                        i, Parameter(), const_true(), ModulusRemainder()), s);
+                                        i, Parameter(), const_true(), ModulusRemainder()),
+                            s);
         }
         s = Block::make(s, Free::make("profiling_func_stack_peak_buf"));
         s = Allocate::make("profiling_func_stack_peak_buf", UInt(64),

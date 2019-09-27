@@ -39,13 +39,14 @@ Target complete_x86_target(Target t) {
     }
     return t;
 }
-}
+}  // namespace
 
-CodeGen_X86::CodeGen_X86(Target t) : CodeGen_Posix(complete_x86_target(t)) {
+CodeGen_X86::CodeGen_X86(Target t)
+    : CodeGen_Posix(complete_x86_target(t)) {
 
-    #if !defined(WITH_X86)
+#if !defined(WITH_X86)
     user_error << "x86 not enabled for this build of Halide.\n";
-    #endif
+#endif
 
     user_assert(llvm_X86_enabled) << "llvm build not configured with X86 target enabled.\n";
 }
@@ -80,8 +81,7 @@ bool should_use_pmaddwd(Expr a, Expr b, vector<Expr> &result) {
     return true;
 }
 
-}
-
+}  // namespace
 
 void CodeGen_X86::visit(const Add *op) {
     vector<Expr> matches;
@@ -91,7 +91,6 @@ void CodeGen_X86::visit(const Add *op) {
         CodeGen_Posix::visit(op);
     }
 }
-
 
 void CodeGen_X86::visit(const Sub *op) {
     vector<Expr> matches;
@@ -139,7 +138,6 @@ void CodeGen_X86::visit(const GT *op) {
     } else {
         CodeGen_Posix::visit(op);
     }
-
 }
 
 void CodeGen_X86::visit(const EQ *op) {
@@ -312,10 +310,9 @@ void CodeGen_X86::visit(const Cast *op) {
         {Target::AVX2, false, UInt(16, 16), 9, "packusdwx16",
          u16_sat(wild_i32x_)},
         {Target::SSE41, false, UInt(16, 8), 0, "packusdwx8",
-         u16_sat(wild_i32x_)}
-    };
+         u16_sat(wild_i32x_)}};
 
-    for (size_t i = 0; i < sizeof(patterns)/sizeof(patterns[0]); i++) {
+    for (size_t i = 0; i < sizeof(patterns) / sizeof(patterns[0]); i++) {
         const Pattern &pattern = patterns[i];
 
         if (!target.has_feature(pattern.feature)) {
