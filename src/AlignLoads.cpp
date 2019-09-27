@@ -2,12 +2,12 @@
 
 #include "AlignLoads.h"
 #include "Bounds.h"
+#include "HexagonAlignment.h"
 #include "IRMutator.h"
 #include "IROperator.h"
 #include "ModulusRemainder.h"
 #include "Scope.h"
 #include "Simplify.h"
-#include "HexagonAlignment.h"
 using std::vector;
 
 namespace Halide {

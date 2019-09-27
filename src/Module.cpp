@@ -5,8 +5,8 @@
 #include <future>
 
 #include "CodeGen_C.h"
-#include "CodeGen_PyTorch.h"
 #include "CodeGen_Internal.h"
+#include "CodeGen_PyTorch.h"
 #include "Debug.h"
 #include "HexagonOffload.h"
 #include "IROperator.h"

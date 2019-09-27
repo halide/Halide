@@ -1,11 +1,11 @@
 #include "Solve.h"
 #include "CSE.h"
+#include "ConciseCasts.h"
 #include "ExprUsesVar.h"
 #include "IREquality.h"
 #include "IRMutator.h"
 #include "Simplify.h"
 #include "Substitute.h"
-#include "ConciseCasts.h"
 
 namespace Halide {
 namespace Internal {

@@ -1,11 +1,11 @@
 #ifndef HALIDE_TYPE_H
 #define HALIDE_TYPE_H
 
-#include <stdint.h>
-#include "runtime/HalideRuntime.h"
 #include "Error.h"
-#include "Util.h"
 #include "Float16.h"
+#include "Util.h"
+#include "runtime/HalideRuntime.h"
+#include <stdint.h>
 
 /** \file
  * Defines halide types

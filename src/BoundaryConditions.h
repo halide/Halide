@@ -8,7 +8,6 @@
 #include <utility>
 #include <vector>
 
-#include "Lambda.h"
 #include "Func.h"
 #include "IR.h"
 #include "Lambda.h"

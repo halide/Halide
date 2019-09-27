@@ -1,8 +1,8 @@
 #include "BoundSmallAllocations.h"
 #include "Bounds.h"
+#include "CodeGen_Internal.h"
 #include "IRMutator.h"
 #include "Simplify.h"
-#include "CodeGen_Internal.h"
 
 namespace Halide {
 namespace Internal {

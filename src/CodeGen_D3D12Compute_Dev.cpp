@@ -1,12 +1,12 @@
-#include <sstream>
 #include <algorithm>
 #include <iomanip>
+#include <sstream>
 
 #include "CodeGen_D3D12Compute_Dev.h"
 #include "CodeGen_Internal.h"
 #include "Debug.h"
-#include "IROperator.h"
 #include "IRMutator.h"
+#include "IROperator.h"
 
 #define DEBUG_TYPES (0)
 

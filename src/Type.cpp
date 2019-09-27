@@ -1,6 +1,6 @@
-#include <sstream>
-#include <cfloat>
 #include "IR.h"
+#include <cfloat>
+#include <sstream>
 
 namespace Halide {
 

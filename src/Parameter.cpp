@@ -1,8 +1,8 @@
+#include "Parameter.h"
 #include "Argument.h"
 #include "IR.h"
 #include "IROperator.h"
 #include "ObjectInstanceRegistry.h"
-#include "Parameter.h"
 #include "Simplify.h"
 
 namespace Halide {

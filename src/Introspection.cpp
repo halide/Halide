@@ -3,13 +3,13 @@
 #ifdef WITH_INTROSPECTION
 
 #include "Debug.h"
-#include "LLVM_Headers.h"
 #include "Error.h"
+#include "LLVM_Headers.h"
 
-#include <string>
 #include <iostream>
 #include <sstream>
 #include <stdio.h>
+#include <string>
 
 // defines backtrace, which gets the call stack as instruction pointers
 #include <execinfo.h>

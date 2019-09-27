@@ -1,6 +1,6 @@
+#include <array>
 #include <iostream>
 #include <string>
-#include <array>
 
 #include "Target.h"
 

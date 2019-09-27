@@ -3,10 +3,10 @@
 #include "CSE.h"
 #include "Debug.h"
 #include "IRMutator.h"
+#include "IROperator.h"
 #include "IRPrinter.h"
 #include "Inline.h"
 #include "Qualify.h"
-#include "IROperator.h"
 #include "Substitute.h"
 
 namespace Halide {

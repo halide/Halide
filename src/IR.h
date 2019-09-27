@@ -13,9 +13,9 @@
 #include "Expr.h"
 #include "Function.h"
 #include "IntrusivePtr.h"
+#include "ModulusRemainder.h"
 #include "Parameter.h"
 #include "Type.h"
-#include "ModulusRemainder.h"
 #include "Util.h"
 #include "runtime/HalideBuffer.h"
 

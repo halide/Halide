@@ -2,8 +2,8 @@
 
 #include "CSE.h"
 #include "ExprUsesVar.h"
-#include "IROperator.h"
 #include "IRMutator.h"
+#include "IROperator.h"
 #include "Monotonic.h"
 #include "Scope.h"
 #include "Simplify.h"

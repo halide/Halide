@@ -1,5 +1,6 @@
 #include <sstream>
 
+#include "CodeGen_D3D12Compute_Dev.h"
 #include "CodeGen_GPU_Host.h"
 #include "CodeGen_Internal.h"
 #include "CodeGen_Metal_Dev.h"
@@ -7,7 +8,6 @@
 #include "CodeGen_OpenGLCompute_Dev.h"
 #include "CodeGen_OpenGL_Dev.h"
 #include "CodeGen_PTX_Dev.h"
-#include "CodeGen_D3D12Compute_Dev.h"
 #include "Debug.h"
 #include "ExprUsesVar.h"
 #include "IROperator.h"

@@ -1,8 +1,7 @@
 #include <algorithm>
-#include <utility>
 #include <memory>
+#include <utility>
 
-#include "ScheduleFunctions.h"
 #include "ApplySplit.h"
 #include "CodeGen_GPU_Dev.h"
 #include "ExprUsesVar.h"
@@ -12,13 +11,14 @@
 #include "IROperator.h"
 #include "IRPrinter.h"
 #include "Inline.h"
+#include "Prefetch.h"
 #include "Qualify.h"
+#include "ScheduleFunctions.h"
 #include "Simplify.h"
 #include "Solve.h"
 #include "Substitute.h"
 #include "Target.h"
 #include "Var.h"
-#include "Prefetch.h"
 
 namespace Halide {
 namespace Internal {

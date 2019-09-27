@@ -1,11 +1,11 @@
 #include "StmtToHtml.h"
-#include "IRVisitor.h"
 #include "IROperator.h"
+#include "IRVisitor.h"
 #include "Scope.h"
 
-#include <iterator>
-#include <iostream>
 #include <fstream>
+#include <iostream>
+#include <iterator>
 #include <sstream>
 #include <stdio.h>
 

@@ -3,6 +3,7 @@
 #include "CSE.h"
 #include "ConciseCasts.h"
 #include "ExprUsesVar.h"
+#include "HexagonAlignment.h"
 #include "IREquality.h"
 #include "IRMatch.h"
 #include "IRMutator.h"
@@ -11,7 +12,6 @@
 #include "Scope.h"
 #include "Simplify.h"
 #include "Substitute.h"
-#include "HexagonAlignment.h"
 #include <unordered_map>
 
 namespace Halide {

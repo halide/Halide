@@ -1,9 +1,9 @@
 #include "Tracing.h"
+#include "Bounds.h"
 #include "IRMutator.h"
 #include "IROperator.h"
-#include "runtime/HalideRuntime.h"
-#include "Bounds.h"
 #include "RealizationOrder.h"
+#include "runtime/HalideRuntime.h"
 
 namespace Halide {
 namespace Internal {

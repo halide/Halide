@@ -1,6 +1,6 @@
 #include "DeviceInterface.h"
-#include "JITModule.h"
 #include "IROperator.h"
+#include "JITModule.h"
 #include "Target.h"
 
 using namespace Halide;

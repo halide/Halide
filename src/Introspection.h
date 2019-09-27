@@ -1,9 +1,9 @@
 #ifndef HALIDE_INTROSPECTION_H
 #define HALIDE_INTROSPECTION_H
 
-#include <string>
 #include <iostream>
 #include <stdint.h>
+#include <string>
 
 #include "Util.h"
 

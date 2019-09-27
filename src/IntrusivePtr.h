@@ -7,8 +7,8 @@
  * pointers.
  */
 
-#include <stdlib.h>
 #include <atomic>
+#include <stdlib.h>
 
 #include "Util.h"
 
