@@ -341,6 +341,28 @@ Expr Simplify::visit(const Call *op, ExprInfo *bounds) {
         } else {
             return Call::make(op->type, op->name, {arg}, op->call_type);
         }
+    } else if (op->call_type == Call::PureExtern &&
+               (op->name == "is_inf_f16" || op->name == "is_inf_f32" || op->name == "is_inf_f64")) {
+        Expr arg = mutate(op->args[0], nullptr);
+        double f = 0.0;
+        if (const_float(arg, &f)) {
+            return make_bool(std::isinf(f));
+        } else if (arg.same_as(op->args[0])) {
+            return op;
+        } else {
+            return Call::make(op->type, op->name, {arg}, op->call_type);
+        }
+    } else if (op->call_type == Call::PureExtern &&
+               (op->name == "is_finite_f16" || op->name == "is_finite_f32" || op->name == "is_finite_f64")) {
+        Expr arg = mutate(op->args[0], nullptr);
+        double f = 0.0;
+        if (const_float(arg, &f)) {
+            return make_bool(std::isfinite(f));
+        } else if (arg.same_as(op->args[0])) {
+            return op;
+        } else {
+            return Call::make(op->type, op->name, {arg}, op->call_type);
+        }
     } else if (op->is_intrinsic(Call::stringify)) {
         // Eagerly concat constant arguments to a stringify.
         bool changed = false;

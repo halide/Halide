@@ -106,8 +106,12 @@ inline double round_f64(double x) {return round(x);}
 inline float nan_f32() {return NAN;}
 inline float neg_inf_f32() {return -INFINITY;}
 inline float inf_f32() {return INFINITY;}
-inline bool is_nan_f32(float x) {return x != x;}
-inline bool is_nan_f64(double x) {return x != x;}
+inline bool is_nan_f32(float x) {return isnan(x);}
+inline bool is_nan_f64(double x) {return isnan(x);}
+inline bool is_inf_f32(float x) {return isinf(x);}
+inline bool is_inf_f64(double x) {return isinf(x);}
+inline bool is_finite_f32(float x) {return isfinite(x);}
+inline bool is_finite_f64(double x) {return isfinite(x);}
 
 template<typename A, typename B>
 inline A reinterpret(const B &b) {
