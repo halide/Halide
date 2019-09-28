@@ -40,8 +40,11 @@ class UsesExternImage : public IRVisitor {
             IRVisitor::visit(c);
         }
     }
+
 public:
-    UsesExternImage() : result(false) {}
+    UsesExternImage()
+        : result(false) {
+    }
     bool result;
 };
 
@@ -170,7 +173,7 @@ class SplitTuples : public IRMutator {
             string var_name = name + ".value";
             Expr val = mutate(op->values[i]);
             if (!is_undef(val) && atomic) {
-                lets.push_back({ var_name, val });
+                lets.push_back({var_name, val});
                 val = Variable::make(val.type(), var_name);
             }
             provides.push_back(Provide::make(name, {val}, args));
@@ -191,8 +194,9 @@ class SplitTuples : public IRMutator {
     Scope<int> realizations;
 
 public:
-
-    SplitTuples(const map<string, Function> &e) : env(e) {}
+    SplitTuples(const map<string, Function> &e)
+        : env(e) {
+    }
 };
 
 }  // namespace

@@ -140,6 +140,8 @@ void define_operators(py::module &m) {
     m.def("trunc", &trunc);
     m.def("fract", &fract);
     m.def("is_nan", &is_nan);
+    m.def("is_inf", &is_inf);
+    m.def("is_finite", &is_finite);
     m.def("reinterpret", (Expr (*)(Type, Expr)) &reinterpret);
     m.def("cast", (Expr (*)(Type, Expr)) &cast);
     m.def("print", [](py::args args) -> Expr {

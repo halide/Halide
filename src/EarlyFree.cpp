@@ -17,7 +17,9 @@ public:
     string func;
     Stmt last_use;
 
-    FindLastUse(string s) : func(s) {}
+    FindLastUse(string s)
+        : func(s) {
+    }
 
 private:
     bool in_loop = false;
@@ -112,7 +114,6 @@ public:
     Stmt last_use;
 
 private:
-
     bool injected = false;
 
     using IRMutator::visit;
@@ -163,7 +164,6 @@ class InjectEarlyFrees : public IRMutator {
                                   alloc->new_expr, alloc->free_function);
         }
         return stmt;
-
     }
 };
 

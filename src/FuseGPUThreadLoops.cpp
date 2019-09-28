@@ -26,7 +26,7 @@ namespace {
 string thread_names[] = {"__thread_id_x", "__thread_id_y", "__thread_id_z", "__thread_id_w"};
 string block_names[] = {"__block_id_x", "__block_id_y", "__block_id_z", "__block_id_w"};
 string shared_mem_name = "__shared";
-}
+}  // namespace
 
 class InjectThreadBarriers : public IRMutator {
     bool in_threads;
@@ -67,13 +67,13 @@ class InjectThreadBarriers : public IRMutator {
     }
 
 public:
-    InjectThreadBarriers() : in_threads(false) {
+    InjectThreadBarriers()
+        : in_threads(false) {
         barrier =
             Evaluate::make(Call::make(Int(32), Call::gpu_thread_barrier,
                                       vector<Expr>(), Call::Intrinsic));
     }
 };
-
 
 class ExtractBlockSize : public IRVisitor {
     Expr block_extent[4];
@@ -192,7 +192,8 @@ class NormalizeDimensionality : public IRMutator {
 
 public:
     NormalizeDimensionality(const ExtractBlockSize &e, DeviceAPI device_api)
-      : block_size(e), device_api(device_api), depth(0), max_depth(0) {}
+        : block_size(e), device_api(device_api), depth(0), max_depth(0) {
+    }
 };
 
 class ReplaceForWithIf : public IRMutator {
@@ -228,15 +229,21 @@ class ReplaceForWithIf : public IRMutator {
     }
 
 public:
-    ReplaceForWithIf(const ExtractBlockSize &e) : block_size(e) {}
+    ReplaceForWithIf(const ExtractBlockSize &e)
+        : block_size(e) {
+    }
 };
 
 class ExtractSharedAllocations : public IRMutator {
     using IRMutator::visit;
 
     struct IntInterval {
-        IntInterval() : IntInterval(0, 0) {}
-        IntInterval(int min, int max) : min(min), max(max) {}
+        IntInterval()
+            : IntInterval(0, 0) {
+        }
+        IntInterval(int min, int max)
+            : min(min), max(max) {
+        }
         int min;
         int max;
     };
@@ -245,12 +252,13 @@ class ExtractSharedAllocations : public IRMutator {
         string name;
         Type type;
         Expr size;
-        IntInterval liveness; // Start and end of the barrier stage at which this allocation is used.
+        IntInterval liveness;  // Start and end of the barrier stage at which this allocation is used.
     };
 
     struct AllocGroup {
         AllocGroup() = default;
-        AllocGroup(const SharedAllocation &alloc) : max_type_bytes(alloc.type.bytes()) {
+        AllocGroup(const SharedAllocation &alloc)
+            : max_type_bytes(alloc.type.bytes()) {
             max_size_bytes = simplify(alloc.type.bytes() * alloc.size);
             group.push_back(alloc);
         }
@@ -268,8 +276,8 @@ class ExtractSharedAllocations : public IRMutator {
         }
 
         int max_type_bytes;
-        Expr max_size_bytes; // In bytes
-        vector<SharedAllocation> group; // Groups of allocs that should be coalesced together
+        Expr max_size_bytes;             // In bytes
+        vector<SharedAllocation> group;  // Groups of allocs that should be coalesced together
     };
 
     vector<SharedAllocation> allocations;
@@ -336,8 +344,8 @@ class ExtractSharedAllocations : public IRMutator {
     }
 
     Stmt visit(const Allocate *op) override {
-        user_assert(!op->new_expr.defined()) << "Allocate node inside GPU kernel has custom new expression.\n" <<
-            "(Memoization is not supported inside GPU kernels at present.)\n";
+        user_assert(!op->new_expr.defined()) << "Allocate node inside GPU kernel has custom new expression.\n"
+                                             << "(Memoization is not supported inside GPU kernels at present.)\n";
 
         if (in_threads ||
             op->memory_type == MemoryType::Stack ||
@@ -430,9 +438,9 @@ class ExtractSharedAllocations : public IRMutator {
 
     // Return index to free_spaces where 'alloc' should be coalesced. Return -1
     // if there isn't any.
-    int find_best_fit(const vector<AllocGroup>& mem_allocs,
-                      const vector<int>& free_spaces,
-                      const SharedAllocation& alloc, int stage) {
+    int find_best_fit(const vector<AllocGroup> &mem_allocs,
+                      const vector<int> &free_spaces,
+                      const SharedAllocation &alloc, int stage) {
         int free_idx = -1;
 
         Expr alloc_size = simplify(alloc.size);
@@ -447,7 +455,7 @@ class ExtractSharedAllocations : public IRMutator {
         // the least with 'alloc' (can be smaller or larger; it does not really
         // matter since we take the max of the two as the new size).
 
-        if (!is_const(alloc_size)) { // dynamic-sized alloc
+        if (!is_const(alloc_size)) {  // dynamic-sized alloc
             for (int i = free_spaces.size() - 1; i >= 0; --i) {
                 internal_assert(free_spaces[i] >= 0 && free_spaces[i] < (int)mem_allocs.size());
                 internal_assert(mem_allocs[free_spaces[i]].is_free(stage));
@@ -458,7 +466,7 @@ class ExtractSharedAllocations : public IRMutator {
                     free_idx = i;
                 }
             }
-        } else { // constant-sized alloc
+        } else {  // constant-sized alloc
             int64_t diff = -1;
             for (int i = free_spaces.size() - 1; i >= 0; --i) {
                 internal_assert(free_spaces[i] >= 0 && free_spaces[i] < (int)mem_allocs.size());
@@ -490,25 +498,24 @@ class ExtractSharedAllocations : public IRMutator {
         // Sort based on the ascending order of the min liveness stage; if equal,
         // sort based on the ascending order of the max liveness stage.
         sort(allocations.begin(), allocations.end(),
-            [](const SharedAllocation &lhs, const SharedAllocation &rhs){
-                if (lhs.liveness.min < rhs.liveness.min) {
-                    return true;
-                } else if (lhs.liveness.min == rhs.liveness.min) {
-                    return lhs.liveness.max < rhs.liveness.max;
-                }
-                return false;
-            }
-        );
+             [](const SharedAllocation &lhs, const SharedAllocation &rhs) {
+                 if (lhs.liveness.min < rhs.liveness.min) {
+                     return true;
+                 } else if (lhs.liveness.min == rhs.liveness.min) {
+                     return lhs.liveness.max < rhs.liveness.max;
+                 }
+                 return false;
+             });
 
         vector<AllocGroup> mem_allocs;
-        vector<int> free_spaces; // Contains index to free spaces in mem_allocs
+        vector<int> free_spaces;  // Contains index to free spaces in mem_allocs
         int start_idx = 0;
 
         for (int stage = 0; stage < barrier_stage; ++stage) {
             for (int i = start_idx; i < (int)allocations.size(); ++i) {
                 if (allocations[i].liveness.min > stage) {
                     break;
-                } else if (allocations[i].liveness.min == stage) { // Allocate
+                } else if (allocations[i].liveness.min == stage) {  // Allocate
                     int free_idx = find_best_fit(mem_allocs, free_spaces, allocations[i], stage);
                     if (free_idx != -1) {
                         mem_allocs[free_spaces[free_idx]].insert(allocations[i]);
@@ -516,9 +523,9 @@ class ExtractSharedAllocations : public IRMutator {
                     } else {
                         mem_allocs.push_back(AllocGroup(allocations[i]));
                     }
-                } else if (allocations[i].liveness.max == stage - 1) { // Free
+                } else if (allocations[i].liveness.max == stage - 1) {  // Free
                     int free_idx = -1;
-                    for (int j = 0; j < (int)mem_allocs.size(); ++j) { // Find the index of the space to free
+                    for (int j = 0; j < (int)mem_allocs.size(); ++j) {  // Find the index of the space to free
                         if (mem_allocs[j].group.back().name == allocations[i].name) {
                             free_idx = j;
                             break;
@@ -556,10 +563,9 @@ public:
             // to then element type as long as the original one is aligned
             // to the widest type.
             sort(mem_allocs.begin(), mem_allocs.end(),
-                [](const AllocGroup &lhs, const AllocGroup &rhs){
-                    return lhs.max_type_bytes > rhs.max_type_bytes;
-                }
-            );
+                 [](const AllocGroup &lhs, const AllocGroup &rhs) {
+                     return lhs.max_type_bytes > rhs.max_type_bytes;
+                 });
 
             SharedAllocation sentinel;
             sentinel.name = "sentinel";
@@ -568,7 +574,7 @@ public:
             mem_allocs.push_back(AllocGroup(sentinel));
 
             // Add a dummy allocation at the end to get the total size
-            Expr total_size = Variable::make(Int(32), "group_" + std::to_string(mem_allocs.size()-1) + ".shared_offset");
+            Expr total_size = Variable::make(Int(32), "group_" + std::to_string(mem_allocs.size() - 1) + ".shared_offset");
             s = Allocate::make(shared_mem_name, UInt(8), MemoryType::GPUShared,
                                {total_size}, const_true(), s);
 
@@ -586,9 +592,9 @@ public:
 
                 Expr offset = 0;
                 if (i > 0) {
-                    offset = Variable::make(Int(32), "group_" + std::to_string(i-1) + ".shared_offset");
+                    offset = Variable::make(Int(32), "group_" + std::to_string(i - 1) + ".shared_offset");
                     int new_elem_size = mem_allocs[i].max_type_bytes;
-                    offset += (((mem_allocs[i-1].max_size_bytes + new_elem_size - 1)/new_elem_size)*new_elem_size);
+                    offset += (((mem_allocs[i - 1].max_size_bytes + new_elem_size - 1) / new_elem_size) * new_elem_size);
                 }
                 s = LetStmt::make("group_" + std::to_string(i) + ".shared_offset", simplify(offset), s);
             }
@@ -597,9 +603,10 @@ public:
         return s;
     }
 
-    ExtractSharedAllocations(DeviceAPI d) : in_threads(false), barrier_stage(0), device_api(d) {}
+    ExtractSharedAllocations(DeviceAPI d)
+        : in_threads(false), barrier_stage(0), device_api(d) {
+    }
 };
-
 
 // Pull out any allocate node outside of the innermost thread
 // block. Should only be run after shared allocations have already
@@ -609,10 +616,10 @@ class ExtractRegisterAllocations : public IRMutator {
 
     struct RegisterAllocation {
         string name;
-        string loop_var; // The nearest enclosing loop over threads. Empty if it's at block level.
+        string loop_var;  // The nearest enclosing loop over threads. Empty if it's at block level.
         Type type;
         Expr size;
-        MemoryType memory_type; // Should be Auto, Stack, or Register
+        MemoryType memory_type;  // Should be Auto, Stack, or Register
     };
 
     bool in_lane_loop = false;
@@ -722,7 +729,6 @@ class ExtractRegisterAllocations : public IRMutator {
         return visit_let<Stmt>(op);
     }
 
-
     Scope<int> register_allocations;
     string loop_var;
 
@@ -753,12 +759,14 @@ class FuseGPUThreadLoopsSingleKernel : public IRMutator {
             Stmt body = op->body;
 
             // This is the innermost loop over blocks.
-            debug(3) << "Fusing thread block:\n" << body << "\n\n";
+            debug(3) << "Fusing thread block:\n"
+                     << body << "\n\n";
 
             NormalizeDimensionality n(block_size, op->device_api);
             body = n.mutate(body);
 
-            debug(3) << "Normalized dimensionality:\n" << body << "\n\n";
+            debug(3) << "Normalized dimensionality:\n"
+                     << body << "\n\n";
 
             Expr block_size_x = block_size.dimensions() ? block_size.extent(0) : 1;
             ExtractRegisterAllocations register_allocs;
@@ -770,7 +778,8 @@ class FuseGPUThreadLoopsSingleKernel : public IRMutator {
                 }
             }
 
-            debug(3) << "Extracted register-level allocations:\n" << body << "\n\n";
+            debug(3) << "Extracted register-level allocations:\n"
+                     << body << "\n\n";
 
             if (register_allocs.has_thread_loop) {
                 // If there's no loop over threads, everything is already synchronous.
@@ -778,12 +787,14 @@ class FuseGPUThreadLoopsSingleKernel : public IRMutator {
                 body = i.mutate(body);
             }
 
-            debug(3) << "Injected synchronization:\n" << body << "\n\n";
+            debug(3) << "Injected synchronization:\n"
+                     << body << "\n\n";
 
             ReplaceForWithIf f(block_size);
             body = f.mutate(body);
 
-            debug(3) << "Replaced for with if:\n" << body << "\n\n";
+            debug(3) << "Replaced for with if:\n"
+                     << body << "\n\n";
 
             // There is always a loop over thread_id_x
             string thread_id = "." + thread_names[0];
@@ -800,11 +811,13 @@ class FuseGPUThreadLoopsSingleKernel : public IRMutator {
             thread_id.clear();
             body = register_allocs.rewrap(body, thread_id);
 
-            debug(3) << "Rewrapped in for loops:\n" << body << "\n\n";
+            debug(3) << "Rewrapped in for loops:\n"
+                     << body << "\n\n";
 
             // Add back in the shared allocations
             body = shared_mem.rewrap(body);
-            debug(3) << "Add back in shared allocations:\n" << body << "\n\n";
+            debug(3) << "Add back in shared allocations:\n"
+                     << body << "\n\n";
 
             if (body.same_as(op->body)) {
                 return op;
@@ -814,14 +827,13 @@ class FuseGPUThreadLoopsSingleKernel : public IRMutator {
         } else {
             return IRMutator::visit(op);
         }
-
     }
 
 public:
     FuseGPUThreadLoopsSingleKernel(const ExtractBlockSize &bs,
-                                   ExtractSharedAllocations &sm) :
-        block_size(bs), shared_mem(sm) {}
-
+                                   ExtractSharedAllocations &sm)
+        : block_size(bs), shared_mem(sm) {
+    }
 };
 
 class FuseGPUThreadLoops : public IRMutator {
@@ -849,7 +861,8 @@ class FuseGPUThreadLoops : public IRMutator {
             ExtractSharedAllocations shared_mem(op->device_api);
             loop = shared_mem.mutate(loop);
 
-            debug(3) << "Pulled out shared allocations:\n" << loop << "\n\n";
+            debug(3) << "Pulled out shared allocations:\n"
+                     << loop << "\n\n";
 
             // Mutate the inside of the kernel
             return FuseGPUThreadLoopsSingleKernel(block_size, shared_mem).mutate(loop);
@@ -867,9 +880,9 @@ class ZeroGPULoopMins : public IRMutator {
         ScopedValue<bool> old_in_non_glsl_gpu(in_non_glsl_gpu);
 
         in_non_glsl_gpu = (in_non_glsl_gpu && op->device_api == DeviceAPI::None) ||
-          (op->device_api == DeviceAPI::CUDA) || (op->device_api == DeviceAPI::OpenCL) ||
-          (op->device_api == DeviceAPI::Metal) ||
-          (op->device_api == DeviceAPI::D3D12Compute);
+                          (op->device_api == DeviceAPI::CUDA) || (op->device_api == DeviceAPI::OpenCL) ||
+                          (op->device_api == DeviceAPI::Metal) ||
+                          (op->device_api == DeviceAPI::D3D12Compute);
 
         Stmt stmt = IRMutator::visit(op);
         if (CodeGen_GPU_Dev::is_gpu_var(op->name) && !is_zero(op->min)) {
@@ -883,7 +896,9 @@ class ZeroGPULoopMins : public IRMutator {
     }
 
 public:
-    ZeroGPULoopMins() : in_non_glsl_gpu(false) { }
+    ZeroGPULoopMins()
+        : in_non_glsl_gpu(false) {
+    }
 };
 
 class ValidateGPULoopNesting : public IRVisitor {
@@ -899,7 +914,7 @@ class ValidateGPULoopNesting : public IRVisitor {
         ScopedValue<int> old_gpu_thread_depth(gpu_thread_depth);
 
         for (int i = 1; i <= 4; i++) {
-            if (ends_with(op->name, block_names[4-i])) {
+            if (ends_with(op->name, block_names[4 - i])) {
                 user_assert(i > gpu_block_depth)
                     << "Invalid schedule: Loop over " << op->name
                     << " cannot be inside of loop over " << innermost_block_var << "\n";
@@ -909,7 +924,7 @@ class ValidateGPULoopNesting : public IRVisitor {
                 innermost_block_var = op->name;
                 gpu_block_depth = i;
             }
-            if (ends_with(op->name, thread_names[4-i])) {
+            if (ends_with(op->name, thread_names[4 - i])) {
                 user_assert(i > gpu_thread_depth)
                     << "Invalid schedule: Loop over " << op->name
                     << " cannot be inside of loop over " << innermost_thread_var << "\n";

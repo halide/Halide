@@ -32,36 +32,42 @@ std::unique_ptr<llvm::Module> parse_bitcode_file(llvm::StringRef buf, llvm::LLVM
     std::unique_ptr<llvm::Module> get_initmod_##mod(llvm::LLVMContext *context) {         \
         llvm::StringRef sb = llvm::StringRef((const char *)halide_internal_initmod_##mod, \
                                              halide_internal_initmod_##mod##_length);     \
-        return parse_bitcode_file(sb, context, #mod);                                    \
+        return parse_bitcode_file(sb, context, #mod);                                     \
     }
 
-#define DECLARE_NO_INITMOD(mod)                                                      \
-  std::unique_ptr<llvm::Module> get_initmod_##mod(llvm::LLVMContext *, bool, bool) { \
-        user_error << "Halide was compiled without support for this target\n";       \
-        return std::unique_ptr<llvm::Module>();                                      \
-    }                                                                                \
-  std::unique_ptr<llvm::Module> get_initmod_##mod##_ll(llvm::LLVMContext *) {        \
-        user_error << "Halide was compiled without support for this target\n";       \
-        return std::unique_ptr<llvm::Module>();                                      \
+#define DECLARE_NO_INITMOD(mod)                                                        \
+    std::unique_ptr<llvm::Module> get_initmod_##mod(llvm::LLVMContext *, bool, bool) { \
+        user_error << "Halide was compiled without support for this target\n";         \
+        return std::unique_ptr<llvm::Module>();                                        \
+    }                                                                                  \
+    std::unique_ptr<llvm::Module> get_initmod_##mod##_ll(llvm::LLVMContext *) {        \
+        user_error << "Halide was compiled without support for this target\n";         \
+        return std::unique_ptr<llvm::Module>();                                        \
     }
 
-#define DECLARE_CPP_INITMOD(mod) \
-    DECLARE_INITMOD(mod ## _32_debug) \
-    DECLARE_INITMOD(mod ## _64_debug) \
-    DECLARE_INITMOD(mod ## _32) \
-    DECLARE_INITMOD(mod ## _64) \
+#define DECLARE_CPP_INITMOD(mod)                                                                            \
+    DECLARE_INITMOD(mod##_32_debug)                                                                         \
+    DECLARE_INITMOD(mod##_64_debug)                                                                         \
+    DECLARE_INITMOD(mod##_32)                                                                               \
+    DECLARE_INITMOD(mod##_64)                                                                               \
     std::unique_ptr<llvm::Module> get_initmod_##mod(llvm::LLVMContext *context, bool bits_64, bool debug) { \
-        if (bits_64) {                                                                      \
-            if (debug) return get_initmod_##mod##_64_debug(context);                        \
-            else return get_initmod_##mod##_64(context);                                    \
-        } else {                                                                            \
-            if (debug) return get_initmod_##mod##_32_debug(context);                        \
-            else return get_initmod_##mod##_32(context);                                    \
-        }                                                                                   \
+        if (bits_64) {                                                                                      \
+            if (debug) {                                                                                    \
+                return get_initmod_##mod##_64_debug(context);                                               \
+            } else {                                                                                        \
+                return get_initmod_##mod##_64(context);                                                     \
+            }                                                                                               \
+        } else {                                                                                            \
+            if (debug) {                                                                                    \
+                return get_initmod_##mod##_32_debug(context);                                               \
+            } else {                                                                                        \
+                return get_initmod_##mod##_32(context);                                                     \
+            }                                                                                               \
+        }                                                                                                   \
     }
 
 #define DECLARE_LL_INITMOD(mod) \
-    DECLARE_INITMOD(mod ## _ll)
+    DECLARE_INITMOD(mod##_ll)
 
 // Universal CPP Initmods. Please keep sorted alphabetically.
 DECLARE_CPP_INITMOD(alignment_128)
@@ -296,7 +302,7 @@ llvm::DataLayout get_data_layout_for_target(Target target) {
                 return llvm::DataLayout("e-m:e-p:32:32-f64:32:64-f80:32-n8:16:32-S128");
 #endif
             }
-        } else { // 64-bit
+        } else {  // 64-bit
             if (target.os == Target::OSX) {
 #if LLVM_VERSION >= 100
                 return llvm::DataLayout("e-m:o-p270:32:32-p271:32:32-p272:64:64-i64:64-f80:128-n8:16:32:64-S128");
@@ -344,7 +350,7 @@ llvm::DataLayout get_data_layout_for_target(Target target) {
                 return llvm::DataLayout("e-m:e-p:32:32-i64:64-v128:64:128-a:0:32-n32-S64");
 #endif
             }
-        } else { // 64-bit
+        } else {  // 64-bit
             if (target.os == Target::IOS) {
                 return llvm::DataLayout("e-m:o-i64:64-i128:128-n32:64-S128");
             } else {
@@ -438,11 +444,11 @@ llvm::Triple get_triple_for_target(const Target &target) {
             }
         } else {
             user_assert(target.bits == 64) << "Target bits must be 32 or 64\n";
-            #ifdef WITH_AARCH64
+#ifdef WITH_AARCH64
             triple.setArch(llvm::Triple::aarch64);
-            #else
+#else
             user_error << "AArch64 llvm target not enabled in this build of Halide\n";
-            #endif
+#endif
         }
 
         if (target.os == Target::Android) {
@@ -475,7 +481,7 @@ llvm::Triple get_triple_for_target(const Target &target) {
             user_error << "No mips support for this OS\n";
         }
     } else if (target.arch == Target::POWERPC) {
-        #ifdef WITH_POWERPC
+#ifdef WITH_POWERPC
         // Only ppc*-unknown-linux-gnu are supported for the time being.
         user_assert(target.os == Target::Linux) << "PowerPC target is Linux-only.\n";
         triple.setVendor(llvm::Triple::UnknownVendor);
@@ -488,9 +494,9 @@ llvm::Triple get_triple_for_target(const Target &target) {
             user_assert(target.bits == 64) << "Target must be 32- or 64-bit.\n";
             triple.setArch(llvm::Triple::ppc64le);
         }
-        #else
+#else
         user_error << "PowerPC llvm target not enabled in this build of Halide\n";
-        #endif
+#endif
     } else if (target.arch == Target::Hexagon) {
         triple.setVendor(llvm::Triple::UnknownVendor);
         triple.setArch(llvm::Triple::hexagon);
@@ -581,10 +587,10 @@ void link_modules(std::vector<std::unique_ptr<llvm::Module>> &modules, Target t,
 
     if (t.has_feature(Target::MinGW)) {
         retain.insert(retain.end(),
-                             {"sincos", "sincosf",
-                              "asinh", "asinhf",
-                              "acosh", "acoshf",
-                              "atanh", "atanhf"});
+                      {"sincos", "sincosf",
+                       "asinh", "asinhf",
+                       "acosh", "acoshf",
+                       "atanh", "atanhf"});
     }
 
     // Enumerate the global variables.
@@ -626,7 +632,6 @@ void link_modules(std::vector<std::unique_ptr<llvm::Module>> &modules, Target t,
     if (runtime_api) {
         runtime_api->eraseFromParent();
     }
-
 }
 
 }  // namespace
@@ -838,7 +843,7 @@ std::unique_ptr<llvm::Module> get_initial_module_for_target(Target t, llvm::LLVM
                 }
                 modules.push_back(get_initmod_android_io(c, bits_64, debug));
                 modules.push_back(get_initmod_android_host_cpu_count(c, bits_64, debug));
-                modules.push_back(get_initmod_linux_yield(c, bits_64, debug)); // TODO: verify
+                modules.push_back(get_initmod_linux_yield(c, bits_64, debug));  // TODO: verify
                 if (tsan) {
                     modules.push_back(get_initmod_posix_threads_tsan(c, bits_64, debug));
                 } else {
@@ -969,7 +974,6 @@ std::unique_ptr<llvm::Module> get_initial_module_for_target(Target t, llvm::LLVM
             modules.push_back(get_initmod_float16_t(c, bits_64, debug));
             modules.push_back(get_initmod_errors(c, bits_64, debug));
 
-
             // Note that we deliberately include this module, even if Target::LegacyBufferWrappers
             // isn't enabled: it isn't much code, and it makes it much easier to
             // intermingle code that is built with this flag with code that is
@@ -999,7 +1003,7 @@ std::unique_ptr<llvm::Module> get_initial_module_for_target(Target t, llvm::LLVM
             }
             if (t.arch == Target::ARM) {
                 if (t.bits == 64) {
-                  modules.push_back(get_initmod_aarch64_ll(c));
+                    modules.push_back(get_initmod_aarch64_ll(c));
                 } else if (t.has_feature(Target::ARMv7s)) {
                     modules.push_back(get_initmod_arm_ll(c));
                 } else if (!t.has_feature(Target::NoNEON)) {
@@ -1076,7 +1080,6 @@ std::unique_ptr<llvm::Module> get_initial_module_for_target(Target t, llvm::LLVM
                 modules.push_back(get_initmod_wasm_cpu_features(c, bits_64, debug));
             }
         }
-
     }
 
     if (module_type == ModuleJITShared || module_type == ModuleGPU) {
@@ -1117,7 +1120,7 @@ std::unique_ptr<llvm::Module> get_initial_module_for_target(Target t, llvm::LLVM
             } else if (t.os == Target::OSX) {
                 modules.push_back(get_initmod_osx_opengl_context(c, bits_64, debug));
             } else if (t.os == Target::Android) {
-              modules.push_back(get_initmod_opengl_egl_context(c, bits_64, debug));
+                modules.push_back(get_initmod_opengl_egl_context(c, bits_64, debug));
             } else {
                 // You're on your own to provide definitions of halide_opengl_get_proc_address and halide_opengl_create_context
             }
@@ -1138,7 +1141,6 @@ std::unique_ptr<llvm::Module> get_initial_module_for_target(Target t, llvm::LLVM
             } else {
                 // You're on your own to provide definitions of halide_opengl_get_proc_address and halide_opengl_create_context
             }
-
         }
         if (t.has_feature(Target::Metal)) {
             modules.push_back(get_initmod_metal(c, bits_64, debug));

@@ -19,7 +19,9 @@
 // This is declared in NVPTX.h, which is not exported. Ugly, but seems better than
 // hardcoding a path to the .h file.
 #ifdef WITH_PTX
-namespace llvm { FunctionPass *createNVVMReflectPass(const StringMap<int>& Mapping); }
+namespace llvm {
+FunctionPass *createNVVMReflectPass(const StringMap<int> &Mapping);
+}
 #endif
 
 namespace Halide {
@@ -30,10 +32,11 @@ using std::vector;
 
 using namespace llvm;
 
-CodeGen_PTX_Dev::CodeGen_PTX_Dev(Target host) : CodeGen_LLVM(host) {
-    #if !defined(WITH_PTX)
+CodeGen_PTX_Dev::CodeGen_PTX_Dev(Target host)
+    : CodeGen_LLVM(host) {
+#if !defined(WITH_PTX)
     user_error << "ptx not enabled for this build of Halide.\n";
-    #endif
+#endif
     user_assert(llvm_NVPTX_enabled) << "llvm build not configured with nvptx target enabled\n.";
 
     context = new llvm::LLVMContext();
@@ -124,13 +127,11 @@ void CodeGen_PTX_Dev::add_kernel(Stmt stmt,
     llvm::Metadata *md_args[] = {
         llvm::ValueAsMetadata::get(function),
         MDString::get(*context, "kernel"),
-        llvm::ValueAsMetadata::get(ConstantInt::get(i32_t, 1))
-    };
+        llvm::ValueAsMetadata::get(ConstantInt::get(i32_t, 1))};
 
     MDNode *md_node = MDNode::get(*context, md_args);
 
     module->getOrInsertNamedMetadata("nvvm.annotations")->addOperand(md_node);
-
 
     // Now verify the function is ok
     verifyFunction(*function);
@@ -149,9 +150,9 @@ void CodeGen_PTX_Dev::add_kernel(Stmt stmt,
 void CodeGen_PTX_Dev::init_module() {
     init_context();
 
-    #ifdef WITH_PTX
+#ifdef WITH_PTX
     module = get_initial_module_for_ptx_device(target, context);
-    #endif
+#endif
 }
 
 void CodeGen_PTX_Dev::visit(const Call *op) {
@@ -200,8 +201,8 @@ void CodeGen_PTX_Dev::visit(const For *loop) {
 }
 
 void CodeGen_PTX_Dev::visit(const Allocate *alloc) {
-    user_assert(!alloc->new_expr.defined()) << "Allocate node inside PTX kernel has custom new expression.\n" <<
-        "(Memoization is not supported inside GPU kernels at present.)\n";
+    user_assert(!alloc->new_expr.defined()) << "Allocate node inside PTX kernel has custom new expression.\n"
+                                            << "(Memoization is not supported inside GPU kernels at present.)\n";
     if (alloc->name == "__shared") {
         // PTX uses zero in address space 3 as the base address for shared memory
         Value *shared_base = Constant::getNullValue(PointerType::get(i8_t, 3));
@@ -351,14 +352,13 @@ string CodeGen_PTX_Dev::mattrs() const {
     if (target.has_feature(Target::CUDACapability61)) {
         return "+ptx50";
     } else if (target.features_any_of({Target::CUDACapability32,
-                                Target::CUDACapability50})) {
+                                       Target::CUDACapability50})) {
         // Need ptx isa 4.0.
         return "+ptx40";
     } else {
         // Use the default. For llvm 3.5 it's ptx 3.2.
         return "";
     }
-
 }
 
 bool CodeGen_PTX_Dev::use_soft_float_abi() const {
@@ -367,7 +367,7 @@ bool CodeGen_PTX_Dev::use_soft_float_abi() const {
 
 vector<char> CodeGen_PTX_Dev::compile_to_src() {
 
-    #ifdef WITH_PTX
+#ifdef WITH_PTX
 
     debug(2) << "In CodeGen_PTX_Dev::compile_to_src";
 
@@ -431,8 +431,7 @@ vector<char> CodeGen_PTX_Dev::compile_to_src() {
     // use of fused-multiply-add, but they do not seem to be controlled
     // by this __nvvvm_reflect mechanism and may be flags to earlier compiler
     // passes.
-    #define kDefaultDenorms 0
-    #define kFTZDenorms     1
+    const int kFTZDenorms = 1;
 
     // Insert a module flag for the FTZ handling.
     module->addModuleFlag(llvm::Module::Override, "nvvm-reflect-ftz",
@@ -481,7 +480,8 @@ vector<char> CodeGen_PTX_Dev::compile_to_src() {
     }
     debug(2) << "Done with CodeGen_PTX_Dev::compile_to_src";
 
-    debug(1) << "PTX kernel:\n" << outstr.c_str() << "\n";
+    debug(1) << "PTX kernel:\n"
+             << outstr.c_str() << "\n";
 
     vector<char> buffer(outstr.begin(), outstr.end());
 
@@ -500,7 +500,7 @@ vector<char> CodeGen_PTX_Dev::compile_to_src() {
         if (system(cmd.c_str()) == 0) {
             cmd = "nvdisasm " + sass.pathname();
             int ret = system(cmd.c_str());
-            (void)ret; // Don't care if it fails
+            (void)ret;  // Don't care if it fails
         }
 
         // Note: It works to embed the contents of the .sass file in
@@ -522,7 +522,7 @@ vector<char> CodeGen_PTX_Dev::compile_to_src() {
     // Null-terminate the ptx source
     buffer.push_back(0);
     return buffer;
-#else // WITH_PTX
+#else  // WITH_PTX
     return vector<char>();
 #endif
 }

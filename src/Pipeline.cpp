@@ -35,16 +35,15 @@ std::string output_name(const string &filename, const Module &m, const string &e
 std::map<Output, std::string> single_output(const string &filename, const Module &m, Output output_type) {
     auto ext = get_output_info(m.target());
     std::map<Output, std::string> outputs = {
-        { output_type, output_name(filename, m, ext.at(output_type).extension) }
-    };
+        {output_type, output_name(filename, m, ext.at(output_type).extension)}};
     return outputs;
 }
 
 std::map<Output, std::string> static_library_outputs(const string &filename_prefix, const Target &target) {
     auto ext = get_output_info(target);
     std::map<Output, std::string> outputs = {
-        { Output::c_header, filename_prefix + ext.at(Output::c_header).extension },
-        { Output::static_library, filename_prefix + ext.at(Output::static_library).extension },
+        {Output::c_header, filename_prefix + ext.at(Output::c_header).extension},
+        {Output::static_library, filename_prefix + ext.at(Output::static_library).extension},
     };
     return outputs;
 }
@@ -105,9 +104,9 @@ struct PipelineContents {
 
     bool trace_pipeline;
 
-    PipelineContents() :
-        module("", Target()), trace_pipeline(false) {
-        user_context_arg.arg = Argument("__user_context", Argument::InputScalar, type_of<const void*>(), 0, ArgumentEstimates{});
+    PipelineContents()
+        : module("", Target()), trace_pipeline(false) {
+        user_context_arg.arg = Argument("__user_context", Argument::InputScalar, type_of<const void *>(), 0, ArgumentEstimates{});
         user_context_arg.param = Parameter(Handle(), false, 0, "__user_context");
     }
 
@@ -136,22 +135,25 @@ template<>
 void destroy<PipelineContents>(const PipelineContents *p) {
     delete p;
 }
-}
+}  // namespace Internal
 
-Pipeline::Pipeline() : contents(nullptr) {
+Pipeline::Pipeline()
+    : contents(nullptr) {
 }
 
 bool Pipeline::defined() const {
     return contents.defined();
 }
 
-Pipeline::Pipeline(Func output) : contents(new PipelineContents) {
+Pipeline::Pipeline(Func output)
+    : contents(new PipelineContents) {
     output.function().freeze();
     contents->outputs.push_back(output.function());
 }
 
-Pipeline::Pipeline(const vector<Func> &outputs) : contents(new PipelineContents) {
-    for (Func f: outputs) {
+Pipeline::Pipeline(const vector<Func> &outputs)
+    : contents(new PipelineContents) {
+    for (Func f : outputs) {
         f.function().freeze();
         contents->outputs.push_back(f.function());
     }
@@ -217,7 +219,6 @@ void Pipeline::compile_to(const std::map<Output, std::string> &output_files,
     compile_to_module(args, fn_name, target).compile(output_files);
 }
 
-
 void Pipeline::compile_to_bitcode(const string &filename,
                                   const vector<Argument> &args,
                                   const string &fn_name,
@@ -258,7 +259,6 @@ void Pipeline::compile_to_assembly(const string &filename,
     Module m = compile_to_module(args, fn_name, target);
     m.compile(single_output(filename, m, Output::assembly));
 }
-
 
 void Pipeline::compile_to_c(const string &filename,
                             const vector<Argument> &args,
@@ -306,8 +306,8 @@ void Pipeline::compile_to_file(const string &filename_prefix,
     Module m = compile_to_module(args, fn_name, target);
     auto ext = get_output_info(target);
     std::map<Output, std::string> outputs = {
-        { Output::c_header, filename_prefix + ext.at(Output::c_header).extension },
-        { Output::object, filename_prefix + ext.at(Output::object).extension },
+        {Output::c_header, filename_prefix + ext.at(Output::c_header).extension},
+        {Output::object, filename_prefix + ext.at(Output::object).extension},
     };
     m.compile(outputs);
 }
@@ -381,7 +381,9 @@ class FindExterns : public IRGraphVisitor {
     }
 
 public:
-    FindExterns(std::map<std::string, JITExtern> &externs) : externs(externs) {}
+    FindExterns(std::map<std::string, JITExtern> &externs)
+        : externs(externs) {
+    }
 
     std::map<std::string, JITExtern> &externs;
 };
@@ -488,12 +490,14 @@ void Pipeline::compile_jit(const Target &target_arg) {
     if (contents->jit_target == target) {
         if (target.arch == Target::WebAssembly) {
             if (contents->wasm_module.contents.defined()) {
-                debug(2) << "Reusing old wasm module compiled for :\n" << contents->jit_target << "\n";
+                debug(2) << "Reusing old wasm module compiled for :\n"
+                         << contents->jit_target << "\n";
                 return;
             }
         }
         if (contents->jit_module.compiled()) {
-            debug(2) << "Reusing old jit module compiled for :\n" << contents->jit_target << "\n";
+            debug(2) << "Reusing old jit module compiled for :\n"
+                     << contents->jit_target << "\n";
             return;
         }
     }
@@ -530,7 +534,7 @@ void Pipeline::compile_jit(const Target &target_arg) {
         }
         if (debug::debug_level() >= 1) {
             for (const auto &p : lowered_externs) {
-              debug(1) << "Found extern: " << p.first << "\n";
+                debug(1) << "Found extern: " << p.first << "\n";
             }
         }
 
@@ -546,8 +550,7 @@ void Pipeline::compile_jit(const Target &target_arg) {
             args_and_outputs,
             contents->module.name(),
             lowered_externs,
-            make_externs_jit_module(target, lowered_externs)
-        );
+            make_externs_jit_module(target, lowered_externs));
         return;
     }
 
@@ -570,7 +573,6 @@ void Pipeline::compile_jit(const Target &target_arg) {
 
     contents->jit_module = jit_module;
 }
-
 
 void Pipeline::set_error_handler(void (*handler)(void *, const char *)) {
     user_assert(defined()) << "Pipeline is undefined\n";
@@ -641,9 +643,8 @@ Realization Pipeline::realize(vector<int32_t> sizes, const Target &target,
                               const ParamMap &param_map) {
     user_assert(defined()) << "Pipeline is undefined\n";
     vector<Buffer<>> bufs;
-    for (auto & out : contents->outputs) {
-        user_assert(out.has_pure_definition() || out.has_extern_definition()) <<
-            "Can't realize Pipeline with undefined output Func: " << out.name() << ".\n";
+    for (auto &out : contents->outputs) {
+        user_assert(out.has_pure_definition() || out.has_extern_definition()) << "Can't realize Pipeline with undefined output Func: " << out.name() << ".\n";
         for (Type t : out.output_types()) {
             bufs.emplace_back(t, nullptr, sizes);
         }
@@ -683,17 +684,17 @@ Realization Pipeline::realize(vector<int32_t> sizes, const Target &target,
 
 Realization Pipeline::realize(int x_size, int y_size, int z_size, int w_size, const Target &target,
                               const ParamMap &param_map) {
-  return realize({x_size, y_size, z_size, w_size}, target, param_map);
+    return realize({x_size, y_size, z_size, w_size}, target, param_map);
 }
 
 Realization Pipeline::realize(int x_size, int y_size, int z_size, const Target &target,
                               const ParamMap &param_map) {
-  return realize({x_size, y_size, z_size}, target, param_map);
+    return realize({x_size, y_size, z_size}, target, param_map);
 }
 
 Realization Pipeline::realize(int x_size, int y_size, const Target &target,
                               const ParamMap &param_map) {
-  return realize({x_size, y_size}, target, param_map);
+    return realize({x_size, y_size}, target, param_map);
 }
 
 Realization Pipeline::realize(int x_size, const Target &target,
@@ -730,8 +731,10 @@ void Pipeline::add_requirement(Expr condition, std::vector<Expr> &error_args) {
         }
 
         const Expr &condition;
+
     public:
-        Checker(const Expr &c) : condition(c) {
+        Checker(const Expr &c)
+            : condition(c) {
             c.accept(this);
         }
     } checker(condition);
@@ -759,7 +762,7 @@ struct ErrorBuffer {
     void concat(const char *message) {
         size_t len = strlen(message);
 
-        if (len && message[len-1] != '\n') {
+        if (len && message[len - 1] != '\n') {
             // Claim some extra space for a newline.
             len++;
         }
@@ -848,7 +851,8 @@ struct Pipeline::JITCallArgs {
     size_t size{0};
     const void **store;
 
-    JITCallArgs(size_t size) : size(size) {
+    JITCallArgs(size_t size)
+        : size(size) {
         if (size > kStoreSize) {
             store = new ConstVoidPtr[size];
         } else {
@@ -858,7 +862,7 @@ struct Pipeline::JITCallArgs {
 
     ~JITCallArgs() {
         if (store != fixed_store) {
-            delete [] store;
+            delete[] store;
         }
     }
 
@@ -939,7 +943,6 @@ void Pipeline::prepare_jit_call_arguments(RealizationArg &outputs, const Target 
             debug(2) << "JIT output buffer @ " << (const void *)buf << ", " << (const void *)buf->host << "\n";
         }
     }
-
 }
 
 std::vector<JITModule>
@@ -971,9 +974,7 @@ Pipeline::make_externs_jit_module(const Target &target,
                 // in current trunk Halide, but may be in some side branches that
                 // have not yet landed, e.g. JavaScript). Forcing it to be
                 // the correct type here, just in case.
-                arg_types.push_back(arg.arg.is_buffer() ?
-                                    type_of<struct buffer_t *>() :
-                                    arg.arg.type);
+                arg_types.push_back(arg.arg.is_buffer() ? type_of<struct buffer_t *>() : arg.arg.type);
             }
             // Add the outputs of the pipeline
             for (size_t i = 0; i < pipeline_contents.outputs.size(); i++) {
@@ -1049,7 +1050,6 @@ void Pipeline::realize(RealizationArg outputs, const Target &t,
     JITCallArgs args(contents->inferred_args.size() + outputs.size());
     prepare_jit_call_arguments(outputs, target, param_map,
                                &user_context_storage, false, args);
-
 
     // The handlers in the jit_context default to the default handlers
     // in the runtime of the shared module (e.g. halide_print_impl,

@@ -7,16 +7,15 @@
 namespace Halide {
 namespace Internal {
 
-using std::vector;
-using std::set;
-using std::pair;
-using std::string;
 using std::map;
+using std::pair;
+using std::set;
+using std::string;
+using std::vector;
 
 /** A mutator which eagerly folds no-op stmts */
 class NoOpCollapsingMutator : public IRMutator {
 protected:
-
     using IRMutator::visit;
 
     Stmt visit(const LetStmt *op) override {
@@ -184,8 +183,8 @@ class GenerateProducerBody : public NoOpCollapsingMutator {
     set<string> inner_semaphores;
 
 public:
-    GenerateProducerBody(const string &f, const vector<Expr> &s, map<string, string> &a) :
-        func(f), sema(s), cloned_acquires(a) {
+    GenerateProducerBody(const string &f, const vector<Expr> &s, map<string, string> &a)
+        : func(f), sema(s), cloned_acquires(a) {
     }
 };
 
@@ -241,8 +240,9 @@ class GenerateConsumerBody : public NoOpCollapsingMutator {
     }
 
 public:
-    GenerateConsumerBody(const string &f, const vector<Expr> &s) :
-        func(f), sema(s) {}
+    GenerateConsumerBody(const string &f, const vector<Expr> &s)
+        : func(f), sema(s) {
+    }
 };
 
 class CloneAcquire : public IRMutator {
@@ -253,9 +253,7 @@ class CloneAcquire : public IRMutator {
 
     Stmt visit(const Evaluate *op) override {
         const Call *call = op->value.as<Call>();
-        const Variable *var = ((call && !call->args.empty()) ?
-                               call->args[0].as<Variable>() :
-                               nullptr);
+        const Variable *var = ((call && !call->args.empty()) ? call->args[0].as<Variable>() : nullptr);
         if (var && var->name == old_name &&
             (call->name == "halide_semaphore_release" ||
              call->name == "halide_semaphore_init")) {
@@ -270,7 +268,8 @@ class CloneAcquire : public IRMutator {
     }
 
 public:
-    CloneAcquire(const string &o, const string &new_name) : old_name(o) {
+    CloneAcquire(const string &o, const string &new_name)
+        : old_name(o) {
         new_var = Variable::make(type_of<halide_semaphore_t *>(), new_name);
     }
 };
@@ -286,8 +285,11 @@ class CountConsumeNodes : public IRVisitor {
         }
         IRVisitor::visit(op);
     }
+
 public:
-    CountConsumeNodes(const string &f) : func(f) {}
+    CountConsumeNodes(const string &f)
+        : func(f) {
+    }
     int count = 0;
 };
 
@@ -356,7 +358,9 @@ class ForkAsyncProducers : public IRMutator {
     }
 
 public:
-    ForkAsyncProducers(const map<string, Function> &e) : env(e) {}
+    ForkAsyncProducers(const map<string, Function> &e)
+        : env(e) {
+    }
 };
 
 // Lowers semaphore initialization from a call to
@@ -489,8 +493,11 @@ class TightenProducerConsumerNodes : public IRMutator {
     }
 
     const map<string, Function> &env;
+
 public:
-    TightenProducerConsumerNodes(const map<string, Function> &e) : env(e) {}
+    TightenProducerConsumerNodes(const map<string, Function> &e)
+        : env(e) {
+    }
 };
 
 // Broaden the scope of acquire nodes to pack trailing work into the
@@ -642,5 +649,5 @@ Stmt fork_async_producers(Stmt s, const map<string, Function> &env) {
     return s;
 }
 
-}
-}
+}  // namespace Internal
+}  // namespace Halide

@@ -5,7 +5,6 @@ namespace Internal {
 
 using std::vector;
 
-
 IRMutator::IRMutator() {
 }
 
@@ -20,11 +19,21 @@ Stmt IRMutator::mutate(const Stmt &s) {
     return s.defined() ? s.get()->mutate_stmt(this) : Stmt();
 }
 
-Expr IRMutator::visit(const IntImm *op)   {return op;}
-Expr IRMutator::visit(const UIntImm *op)   {return op;}
-Expr IRMutator::visit(const FloatImm *op) {return op;}
-Expr IRMutator::visit(const StringImm *op) {return op;}
-Expr IRMutator::visit(const Variable *op) {return op;}
+Expr IRMutator::visit(const IntImm *op) {
+    return op;
+}
+Expr IRMutator::visit(const UIntImm *op) {
+    return op;
+}
+Expr IRMutator::visit(const FloatImm *op) {
+    return op;
+}
+Expr IRMutator::visit(const StringImm *op) {
+    return op;
+}
+Expr IRMutator::visit(const Variable *op) {
+    return op;
+}
 
 Expr IRMutator::visit(const Cast *op) {
     Expr value = mutate(op->value);
@@ -47,21 +56,51 @@ Expr mutate_binary_operator(IRMutator *mutator, const T *op) {
 }
 }  // namespace
 
-Expr IRMutator::visit(const Add *op)     {return mutate_binary_operator(this, op);}
-Expr IRMutator::visit(const Sub *op)     {return mutate_binary_operator(this, op);}
-Expr IRMutator::visit(const Mul *op)     {return mutate_binary_operator(this, op);}
-Expr IRMutator::visit(const Div *op)     {return mutate_binary_operator(this, op);}
-Expr IRMutator::visit(const Mod *op)     {return mutate_binary_operator(this, op);}
-Expr IRMutator::visit(const Min *op)     {return mutate_binary_operator(this, op);}
-Expr IRMutator::visit(const Max *op)     {return mutate_binary_operator(this, op);}
-Expr IRMutator::visit(const EQ *op)      {return mutate_binary_operator(this, op);}
-Expr IRMutator::visit(const NE *op)      {return mutate_binary_operator(this, op);}
-Expr IRMutator::visit(const LT *op)      {return mutate_binary_operator(this, op);}
-Expr IRMutator::visit(const LE *op)      {return mutate_binary_operator(this, op);}
-Expr IRMutator::visit(const GT *op)      {return mutate_binary_operator(this, op);}
-Expr IRMutator::visit(const GE *op)      {return mutate_binary_operator(this, op);}
-Expr IRMutator::visit(const And *op)     {return mutate_binary_operator(this, op);}
-Expr IRMutator::visit(const Or *op)      {return mutate_binary_operator(this, op);}
+Expr IRMutator::visit(const Add *op) {
+    return mutate_binary_operator(this, op);
+}
+Expr IRMutator::visit(const Sub *op) {
+    return mutate_binary_operator(this, op);
+}
+Expr IRMutator::visit(const Mul *op) {
+    return mutate_binary_operator(this, op);
+}
+Expr IRMutator::visit(const Div *op) {
+    return mutate_binary_operator(this, op);
+}
+Expr IRMutator::visit(const Mod *op) {
+    return mutate_binary_operator(this, op);
+}
+Expr IRMutator::visit(const Min *op) {
+    return mutate_binary_operator(this, op);
+}
+Expr IRMutator::visit(const Max *op) {
+    return mutate_binary_operator(this, op);
+}
+Expr IRMutator::visit(const EQ *op) {
+    return mutate_binary_operator(this, op);
+}
+Expr IRMutator::visit(const NE *op) {
+    return mutate_binary_operator(this, op);
+}
+Expr IRMutator::visit(const LT *op) {
+    return mutate_binary_operator(this, op);
+}
+Expr IRMutator::visit(const LE *op) {
+    return mutate_binary_operator(this, op);
+}
+Expr IRMutator::visit(const GT *op) {
+    return mutate_binary_operator(this, op);
+}
+Expr IRMutator::visit(const GE *op) {
+    return mutate_binary_operator(this, op);
+}
+Expr IRMutator::visit(const And *op) {
+    return mutate_binary_operator(this, op);
+}
+Expr IRMutator::visit(const Or *op) {
+    return mutate_binary_operator(this, op);
+}
 
 Expr IRMutator::visit(const Not *op) {
     Expr a = mutate(op->a);
@@ -245,7 +284,6 @@ Stmt IRMutator::visit(const Allocate *op) {
 Stmt IRMutator::visit(const Free *op) {
     return op;
 }
-
 
 Stmt IRMutator::visit(const Realize *op) {
     Region new_bounds;

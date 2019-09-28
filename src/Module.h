@@ -41,9 +41,9 @@ enum class Output {
 /** Type of linkage a function in a lowered Halide module can have.
     Also controls whether auxiliary functions and metadata are generated. */
 enum class LinkageType {
-    External, ///< Visible externally.
-    ExternalPlusMetadata, ///< Visible externally. Argument metadata and an argv wrapper are also generated.
-    Internal, ///< Not visible externally, similar to 'static' linkage in C.
+    External,              ///< Visible externally.
+    ExternalPlusMetadata,  ///< Visible externally. Argument metadata and an argv wrapper are also generated.
+    Internal,              ///< Not visible externally, similar to 'static' linkage in C.
 };
 
 namespace Internal {
@@ -62,9 +62,12 @@ struct LoweredArgument : public Argument {
     ModulusRemainder alignment;
 
     LoweredArgument() = default;
-    explicit LoweredArgument(const Argument &arg) : Argument(arg) {}
+    explicit LoweredArgument(const Argument &arg)
+        : Argument(arg) {
+    }
     LoweredArgument(const std::string &_name, Kind _kind, const Type &_type, uint8_t _dimensions, const ArgumentEstimates &argument_estimates)
-        : Argument(_name, _kind, _type, _dimensions, argument_estimates) {}
+        : Argument(_name, _kind, _type, _dimensions, argument_estimates) {
+    }
 };
 
 /** Definition of a lowered function. This object provides a concrete

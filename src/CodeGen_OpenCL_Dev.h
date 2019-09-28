@@ -38,13 +38,15 @@ public:
 
     std::string print_gpu_name(const std::string &name) override;
 
-    std::string api_unique_name() override { return "opencl"; }
+    std::string api_unique_name() override {
+        return "opencl";
+    }
 
 protected:
-
     class CodeGen_OpenCL_C : public CodeGen_C {
     public:
-        CodeGen_OpenCL_C(std::ostream &s, Target t) : CodeGen_C(s, t), emit_atomic_stores(false) {}
+        CodeGen_OpenCL_C(std::ostream &s, Target t)
+            : CodeGen_C(s, t), emit_atomic_stores(false) {}
         void add_kernel(Stmt stmt,
                         const std::string &name,
                         const std::vector<DeviceArgument> &args);

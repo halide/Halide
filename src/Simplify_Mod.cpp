@@ -41,7 +41,6 @@ Expr Simplify::visit(const Mod *op, ExprInfo *bounds) {
 
         auto rewrite = IRMatcher::rewriter(IRMatcher::mod(a, b), op->type);
 
-
         bool modulus_non_zero =
             ((b_bounds.min_defined && b_bounds.min > 0) ||
              (b_bounds.max_defined && b_bounds.max < 0) ||
@@ -92,5 +91,5 @@ Expr Simplify::visit(const Mod *op, ExprInfo *bounds) {
     }
 }
 
-}
-}
+}  // namespace Internal
+}  // namespace Halide
