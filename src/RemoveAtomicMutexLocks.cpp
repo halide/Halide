@@ -65,7 +65,6 @@ public:
         : remove_mutex_lock_names(remove_mutex_lock_names) {}
 
     Stmt visit(const Allocate *op) override {
-        std::cerr << "op->name:" << op->name << std::endl;
         if (remove_mutex_lock_names.find(op->name) != remove_mutex_lock_names.end()) {
             // The mutex allocation's body is always a Block
             const Block *block = op->body.as<Block>();

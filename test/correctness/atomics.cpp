@@ -706,35 +706,9 @@ void test_hist_store_at(const Backend &backend) {
                     .vectorize(ri);
             }
         } break;
-        case Backend::OpenCL: {
-            RVar ro, ri;
-            if (is_float_16) {
-                // Associativity prover doesn't support float16.
-                // Set override_associativity_test to true to remove the check.
-                hist.update().atomic(true /*override_associativity_test*/).split(r, ro, ri, 32)
-                    .gpu_blocks(ro, DeviceAPI::OpenCL)
-                    .gpu_threads(ri, DeviceAPI::OpenCL);
-            } else {
-                hist.update().atomic().split(r, ro, ri, 32)
-                    .gpu_blocks(ro, DeviceAPI::OpenCL)
-                    .gpu_threads(ri, DeviceAPI::OpenCL);
-            }
-        } break;
-        case Backend::CUDA: {
-            if (is_float_16) {
-                RVar ro, ri;
-                // Associativity prover doesn't support float16.
-                // Set override_associativity_test to true to remove the check.
-                hist.update().atomic(true /*override_associativity_test*/).split(r, ro, ri, 32)
-                    .gpu_blocks(ro, DeviceAPI::CUDA)
-                    .gpu_threads(ri, DeviceAPI::CUDA);
-            } else {
-                RVar ro, ri;
-                hist.update().atomic().split(r, ro, ri, 32)
-                    .gpu_blocks(ro, DeviceAPI::CUDA)
-                    .gpu_threads(ri, DeviceAPI::CUDA);
-            }
-        } break;
+        default: {
+            _halide_user_assert(false) << "Unsupported backend.\n";
+        }
     }
 
     Buffer<T> correct_hist(hist_size);
@@ -778,7 +752,9 @@ void test_all(const Backend &backend) {
         test_hist_tuple_compute_at<T>(backend);
     }
     test_hist_compute_at<T>(backend);
-    test_hist_store_at<T>(backend);
+    if (backend == Backend::CPU || backend == Backend::CPUVectorize) {
+        test_hist_store_at<T>(backend);
+    }
 }
 
 extern "C" DLLEXPORT int extern_func(int x) {
