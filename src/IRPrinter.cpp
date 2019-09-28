@@ -931,11 +931,10 @@ void IRPrinter::visit(const Shuffle *op) {
 }
 
 void IRPrinter::visit(const Atomic *op) {
-    do_indent();
     if (op->mutex_name == "") {
-        stream << "atomic {\n";
+        stream << get_indent() << "atomic {\n";
     } else {
-        stream << "atomic (";
+        stream << get_indent() << "atomic (";
         stream << op->mutex_name << "[";
         for (size_t i = 0; i < op->mutex_indices.size(); i++) {
             print(op->mutex_indices[i]);
@@ -948,8 +947,7 @@ void IRPrinter::visit(const Atomic *op) {
     indent += 2;
     print(op->body);
     indent -= 2;
-    do_indent();
-    stream << "}\n";
+    stream << get_indent() << "}\n";
 }
 
 }  // namespace Internal

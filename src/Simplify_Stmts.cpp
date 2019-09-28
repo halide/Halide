@@ -501,7 +501,6 @@ Stmt Simplify::visit(const Fork *op) {
     }
 }
 
-<<<<<<< HEAD
 Stmt Simplify::visit(const Atomic *op) {
     if (op->mutex_name == "") {
         internal_assert(op->mutex_indices.size() == 0);

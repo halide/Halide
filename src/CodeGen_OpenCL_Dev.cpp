@@ -338,7 +338,7 @@ void CodeGen_OpenCL_Dev::CodeGen_OpenCL_C::visit(const Store *op) {
         if (is_atomic_add) {
             string id_index = print_expr(op->index);
             string id_delta = print_expr(delta);
-            do_indent();
+            stream << get_indent();
             // atomic_add(&x[i], delta);
             if (t.bits() == 32) {
                 stream << "atomic_add(&";
@@ -359,8 +359,7 @@ void CodeGen_OpenCL_Dev::CodeGen_OpenCL_C::visit(const Store *op) {
             //     new_val.f = ...
             //   } while(atomic_cmpxchg((volatile address_space unsigned int*)&x[id_index], old_val.i, new_val.i) != old_val.i);
             // }
-            do_indent();
-            stream << "{\n";
+            stream << get_indent() << "{\n";
             indent += 2;
             string id_index = print_expr(op->index);
             std::string int_type = t.bits() == 32 ? "int" : "long";
@@ -368,20 +367,15 @@ void CodeGen_OpenCL_Dev::CodeGen_OpenCL_C::visit(const Store *op) {
                 int_type = "unsigned " + int_type;
             }
             if (t.is_float()) {
-                do_indent();
-                stream << "union {" << int_type << " i; " << print_type(t) << " f;} old_val;\n";
-                do_indent();
-                stream << "union {" << int_type << " i; " << print_type(t) << " f;} new_val;\n";
+                stream << get_indent() << "union {" << int_type << " i; " << print_type(t) << " f;} old_val;\n";
+                stream << get_indent() << "union {" << int_type << " i; " << print_type(t) << " f;} new_val;\n";
             } else {
-                do_indent();
-                stream << int_type << " old_val;\n";
-                do_indent();
-                stream << int_type << " new_val;\n";
+                stream << get_indent() << int_type << " old_val;\n";
+                stream << get_indent() << int_type << " new_val;\n";
             }
-            do_indent();
-            stream << "do {\n";
+            stream << get_indent() << "do {\n";
             indent += 2;
-            do_indent();
+            stream << get_indent();
             if (t.is_float()) {
                 stream << "old_val.f = ";
             } else {
@@ -390,7 +384,7 @@ void CodeGen_OpenCL_Dev::CodeGen_OpenCL_C::visit(const Store *op) {
             print_store_var();
             stream << "[" << id_index << "];\n";
             string id_value = print_expr(op->value);
-            do_indent();
+            stream << get_indent();
             if (t.is_float()) {
                 stream << "new_val.f = ";
             } else {
@@ -398,15 +392,13 @@ void CodeGen_OpenCL_Dev::CodeGen_OpenCL_C::visit(const Store *op) {
             }
             stream << id_value << ";\n";
             indent -= 2;
-            do_indent();
             std::string old_val = t.is_float() ? "old_val.i" : "old_val";
             std::string new_val = t.is_float() ? "new_val.i" : "new_val";
-            stream << "} while(atomic_cmpxchg((volatile " <<
+            stream << get_indent() << "} while(atomic_cmpxchg((volatile " <<
                 get_memory_space(op->name) << " " << int_type << "*)&" <<
                 print_name(op->name) << "[" << id_index << "], " << 
                 old_val << ", " << new_val << ") != " << old_val << ");\n";
-            do_indent();
-            stream << "}\n";
+            stream << get_indent() << "}\n";
             indent -= 2;
         }
         cache.clear();

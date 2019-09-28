@@ -1220,7 +1220,10 @@ template<>
 Stmt StmtNode<Fork>::mutate_stmt(IRMutator *v) const {
     return v->visit((const Fork *)this);
 }
->>>>>>> de12425a70fbcf103704d0994719282aaf84a704
+template<>
+Stmt StmtNode<Atomic>::mutate_stmt(IRMutator *v) const {
+    return v->visit((const Atomic *)this);
+}
 
 Call::ConstString Call::buffer_get_dimensions = "_halide_buffer_get_dimensions";
 Call::ConstString Call::buffer_get_min = "_halide_buffer_get_min";
