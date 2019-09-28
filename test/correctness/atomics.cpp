@@ -1040,18 +1040,21 @@ void test_async_tuple(const Backend &backend) {
     consumer1(x) = Tuple(0, 0);
     consumer1(clamp(consumer0(rh)[0], 0, 2*img_size)) += Tuple(1, 1);
 
-    consumer0.compute_root();
+    consumer0.compute_root().async();
     producer0.compute_root().async().parallel(x);
     producer1.compute_root().async().parallel(x);
     consumer1.compute_root();
     switch(backend) {
         case Backend::CPU: {
-            consumer0.update()
+            consumer0.update(0)
                      .atomic(true /*override_associativity_test*/)
                      .parallel(r);
-            consumer1.update()
-                     .atomic()
-                     .parallel(rh);
+            consumer0.update(1)
+                     .atomic(true /*override_associativity_test*/)
+                     .parallel(r);
+            // consumer1.update()
+            //          .atomic()
+            //          .parallel(rh);
         } break;
         default: {
             _halide_user_assert(false) << "Unsupported backend.\n";

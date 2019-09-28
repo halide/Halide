@@ -825,7 +825,9 @@ struct Atomic : public StmtNode<Atomic> {
     std::vector<Expr> mutex_indices;
     Stmt body;
 
-    static Stmt make(const std::string &mutex_name, const std::vector<Expr> &mutex_indices, Stmt body);
+    static Stmt make(const std::string &mutex_name,
+                     const std::vector<Expr> &mutex_indices,
+                     Stmt body);
 
     static const IRNodeType _node_type = IRNodeType::Atomic;
 };

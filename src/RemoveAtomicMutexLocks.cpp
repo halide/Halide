@@ -66,13 +66,15 @@ public:
 
     Stmt visit(const Allocate *op) override {
         if (remove_mutex_lock_names.find(op->name) != remove_mutex_lock_names.end()) {
-            // The mutex allocation's body is always a Block
+            // The mutex allocation's body is always a Block.
             const Block *block = op->body.as<Block>();
             internal_assert(block != nullptr) <<
                 "This is a mutex lock allocation, where the body is expected to be a Block.";
+            // The body Block always start with an Evaluate.
             const Evaluate *eval = block->first.as<Evaluate>();
             internal_assert(eval != nullptr) <<
                 "This is a mutex lock allocation, where the body Block's first statement is expected to be an Evaluate.";
+            // The Evaluate node always contains a Call to memset for initializing the mutexes.
             const Call *call = eval->value.as<Call>();
             internal_assert(call->name == "memset") <<
                 "This is a mutex lock allocation, where there should be a call to memset to initialize the locks.";

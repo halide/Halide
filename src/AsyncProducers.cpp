@@ -90,6 +90,17 @@ protected:
             return IfThenElse::make(op->condition, then_case, else_case);
         }
     }
+
+    Stmt visit(const Atomic *op) override {
+        Stmt body = mutate(op->body);
+        if (is_no_op(body)) {
+            return body;
+        } else {
+            return Atomic::make(op->mutex_name,
+                                op->mutex_indices,
+                                body);
+        }
+    }
 };
 
 class GenerateProducerBody : public NoOpCollapsingMutator {
@@ -165,7 +176,30 @@ class GenerateProducerBody : public NoOpCollapsingMutator {
     }
 
     Stmt visit(const Allocate *op) override {
-        // Atomic mutex lock can generate an Allocate node to allocate the mutex buffer.
+        if (ends_with(op->name, ".mutex")) {
+            // Atomic mutex lock can generate an Allocate node to allocate the mutex buffer.
+            // The mutex allocation's body is always a Block.
+            const Block *block = op->body.as<Block>();
+            internal_assert(block != nullptr) <<
+                "This is a mutex lock allocation, where the body is expected to be a Block.";
+            if (op->name == func + ".mutex") {
+                // The mutex buffer is allocated for the producer.
+                // We want to preserve the memset call for mutex initialization.
+                Stmt body = Block::make(block->first, mutate(block->rest));
+                return Allocate::make(op->name, op->type, op->memory_type,
+                                      op->extents, op->condition, body,
+                                      op->new_expr, op->free_function);
+            } else {
+                // The mutex buffer is allocated for a consumer, and we should
+                // remove the buffer allocation.
+                return mutate(block->rest);
+            }
+        } else {
+            return NoOpCollapsingMutator::visit(op);
+        }
+    }
+
+    Stmt visit(const Atomic *op) override {
         return Evaluate::make(0);
     }
 
@@ -214,8 +248,25 @@ class GenerateConsumerBody : public NoOpCollapsingMutator {
         // Don't want to keep the producer's storage-folding tracker - it's dead code on the consumer side
         if (starts_with(op->name, func + ".folding_semaphore.") && ends_with(op->name, ".head")) {
             return mutate(op->body);
+        } else if (ends_with(op->name, ".mutex")) {
+            // Atomic mutex lock can generate an Allocate node to allocate the mutex buffer.
+            // The mutex allocation's body is always a Block.
+            const Block *block = op->body.as<Block>();
+            internal_assert(block != nullptr) <<
+                "This is a mutex lock allocation, where the body is expected to be a Block.";
+            if (op->name == func + ".mutex") {
+                // The mutex buffer is allocated for the consumer, proceed as normal.
+                Stmt body = Block::make(block->first, mutate(block->rest));
+                return Allocate::make(op->name, op->type, op->memory_type,
+                                      op->extents, op->condition, body,
+                                      op->new_expr, op->free_function);
+            } else {
+                // The mutex buffer is allocated for a producer, and we should
+                // remove the buffer allocation here.
+                return mutate(block->rest);
+            }
         } else {
-            return IRMutator::visit(op);
+            return NoOpCollapsingMutator::visit(op);
         }
     }
 
@@ -647,9 +698,17 @@ class TightenForkNodes : public IRMutator {
 
 Stmt fork_async_producers(Stmt s, const map<string, Function> &env) {
     s = TightenProducerConsumerNodes(env).mutate(s);
+    // std::cerr << "***** AFTER TIGHTING *****" << std::endl;
+    // std::cerr << s << std::endl;
     s = ForkAsyncProducers(env).mutate(s);
+    // std::cerr << "***** AFTER FORKING *****" << std::endl;
+    // std::cerr << s << std::endl;
     s = ExpandAcquireNodes().mutate(s);
+    // std::cerr << "***** AFTER EXPANDING *****" << std::endl;
+    // std::cerr << s << std::endl;
     s = TightenForkNodes().mutate(s);
+    // std::cerr << "***** AFTER TIGHTING2 *****" << std::endl;
+    // std::cerr << s << std::endl;
     s = InitializeSemaphores().mutate(s);
     return s;
 }
