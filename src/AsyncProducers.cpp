@@ -628,7 +628,12 @@ class TightenForkNodes : public IRMutator {
 
     Stmt visit(const LetStmt *op) override {
         Stmt body = mutate(op->body);
-        if (in_fork && !stmt_uses_var(body, op->name)) {
+        // Special case handling for .min & .stride fields.
+        // Atomics generate these let variables for the mutexes
+        // before the storage flatten stage insert the usages of them.
+        bool is_storage_var = op->name.find(".min.") != std::string::npos ||
+                              op->name.find(".stride.") != std::string::npos;
+        if (in_fork && !is_storage_var && !stmt_uses_var(body, op->name)) {
             return body;
         } else {
             return LetStmt::make(op->name, op->value, body);

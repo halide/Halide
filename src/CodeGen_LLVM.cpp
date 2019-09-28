@@ -4303,7 +4303,6 @@ void CodeGen_LLVM::visit(const Atomic *op) {
         internal_assert(mutex_lock->arg_begin() != mutex_lock->arg_end()) << "halide_mutex_lock has no arguments.\n";
         llvm::Argument *arg = mutex_lock->arg_begin();
         ptr = builder->CreatePointerCast(ptr, arg->getType());
-        llvm::raw_os_ostream raw_os(std::cerr);
         builder->CreateCall(mutex_lock, {ptr});
 
         codegen(op->body);
