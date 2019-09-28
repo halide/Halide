@@ -272,7 +272,7 @@ void CodeGen_PTX_Dev::visit(const Store *op) {
         // Generate nnvm intrinsics for the atomics if this is an float atomicAdd.
         // Otherwise refer to the llvm codegen. For llvm version >= 90, atomicrmw support floats so we
         // can also refer to llvm.
-        // half atomics are supported by compute capability 7.x or higher
+        // Half atomics are supported by compute capability 7.x or higher.
         if (op->value.type().is_float() && (op->value.type().bits() == 32 || (op->value.type().bits() == 64 && target.has_feature(Target::CUDACapability61)))) {
             Expr val_expr = op->value;
             Expr equiv_load = Load::make(op->value.type(), op->name, op->index, Buffer<>(), op->param, op->predicate, op->alignment);

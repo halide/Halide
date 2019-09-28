@@ -426,7 +426,7 @@ void CodeGen_Metal_Dev::CodeGen_Metal_C::visit(const Cast *op) {
 
 void CodeGen_Metal_Dev::CodeGen_Metal_C::visit(const Atomic *op) {
     // It might be possible to support atomic but this is not trivial.
-    // Metal requires atomic data types to be wrapped in an atomic integer data type
+    // Metal requires atomic data types to be wrapped in an atomic integer data type.
     user_assert(false) << "Atomic updates are not supported inside Metal kernels";
 }
 

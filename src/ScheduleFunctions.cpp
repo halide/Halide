@@ -977,12 +977,12 @@ class InjectFunctionRealization : public IRMutator {
 public:
     InjectFunctionRealization(const vector<Function> &funcs,
                               const vector<bool> &is_output_list,
-                              const map<string, Function> &env,
-                              const Target &target)
+                              const Target &target,
+                              const map<string, Function> &env)
         : funcs(funcs),
           is_output_list(is_output_list),
-          env(env),
           target(target),
+          env(env),
           compute_level(funcs[0].schedule().compute_level()),
           store_level(funcs[0].schedule().store_level()) {
     }
@@ -1107,8 +1107,8 @@ protected:
 private:
     const vector<Function> &funcs;
     const vector<bool> &is_output_list;
-    const map<string, Function> &env;
     const Target &target;
+    const map<string, Function> &env;
     const LoopLevel &compute_level;
     const LoopLevel &store_level;
 
@@ -2172,7 +2172,7 @@ Stmt schedule_functions(const vector<Function> &outputs,
             s = inline_function(s, funcs[0]);
         } else {
             debug(1) << "Injecting realization of " << funcs << '\n';
-            InjectFunctionRealization injector(funcs, is_output_list, env, target);
+            InjectFunctionRealization injector(funcs, is_output_list, target, env);
             s = injector.mutate(s);
             internal_assert(injector.found_store_level() && injector.found_compute_level());
         }

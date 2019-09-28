@@ -743,6 +743,7 @@ void IRPrinter::visit(const Provide *op) {
     if (op->values.size() > 1) {
         stream << "}";
     }
+
     stream << '\n';
 }
 

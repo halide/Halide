@@ -2465,32 +2465,40 @@ void CodeGen_LLVM::codegen_atomic_store(const Store *op) {
 
     // Detect whether we can describe this as an atomic-read-modify-write, 
     // otherwise fallback to a compare-and-swap loop.
-    // Current only test for atomicAdd
+    // Currently we only test for atomicAdd.
     Expr val_expr = op->value;
     Halide::Type value_type = op->value.type();
     // For atomicAdd, we check if op->value - store[index] is independent of store.
-    // For llvm version < 9, the atomicRMW operations only support integers so
-    // we also check that.
-    Expr equiv_load = Load::make(value_type, op->name, op->index, Buffer<>(), op->param, op->predicate, op->alignment);
+    // For llvm version < 9, the atomicRMW operations only support integers so we also check that.
+    Expr equiv_load = Load::make(value_type, op->name,
+                                 op->index,
+                                 Buffer<>(),
+                                 op->param,
+                                 op->predicate,
+                                 op->alignment);
     Expr delta = simplify(common_subexpression_elimination(op->value - equiv_load));
 #if LLVM_VERSION >= 90
     bool is_atomic_add = !expr_uses_var(delta, op->name);
     if (is_ptx_atomic_store) {
-        if (value_type.is_float() && value_type.bits() == 64 && !target.has_feature(Target::CUDACapability61)) {
-            // AtomicRMW complains when the GPU backend doesn't support the corresponding atomic add
-            // operation.
+        if (value_type.is_float() &&
+                value_type.bits() == 64 &&
+                !target.has_feature(Target::CUDACapability61)) {
+            // AtomicRMW complains when the GPU backend doesn't support the 
+            // corresponding atomic add operation.
             is_atomic_add = false;
         }
     }
 #else
-    bool is_atomic_add = value_type.is_int_or_uint() && !expr_uses_var(delta, op->name);
+    bool is_atomic_add = value_type.is_int_or_uint() &&
+                         !expr_uses_var(delta, op->name);
 #endif
     if (is_atomic_add) {
         Value *val = codegen(delta);
         if (value_type.is_scalar()) {
-            Value *ptr = codegen_buffer_pointer(op->name, op->value.type(), op->index);
-            // llvm 9 has FAdd which can be used for atomic floats,
-            // but currently Halide depends on llvm 7
+            Value *ptr = codegen_buffer_pointer(op->name,
+                                                op->value.type(),
+                                                op->index);
+            // llvm 9 has FAdd which can be used for atomic floats.
 #if LLVM_VERSION >= 90
             if (value_type.is_float()) {
                 builder->CreateAtomicRMW(AtomicRMWInst::FAdd, ptr, val, AtomicOrdering::Monotonic);
@@ -2502,7 +2510,7 @@ void CodeGen_LLVM::codegen_atomic_store(const Store *op) {
 #endif
         } else {
             Value *index = codegen(op->index);
-            // Scalarize vector store
+            // Scalarize vector store.
             for (int i = 0; i < value_type.lanes(); i++) {
                 Value *lane = ConstantInt::get(i32_t, i);
                 Value *idx = builder->CreateExtractElement(index, lane);
@@ -2534,17 +2542,17 @@ void CodeGen_LLVM::codegen_atomic_store(const Store *op) {
         // casloop.end:
         Value *vec_index = nullptr;
         if (!value_type.is_scalar()) {
-            // Precompute index for vector store
+            // Precompute index for vector store.
             vec_index = codegen(op->index);
         }
-        // Scalarize vector store
+        // Scalarize vector store.
         for (int lane_id = 0; lane_id < value_type.lanes(); lane_id++) {
             LLVMContext &ctx = builder->getContext();
             BasicBlock *bb = builder->GetInsertBlock();
             llvm::Function *f = bb->getParent();
             BasicBlock *loop_bb =
                 BasicBlock::Create(ctx, "casloop.start", f);
-            // Load the old value for compare and swap test
+            // Load the old value for compare and swap test.
             Value *ptr = nullptr;
             if (value_type.is_scalar()) {
                 ptr = codegen_buffer_pointer(op->name, value_type, op->index);
@@ -2555,10 +2563,10 @@ void CodeGen_LLVM::codegen_atomic_store(const Store *op) {
             LoadInst *orig = builder->CreateAlignedLoad(ptr, value_type.bytes());
             orig->setOrdering(AtomicOrdering::Monotonic);
             add_tbaa_metadata(orig, op->name, op->index);
-            // Explicit fall through from the current block to the cas loop body
+            // Explicit fall through from the current block to the cas loop body.
             builder->CreateBr(loop_bb);
 
-            // CAS loop body
+            // CAS loop body:
             builder->SetInsertPoint(loop_bb);
             llvm::Type *ptr_type = ptr->getType();
             PHINode *cmp = builder->CreatePHI(ptr_type->getPointerElementType(), 2, "loaded");
@@ -4055,13 +4063,13 @@ void CodeGen_LLVM::visit(const Store *op) {
         return;
     }
 
-    // Atomic store
+    // Atomic store.
     if (emit_atomic_stores) {
         codegen_atomic_store(op);
         return;
     }
 
-    // Predicated store
+    // Predicated store.
     if (!is_one(op->predicate)) {
         codegen_predicated_vector_store(op);
         return;

@@ -217,63 +217,12 @@ void test_parallel_hist_tuple(const Backend &backend) {
     bool is_float_16 = t.is_float() && t.bits() == 16;
 
     hist.compute_root();
-    switch(backend) {
-        case Backend::CPU: {
-            if (is_float_16) {
-                // Associativity prover doesn't support float16,
-                // Set override_associativity_test to true to remove the check.
-                hist.update().atomic(true /*override_associativity_test*/).parallel(r);
-            } else {
-                hist.update().atomic().parallel(r);
-            }
-        } break;
-        case Backend::CPUVectorize: {
-            RVar ro, ri;
-            if (is_float_16) {
-                // Associativity prover doesn't support float16,
-                // Set override_associativity_test to true to remove the check.
-                hist.update()
-                    .atomic(true /*override_associativity_test*/)
-                    .split(r, ro, ri, 8)
-                    .parallel(ro)
-                    .vectorize(ri);
-            } else {
-                hist.update()
-                    .atomic()
-                    .split(r, ro, ri, 8)
-                    .parallel(ro)
-                    .vectorize(ri);
-            }
-        } break;
-        case Backend::OpenCL: {
-            RVar ro, ri;
-            if (is_float_16) {
-                // Associativity prover doesn't support float16.
-                // Set override_associativity_test to true to remove the check.
-                hist.update().atomic(true /*override_associativity_test*/).split(r, ro, ri, 32)
-                    .gpu_blocks(ro, DeviceAPI::OpenCL)
-                    .gpu_threads(ri, DeviceAPI::OpenCL);
-            } else {
-                hist.update().atomic().split(r, ro, ri, 32)
-                    .gpu_blocks(ro, DeviceAPI::OpenCL)
-                    .gpu_threads(ri, DeviceAPI::OpenCL);
-            }
-        } break;
-        case Backend::CUDA: {
-            if (is_float_16) {
-                RVar ro, ri;
-                // Associativity prover doesn't support float16.
-                // Set override_associativity_test to true to remove the check.
-                hist.update().atomic(true /*override_associativity_test*/).split(r, ro, ri, 32)
-                    .gpu_blocks(ro, DeviceAPI::CUDA)
-                    .gpu_threads(ri, DeviceAPI::CUDA);
-            } else {
-                RVar ro, ri;
-                hist.update().atomic().split(r, ro, ri, 32)
-                    .gpu_blocks(ro, DeviceAPI::CUDA)
-                    .gpu_threads(ri, DeviceAPI::CUDA);
-            }
-        } break;
+    if (is_float_16) {
+        // Associativity prover doesn't support float16,
+        // Set override_associativity_test to true to remove the check.
+        hist.update().atomic(true /*override_associativity_test*/).parallel(r);
+    } else {
+        hist.update().atomic().parallel(r);
     }
 
     Buffer<T> correct0(hist_size);
@@ -889,24 +838,24 @@ void test_hist_tuple_rfactor(const Backend &backend) {
 
 template <typename T>
 void test_all(const Backend &backend) {
-    // test_parallel_hist<T>(backend);
-    // test_parallel_cas_update<T>(backend);
-    // if (backend != Backend::CPUVectorize) {
-    //     // Doesn't support vectorized predicated store yet.
-    //     test_predicated_hist<T>(backend);
-    // }
-    // test_hist_compute_at<T>(backend);
-    // if (backend == Backend::CPU || backend == Backend::CPUVectorize) {
-    //     test_hist_store_at<T>(backend);
-    // }
-    // test_hist_rfactor<T>(backend);
+    test_parallel_hist<T>(backend);
+    test_parallel_cas_update<T>(backend);
+    if (backend != Backend::CPUVectorize) {
+        // Doesn't support vectorized predicated store yet.
+        test_predicated_hist<T>(backend);
+    }
+    test_hist_compute_at<T>(backend);
+    if (backend == Backend::CPU || backend == Backend::CPUVectorize) {
+        test_hist_store_at<T>(backend);
+    }
+    test_hist_rfactor<T>(backend);
     if (backend == Backend::CPU) {
         // These require mutex locking which does not support vectorization and GPU
         test_parallel_hist_tuple<T>(backend);
-        // test_parallel_hist_tuple2<T>(backend);
-        // test_tuple_reduction<T>(backend);
-        // test_hist_tuple_compute_at<T>(backend);
-        // test_hist_tuple_rfactor<T>(backend);
+        test_parallel_hist_tuple2<T>(backend);
+        test_tuple_reduction<T>(backend);
+        test_hist_tuple_compute_at<T>(backend);
+        test_hist_tuple_rfactor<T>(backend);
     }
 }
 
@@ -1131,6 +1080,8 @@ int main(int argc, char **argv) {
         }
     }
     if (target.has_feature(Target::CUDA)) {
+        // No support for 8-bit & 16-bit atomics in CUDA
+        // 16-bit half is possible but not implemented yet.
         test_all<uint32_t>(Backend::CUDA);
         test_all<int32_t>(Backend::CUDA);
         test_all<float>(Backend::CUDA);

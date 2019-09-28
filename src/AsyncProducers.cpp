@@ -698,17 +698,9 @@ class TightenForkNodes : public IRMutator {
 
 Stmt fork_async_producers(Stmt s, const map<string, Function> &env) {
     s = TightenProducerConsumerNodes(env).mutate(s);
-    // std::cerr << "***** AFTER TIGHTING *****" << std::endl;
-    // std::cerr << s << std::endl;
     s = ForkAsyncProducers(env).mutate(s);
-    // std::cerr << "***** AFTER FORKING *****" << std::endl;
-    // std::cerr << s << std::endl;
     s = ExpandAcquireNodes().mutate(s);
-    // std::cerr << "***** AFTER EXPANDING *****" << std::endl;
-    // std::cerr << s << std::endl;
     s = TightenForkNodes().mutate(s);
-    // std::cerr << "***** AFTER TIGHTING2 *****" << std::endl;
-    // std::cerr << s << std::endl;
     s = InitializeSemaphores().mutate(s);
     return s;
 }
