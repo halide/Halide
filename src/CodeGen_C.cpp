@@ -2550,11 +2550,9 @@ void CodeGen_C::visit(const Acquire *op) {
 void CodeGen_C::visit(const Atomic *op) {
     if (op->mutex_name != "") {
         internal_assert(op->mutex_indices.size() == 1) << "Atomic mutex access index should be flattened.";
-        do_indent();
-        stream << "halide_mutex_lock(&" << op->mutex_name << "[" << op->mutex_indices[0] << "]);\n";
+        stream << get_indent() << "halide_mutex_lock(&" << op->mutex_name << "[" << op->mutex_indices[0] << "]);\n";
         op->body.accept(this);
-        do_indent();
-        stream << "halide_mutex_unlock(&" << op->mutex_name << "[" << op->mutex_indices[0] << "]);\n";
+        stream << get_indent() << "halide_mutex_unlock(&" << op->mutex_name << "[" << op->mutex_indices[0] << "]);\n";
     } else {
         emit_atomic_stores = true;
         op->body.accept(this);
