@@ -40,15 +40,22 @@ using std::vector;
 
 using namespace Internal;
 
-Func::Func(const string &name) : func(unique_name(name)) {}
+Func::Func(const string &name)
+    : func(unique_name(name)) {
+}
 
-Func::Func() : func(make_entity_name(this, "Halide:.*:Func", 'f')) {}
+Func::Func()
+    : func(make_entity_name(this, "Halide:.*:Func", 'f')) {
+}
 
-Func::Func(Expr e) : func(make_entity_name(this, "Halide:.*:Func", 'f')) {
+Func::Func(Expr e)
+    : func(make_entity_name(this, "Halide:.*:Func", 'f')) {
     (*this)(_) = e;
 }
 
-Func::Func(Function f) : func(f) {}
+Func::Func(Function f)
+    : func(f) {
+}
 
 const string &Func::name() const {
     return func.name();
@@ -161,12 +168,12 @@ void Func::define_extern(const std::string &function_name,
                          const std::vector<Type> &types,
                          const std::vector<Var> &arguments,
                          NameMangling mangling, DeviceAPI device_api) {
-  vector<string> dim_names(arguments.size());
-  for (size_t i = 0; i < arguments.size(); i++) {
-    dim_names[i] = arguments[i].name();
-  }
-  func.define_extern(function_name, args, types, dim_names, mangling,
-                     device_api);
+    vector<string> dim_names(arguments.size());
+    for (size_t i = 0; i < arguments.size(); i++) {
+        dim_names[i] = arguments[i].name();
+    }
+    func.define_extern(function_name, args, types, dim_names, mangling,
+                       device_api);
 }
 
 /** Get the types of the buffers returned by an extern definition. */
@@ -227,7 +234,7 @@ std::pair<int, int> Func::add_implicit_vars(vector<Var> &args) const {
                    << args.size() << " arguments, but was defined with " << dimensions() << "\n";
     }
 
-    return { placeholder_pos, count };
+    return {placeholder_pos, count};
 }
 
 std::pair<int, int> Func::add_implicit_vars(vector<Expr> &args) const {
@@ -257,7 +264,7 @@ std::pair<int, int> Func::add_implicit_vars(vector<Expr> &args) const {
                    << args.size() << " arguments, but was defined with " << dimensions() << "\n";
     }
 
-    return { placeholder_pos, count };
+    return {placeholder_pos, count};
 }
 
 namespace {
@@ -268,11 +275,10 @@ bool var_name_match(string candidate, string var) {
     if (candidate == var) return true;
     return Internal::ends_with(candidate, "." + var);
 }
-}
+}  // namespace
 
 std::string Stage::name() const {
-    std::string stage_name = (stage_index == 0) ?
-        function.name() : function.name() + ".update(" + std::to_string(stage_index - 1) + ")";
+    std::string stage_name = (stage_index == 0) ? function.name() : function.name() + ".update(" + std::to_string(stage_index - 1) + ")";
     return stage_name;
 }
 
@@ -373,10 +379,11 @@ class SubstituteSelfReference : public IRMutator {
         }
         return expr;
     }
+
 public:
     SubstituteSelfReference(const string &func, const Function &substitute,
                             const vector<Var> &new_args)
-            : func(func), substitute(substitute), new_args(new_args) {
+        : func(func), substitute(substitute), new_args(new_args) {
         internal_assert(substitute.get_contents().defined());
     }
 };
@@ -419,7 +426,7 @@ void apply_split_result(const vector<pair<string, Expr>> &bounds_let_stmts,
 
     // Make sure we substitute in all the let stmts from 'bounds_let_stmts'
     // since we are not going to add them to the exprs.
-    for (const auto &let: bounds_let_stmts) {
+    for (const auto &let : bounds_let_stmts) {
         substitute_var_in_exprs(let.first, let.second, predicates);
         substitute_var_in_exprs(let.first, let.second, args);
         substitute_var_in_exprs(let.first, let.second, values);
@@ -434,7 +441,7 @@ bool apply_split(const Split &s, vector<ReductionVariable> &rvars,
                  vector<Expr> &values, map<string, Expr> &dim_extent_alignment) {
     internal_assert(s.is_split());
     const auto it = std::find_if(rvars.begin(), rvars.end(),
-        [&s](const ReductionVariable &rv) { return (s.old_var == rv.var); });
+                                 [&s](const ReductionVariable &rv) { return (s.old_var == rv.var); });
 
     Expr old_max, old_min, old_extent;
 
@@ -449,7 +456,7 @@ bool apply_split(const Split &s, vector<ReductionVariable> &rvars,
         it->min = 0;
         it->extent = s.factor;
 
-        rvars.insert(it + 1, {s.outer, 0, simplify((old_extent - 1 + s.factor)/s.factor)});
+        rvars.insert(it + 1, {s.outer, 0, simplify((old_extent - 1 + s.factor) / s.factor)});
 
         vector<ApplySplitResult> splits_result = apply_split(s, true, "", dim_extent_alignment);
         vector<pair<string, Expr>> bounds_let_stmts = compute_loop_bounds_after_split(s, "");
@@ -467,9 +474,9 @@ bool apply_fuse(const Split &s, vector<ReductionVariable> &rvars,
                 vector<Expr> &values, map<string, Expr> &dim_extent_alignment) {
     internal_assert(s.is_fuse());
     const auto &iter_outer = std::find_if(rvars.begin(), rvars.end(),
-        [&s](const ReductionVariable &rv) { return (s.outer == rv.var); });
+                                          [&s](const ReductionVariable &rv) { return (s.outer == rv.var); });
     const auto &iter_inner = std::find_if(rvars.begin(), rvars.end(),
-        [&s](const ReductionVariable &rv) { return (s.inner == rv.var); });
+                                          [&s](const ReductionVariable &rv) { return (s.inner == rv.var); });
 
     Expr inner_min, inner_extent, outer_min, outer_extent;
     if ((iter_outer != rvars.end()) && (iter_inner != rvars.end())) {
@@ -504,7 +511,7 @@ bool apply_purify(const Split &s, vector<ReductionVariable> &rvars,
                   vector<Expr> &values, map<string, Expr> &dim_extent_alignment) {
     internal_assert(s.is_purify());
     const auto &iter = std::find_if(rvars.begin(), rvars.end(),
-        [&s](const ReductionVariable &rv) { return (s.old_var == rv.var); });
+                                    [&s](const ReductionVariable &rv) { return (s.old_var == rv.var); });
     if (iter != rvars.end()) {
         debug(4) << "  Purify RVar " << iter->var << " into Var " << s.outer
                  << ", deleting it from the rvars list\n";
@@ -525,7 +532,7 @@ bool apply_rename(const Split &s, vector<ReductionVariable> &rvars,
                   vector<Expr> &values, map<string, Expr> &dim_extent_alignment) {
     internal_assert(s.is_rename());
     const auto &iter = std::find_if(rvars.begin(), rvars.end(),
-        [&s](const ReductionVariable &rv) { return (s.old_var == rv.var); });
+                                    [&s](const ReductionVariable &rv) { return (s.old_var == rv.var); });
     if (iter != rvars.end()) {
         debug(4) << "  Renaming " << iter->var << " into " << s.outer << "\n";
         iter->var = s.outer;
@@ -551,9 +558,9 @@ bool apply_split_directive(const Split &s, vector<ReductionVariable> &rvars,
 
     vector<pair<string, Expr>> rvar_bounds;
     for (const ReductionVariable &rv : rvars) {
-        rvar_bounds.push_back({ rv.var + ".loop_min", rv.min });
-        rvar_bounds.push_back({ rv.var + ".loop_max", simplify(rv.min + rv.extent - 1) });
-        rvar_bounds.push_back({ rv.var + ".loop_extent", rv.extent });
+        rvar_bounds.push_back({rv.var + ".loop_min", rv.min});
+        rvar_bounds.push_back({rv.var + ".loop_max", simplify(rv.min + rv.extent - 1)});
+        rvar_bounds.push_back({rv.var + ".loop_extent", rv.extent});
     }
 
     bool found = false;
@@ -568,7 +575,7 @@ bool apply_split_directive(const Split &s, vector<ReductionVariable> &rvars,
     }
 
     if (found) {
-        for (const auto &let: rvar_bounds) {
+        for (const auto &let : rvar_bounds) {
             substitute_var_in_exprs(let.first, let.second, predicates);
             substitute_var_in_exprs(let.first, let.second, args);
             substitute_var_in_exprs(let.first, let.second, values);
@@ -577,7 +584,7 @@ bool apply_split_directive(const Split &s, vector<ReductionVariable> &rvars,
     return found;
 }
 
-} // anonymous namespace
+}  // anonymous namespace
 
 Func Stage::rfactor(RVar r, Var v) {
     return rfactor({{r, v}});
@@ -604,7 +611,7 @@ Func Stage::rfactor(vector<pair<RVar, Var>> preserved) {
     vector<ReductionVariable> &rvars = definition.schedule().rvars();
     vector<Expr> predicates = definition.split_predicate();
 
-    Scope<string> scope; // Contains list of RVars lifted to the intermediate Func
+    Scope<string> scope;  // Contains list of RVars lifted to the intermediate Func
     vector<string> rvars_removed;
 
     vector<bool> is_rfactored(dims.size(), false);
@@ -614,7 +621,7 @@ Func Stage::rfactor(vector<pair<RVar, Var>> preserved) {
         {
             // Check that the RVar are in the dims list
             const auto &iter = std::find_if(dims.begin(), dims.end(),
-                [&rv](const Dim &dim) { return var_name_match(dim.var, rv.name()); });
+                                            [&rv](const Dim &dim) { return var_name_match(dim.var, rv.name()); });
             user_assert((iter != dims.end()) && (*iter).is_rvar())
                 << "In schedule for " << name()
                 << ", can't perform rfactor() on " << rv.name()
@@ -625,7 +632,7 @@ Func Stage::rfactor(vector<pair<RVar, Var>> preserved) {
         {
             // Check that the new pure Vars we used to rename the RVar aren't already in the dims list
             const auto &iter = std::find_if(dims.begin(), dims.end(),
-                [&v](const Dim &dim) { return var_name_match(dim.var, v.name()); });
+                                            [&v](const Dim &dim) { return var_name_match(dim.var, v.name()); });
             user_assert(iter == dims.end())
                 << "In schedule for " << name()
                 << ", can't rename the rvars " << rv.name() << " into " << v.name()
@@ -671,7 +678,7 @@ Func Stage::rfactor(vector<pair<RVar, Var>> preserved) {
     vector<ReductionVariable> intm_rvars;
     for (const auto &rv : rvars) {
         const auto &iter = std::find_if(preserved.begin(), preserved.end(),
-            [&rv](const pair<RVar, Var> &pair) { return var_name_match(rv.var, pair.first.name()); });
+                                        [&rv](const pair<RVar, Var> &pair) { return var_name_match(rv.var, pair.first.name()); });
         if (iter == preserved.end()) {
             intm_rvars.push_back(rv);
             scope.push(rv.var, rv.var);
@@ -684,14 +691,13 @@ Func Stage::rfactor(vector<pair<RVar, Var>> preserved) {
     // can have a consistent args order for the update definition of the
     // intermediate and new merge Funcs.
     std::sort(preserved.begin(), preserved.end(),
-        [&](const pair<RVar, Var> &lhs, const pair<RVar, Var> &rhs){
-            const auto &iter_lhs = std::find_if(rvars.begin(), rvars.end(),
-                [&lhs](const ReductionVariable &rv) { return var_name_match(rv.var, lhs.first.name()); });
-            const auto &iter_rhs = std::find_if(rvars.begin(), rvars.end(),
-                [&rhs](const ReductionVariable &rv) { return var_name_match(rv.var, rhs.first.name()); });
-            return iter_lhs < iter_rhs;
-        }
-    );
+              [&](const pair<RVar, Var> &lhs, const pair<RVar, Var> &rhs) {
+                  const auto &iter_lhs = std::find_if(rvars.begin(), rvars.end(),
+                                                      [&lhs](const ReductionVariable &rv) { return var_name_match(rv.var, lhs.first.name()); });
+                  const auto &iter_rhs = std::find_if(rvars.begin(), rvars.end(),
+                                                      [&rhs](const ReductionVariable &rv) { return var_name_match(rv.var, rhs.first.name()); });
+                  return iter_lhs < iter_rhs;
+              });
     // The list of RVars to keep in the new update definition
     vector<RVar> rvars_kept(preserved.size());
     // List of pure Vars to replace the RVars in the intermediate's update definition
@@ -708,7 +714,7 @@ Func Stage::rfactor(vector<pair<RVar, Var>> preserved) {
         vector<ReductionVariable> temp;
         for (const auto &rv : rvars) {
             const auto &iter = std::find_if(rvars_kept.begin(), rvars_kept.end(),
-                [&rv](const RVar &rvar) { return var_name_match(rv.var, rvar.name()); });
+                                            [&rv](const RVar &rvar) { return var_name_match(rv.var, rvar.name()); });
             if (iter != rvars_kept.end()) {
                 temp.push_back(rv);
             } else {
@@ -760,7 +766,7 @@ Func Stage::rfactor(vector<pair<RVar, Var>> preserved) {
         RVar rvar_kept = rvars_kept[i];
         // Find the full name of rvar_kept in rvars
         const auto &iter = std::find_if(rvars.begin(), rvars.end(),
-            [&rvar_kept](const ReductionVariable &rv) { return var_name_match(rv.var, rvar_kept.name()); });
+                                        [&rvar_kept](const ReductionVariable &rv) { return var_name_match(rv.var, rvar_kept.name()); });
         substitution_map[iter->var] = vars_rename[i];
     }
     for (size_t i = 0; i < args.size(); i++) {
@@ -793,7 +799,6 @@ Func Stage::rfactor(vector<pair<RVar, Var>> preserved) {
     }
     intm(update_args) = Tuple(update_vals);
 
-
     // Determine the dims and schedule of the update definition of the
     // intermediate Func. We copy over the schedule from the original
     // update definition (e.g. split, parallelize, vectorize, etc.)
@@ -820,10 +825,10 @@ Func Stage::rfactor(vector<pair<RVar, Var>> preserved) {
     // if they are not already in the list
     for (const Var &v : dim_vars) {
         const auto &iter = std::find_if(dims.begin(), dims.end(),
-            [&v](const Dim &dim) { return var_name_match(dim.var, v.name()); });
+                                        [&v](const Dim &dim) { return var_name_match(dim.var, v.name()); });
         if (iter == dims.end()) {
             Dim d = {v.name(), ForType::Serial, DeviceAPI::None, Dim::Type::PureVar};
-            dims.insert(dims.end()-1, d);
+            dims.insert(dims.end() - 1, d);
         }
     }
     // Then, we need to remove lifted RVars from the dims list
@@ -915,10 +920,10 @@ void Stage::split(const string &old, const string &outer, const string &inner, E
             outer_name = old_name + "." + outer;
             dims.insert(dims.begin() + i, dims[i]);
             dims[i].var = inner_name;
-            dims[i+1].var = outer_name;
+            dims[i + 1].var = outer_name;
             if (dims[i].for_type == ForType::Extern) {
                 // If we split an extern loop, mark the outer loop serial.
-                dims[i+1].for_type = ForType::Serial;
+                dims[i + 1].for_type = ForType::Serial;
             }
         }
     }
@@ -962,7 +967,6 @@ void Stage::split(const string &old, const string &outer, const string &inner, E
             << "could change the meaning of the algorithm. "
             << "Use TailStrategy::GuardWithIf instead.";
     }
-
 
     if (tail == TailStrategy::Auto) {
         // Select a tail strategy
@@ -1099,8 +1103,7 @@ Stage &Stage::fuse(VarOrRVar inner, VarOrRVar outer, VarOrRVar fused) {
                 (!dims[i].is_rvar() && (outer_type == Dim::Type::PureVar)));
 
             if (dims[i].is_rvar()) {
-                dims[i].dim_type = (dims[i].dim_type == Dim::Type::PureRVar) && (outer_type == Dim::Type::PureRVar) ?
-                    Dim::Type::PureRVar : Dim::Type::ImpureRVar;
+                dims[i].dim_type = (dims[i].dim_type == Dim::Type::PureRVar) && (outer_type == Dim::Type::PureRVar) ? Dim::Type::PureRVar : Dim::Type::ImpureRVar;
             }
         }
     }
@@ -1123,6 +1126,7 @@ namespace Internal {
 class CheckForFreeVars : public IRGraphVisitor {
 public:
     string offending_var;
+
 protected:
     using IRGraphVisitor::visit;
     void visit(const Variable *var) override {
@@ -1131,7 +1135,7 @@ protected:
         }
     }
 };
-}
+}  // namespace Internal
 
 Stage Stage::specialize(Expr condition) {
     user_assert(condition.type().is_bool()) << "Argument passed to specialize must be of type bool\n";
@@ -1167,7 +1171,7 @@ void Stage::specialize_fail(const std::string &message) {
     const vector<Specialization> &specializations = definition.specializations();
     user_assert(specializations.empty() || specializations.back().failure_message.empty())
         << "Only one specialize_fail() may be defined per Stage.";
-    (void) definition.add_specialization(const_true());
+    (void)definition.add_specialization(const_true());
     Specialization &s = definition.specializations().back();
     s.failure_message = message;
 }
@@ -1236,7 +1240,6 @@ void Stage::remove(const string &var) {
             << var
             << "\n"
             << dump_argument_list();
-
     }
 
     std::set<string> removed_vars;
@@ -1252,34 +1255,34 @@ void Stage::remove(const string &var) {
     vector<Split> temp;
     for (size_t i = splits.size(); i > 0; i--) {
         bool is_removed = false;
-        if (splits[i-1].is_fuse()) {
-            debug(4) << "    checking fuse " << splits[i-1].inner << " and "
-                     << splits[i-1].inner << " into " << splits[i-1].old_var << "\n";
-            if (splits[i-1].inner == old_name ||
-                splits[i-1].outer == old_name) {
+        if (splits[i - 1].is_fuse()) {
+            debug(4) << "    checking fuse " << splits[i - 1].inner << " and "
+                     << splits[i - 1].inner << " into " << splits[i - 1].old_var << "\n";
+            if (splits[i - 1].inner == old_name ||
+                splits[i - 1].outer == old_name) {
                 user_error
                     << "In schedule for " << name()
                     << ", can't remove variable " << old_name
                     << " because it has already been fused into "
-                    << splits[i-1].old_var << "\n"
+                    << splits[i - 1].old_var << "\n"
                     << dump_argument_list();
             }
-            if (should_remove(splits[i-1].old_var)) {
+            if (should_remove(splits[i - 1].old_var)) {
                 is_removed = true;
-                removed_vars.insert(splits[i-1].outer);
-                removed_vars.insert(splits[i-1].inner);
+                removed_vars.insert(splits[i - 1].outer);
+                removed_vars.insert(splits[i - 1].inner);
             }
-        } else if (splits[i-1].is_split()) {
-            debug(4) << "    splitting " << splits[i-1].old_var << " into "
-                     << splits[i-1].outer << " and " << splits[i-1].inner << "\n";
-            if (should_remove(splits[i-1].inner)) {
+        } else if (splits[i - 1].is_split()) {
+            debug(4) << "    splitting " << splits[i - 1].old_var << " into "
+                     << splits[i - 1].outer << " and " << splits[i - 1].inner << "\n";
+            if (should_remove(splits[i - 1].inner)) {
                 is_removed = true;
-                removed_vars.insert(splits[i-1].old_var);
-            } else if (should_remove(splits[i-1].outer)) {
+                removed_vars.insert(splits[i - 1].old_var);
+            } else if (should_remove(splits[i - 1].outer)) {
                 is_removed = true;
-                removed_vars.insert(splits[i-1].old_var);
+                removed_vars.insert(splits[i - 1].old_var);
             }
-            if (splits[i-1].old_var == old_name) {
+            if (splits[i - 1].old_var == old_name) {
                 user_error
                     << "In schedule for " << name()
                     << ", can't remove a variable " << old_name
@@ -1287,13 +1290,13 @@ void Stage::remove(const string &var) {
                     << dump_argument_list();
             }
         } else {
-            debug(4) << "    replace/rename " << splits[i-1].old_var
-                     << " into " << splits[i-1].outer << "\n";
-            if (should_remove(splits[i-1].outer)) {
+            debug(4) << "    replace/rename " << splits[i - 1].old_var
+                     << " into " << splits[i - 1].outer << "\n";
+            if (should_remove(splits[i - 1].outer)) {
                 is_removed = true;
-                removed_vars.insert(splits[i-1].old_var);
+                removed_vars.insert(splits[i - 1].old_var);
             }
-            if (splits[i-1].old_var == old_name) {
+            if (splits[i - 1].old_var == old_name) {
                 user_error
                     << "In schedule for " << name()
                     << ", can't remove a variable " << old_name
@@ -1302,7 +1305,7 @@ void Stage::remove(const string &var) {
             }
         }
         if (!is_removed) {
-            temp.insert(temp.begin(), splits[i-1]);
+            temp.insert(temp.begin(), splits[i - 1]);
         }
     }
     splits.swap(temp);
@@ -1353,33 +1356,33 @@ Stage &Stage::rename(VarOrRVar old_var, VarOrRVar new_var) {
     found = false;
     vector<Split> &splits = schedule.splits();
     for (size_t i = splits.size(); i > 0; i--) {
-        if (splits[i-1].is_fuse()) {
-            if (splits[i-1].inner == old_name ||
-                splits[i-1].outer == old_name) {
+        if (splits[i - 1].is_fuse()) {
+            if (splits[i - 1].inner == old_name ||
+                splits[i - 1].outer == old_name) {
                 user_error
                     << "In schedule for " << name()
                     << ", can't rename variable " << old_name
                     << " because it has already been fused into "
-                    << splits[i-1].old_var << "\n"
+                    << splits[i - 1].old_var << "\n"
                     << dump_argument_list();
             }
-            if (splits[i-1].old_var == old_name) {
-                splits[i-1].old_var = new_name;
+            if (splits[i - 1].old_var == old_name) {
+                splits[i - 1].old_var = new_name;
                 found = true;
                 break;
             }
         } else {
-            if (splits[i-1].inner == old_name) {
-                splits[i-1].inner = new_name;
+            if (splits[i - 1].inner == old_name) {
+                splits[i - 1].inner = new_name;
                 found = true;
                 break;
             }
-            if (splits[i-1].outer == old_name) {
-                splits[i-1].outer = new_name;
+            if (splits[i - 1].outer == old_name) {
+                splits[i - 1].outer = new_name;
                 found = true;
                 break;
             }
-            if (splits[i-1].old_var == old_name) {
+            if (splits[i - 1].old_var == old_name) {
                 user_error
                     << "In schedule for " << name()
                     << ", can't rename a variable " << old_name
@@ -1482,7 +1485,7 @@ Stage &Stage::tile(VarOrRVar x, VarOrRVar y,
     return *this;
 }
 
-Stage &Stage::reorder(const std::vector<VarOrRVar>& vars) {
+Stage &Stage::reorder(const std::vector<VarOrRVar> &vars) {
     const string &func_name = function.name();
     vector<Expr> &args = definition.args();
     vector<Expr> &values = definition.values();
@@ -1512,7 +1515,7 @@ Stage &Stage::reorder(const std::vector<VarOrRVar>& vars) {
     bool associativity_proven = false;
     for (size_t i = 0; !associativity_proven && i < idx.size(); i++) {
         if (!dims[idx[i]].is_pure()) {
-            for (size_t j = i+1; !associativity_proven && j < idx.size(); j++) {
+            for (size_t j = i + 1; !associativity_proven && j < idx.size(); j++) {
                 if (!dims[idx[j]].is_pure() && (idx[i] > idx[j])) {
                     // Generate an error if the operator is not both associative and commutative.
                     const auto &prover_result = prove_associativity(func_name, args, values);
@@ -1641,7 +1644,6 @@ Stage &Stage::gpu_tile(VarOrRVar x, VarOrRVar tx, Expr x_size,
     return *this;
 }
 
-
 Stage &Stage::gpu_tile(VarOrRVar x, VarOrRVar y,
                        VarOrRVar bx, VarOrRVar by,
                        VarOrRVar tx, VarOrRVar ty,
@@ -1740,8 +1742,8 @@ Stage &Stage::compute_with(LoopLevel loop_level, const map<string, LoopAlignStra
     // without the specialization) to ensure there is no competing compute_with.
     Definition &original_def = (stage_index == 0) ? function.definition() : function.update(stage_index - 1);
     user_assert(original_def.specializations().empty())
-            << "Func " << name() << " is scheduled to be computed with "
-            << loop_level.func() << ", so it must not have any specializations.\n";
+        << "Func " << name() << " is scheduled to be computed with "
+        << loop_level.func() << ", so it must not have any specializations.\n";
 
     FuseLoopLevel &fuse_level = original_def.schedule().fuse_level();
     if (!fuse_level.level.lock().is_inlined()) {
@@ -1755,7 +1757,7 @@ Stage &Stage::compute_with(LoopLevel loop_level, const map<string, LoopAlignStra
 
 Stage &Stage::compute_with(LoopLevel loop_level, const vector<pair<VarOrRVar, LoopAlignStrategy>> &align) {
     map<string, LoopAlignStrategy> align_str;
-    for (const auto &iter: align) {
+    for (const auto &iter : align) {
         align_str.emplace(iter.first.name(), iter.second);
     }
     return compute_with(loop_level, align_str);
@@ -1845,8 +1847,7 @@ Func get_wrapper(Function wrapped_fn, string wrapper_name, const vector<Func> &f
                 << "Cannot define the wrapper since " << fs[i].name()
                 << " already has a wrapper while " << fs[0].name() << " doesn't \n";
         }
-        Func wrapper = clone ? create_clone_wrapper(wrapped_fn, wrapper_name)
-                             : create_in_wrapper(wrapped_fn, wrapper_name);
+        Func wrapper = clone ? create_clone_wrapper(wrapped_fn, wrapper_name) : create_in_wrapper(wrapped_fn, wrapper_name);
         Function wrapper_fn = wrapper.function();
         if (fs.empty()) {
             // Add global wrapper
@@ -1854,7 +1855,7 @@ Func get_wrapper(Function wrapped_fn, string wrapper_name, const vector<Func> &f
         } else {
             for (const Func &f : fs) {
                 user_assert(wrapped_fn.name() != f.name())
-                    << "Cannot create wrapper of itself (\"" << wrapped_fn.name() <<  "\")\n";
+                    << "Cannot create wrapper of itself (\"" << wrapped_fn.name() << "\")\n";
                 wrapped_fn.add_wrapper(f.name(), wrapper_fn);
             }
         }
@@ -1868,7 +1869,7 @@ Func get_wrapper(Function wrapped_fn, string wrapper_name, const vector<Func> &f
     return Func(wrapper);
 }
 
-} // anonymous namespace
+}  // anonymous namespace
 
 Func Func::in(const Func &f) {
     invalidate_cache();
@@ -1938,7 +1939,7 @@ Func Func::copy_to_device(DeviceAPI d) {
 
     ExternFuncArgument device_interface = make_device_interface_call(d);
     func.define_extern("halide_buffer_copy", {buffer, device_interface},
-                       {call->type}, func.args(), // Reuse the existing dimension names
+                       {call->type}, func.args(),  // Reuse the existing dimension names
                        NameMangling::C, d);
     return *this;
 }
@@ -2003,7 +2004,7 @@ Stage Func::specialize(Expr c) {
 
 void Func::specialize_fail(const std::string &message) {
     invalidate_cache();
-    (void) Stage(func, func.definition(), 0).specialize_fail(message);
+    (void)Stage(func, func.definition(), 0).specialize_fail(message);
 }
 
 Func &Func::serial(VarOrRVar var) {
@@ -2317,7 +2318,7 @@ Func &Func::shader(Var x, Var y, Var c, DeviceAPI device_api) {
     for (size_t i = 0; i < sched.bounds().size(); i++) {
         if (c.name() == sched.bounds()[i].var) {
             constant_bounds = is_const(sched.bounds()[i].min) &&
-                is_const(sched.bounds()[i].extent);
+                              is_const(sched.bounds()[i].extent);
             break;
         }
     }
@@ -2381,8 +2382,7 @@ Func &Func::reorder_storage(const std::vector<Var> &dims, size_t start) {
 }
 
 Func &Func::reorder_storage(const std::vector<Var> &dims) {
-    user_assert(dims.size() > 1) <<
-        "reorder_storage must have at least two dimensions in reorder list.\n";
+    user_assert(dims.size() > 1) << "reorder_storage must have at least two dimensions in reorder list.\n";
 
     return reorder_storage(dims, 0);
 }
@@ -2517,11 +2517,9 @@ void Func::debug_to_file(const string &filename) {
 }
 
 Stage Func::update(int idx) {
-    user_assert(idx < num_update_definitions()) <<
-      "Call to update with index larger than last defined update stage for Func \"" <<
-      name() << "\".\n";
+    user_assert(idx < num_update_definitions()) << "Call to update with index larger than last defined update stage for Func \"" << name() << "\".\n";
     invalidate_cache();
-    return Stage(func, func.update(idx), idx+1);
+    return Stage(func, func.update(idx), idx + 1);
 }
 
 Func::operator Stage() const {
@@ -2535,7 +2533,8 @@ class CountImplicitVars : public Internal::IRGraphVisitor {
 public:
     int count;
 
-    CountImplicitVars(const vector<Expr> &e) : count(0) {
+    CountImplicitVars(const vector<Expr> &e)
+        : count(0) {
         for (size_t i = 0; i < e.size(); i++) {
             e[i].accept(this);
         }
@@ -2550,16 +2549,18 @@ public:
         }
     }
 };
-}
+}  // namespace
 
 FuncRef::FuncRef(Internal::Function f, const vector<Expr> &a, int placeholder_pos,
-                 int count) : func(f), implicit_count(count), args(a){
+                 int count)
+    : func(f), implicit_count(count), args(a) {
     implicit_placeholder_pos = placeholder_pos;
     Internal::check_call_arg_types(f.name(), &args, args.size());
 }
 
 FuncRef::FuncRef(Internal::Function f, const vector<Var> &a, int placeholder_pos,
-                 int count) : func(f), implicit_count(count) {
+                 int count)
+    : func(f), implicit_count(count) {
     implicit_placeholder_pos = placeholder_pos;
     args.resize(a.size());
     for (size_t i = 0; i < a.size(); i++) {
@@ -2572,11 +2573,11 @@ vector<Expr> FuncRef::args_with_implicit_vars(const vector<Expr> &e) const {
 
     for (size_t i = 0; i < a.size(); i++) {
         user_assert(a[i].defined())
-            << "Argument " << (i+1) << " in call to \"" << func.name() << "\" is undefined.\n";
+            << "Argument " << (i + 1) << " in call to \"" << func.name() << "\" is undefined.\n";
     }
     for (size_t i = 0; i < e.size(); i++) {
         user_assert(e[i].defined())
-            << "Value " << (i+1) << " in definition of \"" << func.name() << "\" is undefined.\n";
+            << "Value " << (i + 1) << " in definition of \"" << func.name() << "\" is undefined.\n";
     }
 
     CountImplicitVars count(e);
@@ -2636,7 +2637,7 @@ Stage FuncRef::operator=(const Tuple &e) {
         for (size_t i = 0; i < args.size(); ++i) {
             const Variable *var = args[i].as<Variable>();
             user_assert((var != nullptr) && (!var->reduction_domain.defined()))
-                << "Argument " << (i+1) << " in initial definition of \""
+                << "Argument " << (i + 1) << " in initial definition of \""
                 << func.name() << "\" is not a Var.\n";
         }
 
@@ -2693,7 +2694,7 @@ Func define_base_case(Internal::Function func, const vector<Expr> &a, Expr e) {
     return define_base_case(func, a, Tuple(e));
 }
 
-template <typename BinaryOp>
+template<typename BinaryOp>
 Stage FuncRef::func_ref_update(const Tuple &e, int init_val) {
     internal_assert(e.size() > 1);
 
@@ -2711,7 +2712,7 @@ Stage FuncRef::func_ref_update(const Tuple &e, int init_val) {
     return self_ref = Tuple(values);
 }
 
-template <typename BinaryOp>
+template<typename BinaryOp>
 Stage FuncRef::func_ref_update(Expr e, int init_val) {
     vector<Expr> expanded_args = args_with_implicit_vars({e});
     FuncRef self_ref = define_base_case(func, expanded_args, cast(e.type(), init_val))(expanded_args);
@@ -2828,8 +2829,8 @@ size_t FuncRef::size() const {
 }
 
 FuncTupleElementRef::FuncTupleElementRef(
-        const FuncRef &ref, const std::vector<Expr>& args, int idx)
-        : func_ref(ref), args(args), idx(idx) {
+    const FuncRef &ref, const std::vector<Expr> &args, int idx)
+    : func_ref(ref), args(args), idx(idx) {
     internal_assert(func_ref.size() > 1)
         << "Func " << ref.function().name() << " does not return a Tuple\n";
     internal_assert(idx >= 0 && idx < (int)func_ref.size());
@@ -2964,7 +2965,6 @@ std::string Func::source_location() const {
 Module Func::compile_to_module(const vector<Argument> &args, const std::string &fn_name, const Target &target) {
     return pipeline().compile_to_module(args, fn_name, target);
 }
-
 
 void Func::compile_to(const map<Output, string> &output_files,
                       const vector<Argument> &args,

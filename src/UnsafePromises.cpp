@@ -33,13 +33,16 @@ class LowerUnsafePromises : public IRMutator {
     }
 
     bool check;
+
 public:
-    LowerUnsafePromises(bool check) : check(check) {}
+    LowerUnsafePromises(bool check)
+        : check(check) {
+    }
 };
 
 Stmt lower_unsafe_promises(Stmt s, const Target &t) {
     return LowerUnsafePromises(t.has_feature(Target::CheckUnsafePromises)).mutate(s);
 }
 
-}
-}
+}  // namespace Internal
+}  // namespace Halide

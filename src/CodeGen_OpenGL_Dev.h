@@ -34,7 +34,9 @@ public:
 
     void dump() override;
 
-    std::string api_unique_name() override { return "opengl"; }
+    std::string api_unique_name() override {
+        return "opengl";
+    }
 
 private:
     CodeGen_GLSL *glc;
@@ -82,7 +84,6 @@ protected:
 
     std::map<std::string, std::string> builtin;
 };
-
 
 /** Compile one statement into GLSL. */
 class CodeGen_GLSL : public CodeGen_GLSLBase {

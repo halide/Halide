@@ -110,7 +110,9 @@ public:
     static void test();
 
 protected:
-    Indentation get_indent() const { return Indentation{indent}; }
+    Indentation get_indent() const {
+        return Indentation{indent};
+    }
 
     /** The stream on which we're outputting */
     std::ostream &stream;

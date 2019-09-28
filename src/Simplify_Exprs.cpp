@@ -5,7 +5,6 @@ namespace Internal {
 
 // Miscellaneous expression visitors that are too small to bother putting in their own files
 
-
 Expr Simplify::visit(const IntImm *op, ExprInfo *bounds) {
     if (bounds && no_overflow_int(op->type)) {
         bounds->min_defined = bounds->max_defined = true;
@@ -82,7 +81,6 @@ Expr Simplify::visit(const Variable *op, ExprInfo *bounds) {
     }
 }
 
-
 Expr Simplify::visit(const Ramp *op, ExprInfo *bounds) {
     ExprInfo base_bounds, stride_bounds;
     Expr base = mutate(op->base, &base_bounds);
@@ -158,5 +156,5 @@ Expr Simplify::visit(const Load *op, ExprInfo *bounds) {
     }
 }
 
-}
-}
+}  // namespace Internal
+}  // namespace Halide

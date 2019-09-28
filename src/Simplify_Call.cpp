@@ -9,19 +9,19 @@
 namespace Halide {
 namespace Internal {
 
-using std::vector;
 using std::string;
+using std::vector;
 
 namespace {
 
 // Consider moving these to (say) Util.h if we need them elsewhere.
 int popcount64(uint64_t x) {
 #ifdef _MSC_VER
-    #if defined(_WIN64)
-        return __popcnt64(x);
-    #else
-        return __popcnt((uint32_t) (x >> 32)) + __popcnt((uint32_t) (x & 0xffffffff));
-    #endif
+#if defined(_WIN64)
+    return __popcnt64(x);
+#else
+    return __popcnt((uint32_t)(x >> 32)) + __popcnt((uint32_t)(x & 0xffffffff));
+#endif
 #else
     static_assert(sizeof(unsigned long long) >= sizeof(uint64_t), "");
     return __builtin_popcountll(x);
@@ -32,17 +32,17 @@ int clz64(uint64_t x) {
     internal_assert(x != 0);
 #ifdef _MSC_VER
     unsigned long r = 0;
-    #if defined(_WIN64)
-        return _BitScanReverse64(&r, x) ? (63 - r) : 64;
-    #else
-        if (_BitScanReverse(&r, (uint32_t) (x >> 32))) {
-            return (63 - (r + 32));
-        } else if (_BitScanReverse(&r, (uint32_t) (x & 0xffffffff))) {
-            return 63 - r;
-        } else {
-            return 64;
-        }
-    #endif
+#if defined(_WIN64)
+    return _BitScanReverse64(&r, x) ? (63 - r) : 64;
+#else
+    if (_BitScanReverse(&r, (uint32_t)(x >> 32))) {
+        return (63 - (r + 32));
+    } else if (_BitScanReverse(&r, (uint32_t)(x & 0xffffffff))) {
+        return 63 - r;
+    } else {
+        return 64;
+    }
+#endif
 #else
     static_assert(sizeof(unsigned long long) >= sizeof(uint64_t), "");
     constexpr int offset = (sizeof(unsigned long long) - sizeof(uint64_t)) * 8;
@@ -54,17 +54,17 @@ int ctz64(uint64_t x) {
     internal_assert(x != 0);
 #ifdef _MSC_VER
     unsigned long r = 0;
-    #if defined(_WIN64)
-        return _BitScanForward64(&r, x) ? r : 64;
-    #else
-        if (_BitScanForward(&r, (uint32_t) (x & 0xffffffff))) {
-            return r;
-        } else if (_BitScanForward(&r, (uint32_t) (x >> 32))) {
-            return r + 32;
-        } else {
-            return 64;
-        }
-    #endif
+#if defined(_WIN64)
+    return _BitScanForward64(&r, x) ? r : 64;
+#else
+    if (_BitScanForward(&r, (uint32_t)(x & 0xffffffff))) {
+        return r;
+    } else if (_BitScanForward(&r, (uint32_t)(x >> 32))) {
+        return r + 32;
+    } else {
+        return 64;
+    }
+#endif
 #else
     static_assert(sizeof(unsigned long long) >= sizeof(uint64_t), "");
     return __builtin_ctzll(x);
@@ -150,7 +150,7 @@ Expr Simplify::visit(const Call *op, ExprInfo *bounds) {
             // shifts >= typesize, so we will follow suit in our simplifier.
             user_assert(ub < (uint64_t)t.bits()) << "bitshift by a constant amount >= the type size is not legal in Halide.";
             if (a.type().is_uint() || ub < ((uint64_t)t.bits() - 1)) {
-                b = make_const(t, ((int64_t) 1LL) << ub);
+                b = make_const(t, ((int64_t)1LL) << ub);
                 if (shift_left) {
                     return mutate(Mul::make(a, b), bounds);
                 } else if (shift_right) {
@@ -161,7 +161,7 @@ Expr Simplify::visit(const Call *op, ExprInfo *bounds) {
                 // (-32768 >> ub) propagates the sign bit, making decomposition
                 // into mul or div problematic, so just special-case them here.
                 if (shift_left) {
-                    return mutate(select((a & 1) != 0, make_const(t, ((int64_t) 1LL) << ub), make_zero(t)), bounds);
+                    return mutate(select((a & 1) != 0, make_const(t, ((int64_t)1LL) << ub), make_zero(t)), bounds);
                 } else if (shift_right) {
                     return mutate(select(a < 0, make_const(t, -1), make_zero(t)), bounds);
                 }
@@ -188,7 +188,7 @@ Expr Simplify::visit(const Call *op, ExprInfo *bounds) {
             return make_const(op->type, ia & ib);
         } else if (const_uint(a, &ua) &&
                    const_uint(b, &ub)) {
-            return make_const(op->type, ua & ub) ;
+            return make_const(op->type, ua & ub);
         } else if (const_int(b, &ib) &&
                    !b.type().is_max(ib) &&
                    is_const_power_of_two_integer(make_const(a.type(), ib + 1), &bits)) {
@@ -374,12 +374,12 @@ Expr Simplify::visit(const Call *op, ExprInfo *bounds) {
                 changed = true;
             }
             const StringImm *string_imm = arg.as<StringImm>();
-            const IntImm    *int_imm    = arg.as<IntImm>();
-            const FloatImm  *float_imm  = arg.as<FloatImm>();
+            const IntImm *int_imm = arg.as<IntImm>();
+            const FloatImm *float_imm = arg.as<FloatImm>();
             // We use snprintf here rather than stringstreams,
             // because the runtime's float printing is guaranteed
             // to match snprintf.
-            char buf[64]; // Large enough to hold the biggest float literal.
+            char buf[64];  // Large enough to hold the biggest float literal.
             if (last && string_imm) {
                 new_args.back() = last->value + string_imm->value;
                 changed = true;
@@ -494,7 +494,7 @@ Expr Simplify::visit(const Call *op, ExprInfo *bounds) {
         // Collapse the prefetched region into lower dimension whenever is possible.
         // TODO(psuriana): Deal with negative strides and overlaps.
 
-        internal_assert(op->args.size() % 2 == 0); // Format: {base, offset, extent0, min0, ...}
+        internal_assert(op->args.size() % 2 == 0);  // Format: {base, offset, extent0, min0, ...}
 
         vector<Expr> args(op->args);
         bool changed = false;
@@ -598,5 +598,5 @@ Expr Simplify::visit(const Call *op, ExprInfo *bounds) {
     }
 }
 
-}
-}
+}  // namespace Internal
+}  // namespace Halide

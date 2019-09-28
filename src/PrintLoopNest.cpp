@@ -21,8 +21,10 @@ using std::vector;
 
 class PrintLoopNest : public IRVisitor {
 public:
-    PrintLoopNest(std::ostream &output, const map<string, Function> &e) :
-        out(output), env(e), indent(0) {}
+    PrintLoopNest(std::ostream &output, const map<string, Function> &e)
+        : out(output), env(e), indent(0) {
+    }
+
 private:
     std::ostream &out;
     const map<string, Function> &env;
@@ -32,7 +34,9 @@ private:
 
     using IRVisitor::visit;
 
-    Indentation get_indent() const { return Indentation{indent}; }
+    Indentation get_indent() const {
+        return Indentation{indent};
+    }
 
     string simplify_var_name(const string &s) {
         return simplify_name(s, false);
@@ -158,7 +162,7 @@ string print_loop_nest(const vector<Function> &output_funcs) {
     std::tie(outputs, env) = deep_copy(output_funcs, env);
 
     // Output functions should all be computed and stored at root.
-    for (Function f: outputs) {
+    for (Function f : outputs) {
         Func(f).compute_root().store_root();
     }
 
