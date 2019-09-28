@@ -1052,9 +1052,9 @@ void test_async_tuple(const Backend &backend) {
             consumer0.update(1)
                      .atomic(true /*override_associativity_test*/)
                      .parallel(r);
-            // consumer1.update()
-            //          .atomic()
-            //          .parallel(rh);
+            consumer1.update()
+                     .atomic()
+                     .parallel(rh);
         } break;
         default: {
             _halide_user_assert(false) << "Unsupported backend.\n";
