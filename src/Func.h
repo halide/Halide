@@ -1588,7 +1588,7 @@ public:
      * will be compiled to updates guarded by a mutex lock,
      * since it is impossible to atomically update two different locations.
      *
-     * Currently the atomic operation is supported by x86, CUDA, OpenCL backends.
+     * Currently the atomic operation is supported by x86, CUDA, and OpenCL backends.
      * Compiling to other backends result in a compile error.
      * If an operation is compiled into a mutex lock, and is vectorized or is
      * compiled to CUDA or OpenCL, it also results in a compile error,
@@ -1596,6 +1596,7 @@ public:
      * deadlock.
      * Vectorization of predicated RVars (through rdom.where()) on CPU
      * is also unsupported yet.
+     * 8-bit and 16-bit atomics on GPU are also not supported.
      */
     Func &atomic(bool override_associativity_test = false);
 
