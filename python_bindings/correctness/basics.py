@@ -160,7 +160,7 @@ def test_basics4():
     g[x] = 1
     f[x] = 0
     r = hl.RDom([(0, 100)])
-    f[g[1]] = 2
+    f[g[r]] = 2
     f.compute_root()
     f.compile_jit()
 
