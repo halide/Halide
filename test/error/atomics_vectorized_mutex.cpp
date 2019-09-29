@@ -12,11 +12,12 @@ int main(int argc, char **argv) {
 
     im(x) = (x*x) % hist_size;
 
-    hist(x) = Tuple(cast<T>(0), cast<T>(0));
-    hist(im(r)) += Tuple(cast<T>(1), cast<T>(2));
+    hist(x) = Tuple(0, 0);
+    hist(im(r)) += Tuple(1, 2);
 
     hist.compute_root();
 
+    RVar ro, ri;
     hist.update()
         .atomic()
         .split(r, ro, ri, 8)

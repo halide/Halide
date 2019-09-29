@@ -12,8 +12,8 @@ int main(int argc, char **argv) {
 
     im(x) = (x*x) % hist_size;
 
-    hist(x) = Tuple(0, 0);
-    hist(im(r)) += Tuple(1, 2);
+    hist(x) = cast<uint8_t>(0);
+    hist(im(r)) += cast<uint8_t>(1);
 
     hist.compute_root();
 
@@ -24,10 +24,7 @@ int main(int argc, char **argv) {
         .gpu_blocks(ro)
         .gpu_threads(ri);
 
-    // hist's update will be lowered to mutex locks,
-    // and we don't allow GPU blocks on mutex locks since
-    // it leads to deadlocks.
-    // This should throw an error
+    // GPU doesn't support 8/16-bit atomics
     Realization out = hist.realize(hist_size);
     return 0;
 }
