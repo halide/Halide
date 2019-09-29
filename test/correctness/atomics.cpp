@@ -1081,7 +1081,7 @@ int main(int argc, char **argv) {
     }
     if (target.has_feature(Target::CUDA)) {
         // No support for 8-bit & 16-bit atomics in CUDA
-        // 16-bit half is possible but not implemented yet.
+        // float16 is possible but not implemented yet.
         test_all<uint32_t>(Backend::CUDA);
         test_all<int32_t>(Backend::CUDA);
         test_all<float>(Backend::CUDA);
