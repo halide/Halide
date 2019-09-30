@@ -58,8 +58,8 @@ public:
     StrictifyFloat(StrictnessMode mode)
         : strict_float_allowed(mode != NotAllowed),
           strictness((mode == Forced) ? StrictFloat : FastMath) {
-         any_strict_float |= (mode == Forced);
-     }
+        any_strict_float |= (mode == Forced);
+    }
 };
 
 bool strictify_float(std::map<std::string, Function> &env, const Target &t) {

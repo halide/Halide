@@ -23,21 +23,27 @@ namespace Elf {
 // http://www.skyfree.org/linux/references/ELF_Format.pdf as a reference
 // for the ELF structs and constants.
 
-
 class Object;
 class Symbol;
 class Section;
 class Relocation;
 
 // Helpful wrapper to allow range-based for loops.
-template <typename T>
+template<typename T>
 class iterator_range {
     T b, e;
-public:
-    iterator_range(T b, T e) : b(b), e(e) {}
 
-    T begin() const { return b; }
-    T end() const { return e; }
+public:
+    iterator_range(T b, T e)
+        : b(b), e(e) {
+    }
+
+    T begin() const {
+        return b;
+    }
+    T end() const {
+        return e;
+    }
 };
 
 /** Describes a symbol */
@@ -79,7 +85,9 @@ private:
 
 public:
     Symbol() = default;
-    Symbol(const std::string &name) : name(name) {}
+    Symbol(const std::string &name)
+        : name(name) {
+    }
 
     /** Accesses the name of this symbol. */
     ///@{
@@ -87,7 +95,9 @@ public:
         this->name = name;
         return *this;
     }
-    const std::string &get_name() const { return name; }
+    const std::string &get_name() const {
+        return name;
+    }
     ///@}
 
     /** Accesses the type of this symbol. */
@@ -96,7 +106,9 @@ public:
         this->type = type;
         return *this;
     }
-    Type get_type() const { return type; }
+    Type get_type() const {
+        return type;
+    }
     ///@}
 
     /** Accesses the properties that describe the definition of this symbol. */
@@ -107,10 +119,18 @@ public:
         this->size = size;
         return *this;
     }
-    bool is_defined() const { return definition != nullptr; }
-    const Section *get_section() const { return definition; }
-    uint64_t get_offset() const { return offset; }
-    uint32_t get_size() const { return size; }
+    bool is_defined() const {
+        return definition != nullptr;
+    }
+    const Section *get_section() const {
+        return definition;
+    }
+    uint64_t get_offset() const {
+        return offset;
+    }
+    uint32_t get_size() const {
+        return size;
+    }
     ///@}
 
     /** Access the binding and visibility of this symbol. See the ELF
@@ -124,8 +144,12 @@ public:
         this->visibility = visibility;
         return *this;
     }
-    Binding get_binding() const { return binding; }
-    Visibility get_visibility() const { return visibility; }
+    Binding get_binding() const {
+        return binding;
+    }
+    Visibility get_visibility() const {
+        return visibility;
+    }
     ///@}
 };
 
@@ -140,7 +164,8 @@ class Relocation {
 public:
     Relocation() = default;
     Relocation(uint32_t type, uint64_t offset, int64_t addend, const Symbol *symbol)
-        : type(type), offset(offset), addend(addend), symbol(symbol) {}
+        : type(type), offset(offset), addend(addend), symbol(symbol) {
+    }
 
     /** The type of relocation to be applied. The meaning of this
      * value depends on the machine of the object. */
@@ -149,7 +174,9 @@ public:
         this->type = type;
         return *this;
     }
-    uint32_t get_type() const { return type; }
+    uint32_t get_type() const {
+        return type;
+    }
     ///@}
 
     /** Where to apply the relocation. This is relative to the section
@@ -159,7 +186,9 @@ public:
         this->offset = offset;
         return *this;
     }
-    uint64_t get_offset() const { return offset; }
+    uint64_t get_offset() const {
+        return offset;
+    }
     ///@}
 
     /** The value to replace with the relocation is the address of the symbol plus the addend. */
@@ -172,8 +201,12 @@ public:
         this->addend = addend;
         return *this;
     }
-    const Symbol *get_symbol() const { return symbol; }
-    int64_t get_addend() const { return addend; }
+    const Symbol *get_symbol() const {
+        return symbol;
+    }
+    int64_t get_addend() const {
+        return addend;
+    }
     ///@}
 };
 
@@ -225,23 +258,30 @@ private:
 
 public:
     Section() = default;
-    Section(const std::string &name, Type type) : name(name), type(type) {}
+    Section(const std::string &name, Type type)
+        : name(name), type(type) {
+    }
 
     Section &set_name(const std::string &name) {
         this->name = name;
         return *this;
     }
-    const std::string &get_name() const { return name; }
+    const std::string &get_name() const {
+        return name;
+    }
 
     Section &set_type(Type type) {
         this->type = type;
         return *this;
     }
-    Type get_type() const { return type; }
+    Type get_type() const {
+        return type;
+    }
 
     Section &set_flag(Flag flag) {
         this->flags |= flag;
-        return *this; }
+        return *this;
+    }
     Section &remove_flag(Flag flag) {
         this->flags &= ~flag;
         return *this;
@@ -250,9 +290,15 @@ public:
         this->flags = flags;
         return *this;
     }
-    uint32_t get_flags() const { return flags; }
-    bool is_alloc() const { return (flags & SHF_ALLOC) != 0; }
-    bool is_writable() const { return (flags & SHF_WRITE) != 0; }
+    uint32_t get_flags() const {
+        return flags;
+    }
+    bool is_alloc() const {
+        return (flags & SHF_ALLOC) != 0;
+    }
+    bool is_writable() const {
+        return (flags & SHF_WRITE) != 0;
+    }
 
     /** Get or set the size of the section. The size may be larger
      * than the content. */
@@ -261,30 +307,34 @@ public:
         this->size = size;
         return *this;
     }
-    uint64_t get_size() const { return std::max((uint64_t) size, (uint64_t) contents.size()); }
+    uint64_t get_size() const {
+        return std::max((uint64_t)size, (uint64_t)contents.size());
+    }
     ///@}
 
     Section &set_alignment(uint64_t alignment) {
         this->alignment = alignment;
         return *this;
     }
-    uint64_t get_alignment() const { return alignment; }
+    uint64_t get_alignment() const {
+        return alignment;
+    }
 
     Section &set_contents(std::vector<char> contents) {
         this->contents = std::move(contents);
         return *this;
     }
-    template <typename It>
+    template<typename It>
     Section &set_contents(It begin, It end) {
         this->contents.assign(begin, end);
         return *this;
     }
-    template <typename It>
+    template<typename It>
     Section &append_contents(It begin, It end) {
         this->contents.insert(this->contents.end(), begin, end);
         return *this;
     }
-    template <typename It>
+    template<typename It>
     Section &prepend_contents(It begin, It end) {
         typedef typename std::iterator_traits<It>::value_type T;
         uint64_t size_bytes = std::distance(begin, end) * sizeof(T);
@@ -300,45 +350,77 @@ public:
     }
     /** Set, append or prepend an object to the contents, assuming T is a
      * trivially copyable datatype. */
-    template <typename T>
+    template<typename T>
     Section &set_contents(const std::vector<T> &contents) {
         this->contents.assign((const char *)contents.data(), (const char *)(contents.data() + contents.size()));
         return *this;
     }
-    template <typename T>
-    Section &append_contents(const T& x) {
+    template<typename T>
+    Section &append_contents(const T &x) {
         return append_contents((const char *)&x, (const char *)(&x + 1));
     }
-    template <typename T>
-    Section &prepend_contents(const T& x) {
+    template<typename T>
+    Section &prepend_contents(const T &x) {
         return prepend_contents((const char *)&x, (const char *)(&x + 1));
     }
-    const std::vector<char> &get_contents() const { return contents; }
-    contents_iterator contents_begin() { return contents.begin(); }
-    contents_iterator contents_end() { return contents.end(); }
-    const_contents_iterator contents_begin() const { return contents.begin(); }
-    const_contents_iterator contents_end() const { return contents.end(); }
-    const char *contents_data() const { return contents.data(); }
-    size_t contents_size() const { return contents.size(); }
-    bool contents_empty() const { return contents.empty(); }
+    const std::vector<char> &get_contents() const {
+        return contents;
+    }
+    contents_iterator contents_begin() {
+        return contents.begin();
+    }
+    contents_iterator contents_end() {
+        return contents.end();
+    }
+    const_contents_iterator contents_begin() const {
+        return contents.begin();
+    }
+    const_contents_iterator contents_end() const {
+        return contents.end();
+    }
+    const char *contents_data() const {
+        return contents.data();
+    }
+    size_t contents_size() const {
+        return contents.size();
+    }
+    bool contents_empty() const {
+        return contents.empty();
+    }
 
     Section &set_relocations(std::vector<Relocation> relocs) {
         this->relocs = std::move(relocs);
         return *this;
     }
-    template <typename It>
+    template<typename It>
     Section &set_relocations(It begin, It end) {
         this->relocs.assign(begin, end);
         return *this;
     }
-    void add_relocation(const Relocation &reloc) { relocs.push_back(reloc); }
-    relocation_iterator relocations_begin() { return relocs.begin(); }
-    relocation_iterator relocations_end() { return relocs.end(); }
-    iterator_range<relocation_iterator> relocations() { return {relocs.begin(), relocs.end()}; }
-    const_relocation_iterator relocations_begin() const { return relocs.begin(); }
-    const_relocation_iterator relocations_end() const { return relocs.end(); }
-    iterator_range<const_relocation_iterator> relocations() const { return {relocs.begin(), relocs.end()}; }
-    size_t relocations_size() const { return relocs.size(); }
+    void add_relocation(const Relocation &reloc) {
+        relocs.push_back(reloc);
+    }
+    relocation_iterator relocations_begin() {
+        return relocs.begin();
+    }
+    relocation_iterator relocations_end() {
+        return relocs.end();
+    }
+    iterator_range<relocation_iterator> relocations() {
+        return {relocs.begin(), relocs.end()};
+    }
+    const_relocation_iterator relocations_begin() const {
+        return relocs.begin();
+    }
+    const_relocation_iterator relocations_end() const {
+        return relocs.end();
+    }
+    iterator_range<const_relocation_iterator> relocations() const {
+        return {relocs.begin(), relocs.end()};
+    }
+    size_t relocations_size() const {
+        return relocs.size();
+    }
 };
 
 /** Base class for a target architecture to implement the target
@@ -371,7 +453,6 @@ public:
     virtual Relocation relocate(uint64_t fixup_offset, char *fixup_addr, uint64_t type,
                                 const Symbol *sym, uint64_t sym_offset, int64_t addend,
                                 Section &got) = 0;
-
 };
 
 /** Holds all of the relevant sections and symbols for an object. */
@@ -408,16 +489,26 @@ private:
     uint32_t flags = 0;
 
     Object(const Object &);
-    void operator = (const Object &);
+    void operator=(const Object &);
 
 public:
     Object() = default;
 
-    Type get_type() const { return type; }
-    uint16_t get_machine() const { return machine; }
-    uint32_t get_version() const { return version; }
-    uint64_t get_entry() const { return entry; }
-    uint32_t get_flags() const { return flags; }
+    Type get_type() const {
+        return type;
+    }
+    uint16_t get_machine() const {
+        return machine;
+    }
+    uint32_t get_version() const {
+        return version;
+    }
+    uint64_t get_entry() const {
+        return entry;
+    }
+    uint32_t get_flags() const {
+        return flags;
+    }
 
     Object &set_type(Type type) {
         this->type = type;
@@ -447,29 +538,59 @@ public:
     std::vector<char> write_shared_object(Linker *linker, const std::vector<std::string> &depedencies = {},
                                           const std::string &soname = "");
 
-    section_iterator sections_begin() { return secs.begin(); }
-    section_iterator sections_end() { return secs.end(); }
-    iterator_range<section_iterator> sections() { return {secs.begin(), secs.end()}; }
-    const_section_iterator sections_begin() const { return secs.begin(); }
-    const_section_iterator sections_end() const { return secs.end(); }
-    iterator_range<const_section_iterator> sections() const { return {secs.begin(), secs.end()}; }
-    size_t sections_size() const { return secs.size(); }
+    section_iterator sections_begin() {
+        return secs.begin();
+    }
+    section_iterator sections_end() {
+        return secs.end();
+    }
+    iterator_range<section_iterator> sections() {
+        return {secs.begin(), secs.end()};
+    }
+    const_section_iterator sections_begin() const {
+        return secs.begin();
+    }
+    const_section_iterator sections_end() const {
+        return secs.end();
+    }
+    iterator_range<const_section_iterator> sections() const {
+        return {secs.begin(), secs.end()};
+    }
+    size_t sections_size() const {
+        return secs.size();
+    }
     section_iterator find_section(const std::string &name);
 
     section_iterator add_section(const std::string &name, Section::Type type);
     section_iterator add_relocation_section(const Section &for_section);
-    section_iterator erase_section(section_iterator i) { return secs.erase(i); }
+    section_iterator erase_section(section_iterator i) {
+        return secs.erase(i);
+    }
 
     section_iterator merge_sections(const std::vector<section_iterator> &sections);
     section_iterator merge_text_sections();
 
-    symbol_iterator symbols_begin() { return syms.begin(); }
-    symbol_iterator symbols_end() { return syms.end(); }
-    iterator_range<symbol_iterator> symbols() { return {syms.begin(), syms.end()}; }
-    const_symbol_iterator symbols_begin() const { return syms.begin(); }
-    const_symbol_iterator symbols_end() const { return syms.end(); }
-    iterator_range<const_symbol_iterator> symbols() const { return {syms.begin(), syms.end()}; }
-    size_t symbols_size() const { return syms.size(); }
+    symbol_iterator symbols_begin() {
+        return syms.begin();
+    }
+    symbol_iterator symbols_end() {
+        return syms.end();
+    }
+    iterator_range<symbol_iterator> symbols() {
+        return {syms.begin(), syms.end()};
+    }
+    const_symbol_iterator symbols_begin() const {
+        return syms.begin();
+    }
+    const_symbol_iterator symbols_end() const {
+        return syms.end();
+    }
+    iterator_range<const_symbol_iterator> symbols() const {
+        return {syms.begin(), syms.end()};
+    }
+    size_t symbols_size() const {
+        return syms.size();
+    }
     symbol_iterator find_symbol(const std::string &name);
     const_symbol_iterator find_symbol(const std::string &name) const;
 

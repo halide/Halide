@@ -142,8 +142,7 @@ Expr Simplify::visit(const Select *op, ExprInfo *bounds) {
     } else {
         return Select::make(std::move(condition), std::move(true_value), std::move(false_value));
     }
-
 }
 
-}
-}
+}  // namespace Internal
+}  // namespace Halide

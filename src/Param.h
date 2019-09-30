@@ -29,11 +29,11 @@ class Param {
     struct DynamicParamType;
 
     /** T unless T is (const) void, in which case pointer-to-useless-type.` */
-    using not_void_T = typename std::conditional<std::is_void<T>::value, DynamicParamType*, T>::type;
-
+    using not_void_T = typename std::conditional<std::is_void<T>::value, DynamicParamType *, T>::type;
 
     void check_name() const {
-        user_assert(param.name() != "__user_context") << "Param<void*>(\"__user_context\") "
+        user_assert(param.name() != "__user_context")
+            << "Param<void*>(\"__user_context\") "
             << "is no longer used to control whether Halide functions take explicit "
             << "user_context arguments. Use set_custom_user_context() when jitting, "
             << "or add Target::UserContext to the Target feature set when compiling ahead of time.";
@@ -41,11 +41,12 @@ class Param {
 
     // Must be constexpr to allow use in case clauses.
     inline static constexpr int halide_type_code(halide_type_code_t code, int bits) {
-        return (((int) code) << 8) | bits;
+        return (((int)code) << 8) | bits;
     }
 
     // Allow all Param<> variants friend access to each other
-    template<typename OTHER_TYPE> friend class Param;
+    template<typename OTHER_TYPE>
+    friend class Param;
 
 public:
     /** True if the Halide type is not void (or const void). */
@@ -61,30 +62,30 @@ public:
     /** Construct a scalar parameter of type T with a unique
      * auto-generated name */
     // @{
-    Param() :
-        param(type_of<T>(), false, 0, Internal::make_entity_name(this, "Halide:.*:Param<.*>", 'p')) {
+    Param()
+        : param(type_of<T>(), false, 0, Internal::make_entity_name(this, "Halide:.*:Param<.*>", 'p')) {
         static_assert(has_static_type, "Cannot use this ctor without an explicit type.");
     }
-    explicit Param(Type t) :
-        param(t, false, 0, Internal::make_entity_name(this, "Halide:.*:Param<.*>", 'p')) {
+    explicit Param(Type t)
+        : param(t, false, 0, Internal::make_entity_name(this, "Halide:.*:Param<.*>", 'p')) {
         static_assert(!has_static_type, "Cannot use this ctor with an explicit type.");
     }
     // @}
 
     /** Construct a scalar parameter of type T with the given name. */
     // @{
-    explicit Param(const std::string &n) :
-        param(type_of<T>(), false, 0, n) {
+    explicit Param(const std::string &n)
+        : param(type_of<T>(), false, 0, n) {
         static_assert(has_static_type, "Cannot use this ctor without an explicit type.");
         check_name();
     }
-    explicit Param(const char *n) :
-        param(type_of<T>(), false, 0, n) {
+    explicit Param(const char *n)
+        : param(type_of<T>(), false, 0, n) {
         static_assert(has_static_type, "Cannot use this ctor without an explicit type.");
         check_name();
     }
-    Param(Type t, const std::string &n) :
-        param(t, false, 0, n) {
+    Param(Type t, const std::string &n)
+        : param(t, false, 0, n) {
         static_assert(!has_static_type, "Cannot use this ctor with an explicit type.");
         check_name();
     }
@@ -92,17 +93,17 @@ public:
 
     /** Construct a scalar parameter of type T an initial value of
      * 'val'. Only triggers for non-pointer types. */
-    template <typename T2 = T, typename std::enable_if<!std::is_pointer<T2>::value>::type * = nullptr>
-    explicit Param(not_void_T val) :
-        param(type_of<T>(), false, 0, Internal::make_entity_name(this, "Halide:.*:Param<.*>", 'p')) {
+    template<typename T2 = T, typename std::enable_if<!std::is_pointer<T2>::value>::type * = nullptr>
+    explicit Param(not_void_T val)
+        : param(type_of<T>(), false, 0, Internal::make_entity_name(this, "Halide:.*:Param<.*>", 'p')) {
         static_assert(has_static_type, "Cannot use this ctor without an explicit type.");
         set<not_void_T>(val);
     }
 
     /** Construct a scalar parameter of type T with the given name
      * and an initial value of 'val'. */
-    Param(const std::string &n, not_void_T val) :
-        param(type_of<T>(), false, 0, n) {
+    Param(const std::string &n, not_void_T val)
+        : param(type_of<T>(), false, 0, n) {
         check_name();
         static_assert(has_static_type, "Cannot use this ctor without an explicit type.");
         set<not_void_T>(val);
@@ -110,8 +111,8 @@ public:
 
     /** Construct a scalar parameter of type T with an initial value of 'val'
     * and a given min and max. */
-    Param(not_void_T val, Expr min, Expr max) :
-        param(type_of<T>(), false, 0, Internal::make_entity_name(this, "Halide:.*:Param<.*>", 'p')) {
+    Param(not_void_T val, Expr min, Expr max)
+        : param(type_of<T>(), false, 0, Internal::make_entity_name(this, "Halide:.*:Param<.*>", 'p')) {
         static_assert(has_static_type, "Cannot use this ctor without an explicit type.");
         set_range(min, max);
         set<not_void_T>(val);
@@ -119,8 +120,8 @@ public:
 
     /** Construct a scalar parameter of type T with the given name
      * and an initial value of 'val' and a given min and max. */
-    Param(const std::string &n, not_void_T val, Expr min, Expr max) :
-        param(type_of<T>(), false, 0, n) {
+    Param(const std::string &n, not_void_T val, Expr min, Expr max)
+        : param(type_of<T>(), false, 0, n) {
         static_assert(has_static_type, "Cannot use this ctor without an explicit type.");
         check_name();
         set_range(min, max);
@@ -128,21 +129,23 @@ public:
     }
 
     /** Construct a Param<void> from any other Param. */
-    template <typename OTHER_TYPE, typename T2 = T, typename std::enable_if<std::is_void<T2>::value>::type * = nullptr>
-    Param(const Param<OTHER_TYPE> &other) : param(other.param) {
+    template<typename OTHER_TYPE, typename T2 = T, typename std::enable_if<std::is_void<T2>::value>::type * = nullptr>
+    Param(const Param<OTHER_TYPE> &other)
+        : param(other.param) {
         // empty
     }
 
     /** Construct a Param<non-void> from a Param with matching type.
      * (Do the check at runtime so that we can assign from Param<void> if the types are compatible.) */
-    template <typename OTHER_TYPE, typename T2 = T, typename std::enable_if<!std::is_void<T2>::value>::type * = nullptr>
-    Param(const Param<OTHER_TYPE> &other) : param(other.param) {
+    template<typename OTHER_TYPE, typename T2 = T, typename std::enable_if<!std::is_void<T2>::value>::type * = nullptr>
+    Param(const Param<OTHER_TYPE> &other)
+        : param(other.param) {
         user_assert(other.type() == type_of<T>())
             << "Param<" << type_of<T>() << "> cannot be constructed from a Param with type " << other.type();
     }
 
     /** Copy a Param<void> from any other Param. */
-    template <typename OTHER_TYPE, typename T2 = T, typename std::enable_if<std::is_void<T2>::value>::type * = nullptr>
+    template<typename OTHER_TYPE, typename T2 = T, typename std::enable_if<std::is_void<T2>::value>::type * = nullptr>
     Param<T> &operator=(const Param<OTHER_TYPE> &other) {
         param = other.param;
         return *this;
@@ -150,7 +153,7 @@ public:
 
     /** Copy a Param<non-void> from a Param with matching type.
      * (Do the check at runtime so that we can assign from Param<void> if the types are compatible.) */
-    template <typename OTHER_TYPE, typename T2 = T, typename std::enable_if<!std::is_void<T2>::value>::type * = nullptr>
+    template<typename OTHER_TYPE, typename T2 = T, typename std::enable_if<!std::is_void<T2>::value>::type * = nullptr>
     Param<T> &operator=(const Param<OTHER_TYPE> &other) {
         user_assert(other.type() == type_of<T>())
             << "Param<" << type_of<T>() << "> cannot be copied from a Param with type " << other.type();
@@ -173,7 +176,7 @@ public:
     /** Set the current value of this parameter. Only meaningful when jitting.
         Asserts if type is not losslessly-convertible to Parameter's type. */
     // @{
-    template <typename SOME_TYPE, typename T2 = T, typename std::enable_if<!std::is_void<T2>::value>::type * = nullptr>
+    template<typename SOME_TYPE, typename T2 = T, typename std::enable_if<!std::is_void<T2>::value>::type * = nullptr>
     HALIDE_NO_USER_CODE_INLINE void set(const SOME_TYPE &val) {
         user_assert(Internal::IsRoundtrippable<T>::value(val))
             << "The value " << val << " cannot be losslessly converted to type " << type();
@@ -183,35 +186,34 @@ public:
     // Specialized version for when T = void (thus the type is only known at runtime,
     // not compiletime). Note that this actually works fine for all Params; we specialize
     // it just to reduce code size for the common case of T != void.
-    template <typename SOME_TYPE, typename T2 = T, typename std::enable_if<std::is_void<T2>::value>::type * = nullptr>
+    template<typename SOME_TYPE, typename T2 = T, typename std::enable_if<std::is_void<T2>::value>::type * = nullptr>
     HALIDE_NO_USER_CODE_INLINE void set(const SOME_TYPE &val) {
-    #define HALIDE_HANDLE_TYPE_DISPATCH(CODE, BITS, TYPE) \
-        case halide_type_code(CODE, BITS): \
-            user_assert(Internal::IsRoundtrippable<TYPE>::value(val)) \
-                << "The value " << val << " cannot be losslessly converted to type " << type; \
-            param.set_scalar<TYPE>(Internal::StaticCast<TYPE>::value(val)); \
-            break;
+#define HALIDE_HANDLE_TYPE_DISPATCH(CODE, BITS, TYPE)                                     \
+    case halide_type_code(CODE, BITS):                                                    \
+        user_assert(Internal::IsRoundtrippable<TYPE>::value(val))                         \
+            << "The value " << val << " cannot be losslessly converted to type " << type; \
+        param.set_scalar<TYPE>(Internal::StaticCast<TYPE>::value(val));                   \
+        break;
 
         const Type type = param.type();
         switch (halide_type_code(type.code(), type.bits())) {
-        HALIDE_HANDLE_TYPE_DISPATCH(halide_type_float, 32, float)
-        HALIDE_HANDLE_TYPE_DISPATCH(halide_type_float, 64, double)
-        HALIDE_HANDLE_TYPE_DISPATCH(halide_type_int, 8, int8_t)
-        HALIDE_HANDLE_TYPE_DISPATCH(halide_type_int, 16, int16_t)
-        HALIDE_HANDLE_TYPE_DISPATCH(halide_type_int, 32, int32_t)
-        HALIDE_HANDLE_TYPE_DISPATCH(halide_type_int, 64, int64_t)
-        HALIDE_HANDLE_TYPE_DISPATCH(halide_type_uint, 1, bool)
-        HALIDE_HANDLE_TYPE_DISPATCH(halide_type_uint, 8, uint8_t)
-        HALIDE_HANDLE_TYPE_DISPATCH(halide_type_uint, 16, uint16_t)
-        HALIDE_HANDLE_TYPE_DISPATCH(halide_type_uint, 32, uint32_t)
-        HALIDE_HANDLE_TYPE_DISPATCH(halide_type_uint, 64, uint64_t)
-        HALIDE_HANDLE_TYPE_DISPATCH(halide_type_handle, 64, uint64_t) // Handle types are always set via set_scalar<uint64_t>, not set_scalar<void*>
+            HALIDE_HANDLE_TYPE_DISPATCH(halide_type_float, 32, float)
+            HALIDE_HANDLE_TYPE_DISPATCH(halide_type_float, 64, double)
+            HALIDE_HANDLE_TYPE_DISPATCH(halide_type_int, 8, int8_t)
+            HALIDE_HANDLE_TYPE_DISPATCH(halide_type_int, 16, int16_t)
+            HALIDE_HANDLE_TYPE_DISPATCH(halide_type_int, 32, int32_t)
+            HALIDE_HANDLE_TYPE_DISPATCH(halide_type_int, 64, int64_t)
+            HALIDE_HANDLE_TYPE_DISPATCH(halide_type_uint, 1, bool)
+            HALIDE_HANDLE_TYPE_DISPATCH(halide_type_uint, 8, uint8_t)
+            HALIDE_HANDLE_TYPE_DISPATCH(halide_type_uint, 16, uint16_t)
+            HALIDE_HANDLE_TYPE_DISPATCH(halide_type_uint, 32, uint32_t)
+            HALIDE_HANDLE_TYPE_DISPATCH(halide_type_uint, 64, uint64_t)
+            HALIDE_HANDLE_TYPE_DISPATCH(halide_type_handle, 64, uint64_t)  // Handle types are always set via set_scalar<uint64_t>, not set_scalar<void*>
         default:
             internal_error << "Unsupported type in Param::set<" << type << ">\n";
         }
 
-    #undef HALIDE_HANDLE_TYPE_DISPATCH
-
+#undef HALIDE_HANDLE_TYPE_DISPATCH
     }
     // @}
 
@@ -275,7 +277,7 @@ public:
      * statically compiling halide pipelines. */
     operator Argument() const {
         return Argument(name(), Argument::InputScalar, type(), 0,
-            param.get_argument_estimates());
+                        param.get_argument_estimates());
     }
 
     const Internal::Parameter &parameter() const {
@@ -292,7 +294,7 @@ public:
  * (e.g. to pass the user context to an extern function written in C). */
 inline Expr user_context_value() {
     return Internal::Variable::make(Handle(), "__user_context",
-        Internal::Parameter(Handle(), false, 0, "__user_context"));
+                                    Internal::Parameter(Handle(), false, 0, "__user_context"));
 }
 
 }  // namespace Halide

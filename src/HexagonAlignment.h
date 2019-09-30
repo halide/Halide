@@ -15,8 +15,10 @@ namespace Internal {
 // TODO: This class is barely stateful, and could probably be replaced with free functions.
 class HexagonAlignmentAnalyzer {
     const int required_alignment;
+
 public:
-    HexagonAlignmentAnalyzer(int required_alignment) : required_alignment(required_alignment) {
+    HexagonAlignmentAnalyzer(int required_alignment)
+        : required_alignment(required_alignment) {
         internal_assert(required_alignment != 0);
     }
 
