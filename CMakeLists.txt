@@ -75,7 +75,7 @@ file(TO_NATIVE_PATH "${LLVM_TOOLS_BINARY_DIR}/llvm-nm${CMAKE_EXECUTABLE_SUFFIX}"
 file(TO_NATIVE_PATH "${LLVM_TOOLS_BINARY_DIR}/clang${CMAKE_EXECUTABLE_SUFFIX}" CLANG)
 file(TO_NATIVE_PATH "${LLVM_TOOLS_BINARY_DIR}/llvm-config${CMAKE_EXECUTABLE_SUFFIX}" LLVM_CONFIG)
 
-if(HALIDE_SHARED_LLVM_LIBRARY)
+if(LLVM_USE_SHARED_LLVM_LIBRARY)
   # Since we will be linking to the shared LLVM library,
   # we will get all the transitive dependencies for free automagically.
   set(HALIDE_SYSTEM_LIBS)
@@ -191,7 +191,7 @@ option(TARGET_OPENGL "Include OpenGL/GLSL target" ON)
 option(TARGET_OPENGLCOMPUTE "Include OpenGLCompute target" ON)
 option(TARGET_D3D12COMPUTE "Include Direct3D 12 Compute target" ON)
 option(HALIDE_SHARED_LIBRARY "Build as a shared library" ON)
-option(HALIDE_SHARED_LLVM_LIBRARY "Use shared versions of LLVM libraries" OFF)
+option(LLVM_USE_SHARED_LLVM_LIBRARY "Use shared versions of LLVM libraries" OFF)
 option(HALIDE_ENABLE_RTTI "Enable RTTI" ${LLVM_ENABLE_RTTI})
 option(HALIDE_ENABLE_EXCEPTIONS "Enable exceptions" ${LLVM_ENABLE_EH})
 option(HALIDE_USE_CODEMODEL_LARGE "Use the Large LLVM codemodel" OFF)

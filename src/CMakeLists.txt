@@ -761,16 +761,16 @@ endif()
 # When building a shared library the LLVM libraries will either be
 # embedded or linked into the Halide library. When building a static library
 # LLVM is not embedded/linked but CMake knows that when building an executable
-# against the Halide static library that it needs to link LLVM too, IFF the
-# halide is being built as a subproject. (which means, statically-built halide
-# doesn't work out-of-installation directory)
+# against Halide static library that it needs to link LLVM too, IFF the
+# halide is being built as a subproject. (Which means, statically-built Halide
+# doesn't work out-of-installation directory.)
 # FIXME: migrate to proper cmake config magic.
-if(HALIDE_SHARED_LLVM_LIBRARY)
+if(LLVM_USE_SHARED_LLVM_LIBRARY)
   set(LLVM_USE_SHARED "USE_SHARED")
 endif()
 llvm_config(Halide ${LLVM_USE_SHARED} ${LLVM_COMPONENTS})
 
-if (NOT MSVC AND NOT HALIDE_SHARED_LLVM_LIBRARY)
+if (NOT MSVC AND NOT LLVM_USE_SHARED_LLVM_LIBRARY)
   set(LLVM_CONFIG ${LLVM_TOOLS_BINARY_DIR}/llvm-config)
   execute_process(COMMAND "${LLVM_CONFIG}" --system-libs ${LLVM_COMPONENTS} OUTPUT_VARIABLE EXTRA_LIBS)
   string(STRIP EXTRA_LIBS "${EXTRA_LIBS}")
