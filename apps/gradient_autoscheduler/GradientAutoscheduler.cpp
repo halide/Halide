@@ -608,7 +608,7 @@ void apply_schedule(const MachineParams &params,
         }
         schedule_source << ";\n";
     } else {
-        // If the pure domain is small,
+        // If the pure domain is smaller than the reduction domain,
         // we try to apply rfactor to increase parallelism:
         bool checked_associative = false;
         bool is_associative = false;
@@ -624,7 +624,11 @@ void apply_schedule(const MachineParams &params,
         for (ReductionVariable r : reduction_vars) {
             rvars.push_back(RVar(r.var));
         }
-        if (domain_size < params.parallelism) {
+        int rdomain_size = 1;
+        for (int b : rvar_bounds) {
+            rdomain_size *= b;
+        }
+        if (domain_size < rdomain_size) {
             if (rvars.size() > 0) {
                 // Check associativity
                 std::vector<Expr> values =
