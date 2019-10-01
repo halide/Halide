@@ -815,11 +815,11 @@ struct Prefetch : public StmtNode<Prefetch> {
 };
 
 /** Lock all the Store nodes in the body statement.
-    Typically the lock is implemented by an atomic operation
-    (e.g. atomic add or atomic compare-and-swap).
-    However, if necessary, the node can access a mutex buffer through
-    mutex_name and mutex_args, by lowering this node into
-    calls to acquire and release the lock. */
+ *  Typically the lock is implemented by an atomic operation
+ *  (e.g. atomic add or atomic compare-and-swap).
+ *  However, if necessary, the node can access a mutex buffer through
+ *  mutex_name and mutex_args, by lowering this node into
+ *  calls to acquire and release the lock. */
 struct Atomic : public StmtNode<Atomic> {
     std::string mutex_name; // empty string if not using mutex
     std::vector<Expr> mutex_indices;
