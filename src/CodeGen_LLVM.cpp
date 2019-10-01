@@ -4148,7 +4148,11 @@ Value *CodeGen_LLVM::create_alloca_at_entry(llvm::Type *t, int n, bool zero_init
     AllocaInst *ptr = builder->CreateAlloca(t, size, name);
     int align = native_vector_bits() / 8;
     if (t->isVectorTy() || n > 1) {
+#if LLVM_VERSION >= 100
+        ptr->setAlignment(MaybeAlign(align));
+#else
         ptr->setAlignment(align);
+#endif
     }
 
     if (zero_initialize) {
