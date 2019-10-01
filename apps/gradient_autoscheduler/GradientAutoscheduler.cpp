@@ -300,7 +300,7 @@ void parallelize_vars_and_rvars(
     // Fuse all outer loop vars into a single variable for parallelism
     Var fused_var("");
     if (var_outer_loops.size() > 0) {
-        Var fused_var = var_outer_loops[0];
+        fused_var = var_outer_loops[0];
         // inner to outer
         for (int i = 1; i < (int)var_outer_loops.size(); i++) {
             func_or_stage.fuse(fused_var, var_outer_loops[i], fused_var);
@@ -313,7 +313,7 @@ void parallelize_vars_and_rvars(
     // Fuse all outer loop rvars into a single variable for parallelism
     RVar fused_rvar("");
     if (rvar_outer_loops.size() > 0) {
-        RVar fused_rvar = rvar_outer_loops[0];
+        fused_rvar = rvar_outer_loops[0];
         // inner to outer
         for (int i = 1; i < (int)rvar_outer_loops.size(); i++) {
             func_or_stage.fuse(fused_rvar, rvar_outer_loops[i], fused_rvar);
@@ -901,6 +901,8 @@ void generate_schedule(const std::vector<Function> &outputs,
             apply_schedule(params, func, update_id, int_bounds, target.has_gpu_feature(), schedule_source);
         }
     }
+
+    auto_scheduler_results->scheduler_name = "gradient autoscheduler";
     auto_scheduler_results->schedule_source = schedule_source.str();
 }
 

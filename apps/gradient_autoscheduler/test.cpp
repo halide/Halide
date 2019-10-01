@@ -64,7 +64,9 @@ int main(int argc, char **argv) {
         f2.set_estimate(x, 0, 1000)
           .set_estimate(y, 0, 1000);
 
-        Pipeline(f2).auto_schedule(target, params);
+        AutoSchedulerResults result =
+            Pipeline(f2).auto_schedule(target, params);
+        std::cerr << result.schedule_source << std::endl;
     }
 
     return 0;
