@@ -51,7 +51,24 @@ int main(int argc, char **argv) {
 
     Var x("x"), y("y");
 
-    { // Simple pointwise operations. Should inline.
+    { // Simple 1D pointwise operations. Should inline.
+        Func in("in");
+        in(x) = cast<float>(x);
+        Func f0("f0");
+        f0(x) = 2.f * in(x);
+        Func f1("f1");
+        f1(x) = sin(f0(x));
+        Func f2("f2");
+        f2(x) = f1(x) * f1(x);
+
+        f2.set_estimate(x, 0, 10000);
+
+        AutoSchedulerResults result =
+            Pipeline(f2).auto_schedule(target, params);
+        std::cerr << result.schedule_source << std::endl;
+    }
+
+    { // Simple 2D pointwise operations. Should inline.
         Func in("in");
         in(x, y) = cast<float>(x + y);
         Func f0("f0");

@@ -490,15 +490,26 @@ void parallelize_vars_and_rvars(
             }
             if (var_inner_loops.size() > 0) {
                 // TODO: reorder storage?
-                func_or_stage.vectorize(var_inner_loops[0]);
-                schedule_source << "    .vectorize(" <<
-                    var_inner_loops[0].name() << ")\n";
-
+                if (tile_size == 16) {
+                    func_or_stage.vectorize(var_inner_loops[0]);
+                    schedule_source << "    .vectorize(" <<
+                        var_inner_loops[0].name() << ")\n";
+                } else {
+                    func_or_stage.vectorize(var_inner_loops[0], 16);
+                    schedule_source << "    .vectorize(" <<
+                        var_inner_loops[0].name() << ", 16)\n";
+                }
             } else {
-                internal_assert(rvar_inner_loops.size() > 0);
-                func_or_stage.vectorize(rvar_inner_loops[0]);
-                schedule_source << "    .vectorize(" <<
-                    rvar_inner_loops[0].name() << ")\n";
+                if (tile_size == 16) {
+                    internal_assert(rvar_inner_loops.size() > 0);
+                    func_or_stage.vectorize(rvar_inner_loops[0]);
+                    schedule_source << "    .vectorize(" <<
+                        rvar_inner_loops[0].name() << ")\n";
+                } else {
+                    func_or_stage.vectorize(rvar_inner_loops[0], 16);
+                    schedule_source << "    .vectorize(" <<
+                        rvar_inner_loops[0].name() << ", 16)\n";
+                }
             }
         } else {
             if (var_outer_size >= 32) {
