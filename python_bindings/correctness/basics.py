@@ -154,6 +154,8 @@ def test_basics3():
     left += ss
 
 def test_basics4():
+    # Test for f[g[r]] = ...
+    # See https://github.com/halide/Halide/issues/4285
     x = hl.Var('x')
     f = hl.Func('f')
     g = hl.Func('g')

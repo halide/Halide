@@ -51,7 +51,18 @@ template<>
 void define_set_func_ref<double>(py::class_<Func> &func_class) {
     func_class
         .def("__setitem__", [](Func &func, const FuncRef &lhs, const double &rhs) -> Stage {
-            return func(lhs) = Expr(rhs);
+            // Implicitly convert rhs to single precision. Issue warnings if 
+            // we detect loss of precision.
+            float f = rhs;
+            if (Internal::reinterpret_bits<uint64_t>(rhs) !=
+                    Internal::reinterpret_bits<uint64_t>((double)f)) {
+                std::ostringstream os;
+                os << "Loss of precision detected when casting " <<
+                    rhs << " to a single precision float.";
+                std::string msg = os.str();
+                PyErr_WarnEx(NULL, msg.c_str(), 1);
+            }
+            return func(lhs) = Expr(f);
         });
 }
 
