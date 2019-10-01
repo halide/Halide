@@ -39,7 +39,7 @@ export HL_TARGET=host-cuda
 export HL_RANDOM_DROPOUT=100
 
 if [ -z $APP ]; then
-    APPS="resnet_50_blockwise bgu bilateral_grid local_laplacian nl_means lens_blur camera_pipe stencil_chain harris hist max_filter unsharp interpolate_generator conv_layer mat_mul_generator iir_blur_generator"
+    APPS="resnet_50_blockwise bgu bilateral_grid local_laplacian nl_means lens_blur camera_pipe stencil_chain harris hist max_filter unsharp interpolate_generator conv_layer cuda_mat_mul iir_blur_generator"
 else
     APPS=$APP
 fi
