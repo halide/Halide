@@ -1386,6 +1386,62 @@ struct LoopNest {
         }
     }
 
+    std::pair<const LoopNest*, const LoopNest*> find_innermost_and_parent() const {
+        internal_assert(!innermost);
+
+        const LoopNest* parent = this;
+        const LoopNest* child = nullptr;
+
+        while (true) {
+            for (const auto& c : parent->children) {
+                if (c->node != node) {
+                    continue;
+                }
+
+                child = c.get();
+            }
+
+            internal_assert(child);
+
+            if (child->innermost) {
+                break;
+            }
+
+            parent = child;
+        }
+
+        return {child, parent};
+    }
+
+    int64_t compute_licm_amortization(const LoopNest* innermost, const LoopNest* parent, const ScheduleFeatures& feat, const LoadJacobian& jac, int producer_dims) const {
+        // Is this load loop-invariant over an
+        // unrolled block? If so, we amortize the
+        // number of loads to account for LICM.
+        int64_t amortization = 1;
+        if (feat.unrolled_loop_extent <= 1) {
+            return amortization;
+        }
+
+        for (size_t idx = 0; idx < innermost->stage->loop.size(); idx++) {
+            if (!innermost->stage->loop[idx].rvar) {
+                bool loop_invariant = true;
+                for (int i = 0; i < producer_dims; i++) {
+                    if (!(jac(i, idx) == 0)) {
+                        loop_invariant = false;
+                        break;
+                    }
+                }
+                if (loop_invariant) {
+                    amortization *= parent->size[idx];
+                }
+            }
+        }
+
+        // TODO: LICM still acts for the innermost loop of non-unrolled things
+
+        return amortization;
+    }
+
     void compute_features(const FunctionDAG &dag,
                           const MachineParams &params,
                           const Target& target,
@@ -1989,28 +2045,11 @@ struct LoopNest {
                             double n = jac.first.count();
                             // internal_assert(n < 1024 * 1024 * 1024) << "Implausibly large n: " << jac.count() << " " << next_count << "\n";
 
-                            // Is this load loop-invariant over an
-                            // unrolled block? If so, we amortize the
-                            // number of loads to account for LICM.
-                            int64_t amortization = 1;
-                            if (feat.unrolled_loop_extent > 1) {
-                                for (size_t idx = 0; idx < stage->loop.size(); idx++) {
-                                    if (!stage->loop[idx].rvar) {
-                                        bool loop_invariant = true;
-                                        for (int i = 0; i < e->producer->dimensions; i++) {
-                                            if (!(jac.first(i, idx) == 0)) {
-                                                loop_invariant = false;
-                                                break;
-                                            }
-                                        }
-                                        if (loop_invariant) {
-                                            amortization *= parent->size[idx];
-                                        }
-                                    }
-                                }
-                            }
-                            // TODO: LICM still acts for the innermost loop of non-unrolled things
+                            auto innermost_and_parent = find_innermost_and_parent();
+                            const LoopNest* innermost = innermost_and_parent.first;
+                            const LoopNest* parent = innermost_and_parent.second;
 
+                            int64_t amortization = compute_licm_amortization(innermost, parent, feat, jac.first, e->producer->dimensions);
                             n /= amortization;
 
                             if (is_shared_mem) {
