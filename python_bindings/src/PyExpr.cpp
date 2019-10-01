@@ -1,5 +1,6 @@
  #include "PyExpr.h"
 
+#include <iomanip>
 
 #include "PyBinaryOperators.h"
 #include "PyType.h"
@@ -27,9 +28,17 @@ void define_expr(py::module &m) {
             .def(py::init([](double v) {
                 float f = static_cast<float>(v);
                 double check = static_cast<double>(f);
-                if ( Internal::reinterpret_bits<uint64_t>(v) != Internal::reinterpret_bits<uint64_t>(check) ) {
-                    throw py::value_error("The halide.Expr(" + std::to_string(v) + ") loses precision."
-                        "If this error occurs construct by double-range float, consider construct by the `f32`/`f64` casts instead.");
+                // 2^(-n) (or some combination) case is safe. e.g. 0.5, 0.25, 0.75, ...
+                // otherwise, precision will be lost.  e.g. 0.1, 0.3, ...
+                using Internal::reinterpret_bits;
+                if ( reinterpret_bits<uint64_t>(v) != reinterpret_bits<uint64_t>(check) ) {
+                    std::ostringstream oss;
+                    oss.precision(17);
+                    oss << std::fixed << v;
+                    PyErr_WarnEx(
+                        PyExc_RuntimeWarning,
+                        ("The halide.Expr(" + oss.str() + ") loses precision."
+                         " If this error occurs construct by double-range float, consider construct by the `f32`/`f64` casts instead.").c_str(), 0);
                 }
                 return Expr(f);
             }))
