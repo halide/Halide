@@ -113,6 +113,17 @@ extern void halide_cond_broadcast(struct halide_cond *cond);
 extern void halide_cond_wait(struct halide_cond *cond, struct halide_mutex *mutex);
 //@}
 
+/** Functions for constructing/destroying/locking/unlocking arrays of mutexes. */
+struct halide_mutex_array {
+    halide_mutex *array;
+};
+//@{
+extern void halide_mutex_array_create(struct halide_mutex_array *array, int sz);
+extern void halide_mutex_array_destroy(struct halide_mutex_array *array);
+extern void halide_mutex_array_lock(struct halide_mutex_array *array, int entry);
+extern void halide_mutex_array_unlock(struct halide_mutex_array *array, int entry);
+//@}
+
 /** Define halide_do_par_for to replace the default thread pool
  * implementation. halide_shutdown_thread_pool can also be called to
  * release resources used by the default thread pool on platforms

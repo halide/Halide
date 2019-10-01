@@ -1138,4 +1138,20 @@ WEAK void halide_cond_wait(struct halide_cond *cond, struct halide_mutex *mutex)
    fast_cond->wait(fast_mutex);
 }
 
+WEAK void halide_mutex_array_create(halide_mutex_array *array, int sz) {
+    array->array = (halide_mutex*)malloc(sz * sizeof(halide_mutex));
+}
+
+WEAK void halide_mutex_array_destroy(halide_mutex_array *array) {
+    free(array->array);
+}
+
+WEAK void halide_mutex_array_lock(halide_mutex_array *array, int entry) {
+    halide_mutex_lock(&array->array[entry]);
+}
+
+WEAK void halide_mutex_array_unlock(halide_mutex_array *array, int entry) {
+    halide_mutex_unlock(&array->array[entry]);
+}
+
 }
