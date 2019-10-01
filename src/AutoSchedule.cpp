@@ -29,10 +29,10 @@ namespace {
 
 // Substitute parameter estimates into the exprs describing the box bounds.
 void substitute_estimates_box(Box &box) {
-    box.used = subsitute_var_estimates(box.used);
+    box.used = substitute_var_estimates(box.used);
     for (auto &b : box.bounds) {
-        b.min = subsitute_var_estimates(b.min);
-        b.max = subsitute_var_estimates(b.max);
+        b.min = substitute_var_estimates(b.min);
+        b.max = substitute_var_estimates(b.max);
     }
 }
 
@@ -457,7 +457,7 @@ DependenceAnalysis::regions_required(Function f, int stage_num,
                         } else if (arg.is_expr()) {
                             // Find the boxes required for the expression and add the regions
                             // to the queue.
-                            Expr subs_arg = subsitute_var_estimates(arg.expr);
+                            Expr subs_arg = substitute_var_estimates(arg.expr);
                             map<string, Box> arg_regions = boxes_required(subs_arg, curr_scope, func_val_bounds);
                             substitute_estimates_region(arg_regions);
                             merge_and_queue_regions(fs_bounds, regions, arg_regions, prods, env,
@@ -487,8 +487,8 @@ DependenceAnalysis::regions_required(Function f, int stage_num,
                     // current scope.
                     for (int d = 0; d < (int)dims.size() - 1; d++) {
                         Interval simple_bounds = get_element(curr_bounds, dims[d].var);
-                        simple_bounds.min = subsitute_var_estimates(simple_bounds.min);
-                        simple_bounds.max = subsitute_var_estimates(simple_bounds.max);
+                        simple_bounds.min = substitute_var_estimates(simple_bounds.min);
+                        simple_bounds.max = substitute_var_estimates(simple_bounds.max);
                         curr_scope.push(dims[d].var, simple_bounds);
                     }
 
@@ -497,7 +497,7 @@ DependenceAnalysis::regions_required(Function f, int stage_num,
                     for (const auto &val : def.values()) {
                         // Substitute the parameter estimates into the expression and get
                         // the regions required for the expression.
-                        Expr subs_val = subsitute_var_estimates(val);
+                        Expr subs_val = substitute_var_estimates(val);
                         map<string, Box> curr_regions = boxes_required(subs_val, curr_scope, func_val_bounds);
                         substitute_estimates_region(curr_regions);
 
@@ -506,7 +506,7 @@ DependenceAnalysis::regions_required(Function f, int stage_num,
                         // based on the value of a function.
                         Box left_reg;
                         for (const Expr &arg : def.args()) {
-                            Expr subs_arg = subsitute_var_estimates(arg);
+                            Expr subs_arg = substitute_var_estimates(arg);
                             map<string, Box> arg_regions = boxes_required(subs_arg, curr_scope, func_val_bounds);
                             substitute_estimates_region(arg_regions);
 
