@@ -1823,7 +1823,7 @@ $(BIN_DIR)/tutorial_lesson_21_auto_scheduler_generate: $(ROOT_DIR)/tutorial/less
 
 # The values in MachineParams are:
 # - the maximum level of parallelism available,
-# - the size of the last-level cache (in KB),
+# - the size of the last-level cache (in bytes),
 # - the ratio between the cost of a miss at the last level cache and the cost
 #   of arithmetic on the target architecture
 # ...in that order.
