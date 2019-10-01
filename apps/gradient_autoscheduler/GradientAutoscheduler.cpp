@@ -292,8 +292,8 @@ void parallelize_vars_and_rvars(
             }
             rvar_outer_size *= size;
         } else {
-            rvar_outer_loops.push_back(rvar);
-            rvar_outer_size *= rvar_bounds[i];
+            // Don't want to parallelize small rvars
+            rvar_inner_loops.push_back(rvar);
         }
     }
 
@@ -356,7 +356,9 @@ void parallelize_vars_and_rvars(
                 schedule_source << "    .gpu_blocks(" << fused_var.name() << ")\n";
             }
             if (fused_rvar.name() != "") {
-                func_or_stage.gpu_blocks(fused_rvar);
+                func_or_stage.atomic()
+                             .gpu_blocks(fused_rvar);
+                schedule_source << "    .atomic()\n";
                 schedule_source << "    .gpu_blocks(" << fused_rvar.name() << ")\n";
             }
             // Fuse all inner loops
@@ -392,6 +394,7 @@ void parallelize_vars_and_rvars(
             if (inner_fused_rvar.name() != "") {
                 RVar outer, inner;
                 func_or_stage.split(inner_fused_rvar, outer, inner, 64, tail)
+                             .atomic()
                              .gpu_blocks(outer)
                              .gpu_threads(inner);
                 schedule_source << "    .split(" <<
@@ -400,6 +403,7 @@ void parallelize_vars_and_rvars(
                     inner.name() << "," <<
                     64 << "," <<
                     tail << ")\n";
+                schedule_source << "    .atomic()\n";
                 schedule_source << "    .gpu_blocks(" << outer.name() << ")\n";
                 schedule_source << "    .gpu_threads(" << inner.name() << ")\n";
                 if (inner_fused_var.name() != "") {
@@ -424,6 +428,7 @@ void parallelize_vars_and_rvars(
             if (fused_rvar.name() != "") {
                 RVar outer, inner;
                 func_or_stage.split(fused_rvar, outer, inner, 64, tail)
+                             .atomic()
                              .gpu_blocks(outer)
                              .gpu_threads(inner);
                 schedule_source << "    .split(" <<
@@ -432,6 +437,7 @@ void parallelize_vars_and_rvars(
                     inner.name() << "," <<
                     64 << "," <<
                     tail << ")\n";
+                schedule_source << "    .atomic()\n";
                 schedule_source << "    .gpu_blocks(" << outer.name() << ")\n";
                 schedule_source << "    .gpu_threads(" << inner.name() << ")\n";
                 if (fused_var.name() != "") {
@@ -475,15 +481,19 @@ void parallelize_vars_and_rvars(
             if (fused_rvar.name() != "") {
                 if (rvar_outer_size > params.parallelism * 8) {
                     // split again
-                    func_or_stage.parallel(fused_rvar,
+                    func_or_stage.atomic()
+                                 .parallel(fused_rvar,
                                            params.parallelism * 8,
                                            tail);
+                    schedule_source << "    .atomic()\n";
                     schedule_source << "    .parallel(" <<
                         fused_rvar.name() << "," <<
                         params.parallelism * 8 << "," <<
                         tail << ")\n";
                 } else {
-                    func_or_stage.parallel(fused_rvar);
+                    func_or_stage.atomic()
+                                 .parallel(fused_rvar);
+                    schedule_source << "    .atomic()\n";
                     schedule_source << "    .parallel(" <<
                         fused_rvar.name() << ")\n";
                 }
@@ -502,11 +512,15 @@ void parallelize_vars_and_rvars(
             } else {
                 if (tile_size == 16) {
                     internal_assert(rvar_inner_loops.size() > 0);
-                    func_or_stage.vectorize(rvar_inner_loops[0]);
+                    func_or_stage.atomic()
+                                 .vectorize(rvar_inner_loops[0]);
+                    schedule_source << "    .atomic()\n";
                     schedule_source << "    .vectorize(" <<
                         rvar_inner_loops[0].name() << ")\n";
                 } else {
-                    func_or_stage.vectorize(rvar_inner_loops[0], 16);
+                    func_or_stage.atomic()
+                                 .vectorize(rvar_inner_loops[0], 16);
+                    schedule_source << "    .atomic()\n";
                     schedule_source << "    .vectorize(" <<
                         rvar_inner_loops[0].name() << ", 16)\n";
                 }
@@ -534,9 +548,11 @@ void parallelize_vars_and_rvars(
                 }
             } else if (rvar_outer_size >= 32) {
                 RVar outer, inner;
-                func_or_stage.split(fused_rvar, outer, inner, 16, tail)
+                func_or_stage.atomic()
+                             .split(fused_rvar, outer, inner, 16, tail)
                              .parallel(outer)
                              .vectorize(inner);
+                schedule_source << "    .atomic()\n";
                 schedule_source << "    .split(" <<
                     fused_var.name() << "," <<
                     outer.name() << "," <<
@@ -559,7 +575,9 @@ void parallelize_vars_and_rvars(
                         fused_var.name() << ")\n";
                 }
                 if (fused_rvar.name() != "") {
-                    func_or_stage.parallel(fused_rvar);
+                    func_or_stage.atomic()
+                                 .parallel(fused_rvar);
+                    schedule_source << "    .atomic()\n";
                     schedule_source << "    .parallel(" <<
                         fused_rvar.name() << ")\n";                    
                 }

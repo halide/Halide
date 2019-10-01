@@ -65,7 +65,6 @@ int main(int argc, char **argv) {
 
         AutoSchedulerResults result =
             Pipeline(f2).auto_schedule(target, params);
-        std::cerr << result.schedule_source << std::endl;
     }
 
     { // Simple 2D pointwise operations. Should inline.
@@ -83,7 +82,19 @@ int main(int argc, char **argv) {
 
         AutoSchedulerResults result =
             Pipeline(f2).auto_schedule(target, params);
-        std::cerr << result.schedule_source << std::endl;
+    }
+
+    { // 1D Convolution.
+        Func in("in");
+        in(x) = cast<float>(x);
+        RDom r(0, 5);
+        Func f0("f0");
+        f0(x) += in(x + r) / 5.f;
+
+        f0.set_estimate(x, 0, 1000);
+
+        AutoSchedulerResults result =
+            Pipeline(f0).auto_schedule(target, params);
     }
 
     return 0;
