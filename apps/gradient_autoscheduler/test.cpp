@@ -97,5 +97,33 @@ int main(int argc, char **argv) {
             Pipeline(f0).auto_schedule(target, params);
     }
 
+    { // 2D Convolution.
+        Func in("in");
+        in(x, y) = cast<float>(x + y);
+        RDom r(0, 5, 0, 5);
+        Func f0("f0");
+        f0(x, y) += in(x + r.x, y + r.y) / 25.f;
+
+        f0.set_estimate(x, 0, 1000)
+          .set_estimate(y, 0, 1000);
+
+        AutoSchedulerResults result =
+            Pipeline(f0).auto_schedule(target, params);
+    }
+
+    { // 1D Histogram.
+        Func in("in");
+        in(x) = x % 10;
+        RDom r(0, 1000);
+        Func hist("hist");
+        hist(x) = 0;
+        hist(clamp(in(r), 0, 10)) += 1;
+
+        hist.set_estimate(x, 0, 10);
+
+        AutoSchedulerResults result =
+            Pipeline(hist).auto_schedule(target, params);
+    }
+
     return 0;
 }

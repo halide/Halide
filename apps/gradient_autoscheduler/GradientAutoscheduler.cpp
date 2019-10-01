@@ -212,7 +212,7 @@ void parallelize_vars_and_rvars(
         FuncOrStage func_or_stage,
         const std::vector<Var> &vars,
         const std::vector<int> &var_bounds,
-        const std::vector<ReductionVariable> &rvars,
+        const std::vector<RVar> &rvars,
         const std::vector<int> &rvar_bounds,
         TailStrategy tail,
         bool is_gpu,
@@ -240,7 +240,7 @@ void parallelize_vars_and_rvars(
     int var_outer_size = 1;
     std::vector<Var> var_outer_loops, var_inner_loops;
     for (int i = 0; i < (int)vars.size(); i++) {
-        if (var_bounds[i] >= tile_size) {
+        if (var_bounds[i] > tile_size) {
             Var outer, inner;
             func_or_stage.split(vars[i],
                                 outer,
@@ -270,16 +270,15 @@ void parallelize_vars_and_rvars(
     int rvar_outer_size = 1;
     std::vector<RVar> rvar_outer_loops, rvar_inner_loops;
     for (int i = 0; i < (int)rvars.size(); i++) {
-        RVar rvar(rvars[i].var);
-        if (rvar_bounds[i] >= tile_size) {
+        if (rvar_bounds[i] > tile_size) {
             RVar outer, inner;
-            func_or_stage.split(rvar,
+            func_or_stage.split(rvars[i],
                                 outer,
                                 inner,
                                 tile_size,
                                 tail);
             schedule_source << "    .split(" <<
-                rvar.name() << "," <<
+                rvars[i].name() << "," <<
                 outer.name() << "," <<
                 inner.name() << "," <<
                 tile_size << "," <<
@@ -293,7 +292,7 @@ void parallelize_vars_and_rvars(
             rvar_outer_size *= size;
         } else {
             // Don't want to parallelize small rvars
-            rvar_inner_loops.push_back(rvar);
+            rvar_inner_loops.push_back(rvars[i]);
         }
     }
 
@@ -617,9 +616,15 @@ void apply_schedule(const MachineParams &params,
         for (int b : var_bounds) {
             domain_size *= b;
         }
+        std::vector<ReductionVariable> reduction_vars =
+            func.update(update_id).get_schedule().rvars();
+        std::vector<int> rvar_bounds = get_rvar_bounds(reduction_vars);
+        std::vector<RVar> rvars;
+        rvars.reserve(reduction_vars.size());
+        for (ReductionVariable r : reduction_vars) {
+            rvars.push_back(RVar(r.var));
+        }
         if (domain_size < params.parallelism) {
-            std::vector<ReductionVariable> rvars =
-                func.update(update_id).get_schedule().rvars();
             if (rvars.size() > 0) {
                 // Check associativity
                 std::vector<Expr> values =
@@ -633,7 +638,6 @@ void apply_schedule(const MachineParams &params,
                 is_associative = prover_result.associative();
                 if (is_associative) {
                     schedule_source << func.name() << ".update(" << update_id << ")\n";
-                    std::vector<int> rvar_bounds = get_rvar_bounds(rvars);
                     int tile_size = rvars.size() >= 2 ? 8 : 64;
                     // Apply heuristics tiling to split the args.
                     int num_tilable = 0;
@@ -650,16 +654,16 @@ void apply_schedule(const MachineParams &params,
                     // Generate a list of tiled RVars
                     std::vector<RVar> outer_rvars, inner_rvars;
                     int outer_size = 1;
+                    std::vector<int> inner_rvar_sizes;
                     for (int i = 0; i < (int)rvars.size(); i++) {
-                        RVar r = RVar(rvars[i].var);
-                        if (rvar_bounds[i] >= tile_size) {
+                        if (rvar_bounds[i] > tile_size) {
                             // Split the rvar
                             RVar outer, inner;
                             func.update(update_id)
-                                .split(r, outer, inner, tile_size,
+                                .split(rvars[i], outer, inner, tile_size,
                                     TailStrategy::GuardWithIf);
                             schedule_source << "    .split(" <<
-                                r.name() << "," <<
+                                rvars[i].name() << "," <<
                                 outer.name() << "," <<
                                 inner.name() << "," <<
                                 tile_size << "," <<
@@ -671,101 +675,107 @@ void apply_schedule(const MachineParams &params,
                                 size += 1;
                             }
                             outer_size *= size;
+                            inner_rvar_sizes.push_back(tile_size);
                         } else {
-                            inner_rvars.push_back(r);
+                            inner_rvars.push_back(rvars[i]);
+                            inner_rvar_sizes.push_back(rvar_bounds[i]);
                         }
                     }
                     // Fuse all outer RVars
-                    internal_assert(outer_rvars.size() > 0);
-                    RVar fused = outer_rvars[0];
-                    // inner to outer
-                    for (int i = 1; i < (int)outer_rvars.size(); i++) {
-                        func.update(update_id)
-                            .fuse(fused, outer_rvars[i], fused);
-                        schedule_source << "    .fuse(" <<
-                            fused.name() << "," <<
-                            outer_rvars[i].name() << "," <<
-                            fused.name() << ")\n";
-                    }
-                    // Reorder
-                    std::vector<VarOrRVar> all_rvars;
-                    all_rvars.reserve(inner_rvars.size() + 1);
-                    for (RVar r : inner_rvars) {
-                        all_rvars.push_back(r);
-                    }
-                    all_rvars.push_back(fused);
-                    func.update(update_id).reorder(all_rvars);
-                    schedule_source << "    .reorder(";
-                    for (int i = 0; i < (int)all_rvars.size(); i++) {
-                        schedule_source << all_rvars[i].name();
-                        if (i != (int)all_rvars.size() - 1) {
-                            schedule_source << ",";
-                        }
-                    }
-                    schedule_source << ")\n";
-                    schedule_source << ";\n";
-                    // If there is any inner RVars, rfactor all the
-                    // outer RVars
-                    if (inner_rvars.size() > 0) {
-                        Var factored;
-                        Func interm =
+                    if (outer_rvars.size() > 0) {
+                        RVar fused = outer_rvars[0];
+                        // inner to outer
+                        for (int i = 1; i < (int)outer_rvars.size(); i++) {
                             func.update(update_id)
-                                .rfactor(fused, factored);
-                        schedule_source << interm.name() << " = " <<
-                            func.name() << ".update(" << update_id << ")" <<
-                            ".rfactor(" << fused.name() << "," << factored.name() << ");\n";
-                        if (is_gpu) {
-                            Var outer, inner;
-                            interm.compute_root()
-                                  .split(factored, outer, inner, 64, TailStrategy::GuardWithIf)
-                                  .gpu_blocks(outer)
-                                  .gpu_threads(inner);
-                            schedule_source << interm.name() << ".compute_root()\n";
-                            schedule_source << "    .split(" <<
-                                factored.name() << "," << outer.name() << "," << inner.name() << "," <<
-                                64 << "," << TailStrategy::GuardWithIf << ")\n";
-                            schedule_source << "    .gpu_blocks(" << outer.name() << ")\n" << std::endl;
-                            schedule_source << "    .gpu_threads(" << inner.name() << ")\n" << std::endl;
-                            schedule_source << ";\n";
-                            interm.update()
-                                  .split(factored, outer, inner, 64,
-                                         TailStrategy::GuardWithIf)
-                                  .gpu_blocks(outer)
-                                  .gpu_threads(inner);
-                            schedule_source << interm.name() << ".update()\n";
-                            schedule_source << "    .split(" <<
-                                factored.name() << "," << outer.name() << "," << inner.name() << "," <<
-                                64 << "," << TailStrategy::GuardWithIf << ")\n";
-                            schedule_source << "    .gpu_blocks(" << outer.name() << ")\n" << std::endl;
-                            schedule_source << "    .gpu_threads(" << inner.name() << ")\n" << std::endl;
-                            schedule_source << ";\n";
-                        } else {
-                            Var outer, inner;
-                            interm.compute_root()
-                                  .split(factored, outer, inner, 16,
-                                         TailStrategy::GuardWithIf)
-                                  .parallel(outer)
-                                  .vectorize(inner);
-                            schedule_source << interm.name() << ".compute_root()\n";
-                            schedule_source << "    .split(" <<
-                                factored.name() << "," << outer.name() << "," << inner.name() << "," <<
-                                16 << "," << TailStrategy::GuardWithIf << ")\n";
-                            schedule_source << "    .parallel(" << outer.name() << ")\n" << std::endl;
-                            schedule_source << "    .vectorize(" << inner.name() << ")\n" << std::endl;
-                            schedule_source << ";\n";
-                            interm.update()
-                                  .split(factored, outer, inner, 16,
-                                         TailStrategy::GuardWithIf)
-                                  .parallel(outer)
-                                  .vectorize(inner);
-                            schedule_source << interm.name() << ".update()\n";
-                            schedule_source << "    .split(" <<
-                                factored.name() << "," << outer.name() << "," << inner.name() << "," <<
-                                16 << "," << TailStrategy::GuardWithIf << ")\n";
-                            schedule_source << "    .parallel(" << outer.name() << ")\n" << std::endl;
-                            schedule_source << "    .vectorize(" << inner.name() << ")\n" << std::endl;
-                            schedule_source << ";\n";
+                                .fuse(fused, outer_rvars[i], fused);
+                            schedule_source << "    .fuse(" <<
+                                fused.name() << "," <<
+                                outer_rvars[i].name() << "," <<
+                                fused.name() << ")\n";
                         }
+                        // Reorder
+                        std::vector<VarOrRVar> all_rvars;
+                        all_rvars.reserve(inner_rvars.size() + 1);
+                        for (RVar r : inner_rvars) {
+                            all_rvars.push_back(r);
+                        }
+                        all_rvars.push_back(fused);
+                        func.update(update_id).reorder(all_rvars);
+                        schedule_source << "    .reorder(";
+                        for (int i = 0; i < (int)all_rvars.size(); i++) {
+                            schedule_source << all_rvars[i].name();
+                            if (i != (int)all_rvars.size() - 1) {
+                                schedule_source << ",";
+                            }
+                        }
+                        schedule_source << ")\n";
+                        schedule_source << ";\n";
+                        // If there is any inner RVars, rfactor all the
+                        // outer RVars
+                        if (inner_rvars.size() > 0) {
+                            Var factored;
+                            Func interm =
+                                func.update(update_id)
+                                    .rfactor(fused, factored);
+                            schedule_source << interm.name() << " = " <<
+                                func.name() << ".update(" << update_id << ")" <<
+                                ".rfactor(" << fused.name() << "," << factored.name() << ");\n";
+                            if (is_gpu) {
+                                Var outer, inner;
+                                interm.compute_root()
+                                      .split(factored, outer, inner, 64, TailStrategy::GuardWithIf)
+                                      .gpu_blocks(outer)
+                                      .gpu_threads(inner);
+                                schedule_source << interm.name() << ".compute_root()\n";
+                                schedule_source << "    .split(" <<
+                                    factored.name() << "," << outer.name() << "," << inner.name() << "," <<
+                                    64 << "," << TailStrategy::GuardWithIf << ")\n";
+                                schedule_source << "    .gpu_blocks(" << outer.name() << ")\n" << std::endl;
+                                schedule_source << "    .gpu_threads(" << inner.name() << ")\n" << std::endl;
+                                schedule_source << ";\n";
+                                interm.update()
+                                      .split(factored, outer, inner, 64,
+                                             TailStrategy::GuardWithIf)
+                                      .gpu_blocks(outer)
+                                      .gpu_threads(inner);
+                                schedule_source << interm.name() << ".update()\n";
+                                schedule_source << "    .split(" <<
+                                    factored.name() << "," << outer.name() << "," << inner.name() << "," <<
+                                    64 << "," << TailStrategy::GuardWithIf << ")\n";
+                                schedule_source << "    .gpu_blocks(" << outer.name() << ")\n" << std::endl;
+                                schedule_source << "    .gpu_threads(" << inner.name() << ")\n" << std::endl;
+                                schedule_source << ";\n";
+                            } else {
+                                Var outer, inner;
+                                interm.compute_root()
+                                      .split(factored, outer, inner, 16,
+                                             TailStrategy::GuardWithIf)
+                                      .parallel(outer)
+                                      .vectorize(inner);
+                                schedule_source << interm.name() << ".compute_root()\n";
+                                schedule_source << "    .split(" <<
+                                    factored.name() << "," << outer.name() << "," << inner.name() << "," <<
+                                    16 << "," << TailStrategy::GuardWithIf << ")\n";
+                                schedule_source << "    .parallel(" << outer.name() << ")\n" << std::endl;
+                                schedule_source << "    .vectorize(" << inner.name() << ")\n" << std::endl;
+                                schedule_source << ";\n";
+                                interm.update()
+                                      .split(factored, outer, inner, 16,
+                                             TailStrategy::GuardWithIf)
+                                      .parallel(outer)
+                                      .vectorize(inner);
+                                schedule_source << interm.name() << ".update()\n";
+                                schedule_source << "    .split(" <<
+                                    factored.name() << "," << outer.name() << "," << inner.name() << "," <<
+                                    16 << "," << TailStrategy::GuardWithIf << ")\n";
+                                schedule_source << "    .parallel(" << outer.name() << ")\n" << std::endl;
+                                schedule_source << "    .vectorize(" << inner.name() << ")\n" << std::endl;
+                                schedule_source << ";\n";
+                            }
+                        }
+                        // Update rvars
+                        rvars = {fused};
+                        rvar_bounds = {outer_size};
                     }
                 }
             }
@@ -823,9 +833,6 @@ void apply_schedule(const MachineParams &params,
                 is_associative = prover_result.associative();
             }
             if (is_associative) {
-                std::vector<ReductionVariable> rvars =
-                    func.update(update_id).get_schedule().rvars();
-                std::vector<int> rvar_bounds = get_rvar_bounds(rvars);
                 schedule_source << func.name() << ".update(" << update_id << ")\n";
                 parallelize_vars_and_rvars(
                     params,
@@ -900,6 +907,8 @@ void generate_schedule(const std::vector<Function> &outputs,
     for (const auto &output : outputs) {
         const FuncSchedule &schedule = output.schedule();
         const std::vector<Bound> &estimates = schedule.estimates();
+        user_assert((int)estimates.size() == output.dimensions()) <<
+            "Bound estimates of function " << output.name() << " are not provided.\n";
         std::vector<Interval> b;
         b.reserve(estimates.size());
         for (const auto &e : estimates) {
@@ -909,6 +918,14 @@ void generate_schedule(const std::vector<Function> &outputs,
     }
 
     std::map<std::string, Box> func_bounds = inference_bounds(outputs, output_bounds_expr);
+    for (const auto &it : func_bounds) {
+        const Box &bounds = it.second;
+        for (int d = 0; d < (int)bounds.size(); d++) {
+            user_assert(bounds[d].is_bounded()) << "Access to function or buffer " << it.first << " at dimension " << d << " is not bounded. "
+                                                << "We can only differentiate bounded accesses.\n";
+        }
+    }
+
     std::set<std::string> output_set;
     for (const auto &output : outputs) {
         output_set.insert(output.name());
