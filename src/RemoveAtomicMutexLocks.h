@@ -9,8 +9,8 @@
  * Defines the lowering pass that optimizes out the mutex lock of an
  * atomic node, if the SplitTuple pass does not lift out the Provide
  * value as a let expression. This is confirmed by checking whether
- * the Provide nodes inside an Atomic node has a value of a variable,
- * where the name of the variable is [name of the Provide node].value. 
+ * the Provide nodes inside an Atomic node have let binding values
+ * accessing the buffers inside the atomic node.
  * If we detect that the Atomic node does not require a mutex lock,
  * we remove the mutex access of the atomic node, the corresponding
  * mutex allocations and frees. We don't rely on dead allocation

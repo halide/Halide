@@ -1,47 +1,115 @@
 #include "RemoveAtomicMutexLocks.h"
 #include "IRVisitor.h"
 #include "IRMutator.h"
+#include "Scope.h"
 
 namespace Halide {
 namespace Internal {
 
 using std::string;
 using std::vector;
+using std::set;
 
 namespace {
 
-class FindAtomicTupleProvide : public IRVisitor {
+class FindCall : public IRGraphVisitor {
+    using IRGraphVisitor::visit;
+
+    void visit(const Call *op) override {
+        if (call_names.find(op->name) != call_names.end()) {
+            found = true;
+        }
+        for (size_t i = 0; i < op->args.size(); i++) {
+            include(op->args[i]);
+        }
+    }
+
+    set<string> call_names;
+    bool found = false;
+
+public:
+
+    bool find_call(Expr e, const set<string> &call_names) {
+        found = false;
+        this->call_names = call_names;
+        include(e);
+        return found;
+    }
+};
+
+class FindAtomicLetBindings : public IRVisitor {
     using IRVisitor::visit;
 
+    void visit(const Let *op) override {
+        op->value.accept(this);
+        let_bindings.push(op->name, op->value);
+        op->body.accept(this);
+        let_bindings.pop(op->name);
+    }
+
+    void visit(const LetStmt *op) override {
+        op->value.accept(this);
+        let_bindings.push(op->name, op->value);
+        op->body.accept(this);
+        let_bindings.pop(op->name);
+    }
+
     void visit(const Variable *op) override {
-        if (current_provide_name != "" &&
-                op->name == current_provide_name + ".value") {
-            found = true;
+        if (inside_provide) {
+            if (let_bindings.contains(op->name)) {
+                Expr e = let_bindings.get(op->name);
+                FindCall finder;
+                if (finder.find_call(e, provide_names)) {
+                    found = true;
+                }
+            }
         }
     }
 
     void visit(const Provide *op) override {
         for (size_t i = 0; i < op->values.size(); i++) {
-            current_provide_name = op->name;
+            inside_provide = true;
             op->values[i].accept(this);
-            current_provide_name = "";
+            inside_provide = false;
         }
         for (size_t i = 0; i < op->args.size(); i++) {
             op->args[i].accept(this);
         }
     }
 
-    string current_provide_name;
+    bool inside_provide;
+    set<string> provide_names;
+    Scope<Expr> let_bindings;
 public:
+    FindAtomicLetBindings(const set<string> &provide_names)
+        : provide_names(provide_names) {}
+
     bool found = false;
+};
+
+class CollectProvideNames : public IRGraphVisitor {
+    void visit(const Provide *op) {
+        for (size_t i = 0; i < op->values.size(); i++) {
+            include(op->values[i]);
+        }
+        for (size_t i = 0; i < op->args.size(); i++) {
+            include(op->args[i]);
+        }
+        provide_names.insert(op->name);
+    }
+public:
+    set<string> provide_names;
 };
 
 class RemoveAtomicMutexLocks : public IRMutator {
     using IRMutator::visit;
 
     Stmt visit(const Atomic *op) override {
-        // Search for atomic tuple Provide nodes
-        FindAtomicTupleProvide finder;
+        // Collect the names of all provide nodes inside.
+        CollectProvideNames collector;
+        op->body.accept(&collector);
+        // Search for let bindings that access the providers.
+        FindAtomicLetBindings finder(collector.provide_names);
         op->body.accept(&finder);
         if (finder.found) {
             // Can't remove mutex lock. Leave the Stmt as is.
