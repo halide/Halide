@@ -160,9 +160,9 @@ def test_basics4():
     f = hl.Func('f')
     g = hl.Func('g')
     g[x] = 1
-    f[x] = 0
+    f[x] = 0.0
     r = hl.RDom([(0, 100)])
-    f[g[r]] = 2
+    f[g[r]] = 2.3 # This triggers a warning of double-to-float conversion
     f.compute_root()
     f.compile_jit()
 

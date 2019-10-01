@@ -56,9 +56,11 @@ void define_set_func_ref<double>(py::class_<Func> &func_class) {
             float f = rhs;
             if (Internal::reinterpret_bits<uint64_t>(rhs) !=
                     Internal::reinterpret_bits<uint64_t>((double)f)) {
+                double diff = rhs - f;
                 std::ostringstream os;
                 os << "Loss of precision detected when casting " <<
-                    rhs << " to a single precision float.";
+                    rhs << " to a single precision float. The difference is " <<
+                    diff << ".";
                 std::string msg = os.str();
                 PyErr_WarnEx(NULL, msg.c_str(), 1);
             }
@@ -382,7 +384,6 @@ void define_func(py::module &m) {
     define_set_func_ref<Expr>(func_class);
     define_set_func_ref<Tuple>(func_class);
     define_set_func_ref<int>(func_class);
-    define_set_func_ref<float>(func_class);
     define_set_func_ref<double>(func_class);
 
     // LHS(Var, ...Var) is LHS of an ordinary Func definition.
