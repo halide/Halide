@@ -628,7 +628,10 @@ void apply_schedule(const MachineParams &params,
         for (int b : rvar_bounds) {
             rdomain_size *= b;
         }
-        if (domain_size < rdomain_size) {
+        int cpu_max_domain_size = 8 * params.parallelism;
+        int gpu_max_domain_size = 4096;
+        int max_domain_size = is_gpu ? gpu_max_domain_size : cpu_max_domain_size;
+        if (domain_size < max_domain_size) {
             if (rvars.size() > 0) {
                 // Check associativity
                 std::vector<Expr> values =
