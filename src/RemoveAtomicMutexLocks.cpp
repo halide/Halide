@@ -88,7 +88,9 @@ public:
 };
 
 class CollectProvideNames : public IRGraphVisitor {
-    void visit(const Provide *op) {
+    using IRGraphVisitor::visit;
+    
+    void visit(const Provide *op) override {
         for (size_t i = 0; i < op->values.size(); i++) {
             include(op->values[i]);
         }
