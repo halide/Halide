@@ -8,7 +8,7 @@ if [ $# -lt 7 -o $# -gt 8 ]; then
   exit
 fi
 
-source $(dirname $0)/utils.sh
+source $(dirname $0)/scripts/utils.sh
 find_halide HALIDE_ROOT
 
 set -eu

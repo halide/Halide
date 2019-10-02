@@ -2,19 +2,21 @@
 
 function find_halide() {
     local -n halide_root_ref=$1
+    local -r silent=$2 || 0
     local dir=$(pwd)
 
     for i in {1..5}; do
         if [[ -f ${dir}/distrib/include/Halide.h ]]; then
             halide_root_ref=$(cd ${dir}; pwd)
-            echo "Using Halide in ${halide_root_ref}"
+            if [[ $silent -ne 1 ]]; then
+                echo "Using Halide in ${halide_root_ref}"
+            fi
             return 0
         fi
         dir=${dir}/..
     done
 
-    echo "Unable to find Halide. Try re-running $(basename $0) from somewhere in the
-    Halide tree."
+    echo "Unable to find Halide. Try re-running $(basename $0) from somewhere in the Halide tree."
     exit
 }
 
@@ -41,6 +43,12 @@ function get_autoscheduler_bin_dir() {
     local -n autoscheduler_bin_dir_ref=$2
     get_autoscheduler_dir $halide_root autoscheduler_dir
     autoscheduler_bin_dir_ref=${autoscheduler_dir}/bin
+}
+
+function get_autoscheduler_scripts_dir() {
+    local -r halide_root=$1
+    local -n autoscheduler_scripts_dir_ref=$2
+    autoscheduler_scripts_dir_ref=${halide_root}/apps/autoscheduler/scripts
 }
 
 function build_augment_sample() {
@@ -170,16 +178,20 @@ function profile_gpu_sample() {
 }
 
 function predict_all() {
-    local -r samples_dir=$1
-    local -r weights_dir=$2
-    local -r predictions_file=$3
+    local -r halide_root=$1
+    local -r samples_dir=$2
+    local -r weights_dir=$3
+    local -r predictions_file=$4
 
-    bash predict_all.sh ${samples_dir} ${weights_dir} ${predictions_file}
+    get_autoscheduler_scripts_dir ${halide_root} scripts_dir
+    bash ${scripts_dir}/predict_all.sh ${samples_dir} ${weights_dir} ${predictions_file}
 }
 
 function extract_best_times() {
-    local -r samples_dir=$1
-    local -r output_file=$2
+    local -r halide_root=$1
+    local -r samples_dir=$2
+    local -r output_file=$3
 
-    bash extract_best_times.sh ${samples_dir} ${output_file}
+    get_autoscheduler_scripts_dir ${halide_root} scripts_dir
+    bash ${scripts_dir}/extract_best_times.sh ${samples_dir} ${output_file}
 }
