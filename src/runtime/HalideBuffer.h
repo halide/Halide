@@ -6,14 +6,14 @@
 #ifndef HALIDE_RUNTIME_BUFFER_H
 #define HALIDE_RUNTIME_BUFFER_H
 
-#include <memory>
-#include <vector>
-#include <cassert>
-#include <atomic>
 #include <algorithm>
+#include <atomic>
+#include <cassert>
 #include <limits>
+#include <memory>
 #include <stdint.h>
 #include <string.h>
+#include <vector>
 
 #if defined(__has_feature)
 #if __has_feature(memory_sanitizer)

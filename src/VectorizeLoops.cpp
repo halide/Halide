@@ -40,11 +40,12 @@ class ReplaceShuffleVectors : public IRMutator {
             return IRMutator::visit(op);
         }
     }
+
 public:
-    ReplaceShuffleVectors(const string &v) : var(v) {}
+    ReplaceShuffleVectors(const string &v)
+        : var(v) {
+    }
 };
-
-
 
 /** Find the exact max and min lanes of a vector expression. Not
  * conservative like bounds_of_expr, but uses similar rules for some
@@ -132,7 +133,7 @@ Interval bounds_of_lanes(Expr e) {
         Interval ia = bounds_of_lanes(not_->a);
         return {!ia.max, !ia.min};
     } else if (const Ramp *r = e.as<Ramp>()) {
-        Expr last_lane_idx = make_const(r->base.type(), r->lanes-1);
+        Expr last_lane_idx = make_const(r->base.type(), r->lanes - 1);
         if (is_positive_const(r->stride)) {
             return {r->base, r->base + last_lane_idx * r->stride};
         } else if (is_negative_const(r->stride)) {
@@ -222,8 +223,9 @@ class RewriteAccessToVectorAlloc : public IRMutator {
     }
 
 public:
-    RewriteAccessToVectorAlloc(string v, string a, int l) :
-        var(Variable::make(Int(32), v)), alloc(a), lanes(l) {}
+    RewriteAccessToVectorAlloc(string v, string a, int l)
+        : var(Variable::make(Int(32), v)), alloc(a), lanes(l) {
+    }
 };
 
 class UsesGPUVars : public IRVisitor {
@@ -235,6 +237,7 @@ private:
             uses_gpu = true;
         }
     }
+
 public:
     bool uses_gpu = false;
 };
@@ -349,13 +352,13 @@ class PredicateLoadStore : public IRMutator {
     }
 
 public:
-    PredicateLoadStore(string v, Expr vpred, bool in_hexagon, const Target &t) :
-            var(v), vector_predicate(vpred), in_hexagon(in_hexagon), target(t),
-            lanes(vpred.type().lanes()), valid(true), vectorized(false) {
+    PredicateLoadStore(string v, Expr vpred, bool in_hexagon, const Target &t)
+        : var(v), vector_predicate(vpred), in_hexagon(in_hexagon), target(t),
+          lanes(vpred.type().lanes()), valid(true), vectorized(false) {
         internal_assert(lanes > 1);
     }
 
-    bool is_vectorized() const  {
+    bool is_vectorized() const {
         return valid && vectorized;
     }
 };
@@ -371,7 +374,7 @@ class VectorSubs : public IRMutator {
 
     const Target &target;
 
-    bool in_hexagon; // Are we inside the hexagon loop?
+    bool in_hexagon;  // Are we inside the hexagon loop?
 
     // A suffix to attach to widened variables.
     string widening_suffix;
@@ -432,21 +435,51 @@ class VectorSubs : public IRMutator {
         }
     }
 
-    Expr visit(const Add *op) override {return mutate_binary_operator(op);}
-    Expr visit(const Sub *op) override {return mutate_binary_operator(op);}
-    Expr visit(const Mul *op) override {return mutate_binary_operator(op);}
-    Expr visit(const Div *op) override {return mutate_binary_operator(op);}
-    Expr visit(const Mod *op) override {return mutate_binary_operator(op);}
-    Expr visit(const Min *op) override {return mutate_binary_operator(op);}
-    Expr visit(const Max *op) override {return mutate_binary_operator(op);}
-    Expr visit(const EQ *op) override  {return mutate_binary_operator(op);}
-    Expr visit(const NE *op) override  {return mutate_binary_operator(op);}
-    Expr visit(const LT *op) override  {return mutate_binary_operator(op);}
-    Expr visit(const LE *op) override  {return mutate_binary_operator(op);}
-    Expr visit(const GT *op) override  {return mutate_binary_operator(op);}
-    Expr visit(const GE *op) override  {return mutate_binary_operator(op);}
-    Expr visit(const And *op) override {return mutate_binary_operator(op);}
-    Expr visit(const Or *op) override  {return mutate_binary_operator(op);}
+    Expr visit(const Add *op) override {
+        return mutate_binary_operator(op);
+    }
+    Expr visit(const Sub *op) override {
+        return mutate_binary_operator(op);
+    }
+    Expr visit(const Mul *op) override {
+        return mutate_binary_operator(op);
+    }
+    Expr visit(const Div *op) override {
+        return mutate_binary_operator(op);
+    }
+    Expr visit(const Mod *op) override {
+        return mutate_binary_operator(op);
+    }
+    Expr visit(const Min *op) override {
+        return mutate_binary_operator(op);
+    }
+    Expr visit(const Max *op) override {
+        return mutate_binary_operator(op);
+    }
+    Expr visit(const EQ *op) override {
+        return mutate_binary_operator(op);
+    }
+    Expr visit(const NE *op) override {
+        return mutate_binary_operator(op);
+    }
+    Expr visit(const LT *op) override {
+        return mutate_binary_operator(op);
+    }
+    Expr visit(const LE *op) override {
+        return mutate_binary_operator(op);
+    }
+    Expr visit(const GT *op) override {
+        return mutate_binary_operator(op);
+    }
+    Expr visit(const GE *op) override {
+        return mutate_binary_operator(op);
+    }
+    Expr visit(const And *op) override {
+        return mutate_binary_operator(op);
+    }
+    Expr visit(const Or *op) override {
+        return mutate_binary_operator(op);
+    }
 
     Expr visit(const Select *op) override {
         Expr condition = mutate(op->condition);
@@ -516,7 +549,7 @@ class VectorSubs : public IRMutator {
                     vector<Expr> call_args(call->args.size());
                     for (size_t j = 0; j < call_args.size(); j += 2) {
                         Expr min_v = widen(call->args[j], max_lanes);
-                        Expr extent_v = widen(call->args[j+1], max_lanes);
+                        Expr extent_v = widen(call->args[j + 1], max_lanes);
                         Expr min_scalar = extract_lane(min_v, 0);
                         Expr max_scalar = min_scalar + extract_lane(extent_v, 0);
                         for (int k = 1; k < max_lanes; ++k) {
@@ -526,7 +559,7 @@ class VectorSubs : public IRMutator {
                             max_scalar = max(max_scalar, min_k + extent_k);
                         }
                         call_args[j] = min_scalar;
-                        call_args[j+1] = max_scalar - min_scalar;
+                        call_args[j + 1] = max_scalar - min_scalar;
                     }
                     new_args[i] = Call::make(call->type.element_of(), Call::make_struct, call_args, Call::Intrinsic);
                 }
@@ -612,7 +645,6 @@ class VectorSubs : public IRMutator {
             // Also keep track of the original let, in case inner code scalarizes.
             containing_lets.push_back({op->name, op->value});
         }
-
 
         Stmt mutated_body = mutate(op->body);
 
@@ -747,12 +779,13 @@ class VectorSubs : public IRMutator {
             }
 
             debug(4) << "IfThenElse should vectorize predicate over var " << var << "? " << vectorize_predicate << "; cond: " << cond << "\n";
-            debug(4) << "Predicated stmt:\n" << predicated_stmt << "\n";
+            debug(4) << "Predicated stmt:\n"
+                     << predicated_stmt << "\n";
 
             // First check if the condition is marked as likely.
             const Call *c = cond.as<Call>();
             if (c && (c->is_intrinsic(Call::likely) ||
-                c->is_intrinsic(Call::likely_if_innermost))) {
+                      c->is_intrinsic(Call::likely_if_innermost))) {
 
                 // The meaning of the likely intrinsic is that
                 // Halide should optimize for the case in which
@@ -776,24 +809,28 @@ class VectorSubs : public IRMutator {
                         IfThenElse::make(all_true,
                                          then_case,
                                          scalarize(without_likelies));
-                    debug(4) << "...With all_true likely: \n" << stmt << "\n";
+                    debug(4) << "...With all_true likely: \n"
+                             << stmt << "\n";
                     return stmt;
                 } else {
                     Stmt stmt =
                         IfThenElse::make(all_true,
                                          then_case,
                                          predicated_stmt);
-                    debug(4) << "...Predicated IfThenElse: \n" << stmt << "\n";
+                    debug(4) << "...Predicated IfThenElse: \n"
+                             << stmt << "\n";
                     return stmt;
                 }
             } else {
                 // It's some arbitrary vector condition.
                 if (!vectorize_predicate) {
-                    debug(4) << "...Scalarizing vector predicate: \n" << Stmt(op) << "\n";
+                    debug(4) << "...Scalarizing vector predicate: \n"
+                             << Stmt(op) << "\n";
                     return scalarize(op);
                 } else {
                     Stmt stmt = predicated_stmt;
-                    debug(4) << "...Predicated IfThenElse: \n" << stmt << "\n";
+                    debug(4) << "...Predicated IfThenElse: \n"
+                             << stmt << "\n";
                     return stmt;
                 }
             }
@@ -909,7 +946,7 @@ class VectorSubs : public IRMutator {
 
         // We'll need the original scalar versions of any containing lets.
         for (size_t i = containing_lets.size(); i > 0; i--) {
-            const auto &l = containing_lets[i-1];
+            const auto &l = containing_lets[i - 1];
             s = LetStmt::make(l.first, l.second, s);
         }
 
@@ -952,8 +989,8 @@ class VectorSubs : public IRMutator {
     }
 
 public:
-    VectorSubs(string v, Expr r, bool in_hexagon, const Target &t) :
-            var(v), replacement(r), target(t), in_hexagon(in_hexagon) {
+    VectorSubs(string v, Expr r, bool in_hexagon, const Target &t)
+        : var(v), replacement(r), target(t), in_hexagon(in_hexagon) {
         widening_suffix = ".x" + std::to_string(replacement.type().lanes());
     }
 };
@@ -997,7 +1034,9 @@ class VectorizeLoops : public IRMutator {
     }
 
 public:
-    VectorizeLoops(const Target &t) : target(t), in_hexagon(false) {}
+    VectorizeLoops(const Target &t)
+        : target(t), in_hexagon(false) {
+    }
 };
 
 }  // Anonymous namespace

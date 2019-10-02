@@ -30,16 +30,19 @@ class RVar {
 
 public:
     /** An empty reduction variable. */
-    RVar() : _name(Internal::make_entity_name(this, "Halide:.*:RVar", 'r')) {}
+    RVar()
+        : _name(Internal::make_entity_name(this, "Halide:.*:RVar", 'r')) {
+    }
 
     /** Construct an RVar with the given name */
-    explicit RVar(const std::string &n) : _name(n) {
+    explicit RVar(const std::string &n)
+        : _name(n) {
     }
 
     /** Construct a reduction variable with the given name and
      * bounds. Must be a member of the given reduction domain. */
-    RVar(Internal::ReductionDomain domain, int index) :
-        _domain(domain), _index(index) {
+    RVar(Internal::ReductionDomain domain, int index)
+        : _domain(domain), _index(index) {
     }
 
     /** The minimum value that this variable will take on */
@@ -50,7 +53,9 @@ public:
     Expr extent() const;
 
     /** The reduction domain this is associated with. */
-    Internal::ReductionDomain domain() const {return _domain;}
+    Internal::ReductionDomain domain() const {
+        return _domain;
+    }
 
     /** The name of this reduction variable */
     const std::string &name() const;
@@ -183,9 +188,9 @@ class RDom {
 
     void initialize_from_ranges(const std::vector<std::pair<Expr, Expr>> &ranges, std::string name = "");
 
-    template <typename... Args>
-    HALIDE_NO_USER_CODE_INLINE void initialize_from_ranges(std::vector<std::pair<Expr, Expr>> &ranges, Expr min, Expr extent, Args&&... args) {
-        ranges.push_back({ min, extent });
+    template<typename... Args>
+    HALIDE_NO_USER_CODE_INLINE void initialize_from_ranges(std::vector<std::pair<Expr, Expr>> &ranges, Expr min, Expr extent, Args &&... args) {
+        ranges.push_back({min, extent});
         initialize_from_ranges(ranges, std::forward<Args>(args)...);
     }
 
@@ -200,8 +205,8 @@ public:
         initialize_from_ranges(ranges, name);
     }
 
-    template <typename... Args>
-    HALIDE_NO_USER_CODE_INLINE RDom(Expr min, Expr extent, Args&&... args) {
+    template<typename... Args>
+    HALIDE_NO_USER_CODE_INLINE RDom(Expr min, Expr extent, Args &&... args) {
         // This should really just be a delegating constructor, but I couldn't make
         // that work with variadic template unpacking in visual studio 2013
         std::vector<std::pair<Expr, Expr>> ranges;
@@ -216,20 +221,28 @@ public:
     RDom(const Buffer<> &);
     RDom(const OutputImageParam &);
     template<typename T>
-    HALIDE_NO_USER_CODE_INLINE RDom(const Buffer<T> &im) : RDom(Buffer<>(im)) {}
+    HALIDE_NO_USER_CODE_INLINE RDom(const Buffer<T> &im)
+        : RDom(Buffer<>(im)) {
+    }
     // @}
 
     /** Construct a reduction domain that wraps an Internal ReductionDomain object. */
     RDom(Internal::ReductionDomain d);
 
     /** Get at the internal reduction domain object that this wraps. */
-    Internal::ReductionDomain domain() const {return dom;}
+    Internal::ReductionDomain domain() const {
+        return dom;
+    }
 
     /** Check if this reduction domain is non-null */
-    bool defined() const {return dom.defined();}
+    bool defined() const {
+        return dom.defined();
+    }
 
     /** Compare two reduction domains for equality of reference */
-    bool same_as(const RDom &other) const {return dom.same_as(other.dom);}
+    bool same_as(const RDom &other) const {
+        return dom.same_as(other.dom);
+    }
 
     /** Get the dimensionality of a reduction domain */
     int dimensions() const;

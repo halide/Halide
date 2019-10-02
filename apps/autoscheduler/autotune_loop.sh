@@ -113,7 +113,7 @@ make_featurization() {
         -g ${PIPELINE} \
         -f ${FNAME} \
         -o ${D} \
-        -e stmt,assembly,static_library,h,registration,schedule,featurization \
+        -e stmt,assembly,static_library,c_header,registration,schedule,featurization \
         target=${HL_TARGET} \
         auto_schedule=true \
         ${EXTRA_GENERATOR_ARGS} \

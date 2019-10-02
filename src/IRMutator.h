@@ -35,8 +35,10 @@ public:
 
 protected:
     // ExprNode<> and StmtNode<> are allowed to call visit (to implement mutate_expr/mutate_stmt())
-    template<typename T> friend struct ExprNode;
-    template<typename T> friend struct StmtNode;
+    template<typename T>
+    friend struct ExprNode;
+    template<typename T>
+    friend struct StmtNode;
 
     virtual Expr visit(const IntImm *);
     virtual Expr visit(const UIntImm *);
@@ -100,7 +102,7 @@ public:
 
 /** A helper function for mutator-like things to mutate regions */
 template<typename Mutator, typename... Args>
-std::pair<Region, bool> mutate_region(Mutator *mutator, const Region &bounds, Args&&... args) {
+std::pair<Region, bool> mutate_region(Mutator *mutator, const Region &bounds, Args &&... args) {
     Region new_bounds(bounds.size());
     bool bounds_changed = false;
 

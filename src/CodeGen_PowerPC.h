@@ -20,7 +20,6 @@ public:
     static void test();
 
 protected:
-
     std::string mcpu() const override;
     std::string mattrs() const override;
     bool use_soft_float_abi() const override;

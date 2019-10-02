@@ -28,6 +28,8 @@ public:
         CPlusPlusHeader,
         CImplementation,
         CPlusPlusImplementation,
+        CExternDecl,
+        CPlusPlusExternDecl,
     };
 
     /** Initialize a C code generator pointing at a particular output
@@ -42,14 +44,16 @@ public:
     void compile(const Module &module);
 
     /** The target we're generating code for */
-    const Target &get_target() const { return target; }
+    const Target &get_target() const {
+        return target;
+    }
 
     static void test();
 
     /**  Add common macros to be shared across all backends */
     void add_common_macros(std::ostream &dest);
-protected:
 
+protected:
     /** Emit a declaration. */
     // @{
     virtual void compile(const LoweredFunc &func);
@@ -120,10 +124,22 @@ protected:
                output_kind == CPlusPlusHeader;
     }
 
+    /** Return true if only generating an interface, which may be extern "C" or C++ */
+    bool is_extern_decl() {
+        return output_kind == CExternDecl ||
+               output_kind == CPlusPlusExternDecl;
+    }
+
+    /** Return true if only generating an interface, which may be extern "C" or C++ */
+    bool is_header_or_extern_decl() {
+        return is_header() || is_extern_decl();
+    }
+
     /** Return true if generating C++ linkage. */
     bool is_c_plus_plus_interface() {
         return output_kind == CPlusPlusHeader ||
-               output_kind == CPlusPlusImplementation;
+               output_kind == CPlusPlusImplementation ||
+               output_kind == CPlusPlusExternDecl;
     }
 
     /** Open a new C scope (i.e. throw in a brace, increase the indent) */
