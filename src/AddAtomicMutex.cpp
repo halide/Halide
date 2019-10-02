@@ -145,7 +145,7 @@ public:
                 internal_assert(mutex_name == op->mutex_name &&
                     tuple_size == op->tuple_size &&
                     dimensions == op->dimensions) <<
-                    "Inconsistent informatino of atomics inside a Producer node.\n";
+                    "Inconsistent information of atomics inside a Producer node.\n";
             }
             found = true;
             mutex_name = op->mutex_name;
