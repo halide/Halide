@@ -168,3 +168,11 @@ function profile_gpu_sample() {
     eval "${nvprof_timeline_cmd} && ${nvprof_metrics_cmd}"
     return 0
 }
+
+function predict_all() {
+    local -r sample_dir=$1
+    local -r weights_dir=$2
+    local -r predictions_file=$3
+
+    bash predict_all.sh ${sample_dir} ${weights_dir} ${predictions_file}
+}

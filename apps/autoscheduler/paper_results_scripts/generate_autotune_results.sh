@@ -77,4 +77,6 @@ for app in $APPS; do
 
         ITERATION=$((ITERATION + 1))
     done
+
+    predict_all ${SAMPLES_DIR} ${SAMPLES_DIR}/weights ${SAMPLES_DIR}/predictions
 done
