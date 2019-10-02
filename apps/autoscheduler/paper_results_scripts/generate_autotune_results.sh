@@ -55,7 +55,7 @@ MAX_ITERATIONS=$((MAX_ITERATIONS * NUM_APPS))
 
 ITERATION=1
 
-SAMPLES_DIR="${HALIDE_ROOT}/apps/${app}/autotuned_samples_${MODE}"
+SAMPLES_DIR="${HALIDE_ROOT}/apps/${app}/autotuned_samples"
 OUTPUT_FILE="${SAMPLES_DIR}/autotune_out.txt"
 
 for app in $APPS; do
@@ -63,19 +63,18 @@ for app in $APPS; do
     touch ${OUTPUT_FILE}
 done
 
-while [ 1 ]; do
-    for app in $APPS; do
-        SECONDS=0
-        # 15 mins of autotuning per app, round robin
-        while [[ SECONDS -lt 900 ]]; do
-            echo ${SAMPLES_DIR}
-            SAMPLES_DIR=${SAMPLES_DIR} make -C ${HALIDE_ROOT}/apps/${app} autotune | tee -a ${OUTPUT_FILE}
+for app in $APPS; do
+    DONE=0
+    SECONDS=0
+    # 15 mins of autotuning per app, round robin
+    while [[ DONE -ne 1 && SECONDS -lt 900 ]]; do
+        echo ${SAMPLES_DIR}
+        SAMPLES_DIR=${SAMPLES_DIR} make -C ${HALIDE_ROOT}/apps/${app} autotune | tee -a ${OUTPUT_FILE}
 
-            if [[ $MAX_ITERATIONS -ne 0 && $ITERATION -ge $MAX_ITERATIONS ]]; then
-                exit
-            fi
+        if [[ $MAX_ITERATIONS -ne 0 && $ITERATION -ge $MAX_ITERATIONS ]]; then
+            DONE=1
+        fi
 
-            ITERATION=$((ITERATION + 1))
-        done
+        ITERATION=$((ITERATION + 1))
     done
 done
