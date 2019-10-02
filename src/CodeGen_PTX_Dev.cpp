@@ -296,7 +296,6 @@ void CodeGen_PTX_Dev::visit(const Store *op) {
             }
         }
 #endif
-        is_ptx_atomic_store = true;
     }
 
     // Do aligned 4-wide 32-bit stores as a single i128 store.
@@ -314,7 +313,6 @@ void CodeGen_PTX_Dev::visit(const Store *op) {
     }
 
     CodeGen_LLVM::visit(op);
-    is_ptx_atomic_store = false;
 }
 
 void CodeGen_PTX_Dev::visit(const Atomic *op) {
@@ -542,6 +540,24 @@ void CodeGen_PTX_Dev::dump() {
 
 std::string CodeGen_PTX_Dev::print_gpu_name(const std::string &name) {
     return name;
+}
+
+bool CodeGen_PTX_Dev::supports_atomic_add(const Type &t) const {
+    if (t.bits() < 32) {
+        // TODO: Half atomics are supported by compute capability 7.x or higher.
+        return false;
+    }
+    if (t.is_int_or_uint()) {
+        return true;
+    }
+    if (t.is_float() && t.bits() == 32) {
+        return true;
+    }
+    if (t.is_float() && t.bits() == 64) {
+        // double atomics are supported since CC6.1
+        return target.has_feature(Target::CUDACapability61);
+    }
+    return false;
 }
 
 }  // namespace Internal

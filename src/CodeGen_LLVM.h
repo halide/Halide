@@ -493,15 +493,14 @@ protected:
      */
     std::pair<llvm::Function *, int> find_vector_runtime_function(const std::string &name, int lanes);
 
+    virtual bool supports_atomic_add(const Type &t) const;
+
     /** Are we inside an atomic node that uses mutex locks?
         This is used for detecting deadlocks from nested atomics. */
     bool inside_atomic_mutex_node;
 
     /** Emit atomic operations if we encounter a store node. */
     bool emit_atomic_stores;
-
-    /** Are we generating an atomic store for PTX backend now? For different handling of atomic operations. */
-    bool is_ptx_atomic_store;
 
 private:
     /** All the values in scope at the current code location during

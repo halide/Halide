@@ -84,6 +84,8 @@ protected:
     /** Map from simt variable names (e.g. foo.__block_id_x) to the llvm
      * ptx intrinsic functions to call to get them. */
     std::string simt_intrinsic(const std::string &name);
+
+    bool supports_atomic_add(const Type &t) const override;
 };
 
 }  // namespace Internal
