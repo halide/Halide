@@ -42,16 +42,18 @@ public:
 
     void visit(const Let *op) override {
         include(op->value);
-        let_bindings.push(op->name, op->value);
-        include(op->body);
-        let_bindings.pop(op->name);
+        {
+            ScopedBinding<Expr> bind(let_bindings, op->name, op->value);
+            include(op->body);
+        }
     }
 
     void visit(const LetStmt *op) override {
         include(op->value);
-        let_bindings.push(op->name, op->value);
-        include(op->body);
-        let_bindings.pop(op->name);
+        {
+            ScopedBinding<Expr> bind(let_bindings, op->name, op->value);
+            include(op->body);
+        }
     }
 
     void visit(const Variable *op) override {
