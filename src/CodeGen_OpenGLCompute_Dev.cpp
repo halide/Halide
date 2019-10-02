@@ -5,7 +5,6 @@
 #include "IRMutator.h"
 #include "IROperator.h"
 #include "Simplify.h"
-#include "ExprUsesVar.h"
 #include "VaryingAttributes.h"
 #include <iomanip>
 #include <limits>

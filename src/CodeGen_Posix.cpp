@@ -284,7 +284,6 @@ CodeGen_Posix::Allocation CodeGen_Posix::create_allocation(const std::string &na
         if (free_function.empty()) {
             free_function = "halide_free";
         }
-
         llvm::Function *free_fn = module->getFunction(free_function);
         internal_assert(free_fn) << "Could not find " << free_function << " in module.\n";
         allocation.destructor = register_destructor(free_fn, allocation.ptr, OnError);

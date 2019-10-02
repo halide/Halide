@@ -323,18 +323,13 @@ Stmt build_loop_nest(
     return stmt;
 }
 
-std::string get_mutex_name(const std::string func_name) {
-    return func_name + ".mutex";
-}
-
 // Build a loop nest about a provide node using a schedule
 Stmt build_provide_loop_nest(const map<string, Function> &env,
                              const string &prefix,
                              const Function &func,
                              const Definition &def,
                              int start_fuse,
-                             bool is_update,
-                             bool &need_alloc_mutex) {
+                             bool is_update) {
 
     internal_assert(!is_update == def.is_init());
 
@@ -358,7 +353,6 @@ Stmt build_provide_loop_nest(const map<string, Function> &env,
 
     // Make the (multi-dimensional multi-valued) store node.
     Stmt body = Provide::make(func.name(), values, site);
-    need_alloc_mutex = false;
     if (def.schedule().atomic()) {
         // We will allocate a mutex buffer called get_mutex_name(func.name())
         body = Atomic::make(func.name(),
@@ -367,7 +361,6 @@ Stmt build_provide_loop_nest(const map<string, Function> &env,
                             func.values().size(),
                             func.dimensions(),
                             body);
-        need_alloc_mutex = true;
     }
 
     // Default schedule/values if there is no specialization
@@ -379,8 +372,7 @@ Stmt build_provide_loop_nest(const map<string, Function> &env,
     for (size_t i = specializations.size(); i > 0; i--) {
         const Specialization &s = specializations[i - 1];
         if (s.failure_message.empty()) {
-            bool need_alloc_mutex = false;
-            Stmt then_case = build_provide_loop_nest(env, prefix, func, s.definition, start_fuse, is_update, need_alloc_mutex);
+            Stmt then_case = build_provide_loop_nest(env, prefix, func, s.definition, start_fuse, is_update);
             stmt = IfThenElse::make(s.condition, then_case, stmt);
         } else {
             internal_assert(equal(s.condition, const_true()));
@@ -1117,10 +1109,9 @@ private:
     const LoopLevel &store_level;
 
     Stmt build_realize(Stmt s, const Function &func, bool is_output) {
-        const string &name = func.name();
-
         if (!is_output) {
             Region bounds;
+            const string &name = func.name();
             const vector<string> &func_args = func.args();
             for (int i = 0; i < func.dimensions(); i++) {
                 const string &arg = func_args[i];
@@ -1219,7 +1210,7 @@ private:
     }
 
     Stmt build_produce_definition(const Function &f, const string &prefix, const Definition &def, bool is_update,
-                                  map<string, Expr> &replacements, vector<pair<string, Expr>> &add_lets, bool &need_alloc_mutex) {
+                                  map<string, Expr> &replacements, vector<pair<string, Expr>> &add_lets) {
         const vector<Dim> &dims = def.schedule().dims();  // From inner to outer
         const LoopLevel &fuse_level = def.schedule().fuse_level().level;
 
@@ -1261,7 +1252,7 @@ private:
             }
         }
 
-        Stmt produce = build_provide_loop_nest(env, prefix, f, def, (int)(start_fuse), is_update, need_alloc_mutex);
+        Stmt produce = build_provide_loop_nest(env, prefix, f, def, (int)(start_fuse), is_update);
 
         // Strip off the containing lets. The bounds of the parent fused loop
         // (i.e. the union bounds) might refer to them, so we need to move them
@@ -1404,25 +1395,20 @@ private:
         for (auto iter = funcs.rbegin(); iter != funcs.rend(); iter++) {
             const auto &f = *iter;
 
-            bool need_alloc_mutex = false;
             if (f.has_extern_definition()) {
                 const Stmt &produceDef = Internal::build_extern_produce(env, f, target);
                 producer = inject_stmt(producer, produceDef, LoopLevel::inlined().lock());
             } else {
-                bool need_alloc_mutex_ = false;
                 const Stmt &produceDef = build_produce_definition(f, f.name() + ".s0.", f.definition(), false,
-                                                                  replacements, add_lets, need_alloc_mutex_);
-                need_alloc_mutex = need_alloc_mutex || need_alloc_mutex_;
+                                                                  replacements, add_lets);
                 producer = inject_stmt(producer, produceDef, f.definition().schedule().fuse_level().level);
             }
 
             for (size_t j = 0; j < f.updates().size(); ++j) {
                 string defPrefix = f.name() + ".s" + std::to_string(j + 1) + ".";
                 const Definition &def = f.updates()[j];
-                bool need_alloc_mutex_ = false;
                 const Stmt &updateDef = build_produce_definition(f, defPrefix, def, true,
-                                                                 replacements, add_lets, need_alloc_mutex_);
-                need_alloc_mutex = need_alloc_mutex || need_alloc_mutex_;
+                                                                 replacements, add_lets);
                 producer = inject_stmt(producer, updateDef, def.schedule().fuse_level().level);
             }
         }
