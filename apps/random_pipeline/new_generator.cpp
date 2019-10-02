@@ -258,33 +258,33 @@ public:
     using dim_shape = std::tuple<int,int>;
     using Generator<RandomPipeline<training>>::auto_schedule;
     using Generator<RandomPipeline<training>>::get_pipeline;
-		// types for buffers
-		using inputT = int16_t;
-		Type inputHT = Halide::type_of<inputT>();
-		using outputT = int16_t;
-		using lossT = float;
-		using paramT = float;
-		Type paramHT = Halide::type_of<paramT>();
+    // types for buffers
+    using inputT = int16_t;
+    Type inputHT = Halide::type_of<inputT>();
+    using outputT = int16_t;
+    using lossT = float;
+    using paramT = float;
+    Type paramHT = Halide::type_of<paramT>();
 
     int num_stage_types = 21;
 
     // The random seed to use to generate the pipeline.
     GeneratorParam<int> seed{"seed", 1};
-		// The number of input buffers to this random pipeline
-		GeneratorParam<int> num_input_buffers{"num_input_buffers", 4};
-		// The size of the input buffers ASSUMING ALL ARE THE SAME SIZE FOR NOW
-		GeneratorParam<int> input_w{"input_w", 14};
-		GeneratorParam<int> input_h{"input_h", 14};
-		GeneratorParam<int> input_c{"input_c", 3};
-		GeneratorParam<int> output_w{"output_w", 10};
-		GeneratorParam<int> output_h{"output_h", 10};
-		GeneratorParam<int> output_c{"output_c", 3};
-		// The number of output buffers to this random pipeline
-		GeneratorParam<int> num_output_buffers{"num_output_buffers", 1};
+    // The number of input buffers to this random pipeline
+    GeneratorParam<int> num_input_buffers{"num_input_buffers", 4};
+    // The size of the input buffers ASSUMING ALL ARE THE SAME SIZE FOR NOW
+    GeneratorParam<int> input_w{"input_w", 14};
+    GeneratorParam<int> input_h{"input_h", 14};
+    GeneratorParam<int> input_c{"input_c", 3};
+    GeneratorParam<int> output_w{"output_w", 10};
+    GeneratorParam<int> output_h{"output_h", 10};
+    GeneratorParam<int> output_c{"output_c", 3};
+    // The number of output buffers to this random pipeline
+    GeneratorParam<int> num_output_buffers{"num_output_buffers", 1};
     // The approximate max number of stages to generate in the random pipeline.
     GeneratorParam<int> max_stages{"max_stages", 20};
-		// how much to shift input image by to avoid boundary issues 
-		GeneratorParam<int> shift{"shift", 2}; 
+    // how much to shift input image by to avoid boundary issues 
+    GeneratorParam<int> shift{"shift", 2}; 
     Input<int> batch_size{ "batch_size", 1 };
     Input<float> learning_rate{ "learning_rate", 1.0f };
     Input<int> timestep{ "timestep", 0 }; // Needed by ADAM
@@ -368,38 +368,38 @@ public:
         Expr current_weight = weights(args);
 
         loss_gradient = d(weights)(args);
-				std::cout << "loss gradient: " << loss_gradient << std::endl;
-				std::cout << "loss gradient update definitons: " << std::endl;
-				for (auto& def : loss_gradient.function().updates()) {
-						for (auto& expr : def.values()) {
-								std::cout << expr << std::endl;
-						}
-				}
+        std::cout << "loss gradient: " << loss_gradient << std::endl;
+        std::cout << "loss gradient update definitons: " << std::endl;
+        for (auto& def : loss_gradient.function().updates()) {
+            for (auto& expr : def.values()) {
+                std::cout << expr << std::endl;
+            }
+        }
 
         // Update the first and second moment estimates
         //smoothed_deriv = 0.9f * smoothed_deriv + 0.1f * loss_gradient;
-				std::cout << "\nsmoothed deriv: " << smoothed_deriv << std::endl;
-				std::cout << "smoothed deriv update definitons: " << std::endl;
-				for (auto& def : smoothed_deriv.function().updates()) {
-						for (auto& expr : def.values()) {
-								std::cout << expr << std::endl;
-						}
-				}
+        std::cout << "\nsmoothed deriv: " << smoothed_deriv << std::endl;
+        std::cout << "smoothed deriv update definitons: " << std::endl;
+        for (auto& def : smoothed_deriv.function().updates()) {
+            for (auto& expr : def.values()) {
+                std::cout << expr << std::endl;
+            }
+        }
         //smoothed_second_moment = 0.999f * smoothed_second_moment + 0.001f * pow(loss_gradient, 2);
-			
+      
         // Correction to account for the fact that the smoothed_deriv
         // and smoothed_second_moment start at zero when t == 0
         Expr smoothed_deriv_correction = 1 / (1 - pow(0.9f, timestep + 1));
         Expr smoothed_second_moment_correction = 1 / (1 - pow(0.999f, timestep + 1));
 
-				std::cout << "\nsmoothed deriv expr: " << (Expr)smoothed_deriv << std::endl;
-				std::cout << smoothed_deriv.function().name() << std::endl;
+        std::cout << "\nsmoothed deriv expr: " << (Expr)smoothed_deriv << std::endl;
+        std::cout << smoothed_deriv.function().name() << std::endl;
         // Update the weights
         //Expr step = learning_rate * smoothed_deriv * smoothed_deriv_correction;
         //step /= sqrt(smoothed_second_moment * smoothed_second_moment_correction) + 1e-5f;
-				Expr step = learning_rate * d(weights)(args);
+        Expr step = learning_rate * d(weights)(args);
 
-				std::cout << "step: " << step << std::endl;
+        std::cout << "step: " << step << std::endl;
         new_weight = current_weight - step;
     }
 
@@ -482,8 +482,8 @@ public:
 
     vector<Stage> stages; // the list of stages we will generate
 
-		// USED BY INTERP 2TAP STAGES
-		typedef std::tuple<Stage, vector<Expr>, vector<Expr>, Func> InterpStageAndCoords;
+    // USED BY INTERP 2TAP STAGES
+    typedef std::tuple<Stage, vector<Expr>, vector<Expr>, Func> InterpStageAndCoords;
 
     // Generate a random convolution of one dimension of f, statically unrolled.
     Stage convolve(Stage f, int dim, int kernel_min, int kernel_max) {
@@ -1062,39 +1062,39 @@ public:
         return {scan, f.w, f.h, f.c};
     }
 
-		/** normalize a grid of values for slicing **/
-		Stage normalize2DGrid(Stage f) {
-				// indexing math won't work if width or height = 1
-				assert(f.w > 1 && f.h > 1 && f.c == 1);
-				RDom r(0, f.w, 0, f.h, 0, 1); // assume last dim extent = 1
-				Func normed;
-				Func max_scan_x, min_scan_x, max_scan_y, min_scan_y;
-				max_scan_x(f.func.args()) = std::numeric_limits<float>::min(); 
-				min_scan_x(f.func.args()) = std::numeric_limits<float>::max();
-				max_scan_y(f.func.args()[1]) = std::numeric_limits<float>::min(); 
-				min_scan_y(f.func.args()[1]) = std::numeric_limits<float>::max();
+    /** normalize a grid of values for slicing **/
+    Stage normalize2DGrid(Stage f) {
+        // indexing math won't work if width or height = 1
+        assert(f.w > 1 && f.h > 1 && f.c == 1);
+        RDom r(0, f.w, 0, f.h, 0, 1); // assume last dim extent = 1
+        Func normed;
+        Func max_scan_x, min_scan_x, max_scan_y, min_scan_y;
+        max_scan_x(f.func.args()) = std::numeric_limits<float>::min(); 
+        min_scan_x(f.func.args()) = std::numeric_limits<float>::max();
+        max_scan_y(f.func.args()[1]) = std::numeric_limits<float>::min(); 
+        min_scan_y(f.func.args()[1]) = std::numeric_limits<float>::max();
 
-				max_scan_x(r.x, r.y, r.z) = select(f.func(r.x, r.y, r.z) >  max_scan_x(r.x-1, r.y, r.z), 
-																				f.func(r.x, r.y, r.z),
-																				max_scan_x(r.x-1, r.y, r.z));
-				min_scan_x(r.x, r.y, r.z) = select(f.func(r.x, r.y, r.z) <  min_scan_x(r.x-1, r.y, r.z), 
-																				f.func(r.x, r.y, r.z),
-																				min_scan_x(r.x-1, r.y, r.z));
+        max_scan_x(r.x, r.y, r.z) = select(f.func(r.x, r.y, r.z) >  max_scan_x(r.x-1, r.y, r.z), 
+                                        f.func(r.x, r.y, r.z),
+                                        max_scan_x(r.x-1, r.y, r.z));
+        min_scan_x(r.x, r.y, r.z) = select(f.func(r.x, r.y, r.z) <  min_scan_x(r.x-1, r.y, r.z), 
+                                        f.func(r.x, r.y, r.z),
+                                        min_scan_x(r.x-1, r.y, r.z));
 
-				max_scan_y(r.y) = select(max_scan_x(f.w-1, r.y, r.z) > max_scan_y(r.y-1),
-																max_scan_x(f.w-1, r.y, r.z),
-																max_scan_y(r.y-1));		
-	
-				min_scan_y(r.y) = select(min_scan_x(f.w-1, r.y, r.z) < min_scan_y(r.y-1),
-																min_scan_x(f.w-1, r.y, r.z),
-																min_scan_y(r.y-1));			
+        max_scan_y(r.y) = select(max_scan_x(f.w-1, r.y, r.z) > max_scan_y(r.y-1),
+                                max_scan_x(f.w-1, r.y, r.z),
+                                max_scan_y(r.y-1));   
+  
+        min_scan_y(r.y) = select(min_scan_x(f.w-1, r.y, r.z) < min_scan_y(r.y-1),
+                                min_scan_x(f.w-1, r.y, r.z),
+                                min_scan_y(r.y-1));     
 
-				Expr f_max = max_scan_y(f.h-1);
-				Expr f_min = min_scan_y(f.h-1);
+        Expr f_max = max_scan_y(f.h-1);
+        Expr f_min = min_scan_y(f.h-1);
 
-				normed(f.func.args()) = (f.func(f.func.args()) - f_min) / (f_max - f_min + 0.0001f);
-				return {normed, f.w, f.h, f.c};
-		}
+        normed(f.func.args()) = (f.func(f.func.args()) - f_min) / (f_max - f_min + 0.0001f);
+        return {normed, f.w, f.h, f.c};
+    }
 
     // Do a data-dependent looking into one stage using another as the
     // index.
@@ -1106,8 +1106,8 @@ public:
 
         // Index g's channels using f
         f = resample_to(f, g.w, g.h, 1);
-				// normalize f's values for indexing
-				Stage normed = normalize2DGrid(f);
+        // normalize f's values for indexing
+        Stage normed = normalize2DGrid(f);
 
         Func sliced("sliced");
 
@@ -1115,13 +1115,13 @@ public:
         int_coords_below.back() = clamp(cast<int>(floor(cast<float>(g.c) * (normed.func(normed.func.args())))), 0, g.c - 2);
 
         vector<Expr> int_coords_above = make_arguments(normed.func.args()); 
-				int_coords_above.back() = int_coords_below.back() + 1;
+        int_coords_above.back() = int_coords_below.back() + 1;
 
-			 	vector<Expr> float_coords = make_arguments(normed.func.args());
-				float_coords.back() = clamp(cast<float>(g.c) * (normed.func(normed.func.args())), 0.0f, cast<float>(g.c - 1));
+        vector<Expr> float_coords = make_arguments(normed.func.args());
+        float_coords.back() = clamp(cast<float>(g.c) * (normed.func(normed.func.args())), 0.0f, cast<float>(g.c - 1));
 
-				Expr wc = float_coords.back() - int_coords_below.back();
-					
+        Expr wc = float_coords.back() - int_coords_below.back();
+          
         sliced(normed.func.args()) = g.func(int_coords_below) * wc + g.func(int_coords_above) * (1.0f - wc);
         std::cout << sliced.name() << " has inputs: " << f.func.name() << ", " << g.func.name() << std::endl;
         return {sliced, normed.w, normed.h, normed.c};
@@ -1195,161 +1195,161 @@ public:
 
     Stage cast_stage(Type t, Stage f) {
         Func casted("casted");
-				std::cout << "Casting " << f.func.name() << std::endl;
+        std::cout << "Casting " << f.func.name() << std::endl;
         casted(f.func.args()) = cast(t, f.func(f.func.args()));
         std::cout << casted.name() << " has input: " << f.func.name() << std::endl;
         return {casted, f.w, f.h, f.c};
     }
 
-		InterpStageAndCoords interp2Tap_stage(const vector<Stage> &s) {
-				Func interp("interp2Tap");
-				// pick a random input
-				int input_id = rand_int(0, s.size()-1);
-				Stage input_s = s[input_id];
-				std::cout << interp.name() << " is a 2 tap interp on " << input_s.func.name() << std::endl;
-				// generate random coordinates to use 
-				vector<Expr> coords1 = make_arguments(input_s.func.args());
-				vector<Expr> coords2 = make_arguments(input_s.func.args());
-				if (rand_bool()) {	
-						coords1[0] += rand_int(0,1);
-				} else {
-						coords1[0] -= rand_int(0,1);
-				}
-				if (rand_bool()) {	
-						coords1[1] += rand_int(0,1);
-				} else {
-						coords1[1] -= rand_int(0,1);
-				}
-				if (rand_bool()) {	
-						coords2[0] += rand_int(0,1);
-				} else {
-						coords2[0] -= rand_int(0,1);
-				}
-				if (rand_bool()) {	
-						coords2[1] += rand_int(0,1);
-				} else {
-						coords2[1] -= rand_int(0,1);
-				}
-				std::cout << "coords1: " << coords1[0] << "," << coords1[1] << std::endl;
-				std::cout << "coords2: " << coords2[0] << "," << coords2[1] << std::endl;
-				interp(input_s.func.args()) = avg(input_s.func(coords1), input_s.func(coords2));
+    InterpStageAndCoords interp2Tap_stage(const vector<Stage> &s) {
+        Func interp("interp2Tap");
+        // pick a random input
+        int input_id = rand_int(0, s.size()-1);
+        Stage input_s = s[input_id];
+        std::cout << interp.name() << " is a 2 tap interp on " << input_s.func.name() << std::endl;
+        // generate random coordinates to use 
+        vector<Expr> coords1 = make_arguments(input_s.func.args());
+        vector<Expr> coords2 = make_arguments(input_s.func.args());
+        if (rand_bool()) {  
+            coords1[0] += rand_int(0,1);
+        } else {
+            coords1[0] -= rand_int(0,1);
+        }
+        if (rand_bool()) {  
+            coords1[1] += rand_int(0,1);
+        } else {
+            coords1[1] -= rand_int(0,1);
+        }
+        if (rand_bool()) {  
+            coords2[0] += rand_int(0,1);
+        } else {
+            coords2[0] -= rand_int(0,1);
+        }
+        if (rand_bool()) {  
+            coords2[1] += rand_int(0,1);
+        } else {
+            coords2[1] -= rand_int(0,1);
+        }
+        std::cout << "coords1: " << coords1[0] << "," << coords1[1] << std::endl;
+        std::cout << "coords2: " << coords2[0] << "," << coords2[1] << std::endl;
+        interp(input_s.func.args()) = avg(input_s.func(coords1), input_s.func(coords2));
 
-				Stage interp_s = {interp, input_s.w, input_s.h, input_s.c};
-			  return std::make_tuple(interp_s, coords1, coords2, input_s.func);	
-		}
-	
-		bool same_vars(vector<Var> v1, vector<Var> v2) {
-				assert(v1.size() == v2.size());
-				for (int i = 0; i < (int)v1.size(); i++) {
-						if (v1[i].name() != v2[i].name()) return false;
-				}
-				return true;
-		}
+        Stage interp_s = {interp, input_s.w, input_s.h, input_s.c};
+        return std::make_tuple(interp_s, coords1, coords2, input_s.func); 
+    }
+  
+    bool same_vars(vector<Var> v1, vector<Var> v2) {
+        assert(v1.size() == v2.size());
+        for (int i = 0; i < (int)v1.size(); i++) {
+            if (v1[i].name() != v2[i].name()) return false;
+        }
+        return true;
+    }
 
-		Stage select_interp2Tap_stage(const vector<Stage> &s) {
-				Func select_interp("selectInterp2Tap");
+    Stage select_interp2Tap_stage(const vector<Stage> &s) {
+        Func select_interp("selectInterp2Tap");
 
-				Stage s1, s2;
-				vector<Expr> s1coords1, s1coords2, s2coords1, s2coords2;
-				Func s1input, s2input;
-				std::tie(s1, s1coords1, s1coords2, s1input) = interp2Tap_stage(s);
-				std::tie(s2, s2coords1, s2coords2, s2input) = interp2Tap_stage(s);
-				std::cout << select_interp.name() << " is a 2 tap select interp on " << s1input.name() << " and " << s2input.name() << std::endl;
+        Stage s1, s2;
+        vector<Expr> s1coords1, s1coords2, s2coords1, s2coords2;
+        Func s1input, s2input;
+        std::tie(s1, s1coords1, s1coords2, s1input) = interp2Tap_stage(s);
+        std::tie(s2, s2coords1, s2coords2, s2input) = interp2Tap_stage(s);
+        std::cout << select_interp.name() << " is a 2 tap select interp on " << s1input.name() << " and " << s2input.name() << std::endl;
 
-				// make sure that the two funcs have the same function arguments and size
-				vector<Expr> s1args = make_arguments(s1input.args());
-				assert(same_vars(s1input.args(), s2input.args()));
+        // make sure that the two funcs have the same function arguments and size
+        vector<Expr> s1args = make_arguments(s1input.args());
+        assert(same_vars(s1input.args(), s2input.args()));
 
-				assert(s1.w == s2.w && s1.h == s2.h && s1.c == s2.c);
+        assert(s1.w == s2.w && s1.h == s2.h && s1.c == s2.c);
 
-				Expr diff1 = absd(s1input(s1coords1), s1input(s1coords2));			
-				Expr diff2 = absd(s2input(s2coords1), s2input(s2coords2));
+        Expr diff1 = absd(s1input(s1coords1), s1input(s1coords2));      
+        Expr diff2 = absd(s2input(s2coords1), s2input(s2coords2));
 
-				select_interp(s1args) = select(diff1 < diff2, s1.func(s1args), s2.func(s1args));
-				return {select_interp, s1.w, s1.h, s1.c};
-		}
+        select_interp(s1args) = select(diff1 < diff2, s1.func(s1args), s2.func(s1args));
+        return {select_interp, s1.w, s1.h, s1.c};
+    }
 
-		InterpStageAndCoords correct_interp2Tap_stage(const vector<Stage> &s) {
-				Func correctInterp("correctInterp2Tap");
-				// pick a random input
-				Stage input_s  = s[rand_int(0, s.size() - 1)];
-				Stage ref_s    = s[rand_int(0, s.size() - 1)];
-				Stage interp_s = s[rand_int(0, s.size() - 1)];
+    InterpStageAndCoords correct_interp2Tap_stage(const vector<Stage> &s) {
+        Func correctInterp("correctInterp2Tap");
+        // pick a random input
+        Stage input_s  = s[rand_int(0, s.size() - 1)];
+        Stage ref_s    = s[rand_int(0, s.size() - 1)];
+        Stage interp_s = s[rand_int(0, s.size() - 1)];
 
-				Func input_f  = input_s.func;
-				Func ref_f    = ref_s.func;
-				Func interp_f = interp_s.func;
-				
-				std::cout << correctInterp.name() << "is a 2 tap corrected interp on " << input_f.name() << " with ref func: " << ref_f.name() << " and interp func: " << interp_f.name() << std::endl;
+        Func input_f  = input_s.func;
+        Func ref_f    = ref_s.func;
+        Func interp_f = interp_s.func;
+        
+        std::cout << correctInterp.name() << "is a 2 tap corrected interp on " << input_f.name() << " with ref func: " << ref_f.name() << " and interp func: " << interp_f.name() << std::endl;
 
-				// generate random coordinates to use 
-				vector<Expr> coords1 = make_arguments(input_f.args());
-				vector<Expr> coords2 = make_arguments(input_f.args());
-				if (rand_bool()) {	
-						coords1[0] += rand_int(0,1);
-				} else {
-						coords1[0] -= rand_int(0,1);
-				}
-				if (rand_bool()) {	
-						coords1[1] += rand_int(0,1);
-				} else {
-						coords1[1] -= rand_int(0,1);
-				}
-				if (rand_bool()) {	
-						coords2[0] += rand_int(0,1);
-				} else {
-						coords2[0] -= rand_int(0,1);
-				}
-				if (rand_bool()) {	
-						coords2[1] += rand_int(0,1);
-				} else {
-						coords2[1] -= rand_int(0,1);
-				}
-				std::cout << "coords1: " << coords1[0] << "," << coords1[1] << std::endl;
-				std::cout << "coords2: " << coords2[0] << "," << coords2[1] << std::endl;
+        // generate random coordinates to use 
+        vector<Expr> coords1 = make_arguments(input_f.args());
+        vector<Expr> coords2 = make_arguments(input_f.args());
+        if (rand_bool()) {  
+            coords1[0] += rand_int(0,1);
+        } else {
+            coords1[0] -= rand_int(0,1);
+        }
+        if (rand_bool()) {  
+            coords1[1] += rand_int(0,1);
+        } else {
+            coords1[1] -= rand_int(0,1);
+        }
+        if (rand_bool()) {  
+            coords2[0] += rand_int(0,1);
+        } else {
+            coords2[0] -= rand_int(0,1);
+        }
+        if (rand_bool()) {  
+            coords2[1] += rand_int(0,1);
+        } else {
+            coords2[1] -= rand_int(0,1);
+        }
+        std::cout << "coords1: " << coords1[0] << "," << coords1[1] << std::endl;
+        std::cout << "coords2: " << coords2[0] << "," << coords2[1] << std::endl;
 
-				vector<Expr> coords = make_arguments(input_f.args());	
-				Expr correction = ref_f(coords) - avg(interp_f(coords1), interp_f(coords2));
-				correctInterp(coords) = correction + avg(input_f(coords1), input_f(coords2));
-				Stage correct_interp_s = {correctInterp, input_s.w, input_s.h, input_s.c};	
-				
-				return std::make_tuple(correct_interp_s, coords1, coords2, input_s.func);
-		}
+        vector<Expr> coords = make_arguments(input_f.args()); 
+        Expr correction = ref_f(coords) - avg(interp_f(coords1), interp_f(coords2));
+        correctInterp(coords) = correction + avg(input_f(coords1), input_f(coords2));
+        Stage correct_interp_s = {correctInterp, input_s.w, input_s.h, input_s.c};  
+        
+        return std::make_tuple(correct_interp_s, coords1, coords2, input_s.func);
+    }
 
-		Stage select_correct_interp2Tap_stage(const vector<Stage> &s) {
-				Stage s1, s2;
-				vector<Expr> s1coords1, s1coords2, s2coords1, s2coords2;
-				Func s1input, s2input;
-				std::tie(s1, s1coords1, s1coords2, s1input) = correct_interp2Tap_stage(s);
-				std::tie(s2, s2coords1, s2coords2, s2input) = correct_interp2Tap_stage(s);
+    Stage select_correct_interp2Tap_stage(const vector<Stage> &s) {
+        Stage s1, s2;
+        vector<Expr> s1coords1, s1coords2, s2coords1, s2coords2;
+        Func s1input, s2input;
+        std::tie(s1, s1coords1, s1coords2, s1input) = correct_interp2Tap_stage(s);
+        std::tie(s2, s2coords1, s2coords2, s2input) = correct_interp2Tap_stage(s);
 
-				vector<Expr> s1args = make_arguments(s1input.args());
-				assert(same_vars(s1input.args(), s2input.args()));
-				assert(s1.w == s2.w && s1.h == s2.h && s1.c == s2.c);
+        vector<Expr> s1args = make_arguments(s1input.args());
+        assert(same_vars(s1input.args(), s2input.args()));
+        assert(s1.w == s2.w && s1.h == s2.h && s1.c == s2.c);
 
-				Expr diff1 = absd(s1input(s1coords1), s1input(s1coords2));
-				Expr diff2 = absd(s2input(s2coords1), s2input(s2coords2));
+        Expr diff1 = absd(s1input(s1coords1), s1input(s1coords2));
+        Expr diff2 = absd(s2input(s2coords1), s2input(s2coords2));
 
-				Func select_interp("selectCorrectInterp2Tap");
-				std::cout << select_interp.name() << " is Selecting 2 Tap interp from: " <<	s1input.name() << " and " << s2input.name() << std::endl;
-				select_interp(s1args) = select(diff1 < diff2, s1.func(s1args), s2.func(s1args));
+        Func select_interp("selectCorrectInterp2Tap");
+        std::cout << select_interp.name() << " is Selecting 2 Tap interp from: " << s1input.name() << " and " << s2input.name() << std::endl;
+        select_interp(s1args) = select(diff1 < diff2, s1.func(s1args), s2.func(s1args));
 
-				return {select_interp, s1.w, s1.h, s1.c};
-		}
+        return {select_interp, s1.w, s1.h, s1.c};
+    }
 
     // Add a random new stage onto the end of the pipeline that can choose any of the 
-		// input buffers or previous stages as an input. Note that the type of random stage
-		// will determine how many inputs it needs 
+    // input buffers or previous stages as an input. Note that the type of random stage
+    // will determine how many inputs it needs 
     Stage random_stage(const vector<Stage> &s) {
         int m = (int)s.size() - 1;
         int i2 = m > 0 ? rand_int(0, m - 1) : 0;
         int i1 = m > 0 ? rand_int(i2 + 1, m) : 0;
-				
+        
         int stage_type = rand_int(16, 19); // KMA: only select from demosaic template stages
         Stage f = s[i1], g = s[i2];
-			
-				std::cout <<  "STAGE TYPE: " << stage_type << std::endl;
-				std::cout.flush();
+      
+        std::cout <<  "STAGE TYPE: " << stage_type << std::endl;
+        std::cout.flush();
         if (stage_type == 0) {
             int dim = rand_int(0, 1);
             int kernel_min = rand_int(-3, 0);
@@ -1402,31 +1402,31 @@ public:
         } else if (stage_type == 15) {
             return slice(f, g);
         } else if (stage_type == 16) {
-						Stage interp_s;
-						vector<Expr> _coords1, _coords2;
-						Func _input;
-						std::tie(interp_s, _coords1, _coords2, _input) = interp2Tap_stage(s);
-						return interp_s;
-				} else if (stage_type == 17) {
-						if (s.size() < 2) {
-								return random_stage(s);
-						}
-						return select_interp2Tap_stage(s);
-				} else if (stage_type == 18) {
-						if (s.size() < 3) {	
-								return random_stage(s);
-						}
-						Stage interp_s;
-						vector<Expr> _coords1, _coords2;
-						Func _input;
-						std::tie(interp_s, _coords1, _coords2, _input) = correct_interp2Tap_stage(s);
-						return interp_s;
-				} else if (stage_type == 19) {
-						if (s.size() < 3) {
-								return random_stage(s);
-						}
-						return select_correct_interp2Tap_stage(s);
-				} else if (i1 != i2) {
+            Stage interp_s;
+            vector<Expr> _coords1, _coords2;
+            Func _input;
+            std::tie(interp_s, _coords1, _coords2, _input) = interp2Tap_stage(s);
+            return interp_s;
+        } else if (stage_type == 17) {
+            if (s.size() < 2) {
+                return random_stage(s);
+            }
+            return select_interp2Tap_stage(s);
+        } else if (stage_type == 18) {
+            if (s.size() < 3) { 
+                return random_stage(s);
+            }
+            Stage interp_s;
+            vector<Expr> _coords1, _coords2;
+            Func _input;
+            std::tie(interp_s, _coords1, _coords2, _input) = correct_interp2Tap_stage(s);
+            return interp_s;
+        } else if (stage_type == 19) {
+            if (s.size() < 3) {
+                return random_stage(s);
+            }
+            return select_correct_interp2Tap_stage(s);
+        } else if (i1 != i2) {
             return binary_op(f, g);
         } else {
             // Try again
@@ -1436,111 +1436,111 @@ public:
 
     // build pipeline and define all required inputs and outputs for the generated program
     void configure() {
-				// create input and output buffers
-				for (int i = 0; i < num_input_buffers; i++) {
-        		Input<Buffer<inputT>>* input_buff = 
-								Halide::Internal::GeneratorBase::add_input<Buffer<outputT>>("input_" + std::to_string(i), 3);
-						input_buffs.push_back(input_buff);
-				}
-				for (int i = 0; i < num_output_buffers; i++) {
-						Output<Buffer<outputT>>* output_buff = 
-								Halide::Internal::GeneratorBase::add_output<Buffer<outputT>>("output_" + std::to_string(i), 3);
-						output_buffs.push_back(output_buff);
-						Input<Buffer<outputT>>* correct_output_buff = 
-								Halide::Internal::GeneratorBase::add_input<Buffer<outputT>>("correct_output_" + std::to_string(i), 3);
-						correct_outputs.push_back(correct_output_buff);
-				}
+        // create input and output buffers
+        for (int i = 0; i < num_input_buffers; i++) {
+            Input<Buffer<inputT>>* input_buff = 
+                Halide::Internal::GeneratorBase::add_input<Buffer<outputT>>("input_" + std::to_string(i), 3);
+            input_buffs.push_back(input_buff);
+        }
+        for (int i = 0; i < num_output_buffers; i++) {
+            Output<Buffer<outputT>>* output_buff = 
+                Halide::Internal::GeneratorBase::add_output<Buffer<outputT>>("output_" + std::to_string(i), 3);
+            output_buffs.push_back(output_buff);
+            Input<Buffer<outputT>>* correct_output_buff = 
+                Halide::Internal::GeneratorBase::add_input<Buffer<outputT>>("correct_output_" + std::to_string(i), 3);
+            correct_outputs.push_back(correct_output_buff);
+        }
 
         rng.seed((int)seed);
 
         Var x("x"), y("y"), c("c");
 
-				// create dummy image params for each input buffer so that we can access them in configure()
-       	// Zero pad all inputs and add them as stages to be used by the generated random stages
-				// Assuming all inputs are same size for now
-				for (int i = 0; i < num_input_buffers; i++) {	
-        		input_buff_dummies.emplace_back(Halide::ImageParam(inputHT, 3, "input_" + std::to_string(i)));
-						std::vector<std::pair<Expr, Expr>> bounds(3); 
-						bounds.at(0).first = 0;
-						bounds.at(0).second = input_w;
-						bounds.at(1).first = 0;
-						bounds.at(1).second = input_h;
-						bounds.at(2).first = 0;
-						bounds.at(2).second = input_c;
-						Func padded_input = Halide::BoundaryConditions::constant_exterior(input_buff_dummies[i], cast(inputHT, 0), bounds);
-						Func input_func, shifted_input;
-						// shift the input so that we don't have to worry about boundary conditions
-						input_func(x, y, c) = padded_input(x, y, c);
-						shifted_input(x, y, c) = input_func(x + (int)shift, y + (int)shift, c);
-						stages.emplace_back(Stage{shifted_input, output_w, output_h, output_c});	
-				} 
+        // create dummy image params for each input buffer so that we can access them in configure()
+        // Zero pad all inputs and add them as stages to be used by the generated random stages
+        // Assuming all inputs are same size for now
+        for (int i = 0; i < num_input_buffers; i++) { 
+            input_buff_dummies.emplace_back(Halide::ImageParam(inputHT, 3, "input_" + std::to_string(i)));
+            std::vector<std::pair<Expr, Expr>> bounds(3); 
+            bounds.at(0).first = 0;
+            bounds.at(0).second = input_w;
+            bounds.at(1).first = 0;
+            bounds.at(1).second = input_h;
+            bounds.at(2).first = 0;
+            bounds.at(2).second = input_c;
+            Func padded_input = Halide::BoundaryConditions::constant_exterior(input_buff_dummies[i], cast(inputHT, 0), bounds);
+            Func input_func, shifted_input;
+            // shift the input so that we don't have to worry about boundary conditions
+            input_func(x, y, c) = padded_input(x, y, c);
+            shifted_input(x, y, c) = input_func(x + (int)shift, y + (int)shift, c);
+            stages.emplace_back(Stage{shifted_input, output_w, output_h, output_c});  
+        } 
 
-				std::cout << "max stages: " << (int)max_stages << std::endl;
-				// NOTE: We cannot stop generating stages until we've created at least enough stages to fill the outputs 
-				// for now just randomly assigning generated funcs to outputs but in the future we will need to make 
-				// sure that the funcs satisfy the size/type/other constraints on the output buffers. 
-				// CONSIDER growing pipeline from output and input buffers.
-				assert((int)max_stages >= (int)num_output_buffers);
+        std::cout << "max stages: " << (int)max_stages << std::endl;
+        // NOTE: We cannot stop generating stages until we've created at least enough stages to fill the outputs 
+        // for now just randomly assigning generated funcs to outputs but in the future we will need to make 
+        // sure that the funcs satisfy the size/type/other constraints on the output buffers. 
+        // CONSIDER growing pipeline from output and input buffers.
+        assert((int)max_stages >= (int)num_output_buffers);
         for (int i = 0; i < max_stages; i++) {
             Stage next = random_stage(stages);
             stages.push_back(next);
             std::cout << "Approx size: " << stages.back().w << ", " << stages.back().h << ", " << stages.back().c << "\n";
-						/**
+            /**
             if (!auto_schedule) {
                 stages.back().func.compute_root().reorder(x, c, y).vectorize(x, 8).parallel(y, 8);
             }
-						**/
+            **/
         }
 
-				std::cout << "finished adding stages" << std::endl;
+        std::cout << "finished adding stages" << std::endl;
     }
 
-		// Select which funcs to map to the output buffers 
+    // Select which funcs to map to the output buffers 
     // Compute the loss and call backprop if we are in training mode
     void generate() {
         Var x("x"), y("y"), c("c");
 
-				std::vector<Func> last_funcs; // need these for backrop if training
-				last_funcs.push_back(stages[num_input_buffers].func);
+        std::vector<Func> last_funcs; // need these for backrop if training
+        last_funcs.push_back(stages[num_input_buffers].func);
 
-				(*output_buffs[0])(x, y, c) = stages[num_input_buffers].func(x, y, c);
+        (*output_buffs[0])(x, y, c) = stages[num_input_buffers].func(x, y, c);
 
-				/**
-				// select output stages
-			  std::random_device rd;
-	      std::mt19937 g(rd());
-				// can't select output stage from input buffers
-				std::shuffle(stages.begin() + num_input_buffers, stages.end(), g);
-				
+        /**
+        // select output stages
+        std::random_device rd;
+        std::mt19937 g(rd());
+        // can't select output stage from input buffers
+        std::shuffle(stages.begin() + num_input_buffers, stages.end(), g);
+        
 
-				// resample and cast selected output funcs and fill output buffers
-				for (int i = 0; i < num_output_buffers; i++) {
-						Stage out = stages[num_input_buffers + i];
-						out = resample_to(out, output_w, output_h, output_c);
-						(*output_buffs[i])(x, y, c) = out.func(x, y, c);
-						last_funcs.push_back(out.func);
-				}**/
-			
+        // resample and cast selected output funcs and fill output buffers
+        for (int i = 0; i < num_output_buffers; i++) {
+            Stage out = stages[num_input_buffers + i];
+            out = resample_to(out, output_w, output_h, output_c);
+            (*output_buffs[i])(x, y, c) = out.func(x, y, c);
+            last_funcs.push_back(out.func);
+        }**/
+      
         Derivative d_loss_d;
         Func err;
 
-				// need to compute total loss over all outputs
-				RDom r(0, output_w, 
-							 0, output_h,
-							 0, output_c);
-				Expr loss = Expr(0.0f);
-				for (int i = 0; i < num_output_buffers; i++) {
-						Expr diff = cast<double>((*correct_outputs[i])(x, y, c) - last_funcs[i](x, y, c));
-						err(x, y, c) = Expr(0.5)*(diff*diff);
-						loss += sum(err(r.x, r.y, r.z)/((int)output_w * (int)output_h));
-				}
+        // need to compute total loss over all outputs
+        RDom r(0, output_w, 
+               0, output_h,
+               0, output_c);
+        Expr loss = Expr(0.0f);
+        for (int i = 0; i < num_output_buffers; i++) {
+            Expr diff = cast<double>((*correct_outputs[i])(x, y, c) - last_funcs[i](x, y, c));
+            err(x, y, c) = Expr(0.5)*(diff*diff);
+            loss += sum(err(r.x, r.y, r.z)/((int)output_w * (int)output_h));
+        }
 
-				loss_output() = cast<lossT>(loss);
+        loss_output() = cast<lossT>(loss);
 
         // Compute derivatives of the loss, and backprop them to the parameters.
         if (training) {
             d_loss_d = propagate_adjoints(loss_output);
-						
+            
             // iterate over the generated params and backprop
             for (auto &output_w : output_params) {
                 auto& input_w = input_param_dummies[output_w.first];
@@ -1567,39 +1567,39 @@ public:
 
         // SCHEDULING
         if (!auto_schedule and !training) {
-						do_random_pipeline_schedule(get_pipeline());
+            do_random_pipeline_schedule(get_pipeline());
         } 
         if (!auto_schedule and training) {
             do_random_pipeline_schedule(get_pipeline());
         }
 
-				// bound all inputs and outputs
-				for (int i = 0; i < num_input_buffers; i++) {
-						(*input_buffs[i]).dim(0).set_bounds_estimate(0, input_w)
-								.dim(1).set_bounds_estimate(0, input_h)
-								.dim(2).set_bounds_estimate(0, input_c);
-				}
-				for (int i = 0; i < num_output_buffers; i++) {
-						(*correct_outputs[i]).dim(0).set_bounds_estimate(0, output_w)
-								.dim(1).set_bounds_estimate(0, output_h)
-								.dim(2).set_bounds_estimate(0, output_c);
+        // bound all inputs and outputs
+        for (int i = 0; i < num_input_buffers; i++) {
+            (*input_buffs[i]).dim(0).set_bounds_estimate(0, input_w)
+                .dim(1).set_bounds_estimate(0, input_h)
+                .dim(2).set_bounds_estimate(0, input_c);
+        }
+        for (int i = 0; i < num_output_buffers; i++) {
+            (*correct_outputs[i]).dim(0).set_bounds_estimate(0, output_w)
+                .dim(1).set_bounds_estimate(0, output_h)
+                .dim(2).set_bounds_estimate(0, output_c);
 
-						(*output_buffs[i]).dim(0).set_bounds_estimate(0, output_w)
-								.dim(1).set_bounds_estimate(0, output_h)
-								.dim(2).set_bounds_estimate(0, output_c);
-				}
+            (*output_buffs[i]).dim(0).set_bounds_estimate(0, output_w)
+                .dim(1).set_bounds_estimate(0, output_h)
+                .dim(2).set_bounds_estimate(0, output_c);
+        }
     }
 
 private:
-		std::vector<Halide::ImageParam> input_buff_dummies;
-		std::vector<Input<Buffer<inputT>> *>   input_buffs;
+    std::vector<Halide::ImageParam> input_buff_dummies;
+    std::vector<Input<Buffer<inputT>> *>   input_buffs;
     std::vector<Input<Buffer<outputT>> *>  correct_outputs;
-		std::vector<Output<Buffer<outputT>> *> output_buffs;
+    std::vector<Output<Buffer<outputT>> *> output_buffs;
 
     std::unordered_map<std::string, Halide::ImageParam> input_param_dummies;
     std::unordered_map<std::string, Input<Halide::Buffer<paramT>> *> input_params;
     std::unordered_map<std::string, Output<Halide::Buffer<paramT>> *> output_params;
-		// param_shapes of parameter buffers
+    // param_shapes of parameter buffers
     std::unordered_map<std::string, std::tuple<dim_shape, dim_shape, dim_shape, dim_shape>> param_shapes;
 
     Output<Buffer<lossT>> loss_output { "loss_output", 0 };
