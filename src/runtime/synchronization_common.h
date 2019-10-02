@@ -1146,8 +1146,6 @@ WEAK halide_mutex_array** halide_mutex_array_create(int sz) {
     (*array)->array = (halide_mutex*)halide_default_malloc(
         NULL, sz * sizeof(halide_mutex));
     memset((*array)->array, 0, sz * sizeof(halide_mutex));
-    // print(NULL) << "[create] array:" << array << "\n";
-    // print(NULL) << "[create] array->array:" << (*array)->array << "\n";
     return array;
 }
 
@@ -1159,11 +1157,7 @@ WEAK void halide_mutex_array_destroy(void *user_context, void *array_ptr) {
 }
 
 WEAK int halide_mutex_array_lock(struct halide_mutex_array *array, int entry) {
-    // print(NULL) << "[lock] array:" << array << "\n";
-    // print(NULL) << "[lock] array->array:" << array->array << "\n";
-    // print(NULL) << "entry:" << entry << "\n";
     halide_mutex_lock(&array->array[entry]);
-    // print(NULL) << "locked\n";
     return 0;
 }
 
