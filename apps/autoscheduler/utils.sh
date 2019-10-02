@@ -170,9 +170,16 @@ function profile_gpu_sample() {
 }
 
 function predict_all() {
-    local -r sample_dir=$1
+    local -r samples_dir=$1
     local -r weights_dir=$2
     local -r predictions_file=$3
 
-    bash predict_all.sh ${sample_dir} ${weights_dir} ${predictions_file}
+    bash predict_all.sh ${samples_dir} ${weights_dir} ${predictions_file}
+}
+
+function extract_best_times() {
+    local -r samples_dir=$1
+    local -r output_file=$2
+
+    bash extract_best_times.sh ${samples_dir} ${output_file}
 }

@@ -79,4 +79,5 @@ for app in $APPS; do
     done
 
     predict_all ${SAMPLES_DIR} ${SAMPLES_DIR}/weights ${SAMPLES_DIR}/predictions
+    extract_best_times ${SAMPLES_DIR} ${SAMPLES_DIR}/best_times
 done
