@@ -5,7 +5,11 @@ if [[ $# -ne 2 && $# -ne 3 ]]; then
     exit
 fi
 
-HALIDE=$(cd $(dirname $0)/../../..; pwd)
+source $(dirname $0)/../utils.sh
+
+find_halide HALIDE_ROOT
+
+build_autoscheduler_tools ${HALIDE_ROOT}
 
 MODE=${1}
 MAX_ITERATIONS=${2}
@@ -32,7 +36,7 @@ export CXX="ccache c++"
 export HL_MACHINE_PARAMS=80,24000000,160
 
 export HL_PERMIT_FAILED_UNROLL=1
-export HL_WEIGHTS_DIR=${HALIDE}/apps/autoscheduler/gpu_weights
+export HL_WEIGHTS_DIR=${HALIDE_ROOT}/apps/autoscheduler/gpu_weights
 export HL_TARGET=host-cuda
 
 # no random dropout
@@ -54,7 +58,7 @@ MAX_ITERATIONS=$((MAX_ITERATIONS * NUM_APPS))
 
 ITERATION=1
 
-SAMPLES_DIR="${HALIDE}/apps/${app}/autotuned_samples_${MODE}"
+SAMPLES_DIR="${HALIDE_ROOT}/apps/${app}/autotuned_samples_${MODE}"
 OUTPUT_FILE="${SAMPLES_DIR}/autotune_out.txt"
 
 for app in $APPS; do
@@ -68,7 +72,7 @@ while [ 1 ]; do
         # 15 mins of autotuning per app, round robin
         while [[ SECONDS -lt 900 ]]; do
             echo ${SAMPLES_DIR}
-            SAMPLES_DIR=${SAMPLES_DIR} make -C ${HALIDE}/apps/${app} autotune | tee -a ${OUTPUT_FILE}
+            SAMPLES_DIR=${SAMPLES_DIR} make -C ${HALIDE_ROOT}/apps/${app} autotune | tee -a ${OUTPUT_FILE}
 
             if [[ $MAX_ITERATIONS -ne 0 && $ITERATION -ge $MAX_ITERATIONS ]]; then
                 exit
