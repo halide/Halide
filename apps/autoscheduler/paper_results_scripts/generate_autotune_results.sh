@@ -16,19 +16,16 @@ MAX_ITERATIONS=${2}
 APP=${3}
 
 if [ $MODE == "greedy" ]; then
-    BEAM_SIZE=1
     NUM_PASSES=1
 elif [ $MODE == "beam_search" ]; then
-    BEAM_SIZE=32
     NUM_PASSES=5
 else
     echo "Unknown mode: ${MODE}"
     exit
 fi
 
-echo "Using ${MODE} mode with beam_size=${BEAM_SIZE} and num_passes=${NUM_PASSES}"
+echo "Using num_passes=${NUM_PASSES}"
 
-export HL_BEAM_SIZE=${BEAM_SIZE}
 export HL_NUM_PASSES=${NUM_PASSES}
 
 export CXX="ccache c++"
