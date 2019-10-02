@@ -1500,40 +1500,45 @@ public:
     void generate() {
         Var x("x"), y("y"), c("c");
 
+				std::vector<Func> last_funcs; // need these for backrop if training
+				last_funcs.push_back(stages[num_input_buffers].func);
+
+				(*output_buffs[0])(x, y, c) = stages[num_input_buffers].func(x, y, c);
+
+				/**
 				// select output stages
 			  std::random_device rd;
 	      std::mt19937 g(rd());
 				// can't select output stage from input buffers
 				std::shuffle(stages.begin() + num_input_buffers, stages.end(), g);
 				
-				std::vector<Func> last_funcs; // need these for backrop if training
+
 				// resample and cast selected output funcs and fill output buffers
 				for (int i = 0; i < num_output_buffers; i++) {
 						Stage out = stages[num_input_buffers + i];
 						out = resample_to(out, output_w, output_h, output_c);
 						(*output_buffs[i])(x, y, c) = out.func(x, y, c);
 						last_funcs.push_back(out.func);
-				}	
+				}**/
 			
         Derivative d_loss_d;
         Func err;
 
-        if (!training) {
-            loss_output() = 0.0f;
-        } else {
-						// need to compute total loss over all outputs
-            RDom r(0, output_w, 
-                   0, output_h,
-                   0, output_c);
-						Expr loss = Expr(0.0f);
-						for (int i = 0; i < num_output_buffers; i++) {
-								Expr diff = cast<double>((*correct_outputs[i])(x, y, c) - last_funcs[i](x, y, c));
-								err(x, y, c) = Expr(0.5)*(diff*diff);
-								loss += sum(err(r.x, r.y, r.z)/((int)output_w * (int)output_h));
-						}
+				// need to compute total loss over all outputs
+				RDom r(0, output_w, 
+							 0, output_h,
+							 0, output_c);
+				Expr loss = Expr(0.0f);
+				for (int i = 0; i < num_output_buffers; i++) {
+						Expr diff = cast<double>((*correct_outputs[i])(x, y, c) - last_funcs[i](x, y, c));
+						err(x, y, c) = Expr(0.5)*(diff*diff);
+						loss += sum(err(r.x, r.y, r.z)/((int)output_w * (int)output_h));
+				}
 
-						loss_output() = cast<lossT>(loss);
-            // Compute derivatives of the loss, and backprop them to the parameters.
+				loss_output() = cast<lossT>(loss);
+
+        // Compute derivatives of the loss, and backprop them to the parameters.
+        if (training) {
             d_loss_d = propagate_adjoints(loss_output);
 						
             // iterate over the generated params and backprop
