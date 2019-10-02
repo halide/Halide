@@ -98,8 +98,6 @@ protected:
         } else {
             return Atomic::make(op->producer_name,
                                 op->mutex_name,
-                                op->tuple_size,
-                                op->dimensions,
                                 std::move(body));
         }
     }

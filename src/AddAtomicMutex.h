@@ -15,7 +15,7 @@
 namespace Halide {
 namespace Internal {
 
-Stmt add_atomic_mutex(Stmt s);
+Stmt add_atomic_mutex(Stmt s, const std::map<std::string, Function> &env);
 
 }  // namespace Internal
 }  // namespace Halide

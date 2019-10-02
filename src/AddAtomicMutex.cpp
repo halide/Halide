@@ -11,6 +11,16 @@ using std::string;
 
 namespace {
 
+std::string get_producer_name(std::string name) {
+    // Remove names after "." since split_tuple introduces different Stores with names
+    // like producer_name.0, producer_name.1, etc.
+    size_t i = name.find('.');
+    if (i != std::string::npos) {
+        name = name.substr(0, i);
+    }
+    return name;
+}
+
 class FindLoad : public IRGraphVisitor {
 public:
     using IRGraphVisitor::visit;
@@ -105,7 +115,7 @@ public:
         // Collect the names of all Store nodes inside.
         CollectStoreNames collector;
         op->body.accept(&collector);
-        // Search for let bindings that access the providers.
+        // Search for let bindings that access the producers.
         FindAtomicLetBindings finder(collector.store_names);
         op->body.accept(&finder);
         if (finder.found) {
@@ -116,8 +126,6 @@ public:
             Stmt body = mutate(op->body);
             return Atomic::make(op->producer_name,
                                 "",
-                                op->tuple_size,
-                                op->dimensions,
                                 std::move(body));
         }
     }
@@ -138,23 +146,17 @@ public:
             if (found) {
                 // Multiple atomics inside the producer,
                 // make sure they have consistent information
-                internal_assert(mutex_name == op->mutex_name &&
-                    tuple_size == op->tuple_size &&
-                    dimensions == op->dimensions) <<
+                internal_assert(mutex_name == op->mutex_name) <<
                     "Inconsistent information of atomics inside a Producer node.\n";
             }
             found = true;
             mutex_name = op->mutex_name;
-            tuple_size = op->tuple_size;
-            dimensions = op->dimensions;
         }
     }
 
     const std::string &producer_name;
     bool found = false;
     std::string mutex_name;
-    int tuple_size = 0;
-    int dimensions = 0;
 };
 
 class FindStoreIndex : public IRGraphVisitor {
@@ -170,14 +172,7 @@ public:
         if (index.defined()) {
             return;
         }
-        std::string store_name = op->name;
-        // Remove names after . since split_tuple introduces different Stores with names
-        // like producer_name.0, producer_name.1, etc.
-        size_t i = store_name.find('.');
-        if (i != std::string::npos) {
-            store_name = store_name.substr(0, i);
-        }
-        if (store_name == producer_name) {
+        if (get_producer_name(op->name) == producer_name) {
             index = op->index;
         }
     }
@@ -190,32 +185,18 @@ class AddAtomicMutex : public IRMutator {
 public:
     using IRMutator::visit;
 
-    Stmt visit(const ProducerConsumer *op) override {
-        FindAtomicMutexUsage finder(op->name);
-        if (op->is_producer) {
-            finder.visit(op);
-            if (!finder.found) {
-                return IRMutator::visit(op);
-            }
-        } else {
-            return IRMutator::visit(op);
-        }
+    const std::map<std::string, Function> &env;
+    // The set of producers that have allocated a mutex buffer
+    std::set<string> allocated_mutexes;
 
-        const std::string &producer_name = finder.producer_name;
-        const std::string &mutex_name = finder.mutex_name;
-        int tuple_size = finder.tuple_size;
-        int dimensions = finder.dimensions;
-        const char *extent_field = tuple_size == 1 ? ".extent." : ".0.extent.";
-        Expr buffer_size = Expr(1);
-        for (int i = 0; i < dimensions; i++) {
-            Expr extent = Variable::make(Int(32), producer_name + extent_field + std::to_string(i));
-            buffer_size *= extent;
-        }
+    AddAtomicMutex(const std::map<std::string, Function> &env)
+        : env(env) {}
+
+    Stmt allocate_mutex(const std::string &mutex_name, Expr extent, Stmt body) {
         Expr mutex_array = Call::make(type_of<halide_mutex_array *>(),
                                       "halide_mutex_array_create",
-                                      {buffer_size},
+                                      {extent},
                                       Call::Extern);
-        Stmt body = mutate(op->body);
         // Allocate a scalar of halide_mutex_array.
         // This generate halide_mutex_array mutex[1];
         body = Allocate::make(mutex_name,
@@ -226,7 +207,83 @@ public:
                               body,
                               mutex_array,
                               "halide_mutex_array_destroy");
+        return body;
+    }
 
+    Stmt visit(const Allocate *op) override {
+        // If this Allocate node is allocating a buffer for a producer,
+        // and the producer contains an atomic node that requires a mutex lock buffer,
+        // allocate it here.
+        std::string producer_name = get_producer_name(op->name);
+        if (allocated_mutexes.find(producer_name) != allocated_mutexes.end()) {
+            // We've already allocated a mutex.
+            return IRMutator::visit(op);
+        }
+
+        FindAtomicMutexUsage finder(producer_name);
+        op->body.accept(&finder);
+        if (!finder.found) {
+            // No Atomic node that requires mutex lock from this node inside.
+            return IRMutator::visit(op);
+        }
+        allocated_mutexes.insert(producer_name);
+
+        const std::string &mutex_name = finder.mutex_name;
+        Stmt body = mutate(op->body);
+        Expr extent = Expr(1);
+        for (Expr e : op->extents) {
+            extent = extent * e;
+        }
+        body = allocate_mutex(mutex_name, extent, body);
+        return Allocate::make(op->name,
+                              op->type,
+                              op->memory_type,
+                              op->extents,
+                              op->condition,
+                              std::move(body),
+                              op->new_expr,
+                              op->free_function);
+    }
+
+    Stmt visit(const ProducerConsumer *op) override {
+        // Usually we allocate the mutex buffer at the Allocate node,
+        // but outputs don't have Allocate. For those we allocate the mutex
+        // buffer at the producer node.
+        if (!op->is_producer) {
+            // This is a consumer.
+            return IRMutator::visit(op);
+        }
+        const std::string &producer_name = op->name;
+        if (allocated_mutexes.find(producer_name) != allocated_mutexes.end()) {
+            // We've already allocated a mutex.
+            return IRMutator::visit(op);
+        }
+
+        FindAtomicMutexUsage finder(producer_name);
+        op->body.accept(&finder);
+        if (!finder.found) {
+            // No Atomic node that requires mutex lock from this node inside.
+            return IRMutator::visit(op);
+        }
+        allocated_mutexes.insert(producer_name);
+
+        // Find the corresponding output.
+        auto func_it = env.find(producer_name);
+        const Function &f = func_it->second;
+        internal_assert(f.output_buffers().size() > 0) <<
+            "Found a producer node that contains an atomic node that requires mutex lock, "
+            "but does not have an Allocate node and is not an output function. This is not supported.\n";
+        // We assume all output buffers have the same extent
+        Parameter output_buffer = f.output_buffers()[0];
+        Expr extent = Expr(1);
+        for (int i = 0; i < output_buffer.dimensions(); i++) {
+            // TODO: cleanup this by adding access methods to Parameter class to extract
+            //       the extent variable.
+            string extent_name = output_buffer.name() + ".extent." + std::to_string(i);
+            extent = extent * Variable::make(Int(32), extent_name);
+        }
+        Stmt body = mutate(op->body);
+        body = allocate_mutex(finder.mutex_name, extent, body);
         return ProducerConsumer::make(op->name, op->is_producer, std::move(body));
     }
 
@@ -264,17 +321,15 @@ public:
 
         return Atomic::make(op->producer_name,
                             op->mutex_name,
-                            op->tuple_size,
-                            op->dimensions,
                             std::move(body));
     }
 };
 
 }  // namespace
 
-Stmt add_atomic_mutex(Stmt s) {
+Stmt add_atomic_mutex(Stmt s, const std::map<std::string, Function> &env) {
     s = RemoveUnnecessaryMutexUse().mutate(s);
-    s = AddAtomicMutex().mutate(s);
+    s = AddAtomicMutex(env).mutate(s);
     return s;
 }
 

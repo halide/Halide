@@ -823,14 +823,10 @@ struct Prefetch : public StmtNode<Prefetch> {
 struct Atomic : public StmtNode<Atomic> {
     std::string producer_name;
     std::string mutex_name; // empty string if not using mutex
-    int tuple_size; // information for injecting mutex allocation
-    int dimensions; // same as above
     Stmt body;
 
     static Stmt make(const std::string &producer_name,
                      const std::string &mutex_name,
-                     int tuple_size,
-                     int dimensions,
                      Stmt body);
 
     static const IRNodeType _node_type = IRNodeType::Atomic;

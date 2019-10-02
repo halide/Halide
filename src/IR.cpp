@@ -812,14 +812,10 @@ bool Shuffle::is_interleave() const {
 
 Stmt Atomic::make(const std::string &producer_name,
                   const std::string &mutex_name,
-                  int tuple_size,
-                  int dimensions,
                   Stmt body) {
     Atomic *node = new Atomic;
     node->producer_name = producer_name;
     node->mutex_name = mutex_name;
-    node->tuple_size = tuple_size;
-    node->dimensions = dimensions;
     node->body = std::move(body);
     return node;
 }

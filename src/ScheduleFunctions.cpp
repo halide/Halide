@@ -355,11 +355,7 @@ Stmt build_provide_loop_nest(const map<string, Function> &env,
     Stmt body = Provide::make(func.name(), values, site);
     if (def.schedule().atomic()) {
         // We will allocate a mutex buffer called func.name() + ".mutex"
-        body = Atomic::make(func.name(),
-                            func.name() + ".mutex",
-                            func.values().size(),
-                            func.dimensions(),
-                            body);
+        body = Atomic::make(func.name(), func.name() + ".mutex", body);
     }
 
     // Default schedule/values if there is no specialization

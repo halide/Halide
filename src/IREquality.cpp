@@ -586,8 +586,6 @@ void IRComparer::visit(const Atomic *op) {
 
     compare_names(s->producer_name, op->producer_name);
     compare_names(s->mutex_name, op->mutex_name);
-    compare_scalar(s->tuple_size, op->tuple_size);
-    compare_scalar(s->dimensions, op->dimensions);
     compare_stmt(s->body, op->body);
 }
 
