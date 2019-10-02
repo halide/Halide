@@ -320,7 +320,7 @@ void CodeGen_PTX_Dev::visit(const Store *op) {
 void CodeGen_PTX_Dev::visit(const Atomic *op) {
     // CUDA requires all the threads in a warp to perform the same operations,
     // which means our mutex will lead to deadlock.
-    user_assert(op->mutex_name == "" && op->mutex_indices.size() == 0) <<
+    user_assert(op->mutex_name.empty()) <<
         "The atomic update requires a mutex lock, which is not supported in CUDA.\n";
 
     emit_atomic_stores = true;

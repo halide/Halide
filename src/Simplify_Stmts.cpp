@@ -502,34 +502,7 @@ Stmt Simplify::visit(const Fork *op) {
 }
 
 Stmt Simplify::visit(const Atomic *op) {
-    if (op->mutex_name == "") {
-        internal_assert(op->mutex_indices.size() == 0);
-        Stmt body = mutate(op->body);
-        if (is_no_op(body)) {
-            return Evaluate::make(0);
-        } else if (body.same_as(op->body)) {
-            return op;
-        } else {
-            return Atomic::make(op->producer_name,
-                                op->mutex_name,
-                                op->mutex_indices,
-                                op->tuple_size,
-                                op->dimensions,
-                                std::move(body));
-        }
-    }
-
-    vector<Expr> new_mutex_indices(op->mutex_indices.size());
     bool changed = false;
-
-    // Mutate mutex_indices
-    for (size_t i = 0; i < op->mutex_indices.size(); i++) {
-        const Expr &old_index = op->mutex_indices[i];
-        Expr new_index = mutate(old_index, nullptr);
-        if (!new_index.same_as(old_index)) changed = true;
-        new_mutex_indices[i] = new_index;
-    }
-
     Stmt body = mutate(op->body);
     if (!body.same_as(op->body)) {
         changed = true;
@@ -541,7 +514,6 @@ Stmt Simplify::visit(const Atomic *op) {
     } else {
         return Atomic::make(op->producer_name,
                             op->mutex_name,
-                            new_mutex_indices,
                             op->tuple_size,
                             op->dimensions,
                             std::move(body));

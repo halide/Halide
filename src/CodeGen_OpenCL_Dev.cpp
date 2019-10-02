@@ -623,7 +623,7 @@ void CodeGen_OpenCL_Dev::CodeGen_OpenCL_C::visit(const Min *op) {
 void CodeGen_OpenCL_Dev::CodeGen_OpenCL_C::visit(const Atomic *op) {
     // Most GPUs require all the threads in a warp to perform the same operations,
     // which means our mutex will lead to deadlock.
-    user_assert(op->mutex_name == "" && op->mutex_indices.size() == 0) <<
+    user_assert(op->mutex_name.empty()) <<
         "The atomic update requires a mutex lock, which is not supported in OpenCL.\n";
 
     emit_atomic_stores = true;

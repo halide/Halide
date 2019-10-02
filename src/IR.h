@@ -814,7 +814,7 @@ struct Prefetch : public StmtNode<Prefetch> {
     static const IRNodeType _node_type = IRNodeType::Prefetch;
 };
 
-/** Lock all the Store nodes in the body statement.
+/** Lock all the Store nodes produced from [producer_name] in the body statement.
  *  Typically the lock is implemented by an atomic operation
  *  (e.g. atomic add or atomic compare-and-swap).
  *  However, if necessary, the node can access a mutex buffer through
@@ -823,14 +823,12 @@ struct Prefetch : public StmtNode<Prefetch> {
 struct Atomic : public StmtNode<Atomic> {
     std::string producer_name;
     std::string mutex_name; // empty string if not using mutex
-    std::vector<Expr> mutex_indices;
     int tuple_size; // information for injecting mutex allocation
     int dimensions; // same as above
     Stmt body;
 
     static Stmt make(const std::string &producer_name,
                      const std::string &mutex_name,
-                     const std::vector<Expr> &mutex_indices,
                      int tuple_size,
                      int dimensions,
                      Stmt body);

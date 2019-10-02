@@ -357,7 +357,6 @@ Stmt build_provide_loop_nest(const map<string, Function> &env,
         // We will allocate a mutex buffer called func.name() + ".mutex"
         body = Atomic::make(func.name(),
                             func.name() + ".mutex",
-                            site,
                             func.values().size(),
                             func.dimensions(),
                             body);

@@ -393,15 +393,7 @@ Stmt IRMutator::visit(const Acquire *op) {
 }
 
 Stmt IRMutator::visit(const Atomic *op) {
-    vector<Expr> new_mutex_indices(op->mutex_indices.size());
     bool changed = false;
-    for (size_t i = 0; i < op->mutex_indices.size(); i++) {
-        Expr old_index = op->mutex_indices[i];
-        Expr new_index = mutate(old_index);
-        if (!new_index.same_as(old_index)) changed = true;
-        new_mutex_indices[i] = new_index;
-    }
-
     Stmt body = mutate(op->body);
     if (!body.same_as(op->body)) {
         changed = true;
@@ -411,7 +403,6 @@ Stmt IRMutator::visit(const Atomic *op) {
     } else {
         return Atomic::make(op->producer_name,
                             op->mutex_name,
-                            new_mutex_indices,
                             op->tuple_size,
                             op->dimensions,
                             std::move(body));

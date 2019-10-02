@@ -936,14 +936,8 @@ void IRPrinter::visit(const Atomic *op) {
         stream << get_indent() << "atomic {\n";
     } else {
         stream << get_indent() << "atomic (";
-        stream << op->mutex_name << "[";
-        for (size_t i = 0; i < op->mutex_indices.size(); i++) {
-            print(op->mutex_indices[i]);
-            if (i < op->mutex_indices.size() - 1) {
-                stream << ", ";
-            }
-        }
-        stream << "]) {\n";
+        stream << op->mutex_name;
+        stream << ") {\n";
     }
     indent += 2;
     print(op->body);

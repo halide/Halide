@@ -4064,6 +4064,11 @@ void CodeGen_LLVM::visit(const Store *op) {
         return;
     }
 
+    if (inside_atomic_mutex_node) {
+        user_assert(value_type.is_scalar()) << "The vectorized atomic operation for the store" <<
+            op->name << " is lowered into a mutex lock, which does not support vectorization.\n";
+    }
+
     // Atomic store.
     if (emit_atomic_stores) {
         codegen_atomic_store(op);
@@ -4291,11 +4296,6 @@ void CodeGen_LLVM::visit(const Shuffle *op) {
 
 void CodeGen_LLVM::visit(const Atomic *op) {
     if (op->mutex_name != "") {
-        internal_assert(op->mutex_indices.size() <= 1) << "Atomic mutex access index should be flattened.";
-        Expr index = op->mutex_indices.size() == 1 ? op->mutex_indices[0] : Expr(0);
-        user_assert(index.type().is_scalar()) << "The vectorized atomic operation in " <<
-            op->producer_name << " is lowered into a mutex lock, which does not support vectorization.\n";
-
         internal_assert(!inside_atomic_mutex_node) <<
             "Nested atomic mutex locks detected. This might causes a deadlock.\n";
         ScopedValue<bool> old_inside_atomic_mutex_node(inside_atomic_mutex_node, true);

@@ -370,20 +370,6 @@ private:
         in_shader = old_in_shader;
         return stmt;
     }
-
-    Stmt visit(const Atomic *op) override {
-        if (op->mutex_indices.size() > 0) {
-            Expr flatten_arg = mutate(flatten_args(op->mutex_name, op->mutex_indices, Buffer<>(), Parameter()));
-            return Atomic::make(op->producer_name,
-                                op->mutex_name,
-                                {flatten_arg},
-                                op->tuple_size,
-                                op->dimensions,
-                                mutate(op->body));
-        } else {
-            return IRMutator::visit(op);
-        }
-    }
 };
 
 // Realizations, stores, and loads must all be on types that are

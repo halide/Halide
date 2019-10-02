@@ -1,4 +1,5 @@
 #include "AddAtomicMutex.h"
+#include "IREquality.h"
 #include "IRMutator.h"
 #include "IROperator.h"
 
@@ -115,7 +116,6 @@ public:
             Stmt body = mutate(op->body);
             return Atomic::make(op->producer_name,
                                 "",
-                                {},
                                 op->tuple_size,
                                 op->dimensions,
                                 std::move(body));
@@ -133,9 +133,6 @@ public:
     using IRGraphVisitor::visit;
 
     void visit(const Atomic *op) override {
-        for (Expr i : op->mutex_indices) {
-            include(i);
-        }
         include(op->body);
         if (op->producer_name == producer_name && !op->mutex_name.empty()) {
             if (found) {
@@ -158,6 +155,35 @@ public:
     std::string mutex_name;
     int tuple_size = 0;
     int dimensions = 0;
+};
+
+class FindStoreIndex : public IRGraphVisitor {
+public:
+    using IRGraphVisitor::visit;
+
+    void visit(const Store *op) override {
+        // Ideally we want to insert equal() checks here for different stores,
+        // but the indices of them actually are different in the case of tuples,
+        // since they usually refer to the strides/min/extents of their own tuple
+        // buffers. However, different elements in a tuple would have the same
+        // strides/min/extents so we are fine.
+        if (index.defined()) {
+            return;
+        }
+        std::string store_name = op->name;
+        // Remove names after . since split_tuple introduces different Stores with names
+        // like producer_name.0, producer_name.1, etc.
+        size_t i = store_name.find('.');
+        if (i != std::string::npos) {
+            store_name = store_name.substr(0, i);
+        }
+        if (store_name == producer_name) {
+            index = op->index;
+        }
+    }
+
+    std::string producer_name;
+    Expr index;
 };
 
 class AddAtomicMutex : public IRMutator {
@@ -220,8 +246,15 @@ public:
             return IRMutator::visit(op);
         }
 
-        // op->mutex_indices.size() could be 0.
-        Expr index = op->mutex_indices.size() == 1 ? op->mutex_indices[0] : Expr(0);
+        // Lock the mutexes using the indices from the Store nodes inside the body.
+        FindStoreIndex find;
+        op->body.accept(&find);
+
+        Expr index = find.index;
+        if (!index.defined()) {
+            // scalar output
+            index = Expr(0);
+        }
         Stmt body = op->body;
         // This generates a pointer to the mutex array
         Expr mutex_array = Variable::make(
@@ -242,7 +275,6 @@ public:
 
         return Atomic::make(op->producer_name,
                             op->mutex_name,
-                            op->mutex_indices,
                             op->tuple_size,
                             op->dimensions,
                             std::move(body));
