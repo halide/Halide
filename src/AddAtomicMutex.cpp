@@ -137,8 +137,7 @@ public:
             include(i);
         }
         include(op->body);
-        if (op->producer_name == producer_name &&
-                op->mutex_name != "") {
+        if (op->producer_name == producer_name && !op->mutex_name.empty()) {
             if (found) {
                 // Multiple atomics inside the producer,
                 // make sure they have consistent information
