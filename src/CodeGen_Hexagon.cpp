@@ -1391,10 +1391,9 @@ Value *create_vector(llvm::Type *ty, int val) {
 }
 
 Value *CodeGen_Hexagon::vlut(Value *lut, Value *idx, int min_index, int max_index) {
-    const unsigned idx_elems_size = idx->getType()->getScalarSizeInBits();
-    internal_assert(idx_elems_size <= 16)
+    const unsigned idx_elem_size = idx->getType()->getScalarSizeInBits();
+    internal_assert(idx_elem_size <= 16)
         << "Index element for lookup tables must be <= 16 bits in size.\n";
-
     llvm::Type *lut_ty = lut->getType();
     llvm::Type *result_ty = llvm::VectorType::get(lut_ty->getVectorElementType(),
                                                   idx->getType()->getVectorNumElements());
@@ -1416,16 +1415,14 @@ Value *CodeGen_Hexagon::vlut(Value *lut, Value *idx, int min_index, int max_inde
         idx = interleave_vectors(indices);
         min_index = min_index * replicate;
         max_index = (max_index + 1) * replicate - 1;
-        lut_ty = llvm::VectorType::get(i16_t, lut_ty->getVectorNumElements()*2);
+        lut_ty = llvm::VectorType::get(i16_t,
+                                       lut_ty->getVectorNumElements() * replicate);
         lut = builder->CreateBitCast(lut, lut_ty);
     }
 
-    const unsigned lut_elems_size = lut_ty->getScalarSizeInBits();
     const unsigned idx_elems = idx->getType()->getVectorNumElements();
     llvm::Type *i8x_t  = VectorType::get(i8_t,  idx_elems);
     llvm::Type *i16x_t = VectorType::get(i16_t, idx_elems);
-    llvm::Type *i32x_t = VectorType::get(i32_t, idx_elems);
-
     if (max_index < 256) {
         // If we can do this with one vlut, do it now.
         idx = builder->CreateTruncOrBitCast(idx, i8x_t);
@@ -1433,11 +1430,9 @@ Value *CodeGen_Hexagon::vlut(Value *lut, Value *idx, int min_index, int max_inde
         return builder->CreateBitCast(result_val, result_ty);
     }
 
-    llvm::Type *cmp_index_ty = (lut_elems_size == 16) ? i16x_t : i32x_t;
-    Value *minus_one = create_vector(cmp_index_ty, -1);
-    Value *lut_max_val = create_vector(cmp_index_ty, 256);
+    Value *minus_one = create_vector(i16x_t, -1);
+    Value *lut_max_val = create_vector(i16x_t, 256);
     Value *idx16 = builder->CreateZExtOrBitCast(idx, i16x_t);
-
     // We need to break the index up into ranges of up to 256, and mux
     // the ranges together after using vlut on each range. This vector
     // contains the result of each range, and a condition vector
@@ -1448,16 +1443,14 @@ Value *CodeGen_Hexagon::vlut(Value *lut, Value *idx, int min_index, int max_inde
         // this range is at 0. Use 16-bit indices for this.
         Value *min_index_i_val = create_vector(i16x_t, min_index_i);
         Value *indices = builder->CreateSub(idx16, min_index_i_val);
-        // Upcast the indices if required to match the lut_elems_size as
-        // use_index mask element size should be same as lut_elem_size.
-        indices = builder->CreateZExtOrBitCast(indices, cmp_index_ty);
 
         // Create a condition value for which elements of the range are valid
         // for this index.
         Value *use_index_lb = builder->CreateICmpSGT(indices, minus_one);
         Value *use_index_ub = builder->CreateICmpSGT(lut_max_val, indices);
         Value *use_index = builder->CreateAnd(use_index_lb, use_index_ub);
-        // Value *use_index = use_index_lb;
+        use_index = (lut_ty->getScalarSizeInBits() == 8) ?
+                    builder->CreateTrunc(use_index, i8x_t) : use_index;
 
         // After we've eliminated the invalid elements, we can
         // truncate to 8 bits, as vlut requires.

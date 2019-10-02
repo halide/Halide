@@ -1777,11 +1777,12 @@ class OptimizeShuffles : public IRMutator {
                 Expr index_span = span_of_bounds(index_bounds);
                 index_span = common_subexpression_elimination(index_span);
                 index_span = simplify(index_span);
-
-                if (can_prove(index_span < 256)) {
+                int max_index_span = 512;
+                if (can_prove(index_span < max_index_span)) {
                     // This is a lookup within an up to 256 element array. We
                     // can use dynamic_shuffle for this.
-                    int const_extent = as_const_int(index_span) ? *as_const_int(index_span) + 1 : 256;
+                    int const_extent = as_const_int(index_span) ?
+                                       *as_const_int(index_span) + 1 : max_index_span;
                     Expr base = simplify(index_bounds.min);
 
                     // Load all of the possible indices loaded from the
@@ -1795,8 +1796,9 @@ class OptimizeShuffles : public IRMutator {
                     // We know the size of the LUT is not more than 256, so we
                     // can safely cast the index to 8 bit, which
                     // dynamic_shuffle requires.
-                    index = simplify(cast(UInt(8).with_lanes(op->type.lanes()), index - base));
-
+                    int index_elem_size = (const_extent < 256) ? 8 : 16;
+                    index = simplify(cast(UInt(index_elem_size).with_lanes(op->type.lanes()),
+                                          index - base));
                     return Call::make(op->type, "dynamic_shuffle", {lut, index, 0, const_extent - 1}, Call::PureIntrinsic);
                 }
                 // Only the first iteration of this loop is aligned.

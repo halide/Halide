@@ -119,7 +119,7 @@ private:
      * positive number an int32_t can hold. */
     llvm::Value *codegen_cache_allocation_size(const std::string &name, Type type, const std::vector<Expr> &extents);
 
-    /** Generate a LUT (8/16 bit, max_idx=255) lookup using vlut instructions. */
+    /** Generate a LUT (8/16 bit, max_index < 256) lookup using vlut instructions. */
     llvm::Value *vlut256(llvm::Value *lut, llvm::Value *indices, int min_index = 0, int max_index = 255);
 };
 
