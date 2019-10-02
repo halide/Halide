@@ -206,8 +206,6 @@ public:
         int tuple_size = finder.tuple_size;
         int dimensions = finder.dimensions;
         const char *extent_field = tuple_size == 1 ? ".extent." : ".0.extent.";
-        const char *min_field = tuple_size == 1 ? ".min." : ".0.min.";
-        const char *stride_field = tuple_size == 1 ? ".stride." : ".0.stride.";
         Expr buffer_size = Expr(1);
         for (int i = 0; i < dimensions; i++) {
             Expr extent = Variable::make(Int(32), producer_name + extent_field + std::to_string(i));
@@ -228,15 +226,6 @@ public:
                               body,
                               mutex_array,
                               "halide_mutex_array_destroy");
-        // Insert Let statements for the buffer's min and stride for storage flattening.
-        for (int i = 0; i < dimensions; i++) {
-            body = LetStmt::make(mutex_name + ".min." + std::to_string(i),
-                                 Variable::make(Int(32), producer_name + min_field + std::to_string(i)),
-                                 body);
-            body = LetStmt::make(mutex_name + ".stride." + std::to_string(i),
-                                 Variable::make(Int(32), producer_name + stride_field + std::to_string(i)),
-                                 body);
-        }
 
         return ProducerConsumer::make(op->name, op->is_producer, std::move(body));
     }
