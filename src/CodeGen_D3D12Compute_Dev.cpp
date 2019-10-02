@@ -765,8 +765,7 @@ void CodeGen_D3D12Compute_Dev::CodeGen_D3D12Compute_C::visit(const Cast *op) {
     print_assignment(target_type, cast_expr);
 }
 
-void CodeGen_D3D12Compute_Dev::CodeGen_D3D12Compute_C::visit(const Atomic *op)
-{
+void CodeGen_D3D12Compute_Dev::CodeGen_D3D12Compute_C::visit(const Atomic *op) {
     // TODO: atomics
     user_assert(false) << "Atomics operations are not supported inside D3D12Compute kernel.\n";
 }
