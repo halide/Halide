@@ -354,9 +354,9 @@ Stmt build_provide_loop_nest(const map<string, Function> &env,
     // Make the (multi-dimensional multi-valued) store node.
     Stmt body = Provide::make(func.name(), values, site);
     if (def.schedule().atomic()) {
-        // We will allocate a mutex buffer called get_mutex_name(func.name())
+        // We will allocate a mutex buffer called func.name() + ".mutex"
         body = Atomic::make(func.name(),
-                            get_mutex_name(func.name()),
+                            func.name() + ".mutex",
                             site,
                             func.values().size(),
                             func.dimensions(),
