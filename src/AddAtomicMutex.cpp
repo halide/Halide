@@ -216,7 +216,7 @@ public:
     }
 
     Stmt visit(const Atomic *op) override {
-        if (op->mutex_name == "") {
+        if (op->mutex_name.empty()) {
             return IRMutator::visit(op);
         }
 
