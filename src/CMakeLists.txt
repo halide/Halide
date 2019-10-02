@@ -573,7 +573,6 @@ add_library(Halide ${HALIDE_LIBRARY_TYPE}
   RealizationOrder.cpp
   Reduction.cpp
   RegionCosts.cpp
-  RemoveAtomicMutexLocks.cpp
   RemoveDeadAllocations.cpp
   RemoveExternLoops.cpp
   RemoveUndef.cpp
