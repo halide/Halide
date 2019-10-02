@@ -163,10 +163,6 @@ class AddAtomicMutex : public IRMutator {
 public:
     using IRMutator::visit;
 
-    const Target &target;
-
-    AddAtomicMutex(const Target &target) : target(target) {}
-
     Stmt visit(const ProducerConsumer *op) override {
         FindAtomicMutexUsage finder(op->name);
         if (op->is_producer) {
@@ -190,15 +186,15 @@ public:
             Expr extent = Variable::make(Int(32), producer_name + extent_field + std::to_string(i));
             buffer_size *= extent;
         }
-        Expr mutex_array = Call::make(type_of<halide_mutex_array **>(),
+        Expr mutex_array = Call::make(type_of<halide_mutex_array *>(),
                                       "halide_mutex_array_create",
                                       {buffer_size},
                                       Call::Extern);
         Stmt body = mutate(op->body);
         // Allocate a scalar of halide_mutex_array.
-        // This generate halide_mutex_array *mutex[1];
+        // This generate halide_mutex_array mutex[1];
         body = Allocate::make(mutex_name,
-                              type_of<halide_mutex_array *>(),
+                              Handle(),
                               MemoryType::Stack,
                               {},
                               const_true(),
@@ -226,23 +222,19 @@ public:
         // op->mutex_indices.size() could be 0.
         Expr index = op->mutex_indices.size() == 1 ? op->mutex_indices[0] : Expr(0);
         Stmt body = op->body;
-        Expr mutex = Load::make(type_of<halide_mutex_array *>(),
-                                op->mutex_name,
-                                Expr(0),
-                                Buffer<>(),
-                                Parameter(),
-                                const_true(),
-                                ModulusRemainder());
+        // This generates a pointer to the mutex array
+        Expr mutex_array = Variable::make(
+            type_of<halide_mutex_array *>(), op->mutex_name);
         // Add mutex locks & unlocks
         body = Block::make(
             Evaluate::make(Call::make(type_of<int>(),
                                       "halide_mutex_array_lock",
-                                      {mutex, index},
+                                      {mutex_array, index},
                                       Call::CallType::Extern)),
             Block::make(std::move(body),
                 Evaluate::make(Call::make(type_of<int>(),
                                           "halide_mutex_array_unlock",
-                                          {mutex, index},
+                                          {mutex_array, index},
                                           Call::CallType::Extern))));
 
         return Atomic::make(op->producer_name,
@@ -256,9 +248,9 @@ public:
 
 }  // namespace
 
-Stmt add_atomic_mutex(Stmt s, const Target &target) {
+Stmt add_atomic_mutex(Stmt s) {
     s = RemoveUnnecessaryMutexUse().mutate(s);
-    s = AddAtomicMutex(target).mutate(s);
+    s = AddAtomicMutex().mutate(s);
     return s;
 }
 

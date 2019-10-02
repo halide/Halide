@@ -126,7 +126,7 @@ struct halide_mutex_array {
 // statement with a type with equivalent size, say, uint64_t, this generates
 // a type error in the llvm codegen since llvm doesn't cast uint64_t to 
 // halide_mutex_array automatically.
-extern struct halide_mutex_array** halide_mutex_array_create(int sz);
+extern struct halide_mutex_array* halide_mutex_array_create(int sz);
 extern void halide_mutex_array_destroy(void *user_context, void *array);
 extern int halide_mutex_array_lock(struct halide_mutex_array *array, int entry);
 extern int halide_mutex_array_unlock(struct halide_mutex_array *array, int entry);

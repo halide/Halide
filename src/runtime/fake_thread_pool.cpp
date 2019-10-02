@@ -78,7 +78,7 @@ WEAK void halide_mutex_lock(halide_mutex *mutex) {
 WEAK void halide_mutex_unlock(halide_mutex *mutex) {
 }
 
-WEAK halide_mutex_array** halide_mutex_array_create(int sz) {
+WEAK halide_mutex_array* halide_mutex_array_create(int sz) {
     return NULL;
 }
 

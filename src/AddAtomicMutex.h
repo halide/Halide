@@ -15,7 +15,7 @@
 namespace Halide {
 namespace Internal {
 
-Stmt add_atomic_mutex(Stmt s, const Target &target);
+Stmt add_atomic_mutex(Stmt s);
 
 }  // namespace Internal
 }  // namespace Halide

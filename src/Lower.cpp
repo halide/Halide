@@ -257,7 +257,7 @@ Module lower(const vector<Function> &output_funcs,
              << s << "\n\n";
 
     debug(1) << "Adding atomic mutex allocation...\n";
-    s = add_atomic_mutex(s, t);
+    s = add_atomic_mutex(s);
     debug(2) << "Lowering after adding atomic mutex allocation:\n" << s << "\n\n";
 
     debug(1) << "Unpacking buffer arguments...\n";
