@@ -810,13 +810,21 @@ bool Shuffle::is_interleave() const {
     return true;
 }
 
-Stmt Atomic::make(const std::string &mutex_name, const std::vector<Expr> &mutex_indices, Stmt body) {
+Stmt Atomic::make(const std::string &producer_name,
+                  const std::string &mutex_name,
+                  const std::vector<Expr> &mutex_indices,
+                  int tuple_size,
+                  int dimensions,
+                  Stmt body) {
     if (mutex_name == "") {
         internal_assert(mutex_indices.size() == 0) << "The atomic node does not specify a mutex buffer but contains its indices.";
     }
     Atomic *node = new Atomic;
+    node->producer_name = producer_name;
     node->mutex_name = mutex_name;
     node->mutex_indices = mutex_indices;
+    node->tuple_size = tuple_size;
+    node->dimensions = dimensions;
     node->body = std::move(body);
     return node;
 }

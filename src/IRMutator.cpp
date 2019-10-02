@@ -409,7 +409,12 @@ Stmt IRMutator::visit(const Atomic *op) {
     if (!changed) {
         return op;
     } else {
-        return Atomic::make(op->mutex_name, new_mutex_indices, std::move(body));
+        return Atomic::make(op->producer_name,
+                            op->mutex_name,
+                            new_mutex_indices,
+                            op->tuple_size,
+                            op->dimensions,
+                            std::move(body));
     }
 }
 

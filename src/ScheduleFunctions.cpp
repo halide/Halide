@@ -361,7 +361,12 @@ Stmt build_provide_loop_nest(const map<string, Function> &env,
     need_alloc_mutex = false;
     if (def.schedule().atomic()) {
         // We will allocate a mutex buffer called get_mutex_name(func.name())
-        body = Atomic::make(get_mutex_name(func.name()), site, body);
+        body = Atomic::make(func.name(),
+                            get_mutex_name(func.name()),
+                            site,
+                            func.values().size(),
+                            func.dimensions(),
+                            body);
         need_alloc_mutex = true;
     }
 
@@ -997,7 +1002,6 @@ public:
 protected:
     bool _found_compute_level{};
     bool _found_store_level{};
-    std::set<Function, Function::Compare> _funcs_need_alloc_mutex;
 
     using IRMutator::visit;
 
@@ -1114,41 +1118,6 @@ private:
 
     Stmt build_realize(Stmt s, const Function &func, bool is_output) {
         const string &name = func.name();
-        if (_funcs_need_alloc_mutex.find(func) != _funcs_need_alloc_mutex.end()) {
-            // Place an Allocate node here and a call to initialization to create a mutex buffer
-            debug(1) << "Injecting allocation of mutex buffer for " << name << '\n';
-            Type mutex_type = target.bits == 64 ? UInt(64) : UInt(32);
-            Expr buffer_size = Expr(1);
-            std::vector<Expr> extents(func.dimensions());
-            const char *extent_field = func.values().size() == 1 ? ".extent." : ".0.extent.";
-            const char *min_field = func.values().size() == 1 ? ".min." : ".0.min.";
-            const char *stride_field = func.values().size() == 1 ? ".stride." : ".0.stride.";
-            for (int i = 0; i < func.dimensions(); i++) {
-                extents[i] = Variable::make(Int(32), name + extent_field + std::to_string(i));
-                buffer_size *= extents[i];
-            }
-            std::string mutex_name = get_mutex_name(name);
-            std::vector<Expr> memset_args(3);
-            memset_args[0] = Variable::make(Handle(), mutex_name);
-            memset_args[1] = Expr(0);
-            memset_args[2] = target.bits == 64 ? 8 * buffer_size : 4 * buffer_size;
-            s = Allocate::make(mutex_name,
-                               mutex_type,
-                               func.schedule().memory_type(),
-                               extents,
-                               const_true(),
-                               Block::make(
-                Evaluate::make(Call::make(type_of<void *>(), "memset", memset_args, Call::Extern)), s));
-            // Insert Let statements for the buffer's min and stride for storage flattening.
-            for (int i = 0; i < func.dimensions(); i++) {
-                s = LetStmt::make(mutex_name + ".min." + std::to_string(i),
-                                  Variable::make(Int(32), name + min_field + std::to_string(i)),
-                                  s);
-                s = LetStmt::make(mutex_name + ".stride." + std::to_string(i),
-                                  Variable::make(Int(32), name + stride_field + std::to_string(i)),
-                                  s);
-            }
-        }
 
         if (!is_output) {
             Region bounds;
@@ -1455,10 +1424,6 @@ private:
                                                                  replacements, add_lets, need_alloc_mutex_);
                 need_alloc_mutex = need_alloc_mutex || need_alloc_mutex_;
                 producer = inject_stmt(producer, updateDef, def.schedule().fuse_level().level);
-            }
-
-            if (need_alloc_mutex) {
-                _funcs_need_alloc_mutex.insert(f);
             }
         }
 

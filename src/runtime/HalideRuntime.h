@@ -118,10 +118,10 @@ struct halide_mutex_array {
     struct halide_mutex *array;
 };
 //@{
-extern void halide_mutex_array_create(struct halide_mutex_array *array, int sz);
-extern void halide_mutex_array_destroy(struct halide_mutex_array *array);
-extern void halide_mutex_array_lock(struct halide_mutex_array *array, int entry);
-extern void halide_mutex_array_unlock(struct halide_mutex_array *array, int entry);
+extern struct halide_mutex_array** halide_mutex_array_create(int sz);
+extern void halide_mutex_array_destroy(void *user_context, void *array);
+extern int halide_mutex_array_lock(struct halide_mutex_array *array, int entry);
+extern int halide_mutex_array_unlock(struct halide_mutex_array *array, int entry);
 //@}
 
 /** Define halide_do_par_for to replace the default thread pool

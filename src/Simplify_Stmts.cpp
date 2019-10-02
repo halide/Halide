@@ -510,7 +510,12 @@ Stmt Simplify::visit(const Atomic *op) {
         } else if (body.same_as(op->body)) {
             return op;
         } else {
-            return Atomic::make(op->mutex_name, op->mutex_indices, body);
+            return Atomic::make(op->producer_name,
+                                op->mutex_name,
+                                op->mutex_indices,
+                                op->tuple_size,
+                                op->dimensions,
+                                std::move(body));
         }
     }
 
@@ -534,7 +539,12 @@ Stmt Simplify::visit(const Atomic *op) {
     } else if (!changed) {
         return op;
     } else {
-        return Atomic::make(op->mutex_name, new_mutex_indices, body);
+        return Atomic::make(op->producer_name,
+                            op->mutex_name,
+                            new_mutex_indices,
+                            op->tuple_size,
+                            op->dimensions,
+                            std::move(body));
     }
 }
 

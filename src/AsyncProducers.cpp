@@ -96,9 +96,12 @@ protected:
         if (is_no_op(body)) {
             return body;
         } else {
-            return Atomic::make(op->mutex_name,
+            return Atomic::make(op->producer_name,
+                                op->mutex_name,
                                 op->mutex_indices,
-                                body);
+                                op->tuple_size,
+                                op->dimensions,
+                                std::move(body));
         }
     }
 };
@@ -175,30 +178,6 @@ class GenerateProducerBody : public NoOpCollapsingMutator {
         }
     }
 
-    Stmt visit(const Allocate *op) override {
-        if (ends_with(op->name, ".mutex")) {
-            // Atomic mutex lock can generate an Allocate node to allocate the mutex buffer.
-            // The mutex allocation's body is always a Block.
-            const Block *block = op->body.as<Block>();
-            internal_assert(block != nullptr) <<
-                "This is a mutex lock allocation, where the body is expected to be a Block.";
-            if (op->name == func + ".mutex") {
-                // The mutex buffer is allocated for the producer.
-                // We want to preserve the memset call for mutex initialization.
-                Stmt body = Block::make(block->first, mutate(block->rest));
-                return Allocate::make(op->name, op->type, op->memory_type,
-                                      op->extents, op->condition, body,
-                                      op->new_expr, op->free_function);
-            } else {
-                // The mutex buffer is allocated for a consumer, and we should
-                // remove the buffer allocation.
-                return mutate(block->rest);
-            }
-        } else {
-            return NoOpCollapsingMutator::visit(op);
-        }
-    }
-
     Stmt visit(const Atomic *op) override {
         return Evaluate::make(0);
     }
@@ -248,25 +227,8 @@ class GenerateConsumerBody : public NoOpCollapsingMutator {
         // Don't want to keep the producer's storage-folding tracker - it's dead code on the consumer side
         if (starts_with(op->name, func + ".folding_semaphore.") && ends_with(op->name, ".head")) {
             return mutate(op->body);
-        } else if (ends_with(op->name, ".mutex")) {
-            // Atomic mutex lock can generate an Allocate node to allocate the mutex buffer.
-            // The mutex allocation's body is always a Block.
-            const Block *block = op->body.as<Block>();
-            internal_assert(block != nullptr) <<
-                "This is a mutex lock allocation, where the body is expected to be a Block.";
-            if (op->name == func + ".mutex") {
-                // The mutex buffer is allocated for the consumer, proceed as normal.
-                Stmt body = Block::make(block->first, mutate(block->rest));
-                return Allocate::make(op->name, op->type, op->memory_type,
-                                      op->extents, op->condition, body,
-                                      op->new_expr, op->free_function);
-            } else {
-                // The mutex buffer is allocated for a producer, and we should
-                // remove the buffer allocation here.
-                return mutate(block->rest);
-            }
         } else {
-            return NoOpCollapsingMutator::visit(op);
+            return IRMutator::visit(op);
         }
     }
 
@@ -679,12 +641,7 @@ class TightenForkNodes : public IRMutator {
 
     Stmt visit(const LetStmt *op) override {
         Stmt body = mutate(op->body);
-        // Special case handling for .min & .stride fields.
-        // Atomics generate these let variables for the mutexes
-        // before the storage flatten stage insert the usages of them.
-        bool is_storage_var = op->name.find(".min.") != std::string::npos ||
-                              op->name.find(".stride.") != std::string::npos;
-        if (in_fork && !is_storage_var && !stmt_uses_var(body, op->name)) {
+        if (in_fork && !stmt_uses_var(body, op->name)) {
             return body;
         } else {
             return LetStmt::make(op->name, op->value, body);

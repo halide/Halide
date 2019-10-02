@@ -374,7 +374,12 @@ private:
     Stmt visit(const Atomic *op) override {
         if (op->mutex_indices.size() > 0) {
             Expr flatten_arg = mutate(flatten_args(op->mutex_name, op->mutex_indices, Buffer<>(), Parameter()));
-            return Atomic::make(op->mutex_name, {flatten_arg}, mutate(op->body));
+            return Atomic::make(op->producer_name,
+                                op->mutex_name,
+                                {flatten_arg},
+                                op->tuple_size,
+                                op->dimensions,
+                                mutate(op->body));
         } else {
             return IRMutator::visit(op);
         }

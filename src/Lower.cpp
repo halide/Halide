@@ -5,6 +5,7 @@
 
 #include "Lower.h"
 
+#include "AddAtomicMutex.h"
 #include "AddImageChecks.h"
 #include "AddParameterChecks.h"
 #include "AllocationBoundsInference.h"
@@ -42,7 +43,6 @@
 #include "PurifyIndexMath.h"
 #include "Qualify.h"
 #include "RealizationOrder.h"
-#include "RemoveAtomicMutexLocks.h"
 #include "RemoveDeadAllocations.h"
 #include "RemoveExternLoops.h"
 #include "RemoveUndef.h"
@@ -240,10 +240,6 @@ Module lower(const vector<Function> &output_funcs,
     debug(2) << "Lowering after destructuring tuple-valued realizations:\n"
              << s << "\n\n";
 
-    debug(1) << "Removing unnecessary atomic mutex locks...\n";
-    s = remove_atomic_mutex_locks(s);
-    debug(2) << "Lowering after removing atomic mutex locks:\n" << s << "\n\n";
-
     // OpenGL relies on GPU var canonicalization occurring before
     // storage flattening.
     if (t.has_gpu_feature() ||
@@ -259,6 +255,10 @@ Module lower(const vector<Function> &output_funcs,
     s = storage_flattening(s, outputs, env, t);
     debug(2) << "Lowering after storage flattening:\n"
              << s << "\n\n";
+
+    debug(1) << "Adding atomic mutex allocation...\n";
+    s = add_atomic_mutex(s, t);
+    debug(2) << "Lowering after adding atomic mutex allocation:\n" << s << "\n\n";
 
     debug(1) << "Unpacking buffer arguments...\n";
     s = unpack_buffers(s);

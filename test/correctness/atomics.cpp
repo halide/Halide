@@ -222,7 +222,7 @@ void test_parallel_hist_tuple(const Backend &backend) {
         // Set override_associativity_test to true to remove the check.
         hist.update().atomic(true /*override_associativity_test*/).parallel(r);
     } else {
-        hist.update().atomic().parallel(r);
+        hist.update().atomic();//.parallel(r);
     }
 
     Buffer<T> correct0(hist_size);
