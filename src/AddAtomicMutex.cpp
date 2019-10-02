@@ -226,6 +226,8 @@ public:
         Expr mutex_array = Variable::make(
             type_of<halide_mutex_array *>(), op->mutex_name);
         // Add mutex locks & unlocks
+        // If a thread locks the mutex and throws an exception,
+        // halide_mutex_array_destroy will be called and cleanup the mutex locks.
         body = Block::make(
             Evaluate::make(Call::make(type_of<int>(),
                                       "halide_mutex_array_lock",
