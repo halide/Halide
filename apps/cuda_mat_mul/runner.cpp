@@ -1,8 +1,11 @@
 #include "bin/mat_mul.h"
+#include "mat_mul_simple_auto_schedule.h"
 #include "halide_benchmark.h"
 #include "HalideBuffer.h"
 #include <cublas_v2.h>
 #include <cuda_runtime.h>
+
+#include "benchmark_util.h"
 
 using Halide::Runtime::Buffer;
 using Halide::Tools::benchmark;
@@ -40,11 +43,10 @@ int main(int argc, char **argv) {
     // Benchmark it
     {
         Buffer<float> A(size, size), B(size, size), C(size, size);
-        double t = Halide::Tools::benchmark(3, 3, [&]() {
-                mat_mul(A, B, C);
-                C.device_sync();
-            });
-        printf("Halide time: %f\n", t);
+        multi_way_bench({
+            {"Manual", [&]() { mat_mul(A, B, C); C.device_sync(); }},
+            {"Simple auto-schedule", [&]() { mat_mul_simple_auto_schedule(A, B, C); C.device_sync(); }}
+        });
     }
 
     // Benchmark cublas
@@ -65,7 +67,7 @@ int main(int argc, char **argv) {
         cudaFree(B);
         cudaFree(C);
         cublasDestroy(handle);
-        printf("cublas time: %f\n", t);
+        printf("cublas time: %f ms\n", t * 1e3);
     }
     return 0;
 }

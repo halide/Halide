@@ -9,17 +9,24 @@ CUDA_SDK ?= /usr/local/cuda-8.0
 CXXFLAGS += -I $(CUDA_SDK)/include
 LDFLAGS += -L $(CUDA_SDK)/lib64
 
+HL_TARGET = host-cuda-cuda_capability_50
+
 all: $(BIN)/runner
 
-$(BIN)/mat_mul.generator: mat_mul_generator.cpp $(GENERATOR_DEPS)
+$(BIN)/mat_mul.generator: mat_mul_generator.cpp  ../autoscheduler/SimpleAutoSchedule.h ../autoscheduler/SimpleAutoSchedule.cpp ../autoscheduler/DerivativeUtils.h ../autoscheduler/DerivativeUtils.cpp $(GENERATOR_DEPS)
 	@mkdir -p $(@D)
 	$(CXX) $(CXXFLAGS) $(USE_EXPORT_DYNAMIC) -g $(filter-out %.h,$^) -o $@ $(LDFLAGS) $(HALIDE_SYSTEM_LIBS)
 
 $(BIN)/mat_mul.a: $(BIN)/mat_mul.generator
 	@mkdir -p $(@D)
-	$^ -g mat_mul -o $(BIN) target=host-cuda-cuda_capability_50 size=$(MATRIX_SIZE)
+	$^ -g mat_mul -o $(BIN) target=$(HL_TARGET) size=$(MATRIX_SIZE)
 
-$(BIN)/runner: runner.cpp $(BIN)/mat_mul.a
+$(BIN)/mat_mul_simple_auto_schedule.a: $(BIN)/mat_mul.generator
+	@mkdir -p $(@D)
+	HL_USE_SIMPLE_AUTOSCHEDULER=1 \
+	$< -g mat_mul -o $(BIN) -f mat_mul_simple_auto_schedule target=$(HL_TARGET)-no_runtime auto_schedule=false -e static_library,h
+
+$(BIN)/runner: runner.cpp $(BIN)/mat_mul.a $(BIN)/mat_mul_simple_auto_schedule.a
 	@mkdir -p $(@D)
 	$(CXX) $(CXXFLAGS) -I$(BIN) -Wall -O3 $^ -o $@ $(LDFLAGS) -lcudart -lcublas
 
