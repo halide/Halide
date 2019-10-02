@@ -2478,21 +2478,6 @@ void CodeGen_LLVM::codegen_atomic_store(const Store *op) {
                                  op->alignment);
     Expr delta = simplify(common_subexpression_elimination(op->value - equiv_load));
     bool is_atomic_add = supports_atomic_add(value_type) && !expr_uses_var(delta, op->name);
-// #if LLVM_VERSION >= 90
-//     bool is_atomic_add = !expr_uses_var(delta, op->name);
-//     if (is_ptx_atomic_store) {
-//         if (value_type.is_float() &&
-//                 value_type.bits() == 64 &&
-//                 !target.has_feature(Target::CUDACapability61)) {
-//             // AtomicRMW complains when the GPU backend doesn't support the 
-//             // corresponding atomic add operation.
-//             is_atomic_add = false;
-//         }
-//     }
-// #else
-//     bool is_atomic_add = value_type.is_int_or_uint() &&
-//                          !expr_uses_var(delta, op->name);
-// #endif
     if (is_atomic_add) {
         Value *val = codegen(delta);
         if (value_type.is_scalar()) {
