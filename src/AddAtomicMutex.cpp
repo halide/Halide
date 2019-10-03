@@ -70,9 +70,9 @@ protected:
     }
 };
 
-/** Throw assertion for cases where the indexing on left-hand-side of
+/** Throw an assertion for cases where the indexing on left-hand-side of
  *  an atomic update references to itself.
- *  e.g. f(clamp(f(r), 0, 100)) = f(r) + 1 should be rejected */
+ *  e.g. f(clamp(f(r), 0, 100)) = f(r) + 1 should be rejected. */
 class CheckAtomicValidity : public IRGraphVisitor {
 protected:
     using IRVisitor::visit;

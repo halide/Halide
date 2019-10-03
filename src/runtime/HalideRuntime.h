@@ -114,9 +114,7 @@ extern void halide_cond_wait(struct halide_cond *cond, struct halide_mutex *mute
 //@}
 
 /** Functions for constructing/destroying/locking/unlocking arrays of mutexes. */
-struct halide_mutex_array {
-    struct halide_mutex *array;
-};
+struct halide_mutex_array;
 //@{
 extern struct halide_mutex_array* halide_mutex_array_create(int sz);
 extern void halide_mutex_array_destroy(void *user_context, void *array);

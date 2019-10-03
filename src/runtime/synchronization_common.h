@@ -1138,6 +1138,11 @@ WEAK void halide_cond_wait(struct halide_cond *cond, struct halide_mutex *mutex)
    fast_cond->wait(fast_mutex);
 }
 
+// Actual definition of the mutex array.
+struct halide_mutex_array {
+    struct halide_mutex *array;
+};
+
 WEAK halide_mutex_array* halide_mutex_array_create(int sz) {
     // TODO: If sz is huge, we should probably hash it down to something smaller 
     // in the accessors below. Check for deadlocks before doing so.
