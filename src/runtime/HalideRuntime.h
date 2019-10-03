@@ -394,7 +394,11 @@ typedef enum halide_type_code_t
     #endif
 #endif
 
-#if __cplusplus >= 201103L
+// VC2017 has some obscure bugs in constexpr; VC2019 claims to have fixed them.
+// We (currently) only use HALIDE_CONSTEXPR for some improved optimization
+// in certain luts, so we'll just conditionally define it and live with slightly
+// suboptimal code on VC2017. (Note that _MSC_VER=1920 == Visual Studio 2019 version 16.0.0)
+#if __cplusplus >= 201103L && (!defined(_MSC_VER) || _MSC_VER >= 1920)
     #define HALIDE_CONSTEXPR constexpr
 #else
     #define HALIDE_CONSTEXPR
