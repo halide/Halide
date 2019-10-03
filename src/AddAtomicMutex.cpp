@@ -277,7 +277,7 @@ protected:
 
         allocated_mutexes.insert(finder.mutex_name);
 
-        // We assume all output buffers have the same extent
+        // We assume all output buffers in a Tuple have the same extent.
         Parameter output_buffer = f.output_buffers()[0];
         Expr extent = Expr(1);
         for (int i = 0; i < output_buffer.dimensions(); i++) {
