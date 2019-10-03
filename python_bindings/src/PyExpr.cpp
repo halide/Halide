@@ -31,14 +31,13 @@ void define_expr(py::module &m) {
                 // 2^(-n) (or some combination) case is safe. e.g. 0.5, 0.25, 0.75, ...
                 // otherwise, precision will be lost.  e.g. 0.1, 0.3, ...
                 using Internal::reinterpret_bits;
-                if ( reinterpret_bits<uint64_t>(v) != reinterpret_bits<uint64_t>(check) ) {
+                if (reinterpret_bits<uint64_t>(v) != reinterpret_bits<uint64_t>(check)) {
                     std::ostringstream oss;
                     oss.precision(17);
                     oss << std::fixed << v;
-                    PyErr_WarnEx(
-                        PyExc_RuntimeWarning,
-                        ("The halide.Expr(" + oss.str() + ") loses precision."
-                         " If this error occurs construct by double-range float, consider construct by the `f32`/`f64` casts instead.").c_str(), 0);
+                    throw py::value_error(
+                        ("The floating-point value " + oss.str() + " will be interpreted as a float32 by Halide and lose precision;"
+                         " add an explicit `f32()` or `f64()`` cast to avoid this warning.").c_str());
                 }
                 return Expr(f);
             }))
