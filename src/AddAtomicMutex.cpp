@@ -164,6 +164,24 @@ public:
 protected:
     using IRGraphVisitor::visit;
 
+    // Need to also extract the let bindings of a Store index.
+    void visit(const Let *op) override {
+        IRGraphVisitor::visit(op);
+        if (index.defined()) {
+            if (expr_uses_var(index, op->name)) {
+                index = Let::make(op->name, op->value, index);
+            }
+        }
+    }
+    void visit(const LetStmt *op) override {
+        IRGraphVisitor::visit(op);
+        if (index.defined()) {
+            if (expr_uses_var(index, op->name)) {
+                index = Let::make(op->name, op->value, index);
+            }
+        }
+    }
+
     void visit(const Store *op) override {
         // Ideally we want to insert equal() checks here for different stores,
         // but the indices of them actually are different in the case of tuples,
@@ -174,6 +192,7 @@ protected:
             return;
         }
         index = op->index;
+        op->value.accept(this);
     }
 };
 
