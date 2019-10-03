@@ -739,9 +739,10 @@ void test_multiple_updates_histogram() {
 
     // Schedule this so it doesn't run forever
     output.compute_root();
-    auto funcs = d.adjoints;
-    for (auto it : funcs) {
-        it.second.compute_root();
+    for (auto f : std::vector<Func>{output, loss}) {
+        for (auto it : d.funcs(f)) {
+            it.compute_root();
+        }
     }
 
     // d_output(2) -> d_k(0) * 2

@@ -2,8 +2,8 @@
 
 #include "CSE.h"
 #include "ExprUsesVar.h"
-#include "IROperator.h"
 #include "IRMutator.h"
+#include "IROperator.h"
 #include "Monotonic.h"
 #include "Scope.h"
 #include "Simplify.h"
@@ -14,9 +14,9 @@ namespace Halide {
 namespace Internal {
 namespace {
 
+using std::pair;
 using std::string;
 using std::vector;
-using std::pair;
 
 class SimplifyCorrelatedDifferences : public IRMutator {
     using IRMutator::visit;
@@ -33,10 +33,13 @@ class SimplifyCorrelatedDifferences : public IRMutator {
         struct Frame {
             const LetStmtOrLet *op;
             ScopedBinding<Monotonic> binding;
-            Frame(const LetStmtOrLet *op, const string &loop_var, Scope<Monotonic> &scope) :
-                op(op),
-                binding(scope, op->name, is_monotonic(op->value, loop_var, scope)) {}
-            Frame(const LetStmtOrLet *op) : op(op) {}
+            Frame(const LetStmtOrLet *op, const string &loop_var, Scope<Monotonic> &scope)
+                : op(op),
+                  binding(scope, op->name, is_monotonic(op->value, loop_var, scope)) {
+            }
+            Frame(const LetStmtOrLet *op)
+                : op(op) {
+            }
         };
         std::vector<Frame> frames;
         StmtOrExpr result;
@@ -145,5 +148,5 @@ Stmt simplify_correlated_differences(const Stmt &s) {
     return SimplifyCorrelatedDifferences().mutate(s);
 }
 
-}
-}
+}  // namespace Internal
+}  // namespace Halide

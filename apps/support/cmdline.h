@@ -1,4 +1,6 @@
 // GitHub source: from https://github.com/tanakh/cmdline
+// Modifications made in-place to remove the use of exceptions,
+// flagged with WITH_EXCEPTIONS
 
 /*
   Copyright (c) 2009, Hideyuki Tanaka
@@ -29,21 +31,39 @@
 
 #pragma once
 
-#include <iostream>
-#include <sstream>
-#include <vector>
-#include <map>
-#include <string>
-#include <stdexcept>
-#include <typeinfo>
-#include <cstring>
 #include <algorithm>
-#include <cxxabi.h>
 #include <cstdlib>
+#include <cstring>
+#include <iostream>
+#include <map>
+#include <sstream>
+#include <stdexcept>
+#include <string>
+#include <typeinfo>
+#include <vector>
+
+#if defined(_MSC_VER) && !defined(NOMINMAX)
+#define NOMINMAX
+#endif
+
+#if !defined(_WIN32)
+#include <cxxabi.h>
+#else
+#include <windows.h>
+#pragma warning(disable : 4091)
+#include <dbghelp.h>
+#pragma comment(lib, "dbghelp.lib")
+#endif
 
 namespace cmdline{
 
 namespace detail{
+
+#ifdef WITH_EXCEPTIONS
+  inline void throw_bad_cast() { throw std::bad_cast(); }
+#else
+  inline void throw_bad_cast() { std::cerr << "bad cast\n"; exit(1); }
+#endif
 
 template <typename Target, typename Source, bool Same>
 class lexical_cast_t{
@@ -52,7 +72,7 @@ public:
     Target ret;
     std::stringstream ss;
     if (!(ss<<arg && ss>>ret && ss.eof()))
-      throw std::bad_cast();
+      throw_bad_cast();
 
     return ret;
   }
@@ -83,7 +103,7 @@ public:
     Target ret;
     std::istringstream ss(arg);
     if (!(ss>>ret && ss.eof()))
-      throw std::bad_cast();
+      throw_bad_cast();
     return ret;
   }
 };
@@ -106,11 +126,24 @@ Target lexical_cast(const Source &arg)
 
 static inline std::string demangle(const std::string &name)
 {
+#if !defined(_WIN32)
   int status=0;
   char *p=abi::__cxa_demangle(name.c_str(), 0, 0, &status);
   std::string ret(p);
   free(p);
   return ret;
+#else
+  char demangled_name[8192];
+  if (UnDecorateSymbolName(name.c_str(), demangled_name, sizeof(demangled_name),
+                           UNDNAME_COMPLETE)) {
+    std::string ret(demangled_name);
+    return ret;
+  } else {
+    DWORD error = GetLastError();
+    std::cout << "UnDecorateSymbolName error: " << error << std::endl;
+    return name;
+  }
+#endif
 }
 
 template <class T>
@@ -135,14 +168,19 @@ inline std::string readable_typename<std::string>()
 
 //-----
 
+#ifdef WITH_EXCEPTIONS
 class cmdline_error : public std::exception {
 public:
   cmdline_error(const std::string &msg): msg(msg){}
   ~cmdline_error() throw() {}
-  const char *what() const throw() { return msg.c_str(); }
+  const char *what() const throw() override { return msg.c_str(); }
 private:
   std::string msg;
 };
+inline void throw_cmdline_error(const std::string &s) { throw cmdline::cmdline_error(s); }
+#else
+inline void throw_cmdline_error(const std::string &s) { std::cerr << "error: " << s << "\n"; exit(1); }
+#endif
 
 template <class T>
 struct default_reader{
@@ -156,7 +194,7 @@ struct range_reader{
   range_reader(const T &low, const T &high): low(low), high(high) {}
   T operator()(const std::string &s) const {
     T ret=default_reader<T>()(s);
-    if (!(ret>=low && ret<=high)) throw cmdline::cmdline_error("range_error");
+    if (!(ret>=low && ret<=high)) throw_cmdline_error("range_error");
     return ret;
   }
 private:
@@ -174,7 +212,7 @@ struct oneof_reader{
   T operator()(const std::string &s){
     T ret=default_reader<T>()(s);
     if (std::find(alt.begin(), alt.end(), ret)==alt.end())
-      throw cmdline_error("");
+      throw_cmdline_error("");
     return ret;
   }
   void add(const T &v){ alt.push_back(v); }
@@ -322,7 +360,7 @@ public:
   void add(const std::string &name,
            char short_name=0,
            const std::string &desc=""){
-    if (options.count(name)) throw cmdline_error("multiple definition: "+name);
+    if (options.count(name)) throw_cmdline_error("multiple definition: "+name);
     options[name]=new option_without_value(name, short_name, desc);
     ordered.push_back(options[name]);
   }
@@ -343,7 +381,7 @@ public:
            bool need=true,
            const T def=T(),
            F reader=F()){
-    if (options.count(name)) throw cmdline_error("multiple definition: "+name);
+    if (options.count(name)) throw_cmdline_error("multiple definition: "+name);
     options[name]=new option_with_value_with_reader<T, F>(name, short_name, need, def, desc, reader);
     ordered.push_back(options[name]);
   }
@@ -357,15 +395,15 @@ public:
   }
 
   bool exist(const std::string &name) const {
-    if (options.count(name)==0) throw cmdline_error("there is no flag: --"+name);
+    if (options.count(name)==0) throw_cmdline_error("there is no flag: --"+name);
     return options.find(name)->second->has_set();
   }
 
   template <class T>
   const T &get(const std::string &name) const {
-    if (options.count(name)==0) throw cmdline_error("there is no flag: --"+name);
+    if (options.count(name)==0) throw_cmdline_error("there is no flag: --"+name);
     const option_with_value<T> *p=dynamic_cast<const option_with_value<T>*>(options.find(name)->second);
-    if (p==NULL) throw cmdline_error("type mismatch flag '"+name+"'");
+    if (p==NULL) throw_cmdline_error("type mismatch flag '"+name+"'");
     return p->get();
   }
 
@@ -648,42 +686,42 @@ private:
     }
     ~option_without_value(){}
 
-    bool has_value() const { return false; }
+    bool has_value() const override { return false; }
 
-    bool set(){
+    bool set() override {
       has=true;
       return true;
     }
 
-    bool set(const std::string &){
+    bool set(const std::string &) override {
       return false;
     }
 
-    bool has_set() const {
+    bool has_set() const override {
       return has;
     }
 
-    bool valid() const{
+    bool valid() const override {
       return true;
     }
 
-    bool must() const{
+    bool must() const override {
       return false;
     }
 
-    const std::string &name() const{
+    const std::string &name() const override {
       return nam;
     }
 
-    char short_name() const{
+    char short_name() const override {
       return snam;
     }
 
-    const std::string &description() const {
+    const std::string &description() const override {
       return desc;
     }
 
-    std::string short_description() const{
+    std::string short_description() const override {
       return "--"+nam;
     }
 
@@ -712,49 +750,56 @@ private:
       return actual;
     }
 
-    bool has_value() const { return true; }
+    bool has_value() const override { return true; }
 
-    bool set(){
+    bool set() override {
       return false;
     }
 
-    bool set(const std::string &value){
+    bool set(const std::string &value) override {
+#ifdef WITH_EXCEPTIONS
       try{
         actual=read(value);
         has=true;
       }
       catch(const std::exception &e){
+        std::cout << "Exception was caught: " << e.what() << std::endl;
         return false;
       }
       return true;
+#else
+      actual=read(value);
+      has=true;
+      return true;
+#endif
     }
 
-    bool has_set() const{
+    bool has_set() const override {
       return has;
     }
 
-    bool valid() const{
+    bool valid() const override {
       if (need && !has) return false;
       return true;
     }
 
-    bool must() const{
+    bool must() const override {
       return need;
     }
 
-    const std::string &name() const{
+    const std::string &name() const override {
       return nam;
     }
 
-    char short_name() const{
+    char short_name() const override {
       return snam;
     }
 
-    const std::string &description() const {
+    const std::string &description() const override {
       return desc;
     }
 
-    std::string short_description() const{
+    std::string short_description() const override {
       return "--"+nam+"="+detail::readable_typename<T>();
     }
 
@@ -791,7 +836,7 @@ private:
     }
 
   private:
-    T read(const std::string &s){
+    T read(const std::string &s) override {
       return reader(s);
     }
 

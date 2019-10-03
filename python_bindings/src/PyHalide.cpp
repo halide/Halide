@@ -15,7 +15,6 @@
 #include "PyLambda.h"
 #include "PyMachineParams.h"
 #include "PyModule.h"
-#include "PyOutputs.h"
 #include "PyParam.h"
 #include "PyPipeline.h"
 #include "PyRDom.h"
@@ -47,7 +46,6 @@ PYBIND11_MODULE(HALIDE_PYBIND_MODULE_NAME, m) {
     define_extern_func_argument(m);
     define_var(m);
     define_rdom(m);
-    define_outputs(m);
     define_machine_params(m);
     define_module(m);
     define_func(m);

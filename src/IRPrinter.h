@@ -18,6 +18,7 @@
 
 #include "IRVisitor.h"
 #include "Module.h"
+#include "Scope.h"
 
 namespace Halide {
 
@@ -79,6 +80,11 @@ std::ostream &operator<<(std::ostream &stream, const LoweredFunc &);
 /** Emit a halide linkage value in a human readable format */
 std::ostream &operator<<(std::ostream &stream, const LinkageType &);
 
+struct Indentation {
+    int indent;
+};
+std::ostream &operator<<(std::ostream &stream, const Indentation &);
+
 /** An IRVisitor that emits IR to the given output stream in a human
  * readable form. Can be subclassed if you want to modify the way in
  * which it prints.
@@ -104,15 +110,23 @@ public:
     static void test();
 
 protected:
-    /** The stream we're outputting on */
+    Indentation get_indent() const {
+        return Indentation{indent};
+    }
+
+    /** The stream on which we're outputting */
     std::ostream &stream;
 
     /** The current indentation level, useful for pretty-printing
      * statements */
     int indent;
 
-    /** Emit spaces according to the current indentation level */
-    void do_indent();
+    /** The symbols whose types can be inferred from values printed
+     * already. */
+    Scope<> known_type;
+
+    /** A helper for printing a chain of lets with line breaks */
+    void print_lets(const Let *let);
 
     void visit(const IntImm *) override;
     void visit(const UIntImm *) override;
@@ -159,6 +173,7 @@ protected:
     void visit(const Shuffle *) override;
     void visit(const Prefetch *) override;
 };
+
 }  // namespace Internal
 }  // namespace Halide
 

@@ -79,17 +79,26 @@ struct Argument {
     // to indicate that it shouldn't be baked into the object file,
     // but instead received as an argument at runtime
     template<typename T>
-    Argument(Buffer<T> im) :
-        name(im.name()),
-        kind(InputBuffer),
-        dimensions(im.dimensions()),
-        type(im.type()) {}
+    Argument(Buffer<T> im)
+        : name(im.name()),
+          kind(InputBuffer),
+          dimensions(im.dimensions()),
+          type(im.type()) {
+    }
 
-    bool is_buffer() const { return kind == InputBuffer || kind == OutputBuffer; }
-    bool is_scalar() const { return kind == InputScalar; }
+    bool is_buffer() const {
+        return kind == InputBuffer || kind == OutputBuffer;
+    }
+    bool is_scalar() const {
+        return kind == InputScalar;
+    }
 
-    bool is_input() const { return kind == InputScalar || kind == InputBuffer; }
-    bool is_output() const { return kind == OutputBuffer; }
+    bool is_input() const {
+        return kind == InputScalar || kind == InputBuffer;
+    }
+    bool is_output() const {
+        return kind == OutputBuffer;
+    }
 
     bool operator==(const Argument &rhs) const {
         return name == rhs.name &&

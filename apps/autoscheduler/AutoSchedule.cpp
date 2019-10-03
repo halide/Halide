@@ -1100,6 +1100,12 @@ struct LoopNest {
                         bytes_loaded += footprint;
                         lines_loaded += line_footprint;
                     }
+
+                    // We compute (but never use) these; computing them is cheap,
+                    // so let's leave in for future reference, but mark as 'ignore me'
+                    // to avoid clang-tidy warnings.
+                    (void) compute_line_footprint;
+                    (void) task_line_footprint;
                 }
             }
         }
@@ -1249,6 +1255,9 @@ struct LoopNest {
     // Recursively print a loop nest representation to stderr
     void dump(string prefix, const LoopNest *parent) const {
         if (!is_root()) {
+            // Non-root nodes always have parents.
+            internal_assert(parent != nullptr);
+
             aslog(0) << prefix << node->func.name();
             prefix += " ";
 
@@ -1631,6 +1640,9 @@ struct LoopNest {
         }
 
         if (tileable) {
+            // The root node is not tileable, so all tileable nodes have parents.
+            internal_assert(parent != nullptr);
+
             // Generate a list of tile sizes to try
             auto tilings = generate_tilings(size, (int)(size.size() - 1), 2, !in_realization);
 
@@ -1869,7 +1881,10 @@ struct LoopNest {
                 }
             }
         } else {
-            if (parent && parent->node != node) {
+            // Non-root nodes always have parents.
+            internal_assert(parent != nullptr);
+
+            if (parent->node != node) {
                 compute_site = this;
             }
 
@@ -2992,7 +3007,7 @@ IntrusivePtr<State> optimal_schedule_pass(FunctionDAG &dag,
         q.swap(pending);
 
         if (pending.empty()) {
-            if (false && beam_size < 1000) {
+            if ((false) && beam_size < 1000) {  // Intentional dead code. Extra parens to pacify clang-tidy.
                 // Total mortality. Double the beam size and
                 // restart. Disabled for now because total mortality
                 // may indicate a bug.
@@ -3234,6 +3249,7 @@ void generate_schedule(const std::vector<Function> &outputs,
     // just have the one, but it's an abstract interface, so others
     // can be slotted in for experimentation.
     std::unique_ptr<CostModel> cost_model = make_default_cost_model(weights_in_path, weights_out_path, randomize_weights);
+    internal_assert(cost_model != nullptr);
 
     IntrusivePtr<State> optimal;
 

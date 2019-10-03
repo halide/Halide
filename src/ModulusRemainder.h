@@ -23,8 +23,12 @@ namespace Internal {
  * remainder == 0). */
 
 struct ModulusRemainder {
-    ModulusRemainder() : modulus(1), remainder(0) {}
-    ModulusRemainder(int64_t m, int64_t r) : modulus(m), remainder(r) {}
+    ModulusRemainder()
+        : modulus(1), remainder(0) {
+    }
+    ModulusRemainder(int64_t m, int64_t r)
+        : modulus(m), remainder(r) {
+    }
 
     int64_t modulus, remainder;
 

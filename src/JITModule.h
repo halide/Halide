@@ -35,7 +35,9 @@ struct JITModule {
     struct Symbol {
         void *address = nullptr;
         Symbol() = default;
-        explicit Symbol(void *address) : address(address) {}
+        explicit Symbol(void *address)
+            : address(address) {
+        }
     };
 
     JITModule();

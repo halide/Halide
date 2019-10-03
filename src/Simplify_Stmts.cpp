@@ -6,9 +6,9 @@
 namespace Halide {
 namespace Internal {
 
-using std::vector;
 using std::pair;
 using std::string;
+using std::vector;
 
 Stmt Simplify::visit(const IfThenElse *op) {
     Expr condition = mutate(op->condition, nullptr);
@@ -90,8 +90,8 @@ Stmt Simplify::visit(const IfThenElse *op) {
         return Block::make(mutate(IfThenElse::make(condition, Evaluate::make(0), else_block->first)),
                            then_case);
     } else if (condition.same_as(op->condition) &&
-        then_case.same_as(op->then_case) &&
-        else_case.same_as(op->else_case)) {
+               then_case.same_as(op->then_case) &&
+               else_case.same_as(op->else_case)) {
         return op;
     } else {
         return IfThenElse::make(condition, then_case, else_case);
@@ -291,7 +291,7 @@ Stmt Simplify::visit(const Evaluate *op) {
         // Rewrap the lets outside the evaluate node
         Stmt stmt = Evaluate::make(value);
         for (size_t i = lets.size(); i > 0; i--) {
-            stmt = LetStmt::make(lets[i-1].first, lets[i-1].second, stmt);
+            stmt = LetStmt::make(lets[i - 1].first, lets[i - 1].second, stmt);
         }
         return stmt;
     }
@@ -501,5 +501,5 @@ Stmt Simplify::visit(const Fork *op) {
     }
 }
 
-}
-}
+}  // namespace Internal
+}  // namespace Halide

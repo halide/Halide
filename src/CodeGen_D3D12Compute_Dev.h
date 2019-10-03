@@ -38,13 +38,16 @@ public:
 
     virtual std::string print_gpu_name(const std::string &name) override;
 
-    std::string api_unique_name() override { return "d3d12compute"; }
+    std::string api_unique_name() override {
+        return "d3d12compute";
+    }
 
 protected:
-
     class CodeGen_D3D12Compute_C : public CodeGen_C {
     public:
-        CodeGen_D3D12Compute_C(std::ostream &s, Target t) : CodeGen_C(s, t) {}
+        CodeGen_D3D12Compute_C(std::ostream &s, Target t)
+            : CodeGen_C(s, t) {
+        }
         void add_kernel(Stmt stmt,
                         const std::string &name,
                         const std::vector<DeviceArgument> &args);
@@ -62,7 +65,7 @@ protected:
         std::string print_cast(Type target_type, Type source_type, std::string value_expr);
         std::string print_reinterpret_cast(Type type, std::string value_expr);
 
-        virtual std::string print_assignment(Type t, const std::string &rhs) override ;
+        virtual std::string print_assignment(Type t, const std::string &rhs) override;
 
         void visit(const Evaluate *op) override;
         void visit(const Min *) override;
@@ -86,6 +89,7 @@ protected:
     CodeGen_D3D12Compute_C d3d12compute_c;
 };
 
-}}
+}  // namespace Internal
+}  // namespace Halide
 
 #endif
