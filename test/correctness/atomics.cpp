@@ -1085,58 +1085,58 @@ void test_async_tuple(const Backend &backend) {
 }
 
 int main(int argc, char **argv) {
-    // Target target = get_jit_target_from_environment();
+    Target target = get_jit_target_from_environment();
     test_all<uint8_t>(Backend::CPU);
-    // test_all<uint8_t>(Backend::CPUVectorize);
-    // test_all<int8_t>(Backend::CPU);
-    // test_all<int8_t>(Backend::CPUVectorize);
-    // test_all<uint16_t>(Backend::CPU);
-    // test_all<uint16_t>(Backend::CPUVectorize);
-    // test_all<int16_t>(Backend::CPU);
-    // test_all<int16_t>(Backend::CPUVectorize);
-    // if (target.has_feature(Target::F16C)) {
-    //     test_all<float16_t>(Backend::CPU);
-    //     test_all<float16_t>(Backend::CPUVectorize);
-    // }
-    // test_all<bfloat16_t>(Backend::CPU);
-    // test_all<bfloat16_t>(Backend::CPUVectorize);
-    // test_all<uint32_t>(Backend::CPU);
-    // test_all<uint32_t>(Backend::CPUVectorize);
-    // test_all<int32_t>(Backend::CPU);
-    // test_all<int32_t>(Backend::CPUVectorize);
-    // test_all<float>(Backend::CPU);
-    // test_all<float>(Backend::CPUVectorize);
-    // test_all<uint64_t>(Backend::CPU);
-    // test_all<uint64_t>(Backend::CPUVectorize);
-    // test_all<int64_t>(Backend::CPU);
-    // test_all<int64_t>(Backend::CPUVectorize);
-    // test_all<double>(Backend::CPU);
-    // test_all<double>(Backend::CPUVectorize);
-    // if (target.has_feature(Target::OpenCL)) {
-    //     // No support for 8-bit & 16-bit atomics in OpenCL
-    //     test_all<uint32_t>(Backend::OpenCL);
-    //     test_all<int32_t>(Backend::OpenCL);
-    //     test_all<float>(Backend::OpenCL);
-    //     if (target.has_feature(Target::CLAtomics64)) {
-    //         test_all<uint64_t>(Backend::OpenCL);
-    //         test_all<int64_t>(Backend::OpenCL);
-    //         test_all<double>(Backend::OpenCL);
-    //     }
-    // }
-    // if (target.has_feature(Target::CUDA)) {
-    //     // No support for 8-bit & 16-bit atomics in CUDA
-    //     // float16 is possible but not implemented yet.
-    //     test_all<uint32_t>(Backend::CUDA);
-    //     test_all<int32_t>(Backend::CUDA);
-    //     test_all<float>(Backend::CUDA);
-    //     test_all<uint64_t>(Backend::CUDA);
-    //     test_all<int64_t>(Backend::CUDA);
-    //     test_all<double>(Backend::CUDA);
-    // }
-    // test_extern_func(Backend::CPU);
-    // test_extern_func(Backend::CPUVectorize);
-    // test_async(Backend::CPU);
-    // test_async(Backend::CPUVectorize);
-    // test_async_tuple(Backend::CPU);
+    test_all<uint8_t>(Backend::CPUVectorize);
+    test_all<int8_t>(Backend::CPU);
+    test_all<int8_t>(Backend::CPUVectorize);
+    test_all<uint16_t>(Backend::CPU);
+    test_all<uint16_t>(Backend::CPUVectorize);
+    test_all<int16_t>(Backend::CPU);
+    test_all<int16_t>(Backend::CPUVectorize);
+    if (target.has_feature(Target::F16C)) {
+        test_all<float16_t>(Backend::CPU);
+        test_all<float16_t>(Backend::CPUVectorize);
+    }
+    test_all<bfloat16_t>(Backend::CPU);
+    test_all<bfloat16_t>(Backend::CPUVectorize);
+    test_all<uint32_t>(Backend::CPU);
+    test_all<uint32_t>(Backend::CPUVectorize);
+    test_all<int32_t>(Backend::CPU);
+    test_all<int32_t>(Backend::CPUVectorize);
+    test_all<float>(Backend::CPU);
+    test_all<float>(Backend::CPUVectorize);
+    test_all<uint64_t>(Backend::CPU);
+    test_all<uint64_t>(Backend::CPUVectorize);
+    test_all<int64_t>(Backend::CPU);
+    test_all<int64_t>(Backend::CPUVectorize);
+    test_all<double>(Backend::CPU);
+    test_all<double>(Backend::CPUVectorize);
+    if (target.has_feature(Target::OpenCL)) {
+        // No support for 8-bit & 16-bit atomics in OpenCL
+        test_all<uint32_t>(Backend::OpenCL);
+        test_all<int32_t>(Backend::OpenCL);
+        test_all<float>(Backend::OpenCL);
+        if (target.has_feature(Target::CLAtomics64)) {
+            test_all<uint64_t>(Backend::OpenCL);
+            test_all<int64_t>(Backend::OpenCL);
+            test_all<double>(Backend::OpenCL);
+        }
+    }
+    if (target.has_feature(Target::CUDA)) {
+        // No support for 8-bit & 16-bit atomics in CUDA
+        // float16 is possible but not implemented yet.
+        test_all<uint32_t>(Backend::CUDA);
+        test_all<int32_t>(Backend::CUDA);
+        test_all<float>(Backend::CUDA);
+        test_all<uint64_t>(Backend::CUDA);
+        test_all<int64_t>(Backend::CUDA);
+        test_all<double>(Backend::CUDA);
+    }
+    test_extern_func(Backend::CPU);
+    test_extern_func(Backend::CPUVectorize);
+    test_async(Backend::CPU);
+    test_async(Backend::CPUVectorize);
+    test_async_tuple(Backend::CPU);
     return 0;
 }
