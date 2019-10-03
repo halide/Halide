@@ -6,18 +6,22 @@
 namespace Halide {
 namespace Internal {
 
+using std::map;
 using std::set;
 using std::string;
 
 namespace {
 
+/** Find Load statements that matches the provided symbols. */
 class FindLoad : public IRGraphVisitor {
 public:
     using IRGraphVisitor::visit;
 
-    set<string> symbols;
+    FindLoad(const set<string> &symbols) : symbols(symbols) {}
+
     bool found = false;
 
+protected:
     void visit(const Load *op) override {
         if (symbols.find(op->name) != symbols.end()) {
             found = true;
@@ -26,14 +30,12 @@ public:
         include(op->index);
     }
 
-    bool find_load(Expr e, const set<string> &symbols) {
-        found = false;
-        this->symbols = symbols;
-        include(e);
-        return found;
-    }
+    const set<string> &symbols;
 };
 
+/** Search if the value of a Store node has a variable pointing to a let binding,
+    where the let binding contains the Store location. Use for checking whether
+    we need a mutex lock for Atomic. */
 class FindAtomicLetBindings : public IRGraphVisitor {
 public:
     using IRVisitor::visit;
@@ -41,6 +43,9 @@ public:
     FindAtomicLetBindings(const set<string> &store_names)
         : store_names(store_names) {}
 
+    bool found = false;
+
+protected:
     void visit(const Let *op) override {
         include(op->value);
         {
@@ -61,8 +66,9 @@ public:
         if (inside_store) {
             if (let_bindings.contains(op->name)) {
                 Expr e = let_bindings.get(op->name);
-                FindLoad finder;
-                if (finder.find_load(e, store_names)) {
+                FindLoad finder(store_names);
+                e.accept(&finder);
+                if (finder.found) {
                     found = true;
                 }
             }
@@ -71,20 +77,24 @@ public:
 
     void visit(const Store *op) override {
         include(op->predicate);
-        inside_store = true;
-        include(op->value);
-        inside_store = false;
+        {
+            ScopedValue<bool> old_inside_store(inside_store, true);
+            include(op->value);
+        }
         include(op->index);
     }
 
-    bool inside_store;
-    set<string> store_names;
+    bool inside_store = false;
+    const set<string> &store_names;
     Scope<Expr> let_bindings;
-    bool found = false;
 };
 
+/** Collect all store's names inside a statement. */
 class CollectStoreNames : public IRGraphVisitor {
 public:
+    set<string> store_names;
+
+protected:
     using IRGraphVisitor::visit;
     
     void visit(const Store *op) override {
@@ -93,12 +103,14 @@ public:
         include(op->index);
         store_names.insert(op->name);
     }
-
-    set<string> store_names;
 };
 
+/** Clear out the Atomic node's mutex usages if it doesn't need one. */
 class RemoveUnnecessaryMutexUse : public IRMutator {
 public:
+    set<string> remove_mutex_lock_names;
+
+protected:
     using IRMutator::visit;
 
     Stmt visit(const Atomic *op) override {
@@ -119,10 +131,9 @@ public:
                                 std::move(body));
         }
     }
-
-    std::set<string> remove_mutex_lock_names;
 };
 
+/** Find Store inside an Atomic that matches the provided store_names. */
 class FindStoreInAtomicMutex : public IRGraphVisitor {
 public:
     using IRGraphVisitor::visit;
@@ -130,6 +141,10 @@ public:
     FindStoreInAtomicMutex(const std::set<std::string> &store_names)
         : store_names(store_names) {}
 
+    bool found = false;
+    std::string producer_name;
+    std::string mutex_name;
+protected:
     void visit(const Atomic *op) override {
         if (!found && !op->mutex_name.empty()) {
             ScopedValue<bool> old_in_atomic_mutex(in_atomic_mutex, true);
@@ -156,13 +171,13 @@ public:
 
     bool in_atomic_mutex = false;
     const std::set<std::string> &store_names;
-    bool found = false;
-    std::string producer_name;
-    std::string mutex_name;
 };
 
+/** Find Store inside of an Atomic node and return their indices. */
 class FindStoreIndex : public IRGraphVisitor {
 public:
+    Expr index;
+protected:
     using IRGraphVisitor::visit;
 
     void visit(const Store *op) override {
@@ -174,24 +189,24 @@ public:
         if (index.defined()) {
             return;
         }
+        index = op->index;
     }
-
-    std::string producer_name;
-    Expr index;
 };
 
+/** Add mutex allocation & lock & unlock if required. */
 class AddAtomicMutex : public IRMutator {
 public:
-    using IRMutator::visit;
-
-    const std::map<std::string, Function> &env;
-    // The set of producers that have allocated a mutex buffer
-    std::set<string> allocated_mutexes;
-
-    AddAtomicMutex(const std::map<std::string, Function> &env)
+    AddAtomicMutex(const map<string, Function> &env)
         : env(env) {}
 
-    Stmt allocate_mutex(const std::string &mutex_name, Expr extent, Stmt body) {
+protected:
+    using IRMutator::visit;
+
+    const map<string, Function> &env;
+    // The set of producers that have allocated a mutex buffer
+    set<string> allocated_mutexes;
+
+    Stmt allocate_mutex(const string &mutex_name, Expr extent, Stmt body) {
         Expr mutex_array = Call::make(type_of<halide_mutex_array *>(),
                                       "halide_mutex_array_create",
                                       {extent},
@@ -227,7 +242,7 @@ public:
 
         allocated_mutexes.insert(finder.mutex_name);
 
-        const std::string &mutex_name = finder.mutex_name;
+        const string &mutex_name = finder.mutex_name;
         Stmt body = mutate(op->body);
         Expr extent = Expr(1);
         for (Expr e : op->extents) {
@@ -261,7 +276,7 @@ public:
             "Found a producer node that contains an atomic node that requires mutex lock, "
             "but does not have an Allocate node and is not an output function. This is not supported.\n";
 
-        std::set<std::string> store_names;
+        set<string> store_names;
         for (auto buffer : f.output_buffers()) {
             store_names.insert(buffer.name());
         }
@@ -334,7 +349,7 @@ public:
 
 }  // namespace
 
-Stmt add_atomic_mutex(Stmt s, const std::map<std::string, Function> &env) {
+Stmt add_atomic_mutex(Stmt s, const map<string, Function> &env) {
     s = RemoveUnnecessaryMutexUse().mutate(s);
     s = AddAtomicMutex(env).mutate(s);
     return s;
