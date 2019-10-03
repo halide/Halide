@@ -264,7 +264,8 @@ void CodeGen_PTX_Dev::visit(const Load *op) {
 }
 
 void CodeGen_PTX_Dev::visit(const Store *op) {
-    if (emit_atomic_stores) {
+    // Issue atomic store if we are in the designated producer.
+    if (emit_atomic_stores_for.find(current_producer) != emit_atomic_stores_for.end()) {
         user_assert(op->value.type().is_scalar()) << "CUDA atomic update does not support vectorization.\n";
         user_assert(is_one(op->predicate)) << "Atomic update does not support predicated store.\n";
         user_assert(op->value.type().bits() >= 32) << "CUDA: 8-bit or 16-bit atomics are not supported.\n";
@@ -321,9 +322,9 @@ void CodeGen_PTX_Dev::visit(const Atomic *op) {
     user_assert(op->mutex_name.empty()) <<
         "The atomic update requires a mutex lock, which is not supported in CUDA.\n";
 
-    emit_atomic_stores = true;
+    emit_atomic_stores_for.insert(op->producer_name);
     IRVisitor::visit(op);
-    emit_atomic_stores = false;
+    emit_atomic_stores_for.erase(op->producer_name);
 }
 
 string CodeGen_PTX_Dev::march() const {
