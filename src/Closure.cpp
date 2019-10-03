@@ -89,9 +89,6 @@ void Closure::visit(const Atomic *op) {
     if (op->mutex_name != "") {
         found_buffer_ref(op->mutex_name, type_of<void *>(), true, true, Halide::Buffer<>());
     }
-    for (size_t i = 0; i < op->mutex_indices.size(); i++) {
-        op->mutex_indices[i].accept(this);
-    }
     op->body.accept(this);
 }
 

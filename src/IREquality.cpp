@@ -584,10 +584,8 @@ void IRComparer::visit(const Prefetch *op) {
 void IRComparer::visit(const Atomic *op) {
     const Atomic *s = stmt.as<Atomic>();
 
+    compare_names(s->producer_name, op->producer_name);
     compare_names(s->mutex_name, op->mutex_name);
-    for (size_t i = 0; (result == Equal) && (i < s->mutex_indices.size()); i++) {
-        compare_expr(s->mutex_indices[i], op->mutex_indices[i]);
-    }
     compare_stmt(s->body, op->body);
 }
 

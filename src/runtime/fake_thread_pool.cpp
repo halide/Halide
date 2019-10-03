@@ -78,6 +78,21 @@ WEAK void halide_mutex_lock(halide_mutex *mutex) {
 WEAK void halide_mutex_unlock(halide_mutex *mutex) {
 }
 
+WEAK halide_mutex_array* halide_mutex_array_create(int sz) {
+    return NULL;
+}
+
+WEAK void halide_mutex_array_destroy(void *user_context, void *array) {
+}
+
+WEAK int halide_mutex_array_lock(halide_mutex_array *array, int entry) {
+    return 0;
+}
+
+WEAK int halide_mutex_array_unlock(halide_mutex_array *array, int entry) {
+    return 0;
+}
+
 WEAK void halide_shutdown_thread_pool() {
 }
 

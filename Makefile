@@ -445,6 +445,7 @@ HEXAGON_RUNTIME_LIBS = \
 
 # Keep this list sorted in alphabetical order.
 SOURCE_FILES = \
+  AddAtomicMutex.cpp \
   AddImageChecks.cpp \
   AddParameterChecks.cpp \
   AlignLoads.cpp \
@@ -557,7 +558,6 @@ SOURCE_FILES = \
   RealizationOrder.cpp \
   Reduction.cpp \
   RegionCosts.cpp \
-  RemoveAtomicMutexLocks.cpp \
   RemoveDeadAllocations.cpp \
   RemoveExternLoops.cpp \
   RemoveUndef.cpp \
@@ -617,6 +617,7 @@ SOURCE_FILES = \
 # Don't include anything here that includes llvm headers.
 # Keep this list sorted in alphabetical order.
 HEADER_FILES = \
+  AddAtomicMutex.h \
   AddImageChecks.h \
   AddParameterChecks.h \
   AlignLoads.h \
@@ -737,7 +738,6 @@ HEADER_FILES = \
   RealizationOrder.h \
   Reduction.h \
   RegionCosts.h \
-  RemoveAtomicMutexLocks.h \
   RemoveDeadAllocations.h \
   RemoveExternLoops.h \
   RemoveUndef.h \
@@ -1823,7 +1823,7 @@ $(BIN_DIR)/tutorial_lesson_21_auto_scheduler_generate: $(ROOT_DIR)/tutorial/less
 
 # The values in MachineParams are:
 # - the maximum level of parallelism available,
-# - the size of the last-level cache (in KB),
+# - the size of the last-level cache (in bytes),
 # - the ratio between the cost of a miss at the last level cache and the cost
 #   of arithmetic on the target architecture
 # ...in that order.
