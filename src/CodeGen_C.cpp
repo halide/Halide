@@ -297,7 +297,7 @@ public:
 };
 
 CodeGen_C::CodeGen_C(ostream &s, Target t, OutputKind output_kind, const std::string &guard)
-    : IRPrinter(s), id("$$ BAD ID $$"), target(t), output_kind(output_kind), extern_c_open(false), emit_atomic_stores(false) {
+    : IRPrinter(s), id("$$ BAD ID $$"), target(t), output_kind(output_kind), extern_c_open(false), inside_atomic_mutex_node(false) {
 
     if (is_header()) {
         // If it's a header, emit an include guard.
@@ -2376,11 +2376,19 @@ void CodeGen_C::visit(const Load *op) {
 
 void CodeGen_C::visit(const Store *op) {
     user_assert(is_one(op->predicate)) << "Predicated store is not supported by C backend.\n";
-    if (emit_atomic_stores) {
+
+    Type t = op->value.type();
+
+    if (inside_atomic_mutex_node) {
+        user_assert(t.is_scalar()) << "The vectorized atomic operation for the store" <<
+            op->name << " is lowered into a mutex lock, which does not support vectorization.\n";
+    }
+
+    // Issue atomic store if we are in the designated producer.
+    if (emit_atomic_stores_for.find(current_producer) != emit_atomic_stores_for.end()) {
         stream << "#pragma omp atomic\n";
     }
 
-    Type t = op->value.type();
     string id_value = print_expr(op->value);
     string name = print_name(op->name);
 
@@ -2513,7 +2521,11 @@ void CodeGen_C::visit(const ProducerConsumer *op) {
     } else {
         stream << "// consume " << op->name << '\n';
     }
-    print_stmt(op->body);
+    {
+        ScopedValue<std::string> old_current_producer(current_producer,
+            op->is_producer ? op->name : current_producer);
+        print_stmt(op->body);
+    }
 }
 
 void CodeGen_C::visit(const Fork *op) {
@@ -2549,10 +2561,14 @@ void CodeGen_C::visit(const Acquire *op) {
 
 void CodeGen_C::visit(const Atomic *op) {
     if (!op->mutex_name.empty()) {
+        internal_assert(!inside_atomic_mutex_node) <<
+            "Nested atomic mutex locks detected. This might causes a deadlock.\n";
+        ScopedValue<bool> old_inside_atomic_mutex_node(inside_atomic_mutex_node, true);
         op->body.accept(this);
     } else {
-        ScopedValue<bool> old_emit_atomic_stores(emit_atomic_stores, true);
+        emit_atomic_stores_for.insert(op->producer_name);
         op->body.accept(this);
+        emit_atomic_stores_for.erase(op->producer_name);
     }
 }
 

@@ -244,8 +244,15 @@ protected:
 
 private:
 
-    /** Emit atomic operations if we encounter a store node. */
-    bool emit_atomic_stores;
+    /** Are we inside an atomic node that uses mutex locks?
+        This is used for detecting deadlocks from nested atomics. */
+    bool inside_atomic_mutex_node;
+
+    /** Emit atomic operations if we encounter a Producer node that matches these names. */
+    std::set<std::string> emit_atomic_stores_for;
+
+    /** Use for checking emit_atomic_stores_for. */
+    std::string current_producer;
 };
 
 }  // namespace Internal

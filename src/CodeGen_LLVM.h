@@ -496,7 +496,7 @@ protected:
     virtual bool supports_atomic_add(const Type &t) const;
 
     /** Are we inside an atomic node that uses mutex locks?
-        This is used for detecting deadlocks from nested atomics. */
+        This is used for detecting deadlocks from nested atomics & illegal vectorization. */
     bool inside_atomic_mutex_node;
 
     /** Emit atomic operations if we encounter a Producer node that matches these names. */

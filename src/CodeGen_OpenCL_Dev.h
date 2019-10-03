@@ -46,7 +46,7 @@ protected:
     class CodeGen_OpenCL_C : public CodeGen_C {
     public:
         CodeGen_OpenCL_C(std::ostream &s, Target t)
-            : CodeGen_C(s, t), emit_atomic_stores(false) {
+            : CodeGen_C(s, t) {
         }
         void add_kernel(Stmt stmt,
                         const std::string &name,
@@ -83,8 +83,11 @@ protected:
         void visit(const Max *op) override;
         void visit(const Atomic *op) override;
 
-        /** Emit atomic operations if we encounter a store node. */
-        bool emit_atomic_stores;
+        /** Emit atomic operations if we encounter a Producer node that matches these names. */
+        std::set<std::string> emit_atomic_stores_for;
+
+        /** Use for checking emit_atomic_stores_for. */
+        std::string current_producer;
     };
 
     std::ostringstream src_stream;
