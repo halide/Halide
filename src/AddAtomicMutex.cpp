@@ -15,20 +15,101 @@ using std::string;
 
 namespace {
 
+/** Collect all store's names inside a statement. */
+class CollectStoreNames : public IRGraphVisitor {
+public:
+    Scope<void> store_names;
+
+protected:
+    using IRGraphVisitor::visit;
+    
+    void visit(const Store *op) override {
+        include(op->predicate);
+        include(op->value);
+        include(op->index);
+        store_names.push(op->name);
+    }
+};
+
+/** Find Store inside of an Atomic node and return their indices. */
+class FindStoreIndex : public IRGraphVisitor {
+public:
+    Expr index;
+protected:
+    using IRGraphVisitor::visit;
+
+    // Need to also extract the let bindings of a Store index.
+    void visit(const Let *op) override {
+        IRGraphVisitor::visit(op);
+        if (index.defined()) {
+            if (expr_uses_var(index, op->name)) {
+                index = Let::make(op->name, op->value, index);
+            }
+        }
+    }
+    void visit(const LetStmt *op) override {
+        IRGraphVisitor::visit(op);
+        if (index.defined()) {
+            if (expr_uses_var(index, op->name)) {
+                index = Let::make(op->name, op->value, index);
+            }
+        }
+    }
+
+    void visit(const Store *op) override {
+        // Ideally we want to insert equal() checks here for different stores,
+        // but the indices of them actually are different in the case of tuples,
+        // since they usually refer to the strides/min/extents of their own tuple
+        // buffers. However, different elements in a tuple would have the same
+        // strides/min/extents so we are fine.
+        if (index.defined()) {
+            return;
+        }
+        index = op->index;
+        op->value.accept(this);
+    }
+};
+
+/** Throw assertion for cases where the indexing on left-hand-side of
+ *  an atomic update references to itself.
+ *  e.g. f(clamp(f(r), 0, 100)) = f(r) + 1 should be rejected */
+class CheckAtomicValidity : public IRGraphVisitor {
+protected:
+    using IRVisitor::visit;
+
+    void visit(const Atomic *op) override {
+        // Collect the names of all Store nodes inside.
+        CollectStoreNames collector;
+        op->body.accept(&collector);
+
+        // Find the indices from the Store nodes inside the body.
+        FindStoreIndex find;
+        op->body.accept(&find);
+
+        Expr index = find.index;
+        if (index.defined()) {
+            user_assert(!expr_uses_vars(index, collector.store_names)) 
+                << "Can't use atomic() on an update where the index written "
+                << "to depends on the current value of the Func\n";
+        }
+        op->body.accept(this);
+    }
+};
+
 /** Search if the value of a Store node has a variable pointing to a let binding,
     where the let binding contains the Store location. Use for checking whether
     we need a mutex lock for Atomic since some lowering pass before lifted a let
     binding from the Store node (currently only SplitTuple would do this). */
 class FindAtomicLetBindings : public IRGraphVisitor {
 public:
-    using IRVisitor::visit;
-
     FindAtomicLetBindings(const Scope<void> &store_names)
         : store_names(store_names) {}
 
     bool found = false;
 
 protected:
+    using IRVisitor::visit;
+
     void visit(const Let *op) override {
         include(op->value);
         {
@@ -71,22 +152,6 @@ protected:
     std::string inside_store;
     const Scope<void> &store_names;
     Scope<Expr> let_bindings;
-};
-
-/** Collect all store's names inside a statement. */
-class CollectStoreNames : public IRGraphVisitor {
-public:
-    Scope<void> store_names;
-
-protected:
-    using IRGraphVisitor::visit;
-    
-    void visit(const Store *op) override {
-        include(op->predicate);
-        include(op->value);
-        include(op->index);
-        store_names.push(op->name);
-    }
 };
 
 /** Clear out the Atomic node's mutex usages if it doesn't need one. */
@@ -155,45 +220,6 @@ protected:
 
     bool in_atomic_mutex = false;
     const std::set<std::string> &store_names;
-};
-
-/** Find Store inside of an Atomic node and return their indices. */
-class FindStoreIndex : public IRGraphVisitor {
-public:
-    Expr index;
-protected:
-    using IRGraphVisitor::visit;
-
-    // Need to also extract the let bindings of a Store index.
-    void visit(const Let *op) override {
-        IRGraphVisitor::visit(op);
-        if (index.defined()) {
-            if (expr_uses_var(index, op->name)) {
-                index = Let::make(op->name, op->value, index);
-            }
-        }
-    }
-    void visit(const LetStmt *op) override {
-        IRGraphVisitor::visit(op);
-        if (index.defined()) {
-            if (expr_uses_var(index, op->name)) {
-                index = Let::make(op->name, op->value, index);
-            }
-        }
-    }
-
-    void visit(const Store *op) override {
-        // Ideally we want to insert equal() checks here for different stores,
-        // but the indices of them actually are different in the case of tuples,
-        // since they usually refer to the strides/min/extents of their own tuple
-        // buffers. However, different elements in a tuple would have the same
-        // strides/min/extents so we are fine.
-        if (index.defined()) {
-            return;
-        }
-        index = op->index;
-        op->value.accept(this);
-    }
 };
 
 /** Add mutex allocation & lock & unlock if required. */
@@ -355,6 +381,8 @@ protected:
 }  // namespace
 
 Stmt add_atomic_mutex(Stmt s, const map<string, Function> &env) {
+    CheckAtomicValidity check;
+    s.accept(&check); 
     s = RemoveUnnecessaryMutexUse().mutate(s);
     s = AddAtomicMutex(env).mutate(s);
     return s;
