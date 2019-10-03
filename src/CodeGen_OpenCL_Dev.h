@@ -82,12 +82,6 @@ protected:
         void visit(const Min *op) override;
         void visit(const Max *op) override;
         void visit(const Atomic *op) override;
-
-        /** Emit atomic operations if we encounter a Producer node that matches these names. */
-        std::set<std::string> emit_atomic_stores_for;
-
-        /** Use for checking emit_atomic_stores_for. */
-        std::string current_producer;
     };
 
     std::ostringstream src_stream;

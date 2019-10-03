@@ -303,7 +303,7 @@ void CodeGen_OpenCL_Dev::CodeGen_OpenCL_C::visit(const Load *op) {
 void CodeGen_OpenCL_Dev::CodeGen_OpenCL_C::visit(const Store *op) {
     user_assert(is_one(op->predicate)) << "Predicated store is not supported inside OpenCL kernel.\n";
 
-    if (emit_atomic_stores_for.find(current_producer) != emit_atomic_stores_for.end()) {
+    if (emit_atomic_stores) {
         // Currently only support scalar atomics
         user_assert(op->value.type().is_scalar()) << "OpenCL atomic store does not support vectorization.\n";
         user_assert(op->value.type().bits() >= 32) << "OpenCL only support 32 and 64 bit atomics.\n";
@@ -626,10 +626,9 @@ void CodeGen_OpenCL_Dev::CodeGen_OpenCL_C::visit(const Atomic *op) {
     user_assert(op->mutex_name.empty()) <<
         "The atomic update requires a mutex lock, which is not supported in OpenCL.\n";
 
-    // Issue atomic stores for the corresponding producer.
-    emit_atomic_stores_for.insert(op->producer_name);
+    // Issue atomic stores.
+    ScopedValue<bool> old_emit_atomic_stores(emit_atomic_stores, true);
     IRVisitor::visit(op);
-    emit_atomic_stores_for.erase(op->producer_name);
 }
 
 void CodeGen_OpenCL_Dev::add_kernel(Stmt s,

@@ -499,11 +499,8 @@ protected:
         This is used for detecting deadlocks from nested atomics & illegal vectorization. */
     bool inside_atomic_mutex_node;
 
-    /** Emit atomic operations if we encounter a Producer node that matches these names. */
-    std::set<std::string> emit_atomic_stores_for;
-
-    /** Use for checking emit_atomic_stores_for. */
-    std::string current_producer;
+    /** Emit atomic store instructions? */
+    bool emit_atomic_stores;
 private:
     /** All the values in scope at the current code location during
      * codegen. Use sym_push and sym_pop to access. */

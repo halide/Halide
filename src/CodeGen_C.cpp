@@ -297,7 +297,8 @@ public:
 };
 
 CodeGen_C::CodeGen_C(ostream &s, Target t, OutputKind output_kind, const std::string &guard)
-    : IRPrinter(s), id("$$ BAD ID $$"), target(t), output_kind(output_kind), extern_c_open(false), inside_atomic_mutex_node(false) {
+    : IRPrinter(s), id("$$ BAD ID $$"), target(t), output_kind(output_kind),
+        extern_c_open(false), inside_atomic_mutex_node(false), emit_atomic_stores(false) {
 
     if (is_header()) {
         // If it's a header, emit an include guard.
@@ -2385,7 +2386,7 @@ void CodeGen_C::visit(const Store *op) {
     }
 
     // Issue atomic store if we are in the designated producer.
-    if (emit_atomic_stores_for.find(current_producer) != emit_atomic_stores_for.end()) {
+    if (emit_atomic_stores) {
         stream << "#pragma omp atomic\n";
     }
 
@@ -2521,11 +2522,7 @@ void CodeGen_C::visit(const ProducerConsumer *op) {
     } else {
         stream << "// consume " << op->name << '\n';
     }
-    {
-        ScopedValue<std::string> old_current_producer(current_producer,
-            op->is_producer ? op->name : current_producer);
-        print_stmt(op->body);
-    }
+    print_stmt(op->body);
 }
 
 void CodeGen_C::visit(const Fork *op) {
@@ -2566,9 +2563,9 @@ void CodeGen_C::visit(const Atomic *op) {
         ScopedValue<bool> old_inside_atomic_mutex_node(inside_atomic_mutex_node, true);
         op->body.accept(this);
     } else {
-        emit_atomic_stores_for.insert(op->producer_name);
+        // Issue atomic stores.
+        ScopedValue<bool> old_emit_atomic_stores(emit_atomic_stores, true);
         op->body.accept(this);
-        emit_atomic_stores_for.erase(op->producer_name);
     }
 }
 

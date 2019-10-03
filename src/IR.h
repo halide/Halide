@@ -814,7 +814,7 @@ struct Prefetch : public StmtNode<Prefetch> {
     static const IRNodeType _node_type = IRNodeType::Prefetch;
 };
 
-/** Lock all the Store nodes produced from [producer_name] in the body statement.
+/** Lock all the Store nodes in the body statement.
  *  Typically the lock is implemented by an atomic operation
  *  (e.g. atomic add or atomic compare-and-swap).
  *  However, if necessary, the node can access a mutex buffer through
