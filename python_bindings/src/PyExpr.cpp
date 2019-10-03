@@ -35,9 +35,10 @@ void define_expr(py::module &m) {
                     std::ostringstream oss;
                     oss.precision(17);
                     oss << std::fixed << v;
-                    throw py::value_error(
+                    PyErr_WarnEx(
+                        PyExc_RuntimeWarning,
                         ("The floating-point value " + oss.str() + " will be interpreted as a float32 by Halide and lose precision;"
-                         " add an explicit `f32()` or `f64()`` cast to avoid this warning.").c_str());
+                         " add an explicit `f32()` or `f64()`` cast to avoid this warning.").c_str(), 0);
                 }
                 return Expr(f);
             }))
