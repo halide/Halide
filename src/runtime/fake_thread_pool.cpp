@@ -72,6 +72,7 @@ WEAK void halide_join_thread(halide_thread *thread_arg) {
     halide_error(NULL, "halide_join_thread not implemented on this platform.");
 }
 
+// Don't need to do anything with mutexes since we are in a fake thread pool.
 WEAK void halide_mutex_lock(halide_mutex *mutex) {
 }
 
