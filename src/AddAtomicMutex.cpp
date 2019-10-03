@@ -255,10 +255,15 @@ protected:
 
         // Find the corresponding output.
         auto func_it = env.find(op->name);
+        if (func_it == env.end()) {
+            // Not an output.
+            return IRMutator::visit(op);
+        }
         Func f = Func(func_it->second);
-        internal_assert(f.output_buffers().size() > 0) <<
-            "Found a producer node that contains an atomic node that requires mutex lock, "
-            "but does not have an Allocate node and is not an output function. This is not supported.\n";
+        if (f.output_buffers().size() == 0) {
+            // Not an output.
+            return IRMutator::visit(op);
+        }
 
         set<string> store_names;
         for (auto buffer : f.output_buffers()) {
