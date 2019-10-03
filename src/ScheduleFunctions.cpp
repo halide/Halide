@@ -1077,7 +1077,7 @@ protected:
         }
     }
 
-    // If we're an inline update or extern, we may need to inject a realization in
+    // If we're an inline update or extern, we may need to inject a realization around
     // the Provide node (or a Provide node surrounded by an Atomic).
     Stmt inline_to_provide(const std::string &provide_name, Stmt provide_op) {
         // none of the functions in a fused group can be inlined, so this will only

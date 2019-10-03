@@ -118,14 +118,6 @@ struct halide_mutex_array {
     struct halide_mutex *array;
 };
 //@{
-// halide_mutex_array_create returns a halide_mutex_array** because of how Halide's
-// lower works at the moment. If we want to make halide_mutex_array_lock takes
-// halide_mutex_array instead of halide_mutex_array* as input, we need to generate
-// a Halide Load statement with type halide_mutex_array, which is not supported
-// in the current Halide typing system. If on the other hand we create the Load
-// statement with a type with equivalent size, say, uint64_t, this generates
-// a type error in the llvm codegen since llvm doesn't cast uint64_t to 
-// halide_mutex_array automatically.
 extern struct halide_mutex_array* halide_mutex_array_create(int sz);
 extern void halide_mutex_array_destroy(void *user_context, void *array);
 extern int halide_mutex_array_lock(struct halide_mutex_array *array, int entry);
