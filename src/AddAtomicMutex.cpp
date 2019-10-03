@@ -109,7 +109,7 @@ protected:
             remove_mutex_lock_names.insert(op->mutex_name);
             Stmt body = mutate(op->body);
             return Atomic::make(op->producer_name,
-                                "",
+                                string(),
                                 std::move(body));
         }
     }
