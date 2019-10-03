@@ -1,4 +1,5 @@
 #include "AddAtomicMutex.h"
+#include "ExprUsesVar.h"
 #include "IREquality.h"
 #include "IRMutator.h"
 #include "IROperator.h"
@@ -12,35 +13,15 @@ using std::string;
 
 namespace {
 
-/** Find Load statements that matches the provided symbols. */
-class FindLoad : public IRGraphVisitor {
-public:
-    using IRGraphVisitor::visit;
-
-    FindLoad(const set<string> &symbols) : symbols(symbols) {}
-
-    bool found = false;
-
-protected:
-    void visit(const Load *op) override {
-        if (symbols.find(op->name) != symbols.end()) {
-            found = true;
-        }
-        include(op->predicate);
-        include(op->index);
-    }
-
-    const set<string> &symbols;
-};
-
 /** Search if the value of a Store node has a variable pointing to a let binding,
     where the let binding contains the Store location. Use for checking whether
-    we need a mutex lock for Atomic. */
+    we need a mutex lock for Atomic since some lowering pass before lifted a let
+    binding from the Store node (currently only SplitTuple would do this). */
 class FindAtomicLetBindings : public IRGraphVisitor {
 public:
     using IRVisitor::visit;
 
-    FindAtomicLetBindings(const set<string> &store_names)
+    FindAtomicLetBindings(const Scope<void> &store_names)
         : store_names(store_names) {}
 
     bool found = false;
@@ -63,36 +44,37 @@ protected:
     }
 
     void visit(const Variable *op) override {
-        if (inside_store) {
-            if (let_bindings.contains(op->name)) {
-                Expr e = let_bindings.get(op->name);
-                FindLoad finder(store_names);
-                e.accept(&finder);
-                if (finder.found) {
-                    found = true;
-                }
+        if (!inside_store.empty()) {
+            // If this Variable inside the store value is an expression
+            // that depends on one of the store_names, we found a lifted let.
+            if (expr_uses_vars(op, store_names, let_bindings)) {
+                found = true;
             }
         }
     }
 
     void visit(const Store *op) override {
         include(op->predicate);
-        {
-            ScopedValue<bool> old_inside_store(inside_store, true);
+        if (store_names.contains(op->name)) {
+            // If we are in a designated store and op->value has a let binding
+            // that uses one of the store_names, we found a lifted let.
+            ScopedValue<string> old_inside_store(inside_store, op->name);
+            include(op->value);
+        } else {
             include(op->value);
         }
         include(op->index);
     }
 
-    bool inside_store = false;
-    const set<string> &store_names;
+    std::string inside_store;
+    const Scope<void> &store_names;
     Scope<Expr> let_bindings;
 };
 
 /** Collect all store's names inside a statement. */
 class CollectStoreNames : public IRGraphVisitor {
 public:
-    set<string> store_names;
+    Scope<void> store_names;
 
 protected:
     using IRGraphVisitor::visit;
@@ -101,7 +83,7 @@ protected:
         include(op->predicate);
         include(op->value);
         include(op->index);
-        store_names.insert(op->name);
+        store_names.push(op->name);
     }
 };
 

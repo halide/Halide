@@ -4052,7 +4052,7 @@ void CodeGen_LLVM::visit(const Store *op) {
     }
 
     if (inside_atomic_mutex_node) {
-        user_assert(value_type.is_scalar()) << "The vectorized atomic operation for the store" <<
+        user_assert(value_type.is_scalar()) << "The vectorized atomic operation for the store " <<
             op->name << " is lowered into a mutex lock, which does not support vectorization.\n";
     }
 
