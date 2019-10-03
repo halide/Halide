@@ -11,16 +11,6 @@ using std::string;
 
 namespace {
 
-std::string get_producer_name(std::string name) {
-    // Remove names after "." since split_tuple introduces different Stores with names
-    // like producer_name.0, producer_name.1, etc.
-    size_t i = name.find('.');
-    if (i != std::string::npos) {
-        name = name.substr(0, i);
-    }
-    return name;
-}
-
 class FindLoad : public IRGraphVisitor {
 public:
     using IRGraphVisitor::visit;
@@ -133,29 +123,41 @@ public:
     std::set<string> remove_mutex_lock_names;
 };
 
-class FindAtomicMutexUsage : public IRGraphVisitor {
+class FindStoreInAtomicMutex : public IRGraphVisitor {
 public:
-    FindAtomicMutexUsage(const std::string &producer_name)
-        : producer_name(producer_name) {}
-
     using IRGraphVisitor::visit;
 
+    FindStoreInAtomicMutex(const std::set<std::string> &store_names)
+        : store_names(store_names) {}
+
     void visit(const Atomic *op) override {
-        include(op->body);
-        if (op->producer_name == producer_name && !op->mutex_name.empty()) {
+        if (!found && !op->mutex_name.empty()) {
+            ScopedValue<bool> old_in_atomic_mutex(in_atomic_mutex, true);
+            include(op->body);
             if (found) {
-                // Multiple atomics inside the producer,
-                // make sure they have consistent information
-                internal_assert(mutex_name == op->mutex_name) <<
-                    "Inconsistent information of atomics inside a Producer node.\n";
+                // We found a Store inside Atomic with matching name,
+                // record the mutex information.
+                producer_name = op->producer_name;
+                mutex_name = op->mutex_name;
             }
-            found = true;
-            mutex_name = op->mutex_name;
+        } else {
+            include(op->body);
         }
     }
 
-    const std::string &producer_name;
+    void visit(const Store *op) override {
+        if (in_atomic_mutex) {
+            if (store_names.find(op->name) != store_names.end()) {
+                found = true;
+            }
+        }
+        IRGraphVisitor::visit(op);
+    }
+
+    bool in_atomic_mutex = false;
+    const std::set<std::string> &store_names;
     bool found = false;
+    std::string producer_name;
     std::string mutex_name;
 };
 
@@ -171,9 +173,6 @@ public:
         // strides/min/extents so we are fine.
         if (index.defined()) {
             return;
-        }
-        if (get_producer_name(op->name) == producer_name) {
-            index = op->index;
         }
     }
 
@@ -212,21 +211,21 @@ public:
 
     Stmt visit(const Allocate *op) override {
         // If this Allocate node is allocating a buffer for a producer,
-        // and the producer contains an atomic node that requires a mutex lock buffer,
-        // allocate it here.
-        std::string producer_name = get_producer_name(op->name);
-        if (allocated_mutexes.find(producer_name) != allocated_mutexes.end()) {
-            // We've already allocated a mutex.
-            return IRMutator::visit(op);
-        }
-
-        FindAtomicMutexUsage finder(producer_name);
+        // and there is a Store node inside of an Atomic node requiring mutex lock
+        // matching the name of the Allocate, allocate a mutex lock.
+        FindStoreInAtomicMutex finder({op->name});
         op->body.accept(&finder);
         if (!finder.found) {
             // No Atomic node that requires mutex lock from this node inside.
             return IRMutator::visit(op);
         }
-        allocated_mutexes.insert(producer_name);
+
+        if (allocated_mutexes.find(finder.mutex_name) != allocated_mutexes.end()) {
+            // We've already allocated a mutex.
+            return IRMutator::visit(op);
+        }
+
+        allocated_mutexes.insert(finder.mutex_name);
 
         const std::string &mutex_name = finder.mutex_name;
         Stmt body = mutate(op->body);
@@ -249,30 +248,38 @@ public:
         // Usually we allocate the mutex buffer at the Allocate node,
         // but outputs don't have Allocate. For those we allocate the mutex
         // buffer at the producer node.
+
         if (!op->is_producer) {
             // This is a consumer.
             return IRMutator::visit(op);
         }
-        const std::string &producer_name = op->name;
-        if (allocated_mutexes.find(producer_name) != allocated_mutexes.end()) {
-            // We've already allocated a mutex.
-            return IRMutator::visit(op);
+
+        // Find the corresponding output.
+        auto func_it = env.find(op->name);
+        const Function &f = func_it->second;
+        internal_assert(f.output_buffers().size() > 0) <<
+            "Found a producer node that contains an atomic node that requires mutex lock, "
+            "but does not have an Allocate node and is not an output function. This is not supported.\n";
+
+        std::set<std::string> store_names;
+        for (auto buffer : f.output_buffers()) {
+            store_names.insert(buffer.name());
         }
 
-        FindAtomicMutexUsage finder(producer_name);
+        FindStoreInAtomicMutex finder(store_names);
         op->body.accept(&finder);
         if (!finder.found) {
             // No Atomic node that requires mutex lock from this node inside.
             return IRMutator::visit(op);
         }
-        allocated_mutexes.insert(producer_name);
 
-        // Find the corresponding output.
-        auto func_it = env.find(producer_name);
-        const Function &f = func_it->second;
-        internal_assert(f.output_buffers().size() > 0) <<
-            "Found a producer node that contains an atomic node that requires mutex lock, "
-            "but does not have an Allocate node and is not an output function. This is not supported.\n";
+        if (allocated_mutexes.find(finder.mutex_name) != allocated_mutexes.end()) {
+            // We've already allocated a mutex.
+            return IRMutator::visit(op);
+        }
+
+        allocated_mutexes.insert(finder.mutex_name);
+
         // We assume all output buffers have the same extent
         Parameter output_buffer = f.output_buffers()[0];
         Expr extent = Expr(1);
