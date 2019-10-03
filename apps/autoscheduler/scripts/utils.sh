@@ -54,30 +54,33 @@ function get_autoscheduler_scripts_dir() {
 function build_augment_sample() {
     local -r halide_root=$1
     get_autoscheduler_dir $halide_root autoscheduler_dir
+    get_autoscheduler_bin_dir $halide_root autoscheduler_bin_dir
 
     echo
     echo "Building augment_sample..."
-    make -C ../autoscheduler ../autoscheduler/bin/augment_sample
+    make -C ${autoscheduler_dir} ${autoscheduler_bin_dir}/augment_sample
     echo
 }
 
 function build_libauto_schedule() {
     local -r halide_root=$1
     get_autoscheduler_dir $halide_root autoscheduler_dir
+    get_autoscheduler_bin_dir $halide_root autoscheduler_bin_dir
 
     echo
     echo "Building libauto_schedule..."
-    make -C ../autoscheduler ../autoscheduler/bin/libauto_schedule.so
+    make -C ${autoscheduler_dir} ${autoscheduler_bin_dir}/libauto_schedule.so
     echo
 }
 
 function build_train_cost_model() {
     local -r halide_root=$1
     get_autoscheduler_dir $halide_root autoscheduler_dir
+    get_autoscheduler_bin_dir $halide_root autoscheduler_bin_dir
 
     echo
     echo "Building train_cost_model..."
-    make -C ${autoscheduler_dir}/../autoscheduler ../autoscheduler/bin/train_cost_model
+    make -C ${autoscheduler_dir} ${autoscheduler_bin_dir}/train_cost_model
     echo
 }
 
