@@ -393,12 +393,8 @@ Stmt IRMutator::visit(const Acquire *op) {
 }
 
 Stmt IRMutator::visit(const Atomic *op) {
-    bool changed = false;
     Stmt body = mutate(op->body);
-    if (!body.same_as(op->body)) {
-        changed = true;
-    }
-    if (!changed) {
+    if (body.same_as(op->body)) {
         return op;
     } else {
         return Atomic::make(op->producer_name,
