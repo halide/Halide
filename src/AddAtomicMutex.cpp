@@ -1,8 +1,10 @@
 #include "AddAtomicMutex.h"
 #include "ExprUsesVar.h"
+#include "Func.h"
 #include "IREquality.h"
 #include "IRMutator.h"
 #include "IROperator.h"
+#include "OutputImageParam.h"
 
 namespace Halide {
 namespace Internal {
@@ -253,7 +255,7 @@ protected:
 
         // Find the corresponding output.
         auto func_it = env.find(op->name);
-        const Function &f = func_it->second;
+        Func f = Func(func_it->second);
         internal_assert(f.output_buffers().size() > 0) <<
             "Found a producer node that contains an atomic node that requires mutex lock, "
             "but does not have an Allocate node and is not an output function. This is not supported.\n";
@@ -278,13 +280,10 @@ protected:
         allocated_mutexes.insert(finder.mutex_name);
 
         // We assume all output buffers in a Tuple have the same extent.
-        Parameter output_buffer = f.output_buffers()[0];
+        OutputImageParam output_buffer = f.output_buffers()[0];
         Expr extent = Expr(1);
         for (int i = 0; i < output_buffer.dimensions(); i++) {
-            // TODO: cleanup this by adding access methods to Parameter class to extract
-            //       the extent variable.
-            string extent_name = output_buffer.name() + ".extent." + std::to_string(i);
-            extent = extent * Variable::make(Int(32), extent_name);
+            extent = extent * output_buffer.dim(i).extent();
         }
         Stmt body = mutate(op->body);
         body = allocate_mutex(finder.mutex_name, extent, body);
