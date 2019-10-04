@@ -1154,7 +1154,7 @@ int main(int argc, char **argv) {
     // thread count machines, due to massive amounts of
     // contention. We'll just set the thread count to 4. Unfortunately
     // there's no JIT api for this yet.
-    #ifdef _MSC_VER
+    #ifdef _WIN32
     _putenv_s("HL_NUM_THREADS", "4");
     #else
     setenv("HL_NUM_THREADS", "4", 1);
