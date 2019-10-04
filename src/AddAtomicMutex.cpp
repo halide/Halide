@@ -35,6 +35,7 @@ protected:
 class FindStoreIndex : public IRGraphVisitor {
 public:
     Expr index;
+
 protected:
     using IRGraphVisitor::visit;
 
@@ -149,7 +150,7 @@ protected:
         include(op->index);
     }
 
-    std::string inside_store;
+    string inside_store;
     const Scope<void> &store_names;
     Scope<Expr> let_bindings;
 };
@@ -191,8 +192,9 @@ public:
         : store_names(store_names) {}
 
     bool found = false;
-    std::string producer_name;
-    std::string mutex_name;
+    string producer_name;
+    string mutex_name;
+
 protected:
     void visit(const Atomic *op) override {
         if (!found && !op->mutex_name.empty()) {
