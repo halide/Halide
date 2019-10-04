@@ -97,9 +97,9 @@ protected:
 };
 
 /** Search if the value of a Store node has a variable pointing to a let binding,
-    where the let binding contains the Store location. Use for checking whether
-    we need a mutex lock for Atomic since some lowering pass before lifted a let
-    binding from the Store node (currently only SplitTuple would do this). */
+ *  where the let binding contains the Store location. Use for checking whether
+ *  we need a mutex lock for Atomic since some lowering pass before lifted a let
+ *  binding from the Store node (currently only SplitTuple would do this). */
 class FindAtomicLetBindings : public IRGraphVisitor {
 public:
     FindAtomicLetBindings(const Scope<void> &store_names)
