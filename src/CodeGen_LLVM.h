@@ -501,6 +501,7 @@ protected:
 
     /** Emit atomic store instructions? */
     bool emit_atomic_stores;
+
 private:
     /** All the values in scope at the current code location during
      * codegen. Use sym_push and sym_pop to access. */

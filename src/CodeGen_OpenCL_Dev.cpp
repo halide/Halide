@@ -1,16 +1,16 @@
 #include <algorithm>
 #include <sstream>
 
+#include "CSE.h"
 #include "CodeGen_Internal.h"
 #include "CodeGen_OpenCL_Dev.h"
-#include "CSE.h"
 #include "Debug.h"
 #include "EliminateBoolVectors.h"
 #include "EmulateFloat16Math.h"
+#include "ExprUsesVar.h"
 #include "IRMutator.h"
 #include "IROperator.h"
 #include "Simplify.h"
-#include "ExprUsesVar.h"
 
 namespace Halide {
 namespace Internal {
@@ -308,10 +308,10 @@ void CodeGen_OpenCL_Dev::CodeGen_OpenCL_C::visit(const Store *op) {
         user_assert(op->value.type().is_scalar()) << "OpenCL atomic store does not support vectorization.\n";
         user_assert(op->value.type().bits() >= 32) << "OpenCL only support 32 and 64 bit atomics.\n";
         if (op->value.type().bits() == 64) {
-            user_assert(target.has_feature(Target::CLAtomics64)) <<
-                "Enable feature CLAtomics64 for 64-bit atomics in OpenCL.\n";
+            user_assert(target.has_feature(Target::CLAtomics64))
+                << "Enable feature CLAtomics64 for 64-bit atomics in OpenCL.\n";
         }
-        // Detect whether we can describe this as an atomic-read-modify-write, 
+        // Detect whether we can describe this as an atomic-read-modify-write,
         // otherwise fallback to a compare-and-swap loop.
         // Current only test for atomic add.
         Expr val_expr = op->value;
@@ -394,11 +394,12 @@ void CodeGen_OpenCL_Dev::CodeGen_OpenCL_C::visit(const Store *op) {
             indent -= 2;
             std::string old_val = t.is_float() ? "old_val.i" : "old_val";
             std::string new_val = t.is_float() ? "new_val.i" : "new_val";
-            stream << get_indent() << "} while(atomic_cmpxchg((volatile " <<
-                get_memory_space(op->name) << " " << int_type << "*)&" <<
-                print_name(op->name) << "[" << id_index << "], " << 
-                old_val << ", " << new_val << ") != " << old_val << ");\n";
-            stream << get_indent() << "}\n";
+            stream << get_indent()
+                   << "} while(atomic_cmpxchg((volatile "
+                   << get_memory_space(op->name) << " " << int_type << "*)&"
+                   << print_name(op->name) << "[" << id_index << "], "
+                   << old_val << ", " << new_val << ") != " << old_val << ");\n"
+                   << get_indent() << "}\n";
             indent -= 2;
         }
         cache.clear();
@@ -623,8 +624,8 @@ void CodeGen_OpenCL_Dev::CodeGen_OpenCL_C::visit(const Min *op) {
 void CodeGen_OpenCL_Dev::CodeGen_OpenCL_C::visit(const Atomic *op) {
     // Most GPUs require all the threads in a warp to perform the same operations,
     // which means our mutex will lead to deadlock.
-    user_assert(op->mutex_name.empty()) <<
-        "The atomic update requires a mutex lock, which is not supported in OpenCL.\n";
+    user_assert(op->mutex_name.empty())
+        << "The atomic update requires a mutex lock, which is not supported in OpenCL.\n";
 
     // Issue atomic stores.
     ScopedValue<bool> old_emit_atomic_stores(emit_atomic_stores, true);

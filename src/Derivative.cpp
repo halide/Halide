@@ -1924,13 +1924,13 @@ void ReverseAccumulationVisitor::propagate_halide_function_call(
 }  // namespace Internal
 
 Func Derivative::operator()(const Func &func, int update_id) const {
-    auto it = adjoints.find(FuncKey{ func.name(), update_id });
+    auto it = adjoints.find(FuncKey{func.name(), update_id});
     internal_assert(it != adjoints.end()) << "Could not find Func " << func.name() << "\n";
     return it->second;
 }
 
 Func Derivative::get_unbounded(const Func &func, int update_id) const {
-    auto it = adjoints.find(FuncKey{ func.name() + "_unbounded", update_id });
+    auto it = adjoints.find(FuncKey{func.name() + "_unbounded", update_id});
     if (it != adjoints.end()) {
         return it->second;
     }
@@ -1939,13 +1939,13 @@ Func Derivative::get_unbounded(const Func &func, int update_id) const {
 }
 
 Func Derivative::operator()(const Buffer<> &buffer) const {
-    auto it = adjoints.find(FuncKey{ buffer.name(), -1 });
+    auto it = adjoints.find(FuncKey{buffer.name(), -1});
     internal_assert(it != adjoints.end()) << "Could not find Buffer " << buffer.name() << "\n";
     return it->second;
 }
 
 Func Derivative::operator()(const Param<> &param) const {
-    auto it = adjoints.find(FuncKey{ param.name(), -1 });
+    auto it = adjoints.find(FuncKey{param.name(), -1});
     internal_assert(it != adjoints.end()) << "Could not find Param " << param.name() << "\n";
     return it->second;
 }

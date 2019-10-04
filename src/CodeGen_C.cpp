@@ -298,7 +298,7 @@ public:
 
 CodeGen_C::CodeGen_C(ostream &s, Target t, OutputKind output_kind, const std::string &guard)
     : IRPrinter(s), id("$$ BAD ID $$"), target(t), output_kind(output_kind),
-        extern_c_open(false), inside_atomic_mutex_node(false), emit_atomic_stores(false) {
+      extern_c_open(false), inside_atomic_mutex_node(false), emit_atomic_stores(false) {
 
     if (is_header()) {
         // If it's a header, emit an include guard.
@@ -2381,8 +2381,9 @@ void CodeGen_C::visit(const Store *op) {
     Type t = op->value.type();
 
     if (inside_atomic_mutex_node) {
-        user_assert(t.is_scalar()) << "The vectorized atomic operation for the store" <<
-            op->name << " is lowered into a mutex lock, which does not support vectorization.\n";
+        user_assert(t.is_scalar())
+            << "The vectorized atomic operation for the store" << op->name
+            << " is lowered into a mutex lock, which does not support vectorization.\n";
     }
 
     // Issue atomic store if we are in the designated producer.
@@ -2558,8 +2559,8 @@ void CodeGen_C::visit(const Acquire *op) {
 
 void CodeGen_C::visit(const Atomic *op) {
     if (!op->mutex_name.empty()) {
-        internal_assert(!inside_atomic_mutex_node) <<
-            "Nested atomic mutex locks detected. This might causes a deadlock.\n";
+        internal_assert(!inside_atomic_mutex_node)
+            << "Nested atomic mutex locks detected. This might causes a deadlock.\n";
         ScopedValue<bool> old_inside_atomic_mutex_node(inside_atomic_mutex_node, true);
         op->body.accept(this);
     } else {

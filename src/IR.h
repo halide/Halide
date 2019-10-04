@@ -822,7 +822,7 @@ struct Prefetch : public StmtNode<Prefetch> {
  *  calls to acquire and release the lock. */
 struct Atomic : public StmtNode<Atomic> {
     std::string producer_name;
-    std::string mutex_name; // empty string if not using mutex
+    std::string mutex_name;  // empty string if not using mutex
     Stmt body;
 
     static Stmt make(const std::string &producer_name,

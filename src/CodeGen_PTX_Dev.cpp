@@ -1,6 +1,6 @@
 #include "CodeGen_PTX_Dev.h"
-#include "CodeGen_Internal.h"
 #include "CSE.h"
+#include "CodeGen_Internal.h"
 #include "Debug.h"
 #include "ExprUsesVar.h"
 #include "IREquality.h"
@@ -269,8 +269,8 @@ void CodeGen_PTX_Dev::visit(const Store *op) {
         user_assert(is_one(op->predicate)) << "Atomic update does not support predicated store.\n";
         user_assert(op->value.type().bits() >= 32) << "CUDA: 8-bit or 16-bit atomics are not supported.\n";
 #if LLVM_VERSION < 90
-        user_assert(op->value.type().is_scalar()) <<
-            "CUDA atomic update does not support vectorization with LLVM version < 9.\n";
+        user_assert(op->value.type().is_scalar())
+            << "CUDA atomic update does not support vectorization with LLVM version < 9.\n";
         // Generate nnvm intrinsics for the atomics if this is an float atomicAdd.
         // Otherwise defer to the llvm codegen. For llvm version >= 90, atomicrmw support floats so we
         // can also refer to llvm.
@@ -320,9 +320,9 @@ void CodeGen_PTX_Dev::visit(const Store *op) {
 void CodeGen_PTX_Dev::visit(const Atomic *op) {
     // CUDA requires all the threads in a warp to perform the same operations,
     // which means our mutex will lead to deadlock.
-    user_assert(op->mutex_name.empty()) <<
-        "The atomic update requires a mutex lock, which is not supported in CUDA.\n";
-    
+    user_assert(op->mutex_name.empty())
+        << "The atomic update requires a mutex lock, which is not supported in CUDA.\n";
+
     // Issue atomic stores.
     ScopedValue<bool> old_emit_atomic_stores(emit_atomic_stores, true);
     IRVisitor::visit(op);

@@ -22,7 +22,7 @@ public:
 
 protected:
     using IRGraphVisitor::visit;
-    
+
     void visit(const Store *op) override {
         include(op->predicate);
         include(op->value);
@@ -89,7 +89,7 @@ protected:
 
         Expr index = find.index;
         if (index.defined()) {
-            user_assert(!expr_uses_vars(index, collector.store_names)) 
+            user_assert(!expr_uses_vars(index, collector.store_names))
                 << "Can't use atomic() on an update where the index written "
                 << "to depends on the current value of the Func\n";
         }
@@ -370,10 +370,10 @@ protected:
                                       {mutex_array, index},
                                       Call::CallType::Extern)),
             Block::make(std::move(body),
-                Evaluate::make(Call::make(type_of<int>(),
-                                          "halide_mutex_array_unlock",
-                                          {mutex_array, index},
-                                          Call::CallType::Extern))));
+                        Evaluate::make(Call::make(type_of<int>(),
+                                                  "halide_mutex_array_unlock",
+                                                  {mutex_array, index},
+                                                  Call::CallType::Extern))));
 
         return Atomic::make(op->producer_name,
                             op->mutex_name,
@@ -385,7 +385,7 @@ protected:
 
 Stmt add_atomic_mutex(Stmt s, const map<string, Function> &env) {
     CheckAtomicValidity check;
-    s.accept(&check); 
+    s.accept(&check);
     s = RemoveUnnecessaryMutexUse().mutate(s);
     s = AddAtomicMutex(env).mutate(s);
     return s;
