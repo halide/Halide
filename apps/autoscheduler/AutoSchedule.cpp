@@ -125,17 +125,17 @@ bool compute_root_and_inline_only() {
     return only;
 }
 
-uint32_t get_dropout_threshold() {
+double get_dropout_threshold() {
     string random_dropout_str = get_env_variable("HL_RANDOM_DROPOUT");
     if (!random_dropout_str.empty()) {
-        return atoi(random_dropout_str.c_str());
+        return atof(random_dropout_str.c_str());
     } else {
         return 100;
     }
 }
 
 bool random_dropout(RNG &rng, size_t num_decisions) {
-    static double random_dropout_threshold = get_dropout_threshold();
+    static double random_dropout_threshold = std::max(0.0, get_dropout_threshold());
     if (random_dropout_threshold >= 100) return false;
 
     // The random dropout threshold is the chance that we operate
@@ -4973,7 +4973,6 @@ IntrusivePtr<State> optimal_schedule_pass(FunctionDAG &dag,
             }
 
             if (pending.size() > 1 && random_dropout(rng, dag.nodes.size() * 2)) {
-                // debug(0) << "Dropping state\n";
                 continue;
             }
 
