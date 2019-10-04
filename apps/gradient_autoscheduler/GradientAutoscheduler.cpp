@@ -217,7 +217,7 @@ void parallelize_vars_and_rvars(
         TailStrategy tail,
         bool is_gpu,
         std::ostringstream &schedule_source) {
-    int tile_size = (vars.size() + rvars.size()) >= 2 ? 16 : 64;
+    int tile_size = (vars.size() + rvars.size()) >= 2 ? 16 : 256;
     // Apply heuristics tiling to split the args.
     int num_tilable = 0;
     for (int i = 0; i < (int)vars.size(); i++) {
@@ -231,9 +231,9 @@ void parallelize_vars_and_rvars(
         }
     }
     if ((vars.size() + rvars.size()) >= 2 && num_tilable <= 1) {
-        // The case where Func has a single very long dimension
+        // The case where Func has a single long dimension
         // but the rest are short.
-        tile_size = 64;
+        tile_size = 256;
     }
 
     // Tile vars
@@ -388,74 +388,111 @@ void parallelize_vars_and_rvars(
                 }
             }
             // On GPU we only want to assign one loop as GPU threads (with size 64)
+            // and one loop as vectorize (with size 4).
             // We do it with the order of inner_rvar -> inner_var
             // and assign the rest to GPU blocks.
             if (inner_fused_rvar.name() != "") {
                 RVar outer, inner;
-                func_or_stage.split(inner_fused_rvar, outer, inner, 64, tail)
+                RVar in_outer, in_inner;
+                func_or_stage.split(inner_fused_rvar, outer, inner, 256, tail)
+                             .split(inner, in_outer, in_inner, 4)
                              .atomic()
                              .gpu_blocks(outer)
-                             .gpu_threads(inner);
+                             .gpu_threads(in_outer)
+                             .vectorize(in_inner);
                 schedule_source << "    .split(" <<
                     inner_fused_rvar.name() << "," <<
                     outer.name() << "," <<
                     inner.name() << "," <<
-                    64 << "," <<
+                    256 << "," <<
                     tail << ")\n";
+                schedule_source << "    .split(" <<
+                    inner.name() << "," <<
+                    in_outer.name() << "," <<
+                    in_inner.name() << "," <<
+                    4 << ")\n";
                 schedule_source << "    .atomic()\n";
                 schedule_source << "    .gpu_blocks(" << outer.name() << ")\n";
-                schedule_source << "    .gpu_threads(" << inner.name() << ")\n";
+                schedule_source << "    .gpu_threads(" << in_outer.name() << ")\n";
+                schedule_source << "    .vectorize(" << in_inner.name() << ")\n";
                 if (inner_fused_var.name() != "") {
                     func_or_stage.gpu_blocks(inner_fused_var);
                     schedule_source << "    .gpu_blocks(" << inner_fused_var.name() << ")\n";
                 }
             } else {
                 Var outer, inner;
-                func_or_stage.split(inner_fused_var, outer, inner, 64, tail)
+                Var in_outer, in_inner;
+                func_or_stage.split(inner_fused_var, outer, inner, 256, tail)
+                             .split(inner, in_outer, in_inner, 4)
                              .gpu_blocks(outer)
-                             .gpu_threads(inner);
+                             .gpu_threads(in_outer)
+                             .vectorize(in_inner);
                 schedule_source << "    .split(" <<
                     inner_fused_var.name() << "," <<
                     outer.name() << "," <<
                     inner.name() << "," <<
-                    64 << "," <<
+                    256 << "," <<
                     tail << ")\n";
+                schedule_source << "    .split(" <<
+                    inner.name() << "," <<
+                    in_outer.name() << "," <<
+                    in_inner.name() << "," <<
+                    4 << ")\n";
                 schedule_source << "    .gpu_blocks(" << outer.name() << ")\n";
-                schedule_source << "    .gpu_threads(" << inner.name() << ")\n";
+                schedule_source << "    .gpu_threads(" << in_outer.name() << ")\n";
+                schedule_source << "    .vectorize(" << in_inner.name() << ")\n";
             }
         } else {
             if (fused_rvar.name() != "") {
                 RVar outer, inner;
-                func_or_stage.split(fused_rvar, outer, inner, 64, tail)
+                RVar in_outer, in_inner;
+                func_or_stage.split(fused_rvar, outer, inner, 256, tail)
+                             .split(inner, in_outer, in_inner, 4)
                              .atomic()
                              .gpu_blocks(outer)
-                             .gpu_threads(inner);
+                             .gpu_threads(in_outer)
+                             .vectorize(in_inner);
                 schedule_source << "    .split(" <<
                     fused_rvar.name() << "," <<
                     outer.name() << "," <<
                     inner.name() << "," <<
-                    64 << "," <<
+                    256 << "," <<
                     tail << ")\n";
+                schedule_source << "    .split(" <<
+                    inner.name() << "," <<
+                    in_outer.name() << "," <<
+                    in_inner.name() << "," <<
+                    4 << ")\n";
                 schedule_source << "    .atomic()\n";
                 schedule_source << "    .gpu_blocks(" << outer.name() << ")\n";
-                schedule_source << "    .gpu_threads(" << inner.name() << ")\n";
+                schedule_source << "    .gpu_threads(" << in_outer.name() << ")\n";
+                schedule_source << "    .vectorize(" << in_inner.name() << ")\n";
                 if (fused_var.name() != "") {
                     func_or_stage.gpu_blocks(fused_var);
                     schedule_source << "    .gpu_blocks(" << fused_var.name() << ")\n";
                 }
             } else {
                 Var outer, inner;
-                func_or_stage.split(fused_var, outer, inner, 64, tail)
+                Var in_outer, in_inner;
+                func_or_stage.split(fused_var, outer, inner, 256, tail)
+                             .split(inner, in_outer, in_inner, 4)
                              .gpu_blocks(outer)
-                             .gpu_threads(inner);
+                             .gpu_threads(in_outer)
+                             .vectorize(in_inner);
                 schedule_source << "    .split(" <<
                     fused_var.name() << "," <<
                     outer.name() << "," <<
                     inner.name() << "," <<
-                    64 << "," <<
+                    256 << "," <<
                     tail << ")\n";
+                schedule_source << "    .split(" <<
+                    inner.name() << "," <<
+                    in_outer.name() << "," <<
+                    in_inner.name() << "," <<
+                    4 << ")\n";
                 schedule_source << "    .gpu_blocks(" << outer.name() << ")\n";
-                schedule_source << "    .gpu_threads(" << inner.name() << ")\n";
+                schedule_source << "    .gpu_threads(" << in_outer.name() << ")\n";
+                schedule_source << "    .vectorize(" << in_inner.name() << ")\n";
             }
         }
     } else {
@@ -809,7 +846,7 @@ void apply_schedule(const MachineParams &params,
         // For CPU we want at least (8 * cores) * 16 parallelism
         // for vectorization + threading.
         // For GPU we want at least 10 * (num SMs) * 32 parallelism
-        // Turing has ~70 SMs 
+        // Turing has ~70 SMs
         int cpu_min_parallelism = 8 * params.parallelism * 16;
         int gpu_min_parallelism = 10 * 70 * 32;
         int min_parallelism =
