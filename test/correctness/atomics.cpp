@@ -14,7 +14,8 @@ enum class Backend {
     CPU,
     CPUVectorize,
     OpenCL,
-    CUDA
+    CUDA,
+    CUDAVectorize
 };
 
 template<typename T,
@@ -114,6 +115,17 @@ void test_parallel_hist(const Backend &backend) {
                     .gpu_threads(ri, DeviceAPI::CUDA);
             }
         } break;
+        case Backend::CUDAVectorize: {
+            RVar ro, ri;
+            RVar rio, rii;
+            hist.update().atomic().split(r, ro, ri, 32).split(ri, rio, rii, 4)
+                .gpu_blocks(ro, DeviceAPI::CUDA)
+                .gpu_threads(rio, DeviceAPI::CUDA)
+                .vectorize(rii);
+        } break;
+        default: {
+            _halide_user_assert(false) << "Unsupported backend.\n";
+        } break;
     }
 
     Buffer<T> correct(hist_size);
@@ -179,6 +191,18 @@ void test_parallel_cas_update(const Backend &backend) {
             hist.update().atomic(true /*override_associativity_test*/).split(r, ro, ri, 32)
                 .gpu_blocks(ro, DeviceAPI::CUDA)
                 .gpu_threads(ri, DeviceAPI::CUDA);
+        } break;
+        case Backend::CUDAVectorize: {
+            RVar ro, ri;
+            RVar rio, rii;
+            hist.update().atomic(true /*override_assciativity_test*/)
+                .split(r, ro, ri, 32).split(ri, rio, rii, 4)
+                .gpu_blocks(ro, DeviceAPI::CUDA)
+                .gpu_threads(rio, DeviceAPI::CUDA)
+                .vectorize(rii);
+        } break;
+        default: {
+            _halide_user_assert(false) << "Unsupported backend.\n";
         } break;
     }
 
@@ -296,6 +320,18 @@ void test_predicated_hist(const Backend &backend) {
                 hist.update(update_id).atomic(true /*override_associativity_test*/).split(r, ro, ri, 32)
                     .gpu_blocks(ro, DeviceAPI::CUDA)
                     .gpu_threads(ri, DeviceAPI::CUDA);
+            } break;
+            case Backend::CUDAVectorize: {
+                RVar ro, ri;
+                RVar rio, rii;
+                hist.update().atomic(true /*override_assciativity_test*/)
+                    .split(r, ro, ri, 32).split(ri, rio, rii, 4)
+                    .gpu_blocks(ro, DeviceAPI::CUDA)
+                    .gpu_threads(rio, DeviceAPI::CUDA)
+                    .vectorize(rii);
+            } break;
+            default: {
+                _halide_user_assert(false) << "Unsupported backend.\n";
             } break;
         }
     }
@@ -540,19 +576,22 @@ void test_hist_compute_at(const Backend &backend) {
             }
         } break;
         case Backend::CUDA: {
-            if (is_float_16) {
-                RVar ro, ri;
-                // Associativity prover doesn't support float16.
-                // Set override_associativity_test to true to remove the check.
-                hist.update().atomic(true /*override_associativity_test*/).split(r, ro, ri, 32)
-                    .gpu_blocks(ro, DeviceAPI::CUDA)
-                    .gpu_threads(ri, DeviceAPI::CUDA);
-            } else {
-                RVar ro, ri;
-                hist.update().atomic().split(r, ro, ri, 32)
-                    .gpu_blocks(ro, DeviceAPI::CUDA)
-                    .gpu_threads(ri, DeviceAPI::CUDA);
-            }
+            RVar ro, ri;
+            hist.update().atomic().split(r, ro, ri, 32)
+                .gpu_blocks(ro, DeviceAPI::CUDA)
+                .gpu_threads(ri, DeviceAPI::CUDA);
+        } break;
+        case Backend::CUDAVectorize: {
+            RVar ro, ri;
+            RVar rio, rii;
+            hist.update().atomic()
+                .split(r, ro, ri, 32).split(ri, rio, rii, 4)
+                .gpu_blocks(ro, DeviceAPI::CUDA)
+                .gpu_threads(rio, DeviceAPI::CUDA)
+                .vectorize(rii);
+        } break;
+        default: {
+            _halide_user_assert(false) << "Unsupported backend.\n";
         } break;
     }
 
@@ -781,6 +820,18 @@ void test_hist_rfactor(const Backend &backend) {
                         .gpu_blocks(ro, DeviceAPI::CUDA)
                         .gpu_threads(ri, DeviceAPI::CUDA);
         } break;
+        case Backend::CUDAVectorize: {
+            RVar ro, ri;
+            RVar rio, rii;
+            hist.update().atomic(true)
+                .split(r, ro, ri, 32).split(ri, rio, rii, 4)
+                .gpu_blocks(ro, DeviceAPI::CUDA)
+                .gpu_threads(rio, DeviceAPI::CUDA)
+                .vectorize(rii);
+        } break;
+        default: {
+            _halide_user_assert(false) << "Unsupported backend.\n";
+        } break;
     }
 
     Buffer<T> correct(hist_size);
@@ -853,6 +904,19 @@ void test_hist_tuple_rfactor(const Backend &backend) {
                         .gpu_blocks(ro, DeviceAPI::CUDA)
                         .gpu_threads(ri, DeviceAPI::CUDA);
         } break;
+        case Backend::CUDAVectorize: {
+            RVar ro, ri;
+            RVar rio, rii;
+            hist.update().atomic(true /*override_assciativity_test*/)
+                .split(r, ro, ri, 8).split(ri, rio, rii, 4)
+                .gpu_blocks(ro, DeviceAPI::CUDA)
+                .gpu_threads(rio, DeviceAPI::CUDA)
+                .vectorize(rii);
+        } break;
+        default: {
+            _halide_user_assert(false) << "Unsupported backend.\n";
+        } break;
+
     }
 
     Buffer<T> correct0(hist_size);
@@ -1132,11 +1196,19 @@ int main(int argc, char **argv) {
         test_all<uint64_t>(Backend::CUDA);
         test_all<int64_t>(Backend::CUDA);
         test_all<double>(Backend::CUDA);
+#if LLVM_VERSION >= 90
+        test_all<uint32_t>(Backend::CUDAVectorize);
+        test_all<int32_t>(Backend::CUDAVectorize);
+        test_all<float>(Backend::CUDAVectorize);
+        test_all<uint64_t>(Backend::CUDAVectorize);
+        test_all<int64_t>(Backend::CUDAVectorize);
+        test_all<double>(Backend::CUDAVectorize);
+#endif
     }
     test_extern_func(Backend::CPU);
     test_extern_func(Backend::CPUVectorize);
     test_async(Backend::CPU);
     test_async(Backend::CPUVectorize);
-    test_async_tuple(Backend::CPU);
+    test_async_tuple(Backend::CPU);*/
     return 0;
 }

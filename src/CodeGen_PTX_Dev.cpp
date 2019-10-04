@@ -266,10 +266,11 @@ void CodeGen_PTX_Dev::visit(const Load *op) {
 void CodeGen_PTX_Dev::visit(const Store *op) {
     // Issue atomic store if we are inside an Atomic node.
     if (emit_atomic_stores) {
-        user_assert(op->value.type().is_scalar()) << "CUDA atomic update does not support vectorization.\n";
         user_assert(is_one(op->predicate)) << "Atomic update does not support predicated store.\n";
         user_assert(op->value.type().bits() >= 32) << "CUDA: 8-bit or 16-bit atomics are not supported.\n";
 #if LLVM_VERSION < 90
+        user_assert(op->value.type().is_scalar()) <<
+            "CUDA atomic update does not support vectorization with LLVM version < 9.\n";
         // Generate nnvm intrinsics for the atomics if this is an float atomicAdd.
         // Otherwise defer to the llvm codegen. For llvm version >= 90, atomicrmw support floats so we
         // can also refer to llvm.
