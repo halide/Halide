@@ -1596,8 +1596,7 @@ public:
      * deadlock.
      * Vectorization of predicated RVars (through rdom.where()) on CPU
      * is also unsupported yet.
-     * 8-bit and 16-bit atomics on GPU are also not supported.
-     */
+     * 8-bit and 16-bit atomics on GPU are also not supported. */
     Func &atomic(bool override_associativity_test = false);
 
     /** Specialize a Func. This creates a special-case version of the

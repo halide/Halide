@@ -304,7 +304,7 @@ void CodeGen_OpenCL_Dev::CodeGen_OpenCL_C::visit(const Store *op) {
     user_assert(is_one(op->predicate)) << "Predicated store is not supported inside OpenCL kernel.\n";
 
     if (emit_atomic_stores) {
-        // Currently only support scalar atomics
+        // Currently only support scalar atomics.
         user_assert(op->value.type().is_scalar()) << "OpenCL atomic store does not support vectorization.\n";
         user_assert(op->value.type().bits() >= 32) << "OpenCL only support 32 and 64 bit atomics.\n";
         if (op->value.type().bits() == 64) {
@@ -313,7 +313,7 @@ void CodeGen_OpenCL_Dev::CodeGen_OpenCL_C::visit(const Store *op) {
         }
         // Detect whether we can describe this as an atomic-read-modify-write, 
         // otherwise fallback to a compare-and-swap loop.
-        // Current only test for atomic_add
+        // Current only test for atomic add.
         Expr val_expr = op->value;
         Type t = val_expr.type();
         Expr equiv_load = Load::make(t, op->name, op->index, Buffer<>(), op->param, op->predicate, op->alignment);
