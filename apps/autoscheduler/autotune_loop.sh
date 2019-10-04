@@ -135,7 +135,7 @@ make_sample() {
         HL_NUM_PASSES=${HL_NUM_PASSES} \
         HL_SHARED_MEMORY_LIMIT=${shared_memory_limit} \
         HL_MACHINE_PARAMS=${HL_MACHINE_PARAMS} \
-        ${TIMEOUT_CMD} -k ${COMPILATION_TIMEOUT} ${COMPILATION_TIMEOUT} \
+        time -f 'Compile time (s): %e' ${TIMEOUT_CMD} -k ${COMPILATION_TIMEOUT} ${COMPILATION_TIMEOUT} \
         ${GENERATOR} \
         -g ${PIPELINE} \
         -f ${FNAME} \
