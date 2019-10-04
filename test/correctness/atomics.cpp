@@ -1209,6 +1209,6 @@ int main(int argc, char **argv) {
     test_extern_func(Backend::CPUVectorize);
     test_async(Backend::CPU);
     test_async(Backend::CPUVectorize);
-    test_async_tuple(Backend::CPU);*/
+    test_async_tuple(Backend::CPU);
     return 0;
 }

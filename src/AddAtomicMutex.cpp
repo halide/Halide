@@ -219,7 +219,7 @@ protected:
     }
 
     bool in_atomic_mutex = false;
-    const std::set<std::string> &store_names;
+    const set<string> &store_names;
 };
 
 /** Add mutex allocation & lock & unlock if required. */
@@ -257,7 +257,8 @@ protected:
         // If this Allocate node is allocating a buffer for a producer,
         // and there is a Store node inside of an Atomic node requiring mutex lock
         // matching the name of the Allocate, allocate a mutex lock.
-        FindStoreInAtomicMutex finder({op->name});
+        set<string> store_names{op->name};
+        FindStoreInAtomicMutex finder(store_names);
         op->body.accept(&finder);
         if (!finder.found) {
             // No Atomic node that requires mutex lock from this node inside.
