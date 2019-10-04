@@ -135,8 +135,8 @@ void test_parallel_hist(const Backend &backend) {
         correct(idx) = correct(idx) + T(1);
     }
 
-    // Run 100 times to make sure race condition do happen
-    for (int iter = 0; iter < 100; iter++) {
+    // Run 10 times to make sure race condition do happen
+    for (int iter = 0; iter < 10; iter++) {
         Buffer<T> out = hist.realize(hist_size);
         for (int i = 0; i < hist_size; i++) {
             check(__LINE__, out(i), correct(i));
@@ -186,7 +186,7 @@ void test_parallel_cas_update(const Backend &backend) {
         } break;
         case Backend::CUDA: {
             RVar ro, ri;
-            // Halide cannot prove that this is associative. 
+            // Halide cannot prove that this is associative.
             // Set override_associativity_test to true to remove the check.
             hist.update().atomic(true /*override_associativity_test*/).split(r, ro, ri, 32)
                 .gpu_blocks(ro, DeviceAPI::CUDA)
@@ -214,8 +214,8 @@ void test_parallel_cas_update(const Backend &backend) {
         correct(idx) = x < T(100) ? x : T(100);
     }
 
-    // Run 1000 times to make sure race condition do happen
-    for (int iter = 0; iter < 1000; iter++) {
+    // Run 10 times to make sure race condition do happen
+    for (int iter = 0; iter < 10; iter++) {
         Buffer<T> out = hist.realize(hist_size);
         for (int i = 0; i < hist_size; i++) {
             check(__LINE__, out(i), correct(i));
@@ -259,8 +259,8 @@ void test_parallel_hist_tuple(const Backend &backend) {
         correct1(idx) = correct1(idx) + T(2);
     }
 
-    // Run 100 times to make sure race condition do happen
-    for (int iter = 0; iter < 100; iter++) {
+    // Run 10 times to make sure race condition do happen
+    for (int iter = 0; iter < 10; iter++) {
         Realization out = hist.realize(hist_size);
         Buffer<T> out0 = out[0];
         Buffer<T> out1 = out[1];
@@ -364,8 +364,8 @@ void test_predicated_hist(const Backend &backend) {
         correct(idx) = x < T(100) ? x : T(100);
     }
 
-    // Run 100 times to make sure race condition do happen
-    for (int iter = 0; iter < 100; iter++) {
+    // Run 10 times to make sure race condition do happen
+    for (int iter = 0; iter < 10; iter++) {
         Buffer<T> out = hist.realize(hist_size);
         for (int i = 0; i < hist_size; i++) {
             check(__LINE__, out(i), correct(i));
@@ -415,8 +415,8 @@ void test_parallel_hist_tuple2(const Backend &backend) {
         correct1(idx) = new_c1;
     }
 
-    // Run 100 times to make sure race condition do happen
-    for (int iter = 0; iter < 100; iter++) {
+    // Run 10 times to make sure race condition do happen
+    for (int iter = 0; iter < 10; iter++) {
         Realization out = hist.realize(hist_size);
         Buffer<T> out0 = out[0];
         Buffer<T> out1 = out[1];
@@ -459,8 +459,8 @@ void test_tuple_reduction(const Backend &backend) {
         }
     }
 
-    // Run 100 times to make sure race condition do happen
-    for (int iter = 0; iter < 100; iter++) {
+    // Run 10 times to make sure race condition do happen
+    for (int iter = 0; iter < 10; iter++) {
         Realization out = arg_max.realize();
         Buffer<int> out0 = out[0];
         Buffer<T> out1 = out[1];
@@ -502,8 +502,8 @@ void test_nested_atomics(const Backend &backend) {
         }
     }
 
-    // Run 100 times to make sure race condition do happen
-    for (int iter = 0; iter < 100; iter++) {
+    // Run 10 times to make sure race condition do happen
+    for (int iter = 0; iter < 10; iter++) {
         Realization out = arg_max.realize();
         Buffer<int> out0 = out[0];
         Buffer<T> out1 = out[1];
@@ -609,8 +609,8 @@ void test_hist_compute_at(const Backend &backend) {
         }
     }
 
-    // Run 100 times to make sure race condition do happen
-    for (int iter = 0; iter < 100; iter++) {
+    // Run 10 times to make sure race condition do happen
+    for (int iter = 0; iter < 10; iter++) {
         Buffer<T> out = final.realize(10, 10);
         for (int i = 0; i < 10; i++) {
             for (int j = 0; j < 10; j++) {
@@ -674,8 +674,8 @@ void test_hist_tuple_compute_at(const Backend &backend) {
         }
     }
 
-    // Run 100 times to make sure race condition do happen
-    for (int iter = 0; iter < 100; iter++) {
+    // Run 10 times to make sure race condition do happen
+    for (int iter = 0; iter < 10; iter++) {
         Realization out = final.realize(10, 10);
         Buffer<T> out0 = out[0];
         Buffer<T> out1 = out[1];
@@ -757,8 +757,8 @@ void test_hist_store_at(const Backend &backend) {
         }
     }
 
-    // Run 100 times to make sure race condition do happen
-    for (int iter = 0; iter < 100; iter++) {
+    // Run 10 times to make sure race condition do happen
+    for (int iter = 0; iter < 10; iter++) {
         Buffer<T> out = final.realize(10, 10);
         for (int i = 0; i < 10; i++) {
             for (int j = 0; j < 10; j++) {
@@ -843,8 +843,8 @@ void test_hist_rfactor(const Backend &backend) {
         }
     }
 
-    // Run 100 times to make sure race condition do happen
-    for (int iter = 0; iter < 100; iter++) {
+    // Run 10 times to make sure race condition do happen
+    for (int iter = 0; iter < 10; iter++) {
         Buffer<T> out = hist.realize(hist_size);
         for (int i = 0; i < hist_size; i++) {
             check(__LINE__, out(i), correct(i));
@@ -931,8 +931,8 @@ void test_hist_tuple_rfactor(const Backend &backend) {
         }
     }
 
-    // Run 100 times to make sure race condition do happen
-    for (int iter = 0; iter < 100; iter++) {
+    // Run 10 times to make sure race condition do happen
+    for (int iter = 0; iter < 10; iter++) {
         Realization out = hist.realize(hist_size);
         Buffer<T> out0 = out[0];
         Buffer<T> out1 = out[1];
@@ -1010,8 +1010,8 @@ void test_extern_func(const Backend &backend) {
         correct(idx) = correct(idx) + 1;
     }
 
-    // Run 100 times to make sure race condition do happen
-    for (int iter = 0; iter < 100; iter++) {
+    // Run 10 times to make sure race condition do happen
+    for (int iter = 0; iter < 10; iter++) {
         Buffer<int> out = hist.realize(hist_size);
         for (int i = 0; i < hist_size; i++) {
             check(__LINE__, out(i), correct(i));
@@ -1069,8 +1069,8 @@ void test_async(const Backend &backend) {
         correct(idx) = correct(idx) + 1;
     }
 
-    // Run 100 times to make sure race condition do happen
-    for (int iter = 0; iter < 100; iter++) {
+    // Run 10 times to make sure race condition do happen
+    for (int iter = 0; iter < 10; iter++) {
         Buffer<int> out = consumer.realize(hist_size);
         for (int i = 0; i < hist_size; i++) {
             check(__LINE__, out(i), correct(i));
@@ -1136,8 +1136,8 @@ void test_async_tuple(const Backend &backend) {
         correct_consumer1(idx) = correct_consumer1(idx) + 1;
     }
 
-    // Run 100 times to make sure race condition do happen
-    for (int iter = 0; iter < 100; iter++) {
+    // Run 10 times to make sure race condition do not happen
+    for (int iter = 0; iter < 10; iter++) {
         Realization out = consumer1.realize(2 * img_size);
         Buffer<int> out0 = out[0];
         Buffer<int> out1 = out[1];
@@ -1150,6 +1150,15 @@ void test_async_tuple(const Backend &backend) {
 
 int main(int argc, char **argv) {
     Target target = get_jit_target_from_environment();
+    // Most of the schedules used in this test are terrible for large
+    // thread count machines, due to massive amounts of
+    // contention. We'll just set the thread count to 4. Unfortunately
+    // there's no JIT api for this yet.
+    #ifdef _MSC_VER
+    _putenv_s("HL_NUM_THREADS", "4");
+    #else
+    setenv("HL_NUM_THREADS", "4", 1);
+    #endif
     test_all<uint8_t>(Backend::CPU);
     test_all<uint8_t>(Backend::CPUVectorize);
     test_all<int8_t>(Backend::CPU);
