@@ -502,14 +502,10 @@ Stmt Simplify::visit(const Fork *op) {
 }
 
 Stmt Simplify::visit(const Atomic *op) {
-    bool changed = false;
     Stmt body = mutate(op->body);
-    if (!body.same_as(op->body)) {
-        changed = true;
-    }
     if (is_no_op(body)) {
         return Evaluate::make(0);
-    } else if (!changed) {
+    } else if (body.same_as(op->body)) {
         return op;
     } else {
         return Atomic::make(op->producer_name,

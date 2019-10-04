@@ -353,8 +353,9 @@ Stmt build_provide_loop_nest(const map<string, Function> &env,
 
     // Make the (multi-dimensional multi-valued) store node.
     Stmt body = Provide::make(func.name(), values, site);
-    if (def.schedule().atomic()) {
-        // We will allocate a mutex buffer called func.name() + ".mutex"
+    if (def.schedule().atomic()) {  // Add atomic node.
+        // If required, we will allocate a mutex buffer called func.name() + ".mutex"
+        // The buffer is added in the AddAtomicMutex pass.
         body = Atomic::make(func.name(), func.name() + ".mutex", body);
     }
 
@@ -1077,22 +1078,31 @@ protected:
         }
     }
 
-    // If we're an inline update or extern, we may need to inject a realization here
-    Stmt visit(const Provide *op) override {
+    // If we're an inline update or extern, we may need to inject a realization around
+    // the Provide node (or a Provide node surrounded by an Atomic).
+    Stmt inline_to_provide(const std::string &provide_name, Stmt provide_op) {
         // none of the functions in a fused group can be inlined, so this will only
         // happen when we're lowering a single func.
-        if (op->name != funcs[0].name() &&
+        if (provide_name != funcs[0].name() &&
             !funcs[0].is_pure() &&
             funcs[0].schedule().compute_level().is_inlined() &&
-            function_is_used_in_stmt(funcs[0], op)) {
+            function_is_used_in_stmt(funcs[0], provide_op)) {
 
             // Prefix all calls to func in op
-            Stmt stmt = build_realize(build_pipeline_group(op), funcs[0], is_output_list[0]);
+            Stmt stmt = build_realize(build_pipeline_group(provide_op), funcs[0], is_output_list[0]);
             _found_store_level = _found_compute_level = true;
             return stmt;
         }
 
-        return op;
+        return provide_op;
+    }
+
+    Stmt visit(const Provide *op) override {
+        return inline_to_provide(op->name, op);
+    }
+
+    Stmt visit(const Atomic *op) override {
+        return inline_to_provide(op->producer_name, op);
     }
 
 private:

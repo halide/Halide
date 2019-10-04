@@ -1138,16 +1138,23 @@ WEAK void halide_cond_wait(struct halide_cond *cond, struct halide_mutex *mutex)
    fast_cond->wait(fast_mutex);
 }
 
+// Actual definition of the mutex array.
+struct halide_mutex_array {
+    struct halide_mutex *array;
+};
+
 WEAK halide_mutex_array* halide_mutex_array_create(int sz) {
-    halide_mutex_array *array = (halide_mutex_array*)halide_default_malloc(
+    // TODO: If sz is huge, we should probably hash it down to something smaller 
+    // in the accessors below. Check for deadlocks before doing so.
+    halide_mutex_array *array = (halide_mutex_array*)halide_malloc(
         NULL, sizeof(halide_mutex_array));
     if (array == NULL) {
         return NULL;
     }
-    array->array = (halide_mutex*)halide_default_malloc(
+    array->array = (halide_mutex*)halide_malloc(
         NULL, sz * sizeof(halide_mutex));
     if (array->array == NULL) {
-        halide_default_free(NULL, array->array);
+        halide_free(NULL, array);
         return NULL;
     }
     memset(array->array, 0, sz * sizeof(halide_mutex));
@@ -1156,8 +1163,8 @@ WEAK halide_mutex_array* halide_mutex_array_create(int sz) {
 
 WEAK void halide_mutex_array_destroy(void *user_context, void *array) {
     struct halide_mutex_array *arr_ptr = (struct halide_mutex_array *)array;
-    halide_default_free(user_context, arr_ptr->array);
-    halide_default_free(user_context, arr_ptr);
+    halide_free(user_context, arr_ptr->array);
+    halide_free(user_context, arr_ptr);
 }
 
 WEAK int halide_mutex_array_lock(struct halide_mutex_array *array, int entry) {

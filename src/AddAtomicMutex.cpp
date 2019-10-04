@@ -1,55 +1,115 @@
 #include "AddAtomicMutex.h"
+#include "ExprUsesVar.h"
+#include "Func.h"
 #include "IREquality.h"
 #include "IRMutator.h"
 #include "IROperator.h"
+#include "OutputImageParam.h"
 
 namespace Halide {
 namespace Internal {
 
+using std::map;
 using std::set;
 using std::string;
 
 namespace {
 
-std::string get_producer_name(std::string name) {
-    // Remove names after "." since split_tuple introduces different Stores with names
-    // like producer_name.0, producer_name.1, etc.
-    size_t i = name.find('.');
-    if (i != std::string::npos) {
-        name = name.substr(0, i);
-    }
-    return name;
-}
-
-class FindLoad : public IRGraphVisitor {
+/** Collect all store's names inside a statement. */
+class CollectStoreNames : public IRGraphVisitor {
 public:
+    Scope<void> store_names;
+
+protected:
     using IRGraphVisitor::visit;
 
-    set<string> symbols;
-    bool found = false;
-
-    void visit(const Load *op) override {
-        if (symbols.find(op->name) != symbols.end()) {
-            found = true;
-        }
+    void visit(const Store *op) override {
         include(op->predicate);
+        include(op->value);
         include(op->index);
-    }
-
-    bool find_load(Expr e, const set<string> &symbols) {
-        found = false;
-        this->symbols = symbols;
-        include(e);
-        return found;
+        store_names.push(op->name);
     }
 };
 
-class FindAtomicLetBindings : public IRGraphVisitor {
+/** Find Store inside of an Atomic node and return their indices. */
+class FindStoreIndex : public IRGraphVisitor {
 public:
+    Expr index;
+
+protected:
+    using IRGraphVisitor::visit;
+
+    // Need to also extract the let bindings of a Store index.
+    void visit(const Let *op) override {
+        IRGraphVisitor::visit(op);
+        if (index.defined()) {
+            if (expr_uses_var(index, op->name)) {
+                index = Let::make(op->name, op->value, index);
+            }
+        }
+    }
+    void visit(const LetStmt *op) override {
+        IRGraphVisitor::visit(op);
+        if (index.defined()) {
+            if (expr_uses_var(index, op->name)) {
+                index = Let::make(op->name, op->value, index);
+            }
+        }
+    }
+
+    void visit(const Store *op) override {
+        // Ideally we want to insert equal() checks here for different stores,
+        // but the indices of them actually are different in the case of tuples,
+        // since they usually refer to the strides/min/extents of their own tuple
+        // buffers. However, different elements in a tuple would have the same
+        // strides/min/extents so we are fine.
+        if (index.defined()) {
+            return;
+        }
+        index = op->index;
+        op->value.accept(this);
+    }
+};
+
+/** Throw an assertion for cases where the indexing on left-hand-side of
+ *  an atomic update references to itself.
+ *  e.g. f(clamp(f(r), 0, 100)) = f(r) + 1 should be rejected. */
+class CheckAtomicValidity : public IRGraphVisitor {
+protected:
     using IRVisitor::visit;
 
-    FindAtomicLetBindings(const set<string> &store_names)
+    void visit(const Atomic *op) override {
+        // Collect the names of all Store nodes inside.
+        CollectStoreNames collector;
+        op->body.accept(&collector);
+
+        // Find the indices from the Store nodes inside the body.
+        FindStoreIndex find;
+        op->body.accept(&find);
+
+        Expr index = find.index;
+        if (index.defined()) {
+            user_assert(!expr_uses_vars(index, collector.store_names))
+                << "Can't use atomic() on an update where the index written "
+                << "to depends on the current value of the Func\n";
+        }
+        op->body.accept(this);
+    }
+};
+
+/** Search if the value of a Store node has a variable pointing to a let binding,
+ *  where the let binding contains the Store location. Use for checking whether
+ *  we need a mutex lock for Atomic since some lowering pass before lifted a let
+ *  binding from the Store node (currently only SplitTuple would do this). */
+class FindAtomicLetBindings : public IRGraphVisitor {
+public:
+    FindAtomicLetBindings(const Scope<void> &store_names)
         : store_names(store_names) {}
+
+    bool found = false;
+
+protected:
+    using IRVisitor::visit;
 
     void visit(const Let *op) override {
         include(op->value);
@@ -68,47 +128,39 @@ public:
     }
 
     void visit(const Variable *op) override {
-        if (inside_store) {
-            if (let_bindings.contains(op->name)) {
-                Expr e = let_bindings.get(op->name);
-                FindLoad finder;
-                if (finder.find_load(e, store_names)) {
-                    found = true;
-                }
+        if (!inside_store.empty()) {
+            // If this Variable inside the store value is an expression
+            // that depends on one of the store_names, we found a lifted let.
+            if (expr_uses_vars(op, store_names, let_bindings)) {
+                found = true;
             }
         }
     }
 
     void visit(const Store *op) override {
         include(op->predicate);
-        inside_store = true;
-        include(op->value);
-        inside_store = false;
+        if (store_names.contains(op->name)) {
+            // If we are in a designated store and op->value has a let binding
+            // that uses one of the store_names, we found a lifted let.
+            ScopedValue<string> old_inside_store(inside_store, op->name);
+            include(op->value);
+        } else {
+            include(op->value);
+        }
         include(op->index);
     }
 
-    bool inside_store;
-    set<string> store_names;
+    string inside_store;
+    const Scope<void> &store_names;
     Scope<Expr> let_bindings;
-    bool found = false;
 };
 
-class CollectStoreNames : public IRGraphVisitor {
-public:
-    using IRGraphVisitor::visit;
-    
-    void visit(const Store *op) override {
-        include(op->predicate);
-        include(op->value);
-        include(op->index);
-        store_names.insert(op->name);
-    }
-
-    set<string> store_names;
-};
-
+/** Clear out the Atomic node's mutex usages if it doesn't need one. */
 class RemoveUnnecessaryMutexUse : public IRMutator {
 public:
+    set<string> remove_mutex_lock_names;
+
+protected:
     using IRMutator::visit;
 
     Stmt visit(const Atomic *op) override {
@@ -125,74 +177,67 @@ public:
             remove_mutex_lock_names.insert(op->mutex_name);
             Stmt body = mutate(op->body);
             return Atomic::make(op->producer_name,
-                                "",
+                                string(),
                                 std::move(body));
         }
     }
-
-    std::set<string> remove_mutex_lock_names;
 };
 
-class FindAtomicMutexUsage : public IRGraphVisitor {
+/** Find Store inside an Atomic that matches the provided store_names. */
+class FindStoreInAtomicMutex : public IRGraphVisitor {
 public:
-    FindAtomicMutexUsage(const std::string &producer_name)
-        : producer_name(producer_name) {}
-
     using IRGraphVisitor::visit;
 
+    FindStoreInAtomicMutex(const std::set<std::string> &store_names)
+        : store_names(store_names) {}
+
+    bool found = false;
+    string producer_name;
+    string mutex_name;
+
+protected:
     void visit(const Atomic *op) override {
-        include(op->body);
-        if (op->producer_name == producer_name && !op->mutex_name.empty()) {
+        if (!found && !op->mutex_name.empty()) {
+            ScopedValue<bool> old_in_atomic_mutex(in_atomic_mutex, true);
+            include(op->body);
             if (found) {
-                // Multiple atomics inside the producer,
-                // make sure they have consistent information
-                internal_assert(mutex_name == op->mutex_name) <<
-                    "Inconsistent information of atomics inside a Producer node.\n";
+                // We found a Store inside Atomic with matching name,
+                // record the mutex information.
+                producer_name = op->producer_name;
+                mutex_name = op->mutex_name;
             }
-            found = true;
-            mutex_name = op->mutex_name;
+        } else {
+            include(op->body);
         }
     }
-
-    const std::string &producer_name;
-    bool found = false;
-    std::string mutex_name;
-};
-
-class FindStoreIndex : public IRGraphVisitor {
-public:
-    using IRGraphVisitor::visit;
 
     void visit(const Store *op) override {
-        // Ideally we want to insert equal() checks here for different stores,
-        // but the indices of them actually are different in the case of tuples,
-        // since they usually refer to the strides/min/extents of their own tuple
-        // buffers. However, different elements in a tuple would have the same
-        // strides/min/extents so we are fine.
-        if (index.defined()) {
-            return;
+        if (in_atomic_mutex) {
+            if (store_names.find(op->name) != store_names.end()) {
+                found = true;
+            }
         }
-        if (get_producer_name(op->name) == producer_name) {
-            index = op->index;
-        }
+        IRGraphVisitor::visit(op);
     }
 
-    std::string producer_name;
-    Expr index;
+    bool in_atomic_mutex = false;
+    const set<string> &store_names;
 };
 
+/** Add mutex allocation & lock & unlock if required. */
 class AddAtomicMutex : public IRMutator {
 public:
-    using IRMutator::visit;
-
-    const std::map<std::string, Function> &env;
-    // The set of producers that have allocated a mutex buffer
-    std::set<string> allocated_mutexes;
-
-    AddAtomicMutex(const std::map<std::string, Function> &env)
+    AddAtomicMutex(const map<string, Function> &env)
         : env(env) {}
 
-    Stmt allocate_mutex(const std::string &mutex_name, Expr extent, Stmt body) {
+protected:
+    using IRMutator::visit;
+
+    const map<string, Function> &env;
+    // The set of producers that have allocated a mutex buffer
+    set<string> allocated_mutexes;
+
+    Stmt allocate_mutex(const string &mutex_name, Expr extent, Stmt body) {
         Expr mutex_array = Call::make(type_of<halide_mutex_array *>(),
                                       "halide_mutex_array_create",
                                       {extent},
@@ -212,23 +257,24 @@ public:
 
     Stmt visit(const Allocate *op) override {
         // If this Allocate node is allocating a buffer for a producer,
-        // and the producer contains an atomic node that requires a mutex lock buffer,
-        // allocate it here.
-        std::string producer_name = get_producer_name(op->name);
-        if (allocated_mutexes.find(producer_name) != allocated_mutexes.end()) {
-            // We've already allocated a mutex.
-            return IRMutator::visit(op);
-        }
-
-        FindAtomicMutexUsage finder(producer_name);
+        // and there is a Store node inside of an Atomic node requiring mutex lock
+        // matching the name of the Allocate, allocate a mutex lock.
+        set<string> store_names{op->name};
+        FindStoreInAtomicMutex finder(store_names);
         op->body.accept(&finder);
         if (!finder.found) {
             // No Atomic node that requires mutex lock from this node inside.
             return IRMutator::visit(op);
         }
-        allocated_mutexes.insert(producer_name);
 
-        const std::string &mutex_name = finder.mutex_name;
+        if (allocated_mutexes.find(finder.mutex_name) != allocated_mutexes.end()) {
+            // We've already allocated a mutex.
+            return IRMutator::visit(op);
+        }
+
+        allocated_mutexes.insert(finder.mutex_name);
+
+        const string &mutex_name = finder.mutex_name;
         Stmt body = mutate(op->body);
         Expr extent = Expr(1);
         for (Expr e : op->extents) {
@@ -249,38 +295,48 @@ public:
         // Usually we allocate the mutex buffer at the Allocate node,
         // but outputs don't have Allocate. For those we allocate the mutex
         // buffer at the producer node.
+
         if (!op->is_producer) {
             // This is a consumer.
             return IRMutator::visit(op);
         }
-        const std::string &producer_name = op->name;
-        if (allocated_mutexes.find(producer_name) != allocated_mutexes.end()) {
-            // We've already allocated a mutex.
+
+        // Find the corresponding output.
+        auto func_it = env.find(op->name);
+        if (func_it == env.end()) {
+            // Not an output.
+            return IRMutator::visit(op);
+        }
+        Func f = Func(func_it->second);
+        if (f.output_buffers().size() == 0) {
+            // Not an output.
             return IRMutator::visit(op);
         }
 
-        FindAtomicMutexUsage finder(producer_name);
+        set<string> store_names;
+        for (auto buffer : f.output_buffers()) {
+            store_names.insert(buffer.name());
+        }
+
+        FindStoreInAtomicMutex finder(store_names);
         op->body.accept(&finder);
         if (!finder.found) {
             // No Atomic node that requires mutex lock from this node inside.
             return IRMutator::visit(op);
         }
-        allocated_mutexes.insert(producer_name);
 
-        // Find the corresponding output.
-        auto func_it = env.find(producer_name);
-        const Function &f = func_it->second;
-        internal_assert(f.output_buffers().size() > 0) <<
-            "Found a producer node that contains an atomic node that requires mutex lock, "
-            "but does not have an Allocate node and is not an output function. This is not supported.\n";
-        // We assume all output buffers have the same extent
-        Parameter output_buffer = f.output_buffers()[0];
+        if (allocated_mutexes.find(finder.mutex_name) != allocated_mutexes.end()) {
+            // We've already allocated a mutex.
+            return IRMutator::visit(op);
+        }
+
+        allocated_mutexes.insert(finder.mutex_name);
+
+        // We assume all output buffers in a Tuple have the same extent.
+        OutputImageParam output_buffer = f.output_buffers()[0];
         Expr extent = Expr(1);
         for (int i = 0; i < output_buffer.dimensions(); i++) {
-            // TODO: cleanup this by adding access methods to Parameter class to extract
-            //       the extent variable.
-            string extent_name = output_buffer.name() + ".extent." + std::to_string(i);
-            extent = extent * Variable::make(Int(32), extent_name);
+            extent = extent * output_buffer.dim(i).extent();
         }
         Stmt body = mutate(op->body);
         body = allocate_mutex(finder.mutex_name, extent, body);
@@ -314,10 +370,10 @@ public:
                                       {mutex_array, index},
                                       Call::CallType::Extern)),
             Block::make(std::move(body),
-                Evaluate::make(Call::make(type_of<int>(),
-                                          "halide_mutex_array_unlock",
-                                          {mutex_array, index},
-                                          Call::CallType::Extern))));
+                        Evaluate::make(Call::make(type_of<int>(),
+                                                  "halide_mutex_array_unlock",
+                                                  {mutex_array, index},
+                                                  Call::CallType::Extern))));
 
         return Atomic::make(op->producer_name,
                             op->mutex_name,
@@ -327,7 +383,9 @@ public:
 
 }  // namespace
 
-Stmt add_atomic_mutex(Stmt s, const std::map<std::string, Function> &env) {
+Stmt add_atomic_mutex(Stmt s, const map<string, Function> &env) {
+    CheckAtomicValidity check;
+    s.accept(&check);
     s = RemoveUnnecessaryMutexUse().mutate(s);
     s = AddAtomicMutex(env).mutate(s);
     return s;

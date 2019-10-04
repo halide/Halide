@@ -242,9 +242,11 @@ protected:
         return with_sep<T>(v, ", ");
     }
 
-private:
+    /** Are we inside an atomic node that uses mutex locks?
+        This is used for detecting deadlocks from nested atomics. */
+    bool inside_atomic_mutex_node;
 
-    /** Emit atomic operations if we encounter a store node. */
+    /** Emit atomic store instructions? */
     bool emit_atomic_stores;
 };
 

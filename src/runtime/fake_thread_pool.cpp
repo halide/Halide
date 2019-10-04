@@ -72,11 +72,18 @@ WEAK void halide_join_thread(halide_thread *thread_arg) {
     halide_error(NULL, "halide_join_thread not implemented on this platform.");
 }
 
+// Don't need to do anything with mutexes since we are in a fake thread pool.
 WEAK void halide_mutex_lock(halide_mutex *mutex) {
 }
 
 WEAK void halide_mutex_unlock(halide_mutex *mutex) {
 }
+
+// Fake mutex array. We still define a pointer to halide_mutex since empty struct leads
+// to compile error (empty struct has size 0 in C, size 1 in C++).
+struct halide_mutex_array {
+    halide_mutex *mutex;
+};
 
 WEAK halide_mutex_array* halide_mutex_array_create(int sz) {
     return NULL;

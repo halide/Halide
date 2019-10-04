@@ -295,7 +295,7 @@ void Stage::set_dim_type(VarOrRVar var, ForType t) {
             // unless it is flagged explicitly or is a associative atomic operation.
             if (!dims[i].is_pure() && var.is_rvar && is_parallel(t)) {
                 if (!definition.schedule().allow_race_conditions() &&
-                        definition.schedule().atomic()) {
+                    definition.schedule().atomic()) {
                     if (!definition.schedule().override_atomic_associativity_test()) {
                         // We only allow allow associative atomic operations
                         const string &func_name = function.name();

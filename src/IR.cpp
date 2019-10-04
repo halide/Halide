@@ -816,6 +816,7 @@ Stmt Atomic::make(const std::string &producer_name,
     Atomic *node = new Atomic;
     node->producer_name = producer_name;
     node->mutex_name = mutex_name;
+    internal_assert(body.defined()) << "Atomic must have a body statement.\n";
     node->body = std::move(body);
     return node;
 }
