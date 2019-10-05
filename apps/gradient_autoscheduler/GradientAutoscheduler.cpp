@@ -309,6 +309,7 @@ void parallelize_vars_and_rvars(
                 fused_var.name() << ")\n";
         }
     }
+
     // Fuse all outer loop rvars into a single variable for parallelism
     RVar fused_rvar("");
     if (rvar_outer_loops.size() > 0) {
@@ -364,7 +365,7 @@ void parallelize_vars_and_rvars(
             Var inner_fused_var("");
             if (var_inner_loops.size() > 0) {
                 inner_fused_var = var_inner_loops[0];
-                for (int i = 0; i < (int)var_inner_loops.size(); i++) {
+                for (int i = 1; i < (int)var_inner_loops.size(); i++) {
                     func_or_stage.fuse(inner_fused_var,
                                        var_inner_loops[i],
                                        inner_fused_var);
@@ -377,7 +378,7 @@ void parallelize_vars_and_rvars(
             RVar inner_fused_rvar("");
             if (rvar_inner_loops.size() > 0) {
                 inner_fused_rvar = rvar_inner_loops[0];
-                for (int i = 0; i < (int)rvar_inner_loops.size(); i++) {
+                for (int i = 1; i < (int)rvar_inner_loops.size(); i++) {
                     func_or_stage.fuse(inner_fused_rvar,
                                        rvar_inner_loops[i],
                                        inner_fused_rvar);
