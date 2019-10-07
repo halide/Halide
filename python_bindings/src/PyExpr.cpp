@@ -1,5 +1,6 @@
  #include "PyExpr.h"
 
+#include <iomanip>
 
 #include "PyBinaryOperators.h"
 #include "PyType.h"
@@ -22,7 +23,25 @@ void define_expr(py::module &m) {
             // PyBind11 searches in declared order,
             // int should be tried before float conversion
             .def(py::init<int>())
-            .def(py::init<double>())
+            // Python float is implemented by double
+            // But Halide prohibits implicitly construct by double.
+            .def(py::init([](double v) {
+                float f = static_cast<float>(v);
+                double check = static_cast<double>(f);
+                // 2^(-n) (or some combination) case is safe. e.g. 0.5, 0.25, 0.75, ...
+                // otherwise, precision will be lost.  e.g. 0.1, 0.3, ...
+                using Internal::reinterpret_bits;
+                if (reinterpret_bits<uint64_t>(v) != reinterpret_bits<uint64_t>(check)) {
+                    std::ostringstream oss;
+                    oss.precision(17);
+                    oss << std::fixed << v;
+                    PyErr_WarnEx(
+                        PyExc_RuntimeWarning,
+                        ("The floating-point value " + oss.str() + " will be interpreted as a float32 by Halide and lose precision;"
+                         " add an explicit `f32()` or `f64()`` cast to avoid this warning.").c_str(), 0);
+                }
+                return Expr(f);
+            }))
             .def(py::init<std::string>())
 
             // for implicitly_convertible
