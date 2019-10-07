@@ -2462,7 +2462,7 @@ void CodeGen_LLVM::codegen_predicated_vector_load(const Load *op) {
 }
 
 void CodeGen_LLVM::codegen_atomic_store(const Store *op) {
-    // TODO: predicated store
+    // TODO: predicated store (see https://github.com/halide/Halide/issues/4298).
     user_assert(is_one(op->predicate)) << "Atomic predicated store is not supported.\n";
 
     // Detect whether we can describe this as an atomic-read-modify-write,
