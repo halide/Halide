@@ -579,9 +579,9 @@ public:
     bool &atomic();
     // @}
 
-    /** Atomic updates are only allowed on associative reduction.
+    /** Atomic updates are only allowed on associative reductions.
      *  We try to prove the associativity, but the user can override
-     *  the associativity test and supress compiler error if the prover
+     *  the associativity test and suppress compiler error if the prover
      *  fails to recognize the associativity or the user does not care. */
     // @{
     bool override_atomic_associativity_test() const;
