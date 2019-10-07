@@ -1595,7 +1595,7 @@ public:
      * since per-element mutex lock on vectorized operation leads to a
      * deadlock.
      * Vectorization of predicated RVars (through rdom.where()) on CPU
-     * is also unsupported yet.
+     * is also unsupported yet (see https://github.com/halide/Halide/issues/4298).
      * 8-bit and 16-bit atomics on GPU are also not supported. */
     Func &atomic(bool override_associativity_test = false);
 
