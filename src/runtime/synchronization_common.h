@@ -1149,12 +1149,14 @@ WEAK halide_mutex_array* halide_mutex_array_create(int sz) {
     halide_mutex_array *array = (halide_mutex_array*)halide_malloc(
         NULL, sizeof(halide_mutex_array));
     if (array == NULL) {
+        // Will result in a failed assertion and a call to halide_error.
         return NULL;
     }
     array->array = (halide_mutex*)halide_malloc(
         NULL, sz * sizeof(halide_mutex));
     if (array->array == NULL) {
         halide_free(NULL, array);
+        // Will result in a failed assertion and a call to halide_error.
         return NULL;
     }
     memset(array->array, 0, sz * sizeof(halide_mutex));
