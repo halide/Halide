@@ -198,3 +198,15 @@ function extract_best_times() {
     get_autoscheduler_scripts_dir ${halide_root} scripts_dir
     bash ${scripts_dir}/extract_best_times.sh ${samples_dir} ${output_file}
 }
+
+function average_compile_time_beam_search() {
+    local -r samples_dir=$1
+
+    grep "Compile time" ${samples_dir}/*/0/compile_err.txt | awk -F" " '{sum += $4}; END{printf("Average beam search compile time: %fs\n", sum / NR)}'
+}
+
+function average_compile_time_greedy() {
+    local -r samples_dir=$1
+
+    grep "Compile time" ${samples_dir}/*/*/compile_err.txt | awk -F" " '$1 !~ /\/0\/compile_err.txt:Compile$/ {sum += $4}; {count += 1}; END{printf("Average greedy compile time: %fs\n", sum / count)}'
+}
