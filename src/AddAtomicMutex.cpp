@@ -15,7 +15,7 @@ using std::string;
 
 namespace {
 
-/** Collect all store's names inside a statement. */
+/** Collect names of all stores inside a statement. */
 class CollectStoreNames : public IRGraphVisitor {
 public:
     Scope<void> store_names;
@@ -243,7 +243,7 @@ protected:
                                       {extent},
                                       Call::Extern);
         // Allocate a scalar of halide_mutex_array.
-        // This generate halide_mutex_array mutex[1];
+        // This generates halide_mutex_array mutex[1];
         body = Allocate::make(mutex_name,
                               Handle(),
                               MemoryType::Stack,
