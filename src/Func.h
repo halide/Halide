@@ -1558,7 +1558,7 @@ public:
      * Halide compiles this into hardware atomic operations whenever possible, 
      * and falls back to a mutex lock per storage element if it is impossible 
      * to atomically update.
-     * There are three possible outcome of the compiled code:
+     * There are three possible outcomes of the compiled code:
      * atomic add, compare-and-swap loop, and mutex lock.
      * For example:
      *
@@ -1589,7 +1589,7 @@ public:
      * since it is impossible to atomically update two different locations.
      *
      * Currently the atomic operation is supported by x86, CUDA, and OpenCL backends.
-     * Compiling to other backends result in a compile error.
+     * Compiling to other backends results in a compile error.
      * If an operation is compiled into a mutex lock, and is vectorized or is
      * compiled to CUDA or OpenCL, it also results in a compile error,
      * since per-element mutex lock on vectorized operation leads to a
