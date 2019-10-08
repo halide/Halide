@@ -387,12 +387,17 @@ struct HvxIntrinsic {
     int flags;
 };
 
-constexpr halide_type_t i8 = halide_type_t(halide_type_int, 8);
-constexpr halide_type_t i16 = halide_type_t(halide_type_int, 16);
-constexpr halide_type_t i32 = halide_type_t(halide_type_int, 32);
-constexpr halide_type_t u8 = halide_type_t(halide_type_uint, 8);
-constexpr halide_type_t u16 = halide_type_t(halide_type_uint, 16);
-constexpr halide_type_t u32 = halide_type_t(halide_type_uint, 32);
+// TODO: these should probably be declared constexpr, but that would
+// require marking various halide_type_t methods as constexpr, and an
+// obscure bug in MSVC2017 can cause compilation failures for them.
+// The bug appears to be fixed in MSVC2019, so when we move to that
+// as a baseline for Windows, this should be revisited.
+halide_type_t i8 = halide_type_t(halide_type_int, 8);
+halide_type_t i16 = halide_type_t(halide_type_int, 16);
+halide_type_t i32 = halide_type_t(halide_type_int, 32);
+halide_type_t u8 = halide_type_t(halide_type_uint, 8);
+halide_type_t u16 = halide_type_t(halide_type_uint, 16);
+halide_type_t u32 = halide_type_t(halide_type_uint, 32);
 
 // Define vectors that are 1x and 2x the Hexagon HVX width --
 // Note that we use placeholders here (which we fix up when processing
@@ -401,21 +406,21 @@ constexpr halide_type_t u32 = halide_type_t(halide_type_uint, 32);
 // data, rather than having to assemble it at runtime.
 constexpr int kOneX = 64 * 8;
 
-constexpr halide_type_t i8v1 = i8.with_lanes(kOneX / 8);
-constexpr halide_type_t i16v1 = i16.with_lanes(kOneX / 16);
-constexpr halide_type_t i32v1 = i32.with_lanes(kOneX / 32);
-constexpr halide_type_t u8v1 = u8.with_lanes(kOneX / 8);
-constexpr halide_type_t u16v1 = u16.with_lanes(kOneX / 16);
-constexpr halide_type_t u32v1 = u32.with_lanes(kOneX / 32);
+halide_type_t i8v1 = i8.with_lanes(kOneX / 8);
+halide_type_t i16v1 = i16.with_lanes(kOneX / 16);
+halide_type_t i32v1 = i32.with_lanes(kOneX / 32);
+halide_type_t u8v1 = u8.with_lanes(kOneX / 8);
+halide_type_t u16v1 = u16.with_lanes(kOneX / 16);
+halide_type_t u32v1 = u32.with_lanes(kOneX / 32);
 
-constexpr halide_type_t i8v2 = i8v1.with_lanes(i8v1.lanes * 2);
-constexpr halide_type_t i16v2 = i16v1.with_lanes(i16v1.lanes * 2);
-constexpr halide_type_t i32v2 = i32v1.with_lanes(i32v1.lanes * 2);
-constexpr halide_type_t u8v2 = u8v1.with_lanes(u8v1.lanes * 2);
-constexpr halide_type_t u16v2 = u16v1.with_lanes(u16v1.lanes * 2);
-constexpr halide_type_t u32v2 = u32v1.with_lanes(u32v1.lanes * 2);
+halide_type_t i8v2 = i8v1.with_lanes(i8v1.lanes * 2);
+halide_type_t i16v2 = i16v1.with_lanes(i16v1.lanes * 2);
+halide_type_t i32v2 = i32v1.with_lanes(i32v1.lanes * 2);
+halide_type_t u8v2 = u8v1.with_lanes(u8v1.lanes * 2);
+halide_type_t u16v2 = u16v1.with_lanes(u16v1.lanes * 2);
+halide_type_t u32v2 = u32v1.with_lanes(u32v1.lanes * 2);
 
-static constexpr HvxIntrinsic intrinsic_wrappers[] = {
+static const HvxIntrinsic intrinsic_wrappers[] = {
     // Zero/sign extension:
     {MAKE_ID_PAIR(Intrinsic::hexagon_V6_vzb), u16v2, "zxt.vub", {u8v1}},
     {MAKE_ID_PAIR(Intrinsic::hexagon_V6_vzh), u32v2, "zxt.vuh", {u16v1}},

@@ -394,16 +394,6 @@ typedef enum halide_type_code_t
     #endif
 #endif
 
-// VC2017 has some obscure bugs in constexpr; VC2019 claims to have fixed them.
-// We (currently) only use HALIDE_CONSTEXPR for some improved optimization
-// in certain luts, so we'll just conditionally define it and live with slightly
-// suboptimal code on VC2017. (Note that _MSC_VER=1920 == Visual Studio 2019 version 16.0.0)
-#if __cplusplus >= 201103L && (!defined(_MSC_VER) || _MSC_VER >= 1920)
-    #define HALIDE_CONSTEXPR constexpr
-#else
-    #define HALIDE_CONSTEXPR
-#endif
-
 /** A runtime tag for a type in the halide type system. Can be ints,
  * unsigned ints, or floats of various bit-widths (the 'bits'
  * field). Can also be vectors of the same (by setting the 'lanes'
@@ -428,15 +418,15 @@ struct halide_type_t {
      * code: The fundamental type from an enum.
      * bits: The bit size of one element.
      * lanes: The number of vector elements in the type. */
-    HALIDE_ALWAYS_INLINE HALIDE_CONSTEXPR halide_type_t(halide_type_code_t code, uint8_t bits, uint16_t lanes = 1)
+    HALIDE_ALWAYS_INLINE halide_type_t(halide_type_code_t code, uint8_t bits, uint16_t lanes = 1)
         : code(code), bits(bits), lanes(lanes) {
     }
 
     /** Default constructor is required e.g. to declare halide_trace_event
      * instances. */
-    HALIDE_ALWAYS_INLINE HALIDE_CONSTEXPR halide_type_t() : code((halide_type_code_t)0), bits(0), lanes(0) {}
+    HALIDE_ALWAYS_INLINE halide_type_t() : code((halide_type_code_t)0), bits(0), lanes(0) {}
 
-    HALIDE_ALWAYS_INLINE HALIDE_CONSTEXPR halide_type_t with_lanes(uint16_t new_lanes) const {
+    HALIDE_ALWAYS_INLINE halide_type_t with_lanes(uint16_t new_lanes) const {
         return halide_type_t((halide_type_code_t) code, bits, new_lanes);
     }
 
