@@ -11,7 +11,7 @@ Expr Simplify::visit(const Shuffle *op, ExprInfo *bounds) {
          op->vectors[0].as<Broadcast>())) {
         // Extracting a single lane of a ramp or broadcast
         if (const Ramp *r = op->vectors[0].as<Ramp>()) {
-            return mutate(r->base + op->indices[0]*r->stride, bounds);
+            return mutate(r->base + op->indices[0] * r->stride, bounds);
         } else if (const Broadcast *b = op->vectors[0].as<Broadcast>()) {
             return mutate(b->value, bounds);
         } else {
@@ -126,7 +126,7 @@ Expr Simplify::visit(const Shuffle *op, ExprInfo *bounds) {
                 // difference between two adjacent terms in the
                 // interleave needs to be a broadcast of the new
                 // stride.
-                Expr diff = mutate(new_vectors[i] - new_vectors[i-1], nullptr);
+                Expr diff = mutate(new_vectors[i] - new_vectors[i - 1], nullptr);
                 const Broadcast *b = diff.as<Broadcast>();
                 if (b) {
                     Expr check = mutate(b->value * terms - r->stride, nullptr);
@@ -187,13 +187,13 @@ Expr Simplify::visit(const Shuffle *op, ExprInfo *bounds) {
             bool can_collapse = true;
             for (size_t i = 1; i < new_vectors.size() && can_collapse; i++) {
                 Expr diff;
-                if (new_vectors[i].type().lanes() == new_vectors[i-1].type().lanes()) {
-                    diff = mutate(new_vectors[i] - new_vectors[i-1], nullptr);
+                if (new_vectors[i].type().lanes() == new_vectors[i - 1].type().lanes()) {
+                    diff = mutate(new_vectors[i] - new_vectors[i - 1], nullptr);
                 }
 
                 const Broadcast *b = diff.as<Broadcast>();
                 if (b) {
-                    Expr check = mutate(b->value - r->stride * new_vectors[i-1].type().lanes(), nullptr);
+                    Expr check = mutate(b->value - r->stride * new_vectors[i - 1].type().lanes(), nullptr);
                     can_collapse &= is_zero(check);
                 } else {
                     can_collapse = false;
@@ -233,7 +233,7 @@ Expr Simplify::visit(const Shuffle *op, ExprInfo *bounds) {
     }
 }
 
-template <typename T>
+template<typename T>
 Expr Simplify::hoist_slice_vector(Expr e) {
     const T *op = e.as<T>();
     internal_assert(op);
@@ -275,5 +275,5 @@ template Expr Simplify::hoist_slice_vector<Mul>(Expr);
 template Expr Simplify::hoist_slice_vector<Min>(Expr);
 template Expr Simplify::hoist_slice_vector<Max>(Expr);
 
-}
-}
+}  // namespace Internal
+}  // namespace Halide

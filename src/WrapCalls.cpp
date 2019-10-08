@@ -60,7 +60,8 @@ void validate_custom_wrapper(Function in_func, Function wrapped, Function wrappe
             << "Cannot wrap \"" << wrapped.name() << "\" in \"" << in_func.name()
             << "\" because \"" << in_func.name() << "\" does not call \""
             << wrapped.name() << "\"\n"
-            << "Direct callees of \"" << in_func.name() << "\" are:\n" << callees_text.str();
+            << "Direct callees of \"" << in_func.name() << "\" are:\n"
+            << callees_text.str();
     }
 }
 
@@ -69,7 +70,7 @@ void validate_custom_wrapper(Function in_func, Function wrapped, Function wrappe
 map<string, Function> wrap_func_calls(const map<string, Function> &env) {
     map<string, Function> wrapped_env;
 
-    map<FunctionPtr, SubstitutionMap> func_wrappers_map; // In Func -> [wrapped Func -> wrapper]
+    map<FunctionPtr, SubstitutionMap> func_wrappers_map;  // In Func -> [wrapped Func -> wrapper]
     set<string> global_wrappers;
 
     for (const auto &iter : env) {
@@ -93,7 +94,7 @@ map<string, Function> wrap_func_calls(const map<string, Function> &env) {
             string in_func = iter.first;
             FunctionPtr wrapper = iter.second;
 
-            if (in_func.empty()) { // Global wrapper
+            if (in_func.empty()) {  // Global wrapper
                 global_wrappers.insert(Function(wrapper).name());
                 for (const auto &wrapped_env_iter : wrapped_env) {
                     in_func = wrapped_env_iter.first;
@@ -114,15 +115,15 @@ map<string, Function> wrap_func_calls(const map<string, Function> &env) {
                         continue;
                     }
                     debug(4) << "Global wrapper: replacing reference of \""
-                             << wrapped_fname <<  "\" in \"" << in_func
+                             << wrapped_fname << "\" in \"" << in_func
                              << "\" with \"" << Function(wrapper).name() << "\"\n";
                     insert_func_wrapper_helper(func_wrappers_map,
                                                wrapped_env_iter.second.get_contents(),
                                                wrapped_func, wrapper);
                 }
-            } else { // Custom wrapper
+            } else {  // Custom wrapper
                 debug(4) << "Custom wrapper: replacing reference of \""
-                         << wrapped_fname <<  "\" in \"" << in_func << "\" with \""
+                         << wrapped_fname << "\" in \"" << in_func << "\" with \""
                          << Function(wrapper).name() << "\"\n";
 
                 const auto &in_func_iter = wrapped_env.find(in_func);

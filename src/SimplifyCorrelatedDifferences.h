@@ -44,7 +44,7 @@ namespace Internal {
  */
 Stmt simplify_correlated_differences(const Stmt &);
 
-}
-}
+}  // namespace Internal
+}  // namespace Halide
 
 #endif

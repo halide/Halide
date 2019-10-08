@@ -153,6 +153,19 @@ def test_basics3():
     left += 5
     left += ss
 
+def test_basics4():
+    # Test for f[g[r]] = ...
+    # See https://github.com/halide/Halide/issues/4285
+    x = hl.Var('x')
+    f = hl.Func('f')
+    g = hl.Func('g')
+    g[x] = 1
+    f[x] = 0.0
+    r = hl.RDom([(0, 100)])
+    f[g[r]] = 2.3 # This triggers a warning of double-to-float conversion
+    f.compute_root()
+    f.compile_jit()
+
 def test_float_or_int():
     x = hl.Var('x')
     i32, f32 =  hl.Int(32), hl.Float(32)
@@ -214,3 +227,4 @@ if __name__ == "__main__":
     test_basics()
     test_basics2()
     test_basics3()
+    test_basics4()

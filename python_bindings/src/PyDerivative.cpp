@@ -15,20 +15,14 @@ void define_derivative(py::module &m) {
             return d(param);
         }, py::arg("param"))
         .def("__getitem__", [](const Derivative &d, const std::tuple<const Func &, int> &args) {
-            return d(std::get<0>(args), std::get<1>(args), true);
+            return d(std::get<0>(args), std::get<1>(args));
         })
-        .def("__getitem__", [](const Derivative &d, const std::tuple<const Func &, int, bool> &args) {
-            return d(std::get<0>(args), std::get<1>(args), std::get<2>(args));
-        })
-        .def("get", [](const Derivative &d, const Func &func, int update_id, bool bounded) {
-            return d.get(func, update_id, bounded);  
-        }, py::arg("func"), py::arg("update_id") = -1, py::arg("bounded") = true)
-        .def("get", [](const Derivative &d, const Buffer<> &buffer) {
-            return d.get(buffer);
-        }, py::arg("buffer"))
-        .def("get", [](const Derivative &d, const Param<> &param) {
-            return d.get(param);
-        }, py::arg("param"));
+        .def("get_unbounded", [](const Derivative &d, const Func &func, int update_id) {
+            return d.get_unbounded(func, update_id);
+        }, py::arg("func"), py::arg("update_id") = -1)
+        .def("funcs", [](const Derivative &d, const Func &func) {
+            return d.funcs(func);  
+        }, py::arg("func"));
 
     m.def("propagate_adjoints",
         (Derivative (*)(const Func &, const Func &,

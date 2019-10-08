@@ -23,7 +23,8 @@ struct MachineParams {
     float balance;
 
     explicit MachineParams(int parallelism, uint64_t llc, float balance)
-        : parallelism(parallelism), last_level_cache_size(llc), balance(balance) {}
+        : parallelism(parallelism), last_level_cache_size(llc), balance(balance) {
+    }
 
     /** Default machine parameters for generic CPU architecture. */
     static MachineParams generic();

@@ -14,7 +14,8 @@ class Function;
 class FunctionType;
 class IRBuilderDefaultInserter;
 class ConstantFolder;
-template<typename, typename> class IRBuilder;
+template<typename, typename>
+class IRBuilder;
 class LLVMContext;
 class Type;
 class StructType;
@@ -67,7 +68,9 @@ public:
     virtual std::unique_ptr<llvm::Module> compile(const Module &module);
 
     /** The target we're generating code for */
-    const Target &get_target() const { return target; }
+    const Target &get_target() const {
+        return target;
+    }
 
     /** Tell the code generator which LLVM context to use. */
     void set_context(llvm::LLVMContext &context);
@@ -114,7 +117,9 @@ protected:
 
     /** Should indexing math be promoted to 64-bit on platforms with
      * 64-bit pointers? */
-    virtual bool promote_indices() const {return true;}
+    virtual bool promote_indices() const {
+        return true;
+    }
 
     /** What's the natural vector bit-width to use for loads, stores, etc. */
     virtual int native_vector_bits() const = 0;
@@ -185,7 +190,7 @@ protected:
     /** Fetch an entry from the symbol table. If the symbol is not
      * found, it either errors out (if the second arg is true), or
      * returns nullptr. */
-    llvm::Value* sym_get(const std::string &name,
+    llvm::Value *sym_get(const std::string &name,
                          bool must_succeed = true) const;
 
     /** Test if an item exists in the symbol table. */
@@ -224,16 +229,16 @@ protected:
     /** Some wildcard variables used for peephole optimizations in
      * subclasses */
     // @{
-    Expr wild_i8x8, wild_i16x4, wild_i32x2; // 64-bit signed ints
-    Expr wild_u8x8, wild_u16x4, wild_u32x2; // 64-bit unsigned ints
-    Expr wild_i8x16, wild_i16x8, wild_i32x4, wild_i64x2; // 128-bit signed ints
-    Expr wild_u8x16, wild_u16x8, wild_u32x4, wild_u64x2; // 128-bit unsigned ints
-    Expr wild_i8x32, wild_i16x16, wild_i32x8, wild_i64x4; // 256-bit signed ints
-    Expr wild_u8x32, wild_u16x16, wild_u32x8, wild_u64x4; // 256-bit unsigned ints
+    Expr wild_i8x8, wild_i16x4, wild_i32x2;                // 64-bit signed ints
+    Expr wild_u8x8, wild_u16x4, wild_u32x2;                // 64-bit unsigned ints
+    Expr wild_i8x16, wild_i16x8, wild_i32x4, wild_i64x2;   // 128-bit signed ints
+    Expr wild_u8x16, wild_u16x8, wild_u32x4, wild_u64x2;   // 128-bit unsigned ints
+    Expr wild_i8x32, wild_i16x16, wild_i32x8, wild_i64x4;  // 256-bit signed ints
+    Expr wild_u8x32, wild_u16x16, wild_u32x8, wild_u64x4;  // 256-bit unsigned ints
 
-    Expr wild_f32x2; // 64-bit floats
-    Expr wild_f32x4, wild_f64x2; // 128-bit floats
-    Expr wild_f32x8, wild_f64x4; // 256-bit floats
+    Expr wild_f32x2;              // 64-bit floats
+    Expr wild_f32x4, wild_f64x2;  // 128-bit floats
+    Expr wild_f32x8, wild_f64x4;  // 256-bit floats
 
     // Wildcards for a varying number of lanes.
     Expr wild_u1x_, wild_i8x_, wild_u8x_, wild_i16x_, wild_u16x_;
@@ -250,7 +255,6 @@ protected:
      * representation of the result of the expression. */
     llvm::Value *codegen(Expr);
 
-
     /** Emit code that runs a statement. */
     void codegen(Stmt);
 
@@ -259,7 +263,9 @@ protected:
 
     /** Some destructors should always be called. Others should only
      * be called if the pipeline is exiting with an error code. */
-    enum DestructorType {Always, OnError, OnSuccess};
+    enum DestructorType { Always,
+                          OnError,
+                          OnSuccess };
 
     /* Call this at the location of object creation to register how an
      * object should be destroyed. This does three things:
@@ -343,7 +349,9 @@ protected:
     /** Get a unique name for the actual block of memory that an
      * allocate node uses. Used so that alias analysis understands
      * when multiple Allocate nodes shared the same memory. */
-    virtual std::string get_allocation_name(const std::string &n) {return n;}
+    virtual std::string get_allocation_name(const std::string &n) {
+        return n;
+    }
 
     using IRVisitor::visit;
 
@@ -412,7 +420,8 @@ protected:
 
     /** If we have to bail out of a pipeline midway, this should
      * inject the appropriate target-specific cleanup code. */
-    virtual void prepare_for_early_exit() {}
+    virtual void prepare_for_early_exit() {
+    }
 
     /** Get the llvm type equivalent to the given halide type in the
      * current context. */
@@ -484,7 +493,6 @@ protected:
     std::pair<llvm::Function *, int> find_vector_runtime_function(const std::string &name, int lanes);
 
 private:
-
     /** All the values in scope at the current code location during
      * codegen. Use sym_push and sym_pop to access. */
     Scope<llvm::Value *> symbol_table;
@@ -506,9 +514,9 @@ private:
      * as extern "C" linkage. Note that the return value is a function-returning-
      * pointer-to-constant-data.
      */
-    llvm::Function* embed_metadata_getter(const std::string &metadata_getter_name,
-        const std::string &function_name, const std::vector<LoweredArgument> &args,
-        const std::map<std::string, std::string> &metadata_name_map);
+    llvm::Function *embed_metadata_getter(const std::string &metadata_getter_name,
+                                          const std::string &function_name, const std::vector<LoweredArgument> &args,
+                                          const std::map<std::string, std::string> &metadata_name_map);
 
     /** Embed a constant expression as a global variable. */
     llvm::Constant *embed_constant_expr(Expr e, llvm::Type *t);
@@ -523,7 +531,6 @@ private:
 
     void init_codegen(const std::string &name, bool any_strict_float = false);
     std::unique_ptr<llvm::Module> finish_codegen();
-
 };
 
 }  // namespace Internal

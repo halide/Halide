@@ -23,12 +23,14 @@ class IRVisitor {
 public:
     IRVisitor();
     virtual ~IRVisitor();
+
 protected:
     // ExprNode<> and StmtNode<> are allowed to call visit (to implement accept())
-    template<typename T> friend struct ExprNode;
+    template<typename T>
+    friend struct ExprNode;
 
-
-    template<typename T> friend struct StmtNode;
+    template<typename T>
+    friend struct StmtNode;
 
     virtual void visit(const IntImm *);
     virtual void visit(const UIntImm *);
@@ -153,10 +155,9 @@ protected:
 template<typename T, typename ExprRet, typename StmtRet>
 class VariadicVisitor {
 private:
-
     template<typename... Args>
-    ExprRet dispatch_expr(const BaseExprNode *node, Args&&... args) {
-        if (node == nullptr) return ExprRet {};
+    ExprRet dispatch_expr(const BaseExprNode *node, Args &&... args) {
+        if (node == nullptr) return ExprRet{};
         switch (node->node_type) {
         case IRNodeType::IntImm:
             return ((T *)this)->visit((const IntImm *)node, std::forward<Args>(args)...);
@@ -236,12 +237,12 @@ private:
         case IRNodeType::Prefetch:
             internal_error << "Unreachable";
         }
-        return ExprRet {};
+        return ExprRet{};
     }
 
     template<typename... Args>
-    StmtRet dispatch_stmt(const BaseStmtNode *node, Args&&... args) {
-        if (node == nullptr) return StmtRet {};
+    StmtRet dispatch_stmt(const BaseStmtNode *node, Args &&... args) {
+        if (node == nullptr) return StmtRet{};
         switch (node->node_type) {
         case IRNodeType::IntImm:
         case IRNodeType::UIntImm:
@@ -305,31 +306,27 @@ private:
         case IRNodeType::Prefetch:
             return ((T *)this)->visit((const Prefetch *)node, std::forward<Args>(args)...);
         }
-        return StmtRet {};
+        return StmtRet{};
     }
+
 public:
-
     template<typename... Args>
-    HALIDE_ALWAYS_INLINE
-    StmtRet dispatch(const Stmt &s, Args&&... args) {
+    HALIDE_ALWAYS_INLINE StmtRet dispatch(const Stmt &s, Args &&... args) {
         return dispatch_stmt(s.get(), std::forward<Args>(args)...);
     }
 
     template<typename... Args>
-    HALIDE_ALWAYS_INLINE
-    StmtRet dispatch(Stmt &&s, Args&&... args) {
+    HALIDE_ALWAYS_INLINE StmtRet dispatch(Stmt &&s, Args &&... args) {
         return dispatch_stmt(s.get(), std::forward<Args>(args)...);
     }
 
     template<typename... Args>
-    HALIDE_ALWAYS_INLINE
-    ExprRet dispatch(const Expr &e, Args&&... args) {
+    HALIDE_ALWAYS_INLINE ExprRet dispatch(const Expr &e, Args &&... args) {
         return dispatch_expr(e.get(), std::forward<Args>(args)...);
     }
 
     template<typename... Args>
-    HALIDE_ALWAYS_INLINE
-    ExprRet dispatch(Expr &&e, Args&&... args) {
+    HALIDE_ALWAYS_INLINE ExprRet dispatch(Expr &&e, Args &&... args) {
         return dispatch_expr(e.get(), std::forward<Args>(args)...);
     }
 };

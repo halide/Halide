@@ -63,7 +63,7 @@ Expr make_min_helper(const Expr &a, const Expr &b) {
     }
 }
 
-}
+}  // namespace
 
 // This is called repeatedly by bounds inference and the solver to
 // build large expressions, so we want to simplify eagerly to avoid
@@ -102,8 +102,12 @@ Interval Interval::make_intersection(const Interval &a, const Interval &b) {
 Expr Interval::pos_inf_expr = Variable::make(Handle(), "pos_inf");
 Expr Interval::neg_inf_expr = Variable::make(Handle(), "neg_inf");
 
-Expr Interval::pos_inf_noinline() { return Interval::pos_inf_expr; }
-Expr Interval::neg_inf_noinline() { return Interval::neg_inf_expr; }
+Expr Interval::pos_inf_noinline() {
+    return Interval::pos_inf_expr;
+}
+Expr Interval::neg_inf_noinline() {
+    return Interval::neg_inf_expr;
+}
 
 }  // namespace Internal
 }  // namespace Halide

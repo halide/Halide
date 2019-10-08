@@ -25,8 +25,8 @@ class FindBufferSymbols : public IRVisitor {
         if (param.defined() && param.is_buffer()) {
             string name = param.name();
             buffers[name] =
-                BufferInfo {Variable::make(type_of<buffer_t *>(), name + ".buffer", param),
-                            param.dimensions()};
+                BufferInfo{Variable::make(type_of<buffer_t *>(), name + ".buffer", param),
+                           param.dimensions()};
         }
     }
 
@@ -34,8 +34,8 @@ class FindBufferSymbols : public IRVisitor {
         if (buffer.defined()) {
             string name = buffer.name();
             buffers[name] =
-                BufferInfo {Variable::make(type_of<buffer_t *>(), name + ".buffer", buffer),
-                            buffer.dimensions()};
+                BufferInfo{Variable::make(type_of<buffer_t *>(), name + ".buffer", buffer),
+                           buffer.dimensions()};
         }
     }
 
