@@ -48,7 +48,7 @@ CFLAGS += $(OPTIMIZE) -I $(HALIDE_DISTRIB_PATH)/include/ -I $(HALIDE_DISTRIB_PAT
 CXXFLAGS += $(OPTIMIZE) -std=c++11 -I $(HALIDE_DISTRIB_PATH)/include/ -I $(HALIDE_DISTRIB_PATH)/tools/ $(SANITIZER_FLAGS) -Wall -Werror -Wno-unused-function -Wcast-qual -Wignored-qualifiers -Wno-comment -Wsign-compare -Wno-unknown-warning-option -Wno-psabi
 
 ifeq ($(CXX), clang++)
-CXXFLAGS += $(findstring -stdlib=libc++, $(HALIDE_LLVM_CXXFLAGS))
+CXXFLAGS += $(findstring -stdlib=libc++, $(HALIDE_LLVM_CXX_FLAGS))
 endif
 
 ifeq (0, $(HALIDE_RTTI))

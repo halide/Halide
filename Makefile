@@ -2188,7 +2188,7 @@ $(BUILD_DIR)/halide_config.%: $(ROOT_DIR)/tools/halide_config.%.tpl
 	@mkdir -p $(@D)
 	cat $< | sed -e 's/@HALIDE_SYSTEM_LIBS_RAW@/${LLVM_SYSTEM_LIBS}/g' \
 	       | sed -e 's/@HALIDE_RTTI_RAW@/${HALIDE_RTTI_RAW}/g' \
-	       | sed -e 's;@HALIDE_LLVM_CXXFLAGS_RAW@;${LLVM_CXX_FLAGS};g' > $@
+	       | sed -e 's;@HALIDE_LLVM_CXX_FLAGS_RAW@;${LLVM_CXX_FLAGS};g' > $@
 
 
 $(DISTRIB_DIR)/halide.tgz: $(LIB_DIR)/libHalide.a \
