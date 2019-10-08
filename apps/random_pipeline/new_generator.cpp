@@ -1200,52 +1200,52 @@ public:
         std::cout << casted.name() << " has input: " << f.func.name() << std::endl;
         return {casted, f.w, f.h, f.c};
     }
-		
-		/** generates interpolation coords and makes sure that the coordinates are not the same **/
-		bool random_coords(vector<Expr> &coords1, vector<Expr> &coords2) {
-				int choice = rand_int(0, 2);
-				switch (choice) {
-						case 0:
-								break; 
-						case 1:
-								coords1[0] += 1;
-								break;
-						case 2:
-								coords1[0] -= 1;
-				}
-				choice = rand_int(0, 2);
-				switch (choice) {
-						case 0:
-								break; 
-						case 1:
-								coords1[1] += 1;
-								break;
-						case 2:
-								coords1[1] -= 1;
-				}
-				choice = rand_int(0, 2);
-				switch (choice) {
-						case 0:
-								break; 
-						case 1:
-								coords2[0] += 1;
-								break;
-						case 2:
-								coords2[0] -= 1;
-				}
-				choice = rand_int(0, 2);
-				switch (choice) {
-						case 0:
-								break; 
-						case 1:
-								coords2[1] += 1;
-								break;
-						case 2:
-								coords2[1] -= 1;
-				}
-				bool success = !( equal(coords1[0], coords2[0]) && equal(coords1[1], coords2[1]) );
-				return success;
-		}
+    
+    /** generates interpolation coords and makes sure that the coordinates are not the same **/
+    bool random_coords(vector<Expr> &coords1, vector<Expr> &coords2) {
+        int choice = rand_int(0, 2);
+        switch (choice) {
+            case 0:
+                break; 
+            case 1:
+                coords1[0] += 1;
+                break;
+            case 2:
+                coords1[0] -= 1;
+        }
+        choice = rand_int(0, 2);
+        switch (choice) {
+            case 0:
+                break; 
+            case 1:
+                coords1[1] += 1;
+                break;
+            case 2:
+                coords1[1] -= 1;
+        }
+        choice = rand_int(0, 2);
+        switch (choice) {
+            case 0:
+                break; 
+            case 1:
+                coords2[0] += 1;
+                break;
+            case 2:
+                coords2[0] -= 1;
+        }
+        choice = rand_int(0, 2);
+        switch (choice) {
+            case 0:
+                break; 
+            case 1:
+                coords2[1] += 1;
+                break;
+            case 2:
+                coords2[1] -= 1;
+        }
+        bool success = !( equal(coords1[0], coords2[0]) && equal(coords1[1], coords2[1]) );
+        return success;
+    }
 
     InterpStageAndCoords interp2Tap_stage(const vector<Stage> &s) {
         Func interp("interp2Tap");
@@ -1256,10 +1256,10 @@ public:
         // generate random coordinates to use 
         vector<Expr> coords1 = make_arguments(input_s.func.args());
         vector<Expr> coords2 = make_arguments(input_s.func.args());
-				while (!random_coords(coords1, coords2)) {
-						coords1 = make_arguments(input_s.func.args());
-						coords2 = make_arguments(input_s.func.args());
-				}
+        while (!random_coords(coords1, coords2)) {
+            coords1 = make_arguments(input_s.func.args());
+            coords2 = make_arguments(input_s.func.args());
+        }
 
         std::cout << "coords1: " << coords1[0] << "," << coords1[1] << std::endl;
         std::cout << "coords2: " << coords2[0] << "," << coords2[1] << std::endl;
@@ -1273,23 +1273,23 @@ public:
         Func interp("interp2Tap");
         // pick a random input
         int input_id = rand_int(0, s.size()-1);
-				if (gr) {
-						input_id = 0; 
-				}
-				else {
-						input_id = 3;
-				}
-					
+        if (gr) {
+            input_id = 0; 
+        }
+        else {
+            input_id = 3;
+        }
+          
         Stage input_s = s[input_id];
         std::cout << interp.name() << " is a 2 tap interp on " << input_s.func.name() << std::endl;
         // generate random coordinates to use 
         vector<Expr> coords1 = make_arguments(input_s.func.args());
         vector<Expr> coords2 = make_arguments(input_s.func.args());
-				if (gr) {
-						coords1[1] += 1;
-				} else {
-						coords1[0] -= 1;
-				}
+        if (gr) {
+            coords1[1] += 1;
+        } else {
+            coords1[0] -= 1;
+        }
         std::cout << "coords1: " << coords1[0] << "," << coords1[1] << std::endl;
         std::cout << "coords2: " << coords2[0] << "," << coords2[1] << std::endl;
         interp(input_s.func.args()) = avg(input_s.func(coords1), input_s.func(coords2));
@@ -1345,10 +1345,10 @@ public:
         // generate random coordinates to use 
         vector<Expr> coords1 = make_arguments(input_f.args());
         vector<Expr> coords2 = make_arguments(input_f.args());
-				while (!random_coords(coords1, coords2)) {
-						coords1 = make_arguments(input_s.func.args());
-						coords2 = make_arguments(input_s.func.args());
-				}
+        while (!random_coords(coords1, coords2)) {
+            coords1 = make_arguments(input_s.func.args());
+            coords2 = make_arguments(input_s.func.args());
+        }
         std::cout << "coords1: " << coords1[0] << "," << coords1[1] << std::endl;
         std::cout << "coords2: " << coords2[0] << "," << coords2[1] << std::endl;
 
