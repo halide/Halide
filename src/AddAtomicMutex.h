@@ -14,7 +14,10 @@
  * If the SplitTuple pass does not lift out the Provide value as a let 
  * expression. This is confirmed by checking whether the Provide nodes 
  * inside an Atomic node  have let binding values accessing the buffers
- * inside the atomic node. */
+ * inside the atomic node.
+ * Finally, it lifts the store indexing expressions inside the atomic node
+ * outside of the atomic to avoid side-effects inside those expressions
+ * being evaluated twice. */
 
 namespace Halide {
 namespace Internal {

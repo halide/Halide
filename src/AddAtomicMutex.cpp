@@ -224,6 +224,28 @@ protected:
     const set<string> &store_names;
 };
 
+/** Replace the indices in the Store nodes with the specified variable. */
+class ReplaceStoreIndexWithVar : public IRMutator {
+public:
+    ReplaceStoreIndexWithVar(Expr var) : var(var) {}
+
+protected:
+    using IRMutator::visit;
+
+    Stmt visit(const Store *op) override {
+        Expr predicate = mutate(op->predicate);
+        Expr value = mutate(op->value);
+        return Store::make(op->name,
+                           std::move(value),
+                           var,
+                           op->param,
+                           std::move(predicate),
+                           op->alignment);
+    }
+
+    Expr var;
+};
+
 /** Add mutex allocation & lock & unlock if required. */
 class AddAtomicMutex : public IRMutator {
 public:
@@ -352,12 +374,20 @@ protected:
         FindStoreIndex find;
         op->body.accept(&find);
 
-        Expr index = find.index;
-        if (!index.defined()) {
-            // scalar output
-            index = Expr(0);
-        }
         Stmt body = op->body;
+
+        Expr index = find.index;
+        Expr index_let; // If defined, represents the value of the lifted let binding.
+        if (!index.defined()) {
+            // Scalar output.
+            index = Expr(0);
+        } else {
+            // Lift the index outside of the atomic node.
+            string name = unique_name('t');
+            index_let = index;
+            index = Variable::make(index.type(), name);
+            body = ReplaceStoreIndexWithVar(index).mutate(body);
+        }
         // This generates a pointer to the mutex array
         Expr mutex_array = Variable::make(
             type_of<halide_mutex_array *>(), op->mutex_name);
@@ -374,10 +404,16 @@ protected:
                                                   "halide_mutex_array_unlock",
                                                   {mutex_array, index},
                                                   Call::CallType::Extern))));
+        Stmt ret = Atomic::make(op->producer_name,
+                                op->mutex_name,
+                                std::move(body));
 
-        return Atomic::make(op->producer_name,
-                            op->mutex_name,
-                            std::move(body));
+        if (index_let.defined()) {
+            // Attach the let binding outside of the atomic node.
+            internal_assert(index.as<Variable>() != nullptr);
+            ret = LetStmt::make(index.as<Variable>()->name, index_let, ret);
+        }
+        return ret;
     }
 };
 
