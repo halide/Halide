@@ -13,7 +13,7 @@ int64_t mod(int64_t a, int64_t m) {
     if (m == 0) return a;
     return mod_imp(a, m);
 }
-}
+}  // namespace
 
 class ComputeModulusRemainder : public IRVisitor {
 public:
@@ -134,19 +134,18 @@ void modulus_remainder_test() {
     Expr x = Variable::make(Int(32), "x");
     Expr y = Variable::make(Int(32), "y");
 
-    check((30*x + 3) + (40*y + 2), 10, 5);
-    check((6*x + 3) * (4*y + 1), 2, 1);
-    check(max(30*x - 24, 40*y + 31), 5, 1);
-    check(10*x - 33*y, 1, 0);
-    check(10*x - 35*y, 5, 0);
+    check((30 * x + 3) + (40 * y + 2), 10, 5);
+    check((6 * x + 3) * (4 * y + 1), 2, 1);
+    check(max(30 * x - 24, 40 * y + 31), 5, 1);
+    check(10 * x - 33 * y, 1, 0);
+    check(10 * x - 35 * y, 5, 0);
     check(123, 0, 123);
-    check(Let::make("y", x*3 + 4, y*3 + 4), 9, 7);
+    check(Let::make("y", x * 3 + 4, y * 3 + 4), 9, 7);
     // Check overflow
-    check((5045320*x + 4) * (405713 * y + 3) * (8000123 * x + 4354), 1, 0);
+    check((5045320 * x + 4) * (405713 * y + 3) * (8000123 * x + 4354), 1, 0);
 
     std::cout << "modulus_remainder test passed\n";
 }
-
 
 void ComputeModulusRemainder::visit(const IntImm *op) {
     // Equal to op->value modulo anything. We'll use zero as the

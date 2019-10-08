@@ -18,8 +18,8 @@ using std::vector;
 int Simplify::debug_indent = 0;
 #endif
 
-Simplify::Simplify(bool r, const Scope<Interval> *bi, const Scope<ModulusRemainder> *ai) :
-    remove_dead_lets(r), no_float_simplify(false) {
+Simplify::Simplify(bool r, const Scope<Interval> *bi, const Scope<ModulusRemainder> *ai)
+    : remove_dead_lets(r), no_float_simplify(false) {
 
     // Only respect the constant bounds from the containing scope.
     for (auto iter = bi->cbegin(); iter != bi->cend(); ++iter) {
@@ -51,7 +51,6 @@ Simplify::Simplify(bool r, const Scope<Interval> *bi, const Scope<ModulusRemaind
         bounds.alignment = iter.value();
         bounds_and_alignment_info.push(iter.name(), bounds);
     }
-
 }
 
 void Simplify::found_buffer_reference(const string &name, size_t dimensions) {
@@ -368,7 +367,8 @@ bool can_prove(Expr e, const Scope<Interval> &bounds) {
         }
 
         debug(0) << "Failed to prove, but could not find a counter-example:\n " << e << "\n";
-        debug(0) << "Original expression:\n" << orig << "\n";
+        debug(0) << "Original expression:\n"
+                 << orig << "\n";
         return false;
     }
 

@@ -26,7 +26,7 @@ Stmt make_checked_call(Expr call) {
     return s;
 }
 
-}
+}  // namespace
 
 void add_legacy_wrapper(Module module, const LoweredFunc &fn) {
     if (!module.target().has_feature(Target::LegacyBufferWrappers)) {
@@ -114,7 +114,8 @@ void add_legacy_wrapper(Module module, const LoweredFunc &fn) {
     }
 
     // Add the wrapper to the module.
-    debug(2) << "Added legacy wrapper for " << fn.name << ":\n" << body << "\n\n";
+    debug(2) << "Added legacy wrapper for " << fn.name << ":\n"
+             << body << "\n\n";
     LoweredFunc wrapper(name, args, body, LinkageType::External, NameMangling::Default);
     module.append(wrapper);
 }

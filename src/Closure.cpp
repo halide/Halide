@@ -37,7 +37,7 @@ void Closure::found_buffer_ref(const string &name, Type type,
     if (!ignore.contains(name)) {
         debug(3) << "Adding buffer " << name << " to closure\n";
         Buffer &ref = buffers[name];
-        ref.type = type.element_of(); // TODO: Validate type is the same as existing refs?
+        ref.type = type.element_of();  // TODO: Validate type is the same as existing refs?
         ref.read = ref.read || read;
         ref.write = ref.write || written;
 

@@ -79,9 +79,8 @@ class AddFunction(th.autograd.Function):
       d_input_b = d_out.new()
       d_input_a.resize_(d_out.shape)
       d_input_b.resize_(d_out.shape)
-      bs, c, h, w = d_out.shape
 
-      fn_(input_a, input_b, d_out.contiguous(), w, h, c, bs, d_input_a, d_input_b)
+      fn_(input_a, input_b, d_out.contiguous(), d_input_a, d_input_b)
       return d_input_a, d_input_b
 
 

@@ -17,8 +17,8 @@ using std::sort;
 using std::string;
 using std::vector;
 
-CodeGen_OpenCL_Dev::CodeGen_OpenCL_Dev(Target t) :
-    clc(src_stream, t) {
+CodeGen_OpenCL_Dev::CodeGen_OpenCL_Dev(Target t)
+    : clc(src_stream, t) {
 }
 
 string CodeGen_OpenCL_Dev::CodeGen_OpenCL_C::print_type(Type type, AppendSpaceIfNeeded space) {
@@ -69,7 +69,7 @@ string CodeGen_OpenCL_Dev::CodeGen_OpenCL_C::print_type(Type type, AppendSpaceIf
             oss << type.lanes();
             break;
         default:
-            user_error <<  "Unsupported vector width in OpenCL C: " << type << "\n";
+            user_error << "Unsupported vector width in OpenCL C: " << type << "\n";
         }
     }
     if (space == AppendSpace) {
@@ -87,8 +87,6 @@ string CodeGen_OpenCL_Dev::CodeGen_OpenCL_C::print_reinterpret(Type type, Expr e
     oss << "as_" << print_type(type) << "(" << print_expr(e) << ")";
     return oss.str();
 }
-
-
 
 namespace {
 string simt_intrinsic(const string &name) {
@@ -121,8 +119,7 @@ void CodeGen_OpenCL_Dev::CodeGen_OpenCL_C::visit(const For *loop) {
             << "kernel loop must be either gpu block or gpu thread\n";
         internal_assert(is_zero(loop->min));
 
-        do_indent();
-        stream << print_type(Int(32)) << " " << print_name(loop->name)
+        stream << get_indent() << print_type(Int(32)) << " " << print_name(loop->name)
                << " = " << simt_intrinsic(loop->name) << ";\n";
 
         loop->body.accept(this);
@@ -207,8 +204,7 @@ void CodeGen_OpenCL_Dev::CodeGen_OpenCL_C::visit(const Call *op) {
         rhs << "abs_diff(" << print_expr(op->args[0]) << ", " << print_expr(op->args[1]) << ")";
         print_assignment(op->type, rhs.str());
     } else if (op->is_intrinsic(Call::gpu_thread_barrier)) {
-        do_indent();
-        stream << "barrier(CLK_LOCAL_MEM_FENCE);\n";
+        stream << get_indent() << "barrier(CLK_LOCAL_MEM_FENCE);\n";
         print_assignment(op->type, "0");
     } else if (op->is_intrinsic(Call::shift_left) || op->is_intrinsic(Call::shift_right)) {
         // Some OpenCL implementations forbid mixing signed-and-unsigned shift values;
@@ -284,12 +280,11 @@ void CodeGen_OpenCL_Dev::CodeGen_OpenCL_C::visit(const Load *op) {
         id = "_" + unique_name('V');
         cache[rhs.str()] = id;
 
-        do_indent();
-        stream << print_type(op->type)
+        stream << get_indent() << print_type(op->type)
                << " " << id << ";\n";
 
         for (int i = 0; i < op->type.lanes(); ++i) {
-            do_indent();
+            stream << get_indent();
             stream
                 << id << ".s" << vector_elements[i]
                 << " = ((" << get_memory_space(op->name) << " "
@@ -314,8 +309,7 @@ void CodeGen_OpenCL_Dev::CodeGen_OpenCL_C::visit(const Store *op) {
         internal_assert(op->value.type().is_vector());
         string id_ramp_base = print_expr(ramp_base);
 
-        do_indent();
-        stream << "vstore" << t.lanes() << "("
+        stream << get_indent() << "vstore" << t.lanes() << "("
                << id_value << ","
                << 0 << ", (" << get_memory_space(op->name) << " "
                << print_type(t.element_of()) << "*)"
@@ -329,8 +323,7 @@ void CodeGen_OpenCL_Dev::CodeGen_OpenCL_C::visit(const Store *op) {
         string id_index = print_expr(op->index);
 
         for (int i = 0; i < t.lanes(); ++i) {
-            do_indent();
-            stream << "((" << get_memory_space(op->name) << " "
+            stream << get_indent() << "((" << get_memory_space(op->name) << " "
                    << print_type(t.element_of()) << " *)"
                    << print_name(op->name)
                    << ")["
@@ -342,7 +335,7 @@ void CodeGen_OpenCL_Dev::CodeGen_OpenCL_C::visit(const Store *op) {
                                   allocations.get(op->name).type == t);
 
         string id_index = print_expr(op->index);
-        do_indent();
+        stream << get_indent();
 
         if (type_cast_needed) {
             stream << "(("
@@ -410,8 +403,8 @@ void CodeGen_OpenCL_Dev::CodeGen_OpenCL_C::visit(const Select *op) {
 }
 
 void CodeGen_OpenCL_Dev::CodeGen_OpenCL_C::visit(const Allocate *op) {
-    user_assert(!op->new_expr.defined()) << "Allocate node inside OpenCL kernel has custom new expression.\n" <<
-        "(Memoization is not supported inside GPU kernels at present.)\n";
+    user_assert(!op->new_expr.defined()) << "Allocate node inside OpenCL kernel has custom new expression.\n"
+                                         << "(Memoization is not supported inside GPU kernels at present.)\n";
 
     if (op->name == "__shared") {
         // Already handled
@@ -431,11 +424,9 @@ void CodeGen_OpenCL_Dev::CodeGen_OpenCL_C::visit(const Allocate *op) {
             << "Only fixed-size allocations are supported on the gpu. "
             << "Try storing into shared memory instead.";
 
-        do_indent();
-        stream << print_type(op->type) << ' '
+        stream << get_indent() << print_type(op->type) << ' '
                << print_name(op->name) << "[" << size << "];\n";
-        do_indent();
-        stream << "#define " << get_memory_space(op->name) << " __private\n";
+        stream << get_indent() << "#define " << get_memory_space(op->name) << " __private\n";
 
         Allocation alloc;
         alloc.type = op->type;
@@ -457,11 +448,9 @@ void CodeGen_OpenCL_Dev::CodeGen_OpenCL_C::visit(const Free *op) {
         // Should have been freed internally
         internal_assert(allocations.contains(op->name));
         allocations.pop(op->name);
-        do_indent();
-        stream << "#undef " << get_memory_space(op->name) << "\n";
+        stream << get_indent() << "#undef " << get_memory_space(op->name) << "\n";
     }
 }
-
 
 void CodeGen_OpenCL_Dev::CodeGen_OpenCL_C::visit(const AssertStmt *op) {
     user_warning << "Ignoring assertion inside OpenCL kernel: " << op->condition << "\n";
@@ -484,12 +473,9 @@ void CodeGen_OpenCL_Dev::CodeGen_OpenCL_C::visit(const Shuffle *op) {
             string a1 = print_expr(op->vectors[0]);
             string a2 = print_expr(op->vectors[1]);
             id = unique_name('_');
-            do_indent();
-            stream << print_type(op->type) << " " << id << ";\n";
-            do_indent();
-            stream << id << ".even = " << a1 << ";\n";
-            do_indent();
-            stream << id << ".odd = " << a2 << ";\n";
+            stream << get_indent() << print_type(op->type) << " " << id << ";\n";
+            stream << get_indent() << id << ".even = " << a1 << ";\n";
+            stream << get_indent() << id << ".odd = " << a2 << ";\n";
         } else {
             // 3+ arguments, interleave via a vector literal
             // selecting the appropriate elements of the vectors
@@ -503,8 +489,7 @@ void CodeGen_OpenCL_Dev::CodeGen_OpenCL_C::visit(const Shuffle *op) {
             }
             internal_assert(num_vectors * arg_lanes >= dest_lanes);
             id = unique_name('_');
-            do_indent();
-            stream << print_type(op->type) << " " << id;
+            stream << get_indent() << print_type(op->type) << " " << id;
             stream << " = (" << print_type(op->type) << ")(";
             for (int i = 0; i < dest_lanes; i++) {
                 int arg = i % num_vectors;
@@ -545,10 +530,14 @@ struct BufferSize {
     string name;
     size_t size;
 
-    BufferSize() : size(0) {}
-    BufferSize(string name, size_t size) : name(name), size(size) {}
+    BufferSize()
+        : size(0) {
+    }
+    BufferSize(string name, size_t size)
+        : name(name), size(size) {
+    }
 
-    bool operator < (const BufferSize &r) const {
+    bool operator<(const BufferSize &r) const {
         return size < r.size;
     }
 };
@@ -562,7 +551,8 @@ void CodeGen_OpenCL_Dev::CodeGen_OpenCL_C::add_kernel(Stmt s,
 
     debug(2) << "Eliminating bool vectors\n";
     s = eliminate_bool_vectors(s);
-    debug(2) << "After eliminating bool vectors:\n" << s << "\n";
+    debug(2) << "After eliminating bool vectors:\n"
+             << s << "\n";
 
     // Figure out which arguments should be passed in __constant.
     // Such arguments should be:
@@ -644,9 +634,10 @@ void CodeGen_OpenCL_Dev::CodeGen_OpenCL_C::add_kernel(Stmt s,
                    << print_name(name);
         }
 
-        if (i < args.size()-1) stream << ",\n";
+        if (i < args.size() - 1) stream << ",\n";
     }
-    stream << ",\n" << " __address_space___shared int16* __shared";
+    stream << ",\n"
+           << " __address_space___shared int16* __shared";
     stream << ")\n";
 
     open_scope();
@@ -699,6 +690,9 @@ void CodeGen_OpenCL_Dev::init_module() {
                << "inline float nan_f32() { return NAN; }\n"
                << "inline float neg_inf_f32() { return -INFINITY; }\n"
                << "inline float inf_f32() { return INFINITY; }\n"
+               << "inline bool is_nan_f32(float x) {return isnan(x); }\n"
+               << "inline bool is_inf_f32(float x) {return isinf(x); }\n"
+               << "inline bool is_finite_f32(float x) {return isfinite(x); }\n"
                << "#define sqrt_f32 sqrt \n"
                << "#define sin_f32 sin \n"
                << "#define cos_f32 cos \n"
@@ -729,7 +723,9 @@ void CodeGen_OpenCL_Dev::init_module() {
 
     if (target.has_feature(Target::CLDoubles)) {
         src_stream << "#pragma OPENCL EXTENSION cl_khr_fp64 : enable\n"
-                   << "bool is_nan_f64(double x) {return x != x; }\n"
+                   << "inline bool is_nan_f64(double x) {return isnan(x); }\n"
+                   << "inline bool is_inf_f64(double x) {return isinf(x); }\n"
+                   << "inline bool is_finite_f64(double x) {return isfinite(x); }\n"
                    << "#define sqrt_f64 sqrt\n"
                    << "#define sin_f64 sin\n"
                    << "#define cos_f64 cos\n"
@@ -760,7 +756,9 @@ void CodeGen_OpenCL_Dev::init_module() {
                    << "inline half nan_f16() { return half_from_bits(32767); }\n"
                    << "inline half neg_inf_f16() { return half_from_bits(31744); }\n"
                    << "inline half inf_f16() { return half_from_bits(64512); }\n"
-                   << "bool is_nan_f16(half x) {return x != x; }\n"
+                   << "inline bool is_nan_f16(half x) {return isnan(x); }\n"
+                   << "inline bool is_inf_f16(half x) {return isinf(x); }\n"
+                   << "inline bool is_finite_f16(half x) {return isfinite(x); }\n"
                    << "#define sqrt_f16 sqrt\n"
                    << "#define sin_f16 sin\n"
                    << "#define cos_f16 cos\n"
@@ -798,7 +796,8 @@ void CodeGen_OpenCL_Dev::init_module() {
 
 vector<char> CodeGen_OpenCL_Dev::compile_to_src() {
     string str = src_stream.str();
-    debug(1) << "OpenCL kernel:\n" << str << "\n";
+    debug(1) << "OpenCL kernel:\n"
+             << str << "\n";
     vector<char> buffer(str.begin(), str.end());
     buffer.push_back(0);
     return buffer;
