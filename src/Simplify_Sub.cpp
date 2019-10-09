@@ -264,6 +264,8 @@ Expr Simplify::visit(const Sub *op, ExprInfo *bounds) {
                rewrite(((max(x, (y + z)) - w) - z), (max((x - z), y) - w)) ||
                rewrite(((min((x - y), z) + (w + y)) - u), (min((y + z), x) + (w - u))) ||
                rewrite(((x + (y + (z + w))) - w), ((y + z) + x)) ||
+               rewrite((((x + (y + z)) + w) - z), ((w + x) + y)) ||
+               rewrite((((x + ((y + z) + w)) + u) - w), (((u + x) + z) + y)) ||
                rewrite(((x + (y + z)) - (w + z)), ((y - w) + x)) ||
                rewrite(((x + (y*z)) - (w*z)), (x - ((w - y)*z))) || // A RHS with adds would be better
                rewrite(((x + y) - (z + (w + x))), (y - (w + z))) ||
