@@ -40,9 +40,10 @@ protected:
     OutputImageParam(const Internal::Parameter &p, Argument::Kind k, Func f);
 
 public:
-
     /** Construct a null image parameter handle. */
-    OutputImageParam() : kind(Argument::InputScalar) {}
+    OutputImageParam()
+        : kind(Argument::InputScalar) {
+    }
 
     /** Get the name of this Param */
     const std::string &name() const;

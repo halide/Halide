@@ -37,8 +37,12 @@ protected:
                                          std::vector<Type> arg_types,
                                          int flags);
 
-    int is_hvx_v62_or_later() {return (isa_version >= 62);}
-    int is_hvx_v65_or_later() {return (isa_version >= 65);}
+    int is_hvx_v62_or_later() {
+        return (isa_version >= 62);
+    }
+    int is_hvx_v65_or_later() {
+        return (isa_version >= 65);
+    }
 
     using CodeGen_Posix::visit;
 
@@ -66,7 +70,7 @@ protected:
     /** We ask for an extra vector on each allocation to enable fast
      * clamped ramp loads. */
     int allocation_padding(Type type) const override {
-        return CodeGen_Posix::allocation_padding(type) + native_vector_bits()/8;
+        return CodeGen_Posix::allocation_padding(type) + native_vector_bits() / 8;
     }
 
     /** Call an LLVM intrinsic, potentially casting the operands to
