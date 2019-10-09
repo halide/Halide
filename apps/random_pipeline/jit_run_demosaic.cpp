@@ -101,19 +101,22 @@ int main(int argc, char *argv[]) {
     float learning_rate = 0.1f;
     int timestep = 0;
 
+    float best_loss = 10000000000000.0f;
+    int best_seed = -1;
     // for each pipeline do:
     for (int p = 0; p < num_pipes; p++) {
+        float loss = 0;
         // seed the generator with the pipeline id
-        gen->seed.set(job_id * num_pipes + p);
+        int seed = job_id * num_pipes + p;
+        gen->seed.set(seed);
         
         // iterate over every image in data directory
         std::string image_dir;
         std::ifstream data_files_f(data_files);
         while (getline(data_files_f, image_dir)) {
-            Buffer<outputT> correct_output = buffer_from_file<outputT>(image_dir + "/g_at_b.data", output_shape);
+            Buffer<outputT> correct_output = buffer_from_file<outputT>(image_dir + "/g_at_b_dense.data", output_shape);
             Buffer<inputT> input0 = buffer_from_file<inputT>(image_dir + "/gr.data", input_shape);
-
-            Buffer<inputT> input1 = buffer_from_file<inputT>(image_dir + "/r.data", input_shape);
+            Buffer<inputT> input1 = buffer_from_file<inputT>(image_dir + "/b.data", input_shape);
             Buffer<inputT> input2 = buffer_from_file<inputT>(image_dir + "/b.data", input_shape);
             Buffer<inputT> input3 = buffer_from_file<inputT>(image_dir + "/gb.data", input_shape);
             Buffer<lossT> loss_buff = Buffer<lossT>::make_scalar();
@@ -121,15 +124,25 @@ int main(int argc, char *argv[]) {
             Buffer<outputT> output_buff = Buffer<outputT>(output_w, output_h, 1);
 
             // run the pipeline
-            gen->apply(batch_size, learning_rate, timestep, input0, input1, input2, input3, correct_output, output_buff, loss_buff);
-            gen->realize(60, 60, 1);
+            gen->apply(batch_size, learning_rate, timestep, input0, input1, input2, input3, correct_output);
+
+            Realization r(output_buff, loss_buff);
+            gen->realize(r);
             loss += (loss_buff() / (float)num_images);
         }
         // write average loss to file 
         std::ofstream loss_file;
-        loss_file.open (output_dir + "/loss.txt");
+        loss_file.open (output_dir + "/" + std::to_string(seed) + "_loss.txt");
         loss_file << loss << std::endl;
         loss_file.close();
+        if (loss < best_loss) {
+            best_loss = loss;
+            best_seed = seed;
+        }
     }
+    std::ofstream best_loss_file;
+    best_loss_file.open(output_dir + "/best_loss.txt");
+    best_loss_file << best_loss << "\n" << best_seed << std::endl;
+    best_loss_file.close();
 }
 
