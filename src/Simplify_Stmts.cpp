@@ -501,5 +501,18 @@ Stmt Simplify::visit(const Fork *op) {
     }
 }
 
+Stmt Simplify::visit(const Atomic *op) {
+    Stmt body = mutate(op->body);
+    if (is_no_op(body)) {
+        return Evaluate::make(0);
+    } else if (body.same_as(op->body)) {
+        return op;
+    } else {
+        return Atomic::make(op->producer_name,
+                            op->mutex_name,
+                            std::move(body));
+    }
+}
+
 }  // namespace Internal
 }  // namespace Halide

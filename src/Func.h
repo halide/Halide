@@ -423,6 +423,7 @@ public:
                     DeviceAPI device_api = DeviceAPI::Default_GPU);
 
     Stage &allow_race_conditions();
+    Stage &atomic(bool override_associativity_test = false);
 
     Stage &hexagon(VarOrRVar x = Var::outermost());
     Stage &prefetch(const Func &f, VarOrRVar var, Expr offset = 1,
@@ -1547,6 +1548,56 @@ public:
      * may result in a non-deterministic routine that returns
      * different values at different times or on different machines. */
     Func &allow_race_conditions();
+
+    /** Issue atomic updates for this Func. This allows parallelization
+     * on associative RVars. The function throws a compile error when
+     * Halide fails to prove associativity. Use override_associativity_test
+     * to disable the associativity test if you believe the function is
+     * associative or the order of reduction variable execution does not
+     * matter. 
+     * Halide compiles this into hardware atomic operations whenever possible, 
+     * and falls back to a mutex lock per storage element if it is impossible 
+     * to atomically update.
+     * There are three possible outcomes of the compiled code:
+     * atomic add, compare-and-swap loop, and mutex lock.
+     * For example:
+     *
+     * hist(x) = 0;
+     * hist(im(r)) += 1;
+     * hist.compute_root();
+     * hist.update().atomic().parallel();
+     *
+     * will be compiled to atomic add operations.
+     *
+     * hist(x) = 0;
+     * hist(im(r)) = min(hist(im(r)) + 1, 100);
+     * hist.compute_root();
+     * hist.update().atomic().parallel();
+     *
+     * will be compiled to compare-and-swap loops.
+     *
+     * arg_max() = {0, im(0)};
+     * Expr old_index = arg_max()[0];
+     * Expr old_max   = arg_max()[1];
+     * Expr new_index = select(old_max < im(r), r, old_index);
+     * Expr new_max   = max(im(r), old_max);
+     * arg_max() = {new_index, new_max};
+     * arg_max.compute_root();
+     * arg_max.update().atomic().parallel();
+     *
+     * will be compiled to updates guarded by a mutex lock,
+     * since it is impossible to atomically update two different locations.
+     *
+     * Currently the atomic operation is supported by x86, CUDA, and OpenCL backends.
+     * Compiling to other backends results in a compile error.
+     * If an operation is compiled into a mutex lock, and is vectorized or is
+     * compiled to CUDA or OpenCL, it also results in a compile error,
+     * since per-element mutex lock on vectorized operation leads to a
+     * deadlock.
+     * Vectorization of predicated RVars (through rdom.where()) on CPU
+     * is also unsupported yet (see https://github.com/halide/Halide/issues/4298).
+     * 8-bit and 16-bit atomics on GPU are also not supported. */
+    Func &atomic(bool override_associativity_test = false);
 
     /** Specialize a Func. This creates a special-case version of the
      * Func where the given condition is true. The most effective

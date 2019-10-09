@@ -81,6 +81,7 @@ protected:
         void visit(const Shuffle *op) override;
         void visit(const Min *op) override;
         void visit(const Max *op) override;
+        void visit(const Atomic *op) override;
     };
 
     std::ostringstream src_stream;

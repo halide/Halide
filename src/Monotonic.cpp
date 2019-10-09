@@ -400,6 +400,10 @@ class MonotonicVisitor : public IRVisitor {
         internal_error << "Monotonic of statement\n";
     }
 
+    void visit(const Atomic *op) override {
+        internal_error << "Monotonic of statement\n";
+    }
+
 public:
     Monotonic result;
 

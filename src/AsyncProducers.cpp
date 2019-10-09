@@ -90,6 +90,17 @@ protected:
             return IfThenElse::make(op->condition, then_case, else_case);
         }
     }
+
+    Stmt visit(const Atomic *op) override {
+        Stmt body = mutate(op->body);
+        if (is_no_op(body)) {
+            return body;
+        } else {
+            return Atomic::make(op->producer_name,
+                                op->mutex_name,
+                                std::move(body));
+        }
+    }
 };
 
 class GenerateProducerBody : public NoOpCollapsingMutator {
@@ -162,6 +173,10 @@ class GenerateProducerBody : public NoOpCollapsingMutator {
             cloned_acquires[var->name] = cloned_acquire;
             return Acquire::make(Variable::make(type_of<halide_semaphore_t *>(), cloned_acquire), op->count, body);
         }
+    }
+
+    Stmt visit(const Atomic *op) override {
+        return Evaluate::make(0);
     }
 
     Expr visit(const Call *op) override {

@@ -392,6 +392,17 @@ Stmt IRMutator::visit(const Acquire *op) {
     }
 }
 
+Stmt IRMutator::visit(const Atomic *op) {
+    Stmt body = mutate(op->body);
+    if (body.same_as(op->body)) {
+        return op;
+    } else {
+        return Atomic::make(op->producer_name,
+                            op->mutex_name,
+                            std::move(body));
+    }
+}
+
 Stmt IRGraphMutator::mutate(const Stmt &s) {
     auto p = stmt_replacements.emplace(s, Stmt());
     if (p.second) {

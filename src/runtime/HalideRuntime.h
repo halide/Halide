@@ -110,8 +110,16 @@ extern void halide_mutex_lock(struct halide_mutex *mutex);
 extern void halide_mutex_unlock(struct halide_mutex *mutex);
 extern void halide_cond_signal(struct halide_cond *cond);
 extern void halide_cond_broadcast(struct halide_cond *cond);
-extern void halide_cond_signal(struct halide_cond *cond);
 extern void halide_cond_wait(struct halide_cond *cond, struct halide_mutex *mutex);
+//@}
+
+/** Functions for constructing/destroying/locking/unlocking arrays of mutexes. */
+struct halide_mutex_array;
+//@{
+extern struct halide_mutex_array* halide_mutex_array_create(int sz);
+extern void halide_mutex_array_destroy(void *user_context, void *array);
+extern int halide_mutex_array_lock(struct halide_mutex_array *array, int entry);
+extern int halide_mutex_array_unlock(struct halide_mutex_array *array, int entry);
 //@}
 
 /** Define halide_do_par_for to replace the default thread pool
@@ -1224,6 +1232,7 @@ typedef enum halide_target_feature_t {
 
     halide_target_feature_opencl,  ///< Enable the OpenCL runtime.
     halide_target_feature_cl_doubles,  ///< Enable double support on OpenCL targets
+    halide_target_feature_cl_atomic64, ///< Enable 64-bit atomics operations on OpenCL targets
 
     halide_target_feature_opengl,  ///< Enable the OpenGL runtime.
     halide_target_feature_openglcompute, ///< Enable OpenGL Compute runtime.

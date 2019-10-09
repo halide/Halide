@@ -694,6 +694,25 @@ private:
         stream << close_span();
     }
 
+    void visit(const Atomic *op) override {
+        stream << open_div("Atomic");
+        int id = unique_id();
+        stream << open_expand_button(id);
+        stream << open_span("Matched");
+        if (op->mutex_name.empty()) {
+            stream << keyword("atomic") << matched("{");
+        } else {
+            stream << keyword("atomic") << " (";
+            stream << symbol(op->mutex_name);
+            stream << ")" << matched("{");
+        }
+        stream << close_span();
+        stream << open_div("Atomic Body Indent", id);
+        print(op->body);
+        stream << close_div() << matched("}");
+        stream << close_div();
+    }
+
 public:
     void print(Expr ir) {
         ir.accept(this);

@@ -823,6 +823,15 @@ void CodeGen_GLSL::visit(const Broadcast *op) {
     print_assignment(op->type, rhs.str());
 }
 
+void CodeGen_GLSL::visit(const Atomic *op) {
+    // Floating point atomics can be tricky as there are no floating point atomics
+    // operations, and GLSL does not allow converting a  floating point buffer to an
+    // integer buffer.
+    // Plus, OpenGL supports atomics starting from 4.3, but Halide doesn't distinguish
+    // between OpenGL versions yet.
+    user_assert(false) << "GLSL: atomics are not supported.\n";
+}
+
 void CodeGen_GLSL::add_kernel(Stmt stmt, string name,
                               const vector<DeviceArgument> &args) {
 

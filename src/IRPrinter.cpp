@@ -931,5 +931,19 @@ void IRPrinter::visit(const Shuffle *op) {
     }
 }
 
+void IRPrinter::visit(const Atomic *op) {
+    if (op->mutex_name == "") {
+        stream << get_indent() << "atomic {\n";
+    } else {
+        stream << get_indent() << "atomic (";
+        stream << op->mutex_name;
+        stream << ") {\n";
+    }
+    indent += 2;
+    print(op->body);
+    indent -= 2;
+    stream << get_indent() << "}\n";
+}
+
 }  // namespace Internal
 }  // namespace Halide

@@ -310,6 +310,7 @@ public:
     Stmt visit(const Free *op);
     Stmt visit(const Acquire *op);
     Stmt visit(const Fork *op);
+    Stmt visit(const Atomic *op);
 };
 
 }  // namespace Internal

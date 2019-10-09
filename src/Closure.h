@@ -33,6 +33,7 @@ protected:
     void visit(const Store *op) override;
     void visit(const Allocate *op) override;
     void visit(const Variable *op) override;
+    void visit(const Atomic *op) override;
 
 public:
     /** Information about a buffer reference from a closure. */

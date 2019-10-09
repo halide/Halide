@@ -221,6 +221,7 @@ protected:
     void visit(const Prefetch *) override;
     void visit(const Fork *) override;
     void visit(const Acquire *) override;
+    void visit(const Atomic *) override;
 
     void visit_binop(Type t, Expr a, Expr b, const char *op);
 
@@ -240,6 +241,13 @@ protected:
     static std::string with_commas(const std::vector<T> &v) {
         return with_sep<T>(v, ", ");
     }
+
+    /** Are we inside an atomic node that uses mutex locks?
+        This is used for detecting deadlocks from nested atomics. */
+    bool inside_atomic_mutex_node;
+
+    /** Emit atomic store instructions? */
+    bool emit_atomic_stores;
 };
 
 }  // namespace Internal

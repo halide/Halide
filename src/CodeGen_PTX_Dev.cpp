@@ -1,4 +1,5 @@
 #include "CodeGen_PTX_Dev.h"
+#include "CSE.h"
 #include "CodeGen_Internal.h"
 #include "Debug.h"
 #include "ExprUsesVar.h"
@@ -263,6 +264,41 @@ void CodeGen_PTX_Dev::visit(const Load *op) {
 }
 
 void CodeGen_PTX_Dev::visit(const Store *op) {
+    // Issue atomic store if we are inside an Atomic node.
+    if (emit_atomic_stores) {
+        user_assert(is_one(op->predicate)) << "Atomic update does not support predicated store.\n";
+        user_assert(op->value.type().bits() >= 32) << "CUDA: 8-bit or 16-bit atomics are not supported.\n";
+#if LLVM_VERSION < 90
+        user_assert(op->value.type().is_scalar())
+            << "CUDA atomic update does not support vectorization with LLVM version < 9.\n";
+        // Generate nvvm intrinsics for the atomics if this is a float atomicAdd.
+        // Otherwise defer to the llvm codegen. For llvm version >= 90, atomicrmw support floats so we
+        // can also refer to llvm.
+        // Half atomics are supported by compute capability 7.x or higher.
+        if (op->value.type().is_float() && (op->value.type().bits() == 32 || (op->value.type().bits() == 64 && target.has_feature(Target::CUDACapability61)))) {
+            Expr val_expr = op->value;
+            Expr equiv_load = Load::make(op->value.type(), op->name, op->index, Buffer<>(), op->param, op->predicate, op->alignment);
+            Expr delta = simplify(common_subexpression_elimination(op->value - equiv_load));
+            // For atomicAdd, we check if op->value - store[index] is independent of store.
+            bool is_atomic_add = !expr_uses_var(delta, op->name);
+            if (is_atomic_add) {
+                Value *ptr = codegen_buffer_pointer(op->name, op->value.type(), op->index);
+                Value *val = codegen(delta);
+                llvm::Function *intrin = nullptr;
+                if (op->value.type().bits() == 32) {
+                    intrin = module->getFunction("llvm.nvvm.atomic.load.add.f32.p0f32");
+                    internal_assert(intrin) << "Could not find atomic intrinsics llvm.nvvm.atomic.load.add.f32.p0f32\n";
+                } else {
+                    internal_assert(op->value.type().bits() == 64);
+                    intrin = module->getFunction("llvm.nvvm.atomic.load.add.f64.p0f64");
+                    internal_assert(intrin) << "Could not find atomic intrinsics llvm.nvvm.atomic.load.add.f64.p0f64\n";
+                }
+                value = builder->CreateCall(intrin, {ptr, val});
+                return;
+            }
+        }
+#endif
+    }
 
     // Do aligned 4-wide 32-bit stores as a single i128 store.
     const Ramp *r = op->index.as<Ramp>();
@@ -279,6 +315,17 @@ void CodeGen_PTX_Dev::visit(const Store *op) {
     }
 
     CodeGen_LLVM::visit(op);
+}
+
+void CodeGen_PTX_Dev::visit(const Atomic *op) {
+    // CUDA requires all the threads in a warp to perform the same operations,
+    // which means our mutex will lead to deadlock.
+    user_assert(op->mutex_name.empty())
+        << "The atomic update requires a mutex lock, which is not supported in CUDA.\n";
+
+    // Issue atomic stores.
+    ScopedValue<bool> old_emit_atomic_stores(emit_atomic_stores, true);
+    IRVisitor::visit(op);
 }
 
 string CodeGen_PTX_Dev::march() const {
@@ -495,6 +542,24 @@ void CodeGen_PTX_Dev::dump() {
 
 std::string CodeGen_PTX_Dev::print_gpu_name(const std::string &name) {
     return name;
+}
+
+bool CodeGen_PTX_Dev::supports_atomic_add(const Type &t) const {
+    if (t.bits() < 32) {
+        // TODO: Half atomics are supported by compute capability 7.x or higher.
+        return false;
+    }
+    if (t.is_int_or_uint()) {
+        return true;
+    }
+    if (t.is_float() && t.bits() == 32) {
+        return true;
+    }
+    if (t.is_float() && t.bits() == 64) {
+        // double atomics are supported since CC6.1
+        return target.has_feature(Target::CUDACapability61);
+    }
+    return false;
 }
 
 }  // namespace Internal

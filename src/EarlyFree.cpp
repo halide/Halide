@@ -99,6 +99,13 @@ private:
             }
         }
     }
+
+    void visit(const Atomic *op) override {
+        if (op->mutex_name == func) {
+            last_use = containing_stmt;
+        }
+        IRVisitor::visit(op);
+    }
 };
 
 class InjectMarker : public IRMutator {

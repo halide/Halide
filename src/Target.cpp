@@ -327,6 +327,7 @@ const std::map<std::string, Target::Feature> feature_name_map = {
     {"opencl", Target::OpenCL},
     {"cl_doubles", Target::CLDoubles},
     {"cl_half", Target::CLHalf},
+    {"cl_atomics64", Target::CLAtomics64},
     {"opengl", Target::OpenGL},
     {"openglcompute", Target::OpenGLCompute},
     {"egl", Target::EGL},

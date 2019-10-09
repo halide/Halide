@@ -282,6 +282,7 @@ endforeach()
 # Don't include anything here that includes llvm headers.
 # Keep this list sorted in alphabetical order.
 set(HEADER_FILES
+  AddAtomicMutex.h
   AddImageChecks.h
   AddParameterChecks.h
   AlignLoads.h
@@ -459,6 +460,7 @@ endforeach()
 
 # Keep this list sorted in alphabetical order.
 add_library(Halide ${HALIDE_LIBRARY_TYPE}
+  AddAtomicMutex.cpp
   AddImageChecks.cpp
   AddParameterChecks.cpp
   AlignLoads.cpp

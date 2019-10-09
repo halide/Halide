@@ -85,6 +85,7 @@ protected:
     virtual Stmt visit(const Prefetch *);
     virtual Stmt visit(const Acquire *);
     virtual Stmt visit(const Fork *);
+    virtual Stmt visit(const Atomic *);
 };
 
 /** A mutator that caches and reapplies previously-done mutations, so

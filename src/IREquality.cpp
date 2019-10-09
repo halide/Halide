@@ -96,6 +96,7 @@ private:
     void visit(const Evaluate *) override;
     void visit(const Shuffle *) override;
     void visit(const Prefetch *) override;
+    void visit(const Atomic *) override;
 };
 
 template<typename T>
@@ -577,6 +578,14 @@ void IRComparer::visit(const Prefetch *op) {
         compare_expr(s->bounds[i].extent, op->bounds[i].extent);
     }
     compare_expr(s->condition, op->condition);
+    compare_stmt(s->body, op->body);
+}
+
+void IRComparer::visit(const Atomic *op) {
+    const Atomic *s = stmt.as<Atomic>();
+
+    compare_names(s->producer_name, op->producer_name);
+    compare_names(s->mutex_name, op->mutex_name);
     compare_stmt(s->body, op->body);
 }
 

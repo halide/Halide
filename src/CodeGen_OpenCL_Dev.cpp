@@ -1,13 +1,16 @@
 #include <algorithm>
 #include <sstream>
 
+#include "CSE.h"
 #include "CodeGen_Internal.h"
 #include "CodeGen_OpenCL_Dev.h"
 #include "Debug.h"
 #include "EliminateBoolVectors.h"
 #include "EmulateFloat16Math.h"
+#include "ExprUsesVar.h"
 #include "IRMutator.h"
 #include "IROperator.h"
+#include "Simplify.h"
 
 namespace Halide {
 namespace Internal {
@@ -300,6 +303,109 @@ void CodeGen_OpenCL_Dev::CodeGen_OpenCL_C::visit(const Load *op) {
 void CodeGen_OpenCL_Dev::CodeGen_OpenCL_C::visit(const Store *op) {
     user_assert(is_one(op->predicate)) << "Predicated store is not supported inside OpenCL kernel.\n";
 
+    if (emit_atomic_stores) {
+        // Currently only support scalar atomics.
+        user_assert(op->value.type().is_scalar()) << "OpenCL atomic store does not support vectorization.\n";
+        user_assert(op->value.type().bits() >= 32) << "OpenCL only support 32 and 64 bit atomics.\n";
+        if (op->value.type().bits() == 64) {
+            user_assert(target.has_feature(Target::CLAtomics64))
+                << "Enable feature CLAtomics64 for 64-bit atomics in OpenCL.\n";
+        }
+        // Detect whether we can describe this as an atomic-read-modify-write,
+        // otherwise fallback to a compare-and-swap loop.
+        // Current only test for atomic add.
+        Expr val_expr = op->value;
+        Type t = val_expr.type();
+        Expr equiv_load = Load::make(t, op->name, op->index, Buffer<>(), op->param, op->predicate, op->alignment);
+        Expr delta = simplify(common_subexpression_elimination(op->value - equiv_load));
+        // For atomicAdd, we check if op->value - store[index] is independent of store.
+        // The atomicAdd operations in OpenCL only supports integers so we also check that.
+        bool is_atomic_add = t.is_int_or_uint() && !expr_uses_var(delta, op->name);
+        bool type_cast_needed = !(allocations.contains(op->name) &&
+                                  allocations.get(op->name).type == t);
+        auto print_store_var = [&]() {
+            if (type_cast_needed) {
+                stream << "(("
+                       << get_memory_space(op->name) << " "
+                       << print_type(t)
+                       << " *)"
+                       << print_name(op->name)
+                       << ")";
+            } else {
+                stream << print_name(op->name);
+            }
+        };
+        if (is_atomic_add) {
+            string id_index = print_expr(op->index);
+            string id_delta = print_expr(delta);
+            stream << get_indent();
+            // atomic_add(&x[i], delta);
+            if (t.bits() == 32) {
+                stream << "atomic_add(&";
+            } else {
+                stream << "atom_add(&";
+            }
+
+            print_store_var();
+            stream << "[" << id_index << "]";
+            stream << "," << id_delta << ");\n";
+        } else {
+            // CmpXchg loop
+            // {
+            //   union {unsigned int i; float f;} old_val;
+            //   union {unsigned int i; float f;} new_val;
+            //   do {
+            //     old_val.f = x[id_index];
+            //     new_val.f = ...
+            //   } while(atomic_cmpxchg((volatile address_space unsigned int*)&x[id_index], old_val.i, new_val.i) != old_val.i);
+            // }
+            stream << get_indent() << "{\n";
+            indent += 2;
+            string id_index = print_expr(op->index);
+            std::string int_type = t.bits() == 32 ? "int" : "long";
+            if (t.is_float() || t.is_uint()) {
+                int_type = "unsigned " + int_type;
+            }
+            if (t.is_float()) {
+                stream << get_indent() << "union {" << int_type << " i; " << print_type(t) << " f;} old_val;\n";
+                stream << get_indent() << "union {" << int_type << " i; " << print_type(t) << " f;} new_val;\n";
+            } else {
+                stream << get_indent() << int_type << " old_val;\n";
+                stream << get_indent() << int_type << " new_val;\n";
+            }
+            stream << get_indent() << "do {\n";
+            indent += 2;
+            stream << get_indent();
+            if (t.is_float()) {
+                stream << "old_val.f = ";
+            } else {
+                stream << "old_val = ";
+            }
+            print_store_var();
+            stream << "[" << id_index << "];\n";
+            string id_value = print_expr(op->value);
+            stream << get_indent();
+            if (t.is_float()) {
+                stream << "new_val.f = ";
+            } else {
+                stream << "new_val = ";
+            }
+            stream << id_value << ";\n";
+            indent -= 2;
+            std::string old_val = t.is_float() ? "old_val.i" : "old_val";
+            std::string new_val = t.is_float() ? "new_val.i" : "new_val";
+            stream << get_indent()
+                   << "} while(atomic_cmpxchg((volatile "
+                   << get_memory_space(op->name) << " " << int_type << "*)&"
+                   << print_name(op->name) << "[" << id_index << "], "
+                   << old_val << ", " << new_val << ") != " << old_val << ");\n"
+                   << get_indent() << "}\n";
+            indent -= 2;
+        }
+        cache.clear();
+        return;
+    }
+
     string id_value = print_expr(op->value);
     Type t = op->value.type();
 
@@ -513,6 +619,17 @@ void CodeGen_OpenCL_Dev::CodeGen_OpenCL_C::visit(const Max *op) {
 
 void CodeGen_OpenCL_Dev::CodeGen_OpenCL_C::visit(const Min *op) {
     print_expr(Call::make(op->type, "min", {op->a, op->b}, Call::Extern));
+}
+
+void CodeGen_OpenCL_Dev::CodeGen_OpenCL_C::visit(const Atomic *op) {
+    // Most GPUs require all the threads in a warp to perform the same operations,
+    // which means our mutex will lead to deadlock.
+    user_assert(op->mutex_name.empty())
+        << "The atomic update requires a mutex lock, which is not supported in OpenCL.\n";
+
+    // Issue atomic stores.
+    ScopedValue<bool> old_emit_atomic_stores(emit_atomic_stores, true);
+    IRVisitor::visit(op);
 }
 
 void CodeGen_OpenCL_Dev::add_kernel(Stmt s,
@@ -781,6 +898,11 @@ void CodeGen_OpenCL_Dev::init_module() {
                    << "#define acosh_f16 acosh\n"
                    << "#define tanh_f16 tanh\n"
                    << "#define atanh_f16 atanh\n";
+    }
+
+    if (target.has_feature(Target::CLAtomics64)) {
+        src_stream << "#pragma OPENCL EXTENSION cl_khr_int64_base_atomics : enable\n";
+        src_stream << "#pragma OPENCL EXTENSION cl_khr_int64_extended_atomics : enable\n";
     }
 
     src_stream << '\n';

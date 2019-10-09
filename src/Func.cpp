@@ -291,22 +291,45 @@ void Stage::set_dim_type(VarOrRVar var, ForType t) {
             dims[i].for_type = t;
 
             // If it's an rvar and the for type is parallel, we need to
-            // validate that this doesn't introduce a race condition.
+            // validate that this doesn't introduce a race condition,
+            // unless it is flagged explicitly or is a associative atomic operation.
             if (!dims[i].is_pure() && var.is_rvar && is_parallel(t)) {
-                user_assert(definition.schedule().allow_race_conditions())
+                if (!definition.schedule().allow_race_conditions() &&
+                    definition.schedule().atomic()) {
+                    if (!definition.schedule().override_atomic_associativity_test()) {
+                        // We only allow allow associative atomic operations
+                        const string &func_name = function.name();
+                        vector<Expr> &args = definition.args();
+                        vector<Expr> &values = definition.values();
+
+                        // Check whether the operator is associative and determine the operator and
+                        // its identity for each value in the definition if it is a Tuple
+                        const auto &prover_result = prove_associativity(func_name, args, values);
+
+                        user_assert(prover_result.associative())
+                            << "Failed to call atomic() on " << name()
+                            << " since it can't prove associativity of the operator.\n";
+                        internal_assert(prover_result.size() == values.size());
+                    }
+                }
+                user_assert(definition.schedule().allow_race_conditions() ||
+                            definition.schedule().atomic())
                     << "In schedule for " << name()
                     << ", marking var " << var.name()
                     << " as parallel or vectorized may introduce a race"
                     << " condition resulting in incorrect output."
-                    << " It is possible to override this error using"
-                    << " the allow_race_conditions() method. Use this"
+                    << " It is possible to parallelize this by using the"
+                    << " atomic() method if the operation is associative,"
+                    << " or set override_associativity_test to true in the atomic method "
+                    << " if you are certain that the operation is associative."
+                    << " It is also possible to override this error using"
+                    << " the allow_race_conditions() method. Use allow_race_conditions()"
                     << " with great caution, and only when you are willing"
                     << " to accept non-deterministic output, or you can prove"
                     << " that any race conditions in this code do not change"
                     << " the output, or you can prove that there are actually"
                     << " no race conditions, and that Halide is being too cautious.\n";
             }
-
         } else if (t == ForType::Vectorized) {
             user_assert(dims[i].for_type != ForType::Vectorized)
                 << "In schedule for " << name()
@@ -1405,6 +1428,12 @@ Stage &Stage::allow_race_conditions() {
     return *this;
 }
 
+Stage &Stage::atomic(bool override_associativity_test) {
+    definition.schedule().atomic() = true;
+    definition.schedule().override_atomic_associativity_test() = override_associativity_test;
+    return *this;
+}
+
 Stage &Stage::serial(VarOrRVar var) {
     set_dim_type(var, ForType::Serial);
     return *this;
@@ -1975,7 +2004,14 @@ Func &Func::rename(VarOrRVar old_name, VarOrRVar new_name) {
 }
 
 Func &Func::allow_race_conditions() {
+    invalidate_cache();
     Stage(func, func.definition(), 0).allow_race_conditions();
+    return *this;
+}
+
+Func &Func::atomic(bool override_associativity_test) {
+    invalidate_cache();
+    Stage(func, func.definition(), 0).atomic(override_associativity_test);
     return *this;
 }
 
