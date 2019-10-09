@@ -26,7 +26,7 @@ done
 NUM_IMAGES=$(ls ${DATA_DIR} | wc -l)
 
 # how many pipelines to generate
-NUM_SAMPLES=3
+NUM_SAMPLES=1
 
 for ((i=0;i<${NUM_SAMPLES};i++)); do
   (( SEED = ${NUM_SAMPLES} * ${JOB_ID} + $i ))
@@ -37,7 +37,7 @@ for ((i=0;i<${NUM_SAMPLES};i++)); do
   # run generator to compile new random pipeline
 
   # compile test to use new pipeline 
-  g++ -w -std=c++11  -I ../../distrib/include/ -I ../../distrib/tools/ -g -Wall -I ${DIR} run_demosaic.cpp new_generator.cpp ../../distrib/lib/libHalide.a -o ${DIR}/gen_demosaic_pipes -ldl -lpthread -lz -fopenmp
+  g++ -w -std=c++11  -I ../../distrib/include/ -I ../../distrib/tools/ -g -Wall -I ${DIR} jit_run_demosaic.cpp new_generator.cpp ../../distrib/lib/libHalide.a -o ${DIR}/gen_demosaic_pipes -ldl -lpthread -lz -fopenmp
   # run the jitted generator to generate pipelines and evaluate their losses
   ${DIR}/gen_demosaic_pipes ${IMAGES_LIST_FILE} ${DIR} ${NUM_IMAGES} ${NUM_SAMPLES} ${JOB_ID}
 done
