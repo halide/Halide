@@ -736,6 +736,7 @@ HEADER_FILES = \
   Scope.h \
   SelectGPUAPI.h \
   Simplify.h \
+  Simplify_Internal.h \
   SimplifyCorrelatedDifferences.h \
   SimplifySpecializations.h \
   SkipStages.h \

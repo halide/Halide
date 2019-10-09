@@ -3,6 +3,7 @@
 
 #include "CSE.h"
 #include "IRMutator.h"
+#include "PartitionLoops.h"
 #include "Substitute.h"
 
 namespace Halide {
@@ -22,34 +23,38 @@ Simplify::Simplify(bool r, const Scope<Interval> *bi, const Scope<ModulusRemaind
     remove_dead_lets(r), no_float_simplify(false) {
 
     // Only respect the constant bounds from the containing scope.
-    for (auto iter = bi->cbegin(); iter != bi->cend(); ++iter) {
-        ExprInfo bounds;
-        if (const int64_t *i_min = as_const_int(iter.value().min)) {
-            bounds.min_defined = true;
-            bounds.min = *i_min;
-        }
-        if (const int64_t *i_max = as_const_int(iter.value().max)) {
-            bounds.max_defined = true;
-            bounds.max = *i_max;
-        }
+    if (bi) {
+        for (auto iter = bi->cbegin(); iter != bi->cend(); ++iter) {
+            ExprInfo bounds;
+            if (const int64_t *i_min = as_const_int(iter.value().min)) {
+                bounds.min_defined = true;
+                bounds.min = *i_min;
+            }
+            if (const int64_t *i_max = as_const_int(iter.value().max)) {
+                bounds.max_defined = true;
+                bounds.max = *i_max;
+            }
 
-        if (ai->contains(iter.name())) {
-            bounds.alignment = ai->get(iter.name());
-        }
+            if (ai->contains(iter.name())) {
+                bounds.alignment = ai->get(iter.name());
+            }
 
-        if (bounds.min_defined || bounds.max_defined || bounds.alignment.modulus != 1) {
-            bounds_and_alignment_info.push(iter.name(), bounds);
+            if (bounds.min_defined || bounds.max_defined || bounds.alignment.modulus != 1) {
+                bounds_and_alignment_info.push(iter.name(), bounds);
+            }
         }
     }
 
-    for (auto iter = ai->cbegin(); iter != ai->cend(); ++iter) {
-        if (bounds_and_alignment_info.contains(iter.name())) {
-            // Already handled
-            continue;
+    if (ai) {
+        for (auto iter = ai->cbegin(); iter != ai->cend(); ++iter) {
+            if (bounds_and_alignment_info.contains(iter.name())) {
+                // Already handled
+                continue;
+            }
+            ExprInfo bounds;
+            bounds.alignment = iter.value();
+            bounds_and_alignment_info.push(iter.name(), bounds);
         }
-        ExprInfo bounds;
-        bounds.alignment = iter.value();
-        bounds_and_alignment_info.push(iter.name(), bounds);
     }
 
 }
@@ -105,61 +110,16 @@ bool Simplify::const_uint(const Expr &e, uint64_t *u) {
     }
 }
 
-void Simplify::ScopedFact::learn_false(const Expr &fact) {
-    Simplify::VarInfo info;
-    info.old_uses = info.new_uses = 0;
-    if (const Variable *v = fact.as<Variable>()) {
-        info.replacement = const_false(fact.type().lanes());
-        simplify->var_info.push(v->name, info);
-        pop_list.push_back(v);
-    } else if (const NE *ne = fact.as<NE>()) {
-        const Variable *v = ne->a.as<Variable>();
-        if (v && is_const(ne->b)) {
-            info.replacement = ne->b;
-            simplify->var_info.push(v->name, info);
-            pop_list.push_back(v);
-        }
-    } else if (const LT *lt = fact.as<LT>()) {
-        const Variable *v = lt->a.as<Variable>();
-        const int64_t *i = as_const_int(lt->b);
-        if (v && i) {
-            // !(v < i)
-            learn_lower_bound(v, *i);
-        }
-        v = lt->b.as<Variable>();
-        i = as_const_int(lt->a);
-        if (v && i) {
-            // !(i < v)
-            learn_upper_bound(v, *i);
-        }
-    } else if (const LE *le = fact.as<LE>()) {
-        const Variable *v = le->a.as<Variable>();
-        const int64_t *i = as_const_int(le->b);
-        if (v && i) {
-            // !(v <= i)
-            learn_lower_bound(v, *i + 1);
-        }
-        v = le->b.as<Variable>();
-        i = as_const_int(le->a);
-        if (v && i) {
-            // !(i <= v)
-            learn_upper_bound(v, *i - 1);
-        }
-    } else if (const Or *o = fact.as<Or>()) {
-        // Both must be false
-        learn_false(o->a);
-        learn_false(o->b);
-    } else if (const Not *n = fact.as<Not>()) {
-        learn_true(n->a);
-    } else if (simplify->falsehoods.insert(fact).second) {
-        falsehoods.push_back(fact);
+void Simplify::learn_info(const Variable *v, const ExprInfo &info) {
+    if (bounds_and_alignment_info.contains(v->name)) {
+        bounds_and_alignment_info.ref(v->name).intersect(info);
+    } else {
+        bounds_and_alignment_info.push(v->name, info);
     }
 }
 
-void Simplify::ScopedFact::learn_upper_bound(const Variable *v, int64_t val) {
-    ExprInfo b;
-    b.max_defined = true;
-    b.max = val;
+void Simplify::ScopedFact::learn_info(const Variable *v, const ExprInfo &info) {
+    ExprInfo b = info;
     if (simplify->bounds_and_alignment_info.contains(v->name)) {
         b.intersect(simplify->bounds_and_alignment_info.get(v->name));
     }
@@ -167,26 +127,24 @@ void Simplify::ScopedFact::learn_upper_bound(const Variable *v, int64_t val) {
     bounds_pop_list.push_back(v);
 }
 
-void Simplify::ScopedFact::learn_lower_bound(const Variable *v, int64_t val) {
-    ExprInfo b;
-    b.min_defined = true;
-    b.min = val;
-    if (simplify->bounds_and_alignment_info.contains(v->name)) {
-        b.intersect(simplify->bounds_and_alignment_info.get(v->name));
-    }
-    simplify->bounds_and_alignment_info.push(v->name, b);
-    bounds_pop_list.push_back(v);
-}
+namespace {
 
-void Simplify::ScopedFact::learn_true(const Expr &fact) {
+void learn_false_helper(const Expr &fact, Simplify *simplify, Simplify::ScopedFact *scoped);
+
+void learn_true_helper(const Expr &fact, Simplify *simplify, Simplify::ScopedFact *scoped) {
+
     Simplify::VarInfo info;
+    Simplify::ExprInfo expr_info;
+    const Variable *v = nullptr;
     info.old_uses = info.new_uses = 0;
-    if (const Variable *v = fact.as<Variable>()) {
+    if (const Variable *var = fact.as<Variable>()) {
         info.replacement = const_true(fact.type().lanes());
-        simplify->var_info.push(v->name, info);
-        pop_list.push_back(v);
+        simplify->var_info.push(var->name, info);
+        if (scoped) {
+            scoped->pop_list.push_back(var);
+        }
     } else if (const EQ *eq = fact.as<EQ>()) {
-        const Variable *v = eq->a.as<Variable>();
+        v = eq->a.as<Variable>();
         const Mod *m = eq->a.as<Mod>();
         const int64_t *modulus = m ? as_const_int(m->b) : nullptr;
         const int64_t *remainder = m ? as_const_int(eq->b) : nullptr;
@@ -195,68 +153,159 @@ void Simplify::ScopedFact::learn_true(const Expr &fact) {
                 // TODO: consider other cases where we might want to entirely substitute
                 info.replacement = eq->b;
                 simplify->var_info.push(v->name, info);
-                pop_list.push_back(v);
+                if (scoped) {
+                    scoped->pop_list.push_back(v);
+                }
             } else if (v->type.is_int()) {
                 // Visit the rhs again to get bounds and alignment info to propagate to the LHS
                 // TODO: Visiting it again is inefficient
-                Simplify::ExprInfo expr_info;
                 simplify->mutate(eq->b, &expr_info);
-                if (simplify->bounds_and_alignment_info.contains(v->name)) {
-                    // We already know something about this variable and don't want to suppress it.
-                    auto existing_knowledge = simplify->bounds_and_alignment_info.get(v->name);
-                    expr_info.intersect(existing_knowledge);
-                }
-                simplify->bounds_and_alignment_info.push(v->name, expr_info);
-                bounds_pop_list.push_back(v);
             }
         } else if (modulus && remainder && (v = m->a.as<Variable>())) {
             // Learn from expressions of the form x % 8 == 3
-            Simplify::ExprInfo expr_info;
             expr_info.alignment.modulus = *modulus;
             expr_info.alignment.remainder = *remainder;
-            if (simplify->bounds_and_alignment_info.contains(v->name)) {
-                // We already know something about this variable and don't want to suppress it.
-                auto existing_knowledge = simplify->bounds_and_alignment_info.get(v->name);
-                expr_info.intersect(existing_knowledge);
-            }
-            simplify->bounds_and_alignment_info.push(v->name, expr_info);
-            bounds_pop_list.push_back(v);
         }
     } else if (const LT *lt = fact.as<LT>()) {
-        const Variable *v = lt->a.as<Variable>();
+        v = lt->a.as<Variable>();
         const int64_t *i = as_const_int(lt->b);
         if (v && i) {
             // v < i
-            learn_upper_bound(v, *i - 1);
+            expr_info.max_defined = true;
+            expr_info.max = *i - 1;
+        } else {
+            v = lt->b.as<Variable>();
+            i = as_const_int(lt->a);
+            if (v && i) {
+                // i < v
+                expr_info.min_defined = true;
+                expr_info.min = *i + 1;
+            }
+        }
+    } else if (const LE *le = fact.as<LE>()) {
+        v = le->a.as<Variable>();
+        const int64_t *i = as_const_int(le->b);
+        if (v && i) {
+            // v <= i
+            expr_info.max_defined = true;
+            expr_info.max = *i;
+        } else {
+            v = le->b.as<Variable>();
+            i = as_const_int(le->a);
+            if (v && i) {
+                // i <= v
+                expr_info.min_defined = true;
+                expr_info.min = *i;
+            }
+        }
+    } else if (const And *a = fact.as<And>()) {
+        // Both must be true
+        learn_true_helper(a->a, simplify, scoped);
+        learn_true_helper(a->b, simplify, scoped);
+    } else if (const Not *n = fact.as<Not>()) {
+        learn_false_helper(n->a, simplify, scoped);
+    } else if (simplify->truths.insert(fact).second && scoped) {
+        scoped->truths.push_back(fact);
+    }
+
+    if (v && (expr_info.min_defined ||
+              expr_info.max_defined ||
+              expr_info.alignment.modulus != 1)) {
+        if (scoped) {
+            scoped->learn_info(v, expr_info);
+        } else {
+            simplify->learn_info(v, expr_info);
+        }
+    }
+}
+
+void learn_false_helper(const Expr &fact, Simplify *simplify, Simplify::ScopedFact *scoped) {
+    Simplify::VarInfo info;
+    Simplify::ExprInfo expr_info;
+    const Variable *v = nullptr;
+    info.old_uses = info.new_uses = 0;
+    if (const Variable *var = fact.as<Variable>()) {
+        info.replacement = const_false(fact.type().lanes());
+        simplify->var_info.push(var->name, info);
+        if (scoped) {
+            scoped->pop_list.push_back(var);
+        }
+    } else if (const NE *ne = fact.as<NE>()) {
+        v = ne->a.as<Variable>();
+        if (v && is_const(ne->b)) {
+            info.replacement = ne->b;
+            simplify->var_info.push(v->name, info);
+            if (scoped) {
+                scoped->pop_list.push_back(v);
+            }
+        }
+    } else if (const LT *lt = fact.as<LT>()) {
+        v = lt->a.as<Variable>();
+        const int64_t *i = as_const_int(lt->b);
+        if (v && i) {
+            // !(v < i)
+            expr_info.min_defined = true;
+            expr_info.min = *i;
         }
         v = lt->b.as<Variable>();
         i = as_const_int(lt->a);
         if (v && i) {
-            // i < v
-            learn_lower_bound(v, *i + 1);
+            // !(i < v)
+            expr_info.max_defined = true;
+            expr_info.max = *i;
         }
     } else if (const LE *le = fact.as<LE>()) {
-        const Variable *v = le->a.as<Variable>();
+        v = le->a.as<Variable>();
         const int64_t *i = as_const_int(le->b);
         if (v && i) {
-            // v <= i
-            learn_upper_bound(v, *i);
+            // !(v <= i)
+            expr_info.min_defined = true;
+            expr_info.min = *i + 1;
         }
         v = le->b.as<Variable>();
         i = as_const_int(le->a);
         if (v && i) {
-            // i <= v
-            learn_lower_bound(v, *i);
+            // !(i <= v)
+            expr_info.max_defined = true;
+            expr_info.max = *i - 1;
         }
-    } else if (const And *a = fact.as<And>()) {
-        // Both must be true
-        learn_true(a->a);
-        learn_true(a->b);
+    } else if (const Or *o = fact.as<Or>()) {
+        // Both must be false
+        learn_false_helper(o->a, simplify, scoped);
+        learn_false_helper(o->b, simplify, scoped);
     } else if (const Not *n = fact.as<Not>()) {
-        learn_false(n->a);
-    } else if (simplify->truths.insert(fact).second) {
-        truths.push_back(fact);
+        learn_true_helper(n->a, simplify, scoped);
+    } else if (simplify->falsehoods.insert(fact).second && scoped) {
+        scoped->falsehoods.push_back(fact);
     }
+
+    if (v && (expr_info.min_defined ||
+              expr_info.max_defined ||
+              expr_info.alignment.modulus != 1)) {
+        if (scoped) {
+            scoped->learn_info(v, expr_info);
+        } else {
+            simplify->learn_info(v, expr_info);
+        }
+    }
+}
+}
+
+
+void Simplify::ScopedFact::learn_true(const Expr &fact) {
+    learn_true_helper(fact, simplify, this);
+}
+
+void Simplify::learn_true(const Expr &fact) {
+    learn_true_helper(fact, this, nullptr);
+}
+
+void Simplify::ScopedFact::learn_false(const Expr &fact) {
+    learn_false_helper(fact, simplify, this);
+}
+
+void Simplify::learn_false(const Expr &fact) {
+    learn_false_helper(fact, this, nullptr);
 }
 
 Simplify::ScopedFact::~ScopedFact() {
@@ -302,20 +351,20 @@ bool can_prove(Expr e, const Scope<Interval> &bounds) {
     internal_assert(e.type().is_bool())
         << "Argument to can_prove is not a boolean Expr: " << e << "\n";
 
-    // Remove likelies
-    struct RemoveLikelies : public IRMutator {
+    class RemoveLikelyTags : public IRMutator {
         using IRMutator::visit;
+
         Expr visit(const Call *op) override {
-            if (op->is_intrinsic(Call::likely) ||
-                op->is_intrinsic(Call::likely_if_innermost)) {
+            if (op->is_intrinsic(Call::likely)) {
+                internal_assert(op->args.size() == 1);
                 return mutate(op->args[0]);
             } else {
                 return IRMutator::visit(op);
             }
         }
     };
-    e = RemoveLikelies().mutate(e);
 
+    e = RemoveLikelyTags().mutate(e);
     e = common_subexpression_elimination(e);
 
     Expr orig = e;
