@@ -22,27 +22,27 @@ $(GENERATOR_BIN)/%.generator : %_generator.cpp $(GENERATOR_DEPS)
 
 $(BIN)/%/conv3x3a16.o: $(GENERATOR_BIN)/conv3x3.generator
 	@mkdir -p $(@D)
-	$^ -g conv3x3 -o $(@D) -e o,h -f conv3x3a16 target=$* accumulator_type=int16 ${SCHEDULING_OPTS}
+	$^ -g conv3x3 -o $(@D) -e object,c_header -f conv3x3a16 target=$* accumulator_type=int16 ${SCHEDULING_OPTS}
 
 $(BIN)/%/dilate3x3.o: $(GENERATOR_BIN)/dilate3x3.generator
 	@mkdir -p $(@D)
-	$^ -g dilate3x3 -o $(@D) -e o,h -f dilate3x3 target=$* ${SCHEDULING_OPTS}
+	$^ -g dilate3x3 -o $(@D) -e object,c_header -f dilate3x3 target=$* ${SCHEDULING_OPTS}
 
 $(BIN)/%/median3x3.o: $(GENERATOR_BIN)/median3x3.generator
 	@mkdir -p $(@D)
-	$^ -g median3x3 -o $(@D) -e o,h -f median3x3 target=$* ${SCHEDULING_OPTS}
+	$^ -g median3x3 -o $(@D) -e object,c_header -f median3x3 target=$* ${SCHEDULING_OPTS}
 
 $(BIN)/%/gaussian5x5.o: $(GENERATOR_BIN)/gaussian5x5.generator
 	@mkdir -p $(@D)
-	$^ -g gaussian5x5 -o $(@D) -e o,h -f gaussian5x5 target=$* ${SCHEDULING_OPTS}
+	$^ -g gaussian5x5 -o $(@D) -e object,c_header -f gaussian5x5 target=$* ${SCHEDULING_OPTS}
 
 $(BIN)/%/sobel.o: $(GENERATOR_BIN)/sobel.generator
 	@mkdir -p $(@D)
-	$^ -g sobel -o $(@D) -e o,h -f sobel target=$* ${SCHEDULING_OPTS}
+	$^ -g sobel -o $(@D) -e object,c_header -f sobel target=$* ${SCHEDULING_OPTS}
 
 $(BIN)/%/conv3x3a32.o: $(GENERATOR_BIN)/conv3x3.generator
 	@mkdir -p $(@D)
-	$^ -g conv3x3 -o $(@D) -e o,h -f conv3x3a32 target=$* accumulator_type=int32 ${SCHEDULING_OPTS}
+	$^ -g conv3x3 -o $(@D) -e object,c_header -f conv3x3a32 target=$* accumulator_type=int32 ${SCHEDULING_OPTS}
 
 $(BIN)/%/filters.a : $(OBJS)
 	ar q $(BIN)/$*/filters.a $^

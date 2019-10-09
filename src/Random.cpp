@@ -60,7 +60,7 @@ Expr rng32(Expr x) {
 
     return (((C2 * x) + C1) * x) + C0;
 }
-}
+}  // namespace
 
 Expr random_int(const vector<Expr> &e) {
     internal_assert(e.size());

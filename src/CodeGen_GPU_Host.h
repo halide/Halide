@@ -48,11 +48,10 @@ protected:
     using CodeGen_CPU::create_alloca_at_entry;
     using CodeGen_CPU::function;
     using CodeGen_CPU::get_user_context;
+    using CodeGen_CPU::i16_t;
     using CodeGen_CPU::i32_t;
     using CodeGen_CPU::i64_t;
-    using CodeGen_CPU::i16_t;
     using CodeGen_CPU::i8_t;
-    using CodeGen_CPU::type_t_type;
     using CodeGen_CPU::init_module;
     using CodeGen_CPU::llvm_type_of;
     using CodeGen_CPU::module;
@@ -62,6 +61,7 @@ protected:
     using CodeGen_CPU::sym_pop;
     using CodeGen_CPU::sym_push;
     using CodeGen_CPU::target;
+    using CodeGen_CPU::type_t_type;
     using CodeGen_CPU::visit;
 
     /** Nodes for which we need to override default behavior for the GPU runtime */

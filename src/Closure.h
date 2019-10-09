@@ -33,11 +33,11 @@ protected:
     void visit(const Store *op) override;
     void visit(const Allocate *op) override;
     void visit(const Variable *op) override;
+    void visit(const Atomic *op) override;
 
 public:
     /** Information about a buffer reference from a closure. */
-    struct Buffer
-    {
+    struct Buffer {
         /** The type of the buffer referenced. */
         Type type;
 
@@ -53,7 +53,9 @@ public:
         /** The size of the buffer if known, otherwise zero. */
         size_t size;
 
-        Buffer() : dimensions(0), read(false), write(false), size(0) { }
+        Buffer()
+            : dimensions(0), read(false), write(false), size(0) {
+        }
     };
 
 protected:

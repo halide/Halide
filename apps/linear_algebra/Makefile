@@ -6,7 +6,7 @@ CXXFLAGS += -Wall -march=native -I /opt/local/include
 HL_TARGET ?= host
 LIBHALIDE_BLAS = $(BIN)/libhalide_blas.a
 HALIDEBLAS_FLAGS ?= -DUSE_HALIDE
-EMIT_OPTIONS = stmt,assembly,o,h
+EMIT_OPTIONS = stmt,assembly,object,c_header
 
 EIGEN_INCLUDES ?= -I/usr/include/eigen3
 CBLAS_LIBS ?= -lblas
@@ -207,7 +207,7 @@ $(BUILD)/%.generator: src/%_generators.cpp $(GENERATOR_DEPS)
 
 # This can use any of the generators; pick an arbitrary one
 $(BUILD)/halide_runtime.o: $(BUILD)/blas_l1.generator
-	$< -o $(BUILD) -e o -r halide_runtime target=$(HL_TARGET)
+	$< -o $(BUILD) -e object -r halide_runtime target=$(HL_TARGET)
 
 $(BUILD)/halide_scopy_impl.o $(BUILD)/halide_scopy_impl.h: $(BUILD)/blas_l1.generator
 	$< -g saxpy -f halide_scopy_impl -o $(BUILD) -e $(EMIT_OPTIONS) \

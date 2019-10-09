@@ -19,7 +19,7 @@ void Weights::randomize(uint32_t seed) {
     // Fill the weights with random values
     for_each_buffer([&rng](Buffer<float> &w) {
         w.for_each_value([&rng](float &f) {
-            f = ((float)rng()) / rng.max() - 0.5f;
+            f = ((float)rng()) / ((float)rng.max()) - 0.5f;
         });
     });
 }

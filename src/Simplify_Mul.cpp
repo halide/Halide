@@ -15,7 +15,7 @@ int64_t saturating_mul(int64_t a, int64_t b) {
         return a * b;
     }
 }
-}
+}  // namespace
 
 Expr Simplify::visit(const Mul *op, ExprInfo *bounds) {
     ExprInfo a_bounds, b_bounds;
@@ -115,5 +115,5 @@ Expr Simplify::visit(const Mul *op, ExprInfo *bounds) {
     }
 }
 
-}
-}
+}  // namespace Internal
+}  // namespace Halide

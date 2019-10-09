@@ -20,6 +20,7 @@ public:
     }
     Scope<int> scope;
     bool inside_kernel_loop;
+
 private:
     using IRMutator::visit;
 
@@ -42,16 +43,16 @@ private:
             //                   )
             //
             vector<Expr> args(5);
-            args[0] = call_args[0];    // "name"
-            args[1] = call_args[1];    // name.buffer
+            args[0] = call_args[0];  // "name"
+            args[1] = call_args[1];  // name.buffer
 
             // Normalize first two coordinates.
             for (size_t i = 0; i < 2; i++) {
                 int to_index = 2 + i;
                 int from_index = 2 + i * 2;
                 args[to_index] =
-                  (Cast::make(Float(32), mutate(call_args[from_index])) + 0.5f) /
-                  mutate(call_args[from_index + 1]);
+                    (Cast::make(Float(32), mutate(call_args[from_index])) + 0.5f) /
+                    mutate(call_args[from_index + 1]);
             }
 
             // Confirm that user explicitly specified constant value for min
@@ -82,7 +83,7 @@ private:
             // out of
             //    image_store(name, name.buffer, x, y, c, value)
             vector<Expr> args(call->args);
-            args[5] = mutate(call->args[5]); // mutate value
+            args[5] = mutate(call->args[5]);  // mutate value
             return Call::make(call->type, Call::glsl_texture_store,
                               args, Call::Intrinsic);
         } else {
