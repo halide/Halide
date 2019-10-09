@@ -15,33 +15,43 @@ using std::string;
 
 namespace {
 
-/** Collect names of all stores inside a statement. */
-class CollectStoreNames : public IRGraphVisitor {
+/** Collect names of all stores matching the producer name inside a statement. */
+class CollectProducerStoreNames : public IRGraphVisitor {
 public:
+    CollectProducerStoreNames(const std::string &producer_name)
+        : producer_name(producer_name) {}
+
     Scope<void> store_names;
 
 protected:
     using IRGraphVisitor::visit;
 
     void visit(const Store *op) override {
-        include(op->predicate);
-        include(op->value);
-        include(op->index);
-        store_names.push(op->name);
+        IRGraphVisitor::visit(op);
+        if (op->name == producer_name || starts_with(op->name, producer_name + ".")) {
+            // This is a Store for the desginated Producer.
+            store_names.push(op->name);
+        }
     }
+
+    const std::string &producer_name;
 };
 
-/** Find Store inside of an Atomic node and return their indices. */
-class FindStoreIndex : public IRGraphVisitor {
+/** Find Store inside of an Atomic node for the designated producer
+ *  and return their indices. */
+class FindProducerStoreIndex : public IRGraphVisitor {
 public:
-    Expr index;
+    FindProducerStoreIndex(const std::string &producer_name)
+        : producer_name(producer_name) {}
+
+    Expr index; // The returned index.
 
 protected:
     using IRGraphVisitor::visit;
 
     // Need to also extract the let bindings of a Store index.
     void visit(const Let *op) override {
-        IRGraphVisitor::visit(op);
+        IRGraphVisitor::visit(op); // Make sure we visit the Store first.
         if (index.defined()) {
             if (expr_uses_var(index, op->name)) {
                 index = Let::make(op->name, op->value, index);
@@ -49,7 +59,7 @@ protected:
         }
     }
     void visit(const LetStmt *op) override {
-        IRGraphVisitor::visit(op);
+        IRGraphVisitor::visit(op); // Make sure we visit the Store first.
         if (index.defined()) {
             if (expr_uses_var(index, op->name)) {
                 index = Let::make(op->name, op->value, index);
@@ -58,33 +68,39 @@ protected:
     }
 
     void visit(const Store *op) override {
-        // Ideally we want to insert equal() checks here for different stores,
-        // but the indices of them actually are different in the case of tuples,
-        // since they usually refer to the strides/min/extents of their own tuple
-        // buffers. However, different elements in a tuple would have the same
-        // strides/min/extents so we are fine.
-        if (index.defined()) {
-            return;
+        IRGraphVisitor::visit(op);
+        if (op->name == producer_name || starts_with(op->name, producer_name + ".")) {
+            // This is a Store for the designated producer.
+
+            // Ideally we want to insert equal() checks here for different stores,
+            // but the indices of them actually are different in the case of tuples,
+            // since they usually refer to the strides/min/extents of their own tuple
+            // buffers. However, different elements in a tuple would have the same
+            // strides/min/extents so we are fine.
+            if (index.defined()) {
+                return;
+            }
+            index = op->index;
         }
-        index = op->index;
-        op->value.accept(this);
     }
+
+    const std::string &producer_name;
 };
 
-/** Throw an assertion for cases where the indexing on left-hand-side of
+/** Throws an assertion for cases where the indexing on left-hand-side of
  *  an atomic update references to itself.
  *  e.g. f(clamp(f(r), 0, 100)) = f(r) + 1 should be rejected. */
 class CheckAtomicValidity : public IRGraphVisitor {
 protected:
-    using IRVisitor::visit;
+    using IRGraphVisitor::visit;
 
     void visit(const Atomic *op) override {
         // Collect the names of all Store nodes inside.
-        CollectStoreNames collector;
+        CollectProducerStoreNames collector(op->producer_name);
         op->body.accept(&collector);
 
         // Find the indices from the Store nodes inside the body.
-        FindStoreIndex find;
+        FindProducerStoreIndex find(op->producer_name);
         op->body.accept(&find);
 
         Expr index = find.index;
@@ -165,7 +181,7 @@ protected:
 
     Stmt visit(const Atomic *op) override {
         // Collect the names of all Store nodes inside.
-        CollectStoreNames collector;
+        CollectProducerStoreNames collector(op->producer_name);
         op->body.accept(&collector);
         // Search for let bindings that access the producers.
         FindAtomicLetBindings finder(collector.store_names);
@@ -227,7 +243,8 @@ protected:
 /** Replace the indices in the Store nodes with the specified variable. */
 class ReplaceStoreIndexWithVar : public IRMutator {
 public:
-    ReplaceStoreIndexWithVar(Expr var) : var(var) {}
+    ReplaceStoreIndexWithVar(const std::string &producer_name, Expr var) :
+        producer_name(producer_name), var(var) {}
 
 protected:
     using IRMutator::visit;
@@ -243,6 +260,7 @@ protected:
                            op->alignment);
     }
 
+    const std::string &producer_name;
     Expr var;
 };
 
@@ -371,7 +389,7 @@ protected:
         }
 
         // Lock the mutexes using the indices from the Store nodes inside the body.
-        FindStoreIndex find;
+        FindProducerStoreIndex find(op->producer_name);
         op->body.accept(&find);
 
         Stmt body = op->body;
@@ -383,10 +401,12 @@ protected:
             index = Expr(0);
         } else {
             // Lift the index outside of the atomic node.
+            // This is for avoiding side-effects inside those expressions
+            // being evaluated twice.
             string name = unique_name('t');
             index_let = index;
             index = Variable::make(index.type(), name);
-            body = ReplaceStoreIndexWithVar(index).mutate(body);
+            body = ReplaceStoreIndexWithVar(op->producer_name, index).mutate(body);
         }
         // This generates a pointer to the mutex array
         Expr mutex_array = Variable::make(
