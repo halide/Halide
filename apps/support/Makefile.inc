@@ -130,6 +130,9 @@ endif
 
 GENERATOR_DEPS ?= $(LIB_HALIDE) $(HALIDE_DISTRIB_PATH)/include/Halide.h $(HALIDE_DISTRIB_PATH)/tools/GenGen.cpp
 
+# Generators which use autoscheduler plugin need to specify the linker where to find libHalide.so required by the plugin.
+GENERATOR_LDFLAGS ?= -Wl,-rpath,$(dir $(LIB_HALIDE))
+
 LIBPNG_LIBS_DEFAULT = $(shell libpng-config --ldflags)
 LIBPNG_CXX_FLAGS ?= $(shell libpng-config --cflags)
 # Workaround for libpng-config pointing to 64-bit versions on linux even when we're building for 32-bit
