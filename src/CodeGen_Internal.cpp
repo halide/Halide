@@ -1,9 +1,9 @@
 #include "CodeGen_Internal.h"
 #include "CSE.h"
 #include "Debug.h"
-#include "IntegerDivisionTable.h"
 #include "IRMutator.h"
 #include "IROperator.h"
+#include "IntegerDivisionTable.h"
 #include "LLVM_Headers.h"
 #include "Simplify.h"
 #include "Simplify_Internal.h"
@@ -18,7 +18,7 @@ using namespace llvm;
 
 namespace {
 
-vector<llvm::Type*> llvm_types(const Closure& closure, llvm::StructType *buffer_t, LLVMContext &context) {
+vector<llvm::Type *> llvm_types(const Closure &closure, llvm::StructType *buffer_t, LLVMContext &context) {
     vector<llvm::Type *> res;
     for (const auto &v : closure.vars) {
         res.push_back(llvm_type_of(&context, v.second));
@@ -32,7 +32,7 @@ vector<llvm::Type*> llvm_types(const Closure& closure, llvm::StructType *buffer_
 
 }  // namespace
 
-StructType *build_closure_type(const Closure& closure,
+StructType *build_closure_type(const Closure &closure,
                                llvm::StructType *buffer_t,
                                LLVMContext *context) {
     StructType *struct_t = StructType::create(*context, "closure_t");
@@ -42,7 +42,7 @@ StructType *build_closure_type(const Closure& closure,
 
 void pack_closure(llvm::StructType *type,
                   Value *dst,
-                  const Closure& closure,
+                  const Closure &closure,
                   const Scope<Value *> &src,
                   llvm::StructType *buffer_t,
                   IRBuilder<> *builder) {
@@ -82,7 +82,7 @@ void pack_closure(llvm::StructType *type,
     }
 }
 
-void unpack_closure(const Closure& closure,
+void unpack_closure(const Closure &closure,
                     Scope<Value *> &dst,
                     llvm::StructType *type,
                     Value *src,
@@ -211,7 +211,7 @@ bool function_takes_user_context(const std::string &name) {
         "_halide_buffer_retire_crops_after_extern_stage",
     };
     const int num_funcs = sizeof(user_context_runtime_funcs) /
-        sizeof(user_context_runtime_funcs[0]);
+                          sizeof(user_context_runtime_funcs[0]);
     for (int i = 0; i < num_funcs; ++i) {
         if (name == user_context_runtime_funcs[i]) {
             return true;
@@ -233,7 +233,7 @@ Expr lower_int_uint_div(Expr a, Expr b) {
 
     Type t = a.type();
     internal_assert(!t.is_float())
-            << "lower_int_uint_div is not meant to handle floating-point case.\n";
+        << "lower_int_uint_div is not meant to handle floating-point case.\n";
 
     int shift_amount;
     if (is_const_power_of_two_integer(b, &shift_amount) &&
@@ -248,14 +248,14 @@ Expr lower_int_uint_div(Expr a, Expr b) {
         int64_t multiplier, shift;
         if (t.bits() == 32) {
             multiplier = IntegerDivision::table_s32[*const_int_divisor][2];
-            shift      = IntegerDivision::table_s32[*const_int_divisor][3];
+            shift = IntegerDivision::table_s32[*const_int_divisor][3];
         } else if (t.bits() == 16) {
             multiplier = IntegerDivision::table_s16[*const_int_divisor][2];
-            shift      = IntegerDivision::table_s16[*const_int_divisor][3];
+            shift = IntegerDivision::table_s16[*const_int_divisor][3];
         } else {
             // 8 bit
             multiplier = IntegerDivision::table_s8[*const_int_divisor][2];
-            shift      = IntegerDivision::table_s8[*const_int_divisor][3];
+            shift = IntegerDivision::table_s8[*const_int_divisor][3];
         }
         Expr num = a;
 
@@ -270,7 +270,7 @@ Expr lower_int_uint_div(Expr a, Expr b) {
         // Multiply and keep the high half of the
         // result, and then apply the shift.
         Expr mult = make_const(num.type(), multiplier);
-        num = Call::make(num.type(), Call::mulhi_shr, { num, mult, make_const(UInt(num.type().bits()), shift) },
+        num = Call::make(num.type(), Call::mulhi_shr, {num, mult, make_const(UInt(num.type().bits()), shift)},
                          Call::PureIntrinsic);
 
         // Maybe flip the bits back again.
@@ -284,17 +284,17 @@ Expr lower_int_uint_div(Expr a, Expr b) {
 
         int64_t method, multiplier, shift;
         if (t.bits() == 32) {
-            method     = IntegerDivision::table_u32[*const_uint_divisor][1];
+            method = IntegerDivision::table_u32[*const_uint_divisor][1];
             multiplier = IntegerDivision::table_u32[*const_uint_divisor][2];
-            shift      = IntegerDivision::table_u32[*const_uint_divisor][3];
+            shift = IntegerDivision::table_u32[*const_uint_divisor][3];
         } else if (t.bits() == 16) {
-            method     = IntegerDivision::table_u16[*const_uint_divisor][1];
+            method = IntegerDivision::table_u16[*const_uint_divisor][1];
             multiplier = IntegerDivision::table_u16[*const_uint_divisor][2];
-            shift      = IntegerDivision::table_u16[*const_uint_divisor][3];
+            shift = IntegerDivision::table_u16[*const_uint_divisor][3];
         } else {
-            method     = IntegerDivision::table_u8[*const_uint_divisor][1];
+            method = IntegerDivision::table_u8[*const_uint_divisor][1];
             multiplier = IntegerDivision::table_u8[*const_uint_divisor][2];
-            shift      = IntegerDivision::table_u8[*const_uint_divisor][3];
+            shift = IntegerDivision::table_u8[*const_uint_divisor][3];
         }
 
         internal_assert(method != 0)
@@ -304,12 +304,12 @@ Expr lower_int_uint_div(Expr a, Expr b) {
         // Widen, multiply, narrow
         Expr mult = make_const(num.type(), multiplier);
         Expr val = Call::make(num.type(), Call::mulhi_shr,
-                              { num, mult, make_const(UInt(num.type().bits()), method == 1 ? (int)shift : 0) },
+                              {num, mult, make_const(UInt(num.type().bits()), method == 1 ? (int)shift : 0)},
                               Call::PureIntrinsic);
 
         if (method == 2) {
             // Average with original numerator.
-            val = Call::make(val.type(), Call::sorted_avg, { val, num }, Call::PureIntrinsic);
+            val = Call::make(val.type(), Call::sorted_avg, {val, num}, Call::PureIntrinsic);
 
             // Do the final shift
             if (shift) {
@@ -330,7 +330,7 @@ Expr lower_int_uint_mod(Expr a, Expr b) {
 
     Type t = a.type();
     internal_assert(!t.is_float())
-            << "lower_int_uint_div is not meant to handle floating-point case.\n";
+        << "lower_int_uint_div is not meant to handle floating-point case.\n";
 
     int bits;
     if (is_const_power_of_two_integer(b, &bits)) {
@@ -376,7 +376,7 @@ Expr lower_euclidean_div(Expr a, Expr b) {
            return q - (rs & bs) + (rs & ~bs);
         */
 
-        Expr r = a - q*b;
+        Expr r = a - q * b;
         Expr bs = b >> make_const(b.type(), (a.type().bits() - 1));
         Expr rs = r >> make_const(r.type(), (a.type().bits() - 1));
         q = q - (rs & bs) + (rs & ~bs);
@@ -399,7 +399,7 @@ Expr lower_euclidean_mod(Expr a, Expr b) {
           r = r + sign_mask & abs(b);
         */
 
-        Expr sign_mask = r >> cast(r.type(), (a.type().bits()-1));
+        Expr sign_mask = r >> cast(r.type(), (a.type().bits() - 1));
         r += sign_mask & cast(sign_mask.type(), abs(b));
         return common_subexpression_elimination(r);
     } else {
@@ -483,8 +483,7 @@ class UnpredicateLoadsStores : public IRMutator {
                 Expr pred_i = Shuffle::make({predicate_var}, {i});
                 Expr unpredicated_load = Load::make(op->type.element_of(), op->name, idx_i, op->image, op->param,
                                                     const_true(), ModulusRemainder());
-                lanes.push_back(Call::make(op->type.element_of(), Call::if_then_else, {pred_i, unpredicated_load,
-                                make_zero(unpredicated_load.type())}, Call::PureIntrinsic));
+                lanes.push_back(Call::make(op->type.element_of(), Call::if_then_else, {pred_i, unpredicated_load, make_zero(unpredicated_load.type())}, Call::PureIntrinsic));
                 ramp.push_back(i);
             }
             Expr expr = Shuffle::make(lanes, ramp);
@@ -525,7 +524,7 @@ class UnpredicateLoadsStores : public IRMutator {
             stmt = LetStmt::make(predicate_name, predicate, stmt);
             stmt = LetStmt::make(value_name, value, stmt);
             return LetStmt::make(index_name, index, stmt);
-       }
+        }
     }
 
     using IRMutator::visit;
@@ -593,7 +592,6 @@ void get_target_options(const llvm::Module &module, llvm::TargetOptions &options
     options.RelaxELFRelocations = false;
 }
 
-
 void clone_target_options(const llvm::Module &from, llvm::Module &to) {
     to.setTargetTriple(from.getTargetTriple());
 
@@ -639,7 +637,7 @@ std::unique_ptr<llvm::TargetMachine> make_target_machine(const llvm::Module &mod
     bool use_pic = true;
     get_md_bool(module.getModuleFlag("halide_use_pic"), use_pic);
 
-    return std::unique_ptr<llvm::TargetMachine>(llvm_target->createTargetMachine(module.getTargetTriple(),
+    auto *tm = llvm_target->createTargetMachine(module.getTargetTriple(),
                                                 mcpu, mattrs,
                                                 options,
                                                 use_pic ? llvm::Reloc::PIC_ : llvm::Reloc::Static,
@@ -648,7 +646,8 @@ std::unique_ptr<llvm::TargetMachine> make_target_machine(const llvm::Module &mod
 #else
                                                 llvm::CodeModel::Small,
 #endif
-                                                llvm::CodeGenOpt::Aggressive));
+                                                llvm::CodeGenOpt::Aggressive);
+    return std::unique_ptr<llvm::TargetMachine>(tm);
 }
 
 void set_function_attributes_for_target(llvm::Function *fn, Target t) {
@@ -659,15 +658,15 @@ void set_function_attributes_for_target(llvm::Function *fn, Target t) {
 
 void embed_bitcode(llvm::Module *M, const string &halide_command) {
     // Save llvm.compiler.used and remote it.
-    SmallVector<Constant*, 2> used_array;
-    SmallPtrSet<GlobalValue*, 4> used_globals;
+    SmallVector<Constant *, 2> used_array;
+    SmallPtrSet<GlobalValue *, 4> used_globals;
     llvm::Type *used_element_type = llvm::Type::getInt8Ty(M->getContext())->getPointerTo(0);
     GlobalVariable *used = collectUsedGlobalVariables(*M, used_globals, true);
     for (auto *GV : used_globals) {
         if (GV->getName() != "llvm.embedded.module" &&
             GV->getName() != "llvm.cmdline")
-          used_array.push_back(
-              ConstantExpr::getPointerBitCastOrAddrSpaceCast(GV, used_element_type));
+            used_array.push_back(
+                ConstantExpr::getPointerBitCastOrAddrSpaceCast(GV, used_element_type));
     }
     if (used) {
         used->eraseFromParent();
@@ -732,4 +731,3 @@ void embed_bitcode(llvm::Module *M, const string &halide_command) {
 
 }  // namespace Internal
 }  // namespace Halide
-

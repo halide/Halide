@@ -42,9 +42,11 @@ class CanLift : public IRVisitor {
     const Scope<> &varying;
 
 public:
-    bool result {true};
+    bool result{true};
 
-    CanLift(const Scope<> &v) : varying(v) {}
+    CanLift(const Scope<> &v)
+        : varying(v) {
+    }
 };
 
 // Lift pure loop invariants to the top level. Applied independently
@@ -85,8 +87,9 @@ class LiftLoopInvariants : public IRMutator {
             const T *op;
             Expr new_value;
             ScopedBinding<> binding;
-            Frame(const T *op, Expr v, Scope<> &scope) :
-                op(op), new_value(std::move(v)), binding(scope, op->name) {}
+            Frame(const T *op, Expr v, Scope<> &scope)
+                : op(op), new_value(std::move(v)), binding(scope, op->name) {
+            }
         };
         vector<Frame> frames;
         Body result;
@@ -122,7 +125,6 @@ class LiftLoopInvariants : public IRMutator {
     }
 
 public:
-
     using IRMutator::mutate;
 
     Expr mutate(const Expr &e) override {
@@ -258,6 +260,7 @@ class LICM : public IRMutator {
                 void visit(const Variable *op) override {
                     vars.insert(op->name);
                 }
+
             public:
                 set<string> vars;
             } vars;
@@ -326,9 +329,12 @@ class GroupLoopInvariants : public IRMutator {
                 result = std::max(result, depth.get(op->name));
             }
         }
+
     public:
         int result = 0;
-        ExprDepth(const Scope<int> &var_depth) : depth(var_depth) {}
+        ExprDepth(const Scope<int> &var_depth)
+            : depth(var_depth) {
+        }
     };
 
     int expr_depth(const Expr &e) {
@@ -372,9 +378,9 @@ class GroupLoopInvariants : public IRMutator {
         // Sort the terms by loop depth. Terms of equal depth are
         // likely already in a good order, so don't mess with them.
         std::stable_sort(terms.begin(), terms.end(),
-                  [](const Term &a, const Term &b) {
-                      return a.depth > b.depth;
-                  });
+                         [](const Term &a, const Term &b) {
+                             return a.depth > b.depth;
+                         });
 
         return terms;
     }
@@ -449,10 +455,11 @@ class GroupLoopInvariants : public IRMutator {
             const T *op;
             Expr new_value;
             ScopedBinding<int> binding;
-            Frame(const T *op, Expr v, int depth, Scope<int> &scope) :
-                op(op),
-                new_value(std::move(v)),
-                binding(scope, op->name, depth) {}
+            Frame(const T *op, Expr v, int depth, Scope<int> &scope)
+                : op(op),
+                  new_value(std::move(v)),
+                  binding(scope, op->name, depth) {
+            }
         };
         std::vector<Frame> frames;
         Body result;

@@ -24,7 +24,7 @@ namespace Internal {
  */
 class CodeGen_PyTorch : public IRPrinter {
 public:
-    CodeGen_PyTorch(std::ostream &dest, const Target &target, const std::string &cpp_header_path);
+    CodeGen_PyTorch(std::ostream &dest);
     ~CodeGen_PyTorch() = default;
 
     /** Emit the PyTorch C++ wrapper for the Halide pipeline. */
@@ -33,8 +33,6 @@ public:
     static void test();
 
 private:
-    const Target target;
-
     void compile(const LoweredFunc &func, bool is_cuda);
 };
 

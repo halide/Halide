@@ -26,7 +26,7 @@ Expr bfloat16_to_float32(Expr e);
 Expr lower_float16_cast(const Cast *op);
 //@}
 
-}
-}
+}  // namespace Internal
+}  // namespace Halide
 
 #endif

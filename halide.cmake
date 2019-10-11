@@ -465,6 +465,7 @@ function(_halide_runtime_target_name HALIDE_TARGET OUTVAR)
         opencl
         cl_doubles
         cl_half
+        cl_atomics64
         opengl
         openglcompute
         egl
@@ -712,7 +713,7 @@ if("${HALIDE_TOOLS_DIR}" STREQUAL "" OR
   endif()
 endif()
 
-if("${HALIDE_SYSTEM_LIBS}" STREQUAL "")
+if(NOT DEFINED HALIDE_SYSTEM_LIBS)
   # If HALIDE_SYSTEM_LIBS isn't defined, we are compiling against a Halide distribution
   # folder; this is normally captured in the halide_config.cmake file. If that file
   # exists in the same directory as this one, just include it here.

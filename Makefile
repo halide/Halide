@@ -445,6 +445,7 @@ HEXAGON_RUNTIME_LIBS = \
 
 # Keep this list sorted in alphabetical order.
 SOURCE_FILES = \
+  AddAtomicMutex.cpp \
   AddImageChecks.cpp \
   AddParameterChecks.cpp \
   AlignLoads.cpp \
@@ -616,6 +617,7 @@ SOURCE_FILES = \
 # Don't include anything here that includes llvm headers.
 # Keep this list sorted in alphabetical order.
 HEADER_FILES = \
+  AddAtomicMutex.h \
   AddImageChecks.h \
   AddParameterChecks.h \
   AlignLoads.h \
@@ -1821,7 +1823,7 @@ $(BIN_DIR)/tutorial_lesson_21_auto_scheduler_generate: $(ROOT_DIR)/tutorial/less
 
 # The values in MachineParams are:
 # - the maximum level of parallelism available,
-# - the size of the last-level cache (in KB),
+# - the size of the last-level cache (in bytes),
 # - the ratio between the cost of a miss at the last level cache and the cost
 #   of arithmetic on the target architecture
 # ...in that order.
@@ -2092,7 +2094,7 @@ $(BUILD_DIR)/clang_ok:
 	@exit 1
 endif
 
-ifneq (,$(findstring $(LLVM_VERSION_TIMES_10), 70 71 80 90 100))
+ifneq (,$(findstring $(LLVM_VERSION_TIMES_10), 80 90 100))
 LLVM_OK=yes
 endif
 
@@ -2187,7 +2189,9 @@ HALIDE_RTTI_RAW=$(if $(WITH_RTTI),1,0)
 $(BUILD_DIR)/halide_config.%: $(ROOT_DIR)/tools/halide_config.%.tpl
 	@mkdir -p $(@D)
 	cat $< | sed -e 's/@HALIDE_SYSTEM_LIBS_RAW@/${LLVM_SYSTEM_LIBS}/g' \
-	       | sed -e 's/@HALIDE_RTTI_RAW@/${HALIDE_RTTI_RAW}/g' > $@
+	       | sed -e 's/@HALIDE_RTTI_RAW@/${HALIDE_RTTI_RAW}/g' \
+	       | sed -e 's;@HALIDE_LLVM_CXX_FLAGS_RAW@;${LLVM_CXX_FLAGS};g' > $@
+
 
 $(DISTRIB_DIR)/halide.tgz: $(LIB_DIR)/libHalide.a \
                            $(BIN_DIR)/libHalide.$(SHARED_EXT) \

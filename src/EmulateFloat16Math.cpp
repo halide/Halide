@@ -33,7 +33,6 @@ Expr float32_to_bfloat16(Expr e) {
     return e;
 }
 
-
 Expr float16_to_float32(Expr value) {
     value = strict_float(value);
     Type f32_t = Float(32, value.type().lanes());
@@ -55,9 +54,9 @@ Expr float16_to_float32(Expr value) {
 
     Expr exponent_mantissa = cast(u32_t, magnitude) << 13;
     exponent_mantissa = select(magnitude == 0, 0,
-                               magnitude < 0x0400, denorm, // denorms
-                               magnitude >= 0x7c00, exponent_mantissa | 0x7f800000, // Map infinity to infinity
-                               exponent_mantissa + 0x38000000); // Fix the exponent bias otherwise
+                               magnitude < 0x0400, denorm,                           // denorms
+                               magnitude >= 0x7c00, exponent_mantissa | 0x7f800000,  // Map infinity to infinity
+                               exponent_mantissa + 0x38000000);                      // Fix the exponent bias otherwise
 
     Expr f32 = strict_float(reinterpret(f32_t, (cast(u32_t, sign) << 16) | exponent_mantissa));
     f32 = common_subexpression_elimination(f32);
@@ -136,9 +135,10 @@ const std::map<std::string, std::string> transcendental_remapping =
      {"ceil_f16", "ceil_f32"},
      {"round_f16", "round_f32"},
      {"trunc_f16", "trunc_f32"},
-     {"is_nan_f16", "is_nan_f32"}};
+     {"is_nan_f16", "is_nan_f32"},
+     {"is_inf_f16", "is_inf_f32"},
+     {"is_finite_f16", "is_finite_f32"}};
 }  // anonymous namespace
-
 
 bool is_float16_transcendental(const Call *op) {
     return transcendental_remapping.find(op->name) != transcendental_remapping.end();

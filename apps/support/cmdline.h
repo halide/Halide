@@ -61,10 +61,8 @@ namespace detail{
 
 #ifdef WITH_EXCEPTIONS
   inline void throw_bad_cast() { throw std::bad_cast(); }
-  inline void throw_cmdline_error(const std::string &s) { throw cmdline::cmdline_error(s); }
 #else
   inline void throw_bad_cast() { std::cerr << "bad cast\n"; exit(1); }
-  inline void throw_cmdline_error(const std::string &s) { std::cerr << "error: " << s << "\n"; exit(1); }
 #endif
 
 template <typename Target, typename Source, bool Same>
@@ -179,6 +177,9 @@ public:
 private:
   std::string msg;
 };
+inline void throw_cmdline_error(const std::string &s) { throw cmdline::cmdline_error(s); }
+#else
+inline void throw_cmdline_error(const std::string &s) { std::cerr << "error: " << s << "\n"; exit(1); }
 #endif
 
 template <class T>
@@ -193,7 +194,7 @@ struct range_reader{
   range_reader(const T &low, const T &high): low(low), high(high) {}
   T operator()(const std::string &s) const {
     T ret=default_reader<T>()(s);
-    if (!(ret>=low && ret<=high)) detail::throw_cmdline_error("range_error");
+    if (!(ret>=low && ret<=high)) throw_cmdline_error("range_error");
     return ret;
   }
 private:
@@ -211,7 +212,7 @@ struct oneof_reader{
   T operator()(const std::string &s){
     T ret=default_reader<T>()(s);
     if (std::find(alt.begin(), alt.end(), ret)==alt.end())
-      detail::throw_cmdline_error("");
+      throw_cmdline_error("");
     return ret;
   }
   void add(const T &v){ alt.push_back(v); }
@@ -359,7 +360,7 @@ public:
   void add(const std::string &name,
            char short_name=0,
            const std::string &desc=""){
-    if (options.count(name)) detail::throw_cmdline_error("multiple definition: "+name);
+    if (options.count(name)) throw_cmdline_error("multiple definition: "+name);
     options[name]=new option_without_value(name, short_name, desc);
     ordered.push_back(options[name]);
   }
@@ -380,7 +381,7 @@ public:
            bool need=true,
            const T def=T(),
            F reader=F()){
-    if (options.count(name)) detail::throw_cmdline_error("multiple definition: "+name);
+    if (options.count(name)) throw_cmdline_error("multiple definition: "+name);
     options[name]=new option_with_value_with_reader<T, F>(name, short_name, need, def, desc, reader);
     ordered.push_back(options[name]);
   }
@@ -394,15 +395,15 @@ public:
   }
 
   bool exist(const std::string &name) const {
-    if (options.count(name)==0) detail::throw_cmdline_error("there is no flag: --"+name);
+    if (options.count(name)==0) throw_cmdline_error("there is no flag: --"+name);
     return options.find(name)->second->has_set();
   }
 
   template <class T>
   const T &get(const std::string &name) const {
-    if (options.count(name)==0) detail::throw_cmdline_error("there is no flag: --"+name);
+    if (options.count(name)==0) throw_cmdline_error("there is no flag: --"+name);
     const option_with_value<T> *p=dynamic_cast<const option_with_value<T>*>(options.find(name)->second);
-    if (p==NULL) detail::throw_cmdline_error("type mismatch flag '"+name+"'");
+    if (p==NULL) throw_cmdline_error("type mismatch flag '"+name+"'");
     return p->get();
   }
 

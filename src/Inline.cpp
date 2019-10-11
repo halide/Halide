@@ -3,10 +3,10 @@
 #include "CSE.h"
 #include "Debug.h"
 #include "IRMutator.h"
+#include "IROperator.h"
 #include "IRPrinter.h"
 #include "Inline.h"
 #include "Qualify.h"
-#include "IROperator.h"
 #include "Substitute.h"
 
 namespace Halide {
@@ -171,11 +171,11 @@ class Inliner : public IRMutator {
 public:
     int found = 0;
 
-    Inliner(Function f) : func(f) {
+    Inliner(Function f)
+        : func(f) {
         internal_assert(f.can_be_inlined()) << "Illegal to inline " << f.name() << "\n";
         validate_schedule_inlined_function(f);
     }
-
 };
 
 Stmt inline_function(Stmt s, Function f) {

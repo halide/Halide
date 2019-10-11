@@ -50,7 +50,9 @@ public:
     }
 
     Expr fact;
-    SimplifyUsingFact(Expr f) : fact(f) {}
+    SimplifyUsingFact(Expr f)
+        : fact(f) {
+    }
 };
 
 void simplify_using_fact(Expr fact, vector<Definition> &definitions) {
@@ -86,7 +88,7 @@ vector<Definition> propagate_specialization_in_definition(Definition &def, const
         it->condition = c;
         if (is_zero(c) || seen_const_true) {
             debug(1) << "Erasing unreachable specialization ("
-                << old_c << ") -> (" << c << ") for function \"" << name << "\"\n";
+                     << old_c << ") -> (" << c << ") for function \"" << name << "\"\n";
             it = specializations.erase(it);
         } else {
             it++;
@@ -116,8 +118,8 @@ vector<Definition> propagate_specialization_in_definition(Definition &def, const
     }
 
     for (size_t i = specializations.size(); i > 0; i--) {
-        Expr c = specializations[i-1].condition;
-        Definition &s_def = specializations[i-1].definition;
+        Expr c = specializations[i - 1].condition;
+        Definition &s_def = specializations[i - 1].definition;
         const EQ *eq = c.as<EQ>();
         const Variable *var = eq ? eq->a.as<Variable>() : c.as<Variable>();
 

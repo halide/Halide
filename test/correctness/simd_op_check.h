@@ -50,6 +50,7 @@ class SimdOpCheckTest {
             .with_feature(Target::DisableLLVMLoopOpt);
         num_threads = Internal::ThreadPool<void>::num_processors_online();
     }
+    virtual ~SimdOpCheckTest() = default;
     size_t get_num_threads() const {
         return num_threads;
     }

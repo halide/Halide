@@ -282,6 +282,7 @@ endforeach()
 # Don't include anything here that includes llvm headers.
 # Keep this list sorted in alphabetical order.
 set(HEADER_FILES
+  AddAtomicMutex.h
   AddImageChecks.h
   AddParameterChecks.h
   AlignLoads.h
@@ -459,6 +460,7 @@ endforeach()
 
 # Keep this list sorted in alphabetical order.
 add_library(Halide ${HALIDE_LIBRARY_TYPE}
+  AddAtomicMutex.cpp
   AddImageChecks.cpp
   AddParameterChecks.cpp
   AlignLoads.cpp
@@ -758,17 +760,19 @@ else()
   endif()
 endif()
 
-# Get the LLVM libraries we need
-llvm_map_components_to_libnames(LIBS ${LLVM_COMPONENTS})
+# When building a shared library the LLVM libraries will either be
+# embedded or linked into the Halide library. When building a static library
+# LLVM is not embedded/linked but CMake knows that when building an executable
+# against Halide static library that it needs to link LLVM too, IFF the
+# halide is being built as a subproject. (Which means, statically-built Halide
+# doesn't work out-of-installation directory.)
+# FIXME: migrate to proper cmake config magic.
+if(LLVM_USE_SHARED_LLVM_LIBRARY)
+  set(LLVM_USE_SHARED "USE_SHARED")
+endif()
+llvm_config(Halide ${LLVM_USE_SHARED} ${LLVM_COMPONENTS})
 
-# When building a shared library the LLVM libraries will be
-# embedded in the Halide library. When building a static library
-# LLVM is not embedded but CMake knows that when building an executable
-# against the Halide static library that it needs to link LLVM too so
-# PRIVATE scope is the correct choice here.
-target_link_libraries(Halide PRIVATE ${LIBS})
-
-if (NOT MSVC)
+if (NOT MSVC AND NOT LLVM_USE_SHARED_LLVM_LIBRARY)
   set(LLVM_CONFIG ${LLVM_TOOLS_BINARY_DIR}/llvm-config)
   execute_process(COMMAND "${LLVM_CONFIG}" --system-libs ${LLVM_COMPONENTS} OUTPUT_VARIABLE EXTRA_LIBS)
   string(STRIP EXTRA_LIBS "${EXTRA_LIBS}")

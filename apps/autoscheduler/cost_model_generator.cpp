@@ -386,7 +386,6 @@ public:
 
         prediction_output(n) = prediction(n);
 
-        Derivative d_loss_d;
         Func err;
 
         if (!training) {
@@ -430,7 +429,7 @@ public:
 
             // Compute derivatives of the loss, and backpropagate them
             // to the model weights.
-            d_loss_d = propagate_adjoints(loss_output);
+            Derivative d_loss_d = propagate_adjoints(loss_output);
 
             Weight *weights[] = {&head1_filter, &head1_bias,
                                  &head2_filter, &head2_bias,

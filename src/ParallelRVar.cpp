@@ -40,7 +40,9 @@ class FindLoads : public IRVisitor {
     }
 
 public:
-    FindLoads(const string &f) : func(f) {}
+    FindLoads(const string &f)
+        : func(f) {
+    }
 
     vector<vector<Expr>> loads;
 };

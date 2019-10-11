@@ -83,12 +83,11 @@ map<string, ReductionVariableInfo> gather_rvariables(Tuple tuple) {
             if (op->reduction_domain.defined()) {
                 const vector<ReductionVariable> &domain =
                     op->reduction_domain.domain();
-                for (int i = 0; i < (int) domain.size(); i++) {
+                for (int i = 0; i < (int)domain.size(); i++) {
                     const ReductionVariable &rv = domain[i];
                     if (rv.var == op->name) {
                         rvar_map[op->name] = ReductionVariableInfo{
-                            rv.min, rv.extent, i, op->reduction_domain, op->name
-                        };
+                            rv.min, rv.extent, i, op->reduction_domain, op->name};
                         return;
                     }
                 }
@@ -236,7 +235,7 @@ map<string, Box> inference_bounds(const vector<Func> &funcs,
 
     map<string, Box> bounds;
     // Set up bounds for outputs
-    for (int i = 0; i < (int) funcs.size(); i++) {
+    for (int i = 0; i < (int)funcs.size(); i++) {
         const Func &func = funcs[i];
         bounds[func.name()] = output_bounds[i];
     }
@@ -248,7 +247,7 @@ map<string, Box> inference_bounds(const vector<Func> &funcs,
         const Box &current_bounds = bounds[*it];
         internal_assert(func.args().size() == current_bounds.size());
         // We know the range for each argument of this function
-        for (int i = 0; i < (int) current_bounds.size(); i++) {
+        for (int i = 0; i < (int)current_bounds.size(); i++) {
             string arg = func.args()[i].name();
             scope.push(arg, current_bounds[i]);
         }
@@ -274,13 +273,13 @@ map<string, Box> inference_bounds(const vector<Func> &funcs,
                 }
             }
         }
-        for (int i = 0; i < (int) current_bounds.size(); i++) {
+        for (int i = 0; i < (int)current_bounds.size(); i++) {
             scope.pop(func.args()[i].name());
         }
     }
     for (auto &it : bounds) {
         auto &bound = it.second;
-        for (int i = 0; i < (int) bound.size(); i++) {
+        for (int i = 0; i < (int)bound.size(); i++) {
             bound[i].min = common_subexpression_elimination(simplify(bound[i].min));
             bound[i].max = common_subexpression_elimination(simplify(bound[i].max));
         }
@@ -290,15 +289,15 @@ map<string, Box> inference_bounds(const vector<Func> &funcs,
 
 map<string, Box> inference_bounds(const Func &func,
                                   const Box &output_bounds) {
-    return inference_bounds(vector<Func>{ func },
-                            vector<Box>{ output_bounds });
+    return inference_bounds(vector<Func>{func},
+                            vector<Box>{output_bounds});
 }
 
 vector<pair<Expr, Expr>> box_to_vector(const Box &bounds) {
     vector<pair<Expr, Expr>> ret;
     ret.reserve(bounds.size());
     for (const auto &b : bounds.bounds) {
-        ret.push_back({ b.min, b.max - b.min + 1 });
+        ret.push_back({b.min, b.max - b.min + 1});
     }
     return ret;
 }
@@ -307,7 +306,7 @@ bool equal(const RDom &bounds0, const RDom &bounds1) {
     if (bounds0.domain().domain().size() != bounds1.domain().domain().size()) {
         return false;
     }
-    for (int bid = 0; bid < (int) bounds0.domain().domain().size(); bid++) {
+    for (int bid = 0; bid < (int)bounds0.domain().domain().size(); bid++) {
         if (!equal(bounds0[bid].min(), bounds1[bid].min()) ||
             !equal(bounds0[bid].extent(), bounds1[bid].extent())) {
             return false;
@@ -354,7 +353,7 @@ pair<bool, Expr> solve_inverse(Expr expr,
     expr = substitute_in_all_lets(simplify(expr));
     Interval interval = solve_for_outer_interval(expr, var);
     if (!interval.is_bounded()) {
-        return { false, Expr() };
+        return {false, Expr()};
     }
     Expr rmin = simplify(interval.min);
     Expr rmax = simplify(interval.max);
@@ -362,12 +361,12 @@ pair<bool, Expr> solve_inverse(Expr expr,
 
     const int64_t *extent_int = as_const_int(rextent);
     if (extent_int == nullptr) {
-        return { false, Expr() };
+        return {false, Expr()};
     }
 
     // For some reason interval.is_single_point() doesn't work
     if (extent_int != nullptr && *extent_int == 1) {
-        return { true, rmin };
+        return {true, rmin};
     }
 
     // Create a RDom to loop over the interval
@@ -375,7 +374,7 @@ pair<bool, Expr> solve_inverse(Expr expr,
     Expr cond = substitute(var, rmin + r.x, expr.as<EQ>()->b);
     cond = substitute(new_var, Var(var), cond) == Var(var);
     r.where(cond);
-    return { true, rmin + r.x };
+    return {true, rmin + r.x};
 }
 
 struct BufferDimensionsFinder : public IRGraphVisitor {
@@ -401,8 +400,7 @@ public:
         if (op->param.defined() && op->type.is_float()) {
             buffer_calls[op->name] = BufferInfo{
                 op->param.dimensions(),
-                op->type
-            };
+                op->type};
         }
     }
 
@@ -412,14 +410,12 @@ public:
             if (op->image.defined()) {
                 buffer_calls[op->name] = BufferInfo{
                     op->image.dimensions(),
-                    op->type
-                };
+                    op->type};
             } else {
                 internal_assert(op->param.defined());
                 buffer_calls[op->name] = BufferInfo{
                     op->param.dimensions(),
-                    op->type
-                };
+                    op->type};
             }
         }
     }

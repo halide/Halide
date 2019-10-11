@@ -17,6 +17,10 @@ declare  i32 @llvm.nvvm.read.ptx.sreg.ntid.w()
 declare  i32 @llvm.nvvm.read.ptx.sreg.nctaid.w()
 declare  i32 @llvm.nvvm.read.ptx.sreg.warpsize()
 
+; Remove these two once the minimum required llvm version is 9.0
+declare float @llvm.nvvm.atomic.load.add.f32.p0f32(float*, float)
+declare double @llvm.nvvm.atomic.load.add.f64.p0f64(double *, double)
+
 ; Legacy - to replace
 ;declare void @llvm.ptx.red.global.add.s32(i32*, i32)
 ;declare void @llvm.ptx.red.global.add.f32(float*, float)
@@ -340,3 +344,4 @@ define weak_odr i32 @halide_ptx_trap() nounwind uwtable alwaysinline {
        ", ""() nounwind
        ret i32 0
 }
+

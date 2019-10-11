@@ -110,7 +110,7 @@ $(BIN)/%/add_grad_cuda_float64.a: $(GENERATOR_BIN)/add.generator
 # -----------------------------------------------------------------------------
 
 # Build the Halide generator for the operator
-$(GENERATOR_BIN)/add.generator: src/add.cpp $(GENERATOR_DEPS)
+$(GENERATOR_BIN)/add.generator: src/add_generator.cpp $(GENERATOR_DEPS)
 	@echo Building Generator
 	@mkdir -p $(@D)
 	@$(CXX) $(CXXFLAGS) $(filter-out %.h,$^) \
