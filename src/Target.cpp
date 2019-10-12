@@ -1,6 +1,6 @@
+#include <array>
 #include <iostream>
 #include <string>
-#include <array>
 
 #include "Target.h"
 
@@ -17,7 +17,7 @@
 #include <sys/auxv.h>
 #endif
 
-#ifdef  _MSC_VER
+#ifdef _MSC_VER
 #include <intrin.h>
 #endif  // _MSC_VER
 
@@ -40,20 +40,20 @@ static void cpuid(int info[4], int infoType, int extra) {
 
 #ifdef _LP64
 static void cpuid(int info[4], int infoType, int extra) {
-    __asm__ __volatile__ (
+    __asm__ __volatile__(
         "cpuid                 \n\t"
-        : "=a" (info[0]), "=b" (info[1]), "=c" (info[2]), "=d" (info[3])
-        : "0" (infoType), "2" (extra));
+        : "=a"(info[0]), "=b"(info[1]), "=c"(info[2]), "=d"(info[3])
+        : "0"(infoType), "2"(extra));
 }
 #else
 static void cpuid(int info[4], int infoType, int extra) {
     // We save %ebx in case it's the PIC register
-    __asm__ __volatile__ (
+    __asm__ __volatile__(
         "mov{l}\t{%%}ebx, %1  \n\t"
         "cpuid                 \n\t"
         "xchg{l}\t{%%}ebx, %1  \n\t"
-        : "=a" (info[0]), "=r" (info[1]), "=c" (info[2]), "=d" (info[3])
-        : "0" (infoType), "2" (extra));
+        : "=a"(info[0]), "=r"(info[1]), "=c"(info[2]), "=d"(info[3])
+        : "0"(infoType), "2"(extra));
 }
 #endif
 #endif
@@ -90,26 +90,25 @@ Target calculate_host_target() {
     unsigned long hwcap = getauxval(AT_HWCAP);
     unsigned long hwcap2 = getauxval(AT_HWCAP2);
     bool have_altivec = (hwcap & PPC_FEATURE_HAS_ALTIVEC) != 0;
-    bool have_vsx     = (hwcap & PPC_FEATURE_HAS_VSX) != 0;
-    bool arch_2_07    = (hwcap2 & PPC_FEATURE2_ARCH_2_07) != 0;
+    bool have_vsx = (hwcap & PPC_FEATURE_HAS_VSX) != 0;
+    bool arch_2_07 = (hwcap2 & PPC_FEATURE2_ARCH_2_07) != 0;
 
     user_assert(have_altivec)
         << "The POWERPC backend assumes at least AltiVec support. This machine does not appear to have AltiVec.\n";
 
-    std::vector<Target::Feature> initial_features;
-    if (have_vsx)     initial_features.push_back(Target::VSX);
-    if (arch_2_07)    initial_features.push_back(Target::POWER_ARCH_2_07);
+    if (have_vsx) initial_features.push_back(Target::VSX);
+    if (arch_2_07) initial_features.push_back(Target::POWER_ARCH_2_07);
 #else
     Target::Arch arch = Target::X86;
 
     int info[4];
     cpuid(info, 1, 0);
-    bool have_sse41  = (info[2] & (1 << 19)) != 0;
-    bool have_sse2   = (info[3] & (1 << 26)) != 0;
-    bool have_avx    = (info[2] & (1 << 28)) != 0;
-    bool have_f16c   = (info[2] & (1 << 29)) != 0;
+    bool have_sse41 = (info[2] & (1 << 19)) != 0;
+    bool have_sse2 = (info[3] & (1 << 26)) != 0;
+    bool have_avx = (info[2] & (1 << 28)) != 0;
+    bool have_f16c = (info[2] & (1 << 29)) != 0;
     bool have_rdrand = (info[2] & (1 << 30)) != 0;
-    bool have_fma    = (info[2] & (1 << 12)) != 0;
+    bool have_fma = (info[2] & (1 << 12)) != 0;
 
     user_assert(have_sse2)
         << "The x86 backend assumes at least sse2 support. This machine does not appear to have sse2.\n"
@@ -121,9 +120,9 @@ Target calculate_host_target() {
         << std::dec << "\n";
 
     if (have_sse41) initial_features.push_back(Target::SSE41);
-    if (have_avx)   initial_features.push_back(Target::AVX);
-    if (have_f16c)  initial_features.push_back(Target::F16C);
-    if (have_fma)   initial_features.push_back(Target::FMA);
+    if (have_avx) initial_features.push_back(Target::AVX);
+    if (have_f16c) initial_features.push_back(Target::F16C);
+    if (have_fma) initial_features.push_back(Target::FMA);
 
     if (use_64_bits && have_avx && have_f16c && have_rdrand) {
         // So far, so good.  AVX2/512?
@@ -142,7 +141,7 @@ Target calculate_host_target() {
         const uint32_t avx512 = avx512f | avx512cd;
         const uint32_t avx512_knl = avx512 | avx512pf | avx512er;
         const uint32_t avx512_skylake = avx512 | avx512vl | avx512bw | avx512dq;
-        const uint32_t avx512_cannonlake = avx512_skylake | avx512ifma; // Assume ifma => vbmi
+        const uint32_t avx512_cannonlake = avx512_skylake | avx512ifma;  // Assume ifma => vbmi
         if ((info2[1] & avx2) == avx2) {
             initial_features.push_back(Target::AVX2);
         }
@@ -196,14 +195,14 @@ int get_cuda_capability_lower_bound(const Target &t) {
 }
 
 bool is_using_hexagon(const Target &t) {
-    return t.has_feature(Target::HVX_64)
-           || t.has_feature(Target::HVX_128)
-           || t.has_feature(Target::HVX_v62)
-           || t.has_feature(Target::HVX_v65)
-           || t.has_feature(Target::HVX_v66)
-           || t.has_feature(Target::HexagonDma)
-           || t.has_feature(Target::HVX_shared_object)
-           || t.arch == Target::Hexagon;
+    return (t.has_feature(Target::HVX_64) ||
+            t.has_feature(Target::HVX_128) ||
+            t.has_feature(Target::HVX_v62) ||
+            t.has_feature(Target::HVX_v65) ||
+            t.has_feature(Target::HVX_v66) ||
+            t.has_feature(Target::HexagonDma) ||
+            t.has_feature(Target::HVX_shared_object) ||
+            t.arch == Target::Hexagon);
 }
 
 int get_hvx_lower_bound(const Target &t) {
@@ -241,7 +240,7 @@ Target::Feature calculate_host_cuda_capability(Target t) {
     int major, minor;
     int err = interface->compute_capability(nullptr, &major, &minor);
     internal_assert(err == 0) << "Failed to query cuda compute capability\n";
-    int ver = major*10 + minor;
+    int ver = major * 10 + minor;
     if (ver < 30) {
         return Target::FeatureEnd;
     } else if (ver < 32) {
@@ -272,8 +271,7 @@ const std::map<std::string, Target::OS> os_name_map = {
     {"qurt", Target::QuRT},
     {"noos", Target::NoOS},
     {"fuchsia", Target::Fuchsia},
-    {"wasmrt", Target::WebAssemblyRuntime}
-};
+    {"wasmrt", Target::WebAssemblyRuntime}};
 
 bool lookup_os(const std::string &tok, Target::OS &result) {
     auto os_iter = os_name_map.find(tok);
@@ -328,6 +326,7 @@ const std::map<std::string, Target::Feature> feature_name_map = {
     {"opencl", Target::OpenCL},
     {"cl_doubles", Target::CLDoubles},
     {"cl_half", Target::CLHalf},
+    {"cl_atomics64", Target::CLAtomics64},
     {"opengl", Target::OpenGL},
     {"openglcompute", Target::OpenGLCompute},
     {"egl", Target::EGL},
@@ -383,7 +382,7 @@ bool lookup_feature(const std::string &tok, Target::Feature &result) {
     return false;
 }
 
-} // End anonymous namespace
+}  // End anonymous namespace
 
 Target get_target_from_environment() {
     string target = Internal::get_env_variable("HL_TARGET");
@@ -547,7 +546,7 @@ void bad_target_string(const std::string &target) {
                << "On this platform, the host target is: " << get_host_target().to_string() << "\n";
 }
 
-}
+}  // namespace
 
 Target::Target(const std::string &target) {
     Target host = get_host_target();
@@ -570,7 +569,9 @@ Target::Target(const std::string &target) {
     }
 }
 
-Target::Target(const char *s) : Target(std::string(s)) {}
+Target::Target(const char *s)
+    : Target(std::string(s)) {
+}
 
 bool Target::validate_target_string(const std::string &s) {
     Target t;
@@ -644,7 +645,7 @@ bool Target::supported() const {
 #if !defined(WITH_HEXAGON)
     bad |= arch == Target::Hexagon;
 #endif
-#if !defined(WITH_WEBASSEMBLY) || LLVM_VERSION < 90
+#if !defined(WITH_WEBASSEMBLY) || !(LLVM_VERSION >= 90)
     // LLVM8 supports wasm, but there are fixes and improvements
     // in trunk that may not be in 8 (or that we haven't tested with),
     // so, for now, declare that wasm with LLVM < 9.0 is unsupported.
@@ -768,25 +769,39 @@ bool Target::supports_type(const Type &t, DeviceAPI device) const {
 
 bool Target::supports_device_api(DeviceAPI api) const {
     switch (api) {
-    case DeviceAPI::None:        return true;
-    case DeviceAPI::Host:        return true;
-    case DeviceAPI::Default_GPU: return has_gpu_feature() || has_feature(Target::OpenGLCompute);
-    case DeviceAPI::Hexagon:     return has_feature(Target::HVX_64) || has_feature(Target::HVX_128);
-    case DeviceAPI::HexagonDma:  return has_feature(Target::HexagonDma);
-    default:                     return has_feature(target_feature_for_device_api(api));
+    case DeviceAPI::None:
+        return true;
+    case DeviceAPI::Host:
+        return true;
+    case DeviceAPI::Default_GPU:
+        return has_gpu_feature() || has_feature(Target::OpenGLCompute);
+    case DeviceAPI::Hexagon:
+        return has_feature(Target::HVX_64) || has_feature(Target::HVX_128);
+    case DeviceAPI::HexagonDma:
+        return has_feature(Target::HexagonDma);
+    default:
+        return has_feature(target_feature_for_device_api(api));
     }
 }
 
 Target::Feature target_feature_for_device_api(DeviceAPI api) {
     switch (api) {
-    case DeviceAPI::CUDA:          return Target::CUDA;
-    case DeviceAPI::OpenCL:        return Target::OpenCL;
-    case DeviceAPI::GLSL:          return Target::OpenGL;
-    case DeviceAPI::OpenGLCompute: return Target::OpenGLCompute;
-    case DeviceAPI::Metal:         return Target::Metal;
-    case DeviceAPI::Hexagon:       return Target::HVX_128;
-    case DeviceAPI::D3D12Compute:  return Target::D3D12Compute;
-    default:                       return Target::FeatureEnd;
+    case DeviceAPI::CUDA:
+        return Target::CUDA;
+    case DeviceAPI::OpenCL:
+        return Target::OpenCL;
+    case DeviceAPI::GLSL:
+        return Target::OpenGL;
+    case DeviceAPI::OpenGLCompute:
+        return Target::OpenGLCompute;
+    case DeviceAPI::Metal:
+        return Target::Metal;
+    case DeviceAPI::Hexagon:
+        return Target::HVX_128;
+    case DeviceAPI::D3D12Compute:
+        return Target::D3D12Compute;
+    default:
+        return Target::FeatureEnd;
     }
 }
 
@@ -852,43 +867,37 @@ int Target::natural_vector_size(const Halide::Type &t) const {
     }
 }
 
-bool Target::get_runtime_compatible_target(const Target& other, Target &result) {
+bool Target::get_runtime_compatible_target(const Target &other, Target &result) {
     // Create mask to select features that:
     // (a) must be included if either target has the feature (union)
     // (b) must be included if both targets have the feature (intersection)
     // (c) must match across both targets; it is an error if one target has the feature and the other doesn't
-    const std::array<Feature, 15> union_features = {{
-            // These are true union features.
-            CUDA, OpenCL, OpenGL, OpenGLCompute, Metal, D3D12Compute, NoNEON,
+    const std::array<Feature, 15> union_features = {{// These are true union features.
+                                                     CUDA, OpenCL, OpenGL, OpenGLCompute, Metal, D3D12Compute, NoNEON,
 
-            // These features are actually intersection-y, but because targets only record the _highest_,
-            // we have to put their union in the result and then take a lower bound.
-            CUDACapability30, CUDACapability32, CUDACapability35, CUDACapability50, CUDACapability61,
-            HVX_v62, HVX_v65, HVX_v66
-    }};
+                                                     // These features are actually intersection-y, but because targets only record the _highest_,
+                                                     // we have to put their union in the result and then take a lower bound.
+                                                     CUDACapability30, CUDACapability32, CUDACapability35, CUDACapability50, CUDACapability61,
+                                                     HVX_v62, HVX_v65, HVX_v66}};
 
-    const std::array<Feature, 12> intersection_features = {{
-            SSE41, AVX, AVX2, FMA, FMA4, F16C, ARMv7s,VSX, AVX512, AVX512_KNL, AVX512_Skylake, AVX512_Cannonlake
-    }};
+    const std::array<Feature, 12> intersection_features = {{SSE41, AVX, AVX2, FMA, FMA4, F16C, ARMv7s, VSX, AVX512, AVX512_KNL, AVX512_Skylake, AVX512_Cannonlake}};
 
-    const std::array<Feature, 10> matching_features = {{
-            SoftFloatABI, Debug, TSAN, ASAN, MSAN, HVX_64, HVX_128, MinGW, HexagonDma, HVX_shared_object
-    }};
+    const std::array<Feature, 10> matching_features = {{SoftFloatABI, Debug, TSAN, ASAN, MSAN, HVX_64, HVX_128, MinGW, HexagonDma, HVX_shared_object}};
 
     // bitsets need to be the same width.
     decltype(result.features) union_mask;
     decltype(result.features) intersection_mask;
     decltype(result.features) matching_mask;
 
-    for (auto& feature : union_features) {
+    for (auto &feature : union_features) {
         union_mask.set(feature);
     }
 
-    for (auto& feature : intersection_features) {
+    for (auto &feature : intersection_features) {
         intersection_mask.set(feature);
     }
 
-    for (auto& feature : matching_features) {
+    for (auto &feature : matching_features) {
         matching_mask.set(feature);
     }
 
@@ -910,9 +919,7 @@ bool Target::get_runtime_compatible_target(const Target& other, Target &result) 
     // Intersection of features is computed through bitwise-and and masked away, too.
     // We merge the bits via bitwise or.
     Target output = Target{os, arch, bits};
-    output.features = ((features | other.features) & union_mask)
-            | ((features | other.features) & matching_mask)
-            | ((features & other.features) & intersection_mask);
+    output.features = ((features | other.features) & union_mask) | ((features | other.features) & matching_mask) | ((features & other.features) & intersection_mask);
 
     // Pick tight lower bound for CUDA capability. Use fall-through to clear redundant features
     int cuda_a = get_cuda_capability_lower_bound(*this);
@@ -942,7 +949,6 @@ bool Target::get_runtime_compatible_target(const Target& other, Target &result) 
     return true;
 }
 
-
 namespace Internal {
 
 void target_test() {
@@ -956,18 +962,18 @@ void target_test() {
 
     // 3 targets: {A,B,C}. Want gcd(A,B)=C
     std::vector<std::array<std::string, 3>> gcd_tests = {
-            {{"x86-64-linux-sse41-fma", "x86-64-linux-sse41-fma", "x86-64-linux-sse41-fma"}},
-            {{"x86-64-linux-sse41-fma-no_asserts-no_runtime", "x86-64-linux-sse41-fma", "x86-64-linux-sse41-fma"}},
-            {{"x86-64-linux-avx2-sse41", "x86-64-linux-sse41-fma", "x86-64-linux-sse41"}},
-            {{"x86-64-linux-avx2-sse41", "x86-32-linux-sse41-fma", ""}},
-            {{"x86-64-linux-cuda", "x86-64-linux", "x86-64-linux-cuda"}},
-            {{"x86-64-linux-cuda-cuda_capability_50", "x86-64-linux-cuda", "x86-64-linux-cuda"}},
-            {{"x86-64-linux-cuda-cuda_capability_50", "x86-64-linux-cuda-cuda_capability_30", "x86-64-linux-cuda-cuda_capability_30"}},
-            {{"x86-64-linux-cuda", "x86-64-linux-opengl", "x86-64-linux-cuda-opengl"}},
-            {{"hexagon-32-qurt-hvx_v65", "hexagon-32-qurt-hvx_v62", "hexagon-32-qurt-hvx_v62"}},
-            {{"hexagon-32-qurt-hvx_v62", "hexagon-32-qurt", "hexagon-32-qurt"}},
-            {{"hexagon-32-qurt-hvx_v62-hvx_64", "hexagon-32-qurt", ""}},
-            {{"hexagon-32-qurt-hvx_v62-hvx_64", "hexagon-32-qurt-hvx_64", "hexagon-32-qurt-hvx_64"}},
+        {{"x86-64-linux-sse41-fma", "x86-64-linux-sse41-fma", "x86-64-linux-sse41-fma"}},
+        {{"x86-64-linux-sse41-fma-no_asserts-no_runtime", "x86-64-linux-sse41-fma", "x86-64-linux-sse41-fma"}},
+        {{"x86-64-linux-avx2-sse41", "x86-64-linux-sse41-fma", "x86-64-linux-sse41"}},
+        {{"x86-64-linux-avx2-sse41", "x86-32-linux-sse41-fma", ""}},
+        {{"x86-64-linux-cuda", "x86-64-linux", "x86-64-linux-cuda"}},
+        {{"x86-64-linux-cuda-cuda_capability_50", "x86-64-linux-cuda", "x86-64-linux-cuda"}},
+        {{"x86-64-linux-cuda-cuda_capability_50", "x86-64-linux-cuda-cuda_capability_30", "x86-64-linux-cuda-cuda_capability_30"}},
+        {{"x86-64-linux-cuda", "x86-64-linux-opengl", "x86-64-linux-cuda-opengl"}},
+        {{"hexagon-32-qurt-hvx_v65", "hexagon-32-qurt-hvx_v62", "hexagon-32-qurt-hvx_v62"}},
+        {{"hexagon-32-qurt-hvx_v62", "hexagon-32-qurt", "hexagon-32-qurt"}},
+        {{"hexagon-32-qurt-hvx_v62-hvx_64", "hexagon-32-qurt", ""}},
+        {{"hexagon-32-qurt-hvx_v62-hvx_64", "hexagon-32-qurt-hvx_64", "hexagon-32-qurt-hvx_64"}},
     };
 
     for (const auto &test : gcd_tests) {

@@ -94,7 +94,8 @@ Expr Simplify::visit(const Cast *op, ExprInfo *bounds) {
             // cast(ramp(a, b, w)) -> ramp(cast(a), cast(b), w)
             return mutate(Ramp::make(Cast::make(op->type.element_of(), ramp_value->base),
                                      Cast::make(op->type.element_of(), ramp_value->stride),
-                                     ramp_value->lanes), bounds);
+                                     ramp_value->lanes),
+                          bounds);
         }
     }
 
@@ -105,5 +106,5 @@ Expr Simplify::visit(const Cast *op, ExprInfo *bounds) {
     }
 }
 
-}
-}
+}  // namespace Internal
+}  // namespace Halide

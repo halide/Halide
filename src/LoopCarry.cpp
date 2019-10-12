@@ -160,9 +160,10 @@ class StepForwards : public IRGraphMutator {
     }
 
 public:
-
     bool success = true;
-    StepForwards(const Scope<Expr> &s) : linear(s) {}
+    StepForwards(const Scope<Expr> &s)
+        : linear(s) {
+    }
 };
 
 Expr step_forwards(Expr e, const Scope<Expr> &linear) {
@@ -201,7 +202,7 @@ class LoopCarryOverLoop : public IRMutator {
         Expr step = is_linear(value, linear);
         ScopedBinding<Expr> bind(linear, op->name, step);
 
-        containing_lets.push_back({ op->name, value });
+        containing_lets.push_back({op->name, value});
 
         Stmt stmt;
         Stmt body = mutate(op->body);
@@ -280,7 +281,7 @@ class LoopCarryOverLoop : public IRMutator {
 
         // For each load, move the load index forwards by one loop iteration
         vector<Expr> indices, next_indices, predicates, next_predicates;
-        for (const vector<const Load *> &v: loads) {
+        for (const vector<const Load *> &v : loads) {
             indices.push_back(v[0]->index);
             next_indices.push_back(step_forwards(v[0]->index, linear));
             predicates.push_back(v[0]->predicate);
@@ -320,7 +321,7 @@ class LoopCarryOverLoop : public IRMutator {
                 for (size_t j = 0; j < chains.size(); j++) {
                     if (chains[j].empty()) continue;
                     if (chains[i].back() == chains[j].front()) {
-                        chains[i].insert(chains[i].end(), chains[j].begin()+1, chains[j].end());
+                        chains[i].insert(chains[i].end(), chains[j].begin() + 1, chains[j].end());
                         chains[j].clear();
                         done = false;
                     }
@@ -342,7 +343,7 @@ class LoopCarryOverLoop : public IRMutator {
         // is identical; it doesn't appear to make any meaningful difference
         // in code output, but makes debugging IR output easier to deal with.
         std::stable_sort(chains.begin(), chains.end(),
-                  [&](const vector<int> &c1, const vector<int> &c2){return c1.size() > c2.size();});
+                         [&](const vector<int> &c1, const vector<int> &c2) { return c1.size() > c2.size(); });
 
         for (const vector<int> &c : chains) {
             debug(3) << "Found chain of carried values:\n";
@@ -409,12 +410,10 @@ class LoopCarryOverLoop : public IRMutator {
                 }
                 if (i > 0) {
                     Stmt shuffle = Store::make(scratch, load_from_scratch,
-                                               scratch_index(i-1, orig_load->type),
+                                               scratch_index(i - 1, orig_load->type),
                                                Parameter(), const_true(orig_load->type.lanes()), ModulusRemainder());
                     scratch_shuffles.push_back(shuffle);
                 }
-
-
             }
 
             // Do joint CSE on the initial scratch values instead of
@@ -427,7 +426,7 @@ class LoopCarryOverLoop : public IRMutator {
             call = simplify(common_subexpression_elimination(call));
             // Peel off lets
             while (const Let *l = call.as<Let>()) {
-                initial_lets.push_back({ l->name, l->value });
+                initial_lets.push_back({l->name, l->value});
                 call = l->body;
             }
             internal_assert(call.as<Call>());
@@ -448,22 +447,22 @@ class LoopCarryOverLoop : public IRMutator {
 
             // Wrap them in the appropriate lets
             for (size_t i = initial_lets.size(); i > 0; i--) {
-                auto l = initial_lets[i-1];
+                auto l = initial_lets[i - 1];
                 initial_stores = LetStmt::make(l.first, l.second, initial_stores);
             }
             // We may be lifting the initial stores out of let stmts,
             // so rewrap them in the necessary ones.
             for (size_t i = containing_lets.size(); i > 0; i--) {
-                auto l = containing_lets[i-1];
+                auto l = containing_lets[i - 1];
                 if (stmt_uses_var(initial_stores, l.first)) {
                     initial_stores = LetStmt::make(l.first, l.second, initial_stores);
                 }
             }
 
             allocs.push_back({scratch,
-                        loads[c.front()][0]->type.element_of(),
-                        (int)c.size() * loads[c.front()][0]->type.lanes(),
-                        initial_stores});
+                              loads[c.front()][0]->type.element_of(),
+                              (int)c.size() * loads[c.front()][0]->type.lanes(),
+                              initial_stores});
         }
 
         Stmt s = Block::make(not_first_iteration_scratch_stores);
@@ -544,7 +543,9 @@ class LoopCarry : public IRMutator {
     }
 
 public:
-    LoopCarry(int max_carried_values) : max_carried_values(max_carried_values) {}
+    LoopCarry(int max_carried_values)
+        : max_carried_values(max_carried_values) {
+    }
 };
 
 }  // namespace

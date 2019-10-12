@@ -16,8 +16,10 @@ namespace {
 
 class FindParameterDependencies : public IRGraphVisitor {
 public:
-    FindParameterDependencies() { }
-    ~FindParameterDependencies() override { }
+    FindParameterDependencies() {
+    }
+    ~FindParameterDependencies() override {
+    }
 
     void visit_function(const Function &function) {
         function.accept(this);
@@ -64,7 +66,6 @@ public:
         }
     }
 
-
     void visit(const Load *load) override {
         if (load->param.defined()) {
             record(load->param);
@@ -85,17 +86,19 @@ public:
         info.type = parameter.type();
 
         if (parameter.is_buffer()) {
-            internal_error << "Buffer parameter " << parameter.name() <<
-                " encountered in computed_cached computation.\n" <<
-                "Computations which depend on buffer parameters " <<
-                "cannot be scheduled compute_cached.\n" <<
-                "Use memoize_tag to provide cache key information for buffer.\n";
+            internal_error
+                << "Buffer parameter " << parameter.name()
+                << " encountered in computed_cached computation.\n"
+                << "Computations which depend on buffer parameters "
+                << "cannot be scheduled compute_cached.\n"
+                << "Use memoize_tag to provide cache key information for buffer.\n";
         } else if (info.type.is_handle()) {
-            internal_error << "Handle parameter " << parameter.name() <<
-                " encountered in computed_cached computation.\n" <<
-                "Computations which depend on handle parameters " <<
-                "cannot be scheduled compute_cached.\n" <<
-                "Use memoize_tag to provide cache key information for handle.\n";
+            internal_error
+                << "Handle parameter " << parameter.name()
+                << " encountered in computed_cached computation.\n"
+                << "Computations which depend on handle parameters "
+                << "cannot be scheduled compute_cached.\n"
+                << "Use memoize_tag to provide cache key information for handle.\n";
         } else {
             info.size_expr = info.type.bytes();
             info.value_expr = Internal::Variable::make(info.type, parameter.name(), parameter);
@@ -167,26 +170,25 @@ class KeyInfo {
         return size_t(1) << i;
     }
 
-// TODO: Using the full names in the key results in a (hopefully incredibly
-// slight) performance difference based on how one names filters and
-// functions. It is arguably a little easier to debug if something
-// goes wrong as one doesn't need to destructure the cache key by hand
-// in the debugger. Also, if a pointer is used, a counter must also be
-// put in the cache key to avoid aliasing on reuse of the address in
-// JIT situations where code is regenerated into the same region of
-// memory.
-//
-// There is a plan to change the hash function used in the cache and
-// after that happens, we'll measure performance again and maybe decide
-// to choose one path or the other (see Git history for the implementation.
-// It was deleted as part of the address_of intrinsic cleanup).
+    // TODO: Using the full names in the key results in a (hopefully incredibly
+    // slight) performance difference based on how one names filters and
+    // functions. It is arguably a little easier to debug if something
+    // goes wrong as one doesn't need to destructure the cache key by hand
+    // in the debugger. Also, if a pointer is used, a counter must also be
+    // put in the cache key to avoid aliasing on reuse of the address in
+    // JIT situations where code is regenerated into the same region of
+    // memory.
+    //
+    // There is a plan to change the hash function used in the cache and
+    // after that happens, we'll measure performance again and maybe decide
+    // to choose one path or the other (see Git history for the implementation.
+    // It was deleted as part of the address_of intrinsic cleanup).
 
 public:
     KeyInfo(const Function &function, const std::string &name, int memoize_instance)
         : top_level_name(name),
           function_name(function.origin_name()),
-          memoize_instance(memoize_instance)
-    {
+          memoize_instance(memoize_instance) {
         dependencies.visit_function(function);
         size_t size_so_far = 0;
         size_so_far += Handle().bytes() + 4;
@@ -204,7 +206,9 @@ public:
 
     // Return the number of bytes needed to store the cache key
     // for the target function. Make sure it takes 4 bytes in cache key.
-    Expr key_size() { return cast<int32_t>(key_size_expr); };
+    Expr key_size() {
+        return cast<int32_t>(key_size_expr);
+    };
 
     // Code to fill in the Allocation named key_name with the byte of
     // the key. The Allocation is guaranteed to be 1d, of type uint8_t
@@ -301,7 +305,7 @@ public:
     }
 };
 
-}
+}  // namespace
 
 // Inject caching structure around memoized realizations.
 class InjectMemoization : public IRMutator {
@@ -314,10 +318,11 @@ public:
     InjectMemoization(const std::map<std::string, Function> &e,
                       int memoize_instance,
                       const std::string &name,
-                      const std::vector<Function> &outputs) :
-        env(e), memoize_instance(memoize_instance), top_level_name(name), outputs(outputs) {}
-private:
+                      const std::vector<Function> &outputs)
+        : env(e), memoize_instance(memoize_instance), top_level_name(name), outputs(outputs) {
+    }
 
+private:
     using IRMutator::visit;
 
     Stmt visit(const Realize *op) override {
@@ -358,13 +363,12 @@ private:
                                                    Cast::make(Bool(), Variable::make(Int(32), cache_result_name)),
                                                    mutated_body);
             Stmt cache_lookup_check = Block::make(AssertStmt::make(NE::make(Variable::make(Int(32), cache_result_name), -1),
-                                                                   Call::make(Int(32), "halide_error_out_of_memory", { }, Call::Extern)),
+                                                                   Call::make(Int(32), "halide_error_out_of_memory", {}, Call::Extern)),
                                                   cache_miss_marker);
 
             Stmt cache_lookup = LetStmt::make(cache_result_name,
                                               key_info.generate_lookup(cache_key_name, computed_bounds_name, f.outputs(), op->name),
                                               cache_lookup_check);
-
 
             BufferBuilder builder;
             builder.dimensions = f.dimensions();
@@ -433,7 +437,7 @@ Stmt inject_memoization(Stmt s, const std::map<std::string, Function> &env,
     // counter for the pipeline is needed as the address may be reused
     // across pipelines. This isn't a problem when using full names as
     // the function names already are uniquefied by a counter.
-    static std::atomic<int> memoize_instance {0};
+    static std::atomic<int> memoize_instance{0};
 
     InjectMemoization injector(env, memoize_instance++, name, outputs);
 
@@ -442,7 +446,9 @@ Stmt inject_memoization(Stmt s, const std::map<std::string, Function> &env,
 
 class RewriteMemoizedAllocations : public IRMutator {
 public:
-    RewriteMemoizedAllocations(const std::map<std::string, Function> &e) : env(e) {}
+    RewriteMemoizedAllocations(const std::map<std::string, Function> &e)
+        : env(e) {
+    }
 
 private:
     const std::map<std::string, Function> &env;
@@ -513,7 +519,7 @@ private:
                 // Make the allocation node
                 body = Allocate::make(allocation->name, allocation->type, allocation->memory_type, allocation->extents, allocation->condition, body,
                                       Call::make(Handle(), Call::buffer_get_host,
-                                                 { Variable::make(type_of<struct halide_buffer_t *>(), allocation->name + ".buffer") }, Call::Extern),
+                                                 {Variable::make(type_of<struct halide_buffer_t *>(), allocation->name + ".buffer")}, Call::Extern),
                                       "halide_memoization_cache_release");
             }
 

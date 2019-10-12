@@ -62,13 +62,13 @@ Expr stringify(const std::vector<Expr> &args) {
 
 Expr combine_strings(const std::vector<Expr> &args) {
     // Insert spaces between each expr.
-    std::vector<Expr> strings(args.size()*2);
+    std::vector<Expr> strings(args.size() * 2);
     for (size_t i = 0; i < args.size(); i++) {
-        strings[i*2] = args[i];
+        strings[i * 2] = args[i];
         if (i < args.size() - 1) {
-            strings[i*2+1] = Expr(" ");
+            strings[i * 2 + 1] = Expr(" ");
         } else {
-            strings[i*2+1] = Expr("\n");
+            strings[i * 2 + 1] = Expr("\n");
         }
     }
 
@@ -158,6 +158,7 @@ class ExprIsPure : public IRVisitor {
             IRVisitor::visit(op);
         }
     }
+
 public:
     bool result = true;
 };
@@ -363,7 +364,6 @@ Expr make_const(Type t, double val) {
     return make_const_helper(t, val);
 }
 
-
 Expr make_bool(bool val, int w) {
     return make_const(UInt(1, w), val);
 }
@@ -498,12 +498,16 @@ void match_types(Expr &a, Expr &b) {
         b = cast(ta, std::move(b));
     } else if (ta.is_float() && tb.is_float()) {
         // float(a) * float(b) -> float(max(a, b))
-        if (ta.bits() > tb.bits()) b = cast(ta, std::move(b));
-        else a = cast(tb, std::move(a));
+        if (ta.bits() > tb.bits())
+            b = cast(ta, std::move(b));
+        else
+            a = cast(tb, std::move(a));
     } else if (ta.is_uint() && tb.is_uint()) {
         // uint(a) * uint(b) -> uint(max(a, b))
-        if (ta.bits() > tb.bits()) b = cast(ta, std::move(b));
-        else a = cast(tb, std::move(a));
+        if (ta.bits() > tb.bits())
+            b = cast(ta, std::move(b));
+        else
+            a = cast(tb, std::move(a));
     } else if (!ta.is_float() && !tb.is_float()) {
         // int(a) * (u)int(b) -> int(max(a, b))
         int bits = std::max(ta.bits(), tb.bits());
@@ -515,17 +519,40 @@ void match_types(Expr &a, Expr &b) {
     }
 }
 
+// Cast to the wider type of the two. Already guaranteed to leave
+// signed/unsigned on number of lanes unchanged.
+void match_bits(Expr &x, Expr &y) {
+    // The signedness doesn't match, so just match the bits.
+    if (x.type().bits() < y.type().bits()) {
+        Type t;
+        if (x.type().is_int()) {
+            t = Int(y.type().bits(), y.type().lanes());
+        } else {
+            t = UInt(y.type().bits(), y.type().lanes());
+        }
+        x = cast(t, x);
+    } else if (y.type().bits() < x.type().bits()) {
+        Type t;
+        if (y.type().is_int()) {
+            t = Int(x.type().bits(), x.type().lanes());
+        } else {
+            t = UInt(x.type().bits(), x.type().lanes());
+        }
+        y = cast(t, y);
+    }
+}
+
 void match_types_bitwise(Expr &x, Expr &y, const char *op_name) {
     user_assert(x.defined() && y.defined()) << op_name << " of undefined Expr\n";
     user_assert(x.type().is_int() || x.type().is_uint())
-      << "The first argument to " << op_name << " must be an integer or unsigned integer";
+        << "The first argument to " << op_name << " must be an integer or unsigned integer";
     user_assert(y.type().is_int() || y.type().is_uint())
-      << "The second argument to " << op_name << " must be an integer or unsigned integer";
+        << "The second argument to " << op_name << " must be an integer or unsigned integer";
     user_assert(y.type().is_int() == x.type().is_int())
-      << "Arguments to " << op_name
-      << " must be both be signed or both be unsigned.\n"
-      << "LHS type: " << x.type() << " RHS type: " << y.type() << "\n"
-      << "LHS value: " << x << " RHS value: " << y << "\n";
+        << "Arguments to " << op_name
+        << " must be both be signed or both be unsigned.\n"
+        << "LHS type: " << x.type() << " RHS type: " << y.type() << "\n"
+        << "LHS value: " << x << " RHS value: " << y << "\n";
 
     // Broadcast scalar to match vector
     if (x.type().is_scalar() && y.type().is_vector()) {
@@ -584,8 +611,8 @@ Expr halide_log(Expr x_full) {
     Expr nan = Call::make(type, "nan_f32", {}, Call::PureExtern);
     Expr neg_inf = Call::make(type, "neg_inf_f32", {}, Call::PureExtern);
 
-    Expr use_nan = x_full < 0.0f; // log of a negative returns nan
-    Expr use_neg_inf = x_full == 0.0f; // log of zero is -inf
+    Expr use_nan = x_full < 0.0f;       // log of a negative returns nan
+    Expr use_neg_inf = x_full == 0.0f;  // log of zero is -inf
     Expr exceptional = use_nan | use_neg_inf;
 
     // Avoid producing nans or infs by generating ln(1.0f) instead and
@@ -609,7 +636,7 @@ Expr halide_log(Expr x_full) {
         1.0f,
         0.0f};
     Expr x1 = reduced - 1.0f;
-    Expr result = evaluate_polynomial(x1, coeff, sizeof(coeff)/sizeof(coeff[0]));
+    Expr result = evaluate_polynomial(x1, coeff, sizeof(coeff) / sizeof(coeff[0]));
 
     result += cast(type, exponent) * logf(2.0);
 
@@ -627,7 +654,7 @@ Expr halide_exp(Expr x_full) {
 
     float ln2_part1 = 0.6931457519f;
     float ln2_part2 = 1.4286067653e-6f;
-    float one_over_ln2 = 1.0f/logf(2.0f);
+    float one_over_ln2 = 1.0f / logf(2.0f);
 
     Expr scaled = x_full * one_over_ln2;
     Expr k_real = floor(scaled);
@@ -645,7 +672,7 @@ Expr halide_exp(Expr x_full) {
         0.49999899033463041098f,
         1.0f,
         1.0f};
-    Expr result = evaluate_polynomial(x, coeff, sizeof(coeff)/sizeof(coeff[0]));
+    Expr result = evaluate_polynomial(x, coeff, sizeof(coeff) / sizeof(coeff[0]));
 
     // Compute 2^k.
     int fpbias = 127;
@@ -684,7 +711,7 @@ Expr halide_erf(Expr x_full) {
                   0.0430054424f,
                   0.0703310579f,
                   1.0f};
-    Expr approx1 = evaluate_polynomial(x, c1, sizeof(c1)/sizeof(c1[0]));
+    Expr approx1 = evaluate_polynomial(x, c1, sizeof(c1) / sizeof(c1[0]));
 
     approx1 = 1.0f - pow(approx1, -16);
 
@@ -697,7 +724,7 @@ Expr halide_erf(Expr x_full) {
                   -0.3761207240f,
                   1.1283789803f};
 
-    Expr approx2 = evaluate_polynomial(x*x, c2, sizeof(c2)/sizeof(c2[0]));
+    Expr approx2 = evaluate_polynomial(x * x, c2, sizeof(c2) / sizeof(c2[0]));
     approx2 *= x;
 
     // Switch between the two approximations based on the magnitude.
@@ -721,10 +748,10 @@ Expr raise_to_integer_power(Expr e, int64_t p) {
         // p is at least 2
         if (p & 1) {
             Expr y = raise_to_integer_power(e, p >> 1);
-            result = y*y*std::move(e);
+            result = y * y * std::move(e);
         } else {
             e = raise_to_integer_power(std::move(e), p >> 1);
-            result = e*e;
+            result = e * e;
         }
     }
     return result;
@@ -913,7 +940,7 @@ Expr fast_log(Expr x) {
         1.0f,
         0.0f};
 
-    Expr result = evaluate_polynomial(x1, coeff, sizeof(coeff)/sizeof(coeff[0]));
+    Expr result = evaluate_polynomial(x1, coeff, sizeof(coeff) / sizeof(coeff[0]));
     result = result + cast<float>(exponent) * logf(2);
     result = common_subexpression_elimination(result);
     return result;
@@ -985,7 +1012,7 @@ Expr fast_exp(Expr x_full) {
         0.49970514590562437052f,
         1.0f,
         1.0f};
-    Expr result = evaluate_polynomial(x, coeff, sizeof(coeff)/sizeof(coeff[0]));
+    Expr result = evaluate_polynomial(x, coeff, sizeof(coeff) / sizeof(coeff[0]));
 
     // Compute 2^k.
     int fpbias = 127;
@@ -1046,7 +1073,7 @@ Expr saturating_cast(Type t, Expr e) {
     } else if (e.type() != t) {
         // Limits for Int(2^n) or UInt(2^n) are not exactly representable in Float(2^n)
         if (e.type().is_float() && !t.is_float() && t.bits() >= e.type().bits()) {
-            e = max(std::move(e), t.min()); // min values turn out to be always representable
+            e = max(std::move(e), t.min());  // min values turn out to be always representable
 
             // This line depends on t.max() rounding upward, which should always
             // be the case as it is one less than a representable value, thus
@@ -1443,7 +1470,6 @@ Expr max(Expr a, int b) {
     Internal::check_representable(t, b);
     return Internal::Max::make(std::move(a), Internal::make_const(t, b));
 }
-
 
 Expr max(int a, Expr b) {
     user_assert(b.defined()) << "max of undefined Expr\n";
@@ -1874,6 +1900,34 @@ Expr is_nan(Expr x) {
     }
 }
 
+Expr is_inf(Expr x) {
+    user_assert(x.defined()) << "is_inf of undefined Expr\n";
+    user_assert(x.type().is_float()) << "is_inf only works for float";
+    Type t = Bool(x.type().lanes());
+    if (x.type().element_of() == Float(64)) {
+        return Internal::Call::make(t, "is_inf_f64", {std::move(x)}, Internal::Call::PureExtern);
+    } else if (x.type().element_of() == Float(16)) {
+        return Internal::Call::make(t, "is_inf_f16", {std::move(x)}, Internal::Call::PureExtern);
+    } else {
+        Type ft = Float(32, t.lanes());
+        return Internal::Call::make(t, "is_inf_f32", {cast(ft, std::move(x))}, Internal::Call::PureExtern);
+    }
+}
+
+Expr is_finite(Expr x) {
+    user_assert(x.defined()) << "is_finite of undefined Expr\n";
+    user_assert(x.type().is_float()) << "is_finite only works for float";
+    Type t = Bool(x.type().lanes());
+    if (x.type().element_of() == Float(64)) {
+        return Internal::Call::make(t, "is_finite_f64", {std::move(x)}, Internal::Call::PureExtern);
+    } else if (x.type().element_of() == Float(16)) {
+        return Internal::Call::make(t, "is_finite_f16", {std::move(x)}, Internal::Call::PureExtern);
+    } else {
+        Type ft = Float(32, t.lanes());
+        return Internal::Call::make(t, "is_finite_f32", {cast(ft, std::move(x))}, Internal::Call::PureExtern);
+    }
+}
+
 Expr fract(Expr x) {
     user_assert(x.defined()) << "fract of undefined Expr\n";
     return x - trunc(x);
@@ -1954,43 +2008,31 @@ Expr operator~(Expr x) {
 }
 
 Expr operator<<(Expr x, Expr y) {
-    Expr unsigned_amount = lossless_cast(UInt(x.type().bits(), y.type().lanes()), y);
-    user_assert(unsigned_amount.defined())
-        << "In shift left expression:\n"
-        << "   (" << x << ") << (" << y << ")\n"
-        << "   with types " << x.type() << " << " << y.type() << "\n"
-        << "the RHS must be unsigned and losslessly castable to the same size as the LHS.\n";
-
     if (y.type().is_vector() && !x.type().is_vector()) {
         x = Internal::Broadcast::make(x, y.type().lanes());
     }
-
+    match_bits(x, y);
     Type t = x.type();
-    return Internal::Call::make(t, Internal::Call::shift_left, {std::move(x), std::move(unsigned_amount)}, Internal::Call::PureIntrinsic);
+    return Internal::Call::make(t, Internal::Call::shift_left, {std::move(x), std::move(y)}, Internal::Call::PureIntrinsic);
 }
 
 Expr operator<<(Expr x, int y) {
-    Type t = UInt(x.type().bits(), x.type().lanes());
+    Type t = Int(x.type().bits(), x.type().lanes());
     Internal::check_representable(t, y);
     return std::move(x) << Internal::make_const(t, y);
 }
 
 Expr operator>>(Expr x, Expr y) {
-    Expr unsigned_amount = lossless_cast(UInt(x.type().bits(), y.type().lanes()), y);
-    user_assert(unsigned_amount.defined())
-        << "In shift right expression:\n"
-        << "   (" << x << ") >> (" << y << ")\n"
-        << "   with types " << x.type() << " >> " << y.type() << "\n"
-        << "the RHS must be unsigned and losslessly castable to the same size as the LHS.\n";
     if (y.type().is_vector() && !x.type().is_vector()) {
         x = Internal::Broadcast::make(x, y.type().lanes());
     }
+    match_bits(x, y);
     Type t = x.type();
-    return Internal::Call::make(t, Internal::Call::shift_right, {std::move(x), std::move(unsigned_amount)}, Internal::Call::PureIntrinsic);
+    return Internal::Call::make(t, Internal::Call::shift_right, {std::move(x), std::move(y)}, Internal::Call::PureIntrinsic);
 }
 
 Expr operator>>(Expr x, int y) {
-    Type t = UInt(x.type().bits(), x.type().lanes());
+    Type t = Int(x.type().bits(), x.type().lanes());
     Internal::check_representable(t, y);
     return std::move(x) >> Internal::make_const(t, y);
 }
@@ -2097,7 +2139,7 @@ Expr mod_round_to_zero(Expr x, Expr y) {
 Expr random_float(Expr seed) {
     // Random floats get even IDs
     static std::atomic<int> counter;
-    int id = (counter++)*2;
+    int id = (counter++) * 2;
 
     std::vector<Expr> args;
     if (seed.defined()) {
@@ -2117,7 +2159,7 @@ Expr random_float(Expr seed) {
 Expr random_uint(Expr seed) {
     // Random ints get odd IDs
     static std::atomic<int> counter;
-    int id = (counter++)*2 + 1;
+    int id = (counter++) * 2 + 1;
 
     std::vector<Expr> args;
     if (seed.defined()) {

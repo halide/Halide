@@ -18,16 +18,20 @@ CUDA_OPS = $(BIN)/$(HL_TARGET)/add_cuda_float32.a \
 endif
 
 EXT_LIB=$(BIN)/lib
+PYTHON ?= python3
+PIP ?= pip3
 
 all: test
 
 # Run the PyTorch tests to verify the module is compiled correctly
 # .wrapper is a dummy file whose timestamps allow Make to track the dependency
 # on the Python side of the build 
-test: $(BIN)/.wrapper
-	@PYTHONPATH=$(EXT_LIB):${PYTHONPATH} python test.py
 
 HALIDE_DISTRIB_PATH=$(shell pwd)/../../distrib
+
+
+test: $(BIN)/.wrapper
+	@PYTHONPATH=$(EXT_LIB):${PYTHONPATH} $(PYTHON) test.py
 
 
 # Build the python PyTorch extension that links against the Halide operators
@@ -35,7 +39,7 @@ $(BIN)/.wrapper: $(OPS) $(CUDA_OPS) setup.py
 	@mkdir -p $(EXT_LIB)
 	@HAS_CUDA=$(HAS_CUDA) HALIDE_DISTRIB_PATH=$(HALIDE_DISTRIB_PATH) \
 		BIN=$(BIN)/$(HL_TARGET) PYTHONPATH=$(EXT_LIB):${PYTHONPATH} \
-		pip install . -t $(EXT_LIB) -b $(BIN)
+		$(PIP) install . -t $(EXT_LIB) -b $(BIN)
 	@touch $(BIN)/.wrapper
 
 
@@ -44,7 +48,7 @@ $(BIN)/%/add_float32.a: $(GENERATOR_BIN)/add.generator
 	@mkdir -p $(@D)
 	@echo Producing CPU operator
 	@$^ -g add input_a.type=float32 input_b.type=float32 output.type=float32 \
-		-f add_float32 -e static_library,h,pytorch_wrapper -o $(@D) \
+		-f add_float32 -e static_library,c_header,pytorch_wrapper -o $(@D) \
 		target=$* auto_schedule=false
 
 $(BIN)/%/add_grad_float32.a: $(GENERATOR_BIN)/add.generator
@@ -54,14 +58,14 @@ $(BIN)/%/add_grad_float32.a: $(GENERATOR_BIN)/add.generator
 		input_a.type=float32 input_b.type=float32 \
 		d_input_a.type=float32 d_input_b.type=float32 \
 		d_output.type=float32 -f add_grad_float32 \
-		-e static_library,h,pytorch_wrapper -o $(@D) \
+		-e static_library,c_header,pytorch_wrapper -o $(@D) \
 		target=$* auto_schedule=false
 
 $(BIN)/%/add_float64.a: $(GENERATOR_BIN)/add.generator
 	@mkdir -p $(@D)
 	@echo "Producing CPU (double) operator"
 	@$^ -g add input_a.type=float64 input_b.type=float64 output.type=float64 \
-		-f add_float64 -e static_library,h,pytorch_wrapper -o $(@D) \
+		-f add_float64 -e static_library,c_header,pytorch_wrapper -o $(@D) \
 		target=$* auto_schedule=false
 
 $(BIN)/%/add_grad_float64.a: $(GENERATOR_BIN)/add.generator
@@ -71,7 +75,7 @@ $(BIN)/%/add_grad_float64.a: $(GENERATOR_BIN)/add.generator
 		input_a.type=float64 input_b.type=float64 \
 		d_input_a.type=float64 d_input_b.type=float64 \
 		d_output.type=float64 -f add_grad_float64 \
-		-e static_library,h,pytorch_wrapper -o $(@D) \
+		-e static_library,c_header,pytorch_wrapper -o $(@D) \
 		target=$* auto_schedule=false
 # -----------------------------------------------------------------------------
 
@@ -80,7 +84,7 @@ $(BIN)/%/add_cuda_float32.a: $(GENERATOR_BIN)/add.generator
 	@mkdir -p $(@D)
 	@echo Producing CUDA operator
 	@$^ -g add input_a.type=float32 input_b.type=float32 output.type=float32 \
-		-f add_cuda_float32 -e static_library,h,pytorch_wrapper -o $(@D) \
+		-f add_cuda_float32 -e static_library,c_header,pytorch_wrapper -o $(@D) \
 		target=host-cuda-cuda_capability_61-user_context auto_schedule=false
 
 $(BIN)/%/add_grad_cuda_float32.a: $(GENERATOR_BIN)/add.generator
@@ -90,14 +94,14 @@ $(BIN)/%/add_grad_cuda_float32.a: $(GENERATOR_BIN)/add.generator
 		input_a.type=float32 input_b.type=float32 \
 		d_input_a.type=float32 d_input_b.type=float32 \
 		d_output.type=float32 -f add_grad_cuda_float32 \
-		-e static_library,h,pytorch_wrapper -o $(@D) \
+		-e static_library,c_header,pytorch_wrapper -o $(@D) \
 		target=host-cuda-cuda_capability_61-user_context auto_schedule=false
 
 $(BIN)/%/add_cuda_float64.a: $(GENERATOR_BIN)/add.generator
 	@mkdir -p $(@D)
 	@echo "Producing CUDA (double) operator"
 	@$^ -g add input_a.type=float64 input_b.type=float64 output.type=float64 \
-		-f add_cuda_float64 -e static_library,h,pytorch_wrapper -o $(@D) \
+		-f add_cuda_float64 -e static_library,c_header,pytorch_wrapper -o $(@D) \
 		target=host-cuda-cuda_capability_61-user_context auto_schedule=false
 
 $(BIN)/%/add_grad_cuda_float64.a: $(GENERATOR_BIN)/add.generator
@@ -107,14 +111,14 @@ $(BIN)/%/add_grad_cuda_float64.a: $(GENERATOR_BIN)/add.generator
 		input_a.type=float64 input_b.type=float64 \
 		d_input_a.type=float64 d_input_b.type=float64 \
 		d_output.type=float64 -f add_grad_cuda_float64 \
-		-e static_library,h,pytorch_wrapper -o $(@D) \
+		-e static_library,c_header,pytorch_wrapper -o $(@D) \
 		target=host-cuda-cuda_capability_61-user_context auto_schedule=false
 # -----------------------------------------------------------------------------
 
 # Build the Halide generator for the operator
-$(GENERATOR_BIN)/add.generator: src/add.cpp $(GENERATOR_DEPS)
+$(GENERATOR_BIN)/add.generator: src/add_generator.cpp $(GENERATOR_DEPS)
 	@echo Building Generator
-	@mkdir -p $(@D) 
+	@mkdir -p $(@D)
 	@$(CXX) $(CXXFLAGS) $(filter-out %.h,$^) \
 		-o $@ $(LDFLAGS) $(HALIDE_SYSTEM_LIBS)
 
