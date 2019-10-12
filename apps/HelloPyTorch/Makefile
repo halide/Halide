@@ -29,17 +29,6 @@ test: $(BIN)/.wrapper
 
 HALIDE_DISTRIB_PATH=$(shell pwd)/../../distrib
 
-tmp:
-	@HAS_CUDA=$(HAS_CUDA) HALIDE_DISTRIB_PATH=$(HALIDE_DISTRIB_PATH) \
-	  BIN=$(BIN)/$(HL_TARGET) PYTHONPATH=$(EXT_LIB):${PYTHONPATH} \
-	  python setup.py --help install
-
-tmp2:
-	@HAS_CUDA=$(HAS_CUDA) HALIDE_DISTRIB_PATH=$(HALIDE_DISTRIB_PATH) \
-	  BIN=$(BIN)/$(HL_TARGET) PYTHONPATH=$(EXT_LIB):${PYTHONPATH} \
-	  python setup.py 
-      
-
 
 # Build the python PyTorch extension that links against the Halide operators
 $(BIN)/.wrapper: $(OPS) $(CUDA_OPS) setup.py
@@ -47,15 +36,8 @@ $(BIN)/.wrapper: $(OPS) $(CUDA_OPS) setup.py
 	@HAS_CUDA=$(HAS_CUDA) HALIDE_DISTRIB_PATH=$(HALIDE_DISTRIB_PATH) \
 		BIN=$(BIN)/$(HL_TARGET) PYTHONPATH=$(EXT_LIB):${PYTHONPATH} \
 		pip install . -t $(EXT_LIB) -b $(BIN)
-	# @HAS_CUDA=$(HAS_CUDA) HALIDE_DISTRIB_PATH=$(HALIDE_DISTRIB_PATH) \
-	# 	BIN=$(BIN)/$(HL_TARGET) PYTHONPATH=$(EXT_LIB):${PYTHONPATH} \
-	# 	python setup.py build -b $(BIN)/pythonbuild \
-	# 	      install --install-lib $(EXT_LIB)
-		      # egg_info -e $(BIN) \
-		      bdist_egg -b $(BIN) -d egdist \
-		      # sdist -d $(BIN)/dist \
 	@touch $(BIN)/.wrapper
-		      # sdist -d $(BIN)/dist \
+
 
 # Generate the CPU version of the op ------------------------------------------
 $(BIN)/%/add_float32.a: $(GENERATOR_BIN)/add.generator
