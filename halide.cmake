@@ -305,7 +305,6 @@ endfunction()
 
 # Set the C++ options necessary for using libHalide.
 function(_halide_set_cxx_options TARGET)
-  set_target_properties("${TARGET}" PROPERTIES CXX_STANDARD 11 CXX_STANDARD_REQUIRED YES CXX_EXTENSIONS NO)
   if (MSVC)
     target_compile_definitions("${TARGET}" PUBLIC "-D_CRT_SECURE_NO_WARNINGS" "-D_SCL_SECURE_NO_WARNINGS")
     target_compile_options("${TARGET}" PRIVATE "/GR-")
