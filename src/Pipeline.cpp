@@ -993,6 +993,14 @@ Pipeline::make_externs_jit_module(const Target &target,
 }
 
 int Pipeline::call_jit_code(const Target &target, const JITCallArgs &args) {
+#if defined(__has_feature)
+#if __has_feature(memory_sanitizer)
+    user_warning << "MSAN does not support JIT compilers of any sort, and will report "
+                    "false positives when used in conjunction with the Halide JIT. "
+                    "If you need to test with MSAN enabled, you must use ahead-of-time "
+                    "compilation for Halide code.";
+#endif
+#endif
     if (target.arch == Target::WebAssembly) {
         internal_assert(contents->wasm_module.contents.defined());
         return contents->wasm_module.run(args.store);
@@ -1002,15 +1010,6 @@ int Pipeline::call_jit_code(const Target &target, const JITCallArgs &args) {
 
 void Pipeline::realize(RealizationArg outputs, const Target &t,
                        const ParamMap &param_map) {
-#if defined(__has_feature)
-#if __has_feature(memory_sanitizer)
-    user_warning << "MSAN does not support JIT compilers of any sort, and will report "
-                    "false positives when used in conjunction with the Halide JIT. "
-                    "If you need to test with MSAN enabled, you must use ahead-of-time "
-                    "compilation for Halide code.";
-#endif
-#endif
-
     Target target = t;
     user_assert(defined()) << "Can't realize an undefined Pipeline\n";
 
