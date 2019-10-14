@@ -37,9 +37,11 @@ test: $(BIN)/.wrapper
 # Build the python PyTorch extension that links against the Halide operators
 $(BIN)/.wrapper: $(OPS) $(CUDA_OPS) setup.py
 	@mkdir -p $(EXT_LIB)
-	@HAS_CUDA=$(HAS_CUDA) HALIDE_DISTRIB_PATH=$(HALIDE_DISTRIB_PATH) \
-		BIN=$(BIN)/$(HL_TARGET) PYTHONPATH=$(EXT_LIB):${PYTHONPATH} \
-		$(PIP) install . -t $(EXT_LIB) -b $(BIN)
+	@HAS_CUDA=$(HAS_CUDA) \
+	      HALIDE_DISTRIB_PATH=$(HALIDE_DISTRIB_PATH) \
+	      BIN=$(BIN)/$(HL_TARGET) \
+	      PYTHONPATH=$(EXT_LIB):${PYTHONPATH} \
+	      $(PIP) install . -t $(EXT_LIB) -b $(BIN)
 	@touch $(BIN)/.wrapper
 
 
