@@ -23,11 +23,10 @@ PIP ?= pip3
 
 all: test
 
+
 # Run the PyTorch tests to verify the module is compiled correctly
 # .wrapper is a dummy file whose timestamps allow Make to track the dependency
 # on the Python side of the build 
-
-HALIDE_DISTRIB_PATH=$(shell pwd)/../../distrib
 
 
 test: $(BIN)/.wrapper
