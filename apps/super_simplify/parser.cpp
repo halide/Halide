@@ -1,9 +1,11 @@
 #include "parser.h"
 
 #include <stdio.h>
+#include <fstream>
 
 using std::string;
 using std::ostringstream;
+using std::vector;
 using namespace Halide;
 using namespace Halide::Internal;
 
@@ -321,4 +323,32 @@ Expr parse_halide_expr(char **cursor, char *end, Type expected_type) {
     std::cerr << "Failed to parse Halide Expr starting at " << *cursor << "\n";
     abort();
     return Expr();
+}
+
+
+vector<Expr> parse_halide_exprs_from_file(const std::string &filename) {
+    vector<Expr> exprs;
+    std::ifstream input;
+    input.open(filename);
+    for (string line; std::getline(input, line);) {
+        if (line.empty()) continue;
+        // It's possible to comment out lines for debugging
+        if (line[0] == '#') continue;
+
+        // There are some extraneous newlines in some of the files. Balance parentheses...
+        size_t open, close;
+        while (1) {
+            open = std::count(line.begin(), line.end(), '(');
+            close = std::count(line.begin(), line.end(), ')');
+            if (open == close) break;
+            string next;
+            assert(std::getline(input, next));
+            line += next;
+        }
+        char *start = &line[0];
+        char *end = &line[line.size()];
+        exprs.push_back(parse_halide_expr(&start, end, Type{}));
+    }
+
+    return exprs;
 }

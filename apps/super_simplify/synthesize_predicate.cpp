@@ -1,5 +1,5 @@
 #include "synthesize_predicate.h"
-
+#include "super_simplify.h"
 #include "Halide.h"
 
 using namespace Halide;
@@ -79,6 +79,8 @@ struct Equality {
             find_terms(sub->b, -c);
         } else if (mul && coeff) {
             find_terms(mul->a, c * (int)(*coeff));
+        } else if (mul && is_const(mul->a)) {
+            find_terms(mul->b * mul->a, c);
         } else if (mul) {
             // Apply distributive law to non-linear terms
             const Add *a_a = mul->a.as<Add>();
@@ -260,8 +262,9 @@ struct System {
                 simplifier->learn_true(e);
             } else {
                 Expr v = aux();
-                simplifier->learn_true(-1 < v);
+                simplifier->learn_true(0 <= v);
                 add_term(le->a + v == le->b);
+                simplifier->learn_true(e);
             }
         } else if (lt && lt->a.type() == Int(32)) {
             const Variable *va = lt->a.as<Variable>();
@@ -280,8 +283,9 @@ struct System {
                 simplifier->learn_true(e);
             } else {
                 Expr v = aux();
-                simplifier->learn_true(0 < v);
-                add_term(lt->a + v == lt->b);
+                simplifier->learn_true(0 <= v);
+                add_term(lt->a + v + 1 == lt->b);
+                simplifier->learn_true(e);
             }
         } else if (const Let *l = e.as<Let>()) {
             // Treat lets as equality constraints in the new variable.
@@ -365,13 +369,37 @@ struct System {
 
     // Compute our heuristic for which systems are closest to infeasible
     void compute_complexity() {
+        class HasNonConstantVar : public IRVisitor {
+            void visit(const Variable *op) {
+                result |= (op->name[0] != 'c');
+            }
+        public:
+            bool result = false;
+        };
+
         std::map<std::string, int> inequalities;
         int non_linear_terms = 0, num_terms = 0;
         std::set<std::string> wild_constant_terms;
+        int useful_implications = 0;
         for (auto &e : equalities) {
+            bool lhs_has_symbolic_lower_bound = true;
+            bool rhs_has_symbolic_lower_bound = true;
+            bool lhs_has_symbolic_upper_bound = true;
+            bool rhs_has_symbolic_upper_bound = true;
             for (auto &p : e.terms) {
+                HasNonConstantVar h;
+                p.first.accept(&h);
                 Simplify::ExprInfo info;
                 simplifier->mutate(p.first, &info);
+                bool has_symbolic_lower_bound = !h.result || info.min_defined;
+                bool has_symbolic_upper_bound = !h.result || info.max_defined;
+                if (p.second > 0) {
+                    rhs_has_symbolic_lower_bound &= has_symbolic_lower_bound;
+                    rhs_has_symbolic_upper_bound &= has_symbolic_upper_bound;
+                } else {
+                    lhs_has_symbolic_lower_bound &= has_symbolic_lower_bound;
+                    lhs_has_symbolic_upper_bound &= has_symbolic_upper_bound;
+                }
                 if (const Variable *var = p.first.as<Variable>()) {
                     inequalities[var->name] = (int)info.max_defined + (int)info.min_defined;
                     if (var->name[0] == 'c') {
@@ -382,7 +410,14 @@ struct System {
                 }
                 num_terms++;
             }
+            if (lhs_has_symbolic_lower_bound && rhs_has_symbolic_upper_bound) {
+                useful_implications++;
+            }
+            if (rhs_has_symbolic_lower_bound && lhs_has_symbolic_upper_bound) {
+                useful_implications++;
+            }
         }
+
         int unconstrained_vars = 0;
         int semi_constrained_vars = 0;
         int totally_constrained_vars = 0;
@@ -396,21 +431,31 @@ struct System {
                 totally_constrained_vars++;
             }
         }
-        // debug(0) << "FEATURES " << id << " " << parent_id << " " << non_linear_terms << " " << unconstrained_vars << " " << semi_constrained_vars << " " << totally_constrained_vars << " " << num_terms << " " << num_constraints << "\n";
+        debug(0) << "FEATURES " << id
+                 << " " << parent_id
+                 << " " << non_linear_terms
+                 << " " << unconstrained_vars
+                 << " " << semi_constrained_vars
+                 << " " << totally_constrained_vars
+                 << " " << num_terms
+                 << " " << num_constraints
+                 << " " << useful_implications
+                 << " " << wild_constant_terms.size() << "\n";
         int terms[] = {non_linear_terms, unconstrained_vars, semi_constrained_vars,
-                       totally_constrained_vars, num_terms, num_constraints};
+                       totally_constrained_vars, num_terms, num_constraints,
+                       useful_implications, (int)wild_constant_terms.size()};
         // Use a linear combination of these features to decide
         // which stats are the most promising to explore. Trained
         // by tracking which states lead to success in the
         // store_with test and minimizing cross-entropy loss on a
         // linear classifier.
-        float coeffs[] = {0.0006f,  0.3839f,  0.1992f,  0.0388f, -0.0215f, -0.4192f};
+        float coeffs[] = {-0.1575f, -0.2994f,  0.0849f,  0.1400f,
+                          -0.0252f,  0.4637f,  1.0000f,  0.3821f};
+
         c = 0.0f;
-        for (int i = 0; i < 6; i++) {
-            c += terms[i] * coeffs[i];
+        for (int i = 0; i < 8; i++) {
+            c -= terms[i] * coeffs[i];
         }
-        // HACK
-        c -= (int)(wild_constant_terms.size());
     }
 
     float complexity() const {
@@ -495,7 +540,7 @@ struct System {
                     new_system->add_term(subs(equalities[j].to_expr()));
                 }
                 new_system->add_term(lhs == replacement);
-                simplifier->learn_true(-1 < k1);
+                simplifier->learn_true(0 <= k1);
                 if (is_const(rhs)) {
                     simplifier->learn_true(k1 < rhs);
                 } else {
@@ -519,13 +564,10 @@ struct System {
                 }
             }
             for (const auto &f : factors) {
-                /*
                 if (f.second == 1) {
                     // Not a repeated factor
                     continue;
                 }
-                */
-                debug(0) << "Attempting to eliminate: " << f.first << "\n";
                 Expr factor_expr = Variable::make(Int(32), f.first);
                 Expr terms_with_factor = 0;
                 Expr terms_without_factor = 0;
@@ -538,7 +580,7 @@ struct System {
                     }
                 }
                 terms_with_factor = simplifier->mutate(terms_with_factor, nullptr);
-                debug(0) << "With/without: " << terms_with_factor << ", " << terms_without_factor << "\n";
+
                 if (is_zero(simplifier->mutate(terms_without_factor == 0, nullptr))) {
                     // If the sum of the terms that do not reference
                     // the factor can't be zero, then the factor can't
@@ -729,6 +771,7 @@ struct System {
 
                     //debug(0) << "Attempting elimination of " << var->name << "\n";
 
+                    /*
                     // We have a candidate for elimination. Rule
                     // out searching all equalities that don't
                     // share a common variable with this one,
@@ -743,6 +786,7 @@ struct System {
                             interesting[j] = has_common_variable.count({i, j});
                         }
                     }
+                    */
 
                     // If the RHS is just a constant or variable then
                     // we'll just greedily perform this elimination -
@@ -830,7 +874,7 @@ bool can_disprove(Expr e, int beam_size, std::set<Expr, IRDeepCompare> *implicat
             // TODO: using var name prefixes here is a total hack
             if (starts_with(op->name, "c")) {
                 return;
-            } else if (starts_with(op->name, "k")) {
+            } else {
                 if (simplifier->bounds_and_alignment_info.contains(op->name)) {
                     auto info = simplifier->bounds_and_alignment_info.get(op->name);
                     if (info.min_defined || info.max_defined) {
@@ -838,6 +882,7 @@ bool can_disprove(Expr e, int beam_size, std::set<Expr, IRDeepCompare> *implicat
                     }
                 }
             }
+            debug(0) << "Rejecting due to "  << op->name << "\n";
             useful = false;
         }
 
@@ -847,19 +892,22 @@ bool can_disprove(Expr e, int beam_size, std::set<Expr, IRDeepCompare> *implicat
         FilterImplications(Simplify *s) : simplifier(s) {}
     };
 
-    std::set<Expr, IRDeepCompare> local_implications;
+    std::map<Expr, vector<int>, IRDeepCompare> local_implications;
 
-    auto consider_implication = [&](const Expr &e) {
+    auto consider_implication = [&](const Expr &e, int id) {
         FilterImplications f(&simplifier);
         e.accept(&f);
         if (f.useful) {
-            local_implications.insert(e);
+            local_implications[e].push_back(id);
+        } else {
+            debug(0) << "Rejecting implication with unbounded terms: " << e << "\n";
         }
     };
 
     // Beam search time.
     std::deque<std::unique_ptr<System>> beam;
     beam.emplace_back(std::move(system));
+    float last_complexity = 0;
     while (!beam.empty()) {
         // Take the best thing
         std::unique_ptr<System> next = std::move(beam.front());
@@ -867,12 +915,15 @@ bool can_disprove(Expr e, int beam_size, std::set<Expr, IRDeepCompare> *implicat
 
         if (implications) {
             for (const auto &eq : next->equalities) {
-                consider_implication(eq.to_expr());
+                consider_implication(eq.to_expr(), next->id);
             }
             if (next->non_linear_term.defined()) {
-                consider_implication(next->non_linear_term);
+                consider_implication(next->non_linear_term, next->id);
             }
         }
+
+        //if (next->complexity() == last_complexity) continue;
+        last_complexity = next->complexity();
 
 
           debug(0) << "Top of beam: " << next->complexity() << "\n";
@@ -934,6 +985,51 @@ bool can_disprove(Expr e, int beam_size, std::set<Expr, IRDeepCompare> *implicat
             }
         }
 
+        // Mine the simplifier's list of memorized truth for symbolic
+        // bounds on the remaining auxiliary variables.
+        for (const Expr &t : simplifier.truths) {
+            debug(0) << "Exploiting truth: " << t << "\n";
+            if (const LT *lt = t.as<LT>()) {
+                const Variable *va = lt->a.as<Variable>();
+                const Variable *vb = lt->b.as<Variable>();
+                if (va && scope.contains(va->name)) {
+                    // The RHS may be a useful symbolic bound for the LHS
+                    Interval rhs_bounds = bounds_of_expr_in_scope(lt->b, scope);
+                    if (rhs_bounds.has_lower_bound()) {
+                        Interval &i = scope.ref(va->name);
+                        i.max = Interval::make_min(i.max, rhs_bounds.min - 1);
+                    }
+                }
+                if (vb && scope.contains(vb->name)) {
+                    // The LHS may be a useful symbolic bound for the RHS
+                    Interval rhs_bounds = bounds_of_expr_in_scope(lt->a, scope);
+                    if (rhs_bounds.has_upper_bound()) {
+                        Interval &i = scope.ref(vb->name);
+                        i.min = Interval::make_max(i.min, rhs_bounds.max + 1);
+                    }
+                }
+            } else if (const LE *le = t.as<LE>()) {
+                const Variable *va = le->a.as<Variable>();
+                const Variable *vb = le->b.as<Variable>();
+                if (va && scope.contains(va->name)) {
+                    // The RHS may be a useful symbolic bound for the LHS
+                    Interval rhs_bounds = bounds_of_expr_in_scope(le->b, scope);
+                    if (rhs_bounds.has_lower_bound()) {
+                        Interval &i = scope.ref(va->name);
+                        i.max = Interval::make_min(i.max, rhs_bounds.min);
+                    }
+                }
+                if (vb && scope.contains(vb->name)) {
+                    // The LHS may be a useful symbolic bound for the RHS
+                    Interval rhs_bounds = bounds_of_expr_in_scope(le->a, scope);
+                    if (rhs_bounds.has_upper_bound()) {
+                        Interval &i = scope.ref(vb->name);
+                        i.min = Interval::make_max(i.min, rhs_bounds.max);
+                    }
+                }
+            }
+        }
+
         // Compute symbolic bounds, with the simplifier (and all its
         // accumulated knowledge) as a backstop. TODO: would be better
         // if we could pass a custom simplifier instance into
@@ -941,9 +1037,24 @@ bool can_disprove(Expr e, int beam_size, std::set<Expr, IRDeepCompare> *implicat
         auto get_bounds = [&](const Expr &e) {
             Interval i = bounds_of_expr_in_scope(e, scope);
             Simplify::ExprInfo info;
+            if (const Mul *mul = e.as<Mul>()) {
+                debug(0) << "HI: bounds of product: " << e << "\n";
+                simplifier.mutate(mul->a, &info);
+                Interval mi = get_bounds_from_info(info);
+                debug(0) << "LHS: " << mi.min << " ... " << mi.max << "\n";
+                simplifier.mutate(mul->b, &info);
+                mi = get_bounds_from_info(info);
+                debug(0) << "RHS: " << mi.min << " ... " << mi.max << "\n";
+            }
             simplifier.mutate(e, &info);
             Interval si = get_bounds_from_info(info);
-            return Interval::make_intersection(i, si);
+            if (!i.has_lower_bound() && si.has_lower_bound()) {
+                i.min = si.min;
+            }
+            if (!i.has_upper_bound() && si.has_upper_bound()) {
+                i.max = si.max;
+            }
+            return i;
         };
 
         auto add_intervals = [](const Interval &a, const Interval &b) -> Interval {
@@ -964,7 +1075,8 @@ bool can_disprove(Expr e, int beam_size, std::set<Expr, IRDeepCompare> *implicat
         };
 
         // Now eliminate all the k's
-        for (Expr m : local_implications) {
+        for (auto p : local_implications) {
+            Expr m = p.first;
             debug(0) << "Local implication: " << m << "\n";
             m = simplify(m);
             debug(0) << "Simplify: " << m << "\n";
@@ -1006,6 +1118,12 @@ bool can_disprove(Expr e, int beam_size, std::set<Expr, IRDeepCompare> *implicat
             }
             m = simplify(m);
             debug(0) << "Eliminate: " << m << "\n";
+            if (!is_one(m)) {
+                // We got something
+                for (int id : p.second) {
+                    debug(0) << "USEFUL LEAF: " << id << "\n";
+                }
+            }
             implications->insert(m);
         }
     }
@@ -1046,13 +1164,6 @@ class BreakIntoConvexPieces : public IRMutator {
         return s == VarSign::Negative || s == VarSign::NonPositive;
     }
 
-    int indent_ = 0;
-    void indent() {
-        for (int i = 0; i < indent_; i++) {
-            debug(0) << ' ';
-        }
-    }
-
     Expr visit(const Add *op) override {
         Expr a = mutate(op->a);
         Expr b = mutate(op->b);
@@ -1089,15 +1200,12 @@ class BreakIntoConvexPieces : public IRMutator {
     }
 
     Expr visit(const Mul *op) override {
-        debug(0) << "Mul\n";
         Expr a = mutate(op->a);
         Expr b = mutate(op->b);
         auto rewrite = IRMatcher::rewriter(IRMatcher::mul(a, b), op->type, op->type);
         const Variable *var_b = b.as<Variable>();
 
-        if (false && var_b && !var_sign.contains(var_b->name)) {
-            indent();
-            debug(0) << "Sign of " << b << " is unknown. Expanding into cases...\n";
+        if (var_b && !var_sign.contains(var_b->name)) {
             Expr zero = make_zero(b.type());
             // Break it into two cases with known sign
             Expr prod = a * b;
@@ -1121,15 +1229,12 @@ class BreakIntoConvexPieces : public IRMutator {
     }
 
     Expr visit(const Div *op) override {
-        debug(0) << "Div\n";
         Expr a = mutate(op->a);
         Expr b = mutate(op->b);
         auto rewrite = IRMatcher::rewriter(IRMatcher::div(a, b), op->type, op->type);
         const Variable *var_b = b.as<Variable>();
 
-        if (false && var_b && !var_sign.contains(var_b->name)) {
-            indent();
-            debug(0) << "Sign of " << b << " is unknown. Expanding into cases...\n";
+        if (var_b && !var_sign.contains(var_b->name)) {
             Expr zero = make_zero(b.type());
             // Break it into two cases with known sign
             Expr ratio = a / b;
@@ -1149,7 +1254,6 @@ class BreakIntoConvexPieces : public IRMutator {
     }
 
     Expr visit(const LT *op) override {
-        debug(0) << "LT\n";
         Expr a = mutate(op->a);
         Expr b = mutate(op->b);
         auto rewrite = IRMatcher::rewriter(IRMatcher::lt(a, b), op->type, a.type());
@@ -1198,10 +1302,6 @@ class BreakIntoConvexPieces : public IRMutator {
     }
 
     Expr visit(const Select *op) override {
-        indent();
-        debug(0) << "Mutating select: " << Expr(op) << "\n";
-        indent_++;
-
         cases.insert(op->condition);
 
         if (const LT *lt = op->condition.as<LT>()) {
@@ -1217,25 +1317,16 @@ class BreakIntoConvexPieces : public IRMutator {
                         return mutate(op->false_value);
                     }
                 }
-                indent();
-                debug(0) << "A\n";
                 Expr cond = mutate(op->condition);
                 Expr true_value, false_value;
                 {
-                indent();
-                    debug(0) << "Assuming " << lt->b << " positive\n";
                     ScopedBinding<VarSign> bind(var_sign, var_b->name, VarSign::Positive);
                     true_value = mutate(op->true_value);
                 }
                 {
-                indent();
-                    debug(0) << "Assuming " << lt->b << " non-positive\n";
                     ScopedBinding<VarSign> bind(var_sign, var_b->name, VarSign::NonPositive);
                     false_value = mutate(op->false_value);
                 }
-                indent_--;
-                indent();
-                debug(0) << "Returning\n";
                 return select(cond, true_value, false_value);
             } else if (is_zero(lt->b) && var_a) {
                 if (var_sign.contains(var_a->name)) {
@@ -1247,8 +1338,6 @@ class BreakIntoConvexPieces : public IRMutator {
                         return mutate(op->false_value);
                     }
                 }
-                indent();
-                debug(0) << "B\n";
                 Expr cond = mutate(op->condition);
                 Expr true_value, false_value;
                 {
@@ -1259,11 +1348,9 @@ class BreakIntoConvexPieces : public IRMutator {
                     ScopedBinding<VarSign> bind(var_sign, var_a->name, VarSign::NonNegative);
                     false_value = mutate(op->false_value);
                 }
-                indent_--;
                 return select(cond, true_value, false_value);
             }
         }
-        indent_--;
         return IRMutator::visit(op);
     }
 public:
@@ -1284,9 +1371,9 @@ class ToDNF : public IRMutator {
         Expr a = mutate(op->a);
         Expr b = mutate(op->b);
         if (const Or *or_a = a.as<Or>()) {
-            return mutate(or_a->a && b || or_a->b && b);
+            return mutate(or_a->a && b) || mutate(or_a->b && b);
         } else if (const Or *or_b = b.as<Or>()) {
-            return mutate(a && or_b->a || a && or_b->b);
+            return mutate(a && or_b->a) || mutate(a && or_b->b);
         } else {
             return IRMutator::visit(op);
         }
@@ -1298,6 +1385,45 @@ class ToDNF : public IRMutator {
             return mutate(!and_a->a || !and_a->b);
         } else if (const Or *or_a = a.as<Or>()) {
             return mutate(!or_a->a && !or_a->b);
+        } else {
+            return IRMutator::visit(op);
+        }
+    }
+};
+
+class ToCNF : public IRMutator {
+    using IRMutator::visit;
+    Expr visit(const Select *op) override {
+        if (!op->type.is_bool()) {
+            return IRMutator::visit(op);
+        }
+        return mutate((!op->condition || op->true_value) &&
+                      (op->condition || op->false_value) &&
+                      (op->true_value || op->false_value));
+    }
+
+    Expr visit(const Or *op) override {
+        Expr a = mutate(op->a);
+        Expr b = mutate(op->b);
+        if (const And *and_a = a.as<And>()) {
+            debug(0) << "REWRITE1 a: " << a << "\n";
+            debug(0) << "REWRITE1 b: " << b << "\n";
+            return mutate(and_a->a || b) && mutate(and_a->b || b);
+        } else if (const And *and_b = b.as<And>()) {
+            debug(0) << "REWRITE2 a: " << a << "\n";
+            debug(0) << "REWRITE2 b: " << b << "\n";
+            return mutate(a || and_b->a) && mutate(a || and_b->b);
+        } else {
+            return IRMutator::visit(op);
+        }
+    }
+
+    Expr visit(const Not *op) override {
+        Expr a = mutate(op->a);
+        if (const And *and_a = a.as<And>()) {
+            return mutate(!and_a->a || !and_a->b);
+        } else if (const Or *or_a = a.as<Or>()) {
+            return mutate(!or_a->a) && mutate(!or_a->b);
         } else {
             return IRMutator::visit(op);
         }
@@ -1403,9 +1529,12 @@ bool can_disprove_nonconvex(Expr e, int beam_size, Expr *implication = nullptr) 
             c = simplifier.mutate(c, nullptr);
             simplifier.learn_true(c);
             simplified_clauses.insert(c);
+            if (is_zero(c)) break;
         }
         Expr result = pack_binary_op<And>(simplified_clauses);
-        if (simplified_pieces.count(result)) {
+        if (is_zero(result)) {
+            debug(0) << (++i) << ") empty\n";
+        } else if (simplified_pieces.count(result)) {
             debug(0) << (++i) << ") duplicate\n";
         } else {
             debug(0) << (++i) << ") " << result << "\n";
@@ -1463,7 +1592,7 @@ Expr synthesize_predicate(const Expr &lhs,
     Expr m;
 
     assumption = simplify(assumption);
-    debug(0) << can_disprove_nonconvex(assumption && !to_prove, 256, &m);
+    debug(0) << can_disprove_nonconvex(assumption && !to_prove, 1024, &m);
 
     debug(0) << "\nImplication: " << m << "\n";
 
@@ -1474,8 +1603,12 @@ Expr synthesize_predicate(const Expr &lhs,
                 return mutate(!o->a && !o->b);
             } else if (const And *o = op->a.as<And>()) {
                 return mutate(!o->a || !o->b);
+            } else if (const LT *l = op->a.as<LT>()) {
+                return mutate(l->b <= l->a);
+            } else if (const LE *l = op->a.as<LE>()) {
+                return mutate(l->b < l->a);
             } else {
-                return IRMutator::visit(op);
+                return simplify(IRMutator::visit(op));
             }
         }
 
@@ -1491,7 +1624,7 @@ Expr synthesize_predicate(const Expr &lhs,
                     pending.push_back(next_and->a);
                     pending.push_back(next_and->b);
                 } else {
-                    terms.insert(next);
+                    terms.insert(simplify(next));
                 }
             }
             Expr result;
@@ -1517,7 +1650,7 @@ Expr synthesize_predicate(const Expr &lhs,
                     pending.push_back(next_or->a);
                     pending.push_back(next_or->b);
                 } else {
-                    terms.insert(next);
+                    terms.insert(simplify(next));
                 }
             }
             Expr result;
@@ -1530,45 +1663,122 @@ Expr synthesize_predicate(const Expr &lhs,
             }
             return result;
         }
+
+        Expr visit(const LT *op) override {
+            if (is_const(op->b)) {
+                // x < 0 -> x <= -1
+                return mutate(op->a <= simplify(op->b - 1));
+            } else if (is_const(op->a)) {
+                // 0 < x -> 1 <= x
+                return mutate(simplify(op->a + 1) <= op->b);
+            } else {
+                return IRMutator::visit(op);
+            }
+        }
+
+        Expr visit(const LE *op) override {
+            if (is_const(op->b) && can_prove(op->a != op->b)) {
+                return mutate(op->a <= simplify(op->b - 1));
+            } else if (is_const(op->a) && can_prove(op->a != op->b)) {
+                return mutate(simplify(op->a + 1) <= op->b);
+            } else {
+                return IRMutator::visit(op);
+            }
+        }
+
+        bool can_prove(Expr e) const {
+            return is_one(simplifier->mutate(e, nullptr));
+        }
+
+        Internal::Simplify *simplifier;
+
+    public:
+        NormalizePrecondition(Internal::Simplify *s) : simplifier(s) {}
     };
 
-    // Exploit the assumption to simplify the implications. Cleans
-    // up the expression a little.
+    class ImplicitAssumptions : public IRVisitor {
+        void visit(const Mul *op) override {
+            const Variable *v = op->b.as<Variable>();
+            if (v) {
+                result.push_back(op->b != 0);
+                result.push_back(op->b != 1);
+            }
+            IRVisitor::visit(op);
+        }
+        void visit(const Div *op) override {
+            const Variable *v = op->b.as<Variable>();
+            if (v) {
+                result.push_back(op->b != 0);
+                result.push_back(op->b != 1);
+            }
+            IRVisitor::visit(op);
+        }
+    public:
+        vector<Expr> result;
+    } implicit_assumptions;
+    lhs.accept(&implicit_assumptions);
+    Expr implicit_assumption = pack_binary_op<And>(implicit_assumptions.result);
+
+    // Simplify implication using the assumption
     Simplify simplifier(true, nullptr, nullptr);
-    simplifier.learn_true(assumption);
-    m = simplifier.mutate(m, nullptr);
-    debug(0) << "Assumption: " << assumption << "\n";
-    debug(0) << "Simplified implication using assumption: " << m << "\n";
+    simplifier.learn_true(implicit_assumption);
 
     Expr precondition = simplify(assumption && !m);
-    precondition = NormalizePrecondition().mutate(precondition);
+    debug(0) << "Precondition: " << precondition << "\n";
+    // precondition = ToCNF().mutate(precondition);
+    // debug(0) << "CNF: " << precondition << "\n";
+    precondition = NormalizePrecondition(&simplifier).mutate(precondition);
+    debug(0) << "Normalized: " << precondition << "\n";
 
     // We probably have a big conjunction. Use each term in it to
-    // simplify all subsequent terms, to reduce the number of
+    // simplify all other terms, to reduce the number of
     // overlapping conditions.
     vector<Expr> terms = unpack_binary_op<And>(precondition);
-    precondition = Expr();
+
+    set<Expr, IRDeepCompare> p;
     for (auto &t1 : terms) {
+        debug(0) << "Rewriting term: " << t1 << "\n";
         Simplify s(true, nullptr, nullptr);
+        s.learn_true(implicit_assumption);
         for (const auto &t2 : terms) {
             if (t1.same_as(t2)) continue;
             s.learn_true(t2);
         }
         t1 = s.mutate(t1, nullptr);
 
-        if (!precondition.defined()) {
-            precondition = t1;
-        } else {
-            precondition = precondition && t1;
+        if (is_zero(t1)) {
+            debug(0) << "FALSE: " << t1 << "\n";
         }
+
+        if (!is_one(t1)) {
+            p.insert(t1);
+        }
+    }
+
+    if (p.empty()) {
+        precondition = const_true();
+    } else {
+        precondition = pack_binary_op<And>(p);
     }
 
     precondition = simplify(precondition);
 
+    debug(0) << "Projected out: " << precondition << "\n";
+
+    // Now super-simplify it
+    /*
+    for (int i = 0; i < 5; i++) {
+        debug(0) << "Attempting super simplification at size " << i << "\n";
+        Expr ss = super_simplify(precondition, i);
+        if (ss.defined()) {
+            precondition = ss;
+            break;
+        }
+    }
+    */
+
     debug(0) << "Precondition " << precondition << "\n"
              << "implies " << to_prove << "\n";
-
-    // TODO: check it works on the examples. Extract RHS bindings.
 
     return precondition;
 }

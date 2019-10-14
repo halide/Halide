@@ -143,6 +143,8 @@ void learn_true_helper(const Expr &fact, Simplify *simplify, Simplify::ScopedFac
         if (scoped) {
             scoped->pop_list.push_back(var);
         }
+    } else if (const NE *ne = fact.as<NE>()) {
+        learn_false_helper(ne->a == ne->b, simplify, scoped);
     } else if (const EQ *eq = fact.as<EQ>()) {
         v = eq->a.as<Variable>();
         const Mod *m = eq->a.as<Mod>();
@@ -204,7 +206,9 @@ void learn_true_helper(const Expr &fact, Simplify *simplify, Simplify::ScopedFac
         learn_true_helper(a->b, simplify, scoped);
     } else if (const Not *n = fact.as<Not>()) {
         learn_false_helper(n->a, simplify, scoped);
-    } else if (simplify->truths.insert(fact).second && scoped) {
+    }
+
+    if (simplify->truths.insert(fact).second && scoped) {
         scoped->truths.push_back(fact);
     }
 
@@ -275,7 +279,9 @@ void learn_false_helper(const Expr &fact, Simplify *simplify, Simplify::ScopedFa
         learn_false_helper(o->b, simplify, scoped);
     } else if (const Not *n = fact.as<Not>()) {
         learn_true_helper(n->a, simplify, scoped);
-    } else if (simplify->falsehoods.insert(fact).second && scoped) {
+    }
+
+    if (simplify->falsehoods.insert(fact).second && scoped) {
         scoped->falsehoods.push_back(fact);
     }
 

@@ -36,4 +36,5 @@ Halide::Expr consume_float(char **cursor, char *end);
 // Parse a full Halide Expr, as produced by a Halide IRPrinter elsewhere.
 Halide::Expr parse_halide_expr(char **cursor, char *end, Halide::Type expected_type);
 
+std::vector<Halide::Expr> parse_halide_exprs_from_file(const std::string &filename);
 #endif

@@ -67,6 +67,7 @@ Expr Simplify::visit(const And *op, ExprInfo *bounds) {
          rewrite(c0 <= x && x < c1, false, c1 <= c0) ||
          rewrite(c0 <= x && x <= c1, false, c1 < c0) ||
          rewrite(x <= c1 && c0 <= x, false, c1 < c0) ||
+         rewrite(c0 < x && x != c1, a, c1 <= c0) ||
          rewrite(c0 < x && c1 < x, fold(max(c0, c1)) < x) ||
          rewrite(c0 <= x && c1 <= x, fold(max(c0, c1)) <= x) ||
          rewrite(x < c0 && x < c1, x < fold(min(c0, c1))) ||
@@ -75,6 +76,9 @@ Expr Simplify::visit(const And *op, ExprInfo *bounds) {
     }
 
     if (rewrite(broadcast(x) && broadcast(y), broadcast(x && y, op->type.lanes())) ||
+
+        rewrite(c0 < x && x < c1, x == fold(c0 + 1), !is_float(x) && c1 == c0 + 2) ||
+        rewrite(c0 < x && x != c1, c1 < x, !is_float(x) && c1 == c0 + 1) ||
 
         rewrite((x || (y && z)) && y, (x || z) && y) ||
         rewrite((x || (z && y)) && y, (x || z) && y) ||
@@ -103,8 +107,14 @@ Expr Simplify::visit(const And *op, ExprInfo *bounds) {
 
         rewrite(x < y && x < z, x < min(y, z)) ||
         rewrite(y < x && z < x, max(y, z) < x) ||
+
+        rewrite(x <= y && y <= x, x == y) ||
+        rewrite((z && x <= y) && y <= x, z && (x == y)) ||
+        rewrite((x <= y && z) && y <= x, z && (x == y)) ||
+
         rewrite(x <= y && x <= z, x <= min(y, z)) ||
-        rewrite(y <= x && z <= x, max(y, z) <= x)) {
+        rewrite(y <= x && z <= x, max(y, z) <= x) ||
+        false) {
 
         return mutate(std::move(rewrite.result), bounds);
     }

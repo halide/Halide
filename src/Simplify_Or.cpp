@@ -79,6 +79,8 @@ Expr Simplify::visit(const Or *op, ExprInfo *bounds) {
 
     if (rewrite(broadcast(x) || broadcast(y), broadcast(x || y, op->type.lanes())) ||
 
+        rewrite(x < y || y < x, x != y) ||
+
         rewrite((x && (y || z)) || y, (x && z) || y) ||
         rewrite((x && (z || y)) || y, (x && z) || y) ||
         rewrite(y || (x && (y || z)), y || (x && z)) ||

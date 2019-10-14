@@ -1,13 +1,17 @@
 include ../support/Makefile.inc
 
-OBJECTS = find_rules.o parser.o z3.o expr_util.o synthesize_predicate.o
+OBJECTS = $(BIN)/parser.o $(BIN)/z3.o $(BIN)/expr_util.o $(BIN)/synthesize_predicate.o $(BIN)/super_simplify.o
 
 all: $(BIN)/find_rules
 
-%.o: %.cpp %.h
+$(BIN)/%.o: %.cpp %.h
 	$(CXX) $(CXXFLAGS) -c $< -o $@
 
-$(BIN)/find_rules: $(OBJECTS) $(LIB_HALIDE)
+$(BIN)/find_rules: find_rules.cpp $(OBJECTS) $(LIB_HALIDE)
+	@mkdir -p $(@D)
+	$(CXX) $(CXXFLAGS) $(filter-out %.h,$^) -o $@ $(LDFLAGS)
+
+$(BIN)/synthesize_predicates: synthesize_predicates.cpp $(OBJECTS) $(LIB_HALIDE)
 	@mkdir -p $(@D)
 	$(CXX) $(CXXFLAGS) $(filter-out %.h,$^) -o $@ $(LDFLAGS)
 
