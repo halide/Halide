@@ -734,61 +734,6 @@ int main(int argc, char **argv) {
                         return;
                     }
 
-                    // Mine the predicate for LHS var ==
-                    // constant/other LHS var and move those
-                    // constraints into the binding instead. Also
-                    // de-dup terms in the predicate.
-                    vector<Expr> pending = {simplify(predicate)};
-                    set<Expr, IRDeepCompare> simpler_predicate;
-                    while (!pending.empty()) {
-                        Expr next = pending.back();
-                        pending.pop_back();
-                        if (const And *a = next.as<And>()) {
-                            pending.push_back(a->a);
-                            pending.push_back(a->b);
-                            continue;
-                        }
-
-                        if (const EQ *e = next.as<EQ>()) {
-                            Expr a = e->a, b = e->b;
-                            const Variable *var_a = a.as<Variable>();
-                            const Variable *var_b = b.as<Variable>();
-                            if (var_a && var_b) {
-                                // We want the lower-numbered vars on
-                                // the right, so that we replaced
-                                // things like c2 with things like c0,
-                                // and not vice-versa. The simplifier
-                                // does the opposite. So if they're
-                                // both vars, just flip 'em.
-                                std::swap(a, b);
-                                std::swap(var_a, var_b);
-                            }
-                            // We only want LHS vars
-                            if (var_a && !expr_uses_var(lhs, var_a->name)) {
-                                var_a = nullptr;
-                            }
-                            if (var_b && !expr_uses_var(lhs, var_b->name)) {
-                                var_b = nullptr;
-                            }
-                            if (var_a && (var_b || is_const(b))) {
-                                for (auto &it : binding) {
-                                    it.second = substitute(var_a->name, b, it.second);
-                                }
-                                binding[var_a->name] = b;
-                                continue;
-                            }
-                        }
-
-                        simpler_predicate.insert(next);
-                    }
-
-                    predicate = const_true();
-                    for (auto &t : simpler_predicate) {
-                        predicate = predicate && t;
-                    }
-
-                    predicate = simplify(substitute(binding, predicate));
-                    predicate = simplify(substitute_in_all_lets(predicate));
                     lhs = substitute(binding, lhs);
 
                     // In the RHS, we want to wrap fold() around computed combinations of the constants

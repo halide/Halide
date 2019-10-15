@@ -1,4 +1,5 @@
 #include "synthesize_predicate.h"
+#include "expr_util.h"
 #include "super_simplify.h"
 #include "Halide.h"
 
@@ -1735,7 +1736,7 @@ Expr synthesize_predicate(const Expr &lhs,
     // overlapping conditions.
     vector<Expr> terms = unpack_binary_op<And>(precondition);
 
-    set<Expr, IRDeepCompare> p;
+    set<Expr, IRDeepCompare> clauses;
     for (auto &t1 : terms) {
         debug(1) << "Rewriting term: " << t1 << "\n";
         Simplify s(true, nullptr, nullptr);
@@ -1751,16 +1752,152 @@ Expr synthesize_predicate(const Expr &lhs,
         }
 
         if (!is_one(t1)) {
-            p.insert(t1);
+            for (auto subclause : unpack_binary_op<And>(t1)) {
+                clauses.insert(subclause);
+                simplifier.learn_true(subclause);
+            }
         }
     }
 
-    if (p.empty()) {
-        precondition = const_true();
-    } else {
-        precondition = pack_binary_op<And>(p);
+    for (auto p : find_vars(rhs)) {
+        string v = p.first;
+        if (expr_uses_var(lhs, v)) {
+            continue;
+        }
+        debug(0) << "implicit var: " << v << "\n";
+        set<Expr, IRDeepCompare> upper_bound, lower_bound;
+        for (Expr c : clauses) {
+            if (!expr_uses_var(c, v)) {
+                continue;
+            }
+            debug(0) << "Considering " << c << "\n";
+            Expr result = solve_expression(c, v).result;
+            debug(0) << "Solved clause: " << result << "\n";
+
+            if (const LT *lt = result.as<LT>()) {
+                result = (lt->a <= lt->b - 1);
+            } else if (const GT *gt = result.as<GT>()) {
+                result = (gt->a >= gt->b + 1);
+            }
+
+            const EQ *eq = result.as<EQ>();
+            const LE *le = result.as<LE>();
+            const GE *ge = result.as<GE>();
+            Expr a, b;
+            if (eq) {
+                a = eq->a;
+                b = eq->b;
+            } else if (le) {
+                a = le->a;
+                b = le->b;
+            } else if (ge) {
+                a = ge->a;
+                b = ge->b;
+            } else {
+                continue;
+            }
+
+            const Variable *var_a = a.as<Variable>();
+            const Mul *mul_a = a.as<Mul>();
+            if (mul_a) {
+                var_a = mul_a->a.as<Variable>();
+            }
+
+            if (!var_a || var_a->name != v) {
+                continue;
+            }
+
+            if (mul_a && !is_one(simplifier.mutate(mul_a->b >= 0, nullptr))) {
+                // TODO: could also do something for provably negative
+                // multipliers.
+                continue;
+            }
+
+            if (mul_a && le) {
+                b = b / mul_a->b;
+            } else if (mul_a && ge) {
+                b = (b + mul_a->b - 1) / mul_a->b;
+            } else if (mul_a && eq) {
+                b = b / mul_a->b;
+            }
+
+            if (expr_uses_var(b, v)) {
+                continue;
+            }
+
+            if (eq || le) {
+                upper_bound.insert(b);
+            }
+            if (eq || ge) {
+                lower_bound.insert(b);
+            }
+        }
+
+        // Now we need to pick a value for the implicit var. It can be
+        // anything, because we'll substitute it back into the
+        // predicate. So if we pick something bad, the predicate will
+        // simply not match (as the implicit condition will not hold),
+        // and no harm done. We'll use the max of the lower bounds and
+        // the min of the upper bounds.
+
+        if (upper_bound.empty() && lower_bound.empty()) {
+            debug(0) << "Failed to bound implicit var " << v << "\n";
+            continue;
+        }
+
+        if (!upper_bound.empty()) {
+            lower_bound.insert(pack_binary_op<Min>(upper_bound));
+        }
+        Expr proposal = pack_binary_op<Max>(lower_bound);
+        proposal = simplify(proposal);
+
+        // Eliminate this variable from all existing bindings, and
+        // from all future clauses
+        for (auto &p : *binding) {
+            p.second = substitute(v, proposal, p.second);
+        }
+
+        set<Expr, IRDeepCompare> new_clauses;
+        for (Expr c : clauses) {
+            new_clauses.insert(substitute(v, proposal, c));
+        }
+        clauses.swap(new_clauses);
+
+        (*binding)[v] = proposal;
     }
 
+    // Replace LHS constant wildcards with actual constants where possible
+    vector<Expr> new_clauses;
+    for (Expr c : clauses) {
+        c = substitute(*binding, c);
+        const EQ *eq = c.as<EQ>();
+        if (!eq) {
+            new_clauses.push_back(c);
+            continue;
+        }
+        const Variable *var_a = eq->a.as<Variable>();
+        const Variable *var_b = eq->b.as<Variable>();
+        if (!var_a || !(var_b || is_const(eq->b))) {
+            new_clauses.push_back(c);
+            continue;
+        }
+
+        for (auto &p : *binding) {
+            p.second = substitute(var_a->name, eq->b, p.second);
+        }
+
+        for (Expr &c2 : new_clauses) {
+            c2 = substitute(var_a->name, eq->b, c2);
+        }
+
+        (*binding)[var_a->name] = eq->b;
+    }
+
+    if (new_clauses.empty()) {
+        precondition = const_true();
+    } else {
+        precondition = pack_binary_op<And>(new_clauses);
+    }
     precondition = simplify(precondition);
 
     debug(1) << "Projected out: " << precondition << "\n";
@@ -1777,8 +1914,10 @@ Expr synthesize_predicate(const Expr &lhs,
     }
     */
 
-    debug(1) << "Precondition " << precondition << "\n"
+    debug(0) << "Precondition " << precondition << "\n"
              << "implies " << to_prove << "\n";
+
+
 
     return precondition;
 }

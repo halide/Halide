@@ -19,7 +19,7 @@ int main(int argc, char **argv) {
     vector<Expr> exprs = parse_halide_exprs_from_file(argv[1]);
     vector<Expr> predicates;
 
-    for (auto e : exprs) {
+    for (Expr &e : exprs) {
         const EQ *eq = e.as<EQ>();
         if (!eq) {
             std::cerr << "All expressions must be equalities: " << e << "\n";
@@ -27,6 +27,7 @@ int main(int argc, char **argv) {
         }
         map<string, Expr> binding;
         Expr predicate = synthesize_predicate(eq->a, eq->b, vector<map<string, Expr>>{}, &binding);
+        e = substitute(binding, e);
         predicates.push_back(predicate);
     }
 
