@@ -251,6 +251,10 @@ Expr Simplify::visit(const Sub *op, ExprInfo *bounds) {
                rewrite(x/c0 - (x - y)/c0, ((y + fold(c0 - 1)) - (x % c0))/c0, c0 > 0) ||
                rewrite((x - y)/c0 - x/c0, ((x % c0) - y)/c0, c0 > 0) ||
 
+               #if USE_SYNTHESIZED_RULES_V2
+               rewrite((min(((x + y) + z), w) - y), min((w - y), (x + z))) ||
+               #endif
+
                // Synthesized
                #if USE_SYNTHESIZED_RULES
 

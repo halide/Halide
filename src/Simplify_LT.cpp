@@ -358,6 +358,10 @@ Expr Simplify::visit(const LT *op, ExprInfo *bounds) {
                       c1 * (lanes - 1) < c0 &&
                       c1 * (lanes - 1) >= 0) ||
 
+              #if USE_SYNTHESIZED_RULES_V2
+              rewrite((min(min(x, (y + c0)), z) < y), true, (c0 <= -1)) ||
+              #endif
+
               // Synthesized
               #if USE_SYNTHESIZED_RULES
 
@@ -384,6 +388,7 @@ Expr Simplify::visit(const LT *op, ExprInfo *bounds) {
               rewrite((max(x, c0) < ((max((x*c1), y) + c2)/c1)), (fold((c0 - c2)) < max((x*c1), y)), (((c0 == -1) || (c1 == 0)) && (((0 < c1) && (c1 < 16)) && (c1 <= c2)))) ||
               rewrite((max(x, y) < ((max((x*c0), c1) + c2)/c0)), (y <= max(x, fold((c0 - c2)))), (((((0 < c0) && (c0 == (c2 + -1))) && (c0 < 16)) && ((c1 + c2) < c0)) && (0 <= (c0 + c1)))) ||
 
+              rewrite(((x + y) < max(((max(y, z) + x) + c0), w)), true, (1 <= c0)) ||
 
               // From Google list
               rewrite((x < (y + 1)), (x <= y)) ||
@@ -417,6 +422,57 @@ Expr Simplify::visit(const LE *op, ExprInfo *bounds) {
     Expr mutated = mutate(!(op->b < op->a), bounds);
     if (const LE *le = mutated.as<LE>()) {
         Expr a = le->a, b = le->b;
+
+#if USE_SYNTHESIZED_RULES_V2
+        if (no_overflow_int(a.type())) {
+
+            auto rewrite = IRMatcher::rewriter(IRMatcher::le(a, b), op->type, a.type());
+
+            if (
+                rewrite(((x + c0) <= max((max(y, x) + c0), z)), true) ||
+                rewrite(((min(x, y)/c0) <= (y/c0)), true, (0 <= c0)) ||
+                rewrite((min(x, (y + c0)) <= min(x, (y + c1))), true, (c0 < (c1 + 1))) ||
+                rewrite((min((x + c0), y) <= min((x + c1), y)), true, (c0 < (c1 + 1))) ||
+                rewrite(((min(x, y) + c0) <= min(z, (y + c1))), (min(x, y) < z), ((1 <= c0) && (c0 < (min(c1, 1) + 1)))) ||
+                rewrite((((x + y)*c0) <= (z + (y*c0))), ((x*c0) <= z)) ||
+                rewrite((min(x, y) <= min(z, y)), (min(x, y) <= z)) ||
+                rewrite((min(x, y) <= min(y, x)), true) ||
+
+                rewrite(((x + y) <= min(z, (y + w))), (x <= min((z - y), w))) ||
+                rewrite(((min(x, y) + c0) <= min(y, z)), ((min(x, y) + c0) <= z), (c0 <= 0)) ||
+                rewrite((max(x, y) <= max(z, y)), (x <= max(y, z))) ||
+
+                rewrite(((x + c0) <= ((((x - y)/c1)*c1) + y)), true, ((0 <= c1) && ((c0 + c1) <= 1))) ||
+                // implicit: rewrite(((x + ((y + c0)/c1)) <= ((y + c2)/c1)), (x < c3), ((((c1 + c2) < (((c1*c3) + c0) + 1)) && (((c1*c3) + (c0 + c1)) < (((c1*2) + c2) + 1))) && (0 <= c1))) ||
+                // implicit: rewrite(((x + ((y + c0)/c1)) <= ((y + c2)/c1)), (x <= c3), ((((c1 + c2) < (((c1*c3) + (c0 + c1)) + 1)) && (((c1*c3) + c0) < (c2 + 1))) && (0 <= c1))) ||
+                rewrite(((min((x + c0), y) + c1) <= min((x + c2), y)), true, ((c1 <= 0) && ((c0 + c1) < (c2 + 1)))) ||
+                rewrite(((min(min(x, (y + c0)), c1) + c2) <= min(y, c3)), true, (((c0 + c2) <= 0) && ((c1 + c2) < (c3 + 1)))) ||
+                rewrite(((min(min((x + c0), y), z) + c1) <= x), true, ((c0 + c1) <= 0)) ||
+                rewrite((max((x/c0), c1) <= max(((x + c2)/c0), c3)), true, ((((c0 < ((c0 + c2) + 1)) || (c1 < (c3 + 1))) || (0 <= c2)) && (((0 <= c2) || (c0 < ((c0 + c2) + 1))) && (((c1 < (c3 + 1)) && (((c1 + 1)*c0) < (((c0*c3) + ((c0*2) + c2)) + 1))) && (0 <= c0))))) ||
+
+
+                rewrite((x <= (((((x - y) + c0)/c1)*c1) + y)), true, ((0 <= c1) && (c1 < (max(c0, -1) + 2)))) ||
+                // implicit rewrite(((x + ((y + c0)/c1)) <= ((y + c2)/c1)), (x < c3), ((((c1 + c2) < (((c1*c3) + c0) + 1)) && (((c1*c3) + (c0 + c1)) < (((c1*2) + c2) + 1))) && (0 <= c1))) ||
+                // implicit rewrite((((x + y) + c0) <= y), (x < c1), ((c0 + c1) == 1)) ||
+                // implicit rewrite((((x + y) + c0) <= y), (x <= c1), ((c0 + c1) == 0)) ||
+                // implicit rewrite((((x + y) + z) <= x), ((y + z) <= c0), (c0 == 0)) ||
+                // implicit rewrite((((x + (y + z)) + c0) <= (y + z)), (x <= c1), ((c0 + c1) == 0)) ||
+                // implicit rewrite((((x + (y + z)) + c0) <= (y + z)), (x < c1), ((c0 + c1) == 1)) ||
+                // implicit rewrite((((x + ((y*z) + w)) + u) <= ((y*z) + w)), ((u + x) < c0), (c0 == 1)) ||
+                rewrite((min(x, y) <= min((y + c0), z)), (min(x, y) <= z), (0 <= c0)) ||
+                rewrite((min((x + y), z) <= (max(x, w) + y)), true) ||
+                rewrite((min((x + (y + z)), w) <= (max(x, u) + (y + z))), true) ||
+                rewrite((min(min(x, y), c0) <= min(x, c1)), true, (c0 < (c1 + 1))) ||
+                rewrite((min(min(x, y), c0) <= min(y, c1)), true, (c0 < (c1 + 1))) ||
+                rewrite((min(min(x, y), z) <= y), true) ||
+                rewrite((min(min(x, y), (min(min(z, x), w) + u)) <= y), true) ||
+
+                false) {
+                return mutate(rewrite.result, bounds);
+            }
+        }
+#endif
+
 
         // Synthesized rules
 #if USE_SYNTHESIZED_RULES
@@ -562,6 +618,10 @@ Expr Simplify::visit(const LE *op, ExprInfo *bounds) {
                 rewrite(((x + ((y + c0)/c1)) <= ((y + c2)/c1)), (x <= 1), (((0 < c1) && (c2 == (c0 + c1))) && (c1 < 16))) ||
 
                 rewrite(((x + 1) <= y), (x < y)) ||
+
+                // implicit rewrite(((x + ((y + c0)/c1)) <= ((y + c2)/c1)), (x < c3), (((0 <= c1) && ((c1 + c2) <= ((c1*c3) + c0))) && (((c1*c3) + (c0 + c1)) <= ((c1*2) + c2)))) ||
+                rewrite(((min((min(x, y) + c0), z) + c1) <= x), true, ((c0 + c1) <= 0)) ||
+                rewrite(((min(min(min((x + c0), y), z), w) + c1) <= x), true, ((c0 + c1) <= 0)) ||
 
                 false) {
                 return mutate(rewrite.result, bounds);

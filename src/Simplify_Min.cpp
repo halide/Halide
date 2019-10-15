@@ -209,6 +209,23 @@ Expr Simplify::visit(const Min *op, ExprInfo *bounds) {
               (no_overflow_int(op->type) &&
                (
 
+                #if USE_SYNTHESIZED_RULES_V2
+                rewrite(min(x, (min((x + c0), y) + c1)), min((y + c1), x), (0 <= (c0 + c1))) ||
+                rewrite(min(min(x, y), (x + c0)), min(x, y), (0 <= c0)) ||
+                rewrite(min(min(x, y), (min(z, y) + c0)), min(min(x, y), (z + c0)), (0 <= c0)) ||
+                rewrite(min(((x + (y + z)) + w), (z + u)), (min(((x + y) + w), u) + z)) ||
+                rewrite(min(x, ((max(y, c0) + (min(y, c0) + z)) + c1)), min((y + z), x), ((c0 + c1) == 0)) ||
+                rewrite(min((((((x - y) + c0)/c1)*c1) + y), x), x, ((0 <= c1) && (c1 < (max(c0, -1) + 2)))) ||
+                rewrite(min((min((x + c0), y) + c1), x), min((y + c1), x), (0 <= (c0 + c1))) ||
+                rewrite(min((((x + c0)/c1)*c1), (x + c2)), (x + c2), ((0 <= c1) && ((c1 + c2) < (c0 + 2)))) ||
+                rewrite(min((((x + c0)/c1)*c1), (min(x, y) + c2)), (min(x, y) + c2), ((0 <= c1) && ((c1 + c2) < (c0 + 2)))) ||
+                // implicit rewrite(min(min(x, y), (min(x, (z + c0)) + c1)), min(min(x, y), (z + c2)), ((((c0 < (c2 + 1)) && (c2 < ((c0 + c1) + 1))) && ((c0 + c1) < (c2 + 1))) && (0 <= c1))) ||
+                rewrite(min(min(x, (y + c0)), y), min(x, y), (0 <= c0)) ||
+                // implicit rewrite(min(min((x + min(y, z)), y), z), (min(y, z) + min(x, c0)), (c0 == 0)) ||
+                rewrite(min(min(min(x, y), z), (y + c0)), min(min(x, y), z), (0 <= c0)) ||
+                rewrite(min(min(min((x + c0), y), z), x), min(min(x, y), z), (0 <= c0)) ||
+                #endif
+
                // Synthesized
                #if USE_SYNTHESIZED_RULES
 

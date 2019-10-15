@@ -20,6 +20,7 @@
 
 // Include rules synthesized by the simplifier-automatic-rule-synthesis project
 #define USE_SYNTHESIZED_RULES 0
+#define USE_SYNTHESIZED_RULES_V2 1
 
 // On old compilers, some visitors would use large stack frames,
 // because they use expression templates that generate large numbers

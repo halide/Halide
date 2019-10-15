@@ -119,6 +119,14 @@ Expr Simplify::visit(const And *op, ExprInfo *bounds) {
         return mutate(std::move(rewrite.result), bounds);
     }
 
+    #if USE_SYNTHESIZED_RULES_V2
+    if (false ||
+        // rewrite(((x <= y) && (min(z, w) <= min(w, z))), (x <= y)) || // Bad RULE!
+        false) {
+        return mutate(std::move(rewrite.result), bounds);
+    }
+    #endif
+
     #if USE_SYNTHESIZED_RULES
     if (rewrite((x <= y) && (y <= x), (y == x)) ||     // From google list
         rewrite(((x < y) && (y < (x + c0))), false, (c0 <= 0) && is_no_overflow_int(x)) ||

@@ -122,6 +122,15 @@ Expr Simplify::visit(const Add *op, ExprInfo *bounds) {
                rewrite(x + ((c0 - x)/c1 + y)*c1, y * c1 - ((c0 - x) % c1) + c0, c1 > 0) ||
                rewrite(x + (y + (c0 - x)/c1)*c1, y * c1 - ((c0 - x) % c1) + c0, c1 > 0) ||
 
+               #if USE_SYNTHESIZED_RULES_V2
+               rewrite((min((x - (y + z)), c0) + y), min((x - z), (y + c0))) ||
+               rewrite(((x*y) + ((z*y) + w)), (((x + z)*y) + w)) ||
+               rewrite((min(x, ((y - z) + w)) + z), min((x + z), (w + y))) ||
+               rewrite((min(((x - y) + z), w) + y), min((x + z), (w + y))) ||
+               rewrite((min(((x - y)*z), c0) + (y*z)), min((x*z), ((y*z) + c0))) ||
+               rewrite((min(min((x - y), z), w) + y), min((min(w, z) + y), x)) ||
+               #endif
+
                // Synthesized
                #if USE_SYNTHESIZED_RULES
 
@@ -178,7 +187,6 @@ Expr Simplify::visit(const Add *op, ExprInfo *bounds) {
                rewrite((x + ((y*z) + (w + (u*z)))), (((u + y)*z) + (w + x))) ||
                rewrite((x + (y - (x + z))), (y - z)) ||
                rewrite((x + (y - (z + x))), (y - z)) ||
-
                #endif
 
                false)))) {
