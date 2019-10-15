@@ -3,6 +3,8 @@
 
 #include "Halide.h"
 
+bool can_disprove_nonconvex(Halide::Expr e, int beam_size, Halide::Expr *implication = nullptr);
+
 // Takes a LHS and RHS with symbolic constants, and a list of example
 // bindings for the constants for which LHS has been proved to equal
 // RHS, and returns a sufficient condition on the constants for which
