@@ -309,13 +309,13 @@ struct System {
 
     void dump() const {
         if (most_recent_substitution.defined()) {
-            debug(0) << "Substitution: " << most_recent_substitution << "\n";
+            debug(1) << "Substitution: " << most_recent_substitution << "\n";
         }
         for (auto &e : equalities) {
-            debug(0) << " " << e.to_expr() << "\n";
+            debug(1) << " " << e.to_expr() << "\n";
         }
         if (non_linear_term.defined()) {
-            debug(0) << " non-linear: " << non_linear_term << "\n";
+            debug(1) << " non-linear: " << non_linear_term << "\n";
         }
         const auto &info = simplifier->bounds_and_alignment_info;
         for (auto it = info.cbegin(); it != info.cend(); ++it){
@@ -328,12 +328,12 @@ struct System {
             }
             if (!used) continue;
             if (it.value().min_defined && it.value().max_defined) {
-                debug(0) << " " << it.value().min << " <= " << it.name()
+                debug(1) << " " << it.value().min << " <= " << it.name()
                          << " <= " << it.value().max << "\n";
             } else if (it.value().min_defined) {
-                debug(0) << " " << it.value().min << " <= " << it.name() << "\n";
+                debug(1) << " " << it.value().min << " <= " << it.name() << "\n";
             } else if (it.value().max_defined) {
-                debug(0) << " " << it.name() << " <= " << it.value().max << "\n";
+                debug(1) << " " << it.name() << " <= " << it.value().max << "\n";
             }
         }
     }
@@ -431,7 +431,7 @@ struct System {
                 totally_constrained_vars++;
             }
         }
-        debug(0) << "FEATURES " << id
+        debug(1) << "FEATURES " << id
                  << " " << parent_id
                  << " " << non_linear_terms
                  << " " << unconstrained_vars
@@ -619,7 +619,7 @@ struct System {
                 // opaque variable so that we can try cancelling it.
                 Var t(unique_name('n'));
 
-                debug(0) << "Repeated non-linear term: " << t << " == " << p.first << "\n";
+                debug(1) << "Repeated non-linear term: " << t << " == " << p.first << "\n";
 
                 auto subs = [&](Expr e) {
                     e = substitute(p.first, t, e);
@@ -667,13 +667,13 @@ struct System {
         }
 
         if (!equalities.empty() && eliminable_vars.empty()) {
-            debug(0) << "NO ELIMINABLE VARS:\n";
+            debug(1) << "NO ELIMINABLE VARS:\n";
             dump();
         }
 
         /*
           for (const auto &v : eliminable_vars) {
-          debug(0) << "Eliminable var: " << v << "\n";
+          debug(1) << "Eliminable var: " << v << "\n";
           }
         */
 
@@ -769,7 +769,7 @@ struct System {
                         simplifier->learn_true(p.first == rhs);
                     }
 
-                    //debug(0) << "Attempting elimination of " << var->name << "\n";
+                    //debug(1) << "Attempting elimination of " << var->name << "\n";
 
                     /*
                     // We have a candidate for elimination. Rule
@@ -837,7 +837,7 @@ struct System {
         }
 
         if (result.size() == old_size && !equalities.empty()) {
-            debug(0) << "NO CHILDREN:\n";
+            debug(1) << "NO CHILDREN:\n";
             dump();
         }
     }
@@ -851,7 +851,7 @@ uint64_t System::id_counter = 0;
 bool can_disprove(Expr e, int beam_size, std::set<Expr, IRDeepCompare> *implications = nullptr) {
     // e = common_subexpression_elimination(simplify(remove_likelies(e)));
 
-    debug(0) << "*** Attempting disproof " << e << "\n";
+    debug(1) << "*** Attempting disproof " << e << "\n";
 
     if (is_zero(e)) {
         // The simplifier was capable of doing the disproof by itself
@@ -882,7 +882,7 @@ bool can_disprove(Expr e, int beam_size, std::set<Expr, IRDeepCompare> *implicat
                     }
                 }
             }
-            debug(0) << "Rejecting due to "  << op->name << "\n";
+            debug(1) << "Rejecting due to "  << op->name << "\n";
             useful = false;
         }
 
@@ -900,7 +900,7 @@ bool can_disprove(Expr e, int beam_size, std::set<Expr, IRDeepCompare> *implicat
         if (f.useful) {
             local_implications[e].push_back(id);
         } else {
-            debug(0) << "Rejecting implication with unbounded terms: " << e << "\n";
+            debug(1) << "Rejecting implication with unbounded terms: " << e << "\n";
         }
     };
 
@@ -926,7 +926,7 @@ bool can_disprove(Expr e, int beam_size, std::set<Expr, IRDeepCompare> *implicat
         last_complexity = next->complexity();
 
 
-          debug(0) << "Top of beam: " << next->complexity() << "\n";
+          debug(1) << "Top of beam: " << next->complexity() << "\n";
           next->dump();
 
         if (next->infeasible()) {
@@ -988,7 +988,7 @@ bool can_disprove(Expr e, int beam_size, std::set<Expr, IRDeepCompare> *implicat
         // Mine the simplifier's list of memorized truth for symbolic
         // bounds on the remaining auxiliary variables.
         for (const Expr &t : simplifier.truths) {
-            debug(0) << "Exploiting truth: " << t << "\n";
+            debug(1) << "Exploiting truth: " << t << "\n";
             if (const LT *lt = t.as<LT>()) {
                 const Variable *va = lt->a.as<Variable>();
                 const Variable *vb = lt->b.as<Variable>();
@@ -1038,13 +1038,13 @@ bool can_disprove(Expr e, int beam_size, std::set<Expr, IRDeepCompare> *implicat
             Interval i = bounds_of_expr_in_scope(e, scope);
             Simplify::ExprInfo info;
             if (const Mul *mul = e.as<Mul>()) {
-                debug(0) << "HI: bounds of product: " << e << "\n";
+                debug(1) << "HI: bounds of product: " << e << "\n";
                 simplifier.mutate(mul->a, &info);
                 Interval mi = get_bounds_from_info(info);
-                debug(0) << "LHS: " << mi.min << " ... " << mi.max << "\n";
+                debug(1) << "LHS: " << mi.min << " ... " << mi.max << "\n";
                 simplifier.mutate(mul->b, &info);
                 mi = get_bounds_from_info(info);
-                debug(0) << "RHS: " << mi.min << " ... " << mi.max << "\n";
+                debug(1) << "RHS: " << mi.min << " ... " << mi.max << "\n";
             }
             simplifier.mutate(e, &info);
             Interval si = get_bounds_from_info(info);
@@ -1077,9 +1077,9 @@ bool can_disprove(Expr e, int beam_size, std::set<Expr, IRDeepCompare> *implicat
         // Now eliminate all the k's
         for (auto p : local_implications) {
             Expr m = p.first;
-            debug(0) << "Local implication: " << m << "\n";
+            debug(1) << "Local implication: " << m << "\n";
             m = simplify(m);
-            debug(0) << "Simplify: " << m << "\n";
+            debug(1) << "Simplify: " << m << "\n";
             if (const EQ *eq = m.as<EQ>()) {
                 Expr a = eq->a, b = eq->b;
                 vector<Expr> lhs = unpack_binary_op<Add>(a);
@@ -1091,14 +1091,14 @@ bool can_disprove(Expr e, int beam_size, std::set<Expr, IRDeepCompare> *implicat
                 for (const Expr &e : lhs) {
                     Interval i = get_bounds(e);
                     lhs_range = add_intervals(lhs_range, i);
-                    debug(0) << "Bounds of " << e << ": " << i.min << " ... " << i.max << "\n";
+                    debug(1) << "Bounds of " << e << ": " << i.min << " ... " << i.max << "\n";
                 }
                 for (const Expr &e : rhs) {
                     Interval i = get_bounds(e);
                     rhs_range = add_intervals(rhs_range, i);
-                    debug(0) << "Bounds of " << e << ": " << i.min << " ... " << i.max << "\n";
+                    debug(1) << "Bounds of " << e << ": " << i.min << " ... " << i.max << "\n";
                 }
-                debug(0) << "Bounds of lhs: " << lhs_range.min << " ... " << lhs_range.max << "\n"
+                debug(1) << "Bounds of lhs: " << lhs_range.min << " ... " << lhs_range.max << "\n"
                          << "Bounds of rhs: " << rhs_range.min << " ... " << rhs_range.max << "\n";
 
                 if (lhs_range.is_single_point() && rhs_range.is_single_point()) {
@@ -1117,11 +1117,11 @@ bool can_disprove(Expr e, int beam_size, std::set<Expr, IRDeepCompare> *implicat
                 m = and_condition_over_domain(m, scope);
             }
             m = simplify(m);
-            debug(0) << "Eliminate: " << m << "\n";
+            debug(1) << "Eliminate: " << m << "\n";
             if (!is_one(m)) {
                 // We got something
                 for (int id : p.second) {
-                    debug(0) << "USEFUL LEAF: " << id << "\n";
+                    debug(1) << "USEFUL LEAF: " << id << "\n";
                 }
             }
             implications->insert(m);
@@ -1406,12 +1406,12 @@ class ToCNF : public IRMutator {
         Expr a = mutate(op->a);
         Expr b = mutate(op->b);
         if (const And *and_a = a.as<And>()) {
-            debug(0) << "REWRITE1 a: " << a << "\n";
-            debug(0) << "REWRITE1 b: " << b << "\n";
+            debug(1) << "REWRITE1 a: " << a << "\n";
+            debug(1) << "REWRITE1 b: " << b << "\n";
             return mutate(and_a->a || b) && mutate(and_a->b || b);
         } else if (const And *and_b = b.as<And>()) {
-            debug(0) << "REWRITE2 a: " << a << "\n";
-            debug(0) << "REWRITE2 b: " << b << "\n";
+            debug(1) << "REWRITE2 a: " << a << "\n";
+            debug(1) << "REWRITE2 b: " << b << "\n";
             return mutate(a || and_b->a) && mutate(a || and_b->b);
         } else {
             return IRMutator::visit(op);
@@ -1469,15 +1469,15 @@ class ConvertRoundingToMod : public IRMutator {
     }
 };
 
-bool can_disprove_nonconvex(Expr e, int beam_size, Expr *implication = nullptr) {
+bool can_disprove_nonconvex(Expr e, int beam_size, Expr *implication) {
 
-    debug(0) << "Attempting to disprove non-convex expression: " << e << "\n";
+    debug(1) << "Attempting to disprove non-convex expression: " << e << "\n";
 
     // Canonicalize >, >=, and friends
     e = simplify(e);
 
     // Break it into convex pieces, and disprove every piece
-    debug(0) << "Simplified: " << e << "\n";
+    debug(1) << "Simplified: " << e << "\n";
     BreakIntoConvexPieces b;
     e = b.mutate(e);
     vector<Expr> pieces{e};
@@ -1501,24 +1501,24 @@ bool can_disprove_nonconvex(Expr e, int beam_size, Expr *implication = nullptr) 
     }
     e = pack_binary_op<Or>(pieces);
 
-    debug(0) << "Broken into cases:\n";
+    debug(1) << "Broken into cases:\n";
     int i = 0;
     for (auto p : pieces) {
-        debug(0) << (++i) << ") " << p << "\n";
+        debug(1) << (++i) << ") " << p << "\n";
     }
 
     e = ToDNF().mutate(e);
 
     pieces = unpack_binary_op<Or>(e);
 
-    debug(0) << "In DNF form:\n";
+    debug(1) << "In DNF form:\n";
     i = 0;
     for (auto p : pieces) {
-        debug(0) << (++i) << ") " << p << "\n";
+        debug(1) << (++i) << ") " << p << "\n";
     }
 
     // Simplify each piece.
-    debug(0) << "Simplify each piece:\n";
+    debug(1) << "Simplify each piece:\n";
     std::set<Expr, IRDeepCompare> simplified_pieces;
     i = 0;
     for (const Expr &p : pieces) {
@@ -1533,11 +1533,11 @@ bool can_disprove_nonconvex(Expr e, int beam_size, Expr *implication = nullptr) 
         }
         Expr result = pack_binary_op<And>(simplified_clauses);
         if (is_zero(result)) {
-            debug(0) << (++i) << ") empty\n";
+            debug(1) << (++i) << ") empty\n";
         } else if (simplified_pieces.count(result)) {
-            debug(0) << (++i) << ") duplicate\n";
+            debug(1) << (++i) << ") duplicate\n";
         } else {
-            debug(0) << (++i) << ") " << result << "\n";
+            debug(1) << (++i) << ") " << result << "\n";
             simplified_pieces.insert(result);
         }
     }
@@ -1552,11 +1552,11 @@ bool can_disprove_nonconvex(Expr e, int beam_size, Expr *implication = nullptr) 
     for (auto p : simplified_pieces) {
         set<Expr, IRDeepCompare> implications;
 
-        debug(0) << "Attempting to disprove non-trivial term: " << p << "\n";
+        debug(1) << "Attempting to disprove non-trivial term: " << p << "\n";
         if (can_disprove(p, beam_size, &implications)) {
-            debug(0) << "Success!\n";
+            debug(1) << "Success!\n";
         } else {
-            debug(0) << "Failure\n";
+            debug(1) << "Failure\n";
             failed = true;
         }
 
@@ -1564,18 +1564,18 @@ bool can_disprove_nonconvex(Expr e, int beam_size, Expr *implication = nullptr) 
             Expr m = pack_binary_op<And>(implications);
             if (m.defined()) {
                 m = simplify(m);
-                debug(0) << "Piece: " << p << "\n"
+                debug(1) << "Piece: " << p << "\n"
                          << "implies: " << m << "\n";
                 *implication = *implication || m;
             } else {
-                debug(0) << "Learned nothing from piece: " << p << "\n";
+                debug(1) << "Learned nothing from piece: " << p << "\n";
                 *implication = const_true();
             }
         }
     }
 
     if (implication) {
-        debug(0) << "Unsimplified combined implication: " << *implication << "\n";
+        debug(1) << "Unsimplified combined implication: " << *implication << "\n";
         *implication = simplify(*implication);
     }
 
@@ -1592,9 +1592,9 @@ Expr synthesize_predicate(const Expr &lhs,
     Expr m;
 
     assumption = simplify(assumption);
-    debug(0) << can_disprove_nonconvex(assumption && !to_prove, 1024, &m);
+    debug(1) << can_disprove_nonconvex(assumption && !to_prove, 1024, &m);
 
-    debug(0) << "\nImplication: " << m << "\n";
+    debug(1) << "\nImplication: " << m << "\n";
 
     class NormalizePrecondition : public IRMutator {
         using IRMutator::visit;
@@ -1724,11 +1724,11 @@ Expr synthesize_predicate(const Expr &lhs,
     simplifier.learn_true(implicit_assumption);
 
     Expr precondition = simplify(assumption && !m);
-    debug(0) << "Precondition: " << precondition << "\n";
+    debug(1) << "Precondition: " << precondition << "\n";
     // precondition = ToCNF().mutate(precondition);
-    // debug(0) << "CNF: " << precondition << "\n";
+    // debug(1) << "CNF: " << precondition << "\n";
     precondition = NormalizePrecondition(&simplifier).mutate(precondition);
-    debug(0) << "Normalized: " << precondition << "\n";
+    debug(1) << "Normalized: " << precondition << "\n";
 
     // We probably have a big conjunction. Use each term in it to
     // simplify all other terms, to reduce the number of
@@ -1737,7 +1737,7 @@ Expr synthesize_predicate(const Expr &lhs,
 
     set<Expr, IRDeepCompare> p;
     for (auto &t1 : terms) {
-        debug(0) << "Rewriting term: " << t1 << "\n";
+        debug(1) << "Rewriting term: " << t1 << "\n";
         Simplify s(true, nullptr, nullptr);
         s.learn_true(implicit_assumption);
         for (const auto &t2 : terms) {
@@ -1747,7 +1747,7 @@ Expr synthesize_predicate(const Expr &lhs,
         t1 = s.mutate(t1, nullptr);
 
         if (is_zero(t1)) {
-            debug(0) << "FALSE: " << t1 << "\n";
+            debug(1) << "FALSE: " << t1 << "\n";
         }
 
         if (!is_one(t1)) {
@@ -1763,12 +1763,12 @@ Expr synthesize_predicate(const Expr &lhs,
 
     precondition = simplify(precondition);
 
-    debug(0) << "Projected out: " << precondition << "\n";
+    debug(1) << "Projected out: " << precondition << "\n";
 
     // Now super-simplify it
     /*
     for (int i = 0; i < 5; i++) {
-        debug(0) << "Attempting super simplification at size " << i << "\n";
+        debug(1) << "Attempting super simplification at size " << i << "\n";
         Expr ss = super_simplify(precondition, i);
         if (ss.defined()) {
             precondition = ss;
@@ -1777,7 +1777,7 @@ Expr synthesize_predicate(const Expr &lhs,
     }
     */
 
-    debug(0) << "Precondition " << precondition << "\n"
+    debug(1) << "Precondition " << precondition << "\n"
              << "implies " << to_prove << "\n";
 
     return precondition;
