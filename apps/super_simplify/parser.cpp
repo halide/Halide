@@ -229,6 +229,7 @@ Expr parse_halide_expr(char **cursor, char *end, Type expected_type) {
     }
 
     if (consume(cursor, end, "(")) {
+        char *before_a = *cursor;
         Expr a = parse_halide_expr(cursor, end, Type{});
         Expr result;
         consume_whitespace(cursor, end);
@@ -266,9 +267,19 @@ Expr parse_halide_expr(char **cursor, char *end, Type expected_type) {
             result = a != parse_halide_expr(cursor, end, Type{});
         }
         if (consume(cursor, end, "&&")) {
+            if (!a.type().is_bool()) {
+                // Better re-parse it with type bool
+                a = parse_halide_expr(&before_a, end, Bool());
+                _halide_user_assert(a.type().is_bool()) << "Should have been bool: " << a << "\n";
+            }
             result = a && parse_halide_expr(cursor, end, Bool());
         }
         if (consume(cursor, end, "||")) {
+            if (!a.type().is_bool()) {
+                // Better re-parse it with type bool
+                a = parse_halide_expr(&before_a, end, Bool());
+                _halide_user_assert(a.type().is_bool()) << "Should have been bool: " << a << "\n";
+            }
             result = a || parse_halide_expr(cursor, end, Bool());
         }
         if (result.defined()) {
