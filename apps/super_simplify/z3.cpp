@@ -295,7 +295,7 @@ Z3Result satisfy(Expr e, map<string, Expr> *bindings) {
     TemporaryFile z3_output("output", "txt");
     write_entire_file(z3_file.pathname(), &src[0], src.size());
 
-    std::string cmd = "z3 -T:6 " + z3_file.pathname() + " > " + z3_output.pathname();
+    std::string cmd = "z3 -T:1 " + z3_file.pathname() + " > " + z3_output.pathname();
 
     //int ret = system(cmd.c_str());
     int ret = pclose(popen(cmd.c_str(), "r"));
