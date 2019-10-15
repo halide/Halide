@@ -12,30 +12,37 @@ CUDA_OPS =
 else
 HAS_CUDA = 1
 CUDA_OPS = $(BIN)/$(HL_TARGET)/add_cuda_float32.a \
-	       $(BIN)/$(HL_TARGET)/add_cuda_float64.a \
+	   $(BIN)/$(HL_TARGET)/add_cuda_float64.a \
            $(BIN)/$(HL_TARGET)/add_grad_cuda_float32.a \
-	       $(BIN)/$(HL_TARGET)/add_grad_cuda_float64.a
+	   $(BIN)/$(HL_TARGET)/add_grad_cuda_float64.a 
 endif
 
+EXT_LIB=$(BIN)/lib
 PYTHON ?= python3
+PIP ?= pip3
 
 all: test
 
+
 # Run the PyTorch tests to verify the module is compiled correctly
 # .wrapper is a dummy file whose timestamps allow Make to track the dependency
-# on the Python side of the build
-test: .wrapper
-	@PYTHONPATH=lib:${PYTHONPATH} $(PYTHON) test.py
+# on the Python side of the build 
+
+
+test: $(BIN)/.wrapper
+	@PYTHONPATH=$(EXT_LIB):${PYTHONPATH} $(PYTHON) test.py
+
 
 # Build the python PyTorch extension that links against the Halide operators
-.wrapper: $(OPS) $(CUDA_OPS) setup.py
-	@mkdir -p lib
+$(BIN)/.wrapper: $(OPS) $(CUDA_OPS) setup.py
+	@mkdir -p $(EXT_LIB)
 	@HAS_CUDA=$(HAS_CUDA) \
-		HALIDE_DISTRIB_PATH=$(HALIDE_DISTRIB_PATH) \
-		BIN=$(BIN)/$(HL_TARGET) \
-		PYTHONPATH=lib:${PYTHONPATH} \
-		$(PYTHON) setup.py build -b $(BIN)/python install --install-lib lib
-	@touch .wrapper
+	      HALIDE_DISTRIB_PATH=$(HALIDE_DISTRIB_PATH) \
+	      BIN=$(BIN)/$(HL_TARGET) \
+	      PYTHONPATH=$(EXT_LIB):${PYTHONPATH} \
+	      $(PIP) install . -t $(EXT_LIB) -b $(BIN)
+	@touch $(BIN)/.wrapper
+
 
 # Generate the CPU version of the op ------------------------------------------
 $(BIN)/%/add_float32.a: $(GENERATOR_BIN)/add.generator
@@ -110,11 +117,11 @@ $(BIN)/%/add_grad_cuda_float64.a: $(GENERATOR_BIN)/add.generator
 # -----------------------------------------------------------------------------
 
 # Build the Halide generator for the operator
-$(GENERATOR_BIN)/add.generator: src/add.cpp $(GENERATOR_DEPS)
+$(GENERATOR_BIN)/add.generator: src/add_generator.cpp $(GENERATOR_DEPS)
 	@echo Building Generator
 	@mkdir -p $(@D)
 	@$(CXX) $(CXXFLAGS) $(filter-out %.h,$^) \
 		-o $@ $(LDFLAGS) $(HALIDE_SYSTEM_LIBS)
 
 clean:
-	rm -rf $(BIN) lib dist halide_ops.egg-info .wrapper __pycache__
+	rm -rf $(BIN) __pycache__

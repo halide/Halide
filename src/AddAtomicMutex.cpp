@@ -15,33 +15,43 @@ using std::string;
 
 namespace {
 
-/** Collect all store's names inside a statement. */
-class CollectStoreNames : public IRGraphVisitor {
+/** Collect names of all stores matching the producer name inside a statement. */
+class CollectProducerStoreNames : public IRGraphVisitor {
 public:
+    CollectProducerStoreNames(const std::string &producer_name)
+        : producer_name(producer_name) {}
+
     Scope<void> store_names;
 
 protected:
     using IRGraphVisitor::visit;
 
     void visit(const Store *op) override {
-        include(op->predicate);
-        include(op->value);
-        include(op->index);
-        store_names.push(op->name);
+        IRGraphVisitor::visit(op);
+        if (op->name == producer_name || starts_with(op->name, producer_name + ".")) {
+            // This is a Store for the desginated Producer.
+            store_names.push(op->name);
+        }
     }
+
+    const std::string &producer_name;
 };
 
-/** Find Store inside of an Atomic node and return their indices. */
-class FindStoreIndex : public IRGraphVisitor {
+/** Find Store inside of an Atomic node for the designated producer
+ *  and return their indices. */
+class FindProducerStoreIndex : public IRGraphVisitor {
 public:
-    Expr index;
+    FindProducerStoreIndex(const std::string &producer_name)
+        : producer_name(producer_name) {}
+
+    Expr index; // The returned index.
 
 protected:
     using IRGraphVisitor::visit;
 
     // Need to also extract the let bindings of a Store index.
     void visit(const Let *op) override {
-        IRGraphVisitor::visit(op);
+        IRGraphVisitor::visit(op); // Make sure we visit the Store first.
         if (index.defined()) {
             if (expr_uses_var(index, op->name)) {
                 index = Let::make(op->name, op->value, index);
@@ -49,7 +59,7 @@ protected:
         }
     }
     void visit(const LetStmt *op) override {
-        IRGraphVisitor::visit(op);
+        IRGraphVisitor::visit(op); // Make sure we visit the Store first.
         if (index.defined()) {
             if (expr_uses_var(index, op->name)) {
                 index = Let::make(op->name, op->value, index);
@@ -58,33 +68,39 @@ protected:
     }
 
     void visit(const Store *op) override {
-        // Ideally we want to insert equal() checks here for different stores,
-        // but the indices of them actually are different in the case of tuples,
-        // since they usually refer to the strides/min/extents of their own tuple
-        // buffers. However, different elements in a tuple would have the same
-        // strides/min/extents so we are fine.
-        if (index.defined()) {
-            return;
+        IRGraphVisitor::visit(op);
+        if (op->name == producer_name || starts_with(op->name, producer_name + ".")) {
+            // This is a Store for the designated producer.
+
+            // Ideally we want to insert equal() checks here for different stores,
+            // but the indices of them actually are different in the case of tuples,
+            // since they usually refer to the strides/min/extents of their own tuple
+            // buffers. However, different elements in a tuple would have the same
+            // strides/min/extents so we are fine.
+            if (index.defined()) {
+                return;
+            }
+            index = op->index;
         }
-        index = op->index;
-        op->value.accept(this);
     }
+
+    const std::string &producer_name;
 };
 
-/** Throw an assertion for cases where the indexing on left-hand-side of
+/** Throws an assertion for cases where the indexing on left-hand-side of
  *  an atomic update references to itself.
  *  e.g. f(clamp(f(r), 0, 100)) = f(r) + 1 should be rejected. */
 class CheckAtomicValidity : public IRGraphVisitor {
 protected:
-    using IRVisitor::visit;
+    using IRGraphVisitor::visit;
 
     void visit(const Atomic *op) override {
         // Collect the names of all Store nodes inside.
-        CollectStoreNames collector;
+        CollectProducerStoreNames collector(op->producer_name);
         op->body.accept(&collector);
 
         // Find the indices from the Store nodes inside the body.
-        FindStoreIndex find;
+        FindProducerStoreIndex find(op->producer_name);
         op->body.accept(&find);
 
         Expr index = find.index;
@@ -165,7 +181,7 @@ protected:
 
     Stmt visit(const Atomic *op) override {
         // Collect the names of all Store nodes inside.
-        CollectStoreNames collector;
+        CollectProducerStoreNames collector(op->producer_name);
         op->body.accept(&collector);
         // Search for let bindings that access the producers.
         FindAtomicLetBindings finder(collector.store_names);
@@ -224,6 +240,30 @@ protected:
     const set<string> &store_names;
 };
 
+/** Replace the indices in the Store nodes with the specified variable. */
+class ReplaceStoreIndexWithVar : public IRMutator {
+public:
+    ReplaceStoreIndexWithVar(const std::string &producer_name, Expr var) :
+        producer_name(producer_name), var(var) {}
+
+protected:
+    using IRMutator::visit;
+
+    Stmt visit(const Store *op) override {
+        Expr predicate = mutate(op->predicate);
+        Expr value = mutate(op->value);
+        return Store::make(op->name,
+                           std::move(value),
+                           var,
+                           op->param,
+                           std::move(predicate),
+                           op->alignment);
+    }
+
+    const std::string &producer_name;
+    Expr var;
+};
+
 /** Add mutex allocation & lock & unlock if required. */
 class AddAtomicMutex : public IRMutator {
 public:
@@ -243,7 +283,7 @@ protected:
                                       {extent},
                                       Call::Extern);
         // Allocate a scalar of halide_mutex_array.
-        // This generate halide_mutex_array mutex[1];
+        // This generates halide_mutex_array mutex[1];
         body = Allocate::make(mutex_name,
                               Handle(),
                               MemoryType::Stack,
@@ -349,15 +389,25 @@ protected:
         }
 
         // Lock the mutexes using the indices from the Store nodes inside the body.
-        FindStoreIndex find;
+        FindProducerStoreIndex find(op->producer_name);
         op->body.accept(&find);
 
-        Expr index = find.index;
-        if (!index.defined()) {
-            // scalar output
-            index = Expr(0);
-        }
         Stmt body = op->body;
+
+        Expr index = find.index;
+        Expr index_let; // If defined, represents the value of the lifted let binding.
+        if (!index.defined()) {
+            // Scalar output.
+            index = Expr(0);
+        } else {
+            // Lift the index outside of the atomic node.
+            // This is for avoiding side-effects inside those expressions
+            // being evaluated twice.
+            string name = unique_name('t');
+            index_let = index;
+            index = Variable::make(index.type(), name);
+            body = ReplaceStoreIndexWithVar(op->producer_name, index).mutate(body);
+        }
         // This generates a pointer to the mutex array
         Expr mutex_array = Variable::make(
             type_of<halide_mutex_array *>(), op->mutex_name);
@@ -374,10 +424,16 @@ protected:
                                                   "halide_mutex_array_unlock",
                                                   {mutex_array, index},
                                                   Call::CallType::Extern))));
+        Stmt ret = Atomic::make(op->producer_name,
+                                op->mutex_name,
+                                std::move(body));
 
-        return Atomic::make(op->producer_name,
-                            op->mutex_name,
-                            std::move(body));
+        if (index_let.defined()) {
+            // Attach the let binding outside of the atomic node.
+            internal_assert(index.as<Variable>() != nullptr);
+            ret = LetStmt::make(index.as<Variable>()->name, index_let, ret);
+        }
+        return ret;
     }
 };
 

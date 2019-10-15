@@ -28,10 +28,6 @@ protected:
     bool use_soft_float_abi() const override;
     int native_vector_bits() const override;
 
-    llvm::Function *define_hvx_intrinsic(int intrin, Type ret_ty,
-                                         const std::string &name,
-                                         const std::vector<Type> &arg_types,
-                                         int flags);
     llvm::Function *define_hvx_intrinsic(llvm::Function *intrin, Type ret_ty,
                                          const std::string &name,
                                          std::vector<Type> arg_types,

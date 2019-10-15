@@ -36,6 +36,38 @@ void define_set(py::class_<Func> &func_class) {
     ;
 }
 
+// See the usages below this function to see why we are specializing this function.
+template<typename RHS>
+void define_set_func_ref(py::class_<Func> &func_class) {
+    func_class
+        .def("__setitem__", [](Func &func, const FuncRef &lhs, const RHS &rhs) -> Stage {
+            return func(lhs) = rhs;
+        });
+}
+
+// Special case: there is no implicit conversion of double in C++ Halide
+// but there is implicit conversion of double in Python.
+template<>
+void define_set_func_ref<double>(py::class_<Func> &func_class) {
+    func_class
+        .def("__setitem__", [](Func &func, const FuncRef &lhs, const double &rhs) -> Stage {
+            // Implicitly convert rhs to single precision. Issue warnings if 
+            // we detect loss of precision.
+            float f = rhs;
+            if (Internal::reinterpret_bits<uint64_t>(rhs) !=
+                    Internal::reinterpret_bits<uint64_t>((double)f)) {
+                double diff = rhs - f;
+                std::ostringstream os;
+                os << "Loss of precision detected when casting " <<
+                    rhs << " to a single precision float. The difference is " <<
+                    diff << ".";
+                std::string msg = os.str();
+                PyErr_WarnEx(NULL, msg.c_str(), 1);
+            }
+            return func(lhs) = Expr(f);
+        });
+}
+
 py::object realization_to_object(const Realization &r) {
     // Only one Buffer -> just return it
     if (r.size() == 1) {
@@ -338,6 +370,21 @@ void define_func(py::module &m) {
     define_get<std::vector<Expr>>(func_class);
     define_get<Var>(func_class);
     define_get<std::vector<Var>>(func_class);
+
+    // Special cases of f[g[...]] = ...
+    // We need to capture this case here since otherwise
+    // pybind11 would try to convert g[...], which is a FuncRef
+    // to a list of Var. 
+    // However, to do this it has to check g[...][0] is a Var or not.
+    // If g is not defined as a Tuple this results in a runtime error 
+    // inside Halide.
+    // We also can't rely on implicit conversion in pybind11 since it
+    // happens after all function overloads have been visited.
+    define_set_func_ref<FuncRef>(func_class);
+    define_set_func_ref<Expr>(func_class);
+    define_set_func_ref<Tuple>(func_class);
+    define_set_func_ref<int>(func_class);
+    define_set_func_ref<double>(func_class);
 
     // LHS(Var, ...Var) is LHS of an ordinary Func definition.
     define_set<Var, FuncRef>(func_class);

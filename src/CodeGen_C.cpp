@@ -2388,7 +2388,11 @@ void CodeGen_C::visit(const Store *op) {
 
     // Issue atomic store if we are in the designated producer.
     if (emit_atomic_stores) {
+        stream << "#if defined(_OPENMP)\n";
         stream << "#pragma omp atomic\n";
+        stream << "#else\n";
+        stream << "#error \"Atomic stores in the C backend are only supported in compilers that support OpenMP.\"\n";
+        stream << "#endif\n";
     }
 
     string id_value = print_expr(op->value);
