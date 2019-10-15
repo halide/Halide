@@ -5,6 +5,7 @@ OBJECTS = $(BIN)/parser.o $(BIN)/z3.o $(BIN)/expr_util.o $(BIN)/synthesize_predi
 all: $(BIN)/find_rules
 
 $(BIN)/%.o: %.cpp %.h
+	@mkdir -p $(@D)
 	$(CXX) $(CXXFLAGS) -c $< -o $@
 
 $(BIN)/find_rules: find_rules.cpp $(OBJECTS) $(LIB_HALIDE)
