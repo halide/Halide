@@ -102,6 +102,8 @@ int main(int argc, char *argv[]) {
     float best_loss = 10000000000000.0f;
     int best_seed = -1;
 
+    std::unordered_map<uint64_t, int> used_hashes;
+
     std::string loss_filename = output_dir + "/losses.txt";
 
     // for each pipeline do:
@@ -113,6 +115,7 @@ int main(int argc, char *argv[]) {
         // create generator
         GeneratorContext context(Target("host"));
         auto gen = RandomPipeline<false>::create(context); 
+        gen->set_hashes(&used_hashes);
         gen->seed.set(seed);
         // set the constant parameters
         gen->num_input_buffers.set(4);
