@@ -22,7 +22,7 @@ int main(int argc, char **argv) {
     g(x, y) = (f(x, y, input(x, y)%10) + f(x + 1, y, (input(x, y) - 1)%10))/2;
 
     // Provide estimates on the pipeline output
-    g.estimate(x, 0, input.width() - 1).estimate(y, 0, input.height());
+    g.set_estimate(x, 0, input.width() - 1).set_estimate(y, 0, input.height());
 
     // Auto-schedule the pipeline
     Target target = get_jit_target_from_environment();

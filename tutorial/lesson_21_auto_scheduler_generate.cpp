@@ -76,24 +76,19 @@ public:
 
             // To provide estimates (min and extent values) for each dimension
             // of the input images ('input', 'filter', and 'bias'), we use the
-            // set_bounds_estimate() method. set_bounds_estimate() takes in
+            // set_estimates() method. set_estimates() takes in a list of
             // (min, extent) of the corresponding dimension as arguments.
-            input.dim(0).set_bounds_estimate(0, 1024);
-            input.dim(1).set_bounds_estimate(0, 1024);
-            input.dim(2).set_bounds_estimate(0, 3);
+            input.set_estimates({{0, 1024}, {0, 1024}, {0, 3}});
 
             // To provide estimates on the parameter values, we use the
             // set_estimate() method.
             factor.set_estimate(2.0f);
 
             // To provide estimates (min and extent values) for each dimension
-            // of pipeline outputs, we use the estimate() method. estimate()
-            // takes in (dim_name, min, extent) as arguments.
-            output1.estimate(x, 0, 1024)
-                   .estimate(y, 0, 1024);
-
-            output2.estimate(x, 0, 1024)
-                   .estimate(y, 0, 1024);
+            // of pipeline outputs, we use the set_estimates() method. set_estimates()
+            // takes in a list of (min, extent) for each dimension.
+            output1.set_estimates({{0, 1024}, {0, 1024}});
+            output2.set_estimates({{0, 1024}, {0, 1024}});
 
             // Technically, the estimate values can be anything, but the closer
             // they are to the actual use-case values, the better the generated

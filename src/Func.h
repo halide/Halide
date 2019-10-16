@@ -29,16 +29,28 @@ class ParamMap;
 /** A class that can represent Vars or RVars. Used for reorder calls
  * which can accept a mix of either. */
 struct VarOrRVar {
-    VarOrRVar(const std::string &n, bool r) : var(n), rvar(n), is_rvar(r) {}
-    VarOrRVar(const Var &v) : var(v), is_rvar(false) {}
-    VarOrRVar(const RVar &r) : rvar(r), is_rvar(true) {}
-    VarOrRVar(const RDom &r) : rvar(RVar(r)), is_rvar(true) {}
+    VarOrRVar(const std::string &n, bool r)
+        : var(n), rvar(n), is_rvar(r) {
+    }
+    VarOrRVar(const Var &v)
+        : var(v), is_rvar(false) {
+    }
+    VarOrRVar(const RVar &r)
+        : rvar(r), is_rvar(true) {
+    }
+    VarOrRVar(const RDom &r)
+        : rvar(RVar(r)), is_rvar(true) {
+    }
     template<int N>
-    VarOrRVar(const ImplicitVar<N> &u) : var(u), is_rvar(false) {}
+    VarOrRVar(const ImplicitVar<N> &u)
+        : var(u), is_rvar(false) {
+    }
 
     const std::string &name() const {
-        if (is_rvar) return rvar.name();
-        else return var.name();
+        if (is_rvar)
+            return rvar.name();
+        else
+            return var.name();
     }
 
     Var var;
@@ -92,7 +104,9 @@ public:
 
     /** Return the current StageSchedule associated with this Stage. For
      * introspection only: to modify schedule, use the Func interface. */
-    const Internal::StageSchedule &get_schedule() const { return definition.schedule(); }
+    const Internal::StageSchedule &get_schedule() const {
+        return definition.schedule();
+    }
 
     /** Return a string describing the current var list taking into
      * account all the splits, reorders, and tiles. */
@@ -337,8 +351,7 @@ public:
     Stage &unroll(VarOrRVar var, Expr factor, TailStrategy tail = TailStrategy::Auto);
     Stage &tile(VarOrRVar x, VarOrRVar y,
                 VarOrRVar xo, VarOrRVar yo,
-                VarOrRVar xi, VarOrRVar yi, Expr
-                xfactor, Expr yfactor,
+                VarOrRVar xi, VarOrRVar yi, Expr xfactor, Expr yfactor,
                 TailStrategy tail = TailStrategy::Auto);
     Stage &tile(VarOrRVar x, VarOrRVar y,
                 VarOrRVar xi, VarOrRVar yi,
@@ -346,9 +359,9 @@ public:
                 TailStrategy tail = TailStrategy::Auto);
     Stage &reorder(const std::vector<VarOrRVar> &vars);
 
-    template <typename... Args>
+    template<typename... Args>
     HALIDE_NO_USER_CODE_INLINE typename std::enable_if<Internal::all_are_convertible<VarOrRVar, Args...>::value, Stage &>::type
-    reorder(VarOrRVar x, VarOrRVar y, Args&&... args) {
+    reorder(VarOrRVar x, VarOrRVar y, Args &&... args) {
         std::vector<VarOrRVar> collected_args{x, y, std::forward<Args>(args)...};
         return reorder(collected_args);
     }
@@ -410,12 +423,13 @@ public:
                     DeviceAPI device_api = DeviceAPI::Default_GPU);
 
     Stage &allow_race_conditions();
+    Stage &atomic(bool override_associativity_test = false);
 
     Stage &hexagon(VarOrRVar x = Var::outermost());
     Stage &prefetch(const Func &f, VarOrRVar var, Expr offset = 1,
-                           PrefetchBoundStrategy strategy = PrefetchBoundStrategy::GuardWithIf);
+                    PrefetchBoundStrategy strategy = PrefetchBoundStrategy::GuardWithIf);
     Stage &prefetch(const Internal::Parameter &param, VarOrRVar var, Expr offset = 1,
-                           PrefetchBoundStrategy strategy = PrefetchBoundStrategy::GuardWithIf);
+                    PrefetchBoundStrategy strategy = PrefetchBoundStrategy::GuardWithIf);
     template<typename T>
     Stage &prefetch(const T &image, VarOrRVar var, Expr offset = 1,
                     PrefetchBoundStrategy strategy = PrefetchBoundStrategy::GuardWithIf) {
@@ -432,7 +446,6 @@ public:
 
 // For backwards compatibility, keep the ScheduleHandle name.
 typedef Stage ScheduleHandle;
-
 
 class FuncTupleElementRef;
 
@@ -451,20 +464,20 @@ class FuncRef {
     /** Helper for function update by Tuple. If the function does not
      * already have a pure definition, init_val will be used as RHS of
      * each tuple element in the initial function definition. */
-    template <typename BinaryOp>
+    template<typename BinaryOp>
     Stage func_ref_update(const Tuple &e, int init_val);
 
     /** Helper for function update by Expr. If the function does not
      * already have a pure definition, init_val will be used as RHS in
      * the initial function definition. */
-    template <typename BinaryOp>
+    template<typename BinaryOp>
     Stage func_ref_update(Expr e, int init_val);
 
 public:
     FuncRef(Internal::Function, const std::vector<Expr> &,
-                int placeholder_pos = -1, int count = 0);
+            int placeholder_pos = -1, int count = 0);
     FuncRef(Internal::Function, const std::vector<Var> &,
-                int placeholder_pos = -1, int count = 0);
+            int placeholder_pos = -1, int count = 0);
 
     /** Use this as the left-hand-side of a definition or an update definition
      * (see \ref RDom).
@@ -538,15 +551,21 @@ public:
     size_t size() const;
 
     /** What function is this calling? */
-    Internal::Function function() const {return func;}
+    Internal::Function function() const {
+        return func;
+    }
 };
 
 /** Explicit overloads of min and max for FuncRef. These exist to
  * disambiguate calls to min on FuncRefs when a user has pulled both
  * Halide::min and std::min into their namespace. */
 // @{
-inline Expr min(FuncRef a, FuncRef b) {return min(Expr(std::move(a)), Expr(std::move(b)));}
-inline Expr max(FuncRef a, FuncRef b) {return max(Expr(std::move(a)), Expr(std::move(b)));}
+inline Expr min(FuncRef a, FuncRef b) {
+    return min(Expr(std::move(a)), Expr(std::move(b)));
+}
+inline Expr max(FuncRef a, FuncRef b) {
+    return max(Expr(std::move(a)), Expr(std::move(b)));
+}
 // @}
 
 /** A fragment of front-end syntax of the form f(x, y, z)[index], where x, y,
@@ -556,22 +575,21 @@ inline Expr max(FuncRef a, FuncRef b) {return max(Expr(std::move(a)), Expr(std::
  */
 class FuncTupleElementRef {
     FuncRef func_ref;
-    std::vector<Expr> args; // args to the function
-    int idx;                // Index to function outputs
+    std::vector<Expr> args;  // args to the function
+    int idx;                 // Index to function outputs
 
     /** Helper function that generates a Tuple where element at 'idx' is set
      * to 'e' and the rests are undef. */
     Tuple values_with_undefs(Expr e) const;
 
 public:
-    FuncTupleElementRef(const FuncRef &ref, const std::vector<Expr>& args, int idx);
+    FuncTupleElementRef(const FuncRef &ref, const std::vector<Expr> &args, int idx);
 
     /** Use this as the left-hand-side of an update definition of Tuple
      * component 'idx' of a Func (see \ref RDom). The function must
      * already have an initial definition.
      */
     Stage operator=(Expr e);
-
 
     /** Define a stage that adds the given expression to Tuple component 'idx'
      * of this Func. The other Tuple components are unchanged. If the expression
@@ -614,14 +632,17 @@ public:
     operator Expr() const;
 
     /** What function is this calling? */
-    Internal::Function function() const {return func_ref.function();}
+    Internal::Function function() const {
+        return func_ref.function();
+    }
 
     /** Return index to the function outputs. */
-    int index() const {return idx;}
+    int index() const {
+        return idx;
+    }
 };
 
 namespace Internal {
-struct ErrorBuffer;
 class IRMutator;
 }  // namespace Internal
 
@@ -657,7 +678,6 @@ class Func {
     void invalidate_cache();
 
 public:
-
     /** Declare a new undefined function with the given name */
     explicit Func(const std::string &name);
 
@@ -676,7 +696,8 @@ public:
 
     /** Construct a new Func to wrap a Buffer. */
     template<typename T>
-    HALIDE_NO_USER_CODE_INLINE explicit Func(Buffer<T> &im) : Func() {
+    HALIDE_NO_USER_CODE_INLINE explicit Func(Buffer<T> &im)
+        : Func() {
         (*this)(_) = im(_);
     }
 
@@ -887,12 +908,6 @@ public:
                                  StmtOutputFormat fmt = Text,
                                  const Target &target = get_target_from_environment());
 
-    /** Emit a Python Extension glue .c file. */
-    void compile_to_python_extension(const std::string &filename_prefix,
-                                     const std::vector<Argument> &args,
-                                     const std::string &fn_name,
-                                     const Target &target = get_target_from_environment());
-
     /** Write out the loop nests specified by the schedule for this
      * Function. Helpful for understanding what a schedule is
      * doing. */
@@ -932,9 +947,9 @@ public:
 
     /** Compile and generate multiple target files with single call.
      * Deduces target files based on filenames specified in
-     * output_files struct.
+     * output_files map.
      */
-    void compile_to(const Outputs &output_files,
+    void compile_to(const std::map<Output, std::string> &output_files,
                     const std::vector<Argument> &args,
                     const std::string &fn_name,
                     const Target &target = get_target_from_environment());
@@ -1156,17 +1171,17 @@ public:
                        int dimensionality,
                        NameMangling mangling = NameMangling::Default,
                        DeviceAPI device_api = DeviceAPI::Host) {
-      define_extern(function_name, params, t,
-                    Internal::make_argument_list(dimensionality), mangling,
-                    device_api);
+        define_extern(function_name, params, t,
+                      Internal::make_argument_list(dimensionality), mangling,
+                      device_api);
     }
 
     void define_extern(const std::string &function_name,
                        const std::vector<ExternFuncArgument> &params,
                        const std::vector<Type> &types, int dimensionality,
                        NameMangling mangling) {
-      define_extern(function_name, params, types,
-                    Internal::make_argument_list(dimensionality), mangling);
+        define_extern(function_name, params, types,
+                      Internal::make_argument_list(dimensionality), mangling);
     }
 
     void define_extern(const std::string &function_name,
@@ -1174,9 +1189,9 @@ public:
                        const std::vector<Type> &types, int dimensionality,
                        NameMangling mangling = NameMangling::Default,
                        DeviceAPI device_api = DeviceAPI::Host) {
-      define_extern(function_name, params, types,
-                    Internal::make_argument_list(dimensionality), mangling,
-                    device_api);
+        define_extern(function_name, params, types,
+                      Internal::make_argument_list(dimensionality), mangling,
+                      device_api);
     }
 
     void define_extern(const std::string &function_name,
@@ -1184,8 +1199,8 @@ public:
                        const std::vector<Var> &arguments,
                        NameMangling mangling = NameMangling::Default,
                        DeviceAPI device_api = DeviceAPI::Host) {
-      define_extern(function_name, params, std::vector<Type>{t}, arguments,
-                    mangling, device_api);
+        define_extern(function_name, params, std::vector<Type>{t}, arguments,
+                      mangling, device_api);
     }
 
     void define_extern(const std::string &function_name,
@@ -1220,9 +1235,9 @@ public:
     // @{
     FuncRef operator()(std::vector<Var>) const;
 
-    template <typename... Args>
+    template<typename... Args>
     HALIDE_NO_USER_CODE_INLINE typename std::enable_if<Internal::all_are_convertible<Var, Args...>::value, FuncRef>::type
-    operator()(Args&&... args) const {
+    operator()(Args &&... args) const {
         std::vector<Var> collected_args{std::forward<Args>(args)...};
         return this->operator()(collected_args);
     }
@@ -1237,9 +1252,9 @@ public:
     // @{
     FuncRef operator()(std::vector<Expr>) const;
 
-    template <typename... Args>
+    template<typename... Args>
     HALIDE_NO_USER_CODE_INLINE typename std::enable_if<Internal::all_are_convertible<Expr, Args...>::value, FuncRef>::type
-    operator()(Expr x, Args&&... args) const {
+    operator()(Expr x, Args &&... args) const {
         std::vector<Expr> collected_args{x, std::forward<Args>(args)...};
         return (*this)(collected_args);
     }
@@ -1465,7 +1480,18 @@ public:
      * generated schedules might break when the sizes of the dimensions are
      * very different from the estimates specified. These estimates are used
      * only by the auto scheduler if the function is a pipeline output. */
-    Func &estimate(Var var, Expr min, Expr extent);
+    Func &set_estimate(Var var, Expr min, Expr extent);
+
+    HALIDE_ATTRIBUTE_DEPRECATED("Use set_estimate() instead")
+    Func &estimate(Var var, Expr min, Expr extent) {
+        return set_estimate(var, min, extent);
+    }
+
+    /** Set (min, extent) estimates for all dimensions in the Func
+     * at once; this is equivalent to calling `set_estimate(args()[n], min, extent)`
+     * repeatedly, but slightly terser. The size of the estimates vector
+     * must match the dimensionality of the Func. */
+    Func &set_estimates(const std::vector<std::pair<Expr, Expr>> &estimates);
 
     /** Expand the region computed so that the min coordinates is
      * congruent to 'remainder' modulo 'modulus', and the extent is a
@@ -1505,9 +1531,9 @@ public:
      * innermost out */
     Func &reorder(const std::vector<VarOrRVar> &vars);
 
-    template <typename... Args>
+    template<typename... Args>
     HALIDE_NO_USER_CODE_INLINE typename std::enable_if<Internal::all_are_convertible<VarOrRVar, Args...>::value, Func &>::type
-    reorder(VarOrRVar x, VarOrRVar y, Args&&... args) {
+    reorder(VarOrRVar x, VarOrRVar y, Args &&... args) {
         std::vector<VarOrRVar> collected_args{x, y, std::forward<Args>(args)...};
         return reorder(collected_args);
     }
@@ -1523,6 +1549,55 @@ public:
      * different values at different times or on different machines. */
     Func &allow_race_conditions();
 
+    /** Issue atomic updates for this Func. This allows parallelization
+     * on associative RVars. The function throws a compile error when
+     * Halide fails to prove associativity. Use override_associativity_test
+     * to disable the associativity test if you believe the function is
+     * associative or the order of reduction variable execution does not
+     * matter. 
+     * Halide compiles this into hardware atomic operations whenever possible, 
+     * and falls back to a mutex lock per storage element if it is impossible 
+     * to atomically update.
+     * There are three possible outcomes of the compiled code:
+     * atomic add, compare-and-swap loop, and mutex lock.
+     * For example:
+     *
+     * hist(x) = 0;
+     * hist(im(r)) += 1;
+     * hist.compute_root();
+     * hist.update().atomic().parallel();
+     *
+     * will be compiled to atomic add operations.
+     *
+     * hist(x) = 0;
+     * hist(im(r)) = min(hist(im(r)) + 1, 100);
+     * hist.compute_root();
+     * hist.update().atomic().parallel();
+     *
+     * will be compiled to compare-and-swap loops.
+     *
+     * arg_max() = {0, im(0)};
+     * Expr old_index = arg_max()[0];
+     * Expr old_max   = arg_max()[1];
+     * Expr new_index = select(old_max < im(r), r, old_index);
+     * Expr new_max   = max(im(r), old_max);
+     * arg_max() = {new_index, new_max};
+     * arg_max.compute_root();
+     * arg_max.update().atomic().parallel();
+     *
+     * will be compiled to updates guarded by a mutex lock,
+     * since it is impossible to atomically update two different locations.
+     *
+     * Currently the atomic operation is supported by x86, CUDA, and OpenCL backends.
+     * Compiling to other backends results in a compile error.
+     * If an operation is compiled into a mutex lock, and is vectorized or is
+     * compiled to CUDA or OpenCL, it also results in a compile error,
+     * since per-element mutex lock on vectorized operation leads to a
+     * deadlock.
+     * Vectorization of predicated RVars (through rdom.where()) on CPU
+     * is also unsupported yet (see https://github.com/halide/Halide/issues/4298).
+     * 8-bit and 16-bit atomics on GPU are also not supported. */
+    Func &atomic(bool override_associativity_test = false);
 
     /** Specialize a Func. This creates a special-case version of the
      * Func where the given condition is true. The most effective
@@ -1892,9 +1967,9 @@ public:
     Func &reorder_storage(const std::vector<Var> &dims);
 
     Func &reorder_storage(Var x, Var y);
-    template <typename... Args>
+    template<typename... Args>
     HALIDE_NO_USER_CODE_INLINE typename std::enable_if<Internal::all_are_convertible<Var, Args...>::value, Func &>::type
-    reorder_storage(Var x, Var y, Args&&... args) {
+    reorder_storage(Var x, Var y, Args &&... args) {
         std::vector<Var> collected_args{x, y, std::forward<Args>(args)...};
         return reorder_storage(collected_args);
     }
@@ -2195,7 +2270,6 @@ public:
      * reduction domain */
     Func &store_at(Func f, RVar var);
 
-
     /** Equivalent to the version of store_at that takes a Var, but
      * schedules storage at a given LoopLevel. */
     Func &store_at(LoopLevel loop_level);
@@ -2303,12 +2377,14 @@ public:
     /** Return the current StageSchedule associated with this initial
      * Stage of this Func. For introspection only: to modify schedule,
      * use the Func interface. */
-    const Internal::StageSchedule &get_schedule() const { return Stage(*this).get_schedule(); }
+    const Internal::StageSchedule &get_schedule() const {
+        return Stage(*this).get_schedule();
+    }
 };
 
 namespace Internal {
 
-template <typename Last>
+template<typename Last>
 inline void check_types(const Tuple &t, int idx) {
     using T = typename std::remove_pointer<typename std::remove_reference<Last>::type>::type;
     user_assert(t[idx].type() == type_of<T>())
@@ -2317,22 +2393,22 @@ inline void check_types(const Tuple &t, int idx) {
         << " as a scalar of type " << type_of<T>() << "\n";
 }
 
-template <typename First, typename Second, typename... Rest>
+template<typename First, typename Second, typename... Rest>
 inline void check_types(const Tuple &t, int idx) {
     check_types<First>(t, idx);
-    check_types<Second, Rest...>(t, idx+1);
+    check_types<Second, Rest...>(t, idx + 1);
 }
 
-template <typename Last>
+template<typename Last>
 inline void assign_results(Realization &r, int idx, Last last) {
     using T = typename std::remove_pointer<typename std::remove_reference<Last>::type>::type;
     *last = Buffer<T>(r[idx])();
 }
 
-template <typename First, typename Second, typename... Rest>
-inline void assign_results(Realization &r, int idx, First first, Second second, Rest&&... rest) {
+template<typename First, typename Second, typename... Rest>
+inline void assign_results(Realization &r, int idx, First first, Second second, Rest &&... rest) {
     assign_results<First>(r, idx, first);
-    assign_results<Second, Rest...>(r, idx+1, second, rest...);
+    assign_results<Second, Rest...>(r, idx + 1, second, rest...);
 }
 
 }  // namespace Internal
@@ -2353,8 +2429,8 @@ HALIDE_NO_USER_CODE_INLINE T evaluate(Expr e) {
 }
 
 /** JIT-compile and run enough code to evaluate a Halide Tuple. */
-template <typename First, typename... Rest>
-HALIDE_NO_USER_CODE_INLINE void evaluate(Tuple t, First first, Rest&&... rest) {
+template<typename First, typename... Rest>
+HALIDE_NO_USER_CODE_INLINE void evaluate(Tuple t, First first, Rest &&... rest) {
     Internal::check_types<First, Rest...>(t, 0);
 
     Func f;
@@ -2362,7 +2438,6 @@ HALIDE_NO_USER_CODE_INLINE void evaluate(Tuple t, First first, Rest&&... rest) {
     Realization r = f.realize();
     Internal::assign_results(r, 0, first, rest...);
 }
-
 
 namespace Internal {
 
@@ -2399,8 +2474,8 @@ HALIDE_NO_USER_CODE_INLINE T evaluate_may_gpu(Expr e) {
 /** JIT-compile and run enough code to evaluate a Halide Tuple. Can
  *  use GPU if jit target from environment specifies one. */
 // @{
-template <typename First, typename... Rest>
-HALIDE_NO_USER_CODE_INLINE void evaluate_may_gpu(Tuple t, First first, Rest&&... rest) {
+template<typename First, typename... Rest>
+HALIDE_NO_USER_CODE_INLINE void evaluate_may_gpu(Tuple t, First first, Rest &&... rest) {
     Internal::check_types<First, Rest...>(t, 0);
 
     Func f;

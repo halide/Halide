@@ -120,5 +120,5 @@ Expr Simplify::visit(const Or *op, ExprInfo *bounds) {
     }
 }
 
-}
-}
+}  // namespace Internal
+}  // namespace Halide

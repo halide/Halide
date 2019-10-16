@@ -108,6 +108,7 @@ void define_enums(py::module &m) {
         .value("OpenCL", Target::Feature::OpenCL)
         .value("CLDoubles", Target::Feature::CLDoubles)
         .value("CLHalf", Target::Feature::CLHalf)
+        .value("CLAtomics64", Target::Feature::CLAtomics64)
         .value("OpenGL", Target::Feature::OpenGL)
         .value("OpenGLCompute", Target::Feature::OpenGLCompute)
         .value("EGL", Target::Feature::EGL)
@@ -143,8 +144,8 @@ void define_enums(py::module &m) {
         .value("CheckUnsafePromises", Target::Feature::CheckUnsafePromises)
         .value("HexagonDma", Target::Feature::HexagonDma)
         .value("EmbedBitcode", Target::Feature::EmbedBitcode)
-        .value("DisableLLVMLoopVectorize", Target::Feature::DisableLLVMLoopVectorize)
-        .value("DisableLLVMLoopUnroll", Target::Feature::DisableLLVMLoopUnroll)
+        .value("EnableLLVMLoopOpt", Target::Feature::EnableLLVMLoopOpt)
+        .value("DisableLLVMLoopOpt", Target::Feature::DisableLLVMLoopOpt)
         .value("WasmSimd128", Target::Feature::WasmSimd128)
         .value("WasmSignExt", Target::Feature::WasmSignExt)
         .value("SVE", Target::Feature::SVE)
@@ -156,6 +157,23 @@ void define_enums(py::module &m) {
         .value("UInt", Type::UInt)
         .value("Float", Type::Float)
         .value("Handle", Type::Handle);
+
+    py::enum_<Output>(m, "Output")
+        .value("assembly", Output::assembly)
+        .value("bitcode", Output::bitcode)
+        .value("c_header", Output::c_header)
+        .value("c_source", Output::c_source)
+        .value("cpp_stub", Output::cpp_stub)
+        .value("featurization", Output::featurization)
+        .value("llvm_assembly", Output::llvm_assembly)
+        .value("object", Output::object)
+        .value("python_extension", Output::python_extension)
+        .value("pytorch_wrapper", Output::pytorch_wrapper)
+        .value("registration", Output::registration)
+        .value("schedule", Output::schedule)
+        .value("static_library", Output::static_library)
+        .value("stmt", Output::stmt)
+        .value("stmt_html", Output::stmt_html);
 }
 
 }  // namespace PythonBindings

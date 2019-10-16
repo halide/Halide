@@ -29,15 +29,6 @@ public:
      * given dimension */
     Expr stride() const;
 
-    /** Get the estimate of the minimum coordinate of this image parameter
-     * in the given dimension. Return an undefined expr if the estimate is
-     * never specified. */
-    Expr min_estimate() const;
-
-    /** Get the estimate of the extent of this image parameter in the given
-     * dimension. Return an undefined expr if the estimate is never specified. */
-    Expr extent_estimate() const;
-
     /** Set the min in a given dimension to equal the given
      * expression. Setting the mins to zero may simplify some
      * addressing math. */
@@ -76,8 +67,19 @@ public:
     Dimension set_bounds(Expr min, Expr extent);
 
     /** Set the min and extent estimates in one call. These values are only
-     * used by the auto-scheduler. */
-    Dimension set_bounds_estimate(Expr min, Expr extent);
+     * used by the auto-scheduler and/or the RunGen tool/ */
+    Dimension set_estimate(Expr min, Expr extent);
+
+    HALIDE_ATTRIBUTE_DEPRECATED("Use set_estimate() instead")
+    Dimension set_bounds_estimate(Expr min, Expr extent) {
+        return set_estimate(min, extent);
+    }
+
+    HALIDE_ATTRIBUTE_DEPRECATED("min_estimate() will be removed soon, do not use")
+    Expr min_estimate() const;
+
+    HALIDE_ATTRIBUTE_DEPRECATED("extent_estimate() will be removed soon, do not use")
+    Expr extent_estimate() const;
 
     /** Get a different dimension of the same buffer */
     // @{

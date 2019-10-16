@@ -59,11 +59,6 @@ if(${CMAKE_SYSTEM_NAME} MATCHES "Windows")
   message("Windows: setting CMAKE_OBJECT_PATH_MAX to ${CMAKE_OBJECT_PATH_MAX}")
 endif()
 
-# Require C++11 for everything.
-set(CMAKE_CXX_STANDARD 11)
-set(CMAKE_CXX_STANDARD_REQUIRED ON)
-set(CMAKE_CXX_EXTENSIONS OFF)
-
 set(CMAKE_MACOSX_RPATH ON)
 
 # Export all symbols
@@ -80,17 +75,38 @@ file(TO_NATIVE_PATH "${LLVM_TOOLS_BINARY_DIR}/llvm-nm${CMAKE_EXECUTABLE_SUFFIX}"
 file(TO_NATIVE_PATH "${LLVM_TOOLS_BINARY_DIR}/clang${CMAKE_EXECUTABLE_SUFFIX}" CLANG)
 file(TO_NATIVE_PATH "${LLVM_TOOLS_BINARY_DIR}/llvm-config${CMAKE_EXECUTABLE_SUFFIX}" LLVM_CONFIG)
 
-# LLVM doesn't appear to expose --system-libs via its CMake interface,
-# so we must shell out to llvm-config to find this info
-execute_process(COMMAND ${LLVM_CONFIG} --system-libs --link-static OUTPUT_VARIABLE HALIDE_SYSTEM_LIBS_RAW)
-string(STRIP "${HALIDE_SYSTEM_LIBS_RAW}" HALIDE_SYSTEM_LIBS_RAW)  # strip whitespace from start & end
-string(REPLACE " " ";" HALIDE_SYSTEM_LIBS "${HALIDE_SYSTEM_LIBS_RAW}")  # convert into a list
-if("${HALIDE_SYSTEM_LIBS}" STREQUAL "")
-  # It's theoretically possible that this could be legitimately empty,
-  # but in practice that doesn't really happen, so we'll assume it means we
-  # aren't configured correctly.
-  message(WARNING "'llvm-config --system-libs --link-static' is empty; this is possibly wrong.")
+if(LLVM_USE_SHARED_LLVM_LIBRARY)
+  # Since we will be linking to the shared LLVM library,
+  # we will get all the transitive dependencies for free automagically.
+  set(HALIDE_SYSTEM_LIBS)
+else()
+  # LLVM doesn't appear to expose --system-libs via its CMake interface,
+  # so we must shell out to llvm-config to find this info
+  execute_process(COMMAND ${LLVM_CONFIG} --system-libs --link-static OUTPUT_VARIABLE HALIDE_SYSTEM_LIBS_RAW)
+  string(STRIP "${HALIDE_SYSTEM_LIBS_RAW}" HALIDE_SYSTEM_LIBS_RAW)  # strip whitespace from start & end
+  string(REPLACE " " ";" HALIDE_SYSTEM_LIBS "${HALIDE_SYSTEM_LIBS_RAW}")  # convert into a list
+  if("${HALIDE_SYSTEM_LIBS}" STREQUAL "")
+    # It's theoretically possible that this could be legitimately empty,
+    # but in practice that doesn't really happen, so we'll assume it means we
+    # aren't configured correctly.
+    message(WARNING "'llvm-config --system-libs --link-static' is empty; this is possibly wrong.")
+  endif()
 endif()
+
+execute_process(COMMAND ${LLVM_CONFIG} --cxxflags OUTPUT_VARIABLE LLVM_CONFIG_CXXFLAGS)
+string(FIND "${LLVM_CONFIG_CXXFLAGS}" "-std=c++17" LLVM_CPP17)
+string(FIND "${LLVM_CONFIG_CXXFLAGS}" "-std=c++14" LLVM_CPP14)
+if (LLVM_CPP17 GREATER -1)
+  set(CMAKE_CXX_STANDARD 17)
+elseif (LLVM_CPP14 GREATER -1)
+  set(CMAKE_CXX_STANDARD 14)
+else()
+  # Require (at least) C++11 for everything.
+  set(CMAKE_CXX_STANDARD 11)
+endif()
+
+set(CMAKE_CXX_STANDARD_REQUIRED ON)
+set(CMAKE_CXX_EXTENSIONS OFF)
 
 # Check LLVM
 function(check_dir VARNAME PATH)
@@ -125,8 +141,8 @@ check_tool_exists(clang "${CLANG}")
 if (NOT "${LLVM_VERSION}" MATCHES "^[0-9]+$")
   message(FATAL_ERROR "LLVM_VERSION not specified correctly, must be LLVM version times 10.")
 endif()
-if (LLVM_VERSION LESS 70)
-  message(FATAL_ERROR "LLVM version must be 7.0 or newer")
+if (LLVM_VERSION LESS 80)
+  message(FATAL_ERROR "LLVM version must be 8.0 or newer")
 endif()
 if (LLVM_VERSION GREATER 100)
   message(FATAL_ERROR "LLVM version must be 10.0 or older")
@@ -175,6 +191,7 @@ option(TARGET_OPENGL "Include OpenGL/GLSL target" ON)
 option(TARGET_OPENGLCOMPUTE "Include OpenGLCompute target" ON)
 option(TARGET_D3D12COMPUTE "Include Direct3D 12 Compute target" ON)
 option(HALIDE_SHARED_LIBRARY "Build as a shared library" ON)
+option(LLVM_USE_SHARED_LLVM_LIBRARY "Use shared versions of LLVM libraries" OFF)
 option(HALIDE_ENABLE_RTTI "Enable RTTI" ${LLVM_ENABLE_RTTI})
 option(HALIDE_ENABLE_EXCEPTIONS "Enable exceptions" ${LLVM_ENABLE_EH})
 option(HALIDE_USE_CODEMODEL_LARGE "Use the Large LLVM codemodel" OFF)
@@ -444,6 +461,8 @@ file(GLOB FILES "${CMAKE_BINARY_DIR}/include/HalideRuntime*.h")
 install(FILES
         "${CMAKE_BINARY_DIR}/include/Halide.h"
         "${CMAKE_BINARY_DIR}/include/HalideBuffer.h"
+        "${CMAKE_BINARY_DIR}/include/HalidePyTorchHelpers.h"
+        "${CMAKE_BINARY_DIR}/include/HalidePyTorchCudaHelpers.h"
         ${FILES}
         DESTINATION include)
 

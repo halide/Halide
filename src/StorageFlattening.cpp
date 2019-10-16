@@ -12,12 +12,12 @@
 namespace Halide {
 namespace Internal {
 
-using std::ostringstream;
-using std::string;
-using std::vector;
 using std::map;
+using std::ostringstream;
 using std::pair;
 using std::set;
+using std::string;
+using std::vector;
 
 namespace {
 
@@ -31,6 +31,7 @@ public:
             outputs.insert(f.name());
         }
     }
+
 private:
     const map<string, pair<Function, int>> &env;
     set<string> outputs;
@@ -143,13 +144,13 @@ private:
                         storage_permutation.push_back((int)j);
                         Expr alignment = storage_dims[i].alignment;
                         if (alignment.defined()) {
-                            allocation_extents[j] = ((extents[j] + alignment - 1)/alignment)*alignment;
+                            allocation_extents[j] = ((extents[j] + alignment - 1) / alignment) * alignment;
                         } else {
                             allocation_extents[j] = extents[j];
                         }
                     }
                 }
-                internal_assert(storage_permutation.size() == i+1);
+                internal_assert(storage_permutation.size() == i + 1);
             }
         }
 
@@ -190,8 +191,8 @@ private:
         stmt = Allocate::make(op->name, op->types[0], op->memory_type, allocation_extents, condition, stmt);
 
         // Compute the strides
-        for (int i = (int)op->bounds.size()-1; i > 0; i--) {
-            int prev_j = storage_permutation[i-1];
+        for (int i = (int)op->bounds.size() - 1; i > 0; i--) {
+            int prev_j = storage_permutation[i - 1];
             int j = storage_permutation[i];
             Expr stride = stride_var[prev_j] * allocation_extents[prev_j];
             stmt = LetStmt::make(stride_name[j], stride, stmt);
@@ -205,8 +206,8 @@ private:
 
         // Assign the mins and extents stored
         for (size_t i = op->bounds.size(); i > 0; i--) {
-            stmt = LetStmt::make(min_name[i-1], op->bounds[i-1].min, stmt);
-            stmt = LetStmt::make(extent_name[i-1], extents[i-1], stmt);
+            stmt = LetStmt::make(min_name[i - 1], op->bounds[i - 1].min, stmt);
+            stmt = LetStmt::make(extent_name[i - 1], extents[i - 1], stmt);
         }
         return stmt;
     }
@@ -332,7 +333,7 @@ private:
                             storage_permutation.push_back((int)j);
                         }
                     }
-                    internal_assert(storage_permutation.size() == i+1);
+                    internal_assert(storage_permutation.size() == i + 1);
                 }
             }
             internal_assert(storage_permutation.size() == op->bounds.size());
@@ -349,6 +350,7 @@ private:
             }
         }
 
+        // TODO: Consider generating a prefetch call for each tuple element.
         Stmt prefetch_call = Evaluate::make(Call::make(op->types[0], Call::prefetch, args, Call::Intrinsic));
         if (!is_one(condition)) {
             prefetch_call = IfThenElse::make(condition, prefetch_call);
@@ -368,7 +370,6 @@ private:
         in_shader = old_in_shader;
         return stmt;
     }
-
 };
 
 // Realizations, stores, and loads must all be on types that are
@@ -377,7 +378,7 @@ class PromoteToMemoryType : public IRMutator {
     using IRMutator::visit;
 
     Type upgrade(Type t) {
-        return t.with_bits(((t.bits() + 7)/8)*8);
+        return t.with_bits(((t.bits() + 7) / 8) * 8);
     }
 
     Expr visit(const Load *op) override {
@@ -445,5 +446,5 @@ Stmt storage_flattening(Stmt s,
     return s;
 }
 
-}
-}
+}  // namespace Internal
+}  // namespace Halide

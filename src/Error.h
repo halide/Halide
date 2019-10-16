@@ -48,8 +48,8 @@ struct InternalError : public Error {
 class CompileTimeErrorReporter {
 public:
     virtual ~CompileTimeErrorReporter() = default;
-    virtual void warning(const char* msg) = 0;
-    virtual void error(const char* msg) = 0;
+    virtual void warning(const char *msg) = 0;
+    virtual void error(const char *msg) = 0;
 };
 
 /** The default error reporter logs to stderr, then throws an exception
@@ -59,7 +59,7 @@ public:
  * it is up to the caller to ensure that this is the case (and to do any
  * cleanup necessary).
  */
-void set_custom_compile_time_error_reporter(CompileTimeErrorReporter* error_reporter);
+void set_custom_compile_time_error_reporter(CompileTimeErrorReporter *error_reporter);
 
 namespace Internal {
 
@@ -76,7 +76,9 @@ struct ErrorReport {
     ErrorReport(const char *f, int l, const char *cs, int flags);
 
     // Just a trick used to convert RValue into LValue
-    HALIDE_ALWAYS_INLINE ErrorReport& ref() { return *this; }
+    HALIDE_ALWAYS_INLINE ErrorReport &ref() {
+        return *this;
+    }
 
     template<typename T>
     ErrorReport &operator<<(const T &x) {
@@ -104,11 +106,12 @@ struct ErrorReport {
 // _halide_internal_assertion macro, to coerce the result of the stream
 // expression to void (to match the condition-is-false case).
 class Voidifier {
- public:
-  HALIDE_ALWAYS_INLINE Voidifier() = default;
-  // This has to be an operator with a precedence lower than << but
-  // higher than ?:
-  HALIDE_ALWAYS_INLINE void operator&(ErrorReport&) {}
+public:
+    HALIDE_ALWAYS_INLINE Voidifier() = default;
+    // This has to be an operator with a precedence lower than << but
+    // higher than ?:
+    HALIDE_ALWAYS_INLINE void operator&(ErrorReport &) {
+    }
 };
 
 /**
@@ -126,25 +129,21 @@ class Voidifier {
  * when the assertion is true.
  */
 #define _halide_internal_assertion(condition, flags) \
-  (condition)                                        \
-      ? (void)0                                      \
-      : ::Halide::Internal::Voidifier() &            \
-        ::Halide::Internal::ErrorReport(__FILE__, __LINE__, #condition, flags).ref()
+    (condition) ? (void)0 : ::Halide::Internal::Voidifier() & ::Halide::Internal::ErrorReport(__FILE__, __LINE__, #condition, flags).ref()
 
+#define internal_error Halide::Internal::ErrorReport(__FILE__, __LINE__, nullptr, 0)
+#define user_error Halide::Internal::ErrorReport(__FILE__, __LINE__, nullptr, Halide::Internal::ErrorReport::User)
+#define user_warning Halide::Internal::ErrorReport(__FILE__, __LINE__, nullptr, Halide::Internal::ErrorReport::User | Halide::Internal::ErrorReport::Warning)
+#define halide_runtime_error Halide::Internal::ErrorReport(__FILE__, __LINE__, nullptr, Halide::Internal::ErrorReport::User | Halide::Internal::ErrorReport::Runtime)
 
-#define internal_error            Halide::Internal::ErrorReport(__FILE__, __LINE__, nullptr, 0)
-#define user_error                Halide::Internal::ErrorReport(__FILE__, __LINE__, nullptr, Halide::Internal::ErrorReport::User)
-#define user_warning              Halide::Internal::ErrorReport(__FILE__, __LINE__, nullptr, Halide::Internal::ErrorReport::User | Halide::Internal::ErrorReport::Warning)
-#define halide_runtime_error      Halide::Internal::ErrorReport(__FILE__, __LINE__, nullptr, Halide::Internal::ErrorReport::User | Halide::Internal::ErrorReport::Runtime)
-
-#define internal_assert(c)        _halide_internal_assertion(c, 0)
-#define user_assert(c)            _halide_internal_assertion(c, Halide::Internal::ErrorReport::User)
+#define internal_assert(c) _halide_internal_assertion(c, 0)
+#define user_assert(c) _halide_internal_assertion(c, Halide::Internal::ErrorReport::User)
 
 // The nicely named versions get cleaned up at the end of Halide.h,
 // but user code might want to do halide-style user_asserts (e.g. the
 // Extern macros introduce calls to user_assert), so for that purpose
 // we define an equivalent macro that can be used outside of Halide.h
-#define _halide_user_assert(c)     _halide_internal_assertion(c, Halide::Internal::ErrorReport::User)
+#define _halide_user_assert(c) _halide_internal_assertion(c, Halide::Internal::ErrorReport::User)
 
 // N.B. Any function that might throw a user_assert or user_error may
 // not be inlined into the user's code, or the line number will be

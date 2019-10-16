@@ -1,4 +1,5 @@
 #include "CodeGen_PTX_Dev.h"
+#include "CSE.h"
 #include "CodeGen_Internal.h"
 #include "Debug.h"
 #include "ExprUsesVar.h"
@@ -18,7 +19,9 @@
 // This is declared in NVPTX.h, which is not exported. Ugly, but seems better than
 // hardcoding a path to the .h file.
 #ifdef WITH_PTX
-namespace llvm { FunctionPass *createNVVMReflectPass(const StringMap<int>& Mapping); }
+namespace llvm {
+FunctionPass *createNVVMReflectPass(const StringMap<int> &Mapping);
+}
 #endif
 
 namespace Halide {
@@ -29,10 +32,11 @@ using std::vector;
 
 using namespace llvm;
 
-CodeGen_PTX_Dev::CodeGen_PTX_Dev(Target host) : CodeGen_LLVM(host) {
-    #if !defined(WITH_PTX)
+CodeGen_PTX_Dev::CodeGen_PTX_Dev(Target host)
+    : CodeGen_LLVM(host) {
+#if !defined(WITH_PTX)
     user_error << "ptx not enabled for this build of Halide.\n";
-    #endif
+#endif
     user_assert(llvm_NVPTX_enabled) << "llvm build not configured with nvptx target enabled\n.";
 
     context = new llvm::LLVMContext();
@@ -46,6 +50,11 @@ CodeGen_PTX_Dev::~CodeGen_PTX_Dev() {
     // same one as the host.
     module.reset();
     delete context;
+}
+
+Type CodeGen_PTX_Dev::upgrade_type_for_storage(const Type &t) const {
+    if (t.element_of() == Float(16)) return t;
+    return CodeGen_LLVM::upgrade_type_for_storage(t);
 }
 
 void CodeGen_PTX_Dev::add_kernel(Stmt stmt,
@@ -118,13 +127,11 @@ void CodeGen_PTX_Dev::add_kernel(Stmt stmt,
     llvm::Metadata *md_args[] = {
         llvm::ValueAsMetadata::get(function),
         MDString::get(*context, "kernel"),
-        llvm::ValueAsMetadata::get(ConstantInt::get(i32_t, 1))
-    };
+        llvm::ValueAsMetadata::get(ConstantInt::get(i32_t, 1))};
 
     MDNode *md_node = MDNode::get(*context, md_args);
 
     module->getOrInsertNamedMetadata("nvvm.annotations")->addOperand(md_node);
-
 
     // Now verify the function is ok
     verifyFunction(*function);
@@ -143,9 +150,9 @@ void CodeGen_PTX_Dev::add_kernel(Stmt stmt,
 void CodeGen_PTX_Dev::init_module() {
     init_context();
 
-    #ifdef WITH_PTX
+#ifdef WITH_PTX
     module = get_initial_module_for_ptx_device(target, context);
-    #endif
+#endif
 }
 
 void CodeGen_PTX_Dev::visit(const Call *op) {
@@ -194,8 +201,8 @@ void CodeGen_PTX_Dev::visit(const For *loop) {
 }
 
 void CodeGen_PTX_Dev::visit(const Allocate *alloc) {
-    user_assert(!alloc->new_expr.defined()) << "Allocate node inside PTX kernel has custom new expression.\n" <<
-        "(Memoization is not supported inside GPU kernels at present.)\n";
+    user_assert(!alloc->new_expr.defined()) << "Allocate node inside PTX kernel has custom new expression.\n"
+                                            << "(Memoization is not supported inside GPU kernels at present.)\n";
     if (alloc->name == "__shared") {
         // PTX uses zero in address space 3 as the base address for shared memory
         Value *shared_base = Constant::getNullValue(PointerType::get(i8_t, 3));
@@ -257,6 +264,41 @@ void CodeGen_PTX_Dev::visit(const Load *op) {
 }
 
 void CodeGen_PTX_Dev::visit(const Store *op) {
+    // Issue atomic store if we are inside an Atomic node.
+    if (emit_atomic_stores) {
+        user_assert(is_one(op->predicate)) << "Atomic update does not support predicated store.\n";
+        user_assert(op->value.type().bits() >= 32) << "CUDA: 8-bit or 16-bit atomics are not supported.\n";
+#if LLVM_VERSION < 90
+        user_assert(op->value.type().is_scalar())
+            << "CUDA atomic update does not support vectorization with LLVM version < 9.\n";
+        // Generate nvvm intrinsics for the atomics if this is a float atomicAdd.
+        // Otherwise defer to the llvm codegen. For llvm version >= 90, atomicrmw support floats so we
+        // can also refer to llvm.
+        // Half atomics are supported by compute capability 7.x or higher.
+        if (op->value.type().is_float() && (op->value.type().bits() == 32 || (op->value.type().bits() == 64 && target.has_feature(Target::CUDACapability61)))) {
+            Expr val_expr = op->value;
+            Expr equiv_load = Load::make(op->value.type(), op->name, op->index, Buffer<>(), op->param, op->predicate, op->alignment);
+            Expr delta = simplify(common_subexpression_elimination(op->value - equiv_load));
+            // For atomicAdd, we check if op->value - store[index] is independent of store.
+            bool is_atomic_add = !expr_uses_var(delta, op->name);
+            if (is_atomic_add) {
+                Value *ptr = codegen_buffer_pointer(op->name, op->value.type(), op->index);
+                Value *val = codegen(delta);
+                llvm::Function *intrin = nullptr;
+                if (op->value.type().bits() == 32) {
+                    intrin = module->getFunction("llvm.nvvm.atomic.load.add.f32.p0f32");
+                    internal_assert(intrin) << "Could not find atomic intrinsics llvm.nvvm.atomic.load.add.f32.p0f32\n";
+                } else {
+                    internal_assert(op->value.type().bits() == 64);
+                    intrin = module->getFunction("llvm.nvvm.atomic.load.add.f64.p0f64");
+                    internal_assert(intrin) << "Could not find atomic intrinsics llvm.nvvm.atomic.load.add.f64.p0f64\n";
+                }
+                value = builder->CreateCall(intrin, {ptr, val});
+                return;
+            }
+        }
+#endif
+    }
 
     // Do aligned 4-wide 32-bit stores as a single i128 store.
     const Ramp *r = op->index.as<Ramp>();
@@ -273,6 +315,17 @@ void CodeGen_PTX_Dev::visit(const Store *op) {
     }
 
     CodeGen_LLVM::visit(op);
+}
+
+void CodeGen_PTX_Dev::visit(const Atomic *op) {
+    // CUDA requires all the threads in a warp to perform the same operations,
+    // which means our mutex will lead to deadlock.
+    user_assert(op->mutex_name.empty())
+        << "The atomic update requires a mutex lock, which is not supported in CUDA.\n";
+
+    // Issue atomic stores.
+    ScopedValue<bool> old_emit_atomic_stores(emit_atomic_stores, true);
+    IRVisitor::visit(op);
 }
 
 string CodeGen_PTX_Dev::march() const {
@@ -299,14 +352,13 @@ string CodeGen_PTX_Dev::mattrs() const {
     if (target.has_feature(Target::CUDACapability61)) {
         return "+ptx50";
     } else if (target.features_any_of({Target::CUDACapability32,
-                                Target::CUDACapability50})) {
+                                       Target::CUDACapability50})) {
         // Need ptx isa 4.0.
         return "+ptx40";
     } else {
         // Use the default. For llvm 3.5 it's ptx 3.2.
         return "";
     }
-
 }
 
 bool CodeGen_PTX_Dev::use_soft_float_abi() const {
@@ -315,7 +367,7 @@ bool CodeGen_PTX_Dev::use_soft_float_abi() const {
 
 vector<char> CodeGen_PTX_Dev::compile_to_src() {
 
-    #ifdef WITH_PTX
+#ifdef WITH_PTX
 
     debug(2) << "In CodeGen_PTX_Dev::compile_to_src";
 
@@ -379,8 +431,7 @@ vector<char> CodeGen_PTX_Dev::compile_to_src() {
     // use of fused-multiply-add, but they do not seem to be controlled
     // by this __nvvvm_reflect mechanism and may be flags to earlier compiler
     // passes.
-    #define kDefaultDenorms 0
-    #define kFTZDenorms     1
+    const int kFTZDenorms = 1;
 
     // Insert a module flag for the FTZ handling.
     module->addModuleFlag(llvm::Module::Override, "nvvm-reflect-ftz",
@@ -429,7 +480,8 @@ vector<char> CodeGen_PTX_Dev::compile_to_src() {
     }
     debug(2) << "Done with CodeGen_PTX_Dev::compile_to_src";
 
-    debug(1) << "PTX kernel:\n" << outstr.c_str() << "\n";
+    debug(1) << "PTX kernel:\n"
+             << outstr.c_str() << "\n";
 
     vector<char> buffer(outstr.begin(), outstr.end());
 
@@ -448,7 +500,7 @@ vector<char> CodeGen_PTX_Dev::compile_to_src() {
         if (system(cmd.c_str()) == 0) {
             cmd = "nvdisasm " + sass.pathname();
             int ret = system(cmd.c_str());
-            (void)ret; // Don't care if it fails
+            (void)ret;  // Don't care if it fails
         }
 
         // Note: It works to embed the contents of the .sass file in
@@ -470,7 +522,7 @@ vector<char> CodeGen_PTX_Dev::compile_to_src() {
     // Null-terminate the ptx source
     buffer.push_back(0);
     return buffer;
-#else // WITH_PTX
+#else  // WITH_PTX
     return vector<char>();
 #endif
 }
@@ -490,6 +542,24 @@ void CodeGen_PTX_Dev::dump() {
 
 std::string CodeGen_PTX_Dev::print_gpu_name(const std::string &name) {
     return name;
+}
+
+bool CodeGen_PTX_Dev::supports_atomic_add(const Type &t) const {
+    if (t.bits() < 32) {
+        // TODO: Half atomics are supported by compute capability 7.x or higher.
+        return false;
+    }
+    if (t.is_int_or_uint()) {
+        return true;
+    }
+    if (t.is_float() && t.bits() == 32) {
+        return true;
+    }
+    if (t.is_float() && t.bits() == 64) {
+        // double atomics are supported since CC6.1
+        return target.has_feature(Target::CUDACapability61);
+    }
+    return false;
 }
 
 }  // namespace Internal

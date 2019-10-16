@@ -9,13 +9,24 @@ namespace {
 
 void define_module(py::module &m) {
 
+    auto auto_scheduler_results_class = py::class_<AutoSchedulerResults>(m, "AutoSchedulerResults")
+        .def(py::init<>())
+        .def_readwrite("scheduler_name", &AutoSchedulerResults::scheduler_name)
+        .def_readwrite("target", &AutoSchedulerResults::target)
+        .def_readwrite("machine_params_string", &AutoSchedulerResults::machine_params_string)
+        .def_readwrite("schedule_source", &AutoSchedulerResults::schedule_source)
+        .def_readwrite("featurization", &AutoSchedulerResults::featurization)
+        .def("__repr__", [](const AutoSchedulerResults &o) -> std::string {
+            return "<halide.AutoSchedulerResults>";
+        })
+    ;
+
     auto module_class = py::class_<Module>(m, "Module")
         .def(py::init<const std::string &, const Target &>(), py::arg("name"), py::arg("target"))
 
         .def("target", &Module::target)
         .def("name", &Module::name)
-        .def("auto_schedule", &Module::auto_schedule)
-        .def("featurization", &Module::featurization)
+        .def("get_auto_scheduler_results", &Module::get_auto_scheduler_results)
         .def("buffers", &Module::buffers)
         .def("submodules", &Module::submodules)
 
@@ -31,8 +42,7 @@ void define_module(py::module &m) {
         .def("remap_metadata_name", &Module::remap_metadata_name)
         .def("get_metadata_name_map", &Module::get_metadata_name_map)
 
-        .def("set_auto_schedule", &Module::set_auto_schedule)
-        .def("set_featurization", &Module::set_featurization)
+        .def("set_auto_scheduler_results", &Module::set_auto_scheduler_results)
 
         // TODO: ExternalCode-related methods deliberately skipped for now.
         // .def("append", (void (Module::*)(const ExternalCode &)) &Module::append, py::arg("external_code"))
@@ -52,7 +62,8 @@ void define_module(py::module &m) {
 
     m.def("link_modules", &link_modules, py::arg("name"), py::arg("modules"));
     m.def("compile_standalone_runtime", (void (*)(const std::string &, Target)) &compile_standalone_runtime, py::arg("filename"), py::arg("target"));
-    m.def("compile_standalone_runtime", (Outputs (*)(const Outputs &, Target)) &compile_standalone_runtime, py::arg("outputs"), py::arg("target"));
+    using OutputMap = std::map<Output, std::string>;
+    m.def("compile_standalone_runtime", (OutputMap (*)(const OutputMap &, Target)) &compile_standalone_runtime, py::arg("outputs"), py::arg("target"));
 
     // TODO: compile_multitarget() deliberately skipped for now.
 }

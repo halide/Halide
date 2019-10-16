@@ -73,31 +73,31 @@ struct ModelWeight<true> : public GeneratorInput<Buffer<float>> {
     void set_shape(int s0 = 0, int s1 = 0, int s2 = 0) {
         if (s0) {
             dim(0).set_bounds(0, s0);
-            dim(0).set_bounds_estimate(0, s0);
+            dim(0).set_estimate(0, s0);
             grad.dim(0).set_bounds(0, s0);
-            grad.dim(0).set_bounds_estimate(0, s0);
+            grad.dim(0).set_estimate(0, s0);
             grad.bound(grad.args()[0], 0, s0);
-            grad.estimate(grad.args()[0], 0, s0);
+            grad.set_estimate(grad.args()[0], 0, s0);
         }
         if (s1) {
             dim(1).set_bounds(0, s1);
-            dim(1).set_bounds_estimate(0, s1);
+            dim(1).set_estimate(0, s1);
             grad.dim(1).set_bounds(0, s1);
-            grad.dim(1).set_bounds_estimate(0, s1);
+            grad.dim(1).set_estimate(0, s1);
             grad.bound(grad.args()[1], 0, s1);
-            grad.estimate(grad.args()[1], 0, s1);
+            grad.set_estimate(grad.args()[1], 0, s1);
 
         }
         if (s2) {
             dim(2).set_bounds(0, s2);
-            dim(2).set_bounds_estimate(0, s2);
+            dim(2).set_estimate(0, s2);
             grad.dim(2).set_bounds(0, s2);
-            grad.dim(2).set_bounds_estimate(0, s2);
+            grad.dim(2).set_estimate(0, s2);
             grad.bound(grad.args()[2], 0, s2);
-            grad.estimate(grad.args()[2], 0, s2);
+            grad.set_estimate(grad.args()[2], 0, s2);
         }
         grad.dim(dimensions()).set_bounds(0, 4);
-        grad.dim(dimensions()).set_bounds_estimate(0, 4);
+        grad.dim(dimensions()).set_estimate(0, 4);
     }
 };
 
@@ -386,7 +386,6 @@ public:
 
         prediction_output(n) = prediction(n);
 
-        Derivative d_loss_d;
         Func err;
 
         if (!training) {
@@ -430,7 +429,7 @@ public:
 
             // Compute derivatives of the loss, and backpropagate them
             // to the model weights.
-            d_loss_d = propagate_adjoints(loss_output);
+            Derivative d_loss_d = propagate_adjoints(loss_output);
 
             Weight *weights[] = {&head1_filter, &head1_bias,
                                  &head2_filter, &head2_bias,
@@ -458,19 +457,12 @@ public:
         reference.set_estimate(0);
         batch_size.set_estimate(80);
         num_stages.set_estimate(13);
-        prediction_output.dim(0).set_bounds_estimate(0, 80);
+        prediction_output.set_estimates({{0, 80}});
         learning_rate.set_estimate(0.001f);
         timestep.set_estimate(37);
-        pipeline_features
-            .dim(0).set_bounds_estimate(0, head1_w)
-            .dim(1).set_bounds_estimate(0, head1_h)
-            .dim(2).set_bounds_estimate(0, 13);
-        schedule_features
-            .dim(0).set_bounds_estimate(0, 80)
-            .dim(1).set_bounds_estimate(0, head2_w)
-            .dim(2).set_bounds_estimate(0, 13);
-        true_runtime
-            .dim(0).set_bounds_estimate(0, 80);
+        pipeline_features.set_estimates({{0, head1_w}, {0, head1_h}, {0, 13}});
+        schedule_features.set_estimates({{0, 80}, {0, head2_w}, {0, 13}});
+        true_runtime.set_estimates({{0, 80}});
 
         // SCHEDULE
         if (training && !auto_schedule) {

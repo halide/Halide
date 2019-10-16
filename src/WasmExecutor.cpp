@@ -25,20 +25,21 @@
 #define WASM_DEBUG_LEVEL 0
 
 namespace {
-    struct debug_sink {
-        inline debug_sink() {}
+struct debug_sink {
+    inline debug_sink() {
+    }
 
-        template<typename T>
-        inline debug_sink &operator<<(T&& x) {
-            return *this;
-        }
-    };
+    template<typename T>
+    inline debug_sink &operator<<(T &&x) {
+        return *this;
+    }
+};
 }  // namespace
 
 #if WASM_DEBUG_LEVEL
-    #define wdebug(x) Halide::Internal::debug(((x)<=WASM_DEBUG_LEVEL) ? 0 : 255)
+#define wdebug(x) Halide::Internal::debug(((x) <= WASM_DEBUG_LEVEL) ? 0 : 255)
 #else
-    #define wdebug(x) debug_sink()
+#define wdebug(x) debug_sink()
 #endif
 
 // ---------------------
@@ -54,9 +55,9 @@ inline T align_up(T p, int alignment = 32) {
 
 #define BDMALLOC_DEBUG_LEVEL 0
 #if BDMALLOC_DEBUG_LEVEL
-    #define bddebug(x) Halide::Internal::debug(((x)<=BDMALLOC_DEBUG_LEVEL) ? 0 : 255)
+#define bddebug(x) Halide::Internal::debug(((x) <= BDMALLOC_DEBUG_LEVEL) ? 0 : 255)
 #else
-    #define bddebug(x) debug_sink()
+#define bddebug(x) debug_sink()
 #endif
 
 // BDMalloc aka BrainDeadMalloc. This is an *extremely* simple-minded implementation
@@ -65,8 +66,8 @@ inline T align_up(T p, int alignment = 32) {
 // nor has it been particularly well-vetted for potential buffer overruns and such.
 class BDMalloc {
     struct Region {
-        uint32_t size:31;
-        uint32_t used:1;
+        uint32_t size : 31;
+        uint32_t used : 1;
     };
 
     uint32_t total_size = 0;
@@ -114,7 +115,7 @@ public:
 
         // alignment and min-block-size are the same for our purposes here.
         constexpr uint32_t kAlignment = 32;
-        const uint32_t size = std::max(align_up((uint32_t) requested_size, kAlignment), kAlignment);
+        const uint32_t size = std::max(align_up((uint32_t)requested_size, kAlignment), kAlignment);
 
         constexpr uint32_t kMaxAllocSize = 0x7fffffff;
         internal_assert(size <= kMaxAllocSize);
@@ -124,14 +125,14 @@ public:
             const uint32_t start = it->first;
             Region &r = it->second;
             if (!r.used && r.size >= size) {
-                bddebug(2) << "alloc @ " << start << "," << (uint32_t) r.size << "\n";
+                bddebug(2) << "alloc @ " << start << "," << (uint32_t)r.size << "\n";
                 if (r.size > size + kAlignment) {
                     // Split the block
                     const uint32_t r2_start = start + size;
                     const uint32_t r2_size = r.size - size;
-                    regions[r2_start] = { r2_size, false };
+                    regions[r2_start] = {r2_size, false};
                     r.size = size;
-                    bddebug(2) << "split: r-> " << start << "," << (uint32_t) r.size << "," << (start + r.size) << "\n";
+                    bddebug(2) << "split: r-> " << start << "," << (uint32_t)r.size << "," << (start + r.size) << "\n";
                     bddebug(2) << "split: r2-> " << r2_start << "," << r2_size << "," << (r2_start + r2_size) << "\n";
                 }
                 // Just return the block
@@ -173,7 +174,8 @@ public:
         // If next region is free, combine with it
         auto next = std::next(it);
         if (next != regions.end() && !next->second.used) {
-            bddebug(2) << "combine next: " << next->first << " w/ " << it->first << " " << "\n";
+            bddebug(2) << "combine next: " << next->first << " w/ " << it->first << " "
+                       << "\n";
             it->second.size += next->second.size;
             regions.erase(next);
         }
@@ -216,7 +218,7 @@ public:
         for (auto it : regions) {
             const uint32_t start = it.first;
             const Region &r = it.second;
-            bddebug(2) << "R: " << start << ".." << (start+r.size-1) << "," << r.used << "\n";
+            bddebug(2) << "R: " << start << ".." << (start + r.size - 1) << "," << r.used << "\n";
             internal_assert(start == prev_end) << "start " << start << " prev_end " << prev_end << "\n";
             // it's OK to have two used regions in a row, but not two free ones
             internal_assert(!(!prev_used && !r.used));
@@ -227,7 +229,6 @@ public:
         bddebug(2) << "\n";
 #endif
     }
-
 };
 
 // ---------------------
@@ -246,12 +247,20 @@ using JITExternMap = std::map<std::string, Halide::JITExtern>;
 
 #define V8_API_VERSION ((V8_MAJOR_VERSION * 10) + V8_MINOR_VERSION)
 
-static_assert(V8_API_VERSION >= 70,
-              "Halide requires V8 v7.0 or later when compiling WITH_V8.");
+static_assert(V8_API_VERSION >= 73,
+              "Halide requires V8 v7.3 or later when compiling WITH_V8.");
 
 namespace Halide {
 namespace Internal {
 namespace {
+
+v8::Local<v8::String> NewLocalString(v8::Isolate *isolate, const char *s) {
+#if V8_API_VERSION >= 76
+    return v8::String::NewFromUtf8(isolate, s).ToLocalChecked();
+#else
+    return v8::String::NewFromUtf8(isolate, s);
+#endif
+}
 
 using namespace v8;
 
@@ -270,7 +279,7 @@ void print_object_properties(Isolate *isolate, const Local<Value> &v) {
         Local<Array> properties = obj->GetPropertyNames(context).ToLocalChecked();
         int len = properties->Length();
         wdebug(0) << "Number of properties = " << len << ":\n";
-        for(int i = 0 ; i < len ; ++i) {
+        for (int i = 0; i < len; ++i) {
             const v8::Local<v8::Value> key = properties->Get(i);
             String::Utf8Value str(isolate, key);
             wdebug(0) << "\t" << i + 1 << ". " << *str << "\n";
@@ -280,7 +289,7 @@ void print_object_properties(Isolate *isolate, const Local<Value> &v) {
 #endif
 
 inline constexpr int halide_type_code(halide_type_code_t code, int bits) {
-    return ((int) code) | (bits << 8);
+    return ((int)code) | (bits << 8);
 }
 
 // dynamic_type_dispatch is a utility for functors that want to be able
@@ -299,12 +308,14 @@ inline constexpr int halide_type_code(halide_type_code_t code, int bits) {
 // variants *will* be instantiated (increasing code size), so this approach
 // should only be used when strictly necessary.
 template<template<typename> class Functor, typename... Args>
-auto dynamic_type_dispatch(const halide_type_t &type, Args&&... args) ->
-    decltype(std::declval<Functor<uint8_t>>()(std::forward<Args>(args)...)) {
+auto dynamic_type_dispatch(const halide_type_t &type, Args &&... args) -> decltype(std::declval<Functor<uint8_t>>()(std::forward<Args>(args)...)) {
 
-#define HANDLE_CASE(CODE, BITS, TYPE) \
-    case halide_type_code(CODE, BITS): return Functor<TYPE>()(std::forward<Args>(args)...);
-    switch (halide_type_code((halide_type_code_t) type.code, type.bits)) {
+#define HANDLE_CASE(CODE, BITS, TYPE)  \
+    case halide_type_code(CODE, BITS): \
+        return Functor<TYPE>()(std::forward<Args>(args)...);
+    switch (halide_type_code((halide_type_code_t)type.code, type.bits)) {
+        HANDLE_CASE(halide_type_bfloat, 16, bfloat16_t)
+        HANDLE_CASE(halide_type_float, 16, float16_t)
         HANDLE_CASE(halide_type_float, 32, float)
         HANDLE_CASE(halide_type_float, 64, double)
         HANDLE_CASE(halide_type_int, 8, int8_t)
@@ -316,11 +327,11 @@ auto dynamic_type_dispatch(const halide_type_t &type, Args&&... args) ->
         HANDLE_CASE(halide_type_uint, 16, uint16_t)
         HANDLE_CASE(halide_type_uint, 32, uint32_t)
         HANDLE_CASE(halide_type_uint, 64, uint64_t)
-        HANDLE_CASE(halide_type_handle, 64, void*)
-        default:
-            internal_error;
-            using ReturnType = decltype(std::declval<Functor<uint8_t>>()(std::forward<Args>(args)...));
-            return ReturnType();
+        HANDLE_CASE(halide_type_handle, 64, void *)
+    default:
+        internal_error;
+        using ReturnType = decltype(std::declval<Functor<uint8_t>>()(std::forward<Args>(args)...));
+        return ReturnType();
     }
 #undef HANDLE_CASE
 }
@@ -330,12 +341,24 @@ auto dynamic_type_dispatch(const halide_type_t &type, Args&&... args) ->
 template<typename T>
 struct ExtractAndStoreScalar {
     void operator()(const Local<Context> &context, const Local<Value> &val, void *slot) {
-        *(T *)slot = (T) val->NumberValue(context).ToChecked();
+        *(T *)slot = (T)val->NumberValue(context).ToChecked();
     }
 };
 
 template<>
-inline void ExtractAndStoreScalar<void*>::operator()(const Local<Context> &context, const Local<Value> &val, void *slot) {
+inline void ExtractAndStoreScalar<float16_t>::operator()(const Local<Context> &context, const Local<Value> &val, void *slot) {
+    float16_t f((double)val->NumberValue(context).ToChecked());
+    *(uint16_t *)slot = f.to_bits();
+}
+
+template<>
+inline void ExtractAndStoreScalar<bfloat16_t>::operator()(const Local<Context> &context, const Local<Value> &val, void *slot) {
+    bfloat16_t b((double)val->NumberValue(context).ToChecked());
+    *(uint16_t *)slot = b.to_bits();
+}
+
+template<>
+inline void ExtractAndStoreScalar<void *>::operator()(const Local<Context> &context, const Local<Value> &val, void *slot) {
     internal_error << "TODO: 64-bit slots aren't yet supported";
 }
 
@@ -359,7 +382,19 @@ struct LoadAndReturnScalar {
 };
 
 template<>
-inline void LoadAndReturnScalar<void*>::operator()(const Local<Context> &context, const void *slot, ReturnValue<Value> val) {
+inline void LoadAndReturnScalar<float16_t>::operator()(const Local<Context> &context, const void *slot, ReturnValue<Value> val) {
+    float16_t f = float16_t::make_from_bits(*(const uint16_t *)slot);
+    val.Set((double)f);
+}
+
+template<>
+inline void LoadAndReturnScalar<bfloat16_t>::operator()(const Local<Context> &context, const void *slot, ReturnValue<Value> val) {
+    bfloat16_t b = bfloat16_t::make_from_bits(*(const uint16_t *)slot);
+    val.Set((double)b);
+}
+
+template<>
+inline void LoadAndReturnScalar<void *>::operator()(const Local<Context> &context, const void *slot, ReturnValue<Value> val) {
     internal_error << "TODO: 64-bit slots aren't yet supported";
 }
 
@@ -385,7 +420,21 @@ struct WrapScalar {
 };
 
 template<>
-inline Local<Value> WrapScalar<void*>::operator()(const Local<Context> &context, const void *val_ptr) {
+inline Local<Value> WrapScalar<float16_t>::operator()(const Local<Context> &context, const void *val_ptr) {
+    double val = (double)*(const uint16_t *)val_ptr;
+    Isolate *isolate = context->GetIsolate();
+    return Number::New(isolate, val);
+}
+
+template<>
+inline Local<Value> WrapScalar<bfloat16_t>::operator()(const Local<Context> &context, const void *val_ptr) {
+    double val = (double)*(const uint16_t *)val_ptr;
+    Isolate *isolate = context->GetIsolate();
+    return Number::New(isolate, val);
+}
+
+template<>
+inline Local<Value> WrapScalar<void *>::operator()(const Local<Context> &context, const void *val_ptr) {
     internal_error << "TODO: 64-bit slots aren't yet supported";
     return Local<Value>();
 }
@@ -428,13 +477,13 @@ enum EmbedderDataSlots {
 wasm32_ptr_t v8_WasmMemoryObject_malloc(const Local<Context> &context, size_t size) {
     Isolate *isolate = context->GetIsolate();
 
-    BDMalloc *bdmalloc = (BDMalloc *) context->GetAlignedPointerFromEmbedderData(kBDMallocPtr);
+    BDMalloc *bdmalloc = (BDMalloc *)context->GetAlignedPointerFromEmbedderData(kBDMallocPtr);
     if (!bdmalloc->inited()) {
         int32_t heap_base = context->GetEmbedderData(kHeapBase)->Int32Value(context).ToChecked();
 
         Local<Object> memory_value = context->GetEmbedderData(kWasmMemoryObject).As<Object>();  // really a WasmMemoryObject
         Local<Object> buffer_string = context->GetEmbedderData(kString_buffer).As<Object>();
-        Local<ArrayBuffer> wasm_memory = Local<ArrayBuffer>::Cast(memory_value->Get(buffer_string));
+        Local<ArrayBuffer> wasm_memory = Local<ArrayBuffer>::Cast(memory_value->Get(context, buffer_string).ToLocalChecked());
 
         wdebug(0) << "heap_base is: " << heap_base << "\n";
         wdebug(0) << "initial memory size is: " << wasm_memory->ByteLength() << "\n";
@@ -451,13 +500,18 @@ wasm32_ptr_t v8_WasmMemoryObject_malloc(const Local<Context> &context, size_t si
 
         Local<Value> args[1] = {Integer::New(isolate, pages_needed)};
         int32_t result = memory_value
-            ->Get(context, context->GetEmbedderData(kString_grow)).ToLocalChecked().As<Object>()
-            ->CallAsFunction(context, memory_value, 1, args).ToLocalChecked()->Int32Value(context).ToChecked();
+                             ->Get(context, context->GetEmbedderData(kString_grow))
+                             .ToLocalChecked()
+                             .As<Object>()
+                             ->CallAsFunction(context, memory_value, 1, args)
+                             .ToLocalChecked()
+                             ->Int32Value(context)
+                             .ToChecked();
         wdebug(0) << "grow result: " << result << "\n";
-        internal_assert(result == (int) (bdmalloc->get_total_size() / kWasmPageSize));
+        internal_assert(result == (int)(bdmalloc->get_total_size() / kWasmPageSize));
 
         Local<Object> buffer_string = context->GetEmbedderData(kString_buffer).As<Object>();
-        Local<ArrayBuffer> wasm_memory = Local<ArrayBuffer>::Cast(memory_value->Get(buffer_string));
+        Local<ArrayBuffer> wasm_memory = Local<ArrayBuffer>::Cast(memory_value->Get(context, buffer_string).ToLocalChecked());
         wdebug(0) << "New ArrayBuffer size is: " << wasm_memory->ByteLength() << "\n";
 
         bdmalloc->grow_total_size(wasm_memory->ByteLength());
@@ -470,14 +524,14 @@ wasm32_ptr_t v8_WasmMemoryObject_malloc(const Local<Context> &context, size_t si
 
 void v8_WasmMemoryObject_free(const Local<Context> &context, wasm32_ptr_t ptr) {
     wdebug(2) << "freeing ptr at: " << ptr << "\n";
-    BDMalloc *bdmalloc = (BDMalloc *) context->GetAlignedPointerFromEmbedderData(kBDMallocPtr);
+    BDMalloc *bdmalloc = (BDMalloc *)context->GetAlignedPointerFromEmbedderData(kBDMallocPtr);
     bdmalloc->free_region(ptr);
 }
 
 uint8_t *get_wasm_memory_base(const Local<Context> &context) {
     Local<Object> memory_value = context->GetEmbedderData(kWasmMemoryObject).As<Object>();  // really a WasmMemoryObject
-    Local<ArrayBuffer> wasm_memory = Local<ArrayBuffer>::Cast(memory_value->Get(context->GetEmbedderData(kString_buffer)));
-    uint8_t *p = (uint8_t *) wasm_memory->GetContents().Data();
+    Local<ArrayBuffer> wasm_memory = Local<ArrayBuffer>::Cast(memory_value->Get(context, context->GetEmbedderData(kString_buffer)).ToLocalChecked());
+    uint8_t *p = (uint8_t *)wasm_memory->GetContents().Data();
     return p;
 }
 
@@ -488,8 +542,8 @@ struct wasm_halide_buffer_t {
     uint64_t flags;
     halide_type_t type;
     int32_t dimensions;
-    wasm32_ptr_t dim;               // halide_dimension_t*
-    wasm32_ptr_t padding;           // always zero
+    wasm32_ptr_t dim;      // halide_dimension_t*
+    wasm32_ptr_t padding;  // always zero
 };
 
 void dump_hostbuf(const Local<Context> &context, const halide_buffer_t *buf, const std::string &label) {
@@ -497,18 +551,18 @@ void dump_hostbuf(const Local<Context> &context, const halide_buffer_t *buf, con
     const halide_dimension_t *dim = buf->dim;
     const uint8_t *host = buf->host;
 
-    wdebug(0) << label << " = " << (void *) buf << " = {\n";
+    wdebug(0) << label << " = " << (void *)buf << " = {\n";
     wdebug(0) << "  device = " << buf->device << "\n";
     wdebug(0) << "  device_interface = " << buf->device_interface << "\n";
-    wdebug(0) << "  host = " << (void *) host << " = {\n";
+    wdebug(0) << "  host = " << (void *)host << " = {\n";
     if (host) {
-        wdebug(0) << "    " << (int) host[0] << ", " << (int) host[1] << ", " << (int) host[2] << ", " << (int) host[3] << "...\n" ;
+        wdebug(0) << "    " << (int)host[0] << ", " << (int)host[1] << ", " << (int)host[2] << ", " << (int)host[3] << "...\n";
     }
     wdebug(0) << "  }\n";
     wdebug(0) << "  flags = " << buf->flags << "\n";
-    wdebug(0) << "  type = " << (int) buf->type.code << "," << (int) buf->type.bits << "," << buf->type.lanes << "\n";
+    wdebug(0) << "  type = " << (int)buf->type.code << "," << (int)buf->type.bits << "," << buf->type.lanes << "\n";
     wdebug(0) << "  dimensions = " << buf->dimensions << "\n";
-    wdebug(0) << "  dim = " << (void*) buf->dim << " = {\n";
+    wdebug(0) << "  dim = " << (void *)buf->dim << " = {\n";
     for (int i = 0; i < buf->dimensions; i++) {
         const auto &d = dim[i];
         wdebug(0) << "    {" << d.min << "," << d.extent << "," << d.stride << "," << d.flags << "},\n";
@@ -524,22 +578,22 @@ void dump_wasmbuf(const Local<Context> &context, wasm32_ptr_t buf_ptr, const std
     internal_assert(buf_ptr);
 
     uint8_t *base = get_wasm_memory_base(context);
-    wasm_halide_buffer_t *buf = (wasm_halide_buffer_t *) (base + buf_ptr);
-    halide_dimension_t *dim = buf->dim ? (halide_dimension_t *) (base + buf->dim) : nullptr;
+    wasm_halide_buffer_t *buf = (wasm_halide_buffer_t *)(base + buf_ptr);
+    halide_dimension_t *dim = buf->dim ? (halide_dimension_t *)(base + buf->dim) : nullptr;
     uint8_t *host = buf->host ? (base + buf->host) : nullptr;
 
-    wdebug(0) << label << " = " << buf_ptr << " -> " << (void *) buf << " = {\n";
+    wdebug(0) << label << " = " << buf_ptr << " -> " << (void *)buf << " = {\n";
     wdebug(0) << "  device = " << buf->device << "\n";
     wdebug(0) << "  device_interface = " << buf->device_interface << "\n";
-    wdebug(0) << "  host = " << buf->host << " -> " << (void *) host << " = {\n";
+    wdebug(0) << "  host = " << buf->host << " -> " << (void *)host << " = {\n";
     if (host) {
-        wdebug(0) << "    " << (int) host[0] << ", " << (int) host[1] << ", " << (int) host[2] << ", " << (int) host[3] << "...\n" ;
+        wdebug(0) << "    " << (int)host[0] << ", " << (int)host[1] << ", " << (int)host[2] << ", " << (int)host[3] << "...\n";
     }
     wdebug(0) << "  }\n";
     wdebug(0) << "  flags = " << buf->flags << "\n";
-    wdebug(0) << "  type = " << (int) buf->type.code << "," << (int) buf->type.bits << "," << buf->type.lanes << "\n";
+    wdebug(0) << "  type = " << (int)buf->type.code << "," << (int)buf->type.bits << "," << buf->type.lanes << "\n";
     wdebug(0) << "  dimensions = " << buf->dimensions << "\n";
-    wdebug(0) << "  dim = " << buf->dim << " -> " << (void*) dim << " = {\n";
+    wdebug(0) << "  dim = " << buf->dim << " -> " << (void *)dim << " = {\n";
     for (int i = 0; i < buf->dimensions; i++) {
         const auto &d = dim[i];
         wdebug(0) << "    {" << d.min << "," << d.extent << "," << d.stride << "," << d.flags << "},\n";
@@ -582,7 +636,7 @@ wasm32_ptr_t hostbuf_to_wasmbuf(const Local<Context> &context, const halide_buff
 
     uint8_t *base = get_wasm_memory_base(context);
 
-    wasm_halide_buffer_t *dst = (wasm_halide_buffer_t *) (base + dst_ptr);
+    wasm_halide_buffer_t *dst = (wasm_halide_buffer_t *)(base + dst_ptr);
     dst->device = 0;
     dst->device_interface = 0;
     dst->host = src->host ? (dst_ptr + host_offset) : 0;
@@ -614,7 +668,7 @@ void wasmbuf_to_hostbuf(const Local<Context> &context, wasm32_ptr_t src_ptr, Hal
 
     uint8_t *base = get_wasm_memory_base(context);
 
-    wasm_halide_buffer_t *src = (wasm_halide_buffer_t *) (base + src_ptr);
+    wasm_halide_buffer_t *src = (wasm_halide_buffer_t *)(base + src_ptr);
 
     internal_assert(src->device == 0);
     internal_assert(src->device_interface == 0);
@@ -622,11 +676,11 @@ void wasmbuf_to_hostbuf(const Local<Context> &context, wasm32_ptr_t src_ptr, Hal
     halide_buffer_t dst_tmp;
     dst_tmp.device = 0;
     dst_tmp.device_interface = 0;
-    dst_tmp.host = nullptr; // src->host ? (base + src->host) : nullptr;
+    dst_tmp.host = nullptr;  // src->host ? (base + src->host) : nullptr;
     dst_tmp.flags = src->flags;
     dst_tmp.type = src->type;
     dst_tmp.dimensions = src->dimensions;
-    dst_tmp.dim = src->dim ? (halide_dimension_t *) (base + src->dim) : nullptr;
+    dst_tmp.dim = src->dim ? (halide_dimension_t *)(base + src->dim) : nullptr;
     dst_tmp.padding = 0;
 
     dump_hostbuf(context, &dst_tmp, "dst_tmp");
@@ -651,7 +705,7 @@ void copy_wasmbuf_to_existing_hostbuf(const Local<Context> &context, wasm32_ptr_
 
     uint8_t *base = get_wasm_memory_base(context);
 
-    wasm_halide_buffer_t *src = (wasm_halide_buffer_t *) (base + src_ptr);
+    wasm_halide_buffer_t *src = (wasm_halide_buffer_t *)(base + src_ptr);
     internal_assert(src->device == 0);
     internal_assert(src->device_interface == 0);
     internal_assert(src->dimensions == dst->dimensions);
@@ -684,7 +738,7 @@ void copy_hostbuf_to_existing_wasmbuf(const Local<Context> &context, const halid
 
     uint8_t *base = get_wasm_memory_base(context);
 
-    wasm_halide_buffer_t *dst = (wasm_halide_buffer_t *) (base + dst_ptr);
+    wasm_halide_buffer_t *dst = (wasm_halide_buffer_t *)(base + dst_ptr);
     internal_assert(src->device == 0);
     internal_assert(src->device_interface == 0);
     internal_assert(src->dimensions == dst->dimensions);
@@ -730,12 +784,12 @@ JITUserContext *get_jit_user_context(const Local<Context> &context, const Local<
         return nullptr;
     }
     internal_assert(ucon_magic == kMagicJitUserContextValue);
-    JITUserContext *jit_user_context = (JITUserContext *) context->GetAlignedPointerFromEmbedderData(kJitUserContext);
+    JITUserContext *jit_user_context = (JITUserContext *)context->GetAlignedPointerFromEmbedderData(kJitUserContext);
     internal_assert(jit_user_context);
     return jit_user_context;
 }
 
-void wasm_jit_halide_print_callback(const v8::FunctionCallbackInfo<v8::Value>& args) {
+void wasm_jit_halide_print_callback(const v8::FunctionCallbackInfo<v8::Value> &args) {
     internal_assert(args.Length() == 2);
 
     Isolate *isolate = args.GetIsolate();
@@ -746,7 +800,7 @@ void wasm_jit_halide_print_callback(const v8::FunctionCallbackInfo<v8::Value>& a
     const int32_t str_address = args[1]->Int32Value(context).ToChecked();
 
     uint8_t *p = get_wasm_memory_base(context);
-    const char *str = (const char *) p + str_address;
+    const char *str = (const char *)p + str_address;
 
     if (jit_user_context && jit_user_context->handlers.custom_print != NULL) {
         (*jit_user_context->handlers.custom_print)(jit_user_context, str);
@@ -756,7 +810,7 @@ void wasm_jit_halide_print_callback(const v8::FunctionCallbackInfo<v8::Value>& a
     }
 }
 
-void wasm_jit_halide_error_callback(const v8::FunctionCallbackInfo<v8::Value>& args) {
+void wasm_jit_halide_error_callback(const v8::FunctionCallbackInfo<v8::Value> &args) {
     internal_assert(args.Length() == 2);
 
     Isolate *isolate = args.GetIsolate();
@@ -767,7 +821,7 @@ void wasm_jit_halide_error_callback(const v8::FunctionCallbackInfo<v8::Value>& a
     const int32_t str_address = args[1]->Int32Value(context).ToChecked();
 
     uint8_t *p = get_wasm_memory_base(context);
-    const char *str = (const char *) p + str_address;
+    const char *str = (const char *)p + str_address;
 
     if (jit_user_context && jit_user_context->handlers.custom_error != NULL) {
         (*jit_user_context->handlers.custom_error)(jit_user_context, str);
@@ -776,7 +830,7 @@ void wasm_jit_halide_error_callback(const v8::FunctionCallbackInfo<v8::Value>& a
     }
 }
 
-void wasm_jit_halide_trace_helper_callback(const v8::FunctionCallbackInfo<v8::Value>& args) {
+void wasm_jit_halide_trace_helper_callback(const v8::FunctionCallbackInfo<v8::Value> &args) {
     internal_assert(args.Length() == 12);
     Isolate *isolate = args.GetIsolate();
     Local<Context> context = isolate->GetCurrentContext();
@@ -801,14 +855,14 @@ void wasm_jit_halide_trace_helper_callback(const v8::FunctionCallbackInfo<v8::Va
     internal_assert(dimensions >= 0 && dimensions < 1024);  // not a hard limit, just a sanity check
 
     halide_trace_event_t event;
-    event.func = (const char *) (base + func_name_ptr);
+    event.func = (const char *)(base + func_name_ptr);
     event.value = value_ptr ? ((void *)(base + value_ptr)) : nullptr;
     event.coordinates = coordinates_ptr ? ((int32_t *)(base + coordinates_ptr)) : nullptr;
-    event.trace_tag = (const char *) (base + trace_tag_ptr);
-    event.type.code = (halide_type_code_t) type_code;
-    event.type.bits = (uint8_t) type_bits;
-    event.type.lanes = (uint16_t) type_lanes;
-    event.event = (halide_trace_event_code_t) trace_code;
+    event.trace_tag = (const char *)(base + trace_tag_ptr);
+    event.type.code = (halide_type_code_t)type_code;
+    event.type.bits = (uint8_t)type_bits;
+    event.type.lanes = (uint16_t)type_lanes;
+    event.event = (halide_trace_event_code_t)trace_code;
     event.parent_id = parent_id;
     event.value_index = value_index;
     event.dimensions = dimensions;
@@ -828,7 +882,7 @@ void wasm_jit_halide_trace_helper_callback(const v8::FunctionCallbackInfo<v8::Va
 // failures. https://github.com/halide/Halide/issues/3738
 constexpr size_t kExtraMallocSlop = 32;
 
-void wasm_jit_malloc_callback(const v8::FunctionCallbackInfo<v8::Value>& args) {
+void wasm_jit_malloc_callback(const v8::FunctionCallbackInfo<v8::Value> &args) {
     Isolate *isolate = args.GetIsolate();
     HandleScope scope(isolate);
     Local<Context> context = isolate->GetCurrentContext();
@@ -839,7 +893,7 @@ void wasm_jit_malloc_callback(const v8::FunctionCallbackInfo<v8::Value>& args) {
     args.GetReturnValue().Set(wrap_scalar(context, p));
 }
 
-void wasm_jit_free_callback(const v8::FunctionCallbackInfo<v8::Value>& args) {
+void wasm_jit_free_callback(const v8::FunctionCallbackInfo<v8::Value> &args) {
     Isolate *isolate = args.GetIsolate();
     HandleScope scope(isolate);
     Local<Context> context = isolate->GetCurrentContext();
@@ -848,11 +902,11 @@ void wasm_jit_free_callback(const v8::FunctionCallbackInfo<v8::Value>& args) {
     v8_WasmMemoryObject_free(context, p);
 }
 
-void wasm_jit_abort_callback(const v8::FunctionCallbackInfo<v8::Value>& args) {
+void wasm_jit_abort_callback(const v8::FunctionCallbackInfo<v8::Value> &args) {
     abort();
 }
 
-void wasm_jit_strlen_callback(const v8::FunctionCallbackInfo<v8::Value>& args) {
+void wasm_jit_strlen_callback(const v8::FunctionCallbackInfo<v8::Value> &args) {
     Isolate *isolate = args.GetIsolate();
     Local<Context> context = isolate->GetCurrentContext();
     HandleScope scope(isolate);
@@ -860,16 +914,16 @@ void wasm_jit_strlen_callback(const v8::FunctionCallbackInfo<v8::Value>& args) {
     const int32_t s = args[0]->Int32Value(context).ToChecked();
 
     uint8_t *base = get_wasm_memory_base(context);
-    int32_t r = strlen((char *) base + s);
+    int32_t r = strlen((char *)base + s);
 
     args.GetReturnValue().Set(wrap_scalar(context, r));
 }
 
-void wasm_jit_write_callback(const v8::FunctionCallbackInfo<v8::Value>& args) {
+void wasm_jit_write_callback(const v8::FunctionCallbackInfo<v8::Value> &args) {
     internal_error << "WebAssembly JIT does not yet support the write() call.";
 }
 
-void wasm_jit_getenv_callback(const v8::FunctionCallbackInfo<v8::Value>& args) {
+void wasm_jit_getenv_callback(const v8::FunctionCallbackInfo<v8::Value> &args) {
     Isolate *isolate = args.GetIsolate();
     Local<Context> context = isolate->GetCurrentContext();
     HandleScope scope(isolate);
@@ -877,19 +931,19 @@ void wasm_jit_getenv_callback(const v8::FunctionCallbackInfo<v8::Value>& args) {
     const int32_t s = args[0]->Int32Value(context).ToChecked();
 
     uint8_t *base = get_wasm_memory_base(context);
-    char *e = getenv((char *) base + s);
+    char *e = getenv((char *)base + s);
 
     // TODO: this string is leaked
     if (e) {
         wasm32_ptr_t r = v8_WasmMemoryObject_malloc(context, strlen(e) + 1);
-        strcpy((char *) base + r, e);
+        strcpy((char *)base + r, e);
         args.GetReturnValue().Set(wrap_scalar(context, r));
     } else {
         args.GetReturnValue().Set(wrap_scalar<wasm32_ptr_t>(context, 0));
     }
 }
 
-void wasm_jit_memcpy_callback(const v8::FunctionCallbackInfo<v8::Value>& args) {
+void wasm_jit_memcpy_callback(const v8::FunctionCallbackInfo<v8::Value> &args) {
     Isolate *isolate = args.GetIsolate();
     Local<Context> context = isolate->GetCurrentContext();
     HandleScope scope(isolate);
@@ -905,23 +959,23 @@ void wasm_jit_memcpy_callback(const v8::FunctionCallbackInfo<v8::Value>& args) {
     args.GetReturnValue().Set(wrap_scalar(context, dst));
 }
 
-void wasm_jit_fopen_callback(const v8::FunctionCallbackInfo<v8::Value>& args) {
+void wasm_jit_fopen_callback(const v8::FunctionCallbackInfo<v8::Value> &args) {
     internal_error << "WebAssembly JIT does not yet support the fopen() call.";
 }
 
-void wasm_jit_fileno_callback(const v8::FunctionCallbackInfo<v8::Value>& args) {
+void wasm_jit_fileno_callback(const v8::FunctionCallbackInfo<v8::Value> &args) {
     internal_error << "WebAssembly JIT does not yet support the fileno() call.";
 }
 
-void wasm_jit_fclose_callback(const v8::FunctionCallbackInfo<v8::Value>& args) {
+void wasm_jit_fclose_callback(const v8::FunctionCallbackInfo<v8::Value> &args) {
     internal_error << "WebAssembly JIT does not yet support the fclose() call.";
 }
 
-void wasm_jit_fwrite_callback(const v8::FunctionCallbackInfo<v8::Value>& args) {
+void wasm_jit_fwrite_callback(const v8::FunctionCallbackInfo<v8::Value> &args) {
     internal_error << "WebAssembly JIT does not yet support the fwrite() call.";
 }
 
-void wasm_jit_memset_callback(const v8::FunctionCallbackInfo<v8::Value>& args) {
+void wasm_jit_memset_callback(const v8::FunctionCallbackInfo<v8::Value> &args) {
     Isolate *isolate = args.GetIsolate();
     Local<Context> context = isolate->GetCurrentContext();
     HandleScope scope(isolate);
@@ -936,7 +990,7 @@ void wasm_jit_memset_callback(const v8::FunctionCallbackInfo<v8::Value>& args) {
     args.GetReturnValue().Set(wrap_scalar(context, s));
 }
 
-void wasm_jit_memcmp_callback(const v8::FunctionCallbackInfo<v8::Value>& args) {
+void wasm_jit_memcmp_callback(const v8::FunctionCallbackInfo<v8::Value> &args) {
     Isolate *isolate = args.GetIsolate();
     Local<Context> context = isolate->GetCurrentContext();
     HandleScope scope(isolate);
@@ -952,12 +1006,12 @@ void wasm_jit_memcmp_callback(const v8::FunctionCallbackInfo<v8::Value>& args) {
     args.GetReturnValue().Set(wrap_scalar(context, r));
 }
 
-void wasm_jit___cxa_atexit_callback(const v8::FunctionCallbackInfo<v8::Value>& args) {
+void wasm_jit___cxa_atexit_callback(const v8::FunctionCallbackInfo<v8::Value> &args) {
     // nothing
 }
 
-template<typename T, T some_func(T) >
-void wasm_jit_posix_math_callback(const v8::FunctionCallbackInfo<v8::Value>& args) {
+template<typename T, T some_func(T)>
+void wasm_jit_posix_math_callback(const v8::FunctionCallbackInfo<v8::Value> &args) {
     Isolate *isolate = args.GetIsolate();
     Local<Context> context = isolate->GetCurrentContext();
     HandleScope scope(isolate);
@@ -968,8 +1022,8 @@ void wasm_jit_posix_math_callback(const v8::FunctionCallbackInfo<v8::Value>& arg
     args.GetReturnValue().Set(wrap_scalar(context, out));
 }
 
-template<typename T, T some_func(T, T) >
-void wasm_jit_posix_math2_callback(const v8::FunctionCallbackInfo<v8::Value>& args) {
+template<typename T, T some_func(T, T)>
+void wasm_jit_posix_math2_callback(const v8::FunctionCallbackInfo<v8::Value> &args) {
     Isolate *isolate = args.GetIsolate();
     Local<Context> context = isolate->GetCurrentContext();
     HandleScope scope(isolate);
@@ -994,7 +1048,7 @@ struct ExternArgType {
     bool is_buffer;
 };
 
-void v8_extern_wrapper(const v8::FunctionCallbackInfo<v8::Value>& args) {
+void v8_extern_wrapper(const v8::FunctionCallbackInfo<v8::Value> &args) {
     Isolate *isolate = args.GetIsolate();
     HandleScope scope(isolate);
     Local<Context> context = isolate->GetCurrentContext();
@@ -1004,10 +1058,10 @@ void v8_extern_wrapper(const v8::FunctionCallbackInfo<v8::Value>& args) {
     Local<ArrayBuffer> arg_types_wrap = Local<ArrayBuffer>::Cast(wrapper_data->GetInternalField(kArgTypesWrap));
 
     using TrampolineFn = void (*)(void **);
-    TrampolineFn trampoline = (TrampolineFn) trampoline_wrap->Value();
+    TrampolineFn trampoline = (TrampolineFn)trampoline_wrap->Value();
 
     size_t arg_types_len = (arg_types_wrap->ByteLength() / sizeof(ExternArgType)) - 1;
-    const ExternArgType *arg_types = (const ExternArgType *) arg_types_wrap->GetContents().Data();
+    const ExternArgType *arg_types = (const ExternArgType *)arg_types_wrap->GetContents().Data();
     const ExternArgType ret_type = *arg_types++;
 
     // There's wasted space here, but that's ok.
@@ -1036,7 +1090,7 @@ void v8_extern_wrapper(const v8::FunctionCallbackInfo<v8::Value>& args) {
     (*trampoline)(trampoline_args.data());
 
     if (has_retval) {
-        dynamic_type_dispatch<LoadAndReturnScalar>(ret_type.type, context, (void *) &ret_val, args.GetReturnValue());
+        dynamic_type_dispatch<LoadAndReturnScalar>(ret_type.type, context, (void *)&ret_val, args.GetReturnValue());
     }
 
     // Progagate buffer data backwards. Note that for arbitrary extern functions,
@@ -1052,8 +1106,7 @@ void v8_extern_wrapper(const v8::FunctionCallbackInfo<v8::Value>& args) {
 bool should_skip_extern_symbol(const std::string &name) {
     static std::set<std::string> symbols = {
         "halide_print",
-        "halide_error"
-    };
+        "halide_error"};
     return symbols.count(name) > 0;
 }
 
@@ -1078,10 +1131,10 @@ void add_extern_callbacks(const Local<Context> &context,
         const auto &sig = jit_extern.extern_c_function().signature();
         size_t arg_count = sig.arg_types().size();
         Local<ArrayBuffer> arg_types_wrap = ArrayBuffer::New(isolate, sizeof(ExternArgType) * (arg_count + 1));
-        ExternArgType *arg_types = (ExternArgType *) arg_types_wrap->GetContents().Data();
+        ExternArgType *arg_types = (ExternArgType *)arg_types_wrap->GetContents().Data();
         if (sig.is_void_return()) {
             // Type specified here will be ignored
-            *arg_types++ = ExternArgType{ {halide_type_int, 0, 0}, true, false };
+            *arg_types++ = ExternArgType{{halide_type_int, 0, 0}, true, false};
         } else {
             const Type &t = sig.ret_type();
             const bool is_buffer = (t == type_of<halide_buffer_t *>());
@@ -1091,7 +1144,7 @@ void add_extern_callbacks(const Local<Context> &context,
             user_assert(!(t.is_handle() && !is_buffer)) << "Halide Extern functions cannot return arbitrary pointers as arguments.";
             // TODO: the assertion below can be removed once we are able to marshal int64 values across the barrier
             user_assert(!(t.is_int_or_uint() && t.bits() == 64)) << "Halide Extern functions cannot accept 64-bit values as arguments.";
-            *arg_types++ = ExternArgType{ t, false, false };
+            *arg_types++ = ExternArgType{t, false, false};
         }
         for (size_t i = 0; i < arg_count; ++i) {
             const Type &t = sig.arg_types()[i];
@@ -1101,7 +1154,7 @@ void add_extern_callbacks(const Local<Context> &context,
             user_assert(!(t.is_handle() && !is_buffer)) << "Halide Extern functions cannot accept arbitrary pointers as arguments.";
             // TODO: the assertion below can be removed once we are able to marshal int64 values across the barrier
             user_assert(!(t.is_int_or_uint() && t.bits() == 64)) << "Halide Extern functions cannot accept 64-bit values as arguments.";
-            *arg_types++ = ExternArgType{ t, false, is_buffer };
+            *arg_types++ = ExternArgType{t, false, is_buffer};
         }
 
         Local<Object> wrapper_data = extern_callback_template->NewInstance(context).ToLocalChecked();
@@ -1109,10 +1162,12 @@ void add_extern_callbacks(const Local<Context> &context,
         wrapper_data->SetInternalField(kTrampolineWrap, trampoline_wrap);
         wrapper_data->SetInternalField(kArgTypesWrap, arg_types_wrap);
 
-        Local<v8::Function> f = FunctionTemplate::New(isolate, v8_extern_wrapper, wrapper_data)
-            ->GetFunction(context).ToLocalChecked();
+        Local<v8::String> key = NewLocalString(isolate, name.c_str());
+        Local<v8::Function> value = FunctionTemplate::New(isolate, v8_extern_wrapper, wrapper_data)
+                                        ->GetFunction(context)
+                                        .ToLocalChecked();
 
-        (void) imports_dict->Set(context, String::NewFromUtf8(isolate, name.c_str()), f).ToChecked();
+        (void)imports_dict->Set(context, key, value).ToChecked();
     }
 }
 
@@ -1153,12 +1208,12 @@ std::vector<char> compile_to_wasm(const Module &module, const std::string &fn_na
         obj_file.pathname(),
         "--entry=" + fn_name,
         "-o",
-        wasm_output.pathname()
-    };
+        wasm_output.pathname()};
 
-    constexpr int c = sizeof(lld_arg_strs)/sizeof(lld_arg_strs[0]);
+    constexpr int c = sizeof(lld_arg_strs) / sizeof(lld_arg_strs[0]);
     const char *lld_args[c];
-    for (int i = 0; i < c; ++i) lld_args[i] = lld_arg_strs[i].c_str();
+    for (int i = 0; i < c; ++i)
+        lld_args[i] = lld_arg_strs[i].c_str();
 
     std::string lld_errs_string;
     llvm::raw_string_ostream lld_errs(lld_errs_string);
@@ -1175,13 +1230,11 @@ std::vector<char> compile_to_wasm(const Module &module, const std::string &fn_na
     return read_entire_file(wasm_output.pathname());
 }
 
-
 }  // namespace
 }  // namespace Internal
 }  // namespace Halide
 
 #endif  // WITH_V8
-
 
 namespace Halide {
 namespace Internal {
@@ -1198,7 +1251,7 @@ struct WasmModuleContents {
 
 #ifdef WITH_V8
     v8::Isolate *isolate = nullptr;
-    v8::ArrayBuffer::Allocator* array_buffer_allocator = nullptr;
+    v8::ArrayBuffer::Allocator *array_buffer_allocator = nullptr;
     v8::Persistent<v8::Context> v8_context;
     v8::Persistent<v8::Function> v8_function;
 #endif
@@ -1208,8 +1261,7 @@ struct WasmModuleContents {
         const std::vector<Argument> &arguments,
         const std::string &fn_name,
         const JITExternMap &jit_externs,
-        const std::vector<JITModule> &extern_deps
-    );
+        const std::vector<JITModule> &extern_deps);
 
     int run(const void **args);
 
@@ -1221,12 +1273,12 @@ WasmModuleContents::WasmModuleContents(
     const std::vector<Argument> &arguments,
     const std::string &fn_name,
     const JITExternMap &jit_externs,
-    const std::vector<JITModule> &extern_deps
-) : target(module.target()),
-    arguments(arguments),
-    jit_externs(jit_externs),
-    extern_deps(extern_deps),
-    trampolines(JITModule::make_trampolines_module(get_host_target(), jit_externs, kTrampolineSuffix, extern_deps)) {
+    const std::vector<JITModule> &extern_deps)
+    : target(module.target()),
+      arguments(arguments),
+      jit_externs(jit_externs),
+      extern_deps(extern_deps),
+      trampolines(JITModule::make_trampolines_module(get_host_target(), jit_externs, kTrampolineSuffix, extern_deps)) {
 
     wdebug(0) << "Compiling wasm function " << fn_name << "\n";
 
@@ -1253,8 +1305,8 @@ WasmModuleContents::WasmModuleContents(
             // (eg we enable simd even though we might not use it) as we may well end
             // using different Halide Targets across our lifespan.
             "--experimental-wasm-sat-f2i-conversions",  // +nontrapping-fptoint
-            "--experimental_wasm_se",    // +sign-ext
-            "--experimental_wasm_simd",  // +simd128
+            "--experimental_wasm_se",                   // +sign-ext
+            "--experimental_wasm_simd",                 // +simd128
             // "--experimental_wasm_bulk_memory",
 
             // Sometimes useful for debugging purposes:
@@ -1295,7 +1347,7 @@ WasmModuleContents::WasmModuleContents(
     try_catch.SetCaptureMessage(true);
     try_catch.SetVerbose(true);
 
-    auto fn_name_str = String::NewFromUtf8(isolate, fn_name.c_str());
+    Local<v8::String> fn_name_str = NewLocalString(isolate, fn_name.c_str());
 
     std::vector<char> final_wasm = compile_to_wasm(module, fn_name);
 
@@ -1303,9 +1355,8 @@ WasmModuleContents::WasmModuleContents(
     using WasmModuleObject = WasmCompiledModule;
 #endif
     MaybeLocal<WasmModuleObject> maybe_compiled = WasmModuleObject::DeserializeOrCompile(isolate,
-        /* serialized_module */ {nullptr, 0},
-        /* wire_bytes */        {(const uint8_t *) final_wasm.data(), final_wasm.size()}
-    );
+                                                                                         /* serialized_module */ {nullptr, 0},
+                                                                                         /* wire_bytes */ {(const uint8_t *)final_wasm.data(), final_wasm.size()});
 
     Local<WasmModuleObject> compiled;
     if (!maybe_compiled.ToLocal(&compiled)) {
@@ -1324,9 +1375,11 @@ WasmModuleContents::WasmModuleContents(
     const auto add_callback = [&](const char *name, FunctionCallback f) {
         // Skip any leading :: nonsense that we needed to add
         // to disambiguate (say) ::sin() from Halide::sin()
-        while (*name == ':') name++;
-        (void) imports_dict->Set(context, String::NewFromUtf8(isolate, name),
-                                 FunctionTemplate::New(isolate, f)->GetFunction(context).ToLocalChecked()).ToChecked();
+        while (*name == ':')
+            name++;
+        Local<v8::String> key = NewLocalString(isolate, name);
+        Local<v8::Function> value = FunctionTemplate::New(isolate, f)->GetFunction(context).ToLocalChecked();
+        (void)imports_dict->Set(context, key, value).ToChecked();
     };
 
 #define ADD_CALLBACK(x) add_callback(#x, wasm_jit_##x##_callback);
@@ -1354,45 +1407,45 @@ WasmModuleContents::WasmModuleContents(
 
 #undef ADD_CALLBACK
 
-#define ADD_POSIX_MATH(t, f)  add_callback(#f, wasm_jit_posix_math_callback<t, f>);
+#define ADD_POSIX_MATH(t, f) add_callback(#f, wasm_jit_posix_math_callback<t, f>);
 #define ADD_POSIX_MATH2(t, f) add_callback(#f, wasm_jit_posix_math2_callback<t, f>);
 
     // math glue
-    ADD_POSIX_MATH(double,  ::acos)
-    ADD_POSIX_MATH(double,  ::acosh)
-    ADD_POSIX_MATH(double,  ::asin)
-    ADD_POSIX_MATH(double,  ::asinh)
-    ADD_POSIX_MATH(double,  ::atan)
-    ADD_POSIX_MATH(double,  ::atanh)
-    ADD_POSIX_MATH(double,  ::cos)
-    ADD_POSIX_MATH(double,  ::cosh)
-    ADD_POSIX_MATH(double,  ::exp)
-    ADD_POSIX_MATH(double,  ::log)
-    ADD_POSIX_MATH(double,  ::round)
-    ADD_POSIX_MATH(double,  ::sin)
-    ADD_POSIX_MATH(double,  ::sinh)
-    ADD_POSIX_MATH(double,  ::tan)
-    ADD_POSIX_MATH(double,  ::tanh)
+    ADD_POSIX_MATH(double, ::acos)
+    ADD_POSIX_MATH(double, ::acosh)
+    ADD_POSIX_MATH(double, ::asin)
+    ADD_POSIX_MATH(double, ::asinh)
+    ADD_POSIX_MATH(double, ::atan)
+    ADD_POSIX_MATH(double, ::atanh)
+    ADD_POSIX_MATH(double, ::cos)
+    ADD_POSIX_MATH(double, ::cosh)
+    ADD_POSIX_MATH(double, ::exp)
+    ADD_POSIX_MATH(double, ::log)
+    ADD_POSIX_MATH(double, ::round)
+    ADD_POSIX_MATH(double, ::sin)
+    ADD_POSIX_MATH(double, ::sinh)
+    ADD_POSIX_MATH(double, ::tan)
+    ADD_POSIX_MATH(double, ::tanh)
 
-    ADD_POSIX_MATH(float,   ::acosf)
-    ADD_POSIX_MATH(float,   ::acoshf)
-    ADD_POSIX_MATH(float,   ::asinf)
-    ADD_POSIX_MATH(float,   ::asinhf)
-    ADD_POSIX_MATH(float,   ::atanf)
-    ADD_POSIX_MATH(float,   ::atanhf)
-    ADD_POSIX_MATH(float,   ::cosf)
-    ADD_POSIX_MATH(float,   ::coshf)
-    ADD_POSIX_MATH(float,   ::expf)
-    ADD_POSIX_MATH(float,   ::logf)
-    ADD_POSIX_MATH(float,   ::roundf)
-    ADD_POSIX_MATH(float,   ::sinf)
-    ADD_POSIX_MATH(float,   ::sinhf)
-    ADD_POSIX_MATH(float,   ::tanf)
-    ADD_POSIX_MATH(float,   ::tanhf)
+    ADD_POSIX_MATH(float, ::acosf)
+    ADD_POSIX_MATH(float, ::acoshf)
+    ADD_POSIX_MATH(float, ::asinf)
+    ADD_POSIX_MATH(float, ::asinhf)
+    ADD_POSIX_MATH(float, ::atanf)
+    ADD_POSIX_MATH(float, ::atanhf)
+    ADD_POSIX_MATH(float, ::cosf)
+    ADD_POSIX_MATH(float, ::coshf)
+    ADD_POSIX_MATH(float, ::expf)
+    ADD_POSIX_MATH(float, ::logf)
+    ADD_POSIX_MATH(float, ::roundf)
+    ADD_POSIX_MATH(float, ::sinf)
+    ADD_POSIX_MATH(float, ::sinhf)
+    ADD_POSIX_MATH(float, ::tanf)
+    ADD_POSIX_MATH(float, ::tanhf)
 
-    ADD_POSIX_MATH2(float,  ::atan2f)
+    ADD_POSIX_MATH2(float, ::atan2f)
     ADD_POSIX_MATH2(double, ::atan2)
-    ADD_POSIX_MATH2(float,  ::powf)
+    ADD_POSIX_MATH2(float, ::powf)
     ADD_POSIX_MATH2(double, ::pow)
 
 #undef ADD_POSIX_MATH
@@ -1401,27 +1454,35 @@ WasmModuleContents::WasmModuleContents(
     add_extern_callbacks(context, jit_externs, trampolines, imports_dict);
 
     Local<Object> imports = Object::New(isolate);
-    (void) imports->Set(context, String::NewFromUtf8(isolate, "env"), imports_dict).ToChecked();
+    (void)imports->Set(context, NewLocalString(isolate, "env"), imports_dict).ToChecked();
 
     Local<Value> instance_args[2] = {compiled, imports};
 
     Local<Object> exports = context->Global()
-        ->Get(context, String::NewFromUtf8(isolate, "WebAssembly")).ToLocalChecked().As<Object>()
-        ->Get(context, String::NewFromUtf8(isolate, "Instance")).ToLocalChecked().As<Object>()
-        ->CallAsConstructor(context, 2, instance_args).ToLocalChecked().As<Object>()
-        ->Get(context, String::NewFromUtf8(isolate, "exports")).ToLocalChecked().As<Object>();
+                                ->Get(context, NewLocalString(isolate, "WebAssembly"))
+                                .ToLocalChecked()
+                                .As<Object>()
+                                ->Get(context, NewLocalString(isolate, "Instance"))
+                                .ToLocalChecked()
+                                .As<Object>()
+                                ->CallAsConstructor(context, 2, instance_args)
+                                .ToLocalChecked()
+                                .As<Object>()
+                                ->Get(context, NewLocalString(isolate, "exports"))
+                                .ToLocalChecked()
+                                .As<Object>();
 
-    Local<Value> function_value = exports->Get(fn_name_str);
+    Local<Value> function_value = exports->Get(context, fn_name_str).ToLocalChecked();
     Local<v8::Function> function = Local<v8::Function>::Cast(function_value);
     internal_assert(!function.IsEmpty());
     internal_assert(!function->IsNullOrUndefined());
     v8_function.Reset(isolate, function);
 
-    context->SetEmbedderData(kWasmMemoryObject, exports->Get(String::NewFromUtf8(isolate, "memory")).As<Object>());
+    context->SetEmbedderData(kWasmMemoryObject, exports->Get(context, NewLocalString(isolate, "memory")).ToLocalChecked().As<Object>());
     context->SetAlignedPointerInEmbedderData(kBDMallocPtr, &bdmalloc);
-    context->SetEmbedderData(kHeapBase, exports->Get(String::NewFromUtf8(isolate, "__heap_base")).As<Object>());
-    context->SetEmbedderData(kString_buffer, String::NewFromUtf8(isolate, "buffer"));
-    context->SetEmbedderData(kString_grow, String::NewFromUtf8(isolate, "grow"));
+    context->SetEmbedderData(kHeapBase, exports->Get(context, NewLocalString(isolate, "__heap_base")).ToLocalChecked().As<Object>());
+    context->SetEmbedderData(kString_buffer, NewLocalString(isolate, "buffer"));
+    context->SetEmbedderData(kString_grow, NewLocalString(isolate, "grow"));
 
     internal_assert(!try_catch.HasCaught());
 #endif
@@ -1450,7 +1511,7 @@ int WasmModuleContents::run(const void **args) {
         const Argument &arg = arguments[i];
         const void *arg_ptr = args[i];
         if (arg.is_buffer()) {
-            halide_buffer_t *buf = (halide_buffer_t *) const_cast<void*>(arg_ptr);
+            halide_buffer_t *buf = (halide_buffer_t *)const_cast<void *>(arg_ptr);
             internal_assert(buf);
             wasm32_ptr_t wbuf = hostbuf_to_wasmbuf(context, buf);
             wbufs[i] = wbuf;
@@ -1458,7 +1519,7 @@ int WasmModuleContents::run(const void **args) {
         } else {
             if (arg.name == "__user_context") {
                 js_args.push_back(wrap_scalar(context, kMagicJitUserContextValue));
-                JITUserContext *jit_user_context = check_jit_user_context(*(JITUserContext **) const_cast<void *>(arg_ptr));
+                JITUserContext *jit_user_context = check_jit_user_context(*(JITUserContext **)const_cast<void *>(arg_ptr));
                 context->SetAlignedPointerInEmbedderData(kJitUserContext, jit_user_context);
             } else {
                 js_args.push_back(wrap_scalar(context, arg.type, arg_ptr));
@@ -1483,7 +1544,7 @@ int WasmModuleContents::run(const void **args) {
             const Argument &arg = arguments[i];
             const void *arg_ptr = args[i];
             if (arg.is_buffer()) {
-                halide_buffer_t *buf = (halide_buffer_t *) const_cast<void*>(arg_ptr);
+                halide_buffer_t *buf = (halide_buffer_t *)const_cast<void *>(arg_ptr);
                 copy_wasmbuf_to_existing_hostbuf(context, wbufs[i], buf);
             }
         }
@@ -1522,7 +1583,6 @@ WasmModuleContents::~WasmModuleContents() {
 #endif
 }
 
-
 template<>
 RefCount &ref_count<WasmModuleContents>(const WasmModuleContents *p) noexcept {
     return p->ref_count;
@@ -1535,11 +1595,11 @@ void destroy<WasmModuleContents>(const WasmModuleContents *p) {
 
 /*static*/
 bool WasmModule::can_jit_target(const Target &target) {
-    #if defined(WITH_V8) || defined(WITH_SPIDERMONKEY)
+#if defined(WITH_V8) || defined(WITH_SPIDERMONKEY)
     if (target.arch == Target::WebAssembly) {
         return true;
     }
-    #endif
+#endif
     return false;
 }
 
@@ -1549,8 +1609,7 @@ WasmModule WasmModule::compile(
     const std::vector<Argument> &arguments,
     const std::string &fn_name,
     const JITExternMap &jit_externs,
-    const std::vector<JITModule> &extern_deps
-) {
+    const std::vector<JITModule> &extern_deps) {
 #if !defined(WITH_V8) && !defined(WITH_SPIDERMONKEY)
     user_error << "Cannot run JITted JavaScript without configuring a JavaScript engine.";
     return WasmModule();

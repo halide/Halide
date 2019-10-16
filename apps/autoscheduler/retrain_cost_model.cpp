@@ -9,7 +9,10 @@
 #include <string>
 #include <vector>
 
+#include "cmdline.h"
+
 #include "CostModel.h"
+#include "DefaultCostModel.h"
 #include "HalideBuffer.h"
 #include "NetworkSize.h"
 
@@ -17,29 +20,100 @@ namespace {
 
 using namespace Halide;
 
+using Halide::Runtime::Buffer;
 using std::vector;
 using std::string;
 using std::map;
-using std::set;
 
-const int models = 1;
+struct Flags {
+    int                 epochs = 0;
+    std::vector<float>  rates = {0.0001f};
+    string              initial_weights_path;
+    string              weights_out_path;
+    int                 num_cores = 32;
+    bool                randomize_weights = false;
+    string              best_benchmark_path;
+    string              best_schedule_path;
+
+    Flags(int argc, char **argv) {
+        cmdline::parser a;
+
+        const char *kNoDesc = "";
+
+        constexpr bool kOptional = false;
+        a.add<int>("epochs");
+        a.add<string>("rates");
+        a.add<string>("initial_weights", '\0', kNoDesc, kOptional, "");
+        a.add<string>("weights_out");
+        a.add<bool>("randomize_weights", '\0', kNoDesc, kOptional, false);
+        a.add<int>("num_cores");
+        a.add<string>("best_benchmark");
+        a.add<string>("best_schedule");
+
+        a.parse_check(argc, argv);  // exits if parsing fails
+
+        epochs = a.get<int>("epochs");
+        rates = parse_floats(a.get<string>("rates"));
+        initial_weights_path = a.get<string>("initial_weights");
+        weights_out_path = a.get<string>("weights_out");
+        randomize_weights = a.exist("randomize_weights") && a.get<bool>("randomize_weights");
+        best_benchmark_path = a.get<string>("best_benchmark");
+        best_schedule_path = a.get<string>("best_schedule");
+
+        if (epochs <= 0) {
+            std::cerr << "--epochs must be specified and > 0.\n";
+            std::cerr << a.usage();
+            exit(1);
+        }
+        if ((!initial_weights_path.empty()) == randomize_weights) {
+            std::cerr << "You must specify exactly one of --initial_weights or --randomize_weights.\n";
+            std::cerr << a.usage();
+            exit(1);
+        }
+        if (weights_out_path.empty()) {
+            std::cerr << "--weights_out must be specified.\n";
+            std::cerr << a.usage();
+            exit(1);
+        }
+        if (rates.empty()) {
+            std::cerr << "--rates cannot be empty.\n";
+            std::cerr << a.usage();
+            exit(1);
+        }
+    }
+
+    std::vector<float> parse_floats(const std::string &s) {
+        const char *c = s.c_str();
+        std::vector<float> v;
+        while (isspace(*c)) ++c;
+        while (*c) {
+            string f;
+            while (*c && !isspace(*c)) f += *c++;
+            v.push_back(std::atof(f.c_str()));
+            while (isspace(*c)) ++c;
+        }
+        return v;
+    }
+};
+
+constexpr int kModels = 1;
 
 struct Sample {
-    vector<float> runtimes;
-    double prediction[models];
-    string filename;
-    int32_t schedule_id;
-    Runtime::Buffer<float> schedule_features;
+    vector<float>   runtimes;  // in msec
+    double          prediction[kModels];
+    string          filename;
+    int32_t         schedule_id;
+    Buffer<float>   schedule_features;
 };
 
 struct PipelineSample {
-    int32_t pipeline_id;
-    int32_t num_stages;
-    Runtime::Buffer<float> pipeline_features;
-    map<uint64_t, Sample> schedules;
-    uint64_t fastest_schedule;
-    float fastest_runtime;
-    uint64_t pipeline_hash;
+    int32_t                 pipeline_id;
+    int32_t                 num_stages;
+    Buffer<float>           pipeline_features;
+    map<uint64_t, Sample>   schedules;
+    uint64_t                fastest_schedule_hash;
+    float                   fastest_runtime;   // in msec
+    uint64_t                pipeline_hash;
 };
 
 uint64_t hash_floats(uint64_t h, const float *begin, const float *end) {
@@ -61,8 +135,23 @@ bool ends_with(const string &str, const string &suffix) {
     return true;
 }
 
+string leaf(const string &path) {
+    size_t slash_pos = path.rfind('/');
+#ifdef _WIN32
+    if (slash_pos == string::npos) {
+        // Windows is a thing
+        slash_pos = path.rfind('\\');
+    }
+#endif
+    if (slash_pos != string::npos) {
+        return path.substr(slash_pos + 1);
+    } else {
+        return path;
+    }
+}
+
 // Load all the samples, reading filenames from stdin
-map<int, PipelineSample> load_samples() {
+map<int, PipelineSample> load_samples(const Flags &flags) {
     map<int, PipelineSample> result;
     vector<float> scratch(10 * 1024 * 1024);
 
@@ -124,7 +213,7 @@ map<int, PipelineSample> load_samples() {
         if (ps.pipeline_features.data() == nullptr) {
             ps.pipeline_id = pipeline_id;
             ps.num_stages = (int)num_stages;
-            ps.pipeline_features = Runtime::Buffer<float>(head1_w, head1_h, num_stages);
+            ps.pipeline_features = Buffer<float>(head1_w, head1_h, num_stages);
             ps.fastest_runtime = 1e30f;
             for (size_t i = 0; i < num_stages; i++) {
                 for (int x = 0; x < head1_w; x++) {
@@ -166,17 +255,17 @@ map<int, PipelineSample> load_samples() {
             }
             if (runtime < ps.fastest_runtime) {
                 ps.fastest_runtime = runtime;
-                ps.fastest_schedule = schedule_hash;
+                ps.fastest_schedule_hash = schedule_hash;
             }
         } else {
             Sample sample;
             sample.filename = s;
             sample.runtimes.push_back(runtime);
-            for (int i = 0; i < models; i++) {
+            for (int i = 0; i < kModels; i++) {
                 sample.prediction[i] = 0.0;
             }
             sample.schedule_id = schedule_id;
-            sample.schedule_features = Runtime::Buffer<float>(head2_w, num_stages);
+            sample.schedule_features = Buffer<float>(head2_w, num_stages);
 
             bool ok = true;
             for (size_t i = 0; i < num_stages; i++) {
@@ -199,7 +288,7 @@ map<int, PipelineSample> load_samples() {
             if (ok) {
                 if (runtime < ps.fastest_runtime) {
                     ps.fastest_runtime = runtime;
-                    ps.fastest_schedule = schedule_hash;
+                    ps.fastest_schedule_hash = schedule_hash;
                 }
                 ps.schedules.emplace(schedule_hash, std::move(sample));
                 num_unique++;
@@ -222,7 +311,7 @@ map<int, PipelineSample> load_samples() {
                 std::cerr << "Empty runtimes for schedule: " << p.first << "\n";
                 abort();
             }
-            std::cout << "Unique sample: " << p.second.filename << " : " << p.second.runtimes[0] << "\n";
+            std::cout << "Unique sample: " << leaf(p.second.filename) << " : " << p.second.runtimes[0] << "\n";
             if (p.second.runtimes.size() > 1) {
                 // Compute variance from samples
                 double mean = 0;
@@ -248,51 +337,41 @@ map<int, PipelineSample> load_samples() {
     std::cout << "Distinct pipelines: " << result.size() << "\n";
 
     std::ostringstream o;
-    o << "Best runtime is " << best_runtime << ", from schedule id "<< best << " in file " << best_path << "\n";
+    o << "Best runtime is " << best_runtime << " msec, from schedule id "<< best << " in file " << best_path << "\n";
     std::cout << o.str();
-    if (char *e = getenv("HL_BEST_SCHEDULE_FILE")) {
-        if (e && *e) {
-            std::ofstream f(e, std::ios_base::trunc);
-            f << o.str();
-            f.close();
-            assert(!f.fail());
-        }
+    if (!flags.best_benchmark_path.empty()) {
+        std::ofstream f(flags.best_benchmark_path, std::ios_base::trunc);
+        f << o.str();
+        f.close();
+        assert(!f.fail());
+    }
+    if (!flags.best_schedule_path.empty()) {
+        // best_path points to a .sample file; look for a .schedule.h file in the same dir
+        size_t dot = best_path.rfind('.');
+        assert(dot != string::npos && best_path.substr(dot) == ".sample");
+        string schedule_file = best_path.substr(0, dot) + ".schedule.h";
+        std::ifstream src(schedule_file);
+        std::ofstream dst(flags.best_schedule_path);
+        dst << src.rdbuf();
+        assert(!src.fail());
+        assert(!dst.fail());
     }
 
     return result;
 }
 
-string getenv_safe(const char *key) {
-    const char *value = getenv(key);
-    if (!value) value = "";
-    return value;
-}
-
 }  // namespace
 
 int main(int argc, char **argv) {
+    Flags flags(argc, argv);
 
-    using std::string;
-
-    auto samples = load_samples();
-
-    string randomize_weights_str = getenv_safe("HL_RANDOMIZE_WEIGHTS");
-    bool randomize_weights = randomize_weights_str == "1";
-    string weights_in_dir = getenv_safe("HL_WEIGHTS_DIR");
-    string weights_out_dir = getenv_safe("HL_WEIGHTS_OUT_DIR");
-    if (weights_out_dir.empty()) {
-        weights_out_dir = weights_in_dir;
-    }
+    auto samples = load_samples(flags);
 
     // Iterate through the pipelines
     vector<std::unique_ptr<CostModel>> tpp;
-    for (int i = 0; i < models; i++) {
-        tpp.emplace_back(CostModel::make_default(weights_in_dir, weights_out_dir, randomize_weights));
+    for (int i = 0; i < kModels; i++) {
+        tpp.emplace_back(make_default_cost_model(flags.initial_weights_path, flags.weights_out_path, flags.randomize_weights));
     }
-
-    int num_cores = atoi(getenv_safe("HL_NUM_THREADS").c_str());
-
-    int epochs = atoi(argv[1]);
 
     std::cout.setf(std::ios::fixed, std::ios::floatfield);
     std::cout.precision(4);
@@ -324,23 +403,14 @@ int main(int argc, char **argv) {
 
     std::cout << "Number of unique schedules: " << unique_schedules << "\n";
 
-    std::vector<float> rates;
-    if (argc == 2) {
-        rates.push_back(0.0001f);
-    } else {
-        for (int i = 2; i < argc; i++) {
-            rates.push_back(std::atof(argv[i]));
-        }
-    }
+    for (float learning_rate : flags.rates) {
+        float loss_sum[kModels] = {0}, loss_sum_counter[kModels] = {0};
+        float correct_ordering_rate_sum[kModels] = {0};
+        float correct_ordering_rate_count[kModels] = {0};
+        float v_correct_ordering_rate_sum[kModels] = {0};
+        float v_correct_ordering_rate_count[kModels] = {0};
 
-    for (float learning_rate : rates) {
-        float loss_sum[models] = {0}, loss_sum_counter[models] = {0};
-        float correct_ordering_rate_sum[models] = {0};
-        float correct_ordering_rate_count[models] = {0};
-        float v_correct_ordering_rate_sum[models] = {0};
-        float v_correct_ordering_rate_count[models] = {0};
-
-        for (int e = 0; e < epochs; e++) {
+        for (int e = 0; e < flags.epochs; e++) {
             int counter = 0;
 
             float worst_miss = 0;
@@ -358,22 +428,22 @@ int main(int argc, char **argv) {
 #if defined(_OPENMP)
             #pragma omp parallel for
 #endif
-            for (int model = 0; model < models; model++) {
+            for (int model = 0; model < kModels; model++) {
                 for (int train = 0; train < 2; train++) {
                     auto &tp = tpp[model];
 
                     for (auto &p : train ? samples : validation_set) {
-                        if (models > 1 && rng() & 1) continue; // If we are training multiple models, allow them to diverge.
+                        if (kModels > 1 && rng() & 1) continue; // If we are training multiple kModels, allow them to diverge.
                         if (p.second.schedules.size() < 8) {
                             continue;
                         }
                         tp->reset();
-                        tp->set_pipeline_features(p.second.pipeline_features, num_cores);
+                        tp->set_pipeline_features(p.second.pipeline_features, flags.num_cores);
 
                         size_t batch_size = std::min((size_t)1024, p.second.schedules.size());
 
                         size_t fastest_idx = 0;
-                        Runtime::Buffer<float> runtimes(batch_size);
+                        Buffer<float> runtimes(batch_size);
 
                         size_t first = 0;
                         if (p.second.schedules.size() > 1024) {
@@ -384,7 +454,7 @@ int main(int argc, char **argv) {
                         std::advance(it, first);
                         for (size_t j = 0; j < batch_size; j++) {
                             auto &sched = it->second;
-                            Runtime::Buffer<float> buf;
+                            Buffer<float> buf;
                             tp->enqueue(p.second.num_stages, &buf, &sched.prediction[model]);
                             runtimes(j) = sched.runtimes[0];
                             if (runtimes(j) < runtimes(fastest_idx)) {
@@ -420,7 +490,7 @@ int main(int argc, char **argv) {
                         if (true) {
                             int good = 0, bad = 0;
                             for (auto &sched : p.second.schedules) {
-                                auto &ref = p.second.schedules[p.second.fastest_schedule];
+                                auto &ref = p.second.schedules[p.second.fastest_schedule_hash];
                                 if (sched.second.prediction[model] == 0) continue;
                                 assert(sched.second.runtimes[0] >= ref.runtimes[0]);
                                 float runtime_ratio = sched.second.runtimes[0] / ref.runtimes[0];
@@ -460,16 +530,16 @@ int main(int argc, char **argv) {
             }
 
             std::cout << "Loss: ";
-            for (int model = 0; model < models; model++) {
+            for (int model = 0; model < kModels; model++) {
                 std::cout << loss_sum[model] / loss_sum_counter[model] << " ";
                 loss_sum[model] *= 0.9f;
                 loss_sum_counter[model] *= 0.9f;
             }
-            if (models > 1) std::cout << "\n";
+            if (kModels > 1) std::cout << "\n";
             std::cout << " Rate: ";
             int best_model = 0;
             float best_rate = 0;
-            for (int model = 0; model < models; model++) {
+            for (int model = 0; model < kModels; model++) {
                 float rate = correct_ordering_rate_sum[model] / correct_ordering_rate_count[model];
                 std::cout << rate << " ";
                 correct_ordering_rate_sum[model] *= 0.9f;
@@ -485,9 +555,9 @@ int main(int argc, char **argv) {
                 v_correct_ordering_rate_count[model] *= 0.9f;
             }
 
-            if (models > 1) std::cout << "\n";
+            if (kModels > 1) std::cout << "\n";
             if (samples.count(worst_miss_pipeline_id)) {
-                std::cout << " Worst: " << worst_miss << " " << samples[worst_miss_pipeline_id].schedules[worst_miss_schedule_id].filename << "\n";
+                std::cout << " Worst: " << worst_miss << " " << leaf(samples[worst_miss_pipeline_id].schedules[worst_miss_schedule_id].filename) << "\n";
                 // samples[worst_miss_pipeline_id].schedules.erase(worst_miss_schedule_id);
             } else {
                 std::cout << "\n";
@@ -495,8 +565,8 @@ int main(int argc, char **argv) {
 
             if (worst_inversion.badness > 0) {
                 std::cout << "Worst inversion:\n"
-                          << worst_inversion.f1 << " predicted: " << worst_inversion.p1 << " actual: " << worst_inversion.r1 << "\n"
-                          << worst_inversion.f2 << " predicted: " << worst_inversion.p2 << " actual: " << worst_inversion.r2 << "\n";
+                          << leaf(worst_inversion.f1) << " predicted: " << worst_inversion.p1 << " actual: " << worst_inversion.r1 << "\n"
+                          << leaf(worst_inversion.f2) << " predicted: " << worst_inversion.p2 << " actual: " << worst_inversion.r2 << "\n";
                 if (samples.size() > 50000) {
                     // For robustness during training on large numbers
                     // of random pipelines, we discard poorly

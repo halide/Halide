@@ -12,13 +12,11 @@
 namespace Halide {
 namespace Internal {
 
-using std::map;
-using std::pair;
 using std::set;
 using std::string;
 using std::vector;
 
-Stmt call_extern_and_assert(const string& name, const vector<Expr>& args) {
+Stmt call_extern_and_assert(const string &name, const vector<Expr> &args) {
     Expr call = Call::make(Int(32), name, args, Call::Extern);
     string call_result_name = unique_name(name + "_result");
     Expr call_result_var = Variable::make(Int(32), call_result_name);
@@ -53,7 +51,7 @@ class FindBufferUsage : public IRVisitor {
 
     void visit(const Call *op) override {
         if (op->is_intrinsic(Call::image_load)) {
-            internal_assert(op->args.size() >= 1);
+            internal_assert(!op->args.empty());
             if (is_buffer_var(op->args[1])) {
                 devices_touched.insert(current_device_api);
             }
@@ -62,7 +60,7 @@ class FindBufferUsage : public IRVisitor {
                 op->args[i].accept(this);
             }
         } else if (op->is_intrinsic(Call::image_store)) {
-            internal_assert(op->args.size() >= 1);
+            internal_assert(!op->args.empty());
             if (is_buffer_var(op->args[1])) {
                 devices_touched.insert(current_device_api);
                 devices_writing.insert(current_device_api);
@@ -81,12 +79,13 @@ class FindBufferUsage : public IRVisitor {
             // This is a call to an extern stage
             Function f(op->func);
 
-            internal_assert((f.extern_arguments().size() + f.outputs()) == op->args.size()) <<
-                "Mismatch between args size and extern_arguments size in call to " << op->name << "\n";
+            internal_assert((f.extern_arguments().size() + f.outputs()) == op->args.size())
+                << "Mismatch between args size and extern_arguments size in call to "
+                << op->name << "\n";
 
             // Check each buffer arg
             for (size_t i = 0; i < op->args.size(); i++) {
-                if (is_buffer_var(op->args[i])){
+                if (is_buffer_var(op->args[i])) {
                     DeviceAPI extern_device_api = f.extern_function_device_api();
                     devices_touched_by_extern.insert(extern_device_api);
                     if (i >= f.extern_arguments().size()) {
@@ -118,13 +117,16 @@ class FindBufferUsage : public IRVisitor {
 
     string buffer;
     DeviceAPI current_device_api;
+
 public:
     std::set<DeviceAPI> devices_writing, devices_touched;
     // Any buffer passed to an extern stage may have had its dirty
     // bits and device allocation messed with.
     std::set<DeviceAPI> devices_touched_by_extern;
 
-    FindBufferUsage(const std::string &buf, DeviceAPI d) : buffer(buf), current_device_api(d) {}
+    FindBufferUsage(const std::string &buf, DeviceAPI d)
+        : buffer(buf), current_device_api(d) {
+    }
 };
 
 // Inject the device copies, mallocs, and dirty flag setting for a
@@ -363,6 +365,7 @@ class InjectBufferCopiesForSingleBuffer : public IRMutator {
         void visit(const For *op) override {
             result = true;
         }
+
     public:
         bool result = false;
     };
@@ -396,8 +399,8 @@ class InjectBufferCopiesForSingleBuffer : public IRMutator {
     }
 
 public:
-    InjectBufferCopiesForSingleBuffer(const std::string &b, bool e) :
-        buffer(b), is_external(e) {
+    InjectBufferCopiesForSingleBuffer(const std::string &b, bool e)
+        : buffer(b), is_external(e) {
         if (is_external) {
             // The state of the buffer is totally unknown, which is
             // the default constructor for this->state
@@ -417,7 +420,9 @@ class FindLastUse : public IRVisitor {
 public:
     Stmt last_use;
 
-    FindLastUse(const string &b) : buffer(b) {}
+    FindLastUse(const string &b)
+        : buffer(b) {
+    }
 
 private:
     string buffer;
@@ -438,15 +443,15 @@ private:
     // We break things down into a serial sequence of leaf
     // stmts similar to InjectBufferCopiesForSingleBuffer.
     void visit(const For *op) override {
-         check_and_record_last_use(op);
+        check_and_record_last_use(op);
     }
 
     void visit(const Fork *op) override {
-         check_and_record_last_use(op);
+        check_and_record_last_use(op);
     }
 
     void visit(const Evaluate *op) override {
-         check_and_record_last_use(op);
+        check_and_record_last_use(op);
     }
 
     void visit(const LetStmt *op) override {
@@ -456,9 +461,9 @@ private:
         op->value.accept(&finder);
         if (finder.devices_touched.empty() &&
             finder.devices_touched_by_extern.empty()) {
-             IRVisitor::visit(op);
+            IRVisitor::visit(op);
         } else {
-             check_and_record_last_use(op);
+            check_and_record_last_use(op);
         }
     }
 
@@ -490,7 +495,7 @@ class InjectBufferCopies : public IRMutator {
             if (op->name == buffer) {
                 Expr buf = Variable::make(type_of<struct halide_buffer_t *>(), buffer);
                 Stmt destructor =
-                    Evaluate::make(Call::make(Int(32), Call::register_destructor,
+                    Evaluate::make(Call::make(Handle(), Call::register_destructor,
                                               {Expr("halide_device_free_as_destructor"), buf}, Call::Intrinsic));
                 Stmt body = Block::make(destructor, op->body);
                 return LetStmt::make(op->name, op->value, body);
@@ -500,8 +505,11 @@ class InjectBufferCopies : public IRMutator {
         }
 
         string buffer;
+
     public:
-        InjectDeviceDestructor(string b) : buffer(b) {}
+        InjectDeviceDestructor(string b)
+            : buffer(b) {
+        }
     };
 
     // Find the let stmt that defines the .buffer and insert inside of
@@ -523,7 +531,7 @@ class InjectBufferCopies : public IRMutator {
 
                 // Then the destructor
                 Stmt destructor =
-                    Evaluate::make(Call::make(Int(32), Call::register_destructor,
+                    Evaluate::make(Call::make(Handle(), Call::register_destructor,
                                               {Expr("halide_device_and_host_free_as_destructor"), buf},
                                               Call::Intrinsic));
                 body = Block::make(destructor, body);
@@ -552,14 +560,17 @@ class InjectBufferCopies : public IRMutator {
         vector<Expr> extents;
         Expr condition;
         DeviceAPI device_api;
+
     public:
-        InjectCombinedAllocation(string b, Type t, vector<Expr> e, Expr c, DeviceAPI d) :
-            buffer(b), type(t), extents(e), condition(c), device_api(d) {}
+        InjectCombinedAllocation(string b, Type t, vector<Expr> e, Expr c, DeviceAPI d)
+            : buffer(b), type(t), extents(e), condition(c), device_api(d) {
+        }
     };
 
     class FreeAfterLastUse : public IRMutator {
         Stmt last_use;
         Stmt free_stmt;
+
     public:
         bool success = false;
         using IRMutator::mutate;
@@ -574,7 +585,9 @@ class InjectBufferCopies : public IRMutator {
             }
         }
 
-        FreeAfterLastUse(Stmt s, Stmt f) : last_use(s), free_stmt(f) {}
+        FreeAfterLastUse(Stmt s, Stmt f)
+            : last_use(s), free_stmt(f) {
+        }
     };
 
     Stmt visit(const Allocate *op) override {
@@ -620,7 +633,8 @@ class InjectBufferCopies : public IRMutator {
             }
 
             return InjectCombinedAllocation(op->name, op->type, op->extents,
-                                            op->condition, touching_device).mutate(body);
+                                            op->condition, touching_device)
+                .mutate(body);
         } else {
             // Only touched on host but passed to an extern stage, or
             // only touched on device, or touched on multiple
@@ -752,7 +766,9 @@ public:
         }
     }
 
-    InjectBufferCopiesForInputsAndOutputs(Stmt s) : site(s) {}
+    InjectBufferCopiesForInputsAndOutputs(Stmt s)
+        : site(s) {
+    }
 };
 
 }  // namespace
