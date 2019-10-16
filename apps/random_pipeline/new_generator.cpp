@@ -1247,10 +1247,12 @@ public:
         return success;
     }
 
-    InterpStageAndCoords interp2Tap_stage(const vector<Stage> &s) {
+    InterpStageAndCoords interp2Tap_stage(const vector<Stage> &s, int input_id=-1) {
         Func interp("interp2Tap");
-        // pick a random input
-        int input_id = rand_int(0, s.size()-1);
+        if (input_id < 0) {
+            // pick a random input
+            input_id = rand_int(0, s.size()-1);
+        }
         Stage input_s = s[input_id];
         std::cout << interp.name() << " is a 2 tap interp on " << input_s.func.name() << std::endl;
         // generate random coordinates to use 
@@ -1268,36 +1270,7 @@ public:
         Stage interp_s = {interp, input_s.w, input_s.h, input_s.c};
         return std::make_tuple(interp_s, coords1, coords2, input_s.func); 
     }
-/**
-    InterpStageAndCoords interp2Tap_stage(const vector<Stage> &s, bool gr) {
-        Func interp("interp2Tap");
-        // pick a random input
-        int input_id = rand_int(0, s.size()-1);
-        if (gr) {
-            input_id = 0; 
-        }
-        else {
-            input_id = 3;
-        }
-          
-        Stage input_s = s[input_id];
-        std::cout << interp.name() << " is a 2 tap interp on " << input_s.func.name() << std::endl;
-        // generate random coordinates to use 
-        vector<Expr> coords1 = make_arguments(input_s.func.args());
-        vector<Expr> coords2 = make_arguments(input_s.func.args());
-        if (gr) {
-            coords1[1] += 1;
-        } else {
-            coords1[0] -= 1;
-        }
-        std::cout << "coords1: " << coords1[0] << "," << coords1[1] << std::endl;
-        std::cout << "coords2: " << coords2[0] << "," << coords2[1] << std::endl;
-        interp(input_s.func.args()) = avg(input_s.func(coords1), input_s.func(coords2));
 
-        Stage interp_s = {interp, input_s.w, input_s.h, input_s.c};
-        return std::make_tuple(interp_s, coords1, coords2, input_s.func); 
-    }
-**/
     bool same_vars(vector<Var> v1, vector<Var> v2) {
         assert(v1.size() == v2.size());
         for (int i = 0; i < (int)v1.size(); i++) {
@@ -1306,13 +1279,13 @@ public:
         return true;
     }
 
-    Stage select_interp2Tap_stage(const vector<Stage> &s) {
+    Stage select_interp2Tap_stage(const vector<Stage> &s, int input_id=-1) {
         Func select_interp("selectInterp2Tap");
 
         Stage s1, s2;
         vector<Expr> s1coords1, s1coords2, s2coords1, s2coords2;
         Func s1input, s2input;
-        std::tie(s1, s1coords1, s1coords2, s1input) = interp2Tap_stage(s);
+        std::tie(s1, s1coords1, s1coords2, s1input) = interp2Tap_stage(s, input_id);
         std::tie(s2, s2coords1, s2coords2, s2input) = interp2Tap_stage(s);
         std::cout << select_interp.name() << " is a 2 tap select interp on " << s1input.name() << " and " << s2input.name() << std::endl;
 
@@ -1329,12 +1302,18 @@ public:
         return {select_interp, s1.w, s1.h, s1.c};
     }
 
-    InterpStageAndCoords correct_interp2Tap_stage(const vector<Stage> &s) {
+    InterpStageAndCoords correct_interp2Tap_stage(const vector<Stage> &s, int input_id=-1) {
         Func correctInterp("correctInterp2Tap");
+        Stage input_s, ref_s, interp_s;
+        // if stage id is given, use that as the input function 
+        if (input_id >= 0) {
+            input_s = s[input_id];
+        } else {
+            input_s  = s[rand_int(0, s.size() - 1)];
+        }
         // pick a random input
-        Stage input_s  = s[rand_int(0, s.size() - 1)];
-        Stage ref_s    = s[rand_int(0, s.size() - 1)];
-        Stage interp_s = s[rand_int(0, s.size() - 1)];
+        ref_s    = s[rand_int(0, s.size() - 1)];
+        interp_s = s[rand_int(0, s.size() - 1)];
 
         Func input_f  = input_s.func;
         Func ref_f    = ref_s.func;
@@ -1360,11 +1339,11 @@ public:
         return std::make_tuple(correct_interp_s, coords1, coords2, input_s.func);
     }
 
-    Stage select_correct_interp2Tap_stage(const vector<Stage> &s) {
+    Stage select_correct_interp2Tap_stage(const vector<Stage> &s, int input_id=-1) {
         Stage s1, s2;
         vector<Expr> s1coords1, s1coords2, s2coords1, s2coords2;
         Func s1input, s2input;
-        std::tie(s1, s1coords1, s1coords2, s1input) = correct_interp2Tap_stage(s);
+        std::tie(s1, s1coords1, s1coords2, s1input) = correct_interp2Tap_stage(s, input_id);
         std::tie(s2, s2coords1, s2coords2, s2input) = correct_interp2Tap_stage(s);
 
         vector<Expr> s1args = make_arguments(s1input.args());
@@ -1384,7 +1363,7 @@ public:
     // Add a random new stage onto the end of the pipeline that can choose any of the 
     // input buffers or previous stages as an input. Note that the type of random stage
     // will determine how many inputs it needs 
-    Stage random_stage(const vector<Stage> &s) {
+    Stage random_stage(const vector<Stage> &s, int input_id=-1) {
         int m = (int)s.size() - 1;
         int i2 = m > 0 ? rand_int(0, m - 1) : 0;
         int i1 = m > 0 ? rand_int(i2 + 1, m) : 0;
@@ -1449,13 +1428,13 @@ public:
             Stage interp_s;
             vector<Expr> _coords1, _coords2;
             Func _input;
-            std::tie(interp_s, _coords1, _coords2, _input) = interp2Tap_stage(s);
+            std::tie(interp_s, _coords1, _coords2, _input) = interp2Tap_stage(s, input_id);
             return interp_s;
         } else if (stage_type == 17) {
             if (s.size() < 2) {
                 return random_stage(s);
             }
-            return select_interp2Tap_stage(s);
+            return select_interp2Tap_stage(s, input_id);
         } else if (stage_type == 18) {
             if (s.size() < 3) { 
                 return random_stage(s);
@@ -1463,13 +1442,13 @@ public:
             Stage interp_s;
             vector<Expr> _coords1, _coords2;
             Func _input;
-            std::tie(interp_s, _coords1, _coords2, _input) = correct_interp2Tap_stage(s);
+            std::tie(interp_s, _coords1, _coords2, _input) = correct_interp2Tap_stage(s, input_id);
             return interp_s;
         } else if (stage_type == 19) {
             if (s.size() < 3) {
                 return random_stage(s);
             }
-            return select_correct_interp2Tap_stage(s);
+            return select_correct_interp2Tap_stage(s, input_id);
         } else if (i1 != i2) {
             return binary_op(f, g);
         } else {
@@ -1526,14 +1505,14 @@ public:
         // CONSIDER growing pipeline from output and input buffers.
         assert((int)max_stages >= (int)num_output_buffers);
         for (int i = 0; i < max_stages; i++) {
-            Stage next = random_stage(stages);
+            Stage next;
+            if (i > 0) {
+                next = random_stage(stages, stages.size()-1); // use most recently created func as input
+            } else {
+                next = random_stage(stages);
+            }
             stages.push_back(next);
             std::cout << "Approx size: " << stages.back().w << ", " << stages.back().h << ", " << stages.back().c << "\n";
-            /**
-            if (!auto_schedule) {
-                stages.back().func.compute_root().reorder(x, c, y).vectorize(x, 8).parallel(y, 8);
-            }
-            **/
         }
 
         std::cout << "finished adding stages" << std::endl;
@@ -1547,7 +1526,8 @@ public:
         std::vector<Func> last_funcs; // need these for backrop if training
         last_funcs.push_back(stages[num_input_buffers].func);
 
-        (*output_buffs[0])(x, y, c) = stages[num_input_buffers].func(x, y, c);
+        //(*output_buffs[0])(x, y, c) = stages[num_input_buffers].func(x, y, c);
+        (*output_buffs[0])(x, y, c) = stages[stages.size()-1].func(x, y, c);
 
         /**
         // select output stages
@@ -1632,6 +1612,10 @@ public:
                 .dim(1).set_bounds_estimate(0, output_h)
                 .dim(2).set_bounds_estimate(0, output_c);
         }
+    }
+
+    void set_inputs(const std::vector<Buffer<inputT>> &inputs) {
+        for (size_t i = 0; i < inputs.size(); i++) input_buff_dummies[i].set(inputs[i]);
     }
 
 private:
