@@ -1524,9 +1524,8 @@ public:
         Var x("x"), y("y"), c("c");
 
         std::vector<Func> last_funcs; // need these for backrop if training
-        last_funcs.push_back(stages[num_input_buffers].func);
+        last_funcs.push_back(stages[stages.size()-1].func);
 
-        //(*output_buffs[0])(x, y, c) = stages[num_input_buffers].func(x, y, c);
         (*output_buffs[0])(x, y, c) = stages[stages.size()-1].func(x, y, c);
 
         /**
@@ -1535,7 +1534,6 @@ public:
         std::mt19937 g(rd());
         // can't select output stage from input buffers
         std::shuffle(stages.begin() + num_input_buffers, stages.end(), g);
-        
 
         // resample and cast selected output funcs and fill output buffers
         for (int i = 0; i < num_output_buffers; i++) {
@@ -1555,7 +1553,7 @@ public:
         Expr loss = Expr(0.0f);
         for (int i = 0; i < num_output_buffers; i++) {
             Expr diff = cast<double>((*correct_outputs[i])(x, y, c) - last_funcs[i](x, y, c));
-            err(x, y, c) = Expr(0.5)*(diff*diff);
+            err(x, y, c) = (diff*diff);
             loss += sum(err(r.x, r.y, r.z)/((int)output_w * (int)output_h));
         }
 
