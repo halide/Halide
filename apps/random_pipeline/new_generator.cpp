@@ -246,13 +246,18 @@ Expr random_expr(vector<Expr> inputs, int depth, int func_size) {
     return result;
 }
 
+static void hash_combine(uint64_t &h, uint64_t next) {
+    // From boost
+    h ^= (next + 0x9e3779b9 + (h<<6) + (h>>2));
+}
+
 // Generator to produce a random pipeline. The generated pipeline will
 // be solely a function of the seed and the number of stages.
 // Modified from random_pipeline_generator used by autoscheduler to have 
 // learnable parameters (currently just the weights used by the conv stages)
 template<bool training>
 class RandomPipeline : public Halide::Generator<RandomPipeline<training>> {
-public:
+public:    
     template<typename T> using Input = GeneratorInput<T>;
     template<typename T> using Output = GeneratorOutput<T>;
     using dim_shape = std::tuple<int,int>;
@@ -288,6 +293,13 @@ public:
     Input<int> batch_size{ "batch_size", 1 };
     Input<float> learning_rate{ "learning_rate", 1.0f };
     Input<int> timestep{ "timestep", 0 }; // Needed by ADAM
+  
+    // for avoiding duplicates 
+    std::unordered_map<uint64_t, int>* hashes;
+
+    void set_hashes(std::unordered_map<uint64_t, int>* used_hashes) {
+        hashes = used_hashes;
+    }
 
     void do_random_pipeline_schedule(Halide::Pipeline p) {
         // Compute an environment
@@ -1247,7 +1259,7 @@ public:
         return success;
     }
 
-    InterpStageAndCoords interp2Tap_stage(const vector<Stage> &s, int input_id=-1) {
+    InterpStageAndCoords interp2Tap_stage(const vector<Stage> &s, uint64_t &h, int input_id=-1) {
         Func interp("interp2Tap");
         if (input_id < 0) {
             // pick a random input
@@ -1268,6 +1280,15 @@ public:
         interp(input_s.func.args()) = avg(input_s.func(coords1), input_s.func(coords2));
 
         Stage interp_s = {interp, input_s.w, input_s.h, input_s.c};
+    
+        hash_combine(h, 1); // stage_type = 1
+        hash_combine(h, input_id);
+        uint64_t h_coords1, h_coords2;
+        h_coords1 = h_coords2 = 0;
+        hash_combine(h_coords1, (coords1[0]+1)*10 + (coords1[1]+1));
+        hash_combine(h_coords2, (coords2[0]+1)*10 + (coords2[1]+1));
+        hash_combine(h, h_coords1+h_coords2);
+        
         return std::make_tuple(interp_s, coords1, coords2, input_s.func); 
     }
 
@@ -1279,14 +1300,17 @@ public:
         return true;
     }
 
-    Stage select_interp2Tap_stage(const vector<Stage> &s, int input_id=-1) {
+    Stage select_interp2Tap_stage(const vector<Stage> &s, uint64_t &h, int input_id=-1) {
         Func select_interp("selectInterp2Tap");
 
         Stage s1, s2;
         vector<Expr> s1coords1, s1coords2, s2coords1, s2coords2;
         Func s1input, s2input;
-        std::tie(s1, s1coords1, s1coords2, s1input) = interp2Tap_stage(s, input_id);
-        std::tie(s2, s2coords1, s2coords2, s2input) = interp2Tap_stage(s);
+
+        uint64_t h_interp1, h_interp2;
+        h_interp1 = h_interp2 = 0;
+        std::tie(s1, s1coords1, s1coords2, s1input) = interp2Tap_stage(s, h_interp1, input_id);
+        std::tie(s2, s2coords1, s2coords2, s2input) = interp2Tap_stage(s, h_interp2);
         std::cout << select_interp.name() << " is a 2 tap select interp on " << s1input.name() << " and " << s2input.name() << std::endl;
 
         // make sure that the two funcs have the same function arguments and size
@@ -1299,21 +1323,29 @@ public:
         Expr diff2 = absd(s2input(s2coords1), s2input(s2coords2));
 
         select_interp(s1args) = select(diff1 < diff2, s1.func(s1args), s2.func(s1args));
+        
+        hash_combine(h, 2); 
+        hash_combine(h, h_interp1 + h_interp2);
+
         return {select_interp, s1.w, s1.h, s1.c};
     }
 
-    InterpStageAndCoords correct_interp2Tap_stage(const vector<Stage> &s, int input_id=-1) {
+    InterpStageAndCoords correct_interp2Tap_stage(const vector<Stage> &s, uint64_t &h, int input_id=-1) {
         Func correctInterp("correctInterp2Tap");
         Stage input_s, ref_s, interp_s;
+        int ref_id, interp_id;
+
         // if stage id is given, use that as the input function 
-        if (input_id >= 0) {
-            input_s = s[input_id];
-        } else {
-            input_s  = s[rand_int(0, s.size() - 1)];
+        if (input_id < 0) {
+            input_id = rand_int(0, s.size() - 1);
         }
         // pick a random input
-        ref_s    = s[rand_int(0, s.size() - 1)];
-        interp_s = s[rand_int(0, s.size() - 1)];
+        ref_id = rand_int(0, s.size() - 1);
+        interp_id = rand_int(0, s.size() - 1);
+
+        input_s = s[input_id];
+        ref_s = s[ref_id];
+        interp_s = s[interp_id];
 
         Func input_f  = input_s.func;
         Func ref_f    = ref_s.func;
@@ -1336,15 +1368,29 @@ public:
         correctInterp(coords) = correction + avg(input_f(coords1), input_f(coords2));
         Stage correct_interp_s = {correctInterp, input_s.w, input_s.h, input_s.c};  
         
+        hash_combine(h, 3);
+        hash_combine(h, input_id);
+        hash_combine(h, ref_id);
+        hash_combine(h, interp_id);
+
+        uint64_t h_coords1, h_coords2;
+        h_coords1 = h_coords2 = 0;
+        hash_combine(h_coords1, (coords1[0]+1)*10 + (coords1[1]+1));
+        hash_combine(h_coords2, (coords2[0]+1)*10 + (coords2[1]+1));
+        hash_combine(h, h_coords1+h_coords2);
+
         return std::make_tuple(correct_interp_s, coords1, coords2, input_s.func);
     }
 
-    Stage select_correct_interp2Tap_stage(const vector<Stage> &s, int input_id=-1) {
+    Stage select_correct_interp2Tap_stage(const vector<Stage> &s, uint64_t &h, int input_id=-1) {
         Stage s1, s2;
         vector<Expr> s1coords1, s1coords2, s2coords1, s2coords2;
         Func s1input, s2input;
-        std::tie(s1, s1coords1, s1coords2, s1input) = correct_interp2Tap_stage(s, input_id);
-        std::tie(s2, s2coords1, s2coords2, s2input) = correct_interp2Tap_stage(s);
+
+        uint64_t h_interp1, h_interp2;
+        h_interp1 = h_interp2 = 0;
+        std::tie(s1, s1coords1, s1coords2, s1input) = correct_interp2Tap_stage(s, h_interp1, input_id);
+        std::tie(s2, s2coords1, s2coords2, s2input) = correct_interp2Tap_stage(s, h_interp2);
 
         vector<Expr> s1args = make_arguments(s1input.args());
         assert(same_vars(s1input.args(), s2input.args()));
@@ -1356,6 +1402,9 @@ public:
         Func select_interp("selectCorrectInterp2Tap");
         std::cout << select_interp.name() << " is Selecting 2 Tap interp from: " << s1input.name() << " and " << s2input.name() << std::endl;
         select_interp(s1args) = select(diff1 < diff2, s1.func(s1args), s2.func(s1args));
+    
+        hash_combine(h, 4);
+        hash_combine(h, h_interp1 + h_interp2);
 
         return {select_interp, s1.w, s1.h, s1.c};
     }
@@ -1363,7 +1412,7 @@ public:
     // Add a random new stage onto the end of the pipeline that can choose any of the 
     // input buffers or previous stages as an input. Note that the type of random stage
     // will determine how many inputs it needs 
-    Stage random_stage(const vector<Stage> &s, int input_id=-1) {
+    Stage random_stage(const vector<Stage> &s, uint64_t &h, int input_id=-1) {
         int m = (int)s.size() - 1;
         int i2 = m > 0 ? rand_int(0, m - 1) : 0;
         int i1 = m > 0 ? rand_int(i2 + 1, m) : 0;
@@ -1428,32 +1477,32 @@ public:
             Stage interp_s;
             vector<Expr> _coords1, _coords2;
             Func _input;
-            std::tie(interp_s, _coords1, _coords2, _input) = interp2Tap_stage(s, input_id);
+            std::tie(interp_s, _coords1, _coords2, _input) = interp2Tap_stage(s, h, input_id);
             return interp_s;
         } else if (stage_type == 17) {
             if (s.size() < 2) {
                 return random_stage(s);
             }
-            return select_interp2Tap_stage(s, input_id);
+            return select_interp2Tap_stage(s, h, input_id);
         } else if (stage_type == 18) {
             if (s.size() < 3) { 
-                return random_stage(s);
+                return random_stage(s, h);
             }
             Stage interp_s;
             vector<Expr> _coords1, _coords2;
             Func _input;
-            std::tie(interp_s, _coords1, _coords2, _input) = correct_interp2Tap_stage(s, input_id);
+            std::tie(interp_s, _coords1, _coords2, _input) = correct_interp2Tap_stage(s, h, input_id);
             return interp_s;
         } else if (stage_type == 19) {
             if (s.size() < 3) {
-                return random_stage(s);
+                return random_stage(s, h);
             }
-            return select_correct_interp2Tap_stage(s, input_id);
+            return select_correct_interp2Tap_stage(s, h, input_id);
         } else if (i1 != i2) {
             return binary_op(f, g);
         } else {
             // Try again
-            return random_stage(s);
+            return random_stage(s, h);
         }
     }
 
@@ -1504,18 +1553,27 @@ public:
         // sure that the funcs satisfy the size/type/other constraints on the output buffers. 
         // CONSIDER growing pipeline from output and input buffers.
         assert((int)max_stages >= (int)num_output_buffers);
-        for (int i = 0; i < max_stages; i++) {
-            Stage next;
-            if (i > 0) {
-                next = random_stage(stages, stages.size()-1); // use most recently created func as input
-            } else {
-                next = random_stage(stages);
-            }
-            stages.push_back(next);
-            std::cout << "Approx size: " << stages.back().w << ", " << stages.back().h << ", " << stages.back().c << "\n";
-        }
 
-        std::cout << "finished adding stages" << std::endl;
+        // keep generating pipelines until we don't get a duplicate
+        while (true) {
+            uint64_t h = 0;
+            for (int i = 0; i < max_stages; i++) {
+                Stage next;
+                if (i > 0) {
+                    next = random_stage(stages, h, stages.size()-1); // use most recently created func as input
+                } else {
+                    next = random_stage(stages, h);
+                }
+                stages.push_back(next);
+                std::cout << "Approx size: " << stages.back().w << ", " << stages.back().h << ", " << stages.back().c << "\n";
+            }
+
+            std::cout << "finished adding stages" << std::endl;
+            if (!(*hashes)[h]++) {
+                break;
+            } // else keep generating pipelines
+            stages.erase(stages.begin()+num_input_buffers, stages.end());
+        }
     }
 
     // Select which funcs to map to the output buffers 
@@ -1524,9 +1582,8 @@ public:
         Var x("x"), y("y"), c("c");
 
         std::vector<Func> last_funcs; // need these for backrop if training
-        last_funcs.push_back(stages[num_input_buffers].func);
+        last_funcs.push_back(stages[stages.size()-1].func);
 
-        //(*output_buffs[0])(x, y, c) = stages[num_input_buffers].func(x, y, c);
         (*output_buffs[0])(x, y, c) = stages[stages.size()-1].func(x, y, c);
 
         /**
@@ -1535,8 +1592,6 @@ public:
         std::mt19937 g(rd());
         // can't select output stage from input buffers
         std::shuffle(stages.begin() + num_input_buffers, stages.end(), g);
-        
-
         // resample and cast selected output funcs and fill output buffers
         for (int i = 0; i < num_output_buffers; i++) {
             Stage out = stages[num_input_buffers + i];
@@ -1555,7 +1610,7 @@ public:
         Expr loss = Expr(0.0f);
         for (int i = 0; i < num_output_buffers; i++) {
             Expr diff = cast<double>((*correct_outputs[i])(x, y, c) - last_funcs[i](x, y, c));
-            err(x, y, c) = Expr(0.5)*(diff*diff);
+            err(x, y, c) = (diff*diff);
             loss += sum(err(r.x, r.y, r.z)/((int)output_w * (int)output_h));
         }
 
