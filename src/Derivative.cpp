@@ -560,7 +560,7 @@ void ReverseAccumulationVisitor::propagate_adjoints(
             // Add an update stage to adjoint_func to set everything out of bounds zero.
             // We don't use BoundaryConditions::constant_exterior since it introduces 
             // two extra Funcs, which
-            // 1) makes generated derivatives code less readable.
+            // 1) makes generated derivatives code less readable, and
             // 2) makes (auto-)scheduling more difficult since there are more Funcs to consider.
             Func &adjoint_func = adjoint_funcs[func_key];
             vector<pair<Expr, Expr>> bounds = box_to_vector(func_bounds[func.name()]);
