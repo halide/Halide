@@ -558,8 +558,10 @@ void ReverseAccumulationVisitor::propagate_adjoints(
         // setup since the gradients depend on itself.
         auto add_boundary_condition = [&](const FuncKey &func_key) {
             // Add an update stage to adjoint_func to set everything out of bounds zero.
-            // We don't use BoundaryConditions since it is less easier to (auto)-schedule
-            // as it introduces an extra Func.
+            // We don't use BoundaryConditions::constant_exterior since it introduces 
+            // two extra Funcs, which
+            // 1) makes generated derivatives code less readable.
+            // 2) makes (auto-)scheduling more difficult since there are more Funcs to consider.
             Func &adjoint_func = adjoint_funcs[func_key];
             vector<pair<Expr, Expr>> bounds = box_to_vector(func_bounds[func.name()]);
             vector<Var> args = adjoint_func.args();
