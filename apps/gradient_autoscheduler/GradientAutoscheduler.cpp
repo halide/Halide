@@ -473,8 +473,8 @@ void parallelize_vars_and_rvars_cpu(
                 inner.name() << "," <<
                 split_size << "," <<
                 tail << ")\n";
-            int b = var_bounds[i] / split_size;
-            if (var_bounds[i] % split_size == 0) {
+            int b = rvar_bounds[i] / split_size;
+            if (rvar_bounds[i] % split_size == 0) {
                 b++;
             }
             if (num_threads_var * num_threads_rvar < params.parallelism) {
