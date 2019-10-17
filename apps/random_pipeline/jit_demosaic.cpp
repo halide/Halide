@@ -7,6 +7,7 @@
 #include <iostream>
 #include <map>
 #include <random>
+#include <unordered_map>
 
 #include <unistd.h>
 #include <sys/types.h>
@@ -150,7 +151,7 @@ int main(int argc, char *argv[]) {
         std::string image_dir;
         std::ifstream data_files_f(data_files);
         while (getline(data_files_f, image_dir)) {
-            load_buffer_from_file<outputT>(correct_output, image_dir + "/g_at_b_dense.data");
+            load_buffer_from_file<outputT>(correct_output, image_dir + "/r_at_gr_dense.data");
             load_buffer_from_file<inputT>(input0, image_dir + "/gr.data");
             load_buffer_from_file<inputT>(input1, image_dir + "/r.data");
             load_buffer_from_file<inputT>(input2, image_dir + "/b.data");
@@ -168,11 +169,22 @@ int main(int argc, char *argv[]) {
         if (loss < best_loss) {
             best_loss = loss;
             best_seed = seed;
+            std::ofstream best_loss_file;
+            best_loss_file.open(output_dir + "/best_loss.txt");
+            best_loss_file << "best loss: " << best_loss << " seed: " << best_seed << std::endl;
+            best_loss_file.close();
         }
     }
     std::ofstream best_loss_file;
     best_loss_file.open(output_dir + "/best_loss.txt");
     best_loss_file << "best loss: " << best_loss << " seed: " << best_seed << std::endl;
     best_loss_file.close();
+
+    // take down stats on duplicate pipelines
+    std::ofstream hashes_file;
+    hashes_file.open(output_dir + "/hashes.txt");
+    for (auto it = used_hashes.begin(); it != used_hashes.end(); ++it ) {
+        hashes_file << "hash: " << it->first << " count: " << it->second << std::endl;
+    }
 }
 

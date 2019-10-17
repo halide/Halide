@@ -10,7 +10,7 @@ BIN=./bin
 
 make ./bin/new_generator.generator
 
-SAMPLES_DIR=/mnt/ilcompf8d1/user/kcma/connected_2stages_${JOB_ID}/
+SAMPLES_DIR=/mnt/ilcompf8d1/user/kcma/r_gr_2stages_${JOB_ID}/
 rm -rf ${SAMPLES_DIR}
 mkdir -p ${SAMPLES_DIR}
 
@@ -27,7 +27,7 @@ done
 NUM_IMAGES=$(ls ${DATA_DIR} | wc -l)
 
 # how many pipelines to generate
-NUM_SAMPLES=3000
+NUM_SAMPLES=2000
 
 CORES=8
 
@@ -39,7 +39,7 @@ for ((b=0;b<${CORES};b++)); do
   (( START_SEED=${JOB_ID} * ${CORES} * ${NUM_SAMPLES} + ${b} * ${NUM_SAMPLES} ))
 
   # compile code that will run generator and eval on a dataset of images and then run it 
-  g++ -w -std=c++11  -I ../../distrib/include/ -I ../../distrib/tools/ -I ./ -g -Wall jit_run_demosaic.cpp ../../distrib/lib/libHalide.a -o ${DIR}/gen_demosaic_pipes -ldl -lpthread -lz -ltinfo -fopenmp && \
+  g++ -w -std=c++11  -I ../../distrib/include/ -I ../../distrib/tools/ -I ./ -g -Wall jit_demosaic.cpp ../../distrib/lib/libHalide.a -o ${DIR}/gen_demosaic_pipes -ldl -lpthread -lz -ltinfo -fopenmp && \
   ${DIR}/gen_demosaic_pipes ${IMAGES_LIST_FILE} ${DIR} ${NUM_IMAGES} ${NUM_SAMPLES} ${START_SEED} &
 
   pids[${b}]=$!
