@@ -557,26 +557,37 @@ void ReverseAccumulationVisitor::propagate_adjoints(
         // non overwriting scans, we delay the boundary condition
         // setup since the gradients depend on itself.
         auto add_boundary_condition = [&](const FuncKey &func_key) {
+            // Add an update stage to adjoint_func to set everything out of bounds zero.
+            // We don't use BoundaryConditions since it is less easier to (auto)-schedule
+            // as it introduces an extra Func.
             Func &adjoint_func = adjoint_funcs[func_key];
-            const Box &bounds = func_bounds[func.name()];
-            // Save a pointer to the unbounded def. Useful for scheduling
-            FuncKey unbounded_func_key{func.name() + "_unbounded", func_key.second};
-            adjoint_funcs[unbounded_func_key] = adjoint_func;
-            if (adjoint_func.values().size() == 1) {
-                Type type = adjoint_func.values()[0].type();
-                internal_assert(adjoint_func.function().output_types()[0] ==
-                                adjoint_func.values()[0].type());
-                Func f = BoundaryConditions::constant_exterior(
-                    adjoint_func, make_const(type, 0.0), box_to_vector(bounds));
-                adjoint_func = f;
+            vector<pair<Expr, Expr>> bounds = box_to_vector(func_bounds[func.name()]);
+            vector<Var> args = adjoint_func.args();
+            Expr out_of_bounds = cast<bool>(false);
+            for (size_t i = 0; i < bounds.size(); i++) {
+                Var arg_var = args[i];
+                Expr min = bounds[i].first;
+                Expr extent = bounds[i].second;
+                internal_assert(min.defined() && extent.defined()) <<
+                    "Unbounded adjoint function detected.";
 
+                out_of_bounds = (out_of_bounds ||
+                                 arg_var < min ||
+                                 arg_var >= min + extent);
+            }
+            if (adjoint_func.values().size() == 1) {
+                Expr zero = make_const(adjoint_func.value().type(), 0.0);
+                Expr value = adjoint_func(args);
+                Expr clamped_value = select(out_of_bounds, zero, value);
+                adjoint_func(args) = clamped_value;
             } else {
-                vector<Expr> values(adjoint_func.values().size());
-                for (int i = 0; i < (int)values.size(); i++) {
-                    values[i] = make_const(adjoint_func.values()[i].type(), 0.0);
+                vector<Expr> clamped_values(adjoint_func.values().size());
+                for (size_t i = 0; i < clamped_values.size(); i++) {
+                    Expr zero = make_const(adjoint_func.values()[i].type(), 0.0);
+                    Expr value = adjoint_func(args)[i];
+                    clamped_values[i] = select(out_of_bounds, zero, value);
                 }
-                adjoint_func = BoundaryConditions::constant_exterior(
-                    adjoint_func, Tuple(values), box_to_vector(bounds));
+                adjoint_func(args) = Tuple(clamped_values);
             }
         };
         if (non_overwriting_scans.find(func_key) == non_overwriting_scans.end()) {
@@ -1927,15 +1938,6 @@ Func Derivative::operator()(const Func &func, int update_id) const {
     auto it = adjoints.find(FuncKey{func.name(), update_id});
     internal_assert(it != adjoints.end()) << "Could not find Func " << func.name() << "\n";
     return it->second;
-}
-
-Func Derivative::get_unbounded(const Func &func, int update_id) const {
-    auto it = adjoints.find(FuncKey{func.name() + "_unbounded", update_id});
-    if (it != adjoints.end()) {
-        return it->second;
-    }
-    // No boundary condition applied; look for the original function
-    return (*this)(func, update_id);
 }
 
 Func Derivative::operator()(const Buffer<> &buffer) const {
