@@ -1038,6 +1038,7 @@ bool can_disprove(Expr e, int beam_size, std::set<Expr, IRDeepCompare> *implicat
         auto get_bounds = [&](const Expr &e) {
             Interval i = bounds_of_expr_in_scope(e, scope);
             Simplify::ExprInfo info;
+            /*
             if (const Mul *mul = e.as<Mul>()) {
                 debug(1) << "HI: bounds of product: " << e << "\n";
                 simplifier.mutate(mul->a, &info);
@@ -1047,6 +1048,7 @@ bool can_disprove(Expr e, int beam_size, std::set<Expr, IRDeepCompare> *implicat
                 mi = get_bounds_from_info(info);
                 debug(1) << "RHS: " << mi.min << " ... " << mi.max << "\n";
             }
+            */
             simplifier.mutate(e, &info);
             Interval si = get_bounds_from_info(info);
             if (!i.has_lower_bound() && si.has_lower_bound()) {
@@ -1115,7 +1117,7 @@ bool can_disprove(Expr e, int beam_size, std::set<Expr, IRDeepCompare> *implicat
                     }
                 }
             } else {
-                m = and_condition_over_domain(m, scope);
+                m = !and_condition_over_domain(!m, scope);
             }
             m = simplify(m);
             debug(1) << "Eliminate: " << m << "\n";
@@ -1132,7 +1134,7 @@ bool can_disprove(Expr e, int beam_size, std::set<Expr, IRDeepCompare> *implicat
     return false;
 }
 
-class BreakIntoConvexPieces : public IRMutator {
+class RemoveMinMax : public IRMutator {
     using IRMutator::visit;
 
     IRMatcher::Wild<0> x;
@@ -1204,6 +1206,7 @@ class BreakIntoConvexPieces : public IRMutator {
         Expr a = mutate(op->a);
         Expr b = mutate(op->b);
         auto rewrite = IRMatcher::rewriter(IRMatcher::mul(a, b), op->type, op->type);
+        const Variable *var_a = a.as<Variable>();
         const Variable *var_b = b.as<Variable>();
 
         if (var_b && !var_sign.contains(var_b->name)) {
@@ -1212,6 +1215,13 @@ class BreakIntoConvexPieces : public IRMutator {
             Expr prod = a * b;
             return mutate(select(zero < b, prod,
                                  b < zero, prod,
+                                 zero));
+        } else if (var_a && !var_sign.contains(var_a->name)) {
+            Expr zero = make_zero(a.type());
+            // Break it into two cases with known sign
+            Expr prod = a * b;
+            return mutate(select(zero < a, prod,
+                                 a < zero, prod,
                                  zero));
         } else if (
                    rewrite(min(x, y) * z, select(x < y, x * z, y * z)) ||
@@ -1234,6 +1244,7 @@ class BreakIntoConvexPieces : public IRMutator {
         Expr b = mutate(op->b);
         auto rewrite = IRMatcher::rewriter(IRMatcher::div(a, b), op->type, op->type);
         const Variable *var_b = b.as<Variable>();
+        const Variable *var_a = a.as<Variable>();
 
         if (var_b && !var_sign.contains(var_b->name)) {
             Expr zero = make_zero(b.type());
@@ -1241,6 +1252,13 @@ class BreakIntoConvexPieces : public IRMutator {
             Expr ratio = a / b;
             return mutate(select(zero < b, ratio,
                                  b < zero, ratio,
+                                 zero)); // This case is in fact unreachable
+        } else if (var_a && !var_sign.contains(var_a->name)) {
+            Expr zero = make_zero(a.type());
+            // Break it into two cases with known sign
+            Expr ratio = a / b;
+            return mutate(select(zero < a, ratio,
+                                 a < zero, ratio,
                                  zero)); // This case is in fact unreachable
         } else if (rewrite(min(x, y) / z, select(x < y, x / z, y / z)) ||
             rewrite(z / min(x, y), select(x < y, z / x, z / y)) ||
@@ -1303,8 +1321,6 @@ class BreakIntoConvexPieces : public IRMutator {
     }
 
     Expr visit(const Select *op) override {
-        cases.insert(op->condition);
-
         if (const LT *lt = op->condition.as<LT>()) {
             const Variable *var_a = lt->a.as<Variable>();
             const Variable *var_b = lt->b.as<Variable>();
@@ -1354,41 +1370,59 @@ class BreakIntoConvexPieces : public IRMutator {
         }
         return IRMutator::visit(op);
     }
+};
+
+class FindAllSelectConditions : public IRVisitor {
+    void visit(const Select *op) override {
+        cases.insert(op->condition);
+        IRVisitor::visit(op);
+    }
 public:
     std::set<Expr, IRDeepCompare> cases;
 };
 
-class ToDNF : public IRMutator {
+class RemoveSelect : public IRMutator {
     using IRMutator::visit;
     Expr visit(const Select *op) override {
         if (!op->type.is_bool()) {
             return IRMutator::visit(op);
         }
-        return mutate(op->condition && op->true_value ||
-                      !op->condition && op->false_value);
+        return (mutate(op->condition && op->true_value) ||
+                mutate(!op->condition && op->false_value));
     }
+};
+
+class MoveNegationInnermost : public IRMutator {
+    using IRMutator::visit;
+
+    Expr visit(const Not *op) override {
+        if (const And *and_a = op->a.as<And>()) {
+            return mutate(!and_a->a) || mutate(!and_a->b);
+        } else if (const Or *or_a = op->a.as<Or>()) {
+            return mutate(!or_a->a) && mutate(!or_a->b);
+        } else if (const Not *not_a = op->a.as<Not>()) {
+            return mutate(not_a->a);
+        } else {
+            return IRMutator::visit(op);
+        }
+    }
+};
+
+class ToDNF : public IRMutator {
+    using IRMutator::visit;
 
     Expr visit(const And *op) override {
         Expr a = mutate(op->a);
         Expr b = mutate(op->b);
-        if (const Or *or_a = a.as<Or>()) {
-            return mutate(or_a->a && b) || mutate(or_a->b && b);
-        } else if (const Or *or_b = b.as<Or>()) {
-            return mutate(a && or_b->a) || mutate(a && or_b->b);
-        } else {
-            return IRMutator::visit(op);
+        vector<Expr> as = unpack_binary_op<Or>(a);
+        vector<Expr> bs = unpack_binary_op<Or>(b);
+        set<Expr, IRDeepCompare> result;
+        for (Expr a1 : as) {
+            for (Expr b1 : bs) {
+                result.insert(a1 && b1);
+            }
         }
-    }
-
-    Expr visit(const Not *op) override {
-        Expr a = mutate(op->a);
-        if (const And *and_a = a.as<And>()) {
-            return mutate(!and_a->a || !and_a->b);
-        } else if (const Or *or_a = a.as<Or>()) {
-            return mutate(!or_a->a && !or_a->b);
-        } else {
-            return IRMutator::visit(op);
-        }
+        return pack_binary_op<Or>(result);
     }
 };
 
@@ -1479,10 +1513,13 @@ bool can_disprove_nonconvex(Expr e, int beam_size, Expr *implication) {
 
     // Break it into convex pieces, and disprove every piece
     debug(1) << "Simplified: " << e << "\n";
-    BreakIntoConvexPieces b;
+
+    RemoveMinMax b;
     e = b.mutate(e);
     vector<Expr> pieces{e};
-    for (auto c : b.cases) {
+    FindAllSelectConditions finder;
+    e.accept(&finder);
+    for (auto c : finder.cases) {
         vector<Expr> pending;
         pending.swap(pieces);
         while (!pending.empty()) {
@@ -1508,8 +1545,13 @@ bool can_disprove_nonconvex(Expr e, int beam_size, Expr *implication) {
         debug(1) << (++i) << ") " << p << "\n";
     }
 
-    e = ToDNF().mutate(e);
+    for (auto &p : pieces) {
+        p = RemoveSelect().mutate(p);
+        p = MoveNegationInnermost().mutate(p);
+        p = ToDNF().mutate(p);
+    }
 
+    e = pack_binary_op<Or>(pieces);
     pieces = unpack_binary_op<Or>(e);
 
     debug(1) << "In DNF form:\n";
@@ -1527,10 +1569,20 @@ bool can_disprove_nonconvex(Expr e, int beam_size, Expr *implication) {
         std::set<Expr, IRDeepCompare> simplified_clauses;
         auto clauses = unpack_binary_op<And>(p);
         for (Expr c : clauses) {
+            // debug(0) << "Clause: " << c << "\n";
             c = simplifier.mutate(c, nullptr);
+            if (is_one(c)) {
+                continue;
+            }
             simplifier.learn_true(c);
+            if (is_zero(c)) {
+                simplified_clauses.clear();
+            }
             simplified_clauses.insert(c);
-            if (is_zero(c)) break;
+            // debug(0) << "Clause: " << c << "\n";
+            if (is_zero(c)) {
+                break;
+            }
         }
         Expr result = pack_binary_op<And>(simplified_clauses);
         if (is_zero(result)) {
@@ -1700,7 +1752,7 @@ Expr synthesize_predicate(const Expr &lhs,
     class ImplicitAssumptions : public IRVisitor {
         void visit(const Mul *op) override {
             const Variable *v = op->b.as<Variable>();
-            if (v) {
+            if (v && v->name[0] == 'c') {
                 result.push_back(op->b != 0);
                 result.push_back(op->b != 1);
             }
@@ -1708,7 +1760,7 @@ Expr synthesize_predicate(const Expr &lhs,
         }
         void visit(const Div *op) override {
             const Variable *v = op->b.as<Variable>();
-            if (v) {
+            if (v && v->name[0] == 'c') {
                 result.push_back(op->b != 0);
                 result.push_back(op->b != 1);
             }
@@ -1764,15 +1816,15 @@ Expr synthesize_predicate(const Expr &lhs,
         if (expr_uses_var(lhs, v)) {
             continue;
         }
-        debug(0) << "implicit var: " << v << "\n";
+        debug(1) << "implicit var: " << v << "\n";
         set<Expr, IRDeepCompare> upper_bound, lower_bound;
         for (Expr c : clauses) {
             if (!expr_uses_var(c, v)) {
                 continue;
             }
-            debug(0) << "Considering " << c << "\n";
+            debug(1) << "Considering " << c << "\n";
             Expr result = solve_expression(c, v).result;
-            debug(0) << "Solved clause: " << result << "\n";
+            debug(1) << "Solved clause: " << result << "\n";
 
             if (const LT *lt = result.as<LT>()) {
                 result = (lt->a <= lt->b - 1);
@@ -1842,7 +1894,7 @@ Expr synthesize_predicate(const Expr &lhs,
 
         if (upper_bound.empty() && lower_bound.empty()) {
             debug(0) << "Failed to bound implicit var " << v << "\n";
-            continue;
+            return const_false();
         }
 
         if (!upper_bound.empty()) {
@@ -1916,8 +1968,6 @@ Expr synthesize_predicate(const Expr &lhs,
 
     debug(0) << "Precondition " << precondition << "\n"
              << "implies " << to_prove << "\n";
-
-
 
     return precondition;
 }

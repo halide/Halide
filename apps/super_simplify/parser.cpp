@@ -202,6 +202,33 @@ Expr parse_halide_expr(char **cursor, char *end, Type expected_type) {
         }
     }
 
+    if (consume(cursor, end, "fold(")) {
+        // strip folds
+        Expr e = parse_halide_expr(cursor, end, expected_type);
+        expect(cursor, end, ")");
+        return e;
+    }
+
+    // Parse entire rewrite rules as exprs
+    if (consume(cursor, end, "rewrite(")) {
+        Expr lhs = parse_halide_expr(cursor, end, expected_type);
+        expect(cursor, end, ",");
+        Expr rhs = parse_halide_expr(cursor, end, expected_type);
+        Expr predicate = const_true();
+        consume_whitespace(cursor, end);
+        if (consume(cursor, end, ",")) {
+            predicate = parse_halide_expr(cursor, end, Bool());
+        }
+        expect(cursor, end, ")");
+        return Call::make(Bool(), "rewrite", {lhs, rhs, predicate}, Call::Extern);
+    }
+
+    if (consume(cursor, end, "indeterminate_expression(")) {
+        Expr a = parse_halide_expr(cursor, end, Int(32));
+        expect(cursor, end, ")");
+        return make_indeterminate_expression(Int(32));
+    }
+
     if (consume(cursor, end, "round_f32(")) {
         Expr a = parse_halide_expr(cursor, end, Float(32));
         expect(cursor, end, ")");

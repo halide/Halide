@@ -14,6 +14,10 @@ $(BIN)/find_rules: find_rules.cpp $(OBJECTS) $(LIB_HALIDE)
 
 $(BIN)/synthesize_predicates: synthesize_predicates.cpp $(OBJECTS) $(LIB_HALIDE)
 	@mkdir -p $(@D)
+	$(CXX) $(CXXFLAGS) $(filter-out %.h,$^) -o $@ $(LDFLAGS) 
+
+$(BIN)/filter_rewrite_rules: filter_rewrite_rules.cpp $(OBJECTS) $(LIB_HALIDE)
+	@mkdir -p $(@D)
 	$(CXX) $(CXXFLAGS) $(filter-out %.h,$^) -o $@ $(LDFLAGS)
 
 clean:
