@@ -79,7 +79,7 @@ done
 
 # A batch of this many samples is built in parallel, and then
 # benchmarked serially.
-BATCH_SIZE=32
+BATCH_SIZE=2
 NUM_CORES=80
 EPOCHS=100
 
@@ -283,9 +283,9 @@ for ((BATCH_ID=$((FIRST+1));BATCH_ID<$((FIRST+1+NUM_BATCHES));BATCH_ID++)); do
                   fi
               done
 
-              S=$(printf "%d%02d" $BATCH_ID $SAMPLE_ID)
-              FNAME=$(printf "%s_batch_%02d_sample_%02d" ${PIPELINE} $BATCH_ID $SAMPLE_ID)
-              make_sample "${DIR}/${SAMPLE_ID}" $S $FNAME "$EXTRA_GENERATOR_ARGS" $BATCH $SAMPLE_ID &
+              S=$(printf "%04d%04d" $BATCH_ID $SAMPLE_ID)
+              FNAME=$(printf "%s_batch_%04d_sample_%04d" ${PIPELINE} $BATCH_ID $SAMPLE_ID)
+              make_featurization "${DIR}/${SAMPLE_ID}" $S $FNAME "$EXTRA_GENERATOR_ARGS" $BATCH $SAMPLE_ID &
               echo -n .
           done
           wait

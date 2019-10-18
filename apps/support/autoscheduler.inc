@@ -21,10 +21,6 @@ $(AUTOSCHED_BIN)/cost_model/cost_model.a \
 $(AUTOSCHED_BIN)/cost_model/train_cost_model.a \
 
 $(AUTOSCHED_BIN)/cost_model.generator: $(AUTOSCHED_SRC)/cost_model_generator.cpp \
-							$(AUTOSCHED_SRC)/Derivative.cpp \
-							$(AUTOSCHED_SRC)/Derivative.h \
-							$(AUTOSCHED_SRC)/DerivativeUtils.cpp \
-							$(AUTOSCHED_SRC)/DerivativeUtils.h \
 							$(AUTOSCHED_SRC)/cost_model_schedule.h \
 							$(AUTOSCHED_SRC)/NetworkSize.h \
 							$(GENERATOR_DEPS)

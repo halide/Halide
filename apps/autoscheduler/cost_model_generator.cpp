@@ -520,16 +520,10 @@ public:
         if (training && !auto_schedule) {
             do_cost_model_schedule(get_pipeline());
         } else if (auto_schedule) {
-<<<<<<< HEAD
-            // Blank
-        } else {
-
-=======
             // Do nothing.
         } else {
             // We just write down a good schedule for
             // inference. Scheduling a couple of convs is easy.
->>>>>>> master
             Var no;
             prediction_output.specialize(batch_size < 8).split(n, no, n, 1);
             prediction_output.compute_root().split(n, no, n, 8).parallel(no);

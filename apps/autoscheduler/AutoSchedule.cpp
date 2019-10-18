@@ -1903,7 +1903,7 @@ struct LoopNest {
         if (gpu_thread) {
             const auto &bounds = get_bounds(stage->node);
             for (int i = 0; i < (int)stage->loop.size(); i++) {
-                auto extent = bounds->loops(stage_idx, i).extent();
+                auto extent = bounds->loops(stage->index, i).extent();
                 compute_loops.push_back(extent);
                 total_serial_loop_extents *= extent;
             }
@@ -2623,7 +2623,6 @@ struct LoopNest {
     // methods that mutate the loop nest.
 
     // Inline a Func into all consumers within this loop.
->>>>>>> master
     void inline_func(const FunctionDAG::Node *f) {
         // Inline it into the children
         for (size_t i = 0; i < children.size(); i++) {
@@ -4133,6 +4132,7 @@ struct State {
     // Generate the successor states to this state
     void generate_children(const FunctionDAG &dag,
                            const MachineParams &params,
+                           const Target &target,
                            CostModel *cost_model,
                            std::function<void(IntrusivePtr<State> &&)> &accept_child) const {
         internal_assert(root.defined() && root->is_root());
@@ -4264,11 +4264,14 @@ struct State {
 
             bool should_parallelize = false;
             const vector<int64_t> *pure_size = nullptr;
+            IntrusivePtr<const LoopNest> pure_stage;
+
             if (params.parallelism > 1) {
                 for (auto &c : root->children) {
                     if (c->node == node && node->dimensions > 0) {
                         if (c->stage->index == 0) {
                             pure_size = &(c->size);
+                            pure_stage = c;
                         }
                         should_parallelize = true;
                     }
@@ -4287,7 +4290,7 @@ struct State {
                 internal_assert(pure_size);
 
                 // Generate some candidate parallel task shapes.
-                auto tilings = generate_tilings(*pure_size, node->dimensions - 1, 2, true);
+                auto tilings = generate_tilings(*pure_size, node->dimensions - 1, 2, true, target);
 
                 // We could also just parallelize the outer loop entirely
                 std::vector<int64_t> ones;
@@ -4362,7 +4365,7 @@ struct State {
                                 }
                             }
                             child->root = new_root;
-                            child->num_funcs_scheduled++;
+                            child->num_decisions_made++;
                             if (child->calculate_cost(dag, params, target, cost_model)) {
                                 num_children++;
                                 accept_child(std::move(child));
@@ -4380,7 +4383,7 @@ struct State {
                                 }
                             }
                             child->root = new_root;
-                            child->num_funcs_scheduled++;
+                            child->num_decisions_made++;
                             if (child->calculate_cost(dag, params, target, cost_model)) {
                                 num_children++;
                                 accept_child(std::move(child));
@@ -4395,7 +4398,7 @@ struct State {
                                 }
                             }
                             adjusted_child->root = new_adjusted_root;
-                            adjusted_child->num_funcs_scheduled++;
+                            adjusted_child->num_decisions_made++;
                             if (adjusted_child->calculate_cost(dag, params, target, cost_model)) {
                                 num_children++;
                                 accept_child(std::move(adjusted_child));
@@ -4506,7 +4509,7 @@ struct State {
                             }
                         }
                         child->root = new_root;
-                        child->num_decisions_scheduled++;
+                        child->num_decisions_made++;
                         if (child->calculate_cost(dag, params, target, cost_model)) {
                             num_children++;
                             accept_child(std::move(child));
@@ -4990,6 +4993,7 @@ IntrusivePtr<State> optimal_schedule_pass(FunctionDAG &dag,
                 return optimal_schedule_pass(dag,
                                              outputs,
                                              params,
+                                             target,
                                              cost_model,
                                              rng,
                                              beam_size * 2,
@@ -5097,8 +5101,8 @@ IntrusivePtr<State> optimal_schedule_pass(FunctionDAG &dag,
 
         for (size_t j = 0; j < q.size(); j++) {
             if (std::isinf(q[j]->cost)) {
-                debug(0) << "Infinite cost on intermediate state: " << q[j]->cost << "\n";
-                q[j]->dump();
+                //debug(0) << "Infinite cost on intermediate state: " << q[j]->cost << "\n";
+                //q[j]->dump();
             }
         }
 
@@ -5163,7 +5167,7 @@ IntrusivePtr<State> optimal_schedule(FunctionDAG &dag,
     for (int i = 0; i < num_passes; i++) {
         ProgressBar tick;
 
-        auto pass = optimal_schedule_pass(dag, outputs, params, cost_model,
+        auto pass = optimal_schedule_pass(dag, outputs, params, target, cost_model,
             rng, beam_size, i, num_passes, tick, permitted_hashes);
 
         tick.clear();
@@ -5238,7 +5242,7 @@ void generate_schedule(const std::vector<Function> &outputs,
     IntrusivePtr<State> optimal;
 
     // Run beam search
-    optimal = optimal_schedule(dag, outputs, params, cost_model.get(), rng, beam_size);
+    optimal = optimal_schedule(dag, outputs, params, target, cost_model.get(), rng, beam_size);
 
     HALIDE_TOC;
 
@@ -5248,10 +5252,10 @@ void generate_schedule(const std::vector<Function> &outputs,
     aslog(1) << "** Optimal schedule:\n";
 
     // Just to get the debugging prints to fire
-    optimal->calculate_cost(dag, params, cost_model.get(), aslog::aslog_level() > 0);
+    optimal->calculate_cost(dag, params, target, cost_model.get(), aslog::aslog_level() > 0);
 
     // Apply the schedules to the pipeline
-    optimal->apply_schedule(dag, params);
+    optimal->apply_schedule(dag, params, target);
 
     // Print out the schedule
     if (aslog::aslog_level() > 0) {
@@ -5276,7 +5280,7 @@ void generate_schedule(const std::vector<Function> &outputs,
     if (!feature_file.empty()) {
         user_warning << "HL_FEATURE_FILE is deprecated; use the featurization output from Generator instead\n";
         std::ofstream binfile(feature_file, std::ios::binary | std::ios_base::trunc);
-        optimal->save_featurization(dag, params, binfile);
+        optimal->save_featurization(dag, params, target, binfile);
         binfile.close();
         internal_assert(!binfile.fail()) << "Failed to write " << feature_file;
     }
@@ -5286,7 +5290,7 @@ void generate_schedule(const std::vector<Function> &outputs,
         auto_scheduler_results->schedule_source = optimal->schedule_source;
         {
             std::ostringstream out;
-            optimal->save_featurization(dag, params, out);
+            optimal->save_featurization(dag, params, target, out);
             auto_scheduler_results->featurization.resize(out.str().size());
             memcpy(auto_scheduler_results->featurization.data(), out.str().data(), out.str().size());
         }
@@ -5316,18 +5320,19 @@ struct RegisterAutoscheduler {
 void find_and_apply_schedule(FunctionDAG& dag,
                              const std::vector<Function> &outputs,
                              const MachineParams &params,
+                             const Target &target,
                              CostModel* cost_model,
                              int beam_size,
                              StageMap<ScheduleFeatures>* schedule_features) {
 
     std::mt19937 rng(12345);
-    IntrusivePtr<State> optimal = optimal_schedule(dag, outputs, params, cost_model, rng, beam_size);
+    IntrusivePtr<State> optimal = optimal_schedule(dag, outputs, params, target, cost_model, rng, beam_size);
 
     // Apply the schedules
-    optimal->apply_schedule(dag, params);
+    optimal->apply_schedule(dag, params, target);
 
     if (schedule_features) {
-        optimal->compute_featurization(dag, params, schedule_features);
+        optimal->compute_featurization(dag, params, target, schedule_features);
     }
 }
 

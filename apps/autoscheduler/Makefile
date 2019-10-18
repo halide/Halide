@@ -25,13 +25,16 @@ demo: $(BIN)/$(HL_TARGET)/demo.rungen $(AUTOSCHED_BIN)/libauto_schedule.so
 # demonstrates an autotuning loop
 # (using $(AUTOSCHED_BIN) and $(AUTOSCHED_SRC) here seems overkill, but makes copy-n-paste elsewhere easier)
 autotune: $(GENERATOR_BIN)/demo.generator $(AUTOSCHED_BIN)/featurization_to_sample $(AUTOSCHED_BIN)/get_host_target $(AUTOSCHED_BIN)/retrain_cost_model $(AUTOSCHED_BIN)/libauto_schedule.so $(AUTOSCHED_SRC)/autotune_loop.sh
+	HL_MACHINE_PARAMS=80,1,1 \
+	SAMPLES_DIR=test_autotuned_samples \
 	bash $(AUTOSCHED_SRC)/autotune_loop.sh \
 		$(GENERATOR_BIN)/demo.generator \
 		demo \
 		"" \
 		$(AUTOSCHED_SRC)/baseline.weights \
 		$(AUTOSCHED_BIN) \
-		$(HALIDE_DISTRIB_PATH)
+		0 \
+		0
 
 $(BIN)/test_perfect_hash_map: test_perfect_hash_map.cpp PerfectHashMap.h
 	@mkdir -p $(@D)
@@ -40,7 +43,7 @@ $(BIN)/test_perfect_hash_map: test_perfect_hash_map.cpp PerfectHashMap.h
 # Simple jit-based test
 $(BIN)/%/test: test.cpp $(AUTOSCHED_BIN)/libauto_schedule.so
 	@mkdir -p $(@D)
-	$(CXX) $(CXXFLAGS) $(USE_EXPORT_DYNAMIC) $^ -o $@ $(LDFLAGS) $(LIB_HALIDE) $(HALIDE_SYSTEM_LIBS)
+	$(CXX) $(CXXFLAGS) $(USE_EXPORT_DYNAMIC) $^ -o $@ $(LDFLAGS) $(LIB_HALIDE) $(HALIDE_SYSTEM_LIBS) -g -O0
 
 test_perfect_hash_map: $(BIN)/test_perfect_hash_map
 	$^
