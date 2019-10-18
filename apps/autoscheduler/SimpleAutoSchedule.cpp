@@ -1,6 +1,5 @@
 #include "SimpleAutoSchedule.h"
 #include "Errors.h"
-#include "DerivativeUtils.h"
 
 #include <numeric>
 
@@ -777,7 +776,7 @@ void simple_autoschedule(std::vector<Func> &outputs,
                         .vectorize(xi, vectorize_width);
                 }
             } else if (!options.gpu && pure_args.size() > 0) {
-                debug(1) << "[simple_autoschedule] \n" << 
+                debug(1) << "[simple_autoschedule] \n" <<
                     "Merging pure variables and parallelize them.\n";
                 // On CPU, merge all pure variables and parallelize them
                 Var fused_var = pure_args[0];
@@ -914,7 +913,7 @@ void simple_autoschedule(std::vector<Func> &outputs,
                     }
                     extent = simplify(extent);
                     const int64_t *extent_int = as_const_int(extent);
-                    user_assert(extent_int != nullptr) << "extent:" << extent << 
+                    user_assert(extent_int != nullptr) << "extent:" << extent <<
                         " is not constant.\n";
                     rvar_arg_bounds.push_back(*extent_int);
                 }

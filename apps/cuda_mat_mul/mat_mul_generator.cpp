@@ -119,6 +119,11 @@ public:
                 set_alignment_and_bounds(B, size);
                 set_alignment_and_bounds(out, size);
             }
+        } else {
+            A.dim(0).set_estimate(0, size)
+                .dim(1).set_estimate(0, size);
+            B.dim(0).set_estimate(0, size)
+                .dim(1).set_estimate(0, size);
         }
 
         // Always specify bounds for outputs, whether autoscheduled or not
@@ -126,13 +131,6 @@ public:
             .bound(x, 0, size)
             .bound(y, 0, size);
 
-        // Estimates
-        {
-            A.dim(0).set_bounds_estimate(0, size)
-                .dim(1).set_bounds_estimate(0, size);
-            B.dim(0).set_bounds_estimate(0, size)
-                .dim(1).set_bounds_estimate(0, size);
-        }
     }
 };
 

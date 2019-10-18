@@ -12,7 +12,7 @@ HL_TARGET = host-cuda-cuda_capability_50
 
 all: $(BIN)/$(HL_TARGET)/runner
 
-$(GENERATOR_BIN)/mat_mul.generator: mat_mul_generator.cpp  ../autoscheduler/SimpleAutoSchedule.h ../autoscheduler/SimpleAutoSchedule.cpp ../autoscheduler/DerivativeUtils.h ../autoscheduler/DerivativeUtils.cpp $(GENERATOR_DEPS)
+$(GENERATOR_BIN)/mat_mul.generator: mat_mul_generator.cpp  ../autoscheduler/SimpleAutoSchedule.h ../autoscheduler/SimpleAutoSchedule.cpp $(GENERATOR_DEPS)
 	@mkdir -p $(@D)
 	$(CXX) $(CXXFLAGS) $(USE_EXPORT_DYNAMIC) -g $(filter-out %.h,$^) -o $@ $(LDFLAGS) $(HALIDE_SYSTEM_LIBS)
 
