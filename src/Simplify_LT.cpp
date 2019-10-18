@@ -391,7 +391,6 @@ Expr Simplify::visit(const LT *op, ExprInfo *bounds) {
     }
 }
 
-
 // The other comparison operators redirect to the less-than operator
 Expr Simplify::visit(const LE *op, ExprInfo *bounds) {
     if (!may_simplify(op->a.type())) {
@@ -552,5 +551,5 @@ Expr Simplify::visit(const GE *op, ExprInfo *bounds) {
     return mutate(!(op->a < op->b), bounds);
 }
 
-}
-}
+}  // namespace Internal
+}  // namespace Halide

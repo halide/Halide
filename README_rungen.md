@@ -130,6 +130,14 @@ Generator, and inits every element to zero:
 $ ./bin/local_laplacian.rungen --output_extents=[100,200,3] input=zero:[123,456,3] levels=8 alpha=1 beta=1 output=/tmp/out.png
 ```
 
+You can also specify arbitrary (nonzero) constants:
+
+```
+# Input is a 3-dimensional image with extent 123, 456, and 3,
+# filled with a constant value of 42
+$ ./bin/local_laplacian.rungen --output_extents=[100,200,3] input=constant:42:[123,456,3] levels=8 alpha=1 beta=1 output=/tmp/out.png
+```
+
 Similarly, you can create identity images where only the diagonal elements are
 1-s (rest are 0-s) by invoking `identity:[]`. Diagonal elements are defined as
 those whose first two coordinates are equal.
@@ -197,21 +205,28 @@ highly recommended you do testing with the `--verbose` flag (which will log the
 calculated sizes) to reality-check that you are getting what you expect,
 especially for benchmarking.
 
+A common case (especially for benchmarking) is to specify using estimates for
+all inputs and outputs; for this, you can specify `--estimate_all`, which is
+just a shortcut for `--default_input_buffers=estimate_then_auto --default_input_scalars=estimate --output_extents=estimate`.
+
+
 ## Benchmarking
 
-To run a benchmark, use the `--benchmark` flag:
+To run a benchmark, use the `--benchmarks=all` flag:
 
 ```
-# When you specify the --benchmark flag, outputs become optional.
-$ ./bin/local_laplacian.rungen --benchmark input=zero:[1920,1080,3] levels=8 alpha=1 beta=1
+$ ./bin/local_laplacian.rungen --benchmarks=all input=zero:[1920,1080,3] levels=8 alpha=1 beta=1 --output_extents=[100,200,3]
 Benchmark for local_laplacian produces best case of 0.0494629 sec/iter, over 3 blocks of 10 iterations.
 Best output throughput is 39.9802 mpix/sec.
 ```
 
-Note: this uses Halide's `halide_benchmark.h` to measure the execution time,
-which runs several consecutive sample sets (default=3) of multiple iterations
-(default=10) each, then chooses the best average time. You can use the
-`--benchmark_samples` and `--benchmark_iterations` to override these defaults.
+You can use `--default_input_buffers` and `--default_input_scalars` here as well:
+
+```
+$ ./bin/local_laplacian.rungen --benchmarks=all --default_input_buffers --default_input_scalars --output_extents=estimate
+Benchmark for local_laplacian produces best case of 0.0494629 sec/iter, over 3 blocks of 10 iterations.
+Best output throughput is 39.9802 mpix/sec.
+```
 
 Note: `halide_benchmark.h` is known to be inaccurate for GPU filters; see
 https://github.com/halide/Halide/issues/2278
@@ -222,8 +237,7 @@ To track memory usage, use the `--track_memory` flag, which measures the
 high-water-mark of CPU memory usage.
 
 ```
-# When you specify the --track_memory flag, outputs become optional.
-$ ./bin/local_laplacian.rungen --track_memory input=zero:[1920,1080,3] levels=8 alpha=1 beta=1
+$ ./bin/local_laplacian.rungen --track_memory input=zero:[1920,1080,3] levels=8 alpha=1 beta=1 --output_extents=[100,200,3]
 Maximum Halide memory: 82688420 bytes for output of 1.97754 mpix.
 ```
 

@@ -87,9 +87,9 @@ double run_test(bool auto_schedule) {
 
     if (auto_schedule) {
         // Provide estimates on the pipeline output
-        blur.estimate(x, 0, W)
-            .estimate(y, 0, H)
-            .estimate(c, 0, 3);
+        blur.set_estimate(x, 0, W)
+            .set_estimate(y, 0, H)
+            .set_estimate(c, 0, 3);
         // Auto-schedule the pipeline
         p.auto_schedule(target);
     }

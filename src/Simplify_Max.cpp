@@ -265,5 +265,5 @@ Expr Simplify::visit(const Max *op, ExprInfo *bounds) {
     }
 }
 
-}
-}
+}  // namespace Internal
+}  // namespace Halide

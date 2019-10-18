@@ -140,6 +140,8 @@ void define_operators(py::module &m) {
     m.def("trunc", &trunc);
     m.def("fract", &fract);
     m.def("is_nan", &is_nan);
+    m.def("is_inf", &is_inf);
+    m.def("is_finite", &is_finite);
     m.def("reinterpret", (Expr (*)(Type, Expr)) &reinterpret);
     m.def("cast", (Expr (*)(Type, Expr)) &cast);
     m.def("print", [](py::args args) -> Expr {
@@ -172,6 +174,7 @@ void define_operators(py::module &m) {
     m.def("likely", &likely);
     m.def("likely_if_innermost", &likely_if_innermost);
     m.def("saturating_cast", (Expr (*)(Type, Expr))&saturating_cast);
+    m.def("strict_float", &strict_float);
 }
 
 }  // namespace PythonBindings

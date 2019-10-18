@@ -82,7 +82,6 @@ Expr reduce_expr(Expr e, Expr modulus, const Scope<Interval> &bounds) {
     }
 }
 
-
 // Substitute the gpu loop variables inwards to make future passes simpler
 class SubstituteInLaneVar : public IRMutator {
     using IRMutator::visit;
@@ -121,7 +120,6 @@ class SubstituteInLaneVar : public IRMutator {
         return IRMutator::visit(op);
     }
 };
-
 
 // Determine a good striping stride for an allocation, by inspecting
 // loads and stores.
@@ -235,8 +233,8 @@ class DetermineAllocStride : public IRVisitor {
             bind_bounds_if(is_const(op->min) && is_const(op->extent),
                            bounds, op->name, Interval(op->min, simplify(op->min + op->extent - 1)));
         ScopedBinding<Expr>
-            bound_dependent_if(expr_uses_vars(op->min, dependent_vars) ||
-                               expr_uses_vars(op->extent, dependent_vars),
+            bound_dependent_if((expr_uses_vars(op->min, dependent_vars) ||
+                                expr_uses_vars(op->extent, dependent_vars)),
                                dependent_vars, op->name, Expr());
         IRVisitor::visit(op);
     }
@@ -276,8 +274,8 @@ class DetermineAllocStride : public IRVisitor {
     }
 
 public:
-    DetermineAllocStride(const string &alloc, const string &lane_var, const Expr &warp_size) :
-        alloc(alloc), lane_var(lane_var), warp_size(warp_size) {
+    DetermineAllocStride(const string &alloc, const string &lane_var, const Expr &warp_size)
+        : alloc(alloc), lane_var(lane_var), warp_size(warp_size) {
         dependent_vars.push(lane_var, 1);
     }
 
@@ -603,7 +601,7 @@ class LowerWarpShuffles : public IRMutator {
             Expr mask = simplify(((31 & ~(warp_size - 1)) << 8) | 31);
             // The idx variant can do a general gather. Use it for all other cases.
             shuffled = Call::make(shuffle_type, "llvm.nvvm.shfl.idx" + intrin_suffix,
-                                {base_val, lane, mask}, Call::PureExtern);
+                                  {base_val, lane, mask}, Call::PureExtern);
         }
         // TODO: There are other forms, like butterfly and clamp, that
         // don't need to use the general gather
@@ -644,7 +642,7 @@ class LowerWarpShuffles : public IRMutator {
     }
 
 public:
-    LowerWarpShuffles() {}
+    LowerWarpShuffles() = default;
 };
 
 class HoistWarpShufflesFromSingleIfStmt : public IRMutator {
@@ -714,6 +712,7 @@ class HoistWarpShufflesFromSingleIfStmt : public IRMutator {
         stored_to.push(op->name, 0);
         return IRMutator::visit(op);
     }
+
 public:
     bool success = true;
 
@@ -739,7 +738,9 @@ class MoveIfStatementInwards : public IRMutator {
     Expr condition;
 
 public:
-    MoveIfStatementInwards(Expr c) : condition(c) {}
+    MoveIfStatementInwards(Expr c)
+        : condition(c) {
+    }
 };
 
 // The destination *and source* for warp shuffles must be active
@@ -782,6 +783,7 @@ class HasLaneLoop : public IRVisitor {
         result = result || op->memory_type == MemoryType::Register;
         IRVisitor::visit(op);
     }
+
 public:
     bool result = false;
 };

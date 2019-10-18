@@ -5,7 +5,8 @@
 namespace Halide {
 namespace Internal {
 
-Dimension::Dimension(const Internal::Parameter &p, int d, Func f) : param(p), d(d), f(f) {
+Dimension::Dimension(const Internal::Parameter &p, int d, Func f)
+    : param(p), d(d), f(f) {
     user_assert(param.defined())
         << "Can't access the dimensions of an undefined Parameter\n";
     user_assert(param.is_buffer())
@@ -31,10 +32,12 @@ Expr Dimension::max() const {
     return min() + extent() - 1;
 }
 
+// DEPRECATED
 Expr Dimension::min_estimate() const {
     return param.min_constraint_estimate(d);
 }
 
+// DEPRECATED
 Expr Dimension::extent_estimate() const {
     return param.extent_constraint_estimate(d);
 }
@@ -72,15 +75,15 @@ Dimension Dimension::set_bounds(Expr min, Expr extent) {
     return set_min(min).set_extent(extent);
 }
 
-Dimension Dimension::set_bounds_estimate(Expr min, Expr extent) {
+Dimension Dimension::set_estimate(Expr min, Expr extent) {
     param.set_min_constraint_estimate(d, min);
     param.set_extent_constraint_estimate(d, extent);
     // Update the estimates on the linked Func as well.
     // (This matters mainly for OutputImageParams.)
     // Note that while it's possible/legal for a Dimension to have an undefined
-    // Func, you shouldn't ever call set_bounds_estimate on such an instance.
+    // Func, you shouldn't ever call set_estimate on such an instance.
     internal_assert(f.defined());
-    f.estimate(f.args()[d], min, extent);
+    f.set_estimate(f.args()[d], min, extent);
     return *this;
 }
 

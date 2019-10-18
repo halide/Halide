@@ -49,7 +49,9 @@ class DependsOnBoundsInference : public IRVisitor {
 
 public:
     bool result;
-    DependsOnBoundsInference() : result(false) {}
+    DependsOnBoundsInference()
+        : result(false) {
+    }
 };
 
 bool depends_on_bounds_inference(Expr e) {
@@ -57,7 +59,6 @@ bool depends_on_bounds_inference(Expr e) {
     e.accept(&d);
     return d.result;
 }
-
 
 /** Compute the bounds of the value of some variable defined by an
  * inner let stmt or for loop. E.g. for the stmt:
@@ -72,7 +73,9 @@ bool depends_on_bounds_inference(Expr e) {
 class BoundsOfInnerVar : public IRVisitor {
 public:
     Interval result;
-    BoundsOfInnerVar(const string &v) : var(v) {}
+    BoundsOfInnerVar(const string &v)
+        : var(v) {
+    }
 
 private:
     string var;
@@ -111,7 +114,7 @@ Interval bounds_of_inner_var(string var, Stmt s) {
     return b.result;
 }
 
-}
+}  // namespace
 
 class BoundsInference : public IRMutator {
 public:
@@ -127,15 +130,17 @@ public:
     const Target target;
 
     struct CondValue {
-        Expr cond; // Condition on params only (can't depend on loop variable)
+        Expr cond;  // Condition on params only (can't depend on loop variable)
         Expr value;
 
-        CondValue(const Expr &c, const Expr &v) : cond(c), value(v) {}
+        CondValue(const Expr &c, const Expr &v)
+            : cond(c), value(v) {
+        }
     };
 
     struct Stage {
         Function func;
-        size_t stage; // 0 is the pure definition, 1 is the first update
+        size_t stage;  // 0 is the pure definition, 1 is the first update
         string name;
         vector<int> consumers;
         map<pair<string, int>, Box> bounds;
@@ -149,8 +154,8 @@ public:
         // of an init definition should have the same LHS.
         // This also pushes all the reduction domains it encounters into the 'rvars'
         // set for later use.
-        vector<vector<CondValue>> compute_exprs_helper(const Definition& def, bool is_update) {
-            vector<vector<CondValue>> result(2); // <args, values>
+        vector<vector<CondValue>> compute_exprs_helper(const Definition &def, bool is_update) {
+            vector<vector<CondValue>> result(2);  // <args, values>
 
             if (!def.defined()) {
                 return result;
@@ -190,8 +195,8 @@ public:
 
             const vector<Specialization> &specializations = def.specializations();
             for (size_t i = specializations.size(); i > 0; i--) {
-                Expr s_cond = specializations[i-1].condition;
-                const Definition &s_def = specializations[i-1].definition;
+                Expr s_cond = specializations[i - 1].condition;
+                const Definition &s_def = specializations[i - 1].definition;
 
                 // Else case (i.e. specialization condition is false)
                 for (auto &vec : result) {
@@ -263,11 +268,34 @@ public:
             }
 
             exprs.insert(exprs.end(), result[1].begin(), result[1].end());
+
+            // For the purposes of computation bounds inference, we
+            // don't care what sites are loaded, just what sites need
+            // to have the correct value in them. So remap all selects
+            // to if_then_elses to get tighter bounds.
+            class SelectToIfThenElse : public IRMutator {
+                using IRMutator::visit;
+                Expr visit(const Select *op) override {
+                    if (is_pure(op->condition)) {
+                        return Call::make(op->type, Call::if_then_else,
+                                          {mutate(op->condition),
+                                           mutate(op->true_value),
+                                           mutate(op->false_value)},
+                                          Call::PureIntrinsic);
+                    } else {
+                        return IRMutator::visit(op);
+                    }
+                }
+            } select_to_if_then_else;
+
+            for (auto &e : exprs) {
+                e.value = select_to_if_then_else.mutate(e.value);
+            }
         }
 
         // Check if the dimension at index 'dim_idx' is always pure (i.e. equal to 'dim')
         // in the definition (including in its specializations)
-        bool is_dim_always_pure(const Definition &def, const string& dim, int dim_idx) {
+        bool is_dim_always_pure(const Definition &def, const string &dim, int dim_idx) {
             const Variable *var = def.args()[dim_idx].as<Variable>();
             if ((!var) || (var->name != dim)) {
                 return false;
@@ -297,24 +325,22 @@ public:
             size_t index;
             {
                 const auto &iter = std::find_if(fused_groups.begin(), fused_groups.end(),
-                    [&producing_func](const vector<Function> &group) {
-                        return std::any_of(group.begin(), group.end(),
-                                    [&producing_func](const Function &f) {
-                                        return (f.name() == producing_func.name());
-                                    });
-                    });
+                                                [&producing_func](const vector<Function> &group) {
+                                                    return std::any_of(group.begin(), group.end(),
+                                                                       [&producing_func](const Function &f) {
+                                                                           return (f.name() == producing_func.name());
+                                                                       });
+                                                });
                 internal_assert(iter != fused_groups.end());
                 index = iter - fused_groups.begin();
             }
 
-            const vector<Dim> &dims = (producing_stage_index == 0) ?
-                producing_func.definition().schedule().dims() :
-                producing_func.update(producing_stage_index-1).schedule().dims();
+            const vector<Dim> &dims = (producing_stage_index == 0) ? producing_func.definition().schedule().dims() : producing_func.update(producing_stage_index - 1).schedule().dims();
 
             size_t var_index;
             {
                 const auto &iter = std::find_if(dims.begin(), dims.end(),
-                    [&var](const Dim &d) { return var_name_match(d.var, var); });
+                                                [&var](const Dim &d) { return var_name_match(d.var, var); });
                 internal_assert(iter != dims.end());
                 var_index = iter - dims.begin();
             }
@@ -325,7 +351,7 @@ public:
                 if (((pair.func_1 == consumer_name) && ((int)pair.stage_1 == consumer_stage)) ||
                     ((pair.func_2 == consumer_name) && ((int)pair.stage_2 == consumer_stage))) {
                     const auto &iter = std::find_if(dims.begin(), dims.end(),
-                        [&pair](const Dim &d) { return var_name_match(d.var, pair.var_name); });
+                                                    [&pair](const Dim &d) { return var_name_match(d.var, pair.var_name); });
                     internal_assert(iter != dims.end());
                     size_t idx = iter - dims.begin();
                     if (var_index >= idx) {
@@ -478,9 +504,7 @@ public:
                     }
 
                     s = do_bounds_query(s, in_pipeline, target);
-
                 }
-
             }
 
             if (in_pipeline.count(name) == 0) {
@@ -587,7 +611,7 @@ public:
                         builder.dimensions = input.dimensions();
                         Expr buf = builder.build();
 
-                        lets.push_back({ name, buf });
+                        lets.push_back({name, buf});
                         bounds_inference_args.push_back(Variable::make(type_of<struct halide_buffer_t *>(), name));
                         buffers_to_annotate.push_back(bounds_inference_args.back());
                     }
@@ -610,7 +634,7 @@ public:
                     query_buf = Call::make(type_of<struct halide_buffer_t *>(), Call::buffer_init_from_buffer,
                                            {query_buf, query_shape, in_buf}, Call::Extern);
 
-                    lets.push_back({ query_name, query_buf });
+                    lets.push_back({query_name, query_buf});
                     Expr buf = Variable::make(type_of<struct halide_buffer_t *>(), query_name, b, p, ReductionDomain());
                     bounds_inference_args.push_back(buf);
                     // Although we expect ImageParams to be properly initialized and sanitized by the caller,
@@ -642,13 +666,13 @@ public:
                 // Since this is a temporary, internal-only buffer used for bounds inference,
                 // we need to mark it
                 buffers_to_annotate.push_back(bounds_inference_args.back());
-                lets.push_back({ buf_name, output_buffer_t });
+                lets.push_back({buf_name, output_buffer_t});
             }
 
             Stmt annotate;
             if (target.has_feature(Target::MSAN)) {
                 // Mark the buffers as initialized before calling out.
-                for (const auto &buffer: buffers_to_annotate) {
+                for (const auto &buffer : buffers_to_annotate) {
                     // Return type is really 'void', but no way to represent that in our IR.
                     // Precedent (from halide_print, etc) is to use Int(32) and ignore the result.
                     Expr sizeof_buffer_t =
@@ -705,7 +729,7 @@ public:
                 for (const ReductionVariable &rv : rvars) {
                     string arg = name + ".s" + std::to_string(stage) + "." + rv.var;
                     result.push(rv.var, Interval(Variable::make(Int(32), arg + ".min"),
-                                                   Variable::make(Int(32), arg + ".max")));
+                                                 Variable::make(Int(32), arg + ".max")));
                 }
             }
 
@@ -713,9 +737,7 @@ public:
                 const Bound &b = func.definition().schedule().bounds()[i];
                 result.push(b.var, Interval(b.min, (b.min + b.extent) - 1));
             }*/
-
         }
-
     };
     vector<Stage> stages;
 
@@ -724,8 +746,8 @@ public:
                     const vector<set<FusedPair>> &fp,
                     const vector<Function> &outputs,
                     const FuncValueBounds &fb,
-                    const Target &target) :
-        funcs(f), fused_groups(fg), fused_pairs_in_groups(fp), func_bounds(fb), target(target) {
+                    const Target &target)
+        : funcs(f), fused_groups(fg), fused_pairs_in_groups(fp), func_bounds(fb), target(target) {
         internal_assert(!f.empty());
 
         // Compute the intrinsic relationships between the stages of
@@ -759,18 +781,17 @@ public:
             stages.push_back(s);
 
             for (size_t j = 0; j < f[i].updates().size(); j++) {
-                s.stage = (int)(j+1);
+                s.stage = (int)(j + 1);
                 s.stage_prefix = s.name + ".s" + std::to_string(s.stage) + ".";
                 s.compute_exprs();
                 stages.push_back(s);
             }
-
         }
 
         // Do any pure inlining (TODO: This is currently slow)
         for (size_t i = f.size(); i > 0; i--) {
-            Function func = f[i-1];
-            if (inlined[i-1]) {
+            Function func = f[i - 1];
+            if (inlined[i - 1]) {
                 for (size_t j = 0; j < stages.size(); j++) {
                     Stage &s = stages[j];
                     for (size_t k = 0; k < s.exprs.size(); k++) {
@@ -864,7 +885,7 @@ public:
                             if (consumer.stage == 0) {
                                 err << "The pure definition ";
                             } else {
-                                err << "Update definition number " << (consumer.stage-1);
+                                err << "Update definition number " << (consumer.stage - 1);
                             }
                             err << " of Function " << consumer.name
                                 << " calls function " << producer.name
@@ -885,8 +906,7 @@ public:
                     debug(0) << "\n";
                     */
 
-
-                    producer.bounds[{ consumer.name, consumer.stage }] = b;
+                    producer.bounds[{consumer.name, consumer.stage}] = b;
                     producer.consumers.push_back((int)i);
                 }
             }
@@ -921,7 +941,7 @@ public:
             for (size_t i = 0; i < stages.size(); i++) {
                 Stage &s = stages[i];
                 if (!s.func.same_as(output)) continue;
-                s.bounds[{ s.name, s.stage }] = output_box;
+                s.bounds[{s.name, s.stage}] = output_box;
             }
         }
     }
@@ -950,7 +970,7 @@ public:
             }
 
             body = let->body;
-            lets.push_back({ let->name, let->value });
+            lets.push_back({let->name, let->value});
         }
 
         // If there are no pipelines at this loop level, we can skip
@@ -1042,7 +1062,7 @@ public:
                         vars.push_back(rv.var);
                     }
                 }
-                for (const string& i : vars) {
+                for (const string &i : vars) {
                     string var = s.stage_prefix + i;
                     Interval in = bounds_of_inner_var(var, body);
                     if (in.is_bounded()) {
@@ -1074,7 +1094,7 @@ public:
 
         // Rewrap the let statements
         for (size_t i = lets.size(); i > 0; i--) {
-            body = LetStmt::make(lets[i-1].first, lets[i-1].second, body);
+            body = LetStmt::make(lets[i - 1].first, lets[i - 1].second, body);
         }
 
         return For::make(op->name, op->min, op->extent, op->for_type, op->device_api, body);
@@ -1087,10 +1107,7 @@ public:
         inner_productions.insert(p->name);
         return stmt;
     }
-
 };
-
-
 
 Stmt bounds_inference(Stmt s,
                       const vector<Function> &outputs,
@@ -1140,7 +1157,8 @@ Stmt bounds_inference(Stmt s,
     // Add an outermost bounds inference marker
     s = For::make("<outermost>", 0, 1, ForType::Serial, DeviceAPI::None, s);
     s = BoundsInference(funcs, fused_func_groups, fused_pairs_in_groups,
-                        outputs, func_bounds, target).mutate(s);
+                        outputs, func_bounds, target)
+            .mutate(s);
     return s.as<For>()->body;
 }
 

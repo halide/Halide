@@ -1,18 +1,54 @@
 #include "Halide.h"
 
+#if defined(_MSC_VER) && !defined(NOMINMAX)
+#define NOMINMAX
+#endif
+#ifdef _WIN32
+#include <windows.h>
+#else
 #include <dlfcn.h>
+#endif
 
 using namespace Halide;
 
 int main(int argc, char **argv) {
-    if (!dlopen("libauto_schedule.so", RTLD_LAZY)) {
-        std::cerr << "Failed to load autoscheduler: " << dlerror() << "\n";
+    std::string lib;
+#ifdef _WIN32
+    if (argc > 1) {
+        lib = argv[1];
+    } else {
+        lib = "auto_schedule.dll";
+    }
+
+    if (!LoadLibraryA(lib.c_str())) {
+        DWORD last_err = GetLastError();
+        LPVOID last_err_msg;
+        FormatMessageA(FORMAT_MESSAGE_ALLOCATE_BUFFER | FORMAT_MESSAGE_FROM_SYSTEM |
+                           FORMAT_MESSAGE_IGNORE_INSERTS,
+                       nullptr, last_err, MAKELANGID(LANG_NEUTRAL, SUBLANG_DEFAULT),
+                       reinterpret_cast<LPSTR>(&last_err_msg), 0, nullptr);
+        std::cerr << "Failed to load: " << lib << "\n";
+        std::cerr << "LoadLibraryA failed with error " << last_err << ": "
+                  << static_cast<char *>(last_err_msg) << "\n";
+        LocalFree(last_err_msg);
         return 1;
     }
+#else
+    if (argc > 1) {
+        lib = argv[1];
+    } else {
+        lib = "libauto_schedule.so";
+    }
+
+    if (dlopen(lib.c_str(), RTLD_LAZY) == nullptr) {
+        std::cerr << "Failed to load: " << lib << ": " << dlerror() << "\n";
+        return 1;
+    }
+#endif
 
     MachineParams params(32, 16000000, 40);
     // Use a fixed target for the analysis to get consistent results from this test.
-    Target target("x86-64-avx2-disable_llvm_loop_vectorize-disable_llvm_loop_unroll-cuda");
+    Target target("x86-64-linux-sse41-avx-avx2");
 
     Var x("x"), y("y");
 
@@ -23,7 +59,7 @@ int main(int argc, char **argv) {
         g(x, y) = f(x, y) * 2 + 1;
         h(x, y) = g(x, y) * 2 + 1;
 
-        h.estimate(x, 0, 1000).estimate(y, 0, 1000);
+        h.set_estimate(x, 0, 1000).set_estimate(y, 0, 1000);
 
         Pipeline(h).auto_schedule(target, params);
     }
@@ -43,7 +79,7 @@ int main(int argc, char **argv) {
         }
         h(x, y) = e;
 
-        h.estimate(x, 0, 1000).estimate(y, 0, 1000);
+        h.set_estimate(x, 0, 1000).set_estimate(y, 0, 1000);
 
         Pipeline(h).auto_schedule(target, params);
     }
@@ -57,7 +93,7 @@ int main(int argc, char **argv) {
                    f(x-9, y+9) + f(x, y+9) + f(x+9, y-9));
 
 
-        h.estimate(x, 0, 2048).estimate(y, 0, 2048);
+        h.set_estimate(x, 0, 2048).set_estimate(y, 0, 2048);
 
         Pipeline(h).auto_schedule(target, params);
     }
@@ -70,7 +106,7 @@ int main(int argc, char **argv) {
                    f(x-1, y  ) + f(x, y  ) + f(x+1, y  ) +
                    f(x-1, y+1) + f(x, y+1) + f(x+1, y-1));
 
-        h.estimate(x, 0, 2048).estimate(y, 0, 2048);
+        h.set_estimate(x, 0, 2048).set_estimate(y, 0, 2048);
 
         Pipeline(h).auto_schedule(target, params);
     }
@@ -89,7 +125,7 @@ int main(int argc, char **argv) {
             }
             f[i](x, y) = e;
         }
-        f[N-1].estimate(x, 0, 2048).estimate(y, 0, 2048);
+        f[N-1].set_estimate(x, 0, 2048).set_estimate(y, 0, 2048);
 
         Pipeline(f[N-1]).auto_schedule(target, params);
     }
@@ -100,7 +136,7 @@ int main(int argc, char **argv) {
         Func f;
         f(x, y) = a(x) * b(y);
 
-        f.estimate(x, 0, 2048).estimate(y, 0, 2048);
+        f.set_estimate(x, 0, 2048).set_estimate(y, 0, 2048);
 
         Pipeline(f).auto_schedule(target, params);
     }
@@ -119,7 +155,7 @@ int main(int argc, char **argv) {
         expensive(x, y, k) = orig(x, y) * orig(x, y) + (x + orig(x, y)) * (1 + orig(x, y)) + sqrt(k + orig(x, y));
         downy(x, y, k) = expensive(x, 2*y - 1, k) + expensive(x, 2*y, k) + expensive(x, 2*y+1, k) + expensive(x, 2*y + 2, k);
         downx(x, y, k) = downy(2*x-1, y, k) + downy(2*x, y, k) + downy(2*x + 1, y, k) + downy(2*x + 2, y, k);
-        downx.estimate(x, 1, 1022).estimate(y, 1, 1022).estimate(k, 0, 256);
+        downx.set_estimate(x, 1, 1022).set_estimate(y, 1, 1022).set_estimate(k, 0, 256);
 
         Pipeline(downx).auto_schedule(target, params);
     }
@@ -138,7 +174,7 @@ int main(int argc, char **argv) {
         f(0, y) = 23.0f;
         g(x, y) = f(x - 1, y - 1) + f(x + 1, y + 1);
 
-        g.estimate(x, 1, 1022).estimate(y, 1, 1022);
+        g.set_estimate(x, 1, 1022).set_estimate(y, 1, 1022);
 
         Pipeline(g).auto_schedule(target, params);
     }
@@ -162,7 +198,7 @@ int main(int argc, char **argv) {
             after[i](x, y) = after[i-1](x, y) + 1;
         }
 
-        after[4].estimate(x, 0, 1024).estimate(y, 0, 1024);
+        after[4].set_estimate(x, 0, 1024).set_estimate(y, 0, 1024);
 
         Pipeline(after[4]).auto_schedule(target, params);
     }
@@ -183,7 +219,7 @@ int main(int argc, char **argv) {
         // everything into f_64_2 but this would vectorize fairly
         // narrowly, which is a waste of work for the first Func.
 
-        f_u64_2.estimate(x, 0, 1024 * 1024);
+        f_u64_2.set_estimate(x, 0, 1024 * 1024);
 
         Pipeline(f_u64_2).auto_schedule(target, params);
     }
@@ -202,7 +238,7 @@ int main(int argc, char **argv) {
         Func out("out");
         out(j, i) = c(j, i);
 
-        out.estimate(j, 0, 1024).estimate(i, 0, 1024);
+        out.set_estimate(j, 0, 1024).set_estimate(i, 0, 1024);
 
         Pipeline(out).auto_schedule(target, params);
     }
@@ -232,7 +268,7 @@ int main(int argc, char **argv) {
             p3[i](x, y) = p3[i-1](x, y) + 1;
         }
 
-        p3[N-1].estimate(x, 0, 1024).estimate(y, 0, 1024);
+        p3[N-1].set_estimate(x, 0, 1024).set_estimate(y, 0, 1024);
 
         Pipeline(p3[N-1]).auto_schedule(target, params);
     }
@@ -252,7 +288,7 @@ int main(int argc, char **argv) {
         Func out("out");
         out(x) = lut(clamp(idx(x), 0, 100000));
 
-        out.estimate(x, 0, 10);
+        out.set_estimate(x, 0, 10);
 
         Pipeline(out).auto_schedule(target, params);
     }
@@ -267,7 +303,7 @@ int main(int argc, char **argv) {
         g(x, y) = 0;
         g(x, y) += f(x, 1000*(y+r));
 
-        g.estimate(x, 0, 1000).estimate(y, 0, 1000);
+        g.set_estimate(x, 0, 1000).set_estimate(y, 0, 1000);
 
         Pipeline(g).auto_schedule(target, params);
     }
@@ -282,7 +318,7 @@ int main(int argc, char **argv) {
 
         h(x, y) += g(y + r.y, x + r.y);
 
-        h.estimate(x, 0, 1000).estimate(y, 0, 1000);
+        h.set_estimate(x, 0, 1000).set_estimate(y, 0, 1000);
 
         Pipeline(h).auto_schedule(target, params);
     }
@@ -299,8 +335,8 @@ int main(int argc, char **argv) {
         a(x, y) += in(x+r.x, y+r.y);
         b(x, y) += in(y+r.y, x+r.x);
 
-        a.estimate(x, 0, 1000).estimate(y, 0, 1000);
-        b.estimate(x, 0, 1000).estimate(y, 0, 1000);
+        a.set_estimate(x, 0, 1000).set_estimate(y, 0, 1000);
+        b.set_estimate(x, 0, 1000).set_estimate(y, 0, 1000);
 
         Pipeline({a, b}).auto_schedule(target, params);
 
@@ -313,7 +349,7 @@ int main(int argc, char **argv) {
         f(x, y) = im(x, y);
         g(x, y) = f(x, y);
 
-        g.estimate(x, 0, 1000).estimate(y, 0, 1000);
+        g.set_estimate(x, 0, 1000).set_estimate(y, 0, 1000);
         Pipeline(g).auto_schedule(target, params);
     }
 
@@ -323,7 +359,7 @@ int main(int argc, char **argv) {
         Func f("f");
         f(x, y) = im(x, y) * 7;
 
-        f.estimate(x, 0, 3).estimate(y, 0, 5);
+        f.set_estimate(x, 0, 3).set_estimate(y, 0, 5);
         Pipeline(f).auto_schedule(target, params);
     }
 
@@ -334,13 +370,13 @@ int main(int argc, char **argv) {
         Var z, w, t, u, v;
         f(x, y, z, w, t, u, v) = im(x, y, z, w, t, u, v) * 7;
 
-        f.estimate(x, 0, 8)
-            .estimate(y, 0, 9)
-            .estimate(z, 0, 10)
-            .estimate(w, 0, 5)
-            .estimate(t, 0, 3)
-            .estimate(u, 0, 2)
-            .estimate(v, 0, 6);
+        f.set_estimate(x, 0, 8)
+            .set_estimate(y, 0, 9)
+            .set_estimate(z, 0, 10)
+            .set_estimate(w, 0, 5)
+            .set_estimate(t, 0, 3)
+            .set_estimate(u, 0, 2)
+            .set_estimate(v, 0, 6);
         Pipeline(f).auto_schedule(target, params);
     }
 
@@ -358,8 +394,8 @@ int main(int argc, char **argv) {
         out1(x, y) = f(x, y) + g(x, y) + h(x, y);
         out2(x, y) = f(x, y) + g(x, y) + h(x, y);
 
-        out1.estimate(x, 0, 1000).estimate(y, 0, 1000);
-        out2.estimate(x, 0, 1000).estimate(y, 0, 1000);
+        out1.set_estimate(x, 0, 1000).set_estimate(y, 0, 1000);
+        out2.set_estimate(x, 0, 1000).set_estimate(y, 0, 1000);
         Pipeline({out1, out2}).auto_schedule(target, params);
 
     }
@@ -384,7 +420,7 @@ int main(int argc, char **argv) {
         Func g("output");
         // Access it in a way that makes it insane not to inline.
         g(x, y) = f[N-1](x, y) + f[0](clamp(cast<int>(sin(x) * 10000), 0, 100000), clamp(cast<int>(sin(x*y) * 10000), 0, 100000));
-        g.estimate(x, 0, 2048).estimate(y, 0, 2048);
+        g.set_estimate(x, 0, 2048).set_estimate(y, 0, 2048);
 
         Pipeline(g).auto_schedule(target, params);
     }
@@ -398,7 +434,7 @@ int main(int argc, char **argv) {
         g() += r;
         h(x, y) = g() + x + y;
 
-        h.estimate(x, 0, 1024).estimate(y, 0, 2048);
+        h.set_estimate(x, 0, 1024).set_estimate(y, 0, 2048);
         Pipeline(h).auto_schedule(target, params);
     }
 
@@ -413,7 +449,7 @@ int main(int argc, char **argv) {
 
         g(x, y) = f(x, y);
 
-        g.estimate(x, 0, 10).estimate(y, 0, 2048);
+        g.set_estimate(x, 0, 10).set_estimate(y, 0, 2048);
         Pipeline(g).auto_schedule(target, params);
     }
 
@@ -445,7 +481,7 @@ int main(int argc, char **argv) {
         Func out;
         out(x, y) = up[0](x, y);
 
-        out.estimate(x, 0, 2048).estimate(y, 0, 2048);
+        out.set_estimate(x, 0, 2048).set_estimate(y, 0, 2048);
         Pipeline(out).auto_schedule(target, params);
     }
 
@@ -463,7 +499,7 @@ int main(int argc, char **argv) {
         Func casted("casted");
         casted(x, y) = scan(x, y);
 
-        casted.estimate(x, 0, 2000).estimate(y, 0, 2000);
+        casted.set_estimate(x, 0, 2000).set_estimate(y, 0, 2000);
         Pipeline(casted).auto_schedule(target, params);
     }
 

@@ -2,9 +2,9 @@
 #define HALIDE_HALIDERUNTIME_H
 
 #ifndef COMPILING_HALIDE_RUNTIME
+#include <stdbool.h>
 #include <stddef.h>
 #include <stdint.h>
-#include <stdbool.h>
 #include <string.h>
 #else
 #include "runtime_internal.h"
@@ -110,8 +110,16 @@ extern void halide_mutex_lock(struct halide_mutex *mutex);
 extern void halide_mutex_unlock(struct halide_mutex *mutex);
 extern void halide_cond_signal(struct halide_cond *cond);
 extern void halide_cond_broadcast(struct halide_cond *cond);
-extern void halide_cond_signal(struct halide_cond *cond);
 extern void halide_cond_wait(struct halide_cond *cond, struct halide_mutex *mutex);
+//@}
+
+/** Functions for constructing/destroying/locking/unlocking arrays of mutexes. */
+struct halide_mutex_array;
+//@{
+extern struct halide_mutex_array* halide_mutex_array_create(int sz);
+extern void halide_mutex_array_destroy(void *user_context, void *array);
+extern int halide_mutex_array_lock(struct halide_mutex_array *array, int entry);
+extern int halide_mutex_array_unlock(struct halide_mutex_array *array, int entry);
 //@}
 
 /** Define halide_do_par_for to replace the default thread pool
@@ -379,8 +387,9 @@ typedef enum halide_type_code_t
 {
     halide_type_int = 0,   //!< signed integers
     halide_type_uint = 1,  //!< unsigned integers
-    halide_type_float = 2, //!< floating point numbers
-    halide_type_handle = 3 //!< opaque pointer type (void *)
+    halide_type_float = 2, //!< IEEE floating point numbers
+    halide_type_handle = 3, //!< opaque pointer type (void *)
+    halide_type_bfloat = 4, //!< floating point numbers in the bfloat format
 } halide_type_code_t;
 
 // Note that while __attribute__ can go before or after the declaration,
@@ -424,6 +433,10 @@ struct halide_type_t {
     /** Default constructor is required e.g. to declare halide_trace_event
      * instances. */
     HALIDE_ALWAYS_INLINE halide_type_t() : code((halide_type_code_t)0), bits(0), lanes(0) {}
+
+    HALIDE_ALWAYS_INLINE halide_type_t with_lanes(uint16_t new_lanes) const {
+        return halide_type_t((halide_type_code_t) code, bits, new_lanes);
+    }
 
     /** Compare two types for equality. */
     HALIDE_ALWAYS_INLINE bool operator==(const halide_type_t &other) const {
@@ -910,7 +923,7 @@ extern void halide_memoization_cache_cleanup();
  *
  * The default implementation uses the LLVM-provided AnnotateMemoryIsInitialized() function.
  */
-extern void halide_msan_annotate_memory_is_initialized(void *user_context, const void *ptr, uint64_t len);
+extern int halide_msan_annotate_memory_is_initialized(void *user_context, const void *ptr, uint64_t len);
 
 /** Mark the data pointed to by the buffer_t as initialized (but *not* the buffer_t itself),
  * using halide_msan_annotate_memory_is_initialized() for marking.
@@ -921,7 +934,7 @@ extern void halide_msan_annotate_memory_is_initialized(void *user_context, const
  *
  * Most client code should never need to replace the default implementation.
  */
-extern void halide_msan_annotate_buffer_is_initialized(void *user_context, struct halide_buffer_t *buffer);
+extern int halide_msan_annotate_buffer_is_initialized(void *user_context, struct halide_buffer_t *buffer);
 extern void halide_msan_annotate_buffer_is_initialized_as_destructor(void *user_context, void *buffer);
 
 /** The error codes that may be returned by a Halide pipeline. */
@@ -1223,6 +1236,7 @@ typedef enum halide_target_feature_t {
 
     halide_target_feature_opencl,  ///< Enable the OpenCL runtime.
     halide_target_feature_cl_doubles,  ///< Enable double support on OpenCL targets
+    halide_target_feature_cl_atomic64, ///< Enable 64-bit atomics operations on OpenCL targets
 
     halide_target_feature_opengl,  ///< Enable the OpenGL runtime.
     halide_target_feature_openglcompute, ///< Enable OpenGL Compute runtime.
@@ -1255,6 +1269,7 @@ typedef enum halide_target_feature_t {
     halide_target_feature_trace_loads, ///< Trace all loads done by the pipeline. Equivalent to calling Func::trace_loads on every non-inlined Func.
     halide_target_feature_trace_stores, ///< Trace all stores done by the pipeline. Equivalent to calling Func::trace_stores on every non-inlined Func.
     halide_target_feature_trace_realizations, ///< Trace all realizations done by the pipeline. Equivalent to calling Func::trace_realizations on every non-inlined Func.
+    halide_target_feature_trace_pipeline, ///< Trace the pipeline.
     halide_target_feature_cuda_capability61,  ///< Enable CUDA compute capability 6.1 (Pascal)
     halide_target_feature_hvx_v65, ///< Enable Hexagon v65 architecture.
     halide_target_feature_hvx_v66, ///< Enable Hexagon v66 architecture.
@@ -1267,8 +1282,14 @@ typedef enum halide_target_feature_t {
     halide_target_feature_check_unsafe_promises, ///< Insert assertions for promises.
     halide_target_feature_hexagon_dma, ///< Enable Hexagon DMA buffers.
     halide_target_feature_embed_bitcode,  ///< Emulate clang -fembed-bitcode flag.
-    halide_target_feature_disable_llvm_loop_vectorize,  ///< Disable loop vectorization in LLVM. (Ignored for non-LLVM targets.)
-    halide_target_feature_disable_llvm_loop_unroll,  ///< Disable loop unrolling in LLVM. (Ignored for non-LLVM targets.)
+    halide_target_feature_enable_llvm_loop_opt,  ///< Enable loop vectorization + unrolling in LLVM. Overrides halide_target_feature_disable_llvm_loop_opt. (Ignored for non-LLVM targets.)
+    halide_target_feature_disable_llvm_loop_opt,  ///< Disable loop vectorization + unrolling in LLVM. (Ignored for non-LLVM targets.)
+    halide_target_feature_wasm_simd128,  ///< Enable +simd128 instructions for WebAssembly codegen.
+    halide_target_feature_wasm_signext,  ///< Enable +sign-ext instructions for WebAssembly codegen.
+    halide_target_feature_sve, ///< Enable ARM Scalable Vector Extensions
+    halide_target_feature_sve2, ///< Enable ARM Scalable Vector Extensions v2
+    halide_target_feature_egl,            ///< Force use of EGL support.
+
     halide_target_feature_end ///< A sentinel. Every target is considered to have this feature, and setting this feature does nothing.
 } halide_target_feature_t;
 
@@ -1830,6 +1851,12 @@ extern double halide_float16_bits_to_double(uint16_t);
  * eagerly to the underlying device API. Many device allocators are
  * quite slow, so it can be beneficial to set this to true. The
  * default value for now is false.
+ *
+ * Note that if enabled, the eviction policy is very simplistic. The
+ * 32 most-recently used allocations are preserved, regardless of
+ * their size. Additionally, if a call to cuMalloc results in an
+ * out-of-memory error, the entire cache is flushed and the allocation
+ * is retried. See https://github.com/halide/Halide/issues/4093
  *
  * If set to false, releases all unused device allocations back to the
  * underlying device APIs. For finer-grained control, see specific

@@ -1,6 +1,8 @@
 #include "Halide.h"
 #include <stdio.h>
 
+namespace {
+
 using namespace Halide;
 
 struct event {
@@ -113,8 +115,74 @@ int my_trace(void *user_context, const halide_trace_event_t *ev) {
     return n_trace;
 }
 
+bool check_trace_correct(event* correct_trace, int correct_trace_length) {
+    int n = n_trace > correct_trace_length ? n_trace : correct_trace_length;
+    for (int i = 0; i < n; i++) {
+        event recorded = {0};
+        if (i < n_trace) recorded = trace[i];
+        event correct = {0};
+        if (i < correct_trace_length) correct = correct_trace[i];
+
+        if (!events_match(recorded, correct)) {
+            constexpr int radius_max = 2;
+
+            // Uh oh. Maybe it's just a reordered load.
+            bool reordered = false;
+            for (int radius = 1; radius <= radius_max; ++radius) {
+                if (i >= radius &&
+                    events_match(recorded, correct_trace[i-radius]) &&
+                    recorded.event_type == 0 &&
+                    correct.event_type == 0) {
+                    // Phew.
+                    reordered = true;
+                    break;
+                }
+
+                if (i < correct_trace_length-radius &&
+                    events_match(recorded, correct_trace[i+radius]) &&
+                    recorded.event_type == 0 &&
+                    correct.event_type == 0) {
+                    // Phew.
+                    reordered = true;
+                    break;
+                }
+            }
+            if (reordered) {
+                continue;
+            }
+
+            printf("Traces differs at event %d:\n"
+                   "-------------------------------\n"
+                   "Correct trace:\n", i);
+            for (int j = 0; j < correct_trace_length; j++) {
+                if (j == i) printf(" ===> ");
+                print_event(correct_trace[j]);
+            }
+            printf("-------------------------------\n"
+                   "Trace encountered:\n");
+            for (int j = 0; j < n_trace; j++) {
+                if (j == i) printf(" ===> ");
+                print_event_source(trace[j]);
+            }
+            printf("-------------------------------\n");
+            return false;
+        }
+    }
+    return true;
+}
+
+void reset_trace() {
+    n_trace = 0;
+}
+
+}  // namespace
+
 int main(int argc, char **argv) {
     ImageParam input(Float(32), 1, "i");
+
+    Buffer<float> input_buf(10);
+    input_buf.fill(0.f);
+    input.set(input_buf);
 
     Func f("f"), g("g");
     Var x;
@@ -122,25 +190,39 @@ int main(int argc, char **argv) {
     f(x) = g(x)[0] + g(x+1)[1] + input(x);
 
     f.vectorize(x, 4);
+    g.store_root().compute_at(f, x);
+    g.vectorize(x, 4);
+
+    f.set_custom_trace(&my_trace);
+
+    // Check that Target::TracePipeline works.
+    f.realize(10, get_jit_target_from_environment().with_feature(Target::TracePipeline));
+
+    // The golden trace, recorded when this test was written
+    event correct_pipeline_trace[] = {
+        {102, 0, 8, 3, 0, 0, 0, 0, {0, 0, 0, 0}, {0.000000f, 0.000000f, 0.000000f, 0.000000f}, ""},
+        {102, 1, 9, 3, 0, 0, 0, 0, {0, 0, 0, 0}, {0.000000f, 0.000000f, 0.000000f, 0.000000f}, ""},
+    };
+    if (!check_trace_correct(correct_pipeline_trace, 2)) {
+        return -1;
+    }
+
+
+    // Test a more interesting trace.
+    reset_trace();
+
+    g.add_trace_tag("g whiz");
+    g.trace_stores().trace_loads().trace_realizations();
+
     f.trace_stores();
     f.trace_realizations();
     f.add_trace_tag("arbitrary data on f");
     // All non-null characters are OK
     f.add_trace_tag("more:arbitrary \xff data on f?");
 
-    g.add_trace_tag("g whiz");
-    g.vectorize(x, 4);
-    g.store_root().compute_at(f, x);
-    g.trace_stores().trace_loads().trace_realizations();
-
     input.trace_loads();
 
-    Buffer<float> input_buf(10);
-    input_buf.fill(0.f);
-    input.set(input_buf);
-
-    f.set_custom_trace(&my_trace);
-    f.realize(10);
+    f.realize(10, get_jit_target_from_environment());
 
     // The golden trace, recorded when this test was written
     event correct_trace[] = {
@@ -193,58 +275,8 @@ int main(int argc, char **argv) {
     };
 
     int correct_trace_length = sizeof(correct_trace)/sizeof(correct_trace[0]);
-
-    int n = n_trace > correct_trace_length ? n_trace : correct_trace_length;
-    for (int i = 0; i < n; i++) {
-        event recorded = {0};
-        if (i < n_trace) recorded = trace[i];
-        event correct = {0};
-        if (i < correct_trace_length) correct = correct_trace[i];
-
-        if (!events_match(recorded, correct)) {
-            constexpr int radius_max = 2;
-
-            // Uh oh. Maybe it's just a reordered load.
-            bool reordered = false;
-            for (int radius = 1; radius <= radius_max; ++radius) {
-                if (i >= radius &&
-                    events_match(recorded, correct_trace[i-radius]) &&
-                    recorded.event_type == 0 &&
-                    correct.event_type == 0) {
-                    // Phew.
-                    reordered = true;
-                    break;
-                }
-
-                if (i < correct_trace_length-radius &&
-                    events_match(recorded, correct_trace[i+radius]) &&
-                    recorded.event_type == 0 &&
-                    correct.event_type == 0) {
-                    // Phew.
-                    reordered = true;
-                    break;
-                }
-            }
-            if (reordered) {
-                continue;
-            }
-
-            printf("Traces differs at event %d:\n"
-                   "-------------------------------\n"
-                   "Correct trace:\n", i);
-            for (int j = 0; j < correct_trace_length; j++) {
-                if (j == i) printf(" ===> ");
-                print_event(correct_trace[j]);
-            }
-            printf("-------------------------------\n"
-                   "Trace encountered:\n");
-            for (int j = 0; j < n_trace; j++) {
-                if (j == i) printf(" ===> ");
-                print_event_source(trace[j]);
-            }
-            printf("-------------------------------\n");
-            return -1;
-        }
+    if (!check_trace_correct(correct_trace, correct_trace_length)) {
+        return -1;
     }
 
     printf("Success!\n");

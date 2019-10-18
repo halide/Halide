@@ -3,84 +3,80 @@ include ../support/autoscheduler.inc
 
 HL_TARGET=host-cuda
 
-all: $(BIN)/filter
+all: $(BIN)/$(HL_TARGET)/filter
 
-$(BIN)/bilateral_grid.generator: bilateral_grid_generator.cpp ../autoscheduler/SimpleAutoSchedule.h ../autoscheduler/SimpleAutoSchedule.cpp ../autoscheduler/DerivativeUtils.h ../autoscheduler/DerivativeUtils.cpp $(GENERATOR_DEPS)
+$(GENERATOR_BIN)/bilateral_grid.generator: bilateral_grid_generator.cpp ../autoscheduler/SimpleAutoSchedule.h ../autoscheduler/SimpleAutoSchedule.cpp ../autoscheduler/DerivativeUtils.h ../autoscheduler/DerivativeUtils.cpp $(GENERATOR_DEPS)
 	@mkdir -p $(@D)
 	$(CXX) $(CXXFLAGS) $(USE_EXPORT_DYNAMIC) -g $(filter-out %.h,$^) -o $@ $(LDFLAGS) $(HALIDE_SYSTEM_LIBS)
 
-$(BIN)/bilateral_grid.a: $(BIN)/bilateral_grid.generator
+$(BIN)/%/bilateral_grid.a: $(GENERATOR_BIN)/bilateral_grid.generator
 	@mkdir -p $(@D)
-	$< -g bilateral_grid -o $(BIN) -f bilateral_grid target=$(HL_TARGET) auto_schedule=false
+	$< -g bilateral_grid -e $(GENERATOR_OUTPUTS) -o $(@D) -f bilateral_grid target=$(HL_TARGET) auto_schedule=false
 
-$(BIN)/bilateral_grid_classic_auto_schedule.a: $(BIN)/bilateral_grid.generator $(AUTOSCHED_BIN)/libauto_schedule.so
+$(BIN)/%/bilateral_grid_classic_auto_schedule.a: $(GENERATOR_BIN)/bilateral_grid.generator $(AUTOSCHED_BIN)/libauto_schedule.so
 	@mkdir -p $(@D)
 	HL_PERMIT_FAILED_UNROLL=1 \
 	HL_WEIGHTS_DIR=$(AUTOSCHED_SRC)/gpu_weights \
 	HL_DEBUG_CODEGEN=1 \
 	HL_SHARED_MEMORY_LIMIT=48 \
 	HL_COMPUTE_ROOT_AND_INLINE_ONLY=1 \
-	$< -g bilateral_grid -o $(BIN) -f bilateral_grid_classic_auto_schedule target=$(HL_TARGET)-no_runtime auto_schedule=true -p $(AUTOSCHED_BIN)/libauto_schedule.so machine_params=$(HL_MACHINE_PARAMS) -e static_library,h,schedule 2> stderr_classic.txt > stdout_classic.txt
+	$^ -g bilateral_grid -o $(BIN) -f bilateral_grid_classic_auto_schedule target=$(HL_TARGET)-no_runtime auto_schedule=true -p $(AUTOSCHED_BIN)/libauto_schedule.so machine_params=$(HL_MACHINE_PARAMS) -e static_library,h,schedule 2> stderr_classic.txt > stdout_classic.txt
 
-$(BIN)/bilateral_grid_auto_schedule.a: $(BIN)/bilateral_grid.generator $(AUTOSCHED_BIN)/libauto_schedule.so
+$(BIN)/%/bilateral_grid_auto_schedule.a: $(GENERATOR_BIN)/bilateral_grid.generator
 	@mkdir -p $(@D)
 	HL_PERMIT_FAILED_UNROLL=1 \
 	HL_WEIGHTS_DIR=$(AUTOSCHED_SRC)/gpu_weights \
 	HL_DEBUG_CODEGEN=1 \
 	HL_SHARED_MEMORY_LIMIT=48 \
-	$< -g bilateral_grid -o $(BIN) -f bilateral_grid_auto_schedule target=$(HL_TARGET)-no_runtime auto_schedule=true -p $(AUTOSCHED_BIN)/libauto_schedule.so machine_params=$(HL_MACHINE_PARAMS) -e static_library,h,schedule 2> stderr.txt > stdout.txt
+	$^ -g bilateral_grid -e $(GENERATOR_OUTPUTS) -o $(@D) -f bilateral_grid_auto_schedule target=$*-no_runtime auto_schedule=true -p $(AUTOSCHED_BIN)/libauto_schedule.so machine_params=$(HL_MACHINE_PARAMS) 2> stderr.txt > stdout.txt
 
-$(BIN)/bilateral_grid_simple_auto_schedule.a: $(BIN)/bilateral_grid.generator
+$(BIN)/%/bilateral_grid_simple_auto_schedule.a: $(GENERATOR_BIN)/bilateral_grid.generator
 	@mkdir -p $(@D)
 	HL_USE_SIMPLE_AUTOSCHEDULER=1 \
-	$< -g bilateral_grid -o $(BIN) -f bilateral_grid_simple_auto_schedule target=$(HL_TARGET)-no_runtime auto_schedule=false -e static_library,h
+	$^ -g bilateral_grid -e $(GENERATOR_OUTPUTS) -o $(@D) -f bilateral_grid_simple_auto_schedule target=$(HL_TARGET)-no_runtime auto_schedule=false
 
-$(BIN)/viz/bilateral_grid.a: $(BIN)/bilateral_grid.generator
+$(BIN)/%/filter: filter.cpp $(BIN)/%/bilateral_grid.a $(BIN)/%/bilateral_grid_classic_auto_schedule.a $(BIN)/%/bilateral_grid_auto_schedule.a $(BIN)/%/bilateral_grid_simple_auto_schedule.a
 	@mkdir -p $(@D)
-	$^ -g bilateral_grid -o $(BIN)/viz target=$(HL_TARGET)-trace_all
+	$(CXX) $(CXXFLAGS) -I$(BIN)/$* $^ -o $@ $(IMAGE_IO_FLAGS) $(LDFLAGS)
 
-$(BIN)/filter: filter.cpp $(BIN)/bilateral_grid.a $(BIN)/bilateral_grid_classic_auto_schedule.a $(BIN)/bilateral_grid_auto_schedule.a $(BIN)/bilateral_grid_simple_auto_schedule.a
+$(BIN)/%/filter_viz: filter.cpp $(BIN)/%-trace_all/bilateral_grid.a
 	@mkdir -p $(@D)
-	$(CXX) $(CXXFLAGS) -O3 -ffast-math -Wall -Werror -I$(BIN) $^ -o $@ $(IMAGE_IO_FLAGS) $(LDFLAGS)
-
-$(BIN)/filter_viz: $(BIN)/viz/bilateral_grid.a filter.cpp ../../bin/HalideTraceViz
-	@mkdir -p $(@D)
-	$(CXX) $(CXXFLAGS) -DNO_AUTO_SCHEDULE -O3 -ffast-math -Wall -Werror -I$(BIN)/viz filter.cpp $(BIN)/viz/bilateral_grid.a -o $@ $(IMAGE_IO_FLAGS) $(LDFLAGS)
+	$(CXX) $(CXXFLAGS) -DNO_AUTO_SCHEDULE -I$(BIN)/$*-trace_all $^ -o $@ $(IMAGE_IO_FLAGS) $(LDFLAGS)
 
 ../../bin/HalideTraceViz: ../../util/HalideTraceViz.cpp
 	$(MAKE) -C ../../ bin/HalideTraceViz
 
-$(BIN)/bilateral_grid.mp4: $(BIN)/filter_viz viz.sh ../../bin/HalideTraceViz
+$(BIN)/%/bilateral_grid.mp4: $(BIN)/%/filter_viz viz.sh ../../bin/HalideTraceViz
 	@mkdir -p $(@D)
-	HL_AVCONV=$(HL_AVCONV) bash viz.sh $(BIN)
+	HL_AVCONV=$(HL_AVCONV) bash viz.sh $(BIN)/$*
 
-$(BIN)/out.png: $(BIN)/filter
+$(BIN)/%/out.png: $(BIN)/%/filter
 	@mkdir -p $(@D)
-	$(BIN)/filter $(IMAGES)/gray.png $(BIN)/out.png 0.1 10
+	$< $(IMAGES)/gray.png $@ 0.1 10
 
-$(BIN)/out.tiff: $(BIN)/filter
+$(BIN)/%/out.tiff: $(BIN)/%/filter
 	@mkdir -p $(@D)
-	$(BIN)/filter $(IMAGES)/gray.png $(BIN)/out.tiff 0.1 10
+	$< $(IMAGES)/gray.png $@ 0.1 10
 
 clean:
 	rm -rf $(BIN)
 
-test: $(BIN)/out.png $(BIN)/out.tiff
+test: $(BIN)/$(HL_TARGET)/out.png $(BIN)/$(HL_TARGET)/out.tiff
 
-viz: $(BIN)/bilateral_grid.mp4
+viz: $(BIN)/$(HL_TARGET)/bilateral_grid.mp4
 	$(HL_VIDEOPLAYER) $^
 
-$(BIN)/viz_auto.mp4: $(BIN)/filter_viz ../support/viz_auto.sh ../../bin/HalideTraceViz
+$(BIN)/%/viz_auto.mp4: $(BIN)/%/filter_viz ../support/viz_auto.sh ../../bin/HalideTraceViz
 	@mkdir -p $(@D)
-	HL_AVCONV=$(HL_AVCONV) bash ../support/viz_auto.sh "$(BIN)/filter_viz $(IMAGES)/gray_small.png $(BIN)/out_small.png 0.2 0" ../../bin/HalideTraceViz $@
+	HL_AVCONV=$(HL_AVCONV) bash ../support/viz_auto.sh "$(BIN)/$*/filter_viz $(IMAGES)/gray_small.png $(BIN)/$*/out_small.png 0.2 0" ../../bin/HalideTraceViz $@
 
-viz_auto: $(BIN)/viz_auto.mp4
+viz_auto: $(BIN)/$(HL_TARGET)/viz_auto.mp4
 	$(HL_VIDEOPLAYER) $^
 
 BATCH_ID ?= 0
 TRAIN_ONLY ?= 0
 SAMPLES_DIR ?= autotuned_samples
-autotune: $(BIN)/bilateral_grid.generator $(AUTOSCHED_BIN)/augment_sample $(AUTOSCHED_BIN)/train_cost_model $(AUTOSCHED_BIN)/libauto_schedule.so $(AUTOSCHED_SRC)/autotune_loop.sh
+autotune: $(GENERATOR_BIN)/bilateral_grid.generator $(AUTOSCHED_BIN)/augment_sample $(AUTOSCHED_BIN)/train_cost_model $(AUTOSCHED_BIN)/libauto_schedule.so $(AUTOSCHED_SRC)/autotune_loop.sh
 	HL_TARGET=host-cuda \
 	HL_MACHINE_PARAMS=80,1,1 \
 	SAMPLES_DIR=$(SAMPLES_DIR) \
@@ -88,7 +84,7 @@ autotune: $(BIN)/bilateral_grid.generator $(AUTOSCHED_BIN)/augment_sample $(AUTO
 	HL_DEBUG_CODEGEN=0 \
 	HL_SHARED_MEMORY_LIMIT=48 \
 	bash $(AUTOSCHED_SRC)/autotune_loop.sh \
-		$(BIN)/bilateral_grid.generator \
+		$(GENERATOR_BIN)/bilateral_grid.generator \
 		bilateral_grid \
 		host-cuda \
 		$(AUTOSCHED_SRC)/gpu_weights \

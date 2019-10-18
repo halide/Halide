@@ -34,15 +34,20 @@ public:
 
         output(x, y) = stages.back()(x, y);
 
-        if (auto_schedule) {
+        /* ESTIMATES */
+        // (This can be useful in conjunction with RunGen and benchmarks as well
+        // as auto-schedule, so we do it in all cases.)
+        {
             const int width = 1536;
             const int height = 2560;
             // Provide estimates on the input image
-            input.dim(0).set_bounds_estimate(0, width);
-            input.dim(1).set_bounds_estimate(0, height);
+            input.set_estimates({{0, width}, {0, height}});
             // Provide estimates on the pipeline output
-            output.estimate(x, 0, width)
-                .estimate(y, 0, height);
+            output.set_estimates({{0, width}, {0, height}});
+        }
+
+        if (auto_schedule) {
+            // nothing
         } else {
             std::string use_simple_autoscheduler =
                 Halide::Internal::get_env_variable("HL_USE_SIMPLE_AUTOSCHEDULER");

@@ -107,6 +107,9 @@ HALIDE_NEVER_INLINE void add_schedule_methods(PythonClass &class_instance) {
         py::arg("message"))
 
     .def("allow_race_conditions", &T::allow_race_conditions)
+
+    .def("atomic", &T::atomic, py::arg("override_associativity_test") = false)
+
     .def("hexagon", &T::hexagon, py::arg("x") = Var::outermost())
 
     .def("prefetch", (T &(T::*)(const Func &, VarOrRVar, Expr, PrefetchBoundStrategy)) &T::prefetch,

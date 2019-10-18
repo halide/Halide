@@ -14,7 +14,7 @@ int main(int argc, char **argv) {
     g(x) = fib(x+10);
 
     // Provide estimates for pipeline output
-    g.estimate(x, 0, 50);
+    g.set_estimate(x, 0, 50);
 
     // Partially specify some schedules
     g.bound(x, 0, 100);

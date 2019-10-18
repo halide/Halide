@@ -73,6 +73,18 @@ public:
 
         Var tx("tx"), ty("ty"), xi("xi"), yi("yi");
 
+        /* ESTIMATES */
+        // (This can be useful in conjunction with RunGen and benchmarks as well
+        // as auto-schedule, so we do it in all cases.)
+        // Provide estimates on the input image
+        input.set_estimates({{0, 614}, {0, 1024}, {0, 3}});
+        // Provide estimates on the parameters
+        patch_size.set_estimate(7);
+        search_area.set_estimate(7);
+        sigma.set_estimate(0.12f);
+        // Provide estimates on the output pipeline
+        non_local_means.set_estimates({{0, 614}, {0, 1024}, {0, 3}});
+
         if (auto_schedule) {
             // Provide estimates on the input image
             input.dim(0).set_bounds_estimate(0, 1536);
@@ -86,7 +98,11 @@ public:
             non_local_means.estimate(x, 0, 1536)
                 .estimate(y, 0, 2560)
                 .estimate(c, 0, 3);
-        } else if (get_target().has_gpu_feature()) {
+        } /*else if (get_target().has_gpu_feature()) {
+            // TODO: the GPU schedule is currently using to much shared memory
+            // because the simplifier can't simplify the expr (it can't cancel
+            // the 'x' term in min(((a + (x + b)) + c) - min(x + d + e))) so
+            // it ends up using the entire image size as the shared memory size.
             non_local_means.compute_root()
                 .gpu_tile(x, y, xi, yi, 32, 8);
             non_local_means_sum.compute_root()

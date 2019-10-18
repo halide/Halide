@@ -233,7 +233,9 @@ void check_algebra() {
 
     check(0/max(x, 1), 0);
     check(x/1, x);
-    check(x/x, 1);
+    check(max(x, 1)/(max(x, 1)), 1);
+    check(min(x, -1)/(min(x, -1)), 1);
+    check((x*2+1)/(x*2+1), 1);
     check((-1)/(x*2 + 1), select(x < 0, 1, -1));
     check(Expr(7)/3, 2);
     check(Expr(6.0f)/2.0f, 3.0f);
@@ -1506,6 +1508,62 @@ void check_overflow() {
         internal_assert(is_const(simplify(e)))
             << "Non-everflowing expression should have simplified: " << e << "\n";
     }
+
+    // We also risk 64-bit overflow when computing the constant bounds of subexpressions
+    Expr x = Variable::make(halide_type_of<int64_t>(), "x");
+    Expr y = Variable::make(halide_type_of<int64_t>(), "y");
+
+    Expr zero = make_const(Int(64), 0);
+    Expr two_32 = make_const(Int(64), (int64_t)1 << 32);
+    Expr neg_two_32 = make_const(Int(64), -((int64_t)1 << 32));
+    Expr min_64 = make_const(Int(64), INT64_MIN);
+    Expr max_64 = make_const(Int(64), INT64_MAX);
+    for (int x_pos = 0; x_pos <= 1; x_pos++) {
+        for (int y_pos = 0; y_pos <= 1; y_pos++) {
+            // Mul
+            {
+                Scope<Interval> scope;
+                if (x_pos) {
+                    scope.push("x", {zero, two_32});
+                } else {
+                    scope.push("x", {neg_two_32, zero});
+                }
+                if (y_pos) {
+                    scope.push("y", {zero, two_32});
+                } else {
+                    scope.push("y", {neg_two_32, zero});
+                }
+                if (x_pos == y_pos) {
+                    internal_assert(!is_const(simplify((x * y) < two_32, true, scope)));
+                } else {
+                    internal_assert(!is_const(simplify((x * y) > neg_two_32, true, scope)));
+                }
+            }
+            // Add/Sub
+            {
+                Scope<Interval> scope;
+                if (x_pos) {
+                    scope.push("x", {zero, max_64});
+                } else {
+                    scope.push("x", {min_64, zero});
+                }
+                if (y_pos) {
+                    scope.push("y", {zero, max_64});
+                } else {
+                    scope.push("y", {min_64, zero});
+                }
+                if (x_pos && y_pos) {
+                    internal_assert(!is_const(simplify((x + y) < two_32, true, scope)));
+                } else if (x_pos && !y_pos) {
+                    internal_assert(!is_const(simplify((x - y) < two_32, true, scope)));
+                } else if (!x_pos && y_pos) {
+                    internal_assert(!is_const(simplify((x - y) > neg_two_32, true, scope)));
+                } else {
+                    internal_assert(!is_const(simplify((x + y) > neg_two_32, true, scope)));
+                }
+            }
+        }
+    }
 }
 
 template<typename T>
@@ -1747,6 +1805,47 @@ int main(int argc, char **argv) {
         check(Halide::is_nan(Expr(std::nanf("1"))), const_true());
         check(Halide::is_nan(Expr(std::nan("1"))), const_true());
     }
+
+    // Check that is_inf() returns a boolean result for constant inputs
+    {
+        constexpr float inf32 = std::numeric_limits<float>::infinity();
+        constexpr double inf64 = std::numeric_limits<double>::infinity();
+
+        check(Halide::is_inf(cast<float16_t>(Expr(0.f))), const_false());
+        check(Halide::is_inf(Expr(0.f)), const_false());
+        check(Halide::is_inf(Expr(0.0)), const_false());
+
+        check(Halide::is_inf(Expr(cast<float16_t>(inf32))), const_true());
+        check(Halide::is_inf(Expr(inf32)), const_true());
+        check(Halide::is_inf(Expr(inf64)), const_true());
+
+        check(Halide::is_inf(Expr(cast<float16_t>(-inf32))), const_true());
+        check(Halide::is_inf(Expr(-inf32)), const_true());
+        check(Halide::is_inf(Expr(-inf64)), const_true());
+    }
+
+    // Check that is_finite() returns a boolean result for constant inputs
+    {
+        constexpr float inf32 = std::numeric_limits<float>::infinity();
+        constexpr double inf64 = std::numeric_limits<double>::infinity();
+
+        check(Halide::is_finite(cast<float16_t>(Expr(0.f))), const_true());
+        check(Halide::is_finite(Expr(0.f)), const_true());
+        check(Halide::is_finite(Expr(0.0)), const_true());
+
+        check(Halide::is_finite(Expr(cast<float16_t>(std::nanf("1")))), const_false());
+        check(Halide::is_finite(Expr(std::nanf("1"))), const_false());
+        check(Halide::is_finite(Expr(std::nan("1"))), const_false());
+
+        check(Halide::is_finite(Expr(cast<float16_t>(inf32))), const_false());
+        check(Halide::is_finite(Expr(inf32)), const_false());
+        check(Halide::is_finite(Expr(inf64)), const_false());
+
+        check(Halide::is_finite(Expr(cast<float16_t>(-inf32))), const_false());
+        check(Halide::is_finite(Expr(-inf32)), const_false());
+        check(Halide::is_finite(Expr(-inf64)), const_false());
+    }
+
 
     {
         using ConciseCasts::i32;

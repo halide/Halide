@@ -42,7 +42,9 @@ class CountProducers : public IRVisitor {
 public:
     int count = 0;
 
-    CountProducers(const std::string &name) : name(name) {}
+    CountProducers(const std::string &name)
+        : name(name) {
+    }
 };
 
 int count_producers(Stmt in, const std::string &name) {
@@ -147,10 +149,10 @@ class FoldStorageOfFunction : public IRMutator {
         return stmt;
     }
 
-
 public:
-    FoldStorageOfFunction(string f, int d, Expr e, string p) :
-        func(f), dim(d), factor(e), dynamic_footprint(p) {}
+    FoldStorageOfFunction(string f, int d, Expr e, string p)
+        : func(f), dim(d), factor(e), dynamic_footprint(p) {
+    }
 };
 
 // Inject dynamic folding checks against a tracked live range.
@@ -381,7 +383,6 @@ class InjectFoldingCheck : public IRMutator {
         } else {
             return LetStmt::make(op->name, op->value, mutate(op->body));
         }
-
     }
 
 public:
@@ -449,12 +450,16 @@ class AttemptStorageFoldingOfFunction : public IRMutator {
 
         // Try each dimension in turn from outermost in
         for (size_t i = box.size(); i > 0; i--) {
-            int dim = (int)(i-1);
+            int dim = (int)(i - 1);
 
-            if (!box[dim].is_bounded()) continue;
+            if (!box[dim].is_bounded()) {
+                continue;
+            }
 
-            Expr min = simplify(common_subexpression_elimination(simplify(box[dim].min)));
-            Expr max = simplify(common_subexpression_elimination(simplify(box[dim].max)));
+            // TODO: should call cse() here, but there can be duplicate names in the Expr.
+            // https://github.com/halide/Halide/issues/3793
+            Expr min = simplify(box[dim].min);
+            Expr max = simplify(box[dim].max);
 
             Expr min_provided, max_provided, min_required, max_required;
             if (func.schedule().async() && !explicit_only) {
@@ -482,10 +487,12 @@ class AttemptStorageFoldingOfFunction : public IRMutator {
             Expr extent_initial = simplify(substitute(loop_var, op->min, max_initial - min_initial + 1), true, bounds);
             Expr extent_steady = simplify(max_steady - min_steady + 1, true, steady_bounds);
             Expr extent = Max::make(extent_initial, extent_steady);
-            extent = simplify(common_subexpression_elimination(extent), true, bounds);
+            // TODO: should call cse() here, but there can be duplicate names in the Expr.
+            // https://github.com/halide/Halide/issues/3793
+            extent = simplify(extent, true, bounds);
 
             // Find the StorageDim corresponding to dim.
-            const std::vector<StorageDim>& storage_dims = func.schedule().storage_dims();
+            const std::vector<StorageDim> &storage_dims = func.schedule().storage_dims();
             auto storage_dim_i = std::find_if(storage_dims.begin(), storage_dims.end(),
                                               [&](const StorageDim &i) { return i.var == func.args()[dim]; });
             internal_assert(storage_dim_i != storage_dims.end());
@@ -575,7 +582,8 @@ class AttemptStorageFoldingOfFunction : public IRMutator {
                                               op->name,
                                               sema_var,
                                               dim,
-                                              storage_dim).mutate(body);
+                                              storage_dim)
+                               .mutate(body);
 
                     if (storage_dim.fold_forward) {
                         can_fold_forwards = true;
@@ -619,22 +627,22 @@ class AttemptStorageFoldingOfFunction : public IRMutator {
                 if (const_max_extent && *const_max_extent <= max_fold) {
                     factor = static_cast<int>(next_power_of_two(*const_max_extent));
                 } else {
-                        // Try a little harder to find a bounding power of two
-                        int e = max_fold * 2;
-                        bool success = false;
-                        while (e > 0 && can_prove(extent <= e / 2)) {
-                            success = true;
-                            e /= 2;
-                        }
-                        if (success) {
-                            factor = e;
-                        } else {
-                            debug(3) << "Not folding because extent not bounded by a constant not greater than " << max_fold << "\n"
-                                     << "extent = " << extent << "\n"
-                                     << "max extent = " << max_extent << "\n";
-                            // Try the next dimension
-                            continue;
-                        }
+                    // Try a little harder to find a bounding power of two
+                    int e = max_fold * 2;
+                    bool success = false;
+                    while (e > 0 && can_prove(extent <= e / 2)) {
+                        success = true;
+                        e /= 2;
+                    }
+                    if (success) {
+                        factor = e;
+                    } else {
+                        debug(3) << "Not folding because extent not bounded by a constant not greater than " << max_fold << "\n"
+                                 << "extent = " << extent << "\n"
+                                 << "max extent = " << max_extent << "\n";
+                        // Try the next dimension
+                        continue;
+                    }
                 }
             }
 
@@ -670,14 +678,14 @@ class AttemptStorageFoldingOfFunction : public IRMutator {
                     if (can_fold_forwards) {
                         Expr max_provided_prev = substitute(op->name, loop_var - 1, max_provided);
                         Expr min_required_next = substitute(op->name, loop_var + 1, min_required);
-                        to_acquire = max_provided - max_provided_prev; // This is the first time we use these entries
-                        to_release = min_required_next - min_required; // This is the last time we use these entries
+                        to_acquire = max_provided - max_provided_prev;  // This is the first time we use these entries
+                        to_release = min_required_next - min_required;  // This is the last time we use these entries
                     } else {
                         internal_assert(can_fold_backwards);
                         Expr min_provided_prev = substitute(op->name, loop_var - 1, min_provided);
                         Expr max_required_next = substitute(op->name, loop_var + 1, max_required);
-                        to_acquire = min_provided_prev - min_provided; // This is the first time we use these entries
-                        to_release = max_required - max_required_next; // This is the last time we use these entries
+                        to_acquire = min_provided_prev - min_provided;  // This is the first time we use these entries
+                        to_release = max_required - max_required_next;  // This is the last time we use these entries
                     }
 
                     // Logically we acquire the entire extent on
@@ -692,9 +700,9 @@ class AttemptStorageFoldingOfFunction : public IRMutator {
 
                     Expr fudge = simplify(substitute(op->name, loop_min, extent - to_acquire));
                     if (is_const(fudge) && can_prove(fudge <= sema.init)) {
-                      sema.init -= fudge;
+                        sema.init -= fudge;
                     } else {
-                      to_acquire = select(loop_var > loop_min, likely(to_acquire), extent);
+                        to_acquire = select(loop_var > loop_min, likely(to_acquire), extent);
                     }
 
                     // We may need dynamic assertions that a positive
@@ -776,7 +784,7 @@ class AttemptStorageFoldingOfFunction : public IRMutator {
             stmt = For::make(op->name, op->min, op->extent, op->for_type, op->device_api, body);
         }
 
-        if (func.schedule().async() && !dynamic_footprint.empty() ) {
+        if (func.schedule().async() && !dynamic_footprint.empty()) {
             // Step the counters backwards over the entire extent of
             // the realization, in case we're in an inner loop and are
             // going to run this loop again with the same
@@ -809,7 +817,8 @@ public:
     vector<Fold> dims_folded;
 
     AttemptStorageFoldingOfFunction(Function f, bool explicit_only)
-        : func(f), explicit_only(explicit_only) {}
+        : func(f), explicit_only(explicit_only) {
+    }
 };
 
 // Look for opportunities for storage folding in a statement
@@ -885,7 +894,9 @@ class StorageFolding : public IRMutator {
     }
 
 public:
-    StorageFolding(const map<string, Function> &env) : env(env) {}
+    StorageFolding(const map<string, Function> &env)
+        : env(env) {
+    }
 };
 
 // Because storage folding runs before simplification, it's useful to
@@ -902,10 +913,11 @@ class SubstituteInConstants : public IRMutator {
             const LetStmt *op;
             Expr new_value;
             ScopedBinding<Expr> binding;
-            Frame(const LetStmt *op, Expr v, Scope<Expr> &scope) :
-                op(op),
-                new_value(std::move(v)),
-                binding(is_const(new_value), scope, op->name, new_value) {}
+            Frame(const LetStmt *op, Expr v, Scope<Expr> &scope)
+                : op(op),
+                  new_value(std::move(v)),
+                  binding(is_const(new_value), scope, op->name, new_value) {
+            }
         };
         std::vector<Frame> frames;
 

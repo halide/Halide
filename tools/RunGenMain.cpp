@@ -51,7 +51,8 @@ Arguments:
         some_int=42 some_float=3.1415
 
     You can also use the text `default` or `estimate` to use the default or
-    estimate value of the given input.
+    estimate value of the given input, respectively. (You can join these by
+    commas to give default-then-estimate or estimate-then-default behaviors.)
 
     Buffer inputs and outputs are specified by pathname:
 
@@ -103,7 +104,7 @@ Arguments:
         the --output_extents flag.)
 
         In place of [NUM,NUM,...] for boundary, you may specify 'estimate';
-        this will use the esimated bounds specified in the code.
+        this will use the estimated bounds specified in the code.
 
 Flags:
 
@@ -138,14 +139,6 @@ Flags:
         Override the default minimum desired benchmarking time; ignored if
         --benchmarks is not also specified.
 
-    --benchmark_min_iters=NUM [default = 1]:
-        Override the default minimum number of benchmarking iterations; ignored
-        if --benchmarks is not also specified.
-
-    --benchmark_max_iters=NUM [default = 1000000000]:
-        Override the default maximum number of benchmarking iterations; ignored
-        if --benchmarks is not also specified.
-
     --track_memory:
         Override Halide memory allocator to track high-water mark of memory
         allocation during run; note that this may slow down execution, so
@@ -153,11 +146,27 @@ Flags:
 
     --default_input_buffers=VALUE:
         Specify the value for all otherwise-unspecified buffer inputs, in the
-        same syntax in use above.
+        same syntax in use above. If you omit =VALUE, "zero:auto" will be used.
 
     --default_input_scalars=VALUE:
         Specify the value for all otherwise-unspecified scalar inputs, in the
-        same syntax in use above.
+        same syntax in use above. If you omit =VALUE, "estimate,default"
+        will be used.
+
+    --parsable_output:
+        Final output is emitted in an easy-to-parse output (one value per line),
+        rather than easy-for-humans.
+
+    --estimate_all:
+        Request that all inputs and outputs are based on estimate,
+        and fill buffers with random values. This is exactly equivalent to
+        specifying
+
+            --default_input_buffers=estimate_then_auto
+            --default_input_scalars=estimate
+            --output_extents=estimate
+
+        and is a convenience for automated benchmarking.
 
 Known Issues:
 
@@ -364,10 +373,9 @@ int main(int argc, char **argv) {
     bool track_memory = false;
     bool describe = false;
     double benchmark_min_time = BenchmarkConfig().min_time;
-    uint64_t benchmark_min_iters = BenchmarkConfig().min_iters;
-    uint64_t benchmark_max_iters = BenchmarkConfig().max_iters;
     std::string default_input_buffers;
     std::string default_input_scalars;
+    std::string benchmarks_flag_value;
     for (int i = 1; i < argc; ++i) {
         if (argv[i][0] == '-') {
             const char *p = argv[i] + 1; // skip -
@@ -398,6 +406,15 @@ int main(int argc, char **argv) {
                     fail() << "Invalid value for flag: " << flag_name;
                 }
                 r.set_quiet(quiet);
+            } else if (flag_name == "parsable_output") {
+                if (flag_value.empty()) {
+                    flag_value = "true";
+                }
+                bool parsable_output;
+                if (!parse_scalar(flag_value, &parsable_output)) {
+                    fail() << "Invalid value for flag: " << flag_name;
+                }
+                r.set_parsable_output(parsable_output);
             } else if (flag_name == "describe") {
                 if (flag_value.empty()) {
                     flag_value = "true";
@@ -413,20 +430,10 @@ int main(int argc, char **argv) {
                     fail() << "Invalid value for flag: " << flag_name;
                 }
             } else if (flag_name == "benchmarks") {
-                if (flag_value != "all") {
-                    fail() << "The only valid value for --benchmarks is 'all'";
-                }
+                benchmarks_flag_value = flag_value;
                 benchmark = true;
             } else if (flag_name == "benchmark_min_time") {
                 if (!parse_scalar(flag_value, &benchmark_min_time)) {
-                    fail() << "Invalid value for flag: " << flag_name;
-                }
-            } else if (flag_name == "benchmark_min_iters") {
-                if (!parse_scalar(flag_value, &benchmark_min_iters)) {
-                    fail() << "Invalid value for flag: " << flag_name;
-                }
-            } else if (flag_name == "benchmark_max_iters") {
-                if (!parse_scalar(flag_value, &benchmark_max_iters)) {
                     fail() << "Invalid value for flag: " << flag_name;
                 }
             } else if (flag_name == "default_input_buffers") {
@@ -437,10 +444,18 @@ int main(int argc, char **argv) {
             } else if (flag_name == "default_input_scalars") {
                 default_input_scalars = flag_value;
                 if (default_input_scalars.empty()) {
-                    default_input_scalars = "default";
+                    default_input_scalars = "estimate,default";
                 }
             } else if (flag_name == "output_extents") {
                 user_specified_output_shape = flag_value;
+            } else if (flag_name == "estimate_all") {
+                // Equivalent to:
+                // --default_input_buffers=random:0:estimate_then_auto
+                // --default_input_scalars=estimate
+                // --output_extents=estimate
+                default_input_buffers = "random:0:estimate_then_auto";
+                default_input_scalars = "estimate";
+                user_specified_output_shape = "estimate";
             } else {
                 usage(argv[0]);
                 fail() << "Unknown flag: " << flag_name;
@@ -493,7 +508,13 @@ int main(int argc, char **argv) {
     halide_reuse_device_allocations(nullptr, true);
 
     if (benchmark) {
-        r.run_for_benchmark(benchmark_min_time, benchmark_min_iters, benchmark_max_iters);
+        if (benchmarks_flag_value.empty()) {
+            benchmarks_flag_value = "all";
+        }
+        if (benchmarks_flag_value != "all") {
+            fail() << "The only valid value for --benchmarks is 'all'";
+        }
+        r.run_for_benchmark(benchmark_min_time);
     } else {
         r.run_for_output();
     }

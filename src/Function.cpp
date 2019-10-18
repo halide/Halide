@@ -21,7 +21,6 @@ namespace Internal {
 
 using std::map;
 using std::pair;
-using std::set;
 using std::string;
 using std::vector;
 
@@ -51,9 +50,12 @@ class WeakenFunctionPtrs : public IRMutator {
         return expr;
     }
     FunctionContents *func;
+
 public:
     int count = 0;
-    WeakenFunctionPtrs(FunctionContents *f) : func(f) {}
+    WeakenFunctionPtrs(FunctionContents *f)
+        : func(f) {
+    }
 };
 }  // namespace
 
@@ -163,7 +165,7 @@ FunctionContents *FunctionPtr::get() const {
 }
 
 template<>
-RefCount &ref_count<FunctionGroup>(const FunctionGroup *f) {
+RefCount &ref_count<FunctionGroup>(const FunctionGroup *f) noexcept {
     return f->ref_count;
 }
 
@@ -183,8 +185,9 @@ struct CheckVars : public IRGraphVisitor {
     const std::string name;
     bool unbound_reduction_vars_ok = false;
 
-    CheckVars(const std::string &n) :
-        name(n) {}
+    CheckVars(const std::string &n)
+        : name(n) {
+    }
 
     using IRVisitor::visit;
 
@@ -262,8 +265,11 @@ class FreezeFunctions : public IRGraphVisitor {
             f.freeze();
         }
     }
+
 public:
-    FreezeFunctions(const string &f) : func(f) {}
+    FreezeFunctions(const string &f)
+        : func(f) {
+    }
 };
 
 // A counter to use in tagging random variables
@@ -274,7 +280,8 @@ static std::atomic<int> rand_counter;
 Function::Function() {
 }
 
-Function::Function(const FunctionPtr &ptr) : contents(ptr) {
+Function::Function(const FunctionPtr &ptr)
+    : contents(ptr) {
     contents.strengthen();
     internal_assert(ptr.defined())
         << "Can't construct Function from undefined FunctionContents ptr\n";
@@ -295,14 +302,14 @@ Function::Function(const std::string &n) {
 
 // Return deep-copy of ExternFuncArgument 'src'
 ExternFuncArgument deep_copy_extern_func_argument_helper(
-        const ExternFuncArgument &src, DeepCopyMap &copied_map) {
+    const ExternFuncArgument &src, DeepCopyMap &copied_map) {
     ExternFuncArgument copy;
     copy.arg_type = src.arg_type;
     copy.buffer = src.buffer;
     copy.expr = src.expr;
     copy.image_param = src.image_param;
 
-    if (!src.func.defined()) { // No need to deep-copy the func if it's undefined
+    if (!src.func.defined()) {  // No need to deep-copy the func if it's undefined
         internal_assert(!src.is_func())
             << "ExternFuncArgument has type FuncArg but has no function definition\n";
         return copy;
@@ -493,7 +500,6 @@ void Function::define_update(const vector<Expr> &_args, vector<Expr> values) {
         user_assert(values[i].defined())
             << "In update definition " << update_idx << " of Func \"" << name() << "\":\n"
             << "Undefined expression in right-hand-side of update.\n";
-
     }
 
     // Check the dimensionality matches
@@ -537,7 +543,7 @@ void Function::define_update(const vector<Expr> &_args, vector<Expr> values) {
     bool pure = true;
     vector<string> pure_args(args.size());
     for (size_t i = 0; i < args.size(); i++) {
-        pure_args[i] = ""; // Will never match a var name
+        pure_args[i] = "";  // Will never match a var name
         user_assert(args[i].defined())
             << "In update definition " << update_idx << " of Func \"" << name() << "\":\n"
             << "Argument " << i
@@ -675,7 +681,6 @@ void Function::define_update(const vector<Expr> &_args, vector<Expr> values) {
     }
 
     contents->updates.push_back(r);
-
 }
 
 void Function::define_extern(const std::string &function_name,
@@ -724,7 +729,7 @@ void Function::define_extern(const std::string &function_name,
     contents->func_schedule.storage_dims().clear();
     contents->init_def.schedule().dims().clear();
     for (size_t i = 0; i < args.size(); i++) {
-        contents->func_schedule.storage_dims().push_back(StorageDim {args[i]});
+        contents->func_schedule.storage_dims().push_back(StorageDim{args[i]});
         contents->init_def.schedule().dims().push_back(
             Dim{args[i], ForType::Extern, DeviceAPI::None, Dim::Type::PureVar});
     }
@@ -842,9 +847,7 @@ Expr Function::make_call_to_extern_definition(const std::vector<Expr> &args,
     Call::CallType call_type = Call::Extern;
     switch (contents->extern_mangling) {
     case NameMangling::Default:
-        call_type = (target.has_feature(Target::CPlusPlusMangling) ?
-                     Call::ExternCPlusPlus :
-                     Call::Extern);
+        call_type = (target.has_feature(Target::CPlusPlusMangling) ? Call::ExternCPlusPlus : Call::Extern);
         break;
     case NameMangling::CPlusPlus:
         call_type = Call::ExternCPlusPlus;
@@ -947,7 +950,7 @@ const map<string, FunctionPtr> &Function::wrappers() const {
 
 Function Function::new_function_in_same_group(const std::string &f) {
     int group_size = (int)(contents.group()->members.size());
-    contents.group()->members.resize(group_size+1);
+    contents.group()->members.resize(group_size + 1);
     contents.group()->members[group_size].name = f;
     FunctionPtr ptr;
     ptr.strong = contents.group();
@@ -1017,9 +1020,11 @@ class SubstituteCalls : public IRMutator {
         }
         return expr;
     }
+
 public:
     SubstituteCalls(const map<FunctionPtr, FunctionPtr> &substitutions)
-        : substitutions(substitutions) {}
+        : substitutions(substitutions) {
+    }
 };
 
 }  // anonymous namespace
@@ -1047,7 +1052,7 @@ pair<vector<Function>, map<string, Function>> deep_copy(
     map<string, Function> copy_env;
 
     // Create empty deep-copies of all Functions in 'env'
-    DeepCopyMap copied_map; // Original Function -> Deep-copy
+    DeepCopyMap copied_map;  // Original Function -> Deep-copy
     IntrusivePtr<FunctionGroup> group(new FunctionGroup);
     group->members.resize(env.size());
     int i = 0;
@@ -1090,7 +1095,7 @@ pair<vector<Function>, map<string, Function>> deep_copy(
         }
     }
 
-    return { copy_outputs, copy_env };
+    return {copy_outputs, copy_env};
 }
 
 }  // namespace Internal

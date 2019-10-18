@@ -24,6 +24,14 @@ using ::Halide::Runtime::Buffer;
 // provide a typedef for it (and doesn't use a vector for it in any event).
 using Shape = std::vector<halide_dimension_t>;
 
+// A ShapePromise is a function that returns a Shape. If the Promise can't
+// return a valid Shape, it may fail. This allows us to defer error reporting
+// for situations until the Shape is actually needed; in particular, it allows
+// us to attempt doing bounds-query for the shape of input buffers early,
+// but to ignore the error unless we actually need it... which we won't if an
+// estimate is provided for the input in question.
+using ShapePromise = std::function<Shape()>;
+
 // Standard stream output for halide_type_t
 inline std::ostream &operator<<(std::ostream &stream, const halide_type_t &type) {
     if (type.code == halide_type_uint && type.bits == 1) {
@@ -480,7 +488,12 @@ public:
     }
 
 private:
-    template<typename T2 = T, typename std::enable_if<std::is_integral<T2>::value && !std::is_same<T2, bool>::value>::type * = nullptr>
+    template<typename T2 = T,
+            typename std::enable_if<std::is_integral<T2>::value
+            && !std::is_same<T2, bool>::value
+            && !std::is_same<T2, char>::value
+            && !std::is_same<T2, signed char>::value
+            && !std::is_same<T2, unsigned char>::value>::type * = nullptr>
     void fill(Buffer<T2> &b, std::mt19937 &rng) {
         std::uniform_int_distribution<T2> dis;
         b.for_each_value([&rng, &dis](T2 &value) {
@@ -500,7 +513,37 @@ private:
     void fill(Buffer<T2> &b, std::mt19937 &rng) {
         std::uniform_int_distribution<int> dis(0, 1);
         b.for_each_value([&rng, &dis](T2 &value) {
-            value = dis(rng);
+            value = static_cast<T2>(dis(rng));
+        });
+    }
+
+    // std::uniform_int_distribution<char> is UB in C++11,
+    // so special-case to avoid compiler variation
+    template<typename T2 = T, typename std::enable_if<std::is_same<T2, char>::value>::type * = nullptr>
+    void fill(Buffer<T2> &b, std::mt19937 &rng) {
+        std::uniform_int_distribution<int> dis(-128, 127);
+        b.for_each_value([&rng, &dis](T2 &value) {
+            value = static_cast<T2>(dis(rng));
+        });
+    }
+
+    // std::uniform_int_distribution<signed char> is UB in C++11,
+    // so special-case to avoid compiler variation
+    template<typename T2 = T, typename std::enable_if<std::is_same<T2, signed char>::value>::type * = nullptr>
+    void fill(Buffer<T2> &b, std::mt19937 &rng) {
+        std::uniform_int_distribution<int> dis(-128, 127);
+        b.for_each_value([&rng, &dis](T2 &value) {
+            value = static_cast<T2>(dis(rng));
+        });
+    }
+
+    // std::uniform_int_distribution<unsigned char> is UB in C++11,
+    // so special-case to avoid compiler variation
+    template<typename T2 = T, typename std::enable_if<std::is_same<T2, unsigned char>::value>::type * = nullptr>
+    void fill(Buffer<T2> &b, std::mt19937 &rng) {
+        std::uniform_int_distribution<int> dis(0, 255);
+        b.for_each_value([&rng, &dis](T2 &value) {
+            value = static_cast<T2>(dis(rng));
         });
     }
 
@@ -620,10 +663,10 @@ struct ArgData {
     ArgData(size_t index, const std::string &name, const halide_filter_argument_t * metadata)
         : index(index), name(name), metadata(metadata) {}
 
-    Buffer<> load_buffer(const Shape &auto_shape, const halide_filter_argument_t *argument_metadata) {
+    Buffer<> load_buffer(ShapePromise shape_promise, const halide_filter_argument_t *argument_metadata) {
         const auto parse_optional_extents = [&](const std::string &s) -> Shape {
             if (s == "auto") {
-                return auto_shape;
+                return shape_promise();
             }
             if (s == "estimate") {
                 return parse_metadata_buffer_estimates(argument_metadata);
@@ -632,7 +675,7 @@ struct ArgData {
                 Shape shape;
                 if (!try_parse_metadata_buffer_estimates(argument_metadata, &shape)) {
                     info() << "Input " << argument_metadata->name << " has no estimates; using bounds-query result instead.";
-                    shape = auto_shape;
+                    shape = shape_promise();
                 }
                 return shape;
             }
@@ -680,6 +723,11 @@ struct ArgData {
         } else {
             return load_input_from_file(v[0], *metadata);
         }
+    }
+
+    Buffer<> load_buffer(Shape shape, const halide_filter_argument_t *argument_metadata) {
+        ShapePromise promise = [shape]() -> Shape { return shape; };
+        return load_buffer(promise, argument_metadata);
     }
 
     void adapt_input_buffer(const Shape &constrained_shape) {
@@ -875,7 +923,7 @@ public:
         assert(output_shapes.empty());
 
         Shape first_input_shape;
-        std::map<std::string, Shape> auto_input_shapes;
+        std::map<std::string, ShapePromise> auto_input_shape_promises;
 
         // First, set all the scalar inputs: we need those to be correct
         // in order to get useful values from the bound-query for input buffers.
@@ -884,24 +932,38 @@ public:
             auto &arg = arg_pair.second;
             switch (arg.metadata->kind) {
             case halide_argument_kind_input_scalar: {
+                if (!strcmp(arg.metadata->name, "__user_context")) {
+                    arg.scalar_value.u.handle = nullptr;
+                    info() << "Argument value for: __user_context is special-cased as: nullptr";
+                    break;
+                }
+                std::vector<std::pair<const halide_scalar_value_t*, const char*>> values;
+                // If this gets any more complex, smarten it up, but for now,
+                // simpleminded code is fine.
                 if (arg.raw_string == "default") {
-                    if (!arg.metadata->scalar_def) {
-                        fail() << "Argument value for: " << arg.metadata->name << " was specified as using the default, but no default was found in the metadata.";
-                    }
-                    info() << "Argument value for: " << arg.metadata->name << " is parsed from metadata as: "
-                           << scalar_to_string(arg.metadata->type, *arg.metadata->scalar_def);
-                    arg.scalar_value = *arg.metadata->scalar_def;
+                    values.push_back({arg.metadata->scalar_def, "default"});
                 } else if (arg.raw_string == "estimate") {
-                    if (!strcmp(arg.metadata->name, "__user_context")) {
-                      arg.scalar_value.u.handle = nullptr;
-                      info() << "Argument value for: __user_context is special-cased as: nullptr";
-                    } else {
-                      if (!arg.metadata->scalar_estimate) {
-                          fail() << "Argument value for: " << arg.metadata->name << " was specified as using the estimate, but no estimate was found in the metadata.";
-                      }
-                      info() << "Argument value for: " << arg.metadata->name << " is parsed from metadata as: "
-                             << scalar_to_string(arg.metadata->type, *arg.metadata->scalar_estimate);
-                      arg.scalar_value = *arg.metadata->scalar_estimate;
+                    values.push_back({arg.metadata->scalar_estimate, "estimate"});
+                } else if (arg.raw_string == "default,estimate") {
+                    values.push_back({arg.metadata->scalar_def, "default"});
+                    values.push_back({arg.metadata->scalar_estimate, "estimate"});
+                } else if (arg.raw_string == "estimate,default") {
+                    values.push_back({arg.metadata->scalar_estimate, "estimate"});
+                    values.push_back({arg.metadata->scalar_def, "default"});
+                }
+                if (!values.empty()) {
+                    bool set = false;
+                    for (auto &v : values) {
+                        if (!v.first) continue;
+                        info() << "Argument value for: " << arg.metadata->name << " is parsed from metadata (" << v.second << ") as: "
+                               << scalar_to_string(arg.metadata->type, *v.first);
+                        arg.scalar_value = *v.first;
+                        set = true;
+                        break;
+                    }
+                    if (!set) {
+                        fail() << "Argument value for: " << arg.metadata->name << " was specified as '" << arg.raw_string << "', "
+                               << "but no default and/or estimate was found in the metadata.";
                     }
                 } else {
                     if (!parse_scalar(arg.metadata->type, arg.raw_string, &arg.scalar_value)) {
@@ -936,7 +998,7 @@ public:
                     }
                 }
             }
-            auto_input_shapes = bounds_query_input_shapes();
+            auto_input_shape_promises = bounds_query_input_shapes();
         }
 
         for (auto &arg_pair : args) {
@@ -944,7 +1006,7 @@ public:
             auto &arg = arg_pair.second;
             switch (arg.metadata->kind) {
             case halide_argument_kind_input_buffer:
-                arg.buffer_value = arg.load_buffer(auto_input_shapes[arg_name], arg.metadata);
+                arg.buffer_value = arg.load_buffer(auto_input_shape_promises[arg_name], arg.metadata);
                 info() << "Input " << arg_name << ": Shape is " << get_shape(arg.buffer_value);
                 if (first_input_shape.empty()) {
                     first_input_shape = get_shape(arg.buffer_value);
@@ -1146,9 +1208,7 @@ public:
         }
     }
 
-    void run_for_benchmark(double benchmark_min_time,
-                           uint64_t benchmark_min_iters,
-                           uint64_t benchmark_max_iters) {
+    void run_for_benchmark(double benchmark_min_time) {
         std::vector<void*> filter_argv = build_filter_argv();
 
         const auto benchmark_inner = [this, &filter_argv]() {
@@ -1164,15 +1224,22 @@ public:
         Halide::Tools::BenchmarkConfig config;
         config.min_time = benchmark_min_time;
         config.max_time = benchmark_min_time * 4;
-        config.min_iters = benchmark_min_iters;
-        config.max_iters = benchmark_max_iters;
         auto result = Halide::Tools::benchmark(benchmark_inner, config);
 
-        out() << "Benchmark for " << md->name << " produces best case of " << result.wall_time << " sec/iter (over "
-              << result.samples << " samples, "
-              << result.iterations << " iterations, "
-              << "accuracy " << std::setprecision(2) << (result.accuracy * 100.0) << "%); "
-              << "best throughput is " << (megapixels_out() / result.wall_time) << " mpix/sec.\n";
+        if (!parsable_output) {
+            out() << "Benchmark for " << md->name << " produces best case of " << result.wall_time << " sec/iter (over "
+                  << result.samples << " samples, "
+                  << result.iterations << " iterations, "
+                  << "accuracy " << std::setprecision(2) << (result.accuracy * 100.0) << "%).\n"
+                  << "Best output throughput is " << (megapixels_out() / result.wall_time) << " mpix/sec.\n";
+        } else {
+            out() << md->name << "  BEST_TIME_MSEC_PER_ITER  " << result.wall_time * 1000.f << "\n"
+                  << md->name << "  SAMPLES                  " << result.samples << "\n"
+                  << md->name << "  ITERATIONS               " << result.iterations << "\n"
+                  << md->name << "  TIMING_ACCURACY          " << result.accuracy << "\n"
+                  << md->name << "  THROUGHPUT_MPIX_PER_SEC  " << (megapixels_out() / result.wall_time) << "\n"
+                  << md->name << "  HALIDE_TARGET            " << md->target << "\n";
+        }
     }
 
     struct Output {
@@ -1247,8 +1314,16 @@ public:
         halide_set_custom_print(quiet ? rungen_halide_print_quiet : rungen_halide_print);
     }
 
+    void set_parsable_output(bool parsable_output = true) {
+        this->parsable_output = parsable_output;
+    }
+
 private:
-    std::map<std::string, Shape> bounds_query_input_shapes() const {
+    static void rungen_ignore_error(void *user_context, const char *message) {
+        // nothing
+    }
+
+    std::map<std::string, ShapePromise> bounds_query_input_shapes() const {
         assert(!output_shapes.empty());
         std::vector<void*> filter_argv(args.size(), nullptr);
         std::vector<Buffer<>> bounds_query_buffers(args.size());
@@ -1271,19 +1346,30 @@ private:
             }
         }
 
-        // Ignore result since our halide_error() should catch everything.
-        (void) halide_argv_call(&filter_argv[0]);
+        auto previous_error_handler = halide_set_error_handler(rungen_ignore_error);
+        int result = halide_argv_call(&filter_argv[0]);
+        halide_set_error_handler(previous_error_handler);
 
-        std::map<std::string, Shape> input_shapes;
+        std::map<std::string, ShapePromise> input_shape_promises;
         for (const auto &arg_pair : args) {
             auto &arg_name = arg_pair.first;
             auto &arg = arg_pair.second;
             if (arg.metadata->kind == halide_argument_kind_input_buffer) {
-                input_shapes[arg_name] = get_shape(bounds_query_buffers[arg.index]);
-                info() << "Input " << arg_name << " has a bounds-query shape of " << input_shapes[arg_name];
+                if (result == 0) {
+                    Shape shape = get_shape(bounds_query_buffers[arg.index]);
+                    input_shape_promises[arg_name] = [shape]() -> Shape { return shape; };
+                    info() << "Input " << arg_name << " has a bounds-query shape of " << shape;
+                } else {
+                    input_shape_promises[arg_name] = [arg_name]() -> Shape {
+                        fail() << "Input " << arg_name << " could not calculate a shape satisfying bounds-query constraints.\n"
+                               << "Try relaxing the constraints, or providing an explicit estimate for the input.\n";
+                        return Shape();
+                    };
+                    info() << "Input " << arg_name << " failed bounds-query\n";
+                }
             }
         }
-        return input_shapes;
+        return input_shape_promises;
     }
 
     // Replace the standard Halide runtime function to capture print output to stdout
@@ -1304,6 +1390,7 @@ private:
     const struct halide_filter_metadata_t * const md;
     std::map<std::string, ArgData> args;
     std::map<std::string, Shape> output_shapes;
+    bool parsable_output = false;
 };
 
 }  // namespace RunGen

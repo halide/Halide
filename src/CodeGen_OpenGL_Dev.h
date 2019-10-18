@@ -34,7 +34,9 @@ public:
 
     void dump() override;
 
-    std::string api_unique_name() override { return "opengl"; }
+    std::string api_unique_name() override {
+        return "opengl";
+    }
 
 private:
     CodeGen_GLSL *glc;
@@ -83,7 +85,6 @@ protected:
     std::map<std::string, std::string> builtin;
 };
 
-
 /** Compile one statement into GLSL. */
 class CodeGen_GLSL : public CodeGen_GLSLBase {
 public:
@@ -114,6 +115,7 @@ protected:
     void visit(const Broadcast *) override;
 
     void visit(const Evaluate *) override;
+    void visit(const Atomic *) override;
 
 private:
     std::string get_vector_suffix(Expr e);

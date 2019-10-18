@@ -7,9 +7,9 @@
 
 namespace {
 
-const char * const root_looplevel_name = "__root";
-const char * const inline_looplevel_name = "";
-const char * const undefined_looplevel_name = "__undefined_loop_level_var_name";
+const char *const root_looplevel_name = "__root";
+const char *const inline_looplevel_name = "";
+const char *const undefined_looplevel_name = "__undefined_loop_level_var_name";
 
 }  // namespace
 
@@ -36,12 +36,13 @@ struct LoopLevelContents {
                       bool is_rvar,
                       int stage_index,
                       bool locked)
-    : func_name(func_name), stage_index(stage_index), var_name(var_name),
-      is_rvar(is_rvar), locked(locked) {}
+        : func_name(func_name), stage_index(stage_index), var_name(var_name),
+          is_rvar(is_rvar), locked(locked) {
+    }
 };
 
 template<>
-RefCount &ref_count<LoopLevelContents>(const LoopLevelContents *p) {
+RefCount &ref_count<LoopLevelContents>(const LoopLevelContents *p) noexcept {
     return p->ref_count;
 }
 
@@ -54,18 +55,23 @@ void destroy<LoopLevelContents>(const LoopLevelContents *p) {
 
 LoopLevel::LoopLevel(const std::string &func_name, const std::string &var_name,
                      bool is_rvar, int stage_index, bool locked)
-    : contents(new Internal::LoopLevelContents(func_name, var_name, is_rvar, stage_index, locked)) {}
+    : contents(new Internal::LoopLevelContents(func_name, var_name, is_rvar, stage_index, locked)) {
+}
 
 LoopLevel::LoopLevel(const Internal::Function &f, VarOrRVar v, int stage_index)
-    : LoopLevel(f.name(), v.name(), v.is_rvar, stage_index, false) {}
+    : LoopLevel(f.name(), v.name(), v.is_rvar, stage_index, false) {
+}
 
 LoopLevel::LoopLevel(const Func &f, VarOrRVar v, int stage_index)
-    : LoopLevel(f.function().name(), v.name(), v.is_rvar, stage_index, false) {}
+    : LoopLevel(f.function().name(), v.name(), v.is_rvar, stage_index, false) {
+}
 
 // Note that even 'undefined' LoopLevels get a LoopLevelContents; this is deliberate,
 // as we want to be able to create an undefined LoopLevel, pass it to another function
 // to use, then mutate it afterwards via 'set()'.
-LoopLevel::LoopLevel() : LoopLevel("", undefined_looplevel_name, false, -1, false) {}
+LoopLevel::LoopLevel()
+    : LoopLevel("", undefined_looplevel_name, false, -1, false) {
+}
 
 void LoopLevel::check_defined() const {
     internal_assert(defined());
@@ -215,9 +221,9 @@ struct FuncScheduleContents {
     MemoryType memory_type;
     bool memoized, async;
 
-    FuncScheduleContents() :
-        store_level(LoopLevel::inlined()), compute_level(LoopLevel::inlined()),
-        memory_type(MemoryType::Auto), memoized(false), async(false) {};
+    FuncScheduleContents()
+        : store_level(LoopLevel::inlined()), compute_level(LoopLevel::inlined()),
+          memory_type(MemoryType::Auto), memoized(false), async(false){};
 
     // Pass an IRMutator through to all Exprs referenced in the FuncScheduleContents
     void mutate(IRMutator *mutator) {
@@ -253,7 +259,7 @@ struct FuncScheduleContents {
 };
 
 template<>
-RefCount &ref_count<FuncScheduleContents>(const FuncScheduleContents *p) {
+RefCount &ref_count<FuncScheduleContents>(const FuncScheduleContents *p) noexcept {
     return p->ref_count;
 }
 
@@ -261,7 +267,6 @@ template<>
 void destroy<FuncScheduleContents>(const FuncScheduleContents *p) {
     delete p;
 }
-
 
 /** A schedule for a sigle halide stage_index, which defines where, when, and
  * how it should be evaluated. */
@@ -276,9 +281,13 @@ struct StageScheduleContents {
     std::vector<FusedPair> fused_pairs;
     bool touched;
     bool allow_race_conditions;
+    bool atomic;
+    bool override_atomic_associativity_test;
 
-    StageScheduleContents() : fuse_level(FuseLoopLevel()), touched(false),
-                              allow_race_conditions(false) {};
+    StageScheduleContents()
+        : fuse_level(FuseLoopLevel()), touched(false),
+          allow_race_conditions(false), atomic(false),
+          override_atomic_associativity_test(false) {};
 
     // Pass an IRMutator through to all Exprs referenced in the StageScheduleContents
     void mutate(IRMutator *mutator) {
@@ -304,7 +313,7 @@ struct StageScheduleContents {
 };
 
 template<>
-RefCount &ref_count<StageScheduleContents>(const StageScheduleContents *p) {
+RefCount &ref_count<StageScheduleContents>(const StageScheduleContents *p) noexcept {
     return p->ref_count;
 }
 
@@ -313,11 +322,12 @@ void destroy<StageScheduleContents>(const StageScheduleContents *p) {
     delete p;
 }
 
-
-FuncSchedule::FuncSchedule() : contents(new FuncScheduleContents) {}
+FuncSchedule::FuncSchedule()
+    : contents(new FuncScheduleContents) {
+}
 
 FuncSchedule FuncSchedule::deep_copy(
-        std::map<FunctionPtr, FunctionPtr> &copied_map) const {
+    std::map<FunctionPtr, FunctionPtr> &copied_map) const {
 
     internal_assert(contents.defined()) << "Cannot deep-copy undefined FuncSchedule\n";
     FuncSchedule copy;
@@ -462,8 +472,9 @@ void FuncSchedule::mutate(IRMutator *mutator) {
     }
 }
 
-
-StageSchedule::StageSchedule() : contents(new StageScheduleContents) {}
+StageSchedule::StageSchedule()
+    : contents(new StageScheduleContents) {
+}
 
 StageSchedule StageSchedule::get_copy() const {
     internal_assert(contents.defined()) << "Cannot copy undefined Schedule\n";
@@ -476,6 +487,8 @@ StageSchedule StageSchedule::get_copy() const {
     copy.contents->fused_pairs = contents->fused_pairs;
     copy.contents->touched = contents->touched;
     copy.contents->allow_race_conditions = contents->allow_race_conditions;
+    copy.contents->atomic = contents->atomic;
+    copy.contents->override_atomic_associativity_test = contents->override_atomic_associativity_test;
     return copy;
 }
 
@@ -541,6 +554,22 @@ bool &StageSchedule::allow_race_conditions() {
 
 bool StageSchedule::allow_race_conditions() const {
     return contents->allow_race_conditions;
+}
+
+bool &StageSchedule::atomic() {
+    return contents->atomic;
+}
+
+bool StageSchedule::atomic() const {
+    return contents->atomic;
+}
+
+bool &StageSchedule::override_atomic_associativity_test() {
+    return contents->override_atomic_associativity_test;
+}
+
+bool StageSchedule::override_atomic_associativity_test() const {
+    return contents->override_atomic_associativity_test;
 }
 
 void StageSchedule::accept(IRVisitor *visitor) const {

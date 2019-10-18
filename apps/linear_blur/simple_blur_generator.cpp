@@ -26,17 +26,17 @@ struct SimpleBlur : public Halide::Generator<SimpleBlur> {
             const int W = 1536, H = 2560, C = 4;
             // Wart: Input<Func> are defined with Vars we don't know.
             // Might be x,y but might be _0,_1. Use the args() to work around.
-            input.estimate(input.args()[0], 0, W)
-                 .estimate(input.args()[1], 0, H);
+            input.set_estimate(input.args()[0], 0, W)
+                 .set_estimate(input.args()[1], 0, H);
             for (size_t i = 2; i < input.args().size(); ++i) {
-                input.estimate(input.args()[i], 0, C);
+                input.set_estimate(input.args()[i], 0, C);
             }
             width.set_estimate(W);
             height.set_estimate(H);
-            output.estimate(x, 0, W)
-                  .estimate(y, 0, H);
+            output.set_estimate(x, 0, W)
+                  .set_estimate(y, 0, H);
             for (size_t i = 2; i < output.args().size(); ++i) {
-                output.estimate(output.args()[i], 0, C);
+                output.set_estimate(output.args()[i], 0, C);
             }
         } else {
             Var xi("xi"), yi("yi");

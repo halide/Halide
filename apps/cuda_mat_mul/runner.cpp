@@ -1,4 +1,4 @@
-#include "bin/mat_mul.h"
+#include "mat_mul.h"
 #include "mat_mul_simple_auto_schedule.h"
 #include "halide_benchmark.h"
 #include "HalideBuffer.h"

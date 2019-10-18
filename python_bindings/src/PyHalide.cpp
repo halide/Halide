@@ -15,7 +15,6 @@
 #include "PyLambda.h"
 #include "PyMachineParams.h"
 #include "PyModule.h"
-#include "PyOutputs.h"
 #include "PyParam.h"
 #include "PyPipeline.h"
 #include "PyRDom.h"
@@ -23,6 +22,7 @@
 #include "PyTuple.h"
 #include "PyType.h"
 #include "PyVar.h"
+#include "PyDerivative.h"
 
 #ifndef HALIDE_PYBIND_MODULE_NAME
   #define HALIDE_PYBIND_MODULE_NAME halide
@@ -46,7 +46,6 @@ PYBIND11_MODULE(HALIDE_PYBIND_MODULE_NAME, m) {
     define_extern_func_argument(m);
     define_var(m);
     define_rdom(m);
-    define_outputs(m);
     define_machine_params(m);
     define_module(m);
     define_func(m);
@@ -57,4 +56,5 @@ PYBIND11_MODULE(HALIDE_PYBIND_MODULE_NAME, m) {
     define_param(m);
     define_image_param(m);
     define_type(m);
+    define_derivative(m);
 }

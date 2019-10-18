@@ -9,9 +9,9 @@ option(WITH_TEST_AUTO_SCHEDULE "Build auto_schedule tests" ON)
 
 if (WITH_TEST_INTERNAL)
   message(STATUS "Internal tests enabled")
-  halide_project(test_internal internal internal.cpp)
-  add_test(test_internal
-           GROUPS run_tests)
+  halide_project(_test_internal internal internal.cpp)
+  target_include_directories(_test_internal PRIVATE "${CMAKE_SOURCE_DIR}/src")
+  add_halide_test(_test_internal GROUPS test_internal run_tests)
 else()
   message(WARNING "Internal tests disabled")
 endif()
@@ -21,7 +21,7 @@ function(test_plain_c_includes)
   set(name "plain_c_includes")
   set(TEST_NAMES "${folder}_${name}")
   add_executable("${folder}_${name}" "${CMAKE_CURRENT_SOURCE_DIR}/${folder}/${name}.c")
-  target_include_directories("${folder}_${name}" PRIVATE "${CMAKE_BINARY_DIR}/include")
+  target_include_directories("${folder}_${name}" PRIVATE "${HALIDE_INCLUDE_DIR}")
   set(TEST_NAMES "${TEST_NAMES}" PARENT_SCOPE)
 endfunction(test_plain_c_includes)
 
@@ -35,21 +35,37 @@ function(tests folder)
     list(APPEND TEST_NAMES "${TARGET}")
 
     halide_project("${TARGET}" "${folder}" "${folder}/${file}")
-    target_include_directories("${TARGET}" PRIVATE "${CMAKE_SOURCE_DIR}")
     target_compile_definitions("${TARGET}"  PRIVATE "-DLLVM_VERSION=${LLVM_VERSION}")
+    # Tests are built with the equivalent of OPTIMIZE_FOR_BUILD_TIME (-O0 or /Od).
+    if(MSVC)
+        target_compile_options("${TARGET}" PRIVATE "$<$<CONFIG:RELEASE>:/Od>")
+    else()
+        target_compile_options("${TARGET}" PRIVATE "$<$<CONFIG:RELEASE>:-O0>")
+        # Also allow tests, via conditional compilation, to use the entire
+        # capability of the CPU being compiled on via -march=native. This
+        # presumes tests are run on the same machine they are compiled on.
+        target_compile_options("${TARGET}" PRIVATE "-march=native")
+    endif()
+
+    target_include_directories("${TARGET}" PRIVATE "${HALIDE_INCLUDE_DIR}")
+    target_include_directories("${TARGET}" PRIVATE "${CMAKE_SOURCE_DIR}")
+    if("${folder}" STREQUAL "opengl")
+      target_include_directories("${TARGET}" PRIVATE "${CMAKE_SOURCE_DIR}/src")
+    endif()
 
     set(GROUPS "test_${folder}")
-    if("${folder}" STREQUAL "performance" OR "${folder}" STREQUAL "auto_schedule")
+    if("${folder}" STREQUAL "performance" OR "${folder}" STREQUAL "auto_schedule" OR "${folder}" STREQUAL "opengl")
       # These shouldn't be part of run_tests, since they must be run with -j for timing purposes
+      # Exception: opengl is excluded because Makefile excludes it too. Why?
     else()
       list(APPEND GROUPS run_tests)
     endif()
     if("${folder}" STREQUAL "error")
-      add_test("${TARGET}"
+      add_halide_test("${TARGET}"
                GROUPS ${GROUPS}
                EXPECT_FAILURE)
     else()
-      add_test("${TARGET}"
+      add_halide_test("${TARGET}"
                GROUPS ${GROUPS})
     endif()
 
@@ -115,7 +131,7 @@ if (WITH_TEST_GENERATOR)
       target_link_libraries("${TARGET}" PUBLIC "${NAME}")
     endif()
 
-    add_test("${TARGET}"
+    add_halide_test("${TARGET}"
              GROUPS test_generator run_tests)
   endfunction(halide_define_aot_test)
 
@@ -182,7 +198,7 @@ if (WITH_TEST_GENERATOR)
     set(TARGET "generator_jit_${NAME}")
     halide_project("${TARGET}" "generator" "${GEN_TEST_DIR}/${FILE}")
     target_link_libraries("${TARGET}" PRIVATE "${NAME}.generator")
-    add_test("${TARGET}"
+    add_halide_test("${TARGET}"
              GROUPS test_generator run_tests)
   endforeach()
 
@@ -293,6 +309,8 @@ if (WITH_TEST_GENERATOR)
 
   halide_define_aot_test(pyramid
                          GENERATOR_ARGS levels=10)
+  halide_define_aot_test(string_param
+                         GENERATOR_ARGS rpn_expr="5 y * x +")
 
   halide_define_aot_test(msan
                          HALIDE_TARGET_FEATURES msan)

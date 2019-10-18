@@ -1,59 +1,57 @@
 include ../support/Makefile.inc
 include ../support/autoscheduler.inc
 
-BIN ?= bin
-
 HL_TARGET=host-cuda
 
-all: $(BIN)/process
+all: $(BIN)/$(HL_TARGET)/process
 
-$(BIN)/stencil_chain.generator: stencil_chain_generator.cpp ../autoscheduler/SimpleAutoSchedule.h ../autoscheduler/SimpleAutoSchedule.cpp ../autoscheduler/DerivativeUtils.h ../autoscheduler/DerivativeUtils.cpp $(GENERATOR_DEPS)
+$(GENERATOR_BIN)/stencil_chain.generator: stencil_chain_generator.cpp ../autoscheduler/SimpleAutoSchedule.h ../autoscheduler/SimpleAutoSchedule.cpp ../autoscheduler/DerivativeUtils.h ../autoscheduler/DerivativeUtils.cpp $(GENERATOR_DEPS)
 	@mkdir -p $(@D)
 	$(CXX) $(CXXFLAGS) -g $(filter-out %.h,$^) -o $@ $(LDFLAGS) $(HALIDE_SYSTEM_LIBS) $(USE_EXPORT_DYNAMIC)
 
-$(BIN)/stencil_chain.a: $(BIN)/stencil_chain.generator
+$(BIN)/%/stencil_chain.a: $(GENERATOR_BIN)/stencil_chain.generator
 	@mkdir -p $(@D)
-	$^ -g stencil_chain -o $(BIN) -f stencil_chain target=$(HL_TARGET) auto_schedule=false
+	$^ -g stencil_chain -e $(GENERATOR_OUTPUTS) -o $(@D) -f stencil_chain target=$* auto_schedule=false
 
-$(BIN)/stencil_chain_classic_auto_schedule.a: $(BIN)/stencil_chain.generator $(AUTOSCHED_BIN)/libauto_schedule.so
+$(BIN)/stencil_chain_classic_auto_schedule.a: $(GENERATOR_BIN)/stencil_chain.generator $(AUTOSCHED_BIN)/libauto_schedule.so
 	@mkdir -p $(@D)
 	HL_PERMIT_FAILED_UNROLL=1 \
 	HL_WEIGHTS_DIR=$(AUTOSCHED_SRC)/gpu_weights \
 	HL_DEBUG_CODEGEN=1 \
 	HL_SHARED_MEMORY_LIMIT=48 \
 	HL_COMPUTE_ROOT_AND_INLINE_ONLY=1 \
-	$< -g stencil_chain -o $(BIN) -f stencil_chain_classic_auto_schedule target=$(HL_TARGET)-no_runtime auto_schedule=true -p $(AUTOSCHED_BIN)/libauto_schedule.so machine_params=$(HL_MACHINE_PARAMS) -e stmt,assembly,static_library,h 2> stderr_classic.txt > stdout_classic.txt
+	$^ -g stencil_chain -e $(GENERATOR_OUTPUTS) -o $(@D) -f stencil_chain_classic_auto_schedule target=$*-no_runtime auto_schedule=true -p $(AUTOSCHED_BIN)/libauto_schedule.so machine_params=$(HL_MACHINE_PARAMS) 2> stderr_classic.txt > stdout_classic.txt
 
-$(BIN)/stencil_chain_auto_schedule.a: $(BIN)/stencil_chain.generator $(AUTOSCHED_BIN)/libauto_schedule.so
+$(BIN)/%/stencil_chain_auto_schedule.a: $(GENERATOR_BIN)/stencil_chain.generator $(AUTOSCHED_BIN)/libauto_schedule.so
 	@mkdir -p $(@D)
 	HL_PERMIT_FAILED_UNROLL=1 \
 	HL_WEIGHTS_DIR=$(AUTOSCHED_SRC)/gpu_weights \
 	HL_DEBUG_CODEGEN=1 \
 	HL_SHARED_MEMORY_LIMIT=48 \
-	$< -g stencil_chain -o $(BIN) -f stencil_chain_auto_schedule target=$(HL_TARGET)-no_runtime auto_schedule=true -p $(AUTOSCHED_BIN)/libauto_schedule.so machine_params=$(HL_MACHINE_PARAMS) -e stmt,assembly,static_library,h 2> stderr.txt > stdout.txt
+	$^ -g stencil_chain -e $(GENERATOR_OUTPUTS) -o $(@D) -f stencil_chain_auto_schedule target=$*-no_runtime auto_schedule=true -p $(AUTOSCHED_BIN)/libauto_schedule.so machine_params=$(HL_MACHINE_PARAMS) 2> stderr.txt > stdout.txt
 
-$(BIN)/stencil_chain_simple_auto_schedule.a: $(BIN)/stencil_chain.generator
+$(BIN)/%/stencil_chain_simple_auto_schedule.a: $(GENERATOR_BIN)/stencil_chain.generator
 	@mkdir -p $(@D)
 	HL_USE_SIMPLE_AUTOSCHEDULER=1 \
-	$< -g stencil_chain -o $(BIN) -f stencil_chain_simple_auto_schedule target=$(HL_TARGET)-no_runtime auto_schedule=false -e static_library,h
+	$^ -g stencil_chain -e $(GENERATOR_OUTPUTS) -o $(@D) -f stencil_chain_simple_auto_schedule target=$(HL_TARGET)-no_runtime auto_schedule=false
 
-$(BIN)/process: process.cpp $(BIN)/stencil_chain.a $(BIN)/stencil_chain_classic_auto_schedule.a $(BIN)/stencil_chain_auto_schedule.a $(BIN)/stencil_chain_simple_auto_schedule.a
+$(BIN)/%/process: process.cpp $(BIN)/%/stencil_chain.a $(BIN)/%/stencil_chain_classic_auto_schedule.a $(BIN)/%/stencil_chain_auto_schedule.a $(BIN)/%/stencil_chain_simple_auto_schedule.a
 	@mkdir -p $(@D)
-	$(CXX) $(CXXFLAGS) -I$(BIN) -Wall -O3 $^ -o $@ $(LDFLAGS) $(IMAGE_IO_FLAGS) $(CUDA_LDFLAGS) $(OPENCL_LDFLAGS) $(OPENGL_LDFLAGS)
+	$(CXX) $(CXXFLAGS) -I$(BIN)/$* -Wall $^ -o $@ $(LDFLAGS) $(IMAGE_IO_FLAGS) $(CUDA_LDFLAGS) $(OPENCL_LDFLAGS) $(OPENGL_LDFLAGS)
 
-$(BIN)/out.png: $(BIN)/process
+$(BIN)/%/out.png: $(BIN)/%/process
 	@mkdir -p $(@D)
-	$(BIN)/process $(IMAGES)/rgb.png 10 $(BIN)/out.png
+	$< $(IMAGES)/rgb.png 10 $@
 
 clean:
 	rm -rf $(BIN)
 
-test: $(BIN)/out.png
+test: $(BIN)/$(HL_TARGET)/out.png
 
 BATCH_ID ?= 0
 TRAIN_ONLY ?= 0
 SAMPLES_DIR ?= autotuned_samples
-autotune: $(BIN)/stencil_chain.generator $(AUTOSCHED_BIN)/augment_sample $(AUTOSCHED_BIN)/train_cost_model $(AUTOSCHED_BIN)/libauto_schedule.so $(AUTOSCHED_SRC)/autotune_loop.sh
+autotune: $(GENERATOR_BIN)/stencil_chain.generator $(AUTOSCHED_BIN)/augment_sample $(AUTOSCHED_BIN)/train_cost_model $(AUTOSCHED_BIN)/libauto_schedule.so $(AUTOSCHED_SRC)/autotune_loop.sh
 	HL_TARGET=host-cuda \
 	HL_MACHINE_PARAMS=80,1,1 \
 	SAMPLES_DIR=$(SAMPLES_DIR) \
@@ -61,7 +59,7 @@ autotune: $(BIN)/stencil_chain.generator $(AUTOSCHED_BIN)/augment_sample $(AUTOS
 	HL_DEBUG_CODEGEN=0 \
 	HL_SHARED_MEMORY_LIMIT=48 \
 	bash $(AUTOSCHED_SRC)/autotune_loop.sh \
-		$(BIN)/stencil_chain.generator \
+		$(GENERATOR_BIN)/stencil_chain.generator \
 		stencil_chain \
 		host-cuda \
 		$(AUTOSCHED_SRC)/gpu_weights \

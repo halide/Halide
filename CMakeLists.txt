@@ -1,6 +1,6 @@
 
 project(Halide)
-cmake_minimum_required(VERSION 3.2)
+cmake_minimum_required(VERSION 3.3)
 
 set(HALIDE_BASE_DIR   "${CMAKE_CURRENT_SOURCE_DIR}")
 
@@ -24,8 +24,17 @@ if("${HALIDE_REQUIRE_LLVM_VERSION}" STREQUAL "")
   find_package(LLVM REQUIRED CONFIG)
 else()
   # Find a specific version.
-  string(SUBSTRING "${HALIDE_REQUIRE_LLVM_VERSION}" 0 1 MAJOR)
-  string(SUBSTRING "${HALIDE_REQUIRE_LLVM_VERSION}" 1 1 MINOR)
+  string(REGEX REPLACE
+    "^([0-9]+)([0-9])$"
+    "\\1"
+    MAJOR
+    "${HALIDE_REQUIRE_LLVM_VERSION}")
+  string(REGEX REPLACE
+    "^([0-9]+)([0-9])$"
+    "\\2"
+    MINOR
+    "${HALIDE_REQUIRE_LLVM_VERSION}")
+  message("HALIDE_REQUIRE_LLVM_VERSION ${HALIDE_REQUIRE_LLVM_VERSION}")
   message("Looking for LLVM version ${MAJOR}.${MINOR}")
   find_package(LLVM "${MAJOR}.${MINOR}" REQUIRED CONFIG)
   if(NOT "${LLVM_VERSION_MAJOR}${LLVM_VERSION_MINOR}" STREQUAL "${MAJOR}${MINOR}")
@@ -40,7 +49,7 @@ message(STATUS "Using LLVMConfig.cmake in: ${LLVM_DIR}")
 if (MSVC AND NOT CMAKE_CONFIGURATION_TYPES)
   # LLVM5.x on Windows can include "$(Configuration)" in the path;
   # fix this so we can use the paths right away.
-  string(REPLACE "$(Configuration)" ${CMAKE_BUILD_TYPE} LLVM_TOOLS_BINARY_DIR "${LLVM_TOOLS_BINARY_DIR}")
+  string(REPLACE "$(Configuration)" "${CMAKE_BUILD_TYPE}" LLVM_TOOLS_BINARY_DIR "${LLVM_TOOLS_BINARY_DIR}")
 endif()
 
 set_property(GLOBAL PROPERTY USE_FOLDERS ON)
@@ -49,11 +58,6 @@ if(${CMAKE_SYSTEM_NAME} MATCHES "Windows")
   set(CMAKE_OBJECT_PATH_MAX 260)
   message("Windows: setting CMAKE_OBJECT_PATH_MAX to ${CMAKE_OBJECT_PATH_MAX}")
 endif()
-
-# Require C++11 for everything.
-set(CMAKE_CXX_STANDARD 11)
-set(CMAKE_CXX_STANDARD_REQUIRED ON)
-set(CMAKE_CXX_EXTENSIONS OFF)
 
 set(CMAKE_MACOSX_RPATH ON)
 
@@ -71,17 +75,54 @@ file(TO_NATIVE_PATH "${LLVM_TOOLS_BINARY_DIR}/llvm-nm${CMAKE_EXECUTABLE_SUFFIX}"
 file(TO_NATIVE_PATH "${LLVM_TOOLS_BINARY_DIR}/clang${CMAKE_EXECUTABLE_SUFFIX}" CLANG)
 file(TO_NATIVE_PATH "${LLVM_TOOLS_BINARY_DIR}/llvm-config${CMAKE_EXECUTABLE_SUFFIX}" LLVM_CONFIG)
 
-# LLVM doesn't appear to expose --system-libs via its CMake interface,
-# so we must shell out to llvm-config to find this info
-execute_process(COMMAND ${LLVM_CONFIG} --system-libs --link-static OUTPUT_VARIABLE HALIDE_SYSTEM_LIBS_RAW)
-string(STRIP "${HALIDE_SYSTEM_LIBS_RAW}" HALIDE_SYSTEM_LIBS_RAW)  # strip whitespace from start & end
-string(REPLACE " " ";" HALIDE_SYSTEM_LIBS "${HALIDE_SYSTEM_LIBS_RAW}")  # convert into a list
-if("${HALIDE_SYSTEM_LIBS}" STREQUAL "")
-  # It's theoretically possible that this could be legitimately empty,
-  # but in practice that doesn't really happen, so we'll assume it means we
-  # aren't configured correctly.
-  message(WARNING "'llvm-config --system-libs --link-static' is empty; this is possibly wrong.")
+if(LLVM_USE_SHARED_LLVM_LIBRARY)
+  # Since we will be linking to the shared LLVM library,
+  # we will get all the transitive dependencies for free automagically.
+  set(HALIDE_SYSTEM_LIBS)
+else()
+  # LLVM doesn't appear to expose --system-libs via its CMake interface,
+  # so we must shell out to llvm-config to find this info
+  execute_process(COMMAND ${LLVM_CONFIG} --system-libs --link-static OUTPUT_VARIABLE HALIDE_SYSTEM_LIBS_RAW)
+  string(STRIP "${HALIDE_SYSTEM_LIBS_RAW}" HALIDE_SYSTEM_LIBS_RAW)  # strip whitespace from start & end
+  string(REPLACE " " ";" HALIDE_SYSTEM_LIBS "${HALIDE_SYSTEM_LIBS_RAW}")  # convert into a list
+  if("${HALIDE_SYSTEM_LIBS}" STREQUAL "")
+    # It's theoretically possible that this could be legitimately empty,
+    # but in practice that doesn't really happen, so we'll assume it means we
+    # aren't configured correctly.
+    message(WARNING "'llvm-config --system-libs --link-static' is empty; this is possibly wrong.")
+  endif()
 endif()
+
+execute_process(COMMAND ${LLVM_CONFIG} --cxxflags OUTPUT_VARIABLE LLVM_CONFIG_CXXFLAGS)
+string(FIND "${LLVM_CONFIG_CXXFLAGS}" "-std=c++2a" LLVM_CPP2a)
+string(FIND "${LLVM_CONFIG_CXXFLAGS}" "-std=c++20" LLVM_CPP20)
+string(FIND "${LLVM_CONFIG_CXXFLAGS}" "-std=c++17" LLVM_CPP17)
+string(FIND "${LLVM_CONFIG_CXXFLAGS}" "-std=c++14" LLVM_CPP14)
+if (LLVM_CPP2a GREATER -1 OR LLVM_CPP20 GREATER -1)
+  set(CMAKE_CXX_STANDARD 20)
+elseif (LLVM_CPP17 GREATER -1)
+  set(CMAKE_CXX_STANDARD 17)
+elseif (LLVM_CPP14 GREATER -1)
+  set(CMAKE_CXX_STANDARD 14)
+else()
+  # Require (at least) C++11 for everything.
+  set(CMAKE_CXX_STANDARD 11)
+endif()
+
+string(FIND "${LLVM_CONFIG_CXXFLAGS}" "-stdlib=libc++" LLVM_LIBCXX)
+if (LLVM_LIBCXX GREATER -1)
+  add_compile_options(-stdlib=libc++)
+  if(COMMAND add_link_options)
+    add_link_options(-stdlib=libc++)
+  else()
+    set(CMAKE_SHARED_LINKER_FLAGS "${CMAKE_SHARED_LINKER_FLAGS} -stdlib=libc++")
+    set(CMAKE_MODULE_LINKER_FLAGS "${CMAKE_MODULE_LINKER_FLAGS} -stdlib=libc++")
+    set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -stdlib=libc++")
+  endif()
+endif()
+
+set(CMAKE_CXX_STANDARD_REQUIRED ON)
+set(CMAKE_CXX_EXTENSIONS OFF)
 
 # Check LLVM
 function(check_dir VARNAME PATH)
@@ -99,7 +140,7 @@ function(check_tool_exists NAME PATH)
   if (MSVC)
     # LLVM5.x on Windows can include "$(Configuration)" in the path;
     # fix this so we can use the paths right away.
-    string(REPLACE "$(Configuration)" ${CMAKE_BUILD_TYPE} TOOL_PATH "${TOOL_PATH}")
+    string(REPLACE "$(Configuration)" "${CMAKE_BUILD_TYPE}" TOOL_PATH "${TOOL_PATH}")
   endif()
   if (NOT EXISTS "${TOOL_PATH}")
     message(FATAL_ERROR "Tool ${NAME} not found at ${TOOL_PATH}")
@@ -113,11 +154,14 @@ check_tool_exists(llvm-nm "${LLVM_NM}")
 check_tool_exists(clang "${CLANG}")
 
 # Check reported LLVM version
-if (NOT "${LLVM_VERSION}" MATCHES "^[0-9][0-9]$")
-  message(FATAL_ERROR "LLVM_VERSION not specified correctly. Must be <major><minor> E.g. LLVM 7.0 is \"70\"")
+if (NOT "${LLVM_VERSION}" MATCHES "^[0-9]+$")
+  message(FATAL_ERROR "LLVM_VERSION not specified correctly, must be LLVM version times 10.")
 endif()
-if (LLVM_VERSION LESS 60)
-  message(FATAL_ERROR "LLVM version must be 6.0 or newer")
+if (LLVM_VERSION LESS 80)
+  message(FATAL_ERROR "LLVM version must be 8.0 or newer")
+endif()
+if (LLVM_VERSION GREATER 100)
+  message(FATAL_ERROR "LLVM version must be 10.0 or older")
 endif()
 
 function(check_llvm_target TARGET HAS_TARGET)
@@ -143,6 +187,7 @@ check_llvm_target(Hexagon WITH_HEXAGON 40)
 check_llvm_target(Mips WITH_MIPS)
 check_llvm_target(PowerPC WITH_POWERPC)
 check_llvm_target(NVPTX WITH_NVPTX)
+check_llvm_target(RISCV WITH_RISCV)
 # AMDGPU target is WIP
 check_llvm_target(AMDGPU WITH_AMDGPU)
 
@@ -156,19 +201,23 @@ option(TARGET_MIPS "Include MIPS target" ${WITH_MIPS})
 option(TARGET_POWERPC "Include POWERPC target" ${WITH_POWERPC})
 option(TARGET_PTX "Include PTX target" ${WITH_NVPTX})
 option(TARGET_AMDGPU "Include AMDGPU target" ${WITH_AMDGPU})
+option(TARGET_RISCV "Include RISCV target" ${WITH_RISCV})
 option(TARGET_OPENCL "Include OpenCL-C target" ON)
 option(TARGET_OPENGL "Include OpenGL/GLSL target" ON)
 option(TARGET_OPENGLCOMPUTE "Include OpenGLCompute target" ON)
 option(TARGET_D3D12COMPUTE "Include Direct3D 12 Compute target" ON)
 option(HALIDE_SHARED_LIBRARY "Build as a shared library" ON)
+option(LLVM_USE_SHARED_LLVM_LIBRARY "Use shared versions of LLVM libraries" OFF)
 option(HALIDE_ENABLE_RTTI "Enable RTTI" ${LLVM_ENABLE_RTTI})
 option(HALIDE_ENABLE_EXCEPTIONS "Enable exceptions" ${LLVM_ENABLE_EH})
 option(HALIDE_USE_CODEMODEL_LARGE "Use the Large LLVM codemodel" OFF)
 
 if (HALIDE_SHARED_LIBRARY)
   set(HALIDE_LIBRARY_TYPE SHARED)
+  message(STATUS "Building Halide as a shared library")
 else()
   set(HALIDE_LIBRARY_TYPE STATIC)
+  message(STATUS "Building Halide as a static library")
 endif()
 
 if (HALIDE_ENABLE_RTTI AND NOT LLVM_ENABLE_RTTI)
@@ -193,7 +242,7 @@ function(halide_project name folder)
       target_compile_options("${name}" PUBLIC "-fno-rtti")
     endif()
   endif()
-  target_link_libraries("${name}" PRIVATE Halide ${CMAKE_DL_LIBS} ${CMAKE_THREAD_LIBS_INIT})
+  target_link_libraries("${name}" PRIVATE ${HALIDE_COMPILER_LIB} ${CMAKE_DL_LIBS} ${CMAKE_THREAD_LIBS_INIT})
   target_include_directories("${name}" PRIVATE "${HALIDE_BASE_DIR}/src")
   target_include_directories("${name}" PRIVATE "${HALIDE_BASE_DIR}/tools")
   set_target_properties("${name}" PROPERTIES FOLDER "${folder}")
@@ -316,7 +365,7 @@ define_test_group(run_tests)
 # TODO(srj): add test_avx512 variant
 # TODO(srj): add test_python variant
 # TODO(srj): add test_apps variant
-function(add_test TARGET)
+function(add_halide_test TARGET)
   set(options EXPECT_FAILURE)
   set(oneValueArgs WORKING_DIRECTORY)
   set(multiValueArgs GROUPS)
@@ -328,7 +377,6 @@ function(add_test TARGET)
   endforeach()
 
   set(BUILD_NAME "${TARGET}")
-  # add_custom_target("${BUILD_NAME}" DEPENDS "${TARGET}")
   set_target_properties("${BUILD_NAME}" PROPERTIES EXCLUDE_FROM_ALL TRUE)
   add_dependencies(build_tests "${BUILD_NAME}")
 
@@ -349,12 +397,13 @@ function(add_test TARGET)
     # It's probably a custom target or a group: just depend on it.
     add_custom_target("${EXEC_NAME}" DEPENDS "${TARGET}")
   else()
-    message(FATAL_ERROR "add_test(): unsupported type ${TARGET_TYPE} for ${TARGET}")
+    message(FATAL_ERROR "add_halide_test(): unsupported type ${TARGET_TYPE} for ${TARGET}")
   endif()
   set_target_properties("${EXEC_NAME}" PROPERTIES EXCLUDE_FROM_ALL TRUE)
   foreach(GROUP ${args_GROUPS})
     add_dependencies("${GROUP}" "${EXEC_NAME}")
   endforeach()
+  add_test(NAME ${TARGET} COMMAND ${COMMAND})
 
 endfunction()
 
@@ -365,6 +414,7 @@ define_test_group(test_auto_schedule)
 define_test_group(test_correctness)
 define_test_group(test_error)
 define_test_group(test_generator)
+define_test_group(test_internal)
 define_test_group(test_opengl)
 define_test_group(test_performance)
 define_test_group(test_tutorial)
@@ -374,6 +424,7 @@ add_subdirectory(src)
 option(WITH_TESTS "Build tests" ON)
 if (WITH_TESTS)
   message(STATUS "Building tests enabled")
+  enable_testing()
   add_subdirectory(test)
 else()
   message(STATUS "Building tests disabled")
@@ -426,9 +477,10 @@ file(GLOB FILES "${CMAKE_BINARY_DIR}/include/HalideRuntime*.h")
 install(FILES
         "${CMAKE_BINARY_DIR}/include/Halide.h"
         "${CMAKE_BINARY_DIR}/include/HalideBuffer.h"
+        "${CMAKE_BINARY_DIR}/include/HalidePyTorchHelpers.h"
+        "${CMAKE_BINARY_DIR}/include/HalidePyTorchCudaHelpers.h"
         ${FILES}
-        DESTINATION include
-        )
+        DESTINATION include)
 
 install(DIRECTORY tutorial
         DESTINATION .
@@ -461,7 +513,7 @@ file(GLOB FILES "${HALIDE_BASE_DIR}/*.md")
 install(FILES ${FILES}
         DESTINATION .)
 
-# ---- CMake
+# ---- halide.cmake
 file(GLOB FILES "${HALIDE_BASE_DIR}/*.cmake")
 install(FILES ${FILES}
         DESTINATION .)
@@ -476,17 +528,5 @@ foreach(F ${FILES})
           DESTINATION .)
 endforeach()
 
-if (NOT WIN32)
-  set(CPACK_PACKAGE_EXT "tar.gz")
-  set(DISTRIB_PACKAGE_EXT "tgz")
-else()
-  set(CPACK_PACKAGE_EXT "zip")
-  set(DISTRIB_PACKAGE_EXT ${CPACK_PACKAGE_EXT})
-endif()
-
 add_custom_target(distrib
-  COMMAND cmake --build . --config $<CONFIG> --target package
-  COMMAND cmake -E echo "${CPACK_PACKAGE_VENDOR}.${CPACK_PACKAGE_EXT} \"=>\" ${CPACK_PACKAGE_VENDOR}.${DISTRIB_PACKAGE_EXT}"
-  COMMAND cmake -E rename "${CPACK_PACKAGE_VENDOR}.${CPACK_PACKAGE_EXT}" "${CPACK_PACKAGE_VENDOR}.${DISTRIB_PACKAGE_EXT}"
-  BYPRODUCTS "${CPACK_PACKAGE_VENDOR}.${DISTRIB_PACKAGE_EXT}"
-  USES_TERMINAL)
+  COMMAND cmake -E echo "\\'make distrib\\' is not available under CMake. Use \\'make package\\' instead.")

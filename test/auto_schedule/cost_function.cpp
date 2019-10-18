@@ -31,15 +31,16 @@ int main(int argc, char **argv) {
     }
 
     // Provide estimates on the pipeline output
-    stencils[num_stencils - 1].estimate(x, 0, 6200).estimate(y, 0, 4600);
+    stencils[num_stencils - 1].set_estimate(x, 0, 6200).set_estimate(y, 0, 4600);
 
     // Auto-schedule the pipeline
     Target target = get_jit_target_from_environment();
     Pipeline p(stencils[num_stencils - 1]);
+    AutoSchedulerResults results = p.auto_schedule(target);
 
     std::cout << "\n\n******************************************\nSCHEDULE:\n"
               << "******************************************\n"
-              << p.auto_schedule(target)
+              << results.schedule_source
               << "\n******************************************\n\n";
 
     // Inspect the schedule

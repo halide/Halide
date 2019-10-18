@@ -1,7 +1,6 @@
 include ../support/Makefile.inc
 include ../support/autoscheduler.inc
 
-BIN ?= bin
 MATRIX_SIZE ?= 1024
 
 CUDA_SDK ?= /usr/local/cuda-8.0
@@ -11,27 +10,27 @@ LDFLAGS += -L $(CUDA_SDK)/lib64
 
 HL_TARGET = host-cuda-cuda_capability_50
 
-all: $(BIN)/runner
+all: $(BIN)/$(HL_TARGET)/runner
 
-$(BIN)/mat_mul.generator: mat_mul_generator.cpp  ../autoscheduler/SimpleAutoSchedule.h ../autoscheduler/SimpleAutoSchedule.cpp ../autoscheduler/DerivativeUtils.h ../autoscheduler/DerivativeUtils.cpp $(GENERATOR_DEPS)
+$(GENERATOR_BIN)/mat_mul.generator: mat_mul_generator.cpp  ../autoscheduler/SimpleAutoSchedule.h ../autoscheduler/SimpleAutoSchedule.cpp ../autoscheduler/DerivativeUtils.h ../autoscheduler/DerivativeUtils.cpp $(GENERATOR_DEPS)
 	@mkdir -p $(@D)
 	$(CXX) $(CXXFLAGS) $(USE_EXPORT_DYNAMIC) -g $(filter-out %.h,$^) -o $@ $(LDFLAGS) $(HALIDE_SYSTEM_LIBS)
 
-$(BIN)/mat_mul.a: $(BIN)/mat_mul.generator
+$(BIN)/%/mat_mul.a: $(GENERATOR_BIN)/mat_mul.generator
 	@mkdir -p $(@D)
-	$^ -g mat_mul -o $(BIN) target=$(HL_TARGET) size=$(MATRIX_SIZE)
+	$^ -g mat_mul -e $(GENERATOR_OUTPUTS) -o $(@D) target=$(HL_TARGET) size=$(MATRIX_SIZE)
 
-$(BIN)/mat_mul_simple_auto_schedule.a: $(BIN)/mat_mul.generator
+$(BIN)/%/mat_mul_simple_auto_schedule.a: $(GENERATOR_BIN)/mat_mul.generator
 	@mkdir -p $(@D)
 	HL_USE_SIMPLE_AUTOSCHEDULER=1 \
-	$< -g mat_mul -o $(BIN) -f mat_mul_simple_auto_schedule target=$(HL_TARGET)-no_runtime auto_schedule=false -e static_library,h
+	$^ -g mat_mul -e $(GENERATOR_OUTPUTS) -o $(@D) -f mat_mul_simple_auto_schedule target=$(HL_TARGET)-no_runtime auto_schedule=false
 
-$(BIN)/runner: runner.cpp $(BIN)/mat_mul.a $(BIN)/mat_mul_simple_auto_schedule.a
+$(BIN)/%/runner: runner.cpp $(BIN)/%/mat_mul.a $(BIN)/%/mat_mul_simple_auto_schedule.a
 	@mkdir -p $(@D)
-	$(CXX) $(CXXFLAGS) -I$(BIN) -Wall -O3 $^ -o $@ $(LDFLAGS) -lcudart -lcublas
+	$(CXX) $(CXXFLAGS) -I$(BIN)/$* -Wall $^ -o $@ $(LDFLAGS) -lcudart -lcublas
 
-test: $(BIN)/runner
-	HL_CUDA_JIT_MAX_REGISTERS=256 $(BIN)/runner $(MATRIX_SIZE)
+test: $(BIN)/$(HL_TARGET)/runner
+	HL_CUDA_JIT_MAX_REGISTERS=256 $^ $(MATRIX_SIZE)
 
 clean:
 	rm -rf $(BIN)
@@ -39,17 +38,17 @@ clean:
 BATCH_ID ?= 0
 TRAIN_ONLY ?= 0
 SAMPLES_DIR ?= autotuned_samples
-autotune: $(BIN)/mat_mul.generator $(AUTOSCHED_BIN)/augment_sample $(AUTOSCHED_BIN)/train_cost_model $(AUTOSCHED_BIN)/libauto_schedule.so $(AUTOSCHED_SRC)/autotune_loop.sh
-	HL_TARGET=host-cuda \
+autotune: $(GENERATOR_BIN)/mat_mul.generator $(AUTOSCHED_BIN)/augment_sample $(AUTOSCHED_BIN)/train_cost_model $(AUTOSCHED_BIN)/libauto_schedule.so $(AUTOSCHED_SRC)/autotune_loop.sh
+	HL_TARGET=$(HL_TARGET) \
 	HL_MACHINE_PARAMS=80,1,1 \
 	SAMPLES_DIR=$(SAMPLES_DIR) \
 	HL_WEIGHTS_DIR=$(AUTOSCHED_SRC)/gpu_weights \
 	HL_DEBUG_CODEGEN=0 \
 	HL_SHARED_MEMORY_LIMIT=48 \
 	bash $(AUTOSCHED_SRC)/autotune_loop.sh \
-		$(BIN)/mat_mul.generator \
+		$(GENERATOR_BIN)/mat_mul.generator \
 		mat_mul \
-		host-cuda \
+		$(HL_TARGET) \
 		$(AUTOSCHED_SRC)/gpu_weights \
 		$(AUTOSCHED_BIN) \
 		$(BATCH_ID) \

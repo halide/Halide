@@ -4,7 +4,7 @@
 # autoscheduler's cost model training pipeline, which is large enough
 # to be interesting.
 if [ $# -lt 7 -o $# -gt 8 ]; then
-  echo "Usage: $0 /path/to/some.generator generatorname halide_target weights_dir autoschedule_bin_dir batch_id train_only [generator_args_sets]"
+  echo "Usage: $0 /path/to/some.generator generatorname halide_target weights_file autoschedule_bin_dir batch_id train_only [generator_args_sets]"
   exit
 fi
 
@@ -19,7 +19,7 @@ set -eu
 GENERATOR=${1}
 PIPELINE=${2}
 HL_TARGET=${3}
-START_WEIGHTS_DIR=${4}
+START_WEIGHTS_FILE=${4}
 AUTOSCHED_BIN=${5}
 BATCH_ID=${6}
 TRAIN_ONLY=${7}
@@ -42,8 +42,11 @@ COMPILATION_TIMEOUT=600s
 BENCHMARKING_TIMEOUT=60s
 
 if [ -z ${HL_TARGET} ]; then
-HL_TARGET=x86-64-avx2
+# Use the host target -- but remove features that we don't want to train
+# for by default, at least not yet (most notably, AVX512).
+HL_TARGET=`${AUTOSCHED_BIN}/get_host_target avx512 avx512_knl avx512_skylake avx512_cannonlake`
 fi
+echo Training target is: ${HL_TARGET}
 
 if [ -z ${GENERATOR} ]; then
 GENERATOR=./bin/demo.generator
@@ -56,20 +59,19 @@ fi
 SAMPLES=${SAMPLES_DIR}
 mkdir -p ${SAMPLES}
 
-WEIGHTS=${SAMPLES}/weights
-if [[ -d ${WEIGHTS} ]]; then
-    echo Using existing weights in ${WEIGHTS}
+WEIGHTS=${SAMPLES}/updated.weights
+if [[ -f ${WEIGHTS} ]]; then
+    echo Using existing weights "${WEIGHTS}"
 else
     # Only copy over the weights if we don't have any already,
     # so that restarted jobs can continue from where they left off
-    mkdir -p ${WEIGHTS}
-    cp ${START_WEIGHTS_DIR}/*.data ${WEIGHTS}/
-    echo Copying starting weights from ${START_WEIGHTS_DIR} to ${WEIGHTS}
+    cp ${START_WEIGHTS_FILE} ${WEIGHTS}
+    echo Copying starting weights from ${START_WEIGHTS_FILE} to ${WEIGHTS}
 fi
 
-# We could add these unconditionally, but it's easier to wade thru
+# We could add this unconditionally, but it's easier to wade thru
 # results if we only add if needed
-for F in disable_llvm_loop_unroll disable_llvm_loop_vectorize; do
+for F in disable_llvm_loop_opt; do
     if [[ ! ${HL_TARGET} =~ .*${F}.* ]]; then
         HL_TARGET="${HL_TARGET}-${F}"
     fi
@@ -101,8 +103,8 @@ record_command() {
     fi
 }
 
-# Build a single sample of the pipeline with a random schedule
-make_sample() {
+# Build a single featurization of the pipeline with a random schedule
+make_featurization() {
     D=${1}
     SEED=${2}
     FNAME=${3}
@@ -110,7 +112,8 @@ make_sample() {
     BATCH=${5}
     SAMPLE_ID=${6}
     mkdir -p ${D}
-    rm -f "${D}/sample.sample"
+    rm -f "${D}/${FNAME}.featurization"
+    rm -f "${D}/${FNAME}.sample"
     if [[ $D == */0 ]]; then
         # Sample 0 in each batch is best effort beam search, with no randomness
         dropout=100
@@ -125,14 +128,10 @@ make_sample() {
 
     echo "Compiling HL_SEED=${SEED} ${EXTRA_GENERATOR_ARGS}"
 
-    CMD="HL_PERMIT_FAILED_UNROLL=1 \
-        HL_SEED=${SEED} \
-        HL_SCHEDULE_FILE=${D}/schedule.txt \
-        HL_FEATURE_FILE=${D}/sample.sample \
+    CMD="HL_SEED=${SEED} \
         HL_WEIGHTS_DIR=${WEIGHTS} \
         HL_RANDOM_DROPOUT=${dropout} \
         HL_BEAM_SIZE=${beam} \
-        HL_NUM_PASSES=${HL_NUM_PASSES} \
         HL_SHARED_MEMORY_LIMIT=${shared_memory_limit} \
         HL_MACHINE_PARAMS=${HL_MACHINE_PARAMS} \
         time -f 'Compile time (s): %e' ${TIMEOUT_CMD} -k ${COMPILATION_TIMEOUT} ${COMPILATION_TIMEOUT} \
@@ -140,7 +139,7 @@ make_sample() {
         -g ${PIPELINE} \
         -f ${FNAME} \
         -o ${D} \
-        -e stmt,assembly,static_library,h,registration \
+        -e stmt,assembly,static_library,c_header,registration,schedule,featurization \
         target=${HL_TARGET} \
         auto_schedule=true \
         ${EXTRA_GENERATOR_ARGS} \
@@ -161,7 +160,8 @@ make_sample() {
         ${D}/*.registration.cpp \
         ${D}/*.a \
         -o ${D}/bench \
-        -ljpeg -ldl -lpthread -lz -lpng"
+        -DHALIDE_NO_PNG -DHALIDE_NO_JPEG \
+        -ldl -lpthread"
 
     eval $CMD
     FAILED=0
@@ -174,6 +174,8 @@ make_sample() {
 
 # Benchmark one of the random samples
 benchmark_sample() {
+    sleep 1 # Give CPU clocks a chance to spin back up if we're thermally throttling
+
     D=${1}
     BATCH=${3}
     SAMPLE_ID=${4}
@@ -182,13 +184,10 @@ benchmark_sample() {
         return
     fi
 
-    sleep 1 # Give CPU clocks a chance to spin back up if we're thermally throttling
     CMD="HL_NUM_THREADS=${NUM_CORES} \
         ${TIMEOUT_CMD} -k ${BENCHMARKING_TIMEOUT} ${BENCHMARKING_TIMEOUT} \
         ${D}/bench \
-        --output_extents=estimate \
-        --default_input_buffers=random:0:estimate_then_auto \
-        --default_input_scalars=estimate \
+        --estimate_all \
         --benchmarks=all"
 
     eval $CMD | tee ${D}/bench.txt
@@ -227,17 +226,11 @@ benchmark_sample() {
 
     # Add the runtime, pipeline id, and schedule id to the feature file
     R=$(cut -d' ' -f8 < ${D}/bench.txt)
-    P=0
+    P=$5
     S=$2
+    FNAME=$6
 
-    CMD="${AUTOSCHED_BIN}/augment_sample ${D}/sample.sample $R $P $S"
-    eval $CMD
-    FAILED=0
-    if [[ $? != 0 ]]; then
-        echo "Augment sample failed for ${D}"
-        FAILED=1
-    fi
-    record_command $BATCH $SAMPLE_ID "$CMD" "augment_command" $FAILED
+    ${AUTOSCHED_BIN}/featurization_to_sample ${D}/${FNAME}.featurization $R $P $S ${D}/${FNAME}.sample || echo "featurization_to_sample failed for ${D} (probably because benchmarking failed)"
 }
 
 if [[ $BATCH_ID == 0 ]]; then
@@ -267,8 +260,8 @@ for ((BATCH_ID=$((FIRST+1));BATCH_ID<$((FIRST+1+NUM_BATCHES));BATCH_ID++)); do
           DIR=${SAMPLES}/${BATCH}
 
           # Copy the weights being used into the batch folder so that we can repro failures
-          mkdir -p ${DIR}/weights_used/
-          cp ${WEIGHTS}/*.data ${DIR}/weights_used/
+          mkdir -p ${DIR}/
+          cp ${WEIGHTS} ${DIR}/used.weights
 
           EXTRA_GENERATOR_ARGS=${GENERATOR_ARGS_SETS_ARRAY[EXTRA_ARGS_IDX]/;/ }
           if [ ! -z "${EXTRA_GENERATOR_ARGS}" ]; then
@@ -279,7 +272,7 @@ for ((BATCH_ID=$((FIRST+1));BATCH_ID<$((FIRST+1+NUM_BATCHES));BATCH_ID++)); do
 
           # Do parallel compilation in batches, so that machines with fewer than BATCH_SIZE cores
           # don't get swamped and timeout unnecessarily
-          echo Compiling samples
+          echo -n Compiling ${BATCH_SIZE} samples
           for ((SAMPLE_ID=0;SAMPLE_ID<${BATCH_SIZE};SAMPLE_ID++)); do
               while [[ 1 ]]; do
                   RUNNING=$(jobs -r | wc -l)
@@ -293,13 +286,16 @@ for ((BATCH_ID=$((FIRST+1));BATCH_ID<$((FIRST+1+NUM_BATCHES));BATCH_ID++)); do
               S=$(printf "%d%02d" $BATCH_ID $SAMPLE_ID)
               FNAME=$(printf "%s_batch_%02d_sample_%02d" ${PIPELINE} $BATCH_ID $SAMPLE_ID)
               make_sample "${DIR}/${SAMPLE_ID}" $S $FNAME "$EXTRA_GENERATOR_ARGS" $BATCH $SAMPLE_ID &
+              echo -n .
           done
           wait
+          echo done.
 
           # benchmark them serially using rungen
           for ((SAMPLE_ID=0;SAMPLE_ID<${BATCH_SIZE};SAMPLE_ID++)); do
-              S=$(printf "%d%02d" $BATCH_ID $SAMPLE_ID)
-              benchmark_sample "${DIR}/${SAMPLE_ID}" $S $BATCH $SAMPLE_ID
+              S=$(printf "%04d%04d" $BATCH_ID $SAMPLE_ID)
+              FNAME=$(printf "%s_batch_%04d_sample_%04d" ${PIPELINE} $BATCH_ID $SAMPLE_ID)
+              benchmark_sample "${DIR}/${SAMPLE_ID}" $S $BATCH $SAMPLE_ID $EXTRA_ARGS_IDX $FNAME
           done
       done
     fi
@@ -307,7 +303,15 @@ for ((BATCH_ID=$((FIRST+1));BATCH_ID<$((FIRST+1+NUM_BATCHES));BATCH_ID++)); do
     # retrain model weights on all samples seen so far
     echo Retraining model...
 
-    train_cost_model ${HALIDE_ROOT} ${SAMPLES} ${WEIGHTS} ${NUM_CORES} ${EPOCHS} ${SAMPLES}/best.txt
+    find ${SAMPLES} -name "*.sample" | \
+        ${AUTOSCHED_BIN}/retrain_cost_model \
+            --epochs=${BATCH_SIZE} \
+            --rates="0.0001" \
+            --num_cores=${NUM_CORES} \
+            --initial_weights=${WEIGHTS} \
+            --weights_out=${WEIGHTS} \
+            --best_benchmark=${SAMPLES}/best.${PIPELINE}.benchmark.txt \
+            --best_schedule=${SAMPLES}/best.${PIPELINE}.schedule.h
 
     if [[ $TRAIN_ONLY == 1 ]]; then
       echo Batch ${BATCH_ID} took ${SECONDS} seconds to retrain

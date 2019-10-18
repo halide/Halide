@@ -36,7 +36,8 @@ Interval bounds_of_expr_in_scope(Expr expr,
  * An upper bound (always greater than or equal to the expression), or
  * A lower bound (always less than or equal to the expression)
  * If it fails, returns an undefined Expr. */
-enum class Direction {Upper, Lower};
+enum class Direction { Upper,
+                       Lower };
 Expr find_constant_bound(const Expr &e, Direction d,
                          const Scope<Interval> &scope = Scope<Interval>());
 
@@ -53,21 +54,39 @@ struct Box {
     /** The bounds if it is touched. */
     std::vector<Interval> bounds;
 
-    Box() {}
-    Box(size_t sz) : bounds(sz) {}
-    Box(const std::vector<Interval> &b) : bounds(b) {}
+    Box() = default;
+    Box(size_t sz)
+        : bounds(sz) {
+    }
+    Box(const std::vector<Interval> &b)
+        : bounds(b) {
+    }
 
-    size_t size() const {return bounds.size();}
-    bool empty() const {return bounds.empty();}
-    Interval &operator[](size_t i) {return bounds[i];}
-    const Interval &operator[](size_t i) const {return bounds[i];}
-    void resize(size_t sz) {bounds.resize(sz);}
-    void push_back(const Interval &i) {bounds.push_back(i);}
+    size_t size() const {
+        return bounds.size();
+    }
+    bool empty() const {
+        return bounds.empty();
+    }
+    Interval &operator[](size_t i) {
+        return bounds[i];
+    }
+    const Interval &operator[](size_t i) const {
+        return bounds[i];
+    }
+    void resize(size_t sz) {
+        bounds.resize(sz);
+    }
+    void push_back(const Interval &i) {
+        bounds.push_back(i);
+    }
 
     /** Check if the used condition is defined and not trivially true. */
-    bool maybe_unused() const {return used.defined() && !is_one(used);}
+    bool maybe_unused() const {
+        return used.defined() && !is_one(used);
+    }
 
-    friend std::ostream& operator<<(std::ostream& stream, const Box& b) {
+    friend std::ostream &operator<<(std::ostream &stream, const Box &b) {
         stream << "{";
         for (size_t dim = 0; dim < b.size(); dim++) {
             if (dim > 0) {
@@ -94,7 +113,6 @@ Box box_intersection(const Box &a, const Box &b);
 
 /** Test if box a provably contains box b */
 bool box_contains(const Box &a, const Box &b);
-
 
 /** Compute rectangular domains large enough to cover all the 'Call's
  * to each function that occurs within a given statement or

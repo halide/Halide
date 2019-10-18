@@ -39,13 +39,14 @@ Target complete_x86_target(Target t) {
     }
     return t;
 }
-}
+}  // namespace
 
-CodeGen_X86::CodeGen_X86(Target t) : CodeGen_Posix(complete_x86_target(t)) {
+CodeGen_X86::CodeGen_X86(Target t)
+    : CodeGen_Posix(complete_x86_target(t)) {
 
-    #if !(WITH_X86)
+#if !defined(WITH_X86)
     user_error << "x86 not enabled for this build of Halide.\n";
-    #endif
+#endif
 
     user_assert(llvm_X86_enabled) << "llvm build not configured with X86 target enabled.\n";
 }
@@ -80,8 +81,7 @@ bool should_use_pmaddwd(Expr a, Expr b, vector<Expr> &result) {
     return true;
 }
 
-}
-
+}  // namespace
 
 void CodeGen_X86::visit(const Add *op) {
     vector<Expr> matches;
@@ -91,7 +91,6 @@ void CodeGen_X86::visit(const Add *op) {
         CodeGen_Posix::visit(op);
     }
 }
-
 
 void CodeGen_X86::visit(const Sub *op) {
     vector<Expr> matches;
@@ -109,11 +108,13 @@ void CodeGen_X86::visit(const Sub *op) {
 }
 
 void CodeGen_X86::visit(const GT *op) {
-    if (op->type.is_vector()) {
+    Type t = op->a.type();
+
+    if (t.is_vector() &&
+        upgrade_type_for_arithmetic(t) == t) {
         // Non-native vector widths get legalized poorly by llvm. We
         // split it up ourselves.
 
-        Type t = op->a.type();
         int slice_size = vector_lanes_for_slice(t);
 
         Value *a = codegen(op->a), *b = codegen(op->b);
@@ -137,15 +138,16 @@ void CodeGen_X86::visit(const GT *op) {
     } else {
         CodeGen_Posix::visit(op);
     }
-
 }
 
 void CodeGen_X86::visit(const EQ *op) {
-    if (op->type.is_vector()) {
+    Type t = op->a.type();
+
+    if (t.is_vector() &&
+        upgrade_type_for_arithmetic(t) == t) {
         // Non-native vector widths get legalized poorly by llvm. We
         // split it up ourselves.
 
-        Type t = op->a.type();
         int slice_size = vector_lanes_for_slice(t);
 
         Value *a = codegen(op->a), *b = codegen(op->b);
@@ -230,8 +232,6 @@ void CodeGen_X86::visit(const Cast *op) {
     };
 
     static Pattern patterns[] = {
-#if LLVM_VERSION >= 80
-        // Names for these intrinsics vary between LLVM versions
         {Target::AVX2, true, Int(8, 32), 17, "llvm.sadd.sat.v32i8",
          i8_sat(wild_i16x_ + wild_i16x_)},
         {Target::FeatureEnd, true, Int(8, 16), 9, "llvm.sadd.sat.v16i8",
@@ -252,27 +252,6 @@ void CodeGen_X86::visit(const Cast *op) {
          i16_sat(wild_i32x_ - wild_i32x_)},
         {Target::FeatureEnd, true, Int(16, 8), 0, "llvm.ssub.sat.v8i16",
          i16_sat(wild_i32x_ - wild_i32x_)},
-#else
-        // Names for these intrinsics vary between LLVM versions
-        {Target::AVX2, true, Int(8, 32), 0, "llvm.x86.avx2.padds.b",
-         i8_sat(wild_i16x_ + wild_i16x_)},
-        {Target::FeatureEnd, true, Int(8, 16), 0, "llvm.x86.sse2.padds.b",
-         i8_sat(wild_i16x_ + wild_i16x_)},
-        {Target::AVX2, true, Int(8, 32), 0, "llvm.x86.avx2.psubs.b",
-         i8_sat(wild_i16x_ - wild_i16x_)},
-        {Target::FeatureEnd, true, Int(8, 16), 0, "llvm.x86.sse2.psubs.b",
-         i8_sat(wild_i16x_ - wild_i16x_)},
-        {Target::AVX2, true, Int(16, 16), 0, "llvm.x86.avx2.padds.w",
-         i16_sat(wild_i32x_ + wild_i32x_)},
-        {Target::FeatureEnd, true, Int(16, 8), 0, "llvm.x86.sse2.padds.w",
-         i16_sat(wild_i32x_ + wild_i32x_)},
-        {Target::AVX2, true, Int(16, 16), 0, "llvm.x86.avx2.psubs.w",
-         i16_sat(wild_i32x_ - wild_i32x_)},
-        {Target::FeatureEnd, true, Int(16, 8), 0, "llvm.x86.sse2.psubs.w",
-         i16_sat(wild_i32x_ - wild_i32x_)},
-#endif
-#if LLVM_VERSION >= 80
-        // LLVM 8.0+ require using helpers from x86_avx.ll
 
         // Some of the instructions referred to below only appear with
         // AVX2, but LLVM generates better AVX code if you give it
@@ -280,7 +259,6 @@ void CodeGen_X86::visit(const Cast *op) {
         // individual instructions itself. This is why we use
         // Target::AVX instead of Target::AVX2 as the feature flag
         // requirement.
-
         {Target::AVX, true, UInt(8, 32), 17, "paddusbx32",
          u8_sat(wild_u16x_ + wild_u16x_)},
         {Target::FeatureEnd, true, UInt(8, 16), 0, "paddusbx16",
@@ -297,25 +275,7 @@ void CodeGen_X86::visit(const Cast *op) {
          u16(max(wild_i32x_ - wild_i32x_, 0))},
         {Target::FeatureEnd, true, UInt(16, 8), 0, "psubuswx8",
          u16(max(wild_i32x_ - wild_i32x_, 0))},
-#else
-        // Older LLVM versions support these as intrinsics
-        {Target::AVX2, true, UInt(8, 32), 0, "llvm.x86.avx2.paddus.b",
-         u8_sat(wild_u16x_ + wild_u16x_)},
-        {Target::FeatureEnd, true, UInt(8, 16), 0, "llvm.x86.sse2.paddus.b",
-         u8_sat(wild_u16x_ + wild_u16x_)},
-        {Target::AVX2, true, UInt(8, 32), 0, "llvm.x86.avx2.psubus.b",
-         u8(max(wild_i16x_ - wild_i16x_, 0))},
-        {Target::FeatureEnd, true, UInt(8, 16), 0, "llvm.x86.sse2.psubus.b",
-         u8(max(wild_i16x_ - wild_i16x_, 0))},
-        {Target::AVX2, true, UInt(16, 16), 0, "llvm.x86.avx2.paddus.w",
-         u16_sat(wild_u32x_ + wild_u32x_)},
-        {Target::FeatureEnd, true, UInt(16, 8), 0, "llvm.x86.sse2.paddus.w",
-         u16_sat(wild_u32x_ + wild_u32x_)},
-        {Target::AVX2, true, UInt(16, 16), 0, "llvm.x86.avx2.psubus.w",
-         u16(max(wild_i32x_ - wild_i32x_, 0))},
-        {Target::FeatureEnd, true, UInt(16, 8), 0, "llvm.x86.sse2.psubus.w",
-         u16(max(wild_i32x_ - wild_i32x_, 0))},
-#endif
+
         // Only use the avx2 version if we have > 8 lanes
         {Target::AVX2, true, Int(16, 16), 9, "llvm.x86.avx2.pmulh.w",
          i16((wild_i32x_ * wild_i32x_) / 65536)},
@@ -350,10 +310,9 @@ void CodeGen_X86::visit(const Cast *op) {
         {Target::AVX2, false, UInt(16, 16), 9, "packusdwx16",
          u16_sat(wild_i32x_)},
         {Target::SSE41, false, UInt(16, 8), 0, "packusdwx8",
-         u16_sat(wild_i32x_)}
-    };
+         u16_sat(wild_i32x_)}};
 
-    for (size_t i = 0; i < sizeof(patterns)/sizeof(patterns[0]); i++) {
+    for (size_t i = 0; i < sizeof(patterns) / sizeof(patterns[0]); i++) {
         const Pattern &pattern = patterns[i];
 
         if (!target.has_feature(pattern.feature)) {
@@ -405,22 +364,26 @@ void CodeGen_X86::visit(const Cast *op) {
     CodeGen_Posix::visit(op);
 }
 
-Expr CodeGen_X86::mulhi_shr(Expr a, Expr b, int shr) {
-    Type ty = a.type();
-    if (ty.is_vector() && ty.bits() == 16) {
-        // We can use pmulhu for this op.
+void CodeGen_X86::visit(const Call *op) {
+    if (op->is_intrinsic(Call::mulhi_shr) &&
+        op->type.is_vector() && op->type.bits() == 16) {
+        internal_assert(op->args.size() == 3);
         Expr p;
-        if (ty.is_uint()) {
-            p = u16(u32(a) * u32(b) / 65536);
+        if (op->type.is_uint()) {
+            p = u16(u32(op->args[0]) * u32(op->args[1]) / 65536);
         } else {
-            p = i16(i32(a) * i32(b) / 65536);
+            p = i16(i32(op->args[0]) * i32(op->args[1]) / 65536);
         }
-        if (shr) {
-            p = p >> shr;
+        const UIntImm *shift = op->args[2].as<UIntImm>();
+        internal_assert(shift != nullptr) << "Third argument to mulhi_shr intrinsic must be an unsigned integer immediate.\n";
+        if (shift->value != 0) {
+            p = p >> shift->value;
         }
-        return p;
+        value = codegen(p);
+        return;
     }
-    return CodeGen_Posix::mulhi_shr(a, b, shr);
+
+    CodeGen_Posix::visit(op);
 }
 
 string CodeGen_X86::mcpu() const {
@@ -488,16 +451,31 @@ int CodeGen_X86::native_vector_bits() const {
     }
 }
 
-int CodeGen_X86::vector_lanes_for_slice(Type t) const {
+int CodeGen_X86::vector_lanes_for_slice(const Type &t) const {
     // We don't want to pad all the way out to natural_vector_size,
     // because llvm generates crappy code. Better to use a smaller
     // type if we can.
     int vec_bits = t.lanes() * t.bits();
     int natural_vec_bits = target.natural_vector_size(t) * t.bits();
     int slice_bits = ((vec_bits > 256 && natural_vec_bits > 256) ? 512 :
-                      (vec_bits > 128 && natural_vec_bits > 128) ? 256 :
-                      128);
+                                                                   (vec_bits > 128 && natural_vec_bits > 128) ? 256 :
+                                                                                                                128);
     return slice_bits / t.bits();
+}
+
+llvm::Type *CodeGen_X86::llvm_type_of(const Type &t) const {
+    if (t.is_float() && t.bits() < 32) {
+        // LLVM as of August 2019 has all sorts of issues in the x86
+        // backend for half types. It injects expensive calls to
+        // convert between float and half for seemingly no reason
+        // (e.g. to do a select), and bitcasting to int16 doesn't
+        // help, because it simplifies away the bitcast for you.
+        // See: https://bugs.llvm.org/show_bug.cgi?id=43065
+        // and: https://github.com/halide/Halide/issues/4166
+        return llvm_type_of(t.with_code(halide_type_uint));
+    } else {
+        return CodeGen_Posix::llvm_type_of(t);
+    }
 }
 
 }  // namespace Internal

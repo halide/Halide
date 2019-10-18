@@ -5,7 +5,7 @@ Erode application using Python Halide bindings
 import halide as hl
 
 import numpy as np
-from scipy.misc import imread, imsave
+from imageio import imread, imsave
 import os.path
 
 def get_erode(input):

@@ -15,8 +15,10 @@ namespace Internal {
 // TODO: This class is barely stateful, and could probably be replaced with free functions.
 class HexagonAlignmentAnalyzer {
     const int required_alignment;
+
 public:
-    HexagonAlignmentAnalyzer(int required_alignment) : required_alignment(required_alignment) {
+    HexagonAlignmentAnalyzer(int required_alignment)
+        : required_alignment(required_alignment) {
         internal_assert(required_alignment != 0);
     }
 
@@ -50,7 +52,7 @@ public:
         if (known_alignment) {
             *aligned_offset = op->alignment.remainder % native_lanes;
         }
-        return known_alignment;
+        return known_alignment && (*aligned_offset == 0);
     }
 
     bool is_aligned(const Load *op, int64_t *aligned_offset) {

@@ -231,6 +231,12 @@ WEAK bool validate_device_pointer(void *user_context, halide_buffer_t* buf, size
         return true;
     }
 
+    // We may call this in situations where we haven't loaded the
+    // OpenCL API yet.
+    if (!clGetMemObjectInfo) {
+        load_libopencl(user_context);
+    }
+
     cl_mem dev_ptr = ((device_handle *)buf->device)->mem;
     uint64_t offset = ((device_handle *)buf->device)->offset;
 
@@ -1093,7 +1099,7 @@ WEAK int halide_opencl_wrap_cl_mem(void *user_context, struct halide_buffer_t *b
     buf->device = (uint64_t)dev_handle;
     buf->device_interface = &opencl_device_interface;
     buf->device_interface->impl->use_module();
-#if DEBUG_RUNTIME
+#ifdef DEBUG_RUNTIME
     if (!validate_device_pointer(user_context, buf)) {
         free((device_handle *)buf->device);
         buf->device = 0;

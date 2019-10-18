@@ -326,6 +326,7 @@ void check_metadata(const halide_filter_metadata_t &md, bool expect_ucon_at_0) {
     // will contain "x86" or "arm".
     if (!strstr(md.target, "x86") &&
         !strstr(md.target, "powerpc") &&
+        !strstr(md.target, "wasm") &&
         !strstr(md.target, "arm")) {
         std::cerr << "Expected x86 or arm, Actual " << md.target << "\n";
         exit(-1);

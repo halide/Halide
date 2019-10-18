@@ -95,7 +95,8 @@ struct ReductionDomainContents {
     Expr predicate;
     bool frozen;
 
-    ReductionDomainContents() : predicate(const_true()), frozen(false) {
+    ReductionDomainContents()
+        : predicate(const_true()), frozen(false) {
     }
 
     // Pass an IRVisitor through to all Exprs referenced in the ReductionDomainContents
@@ -130,13 +131,17 @@ struct ReductionDomainContents {
 };
 
 template<>
-RefCount &ref_count<Halide::Internal::ReductionDomainContents>(const ReductionDomainContents *p) {return p->ref_count;}
+RefCount &ref_count<Halide::Internal::ReductionDomainContents>(const ReductionDomainContents *p) noexcept {
+    return p->ref_count;
+}
 
 template<>
-void destroy<Halide::Internal::ReductionDomainContents>(const ReductionDomainContents *p) {delete p;}
+void destroy<Halide::Internal::ReductionDomainContents>(const ReductionDomainContents *p) {
+    delete p;
+}
 
-ReductionDomain::ReductionDomain(const std::vector<ReductionVariable> &domain) :
-    contents(new ReductionDomainContents) {
+ReductionDomain::ReductionDomain(const std::vector<ReductionVariable> &domain)
+    : contents(new ReductionDomainContents) {
     contents->domain = domain;
 }
 
@@ -169,11 +174,13 @@ class DropSelfReferences : public IRMutator {
             return op;
         }
     }
+
 public:
     Expr predicate;
     const ReductionDomain &domain;
-    DropSelfReferences(Expr p, const ReductionDomain &d) :
-        predicate(p), domain(d) {}
+    DropSelfReferences(Expr p, const ReductionDomain &d)
+        : predicate(p), domain(d) {
+    }
 };
 }  // namespace
 

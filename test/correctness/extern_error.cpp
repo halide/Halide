@@ -11,7 +11,7 @@ using namespace Halide;
 
 bool extern_error_called = false;
 extern "C" DLLEXPORT
-int extern_error(void *user_context, buffer_t *out) {
+int extern_error(void *user_context, halide_buffer_t *out) {
     extern_error_called = true;
     return -1;
 }
@@ -24,6 +24,11 @@ void my_halide_error(void *user_context, const char *msg) {
 }
 
 int main(int argc, char **argv) {
+    if (get_jit_target_from_environment().arch == Target::WebAssembly) {
+        printf("Skipping test for WebAssembly as the wasm JIT cannot support passing arbitrary pointers to/from HalideExtern code.\n");
+        return 0;
+    }
+
     std::vector<ExternFuncArgument> args;
     args.push_back(user_context_value());
 

@@ -39,17 +39,17 @@ void define_var(py::module &m) {
 
     add_binary_operators_with<Expr>(var_class);
 
-    m.attr("_") = Halide::_;
-    m.attr("_0") = Halide::_0;
-    m.attr("_1") = Halide::_1;
-    m.attr("_2") = Halide::_2;
-    m.attr("_3") = Halide::_3;
-    m.attr("_4") = Halide::_4;
-    m.attr("_5") = Halide::_5;
-    m.attr("_6") = Halide::_6;
-    m.attr("_7") = Halide::_7;
-    m.attr("_8") = Halide::_8;
-    m.attr("_9") = Halide::_9;
+    m.attr("_") = Halide::Var(Halide::_);
+    m.attr("_0") = Halide::Var(Halide::_0);
+    m.attr("_1") = Halide::Var(Halide::_1);
+    m.attr("_2") = Halide::Var(Halide::_2);
+    m.attr("_3") = Halide::Var(Halide::_3);
+    m.attr("_4") = Halide::Var(Halide::_4);
+    m.attr("_5") = Halide::Var(Halide::_5);
+    m.attr("_6") = Halide::Var(Halide::_6);
+    m.attr("_7") = Halide::Var(Halide::_7);
+    m.attr("_8") = Halide::Var(Halide::_8);
+    m.attr("_9") = Halide::Var(Halide::_9);
 }
 
 }  // namespace PythonBindings

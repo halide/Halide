@@ -76,8 +76,38 @@ Expr Simplify::visit(const Select *op, ExprInfo *bounds) {
              rewrite(select(x, z / y, w / y), select(x, z, w) / y) ||
              rewrite(select(x, z % y, w % y), select(x, z, w) % y) ||
 
+             rewrite(select(x, (y + z) + u, y + w), y + select(x, z + u, w)) ||
+             rewrite(select(x, (y + z) - u, y + w), y + select(x, z - u, w)) ||
+             rewrite(select(x, u + (y + z), y + w), y + select(x, u + z, w)) ||
+             rewrite(select(x, y + z, (y + w) + u), y + select(x, z, w + u)) ||
+             rewrite(select(x, y + z, (y + w) - u), y + select(x, z, w - u)) ||
+             rewrite(select(x, y + z, u + (y + w)), y + select(x, z, u + w)) ||
+
+             rewrite(select(x, (y + z) + u, w + y), y + select(x, z + u, w)) ||
+             rewrite(select(x, (y + z) - u, w + y), y + select(x, z - u, w)) ||
+             rewrite(select(x, u + (y + z), w + y), y + select(x, u + z, w)) ||
+             rewrite(select(x, y + z, (w + y) + u), y + select(x, z, w + u)) ||
+             rewrite(select(x, y + z, (w + y) - u), y + select(x, z, w - u)) ||
+             rewrite(select(x, y + z, u + (w + y)), y + select(x, z, u + w)) ||
+
+             rewrite(select(x, (z + y) + u, y + w), y + select(x, z + u, w)) ||
+             rewrite(select(x, (z + y) - u, y + w), y + select(x, z - u, w)) ||
+             rewrite(select(x, u + (z + y), y + w), y + select(x, u + z, w)) ||
+             rewrite(select(x, z + y, (y + w) + u), y + select(x, z, w + u)) ||
+             rewrite(select(x, z + y, (y + w) - u), y + select(x, z, w - u)) ||
+             rewrite(select(x, z + y, u + (y + w)), y + select(x, z, u + w)) ||
+
+             rewrite(select(x, (z + y) + u, w + y), select(x, z + u, w) + y) ||
+             rewrite(select(x, (z + y) - u, w + y), select(x, z - u, w) + y) ||
+             rewrite(select(x, u + (z + y), w + y), select(x, u + z, w) + y) ||
+             rewrite(select(x, z + y, (w + y) + u), select(x, z, w + u) + y) ||
+             rewrite(select(x, z + y, (w + y) - u), select(x, z, w - u) + y) ||
+             rewrite(select(x, z + y, u + (w + y)), select(x, z, u + w) + y) ||
+
              rewrite(select(x < y, x, y), min(x, y)) ||
              rewrite(select(x < y, y, x), max(x, y)) ||
+             rewrite(select(x < 0, x * y, 0), min(x, 0) * y) ||
+             rewrite(select(x < 0, 0, x * y), max(x, 0) * y) ||
 
              (no_overflow_int(op->type) &&
               (rewrite(select(x, y * c0, c1), select(x, y, fold(c1 / c0)) * c0, c1 % c0 == 0) ||
@@ -92,17 +122,7 @@ Expr Simplify::visit(const Select *op, ExprInfo *bounds) {
                rewrite(select(c0 < x, x, c1), max(x, c1), c1 == c0 + 1) ||
                rewrite(select(x < c0, c1, x), max(x, c1), c1 + 1 == c0) ||
                rewrite(select(c0 < x, c1, x), min(x, c1), c1 == c0 + 1) ||
-               rewrite(select(x < c0, x, c1), min(x, c1), c1 + 1 == c0) ||
-
-               // Synthesized
-               #if USE_SYNTHESIZED_RULES
-               rewrite(select((x < y), (z + w), w), (select((x < y), z, 0) + w)) || // Could be more general
-
-               rewrite(select((c0 < x), min(x, c1), c1), c1, ((0 <= c0) && (c1 <= 0))) || // Could be more general
-               rewrite(select((x < (y + c0)), min(y, x), x), x, (c0 <= 0)) ||
-               #endif
-
-               false)) ||
+               rewrite(select(x < c0, x, c1), min(x, c1), c1 + 1 == c0))) ||
 
              (op->type.is_bool() &&
               (rewrite(select(x, true, false), cast(op->type, x)) ||
@@ -122,8 +142,7 @@ Expr Simplify::visit(const Select *op, ExprInfo *bounds) {
     } else {
         return Select::make(std::move(condition), std::move(true_value), std::move(false_value));
     }
-
 }
 
-}
-}
+}  // namespace Internal
+}  // namespace Halide

@@ -75,10 +75,7 @@ int run_test(bool auto_schedule, int argc, char **argv) {
 
     Func normalize("normalize");
     normalize(x, y, c) = interpolated[0](x, y, c) / interpolated[0](x, y, 3);
-    normalize
-        .estimate(c, 0, 4)
-        .estimate(x, 0, in.width())
-        .estimate(y, 0, in.height());
+    normalize.set_estimates({{0, in.width()}, {0, in.height()}, {0, 4}});
 
     std::cout << "Finished function setup." << std::endl;
 

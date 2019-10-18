@@ -8,7 +8,6 @@ namespace Halide {
 namespace Internal {
 
 using std::map;
-using std::pair;
 using std::set;
 using std::string;
 using std::vector;
@@ -122,8 +121,8 @@ class AllocationInference : public IRMutator {
     }
 
 public:
-    AllocationInference(const map<string, Function> &e, const FuncValueBounds &fb) :
-        env(e), func_bounds(fb) {
+    AllocationInference(const map<string, Function> &e, const FuncValueBounds &fb)
+        : env(e), func_bounds(fb) {
         // Figure out which buffers are touched by extern stages
         for (map<string, Function>::const_iterator iter = e.begin();
              iter != e.end(); ++iter) {

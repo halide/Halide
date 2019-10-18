@@ -3,9 +3,7 @@
 namespace Halide {
 namespace Internal {
 
-using std::pair;
 using std::vector;
-
 
 IRMutator::IRMutator() {
 }
@@ -21,11 +19,21 @@ Stmt IRMutator::mutate(const Stmt &s) {
     return s.defined() ? s.get()->mutate_stmt(this) : Stmt();
 }
 
-Expr IRMutator::visit(const IntImm *op)   {return op;}
-Expr IRMutator::visit(const UIntImm *op)   {return op;}
-Expr IRMutator::visit(const FloatImm *op) {return op;}
-Expr IRMutator::visit(const StringImm *op) {return op;}
-Expr IRMutator::visit(const Variable *op) {return op;}
+Expr IRMutator::visit(const IntImm *op) {
+    return op;
+}
+Expr IRMutator::visit(const UIntImm *op) {
+    return op;
+}
+Expr IRMutator::visit(const FloatImm *op) {
+    return op;
+}
+Expr IRMutator::visit(const StringImm *op) {
+    return op;
+}
+Expr IRMutator::visit(const Variable *op) {
+    return op;
+}
 
 Expr IRMutator::visit(const Cast *op) {
     Expr value = mutate(op->value);
@@ -48,21 +56,51 @@ Expr mutate_binary_operator(IRMutator *mutator, const T *op) {
 }
 }  // namespace
 
-Expr IRMutator::visit(const Add *op)     {return mutate_binary_operator(this, op);}
-Expr IRMutator::visit(const Sub *op)     {return mutate_binary_operator(this, op);}
-Expr IRMutator::visit(const Mul *op)     {return mutate_binary_operator(this, op);}
-Expr IRMutator::visit(const Div *op)     {return mutate_binary_operator(this, op);}
-Expr IRMutator::visit(const Mod *op)     {return mutate_binary_operator(this, op);}
-Expr IRMutator::visit(const Min *op)     {return mutate_binary_operator(this, op);}
-Expr IRMutator::visit(const Max *op)     {return mutate_binary_operator(this, op);}
-Expr IRMutator::visit(const EQ *op)      {return mutate_binary_operator(this, op);}
-Expr IRMutator::visit(const NE *op)      {return mutate_binary_operator(this, op);}
-Expr IRMutator::visit(const LT *op)      {return mutate_binary_operator(this, op);}
-Expr IRMutator::visit(const LE *op)      {return mutate_binary_operator(this, op);}
-Expr IRMutator::visit(const GT *op)      {return mutate_binary_operator(this, op);}
-Expr IRMutator::visit(const GE *op)      {return mutate_binary_operator(this, op);}
-Expr IRMutator::visit(const And *op)     {return mutate_binary_operator(this, op);}
-Expr IRMutator::visit(const Or *op)      {return mutate_binary_operator(this, op);}
+Expr IRMutator::visit(const Add *op) {
+    return mutate_binary_operator(this, op);
+}
+Expr IRMutator::visit(const Sub *op) {
+    return mutate_binary_operator(this, op);
+}
+Expr IRMutator::visit(const Mul *op) {
+    return mutate_binary_operator(this, op);
+}
+Expr IRMutator::visit(const Div *op) {
+    return mutate_binary_operator(this, op);
+}
+Expr IRMutator::visit(const Mod *op) {
+    return mutate_binary_operator(this, op);
+}
+Expr IRMutator::visit(const Min *op) {
+    return mutate_binary_operator(this, op);
+}
+Expr IRMutator::visit(const Max *op) {
+    return mutate_binary_operator(this, op);
+}
+Expr IRMutator::visit(const EQ *op) {
+    return mutate_binary_operator(this, op);
+}
+Expr IRMutator::visit(const NE *op) {
+    return mutate_binary_operator(this, op);
+}
+Expr IRMutator::visit(const LT *op) {
+    return mutate_binary_operator(this, op);
+}
+Expr IRMutator::visit(const LE *op) {
+    return mutate_binary_operator(this, op);
+}
+Expr IRMutator::visit(const GT *op) {
+    return mutate_binary_operator(this, op);
+}
+Expr IRMutator::visit(const GE *op) {
+    return mutate_binary_operator(this, op);
+}
+Expr IRMutator::visit(const And *op) {
+    return mutate_binary_operator(this, op);
+}
+Expr IRMutator::visit(const Or *op) {
+    return mutate_binary_operator(this, op);
+}
 
 Expr IRMutator::visit(const Not *op) {
     Expr a = mutate(op->a);
@@ -247,7 +285,6 @@ Stmt IRMutator::visit(const Free *op) {
     return op;
 }
 
-
 Stmt IRMutator::visit(const Realize *op) {
     Region new_bounds;
     bool bounds_changed;
@@ -355,25 +392,33 @@ Stmt IRMutator::visit(const Acquire *op) {
     }
 }
 
-
-Stmt IRGraphMutator2::mutate(const Stmt &s) {
-    auto iter = stmt_replacements.find(s);
-    if (iter != stmt_replacements.end()) {
-        return iter->second;
+Stmt IRMutator::visit(const Atomic *op) {
+    Stmt body = mutate(op->body);
+    if (body.same_as(op->body)) {
+        return op;
+    } else {
+        return Atomic::make(op->producer_name,
+                            op->mutex_name,
+                            std::move(body));
     }
-    Stmt new_s = IRMutator::mutate(s);
-    stmt_replacements[s] = new_s;
-    return new_s;
 }
 
-Expr IRGraphMutator2::mutate(const Expr &e) {
-    auto iter = expr_replacements.find(e);
-    if (iter != expr_replacements.end()) {
-        return iter->second;
+Stmt IRGraphMutator::mutate(const Stmt &s) {
+    auto p = stmt_replacements.emplace(s, Stmt());
+    if (p.second) {
+        // N.B: Inserting into a map (as the recursive mutate call
+        // does), does not invalidate existing iterators.
+        p.first->second = IRMutator::mutate(s);
     }
-    Expr new_e = IRMutator::mutate(e);
-    expr_replacements[e] = new_e;
-    return new_e;
+    return p.first->second;
+}
+
+Expr IRGraphMutator::mutate(const Expr &e) {
+    auto p = expr_replacements.emplace(e, Expr());
+    if (p.second) {
+        p.first->second = IRMutator::mutate(e);
+    }
+    return p.first->second;
 }
 
 }  // namespace Internal

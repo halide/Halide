@@ -1180,6 +1180,9 @@ bool save_mat(ImageType &im, const std::string &filename) {
         break;
     case halide_type_float:
         switch (im.raw_buffer()->type.bits) {
+        case 16:
+            check(false, "float16 not supported by .mat");
+            break;
         case 32:
             class_code = mxSINGLE_CLASS;
             type_code = miSINGLE;
@@ -1192,7 +1195,10 @@ bool save_mat(ImageType &im, const std::string &filename) {
             check(false, "unreachable");
         };
         break;
-    case halide_type_handle:
+    case halide_type_bfloat:
+        check(false, "bfloat not supported by .mat");
+        break;
+    default:
         check(false, "unreachable");
     }
 
@@ -1245,9 +1251,11 @@ bool save_mat(ImageType &im, const std::string &filename) {
     }
     int padded_dims = dims + (dims & 1);
 
+    uint32_t padding_bytes = 7 - ((payload_bytes - 1) & 7);
+
     // Matrix header
     uint32_t matrix_header[2] = {
-        miMATRIX, 40 + padded_dims * 4 + (uint32_t)name.size() + (uint32_t)payload_bytes
+        miMATRIX, 40 + padded_dims * 4 + (uint32_t)name.size() + (uint32_t)payload_bytes + padding_bytes
     };
 
     // Array flags
@@ -1274,8 +1282,6 @@ bool save_mat(ImageType &im, const std::string &filename) {
     uint32_t name_header[2] = {
         miINT8, name_size
     };
-
-    uint32_t padding_bytes = 7 - ((payload_bytes - 1) & 7);
 
     // Payload header
     uint32_t payload_header[2] = {

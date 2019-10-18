@@ -15,7 +15,6 @@
 
 namespace llvm {
 class Module;
-class Type;
 }
 
 namespace Halide {
@@ -34,15 +33,27 @@ struct JITModule {
     IntrusivePtr<JITModuleContents> jit_module;
 
     struct Symbol {
-        void *address;
-        llvm::Type *llvm_type;
-        Symbol() : address(nullptr), llvm_type(nullptr) {}
-        Symbol(void *address, llvm::Type *llvm_type) : address(address), llvm_type(llvm_type) {}
+        void *address = nullptr;
+        Symbol() = default;
+        explicit Symbol(void *address)
+            : address(address) {
+        }
     };
 
     JITModule();
     JITModule(const Module &m, const LoweredFunc &fn,
-                     const std::vector<JITModule> &dependencies = std::vector<JITModule>());
+              const std::vector<JITModule> &dependencies = std::vector<JITModule>());
+
+    /** Take a list of JITExterns and generate trampoline functions
+     * which can be called dynamically via a function pointer that
+     * takes an array of void *'s for each argument and the return
+     * value.
+     */
+    static JITModule make_trampolines_module(const Target &target,
+                                             const std::map<std::string, JITExtern> &externs,
+                                             const std::string &suffix,
+                                             const std::vector<JITModule> &deps);
+
     /** The exports map of a JITModule contains all symbols which are
      * available to other JITModules which depend on this one. For
      * runtime modules, this is all of the symbols exported from the
@@ -100,8 +111,8 @@ struct JITModule {
      * depend on this one. This routine converts the ExternSignature
      * info into an LLVM type, which allows type safe linkage of
      * external routines. */
-    Symbol add_extern_for_export(const std::string &name,
-                                 const ExternCFunction &extern_c_function);
+    void add_extern_for_export(const std::string &name,
+                               const ExternCFunction &extern_c_function);
 
     /** Look up a symbol by name in this module or its dependencies. */
     Symbol find_symbol_by_name(const std::string &) const;
@@ -165,6 +176,8 @@ public:
 
     static void release_all();
 };
+
+void *get_symbol_address(const char *s);
 
 }  // namespace Internal
 }  // namespace Halide

@@ -7,12 +7,13 @@
  * pipeline.
  */
 
+#include <map>
 #include <vector>
 
 #include "AutoSchedule.h"
 #include "ExternalCode.h"
-#include "IntrusivePtr.h"
 #include "IROperator.h"
+#include "IntrusivePtr.h"
 #include "JITModule.h"
 #include "Module.h"
 #include "ParamMap.h"
@@ -23,7 +24,6 @@ namespace Halide {
 
 struct Argument;
 class Func;
-struct Outputs;
 struct PipelineContents;
 
 namespace Internal {
@@ -55,6 +55,18 @@ struct CustomLoweringPass {
 
 struct JITExtern;
 
+struct AutoSchedulerResults {
+    std::string scheduler_name;          // name of the autoscheduler used
+    Target target;                       // Target specified to the autoscheduler
+    std::string machine_params_string;   // MachineParams specified to the autoscheduler (in string form)
+    std::string schedule_source;         // The C++ source code of the generated schedule
+    std::vector<uint8_t> featurization;  // The featurization of the pipeline (if any)
+};
+
+class Pipeline;
+
+using AutoSchedulerFn = std::function<void(Pipeline, const Target &, const MachineParams &, AutoSchedulerResults *outputs)>;
+
 /** A class representing a Halide pipeline. Constructed from the Func
  * or Funcs that it outputs. */
 class Pipeline {
@@ -65,16 +77,26 @@ public:
         halide_buffer_t *buf{nullptr};
         std::unique_ptr<std::vector<Buffer<>>> buffer_list;
 
-        RealizationArg(Realization &r) : r(&r) { }
-        RealizationArg(Realization &&r) : r(&r) { }
-        RealizationArg(halide_buffer_t *buf) : buf(buf) { }
+        RealizationArg(Realization &r)
+            : r(&r) {
+        }
+        RealizationArg(Realization &&r)
+            : r(&r) {
+        }
+        RealizationArg(halide_buffer_t *buf)
+            : buf(buf) {
+        }
         template<typename T, int D>
-        RealizationArg(Runtime::Buffer<T, D> &dst) : buf(dst.raw_buffer()) { }
-        template <typename T>
-        HALIDE_NO_USER_CODE_INLINE RealizationArg(Buffer<T> &dst) : buf(dst.raw_buffer()) { }
-        template<typename T, typename ...Args,
+        RealizationArg(Runtime::Buffer<T, D> &dst)
+            : buf(dst.raw_buffer()) {
+        }
+        template<typename T>
+        HALIDE_NO_USER_CODE_INLINE RealizationArg(Buffer<T> &dst)
+            : buf(dst.raw_buffer()) {
+        }
+        template<typename T, typename... Args,
                  typename = typename std::enable_if<Internal::all_are_convertible<Buffer<>, Args...>::value>::type>
-            RealizationArg(Buffer<T> &a, Args&&... args) {
+        RealizationArg(Buffer<T> &a, Args &&... args) {
             buffer_list.reset(new std::vector<Buffer<>>({a, args...}));
         }
         RealizationArg(RealizationArg &&from) = default;
@@ -93,7 +115,7 @@ public:
 
     std::vector<Argument> infer_arguments(Internal::Stmt body);
 
-    struct JITCallArgs; // Opaque structure to optimize away dynamic allocation in this path.
+    struct JITCallArgs;  // Opaque structure to optimize away dynamic allocation in this path.
 
     // For the three method below, precisely one of the first two args should be non-null
     void prepare_jit_call_arguments(RealizationArg &output, const Target &target, const ParamMap &param_map,
@@ -102,11 +124,11 @@ public:
     static std::vector<Internal::JITModule> make_externs_jit_module(const Target &target,
                                                                     std::map<std::string, JITExtern> &externs_in_out);
 
-    static std::function<std::string(Pipeline, const Target &, const MachineParams &)> *get_custom_auto_scheduler_ptr();
+    static AutoSchedulerFn *get_custom_auto_scheduler_ptr();
 
     int call_jit_code(const Target &target, const JITCallArgs &args);
 
- public:
+public:
     /** Make an undefined Pipeline object. */
     Pipeline();
 
@@ -123,14 +145,14 @@ public:
 
     /** Generate a schedule for the pipeline. */
     //@{
-    std::string auto_schedule(const Target &target,
-                              const MachineParams &arch_params = MachineParams::generic());
+    AutoSchedulerResults auto_schedule(const Target &target,
+                                       const MachineParams &arch_params = MachineParams::generic());
     //@}
 
     /** Globally set the autoscheduler method to use whenever
      * autoscheduling any Pipeline. Uses the built-in autoscheduler if
      * passed nullptr. */
-    static void set_custom_auto_scheduler(std::function<std::string(Pipeline, const Target &, const MachineParams &)> auto_scheduler);
+    static void set_custom_auto_scheduler(AutoSchedulerFn auto_scheduler);
 
     /** Return handle to the index-th Func within the pipeline based on the
      * topological order. */
@@ -138,9 +160,9 @@ public:
 
     /** Compile and generate multiple target files with single call.
      * Deduces target files based on filenames specified in
-     * output_files struct.
+     * output_files map.
      */
-    void compile_to(const Outputs &output_files,
+    void compile_to(const std::map<Output, std::string> &output_files,
                     const std::vector<Argument> &args,
                     const std::string &fn_name,
                     const Target &target);
@@ -203,12 +225,6 @@ public:
                       const std::string &fn_name,
                       const Target &target = get_target_from_environment());
 
-    /** Emit a Python extension glue .c file. */
-    void compile_to_python_extension(const std::string &filename,
-                                     const std::vector<Argument> &args,
-                                     const std::string &fn_name,
-                                     const Target &target = get_target_from_environment());
-
     /** Write out an internal representation of lowered code. Useful
      * for analyzing and debugging scheduling. Can emit html or plain
      * text. */
@@ -254,14 +270,14 @@ public:
                              const Target &target = get_target_from_environment(),
                              const LinkageType linkage_type = LinkageType::ExternalPlusMetadata);
 
-   /** Eagerly jit compile the function to machine code. This
+    /** Eagerly jit compile the function to machine code. This
      * normally happens on the first call to realize. If you're
      * running your halide pipeline inside time-sensitive code and
      * wish to avoid including the time taken to compile a pipeline,
      * then you can call this ahead of time. Default is to use the Target
      * returned from Halide::get_jit_target_from_environment()
      */
-     void compile_jit(const Target &target = get_jit_target_from_environment());
+    void compile_jit(const Target &target = get_jit_target_from_environment());
 
     /** Set the error handler function that be called in the case of
      * runtime errors during halide pipelines. If you are compiling
@@ -466,21 +482,23 @@ public:
      * in the order added. */
     void add_requirement(Expr condition, std::vector<Expr> &error);
 
-    template<typename ...Args>
-    inline HALIDE_NO_USER_CODE_INLINE void add_requirement(Expr condition, Args&&... args) {
+    /** Generate begin_pipeline and end_pipeline tracing calls for this pipeline. */
+    void trace_pipeline();
+
+    template<typename... Args>
+    inline HALIDE_NO_USER_CODE_INLINE void add_requirement(Expr condition, Args &&... args) {
         std::vector<Expr> collected_args;
         Internal::collect_print_args(collected_args, std::forward<Args>(args)...);
         add_requirement(std::move(condition), collected_args);
     }
 
 private:
-
     std::string generate_function_name() const;
 };
 
 struct ExternSignature {
 private:
-    Type ret_type_;       // Only meaningful if is_void_return is false; must be default value otherwise
+    Type ret_type_;  // Only meaningful if is_void_return is false; must be default value otherwise
     bool is_void_return_{false};
     std::vector<Type> arg_types_;
 
@@ -494,7 +512,7 @@ public:
         internal_assert(!(is_void_return && ret_type != Type()));
     }
 
-    template <typename RT, typename... Args>
+    template<typename RT, typename... Args>
     ExternSignature(RT (*f)(Args... args))
         : ret_type_(type_of<RT>()),
           is_void_return_(std::is_void<RT>::value),
@@ -524,13 +542,20 @@ public:
     ExternCFunction() = default;
 
     ExternCFunction(void *address, const ExternSignature &signature)
-        : address_(address), signature_(signature) {}
+        : address_(address), signature_(signature) {
+    }
 
-    template <typename RT, typename... Args>
-    ExternCFunction(RT (*f)(Args... args)) : ExternCFunction((void *)f, ExternSignature(f)) {}
+    template<typename RT, typename... Args>
+    ExternCFunction(RT (*f)(Args... args))
+        : ExternCFunction((void *)f, ExternSignature(f)) {
+    }
 
-    void *address() const { return address_; }
-    const ExternSignature &signature() const { return signature_; }
+    void *address() const {
+        return address_;
+    }
+    const ExternSignature &signature() const {
+        return signature_;
+    }
 };
 
 struct JITExtern {
@@ -545,11 +570,17 @@ public:
     JITExtern(Func func);
     JITExtern(const ExternCFunction &extern_c_function);
 
-    template <typename RT, typename... Args>
-    JITExtern(RT (*f)(Args... args)) : JITExtern(ExternCFunction(f)) {}
+    template<typename RT, typename... Args>
+    JITExtern(RT (*f)(Args... args))
+        : JITExtern(ExternCFunction(f)) {
+    }
 
-    const Pipeline &pipeline() const { return pipeline_; }
-    const ExternCFunction &extern_c_function() const { return extern_c_function_; }
+    const Pipeline &pipeline() const {
+        return pipeline_;
+    }
+    const ExternCFunction &extern_c_function() const {
+        return extern_c_function_;
+    }
 };
 
 }  // namespace Halide

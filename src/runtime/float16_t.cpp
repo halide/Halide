@@ -4,8 +4,6 @@ extern "C" {
 
 // Will this work on big-endian?
 WEAK float halide_float16_bits_to_float(uint16_t bits) {
-    // FIXME: Could really do with static_asserts here!
-    //static_assert(sizeof(float) == 4, "");
     uint32_t signMask = (bits & 0x8000) << 16;
     union {
         float asFloat;

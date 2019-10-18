@@ -80,6 +80,12 @@ Expr Simplify::visit(const Div *op, ExprInfo *bounds) {
         bounds->trim_bounds_using_alignment();
     }
 
+    bool denominator_non_zero =
+        ((b_bounds.min_defined && b_bounds.min > 0) ||
+         (b_bounds.max_defined && b_bounds.max < 0) ||
+         (b_bounds.alignment.remainder != 0));
+
+
     if (may_simplify(op->type)) {
 
         int lanes = op->type.lanes();
@@ -93,8 +99,9 @@ Expr Simplify::visit(const Div *op, ExprInfo *bounds) {
             rewrite(x / 1, x) ||
             (!op->type.is_float() &&
              rewrite(x / 0, IRMatcher::Indeterminate())) ||
-            rewrite(0 / x, 0) ||
-            rewrite(x / x, 1) ||
+            (denominator_non_zero &&
+             (rewrite(0 / x, 0) ||
+              rewrite(x / x, 1))) ||
             rewrite(c0 / c1, fold(c0 / c1))) {
             return rewrite.result;
         }
@@ -192,5 +199,5 @@ Expr Simplify::visit(const Div *op, ExprInfo *bounds) {
     }
 }
 
-}
-}
+}  // namespace Internal
+}  // namespace Halide

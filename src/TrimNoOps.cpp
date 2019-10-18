@@ -15,8 +15,6 @@
 namespace Halide {
 namespace Internal {
 
-using std::map;
-using std::pair;
 using std::string;
 using std::vector;
 
@@ -50,9 +48,12 @@ class LoadsFromBuffer : public IRVisitor {
     }
 
     string buffer;
+
 public:
     bool result = false;
-    LoadsFromBuffer(const string &b) : buffer(b) {}
+    LoadsFromBuffer(const string &b)
+        : buffer(b) {
+    }
 };
 
 bool loads_from_buffer(Expr e, string buf) {
@@ -191,14 +192,14 @@ class SimplifyUsingBounds : public IRMutator {
             // need to take each variable one-by-one, simplifying in
             // between to allow for cancellations of the bounds of
             // inner loops with outer loop variables.
-            auto loop = containing_loops[i-1];
+            auto loop = containing_loops[i - 1];
             if (is_const(test)) {
                 break;
             } else if (!expr_uses_var(test, loop.var)) {
                 continue;
-            }  else if (loop.i.is_bounded() &&
-                        can_prove(loop.i.min == loop.i.max) &&
-                        expr_uses_var(test, loop.var)) {
+            } else if (loop.i.is_bounded() &&
+                       can_prove(loop.i.min == loop.i.max) &&
+                       expr_uses_var(test, loop.var)) {
                 // If min == max then either the domain only has one correct value, which we
                 // can substitute directly.
                 // Need to call CSE here since simplify() is sometimes unable to simplify expr with
@@ -325,12 +326,13 @@ class SimplifyUsingBounds : public IRMutator {
         containing_loops.pop_back();
         return For::make(op->name, min, extent, op->for_type, op->device_api, body);
     }
+
 public:
     SimplifyUsingBounds(const string &v, const Interval &i) {
         containing_loops.push_back({v, i});
     }
 
-    SimplifyUsingBounds() {}
+    SimplifyUsingBounds() = default;
 };
 
 class TrimNoOps : public IRMutator {

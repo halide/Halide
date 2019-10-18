@@ -1,8 +1,8 @@
+#include "Parameter.h"
 #include "Argument.h"
 #include "IR.h"
 #include "IROperator.h"
 #include "ObjectInstanceRegistry.h"
-#include "Parameter.h"
 #include "Simplify.h"
 
 namespace Halide {
@@ -38,10 +38,14 @@ struct ParameterContents {
 };
 
 template<>
-RefCount &ref_count<Halide::Internal::ParameterContents>(const ParameterContents *p) {return p->ref_count;}
+RefCount &ref_count<Halide::Internal::ParameterContents>(const ParameterContents *p) noexcept {
+    return p->ref_count;
+}
 
 template<>
-void destroy<Halide::Internal::ParameterContents>(const ParameterContents *p) {delete p;}
+void destroy<Halide::Internal::ParameterContents>(const ParameterContents *p) {
+    delete p;
+}
 
 void Parameter::check_defined() const {
     user_assert(defined()) << "Parameter is undefined\n";
@@ -62,13 +66,13 @@ void Parameter::check_dim_ok(int dim) const {
         << "Dimension " << dim << " is not in the range [0, " << dimensions() - 1 << "]\n";
 }
 
-Parameter::Parameter(Type t, bool is_buffer, int d) :
-    contents(new ParameterContents(t, is_buffer, d, unique_name('p'))) {
+Parameter::Parameter(Type t, bool is_buffer, int d)
+    : contents(new ParameterContents(t, is_buffer, d, unique_name('p'))) {
     internal_assert(is_buffer || d == 0) << "Scalar parameters should be zero-dimensional";
 }
 
-Parameter::Parameter(Type t, bool is_buffer, int d, const std::string &name) :
-    contents(new ParameterContents(t, is_buffer, d, name)) {
+Parameter::Parameter(Type t, bool is_buffer, int d, const std::string &name)
+    : contents(new ParameterContents(t, is_buffer, d, name)) {
     internal_assert(is_buffer || d == 0) << "Scalar parameters should be zero-dimensional";
 }
 
@@ -97,29 +101,46 @@ Expr Parameter::scalar_expr() const {
     const Type t = type();
     if (t.is_float()) {
         switch (t.bits()) {
-        case 16: return Expr(scalar<float16_t>());
-        case 32: return Expr(scalar<float>());
-        case 64: return Expr(scalar<double>());
+        case 16:
+            if (t.is_bfloat()) {
+                return Expr(scalar<bfloat16_t>());
+            } else {
+                return Expr(scalar<float16_t>());
+            }
+        case 32:
+            return Expr(scalar<float>());
+        case 64:
+            return Expr(scalar<double>());
         }
     } else if (t.is_int()) {
         switch (t.bits()) {
-        case 8: return Expr(scalar<int8_t>());
-        case 16: return Expr(scalar<int16_t>());
-        case 32: return Expr(scalar<int32_t>());
-        case 64: return Expr(scalar<int64_t>());
+        case 8:
+            return Expr(scalar<int8_t>());
+        case 16:
+            return Expr(scalar<int16_t>());
+        case 32:
+            return Expr(scalar<int32_t>());
+        case 64:
+            return Expr(scalar<int64_t>());
         }
     } else if (t.is_uint()) {
         switch (t.bits()) {
-        case 1: return make_bool(scalar<bool>());
-        case 8: return Expr(scalar<uint8_t>());
-        case 16: return Expr(scalar<uint16_t>());
-        case 32: return Expr(scalar<uint32_t>());
-        case 64: return Expr(scalar<uint64_t>());
+        case 1:
+            return make_bool(scalar<bool>());
+        case 8:
+            return Expr(scalar<uint8_t>());
+        case 16:
+            return Expr(scalar<uint16_t>());
+        case 32:
+            return Expr(scalar<uint32_t>());
+        case 64:
+            return Expr(scalar<uint64_t>());
         }
     } else if (t.is_handle()) {
         // handles are always uint64 internally.
         switch (t.bits()) {
-        case 64: return Expr(scalar<uint64_t>());
+        case 64:
+            return Expr(scalar<uint64_t>());
         }
     }
     internal_error << "Unsupported type " << t << " in scalar_expr\n";
@@ -240,6 +261,10 @@ void Parameter::set_min_value(Expr e) {
             << " of type " << contents->type
             << " to have min value " << e
             << " of type " << e.type() << "\n";
+
+        user_assert(is_const(e))
+            << "Min value for parameter " << name()
+            << " must be constant: " << e << "\n";
     }
     contents->scalar_min = e;
 }
@@ -257,6 +282,10 @@ void Parameter::set_max_value(Expr e) {
             << " of type " << contents->type
             << " to have max value " << e
             << " of type " << e.type() << "\n";
+
+        user_assert(is_const(e))
+            << "Max value for parameter " << name()
+            << " must be constant: " << e << "\n";
     }
     contents->scalar_max = e;
 }
@@ -293,7 +322,6 @@ ArgumentEstimates Parameter::get_argument_estimates() const {
     return argument_estimates;
 }
 
-
 void check_call_arg_types(const std::string &name, std::vector<Expr> *args, int dims) {
     user_assert(args->size() == (size_t)dims)
         << args->size() << "-argument call to \""
@@ -304,7 +332,7 @@ void check_call_arg_types(const std::string &name, std::vector<Expr> *args, int 
             << "Argument " << i << " to call to \"" << name << "\" is an undefined Expr\n";
         Type t = (*args)[i].type();
         if (t.is_float() || (t.is_uint() && t.bits() >= 32) || (t.is_int() && t.bits() > 32)) {
-            user_error << "Implicit cast from " << t << " to int in argument " << (i+1)
+            user_error << "Implicit cast from " << t << " to int in argument " << (i + 1)
                        << " in call to \"" << name << "\" is not allowed. Use an explicit cast.\n";
         }
         // We're allowed to implicitly cast from other varieties of int

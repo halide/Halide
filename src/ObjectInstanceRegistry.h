@@ -70,20 +70,23 @@ private:
 
     struct InstanceInfo {
         void *subject_ptr;  // May be different from the this_ptr in the key
-        size_t size;  // May be 0 for params
+        size_t size;        // May be 0 for params
         Kind kind;
         bool registered_for_introspection;
 
-        InstanceInfo() : subject_ptr(nullptr), size(0), kind(Invalid), registered_for_introspection(false) {}
+        InstanceInfo()
+            : subject_ptr(nullptr), size(0), kind(Invalid), registered_for_introspection(false) {
+        }
         InstanceInfo(size_t size, Kind kind, void *subject_ptr, bool registered_for_introspection)
-            : subject_ptr(subject_ptr), size(size), kind(kind), registered_for_introspection(registered_for_introspection) {}
+            : subject_ptr(subject_ptr), size(size), kind(kind), registered_for_introspection(registered_for_introspection) {
+        }
     };
 
     std::mutex mutex;
     std::map<uintptr_t, InstanceInfo> instances;
 
-    ObjectInstanceRegistry() {}
-    ObjectInstanceRegistry(ObjectInstanceRegistry &rhs);  // unimplemented
+    ObjectInstanceRegistry() = default;
+    ObjectInstanceRegistry(ObjectInstanceRegistry &rhs) = delete;
 };
 
 }  // namespace Internal

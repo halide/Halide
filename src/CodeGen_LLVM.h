@@ -11,9 +11,11 @@ namespace llvm {
 class Value;
 class Module;
 class Function;
+class FunctionType;
 class IRBuilderDefaultInserter;
 class ConstantFolder;
-template<typename, typename> class IRBuilder;
+template<typename, typename>
+class IRBuilder;
 class LLVMContext;
 class Type;
 class StructType;
@@ -42,6 +44,10 @@ class GlobalVariable;
 #include "Target.h"
 
 namespace Halide {
+struct ExternSignature;
+}  // namespace Halide
+
+namespace Halide {
 namespace Internal {
 
 /** A code generator abstract base class. Actual code generators
@@ -62,13 +68,21 @@ public:
     virtual std::unique_ptr<llvm::Module> compile(const Module &module);
 
     /** The target we're generating code for */
-    const Target &get_target() const { return target; }
+    const Target &get_target() const {
+        return target;
+    }
 
     /** Tell the code generator which LLVM context to use. */
     void set_context(llvm::LLVMContext &context);
 
     /** Initialize internal llvm state for the enabled targets. */
     static void initialize_llvm();
+
+    static std::unique_ptr<llvm::Module> compile_trampolines(
+        const Target &target,
+        llvm::LLVMContext &context,
+        const std::string &suffix,
+        const std::vector<std::pair<std::string, ExternSignature>> &externs);
 
 protected:
     CodeGen_LLVM(Target t);
@@ -98,14 +112,29 @@ protected:
     virtual std::string mcpu() const = 0;
     virtual std::string mattrs() const = 0;
     virtual bool use_soft_float_abi() const = 0;
+    virtual bool use_pic() const;
     // @}
 
     /** Should indexing math be promoted to 64-bit on platforms with
      * 64-bit pointers? */
-    virtual bool promote_indices() const {return true;}
+    virtual bool promote_indices() const {
+        return true;
+    }
 
     /** What's the natural vector bit-width to use for loads, stores, etc. */
     virtual int native_vector_bits() const = 0;
+
+    /** Return the type in which arithmetic should be done for the
+     * given storage type. */
+    virtual Type upgrade_type_for_arithmetic(const Type &) const;
+
+    /** Return the type that a given Halide type should be
+     * stored/loaded from memory as. */
+    virtual Type upgrade_type_for_storage(const Type &) const;
+
+    /** Return the type that a Halide type should be passed in and out
+     * of functions as. */
+    virtual Type upgrade_type_for_argument_passing(const Type &) const;
 
     /** State needed by llvm for code generation, including the
      * current module, function, context, builder, and most recently
@@ -119,6 +148,8 @@ protected:
     static bool llvm_Mips_enabled;
     static bool llvm_PowerPC_enabled;
     static bool llvm_AMDGPU_enabled;
+    static bool llvm_WebAssembly_enabled;
+    static bool llvm_RISCV_enabled;
 
     std::unique_ptr<llvm::Module> module;
     llvm::Function *function;
@@ -159,11 +190,14 @@ protected:
     /** Fetch an entry from the symbol table. If the symbol is not
      * found, it either errors out (if the second arg is true), or
      * returns nullptr. */
-    llvm::Value* sym_get(const std::string &name,
+    llvm::Value *sym_get(const std::string &name,
                          bool must_succeed = true) const;
 
     /** Test if an item exists in the symbol table. */
     bool sym_exists(const std::string &name) const;
+
+    /** Given a Halide ExternSignature, return the equivalent llvm::FunctionType. */
+    llvm::FunctionType *signature_to_type(const ExternSignature &signature);
 
     /** Some useful llvm types */
     // @{
@@ -195,16 +229,16 @@ protected:
     /** Some wildcard variables used for peephole optimizations in
      * subclasses */
     // @{
-    Expr wild_i8x8, wild_i16x4, wild_i32x2; // 64-bit signed ints
-    Expr wild_u8x8, wild_u16x4, wild_u32x2; // 64-bit unsigned ints
-    Expr wild_i8x16, wild_i16x8, wild_i32x4, wild_i64x2; // 128-bit signed ints
-    Expr wild_u8x16, wild_u16x8, wild_u32x4, wild_u64x2; // 128-bit unsigned ints
-    Expr wild_i8x32, wild_i16x16, wild_i32x8, wild_i64x4; // 256-bit signed ints
-    Expr wild_u8x32, wild_u16x16, wild_u32x8, wild_u64x4; // 256-bit unsigned ints
+    Expr wild_i8x8, wild_i16x4, wild_i32x2;                // 64-bit signed ints
+    Expr wild_u8x8, wild_u16x4, wild_u32x2;                // 64-bit unsigned ints
+    Expr wild_i8x16, wild_i16x8, wild_i32x4, wild_i64x2;   // 128-bit signed ints
+    Expr wild_u8x16, wild_u16x8, wild_u32x4, wild_u64x2;   // 128-bit unsigned ints
+    Expr wild_i8x32, wild_i16x16, wild_i32x8, wild_i64x4;  // 256-bit signed ints
+    Expr wild_u8x32, wild_u16x16, wild_u32x8, wild_u64x4;  // 256-bit unsigned ints
 
-    Expr wild_f32x2; // 64-bit floats
-    Expr wild_f32x4, wild_f64x2; // 128-bit floats
-    Expr wild_f32x8, wild_f64x4; // 256-bit floats
+    Expr wild_f32x2;              // 64-bit floats
+    Expr wild_f32x4, wild_f64x2;  // 128-bit floats
+    Expr wild_f32x8, wild_f64x4;  // 256-bit floats
 
     // Wildcards for a varying number of lanes.
     Expr wild_u1x_, wild_i8x_, wild_u8x_, wild_i16x_, wild_u16x_;
@@ -221,7 +255,6 @@ protected:
      * representation of the result of the expression. */
     llvm::Value *codegen(Expr);
 
-
     /** Emit code that runs a statement. */
     void codegen(Stmt);
 
@@ -230,7 +263,9 @@ protected:
 
     /** Some destructors should always be called. Others should only
      * be called if the pipeline is exiting with an error code. */
-    enum DestructorType {Always, OnError, OnSuccess};
+    enum DestructorType { Always,
+                          OnError,
+                          OnSuccess };
 
     /* Call this at the location of object creation to register how an
      * object should be destroyed. This does three things:
@@ -304,7 +339,7 @@ protected:
     // @}
 
     /** Turn a Halide Type into an llvm::Value representing a constant halide_type_t */
-    llvm::Value *make_halide_type_t(Type);
+    llvm::Value *make_halide_type_t(const Type &);
 
     /** Mark a load or store with type-based-alias-analysis metadata
      * so that llvm knows it can reorder loads and stores across
@@ -314,18 +349,9 @@ protected:
     /** Get a unique name for the actual block of memory that an
      * allocate node uses. Used so that alias analysis understands
      * when multiple Allocate nodes shared the same memory. */
-    virtual std::string get_allocation_name(const std::string &n) {return n;}
-
-    /** Helpers for implementing fast integer division. */
-    // @{
-    // Compute high_half(a*b) >> shr. Note that this is a shift in
-    // addition to the implicit shift due to taking the upper half of
-    // the multiply result.
-    virtual Expr mulhi_shr(Expr a, Expr b, int shr);
-    // Compute (a+b)/2, assuming a < b.
-    virtual Expr sorted_avg(Expr a, Expr b);
-    // @}
-
+    virtual std::string get_allocation_name(const std::string &n) {
+        return n;
+    }
 
     using IRVisitor::visit;
 
@@ -373,6 +399,7 @@ protected:
     void visit(const Evaluate *) override;
     void visit(const Shuffle *) override;
     void visit(const Prefetch *) override;
+    void visit(const Atomic *) override;
     // @}
 
     /** Generate code for an allocate node. It has no default
@@ -394,11 +421,12 @@ protected:
 
     /** If we have to bail out of a pipeline midway, this should
      * inject the appropriate target-specific cleanup code. */
-    virtual void prepare_for_early_exit() {}
+    virtual void prepare_for_early_exit() {
+    }
 
     /** Get the llvm type equivalent to the given halide type in the
      * current context. */
-    llvm::Type *llvm_type_of(Type);
+    virtual llvm::Type *llvm_type_of(const Type &) const;
 
     /** Perform an alloca at the function entrypoint. Will be cleaned
      * on function exit. */
@@ -428,7 +456,7 @@ protected:
      * arguments must be specified explicitly as
      * 'called_lanes'. */
     // @{
-    llvm::Value *call_intrin(Type t, int intrin_lanes,
+    llvm::Value *call_intrin(const Type &t, int intrin_lanes,
                              const std::string &name, std::vector<Expr>);
     llvm::Value *call_intrin(llvm::Type *t, int intrin_lanes,
                              const std::string &name, std::vector<llvm::Value *>);
@@ -465,8 +493,16 @@ protected:
      */
     std::pair<llvm::Function *, int> find_vector_runtime_function(const std::string &name, int lanes);
 
-private:
+    virtual bool supports_atomic_add(const Type &t) const;
 
+    /** Are we inside an atomic node that uses mutex locks?
+        This is used for detecting deadlocks from nested atomics & illegal vectorization. */
+    bool inside_atomic_mutex_node;
+
+    /** Emit atomic store instructions? */
+    bool emit_atomic_stores;
+
+private:
     /** All the values in scope at the current code location during
      * codegen. Use sym_push and sym_pop to access. */
     Scope<llvm::Value *> symbol_table;
@@ -488,20 +524,25 @@ private:
      * as extern "C" linkage. Note that the return value is a function-returning-
      * pointer-to-constant-data.
      */
-    llvm::Function* embed_metadata_getter(const std::string &metadata_getter_name,
-        const std::string &function_name, const std::vector<LoweredArgument> &args,
-        const std::map<std::string, std::string> &metadata_name_map);
+    llvm::Function *embed_metadata_getter(const std::string &metadata_getter_name,
+                                          const std::string &function_name, const std::vector<LoweredArgument> &args,
+                                          const std::map<std::string, std::string> &metadata_name_map);
 
     /** Embed a constant expression as a global variable. */
     llvm::Constant *embed_constant_expr(Expr e, llvm::Type *t);
     llvm::Constant *embed_constant_scalar_value_t(Expr e);
 
-    llvm::Function *add_argv_wrapper(const std::string &name);
+    llvm::Function *add_argv_wrapper(llvm::Function *fn, const std::string &name, bool result_in_argv = false);
 
     llvm::Value *codegen_dense_vector_load(const Load *load, llvm::Value *vpred = nullptr);
 
     virtual void codegen_predicated_vector_load(const Load *op);
     virtual void codegen_predicated_vector_store(const Store *op);
+
+    void codegen_atomic_store(const Store *op);
+
+    void init_codegen(const std::string &name, bool any_strict_float = false);
+    std::unique_ptr<llvm::Module> finish_codegen();
 };
 
 }  // namespace Internal
