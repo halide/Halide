@@ -4,672 +4,922 @@
 
 using namespace Halide;
 
-inline void do_cost_model_schedule(Halide::Pipeline p) {
-    for (int i = 0; i < 96; i++) {
-        p.get_func(i).compute_root();
-    }
-    return;
-
-    Func loss_output = p.get_func(95);
-    Func sum_1 = p.get_func(94);
-    Func f2 = p.get_func(93);
-    Func sum = p.get_func(92);
-    Func prediction_output = p.get_func(91);
-    Func updated_bias1 = p.get_func(90);
-    Func constant_exterior_23 = p.get_func(89);
-    Func repeat_edge_23 = p.get_func(88);
-    Func bias1_im_0_d_def__ = p.get_func(87);
-    Func conv1_stage1_0_d_def___1 = p.get_func(86);
-    Func updated_filter1 = p.get_func(85);
-    Func constant_exterior_22 = p.get_func(84);
-    Func repeat_edge_22 = p.get_func(83);
-    Func filter1_im_0_d_def__ = p.get_func(82);
-    Func updated_head2_bias = p.get_func(81);
-    Func constant_exterior_14 = p.get_func(80);
-    Func repeat_edge_14 = p.get_func(79);
-    Func head2_bias_im_0_d_def__ = p.get_func(78);
-    Func head2_conv_0_d_def___1 = p.get_func(77);
-    Func updated_head2_filter = p.get_func(76);
-    Func constant_exterior_13 = p.get_func(75);
-    Func repeat_edge_13 = p.get_func(74);
-    Func head2_filter_im_0_d_def__ = p.get_func(73);
-    Func constant_exterior_10 = p.get_func(72);
-    Func repeat_edge_10 = p.get_func(71);
-    Func head2_conv_1_d_def__ = p.get_func(70);
-    Func constant_exterior_9 = p.get_func(69);
-    Func repeat_edge_9 = p.get_func(68);
-    Func head2_relu_0_d_def__ = p.get_func(67);
-    Func updated_head1_bias = p.get_func(66);
-    Func constant_exterior_21 = p.get_func(65);
-    Func repeat_edge_21 = p.get_func(64);
-    Func head1_bias_im_0_d_def__ = p.get_func(63);
-    Func head1_conv_0_d_def___1 = p.get_func(62);
-    Func updated_head1_filter = p.get_func(61);
-    Func constant_exterior_19 = p.get_func(60);
-    Func repeat_edge_19 = p.get_func(59);
-    Func head1_filter_im_0_d_def__ = p.get_func(58);
-    Func constant_exterior_18 = p.get_func(57);
-    Func repeat_edge_18 = p.get_func(56);
-    Func squashed_head1_filter_0_d_def__ = p.get_func(55);
-    Func constant_exterior_17 = p.get_func(54);
-    Func repeat_edge_17 = p.get_func(53);
-    Func squashed_head1_filter_broadcast_0_d_def__ = p.get_func(52);
-    Func constant_exterior_16 = p.get_func(51);
-    Func repeat_edge_16 = p.get_func(50);
-    Func head1_conv_1_d_def__ = p.get_func(49);
-    Func constant_exterior_15 = p.get_func(48);
-    Func repeat_edge_15 = p.get_func(47);
-    Func conv1_stage1_1_d_def__ = p.get_func(46);
-    Func conv1_stage2_0_d_def___1 = p.get_func(45);
-    Func constant_exterior_8 = p.get_func(44);
-    Func repeat_edge_8 = p.get_func(43);
-    Func conv1_stage2_1_d_def__ = p.get_func(42);
-    Func constant_exterior_7 = p.get_func(41);
-    Func repeat_edge_7 = p.get_func(40);
-    Func relu1_0_d_def__ = p.get_func(39);
-    Func constant_exterior_6 = p.get_func(38);
-    Func repeat_edge_6 = p.get_func(37);
-    Func f0_0_d_def__ = p.get_func(36);
-    Func constant_exterior_5 = p.get_func(35);
-    Func repeat_edge_5 = p.get_func(34);
-    Func f1_1_d_def__ = p.get_func(33);
-    Func f1 = p.get_func(31);
-    Func f0 = p.get_func(30);
-    Func relu1 = p.get_func(29);
-    Func conv1_stage2 = p.get_func(28);
-    Func head2_relu = p.get_func(27);
-    Func head2_conv = p.get_func(26);
-    Func normalized_schedule_features = p.get_func(25);
-    Func conv1_stage1 = p.get_func(21);
-    Func head1_conv = p.get_func(20);
-    Func squashed_head1_filter_broadcast = p.get_func(19);
-    Func squashed_head1_filter = p.get_func(18);
-    Func constant_exterior_4 = p.get_func(12);
-    Func repeat_edge_4 = p.get_func(11);
-    Func sum_1_d_def__ = p.get_func(10);
-    Func constant_exterior_2 = p.get_func(9);
-    Func repeat_edge_2 = p.get_func(8);
-    Func f2_0_d_def__ = p.get_func(7);
-    Func constant_exterior_1 = p.get_func(6);
-    Func repeat_edge_1 = p.get_func(5);
-    Func sum_1_1_d_def__ = p.get_func(4);
-    Func constant_exterior = p.get_func(3);
-    Func repeat_edge = p.get_func(2);
-    Func loss_output_0_d_def__ = p.get_func(1);
-    Func adjoint = p.get_func(0);
-    Var c(constant_exterior_10.get_schedule().dims()[0].var), ci("ci"), cii("cii"), n(f2.get_schedule().dims()[0].var), ni("ni"), r1001_y(head2_relu_0_d_def__.update(0).get_schedule().dims()[1].var), r1025_z(filter1_im_0_d_def__.update(0).get_schedule().dims()[2].var), r1110_z(head2_filter_im_0_d_def__.update(0).get_schedule().dims()[2].var), r1198_y(head1_conv_1_d_def__.update(0).get_schedule().dims()[1].var), r1222_y(filter1_im_0_d_def__.update(1).get_schedule().dims()[1].var), r1303_x(squashed_head1_filter_broadcast_0_d_def__.update(0).get_schedule().dims()[0].var), r1303_y(squashed_head1_filter_broadcast_0_d_def__.update(0).get_schedule().dims()[1].var), r189_x(conv1_stage2_1_d_def__.update(0).get_schedule().dims()[0].var), r189_y(conv1_stage2_1_d_def__.update(0).get_schedule().dims()[1].var), r217_x(f0_0_d_def__.update(0).get_schedule().dims()[0].var), r96_x(f2_0_d_def__.update(0).get_schedule().dims()[0].var), s(constant_exterior_18.get_schedule().dims()[1].var), v2947(updated_head1_filter.get_schedule().dims()[0].var), v2947i("v2947i"), v2948(updated_head1_filter.get_schedule().dims()[1].var), v2949(updated_head1_filter.get_schedule().dims()[2].var), v2950(updated_head1_filter.get_schedule().dims()[3].var), v2971(updated_head1_bias.get_schedule().dims()[0].var), v2971i("v2971i"), v2972(updated_head1_bias.get_schedule().dims()[1].var), v2983(updated_head2_filter.get_schedule().dims()[0].var), v2983i("v2983i"), v2983ii("v2983ii"), v2984(updated_head2_filter.get_schedule().dims()[1].var), v2985(updated_head2_filter.get_schedule().dims()[2].var), v3001(updated_head2_bias.get_schedule().dims()[0].var), v3001i("v3001i"), v3002(updated_head2_bias.get_schedule().dims()[1].var), v3013(updated_filter1.get_schedule().dims()[0].var), v3013i("v3013i"), v3013ii("v3013ii"), v3014(updated_filter1.get_schedule().dims()[1].var), v3015(updated_filter1.get_schedule().dims()[2].var), v3031(updated_bias1.get_schedule().dims()[0].var), v3031i("v3031i"), v3032(updated_bias1.get_schedule().dims()[1].var), v360(repeat_edge_23.get_schedule().dims()[0].var), v360i("v360i"), v364(constant_exterior_22.get_schedule().dims()[0].var), v364i("v364i"), v365(constant_exterior_22.get_schedule().dims()[1].var), v369(head1_bias_im_0_d_def__.get_schedule().dims()[0].var), v369i("v369i"), v383(constant_exterior_19.get_schedule().dims()[0].var), v383i("v383i"), v384(constant_exterior_19.get_schedule().dims()[1].var), v385(constant_exterior_19.get_schedule().dims()[2].var), v420(repeat_edge_14.get_schedule().dims()[0].var), v420i("v420i"), v424(constant_exterior_13.get_schedule().dims()[0].var), v424i("v424i"), v425(constant_exterior_13.get_schedule().dims()[1].var), w(constant_exterior_10.get_schedule().dims()[1].var), wi("wi");
-    RVar r1001_x(head2_relu_0_d_def__.update(0).get_schedule().dims()[0].var), r1025_x(filter1_im_0_d_def__.update(0).get_schedule().dims()[0].var), r1025_y(filter1_im_0_d_def__.update(0).get_schedule().dims()[1].var), r1044_x(conv1_stage1_1_d_def__.update(0).get_schedule().dims()[0].var), r1110_x(head2_filter_im_0_d_def__.update(0).get_schedule().dims()[0].var), r1110_y(head2_filter_im_0_d_def__.update(0).get_schedule().dims()[1].var), r1129_x(head2_bias_im_0_d_def__.update(0).get_schedule().dims()[0].var), r1129_y(head2_bias_im_0_d_def__.update(0).get_schedule().dims()[1].var), r1198_x(head1_conv_1_d_def__.update(0).get_schedule().dims()[0].var), r1222_x(filter1_im_0_d_def__.update(1).get_schedule().dims()[0].var), r1241_x(bias1_im_0_d_def__.update(0).get_schedule().dims()[0].var), r1322_x(head1_bias_im_0_d_def__.update(0).get_schedule().dims()[0].var), r1341_x(squashed_head1_filter_0_d_def__.update(0).get_schedule().dims()[0].var), r14_x(conv1_stage1.update(0).get_schedule().dims()[0].var), r19_x(conv1_stage2.update(0).get_schedule().dims()[0].var), r24_x(f1.update(0).get_schedule().dims()[0].var), r29_x(sum_1.update(0).get_schedule().dims()[0].var), r34_x(sum.update(0).get_schedule().dims()[0].var), r34_y(sum.update(0).get_schedule().dims()[1].var), r4_x(head1_conv.update(0).get_schedule().dims()[0].var), r4_y(head1_conv.update(0).get_schedule().dims()[1].var), r9_x(head2_conv.update(0).get_schedule().dims()[0].var);
+inline void do_cost_model_schedule(Halide::Pipeline pipeline) {
+    // Manually removed all unrolls.
+    // Also manually replaced all ShiftInwards and RoundUp with
+    // GuardWithIf.
+    using ::Halide::Func;
+    using ::Halide::MemoryType;
+    using ::Halide::RVar;
+    using ::Halide::TailStrategy;
+    using ::Halide::Var;
+    Func loss_output = pipeline.get_func(55);
+    Func sum_1 = pipeline.get_func(54);
+    Func f2 = pipeline.get_func(53);
+    Func sum = pipeline.get_func(52);
+    Func prediction_output = pipeline.get_func(51);
+    Func updated_bias1 = pipeline.get_func(50);
+    Func bias1_im_0_d_def__ = pipeline.get_func(49);
+    Func conv1_stage1_0_d_def___1 = pipeline.get_func(48);
+    Func updated_filter1 = pipeline.get_func(47);
+    Func filter1_im_0_d_def__ = pipeline.get_func(46);
+    Func updated_head2_bias = pipeline.get_func(45);
+    Func head2_bias_im_0_d_def__ = pipeline.get_func(44);
+    Func head2_conv_0_d_def___1 = pipeline.get_func(43);
+    Func updated_head2_filter = pipeline.get_func(42);
+    Func head2_filter_im_0_d_def__ = pipeline.get_func(41);
+    Func head2_conv_1_d_def__ = pipeline.get_func(40);
+    Func head2_relu_0_d_def__ = pipeline.get_func(39);
+    Func updated_head1_bias = pipeline.get_func(38);
+    Func head1_bias_im_0_d_def__ = pipeline.get_func(37);
+    Func head1_conv_0_d_def___1 = pipeline.get_func(36);
+    Func updated_head1_filter = pipeline.get_func(35);
+    Func head1_filter_im_0_d_def__ = pipeline.get_func(34);
+    Func squashed_head1_filter_0_d_def__ = pipeline.get_func(33);
+    Func squashed_head1_filter_broadcast_0_d_def__ = pipeline.get_func(32);
+    Func head1_conv_1_d_def__ = pipeline.get_func(31);
+    Func conv1_stage1_1_d_def__ = pipeline.get_func(30);
+    Func conv1_stage2_0_d_def___1 = pipeline.get_func(29);
+    Func conv1_stage2_1_d_def__ = pipeline.get_func(28);
+    Func sum_1_d_def__ = pipeline.get_func(27);
+    Func relu1_0_d_def__ = pipeline.get_func(26);
+    Func f0_0_d_def__ = pipeline.get_func(25);
+    Func f1_1_d_def__ = pipeline.get_func(24);
+    Func f2_0_d_def__ = pipeline.get_func(22);
+    Func sum_1_1_d_def__ = pipeline.get_func(21);
+    Func loss_output_0_d_def__ = pipeline.get_func(20);
+    Func adjoint = pipeline.get_func(19);
+    Func f1 = pipeline.get_func(18);
+    Func f0 = pipeline.get_func(17);
+    Func relu1 = pipeline.get_func(16);
+    Func conv1_stage2 = pipeline.get_func(15);
+    Func head2_relu = pipeline.get_func(14);
+    Func head2_conv = pipeline.get_func(13);
+    Func normalized_schedule_features = pipeline.get_func(12);
+    Func conv1_stage1 = pipeline.get_func(8);
+    Func head1_conv = pipeline.get_func(7);
+    Func squashed_head1_filter_broadcast = pipeline.get_func(6);
+    Func squashed_head1_filter = pipeline.get_func(5);
+    Var c(head2_conv_0_d_def___1.get_schedule().dims()[0].var);
+    Var ci("ci");
+    Var n(sum.get_schedule().dims()[0].var);
+    Var ni("ni");
+    Var r1010_z(filter1_im_0_d_def__.update(0).get_schedule().dims()[2].var);
+    Var r1207_y(filter1_im_0_d_def__.update(1).get_schedule().dims()[1].var);
+    Var s(squashed_head1_filter_0_d_def__.get_schedule().dims()[1].var);
+    Var si("si");
+    Var v10(head1_filter_im_0_d_def__.get_schedule().dims()[1].var);
+    Var v11(head1_filter_im_0_d_def__.get_schedule().dims()[2].var);
+    Var v12(head2_bias_im_0_d_def__.get_schedule().dims()[0].var);
+    Var v12i("v12i");
+    Var v13(head2_filter_im_0_d_def__.get_schedule().dims()[0].var);
+    Var v13i("v13i");
+    Var v14(head2_filter_im_0_d_def__.get_schedule().dims()[1].var);
+    Var v2(bias1_im_0_d_def__.get_schedule().dims()[0].var);
+    Var v207(updated_head1_filter.get_schedule().dims()[0].var);
+    Var v207i("v207i");
+    Var v208(updated_head1_filter.get_schedule().dims()[1].var);
+    Var v208i("v208i");
+    Var v209(updated_head1_filter.get_schedule().dims()[2].var);
+    Var v209i("v209i");
+    Var v210(updated_head1_filter.get_schedule().dims()[3].var);
+    Var v210i("v210i");
+    Var v211(updated_head1_bias.get_schedule().dims()[0].var);
+    Var v211i("v211i");
+    Var v212(updated_head1_bias.get_schedule().dims()[1].var);
+    Var v213(updated_head2_filter.get_schedule().dims()[0].var);
+    Var v213i("v213i");
+    Var v214(updated_head2_filter.get_schedule().dims()[1].var);
+    Var v214i("v214i");
+    Var v215(updated_head2_filter.get_schedule().dims()[2].var);
+    Var v215i("v215i");
+    Var v216(updated_head2_bias.get_schedule().dims()[0].var);
+    Var v216i("v216i");
+    Var v217(updated_head2_bias.get_schedule().dims()[1].var);
+    Var v218(updated_filter1.get_schedule().dims()[0].var);
+    Var v218i("v218i");
+    Var v218ii("v218ii");
+    Var v219(updated_filter1.get_schedule().dims()[1].var);
+    Var v219i("v219i");
+    Var v220(updated_filter1.get_schedule().dims()[2].var);
+    Var v220i("v220i");
+    Var v221(updated_bias1.get_schedule().dims()[0].var);
+    Var v221i("v221i");
+    Var v222(updated_bias1.get_schedule().dims()[1].var);
+    Var v2i("v2i");
+    Var v3(filter1_im_0_d_def__.get_schedule().dims()[0].var);
+    Var v4(filter1_im_0_d_def__.get_schedule().dims()[1].var);
+    Var v4i("v4i");
+    Var v5(head1_bias_im_0_d_def__.get_schedule().dims()[0].var);
+    Var v5i("v5i");
+    Var v9(head1_filter_im_0_d_def__.get_schedule().dims()[0].var);
+    Var v9i("v9i");
+    Var w(head2_conv_0_d_def___1.get_schedule().dims()[1].var);
+    Var wi("wi");
+    Var wii("wii");
+    RVar r1010_x(filter1_im_0_d_def__.update(0).get_schedule().dims()[0].var);
+    RVar r1010_y(filter1_im_0_d_def__.update(0).get_schedule().dims()[1].var);
+    RVar r1029_x(conv1_stage1_1_d_def__.update(0).get_schedule().dims()[0].var);
+    RVar r1029_xi("r1029$xi");
+    RVar r1095_x(head2_filter_im_0_d_def__.update(0).get_schedule().dims()[0].var);
+    RVar r1095_y(head2_filter_im_0_d_def__.update(0).get_schedule().dims()[1].var);
+    RVar r1114_x(head2_bias_im_0_d_def__.update(0).get_schedule().dims()[0].var);
+    RVar r1114_y(head2_bias_im_0_d_def__.update(0).get_schedule().dims()[1].var);
+    RVar r1183_x(head1_conv_1_d_def__.update(0).get_schedule().dims()[0].var);
+    RVar r1207_x(filter1_im_0_d_def__.update(1).get_schedule().dims()[0].var);
+    RVar r1226_x(bias1_im_0_d_def__.update(0).get_schedule().dims()[0].var);
+    RVar r1302_x(head1_bias_im_0_d_def__.update(0).get_schedule().dims()[0].var);
+    RVar r1321_x(squashed_head1_filter_0_d_def__.update(0).get_schedule().dims()[0].var);
+    RVar r14_x(conv1_stage1.update(0).get_schedule().dims()[0].var);
+    RVar r19_x(conv1_stage2.update(0).get_schedule().dims()[0].var);
+    RVar r24_x(f1.update(0).get_schedule().dims()[0].var);
+    RVar r29_x(sum_1.update(0).get_schedule().dims()[0].var);
+    RVar r34_x(sum.update(0).get_schedule().dims()[0].var);
+    RVar r34_y(sum.update(0).get_schedule().dims()[1].var);
+    RVar r4_x(head1_conv.update(0).get_schedule().dims()[0].var);
+    RVar r4_y(head1_conv.update(0).get_schedule().dims()[1].var);
+    RVar r9_x(head2_conv.update(0).get_schedule().dims()[0].var);
+    RVar r986_x(head2_relu_0_d_def__.update(0).get_schedule().dims()[0].var);
     loss_output
         .compute_root();
     sum_1
         .compute_root();
     sum_1.update(0);
-    f2
-        .split(n, n, ni, 8, TailStrategy::ShiftInwards)
-        .unroll(n)
-        .vectorize(ni)
-        .compute_root()
-        .reorder(ni, n);
     sum
-        .split(n, n, ni, 8, TailStrategy::RoundUp)
+        .split(n, n, ni, 8, TailStrategy::GuardWithIf)
         .vectorize(ni)
-        .compute_at(f2, n)
-        .reorder(ni, n);
+        .compute_root()
+        .reorder(ni, n)
+        .parallel(n);
     sum.update(0)
-        .split(n, n, ni, 8, TailStrategy::RoundUp)
+        .split(n, n, ni, 8, TailStrategy::GuardWithIf)
         .vectorize(ni)
-        .reorder(ni, n, r34_x, r34_y);
+        .reorder(ni, r34_x, r34_y, n)
+        .parallel(n);
     prediction_output
-        .split(n, n, ni, 8, TailStrategy::ShiftInwards)
+        .split(n, n, ni, 8, TailStrategy::GuardWithIf)
         .vectorize(ni)
         .compute_root()
-        .reorder(ni, n);
+        .reorder(ni, n)
+        .parallel(n);
     updated_bias1
-        .split(v3031, v3031, v3031i, 8, TailStrategy::ShiftInwards)
-        .vectorize(v3031i)
+        .split(v221, v221, v221i, 8, TailStrategy::GuardWithIf)
+        .vectorize(v221i)
         .compute_root()
-        .reorder(v3031i, v3031, v3032);
+        .reorder(v221i, v221, v222)
+        .fuse(v221, v222, v221)
+        .parallel(v221);
     updated_bias1.update(0)
-        .split(v3031, v3031, v3031i, 8, TailStrategy::GuardWithIf)
-        .unroll(v3031)
-        .vectorize(v3031i)
-        .reorder(v3031i, v3031);
+        .split(v221, v221, v221i, 8, TailStrategy::GuardWithIf)
+        .vectorize(v221i)
+        .reorder(v221i, v221)
+        .parallel(v221);
     updated_bias1.update(1)
-        .split(v3031, v3031, v3031i, 8, TailStrategy::GuardWithIf)
-        .unroll(v3031)
-        .vectorize(v3031i)
-        .reorder(v3031i, v3031);
+        .split(v221, v221, v221i, 8, TailStrategy::GuardWithIf)
+        .vectorize(v221i)
+        .reorder(v221i, v221)
+        .parallel(v221);
     updated_bias1.update(2)
-        .split(v3031, v3031, v3031i, 8, TailStrategy::GuardWithIf)
-        .unroll(v3031)
-        .vectorize(v3031i)
-        .reorder(v3031i, v3031);
+        .split(v221, v221, v221i, 8, TailStrategy::GuardWithIf)
+        .vectorize(v221i)
+        .reorder(v221i, v221)
+        .parallel(v221);
     updated_bias1.update(3)
-        .split(v3031, v3031, v3031i, 8, TailStrategy::GuardWithIf)
-        .unroll(v3031)
-        .vectorize(v3031i)
-        .reorder(v3031i, v3031);
-    repeat_edge_23
-        .split(v360, v360, v360i, 8, TailStrategy::RoundUp)
-        .vectorize(v360i)
-        .compute_at(updated_bias1, v3031)
-        .reorder(v360i, v360);
+        .split(v221, v221, v221i, 8, TailStrategy::GuardWithIf)
+        .vectorize(v221i)
+        .reorder(v221i, v221)
+        .parallel(v221);
     bias1_im_0_d_def__
-        .split(v360, v360, v360i, 8, TailStrategy::RoundUp)
-        .vectorize(v360i)
-        .compute_at(updated_bias1, v3031)
-        .reorder(v360i, v360);
+        .split(v2, v2, v2i, 8, TailStrategy::GuardWithIf)
+        .vectorize(v2i)
+        .compute_at(updated_bias1, v221)
+        .reorder(v2i, v2);
     bias1_im_0_d_def__.update(0)
-        .split(v360, v360, v360i, 8, TailStrategy::RoundUp)
-        .vectorize(v360i)
-        .reorder(v360i, r1241_x, v360);
+        .split(v2, v2, v2i, 8, TailStrategy::GuardWithIf)
+        .vectorize(v2i)
+        .reorder(v2i, v2, r1226_x);
+    bias1_im_0_d_def__.update(1)
+        .split(v2, v2, v2i, 8, TailStrategy::GuardWithIf)
+        .vectorize(v2i)
+        .reorder(v2i, v2);
     updated_filter1
-        .split(v3013, v3013, v3013i, 8, TailStrategy::ShiftInwards)
-        .vectorize(v3013i)
+        .split(v218, v218, v218i, 16, TailStrategy::GuardWithIf)
+        .split(v219, v219, v219i, 2, TailStrategy::GuardWithIf)
+        .split(v220, v220, v220i, 2, TailStrategy::GuardWithIf)
+        .split(v218i, v218i, v218ii, 8, TailStrategy::GuardWithIf)
+        .vectorize(v218ii)
         .compute_root()
-        .reorder(v3013i, v3013, v3014, v3015);
+        .reorder(v218ii, v218i, v219i, v220i, v218, v219, v220)
+        .fuse(v219, v220, v219)
+        .fuse(v218, v219, v218)
+        .parallel(v218);
     updated_filter1.update(0)
-        .split(v3013, v3013, v3013i, 16, TailStrategy::GuardWithIf)
-        .split(v3013i, v3013i, v3013ii, 8, TailStrategy::GuardWithIf)
-        .vectorize(v3013ii)
-        .reorder(v3013ii, v3013i, v3014, v3013);
+        .split(v218, v218, v218i, 16, TailStrategy::GuardWithIf)
+        .split(v219, v219, v219i, 2, TailStrategy::GuardWithIf)
+        .split(v218i, v218i, v218ii, 8, TailStrategy::GuardWithIf)
+        .vectorize(v218ii)
+        .reorder(v218ii, v218i, v219i, v218, v219)
+        .fuse(v218, v219, v218)
+        .parallel(v218);
     updated_filter1.update(1)
-        .split(v3013, v3013, v3013i, 8, TailStrategy::GuardWithIf)
-        .vectorize(v3013i)
-        .reorder(v3013i, v3013, v3014);
+        .split(v218, v218, v218i, 16, TailStrategy::GuardWithIf)
+        .split(v219, v219, v219i, 2, TailStrategy::GuardWithIf)
+        .split(v218i, v218i, v218ii, 8, TailStrategy::GuardWithIf)
+        .vectorize(v218ii)
+        .reorder(v218ii, v218i, v219i, v218, v219)
+        .fuse(v218, v219, v218)
+        .parallel(v218);
     updated_filter1.update(2)
-        .split(v3013, v3013, v3013i, 8, TailStrategy::GuardWithIf)
-        .vectorize(v3013i)
-        .reorder(v3013i, v3013, v3014);
+        .split(v218, v218, v218i, 16, TailStrategy::GuardWithIf)
+        .split(v219, v219, v219i, 2, TailStrategy::GuardWithIf)
+        .split(v218i, v218i, v218ii, 8, TailStrategy::GuardWithIf)
+        .vectorize(v218ii)
+        .reorder(v218ii, v218i, v219i, v218, v219)
+        .fuse(v218, v219, v218)
+        .parallel(v218);
     updated_filter1.update(3)
-        .split(v3013, v3013, v3013i, 8, TailStrategy::GuardWithIf)
-        .vectorize(v3013i)
-        .reorder(v3013i, v3013, v3014);
-    constant_exterior_22
-        .store_in(MemoryType::Stack)
-        .split(v364, v364, v364i, 8, TailStrategy::RoundUp)
-        .vectorize(v364i)
-        .compute_at(updated_filter1, v3014)
-        .reorder(v364i, v364, v365);
+        .split(v218, v218, v218i, 16, TailStrategy::GuardWithIf)
+        .split(v219, v219, v219i, 2, TailStrategy::GuardWithIf)
+        .split(v218i, v218i, v218ii, 8, TailStrategy::GuardWithIf)
+        .vectorize(v218ii)
+        .reorder(v218ii, v218i, v219i, v218, v219)
+        .fuse(v218, v219, v218)
+        .parallel(v218);
     filter1_im_0_d_def__
-        .split(v364, v364, v364i, 8, TailStrategy::RoundUp)
-        .vectorize(v364i)
-        .compute_at(updated_filter1, v3013)
-        .reorder(v364i, v364, v365);
+        .split(v4, v4, v4i, 8, TailStrategy::GuardWithIf)
+        .vectorize(v4i)
+        .compute_root()
+        .reorder(v4i, v4, v3)
+        .parallel(v3)
+        .reorder_storage(v4, v3);
     filter1_im_0_d_def__.update(0)
-        .split(v364, v364, v364i, 8, TailStrategy::RoundUp)
-        .vectorize(v364i)
-        .reorder(v364i, r1025_x, r1025_y, v364, r1025_z);
+        .reorder(r1010_x, r1010_y, r1010_z, v3)
+        .parallel(v3);
     filter1_im_0_d_def__.update(1)
-        .split(v364, v364, v364i, 8, TailStrategy::RoundUp)
-        .vectorize(v364i)
-        .reorder(v364i, r1222_x, v364, r1222_y);
+        .reorder(r1207_x, r1207_y, v3)
+        .parallel(v3);
+    filter1_im_0_d_def__.update(2)
+        .split(v4, v4, v4i, 8, TailStrategy::GuardWithIf)
+        .vectorize(v4i)
+        .reorder(v4i, v4, v3)
+        .parallel(v3);
     updated_head2_bias
-        .split(v3001, v3001, v3001i, 8, TailStrategy::ShiftInwards)
-        .vectorize(v3001i)
+        .split(v216, v216, v216i, 8, TailStrategy::GuardWithIf)
+        .vectorize(v216i)
         .compute_root()
-        .reorder(v3001i, v3001, v3002);
+        .reorder(v216i, v216, v217)
+        .fuse(v216, v217, v216)
+        .parallel(v216);
     updated_head2_bias.update(0)
-        .split(v3001, v3001, v3001i, 8, TailStrategy::GuardWithIf)
-        .unroll(v3001)
-        .vectorize(v3001i)
-        .reorder(v3001i, v3001);
+        .split(v216, v216, v216i, 8, TailStrategy::GuardWithIf)
+        .vectorize(v216i)
+        .reorder(v216i, v216)
+        .parallel(v216);
     updated_head2_bias.update(1)
-        .split(v3001, v3001, v3001i, 8, TailStrategy::GuardWithIf)
-        .unroll(v3001)
-        .vectorize(v3001i)
-        .reorder(v3001i, v3001);
+        .split(v216, v216, v216i, 8, TailStrategy::GuardWithIf)
+        .vectorize(v216i)
+        .reorder(v216i, v216)
+        .parallel(v216);
     updated_head2_bias.update(2)
-        .split(v3001, v3001, v3001i, 8, TailStrategy::GuardWithIf)
-        .unroll(v3001)
-        .vectorize(v3001i)
-        .reorder(v3001i, v3001);
+        .split(v216, v216, v216i, 8, TailStrategy::GuardWithIf)
+        .vectorize(v216i)
+        .reorder(v216i, v216)
+        .parallel(v216);
     updated_head2_bias.update(3)
-        .split(v3001, v3001, v3001i, 8, TailStrategy::GuardWithIf)
-        .unroll(v3001)
-        .vectorize(v3001i)
-        .reorder(v3001i, v3001);
-    repeat_edge_14
-        .split(v420, v420, v420i, 8, TailStrategy::RoundUp)
-        .unroll(v420)
-        .vectorize(v420i)
-        .compute_root()
-        .reorder(v420i, v420);
+        .split(v216, v216, v216i, 8, TailStrategy::GuardWithIf)
+        .vectorize(v216i)
+        .reorder(v216i, v216)
+        .parallel(v216);
     head2_bias_im_0_d_def__
-        .split(v420, v420, v420i, 8, TailStrategy::RoundUp)
-        .vectorize(v420i)
-        .compute_at(repeat_edge_14, v420)
-        .reorder(v420i, v420);
+        .split(v12, v12, v12i, 8, TailStrategy::GuardWithIf)
+        .vectorize(v12i)
+        .compute_at(updated_head2_bias, v216)
+        .reorder(v12i, v12);
     head2_bias_im_0_d_def__.update(0)
-        .split(v420, v420, v420i, 8, TailStrategy::RoundUp)
-        .vectorize(v420i)
-        .reorder(v420i, r1129_x, r1129_y, v420);
+        .split(v12, v12, v12i, 8, TailStrategy::GuardWithIf)
+        .vectorize(v12i)
+        .reorder(v12i, v12, r1114_x, r1114_y);
+    head2_bias_im_0_d_def__.update(1)
+        .split(v12, v12, v12i, 8, TailStrategy::GuardWithIf)
+        .vectorize(v12i)
+        .reorder(v12i, v12);
+    head2_conv_0_d_def___1
+        .store_in(MemoryType::Stack)
+        .split(c, c, ci, 8, TailStrategy::GuardWithIf)
+        .vectorize(ci)
+        .compute_at(head2_bias_im_0_d_def__, v12)
+        .reorder(ci, c, w, n);
     updated_head2_filter
-        .split(v2983, v2983, v2983i, 8, TailStrategy::ShiftInwards)
-        .vectorize(v2983i)
+        .split(v213, v213, v213i, 8, TailStrategy::GuardWithIf)
+        .split(v214, v214, v214i, 2, TailStrategy::GuardWithIf)
+        .split(v215, v215, v215i, 2, TailStrategy::GuardWithIf)
+        .vectorize(v213i)
         .compute_root()
-        .reorder(v2983i, v2983, v2984, v2985);
+        .reorder(v213i, v214i, v215i, v213, v214, v215)
+        .fuse(v214, v215, v214)
+        .fuse(v213, v214, v213)
+        .parallel(v213);
     updated_head2_filter.update(0)
-        .split(v2983, v2983, v2983i, 16, TailStrategy::GuardWithIf)
-        .split(v2983i, v2983i, v2983ii, 8, TailStrategy::GuardWithIf)
-        .vectorize(v2983ii)
-        .reorder(v2983ii, v2983i, v2984, v2983);
+        .split(v213, v213, v213i, 8, TailStrategy::GuardWithIf)
+        .split(v214, v214, v214i, 2, TailStrategy::GuardWithIf)
+        .vectorize(v213i)
+        .reorder(v213i, v214i, v213, v214)
+        .fuse(v213, v214, v213)
+        .parallel(v213);
     updated_head2_filter.update(1)
-        .split(v2983, v2983, v2983i, 8, TailStrategy::GuardWithIf)
-        .vectorize(v2983i)
-        .reorder(v2983i, v2983, v2984);
+        .split(v213, v213, v213i, 8, TailStrategy::GuardWithIf)
+        .split(v214, v214, v214i, 2, TailStrategy::GuardWithIf)
+        .vectorize(v213i)
+        .reorder(v213i, v214i, v213, v214)
+        .fuse(v213, v214, v213)
+        .parallel(v213);
     updated_head2_filter.update(2)
-        .split(v2983, v2983, v2983i, 8, TailStrategy::GuardWithIf)
-        .vectorize(v2983i)
-        .reorder(v2983i, v2983, v2984);
+        .split(v213, v213, v213i, 8, TailStrategy::GuardWithIf)
+        .split(v214, v214, v214i, 2, TailStrategy::GuardWithIf)
+        .vectorize(v213i)
+        .reorder(v213i, v214i, v213, v214)
+        .fuse(v213, v214, v213)
+        .parallel(v213);
     updated_head2_filter.update(3)
-        .split(v2983, v2983, v2983i, 8, TailStrategy::GuardWithIf)
-        .vectorize(v2983i)
-        .reorder(v2983i, v2983, v2984);
-    constant_exterior_13
-        .store_in(MemoryType::Stack)
-        .split(v424, v424, v424i, 8, TailStrategy::RoundUp)
-        .vectorize(v424i)
-        .compute_at(updated_head2_filter, v2984)
-        .reorder(v424i, v424, v425);
+        .split(v213, v213, v213i, 8, TailStrategy::GuardWithIf)
+        .split(v214, v214, v214i, 2, TailStrategy::GuardWithIf)
+        .vectorize(v213i)
+        .reorder(v213i, v214i, v213, v214)
+        .fuse(v213, v214, v213)
+        .parallel(v213);
     head2_filter_im_0_d_def__
-        .split(v424, v424, v424i, 8, TailStrategy::RoundUp)
-        .vectorize(v424i)
-        .compute_at(updated_head2_filter, v2983)
-        .reorder(v424i, v424, v425);
+        .store_in(MemoryType::Stack)
+        .split(v13, v13, v13i, 8, TailStrategy::GuardWithIf)
+        .vectorize(v13i)
+        .compute_at(updated_head2_filter, v214i)
+        .reorder(v13i, v13, v14);
     head2_filter_im_0_d_def__.update(0)
-        .split(v424, v424, v424i, 8, TailStrategy::RoundUp)
-        .vectorize(v424i)
-        .reorder(v424i, r1110_x, r1110_y, v424, r1110_z);
-    constant_exterior_10
-        .split(w, w, wi, 7, TailStrategy::ShiftInwards)
-        .split(c, c, ci, 8, TailStrategy::ShiftInwards)
+        .split(v13, v13, v13i, 8, TailStrategy::GuardWithIf)
+        .vectorize(v13i)
+        .reorder(v13i, v13, v14, r1095_x, r1095_y);
+    head2_filter_im_0_d_def__.update(1)
+        .split(v13, v13, v13i, 8, TailStrategy::GuardWithIf)
+        .vectorize(v13i)
+        .reorder(v13i, v13, v14);
+    head2_conv_1_d_def__
+        .split(w, w, wi, 7, TailStrategy::GuardWithIf)
+        .split(n, n, ni, 5, TailStrategy::GuardWithIf)
+        .split(c, c, ci, 8, TailStrategy::GuardWithIf)
         .vectorize(ci)
         .compute_root()
-        .reorder(ci, c, wi, w, n);
-    repeat_edge_10
-        .store_in(MemoryType::Stack)
-        .split(c, c, ci, 8, TailStrategy::RoundUp)
+        .reorder(ci, wi, c, ni, w, n)
+        .fuse(w, n, w)
+        .parallel(w);
+    head2_conv_1_d_def__.update(0)
+        .split(w, w, wi, 7, TailStrategy::GuardWithIf)
+        .split(n, n, ni, 5, TailStrategy::GuardWithIf)
+        .split(c, c, ci, 8, TailStrategy::GuardWithIf)
         .vectorize(ci)
-        .compute_at(constant_exterior_10, wi)
-        .reorder(ci, c, w, n);
-    head2_conv_1_d_def__
-        .store_in(MemoryType::Stack)
-        .split(c, c, ci, 8, TailStrategy::RoundUp)
-        .vectorize(ci)
-        .compute_at(constant_exterior_10, wi)
-        .store_at(constant_exterior_10, w)
-        .reorder(ci, c, w, n);
-    repeat_edge_9
-        .store_in(MemoryType::Stack)
-        .split(c, c, ci, 8, TailStrategy::RoundUp)
-        .vectorize(ci)
-        .compute_at(constant_exterior_10, wi)
-        .reorder(ci, c, w, n);
+        .reorder(ci, c, wi, ni, w, n)
+        .fuse(w, n, w)
+        .parallel(w);
     head2_relu_0_d_def__
-        .split(c, c, ci, 8, TailStrategy::RoundUp)
+        .store_in(MemoryType::Stack)
+        .split(c, c, ci, 8, TailStrategy::GuardWithIf)
         .vectorize(ci)
-        .compute_at(constant_exterior_10, w)
+        .compute_at(head2_conv_1_d_def__, c)
         .reorder(ci, c, w, n);
     head2_relu_0_d_def__.update(0)
-        .reorder(r1001_x, r1001_y, w, n);
-    updated_head1_bias
-        .split(v2971, v2971, v2971i, 8, TailStrategy::ShiftInwards)
-        .vectorize(v2971i)
-        .compute_root()
-        .reorder(v2971i, v2971, v2972);
-    updated_head1_bias.update(0)
-        .split(v2971, v2971, v2971i, 8, TailStrategy::GuardWithIf)
-        .vectorize(v2971i)
-        .reorder(v2971i, v2971);
-    updated_head1_bias.update(1)
-        .split(v2971, v2971, v2971i, 8, TailStrategy::GuardWithIf)
-        .vectorize(v2971i)
-        .reorder(v2971i, v2971);
-    updated_head1_bias.update(2)
-        .split(v2971, v2971, v2971i, 8, TailStrategy::GuardWithIf)
-        .vectorize(v2971i)
-        .reorder(v2971i, v2971);
-    updated_head1_bias.update(3)
-        .split(v2971, v2971, v2971i, 8, TailStrategy::GuardWithIf)
-        .vectorize(v2971i)
-        .reorder(v2971i, v2971);
-    head1_bias_im_0_d_def__
-        .split(v369, v369, v369i, 8, TailStrategy::RoundUp)
-        .vectorize(v369i)
-        .compute_root()
-        .reorder(v369i, v369);
-    head1_bias_im_0_d_def__.update(0)
-        .split(v369, v369, v369i, 8, TailStrategy::RoundUp)
-        .vectorize(v369i)
-        .reorder(v369i, r1322_x, v369);
-    updated_head1_filter
-        .split(v2947, v2947, v2947i, 8, TailStrategy::ShiftInwards)
-        .vectorize(v2947i)
-        .compute_root()
-        .reorder(v2947i, v2947, v2948, v2949, v2950);
-    updated_head1_filter.update(0)
-        .split(v2947, v2947, v2947i, 8, TailStrategy::GuardWithIf)
-        .unroll(v2949)
-        .vectorize(v2947i)
-        .reorder(v2947i, v2947, v2949, v2948);
-    updated_head1_filter.update(1)
-        .split(v2947, v2947, v2947i, 8, TailStrategy::GuardWithIf)
-        .vectorize(v2947i)
-        .reorder(v2947i, v2947, v2948, v2949);
-    updated_head1_filter.update(2)
-        .split(v2947, v2947, v2947i, 8, TailStrategy::GuardWithIf)
-        .vectorize(v2947i)
-        .reorder(v2947i, v2947, v2948, v2949);
-    updated_head1_filter.update(3)
-        .split(v2947, v2947, v2947i, 8, TailStrategy::GuardWithIf)
-        .vectorize(v2947i)
-        .reorder(v2947i, v2947, v2948, v2949);
-    constant_exterior_19
-        .store_in(MemoryType::Stack)
-        .split(v383, v383, v383i, 8, TailStrategy::RoundUp)
-        .vectorize(v383i)
-        .compute_at(updated_head1_filter, v2947)
-        .store_at(updated_head1_filter, v2948)
-        .reorder(v383i, v383, v384, v385);
-    head1_filter_im_0_d_def__
-        .split(v383, v383, v383i, 8, TailStrategy::ShiftInwards)
-        .vectorize(v383i)
-        .compute_at(updated_head1_filter, v2948)
-        .reorder(v383i, v383, v384, v385);
-    constant_exterior_18
-        .store_in(MemoryType::Stack)
-        .split(c, c, ci, 8, TailStrategy::RoundUp)
+        .split(c, c, ci, 8, TailStrategy::GuardWithIf)
         .vectorize(ci)
-        .compute_at(head1_filter_im_0_d_def__, v383)
-        .store_at(updated_head1_filter, v2948)
-        .reorder(ci, c, s, n);
+        .reorder(ci, c, w, n, r986_x);
+    head2_relu_0_d_def__.update(1)
+        .split(c, c, ci, 8, TailStrategy::GuardWithIf)
+        .vectorize(ci)
+        .reorder(ci, c, w, n);
+    updated_head1_bias
+        .split(v211, v211, v211i, 8, TailStrategy::GuardWithIf)
+        .vectorize(v211i)
+        .compute_root()
+        .reorder(v211i, v211, v212)
+        .parallel(v212);
+    updated_head1_bias.update(0)
+        .split(v211, v211, v211i, 8, TailStrategy::GuardWithIf)
+        .vectorize(v211i)
+        .reorder(v211i, v211);
+    updated_head1_bias.update(1)
+        .split(v211, v211, v211i, 8, TailStrategy::GuardWithIf)
+        .vectorize(v211i)
+        .reorder(v211i, v211);
+    updated_head1_bias.update(2)
+        .split(v211, v211, v211i, 8, TailStrategy::GuardWithIf)
+        .vectorize(v211i)
+        .reorder(v211i, v211);
+    updated_head1_bias.update(3)
+        .split(v211, v211, v211i, 8, TailStrategy::GuardWithIf)
+        .vectorize(v211i)
+        .reorder(v211i, v211);
+    head1_bias_im_0_d_def__
+        .split(v5, v5, v5i, 8, TailStrategy::GuardWithIf)
+        .vectorize(v5i)
+        .compute_root()
+        .reorder(v5i, v5);
+    head1_bias_im_0_d_def__.update(0)
+        .split(v5, v5, v5i, 8, TailStrategy::GuardWithIf)
+        .vectorize(v5i)
+        .reorder(v5i, v5, r1302_x);
+    head1_bias_im_0_d_def__.update(1)
+        .split(v5, v5, v5i, 8, TailStrategy::GuardWithIf)
+        .vectorize(v5i)
+        .reorder(v5i, v5);
+    updated_head1_filter
+        .split(v208, v208, v208i, 2, TailStrategy::GuardWithIf)
+        .split(v209, v209, v209i, 2, TailStrategy::GuardWithIf)
+        .split(v210, v210, v210i, 2, TailStrategy::GuardWithIf)
+        .split(v207, v207, v207i, 8, TailStrategy::GuardWithIf)
+        .vectorize(v207i)
+        .compute_root()
+        .reorder(v207i, v207, v208i, v209i, v210i, v208, v209, v210)
+        .fuse(v209, v210, v209)
+        .fuse(v208, v209, v208)
+        .parallel(v208);
+    updated_head1_filter.update(0)
+        .split(v208, v208, v208i, 2, TailStrategy::GuardWithIf)
+        .split(v209, v209, v209i, 2, TailStrategy::GuardWithIf)
+        .split(v207, v207, v207i, 8, TailStrategy::GuardWithIf)
+        .vectorize(v207i)
+        .reorder(v207i, v207, v208i, v209i, v208, v209)
+        .fuse(v208, v209, v208)
+        .parallel(v208);
+    updated_head1_filter.update(1)
+        .split(v208, v208, v208i, 2, TailStrategy::GuardWithIf)
+        .split(v209, v209, v209i, 2, TailStrategy::GuardWithIf)
+        .split(v207, v207, v207i, 8, TailStrategy::GuardWithIf)
+        .vectorize(v207i)
+        .reorder(v207i, v207, v208i, v209i, v208, v209)
+        .fuse(v208, v209, v208)
+        .parallel(v208);
+    updated_head1_filter.update(2)
+        .split(v208, v208, v208i, 2, TailStrategy::GuardWithIf)
+        .split(v209, v209, v209i, 2, TailStrategy::GuardWithIf)
+        .split(v207, v207, v207i, 8, TailStrategy::GuardWithIf)
+        .vectorize(v207i)
+        .reorder(v207i, v207, v208i, v209i, v208, v209)
+        .fuse(v208, v209, v208)
+        .parallel(v208);
+    updated_head1_filter.update(3)
+        .split(v208, v208, v208i, 2, TailStrategy::GuardWithIf)
+        .split(v209, v209, v209i, 2, TailStrategy::GuardWithIf)
+        .split(v207, v207, v207i, 8, TailStrategy::GuardWithIf)
+        .vectorize(v207i)
+        .reorder(v207i, v207, v208i, v209i, v208, v209)
+        .fuse(v208, v209, v208)
+        .parallel(v208);
+    head1_filter_im_0_d_def__
+        .store_in(MemoryType::Stack)
+        .split(v9, v9, v9i, 8, TailStrategy::GuardWithIf)
+        .vectorize(v9i)
+        .compute_at(updated_head1_filter, v207)
+        .reorder(v9i, v9, v10, v11);
+    head1_filter_im_0_d_def__.update(0)
+        .split(v9, v9, v9i, 8, TailStrategy::GuardWithIf)
+        .vectorize(v9i)
+        .reorder(v9i, v9, v10, v11);
     squashed_head1_filter_0_d_def__
         .store_in(MemoryType::Stack)
-        .split(c, c, ci, 8, TailStrategy::RoundUp)
+        .split(c, c, ci, 8, TailStrategy::GuardWithIf)
         .vectorize(ci)
-        .compute_at(head1_filter_im_0_d_def__, v383)
+        .compute_at(updated_head1_filter, v207)
         .reorder(ci, c, s, n);
     squashed_head1_filter_0_d_def__.update(0)
-        .split(c, c, ci, 8, TailStrategy::RoundUp)
+        .split(c, c, ci, 8, TailStrategy::GuardWithIf)
         .vectorize(ci)
-        .reorder(ci, r1341_x, c, s, n);
+        .reorder(ci, c, s, n, r1321_x);
+    squashed_head1_filter_0_d_def__.update(1)
+        .split(c, c, ci, 8, TailStrategy::GuardWithIf)
+        .vectorize(ci)
+        .reorder(ci, c, s, n);
     squashed_head1_filter_broadcast_0_d_def__
-        .split(c, c, ci, 8, TailStrategy::RoundUp)
+        .store_in(MemoryType::Stack)
+        .split(c, c, ci, 8, TailStrategy::GuardWithIf)
         .vectorize(ci)
-        .compute_root()
+        .compute_at(squashed_head1_filter_0_d_def__, c)
         .reorder(ci, c, w, s, n);
     squashed_head1_filter_broadcast_0_d_def__.update(0)
         .split(c, c, ci, 8, TailStrategy::GuardWithIf)
         .vectorize(ci)
-        .reorder(ci, c, r1303_x, r1303_y, w);
-    constant_exterior_16
-        .split(c, c, ci, 8, TailStrategy::ShiftInwards)
-        .vectorize(ci)
-        .compute_root()
-        .reorder(ci, c, w);
-    repeat_edge_16
-        .split(c, c, ci, 8, TailStrategy::RoundUp)
-        .vectorize(ci)
-        .compute_at(constant_exterior_16, c)
-        .reorder(ci, c, w);
+        .reorder(ci, c, w, s, n);
     head1_conv_1_d_def__
-        .split(c, c, ci, 8, TailStrategy::RoundUp)
+        .split(c, c, ci, 8, TailStrategy::GuardWithIf)
         .vectorize(ci)
-        .compute_at(constant_exterior_16, c)
-        .reorder(ci, c, w);
+        .compute_root()
+        .reorder(ci, c, w)
+        .parallel(w);
     head1_conv_1_d_def__.update(0)
-        .reorder(r1198_x, r1198_y, w);
-    constant_exterior_15
-        .split(w, w, wi, 8, TailStrategy::RoundUp)
-        .vectorize(wi)
-        .compute_root()
-        .reorder(wi, w, c)
-        .reorder_storage(w, c);
-    repeat_edge_15
-        .split(w, w, wi, 8, TailStrategy::RoundUp)
-        .vectorize(wi)
-        .compute_at(constant_exterior_15, w)
-        .reorder(wi, w, c)
-        .reorder_storage(w, c);
+        .split(c, c, ci, 8, TailStrategy::GuardWithIf)
+        .vectorize(ci)
+        .reorder(ci, c, r1183_x, w)
+        .parallel(w);
+    head1_conv_1_d_def__.update(1)
+        .split(c, c, ci, 8, TailStrategy::GuardWithIf)
+        .vectorize(ci)
+        .reorder(ci, c, w)
+        .parallel(w);
     conv1_stage1_1_d_def__
-        .split(c, c, ci, 8, TailStrategy::RoundUp)
-        .vectorize(ci)
+        .split(w, w, wi, 8, TailStrategy::GuardWithIf)
+        .vectorize(wi)
         .compute_root()
-        .reorder(ci, c, w);
+        .reorder(wi, w, c)
+        .parallel(c)
+        .reorder_storage(w, c);
     conv1_stage1_1_d_def__.update(0)
-        .split(c, c, ci, 8, TailStrategy::RoundUp)
-        .vectorize(ci)
-        .reorder(ci, c, r1044_x, w);
+        .split(r1029_x, r1029_x, r1029_xi, 2, TailStrategy::GuardWithIf)
+        .split(w, w, wi, 8, TailStrategy::GuardWithIf)
+        .vectorize(wi)
+        .reorder(wi, r1029_xi, r1029_x, w, c)
+        .parallel(c);
+    conv1_stage1_1_d_def__.update(1)
+        .split(w, w, wi, 8, TailStrategy::GuardWithIf)
+        .vectorize(wi)
+        .reorder(wi, w, c)
+        .parallel(c);
     conv1_stage2_0_d_def___1
-        .split(c, c, ci, 8, TailStrategy::RoundUp)
-        .vectorize(ci)
-        .compute_at(conv1_stage1_1_d_def__, r1044_x)
-        .reorder(ci, c, w, n);
-    constant_exterior_8
-        .split(n, n, ni, 2, TailStrategy::ShiftInwards)
-        .split(c, c, ci, 16, TailStrategy::ShiftInwards)
-        .split(ci, ci, cii, 8, TailStrategy::ShiftInwards)
-        .unroll(ci)
-        .vectorize(cii)
-        .compute_root()
-        .reorder(cii, ci, c, w, ni, n);
-    repeat_edge_8
         .store_in(MemoryType::Stack)
-        .split(c, c, ci, 8, TailStrategy::RoundUp)
-        .unroll(c)
-        .vectorize(ci)
-        .compute_at(constant_exterior_8, c)
-        .reorder(ci, c, w, n);
+        .split(w, w, wi, 8, TailStrategy::GuardWithIf)
+        .vectorize(wi)
+        .compute_at(conv1_stage1_1_d_def__, r1029_xi)
+        .store_at(conv1_stage1_1_d_def__, r1029_x)
+        .reorder(wi, w, c, n)
+        .reorder_storage(w, c, n);
     conv1_stage2_1_d_def__
-        .store_in(MemoryType::Stack)
-        .split(w, w, wi, 8, TailStrategy::RoundUp)
-        .vectorize(wi)
-        .compute_at(constant_exterior_8, ni)
-        .reorder(wi, w, c, n)
-        .reorder_storage(w, c, n);
+        .split(c, c, ci, 2, TailStrategy::GuardWithIf)
+        .split(n, n, ni, 8, TailStrategy::GuardWithIf)
+        .vectorize(ni)
+        .compute_root()
+        .reorder(ni, n, ci, w, c)
+        .parallel(c)
+        .reorder_storage(n, c, w);
     conv1_stage2_1_d_def__.update(0)
-        .reorder(r189_x, r189_y, n);
-    conv1_stage2_1_d_def__.update(1)
-        .split(w, w, wi, 8, TailStrategy::RoundUp)
-        .vectorize(wi)
-        .reorder(wi, w, c, n);
+        .split(c, c, ci, 2, TailStrategy::GuardWithIf)
+        .split(n, n, ni, 8, TailStrategy::GuardWithIf)
+        .vectorize(ni)
+        .reorder(ni, n, ci, w, c)
+        .parallel(c);
+    sum_1_d_def__
+        .split(n, n, ni, 8, TailStrategy::GuardWithIf)
+        .vectorize(ni)
+        .compute_root()
+        .reorder(ni, n)
+        .parallel(n);
+    sum_1_d_def__.update(0)
+        .split(n, n, ni, 8, TailStrategy::GuardWithIf)
+        .vectorize(ni)
+        .reorder(ni, n)
+        .parallel(n);
     relu1_0_d_def__
-        .split(w, w, wi, 8, TailStrategy::RoundUp)
-        .vectorize(wi)
-        .compute_at(constant_exterior_8, n)
-        .reorder(wi, w, c, n)
-        .reorder_storage(w, c, n);
+        .split(n, n, ni, 8, TailStrategy::GuardWithIf)
+        .split(w, w, wi, 2, TailStrategy::GuardWithIf)
+        .vectorize(ni)
+        .compute_root()
+        .reorder(ni, c, wi, n, w)
+        .fuse(n, w, n)
+        .parallel(n)
+        .reorder_storage(n, c, w);
     relu1_0_d_def__.update(0)
-        .split(w, w, wi, 8, TailStrategy::RoundUp)
-        .vectorize(wi)
-        .reorder(wi, w, n);
+        .split(n, n, ni, 8, TailStrategy::GuardWithIf)
+        .split(w, w, wi, 2, TailStrategy::GuardWithIf)
+        .vectorize(ni)
+        .reorder(ni, wi, n, w)
+        .fuse(n, w, n)
+        .parallel(n);
     relu1_0_d_def__.update(1)
-        .split(w, w, wi, 8, TailStrategy::RoundUp)
-        .vectorize(wi)
-        .reorder(wi, w, n);
+        .split(n, n, ni, 8, TailStrategy::GuardWithIf)
+        .split(w, w, wi, 2, TailStrategy::GuardWithIf)
+        .vectorize(ni)
+        .reorder(ni, wi, n, w)
+        .fuse(n, w, n)
+        .parallel(n);
     relu1_0_d_def__.update(2)
-        .split(w, w, wi, 8, TailStrategy::RoundUp)
-        .vectorize(wi)
-        .reorder(wi, w, n);
+        .split(n, n, ni, 8, TailStrategy::GuardWithIf)
+        .split(w, w, wi, 2, TailStrategy::GuardWithIf)
+        .vectorize(ni)
+        .reorder(ni, wi, n, w)
+        .fuse(n, w, n)
+        .parallel(n);
     relu1_0_d_def__.update(3)
-        .split(w, w, wi, 8, TailStrategy::RoundUp)
-        .vectorize(wi)
-        .reorder(wi, w, n);
+        .split(n, n, ni, 8, TailStrategy::GuardWithIf)
+        .split(w, w, wi, 2, TailStrategy::GuardWithIf)
+        .vectorize(ni)
+        .reorder(ni, wi, n, w)
+        .fuse(n, w, n)
+        .parallel(n);
     relu1_0_d_def__.update(4)
-        .split(w, w, wi, 8, TailStrategy::RoundUp)
-        .vectorize(wi)
-        .reorder(wi, w, n);
+        .split(n, n, ni, 8, TailStrategy::GuardWithIf)
+        .split(w, w, wi, 2, TailStrategy::GuardWithIf)
+        .vectorize(ni)
+        .reorder(ni, wi, n, w)
+        .fuse(n, w, n)
+        .parallel(n);
     relu1_0_d_def__.update(5)
-        .split(w, w, wi, 8, TailStrategy::GuardWithIf)
-        .vectorize(wi)
-        .reorder(wi, w, n);
+        .split(n, n, ni, 8, TailStrategy::GuardWithIf)
+        .split(w, w, wi, 2, TailStrategy::GuardWithIf)
+        .vectorize(ni)
+        .reorder(ni, wi, n, w)
+        .fuse(n, w, n)
+        .parallel(n);
     relu1_0_d_def__.update(6)
-        .split(w, w, wi, 8, TailStrategy::GuardWithIf)
-        .vectorize(wi)
-        .reorder(wi, w, n);
+        .split(n, n, ni, 8, TailStrategy::GuardWithIf)
+        .split(w, w, wi, 2, TailStrategy::GuardWithIf)
+        .vectorize(ni)
+        .reorder(ni, wi, n, w)
+        .fuse(n, w, n)
+        .parallel(n);
     relu1_0_d_def__.update(7)
-        .split(w, w, wi, 8, TailStrategy::GuardWithIf)
-        .vectorize(wi)
-        .reorder(wi, w, n);
+        .split(n, n, ni, 8, TailStrategy::GuardWithIf)
+        .split(w, w, wi, 2, TailStrategy::GuardWithIf)
+        .vectorize(ni)
+        .reorder(ni, wi, n, w)
+        .fuse(n, w, n)
+        .parallel(n);
     relu1_0_d_def__.update(8)
-        .split(w, w, wi, 8, TailStrategy::GuardWithIf)
-        .vectorize(wi)
-        .reorder(wi, w, n);
+        .split(n, n, ni, 8, TailStrategy::GuardWithIf)
+        .split(w, w, wi, 2, TailStrategy::GuardWithIf)
+        .vectorize(ni)
+        .reorder(ni, wi, n, w)
+        .fuse(n, w, n)
+        .parallel(n);
     relu1_0_d_def__.update(9)
-        .split(w, w, wi, 8, TailStrategy::GuardWithIf)
-        .vectorize(wi)
-        .reorder(wi, w, n);
+        .split(n, n, ni, 8, TailStrategy::GuardWithIf)
+        .split(w, w, wi, 2, TailStrategy::GuardWithIf)
+        .vectorize(ni)
+        .reorder(ni, wi, n, w)
+        .fuse(n, w, n)
+        .parallel(n);
     relu1_0_d_def__.update(10)
-        .split(w, w, wi, 8, TailStrategy::GuardWithIf)
-        .vectorize(wi)
-        .reorder(wi, w, n);
+        .split(n, n, ni, 8, TailStrategy::GuardWithIf)
+        .split(w, w, wi, 2, TailStrategy::GuardWithIf)
+        .vectorize(ni)
+        .reorder(ni, wi, n, w)
+        .fuse(n, w, n)
+        .parallel(n);
     relu1_0_d_def__.update(11)
-        .split(w, w, wi, 8, TailStrategy::GuardWithIf)
-        .vectorize(wi)
-        .reorder(wi, w, n);
+        .split(n, n, ni, 8, TailStrategy::GuardWithIf)
+        .split(w, w, wi, 2, TailStrategy::GuardWithIf)
+        .vectorize(ni)
+        .reorder(ni, wi, n, w)
+        .fuse(n, w, n)
+        .parallel(n);
     relu1_0_d_def__.update(12)
-        .split(w, w, wi, 8, TailStrategy::GuardWithIf)
-        .vectorize(wi)
-        .reorder(wi, w, n);
+        .split(n, n, ni, 8, TailStrategy::GuardWithIf)
+        .split(w, w, wi, 2, TailStrategy::GuardWithIf)
+        .vectorize(ni)
+        .reorder(ni, wi, n, w)
+        .fuse(n, w, n)
+        .parallel(n);
     relu1_0_d_def__.update(13)
-        .split(w, w, wi, 8, TailStrategy::GuardWithIf)
-        .vectorize(wi)
-        .reorder(wi, w, n);
+        .split(n, n, ni, 8, TailStrategy::GuardWithIf)
+        .split(w, w, wi, 2, TailStrategy::GuardWithIf)
+        .vectorize(ni)
+        .reorder(ni, wi, n, w)
+        .fuse(n, w, n)
+        .parallel(n);
     relu1_0_d_def__.update(14)
-        .split(w, w, wi, 8, TailStrategy::GuardWithIf)
-        .vectorize(wi)
-        .reorder(wi, w, n);
+        .split(n, n, ni, 8, TailStrategy::GuardWithIf)
+        .split(w, w, wi, 2, TailStrategy::GuardWithIf)
+        .vectorize(ni)
+        .reorder(ni, wi, n, w)
+        .fuse(n, w, n)
+        .parallel(n);
     relu1_0_d_def__.update(15)
-        .split(w, w, wi, 8, TailStrategy::GuardWithIf)
-        .vectorize(wi)
-        .reorder(wi, w, n);
+        .split(n, n, ni, 8, TailStrategy::GuardWithIf)
+        .split(w, w, wi, 2, TailStrategy::GuardWithIf)
+        .vectorize(ni)
+        .reorder(ni, wi, n, w)
+        .fuse(n, w, n)
+        .parallel(n);
     relu1_0_d_def__.update(16)
-        .split(w, w, wi, 8, TailStrategy::GuardWithIf)
-        .vectorize(wi)
-        .reorder(wi, w, n);
+        .split(n, n, ni, 8, TailStrategy::GuardWithIf)
+        .split(w, w, wi, 2, TailStrategy::GuardWithIf)
+        .vectorize(ni)
+        .reorder(ni, wi, n, w)
+        .fuse(n, w, n)
+        .parallel(n);
     relu1_0_d_def__.update(17)
-        .split(w, w, wi, 8, TailStrategy::GuardWithIf)
-        .vectorize(wi)
-        .reorder(wi, w, n);
+        .split(n, n, ni, 8, TailStrategy::GuardWithIf)
+        .split(w, w, wi, 2, TailStrategy::GuardWithIf)
+        .vectorize(ni)
+        .reorder(ni, wi, n, w)
+        .fuse(n, w, n)
+        .parallel(n);
     relu1_0_d_def__.update(18)
-        .split(w, w, wi, 8, TailStrategy::GuardWithIf)
-        .vectorize(wi)
-        .reorder(wi, w, n);
+        .split(n, n, ni, 8, TailStrategy::GuardWithIf)
+        .split(w, w, wi, 2, TailStrategy::GuardWithIf)
+        .vectorize(ni)
+        .reorder(ni, wi, n, w)
+        .fuse(n, w, n)
+        .parallel(n);
     relu1_0_d_def__.update(19)
-        .split(w, w, wi, 8, TailStrategy::GuardWithIf)
-        .vectorize(wi)
-        .reorder(wi, w, n);
+        .split(n, n, ni, 8, TailStrategy::GuardWithIf)
+        .split(w, w, wi, 2, TailStrategy::GuardWithIf)
+        .vectorize(ni)
+        .reorder(ni, wi, n, w)
+        .fuse(n, w, n)
+        .parallel(n);
     relu1_0_d_def__.update(20)
-        .split(w, w, wi, 8, TailStrategy::GuardWithIf)
-        .vectorize(wi)
-        .reorder(wi, w, n);
+        .split(n, n, ni, 8, TailStrategy::GuardWithIf)
+        .split(w, w, wi, 2, TailStrategy::GuardWithIf)
+        .vectorize(ni)
+        .reorder(ni, wi, n, w)
+        .fuse(n, w, n)
+        .parallel(n);
     relu1_0_d_def__.update(21)
-        .split(w, w, wi, 8, TailStrategy::GuardWithIf)
-        .vectorize(wi)
-        .reorder(wi, w, n);
+        .split(n, n, ni, 8, TailStrategy::GuardWithIf)
+        .split(w, w, wi, 2, TailStrategy::GuardWithIf)
+        .vectorize(ni)
+        .reorder(ni, wi, n, w)
+        .fuse(n, w, n)
+        .parallel(n);
     relu1_0_d_def__.update(22)
-        .split(w, w, wi, 8, TailStrategy::GuardWithIf)
-        .vectorize(wi)
-        .reorder(wi, w, n);
+        .split(n, n, ni, 8, TailStrategy::GuardWithIf)
+        .split(w, w, wi, 2, TailStrategy::GuardWithIf)
+        .vectorize(ni)
+        .reorder(ni, wi, n, w)
+        .fuse(n, w, n)
+        .parallel(n);
     relu1_0_d_def__.update(23)
-        .split(w, w, wi, 8, TailStrategy::GuardWithIf)
-        .vectorize(wi)
-        .reorder(wi, w, n);
+        .split(n, n, ni, 8, TailStrategy::GuardWithIf)
+        .split(w, w, wi, 2, TailStrategy::GuardWithIf)
+        .vectorize(ni)
+        .reorder(ni, wi, n, w)
+        .fuse(n, w, n)
+        .parallel(n);
     relu1_0_d_def__.update(24)
-        .split(w, w, wi, 8, TailStrategy::GuardWithIf)
-        .vectorize(wi)
-        .reorder(wi, w, n);
+        .split(n, n, ni, 8, TailStrategy::GuardWithIf)
+        .split(w, w, wi, 2, TailStrategy::GuardWithIf)
+        .vectorize(ni)
+        .reorder(ni, wi, n, w)
+        .fuse(n, w, n)
+        .parallel(n);
     relu1_0_d_def__.update(25)
-        .split(w, w, wi, 8, TailStrategy::GuardWithIf)
-        .vectorize(wi)
-        .reorder(wi, w, n);
+        .split(n, n, ni, 8, TailStrategy::GuardWithIf)
+        .split(w, w, wi, 2, TailStrategy::GuardWithIf)
+        .vectorize(ni)
+        .reorder(ni, wi, n, w)
+        .fuse(n, w, n)
+        .parallel(n);
     relu1_0_d_def__.update(26)
-        .split(w, w, wi, 8, TailStrategy::GuardWithIf)
-        .vectorize(wi)
-        .reorder(wi, w, n);
+        .split(n, n, ni, 8, TailStrategy::GuardWithIf)
+        .split(w, w, wi, 2, TailStrategy::GuardWithIf)
+        .vectorize(ni)
+        .reorder(ni, wi, n, w)
+        .fuse(n, w, n)
+        .parallel(n);
     relu1_0_d_def__.update(27)
-        .split(w, w, wi, 8, TailStrategy::GuardWithIf)
-        .vectorize(wi)
-        .reorder(wi, w, n);
+        .split(n, n, ni, 8, TailStrategy::GuardWithIf)
+        .split(w, w, wi, 2, TailStrategy::GuardWithIf)
+        .vectorize(ni)
+        .reorder(ni, wi, n, w)
+        .fuse(n, w, n)
+        .parallel(n);
     relu1_0_d_def__.update(28)
-        .split(w, w, wi, 8, TailStrategy::GuardWithIf)
-        .vectorize(wi)
-        .reorder(wi, w, n);
+        .split(n, n, ni, 8, TailStrategy::GuardWithIf)
+        .split(w, w, wi, 2, TailStrategy::GuardWithIf)
+        .vectorize(ni)
+        .reorder(ni, wi, n, w)
+        .fuse(n, w, n)
+        .parallel(n);
     relu1_0_d_def__.update(29)
-        .split(w, w, wi, 8, TailStrategy::GuardWithIf)
-        .vectorize(wi)
-        .reorder(wi, w, n);
+        .split(n, n, ni, 8, TailStrategy::GuardWithIf)
+        .split(w, w, wi, 2, TailStrategy::GuardWithIf)
+        .vectorize(ni)
+        .reorder(ni, wi, n, w)
+        .fuse(n, w, n)
+        .parallel(n);
     relu1_0_d_def__.update(30)
-        .split(w, w, wi, 8, TailStrategy::GuardWithIf)
-        .vectorize(wi)
-        .reorder(wi, w, n);
+        .split(n, n, ni, 8, TailStrategy::GuardWithIf)
+        .split(w, w, wi, 2, TailStrategy::GuardWithIf)
+        .vectorize(ni)
+        .reorder(ni, wi, n, w)
+        .fuse(n, w, n)
+        .parallel(n);
     relu1_0_d_def__.update(31)
-        .split(w, w, wi, 8, TailStrategy::GuardWithIf)
-        .vectorize(wi)
-        .reorder(wi, w, n);
-    constant_exterior_6
-        .split(w, w, wi, 8, TailStrategy::RoundUp)
-        .vectorize(wi)
-        .compute_at(constant_exterior_8, n)
-        .reorder(wi, w, n)
-        .reorder_storage(w, n);
+        .split(n, n, ni, 8, TailStrategy::GuardWithIf)
+        .split(w, w, wi, 2, TailStrategy::GuardWithIf)
+        .vectorize(ni)
+        .reorder(ni, wi, n, w)
+        .fuse(n, w, n)
+        .parallel(n);
+    relu1_0_d_def__.update(32)
+        .split(n, n, ni, 8, TailStrategy::GuardWithIf)
+        .split(w, w, wi, 2, TailStrategy::GuardWithIf)
+        .vectorize(ni)
+        .reorder(ni, c, wi, n, w)
+        .fuse(n, w, n)
+        .parallel(n);
     f0_0_d_def__
-        .store_in(MemoryType::Stack)
-        .split(w, w, wi, 8, TailStrategy::RoundUp)
-        .vectorize(wi)
-        .compute_at(constant_exterior_6, n)
-        .reorder(wi, w, n)
-        .reorder_storage(w, n);
+        .split(n, n, ni, 8, TailStrategy::GuardWithIf)
+        .split(w, w, wi, 2, TailStrategy::GuardWithIf)
+        .vectorize(ni)
+        .compute_root()
+        .reorder(ni, wi, n, w)
+        .fuse(n, w, n)
+        .parallel(n);
     f0_0_d_def__.update(0)
-        .reorder(r217_x, n);
-    constant_exterior_5
-        .split(n, n, ni, 8, TailStrategy::ShiftInwards)
+        .split(n, n, ni, 8, TailStrategy::GuardWithIf)
+        .split(w, w, wi, 2, TailStrategy::GuardWithIf)
+        .vectorize(ni)
+        .reorder(ni, wi, n, w)
+        .fuse(n, w, n)
+        .parallel(n);
+    f1_1_d_def__
+        .split(n, n, ni, 8, TailStrategy::GuardWithIf)
+        .vectorize(ni)
+        .compute_at(f0_0_d_def__, n)
+        .reorder(ni, n);
+    f1_1_d_def__.update(0)
+        .split(n, n, ni, 8, TailStrategy::GuardWithIf)
+        .vectorize(ni)
+        .reorder(ni, n);
+    f2_0_d_def__
+        .split(n, n, ni, 8, TailStrategy::GuardWithIf)
         .vectorize(ni)
         .compute_root()
-        .reorder(ni, n);
+        .reorder(ni, n)
+        .parallel(n);
+    f2_0_d_def__.update(0)
+        .split(n, n, ni, 8, TailStrategy::GuardWithIf)
+        .vectorize(ni)
+        .reorder(ni, n)
+        .parallel(n);
+    sum_1_1_d_def__
+        .compute_root();
+    sum_1_1_d_def__.update(0);
+    loss_output_0_d_def__
+        .compute_root();
+    loss_output_0_d_def__.update(0);
     f1
-        .split(n, n, ni, 8, TailStrategy::RoundUp)
+        .split(n, n, ni, 8, TailStrategy::GuardWithIf)
         .vectorize(ni)
         .compute_root()
-        .reorder(ni, n);
+        .reorder(ni, n)
+        .parallel(n);
     f1.update(0)
         .split(n, n, ni, 8, TailStrategy::GuardWithIf)
         .vectorize(ni)
-        .reorder(ni, r24_x, n);
+        .reorder(ni, r24_x, n)
+        .parallel(n);
     conv1_stage2
-        .split(c, c, ci, 8, TailStrategy::ShiftInwards)
-        .split(n, n, ni, 16, TailStrategy::ShiftInwards)
-        .unroll(ni)
-        .vectorize(ci)
+        .split(c, c, ci, 8, TailStrategy::GuardWithIf)
+        .split(w, w, wi, 4, TailStrategy::GuardWithIf)
+        .split(wi, wi, wii, 2, TailStrategy::GuardWithIf)
+        .split(n, n, ni, 8, TailStrategy::GuardWithIf)
+        .vectorize(ni)
         .compute_root()
-        .reorder(ci, ni, c, w, n);
+        .reorder(ni, n, ci, wii, wi, c, w)
+        .fuse(c, w, c)
+        .parallel(c)
+        .reorder_storage(n, c, w);
     conv1_stage2.update(0)
         .split(c, c, ci, 8, TailStrategy::GuardWithIf)
-        .vectorize(ci)
-        .reorder(ci, r19_x, c, w, n);
+        .split(w, w, wi, 2, TailStrategy::GuardWithIf)
+        .split(n, n, ni, 8, TailStrategy::GuardWithIf)
+        .vectorize(ni)
+        .reorder(ni, r19_x, n, ci, wi, c, w)
+        .fuse(c, w, c)
+        .parallel(c);
     head2_relu
-        .split(n, n, ni, 8, TailStrategy::RoundUp)
+        .split(c, c, ci, 3, TailStrategy::GuardWithIf)
+        .split(w, w, wi, 7, TailStrategy::GuardWithIf)
+        .split(n, n, ni, 8, TailStrategy::GuardWithIf)
         .vectorize(ni)
         .compute_root()
-        .reorder(ni, n, c, w)
+        .reorder(ni, n, ci, wi, c, w)
+        .fuse(c, w, c)
+        .parallel(c)
         .reorder_storage(n, c, w);
     head2_conv
-        .split(c, c, ci, 8, TailStrategy::ShiftInwards)
-        .vectorize(ci)
-        .compute_root()
-        .reorder(ci, c, w, n);
-    head2_conv.update(0)
+        .split(w, w, wi, 7, TailStrategy::GuardWithIf)
+        .split(n, n, ni, 10, TailStrategy::GuardWithIf)
         .split(c, c, ci, 8, TailStrategy::GuardWithIf)
         .vectorize(ci)
-        .reorder(ci, r9_x, c, w, n);
+        .compute_root()
+        .reorder(ci, c, wi, ni, w, n)
+        .fuse(w, n, w)
+        .parallel(w);
+    head2_conv.update(0)
+        .split(w, w, wi, 7, TailStrategy::GuardWithIf)
+        .split(n, n, ni, 10, TailStrategy::GuardWithIf)
+        .split(c, c, ci, 8, TailStrategy::GuardWithIf)
+        .vectorize(ci)
+        .reorder(ci, r9_x, c, wi, ni, w, n)
+        .fuse(w, n, w)
+        .parallel(w);
     normalized_schedule_features
-        .split(n, n, ni, 8, TailStrategy::ShiftInwards)
+        .split(c, c, ci, 5, TailStrategy::GuardWithIf)
+        .split(s, s, si, 7, TailStrategy::GuardWithIf)
+        .split(n, n, ni, 8, TailStrategy::GuardWithIf)
         .vectorize(ni)
         .compute_root()
-        .reorder(ni, n, c, s);
+        .reorder(ni, n, ci, si, c, s)
+        .fuse(c, s, c)
+        .parallel(c);
     conv1_stage1
-        .split(c, c, ci, 8, TailStrategy::ShiftInwards)
+        .split(c, c, ci, 8, TailStrategy::GuardWithIf)
         .vectorize(ci)
         .compute_at(conv1_stage2, c)
         .reorder(ci, c, w);
@@ -678,31 +928,29 @@ inline void do_cost_model_schedule(Halide::Pipeline p) {
         .vectorize(ci)
         .reorder(ci, c, w, r14_x);
     head1_conv
-        .split(c, c, ci, 8, TailStrategy::ShiftInwards)
+        .split(c, c, ci, 8, TailStrategy::GuardWithIf)
         .vectorize(ci)
         .compute_root()
-        .reorder(ci, c, w);
+        .reorder(ci, c, w)
+        .parallel(w);
     head1_conv.update(0)
         .split(c, c, ci, 8, TailStrategy::GuardWithIf)
         .vectorize(ci)
-        .reorder(ci, c, w, r4_x, r4_y);
-    squashed_head1_filter
-        .split(c, c, ci, 8, TailStrategy::ShiftInwards)
+        .reorder(ci, c, r4_x, r4_y, w)
+        .parallel(w);
+    squashed_head1_filter_broadcast
+        .store_in(MemoryType::Stack)
+        .split(c, c, ci, 8, TailStrategy::GuardWithIf)
         .vectorize(ci)
-        .compute_at(head1_conv, r4_x)
-        .reorder(ci, c, s, n);
-    constant_exterior_4
-        .split(n, n, ni, 8, TailStrategy::RoundUp)
-        .vectorize(ni)
+        .compute_at(head1_conv, c)
+        .reorder(ci, c, w, s, n);
+    squashed_head1_filter
+        .split(s, s, si, 10, TailStrategy::GuardWithIf)
+        .split(n, n, ni, 2, TailStrategy::GuardWithIf)
+        .split(c, c, ci, 8, TailStrategy::GuardWithIf)
+        .vectorize(ci)
         .compute_root()
-        .reorder(ni, n);
-    f2_0_d_def__
-        .split(n, n, ni, 8, TailStrategy::RoundUp)
-        .vectorize(ni)
-        .compute_root()
-        .reorder(ni, n);
-    f2_0_d_def__.update(0);
-    constant_exterior_1
-        .compute_root();
-
+        .reorder(ci, c, si, ni, s, n)
+        .fuse(s, n, s)
+        .parallel(s);
 }
