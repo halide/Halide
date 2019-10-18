@@ -308,7 +308,7 @@ void ReverseAccumulationVisitor::propagate_adjoints(
             Tuple rhs_tuple = func.values();
             zeros.reserve(rhs_tuple.size());
             for (int i = 0; i < (int)rhs_tuple.size(); i++) {
-                zeros.push_back(make_const(rhs_tuple[i].type(), 0.0));
+                zeros.push_back(make_zero(rhs_tuple[i].type()));
             }
             self_reference_adjoint = Tuple(zeros);
             self_reference_args.clear();
@@ -511,11 +511,11 @@ void ReverseAccumulationVisitor::propagate_adjoints(
             } else {
                 // Initialize to 0
                 if (func.values().size() == 1) {
-                    adjoint_func(args) = make_const(func.values()[0].type(), 0.0);
+                    adjoint_func(args) = make_zero(func.values()[0].type());
                 } else {
                     vector<Expr> init(func.values().size());
                     for (int i = 0; i < (int)init.size(); i++) {
-                        init[i] = make_const(func.values()[i].type(), 0.0);
+                        init[i] = make_zero(func.values()[i].type());
                     }
                     adjoint_func(args) = Tuple(init);
                 }
@@ -539,7 +539,7 @@ void ReverseAccumulationVisitor::propagate_adjoints(
         for (int i = 0; i < it.second.dimension; i++) {
             args.push_back(Var());
         }
-        adjoint_func(args) = make_const(it.second.type, 0.0);
+        adjoint_func(args) = make_zero(it.second.type);
         FuncKey func_key{it.first, -1};
         if (adjoint_funcs.find(func_key) != adjoint_funcs.end()) {
             user_error << "Naming conflict between buffer/parameters and function:" << it.first << "\n";
@@ -567,13 +567,13 @@ void ReverseAccumulationVisitor::propagate_adjoints(
                 internal_assert(adjoint_func.function().output_types()[0] ==
                                 adjoint_func.values()[0].type());
                 Func f = BoundaryConditions::constant_exterior(
-                    adjoint_func, make_const(type, 0.0), box_to_vector(bounds));
+                    adjoint_func, make_zero(type), box_to_vector(bounds));
                 adjoint_func = f;
 
             } else {
                 vector<Expr> values(adjoint_func.values().size());
                 for (int i = 0; i < (int)values.size(); i++) {
-                    values[i] = make_const(adjoint_func.values()[i].type(), 0.0);
+                    values[i] = make_zero(adjoint_func.values()[i].type());
                 }
                 adjoint_func = BoundaryConditions::constant_exterior(
                     adjoint_func, Tuple(values), box_to_vector(bounds));
@@ -639,22 +639,22 @@ void ReverseAccumulationVisitor::propagate_adjoints(
                         adjoint_funcs[func_key](prev_args);
                     if (func.values().size() == 1) {
                         Type type = func.values()[0].type();
-                        prev_adjoint_func(update_args) = make_const(type, 0.0);
+                        prev_adjoint_func(update_args) = make_zero(type);
                     } else {
                         vector<Expr> init(func.values().size());
                         for (int i = 0; i < (int)init.size(); i++) {
-                            init[i] = make_const(func.values()[i].type(), 0.0);
+                            init[i] = make_zero(func.values()[i].type());
                         }
                         prev_adjoint_func(update_args) = Tuple(init);
                     }
                 } else {
                     if (func.values().size() == 1) {
                         Type type = func.values()[0].type();
-                        prev_adjoint_func(prev_args) = make_const(type, 0.0);
+                        prev_adjoint_func(prev_args) = make_zero(type);
                     } else {
                         vector<Expr> init(func.values().size());
                         for (int i = 0; i < (int)init.size(); i++) {
-                            init[i] = make_const(func.values()[i].type(), 0.0);
+                            init[i] = make_zero(func.values()[i].type());
                         }
                         prev_adjoint_func(prev_args) = Tuple(init);
                     }
@@ -860,7 +860,7 @@ void ReverseAccumulationVisitor::visit(const Cast *op) {
     if (op->type.is_float()) {
         accumulate(op->value, cast(op->value.type(), adjoint));
     } else {
-        accumulate(op->value, make_const(op->value.type(), 0));
+        accumulate(op->value, make_zero(op->value.type()));
     }
 }
 
@@ -962,10 +962,10 @@ void ReverseAccumulationVisitor::visit(const Min *op) {
 
     // d/da min(a, b) = a <= b ? 1 : 0
     accumulate(op->a,
-               select(op->a <= op->b, adjoint, make_const(adjoint.type(), 0.0)));
+               select(op->a <= op->b, adjoint, make_zero(adjoint.type())));
     // d/db min(a, b) = b <= a ? 1 : 0
     accumulate(op->b,
-               select(op->b <= op->a, adjoint, make_const(adjoint.type(), 0.0)));
+               select(op->b <= op->a, adjoint, make_zero(adjoint.type())));
 }
 
 void ReverseAccumulationVisitor::visit(const Max *op) {
@@ -974,10 +974,10 @@ void ReverseAccumulationVisitor::visit(const Max *op) {
 
     // d/da max(a, b) = a >= b ? 1 : 0
     accumulate(op->a,
-               select(op->a >= op->b, adjoint, make_const(adjoint.type(), 0.0)));
+               select(op->a >= op->b, adjoint, make_zero(adjoint.type())));
     // d/db max(a, b) = b >= a ? 1 : 0
     accumulate(op->b,
-               select(op->b >= op->a, adjoint, make_const(adjoint.type(), 0.0)));
+               select(op->b >= op->a, adjoint, make_zero(adjoint.type())));
 }
 
 void ReverseAccumulationVisitor::visit(const EQ *op) {
@@ -985,8 +985,8 @@ void ReverseAccumulationVisitor::visit(const EQ *op) {
     // Expr adjoint = expr_adjoints[op];
 
     // output is a boolean, so we should propagate zero to the arguments
-    accumulate(op->a, make_const(op->a.type(), 0));
-    accumulate(op->b, make_const(op->b.type(), 0));
+    accumulate(op->a, make_zero(op->a.type()));
+    accumulate(op->b, make_zero(op->b.type()));
 }
 
 void ReverseAccumulationVisitor::visit(const NE *op) {
@@ -994,8 +994,8 @@ void ReverseAccumulationVisitor::visit(const NE *op) {
     // Expr adjoint = expr_adjoints[op];
 
     // output is a boolean, so we should propagate zero to the arguments
-    accumulate(op->a, make_const(op->a.type(), 0));
-    accumulate(op->b, make_const(op->b.type(), 0));
+    accumulate(op->a, make_zero(op->a.type()));
+    accumulate(op->b, make_zero(op->b.type()));
 }
 
 void ReverseAccumulationVisitor::visit(const LT *op) {
@@ -1003,8 +1003,8 @@ void ReverseAccumulationVisitor::visit(const LT *op) {
     // Expr adjoint = expr_adjoints[op];
 
     // output is a boolean, so we should propagate zero to the arguments
-    accumulate(op->a, make_const(op->a.type(), 0));
-    accumulate(op->b, make_const(op->b.type(), 0));
+    accumulate(op->a, make_zero(op->a.type()));
+    accumulate(op->b, make_zero(op->b.type()));
 }
 
 void ReverseAccumulationVisitor::visit(const LE *op) {
@@ -1012,8 +1012,8 @@ void ReverseAccumulationVisitor::visit(const LE *op) {
     // Expr adjoint = expr_adjoints[op];
 
     // output is a boolean, so we should propagate zero to the arguments
-    accumulate(op->a, make_const(op->a.type(), 0));
-    accumulate(op->b, make_const(op->b.type(), 0));
+    accumulate(op->a, make_zero(op->a.type()));
+    accumulate(op->b, make_zero(op->b.type()));
 }
 
 void ReverseAccumulationVisitor::visit(const GT *op) {
@@ -1021,8 +1021,8 @@ void ReverseAccumulationVisitor::visit(const GT *op) {
     // Expr adjoint = expr_adjoints[op];
 
     // output is a boolean, so we should propagate zero to the arguments
-    accumulate(op->a, make_const(op->a.type(), 0));
-    accumulate(op->b, make_const(op->b.type(), 0));
+    accumulate(op->a, make_zero(op->a.type()));
+    accumulate(op->b, make_zero(op->b.type()));
 }
 
 void ReverseAccumulationVisitor::visit(const GE *op) {
@@ -1030,8 +1030,8 @@ void ReverseAccumulationVisitor::visit(const GE *op) {
     // Expr adjoint = expr_adjoints[op];
 
     // output is a boolean, so we should propagate zero to the arguments
-    accumulate(op->a, make_const(op->a.type(), 0));
-    accumulate(op->b, make_const(op->b.type(), 0));
+    accumulate(op->a, make_zero(op->a.type()));
+    accumulate(op->b, make_zero(op->b.type()));
 }
 
 void ReverseAccumulationVisitor::visit(const And *op) {
@@ -1039,8 +1039,8 @@ void ReverseAccumulationVisitor::visit(const And *op) {
     // Expr adjoint = expr_adjoints[op];
 
     // output is a boolean, so we should propagate zero to the arguments
-    accumulate(op->a, make_const(op->a.type(), 0));
-    accumulate(op->b, make_const(op->b.type(), 0));
+    accumulate(op->a, make_zero(op->a.type()));
+    accumulate(op->b, make_zero(op->b.type()));
 }
 
 void ReverseAccumulationVisitor::visit(const Or *op) {
@@ -1048,8 +1048,8 @@ void ReverseAccumulationVisitor::visit(const Or *op) {
     // Expr adjoint = expr_adjoints[op];
 
     // output is a boolean, so we should propagate zero to the arguments
-    accumulate(op->a, make_const(op->a.type(), 0));
-    accumulate(op->b, make_const(op->b.type(), 0));
+    accumulate(op->a, make_zero(op->a.type()));
+    accumulate(op->b, make_zero(op->b.type()));
 }
 
 void ReverseAccumulationVisitor::visit(const Not *op) {
@@ -1057,7 +1057,7 @@ void ReverseAccumulationVisitor::visit(const Not *op) {
     // Expr adjoint = expr_adjoints[op];
 
     // output is a boolean, so we should propagate zero to the argument
-    accumulate(op->a, make_const(op->a.type(), 0));
+    accumulate(op->a, make_zero(op->a.type()));
 }
 
 void ReverseAccumulationVisitor::visit(const Let *op) {
@@ -1073,10 +1073,10 @@ void ReverseAccumulationVisitor::visit(const Select *op) {
 
     // d/db select(a, b, c) = select(a, 1, 0)
     accumulate(op->true_value,
-               select(op->condition, adjoint, make_const(adjoint.type(), 0.0)));
+               select(op->condition, adjoint, make_zero(adjoint.type())));
     // d/dc select(a, b, c) = select(a, 0, 1)
     accumulate(op->false_value,
-               select(op->condition, make_const(adjoint.type(), 0.0), adjoint));
+               select(op->condition, make_zero(adjoint.type()), adjoint));
 }
 
 void ReverseAccumulationVisitor::visit(const Call *op) {
@@ -1095,14 +1095,14 @@ void ReverseAccumulationVisitor::visit(const Call *op) {
             accumulate(op->args[0], adjoint * cos(op->args[0]));
         } else if (is_float_extern(op->name, "asin")) {
             // d/dx asin(x) = 1 / sqrt(1 - x^2)
-            Expr one = make_const(op->type, 1.0);
+            Expr one = make_one(op->type);
             accumulate(op->args[0], adjoint / sqrt(one - op->args[0] * op->args[0]));
         } else if (is_float_extern(op->name, "cos")) {
             // d/dx cos(x) = -sin(x)
             accumulate(op->args[0], -adjoint * sin(op->args[0]));
         } else if (is_float_extern(op->name, "acos")) {
             // d/dx acos(x) = - 1 / sqrt(1 - x^2)
-            Expr one = make_const(op->type, 1.0);
+            Expr one = make_one(op->type);
             accumulate(op->args[0], -adjoint / sqrt(one - op->args[0] * op->args[0]));
         } else if (is_float_extern(op->name, "tan")) {
             // d/dx tan(x) = 1 / cos(x)^2
@@ -1110,7 +1110,7 @@ void ReverseAccumulationVisitor::visit(const Call *op) {
             accumulate(op->args[0], adjoint / (c * c));
         } else if (is_float_extern(op->name, "atan")) {
             // d/dx atan(x) = 1 / (1 + x^2)
-            Expr one = make_const(op->type, 1.0);
+            Expr one = make_one(op->type);
             accumulate(op->args[0], adjoint / (one + op->args[0] * op->args[0]));
         } else if (is_float_extern(op->name, "atan2")) {
             Expr x2y2 = op->args[0] * op->args[0] + op->args[1] * op->args[1];
@@ -1123,14 +1123,14 @@ void ReverseAccumulationVisitor::visit(const Call *op) {
             accumulate(op->args[0], adjoint * cosh(op->args[0]));
         } else if (is_float_extern(op->name, "asinh")) {
             // d/dx asin(x) = 1 / sqrt(1 + x^2)
-            Expr one = make_const(op->type, 1.0);
+            Expr one = make_one(op->type);
             accumulate(op->args[0], adjoint / sqrt(one + op->args[0] * op->args[0]));
         } else if (is_float_extern(op->name, "cosh")) {
             // d/dx cosh(x) = sinh(x)
             accumulate(op->args[0], adjoint * sinh(op->args[0]));
         } else if (is_float_extern(op->name, "acosh")) {
             // d/dx acosh(x) = 1 / (sqrt(x - 1) sqrt(x + 1)))
-            Expr one = make_const(op->type, 1.0);
+            Expr one = make_one(op->type);
             accumulate(op->args[0],
                        adjoint / (sqrt(op->args[0] - one) * sqrt(op->args[0] + one)));
         } else if (is_float_extern(op->name, "tanh")) {
@@ -1139,23 +1139,23 @@ void ReverseAccumulationVisitor::visit(const Call *op) {
             accumulate(op->args[0], adjoint / (c * c));
         } else if (is_float_extern(op->name, "atanh")) {
             // d/dx atanh(x) = 1 / (1 - x^2)
-            Expr one = make_const(op->type, 1.0);
+            Expr one = make_one(op->type);
             accumulate(op->args[0], adjoint / (one - op->args[0] * op->args[0]));
         } else if (is_float_extern(op->name, "ceil")) {
             // TODO: d/dx = dirac(n) for n in Z ...
-            accumulate(op->args[0], make_const(op->type, 0.0));
+            accumulate(op->args[0], make_zero(op->type));
         } else if (is_float_extern(op->name, "floor")) {
             // TODO: d/dx = dirac(n) for n in Z ...
-            accumulate(op->args[0], make_const(op->type, 0.0));
+            accumulate(op->args[0], make_zero(op->type));
         } else if (is_float_extern(op->name, "round")) {
-            accumulate(op->args[0], make_const(op->type, 0.0));
+            accumulate(op->args[0], make_zero(op->type));
         } else if (is_float_extern(op->name, "trunc")) {
-            accumulate(op->args[0], make_const(op->type, 0.0));
+            accumulate(op->args[0], make_zero(op->type));
         } else if (is_float_extern(op->name, "sqrt")) {
             Expr half = make_const(op->type, 0.5);
             accumulate(op->args[0], adjoint * (half / sqrt(op->args[0])));
         } else if (is_float_extern(op->name, "pow")) {
-            Expr one = make_const(op->type, 1.0);
+            Expr one = make_one(op->type);
             accumulate(op->args[0],
                        adjoint * op->args[1] * pow(op->args[0], op->args[1] - one));
             accumulate(op->args[1],
@@ -1171,7 +1171,7 @@ void ReverseAccumulationVisitor::visit(const Call *op) {
             accumulate(op->args[0],
                        neg_half * adjoint * inv_sqrt_x * inv_sqrt_x * inv_sqrt_x);
         } else if (op->name == "halide_print") {
-            accumulate(op->args[0], make_const(op->type, 0.0));
+            accumulate(op->args[0], make_zero(op->type));
         } else {
             internal_error << "The derivative of " << op->name << " is not implemented.";
         }
@@ -1179,13 +1179,13 @@ void ReverseAccumulationVisitor::visit(const Call *op) {
         if (op->is_intrinsic(Call::abs)) {
             accumulate(op->args[0],
                        adjoint * select(op->args[0] > 0,
-                                        make_const(op->type, 1.0), make_const(op->type, -1.0)));
+                                        make_one(op->type), make_const(op->type, -1.0)));
         } else if (op->is_intrinsic(Call::lerp)) {
             // z = x * (1 - w) + y * w
             // dz/dx = 1 - w
             // dz/dy = w
             // dz/dw = y - x
-            accumulate(op->args[0], adjoint * (make_const(op->type, 1.0) - op->args[2]));
+            accumulate(op->args[0], adjoint * (make_one(op->type) - op->args[2]));
             accumulate(op->args[1], adjoint * op->args[2]);
             accumulate(op->args[2], adjoint * (op->args[1] - op->args[0]));
         } else if (op->is_intrinsic(Call::likely)) {
@@ -1198,7 +1198,7 @@ void ReverseAccumulationVisitor::visit(const Call *op) {
         } else {
             user_warning << "Dropping gradients at call to " << op->name << "\n";
             for (const auto &arg : op->args) {
-                accumulate(arg, make_const(op->type, 0.0));
+                accumulate(arg, make_zero(op->type));
             }
         }
     } else if (op->call_type == Call::Halide ||
@@ -1573,7 +1573,7 @@ void ReverseAccumulationVisitor::propagate_halide_function_call(
                                     func_to_update_args[i] <= r_interval.max;
                     adjoint = select(in_bound,
                                      simplify(substitute(rvar.var, clamped_arg, adjoint)),
-                                     make_const(adjoint.type(), 0));
+                                     make_zero(adjoint.type()));
                 }
                 // f(4 * r.x + r.y) = g(r.x) + h(4 * r.x + r.y)
                 // => f(x) = g(x/4) + h(x)
@@ -1997,7 +1997,7 @@ Derivative propagate_adjoints(const Func &output,
 
 Derivative propagate_adjoints(const Func &output) {
     Func adjoint("adjoint");
-    adjoint(output.args()) = Internal::make_const(output.value().type(), 1.0);
+    adjoint(output.args()) = Internal::make_one(output.value().type());
     vector<pair<Expr, Expr>> output_bounds;
     output_bounds.reserve(output.dimensions());
     for (int i = 0; i < output.dimensions(); i++) {
