@@ -508,7 +508,7 @@ void parallelize_vars_and_rvars_cpu(
         }
     }
 
-    // Fuse all parallel  rvars into a single variable for parallelism
+    // Fuse all parallel rvars into a single variable for parallelism
     RVar fused_rvar("");
     if (parallel_rvars.size() > 0) {
         fused_rvar = parallel_rvars[0];
@@ -606,7 +606,7 @@ void parallelize_vars_and_rvars_cpu(
         func_or_stage.atomic().vectorize(vectorized_rvar);
         schedule_source << "    .atomic()\n";
         schedule_source << "    .vectorize(" <<
-            vectorized_var.name() << ")\n";
+            vectorized_rvar.name() << ")\n";
     }
 }
 
@@ -715,7 +715,7 @@ void apply_schedule(const MachineParams &params,
                     std::vector<RVar> outer_rvars, inner_rvars;
                     std::vector<int> outer_rvar_sizes, inner_rvar_sizes;
                     for (int i = 0; i < (int)rvars.size(); i++) {
-                        if (rvar_bounds[i] > 0) {
+                        if (rvar_bounds[i] >= 8) {
                             // Let split_size = 8 * n where n is an integer and
                             // split_size > sqrt(rvar_bounds)
                             float target = std::sqrt(rvar_bounds[i]);
