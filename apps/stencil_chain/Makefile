@@ -51,7 +51,7 @@ test: $(BIN)/$(HL_TARGET)/out.png
 BATCH_ID ?= 0
 TRAIN_ONLY ?= 0
 SAMPLES_DIR ?= autotuned_samples
-autotune: $(GENERATOR_BIN)/stencil_chain.generator $(AUTOSCHED_BIN)/featurization_to_sample $(AUTOSCHED_BIN)/train_cost_model $(AUTOSCHED_BIN)/libauto_schedule.so $(AUTOSCHED_SRC)/autotune_loop.sh
+autotune: $(GENERATOR_BIN)/stencil_chain.generator $(AUTOSCHED_BIN)/featurization_to_sample $(AUTOSCHED_BIN)/retrain_cost_model $(AUTOSCHED_BIN)/libauto_schedule.so $(AUTOSCHED_SRC)/autotune_loop.sh
 	HL_TARGET=host-cuda \
 	HL_MACHINE_PARAMS=80,1,1 \
 	SAMPLES_DIR=$(SAMPLES_DIR) \
