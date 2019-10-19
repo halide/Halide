@@ -16,7 +16,7 @@ $(BIN)/%/local_laplacian.a: $(GENERATOR_BIN)/local_laplacian.generator
 $(BIN)/%/local_laplacian_classic_auto_schedule.a: $(GENERATOR_BIN)/local_laplacian.generator $(AUTOSCHED_BIN)/libauto_schedule.so
 	@mkdir -p $(@D)
 	HL_PERMIT_FAILED_UNROLL=1 \
-	HL_WEIGHTS_DIR=$(AUTOSCHED_SRC)/gpu_weights \
+	HL_WEIGHTS_DIR=$(AUTOSCHED_SRC)/gpu.weights \
 	HL_DEBUG_CODEGEN=1 \
 	HL_SHARED_MEMORY_LIMIT=48 \
 	HL_COMPUTE_ROOT_AND_INLINE_ONLY=1 \
@@ -25,7 +25,7 @@ $(BIN)/%/local_laplacian_classic_auto_schedule.a: $(GENERATOR_BIN)/local_laplaci
 $(BIN)/%/local_laplacian_auto_schedule.a: $(GENERATOR_BIN)/local_laplacian.generator $(AUTOSCHED_BIN)/libauto_schedule.so
 	@mkdir -p $(@D)
 	HL_PERMIT_FAILED_UNROLL=1 \
-	HL_WEIGHTS_DIR=$(AUTOSCHED_SRC)/gpu_weights \
+	HL_WEIGHTS_DIR=$(AUTOSCHED_SRC)/gpu.weights \
 	HL_DEBUG_CODEGEN=1 \
 	HL_SHARED_MEMORY_LIMIT=48 \
 	$^ -g local_laplacian -e $(GENERATOR_OUTPUTS) -o $(@D) -f local_laplacian_auto_schedule target=$*-no_runtime auto_schedule=true -p $(AUTOSCHED_BIN)/libauto_schedule.so machine_params=$(HL_MACHINE_PARAMS) 2> stderr.txt > stdout.txt
@@ -80,14 +80,14 @@ autotune: $(GENERATOR_BIN)/local_laplacian.generator $(AUTOSCHED_BIN)/featurizat
 	HL_TARGET=host-cuda \
 	HL_MACHINE_PARAMS=80,1,1 \
 	SAMPLES_DIR=$(SAMPLES_DIR) \
-	HL_WEIGHTS_DIR=$(AUTOSCHED_SRC)/gpu_weights \
+	HL_WEIGHTS_DIR=$(AUTOSCHED_SRC)/gpu.weights \
 	HL_DEBUG_CODEGEN=0 \
 	HL_SHARED_MEMORY_LIMIT=48 \
 	bash $(AUTOSCHED_SRC)/autotune_loop.sh \
 		$(GENERATOR_BIN)/local_laplacian.generator \
 		local_laplacian \
 		host-cuda \
-		$(AUTOSCHED_SRC)/gpu_weights \
+		$(AUTOSCHED_SRC)/gpu.weights \
 		$(AUTOSCHED_BIN) \
 		$(BATCH_ID) \
 		$(TRAIN_ONLY)

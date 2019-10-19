@@ -33,7 +33,7 @@ export CXX="ccache c++"
 export HL_MACHINE_PARAMS=80,24000000,160
 
 export HL_PERMIT_FAILED_UNROLL=1
-export HL_WEIGHTS_DIR=${HALIDE_ROOT}/apps/autoscheduler/gpu_weights
+export HL_WEIGHTS_DIR=${HALIDE_ROOT}/apps/autoscheduler/gpu.weights
 export HL_TARGET=host-cuda
 
 if [ -z $APP ]; then

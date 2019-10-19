@@ -42,14 +42,13 @@ autotune: $(GENERATOR_BIN)/mat_mul.generator $(AUTOSCHED_BIN)/featurization_to_s
 	HL_TARGET=$(HL_TARGET) \
 	HL_MACHINE_PARAMS=80,1,1 \
 	SAMPLES_DIR=$(SAMPLES_DIR) \
-	HL_WEIGHTS_DIR=$(AUTOSCHED_SRC)/gpu_weights \
 	HL_DEBUG_CODEGEN=0 \
 	HL_SHARED_MEMORY_LIMIT=48 \
 	bash $(AUTOSCHED_SRC)/autotune_loop.sh \
 		$(GENERATOR_BIN)/mat_mul.generator \
 		mat_mul \
 		$(HL_TARGET) \
-		$(AUTOSCHED_SRC)/gpu_weights \
+		$(AUTOSCHED_SRC)/gpu.weights \
 		$(AUTOSCHED_BIN) \
 		$(BATCH_ID) \
 		$(TRAIN_ONLY)

@@ -18,7 +18,7 @@ $(BIN)/%/camera_pipe.a: $(GENERATOR_BIN)/camera_pipe.generator
 $(BIN)/%/camera_pipe_classic_auto_schedule.a: $(GENERATOR_BIN)/camera_pipe.generator $(AUTOSCHED_BIN)/libauto_schedule.so
 	@mkdir -p $(@D)
 	HL_PERMIT_FAILED_UNROLL=1 \
-	HL_WEIGHTS_DIR=$(AUTOSCHED_SRC)/gpu_weights \
+	HL_WEIGHTS_DIR=$(AUTOSCHED_SRC)/gpu.weights \
 	HL_DEBUG_CODEGEN=1 \
 	HL_SHARED_MEMORY_LIMIT=48 \
 	HL_COMPUTE_ROOT_AND_INLINE_ONLY=1 \
@@ -27,7 +27,7 @@ $(BIN)/%/camera_pipe_classic_auto_schedule.a: $(GENERATOR_BIN)/camera_pipe.gener
 $(BIN)/%/camera_pipe_auto_schedule.a: $(GENERATOR_BIN)/camera_pipe.generator $(AUTOSCHED_BIN)/libauto_schedule.so
 	@mkdir -p $(@D)
 	HL_PERMIT_FAILED_UNROLL=1 \
-	HL_WEIGHTS_DIR=$(AUTOSCHED_SRC)/gpu_weights \
+	HL_WEIGHTS_DIR=$(AUTOSCHED_SRC)/gpu.weights \
 	HL_DEBUG_CODEGEN=1 \
 	HL_SHARED_MEMORY_LIMIT=48 \
 	$^ -g camera_pipe -e $(GENERATOR_OUTPUTS) -o $(@D) -f camera_pipe_auto_schedule target=$*-no_runtime auto_schedule=true -p $(AUTOSCHED_BIN)/libauto_schedule.so machine_params=$(HL_MACHINE_PARAMS) 2> stderr.txt > stdout.txt
@@ -72,12 +72,12 @@ viz_auto: $(BIN)/$(HL_TARGET)/viz_auto.mp4
 
 autotune: $(GENERATOR_BIN)/camera_pipe.generator $(AUTOSCHED_BIN)/featurization_to_sample $(AUTOSCHED_BIN)/retrain_cost_model $(AUTOSCHED_BIN)/libauto_schedule.so $(AUTOSCHED_SRC)/autotune_loop.sh
 	HL_PERMIT_FAILED_UNROLL=1 \
-	HL_WEIGHTS_DIR=$(AUTOSCHED_SRC)/gpu_weights \
+	HL_WEIGHTS_DIR=$(AUTOSCHED_SRC)/gpu.weights \
 	HL_DEBUG_CODEGEN=1 \
 	HL_SHARED_MEMORY_LIMIT=48 \
 	bash $(AUTOSCHED_SRC)/autotune_loop.sh \
 		$(GENERATOR_BIN)/camera_pipe.generator \
 		camera_pipe \
 		$(HL_TARGET) \
-		$(AUTOSCHED_SRC)/gpu_weights \
+		$(AUTOSCHED_SRC)/gpu.weights \
 		$(AUTOSCHED_BIN)

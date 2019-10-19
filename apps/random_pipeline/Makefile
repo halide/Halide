@@ -41,7 +41,7 @@ $(BIN)/$(ID)/random_pipeline.a: $(BIN)/random_pipeline.generator
 	HL_DEBUG_CODEGEN=1 \
 	HL_FEATURE_FILE=$(BIN)/$(ID)/binary_features.bin \
 	HL_PERMIT_FAILED_UNROLL=1 \
-	HL_WEIGHTS_DIR=$(PWD)/../autoscheduler/gpu_weights \
+	HL_WEIGHTS_DIR=$(PWD)/../autoscheduler/gpu.weights \
 	$^ -g random_pipeline -o $(BIN)/$(ID) -f random_pipeline target=$(HL_TARGET)-no_runtime auto_schedule=$(AUTO_SCHEDULE) seed=$(PIPELINE_SEED) max_stages=$(PIPELINE_STAGES) $(GEN_GEN_ARGS) 2> $(BIN)/$(ID)/stderr.txt > $(BIN)/$(ID)/stdout.txt
 
 $(BIN)/$(ID)/random_pipeline_simple_auto_schedule.a: $(BIN)/random_pipeline.generator
@@ -74,12 +74,12 @@ autotune_gpu: $(BIN)/random_pipeline.generator $(AUTOSCHED_BIN)/featurization_to
 	SAMPLES_DIR=autotuned_samples \
 	HL_SHARED_MEMORY_LIMIT=48 \
 	HL_DEBUG_CODEGEN=1 \
-	HL_WEIGHTS_DIR=$(PWD)/../autoscheduler/gpu_weights \
+	HL_WEIGHTS_DIR=$(PWD)/../autoscheduler/gpu.weights \
 	bash $(AUTOSCHED_SRC)/autotune_loop.sh \
 		$(BIN)/random_pipeline.generator \
 		random_pipeline \
 		host-cuda \
-		$(AUTOSCHED_SRC)/gpu_weights \
+		$(AUTOSCHED_SRC)/gpu.weights \
 		$(AUTOSCHED_BIN) \
 		$(BATCH_ID) \
 		$(TRAIN_ONLY) \

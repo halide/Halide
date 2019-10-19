@@ -18,7 +18,7 @@ $(BIN)/resnet50block_manual%.a: $(BIN)/resnet50block.generator
 $(BIN)/resnet50block_classic_auto_schedule%.a: $(BIN)/resnet50block.generator
 	@mkdir -p $(@D)
 	HL_PERMIT_FAILED_UNROLL=1 \
-	HL_WEIGHTS_DIR=$(AUTOSCHED_SRC)/gpu_weights \
+	HL_WEIGHTS_DIR=$(AUTOSCHED_SRC)/gpu.weights \
 	HL_DEBUG_CODEGEN=1 \
 	HL_SHARED_MEMORY_LIMIT=48 \
 	HL_COMPUTE_ROOT_AND_INLINE_ONLY=1 \
@@ -28,7 +28,7 @@ $(BIN)/resnet50block_classic_auto_schedule%.a: $(BIN)/resnet50block.generator
 $(BIN)/resnet50block_auto_schedule%.a: $(BIN)/resnet50block.generator $(AUTOSCHED_BIN)/libauto_schedule.so
 	@mkdir -p $(@D)
 	HL_PERMIT_FAILED_UNROLL=1 \
-	HL_WEIGHTS_DIR=$(AUTOSCHED_SRC)/gpu_weights \
+	HL_WEIGHTS_DIR=$(AUTOSCHED_SRC)/gpu.weights \
 	HL_DEBUG_CODEGEN=1 \
 	HL_SHARED_MEMORY_LIMIT=48 \
 	$(BIN)/resnet50block.generator -g resnet50block -o $(BIN) -f resnet50block_auto_schedule$* target=$(HL_TARGET) auto_schedule=true block_id=$* -p $(AUTOSCHED_BIN)/libauto_schedule.so machine_params=$(HL_MACHINE_PARAMS) 2> stderr.txt > stdout.txt
@@ -70,13 +70,13 @@ AUTOTUNE_ARG_SETS ?= $(foreach block,0 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15,block
 
 autotune: $(BIN)/resnet50block.generator $(AUTOSCHED_BIN)/featurization_to_sample $(AUTOSCHED_BIN)/retrain_cost_model $(AUTOSCHED_BIN)/libauto_schedule.so $(AUTOSCHED_SRC)/autotune_loop.sh
 	HL_PERMIT_FAILED_UNROLL=1 \
-	HL_WEIGHTS_DIR=$(AUTOSCHED_SRC)/gpu_weights \
+	HL_WEIGHTS_DIR=$(AUTOSCHED_SRC)/gpu.weights \
 	HL_DEBUG_CODEGEN=1 \
 	HL_SHARED_MEMORY_LIMIT=48 \
 	bash $(AUTOSCHED_SRC)/autotune_loop.sh \
 		$(BIN)/resnet50block.generator \
 		resnet50block \
 		$(HL_TARGET) \
-		$(AUTOSCHED_SRC)/gpu_weights \
+		$(AUTOSCHED_SRC)/gpu.weights \
 		$(AUTOSCHED_BIN) \
 		"${AUTOTUNE_ARG_SETS}"
