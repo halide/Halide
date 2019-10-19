@@ -5173,9 +5173,9 @@ IntrusivePtr<State> optimal_schedule(FunctionDAG &dag,
         tick.clear();
 
         if (aslog::aslog_level() == 0) {
-            aslog(0) << "Pass " << i << " of " << num_passes << ", cost: " << pass->cost << "\n";
+            aslog(0) << "Pass " << i + 1 << " of " << num_passes << ", cost: " << pass->cost << "\n";
         } else {
-            aslog(0) << "Pass " << i << " result: ";
+            aslog(0) << "Pass " << i + 1 << " result: ";
             pass->dump();
         }
 
