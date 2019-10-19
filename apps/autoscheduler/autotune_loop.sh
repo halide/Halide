@@ -303,15 +303,7 @@ for ((BATCH_ID=$((FIRST+1));BATCH_ID<$((FIRST+1+NUM_BATCHES));BATCH_ID++)); do
     # retrain model weights on all samples seen so far
     echo Retraining model...
 
-    find ${SAMPLES} -name "*.sample" | \
-        ${AUTOSCHED_BIN}/retrain_cost_model \
-            --epochs=${BATCH_SIZE} \
-            --rates="0.0001" \
-            --num_cores=${NUM_CORES} \
-            --initial_weights=${WEIGHTS} \
-            --weights_out=${WEIGHTS} \
-            --best_benchmark=${SAMPLES}/best.${PIPELINE}.benchmark.txt \
-            --best_schedule=${SAMPLES}/best.${PIPELINE}.schedule.h
+    retrain_cost_model ${HALIDE_ROOT} ${SAMPLES} ${WEIGHTS} ${NUM_CORES} ${EPOCHS} ${PIPELINE}
 
     if [[ $TRAIN_ONLY == 1 ]]; then
       echo Batch ${BATCH_ID} took ${SECONDS} seconds to retrain

@@ -96,18 +96,26 @@ function build_autoscheduler_tools() {
     echo
 }
 
-function train_cost_model() {
+function retrain_cost_model() {
     local -r halide_root=$1
     local -r samples_dir=$2
-    local -r weights_dir=$3
+    local -r weights=$3
     local -r num_cores=$4
     local -r num_epochs=$5
-    local -r best_schedule_file=$6
+    local -r pipeline_id=$6
     local -r predictions_file=${7-""}
 
     get_autoscheduler_bin_dir ${halide_root} autosched_bin
 
-    find ${samples_dir} | grep sample$ | HL_NUM_THREADS=${num_cores} HL_WEIGHTS_DIR=${weights_dir} HL_BEST_SCHEDULE_FILE=${best_schedule_file} PREDICTIONS_FILE=${predictions_file} ${autosched_bin}/train_cost_model ${num_epochs} 0.0001
+    find ${samples_dir} -name "*.sample" | \
+        ${autosched_bin}/retrain_cost_model \
+            --epochs=${num_epochs} \
+            --rates="0.0001" \
+            --num_cores=${num_cores} \
+            --initial_weights=${weights} \
+            --weights_out=${weights} \
+            --best_benchmark=${samples_dir}/best.${pipeline_id}.benchmark.txt \
+            --best_schedule=${samples_dir}/best.${pipeline_id}.schedule.h
 }
 
 function find_equal_predicted_pairs() {
