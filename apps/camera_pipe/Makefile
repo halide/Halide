@@ -70,7 +70,7 @@ $(BIN)/%/viz_auto.mp4: $(BIN)/%/process_viz ../support/viz_auto.sh ../../bin/Hal
 viz_auto: $(BIN)/$(HL_TARGET)/viz_auto.mp4
 	$(HL_VIDEOPLAYER) $^
 
-autotune: $(GENERATOR_BIN)/camera_pipe.generator $(AUTOSCHED_BIN)/augment_sample $(AUTOSCHED_BIN)/train_cost_model $(AUTOSCHED_BIN)/libauto_schedule.so $(AUTOSCHED_SRC)/autotune_loop.sh
+autotune: $(GENERATOR_BIN)/camera_pipe.generator $(AUTOSCHED_BIN)/featurization_to_sample $(AUTOSCHED_BIN)/train_cost_model $(AUTOSCHED_BIN)/libauto_schedule.so $(AUTOSCHED_SRC)/autotune_loop.sh
 	HL_PERMIT_FAILED_UNROLL=1 \
 	HL_WEIGHTS_DIR=$(AUTOSCHED_SRC)/gpu_weights \
 	HL_DEBUG_CODEGEN=1 \

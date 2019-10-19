@@ -45,7 +45,7 @@ clean:
 test: $(BIN)/filter
 	$(BIN)/filter
 
-autotune: $(BIN)/mat_mul.generator $(AUTOSCHED_BIN)/augment_sample $(AUTOSCHED_BIN)/train_cost_model $(AUTOSCHED_BIN)/libauto_schedule.so $(AUTOSCHED_SRC)/autotune_loop.sh
+autotune: $(BIN)/mat_mul.generator $(AUTOSCHED_BIN)/featurization_to_sample $(AUTOSCHED_BIN)/train_cost_model $(AUTOSCHED_BIN)/libauto_schedule.so $(AUTOSCHED_SRC)/autotune_loop.sh
 	HL_PERMIT_FAILED_UNROLL=1 \
 	HL_WEIGHTS_DIR=$(AUTOSCHED_SRC)/gpu_weights \
 	HL_DEBUG_CODEGEN=1 \

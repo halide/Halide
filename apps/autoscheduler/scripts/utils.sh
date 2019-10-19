@@ -51,14 +51,14 @@ function get_autoscheduler_scripts_dir() {
     autoscheduler_scripts_dir_ref=${halide_root}/apps/autoscheduler/scripts
 }
 
-function build_augment_sample() {
+function build_featurization_to_sample() {
     local -r halide_root=$1
     get_autoscheduler_dir $halide_root autoscheduler_dir
     get_autoscheduler_bin_dir $halide_root autoscheduler_bin_dir
 
     echo
-    echo "Building augment_sample..."
-    make -C ${autoscheduler_dir} ${autoscheduler_bin_dir}/augment_sample
+    echo "Building featurization_to_sample..."
+    make -C ${autoscheduler_dir} ${autoscheduler_bin_dir}/featurization_to_sample
     echo
 }
 
@@ -79,8 +79,8 @@ function build_train_cost_model() {
     get_autoscheduler_bin_dir $halide_root autoscheduler_bin_dir
 
     echo
-    echo "Building train_cost_model..."
-    make -C ${autoscheduler_dir} ${autoscheduler_bin_dir}/train_cost_model
+    echo "Building retrain_cost_model..."
+    make -C ${autoscheduler_dir} ${autoscheduler_bin_dir}/retrain_cost_model
     echo
 }
 
@@ -90,7 +90,7 @@ function build_autoscheduler_tools() {
 
     echo
     echo "Building autoscheduler tools..."
-    build_augment_sample $halide_root
+    build_featurization_to_sample $halide_root
     build_train_cost_model $halide_root
     build_libauto_schedule $halide_root
     echo

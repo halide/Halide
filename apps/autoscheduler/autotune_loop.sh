@@ -79,7 +79,7 @@ done
 
 # A batch of this many samples is built in parallel, and then
 # benchmarked serially.
-BATCH_SIZE=2
+BATCH_SIZE=32
 NUM_CORES=80
 EPOCHS=100
 

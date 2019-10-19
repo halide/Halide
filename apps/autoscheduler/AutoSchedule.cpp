@@ -5101,8 +5101,8 @@ IntrusivePtr<State> optimal_schedule_pass(FunctionDAG &dag,
 
         for (size_t j = 0; j < q.size(); j++) {
             if (std::isinf(q[j]->cost)) {
-                //debug(0) << "Infinite cost on intermediate state: " << q[j]->cost << "\n";
-                //q[j]->dump();
+                debug(0) << "Infinite cost on intermediate state: " << q[j]->cost << "\n";
+                q[j]->dump();
             }
         }
 

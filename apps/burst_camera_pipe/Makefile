@@ -35,7 +35,7 @@ clean:
 test: $(BIN)/process
 	$(BIN)/process
 
-autotune: $(BIN)/burst_camera_pipe.generator $(AUTOSCHED_BIN)/augment_sample $(AUTOSCHED_BIN)/train_cost_model $(AUTOSCHED_BIN)/libauto_schedule.so $(AUTOSCHED_SRC)/autotune_loop.sh
+autotune: $(BIN)/burst_camera_pipe.generator $(AUTOSCHED_BIN)/featurization_to_sample $(AUTOSCHED_BIN)/train_cost_model $(AUTOSCHED_BIN)/libauto_schedule.so $(AUTOSCHED_SRC)/autotune_loop.sh
 	bash $(AUTOSCHED_SRC)/autotune_loop.sh \
 		$(BIN)/burst_camera_pipe.generator \
 		burst_camera_pipe \
