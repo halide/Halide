@@ -3006,7 +3006,8 @@ struct LoopNest {
                 }
 
                 // Tile this loop and place the computation at some coarser granularity
-                LoopNest *inner = new LoopNest, *outer = new LoopNest;
+                std::unique_ptr<LoopNest> inner{new LoopNest};
+                std::unique_ptr<LoopNest> outer{new LoopNest};
                 inner->node      = outer->node      = node;
                 inner->stage     = outer->stage     = stage;
                 inner->tileable  = outer->tileable  = tileable && may_subtile();
@@ -3069,7 +3070,7 @@ struct LoopNest {
                     // don't have to worry about the constraints this
                     // places on parallelism, as we forced all the
                     // parallelism to the outer loop.
-                    auto opts = inner->compute_in_tiles(f, outer, params, target, v, true, in_threads_loop);
+                    auto opts = inner->compute_in_tiles(f, outer.get(), params, target, v, true, in_threads_loop);
                     for (IntrusivePtr<const LoopNest> &n : opts) {
                         LoopNest *store_at_outer_compute_further_in = new LoopNest;
                         store_at_outer_compute_further_in->copy_from(*outer);
@@ -3082,10 +3083,10 @@ struct LoopNest {
                 outer->tileable &= !in_realization;
 
                 if (!target.has_gpu_feature()) {
-                    outer->children.emplace_back(inner);
+                    outer->children.emplace_back(inner.release());
                     // Site the computation inside the outer loop
                     outer->compute_here(f, true, v, in_threads_loop, target);
-                    result.emplace_back(outer);
+                    result.emplace_back(outer.release());
                 } else {
                     // Rules for assigning gpu_labels when splitting a loop:
                     // threaded loops can be split into: (threaded, serial) or (serial, threaded)
@@ -3123,9 +3124,9 @@ struct LoopNest {
                                 outer->gpu_label = thread;
                                 inner->gpu_label = serial;
 
-                                outer->children.emplace_back(inner);
+                                outer->children.emplace_back(inner.release());
                                 outer->compute_here(f, true, v, true, target);
-                                result.emplace_back(outer);
+                                result.emplace_back(outer.release());
                             }
                             break;
                         }
@@ -3139,15 +3140,14 @@ struct LoopNest {
                                 outer->gpu_label = block;
                                 inner->gpu_label = serial;
 
-                                outer->children.emplace_back(inner);
+                                outer->children.emplace_back(inner.release());
                                 outer->compute_here(f, true, v, false, target);
 
                                 bool made_child = outer->add_gpu_thread_tilings(f, params, target, v, result, union_counts);
 
-                                if (made_child)
-                                    delete outer;
-                                else {// no good thread tilings, just add the untiled thread loop
-                                    result.emplace_back(outer);
+                                // no good thread tilings, just add the untiled thread loop
+                                if (!made_child) {
+                                    result.emplace_back(outer.release());
                                 }
                             }
                             break;
@@ -3161,18 +3161,18 @@ struct LoopNest {
                                 outer->gpu_label = serial;
                                 inner->gpu_label = serial;
 
-                                outer->children.emplace_back(inner);
+                                outer->children.emplace_back(inner.release());
                                 outer->compute_here(f, true, v, in_threads_loop, target);
 
                                 if (!in_threads_loop) {
                                     bool made_child = outer->add_gpu_thread_tilings(f, params, target, v, result, union_counts);
 
-                                    if (made_child)
-                                        delete outer;
-                                    else // no good thread tilings, just add the untiled thread loop
-                                        result.emplace_back(outer);
+                                    // no good thread tilings, just add the untiled thread loop
+                                    if (!made_child) {
+                                        result.emplace_back(outer.release());
+                                    }
                                 } else { // inside a threads loop, can't generate thread loop tilings
-                                    result.emplace_back(outer);
+                                    result.emplace_back(outer.release());
                                 }
                             }
                             break;
