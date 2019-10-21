@@ -34,6 +34,7 @@ struct Flags {
     bool                randomize_weights = false;
     string              best_benchmark_path;
     string              best_schedule_path;
+    string              predictions_file;
 
     Flags(int argc, char **argv) {
         cmdline::parser a;
@@ -49,6 +50,7 @@ struct Flags {
         a.add<int>("num_cores");
         a.add<string>("best_benchmark");
         a.add<string>("best_schedule");
+        a.add<string>("predictions_file");
 
         a.parse_check(argc, argv);  // exits if parsing fails
 
@@ -59,6 +61,7 @@ struct Flags {
         randomize_weights = a.exist("randomize_weights") && a.get<bool>("randomize_weights");
         best_benchmark_path = a.get<string>("best_benchmark");
         best_schedule_path = a.get<string>("best_schedule");
+        predictions_file = a.get<string>("predictions_file");
 
         if (epochs <= 0) {
             std::cerr << "--epochs must be specified and > 0.\n";
@@ -360,12 +363,36 @@ map<int, PipelineSample> load_samples(const Flags &flags) {
     return result;
 }
 
+void save_predictions(const map<int, PipelineSample>& samples, const string& filename) {
+    std::ostringstream out;
+
+    for (const auto &p : samples) {
+        for (const auto &sched : p.second.schedules) {
+            out << sched.second.filename << ", " << sched.second.prediction[0] << ", " << sched.second.runtimes[0] << "\n";
+        }
+    }
+
+    std::cout << filename << "\n\n";
+    std::ofstream file(filename, std::ios_base::trunc);
+    file << out.str();
+    file.close();
+    assert(!file.fail());
+
+    std::cout << "Predictions saved to: " << filename << "\n";
+}
+
 }  // namespace
 
 int main(int argc, char **argv) {
     Flags flags(argc, argv);
 
     auto samples = load_samples(flags);
+
+    bool predict_only = !flags.predictions_file.empty();
+    if (predict_only) {
+        std::cout << "Predicting only (no training)\n";
+        flags.epochs = 1;
+    }
 
     // Iterate through the pipelines
     vector<std::unique_ptr<CostModel>> tpp;
@@ -434,20 +461,21 @@ int main(int argc, char **argv) {
 
                     for (auto &p : train ? samples : validation_set) {
                         if (kModels > 1 && rng() & 1) continue; // If we are training multiple kModels, allow them to diverge.
-                        if (p.second.schedules.size() < 8) {
+                        if (p.second.schedules.size() < 8 && !predict_only) {
                             continue;
                         }
                         tp->reset();
                         tp->set_pipeline_features(p.second.pipeline_features, flags.num_cores);
 
-                        size_t batch_size = std::min((size_t)1024, p.second.schedules.size());
+                        size_t max_batch_size = predict_only ? p.second.schedules.size() : 1024;
+                        size_t batch_size = std::min(max_batch_size, p.second.schedules.size());
 
                         size_t fastest_idx = 0;
                         Buffer<float> runtimes(batch_size);
 
                         size_t first = 0;
-                        if (p.second.schedules.size() > 1024) {
-                            first = rng() % (p.second.schedules.size() - 1024);
+                        if (p.second.schedules.size() > max_batch_size) {
+                            first = rng() % (p.second.schedules.size() - max_batch_size);
                         }
 
                         auto it = p.second.schedules.begin();
@@ -465,7 +493,7 @@ int main(int argc, char **argv) {
                         }
 
                         float loss = 0.0f;
-                        if (train) {
+                        if (train && !predict_only) {
                             loss = tp->backprop(runtimes, learning_rate);
                             assert(!std::isnan(loss));
                             loss_sum[model] += loss;
@@ -556,7 +584,7 @@ int main(int argc, char **argv) {
             }
 
             if (kModels > 1) std::cout << "\n";
-            if (samples.count(worst_miss_pipeline_id)) {
+            if (!predict_only && samples.count(worst_miss_pipeline_id)) {
                 std::cout << " Worst: " << worst_miss << " " << leaf(samples[worst_miss_pipeline_id].schedules[worst_miss_schedule_id].filename) << "\n";
                 // samples[worst_miss_pipeline_id].schedules.erase(worst_miss_schedule_id);
             } else {
@@ -577,13 +605,19 @@ int main(int argc, char **argv) {
                 }
             }
 
-            tpp[best_model]->save_weights();
+            if (!predict_only) {
+                tpp[best_model]->save_weights();
+            }
 
-            if (loss_sum[best_model] < 1e-5f) {
+            if (!predict_only && loss_sum[best_model] < 1e-5f) {
                 std::cout << "Zero loss, returning early\n";
                 return 0;
             }
         }
+    }
+
+    if (predict_only) {
+        save_predictions(samples, flags.predictions_file);
     }
 
     // tpp.save_weights();

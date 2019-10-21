@@ -33,7 +33,6 @@ export CXX="ccache c++"
 export HL_MACHINE_PARAMS=80,24000000,160
 
 export HL_PERMIT_FAILED_UNROLL=1
-export HL_WEIGHTS_DIR=${HALIDE_ROOT}/apps/autoscheduler/gpu.weights
 export HL_TARGET=host-cuda
 
 if [ -z $APP ]; then
@@ -54,7 +53,7 @@ for app in $APPS; do
     OUTPUT_FILE="${SAMPLES_DIR}/autotune_out.txt"
     PREDICTIONS_FILE="${SAMPLES_DIR}/predictions"
     BEST_TIMES_FILE="${SAMPLES_DIR}/best_times"
-    WEIGHTS_DIR="${SAMPLES_DIR}/weights"
+    WEIGHTS_FILE="${SAMPLES_DIR}/updated.weights"
 
     mkdir -p ${SAMPLES_DIR}
     touch ${OUTPUT_FILE}
@@ -72,7 +71,7 @@ for app in $APPS; do
         ITERATION=$((ITERATION + 1))
     done
 
-    predict_all ${HALIDE_ROOT} ${SAMPLES_DIR} ${WEIGHTS_DIR} ${PREDICTIONS_FILE}
+    predict_all ${HALIDE_ROOT} ${SAMPLES_DIR} ${WEIGHTS_FILE} ${PREDICTIONS_FILE}
     extract_best_times ${HALIDE_ROOT} ${SAMPLES_DIR} ${BEST_TIMES_FILE}
     average_compile_time_beam_search ${SAMPLES_DIR} >> ${OUTPUT_FILE}
     average_compile_time_greedy ${SAMPLES_DIR} >> ${OUTPUT_FILE}

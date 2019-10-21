@@ -45,6 +45,11 @@ function get_autoscheduler_bin_dir() {
     autoscheduler_bin_dir_ref=${autoscheduler_dir}/bin
 }
 
+function get_autoscheduler_make_bin_dir() {
+    local -n autoscheduler_bin_dir_ref=$1
+    autoscheduler_bin_dir_ref=../autoscheduler/bin
+}
+
 function get_autoscheduler_scripts_dir() {
     local -r halide_root=$1
     local -n autoscheduler_scripts_dir_ref=$2
@@ -54,33 +59,33 @@ function get_autoscheduler_scripts_dir() {
 function build_featurization_to_sample() {
     local -r halide_root=$1
     get_autoscheduler_dir $halide_root autoscheduler_dir
-    get_autoscheduler_bin_dir $halide_root autoscheduler_bin_dir
+    get_autoscheduler_make_bin_dir autoscheduler_make_bin_dir
 
     echo
     echo "Building featurization_to_sample..."
-    make -C ${autoscheduler_dir} ${autoscheduler_bin_dir}/featurization_to_sample
+    make -C ${autoscheduler_dir} ${autoscheduler_make_bin_dir}/featurization_to_sample
     echo
 }
 
 function build_libauto_schedule() {
     local -r halide_root=$1
     get_autoscheduler_dir $halide_root autoscheduler_dir
-    get_autoscheduler_bin_dir $halide_root autoscheduler_bin_dir
+    get_autoscheduler_make_bin_dir autoscheduler_make_bin_dir
 
     echo
     echo "Building libauto_schedule..."
-    make -C ${autoscheduler_dir} ${autoscheduler_bin_dir}/libauto_schedule.so
+    make -C ${autoscheduler_dir} ${autoscheduler_make_bin_dir}/libauto_schedule.so
     echo
 }
 
-function build_train_cost_model() {
+function build_retrain_cost_model() {
     local -r halide_root=$1
     get_autoscheduler_dir $halide_root autoscheduler_dir
-    get_autoscheduler_bin_dir $halide_root autoscheduler_bin_dir
+    get_autoscheduler_make_bin_dir autoscheduler_make_bin_dir
 
     echo
     echo "Building retrain_cost_model..."
-    make -C ${autoscheduler_dir} ${autoscheduler_bin_dir}/retrain_cost_model
+    make -C ${autoscheduler_dir} ${autoscheduler_make_bin_dir}/retrain_cost_model
     echo
 }
 
@@ -91,7 +96,7 @@ function build_autoscheduler_tools() {
     echo
     echo "Building autoscheduler tools..."
     build_featurization_to_sample $halide_root
-    build_train_cost_model $halide_root
+    build_retrain_cost_model $halide_root
     build_libauto_schedule $halide_root
     echo
 }
@@ -115,7 +120,8 @@ function retrain_cost_model() {
             --initial_weights=${weights} \
             --weights_out=${weights} \
             --best_benchmark=${samples_dir}/best.${pipeline_id}.benchmark.txt \
-            --best_schedule=${samples_dir}/best.${pipeline_id}.schedule.h
+            --best_schedule=${samples_dir}/best.${pipeline_id}.schedule.h \
+            --predictions_file=${predictions_file}
 }
 
 function find_equal_predicted_pairs() {
