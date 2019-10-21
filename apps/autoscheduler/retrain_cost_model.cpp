@@ -35,6 +35,7 @@ struct Flags {
     string              best_benchmark_path;
     string              best_schedule_path;
     string              predictions_file;
+    bool                verbose;
 
     Flags(int argc, char **argv) {
         cmdline::parser a;
@@ -51,6 +52,7 @@ struct Flags {
         a.add<string>("best_benchmark");
         a.add<string>("best_schedule");
         a.add<string>("predictions_file");
+        a.add<bool>("verbose");
 
         a.parse_check(argc, argv);  // exits if parsing fails
 
@@ -62,6 +64,7 @@ struct Flags {
         best_benchmark_path = a.get<string>("best_benchmark");
         best_schedule_path = a.get<string>("best_schedule");
         predictions_file = a.get<string>("predictions_file");
+        verbose = a.exist("verbose") && a.get<bool>("verbose");
 
         if (epochs <= 0) {
             std::cerr << "--epochs must be specified and > 0.\n";
@@ -190,7 +193,9 @@ map<int, PipelineSample> load_samples(const Flags &flags) {
             continue;
         }
         if (num_features % features_per_stage != 0) {
-            std::cout << "Truncated sample: " << s << " " << floats_read << "\n";
+            if (flags.verbose) {
+                std::cout << "Truncated sample: " << s << " " << floats_read << "\n";
+            }
             continue;
         }
         const size_t num_stages = num_features / features_per_stage;
@@ -314,7 +319,9 @@ map<int, PipelineSample> load_samples(const Flags &flags) {
                 std::cerr << "Empty runtimes for schedule: " << p.first << "\n";
                 abort();
             }
-            std::cout << "Unique sample: " << leaf(p.second.filename) << " : " << p.second.runtimes[0] << "\n";
+            if (flags.verbose) {
+                std::cout << "Unique sample: " << leaf(p.second.filename) << " : " << p.second.runtimes[0] << "\n";
+            }
             if (p.second.runtimes.size() > 1) {
                 // Compute variance from samples
                 double mean = 0;
