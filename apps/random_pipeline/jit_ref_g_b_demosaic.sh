@@ -1,17 +1,12 @@
 #!/bin/bash
 
-# takes input seed and generates pipeline with that seed
-
-PIPELINE_SEED=$1
 PIPELINE_STAGES=1
 
 HL_TARGET=x86-64-avx2-disable_llvm_loop_vectorize-disable_llvm_loop_unroll
 
 BIN=./bin
 
-make ./bin/new_generator.generator
-
-SAMPLES_DIR=/mnt/ilcompf8d1/user/kcma/jit_seed_${PIPELINE_SEED}/
+SAMPLES_DIR=/mnt/ilcompf8d1/user/kcma/jit_ref_g_b_demosaic/
 rm -rf ${SAMPLES_DIR}
 mkdir -p ${SAMPLES_DIR}
 
@@ -44,21 +39,17 @@ done
 
 NUM_IMAGES=$(cat ${IMAGES_LIST_FILE} | wc -l)
 
-
-# how many pipelines to generate
-NUM_SAMPLES=1
-
 start=$(date +%s%N | cut -b1-13)
 
 DIR=${SAMPLES_DIR}
 mkdir -p ${DIR}
 
 # compile code that will run generator and eval on a dataset of images and then run it 
-g++ -w -std=c++11  -I ../../distrib/include/ -I ../../distrib/tools/ -I ./ -g -Wall jit_demosaic.cpp ../../distrib/lib/libHalide.a -o ${DIR}/gen_demosaic_pipes -ldl -lpthread -lz -ltinfo -fopenmp && \
-${DIR}/gen_demosaic_pipes ${IMAGES_LIST_FILE} ${DIR} ${NUM_IMAGES} ${NUM_SAMPLES} ${PIPELINE_SEED} 
+g++ -w -std=c++11  -I ../../distrib/include/ -I ../../distrib/tools/ -I ./ -g -Wall jit_ref_demosaic.cpp ../../distrib/lib/libHalide.a -o ${DIR}/gen_demosaic_pipes -ldl -lpthread -lz -ltinfo -fopenmp -D G_B && \
+${DIR}/gen_demosaic_pipes ${IMAGES_LIST_FILE} ${DIR} ${NUM_IMAGES}
 
 end=$(date +%s%N | cut -b1-13)
 (( diff = $end - $start ))
 
-echo "time to compile and eval pipeline with seed ${PIPELINE_SEED}: $diff"
+echo "time to compile and eval ref pipeline: $diff"
 

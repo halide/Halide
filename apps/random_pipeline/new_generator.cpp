@@ -1366,7 +1366,7 @@ public:
         interp_id = rand_int(0, s.size() - 1);
 
         // if stage id is given, use that as one of the input functions 
-        if (use_id) {
+        if (use_id >= 0) {
             // pick a buffer to fill given input
             int buff_id = rand_int(0, 2);
             switch (buff_id) {

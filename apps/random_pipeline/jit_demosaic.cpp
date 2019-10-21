@@ -8,6 +8,7 @@
 #include <map>
 #include <random>
 #include <unordered_map>
+#include <chrono>
 
 #include <unistd.h>
 #include <sys/types.h>
@@ -150,8 +151,14 @@ int main(int argc, char *argv[]) {
         // iterate over every image in data directory
         std::string image_dir;
         std::ifstream data_files_f(data_files);
+      
+        ///int first = 1;
+        //uint64_t start, end, diff, first_diff;
+        //float avg_diff;
         while (getline(data_files_f, image_dir)) {
-            load_buffer_from_file<outputT>(correct_output, image_dir + "/r_at_gr_dense.data");
+            // start = std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::system_clock::now().time_since_epoch()).count();
+
+            load_buffer_from_file<outputT>(correct_output, image_dir + "/b_at_gr_dense.data");
             load_buffer_from_file<inputT>(input0, image_dir + "/gr.data");
             load_buffer_from_file<inputT>(input1, image_dir + "/r.data");
             load_buffer_from_file<inputT>(input2, image_dir + "/b.data");
@@ -159,8 +166,23 @@ int main(int argc, char *argv[]) {
 
             Realization r(loss_buff, output_buff);
             gen->realize(r);
+
+            //end = std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::system_clock::now().time_since_epoch()).count();
+            /**
+            if (first) {
+                first_diff = end - start;
+                std::cout << "time for first realization: " << first_diff << std::endl;
+                first = 0;
+            } else {
+                diff = end - start;
+                avg_diff += float(diff)/float(num_images-1);
+            }**/
+
             loss += (loss_buff() / (float)num_images);
         }
+
+        //std::cout << "average time for all other realizations: " << avg_diff << std::endl;
+
         // write average loss to file 
         std::ofstream loss_file;
         loss_file.open(loss_filename, std::ofstream::app);

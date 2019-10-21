@@ -13,8 +13,16 @@
 
 #include "Halide.h"
 #include "HalideBuffer.h"
-#include "demosaic_ref_generator.cpp"
 
+#ifdef G_B
+#include "demosaic_ref_g_b_generator.cpp"
+#define TARGET_DATA "/g_at_b_dense.data"
+#endif
+
+#ifdef B_GR
+#include "demosaic_ref_b_gr_generator.cpp"
+#define TARGET_DATA "/b_at_gr_dense.data"
+#endif
 
 using namespace Halide;
 
@@ -122,7 +130,6 @@ int main(int argc, char *argv[]) {
     Buffer<lossT> loss_buff = Buffer<lossT>::make_scalar();
     Buffer<outputT> output_buff = Buffer<outputT>(output_w, output_h, output_c);
 
-
     // configure the pipeline
     gen->apply(batch_size, learning_rate, timestep, input0, input1, input2, input3, correct_output);
 
@@ -134,7 +141,7 @@ int main(int argc, char *argv[]) {
     std::string image_dir;
     std::ifstream data_files_f(data_files);
     while (getline(data_files_f, image_dir)) {
-        load_buffer_from_file<outputT>(correct_output, image_dir + "/g_at_b_dense.data");
+        load_buffer_from_file<outputT>(correct_output, image_dir + TARGET_DATA);
         load_buffer_from_file<inputT>(input0, image_dir + "/gr.data");
         load_buffer_from_file<inputT>(input1, image_dir + "/r.data");
         load_buffer_from_file<inputT>(input2, image_dir + "/b.data");
