@@ -17,6 +17,7 @@
 #include "JITModule.h"
 #include "Module.h"
 #include "ParamMap.h"
+#include "Realization.h"
 #include "Target.h"
 #include "Tuple.h"
 

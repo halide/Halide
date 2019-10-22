@@ -400,6 +400,7 @@ set(HEADER_FILES
   Qualify.h
   Random.h
   RDom.h
+  Realization.h
   RealizationOrder.h
   Reduction.h
   RegionCosts.h
