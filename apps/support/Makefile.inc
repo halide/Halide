@@ -1,4 +1,4 @@
-HALIDE_DISTRIB_PATH ?= ../../distrib
+HALIDE_DISTRIB_PATH ?= $(realpath ../../distrib)
 LDFLAGS ?=
 IMAGES ?= ../images
 UNAME ?= $(shell uname)
