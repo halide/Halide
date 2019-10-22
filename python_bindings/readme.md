@@ -27,7 +27,7 @@ in Python, only the second variant is provided.
 
 ## Prerequisites ##
 
-The bindings (and demonstration applications) should work well both for python2.7 and python3.4 (or higher), on Linux and OSX platforms. Windows is not yet supported, but could be with CMake work. (The Makefile defaults to using Python 3.x; to use Python 2, set `PYTHON = python` before building.)
+The bindings (and demonstration applications) should work well for Pytho n3.4 (or higher), on Linux and OSX platforms. Windows is not yet supported, but could be with CMake work. (We have dropped support for Python 2.x and will not accept patches to re-enable it.)
 
 
 #### Python requirements:
