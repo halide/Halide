@@ -8,3 +8,4 @@
 numpy
 scipy
 pillow
+imageio
