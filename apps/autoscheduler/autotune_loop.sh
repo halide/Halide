@@ -126,8 +126,6 @@ make_featurization() {
 
     local -r shared_memory_limit=48
 
-    echo "Compiling HL_SEED=${SEED} ${EXTRA_GENERATOR_ARGS}"
-
     CMD="HL_SEED=${SEED} \
         HL_WEIGHTS_DIR=${WEIGHTS} \
         HL_RANDOM_DROPOUT=${dropout} \
@@ -273,7 +271,9 @@ for ((BATCH_ID=$((FIRST+1));BATCH_ID<$((FIRST+1+NUM_BATCHES));BATCH_ID++)); do
 
           # Do parallel compilation in batches, so that machines with fewer than BATCH_SIZE cores
           # don't get swamped and timeout unnecessarily
-          echo -n Compiling ${BATCH_SIZE} samples
+          first=$(printf "%04d%04d" $BATCH_ID 0)
+          last=$(printf "%04d%04d" $BATCH_ID $(($BATCH_SIZE-1)))
+          echo Compiling ${BATCH_SIZE} samples from ${first} to ${last}
           for ((SAMPLE_ID=0;SAMPLE_ID<${BATCH_SIZE};SAMPLE_ID++)); do
               while [[ 1 ]]; do
                   RUNNING=$(jobs -r | wc -l)
@@ -287,7 +287,6 @@ for ((BATCH_ID=$((FIRST+1));BATCH_ID<$((FIRST+1+NUM_BATCHES));BATCH_ID++)); do
               S=$(printf "%04d%04d" $BATCH_ID $SAMPLE_ID)
               FNAME=$(printf "%s_batch_%04d_sample_%04d" ${PIPELINE} $BATCH_ID $SAMPLE_ID)
               make_featurization "${DIR}/${SAMPLE_ID}" $S $FNAME "$EXTRA_GENERATOR_ARGS" $BATCH $SAMPLE_ID &
-              echo -n .
           done
           wait
           echo done.
