@@ -1559,9 +1559,9 @@ bool can_disprove_nonconvex(Expr e, int beam_size, Expr *implication) {
     for (auto &p : pieces) {
         // Distribute and over or.
         p = ToDNF().mutate(p);
-        e = pack_binary_op<Or>(pieces);
-        pieces = unpack_binary_op<Or>(e);
     }
+    e = pack_binary_op<Or>(pieces);
+    pieces = unpack_binary_op<Or>(e);
 
     debug(1) << "In DNF form:\n";
     int i = 0;
