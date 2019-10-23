@@ -557,7 +557,7 @@ void ReverseAccumulationVisitor::propagate_adjoints(
         // non overwriting scans, we delay the boundary condition
         // setup since the gradients depend on itself.
         auto add_boundary_condition = [&](const FuncKey &func_key) {
-            // Add an update stage to adjoint_func to set everything out of bounds zero.
+            // Add an update stage to adjoint_func to set everything out of bounds to zero.
             // We don't use BoundaryConditions::constant_exterior since it introduces 
             // two extra Funcs, which
             // 1) makes generated derivatives code less readable, and
