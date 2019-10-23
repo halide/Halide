@@ -587,7 +587,7 @@ void ReverseAccumulationVisitor::propagate_adjoints(
                 for (size_t i = 0; i < clamped_values.size(); i++) {
                     Expr zero = make_zero(adjoint_func.values()[i].type());
                     Expr value = adjoint_func(args)[i];
-                    clamped_values[i] = select(out_of_bounds, zero, value);
+                    clamped_values[i] = select(!likely(out_of_bounds), zero, value);
                 }
                 adjoint_func(args) = Tuple(clamped_values);
             }
