@@ -7,7 +7,7 @@ import time, sys
 import halide as hl
 
 from datetime import datetime
-from imageio import imread, imsave
+import imageio
 import numpy as np
 import os.path
 
@@ -157,7 +157,7 @@ def get_input_data():
 
     image_path = os.path.join(os.path.dirname(__file__), "../../apps/images/rgba.png")
     assert os.path.exists(image_path), "Could not find %s" % image_path
-    rgba_data = imread(image_path)
+    rgba_data = imageio.imread(image_path)
     #print("rgba_data", type(rgba_data), rgba_data.shape, rgba_data.dtype)
 
     input_data = np.copy(rgba_data, order="F").astype(np.float32) / 255.0
@@ -192,8 +192,8 @@ def main():
     # save results
     input_path = "interpolate_input.png"
     output_path = "interpolate_result.png"
-    imsave(input_path, input_data)
-    imsave(output_path, output_data)
+    imageio.imsave(input_path, input_data)
+    imageio.imsave(output_path, output_data)
     print("\nblur realized on output image.",
           "Result saved at", output_path,
           "( input data copy at", input_path, ")")
