@@ -544,7 +544,7 @@ bool test_div_mod(int vector_width, ScheduleVariant scheduling, Target target) {
 int main(int argc, char **argv) {
     Target target = get_jit_target_from_environment();
 
-    int threads = Halide::Internal::ThreadPool::num_processors_online();
+    int threads = Halide::Internal::ThreadPool<bool>::num_processors_online();
 
     ScheduleVariant scheduling = CPU;
     if (target.has_gpu_feature()) {
