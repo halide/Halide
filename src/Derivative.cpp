@@ -580,7 +580,7 @@ void ReverseAccumulationVisitor::propagate_adjoints(
             if (adjoint_func.values().size() == 1) {
                 Expr zero = make_const(adjoint_func.value().type(), 0.0);
                 Expr value = adjoint_func(args);
-                Expr clamped_value = select(out_of_bounds, zero, value);
+                Expr clamped_value = select(!likely(out_of_bounds), zero, value);
                 adjoint_func(args) = clamped_value;
             } else {
                 vector<Expr> clamped_values(adjoint_func.values().size());
