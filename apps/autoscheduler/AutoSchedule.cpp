@@ -702,6 +702,7 @@ private:
     }
 };
 
+
 template<typename T>
 using NodeMap = PerfectHashMap<FunctionDAG::Node, T>;
 
@@ -709,6 +710,29 @@ template<typename T>
 using StageMap = PerfectHashMap<FunctionDAG::Node::Stage, T>;
 
 enum GPU_parallelism { block, thread, serial, simd, parallelized, none };
+
+struct LoopNest;
+
+struct GPULoopInfo {
+    const LoopNest* current_block_loop = nullptr;
+    const LoopNest* current_thread_loop = nullptr;
+    int64_t num_blocks = 1;
+    int64_t total_outer_serial_extents = 1;
+    int64_t total_inner_serial_extents = 1;
+    const ThreadInfo* thread_info = nullptr;
+
+    void update(const Target& target, const LoopNest* loop);
+
+    int64_t total_serial_extents() const;
+
+    bool at_or_inside_block() const;
+
+    bool at_or_inside_thread() const;
+
+    std::vector<int64_t> get_inner_serial_loop_extents(const LoopNest* loop_nest) const;
+
+    std::unique_ptr<ThreadInfo> create_thread_info();
+};
 
 // We're going to do a tree search over possible schedules to find an
 // optimal one. A tree search requires a state, and a function that
@@ -765,11 +789,15 @@ struct LoopNest {
     // Apply gpu threads to this loop nest
     mutable GPU_parallelism gpu_label = none;
 
-    bool is_thread(const Target& target) const {
+    bool is_gpu_serial(const Target& target) const {
+        return target.has_gpu_feature() && gpu_label == serial;
+    }
+
+    bool is_gpu_thread(const Target& target) const {
         return target.has_gpu_feature() && gpu_label == thread;
     }
 
-    bool is_block(const Target& target) const {
+    bool is_gpu_block(const Target& target) const {
         return target.has_gpu_feature() && gpu_label == block;
     }
 
@@ -1415,30 +1443,32 @@ struct LoopNest {
         return false;
     }
 
-    void compute_warp_features(ScheduleFeatures& features, const ThreadInfo& thread_info, int64_t block_extents) const {
-        features.warp_lane_utilization = thread_info.warp_lane_utilization();
-        features.warp_lane_utilization_at_block = thread_info.total_warp_lane_utilization_at_block();
-        features.warp_lane_utilization_at_block_x = thread_info.warp_lane_utilization_at_block_x();
-        features.warp_lane_utilization_at_block_y = thread_info.warp_lane_utilization_at_block_y();
-        features.warp_lane_utilization_at_block_z = thread_info.warp_lane_utilization_at_block_z();
-        features.num_warps_per_block = thread_info.num_warps_per_block;
-        features.num_blocks = block_extents;
-        features.block_occupancy = thread_info.block_occupancy();
+    void compute_warp_features(ScheduleFeatures& features, const GPULoopInfo& gpu_loop_info) const {
+        const ThreadInfo* thread_info = gpu_loop_info.thread_info;
+        features.warp_lane_utilization = thread_info->warp_lane_utilization();
+        features.warp_lane_utilization_at_block = thread_info->total_warp_lane_utilization_at_block();
+        features.warp_lane_utilization_at_block_x = thread_info->warp_lane_utilization_at_block_x();
+        features.warp_lane_utilization_at_block_y = thread_info->warp_lane_utilization_at_block_y();
+        features.warp_lane_utilization_at_block_z = thread_info->warp_lane_utilization_at_block_z();
+        features.num_warps_per_block = thread_info->num_warps_per_block;
+        features.num_blocks = gpu_loop_info.num_blocks;
+        features.block_occupancy = thread_info->block_occupancy();
     }
 
     // Assume that when a block is active, all its warps are active
-    void compute_warp_and_block_occupancy(const Target& target, ScheduleFeatures &feat) const {
-        if (!is_block(target)) {
+    void compute_warp_and_block_occupancy(ScheduleFeatures &feat, const GPULoopInfo& gpu_loop_info) const {
+        // Only compute these features for stage's that actually have a block
+        // loop
+        if (node != gpu_loop_info.current_block_loop->node) {
             return;
         }
 
         auto active_block_hardware_limit = get_active_block_hardware_limit();
         auto active_warp_hardware_limit = get_active_warp_hardware_limit();
 
-        ThreadInfo thread_info{get_union_thread_counts(nullptr)};
-        int64_t num_warps_per_block = thread_info.num_warps_per_block;
+        int64_t num_warps_per_block = gpu_loop_info.thread_info->num_warps_per_block;
 
-        auto num_blocks = get_block_and_serial_extents(this).first;
+        auto num_blocks = gpu_loop_info.num_blocks;
 
         auto max_theoretical_active_blocks = std::min(active_block_hardware_limit, num_blocks);
         auto max_active_warps = std::min(active_warp_hardware_limit, max_theoretical_active_blocks * num_warps_per_block);
@@ -1450,7 +1480,7 @@ struct LoopNest {
     }
 
     void compute_shared_mem_occupancy(const Target& target, int64_t working_set_here, ScheduleFeatures &feat) const {
-        if (!is_block(target)) {
+        if (!is_gpu_block(target)) {
             return;
         }
 
@@ -1533,7 +1563,14 @@ struct LoopNest {
                           const LoopNest &root,
                           int64_t *working_set,
                           StageMap<ScheduleFeatures> *features,
-                          std::unordered_map<const LoopNest*, ThreadInfo>& thread_info_map) const {
+                          GPULoopInfo gpu_loop_info) const {
+
+        gpu_loop_info.update(target, this);
+        std::unique_ptr<ThreadInfo> thread_info;
+
+        if (is_gpu_thread(target)) {
+            thread_info = gpu_loop_info.create_thread_info();
+        }
 
         int64_t working_set_here = 0;
 
@@ -1623,7 +1660,7 @@ struct LoopNest {
         if (is_root()) {
             // TODO: This block of code is repeated below. Refactor
             for (const auto &c : children) {
-                c->compute_features(dag, params, target, sites, subinstances, parallelism, this, parent, root, &working_set_here, features, thread_info_map);
+                c->compute_features(dag, params, target, sites, subinstances, parallelism, this, parent, root, &working_set_here, features, gpu_loop_info);
             }
 
             for (const auto *node : store_at) {
@@ -1831,7 +1868,7 @@ struct LoopNest {
 
         // Recurse inwards
         for (const auto &c : children) {
-            c->compute_features(dag, params, target, sites, subinstances, subparallelism, this, parent, root, &working_set_here, features, thread_info_map);
+            c->compute_features(dag, params, target, sites, subinstances, subparallelism, this, parent, root, &working_set_here, features, gpu_loop_info);
         }
         for (const auto *node : store_at) {
             auto &feat = features->get(&(node->stages[0]));
@@ -1850,8 +1887,7 @@ struct LoopNest {
             }
         }
 
-        bool gpu_thread = target.has_gpu_feature() && gpu_label == thread;
-        if (gpu_thread) {
+        if (is_gpu_thread(target)) {
             feat.working_set_at_thread = working_set_here;
         }
 
@@ -1896,70 +1932,42 @@ struct LoopNest {
             num_stride_3_loads = 0, num_stride_4_loads = 0,
             num_loads = 0;
         GlobalMemInfo global_mem_loads;
-        double num_shared_mem_loads = 0;
-        double min_num_shared_mem_loads = 0;
-        std::vector<int64_t> compute_loops;
+        double num_shared_mem_loads_per_block = 0;
+        double min_num_shared_mem_loads_per_block = 0;
         int64_t total_serial_loop_extents = 1;
-        if (gpu_thread) {
-            const auto &bounds = get_bounds(stage->node);
-            for (int i = 0; i < (int)stage->loop.size(); i++) {
-                auto extent = bounds->loops(stage->index, i).extent();
-                compute_loops.push_back(extent);
-                total_serial_loop_extents *= extent;
-            }
 
-            if (parent->gpu_label == serial) {
-                for (auto c : parent->size) {
-                    total_serial_loop_extents *= c;
-                }
-            }
-
-            const LoopNest* block = get_enclosing_block(parent, grandparent);
-
-            auto block_and_serial_extents = get_block_and_serial_extents(block);
-            total_serial_loop_extents *= block_and_serial_extents.second;
-
-            if (!thread_info_map.count(this)) {
-                auto max_thread_counts = block->get_union_thread_counts(nullptr);
-                thread_info_map.emplace(this, ThreadInfo{vectorized_loop_index, size, max_thread_counts});
-            }
-
-            const auto& thread_info = thread_info_map.at(this);
-            compute_warp_features(feat, thread_info, block_and_serial_extents.first);
-        }
-
-        if (innermost || at_production || gpu_thread) { // These are the sites at which we compute load footprints
+        if (innermost || at_production) { // These are the sites at which we compute load footprints
             // Pick the site at which we will compute the footprint relationship
             const auto &consumer_site = sites.get(stage);
 
             // The store_at location of the consumer
             const auto *consumer_store_site = innermost ? parent : consumer_site.store;
 
-            if (gpu_thread) {
+            std::vector<int64_t> inner_serial_loop_extents;
+
+            if (innermost) {
                 const auto& bounds = consumer_site.store->get_bounds(stage->node);
-                auto store_jac = *stage->store_jacobian * compute_loops;
+                inner_serial_loop_extents = gpu_loop_info.get_inner_serial_loop_extents(this);
+                auto store_jac = *stage->store_jacobian * inner_serial_loop_extents;
 
                 compute_gpu_store_features(
                     store_jac,
                     vector_dim,
                     stage->node,
                     bounds,
-                    thread_info_map.at(this),
-                    total_serial_loop_extents,
+                    *gpu_loop_info.thread_info,
+                    gpu_loop_info.total_serial_extents(),
                     consumer_site,
                     feat
                 );
 
-                feat.num_shared_mem_stores = instances * feat.num_shared_mem_stores_per_block;
+                feat.num_shared_mem_stores = gpu_loop_info.num_blocks * feat.num_shared_mem_stores_per_block;
             }
 
             // The parallel loop of the consumer
             const auto *consumer_task_site = consumer_site.task;
 
             int64_t consumer_instances = innermost ? instances : feat.num_realizations;
-            if (consumer_instances == 0) {
-                root.dump(" ", nullptr);
-            }
             internal_assert(consumer_instances != 0);
 
             vector<const FunctionDAG::Node::Stage *> pending;
@@ -1983,6 +1991,11 @@ struct LoopNest {
                         if (e->consumer == stage) {
                             for (auto &j : e->load_jacobians) {
                                 jacobians.emplace_back(j, e->producer);
+
+                                // Thread loops may not be innermost so in the
+                                // Jacobians we need to account for the stride
+                                // of the inner loops
+                                thread_jacobians.emplace_back(j * inner_serial_loop_extents, e->producer);
                             }
                         } else {
                             // Consumer was inlined. Multiply the Jacobians to look through it.
@@ -1998,31 +2011,20 @@ struct LoopNest {
                                 }
                             }
                             jacobians.swap(new_jacobians);
-                        }
-                    }
 
-                    if (gpu_thread) {
-                        if (e->consumer == stage) {
-                            for (auto &j : e->load_jacobians) {
-                                // Thread loops may not be innermost so in the
-                                // Jacobians we need to account for the stride
-                                // of the inner loops
-                                thread_jacobians.emplace_back(j * compute_loops, e->producer);
-                            }
-                        } else {
                             // Consumer was inlined. Concat the jacobians to look through it.
-                            decltype(jacobians) new_jacobians;
-                            for (auto &j1 : jacobians) {
+                            decltype(jacobians) new_thread_jacobians;
+                            for (auto &j1 : thread_jacobians) {
                                 if (e->consumer->node == j1.second) {
                                     for (auto &j2 : e->load_jacobians) {
-                                        LoadJacobian j = (j2 * compute_loops) * j1.first;
-                                        new_jacobians.emplace_back(j, e->producer);
+                                        LoadJacobian j = (j2 * inner_serial_loop_extents) * j1.first;
+                                        new_thread_jacobians.emplace_back(j, e->producer);
                                     }
                                 } else {
-                                    new_jacobians.emplace_back(std::move(j1));
+                                    new_thread_jacobians.emplace_back(std::move(j1));
                                 }
                             }
-                            thread_jacobians.swap(new_jacobians);
+                            thread_jacobians.swap(new_thread_jacobians);
                         }
                     }
 
@@ -2169,7 +2171,7 @@ struct LoopNest {
                         }
                     }
 
-                    if (gpu_thread) {
+                    if (innermost) {
                         int producer_innermost_dim =
                             (e->producer->is_input ? 0 : // Assume default storage layout for inputs
                              !producer_has_been_scheduled ? -1 :
@@ -2184,11 +2186,7 @@ struct LoopNest {
                             if (jac.second != e->producer) continue;
                             double n = jac.first.count();
 
-                            auto innermost_and_parent = find_innermost_and_parent();
-                            const LoopNest* innermost = innermost_and_parent.first;
-                            const LoopNest* parent = innermost_and_parent.second;
-
-                            int64_t amortization = compute_licm_amortization(innermost, parent, feat, jac.first, e->producer->dimensions);
+                            int64_t amortization = compute_licm_amortization(this, parent, feat, jac.first, e->producer->dimensions);
                             n /= amortization;
 
                             if (is_shared_mem) {
@@ -2198,10 +2196,10 @@ struct LoopNest {
                                     e->producer,
                                     producer_store_bounds,
                                     producer_has_been_scheduled,
-                                    thread_info_map.at(this)
+                                    *gpu_loop_info.thread_info
                                 );
-                                num_shared_mem_loads += n * shared_mem_features.first * total_serial_loop_extents;
-                                min_num_shared_mem_loads += n * shared_mem_features.second * total_serial_loop_extents;
+                                num_shared_mem_loads_per_block += n * shared_mem_features.first * total_serial_loop_extents;
+                                min_num_shared_mem_loads_per_block += n * shared_mem_features.second * total_serial_loop_extents;
                             } else if (is_global_mem) {
                                 compute_global_mem_load_features(
                                     jac.first,
@@ -2209,7 +2207,7 @@ struct LoopNest {
                                     e->producer,
                                     producer_store_bounds,
                                     producer_has_been_scheduled,
-                                    thread_info_map.at(this),
+                                    *gpu_loop_info.thread_info,
                                     global_mem_loads,
                                     n * total_serial_loop_extents
                                 );
@@ -2347,13 +2345,11 @@ struct LoopNest {
             }
             feat.unique_bytes_read_per_vector = bytes_loaded;
             feat.unique_lines_read_per_vector = lines_loaded;
-        }
 
-        if (gpu_thread) {
-            feat.num_shared_mem_loads = instances * num_shared_mem_loads;
-            feat.num_shared_mem_loads_per_block = num_shared_mem_loads;
-            if (min_num_shared_mem_loads > 0 && num_shared_mem_loads > 0) {
-                feat.shared_mem_load_efficiency = min_num_shared_mem_loads / num_shared_mem_loads;
+            feat.num_shared_mem_loads_per_block = num_shared_mem_loads_per_block;
+            feat.num_shared_mem_loads = gpu_loop_info.num_blocks * num_shared_mem_loads_per_block;
+            if (min_num_shared_mem_loads_per_block > 0 && num_shared_mem_loads_per_block > 0) {
+                feat.shared_mem_load_efficiency = min_num_shared_mem_loads_per_block / num_shared_mem_loads_per_block;
             }
 
             feat.num_global_mem_loads_per_block = global_mem_loads.required_accesses();
@@ -2387,7 +2383,11 @@ struct LoopNest {
         }
 
         compute_shared_mem_occupancy(target, working_set_here, feat);
-        compute_warp_and_block_occupancy(target, feat);
+
+        if (innermost) {
+            compute_warp_features(feat, gpu_loop_info);
+            compute_warp_and_block_occupancy(feat, gpu_loop_info);
+        }
     }
 
     bool is_root() const {
@@ -3636,6 +3636,72 @@ struct LoopNest {
 
 };
 
+void GPULoopInfo::update(const Target& target, const LoopNest* loop) {
+    if (loop->is_gpu_block(target)) {
+        current_block_loop = loop;
+        num_blocks = loop->get_block_and_serial_extents(loop).first;
+        return;
+    }
+
+    if (loop->is_gpu_thread(target)) {
+        current_thread_loop = loop;
+        return;
+    }
+
+    if (loop->is_gpu_serial(target) && at_or_inside_block()) {
+        int64_t serial_loop_extents = 1;
+        for (auto c : loop->size) {
+            serial_loop_extents *= c;
+        }
+
+        if (at_or_inside_thread()) {
+            total_inner_serial_extents *= serial_loop_extents;
+        } else {
+            total_outer_serial_extents *= serial_loop_extents;
+        }
+    }
+}
+
+int64_t GPULoopInfo::total_serial_extents() const {
+    return total_outer_serial_extents * total_inner_serial_extents;
+}
+
+bool GPULoopInfo::at_or_inside_block() const {
+    return current_block_loop != nullptr;
+}
+
+bool GPULoopInfo::at_or_inside_thread() const {
+    return current_thread_loop != nullptr;
+}
+
+std::vector<int64_t> GPULoopInfo::get_inner_serial_loop_extents(const LoopNest* loop_nest) const {
+    internal_assert(at_or_inside_thread());
+
+    std::vector<int64_t> extents;
+    std::size_t N = loop_nest->stage->loop.size();
+    extents.reserve(N);
+
+    const auto &bounds = current_thread_loop->get_bounds(loop_nest->stage->node);
+
+    for (std::size_t i = 0; i < N; i++) {
+        auto extent = bounds->loops(loop_nest->stage->index, i).extent();
+        extents.push_back(extent);
+    }
+
+    return extents;
+}
+
+std::unique_ptr<ThreadInfo> GPULoopInfo::create_thread_info() {
+    internal_assert(at_or_inside_block());
+    internal_assert(at_or_inside_thread());
+
+    auto max_thread_counts = current_block_loop->get_union_thread_counts(nullptr);
+    std::unique_ptr<ThreadInfo> new_thread_info = make_unique<ThreadInfo>(current_thread_loop->vectorized_loop_index, current_thread_loop->size, max_thread_counts);
+    thread_info = new_thread_info.get();
+    return new_thread_info;
+}
+
+
 struct State {
     mutable RefCount ref_count;
     IntrusivePtr<const LoopNest> root;
@@ -3912,7 +3978,7 @@ struct State {
         }
 
         std::unordered_map<const LoopNest*, ThreadInfo> thread_info_map;
-        feature_root->compute_features(dag, params, target, sites, 1, 1, nullptr, nullptr, *feature_root, nullptr, features, thread_info_map);
+        feature_root->compute_features(dag, params, target, sites, 1, 1, nullptr, nullptr, *feature_root, nullptr, features, {});
 
         for (const auto &n : dag.nodes) {
             if (sites.get(&(n.stages[0])).produce == nullptr) {
