@@ -23,7 +23,7 @@ def _redirect_stdout(out):
 def test_print_expr():
     x = hl.Var('x')
     f = hl.Func('f')
-    f[x] = hl.print(hl.cast(hl.UInt(8), x), 'is what', 'the', 1, 'and', 3.1415, 'saw')
+    f[x] = hl.print(hl.cast(hl.UInt(8), x), 'is what', 'the', 1, 'and', hl.f32(3.1415), 'saw')
     buf = hl.Buffer(hl.UInt(8), [1])
     output = StringIO()
     with _redirect_stdout(output):
@@ -57,17 +57,11 @@ def test_select():
     assert b[2] == 48
     assert b[3] == 3
 
-def i32(e):
-    return hl.cast(hl.Int(32), e)
-
-def f32(e):
-    return hl.cast(hl.Float(32), e)
-
 def test_minmax():
     x = hl.Var()
     f = hl.Func()
     f[x] = hl.select(x == 0,              hl.min(x, 1),
-                     (x == 2) | (x == 4), i32(hl.min(f32(x), 3.2, x*2.1)),
+                     (x == 2) | (x == 4), hl.i32(hl.min(hl.f32(x), hl.f32(3.2), x*hl.f32(2.1))),
                      x == 3,              hl.max(x, x * 3, 1, x * 4),
                                           x)
     b = f.realize(5)

@@ -162,7 +162,7 @@ def test_basics4():
     g[x] = 1
     f[x] = 0.0
     r = hl.RDom([(0, 100)])
-    f[g[r]] = 2.3 # This triggers a warning of double-to-float conversion
+    f[g[r]] = 2.5
     f.compute_root()
     f.compile_jit()
 

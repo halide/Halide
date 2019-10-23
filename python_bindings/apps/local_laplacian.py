@@ -80,7 +80,10 @@ def get_local_laplacian(input, levels, alpha, beta, J=8):
 
     # Get the luminance channel
     gray = hl.Func('gray')
-    gray[x,y] = 0.299*clamped[x,y,0] + 0.587*clamped[x,y,1] + 0.114*clamped[x,y,2]
+    kR = hl.f32(0.299)
+    kG = hl.f32(0.587)
+    kB = hl.f32(0.114)
+    gray[x,y] = kR*clamped[x,y,0] + kG*clamped[x,y,1] + kB*clamped[x,y,2]
 
     # Make the processed Gaussian pyramid.
     gPyramid = [hl.Func('gPyramid%d'%i) for i in range(J)]
@@ -122,7 +125,7 @@ def get_local_laplacian(input, levels, alpha, beta, J=8):
 
     # Reintroduce color (Connelly: use eps to avoid scaling up noise w/ apollo3.png input)
     color = hl.Func('color')
-    eps = 0.01
+    eps = hl.f32(0.01)
     color[x,y,c] = outGPyramid[0][x,y] * (clamped[x,y,c] + eps) / (gray[x,y] + eps)
 
     output = hl.Func('local_laplacian')
