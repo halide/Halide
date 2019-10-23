@@ -734,6 +734,7 @@ HEADER_FILES = \
   PythonExtensionGen.h \
   Qualify.h \
   Random.h \
+  Realization.h \
   RDom.h \
   RealizationOrder.h \
   Reduction.h \
