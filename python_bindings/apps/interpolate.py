@@ -2,8 +2,6 @@
 Fast image interpolation using a pyramid.
 """
 
-from __future__ import print_function
-from __future__ import division
 
 import time, sys
 import halide as hl

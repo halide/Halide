@@ -2,8 +2,6 @@
 Local Laplacian, see e.g. Aubry et al 2011, "Fast and Robust Pyramid-based Image Processing".
 """
 
-from __future__ import print_function
-from __future__ import division
 
 import halide as hl
 
