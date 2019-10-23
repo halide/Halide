@@ -110,6 +110,7 @@ function retrain_cost_model() {
     local -r pipeline_id=$6
     local -r predictions_file=${7-""}
     local -r verbose=${8-0}
+    local -r partition_schedules=${9-0}
 
     get_autoscheduler_bin_dir ${halide_root} autosched_bin
 
@@ -123,7 +124,8 @@ function retrain_cost_model() {
             --best_benchmark=${samples_dir}/best.${pipeline_id}.benchmark.txt \
             --best_schedule=${samples_dir}/best.${pipeline_id}.schedule.h \
             --predictions_file=${predictions_file} \
-            --verbose=${verbose}
+            --verbose=${verbose} \
+            --partition_schedules=${partition_schedules}
 }
 
 function find_equal_predicted_pairs() {

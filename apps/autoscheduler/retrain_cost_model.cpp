@@ -36,6 +36,7 @@ struct Flags {
     string              best_schedule_path;
     string              predictions_file;
     bool                verbose;
+    bool                partition_schedules;
 
     Flags(int argc, char **argv) {
         cmdline::parser a;
@@ -53,6 +54,7 @@ struct Flags {
         a.add<string>("best_schedule");
         a.add<string>("predictions_file");
         a.add<bool>("verbose");
+        a.add<bool>("partition_schedules");
 
         a.parse_check(argc, argv);  // exits if parsing fails
 
@@ -65,6 +67,7 @@ struct Flags {
         best_schedule_path = a.get<string>("best_schedule");
         predictions_file = a.get<string>("predictions_file");
         verbose = a.exist("verbose") && a.get<bool>("verbose");
+        partition_schedules = a.exist("partition_schedules") && a.get<bool>("partition_schedules");
 
         if (epochs <= 0) {
             std::cerr << "--epochs must be specified and > 0.\n";
@@ -109,17 +112,21 @@ struct Sample {
     double          prediction[kModels];
     string          filename;
     int32_t         schedule_id;
+    uint64_t        schedule_hash;
     Buffer<float>   schedule_features;
 };
 
-struct PipelineSample {
+struct Pipeline {
     int32_t                 pipeline_id;
     int32_t                 num_stages;
     Buffer<float>           pipeline_features;
+    uint64_t                pipeline_hash;
+};
+
+struct PipelineSample {
     map<uint64_t, Sample>   schedules;
     uint64_t                fastest_schedule_hash;
-    float                   fastest_runtime;   // in msec
-    uint64_t                pipeline_hash;
+    float                   fastest_runtime{1e30f}; // in msec
 };
 
 uint64_t hash_floats(uint64_t h, const float *begin, const float *end) {
@@ -157,8 +164,7 @@ string leaf(const string &path) {
 }
 
 // Load all the samples, reading filenames from stdin
-map<int, PipelineSample> load_samples(const Flags &flags) {
-    map<int, PipelineSample> result;
+void load_samples(map<int, PipelineSample>& training_set, map<int, PipelineSample>& validation_set, map<int, Pipeline>& pipelines, const Flags& flags) {
     vector<float> scratch(10 * 1024 * 1024);
 
     int best = -1;
@@ -216,13 +222,12 @@ map<int, PipelineSample> load_samples(const Flags &flags) {
             best_path = s;
         }
 
-        PipelineSample &ps = result[pipeline_id];
+        Pipeline &p = pipelines[pipeline_id];
 
-        if (ps.pipeline_features.data() == nullptr) {
-            ps.pipeline_id = pipeline_id;
-            ps.num_stages = (int)num_stages;
-            ps.pipeline_features = Buffer<float>(head1_w, head1_h, num_stages);
-            ps.fastest_runtime = 1e30f;
+        if (p.pipeline_features.data() == nullptr) {
+            p.pipeline_id = pipeline_id;
+            p.num_stages = (int)num_stages;
+            p.pipeline_features = Runtime::Buffer<float>(head1_w, head1_h, num_stages);
             for (size_t i = 0; i < num_stages; i++) {
                 for (int x = 0; x < head1_w; x++) {
                     for (int y = 0; y < head1_h; y++) {
@@ -230,12 +235,12 @@ map<int, PipelineSample> load_samples(const Flags &flags) {
                         if (f < 0 || std::isnan(f)) {
                             std::cout << "Negative or NaN pipeline feature: " << x << " " << y << " " << i << " " << f << "\n";
                         }
-                        ps.pipeline_features(x, y, i) = f;
+                        p.pipeline_features(x, y, i) = f;
                     }
                 }
             }
 
-            ps.pipeline_hash = hash_floats(0, ps.pipeline_features.begin(), ps.pipeline_features.end());
+            p.pipeline_hash = hash_floats(0, p.pipeline_features.begin(), p.pipeline_features.end());
 
         }
 
@@ -248,6 +253,15 @@ map<int, PipelineSample> load_samples(const Flags &flags) {
                             &scratch[i * features_per_stage + head2_w]);
         }
 
+        uint64_t hash = flags.partition_schedules ? schedule_hash : p.pipeline_hash;
+
+        // Whether or not a pipeline/schedule is part of the validation set
+        // can't be a call to rand. It must be a fixed property of a
+        // hash of some aspect of it.  This way you don't accidentally
+        // do a training run where a validation set member was in the
+        // training set of a previous run. The id of the fastest
+        // schedule will do as a hash.
+        PipelineSample &ps = ((hash & 7) == 0) ? validation_set[pipeline_id] : training_set[pipeline_id];
 
 
         auto it = ps.schedules.find(schedule_hash);
@@ -267,6 +281,7 @@ map<int, PipelineSample> load_samples(const Flags &flags) {
             }
         } else {
             Sample sample;
+            sample.schedule_hash = schedule_hash;
             sample.filename = s;
             sample.runtimes.push_back(runtime);
             for (int i = 0; i < kModels; i++) {
@@ -309,8 +324,15 @@ map<int, PipelineSample> load_samples(const Flags &flags) {
         }
     }
 
+    std::cout << "Samples loaded: " << num_read << " (" << num_unique << " unique)\n";
+
+    // If the training set is empty, we are likely training on a single pipeline
+    if (training_set.empty()) {
+        training_set.swap(validation_set);
+    }
+
     // Check the noise level
-    for (const auto &pipe : result) {
+    for (const auto &pipe : training_set) {
         double variance_sum = 0;
         size_t count = 0;
         // Compute the weighted average of variances across all samples
@@ -344,7 +366,7 @@ map<int, PipelineSample> load_samples(const Flags &flags) {
         }
     }
 
-    std::cout << "Distinct pipelines: " << result.size() << "\n";
+    std::cout << "Distinct pipelines: " << training_set.size() << "\n";
 
     std::ostringstream o;
     o << "Best runtime is " << best_runtime << " msec, from schedule id "<< best << " in file " << best_path << "\n";
@@ -366,8 +388,6 @@ map<int, PipelineSample> load_samples(const Flags &flags) {
         assert(!src.fail());
         assert(!dst.fail());
     }
-
-    return result;
 }
 
 void save_predictions(const map<int, PipelineSample>& samples, const string& filename) {
@@ -388,12 +408,39 @@ void save_predictions(const map<int, PipelineSample>& samples, const string& fil
     std::cout << "Predictions saved to: " << filename << "\n";
 }
 
+void print_statistics(const map<int, PipelineSample>& training_set, const map<int, PipelineSample>& validation_set) {
+    int64_t num_training_set_schedules = 0;
+    int64_t num_val_set_schedules = 0;
+
+    for (const auto& ps : training_set) {
+        num_training_set_schedules += ps.second.schedules.size();
+    }
+
+    for (const auto& ps : validation_set) {
+        num_val_set_schedules += ps.second.schedules.size();
+    }
+
+    std::cout << "Training set: "
+        << training_set.size()
+        << " pipelines, "
+        << num_training_set_schedules
+        << " schedules. Validation set: "
+        << validation_set.size()
+        << " pipelines, "
+        << num_val_set_schedules
+        << " schedules.\n";
+}
+
 }  // namespace
 
 int main(int argc, char **argv) {
     Flags flags(argc, argv);
 
-    auto samples = load_samples(flags);
+    map<int, PipelineSample> samples;
+    map<int, PipelineSample> validation_set;
+    map<int, Pipeline> pipelines;
+    load_samples(samples, validation_set, pipelines, flags);
+    print_statistics(samples, validation_set);
 
     bool predict_only = !flags.predictions_file.empty();
     if (predict_only) {
@@ -413,29 +460,7 @@ int main(int argc, char **argv) {
     auto seed = time(NULL);
     std::mt19937 rng((uint32_t) seed);
 
-    std::cout << "Iterating over " << samples.size() << " samples using seed = " << seed << "\n";
-    decltype(samples) validation_set;
-    uint64_t unique_schedules = 0;
-    if (samples.size() > 16) {
-        for (auto p : samples) {
-            unique_schedules += p.second.schedules.size();
-            // Whether or not a pipeline is part of the validation set
-            // can't be a call to rand. It must be a fixed property of a
-            // hash of some aspect of it.  This way you don't accidentally
-            // do a training run where a validation set member was in the
-            // training set of a previous run. The id of the fastest
-            // schedule will do as a hash.
-            if ((p.second.pipeline_hash & 7) == 0) {
-                validation_set.insert(p);
-            }
-        }
-
-        for (auto p : validation_set) {
-            samples.erase(p.first);
-        }
-    }
-
-    std::cout << "Number of unique schedules: " << unique_schedules << "\n";
+    std::cout << "Iterating over " << samples.size() << " pipelines using seed = " << seed << "\n";
 
     for (float learning_rate : flags.rates) {
         float loss_sum[kModels] = {0}, loss_sum_counter[kModels] = {0};
@@ -472,7 +497,8 @@ int main(int argc, char **argv) {
                             continue;
                         }
                         tp->reset();
-                        tp->set_pipeline_features(p.second.pipeline_features, flags.num_cores);
+                        const auto& pipeline = pipelines[p.first];
+                        tp->set_pipeline_features(pipeline.pipeline_features, flags.num_cores);
 
                         size_t max_batch_size = predict_only ? p.second.schedules.size() : 1024;
                         size_t batch_size = std::min(max_batch_size, p.second.schedules.size());
@@ -490,7 +516,7 @@ int main(int argc, char **argv) {
                         for (size_t j = 0; j < batch_size; j++) {
                             auto &sched = it->second;
                             Buffer<float> buf;
-                            tp->enqueue(p.second.num_stages, &buf, &sched.prediction[model]);
+                            tp->enqueue(pipeline.num_stages, &buf, &sched.prediction[model]);
                             runtimes(j) = sched.runtimes[0];
                             if (runtimes(j) < runtimes(fastest_idx)) {
                                 fastest_idx = j;
