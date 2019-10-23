@@ -4,11 +4,7 @@ from __future__ import division
 from contextlib import contextmanager
 import halide as hl
 import sys
-
-try:
-    from StringIO import StringIO  # Python2
-except ImportError:
-    from io import StringIO        # Python3
+from io import StringIO
 
 # redirect_stdout() requires Python3, alas
 @contextmanager

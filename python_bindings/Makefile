@@ -6,7 +6,6 @@ ROOT_DIR = $(strip $(shell dirname $(THIS_MAKEFILE)))
 HALIDE_PATH ?= $(ROOT_DIR)/..
 HALIDE_DISTRIB_PATH ?= $(HALIDE_PATH)/distrib
 BIN ?= $(ROOT_DIR)/bin
-# 'python' or 'python3'
 PYTHON ?= python3
 TEST_TMP ?= $(BIN)/tmp
 
@@ -27,10 +26,7 @@ endif
 
 LIBHALIDE ?= $(HALIDE_DISTRIB_PATH)/bin/libHalide.$(SHARED_EXT)
 
-SUFFIX ?= .$(SHARED_EXT)
-ifeq ($(PYTHON), python3)
-    SUFFIX = $(shell $(PYTHON)-config --extension-suffix)
-endif
+SUFFIX = $(shell $(PYTHON)-config --extension-suffix)
 
 # Discover PyBind path from `python3 -m pybind11 --includes`
 # if it is pip/conda installed, which is a common case.
