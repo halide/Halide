@@ -5,10 +5,13 @@
 #include <cstdlib>
 #include <unordered_map>
 #include <limits>
+#include "schema.h"
+
 
 using namespace Halide;
 using namespace Halide::Internal;
 using std::vector;
+using std::string;
 using std::unordered_map;
 using Halide::Derivative;
 
@@ -290,10 +293,18 @@ public:
     GeneratorParam<int> max_stages{"max_stages", 20};
     // how much to shift input image by to avoid boundary issues 
     GeneratorParam<int> shift{"shift", 2}; 
+    // where to store databse information on generated pipelines
+    GeneratorParam<string> DAG_csv{"DAG_csv", ""};
+    GeneratorParam<string> FuncDef_csv{"FuncDef_csv", ""};
+    
     Input<int> batch_size{ "batch_size", 1 };
     Input<float> learning_rate{ "learning_rate", 1.0f };
     Input<int> timestep{ "timestep", 0 }; // Needed by ADAM
   
+    // store generated pipeline information
+    vector<DAGSchema> dag_schema;
+    vector<FuncDefSchema> func_def_schema;
+
     // for avoiding duplicates 
     std::unordered_map<uint64_t, int>* hashes;
 
@@ -303,9 +314,9 @@ public:
 
     void do_random_pipeline_schedule(Halide::Pipeline p) {
         // Compute an environment
-        std::map<std::string, Function> env;
+        std::map<string, Function> env;
         for (Func &f : p.outputs()) {
-            std::map<std::string, Function> more_funcs = find_transitive_calls(f.function());
+            std::map<string, Function> more_funcs = find_transitive_calls(f.function());
             env.insert(more_funcs.begin(), more_funcs.end());
         }
 
@@ -1275,6 +1286,7 @@ public:
     }
 
     InterpStageAndCoords interp2Tap_stage(const vector<Stage> &s, uint64_t &h, int input_id=-1) {
+        uint64_t stage_type = 1;
         Func interp("interp2Tap");
         if (input_id < 0) {
             // pick a random input
@@ -1303,10 +1315,14 @@ public:
 
         Stage interp_s = {interp, input_s.w, input_s.h, input_s.c};
     
-        hash_combine(h, 1); // stage_type = 1
+        hash_combine(h, stage_type); 
         hash_combine(h, input_id);
         hash_combine(h, h_coords1 + h_coords2);
         
+        // create schema 
+        dag_schema.emplace_back({ (uint64_t)seed, interp.name(), (uint64_t)stage_type, (uint64_t)s.size(), (uint64_t)input_id, input_s.func.name() });
+        func_def_schema.emplace_back({ (uint64_t)seed, interp.name(), (uint64_t)s.size(), (string)(input_s.func.args()) + " = " + (string)(value) });
+
         return std::make_tuple(interp_s, coords1, coords2, input_s.func); 
     }
 
@@ -1319,7 +1335,8 @@ public:
     }
 
     Stage select_interp2Tap_stage(const vector<Stage> &s, uint64_t &h, int input_id=-1) {
-        Func select_interp("selectInterp2Tap");
+        uint64_t stage_type = 2;
+        Func selectInterp("selectInterp2Tap");
 
         Stage s1, s2;
         vector<Expr> s1coords1, s1coords2, s2coords1, s2coords2;
@@ -1327,12 +1344,17 @@ public:
 
         uint64_t h_interp1, h_interp2;
         h_interp1 = h_interp2 = 0;
-        std::cout << select_interp.name() << " is Select Interp" << std::endl; 
+        std::cout << selectInterp.name() << " is Select Interp" << std::endl; 
 
         std::tie(s1, s1coords1, s1coords2, s1input) = interp2Tap_stage(s, h_interp1, input_id);
-        std::tie(s2, s2coords1, s2coords2, s2input) = interp2Tap_stage(s, h_interp2);
+        s.push_back(s1);
+        dag_schema.emplace_back({ (uint64_t)seed, selectInterp.name(), (uint64_t)stage_type, (uint64_t)s.size(), dag_schema.back().stage_index, dag_schema.back().func_name });
 
-        std::cout << select_interp.name() << " selects from: " << s1.func.name() << " and " << s2.func.name() << std::endl; 
+        std::tie(s2, s2coords1, s2coords2, s2input) = interp2Tap_stage(s, h_interp2);
+        s.push_back(s2);
+        dag_schema.emplace_back({ (uint64_t)seed, selectInterp.name(), (uint64_t)stage_type, (uint64_t)s.size(), dag_schema.back().stage_index, dag_schema.back().func_name });
+
+        std::cout << selectInterp.name() << " selects from: " << s1.func.name() << " and " << s2.func.name() << std::endl; 
 
         // make sure that the two funcs have the same function arguments and size
         vector<Expr> s1args = make_arguments(s1input.args());
@@ -1344,15 +1366,17 @@ public:
         Expr diff2 = absd(s2input(s2coords1), s2input(s2coords2));
 
         Expr value = select(diff1 < diff2, s1.func(s1args), s2.func(s1args));
-        select_interp(s1args) = value;
+        selectInterp(s1args) = value;
 
-        std::cout << select_interp(s1args) << " = ";
+        std::cout << selectInterp(s1args) << " = ";
         std::cout << value << std::endl;
         
-        hash_combine(h, 2); 
+        hash_combine(h, stage_type); 
         hash_combine(h, h_interp1 + h_interp2);
 
-        return {select_interp, s1.w, s1.h, s1.c};
+        func_def_schema.emplace_back({ (uint64_t)seed, selectInterp.name(), (uint64_t)s.size(), (string)(selectInterp(s1args)) + " = " + (string)(value) });
+
+        return {selectInterp, s1.w, s1.h, s1.c};
     }
 
     InterpStageAndCoords correct_interp2Tap_stage(const vector<Stage> &s, uint64_t &h, int use_id=-1) {
@@ -1430,12 +1454,18 @@ public:
         hash_combine(h, interp_id);
         hash_combine(h, h_coords1 + h_coords2);
 
+        dag_schema.emplace_back({ (uint64_t)seed, correctInterp.name(), (uint64_t)stage_type, (uint64_t)s.size(), (uint64_t)input_id,  input_f.name() });
+        dag_schema.emplace_back({ (uint64_t)seed, correctInterp.name(), (uint64_t)stage_type, (uint64_t)s.size(), (uint64_t)ref_id,    ref_f.name() });
+        dag_schema.emplace_back({ (uint64_t)seed, correctInterp.name(), (uint64_t)stage_type, (uint64_t)s.size(), (uint64_t)interp_id, interp_f.name() });
+
+        func_def_schema.emplace_back({ (uint64_t)seed, correctInterp.name(), (uint64_t)s.size(), (string)(correctInterp(coords)) + " = " + (string)(value) });
+
         return std::make_tuple(correct_interp_s, coords1, coords2, input_s.func);
     }
 
     Stage select_correct_interp2Tap_stage(const vector<Stage> &s, uint64_t &h, int input_id=-1) {
-        Func select_interp("selectCorrectInterp2Tap");
-        std::cout << select_interp.name() << " is Select Corrected Interp" << std::endl;
+        Func selectInterp("selectCorrectInterp2Tap");
+        std::cout << selectInterp.name() << " is Select Corrected Interp" << std::endl;
 
         Stage s1, s2;
         vector<Expr> s1coords1, s1coords2, s2coords1, s2coords2;
@@ -1443,10 +1473,16 @@ public:
 
         uint64_t h_interp1, h_interp2;
         h_interp1 = h_interp2 = 0;
-        std::tie(s1, s1coords1, s1coords2, s1input) = correct_interp2Tap_stage(s, h_interp1, input_id);
-        std::tie(s2, s2coords1, s2coords2, s2input) = correct_interp2Tap_stage(s, h_interp2);
 
-        std::cout << select_interp.name() << " selects from: " << s1.func.name() << " and " << s2.func.name() << std::endl; 
+        std::tie(s1, s1coords1, s1coords2, s1input) = correct_interp2Tap_stage(s, h_interp1, input_id);
+        s.push_back(s1);
+        dag_schema.emplace_back({ (uint64_t)seed, selectInterp.name(), (uint64_t)stage_type, (uint64_t)s.size(), dag_schema.back().stage_index, dag_schema.back().func_name });
+
+        std::tie(s2, s2coords1, s2coords2, s2input) = correct_interp2Tap_stage(s, h_interp2);
+        s.push_back(s2);
+        dag_schema.emplace_back({ (uint64_t)seed, selectInterp.name(), (uint64_t)stage_type, (uint64_t)s.size(), dag_schema.back().stage_index, dag_schema.back().func_name });
+
+        std::cout << selectInterp.name() << " selects from: " << s1.func.name() << " and " << s2.func.name() << std::endl; 
 
         vector<Expr> s1args = make_arguments(s1input.args());
         assert(same_vars(s1input.args(), s2input.args()));
@@ -1456,15 +1492,17 @@ public:
         Expr diff2 = absd(s2input(s2coords1), s2input(s2coords2));
 
         Expr value = select(diff1 < diff2, s1.func(s1args), s2.func(s1args));
-        select_interp(s1args) = value;
+        selectInterp(s1args) = value;
         
-        std::cout << select_interp(s1args) << " = ";
+        std::cout << selectInterp(s1args) << " = ";
         std::cout << value << std::endl;
     
         hash_combine(h, 4);
         hash_combine(h, h_interp1 + h_interp2);
 
-        return {select_interp, s1.w, s1.h, s1.c};
+        func_def_schema.emplace_back({ (uint64_t)seed, selectInterp.name(), (uint64_t)s.size(), (string)(selectInterp(s1args)) + " = " + (string)(value) });
+
+        return {selectInterp, s1.w, s1.h, s1.c};
     }
 
     // Add a random new stage onto the end of the pipeline that can choose any of the 
@@ -1743,11 +1781,11 @@ private:
     std::vector<Input<Buffer<outputT>> *>  correct_outputs;
     std::vector<Output<Buffer<outputT>> *> output_buffs;
 
-    std::unordered_map<std::string, Halide::ImageParam> input_param_dummies;
-    std::unordered_map<std::string, Input<Halide::Buffer<paramT>> *> input_params;
-    std::unordered_map<std::string, Output<Halide::Buffer<paramT>> *> output_params;
+    std::unordered_map<string, Halide::ImageParam> input_param_dummies;
+    std::unordered_map<string, Input<Halide::Buffer<paramT>> *> input_params;
+    std::unordered_map<string, Output<Halide::Buffer<paramT>> *> output_params;
     // param_shapes of parameter buffers
-    std::unordered_map<std::string, std::tuple<dim_shape, dim_shape, dim_shape, dim_shape>> param_shapes;
+    std::unordered_map<string, std::tuple<dim_shape, dim_shape, dim_shape, dim_shape>> param_shapes;
 
     Output<Buffer<lossT>> loss_output { "loss_output", 0 };
 };
