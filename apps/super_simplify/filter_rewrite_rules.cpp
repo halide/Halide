@@ -55,6 +55,17 @@ int main(int argc, char **argv) {
         r.rhs = substitute(binding, r.rhs);
     }
 
+    /*
+    {
+        Var x("x"), y("y"), c0("c0"), c1("c1");
+        map<string, Expr> binding;
+        Expr la = ((x < (y/c0)) && ((y/c0) < (x + c1)));
+        Expr lb = ((x < y) && (y < (x + c0)));
+        std::cerr << more_general_than(lb, la, binding) << "\n";
+        return 1;
+    }
+    */
+
     Expr last;
     for (const Rule &r : rules) {
         bool bad = false;
@@ -86,8 +97,7 @@ int main(int argc, char **argv) {
 
             map<string, Expr> binding;
             if (more_general_than(r2.lhs, r.lhs, binding) &&
-                more_general_than(r2.rhs, r.rhs, binding) &&
-                can_prove(r.predicate == r2.predicate)) {
+                can_prove(r2.predicate || substitute(binding, !r.predicate))) {
                 std::cout << "Too specific: " << r.orig << " vs " << r2.orig << "\n";
                 bad = true;
                 break;

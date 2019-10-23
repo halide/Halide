@@ -1,6 +1,7 @@
 #include "synthesize_predicate.h"
 #include "expr_util.h"
 #include "super_simplify.h"
+#include "z3.h"
 #include "Halide.h"
 
 using namespace Halide;
@@ -231,6 +232,10 @@ struct System {
         } else {
             non_linear_term = non_linear_term && e;
         }
+    }
+
+    bool can_prove(Expr e) {
+        return is_one(simplifier->mutate(e, nullptr));
     }
 
     void add_term(const Expr &e) {
@@ -1402,6 +1407,10 @@ class MoveNegationInnermost : public IRMutator {
             return mutate(!or_a->a) && mutate(!or_a->b);
         } else if (const Not *not_a = op->a.as<Not>()) {
             return mutate(not_a->a);
+        } else if (const LT *lt = op->a.as<LT>()) {
+            return mutate(lt->b <= lt->a);
+        } else if (const LE *le = op->a.as<LE>()) {
+            return mutate(le->b < le->a);
         } else {
             return IRMutator::visit(op);
         }
@@ -1419,7 +1428,12 @@ class ToDNF : public IRMutator {
         set<Expr, IRDeepCompare> result;
         for (Expr a1 : as) {
             for (Expr b1 : bs) {
-                result.insert(a1 && b1);
+                auto a_clauses = unpack_binary_op<And>(a1);
+                auto b_clauses = unpack_binary_op<And>(b1);
+                set<Expr, IRDeepCompare> both;
+                both.insert(a_clauses.begin(), a_clauses.end());
+                both.insert(b_clauses.begin(), b_clauses.end());
+                result.insert(pack_binary_op<And>(both));
             }
         }
         return pack_binary_op<Or>(result);
@@ -1428,40 +1442,24 @@ class ToDNF : public IRMutator {
 
 class ToCNF : public IRMutator {
     using IRMutator::visit;
-    Expr visit(const Select *op) override {
-        if (!op->type.is_bool()) {
-            return IRMutator::visit(op);
-        }
-        return mutate((!op->condition || op->true_value) &&
-                      (op->condition || op->false_value) &&
-                      (op->true_value || op->false_value));
-    }
 
     Expr visit(const Or *op) override {
         Expr a = mutate(op->a);
         Expr b = mutate(op->b);
-        if (const And *and_a = a.as<And>()) {
-            debug(1) << "REWRITE1 a: " << a << "\n";
-            debug(1) << "REWRITE1 b: " << b << "\n";
-            return mutate(and_a->a || b) && mutate(and_a->b || b);
-        } else if (const And *and_b = b.as<And>()) {
-            debug(1) << "REWRITE2 a: " << a << "\n";
-            debug(1) << "REWRITE2 b: " << b << "\n";
-            return mutate(a || and_b->a) && mutate(a || and_b->b);
-        } else {
-            return IRMutator::visit(op);
+        vector<Expr> as = unpack_binary_op<And>(a);
+        vector<Expr> bs = unpack_binary_op<And>(b);
+        set<Expr, IRDeepCompare> result;
+        for (Expr a1 : as) {
+            for (Expr b1 : bs) {
+                auto a_clauses = unpack_binary_op<Or>(a1);
+                auto b_clauses = unpack_binary_op<Or>(b1);
+                set<Expr, IRDeepCompare> both;
+                both.insert(a_clauses.begin(), a_clauses.end());
+                both.insert(b_clauses.begin(), b_clauses.end());
+                result.insert(pack_binary_op<Or>(both));
+            }
         }
-    }
-
-    Expr visit(const Not *op) override {
-        Expr a = mutate(op->a);
-        if (const And *and_a = a.as<And>()) {
-            return mutate(!and_a->a || !and_a->b);
-        } else if (const Or *or_a = a.as<Or>()) {
-            return mutate(!or_a->a) && mutate(!or_a->b);
-        } else {
-            return IRMutator::visit(op);
-        }
+        return pack_binary_op<And>(result);
     }
 };
 
@@ -1504,21 +1502,19 @@ class ConvertRoundingToMod : public IRMutator {
     }
 };
 
-bool can_disprove_nonconvex(Expr e, int beam_size, Expr *implication) {
-
-    debug(1) << "Attempting to disprove non-convex expression: " << e << "\n";
-
-    // Canonicalize >, >=, and friends
-    e = simplify(e);
-
-    // Break it into convex pieces, and disprove every piece
-    debug(1) << "Simplified: " << e << "\n";
-
+// Take a boolean expression with min/max/select in it, and reduce it
+// to a big disjunction of inequalities intead.
+vector<Expr> remove_min_max_select(Expr e) {
+    // First turn min/max into select
     RemoveMinMax b;
     e = b.mutate(e);
     vector<Expr> pieces{e};
+    // Then find all the select conditions
     FindAllSelectConditions finder;
     e.accept(&finder);
+
+    // Fork the expr into cases according to the truth values of the
+    // select conditions.
     for (auto c : finder.cases) {
         vector<Expr> pending;
         pending.swap(pieces);
@@ -1537,25 +1533,38 @@ bool can_disprove_nonconvex(Expr e, int beam_size, Expr *implication) {
             }
         }
     }
-    e = pack_binary_op<Or>(pieces);
-
-    debug(1) << "Broken into cases:\n";
-    int i = 0;
-    for (auto p : pieces) {
-        debug(1) << (++i) << ") " << p << "\n";
-    }
 
     for (auto &p : pieces) {
+        // Remove any remaining selects
         p = RemoveSelect().mutate(p);
+        // Apply DeMorgan's law to move not operations innermost
         p = MoveNegationInnermost().mutate(p);
-        p = ToDNF().mutate(p);
     }
 
-    e = pack_binary_op<Or>(pieces);
-    pieces = unpack_binary_op<Or>(e);
+    return pieces;
+}
+
+bool can_disprove_nonconvex(Expr e, int beam_size, Expr *implication) {
+
+    debug(1) << "Attempting to disprove non-convex expression: " << e << "\n";
+
+    // Canonicalize >, >=, and friends
+    e = simplify(e);
+
+    // Break it into convex pieces, and disprove every piece
+    debug(1) << "Simplified: " << e << "\n";
+
+    auto pieces = remove_min_max_select(e);
+
+    for (auto &p : pieces) {
+        // Distribute and over or.
+        p = ToDNF().mutate(p);
+        e = pack_binary_op<Or>(pieces);
+        pieces = unpack_binary_op<Or>(e);
+    }
 
     debug(1) << "In DNF form:\n";
-    i = 0;
+    int i = 0;
     for (auto p : pieces) {
         debug(1) << (++i) << ") " << p << "\n";
     }
@@ -1660,61 +1669,33 @@ Expr synthesize_predicate(const Expr &lhs,
                 return mutate(l->b <= l->a);
             } else if (const LE *l = op->a.as<LE>()) {
                 return mutate(l->b < l->a);
+            } else if (const EQ *eq = op->a.as<EQ>()) {
+                return mutate(eq->a < eq->b || eq->b < eq->a);
+            } else if (const NE *ne = op->a.as<NE>()) {
+                return mutate(ne->a == ne->b);
+            } else if (const Select *s = op->a.as<Select>()) {
+                return mutate(select(s->condition, !s->true_value, !s->false_value));
             } else {
-                return simplify(IRMutator::visit(op));
+                return IRMutator::visit(op);
             }
         }
 
         Expr visit(const And *op) override {
-            Expr a = mutate(op->a);
-            Expr b = mutate(op->b);
-            vector<Expr> pending = {a, b};
-            set<Expr, IRDeepCompare> terms;
-            while (!pending.empty()) {
-                Expr next = pending.back();
-                pending.pop_back();
-                if (const And *next_and = next.as<And>()) {
-                    pending.push_back(next_and->a);
-                    pending.push_back(next_and->b);
-                } else {
-                    terms.insert(simplify(next));
-                }
+            auto v = unpack_binary_op<And>(Expr(op));
+            for (auto &t : v) {
+                t = mutate(t);
             }
-            Expr result;
-            for (auto t : terms) {
-                if (!result.defined()) {
-                    result = t;
-                } else {
-                    result = result && t;
-                }
-            }
-            return result;
+            set<Expr, IRDeepCompare> terms(v.begin(), v.end());
+            return pack_binary_op<And>(terms);
         }
 
         Expr visit(const Or *op) override {
-            Expr a = mutate(op->a);
-            Expr b = mutate(op->b);
-            vector<Expr> pending = {a, b};
-            set<Expr, IRDeepCompare> terms;
-            while (!pending.empty()) {
-                Expr next = pending.back();
-                pending.pop_back();
-                if (const Or *next_or = next.as<Or>()) {
-                    pending.push_back(next_or->a);
-                    pending.push_back(next_or->b);
-                } else {
-                    terms.insert(simplify(next));
-                }
+            auto v = unpack_binary_op<Or>(Expr(op));
+            for (auto &t : v) {
+                t = mutate(t);
             }
-            Expr result;
-            for (auto t : terms) {
-                if (!result.defined()) {
-                    result = t;
-                } else {
-                    result = result || t;
-                }
-            }
-            return result;
+            set<Expr, IRDeepCompare> terms(v.begin(), v.end());
+            return pack_binary_op<Or>(terms);
         }
 
         Expr visit(const LT *op) override {
@@ -1730,21 +1711,54 @@ Expr synthesize_predicate(const Expr &lhs,
         }
 
         Expr visit(const LE *op) override {
+            const Min *min_a = op->a.as<Min>();
+            const Min *min_b = op->b.as<Min>();
+            const Max *max_a = op->a.as<Max>();
+            const Max *max_b = op->b.as<Max>();
             if (is_const(op->b) && can_prove(op->a != op->b)) {
                 return mutate(op->a <= simplify(op->b - 1));
             } else if (is_const(op->a) && can_prove(op->a != op->b)) {
                 return mutate(simplify(op->a + 1) <= op->b);
+            } else if (min_a) {
+                return mutate(min_a->a <= op->b || min_a->b <= op->b);
+            } else if (max_a) {
+                return mutate(max_a->a <= op->b && max_a->b <= op->b);
+            } else if (min_b) {
+                return mutate(op->a <= min_b->a && op->a <= min_b->b);
+            } else if (max_b) {
+                return mutate(op->a <= max_b->a || op->a <= max_b->b);
             } else {
                 return IRMutator::visit(op);
             }
         }
 
-        bool can_prove(Expr e) const {
-            return is_one(simplifier->mutate(e, nullptr));
+        Expr visit(const EQ *op) override {
+            Expr a = mutate(op->a);
+            Expr b = mutate(op->b);
+            if (IRDeepCompare()(a, b)) {
+                return a == b;
+            } else {
+                return b == a;
+            }
+        }
+
+        Expr visit(const NE *op) override {
+            Expr a = mutate(op->a);
+            Expr b = mutate(op->b);
+            if (is_const(a) || is_const(b)) {
+                return mutate(a < b) || mutate(b < a);
+            } else if (IRDeepCompare()(a, b)) {
+                return a != b;
+            } else {
+                return b != a;
+            }
         }
 
         Internal::Simplify *simplifier;
 
+        bool can_prove(Expr e) const {
+            return is_one(simplifier->mutate(e, nullptr));
+        }
     public:
         NormalizePrecondition(Internal::Simplify *s) : simplifier(s) {}
     };
@@ -1755,6 +1769,8 @@ Expr synthesize_predicate(const Expr &lhs,
             if (v && v->name[0] == 'c') {
                 result.push_back(op->b != 0);
                 result.push_back(op->b != 1);
+                result.push_back(op->b <= -1 || 1 <= op->b);
+                result.push_back(1 <= op->b || op->b <= -1);
             }
             IRVisitor::visit(op);
         }
@@ -1763,6 +1779,8 @@ Expr synthesize_predicate(const Expr &lhs,
             if (v && v->name[0] == 'c') {
                 result.push_back(op->b != 0);
                 result.push_back(op->b != 1);
+                result.push_back(op->b <= -1 || 1 <= op->b);
+                result.push_back(1 <= op->b || op->b <= -1);
             }
             IRVisitor::visit(op);
         }
@@ -1780,35 +1798,129 @@ Expr synthesize_predicate(const Expr &lhs,
     debug(1) << "Precondition: " << precondition << "\n";
     // precondition = ToCNF().mutate(precondition);
     // debug(1) << "CNF: " << precondition << "\n";
-    precondition = NormalizePrecondition(&simplifier).mutate(precondition);
+    NormalizePrecondition normalizer(&simplifier);
+    precondition = normalizer.mutate(precondition);
+    //precondition = ToDNF().mutate(precondition);
     debug(1) << "Normalized: " << precondition << "\n";
+
+    // Check satisfiability with z3
+    {
+        map<string, Expr> bindings;
+        auto z3_result = satisfy(precondition, &bindings);
+
+        // Early-out
+        if (z3_result == Z3Result::Unsat) {
+            return const_false();
+        }
+    }
 
     // We probably have a big conjunction. Use each term in it to
     // simplify all other terms, to reduce the number of
     // overlapping conditions.
-    vector<Expr> terms = unpack_binary_op<And>(precondition);
-
-    set<Expr, IRDeepCompare> clauses;
-    for (auto &t1 : terms) {
-        debug(1) << "Rewriting term: " << t1 << "\n";
-        Simplify s(true, nullptr, nullptr);
-        s.learn_true(implicit_assumption);
-        for (const auto &t2 : terms) {
-            if (t1.same_as(t2)) continue;
-            s.learn_true(t2);
+    vector<Expr> clause_vec = unpack_binary_op<And>(precondition);
+    if (0) {
+        for (auto &c : clause_vec) {
+            debug(0) << "A: " << c << "\n";
+            c = pack_binary_op<Or>(remove_min_max_select(c));
+            debug(0) << "B: " << c << "\n";
+            c = ToCNF().mutate(c);
+            debug(0) << "C: " << c << "\n";
         }
-        t1 = s.mutate(t1, nullptr);
+        Expr e = pack_binary_op<And>(clause_vec);
+        clause_vec = unpack_binary_op<And>(e);
+    }
 
-        if (is_zero(t1)) {
-            debug(1) << "FALSE: " << t1 << "\n";
-        }
+    set<Expr, IRDeepCompare> clauses(clause_vec.begin(), clause_vec.end());
 
-        if (!is_one(t1)) {
-            for (auto subclause : unpack_binary_op<And>(t1)) {
-                clauses.insert(subclause);
-                simplifier.learn_true(subclause);
+    debug(1) << "Clauses before CNF simplifications:\n";
+    for (auto &c : clauses) {
+        debug(1) << " " << c << "\n\n";
+    }
+
+    // We end up with a lot of pairs of clauses of the form:
+    // (a || b) && ... && (a || !b).
+    // We can simplify these to just a.
+    vector<set<Expr, IRDeepCompare>> cnf;
+    for (const auto &c : clauses) {
+        vector<Expr> terms = unpack_binary_op<Or>(c);
+        set<Expr, IRDeepCompare> term_set(terms.begin(), terms.end());
+        cnf.push_back(std::move(term_set));
+    }
+
+    bool changed = true;
+    while (changed) {
+        changed = false;
+        for (size_t i = 0; i < cnf.size() && !changed; i++) {
+            auto &c1 = cnf[i];
+            if (c1.size() == 1 && is_one(*c1.begin())) continue;
+            for (size_t j = i+1; j < cnf.size() && !changed; j++) {
+                auto &c2 = cnf[j];
+                if (c2.size() == 1 && is_one(*c2.begin())) continue;
+
+                debug(1) << "Considering pair:\n"
+                         << " c1 = " << pack_binary_op<Or>(c1) << "\n"
+                         << " c2 = " << pack_binary_op<Or>(c2) << "\n";
+
+                // (A || B) && (A || C) == (A || (B && C)) whenever (B && C) usefully simplifies
+                // check if (c1 - c2) and (c2 - c1) is false and if so replace with intersection
+                set<Expr, IRDeepCompare> c2_minus_c1, c1_minus_c2;
+                std::set_difference(c1.begin(), c1.end(), c2.begin(), c2.end(),
+                                    std::inserter(c1_minus_c2, c1_minus_c2.end()),
+                                    IRDeepCompare{});
+                std::set_difference(c2.begin(), c2.end(), c1.begin(), c1.end(),
+                                    std::inserter(c2_minus_c1, c2_minus_c1.end()),
+                                    IRDeepCompare{});
+                if (c1_minus_c2.empty()) {
+                    debug(1) << " c1 && c2 -> c1\n";
+                    // A && (A || B) -> A && true
+                    c2.clear();
+                    c2.insert(const_true());
+                    changed = true;
+                } else if (c2_minus_c1.empty()) {
+                    debug(1) << " c1 && c2 -> c2\n";
+                    c1.clear();
+                    c1.insert(const_true());
+                    changed = true;
+                } else {
+                    Expr a = pack_binary_op<Or>(c2_minus_c1);
+                    Expr b = pack_binary_op<Or>(c1_minus_c2);
+                    Expr a_and_b = normalizer.mutate(simplify(a && b));
+                    if (a_and_b.as<And>() == nullptr) {
+                        set<Expr, IRDeepCompare> c1_and_c2;
+                        std::set_intersection(c1.begin(), c1.end(), c2.begin(), c2.end(),
+                                              std::inserter(c1_and_c2, c1_and_c2.end()),
+                                              IRDeepCompare{});
+                        c1.swap(c1_and_c2);
+                        if (!is_zero(a_and_b)) {
+                            c1.insert(a_and_b);
+                        }
+                        debug(1) << " c1 && c2 -> " << pack_binary_op<Or>(c1) << "\n";
+                        c2.clear();
+                        c2.insert(const_true());
+                        changed = true;
+                    }
+                }
             }
         }
+    }
+
+    clauses.clear();
+    for (auto &c : cnf) {
+        if (c.empty()) {
+            // An empty disjunction is false, making the whole thing
+            // false.
+            return const_false();
+        }
+        Expr clause = pack_binary_op<Or>(c);
+        if (is_one(clause)) {
+            continue;
+        }
+        clauses.insert(clause);
+    }
+
+    debug(1) << "Clauses after CNF simplifications:\n";
+    for (auto &c : clauses) {
+        debug(1) << " " << c << "\n";
     }
 
     for (auto p : find_vars(rhs)) {
@@ -1893,7 +2005,9 @@ Expr synthesize_predicate(const Expr &lhs,
         // the min of the upper bounds.
 
         if (upper_bound.empty() && lower_bound.empty()) {
-            debug(0) << "Failed to bound implicit var " << v << "\n";
+            debug(0) << "In synthesizing predicate for " << lhs << " == " << rhs << "\n"
+                     << "with implicit predicate: " << pack_binary_op<And>(clauses) << "\n"
+                     << "Failed to bound implicit var " << v << "\n";
             return const_false();
         }
 
@@ -1950,9 +2064,11 @@ Expr synthesize_predicate(const Expr &lhs,
     } else {
         precondition = pack_binary_op<And>(new_clauses);
     }
-    precondition = simplify(precondition);
+    precondition = simplifier.mutate(precondition, nullptr);
 
     debug(1) << "Projected out: " << precondition << "\n";
+
+    debug(0) << common_subexpression_elimination(precondition) << "\n";
 
     // Now super-simplify it
     /*

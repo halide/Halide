@@ -55,11 +55,12 @@ Expr Simplify::visit(const LT *op, ExprInfo *bounds) {
         if (rewrite(broadcast(x) < broadcast(y), broadcast(x < y, lanes)) ||
             (no_overflow(ty) && EVAL_IN_LAMBDA
              (rewrite(ramp(x, y) < ramp(z, y), broadcast(x < z, lanes)) ||
+              // Merge RHS constant additions with a constant LHS
+              rewrite(x + c0 < c1, x < fold(c1 - c0)) ||
+              rewrite(c0 < x + c1, fold(c0 - c1) < x) ||
+
               // Move constants to the RHS
               rewrite(x + c0 < y, x < y + fold(-c0)) ||
-
-              // Merge RHS constant additions with a constant LHS
-              rewrite(c0 < x + c1, fold(c0 - c1) < x) ||
 
               // Normalize subtractions to additions to cut down on cases to consider
               rewrite(x - y < z, x < z + y) ||
@@ -423,10 +424,10 @@ Expr Simplify::visit(const LE *op, ExprInfo *bounds) {
     if (const LE *le = mutated.as<LE>()) {
         Expr a = le->a, b = le->b;
 
+        auto rewrite = IRMatcher::rewriter(IRMatcher::le(a, b), op->type, a.type());
+
 #if USE_SYNTHESIZED_RULES_V2
         if (no_overflow_int(a.type())) {
-
-            auto rewrite = IRMatcher::rewriter(IRMatcher::le(a, b), op->type, a.type());
 
             if (
                 rewrite(((x + c0) <= max((max(y, x) + c0), z)), true) ||
@@ -477,8 +478,6 @@ Expr Simplify::visit(const LE *op, ExprInfo *bounds) {
         // Synthesized rules
 #if USE_SYNTHESIZED_RULES
         if (no_overflow_int(a.type())) {
-
-            auto rewrite = IRMatcher::rewriter(IRMatcher::le(a, b), op->type, a.type());
 
             if (rewrite((x <= max(max(y, x), z)), true) ||
                 rewrite((x <= max(max(x, y), z)), true) ||

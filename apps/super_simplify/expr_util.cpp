@@ -81,7 +81,12 @@ bool more_general_than(const Expr &a, const Expr &b, map<string, Expr> &bindings
         return equal(a, b);
     }
 
-    if (const Min *op = b.as<Min>()) {
+
+    if (const And *op = b.as<And>()) {
+        return more_general_than(a, op, bindings);
+    }
+
+    if (const Or *op = b.as<Or>()) {
         return more_general_than(a, op, bindings);
     }
 

@@ -250,10 +250,10 @@ Z3Result satisfy(Expr e, map<string, Expr> *bindings) {
     e = simplify(common_subexpression_elimination(e));
 
     if (is_one(e)) {
-        return Sat;
+        return Z3Result::Sat;
     }
     if (is_zero(e)) {
-        return Unsat;
+        return Z3Result::Unsat;
     }
     if (!e.type().is_bool()) {
         std::cout << "Cannot satisfy non-boolean expression " << e << "\n";
@@ -295,7 +295,7 @@ Z3Result satisfy(Expr e, map<string, Expr> *bindings) {
     TemporaryFile z3_output("output", "txt");
     write_entire_file(z3_file.pathname(), &src[0], src.size());
 
-    std::string cmd = "z3 -T:1 " + z3_file.pathname() + " > " + z3_output.pathname();
+    std::string cmd = "z3 -T:10 " + z3_file.pathname() + " > " + z3_output.pathname();
 
     //int ret = system(cmd.c_str());
     int ret = pclose(popen(cmd.c_str(), "r"));
@@ -305,25 +305,25 @@ Z3Result satisfy(Expr e, map<string, Expr> *bindings) {
 
     if (starts_with(result, "unknown") || starts_with(result, "timeout")) {
         // std::cout << "z3 produced: " << result << "\n";
-        return Unknown;
+        return Z3Result::Unknown;
     }
 
     if (ret && !starts_with(result, "unsat")) {
         std::cout << "** z3 query failed with exit code " << ret << "\n"
                   << "** query was:\n" << src << "\n"
                   << "** output was:\n" << result << "\n";
-        return Unknown;
+        return Z3Result::Unknown;
     }
 
     if (starts_with(result, "unsat")) {
-        return Unsat;
+        return Z3Result::Unsat;
     } else {
         char *cursor = &(result[0]);
         char *end = &(result[result.size()]);
         if (!consume(&cursor, end, "sat")) {
-            return Unknown;
+            return Z3Result::Unknown;
         }
         parse_model(&cursor, end, bindings);
-        return Sat;
+        return Z3Result::Sat;
     }
 }

@@ -78,6 +78,12 @@ Expr Simplify::visit(const And *op, ExprInfo *bounds) {
     if (rewrite(broadcast(x) && broadcast(y), broadcast(x && y, op->type.lanes())) ||
 
         rewrite(c0 < x && x < c1, x == fold(c0 + 1), !is_float(x) && c1 == c0 + 2) ||
+        rewrite(c0 <= x && x < c1, x == c0, !is_float(x) && c1 == c0 + 1) ||
+        rewrite(c0 < x && x <= c1, x == fold(c0 + 1), !is_float(x) && c1 == c0 + 1) ||
+        rewrite(x < c1 && c0 < x, x == fold(c0 + 1), !is_float(x) && c1 == c0 + 2) ||
+        rewrite(x < c1 && c0 <= x, x == c0, !is_float(x) && c1 == c0 + 1) ||
+        rewrite(x <= c1 && c0 < x, x == fold(c0 + 1), !is_float(x) && c1 == c0 + 1) ||
+
         rewrite(c0 < x && x != c1, c1 < x, !is_float(x) && c1 == c0 + 1) ||
 
         rewrite((x || (y && z)) && y, (x || z) && y) ||
