@@ -2017,7 +2017,7 @@ struct LoopNest {
                             for (auto &j1 : thread_jacobians) {
                                 if (e->consumer->node == j1.second) {
                                     for (auto &j2 : e->load_jacobians) {
-                                        LoadJacobian j = (j2 * inner_serial_loop_extents) * j1.first;
+                                        LoadJacobian j = j2 * j1.first;
                                         new_thread_jacobians.emplace_back(j, e->producer);
                                     }
                                 } else {
