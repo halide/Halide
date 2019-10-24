@@ -1,9 +1,6 @@
 #include <cmath>
-#include <iostream>
 
 #include "Halide.h"
-
-using std::ostream;
 
 using namespace Halide;
 using namespace Halide::Internal;
@@ -1289,75 +1286,6 @@ void test_diagonal() {
     check(__LINE__, d_input_buf(2), 2.f);
     check(__LINE__, d_input_buf(3), 2.f);
     check(__LINE__, d_input_buf(4), 1.f);
-}
-
-namespace {
-
-template<typename T>
-void emit_with_commas(ostream &stream, const std::vector<T> &v) {
-    stream << "(";
-    const char *sep = "";
-    for (const T &t : v) {
-        stream << sep << t;
-        sep = ", ";
-    }
-    stream << ")";
-};
-
-}  // namespace
-
-ostream &operator<<(ostream &stream, const Func &func) {
-    using Internal::extract_rdom;
-    using Internal::ReductionDomain;
-    using Internal::simplify;
-
-    stream << "func " << func.name() << " = {\n";
-
-    // Topologically sort the functions
-    std::map<std::string, Internal::Function> env = find_transitive_calls(func.function());
-    std::vector<std::string> order = realization_order({ func.function() }, env).first;
-
-    for (int i = (int) order.size() - 1; i >= 0; i--) {
-        Func f(env[order[i]]);
-        for (int update_id = -1; update_id < f.num_update_definitions(); update_id++) {
-            std::vector<Expr> vals;
-            if (update_id >= 0) {
-                stream << "  " << f.name() << ".update[" << update_id << "]";
-                emit_with_commas(stream, f.update_args(update_id));
-                stream << " = ";
-                vals = f.update_values(update_id).as_vector();
-            } else {
-                stream << " " << f.name();
-                emit_with_commas(stream, f.args());
-                stream << " = ";
-                vals = f.values().as_vector();
-            }
-            if (vals.size() > 1) {
-                stream << "tuple<" << vals.size() << ">";
-            }
-            emit_with_commas(stream, vals);
-            // Assume that Tuples have the same (or no) RDom across all values.
-            ReductionDomain rdom = extract_rdom(vals.at(0));
-            if (rdom.defined()) {
-                stream << " with RDom";
-                std::vector<Expr> e;
-                for (const auto &d : rdom.domain()) {
-                    e.push_back(d.min);
-                    e.push_back(d.extent);
-                }
-                emit_with_commas(stream, e);
-                Expr pred = rdom.predicate();
-                if (pred.defined() && !is_one(pred)) {
-                    stream << ".where(" << pred << ")";
-                }
-            }
-            stream << "\n";
-        }
-    }
-
-    stream << "}\n";
-
-    return stream;
 }
 
 void test_input_bounds() {
