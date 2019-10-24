@@ -544,11 +544,17 @@ bool test_div_mod(int vector_width, ScheduleVariant scheduling, Target target) {
 int main(int argc, char **argv) {
     Target target = get_jit_target_from_environment();
 
+    int threads = Halide::Internal::ThreadPool<bool>::num_processors_online();
+
     ScheduleVariant scheduling = CPU;
     if (target.has_gpu_feature()) {
         scheduling = TiledGPU;
     } else if (target.features_any_of({Target::HVX_64, Target::HVX_128})) {
         scheduling = Hexagon;
+        // HVX targets crater when multithreaded, injection
+        // point appears to be https://github.com/halide/Halide/issues/4335 --
+        // make singlethreaded as temporary workaround
+        threads = 1;
     }
 
     // Test multiplication
@@ -576,7 +582,7 @@ int main(int argc, char **argv) {
         div_vector_widths.push_back(1);
     }
 
-    Halide::Internal::ThreadPool<bool> pool;
+    Halide::Internal::ThreadPool<bool> pool(threads);
     std::vector<std::future<bool>> futures;
     for (int vector_width : mul_vector_widths) {
         std::cout << "Testing mul vector_width: " << vector_width << "\n";
