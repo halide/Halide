@@ -207,17 +207,19 @@ void test_1d_box_no_clamp() {
 
     Buffer<float> blur_buf = blur.realize(2);
     // d loss / d blur = 2 * blur(x)
-    Buffer<float> d_blur_buf = d(blur).realize(2);
+    Buffer<float> d_blur_buf = d(blur).realize(3);
     check(__LINE__, d_blur_buf(0), 2 * blur_buf(0));
     check(__LINE__, d_blur_buf(1), 2 * blur_buf(1));
+    check(__LINE__, d_blur_buf(2), 0.f);
     // d input(x) = d blur(x) + d blur(x - 1)
     Func d_input = d(input);
     // Every dependency of d_input should only use pure variables in lhs
     _halide_user_assert(!has_non_pure_update(d_input)) << "Function has non pure update\n";
-    Buffer<float> d_input_buf = d_input.realize(3);
+    Buffer<float> d_input_buf = d_input.realize(4);
     check(__LINE__, d_input_buf(0), d_blur_buf(0));
     check(__LINE__, d_input_buf(1), d_blur_buf(0) + d_blur_buf(1));
     check(__LINE__, d_input_buf(2), d_blur_buf(1));
+    check(__LINE__, d_input_buf(3), 0.f);
 }
 
 void test_1d_box() {
@@ -697,6 +699,44 @@ void test_histogram() {
 
     Func loss("loss");
     RDom rd(input);
+    loss() += output(rd) * cast<float>(rd + 1);
+    Derivative d = propagate_adjoints(loss);
+
+    // d_output(2) -> d_k(0)
+    // d_output(2) -> d_k(1)
+    // d_output(1) -> d_k(2)
+    // d_output(3) -> d_k(3)
+    Buffer<float> d_k = d(k).realize(5);
+    check(__LINE__, d_k(0), 3.0f);
+    check(__LINE__, d_k(1), 3.0f);
+    check(__LINE__, d_k(2), 2.0f);
+    check(__LINE__, d_k(3), 4.0f);
+    check(__LINE__, d_k(4), 0.0f);
+}
+
+void test_histogram_no_bounds() {
+    // Same as test histogram but the input is a func,
+    // and we don't clamp it. For testing bounds inference.
+    Var x("x");
+    Func input("input");
+    input(x) = 0;
+    input(0) = 2;
+    input(1) = 2;
+    input(2) = 1;
+    input(3) = 3;
+    Buffer<float> k(5, "k");
+    k(0) = 0.5f;
+    k(1) = 1.f;
+    k(2) = 1.5f;
+    k(3) = 2.f;
+    k(4) = 2.5f;
+    Func output("output");
+    output(x) = 0.f;
+    RDom r(0, 4);
+    output(input(r)) += k(r);
+
+    Func loss("loss");
+    RDom rd(0, 4);
     loss() += output(rd) * cast<float>(rd + 1);
     Derivative d = propagate_adjoints(loss);
 
@@ -1282,6 +1322,7 @@ int main(int argc, char **argv) {
     test_linear_resampling_2d();
     test_sparse_update();
     test_histogram();
+    test_histogram_no_bounds();
     test_multiple_updates_histogram();
     test_rdom_update();
     test_repeat_edge();

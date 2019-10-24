@@ -217,6 +217,7 @@ map<string, Box> inference_bounds(const vector<Func> &funcs,
         map<string, Function> local_env = find_transitive_calls(func);
         env.insert(local_env.begin(), local_env.end());
     }
+
     // Reduction variable scopes
     Scope<Interval> scope;
     for (const auto &it : env) {
@@ -232,6 +233,7 @@ map<string, Box> inference_bounds(const vector<Func> &funcs,
     }
     // Sort functions
     vector<string> order = realization_order(functions, env).first;
+    FuncValueBounds func_value_bounds = compute_function_value_bounds(order, env);
 
     map<string, Box> bounds;
     // Set up bounds for outputs
@@ -259,9 +261,13 @@ map<string, Box> inference_bounds(const vector<Func> &funcs,
                 // For all the immediate dependencies of this expression,
                 // find the required ranges
                 map<string, Box> update_bounds =
-                    boxes_required(expr, scope);
+                    boxes_required(expr, scope, func_value_bounds);
                 // Loop over the dependencies
                 for (const auto &it : update_bounds) {
+                    if (it.first == func.name()) {
+                        // Skip self reference
+                        continue;
+                    }
                     // Update the bounds, if not exists then create a new one
                     auto found = bounds.find(it.first);
                     if (found == bounds.end()) {
