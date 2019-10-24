@@ -2523,7 +2523,7 @@ struct LoopNest {
             aslog(0) << '\n';
         }
         for (auto p : store_at) {
-            aslog(0) << prefix << "realize: " << p->func.name() << '\n';
+            aslog(0) << prefix << "realize: " << p->func.name() << " [";
             for (int i = 0; i < p->dimensions; i++) {
                 if (i > 0) {
                     aslog(0) << ", ";
