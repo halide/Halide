@@ -24,6 +24,11 @@
 #define TARGET_DATA "/b_at_gr_dense.data"
 #endif
 
+#ifdef HE_B_GR
+#include "demosaic_he_b_gr_generator.cpp"
+#define TARGET_DATA "/b_at_gr_dense.data"
+#endif
+
 using namespace Halide;
 
 using inputT = int16_t;
