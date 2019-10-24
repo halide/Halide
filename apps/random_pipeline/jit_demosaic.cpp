@@ -108,6 +108,16 @@ int main(int argc, char *argv[]) {
 
     std::string loss_filename = output_dir + "/losses.txt";
 
+    // create input buffers 
+    Buffer<outputT> correct_output = Buffer<outputT>(output_w, output_h, output_c);
+    Buffer<inputT> input0 = Buffer<inputT>(input_w, input_h, input_c);
+    Buffer<inputT> input1 = Buffer<inputT>(input_w, input_h, input_c);
+    Buffer<inputT> input2 = Buffer<inputT>(input_w, input_h, input_c);
+    Buffer<inputT> input3 = Buffer<inputT>(input_w, input_h, input_c);
+    // output buffers
+    Buffer<lossT> loss_buff = Buffer<lossT>::make_scalar();
+    Buffer<outputT> output_buff = Buffer<outputT>(output_w, output_h, output_c);
+
     // for each pipeline do:
     for (int p = 0; p < num_pipes; p++) {
         float loss = 0;
@@ -118,7 +128,10 @@ int main(int argc, char *argv[]) {
         GeneratorContext context(Target("host"));
         auto gen = RandomPipeline<false>::create(context); 
         gen->set_hashes(&used_hashes);
+        gen->set_dag_file(argv[6]);
+        gen->set_funcdef_file(argv[7]);
         gen->seed.set(seed);
+
         // set the constant parameters
         gen->num_input_buffers.set(4);
         gen->num_output_buffers.set(1);
@@ -130,16 +143,6 @@ int main(int argc, char *argv[]) {
         gen->output_c.set(output_c);
         gen->max_stages.set(2);
         gen->shift.set(2);
-
-        // create input buffers 
-        Buffer<outputT> correct_output = Buffer<outputT>(output_w, output_h, output_c);
-        Buffer<inputT> input0 = Buffer<inputT>(input_w, input_h, input_c);
-        Buffer<inputT> input1 = Buffer<inputT>(input_w, input_h, input_c);
-        Buffer<inputT> input2 = Buffer<inputT>(input_w, input_h, input_c);
-        Buffer<inputT> input3 = Buffer<inputT>(input_w, input_h, input_c);
-        // output buffers
-        Buffer<lossT> loss_buff = Buffer<lossT>::make_scalar();
-        Buffer<outputT> output_buff = Buffer<outputT>(output_w, output_h, output_c);
 
         // configure the pipeline
         gen->apply(batch_size, learning_rate, timestep, input0, input1, input2, input3, correct_output);
