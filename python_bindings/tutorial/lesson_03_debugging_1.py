@@ -16,9 +16,6 @@
 # g++ lesson_03*.cpp -g -I ../include -L ../bin -lHalide -o lesson_03 -std=c++11
 # DYLD_LIBRARY_PATH=../bin ./lesson_03
 
-from __future__ import absolute_import
-from __future__ import division
-from __future__ import print_function
 
 import halide as hl
 

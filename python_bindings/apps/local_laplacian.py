@@ -2,13 +2,11 @@
 Local Laplacian, see e.g. Aubry et al 2011, "Fast and Robust Pyramid-based Image Processing".
 """
 
-from __future__ import print_function
-from __future__ import division
 
 import halide as hl
 
 import numpy as np
-from imageio import imread, imsave
+import imageio
 import os.path
 
 
@@ -192,7 +190,7 @@ def get_input_data():
     image_path = os.path.join(os.path.dirname(__file__), "../../apps/images/rgb.png")
     assert os.path.exists(image_path), \
         "Could not find %s" % image_path
-    rgb_data = imread(image_path)
+    rgb_data = imageio.imread(image_path)
     #print("rgb_data", type(rgb_data), rgb_data.shape, rgb_data.dtype)
 
     input_data = np.copy(rgb_data.astype(np.uint16), order="F") << 8
@@ -224,8 +222,8 @@ def filter_test_image(local_laplacian, input):
     # save results
     input_path = "local_laplacian_input.png"
     output_path = "local_laplacian.png"
-    imsave(input_path, input_data)
-    imsave(output_path, output_data)
+    imageio.imsave(input_path, input_data)
+    imageio.imsave(output_path, output_data)
     print("\nlocal_laplacian realized on output_image.")
     print("Result saved at '", output_path,
           "' ( input data copy at '", input_path, "' ).", sep="")
