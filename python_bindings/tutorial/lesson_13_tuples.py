@@ -17,7 +17,6 @@
 #    make tutorial_lesson_13_tuples
 # in a shell with the current directory at the top of the halide
 # source tree.
-from __future__ import print_function
 
 import halide as hl
 
