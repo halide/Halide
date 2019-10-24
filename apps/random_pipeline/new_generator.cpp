@@ -1701,11 +1701,25 @@ public:
             bounds.at(2).first = 0;
             bounds.at(2).second = input_c;
             Func padded_input = Halide::BoundaryConditions::constant_exterior(input_buff_dummies[i], cast(inputHT, 0), bounds);
-            Func input_func, shifted_input;
+            std::string func_name;
+            switch (i) {
+                case 0:
+                    func_name = "shifted_GR";
+                    break;
+                case 1:
+                    func_name = "shifted_R";
+                    break;
+                case 2:
+                    func_name = "shifted_B";
+                    break;
+                case 3:
+                    func_name = "shifted_GB";
+                    break;
+            }
 
+            Func shifted_input(func_name);
             // shift the input so that we don't have to worry about boundary conditions
-            input_func(x, y, c) = padded_input(x, y, c);
-            Expr value = input_func(x + (int)shift, y + (int)shift, c);
+            Expr value = padded_input(x + (int)shift, y + (int)shift, c);
             shifted_input(x, y, c) = value;
 
             std::cout << shifted_input(x, y, c) << " = " << value << std::endl;
