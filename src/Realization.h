@@ -1,6 +1,11 @@
 #ifndef HALIDE_REALIZATION_H
 #define HALIDE_REALIZATION_H
 
+#include <cstdint>
+#include <vector>
+
+#include "Buffer.h"
+
 /** \file
  *
  * Defines Realization - a vector of Buffer for use in pipelines with multiple outputs.
