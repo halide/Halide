@@ -206,7 +206,7 @@ bool random_dropout(std::mt19937 &rng, size_t num_decisions) {
     t = std::pow(t, 1.0f / num_decisions);
     t *= 100;
 
-    double r = rng();
+    double r = rng() % 100;
     bool drop_it = r >= t;
     return drop_it;
 }
