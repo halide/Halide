@@ -41,29 +41,6 @@ def test_autodiff():
     assert(d_f_update_0_buf[1] == 5.0)
     assert(d_f_update_0_buf[2] == 5.0)
 
-    # gradient w.r.t. the initialization of f,
-    # before the boundary condition
-    d_f_init_ub = d.get_unbounded(f, -1)
-    d_f_init_ub_buf = d_f_init_ub.realize(3)
-    assert(d_f_init_ub_buf[0] == 0.0)
-    assert(d_f_init_ub_buf[1] == 5.0)
-    assert(d_f_init_ub_buf[2] == 5.0)
-    d_f_init_ub = d.get_unbounded(f, -1)
-    d_f_init_ub_buf = d_f_init_ub.realize(3)
-    assert(d_f_init_ub_buf[0] == 0.0)
-    assert(d_f_init_ub_buf[1] == 5.0)
-    assert(d_f_init_ub_buf[2] == 5.0)
-    d_f_update_0_ub = d.get_unbounded(f, 0)
-    d_f_update_0_ub_buf = d_f_update_0_ub.realize(3)
-    assert(d_f_update_0_ub_buf[0] == 5.0)
-    assert(d_f_update_0_ub_buf[1] == 5.0)
-    assert(d_f_update_0_ub_buf[2] == 5.0)
-    d_f_update_0_ub = d.get_unbounded(f, 0)
-    d_f_update_0_ub_buf = d_f_update_0_ub.realize(3)
-    assert(d_f_update_0_ub_buf[0] == 5.0)
-    assert(d_f_update_0_ub_buf[1] == 5.0)
-    assert(d_f_update_0_ub_buf[2] == 5.0)
-
     # gradient w.r.t. the buffer
     d_b = d[b]
     d_b_buf = d_b.realize(3)
