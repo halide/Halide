@@ -1,6 +1,9 @@
 #include <cmath>
+#include <iostream>
 
 #include "Halide.h"
+
+using std::ostream;
 
 using namespace Halide;
 using namespace Halide::Internal;
@@ -1288,6 +1291,116 @@ void test_diagonal() {
     check(__LINE__, d_input_buf(4), 1.f);
 }
 
+namespace {
+
+template<typename T>
+void emit_with_commas(ostream &stream, const std::vector<T> &v) {
+    stream << "(";
+    const char *sep = "";
+    for (const T &t : v) {
+        stream << sep << t;
+        sep = ", ";
+    }
+    stream << ")";
+};
+
+}  // namespace
+
+ostream &operator<<(ostream &stream, const Func &func) {
+    using Internal::extract_rdom;
+    using Internal::ReductionDomain;
+    using Internal::simplify;
+
+    stream << "func " << func.name() << " = {\n";
+
+    // Topologically sort the functions
+    std::map<std::string, Internal::Function> env = find_transitive_calls(func.function());
+    std::vector<std::string> order = realization_order({ func.function() }, env).first;
+
+    for (int i = (int) order.size() - 1; i >= 0; i--) {
+        Func f(env[order[i]]);
+        for (int update_id = -1; update_id < f.num_update_definitions(); update_id++) {
+            std::vector<Expr> vals;
+            if (update_id >= 0) {
+                stream << "  " << f.name() << ".update[" << update_id << "]";
+                emit_with_commas(stream, f.update_args(update_id));
+                stream << " = ";
+                vals = f.update_values(update_id).as_vector();
+            } else {
+                stream << " " << f.name();
+                emit_with_commas(stream, f.args());
+                stream << " = ";
+                vals = f.values().as_vector();
+            }
+            if (vals.size() > 1) {
+                stream << "tuple<" << vals.size() << ">";
+            }
+            emit_with_commas(stream, vals);
+            // Assume that Tuples have the same (or no) RDom across all values.
+            ReductionDomain rdom = extract_rdom(vals.at(0));
+            if (rdom.defined()) {
+                stream << " with RDom";
+                std::vector<Expr> e;
+                for (const auto &d : rdom.domain()) {
+                    e.push_back(d.min);
+                    e.push_back(d.extent);
+                }
+                emit_with_commas(stream, e);
+                Expr pred = rdom.predicate();
+                if (pred.defined() && !is_one(pred)) {
+                    stream << ".where(" << pred << ")";
+                }
+            }
+            stream << "\n";
+        }
+    }
+
+    stream << "}\n";
+
+    return stream;
+}
+
+void test_input_bounds() {
+    Buffer<float> input(5);
+    for (int i = 0; i < 5; i++) {
+        input(i) = float(i + 1);
+    }
+    Var x("x"), y("y");
+    Func f("f");
+    f(x) += input(x) * input(x + 1);
+    Func g("g");
+    g(x) += f(x) * input(x);
+    RDom r(0, 4);
+    Func loss("loss");
+    loss() += g(r);
+    Derivative d = propagate_adjoints(loss);
+    Func d_f = d(f);
+    Buffer<float> d_f_buf = d_f.realize(4);
+    // d_f(x) = d_g(x) * input(x)
+    check(__LINE__, d_f_buf(0), 1.f);
+    check(__LINE__, d_f_buf(1), 2.f);
+    check(__LINE__, d_f_buf(2), 3.f);
+    check(__LINE__, d_f_buf(3), 4.f);
+    Func d_input = d(input);
+
+    Buffer<float> d_input_buf = d_input.realize(5);
+    // d_input(x) += d_f(x) * input(x + 1)
+    //            += d_f(x - 1) * input(x - 1)
+    //            += d_g(x) * f(x)
+    check(__LINE__, d_input_buf(0), d_f_buf(0) * input(1) +
+                                    input(0) * input(1));
+    check(__LINE__, d_input_buf(1), d_f_buf(1) * input(2) +
+                                    d_f_buf(0) * input(0) +
+                                    input(1) * input(2));
+    check(__LINE__, d_input_buf(2), d_f_buf(2) * input(3) +
+                                    d_f_buf(1) * input(1) +
+                                    input(2) * input(3));
+    check(__LINE__, d_input_buf(3), d_f_buf(3) * input(4) +
+                                    d_f_buf(2) * input(2) +
+                                    input(3) * input(4));
+    check(__LINE__, d_input_buf(4), d_f_buf(3) * input(3));
+}
+
 void test_select_guard() {
     Var x("x");
     Buffer<float> input(2);
@@ -1364,6 +1477,7 @@ int main(int argc, char **argv) {
     test_rdom_predicate();
     test_reverse_scan();
     test_diagonal();
+    test_input_bounds();
     test_select_guard();
     test_param();
     printf("[autodiff] Success!\n");

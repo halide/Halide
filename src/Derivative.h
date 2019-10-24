@@ -35,10 +35,6 @@ public:
     Func operator()(const Buffer<> &buffer) const;
     Func operator()(const Param<> &param) const;
 
-    /** Get the unbounded Func, if any. If no such Func (ie no boundary condition
-     * was applied), equivalent to just calling operator(). */
-    Func get_unbounded(const Func &func, int update_id = -1) const;
-
     /** Get the entire chain of new synthesized Funcs that compute the
      * derivative of a given user-written Func for the purpose of
      * scheduling. */

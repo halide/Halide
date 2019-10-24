@@ -17,9 +17,6 @@ void define_derivative(py::module &m) {
         .def("__getitem__", [](const Derivative &d, const std::tuple<const Func &, int> &args) {
             return d(std::get<0>(args), std::get<1>(args));
         })
-        .def("get_unbounded", [](const Derivative &d, const Func &func, int update_id) {
-            return d.get_unbounded(func, update_id);
-        }, py::arg("func"), py::arg("update_id") = -1)
         .def("funcs", [](const Derivative &d, const Func &func) {
             return d.funcs(func);  
         }, py::arg("func"));
