@@ -1266,6 +1266,28 @@ void test_reverse_scan() {
     }
 }
 
+void test_diagonal() {
+    Buffer<float> input(5);
+    for (int i = 0; i < 5; i++) {
+        input(i) = float(i);
+    }
+    Var x("x"), y("y");
+    Func f("f");
+    f(x, y) = 0.f;
+    f(x, x) = input(x) + input(x + 1);
+    RDom r(0, 4, 0, 4);
+    Func loss("loss");
+    loss() += f(r.x, r.y);
+    Derivative d = propagate_adjoints(loss);
+    Func d_input = d(input);
+    Buffer<float> d_input_buf = d_input.realize(5);
+    check(__LINE__, d_input_buf(0), 1.f);
+    check(__LINE__, d_input_buf(1), 2.f);
+    check(__LINE__, d_input_buf(2), 2.f);
+    check(__LINE__, d_input_buf(3), 2.f);
+    check(__LINE__, d_input_buf(4), 1.f);
+}
+
 void test_select_guard() {
     Var x("x");
     Buffer<float> input(2);
@@ -1341,6 +1363,7 @@ int main(int argc, char **argv) {
     test_change_var();
     test_rdom_predicate();
     test_reverse_scan();
+    test_diagonal();
     test_select_guard();
     test_param();
     printf("[autodiff] Success!\n");
