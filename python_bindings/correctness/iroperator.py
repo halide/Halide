@@ -1,5 +1,3 @@
-from __future__ import print_function
-from __future__ import division
 
 from contextlib import contextmanager
 import halide as hl
