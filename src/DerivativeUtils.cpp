@@ -263,10 +263,6 @@ map<string, Box> inference_bounds(const vector<Func> &funcs,
                     boxes_required(expr, scope, func_value_bounds);
                 // Loop over the dependencies
                 for (const auto &it : update_bounds) {
-                    if (it.first == func.name()) {
-                        // Skip self reference
-                        continue;
-                    }
                     // Update the bounds, if not exists then create a new one
                     auto found = bounds.find(it.first);
                     if (found == bounds.end()) {
