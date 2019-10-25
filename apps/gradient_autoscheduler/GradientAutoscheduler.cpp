@@ -543,7 +543,7 @@ void apply_schedule(const MachineParams &params,
         // to launch threads. For GPU we want to launch at least 64 GPU blocks.
         // We don't use a larger domain size for GPU since we can also use atomic
         // to increase parallelism and atomics are faster on GPU.
-        // These numbers can be better tuned.
+        // These numbers can be better tuned (issue 4346).
         const int cpu_max_domain_size = 8 * params.parallelism;
         constexpr int gpu_max_domain_size = 4096;
         int max_domain_size = is_gpu ? gpu_max_domain_size : cpu_max_domain_size;
@@ -678,6 +678,7 @@ void apply_schedule(const MachineParams &params,
         // for vectorization + threading.
         // For GPU we want at least 10 * (num SMs) * 32 parallelism
         // Turing has ~70 SMs
+        // These numbers can be better tuned (issue 4346).
         int cpu_min_parallelism = 8 * params.parallelism * 16;
         int gpu_min_parallelism = 10 * 70 * 32;
         int min_parallelism =
