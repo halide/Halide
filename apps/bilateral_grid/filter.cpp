@@ -27,11 +27,6 @@ int main(int argc, char **argv) {
     Buffer<float> input = load_and_convert_image(argv[1]);
     Buffer<float> output(input.width(), input.height());
 
-    // Let the Halide runtime hold onto GPU allocations for
-    // intermediates and reuse them instead of eagerly freeing
-    // them. cuMemAlloc/cuMemFree is slower than the algorithm!
-    halide_reuse_device_allocations(nullptr, true);
-
     bilateral_grid(input, r_sigma, output);
 
     // Timing code. Timing doesn't include copying the input data to
