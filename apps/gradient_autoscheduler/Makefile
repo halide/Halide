@@ -1,8 +1,25 @@
 include ../support/Makefile.inc
 
+WITH_PYTHON ?= 0
+ifeq ($(WITH_PYTHON),1)
+	PYTHON ?= python3
+	# Discover pybind11 path from `python3 -m pybind11 --includes`
+	# if it is pip/conda installed, which is a common case.
+	# Cf. https://github.com/pybind/pybind11/blob/master/docs/compiling.rst#building-manually
+	PYBIND11_CFLAGS = $(shell $(PYTHON) -m pybind11 --includes)
+	ifeq ($(PYBIND11_CFLAGS),)
+		ifndef PYBIND11_PATH
+			$(error PYBIND11_PATH is undefined)
+		endif
+		PYBIND11_PATH ?= /path/to/pybind11
+		PYBIND11_CFLAGS = -I $(PYBIND11_PATH)/include
+	endif
+	PYTHON_FLAGS = -DWITH_PYTHON $(PYBIND11_CFLAGS)
+endif
+
 bin/libgradient_autoscheduler.so: GradientAutoscheduler.cpp
 	@mkdir -p $(@D)
-	$(CXX) -shared $(USE_EXPORT_DYNAMIC) -fPIC $(CXXFLAGS) -g $(OPTIMIZE) $^ -o $@ $(HALIDE_SYSTEM_LIBS)
+	$(CXX) -shared $(USE_EXPORT_DYNAMIC) -fPIC $(CXXFLAGS) -g $(OPTIMIZE) $^ -o $@ $(HALIDE_SYSTEM_LIBS) $(PYTHON_FLAGS)
 
 # Demonstrate a JIT-based use of gradient autoscheuler
 bin/test: test.cpp bin/libgradient_autoscheduler.so
