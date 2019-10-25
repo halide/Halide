@@ -71,7 +71,7 @@ void reorder_storage(Func func,
 void reorder_storage(Stage stage,
                      const std::vector<Var> &all_vars,
                      std::ostringstream &schedule_source) {
-    // Can't reorder storage of a stage.
+    internal_assert(false) << "Can't reorder storage of a stage.";
 }
 
 int natural_vector_size(const Target &target, const Type &t) {
