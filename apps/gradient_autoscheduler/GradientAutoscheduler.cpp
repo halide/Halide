@@ -75,20 +75,11 @@ void reorder_storage(Stage stage,
 }
 
 int natural_vector_size(const Target &target, const Type &t) {
-    const bool is_integer = t.is_int() || t.is_uint();
     const int data_size = t.bytes();
-    if (is_integer && (target.has_feature(Halide::Target::AVX512_Skylake) ||
-            target.has_feature(Halide::Target::AVX512_Cannonlake))) {
-        // AVX512BW exists on Skylake and Cannonlake
-        return 64 / data_size;
-    } else if (t.is_float() && (target.has_feature(Halide::Target::AVX512) ||
-            target.has_feature(Halide::Target::AVX512_KNL) ||
-            target.has_feature(Halide::Target::AVX512_Skylake) ||
-            target.has_feature(Halide::Target::AVX512_Cannonlake))) {
-        // AVX512F is on all AVX512 architectures
-        return 64 / data_size;
-    } else {
+    if (target.os == Target::OSUnknown || target.arch == Target::ArchUnknown || target.bits != 0) {
         return 32 / data_size;
+    } else {
+        return target.natural_vector_size(t);
     }
 }
 
