@@ -10,7 +10,7 @@ lens_blur | 7.77 ms | 22.41 ms | 0.73 ms | 5.60 ms
 local_laplacian | 42.29 ms | 128.31 ms | 0.81 ms | 14.30 ms
 nl_means | 145.003 ms | out-of-memory | N/A | 82.93 ms
 conv_layer | 15.46 ms | 6.89 ms | N/A | 1.90 ms
-wavelet | 18.86 ms | 21.46 ms | N/A | 6.35 ms
+stencil_chain | 18.86 ms | 21.46 ms | N/A | 6.35 ms
 
 Tested on a 8 core Intel CPU (16 with HT) and TITAN Xp.
 
