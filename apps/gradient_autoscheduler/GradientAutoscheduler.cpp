@@ -96,6 +96,8 @@ void parallelize_vars_and_rvars_gpu(
         std::ostringstream &schedule_source) {
     // Find the first variable that has bounds larger or equal than 64,
     // this is our GPU thread.
+    // We use 64 since it's twice the warp size, so this launches enough
+    // GPU threads for a block to be work efficient.
     int split_size = 64;
     std::vector<Var> gpu_blocks;
     Var gpu_threads("");
