@@ -258,7 +258,7 @@ void parallelize_vars_and_rvars_cpu(
         const std::vector<int> &rvar_bounds,
         TailStrategy tail,
         std::ostringstream &schedule_source) {
-    // Find the first variable that has bounds larger or equal than 16,
+    // Find the first variable that has bounds larger or equal than natural_vector_size,
     // this is our vectorized dimension
     const int split_size = natural_vector_size;
     std::vector<Var> parallel_vars;
