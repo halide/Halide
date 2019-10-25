@@ -155,7 +155,7 @@ void parallelize_vars_and_rvars_gpu(
 
     // Fuse all gpu blocks into a single variable
     Var fused_var("");
-    if (gpu_blocks.size() > 0) {
+    if (!gpu_blocks.empty()) {
         fused_var = gpu_blocks[0];
         // inner to outer
         for (int i = 1; i < (int)gpu_blocks.size(); i++) {
@@ -167,7 +167,7 @@ void parallelize_vars_and_rvars_gpu(
         }
     }
     RVar fused_rvar("");
-    if (r_gpu_blocks.size() > 0) {
+    if (!r_gpu_blocks.empty()) {
         fused_rvar = r_gpu_blocks[0];
         // inner to outer
         for (int i = 1; i < (int)r_gpu_blocks.size(); i++) {
@@ -217,7 +217,7 @@ void parallelize_vars_and_rvars_gpu(
         }
     }
     
-    if (gpu_blocks.size() + r_gpu_blocks.size() > 0) { 
+    if (!gpu_blocks.empty() || !r_gpu_blocks.empty() { 
         // Assign outer loops to GPU blocks
         if (!fused_var.name().empty()) {
             func_or_stage.gpu_blocks(fused_var);
@@ -337,7 +337,7 @@ void parallelize_vars_and_rvars_cpu(
 
     // Fuse all parallel vars into a single variable for parallelism
     Var fused_var("");
-    if (parallel_vars.size() > 0) {
+    if (!parallel_vars.empty()) {
         fused_var = parallel_vars[0];
         // inner to outer
         for (int i = 1; i < (int)parallel_vars.size(); i++) {
@@ -351,7 +351,7 @@ void parallelize_vars_and_rvars_cpu(
 
     // Fuse all parallel rvars into a single variable for parallelism
     RVar fused_rvar("");
-    if (parallel_rvars.size() > 0) {
+    if (!parallel_rvars.empty()) {
         fused_rvar = parallel_rvars[0];
         // inner to outer
         for (int i = 1; i < (int)parallel_rvars.size(); i++) {
@@ -539,7 +539,7 @@ void apply_schedule(const MachineParams &params,
         int gpu_max_domain_size = 4096;
         int max_domain_size = is_gpu ? gpu_max_domain_size : cpu_max_domain_size;
         if (domain_size < max_domain_size) {
-            if (rvars.size() > 0) {
+            if (!rvars.empty()) {
                 // Check associativity
                 std::vector<Expr> values =
                     func.update_values(update_id).as_vector();
@@ -583,7 +583,7 @@ void apply_schedule(const MachineParams &params,
                         }
                     }
                     schedule_source << ";\n";
-                    if (outer_rvars.size() > 0 && inner_rvars.size() > 0) {
+                    if (!outer_rvars.empty() && !inner_rvars.empty()) {
                         // Rfactor all the outer RVars.
                         std::vector<std::pair<RVar, Var>> preserved;
                         std::vector<Var> interm_vars;
