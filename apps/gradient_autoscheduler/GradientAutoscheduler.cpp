@@ -515,7 +515,7 @@ void apply_schedule(const MachineParams &params,
                 schedule_source);
         }
     } else {
-        // If the pure domain is smaller than the reduction domain,
+        // If the pure domain is smaller than some thresholds,
         // we try to apply rfactor to increase parallelism:
         bool checked_associative = false;
         bool is_associative = false;
@@ -535,8 +535,14 @@ void apply_schedule(const MachineParams &params,
         for (int b : rvar_bounds) {
             rdomain_size *= b;
         }
-        int cpu_max_domain_size = 8 * params.parallelism;
-        int gpu_max_domain_size = 4096;
+        // Define the thresholds for the pure domain.
+        // For CPU we want at least params.parallelism number of elements
+        // to launch threads. For GPU we want to launch at least 64 GPU blocks.
+        // We don't use a larger domain size for GPU since we can also use atomic
+        // to increase parallelism and atomics are faster on GPU.
+        // These numbers can be better tuned.
+        const int cpu_max_domain_size = 8 * params.parallelism;
+        constexpr int gpu_max_domain_size = 4096;
         int max_domain_size = is_gpu ? gpu_max_domain_size : cpu_max_domain_size;
         if (domain_size < max_domain_size) {
             if (!rvars.empty()) {
