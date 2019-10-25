@@ -765,8 +765,8 @@ void generate_schedule(const std::vector<Function> &outputs,
     std::vector<std::string> top_order = topological_order(outputs, env);
     // Run a pre-pass that inlines all trivial Funcs (i.e. the cost of
     // computing a Func <= calling that Func).
-    // XXX: Note that the cost is estimated using heuristics based on CPU statistics
-    // so this can be bad on GPU.
+    // TODO: Note that the cost is estimated using heuristics based on CPU statistics
+    // so this can be bad on GPU. In particular GPU should inline more aggressively.
     if (inline_all_trivial_functions(outputs, top_order, env)) {
         // Recompute env map since some functions are inlined.
         env.clear();
