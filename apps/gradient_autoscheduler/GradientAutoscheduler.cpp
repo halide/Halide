@@ -592,21 +592,21 @@ void apply_schedule(const MachineParams &params,
                     if (!outer_rvars.empty() && !inner_rvars.empty()) {
                         // Rfactor all the outer RVars.
                         std::vector<std::pair<RVar, Var>> preserved;
-                        std::vector<Var> interm_vars;
+                        std::vector<Var> interim_vars;
                         preserved.reserve(outer_rvars.size());
-                        interm_vars.reserve(outer_rvars.size());
+                        interim_vars.reserve(outer_rvars.size());
                         for (RVar r : outer_rvars) {
                             Var v;
                             preserved.push_back({r, v});
-                            interm_vars.push_back(v);
+                            interim_vars.push_back(v);
                         }
 
                         Var factored;
-                        Func interm =
+                        Func interim =
                             func.update(update_id)
                                 .rfactor(preserved)
                                 .compute_root();
-                        schedule_source << interm.name() << " = " <<
+                        schedule_source << interim.name() << " = " <<
                             func.name() << ".update(" << update_id << ")\n";
                         schedule_source << "    .rfactor({";
                         for (int i = 0; i < (int)preserved.size(); i++) {
@@ -621,10 +621,10 @@ void apply_schedule(const MachineParams &params,
 
                         parallelize_vars_and_rvars(
                             params,
-                            interm,
-                            natural_vector_size(target, interm.values()[0].type()),
+                            interim,
+                            natural_vector_size(target, interim.values()[0].type()),
                             true,
-                            interm_vars,
+                            interim_vars,
                             outer_rvar_sizes,
                             {},
                             {},
@@ -632,13 +632,13 @@ void apply_schedule(const MachineParams &params,
                             is_gpu,
                             schedule_source);
                         schedule_source << ";\n";
-                        schedule_source << interm.name() << ".update()\n";
+                        schedule_source << interim.name() << ".update()\n";
                         parallelize_vars_and_rvars(
                             params,
-                            interm.update(0),
-                            natural_vector_size(target, interm.values()[0].type()),
+                            interim.update(0),
+                            natural_vector_size(target, interim.values()[0].type()),
                             false,
-                            interm_vars,
+                            interim_vars,
                             outer_rvar_sizes,
                             inner_rvars,
                             inner_rvar_sizes,
