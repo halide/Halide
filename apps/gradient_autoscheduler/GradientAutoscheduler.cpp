@@ -98,7 +98,7 @@ void parallelize_vars_and_rvars_gpu(
     // this is our GPU thread.
     // We use 64 since it's twice the warp size, so this launches enough
     // GPU threads for a block to be work efficient.
-    int split_size = 64;
+    const int split_size = 64;
     std::vector<Var> gpu_blocks;
     Var gpu_threads("");
     int gpu_thread_dim = -1;
