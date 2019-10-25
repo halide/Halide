@@ -2939,13 +2939,13 @@ struct LoopNest {
             union_counts = get_union_thread_counts(f);
         }
 
+
         // Place the computation directly inside this loop (provided it's not a SIMD loop)
         if (!innermost &&
             (!in_realization ||
              size.empty() ||
              vector_dim == -1 ||
-             size[vector_dim] == 1) &&
-            (in_realization || gpu_label == block || is_root())) {
+             size[vector_dim] == 1)) {
 
             std::unique_ptr<LoopNest> r{new LoopNest};
             r->copy_from(*this);
@@ -3055,9 +3055,7 @@ struct LoopNest {
                     outer->set_bounds(node, b);
                 }
 
-                bool allocate_here = !target.has_gpu_feature() || (gpu_label == block || is_root());
-
-                if (!in_realization && allocate_here) {
+                if (!in_realization) {
                     outer->store_at.insert(f);
                 }
 
@@ -3116,64 +3114,49 @@ struct LoopNest {
 
                             // create (threads, serial) option
 
-                            // Only allow allocations at the root or block level i.e.
-                            // only compute here if f was already allocated at
-                            // an outer level
-                            if (in_realization) {
-                                internal_assert(in_threads_loop); // threads loop can't be inside threads loop
-                                outer->gpu_label = thread;
-                                inner->gpu_label = serial;
+                            internal_assert(in_threads_loop); // threads loop can't be inside threads loop
+                            outer->gpu_label = thread;
+                            inner->gpu_label = serial;
 
-                                outer->children.emplace_back(inner.release());
-                                outer->compute_here(f, true, v, true, target);
+                            outer->children.emplace_back(inner.release());
+                            outer->compute_here(f, true, v, true, target);
+                            result.emplace_back(outer.release());
+                            break;
+                        }
+
+                        case block: {
+                            internal_assert(!in_threads_loop);
+                            outer->gpu_label = block;
+                            inner->gpu_label = serial;
+
+                            outer->children.emplace_back(inner.release());
+                            outer->compute_here(f, true, v, false, target);
+
+                            bool made_child = outer->add_gpu_thread_tilings(f, params, target, v, result, union_counts);
+
+                            // no good thread tilings, just add the untiled thread loop
+                            if (!made_child) {
                                 result.emplace_back(outer.release());
                             }
                             break;
                         }
 
-                        case block: {
-                            // Only allow allocations at the root or block level i.e.
-                            // disallow this split if the inner loop (which will become
-                            // serial) contains allocations
-                            if (inner->store_at.size() == 0) {
-                                internal_assert(!in_threads_loop);
-                                outer->gpu_label = block;
-                                inner->gpu_label = serial;
+                        case serial: {
+                            outer->gpu_label = serial;
+                            inner->gpu_label = serial;
 
-                                outer->children.emplace_back(inner.release());
-                                outer->compute_here(f, true, v, false, target);
+                            outer->children.emplace_back(inner.release());
+                            outer->compute_here(f, true, v, in_threads_loop, target);
 
+                            if (!in_threads_loop) {
                                 bool made_child = outer->add_gpu_thread_tilings(f, params, target, v, result, union_counts);
 
                                 // no good thread tilings, just add the untiled thread loop
                                 if (!made_child) {
                                     result.emplace_back(outer.release());
                                 }
-                            }
-                            break;
-                        }
-
-                        case serial: {
-                            // Only allow allocations at the root or block level i.e.
-                            // only compute here if f was already allocated at
-                            // an outer level
-                            if (in_realization) {
-                                outer->gpu_label = serial;
-                                inner->gpu_label = serial;
-
-                                outer->children.emplace_back(inner.release());
-                                outer->compute_here(f, true, v, in_threads_loop, target);
-
-                                if (!in_threads_loop) {
-                                    bool made_child = outer->add_gpu_thread_tilings(f, params, target, v, result, union_counts);
-
-                                    // no good thread tilings, just add the untiled thread loop
-                                    if (!made_child) {
-                                        result.emplace_back(outer.release());
-                                    }
-                                } else { // inside a threads loop, can't generate thread loop tilings
-                                    result.emplace_back(outer.release());
-                                }
+                            } else { // inside a threads loop, can't generate thread loop tilings
+                                result.emplace_back(outer.release());
                             }
                             break;
                         }
