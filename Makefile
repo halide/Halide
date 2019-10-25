@@ -734,6 +734,7 @@ HEADER_FILES = \
   PythonExtensionGen.h \
   Qualify.h \
   Random.h \
+  Realization.h \
   RDom.h \
   RealizationOrder.h \
   Reduction.h \
@@ -2011,16 +2012,6 @@ benchmark_apps: $(BENCHMARK_APPS)
 			BIN_DIR=$(CURDIR)/$(BIN_DIR)/apps/$${APP}/bin \
 			HL_TARGET=$(HL_TARGET) ; \
 	done
-
-.PHONY: test_python2
-test_python2: distrib $(BIN_DIR)/host/runtime.a
-	$(MAKE) -C $(ROOT_DIR)/python_bindings \
-		-f $(ROOT_DIR)/python_bindings/Makefile \
-		test \
-		HALIDE_DISTRIB_PATH=$(CURDIR)/$(DISTRIB_DIR) \
-		BIN=$(CURDIR)/$(BIN_DIR)/python2_bindings \
-		PYTHON=python \
-		PYBIND11_PATH=$(REAL_PYBIND11_PATH)
 
 .PHONY: test_python
 test_python: distrib $(BIN_DIR)/host/runtime.a

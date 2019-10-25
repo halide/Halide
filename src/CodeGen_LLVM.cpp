@@ -990,7 +990,11 @@ Constant *CodeGen_LLVM::embed_constant_scalar_value_t(Expr e) {
         ConstantArray::get(array_type, array_entries));
 
     // Ensure that the storage is aligned for halide_scalar_value_t
+#if LLVM_VERSION >= 100
+    storage->setAlignment(MaybeAlign((unsigned)sizeof(halide_scalar_value_t)));
+#else
     storage->setAlignment((unsigned)sizeof(halide_scalar_value_t));
+#endif
 
     Constant *zero[] = {ConstantInt::get(i32_t, 0)};
     return ConstantExpr::getBitCast(
@@ -3511,7 +3515,11 @@ Constant *CodeGen_LLVM::create_binary_blob(const vector<char> &data, const strin
     if (data.size() > alignment && native_vector_bytes > alignment) {
         alignment = native_vector_bytes;
     }
+#if LLVM_VERSION >= 100
+    global->setAlignment(MaybeAlign((unsigned)alignment));
+#else
     global->setAlignment((unsigned)alignment);
+#endif
 
     Constant *zero = ConstantInt::get(i32_t, 0);
     Constant *zeros[] = {zero, zero};
