@@ -5,6 +5,8 @@ namespace Halide {
 namespace Internal {
 namespace Autoscheduler {
 
+namespace {
+
 std::map<std::string, Box> inference_bounds(const std::vector<Function> &functions,
                                             const std::vector<Box> &output_bounds) {
     std::vector<Func> funcs;
@@ -738,6 +740,8 @@ void apply_schedule(const MachineParams &params,
         }
     }
     schedule_source << ";\n";
+}
+
 }
 
 void generate_schedule(const std::vector<Function> &outputs,
