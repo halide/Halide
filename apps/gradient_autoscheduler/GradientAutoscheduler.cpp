@@ -217,7 +217,7 @@ void parallelize_vars_and_rvars_gpu(
         }
     }
     
-    if (!gpu_blocks.empty() || !r_gpu_blocks.empty() { 
+    if (!gpu_blocks.empty() || !r_gpu_blocks.empty()) { 
         // Assign outer loops to GPU blocks
         if (!fused_var.name().empty()) {
             func_or_stage.gpu_blocks(fused_var);
@@ -260,7 +260,7 @@ void parallelize_vars_and_rvars_cpu(
         std::ostringstream &schedule_source) {
     // Find the first variable that has bounds larger or equal than 16,
     // this is our vectorized dimension
-    constexpr int split_size = natural_vector_size;
+    const int split_size = natural_vector_size;
     std::vector<Var> parallel_vars;
     Var vectorized_var("");
     int num_threads_var = 1;
