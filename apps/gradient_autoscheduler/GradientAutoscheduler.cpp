@@ -98,7 +98,7 @@ void parallelize_vars_and_rvars_gpu(
     // this is our GPU thread.
     // We use 64 since it's twice the warp size, so this launches enough
     // GPU threads for a block to be work efficient.
-    const int split_size = 64;
+    constexpr int split_size = 64;
     std::vector<Var> gpu_blocks;
     Var gpu_threads("");
     int gpu_thread_dim = -1;
@@ -260,7 +260,7 @@ void parallelize_vars_and_rvars_cpu(
         std::ostringstream &schedule_source) {
     // Find the first variable that has bounds larger or equal than 16,
     // this is our vectorized dimension
-    int split_size = natural_vector_size;
+    constexpr int split_size = natural_vector_size;
     std::vector<Var> parallel_vars;
     Var vectorized_var("");
     int num_threads_var = 1;
