@@ -809,7 +809,7 @@ void generate_schedule(const std::vector<Function> &outputs,
         const Box &bounds = it.second;
         for (int d = 0; d < (int)bounds.size(); d++) {
             user_assert(bounds[d].is_bounded()) << "Access to function or buffer " << it.first << " at dimension " << d << " is not bounded. "
-                                                << "We can only differentiate bounded accesses.\n";
+                                                << "We can only schedule bounded accesses.\n";
         }
     }
 
