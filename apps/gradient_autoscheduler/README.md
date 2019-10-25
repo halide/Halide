@@ -14,7 +14,8 @@ wavelet | 18.86 ms | 21.46 ms | N/A | 6.35 ms
 
 Tested on a 8 core Intel CPU (16 with HT) and TITAN Xp.
 
-This autoscheduler can also be used with Python bindings. Compile with
+See `test.cpp` and `demo_generator.cpp` for how to use this autoscheduler.
+It can also be used with Python bindings. Compile with
 ```
 WITH_PYTHON=1 make
 ```
