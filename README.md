@@ -11,7 +11,8 @@ Rather than being a standalone programming language, Halide is
 embedded in C++. This means you write C++ code that builds an
 in-memory representation of a Halide pipeline using Halide's C++
 API. You can then compile this representation to an object file, or
-JIT-compile it and run it in the same process.
+JIT-compile it and run it in the same process. Halide also provides
+Python bindings that mirror the C++ API.
 
 For more detail about what Halide is, see http://halide-lang.org.
 
