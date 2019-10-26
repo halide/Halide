@@ -61,7 +61,7 @@ requirements.txt`)
 
 ## Compilation instructions
 
-Build using: `bash make`
+Build using: `make`
 
 ## Documentation and Examples
 
