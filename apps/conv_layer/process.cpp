@@ -41,6 +41,11 @@ int main(int argc, char **argv) {
 
     Buffer<float> output(64, 64, 32, 4);
 
+    // Let the Halide runtime hold onto GPU allocations for
+    // intermediates and reuse them instead of eagerly freeing
+    // them. cuMemAlloc/cuMemFree is slower than the algorithm!
+    halide_reuse_device_allocations(nullptr, true);
+
     conv_layer(input, filter, bias, output);
 
     // Timing code
@@ -48,12 +53,14 @@ int main(int argc, char **argv) {
     // Manually-tuned version
     double min_t_manual = benchmark(10, 10, [&]() {
         conv_layer(input, filter, bias, output);
+        output.device_sync();
     });
     printf("Manually-tuned time: %gms\n", min_t_manual * 1e3);
 
     // Auto-scheduled version
     double min_t_auto = benchmark(10, 10, [&]() {
         conv_layer_auto_schedule(input, filter, bias, output);
+        output.device_sync();
     });
     printf("Auto-scheduled time: %gms\n", min_t_auto * 1e3);
 
