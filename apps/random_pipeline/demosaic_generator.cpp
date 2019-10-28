@@ -277,7 +277,7 @@ public:
     using paramT = float;
     Type paramHT = Halide::type_of<paramT>();
 
-    int num_stage_types = 21;
+    int num_stage_types = 4;
 
     // The random seed to use to generate the pipeline.
     GeneratorParam<int> seed{"seed", 1};
@@ -313,6 +313,8 @@ public:
     std::unordered_map<uint64_t, int>* hashes;
 
     vector<int> correct_output_type;
+
+    int rejection_count = 0;
 
     void set_dag_file(string fname) {
         DAG_csv = fname;
@@ -469,17 +471,40 @@ public:
         return;
     }
 
+    std::string type_string(vector<int>& type) {
+        std::string type_string = "";
+        for (int v : type) {
+            type_string += std::to_string(v);
+        }
+        return type_string;
+    }
+
+    bool type_match(vector<int>& typeA, vector<int>& typeB) {
+        bool match = true;
+        for (int c = 0; c < 3; c++) {
+            match = match && ( typeA[c] == typeB[c] );
+        }
+        return match;
+    }
+
     class Stage {
         public:
             uint64_t stage_index;
             uint64_t stage_type;
             uint64_t hash;
 
-            virtual vector<int> compute_output_type();
+            vector<int> output_type;
+
+            virtual vector<int>& compute_output_type() {
+                asseert(!output_type.empty());
+                return output_type;
+            };
 
             void add_dag_schema(Stage producer) {
+                vector<int>& type = compute_output_type();
                 dag_schema.emplace_back((uint64_t)seed, std::string(func.name()), 
-                                        stage_type, stage_index, producer.stage_index,
+                                        stage_type, stage_index, type_string(type), 
+                                        producer.stage_index,
                                         std::string(producer.func.name()));
             }
             
@@ -497,14 +522,20 @@ public:
             }
             
             Func func;
-            // approx width and height and channels. Used to preserve
-            // spatial scale when combining stages, and to track the total
-            // sizes of things.
+            // approx width and height and channels. Used to preserve spatial
+            // scale when combining stages, and to track the total sizes of things.
             int w, h, c;
 
             static constexpr int max_size = 10000;
             static constexpr int min_size = 100;
             static constexpr int max_stride = 3; // for convs and pools
+
+            Stage() {}
+            Stage(Func f, int w, int h, int c, vector<int> output_type)  : 
+                func(f), w(w), h(h), c(c), output_type(output_type) { 
+                stage_type = 0;
+                stage_index = 0;
+            }
 
             int size() const {
                 return w*h*c;
@@ -614,12 +645,17 @@ public:
         vector<Expr> input_coords1;
         vector<Expr> input_coords2;
         
-        vector<int> compute_output_type() {
-            return input_stage.compute_output_type();
+        vector<int>& compute_output_type() {
+            if (!output_type.empty()) {
+                return output_type;
+            } else {
+                output_type = input_stage.compute_output_type();
+                return output_type;
+            }
         }
 
         Interp2TapStage(vector<Stage> &s, uint64_t h, int input_id=-1) {
-            stage_index = (uint64_t)s.size();
+            stage_index = (uint64_t)s.size() - num_input_buffers + 1;
             stage_type  = (uint64_t)1;
             hash = h; 
             Func interp("interp2Tap");
@@ -673,16 +709,20 @@ public:
 
     class SelectInterp2Tap : public Stage {
         public:
-        Stage interp1_stage, interp2_stage;
+        Interp2Tap interp1_stage, interp2_stage;
         
-        vector<int> compute_output_type() {
-            vector<int> interp1_output_type, interp2_output_type;
-            interp1_output_type = interp1_stage.compute_output_type();
-            interp2_output_type = interp2_stage.compute_output_type();
-            if (interp1_output_type != interp2_output_type) {
-                throw "select must choose from interps of same type";
-            } 
-            return interp1_output_type;
+        vector<int>& compute_output_type() {
+            if (!output_type.empty()) {
+                return output_type;
+            } else {
+                vector<int>& interp1_output_type = interp1_stage.compute_output_type();
+                vector<int>& interp2_output_type = interp2_stage.compute_output_type();
+                if (interp1_output_type != interp2_output_type) {
+                    throw "select must choose from interps of same type";
+                } 
+                output_type = interp1_output_type;
+                return output_type;
+            }
         }
 
         SelectInterp2Tap(vector<Stage> &s, uint64_t h, int input_id=-1) {
@@ -710,7 +750,7 @@ public:
             interp2_coords2 = interp2_stage.input_coords2;
             s.push_back(interp2_stage);
           
-            stage_index = (uint64_t)s.size();
+            stage_index = (uint64_t)s.size() - num_input_buffers + 1;
 
             std::cout << selectInterp.name() << " selects from: " << interp1_stage.func.name() << " and " << interp2_stage.func.name() << std::endl; 
 
@@ -745,23 +785,27 @@ public:
         vector<Expr> coords1; // coordinates used to index
         vector<Expr> coords2; // interp stage and input stage
 
-        vector<int> compute_output_type() {
-            vector<int> ref_output_type = ref_stage.compute_output_type();
-            vector<int> interp_output_type = interp_stage.compugte_output_type();
-            vector<int> input_output_type = input_stage.compute_output_type();
-            assert(ref_output_type.size() == interp_output_type.size() == input_output_type.size());
+        vector<int>& compute_output_type() {
+            if (!output_type.empty()) {
+                return output_type;
+            } else {
+                vector<int>& ref_output_type = ref_stage.compute_output_type();
+                vector<int>& interp_output_type = interp_stage.compugte_output_type();
+                vector<int>& input_output_type = input_stage.compute_output_type();
+                assert(ref_output_type.size() == interp_output_type.size() == input_output_type.size());
 
-            vector<int> output_type = ref_output_type;
+                output_type = ref_output_type;
 
-            for (int i = 0; i < ref_output_type.size(); i++) {
-                output_type[i] -= interp_output_type[i];
-                output_type[i] += input_output_type[i];
+                for (int i = 0; i < ref_output_type.size(); i++) {
+                    output_type[i] -= interp_output_type[i];
+                    output_type[i] += input_output_type[i];
+                }
+                return output_type;
             }
-            return output_type;
         }
        
         CorrectInterp2Tap(vector<Stage> &s, uint64_t h, int use_id=-1) {
-            stage_index = (uint64_t)s.size();
+            stage_index = (uint64_t)s.size() - num_input_buffers + 1;
             stage_type = 3;
             hash = h;
             Func correctInterp("correctInterp2Tap");
@@ -841,16 +885,19 @@ public:
 
     class SelectCorrectInterp : public Stage {
         public:
-        Stage correctInterp1, correctInterp2;
+        CorrectInterp2Tap correctInterp1, correctInterp2;
         
-        vector<int> compute_output_type() {
-            vector<int> correctInterp1_type, correctInterp2_type;
-            correctInterp1_type = correctInterp1.compute_output_type();
-            correctInterp2_type = correctInterp2.compute_output_type();
+        vector<int>& compute_output_type() {
+            if (!output_type.empty()) {
+                return output_type;
+            } else {
+            vector<int>& correctInterp1_type = correctInterp1.compute_output_type();
+            vector<int>& correctInterp2_type = correctInterp2.compute_output_type();
             if (correctInterp1_type != correctInterp2_type) {
                 throw "select correct interp must choose from interps of same type";
             } 
-            return correctInterp1_type;
+            output_type = correctInterp1_type;
+            return output_type;
         }
         
         SelectCorrectInterp(vector<Stage> &s, uint64_t h, int input_id=-1) {
@@ -872,7 +919,7 @@ public:
             s.push_back(correctInterp2);
           
             std::cout << selectInterp.name() << " selects from: " << s1.func.name() << " and " << s2.func.name() << std::endl; 
-            stage_index = (uint64_t)s.size();
+            stage_index = (uint64_t)s.size() - num_input_buffers + 1;
 
             Func correctInterp1_input = correctInterp1.input_stage;
             Func correctInterp2_input = correctInterp2.input_stage;
@@ -967,19 +1014,24 @@ public:
             bounds.at(2).first = 0;
             bounds.at(2).second = input_c;
             Func padded_input = Halide::BoundaryConditions::constant_exterior(input_buff_dummies[i], cast(inputHT, 0), bounds);
+            vector<int> input_type;
             std::string func_name;
             switch (i) {
                 case 0:
                     func_name = "shifted_GR";
+                    input_type = {0, 1, 0, 0, 0, 0};
                     break;
                 case 1:
                     func_name = "shifted_R";
+                    input_type = {1, 0, 0, 0, 0, 0};
                     break;
                 case 2:
                     func_name = "shifted_B";
+                    input_type = {0, 0, 1, 0, 0, 0};
                     break;
                 case 3:
                     func_name = "shifted_GB";
+                    input_type = {0, 1, 0, 0, 0, 0};
                     break;
             }
 
@@ -990,7 +1042,7 @@ public:
 
             std::cout << shifted_input(x, y, c) << " = " << value << std::endl;
 
-            stages.emplace_back(Stage{shifted_input, output_w, output_h, output_c});  
+            stages.emplace_back(Stage(shifted_input, output_w, output_h, output_c, input_type));  
         } 
 
         std::cout << "max stages: " << (int)max_stages << "\n" << std::endl;
@@ -1017,10 +1069,12 @@ public:
             std::cout << "finished adding stages" << std::endl;
 
             // check that pipeline is not a duplicate and type check
-            vector<int> output_type = stages.back().compute_output_type();
-            if (!(*hashes)[h]++ && (output_type == correct_output_type)) {
+            vector<int>& output_type = stages.back().compute_output_type();
+            
+            if (!(*hashes)[h]++ && type_match(output_type, correct_output_type)) {
                 break;
             } // else keep generating pipelines
+            rejection_count++;
             stages.erase(stages.begin()+num_input_buffers, stages.end());
         }
     }

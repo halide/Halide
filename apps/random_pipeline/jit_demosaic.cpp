@@ -15,7 +15,7 @@
 
 #include "Halide.h"
 #include "HalideBuffer.h"
-#include "new_generator.cpp"
+#include "demosaic_generator.cpp"
 
 
 using namespace Halide;
@@ -118,6 +118,9 @@ int main(int argc, char *argv[]) {
     Buffer<lossT> loss_buff = Buffer<lossT>::make_scalar();
     Buffer<outputT> output_buff = Buffer<outputT>(output_w, output_h, output_c);
 
+    int rejection_count = 0;
+    std::vector<int> correct_output_type{0, 0, 1, 0, 0, 0};
+
     // for each pipeline do:
     for (int p = 0; p < num_pipes; p++) {
         float loss = 0;
@@ -150,16 +153,13 @@ int main(int argc, char *argv[]) {
         // hook up the input buffers correctly
         std::vector<Buffer<inputT>> input_buffs = {input0, input1, input2, input3};
         gen->set_inputs(input_buffs);
+        gen->set_correct_output_type(correct_output_type);
         
         // iterate over every image in data directory
         std::string image_dir;
         std::ifstream data_files_f(data_files);
       
-        ///int first = 1;
-        //uint64_t start, end, diff, first_diff;
-        //float avg_diff;
         while (getline(data_files_f, image_dir)) {
-            // start = std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::system_clock::now().time_since_epoch()).count();
 
             load_buffer_from_file<outputT>(correct_output, image_dir + "/b_at_gr_dense.data");
             load_buffer_from_file<inputT>(input0, image_dir + "/gr.data");
@@ -170,7 +170,6 @@ int main(int argc, char *argv[]) {
             Realization r(loss_buff, output_buff);
             gen->realize(r);
 
-            //end = std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::system_clock::now().time_since_epoch()).count();
             /**
             if (first) {
                 first_diff = end - start;
@@ -184,7 +183,8 @@ int main(int argc, char *argv[]) {
             loss += (loss_buff() / (float)num_images);
         }
 
-        //std::cout << "average time for all other realizations: " << avg_diff << std::endl;
+        // increment rejetion count
+        rejection_count += gen.rejection_count;
 
         // write average loss to file 
         std::ofstream loss_file;
@@ -202,7 +202,8 @@ int main(int argc, char *argv[]) {
     }
     std::ofstream best_loss_file;
     best_loss_file.open(output_dir + "/best_loss.txt");
-    best_loss_file << "best loss: " << best_loss << " seed: " << best_seed << std::endl;
+    best_loss_file << "best loss: " << best_loss << " seed: " << best_seed 
+        << "rejected: " << rejection_count << std::endl;
     best_loss_file.close();
 
     // take down stats on duplicate pipelines
