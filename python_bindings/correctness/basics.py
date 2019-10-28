@@ -165,6 +165,7 @@ def test_basics4():
     f.compile_jit()
 
 def test_basics5():
+    # Test Func.inside()
     x, y = hl.Var('x'), hl.Var('y')
     f = hl.Func('f')
     g = hl.Func('g')
