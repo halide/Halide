@@ -13,6 +13,11 @@ int main(int argc, char **argv) {
         size = atoi(argv[1]);
     }
 
+    // Let the Halide runtime hold onto GPU allocations for
+    // intermediates and reuse them instead of eagerly freeing
+    // them. cuMemAlloc/cuMemFree is slower than the algorithm!
+    halide_reuse_device_allocations(nullptr, true);
+
     // Check correctness using small-integer matrices
     if (1) {
         Buffer<float> A(size, size), B(size, size), C(size, size);

@@ -20,6 +20,11 @@ int main(int argc, char **argv) {
         return 0;
     }
 
+    // Let the Halide runtime hold onto GPU allocations for
+    // intermediates and reuse them instead of eagerly freeing
+    // them. cuMemAlloc/cuMemFree is slower than the algorithm!
+    halide_reuse_device_allocations(nullptr, true);
+
     // Input may be a PNG8
     Buffer<uint16_t> input = load_and_convert_image(argv[1]);
     // Just take the red channel
@@ -35,6 +40,7 @@ int main(int argc, char **argv) {
     // Manually-tuned version
     double best_manual = benchmark(timing, 1, [&]() {
         stencil_chain(input, output);
+        output.device_sync();
     });
     printf("Manually-tuned time: %gms\n", best_manual * 1e3);
 
@@ -42,6 +48,7 @@ int main(int argc, char **argv) {
     // Auto-scheduled version
     double best_auto = benchmark(timing, 1, [&]() {
         stencil_chain_auto_schedule(input, output);
+        output.device_sync();
     });
     printf("Auto-scheduled time: %gms\n", best_auto * 1e3);
     #endif
