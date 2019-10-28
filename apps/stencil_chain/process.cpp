@@ -20,11 +20,6 @@ int main(int argc, char **argv) {
         return 0;
     }
 
-    // Let the Halide runtime hold onto GPU allocations for
-    // intermediates and reuse them instead of eagerly freeing
-    // them. cuMemAlloc/cuMemFree is slower than the algorithm!
-    halide_reuse_device_allocations(nullptr, true);
-
     // Input may be a PNG8
     Buffer<uint16_t> input = load_and_convert_image(argv[1]);
     // Just take the red channel
