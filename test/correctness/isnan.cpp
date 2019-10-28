@@ -6,10 +6,7 @@ using namespace Halide;
 constexpr int w = 16;
 constexpr int h = 16;
 
-/* Halide uses fast-math by default. is_nan must either be used inside
- * strict_float or as a test on inputs produced outside of
- * Halide. Using it to test results produced by math inside Halide but
- * not using strict_float is unreliable. This test covers both of these cases. */
+/* Halide uses fast-math by default. is_nan must be used inside strict_float. */
 
 int check_nans(const Buffer<float> &im) {
     for (int x = 0; x < im.dim(0).extent(); x++) {
@@ -100,7 +97,7 @@ int main(int argc, char **argv) {
         Var x;
         Var y;
 
-        f(x, y) = select(is_nan(in(x, y)), 0.0f, 1.0f);
+        f(x, y) = select(is_nan(strict_float(in(x, y))), 0.0f, 1.0f);
         f.vectorize(x, 8);
 
         in.set(non_halide_produced);
@@ -139,7 +136,7 @@ int main(int argc, char **argv) {
         Var x;
         Var y;
 
-        f(x, y) = select(is_inf(in(x, y)), 1.0f, 0.0f);
+        f(x, y) = select(is_inf(strict_float(in(x, y))), 1.0f, 0.0f);
         f.vectorize(x, 8);
 
         in.set(non_halide_produced);
@@ -178,7 +175,7 @@ int main(int argc, char **argv) {
         Var x;
         Var y;
 
-        f(x, y) = select(is_finite(in(x, y)), 1.0f, 0.0f);
+        f(x, y) = select(is_finite(strict_float(in(x, y))), 1.0f, 0.0f);
         f.vectorize(x, 8);
 
         in.set(non_halide_produced);

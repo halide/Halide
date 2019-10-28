@@ -1,5 +1,7 @@
 #include "StrictifyFloat.h"
 
+#include <unordered_set>
+
 #include "IRMutator.h"
 #include "IROperator.h"
 
@@ -7,11 +9,22 @@ namespace Halide {
 namespace Internal {
 
 class StrictifyFloat : public IRMutator {
-    bool strict_float_allowed;
     enum Strictness {
         FastMath,
         StrictFloat,
     } strictness;
+
+    const std::unordered_set<std::string> strict_required_calls = {
+        "is_finite_f16",
+        "is_finite_f32",
+        "is_finite_f64",
+        "is_inf_f16",
+        "is_inf_f32",
+        "is_inf_f64",
+        "is_nan_f16",
+        "is_nan_f32",
+        "is_nan_f64",
+    };
 
     using IRMutator::visit;
 
@@ -19,14 +32,29 @@ class StrictifyFloat : public IRMutator {
         Strictness new_strictness = strictness;
 
         if (call->is_intrinsic(Call::strict_float)) {
-            user_assert(strict_float_allowed) << "strict_float intrinsic is not allowed unless target has feature 'allow_strict_float' or 'force_strict_float'\n";
             new_strictness = StrictFloat;
             any_strict_float |= true;
         }
 
         ScopedValue<Strictness> save_strictness(strictness, new_strictness);
 
-        return IRMutator::visit(call);
+        Expr result = IRMutator::visit(call);
+        if (strict_required_calls.count(call->name)) {
+            const Call *c = result.as<Call>();
+            internal_assert(c != nullptr);
+            internal_assert(c->name == call->name);
+            for (const Expr &e : c->args) {
+                const Call *strict = e.as<Call>();
+                if (!strict || !strict->is_intrinsic(Call::strict_float)) {
+                    user_error
+                        << c->name << "() may only be used on Exprs "
+                           "that will evaluated in strict_float mode; either wrap the Expr in strict_float() "
+                           "or add strict_float to your Target flags.\n"
+                        << e << "\n";
+                }
+            }
+        }
+        return result;
     }
 
     using IRMutator::mutate;
@@ -49,15 +77,13 @@ class StrictifyFloat : public IRMutator {
 
 public:
     enum StrictnessMode {
-        NotAllowed,
         Allowed,
         Forced
     };
     bool any_strict_float{false};
 
     StrictifyFloat(StrictnessMode mode)
-        : strict_float_allowed(mode != NotAllowed),
-          strictness((mode == Forced) ? StrictFloat : FastMath) {
+        : strictness((mode == Forced) ? StrictFloat : FastMath) {
         any_strict_float |= (mode == Forced);
     }
 };
