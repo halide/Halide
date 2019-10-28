@@ -1912,18 +1912,6 @@ Func Derivative::operator()(const Param<> &param) const {
     return it->second;
 }
 
-std::vector<Func> Derivative::funcs(const Func &func) const {
-    std::vector<Func> result;
-    FuncKey k{func.name(), -1};
-    for (int i = func.num_update_definitions() - 1; i >= -1; i--) {
-        k.second = i;
-        auto it = adjoints.find(k);
-        internal_assert(it != adjoints.end()) << "Could not find derivative of " << k.first << " " << k.second << "\n";
-        result.push_back(it->second);
-    }
-    return result;
-}
-
 Derivative propagate_adjoints(const Func &output,
                               const Func &adjoint,
                               const vector<pair<Expr, Expr>> &output_bounds) {
