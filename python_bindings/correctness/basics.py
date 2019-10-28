@@ -176,8 +176,8 @@ def test_basics5():
     g[x] += f[x, r]
     h[x] = 0
     h[x] += f[x, r]
-    f.inside(g).compute_at(g, x)
-    f.inside(h).compute_at(h, x)
+    f.in_(g).compute_at(g, x)
+    f.in_(h).compute_at(h, x)
     g.compute_root()
     h.compute_root()
     p = hl.Pipeline([g, h])
