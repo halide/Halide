@@ -37,8 +37,8 @@ std::vector<int> get_int_bounds(const Box &bounds) {
         Expr extent = simplify(interval.max - interval.min + 1);
         extent = simplify(substitute_var_estimates(extent));
         const int64_t *extent_int = as_const_int(extent);
-        user_assert(extent_int != nullptr) <<
-            "extent:" << extent << " is not constant.\n";
+        user_assert(extent_int != nullptr)
+            << "extent:" << extent << " is not constant.\n";
         int_bounds.push_back(*extent_int);
     }
     return int_bounds;
@@ -50,8 +50,8 @@ std::vector<int> get_rvar_bounds(const std::vector<ReductionVariable> &rvars) {
     for (int arg_id = 0; arg_id < (int)rvars.size(); arg_id++) {
         Expr extent = simplify(substitute_var_estimates(rvars[arg_id].extent));
         const int64_t *extent_int = as_const_int(extent);
-        user_assert(extent_int != nullptr) <<
-            "extent:" << extent << " is not constant.\n";
+        user_assert(extent_int != nullptr)
+            << "extent:" << extent << " is not constant.\n";
         rvar_bounds.push_back(*extent_int);
     }
     return rvar_bounds;
@@ -114,12 +114,12 @@ void parallelize_vars_and_rvars_gpu(
                                 inner,
                                 split_size,
                                 tail);
-            schedule_source << "    .split(" <<
-                vars[i].name() << "," <<
-                outer.name() << "," <<
-                inner.name() << "," <<
-                split_size << "," <<
-                tail << ")\n";
+            schedule_source << "    .split("
+                << vars[i].name() << ","
+                << outer.name() << ","
+                << inner.name() << ","
+                << split_size << ","
+                << tail << ")\n";
             gpu_blocks.push_back(outer);
             gpu_threads = inner;
         } else {
@@ -140,12 +140,12 @@ void parallelize_vars_and_rvars_gpu(
                                     inner,
                                     split_size,
                                     tail);
-                schedule_source << "    .split(" <<
-                    rvars[i].name() << "," <<
-                    outer.name() << "," <<
-                    inner.name() << "," <<
-                    split_size << "," <<
-                    tail << ")\n";
+                schedule_source << "    .split("
+                    << rvars[i].name() << ","
+                    << outer.name() << ","
+                    << inner.name() << ","
+                    << split_size << ","
+                    << tail << ")\n";
                 r_gpu_blocks.push_back(outer);
                 r_gpu_threads = inner;
             } else {
@@ -163,10 +163,10 @@ void parallelize_vars_and_rvars_gpu(
         // inner to outer
         for (int i = 1; i < (int)gpu_blocks.size(); i++) {
             func_or_stage.fuse(fused_var, gpu_blocks[i], fused_var);
-            schedule_source << "    .fuse(" <<
-                fused_var.name() << "," <<
-                gpu_blocks[i].name() << "," <<
-                fused_var.name() << ")\n";
+            schedule_source << "    .fuse("
+                << fused_var.name() << ","
+                << gpu_blocks[i].name() << ","
+                << fused_var.name() << ")\n";
         }
     }
     RVar fused_rvar("");
@@ -175,10 +175,10 @@ void parallelize_vars_and_rvars_gpu(
         // inner to outer
         for (int i = 1; i < (int)r_gpu_blocks.size(); i++) {
             func_or_stage.fuse(fused_rvar, r_gpu_blocks[i], fused_rvar);
-            schedule_source << "    .fuse(" <<
-                fused_rvar.name() << "," <<
-                r_gpu_blocks[i].name() << "," <<
-                fused_rvar.name() << ")\n";
+            schedule_source << "    .fuse("
+                << fused_rvar.name() << ","
+                << r_gpu_blocks[i].name() << ","
+                << fused_rvar.name() << ")\n";
         }
     }
 
@@ -277,12 +277,12 @@ void parallelize_vars_and_rvars_cpu(
                                 inner,
                                 split_size,
                                 tail);
-            schedule_source << "    .split(" <<
-                vars[i].name() << "," <<
-                outer.name() << "," <<
-                inner.name() << "," <<
-                split_size << "," <<
-                tail << ")\n";
+            schedule_source << "    .split("
+                << vars[i].name() << ","
+                << outer.name() << ","
+                << inner.name() << ","
+                << split_size << ","
+                << tail << ")\n";
             parallel_vars.push_back(outer);
             vectorized_var = inner;
             int b = var_bounds[i] / split_size;
@@ -311,12 +311,12 @@ void parallelize_vars_and_rvars_cpu(
                                 inner,
                                 split_size,
                                 tail);
-            schedule_source << "    .split(" <<
-                rvars[i].name() << "," <<
-                outer.name() << "," <<
-                inner.name() << "," <<
-                split_size << "," <<
-                tail << ")\n";
+            schedule_source << "    .split("
+                << rvars[i].name() << ","
+                << outer.name() << ","
+                << inner.name() << ","
+                << split_size << ","
+                << tail << ")\n";
             int b = rvar_bounds[i] / split_size;
             if (rvar_bounds[i] % split_size == 0) {
                 b++;
@@ -345,10 +345,10 @@ void parallelize_vars_and_rvars_cpu(
         // inner to outer
         for (int i = 1; i < (int)parallel_vars.size(); i++) {
             func_or_stage.fuse(fused_var, parallel_vars[i], fused_var);
-            schedule_source << "    .fuse(" <<
-                fused_var.name() << "," <<
-                parallel_vars[i].name() << "," <<
-                fused_var.name() << ")\n";
+            schedule_source << "    .fuse("
+                << fused_var.name() << ","
+                << parallel_vars[i].name() << ","
+                << fused_var.name() << ")\n";
         }
     }
 
@@ -359,10 +359,10 @@ void parallelize_vars_and_rvars_cpu(
         // inner to outer
         for (int i = 1; i < (int)parallel_rvars.size(); i++) {
             func_or_stage.fuse(fused_rvar, parallel_rvars[i], fused_rvar);
-            schedule_source << "    .fuse(" <<
-                fused_rvar.name() << "," <<
-                parallel_rvars[i].name() << "," <<
-                fused_rvar.name() << ")\n";
+            schedule_source << "    .fuse("
+                << fused_rvar.name() << ","
+                << parallel_rvars[i].name() << ","
+                << fused_rvar.name() << ")\n";
         }
     }
 
@@ -411,10 +411,10 @@ void parallelize_vars_and_rvars_cpu(
             func_or_stage.parallel(fused_var,
                                    num_threads_var / (params.parallelism * 8),
                                    tail);
-            schedule_source << "    .parallel(" <<
-                fused_var.name() << "," <<
-                num_threads_var / (params.parallelism * 8) << "," <<
-                tail << ")\n";
+            schedule_source << "    .parallel("
+                << fused_var.name() << ","
+                << num_threads_var / (params.parallelism * 8) << ","
+                << tail << ")\n";
         } else {
             func_or_stage.parallel(fused_var);
             schedule_source << "    .parallel(" <<
@@ -429,28 +429,28 @@ void parallelize_vars_and_rvars_cpu(
                                    num_threads_rvar / (params.parallelism * 8),
                                    tail);
             schedule_source << "    .atomic()\n";
-            schedule_source << "    .parallel(" <<
-                fused_rvar.name() << "," <<
-                num_threads_rvar / (params.parallelism * 8) << "," <<
-                tail << ")\n";
+            schedule_source << "    .parallel("
+                << fused_rvar.name() << ","
+                << num_threads_rvar / (params.parallelism * 8) << ","
+                << tail << ")\n";
         } else {
             func_or_stage.atomic()
                          .parallel(fused_rvar);
             schedule_source << "    .atomic()\n";
-            schedule_source << "    .parallel(" <<
-                fused_rvar.name() << ")\n";
+            schedule_source << "    .parallel("
+                << fused_rvar.name() << ")\n";
         }
     }
     if (!vectorized_var.name().empty()) {
         func_or_stage.vectorize(vectorized_var);
-        schedule_source << "    .vectorize(" <<
-            vectorized_var.name() << ")\n";
+        schedule_source << "    .vectorize("
+            << vectorized_var.name() << ")\n";
     }
     if (!vectorized_rvar.name().empty()) {
         func_or_stage.atomic().vectorize(vectorized_rvar);
         schedule_source << "    .atomic()\n";
-        schedule_source << "    .vectorize(" <<
-            vectorized_rvar.name() << ")\n";
+        schedule_source << "    .vectorize("
+            << vectorized_rvar.name() << ")\n";
     }
 }
 
@@ -575,12 +575,12 @@ void apply_schedule(const MachineParams &params,
                             func.update(update_id)
                                 .split(rvars[i], outer, inner, split_size,
                                        TailStrategy::GuardWithIf);
-                            schedule_source << "    .split(" <<
-                                rvars[i].name() << "," <<
-                                outer.name() << "," <<
-                                inner.name() << "," <<
-                                split_size << "," <<
-                                TailStrategy::GuardWithIf << ")\n";
+                            schedule_source << "    .split("
+                                << rvars[i].name() << ","
+                                << outer.name() << ","
+                                << inner.name() << ","
+                                << split_size << ","
+                                << TailStrategy::GuardWithIf << ")\n";
                             outer_rvars.push_back(outer);
                             inner_rvars.push_back(inner);
                             int outer_size = rvar_bounds[i] % split_size == 0 ? split_size : split_size + 1;
@@ -609,12 +609,12 @@ void apply_schedule(const MachineParams &params,
                             func.update(update_id)
                                 .rfactor(preserved)
                                 .compute_root();
-                        schedule_source << interim.name() << " = " <<
-                            func.name() << ".update(" << update_id << ")\n";
+                        schedule_source << interim.name() << " = "
+                            << func.name() << ".update(" << update_id << ")\n";
                         schedule_source << "    .rfactor({";
                         for (int i = 0; i < (int)preserved.size(); i++) {
-                            schedule_source << "{" << preserved[i].first.name() << "," <<
-                                                      preserved[i].second.name() << "}";
+                            schedule_source << "{" << preserved[i].first.name() << ","
+                                                   << preserved[i].second.name() << "}";
                             if (i != (int)preserved.size() - 1) {
                                 schedule_source << ",";
                             }
@@ -798,8 +798,8 @@ void generate_schedule(const std::vector<Function> &outputs,
     for (const auto &output : outputs) {
         const FuncSchedule &schedule = output.schedule();
         const std::vector<Bound> &estimates = schedule.estimates();
-        user_assert((int)estimates.size() == output.dimensions()) <<
-            "Bound estimates of function " << output.name() << " are not provided.\n";
+        user_assert((int)estimates.size() == output.dimensions())
+            << "Bound estimates of function " << output.name() << " are not provided.\n";
         std::vector<Interval> b;
         b.reserve(estimates.size());
         for (const auto &e : estimates) {
