@@ -67,7 +67,7 @@ int main(int argc, char **argv) {
         // For each Func we need to schedule all its updates.
         // update_id == -1 represents the pure definition.
         for (int update_id = -1; update_id < f.num_update_definitions(); update_id++) {
-            Func df = d_err_d(f);
+            Func df = d_err_d(f, update_id);
             df.compute_root().vectorize(df.args()[0], 4);
             for (int i = 0; i < df.num_update_definitions(); i++) {
                 // Find a pure var to vectorize over
