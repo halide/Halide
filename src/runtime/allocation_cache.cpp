@@ -6,7 +6,7 @@ namespace Halide {
 namespace Runtime {
 namespace Internal {
 
-WEAK bool halide_reuse_device_allocations_flag = false;
+WEAK bool halide_reuse_device_allocations_flag = true;
 
 WEAK halide_mutex allocation_pools_lock;
 WEAK halide_device_allocation_pool *device_allocation_pools = NULL;
