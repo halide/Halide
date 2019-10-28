@@ -56,22 +56,26 @@ int main(int argc, char **argv) {
 
     // d_err_d(coeffs) is just a Func, and you can schedule it.
     // Each Func in the forward pipeline has a corresponding
-    // derivative Func. Here we will write a quick-and-dirty
-    // autoscheduler for this pipeline to illustrate how you can
-    // access the new synthesized derivative Funcs.
+    // derivative Func for each update, including the pure definition.
+    // Here we will write a quick-and-dirty autoscheduler for this
+    // pipeline to illustrate how you can access the new synthesized
+    // derivative Funcs.
     Var v;
     Func fs[] = {coeffs, approx_sin, err};
     for (Func f : fs) {
-        // Schedule the derivative Funcs for this Func. We get
-        // them in order from output to input.
-        Func df = d_err_d(f);
-        df.compute_root().vectorize(df.args()[0], 4);
-        for (int i = 0; i < df.num_update_definitions(); i++) {
-            // Find a pure var to vectorize over
-            for (auto d : df.update(i).get_schedule().dims()) {
-                if (d.is_pure()) {
-                    df.update(i).vectorize(Var(d.var), 4);
-                    break;
+        // Schedule the derivative Funcs for this Func.
+        // For each Func we need to schedule all its updates.
+        // update_id == -1 represents the pure definition.
+        for (int update_id = -1; update_id < f.num_update_definitions(); update_id++) {
+            Func df = d_err_d(f);
+            df.compute_root().vectorize(df.args()[0], 4);
+            for (int i = 0; i < df.num_update_definitions(); i++) {
+                // Find a pure var to vectorize over
+                for (auto d : df.update(i).get_schedule().dims()) {
+                    if (d.is_pure()) {
+                        df.update(i).vectorize(Var(d.var), 4);
+                        break;
+                    }
                 }
             }
         }

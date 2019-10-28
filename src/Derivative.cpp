@@ -1934,8 +1934,7 @@ Derivative propagate_adjoints(const Func &output,
     for (int dim = 0; dim < adjoint.dimensions(); dim++) {
         bounds.emplace_back(adjoint.min(dim), adjoint.min(dim) + adjoint.extent(dim) - 1);
     }
-    Func adjoint_func("adjoint_func");
-    adjoint_func(_) = adjoint(_);
+    Func adjoint_func = BoundaryConditions::constant_exterior(adjoint, 0.f);
     return propagate_adjoints(output, adjoint_func, bounds);
 }
 

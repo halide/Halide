@@ -780,8 +780,9 @@ void test_multiple_updates_histogram() {
     // Schedule this so it doesn't run forever
     output.compute_root();
     for (auto f : std::vector<Func>{output, loss}) {
-        for (auto it : d.funcs(f)) {
-            it.compute_root();
+        d(f).compute_root();
+        for (int update_id = 0; update_id < f.num_update_definitions(); update_id++) {
+            d(f, update_id).compute_root();
         }
     }
 
@@ -1369,6 +1370,33 @@ void test_param() {
     check(__LINE__, d_buffer_buf(1), 0.f);
 }
 
+void test_custom_adjoint_buffer() {
+    Var x("x");
+    Buffer<float> input(3);
+    input(0) = 1.f;
+    input(1) = 2.f;
+    input(2) = 3.f;
+    Func blur("blur");
+    blur(x) = input(x) + input(x + 1);
+    Buffer<float> adjoint(2);
+    adjoint(0) = 1.f;
+    adjoint(1) = 1.f;
+    Derivative d = propagate_adjoints(blur, adjoint);
+
+    Buffer<float> blur_buf = blur.realize(2);
+    Buffer<float> d_blur_buf = d(blur).realize(2);
+    check(__LINE__, d_blur_buf(0), 1.f);
+    check(__LINE__, d_blur_buf(1), 1.f);
+    // d input(x) = d blur(x) + d blur(x - 1)
+    Func d_input = d(input);
+    // Every dependency of d_input should only use pure variables in lhs
+    _halide_user_assert(!has_non_pure_update(d_input)) << "Function has non pure update\n";
+    Buffer<float> d_input_buf = d_input.realize(3);
+    check(__LINE__, d_input_buf(0), d_blur_buf(0));
+    check(__LINE__, d_input_buf(1), d_blur_buf(0) + d_blur_buf(1));
+    check(__LINE__, d_input_buf(2), d_blur_buf(1));
+}
+
 int main(int argc, char **argv) {
     test_scalar<float>();
     test_scalar<double>();
@@ -1408,6 +1436,7 @@ int main(int argc, char **argv) {
     test_input_bounds();
     test_select_guard();
     test_param();
+    test_custom_adjoint_buffer();
     printf("[autodiff] Success!\n");
     return 0;
 }
