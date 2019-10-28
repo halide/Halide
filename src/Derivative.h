@@ -35,11 +35,6 @@ public:
     Func operator()(const Buffer<> &buffer) const;
     Func operator()(const Param<> &param) const;
 
-    /** Get the entire chain of new synthesized Funcs that compute the
-     * derivative of a given user-written Func for the purpose of
-     * scheduling. */
-    std::vector<Func> funcs(const Func &func) const;
-
 private:
     const std::map<FuncKey, Func> adjoints;
 };
