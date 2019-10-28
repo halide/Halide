@@ -409,11 +409,11 @@ void parallelize_vars_and_rvars_cpu(
         // Parallelize vars
         if (num_threads_var > params.parallelism * 8) {
             func_or_stage.parallel(fused_var,
-                                   params.parallelism * 8,
+                                   num_threads_var / (params.parallelism * 8),
                                    tail);
             schedule_source << "    .parallel(" <<
                 fused_var.name() << "," <<
-                params.parallelism * 8 << "," <<
+                num_threads_var / (params.parallelism * 8) << "," <<
                 tail << ")\n";
         } else {
             func_or_stage.parallel(fused_var);
@@ -426,12 +426,12 @@ void parallelize_vars_and_rvars_cpu(
         if (num_threads_rvar > params.parallelism * 8) {
             func_or_stage.atomic()
                          .parallel(fused_rvar,
-                                   params.parallelism * 8,
+                                   num_threads_rvar / (params.parallelism * 8),
                                    tail);
             schedule_source << "    .atomic()\n";
             schedule_source << "    .parallel(" <<
                 fused_rvar.name() << "," <<
-                params.parallelism * 8 << "," <<
+                num_threads_rvar / (params.parallelism * 8) << "," <<
                 tail << ")\n";
         } else {
             func_or_stage.atomic()
@@ -841,6 +841,7 @@ void generate_schedule(const std::vector<Function> &outputs,
 
     auto_scheduler_results->scheduler_name = "gradient autoscheduler";
     auto_scheduler_results->schedule_source = schedule_source.str();
+    std::cerr << schedule_source.str() << std::endl;
 }
 
 
