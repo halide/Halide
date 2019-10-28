@@ -96,6 +96,7 @@ namespace Autoscheduler {
 // entirely unroll the thing. Sized for an architecture with 16 vector
 // registers.
 const int kUnrollLimit = 12;
+const int kUnrollLimitGPU = 16;
 
 using std::string;
 using std::vector;
@@ -140,6 +141,14 @@ int64_t get_active_warp_hardware_limit() {
         return 64;
     }
     return atoi(limit.c_str());
+}
+
+int get_unroll_limit(const Target& target) {
+    if (target.has_gpu_feature()) {
+        return kUnrollLimitGPU;
+    }
+
+    return kUnrollLimit;
 }
 
 bool compute_root_and_inline_only() {
@@ -1901,7 +1910,7 @@ struct LoopNest {
 
         if (innermost) {
             bool parent_unrolled =
-                (feat.innermost_pure_loop_extent <= kUnrollLimit &&
+                (feat.innermost_pure_loop_extent <= get_unroll_limit(target) &&
                  parent->node == node);
 
             if (parent_unrolled) {
@@ -3538,7 +3547,7 @@ struct LoopNest {
                             }
                         }
 
-                        if (product_of_pure_loops <= kUnrollLimit && all_pure_loops_constant_size) {
+                        if (product_of_pure_loops <= get_unroll_limit(target) && all_pure_loops_constant_size) {
                             // There's a hope we can fit anything compute-at this level into registers if we fully unroll
                             // TODO: 16 should be the number of vector registers in the architecture
                             std::stable_sort(state.vars.begin(), state.vars.begin() + symbolic_loop.size(),
