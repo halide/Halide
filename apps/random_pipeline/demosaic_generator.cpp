@@ -8,6 +8,7 @@
 #include <iostream>
 #include <fstream>
 #include <sstream>
+#include <stdexcept>
 #include "schema.h"
 
 
@@ -278,11 +279,11 @@ public:
     Type paramHT = Halide::type_of<paramT>();
 
     int num_stage_types = 4;
+    const static int num_input_buffers = 4;
 
     // The random seed to use to generate the pipeline.
     GeneratorParam<int> seed{"seed", 1};
-    // The number of input buffers to this random pipeline
-    GeneratorParam<int> num_input_buffers{"num_input_buffers", 4};
+    // The number of input buffers to this->random pipeline
     // The size of the input buffers ASSUMING ALL ARE THE SAME SIZE FOR NOW
     GeneratorParam<int> input_w{"input_w", 14};
     GeneratorParam<int> input_h{"input_h", 14};
@@ -290,7 +291,7 @@ public:
     GeneratorParam<int> output_w{"output_w", 10};
     GeneratorParam<int> output_h{"output_h", 10};
     GeneratorParam<int> output_c{"output_c", 3};
-    // The number of output buffers to this random pipeline
+    // The number of output buffers to this->random pipeline
     GeneratorParam<int> num_output_buffers{"num_output_buffers", 1};
     // The approximate max number of stages to generate in the random pipeline.
     GeneratorParam<int> max_stages{"max_stages", 20};
@@ -471,7 +472,7 @@ public:
         return;
     }
 
-    std::string type_string(vector<int>& type) {
+    static std::string type_string(vector<int>& type) {
         std::string type_string = "";
         for (int v : type) {
             type_string += std::to_string(v);
@@ -479,7 +480,7 @@ public:
         return type_string;
     }
 
-    bool type_match(vector<int>& typeA, vector<int>& typeB) {
+    static bool type_match(vector<int>& typeA, vector<int>& typeB) {
         bool match = true;
         for (int c = 0; c < 3; c++) {
             match = match && ( typeA[c] == typeB[c] );
@@ -492,17 +493,18 @@ public:
             uint64_t stage_index;
             uint64_t stage_type;
             uint64_t hash;
-
+            RandomPipeline<training>* gen;
+            
             vector<int> output_type;
 
             virtual vector<int>& compute_output_type() {
-                asseert(!output_type.empty());
+                assert(!output_type.empty());
                 return output_type;
             };
 
             void add_dag_schema(Stage producer) {
                 vector<int>& type = compute_output_type();
-                dag_schema.emplace_back((uint64_t)seed, std::string(func.name()), 
+                gen->dag_schema.emplace_back((uint64_t)gen->seed, std::string(func.name()), 
                                         stage_type, stage_index, type_string(type), 
                                         producer.stage_index,
                                         std::string(producer.func.name()));
@@ -517,7 +519,7 @@ public:
                 right << value;
                 const auto right_string = right.str();
 
-                func_def_schema.emplace_back((uint64_t)seed, std::string(func.name()), 
+                gen->func_def_schema.emplace_back((uint64_t)gen->seed, std::string(func.name()), 
                                              stage_index, left_string + " = " + right_string); 
             }
             
@@ -531,8 +533,9 @@ public:
             static constexpr int max_stride = 3; // for convs and pools
 
             Stage() {}
-            Stage(Func f, int w, int h, int c, vector<int> output_type)  : 
-                func(f), w(w), h(h), c(c), output_type(output_type) { 
+            Stage(Func f, int w, int h, int c, vector<int> output_type,
+                  RandomPipeline<training>* gen)  : 
+                func(f), w(w), h(h), c(c), output_type(output_type), gen(gen) {
                 stage_type = 0;
                 stage_index = 0;
             }
@@ -579,7 +582,7 @@ public:
     typedef std::tuple<Stage, vector<Expr>, vector<Expr>, Func> InterpStageAndCoords;
 
     /** generates interpolation coords and makes sure that the coordinates are not the same **/
-    bool random_coords(vector<Expr> &coords1, vector<Expr> &coords2, uint64_t &h1, uint64_t &h2) {
+    static bool random_coords(vector<Expr> &coords1, vector<Expr> &coords2, uint64_t &h1, uint64_t &h2) {
         int choice = rand_int(0, 2);
         int offset11, offset12, offset21, offset22;
         offset11 = offset12 = offset21 = offset22 = 1;
@@ -646,18 +649,21 @@ public:
         vector<Expr> input_coords2;
         
         vector<int>& compute_output_type() {
-            if (!output_type.empty()) {
-                return output_type;
-            } else {
-                output_type = input_stage.compute_output_type();
-                return output_type;
+            if (this->output_type.empty()) {
+                this->output_type = input_stage.compute_output_type();
             }
+            return this->output_type;
         }
+        
+        Interp2Tap() {};
 
-        Interp2TapStage(vector<Stage> &s, uint64_t h, int input_id=-1) {
-            stage_index = (uint64_t)s.size() - num_input_buffers + 1;
-            stage_type  = (uint64_t)1;
-            hash = h; 
+        Interp2Tap(vector<Stage> &s, uint64_t h,  
+                   RandomPipeline<training>* gen,
+                   int input_id = -1) {
+            this->hash = h;
+            this->gen = gen;
+            this->stage_index = (uint64_t)s.size() - num_input_buffers + 1;
+            this->stage_type  = (uint64_t)1;
             Func interp("interp2Tap");
             if (input_id < 0) {
                 // pick a random input
@@ -684,22 +690,22 @@ public:
             std::cout << interp(input_func.args()) << " = ";
             std::cout << value << std::endl;
 
-            func = interp;
-            w = input_stage.w;
-            h = input_stage.h;
-            c = input_stage.c;
+            this->func = interp;
+            this->w = input_stage.w;
+            this->h = input_stage.h;
+            this->c = input_stage.c;
     
-            hash_combine(hash, stage_type); 
-            hash_combine(hash, input_id);
-            hash_combine(hash, h_coords1 + h_coords2);
+            hash_combine(this->hash, this->stage_type); 
+            hash_combine(this->hash, input_id);
+            hash_combine(this->hash, h_coords1 + h_coords2);
             
-            add_dag_schema(input_stage);
-            add_func_def_schema(value, input_func.args());
+            this->add_dag_schema(input_stage);
+            this->add_func_def_schema(value, input_func.args());
         }            
         // end of public methods
     };
 
-    bool same_vars(vector<Var> v1, vector<Var> v2) {
+    static bool same_vars(vector<Var> v1, vector<Var> v2) {
         assert(v1.size() == v2.size());
         for (int i = 0; i < (int)v1.size(); i++) {
             if (v1[i].name() != v2[i].name()) return false;
@@ -712,22 +718,23 @@ public:
         Interp2Tap interp1_stage, interp2_stage;
         
         vector<int>& compute_output_type() {
-            if (!output_type.empty()) {
-                return output_type;
-            } else {
+            if (this->output_type.empty()) {
                 vector<int>& interp1_output_type = interp1_stage.compute_output_type();
                 vector<int>& interp2_output_type = interp2_stage.compute_output_type();
                 if (interp1_output_type != interp2_output_type) {
-                    throw "select must choose from interps of same type";
+                    throw std::runtime_error( "select must choose from interps of same type" );
                 } 
-                output_type = interp1_output_type;
-                return output_type;
+                this->output_type = interp1_output_type;
             }
+            return this->output_type;
         }
 
-        SelectInterp2Tap(vector<Stage> &s, uint64_t h, int input_id=-1) {
-            stage_type  = (uint64_t)2;
-            hash = h; 
+        SelectInterp2Tap(vector<Stage> &s, uint64_t h,
+                         RandomPipeline<training>* gen,
+                         int input_id = -1) {
+            this->hash = h;
+            this->gen = gen;
+            this->stage_type  = (uint64_t)2;
             Func selectInterp("selectInterp2Tap");
 
             uint64_t h_interp1, h_interp2;
@@ -738,19 +745,19 @@ public:
             Func interp1_input, interp2_input;
             vector<Expr> interp1_coords1, interp1_coords2, interp2_coords1, interp2_coords2;
 
-            interp1_stage = Interp2Tap(s, h_interp1, input_id);
-            interp1_input = interp1_stage.input_func;
+            interp1_stage = Interp2Tap(s, h_interp1, this->gen, input_id);
+            interp1_input = interp1_stage.input_stage.func;
             interp1_coords1 = interp1_stage.input_coords1;
             interp1_coords2 = interp1_stage.input_coords2;
             s.push_back(interp1_stage);
 
-            interp2_stage = Interp2Tap(s, h_interp2);
-            interp2_input = interp2_stage.input_func;
+            interp2_stage = Interp2Tap(s, h_interp2, this->gen);
+            interp2_input = interp2_stage.input_stage.func;
             interp2_coords1 = interp2_stage.input_coords1;
             interp2_coords2 = interp2_stage.input_coords2;
             s.push_back(interp2_stage);
           
-            stage_index = (uint64_t)s.size() - num_input_buffers + 1;
+            this->stage_index = (uint64_t)s.size() - num_input_buffers + 1;
 
             std::cout << selectInterp.name() << " selects from: " << interp1_stage.func.name() << " and " << interp2_stage.func.name() << std::endl; 
 
@@ -765,17 +772,16 @@ public:
             std::cout << selectInterp(args) << " = ";
             std::cout << value << std::endl;
 
-            func = selectInterp;
-            w = interp1_stage.w;
-            h = interp1_stage.h;
-            c = interp1_stage.c;
+            this->func = selectInterp;
+            this->w = interp1_stage.w;
+            this->h = interp1_stage.h;
+            this->c = interp1_stage.c;
             
-            hash_combine(hash, stage_type); 
-            hash_combine(hash, interp1_stage.hash + interp2_stage.hash);
-          
-            add_dag_schema(interp1_stage);
-            add_dag_schema(interp2_stage);
-            add_func_def_schema(value, args);
+            hash_combine(this->hash, this->stage_type); 
+            hash_combine(this->hash, interp1_stage.hash + interp2_stage.hash);
+            this->add_dag_schema(interp1_stage);
+            this->add_dag_schema(interp2_stage);
+            this->add_func_def_schema(value, args);
         }
     };
 
@@ -786,28 +792,34 @@ public:
         vector<Expr> coords2; // interp stage and input stage
 
         vector<int>& compute_output_type() {
-            if (!output_type.empty()) {
-                return output_type;
-            } else {
+            if (this->output_type.empty()) {
                 vector<int>& ref_output_type = ref_stage.compute_output_type();
-                vector<int>& interp_output_type = interp_stage.compugte_output_type();
+                vector<int>& interp_output_type = interp_stage.compute_output_type();
                 vector<int>& input_output_type = input_stage.compute_output_type();
-                assert(ref_output_type.size() == interp_output_type.size() == input_output_type.size());
+                
+                assert(ref_output_type.size() == interp_output_type.size() && 
+                       ref_output_type.size() == input_output_type.size());
 
-                output_type = ref_output_type;
+
+                this->output_type = ref_output_type;
 
                 for (int i = 0; i < ref_output_type.size(); i++) {
-                    output_type[i] -= interp_output_type[i];
-                    output_type[i] += input_output_type[i];
+                    this->output_type[i] -= interp_output_type[i];
+                    this->output_type[i] += input_output_type[i];
                 }
-                return output_type;
             }
+            return this->output_type;
         }
-       
-        CorrectInterp2Tap(vector<Stage> &s, uint64_t h, int use_id=-1) {
-            stage_index = (uint64_t)s.size() - num_input_buffers + 1;
-            stage_type = 3;
-            hash = h;
+      
+        CorrectInterp2Tap() {};
+ 
+        CorrectInterp2Tap(vector<Stage> &s, uint64_t h, 
+                          RandomPipeline<training>* gen,
+                          int use_id=-1) {
+            this->hash = h;
+            this->gen = gen;
+            this->stage_index = (uint64_t)s.size() - num_input_buffers + 1;
+            this->stage_type = 3;
             Func correctInterp("correctInterp2Tap");
 
             int input_id, ref_id, interp_id;
@@ -838,9 +850,9 @@ public:
             ref_stage = s[ref_id];
             interp_stage = s[interp_id];
 
-            Func input_f  = input_s.func;
-            Func ref_f    = ref_s.func;
-            Func interp_f = interp_s.func;
+            Func input_f  = input_stage.func;
+            Func ref_f    = ref_stage.func;
+            Func interp_f = interp_stage.func;
             
             std::cout << correctInterp.name() << " is Corrected Interp 2 Tap on: " << input_f.name() << " with correction funcs: " << ref_f.name() << " and " << interp_f.name() << std::endl;
 
@@ -851,8 +863,8 @@ public:
             uint64_t h_coords1, h_coords2;
             h_coords1 = h_coords2 = 0;
             while (!random_coords(coords1, coords2, h_coords1, h_coords2)) {
-                coords1 = make_arguments(input_s.func.args());
-                coords2 = make_arguments(input_s.func.args());
+                coords1 = make_arguments(input_f.args());
+                coords2 = make_arguments(input_f.args());
                 h_coords1 = h_coords2 = 0;
             }
 
@@ -865,21 +877,21 @@ public:
             std::cout << correctInterp(coords) << " = ";
             std::cout << value << std::endl;
 
-            func = correctInterp;
-            w = input_stage.w;
-            h = input_stage.h;
-            c = input_stage.c;
+            this->func = correctInterp;
+            this->w = input_stage.w;
+            this->h = input_stage.h;
+            this->c = input_stage.c;
 
-            hash_combine(hash, stage_type);
-            hash_combine(hash, input_id);
-            hash_combine(hash, ref_id);
-            hash_combine(hash, interp_id);
-            hash_combine(hash, h_coords1 + h_coords2);
+            hash_combine(this->hash, this->stage_type);
+            hash_combine(this->hash, input_id);
+            hash_combine(this->hash, ref_id);
+            hash_combine(this->hash, interp_id);
+            hash_combine(this->hash, h_coords1 + h_coords2);
 
-            add_dag_schema(input_stage);
-            add_dag_schema(ref_stage);
-            add_dag_schema(interp_stage);
-            add_func_def_schema(value, input_f.args());
+            this->add_dag_schema(input_stage);
+            this->add_dag_schema(ref_stage);
+            this->add_dag_schema(interp_stage);
+            this->add_func_def_schema(value, input_f.args());
         } 
     };
 
@@ -888,41 +900,42 @@ public:
         CorrectInterp2Tap correctInterp1, correctInterp2;
         
         vector<int>& compute_output_type() {
-            if (!output_type.empty()) {
-                return output_type;
-            } else {
-            vector<int>& correctInterp1_type = correctInterp1.compute_output_type();
-            vector<int>& correctInterp2_type = correctInterp2.compute_output_type();
-            if (correctInterp1_type != correctInterp2_type) {
-                throw "select correct interp must choose from interps of same type";
-            } 
-            output_type = correctInterp1_type;
-            return output_type;
+            if (this->output_type.empty()) {
+                vector<int>& correctInterp1_type = correctInterp1.compute_output_type();
+                vector<int>& correctInterp2_type = correctInterp2.compute_output_type();
+                if (correctInterp1_type != correctInterp2_type) {
+                    throw std::runtime_error( "select must choose from interps of same type" );
+                } 
+                this->output_type = correctInterp1_type;
+            }
+            return this->output_type;
         }
         
-        SelectCorrectInterp(vector<Stage> &s, uint64_t h, int input_id=-1) {
-            stage_type = 4;
-            hash = h;
+        SelectCorrectInterp(vector<Stage> &s, uint64_t h,
+                            RandomPipeline<training>* gen,
+                            int input_id=-1) {
+            this->hash = h;
+            this->gen = gen;
+            this->stage_type = 4;
             Func selectCorrectInterp("selectCorrectInterp2Tap");
             std::cout << selectCorrectInterp.name() << " is Select Corrected Interp" << std::endl;
 
-            Stage s1, s2;
             vector<Expr> s1coords1, s1coords2, s2coords1, s2coords2;
             Func s1input, s2input;
 
             uint64_t h_interp1, h_interp2;
             h_interp1 = h_interp2 = 0;
 
-            correctInterp1 = CorrectInterp2Tap(s, h_interp1, input_id);
+            correctInterp1 = CorrectInterp2Tap(s, h_interp1, this->gen, input_id);
             s.push_back(correctInterp1);
-            correctInterp2 = CorrectInterp2Tap(s, h_interp2);
+            correctInterp2 = CorrectInterp2Tap(s, h_interp2, this->gen);
             s.push_back(correctInterp2);
           
-            std::cout << selectInterp.name() << " selects from: " << s1.func.name() << " and " << s2.func.name() << std::endl; 
-            stage_index = (uint64_t)s.size() - num_input_buffers + 1;
+            std::cout << selectCorrectInterp.name() << " selects from: " << correctInterp1.func.name() << " and " << correctInterp2.func.name() << std::endl; 
+            this->stage_index = (uint64_t)s.size() - num_input_buffers + 1;
 
-            Func correctInterp1_input = correctInterp1.input_stage;
-            Func correctInterp2_input = correctInterp2.input_stage;
+            Func correctInterp1_input = correctInterp1.input_stage.func;
+            Func correctInterp2_input = correctInterp2.input_stage.func;
 
             assert(same_vars(correctInterp1.func.args(), correctInterp2.func.args()));
             assert(correctInterp1.w == correctInterp2.w 
@@ -936,48 +949,55 @@ public:
             Expr value = select(diff1 < diff2, correctInterp1.func(args), correctInterp2.func(args));
             selectCorrectInterp(args) = value;
             
-            std::cout << selectCorrectInterp(s1args) << " = ";
+            std::cout << selectCorrectInterp(args) << " = ";
             std::cout << value << std::endl;
         
-            func = selectCorrectInterp;
-            w = correctInterp1.w;
-            h = correctInterp1.h;
-            c = correctInterp1.c;
+            this->func = selectCorrectInterp;
+            this->w = correctInterp1.w;
+            this->h = correctInterp1.h;
+            this->c = correctInterp1.c;
 
-            hash_combine(hash, stage_type);
-            hash_combine(hash, h_interp1 + h_interp2);
+            hash_combine(this->hash, this->stage_type);
+            hash_combine(this->hash, h_interp1 + h_interp2);
 
-            add_dag_schema(correctInterp1);
-            add_dag_schema(correctInterp2);
-            add_func_def_schema(value, args);
+            this->add_dag_schema(correctInterp1);
+            this->add_dag_schema(correctInterp2);
+            this->add_func_def_schema(value, args);
         }
     };
 
     // Add a random new stage onto the end of the pipeline that can choose any of the 
     // input buffers or previous stages as an input. Note that the type of random stage
     // will determine how many inputs it needs 
-    Stage random_stage(vector<Stage> &s, uint64_t &h, int input_id=-1) {
+    Stage random_stage(vector<Stage> &s, uint64_t h, int input_id=-1) {
         int stage_type = rand_int(0, 3); 
         std::cout <<  "STAGE TYPE: " << stage_type << std::endl;
         std::cout.flush();
         if (stage_type == 0) {
-            return Interp2Tap(s, h, input_id);
+            return Interp2Tap(s, h, this, input_id);
         } else if (stage_type == 1) {
             if (s.size() < 2) {
                 return random_stage(s, h, input_id);
             }
-            return SelectInterp2Tap(s, h, input_id);
+            return SelectInterp2Tap(s, h, this, input_id);
         } else if (stage_type == 2) {
             if (s.size() < 3) { 
                 return random_stage(s, h, input_id);
             }
-            return CorrectInterp2Tap(s, h, input_id);
+            return CorrectInterp2Tap(s, h, this, input_id);
         } else if (stage_type == 3) {
             if (s.size() < 3) {
                 return random_stage(s, h, input_id);
             }
-            return SelectCorrectInterp(s, h, input_id);
+            return SelectCorrectInterp(s, h, this, input_id);
         }
+    }
+
+    void reset() {
+        rejection_count++;
+        stages.erase(stages.begin()+num_input_buffers, stages.end());
+        dag_schema.erase(dag_schema.begin(), dag_schema.end());
+        func_def_schema.erase(func_def_schema.begin(), func_def_schema.end());
     }
 
     // build pipeline and define all required inputs and outputs for the generated program
@@ -1034,15 +1054,14 @@ public:
                     input_type = {0, 1, 0, 0, 0, 0};
                     break;
             }
-
             Func shifted_input(func_name);
             // shift the input so that we don't have to worry about boundary conditions
             Expr value = padded_input(x + (int)shift, y + (int)shift, c);
             shifted_input(x, y, c) = value;
 
             std::cout << shifted_input(x, y, c) << " = " << value << std::endl;
-
-            stages.emplace_back(Stage(shifted_input, output_w, output_h, output_c, input_type));  
+      
+            stages.emplace_back(Stage(shifted_input, output_w, output_h, output_c, input_type, this));  
         } 
 
         std::cout << "max stages: " << (int)max_stages << "\n" << std::endl;
@@ -1055,27 +1074,44 @@ public:
         // keep generating pipelines until we don't get a duplicate
         while (true) {
             uint64_t h = 0;
+            bool type_error = false;
             for (int i = 0; i < max_stages; i++) {
                 Stage next;
                 if (i > 0) {
-                    next = random_stage(stages, h, stages.size()-1); // use most recently created func as input
+                    try {
+                        next = random_stage(stages, h, stages.size()-1); // use most recently created func as input
+                    } catch (const std::exception& ex) {
+                        std::cout << ex.what() << "\npipeline type error, resetting generator..." << std::endl;
+                        reset(); 
+                        type_error = true;
+                        break;
+                    }
                 } else {
-                    next = random_stage(stages, h);
+                    try {
+                        next = random_stage(stages, h); // use most recently created func as input
+                    } catch (const std::exception& ex) {
+                        std::cout << ex.what() << "\npipeline type error, resetting generator..." << std::endl;
+                        reset(); 
+                        type_error = true;
+                        break;
+                    }
                 }
                 stages.push_back(next);
+                h = stages.back().hash;
                 std::cout << "Approx size: " << stages.back().w << ", " << stages.back().h << ", " << stages.back().c << "\n\n";
             }
+
+            if (type_error) continue;
 
             std::cout << "finished adding stages" << std::endl;
 
             // check that pipeline is not a duplicate and type check
             vector<int>& output_type = stages.back().compute_output_type();
-            
+           
             if (!(*hashes)[h]++ && type_match(output_type, correct_output_type)) {
                 break;
             } // else keep generating pipelines
-            rejection_count++;
-            stages.erase(stages.begin()+num_input_buffers, stages.end());
+            reset();
         }
     }
 
@@ -1181,6 +1217,8 @@ public:
     
     void set_correct_output_type(vector<int> &type) {
         correct_output_type = type;
+        std::cout <<  "setting output type " << std::endl;
+        for (auto v: correct_output_type) std::cout << v;
     }
 
 private:
