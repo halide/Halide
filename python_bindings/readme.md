@@ -32,6 +32,7 @@ with some differences where the C++ idiom is either inappropriate or impossible:
 -   No mechanism is provided for supporting `Func::define_extern`.
 -   `Buffer::for_each_value()` is hard to implement well in Python; it's omitted
     entirely for now.
+-   `Func::in` becomes `Func.inside` because `in` is a Python keyword.
 
 ## Enhancements to the C++ API
 
