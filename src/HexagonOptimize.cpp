@@ -1855,7 +1855,6 @@ class OptimizeShuffles : public IRMutator {
                     // can safely cast the index to 8 bit, which
                     // dynamic_shuffle requires.
                     index = simplify(cast(UInt(8).with_lanes(op->type.lanes()), index - base));
-
                     return Call::make(op->type, "dynamic_shuffle", {lut, index, 0, const_extent - 1}, Call::PureIntrinsic);
                 }
                 // Only the first iteration of this loop is aligned.

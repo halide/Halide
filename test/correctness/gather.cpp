@@ -6,11 +6,11 @@ using namespace Halide;
 // hexagon DSP.
 template<typename ITYPE>
 bool test() {
-
+    const Target target = get_jit_target_from_environment();
     const int W_img = 128;
     const int H_img = 8;
     const int W_lut = 256;
-    const int H_lut = 32;
+    const int H_lut = (target.has_feature(Target::HVX_v65)) ? 32 : 1;
 
     srand(time(0));
 
@@ -39,18 +39,9 @@ bool test() {
     output_vtcm(x, y) = lut_vtcm(xCoord, yCoord);
     output(x, y) = output_vtcm(x, y);
 
-    Target target = get_jit_target_from_environment();
     if (target.features_any_of({Target::HVX_64, Target::HVX_128})) {
         const int vector_size = target.has_feature(Target::HVX_128) ? 128 : 64;
         Var yi;
-
-        lut_vtcm
-            .compute_at(output, Var::outermost())
-            .vectorize(x, vector_size/2);
-
-        output_vtcm
-            .compute_at(output, y)
-            .vectorize(x, vector_size/2);
 
         output
             .hexagon()
@@ -59,8 +50,15 @@ bool test() {
             .vectorize(x, vector_size/2);
 
         if (target.has_feature(Target::HVX_v65)) {
-            lut_vtcm.store_in(MemoryType::VTCM);
-            output_vtcm.store_in(MemoryType::VTCM);
+            lut_vtcm
+                .store_in(MemoryType::VTCM)
+                .compute_at(output, Var::outermost())
+                .vectorize(x, vector_size/2);
+
+            output_vtcm
+                .store_in(MemoryType::VTCM)
+                .compute_at(output, y)
+                .vectorize(x, vector_size/2);
         }
     }
 
