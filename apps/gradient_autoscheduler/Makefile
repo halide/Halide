@@ -1,6 +1,6 @@
 include ../support/Makefile.inc
 
-WITH_PYTHON ?= 0
+WITH_PYTHON ?= 1
 ifeq ($(WITH_PYTHON),1)
 	PYTHON ?= python3
 	# Discover pybind11 path from `python3 -m pybind11 --includes`
@@ -9,7 +9,8 @@ ifeq ($(WITH_PYTHON),1)
 	PYBIND11_CFLAGS = $(shell $(PYTHON) -m pybind11 --includes)
 	ifeq ($(PYBIND11_CFLAGS),)
 		ifndef PYBIND11_PATH
-			$(error PYBIND11_PATH is undefined)
+			$(error Can't find pybind11 for compiling the Python module.
+				    Set the environment variable WITH_PYTHON=0 to disable Python support.)
 		endif
 		PYBIND11_PATH ?= /path/to/pybind11
 		PYBIND11_CFLAGS = -I $(PYBIND11_PATH)/include
