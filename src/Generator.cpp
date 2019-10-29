@@ -2,15 +2,6 @@
 #include <fstream>
 #include <unordered_map>
 
-#if defined(_MSC_VER) && !defined(NOMINMAX)
-#define NOMINMAX
-#endif
-#ifdef _WIN32
-#include <windows.h>
-#else
-#include <dlfcn.h>
-#endif
-
 #include "Generator.h"
 #include "IRPrinter.h"
 #include "Module.h"
@@ -816,39 +807,9 @@ int generate_filter_main_inner(int argc, char **argv, std::ostream &cerr) {
     // how arguments are parsed, so we handle those first.
     for (const auto &lib : split_string(flags_info["-p"], ",")) {
         if (lib.empty()) continue;
-#ifdef _WIN32
-        int wide_len = MultiByteToWideChar(CP_UTF8, 0, lib.c_str(), -1, nullptr, 0);
-        if (wide_len < 1) {
-            cerr << "Failed to load: " << lib << " (unconvertible character)\n";
+        if (!load_plugin(lib, cerr)) {
             return 1;
         }
-
-        std::vector<wchar_t> wide_lib(wide_len);
-        wide_len = MultiByteToWideChar(CP_UTF8, 0, lib.c_str(), -1, wide_lib.data(), wide_len);
-        if (wide_len < 1) {
-            cerr << "Failed to load: " << lib << " (unconvertible character)\n";
-            return 1;
-        }
-
-        if (!LoadLibraryW(wide_lib.data())) {
-            DWORD last_err = GetLastError();
-            LPVOID last_err_msg;
-            FormatMessageA(FORMAT_MESSAGE_ALLOCATE_BUFFER | FORMAT_MESSAGE_FROM_SYSTEM |
-                               FORMAT_MESSAGE_IGNORE_INSERTS,
-                           nullptr, last_err, MAKELANGID(LANG_NEUTRAL, SUBLANG_DEFAULT),
-                           reinterpret_cast<LPSTR>(&last_err_msg), 0, nullptr);
-            cerr << "Failed to load: " << lib << "\n";
-            cerr << "LoadLibraryW failed with error " << last_err << ": "
-                 << static_cast<char *>(last_err_msg) << "\n";
-            LocalFree(last_err_msg);
-            return 1;
-        }
-#else
-        if (dlopen(lib.c_str(), RTLD_LAZY) == nullptr) {
-            cerr << "Failed to load: " << lib << ": " << dlerror() << "\n";
-            return 1;
-        }
-#endif
     }
 
     std::string autoscheduler_name = flags_info["-s"];

@@ -1,50 +1,11 @@
 #include "Halide.h"
 
-#if defined(_MSC_VER) && !defined(NOMINMAX)
-#define NOMINMAX
-#endif
-#ifdef _WIN32
-#include <windows.h>
-#else
-#include <dlfcn.h>
-#endif
-
 using namespace Halide;
 
 int main(int argc, char **argv) {
-    std::string lib;
-#ifdef _WIN32
-    if (argc > 1) {
-        lib = argv[1];
-    } else {
-        lib = "auto_schedule.dll";
-    }
-
-    if (!LoadLibraryA(lib.c_str())) {
-        DWORD last_err = GetLastError();
-        LPVOID last_err_msg;
-        FormatMessageA(FORMAT_MESSAGE_ALLOCATE_BUFFER | FORMAT_MESSAGE_FROM_SYSTEM |
-                           FORMAT_MESSAGE_IGNORE_INSERTS,
-                       nullptr, last_err, MAKELANGID(LANG_NEUTRAL, SUBLANG_DEFAULT),
-                       reinterpret_cast<LPSTR>(&last_err_msg), 0, nullptr);
-        std::cerr << "Failed to load: " << lib << "\n";
-        std::cerr << "LoadLibraryA failed with error " << last_err << ": "
-                  << static_cast<char *>(last_err_msg) << "\n";
-        LocalFree(last_err_msg);
+    if (!::Halide::Internal::load_plugin("auto_schedule", std::cerr)) {
         return 1;
     }
-#else
-    if (argc > 1) {
-        lib = argv[1];
-    } else {
-        lib = "libauto_schedule.so";
-    }
-
-    if (dlopen(lib.c_str(), RTLD_LAZY) == nullptr) {
-        std::cerr << "Failed to load: " << lib << ": " << dlerror() << "\n";
-        return 1;
-    }
-#endif
 
     Pipeline::set_default_autoscheduler_name("Adams2019");
 
