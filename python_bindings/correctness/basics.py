@@ -164,6 +164,25 @@ def test_basics4():
     f.compute_root()
     f.compile_jit()
 
+def test_basics5():
+    # Test Func.inside()
+    x, y = hl.Var('x'), hl.Var('y')
+    f = hl.Func('f')
+    g = hl.Func('g')
+    h = hl.Func('h')
+    f[x, y] = y
+    r = hl.RDom([(0, 100)])
+    g[x] = 0
+    g[x] += f[x, r]
+    h[x] = 0
+    h[x] += f[x, r]
+    f.in_(g).compute_at(g, x)
+    f.in_(h).compute_at(h, x)
+    g.compute_root()
+    h.compute_root()
+    p = hl.Pipeline([g, h])
+    p.compile_jit()
+
 def test_float_or_int():
     x = hl.Var('x')
     i32, f32 =  hl.Int(32), hl.Float(32)
@@ -226,3 +245,4 @@ if __name__ == "__main__":
     test_basics2()
     test_basics3()
     test_basics4()
+    test_basics5()
