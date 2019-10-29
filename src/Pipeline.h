@@ -171,8 +171,11 @@ public:
      *
      * At this time, well-known autoschedulers include:
      *  "Mullapudi2016" -- heuristics-based; the first working autoscheduler; currently built in to libHalide
+     *                     see http://graphics.cs.cmu.edu/projects/halidesched/
      *  "Adams2019"     -- aka "the ML autoscheduler"; currently located in apps/autoscheduler
-     *  "Li2019"        -- aka "the gradient autoscheduler"; currently located in apps/gradient_autoscheduler
+     *                     see https://halide-lang.org/papers/autoscheduler2019.html
+     *  "Li2018"        -- aka "the gradient autoscheduler"; currently located in apps/gradient_autoscheduler.
+     *                     see https://people.csail.mit.edu/tzumao/gradient_halide
      */
     static void set_default_autoscheduler_name(const std::string &autoscheduler_name);
 

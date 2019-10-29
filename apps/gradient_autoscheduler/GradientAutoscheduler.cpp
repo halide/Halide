@@ -839,7 +839,7 @@ void generate_schedule(const std::vector<Function> &outputs,
         }
     }
 
-    auto_scheduler_results->scheduler_name = "Li2019";
+    auto_scheduler_results->scheduler_name = "Li2018";
     auto_scheduler_results->schedule_source = schedule_source.str();
     std::cerr << schedule_source.str() << std::endl;
 }
@@ -850,8 +850,8 @@ void generate_schedule(const std::vector<Function> &outputs,
 // constructor.
 struct RegisterGradientAutoscheduler {
     RegisterGradientAutoscheduler() {
-        debug(1) << "Registering autoscheduler 'Li2019'...\n";
-        Pipeline::add_autoscheduler("Li2019", *this);
+        debug(1) << "Registering autoscheduler 'Li2018'...\n";
+        Pipeline::add_autoscheduler("Li2018", *this);
     }
 
     void operator()(Pipeline p, const Target &target, const MachineParams &params, AutoSchedulerResults *results) {
