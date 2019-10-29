@@ -573,7 +573,7 @@ struct ThreadInfo {
 
         int num_thread_loops = 0;
 
-        if (vectorized_loop_index != -1) {
+        if (vectorized_loop_index != -1 && size[vectorized_loop_index] != 1) {
             threads[num_thread_loops] = size[vectorized_loop_index];
             num_threads *= size[vectorized_loop_index];
             num_thread_loops = 1;
