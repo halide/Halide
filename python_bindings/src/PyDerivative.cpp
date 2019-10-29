@@ -16,10 +16,7 @@ void define_derivative(py::module &m) {
         }, py::arg("param"))
         .def("__getitem__", [](const Derivative &d, const std::tuple<const Func &, int> &args) {
             return d(std::get<0>(args), std::get<1>(args));
-        })
-        .def("funcs", [](const Derivative &d, const Func &func) {
-            return d.funcs(func);  
-        }, py::arg("func"));
+        });
 
     m.def("propagate_adjoints",
         (Derivative (*)(const Func &, const Func &,
