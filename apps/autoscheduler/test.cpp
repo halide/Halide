@@ -46,6 +46,8 @@ int main(int argc, char **argv) {
     }
 #endif
 
+    Pipeline::set_default_autoscheduler_name("Adams2019");
+
     MachineParams params(32, 16000000, 40);
     // Use a fixed target for the analysis to get consistent results from this test.
     Target target("x86-64-linux-sse41-avx-avx2");

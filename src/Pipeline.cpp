@@ -167,33 +167,79 @@ vector<Func> Pipeline::outputs() const {
     return funcs;
 }
 
-AutoSchedulerFn *Pipeline::get_custom_auto_scheduler_ptr() {
-    static AutoSchedulerFn custom_auto_scheduler = nullptr;
-    return &custom_auto_scheduler;
-}
-
-AutoSchedulerResults Pipeline::auto_schedule(const Target &target, const MachineParams &arch_params) {
+/* static */
+void Pipeline::auto_schedule_Mullapudi2016(Pipeline pipeline, const Target &target,
+                                           const MachineParams &arch_params, AutoSchedulerResults *outputs) {
     AutoSchedulerResults results;
     results.target = target;
     results.machine_params_string = arch_params.to_string();
 
-    auto custom_auto_scheduler = *get_custom_auto_scheduler_ptr();
-    if (custom_auto_scheduler) {
-        custom_auto_scheduler(*this, target, arch_params, &results);
-    } else {
-        user_assert(target.arch == Target::X86 || target.arch == Target::ARM ||
-                    target.arch == Target::POWERPC || target.arch == Target::MIPS)
-            << "Automatic scheduling is currently supported only on these architectures.";
-        results.scheduler_name = "src/AutoSchedule";  // TODO: find a better name (https://github.com/halide/Halide/issues/4057)
-        results.schedule_source = generate_schedules(contents->outputs, target, arch_params);
-        // this autoscheduler has no featurization
-    }
+    user_assert(target.arch == Target::X86 || target.arch == Target::ARM ||
+                target.arch == Target::POWERPC || target.arch == Target::MIPS)
+        << "The Mullapudi2016 autoscheduler is currently supported only on these architectures." << (int)target.arch;
+    results.scheduler_name = "Mullapudi2016";
+    results.schedule_source = generate_schedules(pipeline.contents->outputs, target, arch_params);
+    // this autoscheduler has no featurization
 
+    *outputs = results;
+}
+
+/* static */
+std::map<std::string, AutoSchedulerFn> &Pipeline::get_autoscheduler_map() {
+    static std::map<std::string, AutoSchedulerFn> autoschedulers = {
+        { "Mullapudi2016", auto_schedule_Mullapudi2016 }
+    };
+    return autoschedulers;
+}
+
+/* static */
+std::string &Pipeline::get_default_autoscheduler_name() {
+    static std::string autoscheduler_name = "Mullapudi2016";
+    return autoscheduler_name;
+}
+
+/* static */
+AutoSchedulerFn Pipeline::find_autoscheduler(const std::string &autoscheduler_name) {
+    const auto &m = get_autoscheduler_map();
+    auto it = m.find(autoscheduler_name);
+    if (it == m.end()) {
+        std::ostringstream o;
+        o << "Unknown autoscheduler name '" << autoscheduler_name << "'; known names are:\n";
+        for (const auto &a : m) {
+            o << "    " << a.first << "\n";
+        }
+        user_error << o.str();
+    }
+    return it->second;
+}
+
+AutoSchedulerResults Pipeline::auto_schedule(const std::string &autoscheduler_name, const Target &target, const MachineParams &arch_params) {
+    auto autoscheduler_fn = find_autoscheduler(autoscheduler_name);
+    internal_assert(autoscheduler_fn != nullptr);
+
+    AutoSchedulerResults results;
+    results.target = target;
+    results.machine_params_string = arch_params.to_string();
+
+    autoscheduler_fn(*this, target, arch_params, &results);
     return results;
 }
 
-void Pipeline::set_custom_auto_scheduler(AutoSchedulerFn auto_scheduler) {
-    *get_custom_auto_scheduler_ptr() = auto_scheduler;
+AutoSchedulerResults Pipeline::auto_schedule(const Target &target, const MachineParams &arch_params) {
+    return auto_schedule(get_default_autoscheduler_name(), target, arch_params);
+}
+
+/* static */
+void Pipeline::add_autoscheduler(const std::string &autoscheduler_name, const AutoSchedulerFn autoscheduler) {
+    auto &m = get_autoscheduler_map();
+    user_assert(m.find(autoscheduler_name) == m.end()) << "'" << autoscheduler_name << "' is already registered as an autoscheduler.\n";
+    m[autoscheduler_name] = autoscheduler;
+}
+
+/* static */
+void Pipeline::set_default_autoscheduler_name(const std::string &autoscheduler_name) {
+    (void) find_autoscheduler(autoscheduler_name);  // ensure it's valid
+    get_default_autoscheduler_name() = autoscheduler_name;
 }
 
 Func Pipeline::get_func(size_t index) {

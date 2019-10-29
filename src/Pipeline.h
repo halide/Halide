@@ -125,7 +125,14 @@ public:
     static std::vector<Internal::JITModule> make_externs_jit_module(const Target &target,
                                                                     std::map<std::string, JITExtern> &externs_in_out);
 
-    static AutoSchedulerFn *get_custom_auto_scheduler_ptr();
+    static void auto_schedule_Mullapudi2016(Pipeline pipeline, const Target &target,
+                                            const MachineParams &arch_params, AutoSchedulerResults *outputs);
+
+    static std::map<std::string, AutoSchedulerFn> &get_autoscheduler_map();
+
+    static std::string &get_default_autoscheduler_name();
+
+    static AutoSchedulerFn find_autoscheduler(const std::string &autoscheduler_name);
 
     int call_jit_code(const Target &target, const JITCallArgs &args);
 
@@ -144,16 +151,30 @@ public:
     /** Get the Funcs this pipeline outputs. */
     std::vector<Func> outputs() const;
 
-    /** Generate a schedule for the pipeline. */
-    //@{
+    /** Generate a schedule for the pipeline using the currently-default autoscheduler. */
     AutoSchedulerResults auto_schedule(const Target &target,
                                        const MachineParams &arch_params = MachineParams::generic());
-    //@}
 
-    /** Globally set the autoscheduler method to use whenever
-     * autoscheduling any Pipeline. Uses the built-in autoscheduler if
-     * passed nullptr. */
-    static void set_custom_auto_scheduler(AutoSchedulerFn auto_scheduler);
+    /** Generate a schedule for the pipeline using the specified autoscheduler. */
+    AutoSchedulerResults auto_schedule(const std::string &autoscheduler_name,
+                                       const Target &target,
+                                       const MachineParams &arch_params = MachineParams::generic());
+
+
+    /** Add a new the autoscheduler method with the given name. Does not affect the current default autoscheduler.
+     * It is an error to call this with the same name multiple times. */
+    static void add_autoscheduler(const std::string &autoscheduler_name, const AutoSchedulerFn autoscheduler);
+
+    /** Globally set the default autoscheduler method to use whenever
+     * autoscheduling any Pipeline when no name is specified. If the autoscheduler_name isn't in the
+     * current table of known autoschedulers, assert-fail.
+     *
+     * At this time, well-known autoschedulers include:
+     *  "Mullapudi2016" -- heuristics-based; the first working autoscheduler; currently built in to libHalide
+     *  "Adams2019"     -- aka "the ML autoscheduler"; currently located in apps/autoscheduler
+     *  "Li2019"        -- aka "the gradient autoscheduler"; currently located in apps/gradient_autoscheduler
+     */
+    static void set_default_autoscheduler_name(const std::string &autoscheduler_name);
 
     /** Return handle to the index-th Func within the pipeline based on the
      * topological order. */

@@ -46,6 +46,8 @@ int main(int argc, char **argv) {
     }
 #endif
 
+    Pipeline::set_default_autoscheduler_name("Li2019");
+
     MachineParams params(32, 16000000, 40);
     Target target;
 

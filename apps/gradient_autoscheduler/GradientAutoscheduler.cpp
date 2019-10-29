@@ -219,8 +219,8 @@ void parallelize_vars_and_rvars_gpu(
             }
         }
     }
-    
-    if (!gpu_blocks.empty() || !r_gpu_blocks.empty()) { 
+
+    if (!gpu_blocks.empty() || !r_gpu_blocks.empty()) {
         // Assign outer loops to GPU blocks
         if (!fused_var.name().empty()) {
             func_or_stage.gpu_blocks(fused_var);
@@ -404,7 +404,7 @@ void parallelize_vars_and_rvars_cpu(
             }
         }
     }
-  
+
     if (!fused_var.name().empty()) {
         // Parallelize vars
         if (num_threads_var > params.parallelism * 8) {
@@ -839,7 +839,7 @@ void generate_schedule(const std::vector<Function> &outputs,
         }
     }
 
-    auto_scheduler_results->scheduler_name = "gradient autoscheduler";
+    auto_scheduler_results->scheduler_name = "Li2019";
     auto_scheduler_results->schedule_source = schedule_source.str();
     std::cerr << schedule_source.str() << std::endl;
 }
@@ -850,8 +850,8 @@ void generate_schedule(const std::vector<Function> &outputs,
 // constructor.
 struct RegisterGradientAutoscheduler {
     RegisterGradientAutoscheduler() {
-        debug(1) << "[gradient_autoscheduler] Registering autoscheduler...\n";
-        Pipeline::set_custom_auto_scheduler(*this);
+        debug(1) << "Registering autoscheduler 'Li2019'...\n";
+        Pipeline::add_autoscheduler("Li2019", *this);
     }
 
     void operator()(Pipeline p, const Target &target, const MachineParams &params, AutoSchedulerResults *results) {
