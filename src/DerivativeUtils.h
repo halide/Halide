@@ -48,7 +48,7 @@ Expr add_let_expression(const Expr &expr,
  */
 std::vector<Expr> sort_expressions(const Expr &expr);
 /**
- * Compute the bounds of funcs
+ * Compute the bounds of funcs.
  */
 std::map<std::string, Box> inference_bounds(const std::vector<Func> &funcs,
                                             const std::vector<Box> &output_bounds);
