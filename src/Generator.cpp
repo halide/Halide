@@ -852,7 +852,6 @@ int generate_filter_main_inner(int argc, char **argv, std::ostream &cerr) {
     }
 
     std::string autoscheduler_name = flags_info["-s"];
-cerr<<"autoscheduler_name is "<<autoscheduler_name<<"\n";
     if (!autoscheduler_name.empty()) {
         Pipeline::set_default_autoscheduler_name(autoscheduler_name);
     }
