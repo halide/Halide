@@ -11,7 +11,7 @@ public:
         // Record how denormals are currently handled so we can restore the current
         // behavior when we exit the current scope and the class destructor is
         // called. Note that the current code relies on the CSR register, which is
-        // available on all new x86 cpus.
+        // available on all the x86 cpus that support SSE instructions.
         // AFAIK, flushing denormals to zero is the standard behavior on NVidia
         // GPUs.
 #ifdef __SSE__
