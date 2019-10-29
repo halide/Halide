@@ -1,5 +1,13 @@
-AUTOSCHED_SRC ?= ../autoscheduler
-AUTOSCHED_BIN ?= $(AUTOSCHED_SRC)/bin
+ifndef BIN
+$(error BIN must be set prior to including autoscheduler.inc)
+endif
+
+AUTOSCHED_SRC ?= $(realpath ../autoscheduler)
+
+# Default to $(BIN) so that the toplevel Makefile can put all build products
+# into the build products directory (rather than into the source tree)
+AUTOSCHED_BIN ?= $(BIN)
+AUTOSCHED_SAMPLES_OUT ?= $(AUTOSCHED_SRC)/samples
 
 AUTOSCHED_WEIGHT_OBJECTS=$(AUTOSCHED_BIN)/baseline_weights.o
 

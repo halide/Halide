@@ -31,7 +31,8 @@ autotune: $(GENERATOR_BIN)/demo.generator $(AUTOSCHED_BIN)/featurization_to_samp
 		"" \
 		$(AUTOSCHED_SRC)/baseline.weights \
 		$(AUTOSCHED_BIN) \
-		$(HALIDE_DISTRIB_PATH)
+		$(HALIDE_DISTRIB_PATH) \
+		$(AUTOSCHED_SAMPLES_OUT)
 
 $(BIN)/test_perfect_hash_map: test_perfect_hash_map.cpp PerfectHashMap.h
 	@mkdir -p $(@D)
@@ -45,11 +46,22 @@ $(BIN)/%/test: test.cpp $(AUTOSCHED_BIN)/libauto_schedule.so
 test_perfect_hash_map: $(BIN)/test_perfect_hash_map
 	$^
 
+run_test: $(BIN)/$(HL_TARGET)/test
+	HL_WEIGHTS_DIR=$(AUTOSCHED_SRC)/baseline.weights LD_LIBRARY_PATH=$(AUTOSCHED_BIN) $<
+
+.PHONY: test clean
+
+# Note that when running the *test*, we want to ensure that we generate samples
+# to a subdir of $(BIN), so that they don't get inadvertently generated into
+# our source tree. (Normally we want samples/ to be retained, to avoid data loss;
+# for the test target, however, it's imperative it go into a transitory directory,
+# to avoid eventually consuming all disk space on the buildbot...)
+test: AUTOSCHED_SAMPLES_OUT = $(BIN)/test_samples_out
+
 # Note that 'make test' is used by Halide buildbots to spot-check changes,
 # so it's important to try a little of each of the important paths here,
 # including single-shot and autotune-loop
-test: $(BIN)/$(HL_TARGET)/test test_perfect_hash_map demo autotune included_schedule_file
-	HL_WEIGHTS_DIR=$(AUTOSCHED_SRC)/baseline.weights LD_LIBRARY_PATH=$(AUTOSCHED_BIN) $<
+test: run_test test_perfect_hash_map demo included_schedule_file autotune
 
 clean:
 	rm -rf $(BIN)

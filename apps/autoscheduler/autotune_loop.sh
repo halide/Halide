@@ -1,8 +1,8 @@
 # Build the generator to autotune. This script will be autotuning the
 # autoscheduler's cost model training pipeline, which is large enough
 # to be interesting.
-if [ $# -lt 6 -o $# -gt 7 ]; then
-  echo "Usage: $0 /path/to/some.generator generatorname halide_target weights_file autoschedule_bin_dir halide_distrib_path [generator_args_sets]"
+if [ $# -lt 6 -o $# -gt 8 ]; then
+  echo "Usage: $0 /path/to/some.generator generatorname halide_target weights_file autoschedule_bin_dir halide_distrib_path samples_out_path [generator_args_sets]"
   exit
 fi
 
@@ -17,12 +17,13 @@ HL_TARGET=${3}
 START_WEIGHTS_FILE=${4}
 AUTOSCHED_BIN=${5}
 HALIDE_DISTRIB_PATH=${6}
+SAMPLES=${7}
 
 # Read the generator-arg sets into an array. Each set is delimited
 # by space; multiple values within each set are are delimited with ;
 # e.g. "set1arg1=1;set1arg2=foo set2=bar set3arg1=3.14;set4arg2=42"
-if [ $# -ge 7 ]; then
-    IFS=' ' read -r -a GENERATOR_ARGS_SETS_ARRAY <<< "${7}"
+if [ $# -ge 8 ]; then
+    IFS=' ' read -r -a GENERATOR_ARGS_SETS_ARRAY <<< "${8}"
 else
     declare -a GENERATOR_ARGS_SETS_ARRAY=
 fi
@@ -50,7 +51,6 @@ if [ -z ${PIPELINE} ]; then
 PIPELINE=demo
 fi
 
-SAMPLES=${PWD}/samples
 mkdir -p ${SAMPLES}
 
 WEIGHTS=${SAMPLES}/updated.weights
@@ -224,8 +224,8 @@ for ((BATCH_ID=$((FIRST+1));BATCH_ID<$((FIRST+1+NUM_BATCHES));BATCH_ID++)); do
                 --num_cores=32 \
                 --initial_weights=${WEIGHTS} \
                 --weights_out=${WEIGHTS} \
-                --best_benchmark=${PWD}/samples/best.${PIPELINE}.benchmark.txt \
-                --best_schedule=${PWD}/samples/best.${PIPELINE}.schedule.h
+                --best_benchmark=${SAMPLES}/best.${PIPELINE}.benchmark.txt \
+                --best_schedule=${SAMPLES}/best.${PIPELINE}.schedule.h
     done
 
     echo Batch ${BATCH_ID} took ${SECONDS} seconds to compile, benchmark, and retrain
