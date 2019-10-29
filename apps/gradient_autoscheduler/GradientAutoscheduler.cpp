@@ -1,4 +1,5 @@
 #include "Halide.h"
+#include "ASLog.h"
 #include "Errors.h"
 #ifdef WITH_PYTHON
     #include <pybind11/pybind11.h>
@@ -219,8 +220,8 @@ void parallelize_vars_and_rvars_gpu(
             }
         }
     }
-    
-    if (!gpu_blocks.empty() || !r_gpu_blocks.empty()) { 
+
+    if (!gpu_blocks.empty() || !r_gpu_blocks.empty()) {
         // Assign outer loops to GPU blocks
         if (!fused_var.name().empty()) {
             func_or_stage.gpu_blocks(fused_var);
@@ -404,7 +405,7 @@ void parallelize_vars_and_rvars_cpu(
             }
         }
     }
-  
+
     if (!fused_var.name().empty()) {
         // Parallelize vars
         if (num_threads_var > params.parallelism * 8) {
@@ -841,7 +842,7 @@ void generate_schedule(const std::vector<Function> &outputs,
 
     auto_scheduler_results->scheduler_name = "gradient autoscheduler";
     auto_scheduler_results->schedule_source = schedule_source.str();
-    std::cerr << schedule_source.str() << std::endl;
+    aslog(1) << schedule_source.str() << '\n';
 }
 
 

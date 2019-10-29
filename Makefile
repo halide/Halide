@@ -1964,6 +1964,7 @@ TEST_APPS=\
 # (see https://github.com/halide/Halide/issues/4069)
 ifneq ($(OS), Windows_NT)
 	TEST_APPS += autoscheduler
+	TEST_APPS += gradient_autoscheduler
 endif
 
 TEST_APPS_DEPS=$(TEST_APPS:%=%_test_app)
