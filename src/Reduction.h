@@ -32,6 +32,7 @@ struct ReductionDomainContents;
  * vector of ReductionVariable. */
 class ReductionDomain {
     IntrusivePtr<ReductionDomainContents> contents;
+
 public:
     /** This lets you use a ReductionDomain as a key in a map of the form
      * map<ReductionDomain, Foo, ReductionDomain::Compare> */
@@ -43,7 +44,9 @@ public:
     };
 
     /** Construct a new nullptr reduction domain */
-    ReductionDomain() : contents(nullptr) {}
+    ReductionDomain()
+        : contents(nullptr) {
+    }
 
     /** Construct a reduction domain that spans the outer product of
      * all values of the given ReductionVariable in scanline order,

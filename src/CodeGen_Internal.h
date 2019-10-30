@@ -27,7 +27,8 @@ class TargetMachine;
 class TargetOptions;
 class Type;
 class Value;
-template<typename, typename> class IRBuilder;
+template<typename, typename>
+class IRBuilder;
 }  // namespace llvm
 
 namespace Halide {
@@ -73,8 +74,8 @@ bool can_allocation_fit_on_stack(int64_t size);
  * Can introduce mulhi_shr and sorted_avg intrinsics as well as those from the
  * lower_euclidean_ operation -- div_round_to_zero or mod_round_to_zero. */
 ///@{
- Expr lower_int_uint_div(Expr a, Expr b);
- Expr lower_int_uint_mod(Expr a, Expr b);
+Expr lower_int_uint_div(Expr a, Expr b);
+Expr lower_int_uint_mod(Expr a, Expr b);
 ///@}
 
 /** Given a Halide Euclidean division/mod operation, define it in terms of
@@ -117,4 +118,3 @@ void embed_bitcode(llvm::Module *M, const std::string &halide_command);
 }  // namespace Halide
 
 #endif
-

@@ -22,7 +22,9 @@ struct DefinitionContents {
     std::vector<Specialization> specializations;
     std::string source_location;
 
-    DefinitionContents() : is_init(true), predicate(const_true()) {}
+    DefinitionContents()
+        : is_init(true), predicate(const_true()) {
+    }
 
     void accept(IRVisitor *visitor) const {
         if (predicate.defined()) {
@@ -79,16 +81,19 @@ void destroy<DefinitionContents>(const DefinitionContents *d) {
     delete d;
 }
 
-Definition::Definition() : contents(nullptr) {}
+Definition::Definition()
+    : contents(nullptr) {
+}
 
-Definition::Definition(const IntrusivePtr<DefinitionContents> &ptr) : contents(ptr) {
+Definition::Definition(const IntrusivePtr<DefinitionContents> &ptr)
+    : contents(ptr) {
     internal_assert(ptr.defined())
         << "Can't construct Function from undefined DefinitionContents ptr\n";
 }
 
 Definition::Definition(const std::vector<Expr> &args, const std::vector<Expr> &values,
                        const ReductionDomain &rdom, bool is_init)
-                       : contents(new DefinitionContents) {
+    : contents(new DefinitionContents) {
     contents->is_init = is_init;
     contents->values = values;
     contents->args = args;
@@ -196,7 +201,7 @@ const Specialization &Definition::add_specialization(Expr condition) {
     s.definition.contents->is_init = contents->is_init;
     s.definition.contents->predicate = contents->predicate;
     s.definition.contents->values = contents->values;
-    s.definition.contents->args   = contents->args;
+    s.definition.contents->args = contents->args;
     s.definition.contents->source_location = contents->source_location;
 
     // The sub-schedule inherits everything about its parent except for its specializations.

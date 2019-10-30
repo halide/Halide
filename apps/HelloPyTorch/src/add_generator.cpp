@@ -15,9 +15,9 @@ Func add_(const Input &input_a, const Input &input_b) {
 
 class AddGenerator : public Generator<AddGenerator> {
 public:
-    Input<Func> input_a{"input_a", 4};
-    Input<Func> input_b{"input_b", 4};
-    Output<Func> output{"output", 4};
+    Input<Buffer<>> input_a{"input_a", 4};
+    Input<Buffer<>> input_b{"input_b", 4};
+    Output<Buffer<>> output{"output", 4};
 
     void generate() {
         output(x, y, c, n) = add_(input_a, input_b)(x, y, c, n);
@@ -46,23 +46,24 @@ public:
 
 class AddGradGenerator : public Generator<AddGradGenerator> {
 public:
-    Input<Func> input_a{"input_a", 4};
-    Input<Func> input_b{"input_b", 4};
-    Input<Func> d_output{"d_output", 4};
-    Input<int> w{"w"};
-    Input<int> h{"h"};
-    Input<int> chans{"chans"};
-    Input<int> bs{"bs"};
+    Input<Buffer<>> input_a{"input_a", 4};
+    Input<Buffer<>> input_b{"input_b", 4};
+    Input<Buffer<>> d_output{"d_output", 4};
 
-    Output<Func> d_input_a{"d_input_a", 4};
-    Output<Func> d_input_b{"d_input_b", 4};
+    Output<Buffer<>> d_input_a{"d_input_a", 4};
+    Output<Buffer<>> d_input_b{"d_input_b", 4};
 
     void generate() {
         Func f_output = add_(input_a, input_b);
 
-        // NOTE: We need to provide the side of the adjoint here.
+        // NOTE: the output_bounds argument is technically supposed to
+        // be the shape of f_output; we'll use the bounds of input_a since it
+        // is equivalent and easier to access.
         Derivative d = propagate_adjoints(f_output, d_output,
-            {{0, w}, {0, h}, {0, chans}, {0, bs}});
+            {{0, input_a.dim(0).extent()}, 
+             {0, input_a.dim(1).extent()}, 
+             {0, input_a.dim(2).extent()}, 
+             {0, input_a.dim(3).extent()}});
 
         d_input_a(x, y, c, n) = d(input_a)(x, y, c, n);
         d_input_b(x, y, c, n) = d(input_b)(x, y, c, n);

@@ -108,6 +108,7 @@ void define_enums(py::module &m) {
         .value("OpenCL", Target::Feature::OpenCL)
         .value("CLDoubles", Target::Feature::CLDoubles)
         .value("CLHalf", Target::Feature::CLHalf)
+        .value("CLAtomics64", Target::Feature::CLAtomics64)
         .value("OpenGL", Target::Feature::OpenGL)
         .value("OpenGLCompute", Target::Feature::OpenGLCompute)
         .value("EGL", Target::Feature::EGL)

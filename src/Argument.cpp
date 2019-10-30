@@ -18,12 +18,13 @@ bool ArgumentEstimates::operator==(const ArgumentEstimates &rhs) const {
            scalar_estimate.same_as(rhs.scalar_estimate);
 }
 
-Argument::Argument(const std::string &_name, Kind _kind, const Type &_type, int _dimensions, const ArgumentEstimates &argument_estimates) :
-    name(_name), kind(_kind), dimensions((uint8_t) _dimensions), type(_type), argument_estimates(argument_estimates) {
+Argument::Argument(const std::string &_name, Kind _kind, const Type &_type, int _dimensions, const ArgumentEstimates &argument_estimates)
+    : name(_name), kind(_kind), dimensions((uint8_t)_dimensions), type(_type), argument_estimates(argument_estimates) {
     internal_assert(dimensions >= 0 && dimensions <= 255);
     user_assert(!(is_scalar() && dimensions != 0)) << "Scalar Arguments must specify dimensions of 0";
     user_assert(argument_estimates.buffer_estimates.empty() ||
-                argument_estimates.buffer_estimates.size() == dimensions) << "buffer_estimates must match dimensionality for Argument " << name;
+                argument_estimates.buffer_estimates.size() == dimensions)
+        << "buffer_estimates must match dimensionality for Argument " << name;
 }
 
 }  // namespace Halide

@@ -80,6 +80,7 @@ struct Target {
         OpenCL = halide_target_feature_opencl,
         CLDoubles = halide_target_feature_cl_doubles,
         CLHalf = halide_target_feature_cl_half,
+        CLAtomics64 = halide_target_feature_cl_atomic64,
         OpenGL = halide_target_feature_opengl,
         OpenGLCompute = halide_target_feature_openglcompute,
         EGL = halide_target_feature_egl,
@@ -124,10 +125,12 @@ struct Target {
         SVE2 = halide_target_feature_sve2,
         FeatureEnd = halide_target_feature_end
     };
-    Target() : os(OSUnknown), arch(ArchUnknown), bits(0) {}
+    Target()
+        : os(OSUnknown), arch(ArchUnknown), bits(0) {
+    }
     Target(OS o, Arch a, int b, const std::vector<Feature> &initial_features = std::vector<Feature>())
         : os(o), arch(a), bits(b) {
-        for (const auto &f :initial_features) {
+        for (const auto &f : initial_features) {
             set_feature(f);
         }
     }
@@ -157,7 +160,7 @@ struct Target {
     bool has_feature(Feature f) const;
 
     inline bool has_feature(halide_target_feature_t f) const {
-        return has_feature((Feature) f);
+        return has_feature((Feature)f);
     }
 
     bool features_any_of(std::vector<Feature> test_features) const;
@@ -202,14 +205,14 @@ struct Target {
     bool supports_device_api(DeviceAPI api) const;
 
     bool operator==(const Target &other) const {
-      return os == other.os &&
-          arch == other.arch &&
-          bits == other.bits &&
-          features == other.features;
+        return os == other.os &&
+               arch == other.arch &&
+               bits == other.bits &&
+               features == other.features;
     }
 
     bool operator!=(const Target &other) const {
-      return !(*this == other);
+        return !(*this == other);
     }
 
     /**
@@ -221,7 +224,7 @@ struct Target {
      * @param[out] result The gcd target if we return true, otherwise unmodified. Can be the same as *this.
      * @return Whether it was possible to find a compatible target (true) or not.
      */
-    bool get_runtime_compatible_target(const Target& other, Target &result);
+    bool get_runtime_compatible_target(const Target &other, Target &result);
 
     /** Convert the Target into a string form that can be reconstituted
      * by merge_string(), which will always be of the form
@@ -242,7 +245,7 @@ struct Target {
 
     /** Given a data type, return an estimate of the "natural" vector size
      * for that data type when compiling for this Target. */
-    template <typename data_t>
+    template<typename data_t>
     int natural_vector_size() const {
         return natural_vector_size(type_of<data_t>());
     }
@@ -269,7 +272,9 @@ struct Target {
     /** Return a bitset of the Featuress set in this Target (set = 1).
      * Note that while this happens to be the current internal representation,
      * that might not always be the case. */
-    const std::bitset<FeatureEnd> &get_features_bitset() const { return features; }
+    const std::bitset<FeatureEnd> &get_features_bitset() const {
+        return features;
+    }
 
     /** Return the name corresponding to a given Feature, in the form
      * used to construct Target strings (e.g., Feature::Debug is "debug" and not "Debug"). */
