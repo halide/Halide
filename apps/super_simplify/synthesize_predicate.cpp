@@ -43,6 +43,42 @@ Expr pack_binary_op(const Iterable &v) {
     return result;
 }
 
+uint64_t hash_combine(uint64_t a, uint64_t b) {
+    // From boost
+    a ^= (b + 0x9e3779b9 + (a<<6) + (a>>2));
+    return a;
+}
+
+class HashExpr : public IRMutator {
+    using IRMutator::visit;
+    using IRMutator::mutate;
+
+    Expr visit(const Variable *op) {
+        hash = hash_combine(hash, std::hash<std::string>{}(op->name));
+        return op;
+    }
+
+    Expr visit(const IntImm *op) {
+        hash = hash_combine(hash, (uint64_t)op->value);
+        return op;
+    }
+
+public:
+    uint64_t hash = 0;
+
+    Expr mutate(const Expr &e) {
+        return IRMutator::mutate(e);
+        hash = hash_combine(hash, (uint64_t)e.node_type());
+    }
+};
+
+// Hash an expr
+uint64_t hash_expr(const Expr &e) {
+    HashExpr hasher;
+    hasher.mutate(e);
+    return hasher.hash;
+}
+
 // Make an auxiliary variable
 Expr aux() {
     Var k(unique_name('k'));
@@ -180,6 +216,14 @@ struct Equality {
         }
         return lhs == rhs;
     }
+
+    uint64_t hash() const {
+        uint64_t total = 0;
+        for (const auto &p : terms) {
+            total += hash_expr(p.first) * p.second;
+        }
+        return total;
+    }
 };
 
 // A system of constraints. We're going to construct systems of
@@ -204,6 +248,10 @@ struct System {
     // can't be satisfied given the bounds we have learned.
     Simplify *simplifier;
 
+    // A shared stash of substituted-out non-linearities, to avoid
+    // giving different names to the same thing.
+    map<Expr, string, IRDeepCompare> *non_linear_substitutions;
+
     // The most-recently-performed substition, for debugging
     Expr most_recent_substitution;
 
@@ -217,9 +265,18 @@ struct System {
     static uint64_t id_counter;
     uint64_t id, parent_id;
 
-    System(Simplify *s, Expr subs, int pid) :
-        simplifier(s), most_recent_substitution(subs),
-        id(id_counter++), parent_id(pid) {}
+    System(System *parent, Expr subs) :
+        simplifier(parent->simplifier),
+        non_linear_substitutions(parent->non_linear_substitutions),
+        most_recent_substitution(subs),
+        id(id_counter++), parent_id(parent->id) {}
+
+    System(Simplify *s,
+           map<Expr, string, IRDeepCompare> *nls) :
+        simplifier(s),
+        non_linear_substitutions(nls),
+        id(id_counter++),
+        parent_id(0) {}
 
     void add_equality(const EQ *eq) {
         equalities.emplace_back(eq);
@@ -235,7 +292,9 @@ struct System {
     }
 
     bool can_prove(Expr e) {
-        return is_one(simplifier->mutate(e, nullptr));
+        return (simplifier->truths.count(e) ||
+                simplifier->falsehoods.count(simplifier->mutate(!e, nullptr)) ||
+                is_one(simplifier->mutate(e, nullptr)));
     }
 
     void add_term(const Expr &e) {
@@ -313,7 +372,19 @@ struct System {
         }
     }
 
+    uint64_t hash() const {
+        uint64_t total = 0;
+        for (const auto &e : equalities) {
+            total = hash_combine(total, e.hash());
+        }
+        if (non_linear_term.defined()) {
+            total = hash_combine(total, hash_expr(non_linear_term));
+        }
+        return total;
+    }
+
     void dump() const {
+        debug(1) << "Id/Parent: " << id << ", " << parent_id << "\n";
         if (most_recent_substitution.defined()) {
             debug(1) << "Substitution: " << most_recent_substitution << "\n";
         }
@@ -323,6 +394,7 @@ struct System {
         if (non_linear_term.defined()) {
             debug(1) << " non-linear: " << non_linear_term << "\n";
         }
+        debug(1) << " hash: " << hash() << "\n";
         const auto &info = simplifier->bounds_and_alignment_info;
         for (auto it = info.cbegin(); it != info.cend(); ++it){
             bool used = false;
@@ -455,9 +527,8 @@ struct System {
         // by tracking which states lead to success in the
         // store_with test and minimizing cross-entropy loss on a
         // linear classifier.
-        float coeffs[] = {-0.1575f, -0.2994f,  0.0849f,  0.1400f,
-                          -0.0252f,  0.4637f,  1.0000f,  0.3821f};
-
+        float coeffs[] = { 0.1330f, -0.1699f, -0.0186f,  0.0545f,
+                           -0.0937f,  0.4846f,  0.7632f,  1.0000f};
         c = 0.0f;
         for (int i = 0; i < 8; i++) {
             c -= terms[i] * coeffs[i];
@@ -494,8 +565,10 @@ struct System {
 
         // Eliminate divs and mods by introducing new variables
         for (int i = 0; i < (int)equalities.size(); i++) {
-            Expr lhs, rhs;
+            Expr lhs, rhs, abs_rhs;
+            Expr term_exploited;
             for (auto &p : equalities[i].terms) {
+                term_exploited = p.first;
                 const Mod *mod = p.first.as<Mod>();
                 const Div *div = p.first.as<Div>();
                 const Mul *mul = p.first.as<Mul>();
@@ -511,51 +584,108 @@ struct System {
                 }
 
                 if (is_const(rhs)) {
+                    // x / 4 or x % 4
                     _halide_user_assert(mul == nullptr);
                     break;
                 } else if (const Variable *v = rhs.as<Variable>()) {
-                    // HACK for constant vars
-                    if (mul) {
+                    while (mul) {
                         div = mul->a.as<Div>();
-                        if (div) {
-                            lhs = div->a;
-                        }
+                        mul = mul->a.as<Mul>();
                     }
-                    if (starts_with(v->name, "c") &&
-                        (!mul || (div && equal(div->b, mul->b))) &&
-                        is_one(simplifier->mutate(rhs > 0, nullptr))) {
-                        break;
+                    if (div) {
+                        lhs = div->a;
+                        rhs = div->b;
+                    }
+                    if (starts_with(v->name, "c") && (mod || div)) {
+                        // We need to know the sign of the rhs to
+                        // construct a suitable remainder.
+                        Simplify::ExprInfo info;
+                        simplifier->mutate(rhs, &info);
+                        if (info.min_defined && info.min >= 0) {
+                            abs_rhs = rhs;
+                            break;
+                        } else if (info.max_defined && info.max <= 0) {
+                            abs_rhs = -rhs;
+                            break;
+                        }
                     }
                 }
 
                 lhs = rhs = Expr();
             }
             if (lhs.defined()) {
-                Expr k1 = aux(), k2 = aux();
-                Expr replacement = simplifier->mutate(k1 + k2 * rhs, nullptr);
-                auto subs = [&](Expr e) {
-                    e = substitute(lhs % rhs, k1, e);
-                    e = substitute(lhs / rhs, k2, e);
-                    return simplifier->mutate(e, nullptr);
-                };
-                std::unique_ptr<System> new_system(new System(simplifier, lhs == rhs, id));
-                if (non_linear_term.defined()) {
-                    new_system->add_term(subs(non_linear_term));
+                {
+                    // Do a variable substitution and pull the quotient
+                    // and remainder of the numerator out.
+                    Expr k1 = aux(), k2 = aux();
+                    Expr replacement = simplifier->mutate(k1 + k2 * rhs, nullptr);
+                    auto subs = [&](Expr e) {
+                        e = substitute(lhs % rhs, k1, e);
+                        e = substitute(lhs / rhs, k2, e);
+                        return simplifier->mutate(e, nullptr);
+                    };
+                    std::unique_ptr<System> new_system(new System(this, lhs / rhs));
+                    if (non_linear_term.defined()) {
+                        new_system->add_term(subs(non_linear_term));
+                    }
+                    for (int j = 0; j < (int)equalities.size(); j++) {
+                        new_system->add_term(subs(equalities[j].to_expr()));
+                    }
+                    new_system->add_term(lhs == replacement);
+                    simplifier->learn_true(0 <= k1);
+                    new_system->add_term(k1 < abs_rhs);
+                    new_system->finalize();
+                    result.emplace_back(std::move(new_system));
                 }
-                for (int j = 0; j < (int)equalities.size(); j++) {
-                    new_system->add_term(subs(equalities[j].to_expr()));
+                {
+                    // Alternatively, multiply through by the rhs and
+                    // add a remainder term of the opposite
+                    // sign. Leave the other equations unchanged.
+
+                    // X == Y <-> cX == cY
+                    Expr k1 = aux();
+
+                    std::unique_ptr<System> new_system(new System(this, lhs / rhs));
+                    if (non_linear_term.defined()) {
+                        new_system->add_term(non_linear_term);
+                    }
+                    for (int j = 0; j < (int)equalities.size(); j++) {
+                        if (i == j) {
+                            Expr e = 0;
+                            for (auto &p : equalities[i].terms) {
+                                const Mul *mul = p.first.as<Mul>();
+                                const Div *div = p.first.as<Div>();
+                                Expr factors;
+                                while (mul) {
+                                    if (factors.defined()) {
+                                        factors *= mul->b;
+                                    } else {
+                                        factors = mul->b;
+                                    }
+                                    div = mul->a.as<Div>();
+                                    mul = mul->a.as<Mul>();
+                                }
+                                if (div && div->a.same_as(lhs) && div->b.same_as(rhs)) {
+                                    // (x / c0) * c0 -> x - k1, where 0 <= k1 < |c0|
+                                    Expr t = div->a - k1;
+                                    if (factors.defined()) {
+                                        t *= factors;
+                                    }
+                                    e += t * p.second;
+                                } else {
+                                    e += (p.first * rhs) * p.second;
+                                }
+                            }
+                            new_system->add_term(e == 0);
+                        } else {
+                            new_system->add_term(equalities[j].to_expr());
+                        }
+                    }
+                    simplifier->learn_true(0 <= k1);
+                    new_system->add_term(k1 < abs_rhs);
+                    new_system->finalize();
+                    result.emplace_back(std::move(new_system));
                 }
-                new_system->add_term(lhs == replacement);
-                simplifier->learn_true(0 <= k1);
-                if (is_const(rhs)) {
-                    simplifier->learn_true(k1 < rhs);
-                } else {
-                    // TODO: only if we know RHS is positive.
-                    new_system->add_term(k1 < rhs);
-                }
-                new_system->finalize();
-                result.emplace_back(std::move(new_system));
-                return;
             }
         }
 
@@ -570,10 +700,6 @@ struct System {
                 }
             }
             for (const auto &f : factors) {
-                if (f.second == 1) {
-                    // Not a repeated factor
-                    continue;
-                }
                 Expr factor_expr = Variable::make(Int(32), f.first);
                 Expr terms_with_factor = 0;
                 Expr terms_without_factor = 0;
@@ -585,15 +711,74 @@ struct System {
                         terms_without_factor += p.first * p.second;
                     }
                 }
-                terms_with_factor = simplifier->mutate(terms_with_factor, nullptr);
+                Simplify::ExprInfo terms_with_factor_info, terms_without_factor_info, factor_info;
+                terms_with_factor = simplifier->mutate(terms_with_factor,
+                                                       &terms_with_factor_info);
+                terms_without_factor = simplifier->mutate(terms_without_factor,
+                                                          &terms_without_factor_info);
+                simplifier->mutate(factor_expr, &factor_info);
 
-                if (is_zero(simplifier->mutate(terms_without_factor == 0, nullptr))) {
-                    // If the sum of the terms that do not reference
-                    // the factor can't be zero, then the factor can't
-                    // be zero either, so it's safe to divide
-                    // by. Furthermore, this implies that the terms
-                    // with the factor can't sum to zero.
-                    std::unique_ptr<System> new_system(new System(simplifier, Expr(), id));
+                // terms_without_factor + factor * terms_with_factor == 0.
+
+                // We can infer bounds on terms_with_factor using
+                // bounds on the other two. For now we'll just
+                // consider the sign.
+                bool without_positive = (terms_without_factor_info.min_defined &&
+                                         terms_without_factor_info.min > 0);
+                bool without_non_negative = (terms_without_factor_info.min_defined &&
+                                             terms_without_factor_info.min >= 0);
+                bool without_negative = (terms_without_factor_info.max_defined &&
+                                         terms_without_factor_info.max < 0);
+                bool without_non_positive = (terms_without_factor_info.max_defined &&
+                                             terms_without_factor_info.max <= 0);
+                bool factor_positive = (factor_info.min_defined &&
+                                        factor_info.min > 0);
+                bool factor_negative = (factor_info.max_defined &&
+                                        factor_info.max < 0);
+
+                bool with_positive = (terms_with_factor_info.min_defined &&
+                                      terms_with_factor_info.min > 0);
+                bool with_non_negative = (terms_with_factor_info.min_defined &&
+                                          terms_with_factor_info.min >= 0);
+                bool with_negative = (terms_with_factor_info.max_defined &&
+                                      terms_with_factor_info.max < 0);
+                bool with_non_positive = (terms_with_factor_info.max_defined &&
+                                          terms_with_factor_info.max <= 0);
+
+                bool with_negative_inferred = ((factor_positive && without_positive) ||
+                                               (factor_negative && without_negative));
+                bool with_positive_inferred = ((factor_positive && without_negative) ||
+                                               (factor_negative && without_positive));
+                bool with_non_positive_inferred = ((factor_positive && without_non_negative) ||
+                                                   (factor_negative && without_non_positive));
+                bool with_non_negative_inferred = ((factor_positive && without_non_positive) ||
+                                                   (factor_negative && without_non_negative));
+
+                // Check for a contradiction to early out
+                bool contradiction =
+                    ((with_negative && with_non_negative_inferred) ||
+                     (with_non_positive && with_positive_inferred) ||
+                     (with_non_negative && with_negative_inferred) ||
+                     (with_positive && with_non_positive_inferred));
+                if (contradiction) {
+                    std::unique_ptr<System> new_system(new System(this, Expr()));
+                    new_system->add_term(const_false());
+                    new_system->finalize();
+                    // Drop the rest of the beam. We're done here.
+                    result.clear();
+                    result.emplace_back(std::move(new_system));
+                    return;
+                }
+
+                if (is_const(terms_with_factor)) {
+                    // This is going to produce a tautology
+                    continue;
+                }
+
+                if (with_negative_inferred || with_positive_inferred ||
+                    with_non_negative_inferred || with_non_positive_inferred) {
+                    // We can usefully separate this equality into two
+                    std::unique_ptr<System> new_system(new System(this, Expr()));
                     if (non_linear_term.defined()) {
                         new_system->add_term(non_linear_term);
                     }
@@ -602,7 +787,15 @@ struct System {
                             new_system->add_term(equalities[j].to_expr());
                         }
                     }
-                    new_system->add_term(terms_with_factor != 0);
+                    if (with_negative_inferred) {
+                        new_system->add_term(terms_with_factor < 0);
+                    } else if (with_positive_inferred) {
+                        new_system->add_term(0 < terms_with_factor);
+                    } else if (with_non_negative_inferred) {
+                        new_system->add_term(0 <= terms_with_factor);
+                    } else if (with_non_positive_inferred) {
+                        new_system->add_term(terms_with_factor <= 0);
+                    }
                     new_system->finalize();
                     result.emplace_back(std::move(new_system));
                 }
@@ -623,7 +816,16 @@ struct System {
             if (p.second > 1) {
                 // It's a repeated non-linearity. Replace it with an
                 // opaque variable so that we can try cancelling it.
-                Var t(unique_name('n'));
+                auto it = non_linear_substitutions->find(p.first);
+                string name;
+                if (it == non_linear_substitutions->end()) {
+                    name = unique_name('n');
+                    Expr key = p.first;
+                    (*non_linear_substitutions)[key] = name;
+                } else {
+                    name = it->second;
+                }
+                Var t(name);
 
                 debug(1) << "Repeated non-linear term: " << t << " == " << p.first << "\n";
 
@@ -632,7 +834,7 @@ struct System {
                     return e;
                 };
 
-                std::unique_ptr<System> new_system(new System(simplifier, t == p.first, id));
+                std::unique_ptr<System> new_system(new System(this, t == p.first));
                 if (non_linear_term.defined()) {
                     new_system->add_term(subs(non_linear_term));
                 }
@@ -801,9 +1003,8 @@ struct System {
                     // typically won't be any because x == y will sort
                     // to the front of the list of equalities.
                     bool greedy = false;
-                    if (rhs.as<Variable>() || is_const(rhs)) {
+                    if ((rhs.as<Variable>() && var->name[0] != 'c') || is_const(rhs)) {
                         greedy = true;
-                        result.clear();
                     }
 
                     auto subs = [&](Expr e) {
@@ -814,7 +1015,7 @@ struct System {
 
                     // Make a child system with the substitution
                     // performed and this equality eliminated.
-                    std::unique_ptr<System> new_system(new System(simplifier, p.first == rhs, id));
+                    std::unique_ptr<System> new_system(new System(this, p.first == rhs));
                     if (non_linear_term.defined()) {
                         new_system->add_term(subs(non_linear_term));
                     }
@@ -849,6 +1050,133 @@ struct System {
     }
 };
 
+Interval add_intervals(const Interval &a, const Interval &b) {
+    Interval result = Interval::everything();
+    if (a.has_lower_bound() && b.has_lower_bound()) {
+        result.min = a.min + b.min;
+    }
+    if (a.has_upper_bound() && b.has_upper_bound()) {
+        result.max = a.max + b.max;
+    }
+    return result;
+}
+
+Interval sub_intervals(const Interval &a, const Interval &b) {
+    Interval result = Interval::everything();
+    if (a.has_lower_bound() && b.has_upper_bound()) {
+        result.min = a.min - b.max;
+    }
+    if (a.has_upper_bound() && b.has_lower_bound()) {
+        result.max = a.max - b.min;
+    }
+    return result;
+};
+
+Interval mul_intervals(Interval a, Interval b, Simplify *simplifier) {
+    // Move constants to the right
+    if (a.is_single_point() && !b.is_single_point()) {
+        std::swap(a, b);
+    }
+
+    if (a.is_single_point() && b.is_single_point()) {
+        return Interval::single_point(a.min * b.min);
+    } else if (b.is_single_point()) {
+        Expr e1 = a.has_lower_bound() ? a.min * b.min : a.min;
+        Expr e2 = a.has_upper_bound() ? a.max * b.min : a.max;
+        Simplify::ExprInfo b_info;
+        simplifier->mutate(b.min, &b_info);
+        if (is_zero(b.min)) {
+            return b;
+        } else if (b_info.min_defined && b_info.min >= 0) {
+            return Interval(e1, e2);
+        } else if (b_info.max_defined && b_info.max <= 0) {
+            if (e1.same_as(Interval::neg_inf)) {
+                e1 = Interval::pos_inf;
+            }
+            if (e2.same_as(Interval::pos_inf)) {
+                e2 = Interval::neg_inf;
+            }
+            return Interval(e2, e1);
+        } else if (a.is_bounded()) {
+            // Sign of b is unknown but a bounded above and below
+            Expr cmp = b.min >= make_zero(b.min.type());
+            return Interval(select(cmp, e1, e2), select(cmp, e2, e1));
+        } else {
+            return Interval::everything();
+        }
+    } else if (a.is_bounded() && b.is_bounded()) {
+        Interval interval = Interval::nothing();
+        interval.include(a.min * b.min);
+        interval.include(a.min * b.max);
+        interval.include(a.max * b.min);
+        interval.include(a.max * b.max);
+        return interval;
+    } else {
+        return Interval::everything();
+    }
+}
+
+// A simplified version of halide's symbolic interval arithmetic that
+// can exploit a custom simplifier. Designed to work on the normalized
+// expressions that come out of the solver. Only handles
+// +/-/*/min/max/select.
+Interval bounds_of_expr(const Expr &e, Simplify *simplifier) {
+    if (is_const(e)) {
+        return Interval::single_point(e);
+    } else if (const Variable *var = e.as<Variable>()) {
+        if (var->name[0] == 'c') {
+            return Interval::single_point(e);
+        }
+        Simplify::ExprInfo info;
+        simplifier->mutate(e, &info);
+        Interval i = Interval::everything();
+        if (info.max_defined) {
+            i.max = (int)info.max;
+        }
+        if (info.min_defined) {
+            i.min = (int)info.min;
+        }
+        return i;
+    } else if (const Add *add = e.as<Add>()) {
+        Interval ia = bounds_of_expr(add->a, simplifier);
+        Interval ib = bounds_of_expr(add->b, simplifier);
+        return add_intervals(ia, ib);
+    } else if (const Sub *sub = e.as<Sub>()) {
+        Interval ia = bounds_of_expr(sub->a, simplifier);
+        Interval ib = bounds_of_expr(sub->b, simplifier);
+        return sub_intervals(ia, ib);
+    } else if (const Mul *mul = e.as<Mul>()) {
+        Interval ia = bounds_of_expr(mul->a, simplifier);
+        Interval ib = bounds_of_expr(mul->b, simplifier);
+        return mul_intervals(ia, ib, simplifier);
+    } else if (const Min *min = e.as<Min>()) {
+        Interval ia = bounds_of_expr(min->a, simplifier);
+        Interval ib = bounds_of_expr(min->b, simplifier);
+        ia.min = Interval::make_min(ia.min, ib.min);
+        ia.max = Interval::make_min(ia.max, ib.max);
+        return ia;
+    } else if (const Max *max = e.as<Max>()) {
+        Interval ia = bounds_of_expr(max->a, simplifier);
+        Interval ib = bounds_of_expr(max->b, simplifier);
+        ia.min = Interval::make_max(ia.min, ib.min);
+        ia.max = Interval::make_max(ia.max, ib.max);
+        return ia;
+    } else if (const Select *select = e.as<Select>()) {
+        Interval ia, ib;
+        {
+            auto t = simplifier->scoped_truth(select->condition);
+            ia = bounds_of_expr(select->true_value, simplifier);
+        }
+        {
+            auto f = simplifier->scoped_falsehood(select->condition);
+            ib = bounds_of_expr(select->false_value, simplifier);
+        }
+        return Interval::make_union(ia, ib);
+    } else {
+        return Interval::everything();
+    }
+}
+
 uint64_t System::id_counter = 0;
 
 // Attempt to disprove a boolean expr by constructing a constraint
@@ -869,7 +1197,8 @@ bool can_disprove(Expr e, int beam_size, std::set<Expr, IRDeepCompare> *implicat
     // knowledge, and construct the initial system of constraints
     // from the expression.
     Simplify simplifier(true, nullptr, nullptr);
-    std::unique_ptr<System> system(new System(&simplifier, Expr(), 0));
+    map<Expr, string, IRDeepCompare> non_linear_substitutions;
+    std::unique_ptr<System> system(new System(&simplifier, &non_linear_substitutions));
     system->add_term(e);
     system->finalize();
 
@@ -911,6 +1240,7 @@ bool can_disprove(Expr e, int beam_size, std::set<Expr, IRDeepCompare> *implicat
     };
 
     // Beam search time.
+    std::set<uint64_t> visited;
     std::deque<std::unique_ptr<System>> beam;
     beam.emplace_back(std::move(system));
     float last_complexity = 0;
@@ -918,6 +1248,12 @@ bool can_disprove(Expr e, int beam_size, std::set<Expr, IRDeepCompare> *implicat
         // Take the best thing
         std::unique_ptr<System> next = std::move(beam.front());
         beam.pop_front();
+
+        if (visited.count(next->hash())) {
+            continue;
+        }
+
+        visited.insert(next->hash());
 
         if (implications) {
             for (const auto &eq : next->equalities) {
@@ -930,7 +1266,6 @@ bool can_disprove(Expr e, int beam_size, std::set<Expr, IRDeepCompare> *implicat
 
         //if (next->complexity() == last_complexity) continue;
         last_complexity = next->complexity();
-
 
           debug(1) << "Top of beam: " << next->complexity() << "\n";
           next->dump();
@@ -1036,53 +1371,7 @@ bool can_disprove(Expr e, int beam_size, std::set<Expr, IRDeepCompare> *implicat
             }
         }
 
-        // Compute symbolic bounds, with the simplifier (and all its
-        // accumulated knowledge) as a backstop. TODO: would be better
-        // if we could pass a custom simplifier instance into
-        // bounds_of_expr_in_scope.
-        auto get_bounds = [&](const Expr &e) {
-            Interval i = bounds_of_expr_in_scope(e, scope);
-            Simplify::ExprInfo info;
-            /*
-            if (const Mul *mul = e.as<Mul>()) {
-                debug(1) << "HI: bounds of product: " << e << "\n";
-                simplifier.mutate(mul->a, &info);
-                Interval mi = get_bounds_from_info(info);
-                debug(1) << "LHS: " << mi.min << " ... " << mi.max << "\n";
-                simplifier.mutate(mul->b, &info);
-                mi = get_bounds_from_info(info);
-                debug(1) << "RHS: " << mi.min << " ... " << mi.max << "\n";
-            }
-            */
-            simplifier.mutate(e, &info);
-            Interval si = get_bounds_from_info(info);
-            if (!i.has_lower_bound() && si.has_lower_bound()) {
-                i.min = si.min;
-            }
-            if (!i.has_upper_bound() && si.has_upper_bound()) {
-                i.max = si.max;
-            }
-            return i;
-        };
-
-        auto add_intervals = [](const Interval &a, const Interval &b) -> Interval {
-            if (a.is_empty()) {
-                return b;
-            }
-            if (b.is_empty()) {
-                return a;
-            }
-            Interval result = Interval::everything();
-            if (a.has_lower_bound() && b.has_lower_bound()) {
-                result.min = a.min + b.min;
-            }
-            if (a.has_upper_bound() && b.has_upper_bound()) {
-                result.max = a.max + b.max;
-            }
-            return result;
-        };
-
-        // Now eliminate all the k's
+        // Now eliminate all the auxiliary and free variables
         for (auto p : local_implications) {
             Expr m = p.first;
             debug(1) << "Local implication: " << m << "\n";
@@ -1090,22 +1379,11 @@ bool can_disprove(Expr e, int beam_size, std::set<Expr, IRDeepCompare> *implicat
             debug(1) << "Simplify: " << m << "\n";
             if (const EQ *eq = m.as<EQ>()) {
                 Expr a = eq->a, b = eq->b;
-                vector<Expr> lhs = unpack_binary_op<Add>(a);
-                vector<Expr> rhs = unpack_binary_op<Add>(b);
                 // Every term must be bounded either above or below
                 // for this to work out
-                Interval lhs_range = Interval::nothing();
-                Interval rhs_range = Interval::nothing();
-                for (const Expr &e : lhs) {
-                    Interval i = get_bounds(e);
-                    lhs_range = add_intervals(lhs_range, i);
-                    debug(1) << "Bounds of " << e << ": " << i.min << " ... " << i.max << "\n";
-                }
-                for (const Expr &e : rhs) {
-                    Interval i = get_bounds(e);
-                    rhs_range = add_intervals(rhs_range, i);
-                    debug(1) << "Bounds of " << e << ": " << i.min << " ... " << i.max << "\n";
-                }
+                Interval lhs_range = bounds_of_expr(a, &simplifier);
+                Interval rhs_range = bounds_of_expr(b, &simplifier);
+
                 debug(1) << "Bounds of lhs: " << lhs_range.min << " ... " << lhs_range.max << "\n"
                          << "Bounds of rhs: " << rhs_range.min << " ... " << rhs_range.max << "\n";
 
@@ -1325,6 +1603,26 @@ class RemoveMinMax : public IRMutator {
         }
     }
 
+    Expr visit(const Not *op) override {
+        if (const And *and_a = op->a.as<And>()) {
+            return mutate(!and_a->a) || mutate(!and_a->b);
+        } else if (const Or *or_a = op->a.as<Or>()) {
+            return mutate(!or_a->a) && mutate(!or_a->b);
+        } else if (const Not *not_a = op->a.as<Not>()) {
+            return mutate(not_a->a);
+        } else if (const LT *lt = op->a.as<LT>()) {
+            return mutate(lt->b <= lt->a);
+        } else if (const LE *le = op->a.as<LE>()) {
+            return mutate(le->b < le->a);
+        } else if (const EQ *eq = op->a.as<EQ>()) {
+            return mutate(eq->a != eq->b);
+        } else if (const NE *ne = op->a.as<NE>()) {
+            return mutate(ne->a == ne->b);
+        } else {
+            return IRMutator::visit(op);
+        }
+    }
+
     Expr visit(const Select *op) override {
         if (const LT *lt = op->condition.as<LT>()) {
             const Variable *var_a = lt->a.as<Variable>();
@@ -1411,6 +1709,10 @@ class MoveNegationInnermost : public IRMutator {
             return mutate(lt->b <= lt->a);
         } else if (const LE *le = op->a.as<LE>()) {
             return mutate(le->b < le->a);
+        } else if (const EQ *eq = op->a.as<EQ>()) {
+            return mutate(eq->a != eq->b);
+        } else if (const NE *ne = op->a.as<NE>()) {
+            return mutate(ne->a == ne->b);
         } else {
             return IRMutator::visit(op);
         }
@@ -1506,8 +1808,7 @@ class ConvertRoundingToMod : public IRMutator {
 // to a big disjunction of inequalities intead.
 vector<Expr> remove_min_max_select(Expr e) {
     // First turn min/max into select
-    RemoveMinMax b;
-    e = b.mutate(e);
+    e = RemoveMinMax().mutate(e);
     vector<Expr> pieces{e};
     // Then find all the select conditions
     FindAllSelectConditions finder;
@@ -1699,14 +2000,24 @@ Expr synthesize_predicate(const Expr &lhs,
         }
 
         Expr visit(const LT *op) override {
-            if (is_const(op->b)) {
-                // x < 0 -> x <= -1
+            const Min *min_a = op->a.as<Min>();
+            const Min *min_b = op->b.as<Min>();
+            const Max *max_a = op->a.as<Max>();
+            const Max *max_b = op->b.as<Max>();
+            if (min_a) {
+                return mutate(min_a->a < op->b || min_a->b < op->b);
+            } else if (max_a) {
+                return mutate(max_a->a < op->b && max_a->b < op->b);
+            } else if (min_b) {
+                return mutate(op->a < min_b->a && op->a < min_b->b);
+            } else if (max_b) {
+                return mutate(op->a < max_b->a || op->a < max_b->b);
+            } else if (is_const(op->b)) {
                 return mutate(op->a <= simplify(op->b - 1));
             } else if (is_const(op->a)) {
-                // 0 < x -> 1 <= x
                 return mutate(simplify(op->a + 1) <= op->b);
             } else {
-                return IRMutator::visit(op);
+                return mutate(op->a + 1 <= op->b);
             }
         }
 
@@ -1715,11 +2026,11 @@ Expr synthesize_predicate(const Expr &lhs,
             const Min *min_b = op->b.as<Min>();
             const Max *max_a = op->a.as<Max>();
             const Max *max_b = op->b.as<Max>();
-            if (is_const(op->b) && can_prove(op->a != op->b)) {
-                return mutate(op->a <= simplify(op->b - 1));
-            } else if (is_const(op->a) && can_prove(op->a != op->b)) {
-                return mutate(simplify(op->a + 1) <= op->b);
-            } else if (min_a) {
+            if (is_zero(op->a) && can_prove(op->a != op->b)) {
+                return mutate(1 <= op->b);
+            } else if (is_zero(op->b) && can_prove(op->a != op->b)) {
+                return mutate(op->a <= -1);
+            } if (min_a) {
                 return mutate(min_a->a <= op->b || min_a->b <= op->b);
             } else if (max_a) {
                 return mutate(max_a->a <= op->b && max_a->b <= op->b);
@@ -1728,7 +2039,67 @@ Expr synthesize_predicate(const Expr &lhs,
             } else if (max_b) {
                 return mutate(op->a <= max_b->a || op->a <= max_b->b);
             } else {
-                return IRMutator::visit(op);
+                // We don't want clauses like c0 * -1 <= c1 and also 0
+                // <= c0 + c1. Normalize by unpacking both sides into
+                // an integer linear combination and sorting the terms
+                // on each side.
+                Expr normalized = IRMutator::visit(op);
+                const LE *le = normalized.as<LE>();
+                if (!le) {
+                    return normalized;
+                }
+                map<Expr, int64_t, IRDeepCompare> terms;
+                for (const Expr &side : {le->a, le->b}) {
+                    int s = side.same_as(le->a) ? 1 : -1;
+                    for (const auto &e : unpack_binary_op<Add>(side)) {
+                        const Mul *mul = e.as<Mul>();
+                        const int64_t *coeff = mul ? as_const_int(mul->b) : as_const_int(e);
+                        if (mul && coeff) {
+                            terms[mul->a] += (*coeff) * s;
+                        } else if (coeff) {
+                            terms[1] += (*coeff) * s;
+                        } else {
+                            terms[e] += s;
+                        }
+                    }
+                }
+                vector<Expr> lhs_terms, rhs_terms;
+                for (auto p : terms) {
+                    if (p.second == 1) {
+                        lhs_terms.push_back(p.first);
+                    } else if (p.second == -1) {
+                        rhs_terms.push_back(p.first);
+                    } else if (p.second > 0) {
+                        if (is_one(p.first)) {
+                            lhs_terms.push_back((int)p.second);
+                        } else {
+                            lhs_terms.push_back(p.first * (int)p.second);
+                        }
+                    } else if (p.second < 0) {
+                        if (is_one(p.first)) {
+                            rhs_terms.push_back((int)(-p.second));
+                        } else {
+                            rhs_terms.push_back(p.first * (int)(-p.second));
+                        }
+                    }
+                }
+                if (lhs_terms.empty() && !rhs_terms.empty() && is_const(rhs_terms[0])) {
+                    // Move the constant to the left
+                    lhs_terms.push_back(simplify(-rhs_terms[0]));
+                    rhs_terms.erase(rhs_terms.begin());
+                }
+                if (rhs_terms.empty() && !lhs_terms.empty() && is_const(lhs_terms[0])) {
+                    // Move the constant to the right
+                    rhs_terms.push_back(simplify(-lhs_terms[0]));
+                    lhs_terms.erase(lhs_terms.begin());
+                }
+                if (lhs_terms.empty()) {
+                    lhs_terms.push_back(0);
+                }
+                if (rhs_terms.empty()) {
+                    rhs_terms.push_back(0);
+                }
+                return pack_binary_op<Add>(lhs_terms) <= pack_binary_op<Add>(rhs_terms);
             }
         }
 
@@ -1736,9 +2107,9 @@ Expr synthesize_predicate(const Expr &lhs,
             Expr a = mutate(op->a);
             Expr b = mutate(op->b);
             if (IRDeepCompare()(a, b)) {
-                return a == b;
-            } else {
                 return b == a;
+            } else {
+                return a == b;
             }
         }
 
@@ -1748,16 +2119,18 @@ Expr synthesize_predicate(const Expr &lhs,
             if (is_const(a) || is_const(b)) {
                 return mutate(a < b) || mutate(b < a);
             } else if (IRDeepCompare()(a, b)) {
-                return a != b;
-            } else {
                 return b != a;
+            } else {
+                return a != b;
             }
         }
 
         Internal::Simplify *simplifier;
 
-        bool can_prove(Expr e) const {
-            return is_one(simplifier->mutate(e, nullptr));
+        bool can_prove(Expr e) {
+            return (simplifier->truths.count(e) ||
+                    simplifier->falsehoods.count(simplifier->mutate(!e, nullptr)) ||
+                    is_one(simplifier->mutate(e, nullptr)));
         }
     public:
         NormalizePrecondition(Internal::Simplify *s) : simplifier(s) {}
@@ -1789,6 +2162,11 @@ Expr synthesize_predicate(const Expr &lhs,
     } implicit_assumptions;
     lhs.accept(&implicit_assumptions);
     Expr implicit_assumption = pack_binary_op<And>(implicit_assumptions.result);
+    if (!implicit_assumption.defined()) {
+        implicit_assumption = const_true();
+    }
+
+    debug(0) << "Implicit assumption: " << implicit_assumption << "\n";
 
     // Simplify implication using the assumption
     Simplify simplifier(true, nullptr, nullptr);
@@ -1806,7 +2184,11 @@ Expr synthesize_predicate(const Expr &lhs,
     // Check satisfiability with z3
     {
         map<string, Expr> bindings;
-        auto z3_result = satisfy(precondition, &bindings);
+        Expr p = precondition;
+        if (implicit_assumption.defined()) {
+            p = p && implicit_assumption;
+        }
+        auto z3_result = satisfy(p, &bindings);
 
         // Early-out
         if (z3_result == Z3Result::Unsat) {
@@ -1820,11 +2202,8 @@ Expr synthesize_predicate(const Expr &lhs,
     vector<Expr> clause_vec = unpack_binary_op<And>(precondition);
     if (0) {
         for (auto &c : clause_vec) {
-            debug(0) << "A: " << c << "\n";
             c = pack_binary_op<Or>(remove_min_max_select(c));
-            debug(0) << "B: " << c << "\n";
             c = ToCNF().mutate(c);
-            debug(0) << "C: " << c << "\n";
         }
         Expr e = pack_binary_op<And>(clause_vec);
         clause_vec = unpack_binary_op<And>(e);
@@ -1850,16 +2229,61 @@ Expr synthesize_predicate(const Expr &lhs,
     bool changed = true;
     while (changed) {
         changed = false;
+
         for (size_t i = 0; i < cnf.size() && !changed; i++) {
             auto &c1 = cnf[i];
             if (c1.size() == 1 && is_one(*c1.begin())) continue;
+
+            // If we already know the whole thing is true, just drop it
+            if (simplifier.truths.count(pack_binary_op<Or>(c1))) {
+                changed = true;
+                c1.clear();
+                c1.insert(const_true());
+                continue;
+            }
+
+            // Erase any terms known to implicitly be false (e.g. if we see x*c0, we know that c0 != 0)
+            set<Expr, IRDeepCompare> c1_minus_falsehoods;
+            std::set_difference(c1.begin(), c1.end(),
+                                simplifier.falsehoods.begin(), simplifier.falsehoods.end(),
+                                std::inserter(c1_minus_falsehoods, c1_minus_falsehoods.end()),
+                                IRDeepCompare{});
+            if (c1.size() > c1_minus_falsehoods.size()) {
+                changed = true;
+                c1.swap(c1_minus_falsehoods);
+                break;
+            }
+
+            // Optimize the clause in isolation
+            {
+                Expr before = pack_binary_op<Or>(c1);
+                auto terms = unpack_binary_op<Or>(before);
+                for (size_t i = 0; i < terms.size(); i++) {
+                    Simplify simplifier(true, nullptr, nullptr);
+                    simplifier.learn_true(implicit_assumption);
+                    for (size_t j = 0; j < terms.size(); j++) {
+                        if (i == j) continue;
+                        simplifier.learn_false(terms[j]);
+                        simplifier.learn_true(simplify(!terms[j]));
+                    }
+                    terms[i] = normalizer.mutate(simplifier.mutate(terms[i], nullptr));
+                }
+                set<Expr, IRDeepCompare> filtered_terms;
+                std::copy_if(terms.begin(), terms.end(),
+                             std::inserter(filtered_terms, filtered_terms.end()),
+                             [](const Expr &e) {return !is_zero(e);});
+
+                if (!equal(pack_binary_op<Or>(filtered_terms), before)) {
+                    c1.swap(filtered_terms);
+                    changed = true;
+                    break;
+                }
+            }
+
+            // Optimize the clause using other clauses
             for (size_t j = i+1; j < cnf.size() && !changed; j++) {
                 auto &c2 = cnf[j];
                 if (c2.size() == 1 && is_one(*c2.begin())) continue;
-
-                debug(1) << "Considering pair:\n"
-                         << " c1 = " << pack_binary_op<Or>(c1) << "\n"
-                         << " c2 = " << pack_binary_op<Or>(c2) << "\n";
 
                 // (A || B) && (A || C) == (A || (B && C)) whenever (B && C) usefully simplifies
                 // check if (c1 - c2) and (c2 - c1) is false and if so replace with intersection
@@ -1871,13 +2295,11 @@ Expr synthesize_predicate(const Expr &lhs,
                                     std::inserter(c2_minus_c1, c2_minus_c1.end()),
                                     IRDeepCompare{});
                 if (c1_minus_c2.empty()) {
-                    debug(1) << " c1 && c2 -> c1\n";
                     // A && (A || B) -> A && true
                     c2.clear();
                     c2.insert(const_true());
                     changed = true;
                 } else if (c2_minus_c1.empty()) {
-                    debug(1) << " c1 && c2 -> c2\n";
                     c1.clear();
                     c1.insert(const_true());
                     changed = true;
@@ -1894,10 +2316,102 @@ Expr synthesize_predicate(const Expr &lhs,
                         if (!is_zero(a_and_b)) {
                             c1.insert(a_and_b);
                         }
-                        debug(1) << " c1 && c2 -> " << pack_binary_op<Or>(c1) << "\n";
                         c2.clear();
                         c2.insert(const_true());
                         changed = true;
+                    }
+                }
+            }
+        }
+
+        {
+            // There are probably terms hidden in this soup which must
+            // always be true. Make a set of all of the terms which appear
+            // in disjunction with some other term, assume each is false,
+            // and see if the system is satisfiable. If not, we can hoist
+            // that term out into its own clause and delete all the
+            // clauses it appears in.
+            set<Expr, IRDeepCompare> all_terms_in_a_disjunction;
+            Expr current_precondition = implicit_assumption;
+            for (const auto &c : cnf) {
+                if (c.size() > 1) {
+                    all_terms_in_a_disjunction.insert(c.begin(), c.end());
+                }
+                current_precondition = current_precondition && pack_binary_op<Or>(c);
+            }
+
+            for (const auto &t : all_terms_in_a_disjunction) {
+                // Could this term be false?
+                map<string, Expr> binding;
+                Z3Result result = satisfy(!t && current_precondition, &binding);
+                if (result == Z3Result::Unsat) {
+                    Simplify simplifier(true, nullptr, nullptr);
+                    simplifier.learn_true(implicit_assumption);
+                    simplifier.learn_true(t);
+                    // This term is actually mandatory
+                    changed = true;
+                    bool included = false;
+                    for (auto &c : cnf) {
+                        if (c.count(t)) {
+                            c.clear();
+                            if (!included) {
+                                // Reset the first clause it appears in to just this term
+                                c.insert(t);
+                                included = true;
+                            } else {
+                                // Nuke every other clause it appears in
+                                c.insert(const_true());
+                            }
+                        } else {
+                            // Simplify every other term given our new-found fact
+                            set<Expr, IRDeepCompare> new_terms;
+                            for (Expr nt : c) {
+                                nt = simplifier.mutate(nt, nullptr);
+                                if (is_one(nt)) {
+                                    new_terms.clear();
+                                    new_terms.insert(const_true());
+                                    break;
+                                } else if (!is_zero(nt)) {
+                                    new_terms.insert(nt);
+                                }
+                            }
+                            c.swap(new_terms);
+                        }
+                    }
+                    break;
+                }
+            }
+        }
+
+        {
+            // If one of the clauses is just a == b, we should replace
+            // all uses of 'a' with 'b'. We know 'a' is more complex than 'b'
+            // due to how we normalize equalities above.
+            for (size_t i = 0; i < cnf.size(); i++) {
+                auto &c = cnf[i];
+                Expr a, b;
+                if (c.size() == 1) {
+                    if (const EQ *eq = c.begin()->as<EQ>()) {
+                        a = eq->a;
+                        b = eq->b;
+                    }
+                }
+
+                if (a.defined()) {
+                    for (size_t j = 0; j < cnf.size(); j++) {
+                        if (i == j) continue;
+                        set<Expr, IRDeepCompare> new_terms;
+                        for (Expr t : cnf[j]) {
+                            Expr orig = t;
+                            t = substitute(a, b, t);
+                            t = simplifier.mutate(t, nullptr);
+                            t = normalizer.mutate(t);
+                            if (!equal(t, orig)) {
+                                changed = true;
+                            }
+                            new_terms.insert(t);
+                        }
+                        cnf[j].swap(new_terms);
                     }
                 }
             }
@@ -1923,20 +2437,39 @@ Expr synthesize_predicate(const Expr &lhs,
         debug(1) << " " << c << "\n";
     }
 
+    // A flattened list of every term in the full DNF form, along with
+    // a bool that indicates whether or not it was the only term in
+    // its clause.
+    struct Term {
+        bool strong;
+        Expr e;
+    };
+
+    vector<Term> terms;
+    for (auto c : clauses) {
+        auto ts = unpack_binary_op<Or>(c);
+        if (ts.size() == 1) {
+            terms.emplace_back(Term{true, std::move(ts[0])});
+        } else {
+            for (auto t : ts) {
+                terms.emplace_back(Term{false, std::move(t)});
+            }
+        }
+    }
+
     for (auto p : find_vars(rhs)) {
         string v = p.first;
         if (expr_uses_var(lhs, v)) {
             continue;
         }
         debug(1) << "implicit var: " << v << "\n";
-        set<Expr, IRDeepCompare> upper_bound, lower_bound;
-        for (Expr c : clauses) {
+        set<Expr, IRDeepCompare> upper_bound, lower_bound, weak_upper_bound, weak_lower_bound;
+        for (auto t : terms) {
+            Expr c = t.e;
             if (!expr_uses_var(c, v)) {
                 continue;
             }
-            debug(1) << "Considering " << c << "\n";
             Expr result = solve_expression(c, v).result;
-            debug(1) << "Solved clause: " << result << "\n";
 
             if (const LT *lt = result.as<LT>()) {
                 result = (lt->a <= lt->b - 1);
@@ -1990,10 +2523,18 @@ Expr synthesize_predicate(const Expr &lhs,
             }
 
             if (eq || le) {
-                upper_bound.insert(b);
+                if (t.strong) {
+                    upper_bound.insert(b);
+                } else {
+                    weak_upper_bound.insert(b);
+                }
             }
             if (eq || ge) {
-                lower_bound.insert(b);
+                if (t.strong) {
+                    lower_bound.insert(b);
+                } else {
+                    weak_lower_bound.insert(b);
+                }
             }
         }
 
@@ -2004,6 +2545,18 @@ Expr synthesize_predicate(const Expr &lhs,
         // and no harm done. We'll use the max of the lower bounds and
         // the min of the upper bounds.
 
+        if (!upper_bound.empty()) {
+            lower_bound.insert(pack_binary_op<Min>(upper_bound));
+        }
+
+        if (upper_bound.empty()) {
+            upper_bound.swap(weak_upper_bound);
+        }
+
+        if (lower_bound.empty()) {
+            lower_bound.swap(weak_lower_bound);
+        }
+
         if (upper_bound.empty() && lower_bound.empty()) {
             debug(0) << "In synthesizing predicate for " << lhs << " == " << rhs << "\n"
                      << "with implicit predicate: " << pack_binary_op<And>(clauses) << "\n"
@@ -2011,9 +2564,6 @@ Expr synthesize_predicate(const Expr &lhs,
             return const_false();
         }
 
-        if (!upper_bound.empty()) {
-            lower_bound.insert(pack_binary_op<Min>(upper_bound));
-        }
         Expr proposal = pack_binary_op<Max>(lower_bound);
         proposal = simplify(proposal);
 
@@ -2064,11 +2614,10 @@ Expr synthesize_predicate(const Expr &lhs,
     } else {
         precondition = pack_binary_op<And>(new_clauses);
     }
+
+    debug(1) << "Before final simplification: " << precondition << "\n";
+
     precondition = simplifier.mutate(precondition, nullptr);
-
-    debug(1) << "Projected out: " << precondition << "\n";
-
-    debug(0) << common_subexpression_elimination(precondition) << "\n";
 
     // Now super-simplify it
     /*
@@ -2082,8 +2631,74 @@ Expr synthesize_predicate(const Expr &lhs,
     }
     */
 
+    /*
+    class SymPyPrinter : public IRPrinter {
+        void visit(const And *op) override {
+            std::cout << "(";
+            op->a.accept(this);
+            std::cout << " & ";
+            op->b.accept(this);
+            std::cout << ")";
+        }
+        void visit(const Or *op) override {
+            std::cout << "(";
+            op->a.accept(this);
+            std::cout << " | ";
+            op->b.accept(this);
+            std::cout << ")";
+        }
+        void visit(const EQ *op) override {
+            std::cout << "sympy.Eq(";
+            op->a.accept(this);
+            std::cout << ",  ";
+            op->b.accept(this);
+            std::cout << ")";
+        }
+        void visit(const NE *op) override {
+            std::cout << "sympy.Ne(";
+            op->a.accept(this);
+            std::cout << ",  ";
+            op->b.accept(this);
+            std::cout << ")";
+        }
+        void visit(const LE *op) override {
+            std::cout << "sympy.Le(";
+            op->a.accept(this);
+            std::cout << ",  ";
+            op->b.accept(this);
+            std::cout << ")";
+        }
+        void visit(const LT *op) override {
+            std::cout << "sympy.Lt(";
+            op->a.accept(this);
+            std::cout << ",  ";
+            op->b.accept(this);
+            std::cout << ")";
+        }
+    public:
+        SymPyPrinter(std::ostream &os) : IRPrinter(os) {}
+    } sympy_printer(std::cout);
+
+    precondition.accept(&sympy_printer);
+    std::cout << "\n";
+    */
+
     debug(0) << "Precondition " << precondition << "\n"
-             << "implies " << to_prove << "\n";
+             << "implies " << substitute(*binding, to_prove) << "\n";
+
+    {
+        debug(0) << "Example where predicate is true:\n";
+        map<string, Expr> bindings;
+        if (!implicit_assumption.defined()) {
+            implicit_assumption = const_true();
+        }
+        Var c0("c0"), c1("c1"), c2("c2");
+        auto result = satisfy(precondition && implicit_assumption, &bindings);
+        debug(0) << result << "\n";
+        for (auto p : bindings) {
+            debug(0) << p.first << " = " << p.second << "\n";
+        }
+    }
 
     return precondition;
 }

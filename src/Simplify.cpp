@@ -151,7 +151,7 @@ void learn_true_helper(const Expr &fact, Simplify *simplify, Simplify::ScopedFac
         const int64_t *modulus = m ? as_const_int(m->b) : nullptr;
         const int64_t *remainder = m ? as_const_int(eq->b) : nullptr;
         if (v) {
-            if (is_const(eq->b) || eq->b.as<Variable>()) {
+            if (is_const(eq->b)) {
                 // TODO: consider other cases where we might want to entirely substitute
                 info.replacement = eq->b;
                 simplify->var_info.push(v->name, info);

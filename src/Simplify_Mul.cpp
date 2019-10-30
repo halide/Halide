@@ -3,34 +3,91 @@
 namespace Halide {
 namespace Internal {
 
+namespace {
+int64_t saturating_mul(int64_t a, int64_t b) {
+    if (a == 0 || b == 0) {
+        return 0;
+    } else if (a == INT64_MIN && b > 0) {
+        return INT64_MIN;
+    } else if (a == INT64_MIN && b < 0) {
+        return INT64_MAX;
+    } else if (a == INT64_MAX && b > 0) {
+        return INT64_MAX;
+    } else if (a == INT64_MAX && b < 0) {
+        return INT64_MIN;
+    } else if (b == INT64_MIN && a > 0) {
+        return INT64_MIN;
+    } else if (b == INT64_MIN && a < 0) {
+        return INT64_MAX;
+    } else if (b == INT64_MAX && a > 0) {
+        return INT64_MAX;
+    } else if (b == INT64_MAX && a < 0) {
+        return INT64_MIN;
+    } else if (mul_would_overflow(64, a, b)) {
+        if ((a > 0) == (b > 0)) {
+            return INT64_MAX;
+        } else {
+            return INT64_MIN;
+        }
+    } else {
+        return a * b;
+    }
+}
+}  // namespace
+
 Expr Simplify::visit(const Mul *op, ExprInfo *bounds) {
     ExprInfo a_bounds, b_bounds;
     Expr a = mutate(op->a, &a_bounds);
     Expr b = mutate(op->b, &b_bounds);
 
     if (bounds && no_overflow_int(op->type)) {
-        bool a_positive = a_bounds.min_defined && a_bounds.min > 0;
-        bool b_positive = b_bounds.min_defined && b_bounds.min > 0;
-        bool a_bounded = a_bounds.min_defined && a_bounds.max_defined;
-        bool b_bounded = b_bounds.min_defined && b_bounds.max_defined;
+        // Just use INT64_MAX/MIN to represent infinity, and take the four extrema.
+        int64_t a_max = a_bounds.max_defined ? a_bounds.max : INT64_MAX;
+        int64_t b_max = b_bounds.max_defined ? b_bounds.max : INT64_MAX;
+        int64_t a_min = a_bounds.min_defined ? a_bounds.min : INT64_MIN;
+        int64_t b_min = b_bounds.min_defined ? b_bounds.min : INT64_MIN;
 
-        if (a_bounded && b_bounded) {
-            bounds->min_defined = bounds->max_defined = true;
-            int64_t v1 = a_bounds.min * b_bounds.min;
-            int64_t v2 = a_bounds.min * b_bounds.max;
-            int64_t v3 = a_bounds.max * b_bounds.min;
-            int64_t v4 = a_bounds.max * b_bounds.max;
-            bounds->min = std::min(std::min(v1, v2), std::min(v3, v4));
-            bounds->max = std::max(std::max(v1, v2), std::max(v3, v4));
-        } else if ((a_bounds.max_defined && b_bounded && b_positive) ||
-                   (b_bounds.max_defined && a_bounded && a_positive)) {
-            bounds->max_defined = true;
-            bounds->max = a_bounds.max * b_bounds.max;
-        } else if ((a_bounds.min_defined && b_bounded && b_positive) ||
-                   (b_bounds.min_defined && a_bounded && a_positive)) {
-            bounds->min_defined = true;
-            bounds->min = a_bounds.min * b_bounds.min;
+        bounds->min_defined = bounds->max_defined = true;
+        int64_t v1 = saturating_mul(a_min, b_min);
+        int64_t v2 = saturating_mul(a_min, b_max);
+        int64_t v3 = saturating_mul(a_max, b_min);
+        int64_t v4 = saturating_mul(a_max, b_max);
+        bounds->min = std::min(std::min(v1, v2), std::min(v3, v4));
+        bounds->max = std::max(std::max(v1, v2), std::max(v3, v4));
+
+        if (bounds->max == INT64_MAX) {
+            bounds->max_defined = false;
+            bounds->max = 0;
         }
+        if (bounds->min == INT64_MIN) {
+            bounds->min_defined = false;
+            bounds->min = 0;
+        }
+
+        // sanity check
+        /*
+        bool a_could_be_negative = !(a_bounds.min_defined && a_bounds.min >= 0);
+        bool a_could_be_positive = !(a_bounds.max_defined && a_bounds.max <= 0);
+        bool b_could_be_negative = !(b_bounds.min_defined && b_bounds.min >= 0);
+        bool b_could_be_positive = !(b_bounds.max_defined && b_bounds.max <= 0);
+        bool could_be_pos_inf = ((!a_bounds.max_defined && b_could_be_positive) ||
+                                 (!b_bounds.max_defined && a_could_be_positive) ||
+                                 (!a_bounds.min_defined && b_could_be_negative) ||
+                                 (!b_bounds.min_defined && a_could_be_negative));
+        bool could_be_neg_inf = ((!a_bounds.max_defined && b_could_be_negative) ||
+                                 (!b_bounds.max_defined && a_could_be_negative) ||
+                                 (!a_bounds.min_defined && b_could_be_positive) ||
+                                 (!b_bounds.min_defined && a_could_be_positive));
+
+        internal_assert(bounds->max_defined == !could_be_pos_inf)
+            << a_bounds.min_defined << " " << a_bounds.min << " "
+            << a_bounds.max_defined << " " << a_bounds.max << "\n"
+            << b_bounds.min_defined << " " << b_bounds.min << " "
+            << b_bounds.max_defined << " " << b_bounds.max << "\n"
+            << bounds->min_defined << " " << bounds->min << " "
+            << bounds->max_defined << " " << bounds->max << "\n";
+        internal_assert(bounds->min_defined == !could_be_neg_inf);
+        */
 
         bounds->alignment = a_bounds.alignment * b_bounds.alignment;
         bounds->trim_bounds_using_alignment();

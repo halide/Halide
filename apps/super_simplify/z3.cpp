@@ -327,3 +327,36 @@ Z3Result satisfy(Expr e, map<string, Expr> *bindings) {
         return Z3Result::Sat;
     }
 }
+
+Expr z3_simplify(const Expr &may_assume, const Expr &e) {
+    std::ostringstream z3_source;
+
+    for (auto v : find_vars(e)) {
+        z3_source << "(declare-const " << v.first << " Int)\n";
+    }
+
+    z3_source << "(define-fun my_min ((x Int) (y Int)) Int (ite (< x y) x y))\n"
+              << "(define-fun my_max ((x Int) (y Int)) Int (ite (< x y) y x))\n"
+              << "(assert " << expr_to_smt2(e) << ")\n"
+              << "(apply ctx-solver-simplify)\n"
+              << "(apply ctx-solver-simplify)\n";
+
+    string src = z3_source.str();
+
+    debug(0) << src << "\n";
+
+    TemporaryFile z3_file("query", "z3");
+    TemporaryFile z3_output("output", "txt");
+    write_entire_file(z3_file.pathname(), &src[0], src.size());
+
+    std::string cmd = "z3 -T:10 " + z3_file.pathname() + " > " + z3_output.pathname();
+
+    int ret = pclose(popen(cmd.c_str(), "r"));
+    (void)ret;
+
+    auto result_vec = read_entire_file(z3_output.pathname());
+    string result(result_vec.begin(), result_vec.end());
+
+    debug(0) << result << "\n";
+    return e;
+}
