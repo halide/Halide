@@ -58,7 +58,7 @@ bool test() {
             .parallel(y)
             .vectorize(x, vector_size/2);
 
-        if (target.has_feature(Target::HVX_v65)) {
+        if (target.features_any_of({Target::HVX_v65, Target::HVX_v66})) {
             lut_vtcm.store_in(MemoryType::VTCM);
             output_vtcm.store_in(MemoryType::VTCM);
         }
