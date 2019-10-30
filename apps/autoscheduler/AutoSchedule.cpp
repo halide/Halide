@@ -151,6 +151,10 @@ int get_unroll_limit(const Target& target) {
     return kUnrollLimit;
 }
 
+bool in_range_zero_one(double x) {
+    return x > 0 && x <= 1;
+}
+
 bool compute_root_and_inline_only() {
     static bool only = get_env_variable("HL_COMPUTE_ROOT_AND_INLINE_ONLY") == "1";
     return only;
@@ -593,6 +597,7 @@ struct ThreadInfo {
             ++num_thread_loops;
         }
 
+        internal_assert(num_threads <= num_threads_in_this_block);
         count_num_active_warps_per_block();
     }
 
@@ -742,6 +747,26 @@ struct GPULoopInfo {
 
     std::unique_ptr<ThreadInfo> create_thread_info();
 };
+
+bool are_valid_thread_extents(const vector<int64_t>& counts) {
+    int num_thread_loops = 0;
+    int num_threads = 1;
+
+    for (auto c : counts) {
+        if (c == 1) {
+            continue;
+        }
+
+        if (num_thread_loops >= 3 || num_threads * c > MAX_THREADS_PER_BLOCK) {
+            return false;
+        }
+
+        num_threads *= c;
+        ++num_thread_loops;
+    }
+
+    return true;
+}
 
 // We're going to do a tree search over possible schedules to find an
 // optimal one. A tree search requires a state, and a function that
@@ -1232,6 +1257,8 @@ struct LoopNest {
 
             feat.num_shared_mem_stores_per_block = shared_mem_features.first;
             feat.shared_mem_store_efficiency = shared_mem_features.second;
+
+            internal_assert(in_range_zero_one(feat.shared_mem_store_efficiency)) << "Invalid shared mem store efficiency: " << feat.shared_mem_store_efficiency;
         } else if (consumer_site.store->is_root()) {
             auto global_mem_info = compute_global_mem_store_features(
                 jac,
@@ -1245,6 +1272,9 @@ struct LoopNest {
             feat.num_global_mem_stores_per_block = global_mem_info.required_accesses();
             feat.global_mem_store_efficiency = global_mem_info.access_efficiency();
             feat.global_mem_store_coalesce_efficiency = global_mem_info.coalesce_efficiency();
+
+            internal_assert(in_range_zero_one(feat.global_mem_store_efficiency)) << "Invalid global mem store efficiency: " << feat.global_mem_store_efficiency;
+            internal_assert(in_range_zero_one(feat.global_mem_store_coalesce_efficiency)) << "Invalid global mem store coalesce efficiency: " << feat.global_mem_store_coalesce_efficiency;
         }
     }
 
@@ -1462,6 +1492,13 @@ struct LoopNest {
         features.num_warps_per_block = thread_info->num_warps_per_block;
         features.num_blocks = gpu_loop_info.num_blocks;
         features.block_occupancy = thread_info->block_occupancy();
+
+        internal_assert(in_range_zero_one(features.block_occupancy)) << "Invalid block occupancy: " << features.block_occupancy;
+        internal_assert(in_range_zero_one(features.warp_lane_utilization)) << "Invalid warp utilization: " << features.warp_lane_utilization;
+        internal_assert(in_range_zero_one(features.warp_lane_utilization_at_block)) << "Invalid warp utilization at block: " << features.warp_lane_utilization_at_block;
+        internal_assert(in_range_zero_one(features.warp_lane_utilization_at_block_x)) << "Invalid warp utilization at block x: " << features.warp_lane_utilization_at_block_x;
+        internal_assert(in_range_zero_one(features.warp_lane_utilization_at_block_y)) << "Invalid warp utilization at block y: " << features.warp_lane_utilization_at_block_y;
+        internal_assert(in_range_zero_one(features.warp_lane_utilization_at_block_z)) << "Invalid warp utilization at block z: " << features.warp_lane_utilization_at_block_z;
     }
 
     // Assume that when a block is active, all its warps are active
@@ -1501,6 +1538,8 @@ struct LoopNest {
         if (working_set_here > 0) {
             auto shared_mem_max_active_blocks = std::min(active_block_hardware_limit, shared_mem_limit / working_set_here);
             feat.shared_mem_block_limit_factor = (double)shared_mem_max_active_blocks / (double)active_block_hardware_limit;
+
+            internal_assert(feat.shared_mem_block_limit_factor <= 1) << "Invalid shared mem block limit factor: " << feat.shared_mem_block_limit_factor;
         }
     }
 
@@ -2359,11 +2398,16 @@ struct LoopNest {
             feat.num_shared_mem_loads = gpu_loop_info.num_blocks * num_shared_mem_loads_per_block;
             if (min_num_shared_mem_loads_per_block > 0 && num_shared_mem_loads_per_block > 0) {
                 feat.shared_mem_load_efficiency = min_num_shared_mem_loads_per_block / num_shared_mem_loads_per_block;
+
+                internal_assert(in_range_zero_one(feat.shared_mem_load_efficiency)) << "Invalid shared mem load efficiency: " << feat.shared_mem_load_efficiency;
             }
 
             feat.num_global_mem_loads_per_block = global_mem_loads.required_accesses();
             feat.global_mem_load_efficiency = global_mem_loads.access_efficiency();
             feat.global_mem_load_coalesce_efficiency = global_mem_loads.coalesce_efficiency();
+
+            internal_assert(in_range_zero_one(feat.global_mem_load_efficiency)) << "Invalid global mem load efficiency: " << feat.global_mem_load_efficiency;
+            internal_assert(in_range_zero_one(feat.global_mem_load_coalesce_efficiency)) << "Invalid global mem load coalease efficiency: " << feat.global_mem_load_coalesce_efficiency;
         }
 
         // Track features for inlined Funcs
@@ -3129,6 +3173,7 @@ struct LoopNest {
 
                             outer->children.emplace_back(inner.release());
                             outer->compute_here(f, true, v, true, target);
+
                             result.emplace_back(outer.release());
                             break;
                         }
@@ -3969,7 +4014,6 @@ struct State {
             }
         }
 
-        std::unordered_map<const LoopNest*, ThreadInfo> thread_info_map;
         feature_root->compute_features(dag, params, target, sites, 1, 1, nullptr, nullptr, *feature_root, nullptr, features, {});
 
         for (const auto &n : dag.nodes) {
@@ -4092,6 +4136,10 @@ struct State {
     }
 
     bool calculate_cost(const FunctionDAG &dag, const MachineParams &params, const Target& target, CostModel *cost_model, bool verbose = false) {
+        if (!are_valid_thread_extents(root->get_union_thread_counts(nullptr))) {
+            return false;
+        }
+
         StageMap<ScheduleFeatures> features;
         compute_featurization(dag, params, target, &features);
 
