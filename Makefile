@@ -1969,7 +1969,7 @@ endif
 
 TEST_APPS_DEPS=$(TEST_APPS:%=%_test_app)
 
-$(TEST_APPS_DEPS): distrib
+$(TEST_APPS_DEPS): distrib build_python_bindings
 	@echo Testing app $(@:%_test_app=%) for ${HL_TARGET}...
 	@$(MAKE) -C $(ROOT_DIR)/apps/$(@:%_test_app=%) test \
 		HALIDE_DISTRIB_PATH=$(CURDIR)/$(DISTRIB_DIR) \
@@ -1988,7 +1988,7 @@ BENCHMARK_APPS=\
 	nl_means \
 	stencil_chain
 
-$(BENCHMARK_APPS): distrib
+$(BENCHMARK_APPS): distrib build_python_bindings
 	$(eval SUFFIX=$(if $(findstring wasm-32-wasmrt,$(HL_TARGET)),_wasm,))
 	@echo Building $@ for ${HL_TARGET}...
 	@$(MAKE) -C $(ROOT_DIR)/apps/$@ \
@@ -2014,8 +2014,20 @@ benchmark_apps: $(BENCHMARK_APPS)
 			HL_TARGET=$(HL_TARGET) ; \
 	done
 
+# TODO(srj): the python bindings need to be put into the distrib folders;
+# this is a hopefully-temporary workaround (https://github.com/halide/Halide/issues/4368)
+.PHONY: build_python_bindings
+build_python_bindings: distrib $(BIN_DIR)/host/runtime.a
+	$(MAKE) -C $(ROOT_DIR)/python_bindings \
+		-f $(ROOT_DIR)/python_bindings/Makefile \
+		build_python_bindings \
+		HALIDE_DISTRIB_PATH=$(CURDIR)/$(DISTRIB_DIR) \
+		BIN=$(CURDIR)/$(BIN_DIR)/python3_bindings \
+		PYTHON=python3 \
+		PYBIND11_PATH=$(REAL_PYBIND11_PATH)
+
 .PHONY: test_python
-test_python: distrib $(BIN_DIR)/host/runtime.a
+test_python: distrib $(BIN_DIR)/host/runtime.a build_python_bindings
 	$(MAKE) -C $(ROOT_DIR)/python_bindings \
 		-f $(ROOT_DIR)/python_bindings/Makefile \
 		test \

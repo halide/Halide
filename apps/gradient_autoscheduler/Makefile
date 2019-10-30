@@ -1,8 +1,8 @@
 include ../support/Makefile.inc
 
-$(BIN)/libgradient_autoscheduler.so: GradientAutoscheduler.cpp ASLog.cpp
+$(BIN)/libgradient_autoscheduler.so: GradientAutoscheduler.cpp ASLog.cpp $(LIB_HALIDE)
 	@mkdir -p $(@D)
-	$(CXX) -shared $(USE_EXPORT_DYNAMIC) -fPIC -fvisibility=hidden -fvisibility-inlines-hidden $(CXXFLAGS) $(OPTIMIZE) $^ -o $@ $(HALIDE_SYSTEM_LIBS)
+	$(CXX) -shared $(USE_EXPORT_DYNAMIC) -fPIC $(CXXFLAGS) $(OPTIMIZE) $^ -o $@ $(HALIDE_SYSTEM_LIBS)
 
 # Demonstrate a JIT-based use of gradient autoscheuler
 $(BIN)/test: test.cpp $(BIN)/libgradient_autoscheduler.so
@@ -32,10 +32,10 @@ test_generator: $(BIN)/$(HL_TARGET)/demo.rungen $(BIN)/libgradient_autoscheduler
 run_test_cpp: $(BIN)/test
 	LD_LIBRARY_PATH=$(BIN) $<
 
-run_test_py: test.py
-	PYTHONPATH=$(HALIDE_PYTHON_BINDINGS_PATH):$$PYTHONPATH \
-		LD_LIBRARY_PATH=$(BIN) $(PYTHON) \
-		test.py
+run_test_py: test.py $(BIN)/libgradient_autoscheduler.so
+	PYTHONPATH=$(BIN):$(HALIDE_PYTHON_BINDINGS_PATH):$(HALIDE_DISTRIB_PATH)/bin:$$PYTHONPATH \
+		LD_LIBRARY_PATH=$(BIN):$(HALIDE_PYTHON_BINDINGS_PATH):$(HALIDE_DISTRIB_PATH)/bin \
+		$(PYTHON) test.py
 
 test: run_test_cpp run_test_py test_generator
 
