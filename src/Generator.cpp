@@ -2,15 +2,6 @@
 #include <fstream>
 #include <unordered_map>
 
-#if defined(_MSC_VER) && !defined(NOMINMAX)
-#define NOMINMAX
-#endif
-#ifdef _WIN32
-#include <windows.h>
-#else
-#include <dlfcn.h>
-#endif
-
 #include "Generator.h"
 #include "IRPrinter.h"
 #include "Module.h"
@@ -752,7 +743,7 @@ int generate_filter_main_inner(int argc, char **argv, std::ostream &cerr) {
     const char kUsage[] =
         "gengen \n"
         "  [-g GENERATOR_NAME] [-f FUNCTION_NAME] [-o OUTPUT_DIR] [-r RUNTIME_NAME]\n"
-        "  [-e EMIT_OPTIONS] [-n FILE_BASE_NAME] [-p PLUGIN_NAME]\n"
+        "  [-e EMIT_OPTIONS] [-n FILE_BASE_NAME] [-p PLUGIN_NAME] [-s AUTOSCHEDULER_NAME]\n"
         "       target=target-string[,target-string...] [generator_arg=value [...]]\n"
         "\n"
         " -e  A comma separated list of files to emit. Accepted values are:\n"
@@ -764,6 +755,10 @@ int generate_filter_main_inner(int argc, char **argv, std::ostream &cerr) {
         "     generator is run. Useful for custom auto-schedulers. The generator must\n"
         "     either be linked against a shared libHalide or compiled with -rdynamic\n"
         "     so that references in the shared library to libHalide can resolve.\n"
+        "     (Note that this does not change the default autoscheduler; use the -s flag\n"
+        "     to set that value.)"
+        "\n"
+        " -s  The name of an autoscheduler to set as the default.\n"
         "\n"
         "-r   The name of a standalone runtime to generate. Only honors EMIT_OPTIONS 'o'\n"
         "     and 'static_library'. When multiple targets are specified, it picks a\n"
@@ -771,13 +766,16 @@ int generate_filter_main_inner(int argc, char **argv, std::ostream &cerr) {
         "     find one. Flags across all of the targets that do not affect runtime code\n"
         "     generation, such as `no_asserts` and `no_runtime`, are ignored.\n";
 
-    std::map<std::string, std::string> flags_info = {{"-f", ""},
-                                                     {"-g", ""},
-                                                     {"-o", ""},
-                                                     {"-e", ""},
-                                                     {"-n", ""},
-                                                     {"-r", ""},
-                                                     {"-p", ""}};
+    std::map<std::string, std::string> flags_info = {
+        {"-e", ""},
+        {"-f", ""},
+        {"-g", ""},
+        {"-n", ""},
+        {"-o", ""},
+        {"-p", ""},
+        {"-r", ""},
+        {"-s", ""},
+    };
     GeneratorParamsMap generator_args;
 
     for (int i = 1; i < argc; ++i) {
@@ -809,39 +807,14 @@ int generate_filter_main_inner(int argc, char **argv, std::ostream &cerr) {
     // how arguments are parsed, so we handle those first.
     for (const auto &lib : split_string(flags_info["-p"], ",")) {
         if (lib.empty()) continue;
-#ifdef _WIN32
-        int wide_len = MultiByteToWideChar(CP_UTF8, 0, lib.c_str(), -1, nullptr, 0);
-        if (wide_len < 1) {
-            cerr << "Failed to load: " << lib << " (unconvertible character)\n";
+        if (!load_plugin(lib, cerr)) {
             return 1;
         }
+    }
 
-        std::vector<wchar_t> wide_lib(wide_len);
-        wide_len = MultiByteToWideChar(CP_UTF8, 0, lib.c_str(), -1, wide_lib.data(), wide_len);
-        if (wide_len < 1) {
-            cerr << "Failed to load: " << lib << " (unconvertible character)\n";
-            return 1;
-        }
-
-        if (!LoadLibraryW(wide_lib.data())) {
-            DWORD last_err = GetLastError();
-            LPVOID last_err_msg;
-            FormatMessageA(FORMAT_MESSAGE_ALLOCATE_BUFFER | FORMAT_MESSAGE_FROM_SYSTEM |
-                               FORMAT_MESSAGE_IGNORE_INSERTS,
-                           nullptr, last_err, MAKELANGID(LANG_NEUTRAL, SUBLANG_DEFAULT),
-                           reinterpret_cast<LPSTR>(&last_err_msg), 0, nullptr);
-            cerr << "Failed to load: " << lib << "\n";
-            cerr << "LoadLibraryW failed with error " << last_err << ": "
-                 << static_cast<char *>(last_err_msg) << "\n";
-            LocalFree(last_err_msg);
-            return 1;
-        }
-#else
-        if (dlopen(lib.c_str(), RTLD_LAZY) == nullptr) {
-            cerr << "Failed to load: " << lib << ": " << dlerror() << "\n";
-            return 1;
-        }
-#endif
+    std::string autoscheduler_name = flags_info["-s"];
+    if (!autoscheduler_name.empty()) {
+        Pipeline::set_default_autoscheduler_name(autoscheduler_name);
     }
 
     std::string runtime_name = flags_info["-r"];

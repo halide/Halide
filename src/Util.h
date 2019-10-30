@@ -455,6 +455,16 @@ struct IsRoundtrippable {
 /** Emit a version of a string that is a valid identifier in C (. is replaced with _) */
 std::string c_print_name(const std::string &name);
 
+/** Load a plugin in the form of a dynamic library (e.g. for custom autoschedulers).
+ * If the string doesn't contain any . characters, the proper prefix and/or suffix
+ * for the platform will be added:
+ *
+ *   foo -> libfoo.so (Linux/OSX/etc -- note that .dylib is not supported)
+ *   foo -> foo.dll (Windows)
+ *
+ * otherwise, it is assumed to be an appropriate pathname. */
+bool load_plugin(const std::string &lib_name, std::ostream &error_msg);
+
 }  // namespace Internal
 }  // namespace Halide
 

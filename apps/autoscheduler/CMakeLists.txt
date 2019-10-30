@@ -80,7 +80,7 @@ install(TARGETS auto_schedule LIBRARY DESTINATION bin)
 halide_library(demo
                SRCS demo_generator.cpp
                FUNCTION_NAME demo
-               GENERATOR_ARGS auto_schedule=true -p $<TARGET_FILE:auto_schedule>)
+               GENERATOR_ARGS auto_schedule=true -p $<TARGET_FILE:auto_schedule> -s Adams2019)
 add_dependencies(demo auto_schedule)
 
 _halide_genfiles_dir(demo GENFILES_DIR)
@@ -108,7 +108,7 @@ add_custom_command(TARGET demo_apps_autoscheduler POST_BUILD
 halide_library(included_schedule_file
                SRCS included_schedule_file_generator.cpp
                FUNCTION_NAME included_schedule_file
-               GENERATOR_ARGS auto_schedule=true -p $<TARGET_FILE:auto_schedule>)
+               GENERATOR_ARGS auto_schedule=true -p $<TARGET_FILE:auto_schedule> -s Adams2019)
 add_dependencies(included_schedule_file auto_schedule)
 
 _halide_genfiles_dir(included_schedule_file GENFILES_DIR)

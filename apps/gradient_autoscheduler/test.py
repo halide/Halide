@@ -15,13 +15,13 @@ def main():
     f_2 = hl.Func('f_2')
     f_2[x] = f_1[x] * f_1[x]
 
-    # Setup 
+    # Setup
     f_2.set_estimate(x, 0, 1000)
     p = hl.Pipeline(f_2)
     target = hl.Target()
     # Only first parameter is used (number of cores on CPU)
     params = hl.MachineParams(32, 0, 0);
-    result = p.auto_schedule(target, params)
+    result = p.auto_schedule('Li2018', target, params)
     print('Schedule:')
     print(result.schedule_source)
 

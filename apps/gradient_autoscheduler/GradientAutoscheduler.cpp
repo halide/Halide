@@ -827,7 +827,7 @@ void generate_schedule(const std::vector<Function> &outputs,
     // Traverse from the consumers to the producers
     for (auto it = order.rbegin(); it != order.rend(); it++) {
         Func func(env[*it]);
-        debug(1) << "[gradient_autoscheduler] Processing function:" << *it << "\n";
+        aslog(1) << "[gradient_autoscheduler] Processing function:" << *it << "\n";
         // Get the bounds in integer constant by substitute all the parameters' estimates.
         Box bounds = func_bounds[*it];
         std::vector<int> int_bounds = get_int_bounds(bounds);
@@ -840,7 +840,7 @@ void generate_schedule(const std::vector<Function> &outputs,
         }
     }
 
-    auto_scheduler_results->scheduler_name = "gradient autoscheduler";
+    auto_scheduler_results->scheduler_name = "Li2018";
     auto_scheduler_results->schedule_source = schedule_source.str();
     aslog(1) << schedule_source.str() << '\n';
 }
@@ -851,8 +851,8 @@ void generate_schedule(const std::vector<Function> &outputs,
 // constructor.
 struct RegisterGradientAutoscheduler {
     RegisterGradientAutoscheduler() {
-        debug(1) << "[gradient_autoscheduler] Registering autoscheduler...\n";
-        Pipeline::set_custom_auto_scheduler(*this);
+        aslog(1) << "Registering autoscheduler 'Li2018'...\n";
+        Pipeline::add_autoscheduler("Li2018", *this);
     }
 
     void operator()(Pipeline p, const Target &target, const MachineParams &params, AutoSchedulerResults *results) {
