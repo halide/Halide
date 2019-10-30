@@ -1,6 +1,6 @@
 include ../support/Makefile.inc
 
-WITH_PYTHON ?= 1
+WITH_PYTHON ?= 0
 ifeq ($(WITH_PYTHON),1)
 	PYTHON ?= python3
 	# Discover pybind11 path from `python3 -m pybind11 --includes`
@@ -16,15 +16,17 @@ ifeq ($(WITH_PYTHON),1)
 		PYBIND11_CFLAGS = -I $(PYBIND11_PATH)/include
 	endif
 	PYTHON_FLAGS = -DWITH_PYTHON $(PYBIND11_CFLAGS) $(shell $(PYTHON)-config --cflags)
+	# # DON'T link libpython* - leave those symbols to lazily resolve at load time
+	# # Cf. https://github.com/pybind/pybind11/blob/master/docs/compiling.rst#building-manually
 	ifeq ($(UNAME), Darwin)
 	    # Keep OS X builds from complaining about missing libpython symbols
 	    PYTHON_FLAGS += -undefined dynamic_lookup
 	endif
 endif
 
-bin/libgradient_autoscheduler.so: GradientAutoscheduler.cpp
+bin/libgradient_autoscheduler.so: GradientAutoscheduler.cpp ASLog.cpp
 	@mkdir -p $(@D)
-	$(CXX) -shared $(USE_EXPORT_DYNAMIC) -fPIC $(CXXFLAGS) -g $(OPTIMIZE) $^ -o $@ $(HALIDE_SYSTEM_LIBS) $(PYTHON_FLAGS)
+	$(CXX) -shared $(USE_EXPORT_DYNAMIC) -fPIC -fvisibility=hidden -fvisibility-inlines-hidden $(CXXFLAGS) -g $(OPTIMIZE) $^ -o $@ $(HALIDE_SYSTEM_LIBS) $(PYTHON_FLAGS)
 
 # Demonstrate a JIT-based use of gradient autoscheuler
 bin/test: test.cpp bin/libgradient_autoscheduler.so

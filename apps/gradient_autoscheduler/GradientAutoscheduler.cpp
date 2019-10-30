@@ -1,4 +1,5 @@
 #include "Halide.h"
+#include "ASLog.h"
 #include "Errors.h"
 #ifdef WITH_PYTHON
     #include <pybind11/pybind11.h>
@@ -841,7 +842,7 @@ void generate_schedule(const std::vector<Function> &outputs,
 
     auto_scheduler_results->scheduler_name = "Li2018";
     auto_scheduler_results->schedule_source = schedule_source.str();
-    std::cerr << schedule_source.str() << std::endl;
+    aslog(1) << schedule_source.str() << '\n';
 }
 
 
