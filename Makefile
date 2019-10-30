@@ -1973,6 +1973,7 @@ $(TEST_APPS_DEPS): distrib build_python_bindings
 	@echo Testing app $(@:%_test_app=%) for ${HL_TARGET}...
 	@$(MAKE) -C $(ROOT_DIR)/apps/$(@:%_test_app=%) test \
 		HALIDE_DISTRIB_PATH=$(CURDIR)/$(DISTRIB_DIR) \
+		HALIDE_PYTHON_BINDINGS_PATH=$(CURDIR)/$(BIN_DIR)/python3_bindings \
 		BIN_DIR=$(CURDIR)/$(BIN_DIR)/apps/$(@:%_test_app=%)/bin \
 		HL_TARGET=$(HL_TARGET) \
 		|| exit 1 ; \
@@ -1994,6 +1995,7 @@ $(BENCHMARK_APPS): distrib build_python_bindings
 	@$(MAKE) -C $(ROOT_DIR)/apps/$@ \
 		$(CURDIR)/$(BIN_DIR)/apps/$@/bin/$(HL_TARGET)/$@.rungen${SUFFIX} \
 		HALIDE_DISTRIB_PATH=$(CURDIR)/$(DISTRIB_DIR) \
+		HALIDE_PYTHON_BINDINGS_PATH=$(CURDIR)/$(BIN_DIR)/python3_bindings \
 		BIN_DIR=$(CURDIR)/$(BIN_DIR)/apps/$@/bin \
 		HL_TARGET=$(HL_TARGET) \
 		> /dev/null \
@@ -2010,6 +2012,7 @@ benchmark_apps: $(BENCHMARK_APPS)
 		make -C $(ROOT_DIR)/apps/$${APP} \
 			$${APP}.benchmark${SUFFIX} \
 			HALIDE_DISTRIB_PATH=$(CURDIR)/$(DISTRIB_DIR) \
+			HALIDE_PYTHON_BINDINGS_PATH=$(CURDIR)/$(BIN_DIR)/python3_bindings \
 			BIN_DIR=$(CURDIR)/$(BIN_DIR)/apps/$${APP}/bin \
 			HL_TARGET=$(HL_TARGET) ; \
 	done
