@@ -2,7 +2,7 @@ include ../support/Makefile.inc
 
 $(BIN)/libgradient_autoscheduler.so: GradientAutoscheduler.cpp ASLog.cpp $(LIB_HALIDE)
 	@mkdir -p $(@D)
-	$(CXX) -shared $(USE_EXPORT_DYNAMIC) -fPIC $(CXXFLAGS) $(OPTIMIZE) $^ -o $@ $(HALIDE_SYSTEM_LIBS)
+	$(CXX) -shared $(USE_EXPORT_DYNAMIC) -fPIC -fvisibility=hidden -fvisibility-inlines-hidden $(CXXFLAGS) $(OPTIMIZE) $^ -o $@ $(HALIDE_SYSTEM_LIBS)
 
 # Demonstrate a JIT-based use of gradient autoscheuler
 $(BIN)/test: test.cpp $(BIN)/libgradient_autoscheduler.so
