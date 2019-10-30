@@ -3,10 +3,7 @@
 using namespace Halide;
 
 int main(int argc, char **argv) {
-    if (!::Halide::Internal::load_plugin("auto_schedule", std::cerr)) {
-        return 1;
-    }
-
+    load_plugin("auto_schedule");
     Pipeline::set_default_autoscheduler_name("Adams2019");
 
     MachineParams params(32, 16000000, 40);

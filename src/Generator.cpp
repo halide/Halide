@@ -806,9 +806,8 @@ int generate_filter_main_inner(int argc, char **argv, std::ostream &cerr) {
     // It's possible that in the future loaded plugins might change
     // how arguments are parsed, so we handle those first.
     for (const auto &lib : split_string(flags_info["-p"], ",")) {
-        if (lib.empty()) continue;
-        if (!load_plugin(lib, cerr)) {
-            return 1;
+        if (!lib.empty()) {
+            load_plugin(lib);
         }
     }
 

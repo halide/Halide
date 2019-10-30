@@ -513,7 +513,9 @@ std::string c_print_name(const std::string &name) {
     return oss.str();
 }
 
-bool load_plugin(const std::string &lib_name, std::ostream &error_msg) {
+}  // namespace Internal
+
+void load_plugin(const std::string &lib_name) {
 #ifdef _WIN32
     std::string lib_path = lib_name;
     if (lib_path.find('.') == std::string::npos) {
@@ -522,15 +524,13 @@ bool load_plugin(const std::string &lib_name, std::ostream &error_msg) {
 
     int wide_len = MultiByteToWideChar(CP_UTF8, 0, lib_path.c_str(), -1, nullptr, 0);
     if (wide_len < 1) {
-        error_msg << "Failed to load: " << lib_path << " (unconvertible character)\n";
-        return false;
+        user_error << "Failed to load: " << lib_path << " (unconvertible character)\n";
     }
 
     std::vector<wchar_t> wide_lib(wide_len);
     wide_len = MultiByteToWideChar(CP_UTF8, 0, lib_path.c_str(), -1, wide_lib.data(), wide_len);
     if (wide_len < 1) {
-        error_msg << "Failed to load: " << lib_path << " (unconvertible character)\n";
-        return false;
+        user_error << "Failed to load: " << lib_path << " (unconvertible character)\n";
     }
 
     if (!LoadLibraryW(wide_lib.data())) {
@@ -540,11 +540,11 @@ bool load_plugin(const std::string &lib_name, std::ostream &error_msg) {
                            FORMAT_MESSAGE_IGNORE_INSERTS,
                        nullptr, last_err, MAKELANGID(LANG_NEUTRAL, SUBLANG_DEFAULT),
                        reinterpret_cast<LPSTR>(&last_err_msg), 0, nullptr);
-        error_msg << "Failed to load: " << lib_path << "\n";
-        error_msg << "LoadLibraryW failed with error " << last_err << ": "
-                  << static_cast<char *>(last_err_msg) << "\n";
+        std::string err_msg(static_cast<char *>(last_err_msg));
         LocalFree(last_err_msg);
-        return false;
+        user_error << "Failed to load: " << lib_path << ";\n"
+                   << "LoadLibraryW failed with error " << last_err << ": "
+                   << err_msg << "\n";
     }
 #else
     std::string lib_path = lib_name;
@@ -552,12 +552,9 @@ bool load_plugin(const std::string &lib_name, std::ostream &error_msg) {
         lib_path = "lib" + lib_path + ".so";
     }
     if (dlopen(lib_path.c_str(), RTLD_LAZY) == nullptr) {
-        error_msg << "Failed to load: " << lib_path << ": " << dlerror() << "\n";
-        return false;
+        user_error << "Failed to load: " << lib_path << ": " << dlerror() << "\n";
     }
 #endif
-    return true;
 }
 
-}  // namespace Internal
 }  // namespace Halide

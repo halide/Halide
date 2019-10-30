@@ -4,6 +4,13 @@ IMAGES ?= ../images
 UNAME ?= $(shell uname)
 SHELL = bash
 
+PYTHON ?= python3
+
+# TODO(srj): the python bindings need to be put into the distrib folders;
+# this is a hopefully-temporary workaround (https://github.com/halide/Halide/issues/4368)
+$(AUTOSCHED_BIN)/binary2cpp: ../../tools/binary2cpp.cpp
+HALIDE_PYTHON_BINDINGS_PATH ?= $(realpath ../../bin/python3_bindings)
+
 BIN_DIR ?= bin
 
 # Most build outputs go into $(BIN)/$(HL_TARGET)/$(HL_TARGET)/, so that you can vary the test

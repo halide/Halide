@@ -1,9 +1,6 @@
 #include "Halide.h"
 #include "ASLog.h"
 #include "Errors.h"
-#ifdef WITH_PYTHON
-    #include <pybind11/pybind11.h>
-#endif
 
 namespace Halide {
 namespace Internal {
@@ -867,9 +864,3 @@ struct RegisterGradientAutoscheduler {
 } // Autoscheduler
 } // Internal
 } // Halide
-
-#ifdef WITH_PYTHON
-    PYBIND11_MODULE(libgradient_autoscheduler, m) {
-        m.doc() = "Halide gradient autoscheduler";
-    }
-#endif

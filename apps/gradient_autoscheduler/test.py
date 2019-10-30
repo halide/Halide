@@ -1,10 +1,8 @@
 import halide as hl
-import sys
-sys.path.append("./bin")
-# import autoscheduler
-import libgradient_autoscheduler
 
 def main():
+    hl.load_plugin("gradient_autoscheduler")
+
     x = hl.Var('x')
     f_in = hl.Func('in')
     f_in[x] = hl.f32(x) # Cast to float 32
