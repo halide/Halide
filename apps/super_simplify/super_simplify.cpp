@@ -222,7 +222,7 @@ Expr super_simplify(Expr e, int size) {
 
         if (counterexamples_found_with_fuzzing == 0) {
             auto result = satisfy(ub_checker.safe && !current_program_works, &counterexample);
-            if (result == Unsat) {
+            if (result == Z3Result::Unsat) {
                 // Woo!
                 Expr e = simplify(substitute_in_all_lets(common_subexpression_elimination(substitute(current_program, program))));
                 if (was_bool) {
@@ -236,7 +236,7 @@ Expr super_simplify(Expr e, int size) {
 
                 // std::cout << "*** Success: " << orig << " -> " << result << "\n\n";
                 return e;
-            } else if (result == Sat) {
+            } else if (result == Z3Result::Sat) {
                 /*
                   std::cout << "Counterexample: ";
                   const char *prefix = "";
@@ -259,7 +259,7 @@ Expr super_simplify(Expr e, int size) {
         for (auto &c : counterexamples) {
             works_on_counterexamples = works_on_counterexamples && substitute(c, program_works);
         }
-        if (satisfy(works_on_counterexamples, &current_program) != Sat) {
+        if (satisfy(works_on_counterexamples, &current_program) != Z3Result::Sat) {
             // Failed to synthesize a program
             // std::cout << "Failed to find a program of size " << size << "\n";
             return Expr();
