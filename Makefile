@@ -2020,6 +2020,7 @@ benchmark_apps: $(BENCHMARK_APPS)
 # TODO(srj): the python bindings need to be put into the distrib folders;
 # this is a hopefully-temporary workaround (https://github.com/halide/Halide/issues/4368)
 .PHONY: build_python_bindings
+ifneq ($(OS), Windows_NT)
 build_python_bindings: distrib $(BIN_DIR)/host/runtime.a
 	$(MAKE) -C $(ROOT_DIR)/python_bindings \
 		-f $(ROOT_DIR)/python_bindings/Makefile \
@@ -2028,6 +2029,10 @@ build_python_bindings: distrib $(BIN_DIR)/host/runtime.a
 		BIN=$(CURDIR)/$(BIN_DIR)/python3_bindings \
 		PYTHON=python3 \
 		PYBIND11_PATH=$(REAL_PYBIND11_PATH)
+else
+# No Python support for MinGW yet
+build_python_bindings: ;
+endif
 
 .PHONY: test_python
 test_python: distrib $(BIN_DIR)/host/runtime.a build_python_bindings
