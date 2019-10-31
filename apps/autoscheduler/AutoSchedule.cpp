@@ -4663,7 +4663,7 @@ struct State {
         }
     }
 
-    bool mark_gpu_threads(LoopNest::StageScheduleState* state, Stage& stage) {
+    bool mark_gpu_threads(LoopNest::StageScheduleState* state, Stage& stage, std::unordered_set<std::string>& new_serial_vars) {
         uint8_t num_loops_tagged_gpu_thread = 0;
         int64_t total_threads = 1;
         int max_threads[3] = {1024, 1024, 64};
@@ -4678,6 +4678,7 @@ struct State {
             }
 
             Var new_outer(v.var.name() + "_serial_outer");
+            new_serial_vars.insert(new_outer.name());
             stage.split(v.var, new_outer, v.var, (int)v.extent, TailStrategy::GuardWithIf);
             stage.gpu_threads(v.var);
             state->schedule_source << "\n    .split(" << v.var.name() << ", " << new_outer.name() << ", " << v.var.name() << ", " << v.extent << ")";
@@ -4709,6 +4710,7 @@ struct State {
         root->apply(LoopLevel::root(), state_map, params.parallelism, 0, nullptr, nullptr, target, ancestors);
 
         std::ostringstream src;
+        std::unordered_set<std::string> new_serial_vars;
 
         // Print handles for all the Funcs
         int i = (int)(dag.nodes.size() - 1);
@@ -4874,7 +4876,7 @@ struct State {
                         }
                     }
 
-                    if (!mark_gpu_threads(p.second.get(), stage) || has_enclosing_parallel) {
+                    if (!mark_gpu_threads(p.second.get(), stage, new_serial_vars) || has_enclosing_parallel) {
                         continue;
                     }
 
@@ -4913,6 +4915,10 @@ struct State {
                     p.second->schedule_source << "\n    .gpu_blocks(" << new_outer.name() << ")";
                 }
             }
+        }
+
+        for (const auto& v : new_serial_vars) {
+            src << "Var " << v << "(\"" << v << "\");\n";
         }
 
         for (auto &p : state_map) {
