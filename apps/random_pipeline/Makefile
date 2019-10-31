@@ -27,7 +27,7 @@ endif
 $(BIN)/runtime.a: $(BIN)/random_pipeline.generator
 	$^ -r runtime target=$(HL_TARGET) -o $(BIN)
 
-$(BIN)/random_pipeline.generator: random_pipeline_generator.cpp ../autoscheduler/SimpleAutoSchedule.h ../autoscheduler/SimpleAutoSchedule.cpp ../autoscheduler/DerivativeUtils.h ../autoscheduler/DerivativeUtils.cpp $(GENERATOR_DEPS)
+$(BIN)/random_pipeline.generator: random_pipeline_generator.cpp ../autoscheduler/SimpleAutoSchedule.h ../autoscheduler/SimpleAutoSchedule.cpp $(GENERATOR_DEPS)
 	@mkdir -p $(@D)
 	$(CXX) $(CXXFLAGS) $(USE_EXPORT_DYNAMIC) -fno-rtti $(filter-out %.h,$^) -o $@ $(LDFLAGS) $(HALIDE_SYSTEM_LIBS)
 

@@ -8,7 +8,7 @@ SRCS = burst_camera_pipe_generator.cpp align.cpp finish.cpp merge.cpp util.cpp
 # 'classic' will exceed 2GB in some allocations, so enable -large
 HL_TARGET_LARGE=$(HL_TARGET)-large_buffers
 
-$(BIN)/burst_camera_pipe.generator: $(SRCS) ../autoscheduler/SimpleAutoSchedule.h ../autoscheduler/SimpleAutoSchedule.cpp ../autoscheduler/DerivativeUtils.h ../autoscheduler/DerivativeUtils.cpp $(GENERATOR_DEPS)
+$(BIN)/burst_camera_pipe.generator: $(SRCS) ../autoscheduler/SimpleAutoSchedule.h ../autoscheduler/SimpleAutoSchedule.cpp $(GENERATOR_DEPS)
 	@mkdir -p $(@D)
 	$(CXX) $(CXXFLAGS) -g $(filter-out %.h,$^) -o $@ $(LDFLAGS) $(HALIDE_SYSTEM_LIBS) $(USE_EXPORT_DYNAMIC)
 
