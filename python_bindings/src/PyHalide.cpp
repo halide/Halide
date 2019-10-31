@@ -57,4 +57,7 @@ PYBIND11_MODULE(HALIDE_PYBIND_MODULE_NAME, m) {
     define_image_param(m);
     define_type(m);
     define_derivative(m);
+
+    // There is no PyUtil yet, so just put this here
+    m.def("load_plugin", &Halide::load_plugin, py::arg("lib_name"));
 }
