@@ -127,7 +127,8 @@ Expr Simplify::visit(const And *op, ExprInfo *bounds) {
 
     #if USE_SYNTHESIZED_RULES_V2
     if (false ||
-        // rewrite(((x <= y) && (min(z, w) <= min(w, z))), (x <= y)) || // Bad RULE!
+        rewrite(((x < y) && (y < (x + c0))), false, (c0 <= 1)) ||
+        rewrite(((x < (y + c0)) && (y < (x + c1))), false, ((c0 + c1) <= 1)) ||
         false) {
         return mutate(std::move(rewrite.result), bounds);
     }

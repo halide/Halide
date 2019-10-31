@@ -224,7 +224,64 @@ Expr Simplify::visit(const Min *op, ExprInfo *bounds) {
                 // implicit rewrite(min(min((x + min(y, z)), y), z), (min(y, z) + min(x, c0)), (c0 == 0)) ||
                 rewrite(min(min(min(x, y), z), (y + c0)), min(min(x, y), z), (0 <= c0)) ||
                 rewrite(min(min(min((x + c0), y), z), x), min(min(x, y), z), (0 <= c0)) ||
-                #endif
+
+                rewrite(min(x, (((((x - y)/c0)*c0) + y) + c1)), x, ((-1 <= (c0 + c1)) && ((c0 + -1) <= c1))) ||
+                rewrite(min(x, (min(y, (x + c0)) + c1)), (min((x + c0), y) + c1), ((c0 + c1) <= 0)) ||
+                rewrite(min(x, (min(y, (x + c0)) + c1)), min((y + c1), x), (0 <= (c0 + c1))) ||
+                rewrite(min(x, (min((x + c0), y) + c1)), (min((x + c0), y) + c1), ((c0 + c1) <= 0)) ||
+                rewrite(min((((((x - y)/c0)*c0) + y) + c1), x), x, ((-1 <= (c0 + c1)) && ((c0 + -1) <= c1))) ||
+                rewrite(min((min(x, (y + c0)) + c1), y), min((x + c1), y), (0 <= (c0 + c1))) ||
+                rewrite(min((min(x, (y + z)) + c0), (z + y)), min((x + c0), (y + z)), (0 <= c0)) ||
+                rewrite(min((min((x + y), (z + c0)) + c1), (y + x)), min((z + (max(c1, -1) + c0)), (x + y)), (0 <= c1)) ||
+                rewrite(min((min(min(x, y), z) + c0), y), min((min(x, z) + c0), y), (0 <= c0)) ||
+                rewrite(min((min(min((x + c0), y), c0) + c1), y), min(min((x + (max(c1, 0) + c0)), y), (max(c1, 0) + c0)), (0 <= c1)) ||
+                rewrite(min((x*c0), ((min(x, y)*c0) + c1)), ((min(x, y)*c0) + c1), ((1 <= c0) && (c1 <= 0))) ||
+                rewrite(min((x*c0), ((min(y, x)*c0) + c1)), ((min(x, y)*c0) + c1), ((1 <= c0) && (c1 <= 0))) ||
+                rewrite(min(((x/c0)*c0), (x + c1)), (x + c1), (((c1 <= 0) && ((c1 + -1) <= c0)) && ((c0 + c1) <= 1))) ||
+                rewrite(min((min(x, y)*c0), ((x*c0) + c1)), (min(x, y)*c0), ((0 <= c1) && (1 <= c0))) ||
+                rewrite(min(min(x, y), (x + c0)), min((x + c0), y), (c0 <= 0)) ||
+                rewrite(min(min(x, y), (y + c0)), min(x, y), (0 <= c0)) ||
+                rewrite(min(min(x, y), (y + c0)), min((y + c0), x), (c0 <= 0)) ||
+                rewrite(min(min(x, y), (min(y, z) + c0)), min((min(y, z) + c0), x), (c0 <= 0)) ||
+                rewrite(min(min(x, y), (min(z, x) + c0)), min((min(x, z) + c0), y), (c0 <= 0)) ||
+                rewrite(min(min(x, y), (min(z, y) + c0)), min((min(y, z) + c0), x), (c0 <= 0)) ||
+                rewrite(min(min(x, (y + c0)), y), min((y + c0), x), (c0 <= 0)) ||
+                rewrite(min(min(x, (y + c0)), (min(x, (y + c1)) + c2)), (min((y + min((c0 - c2), c1)), x) + c2), (c2 <= 0)) ||
+                rewrite(min(min(x, (y + c0)), (min(x, (y + c1)) + c2)), min((y + c0), x), ((0 <= c2) && (c0 <= (c1 + c2)))) ||
+                rewrite(min(min(x, (y + c0)), (min(x, (y + c1)) + c2)), min((y + min((c1 + c2), c0)), x), (0 <= c2)) ||
+                rewrite(min(min(x, (min(y, c0) + z)), z), min(min(x, z), (y + z)), (0 <= c0)) ||
+                rewrite(min(min(x, (min((y + c0), z) + c1)), z), min(min(x, z), (y + (max(c1, 0) + c0))), (0 <= c1)) ||
+                rewrite(min(min((x + c0), y), x), min(x, y), (0 <= c0)) ||
+                rewrite(min(min((x + c0), y), x), min((x + c0), y), (c0 <= 0)) ||
+                rewrite(min(min((x + c0), y), (min((x + c1), y) + c2)), (min((x + min((c0 - c2), c1)), y) + c2), (c2 <= 0)) ||
+                rewrite(min(min(((x + y) + c0), z), (y + x)), min((x + y), z), (0 <= c0)) ||
+                rewrite(min(min((min(x, c0) + y), z), y), min((min(x, min(c0, 0)) + y), z)) ||
+                rewrite(min(min((min(x, y) + c0), z), y), min(min((x + c0), z), y), (0 <= c0)) ||
+                rewrite(min(min((min(x, y) + z), x), y), (min(x, y) + min(z, 0))) ||
+                rewrite(min(min(min(x, y), z), (z + c0)), min(min((z + c0), y), x), (c0 <= 0)) ||
+                rewrite(min(min(min(x, y), z), (min(w, z) + c0)), min(min(x, y), (min(w, z) + c0)), (c0 <= 0)) ||
+                rewrite(min(min(min(x, y), z), (min(z, y) + c0)), min(min(x, y), z), (0 <= c0)) ||
+                rewrite(min(min(min((x + c0), y), z), (x + c1)), min(min((x + c1), z), y), (c1 <= c0)) ||
+                rewrite(min(min(select((x < y), max(x, z), w), w), x), min(w, x)) ||
+                rewrite(min(max((x + c0), y), (max((y + c1), x) + c0)), max((x + c0), y), (0 <= (c0 + c1))) ||
+
+                rewrite(min(x, (min(min((x + c0), y), z) + c1)), min((min(y, z) + c1), x), (0 <= (c0 + c1))) ||
+                rewrite(min(x, min(x, y)), min(x, y)) ||
+                rewrite(min((x + (y + z)), (w + z)), (min((x + y), w) + z)) ||
+                rewrite(min((x + (y + z)), (z + w)), (min((x + y), w) + z)) ||
+                rewrite(min(((x + y)*c0), ((y*c0) + c1)), (min((x*c0), c1) + (y*c0))) ||
+                rewrite(min(min(x, y), (min(x, z) + c0)), min((min(x, z) + c0), y), (c0 <= 0)) ||
+                rewrite(min(min(x, y), (min(y, x) + z)), (min(x, y) + min(z, 0))) ||
+                rewrite(min(min(x, (y + c0)), (min(z, y) + c1)), min((min(y, z) + c1), x), (c1 <= c0)) ||
+                rewrite(min(min(x, ((y + z) + c0)), (min(w, z) + y)), min((min(w, z) + y), x), (0 <= c0)) ||
+                rewrite(min(min((x + min(y, z)), y), z), (min(y, z) + min(x, 0))) ||
+                rewrite(min(min(min(x, y), z), (x + c0)), min(min(x, y), z), (0 <= c0)) ||
+                rewrite(min(min(min(min((x + c0), y), z), w), (x + c1)), min(min(min(w, y), z), (x + c1)), (c1 <= c0)) ||
+
+
+                rewrite(min((min(x, (y + c0)) + c1), y), (min((x + max(fold(-1 - c0), (c1 - max(min(min((c1 - fold(max((0 - c0), c1))), (c0 + c1)), 0), (c1 - fold(max((0 - c0), c1))))))), y) + max(min(min((c1 - fold(max((0 - c0), c1))), (c0 + c1)), 0), (c1 - fold(max((0 - c0), c1)))))) ||
+                rewrite(min(min(min(min(x, y), z), w), (x + c0)), min(min(min(w, y), x), z), (0 <= c0)) ||
+#endif
 
                // Synthesized
                #if USE_SYNTHESIZED_RULES

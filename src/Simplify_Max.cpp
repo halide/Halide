@@ -205,6 +205,29 @@ Expr Simplify::visit(const Max *op, ExprInfo *bounds) {
                rewrite(max(c0 - x, c1), c0 - min(x, fold(c0 - c1))))) ||
              (no_overflow_int(op->type) &&
               (
+#if USE_SYNTHESIZED_RULES_V2
+               rewrite(max((max(x, min(y, (z + c0))) + c1), z), max((x + c1), z), ((c0 + c1) <= 0)) ||
+               rewrite(max((x - y), ((z - y) + w)), (max((w + z), x) - y)) ||
+               rewrite(max(min(x, c0), (min(x, c1) + c2)), (min(x, c1) + c2), ((0 <= c2) && (c0 <= (c1 + c2)))) ||
+               rewrite(max(min(x, y), (x + c0)), (x + c0), (0 <= c0)) ||
+               rewrite(max(min(x, y), (y + c0)), (y + c0), (0 <= c0)) ||
+               rewrite(max(min(x, (y + z)), (max(y, w) + z)), (max(w, y) + z)) ||
+               rewrite(max(min((x + c0), y), (min(x, (y + c1)) + c2)), (min((x + c0), y) + c0), ((((c0 <= 1) || (((c0*2) + c1) <= 0)) || ((c0*2) <= c2)) && ((((-1 <= c1) || (c0 <= 0)) || (c0 <= (c1 + c2))) && (((((-3 <= c1) || (c0 <= 1)) && ((-2 <= c1) || (c0 <= 0))) || ((c0 + -1) <= (c1 + c2))) && (((c0 <= 0) || ((c0*2) <= c2)) && ((((0 <= c0) && (c2 <= (c0*2))) && ((c1 + c2) <= c0)) && (c0 <= max((c1 + c2), 0)))))))) ||
+               rewrite(max(min((x + c0), y), (min(x, (y + c1)) + c2)), (min((x + c0), y) + max(max((c2 - c0), (c1 + c2)), 0)), (((((c0 + c1) <= 0) || ((c1 + c2) <= 1)) || ((((c1*2) + c0) + c2) <= 2)) && (((0 <= (c0 + c1)) || (c2 <= c0)) && ((min(c0, c2) + c1) <= 0)))) ||
+               rewrite(max(min((x + c0), y), (min(x, (y + c1)) + c2)), min((x + c0), y), ((c2 <= c0) && ((c1 + c2) <= 0))) ||
+               rewrite(max(min((x + c0), y), (min((y + c1), x) + c2)), (min((x + c0), y) + max(max((c2 - c0), (c1 + c2)), 0)), (((((c0 + c1) <= 0) || ((c1 + c2) <= 1)) || ((((c1*2) + c0) + c2) <= 2)) && (((0 <= (c0 + c1)) || (c2 <= c0)) && ((min(c0, c2) + c1) <= 0)))) ||
+               rewrite(max(min((x + c0), y), (min((y + c1), x) + c2)), min((x + c0), y), ((c2 <= c0) && ((c1 + c2) <= 0))) ||
+               rewrite(max(min((x + y), z), (max(w, x) + y)), (max(w, x) + y)) ||
+               rewrite(max(min((x + (min(y, c0) + z)), w), (w + c0)), (w + c0), (0 <= c0)) ||
+               rewrite(max(min(((min(x, c0) + y) + z), w), (w + c0)), (w + c0), (0 <= c0)) ||
+               rewrite(max(max(x, y), min(x, z)), max(x, y)) ||
+               rewrite(max(max(x, y), min(y, z)), max(x, y)) ||
+               rewrite(max(max(x, y), min(z, x)), max(x, y)) ||
+               rewrite(max(max(x, y), min(z, y)), max(x, y)) ||
+               rewrite(max(max((x + c0), y), x), max(x, y), (c0 <= 0)) ||
+               rewrite(max(max(min(x, y), z), y), max(y, z)) ||
+               rewrite(max(max(min(max(x, y), z), w), x), max(max(min(y, z), w), x)) ||
+#endif
 
                #if USE_SYNTHESIZED_RULES
 

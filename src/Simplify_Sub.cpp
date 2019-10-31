@@ -251,9 +251,19 @@ Expr Simplify::visit(const Sub *op, ExprInfo *bounds) {
                rewrite(x/c0 - (x - y)/c0, ((y + fold(c0 - 1)) - (x % c0))/c0, c0 > 0) ||
                rewrite((x - y)/c0 - x/c0, ((x % c0) - y)/c0, c0 > 0) ||
 
-               #if USE_SYNTHESIZED_RULES_V2
+#if USE_SYNTHESIZED_RULES_V2
                rewrite((min(((x + y) + z), w) - y), min((w - y), (x + z))) ||
-               #endif
+               rewrite(((x + (y - (z*c0))) - (z*c0)), ((x + y) - (z*max((c0*2), 1))), (1 <= c0)) ||
+               rewrite(((x + (y*c0)) - ((y + z)*c0)), (x - (z*c0))) ||
+               rewrite(((x + (y*c0)) - ((z + y)*c0)), (x - (z*c0))) ||
+               rewrite(((x + (y*z)) - ((y + (w*u))*z)), (x - ((u*w)*z))) ||
+               rewrite(((x + ((y/z)*w)) - (((y/z) + u)*w)), (x - (u*w))) ||
+               rewrite((((x*y) + z) - (w*y)), (((x - w)*y) + z)) ||
+
+               rewrite(((x + y) - (z + (w + y))), (x - (w + z))) ||
+               rewrite(((min((x + c0), y) + z) - (w + (x + z))), (min((y - x), c0) - w)) ||
+
+#endif
 
                // Synthesized
                #if USE_SYNTHESIZED_RULES

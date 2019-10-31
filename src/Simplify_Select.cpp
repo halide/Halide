@@ -95,7 +95,17 @@ Expr Simplify::visit(const Select *op, ExprInfo *bounds) {
                rewrite(select(x < c0, x, c1), min(x, c1), c1 + 1 == c0) ||
 
                // Synthesized
-               #if USE_SYNTHESIZED_RULES
+               #if USE_SYNTHESIZED_RULES_V2
+               rewrite(select((c0 < min(x, y)), (min(y, 0) + z), z), z, (-1 <= c0)) ||
+               rewrite(select((x < y), min((y + c0), x), x), x, (-1 <= c0)) ||
+               rewrite(select((x < (y + c0)), (min((y - x), 0) + z), z), z, (c0 <= 1)) ||
+               rewrite(select((x < (y + c0)), min(x, y), x), x, (c0 <= 1)) ||
+               rewrite(select((x < (y + c0)), min(y, x), x), x, (c0 <= 1)) ||
+               rewrite(select((x < (y + c0)), min((y + c1), x), x), x, ((c0 + -1) <= c1)) ||
+               rewrite(select((x < (y + c0)), min((y - x), c1), z), select((x < (y + c0)), c1, z), ((c0 + c1) <= 1)) ||
+#endif
+
+#if USE_SYNTHESIZED_RULES
                rewrite(select((x < y), (z + w), w), (select((x < y), z, 0) + w)) || // Could be more general
 
                rewrite(select((c0 < x), min(x, c1), c1), c1, ((0 <= c0) && (c1 <= 0))) || // Could be more general
