@@ -2,7 +2,6 @@
 #include <chrono>
 
 #include "stencil_chain.h"
-#include "stencil_chain_classic_auto_schedule.h"
 #include "stencil_chain_auto_schedule.h"
 #include "stencil_chain_simple_auto_schedule.h"
 
@@ -29,8 +28,7 @@ int main(int argc, char **argv) {
 
     multi_way_bench({
         {"Manual", [&]() { stencil_chain(input, output); output.device_sync(); }},
-        {"Classic auto-scheduled", [&]() { stencil_chain_classic_auto_schedule(input, output); output.device_sync(); }},
-        {"Auto-schedueld", [&]() { stencil_chain_auto_schedule(input, output); output.device_sync(); }},
+        {"Auto-scheduled", [&]() { stencil_chain_auto_schedule(input, output); output.device_sync(); }},
         {"Simple auto-scheduled", [&]() { stencil_chain_simple_auto_schedule(input, output); output.device_sync();}}
         }
     );
