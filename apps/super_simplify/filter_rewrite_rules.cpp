@@ -53,6 +53,10 @@ int main(int argc, char **argv) {
         std::cout << "Re-synthesizing predicate for " << r.orig << "\n";
         r.predicate = synthesize_predicate(r.lhs, r.rhs, examples, &binding);
         r.lhs = substitute(binding, r.lhs);
+
+        for (auto &it: binding) {
+            it.second = Call::make(it.second.type(), "fold", {it.second}, Call::PureExtern);
+        }
         r.rhs = substitute(binding, r.rhs);
     }
 
@@ -66,6 +70,8 @@ int main(int argc, char **argv) {
         return 1;
     }
     */
+
+    std::map<IRNodeType, vector<Expr>> good_ones;
 
     Expr last;
     for (const Rule &r : rules) {
@@ -92,29 +98,6 @@ int main(int argc, char **argv) {
         }
         if (bad) continue;
 
-        // Sometimes the binding created by the predicate reduces the
-        // rule to something already simplifiable
-
-        class CountLeaves : public IRVisitor {
-            void visit(const IntImm *op) override {
-                count++;
-            }
-            void visit(const Variable *op) override {
-                count++;
-            }
-        public:
-            int count = 0;
-        };
-        Expr simpler_lhs = simplify(r.lhs);
-        CountLeaves counter;
-        r.lhs.accept(&counter);
-        counter.count = -counter.count;
-        simpler_lhs.accept(&counter);
-        if (counter.count < 0) {
-            std::cout << "Simplifiable LHS: " << r.lhs << " -> " << simpler_lhs << "\n";
-            continue;
-        }
-
         // Check if this rule is dominated by another rule
         for (const Rule &r2 : rules) {
             if (r.orig.same_as(r2.orig)) continue;
@@ -131,6 +114,19 @@ int main(int argc, char **argv) {
 
         // We have a reasonable rule
         std::cout << "Good rule: rewrite(" << r.lhs << ", " << r.rhs << ", " << r.predicate << ")\n";
+        vector<Expr> args = {r.lhs, r.rhs};
+        if (!is_one(r.predicate)) {
+            args.push_back(r.predicate);
+        }
+        good_ones[r.lhs.node_type()].push_back(Call::make(Int(32), "rewrite", args, Call::Extern));
+    }
+
+    std::cout << "Generated rules:\n";
+    for (auto it : good_ones) {
+        std::cout << it.first << "\n";
+        for (auto r : it.second) {
+            std::cout << " " << r << " ||\n";
+        }
     }
 
     return 0;
