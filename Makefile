@@ -1920,7 +1920,6 @@ TEST_APPS=\
 	c_backend \
 	camera_pipe \
 	conv_layer \
-	fft \
 	interpolate \
 	lens_blur \
 	linear_algebra \
