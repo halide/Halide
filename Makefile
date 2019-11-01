@@ -736,6 +736,7 @@ HEADER_FILES = \
   Scope.h \
   SelectGPUAPI.h \
   Simplify.h \
+  Simplify_Internal.h \
   SimplifyCorrelatedDifferences.h \
   SimplifySpecializations.h \
   SkipStages.h \
@@ -1919,7 +1920,6 @@ TEST_APPS=\
 	c_backend \
 	camera_pipe \
 	conv_layer \
-	fft \
 	interpolate \
 	lens_blur \
 	linear_algebra \

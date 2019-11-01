@@ -10,9 +10,16 @@ Expr Simplify::visit(const EQ *op, ExprInfo *bounds) {
         return const_false(op->type.lanes());
     }
 
-    if (!may_simplify(op->a.type())) {
-        Expr a = mutate(op->a, nullptr);
-        Expr b = mutate(op->b, nullptr);
+    // Order commutative operations by node type
+    Expr a = op->a;
+    Expr b = op->b;
+    if (should_commute(a, b)) {
+        std::swap(a, b);
+    }
+
+    if (!may_simplify(a.type())) {
+        a = mutate(a, nullptr);
+        b = mutate(b, nullptr);
         if (a.same_as(op->a) && b.same_as(op->b)) {
             return op;
         } else {
@@ -21,8 +28,8 @@ Expr Simplify::visit(const EQ *op, ExprInfo *bounds) {
     }
 
     if (op->a.type().is_bool()) {
-        Expr a = mutate(op->a, nullptr);
-        Expr b = mutate(op->b, nullptr);
+        a = mutate(a, nullptr);
+        b = mutate(b, nullptr);
         const int lanes = op->type.lanes();
         auto rewrite = IRMatcher::rewriter(IRMatcher::eq(a, b), op->type);
         if (rewrite(x == 1, x)) {
@@ -39,7 +46,7 @@ Expr Simplify::visit(const EQ *op, ExprInfo *bounds) {
     }
 
     ExprInfo delta_bounds;
-    Expr delta = mutate(op->a - op->b, &delta_bounds);
+    Expr delta = mutate(a - b, &delta_bounds);
     const int lanes = op->type.lanes();
 
     // If the delta is 0, then it's just x == x
@@ -94,6 +101,14 @@ Expr Simplify::visit(const EQ *op, ExprInfo *bounds) {
         return rewrite.result;
     }
 
+    #if USE_SYNTHESIZED_RULES_V2
+    if (rewrite((((x + c0)/c1) - (y + ((x + c2)/c1))) == 0, (y == c0), ((((1 <= c1) || (c2 == 0)) || (c1 <= -1)) && (((c0*c1) + c2) == c0))) ||
+        rewrite((((x + c0)/c1) - (((x + c2)/c1) + y)) == 0, (y == c0), ((((1 <= c1) || (c2 == 0)) || (c1 <= -1)) && (((c0*c1) + c2) == c0))) ||
+        false) {
+        return mutate(std::move(rewrite.result), bounds);
+    }
+    #endif
+
     #if USE_SYNTHESIZED_RULES
     // From google list
     if (rewrite(min(x, y) - max(x, y) == 0, x == y) ||
@@ -104,14 +119,14 @@ Expr Simplify::visit(const EQ *op, ExprInfo *bounds) {
     #endif
 
     if (const Sub *s = delta.as<Sub>()) {
-        if (s->a.same_as(op->a) && s->b.same_as(op->b)) {
+        if (s->a.same_as(a) && s->b.same_as(b)) {
             return op;
         } else {
             return EQ::make(s->a, s->b);
         }
     }
 
-    return delta == make_zero(op->a.type());
+    return delta == make_zero(a.type());
 }
 
 // ne redirects to not eq
