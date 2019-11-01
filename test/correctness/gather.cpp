@@ -47,18 +47,17 @@ bool test() {
             .hexagon()
             .split(y, y, yi, H_img/2)
             .parallel(y)
-            .vectorize(x, vector_size/2);
-
-        if (target.has_feature(Target::HVX_v65)) {
+            .vectorize(x, vector_size);
+        if (target.features_any_of({Target::HVX_v65, Target::HVX_v66})) {
             lut_vtcm
                 .store_in(MemoryType::VTCM)
                 .compute_at(output, Var::outermost())
-                .vectorize(x, vector_size/2);
+                .vectorize(x, vector_size);
 
             output_vtcm
                 .store_in(MemoryType::VTCM)
                 .compute_at(output, y)
-                .vectorize(x, vector_size/2);
+                .vectorize(x, vector_size);
         }
     }
 
@@ -80,8 +79,14 @@ bool test() {
 }
 
 int main() {
-    if (!test<uint16_t>() ||
-        !test<int16_t>() ||
+    // With hexagon targets >=v65 with hvx, we expect to see gathers for
+    // uint16_t, int16_t, uint32_t, int32_t
+    // For targets <v65 with hvx, we should generate dynamic_shuffle which are
+    // compiled to vlut instructions.
+    if (!test<uint8_t>()  ||
+        !test<int8_t>()   ||
+        !test<uint16_t>() ||
+        !test<int16_t>()  ||
         !test<uint32_t>() ||
         !test<int32_t>()) return 1;
     printf("Success!\n");

@@ -2031,9 +2031,21 @@ Value *CodeGen_Hexagon::vlut(Value *lut, Value *idx, int min_index, int max_inde
     internal_assert(idx_elem_size <= 16)
         << "Index element for lookup tables must be <= 16 bits in size.\n";
     llvm::Type *lut_ty = lut->getType();
-    llvm::Type *result_ty = llvm::VectorType::get(lut_ty->getVectorElementType(),
-                                                  idx->getType()->getVectorNumElements());
-    int replicate = lut_ty->getScalarSizeInBits()/16;
+    llvm::Type *result_ty = VectorType::get(lut_ty->getVectorElementType(),
+                                            idx->getType()->getVectorNumElements());
+    const unsigned idx_elems = idx->getType()->getVectorNumElements();
+
+    // Construct a new index with 16-bit elements.
+    Value *idx16 = idx;
+    unsigned idx16_elems = idx_elems;
+    unsigned idx16_elem_size = idx_elem_size;
+    if (idx_elem_size == 8) {
+        idx16_elem_size = 16;
+        idx16 = call_intrin(VectorType::get(i16_t, idx16_elems),
+                            "halide.hexagon.unpack.vub", {idx});
+    }
+
+    const int replicate = lut_ty->getScalarSizeInBits()/16;
     if (replicate > 1) {
         // Replicate the LUT indices and use vlut16.
         // For LUT32: create two indices:
@@ -2042,32 +2054,37 @@ Value *CodeGen_Hexagon::vlut(Value *lut, Value *idx, int min_index, int max_inde
         // Interleave the two index vectors and use vlut16 with the new index
         // vector.
         vector<Value *> indices;
-        Value *replicate_val = ConstantInt::get(idx->getType(), replicate);
-        Value *piece = builder->CreateMul(idx, replicate_val);
+        Value *replicate_val = ConstantInt::get(i8_t, replicate);
         for (int i = 0; i < replicate; i++) {
-            Value *pos = ConstantInt::get(idx->getType(), i);
-            indices.emplace_back(builder->CreateAdd(piece, pos));
+            Value *pos = ConstantInt::get(idx16->getType(), i);
+            indices.emplace_back(call_intrin(idx16->getType(),
+                                             "halide.hexagon.add_mul.vh.vh.b",
+                                             {pos, idx16, replicate_val}));
         }
-        idx = interleave_vectors(indices);
+        idx16 = interleave_vectors(indices);
+        idx16_elems *= replicate;
         min_index = min_index * replicate;
         max_index = (max_index + 1) * replicate - 1;
-        lut_ty = llvm::VectorType::get(i16_t,
-                                       lut_ty->getVectorNumElements() * replicate);
+        internal_assert(max_index <= 32676)
+            << "Index range for lookup table must be <= 32676\n";
+        lut_ty = VectorType::get(i16_t,
+                                 lut_ty->getVectorNumElements() * replicate);
         lut = builder->CreateBitCast(lut, lut_ty);
     }
 
-    const unsigned idx_elems = idx->getType()->getVectorNumElements();
-    llvm::Type *i8x_t  = VectorType::get(i8_t,  idx_elems);
-    llvm::Type *i16x_t = VectorType::get(i16_t, idx_elems);
+    llvm::Type *i8x_t  = VectorType::get(i8_t,  idx16_elems);
+    llvm::Type *i16x_t = VectorType::get(i16_t, idx16_elems);
+    Value *minus_one = create_vector(i16x_t, -1);
+
+    // If we can do this with one vlut, do it now.
     if (max_index < 256) {
-        // If we can do this with one vlut, do it now.
-        idx = builder->CreateTruncOrBitCast(idx, i8x_t);
-        Value *result_val = vlut256(lut, idx, min_index, max_index);
+        // If the idx already had 8 bit elements and no replication was needed,
+        // we can use idx else we need to pack idx16.
+        Value *idx8 = (idx_elem_size == 16 || idx_elems != idx16_elems) ?
+                       call_intrin(i8x_t, "halide.hexagon.pack.vh", {idx16}) : idx;
+        Value *result_val = vlut256(lut, idx8, min_index, max_index);
         return builder->CreateBitCast(result_val, result_ty);
     }
-
-    Value *minus_one = create_vector(i16x_t, -1);
-    Value *idx16 = builder->CreateZExtOrBitCast(idx, i16x_t);
     // We need to break the index up into ranges of up to 256, and mux
     // the ranges together after using vlut on each range. This vector
     // contains the result of each range, and a condition vector
@@ -2077,18 +2094,19 @@ Value *CodeGen_Hexagon::vlut(Value *lut, Value *idx, int min_index, int max_inde
         // Make a vector of the indices shifted such that the min of
         // this range is at 0. Use 16-bit indices for this.
         Value *min_index_i_val = create_vector(i16x_t, min_index_i);
-        Value *indices = builder->CreateSub(idx16, min_index_i_val);
+        Value *indices = call_intrin(i16x_t, "halide.hexagon.sub.vh.vh",
+                                     {idx16, min_index_i_val});
 
         // Create a condition value for which elements of the range are valid
         // for this index.
-        Value *use_index =
-            call_intrin(i16x_t, "halide.hexagon.gt.vh.vh", {indices, minus_one});
-        use_index = (lut_ty->getScalarSizeInBits() == 8) ?
-                    call_intrin(i8x_t, "halide.hexagon.pack.vh", {use_index}) : use_index;
+        Value *use_index = call_intrin(i16x_t, "halide.hexagon.gt.vh.vh",
+                                       {indices, minus_one});
 
         // After we've eliminated the invalid elements, we can
         // truncate to 8 bits, as vlut requires.
         indices = call_intrin(i8x_t, "halide.hexagon.pack.vh", {indices});
+        use_index = (lut_ty->getScalarSizeInBits() == 8) ?
+                    call_intrin(i8x_t, "halide.hexagon.pack.vh", {use_index}) : use_index;
 
         int range_extent_i = std::min(max_index - min_index_i, 255);
         Value *range_i = vlut256(slice_vector(lut, min_index_i, range_extent_i),
