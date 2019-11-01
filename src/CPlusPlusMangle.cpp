@@ -345,6 +345,7 @@ std::string simple_type_to_mangle_char(const std::string type_name, const Target
         return "j";
     } else if (type_name == "int64_t") {
         if (target.os == Target::OSX ||
+            target.os == Target::IOS ||
             target.bits == 32 ||
             target.has_feature(Target::MinGW)) {
             return "x";
@@ -353,6 +354,7 @@ std::string simple_type_to_mangle_char(const std::string type_name, const Target
         }
     } else if (type_name == "uint64_t") {
         if (target.os == Target::OSX ||
+            target.os == Target::IOS ||
             target.bits == 32 ||
             target.has_feature(Target::MinGW)) {
             return "y";
@@ -534,6 +536,7 @@ std::string mangle_type(const Type &type, const Target &target, PrevPrefixes &pr
             return "i";
         case 64:
             if (target.os == Target::OSX ||
+                target.os == Target::IOS ||
                 target.bits == 32 ||
                 target.has_feature(Target::MinGW)) {
                 return "x";
@@ -555,6 +558,7 @@ std::string mangle_type(const Type &type, const Target &target, PrevPrefixes &pr
             return "j";
         case 64:
             if (target.os == Target::OSX ||
+                target.os == Target::IOS ||
                 target.bits == 32 ||
                 target.has_feature(Target::MinGW)) {
                 return "y";
