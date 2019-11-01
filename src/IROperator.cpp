@@ -1890,6 +1890,9 @@ Expr is_nan(Expr x) {
     user_assert(x.defined()) << "is_nan of undefined Expr\n";
     user_assert(x.type().is_float()) << "is_nan only works for float";
     Type t = Bool(x.type().lanes());
+    if (!is_const(x)) {
+        x = strict_float(x);
+    }
     if (x.type().element_of() == Float(64)) {
         return Internal::Call::make(t, "is_nan_f64", {std::move(x)}, Internal::Call::PureExtern);
     } else if (x.type().element_of() == Float(16)) {
@@ -1904,6 +1907,9 @@ Expr is_inf(Expr x) {
     user_assert(x.defined()) << "is_inf of undefined Expr\n";
     user_assert(x.type().is_float()) << "is_inf only works for float";
     Type t = Bool(x.type().lanes());
+    if (!is_const(x)) {
+        x = strict_float(x);
+    }
     if (x.type().element_of() == Float(64)) {
         return Internal::Call::make(t, "is_inf_f64", {std::move(x)}, Internal::Call::PureExtern);
     } else if (x.type().element_of() == Float(16)) {
@@ -1918,6 +1924,9 @@ Expr is_finite(Expr x) {
     user_assert(x.defined()) << "is_finite of undefined Expr\n";
     user_assert(x.type().is_float()) << "is_finite only works for float";
     Type t = Bool(x.type().lanes());
+    if (!is_const(x)) {
+        x = strict_float(x);
+    }
     if (x.type().element_of() == Float(64)) {
         return Internal::Call::make(t, "is_finite_f64", {std::move(x)}, Internal::Call::PureExtern);
     } else if (x.type().element_of() == Float(16)) {

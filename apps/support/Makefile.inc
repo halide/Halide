@@ -1,8 +1,14 @@
-HALIDE_DISTRIB_PATH ?= ../../distrib
+HALIDE_DISTRIB_PATH ?= $(realpath ../../distrib)
 LDFLAGS ?=
 IMAGES ?= ../images
 UNAME ?= $(shell uname)
 SHELL = bash
+
+PYTHON ?= python3
+
+# TODO(srj): the python bindings need to be put into the distrib folders;
+# this is a hopefully-temporary workaround (https://github.com/halide/Halide/issues/4368)
+HALIDE_PYTHON_BINDINGS_PATH ?= $(realpath ../../bin/python3_bindings)
 
 BIN_DIR ?= bin
 

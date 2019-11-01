@@ -48,6 +48,7 @@ bool test() {
             .split(y, y, yi, H_img/2)
             .parallel(y)
             .vectorize(x, vector_size);
+
         if (target.features_any_of({Target::HVX_v65, Target::HVX_v66})) {
             lut_vtcm
                 .store_in(MemoryType::VTCM)

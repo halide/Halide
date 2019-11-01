@@ -990,7 +990,11 @@ Constant *CodeGen_LLVM::embed_constant_scalar_value_t(Expr e) {
         ConstantArray::get(array_type, array_entries));
 
     // Ensure that the storage is aligned for halide_scalar_value_t
+#if LLVM_VERSION >= 100
+    storage->setAlignment(MaybeAlign((unsigned)sizeof(halide_scalar_value_t)));
+#else
     storage->setAlignment((unsigned)sizeof(halide_scalar_value_t));
+#endif
 
     Constant *zero[] = {ConstantInt::get(i32_t, 0)};
     return ConstantExpr::getBitCast(
@@ -1213,12 +1217,11 @@ void CodeGen_LLVM::optimize_module() {
     const bool do_loop_opt = !get_target().has_feature(Target::DisableLLVMLoopOpt) ||
                              get_target().has_feature(Target::EnableLLVMLoopOpt);
 
-// Temporarily disabled, see https://github.com/halide/Halide/issues/3957
-// #if LLVM_VERSION >= 90
-#if 0
+#if LLVM_VERSION >= 90
     PipelineTuningOptions pto;
     pto.LoopInterleaving = do_loop_opt;
     pto.LoopVectorization = do_loop_opt;
+    pto.SLPVectorization = true;  // Note: SLP vectorization has no analogue in the Halide scheduling model
     pto.LoopUnrolling = do_loop_opt;
     // Clear ScEv info for all loops. Certain Halide applications spend a very
     // long time compiling in forgetLoop, and prefer to forget everything
@@ -1255,21 +1258,22 @@ void CodeGen_LLVM::optimize_module() {
             mpm.addPass(
                 RequireAnalysisPass<ASanGlobalsMetadataAnalysis, llvm::Module>());
         });
-        bool recover = true;
-        bool use_after_scope = true;
         pb.registerOptimizerLastEPCallback(
-            [recover, use_after_scope](FunctionPassManager &fpm,
-                                     PassBuilder::OptimizationLevel level) {
+            [](FunctionPassManager &fpm, PassBuilder::OptimizationLevel level) {
+                constexpr bool compile_kernel = false;
+                constexpr bool recover = false;
+                constexpr bool use_after_scope = true;
                 fpm.addPass(AddressSanitizerPass(
-                    /*CompileKernel=*/false, recover, use_after_scope));
+                    compile_kernel, recover, use_after_scope));
             });
-        bool module_use_after_scope = false;
-        bool use_odr_indicator = true;
         pb.registerPipelineStartEPCallback(
-            [recover, module_use_after_scope,
-             use_odr_indicator](ModulePassManager &mpm) {
+            [](ModulePassManager &mpm) {
+                constexpr bool compile_kernel = false;
+                constexpr bool recover = false;
+                constexpr bool module_use_after_scope = false;
+                constexpr bool use_odr_indicator = true;
                 mpm.addPass(ModuleAddressSanitizerPass(
-                    /*CompileKernel=*/false, recover, module_use_after_scope,
+                    compile_kernel, recover, module_use_after_scope,
                     use_odr_indicator));
             });
     }
@@ -3511,7 +3515,11 @@ Constant *CodeGen_LLVM::create_binary_blob(const vector<char> &data, const strin
     if (data.size() > alignment && native_vector_bytes > alignment) {
         alignment = native_vector_bytes;
     }
+#if LLVM_VERSION >= 100
+    global->setAlignment(MaybeAlign((unsigned)alignment));
+#else
     global->setAlignment((unsigned)alignment);
+#endif
 
     Constant *zero = ConstantInt::get(i32_t, 0);
     Constant *zeros[] = {zero, zero};

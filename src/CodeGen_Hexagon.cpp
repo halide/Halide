@@ -279,7 +279,7 @@ void CodeGen_Hexagon::compile_func(const LoweredFunc &f,
     debug(2) << "Lowering after unpredicating loads/stores:\n"
              << body << "\n\n";
 
-    if (target.has_feature(Target::HVX_v65)) {
+    if (is_hvx_v65_or_later()) {
         // Generate vscatter-vgathers before optimize_hexagon_shuffles.
         debug(1) << "Looking for vscatter-vgather...\n";
         body = scatter_gather_generator(body);
@@ -2912,8 +2912,8 @@ void CodeGen_Hexagon::visit(const Allocate *alloc) {
         }
     } else if (alloc->memory_type == MemoryType::VTCM &&
                !alloc->new_expr.defined()) {
-        if (!target.has_feature(Target::HVX_v65)) {
-            user_error << "VTCM store_in requires hvx_v65 target feature.\n";
+        if (!is_hvx_v65_or_later()) {
+            user_error << "VTCM store_in requires HVX_v65 or later.\n";
         }
         // Calculate size of allocation.
         Expr size = alloc->type.bytes();
