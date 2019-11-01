@@ -2036,14 +2036,10 @@ Value *CodeGen_Hexagon::vlut(Value *lut, Value *idx, int min_index, int max_inde
     const unsigned idx_elems = idx->getType()->getVectorNumElements();
 
     // Construct a new index with 16-bit elements.
-    Value *idx16 = idx;
     unsigned idx16_elems = idx_elems;
-    unsigned idx16_elem_size = idx_elem_size;
-    if (idx_elem_size == 8) {
-        idx16_elem_size = 16;
-        idx16 = call_intrin(VectorType::get(i16_t, idx16_elems),
-                            "halide.hexagon.unpack.vub", {idx});
-    }
+    Value *idx16 = (idx_elem_size == 8) ?
+                    call_intrin(VectorType::get(i16_t, idx16_elems),
+                    "halide.hexagon.unpack.vub", {idx}) : idx;
 
     const int replicate = lut_ty->getScalarSizeInBits()/16;
     if (replicate > 1) {
