@@ -48,7 +48,7 @@ int main(int argc, char **argv) {
     }
 
     for (Rule &r: rules) {
-        if (not (valid_reduction_order(r.lhs, r.rhs))) {
+        if (!(valid_reduction_order(r.lhs, r.rhs))) {
             std::cout << "Rule doesn't obey reduction order: " << r.orig << "\n";
         } else {
             std::cout << "Rule is consistent with reduction order: " << r.orig << "\n";
