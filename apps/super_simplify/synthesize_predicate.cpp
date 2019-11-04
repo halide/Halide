@@ -2324,7 +2324,7 @@ Expr synthesize_predicate(const Expr &lhs,
             }
         }
 
-        {
+        if (!changed) {
             // There are probably terms hidden in this soup which must
             // always be true. Make a set of all of the terms which appear
             // in disjunction with some other term, assume each is false,
@@ -2340,7 +2340,12 @@ Expr synthesize_predicate(const Expr &lhs,
                 current_precondition = current_precondition && pack_binary_op<Or>(c);
             }
 
+            debug(0) << "Current precondition: " << current_precondition << "\n";
+
+            debug(0) << "Testing each term one-by-one...\n";
+
             for (const auto &t : all_terms_in_a_disjunction) {
+                debug(0) << "Testing " << t << "\n";
                 // Could this term be false?
                 map<string, Expr> binding;
                 Z3Result result = satisfy(!t && current_precondition, &binding);
@@ -2383,7 +2388,7 @@ Expr synthesize_predicate(const Expr &lhs,
             }
         }
 
-        {
+        if (!changed) {
             // If one of the clauses is just a == b, we should replace
             // all uses of 'a' with 'b'. We know 'a' is more complex than 'b'
             // due to how we normalize equalities above.
