@@ -102,8 +102,9 @@ Expr Simplify::visit(const EQ *op, ExprInfo *bounds) {
     }
 
     #if USE_SYNTHESIZED_RULES_V2
-    if (rewrite((((x + c0)/c1) - (y + ((x + c2)/c1))) == 0, (y == c0), ((((1 <= c1) || (c2 == 0)) || (c1 <= -1)) && (((c0*c1) + c2) == c0))) ||
-        rewrite((((x + c0)/c1) - (((x + c2)/c1) + y)) == 0, (y == c0), ((((1 <= c1) || (c2 == 0)) || (c1 <= -1)) && (((c0*c1) + c2) == c0))) ||
+    if (false ||
+        rewrite(((((x + c0)/c1) - (y + ((x + c2)/c1))) == 0), (y == c0), ((((1 <= c1) || (c2 == 0)) || (c1 <= -1)) && (((c0*c1) + c2) == c0))) ||
+        rewrite(((((x + c0)/c1) - (((x + c2)/c1) + y)) == 0), (y == c0), ((((1 <= c1) || (c2 == 0)) || (c1 <= -1)) && (((c0*c1) + c2) == c0))) ||
         false) {
         return mutate(std::move(rewrite.result), bounds);
     }

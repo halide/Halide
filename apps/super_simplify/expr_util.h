@@ -17,7 +17,8 @@ std::map<std::string, int> find_vars(const Halide::Expr &e);
 // b is added.
 bool more_general_than(const Halide::Expr &a,
                        const Halide::Expr &b,
-                       std::map<std::string, Halide::Expr> &bindings);
+                       std::map<std::string, Halide::Expr> &bindings,
+                       bool must_match_all_of_b = false);
 
 inline bool more_general_than(const Halide::Expr &a, const Halide::Expr &b) {
     std::map<std::string, Halide::Expr> bindings;
