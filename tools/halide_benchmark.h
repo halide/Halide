@@ -165,7 +165,7 @@ inline BenchmarkResult benchmark(std::function<void()> op, const BenchmarkConfig
     // We will do (at least) kMinSamples samples; we will do additional
     // samples until the best the kMinSamples'th results are within the
     // accuracy tolerance (or we run out of iterations).
-    constexpr int kMinSamples = 3;
+    constexpr int kMinSamples = 10;
     double times[kMinSamples + 1] = {0};
 
     double total_time = 0;
