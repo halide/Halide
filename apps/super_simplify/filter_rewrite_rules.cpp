@@ -47,6 +47,7 @@ int main(int argc, char **argv) {
     }
 
     // Re-synthesize the predicates if you don't currently trust them
+    /*
     for (Rule &r : rules) {
         vector<map<string, Expr>> examples;
         map<string, Expr> binding;
@@ -59,6 +60,7 @@ int main(int argc, char **argv) {
         }
         r.rhs = substitute(binding, r.rhs);
     }
+    */
 
     /*
     {
