@@ -196,6 +196,8 @@ public:
     IRMatcher::WildConst<1> c1;
     IRMatcher::WildConst<2> c2;
     IRMatcher::WildConst<3> c3;
+    IRMatcher::WildConst<4> c4;
+    IRMatcher::WildConst<5> c5;
 
     // If we encounter a reference to a buffer (a Load, Store, Call,
     // or Provide), there's an implicit dependence on some associated
