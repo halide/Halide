@@ -2,6 +2,7 @@
 #include "parser.h"
 #include "expr_util.h"
 #include "synthesize_predicate.h"
+#include "reduction_order.h"
 
 using namespace Halide;
 using namespace Halide::Internal;
@@ -43,6 +44,14 @@ int main(int argc, char **argv) {
         } else {
             std::cerr << "Expr is not a rewrite rule: " << e << "\n";
             return -1;
+        }
+    }
+
+    for (Rule &r: rules) {
+        if (not (valid_reduction_order(r.lhs, r.rhs))) {
+            std::cout << "Rule doesn't obey reduction order: " << r.orig << "\n";
+        } else {
+            std::cout << "Rule is consistent with reduction order: " << r.orig << "\n";
         }
     }
 
