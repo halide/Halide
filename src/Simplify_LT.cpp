@@ -370,6 +370,15 @@ Expr Simplify::visit(const LT *op, ExprInfo *bounds) {
 
               rewrite((max(x, c0) < ((max((x*c1), c2) + c3)/c1)), true, (((c1 <= (c2 + c3)) || (c2 <= 0)) && (((1 <= c2) || (((c0 + 1)*c1) <= c3)) && (((1 <= c1) && (c1 <= c3)) && (((c0 + 1)*c1) <= (c2 + c3)))))) ||
 
+
+              rewrite((min(min(x, y), c0) < (x + c1)), true, (1 <= c1)) ||
+              rewrite((min(min(x, y), z) < x), (min(y, z) < x)) ||
+
+              rewrite(((((x + c0)/c1)*c2) < min((x*c1), c3)), (x <= c2), ((((((((((((((((((-3 <= ((c0 + c1) + c2)) || (-2 <= (c0 + c1))) || (-2 <= (c0 + c2))) || (-2 <= ((c0 + c1) + c2))) || (-1 <= c0)) || (1 <= c2)) || ((((c0 + c1)*c2) + (c1 + c2)) <= (c1*c1))) || ((((c0 + c1)*c2) + (c1 + c2)) <= (c1*c3))) || ((((c0 + c1)*c2) + (c1 + c2)) <= (((c2 + 2)*c1)*c1))) || (((((c0 + c1) + c2)*c2) + ((c2*2) + c1)) <= (c1*c3))) || (((((c0 + c1) + c2)*c2) + ((c2*2) + c1)) <= (((c2 + 2)*c1)*c1))) || (((((c0 + c1)*c2) + ((c2*2) + c1)) + 1) <= (c1*c1))) || (((((c0 + c1)*c2) + ((c2*2) + c1)) + 1) <= (c1*c3))) || ((((((c0 + c1) + c2)*c2) + ((c2*3) + c1)) + 1) <= (c1*c3))) || ((((((c0 + c1) + c2)*c2) + ((c2*3) + c1)) + 1) <= (((c2 + 2)*c1)*c1))) || ((((c1 + 1)*c1) + -2) <= (c0 + c2))) || ((((c1 + 1)*c1) + -2) <= ((c0 + c1) + c2))) && (((((((((1 <= max(((c1*c1) + ((c0 + -1)*c2)), c2)) || (c0 <= 1)) || (c0 <= (c1*c1))) || ((((c1*c2)*c1) + 1) <= ((c0 + c2)*c2))) || ((c0 + c1) <= 0)) || ((c0 + c2) <= 0)) || (((c0 + c2) + 1) <= (c1*c1))) || (((c0 + c1) + c2) <= -1)) && (((((((-1 <= c2) || ((((((c0 + c1) + c2)*c2) + ((c2*2) + c1)) + 1) <= (c1*c3))) || ((((((c0 + c1) + c2)*c2) + ((c2*2) + c1)) + 1) <= (((c2 + 1)*c1)*c1))) || (((c1*c1) + -1) <= (c0 + c2))) || (((c1*c1) + -1) <= ((c0 + c1) + c2))) || (((c1*c1) + -2) <= ((c0 + c1) + c2))) && ((((((-1 <= (c0 + c1)) || (0 <= c0)) || (1 <= c2)) || ((((c0 + c1)*c2) + (c1 + c2)) <= -1)) || (((((c0 + c1)*c2) + (c1 + c2)) + 1) <= (c1*c3))) && ((((1 <= c2) || (((c1*c3) + 1) <= ((c0 + -1)*c2))) || (((c1*c3) + 1) <= ((c0 + c2)*c2))) && (max(c1, c2) <= -1))))))) ||
+
+              rewrite((min(min((x + c0), y), z) < x), true, (c0 <= -1)) ||
+
+
 #endif
 
               // Synthesized
@@ -611,6 +620,47 @@ Expr Simplify::visit(const LE *op, ExprInfo *bounds) {
                 rewrite((min(x, (y + c0)) <= max(min((y + c0), x), z)), true) ||
                 rewrite((min(x, (min(y, z) + c0)) <= z), true, (c0 <= 0)) ||
                 rewrite((min(min(min(x, y), z), w) <= min((x + c0), y)), true, (0 <= c0)) ||
+
+                 rewrite((x <= (min(((x + c0)/c1), y)*c1)), (x <= (y*c1)), (((1 <= c1) || (c0 <= -1)) && ((c1 <= -1) || ((c1 + -1) <= c0)))) ||
+ rewrite(((x + c0) <= min((((x + c1)/c2)*c2), y)), (x < (y + (1 - c0))), (((c0 + -1) <= (c1 + c2)) && (((c0 + c2) + -1) <= c1))) ||
+ rewrite(((x + y) <= max(z, (max(x, w) + y))), true) ||
+ rewrite(((x + (y*c0)) <= ((z + y)*c0)), (x <= (z*c0))) ||
+ rewrite(((x + (y*c0)) <= ((z + (y*c1))*c1)), (x <= (z*c1)), ((1 <= c0) && ((c1*c1) == c0))) ||
+ rewrite(((x + (y*c0)) <= (((y*c1) + z)*c2)), (x <= (z*c2)), ((c1*c2) == c0)) ||
+ rewrite(((x + (y*z)) <= ((y + w)*z)), (x <= (w*z))) ||
+ rewrite(((x + ((y + z)*w)) <= ((u + (y + z))*w)), (x <= (u*w))) ||
+ rewrite(((x + ((y/z)*z)) <= ((w + (y/z))*z)), (x <= (w*z))) ||
+ rewrite(((x + min(y, 1)) <= y), (x < max(y, 1))) ||
+ rewrite((((x*c0) + y) <= ((z + (x*c1))*c2)), (y <= (z*c2)), ((c1*c2) == c0)) ||
+ rewrite(((((x + y)*c0) + c1) <= (z + (x*c0))), ((y*c0) < (z + (1 - c1)))) ||
+ rewrite((((((x + c0)/c1)*c1) + c2) <= min(x, c3)), (x <= max((c3 - (c0 + c2)), ((c3 - ((c0 + c1) + c2)) + -1))), ((((c1 <= -1) && ((c3 + -1) <= (max((c3 - (c0 + c2)), ((c3 - ((c0 + c1) + c2)) + -1)) + ((c0 + c1) + c2)))) && ((c0 + c2) <= 0)) && (-1 <= c1))) ||
+ rewrite(((((min(x, c0)/c1)*c1) + c2) <= min(x, c3)), true, (((((c1 <= -1) || ((c2 + -1) <= c3)) || (c2 <= (c1 + c3))) || (((0 <= c0) || ((c0 + c2) <= c3)) && ((1 <= c0) || (c0 <= -1)))) && (((((1 <= c1) || ((c2 + -1) <= c3)) || ((c1 + c2) <= c3)) || (((0 <= c0) || ((c0 + c2) <= c3)) && ((1 <= c0) || (c0 <= -1)))) && ((((1 <= max(c0, c1)) || (c0 <= -1)) || (c1 <= -1)) && ((((c0 <= 0) || (((c0 + c2) + -2) <= c3)) || ((((1 <= c1) || ((c2 + -1) <= c3)) || ((c1 + c2) <= c3)) && (((c1 <= -1) || ((c2 + -1) <= c3)) || (c2 <= (c1 + c3))))) && ((((1 <= c0) || (c0 <= -1)) || (c2 <= c3)) && ((((1 <= c1) || (c0 == 0)) || (c1 <= -1)) && (((c0 <= 0) || ((c0 + c2) <= c3)) && (c2 <= 0))))))))) ||
+ rewrite(((min(x, 1) + y) <= x), (y < max(x, 1))) ||
+ rewrite(((min(x, y) + c0) <= min(z, y)), (min(x, y) < (z + (1 - c0))), (c0 <= 0)) ||
+ rewrite(((min(x, y) + c0) <= min(z, (y + c0))), ((min(x, y) + c0) <= z)) ||
+ rewrite(((min(x, (y + c0)) + c1) <= min(y, (x + c1))), true, ((c0 + c1) <= 0)) ||
+ rewrite(((min(x, (min(y, z) + c0)) + c1) <= z), true, ((c0 + c1) <= 0)) ||
+ rewrite(((min(x, (min(y, (z + c0)) + c1)) + c2) <= z), true, (((c0 + c1) + c2) <= 0)) ||
+ rewrite(((min(x, (min(min(y, z), w) + c0)) + c1) <= w), true, ((c0 + c1) <= 0)) ||
+ rewrite(((min((min(x, c0) + y), z) + c1) <= y), true, ((c0 + c1) <= 0)) ||
+ rewrite(((min((min(x, y) + z), w) + c0) <= (x + z)), true, (c0 <= 0)) ||
+ rewrite(((min((min((x*y), c0) + z), w) + c1) <= z), true, (((((c0 + c1) <= 0) && ((min(c1, 0) + c0) <= 1)) && ((min(c0, 0) + c1) <= 1)) && (min(c0, c1) <= 0))) ||
+ rewrite(((min(min(min(x, (y + c0)), z), w) + c1) <= y), true, ((c0 + c1) <= 0)) ||
+ rewrite(((max((x - y), c0) + 1) <= max((z - y), c2)), (x < max(y, z)), ((max(c0, c2) <= 0) && ((max(c0, -1) + 1) <= c2))) ||
+ rewrite(((max(min(x, (y + c0)), z) + c1) <= y), (z < (y + (1 - c1))), ((c0 + c1) <= 0)) ||
+ rewrite(((min((x*c0), y)*c1) <= min((x*c2), c3)), (min(x, y) <= 0), (((0 <= c3) || (c0 <= -1)) && ((((((0 <= (min((c0*c1), c1) + c3)) && (1 <= c0)) && (1 <= c2)) && (c2 <= (c0*c1))) && ((c3 + 1) <= (c0*c1))) && ((max(c3, 0) + 1) <= c1)))) ||
+ rewrite(((((x*c0) + c1)/c2) <= (((x*c0) + c3)/c2)), true, (((1 <= c2) || (c3 <= c1)) && ((c1 <= c3) || (c2 <= -1)))) ||
+ rewrite(((((x*c0) + c1)/c2) <= max(((x*c0)/c2), c3)), true, (((0 <= c1) || (1 <= c2)) && ((c1 <= 0) || (c2 <= -1)))) ||
+ rewrite((min(x, c0) <= select((y < z), c1, min(x, c0))), true, (c0 <= c1)) ||
+ rewrite((min(x, c0) <= select((y < z), min(x, c0), c1)), true, (c0 <= c1)) ||
+ rewrite((min(x, (y + z)) <= (max(w, z) + y)), true) ||
+ rewrite((min((x + y), z) <= (y + x)), true) ||
+ rewrite((min((((min(x, c0)*c1) + y) + c2), z) <= y), true, ((((1 <= c0) || (c0 <= -1)) || (c2 <= 0)) && (((1 <= c1) && (((c0*c1) + c2) <= (min(c1, 0)*2))) && (min((max((c0*c1), 0) + c2), c0) <= 0)))) ||
+ rewrite((min((min(x, y) + c0), z) <= x), true, (c0 <= 0)) ||
+ rewrite((min(min(min(x, y), (z + w)), c0) <= x), true) ||
+ rewrite((min(min(min(min(x, y), z), w), (u*c0)) <= y), true) ||
+ rewrite((min(min(min(min(x, y), z), (w*c0)), u) <= y), true) ||
+                rewrite((min(min(min(min(x, y), (z + w)), u), z) <= y), true) ||
 
                 false) {
                 return mutate(rewrite.result, bounds);

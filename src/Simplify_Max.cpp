@@ -227,6 +227,33 @@ Expr Simplify::visit(const Max *op, ExprInfo *bounds) {
                rewrite(max(max((x + c0), y), x), max(x, y), (c0 <= 0)) ||
                rewrite(max(max(min(x, y), z), y), max(y, z)) ||
                rewrite(max(max(min(max(x, y), z), w), x), max(max(min(y, z), w), x)) ||
+
+
+               rewrite(max((max(x, y) - max(y, z)), c0), max((x - max(y, z)), c0), (0 <= c0)) ||
+               rewrite(max((max(x, y) - max(z, c0)), y), max((x - max(z, c0)), y), (0 <= c0)) ||
+               rewrite(max(((x*x)*y), ((x*y)*x)), ((x*x)*y)) ||
+               rewrite(max((min(x, y)*z), (max(x, y)*z)), max((y*z), (x*z))) ||
+               rewrite(max((max(x, c0)*y), (max(x, c0)*z)), (max(x, c0)*max(y, z)), (0 <= c0)) ||
+               rewrite(max(min(x, c0), (max(min(x, c1), c2) + c3)), (max(min(x, c1), c2) + c3), (((((-1 <= c3) || (c0 <= (c2 + c3))) || ((c0 + -2) <= (c1 + c3))) || ((c2 + -1) <= c1)) && ((((c0 <= (c2 + c3)) || ((c0 + -1) <= (c1 + c3))) || (c2 <= c1)) && (((c0 <= (max(c1, c2) + c3)) || ((c1 + 1) <= c2)) && ((((-1 <= c3) || (c0 <= (c2 + c3))) || (c1 <= (c2 + c3))) && (((0 <= c3) || (c0 <= (c2 + c3))) || ((c1 + 1) <= c2))))))) ||
+               rewrite(max(min(x, y), (min(z, 0) + y)), min(max((y + z), x), y)) ||
+               rewrite(max(min(x, y), min(min(x, z), w)), min(max(min(w, z), y), x)) ||
+               rewrite(max(min(x, y), min(min(y, z), w)), min(max(min(w, z), x), y)) ||
+               rewrite(max(min((x + c0), y), (x + c1)), (x + c1), (c0 <= c1)) ||
+               rewrite(max(min(min(x, y), z), x), x) ||
+               rewrite(max(min(min(x, y), z), min(w, y)), min(max(min(x, z), w), y)) ||
+               rewrite(max(max(x, y), (x + c0)), max((x + c0), y), (0 <= c0)) ||
+               rewrite(max(max(x, y), (y + c0)), max((y + c0), x), (0 <= c0)) ||
+               rewrite(max(max(min(x, y), z), x), max(x, z)) ||
+               rewrite(max(max(max(x, y), z), (z + c0)), max(max((z + c0), x), y), (0 <= c0)) ||
+               rewrite(max(max(max(x, y), z), (z + c0)), max(max(x, y), (z + c0)), (0 <= c0)) ||
+               rewrite(max(select((c0 < x), max(y, z), y), max(y, z)), max(y, z)) ||
+               rewrite(max(select((x < y), c0, c1), select((x < z), c0, c1)), select((x < max(y, z)), c0, c1), (c1 <= c0)) ||
+
+               rewrite(max((min(x, y) - min(z, (x + c0))), c1), max((min(x, y) - z), c1), (0 <= (c0 + c1))) ||
+               rewrite(max(min(x, (y + c0)), (min(y, c1) + c0)), min(max(x, fold((c0 + c1))), (y + c0))) ||
+
+               rewrite(max(max(min(x, (y + c0)), z), min(x, (y + c1))), max(min((y + c0), x), z), (c1 <= c0)) ||
+
 #endif
 
                #if USE_SYNTHESIZED_RULES
