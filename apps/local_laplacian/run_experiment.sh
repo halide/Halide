@@ -1,7 +1,11 @@
 #!/bin/bash
 
 APP=local_laplacian
-NUM_SAMPLES=256
+NUM_SAMPLES=$1
+
+if [ -z $NUM_SAMPLES ]; then
+NUM_SAMPLES=16
+fi
 
 # Make sure Halide is built
 make -C ../../ distrib -j32
@@ -25,7 +29,7 @@ for ((SEED=0;SEED<${NUM_SAMPLES};SEED++)); do
 
     echo "Running generator with seed ${SEED}"
     HL_PERMIT_FAILED_UNROLL=1 HL_SEED=${SEED} HL_RANDOM_DROPOUT=1 HL_BEAM_SIZE=1 HL_DEBUG_CODEGEN=1 \
-    ./bin/host/${APP}.generator -g ${APP} -e stmt,static_library,h,assembly -o results/${SEED} -p ../autoscheduler/bin/libauto_schedule.so target=host auto_schedule=true > results/${SEED}/stdout.txt 2> results/${SEED}/stderr.txt &
+    ./bin/host/${APP}.generator -g ${APP} -e stmt,static_library,h,assembly,registration -o results/${SEED} -p ../autoscheduler/bin/libauto_schedule.so target=host auto_schedule=true > results/${SEED}/stdout.txt 2> results/${SEED}/stderr.txt &
 done
 echo "Waiting for generators to finish..."
 wait
@@ -38,7 +42,7 @@ echo "Waiting for compilations to finish..."
 wait
 
 # Get the benchmarks
-#for ((SEED=0;SEED<${NUM_SAMPLES};SEED++)); do
-#    echo "Running benchmark ${SEED}"
-#    results/${SEED}/benchmark --benchmark_min_time=1 --benchmarks=all --default_input_buffers=random:0:auto --default_input_scalars --output_extents=estimate --parsable_output > results/${SEED}/benchmark_stdout.txt 2> results/${SEED}/benchmark_stderr.txt
-#done
+for ((SEED=0;SEED<${NUM_SAMPLES};SEED++)); do
+    echo "Running benchmark ${SEED}"
+    results/${SEED}/benchmark --benchmark_min_time=1 --benchmarks=all --default_input_buffers=random:0:auto --default_input_scalars --output_extents=estimate --parsable_output > results/${SEED}/benchmark_stdout.txt 2> results/${SEED}/benchmark_stderr.txt
+done
