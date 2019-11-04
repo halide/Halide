@@ -388,17 +388,14 @@ int main(int argc, char **argv) {
     // might make things work for more expressions.
     set<Expr, IRDeepCompare> blacklist;
     if (file_exists("blacklist.txt")) {
-        std::cout << "Loading pattern blacklist\n";
-        std::ifstream b;
-        b.open("blacklist.txt");
-        for (string line; std::getline(b, line);) {
-            char *start = &line[0];
-            char *end = &line[line.size()];
-            blacklist.insert(parse_halide_expr(&start, end, Type{}));
-        }
+        auto b = parse_halide_exprs_from_file("blacklist.txt");
+        blacklist.insert(b.begin(), b.end());
     }
-
     std::cout << blacklist.size() << " blacklisted patterns\n";
+
+    for (auto b : blacklist) {
+        std::cout << b << "\n";
+    }
 
     map<Expr, int, IRDeepCompare> patterns_without_constants;
 

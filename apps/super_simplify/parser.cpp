@@ -315,13 +315,6 @@ Expr parse_halide_expr(char **cursor, char *end, Type expected_type) {
             return result;
         }
     }
-    if (consume(cursor, end, "v")) {
-        if (expected_type == Type{}) {
-            expected_type = Int(32);
-        }
-        Expr a = Variable::make(expected_type, "v" + std::to_string(consume_int(cursor, end)));
-        return a;
-    }
     if ((**cursor >= '0' && **cursor <= '9') || **cursor == '-') {
         Expr e = make_const(Int(32), consume_int(cursor, end));
         if (**cursor == '.') {
@@ -380,6 +373,7 @@ vector<Expr> parse_halide_exprs_from_file(const std::string &filename) {
             close = std::count(line.begin(), line.end(), ')');
             if (open == close) break;
             string next;
+            debug(0) << "Unbalanced parens in :\n\n" << line << "\n\n";
             assert(std::getline(input, next));
             line += next;
         }
