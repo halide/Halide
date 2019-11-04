@@ -65,7 +65,7 @@ std::set<std::string> find_divisors(const Expr &e) {
     return d.divisors;
 }
 
-bool check_divisors(Expr &LHS, Expr &RHS) {
+bool check_divisors(const Expr &LHS, const Expr &RHS) {
     // check that all divisors on RHS appear as divisors on LHS
     std::set<std::string> lhs_divisors = find_divisors(LHS);
     std::set<std::string> rhs_divisors = find_divisors(RHS);
@@ -212,7 +212,7 @@ std::map<IRNodeType, int> build_histogram(const Expr &e) {
 }
 
 // return 1 if correctly ordered, -1 if incorrectly ordered, 0 if tied
-int compare_histograms(Expr &LHS, Expr &RHS) {
+int compare_histograms(const Expr &LHS, const Expr &RHS) {
     std::map<IRNodeType, int> lhs_histo = build_histogram(LHS);
     std::map<IRNodeType, int> rhs_histo = build_histogram(RHS);
     int lhs_node_count, rhs_node_count;
@@ -238,7 +238,7 @@ int compare_histograms(Expr &LHS, Expr &RHS) {
     return 0;
 }
 
-bool valid_reduction_order(Expr &LHS, Expr &RHS) {
+bool valid_reduction_order(const Expr &LHS, const Expr &RHS) {
     // check that occurrences of variables on RHS is equal or lesser to those in LHS
     std::map<std::string, int> lhs_vars = find_vars(LHS);
     std::map<std::string, int> rhs_vars = find_vars(RHS);
