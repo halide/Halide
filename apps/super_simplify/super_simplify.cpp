@@ -16,8 +16,8 @@ using std::set;
 // type errors), so also returns an Expr on the inputs opcodes that
 // encodes whether or not the program is well-formed.
 pair<Expr, Expr> interpreter_expr(vector<Expr> terms, vector<Expr> use_counts, vector<Expr> opcodes) {
-    // Each opcode is an enum identifying the op, followed by the indices of the two args.
-    assert(opcodes.size() % 3 == 0);
+    // Each opcode is an enum identifying the op, followed by the indices of the three args.
+    assert(opcodes.size() % 4 == 0);
     assert(terms.size() == use_counts.size());
 
     Expr program_is_valid = const_true();
@@ -35,25 +35,30 @@ pair<Expr, Expr> interpreter_expr(vector<Expr> terms, vector<Expr> use_counts, v
         }
     }
 
-    for (size_t i = 0; i < opcodes.size(); i += 3) {
+    for (size_t i = 0; i < opcodes.size(); i += 4) {
         Expr op = opcodes[i];
         Expr arg1_idx = opcodes[i+1];
         Expr arg2_idx = opcodes[i+2];
+        Expr arg3_idx = opcodes[i+3];
 
         // Get the args using a select tree. args are either the index of an existing value, or some constant.
-        Expr arg1 = arg1_idx, arg2 = arg2_idx;
+        Expr arg1 = arg1_idx, arg2 = arg2_idx, arg3 = arg3_idx;
 
-        // The constants are ints, so make out-of-range values zero.
-        Expr arg1_type = 0, arg2_type = 0;
+        Expr arg1_type = 0, arg2_type = 0, arg3_type = 0;
         for (size_t j = 0; j < terms.size(); j++) {
             arg1 = select(arg1_idx == (int)j, terms[j], arg1);
             arg2 = select(arg2_idx == (int)j, terms[j], arg2);
+            arg3 = select(arg3_idx == (int)j, terms[j], arg3);
             arg1_type = select(arg1_idx == (int)j, types[j], arg1_type);
             arg2_type = select(arg2_idx == (int)j, types[j], arg2_type);
+            arg3_type = select(arg3_idx == (int)j, types[j], arg3_type);
         }
         int s = (int)terms.size();
+
+        // Opcodes beyond the end of the valid range are the positive integers
         arg1 = select(arg1_idx >= s, arg1_idx - s, arg1);
         arg2 = select(arg2_idx >= s, arg2_idx - s, arg2);
+        arg3 = select(arg3_idx >= s, arg3_idx - s, arg3);
 
         // Perform the op.
         Expr result = arg1; // By default it's just equal to the first operand. This covers constants too.
@@ -87,6 +92,10 @@ pair<Expr, Expr> interpreter_expr(vector<Expr> terms, vector<Expr> use_counts, v
         result = select(op == 8, min(arg1, arg2), result);
         result = select(op == 9, max(arg1, arg2), result);
 
+        // Select
+        result = select(op == 10, select(arg3 == 1, arg1, arg2), result);
+        types_ok = select(op == 10, arg1_type == arg2_type && arg3_type == 1, types_ok);
+
         // Only generate div/mod with a few specific constant
         // denominators. Rely on predicates to generalize it.
         // Including these slows synthesis down dramatically.
@@ -98,10 +107,10 @@ pair<Expr, Expr> interpreter_expr(vector<Expr> terms, vector<Expr> use_counts, v
         result = select(op == 14, arg1 / 4, result);
         result = select(op == 15, arg1 % 4, result);
         */
-        types_ok = select(op > 9, arg1_type == 0 && arg2_idx == 0, types_ok);
+        types_ok = select(op > 10, arg1_type == 0 && arg2_idx == 0, types_ok);
 
         // Type-check it
-        program_is_valid = program_is_valid && types_ok && (op <= 9 && op >= 0);
+        program_is_valid = program_is_valid && types_ok && (op <= 10 && op >= 0);
 
         // TODO: in parallel compute the op histogram, or at least the leading op strength
         terms.push_back(result);
@@ -169,7 +178,7 @@ Expr super_simplify(Expr e, int size) {
     map<string, Expr> current_program;
 
     vector<Expr> symbolic_opcodes;
-    for (int i = 0; i < size*3; i++) {
+    for (int i = 0; i < size * 4; i++) {
         Var op("op" + std::to_string(i));
         symbolic_opcodes.push_back(op);
 
@@ -181,6 +190,21 @@ Expr super_simplify(Expr e, int size) {
     for (auto v : vars) {
         all_vars_zero[v.first] = 0;
     }
+
+    #if 0
+    {
+        // (x - select((0 < y), z, ((w + x) + -62)))
+        // select(0 < y, x - z, 62 - w)
+
+        vector<Expr> leaves = {Expr(Var("x")), Expr(Var("y")), Expr(Var("z")), Expr(Var("w"))};
+        vector<Expr> use_counts = {0, 0, 0, 0};
+        vector<Expr> opcodes = {2, 0, 2, 100, // x - z
+                                2, 67, 3, 100, // 62 - w
+                                4, 6, 1, 100, // 0 < y
+                                10, 4, 5, 6};
+        debug(0) << "ELEPHANT: " << simplify(interpreter_expr(leaves, use_counts, opcodes).first) << "\n";
+    }
+    #endif
 
     auto p = interpreter_expr(leaves, use_counts, symbolic_opcodes);
     Expr program = p.first;
