@@ -1,6 +1,6 @@
 #!/bin/bash
 
-APP=local_laplacian
+APP=stencil_chain
 NUM_SAMPLES=$1
 
 if [ -z $NUM_SAMPLES ]; then
