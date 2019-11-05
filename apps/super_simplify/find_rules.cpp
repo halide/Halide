@@ -180,11 +180,14 @@ class CountOps : public IRGraphVisitor {
     using IRGraphVisitor::include;
 
     void visit(const Variable *op) override {
-        if (op->type != Int(32)) {
+        if (op->type != Int(32) && op->type != Bool()) {
             has_unsupported_ir = true;
         } else if (vars_used.count(op->name)) {
             has_repeated_var = true;
         } else {
+            if (op->type == Bool()) {
+                has_bool_var = true;
+            }
             vars_used.insert(op->name);
         }
     }
@@ -233,6 +236,7 @@ public:
     bool has_div_mod = false;
     bool has_unsupported_ir = false;
     bool has_repeated_var = false;
+    bool has_bool_var = false;
     set<string> vars_used;
 };
 
@@ -367,6 +371,9 @@ int main(int argc, char **argv) {
                       count_ops.num_constants > 100)) {
                     continue;
                 }
+
+                // HACK while testing bool vars
+                // if (!count_ops.has_bool_var) continue;
 
                 std::cout << "PATTERN " << lhs_ops << " : " << p << "\n";
                 futures.emplace_back(pool.async([=, &mutex, &rules, &futures, &done]() {

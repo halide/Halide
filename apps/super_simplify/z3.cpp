@@ -262,8 +262,12 @@ Z3Result satisfy(Expr e, map<string, Expr> *bindings) {
 
     std::ostringstream z3_source;
 
-    for (auto v : find_vars(e)) {
-        z3_source << "(declare-const " << v.first << " Int)\n";
+    for (const auto &v : find_vars(e)) {
+        if (v.second.first.type().is_bool()) {
+            z3_source << "(declare-const " << v.first << " Bool)\n";
+        } else {
+            z3_source << "(declare-const " << v.first << " Int)\n";
+        }
     }
 
     z3_source << "(define-fun my_min ((x Int) (y Int)) Int (ite (< x y) x y))\n"

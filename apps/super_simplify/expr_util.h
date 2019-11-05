@@ -7,7 +7,7 @@
 
 // Find all the free variables in a Halide Expr and return how many
 // times each is used.
-std::map<std::string, int> find_vars(const Halide::Expr &e);
+std::map<std::string, std::pair<Halide::Expr, int>> find_vars(const Halide::Expr &e);
 
 // Does expr a describe a pattern that expr b would match. For example
 // more_general_than(x + y, (x*3) + y) returns true. bindings is an

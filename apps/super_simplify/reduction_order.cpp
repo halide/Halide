@@ -245,11 +245,13 @@ int compare_histograms(const Expr &LHS, const Expr &RHS) {
 
 bool valid_reduction_order(const Expr &LHS, const Expr &RHS) {
     // check that occurrences of variables on RHS is equal or lesser to those in LHS
-    std::map<std::string, int> lhs_vars = find_vars(LHS);
-    std::map<std::string, int> rhs_vars = find_vars(RHS);
+    auto lhs_vars = find_vars(LHS);
+    auto rhs_vars = find_vars(RHS);
     for (auto const& varcount : rhs_vars) {
         // constant wildcards don't count bc they can't match terms so can't cause reduction order failures
-        if (varcount.first.front() != 'c' && (lhs_vars[varcount.first] == 0 || varcount.second > lhs_vars[varcount.first])) {
+        if (varcount.first.front() != 'c' &&
+            (lhs_vars[varcount.first].second == 0 ||
+             varcount.second.second > lhs_vars[varcount.first].second)) {
             return false;
         }
     }

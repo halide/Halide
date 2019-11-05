@@ -24,11 +24,12 @@ pair<Expr, Expr> interpreter_expr(vector<Expr> terms, vector<Expr> use_counts, v
 
     // Type type of each term. Encode int as 0, bool as 1.
     vector<Expr> types;
-    for (auto t : terms) {
+    for (auto &t : terms) {
         if (t.type() == Int(32)) {
             types.push_back(0);
         } else if (t.type() == Bool()) {
             types.push_back(1);
+            t = select(t, 1, 0);
         } else {
             std::cout << t;
             assert(false && "Unhandled wildcard type");
@@ -169,8 +170,8 @@ Expr super_simplify(Expr e, int size) {
     auto vars = find_vars(e);
     vector<Expr> leaves, use_counts;
     for (auto v : vars) {
-        leaves.push_back(Variable::make(Int(32), v.first));
-        use_counts.push_back(v.second);
+        leaves.push_back(v.second.first);
+        use_counts.push_back(v.second.second);
     }
 
     vector<map<string, Expr>> counterexamples;
@@ -188,7 +189,7 @@ Expr super_simplify(Expr e, int size) {
 
     map<string, Expr> all_vars_zero;
     for (auto v : vars) {
-        all_vars_zero[v.first] = 0;
+        all_vars_zero[v.first] = make_zero(v.second.first.type());
     }
 
     #if 0
@@ -230,7 +231,11 @@ Expr super_simplify(Expr e, int size) {
         for (int i = 0; i < 5; i++) {
             map<string, Expr> rand_binding = all_vars_zero;
             for (auto &it : rand_binding) {
-                it.second = random_int(rng);
+                if (it.second.type() == Bool()) {
+                    it.second = (random_int(rng) & 1) ? const_true() : const_false();
+                } else {
+                    it.second = random_int(rng);
+                }
             }
             auto interpreted = simplify(substitute(rand_binding, ub_checker.safe && !current_program_works));
             if (is_one(interpreted)) {

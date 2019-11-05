@@ -13,7 +13,9 @@ class FindVars : public IRVisitor {
 
     void visit(const Variable *op) override {
         if (!lets.contains(op->name)) {
-            vars[op->name]++;
+            auto &v = vars[op->name];
+            v.second++;
+            v.first = op;
         }
     }
 
@@ -25,10 +27,10 @@ class FindVars : public IRVisitor {
         }
     }
 public:
-    std::map<std::string, int> vars;
+    std::map<std::string, std::pair<Expr, int>> vars;
 };
 
-std::map<std::string, int> find_vars(const Expr &e) {
+std::map<std::string, std::pair<Expr, int>> find_vars(const Expr &e) {
     FindVars f;
     e.accept(&f);
     return f.vars;
