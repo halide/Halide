@@ -250,12 +250,16 @@ Expr Simplify::visit(const Sub *op, ExprInfo *bounds) {
                rewrite((x + y)/c0 - x/c0, ((x % c0) + y)/c0, c0 > 0) ||
                rewrite(x/c0 - (x - y)/c0, ((y + fold(c0 - 1)) - (x % c0))/c0, c0 > 0) ||
                rewrite((x - y)/c0 - x/c0, ((x % c0) - y)/c0, c0 > 0) ||
-               false))) ||
-            (no_overflow_int(op->type) && (
+               false)))) {
+            return mutate(std::move(rewrite.result), bounds);
+        }
+
+        if (no_overflow_int(op->type) &&
+            (
 #if USE_SYNTHESIZED_RULES_V2
 #include "Simplify_Sub.inc"
 #endif
-             false))) {
+             false)) {
             return mutate(std::move(rewrite.result), bounds);
         }
     }

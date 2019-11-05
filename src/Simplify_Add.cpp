@@ -121,12 +121,16 @@ Expr Simplify::visit(const Add *op, ExprInfo *bounds) {
                rewrite(x + ((c0 - x)/c1)*c1, c0 - ((c0 - x) % c1), c1 > 0) ||
                rewrite(x + ((c0 - x)/c1 + y)*c1, y * c1 - ((c0 - x) % c1) + c0, c1 > 0) ||
                rewrite(x + (y + (c0 - x)/c1)*c1, y * c1 - ((c0 - x) % c1) + c0, c1 > 0) ||
-               false))) ||
-            (no_overflow_int(op->type) && (
+               false)))) {
+            return mutate(std::move(rewrite.result), bounds);
+        }
+
+        if (no_overflow_int(op->type) &&
+            (
 #if USE_SYNTHESIZED_RULES_V2
 #include "Simplify_Add.inc"
 #endif
-               false))) {
+             false)) {
             return mutate(std::move(rewrite.result), bounds);
         }
 
