@@ -18,9 +18,9 @@ std::map<IRNodeType, int> nto = {
     {IRNodeType::Div,20},
     {IRNodeType::Mul,19},
     {IRNodeType::Mod,18},
-    {IRNodeType::Sub,17},
-    {IRNodeType::Add,16},
-    {IRNodeType::Max,14}, // note max and min have same weight
+    {IRNodeType::Sub,17}, // add and sub have the same weight
+    {IRNodeType::Add,17},
+    {IRNodeType::Max,14}, // max and min have same weight
     {IRNodeType::Min,14},
     {IRNodeType::Not,13},
     {IRNodeType::Or,12},
@@ -80,6 +80,11 @@ bool check_divisors(const Expr &LHS, const Expr &RHS) {
 class NodeHistogram : public IRVisitor {
     Scope<> lets;
 
+    void visit(const Call *op) override {
+        if (op->name == "fold") return;
+        IRVisitor::visit(op);
+    }
+
     void visit(const Select *op) override {
         increment_histo(IRNodeType::Select);
         op->condition.accept(this);
@@ -105,7 +110,7 @@ class NodeHistogram : public IRVisitor {
     }
 
     void visit(const Sub *op) override {
-        increment_histo(IRNodeType::Sub);
+        increment_histo(IRNodeType::Add); // Put Sub counts in the Add bucket
         op->a.accept(this);
         op->b.accept(this);
     }
@@ -226,7 +231,7 @@ int compare_histograms(const Expr &LHS, const Expr &RHS) {
             rhs_node_count = rhs_histo[node];
         }
 
-        std::cout << node << " LHS count " << lhs_node_count << " RHS count " << rhs_node_count << "\n";
+        // std::cout << node << " LHS count " << lhs_node_count << " RHS count " << rhs_node_count << "\n";
         // RHS side has more of some op than LHS
         if (lhs_node_count < rhs_node_count) {
             return -1;
