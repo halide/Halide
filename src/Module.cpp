@@ -530,7 +530,8 @@ Module Module::resolve_submodules() const {
         auto buf = copy.compile_to_buffer();
         lowered_module.append(buf);
     }
-
+    // Copy the autoscheduler results back into the lowered module after resolving the submodules.
+    lowered_module.set_auto_scheduler_results(*contents->auto_scheduler_results.get());
     return lowered_module;
 }
 
