@@ -2,11 +2,13 @@ include ../support/Makefile.inc
 
 OBJECTS = $(BIN)/parser.o $(BIN)/z3.o $(BIN)/expr_util.o $(BIN)/reduction_order.o $(BIN)/synthesize_predicate.o $(BIN)/super_simplify.o
 
-all: $(BIN)/find_rules $(BIN)/synthesize_predicates $(BIN)/filter_rewrite_rules $(BIN)/super_simplify
+all: $(BIN)/find_rules $(BIN)/synthesize_predicates $(BIN)/filter_rewrite_rules $(BIN)/super_simplify $(BIN)/find_rules_static
 
 CXXFLAGS += -g
 
 LDFLAGS += -L ../../distrib/bin -L ../../distrib/lib -rpath ../../distrib/bin 
+
+STATIC_LDFLAGS = $(filter-out -lpthread,$(LDFLAGS)) -pthread -Wl,--whole-archive -lpthread -Wl,--no-whole-archive
 
 $(BIN)/%.o: %.cpp %.h
 	@mkdir -p $(@D)
@@ -19,7 +21,7 @@ $(BIN)/find_rules: find_rules.cpp $(OBJECTS) $(LIB_HALIDE)
 # Statically-linked version for use on a cluster
 $(BIN)/find_rules_static: find_rules.cpp $(OBJECTS) $(LIB_HALIDE)
 	@mkdir -p $(@D)
-	$(CXX) -static $(CXXFLAGS) $< $(OBJECTS) -o $@ $(LDFLAGS) -lHalide
+	$(CXX) -static $(CXXFLAGS) -O1 $< $(OBJECTS) -o $@ $(STATIC_LDFLAGS) -lHalide
 
 $(BIN)/synthesize_predicates: synthesize_predicates.cpp $(OBJECTS) $(LIB_HALIDE)
 	@mkdir -p $(@D)
