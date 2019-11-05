@@ -4,6 +4,8 @@
 #include "synthesize_predicate.h"
 #include "reduction_order.h"
 
+#include <fstream>
+
 using namespace Halide;
 using namespace Halide::Internal;
 
@@ -128,6 +130,62 @@ vector<Rule> generate_commuted_variants(const Rule &r) {
     return result;
 }
 
+Expr remove_folds(const Expr &e) {
+    class RemoveFolds : public IRMutator {
+        using IRMutator::visit;
+
+        Expr visit(const Call *op) override {
+            if (op->name == "fold") {
+                return op->args[0];
+            } else {
+                return IRMutator::visit(op);
+            }
+        }
+    };
+
+    return RemoveFolds().mutate(e);
+}
+
+Expr inject_folds(const Expr &e) {
+
+    class InjectFolds : public IRMutator {
+        bool constant = false;
+
+        using IRMutator::visit;
+
+        Expr visit(const Variable *var) override {
+            if (var->name[0] != 'c') {
+                constant = false;
+            }
+            return var;
+        }
+
+    public:
+        using IRMutator::mutate;
+
+        Expr mutate(const Expr &e) override {
+            bool old = constant;
+            constant = true;
+            Expr new_e = IRMutator::mutate(e);
+            if (constant) {
+                // Note we wrap a fold around the *unmutated* child,
+                // to avoid nested folds.
+                constant = constant && old;
+                if (is_const(e) || e.as<Variable>()) {
+                    return e;
+                } else {
+                    return Call::make(e.type(), "fold", {e}, Call::PureExtern);
+                }
+            } else {
+                constant = constant && old;
+                return new_e;
+            }
+        }
+    };
+
+    return InjectFolds().mutate(e);
+}
+
 int main(int argc, char **argv) {
     if (argc < 2) {
         std::cout << "Usage: ./filter_rewrite_rules rewrite_rules.txt\n";
@@ -153,14 +211,6 @@ int main(int argc, char **argv) {
         } else {
             std::cerr << "Expr is not a rewrite rule: " << e << "\n";
             return -1;
-        }
-    }
-
-    for (Rule &r: rules) {
-        if (!(valid_reduction_order(r.lhs, r.rhs))) {
-            std::cout << "Rule doesn't obey reduction order: " << r.orig << "\n";
-        } else {
-            std::cout << "Rule is consistent with reduction order: " << r.orig << "\n";
         }
     }
 
@@ -190,6 +240,11 @@ int main(int argc, char **argv) {
         return 1;
     }
     */
+
+    // Remove all fold operations
+    for (Rule &r : rules) {
+        r.rhs = remove_folds(r.rhs);
+    }
 
     // Normalize LE rules to LT rules where it's possible to invert the RHS for free
     for (Rule &r : rules) {
@@ -225,13 +280,25 @@ int main(int argc, char **argv) {
     }
     rules.swap(expanded);
 
+
+    std::map<IRNodeType, vector<Expr>> good_ones;
+
+    // Re-inject folds
+    for (Rule &r : rules) {
+        r.rhs = inject_folds(r.rhs);
+    }
+
     // Sort the rules by LHS
     std::sort(rules.begin(), rules.end(),
               [](const Rule &r1, const Rule &r2) {
-                  return IRDeepCompare{}(r1.lhs, r2.lhs);
+                  if (IRDeepCompare{}(r1.lhs, r2.lhs)) {
+                      return true;
+                  }
+                  if (IRDeepCompare{}(r2.lhs, r1.lhs)) {
+                      return false;
+                  }
+                  return IRDeepCompare{}(r1.predicate, r2.predicate);
               });
-
-    std::map<IRNodeType, vector<Expr>> good_ones;
 
     Expr last_lhs, last_predicate;
     for (const Rule &r : rules) {
@@ -244,6 +311,11 @@ int main(int argc, char **argv) {
         }
         last_lhs = r.lhs;
         last_predicate = r.predicate;
+
+        if (!(valid_reduction_order(r.lhs, r.rhs))) {
+            std::cout << "Rule doesn't obey reduction order: " << r.lhs << " -> " << r.rhs << "\n";
+            continue;
+        }
 
         // Check for failed predicate synthesis
         if (is_zero(r.predicate)) {
@@ -293,10 +365,16 @@ int main(int argc, char **argv) {
 
     std::cout << "Generated rules:\n";
     for (auto it : good_ones) {
+        std::ostringstream filename;
+        filename << "Simplify_" << it.first << ".inc";
         std::cout << it.first << "\n";
+        std::ofstream of;
+        of.open(filename.str().c_str());
         for (auto r : it.second) {
-            std::cout << " " << r << " ||\n";
+            of << r << " ||\n";
+            std::cout << " " << r << "\n";
         }
+        of.close();
     }
 
     return 0;
