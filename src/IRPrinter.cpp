@@ -409,7 +409,15 @@ void IRPrinter::visit(const IntImm *op) {
 }
 
 void IRPrinter::visit(const UIntImm *op) {
-    stream << "(" << op->type << ")" << op->value;
+    if (op->type.is_bool()) {
+        if (op->value) {
+            stream << "true";
+        } else {
+            stream << "false";
+        }
+    } else {
+        stream << "(" << op->type << ")" << op->value;
+    }
 }
 
 void IRPrinter::visit(const FloatImm *op) {
