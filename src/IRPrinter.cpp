@@ -183,9 +183,7 @@ void emit_with_commas(ostream &stream, const std::vector<T> &v) {
     stream << ")";
 };
 
-}  // namespace
-
-ostream &operator<<(ostream &stream, const Func &func) {
+void print_func(ostream &stream, const Func &func, bool include_dependencies) {
     using Internal::extract_rdom;
     using Internal::ReductionDomain;
     using Internal::simplify;
@@ -193,8 +191,12 @@ ostream &operator<<(ostream &stream, const Func &func) {
     stream << "func " << func.name() << " = {\n";
 
     // Topologically sort the functions
-    std::map<std::string, Internal::Function> env = find_transitive_calls(func.function());
-    std::vector<std::string> order = realization_order({ func.function() }, env).first;
+    std::map<std::string, Internal::Function> env = include_dependencies
+        ? find_transitive_calls(func.function())
+        : std::map<std::string, Internal::Function>{{func.function().name(), func.function()}};
+    std::vector<std::string> order = include_dependencies
+        ? realization_order({ func.function() }, env).first
+        : std::vector<std::string>{func.function().name()};
 
     for (int i = (int) order.size() - 1; i >= 0; i--) {
         Func f(env[order[i]]);
@@ -235,14 +237,21 @@ ostream &operator<<(ostream &stream, const Func &func) {
     }
 
     stream << "}\n";
+}
 
+}  // namespace
+
+ostream &operator<<(ostream &stream, const Func &f) {
+    print_func(stream, f, /*include_dependencies*/ false);
+    return stream;
+}
+
+ostream &operator<<(ostream &stream, const FuncWithDependencies &f) {
+    print_func(stream, f.func, /*include_dependencies*/ true);
     return stream;
 }
 
 namespace Internal {
-
-IRPrinter::~IRPrinter() {
-}
 
 void IRPrinter::test() {
     Type i32 = Int(32);
@@ -288,6 +297,14 @@ void IRPrinter::test() {
     g(rr) = Tuple(g(rr - 1)[0], g(rr)[1] + 1);
     source << g;
 
+    Func h1("multi_func1"), h2("multi_func2"), h3("multi_func3");
+    h1(xx) = xx + 1;
+    h2(xx) = h1(xx) / 2;
+    source << h2;
+
+    h3(xx) = h2(xx) % 3;
+    source << FuncWithDependencies(h3);
+
     std::string correct_source =  R"GOLDEN(
 allocate buf[float32 * 1023] in Stack
 let y = 17
@@ -310,6 +327,14 @@ func some_func = {
 func tuple_func = {
  tuple_func(xx) = tuple<2>(0, 0)
   tuple_func.update[0](rr$x) = tuple<2>(tuple_func((rr$x - 1)), (tuple_func(rr$x) + 1)) with RDom(1, 99)
+}
+func multi_func2 = {
+ multi_func2(xx) = ((multi_func1(xx)/2))
+}
+func multi_func3 = {
+ multi_func3(xx) = ((multi_func2(xx) % 3))
+ multi_func2(xx) = ((multi_func1(xx)/2))
+ multi_func1(xx) = ((xx + 1))
 }
 )GOLDEN";
 
