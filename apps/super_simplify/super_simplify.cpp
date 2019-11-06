@@ -15,7 +15,7 @@ using std::set;
 // integer opcodes. Not all possible programs are valid (e.g. due to
 // type errors), so also returns an Expr on the inputs opcodes that
 // encodes whether or not the program is well-formed.
-pair<Expr, Expr> interpreter_expr(vector<Expr> terms, vector<Expr> use_counts, vector<Expr> opcodes) {
+pair<Expr, Expr> interpreter_expr(vector<Expr> terms, vector<Expr> use_counts, vector<Expr> opcodes, Type desired_type) {
     // Each opcode is an enum identifying the op, followed by the indices of the three args.
     assert(opcodes.size() % 4 == 0);
     assert(terms.size() == use_counts.size());
@@ -23,13 +23,14 @@ pair<Expr, Expr> interpreter_expr(vector<Expr> terms, vector<Expr> use_counts, v
     Expr program_is_valid = const_true();
 
     // Type type of each term. Encode int as 0, bool as 1.
-    vector<Expr> types;
+    vector<Expr> terms_int, terms_bool;
     for (auto &t : terms) {
         if (t.type() == Int(32)) {
-            types.push_back(0);
+            terms_int.push_back(t);
+            terms_bool.push_back(const_false());
         } else if (t.type() == Bool()) {
-            types.push_back(1);
-            t = select(t, 1, 0);
+            terms_int.push_back(0);
+            terms_bool.push_back(t);
         } else {
             std::cout << t;
             assert(false && "Unhandled wildcard type");
@@ -43,86 +44,77 @@ pair<Expr, Expr> interpreter_expr(vector<Expr> terms, vector<Expr> use_counts, v
         Expr arg3_idx = opcodes[i+3];
 
         // Get the args using a select tree. args are either the index of an existing value, or some constant.
-        Expr arg1 = arg1_idx, arg2 = arg2_idx, arg3 = arg3_idx;
 
-        Expr arg1_type = 0, arg2_type = 0, arg3_type = 0;
-        for (size_t j = 0; j < terms.size(); j++) {
-            arg1 = select(arg1_idx == (int)j, terms[j], arg1);
-            arg2 = select(arg2_idx == (int)j, terms[j], arg2);
-            arg3 = select(arg3_idx == (int)j, terms[j], arg3);
-            arg1_type = select(arg1_idx == (int)j, types[j], arg1_type);
-            arg2_type = select(arg2_idx == (int)j, types[j], arg2_type);
-            arg3_type = select(arg3_idx == (int)j, types[j], arg3_type);
-        }
         int s = (int)terms.size();
 
-        // Opcodes beyond the end of the valid range are the positive integers
-        arg1 = select(arg1_idx >= s, arg1_idx - s, arg1);
-        arg2 = select(arg2_idx >= s, arg2_idx - s, arg2);
-        arg3 = select(arg3_idx >= s, arg3_idx - s, arg3);
+        // int opcodes outside the valid range are constants.
+        Expr arg1_int = select(arg1_idx >= s, arg1_idx - s, arg1_idx);
+        Expr arg2_int = select(arg2_idx >= s, arg2_idx - s, arg2_idx);
+        Expr arg3_int = select(arg3_idx >= s, arg3_idx - s, arg3_idx);
+
+        for (size_t j = 0; j < terms_int.size(); j++) {
+            arg1_int = select(arg1_idx == (int)j, terms_int[j], arg1_int);
+            arg2_int = select(arg2_idx == (int)j, terms_int[j], arg2_int);
+            arg3_int = select(arg3_idx == (int)j, terms_int[j], arg3_int);
+        }
+
+        // Bool opcodes beyond the end of the valid range are true. Negative ones are false
+        Expr arg1_bool = (arg1_idx >= s);
+        Expr arg2_bool = (arg2_idx >= s);
+        Expr arg3_bool = (arg3_idx >= s);
+
+        for (size_t j = 0; j < terms_bool.size(); j++) {
+            arg1_bool = (arg1_idx == (int)j && terms_bool[j]) || arg1_bool;
+            arg2_bool = (arg2_idx == (int)j && terms_bool[j]) || arg2_bool;
+            arg3_bool = (arg3_idx == (int)j && terms_bool[j]) || arg3_bool;
+        }
 
         // Perform the op.
-        Expr result = arg1; // By default it's just equal to the first operand. This covers constants too.
-        Expr result_type = arg1_type; // Most operators take on the type of the first arg and require the types to match.
-        Expr types_ok = arg1_type == arg2_type;
+        Expr result_int = 0;
+        Expr result_bool = const_false();
 
         for (int j = 0; j < (int)use_counts.size(); j++) {
             // We've potentially soaked up one allowed use of each original term
             use_counts[j] -= select((arg1_idx == j) || (op != 0 && arg2_idx == j), 1, 0);
         }
 
-        result = select(op == 1, arg1 + arg2, result);
-        result = select(op == 2, arg1 - arg2, result);
-        // Only use +/- on integers
-        types_ok = (op < 1 || op > 3 || (arg1_type == 0 && arg2_type == 0));
+        result_int = select(op == 0, arg1_int, result_int);
+        result_bool = select(op == 0, arg1_bool, result_bool);
+        result_int = select(op == 1, arg1_int + arg2_int, result_int);
+        result_int = select(op == 2, arg1_int - arg2_int, result_int);
+        result_int = select(op == 3, arg1_int * arg2_int, result_int);
+        result_int = select(op == 4, min(arg1_int, arg2_int), result_int);
+        result_int = select(op == 5, max(arg1_int, arg2_int), result_int);
+        result_bool = (op == 6 && arg1_int < arg2_int) || result_bool;
+        result_bool = (op == 7 && arg1_int <= arg2_int) || result_bool;
+        result_bool = (op == 8 && arg1_int == arg2_int) || result_bool;
+        result_bool = (op == 9 && arg1_int != arg2_int) || result_bool;
 
-        result = select(op == 3, arg1 * arg2, result);
-        // We use bool * int for select(b, x, 0). bool * bool and int
-        // * int also make sense.
-        types_ok = types_ok || op == 3;
+        result_int = select(op == 10, arg1_int / 2, result_int);
+        result_int = select(op == 11, arg1_int % 2, result_int);
 
-        result = select(op == 4, select(arg1 < arg2, 1, 0), result);
-        result = select(op == 5, select(arg1 <= arg2, 1, 0), result);
-        result = select(op == 6, select(arg1 == arg2, 1, 0), result);
-        result = select(op == 7, select(arg1 != arg2, 1, 0), result);
-        // These operators all return bools. They can usefully accept
-        // bools too. E.g. A <= B is A implies B. A < B is !A && B.
-        result_type = select(op >= 4 && op <= 7, 1, result_type);
-
-        // min/max encodes for or/and, if the types are bool
-        result = select(op == 8, min(arg1, arg2), result);
-        result = select(op == 9, max(arg1, arg2), result);
-
-        // Select
-        result = select(op == 10, select(arg3 == 1, arg1, arg2), result);
-        types_ok = select(op == 10, arg1_type == arg2_type && arg3_type == 1, types_ok);
-
-        // Only generate div/mod with a few specific constant
-        // denominators. Rely on predicates to generalize it.
-        // Including these slows synthesis down dramatically.
-        /*
-        result = select(op == 10, arg1 / 2, result);
-        result = select(op == 11, arg1 % 2, result);
-        result = select(op == 12, arg1 / 3, result);
-        result = select(op == 13, arg1 % 3, result);
-        result = select(op == 14, arg1 / 4, result);
-        result = select(op == 15, arg1 % 4, result);
-        */
-        types_ok = select(op > 10, arg1_type == 0 && arg2_idx == 0, types_ok);
+        // Meaningful if arg1 is a bool
+        result_int = select(op == 12, select(arg1_bool, arg2_int, arg3_int), result_int);
+        result_bool = (op == 13 && arg1_bool && arg2_bool) || result_bool;
+        result_bool = (op == 14 && (arg1_bool || arg2_bool)) || result_bool;
+        result_bool = (op == 15 && !arg1_bool) || result_bool;
+        result_bool = (op == 16 && arg1_bool) || result_bool;
 
         // Type-check it
-        program_is_valid = program_is_valid && types_ok && (op <= 10 && op >= 0);
+        program_is_valid = program_is_valid && (op <= 16 && op >= 0);
 
-        // TODO: in parallel compute the op histogram, or at least the leading op strength
-        terms.push_back(result);
-        types.push_back(result_type);
+        terms_int.push_back(result_int);
+        terms_bool.push_back(result_bool);
     }
 
     for (auto u : use_counts) {
         program_is_valid = program_is_valid && (u >= 0);
     }
+    program_is_valid = const_true();
 
-    return {terms.back(), program_is_valid};
+    Expr result = (desired_type.is_bool()) ? terms_bool.back() : terms_int.back();
+
+    return {result, program_is_valid};
 }
 
 Expr reboolify(const Expr &e) {
@@ -143,10 +135,11 @@ Expr reboolify(const Expr &e) {
 
 // Use CEGIS to construct an equivalent expression to the input of the given size.
 Expr super_simplify(Expr e, int size) {
-    bool was_bool = e.type().is_bool();
-    Expr orig = e;
-    if (was_bool) {
-        e = select(e, 1, 0);
+    std::string z3_comment;
+    {
+        std::ostringstream sstr;
+        sstr << e << " at size " << size;
+        z3_comment = sstr.str();
     }
 
     // We may assume there's no undefined behavior in the existing
@@ -194,20 +187,25 @@ Expr super_simplify(Expr e, int size) {
 
     #if 0
     {
-        // (x - select((0 < y), z, ((w + x) + -62)))
-        // select(0 < y, x - z, 62 - w)
+        // (x - select(y, z, ((w + x) + -62)))
+        // select(y, x - z, 62 - w)
 
-        vector<Expr> leaves = {Expr(Var("x")), Expr(Var("y")), Expr(Var("z")), Expr(Var("w"))};
-        vector<Expr> use_counts = {0, 0, 0, 0};
+        vector<Expr> leaves = {Expr(Var("x")),
+                               Variable::make(Bool(), "y"),
+                               Expr(Var("z")),
+                               Expr(Var("w"))};
+        vector<Expr> use_counts = {1, 1, 1, 1};
+
         vector<Expr> opcodes = {2, 0, 2, 100, // x - z
-                                2, 67, 3, 100, // 62 - w
-                                4, 6, 1, 100, // 0 < y
-                                10, 4, 5, 6};
-        debug(0) << "ELEPHANT: " << simplify(interpreter_expr(leaves, use_counts, opcodes).first) << "\n";
+                                2, 66, 3, 100, // 62 - w
+                                0, 1, 4, 5}; // select
+
+        debug(0) << "ELEPHANT: " << simplify(common_subexpression_elimination(interpreter_expr(leaves, use_counts, opcodes, Int(32)).first)) << "\n";
+        abort();
     }
     #endif
 
-    auto p = interpreter_expr(leaves, use_counts, symbolic_opcodes);
+    auto p = interpreter_expr(leaves, use_counts, symbolic_opcodes, e.type());
     Expr program = p.first;
     Expr program_works = (e == program) && p.second;
     program = simplify(common_subexpression_elimination(program));
@@ -217,6 +215,7 @@ Expr super_simplify(Expr e, int size) {
     std::uniform_int_distribution<int> random_int(-3, 3);
 
     while (1) {
+
         // First sythesize a counterexample to the current program.
         Expr current_program_works = substitute(current_program, program_works);
         map<string, Expr> counterexample = all_vars_zero;
@@ -250,13 +249,11 @@ Expr super_simplify(Expr e, int size) {
         }
 
         if (counterexamples_found_with_fuzzing == 0) {
-            auto result = satisfy(ub_checker.safe && !current_program_works, &counterexample);
+            auto result = satisfy(ub_checker.safe && !current_program_works, &counterexample,
+                                  "finding counterexamples for " + z3_comment);
             if (result == Z3Result::Unsat) {
                 // Woo!
                 Expr e = simplify(substitute_in_all_lets(common_subexpression_elimination(substitute(current_program, program))));
-                if (was_bool) {
-                    e = simplify(reboolify(e));
-                }
                 // TODO: Figure out why I need to simplify twice
                 // here. There are still exprs for which the
                 // simplifier requires repeated applications, and
@@ -274,6 +271,9 @@ Expr super_simplify(Expr e, int size) {
                   prefix = ", ";
                   }
                   std::cout << "\n";
+                  std::cout << "Current program works: " << simplify(substitute_in_all_lets(current_program_works)) << "\n";
+                  Expr check = simplify(substitute(counterexample, current_program_works));
+                  std::cout << "Check: " << check << "\n";
                 */
                 counterexamples.push_back(counterexample);
             } else {
@@ -281,14 +281,13 @@ Expr super_simplify(Expr e, int size) {
             }
         }
 
-        // std::cout << "Counterexample found...\n";
-
         // Now synthesize a program that fits all the counterexamples
         Expr works_on_counterexamples = const_true();
         for (auto &c : counterexamples) {
             works_on_counterexamples = works_on_counterexamples && substitute(c, program_works);
         }
-        if (satisfy(works_on_counterexamples, &current_program) != Z3Result::Sat) {
+        if (satisfy(works_on_counterexamples, &current_program,
+                    "finding program for " + z3_comment) != Z3Result::Sat) {
             // Failed to synthesize a program
             // std::cout << "Failed to find a program of size " << size << "\n";
             return Expr();
