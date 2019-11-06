@@ -33,7 +33,6 @@ int main(int argc, char **argv) {
         }
     );
 
-    stencil_chain(input, output);
     convert_and_save_image(output, argv[3]);
 
     return 0;

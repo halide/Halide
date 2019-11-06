@@ -13,7 +13,7 @@ namespace Internal {
 // The algorithm-specific features. For legacy reasons these are
 // called PipelineFeatures in the code.
 struct PipelineFeatures {
-    static constexpr int num_features() {
+    static constexpr size_t num_features() {
         return sizeof(PipelineFeatures) / sizeof(int);
     }
 
@@ -150,7 +150,7 @@ struct PipelineFeatures {
 
 // The schedule-dependent portion of the featurization of a stage
 struct ScheduleFeatures {
-    static constexpr int num_features() {
+    static constexpr size_t num_features() {
         return sizeof(ScheduleFeatures) / sizeof(double);
     }
 

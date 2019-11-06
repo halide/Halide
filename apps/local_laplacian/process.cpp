@@ -22,8 +22,6 @@ int main(int argc, char **argv) {
         return 0;
     }
 
-    halide_reuse_device_allocations(nullptr, true);
-
     // Input may be a PNG8
     Buffer<uint16_t> input = load_and_convert_image(argv[1]);
 

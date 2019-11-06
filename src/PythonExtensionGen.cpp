@@ -269,7 +269,7 @@ static __attribute__((unused)) int _convert_py_buffer_to_halide(
     dest << "};\n";
 
     dest << R"INLINE_CODE(
-#if PY_MAJOR_VERSION >= 3
+static_assert(PY_MAJOR_VERSION >= 3, "Python bindings for Halide require Python 3+");
 static struct PyModuleDef _moduledef = {
     PyModuleDef_HEAD_INIT,
     .m_name=MODULE_NAME,
@@ -278,17 +278,12 @@ static struct PyModuleDef _moduledef = {
     .m_methods=_methods,
 };
 HALIDE_PYTHON_EXPORT PyObject* PyInit_)INLINE_CODE";
+
     dest << module.name() << "(void) {";
+
     dest << R"INLINE_CODE(
     return PyModule_Create(&_moduledef);
 }
-#else
-HALIDE_PYTHON_EXPORT void init)INLINE_CODE";
-    dest << module.name() << "(void) {";
-    dest << R"INLINE_CODE(
-    Py_InitModule3(MODULE_NAME, _methods, NULL);
-}
-#endif
 
 #ifdef __cplusplus
 }

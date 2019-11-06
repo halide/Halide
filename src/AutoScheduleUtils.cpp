@@ -47,12 +47,12 @@ class SubstituteVarEstimates : public IRMutator {
 };
 }  // anonymous namespace
 
-Expr subsitute_var_estimates(Expr e) {
+Expr substitute_var_estimates(Expr e) {
     if (!e.defined()) return e;
     return simplify(SubstituteVarEstimates().mutate(e));
 }
 
-Stmt subsitute_var_estimates(Stmt s) {
+Stmt substitute_var_estimates(Stmt s) {
     if (!s.defined()) return s;
     return simplify(SubstituteVarEstimates().mutate(s));
 }
@@ -136,8 +136,8 @@ DimBounds get_stage_bounds(Function f, int stage_num, const DimBounds &pure_boun
     if (!f.has_extern_definition()) {
         Definition def = get_stage_definition(f, stage_num);
         for (const auto &rvar : def.schedule().rvars()) {
-            Expr lower = subsitute_var_estimates(rvar.min);
-            Expr upper = subsitute_var_estimates(rvar.min + rvar.extent - 1);
+            Expr lower = substitute_var_estimates(rvar.min);
+            Expr upper = substitute_var_estimates(rvar.min + rvar.extent - 1);
             bounds.emplace(rvar.var, Interval(lower, upper));
         }
     }
@@ -244,11 +244,11 @@ void disp_regions(const map<string, Box> &regions) {
 
 namespace {
 void check(Expr input, Expr expected) {
-    Expr result = simplify(subsitute_var_estimates(input));
+    Expr result = simplify(substitute_var_estimates(input));
     expected = simplify(expected);
     if (!equal(result, expected)) {
         internal_error
-            << "\nsubsitute_var_estimates() failure:\n"
+            << "\nsubstitute_var_estimates() failure:\n"
             << "Input: " << input << '\n'
             << "Result: " << result << '\n'
             << "Expected result: " << expected << '\n';

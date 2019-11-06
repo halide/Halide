@@ -734,6 +734,7 @@ HEADER_FILES = \
   PythonExtensionGen.h \
   Qualify.h \
   Random.h \
+  Realization.h \
   RDom.h \
   RealizationOrder.h \
   Reduction.h \
@@ -1969,14 +1970,16 @@ TEST_APPS=\
 # (see https://github.com/halide/Halide/issues/4069)
 ifneq ($(OS), Windows_NT)
 	TEST_APPS += autoscheduler
+	TEST_APPS += gradient_autoscheduler
 endif
 
 TEST_APPS_DEPS=$(TEST_APPS:%=%_test_app)
 
-$(TEST_APPS_DEPS): distrib
+$(TEST_APPS_DEPS): distrib build_python_bindings
 	@echo Testing app $(@:%_test_app=%) for ${HL_TARGET}...
 	@$(MAKE) -C $(ROOT_DIR)/apps/$(@:%_test_app=%) test \
 		HALIDE_DISTRIB_PATH=$(CURDIR)/$(DISTRIB_DIR) \
+		HALIDE_PYTHON_BINDINGS_PATH=$(CURDIR)/$(BIN_DIR)/python3_bindings \
 		BIN_DIR=$(CURDIR)/$(BIN_DIR)/apps/$(@:%_test_app=%)/bin \
 		HL_TARGET=$(HL_TARGET) \
 		|| exit 1 ; \
@@ -1992,12 +1995,13 @@ BENCHMARK_APPS=\
 	nl_means \
 	stencil_chain
 
-$(BENCHMARK_APPS): distrib
+$(BENCHMARK_APPS): distrib build_python_bindings
 	$(eval SUFFIX=$(if $(findstring wasm-32-wasmrt,$(HL_TARGET)),_wasm,))
 	@echo Building $@ for ${HL_TARGET}...
 	@$(MAKE) -C $(ROOT_DIR)/apps/$@ \
 		$(CURDIR)/$(BIN_DIR)/apps/$@/bin/$(HL_TARGET)/$@.rungen${SUFFIX} \
 		HALIDE_DISTRIB_PATH=$(CURDIR)/$(DISTRIB_DIR) \
+		HALIDE_PYTHON_BINDINGS_PATH=$(CURDIR)/$(BIN_DIR)/python3_bindings \
 		BIN_DIR=$(CURDIR)/$(BIN_DIR)/apps/$@/bin \
 		HL_TARGET=$(HL_TARGET) \
 		> /dev/null \
@@ -2014,22 +2018,30 @@ benchmark_apps: $(BENCHMARK_APPS)
 		make -C $(ROOT_DIR)/apps/$${APP} \
 			$${APP}.benchmark${SUFFIX} \
 			HALIDE_DISTRIB_PATH=$(CURDIR)/$(DISTRIB_DIR) \
+			HALIDE_PYTHON_BINDINGS_PATH=$(CURDIR)/$(BIN_DIR)/python3_bindings \
 			BIN_DIR=$(CURDIR)/$(BIN_DIR)/apps/$${APP}/bin \
 			HL_TARGET=$(HL_TARGET) ; \
 	done
 
-.PHONY: test_python2
-test_python2: distrib $(BIN_DIR)/host/runtime.a
+# TODO(srj): the python bindings need to be put into the distrib folders;
+# this is a hopefully-temporary workaround (https://github.com/halide/Halide/issues/4368)
+.PHONY: build_python_bindings
+ifneq ($(OS), Windows_NT)
+build_python_bindings: distrib $(BIN_DIR)/host/runtime.a
 	$(MAKE) -C $(ROOT_DIR)/python_bindings \
 		-f $(ROOT_DIR)/python_bindings/Makefile \
-		test \
+		build_python_bindings \
 		HALIDE_DISTRIB_PATH=$(CURDIR)/$(DISTRIB_DIR) \
-		BIN=$(CURDIR)/$(BIN_DIR)/python2_bindings \
-		PYTHON=python \
+		BIN=$(CURDIR)/$(BIN_DIR)/python3_bindings \
+		PYTHON=python3 \
 		PYBIND11_PATH=$(REAL_PYBIND11_PATH)
+else
+# No Python support for MinGW yet
+build_python_bindings: ;
+endif
 
 .PHONY: test_python
-test_python: distrib $(BIN_DIR)/host/runtime.a
+test_python: distrib $(BIN_DIR)/host/runtime.a build_python_bindings
 	$(MAKE) -C $(ROOT_DIR)/python_bindings \
 		-f $(ROOT_DIR)/python_bindings/Makefile \
 		test \

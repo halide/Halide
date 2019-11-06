@@ -29,11 +29,6 @@ void define_var(py::module &m) {
             .def_static("outermost", &Var::outermost)
             .def("__repr__", &var_repr)
             .def("__str__", &Var::name)
-
-            // Cannot overload a method as both static and instance with PyBind11 and Python2.x
-            // .def_static("is_implicit", (bool (*)(const std::string &)) &Var::is_implicit)
-            // .def_static("implicit_index", (int (*)(const std::string &)) &Var::implicit_index)
-            // .def_static("is_placeholder",  (bool (*)(const std::string &)) &Var::is_placeholder)
     ;
 
 

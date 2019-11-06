@@ -5471,7 +5471,7 @@ void generate_schedule(const std::vector<Function> &outputs,
     }
 
     if (auto_scheduler_results) {
-        auto_scheduler_results->scheduler_name = "apps/autoscheduler/AutoSchedule";  // TODO: find a better name (https://github.com/halide/Halide/issues/4057)
+        auto_scheduler_results->scheduler_name = "Adams2019";
         auto_scheduler_results->schedule_source = optimal->schedule_source;
         {
             std::ostringstream out;
@@ -5487,8 +5487,8 @@ void generate_schedule(const std::vector<Function> &outputs,
 // constructor.
 struct RegisterAutoscheduler {
     RegisterAutoscheduler() {
-        aslog(1) << "Registering autoscheduler...\n";
-        Pipeline::set_custom_auto_scheduler(*this);
+        aslog(1) << "Registering autoscheduler 'Adams2019'...\n";
+        Pipeline::add_autoscheduler("Adams2019", *this);
     }
 
     void operator()(Pipeline p, const Target &target, const MachineParams &params, AutoSchedulerResults *results) {
