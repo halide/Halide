@@ -13,15 +13,6 @@ $(BIN)/%/bilateral_grid.a: $(GENERATOR_BIN)/bilateral_grid.generator
 	@mkdir -p $(@D)
 	$< -g bilateral_grid -e $(GENERATOR_OUTPUTS) -o $(@D) -f bilateral_grid target=$(HL_TARGET) auto_schedule=false
 
-$(BIN)/%/bilateral_grid_classic_auto_schedule.a: $(GENERATOR_BIN)/bilateral_grid.generator $(AUTOSCHED_BIN)/libauto_schedule.so
-	@mkdir -p $(@D)
-	HL_PERMIT_FAILED_UNROLL=1 \
-	HL_WEIGHTS_DIR=$(AUTOSCHED_SRC)/gpu.weights \
-	HL_DEBUG_CODEGEN=1 \
-	HL_SHARED_MEMORY_LIMIT=48 \
-	HL_COMPUTE_ROOT_AND_INLINE_ONLY=1 \
-	$^ -g bilateral_grid -o $(BIN) -f bilateral_grid_classic_auto_schedule target=$(HL_TARGET)-no_runtime auto_schedule=true -p $(AUTOSCHED_BIN)/libauto_schedule.so machine_params=$(HL_MACHINE_PARAMS) -e static_library,h,schedule 2> stderr_classic.txt > stdout_classic.txt
-
 $(BIN)/%/bilateral_grid_auto_schedule.a: $(GENERATOR_BIN)/bilateral_grid.generator $(AUTOSCHED_BIN)/libauto_schedule.so
 	@mkdir -p $(@D)
 	HL_PERMIT_FAILED_UNROLL=1 \
@@ -35,7 +26,7 @@ $(BIN)/%/bilateral_grid_simple_auto_schedule.a: $(GENERATOR_BIN)/bilateral_grid.
 	HL_USE_SIMPLE_AUTOSCHEDULER=1 \
 	$^ -g bilateral_grid -e $(GENERATOR_OUTPUTS) -o $(@D) -f bilateral_grid_simple_auto_schedule target=$(HL_TARGET)-no_runtime auto_schedule=false
 
-$(BIN)/%/filter: filter.cpp $(BIN)/%/bilateral_grid.a $(BIN)/%/bilateral_grid_classic_auto_schedule.a $(BIN)/%/bilateral_grid_auto_schedule.a $(BIN)/%/bilateral_grid_simple_auto_schedule.a
+$(BIN)/%/filter: filter.cpp $(BIN)/%/bilateral_grid.a $(BIN)/%/bilateral_grid_auto_schedule.a $(BIN)/%/bilateral_grid_simple_auto_schedule.a
 	@mkdir -p $(@D)
 	$(CXX) $(CXXFLAGS) -I$(BIN)/$* $^ -o $@ $(IMAGE_IO_FLAGS) $(LDFLAGS)
 
