@@ -19,10 +19,18 @@ bool parse_model(char **cursor, char *end, map<string, Expr> *bindings) {
         if (!consume(cursor, end, "()")) return false;
         consume_whitespace(cursor, end);
         if (consume(cursor, end, "Bool")) {
-            // Don't care about this var
             consume_whitespace(cursor, end);
-            if (!consume(cursor, end, "true)")) {
-                if (!consume(cursor, end, "false)")) return false;
+            bool interesting = !starts_with(name, "z3name!");
+            if (consume(cursor, end, "true)")) {
+                if (interesting) {
+                    (*bindings)[name] = const_true();
+                }
+            } else if (consume(cursor, end, "false)")) {
+                if (interesting) {
+                    (*bindings)[name] = const_false();
+                }
+            } else {
+                return false;
             }
             consume_whitespace(cursor, end);
         } else {
@@ -245,7 +253,7 @@ string expr_to_smt2(const Expr &e) {
 }
 
 
-Z3Result satisfy(Expr e, map<string, Expr> *bindings) {
+Z3Result satisfy(Expr e, map<string, Expr> *bindings, const string &comment) {
 
     e = simplify(common_subexpression_elimination(e));
 
@@ -261,6 +269,8 @@ Z3Result satisfy(Expr e, map<string, Expr> *bindings) {
     }
 
     std::ostringstream z3_source;
+
+    z3_source << "; " << comment << "\n";
 
     for (const auto &v : find_vars(e)) {
         if (v.second.first.type().is_bool()) {
@@ -289,9 +299,9 @@ Z3Result satisfy(Expr e, map<string, Expr> *bindings) {
     z3_source << "(assert " << expr_to_smt2(e) << ")\n"
               << "(check-sat)\n"
               << "(get-model)\n";
-    /*
-    std::cout << "z3 query:\n" << z3_source.str() << "\n";
-    */
+
+    // std::cout << "z3 query:\n" << z3_source.str() << "\n";
+
 
     string src = z3_source.str();
 
@@ -299,7 +309,7 @@ Z3Result satisfy(Expr e, map<string, Expr> *bindings) {
     TemporaryFile z3_output("output", "txt");
     write_entire_file(z3_file.pathname(), &src[0], src.size());
 
-    std::string cmd = "z3 -T:60 " + z3_file.pathname() + " > " + z3_output.pathname();
+    std::string cmd = "z3 -T:10 " + z3_file.pathname() + " > " + z3_output.pathname();
 
     //int ret = system(cmd.c_str());
     int ret = pclose(popen(cmd.c_str(), "r"));

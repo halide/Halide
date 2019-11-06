@@ -23,7 +23,7 @@ inline std::ostream &operator<<(std::ostream &s, Z3Result r) {
     }
 }
 
-Z3Result satisfy(Halide::Expr constraint, std::map<std::string, Halide::Expr> *result);
+Z3Result satisfy(Halide::Expr constraint, std::map<std::string, Halide::Expr> *result, const std::string &comment = "");
 
 Halide::Expr z3_simplify(const Halide::Expr &may_assume, const Halide::Expr &e);
 
