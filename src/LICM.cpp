@@ -187,8 +187,17 @@ class LICM : public IRMutator {
                 return 1;
             }
         } else if (const Add *add = e.as<Add>()) {
-            return cost(add->a, vars) + cost(add->b, vars) + 1;
+            if (is_const(add->b)) {
+                // Permit constant offsets for free
+                return cost(add->a, vars);
+            } else {
+                return cost(add->a, vars) + cost(add->b, vars) + 1;
+            }
         } else if (const Sub *sub = e.as<Sub>()) {
+            if (is_const(sub->a)) {
+                // Permit constant offsets for free
+                return cost(sub->b, vars);
+            }
             return cost(sub->a, vars) + cost(sub->b, vars) + 1;
         } else if (const Mul *mul = e.as<Mul>()) {
             return cost(mul->a, vars) + cost(mul->b, vars) + 1;
@@ -272,7 +281,8 @@ class LICM : public IRMutator {
                 for (size_t i = 0; i < exprs.size(); i++) {
                     if (!exprs[i].defined()) continue;
                     Expr e = call->args[i];
-                    if (cost(e, vars.vars) <= 1) {
+                    int c = cost(e, vars.vars);
+                    if (c <= 1) {
                         // Just subs it back in - computing it is as cheap
                         // as loading it.
                         e.accept(&vars);
