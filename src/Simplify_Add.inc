@@ -160,6 +160,7 @@ rewrite((max((y - (w + z)), x) + z), max((y - w), (x + z))) ||
 rewrite((max((y - (z + w)), x) + z), max((y - w), (x + z))) ||
 rewrite((max((min((x + c0), y) - min(x, c1)), c0) + c2), max(min((y + fold((c2 - c1))), x), c1), ((c0 + c2) == c1)) ||
 
+/*
 // from local laplacian. Delete before evaluating
 rewrite((u + (x - select(y, (x + z), w))), (u - select(y, z, (w - x)))) ||
 rewrite((u + (x - select(y, (z + x), w))), (u - select(y, z, (w - x)))) ||
@@ -244,3 +245,17 @@ rewrite(((y + (z - x)) + x), (y + z)) ||
 rewrite((((z - x) + y) + x), (y + z)) ||
 rewrite(((x*c0) + (y + (x*c1))), ((x*fold((c0 + c1))) + y)) ||
 rewrite(((x*c0) + ((x*c1) + y)), ((x*fold((c0 + c1))) + y)) ||
+rewrite((y + (y + (x*2))), ((x + y)*2)) ||
+rewrite((y + ((x*2) + y)), ((x + y)*2)) ||
+rewrite(((y + (x*2)) + y), ((x + y)*2)) ||
+rewrite((((x*2) + y) + y), ((x + y)*2)) ||
+rewrite((((x*y) + ((z*y) + w)) + c0), ((((x + z)*y) + w) + c0)) ||
+rewrite(((x*y) + (z + (w*y))), (((w + x)*y) + z)) ||
+rewrite(((x*y) + (z + (y*w))), (((w + x)*y) + z)) ||
+rewrite(((x*y) + ((w*y) + z)), (((w + x)*y) + z)) ||
+rewrite(((x*y) + ((y*w) + z)), (((w + x)*y) + z)) ||
+rewrite(((y*x) + (z + (w*y))), (((w + x)*y) + z)) ||
+rewrite(((y*x) + (z + (y*w))), (((w + x)*y) + z)) ||
+rewrite(((y*x) + ((w*y) + z)), (((w + x)*y) + z)) ||
+rewrite(((y*x) + ((y*w) + z)), (((w + x)*y) + z)) ||
+*/

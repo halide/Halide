@@ -203,3 +203,23 @@ rewrite(max(select((x < y), c0, c1), select((x < z), c0, c1)), select((x < max(y
  rewrite(max(max(y, (x + c0)), x), max((x + c0), y), (0 <= c0)) ||
  rewrite(max(max((x + c0), y), x), max((x + c0), y), (0 <= c0)) ||
  rewrite(max(max((y + c0), x), y), max((y + c0), x), (0 <= c0)) ||
+rewrite(max(x, (max(x, c0)*c1)), (max(x, c0)*c1), ((0 <= c0) && (1 <= c1))) ||
+rewrite(max(y, (max(x, (y + c0)) + c1)), (max((y + c0), x) + c1), (0 <= (c0 + c1))) ||
+rewrite(max((max(x, (y + c0)) + c1), y), (max((y + c0), x) + c1), (0 <= (c0 + c1))) ||
+rewrite(max((max(x, c0)*c1), x), (max(x, c0)*c1), ((0 <= c0) && (1 <= c1))) ||
+rewrite(max(max(x, y), (x + c0)), max(x, y), (c0 <= 0)) ||
+rewrite(max(max(x, (x*c0)), 0), (max(x, 0)*c0), (1 <= c0)) ||
+rewrite(max(max(y, x), (x + c0)), max(x, y), (c0 <= 0)) ||
+rewrite(max(max(z, max(x, y)), (y + c0)), max(max((y + c0), x), z), (0 <= c0)) ||
+rewrite(max(max(z, max(y, x)), (y + c0)), max(max((y + c0), x), z), (0 <= c0)) ||
+rewrite(max(max(max(x, y), z), (y + c0)), max(max((y + c0), x), z), (0 <= c0)) ||
+rewrite(max(max(max(y, x), z), (y + c0)), max(max((y + c0), x), z), (0 <= c0)) ||
+rewrite(max(select(x, (y + c0), y), (y + c0)), select(x, (y + c0), y), (c0 <= 0)) ||
+rewrite(max(y, max(x, (max(y, z) + c0))), max((max(y, z) + c0), x), (0 <= c0)) ||
+rewrite(max(y, max((max(y, z) + c0), x)), max((max(y, z) + c0), x), (0 <= c0)) ||
+rewrite(max(z, (select(x, y, (z + c0)) + c1)), select(x, max((y + c1), z), z), ((c0 + c1) <= 0)) ||
+rewrite(max((select(x, y, (z + c0)) + c1), z), select(x, max((y + c1), z), z), ((c0 + c1) <= 0)) ||
+rewrite(max(max(x, y), (max(y, 0) + c1)), max(max((y + c1), x), c1), (0 <= c1)) ||
+rewrite(max(max(x, (max(y, z) + c0)), y), max((max(y, z) + c0), x), (0 <= c0)) ||
+rewrite(max(max(y, x), (max(y, 0) + c1)), max(max((y + c1), x), c1), (0 <= c1)) ||
+rewrite(max(max((max(y, z) + c0), x), y), max((max(y, z) + c0), x), (0 <= c0)) ||

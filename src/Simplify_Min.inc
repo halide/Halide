@@ -333,3 +333,13 @@ rewrite(min(max(min(x, y), c0), max(min(x, c1), c2)), max(min(min(x, y), c1), c0
 rewrite(min(select((x < c0), c1, c2), select((x < c3), c1, c2)), select((x < c3), c1, c2), (((c0 <= c3) || (c2 <= c1)) && ((c1 <= c2) || (c3 <= c0)))) ||
 
 rewrite(min((min(x, y)*c0), ((y*c0) + c1)), (min(x, y)*c0), ((0 <= c1) && (1 <= c0))) ||
+rewrite(min(y, select(x, y, (y + c0))), y, (0 <= c0)) ||
+rewrite(min(select(x, y, (y + c0)), y), y, (0 <= c0)) ||
+rewrite(min(y, min(x, (min(y, (z + c0)) + c1))), min(min((z + fold((c0 + c1))), y), x), (0 <= c1)) ||
+rewrite(min(y, min((min(y, (z + c0)) + c1), x)), min(min((z + fold((c0 + c1))), y), x), (0 <= c1)) ||
+rewrite(min(min(x, (min(y, (z + c0)) + c1)), y), min(min((z + fold((c0 + c1))), y), x), (0 <= c1)) ||
+rewrite(min(min(z, min(x, y)), (x + c0)), min(min(y, z), (x + c0)), (c0 <= 0)) ||
+rewrite(min(min(z, min(y, x)), (x + c0)), min(min(y, z), (x + c0)), (c0 <= 0)) ||
+rewrite(min(min((min(y, (z + c0)) + c1), x), y), min(min((z + fold((c0 + c1))), y), x), (0 <= c1)) ||
+rewrite(min(min(min(x, y), z), (x + c0)), min(min(y, z), (x + c0)), (c0 <= 0)) ||
+rewrite(min(min(min(y, x), z), (x + c0)), min(min(y, z), (x + c0)), (c0 <= 0)) ||

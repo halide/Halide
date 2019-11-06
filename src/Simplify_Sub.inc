@@ -313,6 +313,7 @@ rewrite((max(max(z, (y + x)), w) - x), max((max(w, z) - x), y)) ||
 rewrite((max(max((x + y), z), w) - x), max((max(w, z) - x), y)) ||
 rewrite((max(max((y + x), z), w) - x), max((max(w, z) - x), y)) ||
 
+/*
 // From local laplacian
 rewrite((x - (w + select(y, z, (x + c0)))), (select(y, (x - z), fold((0 - c0))) - w)) ||
 rewrite((x - (w + select(y, (x + c0), z))), (select(y, fold((0 - c0)), (x - z)) - w)) ||
@@ -412,3 +413,15 @@ rewrite((((y + (z + y)) + x) - z), ((x + y) + y)) ||
 rewrite(((((y + z) + y) + x) - z), ((x + y) + y)) ||
 rewrite(((((z + y) + y) + x) - z), ((x + y) + y)) ||
 rewrite((((x - y) + z) - x), (z - y)) ||
+rewrite(((x + (y + (w + z))) - z), ((w + y) + x)) ||
+rewrite(((x + (y + (z + w))) - z), ((w + y) + x)) ||
+rewrite(((x + ((w + z) + y)) - z), ((w + y) + x)) ||
+rewrite(((x + ((z + w) + y)) - z), ((w + y) + x)) ||
+rewrite((((y + (w + z)) + x) - z), ((w + y) + x)) ||
+rewrite((((y + (z + w)) + x) - z), ((w + y) + x)) ||
+rewrite(((((w + z) + y) + x) - z), ((w + y) + x)) ||
+rewrite(((((z + w) + y) + x) - z), ((w + y) + x)) ||
+rewrite((max(x, ((y + z) + c0)) - z), max((x - z), (y + c0))) ||
+rewrite((max(((y + z) + c0), x) - z), max((x - z), (y + c0))) ||
+
+*/
