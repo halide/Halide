@@ -194,11 +194,19 @@ class CountOps : public IRGraphVisitor {
 
     void visit(const Div *op) override {
         has_div_mod = true;
+        if (!is_const(op->b)) {
+            // z3 isn't going to be able to do anything with this
+            has_unsupported_ir = true;
+        }
         IRGraphVisitor::visit(op);
     }
 
     void visit(const Mod *op) override {
         has_div_mod = true;
+        if (!is_const(op->b)) {
+            // z3 isn't going to be able to do anything with this
+            has_unsupported_ir = true;
+        }
         IRGraphVisitor::visit(op);
     }
 
@@ -360,7 +368,7 @@ int main(int argc, char **argv) {
 
     {
         std::lock_guard<std::mutex> lock(mutex);
-        for (int lhs_ops = 1; lhs_ops < 7; lhs_ops++) {
+        for (int lhs_ops = 1; lhs_ops < 6; lhs_ops++) {
             for (auto p : patterns) {
                 CountOps count_ops;
                 count_ops.include(p);
