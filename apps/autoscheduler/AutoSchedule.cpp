@@ -728,6 +728,11 @@ enum GPU_parallelism { block, thread, serial, simd, parallelized, none };
 struct LoopNest;
 
 struct GPULoopInfo {
+    GPULoopInfo(const LoopNest* root)
+        : root{root}
+    {}
+
+    const LoopNest* root = nullptr;
     const LoopNest* current_block_loop = nullptr;
     const LoopNest* current_thread_loop = nullptr;
     int64_t num_blocks = 1;
@@ -1466,6 +1471,24 @@ struct LoopNest {
         }
 
         return {block_extents, serial_extents};
+    }
+
+    bool all_paths_to_leaves_have_thread_loop() const {
+        if (gpu_label == thread) {
+            return true;
+        }
+
+        if (children.size() == 0) {
+            return false;
+        }
+
+        for (const auto &c : children) {
+            if (!c->all_paths_to_leaves_have_thread_loop()) {
+                return false;
+            }
+        }
+
+        return true;
     }
 
     bool has_thread_loop_descendant() const {
@@ -3833,7 +3856,7 @@ struct State {
             }
 
             for (const auto& block_c : c->children) {
-                if (!block_c->has_thread_loop_descendant()) {
+                if (!block_c->all_paths_to_leaves_have_thread_loop()) {
                     return true;
                 }
             }
@@ -3915,23 +3938,73 @@ struct State {
         // If a loop nest does not have thread loops, split the outermost serial
         // loops to create thread loops with extents 1
         void add_outer_thread_loops(LoopNest* loop_nest) const {
-            if (!loop_nest || loop_nest->gpu_label != block) {
+            if (!loop_nest) {
                 return;
             }
 
-            for (auto& c : loop_nest->children) {
-                if (c->has_thread_loop_descendant()) {
-                    continue;
+            if (loop_nest->gpu_label == block) {
+                // Example:
+                // block
+                //  serial (a)
+                //   all serial descendants
+                //
+                //  (a) should be surrounded by a thread loop
+                for (auto& c : loop_nest->children) {
+                    if (c->has_thread_loop_descendant()) {
+                        continue;
+                    }
+
+                    internal_assert(c->gpu_label == serial);
+
+                    // We want outer thread loops with extents 1
+                    vector<int64_t> tiling(c->size.size(), 1);
+
+                    // Mark as 'thread' so this loop is split into threads and
+                    // serial
+                    c->gpu_label = thread;
+                    c = c->parallelize_in_tiles(params, tiling, loop_nest, target, false, true);
+                }
+                return;
+            }
+
+            if (loop_nest->gpu_label == serial) {
+                bool has_child_with_thread_descendant = false;
+
+                for (const auto& c : loop_nest->children) {
+                    if (c->has_thread_loop_descendant()) {
+                        has_child_with_thread_descendant = true;
+                        break;
+                    }
                 }
 
-                internal_assert(c->gpu_label == serial);
+                // If there are no children with thread descendants, then this must be an all
+                // serial hierarchy. This may require an outer thread loop to be
+                // added, but if so, this will occur when this method is called
+                // on the nodes higher in the loop nest
+                if (!has_child_with_thread_descendant) {
+                    return;
+                }
 
-                // We want outer thread loops with extents 1
-                vector<int64_t> tiling(c->size.size(), 1);
+                // Example:
+                // serial
+                //  thread
+                //  serial (a)
+                //
+                //  (a) should be surrounded by a thread loop
+                for (auto& c : loop_nest->children) {
+                    if (c->has_thread_loop_descendant()) {
+                        continue;
+                    }
 
-                // Mark as 'thread' so this loop is split into threads
-                c->gpu_label = thread;
-                c = c->parallelize_in_tiles(params, tiling, loop_nest, target, false, true);
+                    // We want outer thread loops with extents 1
+                    vector<int64_t> tiling(c->size.size(), 1);
+
+                    // Mark as 'thread' so this loop is split into threads and
+                    // serial
+                    c->gpu_label = thread;
+                    c = c->parallelize_in_tiles(params, tiling, loop_nest, target, false, true);
+                }
+
             }
         }
     };
@@ -4014,7 +4087,7 @@ struct State {
             }
         }
 
-        feature_root->compute_features(dag, params, target, sites, 1, 1, nullptr, nullptr, *feature_root, nullptr, features, {});
+        feature_root->compute_features(dag, params, target, sites, 1, 1, nullptr, nullptr, *feature_root, nullptr, features, {feature_root.get()});
 
         for (const auto &n : dag.nodes) {
             if (sites.get(&(n.stages[0])).produce == nullptr) {
