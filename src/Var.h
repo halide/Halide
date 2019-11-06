@@ -176,7 +176,6 @@ struct ImplicitVar {
     operator Expr() const {
         return to_var();
     }
-    constexpr ImplicitVar(){};
 };
 
 /** A placeholder variable for inferred arguments. See \ref Var::implicit */
