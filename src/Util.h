@@ -48,6 +48,19 @@
 #endif
 
 namespace Halide {
+
+/** Load a plugin in the form of a dynamic library (e.g. for custom autoschedulers).
+ * If the string doesn't contain any . characters, the proper prefix and/or suffix
+ * for the platform will be added:
+ *
+ *   foo -> libfoo.so (Linux/OSX/etc -- note that .dylib is not supported)
+ *   foo -> foo.dll (Windows)
+ *
+ * otherwise, it is assumed to be an appropriate pathname.
+ *
+ * Any error in loading will assert-fail. */
+void load_plugin(const std::string &lib_name);
+
 namespace Internal {
 
 /** Some numeric conversions are UB if the value won't fit in the result;

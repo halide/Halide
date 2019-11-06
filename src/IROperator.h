@@ -929,15 +929,21 @@ Expr round(Expr x);
 Expr trunc(Expr x);
 
 /** Returns true if the argument is a Not a Number (NaN). Requires a
-  * floating point argument.  Vectorizes cleanly. */
+  * floating point argument.  Vectorizes cleanly.
+  * Note that the Expr passed in will be evaluated in strict_float mode,
+  * regardless of whether strict_float mode is enabled in the current Target. */
 Expr is_nan(Expr x);
 
 /** Returns true if the argument is Inf or -Inf. Requires a
-  * floating point argument.  Vectorizes cleanly. */
+  * floating point argument.  Vectorizes cleanly.
+  * Note that the Expr passed in will be evaluated in strict_float mode,
+  * regardless of whether strict_float mode is enabled in the current Target. */
 Expr is_inf(Expr x);
 
 /** Returns true if the argument is a finite value (ie, neither NaN nor Inf).
-  * Requires a floating point argument.  Vectorizes cleanly. */
+  * Requires a floating point argument.  Vectorizes cleanly.
+  * Note that the Expr passed in will be evaluated in strict_float mode,
+  * regardless of whether strict_float mode is enabled in the current Target. */
 Expr is_finite(Expr x);
 
 /** Return the fractional part of a floating-point expression. If the argument

@@ -1026,7 +1026,7 @@ std::unique_ptr<llvm::Module> get_initial_module_for_target(Target t, llvm::LLVM
                 } else if (t.has_feature(Target::HVX_128)) {
                     modules.push_back(get_initmod_hvx_128_ll(c));
                 }
-                if (t.has_feature(Target::HVX_v65)) {
+                if (t.features_any_of({Target::HVX_v65, Target::HVX_v66})) {
                     modules.push_back(get_initmod_qurt_hvx_vtcm(c, bits_64,
                                                                 debug));
                 }

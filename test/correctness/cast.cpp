@@ -32,6 +32,9 @@ int main(int argc, char **argv) {
         assert(a.type() == int_expr[i].type());
     }
 
+    assert(float_expr.type() == Float(32));
+    assert(double_expr.type() == Float(64));
+
     printf("Success!\n");
     return 0;
 

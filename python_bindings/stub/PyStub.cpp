@@ -3,7 +3,7 @@
 // linked with PyStubImpl.o to be useful.
 //
 // Note that this quite deliberately doesn't include any PyBind11 headers;
-//it is designed to be compiled without PyBind11 being available at compile time,
+// it is designed to be compiled without PyBind11 being available at compile time,
 // to simplify build requirements in downstream environments.
 
 #include <memory>
@@ -42,18 +42,9 @@ extern "C" PyObject *_halide_pystub_impl(const char *module_name, FactoryFunc fa
     #endif
 #endif
 
-#if PY_MAJOR_VERSION >= 3
-    #define _HALIDE_PLUGIN_IMPL(name) \
-        extern "C" HALIDE_EXPORT PyObject *PyInit_##name()
-#else
-    #define _HALIDE_PLUGIN_IMPL(name) \
-        static PyObject *halide_init_wrapper();                 \
-        extern "C" HALIDE_EXPORT void init##name() {            \
-            (void)halide_init_wrapper();                        \
-        }                                                       \
-        PyObject *halide_init_wrapper()
-#endif
-#define HALIDE_PLUGIN_IMPL(name) _HALIDE_PLUGIN_IMPL(name)
+static_assert(PY_MAJOR_VERSION >= 3, "Python bindings for Halide require Python 3+");
+
+#define HALIDE_PLUGIN_IMPL(name) extern "C" HALIDE_EXPORT PyObject *PyInit_##name()
 
 namespace halide_register_generator {
 namespace HALIDE_CONCAT(HALIDE_PYSTUB_GENERATOR_NAME, _ns) {
