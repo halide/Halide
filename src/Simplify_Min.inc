@@ -331,3 +331,5 @@ rewrite(min(max(min(x, c0), c1), max(min(x, c2), y)), max(min(x, c0), min(y, c1)
 rewrite(min(max(min(x, c0), y), (min(x, c1) + c2)), (min(x, c1) + c2), ((c2 <= 0) && ((c1 + c2) <= c0))) ||
 rewrite(min(max(min(x, y), c0), max(min(x, c1), c2)), max(min(min(x, y), c1), c0), (((((c0 <= c1) || (c2 <= c0)) && (min((c2 + -2), c1) <= c0)) || ((c2 + -1) <= c1)) && (((((c1 <= c0) || (c2 <= c1)) && (min((c2 + -2), c0) <= c1)) || ((c2 + -1) <= c0)) && ((c0 <= c2) && (c2 <= max(c0, c1)))))) ||
 rewrite(min(select((x < c0), c1, c2), select((x < c3), c1, c2)), select((x < c3), c1, c2), (((c0 <= c3) || (c2 <= c1)) && ((c1 <= c2) || (c3 <= c0)))) ||
+
+rewrite(min((min(x, y)*c0), ((y*c0) + c1)), (min(x, y)*c0), ((0 <= c1) && (1 <= c0))) ||

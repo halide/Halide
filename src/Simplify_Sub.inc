@@ -312,3 +312,103 @@ rewrite((max(max(z, (x + y)), w) - x), max((max(w, z) - x), y)) ||
 rewrite((max(max(z, (y + x)), w) - x), max((max(w, z) - x), y)) ||
 rewrite((max(max((x + y), z), w) - x), max((max(w, z) - x), y)) ||
 rewrite((max(max((y + x), z), w) - x), max((max(w, z) - x), y)) ||
+
+// From local laplacian
+rewrite((x - (w + select(y, z, (x + c0)))), (select(y, (x - z), fold((0 - c0))) - w)) ||
+rewrite((x - (w + select(y, (x + c0), z))), (select(y, fold((0 - c0)), (x - z)) - w)) ||
+rewrite((x - (y + (x + z))), ((0 - z) - y)) ||
+rewrite((x - (y + (z + x))), ((0 - z) - y)) ||
+rewrite((x - ((x + z) + y)), ((0 - z) - y)) ||
+rewrite((x - ((z + x) + y)), ((0 - z) - y)) ||
+rewrite((x - (select(y, z, (x + c0)) + w)), (select(y, (x - z), fold((0 - c0))) - w)) ||
+rewrite((x - (select(y, (x + c0), z) + w)), (select(y, fold((0 - c0)), (x - z)) - w)) ||
+rewrite((x - select(y, z, (x + c0))), select(y, (x - z), fold((0 - c0)))) ||
+rewrite((x - select(y, z, (x + (w + (u*c0))))), select(y, (x - z), ((u*fold((0 - c0))) - w))) ||
+rewrite((x - select(y, z, (x + ((u*c0) + w)))), select(y, (x - z), ((u*fold((0 - c0))) - w))) ||
+rewrite((x - select(y, z, ((w + x) + c0))), select(y, (x - z), (fold((0 - c0)) - w))) ||
+rewrite((x - select(y, z, ((w + (u*c0)) + x))), select(y, (x - z), ((u*fold((0 - c0))) - w))) ||
+rewrite((x - select(y, z, ((x + w) + c0))), select(y, (x - z), (fold((0 - c0)) - w))) ||
+rewrite((x - select(y, z, (((u*c0) + w) + x))), select(y, (x - z), ((u*fold((0 - c0))) - w))) ||
+rewrite((x - select(y, (x + c0), z)), select(y, fold((0 - c0)), (x - z))) ||
+rewrite((x - select(y, ((x + z) + c0), w)), select(y, (fold((0 - c0)) - z), (x - w))) ||
+rewrite((x - select(y, ((z + x) + c0), w)), select(y, (fold((0 - c0)) - z), (x - w))) ||
+rewrite(((x + y) - (w + (x + z))), ((y - w) - z)) ||
+rewrite(((x + y) - (w + (y + z))), ((x - z) - w)) ||
+rewrite(((x + y) - (w + (z + x))), ((y - w) - z)) ||
+rewrite(((x + y) - (w + (z + y))), ((x - z) - w)) ||
+rewrite(((x + y) - (z + (w + x))), ((y - w) - z)) ||
+rewrite(((x + y) - (z + (w + y))), (x - (w + z))) ||
+rewrite(((x + y) - (z + (x + w))), ((y - w) - z)) ||
+rewrite(((x + y) - (z + (y + w))), (x - (w + z))) ||
+rewrite(((x + y) - ((w + x) + z)), ((y - w) - z)) ||
+rewrite(((x + y) - ((w + y) + z)), (x - (w + z))) ||
+rewrite(((x + y) - ((x + w) + z)), ((y - w) - z)) ||
+rewrite(((x + y) - ((x + z) + w)), ((y - w) - z)) ||
+rewrite(((x + y) - ((y + w) + z)), (x - (w + z))) ||
+rewrite(((x + y) - ((y + z) + w)), ((x - z) - w)) ||
+rewrite(((x + y) - ((z + x) + w)), ((y - w) - z)) ||
+rewrite(((x + y) - ((z + y) + w)), ((x - z) - w)) ||
+rewrite(((x + y) - select(z, w, (u + y))), (x - select(z, (w - y), u))) ||
+rewrite(((x + y) - select(z, w, (y + u))), (x - select(z, (w - y), u))) ||
+rewrite(((x + y) - select(z, (w + y), u)), (x - select(z, w, (u - y)))) ||
+rewrite(((x + y) - select(z, (y + w), u)), (x - select(z, w, (u - y)))) ||
+rewrite(((x + (y + z)) - (w + z)), ((x + y) - w)) ||
+rewrite(((x + (y + z)) - (z + w)), ((x + y) - w)) ||
+rewrite(((x + (z + y)) - (w + z)), ((x + y) - w)) ||
+rewrite(((x + (z + y)) - (z + w)), ((x + y) - w)) ||
+rewrite(((y + x) - (w + (x + z))), ((y - w) - z)) ||
+rewrite(((y + x) - (w + (y + z))), ((x - z) - w)) ||
+rewrite(((y + x) - (w + (z + x))), ((y - w) - z)) ||
+rewrite(((y + x) - (w + (z + y))), ((x - z) - w)) ||
+rewrite(((y + x) - (z + (w + x))), ((y - w) - z)) ||
+rewrite(((y + x) - (z + (w + y))), (x - (w + z))) ||
+rewrite(((y + x) - (z + (x + w))), ((y - w) - z)) ||
+rewrite(((y + x) - (z + (y + w))), (x - (w + z))) ||
+rewrite(((y + x) - ((w + x) + z)), ((y - w) - z)) ||
+rewrite(((y + x) - ((w + y) + z)), (x - (w + z))) ||
+rewrite(((y + x) - ((x + w) + z)), ((y - w) - z)) ||
+rewrite(((y + x) - ((x + z) + w)), ((y - w) - z)) ||
+rewrite(((y + x) - ((y + w) + z)), (x - (w + z))) ||
+rewrite(((y + x) - ((y + z) + w)), ((x - z) - w)) ||
+rewrite(((y + x) - ((z + x) + w)), ((y - w) - z)) ||
+rewrite(((y + x) - ((z + y) + w)), ((x - z) - w)) ||
+rewrite(((y + x) - select(z, w, (u + y))), (x - select(z, (w - y), u))) ||
+rewrite(((y + x) - select(z, w, (y + u))), (x - select(z, (w - y), u))) ||
+rewrite(((y + x) - select(z, (w + y), u)), (x - select(z, w, (u - y)))) ||
+rewrite(((y + x) - select(z, (y + w), u)), (x - select(z, w, (u - y)))) ||
+rewrite((((y + z) + x) - (w + z)), ((x + y) - w)) ||
+rewrite((((y + z) + x) - (z + w)), ((x + y) - w)) ||
+rewrite((((z + y) + x) - (w + z)), ((x + y) - w)) ||
+rewrite((((z + y) + x) - (z + w)), ((x + y) - w)) ||
+rewrite(((x - y) - select(z, (w + x), x)), ((0 - y) - select(z, w, 0))) ||
+rewrite(((x - y) - select(z, (x + w), x)), ((0 - y) - select(z, w, 0))) ||
+rewrite((((x + y) - z) - y), (x - z)) ||
+rewrite((((y + x) - z) - y), (x - z)) ||
+
+rewrite(((x + (y + z)) - (u + (w + z))), (x - ((u - y) + w))) ||
+rewrite(((x + (y + z)) - (u + (z + w))), (x - ((u - y) + w))) ||
+rewrite(((x + (y + z)) - ((w + z) + u)), (x - ((u - y) + w))) ||
+rewrite(((x + (y + z)) - ((z + w) + u)), (x - ((u - y) + w))) ||
+rewrite(((x + (z + y)) - (u + (w + z))), (x - ((u - y) + w))) ||
+rewrite(((x + (z + y)) - (u + (z + w))), (x - ((u - y) + w))) ||
+rewrite(((x + (z + y)) - ((w + z) + u)), (x - ((u - y) + w))) ||
+rewrite(((x + (z + y)) - ((z + w) + u)), (x - ((u - y) + w))) ||
+rewrite((((y + z) + x) - (u + (w + z))), (x - ((u - y) + w))) ||
+rewrite((((y + z) + x) - (u + (z + w))), (x - ((u - y) + w))) ||
+rewrite((((y + z) + x) - ((w + z) + u)), (x - ((u - y) + w))) ||
+rewrite((((y + z) + x) - ((z + w) + u)), (x - ((u - y) + w))) ||
+rewrite((((z + y) + x) - (u + (w + z))), (x - ((u - y) + w))) ||
+rewrite((((z + y) + x) - (u + (z + w))), (x - ((u - y) + w))) ||
+rewrite((((z + y) + x) - ((w + z) + u)), (x - ((u - y) + w))) ||
+rewrite((((z + y) + x) - ((z + w) + u)), (x - ((u - y) + w))) ||
+
+rewrite(((x + (y + (y + z))) - z), ((x + y) + y)) ||
+rewrite(((x + (y + (z + y))) - z), ((x + y) + y)) ||
+rewrite(((x + ((y + z) + y)) - z), ((x + y) + y)) ||
+rewrite(((x + ((z + y) + y)) - z), ((x + y) + y)) ||
+rewrite(((z + (x - y)) - x), (z - y)) ||
+rewrite((((y + (y + z)) + x) - z), ((x + y) + y)) ||
+rewrite((((y + (z + y)) + x) - z), ((x + y) + y)) ||
+rewrite(((((y + z) + y) + x) - z), ((x + y) + y)) ||
+rewrite(((((z + y) + y) + x) - z), ((x + y) + y)) ||
+rewrite((((x - y) + z) - x), (z - y)) ||

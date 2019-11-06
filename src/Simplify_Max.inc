@@ -193,3 +193,13 @@ rewrite(max(select((c0 < x), max(y, z), y), max(z, y)), max(y, z)) ||
 rewrite(max(select((c0 < x), max(z, y), y), max(y, z)), max(y, z)) ||
 rewrite(max(select((c0 < x), max(z, y), y), max(z, y)), max(y, z)) ||
 rewrite(max(select((x < y), c0, c1), select((x < z), c0, c1)), select((x < max(y, z)), c0, c1), (c1 <= c0)) ||
+
+
+ rewrite(max(x, max(y, (x + c0))), max((x + c0), y), (0 <= c0)) ||
+ rewrite(max(x, max((x + c0), y)), max((x + c0), y), (0 <= c0)) ||
+ rewrite(max(y, max(x, (y + c0))), max((y + c0), x), (0 <= c0)) ||
+ rewrite(max(y, max((y + c0), x)), max((y + c0), x), (0 <= c0)) ||
+ rewrite(max(max(x, (y + c0)), y), max((y + c0), x), (0 <= c0)) ||
+ rewrite(max(max(y, (x + c0)), x), max((x + c0), y), (0 <= c0)) ||
+ rewrite(max(max((x + c0), y), x), max((x + c0), y), (0 <= c0)) ||
+ rewrite(max(max((y + c0), x), y), max((y + c0), x), (0 <= c0)) ||
