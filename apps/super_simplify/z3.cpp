@@ -71,7 +71,15 @@ string expr_to_smt2(const Expr &e) {
         }
 
         void visit(const UIntImm *imm) override {
-            formula << imm->value;
+            if (imm->type.is_bool()) {
+                if (imm->value) {
+                    formula << "true";
+                } else {
+                    formula << "false";
+                }
+            } else {
+                formula << imm->value;
+            }
         }
 
         void visit(const FloatImm *imm) override {

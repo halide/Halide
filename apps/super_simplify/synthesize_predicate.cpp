@@ -13,36 +13,6 @@ using std::set;
 using std::string;
 using std::pair;
 
-template<typename Op>
-vector<Expr> unpack_binary_op(const Expr &e) {
-    vector<Expr> pieces, pending;
-    pending.push_back(e);
-    while (!pending.empty()) {
-        Expr next = pending.back();
-        pending.pop_back();
-        if (const Op *op = next.as<Op>()) {
-            pending.push_back(op->a);
-            pending.push_back(op->b);
-        } else {
-            pieces.push_back(next);
-        }
-    }
-    return pieces;
-}
-
-template<typename Op, typename Iterable>
-Expr pack_binary_op(const Iterable &v) {
-    Expr result;
-    for (const Expr &e : v) {
-        if (result.defined()) {
-            result = Op::make(result, e);
-        } else {
-            result = e;
-        }
-    }
-    return result;
-}
-
 uint64_t hash_combine(uint64_t a, uint64_t b) {
     // From boost
     a ^= (b + 0x9e3779b9 + (a<<6) + (a>>2));

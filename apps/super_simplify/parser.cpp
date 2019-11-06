@@ -364,7 +364,9 @@ vector<Expr> parse_halide_exprs_from_file(const std::string &filename) {
     for (string line; std::getline(input, line);) {
         if (line.empty()) continue;
         // It's possible to comment out lines for debugging
-        if (line[0] == '#') continue;
+        if (line[0] == '#') continue;  // for python-style comments
+        if (line[0] == '/') continue;  // for //
+        if (line[0] == '*') continue;  // for */
 
         // There are some extraneous newlines in some of the files. Balance parentheses...
         size_t open, close;

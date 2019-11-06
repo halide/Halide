@@ -104,27 +104,240 @@ using std::vector;
     };
 
 
+// Levenshtein distance algorithm copied from wikipedia
+unsigned int edit_distance(const std::string& s1, const std::string& s2) {
+    const std::size_t len1 = s1.size(), len2 = s2.size();
+    std::vector<std::vector<unsigned int>> d(len1 + 1, std::vector<unsigned int>(len2 + 1));
 
-vector<Rule> generate_commuted_variants(const Rule &r) {
+    d[0][0] = 0;
+    for (unsigned int i = 1; i <= len1; ++i) d[i][0] = i;
+    for (unsigned int i = 1; i <= len2; ++i) d[0][i] = i;
+
+    for (unsigned int i = 1; i <= len1; ++i)
+        for (unsigned int j = 1; j <= len2; ++j)
+            // note that std::min({arg1, arg2, arg3}) works only in C++11,
+            // for C++98 use std::min(std::min(arg1, arg2), arg3)
+            d[i][j] =
+                std::min({ d[i - 1][j] + 1,
+                           d[i][j - 1] + 1,
+                           d[i - 1][j - 1] + (s1[i - 1] == s2[j - 1] ? 0 : 1) });
+    return d[len1][len2];
+}
+
+vector<Expr> generate_commuted_variants(const Expr &expr) {
     FindCommutativeOps finder;
-    r.lhs.accept(&finder);
+    expr.accept(&finder);
 
-    vector<Expr> lhs;
-    lhs.push_back(r.lhs);
+    vector<Expr> exprs;
+    exprs.push_back(expr);
 
     for (const Expr &e : finder.commutative_ops) {
         Commute commuter(e);
-        vector<Expr> new_lhs = lhs;
-        for (const Expr &l : lhs) {
-            new_lhs.push_back(commuter.mutate(l));
+        vector<Expr> new_exprs = exprs;
+        for (const Expr &l : exprs) {
+            new_exprs.push_back(commuter.mutate(l));
         }
-        lhs.swap(new_lhs);
+        exprs.swap(new_exprs);
     }
+    return exprs;
+}
+
+vector<Expr> generate_reassociated_variants(const Expr &e);
+
+struct LinearTerm {
+    bool positive;
+    Expr e;
+};
+
+// This function is very very exponential
+void all_possible_exprs_that_compute_sum(const vector<LinearTerm> &terms, vector<Expr> *result) {
+    if (terms.size() == 1) {
+        if (terms[0].positive) {
+            vector<Expr> variants = generate_reassociated_variants(terms[0].e);
+            result->insert(result->end(), variants.begin(), variants.end());
+        }
+        return;
+    }
+
+    for (size_t i = 1; i < (1 << terms.size()) - 1; i++) {
+        vector<LinearTerm> left, right;
+        for (size_t j = 0; j < terms.size(); j++) {
+            if (i & (1 << j)) {
+                left.push_back(terms[j]);
+            } else {
+                right.push_back(terms[j]);
+            }
+        }
+        vector<Expr> left_exprs, right_exprs, right_exprs_negated;
+        all_possible_exprs_that_compute_sum(left, &left_exprs);
+        all_possible_exprs_that_compute_sum(right, &right_exprs);
+        for (auto &t : right) {
+            t.positive = !t.positive;
+        }
+        all_possible_exprs_that_compute_sum(right, &right_exprs_negated);
+
+        for (auto &l : left_exprs) {
+            for (auto &r : right_exprs) {
+                result->push_back(l + r);
+            }
+            for (auto &r : right_exprs_negated) {
+                result->push_back(l - r);
+            }
+        }
+    }
+}
+
+Expr make_binop(IRNodeType t, Expr l, Expr r) {
+    if (t == IRNodeType::Min) {
+        return min(l, r);
+    } else if (t == IRNodeType::Max) {
+        return max(l, r);
+    } else {
+        std::cerr << "Unsupported binop in make_binop: " << t << "\n";
+        abort();
+    }
+}
+
+template<typename Op>
+void all_possible_exprs_that_compute_associative_op(const Expr &e,
+                                                    vector<Expr> *result) {
+    if (!e.as<Op>()) {
+        vector<Expr> variants = generate_reassociated_variants(e);
+        result->insert(result->end(), variants.begin(), variants.end());
+        return;
+    }
+
+    vector<Expr> terms = unpack_binary_op<Op>(e);
+    for (size_t i = 1; i < (1 << terms.size()) - 1; i++) {
+        vector<Expr> left, right;
+        for (size_t j = 0; j < terms.size(); j++) {
+            if (i & (1 << j)) {
+                left.push_back(terms[j]);
+            } else {
+                right.push_back(terms[j]);
+            }
+        }
+        assert(left.size() < terms.size());
+        assert(right.size() < terms.size());
+        vector<Expr> left_exprs, right_exprs;
+        all_possible_exprs_that_compute_associative_op<Op>(pack_binary_op<Op>(left), &left_exprs);
+        all_possible_exprs_that_compute_associative_op<Op>(pack_binary_op<Op>(right), &right_exprs);
+        for (auto &l : left_exprs) {
+            for (auto &r : right_exprs) {
+                result->push_back(Op::make(l, r));
+            }
+        }
+    }
+}
+
+vector<Expr> generate_reassociated_variants(const Expr &e) {
+    debug(0) << "Generating variants of " << e << "\n";
+    if (e.as<Add>() || e.as<Sub>()) {
+        vector<LinearTerm> terms, pending;
+        pending.emplace_back(LinearTerm {true, e});
+        while (!pending.empty()) {
+            auto next = pending.back();
+            pending.pop_back();
+            if (const Add *add = next.e.as<Add>()) {
+                pending.emplace_back(LinearTerm {next.positive, add->a});
+                pending.emplace_back(LinearTerm {next.positive, add->b});
+            } else if (const Sub *sub = next.e.as<Sub>()) {
+                pending.emplace_back(LinearTerm {next.positive, sub->a});
+                pending.emplace_back(LinearTerm {!next.positive, sub->b});
+            } else {
+                terms.push_back(next);
+            }
+        }
+
+        // We now have a linear combination of terms and need to
+        // generate all possible trees that compute it. We'll generate
+        // all possible partitions, then generate all reassociated
+        // variants of the left and right, then combine them.
+        vector<Expr> result;
+        all_possible_exprs_that_compute_sum(terms, &result);
+        return result;
+    } else if (const Min *m = e.as<Min>()) {
+        vector<Expr> result;
+        all_possible_exprs_that_compute_associative_op<Min>(e, &result);
+        return result;
+    } else if (const Max *m = e.as<Max>()) {
+        vector<Expr> result;
+        all_possible_exprs_that_compute_associative_op<Max>(e, &result);
+        return result;
+    }
+    return {e};
+}
+
+std::string expr_to_rpn_string(const Expr &e) {
+    std::ostringstream ss;
+    ss << e;
+    return ss.str();
+    /*
+
+    class RPNPrinter : public IRMutator {
+    public:
+        Expr mutate(const Expr &e) override {
+            IRMutator::mutate(e);
+            if (e.as<Variable>() || is_const(e)) {
+                ss << e << ' ';
+            } else if (e.as<Add>()) {
+                ss << "+ ";
+            } else if (e.as<Sub>()) {
+                ss << "- ";
+            } else if (e.as<Min>()) {
+                ss << "_ ";
+            } else if (e.as<Max>()) {
+                ss << "^ ";
+            } else if (e.as<Mul>()) {
+                ss << "* ";
+            } else if (e.as<Div>()) {
+                ss << "/ ";
+            } else if (e.as<Select>()) {
+                ss << "s ";
+            } else if (e.as<And>()) {
+                ss << "& ";
+            } else if (e.as<Or>()) {
+                ss << "| ";
+            } else if (e.as<EQ>()) {
+                ss << "= ";
+            } else if (e.as<NE>()) {
+                ss << "! ";
+            } else if (e.as<LT>()) {
+                ss << "< ";
+            } else if (e.as<LE>()) {
+                ss << "> ";
+            } else {
+                ss << e.node_type() << ' ';
+            }
+            return e;
+        };
+
+        std::ostringstream ss;
+    } rpn_printer;
+    rpn_printer.mutate(e);
+    return rpn_printer.ss.str();
+    */
+}
+
+vector<Rule> generate_commuted_variants(const Rule &rule) {
+    vector<Expr> lhs = generate_commuted_variants(rule.lhs);
+    vector<Expr> rhs = generate_reassociated_variants(rule.rhs);
 
     vector<Rule> result;
     for (const Expr &l : lhs) {
-        Rule r2 = r;
+        Rule r2 = rule;
         r2.lhs = l;
+        // Pick the rhs that minimizes edit distance
+        std::string lhs_str = expr_to_rpn_string(l);
+        int best_edit_distance = -1;
+        for (const Expr &r : rhs) {
+            std::string rhs_str = expr_to_rpn_string(r);
+            int d = edit_distance(lhs_str, rhs_str);
+            if (best_edit_distance < 0 || d < best_edit_distance) {
+                r2.rhs = r;
+                best_edit_distance = d;
+            }
+        }
         result.push_back(r2);
     }
     return result;
@@ -271,6 +484,11 @@ int main(int argc, char **argv) {
         }
     }
 
+    // Reinject folds
+    for (Rule &r : rules) {
+        r.rhs = inject_folds(r.rhs);
+    }
+
     // Generate all commutations
     vector<Rule> expanded;
     for (const Rule &r : rules) {
@@ -282,11 +500,6 @@ int main(int argc, char **argv) {
 
 
     std::map<IRNodeType, vector<Expr>> good_ones;
-
-    // Re-inject folds
-    for (Rule &r : rules) {
-        r.rhs = inject_folds(r.rhs);
-    }
 
     // Sort the rules by LHS
     std::sort(rules.begin(), rules.end(),
@@ -353,6 +566,14 @@ int main(int argc, char **argv) {
             }
         }
         if (bad) continue;
+
+        /*
+        // Add the additional extreme constraint that at least one var is entirely eliminated
+        if (find_vars(r.rhs).size() >= find_vars(r.lhs).size()) {
+            std::cout << "Doesn't eliminate a var: " << r.lhs << " -> " << r.rhs << "\n";
+            continue;
+        }
+        */
 
         // We have a reasonable rule
         std::cout << "Good rule: rewrite(" << r.lhs << ", " << r.rhs << ", " << r.predicate << ")\n";

@@ -25,4 +25,36 @@ inline bool more_general_than(const Halide::Expr &a, const Halide::Expr &b) {
     return more_general_than(a, b, bindings);
 }
 
+
+template<typename Op>
+std::vector<Halide::Expr> unpack_binary_op(const Halide::Expr &e) {
+    std::vector<Halide::Expr> pieces, pending;
+    pending.push_back(e);
+    while (!pending.empty()) {
+        Halide::Expr next = pending.back();
+        pending.pop_back();
+        if (const Op *op = next.as<Op>()) {
+            pending.push_back(op->a);
+            pending.push_back(op->b);
+        } else {
+            pieces.push_back(next);
+        }
+    }
+    return pieces;
+}
+
+template<typename Op, typename Iterable>
+Halide::Expr pack_binary_op(const Iterable &v) {
+    Halide::Expr result;
+    for (const Halide::Expr &e : v) {
+        if (result.defined()) {
+            result = Op::make(result, e);
+        } else {
+            result = e;
+        }
+    }
+    return result;
+}
+
+
 #endif
