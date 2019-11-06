@@ -23,7 +23,7 @@ def test_autodiff():
     assert(d_f_init_buf[0] == 0.0)
     assert(d_f_init_buf[1] == 5.0)
     assert(d_f_init_buf[2] == 5.0)
-    d_f_init = d.get(f) # test different interface
+    d_f_init = d[f]# test different interface
     d_f_init_buf = d_f_init.realize(3)
     assert(d_f_init_buf[0] == 0.0)
     assert(d_f_init_buf[1] == 5.0)
@@ -35,34 +35,11 @@ def test_autodiff():
     assert(d_f_update_0_buf[0] == 5.0)
     assert(d_f_update_0_buf[1] == 5.0)
     assert(d_f_update_0_buf[2] == 5.0)
-    d_f_update_0 = d.get(f, 0)
+    d_f_update_0 = d[f, 0]
     d_f_update_0_buf = d_f_update_0.realize(3)
     assert(d_f_update_0_buf[0] == 5.0)
     assert(d_f_update_0_buf[1] == 5.0)
     assert(d_f_update_0_buf[2] == 5.0)
-
-    # gradient w.r.t. the initialization of f,
-    # before the boundary condition
-    d_f_init_ub = d[f, -1, False]
-    d_f_init_ub_buf = d_f_init_ub.realize(3)
-    assert(d_f_init_ub_buf[0] == 0.0)
-    assert(d_f_init_ub_buf[1] == 5.0)
-    assert(d_f_init_ub_buf[2] == 5.0)
-    d_f_init_ub = d.get(f, -1, False)
-    d_f_init_ub_buf = d_f_init_ub.realize(3)
-    assert(d_f_init_ub_buf[0] == 0.0)
-    assert(d_f_init_ub_buf[1] == 5.0)
-    assert(d_f_init_ub_buf[2] == 5.0)
-    d_f_update_0_ub = d[f, 0, False]
-    d_f_update_0_ub_buf = d_f_update_0_ub.realize(3)
-    assert(d_f_update_0_ub_buf[0] == 5.0)
-    assert(d_f_update_0_ub_buf[1] == 5.0)
-    assert(d_f_update_0_ub_buf[2] == 5.0)
-    d_f_update_0_ub = d.get(f, 0, False)
-    d_f_update_0_ub_buf = d_f_update_0_ub.realize(3)
-    assert(d_f_update_0_ub_buf[0] == 5.0)
-    assert(d_f_update_0_ub_buf[1] == 5.0)
-    assert(d_f_update_0_ub_buf[2] == 5.0)
 
     # gradient w.r.t. the buffer
     d_b = d[b]
@@ -70,7 +47,7 @@ def test_autodiff():
     assert(d_b_buf[0] == 0.0)
     assert(d_b_buf[1] == 5.0)
     assert(d_b_buf[2] == 5.0)
-    d_b = d.get(b)
+    d_b = d[b]
     d_b_buf = d_b.realize(3)
     assert(d_b_buf[0] == 0.0)
     assert(d_b_buf[1] == 5.0)
@@ -81,7 +58,7 @@ def test_autodiff():
     d_p_buf = d_p.realize()
     # 5 * (4 + 2 + 3)
     assert(abs(d_p_buf[()] - 45.0) < 1e-6)
-    d_p = d.get(p)
+    d_p = d[p]
     d_p_buf = d_p.realize()
     assert(abs(d_p_buf[()] - 45.0) < 1e-6)
 

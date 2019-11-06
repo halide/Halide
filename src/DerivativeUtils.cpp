@@ -35,17 +35,17 @@ public:
     }
 };
 
-vector<string> gather_variables(const Expr &expr,
-                                const vector<string> &filter) {
+vector<int> gather_variables(const Expr &expr,
+                             const vector<string> &filter) {
 
     class GatherVariables : public IRGraphVisitor {
     public:
         using IRGraphVisitor::visit;
 
         void visit(const Variable *op) override {
-            for (const auto &pv : filter) {
-                if (op->name == pv) {
-                    variables.push_back(op->name);
+            for (int i = 0; i < (int)filter.size(); i++) {
+                if (op->name == filter[i]) {
+                    variable_ids.push_back(i);
                 }
             }
         }
@@ -54,17 +54,16 @@ vector<string> gather_variables(const Expr &expr,
             : filter(f) {
         }
 
-        vector<string> variables;
+        vector<int> variable_ids;
         const vector<string> &filter;
     } gatherer(filter);
 
     expr.accept(&gatherer);
-
-    return gatherer.variables;
+    return gatherer.variable_ids;
 }
 
-vector<string> gather_variables(const Expr &expr,
-                                const vector<Var> &filter) {
+vector<int> gather_variables(const Expr &expr,
+                             const vector<Var> &filter) {
     vector<string> str_filter;
     str_filter.reserve(filter.size());
     for (const auto &var : filter) {
@@ -83,12 +82,11 @@ map<string, ReductionVariableInfo> gather_rvariables(Tuple tuple) {
             if (op->reduction_domain.defined()) {
                 const vector<ReductionVariable> &domain =
                     op->reduction_domain.domain();
-                for (int i = 0; i < (int) domain.size(); i++) {
+                for (int i = 0; i < (int)domain.size(); i++) {
                     const ReductionVariable &rv = domain[i];
                     if (rv.var == op->name) {
                         rvar_map[op->name] = ReductionVariableInfo{
-                            rv.min, rv.extent, i, op->reduction_domain, op->name
-                        };
+                            rv.min, rv.extent, i, op->reduction_domain, op->name};
                         return;
                     }
                 }
@@ -218,6 +216,7 @@ map<string, Box> inference_bounds(const vector<Func> &funcs,
         map<string, Function> local_env = find_transitive_calls(func);
         env.insert(local_env.begin(), local_env.end());
     }
+
     // Reduction variable scopes
     Scope<Interval> scope;
     for (const auto &it : env) {
@@ -233,10 +232,11 @@ map<string, Box> inference_bounds(const vector<Func> &funcs,
     }
     // Sort functions
     vector<string> order = realization_order(functions, env).first;
+    FuncValueBounds func_value_bounds = compute_function_value_bounds(order, env);
 
     map<string, Box> bounds;
     // Set up bounds for outputs
-    for (int i = 0; i < (int) funcs.size(); i++) {
+    for (int i = 0; i < (int)funcs.size(); i++) {
         const Func &func = funcs[i];
         bounds[func.name()] = output_bounds[i];
     }
@@ -248,7 +248,7 @@ map<string, Box> inference_bounds(const vector<Func> &funcs,
         const Box &current_bounds = bounds[*it];
         internal_assert(func.args().size() == current_bounds.size());
         // We know the range for each argument of this function
-        for (int i = 0; i < (int) current_bounds.size(); i++) {
+        for (int i = 0; i < (int)current_bounds.size(); i++) {
             string arg = func.args()[i].name();
             scope.push(arg, current_bounds[i]);
         }
@@ -260,9 +260,13 @@ map<string, Box> inference_bounds(const vector<Func> &funcs,
                 // For all the immediate dependencies of this expression,
                 // find the required ranges
                 map<string, Box> update_bounds =
-                    boxes_required(expr, scope);
+                    boxes_required(expr, scope, func_value_bounds);
                 // Loop over the dependencies
                 for (const auto &it : update_bounds) {
+                    if (it.first == func.name()) {
+                        // Skip self reference
+                        continue;
+                    }
                     // Update the bounds, if not exists then create a new one
                     auto found = bounds.find(it.first);
                     if (found == bounds.end()) {
@@ -274,13 +278,13 @@ map<string, Box> inference_bounds(const vector<Func> &funcs,
                 }
             }
         }
-        for (int i = 0; i < (int) current_bounds.size(); i++) {
+        for (int i = 0; i < (int)current_bounds.size(); i++) {
             scope.pop(func.args()[i].name());
         }
     }
     for (auto &it : bounds) {
         auto &bound = it.second;
-        for (int i = 0; i < (int) bound.size(); i++) {
+        for (int i = 0; i < (int)bound.size(); i++) {
             bound[i].min = common_subexpression_elimination(simplify(bound[i].min));
             bound[i].max = common_subexpression_elimination(simplify(bound[i].max));
         }
@@ -290,15 +294,15 @@ map<string, Box> inference_bounds(const vector<Func> &funcs,
 
 map<string, Box> inference_bounds(const Func &func,
                                   const Box &output_bounds) {
-    return inference_bounds(vector<Func>{ func },
-                            vector<Box>{ output_bounds });
+    return inference_bounds(vector<Func>{func},
+                            vector<Box>{output_bounds});
 }
 
 vector<pair<Expr, Expr>> box_to_vector(const Box &bounds) {
     vector<pair<Expr, Expr>> ret;
     ret.reserve(bounds.size());
     for (const auto &b : bounds.bounds) {
-        ret.push_back({ b.min, b.max - b.min + 1 });
+        ret.push_back({b.min, b.max - b.min + 1});
     }
     return ret;
 }
@@ -307,7 +311,7 @@ bool equal(const RDom &bounds0, const RDom &bounds1) {
     if (bounds0.domain().domain().size() != bounds1.domain().domain().size()) {
         return false;
     }
-    for (int bid = 0; bid < (int) bounds0.domain().domain().size(); bid++) {
+    for (int bid = 0; bid < (int)bounds0.domain().domain().size(); bid++) {
         if (!equal(bounds0[bid].min(), bounds1[bid].min()) ||
             !equal(bounds0[bid].extent(), bounds1[bid].extent())) {
             return false;
@@ -354,7 +358,7 @@ pair<bool, Expr> solve_inverse(Expr expr,
     expr = substitute_in_all_lets(simplify(expr));
     Interval interval = solve_for_outer_interval(expr, var);
     if (!interval.is_bounded()) {
-        return { false, Expr() };
+        return {false, Expr()};
     }
     Expr rmin = simplify(interval.min);
     Expr rmax = simplify(interval.max);
@@ -362,12 +366,12 @@ pair<bool, Expr> solve_inverse(Expr expr,
 
     const int64_t *extent_int = as_const_int(rextent);
     if (extent_int == nullptr) {
-        return { false, Expr() };
+        return {false, Expr()};
     }
 
     // For some reason interval.is_single_point() doesn't work
     if (extent_int != nullptr && *extent_int == 1) {
-        return { true, rmin };
+        return {true, rmin};
     }
 
     // Create a RDom to loop over the interval
@@ -375,7 +379,7 @@ pair<bool, Expr> solve_inverse(Expr expr,
     Expr cond = substitute(var, rmin + r.x, expr.as<EQ>()->b);
     cond = substitute(new_var, Var(var), cond) == Var(var);
     r.where(cond);
-    return { true, rmin + r.x };
+    return {true, rmin + r.x};
 }
 
 struct BufferDimensionsFinder : public IRGraphVisitor {
@@ -401,8 +405,7 @@ public:
         if (op->param.defined() && op->type.is_float()) {
             buffer_calls[op->name] = BufferInfo{
                 op->param.dimensions(),
-                op->type
-            };
+                op->type};
         }
     }
 
@@ -412,14 +415,12 @@ public:
             if (op->image.defined()) {
                 buffer_calls[op->name] = BufferInfo{
                     op->image.dimensions(),
-                    op->type
-                };
+                    op->type};
             } else {
                 internal_assert(op->param.defined());
                 buffer_calls[op->name] = BufferInfo{
                     op->param.dimensions(),
-                    op->type
-                };
+                    op->type};
             }
         }
     }
@@ -523,17 +524,41 @@ public:
 };
 
 bool is_calling_function(
-    const string &func_name, const Expr &expr,
+    const string &func_name, Expr expr,
     const map<string, Expr> &let_var_mapping) {
     FunctionCallFinder finder;
     return finder.find(func_name, expr, let_var_mapping);
 }
 
 bool is_calling_function(
-    const Expr &expr,
+    Expr expr,
     const map<string, Expr> &let_var_mapping) {
     FunctionCallFinder finder;
     return finder.find(expr, let_var_mapping);
+}
+
+struct SubstituteCallArgWithPureArg : public IRMutator {
+public:
+    SubstituteCallArgWithPureArg(Func f, int variable_id)
+        : f(f), variable_id(variable_id) {}
+protected:
+    using IRMutator::visit;
+    Expr visit(const Call *op) override {
+        if (op->name == f.name()) {
+            vector<Expr> args = op->args;
+            args[variable_id] = f.args()[variable_id];
+            return Call::make(op->type, op->name, args, op->call_type, op->func, op->value_index, op->image, op->param);
+        } else {
+            return IRMutator::visit(op);
+        }
+    }
+
+    Func f;
+    int variable_id;
+};
+
+Expr substitute_call_arg_with_pure_arg(Func f, int variable_id, Expr e) {
+    return simplify(SubstituteCallArgWithPureArg(f, variable_id).mutate(e));
 }
 
 }  // namespace Internal

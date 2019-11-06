@@ -26,16 +26,27 @@ struct ApplySplitResult {
     std::string name;
     Expr value;
 
-    enum Type {Substitution = 0, LetStmt, Predicate};
+    enum Type { Substitution = 0,
+                LetStmt,
+                Predicate };
     Type type;
 
     ApplySplitResult(const std::string &n, Expr val, Type t)
-        : name(n), value(val), type(t) {}
-    ApplySplitResult(Expr val) : name(""), value(val), type(Predicate) {}
+        : name(n), value(val), type(t) {
+    }
+    ApplySplitResult(Expr val)
+        : name(""), value(val), type(Predicate) {
+    }
 
-    bool is_substitution() const {return (type == Substitution);}
-    bool is_let() const {return (type == LetStmt);}
-    bool is_predicate() const {return (type == Predicate);}
+    bool is_substitution() const {
+        return (type == Substitution);
+    }
+    bool is_let() const {
+        return (type == LetStmt);
+    }
+    bool is_predicate() const {
+        return (type == Predicate);
+    }
 };
 
 /** Given a Split schedule on a definition (init or update), return a list of

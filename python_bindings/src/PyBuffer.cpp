@@ -32,6 +32,10 @@ std::ostream &operator<<(std::ostream &stream, const std::vector<halide_dimensio
 // Given a Buffer<>, return its shape in the form of a vector<halide_dimension_t>.
 // (Oddly, Buffer<> has no API to do this directly.)
 std::vector<halide_dimension_t> get_buffer_shape(const Buffer<> &b) {
+    if (!b.defined()) {
+        // Return an empty vector if the buffer is not defined.
+        return {};
+    }
     std::vector<halide_dimension_t> s;
     for (int i = 0; i < b.dimensions(); ++i) {
         s.push_back(b.raw_buffer()->dim[i]);
@@ -531,7 +535,11 @@ void define_buffer(py::module &m) {
 
         .def("__repr__", [](const Buffer<> &b) -> std::string {
             std::ostringstream o;
-            o << "<halide.Buffer of type " << halide_type_to_string(b.type()) << " shape:" << get_buffer_shape(b) << ">";
+            if (b.defined()) {
+                o << "<halide.Buffer of type " << halide_type_to_string(b.type()) << " shape:" << get_buffer_shape(b) << ">";
+            } else {
+                o << "<undefined halide.Buffer>";
+            }
             return o.str();
         })
     ;

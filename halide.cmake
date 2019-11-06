@@ -156,11 +156,22 @@ function(halide_library_from_generator BASENAME)
 
   set(OUTPUTS static_library c_header registration)
   foreach(E ${args_EXTRA_OUTPUTS})
+    # Convert legacy aliases
+    set(cpp_current "c_source")
+    set(h_current "c_header")
+    set(html_current "stmt_html")
+    set(o_current "object")
+    set(py.c_current "python_extension")
+    if (DEFINED ${E}_current)
+      message(DEPRECATION "'${E}' in EXTRA_OUTPUTS is deprecated, please use ${${E}_current}")
+      set(E ${${E}_current})
+    endif()
+
     if("${E}" STREQUAL "c_source")
-      message(FATAL_ERROR "halide_library('${BASENAME}') doesn't support 'c_source' in EXTRA_OUTPUTS; please depend on '${BASENAME}_cc' instead.")
+      message(FATAL_ERROR "halide_library('${BASENAME}') doesn't support '${E}' in EXTRA_OUTPUTS; please depend on '${BASENAME}_cc' instead.")
     endif()
     if("${E}" STREQUAL "cpp_stub")
-      message(FATAL_ERROR "halide_library('${BASENAME}') doesn't support 'cpp_stub' in EXTRA_OUTPUTS; please depend on '${BASENAME}.generator' instead.")
+      message(FATAL_ERROR "halide_library('${BASENAME}') doesn't support '${E}' in EXTRA_OUTPUTS; please depend on '${BASENAME}.generator' instead.")
     endif()
     list(FIND OUTPUTS ${E} index)
     if (${index} GREATER -1)
@@ -190,33 +201,27 @@ function(halide_library_from_generator BASENAME)
   # GENERATOR_ARGS always come last
   list(APPEND GENERATOR_EXEC_ARGS ${args_GENERATOR_ARGS})
 
-  # CMake has no map type, and no switch statement. Whee!
+  set(assembly_ext ".s")
+  set(bitcode_ext ".bc")
+  set(c_header_ext ".h")
+  set(featurization_ext ".featurization")
+  set(llvm_assembly_ext ".ll")
+  set(object_ext ${CMAKE_C_OUTPUT_EXTENSION})
+  set(python_extension_ext ".py.cpp")
+  set(pytorch_wrapper_ext ".pytorch.h")
+  set(registration_ext ".registration.cpp")
+  set(schedule_ext ".schedule.h")
+  set(static_library_ext ${CMAKE_STATIC_LIBRARY_SUFFIX})
+  set(stmt_ext ".stmt")
+  set(stmt_html_ext ".stmt.html")
+
   set(OUTPUT_FILES )
   foreach(OUTPUT ${OUTPUTS})
-    if ("${OUTPUT}" STREQUAL "static_library")
-      list(APPEND OUTPUT_FILES "${GENFILES_DIR}/${BASENAME}${CMAKE_STATIC_LIBRARY_SUFFIX}")
-    elseif ("${OUTPUT}" STREQUAL "o")
-      # Apparently CMake has no predefined variable for this suffix.
-      if(MSVC)
-        list(APPEND OUTPUT_FILES "${GENFILES_DIR}/${BASENAME}.obj")
-      else()
-        list(APPEND OUTPUT_FILES "${GENFILES_DIR}/${BASENAME}.o")
-      endif()
-    elseif ("${OUTPUT}" STREQUAL "h")
-      list(APPEND OUTPUT_FILES "${GENFILES_DIR}/${BASENAME}.h")
-    elseif ("${OUTPUT}" STREQUAL "assembly")
-      list(APPEND OUTPUT_FILES "${GENFILES_DIR}/${BASENAME}.s.txt")
-    elseif ("${OUTPUT}" STREQUAL "bitcode")
-      list(APPEND OUTPUT_FILES "${GENFILES_DIR}/${BASENAME}.bc")
-    elseif ("${OUTPUT}" STREQUAL "stmt")
-      list(APPEND OUTPUT_FILES "${GENFILES_DIR}/${BASENAME}.stmt")
-    elseif ("${OUTPUT}" STREQUAL "schedule")
-      list(APPEND OUTPUT_FILES "${GENFILES_DIR}/${BASENAME}.schedule")
-    elseif ("${OUTPUT}" STREQUAL "html")
-      list(APPEND OUTPUT_FILES "${GENFILES_DIR}/${BASENAME}.html")
-    elseif ("${OUTPUT}" STREQUAL "registration")
-      list(APPEND OUTPUT_FILES "${GENFILES_DIR}/${BASENAME}.registration.cpp")
+    if(NOT DEFINED ${OUTPUT}_ext)
+        message(FATAL_ERROR "halide_library('${BASENAME}'): output '${OUTPUT}' is not supported!")
     endif()
+
+    list(APPEND OUTPUT_FILES "${GENFILES_DIR}/${BASENAME}${${OUTPUT}_ext}")
   endforeach()
 
   # Output everything (except for the generated .cpp file)
@@ -305,7 +310,6 @@ endfunction()
 
 # Set the C++ options necessary for using libHalide.
 function(_halide_set_cxx_options TARGET)
-  set_target_properties("${TARGET}" PROPERTIES CXX_STANDARD 11 CXX_STANDARD_REQUIRED YES CXX_EXTENSIONS NO)
   if (MSVC)
     target_compile_definitions("${TARGET}" PUBLIC "-D_CRT_SECURE_NO_WARNINGS" "-D_SCL_SECURE_NO_WARNINGS")
     target_compile_options("${TARGET}" PRIVATE "/GR-")
@@ -465,6 +469,7 @@ function(_halide_runtime_target_name HALIDE_TARGET OUTVAR)
         opencl
         cl_doubles
         cl_half
+        cl_atomics64
         opengl
         openglcompute
         egl
@@ -712,7 +717,7 @@ if("${HALIDE_TOOLS_DIR}" STREQUAL "" OR
   endif()
 endif()
 
-if("${HALIDE_SYSTEM_LIBS}" STREQUAL "")
+if(NOT DEFINED HALIDE_SYSTEM_LIBS)
   # If HALIDE_SYSTEM_LIBS isn't defined, we are compiling against a Halide distribution
   # folder; this is normally captured in the halide_config.cmake file. If that file
   # exists in the same directory as this one, just include it here.

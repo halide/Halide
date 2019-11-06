@@ -24,29 +24,16 @@ public:
     // function name & update_id, for initialization update_id == -1
     using FuncKey = std::pair<std::string, int>;
 
-    explicit Derivative(const std::map<FuncKey, Func> &adjoints_in) : adjoints(adjoints_in) {}
-    explicit Derivative(std::map<FuncKey, Func> &&adjoints_in) : adjoints(std::move(adjoints_in)) {}
-
-    Func get(const Func &func, int update_id = -1, bool bounded = true) const;
-    Func get(const Buffer<> &buffer) const;
-    Func get(const Param<> &param) const;
-
-    Func operator()(const Func &func, int update_id = -1, bool bounded = true) const {
-        return get(func, update_id, bounded);
+    explicit Derivative(const std::map<FuncKey, Func> &adjoints_in)
+        : adjoints(adjoints_in) {
+    }
+    explicit Derivative(std::map<FuncKey, Func> &&adjoints_in)
+        : adjoints(std::move(adjoints_in)) {
     }
 
-    Func operator()(const Buffer<> &buffer) const {
-        return get(buffer);
-    }
-
-    Func operator()(const Param<> &param) const {
-        return get(param);
-    }
-
-    /** Get the entire chain of new synthesized Funcs that compute the
-     * derivative of a given user-written Func for the purpose of
-     * scheduling. */
-    std::vector<Func> funcs(const Func &func) const;
+    Func operator()(const Func &func, int update_id = -1) const;
+    Func operator()(const Buffer<> &buffer) const;
+    Func operator()(const Param<> &param) const;
 
 private:
     const std::map<FuncKey, Func> adjoints;
@@ -55,7 +42,10 @@ private:
 /**
  *  Given a Func and a corresponding adjoint, (back)propagate the
  *  adjoint to all dependent Funcs, buffers, and parameters.
- *  The bounds of output and adjoint needs to be specified with pair {min, max}
+ *  The bounds of output and adjoint need to be specified with pair {min, max}
+ *  For each Func the output depends on, and for the pure definition and
+ *  each update of that Func, it generates a derivative Func stored in
+ *  the Derivative.
  */
 Derivative propagate_adjoints(const Func &output,
                               const Func &adjoint,
@@ -63,12 +53,18 @@ Derivative propagate_adjoints(const Func &output,
 /**
  *  Given a Func and a corresponding adjoint buffer, (back)propagate the
  *  adjoint to all dependent Funcs, buffers, and parameters.
+ *  For each Func the output depends on, and for the pure definition and
+ *  each update of that Func, it generates a derivative Func stored in
+ *  the Derivative.
  */
 Derivative propagate_adjoints(const Func &output,
                               const Buffer<float> &adjoint);
 /**
  *  Given a scalar Func with size 1, (back)propagate the gradient
  *  to all dependent Funcs, buffers, and parameters.
+ *  For each Func the output depends on, and for the pure definition and
+ *  each update of that Func, it generates a derivative Func stored in
+ *  the Derivative.
  */
 Derivative propagate_adjoints(const Func &output);
 
