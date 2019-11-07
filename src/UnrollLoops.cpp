@@ -59,6 +59,7 @@ class UnrollLoops : public IRMutator {
             if (e == nullptr && permit_failed_unroll) {
                 // Still no luck, but we're allowed to fail. Rewrite
                 // to a serial loop.
+                debug(1) << "Warning: not unrolling loop with extent " << extent << "\n";
                 body = mutate(body);
                 return For::make(for_loop->name, for_loop->min, for_loop->extent,
                                  ForType::Serial, for_loop->device_api, std::move(body));

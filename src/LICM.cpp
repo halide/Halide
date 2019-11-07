@@ -383,40 +383,60 @@ class GroupLoopInvariants : public IRMutator {
         // likely already in a good order, so don't mess with them.
         std::stable_sort(terms.begin(), terms.end(),
                   [](const Term &a, const Term &b) {
-                      return a.depth > b.depth;
+                             if (a.depth < b.depth) return true;
+                             if (a.depth > b.depth) return false;
+                             if (a.positive && !b.positive) return true;
+                             return false;
                   });
 
         return terms;
     }
 
+    Term add_terms(const Term &a, const Term &b) {
+        Term result;
+        if (a.positive == b.positive) {
+            result.expr = a.expr + b.expr;
+            result.positive = a.positive;
+            result.depth = std::max(a.depth, b.depth);
+        } else if (a.positive) {
+            result.expr = a.expr - b.expr;
+            result.positive = true;
+            result.depth = std::max(a.depth, b.depth);
+        } else if (b.positive) {
+            result.expr = a.expr - b.expr;
+            result.positive = false;
+            result.depth = std::max(a.depth, b.depth);
+        } else {
+            internal_error << "Unreachable\n";
+        }
+        return result;
+    }
+
     Expr reassociate_summation(const Expr &e) {
         vector<Term> terms = extract_summation(e);
 
-        Expr result;
-        bool positive = true;
-        while (!terms.empty()) {
-            Term next = terms.back();
-            terms.pop_back();
-            if (result.defined()) {
-                if (next.positive == positive) {
-                    result += next.expr;
-                } else if (next.positive) {
-                    result = next.expr - result;
-                    positive = true;
-                } else {
-                    result -= next.expr;
-                }
+        // Sum the terms within each depth level
+        vector<Term> merged;
+        for (const auto &t : terms) {
+            if (!merged.empty() && t.depth == merged.back().depth) {
+                merged.back() = add_terms(merged.back(), t);
             } else {
-                result = next.expr;
-                positive = next.positive;
+                merged.push_back(t);
             }
         }
 
-        if (!positive) {
-            result = make_zero(result.type()) - result;
+        // Sum the terms
+        internal_assert(!merged.empty());
+        Term result = merged[0];
+        for (size_t i = 1; i < merged.size(); i++) {
+            result = add_terms(result, merged[i]);
         }
 
-        return result;
+        if (result.positive) {
+            return result.expr;
+        } else {
+            return make_zero(result.expr.type()) - result.expr;
+        }
     }
 
     Expr visit(const Sub *op) override {
@@ -441,6 +461,163 @@ class GroupLoopInvariants : public IRMutator {
         }
 
         return reassociate_summation(op);
+    }
+
+    template<typename AddLike, typename MulLike>
+    Expr apply_distributive_law(const AddLike *a, const Expr &b) {
+        if (is_pure(b)) {
+            int depth_aa = expr_depth(a->a);
+            int depth_ab = expr_depth(a->b);
+            int depth_b = expr_depth(b);
+            if (depth_aa < depth &&
+                depth_b < depth &&
+                depth_ab == depth) {
+                // Apply distributive law to expose loop new invariant
+                return mutate(AddLike::make(MulLike::make(a->a, b), MulLike::make(a->b, b)));
+            }
+        }
+        return MulLike::make(Expr(a), b);
+    }
+
+    template<typename AddLike, typename MulLike>
+    Expr apply_distributive_law(const Expr &a, const AddLike *b) {
+        if (is_pure(a)) {
+            int depth_a = expr_depth(a);
+            int depth_ba = expr_depth(b->a);
+            int depth_bb = expr_depth(b->b);
+            if (depth_ba < depth &&
+                depth_a < depth &&
+                depth_bb == depth) {
+                // Apply distributive law to expose loop new invariant
+                return mutate(AddLike::make(MulLike::make(a, b->a), MulLike::make(a, b->b)));
+            }
+        }
+        return MulLike::make(a, Expr(b));
+    }
+
+    Expr visit(const Mul *op) override {
+        // In some cases we want to apply the distributive law to do
+        // transformations like: (a + b)*c -> a*c + b*c, when a, c
+        // have lower depth than b. If we don't end up lifting the
+        // invariant, the simplifier will reliably undo the
+        // transformation.
+        if (op->type.is_float()) {
+            return IRMutator::visit(op);
+        }
+
+        Expr a = mutate(op->a);
+        Expr b = mutate(op->b);
+
+        int depth_a = expr_depth(a);
+        int depth_b = expr_depth(b);
+
+        if (depth_a == depth && depth_b < depth) {
+            if (const Add *add_a = a.as<Add>()) {
+                return apply_distributive_law<Add, Mul>(add_a, b);
+            } else if (const Sub *sub_a = a.as<Sub>()) {
+                if (!is_zero(sub_a->a)) {
+                    return apply_distributive_law<Sub, Mul>(sub_a, b);
+                }
+            } else if (const Min *min_a = a.as<Min>()) {
+                if (is_positive_const(b)) {
+                    return apply_distributive_law<Min, Mul>(min_a, b);
+                }
+            } else if (const Max *max_a = a.as<Max>()) {
+                if (is_positive_const(b)) {
+                    return apply_distributive_law<Max, Mul>(max_a, b);
+                }
+            }
+        } else if (depth_b == depth && depth_a < depth) {
+            if (const Add *add_b = b.as<Add>()) {
+                return apply_distributive_law<Add, Mul>(a, add_b);
+            } else if (const Sub *sub_b = b.as<Sub>()) {
+                if (!is_zero(sub_b->a)) {
+                    return apply_distributive_law<Sub, Mul>(a, sub_b);
+                }
+            } else if (const Min *min_b = b.as<Min>()) {
+                if (is_positive_const(a)) {
+                    return apply_distributive_law<Min, Mul>(a, min_b);
+                }
+            } else if (const Max *max_b = b.as<Max>()) {
+                if (is_positive_const(a)) {
+                    return apply_distributive_law<Max, Mul>(a, max_b);
+                }
+            }
+        }
+
+        return a * b;
+    }
+
+    Expr visit(const Min *op) override {
+        if (op->type.is_float()) {
+            return IRMutator::visit(op);
+        }
+
+        Expr a = mutate(op->a);
+        Expr b = mutate(op->b);
+
+        int depth_a = expr_depth(a);
+        int depth_b = expr_depth(b);
+
+        if (depth_a == depth && depth_b < depth) {
+            if (const Add *add_a = a.as<Add>()) {
+                return apply_distributive_law<Add, Min>(add_a, b);
+            } else if (const Sub *sub_a = a.as<Sub>()) {
+                if (!is_zero(sub_a->a)) {
+                    return apply_distributive_law<Sub, Min>(sub_a, b);
+                }
+            } else if (const Max *max_a = a.as<Max>()) {
+                return apply_distributive_law<Max, Min>(max_a, b);
+            }
+        } else if (depth_b == depth && depth_a < depth) {
+            if (const Add *add_b = b.as<Add>()) {
+                return apply_distributive_law<Add, Min>(a, add_b);
+            } else if (const Sub *sub_b = b.as<Sub>()) {
+                if (!is_zero(sub_b->a)) {
+                    return apply_distributive_law<Sub, Min>(a, sub_b);
+                }
+            } else if (const Max *max_b = b.as<Max>()) {
+                return apply_distributive_law<Max, Min>(a, max_b);
+            }
+        }
+
+        return min(a, b);
+    }
+
+    Expr visit(const Max *op) override {
+        if (op->type.is_float()) {
+            return IRMutator::visit(op);
+        }
+
+        Expr a = mutate(op->a);
+        Expr b = mutate(op->b);
+
+        int depth_a = expr_depth(a);
+        int depth_b = expr_depth(b);
+
+        if (depth_a == depth && depth_b < depth) {
+            if (const Add *add_a = a.as<Add>()) {
+                return apply_distributive_law<Add, Max>(add_a, b);
+            } else if (const Sub *sub_a = a.as<Sub>()) {
+                if (!is_zero(sub_a->a)) {
+                    return apply_distributive_law<Sub, Max>(sub_a, b);
+                }
+            } else if (const Min *min_a = a.as<Min>()) {
+                return apply_distributive_law<Min, Max>(min_a, b);
+            }
+        } else if (depth_b == depth && depth_a < depth) {
+            if (const Add *add_b = b.as<Add>()) {
+                return apply_distributive_law<Add, Max>(a, add_b);
+            } else if (const Sub *sub_b = b.as<Sub>()) {
+                if (!is_zero(sub_b->a)) {
+                    return apply_distributive_law<Sub, Max>(a, sub_b);
+                }
+            } else if (const Min *min_b = b.as<Min>()) {
+                return apply_distributive_law<Min, Max>(a, min_b);
+            }
+        }
+
+        return max(a, b);
     }
 
     int depth = 0;
@@ -500,9 +677,13 @@ class GroupLoopInvariants : public IRMutator {
 
 Stmt loop_invariant_code_motion(Stmt s) {
     s = GroupLoopInvariants().mutate(s);
+    debug(2) << "After grouping loop invariants: " << s << "\n";
     s = common_subexpression_elimination(s);
+    debug(2) << "After CSE: " << s << "\n";
     s = LICM().mutate(s);
+    debug(2) << "After LICM: " << s << "\n";
     s = simplify_exprs(s);
+    debug(2) << "After simplify_exprs: " << s << "\n";
     return s;
 }
 
