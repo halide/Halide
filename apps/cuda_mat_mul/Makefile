@@ -10,9 +10,11 @@ LDFLAGS += -L $(CUDA_SDK)/lib64
 
 HL_TARGET = host-cuda-cuda_capability_50
 
+GRADIENT_AUTOSCHED_BIN=../gradient_autoscheduler/bin
+
 all: $(BIN)/$(HL_TARGET)/runner
 
-$(GENERATOR_BIN)/mat_mul.generator: mat_mul_generator.cpp ../autoscheduler/SimpleAutoSchedule.h ../autoscheduler/SimpleAutoSchedule.cpp $(GENERATOR_DEPS)
+$(GENERATOR_BIN)/mat_mul.generator: mat_mul_generator.cpp $(GENERATOR_DEPS)
 	@mkdir -p $(@D)
 	$(CXX) $(CXXFLAGS) $(USE_EXPORT_DYNAMIC) -g $(filter-out %.h,$^) -o $@ $(LDFLAGS) $(HALIDE_SYSTEM_LIBS)
 
@@ -20,12 +22,11 @@ $(BIN)/%/mat_mul.a: $(GENERATOR_BIN)/mat_mul.generator
 	@mkdir -p $(@D)
 	$^ -g mat_mul -e $(GENERATOR_OUTPUTS) -o $(@D) target=$(HL_TARGET) size=$(MATRIX_SIZE)
 
-$(BIN)/%/mat_mul_simple_auto_schedule.a: $(GENERATOR_BIN)/mat_mul.generator
+$(BIN)/%/mat_mul_gradient_auto_schedule.a: $(GENERATOR_BIN)/mat_mul.generator
 	@mkdir -p $(@D)
-	HL_USE_SIMPLE_AUTOSCHEDULER=1 \
-	$^ -g mat_mul -e $(GENERATOR_OUTPUTS) -o $(@D) -f mat_mul_simple_auto_schedule target=$(HL_TARGET)-no_runtime auto_schedule=false
+	$^ -g mat_mul -e $(GENERATOR_OUTPUTS) -o $(@D) -f mat_mul_gradient_auto_schedule target=$(HL_TARGET)-no_runtime auto_schedule=true -p $(GRADIENT_AUTOSCHED_BIN)/libgradient_autoscheduler.so -s Li2018
 
-$(BIN)/%/runner: runner.cpp $(BIN)/%/mat_mul.a $(BIN)/%/mat_mul_simple_auto_schedule.a
+$(BIN)/%/runner: runner.cpp $(BIN)/%/mat_mul.a $(BIN)/%/mat_mul_gradient_auto_schedule.a
 	@mkdir -p $(@D)
 	$(CXX) $(CXXFLAGS) -I$(BIN)/$* -Wall $^ -o $@ $(LDFLAGS) -lcudart -lcublas
 

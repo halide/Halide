@@ -1,5 +1,5 @@
 #include "mat_mul.h"
-#include "mat_mul_simple_auto_schedule.h"
+#include "mat_mul_gradient_auto_schedule.h"
 #include "halide_benchmark.h"
 #include "HalideBuffer.h"
 #include <cublas_v2.h>
@@ -45,7 +45,7 @@ int main(int argc, char **argv) {
         Buffer<float> A(size, size), B(size, size), C(size, size);
         multi_way_bench({
             {"Manual", [&]() { mat_mul(A, B, C); C.device_sync(); }},
-            {"Simple auto-schedule", [&]() { mat_mul_simple_auto_schedule(A, B, C); C.device_sync(); }}
+            {"Gradient auto-schedule", [&]() { mat_mul_gradient_auto_schedule(A, B, C); C.device_sync(); }}
         });
     }
 

@@ -1,5 +1,4 @@
 #include "Halide.h"
-#include "../autoscheduler/SimpleAutoSchedule.h"
 
 using namespace Halide;
 
@@ -39,86 +38,64 @@ public:
         RVar rxo, rxi;
 
         if (!auto_schedule) {
-            std::string use_simple_autoscheduler =
-                Halide::Internal::get_env_variable("HL_USE_SIMPLE_AUTOSCHEDULER");
+            out.bound(x, 0, size)
+                .bound(y, 0, size)
+                .tile(x, y, xi, yi, x_tile * vec_size * warp_size, y_tile * y_unroll)
+                .split(yi, ty, yi, y_unroll)
+                .vectorize(xi, vec_size)
+                .split(xi, xio, xii, warp_size)
+                .reorder(xio, yi, xii, ty, x, y)
+                .unroll(xio)
+                .unroll(yi)
+                .gpu_blocks(x, y)
+                .gpu_threads(ty)
+                .gpu_lanes(xii);
+            prod.store_in(MemoryType::Register)
+                .compute_at(out, x)
+                .split(x, xo, xi, warp_size * vec_size, TailStrategy::RoundUp)
+                .split(y, ty, y, y_unroll)
+                .gpu_threads(ty)
+                .unroll(xi, vec_size)
+                .gpu_lanes(xi)
+                .unroll(xo)
+                .unroll(y)
+                .update()
+                .split(x, xo, xi, warp_size * vec_size, TailStrategy::RoundUp)
+                .split(y, ty, y, y_unroll)
+                .gpu_threads(ty)
+                .unroll(xi, vec_size)
+                .gpu_lanes(xi)
+                .split(r.x, rxo, rxi, warp_size)
+                .unroll(rxi, r_unroll)
+                .reorder(xi, xo, y, rxi, ty, rxo)
+                .unroll(xo)
+                .unroll(y);
 
-            if (use_simple_autoscheduler == "1") {
-                Halide::SimpleAutoscheduleOptions options;
-                options.gpu = get_target().has_gpu_feature();
-                options.gpu_tile_channel = 1;
-                Func output_func = out;
-                Halide::simple_autoschedule(output_func,
-                                    {{"input_a.min.0", 0},
-                                     {"input_a.extent.0", size},
-                                     {"input_a.min.1", 0},
-                                     {"input_a.extent.1", size},
-                                     {"input_b.min.0", 0},
-                                     {"input_b.extent.0", size},
-                                     {"input_b.min.1", 0},
-                                     {"input_b.extent.1", size}},
-                                    {{0, size},
-                                     {0, size}},
-                                    options);
-            } else {
-                out.bound(x, 0, size)
-                    .bound(y, 0, size)
-                    .tile(x, y, xi, yi, x_tile * vec_size * warp_size, y_tile * y_unroll)
-                    .split(yi, ty, yi, y_unroll)
-                    .vectorize(xi, vec_size)
-                    .split(xi, xio, xii, warp_size)
-                    .reorder(xio, yi, xii, ty, x, y)
-                    .unroll(xio)
-                    .unroll(yi)
-                    .gpu_blocks(x, y)
-                    .gpu_threads(ty)
-                    .gpu_lanes(xii);
-                prod.store_in(MemoryType::Register)
-                    .compute_at(out, x)
-                    .split(x, xo, xi, warp_size * vec_size, TailStrategy::RoundUp)
-                    .split(y, ty, y, y_unroll)
-                    .gpu_threads(ty)
-                    .unroll(xi, vec_size)
-                    .gpu_lanes(xi)
-                    .unroll(xo)
-                    .unroll(y)
-                    .update()
-                    .split(x, xo, xi, warp_size * vec_size, TailStrategy::RoundUp)
-                    .split(y, ty, y, y_unroll)
-                    .gpu_threads(ty)
-                    .unroll(xi, vec_size)
-                    .gpu_lanes(xi)
-                    .split(r.x, rxo, rxi, warp_size)
-                    .unroll(rxi, r_unroll)
-                    .reorder(xi, xo, y, rxi, ty, rxo)
-                    .unroll(xo)
-                    .unroll(y);
+            Var Bx = B.in().args()[0], By = B.in().args()[1];
+            Var Ax = A.in().args()[0], Ay = A.in().args()[1];
+            B.in()
+                .compute_at(prod, ty)
+                .split(Bx, xo, xi, warp_size)
+                .gpu_lanes(xi)
+                .unroll(xo).unroll(By);
 
-                Var Bx = B.in().args()[0], By = B.in().args()[1];
-                Var Ax = A.in().args()[0], Ay = A.in().args()[1];
-                B.in()
-                    .compute_at(prod, ty)
-                    .split(Bx, xo, xi, warp_size)
-                    .gpu_lanes(xi)
-                    .unroll(xo).unroll(By);
+            A.in()
+                .compute_at(prod, rxo)
+                .vectorize(Ax, vec_size)
+                .split(Ax, xo, xi, warp_size)
+                .gpu_lanes(xi)
+                .unroll(xo).split(Ay, yo, yi, y_tile)
+                .gpu_threads(yi).unroll(yo);
 
-                A.in()
-                    .compute_at(prod, rxo)
-                    .vectorize(Ax, vec_size)
-                    .split(Ax, xo, xi, warp_size)
-                    .gpu_lanes(xi)
-                    .unroll(xo).split(Ay, yo, yi, y_tile)
-                    .gpu_threads(yi).unroll(yo);
+            A.in().in().compute_at(prod, rxi)
+                .vectorize(Ax, vec_size)
+                .split(Ax, xo, xi, warp_size)
+                .gpu_lanes(xi)
+                .unroll(xo).unroll(Ay);
 
-                A.in().in().compute_at(prod, rxi)
-                    .vectorize(Ax, vec_size)
-                    .split(Ax, xo, xi, warp_size)
-                    .gpu_lanes(xi)
-                    .unroll(xo).unroll(Ay);
-
-                set_alignment_and_bounds(A, size);
-                set_alignment_and_bounds(B, size);
-                set_alignment_and_bounds(out, size);
-            }
+            set_alignment_and_bounds(A, size);
+            set_alignment_and_bounds(B, size);
+            set_alignment_and_bounds(out, size);
         } else {
             A.dim(0).set_estimate(0, size)
                 .dim(1).set_estimate(0, size);

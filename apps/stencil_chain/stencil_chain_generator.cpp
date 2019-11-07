@@ -1,11 +1,10 @@
 #include "Halide.h"
-#include "../autoscheduler/SimpleAutoSchedule.h"
 
 namespace {
 
 class StencilChain : public Halide::Generator<StencilChain> {
 public:
-    GeneratorParam<int>     stencils{"stencils", 32, 1, 100};
+    GeneratorParam<int>     stencils{"stencils", 5, 1, 100};
 
     Input<Buffer<uint16_t>> input{"input", 2};
     Output<Buffer<uint16_t>> output{"output", 2};
@@ -49,22 +48,7 @@ public:
         if (auto_schedule) {
             // nothing
         } else {
-            std::string use_simple_autoscheduler =
-                Halide::Internal::get_env_variable("HL_USE_SIMPLE_AUTOSCHEDULER");
-            if (use_simple_autoscheduler == "1") {
-                Halide::SimpleAutoscheduleOptions options;
-                options.gpu = get_target().has_gpu_feature();
-                options.gpu_tile_channel = 1;
-                Func output_func = output;
-                Halide::simple_autoschedule(output_func,
-                                    {{"input.min.0", 0},
-                                     {"input.extent.0", 1536},
-                                     {"input.min.1", 0},
-                                     {"input.extent.1", 2560}},
-                                    {{0, 1536},
-                                     {0, 2560}},
-                                    options);
-            } else if (get_target().has_gpu_feature()) {
+            if (get_target().has_gpu_feature()) {
                 Var xi, yi;
                 const int group_size = 4;
                 int last_stage = (int)stages.size() - 1;

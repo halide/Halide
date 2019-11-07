@@ -1,6 +1,5 @@
 #include "Halide.h"
 #include "halide_trace_config.h"
-#include "../autoscheduler/SimpleAutoSchedule.h"
 
 namespace {
 
@@ -84,51 +83,33 @@ public:
         if (auto_schedule) {
             // nothing
         } else if (get_target().has_gpu_feature()) {
-            std::string use_simple_autoscheduler =
-                Halide::Internal::get_env_variable("HL_USE_SIMPLE_AUTOSCHEDULER");
-            if (use_simple_autoscheduler == "1") {
-                Halide::SimpleAutoscheduleOptions options;
-                options.gpu = get_target().has_gpu_feature();
-                options.gpu_tile_channel = 1;
-                Func output_func = bilateral_grid;
-                Halide::simple_autoschedule(output_func,
-                                    {{"r_sigma", 0.1f},
-                                     {"input.min.0", 0},
-                                     {"input.extent.0", 1536},
-                                     {"input.min.1", 0},
-                                     {"input.extent.1", 2560}},
-                                    {{0, 1536},
-                                     {0, 2560}},
-                                    options);
-            } else {
-                Var xi("xi"), yi("yi"), zi("zi");
+            Var xi("xi"), yi("yi"), zi("zi");
 
-                // Schedule blurz in 8x8 tiles. This is a tile in
-                // grid-space, which means it represents something like
-                // 64x64 pixels in the input (if s_sigma is 8).
-                blurz.compute_root().reorder(c, z, x, y).gpu_tile(x, y, xi, yi, 8, 8);
+            // Schedule blurz in 8x8 tiles. This is a tile in
+            // grid-space, which means it represents something like
+            // 64x64 pixels in the input (if s_sigma is 8).
+            blurz.compute_root().reorder(c, z, x, y).gpu_tile(x, y, xi, yi, 8, 8);
 
-                // Schedule histogram to happen per-tile of blurz, with
-                // intermediate results in shared memory. This means histogram
-                // and blurz makes a three-stage kernel:
-                // 1) Zero out the 8x8 set of histograms
-                // 2) Compute those histogram by iterating over lots of the input image
-                // 3) Blur the set of histograms in z
-                histogram.reorder(c, z, x, y).compute_at(blurz, x).gpu_threads(x, y);
-                histogram.update().reorder(c, r.x, r.y, x, y).gpu_threads(x, y).unroll(c);
+            // Schedule histogram to happen per-tile of blurz, with
+            // intermediate results in shared memory. This means histogram
+            // and blurz makes a three-stage kernel:
+            // 1) Zero out the 8x8 set of histograms
+            // 2) Compute those histogram by iterating over lots of the input image
+            // 3) Blur the set of histograms in z
+            histogram.reorder(c, z, x, y).compute_at(blurz, x).gpu_threads(x, y);
+            histogram.update().reorder(c, r.x, r.y, x, y).gpu_threads(x, y).unroll(c);
 
-                // Schedule the remaining blurs and the sampling at the end similarly.
-                blurx.compute_root().reorder(c, x, y, z)
-                    .reorder_storage(c, x, y, z).vectorize(c)
-                    .unroll(y, 2, TailStrategy::RoundUp)
-                    .gpu_tile(x, y, z, xi, yi, zi, 32, 8, 1, TailStrategy::RoundUp);
-                blury.compute_root().reorder(c, x, y, z)
-                    .reorder_storage(c, x, y, z).vectorize(c)
-                    .unroll(y, 2, TailStrategy::RoundUp)
-                    .gpu_tile(x, y, z, xi, yi, zi, 32, 8, 1, TailStrategy::RoundUp);
-                bilateral_grid.compute_root().gpu_tile(x, y, xi, yi, 32, 8);
-                interpolated.compute_at(bilateral_grid, xi).vectorize(c);
-            }
+            // Schedule the remaining blurs and the sampling at the end similarly.
+            blurx.compute_root().reorder(c, x, y, z)
+                .reorder_storage(c, x, y, z).vectorize(c)
+                .unroll(y, 2, TailStrategy::RoundUp)
+                .gpu_tile(x, y, z, xi, yi, zi, 32, 8, 1, TailStrategy::RoundUp);
+            blury.compute_root().reorder(c, x, y, z)
+                .reorder_storage(c, x, y, z).vectorize(c)
+                .unroll(y, 2, TailStrategy::RoundUp)
+                .gpu_tile(x, y, z, xi, yi, zi, 32, 8, 1, TailStrategy::RoundUp);
+            bilateral_grid.compute_root().gpu_tile(x, y, xi, yi, 32, 8);
+            interpolated.compute_at(bilateral_grid, xi).vectorize(c);
         } else {
             // The CPU schedule.
             blurz.compute_root().reorder(c, z, x, y).parallel(y).vectorize(x, 8).unroll(c);

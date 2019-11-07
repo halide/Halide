@@ -5,7 +5,7 @@
 #include "bilateral_grid.h"
 #ifndef NO_AUTO_SCHEDULE
 #include "bilateral_grid_auto_schedule.h"
-#include "bilateral_grid_simple_auto_schedule.h"
+#include "bilateral_grid_gradient_auto_schedule.h"
 #endif
 
 #include "benchmark_util.h"
@@ -31,7 +31,7 @@ int main(int argc, char **argv) {
         {"Manual", [&]() { bilateral_grid(input, r_sigma, output); output.device_sync(); }},
     #ifndef NO_AUTO_SCHEDULE
         {"Auto-scheduled", [&]() { bilateral_grid_auto_schedule(input, r_sigma, output); output.device_sync(); }},
-        {"Simple auto-scheduled", [&]() { bilateral_grid_simple_auto_schedule(input, r_sigma, output); output.device_sync(); }}
+        {"Gradient auto-scheduled", [&]() { bilateral_grid_gradient_auto_schedule(input, r_sigma, output); output.device_sync(); }}
     #endif
         }
     );
