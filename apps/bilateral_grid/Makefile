@@ -3,6 +3,10 @@ include ../support/autoscheduler.inc
 
 HL_TARGET=host-cuda
 
+CXXFLAGS += -I../support/
+
+GRADIENT_AUTOSCHED_BIN=../gradient_autoscheduler/bin
+
 all: $(BIN)/$(HL_TARGET)/filter
 
 $(GENERATOR_BIN)/bilateral_grid.generator: bilateral_grid_generator.cpp $(GENERATOR_DEPS)
