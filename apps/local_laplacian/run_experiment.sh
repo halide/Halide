@@ -1,10 +1,16 @@
 #!/bin/bash
 
 APP=local_laplacian
-NUM_SAMPLES=$1
+FIRST_SEED=$1
+LAST_SEED=$2
 
-if [ -z $NUM_SAMPLES ]; then
-NUM_SAMPLES=16
+
+if [ -z $FIRST_SEED ]; then
+FIRST_SEED=0
+fi
+
+if [ -z $LAST_SEED ]; then
+LAST_SEED=16
 fi
 
 # Make sure Halide is built
@@ -15,6 +21,9 @@ make -C ../autoscheduler ../autoscheduler/bin/libauto_schedule.so -j16
 
 # Build the app generator
 make bin/host/${APP}.generator -j32
+
+# Make a runtime
+./bin/host/${APP}.generator -r runtime -o bin/host target=host
 
 # Precompile RunGenMain
 if [ ! -f bin/RunGenMain.o ]; then
@@ -33,7 +42,7 @@ wait_for_idle () {
 }
 
 # Do all of the compilation
-for ((SEED=0;SEED<${NUM_SAMPLES};SEED++)); do
+for ((SEED=${FIRST_SEED};SEED<${LAST_SEED};SEED++)); do
     mkdir -p results/${SEED}
 
     # Every 8, wait for until more cores become idle
@@ -42,20 +51,20 @@ for ((SEED=0;SEED<${NUM_SAMPLES};SEED++)); do
     fi
     
     echo "Running generator with seed ${SEED}"
-    HL_PERMIT_FAILED_UNROLL=1 HL_SEED=${SEED} HL_RANDOM_DROPOUT=1 HL_BEAM_SIZE=1 HL_DEBUG_CODEGEN=1 \
-    ./bin/host/${APP}.generator -g ${APP} -e stmt,static_library,h,assembly,registration -o results/${SEED} -p ../autoscheduler/bin/libauto_schedule.so target=host auto_schedule=true > results/${SEED}/stdout.txt 2> results/${SEED}/stderr.txt &
+    HL_PERMIT_FAILED_UNROLL=1 HL_SEED=${SEED} HL_RANDOM_DROPOUT=1 HL_BEAM_SIZE=1 HL_DEBUG_CODEGEN=2 \
+    ./bin/host/${APP}.generator -g ${APP} -e stmt,static_library,h,assembly,registration -o results/${SEED} -p ../autoscheduler/bin/libauto_schedule.so target=host-no_runtime auto_schedule=true > results/${SEED}/stdout.txt 2> results/${SEED}/stderr.txt &
 done
 echo "Waiting for generators to finish..."
 wait
 
-for ((SEED=0;SEED<${NUM_SAMPLES};SEED++)); do
+for ((SEED=${FIRST_SEED};SEED<${LAST_SEED};SEED++)); do
     # Every 8, wait for until more cores become idle
     if [[ $(expr $SEED % 8) == 7 ]]; then
         wait_for_idle
     fi
 
     echo "Compiling benchmarker ${SEED}"
-    c++ results/${SEED}/*.{cpp,a} bin/RunGenMain.o -I ../../distrib/include/ -ljpeg -lpng -ltiff -lpthread -ldl -o results/${SEED}/benchmark &
+    c++ results/${SEED}/*.{cpp,a} bin/RunGenMain.o bin/host/runtime.a -I ../../distrib/include/ -ljpeg -lpng -ltiff -lpthread -ldl -o results/${SEED}/benchmark &
 done
 echo "Waiting for compilations to finish..."
 wait
@@ -64,7 +73,7 @@ wait
 sleep 5
 
 # Get the benchmarks
-for ((SEED=0;SEED<${NUM_SAMPLES};SEED++)); do
+for ((SEED=${FIRST_SEED};SEED<${LAST_SEED};SEED++)); do
     echo "Running benchmark ${SEED}"
     results/${SEED}/benchmark --benchmark_min_time=1 --benchmarks=all --default_input_buffers=random:0:auto --default_input_scalars --output_extents=estimate --parsable_output > results/${SEED}/benchmark_stdout.txt 2> results/${SEED}/benchmark_stderr.txt
     sleep 1
