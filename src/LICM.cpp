@@ -511,7 +511,7 @@ class GroupLoopInvariants : public IRMutator {
         int depth_a = expr_depth(a);
         int depth_b = expr_depth(b);
 
-        if (depth_a == depth && depth_b < depth) {
+        if (is_const(b) && depth_a == depth && depth_b < depth) {
             if (const Add *add_a = a.as<Add>()) {
                 return apply_distributive_law<Add, Mul>(add_a, b);
             } else if (const Sub *sub_a = a.as<Sub>()) {
@@ -527,7 +527,7 @@ class GroupLoopInvariants : public IRMutator {
                     return apply_distributive_law<Max, Mul>(max_a, b);
                 }
             }
-        } else if (depth_b == depth && depth_a < depth) {
+        } else if (is_const(a) && depth_b == depth && depth_a < depth) {
             if (const Add *add_b = b.as<Add>()) {
                 return apply_distributive_law<Add, Mul>(a, add_b);
             } else if (const Sub *sub_b = b.as<Sub>()) {
@@ -559,7 +559,7 @@ class GroupLoopInvariants : public IRMutator {
         int depth_a = expr_depth(a);
         int depth_b = expr_depth(b);
 
-        if (depth_a == depth && depth_b < depth) {
+        if (is_const(b) && depth_a == depth && depth_b < depth) {
             if (const Add *add_a = a.as<Add>()) {
                 return apply_distributive_law<Add, Min>(add_a, b);
             } else if (const Sub *sub_a = a.as<Sub>()) {
@@ -569,7 +569,7 @@ class GroupLoopInvariants : public IRMutator {
             } else if (const Max *max_a = a.as<Max>()) {
                 return apply_distributive_law<Max, Min>(max_a, b);
             }
-        } else if (depth_b == depth && depth_a < depth) {
+        } else if (is_const(a) && depth_b == depth && depth_a < depth) {
             if (const Add *add_b = b.as<Add>()) {
                 return apply_distributive_law<Add, Min>(a, add_b);
             } else if (const Sub *sub_b = b.as<Sub>()) {
@@ -595,7 +595,7 @@ class GroupLoopInvariants : public IRMutator {
         int depth_a = expr_depth(a);
         int depth_b = expr_depth(b);
 
-        if (depth_a == depth && depth_b < depth) {
+        if (is_const(b) && depth_a == depth && depth_b < depth) {
             if (const Add *add_a = a.as<Add>()) {
                 return apply_distributive_law<Add, Max>(add_a, b);
             } else if (const Sub *sub_a = a.as<Sub>()) {
@@ -605,7 +605,7 @@ class GroupLoopInvariants : public IRMutator {
             } else if (const Min *min_a = a.as<Min>()) {
                 return apply_distributive_law<Min, Max>(min_a, b);
             }
-        } else if (depth_b == depth && depth_a < depth) {
+        } else if (is_const(a) && depth_b == depth && depth_a < depth) {
             if (const Add *add_b = b.as<Add>()) {
                 return apply_distributive_law<Add, Max>(a, add_b);
             } else if (const Sub *sub_b = b.as<Sub>()) {
