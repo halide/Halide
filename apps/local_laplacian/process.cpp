@@ -20,8 +20,6 @@ int main(int argc, char **argv) {
         return 0;
     }
 
-    halide_reuse_device_allocations(nullptr, true);
-
     // Input may be a PNG8
     Buffer<uint16_t> input = load_and_convert_image(argv[1]);
 
@@ -37,6 +35,7 @@ int main(int argc, char **argv) {
     // Manually-tuned version
     double best_manual = benchmark(timing, 1, [&]() {
         local_laplacian(input, levels, alpha/(levels-1), beta, output);
+        output.device_sync();
     });
     printf("Manually-tuned time: %gms\n", best_manual * 1e3);
 
@@ -44,6 +43,7 @@ int main(int argc, char **argv) {
     // Auto-scheduled version
     double best_auto = benchmark(timing, 1, [&]() {
         local_laplacian_auto_schedule(input, levels, alpha/(levels-1), beta, output);
+        output.device_sync();
     });
     printf("Auto-scheduled time: %gms\n", best_auto * 1e3);
     #endif

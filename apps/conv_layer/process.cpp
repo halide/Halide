@@ -48,12 +48,14 @@ int main(int argc, char **argv) {
     // Manually-tuned version
     double min_t_manual = benchmark(10, 10, [&]() {
         conv_layer(input, filter, bias, output);
+        output.device_sync();
     });
     printf("Manually-tuned time: %gms\n", min_t_manual * 1e3);
 
     // Auto-scheduled version
     double min_t_auto = benchmark(10, 10, [&]() {
         conv_layer_auto_schedule(input, filter, bias, output);
+        output.device_sync();
     });
     printf("Auto-scheduled time: %gms\n", min_t_auto * 1e3);
 

@@ -918,7 +918,7 @@ int generate_filter_main_inner(int argc, char **argv, std::ostream &cerr) {
             {"o", Output::object},
             {"py.c", Output::python_extension},
         };
-        for (auto it : output_info) {
+        for (const auto &it : output_info) {
             output_name_to_enum[it.second.name] = it.first;
         }
 
@@ -926,8 +926,13 @@ int generate_filter_main_inner(int argc, char **argv, std::ostream &cerr) {
             auto it = output_name_to_enum.find(opt);
             if (it == output_name_to_enum.end()) {
                 cerr << "Unrecognized emit option: " << opt << " is not one of [";
-                for (auto k : output_name_to_enum) {
-                    cerr << k.first << " ";
+                auto end = output_info.cend();
+                auto last = std::prev(end);
+                for (auto iter = output_info.cbegin(); iter != end; ++iter) {
+                    cerr << iter->second.name;
+                    if (iter != last) {
+                        cerr << ' ';
+                    }
                 }
                 cerr << "], ignoring.\n";
                 cerr << kUsage;
