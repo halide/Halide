@@ -9,7 +9,7 @@ $(GENERATOR_BIN)/local_laplacian.generator: local_laplacian_generator.cpp $(GENE
 
 $(BIN)/%/local_laplacian.a: $(GENERATOR_BIN)/local_laplacian.generator
 	@mkdir -p $(@D)
-	$^ -g local_laplacian -o $(@D) -f local_laplacian target=$* auto_schedule=false
+	$^ -g local_laplacian -o $(@D) -e static_library,stmt,assembly,h -f local_laplacian target=$* auto_schedule=false
 
 $(BIN)/%/local_laplacian_auto_schedule.a: $(GENERATOR_BIN)/local_laplacian.generator
 	@mkdir -p $(@D)

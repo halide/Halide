@@ -90,6 +90,7 @@ double run_test(bool auto_schedule) {
     Buffer<float> out(in.width(), in.height(), in.channels());
     double t = benchmark(3, 10, [&]() {
         p.realize(out);
+        out.device_sync();
     });
 
     return t*1000;
