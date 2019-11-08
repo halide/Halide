@@ -238,7 +238,7 @@ define weak_odr <64 x i8> @halide.hexagon.shl.vub.ub(<64 x i8> %a, i8 %b) nounwi
 
 define weak_odr <64 x i8> @halide.hexagon.shl.vub.b(<64 x i8> %a, i8 %b) nounwind uwtable readnone alwaysinline {
   %a_32 = bitcast <64 x i8> %a to <16 x i32>
-  %bw = zext i8 %b to i32
+  %bw = sext i8 %b to i32
   %aw = call <32 x i32> @llvm.hexagon.V6.vzb(<16 x i32> %a_32)
   %aw_lo = call <16 x i32> @llvm.hexagon.V6.lo(<32 x i32> %aw)
   %aw_hi = call <16 x i32> @llvm.hexagon.V6.hi(<32 x i32> %aw)
@@ -276,7 +276,7 @@ define weak_odr <64 x i8> @halide.hexagon.shr.vub.ub(<64 x i8> %a, i8 %b) nounwi
 
 define weak_odr <64 x i8> @halide.hexagon.shr.vub.b(<64 x i8> %a, i8 %b) nounwind uwtable readnone alwaysinline {
   %a_32 = bitcast <64 x i8> %a to <16 x i32>
-  %bw = zext i8 %b to i32
+  %bw = sext i8 %b to i32
   %aw = call <32 x i32> @llvm.hexagon.V6.vzb(<16 x i32> %a_32)
   %aw_lo = call <16 x i32> @llvm.hexagon.V6.lo(<32 x i32> %aw)
   %aw_hi = call <16 x i32> @llvm.hexagon.V6.hi(<32 x i32> %aw)
@@ -302,7 +302,7 @@ define weak_odr <64 x i8> @halide.hexagon.shr.vb.ub(<64 x i8> %a, i8 %b) nounwin
 
 define weak_odr <64 x i8> @halide.hexagon.shr.vb.b(<64 x i8> %a, i8 %b) nounwind uwtable readnone alwaysinline {
   %a_32 = bitcast <64 x i8> %a to <16 x i32>
-  %bw = zext i8 %b to i32
+  %bw = sext i8 %b to i32
   %aw = call <32 x i32> @llvm.hexagon.V6.vsb(<16 x i32> %a_32)
   %aw_lo = call <16 x i32> @llvm.hexagon.V6.lo(<32 x i32> %aw)
   %aw_hi = call <16 x i32> @llvm.hexagon.V6.hi(<32 x i32> %aw)
