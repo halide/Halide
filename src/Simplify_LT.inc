@@ -1,9 +1,11 @@
+rewrite((c2 < max(((((x + y) % c0) + c1)/c0), (y + z))), (c2 < (y + z)), ((((0 <= c2) || (1 <= c0)) || (c0 <= -1)) && (((1 <= c0) || ((c0*c2) <= c1)) && ((c0 <= -1) || (c1 <= (c0*c2)))))) ||
+rewrite((c2 < max(((((x + y) % c0) + c1)/c0), (z + y))), (c2 < (z + y)), ((((0 <= c2) || (1 <= c0)) || (c0 <= -1)) && (((1 <= c0) || ((c0*c2) <= c1)) && ((c0 <= -1) || (c1 <= (c0*c2)))))) ||
 rewrite((w < ((min((x - (y + z)), c0) + w) + c1)), false, ((c0 + c1) <= 0)) ||
 rewrite((w < ((min(((x + y) - z), c0) + w) + c1)), false, ((c0 + c1) <= 0)) ||
 rewrite((w < (min(x, (min(min(y, z), w) + c0)) + c1)), false, ((c0 + c1) <= 0)) ||
-rewrite((x < (y + min(x, 1))), (max(x, 1) <= y)) ||
-rewrite((x < (z + (x + y))), (1 <= (y + z))) ||
-rewrite((x < (z + (y + x))), (1 <= (y + z))) ||
+rewrite((x < (y + min(x, 1))), (max(1, x) <= y)) ||
+rewrite((x < (z + (x + y))), (1 <= (z + y))) ||
+rewrite((x < (z + (y + x))), (1 <= (z + y))) ||
 rewrite((x < ((x + y) + z)), (1 <= (y + z))) ||
 rewrite((x < ((y + x) + z)), (1 <= (y + z))) ||
 rewrite((x < (min(x, 1) + y)), (max(x, 1) <= y)) ||
@@ -27,7 +29,7 @@ rewrite((x < min((min(x, y) + c0), z)), false, (c0 <= 0)) ||
 rewrite((x < min(min(x, y), z)), false) ||
 rewrite((x < min(min(y, x), z)), false) ||
 rewrite((x < min(min(min(x, y), (z + w)), c0)), false) ||
-rewrite((y < (x + min(y, 1))), (max(y, 1) <= x)) ||
+rewrite((y < (x + min(y, 1))), (max(1, y) <= x)) ||
 rewrite((y < (min(x, (min(y, z) + c0)) + c1)), false, ((c0 + c1) <= 0)) ||
 rewrite((y < (min(x, (min((y + c0), z) + c1)) + c2)), false, (((c0 + c1) + c2) <= 0)) ||
 rewrite((y < (min(y, 1) + x)), (max(y, 1) <= x)) ||
@@ -110,34 +112,34 @@ rewrite(((u + (w*(x + y))) < (w*(z + (x + y)))), (u < (w*z))) ||
 rewrite(((u + (w*(x + y))) < (w*(z + (y + x)))), (u < (w*z))) ||
 rewrite(((u + (w*(x + y))) < (w*((x + y) + z))), (u < (w*z))) ||
 rewrite(((u + (w*(x + y))) < (w*((y + x) + z))), (u < (w*z))) ||
-rewrite(((u + (w*(x + y))) < ((z + (x + y))*w)), (u < (w*z))) ||
-rewrite(((u + (w*(x + y))) < ((z + (y + x))*w)), (u < (w*z))) ||
-rewrite(((u + (w*(x + y))) < (((x + y) + z)*w)), (u < (w*z))) ||
-rewrite(((u + (w*(x + y))) < (((y + x) + z)*w)), (u < (w*z))) ||
+rewrite(((u + (w*(x + y))) < ((z + (x + y))*w)), (u < (z*w))) ||
+rewrite(((u + (w*(x + y))) < ((z + (y + x))*w)), (u < (z*w))) ||
+rewrite(((u + (w*(x + y))) < (((x + y) + z)*w)), (u < (z*w))) ||
+rewrite(((u + (w*(x + y))) < (((y + x) + z)*w)), (u < (z*w))) ||
 rewrite(((u + (w*(y + x))) < (w*(z + (x + y)))), (u < (w*z))) ||
 rewrite(((u + (w*(y + x))) < (w*(z + (y + x)))), (u < (w*z))) ||
 rewrite(((u + (w*(y + x))) < (w*((x + y) + z))), (u < (w*z))) ||
 rewrite(((u + (w*(y + x))) < (w*((y + x) + z))), (u < (w*z))) ||
-rewrite(((u + (w*(y + x))) < ((z + (x + y))*w)), (u < (w*z))) ||
-rewrite(((u + (w*(y + x))) < ((z + (y + x))*w)), (u < (w*z))) ||
-rewrite(((u + (w*(y + x))) < (((x + y) + z)*w)), (u < (w*z))) ||
-rewrite(((u + (w*(y + x))) < (((y + x) + z)*w)), (u < (w*z))) ||
+rewrite(((u + (w*(y + x))) < ((z + (x + y))*w)), (u < (z*w))) ||
+rewrite(((u + (w*(y + x))) < ((z + (y + x))*w)), (u < (z*w))) ||
+rewrite(((u + (w*(y + x))) < (((x + y) + z)*w)), (u < (z*w))) ||
+rewrite(((u + (w*(y + x))) < (((y + x) + z)*w)), (u < (z*w))) ||
 rewrite(((u + ((x + y)*w)) < (w*(z + (x + y)))), (u < (w*z))) ||
 rewrite(((u + ((x + y)*w)) < (w*(z + (y + x)))), (u < (w*z))) ||
 rewrite(((u + ((x + y)*w)) < (w*((x + y) + z))), (u < (w*z))) ||
 rewrite(((u + ((x + y)*w)) < (w*((y + x) + z))), (u < (w*z))) ||
-rewrite(((u + ((x + y)*w)) < ((z + (x + y))*w)), (u < (w*z))) ||
-rewrite(((u + ((x + y)*w)) < ((z + (y + x))*w)), (u < (w*z))) ||
-rewrite(((u + ((x + y)*w)) < (((x + y) + z)*w)), (u < (w*z))) ||
-rewrite(((u + ((x + y)*w)) < (((y + x) + z)*w)), (u < (w*z))) ||
+rewrite(((u + ((x + y)*w)) < ((z + (x + y))*w)), (u < (z*w))) ||
+rewrite(((u + ((x + y)*w)) < ((z + (y + x))*w)), (u < (z*w))) ||
+rewrite(((u + ((x + y)*w)) < (((x + y) + z)*w)), (u < (z*w))) ||
+rewrite(((u + ((x + y)*w)) < (((y + x) + z)*w)), (u < (z*w))) ||
 rewrite(((u + ((y + x)*w)) < (w*(z + (x + y)))), (u < (w*z))) ||
 rewrite(((u + ((y + x)*w)) < (w*(z + (y + x)))), (u < (w*z))) ||
 rewrite(((u + ((y + x)*w)) < (w*((x + y) + z))), (u < (w*z))) ||
 rewrite(((u + ((y + x)*w)) < (w*((y + x) + z))), (u < (w*z))) ||
-rewrite(((u + ((y + x)*w)) < ((z + (x + y))*w)), (u < (w*z))) ||
-rewrite(((u + ((y + x)*w)) < ((z + (y + x))*w)), (u < (w*z))) ||
-rewrite(((u + ((y + x)*w)) < (((x + y) + z)*w)), (u < (w*z))) ||
-rewrite(((u + ((y + x)*w)) < (((y + x) + z)*w)), (u < (w*z))) ||
+rewrite(((u + ((y + x)*w)) < ((z + (x + y))*w)), (u < (z*w))) ||
+rewrite(((u + ((y + x)*w)) < ((z + (y + x))*w)), (u < (z*w))) ||
+rewrite(((u + ((y + x)*w)) < (((x + y) + z)*w)), (u < (z*w))) ||
+rewrite(((u + ((y + x)*w)) < (((y + x) + z)*w)), (u < (z*w))) ||
 rewrite(((w + y) < (min(x, (min(y, z) + w)) + c0)), false, (c0 <= 0)) ||
 rewrite(((w + y) < min(x, (w + min(y, z)))), false) ||
 rewrite(((w + y) < min(x, (w + min(z, y)))), false) ||
@@ -147,7 +149,7 @@ rewrite(((w + y) < min((w + min(y, z)), x)), false) ||
 rewrite(((w + y) < min((w + min(z, y)), x)), false) ||
 rewrite(((w + y) < min((min(y, z) + w), x)), false) ||
 rewrite(((w + y) < min((min(z, y) + w), x)), false) ||
-rewrite(((w + z) < ((x + (y + z)) + c0)), ((w + fold((1 - c0))) <= (x + y))) ||
+rewrite(((w + z) < ((x + (y + z)) + c0)), ((w + fold((1 - c0))) <= (y + x))) ||
 rewrite(((w + z) < min(x, (w + min(y, z)))), false) ||
 rewrite(((w + z) < min(x, (w + min(z, y)))), false) ||
 rewrite(((w + z) < min(x, (min(y, z) + w))), false) ||
@@ -156,20 +158,20 @@ rewrite(((w + z) < min((w + min(y, z)), x)), false) ||
 rewrite(((w + z) < min((w + min(z, y)), x)), false) ||
 rewrite(((w + z) < min((min(y, z) + w), x)), false) ||
 rewrite(((w + z) < min((min(z, y) + w), x)), false) ||
-rewrite(((w + (x*z)) < (z*(x + y))), (w < (y*z))) ||
-rewrite(((w + (x*z)) < (z*(y + x))), (w < (y*z))) ||
+rewrite(((w + (x*z)) < (z*(x + y))), (w < (z*y))) ||
+rewrite(((w + (x*z)) < (z*(y + x))), (w < (z*y))) ||
 rewrite(((w + (x*z)) < ((x + y)*z)), (w < (y*z))) ||
 rewrite(((w + (x*z)) < ((y + x)*z)), (w < (y*z))) ||
 rewrite(((w + (y*z)) < (((x + y)*z) + 1)), (w <= (x*z))) ||
-rewrite(((w + (z*x)) < (z*(x + y))), (w < (y*z))) ||
-rewrite(((w + (z*x)) < (z*(y + x))), (w < (y*z))) ||
+rewrite(((w + (z*x)) < (z*(x + y))), (w < (z*y))) ||
+rewrite(((w + (z*x)) < (z*(y + x))), (w < (z*y))) ||
 rewrite(((w + (z*x)) < ((x + y)*z)), (w < (y*z))) ||
 rewrite(((w + (z*x)) < ((y + x)*z)), (w < (y*z))) ||
 rewrite(((w + (z*y)) < (((x + y)*z) + 1)), (w <= (x*z))) ||
 rewrite(((x + y) < (w + (z + (y + x)))), (0 < (w + z))) ||
 rewrite(((x + y) < (w + ((y + x) + z))), (0 < (w + z))) ||
-rewrite(((x + y) < ((z + (y + x)) + w)), (0 < (w + z))) ||
-rewrite(((x + y) < (((y + x) + z) + w)), (0 < (w + z))) ||
+rewrite(((x + y) < ((z + (y + x)) + w)), (0 < (z + w))) ||
+rewrite(((x + y) < (((y + x) + z) + w)), (0 < (z + w))) ||
 rewrite(((x + y) < min(z, (x + y))), false) ||
 rewrite(((x + y) < min(z, (y + x))), false) ||
 rewrite(((x + y) < min((x + y), z)), false) ||
@@ -196,16 +198,16 @@ rewrite(((y + w) < min((min(y, z) + w), x)), false) ||
 rewrite(((y + w) < min((min(z, y) + w), x)), false) ||
 rewrite(((y + x) < (w + (z + (x + y)))), (0 < (w + z))) ||
 rewrite(((y + x) < (w + ((x + y) + z))), (0 < (w + z))) ||
-rewrite(((y + x) < ((z + (x + y)) + w)), (0 < (w + z))) ||
-rewrite(((y + x) < (((x + y) + z) + w)), (0 < (w + z))) ||
+rewrite(((y + x) < ((z + (x + y)) + w)), (0 < (z + w))) ||
+rewrite(((y + x) < (((x + y) + z) + w)), (0 < (z + w))) ||
 rewrite(((y + x) < min(z, (x + y))), false) ||
 rewrite(((y + x) < min(z, (y + x))), false) ||
 rewrite(((y + x) < min((x + y), z)), false) ||
 rewrite(((y + x) < min((y + x), z)), false) ||
 rewrite(((y + z) < (w + (x + (z + y)))), (0 < (w + x))) ||
 rewrite(((y + z) < (w + ((z + y) + x))), (0 < (w + x))) ||
-rewrite(((y + z) < ((x + (z + y)) + w)), (0 < (w + x))) ||
-rewrite(((y + z) < (((z + y) + x) + w)), (0 < (w + x))) ||
+rewrite(((y + z) < ((x + (z + y)) + w)), (0 < (x + w))) ||
+rewrite(((y + z) < (((z + y) + x) + w)), (0 < (x + w))) ||
 rewrite(((y + z) < min(w, (z + min(x, y)))), false) ||
 rewrite(((y + z) < min(w, (z + min(y, x)))), false) ||
 rewrite(((y + z) < min(w, (min(x, y) + z))), false) ||
@@ -241,7 +243,7 @@ rewrite(((y + select((z < w), c0, c1)) < min(y, x)), false, (0 <= min(c0, c1))) 
 rewrite(((y + select((z < w), c1, c2)) < (min(x, y) + c0)), false, (((c0 + -1) <= c2) && (c0 <= min(c1, c2)))) ||
 rewrite(((y + select((z < w), c1, c2)) < min(x, (y + c0))), false, (c0 <= min(c1, c2))) ||
 rewrite(((y + select((z < w), c1, c2)) < min((y + c0), x)), false, (c0 <= min(c1, c2))) ||
-rewrite(((z + w) < ((x + (y + z)) + c0)), ((w + fold((1 - c0))) <= (x + y))) ||
+rewrite(((z + w) < ((x + (y + z)) + c0)), ((w + fold((1 - c0))) <= (y + x))) ||
 rewrite(((z + w) < min(x, (w + min(y, z)))), false) ||
 rewrite(((z + w) < min(x, (w + min(z, y)))), false) ||
 rewrite(((z + w) < min(x, (min(y, z) + w))), false) ||
@@ -261,8 +263,8 @@ rewrite(((z + x) < min((min(x, y) + z), w)), false) ||
 rewrite(((z + x) < min((min(y, x) + z), w)), false) ||
 rewrite(((z + y) < (w + (x + (y + z)))), (0 < (w + x))) ||
 rewrite(((z + y) < (w + ((y + z) + x))), (0 < (w + x))) ||
-rewrite(((z + y) < ((x + (y + z)) + w)), (0 < (w + x))) ||
-rewrite(((z + y) < (((y + z) + x) + w)), (0 < (w + x))) ||
+rewrite(((z + y) < ((x + (y + z)) + w)), (0 < (x + w))) ||
+rewrite(((z + y) < (((y + z) + x) + w)), (0 < (x + w))) ||
 rewrite(((z + y) < min(w, (z + min(x, y)))), false) ||
 rewrite(((z + y) < min(w, (z + min(y, x)))), false) ||
 rewrite(((z + y) < min(w, (min(x, y) + z))), false) ||
@@ -273,51 +275,55 @@ rewrite(((z + y) < min((min(x, y) + z), w)), false) ||
 rewrite(((z + y) < min((min(y, x) + z), w)), false) ||
 rewrite(((z + (x*c0)) < (((x + y)*c0) + c1)), ((z + fold((1 - c1))) <= (y*c0))) ||
 rewrite(((z + (y*c0)) < (((x + y)*c0) + c1)), ((z + fold((1 - c1))) <= (x*c0))) ||
+rewrite(((z + ((x + c2)/c1)) < (y + ((x + c0)/c1))), (z < (y + 0)), (c2 == c0)) ||
+rewrite(((z + ((x + c2)/c1)) < (((x + c0)/c1) + y)), (z < (0 + y)), (c2 == c0)) ||
 rewrite((((w*(x + y)) + u) < (w*(z + (x + y)))), (u < (w*z))) ||
 rewrite((((w*(x + y)) + u) < (w*(z + (y + x)))), (u < (w*z))) ||
 rewrite((((w*(x + y)) + u) < (w*((x + y) + z))), (u < (w*z))) ||
 rewrite((((w*(x + y)) + u) < (w*((y + x) + z))), (u < (w*z))) ||
-rewrite((((w*(x + y)) + u) < ((z + (x + y))*w)), (u < (w*z))) ||
-rewrite((((w*(x + y)) + u) < ((z + (y + x))*w)), (u < (w*z))) ||
-rewrite((((w*(x + y)) + u) < (((x + y) + z)*w)), (u < (w*z))) ||
-rewrite((((w*(x + y)) + u) < (((y + x) + z)*w)), (u < (w*z))) ||
+rewrite((((w*(x + y)) + u) < ((z + (x + y))*w)), (u < (z*w))) ||
+rewrite((((w*(x + y)) + u) < ((z + (y + x))*w)), (u < (z*w))) ||
+rewrite((((w*(x + y)) + u) < (((x + y) + z)*w)), (u < (z*w))) ||
+rewrite((((w*(x + y)) + u) < (((y + x) + z)*w)), (u < (z*w))) ||
 rewrite((((w*(y + x)) + u) < (w*(z + (x + y)))), (u < (w*z))) ||
 rewrite((((w*(y + x)) + u) < (w*(z + (y + x)))), (u < (w*z))) ||
 rewrite((((w*(y + x)) + u) < (w*((x + y) + z))), (u < (w*z))) ||
 rewrite((((w*(y + x)) + u) < (w*((y + x) + z))), (u < (w*z))) ||
-rewrite((((w*(y + x)) + u) < ((z + (x + y))*w)), (u < (w*z))) ||
-rewrite((((w*(y + x)) + u) < ((z + (y + x))*w)), (u < (w*z))) ||
-rewrite((((w*(y + x)) + u) < (((x + y) + z)*w)), (u < (w*z))) ||
-rewrite((((w*(y + x)) + u) < (((y + x) + z)*w)), (u < (w*z))) ||
+rewrite((((w*(y + x)) + u) < ((z + (x + y))*w)), (u < (z*w))) ||
+rewrite((((w*(y + x)) + u) < ((z + (y + x))*w)), (u < (z*w))) ||
+rewrite((((w*(y + x)) + u) < (((x + y) + z)*w)), (u < (z*w))) ||
+rewrite((((w*(y + x)) + u) < (((y + x) + z)*w)), (u < (z*w))) ||
 rewrite((((x*c0) + y) < (((z + x)*c0) + c1)), (y < ((z*c0) + c1))) ||
-rewrite((((x*c0) + z) < (((x + y)*c0) + c1)), ((z + fold((1 - c1))) <= (y*c0))) ||
-rewrite((((x*z) + w) < (z*(x + y))), (w < (y*z))) ||
-rewrite((((x*z) + w) < (z*(y + x))), (w < (y*z))) ||
+rewrite((((x*c0) + z) < (((x + y)*c0) + c1)), ((fold((1 - c1)) + z) <= (y*c0))) ||
+rewrite((((x*z) + w) < (z*(x + y))), (w < (z*y))) ||
+rewrite((((x*z) + w) < (z*(y + x))), (w < (z*y))) ||
 rewrite((((x*z) + w) < ((x + y)*z)), (w < (y*z))) ||
 rewrite((((x*z) + w) < ((y + x)*z)), (w < (y*z))) ||
-rewrite((((y*c0) + z) < (((x + y)*c0) + c1)), ((z + fold((1 - c1))) <= (x*c0))) ||
+rewrite((((y*c0) + z) < (((x + y)*c0) + c1)), ((fold((1 - c1)) + z) <= (x*c0))) ||
 rewrite((((y*z) + w) < (((x + y)*z) + 1)), (w <= (x*z))) ||
-rewrite((((z*x) + w) < (z*(x + y))), (w < (y*z))) ||
-rewrite((((z*x) + w) < (z*(y + x))), (w < (y*z))) ||
+rewrite((((z*x) + w) < (z*(x + y))), (w < (z*y))) ||
+rewrite((((z*x) + w) < (z*(y + x))), (w < (z*y))) ||
 rewrite((((z*x) + w) < ((x + y)*z)), (w < (y*z))) ||
 rewrite((((z*x) + w) < ((y + x)*z)), (w < (y*z))) ||
 rewrite((((z*y) + w) < (((x + y)*z) + 1)), (w <= (x*z))) ||
 rewrite(((((x + y)*w) + u) < (w*(z + (y + x)))), (u < (w*z))) ||
 rewrite(((((x + y)*w) + u) < (w*((y + x) + z))), (u < (w*z))) ||
-rewrite(((((x + y)*w) + u) < ((z + (y + x))*w)), (u < (w*z))) ||
-rewrite(((((x + y)*w) + u) < (((y + x) + z)*w)), (u < (w*z))) ||
+rewrite(((((x + y)*w) + u) < ((z + (y + x))*w)), (u < (z*w))) ||
+rewrite(((((x + y)*w) + u) < (((y + x) + z)*w)), (u < (z*w))) ||
 rewrite(((((y + x)*w) + u) < (w*(z + (x + y)))), (u < (w*z))) ||
 rewrite(((((y + x)*w) + u) < (w*((x + y) + z))), (u < (w*z))) ||
-rewrite(((((y + x)*w) + u) < ((z + (x + y))*w)), (u < (w*z))) ||
-rewrite(((((y + x)*w) + u) < (((x + y) + z)*w)), (u < (w*z))) ||
+rewrite(((((y + x)*w) + u) < ((z + (x + y))*w)), (u < (z*w))) ||
+rewrite(((((y + x)*w) + u) < (((x + y) + z)*w)), (u < (z*w))) ||
 rewrite(((((((x - y) + c0)/c1)*c1) + y) < x), false, ((-1 <= (c0 + c1)) && ((c1 + -1) <= c0))) ||
 rewrite(((((((x - y) + c0)/c1)*c1) + y) < x), false, ((0 <= c1) && (c1 < (max(c0, -1) + 2)))) ||
 rewrite((((((x - y)/c1)*c1) + y) < (x + c0)), false, ((0 <= c1) && ((c0 + c1) <= 1))) ||
 rewrite((((((x - y)/c1)*c1) + y) < (x + c0)), false, (((c0 + -1) <= c1) && ((c0 + c1) <= 1))) ||
+rewrite(((((x + c2)/c1) + z) < (y + ((x + c0)/c1))), (z < (y + 0)), (c2 == c0)) ||
+rewrite(((((x + c2)/c1) + z) < (((x + c0)/c1) + y)), (z < (0 + y)), (c2 == c0)) ||
 rewrite(((min(x, c0) + ((max(x, c0)/c1)*c1)) < x), false, (((1 <= c0) || (c1 <= 1)) && (((-1 <= c1) || (1 <= c0)) && ((-1 <= (c0 + c1)) && ((max(c1, 1) + -1) <= c0))))) ||
-rewrite(((min(x, c1) + y) < (x + c0)), ((y + fold(((c1 - c0) + 1))) <= max(x, c1))) ||
-rewrite(((min((x*c0), c1) + (y*c0)) < (x*c0)), ((min(x, 0) + y) < x), ((0 <= c1) && ((max(c1, 0) + 1) <= c0))) ||
-rewrite(((min((x*c0), c1) + (y*c0)) < (x*c0)), (y <= max(x, -1)), (((0 <= (c0 + c1)) && (1 <= c0)) && (c1 <= -1))) ||
+rewrite(((min(x, c1) + y) < (x + c0)), ((fold(((c1 - c0) + 1)) + y) <= max(x, c1))) ||
+rewrite(((min((x*c0), c1) + (y*c0)) < (x*c0)), ((min(0, x) + y) < x), ((0 <= c1) && ((max(c1, 0) + 1) <= c0))) ||
+rewrite(((min((x*c0), c1) + (y*c0)) < (x*c0)), (y <= max(-1, x)), (((0 <= (c0 + c1)) && (1 <= c0)) && (c1 <= -1))) ||
 rewrite(((max(u, x) + (y + z)) < min(w, (x + (y + z)))), false) ||
 rewrite(((max(u, x) + (y + z)) < min(w, (x + (z + y)))), false) ||
 rewrite(((max(u, x) + (y + z)) < min(w, ((y + z) + x))), false) ||
@@ -373,55 +379,55 @@ rewrite(((select((z < w), c1, c2) + x) < min((x + c0), y)), false, (c0 <= min(c1
 rewrite(((select((z < w), c1, c2) + y) < (min(x, y) + c0)), false, (((c0 + -1) <= c2) && (c0 <= min(c1, c2)))) ||
 rewrite(((select((z < w), c1, c2) + y) < min(x, (y + c0))), false, (c0 <= min(c1, c2))) ||
 rewrite(((select((z < w), c1, c2) + y) < min((y + c0), x)), false, (c0 <= min(c1, c2))) ||
-rewrite(((w*(u + (y + z))) < (x + (w*(y + z)))), ((u*w) < x)) ||
-rewrite(((w*(u + (y + z))) < (x + (w*(z + y)))), ((u*w) < x)) ||
-rewrite(((w*(u + (y + z))) < (x + ((y + z)*w))), ((u*w) < x)) ||
-rewrite(((w*(u + (y + z))) < (x + ((z + y)*w))), ((u*w) < x)) ||
-rewrite(((w*(u + (y + z))) < ((w*(y + z)) + x)), ((u*w) < x)) ||
-rewrite(((w*(u + (y + z))) < ((w*(z + y)) + x)), ((u*w) < x)) ||
-rewrite(((w*(u + (y + z))) < (((y + z)*w) + x)), ((u*w) < x)) ||
-rewrite(((w*(u + (y + z))) < (((z + y)*w) + x)), ((u*w) < x)) ||
-rewrite(((w*(u + (z + y))) < (x + (w*(y + z)))), ((u*w) < x)) ||
-rewrite(((w*(u + (z + y))) < (x + (w*(z + y)))), ((u*w) < x)) ||
-rewrite(((w*(u + (z + y))) < (x + ((y + z)*w))), ((u*w) < x)) ||
-rewrite(((w*(u + (z + y))) < (x + ((z + y)*w))), ((u*w) < x)) ||
-rewrite(((w*(u + (z + y))) < ((w*(y + z)) + x)), ((u*w) < x)) ||
-rewrite(((w*(u + (z + y))) < ((w*(z + y)) + x)), ((u*w) < x)) ||
-rewrite(((w*(u + (z + y))) < (((y + z)*w) + x)), ((u*w) < x)) ||
-rewrite(((w*(u + (z + y))) < (((z + y)*w) + x)), ((u*w) < x)) ||
+rewrite(((w*(u + (y + z))) < (x + (w*(y + z)))), ((w*u) < x)) ||
+rewrite(((w*(u + (y + z))) < (x + (w*(z + y)))), ((w*u) < x)) ||
+rewrite(((w*(u + (y + z))) < (x + ((y + z)*w))), ((w*u) < x)) ||
+rewrite(((w*(u + (y + z))) < (x + ((z + y)*w))), ((w*u) < x)) ||
+rewrite(((w*(u + (y + z))) < ((w*(y + z)) + x)), ((w*u) < x)) ||
+rewrite(((w*(u + (y + z))) < ((w*(z + y)) + x)), ((w*u) < x)) ||
+rewrite(((w*(u + (y + z))) < (((y + z)*w) + x)), ((w*u) < x)) ||
+rewrite(((w*(u + (y + z))) < (((z + y)*w) + x)), ((w*u) < x)) ||
+rewrite(((w*(u + (z + y))) < (x + (w*(y + z)))), ((w*u) < x)) ||
+rewrite(((w*(u + (z + y))) < (x + (w*(z + y)))), ((w*u) < x)) ||
+rewrite(((w*(u + (z + y))) < (x + ((y + z)*w))), ((w*u) < x)) ||
+rewrite(((w*(u + (z + y))) < (x + ((z + y)*w))), ((w*u) < x)) ||
+rewrite(((w*(u + (z + y))) < ((w*(y + z)) + x)), ((w*u) < x)) ||
+rewrite(((w*(u + (z + y))) < ((w*(z + y)) + x)), ((w*u) < x)) ||
+rewrite(((w*(u + (z + y))) < (((y + z)*w) + x)), ((w*u) < x)) ||
+rewrite(((w*(u + (z + y))) < (((z + y)*w) + x)), ((w*u) < x)) ||
 rewrite(((w*(y + z)) < ((x + ((y + z)*w)) + c0)), (fold((0 - c0)) < x)) ||
 rewrite(((w*(z + y)) < ((x + ((y + z)*w)) + c0)), (fold((0 - c0)) < x)) ||
-rewrite(((w*((y + z) + u)) < (x + (w*(y + z)))), ((u*w) < x)) ||
-rewrite(((w*((y + z) + u)) < (x + (w*(z + y)))), ((u*w) < x)) ||
-rewrite(((w*((y + z) + u)) < (x + ((y + z)*w))), ((u*w) < x)) ||
-rewrite(((w*((y + z) + u)) < (x + ((z + y)*w))), ((u*w) < x)) ||
-rewrite(((w*((y + z) + u)) < ((w*(y + z)) + x)), ((u*w) < x)) ||
-rewrite(((w*((y + z) + u)) < ((w*(z + y)) + x)), ((u*w) < x)) ||
-rewrite(((w*((y + z) + u)) < (((y + z)*w) + x)), ((u*w) < x)) ||
-rewrite(((w*((y + z) + u)) < (((z + y)*w) + x)), ((u*w) < x)) ||
-rewrite(((w*((z + y) + u)) < (x + (w*(y + z)))), ((u*w) < x)) ||
-rewrite(((w*((z + y) + u)) < (x + (w*(z + y)))), ((u*w) < x)) ||
-rewrite(((w*((z + y) + u)) < (x + ((y + z)*w))), ((u*w) < x)) ||
-rewrite(((w*((z + y) + u)) < (x + ((z + y)*w))), ((u*w) < x)) ||
-rewrite(((w*((z + y) + u)) < ((w*(y + z)) + x)), ((u*w) < x)) ||
-rewrite(((w*((z + y) + u)) < ((w*(z + y)) + x)), ((u*w) < x)) ||
-rewrite(((w*((z + y) + u)) < (((y + z)*w) + x)), ((u*w) < x)) ||
-rewrite(((w*((z + y) + u)) < (((z + y)*w) + x)), ((u*w) < x)) ||
+rewrite(((w*((y + z) + u)) < (x + (w*(y + z)))), ((w*u) < x)) ||
+rewrite(((w*((y + z) + u)) < (x + (w*(z + y)))), ((w*u) < x)) ||
+rewrite(((w*((y + z) + u)) < (x + ((y + z)*w))), ((w*u) < x)) ||
+rewrite(((w*((y + z) + u)) < (x + ((z + y)*w))), ((w*u) < x)) ||
+rewrite(((w*((y + z) + u)) < ((w*(y + z)) + x)), ((w*u) < x)) ||
+rewrite(((w*((y + z) + u)) < ((w*(z + y)) + x)), ((w*u) < x)) ||
+rewrite(((w*((y + z) + u)) < (((y + z)*w) + x)), ((w*u) < x)) ||
+rewrite(((w*((y + z) + u)) < (((z + y)*w) + x)), ((w*u) < x)) ||
+rewrite(((w*((z + y) + u)) < (x + (w*(y + z)))), ((w*u) < x)) ||
+rewrite(((w*((z + y) + u)) < (x + (w*(z + y)))), ((w*u) < x)) ||
+rewrite(((w*((z + y) + u)) < (x + ((y + z)*w))), ((w*u) < x)) ||
+rewrite(((w*((z + y) + u)) < (x + ((z + y)*w))), ((w*u) < x)) ||
+rewrite(((w*((z + y) + u)) < ((w*(y + z)) + x)), ((w*u) < x)) ||
+rewrite(((w*((z + y) + u)) < ((w*(z + y)) + x)), ((w*u) < x)) ||
+rewrite(((w*((z + y) + u)) < (((y + z)*w) + x)), ((w*u) < x)) ||
+rewrite(((w*((z + y) + u)) < (((z + y)*w) + x)), ((w*u) < x)) ||
 rewrite(((y*c0) < min(z, (min(x, y)*c0))), false, (1 <= c0)) ||
 rewrite(((y*c0) < min((min(x, y)*c0), z)), false, (1 <= c0)) ||
 rewrite(((y*min(x, c1)) < min((x*y), c0)), false, ((((1 <= c1) || (c0 <= 0)) || (c1 <= -1)) && (max(c0, 0) <= c1))) ||
 rewrite(((y*min(x, y)) < min((x*y), c0)), false, (c0 <= 1)) ||
 rewrite(((y*min(y, x)) < min((x*y), c0)), false, (c0 <= 1)) ||
-rewrite(((z*(w + y)) < (x + (y*z))), ((w*z) < x)) ||
-rewrite(((z*(w + y)) < (x + (z*y))), ((w*z) < x)) ||
-rewrite(((z*(w + y)) < ((x + (y*z)) + c0)), (((w*z) + fold((1 - c0))) <= x)) ||
-rewrite(((z*(w + y)) < ((y*z) + x)), ((w*z) < x)) ||
-rewrite(((z*(w + y)) < ((z*y) + x)), ((w*z) < x)) ||
-rewrite(((z*(y + w)) < (x + (y*z))), ((w*z) < x)) ||
-rewrite(((z*(y + w)) < (x + (z*y))), ((w*z) < x)) ||
-rewrite(((z*(y + w)) < ((x + (y*z)) + c0)), (((w*z) + fold((1 - c0))) <= x)) ||
-rewrite(((z*(y + w)) < ((y*z) + x)), ((w*z) < x)) ||
-rewrite(((z*(y + w)) < ((z*y) + x)), ((w*z) < x)) ||
+rewrite(((z*(w + y)) < (x + (y*z))), ((z*w) < x)) ||
+rewrite(((z*(w + y)) < (x + (z*y))), ((z*w) < x)) ||
+rewrite(((z*(w + y)) < ((x + (y*z)) + c0)), (((z*w) + fold((1 - c0))) <= x)) ||
+rewrite(((z*(w + y)) < ((y*z) + x)), ((z*w) < x)) ||
+rewrite(((z*(w + y)) < ((z*y) + x)), ((z*w) < x)) ||
+rewrite(((z*(y + w)) < (x + (y*z))), ((z*w) < x)) ||
+rewrite(((z*(y + w)) < (x + (z*y))), ((z*w) < x)) ||
+rewrite(((z*(y + w)) < ((x + (y*z)) + c0)), (((z*w) + fold((1 - c0))) <= x)) ||
+rewrite(((z*(y + w)) < ((y*z) + x)), ((z*w) < x)) ||
+rewrite(((z*(y + w)) < ((z*y) + x)), ((z*w) < x)) ||
 rewrite(((z*min(x, y)) < min(u, min(w, (z*min(y, x))))), false) ||
 rewrite(((z*min(x, y)) < min(u, min(w, (min(x, y)*z)))), false) ||
 rewrite(((z*min(x, y)) < min(u, min(w, (min(y, x)*z)))), false) ||
@@ -464,12 +470,12 @@ rewrite((((u + (z + y))*w) < (((y + z)*w) + x)), ((u*w) < x)) ||
 rewrite((((u + (z + y))*w) < (((z + y)*w) + x)), ((u*w) < x)) ||
 rewrite((((w + y)*z) < (x + (y*z))), ((w*z) < x)) ||
 rewrite((((w + y)*z) < (x + (z*y))), ((w*z) < x)) ||
-rewrite((((w + y)*z) < ((x + (y*z)) + c0)), (((w*z) + fold((1 - c0))) <= x)) ||
+rewrite((((w + y)*z) < ((x + (y*z)) + c0)), ((fold((1 - c0)) + (w*z)) <= x)) ||
 rewrite((((w + y)*z) < ((y*z) + x)), ((w*z) < x)) ||
 rewrite((((w + y)*z) < ((z*y) + x)), ((w*z) < x)) ||
 rewrite((((y + w)*z) < (x + (y*z))), ((w*z) < x)) ||
 rewrite((((y + w)*z) < (x + (z*y))), ((w*z) < x)) ||
-rewrite((((y + w)*z) < ((x + (y*z)) + c0)), (((w*z) + fold((1 - c0))) <= x)) ||
+rewrite((((y + w)*z) < ((x + (y*z)) + c0)), ((fold((1 - c0)) + (w*z)) <= x)) ||
 rewrite((((y + w)*z) < ((y*z) + x)), ((w*z) < x)) ||
 rewrite((((y + w)*z) < ((z*y) + x)), ((w*z) < x)) ||
 rewrite((((z + y)*w) < ((x + ((y + z)*w)) + c0)), (fold((0 - c0)) < x)) ||
@@ -492,7 +498,7 @@ rewrite(((((y*c1) + z)*c2) < ((y*c0) + x)), ((z*c2) < x), ((c1*c2) == c0)) ||
 rewrite(((((x + c0)/c1)*c2) < min((x*c1), c3)), (x <= c2), ((((((((((((((((((-3 <= ((c0 + c1) + c2)) || (-2 <= (c0 + c1))) || (-2 <= (c0 + c2))) || (-2 <= ((c0 + c1) + c2))) || (-1 <= c0)) || (1 <= c2)) || ((((c0 + c1)*c2) + (c1 + c2)) <= (c1*c1))) || ((((c0 + c1)*c2) + (c1 + c2)) <= (c1*c3))) || ((((c0 + c1)*c2) + (c1 + c2)) <= (((c2 + 2)*c1)*c1))) || (((((c0 + c1) + c2)*c2) + ((c2*2) + c1)) <= (c1*c3))) || (((((c0 + c1) + c2)*c2) + ((c2*2) + c1)) <= (((c2 + 2)*c1)*c1))) || (((((c0 + c1)*c2) + ((c2*2) + c1)) + 1) <= (c1*c1))) || (((((c0 + c1)*c2) + ((c2*2) + c1)) + 1) <= (c1*c3))) || ((((((c0 + c1) + c2)*c2) + ((c2*3) + c1)) + 1) <= (c1*c3))) || ((((((c0 + c1) + c2)*c2) + ((c2*3) + c1)) + 1) <= (((c2 + 2)*c1)*c1))) || ((((c1 + 1)*c1) + -2) <= (c0 + c2))) || ((((c1 + 1)*c1) + -2) <= ((c0 + c1) + c2))) && (((((((((1 <= max(((c1*c1) + ((c0 + -1)*c2)), c2)) || (c0 <= 1)) || (c0 <= (c1*c1))) || ((((c1*c2)*c1) + 1) <= ((c0 + c2)*c2))) || ((c0 + c1) <= 0)) || ((c0 + c2) <= 0)) || (((c0 + c2) + 1) <= (c1*c1))) || (((c0 + c1) + c2) <= -1)) && (((((((-1 <= c2) || ((((((c0 + c1) + c2)*c2) + ((c2*2) + c1)) + 1) <= (c1*c3))) || ((((((c0 + c1) + c2)*c2) + ((c2*2) + c1)) + 1) <= (((c2 + 1)*c1)*c1))) || (((c1*c1) + -1) <= (c0 + c2))) || (((c1*c1) + -1) <= ((c0 + c1) + c2))) || (((c1*c1) + -2) <= ((c0 + c1) + c2))) && ((((((-1 <= (c0 + c1)) || (0 <= c0)) || (1 <= c2)) || ((((c0 + c1)*c2) + (c1 + c2)) <= -1)) || (((((c0 + c1)*c2) + (c1 + c2)) + 1) <= (c1*c3))) && ((((1 <= c2) || (((c1*c3) + 1) <= ((c0 + -1)*c2))) || (((c1*c3) + 1) <= ((c0 + c2)*c2))) && (max(c1, c2) <= -1))))))) ||
 rewrite(((min(x, c1)*y) < min((x*y), c0)), false, ((((1 <= c1) || (c0 <= 0)) || (c1 <= -1)) && (max(c0, 0) <= c1))) ||
 rewrite(((min(x, c2)*c0) < min((x*c0), c1)), false, ((((((c0 <= -1) || (c1 <= 1)) || (c1 <= c2)) || (c1 <= (c0*c2))) || (c2 <= 0)) && ((((((-1 <= c2) || (0 <= ((c2 + 1)*c0))) && (0 <= c2)) || (c0 <= -1)) || (c1 <= (c0*c2))) && ((((1 <= c2) || (c0 <= -1)) || (c1 <= 0)) || (c2 <= -1))))) ||
-rewrite(((min(x, y)*c0) < min((x*c0), c1)), (y < min(x, 0)), ((1 <= min((min(c1, 0) + c0), ((c0*2) + c1))) && (c1 <= 0))) ||
+rewrite(((min(x, y)*c0) < min((x*c0), c1)), (y < min(0, x)), ((1 <= min((min(c1, 0) + c0), ((c0*2) + c1))) && (c1 <= 0))) ||
 rewrite(((min(x, y)*y) < min((x*y), c0)), false, (c0 <= 1)) ||
 rewrite(((min(x, y)*z) < min(u, min(w, (z*min(x, y))))), false) ||
 rewrite(((min(x, y)*z) < min(u, min(w, (z*min(y, x))))), false) ||
@@ -526,6 +532,8 @@ rewrite(((max(z, x)*c0) < min(y, (x*c0))), false, (1 <= c0)) ||
 rewrite(((max(z, x)*c0) < min((x*c0), y)), false, (1 <= c0)) ||
 rewrite(((x/c0) < (min(x, y)/c0)), false, (1 <= c0)) ||
 rewrite(((x/c0) < (min(y, x)/c0)), false, (1 <= c0)) ||
+rewrite(((x/c1) < (((x + c0)/c1) + (y*c2))), (1 <= y), ((((((((c0 <= 1) || (c1 <= -1)) || (c2 <= -1)) || ((c0 + 1) <= (c1*2))) || ((c0 + 1) <= ((c2 + 1)*c1))) || ((c0 + 1) <= c1)) || ((((c1*c2) + c0) + 1) <= ((c2 + 1)*c1))) && (((((c0 <= max((c1*c2), 1)) || (c1 <= -1)) || (c2 <= -1)) || (c0 <= 0)) && ((((((-1 <= c0) || (1 <= c1)) || (c2 <= -1)) || ((c1*c2) <= c0)) || (0 <= c0)) && ((((((1 <= c1) || (c0 <= 0)) || (c2 <= -1)) || ((c0 + c1) <= -1)) || (((c1*c2) + c0) <= -1)) && (((c1 <= max(((c1*c2) + c0), -1)) || (c2 <= -1)) && ((((c0 <= 0) || (c1 <= -1)) || (c2 <= -1)) && ((((1 <= c1) || (c2 <= -1)) || (((c1*c2) + c0) <= c1)) && ((((0 <= c0) || (1 <= c1)) || (c2 <= -1)) && (1 <= c2)))))))))) ||
+rewrite(((x/c1) < (((x - select(y, c0, c1))/c1) + c2)), false, ((((0 <= (((0 - c2)*c1) + c0)) || (c1 <= -1)) || ((c1*c2) <= c0)) && (((c1 <= -1) || (((c1*c2) + 1) <= (c0 + c1))) && (((1 <= c1) || (c0 <= (c1*c2))) && (c2 <= 1))))) ||
 rewrite(((y/c0) < (min(x, y)/c0)), false, (0 <= c0)) ||
 rewrite(((y/c0) < (min(y, x)/c0)), false, (0 <= c0)) ||
 rewrite(((y/c2) < (((min(x, c0) + y) + c1)/c2)), false, (((max((c0 + c1), 0) + 1) <= c2) && ((c0 + c1) <= 0))) ||
@@ -535,6 +543,7 @@ rewrite((((x + z)/c0) < ((z + min(x, y))/c0)), false, (1 <= c0)) ||
 rewrite((((x + z)/c0) < ((z + min(y, x))/c0)), false, (1 <= c0)) ||
 rewrite((((x + z)/c0) < ((min(x, y) + z)/c0)), false, (1 <= c0)) ||
 rewrite((((x + z)/c0) < ((min(y, x) + z)/c0)), false, (1 <= c0)) ||
+rewrite((((x + select(y, c2, c3))/c1) < ((x + c0)/c1)), false, (((1 <= c1) || (max(c2, c3) <= c0)) && ((c1 <= -1) || (c0 <= min(c2, c3))))) ||
 rewrite((((y + c0)/c1) < ((min(x, y) + c0)/c1)), false, (1 <= c1)) ||
 rewrite((((y + c2)/c1) < (x + ((y + c0)/c1))), (c2 < x), ((((1 <= c1) || (c0 == 0)) || (c1 <= -1)) && (((c1*c2) + c0) == c2))) ||
 rewrite((((y + c2)/c1) < (x + ((y + c0)/c1))), (c0 < x), ((((1 <= c1) || (c0 == 0)) || (c1 <= -1)) && (((c1 + 1)*c0) == c2))) ||
@@ -585,6 +594,7 @@ rewrite((((min(y, x) + z)/c0) < (min(w, (min(x, y) + z))/c0)), false, (1 <= c0))
 rewrite((((min(y, x) + z)/c0) < (min((z + min(x, y)), w)/c0)), false, (1 <= c0)) ||
 rewrite((((min(y, x) + z)/c0) < (min((z + min(y, x)), w)/c0)), false, (1 <= c0)) ||
 rewrite((((min(y, x) + z)/c0) < (min((min(x, y) + z), w)/c0)), false, (1 <= c0)) ||
+rewrite((((select(y, c2, c3) + x)/c1) < ((x + c0)/c1)), false, (((1 <= c1) || (max(c2, c3) <= c0)) && ((c1 <= -1) || (c0 <= min(c2, c3))))) ||
 rewrite((((c2 - x)/c1) < ((c0 - x)/c1)), false, (((1 <= c1) || (c2 <= c0)) && ((c0 <= c2) || (c1 <= -1)))) ||
 rewrite((((x*c2)/c3) < ((x*c0)/c1)), false, ((1 <= c1) && ((c1*c2) == (c0*c3)))) ||
 rewrite(((max(x, y)/c0) < (x/c0)), false, (1 <= c0)) ||
@@ -613,7 +623,7 @@ rewrite((min(x, y) < min(y, x)), false) ||
 rewrite((min(x, y) < min((y + c0), x)), false, (c0 <= 0)) ||
 rewrite((min(x, z) < (min(min((x + c0), y), z) + c1)), false, ((max(c0, 0) + c1) <= 0)) ||
 rewrite((min(x, z) < min(x, y)), (z < min(x, y))) ||
-rewrite((min(x, z) < min(y, x)), (z < min(x, y))) ||
+rewrite((min(x, z) < min(y, x)), (z < min(y, x))) ||
 rewrite((min(x, (y + c1)) < (min((x + c0), y) + c1)), false, ((c0 + c1) <= 0)) ||
 rewrite((min(x, (y + c2)) < (min(x, (y + c0)) + c1)), false, ((c1 <= 0) && ((c0 + c1) <= c2))) ||
 rewrite((min(x, (z + c0)) < min(z, min(x, y))), false, (0 <= c0)) ||
@@ -631,7 +641,7 @@ rewrite((min(y, x) < min(y, x)), false) ||
 rewrite((min(y, x) < min((y + c0), x)), false, (c0 <= 0)) ||
 rewrite((min(y, z) < (min(x, y) + c0)), (z < (min(x, y) + c0)), (c0 <= 0)) ||
 rewrite((min(y, z) < min(x, y)), (z < min(x, y))) ||
-rewrite((min(y, z) < min(y, x)), (z < min(x, y))) ||
+rewrite((min(y, z) < min(y, x)), (z < min(y, x))) ||
 rewrite((min(y, (x + c0)) < min(w, min(z, min(x, y)))), false, (0 <= c0)) ||
 rewrite((min(y, (x + c0)) < min(w, min(z, min(y, x)))), false, (0 <= c0)) ||
 rewrite((min(y, (x + c0)) < min(w, min(min(x, y), z))), false, (0 <= c0)) ||
@@ -657,7 +667,7 @@ rewrite((min(y, (z + c0)) < min(min(min(x, y), z), w)), false, (0 <= c0)) ||
 rewrite((min(y, (z + c0)) < min(min(min(y, x), z), w)), false, (0 <= c0)) ||
 rewrite((min(y, (z + c1)) < min(min(x, y), (z + c0))), false, (c0 <= c1)) ||
 rewrite((min(y, (z + c1)) < min(min(y, x), (z + c0))), false, (c0 <= c1)) ||
-rewrite((min(y, (((x + c1)/c2)*c2)) < (x + c0)), ((y + fold((1 - c0))) <= x), (((c0 + -1) <= (c1 + c2)) && (((c0 + c2) + -1) <= c1))) ||
+rewrite((min(y, (((x + c1)/c2)*c2)) < (x + c0)), ((fold((1 - c0)) + y) <= x), (((c0 + -1) <= (c1 + c2)) && (((c0 + c2) + -1) <= c1))) ||
 rewrite((min(z, w) < min(w, min(z, min(x, y)))), false) ||
 rewrite((min(z, w) < min(w, min(z, min(y, x)))), false) ||
 rewrite((min(z, w) < min(w, min(min(x, y), z))), false) ||
@@ -668,21 +678,21 @@ rewrite((min(z, w) < min(min(min(x, y), z), w)), false) ||
 rewrite((min(z, w) < min(min(min(y, x), z), w)), false) ||
 rewrite((min(z, x) < (min(min((x + c0), y), z) + c1)), false, ((max(c0, 0) + c1) <= 0)) ||
 rewrite((min(z, x) < min(x, y)), (z < min(x, y))) ||
-rewrite((min(z, x) < min(y, x)), (z < min(x, y))) ||
+rewrite((min(z, x) < min(y, x)), (z < min(y, x))) ||
 rewrite((min(z, y) < (min(x, y) + c0)), (z < (min(x, y) + c0)), (c0 <= 0)) ||
 rewrite((min(z, y) < min(x, y)), (z < min(x, y))) ||
-rewrite((min(z, y) < min(y, x)), (z < min(x, y))) ||
-rewrite((min(z, (w + y)) < (x + y)), (min((z - y), w) < x)) ||
-rewrite((min(z, (w + y)) < (y + x)), (min((z - y), w) < x)) ||
+rewrite((min(z, y) < min(y, x)), (z < min(y, x))) ||
+rewrite((min(z, (w + y)) < (x + y)), (min(w, (z - y)) < x)) ||
+rewrite((min(z, (w + y)) < (y + x)), (min(w, (z - y)) < x)) ||
 rewrite((min(z, (y + c0)) < min(x, y)), (z < min(x, y)), (0 <= c0)) ||
-rewrite((min(z, (y + c0)) < min(y, x)), (z < min(x, y)), (0 <= c0)) ||
+rewrite((min(z, (y + c0)) < min(y, x)), (z < min(y, x)), (0 <= c0)) ||
 rewrite((min(z, (y + c1)) < (min(x, y) + c0)), (z <= min(x, y)), ((1 <= c0) && (c0 < (min(c1, 1) + 1)))) ||
 rewrite((min(z, (y + c1)) < (min(x, y) + c0)), (z <= min(x, y)), ((1 <= c0) && (c0 <= min(c1, 1)))) ||
-rewrite((min(z, (y + w)) < (x + y)), (min((z - y), w) < x)) ||
-rewrite((min(z, (y + w)) < (y + x)), (min((z - y), w) < x)) ||
-rewrite((min(z, min(x, y)) < x), (min(y, z) < x)) ||
+rewrite((min(z, (y + w)) < (x + y)), (min(w, (z - y)) < x)) ||
+rewrite((min(z, (y + w)) < (y + x)), (min(w, (z - y)) < x)) ||
+rewrite((min(z, min(x, y)) < x), (min(z, y) < x)) ||
 rewrite((min(z, min(x, (y + c0))) < y), true, (c0 <= -1)) ||
-rewrite((min(z, min(y, x)) < x), (min(y, z) < x)) ||
+rewrite((min(z, min(y, x)) < x), (min(z, y) < x)) ||
 rewrite((min(z, min(y, (x + c0))) < x), true, (c0 <= -1)) ||
 rewrite((min(z, min((x + c0), y)) < x), true, (c0 <= -1)) ||
 rewrite((min(z, min((y + c0), x)) < y), true, (c0 <= -1)) ||
@@ -703,7 +713,7 @@ rewrite((min((x + c0), y) < min(min(min(y, x), z), w)), false, (0 <= c0)) ||
 rewrite((min((x + c1), y) < min(min(x, y), c0)), false, (0 <= c1)) ||
 rewrite((min((x + c2), y) < (min((x + c0), y) + c1)), false, ((c1 <= 0) && ((c0 + c1) < (c2 + 1)))) ||
 rewrite((min((y + c0), z) < min(x, y)), (z < min(x, y)), (0 <= c0)) ||
-rewrite((min((y + c0), z) < min(y, x)), (z < min(x, y)), (0 <= c0)) ||
+rewrite((min((y + c0), z) < min(y, x)), (z < min(y, x)), (0 <= c0)) ||
 rewrite((min((y + c1), z) < (min(x, y) + c0)), (z <= min(x, y)), ((1 <= c0) && (c0 < (min(c1, 1) + 1)))) ||
 rewrite((min((y + c1), z) < (min(x, y) + c0)), (z <= min(x, y)), ((1 <= c0) && (c0 <= min(c1, 1)))) ||
 rewrite((min((y + c2), x) < (min(x, (y + c0)) + c1)), false, ((c1 <= 0) && ((c0 + c1) <= c2))) ||
@@ -725,7 +735,7 @@ rewrite((min((x*c1), c3) < ((min(x, c0)*c1) + c2)), false, ((((1 <= c0) || (c0 <
 rewrite((min((x*c2), c3) < (min((x*c0), c1)*c1)), false, (((((c0 <= -1) || (c1 <= 1)) || (c1 <= c0)) || (c2 <= -1)) && ((((1 <= max(c0, c2)) || (c1 <= 1)) || ((c0 + c1) <= 0)) && ((((c0 <= -1) || (c2 <= 1)) || (c2 <= (c0*c1))) && (((min(c0, c2) <= -1) || ((c1*c1) <= c2)) && (((1 <= max(c0, c2)) || (((c1*c1) + c2) <= 0)) && ((((-1 <= c2) || (1 <= c0)) || ((c0*c1) <= c2)) && (((1 <= c2) || (c0 <= -1)) && (((1 <= c0) || (c2 <= -1)) && (((0 <= c3) && (1 <= c1)) && ((c1*c1) <= c3))))))))))) ||
 rewrite((min((x*c2), c3) < (min((x*c0), y)*c1)), (fold((1 - min(c0, 0))) <= min(x, y)), (((((((0 <= c3) && (1 <= c0)) && (1 <= c2)) && (c2 <= (c0*c1))) && ((c3 + 1) <= (c0*c1))) && ((c3 + 1) <= (c1*2))) && ((max(c3, 0) + 1) <= c1))) ||
 rewrite((min((x*c2), c3) < (min((x*c0), y)*c1)), (0 < min(x, y)), (((0 <= c3) || (c0 <= -1)) && ((((((0 <= (min((c0*c1), c1) + c3)) && (1 <= c0)) && (1 <= c2)) && (c2 <= (c0*c1))) && ((c3 + 1) <= (c0*c1))) && ((max(c3, 0) + 1) <= c1)))) ||
-rewrite((min((((x + c1)/c2)*c2), y) < (x + c0)), ((y + fold((1 - c0))) <= x), (((c0 + -1) <= (c1 + c2)) && (((c0 + c2) + -1) <= c1))) ||
+rewrite((min((((x + c1)/c2)*c2), y) < (x + c0)), ((fold((1 - c0)) + y) <= x), (((c0 + -1) <= (c1 + c2)) && (((c0 + c2) + -1) <= c1))) ||
 rewrite((min(min(x, y), c0) < (x + c1)), true, (1 <= c1)) ||
 rewrite((min(min(x, y), z) < x), (min(y, z) < x)) ||
 rewrite((min(min(x, (y + c0)), z) < y), true, (c0 <= -1)) ||
@@ -838,6 +848,7 @@ rewrite((max(x, z) < min(x, y)), false) ||
 rewrite((max(x, z) < min(y, x)), false) ||
 rewrite((max(x, z) < max(x, y)), (max(x, z) < y)) ||
 rewrite((max(x, z) < max(y, x)), (max(x, z) < y)) ||
+rewrite((max(y, z) < (min(x, y) + c0)), false, (c0 <= 0)) ||
 rewrite((max(y, z) < (max(x, y) + c0)), ((max(y, z) + fold(max((0 - min(c0, 0)), (1 - c0)))) <= x), (c0 <= 0)) ||
 rewrite((max(y, z) < min(x, y)), false) ||
 rewrite((max(y, z) < min(y, x)), false) ||
@@ -846,13 +857,14 @@ rewrite((max(y, z) < max(y, x)), (max(y, z) < x)) ||
 rewrite((max(y, (x + c2)) < (max((x + c0), y) + c1)), false, ((c1 <= 0) && ((c0 + c1) <= c2))) ||
 rewrite((max(z, x) < min(x, y)), false) ||
 rewrite((max(z, x) < min(y, x)), false) ||
-rewrite((max(z, x) < max(x, y)), (max(x, z) < y)) ||
-rewrite((max(z, x) < max(y, x)), (max(x, z) < y)) ||
-rewrite((max(z, y) < (max(x, y) + c0)), ((max(y, z) + fold(max((0 - min(c0, 0)), (1 - c0)))) <= x), (c0 <= 0)) ||
+rewrite((max(z, x) < max(x, y)), (max(z, x) < y)) ||
+rewrite((max(z, x) < max(y, x)), (max(z, x) < y)) ||
+rewrite((max(z, y) < (min(x, y) + c0)), false, (c0 <= 0)) ||
+rewrite((max(z, y) < (max(x, y) + c0)), ((max(z, y) + fold(max((0 - min(c0, 0)), (1 - c0)))) <= x), (c0 <= 0)) ||
 rewrite((max(z, y) < min(x, y)), false) ||
 rewrite((max(z, y) < min(y, x)), false) ||
-rewrite((max(z, y) < max(x, y)), (max(y, z) < x)) ||
-rewrite((max(z, y) < max(y, x)), (max(y, z) < x)) ||
+rewrite((max(z, y) < max(x, y)), (max(z, y) < x)) ||
+rewrite((max(z, y) < max(y, x)), (max(z, y) < x)) ||
 rewrite((max(z, (x + max(w, y))) < (x + y)), false) ||
 rewrite((max(z, (x + max(w, y))) < (y + x)), false) ||
 rewrite((max(z, (x + max(y, w))) < (x + y)), false) ||
@@ -957,8 +969,8 @@ rewrite((max((max((x + y), w) + z), u) < (z + (y + x))), false) ||
 rewrite((max((max((x + y), w) + z), u) < ((y + x) + z)), false) ||
 rewrite((max((max((y + x), w) + z), u) < (z + (x + y))), false) ||
 rewrite((max((max((y + x), w) + z), u) < ((x + y) + z)), false) ||
-rewrite((max((z - y), c2) < (max((x - y), c0) + 1)), (max(y, z) <= x), ((max(c0, c2) <= 0) && ((max(c0, -1) + 1) <= c2))) ||
-rewrite((max((x*c0), c1) < (max(x, y)*c0)), (max(x, 0) < y), (((0 <= c1) && ((c1 + 1) <= (c0*2))) && ((max(c1, 0) + 1) <= c0))) ||
+rewrite((max((z - y), c2) < (max((x - y), c0) + 1)), (max(z, y) <= x), ((max(c0, c2) <= 0) && ((max(c0, -1) + 1) <= c2))) ||
+rewrite((max((x*c0), c1) < (max(x, y)*c0)), (max(0, x) < y), (((0 <= c1) && ((c1 + 1) <= (c0*2))) && ((max(c1, 0) + 1) <= c0))) ||
 rewrite((max((x*c1), c2) < (max(x, c0)*c1)), false, (((((((-1 <= c2) || (0 <= c0)) || (c0 <= c2)) || (c1 <= -1)) && (((c0 <= 0) || (c1 <= -1)) && (((c0 <= 1) || (c1 <= -1)) || ((c0*c1) <= c1)))) || ((c0*c1) <= c2)) && ((((0 <= c2) || (1 <= c0)) || (c0 <= -1)) || (c1 <= -1)))) ||
 rewrite((max(((x + c2)/c0), c3) < max((x/c0), c1)), false, ((((c0 < ((c0 + c2) + 1)) || (c1 < (c3 + 1))) || (0 <= c2)) && (((0 <= c2) || (c0 < ((c0 + c2) + 1))) && (((c1 < (c3 + 1)) && (((c1 + 1)*c0) < (((c0*c3) + ((c0*2) + c2)) + 1))) && (0 <= c0))))) ||
 rewrite((max(((x*c0)/c2), c3) < (((x*c0) + c1)/c2)), false, (((0 <= c1) || (1 <= c2)) && ((c1 <= 0) || (c2 <= -1)))) ||

@@ -449,6 +449,14 @@ bool can_prove(Expr e, const Scope<Interval> &bounds) {
             }
         }
 
+        // A very common case where random probing fails to find a
+        // counter-example is var != obscure_value. Just cull it here.
+        if (const NE *ne = e.as<NE>()) {
+            if (ne->a.as<Variable>() && is_const(ne->b)) {
+                return false;
+            }
+        }
+
         debug(0) << "Failed to prove, but could not find a counter-example:\n " << e << "\n";
         debug(0) << "Original expression:\n" << orig << "\n";
         return false;
