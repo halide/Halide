@@ -368,7 +368,7 @@ int main(int argc, char **argv) {
 
     {
         std::lock_guard<std::mutex> lock(mutex);
-        for (int lhs_ops = 1; lhs_ops < 6; lhs_ops++) {
+        for (int lhs_ops = 1; lhs_ops < 8; lhs_ops++) {
             for (auto p : patterns) {
                 CountOps count_ops;
                 count_ops.include(p);
@@ -386,7 +386,25 @@ int main(int argc, char **argv) {
                 std::cout << "PATTERN " << lhs_ops << " : " << p << "\n";
                 futures.emplace_back(pool.async([=, &mutex, &rules, &futures, &done]() {
                             Expr e;
-                            for (int budget = 0; !e.defined() && budget < lhs_ops; budget++) {
+                            // Try something dumb first before using the CEGIS hammer
+                            for (Expr r : generate_reassociated_variants(p)) {
+                                // Is there already a simplifier rule that handles some
+                                // reassociation of this expression?
+                                Expr simpler_r = simplify(r);
+                                CountOps counter;
+                                counter.include(simpler_r);
+                                if (counter.count() < lhs_ops) {
+                                    std::lock_guard<std::mutex> lock(mutex);
+                                    std::cout << "Skipping CEGIS - we managed to simplify a reassociation: "
+                                              << p << " -> "
+                                              << r << " -> "
+                                              << simpler_r << "\n";
+                                    e = simpler_r;
+                                    break;
+                                }
+                            }
+
+                            for (int budget = 0; !e.defined() && budget < lhs_ops && budget < 5; budget++) {
                                 e = super_simplify(p, budget);
                             }
                             bool success = false;

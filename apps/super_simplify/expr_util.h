@@ -56,5 +56,7 @@ Halide::Expr pack_binary_op(const Iterable &v) {
     return result;
 }
 
+std::vector<Halide::Expr> generate_commuted_variants(const Halide::Expr &expr);
+std::vector<Halide::Expr> generate_reassociated_variants(const Halide::Expr &e);
 
 #endif
