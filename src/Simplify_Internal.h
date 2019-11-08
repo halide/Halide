@@ -18,10 +18,6 @@
 #define LOG_EXPR_MUTATIONS 0
 #define LOG_STMT_MUTATIONS 0
 
-// Include rules synthesized by the simplifier-automatic-rule-synthesis project
-#define USE_SYNTHESIZED_RULES 0
-#define USE_SYNTHESIZED_RULES_V2 1
-
 // On old compilers, some visitors would use large stack frames,
 // because they use expression templates that generate large numbers
 // of temporary objects when they are built and matched against. If we
@@ -34,6 +30,8 @@ namespace Internal {
 
 class Simplify : public VariadicVisitor<Simplify, Expr, Stmt> {
     using Super = VariadicVisitor<Simplify, Expr, Stmt>;
+
+    bool use_synthesized_rules = false;
 
 public:
     Simplify(bool r, const Scope<Interval> *bi, const Scope<ModulusRemainder> *ai);

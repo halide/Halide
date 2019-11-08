@@ -85,6 +85,8 @@ Module lower(const vector<Function> &output_funcs,
              const LinkageType linkage_type,
              const vector<Stmt> &requirements,
              const vector<IRMutator *> &custom_passes) {
+    HALIDE_TIC;
+
     std::vector<std::string> namespaces;
     std::string simple_pipeline_name = extract_namespaces(pipeline_name, namespaces);
 
@@ -472,6 +474,8 @@ Module lower(const vector<Function> &output_funcs,
     if (!t.has_feature(Target::JIT)) {
         add_legacy_wrapper(result_module, main_func);
     }
+
+    HALIDE_TOC;
 
     return result_module;
 }

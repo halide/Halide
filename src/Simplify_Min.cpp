@@ -210,11 +210,9 @@ Expr Simplify::visit(const Min *op, ExprInfo *bounds) {
         }
 
         if ((no_overflow_int(op->type) &&
+             use_synthesized_rules &&
              (
-
-#if USE_SYNTHESIZED_RULES_V2
 #include "Simplify_Min.inc"
-#endif
               false))) {
             return mutate(std::move(rewrite.result), bounds);
         }

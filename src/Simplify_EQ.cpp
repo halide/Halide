@@ -101,22 +101,13 @@ Expr Simplify::visit(const EQ *op, ExprInfo *bounds) {
         return rewrite.result;
     }
 
-    #if USE_SYNTHESIZED_RULES_V2
-    if (false ||
+    if (no_overflow_int(op->a.type()) &&
+        use_synthesized_rules &&
+        (
 #include "Simplify_EQ.inc"
-        false) {
+         false)) {
         return mutate(std::move(rewrite.result), bounds);
     }
-    #endif
-
-    #if USE_SYNTHESIZED_RULES
-    // From google list
-    if (rewrite(min(x, y) - max(x, y) == 0, x == y) ||
-        rewrite((min(min(x, y), z) - max(max(x, y), z)) == 0, ((x == y) && (z == y))) ||
-        false) {
-        return mutate(std::move(rewrite.result), bounds);
-    }
-    #endif
 
     if (const Sub *s = delta.as<Sub>()) {
         if (s->a.same_as(a) && s->b.same_as(b)) {
