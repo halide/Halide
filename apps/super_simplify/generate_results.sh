@@ -10,6 +10,7 @@ for app in harris local_laplacian unsharp bilateral_grid camera_pipe nl_means st
     echo "ours,baseline" > ${app}_llvm_backend_time.csv
     echo "ours,baseline" > ${app}_proof_failures.csv
     echo "ours,baseline" > ${app}_non_monotonic.csv
+    echo "ours,baseline" > ${app}_code_size.csv
     for ((i=0;i<256;i++)); do
         echo -n .
         A=$(grep BEST ../${app}/results/${i}/benchmark_stdout.txt | cut -d' ' -f5)
