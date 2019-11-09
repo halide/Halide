@@ -41,7 +41,7 @@ for app in harris local_laplacian unsharp bilateral_grid camera_pipe nl_means st
         echo "$A,$B" >> ${app}_non_monotonic.csv
 
         A=$(ls -l ../${app}/results/${i}/${app}.a | cut -d' ' -f5)
-        A=$(ls -l ../${app}/results_baseline/${i}/${app}.a | cut -d' ' -f5)        
+        B=$(ls -l ../${app}/results_baseline/${i}/${app}.a | cut -d' ' -f5)        
         echo "$A,$B" >> ${app}_code_size.csv
         
     done
