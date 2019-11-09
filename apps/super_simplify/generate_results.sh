@@ -1,0 +1,51 @@
+#!/bin/bash
+
+# Assumes that run_all_experiments.sh has run
+for app in harris local_laplacian unsharp bilateral_grid camera_pipe nl_means stencil_chain; do
+    echo $app ...
+    echo "ours,baseline" > ${app}_runtime.csv
+    echo "ours,baseline" > ${app}_peak_memory.csv
+    echo "ours,baseline" > ${app}_halide_compile_time.csv
+    echo "ours,baseline" > ${app}_llvm_optimization_time.csv
+    echo "ours,baseline" > ${app}_llvm_backend_time.csv
+    echo "ours,baseline" > ${app}_proof_failures.csv
+    echo "ours,baseline" > ${app}_non_monotonic.csv
+    for ((i=0;i<256;i++)); do
+        echo -n .
+        A=$(grep BEST ../${app}/results/${i}/benchmark_stdout.txt | cut -d' ' -f5)
+        B=$(grep BEST ../${app}/results_baseline/${i}/benchmark_stdout.txt | cut -d' ' -f5)        
+        echo "$A,$B" >> ${app}_runtime.csv
+
+        A=$(grep memory ../${app}/results/${i}/memory_stdout.txt | cut -d' ' -f4)
+        B=$(grep memory ../${app}/results_baseline/${i}/memory_stdout.txt | cut -d' ' -f4)        
+        echo "$A,$B" >> ${app}_peak_memory.csv
+
+        A=$(grep Lower.cpp ../${app}/results/${i}/stderr.txt | cut -d' ' -f5)
+        B=$(grep Lower.cpp ../${app}/results_baseline/${i}/stderr.txt | cut -d' ' -f5)        
+        echo "$A,$B" >> ${app}_halide_compile_time.csv
+
+        A=$(grep CodeGen_LLVM.cpp ../${app}/results/${i}/stderr.txt | cut -d' ' -f5)
+        B=$(grep CodeGen_LLVM.cpp ../${app}/results_baseline/${i}/stderr.txt | cut -d' ' -f5)        
+        echo "$A,$B" >> ${app}_llvm_optimization_time.csv
+
+        A=$(grep LLVM_Output.cpp ../${app}/results/${i}/stderr.txt | cut -d' ' -f5 | head -n1)
+        B=$(grep LLVM_Output.cpp ../${app}/results_baseline/${i}/stderr.txt | cut -d' ' -f5 | head -n1)        
+        echo "$A,$B" >> ${app}_llvm_backend_time.csv
+
+        A=$(grep 'Failed to prove' ../${app}/results/${i}/stderr.txt | wc)
+        B=$(grep 'Failed to prove' ../${app}/results_baseline/${i}/stderr.txt | wc)        
+        echo "$A,$B" >> ${app}_proof_failures.csv
+
+        A=$(grep 'non-monotonic' ../${app}/results/${i}/stderr.txt | wc)
+        B=$(grep 'non-monotonic' ../${app}/results_baseline/${i}/stderr.txt | wc)        
+        echo "$A,$B" >> ${app}_non_monotonic.csv        
+    done
+    echo
+done
+
+echo harris,,local_laplacian,,unsharp,,bilateral_grid,,camera_pipe,,nl_means,,stencil_chain, > header.csv
+
+for sheet in runtime peak_memory halide_compile_time llvm_optimization_time llvm_backend_time proof_failures non_monotonic; do
+    cp header.csv results_${sheet}.csv
+    paste -d, harris_${sheet}.csv local_laplacian_${sheet}.csv unsharp_${sheet}.csv bilateral_grid_${sheet}.csv camera_pipe_${sheet}.csv nl_means_${sheet}.csv stencil_chain_${sheet}.csv >> results_${sheet}.csv
+done
