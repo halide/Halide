@@ -32,20 +32,28 @@ for app in harris local_laplacian unsharp bilateral_grid camera_pipe nl_means st
         B=$(grep LLVM_Output.cpp ../${app}/results_baseline/${i}/stderr.txt | cut -d' ' -f5 | head -n1)        
         echo "$A,$B" >> ${app}_llvm_backend_time.csv
 
-        A=$(grep 'Failed to prove' ../${app}/results/${i}/stderr.txt | wc)
-        B=$(grep 'Failed to prove' ../${app}/results_baseline/${i}/stderr.txt | wc)        
+        A=$(grep 'Failed to prove' ../${app}/results/${i}/stderr.txt | wc -l)
+        B=$(grep 'Failed to prove' ../${app}/results_baseline/${i}/stderr.txt | wc -l)        
         echo "$A,$B" >> ${app}_proof_failures.csv
 
-        A=$(grep 'non-monotonic' ../${app}/results/${i}/stderr.txt | wc)
-        B=$(grep 'non-monotonic' ../${app}/results_baseline/${i}/stderr.txt | wc)        
-        echo "$A,$B" >> ${app}_non_monotonic.csv        
+        A=$(grep 'non-monotonic' ../${app}/results/${i}/stderr.txt | wc -l)
+        B=$(grep 'non-monotonic' ../${app}/results_baseline/${i}/stderr.txt | wc -l)        
+        echo "$A,$B" >> ${app}_non_monotonic.csv
+
+        A=$(ls -l ../${app}/results/${i}/${app}.a | cut -d' ' -f5)
+        A=$(ls -l ../${app}/results_baseline/${i}/${app}.a | cut -d' ' -f5)        
+        echo "$A,$B" >> ${app}_code_size.csv
+        
     done
     echo
 done
 
 echo harris,,local_laplacian,,unsharp,,bilateral_grid,,camera_pipe,,nl_means,,stencil_chain, > header.csv
 
-for sheet in runtime peak_memory halide_compile_time llvm_optimization_time llvm_backend_time proof_failures non_monotonic; do
+cp header.csv results.csv
+
+for sheet in runtime peak_memory halide_compile_time llvm_optimization_time llvm_backend_time proof_failures non_monotonic code_size; do
     cp header.csv results_${sheet}.csv
     paste -d, harris_${sheet}.csv local_laplacian_${sheet}.csv unsharp_${sheet}.csv bilateral_grid_${sheet}.csv camera_pipe_${sheet}.csv nl_means_${sheet}.csv stencil_chain_${sheet}.csv >> results_${sheet}.csv
 done
+
