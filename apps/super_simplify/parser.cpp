@@ -209,6 +209,12 @@ Expr parse_halide_expr(char **cursor, char *end, Type expected_type) {
         return e;
     }
 
+    if (consume(cursor, end, "!(")) {
+        Expr e = parse_halide_expr(cursor, end, Bool());
+        expect(cursor, end, ")");
+        return !e;
+    }
+
     // Parse entire rewrite rules as exprs
     if (consume(cursor, end, "rewrite(")) {
         Expr lhs = parse_halide_expr(cursor, end, expected_type);
@@ -381,6 +387,7 @@ vector<Expr> parse_halide_exprs_from_file(const std::string &filename) {
         }
         char *start = &line[0];
         char *end = &line[line.size()];
+        debug(1) << "Parsing: " << line << "\n";
         exprs.push_back(parse_halide_expr(&start, end, Type{}));
     }
 
