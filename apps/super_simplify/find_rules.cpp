@@ -143,7 +143,7 @@ vector<Expr> all_possible_lhs_patterns(const Expr &e) {
             }
 
             // Generate all subgraphs with this frontier node included
-            if (may_include && (must_include || c.size() < 10)) { // Max out at some number of unique nodes
+            if (may_include && (must_include || c.size() < 12)) { // Max out at some number of unique nodes
                 c.insert(v);
                 for (auto n : ch) {
                     if (may_add_to_frontier(rejected, current, n)) {
@@ -368,7 +368,7 @@ int main(int argc, char **argv) {
 
     {
         std::lock_guard<std::mutex> lock(mutex);
-        for (int lhs_ops = 1; lhs_ops < 8; lhs_ops++) {
+        for (int lhs_ops = 1; lhs_ops < 6; lhs_ops++) {
             for (auto p : patterns) {
                 CountOps count_ops;
                 count_ops.include(p);
@@ -376,7 +376,7 @@ int main(int argc, char **argv) {
                 if (count_ops.count() != lhs_ops ||
                     count_ops.has_unsupported_ir ||
                     !(count_ops.has_repeated_var ||
-                      count_ops.num_constants > 100)) {
+                      count_ops.num_constants > 2)) {
                     continue;
                 }
 

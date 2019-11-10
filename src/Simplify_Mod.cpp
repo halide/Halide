@@ -76,6 +76,14 @@ Expr Simplify::visit(const Mod *op, ExprInfo *bounds) {
                rewrite(ramp(y + x * c0, c2) % broadcast(c1), ramp(y, fold(c2 % c1), lanes) % c1, c0 % c1 == 0))))) {
             return mutate(std::move(rewrite.result), bounds);
         }
+
+        if (no_overflow_int(op->type) &&
+            use_synthesized_rules &&
+            (
+#include "Simplify_Mod.inc"
+             false)) {
+            return mutate(std::move(rewrite.result), bounds);
+        }
     }
 
     if (a.same_as(op->a) && b.same_as(op->b)) {
