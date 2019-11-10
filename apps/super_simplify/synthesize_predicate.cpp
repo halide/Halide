@@ -1155,7 +1155,7 @@ uint64_t System::id_counter = 0;
 bool can_disprove(Expr e, int beam_size, std::set<Expr, IRDeepCompare> *implications = nullptr) {
     // e = common_subexpression_elimination(simplify(remove_likelies(e)));
 
-    debug(1) << "*** Attempting disproof " << e << "\n";
+    debug(0) << "*** Attempting disproof " << e << "\n";
 
     if (is_zero(e)) {
         // The simplifier was capable of doing the disproof by itself
@@ -1815,9 +1815,11 @@ vector<Expr> remove_min_max_select(Expr e) {
     return pieces;
 }
 
+
+
 bool can_disprove_nonconvex(Expr e, int beam_size, Expr *implication) {
 
-    debug(1) << "Attempting to disprove non-convex expression: " << e << "\n";
+    debug(0) << "Attempting to disprove non-convex expression: " << e << "\n";
 
     // Canonicalize >, >=, and friends
     e = simplify(e);
@@ -1833,6 +1835,8 @@ bool can_disprove_nonconvex(Expr e, int beam_size, Expr *implication) {
     }
     e = pack_binary_op<Or>(pieces);
     pieces = unpack_binary_op<Or>(e);
+
+    debug(0) << "Broken into " << pieces.size() << " pieces\n";
 
     debug(1) << "In DNF form:\n";
     int i = 0;
@@ -1915,17 +1919,52 @@ bool can_disprove_nonconvex(Expr e, int beam_size, Expr *implication) {
     return !failed;
 }
 
+
 Expr synthesize_predicate(const Expr &lhs,
                           const Expr &rhs,
                           const vector<map<string, Expr>> &examples,
                           map<string, Expr> *binding) {
+
+    debug(0) << "Synthesizing predicate for " << lhs << " == " << rhs << "\n";
+
+    class ImplicitAssumptions : public IRVisitor {
+        void visit(const Mul *op) override {
+            const Variable *v = op->b.as<Variable>();
+            if (v && v->name[0] == 'c') {
+                result.push_back(op->b != 0);
+                result.push_back(op->b != 1);
+                result.push_back(op->b <= -1 || 1 <= op->b);
+                result.push_back(1 <= op->b || op->b <= -1);
+            }
+            IRVisitor::visit(op);
+        }
+        void visit(const Div *op) override {
+            const Variable *v = op->b.as<Variable>();
+            if (v && v->name[0] == 'c') {
+                result.push_back(op->b != 0);
+                result.push_back(op->b != 1);
+                result.push_back(op->b <= -1 || 1 <= op->b);
+                result.push_back(1 <= op->b || op->b <= -1);
+            }
+            IRVisitor::visit(op);
+        }
+    public:
+        vector<Expr> result;
+    } implicit_assumptions;
+    lhs.accept(&implicit_assumptions);
+    Expr implicit_assumption = pack_binary_op<And>(implicit_assumptions.result);
+    if (!implicit_assumption.defined()) {
+        implicit_assumption = const_true();
+    }
+
+    debug(0) << "Implicit assumption: " << implicit_assumption << "\n";
 
     Expr assumption = const_true();
     Expr to_prove = lhs == rhs;
     Expr m;
 
     assumption = simplify(assumption);
-    debug(1) << can_disprove_nonconvex(assumption && !to_prove, 1024, &m);
+    debug(1) << can_disprove_nonconvex(assumption && !to_prove, 16, &m);
 
     debug(1) << "\nImplication: " << m << "\n";
 
@@ -1996,6 +2035,8 @@ Expr synthesize_predicate(const Expr &lhs,
             const Min *min_b = op->b.as<Min>();
             const Max *max_a = op->a.as<Max>();
             const Max *max_b = op->b.as<Max>();
+            const Mul *mul_a = op->a.as<Mul>();
+            const Mul *mul_b = op->b.as<Mul>();
             if (is_zero(op->a) && can_prove(op->a != op->b)) {
                 return mutate(1 <= op->b);
             } else if (is_zero(op->b) && can_prove(op->a != op->b)) {
@@ -2008,6 +2049,21 @@ Expr synthesize_predicate(const Expr &lhs,
                 return mutate(op->a <= min_b->a && op->a <= min_b->b);
             } else if (max_b) {
                 return mutate(op->a <= max_b->a || op->a <= max_b->b);
+            } else if (mul_a && equal(op->b, -1)) {
+                // x * y <= -1 > x <= -1 && y >= 1 || x >= 1 && y <= -1
+                return mutate((mul_a->a <= -1 && 1 <= mul_a->b) ||
+                              (mul_a->b <= -1 && 1 <= mul_a->a));
+            } else if (mul_b && equal(op->a, 1)) {
+                return mutate((1 <= mul_b->a && 1 <= mul_b->b) ||
+                              (mul_b->a <= -1 && mul_b->b <= -1));
+
+            } else if (mul_a && is_zero(op->b)) {
+                return mutate((mul_a->a <= 0 && 0 <= mul_a->b) ||
+                              (mul_a->b <= 0 && 0 <= mul_a->a));
+            } else if (mul_b && is_zero(op->a)) {
+                return mutate((0 <= mul_b->a && 0 <= mul_b->b) ||
+                              (mul_b->a <= 0 && mul_b->b <= 0));
+
             } else {
                 // We don't want clauses like c0 * -1 <= c1 and also 0
                 // <= c0 + c1. Normalize by unpacking both sides into
@@ -2105,38 +2161,6 @@ Expr synthesize_predicate(const Expr &lhs,
     public:
         NormalizePrecondition(Internal::Simplify *s) : simplifier(s) {}
     };
-
-    class ImplicitAssumptions : public IRVisitor {
-        void visit(const Mul *op) override {
-            const Variable *v = op->b.as<Variable>();
-            if (v && v->name[0] == 'c') {
-                result.push_back(op->b != 0);
-                result.push_back(op->b != 1);
-                result.push_back(op->b <= -1 || 1 <= op->b);
-                result.push_back(1 <= op->b || op->b <= -1);
-            }
-            IRVisitor::visit(op);
-        }
-        void visit(const Div *op) override {
-            const Variable *v = op->b.as<Variable>();
-            if (v && v->name[0] == 'c') {
-                result.push_back(op->b != 0);
-                result.push_back(op->b != 1);
-                result.push_back(op->b <= -1 || 1 <= op->b);
-                result.push_back(1 <= op->b || op->b <= -1);
-            }
-            IRVisitor::visit(op);
-        }
-    public:
-        vector<Expr> result;
-    } implicit_assumptions;
-    lhs.accept(&implicit_assumptions);
-    Expr implicit_assumption = pack_binary_op<And>(implicit_assumptions.result);
-    if (!implicit_assumption.defined()) {
-        implicit_assumption = const_true();
-    }
-
-    debug(0) << "Implicit assumption: " << implicit_assumption << "\n";
 
     // Simplify implication using the assumption
     Simplify simplifier(true, nullptr, nullptr);
@@ -2360,8 +2384,10 @@ Expr synthesize_predicate(const Expr &lhs,
 
         if (!changed) {
             // If one of the clauses is just a == b, we should replace
-            // all uses of 'a' with 'b'. We know 'a' is more complex than 'b'
-            // due to how we normalize equalities above.
+            // all uses of 'a' with 'b'. We know 'a' is more complex
+            // than 'b' due to how we normalize equalities above. An
+            // exception is if b contains variables in the RHS and a
+            // does not. Then we should do the converse.
             for (size_t i = 0; i < cnf.size(); i++) {
                 auto &c = cnf[i];
                 Expr a, b;
@@ -2373,6 +2399,24 @@ Expr synthesize_predicate(const Expr &lhs,
                 }
 
                 if (a.defined()) {
+                    bool b_uses_rhs_vars = false;
+                    bool a_uses_rhs_vars = false;
+                    for (const auto &v : find_vars(a)) {
+                        if (expr_uses_var(rhs, v.first)) {
+                            a_uses_rhs_vars = true;
+                            break;
+                        }
+                    }
+                    for (const auto &v : find_vars(b)) {
+                        if (expr_uses_var(rhs, v.first)) {
+                            b_uses_rhs_vars = true;
+                            break;
+                        }
+                    }
+                    if (b_uses_rhs_vars && !a_uses_rhs_vars) {
+                        std::swap(a, b);
+                    }
+
                     for (size_t j = 0; j < cnf.size(); j++) {
                         if (i == j) continue;
                         set<Expr, IRDeepCompare> new_terms;
@@ -2432,11 +2476,13 @@ Expr synthesize_predicate(const Expr &lhs,
         }
     }
 
+    bool has_implicit_vars = false;
     for (auto p : find_vars(rhs)) {
         string v = p.first;
         if (expr_uses_var(lhs, v)) {
             continue;
         }
+        has_implicit_vars = true;
         debug(1) << "implicit var: " << v << "\n";
         set<Expr, IRDeepCompare> upper_bound, lower_bound, weak_upper_bound, weak_lower_bound;
         for (auto t : terms) {
@@ -2558,6 +2604,7 @@ Expr synthesize_predicate(const Expr &lhs,
     }
 
     // Replace LHS constant wildcards with actual constants where possible
+    bool has_dead_vars = false;
     vector<Expr> new_clauses;
     for (Expr c : clauses) {
         c = substitute(*binding, c);
@@ -2572,6 +2619,8 @@ Expr synthesize_predicate(const Expr &lhs,
             new_clauses.push_back(c);
             continue;
         }
+
+        has_dead_vars = true;
 
         for (auto &p : *binding) {
             p.second = substitute(var_a->name, eq->b, p.second);
@@ -2588,6 +2637,15 @@ Expr synthesize_predicate(const Expr &lhs,
         precondition = const_true();
     } else {
         precondition = pack_binary_op<And>(new_clauses);
+    }
+
+    if (has_implicit_vars || has_dead_vars) {
+        // Now that we have fewer vars, we might get a cleaner predicate if we restart
+        Expr new_lhs = substitute(*binding, lhs);
+        Expr new_rhs = substitute(*binding, rhs);
+        map<string, Expr> b;
+        precondition = synthesize_predicate(new_lhs, new_rhs, examples, &b);
+        binding->insert(b.begin(), b.end());
     }
 
     debug(1) << "Before final simplification: " << precondition << "\n";
