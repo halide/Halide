@@ -464,7 +464,8 @@ vector<Expr> generate_reassociated_variants(const Expr &e) {
         }
         return result;
     } else {
-        if (!e.as<Variable>() && !is_const(e)) {
+        if (!e.as<Variable>() && !is_const(e) && !e.as<Call>()) {
+            // Don't descend into calls (they're folds)
             std::cout << "Warning. Don't know how to reassociate: " << e << "\n";
         }
     }
