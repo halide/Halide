@@ -119,6 +119,7 @@ Expr Simplify::visit(const Mul *op, ExprInfo *bounds) {
             rewrite((x * c0) * c1, x * fold(c0 * c1), !overflows(c0 * c1)) ||
             rewrite((x * c0) * y, (x * y) * c0, !is_const(y)) ||
             rewrite(x * (y * c0), (x * y) * c0) ||
+            rewrite(x * -1, 0 - x) ||
             rewrite(max(x, y) * min(x, y), x * y) ||
             rewrite(max(x, y) * min(y, x), y * x) ||
             rewrite(broadcast(x) * broadcast(y), broadcast(x * y, op->type.lanes())) ||
@@ -131,6 +132,14 @@ Expr Simplify::visit(const Mul *op, ExprInfo *bounds) {
             rewrite(select(x, 0, 1) * y, select(x, 0, y)) ||
 
             false) {
+            return mutate(std::move(rewrite.result), bounds);
+        }
+
+        if (no_overflow_int(op->type) &&
+            use_synthesized_rules &&
+            (
+#include "Simplify_Mul.inc"
+             false)) {
             return mutate(std::move(rewrite.result), bounds);
         }
     }

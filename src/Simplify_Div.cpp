@@ -148,7 +148,7 @@ Expr Simplify::visit(const Div *op, ExprInfo *bounds) {
                rewrite((x + c0) / c1, x / c1 + fold(c0 / c1),                     c0 % c1 == 0) ||
                rewrite((x + y)/x, y/x + 1) ||
                rewrite((y + x)/x, y/x + 1) ||
-               rewrite((x - y)/x, (-y)/x + 1) ||
+               // rewrite((x - y)/x, (-y)/x + 1) || reduction order failure detected
                rewrite((y - x)/x, y/x - 1) ||
                rewrite(((x + y) + z)/x, (y + z)/x + 1) ||
                rewrite(((y + x) + z)/x, (y + z)/x + 1) ||
@@ -181,6 +181,14 @@ Expr Simplify::visit(const Div *op, ExprInfo *bounds) {
                        c2 > 0 && c0 % c2 == 0) ||
                // A very specific pattern that comes up in bounds in upsampling code.
                rewrite((x % 2 + c0) / 2, x % 2 + fold(c0 / 2), c0 % 2 == 1))))) {
+            return mutate(std::move(rewrite.result), bounds);
+        }
+
+        if (no_overflow_int(op->type) &&
+            use_synthesized_rules &&
+            (
+#include "Simplify_Div.inc"
+             false)) {
             return mutate(std::move(rewrite.result), bounds);
         }
     }
