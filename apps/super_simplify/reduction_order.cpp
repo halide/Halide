@@ -65,6 +65,23 @@ std::set<std::string> find_divisors(const Expr &e) {
     return d.divisors;
 }
 
+class VectorOpCount : public IRVisitor {
+    void visit(const Ramp *op) override {
+        counter += 1;
+    }
+    void visit(const Broadcast *op) override {
+        counter += 1;
+    }
+public:
+    int counter = 0;
+};
+
+int get_vector_count(const Expr &e) {
+    VectorOpCount rcounter;
+    e.accept(&rcounter);
+    return rcounter.counter;
+}
+
 bool check_divisors(const Expr &LHS, const Expr &RHS) {
     // check that all divisors on RHS appear as divisors on LHS
     std::set<std::string> lhs_divisors = find_divisors(LHS);
@@ -75,6 +92,124 @@ bool check_divisors(const Expr &LHS, const Expr &RHS) {
         }
     }
     return true;
+}
+
+class NonlinearOpsCount : public IRVisitor {
+    void visit(const Div *op) override {
+        counter += 1;
+        op->a.accept(this);
+        op->b.accept(this);
+    }
+    void visit(const Mod *op) override {
+        counter += 1;
+        op->a.accept(this);
+        op->b.accept(this);
+    }
+    void visit(const Mul *op) override {
+        counter += 1;
+        op->a.accept(this);
+        op->b.accept(this);
+    }
+public:
+    int counter = 0;
+};
+
+int get_nonlinear_op_count(const Expr &e) {
+    NonlinearOpsCount nl;
+    e.accept(&nl);
+    return nl.counter;
+}
+
+class IsConstant : public IRVisitor {
+    void visit(const Variable *op) override {
+        if (op->name[0] == 'c') {
+            flag = true;
+        }
+    }
+    void visit(const IntImm *op) override {
+        flag = true;
+    }
+    void visit(const UIntImm *op) override {
+        flag = true;
+    }
+public:
+    bool flag = false;
+};
+
+bool is_expr_constant(const Expr &e) {
+    IsConstant c;
+    e.accept(&c);
+    return c.flag;
+}
+
+class IsAddOrSubExpr : public IRVisitor {
+    void visit(const Add *op) override {
+        flag = true;
+    }
+    void visit(const Sub *op) override {
+        flag = true;
+    }
+public:
+    bool flag = false;
+};
+
+bool is_expr_addsub(const Expr &e) {
+    IsAddOrSubExpr a;
+    e.accept(&a);
+    return a.flag;
+}
+
+class IsRightChildConstant : public IRVisitor {
+    void visit(const Add *op) {
+        flag = is_expr_constant(op->b);
+    }
+    void visit(const Sub *op) {
+        flag = is_expr_constant(op->b);
+    }
+    void visit(const Mod *op) {
+        flag = is_expr_constant(op->b);
+    }
+    void visit(const Div *op) {
+        flag = is_expr_constant(op->b);
+    }
+    void visit(const Min *op) {
+        flag = is_expr_constant(op->b);
+    }
+    void visit(const Max *op) {
+        flag = is_expr_constant(op->b);
+    }
+    void visit(const EQ *op) {
+        flag = is_expr_constant(op->b);
+    }
+    void visit(const NE *op) {
+        flag = is_expr_constant(op->b);
+    }
+    void visit(const LT *op) {
+        flag = is_expr_constant(op->b);
+    }
+    void visit(const LE *op) {
+        flag = is_expr_constant(op->b);
+    }
+    void visit(const GT *op) {
+        flag = is_expr_constant(op->b);
+    }
+    void visit(const GE *op) {
+        flag = is_expr_constant(op->b);
+    }
+    void visit(const And *op) {
+        flag = is_expr_constant(op->b);
+    }
+    void visit(const Or *op) {
+        flag = is_expr_constant(op->b);
+    }
+public:
+    bool flag = false;
+};
+
+bool is_right_child_constant(const Expr &e) {
+    IsRightChildConstant rc;
+    e.accept(&rc);
+    return rc.flag;
 }
 
 class NodeHistogram : public IRVisitor {
@@ -216,6 +351,15 @@ std::map<IRNodeType, int> build_histogram(const Expr &e) {
     return histo.histogram;
 }
 
+int get_total_op_count(const Expr &e) {
+    std::map<IRNodeType, int> histo = build_histogram(e);
+    int counter = 0;
+    for (auto const& node : histo) {
+        counter += node.second;
+    }
+    return counter;
+}
+
 // return 1 if correctly ordered, -1 if incorrectly ordered, 0 if tied
 int compare_histograms(const Expr &LHS, const Expr &RHS) {
     std::map<IRNodeType, int> lhs_histo = build_histogram(LHS);
@@ -244,24 +388,77 @@ int compare_histograms(const Expr &LHS, const Expr &RHS) {
 }
 
 bool valid_reduction_order(const Expr &LHS, const Expr &RHS) {
+
+    // first, check that RHS has fewer ramp ops
+    // wildcard variables can only match scalars, so we don't need to check variable occurence counts
+    if (get_vector_count(LHS) > get_vector_count(RHS)) {
+        return true;
+    } else if (get_vector_count(LHS) < get_vector_count(RHS)) {
+        return false;
+    }
+
     // check that occurrences of variables on RHS is equal or lesser to those in LHS
+    // if any variable has more occurrences in RHS than it does on LHS, then the next several orders are invalid
     auto lhs_vars = find_vars(LHS);
     auto rhs_vars = find_vars(RHS);
     for (auto const& varcount : rhs_vars) {
         // constant wildcards don't count bc they can't match terms so can't cause reduction order failures
         if (varcount.first.front() != 'c' &&
-            (lhs_vars[varcount.first].second == 0 ||
-             varcount.second.second > lhs_vars[varcount.first].second)) {
+            (lhs_vars[varcount.first] == 0 ||
+             varcount.second > lhs_vars[varcount.first])) {
             return false;
         }
     }
 
-    // check that histogram of operations obeys ordering
+    // accept rule if LHS has strictly more occurrences of at least 1 variable
+    for (auto const& lhsv : lhs_vars) {
+        if ((lhsv.first.front() != 'c') && 
+            ((rhs_vars.count(lhsv.first) == 0) || (lhsv.second > rhs_vars[lhsv.first]))) {
+            return true;
+        }
+    }
+
+    // LHS should have more div, mod, mul operations than RHS (if var occurrences are >=)
+    if (get_nonlinear_op_count(LHS) > get_nonlinear_op_count(RHS)) {
+        return true;
+    } else if (get_nonlinear_op_count(LHS) < get_nonlinear_op_count(RHS)) {
+        return false;
+    }
+
+    // LHS should have more total ops than RHS (if var occurrences are >=)
+    if (get_total_op_count(LHS) > get_total_op_count(RHS)) {
+        return true;
+    } else if (get_total_op_count(LHS) < get_total_op_count(RHS)) {
+        return false;
+    }
+
+    // check that histogram of operations obeys ordering (if var occurrences are >=)
     int rule_histogram_ordering = compare_histograms(LHS, RHS);
-    // std::cout << "Rule histogram ordering is " << rule_histogram_ordering << "\n";
     if (rule_histogram_ordering == 1) {
         return true;
     } else if (rule_histogram_ordering == -1) {
+        return false;
+    }
+
+    // ordered if LHS is not add or sub and RHS is add or sub
+    // invalid order if LHS is add or sub and RSH is NOT add or sub
+    bool is_LHS_add_sub = is_expr_addsub(LHS);
+    bool is_RHS_add_sub = is_expr_addsub(RHS);
+
+    if (!(is_LHS_add_sub) && is_RHS_add_sub) {
+        return true;
+    }
+    if (is_LHS_add_sub && !(is_RHS_add_sub)) {
+        return false;
+    }
+
+    // ordered if the right child of the LHS is not a constant and the right child of the RHS is a constant
+    // invalid order if the right child of the LHS is a constant and the right child of the RHS is not a constant
+    // this checks if right child is IntImm, UIntImm, or Variable whose first char is c
+    if (!(is_right_child_constant(LHS) && is_right_child_constant(RHS))) {
+        return true;
+    }
+    if (is_right_child_constant(LHS) && !(is_right_child_constant(RHS))) {
         return false;
     }
 
@@ -269,9 +466,11 @@ bool valid_reduction_order(const Expr &LHS, const Expr &RHS) {
     IRNodeType lhs_root_type = LHS.node_type();
     IRNodeType rhs_root_type = RHS.node_type();
 
+    // since this is the last check, this should be false if the root ops are equal
     if (nto[lhs_root_type] >= nto[rhs_root_type]) {
         return false;
     }
 
     return true;
+
 }
