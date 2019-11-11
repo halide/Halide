@@ -1,3 +1,6 @@
+rewrite((0 - (min(x, 0)*c1)), (fold((0 - c1))*min(x, 0))) ||
+rewrite((c0 - (y + ((x + c1)/c2))), (((fold(max((-1 - (((-1 - c0)*c2) + c1)), (((c0*c2) - (c1 + c2)) + -1))) - x)/c2) - y), ((((-2 <= c2) || (1 <= c0)) || (c0 <= -1)) && ((((1 <= c2) || (c0 == 0)) || (c2 <= -1)) && (((0 <= c0) || (c2 <= 3)) && ((c0 <= 0) || (c2 <= 2)))))) ||
+rewrite((c0 - (((x + c1)/c2) + y)), (((fold(max((-1 - (((-1 - c0)*c2) + c1)), (((c0*c2) - (c1 + c2)) + -1))) - x)/c2) - y), ((((-2 <= c2) || (1 <= c0)) || (c0 <= -1)) && ((((1 <= c2) || (c0 == 0)) || (c2 <= -1)) && (((0 <= c0) || (c2 <= 3)) && ((c0 <= 0) || (c2 <= 2)))))) ||
 rewrite((x - (w + select(y, z, (x + c0)))), (select(y, (x - z), fold((0 - c0))) - w)) ||
 rewrite((x - (w + select(y, (x + c0), z))), (select(y, fold((0 - c0)), (x - z)) - w)) ||
 rewrite((x - (y + (x + z))), (0 - (y + z))) ||
@@ -8,17 +11,17 @@ rewrite((x - (select(y, z, (x + c0)) + w)), (select(y, (x - z), fold((0 - c0))) 
 rewrite((x - (select(y, (x + c0), z) + w)), (select(y, fold((0 - c0)), (x - z)) - w)) ||
 rewrite((x - min(y, ((x + z) + c0))), max((x - y), (fold((0 - c0)) - z))) ||
 rewrite((x - min(z, min(y, (x + c0)))), max((x - min(z, y)), fold((0 - c0)))) ||
-rewrite((x - min(z, min((x + c0), y))), max((x - min(z, y)), fold((0 - c0)))) ||
+rewrite((x - min(z, min((x + c0), y))), max((x - min(y, z)), fold((0 - c0)))) ||
 rewrite((x - min(((x + z) + c0), y)), max((x - y), (fold((0 - c0)) - z))) ||
-rewrite((x - min(min(y, (x + c0)), z)), max((x - min(z, y)), fold((0 - c0)))) ||
-rewrite((x - min(min((x + c0), y), z)), max((x - min(z, y)), fold((0 - c0)))) ||
+rewrite((x - min(min(y, (x + c0)), z)), max((x - min(y, z)), fold((0 - c0)))) ||
+rewrite((x - min(min((x + c0), y), z)), max((x - min(y, z)), fold((0 - c0)))) ||
 rewrite((x - select(y, z, (x + c0))), select(y, (x - z), fold((0 - c0)))) ||
-rewrite((x - select(y, z, (x + (w + (u*c0))))), select(y, (x - z), ((u*fold((0 - c0))) - w))) ||
-rewrite((x - select(y, z, (x + ((u*c0) + w)))), select(y, (x - z), ((u*fold((0 - c0))) - w))) ||
+rewrite((x - select(y, z, (x + (w + (u*c0))))), select(y, (x - z), ((fold((0 - c0))*u) - w))) ||
+rewrite((x - select(y, z, (x + ((u*c0) + w)))), select(y, (x - z), ((fold((0 - c0))*u) - w))) ||
 rewrite((x - select(y, z, ((w + x) + c0))), select(y, (x - z), (fold((0 - c0)) - w))) ||
-rewrite((x - select(y, z, ((w + (u*c0)) + x))), select(y, (x - z), ((u*fold((0 - c0))) - w))) ||
+rewrite((x - select(y, z, ((w + (u*c0)) + x))), select(y, (x - z), ((fold((0 - c0))*u) - w))) ||
 rewrite((x - select(y, z, ((x + w) + c0))), select(y, (x - z), (fold((0 - c0)) - w))) ||
-rewrite((x - select(y, z, (((u*c0) + w) + x))), select(y, (x - z), ((u*fold((0 - c0))) - w))) ||
+rewrite((x - select(y, z, (((u*c0) + w) + x))), select(y, (x - z), ((fold((0 - c0))*u) - w))) ||
 rewrite((x - select(y, (x + c0), z)), select(y, fold((0 - c0)), (x - z))) ||
 rewrite((x - select(y, ((x + z) + c0), w)), select(y, (fold((0 - c0)) - z), (x - w))) ||
 rewrite((x - select(y, ((z + x) + c0), w)), select(y, (fold((0 - c0)) - z), (x - w))) ||
@@ -151,13 +154,17 @@ rewrite(((x + y) - ((y + z) + w)), (x - (z + w))) ||
 rewrite(((x + y) - ((z + x) + w)), (y - (z + w))) ||
 rewrite(((x + y) - ((z + y) + w)), (x - (z + w))) ||
 rewrite(((x + y) - min(u, (w + (x + z)))), (y - min((u - x), (w + z)))) ||
-rewrite(((x + y) - min(u, (w + (z + x)))), (y - min((z + w), (u - x)))) ||
+rewrite(((x + y) - min(u, (w + (z + x)))), (y - min((u - x), (z + w)))) ||
 rewrite(((x + y) - min(u, ((x + z) + w))), (y - min((u - x), (z + w)))) ||
 rewrite(((x + y) - min(u, ((z + x) + w))), (y - min((u - x), (z + w)))) ||
+rewrite(((x + y) - min(w, (y + z))), (x - min(z, (w - y)))) ||
+rewrite(((x + y) - min(w, (z + y))), (x - min(z, (w - y)))) ||
 rewrite(((x + y) - min((w + (x + z)), u)), (y - min((w + z), (u - x)))) ||
 rewrite(((x + y) - min((w + (z + x)), u)), (y - min((w + z), (u - x)))) ||
+rewrite(((x + y) - min((y + z), w)), (x - min((w - y), z))) ||
+rewrite(((x + y) - min((z + y), w)), (x - min((w - y), z))) ||
 rewrite(((x + y) - min(((x + z) + w), u)), (y - min((w + z), (u - x)))) ||
-rewrite(((x + y) - min(((z + x) + w), u)), (y - min((z + w), (u - x)))) ||
+rewrite(((x + y) - min(((z + x) + w), u)), (y - min((u - x), (z + w)))) ||
 rewrite(((x + y) - select(z, w, (u + y))), (x - select(z, (w - y), u))) ||
 rewrite(((x + y) - select(z, w, (y + u))), (x - select(z, (w - y), u))) ||
 rewrite(((x + y) - select(z, (w + y), u)), (x - select(z, w, (u - y)))) ||
@@ -178,7 +185,7 @@ rewrite(((x + (z + y)) - ((w + z) + u)), ((x + y) - (w + u))) ||
 rewrite(((x + (z + y)) - ((z + w) + u)), ((x + y) - (w + u))) ||
 rewrite(((x + ((w + z) + y)) - z), (x + (w + y))) ||
 rewrite(((x + ((z + w) + y)) - z), (x + (w + y))) ||
-rewrite(((x + (y - (z*c0))) - (z*c0)), (x + (y - (z*fold(max((c0*2), 1))))), (1 <= c0)) ||
+rewrite(((x + (y - (z*c0))) - (z*c0)), (x + (y - (fold(max((c0*2), 1))*z))), (1 <= c0)) ||
 rewrite(((y + x) - (w + (x + z))), (y - (w + z))) ||
 rewrite(((y + x) - (w + (y + z))), (x - (w + z))) ||
 rewrite(((y + x) - (w + (z + x))), (y - (w + z))) ||
@@ -199,10 +206,14 @@ rewrite(((y + x) - min(u, (w + (x + z)))), (y - min((u - x), (w + z)))) ||
 rewrite(((y + x) - min(u, (w + (z + x)))), (y - min((z + w), (u - x)))) ||
 rewrite(((y + x) - min(u, ((x + z) + w))), (y - min((u - x), (z + w)))) ||
 rewrite(((y + x) - min(u, ((z + x) + w))), (y - min((u - x), (z + w)))) ||
+rewrite(((y + x) - min(w, (y + z))), (x - min(z, (w - y)))) ||
+rewrite(((y + x) - min(w, (z + y))), (x - min(z, (w - y)))) ||
 rewrite(((y + x) - min((w + (x + z)), u)), (y - min((w + z), (u - x)))) ||
 rewrite(((y + x) - min((w + (z + x)), u)), (y - min((w + z), (u - x)))) ||
+rewrite(((y + x) - min((y + z), w)), (x - min((w - y), z))) ||
+rewrite(((y + x) - min((z + y), w)), (x - min((w - y), z))) ||
 rewrite(((y + x) - min(((x + z) + w), u)), (y - min((w + z), (u - x)))) ||
-rewrite(((y + x) - min(((z + x) + w), u)), (y - min((z + w), (u - x)))) ||
+rewrite(((y + x) - min(((z + x) + w), u)), (y - min((u - x), (w + z)))) ||
 rewrite(((y + x) - select(z, w, (u + y))), (x - select(z, (w - y), u))) ||
 rewrite(((y + x) - select(z, w, (y + u))), (x - select(z, (w - y), u))) ||
 rewrite(((y + x) - select(z, (w + y), u)), (x - select(z, w, (u - y)))) ||
@@ -212,7 +223,9 @@ rewrite(((z + (x - y)) - x), (z - y)) ||
 rewrite(((z + (x*y)) - (w*y)), (z + (y*(x - w)))) ||
 rewrite(((z + (x*y)) - (y*w)), (z + (y*(x - w)))) ||
 rewrite(((z + (y*x)) - (w*y)), (z + (y*(x - w)))) ||
-rewrite(((z + (y*x)) - (y*w)), (z + ((x - w)*y))) ||
+rewrite(((z + (y*x)) - (y*w)), (z + (y*(x - w)))) ||
+rewrite(((z + max(y, (x + c0))) - x), (z + max(c0, (y - x)))) ||
+rewrite(((z + max((x + c0), y)) - x), (z + max((y - x), c0))) ||
 rewrite((((y + z) + x) - (u + (w + z))), ((y + x) - (u + w))) ||
 rewrite((((y + z) + x) - (u + (z + w))), ((y + x) - (u + w))) ||
 rewrite((((y + z) + x) - (w + z)), ((y + x) - w)) ||
@@ -235,7 +248,7 @@ rewrite((((x*c0) + y) - (((x*c1) + z)*c2)), (y - (z*c2)), ((((1 <= max(c1, c2)) 
 rewrite((((x*y) + z) - (w*y)), (z + ((x - w)*y))) ||
 rewrite((((x*y) + z) - (y*w)), (z + ((x - w)*y))) ||
 rewrite((((y*x) + z) - (w*y)), (z + ((x - w)*y))) ||
-rewrite((((y*x) + z) - (y*w)), (z + ((x - w)*y))) ||
+rewrite((((y*x) + z) - (y*w)), ((y*(x - w)) + z)) ||
 rewrite(((min(x, (y + z)) + w) - (u + (v + (w + min(x, (y + z)))))), (0 - (u + v))) ||
 rewrite(((min(x, (y + z)) + w) - (u + (v + (w + min(x, (z + y)))))), (0 - (u + v))) ||
 rewrite(((min(x, (y + z)) + w) - (u + (v + (w + min((y + z), x))))), (0 - (u + v))) ||
@@ -348,6 +361,8 @@ rewrite(((min((z + y), x) + w) - (((w + min((z + y), x)) + v) + u)), (0 - (v + u
 rewrite(((min((z + y), x) + w) - (((min(x, (y + z)) + w) + v) + u)), (0 - (v + u))) ||
 rewrite(((min((z + y), x) + w) - (((min(x, (z + y)) + w) + v) + u)), (0 - (v + u))) ||
 rewrite(((min((z + y), x) + w) - (((min((y + z), x) + w) + v) + u)), (0 - (v + u))) ||
+rewrite(((max(y, (x + c0)) + z) - x), (max(c0, (y - x)) + z)) ||
+rewrite(((max((x + c0), y) + z) - x), (max((y - x), c0) + z)) ||
 rewrite(((x - y) - select(z, (w + x), x)), ((0 - y) - select(z, w, 0))) ||
 rewrite(((x - y) - select(z, (x + w), x)), ((0 - y) - select(z, w, 0))) ||
 rewrite((((x + y) - z) - y), (x - z)) ||
@@ -359,18 +374,18 @@ rewrite(((max(z, (x + y)) - w) - y), (max(x, (z - y)) - w)) ||
 rewrite(((max(z, (y + x)) - w) - y), (max(x, (z - y)) - w)) ||
 rewrite(((max((x + y), z) - w) - y), (max((z - y), x) - w)) ||
 rewrite(((max((y + x), z) - w) - y), (max((z - y), x) - w)) ||
-rewrite(((x*y) - ((y*z)*c0)), ((x - (c0*z))*y)) ||
-rewrite(((y*x) - ((y*z)*c0)), (y*(x - (z*c0)))) ||
+rewrite(((x*y) - ((y*z)*c0)), (y*(x - (z*c0)))) ||
+rewrite(((y*x) - ((y*z)*c0)), (y*(x - (c0*z)))) ||
 rewrite(((y*(x + 1)) - (y + z)), ((y*x) - z)) ||
 rewrite(((y*(x + 1)) - (z + y)), ((y*x) - z)) ||
 rewrite(((z*(x*y)) - (w*x)), (((z*y) - w)*x)) ||
 rewrite(((z*(x*y)) - (w*y)), (((x*z) - w)*y)) ||
-rewrite(((z*(x*y)) - (x*w)), (x*((z*y) - w))) ||
-rewrite(((z*(x*y)) - (y*w)), (y*((x*z) - w))) ||
+rewrite(((z*(x*y)) - (x*w)), (((z*y) - w)*x)) ||
+rewrite(((z*(x*y)) - (y*w)), (((x*z) - w)*y)) ||
 rewrite(((z*(y*x)) - (w*x)), (((y*z) - w)*x)) ||
 rewrite(((z*(y*x)) - (w*y)), (((z*x) - w)*y)) ||
 rewrite(((z*(y*x)) - (x*w)), (x*((y*z) - w))) ||
-rewrite(((z*(y*x)) - (y*w)), (y*((z*x) - w))) ||
+rewrite(((z*(y*x)) - (y*w)), (((z*x) - w)*y)) ||
 rewrite((((x + 1)*y) - (y + z)), ((x*y) - z)) ||
 rewrite((((x + 1)*y) - (z + y)), ((x*y) - z)) ||
 rewrite((((x*y)*z) - (w*x)), (((y*z) - w)*x)) ||
@@ -386,7 +401,7 @@ rewrite((min(w, (z + (y + x))) - y), min((z + x), (w - y))) ||
 rewrite((min(w, ((x + y) + z)) - y), min((x + z), (w - y))) ||
 rewrite((min(w, ((y + x) + z)) - y), min((z + x), (w - y))) ||
 rewrite((min(w, min(x, (y + z))) - y), min(z, (min(x, w) - y))) ||
-rewrite((min(w, min(x, (z + y))) - y), min((min(x, w) - y), z)) ||
+rewrite((min(w, min(x, (z + y))) - y), min(z, (min(x, w) - y))) ||
 rewrite((min(w, min((y + z), x)) - y), min(z, (min(w, x) - y))) ||
 rewrite((min(w, min((z + y), x)) - y), min(z, (min(w, x) - y))) ||
 rewrite((min((z + (x + y)), w) - y), min((z + x), (w - y))) ||
@@ -396,7 +411,7 @@ rewrite((min(((y + x) + z), w) - y), min((x + z), (w - y))) ||
 rewrite((min(min(x, (y + z)), w) - y), min((min(x, w) - y), z)) ||
 rewrite((min(min(x, (z + y)), w) - y), min((min(x, w) - y), z)) ||
 rewrite((min(min((y + z), x), w) - y), min(z, (min(x, w) - y))) ||
-rewrite((min(min((z + y), x), w) - y), min(z, (min(x, w) - y))) ||
+rewrite((min(min((z + y), x), w) - y), min((min(w, x) - y), z)) ||
 rewrite((max(u, (w + (z + (x + y)))) - y), max((w + (z + x)), (u - y))) ||
 rewrite((max(u, (w + (z + (y + x)))) - y), max((w + (z + x)), (u - y))) ||
 rewrite((max(u, (w + ((x + y) + z))) - y), max((w + (x + z)), (u - y))) ||
@@ -405,35 +420,35 @@ rewrite((max(u, ((z + (x + y)) + w)) - y), max((z + (x + w)), (u - y))) ||
 rewrite((max(u, ((z + (y + x)) + w)) - y), max((z + (w + x)), (u - y))) ||
 rewrite((max(u, (((x + y) + z) + w)) - y), max(((x + w) + z), (u - y))) ||
 rewrite((max(u, (((y + x) + z) + w)) - y), max(((w + x) + z), (u - y))) ||
-rewrite((max(u, max(w, (z + (x + y)))) - x), max((max(w, u) - x), (z + y))) ||
-rewrite((max(u, max(w, (z + (x + y)))) - y), max((z + x), (max(w, u) - y))) ||
-rewrite((max(u, max(w, (z + (y + x)))) - x), max((max(w, u) - x), (z + y))) ||
-rewrite((max(u, max(w, (z + (y + x)))) - y), max((max(w, u) - y), (z + x))) ||
-rewrite((max(u, max(w, ((x + y) + z))) - x), max((max(w, u) - x), (z + y))) ||
-rewrite((max(u, max(w, ((x + y) + z))) - y), max((max(w, u) - y), (z + x))) ||
-rewrite((max(u, max(w, ((y + x) + z))) - x), max((max(w, u) - x), (z + y))) ||
-rewrite((max(u, max(w, ((y + x) + z))) - y), max((max(w, u) - y), (z + x))) ||
-rewrite((max(u, max(x, (w + (y + z)))) - z), max((max(x, u) - z), (y + w))) ||
-rewrite((max(u, max(x, (w + (z + y)))) - z), max((max(x, u) - z), (y + w))) ||
-rewrite((max(u, max(x, ((y + z) + w))) - z), max((max(x, u) - z), (y + w))) ||
-rewrite((max(u, max(x, ((z + y) + w))) - z), max((max(x, u) - z), (y + w))) ||
-rewrite((max(u, max((w + (y + z)), x)) - z), max((max(x, u) - z), (y + w))) ||
-rewrite((max(u, max((w + (z + y)), x)) - z), max((y + w), (max(u, x) - z))) ||
-rewrite((max(u, max((z + (x + y)), w)) - x), max((z + y), (max(u, w) - x))) ||
-rewrite((max(u, max((z + (x + y)), w)) - y), max((max(w, u) - y), (z + x))) ||
-rewrite((max(u, max((z + (y + x)), w)) - x), max((z + y), (max(u, w) - x))) ||
-rewrite((max(u, max((z + (y + x)), w)) - y), max((z + x), (max(u, w) - y))) ||
-rewrite((max(u, max(((x + y) + z), w)) - x), max((max(w, u) - x), (z + y))) ||
-rewrite((max(u, max(((x + y) + z), w)) - y), max((max(w, u) - y), (z + x))) ||
-rewrite((max(u, max(((y + x) + z), w)) - x), max((max(w, u) - x), (z + y))) ||
-rewrite((max(u, max(((y + x) + z), w)) - y), max((max(w, u) - y), (z + x))) ||
-rewrite((max(u, max(((y + z) + w), x)) - z), max((max(x, u) - z), (y + w))) ||
-rewrite((max(u, max(((z + y) + w), x)) - z), max((max(x, u) - z), (y + w))) ||
+rewrite((max(u, max(w, (z + (x + y)))) - x), max((max(w, u) - x), (y + z))) ||
+rewrite((max(u, max(w, (z + (x + y)))) - y), max((max(w, u) - y), (x + z))) ||
+rewrite((max(u, max(w, (z + (y + x)))) - x), max((max(w, u) - x), (y + z))) ||
+rewrite((max(u, max(w, (z + (y + x)))) - y), max((max(w, u) - y), (x + z))) ||
+rewrite((max(u, max(w, ((x + y) + z))) - x), max((max(w, u) - x), (y + z))) ||
+rewrite((max(u, max(w, ((x + y) + z))) - y), max((max(w, u) - y), (x + z))) ||
+rewrite((max(u, max(w, ((y + x) + z))) - x), max((max(w, u) - x), (y + z))) ||
+rewrite((max(u, max(w, ((y + x) + z))) - y), max((max(w, u) - y), (x + z))) ||
+rewrite((max(u, max(x, (w + (y + z)))) - z), max((max(x, u) - z), (w + y))) ||
+rewrite((max(u, max(x, (w + (z + y)))) - z), max((max(x, u) - z), (w + y))) ||
+rewrite((max(u, max(x, ((y + z) + w))) - z), max((max(x, u) - z), (w + y))) ||
+rewrite((max(u, max(x, ((z + y) + w))) - z), max((max(x, u) - z), (w + y))) ||
+rewrite((max(u, max((w + (y + z)), x)) - z), max((max(u, x) - z), (w + y))) ||
+rewrite((max(u, max((w + (z + y)), x)) - z), max((w + y), (max(u, x) - z))) ||
+rewrite((max(u, max((z + (x + y)), w)) - x), max((max(w, u) - x), (y + z))) ||
+rewrite((max(u, max((z + (x + y)), w)) - y), max((max(u, w) - y), (z + x))) ||
+rewrite((max(u, max((z + (y + x)), w)) - x), max((y + z), (max(u, w) - x))) ||
+rewrite((max(u, max((z + (y + x)), w)) - y), max((x + z), (max(u, w) - y))) ||
+rewrite((max(u, max(((x + y) + z), w)) - x), max((max(u, w) - x), (y + z))) ||
+rewrite((max(u, max(((x + y) + z), w)) - y), max((max(u, w) - y), (x + z))) ||
+rewrite((max(u, max(((y + x) + z), w)) - x), max((max(u, w) - x), (y + z))) ||
+rewrite((max(u, max(((y + x) + z), w)) - y), max((max(u, w) - y), (x + z))) ||
+rewrite((max(u, max(((y + z) + w), x)) - z), max((max(u, x) - z), (w + y))) ||
+rewrite((max(u, max(((z + y) + w), x)) - z), max((max(u, x) - z), (w + y))) ||
 rewrite((max(w, max(z, (x + y))) - x), max(y, (max(z, w) - x))) ||
 rewrite((max(w, max(z, (y + x))) - x), max((max(z, w) - x), y)) ||
 rewrite((max(w, max((x + y), z)) - x), max(y, (max(w, z) - x))) ||
 rewrite((max(w, max((y + x), z)) - x), max(y, (max(w, z) - x))) ||
-rewrite((max(x, ((y + z) + c0)) - z), max((c0 + y), (x - z))) ||
+rewrite((max(x, ((y + z) + c0)) - z), max((y + c0), (x - z))) ||
 rewrite((max(z, (x + y)) - (w + y)), (max(x, (z - y)) - w)) ||
 rewrite((max(z, (x + y)) - (y + w)), (max(x, (z - y)) - w)) ||
 rewrite((max(z, (y + x)) - (w + y)), (max(x, (z - y)) - w)) ||
@@ -453,23 +468,23 @@ rewrite((max(((z + (x + y)) + w), u) - y), max(((z + x) + w), (u - y))) ||
 rewrite((max(((z + (y + x)) + w), u) - y), max(((z + x) + w), (u - y))) ||
 rewrite((max((((x + y) + z) + w), u) - y), max(((x + z) + w), (u - y))) ||
 rewrite((max((((y + x) + z) + w), u) - y), max(((x + z) + w), (u - y))) ||
-rewrite((max(max(w, (z + (x + y))), u) - x), max((max(w, u) - x), (z + y))) ||
-rewrite((max(max(w, (z + (x + y))), u) - y), max((max(w, u) - y), (z + x))) ||
-rewrite((max(max(w, (z + (y + x))), u) - x), max((max(w, u) - x), (z + y))) ||
+rewrite((max(max(w, (z + (x + y))), u) - x), max((max(w, u) - x), (y + z))) ||
+rewrite((max(max(w, (z + (x + y))), u) - y), max((max(w, u) - y), (x + z))) ||
+rewrite((max(max(w, (z + (y + x))), u) - x), max((max(w, u) - x), (y + z))) ||
 rewrite((max(max(w, (z + (y + x))), u) - y), max((x + z), (max(w, u) - y))) ||
-rewrite((max(max(w, ((x + y) + z)), u) - x), max((max(w, u) - x), (z + y))) ||
-rewrite((max(max(w, ((x + y) + z)), u) - y), max((max(w, u) - y), (z + x))) ||
-rewrite((max(max(w, ((y + x) + z)), u) - x), max((max(w, u) - x), (z + y))) ||
-rewrite((max(max(w, ((y + x) + z)), u) - y), max((max(w, u) - y), (z + x))) ||
-rewrite((max(max(x, (w + (y + z))), u) - z), max((max(x, u) - z), (y + w))) ||
-rewrite((max(max(x, (w + (z + y))), u) - z), max((max(x, u) - z), (y + w))) ||
-rewrite((max(max(x, ((y + z) + w)), u) - z), max((max(x, u) - z), (y + w))) ||
-rewrite((max(max(x, ((z + y) + w)), u) - z), max((max(x, u) - z), (y + w))) ||
+rewrite((max(max(w, ((x + y) + z)), u) - x), max((max(w, u) - x), (y + z))) ||
+rewrite((max(max(w, ((x + y) + z)), u) - y), max((max(w, u) - y), (x + z))) ||
+rewrite((max(max(w, ((y + x) + z)), u) - x), max((max(w, u) - x), (y + z))) ||
+rewrite((max(max(w, ((y + x) + z)), u) - y), max((max(w, u) - y), (x + z))) ||
+rewrite((max(max(x, (w + (y + z))), u) - z), max((max(x, u) - z), (w + y))) ||
+rewrite((max(max(x, (w + (z + y))), u) - z), max((max(x, u) - z), (w + y))) ||
+rewrite((max(max(x, ((y + z) + w)), u) - z), max((max(x, u) - z), (w + y))) ||
+rewrite((max(max(x, ((z + y) + w)), u) - z), max((max(x, u) - z), (w + y))) ||
 rewrite((max(max(z, (x + y)), w) - x), max((max(z, w) - x), y)) ||
 rewrite((max(max(z, (y + x)), w) - x), max((max(z, w) - x), y)) ||
 rewrite((max(max((w + (y + z)), x), u) - z), max((w + y), (max(x, u) - z))) ||
 rewrite((max(max((w + (z + y)), x), u) - z), max((w + y), (max(x, u) - z))) ||
-rewrite((max(max((x + y), z), w) - x), max((max(w, z) - x), y)) ||
+rewrite((max(max((x + y), z), w) - x), max(y, (max(z, w) - x))) ||
 rewrite((max(max((y + x), z), w) - x), max(y, (max(z, w) - x))) ||
 rewrite((max(max((z + (x + y)), w), u) - x), max((z + y), (max(w, u) - x))) ||
 rewrite((max(max((z + (x + y)), w), u) - y), max((z + x), (max(w, u) - y))) ||
