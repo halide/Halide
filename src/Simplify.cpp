@@ -19,25 +19,8 @@ using std::vector;
 int Simplify::debug_indent = 0;
 #endif
 
-namespace {
-
-/*
-bool get_exclude_failed_ordering_rules_from_environment() {
-    static string env_var_value = get_env_variable("HL_EXCLUDE_FAILED_RULES");
-    static bool enable = env_var_value == "1";
-    static bool disable = env_var_value == "0";
-    if (enable == disable) {
-        user_warning << "HL_EXCLUDE_FAILED_RULES unset\n";
-    }
-    return enable;
-}
-*/
-}
-
 Simplify::Simplify(bool r, const Scope<Interval> *bi, const Scope<ModulusRemainder> *ai) :
     remove_dead_lets(r), no_float_simplify(false) {
-
-//    exclude_failed_ordering_rules = get_exclude_failed_ordering_rules_from_environment();
 
     // Only respect the constant bounds from the containing scope.
     if (bi) {
