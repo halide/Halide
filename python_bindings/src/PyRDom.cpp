@@ -27,7 +27,7 @@ void define_rdom(py::module &m) {
         .def(py::init<>())
         .def(py::init<Buffer<>>(), py::arg("buffer"))
         .def(py::init<OutputImageParam>(), py::arg("image_param"))
-        .def(py::init<const std::vector<std::pair<Expr, Expr>> &, std::string>(), py::arg("ranges"), py::arg("name") = "")
+        .def(py::init<const Region &, std::string>(), py::arg("region"), py::arg("name") = "")
         .def("domain", &RDom::domain)
         .def("defined", &RDom::defined)
         .def("same_as", &RDom::same_as)

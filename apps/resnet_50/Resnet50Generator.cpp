@@ -236,11 +236,11 @@ public:
 
 private:
     Func pad(Func f, Expr width, Expr height) {
-        std::vector<std::pair<Expr, Expr>> bounds(f.dimensions());
-        bounds[1].first = 0;
-        bounds[1].second = width;
-        bounds[2].first = 0;
-        bounds[2].second = height;
+        Halide::Region bounds(f.dimensions());
+        bounds[1].min = 0;
+        bounds[1].extent = width;
+        bounds[2].min = 0;
+        bounds[2].extent = height;
         return Halide::BoundaryConditions::constant_exterior(f, 0.0f, bounds);
     }
 
@@ -379,7 +379,7 @@ private:
         output(c) = exp_vals(c) / sum(exp_vals(r.x));
         return output;
     }
-}; 
+};
 }  //namespace
 
 HALIDE_REGISTER_GENERATOR(Resnet50Generator, resnet50)

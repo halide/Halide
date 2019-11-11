@@ -107,7 +107,7 @@ public:
         Expr beginx = cast<int>(ceil(sourcex - kernel_radius));
         Expr beginy = cast<int>(ceil(sourcey - kernel_radius));
 
-        RDom r(0, kernel_taps);
+        RDom r(0, cast<int>(kernel_taps));
         const KernelInfo &info = kernel_info[interpolation_type];
 
         unnormalized_kernel_x(x, k) = info.kernel((k + beginx - sourcex) * kernel_scaling);

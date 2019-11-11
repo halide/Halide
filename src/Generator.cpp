@@ -1760,7 +1760,7 @@ void GeneratorInputBase::set_estimate_impl(Var var, Expr min, Expr extent) {
     }
 }
 
-void GeneratorInputBase::set_estimates_impl(const std::vector<std::pair<Expr, Expr>> &estimates) {
+void GeneratorInputBase::set_estimates_impl(const Region &estimates) {
     internal_assert(exprs_.empty() && !funcs_.empty() && parameters_.size() == funcs_.size());
     for (size_t i = 0; i < funcs_.size(); ++i) {
         Func &f = funcs_[i];
@@ -1769,8 +1769,9 @@ void GeneratorInputBase::set_estimates_impl(const std::vector<std::pair<Expr, Ex
         // we end up compiling this for toplevel.
         for (size_t dim = 0; dim < estimates.size(); ++dim) {
             Parameter &p = parameters_[i];
-            p.set_min_constraint_estimate(dim, estimates[dim].first);
-            p.set_extent_constraint_estimate(dim, estimates[dim].second);
+            const Range &r = estimates[dim];
+            p.set_min_constraint_estimate(dim, r.min);
+            p.set_extent_constraint_estimate(dim, r.extent);
         }
     }
 }

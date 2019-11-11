@@ -78,6 +78,28 @@ void define_expr(py::module &m) {
     py::implicitly_convertible<RDom, Expr>();
     py::implicitly_convertible<RVar, Expr>();
     py::implicitly_convertible<Var, Expr>();
+
+    auto range_class =
+        py::class_<Range>(m, "Range")
+            .def(py::init<>())
+            .def(py::init([](const Expr &min, const Expr &extent) -> Range {
+                return Range(min, extent);
+            }))
+            // Allow implicit conversion from py::tuple -> Range, iff py::tuple.size() == 2
+            .def(py::init([](const py::tuple &t) -> Range {
+                if (t.size() != 2) {
+                    throw py::value_error("Halide::Range requires exactly two values");
+                }
+                Expr min = t[0].cast<Expr>();
+                Expr extent = t[1].cast<Expr>();
+                return Range(min, extent);
+            }))
+            .def_readwrite("min", &Range::min)
+            .def_readwrite("extent", &Range::extent);
+
+    // Allow implicit tuple->Range conversion, so that things like
+    // [(0, W), (0, H)] work for BoundaryConditions and Estimates
+    py::implicitly_convertible<py::tuple, Range>();
 }
 
 }  // namespace PythonBindings
