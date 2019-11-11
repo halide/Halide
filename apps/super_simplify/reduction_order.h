@@ -4,6 +4,6 @@
 #include "Halide.h"
 
 bool check_divisors(Halide::Expr &LHS, Halide::Expr &RHS);
-bool valid_reduction_order(Halide::Expr &LHS, Halide::Expr &RHS);
+bool valid_reduction_order(const Halide::Expr &LHS, const Halide::Expr &RHS);
 
 #endif
