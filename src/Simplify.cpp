@@ -37,7 +37,6 @@ Simplify::Simplify(bool r, const Scope<Interval> *bi, const Scope<ModulusRemaind
     remove_dead_lets(r), no_float_simplify(false) {
 
     use_synthesized_rules = get_use_synthesized_rules_from_environment();
-//    exclude_failed_ordering_rules = get_exclude_failed_ordering_rules_from_environment();
 
     // Only respect the constant bounds from the containing scope.
     if (bi) {
