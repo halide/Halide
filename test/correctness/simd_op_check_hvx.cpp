@@ -24,7 +24,9 @@ public:
     void setup_images() override {
         for (auto p : image_params) {
             p.reset();
-            p.set_host_alignment(128);
+            constexpr int kHostAlignmentBits = 128;
+            constexpr int kHostAlignmentBytes = kHostAlignmentBits / 8;
+            p.set_host_alignment(kHostAlignmentBytes);
             Expr min = p.dim(0).min();
             p.dim(0).set_min((min/128) * 128);
         }

@@ -1,8 +1,6 @@
 #include "Halide.h"
 #include "simd_op_check.h"
 
-#include <fstream>
-#include <future>
 #include <stdarg.h>
 #include <stdio.h>
 #include <string.h>
