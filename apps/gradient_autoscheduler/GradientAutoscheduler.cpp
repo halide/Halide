@@ -758,13 +758,14 @@ void generate_schedule(const std::vector<Function> &outputs,
         env.insert(local_env.begin(), local_env.end());
     }
 
-    // Finalize all the LoopLevels
+    // Finalize all the LoopLevels.
     for (auto &iter : env) {
         iter.second.lock_loop_levels();
     }
 
-    // Compute the topological order
+    // Compute the topological order.
     std::vector<std::string> top_order = topological_order(outputs, env);
+
     // Run a pre-pass that inlines all trivial Funcs (i.e. the cost of
     // computing a Func <= calling that Func).
     // TODO: Note that the cost is estimated using heuristics based on CPU statistics
@@ -796,12 +797,24 @@ void generate_schedule(const std::vector<Function> &outputs,
     for (const auto &output : outputs) {
         const FuncSchedule &schedule = output.schedule();
         const std::vector<Bound> &estimates = schedule.estimates();
-        user_assert((int)estimates.size() == output.dimensions())
-            << "Bound estimates of function " << output.name() << " are not provided.\n";
+        
         std::vector<Interval> b;
-        b.reserve(estimates.size());
-        for (const auto &e : estimates) {
-            b.push_back(Interval(e.min, simplify(e.min + e.extent - 1)));
+        b.reserve(output.args().size());
+        for (const auto &arg : output.args()) {
+            bool found = false;
+            Bound est;
+            for (int i = (int)estimates.size() - 1; i >= 0; --i) {
+                if ((estimates[i].var == arg) && estimates[i].min.defined() &&
+                    estimates[i].extent.defined()) {
+                    found = true;
+                    est = estimates[i];
+                    break;
+                }
+            }
+            user_assert(found && est.min.type().is_int() && est.extent.type().is_int())
+                << "Please provide a valid estimate for dimension "
+                << arg << " of output \"" << output.name() << "\"\n";
+            b.push_back(Interval(est.min, simplify(est.min + est.extent - 1)));
         }
         output_bounds_expr.push_back(Box(b));
     }
