@@ -74,7 +74,7 @@ public:
         if (!auto_schedule) {
             Var xi("xi"), yi("yi");
             if (get_target().has_gpu_feature()) {
-                output.gpu_tile(x, y, xi, yi, 16, 16);
+                output.gpu_tile(x, y, xi, yi, 14, 14);
                 Ix.compute_at(output, x).gpu_threads(x, y);
                 Iy.compute_at(output, x).gpu_threads(x, y);
             } else {
