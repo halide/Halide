@@ -261,9 +261,6 @@ class SimdOpCheckTest {
     virtual void setup_images() {
         for (auto p : image_params) {
             p.reset();
-            constexpr int kHostAlignmentBits = 128;
-            constexpr int kHostAlignmentBytes = kHostAlignmentBits / 8;
-            p.set_host_alignment(kHostAlignmentBytes);
         }
     }
     virtual bool test_all() {
