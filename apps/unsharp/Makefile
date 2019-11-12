@@ -14,7 +14,7 @@ $(GENERATOR_BIN)/unsharp.generator: unsharp_generator.cpp $(GENERATOR_DEPS)
 
 $(BIN)/%/unsharp.a: $(GENERATOR_BIN)/unsharp.generator
 	@mkdir -p $(@D)
-	$< -g unsharp -f unsharp -o $(BIN) target=$(HL_TARGET) auto_schedule=false
+	$< -g unsharp -f unsharp -o $(@D) target=$(HL_TARGET) auto_schedule=false
 
 $(BIN)/%/unsharp_auto_schedule.a: $(GENERATOR_BIN)/unsharp.generator $(AUTOSCHED_BIN)/libauto_schedule.so
 	@mkdir -p $(@D)

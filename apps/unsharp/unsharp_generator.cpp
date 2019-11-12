@@ -56,7 +56,8 @@ public:
         // Estimates (for autoscheduler; ignored otherwise)
         {
             input_.set_estimates({{0, 1536}, {0, 2560}, {0, 3}});
-            output_.set_estimates({{0, 1536}, {0, 2560}, {0, 3}});
+            output_.dim(0).set_estimate(0, 1536);
+            output_.dim(1).set_estimate(0, 2560);
         }
 
         // Schedule
