@@ -522,8 +522,8 @@ bool valid_reduction_order(const Expr &LHS, const Expr &RHS) {
     for (auto const& varcount : rhs_vars) {
         // constant wildcards don't count bc they can't match terms so can't cause reduction order failures
         if (varcount.first.front() != 'c' &&
-            (lhs_vars[varcount.first] == 0 ||
-             varcount.second > lhs_vars[varcount.first])) {
+            (lhs_vars.count(varcount.first]) == 0 ||
+             varcount.second.second > lhs_vars[varcount.first].second)) {
             return false;
         }
     }
@@ -531,7 +531,7 @@ bool valid_reduction_order(const Expr &LHS, const Expr &RHS) {
     // accept rule if LHS has strictly more occurrences of at least 1 variable
     for (auto const& lhsv : lhs_vars) {
         if ((lhsv.first.front() != 'c') && 
-            ((rhs_vars.count(lhsv.first) == 0) || (lhsv.second > rhs_vars[lhsv.first]))) {
+            ((rhs_vars.count(lhsv.first) == 0) || (lhsv.second.second > rhs_vars[lhsv.first].second))) {
             return true;
         }
     }
