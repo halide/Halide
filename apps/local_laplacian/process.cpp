@@ -3,9 +3,8 @@
 
 #include "local_laplacian.h"
 #ifndef NO_AUTO_SCHEDULE
-#include "local_laplacian_classic_auto_schedule.h"
 #include "local_laplacian_auto_schedule.h"
-#include "local_laplacian_simple_auto_schedule.h"
+#include "local_laplacian_gradient_auto_schedule.h"
 #endif
 
 #include "benchmark_util.h"
@@ -32,9 +31,8 @@ int main(int argc, char **argv) {
     multi_way_bench({
         {"Manual", [&]() { local_laplacian(input, levels, alpha/(levels-1), beta, output); output.device_sync(); }},
     #ifndef NO_AUTO_SCHEDULE
-        {"Classic auto-scheduled", [&]() { local_laplacian_classic_auto_schedule(input, levels, alpha/(levels-1), beta, output); output.device_sync(); }},
         {"Auto-scheduled", [&]() { local_laplacian_auto_schedule(input, levels, alpha/(levels-1), beta, output); output.device_sync(); }},
-        {"Simple auto-scheduled", [&]() { local_laplacian_simple_auto_schedule(input, levels, alpha/(levels-1), beta, output); output.device_sync(); }}
+        {"Gradient auto-scheduled", [&]() { local_laplacian_gradient_auto_schedule(input, levels, alpha/(levels-1), beta, output); output.device_sync(); }}
     #endif
         }
     );

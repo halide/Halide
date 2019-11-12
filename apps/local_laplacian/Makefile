@@ -3,9 +3,11 @@ include ../support/autoscheduler.inc
 
 HL_TARGET=host-cuda
 
+GRADIENT_AUTOSCHED_BIN=../gradient_autoscheduler/bin
+
 all: $(BIN)/$(HL_TARGET)/process
 
-$(GENERATOR_BIN)/local_laplacian.generator: local_laplacian_generator.cpp ../autoscheduler/SimpleAutoSchedule.h ../autoscheduler/SimpleAutoSchedule.cpp $(GENERATOR_DEPS)
+$(GENERATOR_BIN)/local_laplacian.generator: local_laplacian_generator.cpp $(GENERATOR_DEPS)
 	@mkdir -p $(@D)
 	$(CXX) $(CXXFLAGS) -g $(filter-out %.h,$^) -o $@ $(LDFLAGS) $(HALIDE_SYSTEM_LIBS) $(USE_EXPORT_DYNAMIC)
 
@@ -13,29 +15,19 @@ $(BIN)/%/local_laplacian.a: $(GENERATOR_BIN)/local_laplacian.generator
 	@mkdir -p $(@D)
 	$^ -g local_laplacian -e $(GENERATOR_OUTPUTS) -o $(@D) -f local_laplacian target=$* auto_schedule=false
 
-$(BIN)/%/local_laplacian_classic_auto_schedule.a: $(GENERATOR_BIN)/local_laplacian.generator $(AUTOSCHED_BIN)/libauto_schedule.so
-	@mkdir -p $(@D)
-	HL_PERMIT_FAILED_UNROLL=1 \
-	HL_WEIGHTS_DIR=$(AUTOSCHED_SRC)/gpu.weights \
-	HL_DEBUG_CODEGEN=1 \
-	HL_SHARED_MEMORY_LIMIT=48 \
-	HL_COMPUTE_ROOT_AND_INLINE_ONLY=1 \
-	$< -g local_laplacian -o $(BIN) -f local_laplacian_classic_auto_schedule target=$(HL_TARGET)-no_runtime auto_schedule=true -p $(AUTOSCHED_BIN)/libauto_schedule.so machine_params=$(HL_MACHINE_PARAMS) 2> stderr_classic.txt > stdout_classic.txt
-
 $(BIN)/%/local_laplacian_auto_schedule.a: $(GENERATOR_BIN)/local_laplacian.generator $(AUTOSCHED_BIN)/libauto_schedule.so
 	@mkdir -p $(@D)
 	HL_PERMIT_FAILED_UNROLL=1 \
 	HL_WEIGHTS_DIR=$(AUTOSCHED_SRC)/gpu.weights \
 	HL_DEBUG_CODEGEN=1 \
 	HL_SHARED_MEMORY_LIMIT=48 \
-	$< -g local_laplacian -e $(GENERATOR_OUTPUTS) -o $(@D) -f local_laplacian_auto_schedule target=$*-no_runtime auto_schedule=true -p $(AUTOSCHED_BIN)/libauto_schedule.so machine_params=$(HL_MACHINE_PARAMS) 2> stderr.txt > stdout.txt
+	$< -g local_laplacian -e $(GENERATOR_OUTPUTS) -o $(@D) -f local_laplacian_auto_schedule target=$*-no_runtime auto_schedule=true -p $(AUTOSCHED_BIN)/libauto_schedule.so -s Adams2019 machine_params=$(HL_MACHINE_PARAMS) 2> stderr.txt > stdout.txt
 
-$(BIN)/%/local_laplacian_simple_auto_schedule.a: $(GENERATOR_BIN)/local_laplacian.generator
+$(BIN)/%/local_laplacian_gradient_auto_schedule.a: $(GENERATOR_BIN)/local_laplacian.generator
 	@mkdir -p $(@D)
-	HL_USE_SIMPLE_AUTOSCHEDULER=1 \
-	$^ -g local_laplacian -e $(GENERATOR_OUTPUTS) -o $(@D) -f local_laplacian_simple_auto_schedule target=$*-no_runtime auto_schedule=false
+	$^ -g local_laplacian -e $(GENERATOR_OUTPUTS) -o $(@D) -f local_laplacian_gradient_auto_schedule target=$*-no_runtime auto_schedule=true -p $(GRADIENT_AUTOSCHED_BIN)/libgradient_autoscheduler.so -s Li2018
 
-$(BIN)/%/process: process.cpp $(BIN)/%/local_laplacian.a $(BIN)/%/local_laplacian_classic_auto_schedule.a $(BIN)/%/local_laplacian_auto_schedule.a $(BIN)/%/local_laplacian_simple_auto_schedule.a
+$(BIN)/%/process: process.cpp $(BIN)/%/local_laplacian.a $(BIN)/%/local_laplacian_auto_schedule.a $(BIN)/%/local_laplacian_gradient_auto_schedule.a
 	@mkdir -p $(@D)
 	$(CXX) $(CXXFLAGS) -I$(BIN)/$* -Wall $^ -o $@ $(LDFLAGS) $(IMAGE_IO_FLAGS) $(CUDA_LDFLAGS) $(OPENCL_LDFLAGS) $(OPENGL_LDFLAGS)
 
