@@ -758,14 +758,13 @@ void generate_schedule(const std::vector<Function> &outputs,
         env.insert(local_env.begin(), local_env.end());
     }
 
-    // Finalize all the LoopLevels.
+    // Finalize all the LoopLevels
     for (auto &iter : env) {
         iter.second.lock_loop_levels();
     }
 
-    // Compute the topological order.
+    // Compute the topological order
     std::vector<std::string> top_order = topological_order(outputs, env);
-
     // Run a pre-pass that inlines all trivial Funcs (i.e. the cost of
     // computing a Func <= calling that Func).
     // TODO: Note that the cost is estimated using heuristics based on CPU statistics
