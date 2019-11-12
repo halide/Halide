@@ -212,6 +212,124 @@ bool is_right_child_constant(const Expr &e) {
     return rc.flag;
 }
 
+class NonlinearOpsCount : public IRVisitor {
+    void visit(const Div *op) override {
+        counter += 1;
+        op->a.accept(this);
+        op->b.accept(this);
+    }
+    void visit(const Mod *op) override {
+        counter += 1;
+        op->a.accept(this);
+        op->b.accept(this);
+    }
+    void visit(const Mul *op) override {
+        counter += 1;
+        op->a.accept(this);
+        op->b.accept(this);
+    }
+public:
+    int counter = 0;
+};
+
+int get_nonlinear_op_count(const Expr &e) {
+    NonlinearOpsCount nl;
+    e.accept(&nl);
+    return nl.counter;
+}
+
+class IsConstant : public IRVisitor {
+    void visit(const Variable *op) override {
+        if (op->name[0] == 'c') {
+            flag = true;
+        }
+    }
+    void visit(const IntImm *op) override {
+        flag = true;
+    }
+    void visit(const UIntImm *op) override {
+        flag = true;
+    }
+public:
+    bool flag = false;
+};
+
+bool is_expr_constant(const Expr &e) {
+    IsConstant c;
+    e.accept(&c);
+    return c.flag;
+}
+
+class IsAddOrSubExpr : public IRVisitor {
+    void visit(const Add *op) override {
+        flag = true;
+    }
+    void visit(const Sub *op) override {
+        flag = true;
+    }
+public:
+    bool flag = false;
+};
+
+bool is_expr_addsub(const Expr &e) {
+    IsAddOrSubExpr a;
+    e.accept(&a);
+    return a.flag;
+}
+
+class IsRightChildConstant : public IRVisitor {
+    void visit(const Add *op) {
+        flag = is_expr_constant(op->b);
+    }
+    void visit(const Sub *op) {
+        flag = is_expr_constant(op->b);
+    }
+    void visit(const Mod *op) {
+        flag = is_expr_constant(op->b);
+    }
+    void visit(const Div *op) {
+        flag = is_expr_constant(op->b);
+    }
+    void visit(const Min *op) {
+        flag = is_expr_constant(op->b);
+    }
+    void visit(const Max *op) {
+        flag = is_expr_constant(op->b);
+    }
+    void visit(const EQ *op) {
+        flag = is_expr_constant(op->b);
+    }
+    void visit(const NE *op) {
+        flag = is_expr_constant(op->b);
+    }
+    void visit(const LT *op) {
+        flag = is_expr_constant(op->b);
+    }
+    void visit(const LE *op) {
+        flag = is_expr_constant(op->b);
+    }
+    void visit(const GT *op) {
+        flag = is_expr_constant(op->b);
+    }
+    void visit(const GE *op) {
+        flag = is_expr_constant(op->b);
+    }
+    void visit(const And *op) {
+        flag = is_expr_constant(op->b);
+    }
+    void visit(const Or *op) {
+        flag = is_expr_constant(op->b);
+    }
+public:
+    bool flag = false;
+};
+
+bool is_right_child_constant(const Expr &e) {
+    IsRightChildConstant rc;
+    e.accept(&rc);
+    return rc.flag;
+}
+
 class NodeHistogram : public IRVisitor {
     Scope<> lets;
 
