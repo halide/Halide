@@ -69,6 +69,8 @@ then to point Halide to it:
 
     export LLVM_CONFIG=<path to llvm>/build/bin/llvm-config
 
+(Note that you *must* add `clang` to `LLVM_ENABLE_PROJECTS`; adding `lld` to `LLVM_ENABLE_PROJECTS` is only required when using WebAssembly, but we recommend enabling it in all cases, to simplify builds.)
+
 #### Building Halide with make
 
 With `LLVM_CONFIG` set (or `llvm-config` in your path), you should be
@@ -333,21 +335,13 @@ For examples of using the `hexagon` scheduling directive on both the simulator a
 Hexagon DSP, see the blur example app.
 
 To build and run an example app using the Hexagon target,
-  1. Obtain and build LLVM and Clang v8.0 or later from llvm.org
+  1. Obtain and build trunk LLVM and Clang. (Earlier versions of LLVM may work but are not actively tested and thus not recommended.)
   2. Download and install the Hexagon SDK and version 8.0 Hexagon Tools
   3. Build and run an example for Hexagon HVX
 
-#### 1. Obtain and build LLVM and clang v8.0 or later from llvm.org
-The Hexagon backend is currently under development, so it's best to use trunk llvm. (These are the same instructions as above for building Clang/LLVM.
+#### 1. Obtain and build trunk LLVM and Clang
 
-    % git clone https://github.com/llvm/llvm-project.git
-    % git checkout release/9.x  # to build LLVM 9.x
-    % cd llvm-project
-    % mkdir build
-    % cd build
-    % cmake -DLLVM_ENABLE_PROJECTS="clang;lld" -DLLVM_ENABLE_RTTI=ON -DLLVM_ENABLE_TERMINFO=OFF -DLLVM_TARGETS_TO_BUILD="X86;ARM;NVPTX;AArch64;Mips;PowerPC;Hexagon" -DLLVM_ENABLE_ASSERTIONS=ON -DCMAKE_BUILD_TYPE=Release -DLLVM_BUILD_32_BITS=OFF ../llvm
-    % make -j
-    % export LLVM_CONFIG=<path-to>/llvm-project/build/bin/llvm-config
+(Instructions given previous, just be sure to check out the `master` branch.)
 
 #### 2. Download and install the Hexagon SDK and version 8.0 Hexagon Tools
 Go to https://developer.qualcomm.com/software/hexagon-dsp-sdk/tools
