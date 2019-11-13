@@ -139,7 +139,7 @@ Expr Simplify::visit(const Mul *op, ExprInfo *bounds) {
             use_synthesized_rules &&
             (
 #include "Simplify_Mul.inc"
-             false)) {
+             )) {
             return mutate(std::move(rewrite.result), bounds);
         }
     }

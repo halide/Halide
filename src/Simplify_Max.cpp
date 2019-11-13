@@ -208,11 +208,11 @@ Expr Simplify::visit(const Max *op, ExprInfo *bounds) {
             return mutate(std::move(rewrite.result), bounds);
         }
 
-        if ((no_overflow_int(op->type) &&
-             use_synthesized_rules &&
-             (
+        if (no_overflow_int(op->type) &&
+            use_synthesized_rules &&
+            (
 #include "Simplify_Max.inc"
-              false))) {
+              )) {
             return mutate(std::move(rewrite.result), bounds);
         }
     }

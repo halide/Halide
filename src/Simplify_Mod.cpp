@@ -81,7 +81,7 @@ Expr Simplify::visit(const Mod *op, ExprInfo *bounds) {
             use_synthesized_rules &&
             (
 #include "Simplify_Mod.inc"
-             false)) {
+             )) {
             return mutate(std::move(rewrite.result), bounds);
         }
     }

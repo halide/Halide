@@ -128,7 +128,7 @@ Expr Simplify::visit(const And *op, ExprInfo *bounds) {
     if (use_synthesized_rules &&
         (
 #include "Simplify_And.inc"
-         false)) {
+         )) {
         return mutate(std::move(rewrite.result), bounds);
     }
 

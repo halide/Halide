@@ -188,7 +188,7 @@ Expr Simplify::visit(const Div *op, ExprInfo *bounds) {
             use_synthesized_rules &&
             (
 #include "Simplify_Div.inc"
-             false)) {
+             )) {
             return mutate(std::move(rewrite.result), bounds);
         }
     }

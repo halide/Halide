@@ -106,11 +106,12 @@ Expr Simplify::visit(const Select *op, ExprInfo *bounds) {
             return mutate(std::move(rewrite.result), bounds);
         }
 
+        Expr a = condition, b = true_value;
         if (no_overflow_int(op->true_value.type()) &&
             use_synthesized_rules &&
             (
 #include "Simplify_Select.inc"
-             false)) {
+             )) {
             return mutate(std::move(rewrite.result), bounds);
         }
     }

@@ -366,7 +366,7 @@ Expr Simplify::visit(const LT *op, ExprInfo *bounds) {
             use_synthesized_rules &&
             (
 #include "Simplify_LT.inc"
-             false)) {
+             )) {
             return mutate(std::move(rewrite.result), bounds);
         }
     }

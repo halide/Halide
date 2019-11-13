@@ -105,7 +105,7 @@ Expr Simplify::visit(const EQ *op, ExprInfo *bounds) {
         use_synthesized_rules &&
         (
 #include "Simplify_EQ.inc"
-         false)) {
+         )) {
         return mutate(std::move(rewrite.result), bounds);
     }
 

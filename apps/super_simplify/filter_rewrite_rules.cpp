@@ -274,11 +274,45 @@ int main(int argc, char **argv) {
     rules.swap(expanded);
 
 
-    std::map<IRNodeType, vector<Expr>> good_ones;
+    std::map<IRNodeType, vector<Rule>> good_ones;
+
+    class TopLevelNodeTypes : public IRMutator {
+        int depth = 0;
+    public:
+        using IRMutator::mutate;
+        Expr mutate(const Expr &e) {
+            if (depth >= 2) {
+                return e;
+            }
+            result.push_back(e.node_type());
+            depth++;
+            IRMutator::mutate(e);
+            depth--;
+            return e;
+        }
+        vector<IRNodeType> result;
+    };
 
     // Sort the rules by LHS
     std::sort(rules.begin(), rules.end(),
               [](const Rule &r1, const Rule &r2) {
+                  TopLevelNodeTypes t1, t2;
+                  t1.mutate(r1.lhs);
+                  t2.mutate(r2.lhs);
+                  if (t1.result.size() < t2.result.size()) {
+                      return true;
+                  }
+                  if (t2.result.size() < t1.result.size()) {
+                      return false;
+                  }
+                  for (size_t i = 0; i < t1.result.size(); i++) {
+                      if (t1.result[i] < t2.result[i]) {
+                          return true;
+                      }
+                      if (t2.result[i] < t1.result[i]) {
+                          return false;
+                      }
+                  }
                   if (IRDeepCompare{}(r1.lhs, r2.lhs)) {
                       return true;
                   }
@@ -352,24 +386,73 @@ int main(int argc, char **argv) {
 
         // We have a reasonable rule
         std::cout << "Good rule: rewrite(" << r.lhs << ", " << r.rhs << ", " << r.predicate << ")\n";
-        vector<Expr> args = {r.lhs, r.rhs};
-        if (!is_one(r.predicate)) {
-            args.push_back(r.predicate);
-        }
-        good_ones[r.lhs.node_type()].push_back(Call::make(Int(32), "rewrite", args, Call::Extern));
+        good_ones[r.lhs.node_type()].push_back(r);
     }
 
     std::cout << "Generated rules:\n";
     for (auto it : good_ones) {
+        std::ostringstream os;
+        IRNodeType last_a_type = IRNodeType::Variable, last_b_type = IRNodeType::Variable;
+        bool first_line = true;
+        (void)first_line;
+        for (auto r : it.second) {
+            TopLevelNodeTypes t;
+            t.mutate(r.lhs);
+            IRNodeType a_type = t.result.size() > 0 ? t.result[1] : IRNodeType::Variable;
+            IRNodeType b_type = t.result.size() > 1 ? t.result[2] : IRNodeType::Variable;
+
+            if (b_type != last_b_type && last_b_type != IRNodeType::Variable) {
+                // close out the b type bucket
+                os << "))";
+            }
+
+            if (a_type != last_a_type && last_a_type != IRNodeType::Variable) {
+                os << "))";
+            }
+
+            if (!first_line) {
+                os << " ||\n";
+            }
+            first_line = false;
+
+            if (a_type != last_a_type && a_type != IRNodeType::Variable) {
+                // Open a new a bucket
+                os << "((a.node_type() == IRNodeType::" << a_type << ") && (\n";
+            }
+
+            if (b_type != last_b_type && b_type != IRNodeType::Variable) {
+                // open a new b type bucket
+                os << "((b.node_type() == IRNodeType::" << b_type << ") && (\n";
+            }
+
+            last_a_type = a_type;
+            last_b_type = b_type;
+
+            vector<Expr> args = {r.lhs, r.rhs};
+            if (!is_one(r.predicate)) {
+                args.push_back(r.predicate);
+            }
+            Expr rule_expr = Call::make(Int(32), "rewrite", args, Call::Extern);
+
+            os << " " << rule_expr;
+        }
+
+        if (last_b_type != IRNodeType::Variable) {
+            os << "))";
+        }
+
+        if (last_a_type != IRNodeType::Variable) {
+            os << "))";
+        }
+
+        std::cout << os.str() << "\n";
+
         std::ostringstream filename;
         filename << "Simplify_" << it.first << ".inc";
         std::cout << it.first << "\n";
         std::ofstream of;
         of.open(filename.str().c_str());
-        for (auto r : it.second) {
-            of << r << " ||\n";
-            std::cout << " " << r << "\n";
-        }
+        of << os.str();
         of.close();
     }
 
