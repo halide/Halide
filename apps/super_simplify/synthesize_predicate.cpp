@@ -603,6 +603,9 @@ struct System {
                     }
                     new_system->add_term(lhs == replacement);
                     simplifier->learn_true(0 <= k1);
+                    if (!abs_rhs.defined()) {
+                        abs_rhs = max(rhs, -rhs);
+                    }
                     new_system->add_term(k1 < abs_rhs);
                     new_system->finalize();
                     result.emplace_back(std::move(new_system));
@@ -652,6 +655,9 @@ struct System {
                         }
                     }
                     simplifier->learn_true(0 <= k1);
+                    if (!abs_rhs.defined()) {
+                        abs_rhs = max(rhs, -rhs);
+                    }
                     new_system->add_term(k1 < abs_rhs);
                     new_system->finalize();
                     result.emplace_back(std::move(new_system));
