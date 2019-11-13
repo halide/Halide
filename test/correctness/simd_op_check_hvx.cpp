@@ -24,7 +24,9 @@ public:
     void setup_images() override {
         for (auto p : image_params) {
             p.reset();
-            p.set_host_alignment(128);
+            // HVX needs 128 byte alignment
+            constexpr int kHostAlignmentBytes = 128;
+            p.set_host_alignment(kHostAlignmentBytes);
             Expr min = p.dim(0).min();
             p.dim(0).set_min((min/128) * 128);
         }

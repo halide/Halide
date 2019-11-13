@@ -1,4 +1,4 @@
-"""Wrap our operator (and gradient) in autograd.""" 
+"""Wrap our operator (and gradient) in autograd."""
 
 # We need to import torch before loading the custom modules
 import torch as th
@@ -11,7 +11,7 @@ def _dispatch(opname, optype=th.float32, cuda=False):
     """
     Helper function that matches an opname and type to the Halide backend.
 
-    This is based on the naming convention we use in this example. Functions are 
+    This is based on the naming convention we use in this example. Functions are
     named: <opname>[_cuda]_<optype>.
 
     Args:
@@ -34,10 +34,10 @@ def _dispatch(opname, optype=th.float32, cuda=False):
     elif optype == th.float64:
         opname += "_float64"
     else:
-        raise ValueError("Optype %s not recognized %s" % optype)  
+        raise ValueError("Optype %s not recognized %s" % optype)
     op = getattr(ops, opname)
     if not hasattr(ops, opname):
-        raise ValueError("Module has no operator %s" % opname)  
+        raise ValueError("Module has no operator %s" % opname)
     return op
 
 

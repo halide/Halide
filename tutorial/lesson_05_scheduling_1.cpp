@@ -14,7 +14,7 @@
 
 // If you have the entire Halide source tree, you can also build it by
 // running:
-//    make tutorial_lesson_05_schedule_1
+//    make tutorial_lesson_05_scheduling_1
 // in a shell with the current directory at the top of the halide
 // source tree.
 

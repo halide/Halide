@@ -532,20 +532,22 @@ public:
         return buf.type;
     }
 
-    /** A pointer to the element with the lowest address. If all
-     * strides are positive, equal to the host pointer. */
-    T *begin() const {
+private:
+    /** Offset to the element with the lowest address. If all
+     * strides are positive, equal to zero. Offset is in elements, not bytes. */
+    ptrdiff_t begin_offset() const {
         ptrdiff_t index = 0;
         for (int i = 0; i < dimensions(); i++) {
             if (dim(i).stride() < 0) {
                 index += dim(i).stride() * (dim(i).extent() - 1);
             }
         }
-        return (T *)(buf.host + index * type().bytes());
+        return index;
     }
 
-    /** A pointer to one beyond the element with the highest address. */
-    T *end() const {
+    /** An offset to one beyond the element with the highest address.
+     * Offset is in elements, not bytes. */
+    ptrdiff_t end_offset() const {
         ptrdiff_t index = 0;
         for (int i = 0; i < dimensions(); i++) {
             if (dim(i).stride() > 0) {
@@ -553,12 +555,26 @@ public:
             }
         }
         index += 1;
-        return (T *)(buf.host + index * type().bytes());
+        return index;
+    }
+
+public:
+    /** A pointer to the element with the lowest address. If all
+     * strides are positive, equal to the host pointer. */
+    T *begin() const {
+        assert(buf.host != nullptr); // Cannot call begin() on an unallocated Buffer.
+        return (T *)(buf.host + begin_offset() * type().bytes());
+    }
+
+    /** A pointer to one beyond the element with the highest address. */
+    T *end() const {
+        assert(buf.host != nullptr); // Cannot call end() on an unallocated Buffer.
+        return (T *)(buf.host + end_offset() * type().bytes());
     }
 
     /** The total number of bytes spanned by the data in memory. */
     size_t size_in_bytes() const {
-        return (size_t)((const uint8_t *)end() - (const uint8_t *)begin());
+        return (size_t)(end_offset() - begin_offset()) * type().bytes();
     }
 
     /** Reset the Buffer to be equivalent to a default-constructed Buffer

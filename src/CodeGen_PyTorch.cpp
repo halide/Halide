@@ -71,7 +71,7 @@ void CodeGen_PyTorch::compile(const LoweredFunc &f, bool is_cuda) {
     const std::vector<LoweredArgument> &args = f.args;
     std::vector<LoweredArgument> buffer_args;
 
-    stream << "int " << simple_name << "_th_(";
+    stream << "inline int " << simple_name << "_th_(";
     for (size_t i = 0; i < args.size(); i++) {
         if (args[i].name == "__user_context") {
             continue;
@@ -261,7 +261,7 @@ int test1(struct halide_buffer_t *_buf_buffer, float _alpha, int32_t _beta) HALI
 }  // extern "C"
 #endif
 
-int test1_th_(at::Tensor &_buf, float _alpha, int32_t _beta) {
+inline int test1_th_(at::Tensor &_buf, float _alpha, int32_t _beta) {
     // Check tensors have contiguous memory and are on the correct device
     HLPT_CHECK_CONTIGUOUS(_buf);
 
@@ -300,7 +300,7 @@ int test1(struct halide_buffer_t *_buf_buffer, float _alpha, int32_t _beta) HALI
 }  // extern "C"
 #endif
 
-int test1_th_(at::Tensor &_buf, float _alpha, int32_t _beta) {
+inline int test1_th_(at::Tensor &_buf, float _alpha, int32_t _beta) {
     // Setup CUDA
     int device_id = at::cuda::current_device();
     CUcontext ctx = 0;
