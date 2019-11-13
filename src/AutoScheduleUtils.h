@@ -47,8 +47,8 @@ int string_to_int(const std::string &s);
 /** Substitute every variable in an Expr or a Stmt with its estimate
  * if specified. */
 //@{
-Expr subsitute_var_estimates(Expr e);
-Stmt subsitute_var_estimates(Stmt s);
+Expr substitute_var_estimates(Expr e);
+Stmt substitute_var_estimates(Stmt s);
 //@}
 
 /** Return the size of an interval. Return an undefined expr if the interval

@@ -24,6 +24,16 @@ else
 endif
 endif
 
+ifeq ($(UNAME), Linux)
+USE_EXPORT_DYNAMIC=-rdynamic
+else
+ifeq ($(UNAME), Darwin)
+USE_EXPORT_DYNAMIC=-undefined dynamic_lookup
+else
+USE_EXPORT_DYNAMIC=
+endif
+endif
+
 LIBHALIDE ?= $(HALIDE_DISTRIB_PATH)/bin/libHalide.$(SHARED_EXT)
 
 SUFFIX = $(shell $(PYTHON)-config --extension-suffix)
@@ -52,11 +62,7 @@ CCFLAGS := $(filter-out -Wstrict-prototypes,$(CCFLAGS))
 
 # DON'T link libpython* - leave those symbols to lazily resolve at load time
 # Cf. https://github.com/pybind/pybind11/blob/master/docs/compiling.rst#building-manually
-LDFLAGS=-lz
-ifeq ($(UNAME), Darwin)
-    # Keep OS X builds from complaining about missing libpython symbols
-    LDFLAGS += -undefined dynamic_lookup
-endif
+LDFLAGS=-lz $(USE_EXPORT_DYNAMIC)
 
 PY_SRCS=$(shell ls $(ROOT_DIR)/src/*.cpp)
 PY_OBJS=$(PY_SRCS:$(ROOT_DIR)/src/%.cpp=$(BIN)/src/%.o)
@@ -188,7 +194,14 @@ $(TEST_TMP)/lesson_10_halide.so: test_tutorial_lesson_10_aot_compilation_generat
 		$(TEST_TMP)/lesson_10_halide.o \
 		-I $(TEST_TMP) -o $@
 
+.PHONY: clean
 clean:
 	rm -rf $(BIN)
 
+.PHONY: test
 test: test_correctness test_apps test_tutorial
+
+# TODO(srj): the python bindings need to be put into the distrib folders;
+# this is a hopefully-temporary workaround (https://github.com/halide/Halide/issues/4368)
+.PHONY: build_python_bindings
+build_python_bindings: $(MODULE)
