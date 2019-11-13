@@ -18,7 +18,6 @@
 namespace Halide {
 namespace Internal {
 
-using std::deque;
 using std::make_pair;
 using std::map;
 using std::pair;
@@ -26,14 +25,143 @@ using std::set;
 using std::string;
 using std::vector;
 
+// If the cost of computing a Func is about the same as calling the Func,
+// inline the Func. Return true of any of the Funcs is inlined.
+bool inline_all_trivial_functions(const vector<Function> &outputs,
+                                  const vector<string> &order,
+                                  const map<string, Function> &env) {
+    bool inlined = false;
+    // The very last few functions in 'order' are the last to be realized in the
+    // pipeline (the final producers) so there is no point in checking it.
+    for (int i = 0; i < (int)order.size() - (int)outputs.size(); ++i) {
+        bool is_output = false;
+        for (const Function &f : outputs) {
+            if (order[i] == f.name()) {
+                is_output = true;
+                break;
+            }
+        }
+        if (is_output) {
+            // Should not inline output Func
+            debug(5) << "Skip inlining " << order[i] << " since it is an output\n";
+            continue;
+        }
+        Function f1 = env.at(order[i]);
+        if (is_func_trivial_to_inline(f1)) {
+            inlined = true;
+            debug(4) << "Function \"" << order[i] << "\" is trivial to inline\n";
+            for (int j = i + 1; j < (int)order.size() - (int)outputs.size(); ++j) {
+                internal_assert(order[i] != order[j]);
+                Function f2 = env.at(order[j]);
+
+                if (f2.has_extern_definition() && !f1.is_wrapper()) {
+                    debug(5) << "Skip inlining of function \"" << f1.name()
+                             << "\" inside \"" << f2.name() << "\", because "
+                             << "non-wrapper functions cannot be inlined inside "
+                             << "extern functions.\n";
+                } else {
+                    debug(5) << "Inline trivial function \"" << f1.name()
+                             << "\" inside \"" << f2.name() << "\"\n";
+                    inline_function(f2, f1);
+                }
+            }
+        }
+    }
+    return inlined;
+}
+
+// Determine if a Func (order[index]) is only consumed by another single Func
+// in element-wise manner. If it is, return the name of the consumer Func;
+// otherwise, return an empty string.
+string is_func_called_element_wise(const vector<string> &order, size_t index,
+                                   const map<string, Function> &env) {
+    Function f1 = env.at(order[index]);
+    if (f1.has_extern_definition() || !f1.can_be_inlined()) {
+        return "";
+    }
+    internal_assert(index < order.size());
+
+    string caller = "";
+    for (size_t i = index + 1; i < order.size(); ++i) {
+        Function f2 = env.at(order[i]);
+        if (f2.has_extern_definition()) {
+            continue;
+        }
+        int num_stages = f2.updates().size() + 1;
+        for (int s = 0; s < num_stages; ++s) {
+            Definition def = get_stage_definition(f2, s);
+            FindAllCalls find;
+            def.accept(&find);
+
+            if (find.funcs_called.count(f1.name())) {
+                if (caller.empty()) {
+                    caller = f2.name();
+                } else {
+                    // Found another caller of 'f1'
+                    return "";
+                }
+            }
+            for (const auto &iter : find.call_args) {
+                if (iter.first != f1.name()) {
+                    continue;
+                }
+                if (def.args().size() != iter.second.size()) {
+                    // It's not an element-wise access
+                    return "";
+                }
+                for (size_t j = 0; j < iter.second.size(); ++j) {
+                    if (!equal(def.args()[j], iter.second[j])) {
+                        // It's not an element-wise access
+                        return "";
+                    }
+                }
+            }
+        }
+    }
+    return caller;
+}
+
+// Inline a Func if its values are only consumed by another single Func in
+// element-wise manner.
+bool inline_all_element_wise_functions(const vector<Function> &outputs,
+                                       const vector<string> &order,
+                                       const map<string, Function> &env) {
+    bool inlined = false;
+    // The very last few functions in 'order' are the last to be realized in the
+    // pipeline (the final producers) so there is no point in checking it.
+    for (int i = 0; i < (int)order.size() - (int)outputs.size(); ++i) {
+        bool is_output = false;
+        for (const Function &f : outputs) {
+            if (order[i] == f.name()) {
+                is_output = true;
+                break;
+            }
+        }
+        if (is_output) {
+            // Should not inline output Func
+            debug(5) << "Skip inlining " << order[i] << " since it is an output\n";
+            continue;
+        }
+        string caller = is_func_called_element_wise(order, i, env);
+        if (!caller.empty()) {
+            inlined = true;
+            debug(4) << "Inline function \"" << order[i] << "\" since it is called only by "
+                     << caller << " in element-wise manner\n";
+            internal_assert(order[i] != caller);
+            inline_function(env.at(caller), get_element(env, order[i]));
+        }
+    }
+    return inlined;
+}
+
 namespace {
 
 // Substitute parameter estimates into the exprs describing the box bounds.
 void substitute_estimates_box(Box &box) {
-    box.used = subsitute_var_estimates(box.used);
+    box.used = substitute_var_estimates(box.used);
     for (auto &b : box.bounds) {
-        b.min = subsitute_var_estimates(b.min);
-        b.max = subsitute_var_estimates(b.max);
+        b.min = substitute_var_estimates(b.min);
+        b.max = substitute_var_estimates(b.max);
     }
 }
 
@@ -92,7 +220,9 @@ string get_sanitized_name(string name) {
 struct FStage {
     Function func;
     uint32_t stage_num;
-    FStage(Function func, uint32_t stage_num) : func(func), stage_num(stage_num) {}
+    FStage(Function func, uint32_t stage_num)
+        : func(func), stage_num(stage_num) {
+    }
 
     bool operator==(const FStage &other_stage) const {
         return (func.name() == other_stage.func.name()) &&
@@ -105,7 +235,7 @@ struct FStage {
                 (stage_num < other_stage.stage_num));
     }
 
-    friend std::ostream& operator<<(std::ostream &stream, const FStage &s) {
+    friend std::ostream &operator<<(std::ostream &stream, const FStage &s) {
         if (s.stage_num == 0) {
             stream << s.func.name();
         } else {
@@ -138,7 +268,7 @@ void check_estimates_on_outputs(const vector<Function> &outputs) {
             }
             user_assert(found && est.min.type().is_int() && est.extent.type().is_int())
                 << "Please provide a valid estimate for dimension "
-                << est.var << " of output \"" << out.name() << "\"\n";
+                << arg << " of output \"" << out.name() << "\"\n";
         }
     }
 }
@@ -158,7 +288,8 @@ struct DependenceAnalysis {
         RegionsRequiredQuery(const string &f, int stage, const set<string> &prods,
                              bool only_regions_computed)
             : f(f), stage(stage), prods(prods),
-              only_regions_computed(only_regions_computed) {}
+              only_regions_computed(only_regions_computed) {
+        }
 
         bool operator==(const RegionsRequiredQuery &other) const {
             return (f == other.f) && (stage == other.stage) && (prods == other.prods) &&
@@ -189,7 +320,8 @@ struct DependenceAnalysis {
         // RegionsRequiredQuery.
         map<string, Box> regions;
         RegionsRequired(const DimBounds &b, const map<string, Box> &r)
-            : bounds(b), regions(r) {}
+            : bounds(b), regions(r) {
+        }
     };
     // Cache for bounds queries (bound queries with the same parameters are
     // common during the grouping process).
@@ -197,7 +329,8 @@ struct DependenceAnalysis {
 
     DependenceAnalysis(const map<string, Function> &env, const vector<string> &order,
                        const FuncValueBounds &func_val_bounds)
-        : env(env), order(order), func_val_bounds(func_val_bounds) {}
+        : env(env), order(order), func_val_bounds(func_val_bounds) {
+    }
 
     // Return the regions of the producers ('prods') required to compute the region
     // of the function stage ('f', 'stage_num') specified by 'bounds'. When
@@ -264,9 +397,12 @@ struct StageBounds {
     FStage f_stage;
     DimBounds bounds;
 
-    StageBounds(const FStage &fs, const DimBounds &b) : f_stage(fs), bounds(b) {}
-    StageBounds(Function func, uint32_t stage_num, const DimBounds &b) :
-        f_stage(FStage(func, stage_num)), bounds(b) {}
+    StageBounds(const FStage &fs, const DimBounds &b)
+        : f_stage(fs), bounds(b) {
+    }
+    StageBounds(Function func, uint32_t stage_num, const DimBounds &b)
+        : f_stage(FStage(func, stage_num)), bounds(b) {
+    }
 
     bool operator==(const StageBounds &other) const {
         return (f_stage == other.f_stage) && (bounds == other.bounds);
@@ -275,15 +411,6 @@ struct StageBounds {
         return (f_stage < other.f_stage) ||
                ((f_stage == other.f_stage) && (bounds.size() < other.bounds.size()));
     }
-    friend std::ostream& operator<<(std::ostream &stream, const StageBounds &s) {
-        stream << "Stage: " << s.f_stage << "\n";
-        stream << "Bounds:\n";
-        for (const auto &iter : s.bounds) {
-            stream << "\t" << iter.first << " -> [" << iter.second.min << ", " << iter.second.max << "]\n";
-        }
-        stream << "\n";
-        return stream;
-    }
 };
 
 // Helper function to queue regions that need to be traversed. 'fs_bounds' is
@@ -291,7 +418,7 @@ struct StageBounds {
 // will be added.
 void queue_func_regions(map<FStage, DimBounds> &fs_bounds,
                         const Function &prod_func, const Box &region,
-                        const set<StageBounds>& visited) {
+                        const set<StageBounds> &visited) {
     DimBounds prod_pure_bounds;
     const vector<string> &args = prod_func.args();
 
@@ -328,13 +455,13 @@ void queue_func_regions(map<FStage, DimBounds> &fs_bounds,
                         if (b_iter->second.has_lower_bound() && b.second.has_lower_bound()) {
                             b_iter->second.min = simplify(Interval::make_min(b_iter->second.min, b.second.min));
                         } else {
-                            b_iter->second.min = Interval::neg_inf;
+                            b_iter->second.min = Interval::neg_inf();
                         }
 
                         if (b_iter->second.has_upper_bound() && b.second.has_upper_bound()) {
                             b_iter->second.max = simplify(Interval::make_max(b_iter->second.max, b.second.max));
                         } else {
-                            b_iter->second.max = Interval::pos_inf;
+                            b_iter->second.max = Interval::pos_inf();
                         }
                     }
                 }
@@ -353,7 +480,7 @@ void merge_and_queue_regions(map<FStage, DimBounds> &fs_bounds,
                              const map<string, Function> &env,
                              bool only_regions_computed,
                              string curr_func_name,
-                             const set<StageBounds>& visited) {
+                             const set<StageBounds> &visited) {
     for (const auto &reg : curr_regions) {
         // Merge region with an existing region of a function in the
         // global map. Do not merge the parent function itself to the region
@@ -398,7 +525,7 @@ DependenceAnalysis::regions_required(Function f, int stage_num,
     const auto &iter = regions_required_cache.find(query);
     if (iter != regions_required_cache.end()) {
         const auto &it = std::find_if(iter->second.begin(), iter->second.end(),
-            [&bounds](const RegionsRequired &r) { return (r.bounds == bounds); });
+                                      [&bounds](const RegionsRequired &r) { return (r.bounds == bounds); });
         if (it != iter->second.end()) {
             internal_assert((iter->first == query) && (it->bounds == bounds));
             return it->regions;
@@ -459,7 +586,7 @@ DependenceAnalysis::regions_required(Function f, int stage_num,
                         } else if (arg.is_expr()) {
                             // Find the boxes required for the expression and add the regions
                             // to the queue.
-                            Expr subs_arg = subsitute_var_estimates(arg.expr);
+                            Expr subs_arg = substitute_var_estimates(arg.expr);
                             map<string, Box> arg_regions = boxes_required(subs_arg, curr_scope, func_val_bounds);
                             substitute_estimates_region(arg_regions);
                             merge_and_queue_regions(fs_bounds, regions, arg_regions, prods, env,
@@ -489,8 +616,8 @@ DependenceAnalysis::regions_required(Function f, int stage_num,
                     // current scope.
                     for (int d = 0; d < (int)dims.size() - 1; d++) {
                         Interval simple_bounds = get_element(curr_bounds, dims[d].var);
-                        simple_bounds.min = subsitute_var_estimates(simple_bounds.min);
-                        simple_bounds.max = subsitute_var_estimates(simple_bounds.max);
+                        simple_bounds.min = substitute_var_estimates(simple_bounds.min);
+                        simple_bounds.max = substitute_var_estimates(simple_bounds.max);
                         curr_scope.push(dims[d].var, simple_bounds);
                     }
 
@@ -499,7 +626,7 @@ DependenceAnalysis::regions_required(Function f, int stage_num,
                     for (const auto &val : def.values()) {
                         // Substitute the parameter estimates into the expression and get
                         // the regions required for the expression.
-                        Expr subs_val = subsitute_var_estimates(val);
+                        Expr subs_val = substitute_var_estimates(val);
                         map<string, Box> curr_regions = boxes_required(subs_val, curr_scope, func_val_bounds);
                         substitute_estimates_region(curr_regions);
 
@@ -508,7 +635,7 @@ DependenceAnalysis::regions_required(Function f, int stage_num,
                         // based on the value of a function.
                         Box left_reg;
                         for (const Expr &arg : def.args()) {
-                            Expr subs_arg = subsitute_var_estimates(arg);
+                            Expr subs_arg = substitute_var_estimates(arg);
                             map<string, Box> arg_regions = boxes_required(subs_arg, curr_scope, func_val_bounds);
                             substitute_estimates_region(arg_regions);
 
@@ -554,7 +681,6 @@ DependenceAnalysis::regions_required(Function f, int stage_num,
 
             auto iter = env.find(f_reg.first);
             bool in_env = (iter != env.end());
-
 
             if (!lower.as<IntImm>() && in_env) {
                 const Function &curr_f = iter->second;
@@ -638,7 +764,7 @@ DependenceAnalysis::redundant_regions(Function f, int stage_num, string var,
         internal_assert(b.size() == b_shifted.size());
 
         Box b_intersect;
-        for (uint32_t i = 0 ; i < b.size(); i++) {
+        for (uint32_t i = 0; i < b.size(); i++) {
             b_intersect.push_back(Interval::make_intersection(b[i], b_shifted[i]));
         }
         // A function should appear once in the regions and therefore cannot
@@ -727,7 +853,9 @@ struct AutoSchedule {
         string function;
         size_t stage;
 
-        Stage(const string &f, size_t s) : function(f), stage(s) {}
+        Stage(const string &f, size_t s)
+            : function(f), stage(s) {
+        }
 
         bool operator==(const Stage &other) const {
             return (function == other.function) && (stage == other.stage);
@@ -755,7 +883,8 @@ struct AutoSchedule {
     // function stages.
     map<string, map<int, set<string>>> used_vars;
 
-    AutoSchedule(const map<string, Function> &env, const vector<string> &order) : env(env) {
+    AutoSchedule(const map<string, Function> &env, const vector<string> &order)
+        : env(env) {
         for (size_t i = 0; i < order.size(); ++i) {
             topological_order.emplace(order[i], i);
         }
@@ -774,10 +903,7 @@ struct AutoSchedule {
         return "pipeline.get_func(" + std::to_string(index) + ")";
     }
 
-    friend std::ostream& operator<<(std::ostream &stream, const AutoSchedule &sched) {
-        stream << "// Delete this line if not using Generator\n";
-        stream << "Pipeline pipeline = get_pipeline();\n\n";
-
+    friend std::ostream &operator<<(std::ostream &stream, const AutoSchedule &sched) {
         for (const auto &iter : sched.internal_vars) {
             if (iter.second.is_rvar) {
                 stream << "RVar ";
@@ -801,8 +927,7 @@ struct AutoSchedule {
             // Declare all the Vars and RVars that are actually used in the schedule
             const Function &func = get_element(sched.env, f.first);
             for (size_t i = 0; i < func.args().size(); ++i) {
-                if (sched.used_vars.at(func.name()).at(0).find(func.args()[i])
-                        != sched.used_vars.at(func.name()).at(0).end()) {
+                if (sched.used_vars.at(func.name()).at(0).find(func.args()[i]) != sched.used_vars.at(func.name()).at(0).end()) {
                     schedule_ss << "    Var " << func.args()[i] << " = "
                                 << fname << ".args()[" << i << "];\n";
                 }
@@ -810,7 +935,7 @@ struct AutoSchedule {
             set<string> declared_rvars;
             for (size_t i = 0; i < func.updates().size(); ++i) {
                 const vector<ReductionVariable> &rvars = func.updates()[i].schedule().rvars();
-                const set<string> &var_list = sched.used_vars.at(func.name()).at(i+1);
+                const set<string> &var_list = sched.used_vars.at(func.name()).at(i + 1);
                 for (size_t j = 0; j < rvars.size(); ++j) {
                     if ((var_list.find(rvars[j].var) == var_list.end()) ||
                         (declared_rvars.find(rvars[j].var) != declared_rvars.end())) {
@@ -856,7 +981,7 @@ struct AutoSchedule {
         if (schedules.empty()) {
             schedules.push_back(sched);
         } else {
-            if (schedules[schedules.size()-1] != sched) {
+            if (schedules[schedules.size() - 1] != sched) {
                 schedules.push_back(sched);
             }
         }
@@ -871,7 +996,9 @@ struct Partitioner {
         string prod;
         FStage cons;
 
-        GroupingChoice(const string &prod, const FStage &cons) : prod(prod), cons(cons) {}
+        GroupingChoice(const string &prod, const FStage &cons)
+            : prod(prod), cons(cons) {
+        }
 
         bool operator==(const GroupingChoice &other) const {
             return (prod == other.prod) && (cons == other.cons);
@@ -881,7 +1008,7 @@ struct Partitioner {
             return (prod < other.prod) || ((prod == other.prod) && (cons < other.cons));
         }
 
-        friend std::ostream& operator<<(std::ostream &stream, const GroupingChoice &choice) {
+        friend std::ostream &operator<<(std::ostream &stream, const GroupingChoice &choice) {
             stream << "Choice: " << choice.prod << " -> " << choice.cons << '\n';
             return stream;
         }
@@ -946,9 +1073,10 @@ struct Partitioner {
         map<string, Expr> tile_sizes;
 
         Group(const FStage &output, const vector<FStage> &members)
-            : output(output), members(members) {}
+            : output(output), members(members) {
+        }
 
-        friend std::ostream& operator<<(std::ostream &stream, const Group &g) {
+        friend std::ostream &operator<<(std::ostream &stream, const Group &g) {
             stream << "Output FStage: " << g.output << '\n';
             stream << "Members: " << '{';
             for (size_t i = 0; i < g.members.size(); ++i) {
@@ -968,12 +1096,13 @@ struct Partitioner {
             }
             stream << "}" << '\n';
 
-            stream << "Tile sizes: " << "{";
+            stream << "Tile sizes: "
+                   << "{";
             for (auto iter = g.tile_sizes.begin(); iter != g.tile_sizes.end(); ++iter) {
                 if (std::distance(g.tile_sizes.begin(), iter) > 0) {
                     stream << ", ";
                 }
-                stream << "(" << iter->first << ", " <<  iter->second << ")";
+                stream << "(" << iter->first << ", " << iter->second << ")";
             }
             stream << "}" << '\n';
 
@@ -989,8 +1118,12 @@ struct Partitioner {
         // the group.
         Expr parallelism;
 
-        GroupAnalysis() : cost(Cost()) , parallelism(Expr()) {}
-        GroupAnalysis(const Cost &c, Expr p) : cost(c), parallelism(std::move(p)) {}
+        GroupAnalysis()
+            : cost(Cost()), parallelism(Expr()) {
+        }
+        GroupAnalysis(const Cost &c, Expr p)
+            : cost(c), parallelism(std::move(p)) {
+        }
 
         inline bool defined() const {
             return cost.defined() && parallelism.defined();
@@ -1003,7 +1136,7 @@ struct Partitioner {
             }
         }
 
-        friend std::ostream& operator<<(std::ostream &stream, const GroupAnalysis &analysis) {
+        friend std::ostream &operator<<(std::ostream &stream, const GroupAnalysis &analysis) {
             stream << "[arith cost:" << analysis.cost.arith << ", ";
             stream << "memory cost:" << analysis.cost.memory << ", ";
             stream << "parallelism:" << analysis.parallelism << "]\n";
@@ -1018,8 +1151,11 @@ struct Partitioner {
         map<string, Expr> tile_sizes;
         GroupAnalysis analysis;
         GroupConfig(const map<string, Expr> &tile_sizes, const GroupAnalysis &analysis)
-            : tile_sizes(tile_sizes), analysis(analysis) {}
-        GroupConfig() : tile_sizes(map<string, Expr>()), analysis(GroupAnalysis()) {}
+            : tile_sizes(tile_sizes), analysis(analysis) {
+        }
+        GroupConfig()
+            : tile_sizes(map<string, Expr>()), analysis(GroupAnalysis()) {
+        }
     };
 
     // Cache for storing the best configuration for the grouping choice. During
@@ -1045,7 +1181,8 @@ struct Partitioner {
     // algorithm groups the functions by inlining the expression for the producer function
     // into the consumer stage. In the 'FastMem' mode, the grouping is done at the level of
     // tiles of the group output stage.
-    enum class Level {Inline, FastMem};
+    enum class Level { Inline,
+                       FastMem };
 
     // Bounds of each function stage in the pipeline. These bounds are inferred from the
     // estimates of the outputs and other functions in the pipeline.
@@ -1307,8 +1444,8 @@ Partitioner::Partitioner(const map<string, Box> &_pipeline_bounds,
                          const vector<Function> &_outputs,
                          DependenceAnalysis &_dep_analysis,
                          RegionCosts &_costs)
-        : pipeline_bounds(_pipeline_bounds), arch_params(_arch_params),
-          dep_analysis(_dep_analysis), costs(_costs), outputs(_outputs) {
+    : pipeline_bounds(_pipeline_bounds), arch_params(_arch_params),
+      dep_analysis(_dep_analysis), costs(_costs), outputs(_outputs) {
     // Place each stage of a function in its own group. Each stage is
     // a node in the pipeline graph.
     for (const auto &f : dep_analysis.env) {
@@ -1464,7 +1601,7 @@ Partitioner::choose_candidate_grouping(const vector<pair<string, string>> &cands
     for (const auto &g : best_grouping) {
         debug(3) << "  " << g.first;
     }
-    if (best_grouping.size() > 0) {
+    if (!best_grouping.empty()) {
         debug(3) << "Best benefit: " << best_benefit << '\n';
     }
 
@@ -1516,7 +1653,7 @@ vector<map<string, Expr>> Partitioner::generate_tile_configs(const FStage &stg) 
         for (const auto &dim_size : size_variants) {
             map<string, Expr> tiling;
             tiling.emplace(tile_vars[i],
-                           (i == 0) ? std::max(dim_size, min_inner_dim_size): dim_size);
+                           (i == 0) ? std::max(dim_size, min_inner_dim_size) : dim_size);
             for (size_t j = 0; j < tile_vars.size(); j++) {
                 if (j < i) {
                     tiling.emplace(tile_vars[j], size_variants[size_variants.size() - 1]);
@@ -1527,8 +1664,7 @@ vector<map<string, Expr>> Partitioner::generate_tile_configs(const FStage &stg) 
             if (!tiling.empty()) {
                 bool is_duplicate =
                     std::find_if(tile_configs.begin(), tile_configs.end(),
-                                [&tiling](const map<string, Expr> &m) { return (tiling == m);})
-                    != tile_configs.end();
+                                 [&tiling](const map<string, Expr> &m) { return (tiling == m); }) != tile_configs.end();
                 if (!is_duplicate) {
                     tile_configs.push_back(tiling);
                 }
@@ -1541,13 +1677,12 @@ vector<map<string, Expr>> Partitioner::generate_tile_configs(const FStage &stg) 
         map<string, Expr> tiling;
         for (size_t j = 0; j < tile_vars.size(); j++) {
             tiling.emplace(tile_vars[j],
-                           (j == 0) ? std::max(dim_size, min_inner_dim_size): dim_size);
+                           (j == 0) ? std::max(dim_size, min_inner_dim_size) : dim_size);
         }
         if (!tiling.empty()) {
             bool is_duplicate =
                 std::find_if(tile_configs.begin(), tile_configs.end(),
-                            [&tiling](const map<string, Expr> &m) { return (tiling == m);})
-                != tile_configs.end();
+                             [&tiling](const map<string, Expr> &m) { return (tiling == m); }) != tile_configs.end();
             if (!is_duplicate) {
                 tile_configs.push_back(tiling);
             }
@@ -1569,8 +1704,7 @@ vector<map<string, Expr>> Partitioner::generate_tile_configs(const FStage &stg) 
         if (!tiling.empty()) {
             bool is_duplicate =
                 std::find_if(tile_configs.begin(), tile_configs.end(),
-                            [&tiling](const map<string, Expr> &m) { return (tiling == m);})
-                != tile_configs.end();
+                             [&tiling](const map<string, Expr> &m) { return (tiling == m); }) != tile_configs.end();
             if (!is_duplicate) {
                 tile_configs.push_back(tiling);
             }
@@ -1674,7 +1808,7 @@ void Partitioner::group(Partitioner::Level level) {
                     const string &prod_name = prod_f.name();
                     const string &cons_name = (*child_groups.begin());
                     cand.push_back(make_pair(prod_name, cons_name));
-                } else if((level == Partitioner::Level::Inline) && prod_f.is_pure()) {
+                } else if ((level == Partitioner::Level::Inline) && prod_f.is_pure()) {
                     const string &prod_name = prod_f.name();
                     cand.push_back(make_pair(prod_name, ""));
                 }
@@ -1957,7 +2091,7 @@ Partitioner::GroupAnalysis Partitioner::analyze_group(const Group &g, bool show_
     bool model_reuse = false;
 
     // Linear dropoff
-    Expr load_slope = cast<float>(arch_params.balance) / arch_params.last_level_cache_size;
+    float load_slope = arch_params.balance / arch_params.last_level_cache_size;
     for (const auto &f_load : group_load_costs) {
         internal_assert(g.inlined.find(f_load.first) == g.inlined.end())
             << "Intermediates of inlined pure fuction \"" << f_load.first
@@ -1979,19 +2113,19 @@ Partitioner::GroupAnalysis Partitioner::analyze_group(const Group &g, bool show_
             const auto &f_load_pipeline_bounds = get_element(pipeline_bounds, f_load.first);
 
             bool is_function = (dep_analysis.env.find(f_load.first) != dep_analysis.env.end());
-            if (!is_function) { // It is a load to some input buffer
+            if (!is_function) {  // It is a load to some input buffer
                 // Initial loads
                 initial_footprint = costs.input_region_size(f_load.first, f_load_pipeline_bounds);
                 // Subsequent loads
                 footprint = costs.input_region_size(f_load.first, alloc_reg);
-            } else if (is_output) { // Load to the output function of the group
+            } else if (is_output) {  // Load to the output function of the group
                 internal_assert(is_group_member)
                     << "Output " << f_load.first << " should have been a group member\n";
                 // Initial loads
                 initial_footprint = costs.region_size(f_load.first, f_load_pipeline_bounds);
                 // Subsequent loads
                 footprint = costs.region_size(f_load.first, out_tile_extent);
-            } else { // Load to some non-member function (i.e. function from other groups)
+            } else {  // Load to some non-member function (i.e. function from other groups)
                 // Initial loads
                 initial_footprint = costs.region_size(f_load.first, f_load_pipeline_bounds);
                 // Subsequent loads
@@ -2172,8 +2306,8 @@ Expr Partitioner::estimate_benefit(const GroupAnalysis &old_grouping,
 }
 
 Expr Partitioner::estimate_benefit(
-        const vector<pair<GroupingChoice, GroupConfig>> &new_grouping,
-        bool no_redundant_work, bool ensure_parallelism) {
+    const vector<pair<GroupingChoice, GroupConfig>> &new_grouping,
+    bool no_redundant_work, bool ensure_parallelism) {
 
     set<FStage> old_groups;
 
@@ -2308,45 +2442,10 @@ string get_base_name(string name) {
     return name;
 }
 
-// Return true if any of the values or args in 'def' refers to any of
-// the inputs or outputs, with access function which depends on 'var'.
-bool access_inputs_or_outputs(Definition def, VarOrRVar var,
-                              const map<string, Type> &inputs,
-                              const vector<Function> &outputs) {
-    FindAllCalls find;
-    def.accept(&find);
-
-    for (size_t i = 0; i < find.call_args.size(); ++i) {
-        const string &func = find.call_args[i].first;
-        const vector<Expr> &args = find.call_args[i].second;
-
-        if (inputs.find(func) == inputs.end()) {
-            // Check if 'func' is an output
-            bool is_output =
-                std::find_if(outputs.begin(), outputs.end(),
-                            [&func](const Function &f) { return (f.name() == func);})
-                != outputs.end();
-            if (!is_output) {
-                // 'func' is neither an input or an output
-                continue;
-            }
-        }
-
-        // Check if any of the accesses to 'func' depends on 'var'
-        for (const auto &arg : args) {
-            if (expr_uses_var(arg, var.name())) {
-                return true;
-            }
-        }
-    }
-
-    return false;
-}
-
 pair<VarOrRVar, VarOrRVar> Partitioner::split_dim(
-        const Group &g, Stage f_handle, int stage_num, Definition def,
-        bool is_group_output, VarOrRVar v, const Expr &factor, string in_suffix,
-        string out_suffix, map<string, Expr> &estimates, AutoSchedule &sched) {
+    const Group &g, Stage f_handle, int stage_num, Definition def,
+    bool is_group_output, VarOrRVar v, const Expr &factor, string in_suffix,
+    string out_suffix, map<string, Expr> &estimates, AutoSchedule &sched) {
     // Create new variables for the split dimensions
     string arg_name = v.name();
     string inner_name = arg_name + in_suffix;
@@ -2386,28 +2485,13 @@ pair<VarOrRVar, VarOrRVar> Partitioner::split_dim(
     // care for the nested loops. If it is the update definition of the group output
     // however, we'd better make sure that no other member of the groups accesses
     // the inputs or outputs.
+
     TailStrategy strategy = TailStrategy::Auto;
     if ((stage_num > 0) && !v.is_rvar) {
-        if (!is_group_output) {
-            if (access_inputs_or_outputs(def, v, costs.inputs, outputs)) {
-                strategy = TailStrategy::GuardWithIf;
-            }
-        } else {
-            bool any_access_inputs_outputs = false;
-            for (const FStage &mem : g.members) {
-                if (mem.func.name() == f_handle.name()) {
-                    continue;
-                }
-                Definition mem_def = get_stage_definition(mem.func, mem.stage_num);
-                if (access_inputs_or_outputs(mem_def, v, costs.inputs, outputs)) {
-                    any_access_inputs_outputs = true;
-                    break;
-                }
-            }
-            if (any_access_inputs_outputs) {
-                strategy = TailStrategy::GuardWithIf;
-            }
-        }
+        // TODO: It's safe to use RoundUp here if we know there are no
+        // loads from any input, but at this point we've lost track of
+        // loads from inputs that happen inside inlined Funcs.
+        strategy = TailStrategy::GuardWithIf;
     }
 
     f_handle.split(v, outer, inner, factor, strategy);
@@ -2415,20 +2499,20 @@ pair<VarOrRVar, VarOrRVar> Partitioner::split_dim(
     std::ostringstream oss;
     oss << "split(" << arg_name << ", " << outer_name << ", " << inner_name << ", " << factor;
     switch (strategy) {
-        case TailStrategy::RoundUp:
-            oss << ", TailStrategy::RoundUp)";
-            break;
-        case TailStrategy::GuardWithIf:
-            oss << ", TailStrategy::GuardWithIf)";
-            break;
-        case TailStrategy::ShiftInwards:
-            oss << ", TailStrategy::ShiftInwards)";
-            break;
-        case TailStrategy::Auto:
-            oss << ")";
-            break;
-        default:
-            internal_assert(false);
+    case TailStrategy::RoundUp:
+        oss << ", TailStrategy::RoundUp)";
+        break;
+    case TailStrategy::GuardWithIf:
+        oss << ", TailStrategy::GuardWithIf)";
+        break;
+    case TailStrategy::ShiftInwards:
+        oss << ", TailStrategy::ShiftInwards)";
+        break;
+    case TailStrategy::Auto:
+        oss << ")";
+        break;
+    default:
+        internal_assert(false);
     }
     sched.push_schedule(f_handle.name(), stage_num, oss.str(),
                         {arg_name, outer_name, inner_name});
@@ -2457,7 +2541,7 @@ void Partitioner::vectorize_stage(const Group &g, Stage f_handle, int stage_num,
         vec_len = std::max(vec_len, t.natural_vector_size(type));
     }
 
-    for (int d = 0; d < (int) dims.size() - 1; d++) {
+    for (int d = 0; d < (int)dims.size() - 1; d++) {
         string dim_name = get_base_name(dims[d].var);
         bool can_vectorize = true;
         if (rvars.find(dim_name) != rvars.end()) {
@@ -2507,7 +2591,7 @@ void Partitioner::vectorize_stage(const Group &g, Stage f_handle, int stage_num,
 // Return true if the vars/rvars in 'ordering' are in the same order as the
 // dim list.
 inline bool operator==(const vector<Dim> &dims, const vector<VarOrRVar> &ordering) {
-    if (dims.size() != ordering.size() + 1) { // The dim list also contains '__outermost'
+    if (dims.size() != ordering.size() + 1) {  // The dim list also contains '__outermost'
         return false;
     }
     for (size_t i = 0; i < ordering.size(); ++i) {
@@ -2535,7 +2619,7 @@ void Partitioner::reorder_dims(Stage f_handle, int stage_num, Definition def,
     }
 
     // Iterate until all the dimensions have been assigned an order
-    while (strides.size() > 0) {
+    while (!strides.empty()) {
         // Find the pure dimension (can be vars or rvars) with the smallest stride
         bool found_pure_dim = false;
         Expr min_pure_stride = Int(64).max();
@@ -2636,7 +2720,8 @@ class FindVarsUsingVar : public IRVisitor {
         let->value.accept(this);
         let->body.accept(this);
     }
-public :
+
+public:
     Scope<> vars;
 
     FindVarsUsingVar(string var) {
@@ -2645,11 +2730,11 @@ public :
 };
 
 void Partitioner::generate_group_cpu_schedule(
-        const Group &g, const Target &t,
-        const map<FStage, DimBounds> &group_loop_bounds,
-        const map<string, Box> &group_storage_bounds,
-        const set<string> &inlines,
-        AutoSchedule &sched) {
+    const Group &g, const Target &t,
+    const map<FStage, DimBounds> &group_loop_bounds,
+    const map<string, Box> &group_storage_bounds,
+    const set<string> &inlines,
+    AutoSchedule &sched) {
     string out_f_name = g.output.func.name();
     Function g_out = g.output.func;
 
@@ -2882,7 +2967,7 @@ void Partitioner::generate_group_cpu_schedule(
                                     {sanitized_g_out, tile_inner_var.name()});
             } else {
                 user_warning << "Degenerate tiling. No dimensions are tiled" << '\n';
-                user_warning << "Computing \"" <<  mem.func.name() << "\" at root" << '\n';
+                user_warning << "Computing \"" << mem.func.name() << "\" at root" << '\n';
                 Func(mem.func).compute_root();
                 sched.push_schedule(mem_handle.name(), mem.stage_num, "compute_root()", {});
             }
@@ -2961,7 +3046,7 @@ Expr Partitioner::find_max_access_stride(const Scope<> &vars,
         // Check if the access expression depends on any of the loop variables
         // in 'vars'. Expressions that do not involve the variable have stride 0.
         if (expr_uses_vars(acc_exprs[sdim], vars)) {
-           stride = max(stride, curr_stride);
+            stride = max(stride, curr_stride);
         }
 
         const Interval &dim_range = buffer_bounds[sdim];
@@ -3129,10 +3214,10 @@ void validate_no_partial_schedules(const Function &f) {
 
                 const auto &iter =
                     std::find_if(args.begin(), args.end(),
-                                [&d](const Expr &arg) {
-                                    const Variable *v = arg.as<Variable>();
-                                    return (d.var == v->name);
-                                });
+                                 [&d](const Expr &arg) {
+                                     const Variable *v = arg.as<Variable>();
+                                     return (d.var == v->name);
+                                 });
                 internal_assert(iter != args.end());
                 int current_index = iter - args.begin();
                 user_assert(current_index > last_index)
@@ -3143,135 +3228,6 @@ void validate_no_partial_schedules(const Function &f) {
             }
         }
     }
-}
-
-// If the cost of computing a Func is about the same as calling the Func,
-// inline the Func. Return true of any of the Funcs is inlined.
-bool inline_all_trivial_functions(const vector<Function> &outputs,
-                                  const vector<string> &order,
-                                  const map<string, Function> &env) {
-    bool inlined = false;
-    // The very last few functions in 'order' are the last to be realized in the
-    // pipeline (the final producers) so there is no point in checking it.
-    for (int i = 0; i < (int)order.size() - (int)outputs.size(); ++i) {
-        bool is_output = false;
-        for (const Function &f : outputs) {
-            if (order[i] == f.name()) {
-                is_output = true;
-                break;
-            }
-        }
-        if (is_output) {
-            // Should not inline output Func
-            debug(5) << "Skip inlining " << order[i] << " since it is an output\n";
-            continue;
-        }
-        Function f1 = env.at(order[i]);
-        if (is_func_trivial_to_inline(f1)) {
-            inlined = true;
-            debug(4) << "Function \"" << order[i] << "\" is trivial to inline\n";
-            for (int j = i + 1; j < (int)order.size() - (int)outputs.size(); ++j) {
-                internal_assert(order[i] != order[j]);
-                Function f2 = env.at(order[j]);
-
-                if (f2.has_extern_definition() &&  !f1.is_wrapper()) {
-                    debug(5) << "Skip inlining of function \"" << f1.name()
-                             << "\" inside \"" << f2.name() << "\", because "
-                             << "non-wrapper functions cannot be inlined inside "
-                             << "extern functions.\n";
-                } else {
-                    debug(5) << "Inline trivial function \"" << f1.name()
-                             << "\" inside \"" << f2.name() << "\"\n";
-                    inline_function(f2, f1);
-                }
-            }
-        }
-    }
-    return inlined;
-}
-
-// Determine if a Func (order[index]) is only consumed by another single Func
-// in element-wise manner. If it is, return the name of the consumer Func;
-// otherwise, return an empty string.
-string is_func_called_element_wise(const vector<string> &order, size_t index,
-                                   const map<string, Function> &env) {
-    Function f1 = env.at(order[index]);
-    if (f1.has_extern_definition() || !f1.can_be_inlined()) {
-        return "";
-    }
-    internal_assert(index < order.size());
-
-    string caller = "";
-    for (size_t i = index + 1; i < order.size(); ++i) {
-        Function f2 = env.at(order[i]);
-        if (f2.has_extern_definition()) {
-            continue;
-        }
-        int num_stages = f2.updates().size() + 1;
-        for (int s = 0; s < num_stages; ++s) {
-            Definition def = get_stage_definition(f2, s);
-            FindAllCalls find;
-            def.accept(&find);
-
-            if (find.funcs_called.count(f1.name())) {
-                if (caller.empty()) {
-                    caller = f2.name();
-                } else {
-                    // Found another caller of 'f1'
-                    return "";
-                }
-            }
-            for (const auto &iter : find.call_args) {
-                if (iter.first != f1.name()) {
-                    continue;
-                }
-                if (def.args().size() != iter.second.size()) {
-                    // It's not an element-wise access
-                    return "";
-                }
-                for (size_t j = 0; j < iter.second.size(); ++j) {
-                    if (!equal(def.args()[j], iter.second[j])) {
-                        // It's not an element-wise access
-                        return "";
-                    }
-                }
-            }
-        }
-    }
-    return caller;
-}
-
-// Inline a Func if its values are only consumed by another single Func in
-// element-wise manner.
-bool inline_all_element_wise_functions(const vector<Function> &outputs,
-                                       const vector<string> &order,
-                                       const map<string, Function> &env) {
-    bool inlined = false;
-    // The very last few functions in 'order' are the last to be realized in the
-    // pipeline (the final producers) so there is no point in checking it.
-    for (int i = 0; i < (int)order.size() - (int)outputs.size(); ++i) {
-        bool is_output = false;
-        for (const Function &f : outputs) {
-            if (order[i] == f.name()) {
-                is_output = true;
-                break;
-            }
-        }
-        if (is_output) {
-            // Should not inline output Func
-            debug(5) << "Skip inlining " << order[i] << " since it is an output\n";
-            continue;
-        }
-        string caller = is_func_called_element_wise(order, i, env);
-        if (!caller.empty()) {
-            inlined = true;
-            debug(4) << "Inline function \"" << order[i] << "\" since it is called only by "
-                     << caller << " in element-wise manner\n";
-            internal_assert(order[i] != caller);
-            inline_function(env.at(caller), get_element(env, order[i]));
-        }
-    }
-    return inlined;
 }
 
 // Return true if 'f' is used by some extern Func.
@@ -3529,14 +3485,12 @@ string generate_schedules(const vector<Function> &outputs, const Target &target,
     part.generate_cpu_schedule(target, sched);
 
     std::ostringstream oss;
-    oss << "// Target: " << target.to_string() << "\n";
-    oss << "// MachineParams: " << arch_params.to_string() << "\n";
-    oss << "\n";
     oss << sched;
     string sched_string = oss.str();
 
     debug(3) << "\n\n*******************************\nSchedule:\n"
-             << "*******************************\n" << sched_string << "\n\n";
+             << "*******************************\n"
+             << sched_string << "\n\n";
 
     // TODO: Unify both inlining and grouping for fast mem
     // TODO: GPU scheduling
@@ -3548,13 +3502,15 @@ string generate_schedules(const vector<Function> &outputs, const Target &target,
 }  // namespace Internal
 
 MachineParams MachineParams::generic() {
-    return MachineParams(16, 16 * 1024 * 1024, 40);
+    std::string params = Internal::get_env_variable("HL_MACHINE_PARAMS");
+    if (params.empty()) {
+        return MachineParams(16, 16 * 1024 * 1024, 40);
+    } else {
+        return MachineParams(params);
+    }
 }
 
 std::string MachineParams::to_string() const {
-    internal_assert(parallelism.type().is_int() &&
-                    last_level_cache_size.type().is_int() &&
-                    balance.type().is_int());
     std::ostringstream o;
     o << parallelism << "," << last_level_cache_size << "," << balance;
     return o.str();
@@ -3563,9 +3519,9 @@ std::string MachineParams::to_string() const {
 MachineParams::MachineParams(const std::string &s) {
     std::vector<std::string> v = Internal::split_string(s, ",");
     user_assert(v.size() == 3) << "Unable to parse MachineParams: " << s;
-    parallelism = Internal::string_to_int(v[0]);
-    last_level_cache_size = Internal::string_to_int(v[1]);
-    balance = Internal::string_to_int(v[2]);
+    parallelism = std::atoi(v[0].c_str());
+    last_level_cache_size = std::atoll(v[1].c_str());
+    balance = std::atof(v[2].c_str());
 }
 
 }  // namespace Halide

@@ -3,14 +3,15 @@
 #include "CSE.h"
 #include "Debug.h"
 #include "IRMutator.h"
+#include "IROperator.h"
 #include "IRPrinter.h"
 #include "Inline.h"
 #include "Qualify.h"
+#include "Substitute.h"
 
 namespace Halide {
 namespace Internal {
 
-using std::set;
 using std::string;
 using std::vector;
 
@@ -38,7 +39,7 @@ void validate_schedule_inlined_function(Function f) {
 
     for (size_t i = 0; i < stage_s.dims().size(); i++) {
         Dim d = stage_s.dims()[i];
-        if (d.is_parallel()) {
+        if (d.is_unordered_parallel()) {
             user_error << "Cannot parallelize dimension "
                        << d.var << " of function "
                        << f.name() << " because the function is scheduled inline.\n";
@@ -91,8 +92,8 @@ void validate_schedule_inlined_function(Function f) {
     }
 }
 
-class Inliner : public IRMutator2 {
-    using IRMutator2::visit;
+class Inliner : public IRMutator {
+    using IRMutator::visit;
 
     Function func;
 
@@ -113,15 +114,19 @@ class Inliner : public IRMutator2 {
             internal_assert(args.size() == func_args.size());
 
             for (size_t i = 0; i < args.size(); i++) {
-                body = Let::make(func.name() + "." + func_args[i], args[i], body);
+                if (is_const(args[i]) || args[i].as<Variable>()) {
+                    body = substitute(func.name() + "." + func_args[i], args[i], body);
+                } else {
+                    body = Let::make(func.name() + "." + func_args[i], args[i], body);
+                }
             }
 
-            found = true;
+            found++;
 
             return body;
 
         } else {
-            return IRMutator2::visit(op);
+            return IRMutator::visit(op);
         }
     }
 
@@ -151,27 +156,26 @@ class Inliner : public IRMutator2 {
     }
 
     Stmt visit(const Provide *op) override {
-        bool old_found = found;
+        ScopedValue<int> old_found(found, 0);
+        Stmt stmt = IRMutator::visit(op);
 
-        found = false;
-        Stmt stmt = IRMutator2::visit(op);
-
-        if (found) {
+        // TODO: making this > 1 should be desirable,
+        // but explodes compiletimes in some situations.
+        if (found > 0) {
             stmt = common_subexpression_elimination(stmt);
         }
 
-        found = old_found;
         return stmt;
     }
 
 public:
-    bool found;
+    int found = 0;
 
-    Inliner(Function f) : func(f), found(false) {
+    Inliner(Function f)
+        : func(f) {
         internal_assert(f.can_be_inlined()) << "Illegal to inline " << f.name() << "\n";
         validate_schedule_inlined_function(f);
     }
-
 };
 
 Stmt inline_function(Stmt s, Function f) {
@@ -183,7 +187,9 @@ Stmt inline_function(Stmt s, Function f) {
 Expr inline_function(Expr e, Function f) {
     Inliner i(f);
     e = i.mutate(e);
-    if (i.found) {
+    // TODO: making this > 1 should be desirable,
+    // but explodes compiletimes in some situations.
+    if (i.found > 0) {
         e = common_subexpression_elimination(e);
     }
     return e;

@@ -87,25 +87,16 @@ bool _halide_buffer_is_bounds_query(const halide_buffer_t *buf) {
 }
 
 HALIDE_BUFFER_HELPER_ATTRS
-uint8_t _halide_buffer_get_type_code(const halide_buffer_t *buf) {
-    return buf->type.code;
-}
-
-HALIDE_BUFFER_HELPER_ATTRS
-uint8_t _halide_buffer_get_type_bits(const halide_buffer_t *buf) {
-    return buf->type.bits;
-}
-
-HALIDE_BUFFER_HELPER_ATTRS
-uint16_t _halide_buffer_get_type_lanes(const halide_buffer_t *buf) {
-    return buf->type.lanes;
+uint32_t _halide_buffer_get_type(const halide_buffer_t *buf) {
+    return buf->type.as_u32();
 }
 
 HALIDE_BUFFER_HELPER_ATTRS
 halide_buffer_t *_halide_buffer_init(halide_buffer_t *dst,
                                      halide_dimension_t *dst_shape,
                                      void *host,
-                                     uint64_t device, halide_device_interface_t *device_interface,
+                                     uint64_t device,
+                                     const halide_device_interface_t *device_interface,
                                      int type_code, int type_bits,
                                      int dimensions,
                                      halide_dimension_t *shape,

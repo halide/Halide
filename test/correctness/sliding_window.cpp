@@ -1,5 +1,5 @@
-#include <stdio.h>
 #include "Halide.h"
+#include <stdio.h>
 
 using namespace Halide;
 
@@ -26,6 +26,11 @@ extern "C" void my_free(void *, void *) {
 
 int main(int argc, char **argv) {
     Var x, y;
+
+    if (get_jit_target_from_environment().arch == Target::WebAssembly) {
+        printf("Skipping test for WebAssembly as the wasm JIT cannot support set_custom_allocator.\n");
+        return 0;
+    }
 
     {
         Func f, g;
@@ -192,6 +197,26 @@ int main(int argc, char **argv) {
         // f should be able to tell that it only needs to compute each value once
         if (count != 34) {
             printf("f was called %d times instead of %d times\n", count, 34);
+            return -1;
+        }
+    }
+
+    {
+        // Sliding with an unrolled producer
+        Var x, xi;
+        Func f, g;
+
+        f(x) = call_counter(x, 0) + x*x;
+        g(x) = f(x) + f(x-1);
+
+        g.split(x, x, xi, 10);
+        f.store_root().compute_at(g, x).unroll(x);
+
+        count = 0;
+        Buffer<int> im = g.realize(100);
+
+        if (count != 101) {
+            printf("f was called %d times instead of %d times\n", count, 101);
             return -1;
         }
     }

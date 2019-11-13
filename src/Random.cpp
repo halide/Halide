@@ -60,7 +60,7 @@ Expr rng32(Expr x) {
 
     return (((C2 * x) + C1) * x) + C0;
 }
-}
+}  // namespace
 
 Expr random_int(const vector<Expr> &e) {
     internal_assert(e.size());
@@ -92,8 +92,8 @@ Expr random_float(const vector<Expr> &e) {
     return clamp(reinterpret(Float(32), result) - 1.0f, 0.0f, 1.0f);
 }
 
-class LowerRandom : public IRMutator2 {
-    using IRMutator2::visit;
+class LowerRandom : public IRMutator {
+    using IRMutator::visit;
 
     Expr visit(const Call *op) override {
         if (op->is_intrinsic(Call::random)) {
@@ -110,7 +110,7 @@ class LowerRandom : public IRMutator2 {
                 return Expr();
             }
         } else {
-            return IRMutator2::visit(op);
+            return IRMutator::visit(op);
         }
     }
 

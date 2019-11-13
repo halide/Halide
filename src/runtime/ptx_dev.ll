@@ -17,13 +17,17 @@ declare  i32 @llvm.nvvm.read.ptx.sreg.ntid.w()
 declare  i32 @llvm.nvvm.read.ptx.sreg.nctaid.w()
 declare  i32 @llvm.nvvm.read.ptx.sreg.warpsize()
 
+; Remove these two once the minimum required llvm version is 9.0
+declare float @llvm.nvvm.atomic.load.add.f32.p0f32(float*, float)
+declare double @llvm.nvvm.atomic.load.add.f64.p0f64(double *, double)
+
 ; Legacy - to replace
 ;declare void @llvm.ptx.red.global.add.s32(i32*, i32)
 ;declare void @llvm.ptx.red.global.add.f32(float*, float)
 ;declare void @llvm.ptx.red.shared.add.s32(i32 addrspace(4)*, i32)
 
 define weak_odr float @nan_f32() nounwind uwtable readnone alwaysinline {
-       ret float 0xFFF0000000000000;
+       ret float 0x7FF8000000000000;
 }
 
 define weak_odr float @neg_inf_f32() nounwind uwtable readnone alwaysinline {
@@ -334,14 +338,10 @@ define weak_odr double @atanh_f64(double %x) nounwind uwtable readnone alwaysinl
        ret double %y
 }
 
-define weak_odr i32 @halide_gpu_thread_barrier() nounwind uwtable alwaysinline {
-       call void @llvm.nvvm.barrier0() nounwind
-       ret i32 0
-}
-
 define weak_odr i32 @halide_ptx_trap() nounwind uwtable alwaysinline {
        tail call void asm sideeffect "
        trap;
        ", ""() nounwind
        ret i32 0
 }
+

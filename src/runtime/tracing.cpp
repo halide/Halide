@@ -65,6 +65,10 @@ public:
         __sync_fetch_and_and(&lock, ~exclusive_held_mask);
     }
 
+    __attribute__((always_inline)) void init() {
+    	lock = 0;
+    }
+
     SharedExclusiveSpinLock() : lock(0) {}
 };
 
@@ -130,6 +134,12 @@ public:
         // Need a memory barrier to guarantee all the writes are done.
         __sync_synchronize();
         lock.release_shared();
+    }
+
+    __attribute__((always_inline)) void init() {
+    	cursor = 0;
+    	overage = 0;
+    	lock.init();
     }
 
     TraceBuffer() : cursor(0), overage(0) {}
@@ -337,6 +347,7 @@ WEAK int halide_get_trace_file(void *user_context) {
             halide_trace_file_internally_opened = file;
             if (!halide_trace_buffer) {
                 halide_trace_buffer = (TraceBuffer *)malloc(sizeof(TraceBuffer));
+                halide_trace_buffer->init();
             }
         } else {
             halide_set_trace_file(0);
@@ -369,33 +380,6 @@ __attribute__((destructor))
 WEAK void halide_trace_cleanup() {
     halide_shutdown_trace();
 }
-}
-
-// A wrapper for halide_trace called by the pipeline. Halide Stmt IR
-// has a hard time packing structs itself.
-WEAK int halide_trace_helper(void *user_context,
-                             const char *func,
-                             void *value, int *coords,
-                             int type_code, int type_bits, int type_lanes,
-                             int code,
-                             int parent_id, int value_index, int dimensions,
-                             const char *trace_tag) {
-    halide_trace_event_t event;
-    event.func = func;
-    event.value = value;
-    event.coordinates = coords;
-    event.trace_tag = trace_tag;
-    event.type.code = (halide_type_code_t)type_code;
-    event.type.bits = (uint8_t)type_bits;
-    event.type.lanes = (uint16_t)type_lanes;
-    event.event = (halide_trace_event_code_t)code;
-    event.parent_id = parent_id;
-    event.value_index = value_index;
-    event.dimensions = dimensions;
-    halide_msan_annotate_memory_is_initialized(user_context, &event, sizeof(event));
-    halide_msan_annotate_memory_is_initialized(user_context, value, type_lanes * ((type_bits + 7) / 8));
-    halide_msan_annotate_memory_is_initialized(user_context, coords, dimensions * sizeof(int32_t));
-    return halide_trace(user_context, &event);
 }
 
 }

@@ -37,8 +37,8 @@ vector<T> get_subvector(const vector<T> &v, const set<int> &indices) {
 
 // Replace self-references to 'func' with arguments 'args' at
 // 'value_index' in the Expr/Stmt with some Var
-class ConvertSelfRef : public IRMutator2 {
-    using IRMutator2::visit;
+class ConvertSelfRef : public IRMutator {
+    using IRMutator::visit;
 
     const string &func;
     const vector<Expr> &args;
@@ -51,7 +51,7 @@ class ConvertSelfRef : public IRMutator2 {
         if (!is_solvable) {
             return op;
         }
-        Expr expr = IRMutator2::visit(op);
+        Expr expr = IRMutator::visit(op);
         op = expr.as<Call>();
         internal_assert(op);
 
@@ -83,12 +83,13 @@ class ConvertSelfRef : public IRMutator2 {
 
 public:
     ConvertSelfRef(const string &f, const vector<Expr> &args, int idx,
-                   const vector<string> &x_names) :
-        func(f), args(args), value_index(idx), op_x_names(x_names) {}
+                   const vector<string> &x_names)
+        : func(f), args(args), value_index(idx), op_x_names(x_names) {
+    }
 
     bool is_solvable = true;
-    set<int> x_dependencies; // Contains dependencies on self-reference at different tuple indices
-    Expr x_part; // Undefined if there is no self-reference at value_index
+    set<int> x_dependencies;  // Contains dependencies on self-reference at different tuple indices
+    Expr x_part;              // Undefined if there is no self-reference at value_index
 };
 
 bool associative_op_pattern_match(Expr e,
@@ -186,7 +187,7 @@ bool find_match(const vector<AssociativePattern> &table, const vector<string> &o
             continue;
         }
 
-        vector<pair<Expr, Expr>> replacement; // find -> replacement
+        vector<pair<Expr, Expr>> replacement;  // find -> replacement
         for (size_t index = 0; index < op_y_names.size(); ++index) {
             const auto &y_iter = pattern_match.find("y" + std::to_string(index));
             if (y_iter == pattern_match.end()) {
@@ -315,8 +316,7 @@ vector<set<int>> compute_subgraphs(vector<set<int>> dependencies) {
     return subgraphs;
 }
 
-} // anonymous namespace
-
+}  // anonymous namespace
 
 AssociativeOp prove_associativity(const string &f, vector<Expr> args, vector<Expr> exprs) {
     AssociativeOp assoc_op(exprs.size());
@@ -339,7 +339,7 @@ AssociativeOp prove_associativity(const string &f, vector<Expr> args, vector<Exp
 
     // For a Tuple of exprs to be associative, each element of the Tuple
     // has to be associative.
-    for (int idx = exprs.size()-1; idx >= 0; --idx) {
+    for (int idx = exprs.size() - 1; idx >= 0; --idx) {
         exprs[idx] = simplify(exprs[idx]);
         exprs[idx] = common_subexpression_elimination(exprs[idx]);
         // Calling Simplify or the original expr itself might have let exprs,
@@ -363,7 +363,7 @@ AssociativeOp prove_associativity(const string &f, vector<Expr> args, vector<Exp
 
         exprs[idx] = common_subexpression_elimination(exprs[idx]);
         exprs[idx] = simplify(exprs[idx]);
-        exprs[idx] = solve_expression(exprs[idx], op_x_names[idx]).result; // Move 'x' to the left as possible
+        exprs[idx] = solve_expression(exprs[idx], op_x_names[idx]).result;  // Move 'x' to the left as possible
         exprs[idx] = substitute_in_all_lets(exprs[idx]);
     }
     internal_assert((exprs.size() != 1) || all_independent) << "1D tuple should be all independent\n";
@@ -450,7 +450,8 @@ AssociativeOp prove_associativity(const string &f, vector<Expr> args, vector<Exp
     }
 
     assoc_op.is_associative = true;
-    debug(5) << "Found associative ops:\n" << assoc_op << "\n";
+    debug(5) << "Found associative ops:\n"
+             << assoc_op << "\n";
     return assoc_op;
 }
 
@@ -533,7 +534,7 @@ void check_associativity(const string &f, vector<Expr> args, vector<Expr> exprs,
     }
 }
 
-} // anonymous namespace
+}  // anonymous namespace
 
 void associativity_test() {
     typedef AssociativeOp::Replacement Replacement;
@@ -549,38 +550,34 @@ void associativity_test() {
         // f(x) = uint8(uint16(x + y), 255)
         check_associativity("f", {x_idx}, {Cast::make(UInt(8), min(Cast::make(UInt(16), y + f_call_0), make_const(t, 255)))},
                             AssociativeOp(
-                              AssociativePattern(Cast::make(UInt(8), min(Cast::make(UInt(16), x + y), make_const(t, 255))), make_const(t, 0), true),
-                              {Replacement("x", f_call_0)},
-                              {Replacement("y", y)},
-                              true)
-                            );
+                                AssociativePattern(Cast::make(UInt(8), min(Cast::make(UInt(16), x + y), make_const(t, 255))), make_const(t, 0), true),
+                                {Replacement("x", f_call_0)},
+                                {Replacement("y", y)},
+                                true));
 
         // f(x) = uint8(uint16(x + y), uint16(255))
         check_associativity("f", {x_idx}, {Cast::make(UInt(8), min(Cast::make(UInt(16), y + f_call_0), Cast::make(UInt(16), make_const(t, 255))))},
                             AssociativeOp(
-                              AssociativePattern(Cast::make(UInt(8), min(Cast::make(UInt(16), x + y), make_const(t, 255))), make_const(t, 0), true),
-                              {Replacement("x", f_call_0)},
-                              {Replacement("y", y)},
-                              true)
-                            );
+                                AssociativePattern(Cast::make(UInt(8), min(Cast::make(UInt(16), x + y), make_const(t, 255))), make_const(t, 0), true),
+                                {Replacement("x", f_call_0)},
+                                {Replacement("y", y)},
+                                true));
 
         // f(x) = select(x > 255 - y, 255, y)
         check_associativity("f", {x_idx}, {select(f_call_0 > make_const(t, 255) - y, make_const(t, 255), y)},
                             AssociativeOp(
-                              AssociativePattern(select(x > make_const(t, 255) - y, make_const(t, 255), y), make_const(t, 0), true),
-                              {Replacement("x", f_call_0)},
-                              {Replacement("y", y)},
-                              true)
-                            );
+                                AssociativePattern(select(x > make_const(t, 255) - y, make_const(t, 255), y), make_const(t, 0), true),
+                                {Replacement("x", f_call_0)},
+                                {Replacement("y", y)},
+                                true));
 
         // f(x) = select(x >= -y, 255, y)
         check_associativity("f", {x_idx}, {select(f_call_0 >= -y, make_const(t, 255), y)},
                             AssociativeOp(
-                              AssociativePattern(select(x < -y, y, make_const(t, 255)), make_const(t, 0), true),
-                              {Replacement("x", f_call_0)},
-                              {Replacement("y", y)},
-                              true)
-                            );
+                                AssociativePattern(select(x < -y, y, make_const(t, 255)), make_const(t, 0), true),
+                                {Replacement("x", f_call_0)},
+                                {Replacement("y", y)},
+                                true));
     }
 
     {
@@ -594,20 +591,18 @@ void associativity_test() {
         // f(x) = y && f(x)
         check_associativity("f", {x_idx}, {And::make(y, f_call_0)},
                             AssociativeOp(
-                              AssociativePattern(And::make(x, y), const_true(), true),
-                              {Replacement("x", f_call_0)},
-                              {Replacement("y", y)},
-                              true)
-                            );
+                                AssociativePattern(And::make(x, y), const_true(), true),
+                                {Replacement("x", f_call_0)},
+                                {Replacement("y", y)},
+                                true));
 
         // f(x) = y || f(x)
         check_associativity("f", {x_idx}, {Or::make(y, f_call_0)},
                             AssociativeOp(
-                              AssociativePattern(Or::make(x, y), const_false(), true),
-                              {Replacement("x", f_call_0)},
-                              {Replacement("y", y)},
-                              true)
-                            );
+                                AssociativePattern(Or::make(x, y), const_false(), true),
+                                {Replacement("x", f_call_0)},
+                                {Replacement("y", y)},
+                                true));
     }
 
     {
@@ -622,39 +617,35 @@ void associativity_test() {
 
         // f(x) = f(x)
         check_associativity("f", {x}, {f_call_0},
-                        AssociativeOp(
-                          AssociativePattern(x, make_const(t, 0), true),
-                          {Replacement("x", f_call_0)},
-                          {Replacement("", Expr())},
-                          true)
-                        );
+                            AssociativeOp(
+                                AssociativePattern(x, make_const(t, 0), true),
+                                {Replacement("x", f_call_0)},
+                                {Replacement("", Expr())},
+                                true));
 
         // f(x) = min(f(x), y + int16(z))
         check_associativity("f", {x}, {min(f_call_0, y + Cast::make(Int(16), z))},
                             AssociativeOp(
-                              AssociativePattern(min(x, y), t.max(), true),
-                              {Replacement("x", f_call_0)},
-                              {Replacement("y", y + Cast::make(Int(16), z))},
-                              true)
-                            );
+                                AssociativePattern(min(x, y), t.max(), true),
+                                {Replacement("x", f_call_0)},
+                                {Replacement("y", y + Cast::make(Int(16), z))},
+                                true));
 
         // f(x) = f(x) + g(rx) + y + z
         check_associativity("f", {x}, {y + z + f_call_0},
                             AssociativeOp(
-                              AssociativePattern(x + y, make_const(t, 0), true),
-                              {Replacement("x", f_call_0)},
-                              {Replacement("y", y + z)},
-                              true)
-                            );
+                                AssociativePattern(x + y, make_const(t, 0), true),
+                                {Replacement("x", f_call_0)},
+                                {Replacement("y", y + z)},
+                                true));
 
         // f(x) = max(y, f(x))
         check_associativity("f", {x}, {max(y, f_call_0)},
                             AssociativeOp(
-                              AssociativePattern(max(x, y), t.min(), true),
-                              {Replacement("x", f_call_0)},
-                              {Replacement("y", y)},
-                              true)
-                            );
+                                AssociativePattern(max(x, y), t.min(), true),
+                                {Replacement("x", f_call_0)},
+                                {Replacement("y", y)},
+                                true));
 
         // f(x) = max(f(x) + g(rx), g(rx)) -> not associative
         check_associativity("f", {x}, {max(f_call_0 + g_call_0, g_call_0)}, AssociativeOp());
@@ -662,39 +653,35 @@ void associativity_test() {
         // f(x) = max(f(x) + g(rx), f(x) - 3) -> f(x) + max(g(rx) - 3)
         check_associativity("f", {x}, {max(f_call_0 + g_call_0, f_call_0 - 3)},
                             AssociativeOp(
-                              AssociativePattern(x + y, 0, true),
-                              {Replacement("x", f_call_0)},
-                              {Replacement("y", max(g_call_0, -3))},
-                              true)
-                            );
+                                AssociativePattern(x + y, 0, true),
+                                {Replacement("x", f_call_0)},
+                                {Replacement("y", max(g_call_0, -3))},
+                                true));
 
         // f(x) = min(4, g(rx)) -> trivially associative
         check_associativity("f", {x}, {min(4, g_call_0)},
                             AssociativeOp(
-                              AssociativePattern(y, make_const(t, 0), true),
-                              {Replacement("", Expr())},
-                              {Replacement("y", min(g_call_0, 4))},
-                              true)
-                            );
+                                AssociativePattern(y, make_const(t, 0), true),
+                                {Replacement("", Expr())},
+                                {Replacement("y", min(g_call_0, 4))},
+                                true));
 
         // f(x) = max(max(min(f(x), g(rx) + 2), f(x)), g(rx) + 2) -> can be simplified into max(f(x), g(rx) + 2)
         check_associativity("f", {x}, {max(max(min(f_call_0, g_call_0 + 2), f_call_0), g_call_0 + 2)},
                             AssociativeOp(
-                              AssociativePattern(max(x, y), t.min(), true),
-                              {Replacement("x", f_call_0)},
-                              {Replacement("y", g_call_0 + 2)},
-                              true)
-                            );
+                                AssociativePattern(max(x, y), t.min(), true),
+                                {Replacement("x", f_call_0)},
+                                {Replacement("y", g_call_0 + 2)},
+                                true));
 
         // f(x) = max(x0, f(x)) -> x0 may conflict with the wildcard associative op pattern
         Expr x0 = Variable::make(t, "x0");
         check_associativity("f", {x}, {max(x0, f_call_0)},
                             AssociativeOp(
-                              AssociativePattern(max(x, y), t.min(), true),
-                              {Replacement("x", f_call_0)},
-                              {Replacement("y", x0)},
-                              true)
-                            );
+                                AssociativePattern(max(x, y), t.min(), true),
+                                {Replacement("x", f_call_0)},
+                                {Replacement("y", x0)},
+                                true));
     }
 
     {
@@ -722,60 +709,55 @@ void associativity_test() {
         // f(x) = Tuple(f(x)[0], 3, f(x)[2] + z)
         check_associativity("f", {x}, {f_call_0, make_const(ts[1], 3), f_call_2 + cast(ts[2], z)},
                             AssociativeOp(
-                              AssociativePattern({xs[0], ys[1], xs[2] + ys[2]},
-                                                 {make_const(ts[0], 0), make_const(ts[1], 0), make_const(ts[2], 0)},
-                                                 true),
-                              {Replacement("x0", f_call_0), Replacement("", Expr()), Replacement("x2", f_call_2)},
-                              {Replacement("", Expr()), Replacement("y1", make_const(ts[1], 3)), Replacement("y2", cast(ts[2], z))},
-                              true)
-                            );
+                                AssociativePattern({xs[0], ys[1], xs[2] + ys[2]},
+                                                   {make_const(ts[0], 0), make_const(ts[1], 0), make_const(ts[2], 0)},
+                                                   true),
+                                {Replacement("x0", f_call_0), Replacement("", Expr()), Replacement("x2", f_call_2)},
+                                {Replacement("", Expr()), Replacement("y1", make_const(ts[1], 3)), Replacement("y2", cast(ts[2], z))},
+                                true));
 
         // f(x) = Tuple(2, 3, f(x)[2] + z)
         check_associativity("f", {x}, {make_const(ts[0], 2), make_const(ts[1], 3), f_call_2 + cast(ts[2], z)},
                             AssociativeOp(
-                              AssociativePattern({ys[0], ys[1], xs[2] + ys[2]},
-                                                 {make_const(ts[0], 0), make_const(ts[1], 0), make_const(ts[2], 0)},
-                                                 true),
-                              {Replacement("", Expr()), Replacement("", Expr()), Replacement("x2", f_call_2)},
-                              {Replacement("y0", make_const(ts[0], 2)), Replacement("y1", make_const(ts[1], 3)), Replacement("y2", cast(ts[2], z))},
-                              true)
-                            );
+                                AssociativePattern({ys[0], ys[1], xs[2] + ys[2]},
+                                                   {make_const(ts[0], 0), make_const(ts[1], 0), make_const(ts[2], 0)},
+                                                   true),
+                                {Replacement("", Expr()), Replacement("", Expr()), Replacement("x2", f_call_2)},
+                                {Replacement("y0", make_const(ts[0], 2)), Replacement("y1", make_const(ts[1], 3)), Replacement("y2", cast(ts[2], z))},
+                                true));
 
         // f(x) = Tuple(min(f(x)[0], g(rx)), f(x)[1]*g(x)*2, f(x)[2] + z)
-        check_associativity("f", {x}, {min(f_call_0, g_call_0), f_call_1*g_call_0*2, f_call_2 + cast(ts[2], z)},
+        check_associativity("f", {x}, {min(f_call_0, g_call_0), f_call_1 * g_call_0 * 2, f_call_2 + cast(ts[2], z)},
                             AssociativeOp(
-                              AssociativePattern(
-                                  {min(xs[0], ys[0]), xs[1] * ys[1], xs[2] + ys[2]},
-                                  {ts[0].max(), make_const(ts[1], 1), make_const(ts[2], 0)},
-                                  true),
-                              {Replacement("x0", f_call_0), Replacement("x1", f_call_1), Replacement("x2", f_call_2)},
-                              {Replacement("y0", g_call_0), Replacement("y1", g_call_0*2), Replacement("y2", cast(ts[2], z))},
-                              true)
-                            );
+                                AssociativePattern(
+                                    {min(xs[0], ys[0]), xs[1] * ys[1], xs[2] + ys[2]},
+                                    {ts[0].max(), make_const(ts[1], 1), make_const(ts[2], 0)},
+                                    true),
+                                {Replacement("x0", f_call_0), Replacement("x1", f_call_1), Replacement("x2", f_call_2)},
+                                {Replacement("y0", g_call_0), Replacement("y1", g_call_0 * 2), Replacement("y2", cast(ts[2], z))},
+                                true));
 
         // Complex multiplication: f(x) = Tuple(f(x)[0]*g(r.x)[0] - f(x)[1]*g(r.x)[1], f(x)[0]*g(r.x)[1] + f(x)[1]*g(r.x)[0])
-        check_associativity("f", {x}, {f_call_0*g_call_0 - f_call_1*g_call_1, f_call_0*g_call_1 + f_call_1*g_call_0},
+        check_associativity("f", {x}, {f_call_0 * g_call_0 - f_call_1 * g_call_1, f_call_0 * g_call_1 + f_call_1 * g_call_0},
                             AssociativeOp(
-                              AssociativePattern(
-                                {xs[0]*ys[0] - ys[1]*xs[1], xs[1]*ys[0] + ys[1]*xs[0]},
-                                {make_const(ts[0], 1), make_const(ts[1], 0)},
-                                true),
-                              {Replacement("x0", f_call_0), Replacement("x1", f_call_1)},
-                              {Replacement("y0", g_call_0), Replacement("y1", g_call_1)},
-                              true)
-                            );
+                                AssociativePattern(
+                                    {xs[0] * ys[0] - ys[1] * xs[1], xs[1] * ys[0] + ys[1] * xs[0]},
+                                    {make_const(ts[0], 1), make_const(ts[1], 0)},
+                                    true),
+                                {Replacement("x0", f_call_0), Replacement("x1", f_call_1)},
+                                {Replacement("y0", g_call_0), Replacement("y1", g_call_1)},
+                                true));
 
         // 1D argmin: f(x) = Tuple(min(f(x)[0], g(r.x)[0]), select(f(x)[0] < g(r.x)[0], f(x)[1], g(r.x)[1])
         check_associativity("f", {x}, {min(f_call_0, g_call_0), select(f_call_0 < g_call_0, f_call_1, g_call_1)},
                             AssociativeOp(
-                              AssociativePattern(
-                                {min(xs[0], ys[0]), select(xs[0] < ys[0], xs[1], ys[1])},
-                                {ts[0].max(), make_const(ts[1], 0)},
-                                true),
-                              {Replacement("x0", f_call_0), Replacement("x1", f_call_1)},
-                              {Replacement("y0", g_call_0), Replacement("y1", g_call_1)},
-                              true)
-                            );
+                                AssociativePattern(
+                                    {min(xs[0], ys[0]), select(xs[0] < ys[0], xs[1], ys[1])},
+                                    {ts[0].max(), make_const(ts[1], 0)},
+                                    true),
+                                {Replacement("x0", f_call_0), Replacement("x1", f_call_1)},
+                                {Replacement("y0", g_call_0), Replacement("y1", g_call_1)},
+                                true));
     }
 
     {
@@ -810,16 +792,15 @@ void associativity_test() {
                              select(f_xy_call_0 < g_xy_call_0, f_xy_call_2, cast(Int(16), rx)),
                              select(f_xy_call_0 < g_xy_call_0, f_xy_call_3, cast(Float(32), ry))},
                             AssociativeOp(
-                              AssociativePattern(
-                                {min(xs[0], ys[0]), ys[1] , select(xs[0] < ys[0], xs[2], ys[2]), select(xs[0] < ys[0], xs[3], ys[3])},
-                                {ts[0].max(), make_const(ts[1], 0), make_const(ts[2], 0), make_const(ts[3], 0)},
-                                true),
-                              {Replacement("x0", f_xy_call_0), Replacement("", Expr()),
-                               Replacement("x2", f_xy_call_2), Replacement("x3", f_xy_call_3)},
-                              {Replacement("y0", g_xy_call_0), Replacement("y1", rx + ry),
-                               Replacement("y2", cast(Int(16), rx)), Replacement("y3", cast(Float(32), ry))},
-                              true)
-                            );
+                                AssociativePattern(
+                                    {min(xs[0], ys[0]), ys[1], select(xs[0] < ys[0], xs[2], ys[2]), select(xs[0] < ys[0], xs[3], ys[3])},
+                                    {ts[0].max(), make_const(ts[1], 0), make_const(ts[2], 0), make_const(ts[3], 0)},
+                                    true),
+                                {Replacement("x0", f_xy_call_0), Replacement("", Expr()),
+                                 Replacement("x2", f_xy_call_2), Replacement("x3", f_xy_call_3)},
+                                {Replacement("y0", g_xy_call_0), Replacement("y1", rx + ry),
+                                 Replacement("y2", cast(Int(16), rx)), Replacement("y3", cast(Float(32), ry))},
+                                true));
     }
 
     std::cout << "Associativity test passed" << std::endl;

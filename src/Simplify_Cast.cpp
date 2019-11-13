@@ -3,24 +3,35 @@
 namespace Halide {
 namespace Internal {
 
-Expr Simplify::visit(const Cast *op, ConstBounds *bounds) {
-    // We don't try to reason about bounds through casts for now
+Expr Simplify::visit(const Cast *op, ExprInfo *bounds) {
+    // We generally don't track bounds through casts, with the
+    // exception of casts that constant-fold to a signed integer, so
+    // we don't need the bounds of the value.
     Expr value = mutate(op->value, nullptr);
 
     if (may_simplify(op->type) && may_simplify(op->value.type())) {
+        const Call *call = value.as<Call>();
         const Cast *cast = value.as<Cast>();
         const Broadcast *broadcast_value = value.as<Broadcast>();
         const Ramp *ramp_value = value.as<Ramp>();
         double f = 0.0;
         int64_t i = 0;
         uint64_t u = 0;
-        if (value.type() == op->type) {
+        if (call && (call->is_intrinsic(Call::indeterminate_expression) ||
+                     call->is_intrinsic(Call::signed_integer_overflow))) {
+            if (call->is_intrinsic(Call::indeterminate_expression)) {
+                return make_indeterminate_expression(op->type);
+            } else {
+                return make_signed_integer_overflow(op->type);
+            }
+        } else if (value.type() == op->type) {
             return value;
         } else if (op->type.is_int() &&
                    const_float(value, &f) &&
                    std::isfinite(f)) {
             // float -> int
-            return IntImm::make(op->type, safe_numeric_cast<int64_t>(f));
+            // Recursively call mutate just to set the bounds
+            return mutate(IntImm::make(op->type, safe_numeric_cast<int64_t>(f)), bounds);
         } else if (op->type.is_uint() &&
                    const_float(value, &f) &&
                    std::isfinite(f)) {
@@ -33,7 +44,8 @@ Expr Simplify::visit(const Cast *op, ConstBounds *bounds) {
         } else if (op->type.is_int() &&
                    const_int(value, &i)) {
             // int -> int
-            return IntImm::make(op->type, i);
+            // Recursively call mutate just to set the bounds
+            return mutate(IntImm::make(op->type, i), bounds);
         } else if (op->type.is_uint() &&
                    const_int(value, &i)) {
             // int -> uint
@@ -45,7 +57,8 @@ Expr Simplify::visit(const Cast *op, ConstBounds *bounds) {
         } else if (op->type.is_int() &&
                    const_uint(value, &u)) {
             // uint -> int
-            return IntImm::make(op->type, safe_numeric_cast<int64_t>(u));
+            // Recursively call mutate just to set the bounds
+            return mutate(IntImm::make(op->type, safe_numeric_cast<int64_t>(u)), bounds);
         } else if (op->type.is_uint() &&
                    const_uint(value, &u)) {
             // uint -> uint
@@ -81,7 +94,8 @@ Expr Simplify::visit(const Cast *op, ConstBounds *bounds) {
             // cast(ramp(a, b, w)) -> ramp(cast(a), cast(b), w)
             return mutate(Ramp::make(Cast::make(op->type.element_of(), ramp_value->base),
                                      Cast::make(op->type.element_of(), ramp_value->stride),
-                                     ramp_value->lanes), bounds);
+                                     ramp_value->lanes),
+                          bounds);
         }
     }
 
@@ -92,5 +106,5 @@ Expr Simplify::visit(const Cast *op, ConstBounds *bounds) {
     }
 }
 
-}
-}
+}  // namespace Internal
+}  // namespace Halide

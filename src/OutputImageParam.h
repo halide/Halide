@@ -21,7 +21,7 @@ protected:
     friend class Func;
 
     /** A reference-counted handle on the internal parameter object */
-    Internal::RegisteredParameter param;
+    Internal::Parameter param;
 
     /** Is this an input or an output? OutputImageParam is the base class for both. */
     Argument::Kind kind;
@@ -40,9 +40,10 @@ protected:
     OutputImageParam(const Internal::Parameter &p, Argument::Kind k, Func f);
 
 public:
-
     /** Construct a null image parameter handle. */
-    OutputImageParam() : kind(Argument::InputScalar) {}
+    OutputImageParam()
+        : kind(Argument::InputScalar) {
+    }
 
     /** Get the name of this Param */
     const std::string &name() const;
@@ -110,6 +111,12 @@ public:
     /** Using a param as the argument to an external stage treats it
      * as an Expr */
     operator ExternFuncArgument() const;
+
+    /** Set (min, extent) estimates for all dimensions in the ImageParam
+     * at once; this is equivalent to calling `dim(n).set_estimate(min, extent)`
+     * repeatedly, but slightly terser. The size of the estimates vector
+     * must match the dimensionality of the ImageParam. */
+    OutputImageParam &set_estimates(const std::vector<std::pair<Expr, Expr>> &estimates);
 };
 
 }  // namespace Halide

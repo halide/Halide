@@ -1,5 +1,5 @@
-#include <stdio.h>
 #include "Halide.h"
+#include <stdio.h>
 
 using namespace Halide;
 
@@ -34,6 +34,11 @@ int not_really_parallel_for(void *ctx, int (*f)(void *, int, uint8_t *), int min
 }
 
 int main(int argc, char **argv) {
+    if (get_jit_target_from_environment().arch == Target::WebAssembly) {
+        printf("Skipping test for WebAssembly as the wasm JIT cannot support set_custom_do_par_for().\n");
+        return 0;
+    }
+
     Var x, y;
     Func f;
 

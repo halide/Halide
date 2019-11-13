@@ -14,14 +14,14 @@ using std::vector;
 
 namespace Internal {
 
-class FindFreeVars : public IRMutator2 {
+class FindFreeVars : public IRMutator {
 public:
     vector<Var> free_vars;
     vector<Expr> call_args;
     RDom rdom;
 
-    FindFreeVars(RDom r, const string &n) :
-        rdom(r), explicit_rdom(r.defined()), name(n) {
+    FindFreeVars(RDom r, const string &n)
+        : rdom(r), explicit_rdom(r.defined()), name(n) {
     }
 
 private:
@@ -30,7 +30,7 @@ private:
 
     Scope<> internal;
 
-    using IRMutator2::visit;
+    using IRMutator::visit;
 
     Expr visit(const Let *op) override {
         Expr value = mutate(op->value);
@@ -177,13 +177,13 @@ Tuple argmax(RDom r, Expr e, const std::string &name) {
 
     user_assert(v.rdom.defined()) << "Expression passed to argmax must reference a reduction domain";
 
-    Tuple initial_tup(vector<Expr>(v.rdom.dimensions()+1));
-    Tuple update_tup(vector<Expr>(v.rdom.dimensions()+1));
+    Tuple initial_tup(vector<Expr>(v.rdom.dimensions() + 1));
+    Tuple update_tup(vector<Expr>(v.rdom.dimensions() + 1));
     for (int i = 0; i < v.rdom.dimensions(); i++) {
         initial_tup[i] = 0;
         update_tup[i] = v.rdom[i];
     }
-    int value_index = (int)initial_tup.size()-1;
+    int value_index = (int)initial_tup.size() - 1;
     initial_tup[value_index] = e.type().min();
     update_tup[value_index] = e;
 
@@ -206,13 +206,13 @@ Tuple argmin(RDom r, Expr e, const std::string &name) {
 
     user_assert(v.rdom.defined()) << "Expression passed to argmin must reference a reduction domain";
 
-    Tuple initial_tup(vector<Expr>(v.rdom.dimensions()+1));
-    Tuple update_tup(vector<Expr>(v.rdom.dimensions()+1));
+    Tuple initial_tup(vector<Expr>(v.rdom.dimensions() + 1));
+    Tuple update_tup(vector<Expr>(v.rdom.dimensions() + 1));
     for (int i = 0; i < v.rdom.dimensions(); i++) {
         initial_tup[i] = 0;
         update_tup[i] = v.rdom[i];
     }
-    int value_index = (int)initial_tup.size()-1;
+    int value_index = (int)initial_tup.size() - 1;
     initial_tup[value_index] = e.type().max();
     update_tup[value_index] = e;
 

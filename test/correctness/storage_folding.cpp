@@ -1,5 +1,5 @@
-#include <stdio.h>
 #include "Halide.h"
+#include <stdio.h>
 
 using namespace Halide;
 
@@ -82,6 +82,11 @@ void realize_and_expect_error(Func f, int w, int h) {
 }
 
 int main(int argc, char **argv) {
+    if (get_jit_target_from_environment().arch == Target::WebAssembly) {
+        printf("Skipping test for WebAssembly as the wasm JIT cannot support set_custom_allocator.\n");
+        return 0;
+    }
+
     Var x, y, c;
 
     {
@@ -365,12 +370,17 @@ int main(int argc, char **argv) {
 
     }
 
-    {
+    for (bool interleave : {false, true}) {
         Func f, g;
 
         f(x, y, c) = x;
         g(x, y, c) = f(x-1, y+1, c) + f(x, y-1, c);
         f.store_root().compute_at(g, y).fold_storage(y, 3);
+
+        if (interleave) {
+            f.reorder(c, x, y).reorder_storage(c, x, y);
+            g.reorder(c, x, y).reorder_storage(c, x, y);
+        }
 
         // Make sure we can explicitly fold something with an outer
         // loop.
@@ -379,7 +389,12 @@ int main(int argc, char **argv) {
 
         Buffer<int> im = g.realize(100, 1000, 3);
 
-        size_t expected_size = 101*3*sizeof(int) + sizeof(int);
+        size_t expected_size;
+        if (interleave) {
+            expected_size = 101*3*3*sizeof(int) + sizeof(int);
+        } else {
+            expected_size = 101*3*sizeof(int) + sizeof(int);
+        }
         if (custom_malloc_size == 0 || custom_malloc_size != expected_size) {
             printf("Scratch space allocated was %d instead of %d\n", (int)custom_malloc_size, (int)expected_size);
             return -1;

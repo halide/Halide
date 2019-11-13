@@ -24,6 +24,7 @@
 
 #ifndef HALIDE_EXPORT
 #if defined(_MSC_VER)
+// Halide_EXPORTS is quietly defined by CMake when building a shared library
 #ifdef Halide_EXPORTS
 #define HALIDE_EXPORT __declspec(dllexport)
 #else
@@ -47,6 +48,19 @@
 #endif
 
 namespace Halide {
+
+/** Load a plugin in the form of a dynamic library (e.g. for custom autoschedulers).
+ * If the string doesn't contain any . characters, the proper prefix and/or suffix
+ * for the platform will be added:
+ *
+ *   foo -> libfoo.so (Linux/OSX/etc -- note that .dylib is not supported)
+ *   foo -> foo.dll (Windows)
+ *
+ * otherwise, it is assumed to be an appropriate pathname.
+ *
+ * Any error in loading will assert-fail. */
+void load_plugin(const std::string &lib_name);
+
 namespace Internal {
 
 /** Some numeric conversions are UB if the value won't fit in the result;
@@ -61,14 +75,14 @@ DST safe_numeric_cast(SRC s) {
         // Treat float -> int as a saturating cast; this is handled
         // in different ways by different compilers, so an arbitrary but safe
         // choice like this is reasonable.
-        if (s < (SRC) std::numeric_limits<DST>::min()) {
+        if (s < (SRC)std::numeric_limits<DST>::min()) {
             return std::numeric_limits<DST>::min();
         }
-        if (s > (SRC) std::numeric_limits<DST>::max()) {
+        if (s > (SRC)std::numeric_limits<DST>::max()) {
             return std::numeric_limits<DST>::max();
         }
     }
-    return (DST) s;
+    return (DST)s;
 }
 
 template<typename DST, typename SRC,
@@ -84,10 +98,10 @@ DST safe_numeric_cast(SRC s) {
         // case, but the intent is to match existing common behavior, which this does.)
         if (std::is_integral<SRC>::value && std::is_signed<DST>::value && sizeof(DST) < sizeof(SRC)) {
             using UnsignedSrc = typename std::make_unsigned<SRC>::type;
-            return (DST) (s & (UnsignedSrc) (-1));
+            return (DST)(s & (UnsignedSrc)(-1));
         }
     }
-    return (DST) s;
+    return (DST)s;
 }
 
 /** An aggressive form of reinterpret cast used for correct type-punning. */
@@ -172,21 +186,21 @@ T fold_right(const std::vector<T> &vec, Fn f) {
         return result;
     }
     result = vec.back();
-    for (size_t i = vec.size()-1; i > 0; i--) {
-        result = f(vec[i-1], result);
+    for (size_t i = vec.size() - 1; i > 0; i--) {
+        result = f(vec[i - 1], result);
     }
     return result;
 }
 
-template <typename T1, typename T2, typename T3, typename T4 >
+template<typename T1, typename T2, typename T3, typename T4>
 inline HALIDE_NO_USER_CODE_INLINE void collect_paired_args(std::vector<std::pair<T1, T2>> &collected_args,
-                                     const T3 &a1, const T4 &a2) {
+                                                           const T3 &a1, const T4 &a2) {
     collected_args.push_back(std::pair<T1, T2>(a1, a2));
 }
 
-template <typename T1, typename T2, typename T3, typename T4, typename ...Args>
+template<typename T1, typename T2, typename T3, typename T4, typename... Args>
 inline HALIDE_NO_USER_CODE_INLINE void collect_paired_args(std::vector<std::pair<T1, T2>> &collected_args,
-                                   const T3 &a1, const T4 &a2, Args&&... args) {
+                                                           const T3 &a1, const T4 &a2, Args &&... args) {
     collected_args.push_back(std::pair<T1, T2>(a1, a2));
     collect_paired_args(collected_args, std::forward<Args>(args)...);
 }
@@ -262,6 +276,19 @@ void dir_rmdir(const std::string &name);
 /** Wrapper for stat(). Asserts upon error. */
 FileStat file_stat(const std::string &name);
 
+/** Read the entire contents of a file into a vector<char>. The file
+ * is read in binary mode. Errors trigger an assertion failure. */
+std::vector<char> read_entire_file(const std::string &pathname);
+
+/** Create or replace the contents of a file with a given pointer-and-length
+ * of memory. If the file doesn't exist, it is created; if it does exist, it
+ * is completely overwritten. Any error triggers an assertion failure. */
+void write_entire_file(const std::string &pathname, const void *source, size_t source_len);
+
+inline void write_entire_file(const std::string &pathname, const std::vector<char> &source) {
+    write_entire_file(pathname, source.data(), source.size());
+}
+
 /** A simple utility class that creates a temporary file in its ctor and
  * deletes that file in its dtor; this is useful for temporary files that you
  * want to ensure are deleted when exiting a certain scope. Since this is essentially
@@ -271,13 +298,23 @@ FileStat file_stat(const std::string &name);
 class TemporaryFile final {
 public:
     TemporaryFile(const std::string &prefix, const std::string &suffix)
-        : temp_path(file_make_temp(prefix, suffix)), do_unlink(true) {}
-    const std::string &pathname() const { return temp_path; }
-    ~TemporaryFile() { if (do_unlink) { file_unlink(temp_path); } }
+        : temp_path(file_make_temp(prefix, suffix)), do_unlink(true) {
+    }
+    const std::string &pathname() const {
+        return temp_path;
+    }
+    ~TemporaryFile() {
+        if (do_unlink) {
+            file_unlink(temp_path);
+        }
+    }
     // You can call this if you want to defeat the automatic deletion;
     // this is rarely what you want to do (since it defeats the purpose
     // of this class), but can be quite handy for debugging purposes.
-    void detach() { do_unlink = false; }
+    void detach() {
+        do_unlink = false;
+    }
+
 private:
     const std::string temp_path;
     bool do_unlink;
@@ -300,11 +337,23 @@ struct ScopedValue {
     T &var;
     const T old_value;
     /** Preserve the old value, restored at dtor time */
-    ScopedValue(T &var) : var(var), old_value(var) {}
+    ScopedValue(T &var)
+        : var(var), old_value(var) {
+    }
     /** Preserve the old value, then set the var to a new value. */
-    ScopedValue(T &var, T new_value) : var(var), old_value(var) { var = new_value; }
-    ~ScopedValue() { var = old_value; }
-    operator T() const { return old_value; }
+    ScopedValue(T &var, T new_value)
+        : var(var), old_value(var) {
+        var = new_value;
+    }
+    ~ScopedValue() {
+        var = old_value;
+    }
+    operator T() const {
+        return old_value;
+    }
+    // allow move but not copy
+    ScopedValue(const ScopedValue &that) = delete;
+    ScopedValue(ScopedValue &&that) = default;
 };
 
 // Wrappers for some C++14-isms that are useful and trivially implementable
@@ -314,10 +363,10 @@ struct ScopedValue {
 #if __cplusplus >= 201402L
 
 // C++14: Use the standard implementations
-using std::integer_sequence;
-using std::make_integer_sequence;
 using std::index_sequence;
+using std::integer_sequence;
 using std::make_index_sequence;
+using std::make_integer_sequence;
 
 #else
 
@@ -327,7 +376,9 @@ using std::make_index_sequence;
 
 template<typename T, T... Ints>
 struct integer_sequence {
-    static constexpr size_t size() { return sizeof...(Ints); }
+    static constexpr size_t size() {
+        return sizeof...(Ints);
+    }
 };
 
 template<typename T>
@@ -341,8 +392,7 @@ struct next_integer_sequence<integer_sequence<T, Ints...>> {
 template<typename T, T I, T N>
 struct make_integer_sequence_helper {
     using type = typename next_integer_sequence<
-        typename make_integer_sequence_helper<T, I+1, N>::type
-    >::type;
+        typename make_integer_sequence_helper<T, I + 1, N>::type>::type;
 };
 
 template<typename T, T N>
@@ -383,11 +433,15 @@ void halide_toc_impl(const char *file, int line);
 // regarding 'bool' in some compliation configurations.
 template<typename TO>
 struct StaticCast {
-    template <typename FROM, typename TO2 = TO, typename std::enable_if<!std::is_same<TO2, bool>::value>::type * = nullptr>
-    inline constexpr static TO2 value(const FROM &from) { return static_cast<TO2>(from); }
+    template<typename FROM, typename TO2 = TO, typename std::enable_if<!std::is_same<TO2, bool>::value>::type * = nullptr>
+    inline constexpr static TO2 value(const FROM &from) {
+        return static_cast<TO2>(from);
+    }
 
-    template <typename FROM, typename TO2 = TO, typename std::enable_if<std::is_same<TO2, bool>::value>::type * = nullptr>
-    inline constexpr static TO2 value(const FROM &from) { return from != 0; }
+    template<typename FROM, typename TO2 = TO, typename std::enable_if<std::is_same<TO2, bool>::value>::type * = nullptr>
+    inline constexpr static TO2 value(const FROM &from) {
+        return from != 0;
+    }
 };
 
 // Like std::is_convertible, but with additional tests for arithmetic types:
@@ -395,29 +449,24 @@ struct StaticCast {
 // or dropping of fractional parts).
 template<typename TO>
 struct IsRoundtrippable {
-    template <typename FROM, typename TO2 = TO, typename std::enable_if<
-        !std::is_convertible<FROM, TO>::value
-    >::type * = nullptr>
+    template<typename FROM, typename TO2 = TO, typename std::enable_if<!std::is_convertible<FROM, TO>::value>::type * = nullptr>
     inline constexpr static bool value(const FROM &from) {
         return false;
     }
 
-    template <typename FROM, typename TO2 = TO, typename std::enable_if<
-        std::is_convertible<FROM, TO>::value &&
-        std::is_arithmetic<TO>::value && std::is_arithmetic<FROM>::value && !std::is_same<TO, FROM>::value
-    >::type * = nullptr>
+    template<typename FROM, typename TO2 = TO, typename std::enable_if<std::is_convertible<FROM, TO>::value && std::is_arithmetic<TO>::value && std::is_arithmetic<FROM>::value && !std::is_same<TO, FROM>::value>::type * = nullptr>
     inline constexpr static bool value(const FROM &from) {
         return StaticCast<FROM>::value(StaticCast<TO>::value(from)) == from;
     }
 
-    template <typename FROM, typename TO2 = TO, typename std::enable_if<
-        std::is_convertible<FROM, TO>::value &&
-        !(std::is_arithmetic<TO>::value && std::is_arithmetic<FROM>::value && !std::is_same<TO, FROM>::value)
-    >::type * = nullptr>
+    template<typename FROM, typename TO2 = TO, typename std::enable_if<std::is_convertible<FROM, TO>::value && !(std::is_arithmetic<TO>::value && std::is_arithmetic<FROM>::value && !std::is_same<TO, FROM>::value)>::type * = nullptr>
     inline constexpr static bool value(const FROM &from) {
         return true;
     }
 };
+
+/** Emit a version of a string that is a valid identifier in C (. is replaced with _) */
+std::string c_print_name(const std::string &name);
 
 }  // namespace Internal
 }  // namespace Halide

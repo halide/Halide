@@ -12,7 +12,6 @@ namespace Halide {
 namespace Internal {
 
 using std::map;
-using std::set;
 using std::string;
 using std::vector;
 
@@ -29,9 +28,9 @@ void substitute_value_in_var(const string &var, Expr value, vector<Definition> &
     }
 }
 
-class SimplifyUsingFact : public IRMutator2 {
+class SimplifyUsingFact : public IRMutator {
 public:
-    using IRMutator2::mutate;
+    using IRMutator::mutate;
 
     Expr mutate(const Expr &e) override {
         if (e.type().is_bool()) {
@@ -47,11 +46,13 @@ public:
                 return const_false();
             }
         }
-        return IRMutator2::mutate(e);
+        return IRMutator::mutate(e);
     }
 
     Expr fact;
-    SimplifyUsingFact(Expr f) : fact(f) {}
+    SimplifyUsingFact(Expr f)
+        : fact(f) {
+    }
 };
 
 void simplify_using_fact(Expr fact, vector<Definition> &definitions) {
@@ -87,7 +88,7 @@ vector<Definition> propagate_specialization_in_definition(Definition &def, const
         it->condition = c;
         if (is_zero(c) || seen_const_true) {
             debug(1) << "Erasing unreachable specialization ("
-                << old_c << ") -> (" << c << ") for function \"" << name << "\"\n";
+                     << old_c << ") -> (" << c << ") for function \"" << name << "\"\n";
             it = specializations.erase(it);
         } else {
             it++;
@@ -117,8 +118,8 @@ vector<Definition> propagate_specialization_in_definition(Definition &def, const
     }
 
     for (size_t i = specializations.size(); i > 0; i--) {
-        Expr c = specializations[i-1].condition;
-        Definition &s_def = specializations[i-1].definition;
+        Expr c = specializations[i - 1].condition;
+        Definition &s_def = specializations[i - 1].definition;
         const EQ *eq = c.as<EQ>();
         const Variable *var = eq ? eq->a.as<Variable>() : c.as<Variable>();
 

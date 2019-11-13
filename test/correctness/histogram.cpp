@@ -1,5 +1,5 @@
-#include <stdio.h>
 #include "Halide.h"
+#include <stdio.h>
 
 using namespace Halide;
 
@@ -50,7 +50,7 @@ bool test() {
             .compute_at(g, Var::outermost())
             .vectorize(x, vector_size);
 
-        if (target.has_feature(Target::HVX_v65)) {
+        if (target.features_any_of({Target::HVX_v65, Target::HVX_v66})) {
             hist.store_in(MemoryType::VTCM);
 
             hist

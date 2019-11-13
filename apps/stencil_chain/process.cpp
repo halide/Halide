@@ -35,6 +35,7 @@ int main(int argc, char **argv) {
     // Manually-tuned version
     double best_manual = benchmark(timing, 1, [&]() {
         stencil_chain(input, output);
+        output.device_sync();
     });
     printf("Manually-tuned time: %gms\n", best_manual * 1e3);
 
@@ -42,6 +43,7 @@ int main(int argc, char **argv) {
     // Auto-scheduled version
     double best_auto = benchmark(timing, 1, [&]() {
         stencil_chain_auto_schedule(input, output);
+        output.device_sync();
     });
     printf("Auto-scheduled time: %gms\n", best_auto * 1e3);
     #endif

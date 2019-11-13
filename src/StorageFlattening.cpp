@@ -12,16 +12,16 @@
 namespace Halide {
 namespace Internal {
 
-using std::ostringstream;
-using std::string;
-using std::vector;
 using std::map;
+using std::ostringstream;
 using std::pair;
 using std::set;
+using std::string;
+using std::vector;
 
 namespace {
 
-class FlattenDimensions : public IRMutator2 {
+class FlattenDimensions : public IRMutator {
 public:
     FlattenDimensions(const map<string, pair<Function, int>> &e,
                       const vector<Function> &o,
@@ -31,6 +31,7 @@ public:
             outputs.insert(f.name());
         }
     }
+
 private:
     const map<string, pair<Function, int>> &env;
     set<string> outputs;
@@ -100,7 +101,7 @@ private:
         return idx;
     }
 
-    using IRMutator2::visit;
+    using IRMutator::visit;
 
     Stmt visit(const Realize *op) override {
         realizations.push(op->name);
@@ -143,13 +144,13 @@ private:
                         storage_permutation.push_back((int)j);
                         Expr alignment = storage_dims[i].alignment;
                         if (alignment.defined()) {
-                            allocation_extents[j] = ((extents[j] + alignment - 1)/alignment)*alignment;
+                            allocation_extents[j] = ((extents[j] + alignment - 1) / alignment) * alignment;
                         } else {
                             allocation_extents[j] = extents[j];
                         }
                     }
                 }
-                internal_assert(storage_permutation.size() == i+1);
+                internal_assert(storage_permutation.size() == i + 1);
             }
         }
 
@@ -190,8 +191,8 @@ private:
         stmt = Allocate::make(op->name, op->types[0], op->memory_type, allocation_extents, condition, stmt);
 
         // Compute the strides
-        for (int i = (int)op->bounds.size()-1; i > 0; i--) {
-            int prev_j = storage_permutation[i-1];
+        for (int i = (int)op->bounds.size() - 1; i > 0; i--) {
+            int prev_j = storage_permutation[i - 1];
             int j = storage_permutation[i];
             Expr stride = stride_var[prev_j] * allocation_extents[prev_j];
             stmt = LetStmt::make(stride_name[j], stride, stmt);
@@ -205,8 +206,8 @@ private:
 
         // Assign the mins and extents stored
         for (size_t i = op->bounds.size(); i > 0; i--) {
-            stmt = LetStmt::make(min_name[i-1], op->bounds[i-1].min, stmt);
-            stmt = LetStmt::make(extent_name[i-1], extents[i-1], stmt);
+            stmt = LetStmt::make(min_name[i - 1], op->bounds[i - 1].min, stmt);
+            stmt = LetStmt::make(extent_name[i - 1], extents[i - 1], stmt);
         }
         return stmt;
     }
@@ -245,7 +246,7 @@ private:
             return Evaluate::make(store);
         } else {
             Expr idx = mutate(flatten_args(op->name, op->args, Buffer<>(), output_buf));
-            return Store::make(op->name, value, idx, output_buf, const_true(value.type().lanes()));
+            return Store::make(op->name, value, idx, output_buf, const_true(value.type().lanes()), ModulusRemainder());
         }
     }
 
@@ -290,11 +291,11 @@ private:
             } else {
                 Expr idx = mutate(flatten_args(op->name, op->args, op->image, op->param));
                 return Load::make(op->type, op->name, idx, op->image, op->param,
-                                  const_true(op->type.lanes()));
+                                  const_true(op->type.lanes()), ModulusRemainder());
             }
 
         } else {
-            return IRMutator2::visit(op);
+            return IRMutator::visit(op);
         }
     }
 
@@ -332,7 +333,7 @@ private:
                             storage_permutation.push_back((int)j);
                         }
                     }
-                    internal_assert(storage_permutation.size() == i+1);
+                    internal_assert(storage_permutation.size() == i + 1);
                 }
             }
             internal_assert(storage_permutation.size() == op->bounds.size());
@@ -349,6 +350,7 @@ private:
             }
         }
 
+        // TODO: Consider generating a prefetch call for each tuple element.
         Stmt prefetch_call = Evaluate::make(Call::make(op->types[0], Call::prefetch, args, Call::Intrinsic));
         if (!is_one(condition)) {
             prefetch_call = IfThenElse::make(condition, prefetch_call);
@@ -364,29 +366,29 @@ private:
             op->device_api == DeviceAPI::GLSL) {
             in_shader = true;
         }
-        Stmt stmt = IRMutator2::visit(op);
+        Stmt stmt = IRMutator::visit(op);
         in_shader = old_in_shader;
         return stmt;
     }
-
 };
 
 // Realizations, stores, and loads must all be on types that are
 // multiples of 8-bits. This really only affects bools
-class PromoteToMemoryType : public IRMutator2 {
-    using IRMutator2::visit;
+class PromoteToMemoryType : public IRMutator {
+    using IRMutator::visit;
 
     Type upgrade(Type t) {
-        return t.with_bits(((t.bits() + 7)/8)*8);
+        return t.with_bits(((t.bits() + 7) / 8) * 8);
     }
 
     Expr visit(const Load *op) override {
         Type t = upgrade(op->type);
         if (t != op->type) {
-            return Cast::make(op->type, Load::make(t, op->name, mutate(op->index),
-                                                   op->image, op->param, mutate(op->predicate)));
+            return Cast::make(op->type,
+                              Load::make(t, op->name, mutate(op->index),
+                                         op->image, op->param, mutate(op->predicate), ModulusRemainder()));
         } else {
-            return IRMutator2::visit(op);
+            return IRMutator::visit(op);
         }
     }
 
@@ -394,9 +396,9 @@ class PromoteToMemoryType : public IRMutator2 {
         Type t = upgrade(op->value.type());
         if (t != op->value.type()) {
             return Store::make(op->name, Cast::make(t, mutate(op->value)), mutate(op->index),
-                                                    op->param, mutate(op->predicate));
+                               op->param, mutate(op->predicate), ModulusRemainder());
         } else {
-            return IRMutator2::visit(op);
+            return IRMutator::visit(op);
         }
     }
 
@@ -411,7 +413,7 @@ class PromoteToMemoryType : public IRMutator2 {
                                   mutate(op->condition), mutate(op->body),
                                   mutate(op->new_expr), op->free_function);
         } else {
-            return IRMutator2::visit(op);
+            return IRMutator::visit(op);
         }
     }
 };
@@ -444,5 +446,5 @@ Stmt storage_flattening(Stmt s,
     return s;
 }
 
-}
-}
+}  // namespace Internal
+}  // namespace Halide

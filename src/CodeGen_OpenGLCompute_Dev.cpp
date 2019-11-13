@@ -13,7 +13,6 @@
 namespace Halide {
 namespace Internal {
 
-using std::map;
 using std::ostringstream;
 using std::string;
 using std::vector;
@@ -41,13 +40,13 @@ Type map_type(const Type &type) {
             // valid for uint16 on systems with low float precision.
             result = Float(32);
         } else {
-            user_error << "GLSL: Can't represent type '"<< type << "'.\n";
+            user_error << "GLSL: Can't represent type '" << type << "'.\n";
         }
     } else {
         user_assert(type.lanes() <= 4)
             << "GLSL: vector types wider than 4 aren't supported\n";
         user_assert(type.is_bool() || type.is_int() || type.is_uint() || type.is_float())
-            << "GLSL: Can't represent vector type '"<< type << "'.\n";
+            << "GLSL: Can't represent vector type '" << type << "'.\n";
         Type scalar_type = type.element_of();
         result = map_type(scalar_type).with_lanes(type.lanes());
     }
@@ -55,10 +54,15 @@ Type map_type(const Type &type) {
 }
 }  // namespace
 
+CodeGen_OpenGLCompute_Dev::CodeGen_OpenGLCompute_C::CodeGen_OpenGLCompute_C(std::ostream &s, Target t)
+    : CodeGen_GLSLBase(s, t) {
+    builtin["trunc_f32"] = "trunc";
+}
+
 string CodeGen_OpenGLCompute_Dev::CodeGen_OpenGLCompute_C::print_type(Type type, AppendSpaceIfNeeded space) {
     Type mapped_type = map_type(type);
     if (mapped_type.is_uint() && !mapped_type.is_bool()) {
-        string s = mapped_type.is_scalar() ? "uint": "uvec"  + std::to_string(mapped_type.lanes());
+        string s = mapped_type.is_scalar() ? "uint" : "uvec" + std::to_string(mapped_type.lanes());
         if (space == AppendSpace) {
             s += " ";
         }
@@ -96,10 +100,12 @@ int thread_loop_workgroup_index(const string &name) {
                     ".__thread_id_y",
                     ".__thread_id_z",
                     ".__thread_id_w"};
-     for (size_t i = 0; i < sizeof(ids) / sizeof(string); i++) {
-        if (ends_with(name, ids[i])) { return i; }
-     }
-     return -1;
+    for (size_t i = 0; i < sizeof(ids) / sizeof(string); i++) {
+        if (ends_with(name, ids[i])) {
+            return i;
+        }
+    }
+    return -1;
 }
 }  // namespace
 
@@ -129,9 +135,9 @@ void CodeGen_OpenGLCompute_Dev::CodeGen_OpenGLCompute_C::visit(const Cast *op) {
 }
 
 void CodeGen_OpenGLCompute_Dev::CodeGen_OpenGLCompute_C::visit(const Call *op) {
-    if (op->name == "halide_gpu_thread_barrier") {
-        do_indent();
-        stream << "barrier();\n";
+    if (op->is_intrinsic(Call::gpu_thread_barrier)) {
+        stream << get_indent() << "barrier();\n";
+        print_assignment(op->type, "0");
     } else {
         CodeGen_GLSLBase::visit(op);
     }
@@ -153,22 +159,24 @@ void CodeGen_OpenGLCompute_Dev::CodeGen_OpenGLCompute_C::visit(const For *loop) 
             const IntImm *int_limit = loop->extent.as<IntImm>();
             user_assert(int_limit != nullptr) << "For OpenGLCompute workgroup size must be a constant integer.\n";
             int new_workgroup_size = int_limit->value;
-            user_assert(workgroup_size[index] == 0 || workgroup_size[index] == new_workgroup_size) <<
-                "OpenGLCompute requires all gpu kernels have same workgroup size, "
-                "but two different ones were encountered " << workgroup_size[index] << " and " << new_workgroup_size <<
-                " in dimension " << index << ".\n";
+            user_assert(workgroup_size[index] == 0 ||
+                        workgroup_size[index] == new_workgroup_size)
+                << "OpenGLCompute requires all gpu kernels have same workgroup size, "
+                << "but two different ones were encountered " << workgroup_size[index]
+                << " and " << new_workgroup_size
+                << " in dimension " << index << ".\n";
             workgroup_size[index] = new_workgroup_size;
             debug(4) << "Workgroup size for index " << index << " is " << workgroup_size[index] << "\n";
         }
 
-        do_indent();
-        stream << print_type(Int(32)) << " " << print_name(loop->name)
+        stream << get_indent() << print_type(Int(32)) << " " << print_name(loop->name)
                << " = int(" << simt_intrinsic(loop->name) << ");\n";
 
         loop->body.accept(this);
 
     } else {
-        user_assert(loop->for_type != ForType::Parallel) << "Cannot use parallel loops inside OpenGLCompute kernel\n";
+        user_assert(loop->for_type != ForType::Parallel)
+            << "Cannot use parallel loops inside OpenGLCompute kernel\n";
         CodeGen_C::visit(loop);
     }
 }
@@ -220,8 +228,7 @@ void CodeGen_OpenGLCompute_Dev::CodeGen_OpenGLCompute_C::visit(const Store *op) 
 
     string id_value = print_expr(op->value);
 
-    do_indent();
-    stream << print_name(op->name);
+    stream << get_indent() << print_name(op->name);
     if (!allocations.contains(op->name)) {
         stream << ".data";
     }
@@ -281,9 +288,12 @@ void CodeGen_OpenGLCompute_Dev::CodeGen_OpenGLCompute_C::add_kernel(Stmt s,
     if (target.os == Target::Android) {
         stream << "#version 310 es\n"
                << "#extension GL_ANDROID_extension_pack_es31a : require\n";
+    } else if (target.has_feature(Target::EGL)) {
+        stream << "#version 310 es\n";
     } else {
         stream << "#version 430\n";
     }
+    add_common_macros(stream);
     stream << "float float_from_bits(int x) { return intBitsToFloat(int(x)); }\n";
 
     for (size_t i = 0; i < args.size(); i++) {
@@ -328,8 +338,12 @@ void CodeGen_OpenGLCompute_Dev::CodeGen_OpenGLCompute_C::add_kernel(Stmt s,
     // Declare the workgroup size.
     indent += 2;
     stream << "layout(local_size_x = " << workgroup_size[0];
-    if (workgroup_size[1] > 1) { stream << ", local_size_y = " << workgroup_size[1]; }
-    if (workgroup_size[2] > 1) { stream << ", local_size_z = " << workgroup_size[2]; }
+    if (workgroup_size[1] > 1) {
+        stream << ", local_size_y = " << workgroup_size[1];
+    }
+    if (workgroup_size[2] > 1) {
+        stream << ", local_size_z = " << workgroup_size[2];
+    }
     stream << ") in;\n// end of kernel " << name << "\n";
 }
 
@@ -342,12 +356,12 @@ void CodeGen_OpenGLCompute_Dev::init_module() {
 void CodeGen_OpenGLCompute_Dev::CodeGen_OpenGLCompute_C::visit(const Allocate *op) {
     debug(2) << "OpenGLCompute: Allocate " << op->name << " of type " << op->type << " on device\n";
 
-    do_indent();
+    stream << get_indent();
     Allocation alloc;
     alloc.type = op->type;
     allocations.push(op->name, alloc);
 
-    internal_assert(op->extents.size() >= 1);
+    internal_assert(!op->extents.empty());
     Expr extent = 1;
     for (Expr e : op->extents) {
         extent *= e;
@@ -356,12 +370,20 @@ void CodeGen_OpenGLCompute_Dev::CodeGen_OpenGLCompute_C::visit(const Allocate *o
     internal_assert(is_const(extent));
 
     if (!starts_with(op->name, "__shared_")) {
+        stream << "{\n";
+        indent += 2;
+        stream << get_indent();
         // Shared allocations were already declared at global scope.
         stream << print_type(op->type) << " "
                << print_name(op->name) << "["
                << op->extents[0] << "];\n";
     }
     op->body.accept(this);
+
+    if (!starts_with(op->name, "__shared_")) {
+        indent -= 2;
+        stream << get_indent() << "}\n";
+    }
 }
 
 void CodeGen_OpenGLCompute_Dev::CodeGen_OpenGLCompute_C::visit(const Free *op) {
@@ -376,17 +398,18 @@ void CodeGen_OpenGLCompute_Dev::CodeGen_OpenGLCompute_C::visit(const Evaluate *o
 }
 
 void CodeGen_OpenGLCompute_Dev::CodeGen_OpenGLCompute_C::visit(const IntImm *op) {
-    // GL seems to interpret some large int immediates as uints.
-    id = "int(" + std::to_string(op->value) + ")";
-}
-
-void CodeGen_OpenGLCompute_Dev::CodeGen_OpenGLCompute_C::visit(const UIntImm *op) {
-    id = "uint(" + std::to_string(op->value) + ")";
+    if (op->type == Int(32)) {
+        // GL seems to interpret some large int immediates as uints.
+        id = "int(" + std::to_string(op->value) + ")";
+    } else {
+        id = print_type(op->type) + "(" + std::to_string(op->value) + ")";
+    }
 }
 
 vector<char> CodeGen_OpenGLCompute_Dev::compile_to_src() {
     string str = src_stream.str();
-    debug(1) << "GLSL Compute source:\n" << str << '\n';
+    debug(1) << "GLSL Compute source:\n"
+             << str << '\n';
     vector<char> buffer(str.begin(), str.end());
     buffer.push_back(0);
     return buffer;

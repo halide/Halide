@@ -1,15 +1,14 @@
 language: cpp
 compiler:
   # Comment out for now to keep build matrix small
-  #- clang
+  # - clang
   - gcc
 env:
   global:
-    - BAZEL_VERSION="0.6.1"
-    - JDK=openjdk8
-    # The Travis Ubuntu Trusty environment we run in currently promises 2 cores,
-    # so running lengthy make steps with -j2 is almost certainly a win.
-    - MAKEFLAGS=-j2
+    # The Travis Ubuntu Xenial environment we run in currently promises 2 cores.
+    # We'll run at -j4 on the assumption that there's enough I/O bound work
+    # for that to be profitable.
+    - MAKEFLAGS=-j4
   matrix:
     # Configurations
     #
@@ -18,36 +17,27 @@ env:
     #
     # Test a mix of llvm versions, a mix of build systems, and a mix of shared vs static library
     # Don't build as a static library with cmake. It risks exceeding the travis memory limit.
-    - LLVM_VERSION=6.0.0 BUILD_SYSTEM=MAKE CXX_=g++-4.8 CC_=gcc-4.8
-    - LLVM_VERSION=5.0.0 BUILD_SYSTEM=MAKE CXX_=g++-4.8 CC_=gcc-4.8
-    - LLVM_VERSION=6.0.0 BUILD_SYSTEM=CMAKE CXX_=g++-4.8 CC_=gcc-4.8 HALIDE_SHARED_LIBRARY=1
+    #
+    # Note that gcc5.4 is the default install on Travis Xenial, so we'll just use that.
+    - LLVM_VERSION=9.0.0 BUILD_SYSTEM=MAKE
+    - LLVM_VERSION=9.0.0 BUILD_SYSTEM=CMAKE HALIDE_SHARED_LIBRARY=ON
+    - LLVM_VERSION=9.0.0 BUILD_SYSTEM=CMAKE HALIDE_SHARED_LIBRARY=OFF
+
+    # Just one version of LLVM8 should suffice.
+    - LLVM_VERSION=8.0.0 BUILD_SYSTEM=MAKE
+
 cache: apt ccache
-dist: trusty
-# Note the commands below are written assuming Ubuntu 12.04LTS
-before_install:
-  # Needed for new libstdc++ and gcc4.8
-  - export CXX=${CXX_}
-  - export CC=${CC_}
-  - sudo add-apt-repository --yes ppa:ubuntu-toolchain-r/test/
-  - sudo apt-get update
-  - wget https://github.com/bazelbuild/bazel/releases/download/"${BAZEL_VERSION}"/bazel_"${BAZEL_VERSION}"-linux-x86_64.deb
-  - sudo dpkg -i bazel_"${BAZEL_VERSION}"-linux-x86_64.deb
+dist: xenial
 install:
-  - sudo apt-get -y --force-yes install ${CXX} ${CC} libedit-dev
-  # Make gcc4.8 the default gcc version
-  - sudo update-alternatives --install /usr/bin/gcc gcc /usr/bin/${CC} 20
-  - sudo update-alternatives --install /usr/bin/g++ g++ /usr/bin/${CXX} 20
-  # Download the right llvm release
-  - wget http://llvm.org/releases/${LLVM_VERSION}/clang+llvm-${LLVM_VERSION}-x86_64-linux-gnu-debian8.tar.xz
-  - tar xvf clang+llvm-${LLVM_VERSION}-x86_64-linux-gnu-debian8.tar.xz
-  - sudo mv clang+llvm-${LLVM_VERSION}-x86_64-linux-gnu-debian8 /usr/local/llvm
+  # Travis Xenial uses gcc5.4 / cmake 3.12.4 by default, which are fine
+  #
+  # Download the right llvm release.
+  - wget https://releases.llvm.org/${LLVM_VERSION}/clang+llvm-${LLVM_VERSION}-x86_64-linux-gnu-ubuntu-16.04.tar.xz
+  - tar xvf clang+llvm-${LLVM_VERSION}-x86_64-linux-gnu-ubuntu-16.04.tar.xz
+  - sudo mv clang+llvm-${LLVM_VERSION}-x86_64-linux-gnu-ubuntu-16.04 /usr/local/llvm
   # Get libpng for the tutorials and apps
   - sudo apt-get -y --force-yes install libpng-dev
   # For generating docs
   - sudo apt-get -y --force-yes --no-install-recommends install doxygen
-  # Grab a version of CMake >= 3.4
-  - wget --no-check-certificate https://cmake.org/files/v3.5/cmake-3.5.2-Linux-x86_64.sh
-  - chmod a+x cmake-3.5.2-Linux-x86_64.sh
-  - sudo ./cmake-3.5.2-Linux-x86_64.sh --skip-license --prefix=/usr/local
 script:
   - test/scripts/build_travis.sh

@@ -4,6 +4,7 @@
 #include "Introspection.h"
 #include <atomic>
 #include <chrono>
+#include <fstream>
 #include <iomanip>
 #include <map>
 #include <mutex>
@@ -23,10 +24,15 @@
 #define CAN_GET_RUNNING_PROGRAM_NAME
 #include <linux/limits.h>  // For PATH_MAX
 #endif
+#if defined(_MSC_VER) && !defined(NOMINMAX)
+#define NOMINMAX
+#endif
 #ifdef _WIN32
-#include <windows.h>
 #include <Objbase.h>  // needed for CoCreateGuid
-#include <Shlobj.h>  // needed for SHGetFolderPath
+#include <Shlobj.h>   // needed for SHGetFolderPath
+#include <windows.h>
+#else
+#include <dlfcn.h>
 #endif
 #ifdef __APPLE__
 #define CAN_GET_RUNNING_PROGRAM_NAME
@@ -36,7 +42,6 @@
 namespace Halide {
 namespace Internal {
 
-using std::map;
 using std::ostringstream;
 using std::string;
 using std::vector;
@@ -46,7 +51,7 @@ std::string get_env_variable(char const *env_var_name) {
         return "";
     }
 
-    #ifdef _MSC_VER
+#ifdef _MSC_VER
     // call getenv_s without a buffer to determine the correct string length:
     size_t length = 0;
     if ((getenv_s(&length, NULL, 0, env_var_name) != 0) || (length == 0)) {
@@ -60,37 +65,37 @@ std::string get_env_variable(char const *env_var_name) {
         return "";
     }
     return lvl;
-    #else
+#else
     char *lvl = getenv(env_var_name);
     if (lvl) return std::string(lvl);
-    #endif
+#endif
 
     return "";
 }
 
 string running_program_name() {
-    #ifndef CAN_GET_RUNNING_PROGRAM_NAME
+#ifndef CAN_GET_RUNNING_PROGRAM_NAME
+    return "";
+#else
+    string program_name;
+    char path[PATH_MAX] = {0};
+    uint32_t size = sizeof(path);
+#if defined(__linux__)
+    ssize_t len = ::readlink("/proc/self/exe", path, size - 1);
+#elif defined(__APPLE__)
+    ssize_t len = ::_NSGetExecutablePath(path, &size);
+#endif
+    if (len != -1) {
+#if defined(__linux__)
+        path[len] = '\0';
+#endif
+        string tmp = std::string(path);
+        program_name = tmp.substr(tmp.find_last_of("/") + 1);
+    } else {
         return "";
-    #else
-        string program_name;
-        char path[PATH_MAX] = { 0 };
-        uint32_t size = sizeof(path);
-        #if defined(__linux__)
-            ssize_t len = ::readlink("/proc/self/exe", path, size - 1);
-        #elif defined(__APPLE__)
-            ssize_t len = ::_NSGetExecutablePath(path, &size);
-        #endif
-        if (len != -1) {
-            #if defined(__linux__)
-                path[len] = '\0';
-            #endif
-            string tmp = std::string(path);
-            program_name = tmp.substr(tmp.find_last_of("/") + 1);
-        } else {
-            return "";
-        }
-        return program_name;
-    #endif
+    }
+    return program_name;
+#endif
 }
 
 namespace {
@@ -183,7 +188,7 @@ bool ends_with(const string &str, const string &suffix) {
     if (str.size() < suffix.size()) return false;
     size_t off = str.size() - suffix.size();
     for (size_t i = 0; i < suffix.size(); i++) {
-        if (str[off+i] != suffix[i]) return false;
+        if (str[off + i] != suffix[i]) return false;
     }
     return true;
 }
@@ -239,11 +244,11 @@ std::string extract_namespaces(const std::string &name, std::vector<std::string>
 }
 
 bool file_exists(const std::string &name) {
-    #ifdef _MSC_VER
+#ifdef _MSC_VER
     return _access(name.c_str(), 0) == 0;
-    #else
+#else
     return ::access(name.c_str(), F_OK) == 0;
-    #endif
+#endif
 }
 
 void assert_file_exists(const std::string &name) {
@@ -255,11 +260,11 @@ void assert_no_file_exists(const std::string &name) {
 }
 
 void file_unlink(const std::string &name) {
-    #ifdef _MSC_VER
+#ifdef _MSC_VER
     _unlink(name.c_str());
-    #else
+#else
     ::unlink(name.c_str());
-    #endif
+#endif
 }
 
 void ensure_no_file_exists(const std::string &name) {
@@ -270,27 +275,27 @@ void ensure_no_file_exists(const std::string &name) {
 }
 
 void dir_rmdir(const std::string &name) {
-    #ifdef _MSC_VER
+#ifdef _MSC_VER
     BOOL r = RemoveDirectoryA(name.c_str());
     internal_assert(r != 0) << "Unable to remove dir: " << name << ":" << GetLastError() << "\n";
-    #else
+#else
     int r = ::rmdir(name.c_str());
     internal_assert(r == 0) << "Unable to remove dir: " << name << "\n";
-    #endif
+#endif
 }
 
 FileStat file_stat(const std::string &name) {
-    #ifdef _MSC_VER
+#ifdef _MSC_VER
     struct _stat a;
     if (_stat(name.c_str(), &a) != 0) {
         user_error << "Could not stat " << name << "\n";
     }
-    #else
+#else
     struct stat a;
     if (::stat(name.c_str(), &a) != 0) {
         user_error << "Could not stat " << name << "\n";
     }
-    #endif
+#endif
     return {static_cast<uint64_t>(a.st_size),
             static_cast<uint32_t>(a.st_mtime),
             static_cast<uint32_t>(a.st_uid),
@@ -334,7 +339,7 @@ std::string file_make_temp(const std::string &prefix, const std::string &suffix)
                     prefix.find("\\") == string::npos &&
                     suffix.find("/") == string::npos &&
                     suffix.find("\\") == string::npos);
-    #ifdef _WIN32
+#ifdef _WIN32
     // Windows implementations of mkstemp() try to create the file in the root
     // directory, which is... problematic.
     std::string tmp_dir = get_windows_tmp_dir();
@@ -343,7 +348,7 @@ std::string file_make_temp(const std::string &prefix, const std::string &suffix)
     DWORD ret = GetTempFileNameA(tmp_dir.c_str(), prefix.c_str(), 0, tmp_file);
     internal_assert(ret != 0);
     return std::string(tmp_file);
-    #else
+#else
     std::string templ = "/tmp/" + prefix + "XXXXXX" + suffix;
     // Copy into a temporary buffer, since mkstemp modifies the buffer in place.
     std::vector<char> buf(templ.size() + 1);
@@ -352,11 +357,11 @@ std::string file_make_temp(const std::string &prefix, const std::string &suffix)
     internal_assert(fd != -1) << "Unable to create temp file for (" << &buf[0] << ")\n";
     close(fd);
     return std::string(&buf[0]);
-    #endif
+#endif
 }
 
 std::string dir_make_temp() {
-    #ifdef _WIN32
+#ifdef _WIN32
     std::string tmp_dir = get_windows_tmp_dir();
     // There's no direct API to do this in Windows;
     // our clunky-but-adequate approach here is to use
@@ -392,31 +397,52 @@ std::string dir_make_temp() {
     }
     internal_assert(false) << "Unable to create temp directory in " << tmp_dir << "\n";
     return "";
-    #else
+#else
     std::string templ = "/tmp/XXXXXX";
     // Copy into a temporary buffer, since mkdtemp modifies the buffer in place.
     std::vector<char> buf(templ.size() + 1);
     strcpy(&buf[0], templ.c_str());
-    char* result = mkdtemp(&buf[0]);
+    char *result = mkdtemp(&buf[0]);
     internal_assert(result != nullptr) << "Unable to create temp directory.\n";
     return std::string(result);
-    #endif
+#endif
+}
+
+std::vector<char> read_entire_file(const std::string &pathname) {
+    std::ifstream f(pathname, std::ios::in | std::ios::binary);
+    std::vector<char> result;
+
+    f.seekg(0, std::ifstream::end);
+    size_t size = f.tellg();
+    result.resize(size);
+    f.seekg(0, std::ifstream::beg);
+    f.read(result.data(), result.size());
+    internal_assert(f.good()) << "Unable to read file: " << pathname;
+    f.close();
+    return result;
+}
+
+void write_entire_file(const std::string &pathname, const void *source, size_t source_len) {
+    std::ofstream f(pathname, std::ios::out | std::ios::binary);
+
+    f.write(reinterpret_cast<const char *>(source), source_len);
+    f.flush();
+    internal_assert(f.good()) << "Unable to write file: " << pathname;
+    f.close();
 }
 
 bool add_would_overflow(int bits, int64_t a, int64_t b) {
     int64_t max_val = 0x7fffffffffffffffLL >> (64 - bits);
     int64_t min_val = -max_val - 1;
-    return
-        ((b > 0 && a > max_val - b) || // (a + b) > max_val, rewritten to avoid overflow
-         (b < 0 && a < min_val - b));  // (a + b) < min_val, rewritten to avoid overflow
+    return ((b > 0 && a > max_val - b) ||  // (a + b) > max_val, rewritten to avoid overflow
+            (b < 0 && a < min_val - b));   // (a + b) < min_val, rewritten to avoid overflow
 }
 
 bool sub_would_overflow(int bits, int64_t a, int64_t b) {
     int64_t max_val = 0x7fffffffffffffffLL >> (64 - bits);
     int64_t min_val = -max_val - 1;
-    return
-        ((b < 0 && a > max_val + b) || // (a - b) > max_val, rewritten to avoid overflow
-         (b > 0 && a < min_val + b));  // (a - b) < min_val, rewritten to avoid overflow
+    return ((b < 0 && a > max_val + b) ||  // (a - b) > max_val, rewritten to avoid overflow
+            (b > 0 && a < min_val + b));   // (a - b) < min_val, rewritten to avoid overflow
 }
 
 bool mul_would_overflow(int bits, int64_t a, int64_t b) {
@@ -430,7 +456,7 @@ bool mul_would_overflow(int bits, int64_t a, int64_t b) {
         // Do the multiplication as a uint64, for which overflow is
         // well defined, then cast the bits back to int64 to get
         // multiplication modulo 2^64.
-        int64_t ab = (int64_t)((uint64_t)a)*((uint64_t)b);
+        int64_t ab = (int64_t)((uint64_t)a) * ((uint64_t)b);
         // The first two clauses catch overflow mod 2^bits, assuming
         // no 64-bit overflow occurs, and the third clause catches
         // 64-bit overflow.
@@ -458,12 +484,77 @@ void halide_toc_impl(const char *file, int line) {
     std::chrono::duration<double> diff = t2 - t1.time;
     tick_stack.pop_back();
     for (size_t i = 0; i < tick_stack.size(); i++) {
-        debug(0) << "  ";
+        debug(1) << "  ";
     }
     string f = file;
     f = split_string(f, "/").back();
-    debug(0) << t1.file << ":" << t1.line << " ... " << f << ":" << line << " : " << diff.count() * 1000 << " ms\n";
+    debug(1) << t1.file << ":" << t1.line << " ... " << f << ":" << line << " : " << diff.count() * 1000 << " ms\n";
+}
+
+std::string c_print_name(const std::string &name) {
+    ostringstream oss;
+
+    // Prefix an underscore to avoid reserved words (e.g. a variable named "while")
+    if (isalpha(name[0])) {
+        oss << '_';
+    }
+
+    for (size_t i = 0; i < name.size(); i++) {
+        if (name[i] == '.') {
+            oss << '_';
+        } else if (name[i] == '$') {
+            oss << "__";
+        } else if (name[i] != '_' && !isalnum(name[i])) {
+            oss << "___";
+        } else {
+            oss << name[i];
+        }
+    }
+    return oss.str();
 }
 
 }  // namespace Internal
+
+void load_plugin(const std::string &lib_name) {
+#ifdef _WIN32
+    std::string lib_path = lib_name;
+    if (lib_path.find('.') == std::string::npos) {
+        lib_path += ".dll";
+    }
+
+    int wide_len = MultiByteToWideChar(CP_UTF8, 0, lib_path.c_str(), -1, nullptr, 0);
+    if (wide_len < 1) {
+        user_error << "Failed to load: " << lib_path << " (unconvertible character)\n";
+    }
+
+    std::vector<wchar_t> wide_lib(wide_len);
+    wide_len = MultiByteToWideChar(CP_UTF8, 0, lib_path.c_str(), -1, wide_lib.data(), wide_len);
+    if (wide_len < 1) {
+        user_error << "Failed to load: " << lib_path << " (unconvertible character)\n";
+    }
+
+    if (!LoadLibraryW(wide_lib.data())) {
+        DWORD last_err = GetLastError();
+        LPVOID last_err_msg;
+        FormatMessageA(FORMAT_MESSAGE_ALLOCATE_BUFFER | FORMAT_MESSAGE_FROM_SYSTEM |
+                           FORMAT_MESSAGE_IGNORE_INSERTS,
+                       nullptr, last_err, MAKELANGID(LANG_NEUTRAL, SUBLANG_DEFAULT),
+                       reinterpret_cast<LPSTR>(&last_err_msg), 0, nullptr);
+        std::string err_msg(static_cast<char *>(last_err_msg));
+        LocalFree(last_err_msg);
+        user_error << "Failed to load: " << lib_path << ";\n"
+                   << "LoadLibraryW failed with error " << last_err << ": "
+                   << err_msg << "\n";
+    }
+#else
+    std::string lib_path = lib_name;
+    if (lib_path.find('.') == std::string::npos) {
+        lib_path = "lib" + lib_path + ".so";
+    }
+    if (dlopen(lib_path.c_str(), RTLD_LAZY) == nullptr) {
+        user_error << "Failed to load: " << lib_path << ": " << dlerror() << "\n";
+    }
+#endif
+}
+
 }  // namespace Halide

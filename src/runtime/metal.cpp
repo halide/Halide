@@ -37,8 +37,17 @@ WEAK mtl_command_queue *new_command_queue(mtl_device *device) {
     return (mtl_command_queue *)objc_msgSend(device, sel_getUid("newCommandQueue"));
 }
 
-WEAK mtl_command_buffer *new_command_buffer(mtl_command_queue *queue) {
-    return (mtl_command_buffer *)objc_msgSend(queue, sel_getUid("commandBuffer"));
+WEAK mtl_command_buffer *new_command_buffer(mtl_command_queue *queue, const char *label, size_t label_len) {
+    objc_id label_str = wrap_string_as_ns_string(label, label_len);
+    
+    mtl_command_buffer *command_buffer = (mtl_command_buffer *)objc_msgSend(queue, sel_getUid("commandBuffer"));
+    
+    typedef void (*set_label_method)(objc_id command_buffer, objc_sel sel, objc_id label_string);
+    set_label_method method1 = (set_label_method)&objc_msgSend;
+    (*method1)(command_buffer, sel_getUid("setLabel:"), label_str);
+    
+    release_ns_object(label_str);
+    return command_buffer;
 }
 
 WEAK void add_command_buffer_completed_handler(mtl_command_buffer *command_buffer, struct command_buffer_completed_handler_block_literal *handler) {
@@ -514,7 +523,8 @@ WEAK int halide_metal_initialize_kernels(void *user_context, void **state_ptr, c
 namespace {
 
 inline void halide_metal_device_sync_internal(mtl_command_queue *queue, struct halide_buffer_t *buffer) {
-    mtl_command_buffer *sync_command_buffer = new_command_buffer(queue);
+    const char *buffer_label = "halide_metal_device_sync_internal";
+    mtl_command_buffer *sync_command_buffer = new_command_buffer(queue, buffer_label, strlen(buffer_label));
     if (buffer != NULL) {
         mtl_buffer *metal_buffer = ((device_handle *)buffer->device)->buf;
         if (is_buffer_managed(metal_buffer)) {
@@ -689,7 +699,7 @@ WEAK int halide_metal_run(void *user_context,
         return metal_context.error;
     }
 
-    mtl_command_buffer *command_buffer = new_command_buffer(metal_context.queue);
+    mtl_command_buffer *command_buffer = new_command_buffer(metal_context.queue, entry_name, strlen(entry_name));
     if (command_buffer == 0) {
         error(user_context) << "Metal: Could not allocate command buffer.\n";
         return -1;
@@ -713,7 +723,6 @@ WEAK int halide_metal_run(void *user_context,
     mtl_compute_pipeline_state *pipeline_state = new_compute_pipeline_state_with_function(metal_context.device, function);
     if (pipeline_state == 0) {
         error(user_context) << "Metal: Could not allocate pipeline state.\n";
-        release_ns_object(function);
         return -1;
     }
     set_compute_pipeline_state(encoder, pipeline_state);
@@ -763,7 +772,6 @@ WEAK int halide_metal_run(void *user_context,
             if (args_buffer == 0) {
                 error(user_context) << "Metal: Could not allocate arguments buffer.\n";
                 release_ns_object(pipeline_state);
-                release_ns_object(function);
                 return -1;
             }
             args_ptr = (char *)buffer_contents(args_buffer);
@@ -815,8 +823,11 @@ WEAK int halide_metal_run(void *user_context,
 
     commit_command_buffer(command_buffer);
 
+    // We deliberately don't release the function here; this was causing
+    // crashes on Mojave (issues #3395 and #3408).
+    // We're still releasing the pipeline state object, as that seems to not
+    // cause zombied objects.
     release_ns_object(pipeline_state);
-    release_ns_object(function);
 
     #ifdef DEBUG_RUNTIME
     uint64_t t_after = halide_current_time_ns(user_context);
@@ -894,7 +905,8 @@ WEAK int halide_metal_buffer_copy(void *user_context, struct halide_buffer_t *sr
         // Device only case
         if (!from_host && !to_host) {
             debug(user_context) << "halide_metal_buffer_copy device to device case.\n";
-            mtl_command_buffer *blit_command_buffer = new_command_buffer(metal_context.queue);
+            const char *buffer_label = "halide_metal_buffer_copy";
+            mtl_command_buffer *blit_command_buffer = new_command_buffer(metal_context.queue, buffer_label, strlen(buffer_label));
             mtl_blit_command_encoder *blit_encoder = new_blit_command_encoder(blit_command_buffer);
             do_device_to_device_copy(user_context, blit_encoder, c, ((device_handle *)c.src)->offset,
                                      ((device_handle *)c.dst)->offset, dst->dimensions);

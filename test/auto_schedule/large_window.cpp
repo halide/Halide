@@ -28,7 +28,7 @@ int main(int argc, char **argv) {
     g(x, y) = sum(f(x + w.x, y + w.y), "sum2")/1024;
 
     // Provide estimates on the pipeline output
-    g.estimate(x, 0, input.width()).estimate(y, 0, input.height());
+    g.set_estimate(x, 0, input.width()).set_estimate(y, 0, input.height());
 
     // Pick a schedule
     Target target = get_jit_target_from_environment();

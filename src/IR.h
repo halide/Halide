@@ -13,6 +13,7 @@
 #include "Expr.h"
 #include "Function.h"
 #include "IntrusivePtr.h"
+#include "ModulusRemainder.h"
 #include "Parameter.h"
 #include "Type.h"
 #include "Util.h"
@@ -207,9 +208,15 @@ struct Load : public ExprNode<Load> {
     // If it's a load from an image parameter, this points to that
     Parameter param;
 
+    // The alignment of the index. If the index is a vector, this is
+    // the alignment of the first lane.
+    ModulusRemainder alignment;
+
     static Expr make(Type type, const std::string &name,
                      Expr index, Buffer<> image,
-                     Parameter param, Expr predicate);
+                     Parameter param,
+                     Expr predicate,
+                     ModulusRemainder alignment);
 
     static const IRNodeType _node_type = IRNodeType::Load;
 };
@@ -311,8 +318,12 @@ struct Store : public StmtNode<Store> {
     // If it's a store to an output buffer, then this parameter points to it.
     Parameter param;
 
+    // The alignment of the index. If the index is a vector, this is
+    // the alignment of the first lane.
+    ModulusRemainder alignment;
+
     static Stmt make(const std::string &name, Expr value, Expr index,
-                     Parameter param, Expr predicate);
+                     Parameter param, Expr predicate, ModulusRemainder alignment);
 
     static const IRNodeType _node_type = IRNodeType::Store;
 };
@@ -387,8 +398,9 @@ struct Free : public StmtNode<Free> {
  * (min + extent - 1) */
 struct Range {
     Expr min, extent;
-    Range() {}
-    Range(Expr min, Expr extent) : min(min), extent(extent) {
+    Range() = default;
+    Range(Expr min, Expr extent)
+        : min(min), extent(extent) {
         internal_assert(min.type() == extent.type()) << "Region min and extent must have same type\n";
     }
 };
@@ -413,7 +425,6 @@ struct Realize : public StmtNode<Realize> {
     static Stmt make(const std::string &name, const std::vector<Type> &types, MemoryType memory_type, const Region &bounds, Expr condition, Stmt body);
 
     static const IRNodeType _node_type = IRNodeType::Realize;
-
 };
 
 /** A sequence of statements to be executed in-order. 'rest' may be
@@ -468,13 +479,13 @@ struct Evaluate : public StmtNode<Evaluate> {
 struct Call : public ExprNode<Call> {
     std::string name;
     std::vector<Expr> args;
-    typedef enum {Image,        ///< A load from an input image
-                  Extern,       ///< A call to an external C-ABI function, possibly with side-effects
-                  ExternCPlusPlus, ///< A call to an external C-ABI function, possibly with side-effects
-                  PureExtern,   ///< A call to a guaranteed-side-effect-free external function
-                  Halide,       ///< A call to a Func
-                  Intrinsic,    ///< A possibly-side-effecty compiler intrinsic, which has special handling during codegen
-                  PureIntrinsic ///< A side-effect-free version of the above.
+    typedef enum { Image,            ///< A load from an input image
+                   Extern,           ///< A call to an external C-ABI function, possibly with side-effects
+                   ExternCPlusPlus,  ///< A call to an external C-ABI function, possibly with side-effects
+                   PureExtern,       ///< A call to a guaranteed-side-effect-free external function
+                   Halide,           ///< A call to a Func
+                   Intrinsic,        ///< A possibly-side-effecty compiler intrinsic, which has special handling during codegen
+                   PureIntrinsic     ///< A side-effect-free version of the above.
     } CallType;
     CallType call_type;
 
@@ -485,54 +496,80 @@ struct Call : public ExprNode<Call> {
     // risking ambiguous initalization order; we use a typedef to simplify
     // declaration.
     typedef const char *const ConstString;
-    HALIDE_EXPORT static ConstString debug_to_file,
-        reinterpret,
-        bitwise_and,
-        bitwise_not,
-        bitwise_xor,
-        bitwise_or,
-        shift_left,
-        shift_right,
+
+    // enums for various well-known intrinsics. (It is not *required* that all
+    // intrinsics have an enum entry here, but as a matter of style, it is recommended.)
+    // Note that these are only used in the API; inside the node, they are translated
+    // into a name. (To recover the name, call get_intrinsic_name().)
+    //
+    // Please keep this list sorted alphabetically; the specific enum values
+    // are *not* guaranteed to be stable across time.
+    enum IntrinsicOp {
         abs,
         absd,
-        rewrite_buffer,
-        random,
-        lerp,
-        popcount,
+        add_image_checks_marker,
+        alloca,
+        bitwise_and,
+        bitwise_not,
+        bitwise_or,
+        bitwise_xor,
+        bool_to_mask,
+        call_cached_indirect_function,
+        cast_mask,
         count_leading_zeros,
         count_trailing_zeros,
-        undef,
-        return_second,
-        if_then_else,
+        debug_to_file,
+        div_round_to_zero,
+        dynamic_shuffle,
+        extract_mask_element,
+        gather,
         glsl_texture_load,
         glsl_texture_store,
         glsl_varying,
+        gpu_thread_barrier,
+        if_then_else,
+        if_then_else_mask,
         image_load,
         image_store,
-        make_struct,
-        stringify,
-        memoize_expr,
-        alloca,
+        indeterminate_expression,
+        lerp,
         likely,
         likely_if_innermost,
-        register_destructor,
-        div_round_to_zero,
+        make_struct,
+        memoize_expr,
         mod_round_to_zero,
-        call_cached_indirect_function,
+        mulhi_shr,  // Compute high_half(arg[0] * arg[1]) >> arg[3]. Note that this is a shift in addition to taking the upper half of multiply result. arg[3] must be an unsigned integer immediate.
+        popcount,
         prefetch,
-        signed_integer_overflow,
-        indeterminate_expression,
-        bool_to_mask,
-        cast_mask,
-        select_mask,
-        extract_mask_element,
-        require,
-        size_of_halide_buffer_t,
-        strict_float,
-        add_image_checks_marker,
+        quiet_div,
         quiet_div,
         quiet_mod,
-        unsafe_promise_clamped;
+        quiet_mod,
+        random,
+        register_destructor,
+        reinterpret,
+        require,
+        require_mask,
+        return_second,
+        rewrite_buffer,
+        scatter,
+        scatter_acc,
+        scatter_release,
+        select_mask,
+        shift_left,
+        shift_right,
+        signed_integer_overflow,
+        size_of_halide_buffer_t,
+        sorted_avg,  // Compute (arg[0] + arg[1]) / 2, assuming arg[0] < arg[1].
+        strict_float,
+        stringify,
+        undef,
+        unsafe_promise_clamped,
+
+        IntrinsicOpCount  // Sentinel: keep last.
+    };
+
+    static const char *get_intrinsic_name(IntrinsicOp op);
 
     // We also declare some symbolic names for some of the runtime
     // functions that we want to construct Call nodes to here to avoid
@@ -549,9 +586,7 @@ struct Call : public ExprNode<Call> {
         buffer_get_shape,
         buffer_get_host_dirty,
         buffer_get_device_dirty,
-        buffer_get_type_code,
-        buffer_get_type_bits,
-        buffer_get_type_lanes,
+        buffer_get_type,
         buffer_set_host_dirty,
         buffer_set_device_dirty,
         buffer_is_bounds_query,
@@ -576,6 +611,10 @@ struct Call : public ExprNode<Call> {
     // If it's a call to an image parameter, this call node holds a
     // pointer to that
     Parameter param;
+
+    static Expr make(Type type, IntrinsicOp op, const std::vector<Expr> &args, CallType call_type,
+                     FunctionPtr func = FunctionPtr(), int value_index = 0,
+                     Buffer<> image = Buffer<>(), Parameter param = Parameter());
 
     static Expr make(Type type, const std::string &name, const std::vector<Expr> &args, CallType call_type,
                      FunctionPtr func = FunctionPtr(), int value_index = 0,
@@ -611,8 +650,8 @@ struct Call : public ExprNode<Call> {
                 call_type == PureIntrinsic);
     }
 
-    bool is_intrinsic(ConstString intrin_name) const {
-        return is_intrinsic() && name == intrin_name;
+    bool is_intrinsic(IntrinsicOp op) const {
+        return is_intrinsic() && this->name == get_intrinsic_name(op);
     }
 
     bool is_extern() const {
@@ -683,10 +722,11 @@ struct For : public StmtNode<For> {
 
     static Stmt make(const std::string &name, Expr min, Expr extent, ForType for_type, DeviceAPI device_api, Stmt body);
 
+    bool is_unordered_parallel() const {
+        return Halide::Internal::is_unordered_parallel(for_type);
+    }
     bool is_parallel() const {
-        return (for_type == ForType::Parallel ||
-                for_type == ForType::GPUBlock ||
-                for_type == ForType::GPUThread);
+        return Halide::Internal::is_parallel(for_type);
     }
 
     static const IRNodeType _node_type = IRNodeType::For;
@@ -744,8 +784,12 @@ struct Shuffle : public ExprNode<Shuffle> {
      * slice. */
     ///@{
     bool is_slice() const;
-    int slice_begin() const { return indices[0]; }
-    int slice_stride() const { return indices.size() >= 2 ? indices[1] - indices[0] : 1; }
+    int slice_begin() const {
+        return indices[0];
+    }
+    int slice_stride() const {
+        return indices.size() >= 2 ? indices[1] - indices[0] : 1;
+    }
     ///@}
 
     /** Check if this shuffle is extracting a scalar from the vector
@@ -772,6 +816,24 @@ struct Prefetch : public StmtNode<Prefetch> {
                      Expr condition, Stmt body);
 
     static const IRNodeType _node_type = IRNodeType::Prefetch;
+};
+
+/** Lock all the Store nodes in the body statement.
+ *  Typically the lock is implemented by an atomic operation
+ *  (e.g. atomic add or atomic compare-and-swap).
+ *  However, if necessary, the node can access a mutex buffer through
+ *  mutex_name and mutex_args, by lowering this node into
+ *  calls to acquire and release the lock. */
+struct Atomic : public StmtNode<Atomic> {
+    std::string producer_name;
+    std::string mutex_name;  // empty string if not using mutex
+    Stmt body;
+
+    static Stmt make(const std::string &producer_name,
+                     const std::string &mutex_name,
+                     Stmt body);
+
+    static const IRNodeType _node_type = IRNodeType::Atomic;
 };
 
 }  // namespace Internal

@@ -35,6 +35,7 @@ int main(int argc, char **argv) {
     // Manually-tuned version
     double min_t_manual = benchmark(timing_iterations, 10, [&]() {
         bilateral_grid(input, r_sigma, output);
+        output.device_sync();
     });
     printf("Manually-tuned time: %gms\n", min_t_manual * 1e3);
 
@@ -42,6 +43,7 @@ int main(int argc, char **argv) {
     // Auto-scheduled version
     double min_t_auto = benchmark(timing_iterations, 10, [&]() {
         bilateral_grid_auto_schedule(input, r_sigma, output);
+        output.device_sync();
     });
     printf("Auto-scheduled time: %gms\n", min_t_auto * 1e3);
     #endif

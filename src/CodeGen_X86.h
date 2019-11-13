@@ -28,7 +28,9 @@ protected:
     bool use_soft_float_abi() const override;
     int native_vector_bits() const override;
 
-    Expr mulhi_shr(Expr a, Expr b, int shr) override;
+    int vector_lanes_for_slice(const Type &t) const;
+
+    virtual llvm::Type *llvm_type_of(const Type &t) const override;
 
     using CodeGen_Posix::visit;
 
@@ -37,6 +39,7 @@ protected:
     void visit(const Add *) override;
     void visit(const Sub *) override;
     void visit(const Cast *) override;
+    void visit(const Call *) override;
     void visit(const GT *) override;
     void visit(const LT *) override;
     void visit(const LE *) override;

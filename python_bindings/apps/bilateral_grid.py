@@ -2,13 +2,11 @@
 Bilateral histogram.
 """
 
-from __future__ import print_function
-from __future__ import division
 
 import halide as hl
 
 import numpy as np
-from scipy.misc import imread, imsave
+import imageio
 import os.path
 
 def get_bilateral_grid(input, r_sigma, s_sigma):
@@ -104,7 +102,7 @@ def get_input_data():
     image_path = os.path.join(os.path.dirname(__file__), "../../apps/images/rgb.png")
     assert os.path.exists(image_path), \
         "Could not find %s" % image_path
-    rgb_data = imread(image_path)
+    rgb_data = imageio.imread(image_path)
     #print("rgb_data", type(rgb_data), rgb_data.shape, rgb_data.dtype)
 
     grey_data = np.mean(rgb_data, axis=2, dtype=np.float32)
@@ -133,8 +131,8 @@ def filter_test_image(bilateral_grid, input):
     # save results
     input_path = "bilateral_grid_input.png"
     output_path = "bilateral_grid.png"
-    imsave(input_path, input_data)
-    imsave(output_path, output_data)
+    imageio.imsave(input_path, input_data)
+    imageio.imsave(output_path, output_data)
     print("\nbilateral_grid realized on output_image.")
     print("Result saved at '", output_path,
           "' ( input data copy at '", input_path, "' ).", sep="")

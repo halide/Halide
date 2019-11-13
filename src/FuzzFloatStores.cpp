@@ -6,8 +6,8 @@ namespace Halide {
 namespace Internal {
 
 namespace {
-class FuzzFloatStores : public IRMutator2 {
-    using IRMutator2::visit;
+class FuzzFloatStores : public IRMutator {
+    using IRMutator::visit;
 
     Stmt visit(const Store *op) override {
         Type t = op->value.type();
@@ -18,9 +18,9 @@ class FuzzFloatStores : public IRMutator2 {
             value = reinterpret(mask.type(), value);
             value = value & ~mask;
             value = reinterpret(t, value);
-            return Store::make(op->name, value, op->index, op->param, op->predicate);
+            return Store::make(op->name, value, op->index, op->param, op->predicate, op->alignment);
         } else {
-            return IRMutator2::visit(op);
+            return IRMutator::visit(op);
         }
     }
 };

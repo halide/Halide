@@ -1,7 +1,7 @@
-#include <stdio.h>
 #include "Halide.h"
 #include "halide_benchmark.h"
 
+#include <stdio.h>
 #include <chrono>
 #include <thread>
 #include <atomic>
@@ -70,6 +70,11 @@ Func make(Schedule schedule) {
 }
 
 int main(int argc, char **argv) {
+    if (get_jit_target_from_environment().arch == Target::WebAssembly) {
+        printf("Skipping test for WebAssembly as it does not support async() yet.\n");
+        return 0;
+    }
+
     Func both;
     Buffer<int32_t> im;
     int count;
@@ -84,7 +89,7 @@ int main(int argc, char **argv) {
     });
     printf("Serial time %f for %d calls.\n", time, count);
     fflush(stdout);
-    
+
     call_count = 0;
     both = make(Parallel);
     im = both.realize(10, 10, 2);

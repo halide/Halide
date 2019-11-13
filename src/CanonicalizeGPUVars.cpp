@@ -29,7 +29,7 @@ string get_block_name(int index) {
 }
 
 class CountGPUBlocksThreads : public IRVisitor {
-    string prefix; // Producer name + stage
+    string prefix;  // Producer name + stage
 
     using IRVisitor::visit;
 
@@ -69,16 +69,18 @@ class CountGPUBlocksThreads : public IRVisitor {
     }
 
 public:
-    CountGPUBlocksThreads(const string &p) : prefix(p) {}
+    CountGPUBlocksThreads(const string &p)
+        : prefix(p) {
+    }
     int nblocks = 0;
     int nthreads = 0;
     int nlanes = 0;
 };
 
-class CanonicalizeGPUVars : public IRMutator2 {
+class CanonicalizeGPUVars : public IRMutator {
     map<string, string> gpu_vars;
 
-    using IRMutator2::visit;
+    using IRMutator::visit;
 
     string gpu_name(vector<string> v, const string &new_var) {
         v.push_back(new_var);
@@ -166,25 +168,27 @@ class CanonicalizeGPUVars : public IRMutator2 {
         }
     }
 
-
     Stmt visit(const LetStmt *op) override {
-        Expr value = mutate(op->value);
-        Stmt body = mutate(op->body);
+        vector<std::pair<string, Expr>> lets;
+        Stmt result;
 
-        string name = canonicalize_let(op->name);
-        if (name != op->name) {
-            Expr new_var = Variable::make(Int(32), name);
-            value = substitute(op->name, new_var, value);
-            body = substitute(op->name, new_var, body);
+        do {
+            lets.emplace_back(op->name, mutate(op->value));
+            result = op->body;
+        } while ((op = op->body.as<LetStmt>()));
+
+        result = mutate(result);
+
+        for (auto it = lets.rbegin(); it != lets.rend(); it++) {
+            string name = canonicalize_let(it->first);
+            if (name != it->first) {
+                Expr new_var = Variable::make(Int(32), name);
+                result = substitute(it->first, new_var, result);
+            }
+            result = LetStmt::make(name, it->second, result);
         }
 
-        if ((name == op->name) &&
-            value.same_as(op->value) &&
-            body.same_as(op->body)) {
-            return op;
-        } else {
-            return LetStmt::make(name, value, body);
-        }
+        return result;
     }
 
     Stmt visit(const IfThenElse *op) override {

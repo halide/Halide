@@ -153,7 +153,18 @@ public:
     void schedule() {
         Pipeline p(output);
 
-        if (!auto_schedule) {
+        if (auto_schedule) {
+            // blank
+        } else if (get_target().has_gpu_feature()) {
+            Var xi, yi;
+            for (Func f : intermediates) {
+                f.compute_at(intermed_compute_at).gpu_threads(x, y);
+            }
+            output.compute_at(output_compute_at)
+                .unroll(x, 2)
+                .gpu_threads(x, y)
+                .reorder(c, x, y).unroll(c);
+        } else {
             int vec = get_target().natural_vector_size(UInt(16));
             bool use_hexagon = get_target().features_any_of({Target::HVX_64, Target::HVX_128});
             if (get_target().has_feature(Target::HVX_64)) {
@@ -266,6 +277,9 @@ Func CameraPipe::color_correct(Func input) {
 
     if (!auto_schedule) {
         matrix.compute_root();
+        if (get_target().has_gpu_feature()) {
+            matrix.gpu_single_thread();
+        }
     }
 
     Func corrected;
@@ -327,6 +341,10 @@ Func CameraPipe::apply_curve(Func input) {
     if (!auto_schedule) {
         // It's a LUT, compute it once ahead of time.
         curve.compute_root();
+        if (get_target().has_gpu_feature()) {
+            Var xi;
+            curve.gpu_tile(x, xi, 32);
+        }
     }
 
     /* Optional tags to specify layout for HalideTraceViz */
@@ -361,6 +379,9 @@ Func CameraPipe::sharpen(Func input) {
     sharpen_strength_x32() = u8_sat(sharpen_strength * 32);
     if (!auto_schedule) {
         sharpen_strength_x32.compute_root();
+        if (get_target().has_gpu_feature()) {
+            sharpen_strength_x32.gpu_single_thread();
+        }
     }
 
     /* Optional tags to specify layout for HalideTraceViz */
@@ -411,25 +432,69 @@ void CameraPipe::generate() {
 
     processed(x, y, c) = sharpen(curved)(x, y, c);
 
+    /* ESTIMATES */
+    // (This can be useful in conjunction with RunGen and benchmarks as well
+    // as auto-schedule, so we do it in all cases.)
+    input.set_estimates({{0, 2592}, {0, 1968}});
+    matrix_3200.set_estimates({{0, 4}, {0, 3}});
+    matrix_7000.set_estimates({{0, 4}, {0, 3}});
+    color_temp.set_estimate(3700);
+    gamma.set_estimate(2.0);
+    contrast.set_estimate(50);
+    sharpen_strength.set_estimate(1.0);
+    blackLevel.set_estimate(25);
+    whiteLevel.set_estimate(1023);
+    processed.set_estimates({{0, 2592}, {0, 1968}, {0, 3}});
+
     // Schedule
     if (auto_schedule) {
-        input.dim(0).set_bounds_estimate(0, 2592);
-        input.dim(1).set_bounds_estimate(0, 1968);
+        // nothing
+    } else if (get_target().has_gpu_feature()) {
 
-        matrix_3200.dim(0).set_bounds_estimate(0, 4);
-        matrix_3200.dim(1).set_bounds_estimate(0, 3);
-        matrix_7000.dim(0).set_bounds_estimate(0, 4);
-        matrix_7000.dim(1).set_bounds_estimate(0, 3);
+        // We can generate slightly better code if we know the output is even-sized
+        if (!auto_schedule) {
+            // TODO: The autoscheduler really ought to be able to
+            // accommodate bounds on the output Func.
+            Expr out_width = processed.width();
+            Expr out_height = processed.height();
+            processed.bound(c, 0, 3)
+                .bound(x, 0, (out_width / 2) * 2)
+                .bound(y, 0, (out_height / 2) * 2);
+        }
 
-        processed
-            .estimate(c, 0, 3)
-            .estimate(x, 0, 2592)
-            .estimate(y, 0, 1968);
+        Var xi, yi, xii, xio;
+
+        /* 1391us on a gtx 980. */
+        processed.compute_root()
+            .reorder(c, x, y)
+            .unroll(x, 2)
+            .gpu_tile(x, y, xi, yi, 28, 12);
+
+        curved.compute_at(processed, x)
+            .unroll(x, 2)
+            .gpu_threads(x, y);
+
+        corrected.compute_at(processed, x)
+            .unroll(x, 2)
+            .gpu_threads(x, y);
+
+        demosaiced->output_compute_at.set({processed, x});
+        demosaiced->intermed_compute_at.set({processed, x});
+
+        denoised.compute_at(processed, x)
+            .tile(x, y, xi, yi, 2, 2).unroll(xi).unroll(yi)
+            .gpu_threads(x, y);
+
+        deinterleaved.compute_at(processed, x)
+            .unroll(x, 2)
+            .gpu_threads(x, y)
+            .reorder(c, x, y).unroll(c);
 
     } else {
 
         Expr out_width = processed.width();
         Expr out_height = processed.height();
+
         // In HVX 128, we need 2 threads to saturate HVX with work,
         //and in HVX 64 we need 4 threads, and on other devices,
         // we might need many threads.
@@ -449,6 +514,7 @@ void CameraPipe::generate() {
         } else if (get_target().has_feature(Target::HVX_128)) {
             vec = 64;
         }
+
         processed.compute_root()
             .reorder(c, x, y)
             .split(y, yi, yii, 2, TailStrategy::RoundUp)

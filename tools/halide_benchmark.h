@@ -7,8 +7,14 @@
 #include <functional>
 #include <limits>
 
+#if defined(__EMSCRIPTEN__)
+#include <emscripten.h>
+#endif
+
 namespace Halide {
 namespace Tools {
+
+#if !defined(__EMSCRIPTEN__)
 
 // Prefer high_resolution_clock, but only if it's steady...
 template <bool HighResIsSteady = std::chrono::high_resolution_clock::is_steady>
@@ -21,6 +27,35 @@ template <>
 struct SteadyClock<false> {
     using type = std::chrono::steady_clock;
 };
+
+inline SteadyClock<>::type::time_point benchmark_now() {
+    return SteadyClock<>::type::now();
+}
+
+inline double benchmark_duration_seconds(
+        SteadyClock<>::type::time_point start,
+        SteadyClock<>::type::time_point end) {
+    return std::chrono::duration_cast<std::chrono::duration<double>>(end - start).count();
+}
+
+#else  // __EMSCRIPTEN__
+
+// Emscripten's std::chrono::steady_clock and/or high_resolution_clock
+// can throw an exception (!) if the runtime doesn't have a truly
+// steady clock available. Advice from emscripten-discuss suggested
+// that emscripten_get_now() is the best bet, as it is milliseconds
+// (but returned as a double, with microseconds in the fractional portion),
+// using either performance.now() or performance.hrtime() depending on the
+// environment.
+inline double benchmark_now() {
+    return emscripten_get_now();
+}
+
+inline double benchmark_duration_seconds(double start, double end) {
+    return (end - start) / 1000.0;
+}
+
+#endif
 
 // Benchmark the operation 'op'. The number of iterations refers to
 // how many times the operation is run for each time measurement, the
@@ -40,24 +75,21 @@ struct SteadyClock<false> {
 // code should measure with extreme caution.
 
 inline double benchmark(uint64_t samples, uint64_t iterations, std::function<void()> op) {
-    using BenchmarkClock = SteadyClock<>::type;
     double best = std::numeric_limits<double>::infinity();
     for (uint64_t i = 0; i < samples; i++) {
-        auto start = BenchmarkClock::now();
+        auto start = benchmark_now();
         for (uint64_t j = 0; j < iterations; j++) {
             op();
         }
-        auto end = BenchmarkClock::now();
-        double elapsed_seconds =
-                std::chrono::duration_cast<std::chrono::duration<double>>(end - start).count();
+        auto end = benchmark_now();
+        double elapsed_seconds = benchmark_duration_seconds(start, end);
         best = std::min(best, elapsed_seconds);
     }
     return best / iterations;
 }
 
 // Benchmark the operation 'op': run the operation until at least min_time
-// has elapsed, with the constraint of at least min_iters and no more than
-// max_iters times; the number of iterations is expanded as we
+// has elapsed; the number of iterations is expanded as we
 // progress (based on initial runs of 'op') to minimize overhead. The time
 // reported will be that of the best single iteration.
 //
@@ -83,12 +115,6 @@ struct BenchmarkConfig {
     // Set an absolute upper time limit. Defaults to min_time * 4.
     double max_time{0.1 * 4};
 
-    // Run at least this many iterations per sample.
-    uint64_t min_iters{1};
-
-    // Run at most this many iterations over all samples.
-    uint64_t max_iters{kBenchmarkMaxIterations};
-
     // Terminate when the relative difference between the best runtime
     // seen and the third-best runtime seen is no more than
     // this. Controls accuracy. The closer to zero this gets the more
@@ -111,7 +137,7 @@ struct BenchmarkResult {
     uint64_t iterations;
 
     // Measured accuracy between the best and third-best result.
-    // Will be <= config.accuracy unless max_iters is exceeded.
+    // Will be <= config.accuracy unless max_time is exceeded.
     double accuracy;
 
     operator double() const { return wall_time; }
@@ -123,10 +149,6 @@ inline BenchmarkResult benchmark(std::function<void()> op, const BenchmarkConfig
     const double min_time = std::max(10 * 1e-6, config.min_time);
     const double max_time = std::max(config.min_time, config.max_time);
 
-    const uint64_t min_iters = std::min(std::max((uint64_t)1, config.min_iters),
-                                                                            kBenchmarkMaxIterations);
-    const uint64_t max_iters = std::min(
-            std::max(config.min_iters, config.max_iters), kBenchmarkMaxIterations);
     const double accuracy = 1.0 + std::min(std::max(0.001, config.accuracy), 0.1);
 
     // We will do (at least) kMinSamples samples; we will do additional
@@ -136,8 +158,8 @@ inline BenchmarkResult benchmark(std::function<void()> op, const BenchmarkConfig
     double times[kMinSamples + 1] = {0};
 
     double total_time = 0;
-    uint64_t iters_per_sample = min_iters;
-    while (result.iterations < max_iters) {
+    uint64_t iters_per_sample = 1;
+    for (;;) {
         result.samples = 0;
         result.iterations = 0;
         total_time = 0;
@@ -159,12 +181,11 @@ inline BenchmarkResult benchmark(std::function<void()> op, const BenchmarkConfig
 
     // - Keep taking samples until we are accurate enough (even if we run over min_time).
     // - If we are already accurate enough but have time remaining, keep taking samples.
-    // - No matter what, don't go over max_iters or max_time; this is important, in case
+    // - No matter what, don't go over max_time; this is important, in case
     // we happen to get faster results for the first samples, then happen to transition
     // to throttled-down CPU state.
     while ((times[0] * accuracy < times[kMinSamples - 1] || total_time < min_time) &&
-                 total_time < max_time &&
-                 result.iterations < max_iters) {
+                 total_time < max_time) {
         times[kMinSamples] = benchmark(1, iters_per_sample, op);
         result.samples++;
         result.iterations += iters_per_sample;

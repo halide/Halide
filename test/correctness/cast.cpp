@@ -1,5 +1,5 @@
-#include <stdio.h>
 #include "Halide.h"
+#include <stdio.h>
 
 using namespace Halide;
 
@@ -31,6 +31,9 @@ int main(int argc, char **argv) {
         a += 1.0f + uint_expr[i];
         assert(a.type() == int_expr[i].type());
     }
+
+    assert(float_expr.type() == Float(32));
+    assert(double_expr.type() == Float(64));
 
     printf("Success!\n");
     return 0;

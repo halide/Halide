@@ -10,6 +10,7 @@
 
 #include "Func.h"
 #include "IR.h"
+#include "Lambda.h"
 #include "Util.h"
 
 namespace Halide {
@@ -90,7 +91,7 @@ template<typename T>
 inline HALIDE_NO_USER_CODE_INLINE Func constant_exterior(const T &func_like, Tuple value) {
     std::vector<std::pair<Expr, Expr>> object_bounds;
     for (int i = 0; i < func_like.dimensions(); i++) {
-        object_bounds.push_back({ Expr(func_like.dim(i).min()), Expr(func_like.dim(i).extent()) });
+        object_bounds.push_back({Expr(func_like.dim(i).min()), Expr(func_like.dim(i).extent())});
     }
 
     return constant_exterior(Internal::func_like_to_func(func_like), value, object_bounds);
@@ -100,18 +101,18 @@ inline HALIDE_NO_USER_CODE_INLINE Func constant_exterior(const T &func_like, Exp
     return constant_exterior(func_like, Tuple(value));
 }
 
-template <typename T, typename ...Bounds,
-          typename std::enable_if<Halide::Internal::all_are_convertible<Expr, Bounds...>::value>::type* = nullptr>
+template<typename T, typename... Bounds,
+         typename std::enable_if<Halide::Internal::all_are_convertible<Expr, Bounds...>::value>::type * = nullptr>
 inline HALIDE_NO_USER_CODE_INLINE Func constant_exterior(const T &func_like, Tuple value,
-                                        Bounds&&... bounds) {
+                                                         Bounds &&... bounds) {
     std::vector<std::pair<Expr, Expr>> collected_bounds;
     ::Halide::Internal::collect_paired_args(collected_bounds, std::forward<Bounds>(bounds)...);
     return constant_exterior(Internal::func_like_to_func(func_like), value, collected_bounds);
 }
-template <typename T, typename ...Bounds,
-          typename std::enable_if<Halide::Internal::all_are_convertible<Expr, Bounds...>::value>::type* = nullptr>
+template<typename T, typename... Bounds,
+         typename std::enable_if<Halide::Internal::all_are_convertible<Expr, Bounds...>::value>::type * = nullptr>
 inline HALIDE_NO_USER_CODE_INLINE Func constant_exterior(const T &func_like, Expr value,
-                                        Bounds&&... bounds) {
+                                                         Bounds &&... bounds) {
     return constant_exterior(func_like, Tuple(value), std::forward<Bounds>(bounds)...);
 }
 // @}
@@ -136,16 +137,15 @@ template<typename T>
 inline HALIDE_NO_USER_CODE_INLINE Func repeat_edge(const T &func_like) {
     std::vector<std::pair<Expr, Expr>> object_bounds;
     for (int i = 0; i < func_like.dimensions(); i++) {
-        object_bounds.push_back({ Expr(func_like.dim(i).min()), Expr(func_like.dim(i).extent()) });
+        object_bounds.push_back({Expr(func_like.dim(i).min()), Expr(func_like.dim(i).extent())});
     }
 
     return repeat_edge(Internal::func_like_to_func(func_like), object_bounds);
 }
 
-
-template <typename T, typename ...Bounds,
-          typename std::enable_if<Halide::Internal::all_are_convertible<Expr, Bounds...>::value>::type* = nullptr>
-inline HALIDE_NO_USER_CODE_INLINE Func repeat_edge(const T &func_like, Bounds&&... bounds) {
+template<typename T, typename... Bounds,
+         typename std::enable_if<Halide::Internal::all_are_convertible<Expr, Bounds...>::value>::type * = nullptr>
+inline HALIDE_NO_USER_CODE_INLINE Func repeat_edge(const T &func_like, Bounds &&... bounds) {
     std::vector<std::pair<Expr, Expr>> collected_bounds;
     ::Halide::Internal::collect_paired_args(collected_bounds, std::forward<Bounds>(bounds)...);
     return repeat_edge(Internal::func_like_to_func(func_like), collected_bounds);
@@ -172,15 +172,15 @@ template<typename T>
 inline HALIDE_NO_USER_CODE_INLINE Func repeat_image(const T &func_like) {
     std::vector<std::pair<Expr, Expr>> object_bounds;
     for (int i = 0; i < func_like.dimensions(); i++) {
-        object_bounds.push_back({ Expr(func_like.dim(i).min()), Expr(func_like.dim(i).extent()) });
+        object_bounds.push_back({Expr(func_like.dim(i).min()), Expr(func_like.dim(i).extent())});
     }
 
     return repeat_image(Internal::func_like_to_func(func_like), object_bounds);
 }
 
-template <typename T, typename ...Bounds,
-          typename std::enable_if<Halide::Internal::all_are_convertible<Expr, Bounds...>::value>::type* = nullptr>
-inline HALIDE_NO_USER_CODE_INLINE Func repeat_image(const T &func_like, Bounds&&... bounds) {
+template<typename T, typename... Bounds,
+         typename std::enable_if<Halide::Internal::all_are_convertible<Expr, Bounds...>::value>::type * = nullptr>
+inline HALIDE_NO_USER_CODE_INLINE Func repeat_image(const T &func_like, Bounds &&... bounds) {
     std::vector<std::pair<Expr, Expr>> collected_bounds;
     ::Halide::Internal::collect_paired_args(collected_bounds, std::forward<Bounds>(bounds)...);
     return repeat_image(Internal::func_like_to_func(func_like), collected_bounds);
@@ -207,15 +207,15 @@ template<typename T>
 inline HALIDE_NO_USER_CODE_INLINE Func mirror_image(const T &func_like) {
     std::vector<std::pair<Expr, Expr>> object_bounds;
     for (int i = 0; i < func_like.dimensions(); i++) {
-        object_bounds.push_back({ Expr(func_like.dim(i).min()), Expr(func_like.dim(i).extent()) });
+        object_bounds.push_back({Expr(func_like.dim(i).min()), Expr(func_like.dim(i).extent())});
     }
 
     return mirror_image(Internal::func_like_to_func(func_like), object_bounds);
 }
 
-template <typename T, typename ...Bounds,
-          typename std::enable_if<Halide::Internal::all_are_convertible<Expr, Bounds...>::value>::type* = nullptr>
-inline HALIDE_NO_USER_CODE_INLINE Func mirror_image(const T &func_like, Bounds&&... bounds) {
+template<typename T, typename... Bounds,
+         typename std::enable_if<Halide::Internal::all_are_convertible<Expr, Bounds...>::value>::type * = nullptr>
+inline HALIDE_NO_USER_CODE_INLINE Func mirror_image(const T &func_like, Bounds &&... bounds) {
     std::vector<std::pair<Expr, Expr>> collected_bounds;
     ::Halide::Internal::collect_paired_args(collected_bounds, std::forward<Bounds>(bounds)...);
     return mirror_image(Internal::func_like_to_func(func_like), collected_bounds);
@@ -245,15 +245,15 @@ template<typename T>
 inline HALIDE_NO_USER_CODE_INLINE Func mirror_interior(const T &func_like) {
     std::vector<std::pair<Expr, Expr>> object_bounds;
     for (int i = 0; i < func_like.dimensions(); i++) {
-        object_bounds.push_back({ Expr(func_like.dim(i).min()), Expr(func_like.dim(i).extent()) });
+        object_bounds.push_back({Expr(func_like.dim(i).min()), Expr(func_like.dim(i).extent())});
     }
 
     return mirror_interior(Internal::func_like_to_func(func_like), object_bounds);
 }
 
-template <typename T, typename ...Bounds,
-          typename std::enable_if<Halide::Internal::all_are_convertible<Expr, Bounds...>::value>::type* = nullptr>
-inline HALIDE_NO_USER_CODE_INLINE Func mirror_interior(const T &func_like, Bounds&&... bounds) {
+template<typename T, typename... Bounds,
+         typename std::enable_if<Halide::Internal::all_are_convertible<Expr, Bounds...>::value>::type * = nullptr>
+inline HALIDE_NO_USER_CODE_INLINE Func mirror_interior(const T &func_like, Bounds &&... bounds) {
     std::vector<std::pair<Expr, Expr>> collected_bounds;
     ::Halide::Internal::collect_paired_args(collected_bounds, std::forward<Bounds>(bounds)...);
     return mirror_interior(Internal::func_like_to_func(func_like), collected_bounds);

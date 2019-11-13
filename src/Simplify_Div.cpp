@@ -3,32 +3,88 @@
 namespace Halide {
 namespace Internal {
 
-Expr Simplify::visit(const Div *op, ConstBounds *bounds) {
-    ConstBounds a_bounds, b_bounds;
+Expr Simplify::visit(const Div *op, ExprInfo *bounds) {
+    ExprInfo a_bounds, b_bounds;
     Expr a = mutate(op->a, &a_bounds);
     Expr b = mutate(op->b, &b_bounds);
 
     if (bounds && no_overflow_int(op->type)) {
-        bounds->min_defined = bounds->max_defined =
-            (a_bounds.min_defined && b_bounds.min_defined &&
-             a_bounds.max_defined && b_bounds.max_defined &&
-             (b_bounds.min > 0 || b_bounds.max < 0));
-        if (bounds->min_defined) {
-            int64_t v1 = div_imp(a_bounds.min, b_bounds.min);
-            int64_t v2 = div_imp(a_bounds.min, b_bounds.max);
-            int64_t v3 = div_imp(a_bounds.max, b_bounds.min);
-            int64_t v4 = div_imp(a_bounds.max, b_bounds.max);
-            bounds->min = std::min(std::min(v1, v2), std::min(v3, v4));
-            bounds->max = std::max(std::max(v1, v2), std::max(v3, v4));
+        bounds->min = INT64_MAX;
+        bounds->max = INT64_MIN;
 
-            // Bounded numerator divided by constantish
-            // denominator can sometimes collapse things to a
-            // constant at this point.
-            if (bounds->min == bounds->max) {
+        // Enumerate all possible values for the min and max and take the extreme values.
+        if (a_bounds.min_defined && b_bounds.min_defined && b_bounds.min != 0) {
+            int64_t v = div_imp(a_bounds.min, b_bounds.min);
+            bounds->min = std::min(bounds->min, v);
+            bounds->max = std::max(bounds->max, v);
+        }
+
+        if (a_bounds.min_defined && b_bounds.max_defined && b_bounds.max != 0) {
+            int64_t v = div_imp(a_bounds.min, b_bounds.max);
+            bounds->min = std::min(bounds->min, v);
+            bounds->max = std::max(bounds->max, v);
+        }
+
+        if (a_bounds.max_defined && b_bounds.max_defined && b_bounds.max != 0) {
+            int64_t v = div_imp(a_bounds.max, b_bounds.max);
+            bounds->min = std::min(bounds->min, v);
+            bounds->max = std::max(bounds->max, v);
+        }
+
+        if (a_bounds.max_defined && b_bounds.min_defined && b_bounds.min != 0) {
+            int64_t v = div_imp(a_bounds.max, b_bounds.min);
+            bounds->min = std::min(bounds->min, v);
+            bounds->max = std::max(bounds->max, v);
+        }
+
+        const bool b_positive = b_bounds.min_defined && b_bounds.min > 0;
+        const bool b_negative = b_bounds.max_defined && b_bounds.max < 0;
+
+        if ((b_positive && !b_bounds.max_defined) ||
+            (b_negative && !b_bounds.min_defined)) {
+            // Take limit as b -> +/- infinity
+            int64_t v = 0;
+            bounds->min = std::min(bounds->min, v);
+            bounds->max = std::max(bounds->max, v);
+        }
+
+        bounds->min_defined = ((a_bounds.min_defined && b_positive) ||
+                               (a_bounds.max_defined && b_negative));
+        bounds->max_defined = ((a_bounds.max_defined && b_positive) ||
+                               (a_bounds.min_defined && b_negative));
+
+        // Bounded numerator divided by constantish
+        // denominator can sometimes collapse things to a
+        // constant at this point
+        if (bounds->min_defined &&
+            bounds->max_defined &&
+            bounds->max == bounds->min) {
+            if (op->type.can_represent(bounds->min)) {
                 return make_const(op->type, bounds->min);
+            } else {
+                // Even though this is 'no-overflow-int', if the result
+                // we calculate can't fit into the destination type,
+                // we're better off returning an overflow condition than
+                // a known-wrong value. (Note that no_overflow_int() should
+                // only be true for signed integers.)
+                internal_assert(op->type.is_int());
+                return make_signed_integer_overflow(op->type);
             }
         }
+        // Code downstream can use min/max in calculated-but-unused arithmetic
+        // that can lead to UB (and thus, flaky failures under ASAN/UBSAN)
+        // if we leave them set to INT64_MAX/INT64_MIN; normalize to zero to avoid this.
+        if (!bounds->min_defined) bounds->min = 0;
+        if (!bounds->max_defined) bounds->max = 0;
+        bounds->alignment = a_bounds.alignment / b_bounds.alignment;
+        bounds->trim_bounds_using_alignment();
     }
+
+    bool denominator_non_zero =
+        ((b_bounds.min_defined && b_bounds.min > 0) ||
+         (b_bounds.max_defined && b_bounds.max < 0) ||
+         (b_bounds.alignment.remainder != 0));
+
 
     if (may_simplify(op->type)) {
 
@@ -43,8 +99,9 @@ Expr Simplify::visit(const Div *op, ConstBounds *bounds) {
             rewrite(x / 1, x) ||
             (!op->type.is_float() &&
              rewrite(x / 0, IRMatcher::Indeterminate())) ||
-            rewrite(0 / x, 0) ||
-            rewrite(x / x, 1) ||
+            (denominator_non_zero &&
+             (rewrite(0 / x, 0) ||
+              rewrite(x / x, 1))) ||
             rewrite(c0 / c1, fold(c0 / c1))) {
             return rewrite.result;
         }
@@ -142,5 +199,5 @@ Expr Simplify::visit(const Div *op, ConstBounds *bounds) {
     }
 }
 
-}
-}
+}  // namespace Internal
+}  // namespace Halide

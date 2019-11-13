@@ -14,7 +14,6 @@ typedef unsigned long addr_t;
 
 typedef unsigned int qurt_size_t;
 typedef unsigned int qurt_mem_pool_t;
-//TODO: Change to uint32_t in later releases after DMA Driver API Change
 #define HALIDE_HEXAGON_ENUM  enum __attribute__((aligned(4)))
 
 __inline static int align(int x,int a) {
@@ -22,7 +21,6 @@ __inline static int align(int x,int a) {
 } 
 
 HALIDE_HEXAGON_ENUM { QURT_EOK = 0 };
-
 
 /*!
  * Power Corner vote
@@ -338,13 +336,13 @@ typedef HALIDE_HEXAGON_ENUM {
    * @description DMA power voting
    *
    * @input       cornercase:
-   *				#define PW_MIN_SVS 0
-   *				#define PW_SVS2 1
-   *				#define PW_SVS 2
-   *				#define PW_SVS_L1 3
-   *				#define PW_NORMAL 4
-   *				#define PW_NORMAL_L1 5
-   *				#define PW_TURBO 6
+   *                            #define PW_MIN_SVS 0
+   *                            #define PW_SVS2 1
+   *                            #define PW_SVS 2
+   *                            #define PW_SVS_L1 3
+   *                            #define PW_NORMAL 4
+   *                            #define PW_NORMAL_L1 5
+   *                            #define PW_TURBO 6
    * @return      Success: OK
    * @n           Failure: ERR
    */

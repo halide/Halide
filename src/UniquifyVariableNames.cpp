@@ -9,9 +9,9 @@ using std::map;
 using std::string;
 using std::vector;
 
-class UniquifyVariableNames : public IRMutator2 {
+class UniquifyVariableNames : public IRMutator {
 
-    using IRMutator2::visit;
+    using IRMutator::visit;
 
     map<string, int> vars;
 

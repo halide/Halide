@@ -1,4 +1,4 @@
-// This simple PNG IO library works the Halide::Buffer<T> type or any
+// This simple IO library works the Halide::Buffer<T> type or any
 // other image type with the same API.
 
 #ifndef HALIDE_IMAGE_IO_H
@@ -6,6 +6,7 @@
 
 #include <algorithm>
 #include <cstdarg>
+#include <cstddef>
 #include <cstdio>
 #include <cstdlib>
 #include <functional>
@@ -53,6 +54,11 @@ struct FormatInfo {
 };
 
 namespace Internal {
+
+// Must be constexpr to allow use in case clauses.
+inline constexpr int halide_type_code(halide_type_code_t code, int bits) {
+    return (((int) code) << 8) | bits;
+}
 
 typedef bool (*CheckFunc)(bool condition, const char* msg);
 
@@ -352,7 +358,7 @@ void read_big_endian_row(const uint8_t *src, int y, ImageType *im) {
 // Multibyte elements are written in big-endian layout.
 template<typename ElemType, typename ImageType>
 void write_big_endian_row(const ImageType &im, int y, uint8_t *dst) {
-    auto im_typed = im.template as<ElemType>();
+    auto im_typed = im.template as<typename std::add_const<ElemType>::type>();
     const int xmin = im_typed.dim(0).min();
     const int xmax = im_typed.dim(0).max();
     if (im_typed.dimensions() > 2) {
@@ -808,7 +814,7 @@ template<typename ImageType>
 bool buffer_is_compact_planar(ImageType &im) {
     const halide_type_t im_type = im.type();
     const size_t elem_size = (im_type.bits / 8);
-    if (((uint8_t*)im.begin() + (im.number_of_elements() * elem_size)) != (uint8_t*) im.end()) {
+    if (((const uint8_t*)im.begin() + (im.number_of_elements() * elem_size)) != (const uint8_t*) im.end()) {
         return false;
     }
     for (int d = 1; d < im.dimensions(); ++d) {
@@ -890,7 +896,7 @@ bool write_planar_payload(ImageType &im, FileOpener &f) {
         // We have to do this the hard way.
         int d = im.dimensions() - 1;
         for (int i = im.dim(d).min(); i <= im.dim(d).max(); i++) {
-            ImageType slice = im.sliced(d, i);
+            auto slice = im.sliced(d, i);
             if (!write_planar_payload(slice, f)) {
                 return false;
             }
@@ -1174,6 +1180,9 @@ bool save_mat(ImageType &im, const std::string &filename) {
         break;
     case halide_type_float:
         switch (im.raw_buffer()->type.bits) {
+        case 16:
+            check(false, "float16 not supported by .mat");
+            break;
         case 32:
             class_code = mxSINGLE_CLASS;
             type_code = miSINGLE;
@@ -1186,7 +1195,10 @@ bool save_mat(ImageType &im, const std::string &filename) {
             check(false, "unreachable");
         };
         break;
-    case halide_type_handle:
+    case halide_type_bfloat:
+        check(false, "bfloat not supported by .mat");
+        break;
+    default:
         check(false, "unreachable");
     }
 
@@ -1239,9 +1251,11 @@ bool save_mat(ImageType &im, const std::string &filename) {
     }
     int padded_dims = dims + (dims & 1);
 
+    uint32_t padding_bytes = 7 - ((payload_bytes - 1) & 7);
+
     // Matrix header
     uint32_t matrix_header[2] = {
-        miMATRIX, 40 + padded_dims * 4 + (uint32_t)name.size() + (uint32_t)payload_bytes
+        miMATRIX, 40 + padded_dims * 4 + (uint32_t)name.size() + (uint32_t)payload_bytes + padding_bytes
     };
 
     // Array flags
@@ -1268,8 +1282,6 @@ bool save_mat(ImageType &im, const std::string &filename) {
     uint32_t name_header[2] = {
         miINT8, name_size
     };
-
-    uint32_t padding_bytes = 7 - ((payload_bytes - 1) & 7);
 
     // Payload header
     uint32_t payload_header[2] = {
@@ -1306,30 +1318,312 @@ bool save_mat(ImageType &im, const std::string &filename) {
     return true;
 }
 
+template<typename ImageType, Internal::CheckFunc check = Internal::CheckReturn>
+bool load_tiff(const std::string &filename, ImageType *im) {
+    static_assert(!ImageType::has_static_halide_type, "");
+    check(false, "Reading TIFF is not yet supported");
+    return false;
+}
+
+inline const std::set<FormatInfo> &query_tiff() {
+    auto build_set = []() -> std::set<FormatInfo> {
+        std::set<FormatInfo> s;
+        for (halide_type_code_t code : { halide_type_int, halide_type_uint, halide_type_float}) {
+            for (int bits: { 8, 16, 32, 64 }) {
+                for (int dims: { 1, 2, 3, 4 }) {
+                    if (code == halide_type_float && bits < 32) {
+                        continue;
+                    }
+                    s.insert({halide_type_t(code, bits), dims});
+                }
+            }
+        }
+        return s;
+    };
+
+    static std::set<FormatInfo> info = build_set();
+    return info;
+}
+
+#pragma pack(push)
+#pragma pack(2)
+
+struct halide_tiff_tag {
+    uint16_t tag_code;
+    int16_t type_code;
+    int32_t count;
+    union {
+        int8_t i8;
+        int16_t i16;
+        int32_t i32;
+    } value;
+
+    void assign16(uint16_t tag_code, int32_t count, int16_t value) {
+        this->tag_code = tag_code;
+        this->type_code = 3;  // SHORT
+        this->count = count;
+        this->value.i16 = value;
+    }
+
+    void assign32(uint16_t tag_code, int32_t count, int32_t value) {
+        this->tag_code = tag_code;
+        this->type_code = 4;  // LONG
+        this->count = count;
+        this->value.i32 = value;
+    }
+
+    void assign32(uint16_t tag_code, int16_t type_code, int32_t count, int32_t value) {
+        this->tag_code = tag_code;
+        this->type_code = type_code;
+        this->count = count;
+        this->value.i32 = value;
+    }
+};
+
+struct halide_tiff_header {
+    int16_t byte_order_marker;
+    int16_t version;
+    int32_t ifd0_offset;
+    int16_t entry_count;
+    halide_tiff_tag entries[15];
+    int32_t ifd0_end;
+    int32_t width_resolution[2];
+    int32_t height_resolution[2];
+};
+
+#pragma pack(pop)
+
+template<typename ElemType, int BUFFER_SIZE = 1024>
+struct ElemWriter {
+    ElemWriter(FileOpener *f) : f(f), next(&buf[0]), ok(true) {}
+    ~ElemWriter() { flush(); }
+
+    void operator()(const ElemType &elem) {
+        if (!ok) return;
+
+        *next++ = elem;
+        if (next == &buf[BUFFER_SIZE]) {
+            flush();
+        }
+    }
+
+    void flush() {
+        if (!ok) return;
+
+        if (next > buf) {
+            if (!f->write_bytes(buf, (next - buf) * sizeof(ElemType))) {
+                ok = false;
+            }
+            next = buf;
+        }
+    }
+
+    FileOpener * const f;
+    ElemType buf[BUFFER_SIZE];
+    ElemType *next;
+    bool ok;
+};
+
+// Note that this is a fairly simpleminded TIFF writer that doesn't
+// do any compression. It would be desirable to (optionally) support using libtiff
+// here instead, which would also allow us to provide a useful implementation
+// for TIFF reading.
+template<typename ImageType, Internal::CheckFunc check = Internal::CheckReturn>
+bool save_tiff(ImageType &im, const std::string &filename) {
+    static_assert(!ImageType::has_static_halide_type, "");
+
+    im.copy_to_host();
+
+    if (!check(im.dimensions() <= 4, "Can only save TIFF files with <= 4 dimensions")) {
+        return false;
+    }
+
+    FileOpener f(filename, "wb");
+    if (!check(f.f != nullptr, "File could not be opened for writing")) {
+        return false;
+    }
+
+    const size_t elements = im.number_of_elements();
+    halide_dimension_t shape[4];
+    for (int i = 0; i < im.dimensions() && i < 4; i++) {
+        const auto &d = im.dim(i);
+        shape[i].min = d.min();
+        shape[i].extent = d.extent();
+        shape[i].stride = d.stride();
+    }
+    for (int i = im.dimensions(); i < 4; i++) {
+        shape[i].min = 0;
+        shape[i].extent = 1;
+        shape[i].stride = 0;
+    }
+    const halide_type_t im_type = im.type();
+    if (!check(im_type.code >= 0 && im_type.code < 3, "Unsupported image type")) {
+        return false;
+    }
+    const int32_t bytes_per_element = im_type.bytes();
+    const int32_t width = shape[0].extent;
+    const int32_t height = shape[1].extent;
+    int32_t depth = shape[2].extent;
+    int32_t channels = shape[3].extent;
+
+    if ((channels == 0 || channels == 1) && (depth < 5)) {
+        channels = depth;
+        depth = 1;
+    }
+
+    // TIFF sample type values are:
+    //     0 => Signed int
+    //     1 => Unsigned int
+    //     2 => Floating-point
+    static const int16_t type_code_to_tiff_sample_type[] = {
+        2, 1, 3
+    };
+
+    struct halide_tiff_header header;
+    memset(&header, 0, sizeof(header));
+
+    const int32_t MMII = 0x4d4d4949;
+    // Select the appropriate two bytes signaling byte order automatically
+    const char *c = (const char *)&MMII;
+    header.byte_order_marker = (c[0] << 8) | c[1];
+    header.version = 42;
+    header.ifd0_offset = offsetof(halide_tiff_header, entry_count);
+    header.entry_count = sizeof(header.entries) / sizeof(header.entries[0]);
+
+    static_assert(sizeof(halide_tiff_tag) == 12, "Unexpected halide_tiff_tag packing");
+    halide_tiff_tag *tag = &header.entries[0];
+    tag++->assign32(256, 1, width);                          // ImageWidth
+    tag++->assign32(257, 1, height);                         // ImageLength
+    tag++->assign16(258, 1, int16_t(bytes_per_element * 8)); // BitsPerSample
+    tag++->assign16(259, 1, 1);                              // Compression -- none
+    tag++->assign16(262, 1, channels >= 3 ? 2 : 1);          // PhotometricInterpretation -- black is zero or RGB
+    tag++->assign32(273, channels, sizeof(header));          // StripOffsets
+    tag++->assign16(277, 1, int16_t(channels));              // SamplesPerPixel
+    tag++->assign32(278, 1, height);                         // RowsPerStrip
+    tag++->assign32(279, channels,                           // StripByteCounts
+                    (channels == 1) ?
+                        elements * bytes_per_element :
+                        sizeof(header) + channels * sizeof(int32_t));  // for channels > 1, this is an offset
+    tag++->assign32(282, 5, 1,
+                    offsetof(halide_tiff_header, width_resolution));     // XResolution
+    tag++->assign32(283, 5, 1,
+                    offsetof(halide_tiff_header, height_resolution));    // YResolution
+    tag++->assign16(284, 1, 2);                              // PlanarConfiguration -- planar
+    tag++->assign16(296, 1, 1);                              // ResolutionUnit -- none
+    tag++->assign16(339, 1, type_code_to_tiff_sample_type[im_type.code]);        // SampleFormat
+    tag++->assign32(32997, 1, depth);                        // Image depth
+
+    // Verify we used exactly the number we declared
+    assert(tag == &header.entries[header.entry_count]);
+
+    header.ifd0_end = 0;
+    header.width_resolution[0] = 1;
+    header.width_resolution[1] = 1;
+    header.height_resolution[0] = 1;
+    header.height_resolution[1] = 1;
+
+    if (!check(f.write_bytes(&header, sizeof(header)), "TIFF write failed")) {
+        return false;
+    }
+
+    if (channels > 1) {
+        // Fill in the values for StripOffsets
+        int32_t offset = sizeof(header) + channels * sizeof(int32_t) * 2;
+        for (int32_t i = 0; i < channels; i++) {
+            if (!check(f.write_bytes(&offset, sizeof(offset)), "TIFF write failed")) {
+                return false;
+            }
+            offset += width * height * depth * bytes_per_element;
+        }
+        // Fill in the values for StripByteCounts
+        int32_t count = width * height * depth * bytes_per_element;
+        for (int32_t i = 0; i < channels; i++) {
+            if (!check(f.write_bytes(&count, sizeof(count)), "TIFF write failed")) {
+                return false;
+            }
+        }
+    }
+
+    // If image is dense, we can write it in one fell swoop
+    if (elements * bytes_per_element == im.size_in_bytes()) {
+        if (!check(f.write_bytes(im.data(), im.size_in_bytes()), "TIFF write failed")) {
+            return false;
+        }
+        return true;
+    }
+
+    // Otherwise, write it out via manual traversal.
+#define HANDLE_CASE(CODE, BITS, TYPE) \
+    case halide_type_code(CODE, BITS): { \
+        ElemWriter<TYPE> ew(&f); \
+        im.template as<const TYPE>().for_each_value(ew); \
+        if (!check(ew.ok, "TIFF write failed")) { \
+            return false; \
+        } \
+        break; \
+    }
+
+    switch (halide_type_code((halide_type_code_t) im_type.code, im_type.bits)) {
+        HANDLE_CASE(halide_type_float, 32, float)
+        HANDLE_CASE(halide_type_float, 64, double)
+        HANDLE_CASE(halide_type_int, 8, int8_t)
+        HANDLE_CASE(halide_type_int, 16, int16_t)
+        HANDLE_CASE(halide_type_int, 32, int32_t)
+        HANDLE_CASE(halide_type_int, 64, int64_t)
+        HANDLE_CASE(halide_type_uint, 1, bool)
+        HANDLE_CASE(halide_type_uint, 8, uint8_t)
+        HANDLE_CASE(halide_type_uint, 16, uint16_t)
+        HANDLE_CASE(halide_type_uint, 32, uint32_t)
+        HANDLE_CASE(halide_type_uint, 64, uint64_t)
+        // Note that we don't attempt to handle halide_type_handle here.
+        default:
+            assert(false && "Unsupported type");
+            return false;
+    }
+#undef HANDLE_CASE
+
+    return true;
+}
+
+// Given something like ImageType<Foo>, produce typedef ImageType<Bar>
+template<typename ImageType, typename ElemType>
+struct ImageTypeWithElemType {
+    using type = decltype(std::declval<ImageType>().template as<ElemType>());
+};
+
+// Given something like ImageType<Foo>, produce typedef ImageType<const Bar>
+template<typename ImageType, typename ElemType>
+struct ImageTypeWithConstElemType {
+    using type = decltype(std::declval<ImageType>().template as<typename std::add_const<ElemType>::type>());
+};
 
 template<typename ImageType, Internal::CheckFunc check>
 struct ImageIO {
+    using ConstImageType = typename ImageTypeWithConstElemType<ImageType, typename ImageType::ElemType>::type;
+
     std::function<bool(const std::string &, ImageType *)> load;
-    std::function<bool(ImageType &im, const std::string &)> save;
+    std::function<bool(ConstImageType &im, const std::string &)> save;
     std::function<const std::set<FormatInfo>&()> query;
 };
 
 template<typename ImageType, Internal::CheckFunc check>
 bool find_imageio(const std::string &filename, ImageIO<ImageType, check> *result) {
     static_assert(!ImageType::has_static_halide_type, "");
+    using ConstImageType = typename ImageTypeWithConstElemType<ImageType, typename ImageType::ElemType>::type;
 
     const std::map<std::string, ImageIO<ImageType, check>> m = {
 #ifndef HALIDE_NO_JPEG
-        {"jpeg", {load_jpg<ImageType, check>, save_jpg<ImageType, check>, query_jpg}},
-        {"jpg", {load_jpg<ImageType, check>, save_jpg<ImageType, check>, query_jpg}},
+        {"jpeg", {load_jpg<ImageType, check>, save_jpg<ConstImageType, check>, query_jpg}},
+        {"jpg", {load_jpg<ImageType, check>, save_jpg<ConstImageType, check>, query_jpg}},
 #endif
-        {"pgm", {load_pgm<ImageType, check>, save_pgm<ImageType, check>, query_pgm}},
+        {"pgm", {load_pgm<ImageType, check>, save_pgm<ConstImageType, check>, query_pgm}},
 #ifndef HALIDE_NO_PNG
-        {"png", {load_png<ImageType, check>, save_png<ImageType, check>, query_png}},
+        {"png", {load_png<ImageType, check>, save_png<ConstImageType, check>, query_png}},
 #endif
-        {"ppm", {load_ppm<ImageType, check>, save_ppm<ImageType, check>, query_ppm}},
-        {"tmp", {load_tmp<ImageType, check>, save_tmp<ImageType, check>, query_tmp}},
-        {"mat", {load_mat<ImageType, check>, save_mat<ImageType, check>, query_mat}}
+        {"ppm", {load_ppm<ImageType, check>, save_ppm<ConstImageType, check>, query_ppm}},
+        {"tmp", {load_tmp<ImageType, check>, save_tmp<ConstImageType, check>, query_tmp}},
+        {"mat", {load_mat<ImageType, check>, save_mat<ConstImageType, check>, query_mat}},
+        {"tiff", {load_tiff<ImageType, check>, save_tiff<ConstImageType, check>, query_tiff}},
     };
     std::string ext = Internal::get_lowercase_extension(filename);
     auto it = m.find(ext);
@@ -1344,17 +1638,6 @@ bool find_imageio(const std::string &filename, ImageIO<ImageType, check> *result
     }
     err += "\n";
     return check(false, err.c_str());
-}
-
-// Given something like ImageType<Foo>, produce typedef ImageType<Bar>
-template<typename ImageType, typename ElemType>
-struct ImageTypeWithElemType {
-    using type = decltype(std::declval<ImageType>().template as<ElemType>());
-};
-
-// Must be constexpr to allow use in case clauses.
-inline constexpr int halide_type_code(halide_type_code_t code, int bits) {
-    return (((int) code) << 8) | bits;
 }
 
 template<typename ImageType>
@@ -1605,7 +1888,7 @@ bool save(ImageType &im, const std::string &filename) {
 
     // Allow statically-typed images to be passed in, but quietly pass them on
     // as dynamically-typed images.
-    auto im_d = im.template as<void>();
+    auto im_d = im.template as<const void>();
     return imageio.save(im_d, filename);
 }
 

@@ -7,8 +7,43 @@ namespace Internal {
 using std::string;
 using std::vector;
 
+namespace {
+
+class CountVarUses : public IRVisitor {
+    std::map<std::string, int> &var_uses;
+
+    void visit(const Variable *var) override {
+        var_uses[var->name]++;
+    }
+
+    void visit(const Load *op) override {
+        var_uses[op->name]++;
+        IRVisitor::visit(op);
+    }
+
+    void visit(const Store *op) override {
+        var_uses[op->name]++;
+        IRVisitor::visit(op);
+    }
+
+    using IRVisitor::visit;
+
+public:
+    CountVarUses(std::map<std::string, int> &var_uses)
+        : var_uses(var_uses) {
+    }
+};
+
+template<typename StmtOrExpr>
+void count_var_uses(StmtOrExpr x, std::map<std::string, int> &var_uses) {
+    CountVarUses counter(var_uses);
+    x.accept(&counter);
+}
+
+}  // namespace
+
 template<typename LetOrLetStmt, typename Body>
-Body Simplify::simplify_let(const LetOrLetStmt *op, ConstBounds *bounds) {
+Body Simplify::simplify_let(const LetOrLetStmt *op, ExprInfo *bounds) {
 
     // Lets are often deeply nested. Get the intermediate state off
     // the call stack where it could overflow onto an explicit stack.
@@ -18,7 +53,9 @@ Body Simplify::simplify_let(const LetOrLetStmt *op, ConstBounds *bounds) {
         string new_name;
         bool new_value_alignment_tracked = false, new_value_bounds_tracked = false;
         bool value_alignment_tracked = false, value_bounds_tracked = false;
-        Frame(const LetOrLetStmt *op) : op(op) {}
+        Frame(const LetOrLetStmt *op)
+            : op(op) {
+        }
     };
 
     vector<Frame> frames;
@@ -33,7 +70,7 @@ Body Simplify::simplify_let(const LetOrLetStmt *op, ConstBounds *bounds) {
 
         // If the value is trivial, make a note of it in the scope so
         // we can subs it in later
-        ConstBounds value_bounds;
+        ExprInfo value_bounds;
         f.value = mutate(op->value, &value_bounds);
 
         // Iteratively peel off certain operations from the let value and push them inside.
@@ -144,7 +181,7 @@ Body Simplify::simplify_let(const LetOrLetStmt *op, ConstBounds *bounds) {
         }
 
         if (f.new_value.same_as(f.value)) {
-                // Nothing to substitute
+            // Nothing to substitute
             f.new_value = Expr();
             replacement = Expr();
         } else {
@@ -161,27 +198,19 @@ Body Simplify::simplify_let(const LetOrLetStmt *op, ConstBounds *bounds) {
         // Before we enter the body, track the alignment info
 
         if (f.new_value.defined() && no_overflow_scalar_int(f.new_value.type())) {
-            ModulusRemainder mod_rem = modulus_remainder(f.new_value, alignment_info);
-            if (mod_rem.modulus > 1) {
-                alignment_info.push(f.new_name, mod_rem);
-                f.new_value_alignment_tracked = true;
-            }
-            ConstBounds new_value_bounds;
+            // Remutate new_value to get updated bounds
+            ExprInfo new_value_bounds;
             f.new_value = mutate(f.new_value, &new_value_bounds);
-            if (new_value_bounds.min_defined || new_value_bounds.max_defined) {
-                bounds_info.push(f.new_name, new_value_bounds);
+            if (new_value_bounds.min_defined || new_value_bounds.max_defined || new_value_bounds.alignment.modulus != 1) {
+                // There is some useful information
+                bounds_and_alignment_info.push(f.new_name, new_value_bounds);
                 f.new_value_bounds_tracked = true;
             }
         }
 
         if (no_overflow_scalar_int(f.value.type())) {
-            ModulusRemainder mod_rem = modulus_remainder(f.value, alignment_info);
-            if (mod_rem.modulus > 1) {
-                alignment_info.push(op->name, mod_rem);
-                f.value_alignment_tracked = true;
-            }
-            if (value_bounds.min_defined || value_bounds.max_defined) {
-                bounds_info.push(op->name, value_bounds);
+            if (value_bounds.min_defined || value_bounds.max_defined || value_bounds.alignment.modulus != 1) {
+                bounds_and_alignment_info.push(op->name, value_bounds);
                 f.value_bounds_tracked = true;
             }
         }
@@ -192,31 +221,36 @@ Body Simplify::simplify_let(const LetOrLetStmt *op, ConstBounds *bounds) {
 
     result = mutate_let_body(result, bounds);
 
+    // TODO: var_info and vars_used are pretty redundant; however, at the time
+    // of writing, both cover cases that the other does not:
+    // - var_info prevents duplicate lets from being generated, even
+    //   from different Frame objects.
+    // - vars_used avoids dead lets being generated in cases where vars are
+    //   seen as used by var_info, and then later removed.
+    std::map<std::string, int> vars_used;
+    count_var_uses(result, vars_used);
+
     for (auto it = frames.rbegin(); it != frames.rend(); it++) {
-        if (it->value_alignment_tracked) {
-            alignment_info.pop(it->op->name);
-        }
         if (it->value_bounds_tracked) {
-            bounds_info.pop(it->op->name);
-        }
-        if (it->new_value_alignment_tracked) {
-            alignment_info.pop(it->new_name);
+            bounds_and_alignment_info.pop(it->op->name);
         }
         if (it->new_value_bounds_tracked) {
-            bounds_info.pop(it->new_name);
+            bounds_and_alignment_info.pop(it->new_name);
         }
 
         VarInfo info = var_info.get(it->op->name);
         var_info.pop(it->op->name);
 
-        if (it->new_value.defined() && info.new_uses > 0) {
+        if (it->new_value.defined() && (info.new_uses > 0 && vars_used.count(it->new_name) > 0)) {
             // The new name/value may be used
             result = LetOrLetStmt::make(it->new_name, it->new_value, result);
+            count_var_uses(it->new_value, vars_used);
         }
 
-        if (info.old_uses > 0 || !remove_dead_lets) {
+        if (!remove_dead_lets || (info.old_uses > 0 && vars_used.count(it->op->name) > 0)) {
             // The old name is still in use. We'd better keep it as well.
             result = LetOrLetStmt::make(it->op->name, it->value, result);
+            count_var_uses(it->value, vars_used);
         }
 
         const LetOrLetStmt *new_op = result.template as<LetOrLetStmt>();
@@ -231,7 +265,7 @@ Body Simplify::simplify_let(const LetOrLetStmt *op, ConstBounds *bounds) {
     return result;
 }
 
-Expr Simplify::visit(const Let *op, ConstBounds *bounds) {
+Expr Simplify::visit(const Let *op, ExprInfo *bounds) {
     return simplify_let<Let, Expr>(op, bounds);
 }
 
@@ -239,5 +273,5 @@ Stmt Simplify::visit(const LetStmt *op) {
     return simplify_let<LetStmt, Stmt>(op, nullptr);
 }
 
-}
-}
+}  // namespace Internal
+}  // namespace Halide

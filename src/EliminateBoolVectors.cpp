@@ -6,9 +6,9 @@
 namespace Halide {
 namespace Internal {
 
-class EliminateBoolVectors : public IRMutator2 {
+class EliminateBoolVectors : public IRMutator {
 private:
-    using IRMutator2::visit;
+    using IRMutator::visit;
 
     Scope<Type> lets;
 
@@ -20,8 +20,8 @@ private:
         }
     }
 
-    template <typename T>
-    Expr visit_comparison(const T* op) {
+    template<typename T>
+    Expr visit_comparison(const T *op) {
         Expr a = mutate(op->a);
         Expr b = mutate(op->b);
         Type t = a.type();
@@ -56,15 +56,27 @@ private:
         return expr;
     }
 
-    Expr visit(const EQ *op) override { return visit_comparison(op); }
-    Expr visit(const NE *op) override { return visit_comparison(op); }
-    Expr visit(const LT *op) override { return visit_comparison(op); }
-    Expr visit(const LE *op) override { return visit_comparison(op); }
-    Expr visit(const GT *op) override { return visit_comparison(op); }
-    Expr visit(const GE *op) override { return visit_comparison(op); }
+    Expr visit(const EQ *op) override {
+        return visit_comparison(op);
+    }
+    Expr visit(const NE *op) override {
+        return visit_comparison(op);
+    }
+    Expr visit(const LT *op) override {
+        return visit_comparison(op);
+    }
+    Expr visit(const LE *op) override {
+        return visit_comparison(op);
+    }
+    Expr visit(const GT *op) override {
+        return visit_comparison(op);
+    }
+    Expr visit(const GE *op) override {
+        return visit_comparison(op);
+    }
 
-    template <typename T>
-    Expr visit_logical_binop(const T* op, const std::string& bitwise_op) {
+    template<typename T>
+    Expr visit_logical_binop(const T *op, Call::IntrinsicOp bitwise_op) {
         Expr a = mutate(op->a);
         Expr b = mutate(op->b);
 
@@ -118,12 +130,15 @@ private:
             // Cast to bool
             return mutate(op->value != make_zero(op->value.type()));
         } else {
-            return IRMutator2::visit(op);
+            return IRMutator::visit(op);
         }
     }
 
     Stmt visit(const Store *op) override {
-        Expr predicate = mutate(op->predicate);
+        Expr predicate = op->predicate;
+        if (!is_one(predicate)) {
+            predicate = mutate(predicate);
+        }
         Expr value = op->value;
         if (op->value.type().is_bool()) {
             Type ty = UInt(8, op->value.type().lanes());
@@ -137,8 +152,82 @@ private:
         if (predicate.same_as(op->predicate) && value.same_as(op->value) && index.same_as(op->index)) {
             return op;
         } else {
-            return Store::make(op->name, value, index, op->param, predicate);
+            return Store::make(op->name, value, index, op->param, predicate, op->alignment);
         }
+    }
+
+    Expr visit(const Load *op) override {
+        Expr predicate = op->predicate;
+        if (!is_one(predicate)) {
+            predicate = mutate(predicate);
+        }
+        Expr index = mutate(op->index);
+        if (predicate.same_as(op->predicate) && index.same_as(op->index)) {
+            return op;
+        } else {
+            return Load::make(op->type, op->name, std::move(index),
+                              op->image, op->param, std::move(predicate),
+                              op->alignment);
+        }
+    }
+
+    // Assuming that a and b should have the same scalar type and they might have
+    // been boolean vectors converted to integer vectors, cast the masks to be the
+    // same type. This is necessary in the case of a select or Call::if_then_else, e.g.:
+    //
+    //    Expr a = float_expr1() < float_expr2();  // promoted to int32xN
+    //    Expr b = uint8_expr1() < uint8_expr2();  // promoted to int8xN
+    //    Expr c = select(a < b, a, b);            // whoops
+    static void unify_bool_vector_types(Expr &a, Expr &b) {
+        if (a.type().bits() != b.type().bits() &&
+            a.type().lanes() == b.type().lanes() &&
+            a.type().is_int() && b.type().is_int()) {
+            if (a.type().bits() > b.type().bits()) {
+                b = Call::make(a.type(), Call::cast_mask, {b}, Call::PureIntrinsic);
+            } else {
+                a = Call::make(b.type(), Call::cast_mask, {a}, Call::PureIntrinsic);
+            }
+        }
+    }
+
+    Expr visit(const Call *op) override {
+        if (op->is_intrinsic(Call::if_then_else)) {
+            internal_assert(op->args.size() == 3);
+            if (op->args[0].type().is_vector()) {
+                Expr cond = mutate(op->args[0]);
+                Expr true_value = mutate(op->args[1]);
+                Expr false_value = mutate(op->args[2]);
+                Type cond_ty = cond.type();
+
+                // If the condition is a vector, it should be a vector of ints.
+                internal_assert(cond_ty.code() == Type::Int);
+
+                // if_then_else_mask requires that all 3 operands have the same
+                // width.
+                unify_bool_vector_types(true_value, false_value);
+                internal_assert(true_value.type().bits() == false_value.type().bits());
+                if (true_value.type().bits() != cond_ty.bits()) {
+                    cond_ty = cond_ty.with_bits(true_value.type().bits());
+                    cond = Call::make(cond_ty, Call::cast_mask, {cond}, Call::PureIntrinsic);
+                }
+
+                return Call::make(true_value.type(), Call::if_then_else_mask, {cond, true_value, false_value}, Call::PureIntrinsic);
+            }
+        } else if (op->is_intrinsic(Call::require)) {
+            internal_assert(op->args.size() == 3);
+            if (op->args[0].type().is_vector()) {
+                Expr cond = mutate(op->args[0]);
+                Expr value = mutate(op->args[1]);
+                Expr message = mutate(op->args[2]);
+
+                // If the condition is a vector, it should be a vector of ints.
+                internal_assert(cond.type().code() == Type::Int);
+
+                return Call::make(value.type(), Call::require_mask, {cond, value, message}, Call::PureIntrinsic);
+            }
+        }
+
+        return IRMutator::visit(op);
     }
 
     Expr visit(const Select *op) override {
@@ -151,26 +240,9 @@ private:
             // ints.
             internal_assert(cond_ty.code() == Type::Int);
 
-            // If both true_value and false_value were originally boolean vectors,
-            // they might have been promoted to different-sized integer vectors
-            // depending on how they were calculated, e.g.
-            //
-            //    Expr a = float_expr1() < float_expr2();  // promoted to int32xN
-            //    Expr b = uint8_expr1() < uint8_expr2();  // promoted to int8xN
-            //    Expr c = select(a < b, a, b);            // whoops
-            //
-            if (true_value.type().bits() != false_value.type().bits() &&
-                true_value.type().lanes() == false_value.type().lanes() &&
-                true_value.type().is_int() && false_value.type().is_int()) {
-                if (true_value.type().bits() > false_value.type().bits()) {
-                    false_value = Call::make(true_value.type(), Call::cast_mask, {false_value}, Call::PureIntrinsic);
-                } else {
-                    true_value = Call::make(false_value.type(), Call::cast_mask, {true_value}, Call::PureIntrinsic);
-                }
-            }
-
             // select_mask requires that all 3 operands have the same
             // width.
+            unify_bool_vector_types(true_value, false_value);
             internal_assert(true_value.type().bits() == false_value.type().bits());
             if (true_value.type().bits() != cond_ty.bits()) {
                 cond_ty = cond_ty.with_bits(true_value.type().bits());
@@ -199,7 +271,7 @@ private:
     }
 
     Expr visit(const Shuffle *op) override {
-        Expr expr = IRMutator2::visit(op);
+        Expr expr = IRMutator::visit(op);
         if (op->is_extract_element() && op->type.is_bool()) {
             op = expr.as<Shuffle>();
             internal_assert(op);
@@ -210,7 +282,7 @@ private:
         return expr;
     }
 
-    template <typename NodeType, typename LetType>
+    template<typename NodeType, typename LetType>
     NodeType visit_let(const LetType *op) {
         Expr value = mutate(op->value);
 
@@ -234,8 +306,12 @@ private:
         }
     }
 
-    Expr visit(const Let *op) override { return visit_let<Expr>(op); }
-    Stmt visit(const LetStmt *op) override { return visit_let<Stmt>(op); }
+    Expr visit(const Let *op) override {
+        return visit_let<Expr>(op);
+    }
+    Stmt visit(const LetStmt *op) override {
+        return visit_let<Stmt>(op);
+    }
 };
 
 Stmt eliminate_bool_vectors(Stmt s) {

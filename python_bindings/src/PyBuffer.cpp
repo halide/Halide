@@ -32,6 +32,10 @@ std::ostream &operator<<(std::ostream &stream, const std::vector<halide_dimensio
 // Given a Buffer<>, return its shape in the form of a vector<halide_dimension_t>.
 // (Oddly, Buffer<> has no API to do this directly.)
 std::vector<halide_dimension_t> get_buffer_shape(const Buffer<> &b) {
+    if (!b.defined()) {
+        // Return an empty vector if the buffer is not defined.
+        return {};
+    }
     std::vector<halide_dimension_t> s;
     for (int i = 0; i < b.dimensions(); ++i) {
         s.push_back(b.raw_buffer()->dim[i]);
@@ -152,6 +156,12 @@ Type format_descriptor_to_type(const std::string &fd) {
 
     #undef HANDLE_BUFFER_TYPE
 
+    // The string 'l' corresponds to np.int_, which is essentially
+    // a C 'long'; return a 32 or 64 bit int as appropriate.
+    if (fd == "l") {
+      return sizeof(long) == 8 ? type_of<int64_t>() : type_of<int32_t>();
+    }
+
     throw py::value_error("Unsupported Buffer<> type.");
     return Type();
 }
@@ -225,7 +235,9 @@ class PyBuffer : public Buffer<> {
         std::vector<halide_dimension_t> dims;
         dims.reserve(info.ndim);
         for (int i = 0; i < info.ndim; i++) {
-            // TODO: check for ssize_t -> int32_t overflow
+            if (INT_MAX < info.shape[i] || INT_MAX < (info.strides[i] / t.bytes())) {
+                throw py::value_error("Out of range arguments to make_dim_vec.");
+            }
             dims.push_back({0, (int32_t) info.shape[i], (int32_t) (info.strides[i] / t.bytes())});
         }
         return dims;
@@ -303,6 +315,10 @@ void define_buffer(py::module &m) {
         .def(py::init([](Type type, const std::vector<int> &sizes, const std::string &name) -> Buffer<> {
             return Buffer<>(type, sizes, name);
         }), py::arg("type"), py::arg("sizes"), py::arg("name") = "")
+
+        .def(py::init([](Type type, const std::vector<int> &sizes, const std::vector<int> &storage_order, const std::string &name) -> Buffer<> {
+            return Buffer<>(type, sizes, storage_order, name);
+        }), py::arg("type"), py::arg("sizes"), py::arg("storage_order"), py::arg("name") = "")
 
         // Note that this exists solely to allow you to create a Buffer with a null host ptr;
         // this is necessary for some bounds-query operations (e.g. Func::infer_input_bounds).
@@ -419,10 +435,17 @@ void define_buffer(py::module &m) {
             b.transpose(d1, d2);
         }, py::arg("d1"), py::arg("d2"))
 
-        // Present in Runtime::Buffer but not Buffer
-        // .def("transposed", [](Buffer<> &b, int d1, int d2) -> Buffer<> {
-        //     return b.transposed(d1, d2);
-        // }, py::arg("d1"), py::arg("d2"))
+        .def("transposed", [](Buffer<> &b, int d1, int d2) -> Buffer<> {
+            return b.transposed(d1, d2);
+        }, py::arg("d1"), py::arg("d2"))
+
+        .def("transpose", [](Buffer<> &b, const std::vector<int> &order) -> void {
+            b.transpose(order);
+        }, py::arg("order"))
+
+        .def("transposed", [](Buffer<> &b, const std::vector<int> &order) -> Buffer<> {
+            return b.transposed(order);
+        }, py::arg("order"))
 
         .def("dim", [](Buffer<> &b, int dimension) -> BufferDimension {
             return b.dim(dimension);
@@ -512,7 +535,11 @@ void define_buffer(py::module &m) {
 
         .def("__repr__", [](const Buffer<> &b) -> std::string {
             std::ostringstream o;
-            o << "<halide.Buffer of type " << halide_type_to_string(b.type()) << " shape:" << get_buffer_shape(b) << ">";
+            if (b.defined()) {
+                o << "<halide.Buffer of type " << halide_type_to_string(b.type()) << " shape:" << get_buffer_shape(b) << ">";
+            } else {
+                o << "<undefined halide.Buffer>";
+            }
             return o.str();
         })
     ;

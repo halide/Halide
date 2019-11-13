@@ -5,6 +5,11 @@
 using namespace Halide;
 
 int main(int argc, char **argv) {
+    if (get_jit_target_from_environment().arch == Target::WebAssembly) {
+        printf("Skipping test for WebAssembly as it does not support async() yet.\n");
+        _halide_user_assert(0);
+    }
+
     const int kPrime1 = 7829;
     const int kPrime2 = 7919;
 

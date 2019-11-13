@@ -8,17 +8,18 @@
 
 namespace Halide {
 namespace Internal {
+namespace {
 
-using std::map;
 using std::string;
-using std::vector;
 
 class FindLastUse : public IRVisitor {
 public:
     string func;
     Stmt last_use;
 
-    FindLastUse(string s) : func(s) {}
+    FindLastUse(string s)
+        : func(s) {
+    }
 
 private:
     bool in_loop = false;
@@ -98,18 +99,24 @@ private:
             }
         }
     }
+
+    void visit(const Atomic *op) override {
+        if (op->mutex_name == func) {
+            last_use = containing_stmt;
+        }
+        IRVisitor::visit(op);
+    }
 };
 
-class InjectMarker : public IRMutator2 {
+class InjectMarker : public IRMutator {
 public:
     string func;
     Stmt last_use;
 
 private:
-
     bool injected = false;
 
-    using IRMutator2::visit;
+    using IRMutator::visit;
 
     Stmt inject_marker(Stmt s) {
         if (injected) return s;
@@ -134,11 +141,11 @@ private:
     }
 };
 
-class InjectEarlyFrees : public IRMutator2 {
-    using IRMutator2::visit;
+class InjectEarlyFrees : public IRMutator {
+    using IRMutator::visit;
 
     Stmt visit(const Allocate *alloc) override {
-        Stmt stmt = IRMutator2::visit(alloc);
+        Stmt stmt = IRMutator::visit(alloc);
         alloc = stmt.as<Allocate>();
         internal_assert(alloc);
 
@@ -157,9 +164,10 @@ class InjectEarlyFrees : public IRMutator2 {
                                   alloc->new_expr, alloc->free_function);
         }
         return stmt;
-
     }
 };
+
+}  // namespace
 
 Stmt inject_early_frees(Stmt s) {
     InjectEarlyFrees early_frees;

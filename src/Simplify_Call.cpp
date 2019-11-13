@@ -1,12 +1,79 @@
 #include "Simplify_Internal.h"
 
+#include "Simplify.h"
+
+#ifdef _MSC_VER
+#include <intrin.h>
+#endif
+
 namespace Halide {
 namespace Internal {
 
-using std::vector;
 using std::string;
+using std::vector;
 
-Expr Simplify::visit(const Call *op, ConstBounds *bounds) {
+namespace {
+
+// Consider moving these to (say) Util.h if we need them elsewhere.
+int popcount64(uint64_t x) {
+#ifdef _MSC_VER
+#if defined(_WIN64)
+    return __popcnt64(x);
+#else
+    return __popcnt((uint32_t)(x >> 32)) + __popcnt((uint32_t)(x & 0xffffffff));
+#endif
+#else
+    static_assert(sizeof(unsigned long long) >= sizeof(uint64_t), "");
+    return __builtin_popcountll(x);
+#endif
+}
+
+int clz64(uint64_t x) {
+    internal_assert(x != 0);
+#ifdef _MSC_VER
+    unsigned long r = 0;
+#if defined(_WIN64)
+    return _BitScanReverse64(&r, x) ? (63 - r) : 64;
+#else
+    if (_BitScanReverse(&r, (uint32_t)(x >> 32))) {
+        return (63 - (r + 32));
+    } else if (_BitScanReverse(&r, (uint32_t)(x & 0xffffffff))) {
+        return 63 - r;
+    } else {
+        return 64;
+    }
+#endif
+#else
+    static_assert(sizeof(unsigned long long) >= sizeof(uint64_t), "");
+    constexpr int offset = (sizeof(unsigned long long) - sizeof(uint64_t)) * 8;
+    return __builtin_clzll(x) + offset;
+#endif
+}
+
+int ctz64(uint64_t x) {
+    internal_assert(x != 0);
+#ifdef _MSC_VER
+    unsigned long r = 0;
+#if defined(_WIN64)
+    return _BitScanForward64(&r, x) ? r : 64;
+#else
+    if (_BitScanForward(&r, (uint32_t)(x & 0xffffffff))) {
+        return r;
+    } else if (_BitScanForward(&r, (uint32_t)(x >> 32))) {
+        return r + 32;
+    } else {
+        return 64;
+    }
+#endif
+#else
+    static_assert(sizeof(unsigned long long) >= sizeof(uint64_t), "");
+    return __builtin_ctzll(x);
+#endif
+}
+
+}  // namespace
+
+Expr Simplify::visit(const Call *op, ExprInfo *bounds) {
     // Calls implicitly depend on host, dev, mins, and strides of the buffer referenced
     if (op->call_type == Call::Image || op->call_type == Call::Halide) {
         found_buffer_reference(op->name, op->args.size());
@@ -20,6 +87,37 @@ Expr Simplify::visit(const Call *op, ConstBounds *bounds) {
         } else {
             return strict_float(arg);
         }
+    } else if (op->is_intrinsic(Call::popcount) ||
+               op->is_intrinsic(Call::count_leading_zeros) ||
+               op->is_intrinsic(Call::count_trailing_zeros)) {
+        Expr a = mutate(op->args[0], nullptr);
+
+        uint64_t ua = 0;
+        if (const_int(a, (int64_t *)(&ua)) || const_uint(a, &ua)) {
+            const int bits = op->type.bits();
+            const uint64_t mask = std::numeric_limits<uint64_t>::max() >> (64 - bits);
+            ua &= mask;
+            static_assert(sizeof(unsigned long long) >= sizeof(uint64_t), "");
+            int r = 0;
+            if (op->is_intrinsic(Call::popcount)) {
+                // popcount *is* well-defined for ua = 0
+                r = popcount64(ua);
+            } else if (op->is_intrinsic(Call::count_leading_zeros)) {
+                // clz64() is undefined for 0, but Halide's count_leading_zeros defines clz(0) = bits
+                r = ua == 0 ? bits : (clz64(ua) - (64 - bits));
+            } else /* if (op->is_intrinsic(Call::count_trailing_zeros)) */ {
+                // ctz64() is undefined for 0, but Halide's count_trailing_zeros defines clz(0) = bits
+                r = ua == 0 ? bits : (ctz64(ua));
+            }
+            return make_const(op->type, r);
+        }
+
+        if (a.same_as(op->args[0])) {
+            return op;
+        } else {
+            return Call::make(op->type, op->name, {std::move(a)}, Internal::Call::PureIntrinsic);
+        }
+
     } else if (op->is_intrinsic(Call::shift_left) ||
                op->is_intrinsic(Call::shift_right)) {
         Expr a = mutate(op->args[0], nullptr);
@@ -29,24 +127,43 @@ Expr Simplify::visit(const Call *op, ConstBounds *bounds) {
             return a;
         }
 
-        int64_t ib = 0;
-        if (const_int(b, &ib) || const_uint(b, (uint64_t *)(&ib))) {
-            Type t = op->type;
+        const Type t = op->type;
 
-            bool shift_left = op->is_intrinsic(Call::shift_left);
-            if (t.is_int() && ib < 0) {
-                shift_left = !shift_left;
-                ib = -ib;
+        uint64_t ub = 0;
+        int64_t sb = 0;
+        bool b_is_const_uint = const_uint(b, &ub);
+        bool b_is_const_int = const_int(b, &sb);
+        if (b_is_const_uint || b_is_const_int) {
+            if (b_is_const_int) {
+                ub = std::abs(sb);
             }
 
-            if (ib >= 0 && ib < std::min(t.bits(), 64) - 1) {
-                ib = 1LL << ib;
-                b = make_const(t, ib);
+            // Determine which direction to shift.
+            const bool b_is_pos = b_is_const_uint || (b_is_const_int && sb >= 0);
+            const bool b_is_neg = b_is_const_int && sb < 0;
+            const bool shift_left = ((op->is_intrinsic(Call::shift_left) && b_is_pos) ||
+                                     (op->is_intrinsic(Call::shift_right) && b_is_neg));
+            const bool shift_right = ((op->is_intrinsic(Call::shift_right) && b_is_pos) ||
+                                      (op->is_intrinsic(Call::shift_left) && b_is_neg));
 
+            // LLVM shl and shr instructions produce poison for
+            // shifts >= typesize, so we will follow suit in our simplifier.
+            user_assert(ub < (uint64_t)t.bits()) << "bitshift by a constant amount >= the type size is not legal in Halide.";
+            if (a.type().is_uint() || ub < ((uint64_t)t.bits() - 1)) {
+                b = make_const(t, ((int64_t)1LL) << ub);
                 if (shift_left) {
                     return mutate(Mul::make(a, b), bounds);
-                } else {
+                } else if (shift_right) {
                     return mutate(Div::make(a, b), bounds);
+                }
+            } else {
+                // For signed types, (1 << ub) will overflow into the sign bit while
+                // (-32768 >> ub) propagates the sign bit, making decomposition
+                // into mul or div problematic, so just special-case them here.
+                if (shift_left) {
+                    return mutate(select((a & 1) != 0, make_const(t, ((int64_t)1LL) << ub), make_zero(t)), bounds);
+                } else if (shift_right) {
+                    return mutate(select(a < 0, make_const(t, -1), make_zero(t)), bounds);
                 }
             }
         }
@@ -71,7 +188,7 @@ Expr Simplify::visit(const Call *op, ConstBounds *bounds) {
             return make_const(op->type, ia & ib);
         } else if (const_uint(a, &ua) &&
                    const_uint(b, &ub)) {
-            return make_const(op->type, ua & ub) ;
+            return make_const(op->type, ua & ub);
         } else if (const_int(b, &ib) &&
                    !b.type().is_max(ib) &&
                    is_const_power_of_two_integer(make_const(a.type(), ib + 1), &bits)) {
@@ -118,6 +235,23 @@ Expr Simplify::visit(const Call *op, ConstBounds *bounds) {
         } else {
             return ~a;
         }
+    } else if (op->is_intrinsic(Call::bitwise_xor)) {
+        Expr a = mutate(op->args[0], nullptr);
+        Expr b = mutate(op->args[1], nullptr);
+
+        int64_t ia, ib;
+        uint64_t ua, ub;
+        if (const_int(a, &ia) &&
+            const_int(b, &ib)) {
+            return make_const(op->type, ia ^ ib);
+        } else if (const_uint(a, &ua) &&
+                   const_uint(b, &ub)) {
+            return make_const(op->type, ua ^ ub);
+        } else if (a.same_as(op->args[0]) && b.same_as(op->args[1])) {
+            return op;
+        } else {
+            return a ^ b;
+        }
     } else if (op->is_intrinsic(Call::reinterpret)) {
         Expr a = mutate(op->args[0], nullptr);
 
@@ -139,7 +273,7 @@ Expr Simplify::visit(const Call *op, ConstBounds *bounds) {
         }
     } else if (op->is_intrinsic(Call::abs)) {
         // Constant evaluate abs(x).
-        ConstBounds a_bounds;
+        ExprInfo a_bounds;
         Expr a = mutate(op->args[0], &a_bounds);
 
         Type ta = a.type();
@@ -167,12 +301,63 @@ Expr Simplify::visit(const Call *op, ConstBounds *bounds) {
         } else {
             return abs(a);
         }
+    } else if (op->is_intrinsic(Call::absd)) {
+        // Constant evaluate absd(a, b).
+        ExprInfo a_bounds, b_bounds;
+        Expr a = mutate(op->args[0], &a_bounds);
+        Expr b = mutate(op->args[1], &b_bounds);
+
+        Type ta = a.type();
+        // absd() should enforce identical types for a and b when the node is created
+        internal_assert(ta == b.type());
+
+        int64_t ia = 0, ib = 0;
+        uint64_t ua = 0, ub = 0;
+        double fa = 0, fb = 0;
+        if (ta.is_int() && const_int(a, &ia) && const_int(b, &ib)) {
+            // Note that absd(int, int) always produces a uint result
+            internal_assert(op->type.is_uint());
+            const uint64_t d = ia > ib ? (uint64_t)(ia - ib) : (uint64_t)(ib - ia);
+            return make_const(op->type, d);
+        } else if (ta.is_uint() && const_uint(a, &ua) && const_uint(b, &ub)) {
+            const uint64_t d = ua > ub ? ua - ub : ub - ua;
+            return make_const(op->type, d);
+        } else if (const_float(a, &fa) && const_float(b, &fb)) {
+            const double d = fa > fb ? fa - fb : fb - fa;
+            return make_const(op->type, d);
+        } else if (a.same_as(op->args[0]) && b.same_as(op->args[1])) {
+            return op;
+        } else {
+            return absd(a, b);
+        }
     } else if (op->call_type == Call::PureExtern &&
-               op->name == "is_nan_f32") {
+               (op->name == "is_nan_f16" || op->name == "is_nan_f32" || op->name == "is_nan_f64")) {
         Expr arg = mutate(op->args[0], nullptr);
         double f = 0.0;
         if (const_float(arg, &f)) {
-            return std::isnan(f);
+            return make_bool(std::isnan(f));
+        } else if (arg.same_as(op->args[0])) {
+            return op;
+        } else {
+            return Call::make(op->type, op->name, {arg}, op->call_type);
+        }
+    } else if (op->call_type == Call::PureExtern &&
+               (op->name == "is_inf_f16" || op->name == "is_inf_f32" || op->name == "is_inf_f64")) {
+        Expr arg = mutate(op->args[0], nullptr);
+        double f = 0.0;
+        if (const_float(arg, &f)) {
+            return make_bool(std::isinf(f));
+        } else if (arg.same_as(op->args[0])) {
+            return op;
+        } else {
+            return Call::make(op->type, op->name, {arg}, op->call_type);
+        }
+    } else if (op->call_type == Call::PureExtern &&
+               (op->name == "is_finite_f16" || op->name == "is_finite_f32" || op->name == "is_finite_f64")) {
+        Expr arg = mutate(op->args[0], nullptr);
+        double f = 0.0;
+        if (const_float(arg, &f)) {
+            return make_bool(std::isfinite(f));
         } else if (arg.same_as(op->args[0])) {
             return op;
         } else {
@@ -189,12 +374,12 @@ Expr Simplify::visit(const Call *op, ConstBounds *bounds) {
                 changed = true;
             }
             const StringImm *string_imm = arg.as<StringImm>();
-            const IntImm    *int_imm    = arg.as<IntImm>();
-            const FloatImm  *float_imm  = arg.as<FloatImm>();
+            const IntImm *int_imm = arg.as<IntImm>();
+            const FloatImm *float_imm = arg.as<FloatImm>();
             // We use snprintf here rather than stringstreams,
             // because the runtime's float printing is guaranteed
             // to match snprintf.
-            char buf[64]; // Large enough to hold the biggest float literal.
+            char buf[64];  // Large enough to hold the biggest float literal.
             if (last && string_imm) {
                 new_args.back() = last->value + string_imm->value;
                 changed = true;
@@ -233,7 +418,7 @@ Expr Simplify::visit(const Call *op, ConstBounds *bounds) {
         Expr arg = mutate(op->args[0], nullptr);
 
         if (const double *f = as_const_float(arg)) {
-            return FloatImm::make(arg.type(), std::sqrt(*f));
+            return make_const(arg.type(), std::sqrt(*f));
         } else if (!arg.same_as(op->args[0])) {
             return Call::make(op->type, op->name, {arg}, op->call_type);
         } else {
@@ -244,7 +429,7 @@ Expr Simplify::visit(const Call *op, ConstBounds *bounds) {
         Expr arg = mutate(op->args[0], nullptr);
 
         if (const double *f = as_const_float(arg)) {
-            return FloatImm::make(arg.type(), std::log(*f));
+            return make_const(arg.type(), std::log(*f));
         } else if (!arg.same_as(op->args[0])) {
             return Call::make(op->type, op->name, {arg}, op->call_type);
         } else {
@@ -255,7 +440,7 @@ Expr Simplify::visit(const Call *op, ConstBounds *bounds) {
         Expr arg = mutate(op->args[0], nullptr);
 
         if (const double *f = as_const_float(arg)) {
-            return FloatImm::make(arg.type(), std::exp(*f));
+            return make_const(arg.type(), std::exp(*f));
         } else if (!arg.same_as(op->args[0])) {
             return Call::make(op->type, op->name, {arg}, op->call_type);
         } else {
@@ -269,7 +454,7 @@ Expr Simplify::visit(const Call *op, ConstBounds *bounds) {
         const double *f0 = as_const_float(arg0);
         const double *f1 = as_const_float(arg1);
         if (f0 && f1) {
-            return FloatImm::make(arg0.type(), std::pow(*f0, *f1));
+            return make_const(arg0.type(), std::pow(*f0, *f1));
         } else if (!arg0.same_as(op->args[0]) || !arg1.same_as(op->args[1])) {
             return Call::make(op->type, op->name, {arg0, arg1}, op->call_type);
         } else {
@@ -284,13 +469,13 @@ Expr Simplify::visit(const Call *op, ConstBounds *bounds) {
         const Call *call = arg.as<Call>();
         if (const double *f = as_const_float(arg)) {
             if (op->name == "floor_f32") {
-                return FloatImm::make(arg.type(), std::floor(*f));
+                return make_const(arg.type(), std::floor(*f));
             } else if (op->name == "ceil_f32") {
-                return FloatImm::make(arg.type(), std::ceil(*f));
+                return make_const(arg.type(), std::ceil(*f));
             } else if (op->name == "round_f32") {
-                return FloatImm::make(arg.type(), std::nearbyint(*f));
+                return make_const(arg.type(), std::nearbyint(*f));
             } else if (op->name == "trunc_f32") {
-                return FloatImm::make(arg.type(), (*f < 0 ? std::ceil(*f) : std::floor(*f)));
+                return make_const(arg.type(), (*f < 0 ? std::ceil(*f) : std::floor(*f)));
             } else {
                 return op;
             }
@@ -309,7 +494,7 @@ Expr Simplify::visit(const Call *op, ConstBounds *bounds) {
         // Collapse the prefetched region into lower dimension whenever is possible.
         // TODO(psuriana): Deal with negative strides and overlaps.
 
-        internal_assert(op->args.size() % 2 == 0); // Format: {base, offset, extent0, min0, ...}
+        internal_assert(op->args.size() % 2 == 0);  // Format: {base, offset, extent0, min0, ...}
 
         vector<Expr> args(op->args);
         bool changed = false;
@@ -413,5 +598,5 @@ Expr Simplify::visit(const Call *op, ConstBounds *bounds) {
     }
 }
 
-}
-}
+}  // namespace Internal
+}  // namespace Halide

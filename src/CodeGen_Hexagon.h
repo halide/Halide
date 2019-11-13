@@ -16,16 +16,11 @@ public:
     /** Create a Hexagon code generator for the given Hexagon target. */
     CodeGen_Hexagon(Target);
 
-    std::unique_ptr<llvm::Module> compile(const Module &module) override;
-
 protected:
     void compile_func(const LoweredFunc &f,
                       const std::string &simple_name, const std::string &extern_name) override;
 
     void init_module() override;
-
-    Expr mulhi_shr(Expr a, Expr b, int shr) override;
-    Expr sorted_avg(Expr a, Expr b) override;
 
     std::string mcpu() const override;
     std::string mattrs() const override;
@@ -33,17 +28,17 @@ protected:
     bool use_soft_float_abi() const override;
     int native_vector_bits() const override;
 
-    llvm::Function *define_hvx_intrinsic(int intrin, Type ret_ty,
-                                         const std::string &name,
-                                         const std::vector<Type> &arg_types,
-                                         int flags);
     llvm::Function *define_hvx_intrinsic(llvm::Function *intrin, Type ret_ty,
                                          const std::string &name,
                                          std::vector<Type> arg_types,
                                          int flags);
 
-    int is_hvx_v62_or_later() {return (isa_version >= 62);}
-    int is_hvx_v65_or_later() {return (isa_version >= 65);}
+    int is_hvx_v62_or_later() {
+        return (isa_version >= 62);
+    }
+    int is_hvx_v65_or_later() {
+        return (isa_version >= 65);
+    }
 
     using CodeGen_Posix::visit;
 
@@ -71,7 +66,7 @@ protected:
     /** We ask for an extra vector on each allocation to enable fast
      * clamped ramp loads. */
     int allocation_padding(Type type) const override {
-        return CodeGen_Posix::allocation_padding(type) + native_vector_bits()/8;
+        return CodeGen_Posix::allocation_padding(type) + native_vector_bits() / 8;
     }
 
     /** Call an LLVM intrinsic, potentially casting the operands to

@@ -12,6 +12,7 @@
 
 #ifdef _MSC_VER
 #include <io.h>
+#include <fcntl.h>
 #ifndef STDIN_FILENO
 #define STDIN_FILENO 0
 #endif
@@ -1410,6 +1411,11 @@ int main(int argc, char **argv) {
     FlagProcessor flag_processor = [argc, argv](VizState *state) -> void {
         process_args(argc, argv, state);
     };
+
+#ifdef _MSC_VER
+    _setmode(STDIN_FILENO, _O_BINARY);
+    _setmode(STDOUT_FILENO, _O_BINARY);
+#endif
 
     run(ignore_trace_tags, flag_processor);
 }

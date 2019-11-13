@@ -3,7 +3,7 @@
 namespace Halide {
 namespace Internal {
 
-Expr Simplify::visit(const EQ *op, ConstBounds *bounds) {
+Expr Simplify::visit(const EQ *op, ExprInfo *bounds) {
     if (truths.count(op)) {
         return const_true(op->type.lanes());
     } else if (falsehoods.count(op)) {
@@ -23,11 +23,14 @@ Expr Simplify::visit(const EQ *op, ConstBounds *bounds) {
     if (op->a.type().is_bool()) {
         Expr a = mutate(op->a, nullptr);
         Expr b = mutate(op->b, nullptr);
+        const int lanes = op->type.lanes();
         auto rewrite = IRMatcher::rewriter(IRMatcher::eq(a, b), op->type);
         if (rewrite(x == 1, x)) {
             return rewrite.result;
         } else if (rewrite(x == 0, !x)) {
             return mutate(std::move(rewrite.result), bounds);
+        } else if (rewrite(x == x, const_true(lanes))) {
+            return rewrite.result;
         } else if (a.same_as(op->a) && b.same_as(op->b)) {
             return op;
         } else {
@@ -35,9 +38,14 @@ Expr Simplify::visit(const EQ *op, ConstBounds *bounds) {
         }
     }
 
-    ConstBounds delta_bounds;
+    ExprInfo delta_bounds;
     Expr delta = mutate(op->a - op->b, &delta_bounds);
     const int lanes = op->type.lanes();
+
+    // If the delta is 0, then it's just x == x
+    if (is_zero(delta)) {
+        return const_true(lanes);
+    }
 
     // Attempt to disprove using bounds analysis
     if (delta_bounds.min_defined && delta_bounds.min > 0) {
@@ -49,11 +57,8 @@ Expr Simplify::visit(const EQ *op, ConstBounds *bounds) {
     }
 
     // Attempt to disprove using modulus remainder analysis
-    if (no_overflow_scalar_int(delta.type())) {
-        ModulusRemainder mod_rem = modulus_remainder(delta, alignment_info);
-        if (mod_rem.remainder) {
-            return const_false();
-        }
+    if (delta_bounds.alignment.remainder != 0) {
+        return const_false(lanes);
     }
 
     auto rewrite = IRMatcher::rewriter(IRMatcher::eq(delta, 0), op->type, delta.type());
@@ -83,6 +88,7 @@ Expr Simplify::visit(const EQ *op, ConstBounds *bounds) {
     }
 
     if (rewrite(c0 == 0, fold(c0 == 0)) ||
+        rewrite((x - y) + c0 == 0, x == y + fold(-c0)) ||
         rewrite(x + c0 == 0, x == fold(-c0)) ||
         rewrite(c0 - x == 0, x == c0)) {
         return rewrite.result;
@@ -100,7 +106,7 @@ Expr Simplify::visit(const EQ *op, ConstBounds *bounds) {
 }
 
 // ne redirects to not eq
-Expr Simplify::visit(const NE *op, ConstBounds *bounds) {
+Expr Simplify::visit(const NE *op, ExprInfo *bounds) {
     if (!may_simplify(op->a.type())) {
         Expr a = mutate(op->a, nullptr);
         Expr b = mutate(op->b, nullptr);
@@ -120,5 +126,5 @@ Expr Simplify::visit(const NE *op, ConstBounds *bounds) {
     return mutated;
 }
 
-}
-}
+}  // namespace Internal
+}  // namespace Halide

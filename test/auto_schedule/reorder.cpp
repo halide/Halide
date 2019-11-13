@@ -25,7 +25,7 @@ double run_test_1(bool auto_schedule) {
 
     if (auto_schedule) {
         // Provide estimates on the pipeline output
-        r.estimate(x, 0, 1024).estimate(y, 0, 1024).estimate(c, 0, 3);
+        r.set_estimates({{0, 1024}, {0, 1024}, {0, 3}});
         // Auto-schedule the pipeline
         p.auto_schedule(target);
     } else {
@@ -77,10 +77,7 @@ double run_test_2(bool auto_schedule) {
 
     if (auto_schedule) {
         // Provide estimates on the pipeline output
-        diff.estimate(x, 0, left_im.width()).
-             estimate(y, 0, left_im.height()).
-             estimate(z, 0, 32).
-             estimate(c, 0, 3);
+        diff.set_estimates({{0, left_im.width()}, {0, left_im.height()}, {0, 32}, {0, 3}});
         // Auto-schedule the pipeline
         p.auto_schedule(target);
     } else {
@@ -119,7 +116,7 @@ double run_test_3(bool auto_schedule) {
 
     if (auto_schedule) {
         // Provide estimates on the pipeline output
-        r.estimate(x, 0, 1024).estimate(y, 0, 1024).estimate(c, 0, 3);
+        r.set_estimates({{0, 1024}, {0, 1024}, {0, 3}});
         // Auto-schedule the pipeline
         p.auto_schedule(target);
     } else {
@@ -140,7 +137,7 @@ double run_test_3(bool auto_schedule) {
 }
 
 int main(int argc, char **argv) {
-    const double slowdown_factor = 5.0;
+    const double slowdown_factor = 6.0;
 
     {
         std::cout << "Test 1:" << std::endl;

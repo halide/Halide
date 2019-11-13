@@ -89,7 +89,7 @@ __attribute__((always_inline)) bool cas_strong_sequentially_consistent_helper(T 
  __attribute__((always_inline)) bool atomic_cas_strong_release_relaxed(uintptr_t *addr, uintptr_t *expected, uintptr_t *desired) {
      return cas_strong_sequentially_consistent_helper(addr, expected, desired);
 }
-      
+
 __attribute__((always_inline)) bool atomic_cas_weak_release_relaxed(uintptr_t *addr, uintptr_t *expected, uintptr_t *desired) {
      return cas_strong_sequentially_consistent_helper(addr, expected, desired);
 }
@@ -154,7 +154,7 @@ __attribute__((always_inline))  T atomic_fetch_add_acquire_release(T *addr, T va
 __attribute__((always_inline)) bool atomic_cas_strong_release_relaxed(uintptr_t *addr, uintptr_t *expected, uintptr_t *desired) {
     return __atomic_compare_exchange(addr, expected, desired, false, __ATOMIC_RELEASE, __ATOMIC_RELAXED);
 }
-      
+
 template <typename T>
 __attribute__((always_inline)) bool atomic_cas_weak_relacq_relaxed(T *addr, T *expected, T *desired) {
     return __atomic_compare_exchange(addr, expected, desired, true, __ATOMIC_ACQ_REL, __ATOMIC_RELAXED);
@@ -206,7 +206,7 @@ __attribute__((always_inline)) void atomic_thread_fence_acquire() {
 #endif
 
 }
- 
+
 class spin_control {
     int spin_count;
 
@@ -378,9 +378,7 @@ WEAK void word_lock::unlock_full() {
         int times_through = 0;
         while (tail == NULL) {
             word_lock_queue_data *next = current->next;
-            if (next == NULL) {
-                abort();
-            }
+            halide_assert(NULL, next != NULL);
             next->prev = current;
             current = next;
             tail = current->tail;
@@ -451,7 +449,7 @@ struct queue_data {
 
 struct hash_bucket {
     word_lock mutex;
-    
+
     queue_data *head; // Is this queue_data or thread_data?
     queue_data *tail; // Is this queue_data or thread_data?
 };
@@ -465,7 +463,7 @@ struct hash_table {
     hash_bucket buckets[MAX_THREADS * LOAD_FACTOR];
 };
 WEAK char table_storage[sizeof(hash_table)];
-#define table (*(hash_table *)table_storage) 
+#define table (*(hash_table *)table_storage)
 
 inline void check_hash(uintptr_t hash) {
     halide_assert(NULL, hash < sizeof(table.buckets)/sizeof(table.buckets[0]));
@@ -862,7 +860,7 @@ class fast_mutex {
                 atomic_load_relaxed(&state, &expected);
                 continue;
             }
-            
+
             // Mark mutex as having parked threads if not already done.
             if ((expected & parked_bit) == 0) {
                 uintptr_t desired = expected | parked_bit;
@@ -1138,6 +1136,47 @@ WEAK void halide_cond_wait(struct halide_cond *cond, struct halide_mutex *mutex)
     Halide::Runtime::Internal::Synchronization::fast_mutex *fast_mutex =
         (Halide::Runtime::Internal::Synchronization::fast_mutex *)mutex;
    fast_cond->wait(fast_mutex);
+}
+
+// Actual definition of the mutex array.
+struct halide_mutex_array {
+    struct halide_mutex *array;
+};
+
+WEAK halide_mutex_array* halide_mutex_array_create(int sz) {
+    // TODO: If sz is huge, we should probably hash it down to something smaller 
+    // in the accessors below. Check for deadlocks before doing so.
+    halide_mutex_array *array = (halide_mutex_array*)halide_malloc(
+        NULL, sizeof(halide_mutex_array));
+    if (array == NULL) {
+        // Will result in a failed assertion and a call to halide_error.
+        return NULL;
+    }
+    array->array = (halide_mutex*)halide_malloc(
+        NULL, sz * sizeof(halide_mutex));
+    if (array->array == NULL) {
+        halide_free(NULL, array);
+        // Will result in a failed assertion and a call to halide_error.
+        return NULL;
+    }
+    memset(array->array, 0, sz * sizeof(halide_mutex));
+    return array;
+}
+
+WEAK void halide_mutex_array_destroy(void *user_context, void *array) {
+    struct halide_mutex_array *arr_ptr = (struct halide_mutex_array *)array;
+    halide_free(user_context, arr_ptr->array);
+    halide_free(user_context, arr_ptr);
+}
+
+WEAK int halide_mutex_array_lock(struct halide_mutex_array *array, int entry) {
+    halide_mutex_lock(&array->array[entry]);
+    return 0;
+}
+
+WEAK int halide_mutex_array_unlock(struct halide_mutex_array *array, int entry) {
+    halide_mutex_unlock(&array->array[entry]);
+    return 0;
 }
 
 }

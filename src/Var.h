@@ -16,6 +16,7 @@ namespace Halide {
  * Int(32). */
 class Var {
     std::string _name;
+
 public:
     /** Construct a Var with the given name */
     Var(const std::string &n);
@@ -24,10 +25,14 @@ public:
     Var();
 
     /** Get the name of a Var */
-    const std::string &name() const {return _name;}
+    const std::string &name() const {
+        return _name;
+    }
 
     /** Test if two Vars are the same. This simply compares the names. */
-    bool same_as(const Var &other) const {return _name == other._name;}
+    bool same_as(const Var &other) const {
+        return _name == other._name;
+    }
 
     /** Implicit var constructor. Implicit variables are injected
      * automatically into a function call if the number of arguments
@@ -149,30 +154,45 @@ public:
         return Internal::Variable::make(Int(32), name());
     }
 
-    /** Vars to use for scheduling producer/consumer pairs on the gpu. Deprecated. */
-    // @{
-    HALIDE_ATTRIBUTE_DEPRECATED("Var::gpu_blocks() is deprecated.")
-    static Var gpu_blocks() {
-        return Var("__deprecated_block_id_x");
-    }
-    HALIDE_ATTRIBUTE_DEPRECATED("Var::gpu_threads() is deprecated.")
-    static Var gpu_threads() {
-        return Var("__deprecated_thread_id_x");
-    }
-    // @}
-
     /** A Var that represents the location outside the outermost loop. */
     static Var outermost() {
         return Var("__outermost");
     }
 };
 
-/** A placeholder variable for infered arguments. See \ref Var::implicit */
-HALIDE_EXPORT extern Var _;
+template<int N = -1>
+struct ImplicitVar {
+    Var to_var() const {
+        if (N >= 0) {
+            return Var::implicit(N);
+        } else {
+            return Var("_");
+        }
+    }
+
+    operator Var() const {
+        return to_var();
+    }
+    operator Expr() const {
+        return to_var();
+    }
+};
+
+/** A placeholder variable for inferred arguments. See \ref Var::implicit */
+static constexpr ImplicitVar<> _;
 
 /** The first ten implicit Vars for use in scheduling. See \ref Var::implicit */
 // @{
-HALIDE_EXPORT extern Var _0, _1, _2, _3, _4, _5, _6, _7, _8, _9;
+static constexpr ImplicitVar<0> _0;
+static constexpr ImplicitVar<1> _1;
+static constexpr ImplicitVar<2> _2;
+static constexpr ImplicitVar<3> _3;
+static constexpr ImplicitVar<4> _4;
+static constexpr ImplicitVar<5> _5;
+static constexpr ImplicitVar<6> _6;
+static constexpr ImplicitVar<7> _7;
+static constexpr ImplicitVar<8> _8;
+static constexpr ImplicitVar<9> _9;
 // @}
 
 namespace Internal {

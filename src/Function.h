@@ -22,39 +22,66 @@ namespace Halide {
 /** An argument to an extern-defined Func. May be a Function, Buffer,
  * ImageParam or Expr. */
 struct ExternFuncArgument {
-    enum ArgType {UndefinedArg = 0, FuncArg, BufferArg, ExprArg, ImageParamArg};
+    enum ArgType { UndefinedArg = 0,
+                   FuncArg,
+                   BufferArg,
+                   ExprArg,
+                   ImageParamArg };
     ArgType arg_type;
     Internal::FunctionPtr func;
     Buffer<> buffer;
     Expr expr;
     Internal::Parameter image_param;
 
-    ExternFuncArgument(Internal::FunctionPtr f): arg_type(FuncArg), func(f) {}
+    ExternFuncArgument(Internal::FunctionPtr f)
+        : arg_type(FuncArg), func(f) {
+    }
 
     template<typename T>
-    ExternFuncArgument(Buffer<T> b): arg_type(BufferArg), buffer(b) {}
-    ExternFuncArgument(Expr e): arg_type(ExprArg), expr(e) {}
-    ExternFuncArgument(int e): arg_type(ExprArg), expr(e) {}
-    ExternFuncArgument(float e): arg_type(ExprArg), expr(e) {}
+    ExternFuncArgument(Buffer<T> b)
+        : arg_type(BufferArg), buffer(b) {
+    }
+    ExternFuncArgument(Expr e)
+        : arg_type(ExprArg), expr(e) {
+    }
+    ExternFuncArgument(int e)
+        : arg_type(ExprArg), expr(e) {
+    }
+    ExternFuncArgument(float e)
+        : arg_type(ExprArg), expr(e) {
+    }
 
-    ExternFuncArgument(Internal::Parameter p) : arg_type(ImageParamArg), image_param(p) {
+    ExternFuncArgument(Internal::Parameter p)
+        : arg_type(ImageParamArg), image_param(p) {
         // Scalar params come in via the Expr constructor.
         internal_assert(p.is_buffer());
     }
-    ExternFuncArgument() : arg_type(UndefinedArg) {}
+    ExternFuncArgument()
+        : arg_type(UndefinedArg) {
+    }
 
-    bool is_func() const {return arg_type == FuncArg;}
-    bool is_expr() const {return arg_type == ExprArg;}
-    bool is_buffer() const {return arg_type == BufferArg;}
-    bool is_image_param() const {return arg_type == ImageParamArg;}
-    bool defined() const {return arg_type != UndefinedArg;}
+    bool is_func() const {
+        return arg_type == FuncArg;
+    }
+    bool is_expr() const {
+        return arg_type == ExprArg;
+    }
+    bool is_buffer() const {
+        return arg_type == BufferArg;
+    }
+    bool is_image_param() const {
+        return arg_type == ImageParamArg;
+    }
+    bool defined() const {
+        return arg_type != UndefinedArg;
+    }
 };
 
 /** An enum to specify calling convention for extern stages. */
 enum class NameMangling {
-    Default,   ///< Match whatever is specified in the Target
-    C,         ///< No name mangling
-    CPlusPlus, ///< C++ name mangling
+    Default,    ///< Match whatever is specified in the Target
+    C,          ///< No name mangling
+    CPlusPlus,  ///< C++ name mangling
 };
 
 namespace Internal {
@@ -107,7 +134,7 @@ public:
     // @{
     void deep_copy(FunctionPtr copy, std::map<FunctionPtr, FunctionPtr> &copied_map) const;
     void deep_copy(std::string name, FunctionPtr copy,
-                          std::map<FunctionPtr, FunctionPtr> &copied_map) const;
+                   std::map<FunctionPtr, FunctionPtr> &copied_map) const;
     // @}
 
     /** Add a pure definition to this function. It may not already
@@ -132,7 +159,7 @@ public:
 
     /** Accept a mutator to mutator all of the definitions and
      * arguments of this function. */
-    void mutate(IRMutator2 *mutator);
+    void mutate(IRMutator *mutator);
 
     /** Get the name of the function. */
     const std::string &name() const;
@@ -219,10 +246,6 @@ public:
     Expr make_call_to_extern_definition(const std::vector<Expr> &args,
                                         const Target &t) const;
 
-    /** Check if the extern function being called expects the legacy
-     * buffer_t type. */
-    bool extern_definition_uses_old_buffer_t() const;
-
     /** Get the proxy Expr for the extern stage. This is an expression
      * known to have the same data access pattern as the extern
      * stage. It must touch at least all of the memory that the extern
@@ -239,9 +262,7 @@ public:
                        const std::vector<ExternFuncArgument> &args,
                        const std::vector<Type> &types,
                        const std::vector<std::string> &dims,
-                       NameMangling mangling,
-                       DeviceAPI device_api,
-                       bool uses_old_buffer_t);
+                       NameMangling mangling, DeviceAPI device_api);
 
     /** Retrive the arguments of the extern definition. */
     // @{

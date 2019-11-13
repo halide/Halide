@@ -1,7 +1,7 @@
+#include "Halide.h"
+
 #include <stdio.h>
 #include <iostream>
-
-#include "Halide.h"
 
 #include "test/common/halide_test_dirs.h"
 
@@ -37,23 +37,25 @@ int main(int argc, char **argv) {
 
     f(x, y) = buffer_u8(x, y) + int_param8;
 
-    Target t = get_target_from_environment();
-    t.set_feature(Target::CPlusPlusMangling);
+    Target target = get_target_from_environment().with_feature(Target::CPlusPlusMangling);
 
-    std::string pyext_filename = Internal::get_test_tmp_dir() + "halide_python.py.c";
-    std::string header_filename = Internal::get_test_tmp_dir() + "halide_python.h";
+    std::string pyext_filename = Internal::get_test_tmp_dir() + "halide_python.py.cpp";
     std::string c_filename = Internal::get_test_tmp_dir() + "halide_python.cc";
+    std::string function_name = "org::halide::halide_python::f";
 
-    f.compile_to_c(c_filename, params,
-                   "org::halide::halide_python::f", t);
-    f.compile_to_header(header_filename, params,
-                   "org::halide::halide_python::f", t);
-    f.compile_to_python_extension(pyext_filename, params,
-                   "org::halide::halide_python::f", t);
+    f.compile_to(
+        {
+            {Output::c_source, c_filename},
+            {Output::python_extension, pyext_filename}
+        },
+        params,
+        function_name,
+        target
+    );
 
-    Internal::assert_file_exists(header_filename);
     Internal::assert_file_exists(c_filename);
     Internal::assert_file_exists(pyext_filename);
 
-    exit(0);
+    printf("Success!\n");
+    return 0;
 }

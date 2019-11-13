@@ -14,10 +14,10 @@ using std::ostringstream;
 using std::string;
 using std::vector;
 
-class DebugToFile : public IRMutator2 {
+class DebugToFile : public IRMutator {
     const map<string, Function> &env;
 
-    using IRMutator2::visit;
+    using IRMutator::visit;
 
     Stmt visit(const Realize *op) override {
         map<string, Function>::const_iterator iter = env.find(op->name);
@@ -82,18 +82,20 @@ class DebugToFile : public IRMutator2 {
 
             return Realize::make(op->name, op->types, op->memory_type, op->bounds, op->condition, body);
         } else {
-            return IRMutator2::visit(op);
+            return IRMutator::visit(op);
         }
     }
 
 public:
-    DebugToFile(const map<string, Function> &e) : env(e) {}
+    DebugToFile(const map<string, Function> &e)
+        : env(e) {
+    }
 };
 
-class RemoveDummyRealizations : public IRMutator2 {
+class RemoveDummyRealizations : public IRMutator {
     const vector<Function> &outputs;
 
-    using IRMutator2::visit;
+    using IRMutator::visit;
 
     Stmt visit(const Realize *op) override {
         for (Function f : outputs) {
@@ -101,25 +103,53 @@ class RemoveDummyRealizations : public IRMutator2 {
                 return mutate(op->body);
             }
         }
-        return IRMutator2::visit(op);
+        return IRMutator::visit(op);
     }
 
 public:
-    RemoveDummyRealizations(const vector<Function> &o) : outputs(o) {}
+    RemoveDummyRealizations(const vector<Function> &o)
+        : outputs(o) {
+    }
+};
+
+class AddDummyRealizations : public IRMutator {
+    const vector<Function> &outputs;
+
+    using IRMutator::visit;
+
+    Stmt visit(const ProducerConsumer *op) override {
+        Stmt s = IRMutator::visit(op);
+        for (Function out : outputs) {
+            if (op->name == out.name()) {
+                std::vector<Range> output_bounds;
+                for (int i = 0; i < out.dimensions(); i++) {
+                    string dim = std::to_string(i);
+                    Expr min = Variable::make(Int(32), out.name() + ".min." + dim);
+                    Expr extent = Variable::make(Int(32), out.name() + ".extent." + dim);
+                    output_bounds.push_back(Range(min, extent));
+                }
+                return Realize::make(out.name(),
+                                     out.output_types(),
+                                     MemoryType::Auto,
+                                     output_bounds,
+                                     const_true(),
+                                     s);
+            }
+        }
+        return s;
+    }
+
+public:
+    AddDummyRealizations(const vector<Function> &o)
+        : outputs(o) {
+    }
 };
 
 Stmt debug_to_file(Stmt s, const vector<Function> &outputs, const map<string, Function> &env) {
-    // Temporarily wrap the statement in a realize node for the output functions
-    for (Function out : outputs) {
-        std::vector<Range> output_bounds;
-        for (int i = 0; i < out.dimensions(); i++) {
-            string dim = std::to_string(i);
-            Expr min    = Variable::make(Int(32), out.name() + ".min." + dim);
-            Expr extent = Variable::make(Int(32), out.name() + ".extent." + dim);
-            output_bounds.push_back(Range(min, extent));
-        }
-        s = Realize::make(out.name(), out.output_types(), MemoryType::Auto, output_bounds, const_true(), s);
-    }
+    // Temporarily wrap the produce nodes for the output functions in
+    // realize nodes so that we know when to write the debug outputs.
+    s = AddDummyRealizations(outputs).mutate(s);
+
     s = DebugToFile(env).mutate(s);
 
     // Remove the realize node we wrapped around the output

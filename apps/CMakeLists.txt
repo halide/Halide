@@ -7,6 +7,7 @@ if (MSVC)
     add_compile_options(/wd4244) # conversion from 'type1' to 'type2', possible loss of data.
 endif()
 
+add_subdirectory(autoscheduler)
 add_subdirectory(bilateral_grid)
 add_subdirectory(blur)
 add_subdirectory(c_backend)
