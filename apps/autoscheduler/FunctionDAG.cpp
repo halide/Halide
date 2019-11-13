@@ -587,6 +587,12 @@ FunctionDAG::FunctionDAG(const vector<Function> &outputs, const MachineParams &p
 
     int stage_count = 0;
 
+    FuncValueBounds func_value_bounds = compute_function_value_bounds(order, env);
+    for (auto &p : func_value_bounds) {
+        p.second.min = apply_param_estimates.mutate(p.second.min);
+        p.second.max = apply_param_estimates.mutate(p.second.max);
+    }
+
     for (size_t i = order.size(); i > 0; i--) {
         Function consumer = env[order[i-1]];
 
@@ -645,7 +651,7 @@ FunctionDAG::FunctionDAG(const vector<Function> &outputs, const MachineParams &p
             }
             for (int j = 0; j < consumer.dimensions(); j++) {
                 // The region computed always uses the full extent of the rvars
-                Interval in = bounds_of_expr_in_scope(def.args()[j], stage_scope_with_concrete_rvar_bounds);
+                Interval in = bounds_of_expr_in_scope(def.args()[j], stage_scope_with_concrete_rvar_bounds, func_value_bounds);
                 internal_assert(in.is_bounded())
                     << "Region computed of " << consumer.name()
                     << " is unbounded: [" << in.min << " " << in.max << "]\n";
@@ -877,12 +883,6 @@ FunctionDAG::FunctionDAG(const vector<Function> &outputs, const MachineParams &p
             stage.index = s;
 
             exprs = apply_param_estimates.mutate(exprs);
-
-            FuncValueBounds func_value_bounds = compute_function_value_bounds(order, env);
-            for (auto &p : func_value_bounds) {
-                p.second.min = apply_param_estimates.mutate(p.second.min);
-                p.second.max = apply_param_estimates.mutate(p.second.max);
-            }
 
             // For this stage scope we want symbolic bounds for the rvars
 
