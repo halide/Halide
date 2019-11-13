@@ -57,15 +57,18 @@ Expr Simplify::visit(const Mod *op, ExprInfo *bounds) {
         if (EVAL_IN_LAMBDA
             (rewrite(broadcast(x) % broadcast(y), broadcast(x % y, lanes)) ||
              (no_overflow_int(op->type) &&
+              #ifdef EXCLUDE_INVALID_ORDERING_RULES
               (rewrite((x * c0) % c1, (x * fold(c0 % c1)) % c1, c1 > 0 && (c0 >= c1 || c0 < 0)) ||
                rewrite((x + c0) % c1, (x + fold(c0 % c1)) % c1, c1 > 0 && (c0 >= c1 || c0 < 0)) ||
+               #endif
                rewrite((x * c0) % c1, (x % fold(c1/c0)) * c0, c0 > 0 && c1 % c0 == 0) ||
                rewrite((x * c0 + y) % c1, y % c1, c0 % c1 == 0) ||
                rewrite((y + x * c0) % c1, y % c1, c0 % c1 == 0) ||
                rewrite((x * c0 - y) % c1, (-y) % c1, c0 % c1 == 0) ||
                rewrite((y - x * c0) % c1, y % c1, c0 % c1 == 0) ||
+               #ifdef EXCLUDE_INVALID_ORDERING_RULES
                rewrite((x - y) % 2, (x + y) % 2) || // Addition and subtraction are the same modulo 2, because -1 == 1
-
+               #endif
                rewrite(ramp(x, c0) % broadcast(c1), broadcast(x, lanes) % c1, c0 % c1 == 0) ||
                rewrite(ramp(x, c0) % broadcast(c1), ramp(x % c1, c0, lanes),
                        // First and last lanes are the same when...

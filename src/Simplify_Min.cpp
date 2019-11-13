@@ -102,7 +102,9 @@ Expr Simplify::visit(const Min *op, ExprInfo *bounds) {
              rewrite(min(min(y, x), min(x, z)), min(min(y, z), x)) ||
              rewrite(min(min(x, y), min(z, x)), min(min(y, z), x)) ||
              rewrite(min(min(y, x), min(z, x)), min(min(y, z), x)) ||
+             #ifdef EXCLUDE_INVALID_ORDERING_RULES
              rewrite(min(min(x, y), min(z, w)), min(min(min(x, y), z), w)) ||
+             #endif
              rewrite(min(broadcast(x), broadcast(y)), broadcast(min(x, y), lanes)) ||
              rewrite(min(broadcast(x), ramp(y, z)), min(b, a)) ||
              rewrite(min(min(x, broadcast(y)), broadcast(z)), min(x, broadcast(min(y, z), lanes))) ||
@@ -115,8 +117,9 @@ Expr Simplify::visit(const Min *op, ExprInfo *bounds) {
              rewrite(min(min(x, c0), c1), min(x, fold(min(c0, c1)))) ||
 
              // Canonicalize a clamp
+             #ifdef EXCLUDE_INVALID_ORDERING_RULES
              rewrite(min(max(x, c0), c1), max(min(x, c1), c0), c0 <= c1) ||
-
+             #endif
              (no_overflow(op->type) &&
               (rewrite(min(min(x, y) + c0, x), min(x, y + c0), c0 > 0) ||
                rewrite(min(min(x, y) + c0, x), min(x, y) + c0, c0 < 0) ||

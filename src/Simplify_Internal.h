@@ -18,6 +18,8 @@
 #define LOG_EXPR_MUTATIONS 0
 #define LOG_STMT_MUTATIONS 0
 
+#define EXCLUDE_INVALID_ORDERING_RULES 0
+
 // On old compilers, some visitors would use large stack frames,
 // because they use expression templates that generate large numbers
 // of temporary objects when they are built and matched against. If we
