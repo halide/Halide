@@ -665,8 +665,8 @@ Stmt add_image_checks(Stmt s,
 
     // Checks for images go at the marker deposited by computation
     // bounds inference.
-    class Injector : public IRMutator2 {
-        using IRMutator2::visit;
+    class Injector : public IRMutator {
+        using IRMutator::visit;
 
         Stmt visit(const Block *op) override {
             const Evaluate *e = op->first.as<Evaluate>();
@@ -674,7 +674,7 @@ Stmt add_image_checks(Stmt s,
             if (c && c->is_intrinsic(Call::add_image_checks_marker)) {
                 return add_image_checks_inner(op->rest, outputs, t, order, env, fb);
             } else {
-                return IRMutator2::visit(op);
+                return IRMutator::visit(op);
             }
         }
 

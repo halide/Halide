@@ -542,8 +542,6 @@ struct Call : public ExprNode<Call> {
         popcount,
         prefetch,
         quiet_div,
-        quiet_div,
-        quiet_mod,
         quiet_mod,
         random,
         register_destructor,
