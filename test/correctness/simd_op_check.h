@@ -261,7 +261,6 @@ class SimdOpCheckTest {
     virtual void setup_images() {
         for (auto p : image_params) {
             p.reset();
-            p.set_host_alignment(128);
         }
     }
     virtual bool test_all() {
