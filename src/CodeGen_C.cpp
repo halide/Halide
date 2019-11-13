@@ -422,7 +422,7 @@ CodeGen_C::~CodeGen_C() {
 
 void CodeGen_C::add_common_macros(std::ostream &dest) {
     const char *macros = R"INLINE_CODE(
-// ll suffix in OpenCL is reserver for 128-bit integers.
+// ll suffix in OpenCL is reserved for 128-bit integers.
 #if defined __OPENCL_VERSION__
 #define ADD_INT64_T_SUFFIX(x) x##l
 #define ADD_UINT64_T_SUFFIX(x) x##ul
