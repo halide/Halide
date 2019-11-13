@@ -44,8 +44,10 @@ Expr Simplify::visit(const Add *op, ExprInfo *bounds) {
              rewrite(ramp(x, y) + broadcast(z), ramp(x + z, y, lanes)) ||
              rewrite(broadcast(x) + broadcast(y), broadcast(x + y, lanes)) ||
              rewrite(select(x, y, z) + select(x, w, u), select(x, y + w, z + u)) ||
+             #ifdef EXCLUDE_INVALID_ORDERING_RULES
              rewrite(select(x, c0, c1) + c2, select(x, fold(c0 + c2), fold(c1 + c2))) ||
              //             rewrite(select(x, y, c1) + c2, select(x, y + c2, fold(c1 + c2))) ||
+             #endif
              rewrite(select(x, c0, y) + c2, select(x, fold(c0 + c2), y + c2)) ||
 
              rewrite((select(x, y, z) + w) + select(x, u, v), select(x, y + u, z + v) + w) ||
@@ -67,14 +69,18 @@ Expr Simplify::visit(const Add *op, ExprInfo *bounds) {
              rewrite(x + (c0 - y), (x - y) + c0) ||
              rewrite((x - y) + (y - z), x - z) ||
              rewrite((x - y) + (z - x), z - y) ||
+             #ifdef EXCLUDE_INVALID_ORDERING_RULES
              rewrite(x + y*c0, x - y*(-c0), c0 < 0 && -c0 > 0) ||
              rewrite(x*c0 + y, y - x*(-c0), c0 < 0 && -c0 > 0 && !is_const(y)) ||
+             #endif
              rewrite(x*y + z*y, (x + z)*y) ||
              rewrite(x*y + y*z, (x + z)*y) ||
              rewrite(y*x + z*y, y*(x + z)) ||
              rewrite(y*x + y*z, y*(x + z)) ||
+             #ifdef EXCLUDE_INVALID_ORDERING_RULES
              rewrite(x*c0 + y*c1, (x + y*fold(c1/c0)) * c0, c1 % c0 == 0) ||
              rewrite(x*c0 + y*c1, (x*fold(c0/c1) + y) * c1, c0 % c1 == 0) ||
+             #endif
              (no_overflow(op->type) &&
               (rewrite(x + x*y, x * (y + 1)) ||
                rewrite(x + y*x, (y + 1) * x) ||
