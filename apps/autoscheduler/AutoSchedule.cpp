@@ -346,7 +346,9 @@ vector<vector<int64_t>> generate_gpu_tilings(const vector<vector<int64_t>> &stag
 
             // if the vector dimension has extent < warp_width we use 1 warp for it
             int64_t min_threads = ( (d == vectorized_indices[0]) ? std::min(warp_width, (int)stage_sizes[0][d]) : 1 );
+            bool full_extent_considered = false;
             for (int64_t threads_ext = min_threads; threads_ext <= stage_sizes[0][d]; threads_ext *= factor) {
+                full_extent_considered |= threads_ext == stage_sizes[0][d];
                 // reject if inner exceeds hardware thread limit
                 if (threads_ext > max_threads_extent) {
                     break;
@@ -373,12 +375,26 @@ vector<vector<int64_t>> generate_gpu_tilings(const vector<vector<int64_t>> &stag
             int64_t threads16 = 16;
             int64_t other16 = (stage_sizes[0][d] + threads16 - 1) / threads16;
             if ((d == vectorized_indices[0]) && threads16 < stage_sizes[0][d] && other16 > 1) {
+                full_extent_considered |= threads16 == stage_sizes[0][d];
                 if (false)
                     t.back() = other16;
                 else
                     t.back() = threads16;
                 validity valid_result = is_valid_tiling();
                 if (valid_result == valid_tiling ) {
+                   result.push_back(t);
+                }
+            }
+
+            // It's possible that the loop's full extent has not been considered
+            // as a size, e.g., if the loop has size 18 and is not in the
+            // vectorized dimension, then the above loop will consider only
+            // sizes 1, 2, 4, 8, 16 i.e. the loop will always involve a split
+            // and the full extent of 18 will not be considered as a size. If
+            // so, add it as a possibility here
+            if (!full_extent_considered && stage_sizes[0][d] <= max_threads_extent) {
+                t.back() = stage_sizes[0][d];
+                if (is_valid_tiling() == valid_tiling) {
                    result.push_back(t);
                 }
             }
