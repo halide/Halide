@@ -1167,6 +1167,40 @@ public:
         return dst;
     }
 
+    /** Like copy(), but the copy is created in interleaved memory layout
+     * (vs. keeping the same memory layout as the original). Requires that 'this'
+     * has exactly 3 dimensions.
+     */
+    Buffer<not_const_T, D> copy_to_interleaved(void *(*allocate_fn)(size_t) = nullptr,
+                                               void (*deallocate_fn)(void *) = nullptr) const {
+        assert(dimensions() == 3);
+        Buffer<not_const_T, D> dst = Buffer<not_const_T, D>::make_interleaved(nullptr, width(), height(), channels());
+        dst.set_min(min(0), min(1), min(2));
+        dst.allocate(allocate_fn, deallocate_fn);
+        dst.copy_from(*this);
+        return dst;
+    }
+
+    /** Like copy(), but the copy is created in planar memory layout
+     * (vs. keeping the same memory layout as the original).
+     */
+    Buffer<not_const_T, D> copy_to_planar(void *(*allocate_fn)(size_t) = nullptr,
+                                          void (*deallocate_fn)(void *) = nullptr) const {
+        std::vector<int> mins, extents;
+        const int dims = dimensions();
+        mins.reserve(dims);
+        extents.reserve(dims);
+        for (int d = 0; d < dims; ++d) {
+            mins.push_back(dim(d).min());
+            extents.push_back(dim(d).extent());
+        }
+        Buffer<not_const_T, D> dst = Buffer<not_const_T, D>(nullptr, extents);
+        dst.set_min(mins);
+        dst.allocate(allocate_fn, deallocate_fn);
+        dst.copy_from(*this);
+        return dst;
+    }
+
     /** Make a copy of the Buffer which shares the underlying host and/or device
      * allocations as the existing Buffer. This is purely syntactic sugar for
      * cases where you have a const reference to a Buffer but need a temporary
