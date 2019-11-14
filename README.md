@@ -50,22 +50,26 @@ must be somewhere in the path. If your OS does not have packages for llvm-8.0
 Download an appropriate package and then either install it, or at least put the
 `bin` subdirectory in your path. (This works well on OS X and Ubuntu.)
 
-If you want to build it yourself, first check it out from subversion.
+If you want to build it yourself, first check it out from GitHub:
 
-    % svn co https://llvm.org/svn/llvm-project/llvm/branches/release_90 llvm9.0
-    % svn co https://llvm.org/svn/llvm-project/cfe/branches/release_90 llvm9.0/tools/clang
+    % git clone https://github.com/llvm/llvm-project.git
+    % git checkout release/9.x  # to build LLVM 9.x
+
+(If you want to build LLVM 9.x, use `git checkout release/9.x`; for LLVM 8.0, use `release 8.x`; for current trunk, use `git checkout master`)
 
 Then build it like so:
 
-    % cd llvm9.0
+    % cd llvm-project
     % mkdir build
     % cd build
-    % cmake -DLLVM_ENABLE_TERMINFO=OFF -DLLVM_TARGETS_TO_BUILD="X86;ARM;NVPTX;AArch64;Mips;PowerPC" -DLLVM_ENABLE_ASSERTIONS=ON -DCMAKE_BUILD_TYPE=Release ..
-    % make -j8
+    % cmake -DLLVM_ENABLE_PROJECTS="clang;lld" -DLLVM_ENABLE_RTTI=ON -DLLVM_ENABLE_TERMINFO=OFF -DLLVM_TARGETS_TO_BUILD="X86;ARM;NVPTX;AArch64;Mips;PowerPC" -DLLVM_ENABLE_ASSERTIONS=ON -DCMAKE_BUILD_TYPE=Release -DLLVM_BUILD_32_BITS=OFF ../llvm
+    % make -j
 
 then to point Halide to it:
 
     export LLVM_CONFIG=<path to llvm>/build/bin/llvm-config
+
+(Note that you *must* add `clang` to `LLVM_ENABLE_PROJECTS`; adding `lld` to `LLVM_ENABLE_PROJECTS` is only required when using WebAssembly, but we recommend enabling it in all cases, to simplify builds.)
 
 #### Building Halide with make
 
@@ -94,7 +98,7 @@ If you wish to use cmake to build Halide, the build procedure is:
     % mkdir cmake_build
     % cd cmake_build
     % cmake -DLLVM_DIR=/path-to-llvm-build/lib/cmake/llvm -DCMAKE_BUILD_TYPE=Release /path/to/halide
-    % make -j8
+    % make -j
 
 `LLVM_DIR` should be the folder in the LLVM installation or build tree that contains `LLVMConfig.cmake`.
 
@@ -108,11 +112,11 @@ path. The instructions below assume Halide is checked out under
 
     % mkdir C:\Code\llvm-build
     % cd C:\Code\llvm-build
-    % cmake -DCMAKE_INSTALL_PREFIX=../llvm-install -DLLVM_ENABLE_TERMINFO=OFF -DLLVM_TARGETS_TO_BUILD=X86;ARM;NVPTX;AArch64;Mips;Hexagon -DLLVM_ENABLE_ASSERTIONS=ON -DLLVM_BUILD_32_BITS=OFF -DCMAKE_BUILD_TYPE=Release ../llvm -G "Visual Studio 14 Win64"
+    % cmake -DCMAKE_INSTALL_PREFIX=../llvm-install -DLLVM_ENABLE_TERMINFO=OFF -DLLVM_TARGETS_TO_BUILD=X86;ARM;NVPTX;AArch64;Mips;Hexagon -DLLVM_ENABLE_ASSERTIONS=ON -DLLVM_BUILD_32_BITS=OFF -DCMAKE_BUILD_TYPE=Release ../llvm/llvm -G "Visual Studio 14 Win64"
 
 For a 32-bit build use:
 
-    % cmake -DCMAKE_INSTALL_PREFIX=../llvm-install -DLLVM_ENABLE_TERMINFO=OFF -DLLVM_TARGETS_TO_BUILD=X86;ARM;NVPTX;AArch64;Mips;Hexagon -DLLVM_ENABLE_ASSERTIONS=ON -DLLVM_BUILD_32_BITS=ON -DCMAKE_BUILD_TYPE=Release ../llvm -G "Visual Studio 14"
+    % cmake -DCMAKE_INSTALL_PREFIX=../llvm-install -DLLVM_ENABLE_TERMINFO=OFF -DLLVM_TARGETS_TO_BUILD=X86;ARM;NVPTX;AArch64;Mips;Hexagon -DLLVM_ENABLE_ASSERTIONS=ON -DLLVM_BUILD_32_BITS=ON -DCMAKE_BUILD_TYPE=Release ../llvm/llvm -G "Visual Studio 14"
 
 Then build it like so:
 
@@ -331,26 +335,13 @@ For examples of using the `hexagon` scheduling directive on both the simulator a
 Hexagon DSP, see the blur example app.
 
 To build and run an example app using the Hexagon target,
-  1. Obtain and build LLVM and Clang v5.0 or later from llvm.org
+  1. Obtain and build trunk LLVM and Clang. (Earlier versions of LLVM may work but are not actively tested and thus not recommended.)
   2. Download and install the Hexagon SDK and version 8.0 Hexagon Tools
   3. Build and run an example for Hexagon HVX
 
-#### 1. Obtain and build LLVM and clang v5.0 or later from llvm.org
-The Hexagon backend is currently under development. So it's best to use trunk llvm.
-These are the same instructions as above for building Clang/LLVM, but for trunk
-Clang/LLVM instead of 5.0.
+#### 1. Obtain and build trunk LLVM and Clang
 
-    cd <path to llvm>
-    svn co http://llvm.org/svn/llvm-project/llvm/trunk .
-    svn co http://llvm.org/svn/llvm-project/cfe/trunk ./tools/clang
-    # Or:
-    #    git clone http://llvm.org/git/llvm.git .
-    #    git clone http://llvm.org/git/clang.git llvm/tools
-    mkdir build
-    cd build
-    cmake -DLLVM_ENABLE_TERMINFO=OFF -DLLVM_TARGETS_TO_BUILD="X86;ARM;NVPTX;AArch64;Mips;PowerPC;Hexagon" -DLLVM_ENABLE_ASSERTIONS=ON -DCMAKE_BUILD_TYPE=Release ..
-    make -j8
-    export LLVM_CONFIG=<path to llvm>/build/bin/llvm-config
+(Instructions given previous, just be sure to check out the `master` branch.)
 
 #### 2. Download and install the Hexagon SDK and version 8.0 Hexagon Tools
 Go to https://developer.qualcomm.com/software/hexagon-dsp-sdk/tools
