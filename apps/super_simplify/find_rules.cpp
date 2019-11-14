@@ -404,7 +404,7 @@ int main(int argc, char **argv) {
                                 }
                             }
 
-                            for (int budget = 0; !e.defined() && budget < lhs_ops && budget < 5; budget++) {
+                            for (int budget = 0; !e.defined() && budget < lhs_ops && budget <= 8 - lhs_ops; budget++) {
                                 e = super_simplify(p, budget);
                             }
                             bool success = false;
