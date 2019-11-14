@@ -84,7 +84,7 @@ WEAK char device_type[256];
 WEAK int device_type_lock = 0;
 WEAK bool device_type_initialized = false;
 
-WEAK char build_options[256];
+WEAK char build_options[1024];
 WEAK int build_options_lock = 0;
 WEAK bool build_options_initialized = false;
 
@@ -99,7 +99,11 @@ extern "C" {
 
 WEAK void halide_opencl_set_platform_name(const char *n) {
     if (n) {
-        strncpy(platform_name, n, 255);
+        size_t buffer_size = sizeof(platform_name) / sizeof(platform_name[0]);
+        strncpy(platform_name, n, buffer_size);
+        if (strlen(n) > buffer_size - 1) {
+            platform_name[buffer_size - 1] = 0;
+        }
     } else {
         platform_name[0] = 0;
     }
@@ -118,7 +122,11 @@ WEAK const char *halide_opencl_get_platform_name(void *user_context) {
 
 WEAK void halide_opencl_set_device_type(const char *n) {
     if (n) {
-        strncpy(device_type, n, 255);
+        size_t buffer_size = sizeof(device_type) / sizeof(device_type[0]);
+        strncpy(device_type, n, buffer_size);
+        if (strlen(n) > buffer_size - 1) {
+            device_type[buffer_size - 1] = 0;
+        }
     } else {
         device_type[0] = 0;
     }
@@ -136,7 +144,11 @@ WEAK const char *halide_opencl_get_device_type(void *user_context) {
 
 WEAK void halide_opencl_set_build_options(const char *n) {
     if (n) {
-        strncpy(build_options, n, 255);
+        size_t buffer_size = sizeof(build_options) / sizeof(build_options[0]);
+        strncpy(build_options, n, buffer_size);
+        if (strlen(n) > buffer_size - 1) {
+            build_options[buffer_size - 1] = 0;
+        }
     } else {
         build_options[0] = 0;
     }
