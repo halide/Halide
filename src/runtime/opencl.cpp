@@ -84,6 +84,10 @@ WEAK char device_type[256];
 WEAK int device_type_lock = 0;
 WEAK bool device_type_initialized = false;
 
+WEAK char build_options[256];
+WEAK int build_options_lock = 0;
+WEAK bool build_options_initialized = false;
+
 }}}} // namespace Halide::Runtime::Internal::OpenCL
 
 using namespace Halide::Runtime::Internal::OpenCL;
@@ -128,6 +132,24 @@ WEAK const char *halide_opencl_get_device_type(void *user_context) {
         halide_opencl_set_device_type(name);
     }
     return device_type;
+}
+
+WEAK void halide_opencl_set_build_options(const char *n) {
+    if (n) {
+        strncpy(build_options, n, 255);
+    } else {
+        build_options[0] = 0;
+    }
+    build_options_initialized = true;
+}
+
+WEAK const char *halide_opencl_get_build_options(void *user_context) {
+    ScopedSpinLock lock(&build_options_lock);
+    if (!build_options_initialized) {
+        const char *name = getenv("HL_OCL_BUILD_OPTIONS");
+        halide_opencl_set_build_options(name);
+    }
+    return build_options;
 }
 
 // The default implementation of halide_acquire_cl_context uses the global
@@ -593,10 +615,8 @@ WEAK int halide_opencl_initialize_kernels(void *user_context, void **state_ptr, 
         options << "-D MAX_CONSTANT_BUFFER_SIZE=" << max_constant_buffer_size
                 << " -D MAX_CONSTANT_ARGS=" << max_constant_args;
 
-        const char *extra_options = getenv("HL_OCL_BUILD_OPTIONS");
-        if (extra_options) {
-            options << " " << extra_options;
-        }
+        const char *extra_options = halide_opencl_get_build_options(user_context);
+        options << " " << extra_options;
 
         const char * sources[] = { src };
         debug(user_context) << "    clCreateProgramWithSource -> ";
