@@ -48,6 +48,31 @@ inline void check_type(at::Tensor &tensor) {
     AT_ERROR("Scalar type ", tensor.scalar_type(), " not handled by Halide's PyTorch wrapper");
 }
 
+// TODO: if PyTorch exposes any variable with the API version,
+// I haven't found it in source or documentation; for now, we'll sniff
+// this macro's existence to infer that we are building with v1.3+ (vs 1.2)
+#ifdef AT_FORALL_SCALAR_TYPES_WITH_COMPLEX_AND_QINTS
+#define HL_PYTORCH_API_VERSION 13
+#else
+#define HL_PYTORCH_API_VERSION 12
+#endif
+
+#if HL_PYTORCH_API_VERSION >= 13
+
+// PyTorch 1.3+
+#define HL_PT_DEFINE_TYPECHECK(ctype,ttype) \
+    template<> \
+    inline void check_type<ctype>(at::Tensor &tensor) { \
+      AT_ASSERTM(tensor.scalar_type() == at::ScalarType::ttype, "scalar type do not match"); \
+    }
+
+AT_FORALL_SCALAR_TYPES_WITH_COMPLEX_AND_QINTS(HL_PT_DEFINE_TYPECHECK);
+
+#undef HL_PT_DEFINE_TYPECHECK
+
+#else
+
+// PyTorch 1.2
 
 #define HL_PT_DEFINE_TYPECHECK(ctype,ttype,_3) \
     template<> \
@@ -59,12 +84,18 @@ AT_FORALL_SCALAR_TYPES_WITH_COMPLEX(HL_PT_DEFINE_TYPECHECK);
 
 #undef HL_PT_DEFINE_TYPECHECK
 
+#endif
+
 
 template<class scalar_t>
 inline Buffer<scalar_t> wrap(at::Tensor &tensor) {
     check_type<scalar_t>(tensor);
     std::vector<int> dims = get_dims(tensor);
+#if HL_PYTORCH_API_VERSION >= 13
+    scalar_t* pData  = tensor.data_ptr<scalar_t>();
+#else
     scalar_t* pData  = tensor.data<scalar_t>();
+#endif
     Buffer<scalar_t> buffer;
 
     // TODO(mgharbi): force Halide to put input/output on GPU?
