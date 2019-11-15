@@ -434,6 +434,10 @@ struct halide_type_t {
      * instances. */
     HALIDE_ALWAYS_INLINE halide_type_t() : code((halide_type_code_t)0), bits(0), lanes(0) {}
 
+    HALIDE_ALWAYS_INLINE halide_type_t with_lanes(uint16_t new_lanes) const {
+        return halide_type_t((halide_type_code_t) code, bits, new_lanes);
+    }
+
     /** Compare two types for equality. */
     HALIDE_ALWAYS_INLINE bool operator==(const halide_type_t &other) const {
         return as_u32() == other.as_u32();

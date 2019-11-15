@@ -31,6 +31,7 @@ void define_pipeline(py::module &m) {
     // - add_custom_lowering_pass()
     // - clear_custom_lowering_passes()
     // - custom_lowering_passes()
+    // - add_autoscheduler()
 
     // Not supported yet, because we want to think about how to expose runtime
     // overrides in Python (https://github.com/halide/Halide/issues/2790):
@@ -44,8 +45,15 @@ void define_pipeline(py::module &m) {
         .def(py::init<const std::vector<Func> &>())
 
         .def("outputs", &Pipeline::outputs)
-        .def("auto_schedule", &Pipeline::auto_schedule,
+
+        .def("auto_schedule", (AutoSchedulerResults (Pipeline::*)(const std::string &, const Target &, const MachineParams &)) &Pipeline::auto_schedule,
+            py::arg("autoscheduler_name"), py::arg("target"), py::arg("machine_params") = MachineParams::generic())
+        .def("auto_schedule", (AutoSchedulerResults (Pipeline::*)(const Target &, const MachineParams &)) &Pipeline::auto_schedule,
             py::arg("target"), py::arg("machine_params") = MachineParams::generic())
+
+        .def_static("set_default_autoscheduler_name", &Pipeline::set_default_autoscheduler_name,
+            py::arg("autoscheduler_name"))
+
         .def("get_func", &Pipeline::get_func,
             py::arg("index"))
         .def("print_loop_nest", &Pipeline::print_loop_nest)

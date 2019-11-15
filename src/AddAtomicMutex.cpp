@@ -348,7 +348,7 @@ protected:
             return IRMutator::visit(op);
         }
         Func f = Func(func_it->second);
-        if (f.output_buffers().size() == 0) {
+        if (f.output_buffers().empty()) {
             // Not an output.
             return IRMutator::visit(op);
         }

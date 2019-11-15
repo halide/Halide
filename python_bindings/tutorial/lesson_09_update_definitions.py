@@ -33,7 +33,7 @@ import halide as hl
 
 # Support code for loading pngs.
 #include "image_io.h"
-from imageio import imread
+import imageio
 import numpy as np
 import os.path
 
@@ -43,7 +43,7 @@ def main():
 
     # Load a grayscale image to use as an input.
     image_path = os.path.join(os.path.dirname(__file__), "../../tutorial/images/gray.png")
-    input_data = imread(image_path)
+    input_data = imageio.imread(image_path)
     if True:
          # making the image smaller to go faster
         input_data = input_data[:160, :150]

@@ -18,6 +18,11 @@ int main(int argc, char **argv) {
         return 0;
     }
 
+    // Let the Halide runtime hold onto GPU allocations for
+    // intermediates and reuse them instead of eagerly freeing
+    // them. cuMemAlloc/cuMemFree is slower than the algorithm!
+    halide_reuse_device_allocations(nullptr, true);
+
     Buffer<uint8_t> left_im = load_image(argv[1]);
     Buffer<uint8_t> right_im = load_image(argv[1]);
     uint32_t slices = atoi(argv[2]);
@@ -44,6 +49,7 @@ int main(int argc, char **argv) {
     double min_t_auto = benchmark(timing_iterations, 10, [&]() {
         lens_blur_auto_schedule(left_im, right_im, slices, focus_depth,
                                 blur_radius_scale, aperture_samples, output);
+        output.device_sync();
     });
     printf("Auto-scheduled time: %gms\n", min_t_auto * 1e3);
 

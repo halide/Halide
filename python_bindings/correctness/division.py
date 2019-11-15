@@ -1,4 +1,3 @@
-from __future__ import print_function
 import halide as hl
 
 # TODO: Func.evaluate() needs a wrapper added;
