@@ -209,9 +209,8 @@ Expr parse_halide_expr(char **cursor, char *end, Type expected_type) {
         return e;
     }
 
-    if (consume(cursor, end, "!(")) {
+    if (consume(cursor, end, "!")) {
         Expr e = parse_halide_expr(cursor, end, Bool());
-        expect(cursor, end, ")");
         return !e;
     }
 
