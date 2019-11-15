@@ -334,15 +334,20 @@ int main(int argc, char **argv) {
         last_lhs = r.lhs;
         last_predicate = r.predicate;
 
-        if (!(valid_reduction_order(r.lhs, r.rhs))) {
-            std::cout << "Rule doesn't obey reduction order: " << r.lhs << " -> " << r.rhs << "\n";
-            continue;
-        }
-
         // Check for failed predicate synthesis
         if (is_zero(r.predicate)) {
             std::cout << "False predicate: " << r.orig << "\n";
             continue;
+        }
+
+        if (!(valid_reduction_order(r.lhs, r.rhs))) {
+            std::cout << "Rule doesn't obey reduction order: " << r.lhs << " -> " << r.rhs << "\n";
+            continue;
+        }
+        if (valid_reduction_order(r.rhs, r.lhs)) {
+            std::cerr << "Rule would be valid reduction order in either direction. There must be a bug in the reduction order:\n"
+                      << r.lhs << " -> " << r.rhs << "\n";
+            abort();
         }
 
         // Check for implicit rules

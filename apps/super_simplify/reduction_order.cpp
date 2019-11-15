@@ -156,6 +156,7 @@ Expr get_right_child(const Expr &e) {
     } else if (const Or *op = e.as<Or>()) {
         return op->b;
     } else {
+        debug(0) << "Warning: don't know about the right child of: " << e << "\n";
         return Expr();
     }
 }
@@ -408,7 +409,7 @@ bool valid_reduction_order(const Expr &LHS, const Expr &RHS) {
     // ordered if the right child of the LHS is not a constant and the right child of the RHS is a constant
     // invalid order if the right child of the LHS is a constant and the right child of the RHS is not a constant
     // this checks if right child is IntImm, UIntImm, or Variable whose first char is c
-    if (!(is_right_child_constant(LHS) && is_right_child_constant(RHS))) {
+    if (!(is_right_child_constant(LHS)) && is_right_child_constant(RHS)) {
         return true;
     }
     if (is_right_child_constant(LHS) && !(is_right_child_constant(RHS))) {
@@ -419,11 +420,14 @@ bool valid_reduction_order(const Expr &LHS, const Expr &RHS) {
     IRNodeType lhs_root_type = LHS.node_type();
     IRNodeType rhs_root_type = RHS.node_type();
 
-    // since this is the last check, this should be false if the root ops are equal
-    if (nto[lhs_root_type] >= nto[rhs_root_type]) {
+    if (nto[lhs_root_type] < nto[rhs_root_type]) {
+        return true;
+    }
+    if (nto[lhs_root_type] > nto[rhs_root_type]) {
         return false;
     }
 
-    return true;
+    // It's a tie. No good.
+    return false;
 
 }
