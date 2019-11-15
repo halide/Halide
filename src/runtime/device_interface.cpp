@@ -226,6 +226,8 @@ WEAK int halide_device_malloc(void *user_context, struct halide_buffer_t *buf,
     if (result) {
         return halide_error_code_device_malloc_failed;
     } else {
+        // Mark host as dirty to make sure content is copied
+        buf->set_host_dirty(true);
         return 0;
     }
 }
