@@ -100,9 +100,7 @@ void halide_opencl_set_platform_name_internal(const char *n) {
     if (n) {
         size_t buffer_size = sizeof(platform_name) / sizeof(platform_name[0]);
         strncpy(platform_name, n, buffer_size);
-        if (strlen(n) > buffer_size - 1) {
-            platform_name[buffer_size - 1] = 0;
-        }
+        platform_name[buffer_size - 1] = 0;
     } else {
         platform_name[0] = 0;
     }
@@ -121,9 +119,7 @@ void halide_opencl_set_device_type_internal(const char *n) {
     if (n) {
         size_t buffer_size = sizeof(device_type) / sizeof(device_type[0]);
         strncpy(device_type, n, buffer_size);
-        if (strlen(n) > buffer_size - 1) {
-            device_type[buffer_size - 1] = 0;
-        }
+        device_type[buffer_size - 1] = 0;
     } else {
         device_type[0] = 0;
     }
@@ -142,9 +138,7 @@ void halide_opencl_set_build_options_internal(const char *n) {
     if (n) {
         size_t buffer_size = sizeof(build_options) / sizeof(build_options[0]);
         strncpy(build_options, n, buffer_size);
-        if (strlen(n) > buffer_size - 1) {
-            build_options[buffer_size - 1] = 0;
-        }
+        build_options[buffer_size - 1] = 0;
     } else {
         build_options[0] = 0;
     }
