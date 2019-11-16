@@ -43,6 +43,14 @@
  rewrite(select(x, (w + (z + y)), (z + u)), (select(x, (w + y), u) + z)) ||
  rewrite(select(x, (w + (z + y)), ((u + z) + v)), (select(x, (w + y), (u + v)) + z)) ||
  rewrite(select(x, (w + (z + y)), ((z + u) + v)), (select(x, (w + y), (v + u)) + z)) ||
+ rewrite(select(x, (y + z), (u + (w + z))), (select(x, y, (u + w)) + z)) ||
+ rewrite(select(x, (y + z), (u + (z + w))), (select(x, y, (u + w)) + z)) ||
+ rewrite(select(x, (y + z), ((w + z) + u)), (select(x, y, (w + u)) + z)) ||
+ rewrite(select(x, (y + z), ((z + w) + u)), (select(x, y, (u + w)) + z)) ||
+ rewrite(select(x, (z + y), (u + (w + z))), (select(x, y, (u + w)) + z)) ||
+ rewrite(select(x, (z + y), (u + (z + w))), (select(x, y, (u + w)) + z)) ||
+ rewrite(select(x, (z + y), ((w + z) + u)), (select(x, y, (w + u)) + z)) ||
+ rewrite(select(x, (z + y), ((z + w) + u)), (select(x, y, (u + w)) + z)) ||
  rewrite(select(x, ((w + (y*z)) + u), (v + w)), (select(x, ((y*z) + u), v) + w)) ||
  rewrite(select(x, ((w + (y*z)) + u), (w + v)), (select(x, ((y*z) + u), v) + w)) ||
  rewrite(select(x, ((w + (z*y)) + u), (v + w)), (select(x, ((z*y) + u), v) + w)) ||

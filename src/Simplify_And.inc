@@ -46,15 +46,15 @@
  rewrite(((select(y, max(z, w), z) <= max(z, w)) && x), x))) ||
 ((a.node_type() == IRNodeType::And) && (
 ((b.node_type() == IRNodeType::LT) && (
- rewrite(((w && (x && (y < z))) && (y < u)), (w && (x && (y < min(z, u))))) ||
- rewrite(((w && (z && (x < y))) && (x < u)), (w && (z && (x < min(y, u))))) ||
- rewrite(((w && ((x < y) && z)) && (x < u)), (w && ((x < min(y, u)) && z))) ||
- rewrite(((w && ((y < z) && x)) && (y < u)), (w && ((y < min(z, u)) && x))) ||
+ rewrite(((w && (x && (y < z))) && (y < u)), (w && (x && (y < min(u, z))))) ||
+ rewrite(((w && (z && (x < y))) && (x < u)), (w && (z && (x < min(u, y))))) ||
+ rewrite(((w && ((x < y) && z)) && (x < u)), (w && ((x < min(u, y)) && z))) ||
+ rewrite(((w && ((y < z) && x)) && (y < u)), (w && ((y < min(u, z)) && x))) ||
  rewrite(((x && (y < z)) && (y < w)), (x && (y < min(z, w)))) ||
  rewrite(((z && (x < y)) && (x < w)), (z && (x < min(y, w)))) ||
- rewrite((((x < y) && z) && (x < w)), ((x < min(y, w)) && z)) ||
- rewrite((((y < z) && x) && (y < w)), ((y < min(z, w)) && x)) ||
+ rewrite((((x < y) && z) && (x < w)), ((x < min(w, y)) && z)) ||
+ rewrite((((y < z) && x) && (y < w)), ((y < min(w, z)) && x)) ||
  rewrite((((x && (y < z)) && w) && (y < u)), (((y < min(u, z)) && w) && x)) ||
  rewrite((((z && (x < y)) && w) && (x < u)), (((x < min(u, y)) && w) && z)) ||
  rewrite(((((x < y) && z) && w) && (x < u)), (((x < min(y, u)) && w) && z)) ||
- rewrite(((((y < z) && x) && w) && (y < u)), (((y < min(z, u)) && w) && x))))))
+ rewrite(((((y < z) && x) && w) && (y < u)), (((y < min(u, z)) && w) && x))))))

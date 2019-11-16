@@ -95,6 +95,8 @@
 ((b.node_type() == IRNodeType::Div) && (
  rewrite((x < ((min((x*c0), y) + c1)/c0)), false, ((max(c1, 0) + 1) <= c0)))) ||
 ((b.node_type() == IRNodeType::Min) && (
+ rewrite((c0 < min(y, ((max(x, c1)*c2) + c2))), (c0 < y), (((((1 <= c1) || (c0 <= 1)) || (c1 <= -1)) || ((c0 + 1) <= (c2*2))) && ((((c0 <= 0) || ((c0 + 1) <= c2)) || (((1 <= c1) || (c1 <= -1)) && (0 <= c1))) && ((((1 <= c2) && ((c0 + 1) <= ((c1 + 1)*c2))) && ((c0 + 1) <= ((c1 + 2)*c2))) && ((c0 + 1) <= ((c1 + 3)*c2)))))) ||
+ rewrite((c0 < min(((max(x, c1)*c2) + c2), y)), (c0 < y), (((((1 <= c1) || (c0 <= 1)) || (c1 <= -1)) || ((c0 + 1) <= (c2*2))) && ((((c0 <= 0) || ((c0 + 1) <= c2)) || (((1 <= c1) || (c1 <= -1)) && (0 <= c1))) && ((((1 <= c2) && ((c0 + 1) <= ((c1 + 1)*c2))) && ((c0 + 1) <= ((c1 + 2)*c2))) && ((c0 + 1) <= ((c1 + 3)*c2)))))) ||
  rewrite((x < min(z, min(x, y))), false) ||
  rewrite((x < min(z, min(y, x))), false) ||
  rewrite((x < min(min(x, y), z)), false) ||
@@ -241,7 +243,7 @@
  rewrite(((z + u) < (((y + z) + x) + w)), (u < ((y + x) + w))) ||
  rewrite(((z + u) < (((z + y) + x) + w)), (u < ((y + x) + w))) ||
  rewrite(((z + min(x, y)) < (x + y)), (z < max(x, y))) ||
- rewrite(((z + min(x, y)) < (y + x)), (z < max(y, x))) ||
+ rewrite(((z + min(x, y)) < (y + x)), (z < max(x, y))) ||
  rewrite(((z + min(y, x)) < (x + y)), (z < max(y, x))) ||
  rewrite(((z + min(y, x)) < (y + x)), (z < max(y, x))) ||
  rewrite(((z + select(y, c1, c2)) < (x + c0)), (z < (x + select(y, fold((c0 - c1)), fold((c0 - c2)))))) ||
@@ -250,7 +252,7 @@
  rewrite(((min(x, y) + z) < (y + x)), (z < max(y, x))) ||
  rewrite(((min(y, x) + z) < (x + y)), (z < max(x, y))) ||
  rewrite(((min(y, x) + z) < (y + x)), (z < max(y, x))) ||
- rewrite(((select(y, c1, c2) + z) < (x + c0)), (z < (x + select(y, fold((c0 - c1)), fold((c0 - c2)))))))) ||
+ rewrite(((select(y, c1, c2) + z) < (x + c0)), (z < (select(y, fold((c0 - c1)), fold((c0 - c2))) + x))))) ||
 ((b.node_type() == IRNodeType::Mul) && (
  rewrite(((w + (x*z)) < (z*(x + y))), (w < (z*y))) ||
  rewrite(((w + (x*z)) < (z*(y + x))), (w < (z*y))) ||
@@ -379,6 +381,7 @@
  rewrite(((select(z, c1, c2) + y) < min((y + c0), x)), false, (c0 <= min(c1, c2))))) ||
 ((b.node_type() == IRNodeType::Select) && (
  rewrite(((x + y) < select(z, ((y + x) + c0), w)), (z || ((y + x) < w)), (1 <= c0)) ||
+ rewrite(((y + x) < select(z, ((y + x) + c0), w)), (z || ((y + x) < w)), (1 <= c0)) ||
  rewrite(((y + select(w, c0, c1)) < select(x, min(y, z), y)), false, (0 <= min(c0, c1))) ||
  rewrite(((y + select(w, c0, c1)) < select(x, min(z, y), y)), false, (0 <= min(c0, c1))) ||
  rewrite(((z + select(w, c0, c1)) < select(x, min(y, z), z)), false, (0 <= min(c0, c1))) ||
@@ -418,7 +421,7 @@
  rewrite(((y*z) < (z + (x + (z*y)))), (0 < (z + x))) ||
  rewrite(((y*z) < (z + ((z*y) + x))), (0 < (z + x))) ||
  rewrite(((y*z) < ((x + (z*y)) + z)), (0 < (x + z))) ||
- rewrite(((y*z) < (((z*y) + x) + z)), (0 < (z + x))) ||
+ rewrite(((y*z) < (((z*y) + x) + z)), (0 < (x + z))) ||
  rewrite(((y*z) < ((min(x, y) + (z*y)) + w)), (0 < (min(x, y) + w))) ||
  rewrite(((y*z) < ((min(y, x) + (z*y)) + w)), (0 < (min(y, x) + w))) ||
  rewrite(((y*(w + x)) < (z + (x*y))), ((y*w) < z)) ||
@@ -431,7 +434,7 @@
  rewrite(((y*(x + w)) < ((y*x) + z)), ((y*w) < z)) ||
  rewrite(((z*y) < (w + (min(x, y) + (y*z)))), (0 < (w + min(x, y)))) ||
  rewrite(((z*y) < (w + (min(y, x) + (y*z)))), (0 < (w + min(y, x)))) ||
- rewrite(((z*y) < (z + (x + (y*z)))), (0 < (z + x))) ||
+ rewrite(((z*y) < (z + (x + (y*z)))), (0 < (x + z))) ||
  rewrite(((z*y) < (z + ((y*z) + x))), (0 < (z + x))) ||
  rewrite(((z*y) < ((x + (y*z)) + z)), (0 < (x + z))) ||
  rewrite(((z*y) < (((y*z) + x) + z)), (0 < (z + x))) ||
@@ -517,26 +520,26 @@
  rewrite((min(x, y) < (w + (min(y, x) + min(x, z)))), (0 < (w + min(x, z)))) ||
  rewrite((min(x, y) < (w + (min(y, x) + min(y, z)))), (0 < (w + min(y, z)))) ||
  rewrite((min(x, y) < (w + (min(y, x) + min(z, x)))), (0 < (w + min(z, x)))) ||
- rewrite((min(x, y) < (w + (min(y, x) + min(z, y)))), (0 < (w + min(z, y)))) ||
+ rewrite((min(x, y) < (w + (min(y, x) + min(z, y)))), (0 < (w + min(y, z)))) ||
  rewrite((min(x, y) < ((min(y, x) + (y*z)) + w)), (0 < ((y*z) + w))) ||
  rewrite((min(x, y) < ((min(y, x) + (z*y)) + w)), (0 < ((z*y) + w))) ||
  rewrite((min(x, y) < ((min(y, x) + min(x, z)) + w)), (0 < (min(x, z) + w))) ||
  rewrite((min(x, y) < ((min(y, x) + min(y, z)) + w)), (0 < (min(y, z) + w))) ||
  rewrite((min(x, y) < ((min(y, x) + min(z, x)) + w)), (0 < (min(z, x) + w))) ||
- rewrite((min(x, y) < ((min(y, x) + min(z, y)) + w)), (0 < (min(z, y) + w))) ||
+ rewrite((min(x, y) < ((min(y, x) + min(z, y)) + w)), (0 < (min(y, z) + w))) ||
  rewrite((min(y, c2) < (min(x, c0) + 1)), (y <= min(x, c0)), ((c0 + 1) <= c2)) ||
- rewrite((min(y, c2) < (min(x, c0) + c1)), ((fold((1 - c1)) + y) <= min(x, c0)), ((c0 + c1) <= c2)) ||
+ rewrite((min(y, c2) < (min(x, c0) + c1)), ((y + fold((1 - c1))) <= min(x, c0)), ((c0 + c1) <= c2)) ||
  rewrite((min(y, x) < (w + (min(x, y) + (y*z)))), (0 < (w + (y*z)))) ||
  rewrite((min(y, x) < (w + (min(x, y) + (z*y)))), (0 < (w + (z*y)))) ||
  rewrite((min(y, x) < (w + (min(x, y) + min(x, z)))), (0 < (w + min(x, z)))) ||
  rewrite((min(y, x) < (w + (min(x, y) + min(y, z)))), (0 < (w + min(y, z)))) ||
- rewrite((min(y, x) < (w + (min(x, y) + min(z, x)))), (0 < (w + min(z, x)))) ||
+ rewrite((min(y, x) < (w + (min(x, y) + min(z, x)))), (0 < (w + min(x, z)))) ||
  rewrite((min(y, x) < (w + (min(x, y) + min(z, y)))), (0 < (w + min(z, y)))) ||
  rewrite((min(y, x) < ((min(x, y) + (y*z)) + w)), (0 < ((y*z) + w))) ||
  rewrite((min(y, x) < ((min(x, y) + (z*y)) + w)), (0 < ((z*y) + w))) ||
  rewrite((min(y, x) < ((min(x, y) + min(x, z)) + w)), (0 < (min(x, z) + w))) ||
  rewrite((min(y, x) < ((min(x, y) + min(y, z)) + w)), (0 < (min(y, z) + w))) ||
- rewrite((min(y, x) < ((min(x, y) + min(z, x)) + w)), (0 < (min(z, x) + w))) ||
+ rewrite((min(y, x) < ((min(x, y) + min(z, x)) + w)), (0 < (min(x, z) + w))) ||
  rewrite((min(y, x) < ((min(x, y) + min(z, y)) + w)), (0 < (min(z, y) + w))) ||
  rewrite((min(y, z) < (w + (x + min(z, y)))), (0 < (w + x))) ||
  rewrite((min(y, z) < (w + (min(z, y) + x))), (0 < (w + x))) ||
@@ -590,7 +593,7 @@
  rewrite((min((x*y), z) < ((w + min((y*x), z)) + u)), (0 < (w + u))) ||
  rewrite((min((x*y), z) < ((min(z, (y*x)) + w) + u)), (0 < (w + u))) ||
  rewrite((min((x*y), z) < ((min((y*x), z) + w) + u)), (0 < (w + u))) ||
- rewrite((min((y*c0), c2) < ((x*c0) + c1)), (min(0, y) < x), ((c1 <= min(c2, 0)) && ((max(c2, 0) + 1) <= (c0 + c1)))) ||
+ rewrite((min((y*c0), c2) < ((x*c0) + c1)), (min(y, 0) < x), ((c1 <= min(c2, 0)) && ((max(c2, 0) + 1) <= (c0 + c1)))) ||
  rewrite((min((y*x), z) < (u + (w + min(z, (x*y))))), (0 < (u + w))) ||
  rewrite((min((y*x), z) < (u + (w + min((x*y), z)))), (0 < (u + w))) ||
  rewrite((min((y*x), z) < (u + (min(z, (x*y)) + w))), (0 < (u + w))) ||
@@ -602,7 +605,7 @@
  rewrite((min(min(x, z), y) < (x + c0)), (min(z, y) < (x + c0)), (c0 <= 0)) ||
  rewrite((min(min(z, x), y) < (x + c0)), (min(z, y) < (x + c0)), (c0 <= 0)) ||
  rewrite((min(select(y, x, (x + c1)), z) < (x + c0)), (z < (x + c0)), (c0 <= min(c1, 0))) ||
- rewrite((min(select(y, (x + c1), x), z) < (x + c0)), (z < (x + c0)), (c0 <= min(c1, 0))))) ||
+ rewrite((min(select(y, (x + c1), x), z) < (x + c0)), ((fold((1 - c0)) + z) <= x), (c0 <= min(c1, 0))))) ||
 ((b.node_type() == IRNodeType::Min) && (
  rewrite((min(w, (y*z)) < min(w, min(x, (y*z)))), false) ||
  rewrite((min(w, (y*z)) < min(w, min(x, (z*y)))), false) ||
@@ -860,8 +863,8 @@
  rewrite((max(w, (max(z, x) + y)) < (y + x)), false) ||
  rewrite((max(w, (max(z, y) + x)) < (x + y)), false) ||
  rewrite((max(w, (max(z, y) + x)) < (y + x)), false) ||
- rewrite((max(w, min(z, min(x, y))) < (x + c0)), ((fold((1 - c0)) + w) <= x), (1 <= c0)) ||
- rewrite((max(w, min(z, min(y, x))) < (x + c0)), ((fold((1 - c0)) + w) <= x), (1 <= c0)) ||
+ rewrite((max(w, min(z, min(x, y))) < (x + c0)), ((w + fold((1 - c0))) <= x), (1 <= c0)) ||
+ rewrite((max(w, min(z, min(y, x))) < (x + c0)), ((w + fold((1 - c0))) <= x), (1 <= c0)) ||
  rewrite((max(w, min(min(x, y), z)) < (x + c0)), ((w + fold((1 - c0))) <= x), (1 <= c0)) ||
  rewrite((max(w, min(min(y, x), z)) < (x + c0)), ((w + fold((1 - c0))) <= x), (1 <= c0)) ||
  rewrite((max(y, c2) < (max(x, c0) + 1)), (max(y, c2) <= x), ((c0 + 1) <= c2)) ||
@@ -1023,7 +1026,7 @@
  rewrite((max(max(min(z, w), (x + y)), u) < (y + x)), false) ||
  rewrite((max(max(min(z, w), (y + x)), u) < (x + y)), false))) ||
 ((b.node_type() == IRNodeType::Mul) && (
- rewrite((max((y*c0), c1) < (x*c0)), (max(0, y) < x), (((0 <= c1) && ((c1 + 1) <= (c0*2))) && ((max(c1, 0) + 1) <= c0))))) ||
+ rewrite((max((y*c0), c1) < (x*c0)), (max(y, 0) < x), (((0 <= c1) && ((c1 + 1) <= (c0*2))) && ((max(c1, 0) + 1) <= c0))))) ||
 ((b.node_type() == IRNodeType::Min) && (
  rewrite((max(u, w) < min(w, (z + (x*y)))), false) ||
  rewrite((max(u, w) < min(w, (z + (y*x)))), false) ||
@@ -1103,6 +1106,7 @@
  rewrite((max(z, y) < select(x, max(z, y), z)), false))))) ||
 ((a.node_type() == IRNodeType::Select) && (
  rewrite((select(x, min(y, c1), c0) < c0), (select(x, y, c0) <= fold((c0 + -1))), (c0 <= c1)) ||
+ rewrite((select(y, (x + z), x) < x), (select(y, z, 0) < 0)) ||
  rewrite((select(y, (z + x), x) < x), (select(y, z, 0) < 0)) ||
 ((b.node_type() == IRNodeType::Add) && (
  rewrite((select(y, (x + z), x) < (x + c0)), (select(y, z, c0) < c0), (c0 <= 0)) ||
