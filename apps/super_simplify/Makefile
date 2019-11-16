@@ -2,7 +2,7 @@ include ../support/Makefile.inc
 
 OBJECTS = $(BIN)/parser.o $(BIN)/z3.o $(BIN)/expr_util.o $(BIN)/reduction_order.o $(BIN)/synthesize_predicate.o $(BIN)/super_simplify.o
 
-all: $(BIN)/find_rules $(BIN)/synthesize_predicates $(BIN)/filter_rewrite_rules $(BIN)/super_simplify $(BIN)/find_rules_static
+all: $(BIN)/find_rules $(BIN)/synthesize_predicates $(BIN)/filter_rewrite_rules $(BIN)/super_simplify 
 
 CXXFLAGS += -g
 

@@ -28,7 +28,7 @@ make bin/host/${APP}.generator -j32
 
 # Precompile RunGenMain
 if [ ! -f bin/RunGenMain.o ]; then
-    c++ -O3 -c ../../tools/RunGenMain.cpp -o bin/RunGenMain.o -I ../../distrib/include
+    c++ -std=c++11 -O3 -c ../../tools/RunGenMain.cpp -o bin/RunGenMain.o -I ../../distrib/include -I /opt/local/include
 fi
 
 mkdir -p results
@@ -36,10 +36,11 @@ mkdir -p results_baseline
 
 wait_for_idle () {
     while [ 1 ]; do
-        IDLE=$(top -bn2 | grep Cpu | cut -d, -f4 | cut -d. -f1 | tail -n1)
-        if [ $IDLE -gt 5 ]; then
+        NUM_GENERATORS_RUNNING=$(ps | grep [.]generator | wc -l)
+        if [ $NUM_GENERATORS_RUNNING -lt 8 ]; then
             break
         fi
+        sleep 1
     done
 }
 
@@ -60,7 +61,7 @@ for ((SEED=${FIRST_SEED};SEED<${LAST_SEED};SEED++)); do
     HL_RANDOM_DROPOUT=1 \
     HL_BEAM_SIZE=1 \
     HL_DEBUG_CODEGEN=1 \
-    ./bin/host/${APP}.generator -g ${APP} -e stmt,static_library,h,assembly,registration -o results/${SEED} -p ../autoscheduler/bin/libauto_schedule.so target=host-no_runtime auto_schedule=true > results/${SEED}/stdout.txt 2> results/${SEED}/stderr.txt &
+    ./bin/host/${APP}.generator -g ${APP} -e stmt,static_library,h,assembly,registration -o results/${SEED} -p ../autoscheduler/bin/libauto_schedule.so target=host-no_runtime auto_schedule=true > results/${SEED}/stdout.txt 2> results/${SEED}/stderr.txt 
 
     HL_USE_SYNTHESIZED_RULES=0 \
     HL_PERMIT_FAILED_UNROLL=1 \
@@ -68,7 +69,7 @@ for ((SEED=${FIRST_SEED};SEED<${LAST_SEED};SEED++)); do
     HL_RANDOM_DROPOUT=1 \
     HL_BEAM_SIZE=1 \
     HL_DEBUG_CODEGEN=1 \
-    ./bin/host/${APP}.generator -g ${APP} -e stmt,static_library,h,assembly,registration -o results_baseline/${SEED} -p ../autoscheduler/bin/libauto_schedule.so target=host-no_runtime auto_schedule=true > results_baseline/${SEED}/stdout.txt 2> results_baseline/${SEED}/stderr.txt &    
+    ./bin/host/${APP}.generator -g ${APP} -e stmt,static_library,h,assembly,registration -o results_baseline/${SEED} -p ../autoscheduler/bin/libauto_schedule.so target=host-no_runtime auto_schedule=true > results_baseline/${SEED}/stdout.txt 2> results_baseline/${SEED}/stderr.txt     
 done
 echo "Waiting for generators to finish..."
 wait
@@ -81,7 +82,7 @@ for ((SEED=${FIRST_SEED};SEED<${LAST_SEED};SEED++)); do
 
     echo "Compiling benchmarker ${SEED}"
     for r in results results_baseline; do
-        c++ ${r}/${SEED}/*.{cpp,a} bin/RunGenMain.o bin/host/runtime.a -I ../../distrib/include/ -ljpeg -lpng -ltiff -lpthread -ldl -o ${r}/${SEED}/benchmark &
+        c++ -std=c++11 ${r}/${SEED}/*.{cpp,a} bin/RunGenMain.o bin/host/runtime.a -I ../../distrib/include/ -L/opt/local/lib -ljpeg -lpng -ltiff -lpthread -ldl -o ${r}/${SEED}/benchmark &
     done
     
 done
@@ -100,25 +101,27 @@ for ((SEED=${FIRST_SEED};SEED<${LAST_SEED};SEED++)); do
     done
 done
 
+echo "Aggregating results..."
+
 for r in results results_baseline; do 
     for ((SEED=${FIRST_SEED};SEED<${LAST_SEED};SEED++)); do    
         grep BEST_TIME_MSEC ${r}/${SEED}/benchmark_stdout.txt | cut -d' ' -f5
-    done | paste -sd+ | bc > ${r}/total_runtime.txt
+    done | paste -s -d+ /dev/stdin | bc > ${r}/total_runtime.txt
 
     for ((SEED=${FIRST_SEED};SEED<${LAST_SEED};SEED++)); do    
         grep memory ${r}/${SEED}/memory_stdout.txt | cut -d' ' -f4
-    done | paste -sd+ | bc > ${r}/total_memory.txt
+    done | paste -s -d+ /dev/stdin | bc > ${r}/total_memory.txt
 
     for ((SEED=${FIRST_SEED};SEED<${LAST_SEED};SEED++)); do    
         grep Lower.cpp ${r}/${SEED}/stderr.txt | cut -d' ' -f5
-    done | paste -sd+ | bc > ${r}/total_halide_compile_time.txt
+    done | paste -s -d+ /dev/stdin | bc > ${r}/total_halide_compile_time.txt
 
     for ((SEED=${FIRST_SEED};SEED<${LAST_SEED};SEED++)); do    
         grep CodeGen_LLVM.cpp ${r}/${SEED}/stderr.txt | cut -d' ' -f5
-    done | paste -sd+ | bc > ${r}/total_llvm_optimization_time.txt
+    done | paste -s -d+ /dev/stdin | bc > ${r}/total_llvm_optimization_time.txt
 
     for ((SEED=${FIRST_SEED};SEED<${LAST_SEED};SEED++)); do    
         # Don't count emission time for both assembly and the static library
         grep LLVM_Output.cpp ${r}/${SEED}/stderr.txt | head -n1 | cut -d' ' -f5
-    done | paste -sd+ | bc > ${r}/total_llvm_backend_time.txt                
+    done | paste -s -d+ /dev/stdin | bc > ${r}/total_llvm_backend_time.txt                
 done
