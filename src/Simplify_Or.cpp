@@ -115,6 +115,15 @@ Expr Simplify::visit(const Or *op, ExprInfo *bounds) {
         return mutate(std::move(rewrite.result), bounds);
     }
 
+
+    if (use_synthesized_rules &&
+        (
+#include "Simplify_Or.inc"
+         )) {
+        return mutate(std::move(rewrite.result), bounds);
+    }
+
+
     if (a.same_as(op->a) &&
         b.same_as(op->b)) {
         return op;
