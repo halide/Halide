@@ -1161,7 +1161,7 @@ uint64_t System::id_counter = 0;
 bool can_disprove(Expr e, int beam_size, std::set<Expr, IRDeepCompare> *implications = nullptr) {
     // e = common_subexpression_elimination(simplify(remove_likelies(e)));
 
-    debug(0) << "*** Attempting disproof " << e << "\n";
+    debug(1) << "*** Attempting disproof " << e << "\n";
 
     if (is_zero(e)) {
         // The simplifier was capable of doing the disproof by itself
@@ -1929,7 +1929,8 @@ bool can_disprove_nonconvex(Expr e, int beam_size, Expr *implication) {
 Expr synthesize_predicate(const Expr &lhs,
                           const Expr &rhs,
                           const vector<map<string, Expr>> &examples,
-                          map<string, Expr> *binding) {
+                          map<string, Expr> *binding,
+                          int beam_size) {
 
     debug(0) << "Synthesizing predicate for " << lhs << " == " << rhs << "\n";
 
@@ -1970,7 +1971,7 @@ Expr synthesize_predicate(const Expr &lhs,
     Expr m;
 
     assumption = simplify(assumption);
-    debug(1) << can_disprove_nonconvex(assumption && !to_prove, 16, &m);
+    debug(1) << can_disprove_nonconvex(assumption && !to_prove, beam_size, &m);
 
     debug(1) << "\nImplication: " << m << "\n";
 
