@@ -13,6 +13,6 @@ bool can_disprove_nonconvex(Halide::Expr e, int beam_size, Halide::Expr *implica
 Halide::Expr synthesize_predicate(const Halide::Expr &lhs,
                                   const Halide::Expr &rhs,
                                   const std::vector<std::map<std::string, Halide::Expr>> &examples,
-                                  std::map<std::string, Halide::Expr> *binding);
+                                  std::map<std::string, Halide::Expr> *binding, int beam_size = 16);
 
 #endif
