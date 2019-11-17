@@ -35,5 +35,10 @@ $(BIN)/super_simplify: super_simplify_tool.cpp $(OBJECTS) $(LIB_HALIDE)
 	@mkdir -p $(@D)
 	$(CXX) $(CXXFLAGS) $< $(OBJECTS) -o $@ $(LDFLAGS) -lHalide
 
+
+$(BIN)/enumerate_exprs: enumerate_exprs.cpp $(OBJECTS) $(LIB_HALIDE)
+	@mkdir -p $(@D)
+	$(CXX) $(CXXFLAGS) $< $(OBJECTS) -o $@ $(LDFLAGS) -lHalide
+
 clean:
 	rm -rf $(BIN)
