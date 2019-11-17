@@ -20,7 +20,7 @@ Expr Simplify::visit(const Select *op, ExprInfo *bounds) {
     }
 
     if (may_simplify(op->type)) {
-        auto rewrite = IRMatcher::rewriter(IRMatcher::select(condition, true_value, false_value), op->type);
+        auto rewrite = IRMatcher::rewriter(IRMatcher::select(condition, true_value, false_value), op->type, matcher_scope);
 
         if (EVAL_IN_LAMBDA
             (rewrite(select(IRMatcher::intrin(Call::likely, true), x, y), x) ||

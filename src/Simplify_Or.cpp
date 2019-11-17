@@ -15,7 +15,7 @@ Expr Simplify::visit(const Or *op, ExprInfo *bounds) {
         std::swap(a, b);
     }
 
-    auto rewrite = IRMatcher::rewriter(IRMatcher::or_op(a, b), op->type);
+    auto rewrite = IRMatcher::rewriter(IRMatcher::or_op(a, b), op->type, matcher_scope);
 
     if (EVAL_IN_LAMBDA
         (rewrite(x || true, b) ||

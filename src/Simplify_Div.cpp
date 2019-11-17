@@ -84,7 +84,7 @@ Expr Simplify::visit(const Div *op, ExprInfo *bounds) {
 
         int lanes = op->type.lanes();
 
-        auto rewrite = IRMatcher::rewriter(IRMatcher::div(a, b), op->type);
+        auto rewrite = IRMatcher::rewriter(IRMatcher::div(a, b), op->type, matcher_scope);
 
         if (rewrite(IRMatcher::Indeterminate() / x, a) ||
             rewrite(x / IRMatcher::Indeterminate(), b) ||

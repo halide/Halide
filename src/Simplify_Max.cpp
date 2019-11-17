@@ -40,7 +40,7 @@ Expr Simplify::visit(const Max *op, ExprInfo *bounds) {
         }
 
         int lanes = op->type.lanes();
-        auto rewrite = IRMatcher::rewriter(IRMatcher::max(a, b), op->type);
+        auto rewrite = IRMatcher::rewriter(IRMatcher::max(a, b), op->type, matcher_scope);
 
         if (EVAL_IN_LAMBDA
             (rewrite(max(x, x), x) ||

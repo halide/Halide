@@ -51,6 +51,7 @@ Body Simplify::simplify_let(const LetOrLetStmt *op, ExprInfo *bounds) {
         string new_name;
         bool new_value_alignment_tracked = false, new_value_bounds_tracked = false;
         bool value_alignment_tracked = false, value_bounds_tracked = false;
+        bool in_matcher_scope = false;
         Frame(const LetOrLetStmt *op) : op(op) {}
     };
 
@@ -211,6 +212,14 @@ Body Simplify::simplify_let(const LetOrLetStmt *op, ExprInfo *bounds) {
             }
         }
 
+        f.in_matcher_scope = f.value.type() == Int(32) && is_pure(f.value);
+        if (f.in_matcher_scope) {
+            matcher_scope.push(op->name, f.value);
+            if (f.new_value.defined()) {
+                matcher_scope.push(f.new_name, f.new_value);
+            }
+        }
+
         result = op->body;
         op = result.template as<LetOrLetStmt>();
     }
@@ -236,6 +245,13 @@ Body Simplify::simplify_let(const LetOrLetStmt *op, ExprInfo *bounds) {
 
         VarInfo info = var_info.get(it->op->name);
         var_info.pop(it->op->name);
+
+        if (it->in_matcher_scope) {
+            matcher_scope.pop(it->op->name);
+            if (it->new_value.defined()) {
+                matcher_scope.pop(it->new_name);
+            }
+        }
 
         if (it->new_value.defined() && (info.new_uses > 0 && vars_used.count(it->new_name) > 0)) {
             // The new name/value may be used

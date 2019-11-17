@@ -22,7 +22,7 @@ Expr Simplify::visit(const Sub *op, ExprInfo *bounds) {
 
     if (may_simplify(op->type)) {
 
-        auto rewrite = IRMatcher::rewriter(IRMatcher::sub(a, b), op->type);
+        auto rewrite = IRMatcher::rewriter(IRMatcher::sub(a, b), op->type, matcher_scope);
         const int lanes = op->type.lanes();
 
         if (rewrite(c0 - c1, fold(c0 - c1)) ||
@@ -35,7 +35,7 @@ Expr Simplify::visit(const Sub *op, ExprInfo *bounds) {
         }
 
         if (EVAL_IN_LAMBDA
-            ((!op->type.is_uint() && 
+            ((!op->type.is_uint() &&
               #ifdef EXCLUDE_INVALID_ORDERING_RULES
               rewrite(x - c0, x + fold(-c0), !overflows(-c0))) ||
             #endif

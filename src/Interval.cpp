@@ -14,7 +14,8 @@ IRMatcher::WildConst<0> c0;
 IRMatcher::WildConst<1> c1;
 
 Expr make_max_helper(const Expr &a, const Expr &b) {
-    auto rewrite = IRMatcher::rewriter(IRMatcher::max(a, b), a.type());
+    Scope<Expr> scope;
+    auto rewrite = IRMatcher::rewriter(IRMatcher::max(a, b), a.type(), scope);
 
     if (rewrite(max(x, x), x) ||
         rewrite(max(x, Interval::pos_inf), Interval::pos_inf) ||
@@ -37,7 +38,8 @@ Expr make_max_helper(const Expr &a, const Expr &b) {
 }
 
 Expr make_min_helper(const Expr &a, const Expr &b) {
-    auto rewrite = IRMatcher::rewriter(IRMatcher::min(a, b), a.type());
+    Scope<Expr> scope;
+    auto rewrite = IRMatcher::rewriter(IRMatcher::min(a, b), a.type(), scope);
 
     if (rewrite(min(x, x), x) ||
         rewrite(min(x, Interval::pos_inf), x) ||
