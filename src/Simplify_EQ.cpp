@@ -112,6 +112,7 @@ Expr Simplify::visit(const EQ *op, ExprInfo *bounds) {
         } else {
             Expr a = s->a;
             Expr b = s->b;
+            auto rewrite = IRMatcher::rewriter(IRMatcher::eq(a, b), op->type, delta.type());
             if (no_overflow_int(op->a.type()) &&
                 use_synthesized_rules &&
                 (
