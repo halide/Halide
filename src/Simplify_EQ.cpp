@@ -106,19 +106,21 @@ Expr Simplify::visit(const EQ *op, ExprInfo *bounds) {
         return rewrite.result;
     }
 
-    if (no_overflow_int(op->a.type()) &&
-        use_synthesized_rules &&
-        (
-#include "Simplify_EQ.inc"
-         )) {
-        return mutate(std::move(rewrite.result), bounds);
-    }
-
     if (const Sub *s = delta.as<Sub>()) {
         if (s->a.same_as(a) && s->b.same_as(b)) {
             return op;
         } else {
-            return EQ::make(s->a, s->b);
+            Expr a = s->a;
+            Expr b = s->b;
+            if (no_overflow_int(op->a.type()) &&
+                use_synthesized_rules &&
+                (
+#include "Simplify_EQ.inc"
+                 )) {
+                return mutate(std::move(rewrite.result), bounds);
+            } else {
+                return EQ::make(a, b);
+            }
         }
     }
 
