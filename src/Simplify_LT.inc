@@ -175,7 +175,7 @@
  rewrite((x < select(y, x, (x + z))), (0 < select(y, 0, z))) ||
  rewrite((x < select(y, x, (z + x))), (0 < select(y, 0, z))) ||
  rewrite((x < select(y, x, (x - z))), (select(y, 0, z) < 0)) ||
- rewrite((x < select(y, x, (x*c0))), (fold((max(0, 0) + 1)) <= select(y, 0, x)), (2 <= c0)) ||
+ rewrite((x < select(y, x, (x*c0))), (1 <= select(y, 0, x)), (2 <= c0)) ||
  rewrite((x < select(y, x, min(x, z))), false) ||
  rewrite((x < select(y, x, min(z, x))), false) ||
  rewrite((x < select(y, x, max(x, z))), (x < select(y, x, z))) ||
