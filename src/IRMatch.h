@@ -513,7 +513,11 @@ struct Const {
 
     HALIDE_ALWAYS_INLINE
     Expr make(MatcherState &state, halide_type_t type_hint) const {
-        return make_const(type_hint, v);
+        if (type_hint.bits == 0) {
+            return IntImm::make(Int(32), 0);
+        } else {
+            return make_const(type_hint, v);
+        }
     }
 
     constexpr static bool foldable = true;
