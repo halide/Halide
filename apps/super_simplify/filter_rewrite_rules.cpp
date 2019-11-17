@@ -226,10 +226,13 @@ int main(int argc, char **argv) {
     /*
     {
         Var x("x"), y("y"), z("z"), c0("c0"), c1("c1");
+        Expr cond = Variable::make(Bool(), "cond");
+        Expr a = select(cond, min(x, y), x) < min(x, y);
+        Expr b = select(cond, min(y, x), y) < min(y, x);
         map<string, Expr> binding;
-        Expr la = ((min((min(x, c0) + y), z) + c1) <= y);
-        Expr lb = (((x + y) + c0) <= y);
-        std::cerr << more_general_than(lb, la, binding) << "\n";
+        std::cerr << more_general_than(a, b, binding) << "\n";
+        binding.clear();
+        std::cerr << more_general_than(b, a, binding) << "\n";
         return 1;
     }
     */
@@ -327,10 +330,10 @@ int main(int argc, char **argv) {
                   return IRDeepCompare{}(r1.predicate, r2.predicate);
               });
 
+    // Filter out duplicates
     Expr last_lhs, last_predicate;
+    vector<Rule> deduped_rules;
     for (const Rule &r : rules) {
-        bool bad = false;
-
         if (last_lhs.defined() &&
             equal(r.lhs, last_lhs) &&
             equal(r.predicate, last_predicate)) {
@@ -338,6 +341,12 @@ int main(int argc, char **argv) {
         }
         last_lhs = r.lhs;
         last_predicate = r.predicate;
+        deduped_rules.push_back(r);
+    }
+    deduped_rules.swap(rules);
+
+    for (const Rule &r : rules) {
+        bool bad = false;
 
         // Check for failed predicate synthesis
         if (is_zero(r.predicate)) {
@@ -380,8 +389,8 @@ int main(int argc, char **argv) {
                     bad = &r < &r2; // Arbitrarily pick the one with the lower memory address.
                 } else {
                     bad = true;
+                    break;
                 }
-                break;
             }
         }
         if (bad) continue;
