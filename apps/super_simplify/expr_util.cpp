@@ -463,6 +463,12 @@ vector<Expr> generate_reassociated_variants(const Expr &e) {
             }
         }
         return result;
+    } else if (const Not *op = e.as<Not>()) {
+        vector<Expr> result = generate_reassociated_variants(op->a);
+        for (Expr &e : result) {
+            e = !e;
+        }
+        return result;
     } else {
         if (!e.as<Variable>() && !is_const(e) && !e.as<Call>()) {
             // Don't descend into calls (they're folds)

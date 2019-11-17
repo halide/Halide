@@ -178,9 +178,16 @@ Expr parse_halide_expr(char **cursor, char *end, Type expected_type) {
     if (consume(cursor, end, "select(")) {
         Expr a = parse_halide_expr(cursor, end, Bool());
         expect(cursor, end, ",");
+        char *mark1 = *cursor;
         Expr b = parse_halide_expr(cursor, end, expected_type);
         expect(cursor, end, ",");
-        Expr c = parse_halide_expr(cursor, end, expected_type);
+        Expr c = parse_halide_expr(cursor, end, b.type());
+        if (c.type() != b.type()) {
+            char *mark2 = *cursor;
+            *cursor = mark1;
+            b = parse_halide_expr(cursor, end, c.type());
+            *cursor = mark2;
+        }
         consume_whitespace(cursor, end);
         expect(cursor, end, ")");
         return select(a, b, c);
@@ -378,7 +385,7 @@ vector<Expr> parse_halide_exprs_from_file(const std::string &filename) {
         while (1) {
             open = std::count(line.begin(), line.end(), '(');
             close = std::count(line.begin(), line.end(), ')');
-            if (open == close) break;
+            if (open <= close) break;
             string next;
             debug(0) << "Unbalanced parens in :\n\n" << line << "\n\n";
             assert(std::getline(input, next));

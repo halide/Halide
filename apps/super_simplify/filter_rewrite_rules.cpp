@@ -203,20 +203,25 @@ int main(int argc, char **argv) {
     }
 
     // Re-synthesize the predicates if you don't currently trust them
-    /*
     for (Rule &r : rules) {
         vector<map<string, Expr>> examples;
         map<string, Expr> binding;
-        std::cout << "Re-synthesizing predicate for " << r.orig << "\n";
-        r.predicate = synthesize_predicate(r.lhs, r.rhs, examples, &binding);
-        r.lhs = substitute(binding, r.lhs);
+        if (is_zero(r.predicate)) {
+            std::cout << "Re-synthesizing predicate for " << r.orig << " with a larger beam size\n";
+            int bs = 16;
+            while (bs <= 64 && is_zero(r.predicate)) {
+                binding.clear();
+                r.predicate = synthesize_predicate(r.lhs, r.rhs, examples, &binding, bs);
+                bs *= 2;
+            }
+            r.lhs = substitute(binding, r.lhs);
 
-        for (auto &it: binding) {
-            it.second = Call::make(it.second.type(), "fold", {it.second}, Call::PureExtern);
+            for (auto &it: binding) {
+                it.second = Call::make(it.second.type(), "fold", {it.second}, Call::PureExtern);
+            }
+            r.rhs = substitute(binding, r.rhs);
         }
-        r.rhs = substitute(binding, r.rhs);
     }
-    */
 
     /*
     {
