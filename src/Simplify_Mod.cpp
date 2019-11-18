@@ -39,7 +39,7 @@ Expr Simplify::visit(const Mod *op, ExprInfo *bounds) {
 
         int lanes = op->type.lanes();
 
-        auto rewrite = IRMatcher::rewriter(IRMatcher::mod(a, b), op->type, matcher_scope);
+        auto rewrite = IRMatcher::rewriter(IRMatcher::mod(a, b), op->type);
 
         if (rewrite(c0 % c1, fold(c0 % c1)) ||
             rewrite(IRMatcher::Indeterminate() % x, a) ||

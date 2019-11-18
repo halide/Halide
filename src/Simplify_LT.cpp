@@ -28,7 +28,7 @@ Expr Simplify::visit(const LT *op, ExprInfo *bounds) {
             return const_false(lanes);
         }
 
-        auto rewrite = IRMatcher::rewriter(IRMatcher::lt(a, b), op->type, ty, matcher_scope);
+        auto rewrite = IRMatcher::rewriter(IRMatcher::lt(a, b), op->type, ty);
 
         if (EVAL_IN_LAMBDA
             (rewrite(c0 < c1, fold(c0 < c1)) ||

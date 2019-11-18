@@ -40,7 +40,7 @@ Expr Simplify::visit(const Min *op, ExprInfo *bounds) {
         }
 
         int lanes = op->type.lanes();
-        auto rewrite = IRMatcher::rewriter(IRMatcher::min(a, b), op->type, matcher_scope);
+        auto rewrite = IRMatcher::rewriter(IRMatcher::min(a, b), op->type);
 
         if (EVAL_IN_LAMBDA
             (rewrite(min(x, x), x) ||

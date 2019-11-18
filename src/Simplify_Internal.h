@@ -185,8 +185,6 @@ public:
     // Only tracked for integer let vars
     Scope<ExprInfo> bounds_and_alignment_info;
 
-    Scope<Expr> matcher_scope;
-
     // Symbols used by rewrite rules
     IRMatcher::Wild<0> x;
     IRMatcher::Wild<1> y;

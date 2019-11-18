@@ -31,7 +31,7 @@ Expr Simplify::visit(const EQ *op, ExprInfo *bounds) {
         a = mutate(a, nullptr);
         b = mutate(b, nullptr);
         const int lanes = op->type.lanes();
-        auto rewrite = IRMatcher::rewriter(IRMatcher::eq(a, b), op->type, matcher_scope);
+        auto rewrite = IRMatcher::rewriter(IRMatcher::eq(a, b), op->type);
         if (rewrite(x == 1, x)) {
             return rewrite.result;
         } else if (rewrite(x == 0, !x)) {
@@ -68,7 +68,7 @@ Expr Simplify::visit(const EQ *op, ExprInfo *bounds) {
         return const_false(lanes);
     }
 
-    auto rewrite = IRMatcher::rewriter(IRMatcher::eq(delta, 0), op->type, delta.type(), matcher_scope);
+    auto rewrite = IRMatcher::rewriter(IRMatcher::eq(delta, 0), op->type, delta.type());
 
     if (
         #ifdef EXCLUDE_INVALID_ORDERING_RULES
@@ -112,7 +112,7 @@ Expr Simplify::visit(const EQ *op, ExprInfo *bounds) {
         } else {
             Expr a = s->a;
             Expr b = s->b;
-            auto rewrite = IRMatcher::rewriter(IRMatcher::eq(a, b), op->type, delta.type(), matcher_scope);
+            auto rewrite = IRMatcher::rewriter(IRMatcher::eq(a, b), op->type, delta.type());
             if (no_overflow_int(op->a.type()) &&
                 use_synthesized_rules &&
                 (

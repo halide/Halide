@@ -13,8 +13,6 @@
 #include <random>
 #include <set>
 
-#define MATCH_THROUGH_LETS 1
-
 namespace Halide {
 namespace Internal {
 
@@ -78,8 +76,6 @@ struct MatcherState {
     const BaseExprNode *bindings[max_wild];
     halide_scalar_value_t bound_const[max_wild];
 
-    const Scope<Expr> &scope;
-
     // values of the lanes field with special meaning.
     static constexpr uint16_t signed_integer_overflow = 0x8000;
     static constexpr uint16_t indeterminate_expression = 0x4000;
@@ -128,7 +124,7 @@ struct MatcherState {
     }
 
     HALIDE_ALWAYS_INLINE
-    MatcherState(const Scope<Expr> &s) noexcept : scope(s) {}
+    MatcherState() noexcept {}
 };
 
 template<typename T,
@@ -589,15 +585,6 @@ struct BinOp {
     template<uint32_t bound>
     HALIDE_ALWAYS_INLINE
     bool match(SpecificExpr e, MatcherState &state) const noexcept {
-        #ifdef MATCH_THROUGH_LETS
-        if (e.expr.node_type == IRNodeType::Variable) {
-            // check the scope
-            const std::string &name = ((const Variable &)e.expr).name;
-            if (state.scope.contains(name)) {
-                return match<bound>(SpecificExpr{*(state.scope.get(name).get())}, state);
-            }
-        }
-        #endif
         if (e.expr.node_type != Op::_node_type) {
             return false;
         }
@@ -701,15 +688,6 @@ struct CmpOp {
     template<uint32_t bound>
     HALIDE_ALWAYS_INLINE
     bool match(SpecificExpr e, MatcherState &state) const noexcept {
-        #ifdef MATCH_THROUGH_LETS
-        if (e.expr.node_type == IRNodeType::Variable) {
-            // check the scope
-            const std::string &name = ((const Variable &)e.expr).name;
-            if (state.scope.contains(name)) {
-                return match<bound>(SpecificExpr{*(state.scope.get(name).get())}, state);
-            }
-        }
-        #endif
         if (e.expr.node_type != Op::_node_type) {
             return false;
         }
@@ -1502,15 +1480,6 @@ struct SelectOp {
     template<uint32_t bound>
     HALIDE_ALWAYS_INLINE
     bool match(SpecificExpr e, MatcherState &state) const noexcept {
-        #ifdef MATCH_THROUGH_LETS
-        if (e.expr.node_type == IRNodeType::Variable) {
-            // check the scope
-            const std::string &name = ((const Variable &)e.expr).name;
-            if (state.scope.contains(name)) {
-                return match<bound>(SpecificExpr{*(state.scope.get(name).get())}, state);
-            }
-        }
-        #endif
         if (e.expr.node_type != Select::_node_type) {
             return false;
         }
@@ -2122,8 +2091,7 @@ void fuzz_test_rule(Before &&before, After &&after, Predicate &&pred,
     // expressions and see if the rule holds true. This should catch
     // silly errors, but not necessarily corner cases.
     static std::mt19937_64 rng(0);
-    Scope<Expr> scope;
-    MatcherState state(scope);
+    MatcherState state;
 
     Expr exprs[max_wild];
 
@@ -2272,8 +2240,8 @@ struct Rewriter {
     bool validate;
 
     HALIDE_ALWAYS_INLINE
-    Rewriter(Instance &&instance, halide_type_t ot, halide_type_t wt, const Scope<Expr> &scope) :
-        instance(std::forward<Instance>(instance)), state(scope), output_type(ot), wildcard_type(wt) {}
+    Rewriter(Instance &&instance, halide_type_t ot, halide_type_t wt) :
+        instance(std::forward<Instance>(instance)), output_type(ot), wildcard_type(wt) {}
 
     template<typename After>
     HALIDE_NEVER_INLINE
@@ -2438,26 +2406,26 @@ struct Rewriter {
 template<typename Instance,
          typename = typename enable_if_pattern<Instance>::type>
 HALIDE_ALWAYS_INLINE
-auto rewriter(Instance instance, halide_type_t output_type, halide_type_t wildcard_type, const Scope<Expr> &s) noexcept -> Rewriter<decltype(pattern_arg(instance))> {
-    return {pattern_arg(instance), output_type, wildcard_type, s};
+auto rewriter(Instance instance, halide_type_t output_type, halide_type_t wildcard_type) noexcept -> Rewriter<decltype(pattern_arg(instance))> {
+    return {pattern_arg(instance), output_type, wildcard_type};
 }
 
 template<typename Instance,
          typename = typename enable_if_pattern<Instance>::type>
 HALIDE_ALWAYS_INLINE
-auto rewriter(Instance instance, halide_type_t output_type, const Scope<Expr> &s) noexcept -> Rewriter<decltype(pattern_arg(instance))> {
-    return {pattern_arg(instance), output_type, output_type, s};
+auto rewriter(Instance instance, halide_type_t output_type) noexcept -> Rewriter<decltype(pattern_arg(instance))> {
+    return {pattern_arg(instance), output_type, output_type};
 }
 
 HALIDE_ALWAYS_INLINE
-auto rewriter(const Expr &e, halide_type_t wildcard_type, const Scope<Expr> &s) noexcept -> Rewriter<decltype(pattern_arg(e))> {
-    return {pattern_arg(e), e.type(), wildcard_type, s};
+auto rewriter(const Expr &e, halide_type_t wildcard_type) noexcept -> Rewriter<decltype(pattern_arg(e))> {
+    return {pattern_arg(e), e.type(), wildcard_type};
 }
 
 
 HALIDE_ALWAYS_INLINE
-auto rewriter(const Expr &e, const Scope<Expr> &s) noexcept -> Rewriter<decltype(pattern_arg(e))> {
-    return {pattern_arg(e), e.type(), e.type(), s};
+auto rewriter(const Expr &e) noexcept -> Rewriter<decltype(pattern_arg(e))> {
+    return {pattern_arg(e), e.type(), e.type()};
 }
 // @}
 
