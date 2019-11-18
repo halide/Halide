@@ -1,7 +1,6 @@
 #include "Halide.h"
 #include <stdint.h>
 #include "halide_trace_config.h"
-#include "../autoscheduler/SimpleAutoSchedule.h"
 
 namespace {
 
@@ -44,13 +43,6 @@ public:
     // Inputs and outputs
     Input<Func> deinterleaved{ "deinterleaved", Int(16), 3 };
     Output<Func> output{ "output", Int(16), 3 };
-
-    bool use_simple_autoscheduler = false;
-
-    Demosaic() {
-        use_simple_autoscheduler =
-            Halide::Internal::get_env_variable("HL_USE_SIMPLE_AUTOSCHEDULER") == "1";
-    }
 
     // Defines outputs using inputs
     void generate() {
@@ -161,7 +153,7 @@ public:
     void schedule() {
         Pipeline p(output);
 
-        if (auto_schedule || use_simple_autoscheduler) {
+        if (auto_schedule) {
             // Nothing
         } else if (get_target().has_gpu_feature()) {
             Var xi, yi;
@@ -240,12 +232,6 @@ public:
 
     void generate();
 
-    bool use_simple_autoscheduler = false;
-
-    CameraPipe() {
-        use_simple_autoscheduler =
-            Halide::Internal::get_env_variable("HL_USE_SIMPLE_AUTOSCHEDULER") == "1";
-    }
 private:
 
     Func hot_pixel_suppression(Func input);
@@ -289,7 +275,7 @@ Func CameraPipe::color_correct(Func input) {
     Expr val =  (matrix_3200(x, y) * alpha + matrix_7000(x, y) * (1 - alpha));
     matrix(x, y) = cast<int16_t>(val * 256.0f); // Q8.8 fixed point
 
-    if (!auto_schedule && !use_simple_autoscheduler) {
+    if (!auto_schedule) {
         matrix.compute_root();
         if (get_target().has_gpu_feature()) {
             matrix.gpu_single_thread();
@@ -352,7 +338,7 @@ Func CameraPipe::apply_curve(Func input) {
     // makeLUT add guard band outside of (minRaw, maxRaw]:
     curve(x) = select(x <= minRaw, 0, select(x > maxRaw, 255, val));
 
-    if (!auto_schedule && !use_simple_autoscheduler) {
+    if (!auto_schedule) {
         // It's a LUT, compute it once ahead of time.
         curve.compute_root();
         if (get_target().has_gpu_feature()) {
@@ -391,7 +377,7 @@ Func CameraPipe::sharpen(Func input) {
     // Convert the sharpening strength to 2.5 fixed point. This allows sharpening in the range [0, 4].
     Func sharpen_strength_x32("sharpen_strength_x32");
     sharpen_strength_x32() = u8_sat(sharpen_strength * 32);
-    if (!auto_schedule && !use_simple_autoscheduler) {
+    if (!auto_schedule) {
         sharpen_strength_x32.compute_root();
         if (get_target().has_gpu_feature()) {
             sharpen_strength_x32.gpu_single_thread();
@@ -463,34 +449,6 @@ void CameraPipe::generate() {
     // Schedule
     if (auto_schedule) {
         // nothing
-    } else if (use_simple_autoscheduler) {
-        Halide::SimpleAutoscheduleOptions options;
-        options.gpu = get_target().has_gpu_feature();
-        options.gpu_tile_channel = 1;
-        Func output_func = processed;
-        Halide::simple_autoschedule(output_func,
-                    {{"sharpen_strength", 1.0f},
-                     {"blackLevel", 25},
-                     {"whiteLevel", 1023},
-                     {"gamma", 2.f},
-                     {"contrast", 50.f},
-                     {"color_temp", 3200.f},
-                     {"input.min.0", 0},
-                     {"input.extent.0", 2592},
-                     {"input.min.1", 0},
-                     {"input.extent.1", 1968},
-                     {"matrix3200.min.0", 0},
-                     {"matrix3200.extent.0", 4},
-                     {"matrix3200.min.1", 0},
-                     {"matrix3200.extent.1", 3},
-                     {"matrix7000.min.0", 0},
-                     {"matrix7000.extent.0", 4},
-                     {"matrix7000.min.1", 0},
-                     {"matrix7000.extent.1", 3}},
-                    {{0, 2592-32},
-                     {0, 1968-48},
-                     {0, 3}},
-                    options);
     } else if (get_target().has_gpu_feature()) {
 
         // We can generate slightly better code if we know the output is even-sized

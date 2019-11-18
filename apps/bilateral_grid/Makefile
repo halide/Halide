@@ -27,7 +27,7 @@ $(BIN)/%/bilateral_grid_auto_schedule.a: $(GENERATOR_BIN)/bilateral_grid.generat
 
 $(BIN)/%/bilateral_grid_gradient_auto_schedule.a: $(GENERATOR_BIN)/bilateral_grid.generator
 	@mkdir -p $(@D)
-	$^ -g bilateral_grid -e $(GENERATOR_OUTPUTS) -o $(@D) -f bilateral_grid_gradient_auto_schedule target=$(HL_TARGET)-no_runtime auto_schedule=true -p $(GRADIENT_AUTOSCHED_BIN)/libgradient_autoscheduler.so -s Li2018
+	$^ -g bilateral_grid -e $(GENERATOR_OUTPUTS) -o $(@D) -f bilateral_grid_gradient_auto_schedule target=$*-no_runtime auto_schedule=true -p $(GRADIENT_AUTOSCHED_BIN)/libgradient_autoscheduler.so -s Li2018
 
 $(BIN)/%/filter: filter.cpp $(BIN)/%/bilateral_grid.a $(BIN)/%/bilateral_grid_auto_schedule.a $(BIN)/%/bilateral_grid_gradient_auto_schedule.a
 	@mkdir -p $(@D)
@@ -71,10 +71,8 @@ BATCH_ID ?= 0
 TRAIN_ONLY ?= 0
 SAMPLES_DIR ?= autotuned_samples
 autotune: $(GENERATOR_BIN)/bilateral_grid.generator $(AUTOSCHED_BIN)/featurization_to_sample $(AUTOSCHED_BIN)/retrain_cost_model $(AUTOSCHED_BIN)/libauto_schedule.so $(AUTOSCHED_SRC)/autotune_loop.sh
-	HL_TARGET=host-cuda \
 	HL_MACHINE_PARAMS=80,1,1 \
 	SAMPLES_DIR=$(SAMPLES_DIR) \
-	HL_WEIGHTS_DIR=$(AUTOSCHED_SRC)/gpu.weights \
 	HL_DEBUG_CODEGEN=0 \
 	HL_SHARED_MEMORY_LIMIT=48 \
 	bash $(AUTOSCHED_SRC)/autotune_loop.sh \

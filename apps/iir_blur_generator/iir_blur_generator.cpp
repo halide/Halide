@@ -2,7 +2,6 @@
 // for a 2D image.
 
 #include "Halide.h"
-#include "../autoscheduler/SimpleAutoSchedule.h"
 
 using namespace Halide;
 using namespace Halide::BoundaryConditions;
@@ -10,8 +9,6 @@ using namespace Halide::BoundaryConditions;
 Var x, y, c;
 
 class IirBlur : public Generator<IirBlur> {
-
-    bool use_simple_autoscheduler;
 
     // Defines a func to blur the columns of an input with a first order low
     // pass IIR filter, followed by a transpose.
@@ -36,7 +33,7 @@ class IirBlur : public Generator<IirBlur> {
         transpose(x, y, c) = blur(y, x, c);
 
         // Schedule
-        if (auto_schedule || use_simple_autoscheduler) {
+        if (auto_schedule) {
             // Nothing
         } else if (get_target().has_gpu_feature()) {
             Var xi, yi;
@@ -88,16 +85,13 @@ public:
         Expr width = input.width();
         Expr height = input.height();
 
-        use_simple_autoscheduler =
-            Halide::Internal::get_env_variable("HL_USE_SIMPLE_AUTOSCHEDULER") == "1";
-
         // First, blur the columns of the input.
         Func blury_T = blur_cols_transpose(input, height, alpha);
 
         // Blur the columns again (the rows of the original).
         output = blur_cols_transpose(blury_T, width, alpha);
 
-        if (!auto_schedule && !use_simple_autoscheduler && get_target().has_gpu_feature()) {
+        if (!auto_schedule && get_target().has_gpu_feature()) {
             Var xi, yi;
             output.compute_root()
                 .reorder(c, x, y)
@@ -105,24 +99,6 @@ public:
         }
 
         // Estimates
-        if (use_simple_autoscheduler) {
-            Halide::SimpleAutoscheduleOptions options;
-            options.gpu = get_target().has_gpu_feature();
-            options.gpu_tile_channel = 1;
-            Func output_func = output;
-            Halide::simple_autoschedule(output_func,
-                    {{"alpha", 0.1f},
-                     {"input.min.0", 0},
-                     {"input.extent.0", 1536},
-                     {"input.min.1", 0},
-                     {"input.extent.1", 2560},
-                     {"input.min.2", 0},
-                     {"input.extent.2", 3}},
-                    {{0, 1536},
-                     {0, 2560},
-                     {0, 3}},
-                    options);
-        }
         {
             input.dim(0).set_bounds_estimate(0, 1536)
                    .dim(1).set_bounds_estimate(0, 2560)

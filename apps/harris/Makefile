@@ -22,11 +22,11 @@ $(BIN)/%/harris_auto_schedule.a: $(GENERATOR_BIN)/harris.generator $(AUTOSCHED_B
 	HL_WEIGHTS_DIR=$(AUTOSCHED_SRC)/gpu.weights \
 	HL_DEBUG_CODEGEN=1 \
 	HL_SHARED_MEMORY_LIMIT=48 \
-	$< -g harris -e $(GENERATOR_OUTPUTS) -o $(@D) -f harris_auto_schedule target=$(HL_TARGET) auto_schedule=true -p $(AUTOSCHED_BIN)/libauto_schedule.so -s Adams2019 machine_params=$(HL_MACHINE_PARAMS) 2> stderr.txt > stdout.txt
+	$< -g harris -e $(GENERATOR_OUTPUTS) -o $(@D) -f harris_auto_schedule target=$* auto_schedule=true -p $(AUTOSCHED_BIN)/libauto_schedule.so -s Adams2019 machine_params=$(HL_MACHINE_PARAMS) 2> stderr.txt > stdout.txt
 
 $(BIN)/%/harris_gradient_auto_schedule.a: $(GENERATOR_BIN)/harris.generator
 	@mkdir -p $(@D)
-	$^ -g harris -e $(GENERATOR_OUTPUTS) -o $(@D) -f harris_gradient_auto_schedule target=$(HL_TARGET)-no_runtime auto_schedule=true -p $(GRADIENT_AUTOSCHED_BIN)/libgradient_autoscheduler.so -s Li2018
+	$^ -g harris -e $(GENERATOR_OUTPUTS) -o $(@D) -f harris_gradient_auto_schedule target=$*-no_runtime auto_schedule=true -p $(GRADIENT_AUTOSCHED_BIN)/libgradient_autoscheduler.so -s Li2018
 
 $(BIN)/%/filter: filter.cpp $(BIN)/%/harris.a $(BIN)/%/harris_auto_schedule.a $(BIN)/%/harris_gradient_auto_schedule.a
 	@mkdir -p $(@D)
@@ -48,7 +48,6 @@ autotune: $(GENERATOR_BIN)/harris.generator $(AUTOSCHED_BIN)/featurization_to_sa
 	HL_MACHINE_PARAMS=80,1,1 \
 	SAMPLES_DIR=$(SAMPLES_DIR) \
 	HL_PERMIT_FAILED_UNROLL=1 \
-	HL_WEIGHTS_DIR=$(AUTOSCHED_SRC)/gpu.weights \
 	HL_DEBUG_CODEGEN=1 \
 	HL_SHARED_MEMORY_LIMIT=48 \
 	bash $(AUTOSCHED_SRC)/autotune_loop.sh \

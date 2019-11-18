@@ -20,11 +20,11 @@ $(GENERATOR_BIN)/mat_mul.generator: mat_mul_generator.cpp $(GENERATOR_DEPS)
 
 $(BIN)/%/mat_mul.a: $(GENERATOR_BIN)/mat_mul.generator
 	@mkdir -p $(@D)
-	$^ -g mat_mul -e $(GENERATOR_OUTPUTS) -o $(@D) target=$(HL_TARGET) size=$(MATRIX_SIZE)
+	$^ -g mat_mul -e $(GENERATOR_OUTPUTS) -o $(@D) target=$* size=$(MATRIX_SIZE)
 
 $(BIN)/%/mat_mul_gradient_auto_schedule.a: $(GENERATOR_BIN)/mat_mul.generator
 	@mkdir -p $(@D)
-	$^ -g mat_mul -e $(GENERATOR_OUTPUTS) -o $(@D) -f mat_mul_gradient_auto_schedule target=$(HL_TARGET)-no_runtime auto_schedule=true -p $(GRADIENT_AUTOSCHED_BIN)/libgradient_autoscheduler.so -s Li2018
+	$^ -g mat_mul -e $(GENERATOR_OUTPUTS) -o $(@D) -f mat_mul_gradient_auto_schedule target=$*-no_runtime auto_schedule=true -p $(GRADIENT_AUTOSCHED_BIN)/libgradient_autoscheduler.so -s Li2018
 
 $(BIN)/%/runner: runner.cpp $(BIN)/%/mat_mul.a $(BIN)/%/mat_mul_gradient_auto_schedule.a
 	@mkdir -p $(@D)
@@ -40,9 +40,9 @@ BATCH_ID ?= 0
 TRAIN_ONLY ?= 0
 SAMPLES_DIR ?= autotuned_samples
 autotune: $(GENERATOR_BIN)/mat_mul.generator $(AUTOSCHED_BIN)/featurization_to_sample $(AUTOSCHED_BIN)/retrain_cost_model $(AUTOSCHED_BIN)/libauto_schedule.so $(AUTOSCHED_SRC)/autotune_loop.sh
-	HL_TARGET=$(HL_TARGET) \
 	HL_MACHINE_PARAMS=80,1,1 \
 	SAMPLES_DIR=$(SAMPLES_DIR) \
+	HL_PERMIT_FAILED_UNROLL=1 \
 	HL_DEBUG_CODEGEN=0 \
 	HL_SHARED_MEMORY_LIMIT=48 \
 	bash $(AUTOSCHED_SRC)/autotune_loop.sh \

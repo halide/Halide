@@ -1,5 +1,4 @@
 #include "Halide.h"
-#include "../autoscheduler/SimpleAutoSchedule.h"
 
 namespace {
 
@@ -87,17 +86,15 @@ public:
 
         if (auto_schedule) {
             // Provide estimates on the input image
-            input.dim(0).set_bounds_estimate(0, 1536);
-            input.dim(1).set_bounds_estimate(0, 2560);
-            input.dim(2).set_bounds_estimate(0, 3);
+            input.set_estimates({{0, 1536}, {0, 2560}, {0, 3}});
             // Provide estimates on the parameters
             patch_size.set_estimate(7);
             search_area.set_estimate(7);
             sigma.set_estimate(0.12f);
             // Provide estimates on the output pipeline
-            non_local_means.estimate(x, 0, 1536)
-                .estimate(y, 0, 2560)
-                .estimate(c, 0, 3);
+            non_local_means.set_estimate(x, 0, 1536)
+                .set_estimate(y, 0, 2560)
+                .set_estimate(c, 0, 3);
         } /*else if (get_target().has_gpu_feature()) {
             // TODO: the GPU schedule is currently using to much shared memory
             // because the simplifier can't simplify the expr (it can't cancel
@@ -121,50 +118,27 @@ public:
             d.compute_at(non_local_means_sum, s_dom.y).store_root()
                 .reorder(dx, dy, x, y)
                 .gpu_tile(x, y, xi, yi, 32, 8);
-        } else {
-            std::string use_simple_autoscheduler =
-                Halide::Internal::get_env_variable("HL_USE_SIMPLE_AUTOSCHEDULER");
-            if (use_simple_autoscheduler == "1") {
-                Halide::SimpleAutoscheduleOptions options;
-                options.gpu = get_target().has_gpu_feature();
-                options.gpu_tile_channel = 3;
-                Func output_func = non_local_means;
-                Halide::simple_autoschedule(output_func,
-                                    {{"input.min.0", 0},
-                                     {"input.extent.0", 1536},
-                                     {"input.min.1", 0},
-                                     {"input.extent.1", 2560},
-                                     {"input.min.2", 0},
-                                     {"input.extent.2", 3},
-                                     {"patch_size", 7},
-                                     {"search_area", 7},
-                                     {"sigma", 0.12f}},
-                                    {{0, 1536},
-                                     {0, 2560},
-                                     {0, 3}},
-                                    options);
-            } else {
-                non_local_means.compute_root()
-                    .reorder(c, x, y)
-                    .tile(x, y, tx, ty, x, y, 16, 8)
-                    .parallel(ty)
-                    .vectorize(x, 8);
-                blur_d_y.compute_at(non_local_means, tx)
-                    .reorder(y, x)
-                    .vectorize(x, 8);
-                d.compute_at(non_local_means, tx)
-                    .vectorize(x, 8);
-                non_local_means_sum.compute_at(non_local_means, x)
-                    .reorder(c, x, y)
-                    .bound(c, 0, 4).unroll(c)
-                    .vectorize(x, 8);
-                non_local_means_sum.update(0)
-                    .reorder(c, x, y, s_dom.x, s_dom.y)
-                    .unroll(c)
-                    .vectorize(x, 8);
-                blur_d.compute_at(non_local_means_sum, x)
-                    .vectorize(x, 8);
-            }
+        }*/ else {
+            non_local_means.compute_root()
+                .reorder(c, x, y)
+                .tile(x, y, tx, ty, x, y, 16, 8)
+                .parallel(ty)
+                .vectorize(x, 8);
+            blur_d_y.compute_at(non_local_means, tx)
+                .reorder(y, x)
+                .vectorize(x, 8);
+            d.compute_at(non_local_means, tx)
+                .vectorize(x, 8);
+            non_local_means_sum.compute_at(non_local_means, x)
+                .reorder(c, x, y)
+                .bound(c, 0, 4).unroll(c)
+                .vectorize(x, 8);
+            non_local_means_sum.update(0)
+                .reorder(c, x, y, s_dom.x, s_dom.y)
+                .unroll(c)
+                .vectorize(x, 8);
+            blur_d.compute_at(non_local_means_sum, x)
+                .vectorize(x, 8);
         }
     }
 };

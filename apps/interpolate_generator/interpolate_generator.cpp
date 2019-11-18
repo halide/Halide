@@ -1,5 +1,4 @@
 #include "Halide.h"
-#include "../autoscheduler/SimpleAutoSchedule.h"
 
 namespace {
 
@@ -66,69 +65,48 @@ public:
         } else {
             Var yo, yi, xo, xi, ci;
             if (get_target().has_gpu_feature()) {
-                std::string use_simple_autoscheduler =
-                    Halide::Internal::get_env_variable("HL_USE_SIMPLE_AUTOSCHEDULER");
-                if (use_simple_autoscheduler == "1") {
-                    output_ = normalize;
-                    Halide::SimpleAutoscheduleOptions options;
-                    options.gpu = get_target().has_gpu_feature();
-                    options.gpu_tile_channel = 1;
-                    Func output_func = output_;
-                    Halide::simple_autoschedule(output_func,
-                            {{"input.min.0", 0},
-                            {"input.extent.0", 1536},
-                            {"input.min.1", 0},
-                            {"input.extent.1", 2560},
-                            {"input.min.2", 0},
-                            {"input.extent.2", 4}},
-                            {{0, 1536},
-                             {0, 2560},
-                             {0, 3}},
-                            options);
-                } else {
-                    // Some gpus don't have enough memory to process the entire
-                    // image, so we process the image in tiles.
+                // Some gpus don't have enough memory to process the entire
+                // image, so we process the image in tiles.
 
-                    // We can't compute the entire output stage at once on the GPU
-                    // - it takes too much GPU memory on some of our build bots,
-                    // so we wrap the final stage in a CPU stage.
-                    Func cpu_wrapper = normalize.in();
+                // We can't compute the entire output stage at once on the GPU
+                // - it takes too much GPU memory on some of our build bots,
+                // so we wrap the final stage in a CPU stage.
+                Func cpu_wrapper = normalize.in();
 
-                    cpu_wrapper
-                        .reorder(c, x, y)
-                        .bound(c, 0, 3)
-                        .tile(x, y, xo, yo, xi, yi, input_.width()/4, input_.height()/4)
-                        .vectorize(xi, 8);
+                cpu_wrapper
+                    .reorder(c, x, y)
+                    .bound(c, 0, 3)
+                    .tile(x, y, xo, yo, xi, yi, input_.width()/4, input_.height()/4)
+                    .vectorize(xi, 8);
 
-                    normalize
-                        .compute_at(cpu_wrapper, xo)
-                        .reorder(c, x, y)
-                        .gpu_tile(x, y, xi, yi, 16, 16)
-                        .unroll(c);
+                normalize
+                    .compute_at(cpu_wrapper, xo)
+                    .reorder(c, x, y)
+                    .gpu_tile(x, y, xi, yi, 16, 16)
+                    .unroll(c);
 
-                    // Start from level 1 to save memory - level zero will be computed on demand
-                    for (int l = 1; l < levels; ++l) {
-                        int tile_size = 32 >> l;
-                        if (tile_size < 1) tile_size = 1;
-                        if (tile_size > 8) tile_size = 8;
-                        downsampled[l]
-                            .compute_root()
-                            .gpu_tile(x, y, c, xi, yi, ci, tile_size, tile_size, 4);
-                        if (l == 1 || l == 4) {
-                            interpolated[l]
-                                .compute_at(cpu_wrapper, xo)
-                                .gpu_tile(x, y, c, xi, yi, ci, 8, 8, 4);
-                        } else {
-                            int parent = l > 4 ? 4 : 1;
-                            interpolated[l]
-                                .compute_at(interpolated[parent], x)
-                                .gpu_threads(x, y, c);
-                        }
+                // Start from level 1 to save memory - level zero will be computed on demand
+                for (int l = 1; l < levels; ++l) {
+                    int tile_size = 32 >> l;
+                    if (tile_size < 1) tile_size = 1;
+                    if (tile_size > 8) tile_size = 8;
+                    downsampled[l]
+                        .compute_root()
+                        .gpu_tile(x, y, c, xi, yi, ci, tile_size, tile_size, 4);
+                    if (l == 1 || l == 4) {
+                        interpolated[l]
+                            .compute_at(cpu_wrapper, xo)
+                            .gpu_tile(x, y, c, xi, yi, ci, 8, 8, 4);
+                    } else {
+                        int parent = l > 4 ? 4 : 1;
+                        interpolated[l]
+                            .compute_at(interpolated[parent], x)
+                            .gpu_threads(x, y, c);
                     }
-
-                    // The cpu wrapper is our new output Func
-                    output_ = cpu_wrapper;
                 }
+
+                // The cpu wrapper is our new output Func
+                output_ = cpu_wrapper;
             } else {
                 for (int l = 1; l < levels-1; ++l) {
                     downsampled[l]

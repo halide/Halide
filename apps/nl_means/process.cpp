@@ -2,9 +2,8 @@
 #include <chrono>
 
 #include "nl_means.h"
-#include "nl_means_classic_auto_schedule.h"
 #include "nl_means_auto_schedule.h"
-#include "nl_means_simple_auto_schedule.h"
+#include "nl_means_gradient_auto_schedule.h"
 
 #include "benchmark_util.h"
 #include "HalideBuffer.h"
@@ -31,9 +30,8 @@ int main(int argc, char **argv) {
 
     multi_way_bench({
         {"Manual", [&]() { nl_means(input, patch_size, search_area, sigma, output); output.device_sync(); }},
-        {"Classic auto-scheduled", [&]() { nl_means_classic_auto_schedule(input, patch_size, search_area, sigma, output); output.device_sync(); }},
         {"Auto-scheduled", [&]() { nl_means_auto_schedule(input, patch_size, search_area, sigma, output); output.device_sync(); }},
-        {"Simple auto-scheduled", [&]() { nl_means_simple_auto_schedule(input, patch_size, search_area, sigma, output); output.device_sync(); }}
+        {"Gradient auto-scheduled", [&]() { nl_means_gradient_auto_schedule(input, patch_size, search_area, sigma, output); output.device_sync(); }}
         }
     );
 

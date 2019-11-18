@@ -27,7 +27,7 @@ $(BIN)/%/stencil_chain_auto_schedule.a: $(GENERATOR_BIN)/stencil_chain.generator
 
 $(BIN)/%/stencil_chain_gradient_auto_schedule.a: $(GENERATOR_BIN)/stencil_chain.generator
 	@mkdir -p $(@D)
-	$^ -g stencil_chain -e $(GENERATOR_OUTPUTS) -o $(@D) -f stencil_chain_gradient_auto_schedule target=$(HL_TARGET)-no_runtime auto_schedule=true -p $(GRADIENT_AUTOSCHED_BIN)/libgradient_autoscheduler.so -s Li2018
+	$^ -g stencil_chain -e $(GENERATOR_OUTPUTS) -o $(@D) -f stencil_chain_gradient_auto_schedule target=$*-no_runtime auto_schedule=true -p $(GRADIENT_AUTOSCHED_BIN)/libgradient_autoscheduler.so -s Li2018
 
 $(BIN)/%/process: process.cpp $(BIN)/%/stencil_chain.a $(BIN)/%/stencil_chain_auto_schedule.a $(BIN)/%/stencil_chain_gradient_auto_schedule.a
 	@mkdir -p $(@D)
@@ -46,10 +46,8 @@ BATCH_ID ?= 0
 TRAIN_ONLY ?= 0
 SAMPLES_DIR ?= autotuned_samples
 autotune: $(GENERATOR_BIN)/stencil_chain.generator $(AUTOSCHED_BIN)/featurization_to_sample $(AUTOSCHED_BIN)/retrain_cost_model $(AUTOSCHED_BIN)/libauto_schedule.so $(AUTOSCHED_SRC)/autotune_loop.sh
-	HL_TARGET=host-cuda \
 	HL_MACHINE_PARAMS=80,1,1 \
 	SAMPLES_DIR=$(SAMPLES_DIR) \
-	HL_WEIGHTS_DIR=$(AUTOSCHED_SRC)/gpu.weights \
 	HL_DEBUG_CODEGEN=0 \
 	HL_SHARED_MEMORY_LIMIT=48 \
 	bash $(AUTOSCHED_SRC)/autotune_loop.sh \

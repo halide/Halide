@@ -2,9 +2,8 @@
 #include <random>
 
 #include "fit_and_slice_3x4.h"
-#include "fit_and_slice_3x4_classic_auto_schedule.h"
 #include "fit_and_slice_3x4_auto_schedule.h"
-#include "fit_and_slice_3x4_simple_auto_schedule.h"
+#include "fit_and_slice_3x4_gradient_auto_schedule.h"
 
 #include "benchmark_util.h"
 #include "HalideBuffer.h"
@@ -37,9 +36,8 @@ int main(int argc, char **argv) {
 
     multi_way_bench({
         {"Manual", [&]() { fit_and_slice_3x4(r_sigma, s_sigma, low_res_in, low_res_out, high_res_in, high_res_out); }},
-        {"Classic auto-scheduled", [&]() { fit_and_slice_3x4_classic_auto_schedule(r_sigma, s_sigma, low_res_in, low_res_out, high_res_in, high_res_out); }},
         {"Auto-scheduled", [&]() { fit_and_slice_3x4_auto_schedule(r_sigma, s_sigma, low_res_in, low_res_out, high_res_in, high_res_out); }},
-        {"Simple auto-scheduled", [&]() { fit_and_slice_3x4_simple_auto_schedule(r_sigma, s_sigma, low_res_in, low_res_out, high_res_in, high_res_out); }}
+        {"Gradient auto-scheduled", [&]() { fit_and_slice_3x4_gradient_auto_schedule(r_sigma, s_sigma, low_res_in, low_res_out, high_res_in, high_res_out); }}
     });
 
     return 0;

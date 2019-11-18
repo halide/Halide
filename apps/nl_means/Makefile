@@ -1,12 +1,14 @@
 include ../support/Makefile.inc
 include ../support/autoscheduler.inc
 
-
 HL_TARGET=host-cuda
+
+GRADIENT_AUTOSCHED_BIN=../gradient_autoscheduler/bin
+CXXFLAGS += -I../support/
 
 all: $(BIN)/$(HL_TARGET)/process
 
-$(GENERATOR_BIN)/nl_means.generator: nl_means_generator.cpp ../autoscheduler/SimpleAutoSchedule.h ../autoscheduler/SimpleAutoSchedule.cpp $(GENERATOR_DEPS)
+$(GENERATOR_BIN)/nl_means.generator: nl_means_generator.cpp $(GENERATOR_DEPS)
 	@mkdir -p $(BIN)
 	$(CXX) $(CXXFLAGS) -g $(filter-out %.h,$^) -o $@ $(LDFLAGS) $(HALIDE_SYSTEM_LIBS) $(USE_EXPORT_DYNAMIC)
 
@@ -29,14 +31,13 @@ $(BIN)/%/nl_means_auto_schedule.a: $(GENERATOR_BIN)/nl_means.generator $(AUTOSCH
 	HL_WEIGHTS_DIR=$(AUTOSCHED_SRC)/gpu.weights \
 	HL_DEBUG_CODEGEN=1 \
 	HL_SHARED_MEMORY_LIMIT=48 \
-	$^ -g nl_means -e $(GENERATOR_OUTPUTS) -o $(@D) -f nl_means_auto_schedule target=$*-no_runtime auto_schedule=true -p $(AUTOSCHED_BIN)/libauto_schedule.so machine_params=$(HL_MACHINE_PARAMS) 2> stderr.txt > stdout.txt
+	$< -g nl_means -e $(GENERATOR_OUTPUTS) -o $(@D) -f nl_means_auto_schedule target=$*-no_runtime auto_schedule=true -p $(AUTOSCHED_BIN)/libauto_schedule.so -s Adams2019 machine_params=$(HL_MACHINE_PARAMS) 2> stderr.txt > stdout.txt
 
-$(BIN)/%/nl_means_simple_auto_schedule.a: $(GENERATOR_BIN)/nl_means.generator
+$(BIN)/%/nl_means_gradient_auto_schedule.a: $(GENERATOR_BIN)/nl_means.generator
 	@mkdir -p $(@D)
-	HL_USE_SIMPLE_AUTOSCHEDULER=1 \
-	$^ -g nl_means -e $(GENERATOR_OUTPUTS) -o $(@D) -f nl_means_simple_auto_schedule target=$*$(HL_TARGET)-no_runtime auto_schedule=false
+	$^ -g nl_means -e $(GENERATOR_OUTPUTS) -o $(@D) -f nl_means_gradient_auto_schedule target=$*-no_runtime auto_schedule=true -p $(GRADIENT_AUTOSCHED_BIN)/libgradient_autoscheduler.so -s Li2018
 
-$(BIN)/%/process: process.cpp $(BIN)/%/nl_means.a $(BIN)/%/nl_means_classic_auto_schedule.a $(BIN)/%/nl_means_auto_schedule.a $(BIN)/%/nl_means_simple_auto_schedule.a
+$(BIN)/%/process: process.cpp $(BIN)/%/nl_means.a $(BIN)/%/nl_means_auto_schedule.a $(BIN)/%/nl_means_gradient_auto_schedule.a
 	@mkdir -p $(@D)
 	$(CXX) $(CXXFLAGS) -I$(BIN)/$* -Wall $^ -o $@ $(LDFLAGS) $(IMAGE_IO_FLAGS) $(CUDA_LDFLAGS) $(OPENCL_LDFLAGS) $(OPENGL_LDFLAGS)
 
@@ -49,14 +50,20 @@ clean:
 
 test: $(BIN)/$(HL_TARGET)/out.png
 
+BATCH_ID ?= 0
+TRAIN_ONLY ?= 0
+SAMPLES_DIR ?= autotuned_samples
 autotune: $(GENERATOR_BIN)/nl_means.generator $(AUTOSCHED_BIN)/featurization_to_sample $(AUTOSCHED_BIN)/retrain_cost_model $(AUTOSCHED_BIN)/libauto_schedule.so $(AUTOSCHED_SRC)/autotune_loop.sh
+	HL_MACHINE_PARAMS=80,1,1 \
+	SAMPLES_DIR=$(SAMPLES_DIR) \
 	HL_PERMIT_FAILED_UNROLL=1 \
-	HL_WEIGHTS_DIR=$(AUTOSCHED_SRC)/gpu.weights \
 	HL_DEBUG_CODEGEN=1 \
 	HL_SHARED_MEMORY_LIMIT=48 \
 	bash $(AUTOSCHED_SRC)/autotune_loop.sh \
 		$(GENERATOR_BIN)/nl_means.generator \
 		nl_means \
-		$(HL_TARGET) \
+		host-cuda \
 		$(AUTOSCHED_SRC)/gpu.weights \
-		$(AUTOSCHED_BIN)
+		$(AUTOSCHED_BIN) \
+		$(BATCH_ID) \
+		$(TRAIN_ONLY)

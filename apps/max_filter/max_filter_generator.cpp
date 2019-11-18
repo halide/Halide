@@ -1,5 +1,4 @@
 #include "Halide.h"
-#include "../autoscheduler/SimpleAutoSchedule.h"
 
 namespace {
 
@@ -64,42 +63,22 @@ public:
         // Schedule
         if (!auto_schedule) {
             if (get_target().has_gpu_feature()) {
-                std::string use_simple_autoscheduler =
-                    Halide::Internal::get_env_variable("HL_USE_SIMPLE_AUTOSCHEDULER");
-                if (use_simple_autoscheduler == "1") {
-                    Halide::SimpleAutoscheduleOptions options;
-                    options.gpu = get_target().has_gpu_feature();
-                    options.gpu_tile_channel = 3;
-                    Func output_func = output_;
-                    Halide::simple_autoschedule(output_func,
-                            {{"input.min.0", 0},
-                             {"input.extent.0", 1536},
-                             {"input.min.1", 0},
-                             {"input.extent.1", 2560},
-                             {"input.min.2", 0},
-                             {"input.extent.2", 3}},
-                            {{0, 1536},
-                             {0, 2560},
-                             {0, 3}},
-                            options);
-                } else {
-                    slice_for_radius.compute_root();
-                    filter_height.compute_root();
-                    Var xi, xo, yi;
+                slice_for_radius.compute_root();
+                filter_height.compute_root();
+                Var xi, xo, yi;
 
-                    output_
-                        .split(x, xo, xi, 128)
-                        .reorder(xi, xo, y, c)
-                        .gpu_blocks(xo, y, c).gpu_threads(xi);
+                output_
+                    .split(x, xo, xi, 128)
+                    .reorder(xi, xo, y, c)
+                    .gpu_blocks(xo, y, c).gpu_threads(xi);
 
-                    vert_log.compute_root()
-                        .reorder(c, t, x, y)
-                        .gpu_tile(x, y, xi, yi, 16, 16)
-                        .update()
-                        .split(x, xo, xi, 128)
-                        .reorder(r.x, r.y, xi, xo, c)
-                        .gpu_blocks(xo, c).gpu_threads(xi);
-                }
+                vert_log.compute_root()
+                    .reorder(c, t, x, y)
+                    .gpu_tile(x, y, xi, yi, 16, 16)
+                    .update()
+                    .split(x, xo, xi, 128)
+                    .reorder(r.x, r.y, xi, xo, c)
+                    .gpu_blocks(xo, c).gpu_threads(xi);
             } else {
                 Var tx;
                 // These don't matter, just LUTs

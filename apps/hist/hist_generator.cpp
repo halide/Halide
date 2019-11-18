@@ -1,5 +1,4 @@
 #include "Halide.h"
-#include "../autoscheduler/SimpleAutoSchedule.h"
 
 namespace {
 
@@ -57,12 +56,8 @@ public:
 
         // Estimates (for autoscheduler; ignored otherwise)
         {
-            input.dim(0).set_bounds_estimate(0, 1536)
-                 .dim(1).set_bounds_estimate(0, 2560)
-                 .dim(2).set_bounds_estimate(0, 3);
-            output.dim(0).set_bounds_estimate(0, 1536)
-                  .dim(1).set_bounds_estimate(0, 2560)
-                  .dim(2).set_bounds_estimate(0, 3);
+            input.set_estimates({{0, 1536}, {0, 2560}, {0, 3}});
+            output.set_estimates({{0, 1536}, {0, 2560}, {0, 3}});
         }
 
         // Schedule
@@ -71,36 +66,16 @@ public:
 
             Var xi("xi"), yi("yi");
             if (get_target().has_gpu_feature()) {
-                std::string use_simple_autoscheduler =
-                    Halide::Internal::get_env_variable("HL_USE_SIMPLE_AUTOSCHEDULER");
-                if (use_simple_autoscheduler == "1") {
-                    Halide::SimpleAutoscheduleOptions options;
-                    options.gpu = get_target().has_gpu_feature();
-                    options.gpu_tile_channel = 1;
-                    Func output_func = output;
-                    Halide::simple_autoschedule(output_func,
-                            {{"input.min.0", 0},
-                             {"input.extent.0", 1536},
-                             {"input.min.1", 0},
-                             {"input.extent.1", 2560},
-                             {"input.min.2", 0},
-                             {"input.extent.2", 3}},
-                             {{0, 1536},
-                              {0, 2560},
-                              {0, 3}},
-                            options);
-                } else {
-                    Y.compute_root().gpu_tile(x, y, xi, yi, 16, 16);
-                    hist_rows.compute_root().gpu_tile(y, yi, 16).update().gpu_tile(y, yi, 16);
-                    hist.compute_root().gpu_tile(x, xi, 16).update().gpu_tile(x, xi, 16);
-                    cdf.compute_root().gpu_single_thread();
-                    Cr.compute_at(output, x);
-                    Cb.compute_at(output, x);
-                    eq.compute_at(output, x);
-                    output.compute_root()
-                        .reorder(c, x, y).bound(c, 0, 3).unroll(c)
-                        .gpu_tile(x, y, xi, yi, 16, 16);
-                }
+                Y.compute_root().gpu_tile(x, y, xi, yi, 16, 16);
+                hist_rows.compute_root().gpu_tile(y, yi, 16).update().gpu_tile(y, yi, 16);
+                hist.compute_root().gpu_tile(x, xi, 16).update().gpu_tile(x, xi, 16);
+                cdf.compute_root().gpu_single_thread();
+                Cr.compute_at(output, x);
+                Cb.compute_at(output, x);
+                eq.compute_at(output, x);
+                output.compute_root()
+                    .reorder(c, x, y).bound(c, 0, 3).unroll(c)
+                    .gpu_tile(x, y, xi, yi, 16, 16);
             } else {
                 Y.compute_root().parallel(y, 8).vectorize(x, 8);
                 hist_rows.compute_root()

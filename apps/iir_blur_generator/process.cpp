@@ -2,9 +2,8 @@
 #include <random>
 
 #include "iir_blur.h"
-#include "iir_blur_classic_auto_schedule.h"
 #include "iir_blur_auto_schedule.h"
-#include "iir_blur_simple_auto_schedule.h"
+#include "iir_blur_gradient_auto_schedule.h"
 
 #include "benchmark_util.h"
 #include "HalideBuffer.h"
@@ -28,9 +27,8 @@ int main(int argc, char **argv) {
 
     multi_way_bench({
         {"Manual", [&]() { iir_blur(input, alpha, output); output.device_sync(); }},
-        {"Classic auto-scheduled", [&]() { iir_blur_classic_auto_schedule(input, alpha, output); output.device_sync(); }},
         {"Auto-scheduled", [&]() { iir_blur_auto_schedule(input, alpha, output); output.device_sync(); }},
-        {"Simple auto-scheduled", [&]() { iir_blur_simple_auto_schedule(input, alpha, output); output.device_sync(); }}
+        {"Gradient auto-scheduled", [&]() { iir_blur_gradient_auto_schedule(input, alpha, output); output.device_sync(); }}
     });
 
     return 0;
