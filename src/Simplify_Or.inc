@@ -18,8 +18,7 @@
  rewrite(((select(y, z, w) == x) || y), ((w == x) || y)) ||
 ((b.node_type() == IRNodeType::EQ) && (
  rewrite(((y == x) || (x == y)), (x == y)) ||
- rewrite(((y == x) || (y == x)), (x == y)) ||
- rewrite((((x*x) == c0) || (x == 0)), ((x*x) <= 0), (c0 <= 0)))))) ||
+ rewrite(((y == x) || (y == x)), (x == y)))))) ||
 ((a.node_type() == IRNodeType::NE) && (
 ((b.node_type() == IRNodeType::NE) && (
  rewrite(((y != x) || (x != y)), (y != x)) ||
