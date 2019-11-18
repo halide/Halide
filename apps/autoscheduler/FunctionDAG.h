@@ -152,7 +152,7 @@ public:
             // The consumer is scalar, so all strides are zero.
             return {true, 0, 1};
         }
-        internal_assert(consumer_loop_dim < (int) p.size());
+        internal_assert(consumer_loop_dim >= 0 && consumer_loop_dim < (int) p.size());
         return p[consumer_loop_dim];
     }
 

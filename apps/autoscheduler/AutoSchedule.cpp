@@ -1111,9 +1111,19 @@ struct LoopNest {
         return false;
     }
 
+    int get_pure_stage_vectorized_loop_index(const FunctionDAG::Node* node) const {
+        for (const auto &c : children) {
+            if (node == c->node && c->stage->index == 0) {
+                return c->vectorized_loop_index;
+            }
+        }
+        internal_assert(false) << "No pure stage found for " << node->func.name() << "\n";
+        return -1;
+    }
+
     // Get the stride over "node's" storage for a unit increment in the vectorized loop's
     // index
-    double storage_stride(const LoadJacobian& jac, int innermost_storage_dim, const FunctionDAG::Node* node, const Bound& store_bounds) const {
+    double storage_stride(const LoadJacobian& jac, int innermost_storage_dim, const FunctionDAG::Node* node, const Bound& store_bounds, const LoopNest& root) const {
         // The node's storage dimensions (from innermost outward)
         std::vector<int64_t> storage_dims;
         storage_dims.push_back(innermost_storage_dim >= 0 ? innermost_storage_dim : 0);
@@ -1132,9 +1142,14 @@ struct LoopNest {
             storage_stride *= store_bounds->region_required(storage_dims[i]).extent();
         }
 
+        int v = vectorized_loop_index;
+        if (v < 0) {
+            v = root.get_pure_stage_vectorized_loop_index(node);
+        }
+
         double stride = 0;
         for (std::size_t i = 0; i < storage_dims.size(); i++) {
-            auto jac_stride = jac(i, vectorized_loop_index);
+            auto jac_stride = jac(i, v);
 
             float s = (float)jac_stride.numerator / (float)jac_stride.denominator;
             stride += s * storage_strides[i];
@@ -1143,9 +1158,13 @@ struct LoopNest {
         return stride;
     }
 
-    bool all_strides_exist(const LoadJacobian& jac, const FunctionDAG::Node* node) const {
+    bool all_strides_exist(const LoadJacobian& jac, const FunctionDAG::Node* node, const LoopNest& root) const {
+        int v = vectorized_loop_index;
+        if (v < 0) {
+            v = root.get_pure_stage_vectorized_loop_index(node);
+        }
         for (int i = 0; i < node->dimensions; i++) {
-            auto stride = jac(i, vectorized_loop_index);
+            auto stride = jac(i, v);
 
             if (!stride.exists) {
                 return false;
@@ -1154,8 +1173,8 @@ struct LoopNest {
         return true;
     }
 
-    int num_shared_mem_accesses(const LoadJacobian& jac, const FunctionDAG::Node* node, const Bound& store_bounds, const ThreadInfo& thread_info, int innermost_dim) const {
-        double stride = storage_stride(jac, innermost_dim, node, store_bounds);
+    int num_shared_mem_accesses(const LoadJacobian& jac, const FunctionDAG::Node* node, const Bound& store_bounds, const ThreadInfo& thread_info, int innermost_dim, const LoopNest& root) const {
+        double stride = storage_stride(jac, innermost_dim, node, store_bounds, root);
 
         // No bank conflicts when stride is 0
         if (stride == 0) {
@@ -1211,13 +1230,13 @@ struct LoopNest {
         return std::max(1.0, bytes / 4);
     }
 
-    std::pair<double, double> compute_shared_mem_stores(const LoadJacobian& jac, int consumer_innermost_dim, const FunctionDAG::Node* node, const Bound& consumer_store_bounds, const ThreadInfo& thread_info, double serial_loop_extents) const {
+    std::pair<double, double> compute_shared_mem_stores(const LoadJacobian& jac, int consumer_innermost_dim, const FunctionDAG::Node* node, const Bound& consumer_store_bounds, const ThreadInfo& thread_info, double serial_loop_extents, const LoopNest& root) const {
         // Assume worst case serialized loads if the stride
         // is unknown
         double num_accesses = thread_info.num_threads;
 
-        if (all_strides_exist(jac, node)) {
-            num_accesses = num_shared_mem_accesses(jac, node, consumer_store_bounds, thread_info, consumer_innermost_dim);
+        if (all_strides_exist(jac, node, root)) {
+            num_accesses = num_shared_mem_accesses(jac, node, consumer_store_bounds, thread_info, consumer_innermost_dim, root);
         }
 
         double min_accesses = serial_loop_extents * thread_info.num_active_warps_per_block * num_banks_per_access(node);
@@ -1225,17 +1244,17 @@ struct LoopNest {
         return {num_accesses, min_accesses / num_accesses};
     }
 
-    std::pair<double, double> compute_shared_mem_load_features(const LoadJacobian& jac, int producer_innermost_dim, const FunctionDAG::Node* node, const Bound& producer_store_bounds, bool producer_has_been_scheduled, const ThreadInfo& thread_info) const {
+    std::pair<double, double> compute_shared_mem_load_features(const LoadJacobian& jac, int producer_innermost_dim, const FunctionDAG::Node* node, const Bound& producer_store_bounds, bool producer_has_been_scheduled, const ThreadInfo& thread_info, const LoopNest& root) const {
         double min_accesses = thread_info.num_active_warps_per_block * num_banks_per_access(node);
 
         // Assume worst case serialized loads if the stride
         // is unknown
-        if (!all_strides_exist(jac, node)) {
+        if (!all_strides_exist(jac, node, root)) {
             return {thread_info.num_threads, min_accesses};
         }
 
         if (producer_has_been_scheduled) {
-            int num_accesses = num_shared_mem_accesses(jac, node, producer_store_bounds, thread_info, producer_innermost_dim);
+            int num_accesses = num_shared_mem_accesses(jac, node, producer_store_bounds, thread_info, producer_innermost_dim, root);
             return {num_accesses, min_accesses};
         }
 
@@ -1243,13 +1262,13 @@ struct LoopNest {
         // possible innermost dimensions and take the best
         int min_loads = 32;
         for (int i = 0; i < node->dimensions; i++) {
-            min_loads = std::min(min_loads, num_shared_mem_accesses(jac, node, producer_store_bounds, thread_info, i));
+            min_loads = std::min(min_loads, num_shared_mem_accesses(jac, node, producer_store_bounds, thread_info, i, root));
         }
 
         return {min_loads, min_accesses};
     }
 
-    void compute_gpu_store_features(const LoadJacobian& jac, int consumer_innermost_dim, const FunctionDAG::Node* node, const Bound& consumer_store_bounds, const ThreadInfo& thread_info, double serial_loop_extents, const Sites& consumer_site, ScheduleFeatures& feat) const {
+    void compute_gpu_store_features(const LoadJacobian& jac, int consumer_innermost_dim, const FunctionDAG::Node* node, const Bound& consumer_store_bounds, const ThreadInfo& thread_info, double serial_loop_extents, const Sites& consumer_site, ScheduleFeatures& feat, const LoopNest& root) const {
         if (consumer_site.store->gpu_label == block) {
             auto shared_mem_features = compute_shared_mem_stores(
                 jac,
@@ -1257,7 +1276,8 @@ struct LoopNest {
                 node,
                 consumer_store_bounds,
                 thread_info,
-                serial_loop_extents
+                serial_loop_extents,
+                root
             );
 
             feat.num_shared_mem_stores_per_block = shared_mem_features.first;
@@ -1271,7 +1291,8 @@ struct LoopNest {
                 node,
                 consumer_store_bounds,
                 thread_info,
-                serial_loop_extents
+                serial_loop_extents,
+                root
             );
 
             feat.num_global_mem_stores_per_block = global_mem_info.required_accesses();
@@ -1326,8 +1347,8 @@ struct LoopNest {
         return serial_loop_extents * num_accesses;
     }
 
-    void compute_num_global_mem_accesses_per_block(const LoadJacobian& jac, const FunctionDAG::Node* node, const Bound& store_bounds, const ThreadInfo& thread_info, int innermost_dim, double serial_loop_extents, GlobalMemInfo& global_mem_info) const {
-        double stride = storage_stride(jac, innermost_dim, node, store_bounds);
+    void compute_num_global_mem_accesses_per_block(const LoadJacobian& jac, const FunctionDAG::Node* node, const Bound& store_bounds, const ThreadInfo& thread_info, int innermost_dim, double serial_loop_extents, GlobalMemInfo& global_mem_info, const LoopNest& root) const {
+        double stride = storage_stride(jac, innermost_dim, node, store_bounds, root);
 
         if (stride == 0) {
             // Only need a single access (optimistically assume that it remains
@@ -1376,10 +1397,10 @@ struct LoopNest {
         global_mem_info.add_access_info(serial_loop_extents * num_accesses[0], serial_loop_extents * num_accesses[1], stride);
     }
 
-    GlobalMemInfo compute_global_mem_store_features(const LoadJacobian& jac, int consumer_innermost_dim, const FunctionDAG::Node* node, const Bound& consumer_store_bounds, const ThreadInfo& thread_info, double serial_loop_extents) const {
+    GlobalMemInfo compute_global_mem_store_features(const LoadJacobian& jac, int consumer_innermost_dim, const FunctionDAG::Node* node, const Bound& consumer_store_bounds, const ThreadInfo& thread_info, double serial_loop_extents, const LoopNest& root) const {
         GlobalMemInfo global_mem_info;
 
-        if (!all_strides_exist(jac, node)) {
+        if (!all_strides_exist(jac, node, root)) {
             double stride = 32.0;
 
             // Assume worst case serialized loads if the stride
@@ -1392,14 +1413,14 @@ struct LoopNest {
             return global_mem_info;
         }
 
-        compute_num_global_mem_accesses_per_block(jac, node, consumer_store_bounds, thread_info, consumer_innermost_dim, serial_loop_extents, global_mem_info);
+        compute_num_global_mem_accesses_per_block(jac, node, consumer_store_bounds, thread_info, consumer_innermost_dim, serial_loop_extents, global_mem_info, root);
         return global_mem_info;
     }
 
-    void compute_global_mem_load_features(const LoadJacobian& jac, int producer_innermost_dim, const FunctionDAG::Node* node, const Bound& producer_store_bounds, bool producer_has_been_scheduled, const ThreadInfo& thread_info, GlobalMemInfo& global_mem_info, double serial_loop_extents_and_load_count) const {
+    void compute_global_mem_load_features(const LoadJacobian& jac, int producer_innermost_dim, const FunctionDAG::Node* node, const Bound& producer_store_bounds, bool producer_has_been_scheduled, const ThreadInfo& thread_info, GlobalMemInfo& global_mem_info, double serial_loop_extents_and_load_count, const LoopNest& root) const {
         // Assume worst case serialized loads if the stride
         // is unknown
-        if (!all_strides_exist(jac, node)) {
+        if (!all_strides_exist(jac, node, root)) {
             double stride = 32.0;
 
             auto required_accesses = serial_loop_extents_and_load_count * thread_info.num_threads;
@@ -1411,7 +1432,7 @@ struct LoopNest {
         }
 
         if (producer_has_been_scheduled) {
-            compute_num_global_mem_accesses_per_block(jac, node, producer_store_bounds, thread_info, producer_innermost_dim, serial_loop_extents_and_load_count, global_mem_info);
+            compute_num_global_mem_accesses_per_block(jac, node, producer_store_bounds, thread_info, producer_innermost_dim, serial_loop_extents_and_load_count, global_mem_info, root);
 
             return;
         }
@@ -1425,7 +1446,7 @@ struct LoopNest {
 
         for (int i = 0; i < node->dimensions; i++) {
             GlobalMemInfo info;
-            compute_num_global_mem_accesses_per_block(jac, node, producer_store_bounds, thread_info, i, serial_loop_extents_and_load_count, info);
+            compute_num_global_mem_accesses_per_block(jac, node, producer_store_bounds, thread_info, i, serial_loop_extents_and_load_count, info, root);
             if (info.required_accesses() < min_required_accesses) {
                 global_mem_info = info;
             }
@@ -2029,7 +2050,8 @@ struct LoopNest {
                     *gpu_loop_info.thread_info,
                     gpu_loop_info.total_serial_extents(),
                     consumer_site,
-                    feat
+                    feat,
+                    root
                 );
 
                 feat.num_shared_mem_stores = gpu_loop_info.num_blocks * feat.num_shared_mem_stores_per_block;
@@ -2267,7 +2289,8 @@ struct LoopNest {
                                     e->producer,
                                     producer_store_bounds,
                                     producer_has_been_scheduled,
-                                    *gpu_loop_info.thread_info
+                                    *gpu_loop_info.thread_info,
+                                    root
                                 );
                                 num_shared_mem_loads_per_block += n * shared_mem_features.first * total_serial_loop_extents;
                                 min_num_shared_mem_loads_per_block += n * shared_mem_features.second * total_serial_loop_extents;
@@ -2280,7 +2303,8 @@ struct LoopNest {
                                     producer_has_been_scheduled,
                                     *gpu_loop_info.thread_info,
                                     global_mem_loads,
-                                    n * total_serial_loop_extents
+                                    n * total_serial_loop_extents,
+                                    root
                                 );
                             }
                         }
