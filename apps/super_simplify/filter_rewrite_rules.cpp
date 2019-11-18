@@ -209,7 +209,7 @@ int main(int argc, char **argv) {
         if (is_zero(r.predicate)) {
             std::cout << "Re-synthesizing predicate for " << r.orig << " with a larger beam size\n";
             int bs = 16;
-            while (bs <= 64 && is_zero(r.predicate)) {
+            while (bs <= 256 && is_zero(r.predicate)) {
                 binding.clear();
                 r.predicate = synthesize_predicate(r.lhs, r.rhs, examples, &binding, bs);
                 bs *= 2;
