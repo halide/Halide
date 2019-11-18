@@ -44,29 +44,31 @@ class TestAdd(unittest.TestCase):
         else:
             print("Testing Halide PyTorch CPU operator...")
 
-        output = modules.Add()(self.a, self.b)
+        for backward_op in ["add_grad", "add_halidegrad"]:
+            add = modules.Add(backward_op)
+            output = add(self.a, self.b)
 
-        if is_double:
-            print("  Double-precision mode")
-        else:
-            print("  Single-precision mode")
+            if is_double:
+                print("  Double-precision mode, backward_op:", backward_op)
+            else:
+                print("  Single-precision mode, backward_op:", backward_op)
 
-        diff = (output-self.gt).sum().item()
-        assert diff == 0.0, "Test failed: sum should be 4, got %f" % diff
+            diff = (output-self.gt).sum().item()
+            assert diff == 0.0, "Test failed: sum should be 4, got %f" % diff
 
-        # Test the gradient is correct
-        self.a.requires_grad = True
-        self.b.requires_grad = True
+            # Test the gradient is correct
+            self.a.requires_grad = True
+            self.b.requires_grad = True
 
-        with warnings.catch_warnings():
-            # Inputs are float, the gradient checker wants double inputs and
-            # will issue a warning.
-            warnings.filterwarnings(
-                "ignore", message="At least one of the inputs that requires "
-                "gradient is not of double precision")
-            res = th.autograd.gradcheck(modules.Add(), [self.a, self.b], eps=1e-2)
+            with warnings.catch_warnings():
+                # Inputs are float, the gradient checker wants double inputs and
+                # will issue a warning.
+                warnings.filterwarnings(
+                    "ignore", message="At least one of the inputs that requires "
+                    "gradient is not of double precision")
+                res = th.autograd.gradcheck(add, [self.a, self.b], eps=1e-2)
 
-        print("  Test ran successfully: difference is", diff)
+            print("  Test ran successfully: difference is", diff)
 
 
 if __name__ == "__main__":
