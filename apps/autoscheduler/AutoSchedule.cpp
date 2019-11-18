@@ -2250,7 +2250,7 @@ struct State {
         internal_assert(!binfile.fail()) << "Failed to write " << feature_file;
     }
 
-    bool calculate_cost(const FunctionDAG &dag, const MachineParams &params, CostModel *cost_model, bool verbose = false) {
+    bool calculate_cost(const FunctionDAG &dag, const MachineParams &params, CostModel *cost_model, bool verbose, std::mt19937 &rng) {
         StageMap<ScheduleFeatures> features;
         compute_featurization(dag, params, &features);
 
@@ -2283,6 +2283,10 @@ struct State {
             cost = 1e50;
             return false;
         }
+
+        cost = (float)(rng());
+        return true;
+
 
         int num_stages = (int)features.size();
 
@@ -2346,7 +2350,8 @@ struct State {
     void generate_children(const FunctionDAG &dag,
                            const MachineParams &params,
                            CostModel *cost_model,
-                           std::function<void(IntrusivePtr<State> &&)> &accept_child) const {
+                           std::function<void(IntrusivePtr<State> &&)> &accept_child,
+                           std::mt19937 &rng) const {
         internal_assert(root.defined() && root->is_root());
 
         if (num_decisions_made == 2*(int)dag.nodes.size()) {
@@ -2410,7 +2415,7 @@ struct State {
                     new_root->inline_func(node);
                     child->root = new_root;
                     child->num_decisions_made++;
-                    if (child->calculate_cost(dag, params, cost_model)) {
+                    if (child->calculate_cost(dag, params, cost_model, false, rng)) {
                         num_children++;
                         accept_child(std::move(child));
                     }
@@ -2465,7 +2470,7 @@ struct State {
                     auto child = make_child();
                     child->root = std::move(n);
                     child->num_decisions_made++;
-                    if (child->calculate_cost(dag, params, cost_model)) {
+                    if (child->calculate_cost(dag, params, cost_model, false, rng)) {
                         num_children++;
                         accept_child(std::move(child));
                     }
@@ -2617,7 +2622,7 @@ struct State {
                     }
                     child->root = new_root;
                     child->num_decisions_made++;
-                    if (child->calculate_cost(dag, params, cost_model)) {
+                    if (child->calculate_cost(dag, params, cost_model, false, rng)) {
                         num_children++;
                         accept_child(std::move(child));
                     }
@@ -3068,7 +3073,7 @@ IntrusivePtr<State> optimal_schedule_pass(FunctionDAG &dag,
                 return best;
             }
 
-            state->generate_children(dag, params, cost_model, enqueue_new_children);
+            state->generate_children(dag, params, cost_model, enqueue_new_children, rng);
             expanded++;
         }
 
@@ -3091,7 +3096,7 @@ IntrusivePtr<State> optimal_schedule_pass(FunctionDAG &dag,
                 auto state = q[choice_label];
                 debug(0) << "\n[" << choice_label << "]:\n";
                 state->dump();
-                state->calculate_cost(dag, params, cost_model, true);
+                state->calculate_cost(dag, params, cost_model, true, rng);
             }
             cost_model->evaluate_costs();
 
@@ -3217,7 +3222,7 @@ std::string generate_schedule(const std::vector<Function> &outputs,
     debug(0) << "** Optimal schedule:\n";
 
     // Just to get the debugging prints to fire
-    optimal->calculate_cost(dag, params, cost_model.get(), true);
+    optimal->calculate_cost(dag, params, cost_model.get(), true, rng);
 
     // Apply the schedules to the pipeline
     optimal->apply_schedule(dag, params);
