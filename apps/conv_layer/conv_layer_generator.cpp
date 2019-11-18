@@ -53,10 +53,10 @@ public:
 
         if (auto_schedule) {
             // Provide estimates on the input image
-            input.set_estimates({{0, 131}, {0, 131}, {0, 64}, {0, 4}});
-            filter.set_estimates({{0, 3}, {0, 3}, {0, 64}, {0, 64}});
-            bias.set_estimates({{0, 64}});
-            f_ReLU.set_estimates({{0, 128}, {0, 128}, {0, 64}, {0, 4}});
+            input.set_estimates({{0, CI}, {0, W + 2}, {0, H + 2}, {0, N}});
+            filter.set_estimates({{0, CO}, {0, 3}, {0, 3}, {0, CI}});
+            bias.set_estimates({{0, CO}});
+            f_ReLU.set_estimates({{0, CO}, {0, W}, {0, H}, {0, N}});
 
         } /*else if (get_target().has_gpu_feature()) {
             // TODO: Turn off the manual GPU schedule for now.
