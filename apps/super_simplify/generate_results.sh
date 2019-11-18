@@ -11,7 +11,7 @@ for app in harris local_laplacian unsharp bilateral_grid camera_pipe nl_means st
     echo "ours,baseline" > ${app}_proof_failures.csv
     echo "ours,baseline" > ${app}_non_monotonic.csv
     echo "ours,baseline" > ${app}_code_size.csv
-    for ((i=0;i<128;i++)); do
+    for ((i=0;i<64;i++)); do
         echo -n .
         A=$(grep BEST ../${app}/results/${i}/benchmark_stdout.txt | cut -d' ' -f5)
         B=$(grep BEST ../${app}/results_baseline/${i}/benchmark_stdout.txt | cut -d' ' -f5)        
@@ -49,12 +49,12 @@ for app in harris local_laplacian unsharp bilateral_grid camera_pipe nl_means st
     echo
 done
 
-echo harris,,local_laplacian,,unsharp,,bilateral_grid,,camera_pipe,,nl_means,,stencil_chain, > header.csv
+echo harris,,local_laplacian,,unsharp,,bilateral_grid,,camera_pipe,,nl_means,,stencil_chain,,iir_blur,,interpolate,,max_filter, > header.csv
 
 cp header.csv results.csv
 
 for sheet in runtime peak_memory halide_compile_time llvm_optimization_time llvm_backend_time proof_failures non_monotonic code_size; do
     cp header.csv results_${sheet}.csv
-    paste -d, harris_${sheet}.csv local_laplacian_${sheet}.csv unsharp_${sheet}.csv bilateral_grid_${sheet}.csv camera_pipe_${sheet}.csv nl_means_${sheet}.csv stencil_chain_${sheet}.csv >> results_${sheet}.csv
+    paste -d, harris_${sheet}.csv local_laplacian_${sheet}.csv unsharp_${sheet}.csv bilateral_grid_${sheet}.csv camera_pipe_${sheet}.csv nl_means_${sheet}.csv stencil_chain_${sheet}.csv iir_blur_${sheet}.csv interpolate_${sheet}.csv max_filter_${sheet}.csv >> results_${sheet}.csv
 done
 
