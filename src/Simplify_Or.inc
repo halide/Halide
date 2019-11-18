@@ -1,6 +1,4 @@
 ((b.node_type() == IRNodeType::EQ) && (
- rewrite((x || (w == select(x, y, z))), (x || (z == w))) ||
- rewrite((x || (select(x, y, z) == w)), (x || (z == w))) ||
  rewrite((y || (x == select(y, z, w))), (y || (w == x))) ||
  rewrite((y || (select(y, z, w) == x)), (y || (w == x))))) ||
 ((b.node_type() == IRNodeType::LT) && (
@@ -16,20 +14,14 @@
  rewrite((x || select(x, x, y)), (x || y)) ||
  rewrite((x || select(x, y, x)), x))) ||
 ((a.node_type() == IRNodeType::EQ) && (
- rewrite(((w == select(x, y, z)) || x), ((z == w) || x)) ||
  rewrite(((x == select(y, z, w)) || y), ((w == x) || y)) ||
- rewrite(((select(x, y, z) == w) || x), ((z == w) || x)) ||
  rewrite(((select(y, z, w) == x) || y), ((w == x) || y)) ||
 ((b.node_type() == IRNodeType::EQ) && (
- rewrite(((x == y) || (x == y)), (x == y)) ||
- rewrite(((x == y) || (y == x)), (x == y)) ||
  rewrite(((y == x) || (x == y)), (x == y)) ||
  rewrite(((y == x) || (y == x)), (x == y)) ||
  rewrite((((x*x) == c0) || (x == 0)), ((x*x) <= 0), (c0 <= 0)))))) ||
 ((a.node_type() == IRNodeType::NE) && (
 ((b.node_type() == IRNodeType::NE) && (
- rewrite(((x != y) || (x != y)), (y != x)) ||
- rewrite(((x != y) || (y != x)), (y != x)) ||
  rewrite(((y != x) || (x != y)), (y != x)) ||
  rewrite(((y != x) || (y != x)), (y != x)))))) ||
 ((a.node_type() == IRNodeType::LT) && (

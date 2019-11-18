@@ -1,23 +1,16 @@
  rewrite(select(x, y, (u + select(x, z, w))), select(x, y, (u + w))) ||
- rewrite(select(x, y, (select(x, y, z) + w)), select(x, y, (z + w))) ||
  rewrite(select(x, y, (select(x, z, w) + u)), select(x, y, (w + u))) ||
  rewrite(select(x, y, (y - select(x, z, w))), (y - select(x, 0, w))) ||
  rewrite(select(x, y, (z - select(x, w, y))), select(x, y, (z - y))) ||
  rewrite(select(x, y, (z - select(x, y, w))), select(x, y, (z - w))) ||
- rewrite(select(x, y, (select(x, y, z) - w)), select(x, y, (z - w))) ||
  rewrite(select(x, y, (select(x, z, w) - u)), select(x, y, (w - u))) ||
  rewrite(select(x, y, (u*select(x, z, w))), select(x, y, (u*w))) ||
- rewrite(select(x, y, (select(x, y, z)*w)), select(x, y, (z*w))) ||
  rewrite(select(x, y, (select(x, z, w)*u)), select(x, y, (w*u))) ||
  rewrite(select(x, y, min(u, select(x, z, w))), select(x, y, min(u, w))) ||
- rewrite(select(x, y, min(select(x, y, z), z)), select(x, y, z)) ||
  rewrite(select(x, y, min(select(x, z, w), u)), select(x, y, min(w, u))) ||
  rewrite(select(x, y, max(u, select(x, z, w))), select(x, y, max(u, w))) ||
- rewrite(select(x, y, max(select(x, y, z), w)), select(x, y, max(z, w))) ||
  rewrite(select(x, y, max(select(x, z, w), u)), select(x, y, max(w, u))) ||
- rewrite(select(x, x, (w == select(x, y, z))), (x || (z == w))) ||
  rewrite(select(x, x, (y == select(x, z, w))), (x || (w == y))) ||
- rewrite(select(x, x, (select(x, y, z) == w)), (x || (z == w))) ||
  rewrite(select(x, x, (select(x, z, w) == y)), (x || (w == y))) ||
  rewrite(select(x, x, (y < select(x, z, y))), x) ||
  rewrite(select(x, x, (select(x, y, z) < z)), x) ||
@@ -32,47 +25,19 @@
 ((b.node_type() == IRNodeType::Add) && (
  rewrite(select(x, (w + select(x, y, z)), u), select(x, (w + y), u)) ||
  rewrite(select(x, (select(x, y, z) + w), u), select(x, (y + w), u)) ||
- rewrite(select(x, (u + (w + (y*z))), (v + w)), (select(x, (u + (y*z)), v) + w)) ||
- rewrite(select(x, (u + (w + (y*z))), (w + v)), (select(x, (u + (y*z)), v) + w)) ||
- rewrite(select(x, (u + (w + (z*y))), (v + w)), (select(x, (u + (z*y)), v) + w)) ||
- rewrite(select(x, (u + (w + (z*y))), (w + v)), (select(x, (u + (z*y)), v) + w)) ||
- rewrite(select(x, (u + (y + (w + z))), (v + (w + z))), (select(x, (u + y), v) + (w + z))) ||
- rewrite(select(x, (u + (y + (w + z))), (v + (z + w))), (select(x, (u + y), v) + (z + w))) ||
- rewrite(select(x, (u + (y + (w + z))), ((w + z) + v)), (select(x, (u + y), v) + (w + z))) ||
- rewrite(select(x, (u + (y + (w + z))), ((z + w) + v)), (select(x, (u + y), v) + (z + w))) ||
  rewrite(select(x, (u + (y + (z + w))), (v + (w + z))), (select(x, (u + y), v) + (w + z))) ||
- rewrite(select(x, (u + (y + (z + w))), (v + (z + w))), (select(x, (u + y), v) + (z + w))) ||
  rewrite(select(x, (u + (y + (z + w))), ((w + z) + v)), (select(x, (u + y), v) + (w + z))) ||
- rewrite(select(x, (u + (y + (z + w))), ((z + w) + v)), (select(x, (u + y), v) + (z + w))) ||
- rewrite(select(x, (u + ((w + z) + y)), (v + (w + z))), (select(x, (u + y), v) + (w + z))) ||
- rewrite(select(x, (u + ((w + z) + y)), (v + (z + w))), (select(x, (u + y), v) + (z + w))) ||
- rewrite(select(x, (u + ((w + z) + y)), ((w + z) + v)), (select(x, (u + y), v) + (w + z))) ||
- rewrite(select(x, (u + ((w + z) + y)), ((z + w) + v)), (select(x, (u + y), v) + (z + w))) ||
  rewrite(select(x, (u + ((z + w) + y)), (v + (w + z))), (select(x, (u + y), v) + (w + z))) ||
- rewrite(select(x, (u + ((z + w) + y)), (v + (z + w))), (select(x, (u + y), v) + (z + w))) ||
  rewrite(select(x, (u + ((z + w) + y)), ((w + z) + v)), (select(x, (u + y), v) + (w + z))) ||
- rewrite(select(x, (u + ((z + w) + y)), ((z + w) + v)), (select(x, (u + y), v) + (z + w))) ||
- rewrite(select(x, (u + ((y*z) + w)), (v + w)), (select(x, (u + (y*z)), v) + w)) ||
- rewrite(select(x, (u + ((y*z) + w)), (w + v)), (select(x, (u + (y*z)), v) + w)) ||
- rewrite(select(x, (u + ((z*y) + w)), (v + w)), (select(x, (u + (z*y)), v) + w)) ||
- rewrite(select(x, (u + ((z*y) + w)), (w + v)), (select(x, (u + (z*y)), v) + w)) ||
- rewrite(select(x, (w + (y + z)), (u + y)), (select(x, (w + z), u) + y)) ||
- rewrite(select(x, (w + (y + z)), (u + z)), (select(x, (w + y), u) + z)) ||
  rewrite(select(x, (w + (y + z)), (v + (u + z))), (select(x, (w + y), (v + u)) + z)) ||
  rewrite(select(x, (w + (y + z)), (v + (z + u))), (select(x, (w + y), (v + u)) + z)) ||
- rewrite(select(x, (w + (y + z)), (y + c0)), (select(x, (w + z), c0) + y)) ||
- rewrite(select(x, (w + (y + z)), (y + u)), (select(x, (w + z), u) + y)) ||
- rewrite(select(x, (w + (y + z)), (z + c0)), (select(x, (w + y), c0) + z)) ||
- rewrite(select(x, (w + (y + z)), (z + u)), (select(x, (w + y), u) + z)) ||
  rewrite(select(x, (w + (y + z)), ((u + z) + v)), (select(x, (w + y), (u + v)) + z)) ||
  rewrite(select(x, (w + (y + z)), ((z + u) + v)), (select(x, (w + y), (v + u)) + z)) ||
  rewrite(select(x, (w + (z + y)), (u + y)), (select(x, (w + z), u) + y)) ||
  rewrite(select(x, (w + (z + y)), (u + z)), (select(x, (w + y), u) + z)) ||
  rewrite(select(x, (w + (z + y)), (v + (u + z))), (select(x, (w + y), (v + u)) + z)) ||
  rewrite(select(x, (w + (z + y)), (v + (z + u))), (select(x, (w + y), (v + u)) + z)) ||
- rewrite(select(x, (w + (z + y)), (y + c0)), (select(x, (w + z), c0) + y)) ||
  rewrite(select(x, (w + (z + y)), (y + u)), (select(x, (w + z), u) + y)) ||
- rewrite(select(x, (w + (z + y)), (z + c0)), (select(x, (w + y), c0) + z)) ||
  rewrite(select(x, (w + (z + y)), (z + u)), (select(x, (w + y), u) + z)) ||
  rewrite(select(x, (w + (z + y)), ((u + z) + v)), (select(x, (w + y), (u + v)) + z)) ||
  rewrite(select(x, (w + (z + y)), ((z + u) + v)), (select(x, (w + y), (v + u)) + z)) ||
@@ -84,40 +49,22 @@
  rewrite(select(x, (z + y), (u + (z + w))), (select(x, y, (u + w)) + z)) ||
  rewrite(select(x, (z + y), ((w + z) + u)), (select(x, y, (w + u)) + z)) ||
  rewrite(select(x, (z + y), ((z + w) + u)), (select(x, y, (u + w)) + z)) ||
- rewrite(select(x, ((w + (y*z)) + u), (v + w)), (select(x, ((y*z) + u), v) + w)) ||
- rewrite(select(x, ((w + (y*z)) + u), (w + v)), (select(x, ((y*z) + u), v) + w)) ||
- rewrite(select(x, ((w + (z*y)) + u), (v + w)), (select(x, ((z*y) + u), v) + w)) ||
- rewrite(select(x, ((w + (z*y)) + u), (w + v)), (select(x, ((z*y) + u), v) + w)) ||
- rewrite(select(x, ((y + z) + w), (u + y)), (select(x, (z + w), u) + y)) ||
- rewrite(select(x, ((y + z) + w), (u + z)), (select(x, (y + w), u) + z)) ||
  rewrite(select(x, ((y + z) + w), (v + (u + z))), (select(x, (y + w), (v + u)) + z)) ||
  rewrite(select(x, ((y + z) + w), (v + (z + u))), (select(x, (y + w), (v + u)) + z)) ||
- rewrite(select(x, ((y + z) + w), (y + c0)), (select(x, (z + w), c0) + y)) ||
- rewrite(select(x, ((y + z) + w), (y + u)), (select(x, (z + w), u) + y)) ||
- rewrite(select(x, ((y + z) + w), (z + c0)), (select(x, (y + w), c0) + z)) ||
- rewrite(select(x, ((y + z) + w), (z + u)), (select(x, (y + w), u) + z)) ||
  rewrite(select(x, ((y + z) + w), ((u + z) + v)), (select(x, (y + w), (u + v)) + z)) ||
  rewrite(select(x, ((y + z) + w), ((z + u) + v)), (select(x, (y + w), (v + u)) + z)) ||
- rewrite(select(x, ((y + (w + z)) + u), (v + (z + w))), (select(x, (y + u), v) + (z + w))) ||
- rewrite(select(x, ((y + (w + z)) + u), ((z + w) + v)), (select(x, (y + u), v) + (z + w))) ||
  rewrite(select(x, ((y + (z + w)) + u), (v + (w + z))), (select(x, (y + u), v) + (w + z))) ||
  rewrite(select(x, ((y + (z + w)) + u), ((w + z) + v)), (select(x, (y + u), v) + (w + z))) ||
  rewrite(select(x, ((z + y) + w), (u + y)), (select(x, (z + w), u) + y)) ||
  rewrite(select(x, ((z + y) + w), (u + z)), (select(x, (y + w), u) + z)) ||
  rewrite(select(x, ((z + y) + w), (v + (u + z))), (select(x, (y + w), (v + u)) + z)) ||
  rewrite(select(x, ((z + y) + w), (v + (z + u))), (select(x, (y + w), (v + u)) + z)) ||
- rewrite(select(x, ((z + y) + w), (y + c0)), (select(x, (z + w), c0) + y)) ||
  rewrite(select(x, ((z + y) + w), (y + u)), (select(x, (z + w), u) + y)) ||
- rewrite(select(x, ((z + y) + w), (z + c0)), (select(x, (y + w), c0) + z)) ||
  rewrite(select(x, ((z + y) + w), (z + u)), (select(x, (y + w), u) + z)) ||
  rewrite(select(x, ((z + y) + w), ((u + z) + v)), (select(x, (y + w), (u + v)) + z)) ||
  rewrite(select(x, ((z + y) + w), ((z + u) + v)), (select(x, (y + w), (v + u)) + z)) ||
- rewrite(select(x, (((w + z) + y) + u), (v + (z + w))), (select(x, (y + u), v) + (z + w))) ||
- rewrite(select(x, (((w + z) + y) + u), ((z + w) + v)), (select(x, (y + u), v) + (z + w))) ||
  rewrite(select(x, (((z + w) + y) + u), (v + (w + z))), (select(x, (y + u), v) + (w + z))) ||
  rewrite(select(x, (((z + w) + y) + u), ((w + z) + v)), (select(x, (y + u), v) + (w + z))) ||
- rewrite(select(x, (y + z), (y*2)), (select(x, z, y) + y)) ||
- rewrite(select(x, (y + z), (z*2)), (select(x, y, z) + z)) ||
  rewrite(select(x, (z + y), (y*2)), (select(x, z, y) + y)) ||
  rewrite(select(x, (z + y), (z*2)), (select(x, y, z) + z)))) ||
 ((b.node_type() == IRNodeType::Sub) && (
@@ -131,10 +78,6 @@
 ((b.node_type() == IRNodeType::Min) && (
  rewrite(select(x, min(w, select(x, y, z)), u), select(x, min(w, y), u)) ||
  rewrite(select(x, min(select(x, y, z), w), u), select(x, min(y, w), u)) ||
- rewrite(select(x, min(y, z), min(w, y)), min(select(x, z, w), y)) ||
- rewrite(select(x, min(y, z), min(w, z)), min(select(x, y, w), z)) ||
- rewrite(select(x, min(y, z), min(y, w)), min(select(x, z, w), y)) ||
- rewrite(select(x, min(y, z), min(z, w)), min(select(x, y, w), z)) ||
  rewrite(select(x, min(z, y), min(w, y)), min(select(x, z, w), y)) ||
  rewrite(select(x, min(z, y), min(w, z)), min(select(x, y, w), z)) ||
  rewrite(select(x, min(z, y), min(y, w)), min(select(x, z, w), y)) ||
@@ -150,10 +93,6 @@
  rewrite(select(x, max(select(x, y, z), w), z), select(x, max(y, w), z)) ||
  rewrite(select(x, max(select(x, y, z), y), w), select(x, y, w)) ||
  rewrite(select(x, max(select(x, y, z), z), w), select(x, max(y, z), w)) ||
- rewrite(select(x, max(y, z), max(w, y)), max(select(x, z, w), y)) ||
- rewrite(select(x, max(y, z), max(w, z)), max(select(x, y, w), z)) ||
- rewrite(select(x, max(y, z), max(y, w)), max(select(x, z, w), y)) ||
- rewrite(select(x, max(y, z), max(z, w)), max(select(x, y, w), z)) ||
  rewrite(select(x, max(z, y), max(w, y)), max(select(x, z, w), y)) ||
  rewrite(select(x, max(z, y), max(w, z)), max(select(x, y, w), z)) ||
  rewrite(select(x, max(z, y), max(y, w)), max(select(x, z, w), y)) ||
@@ -164,14 +103,12 @@
  rewrite(select(x, (z == y), (w == y)), (y == select(x, z, w))) ||
  rewrite(select(x, (z == y), (y == w)), (y == select(x, z, w))))) ||
 ((b.node_type() == IRNodeType::NE) && (
- rewrite(select(x, (w != select(x, y, z)), x), !((w == y) || !x)) ||
- rewrite(select(x, (y != select(x, z, w)), x), !((z == y) || !x)) ||
- rewrite(select(x, (select(x, y, z) != w), x), !((w == y) || !x)) ||
- rewrite(select(x, (select(x, z, w) != y), x), !(!x || (z == y))) ||
+ rewrite(select(x, (y != select(x, z, w)), x), !((y == z) || !x)) ||
+ rewrite(select(x, (select(x, z, w) != y), x), !((y == z) || !x)) ||
  rewrite(select(x, (y != z), (w != y)), (select(x, z, w) != y)) ||
  rewrite(select(x, (y != z), (y != w)), (select(x, z, w) != y)) ||
- rewrite(select(x, (z != y), (w != y)), (select(x, z, w) != y)) ||
- rewrite(select(x, (z != y), (y != w)), (select(x, z, w) != y)))) ||
+ rewrite(select(x, (z != y), (w != y)), (y != select(x, z, w))) ||
+ rewrite(select(x, (z != y), (y != w)), (y != select(x, z, w))))) ||
 ((b.node_type() == IRNodeType::LT) && (
  rewrite(select(x, (y < select(x, y, z)), x), false) ||
  rewrite(select(x, (y < select(x, z, y)), x), (y < select(x, z, y))) ||
@@ -192,60 +129,36 @@
  rewrite(select(x, !(y || x), x), false))) ||
 ((a.node_type() == IRNodeType::EQ) && (
 ((b.node_type() == IRNodeType::IntImm) && (
- rewrite(select((x == y), 0, (x - y)), (x - y)) ||
- rewrite(select((x == y), 0, (y - x)), (y - x)) ||
  rewrite(select((y == x), 0, (x - y)), (x - y)) ||
  rewrite(select((y == x), 0, (y - x)), (y - x)))) ||
- rewrite(select((x == y), x, y), y) ||
- rewrite(select((x == y), y, x), x) ||
  rewrite(select((y == x), x, y), y) ||
  rewrite(select((y == x), y, x), x) ||
- rewrite(select((x == y), x, min(x, y)), min(x, y)) ||
- rewrite(select((x == y), x, min(y, x)), min(y, x)) ||
- rewrite(select((x == y), y, min(x, y)), min(x, y)) ||
- rewrite(select((x == y), y, min(y, x)), min(y, x)) ||
  rewrite(select((y == x), x, min(x, y)), min(x, y)) ||
  rewrite(select((y == x), x, min(y, x)), min(y, x)) ||
  rewrite(select((y == x), y, min(x, y)), min(x, y)) ||
  rewrite(select((y == x), y, min(y, x)), min(y, x)) ||
- rewrite(select((x == y), x, max(x, y)), max(x, y)) ||
- rewrite(select((x == y), x, max(y, x)), max(y, x)) ||
- rewrite(select((x == y), y, max(x, y)), max(x, y)) ||
- rewrite(select((x == y), y, max(y, x)), max(y, x)) ||
  rewrite(select((y == x), x, max(x, y)), max(x, y)) ||
  rewrite(select((y == x), x, max(y, x)), max(y, x)) ||
  rewrite(select((y == x), y, max(x, y)), max(x, y)) ||
  rewrite(select((y == x), y, max(y, x)), max(y, x)) ||
 ((b.node_type() == IRNodeType::Sub) && (
- rewrite(select((x == y), (x - y), 0), 0) ||
- rewrite(select((x == y), (y - x), 0), 0) ||
  rewrite(select((y == x), (x - y), 0), 0) ||
  rewrite(select((y == x), (y - x), 0), 0))) ||
 ((b.node_type() == IRNodeType::Min) && (
- rewrite(select((x == y), min(x, y), x), x) ||
- rewrite(select((x == y), min(x, y), y), y) ||
- rewrite(select((x == y), min(y, x), x), x) ||
- rewrite(select((x == y), min(y, x), y), y) ||
  rewrite(select((y == x), min(x, y), x), x) ||
  rewrite(select((y == x), min(x, y), y), y) ||
  rewrite(select((y == x), min(y, x), x), x) ||
  rewrite(select((y == x), min(y, x), y), y))) ||
 ((b.node_type() == IRNodeType::Max) && (
- rewrite(select((x == y), max(x, y), x), x) ||
- rewrite(select((x == y), max(x, y), y), y) ||
- rewrite(select((x == y), max(y, x), x), x) ||
- rewrite(select((x == y), max(y, x), y), y) ||
  rewrite(select((y == x), max(x, y), x), x) ||
  rewrite(select((y == x), max(x, y), y), y) ||
  rewrite(select((y == x), max(y, x), x), x) ||
  rewrite(select((y == x), max(y, x), y), y))) ||
 ((b.node_type() == IRNodeType::NE) && (
- rewrite(select((x == y), (x != y), z), !((y == x) || !z)) ||
- rewrite(select((x == y), (y != x), z), !((x == y) || !z)) ||
  rewrite(select((y == x), (x != y), z), !((x == y) || !z)) ||
- rewrite(select((y == x), (y != x), z), !((x == y) || !z)))) ||
+ rewrite(select((y == x), (y != x), z), !((y == x) || !z)))) ||
 ((b.node_type() == IRNodeType::LT) && (
- rewrite(select((x == y), (x < y), z), !((x == y) || !z)) ||
+ rewrite(select((x == y), (x < y), z), !((y == x) || !z)) ||
  rewrite(select((y == x), (x < y), z), !((x == y) || !z)))))) ||
 ((a.node_type() == IRNodeType::LT) && (
  rewrite(select((x < select(y, x, z)), x, z), select(y, z, min(x, z))) ||
@@ -292,105 +205,53 @@
  rewrite(select((x < y), max(y, x), x), max(y, x)) ||
  rewrite(select((x < y), max(y, x), y), y))))) ||
 ((a.node_type() == IRNodeType::And) && (
- rewrite(select((x && (y == z)), y, z), z) ||
- rewrite(select((x && (y == z)), z, y), y) ||
- rewrite(select((x && (z == y)), y, z), z) ||
- rewrite(select((x && (z == y)), z, y), y) ||
- rewrite(select((x && (y < z)), y, z), select(x, min(y, z), z)) ||
- rewrite(select((x && (y < z)), z, y), select(x, max(y, z), y)) ||
- rewrite(select((z && (x == y)), x, y), y) ||
- rewrite(select((z && (x == y)), y, x), x) ||
  rewrite(select((z && (y == x)), x, y), y) ||
  rewrite(select((z && (y == x)), y, x), x) ||
- rewrite(select((z && (x != y)), x, y), select(z, x, y)) ||
- rewrite(select((z && (x != y)), y, x), select(z, y, x)) ||
  rewrite(select((z && (y != x)), x, y), select(z, x, y)) ||
  rewrite(select((z && (y != x)), y, x), select(z, y, x)) ||
  rewrite(select((z && (x < y)), x, y), select(z, min(x, y), y)) ||
  rewrite(select((z && (x < y)), y, x), select(z, max(x, y), x)) ||
- rewrite(select(((x == y) && z), x, y), y) ||
- rewrite(select(((x == y) && z), y, x), x) ||
- rewrite(select(((y == x) && z), x, y), y) ||
- rewrite(select(((y == x) && z), y, x), x) ||
- rewrite(select(((y == z) && x), y, z), z) ||
- rewrite(select(((y == z) && x), z, y), y) ||
  rewrite(select(((z == y) && x), y, z), z) ||
  rewrite(select(((z == y) && x), z, y), y) ||
- rewrite(select(((x != y) && z), x, y), select(z, x, y)) ||
- rewrite(select(((x != y) && z), y, x), select(z, y, x)) ||
  rewrite(select(((y != x) && z), x, y), select(z, x, y)) ||
  rewrite(select(((y != x) && z), y, x), select(z, y, x)) ||
- rewrite(select(((x < y) && z), x, y), select(z, min(y, x), y)) ||
- rewrite(select(((x < y) && z), y, x), max(select(z, y, x), x)) ||
  rewrite(select(((y < z) && x), y, z), select(x, min(z, y), z)) ||
- rewrite(select(((y < z) && x), z, y), select(x, max(z, y), y)))) ||
+ rewrite(select(((y < z) && x), z, y), max(select(x, z, y), y)))) ||
 ((a.node_type() == IRNodeType::Or) && (
- rewrite(select((x || (y == z)), y, z), select(x, y, z)) ||
- rewrite(select((x || (y == z)), z, y), select(x, z, y)) ||
- rewrite(select((x || (z == y)), y, z), select(x, y, z)) ||
- rewrite(select((x || (z == y)), z, y), select(x, z, y)) ||
- rewrite(select((x || (y < z)), y, z), select(x, y, min(y, z))) ||
- rewrite(select((x || (y < z)), z, y), select(x, z, max(z, y))) ||
- rewrite(select((z || (x == y)), x, y), select(z, x, y)) ||
- rewrite(select((z || (x == y)), y, x), select(z, y, x)) ||
  rewrite(select((z || (y == x)), x, y), select(z, x, y)) ||
  rewrite(select((z || (y == x)), y, x), select(z, y, x)) ||
- rewrite(select((z || (x != y)), x, y), x) ||
- rewrite(select((z || (x != y)), y, x), y) ||
  rewrite(select((z || (y != x)), x, y), x) ||
  rewrite(select((z || (y != x)), y, x), y) ||
  rewrite(select((z || (x < y)), x, y), select(z, x, min(x, y))) ||
- rewrite(select((z || (x < y)), y, x), max(select(z, y, x), y)) ||
- rewrite(select(((x == y) || z), x, y), select(z, x, y)) ||
- rewrite(select(((x == y) || z), y, x), select(z, y, x)) ||
- rewrite(select(((y == x) || z), x, y), select(z, x, y)) ||
- rewrite(select(((y == x) || z), y, x), select(z, y, x)) ||
- rewrite(select(((y == z) || x), y, z), select(x, y, z)) ||
- rewrite(select(((y == z) || x), z, y), select(x, z, y)) ||
+ rewrite(select((z || (x < y)), y, x), select(z, y, max(y, x))) ||
  rewrite(select(((z == y) || x), y, z), select(x, y, z)) ||
  rewrite(select(((z == y) || x), z, y), select(x, z, y)) ||
- rewrite(select(((x != y) || z), x, y), x) ||
- rewrite(select(((x != y) || z), y, x), y) ||
  rewrite(select(((y != x) || z), x, y), x) ||
  rewrite(select(((y != x) || z), y, x), y) ||
- rewrite(select(((x < y) || z), x, y), select(z, x, min(y, x))) ||
- rewrite(select(((x < y) || z), y, x), select(z, y, max(y, x))) ||
  rewrite(select(((y < z) || x), y, z), select(x, y, min(z, y))) ||
  rewrite(select(((y < z) || x), z, y), select(x, z, max(z, y))))) ||
 ((a.node_type() == IRNodeType::Not) && (
- rewrite(select(!(x || (y == z)), y, z), select(x, z, y)) ||
- rewrite(select(!(x || (y == z)), z, y), select(x, y, z)) ||
- rewrite(select(!(x || (z == y)), y, z), select(x, z, y)) ||
- rewrite(select(!(x || (z == y)), z, y), select(x, y, z)) ||
- rewrite(select(!(z || (x == y)), x, y), select(z, y, x)) ||
- rewrite(select(!(z || (x == y)), y, x), select(z, x, y)) ||
  rewrite(select(!(z || (y == x)), x, y), select(z, y, x)) ||
  rewrite(select(!(z || (y == x)), y, x), select(z, x, y)) ||
- rewrite(select(!((x == y) || z), x, y), select(z, y, x)) ||
- rewrite(select(!((x == y) || z), y, x), select(z, x, y)) ||
- rewrite(select(!((y == x) || z), x, y), select(z, y, x)) ||
- rewrite(select(!((y == x) || z), y, x), select(z, x, y)) ||
- rewrite(select(!((y == z) || x), y, z), select(x, z, y)) ||
- rewrite(select(!((y == z) || x), z, y), select(x, y, z)) ||
  rewrite(select(!((z == y) || x), y, z), select(x, z, y)) ||
- rewrite(select(!((z == y) || x), z, y), select(x, y, z)))) ||
+ rewrite(select(!((z == y) || x), z, y), select(x, y, z)) ||
+ rewrite(select(!x, y, min(y, z)), select(x, min(y, z), y)) ||
+ rewrite(select(!x, y, min(z, y)), select(x, min(z, y), y)) ||
+((b.node_type() == IRNodeType::Min) && (
+ rewrite(select(!x, min(z, y), y), select(x, y, min(z, y))) ||
+ rewrite(select(!x, min(z, y), z), select(x, z, min(z, y))))) ||
+((b.node_type() == IRNodeType::Max) && (
+ rewrite(select(!x, max(z, y), y), select(x, y, max(z, y))) ||
+ rewrite(select(!x, max(z, y), z), select(x, z, max(z, y))))))) ||
 ((a.node_type() == IRNodeType::Select) && (
- rewrite(select(select(x, x, (y == z)), y, z), select(x, y, z)) ||
- rewrite(select(select(x, x, (y == z)), z, y), select(x, z, y)) ||
  rewrite(select(select(x, x, (z == y)), y, z), select(x, y, z)) ||
  rewrite(select(select(x, x, (z == y)), z, y), select(x, z, y)) ||
- rewrite(select(select(x, x, (y != z)), y, z), y) ||
- rewrite(select(select(x, x, (y != z)), z, y), z) ||
  rewrite(select(select(x, x, (z != y)), y, z), y) ||
  rewrite(select(select(x, x, (z != y)), z, y), z) ||
  rewrite(select(select(x, x, (y < z)), y, z), select(x, y, min(z, y))) ||
  rewrite(select(select(x, x, (y < z)), z, y), select(x, z, max(z, y))) ||
- rewrite(select(select(x, (y == z), x), y, z), z) ||
- rewrite(select(select(x, (y == z), x), z, y), y) ||
  rewrite(select(select(x, (z == y), x), y, z), z) ||
  rewrite(select(select(x, (z == y), x), z, y), y) ||
- rewrite(select(select(x, (y != z), x), y, z), select(x, y, z)) ||
- rewrite(select(select(x, (y != z), x), z, y), select(x, z, y)) ||
  rewrite(select(select(x, (z != y), x), y, z), select(x, y, z)) ||
  rewrite(select(select(x, (z != y), x), z, y), select(x, z, y)) ||
  rewrite(select(select(x, (y < z), x), z, y), select(x, max(z, y), y))))
