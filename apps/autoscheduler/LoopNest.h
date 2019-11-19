@@ -1,14 +1,15 @@
 /** This file defines the LoopNest, which is our
- * representation of a Halide pipeline, and contains methods to using
- * Halide's bounds tools to query properties of it. */
+ * representation of a Halide schedule, and contains methods to
+ * generate candidates for scheduling as well as extract a
+ * featurization that can be used to cost each candidate. */
 
 #ifndef LOOP_NEST_H
 #define LOOP_NEST_H
 
-#include <set>
-#include <vector>
 #include "FunctionDAG.h"
 #include "PerfectHashMap.h"
+#include <set>
+#include <vector>
 
 using std::set;
 using std::vector;
@@ -16,7 +17,6 @@ using std::vector;
 namespace Halide {
 namespace Internal {
 namespace Autoscheduler {
-
 
 // How small should an innermost loop cluster be before you just
 // entirely unroll the thing. Sized for an architecture with 16 vector
@@ -28,7 +28,6 @@ using NodeMap = PerfectHashMap<FunctionDAG::Node, T>;
 
 template<typename T>
 using StageMap = PerfectHashMap<FunctionDAG::Node::Stage, T>;
-
 
 // Get the HL_NO_SUBTILING environment variable. Purpose described above.
 bool get_may_subtile() {
@@ -43,7 +42,6 @@ bool may_subtile() {
     static bool b = get_may_subtile();
     return b;
 }
-
 
 // Given a multi-dimensional box of dimensionality d, generate a list
 // of candidate tile sizes for it, logarithmically spacing the sizes
@@ -186,7 +184,7 @@ struct LoopNest {
 
     static void hash_combine(uint64_t &h, uint64_t next) {
         // From boost
-        h ^= (next + 0x9e3779b9 + (h<<6) + (h>>2));
+        h ^= (next + 0x9e3779b9 + (h << 6) + (h >> 2));
     }
 
     // Hash the loop structure and sizes up to a fixed depth. This is
@@ -255,12 +253,12 @@ struct LoopNest {
 
     // All of a stage's interesting locations in the loop nest. Used to help compute the featurization of a stage.
     struct Sites {
-        const LoopNest *compute = nullptr;   // Its containing compute_at site
-        const LoopNest *store = nullptr;     // Its containing store_at site
-        const LoopNest *produce = nullptr;   // Its own outermost node
-        const LoopNest *innermost = nullptr; // Its innermost node - usually a SIMD loop
-        const LoopNest *task = nullptr;      // The parallel for loop it belongs to
-        bool inlined = false;                // Is the Func inlined?
+        const LoopNest *compute = nullptr;    // Its containing compute_at site
+        const LoopNest *store = nullptr;      // Its containing store_at site
+        const LoopNest *produce = nullptr;    // Its own outermost node
+        const LoopNest *innermost = nullptr;  // Its innermost node - usually a SIMD loop
+        const LoopNest *task = nullptr;       // The parallel for loop it belongs to
+        bool inlined = false;                 // Is the Func inlined?
     };
 
     // Compute all the sites of interest for each pipeline stage
@@ -479,7 +477,7 @@ struct LoopNest {
         ScheduleFeatures &feat = features->get_or_create(stage);
 
         if (innermost) {
-            if (vectorized_loop_index >= 0 && vectorized_loop_index < (int) size.size()) {
+            if (vectorized_loop_index >= 0 && vectorized_loop_index < (int)size.size()) {
                 feat.vector_size = size[vectorized_loop_index];
             } else {
                 feat.vector_size = 1;
@@ -562,8 +560,8 @@ struct LoopNest {
                     int64_t bytes = e->producer->bytes_per_point, lines = 1;
                     int64_t max_extent = 1;
                     int vector_dim = (e->producer->is_input ? 0 :
-                                      site.produce != nullptr ? site.produce->vector_dim :
-                                      -1);
+                                                              site.produce != nullptr ? site.produce->vector_dim :
+                                                                                        -1);
                     for (int i = 0; i < e->producer->dimensions; i++) {
                         int64_t extent = b->region_required(i).extent();
                         max_extent = std::max(extent, max_extent);
@@ -670,10 +668,10 @@ struct LoopNest {
         // things like vector gathers.
         int64_t bytes_loaded = 0, lines_loaded = 0, allocation_bytes_loaded = 0;
         double num_dense_loads = 0, num_broadcasts = 0,
-            num_gathers = 0, num_stride_2_loads = 0,
-            num_stride_3_loads = 0, num_stride_4_loads = 0,
-            num_loads = 0;
-        if (innermost || at_production) { // These are the sites at which we compute load footprints
+               num_gathers = 0, num_stride_2_loads = 0,
+               num_stride_3_loads = 0, num_stride_4_loads = 0,
+               num_loads = 0;
+        if (innermost || at_production) {  // These are the sites at which we compute load footprints
             // Pick the site at which we will compute the footprint relationship
             const auto &consumer_site = sites.get(stage);
 
@@ -775,9 +773,9 @@ struct LoopNest {
                             bool stride_3_vector_load = true;
                             bool stride_4_vector_load = true;
                             int producer_innermost_dim =
-                                (e->producer->is_input ? 0 : // Assume default storage layout for inputs
-                                 !producer_has_been_scheduled ? -1 :
-                                 site.produce->vector_dim);
+                                (e->producer->is_input ? 0 :  // Assume default storage layout for inputs
+                                     !producer_has_been_scheduled ? -1 :
+                                                                    site.produce->vector_dim);
                             if (vectorized_loop_index >= 0) {
                                 if (!producer_has_been_scheduled) {
                                     // Operate optimistically and just
@@ -788,11 +786,16 @@ struct LoopNest {
                                     for (int i = 0; i < e->producer->dimensions; i++) {
                                         auto stride = jac.first(i, vectorized_loop_index);
                                         // stride is a rational. Check to see if it's a small integer.
-                                        if (stride == 0) count[0]++;
-                                        else if (stride == 1) count[1]++;
-                                        else if (stride == 2) count[2]++;
-                                        else if (stride == 3) count[3]++;
-                                        else if (stride == 4) count[4]++;
+                                        if (stride == 0)
+                                            count[0]++;
+                                        else if (stride == 1)
+                                            count[1]++;
+                                        else if (stride == 2)
+                                            count[2]++;
+                                        else if (stride == 3)
+                                            count[3]++;
+                                        else if (stride == 4)
+                                            count[4]++;
                                     }
                                     vector_broadcast = (count[0] == e->producer->dimensions);
                                     dense_vector_load = (count[0] == e->producer->dimensions - 1 && count[1] == 1);
@@ -953,8 +956,8 @@ struct LoopNest {
                     // We compute (but never use) these; computing them is cheap,
                     // so let's leave in for future reference, but mark as 'ignore me'
                     // to avoid clang-tidy warnings.
-                    (void) compute_line_footprint;
-                    (void) task_line_footprint;
+                    (void)compute_line_footprint;
+                    (void)task_line_footprint;
                 }
             }
         }
@@ -1113,7 +1116,7 @@ struct LoopNest {
             for (size_t i = 0; i < size.size(); i++) {
                 aslog(0) << " " << size[i];
                 // The vectorized loop gets a 'v' suffix
-                if (innermost && i == (size_t) vectorized_loop_index) {
+                if (innermost && i == (size_t)vectorized_loop_index) {
                     aslog(0) << 'v';
                 }
                 // Loops that have a known constant size get a
@@ -1149,7 +1152,7 @@ struct LoopNest {
             aslog(0) << prefix << "realize: " << p->func.name() << '\n';
         }
         for (size_t i = children.size(); i > 0; i--) {
-            children[i-1]->dump(prefix, this);
+            children[i - 1]->dump(prefix, this);
         }
         for (auto it = inlined.begin(); it != inlined.end(); it++) {
             aslog(0) << prefix << "inlined: " << it.key()->func.name() << " " << it.value() << '\n';
@@ -1332,9 +1335,9 @@ struct LoopNest {
                 node->innermost = false;
 
                 LoopNest *one_vector = new LoopNest;
-                one_vector->node      = node->node;
-                one_vector->stage     = node->stage;
-                one_vector->tileable  = false;
+                one_vector->node = node->node;
+                one_vector->stage = node->stage;
+                one_vector->tileable = false;
                 one_vector->vectorized_loop_index = node->vectorized_loop_index;
                 one_vector->vector_dim = v;
                 one_vector->size.resize(loop_dim, 1);
@@ -1358,9 +1361,9 @@ struct LoopNest {
 
         // Split this loop and move factors to the inner loop
         LoopNest *inner = new LoopNest, *outer = new LoopNest;
-        inner->node      = outer->node      = node;
-        inner->stage     = outer->stage     = stage;
-        inner->tileable  = outer->tileable  = tileable && may_subtile();
+        inner->node = outer->node = node;
+        inner->stage = outer->stage = stage;
+        inner->tileable = outer->tileable = tileable && may_subtile();
         inner->vector_dim = outer->vector_dim = vector_dim;
         inner->vectorized_loop_index = outer->vectorized_loop_index = vectorized_loop_index;
         outer->size = size;
@@ -1450,7 +1453,6 @@ struct LoopNest {
                 total_at_parent *= range_at_parent.extent();
             }
             if (total_here >= total_at_parent) return result;
-
         }
 
         // Figure out which child we can fuse this into
@@ -1523,9 +1525,9 @@ struct LoopNest {
 
                 // Tile this loop and place the computation at some coarser granularity
                 LoopNest *inner = new LoopNest, *outer = new LoopNest;
-                inner->node      = outer->node      = node;
-                inner->stage     = outer->stage     = stage;
-                inner->tileable  = outer->tileable  = tileable && may_subtile();
+                inner->node = outer->node = node;
+                inner->stage = outer->stage = stage;
+                inner->tileable = outer->tileable = tileable && may_subtile();
                 inner->vector_dim = outer->vector_dim = vector_dim;
                 inner->vectorized_loop_index = outer->vectorized_loop_index = vectorized_loop_index;
                 outer->size = size;
@@ -1540,7 +1542,6 @@ struct LoopNest {
                 inner->inlined = inlined;
                 inner->bounds = bounds;
                 inner->store_at = store_at;
-
 
                 {
                     auto b = inner->get_bounds(node)->make_copy();
@@ -1660,7 +1661,6 @@ struct LoopNest {
         return result;
     }
 
-
     // Below here we have methods that apply a schedule to a Halide pipeline.
 
     // A model of the state of the loop nest of a Func while applying
@@ -1698,12 +1698,14 @@ struct LoopNest {
 
             // Some flags.
             bool innermost_pure_dim = false,
-                outermost = false,
-                parallel = false,
-                exists = false,
-                pure = false,
-                constant_extent = false;
-            FuncVar() : orig(Var()), var(Var()) {}
+                 outermost = false,
+                 parallel = false,
+                 exists = false,
+                 pure = false,
+                 constant_extent = false;
+            FuncVar()
+                : orig(Var()), var(Var()) {
+            }
         };
 
         // In order from innermost to outermost. Each group of d is one tiling level.
@@ -1758,13 +1760,13 @@ struct LoopNest {
                     fv.exists = true;
                     fv.pure = l.pure;
                     fv.index = i;
-                    fv.innermost_pure_dim = (i == (size_t) vectorized_loop_index);
+                    fv.innermost_pure_dim = (i == (size_t)vectorized_loop_index);
                     state->vars.push_back(fv);
                 }
                 // Bubble the innermost pure dimension to the front of the pure dimensions
                 for (int i = vectorized_loop_index - 1;
                      i >= 0 && state->vars[i].pure; i--) {
-                    std::swap(state->vars[i], state->vars[i+1]);
+                    std::swap(state->vars[i], state->vars[i + 1]);
                 }
                 state_map.emplace(stage, std::unique_ptr<StageScheduleState>(state));
             }
@@ -1816,7 +1818,8 @@ struct LoopNest {
                 if (innermost) {
                     if (vectorized_loop_index >= 0) {
                         size_t i = 0;
-                        while (!state.vars[i].innermost_pure_dim) i++;
+                        while (!state.vars[i].innermost_pure_dim)
+                            i++;
                         auto &v = state.vars[i];
                         internal_assert(v.innermost_pure_dim && v.exists) << v.var.name() << "\n";
                         // Is the result of a split
@@ -1957,7 +1960,6 @@ struct LoopNest {
                 return;
             }
 
-
             for (auto f : store_at) {
                 Func(f->func).store_at(here);
             }
@@ -1996,7 +1998,6 @@ struct LoopNest {
             }
         }
     }
-
 };
 
 }  // namespace Autoscheduler
