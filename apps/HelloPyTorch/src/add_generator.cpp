@@ -129,4 +129,3 @@ public:
 
 HALIDE_REGISTER_GENERATOR(halide_pytorch_ops::AddGenerator, add)
 HALIDE_REGISTER_GENERATOR(halide_pytorch_ops::AddGradGenerator, add_grad)
-pyt
