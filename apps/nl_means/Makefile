@@ -9,7 +9,7 @@ CXXFLAGS += -I../support/
 all: $(BIN)/$(HL_TARGET)/process
 
 $(GENERATOR_BIN)/nl_means.generator: nl_means_generator.cpp $(GENERATOR_DEPS)
-	@mkdir -p $(BIN)
+	@mkdir -p $(@D)
 	$(CXX) $(CXXFLAGS) -g $(filter-out %.h,$^) -o $@ $(LDFLAGS) $(HALIDE_SYSTEM_LIBS) $(USE_EXPORT_DYNAMIC)
 
 $(BIN)/%/nl_means.a: $(GENERATOR_BIN)/nl_means.generator
@@ -17,7 +17,7 @@ $(BIN)/%/nl_means.a: $(GENERATOR_BIN)/nl_means.generator
 	$^ -g nl_means -e $(GENERATOR_OUTPUTS) -o $(@D) -f nl_means target=$* auto_schedule=false
 
 $(BIN)/%/nl_means_classic_auto_schedule.a: $(GENERATOR_BIN)/nl_means.generator $(AUTOSCHED_BIN)/libauto_schedule.so
-	@mkdir -p $(BIN)
+	@mkdir -p $(@D)
 	HL_PERMIT_FAILED_UNROLL=1 \
 	HL_WEIGHTS_DIR=$(AUTOSCHED_SRC)/gpu.weights \
 	HL_DEBUG_CODEGEN=1 \
@@ -26,7 +26,7 @@ $(BIN)/%/nl_means_classic_auto_schedule.a: $(GENERATOR_BIN)/nl_means.generator $
 	$^ -g nl_means -e $(GENERATOR_OUTPUTS) -o $(@D) -f nl_means_classic_auto_schedule target=$*-no_runtime auto_schedule=true -p $(AUTOSCHED_BIN)/libauto_schedule.so machine_params=$(HL_MACHINE_PARAMS) 2> stderr_classic.txt > stdout_classic.txt
 
 $(BIN)/%/nl_means_auto_schedule.a: $(GENERATOR_BIN)/nl_means.generator $(AUTOSCHED_BIN)/libauto_schedule.so
-	@mkdir -p $(BIN)
+	@mkdir -p $(@D)
 	HL_PERMIT_FAILED_UNROLL=1 \
 	HL_WEIGHTS_DIR=$(AUTOSCHED_SRC)/gpu.weights \
 	HL_DEBUG_CODEGEN=1 \
