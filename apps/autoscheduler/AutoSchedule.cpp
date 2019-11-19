@@ -1123,11 +1123,13 @@ struct LoopNest {
 
     // Get the stride over "node's" storage for a unit increment in the vectorized loop's
     // index
-    double storage_stride(const LoadJacobian& jac, int innermost_storage_dim, const FunctionDAG::Node* node, const Bound& store_bounds, const LoopNest& root) const {
+    double storage_stride(const LoadJacobian& jac, int innermost_storage_dim, const FunctionDAG::Node* storage_node, const Bound& store_bounds, const LoopNest& root) const {
+        internal_assert(innermost_storage_dim >= 0);
+
         // The node's storage dimensions (from innermost outward)
         std::vector<int64_t> storage_dims;
-        storage_dims.push_back(innermost_storage_dim >= 0 ? innermost_storage_dim : 0);
-        for (int i = 0; i < node->dimensions; i++) {
+        storage_dims.push_back(innermost_storage_dim);
+        for (int i = 0; i < storage_node->dimensions; i++) {
             if (i == storage_dims[0]) {
                 continue;
             }
@@ -1158,12 +1160,12 @@ struct LoopNest {
         return stride;
     }
 
-    bool all_strides_exist(const LoadJacobian& jac, const FunctionDAG::Node* node, const LoopNest& root) const {
+    bool all_strides_exist(const LoadJacobian& jac, const FunctionDAG::Node* storage_node, const LoopNest& root) const {
         int v = vectorized_loop_index;
         if (v < 0) {
             v = root.get_pure_stage_vectorized_loop_index(node);
         }
-        for (int i = 0; i < node->dimensions; i++) {
+        for (int i = 0; i < storage_node->dimensions; i++) {
             auto stride = jac(i, v);
 
             if (!stride.exists) {
