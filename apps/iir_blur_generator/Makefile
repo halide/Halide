@@ -8,7 +8,7 @@ HL_TARGET=host-cuda
 GRADIENT_AUTOSCHED_BIN=../gradient_autoscheduler/bin
 CXXFLAGS += -I../support/
 
-$(GENERATOR_BIN)/iir_blur.generator: iir_blur_generator.cpp ../autoscheduler/SimpleAutoSchedule.h ../autoscheduler/SimpleAutoSchedule.cpp $(GENERATOR_DEPS)
+$(GENERATOR_BIN)/iir_blur.generator: iir_blur_generator.cpp $(GENERATOR_DEPS)
 	@mkdir -p $(@D)
 	$(CXX) $(CXXFLAGS) -g $(filter-out %.h,$^) -o $@ $(LDFLAGS) $(HALIDE_SYSTEM_LIBS) $(USE_EXPORT_DYNAMIC)
 
@@ -24,11 +24,11 @@ $(BIN)/%/iir_blur_auto_schedule.a: $(GENERATOR_BIN)/iir_blur.generator $(AUTOSCH
 	HL_SHARED_MEMORY_LIMIT=48 \
 	$< -g iir_blur -f iir_blur_auto_schedule -e $(GENERATOR_OUTPUTS) -o $(@D) target=$* auto_schedule=true -p $(AUTOSCHED_BIN)/libauto_schedule.so -s Adams2019 machine_params=$(HL_MACHINE_PARAMS) 2> stderr.txt > stdout.txt
 
-$(BIN)/%/iir_blur_simple_auto_schedule.a: $(GENERATOR_BIN)/iir_blur.generator
+$(BIN)/%/iir_blur_gradient_auto_schedule.a: $(GENERATOR_BIN)/iir_blur.generator
 	@mkdir -p $(@D)
-	$^ -g iir_blur -f iir_blur_simple_auto_schedule -e $(GENERATOR_OUTPUTS) -o $(@D) target=$*-no_runtime auto_schedule=true -p $(GRADIENT_AUTOSCHED_BIN)/libgradient_autoscheduler.so -s Li2018
+	$^ -g iir_blur -f iir_blur_gradient_auto_schedule -e $(GENERATOR_OUTPUTS) -o $(@D) target=$*-no_runtime auto_schedule=true -p $(GRADIENT_AUTOSCHED_BIN)/libgradient_autoscheduler.so -s Li2018
 
-$(BIN)/%/process: process.cpp $(BIN)/%/iir_blur.a $(BIN)/%/iir_blur_auto_schedule.a $(BIN)/%/iir_blur_simple_auto_schedule.a
+$(BIN)/%/process: process.cpp $(BIN)/%/iir_blur.a $(BIN)/%/iir_blur_auto_schedule.a $(BIN)/%/iir_blur_gradient_auto_schedule.a
 	@mkdir -p $(@D)
 	$(CXX) $(CXXFLAGS) -I$(BIN)/$* -Wall -O3 $^ -o $@ $(LDFLAGS) $(IMAGE_IO_FLAGS) $(CUDA_LDFLAGS) $(OPENCL_LDFLAGS) $(OPENGL_LDFLAGS)
 
