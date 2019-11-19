@@ -30,7 +30,22 @@ class UnrollLoops : public IRMutator {
     Stmt visit(const For *for_loop) override {
         if (for_loop->for_type == ForType::Unrolled) {
             // Give it one last chance to simplify to an int
-            Expr extent = simplify(for_loop->extent);
+
+            class RemoveLikelyTags : public IRMutator {
+                using IRMutator::visit;
+
+                Expr visit(const Call *op) override {
+                    if (op->is_intrinsic(Call::likely) ||
+                        op->is_intrinsic(Call::likely_if_innermost)) {
+                        internal_assert(op->args.size() == 1);
+                        return mutate(op->args[0]);
+                    } else {
+                        return IRMutator::visit(op);
+                    }
+                }
+            };
+
+            Expr extent = simplify(RemoveLikelyTags().mutate(for_loop->extent));
             Stmt body = for_loop->body;
             const IntImm *e = extent.as<IntImm>();
 
