@@ -2585,6 +2585,10 @@ Expr synthesize_predicate(const Expr &lhs,
             lower_bound.swap(weak_lower_bound);
         }
 
+        if (lower_bound.empty() && !upper_bound.empty()) {
+            lower_bound.insert(pack_binary_op<Min>(upper_bound));
+        }
+
         if (upper_bound.empty() && lower_bound.empty()) {
             debug(0) << "In synthesizing predicate for " << lhs << " == " << rhs << "\n"
                      << "with implicit predicate: " << pack_binary_op<And>(clauses) << "\n"

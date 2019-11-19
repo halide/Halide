@@ -231,8 +231,10 @@ string expr_to_smt2(const Expr &e) {
         }
 
         void visit(const Cast *op) override {
-            assert(false && "unhandled");
+            std::cerr << "Unhandled IR node for SMT2: " << Expr(op) << "\n";
+            // assert(false && "unhandled");
         }
+
 
         void visit(const Ramp *op) override {
             /*
