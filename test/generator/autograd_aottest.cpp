@@ -26,9 +26,9 @@ int main(int argc, char **argv) {
     Buffer<float> c(kSize);
     Buffer<float> out(kSize);
 
-    a.for_each_element([&](int x) { a(x) = x; });
-    b.for_each_element([&](int x) { b(x) = x; });
-    c.for_each_element([&](int x) { c(x) = x; });
+    a.for_each_element([&](int x) { a(x) = (float) x; });
+    b.for_each_element([&](int x) { b(x) = (float) x; });
+    c.for_each_element([&](int x) { c(x) = (float) x; });
 
     result = autograd(a, b, c, out);
     if (result != 0) {
@@ -41,7 +41,7 @@ int main(int argc, char **argv) {
     });
 
     Buffer<float> L(kSize);
-    L.for_each_element([&](int x) { L(x) = x - kSize / 2; });
+    L.for_each_element([&](int x) { L(x) = (float) (x - kSize / 2); });
 
     Buffer<float> grad_loss_out_wrt_a(kSize);
     Buffer<float> grad_loss_out_wrt_b(kSize);
