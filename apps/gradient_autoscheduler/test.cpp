@@ -136,5 +136,26 @@ int main(int argc, char **argv) {
         std::cout << std::endl;
     }
 
+    { // Test for conjunction use of bound and estimates.
+        Func in("in");
+        in(x, y) = cast<float>(x + y);
+        Func f0("f0");
+        f0(x, y) = 2.f * in(x, y);
+        Func f1("f1");
+        f1(x, y) = sin(f0(x, y));
+        Func f2("f2");
+        f2(x, y) = f1(x, y) * f1(x, y);
+
+        f2.bound(x, 0, 4);
+        // make sure it also works if we reverse the estimate order
+        f2.set_estimate(y, 0, 1024)
+          .set_estimate(x, 0, 4);
+
+        AutoSchedulerResults result =
+            Pipeline(f2).auto_schedule(target, params);
+        std::cout << "Schedule for 2D pointwise operations with small x dimension:" << std::endl;
+        std::cout << result.schedule_source << std::endl;
+        std::cout << std::endl;
+    }
     return 0;
 }

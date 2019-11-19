@@ -1149,6 +1149,11 @@ void test_async_tuple(const Backend &backend) {
 }
 
 int main(int argc, char **argv) {
+    if (get_jit_target_from_environment().arch == Target::WebAssembly) {
+        printf("Skipping test for WebAssembly as it does not support atomics yet.\n");
+        return 0;
+    }
+
     Target target = get_jit_target_from_environment();
     // Most of the schedules used in this test are terrible for large
     // thread count machines, due to massive amounts of

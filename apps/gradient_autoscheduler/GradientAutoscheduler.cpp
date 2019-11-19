@@ -796,12 +796,24 @@ void generate_schedule(const std::vector<Function> &outputs,
     for (const auto &output : outputs) {
         const FuncSchedule &schedule = output.schedule();
         const std::vector<Bound> &estimates = schedule.estimates();
-        user_assert((int)estimates.size() == output.dimensions())
-            << "Bound estimates of function " << output.name() << " are not provided.\n";
+        
         std::vector<Interval> b;
-        b.reserve(estimates.size());
-        for (const auto &e : estimates) {
-            b.push_back(Interval(e.min, simplify(e.min + e.extent - 1)));
+        b.reserve(output.args().size());
+        for (const auto &arg : output.args()) {
+            bool found = false;
+            Bound est;
+            for (int i = (int)estimates.size() - 1; i >= 0; --i) {
+                if ((estimates[i].var == arg) && estimates[i].min.defined() &&
+                    estimates[i].extent.defined()) {
+                    found = true;
+                    est = estimates[i];
+                    break;
+                }
+            }
+            user_assert(found && est.min.type().is_int() && est.extent.type().is_int())
+                << "Please provide a valid estimate for dimension "
+                << arg << " of output \"" << output.name() << "\"\n";
+            b.push_back(Interval(est.min, simplify(est.min + est.extent - 1)));
         }
         output_bounds_expr.push_back(Box(b));
     }

@@ -2818,8 +2818,12 @@ Node convert_random_node(
             low = attr.f();
         } else if (attr.name() == "seed") {
             use_seed = true;
-            float fseed = attr.f();
-            seed = reinterpret_cast<int &>(fseed);
+            union {
+                float f;
+                int32_t i;
+            } u;
+            u.f = attr.f();
+            seed = u.i;
         } else if (attr.name() == "mean") {
             mean = attr.f();
         } else if (attr.name() == "scale") {
