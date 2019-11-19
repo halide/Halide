@@ -1534,6 +1534,8 @@ Module GeneratorBase::build_gradient_module(const std::string &function_name) {
         const ImageParam &d_output = d_output_imageparams.at(i);
         std::vector<std::pair<Expr, Expr>> bounds;
         for (const auto &e : d_output.parameter().get_argument_estimates().buffer_estimates) {
+            user_assert(e.min.defined() && e.extent.defined())
+                << "build_gradient_module: you must provide complete estimates for all inputs and outputs";
             bounds.emplace_back(e.min, e.min + e.extent - 1);
         }
         Func adjoint_func = BoundaryConditions::constant_exterior(d_output, make_zero(d_output.type()));
@@ -1558,7 +1560,7 @@ Module GeneratorBase::build_gradient_module(const std::string &function_name) {
                 d_out_wrt_in.set_estimates(est_pairs);
 
                 // Useful for debugging; ordinarily better to leave out
-                // debug(2) << "\n\n"
+                // debug(0) << "\n\n"
                 //          << "output:\n" << FuncWithDependencies(original_output) << "\n"
                 //          << "d_output:\n" << FuncWithDependencies(adjoint_func) << "\n"
                 //          << "input:\n" << FuncWithDependencies(f) << "\n"
