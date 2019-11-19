@@ -100,13 +100,9 @@ public:
 
         // Estimates
         {
-            input.dim(0).set_bounds_estimate(0, 1536)
-                   .dim(1).set_bounds_estimate(0, 2560)
-                   .dim(2).set_bounds_estimate(0, 3);
+            input.set_estimates({{0, 1536}, {0, 2560}, {0, 3}});
             alpha.set_estimate(0.1f);
-            output.dim(0).set_bounds_estimate(0, 1536)
-                   .dim(1).set_bounds_estimate(0, 2560)
-                   .dim(2).set_bounds_estimate(0, 3);
+            output.set_estimates({{0, 1536}, {0, 2560}, {0, 3}});
         }
     }
 };
