@@ -1507,8 +1507,8 @@ Module GeneratorBase::build_gradient_module(const std::string &function_name) {
             // output_name is something like "funcname_i"
             const std::string grad_in_name = replace_all(grad_input_pattern, "$OUT$", output_name);
             // TODO(srj): does it make sense for gradient to be a non-float type?
-            // For now, assume it's always float32 (unless the output was float64).
-            const Type grad_in_type = output->type() == Float(64) ? Float(64) : Float(32);
+            // For now, assume it's always float32 (unless the output is already some float).
+            const Type grad_in_type = output->type().is_float() ? output->type() : Float(32);
             const int grad_in_dimensions = f.dimensions();
             const ArgumentEstimates grad_in_estimates = f.output_buffer().parameter().get_argument_estimates();
             internal_assert((int) grad_in_estimates.buffer_estimates.size() == grad_in_dimensions);
