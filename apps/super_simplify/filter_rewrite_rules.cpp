@@ -242,7 +242,7 @@ int main(int argc, char **argv) {
         r.rhs = remove_folds(r.rhs);
     }
 
-    // Normalize LE rules to LT rules where it's possible to invert the RHS for free
+    // Normalize LE rules to LT and NE rules to EQ rules where it's possible to invert the RHS for free
     for (Rule &r : rules) {
         if (const LE *lhs = r.lhs.as<LE>()) {
             if (is_const(r.rhs)) {
@@ -262,6 +262,27 @@ int main(int argc, char **argv) {
                 r.rhs = (rhs->a == rhs->b);
             } else if (const Not *rhs = r.rhs.as<Not>()) {
                 r.lhs = (lhs->b < lhs->a);
+                r.rhs = rhs->a;
+            }
+        }
+        if (const NE *lhs = r.lhs.as<NE>()) {
+            if (is_const(r.rhs)) {
+                r.lhs = (lhs->b == lhs->a);
+                r.rhs = simplify(!r.rhs);
+            } else if (const LE *rhs = r.rhs.as<LE>()) {
+                r.lhs = (lhs->b == lhs->a);
+                r.rhs = (rhs->b < rhs->a);
+            } else if (const LT *rhs = r.rhs.as<LT>()) {
+                r.lhs = (lhs->b == lhs->a);
+                r.rhs = (rhs->b <= rhs->a);
+            } else if (const EQ *rhs = r.rhs.as<EQ>()) {
+                r.lhs = (lhs->b == lhs->a);
+                r.rhs = (rhs->a != rhs->b);
+            } else if (const NE *rhs = r.rhs.as<NE>()) {
+                r.lhs = (lhs->b == lhs->a);
+                r.rhs = (rhs->a == rhs->b);
+            } else if (const Not *rhs = r.rhs.as<Not>()) {
+                r.lhs = (lhs->b == lhs->a);
                 r.rhs = rhs->a;
             }
         }
