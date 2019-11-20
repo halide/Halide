@@ -1111,14 +1111,28 @@ struct LoopNest {
         return false;
     }
 
-    int get_pure_stage_vectorized_loop_index(const FunctionDAG::Node* node) const {
+    const LoopNest* find_pure_stage_loop_nest(const FunctionDAG::Node* node) const {
+        const LoopNest* pure;
         for (const auto &c : children) {
-            if (node == c->node && c->stage->index == 0) {
-                return c->vectorized_loop_index;
+            if (node == c->node) {
+                if (c->stage->index == 0) {
+                    return c.get();
+                }
+            } else {
+                pure = c->find_pure_stage_loop_nest(node);
+                if (pure) {
+                    return pure;
+                }
             }
         }
-        internal_assert(false) << "No pure stage found for " << node->func.name() << "\n";
-        return -1;
+
+        return nullptr;
+    }
+
+    int get_pure_stage_vectorized_loop_index(const FunctionDAG::Node* node) const {
+        const auto* pure = find_pure_stage_loop_nest(node);
+        internal_assert(pure) << "No pure stage found for " << node->func.name() << "\n";
+        return pure->vectorized_loop_index;
     }
 
     // Get the stride over "node's" storage for a unit increment in the vectorized loop's
@@ -3919,28 +3933,33 @@ struct State {
                 return;
             }
 
-            std::unordered_map<const FunctionDAG::Node*, std::vector<int64_t>> tilings;
-
             for (auto it = loop_nest->children.rbegin(); it != loop_nest->children.rend(); ++it) {
                 auto& c = *it;
                 if (c->gpu_label != none) {
                     continue;
                 }
 
-                vector<int64_t> tiling = c->size;
-                if (tilings.count(c->node) == 0) {
-                    int vectorized_loop_index = std::max(c->vectorized_loop_index, 0);
+                int vectorized_loop_index = c->vectorized_loop_index;
 
-                    // Make the vectorized dimension of the inner loop 32 (or as
-                    // close as possible)
-                    int64_t inner_extent = std::min(c->size[vectorized_loop_index], (int64_t)32);
-                    tiling[vectorized_loop_index] = (c->size[vectorized_loop_index] + inner_extent - 1) / inner_extent;
+                // Make the vectorized dimension of the inner loop 32 (or as
+                // close as possible)
+                int64_t inner_extent = std::min(c->size[vectorized_loop_index], (int64_t)32);
+                int64_t outer_vec_extent = (c->size[vectorized_loop_index] + inner_extent - 1) / inner_extent;
+
+                if (c->stage->index == 0) {
+                    vector<int64_t> tiling = c->size;
+
                     // Mark as 'parallelized' so this loop is split into blocks and threads
                     c->gpu_label = parallelized;
+                    if (vectorized_loop_index >= 0) {
+                        tiling[vectorized_loop_index] = outer_vec_extent;
+                    }
                     c = c->parallelize_in_tiles(params, tiling, loop_nest, target, false, true);
-                    tilings[c->node] = tiling;
                 } else {
-                    vector<int64_t> tiling(c->stage->loop.size(), 1);
+                    // An update stage may have more or fewer dimensions than
+                    // the pure stage, but the tiling requires its dimensions to
+                    // be equal to the number of dimensions in the pure stage
+                    vector<int64_t> tiling(c->node->dimensions, 1);
                     for (size_t i = 0; i < c->stage->loop.size(); i++) {
                         int l = c->stage->loop[i].pure_dim;
                         if (l == -1) {
@@ -3950,12 +3969,21 @@ struct State {
                         tiling[l] = c->size[i];
                     }
 
-                    // Split into blocks and serial
+                    // For update stages, split into parallelized and serial
+                    // (parallelize_in_tiles will move any RVars inwards and
+                    // make them serial)
                     c = c->parallelize_in_tiles(params, tiling, loop_nest, target, false, true);
 
-                    tiling = tilings[c->node];
+                    // If vectorized_loop_index < 0, then this update stage
+                    // likely does not loop over the vectorized loop of the
+                    // pure stage, so it should not be split by the
+                    // outer_vec_extent and instead only have a single thread
+                    if (vectorized_loop_index >= 0) {
+                        tiling[c->stage->loop[vectorized_loop_index].pure_dim] = outer_vec_extent;
+                    }
 
-                    // Split blocks into blocks and threads
+                    // Now that the RVars have been moved inwards, we can
+                    // split the outer loop into blocks and threads
                     c = c->parallelize_in_tiles(params, tiling, loop_nest, target, false, true);
                 }
             }
@@ -3983,7 +4011,7 @@ struct State {
                     internal_assert(c->gpu_label == serial);
 
                     // We want outer thread loops with extents 1
-                    vector<int64_t> tiling(c->size.size(), 1);
+                    vector<int64_t> tiling(c->node->dimensions, 1);
 
                     // Mark as 'thread' so this loop is split into threads and
                     // serial
@@ -4023,7 +4051,7 @@ struct State {
                     }
 
                     // We want outer thread loops with extents 1
-                    vector<int64_t> tiling(c->size.size(), 1);
+                    vector<int64_t> tiling(c->node->dimensions, 1);
 
                     // Mark as 'thread' so this loop is split into threads and
                     // serial
