@@ -7,54 +7,12 @@
  */
 
 #include "Function.h"
+#include "Pipeline.h"
 #include "Target.h"
 
 namespace Halide {
 
-/** A struct representing the machine parameters to generate the auto-scheduled
- * code for. */
-struct MachineParams {
-    /** Maximum level of parallelism avalaible. */
-    int parallelism;
-    /** Size of the last-level cache (in bytes). */
-    uint64_t last_level_cache_size;
-    /** Indicates how much more expensive is the cost of a load compared to
-     * the cost of an arithmetic operation at last level cache. */
-    float balance;
-
-    explicit MachineParams(int parallelism, uint64_t llc, float balance)
-        : parallelism(parallelism), last_level_cache_size(llc), balance(balance) {
-    }
-
-    /** Default machine parameters for generic CPU architecture. */
-    static MachineParams generic();
-
-    /** Convert the MachineParams into canonical string form. */
-    std::string to_string() const;
-
-    /** Reconstruct a MachineParams from canonical string form. */
-    explicit MachineParams(const std::string &s);
-};
-
 namespace Internal {
-
-/** If the cost of computing a Func is about the same as calling the Func,
- * inline the Func. Return true of any of the Funcs is inlined. */
-bool inline_all_trivial_functions(const std::vector<Function> &outputs,
-                                  const std::vector<std::string> &order,
-                                  const std::map<std::string, Function> &env);
-
-/** Determine if a Func (order[index]) is only consumed by another single Func
- * in element-wise manner. If it is, return the name of the consumer Func;
- * otherwise, return an empty string. */
-std::string is_func_called_element_wise(const std::vector<std::string> &order, size_t index,
-                                        const std::map<std::string, Function> &env);
-
-/** Inline a Func if its values are only consumed by another single Func in
- * element-wise manner. */
-bool inline_all_element_wise_functions(const std::vector<Function> &outputs,
-                                       const std::vector<std::string> &order,
-                                       const std::map<std::string, Function> &env);
 
 /** Generate schedules for Funcs within a pipeline. The Funcs should not already
  * have specializations or schedules as the current auto-scheduler does not take
