@@ -1533,10 +1533,8 @@ Module GeneratorBase::build_gradient_module(const std::string &function_name) {
         const Func &original_output = original_outputs.at(i);
         const ImageParam &d_output = d_output_imageparams.at(i);
         std::vector<std::pair<Expr, Expr>> bounds;
-        for (const auto &e : d_output.parameter().get_argument_estimates().buffer_estimates) {
-            user_assert(e.min.defined() && e.extent.defined())
-                << "build_gradient_module: you must provide complete estimates for all inputs and outputs";
-            bounds.emplace_back(e.min, e.min + e.extent - 1);
+        for (int i = 0; i < d_output.dimensions(); i++) {
+            bounds.emplace_back(d_output.dim(i).min(), d_output.dim(i).max());
         }
         Func adjoint_func = BoundaryConditions::constant_exterior(d_output, make_zero(d_output.type()));
         Derivative d = propagate_adjoints(original_output, adjoint_func, bounds);
