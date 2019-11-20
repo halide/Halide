@@ -46,7 +46,6 @@ int main(int argc, char **argv) {
     Buffer<float> grad_loss_out_wrt_a(kSize);
     Buffer<float> grad_loss_out_wrt_b(kSize);
     Buffer<float> grad_loss_out_wrt_c(kSize);
-    grad_loss_out_wrt_c.fill(12345);
 
     result = autograd_grad(/*inputs*/ a, b, c, L,
                            /*outputs*/ grad_loss_out_wrt_a,
