@@ -2284,10 +2284,6 @@ struct State {
             return false;
         }
 
-        cost = (float)(rng());
-        return true;
-
-
         int num_stages = (int)features.size();
 
         Runtime::Buffer<float> schedule_features;

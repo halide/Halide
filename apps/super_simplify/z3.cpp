@@ -231,8 +231,16 @@ string expr_to_smt2(const Expr &e) {
         }
 
         void visit(const Cast *op) override {
-            assert(false && "unhandled");
+            const Call *call = op->value.as<Call>();
+            if (call && op->type == Int(32) && call->name == "abs") {
+                Expr equiv = select(op->value < 0, 0 - op->value, op->value);
+                equiv.accept(this);
+            } else {
+                std::cerr << "Unhandled IR node for SMT2: " << Expr(op) << "\n";
+                // assert(false && "unhandled");
+            }
         }
+
 
         void visit(const Ramp *op) override {
             /*

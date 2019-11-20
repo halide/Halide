@@ -314,7 +314,7 @@ Expr super_simplify(Expr e, int size) {
                     }
                     std::cout << "\n";
                 }
-                abort();
+                return Expr();
             }
         }
 

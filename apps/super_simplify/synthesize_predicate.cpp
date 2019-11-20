@@ -2257,6 +2257,7 @@ Expr synthesize_predicate(const Expr &lhs,
 
             // Optimize the clause in isolation
             {
+                if (c1.empty()) return const_false();
                 Expr before = pack_binary_op<Or>(c1);
                 auto terms = unpack_binary_op<Or>(before);
                 for (size_t i = 0; i < terms.size(); i++) {
@@ -2583,6 +2584,10 @@ Expr synthesize_predicate(const Expr &lhs,
 
         if (lower_bound.empty()) {
             lower_bound.swap(weak_lower_bound);
+        }
+
+        if (lower_bound.empty() && !upper_bound.empty()) {
+            lower_bound.insert(pack_binary_op<Min>(upper_bound));
         }
 
         if (upper_bound.empty() && lower_bound.empty()) {

@@ -300,10 +300,6 @@ int main(int argc, char **argv) {
     }
     std::cout << blacklist.size() << " blacklisted patterns\n";
 
-    for (auto b : blacklist) {
-        std::cout << b << "\n";
-    }
-
     map<Expr, int, IRDeepCompare> patterns_without_constants;
 
     set<Expr, IRDeepCompare> patterns;
@@ -313,12 +309,14 @@ int main(int argc, char **argv) {
         Expr orig = e;
         e = simplify(e);
         Expr second = simplify(e);
+        /*
         while (!equal(e, second)) {
             std::cerr << "Warning: Expression required multiple applications of the simplifier:\n"
                       << e << " -> " << second << "\n";
             e = second;
             second = simplify(e);
         }
+        */
         std::cout << "Simplified: " << e << "\n";
         total++;
         if (is_one(e)) {
@@ -368,7 +366,7 @@ int main(int argc, char **argv) {
 
     {
         std::lock_guard<std::mutex> lock(mutex);
-        for (int lhs_ops = 1; lhs_ops < 5; lhs_ops++) {
+        for (int lhs_ops = 1; lhs_ops < 6; lhs_ops++) {
             for (auto p : patterns) {
                 CountOps count_ops;
                 count_ops.include(p);
@@ -508,8 +506,7 @@ int main(int argc, char **argv) {
     futures.clear();
 
     for (auto it : generalized) {
-        ///futures.emplace_back(pool.async([=, &mutex, &predicated_rules, &failed_predicated_rules]() {
-        auto work = [=, &mutex, &predicated_rules, &failed_predicated_rules]() {
+        futures.emplace_back(pool.async([=, &mutex, &predicated_rules, &failed_predicated_rules]() {
                     const EQ *eq = it.first.as<EQ>();
                     assert(eq);
                     Expr lhs = eq->a, rhs = eq->b;
@@ -558,15 +555,12 @@ int main(int argc, char **argv) {
                         predicated_rules.emplace_back(lhs, rhs, predicate);
                         std::cout << "PREDICATED RULE: " << predicate << " => " << lhs << " = " << rhs << "\n";
                     }
-                    };
-        work();
-                    //                }));
+                }));
     }
-    /*
+
     for (auto &f : futures) {
         f.get();
     }
-    */
 
     for (auto r : failed_predicated_rules) {
         std::cout << "Failed to synthesize a predicate for rule: "
