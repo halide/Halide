@@ -5,15 +5,15 @@ Halide supports WebAssembly (Wasm) code generation from Halide using the LLVM ba
 As WebAssembly itself is still under active development, Halide's support has some limitations. Some of the most important:
 
 - We require using LLVM 9+ for Wasm codegen; earlier versions of LLVM may work, but have not been tested, and so are currently deliberately excluded.
-- SIMD can be enabled via Target::WasmSimd128, but is likely to require building with LLVM 9+ and running in V8 7.5 or later to work properly. (Earlier versions of V8 should work for non-SIMD usage.)
+- SIMD can be enabled via Target::WasmSimd128, but is likely to require building with LLVM 10+ and running in V8 7.5 or later to work properly. (Earlier versions of V8 should work for non-SIMD usage.)
 - Multithreading is not yet ready to be supported -- there isn't even a Feature flag to enable it yet -- but we would like to add support for this in the future.
 - Halide's JIT for Wasm is extremely limited and really useful only for internal testing purposes.
 
 # Additional Tooling Requirements:
-- In additional to the usual install of LLVM and Clang, you'll need wasm-ld (via LLVM/tools/lld). All should be v9.x+ (current trunk as of April 2019).
-- V8 library, v7.3+
-- d8 shell tool, v7.3+
-- Emscripten, 1.38.28+
+- In additional to the usual install of LLVM and clang, you'll need lld. All should be v10.x+ (current trunk as of November 2019).
+- V8 library, v7.5+
+- d8 shell tool, v7.5+
+- Emscripten, 1.38.47+
 
 Note that for all of the above, earlier versions might work, but have not been tested.
 
@@ -54,14 +54,12 @@ In sum: don't plan on using Halide JIT mode with Wasm unless you are working on 
 ## Enabling wasm JIT
 If you want to run `test_correctness` and other interesting parts of the Halide test suite (and you almost certainly will), you'll need to install libV8 and ensure that LLVM is built with wasm-ld:
 
-- Ensure that you have tools/lld in your LLVM build checkout:
+- Ensure that you have lld in LVM_ENABLE_PROJECTS:
 ```
-svn co https://llvm.org/svn/llvm-project/lld/trunk /path/to/llvm-trunk/tools/lld
+cmake -DLLVM_ENABLE_PROJECTS="clang;lld" ...
 ```
 
-(You might have to do a clean build of LLVM for CMake to notice that you've added a tool.)
-
-- Install libv8 and the d8 shell tool (instructions omitted), or build from source if you prefer (instructions omitted). We are able to compile with v7.3+ (but not earlier versions), but there are SIMD-related bugs in versions prior to v7.5 that will cause many of our tests to fail; if you are going to test with `wasm_simd128` at all, you should really use V8 v7.5 or later.
+- Install libv8 and the d8 shell tool (instructions omitted), or build from source if you prefer (instructions omitted). We require version v7.5+.
 
 Note that using shared-library builds of V8 may be problematic on some platforms (e.g. OSX) due to libc++ conflict issues; using a static-library version may be simpler for those. Also note that (as of this writing), libV8 v7.5+ may not be available in prebuilt form for your platform.
 

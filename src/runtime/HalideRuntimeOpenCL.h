@@ -63,6 +63,19 @@ extern void halide_opencl_set_device_type(const char *n);
  * halide_set_ocl_device_type. */
 extern const char *halide_opencl_get_device_type(void *user_context);
 
+/** Set the additional build options for OpenCL to use. The argument
+ * is copied internally. If never called,
+ * Halide uses the environment variable HL_OCL_BUILD_OPTIONS. */
+extern void halide_opencl_set_build_options(const char *n);
+
+/** Halide calls this to gets the additional build options for OpenCL to
+ * use. Implement this yourself to use a different build options per
+ * user_context. The default implementation returns the value set by
+ * halide_opencl_set_build_options, or the environment variable
+ * HL_OCL_BUILD_OPTIONS. The result is valid until the next call to
+ * halide_opencl_set_build_options. */
+extern const char *halide_opencl_get_build_options(void *user_context);
+
 /** Set the underlying cl_mem for a halide_buffer_t. This memory should be
  * allocated using clCreateBuffer or similar and must have an extent
  * large enough to cover that specified by the halide_buffer_t extent
