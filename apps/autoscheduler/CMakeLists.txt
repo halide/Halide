@@ -47,6 +47,7 @@ add_library(auto_schedule
             AutoSchedule.cpp
             DefaultCostModel.cpp
             FunctionDAG.cpp
+            LoopNest.cpp
             Weights.cpp
             ${WF_CPP})
 
