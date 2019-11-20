@@ -12,12 +12,6 @@ namespace Autoscheduler {
 // registers.
 const int kUnrollLimit = 12;
 
-//template<typename T>
-//using NodeMap = PerfectHashMap<FunctionDAG::Node, T>;
-
-//template<typename T>
-//using StageMap = PerfectHashMap<FunctionDAG::Node::Stage, T>;
-
 // Get the HL_NO_SUBTILING environment variable. Purpose described above.
 bool get_may_subtile() {
     string no_subtiling_str = get_env_variable("HL_NO_SUBTILING");
@@ -214,17 +208,6 @@ void LoopNest::get_sites(StageMap<Sites> &sites,
     }
 }
 
-// A helper for the working_set_at_task feature. Most features are
-// computed in the recursive pass 'compute_features' below, but
-// this one must be done in a second separate recursive pass.
-/*    void set_working_set_at_task_feature(int64_t working_set,
-                                         StageMap<ScheduleFeatures> *features) const {
-        for (const auto &c : children) {
-            c->set_working_set_at_task_feature(working_set, features);
-            features->get(c->stage).working_set_at_task = working_set;
-        }
-	}*/
-
 // Do a recursive walk over the loop nest computing features to feed the cost model.
 void LoopNest::compute_features(const FunctionDAG &dag,
                                 const MachineParams &params,
@@ -236,7 +219,6 @@ void LoopNest::compute_features(const FunctionDAG &dag,
                                 const LoopNest &root,
                                 int64_t *working_set,
                                 StageMap<ScheduleFeatures> *features) const {
-
     int64_t working_set_here = 0;
 
     int64_t loop_instances = 1, parallel_tasks = 1;
@@ -707,16 +689,17 @@ void LoopNest::compute_features(const FunctionDAG &dag,
                                 for (int i = 0; i < e->producer->dimensions; i++) {
                                     auto stride = jac.first(i, vectorized_loop_index);
                                     // stride is a rational. Check to see if it's a small integer.
-                                    if (stride == 0)
+                                    if (stride == 0) {
                                         count[0]++;
-                                    else if (stride == 1)
+                                    } else if (stride == 1) {
                                         count[1]++;
-                                    else if (stride == 2)
+                                    } else if (stride == 2) {
                                         count[2]++;
-                                    else if (stride == 3)
+                                    } else if (stride == 3) {
                                         count[3]++;
-                                    else if (stride == 4)
+                                    } else if (stride == 4) {
                                         count[4]++;
+                                    }
                                 }
                                 vector_broadcast = (count[0] == e->producer->dimensions);
                                 dense_vector_load = (count[0] == e->producer->dimensions - 1 && count[1] == 1);
@@ -1010,6 +993,7 @@ const Bound &LoopNest::get_bounds(const FunctionDAG::Node *f) const {
     }
 
     const Bound &b = set_bounds(f, bound);
+    // Validation is expensive, turn if off by default.
     // b->validate();
     return b;
 }
@@ -1043,7 +1027,7 @@ void LoopNest::dump(string prefix, const LoopNest *parent) const {
                 const auto &p = bounds->loops(stage->index, i);
                 aslog(0) << " [" << p.first << ", " << p.second << "]";
             }
-            */
+        */
 
         aslog(0) << " (" << vectorized_loop_index << ", " << vector_dim << ")";
     }
@@ -1519,8 +1503,6 @@ vector<IntrusivePtr<const LoopNest>> LoopNest::compute_in_tiles(const FunctionDA
 
         // See if it's appropriate to slide over this loop Can't
         // slide at the root level if we intend to parallelize it.
-        // HACK
-        // bool may_slide = false;
         bool may_slide = (params.parallelism == 1) || !is_root();
 
         const auto &c = children[child];
