@@ -1,6 +1,7 @@
 #include <algorithm>
 
 #include "Argument.h"
+#include "AutoSchedule.h"
 #include "FindCalls.h"
 #include "Func.h"
 #include "IRVisitor.h"
