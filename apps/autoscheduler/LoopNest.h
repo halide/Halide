@@ -6,10 +6,10 @@
 #ifndef LOOP_NEST_H
 #define LOOP_NEST_H
 
-#include "FunctionDAG.h"
-#include "PerfectHashMap.h"
 #include <set>
 #include <vector>
+#include "FunctionDAG.h"
+#include "PerfectHashMap.h"
 
 namespace Halide {
 namespace Internal {
