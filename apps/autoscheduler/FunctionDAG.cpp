@@ -333,10 +333,11 @@ void BoundContents::validate() const {
         if (p.max() < p.min()) {
             aslog(0) << "Bad bounds object:\n";
             for (int j = 0; j < layout->total_size; j++) {
-                if (i == j)
+                if (i == j) {
                     aslog(0) << "=> ";
-                else
+                } else {
                     aslog(0) << "   ";
+                }
                 aslog(0) << j << ": " << data()[j].min() << ", " << data()[j].max() << "\n";
             }
             internal_error << "Aborting";
@@ -988,15 +989,17 @@ void FunctionDAG::featurize() {
 
             // Pick a dimension to vectorize over - the innermost pure loop
             size_t vector_dim = 0;
-            while (vector_dim < stage.loop.size() && !stage.loop[vector_dim].pure)
+            while (vector_dim < stage.loop.size() && !stage.loop[vector_dim].pure) {
                 vector_dim++;
+            }
             // bool vectorized = vector_dim < stage.loop.size();
 
             Featurizer featurizer(node.func, stage);
 
             Definition def = node.func.definition();
-            if (stage_idx > 0) def = node.func.updates()[stage_idx - 1];
-
+            if (stage_idx > 0) {
+                def = node.func.updates()[stage_idx - 1];
+            }
             stage.features = PipelineFeatures();
 
             for (auto v : def.values()) {
