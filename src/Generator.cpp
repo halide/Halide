@@ -1546,10 +1546,27 @@ Module GeneratorBase::build_gradient_module(const std::string &function_name) {
                 const auto &f = input->funcs_[i];
                 const auto &p = input->parameters_[i];
 
-                const std::string grad_out_name = replace_all(replace_all(grad_output_pattern, "$OUT$", output_name), "$IN$", input_name);
+                Func d_f = d(f);
+
+                std::string grad_out_name = replace_all(replace_all(grad_output_pattern, "$OUT$", output_name), "$IN$", input_name);
+                if (!d_f.defined()) {
+                    grad_out_name = "_dummy" + grad_out_name;
+                }
 
                 Func d_out_wrt_in(grad_out_name);
-                d_out_wrt_in(Halide::_) = d(f)(Halide::_);
+                if (d_f.defined()) {
+                    d_out_wrt_in(Halide::_) = d_f(Halide::_);
+                } else {
+                    debug(DBG) << "    No Derivative found for output " << output_name << " wrt input " << input_name << "\n";
+                    // If there was no Derivative found, don't skip the output;
+                    // just replace with a dummy Func that is all zeros. This ensures
+                    // that the signature of the Pipeline we produce is always predictable.
+                    std::vector<Var> vars;
+                    for (int i = 0; i < d_output.dimensions(); i++) {
+                        vars.push_back(Var::implicit(i));
+                    }
+                    d_out_wrt_in(vars) = make_zero(d_output.type());
+                }
 
                 std::vector<std::pair<Expr, Expr>> est_pairs;
                 for (const auto e : p.get_argument_estimates().buffer_estimates) {

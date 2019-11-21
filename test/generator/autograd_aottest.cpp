@@ -30,7 +30,13 @@ int main(int argc, char **argv) {
     b.for_each_element([&](int x) { b(x) = (float) x; });
     c.for_each_element([&](int x) { c(x) = (float) x; });
 
-    result = autograd(a, b, c, out);
+    Buffer<uint8_t> lut(256);
+    Buffer<uint8_t> lut_indices(kSize);
+    Buffer<uint8_t> out_lut(kSize);
+    lut.for_each_element([&](int x) { lut(x) = (uint8_t)(x ^ 0xAA); });
+    lut_indices.for_each_element([&](int x) { lut_indices(x) = x * 2; });
+
+    result = autograd(a, b, c, lut, lut_indices, out, out_lut);
     if (result != 0) {
         exit(-1);
     }
@@ -39,18 +45,68 @@ int main(int argc, char **argv) {
         float actual = out(x);
         assert(expected == actual);
     });
+    out_lut.for_each_element([&](int x) {
+        uint8_t expected = (uint8_t) (x * 2) ^ 0xAA;
+        uint8_t actual = out_lut(x);
+        assert(expected == actual);
+    });
 
     Buffer<float> L(kSize);
     L.for_each_element([&](int x) { L(x) = (float) (x - kSize / 2); });
 
+    /*
+        The gradient version should have the following args (in this order):
+        Inputs:
+            input_a
+            input_b
+            input_c
+            lut
+            lut_indices
+            _grad_loss_for_output     (synthesized)
+            _grad_loss_for_output_lut (synthesized)
+        Outputs:
+            _grad_loss_output_wrt_input_a
+            _grad_loss_output_wrt_input_b
+            _grad_loss_output_wrt_input_c
+            _dummy_grad_loss_output_wrt_lut
+            _dummy_grad_loss_output_wrt_lut_indices
+            _dummy_grad_loss_output_lut_wrt_input_a
+            _dummy_grad_loss_output_lut_wrt_input_b
+            _dummy_grad_loss_output_lut_wrt_input_c
+            _grad_loss_output_lut_wrt_lut
+            _grad_loss_output_lut_wrt_lut_indices
+
+        Note that the outputs with "_dummy" prefixes are placeholder
+        outputs that are always filled with zeroes; in those cases,
+        there is no derivative for the output/input pairing, but we
+        emit an output nevertheless so that the function signature
+        is always mechanically predictable from the list of inputs and outputs.
+    */
+
     Buffer<float> grad_loss_out_wrt_a(kSize);
     Buffer<float> grad_loss_out_wrt_b(kSize);
     Buffer<float> grad_loss_out_wrt_c(kSize);
+    Buffer<float> dummy_grad_loss_output_wrt_lut(kSize);
+    Buffer<float> dummy_grad_loss_output_wrt_lut_indices(kSize);
+    Buffer<float> dummy_grad_loss_output_lut_wrt_input_a(kSize);
+    Buffer<float> dummy_grad_loss_output_lut_wrt_input_b(kSize);
+    Buffer<float> dummy_grad_loss_output_lut_wrt_input_c(kSize);
+    Buffer<uint8_t> grad_loss_output_lut_wrt_lut(kSize);
+    Buffer<uint8_t> grad_loss_output_lut_wrt_lut_indices(kSize);
 
-    result = autograd_grad(/*inputs*/ a, b, c, L,
-                           /*outputs*/ grad_loss_out_wrt_a,
+    result = autograd_grad(/*inputs*/ a, b, c, lut, lut_indices, L, L,
+                           /*outputs*/
+                           grad_loss_out_wrt_a,
                            grad_loss_out_wrt_b,
-                           grad_loss_out_wrt_c);
+                           grad_loss_out_wrt_c,
+                           dummy_grad_loss_output_wrt_lut,
+                           dummy_grad_loss_output_wrt_lut_indices,
+                           dummy_grad_loss_output_lut_wrt_input_a,
+                           dummy_grad_loss_output_lut_wrt_input_b,
+                           dummy_grad_loss_output_lut_wrt_input_c,
+                           grad_loss_output_lut_wrt_lut,
+                           grad_loss_output_lut_wrt_lut_indices
+                           );
     if (result != 0) {
         exit(-1);
     }
@@ -73,6 +129,23 @@ int main(int argc, char **argv) {
         // ∂𝐿/∂c = 11 * L
         float expected = L(x) * 11.f;
         float actual = grad_loss_out_wrt_c(x);
+        assert(expected == actual);
+    });
+    dummy_grad_loss_output_wrt_lut.for_each_value([](float f) { assert(f == 0.f); });
+    dummy_grad_loss_output_wrt_lut_indices.for_each_value([](float f) { assert(f == 0.f); });
+    dummy_grad_loss_output_lut_wrt_input_a.for_each_value([](float f) { assert(f == 0.f); });
+    dummy_grad_loss_output_lut_wrt_input_b.for_each_value([](float f) { assert(f == 0.f); });
+    dummy_grad_loss_output_lut_wrt_input_c.for_each_value([](float f) { assert(f == 0.f); });
+    grad_loss_output_lut_wrt_lut.for_each_element([&](int x) {
+        // TODO: is zero really expected?
+        uint8_t expected = 0;
+        uint8_t actual = grad_loss_output_lut_wrt_lut(x);
+        assert(expected == actual);
+    });
+    grad_loss_output_lut_wrt_lut_indices.for_each_element([&](int x) {
+        // TODO: is zero really expected?
+        uint8_t expected = 0;
+        uint8_t actual = grad_loss_output_lut_wrt_lut_indices(x);
         assert(expected == actual);
     });
 
