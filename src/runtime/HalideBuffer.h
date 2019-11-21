@@ -375,7 +375,7 @@ private:
 
     /** Crop as many dimensions as are in rect, without handling device allocation. */
     void crop_host(const std::vector<std::pair<int, int>> &rect) {
-        assert(rect.size() <= std::numeric_limits<int>::max());
+        assert(rect.size() <= static_cast<decltype(rect.size())>(std::numeric_limits<int>::max()));
         int limit = (int)rect.size();
         assert(limit <= dimensions());
         for (int i = 0; i < limit; i++) {
@@ -1345,7 +1345,7 @@ public:
      * how it is indexed. Does not move any data around in memory. */
     void translate(const std::vector<int> &delta) {
         device_deallocate();
-        assert(delta.size() <= std::numeric_limits<int>::max());
+        assert(delta.size() <= static_cast<decltype(delta.size())>(std::numeric_limits<int>::max()));
         int limit = (int)delta.size();
         assert(limit <= dimensions());
         for (int i = 0; i < limit; i++) {
@@ -1356,7 +1356,7 @@ public:
     /** Set the min coordinate of an image in the first N dimensions. */
     // @{
     void set_min(const std::vector<int> &mins) {
-        assert(mins.size() <= (size_t)dimensions());
+        assert(mins.size() <= static_cast<decltype(mins.size())>(dimensions()));
         device_deallocate();
         for (size_t i = 0; i < mins.size(); i++) {
             buf.dim[i].min = mins[i];
@@ -1372,7 +1372,7 @@ public:
     /** Test if a given coordinate is within the bounds of an image. */
     // @{
     bool contains(const std::vector<int> &coords) const {
-        assert(coords.size() <= (size_t)dimensions());
+        assert(coords.size() <= static_cast<decltype(coords.size())>(dimensions()));
         for (size_t i = 0; i < coords.size(); i++) {
             if (coords[i] < dim((int) i).min() || coords[i] > dim((int) i).max()) {
                 return false;
