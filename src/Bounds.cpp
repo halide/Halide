@@ -188,6 +188,11 @@ private:
         interval = Interval::single_point(op);
     }
 
+    void visit(const StringImm *op) override {
+        TRACK_BOUNDS_INTERVAL;
+        interval = Interval::single_point(op);
+    }
+
     void visit(const Cast *op) override {
         TRACK_BOUNDS_INTERVAL;
         op->value.accept(this);
