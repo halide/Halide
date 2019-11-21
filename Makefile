@@ -1327,6 +1327,11 @@ $(BIN_DIR)/correctness_halide_buffer: $(ROOT_DIR)/test/correctness/halide_buffer
 $(BIN_DIR)/correctness_image_io: $(ROOT_DIR)/test/correctness/image_io.cpp $(BIN_DIR)/libHalide.$(SHARED_EXT) $(INCLUDE_DIR)/Halide.h $(RUNTIME_EXPORTED_INCLUDES)
 	$(CXX) $(TEST_CXX_FLAGS) $(IMAGE_IO_CXX_FLAGS) -I$(ROOT_DIR) $(OPTIMIZE_FOR_BUILD_TIME) $< -I$(INCLUDE_DIR) $(TEST_LD_FLAGS) $(IMAGE_IO_LIBS) -o $@
 
+# OpenCL runtime correctness test requires runtime.a to be linked.
+$(BIN_DIR)/$(TARGET)/correctness_opencl_runtime: $(ROOT_DIR)/test/correctness/opencl_runtime.cpp $(RUNTIME_EXPORTED_INCLUDES) $(BIN_DIR)/$(TARGET)/runtime.a
+	@mkdir -p $(@D)
+	$(CXX) $(BIN_DIR)/$(TARGET)/runtime.a $(TEST_CXX_FLAGS) -I$(ROOT_DIR) $(OPTIMIZE_FOR_BUILD_TIME) $< -I$(INCLUDE_DIR) $(TEST_LD_FLAGS) -o $@
+
 $(BIN_DIR)/performance_%: $(ROOT_DIR)/test/performance/%.cpp $(BIN_DIR)/libHalide.$(SHARED_EXT) $(INCLUDE_DIR)/Halide.h
 	$(CXX) $(TEST_CXX_FLAGS) $(OPTIMIZE) $< -I$(INCLUDE_DIR) -I$(ROOT_DIR) $(TEST_LD_FLAGS) -o $@
 
@@ -1850,6 +1855,11 @@ test_internal: $(BIN_DIR)/test_internal
 	@-echo
 
 correctness_%: $(BIN_DIR)/correctness_%
+	@-mkdir -p $(TMP_DIR)
+	cd $(TMP_DIR) ; $(CURDIR)/$<
+	@-echo
+
+correctness_opencl_runtime: $(BIN_DIR)/$(TARGET)/correctness_opencl_runtime
 	@-mkdir -p $(TMP_DIR)
 	cd $(TMP_DIR) ; $(CURDIR)/$<
 	@-echo
