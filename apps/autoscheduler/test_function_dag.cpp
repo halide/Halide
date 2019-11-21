@@ -64,11 +64,11 @@ int main(int argc, char **argv) {
         d.dump(with_extern);
     }
 
-    std::ostringstream without_extern;
+   std::ostringstream without_extern;
     {
         Func f("f"), g("g"), h("h");
         f(x, y) = (x + y) * (x + y);
-        g(x, y) = f(x, y) * 2.0f;
+	g(x, y) = f(x, y) * 2.0f;
         h(x, y) = g(x, y) * 2 + 1;
 
         h.set_estimate(x, 0, 1000).set_estimate(y, 0, 1000);
