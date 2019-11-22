@@ -27,6 +27,7 @@ struct Target {
         Linux,
         Windows,
         OSX,
+        FreeBSD,
         Android,
         IOS,
         QuRT,

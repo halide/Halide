@@ -70,6 +70,9 @@ Target calculate_host_target() {
 #ifdef __APPLE__
     os = Target::OSX;
 #endif
+#ifdef __FreeBSD__
+    os = Target::FreeBSD;
+#endif
 
     bool use_64_bits = (sizeof(size_t) == 8);
     int bits = use_64_bits ? 64 : 32;
@@ -266,6 +269,7 @@ const std::map<std::string, Target::OS> os_name_map = {
     {"linux", Target::Linux},
     {"windows", Target::Windows},
     {"osx", Target::OSX},
+    {"freebsd", Target::FreeBSD},
     {"android", Target::Android},
     {"ios", Target::IOS},
     {"qurt", Target::QuRT},

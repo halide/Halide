@@ -4,7 +4,7 @@ Halide is a programming language designed to make it easier to write
 high-performance image and array processing code on modern machines. Halide
 currently targets:
   * CPU architectures: X86, ARM, MIPS, Hexagon, PowerPC
-  * Operating systems: Linux, Windows, Mac OS X, Android, iOS, Qualcomm QuRT
+  * Operating systems: Linux, Windows, Mac OS X, FreeBSD, Android, iOS, Qualcomm QuRT
   * GPU Compute APIs: CUDA, OpenCL, OpenGL, OpenGL Compute Shaders, Apple Metal, Microsoft Direct X 12
 
 Rather than being a standalone programming language, Halide is
@@ -26,6 +26,7 @@ Build Status
 ============
 
 | Linux                        |
+| FreeBSD		       | 
 |------------------------------|
 | [![linux build status][1]][2]|
 

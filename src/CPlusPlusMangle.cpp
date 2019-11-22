@@ -619,7 +619,7 @@ std::string cplusplus_function_mangled_name(const std::string &name, const std::
 
 namespace {
 
-constexpr int kTestTargetCount = 8;
+constexpr int kTestTargetCount = 10;
 
 struct MangleResult {
     const char *expected;
@@ -940,6 +940,8 @@ void cplusplus_mangle_test() {
         Target(Target::Linux, Target::X86, 64),
         Target(Target::OSX, Target::X86, 32),
         Target(Target::OSX, Target::X86, 64),
+        Target(Target::FreeBSD, Target::X86, 32),
+        Target(Target::FreeBSD, Target::X86, 64),
         Target(Target::IOS, Target::ARM, 32),
         Target(Target::IOS, Target::ARM, 64),
         Target(Target::Windows, Target::X86, 32),
