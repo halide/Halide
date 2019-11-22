@@ -996,20 +996,26 @@ void FunctionDAG::featurize() {
 
             Featurizer featurizer(node.func, stage);
 
-            Definition def = node.func.definition();
-            if (stage_idx > 0) {
-                def = node.func.updates()[stage_idx - 1];
-            }
-            stage.features = PipelineFeatures();
+            if (node.func.extern_definition_proxy_expr().get()) {
+                // Extern function call with a proxy implementation specified: generate the featurization from the proxy
+                Expr v = common_subexpression_elimination(simplify(node.func.extern_definition_proxy_expr()));  // Get things into canonical form
+                v.accept(&featurizer);
+            } else {
+                Definition def = node.func.definition();
+                if (stage_idx > 0) {
+                    def = node.func.updates()[stage_idx - 1];
+                }
+                stage.features = PipelineFeatures();
 
-            for (auto v : def.values()) {
-                featurizer.visit_store_args(node.func.name(), v.type(), def.args());
-                v = common_subexpression_elimination(simplify(v));  // Get things into canonical form
-                v.accept(&featurizer);
-            }
-            for (auto v : def.args()) {
-                v = common_subexpression_elimination(simplify(v));  // Get things into canonical form
-                v.accept(&featurizer);
+                for (auto v : def.values()) {
+                    featurizer.visit_store_args(node.func.name(), v.type(), def.args());
+                    v = common_subexpression_elimination(simplify(v));  // Get things into canonical form
+                    v.accept(&featurizer);
+                }
+                for (auto v : def.args()) {
+                    v = common_subexpression_elimination(simplify(v));  // Get things into canonical form
+                    v.accept(&featurizer);
+                }
             }
         }
     }
@@ -1032,7 +1038,7 @@ void FunctionDAG::dump_internal(OS &os) const {
             for (const auto &l : n.stages[i].loop) {
                 os << "    " << l.var << " " << l.min << " " << l.max << '\n';
             }
-            n.stages[i].features.dump();
+            n.stages[i].features.dump(os);
         }
         os << "  pointwise: " << n.is_pointwise
            << " boundary condition: " << n.is_boundary_condition
