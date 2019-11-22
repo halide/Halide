@@ -569,9 +569,7 @@ void Module::compile(const std::map<Output, std::string> &output_files) const {
     if (!submodules().empty()) {
         std::map<Output, std::string> output_files_copy = output_files;
         output_files_copy.erase(Output::stmt);
-        ;
         output_files_copy.erase(Output::stmt_html);
-        ;
         resolve_submodules().compile(output_files_copy);
         return;
     }
@@ -796,9 +794,8 @@ void compile_multitarget(const std::string &fn_name,
         internal_assert(contains(output_files, Output::static_library));
         sub_out[Output::object] = temp_dir.add_temp_object_file(output_files.at(Output::static_library), suffix, target);
         sub_out.erase(Output::registration);
-        ;
         sub_out.erase(Output::schedule);
-        ;
+
         debug(1) << "compile_multitarget: compile_sub_target " << sub_out[Output::object] << "\n";
         sub_module.compile(sub_out);
         auto *r = sub_module.get_auto_scheduler_results();
