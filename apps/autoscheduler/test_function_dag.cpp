@@ -4,7 +4,7 @@
 
 using namespace Halide;
 
-extern "C" int generateOutputVals(
+extern "C" int generate_output_vals(
     halide_buffer_t *input,
     halide_buffer_t *output) {
     if (input->is_bounds_query()) {
@@ -47,7 +47,7 @@ int main(int argc, char **argv) {
         const int input_rank = 2;
         Halide::Type input_type = Halide::Float(32);
         g.define_extern(
-            "generateOutputVals",
+            "generate_output_vals",
             {arg},
             input_type,
             input_rank,

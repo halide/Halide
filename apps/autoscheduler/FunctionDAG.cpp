@@ -998,7 +998,8 @@ void FunctionDAG::featurize() {
 
             if (node.func.extern_definition_proxy_expr().get()) {
                 // Extern function call with a proxy implementation specified: generate the featurization from the proxy
-                Expr v = common_subexpression_elimination(simplify(node.func.extern_definition_proxy_expr()));  // Get things into canonical form
+                Expr v = simplify(node.func.extern_definition_proxy_expr());
+                v = common_subexpression_elimination(v);
                 v.accept(&featurizer);
             } else {
                 Definition def = node.func.definition();
