@@ -61,14 +61,14 @@ int main(int argc, char **argv) {
         v.push_back(h.function());
         Halide::Internal::Autoscheduler::FunctionDAG d(v, params, target);
 
-	d.dump(with_extern);
+        d.dump(with_extern);
     }
 
     std::ostringstream without_extern;
     {
         Func f("f"), g("g"), h("h");
         f(x, y) = (x + y) * (x + y);
-	g(x, y) = f(x, y) * 2.0f;
+        g(x, y) = f(x, y) * 2.0f;
         h(x, y) = g(x, y) * 2 + 1;
 
         h.set_estimate(x, 0, 1000).set_estimate(y, 0, 1000);
