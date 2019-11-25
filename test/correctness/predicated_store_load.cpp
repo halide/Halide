@@ -47,12 +47,6 @@ class CheckPredicatedStoreLoad : public IRMutator {
 public:
     CheckPredicatedStoreLoad(const Target &target, int store, int load) :
         expected_store_count(store), expected_load_count(load) {
-        // TODO: disabling for now due to trunk LLVM breakage.
-        // See: https://github.com/halide/Halide/issues/3534
-        if (target.arch == Target::X86) {
-            expected_store_count = 0;
-            expected_load_count = 0;
-        }
     }
     using IRMutator::mutate;
 
