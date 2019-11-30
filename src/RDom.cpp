@@ -154,6 +154,9 @@ void RDom::initialize_from_ranges(const std::vector<std::pair<Expr, Expr>> &rang
             << "These depend on the variable " << checker.offending_free_var << ".\n"
             << "The bounds of an RDom may not depend on a free variable.\n";
 
+        user_assert(ranges[i].second.get() < 0)
+            << "Error: The extent of a RDom can't be a negative value: " << ranges[i].second;
+
         std::string rvar_uniquifier;
         switch (i) {
             case 0: rvar_uniquifier = "x"; break;
