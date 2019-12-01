@@ -110,7 +110,7 @@ endfunction()
 # Use a Generator target to emit a code library.
 function(halide_library_from_generator BASENAME)
   set(options )
-  set(oneValueArgs FUNCTION_NAME GENERATOR HALIDE_TARGET)
+  set(oneValueArgs FUNCTION_NAME GENERATOR HALIDE_TARGET GRADIENT_DESCENT)
   set(multiValueArgs EXTRA_OUTPUTS FILTER_DEPS GENERATOR_ARGS HALIDE_TARGET_FEATURES INCLUDES)
   cmake_parse_arguments(args "" "${oneValueArgs}" "${multiValueArgs}" ${ARGN})
 
@@ -122,6 +122,9 @@ function(halide_library_from_generator BASENAME)
   endif()
   if ("${args_HALIDE_TARGET}" STREQUAL "")
     set(args_HALIDE_TARGET "host")
+  endif()
+  if ("${args_GRADIENT_DESCENT}" STREQUAL "")
+    set(args_GRADIENT_DESCENT "0")
   endif()
   # It's fine for EXTRA_OUTPUTS, GENERATOR_ARGS, FILTER_DEPS, HALIDE_TARGET_FEATURES to be empty
 
@@ -195,6 +198,7 @@ function(halide_library_from_generator BASENAME)
   _halide_add_target_features("${TARGET_WITH_FEATURES}" "no_runtime" TARGET_WITH_FEATURES)
 
   set(GENERATOR_EXEC_ARGS "-o" "${GENFILES_DIR}")
+  list(APPEND GENERATOR_EXEC_ARGS "-d" "${args_GRADIENT_DESCENT}")
   list(APPEND GENERATOR_EXEC_ARGS "-g" "${GENERATOR_NAME}")
   list(APPEND GENERATOR_EXEC_ARGS "-f" "${args_FUNCTION_NAME}" )
   list(APPEND GENERATOR_EXEC_ARGS "target=${TARGET_WITH_FEATURES}")

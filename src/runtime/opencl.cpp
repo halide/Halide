@@ -84,6 +84,10 @@ WEAK char device_type[256];
 WEAK int device_type_lock = 0;
 WEAK bool device_type_initialized = false;
 
+WEAK char build_options[1024];
+WEAK int build_options_lock = 0;
+WEAK bool build_options_initialized = false;
+
 }}}} // namespace Halide::Runtime::Internal::OpenCL
 
 using namespace Halide::Runtime::Internal::OpenCL;
@@ -91,43 +95,97 @@ using namespace Halide::Runtime::Internal::OpenCL;
 // Allow OpenCL 1.1 features to be used.
 #define ENABLE_OPENCL_11
 
-extern "C" {
-
-WEAK void halide_opencl_set_platform_name(const char *n) {
+namespace {
+void halide_opencl_set_platform_name_internal(const char *n) {
     if (n) {
-        strncpy(platform_name, n, 255);
+        size_t buffer_size = sizeof(platform_name) / sizeof(platform_name[0]);
+        strncpy(platform_name, n, buffer_size);
+        platform_name[buffer_size - 1] = 0;
     } else {
         platform_name[0] = 0;
     }
     platform_name_initialized = true;
 }
 
-WEAK const char *halide_opencl_get_platform_name(void *user_context) {
-    ScopedSpinLock lock(&platform_name_lock);
+const char *halide_opencl_get_platform_name_internal(void *user_context) {
     if (!platform_name_initialized) {
         const char *name = getenv("HL_OCL_PLATFORM_NAME");
-        halide_opencl_set_platform_name(name);
+        halide_opencl_set_platform_name_internal(name);
     }
     return platform_name;
 }
 
-
-WEAK void halide_opencl_set_device_type(const char *n) {
+void halide_opencl_set_device_type_internal(const char *n) {
     if (n) {
-        strncpy(device_type, n, 255);
+        size_t buffer_size = sizeof(device_type) / sizeof(device_type[0]);
+        strncpy(device_type, n, buffer_size);
+        device_type[buffer_size - 1] = 0;
     } else {
         device_type[0] = 0;
     }
     device_type_initialized = true;
 }
 
-WEAK const char *halide_opencl_get_device_type(void *user_context) {
-    ScopedSpinLock lock(&device_type_lock);
+const char *halide_opencl_get_device_type_internal(void *user_context) {
     if (!device_type_initialized) {
         const char *name = getenv("HL_OCL_DEVICE_TYPE");
-        halide_opencl_set_device_type(name);
+        halide_opencl_set_device_type_internal(name);
     }
     return device_type;
+}
+
+void halide_opencl_set_build_options_internal(const char *n) {
+    if (n) {
+        size_t buffer_size = sizeof(build_options) / sizeof(build_options[0]);
+        strncpy(build_options, n, buffer_size);
+        build_options[buffer_size - 1] = 0;
+    } else {
+        build_options[0] = 0;
+    }
+    build_options_initialized = true;
+}
+
+const char *halide_opencl_get_build_options_internal(void *user_context) {
+    if (!build_options_initialized) {
+        const char *name = getenv("HL_OCL_BUILD_OPTIONS");
+        halide_opencl_set_build_options_internal(name);
+    }
+    return build_options;
+}
+} // namespace
+
+extern "C" {
+
+WEAK void halide_opencl_set_platform_name(const char *n) {
+    ScopedSpinLock lock(&platform_name_lock);
+    halide_opencl_set_platform_name_internal(n);
+}
+
+WEAK const char *halide_opencl_get_platform_name(void *user_context) {
+    ScopedSpinLock lock(&platform_name_lock);
+    return halide_opencl_get_platform_name_internal(user_context);
+}
+
+
+WEAK void halide_opencl_set_device_type(const char *n) {
+    ScopedSpinLock lock(&device_type_lock);
+    halide_opencl_set_device_type_internal(n);
+}
+
+WEAK const char *halide_opencl_get_device_type(void *user_context) {
+    ScopedSpinLock lock(&device_type_lock);
+    return halide_opencl_get_device_type_internal(user_context);
+}
+
+
+WEAK void halide_opencl_set_build_options(const char *n) {
+    ScopedSpinLock lock(&build_options_lock);
+    halide_opencl_set_build_options_internal(n);
+}
+
+WEAK const char *halide_opencl_get_build_options(void *user_context) {
+    ScopedSpinLock lock(&build_options_lock);
+    return halide_opencl_get_build_options_internal(user_context);
 }
 
 // The default implementation of halide_acquire_cl_context uses the global
@@ -592,6 +650,9 @@ WEAK int halide_opencl_initialize_kernels(void *user_context, void **state_ptr, 
         stringstream options(user_context);
         options << "-D MAX_CONSTANT_BUFFER_SIZE=" << max_constant_buffer_size
                 << " -D MAX_CONSTANT_ARGS=" << max_constant_args;
+
+        const char *extra_options = halide_opencl_get_build_options(user_context);
+        options << " " << extra_options;
 
         const char * sources[] = { src };
         debug(user_context) << "    clCreateProgramWithSource -> ";
