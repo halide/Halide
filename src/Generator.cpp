@@ -1568,11 +1568,7 @@ Module GeneratorBase::build_gradient_module(const std::string &function_name) {
                     d_out_wrt_in(vars) = make_zero(d_output.type());
                 }
 
-                std::vector<std::pair<Expr, Expr>> est_pairs;
-                for (const auto e : p.get_argument_estimates().buffer_estimates) {
-                    est_pairs.emplace_back(e.min, e.extent);
-                }
-                d_out_wrt_in.set_estimates(est_pairs);
+                d_out_wrt_in.set_estimates(p.get_argument_estimates().buffer_estimates);
 
                 // Useful for debugging; ordinarily better to leave out
                 // debug(0) << "\n\n"
