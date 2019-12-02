@@ -5,7 +5,7 @@ namespace Halide {
 namespace BoundaryConditions {
 
 Func repeat_edge(const Func &source,
-                 const std::vector<std::pair<Expr, Expr>> &bounds) {
+                 const Region &bounds) {
     std::vector<Var> args(source.args());
     user_assert(args.size() >= bounds.size())
         << "repeat_edge called with more bounds (" << bounds.size()
@@ -15,8 +15,8 @@ Func repeat_edge(const Func &source,
     std::vector<Expr> actuals;
     for (size_t i = 0; i < bounds.size(); i++) {
         Var arg_var = args[i];
-        Expr min = bounds[i].first;
-        Expr extent = bounds[i].second;
+        Expr min = bounds[i].min;
+        Expr extent = bounds[i].extent;
 
         if (min.defined() && extent.defined()) {
             actuals.push_back(clamp(likely(arg_var), min, min + extent - 1));
@@ -38,7 +38,7 @@ Func repeat_edge(const Func &source,
 }
 
 Func constant_exterior(const Func &source, Tuple value,
-                       const std::vector<std::pair<Expr, Expr>> &bounds) {
+                       const Region &bounds) {
     std::vector<Var> source_args = source.args();
     std::vector<Var> args(source_args);
     user_assert(args.size() >= bounds.size())
@@ -49,8 +49,8 @@ Func constant_exterior(const Func &source, Tuple value,
     Expr out_of_bounds = cast<bool>(false);
     for (size_t i = 0; i < bounds.size(); i++) {
         Var arg_var = source_args[i];
-        Expr min = bounds[i].first;
-        Expr extent = bounds[i].second;
+        Expr min = bounds[i].min;
+        Expr extent = bounds[i].extent;
 
         if (min.defined() && extent.defined()) {
             out_of_bounds = (out_of_bounds ||
@@ -77,12 +77,12 @@ Func constant_exterior(const Func &source, Tuple value,
 }
 
 Func constant_exterior(const Func &source, Expr value,
-                       const std::vector<std::pair<Expr, Expr>> &bounds) {
+                       const Region &bounds) {
     return constant_exterior(source, Tuple(value), bounds);
 }
 
 Func repeat_image(const Func &source,
-                  const std::vector<std::pair<Expr, Expr>> &bounds) {
+                  const Region &bounds) {
     std::vector<Var> args(source.args());
     user_assert(args.size() >= bounds.size())
         << "repeat_image called with more bounds (" << bounds.size()
@@ -92,8 +92,8 @@ Func repeat_image(const Func &source,
     std::vector<Expr> actuals;
     for (size_t i = 0; i < bounds.size(); i++) {
         Var arg_var = args[i];
-        Expr min = bounds[i].first;
-        Expr extent = bounds[i].second;
+        Expr min = bounds[i].min;
+        Expr extent = bounds[i].extent;
 
         if (min.defined() && extent.defined()) {
             Expr coord = arg_var - min;  // Enforce zero origin.
@@ -122,7 +122,7 @@ Func repeat_image(const Func &source,
 }
 
 Func mirror_image(const Func &source,
-                  const std::vector<std::pair<Expr, Expr>> &bounds) {
+                  const Region &bounds) {
     std::vector<Var> args(source.args());
     user_assert(args.size() >= bounds.size())
         << "mirror_image called with more bounds (" << bounds.size()
@@ -133,8 +133,8 @@ Func mirror_image(const Func &source,
     for (size_t i = 0; i < bounds.size(); i++) {
         Var arg_var = args[i];
 
-        Expr min = bounds[i].first;
-        Expr extent = bounds[i].second;
+        Expr min = bounds[i].min;
+        Expr extent = bounds[i].extent;
 
         if (min.defined() && extent.defined()) {
             Expr coord = arg_var - min;                                      // Enforce zero origin.
@@ -163,7 +163,7 @@ Func mirror_image(const Func &source,
 }
 
 Func mirror_interior(const Func &source,
-                     const std::vector<std::pair<Expr, Expr>> &bounds) {
+                     const Region &bounds) {
     std::vector<Var> args(source.args());
     user_assert(args.size() >= bounds.size())
         << "mirror_interior called with more bounds (" << bounds.size()
@@ -174,8 +174,8 @@ Func mirror_interior(const Func &source,
     for (size_t i = 0; i < bounds.size(); i++) {
         Var arg_var = args[i];
 
-        Expr min = bounds[i].first;
-        Expr extent = bounds[i].second;
+        Expr min = bounds[i].min;
+        Expr extent = bounds[i].extent;
 
         if (min.defined() && extent.defined()) {
             Expr limit = extent - 1;

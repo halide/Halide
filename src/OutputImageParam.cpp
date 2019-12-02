@@ -89,13 +89,13 @@ OutputImageParam::operator ExternFuncArgument() const {
     return param;
 }
 
-OutputImageParam &OutputImageParam::set_estimates(const std::vector<std::pair<Expr, Expr>> &estimates) {
+OutputImageParam &OutputImageParam::set_estimates(const Region &estimates) {
     const int d = dimensions();
     user_assert((int)estimates.size() == d)
         << "ImageParam " << name() << " has " << d << " dimensions, "
         << "but the estimates passed to set_estimates contains " << estimates.size() << " pairs.\n";
     for (int i = 0; i < d; i++) {
-        dim(i).set_estimate(estimates[i].first, estimates[i].second);
+        dim(i).set_estimate(estimates[i].min, estimates[i].extent);
     }
     return *this;
 }

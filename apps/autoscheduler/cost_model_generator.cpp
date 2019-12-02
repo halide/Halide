@@ -155,9 +155,9 @@ public:
 
     // Zero pad alone the last dimension of a Func
     Func pad_stages(Func f, Expr stages) {
-        std::vector<std::pair<Expr, Expr>> bounds(f.dimensions());
-        bounds[1].first = 0;
-        bounds[1].second = stages;
+        Halide::Region bounds(f.dimensions());
+        bounds[1].min = 0;
+        bounds[1].extent = stages;
         return BoundaryConditions::constant_exterior(f, cast(f.value().type(), 0), bounds);
     }
 

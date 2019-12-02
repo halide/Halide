@@ -3,8 +3,6 @@
 namespace Halide {
 namespace PythonBindings {
 
-using BoundsVec = std::vector<std::pair<Expr, Expr>>;
-
 namespace {
 
 inline Func to_func(const Buffer<> &b) {
@@ -32,7 +30,7 @@ void define_boundary_conditions(py::module &m) {
         return constant_exterior(b, exterior);
     }, py::arg("f"), py::arg("exterior"));
     bc.def("constant_exterior", [](py::object target, Expr exterior,
-                                   BoundsVec bounds) -> Func {
+                                   Region bounds) -> Func {
         try {
             return constant_exterior(target.cast<Func>(), exterior, bounds);
         } catch (...) {
@@ -54,7 +52,7 @@ void define_boundary_conditions(py::module &m) {
     bc.def("repeat_edge", [](Buffer<> b) -> Func {
         return repeat_edge(b);
     }, py::arg("f"));
-    bc.def("repeat_edge", [](py::object target, BoundsVec bounds) -> Func {
+    bc.def("repeat_edge", [](py::object target, Region bounds) -> Func {
         try {
             return repeat_edge(target.cast<Func>(), bounds);
         } catch (...) {
@@ -76,7 +74,7 @@ void define_boundary_conditions(py::module &m) {
     bc.def("repeat_image", [](Buffer<> b) -> Func {
         return repeat_image(b);
     }, py::arg("f"));
-    bc.def("repeat_image", [](py::object target, BoundsVec bounds) -> Func {
+    bc.def("repeat_image", [](py::object target, Region bounds) -> Func {
         try {
             return repeat_image(target.cast<Func>(), bounds);
         } catch (...) {
@@ -98,7 +96,7 @@ void define_boundary_conditions(py::module &m) {
     bc.def("mirror_image", [](Buffer<> b) -> Func {
         return mirror_image(b);
     }, py::arg("f"));
-    bc.def("mirror_image", [](py::object target, BoundsVec bounds) -> Func {
+    bc.def("mirror_image", [](py::object target, Region bounds) -> Func {
         try {
             return mirror_image(target.cast<Func>(), bounds);
         } catch (...) {
@@ -120,7 +118,7 @@ void define_boundary_conditions(py::module &m) {
     bc.def("mirror_interior", [](Buffer<> b) -> Func {
         return mirror_interior(b);
     }, py::arg("f"));
-    bc.def("mirror_interior", [](py::object target, BoundsVec bounds) -> Func {
+    bc.def("mirror_interior", [](py::object target, Region bounds) -> Func {
         try {
             return mirror_interior(target.cast<Func>(), bounds);
         } catch (...) {
