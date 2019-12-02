@@ -158,9 +158,6 @@ target_include_directories(
   test_function_dag
   PRIVATE "${HALIDE_INCLUDE_DIR}" "${HALIDE_TOOLS_DIR}")
 target_link_libraries(test_function_dag PRIVATE Halide)
-#if (NOT WIN32)
-#  target_link_libraries(test_function_dag PRIVATE dl)
-#endif()
 
 add_executable(weightsdir_to_weightsfile weightsdir_to_weightsfile.cpp
                Weights.cpp)
