@@ -393,7 +393,7 @@ Expr lower_euclidean_div(Expr a, Expr b) {
     Expr would_trap = b == zero;
     if (!can_prove(!would_trap)) {
         Expr zero = make_zero(a.type());
-        q = Call::make(a.type(), Call::if_then_else, {would_trap, zero, q}, Call::PureIntrinsic);
+        q = Call::make(a.type(), Call::if_then_else, {would_trap, zero, q}, Call::Intrinsic);
     }
 
     q = common_subexpression_elimination(q);
@@ -421,9 +421,13 @@ Expr lower_euclidean_mod(Expr a, Expr b) {
 
     Expr zero = make_zero(a.type());
     Expr would_trap = (b == zero);
+    if (a.type().is_int()) {
+        would_trap = would_trap || (b == make_const(a.type(), -1) &&
+                                    a == a.type().min());
+    }
     if (!can_prove(!would_trap)) {
         Expr zero = make_zero(a.type());
-        r = Call::make(a.type(), Call::if_then_else, {would_trap, zero, r}, Call::PureIntrinsic);
+        r = Call::make(a.type(), Call::if_then_else, {would_trap, zero, r}, Call::Intrinsic);
     }
 
     r = common_subexpression_elimination(r);
