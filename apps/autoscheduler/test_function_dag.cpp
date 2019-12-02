@@ -44,13 +44,13 @@ int main(int argc, char **argv) {
         f(x, y) = (x + y) * (x + y);
 
         Halide::ExternFuncArgument arg = f;
-	std::vector<Var> vars = {x, y};
+        std::vector<Var> vars = {x, y};
         Halide::Type input_type = Halide::Float(32);
         g.define_extern(
             "generate_output_vals",
             {arg},
             input_type,
-            input_rank,
+            vars,
             Halide::NameMangling::C);
         g.function().extern_definition_proxy_expr() = f(x, y) * 2.0f;
 
@@ -68,7 +68,7 @@ int main(int argc, char **argv) {
     {
         Func f("f"), g("g"), h("h");
         f(x, y) = (x + y) * (x + y);
-	g(x, y) = f(x, y) * 2.0f;
+        g(x, y) = f(x, y) * 2.0f;
         h(x, y) = g(x, y) * 2 + 1;
 
         h.set_estimate(x, 0, 1000).set_estimate(y, 0, 1000);
