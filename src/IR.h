@@ -530,7 +530,6 @@ struct Call : public ExprNode<Call> {
         if_then_else_mask,
         image_load,
         image_store,
-        indeterminate_expression,
         lerp,
         likely,
         likely_if_innermost,
@@ -540,8 +539,6 @@ struct Call : public ExprNode<Call> {
         mulhi_shr,  // Compute high_half(arg[0] * arg[1]) >> arg[3]. Note that this is a shift in addition to taking the upper half of multiply result. arg[3] must be an unsigned integer immediate.
         popcount,
         prefetch,
-        quiet_div,
-        quiet_mod,
         random,
         register_destructor,
         reinterpret,

@@ -45,8 +45,6 @@ Expr Simplify::visit(const Max *op, ExprInfo *bounds) {
         if (EVAL_IN_LAMBDA
             (rewrite(max(x, x), x) ||
              rewrite(max(c0, c1), fold(max(c0, c1))) ||
-             rewrite(max(IRMatcher::Indeterminate(), x), a) ||
-             rewrite(max(x, IRMatcher::Indeterminate()), b) ||
              rewrite(max(IRMatcher::Overflow(), x), a) ||
              rewrite(max(x,IRMatcher::Overflow()), b) ||
              // Cases where one side dominates:

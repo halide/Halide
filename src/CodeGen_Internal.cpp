@@ -357,9 +357,10 @@ Expr lower_int_uint_mod(Expr a, Expr b) {
 
 Expr lower_euclidean_div(Expr a, Expr b) {
     internal_assert(a.type() == b.type());
+
     // IROperator's div_round_to_zero will replace this with a / b for
     // unsigned ops, so create the intrinsic directly.
-    Expr q = Call::make(a.type(), Call::div_round_to_zero, {a, b}, Call::PureIntrinsic);
+    Expr q = Call::make(a.type(), Call::div_round_to_zero, {a, b}, Call::Intrinsic);
     if (a.type().is_int()) {
         // Signed integer division sucks. It should be defined such
         // that it satisifies (a/b)*b + a%b = a, where 0 <= a%b < |b|,
@@ -375,22 +376,39 @@ Expr lower_euclidean_div(Expr a, Expr b) {
            int rs = r >> (t.bits() - 1);
            return q - (rs & bs) + (rs & ~bs);
         */
-
         Expr r = a - q * b;
         Expr bs = b >> make_const(b.type(), (a.type().bits() - 1));
         Expr rs = r >> make_const(r.type(), (a.type().bits() - 1));
         q = q - (rs & bs) + (rs & ~bs);
-        return common_subexpression_elimination(q);
-    } else {
-        return q;
+        Expr would_overflow = (b == -1 && a == a.type().min());
+        if (!can_prove(!would_overflow)) {
+            q = Call::make(a.type(),
+                           Call::if_then_else,
+                           {would_overflow, a.type().min(), q},
+                           Call::PureIntrinsic);
+        }
     }
+
+    Expr zero = make_zero(a.type());
+    Expr would_trap = b == zero;
+    if (!can_prove(!would_trap)) {
+        Expr zero = make_zero(a.type());
+        q = Call::make(a.type(), Call::if_then_else, {would_trap, zero, q}, Call::PureIntrinsic);
+    }
+
+    q = common_subexpression_elimination(q);
+
+    debug(0) << q << "\n";
+
+    return q;
 }
 
 Expr lower_euclidean_mod(Expr a, Expr b) {
     internal_assert(a.type() == b.type());
+
     // IROperator's mod_round_to_zero will replace this with a % b for
     // unsigned ops, so create the intrinsic directly.
-    Expr r = Call::make(a.type(), Call::mod_round_to_zero, {a, b}, Call::PureIntrinsic);
+    Expr r = Call::make(a.type(), Call::mod_round_to_zero, {a, b}, Call::Intrinsic);
     if (a.type().is_int()) {
         // Match this non-overflowing C code
         /*
@@ -401,10 +419,19 @@ Expr lower_euclidean_mod(Expr a, Expr b) {
 
         Expr sign_mask = r >> cast(r.type(), (a.type().bits() - 1));
         r += sign_mask & cast(sign_mask.type(), abs(b));
-        return common_subexpression_elimination(r);
-    } else {
-        return r;
     }
+
+    Expr zero = make_zero(a.type());
+    if (!can_prove(b != zero)) {
+        Expr zero = make_zero(a.type());
+        r = Call::make(a.type(), Call::if_then_else, {b != zero, zero, r}, Call::PureIntrinsic);
+    }
+
+    r = common_subexpression_elimination(r);
+
+    debug(0) << r << "\n";
+
+    return r;
 }
 
 Expr lower_signed_shift_left(Expr a, Expr b) {

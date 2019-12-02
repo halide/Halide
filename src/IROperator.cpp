@@ -120,32 +120,14 @@ bool is_no_op(const Stmt &s) {
 
 namespace {
 
-class ExprIsPure : public IRVisitor {
+class ExprIsPure : public IRGraphVisitor {
     using IRVisitor::visit;
 
     void visit(const Call *op) override {
         if (!op->is_pure()) {
             result = false;
         } else {
-            IRVisitor::visit(op);
-        }
-    }
-
-    void visit(const Div *op) override {
-        if (!op->type.is_float() && (!is_const(op->b) || is_zero(op->b))) {
-            // Division by zero is a side-effect
-            result = false;
-        } else {
-            IRVisitor::visit(op);
-        }
-    }
-
-    void visit(const Mod *op) override {
-        if (!op->type.is_float() && (!is_const(op->b) || is_zero(op->b))) {
-            // Mod by zero is a side-effect
-            result = false;
-        } else {
-            IRVisitor::visit(op);
+            IRGraphVisitor::visit(op);
         }
     }
 
@@ -155,7 +137,7 @@ class ExprIsPure : public IRVisitor {
             // mutate.
             result = false;
         } else {
-            IRVisitor::visit(op);
+            IRGraphVisitor::visit(op);
         }
     }
 
@@ -382,11 +364,6 @@ Expr make_one(Type t) {
 
 Expr make_two(Type t) {
     return make_const(t, 2);
-}
-
-Expr make_indeterminate_expression(Type type) {
-    static std::atomic<int> counter;
-    return Call::make(type, Call::indeterminate_expression, {counter++}, Call::Intrinsic);
 }
 
 Expr make_signed_integer_overflow(Type type) {
@@ -1274,14 +1251,12 @@ Expr operator/(int a, Expr b) {
 
 Expr operator%(Expr a, Expr b) {
     user_assert(a.defined() && b.defined()) << "operator% of undefined Expr\n";
-    user_assert(!Internal::is_zero(b)) << "operator% with constant 0 modulus\n";
     Internal::match_types(a, b);
     return Internal::Mod::make(std::move(a), std::move(b));
 }
 
 Expr operator%(Expr a, int b) {
     user_assert(a.defined()) << "operator% of undefined Expr\n";
-    user_assert(b != 0) << "operator% with constant 0 modulus\n";
     Type t = a.type();
     Internal::check_representable(t, b);
     return Internal::Mod::make(std::move(a), Internal::make_const(t, b));
@@ -1289,7 +1264,6 @@ Expr operator%(Expr a, int b) {
 
 Expr operator%(int a, const Expr &b) {
     user_assert(b.defined()) << "operator% of undefined Expr\n";
-    user_assert(!Internal::is_zero(b)) << "operator% with constant 0 modulus\n";
     Type t = b.type();
     Internal::check_representable(t, a);
     return Internal::Mod::make(Internal::make_const(t, a), std::move(b));
@@ -2127,7 +2101,7 @@ Expr div_round_to_zero(Expr x, Expr y) {
     Type t = x.type();
     return Internal::Call::make(t, Internal::Call::div_round_to_zero,
                                 {std::move(x), std::move(y)},
-                                Internal::Call::PureIntrinsic);
+                                Internal::Call::Intrinsic);
 }
 
 Expr mod_round_to_zero(Expr x, Expr y) {
@@ -2142,7 +2116,7 @@ Expr mod_round_to_zero(Expr x, Expr y) {
     Type t = x.type();
     return Internal::Call::make(t, Internal::Call::mod_round_to_zero,
                                 {std::move(x), std::move(y)},
-                                Internal::Call::PureIntrinsic);
+                                Internal::Call::Intrinsic);
 }
 
 Expr random_float(Expr seed) {

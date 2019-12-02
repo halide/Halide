@@ -171,16 +171,6 @@ const B &return_second(const A &a, const B &b) {
     return b;
 }
 
-template<typename A, typename B>
-inline auto quiet_div(const A &a, const B &b) -> decltype(a / b) {
-    return b == 0 ? static_cast<decltype(a / b)>(0) : (a / b);
-}
-
-template<typename A, typename B>
-inline auto quiet_mod(const A &a, const B &b) -> decltype(a % b) {
-    return b == 0 ? static_cast<decltype(a % b)>(0) : (a % b);
-}
-
 namespace {
 class HalideFreeHelper {
     typedef void (*FreeFunction)(void *user_context, void *p);
@@ -2250,22 +2240,6 @@ void CodeGen_C::visit(const Call *op) {
         user_error << "Signed integer overflow occurred during constant-folding. Signed"
                       " integer overflow for int32 and int64 is undefined behavior in"
                       " Halide.\n";
-    } else if (op->is_intrinsic(Call::quiet_div)) {
-        internal_assert(op->args.size() == 2);
-        // Don't bother checking for zero denominator here; the quiet_div
-        // implementation will always do a runtime check and return zero
-        // (rather than failing at runtime).
-        string a = print_expr(op->args[0]);
-        string b = print_expr(op->args[1]);
-        rhs << "::quiet_div(" << a << ", " << b << ")";
-    } else if (op->is_intrinsic(Call::quiet_mod)) {
-        internal_assert(op->args.size() == 2);
-        // Don't bother checking for zero denominator here; the quiet_mod
-        // implementation will always do a runtime check and return zero
-        // (rather than failing at runtime).
-        string a = print_expr(op->args[0]);
-        string b = print_expr(op->args[1]);
-        rhs << "::quiet_mod(" << a << ", " << b << ")";
     } else if (op->is_intrinsic(Call::prefetch)) {
         user_assert((op->args.size() == 4) && is_one(op->args[2]))
             << "Only prefetch of 1 cache line is supported in C backend.\n";
@@ -2274,8 +2248,6 @@ void CodeGen_C::visit(const Call *op) {
         rhs << "__builtin_prefetch("
             << "((" << print_type(op->type) << " *)" << print_name(base->name)
             << " + " << print_expr(op->args[1]) << "), 1)";
-    } else if (op->is_intrinsic(Call::indeterminate_expression)) {
-        user_error << "Indeterminate expression occurred during constant-folding.\n";
     } else if (op->is_intrinsic(Call::size_of_halide_buffer_t)) {
         rhs << "(sizeof(halide_buffer_t))";
     } else if (op->is_intrinsic(Call::strict_float)) {

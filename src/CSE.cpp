@@ -157,12 +157,22 @@ public:
     using IRGraphVisitor::visit;
 
     void include(const Expr &e) override {
+        // Don't enter control flow
+        if (const Call *c = e.as<Call>()) {
+            if (c->is_intrinsic(Call::if_then_else)) {
+                // Entering the condition is fine
+                include(c->args[0]);
+                return;
+            }
+        }
+
         // If it's not the sort of thing we want to extract as a let,
         // just use the generic visitor to increment use counts for
         // the children.
+        const bool extract_it = should_extract(e, lift_all);
         debug(4) << "Include: " << e
-                 << "; should extract: " << should_extract(e, lift_all) << "\n";
-        if (!should_extract(e, lift_all)) {
+                 << "; should extract: " << extract_it << '\n';
+        if (!extract_it) {
             e.accept(this);
             return;
         }
@@ -241,6 +251,32 @@ public:
     }
 };
 
+class CSEInControlFlowBranches : public IRMutator {
+    bool lift_all;
+
+    using IRMutator::visit;
+
+    Expr visit(const Call *op) {
+        if (op->is_intrinsic(Call::if_then_else)) {
+            internal_assert(op->args.size() == 3);
+            Expr condition = mutate(op->args[0]);
+            Expr true_value = mutate(common_subexpression_elimination(op->args[1], lift_all));
+            Expr false_value = mutate(common_subexpression_elimination(op->args[2], lift_all));
+            return Call::make(op->type,
+                              Call::if_then_else,
+                              {condition, true_value, false_value},
+                              Call::Intrinsic);
+        } else {
+            return IRMutator::visit(op);
+        }
+    }
+
+public:
+    CSEInControlFlowBranches(bool l)
+        : lift_all(l) {
+    }
+};
+
 }  // namespace
 
 Expr common_subexpression_elimination(const Expr &e_in, bool lift_all) {
@@ -295,6 +331,9 @@ Expr common_subexpression_elimination(const Expr &e_in, bool lift_all) {
     }
 
     debug(4) << "With lets: " << e << "\n";
+
+    // Now do the same to the branches of every if-then-else
+    e = CSEInControlFlowBranches(lift_all).mutate(e);
 
     return e;
 }

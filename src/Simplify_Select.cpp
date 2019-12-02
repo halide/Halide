@@ -34,18 +34,7 @@ Expr Simplify::visit(const Select *op, ExprInfo *bounds) {
              rewrite(select(x, y, intrin(Call::likely, y)), false_value) ||
              rewrite(select(x, intrin(Call::likely_if_innermost, y), y), true_value) ||
              rewrite(select(x, y, intrin(Call::likely_if_innermost, y)), false_value) ||
-
-             // Select evaluates both sides, so if we have an
-             // unreachable expression on one side we can't use a
-             // signalling error. Call it UB and assume it can't
-             // happen. The tricky case to consider is:
-             // select(x > 0, a/x, select(x < 0, b/x, indeterminate()))
-             // If we use a signalling error and x > 0, then this will
-             // evaluate indeterminate(), because the top-level select
-             // evaluates both sides.
-
-             rewrite(select(x, y, IRMatcher::Indeterminate()), y) ||
-             rewrite(select(x, IRMatcher::Indeterminate(), y), y))) {
+             false)) {
             return rewrite.result;
         }
 

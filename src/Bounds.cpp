@@ -1702,7 +1702,8 @@ private:
         const Call *call_expr = e.as<Call>();
         if (call_expr != nullptr) {
             if (call_expr->name == Call::buffer_crop) {
-                internal_assert(call_expr->args.size() == 5) << "Call::buffer_crop call with unexpected number of arguments.\n";
+                internal_assert(call_expr->args.size() == 5)
+                    << "Call::buffer_crop call with unexpected number of arguments.\n";
                 const Variable *in_buf = call_expr->args[2].as<Variable>();
                 const Call *mins_struct = call_expr->args[3].as<Call>();
                 const Call *extents_struct = call_expr->args[4].as<Call>();
@@ -1722,10 +1723,12 @@ private:
                     return true;
                 }
             } else if (call_expr->name == Call::buffer_set_bounds) {
-                internal_assert(call_expr->args.size() == 4) << "Call::buffer_set_bounds call with unexpected number of arguments.\n";
+                internal_assert(call_expr->args.size() == 4)
+                    << "Call::buffer_set_bounds call with unexpected number of arguments.\n";
                 const IntImm *dim = call_expr->args[1].as<IntImm>();
                 if (dim != nullptr && box_from_extended_crop(call_expr->args[0], b)) {
-                    internal_assert(dim->value >= 0 && dim->value < (int64_t)b.size()) << "box_from_extended_crop setting bounds for out of range dim.\n";
+                    internal_assert(dim->value >= 0 && dim->value < (int64_t)b.size())
+                        << "box_from_extended_crop setting bounds for out of range dim.\n";
                     Interval min_interval = bounds_of_expr_in_scope(call_expr->args[2], scope, func_bounds);
                     Interval max_interval = bounds_of_expr_in_scope(call_expr->args[2] + call_expr->args[3] - 1, scope, func_bounds);
                     b[dim->value] = Interval(min_interval.min, max_interval.max);

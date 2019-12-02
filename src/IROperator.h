@@ -116,9 +116,6 @@ inline Expr make_const(Type t, float16_t val) {
 }
 // @}
 
-/** Construct a unique indeterminate_expression Expr */
-Expr make_indeterminate_expression(Type type);
-
 /** Construct a unique signed_integer_overflow Expr */
 Expr make_signed_integer_overflow(Type type);
 
@@ -397,7 +394,10 @@ Expr &operator*=(Expr &a, Expr b);
 /** Return the ratio of two expressions, doing any necessary type
  * coercion using \ref Internal::match_types. Note that signed integer
  * division in Halide rounds towards minus infinity, unlike C, which
- * rounds towards zero. */
+ * rounds towards zero. Division by zero returns zero. For types where
+ * overflow is defined behavior, division of the largest negative
+ * signed integer by -1 returns the larged negative signed integer for
+ * the type (i.e. it wraps). */
 Expr operator/(Expr a, Expr b);
 
 /** Modify the first expression to be the ratio of two expressions,
@@ -1108,14 +1108,15 @@ Expr count_trailing_zeros(Expr x);
 /** Divide two integers, rounding towards zero. This is the typical
  * behavior of most hardware architectures, which differs from
  * Halide's division operator, which is Euclidean (rounds towards
- * -infinity). */
+ * -infinity). Will throw a runtime error if y is zero, or if y is -1
+ * and x is the minimum signed integer. */
 Expr div_round_to_zero(Expr x, Expr y);
 
 /** Compute the remainder of dividing two integers, when division is
  * rounding toward zero. This is the typical behavior of most hardware
  * architectures, which differs from Halide's mod operator, which is
  * Euclidean (produces the remainder when division rounds towards
- * -infinity). */
+ * -infinity). Will throw a runtime error if y is zero. */
 Expr mod_round_to_zero(Expr x, Expr y);
 
 /** Return a random variable representing a uniformly distributed

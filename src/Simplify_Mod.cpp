@@ -41,21 +41,13 @@ Expr Simplify::visit(const Mod *op, ExprInfo *bounds) {
 
         auto rewrite = IRMatcher::rewriter(IRMatcher::mod(a, b), op->type);
 
-        bool modulus_non_zero =
-            ((b_bounds.min_defined && b_bounds.min > 0) ||
-             (b_bounds.max_defined && b_bounds.max < 0) ||
-             (b_bounds.alignment.remainder != 0));
-
         if (rewrite(c0 % c1, fold(c0 % c1)) ||
-            rewrite(IRMatcher::Indeterminate() % x, a) ||
-            rewrite(x % IRMatcher::Indeterminate(), b) ||
             rewrite(IRMatcher::Overflow() % x, a) ||
             rewrite(x % IRMatcher::Overflow(), b) ||
-            (modulus_non_zero &&
-             (rewrite(0 % x, 0) ||
-              rewrite(x % x, 0))) ||
+            rewrite(0 % x, 0) ||
+            rewrite(x % x, 0) ||
             (!op->type.is_float() &&
-             (rewrite(x % 0, IRMatcher::Indeterminate()) ||
+             (rewrite(x % 0, 0) ||
               rewrite(x % 1, 0)))) {
             return rewrite.result;
         }

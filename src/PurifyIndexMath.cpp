@@ -9,27 +9,12 @@ namespace Internal {
 class PurifyIndexMath : public IRMutator {
     using IRMutator::visit;
 
-    Expr visit(const Div *op) override {
-        if (can_prove(op->b != 0)) {
-            return IRMutator::visit(op);
-        } else {
-            return Call::make(op->type, Call::quiet_div, {mutate(op->a), mutate(op->b)}, Call::PureIntrinsic);
-        }
-    }
-
-    Expr visit(const Mod *op) override {
-        if (can_prove(op->b != 0)) {
-            return IRMutator::visit(op);
-        } else {
-            return Call::make(op->type, Call::quiet_mod, {mutate(op->a), mutate(op->b)}, Call::PureIntrinsic);
-        }
-    }
-
     Expr visit(const Call *op) override {
-        if (op->is_intrinsic(Call::indeterminate_expression) ||
-            op->is_intrinsic(Call::signed_integer_overflow)) {
-            // This will silently evaluate to an implementation-defined value.
-            return undef(op->type);
+        if (op->is_intrinsic(Call::signed_integer_overflow)) {
+            // This should only occur for values that are evaluated
+            // but never actually used (e.g. on select branches that
+            // are unreachable). Just replace it with zero.
+            return make_zero(op->type);
         } else {
             return IRMutator::visit(op);
         }
