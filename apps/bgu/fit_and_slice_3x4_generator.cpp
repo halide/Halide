@@ -484,18 +484,11 @@ public:
         {
             r_sigma.set_estimate(1.f / 8.f);
             s_sigma.set_estimate(16.f);
-            splat_loc.dim(0).set_bounds_estimate(0, 192)
-                   .dim(1).set_bounds_estimate(0, 320)
-                   .dim(2).set_bounds_estimate(0, 3);
-            values.dim(0).set_bounds_estimate(0, 192)
-                   .dim(1).set_bounds_estimate(0, 320)
-                   .dim(2).set_bounds_estimate(0, 3);
-            slice_loc.dim(0).set_bounds_estimate(0, 1536)
-                   .dim(1).set_bounds_estimate(0, 2560)
-                   .dim(2).set_bounds_estimate(0, 3);
-            output.dim(0).set_bounds_estimate(0, 1536)
-                   .dim(1).set_bounds_estimate(0, 2560)
-                   .dim(2).set_bounds_estimate(0, 3);
+
+            splat_loc.set_estimates({{0, 192}, {0, 320}, {0, 3}});
+            values.set_estimates({{0, 192}, {0, 320}, {0, 3}});
+            slice_loc.set_estimates({{0, 1536}, {0, 2560}, {0, 3}});
+            output.set_estimates({{0, 1536}, {0, 2560}, {0, 3}});
         }
     }
 };
