@@ -443,7 +443,7 @@ int main(int argc, char **argv) {
         // make things slightly clearer:
         //
         // gradient
-        //     .tile(x, y, x_outer, y_outer, x_inner, y_inner, 2, 2)
+        //     .tile(x, y, x_outer, y_outer, x_inner, y_inner, 4, 4)
         //     .fuse(x_outer, y_outer, tile_index)
         //     .parallel(tile_index);
 
