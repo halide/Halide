@@ -385,6 +385,24 @@ struct ExprCompare {
     }
 };
 
+/** A single-dimensional span. Includes all numbers between min and
+ * (min + extent - 1). */
+struct Range {
+    Expr min, extent;
+
+    Range() = default;
+    Range(const Expr &min, const Expr &extent)
+        : min(min), extent(extent) {
+        internal_assert(!min.defined() ||
+                        !extent.defined() ||
+                        min.type() == extent.type())
+            << "Region min and extent must have same type\n";
+    }
+};
+
+/** A multi-dimensional box. The outer product of the elements */
+typedef std::vector<Range> Region;
+
 /** An enum describing a type of device API. Used by schedules, and in
  * the For loop IR node. */
 enum class DeviceAPI {

@@ -31,6 +31,8 @@ public:
         : adjoints(std::move(adjoints_in)) {
     }
 
+    // These all return an undefined Func if no derivative is found
+    // (typically, if the input Funcs aren't differentiable)
     Func operator()(const Func &func, int update_id = -1) const;
     Func operator()(const Buffer<> &buffer) const;
     Func operator()(const Param<> &param) const;

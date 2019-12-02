@@ -1549,7 +1549,7 @@ protected:
     }
 
     void set_estimate_impl(Var var, Expr min, Expr extent);
-    void set_estimates_impl(const std::vector<std::pair<Expr, Expr>> &estimates);
+    void set_estimates_impl(const Region &estimates);
 
 public:
     ~GeneratorInputBase() override;
@@ -1719,7 +1719,7 @@ public:
         return set_estimate(var, min, extent);
     }
 
-    GeneratorInput_Buffer<T> &set_estimates(const std::vector<std::pair<Expr, Expr>> &estimates) {
+    GeneratorInput_Buffer<T> &set_estimates(const Region &estimates) {
         this->check_gio_access();
         this->set_estimates_impl(estimates);
         return *this;
@@ -1883,7 +1883,7 @@ public:
         return set_estimate(var, min, extent);
     }
 
-    GeneratorInput_Func<T> &set_estimates(const std::vector<std::pair<Expr, Expr>> &estimates) {
+    GeneratorInput_Func<T> &set_estimates(const Region &estimates) {
         this->check_gio_access();
         this->set_estimates_impl(estimates);
         return *this;
@@ -2518,7 +2518,7 @@ public:
     // 'perfect forwarding' won't work with initializer lists,
     // so hand-roll our own forwarding method for set_estimates,
     // rather than using HALIDE_FORWARD_METHOD.
-    GeneratorOutput_Buffer<T> &set_estimates(const std::vector<std::pair<Expr, Expr>> &estimates) {
+    GeneratorOutput_Buffer<T> &set_estimates(const Region &estimates) {
         this->as<OutputImageParam>().set_estimates(estimates);
         return *this;
     }
@@ -2608,7 +2608,7 @@ public:
         return set_estimate(var, min, extent);
     }
 
-    GeneratorOutput_Func<T> &set_estimates(const std::vector<std::pair<Expr, Expr>> &estimates) {
+    GeneratorOutput_Func<T> &set_estimates(const Region &estimates) {
         this->check_gio_access();
         internal_assert(this->exprs_.empty() && !this->funcs_.empty());
         for (Func &f : this->funcs_) {
@@ -3064,6 +3064,22 @@ public:
     // If function_name is empty, generator_name() will be used for the function.
     Module build_module(const std::string &function_name = "",
                         const LinkageType linkage_type = LinkageType::ExternalPlusMetadata);
+
+    /**
+     * Build a module that is suitable for using for gradient descent calculation in TensorFlow or PyTorch.
+     *
+     * Essentially:
+     *   - A new Pipeline is synthesized from the current Generator (according to the rules below)
+     *   - The new Pipeline is autoscheduled (if autoscheduling is requested, but it would be odd not to do so)
+     *   - The Pipeline is compiled to a Module and returned
+     *
+     * The new Pipeline is adjoint to the original; it has:
+     *   - All the same inputs as the original, in the same order
+     *   - Followed by one grad-input for each original output
+     *   - Followed by one output for each unique pairing of original-output + original-input.
+     *     (For the common case of just one original-output, this amounts to being one output for each original-input.)
+     */
+    Module build_gradient_module(const std::string &function_name);
 
     /**
      * set_inputs is a variadic wrapper around set_inputs_vector, which makes usage much simpler
