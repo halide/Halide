@@ -3,14 +3,13 @@
 
 namespace PNGHelpers {
 
-    struct image_info {
-	unsigned int width;
-	unsigned int height;
-	const uint8_t *data;
-    };
+struct image_info {
+    unsigned int width;
+    unsigned int height;
+    const uint8_t *data;
+};
 
-    struct image_info load(const std::string &filepath);
-}
-
+struct image_info load(const std::string &filepath);
+}  // namespace PNGHelpers
 
 #endif

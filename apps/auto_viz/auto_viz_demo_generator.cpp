@@ -3,7 +3,9 @@
 using namespace Halide;
 
 enum ScheduleType {
-    Naive, LessNaive, Complex
+    Naive,
+    LessNaive,
+    Complex
 };
 
 // This is a dumbed-down version of the Resize generator, intended solely
@@ -15,11 +17,7 @@ enum ScheduleType {
 // for this purpose; it shouldn't me mimicked in most real-world code.
 class AutoVizDemo : public Halide::Generator<AutoVizDemo> {
 public:
-    GeneratorParam<ScheduleType> schedule_type
-        {"schedule_type", Naive,
-         {{"naive", Naive},
-          {"lessnaive", LessNaive},
-          {"complex", Complex}}};
+    GeneratorParam<ScheduleType> schedule_type{"schedule_type", Naive, {{"naive", Naive}, {"lessnaive", LessNaive}, {"complex", Complex}}};
 
     // If we statically know whether we're upsampling or downsampling,
     // we can generate different pipelines (we want to reorder the
@@ -42,8 +40,8 @@ public:
     void generate() {
 
         clamped = BoundaryConditions::repeat_edge(input,
-                 {{input.dim(0).min(), input.dim(0).extent()},
-                  {input.dim(1).min(), input.dim(1).extent()}});
+                                                  {{input.dim(0).min(), input.dim(0).extent()},
+                                                   {input.dim(1).min(), input.dim(1).extent()}});
 
         // Handle different types by just casting to float
         as_float(x, y, c) = cast<float>(clamped(x, y, c));
@@ -172,7 +170,8 @@ public:
                 .vectorize(y);
             kernel_y
                 .compute_at(output, y)
-                .reorder(k, y).vectorize(y, 8);
+                .reorder(k, y)
+                .vectorize(y, 8);
 
             if (upsample) {
                 as_float

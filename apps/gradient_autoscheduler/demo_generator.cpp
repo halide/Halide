@@ -6,9 +6,9 @@ using namespace Halide;
 
 class ConvRelu : public Halide::Generator<ConvRelu> {
 public:
-    Input<Buffer<float>>  input{"input", 4};
-    Input<Buffer<float>>  filter{"filter", 4};
-    Input<Buffer<float>>  bias{"bias", 1};
+    Input<Buffer<float>> input{"input", 4};
+    Input<Buffer<float>> filter{"filter", 4};
+    Input<Buffer<float>> bias{"bias", 1};
     Output<Buffer<float>> relu{"relu", 4};
 
     void generate() {
@@ -27,6 +27,7 @@ public:
             .bound(y, 0, H)
             .bound(n, 0, N);
 
+        // clang-format off
         relu.dim(0).set_bounds(0, CO).set_stride(1)
             .dim(1).set_bounds(0, W).set_stride(CO)
             .dim(2).set_bounds(0, H).set_stride(CO * W)
@@ -41,6 +42,7 @@ public:
             .dim(1).set_bounds(0, 3).set_stride(CO)
             .dim(2).set_bounds(0, 3).set_stride(CO * 3)
             .dim(3).set_bounds(0, CI).set_stride(CO * 3 * 3);
+        // clang-format on
 
         bias.dim(0).set_bounds(0, CO).set_stride(1);
     }

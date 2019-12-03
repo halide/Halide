@@ -47,7 +47,7 @@ std::vector<int> load_shape(const std::string &shapefile) {
     int num_dims = 0;
     infile.read(reinterpret_cast<char *>(&num_dims), sizeof(int));
     std::vector<int> dims(num_dims);
-    infile.read((char *) dims.data(), num_dims * sizeof(int));
+    infile.read((char *)dims.data(), num_dims * sizeof(int));
     infile.close();
     assert(!infile.fail());
     return dims;
@@ -55,7 +55,7 @@ std::vector<int> load_shape(const std::string &shapefile) {
 
 void write_buffer_to_file(const Buffer<float> &buf, const std::string &filename) {
     std::ofstream o(filename, std::ios_base::trunc | std::ios_base::binary);
-    o.write((const char *) (buf.data()), buf.size_in_bytes());
+    o.write((const char *)(buf.data()), buf.size_in_bytes());
     o.close();
     assert(!o.fail());
 }
@@ -63,7 +63,7 @@ void write_buffer_to_file(const Buffer<float> &buf, const std::string &filename)
 Buffer<float> load_buffer_from_file(const std::string &filename, std::vector<int> &shape) {
     Buffer<float> buffer(shape);
     std::ifstream infile(filename, std::ios::binary);
-    infile.read((char *) buffer.data(), buffer.size_in_bytes());
+    infile.read((char *)buffer.data(), buffer.size_in_bytes());
     infile.close();
     assert(!infile.fail());
     return buffer;
@@ -158,12 +158,12 @@ int main(int argc, char **argv) {
     std::string conv1_beta_datafile = weight_dir + "bn1_bias.data";
     conv1_beta = load_batch_norm_params(conv1_beta_shapefile, conv1_beta_datafile);
 
-    std::string layer_names[16] = { "layer1_0", "layer1_1", "layer1_2",
-                                    "layer2_0", "layer2_1", "layer2_2", "layer2_3",
-                                    "layer3_0", "layer3_1", "layer3_2", "layer3_3", "layer3_4", "layer3_5",
-                                    "layer4_0", "layer4_1", "layer4_2" };
+    std::string layer_names[16] = {"layer1_0", "layer1_1", "layer1_2",
+                                   "layer2_0", "layer2_1", "layer2_2", "layer2_3",
+                                   "layer3_0", "layer3_1", "layer3_2", "layer3_3", "layer3_4", "layer3_5",
+                                   "layer4_0", "layer4_1", "layer4_2"};
 
-    std::string br1_names[4] = { "layer1_0_downsample", "layer2_0_downsample", "layer3_0_downsample", "layer4_0_downsample" };
+    std::string br1_names[4] = {"layer1_0_downsample", "layer2_0_downsample", "layer3_0_downsample", "layer4_0_downsample"};
 
     // load branch 1 data
     for (int i = 0; i < 4; i++) {
@@ -241,7 +241,7 @@ int main(int argc, char **argv) {
 
     std::mt19937 e2(seed);
     input.for_each_value([&e2](float &v) {
-        v = e2() / (float) e2.max();
+        v = e2() / (float)e2.max();
     });
     printf("Running Resnet50 for %d iterations....\n", iterations);
     double best = benchmark(iterations, 1, [&]() {
