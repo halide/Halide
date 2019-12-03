@@ -16,15 +16,6 @@ $(BIN)/%/nl_means.a: $(GENERATOR_BIN)/nl_means.generator
 	@mkdir -p $(@D)
 	$^ -g nl_means -e $(GENERATOR_OUTPUTS) -o $(@D) -f nl_means target=$* auto_schedule=false
 
-$(BIN)/%/nl_means_classic_auto_schedule.a: $(GENERATOR_BIN)/nl_means.generator $(AUTOSCHED_BIN)/libauto_schedule.so
-	@mkdir -p $(@D)
-	HL_PERMIT_FAILED_UNROLL=1 \
-	HL_WEIGHTS_DIR=$(AUTOSCHED_SRC)/gpu.weights \
-	HL_DEBUG_CODEGEN=1 \
-	HL_SHARED_MEMORY_LIMIT=48 \
-	HL_COMPUTE_ROOT_AND_INLINE_ONLY=1 \
-	$^ -g nl_means -e $(GENERATOR_OUTPUTS) -o $(@D) -f nl_means_classic_auto_schedule target=$*-no_runtime auto_schedule=true -p $(AUTOSCHED_BIN)/libauto_schedule.so machine_params=$(HL_MACHINE_PARAMS) 2> stderr_classic.txt > stdout_classic.txt
-
 $(BIN)/%/nl_means_auto_schedule.a: $(GENERATOR_BIN)/nl_means.generator $(AUTOSCHED_BIN)/libauto_schedule.so
 	@mkdir -p $(@D)
 	HL_PERMIT_FAILED_UNROLL=1 \

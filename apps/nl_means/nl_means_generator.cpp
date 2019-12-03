@@ -72,18 +72,6 @@ public:
 
         Var tx("tx"), ty("ty"), xi("xi"), yi("yi");
 
-        /* ESTIMATES */
-        // (This can be useful in conjunction with RunGen and benchmarks as well
-        // as auto-schedule, so we do it in all cases.)
-        // Provide estimates on the input image
-        input.set_estimates({{0, 614}, {0, 1024}, {0, 3}});
-        // Provide estimates on the parameters
-        patch_size.set_estimate(7);
-        search_area.set_estimate(7);
-        sigma.set_estimate(0.12f);
-        // Provide estimates on the output pipeline
-        non_local_means.set_estimates({{0, 614}, {0, 1024}, {0, 3}});
-
         if (auto_schedule) {
             // Provide estimates on the input image
             input.set_estimates({{0, 1536}, {0, 2560}, {0, 3}});
