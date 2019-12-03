@@ -516,7 +516,8 @@ void CameraPipe::generate() {
             vec = 64;
         }
 
-        processed.compute_root()
+        processed
+            .compute_root()
             .reorder(c, x, y)
             .split(y, yi, yii, 2, TailStrategy::RoundUp)
             .split(yi, yo, yi, strip_size / 2)
@@ -524,12 +525,34 @@ void CameraPipe::generate() {
             .unroll(c)
             .parallel(yo);
 
-        denoised.compute_at(processed, yi).store_at(processed, yo).prefetch(input, y, 2).fold_storage(y, 16).tile(x, y, x, y, xi, yi, 2 * vec, 2).vectorize(xi).unroll(yi);
+        denoised
+            .compute_at(processed, yi)
+            .store_at(processed, yo)
+            .prefetch(input, y, 2)
+            .fold_storage(y, 16)
+            .tile(x, y, x, y, xi, yi, 2 * vec, 2)
+            .vectorize(xi)
+            .unroll(yi);
 
-        deinterleaved.compute_at(processed, yi).store_at(processed, yo).fold_storage(y, 8).reorder(c, x, y).vectorize(x, 2 * vec, TailStrategy::RoundUp).unroll(c);
+        deinterleaved
+            .compute_at(processed, yi)
+            .store_at(processed, yo)
+            .fold_storage(y, 8)
+            .reorder(c, x, y)
+            .vectorize(x, 2 * vec, TailStrategy::RoundUp)
+            .unroll(c);
 
-        curved.compute_at(processed, yi).store_at(processed, yo).reorder(c, x, y).tile(x, y, x, y, xi, yi, 2 * vec, 2, TailStrategy::RoundUp).vectorize(xi).unroll(yi).unroll(c);
-        corrected.compute_at(curved, x)
+        curved
+            .compute_at(processed, yi)
+            .store_at(processed, yo)
+            .reorder(c, x, y)
+            .tile(x, y, x, y, xi, yi, 2 * vec, 2, TailStrategy::RoundUp)
+            .vectorize(xi)
+            .unroll(yi)
+            .unroll(c);
+
+        corrected
+            .compute_at(curved, x)
             .reorder(c, x, y)
             .vectorize(x)
             .unroll(c);

@@ -89,11 +89,13 @@ struct Flags {
             ++c;
         while (*c) {
             string f;
-            while (*c && !isspace(*c))
+            while (*c && !isspace(*c)) {
                 f += *c++;
+            }
             v.push_back(std::atof(f.c_str()));
-            while (isspace(*c))
+            while (isspace(*c)) {
                 ++c;
+            }
         }
         return v;
     }

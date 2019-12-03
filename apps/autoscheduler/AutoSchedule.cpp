@@ -124,10 +124,12 @@ struct ProgressBar {
 
     void clear() {
         if (counter) {
-            for (int j = 0; j < 80; j++)
+            for (int j = 0; j < 80; j++) {
                 aslog(0) << ' ';
-            for (int j = 0; j < 80; j++)
+            }
+            for (int j = 0; j < 80; j++) {
                 aslog(0) << '\b';
+            }
         }
     }
 

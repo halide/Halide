@@ -90,14 +90,14 @@ public:
             .gpu_threads(yi)
             .unroll(yo);
 
-        // clang-format off
-        A.in().in()
+        A.in()
+            .in()
             .compute_at(prod, rxi)
             .vectorize(Ax, vec_size)
             .split(Ax, xo, xi, warp_size)
             .gpu_lanes(xi)
-            .unroll(xo).unroll(Ay);
-        // clang-format on
+            .unroll(xo)
+            .unroll(Ay);
 
         set_alignment_and_bounds(A, size);
         set_alignment_and_bounds(B, size);

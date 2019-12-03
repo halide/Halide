@@ -59,7 +59,11 @@ public:
                 //   blur_x calculation is re-used implicitly. This achieves
                 //   the similar schedule of sliding window.
                 Var y_inner("y_inner");
-                blur_y.split(y, y, y_inner, tile_y).reorder(y_inner, x).unroll(y_inner).gpu_tile(x, y, xi, yi, tile_x, 1);
+                blur_y
+                    .split(y, y, y_inner, tile_y)
+                    .reorder(y_inner, x)
+                    .unroll(y_inner)
+                    .gpu_tile(x, y, xi, yi, tile_x, 1);
                 break;
             }
             case BlurGPUSchedule::SlideVectorize: {

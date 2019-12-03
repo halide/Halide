@@ -275,17 +275,19 @@ public:
         if (!need_randomize && weights.pipeline_features_version != PipelineFeatures::version()) {
             // Emit to cout (rather than cerr) because the latter is hidden during the autotune loop,
             // and we want this to be seen.
-            std::cout << "WARNING: loaded weights have pipeline_version = " << weights.pipeline_features_version
-                      << " but current pipeline_version is " << PipelineFeatures::version() << "; the weights may be "
-                                                                                               "invalid. Using anyway.\n";
+            std::cout << "WARNING: loaded weights have pipeline_version = "
+                      << weights.pipeline_features_version
+                      << " but current pipeline_version is " << PipelineFeatures::version()
+                      << "; the weights may be invalid. Using anyway.\n";
         }
 
         if (!need_randomize && weights.schedule_features_version != ScheduleFeatures::version()) {
             // Emit to cout (rather than cerr) because the latter is hidden during the autotune loop,
             // and we want this to be seen.
-            std::cout << "WARNING: loaded weights have schedule_features_version = " << weights.schedule_features_version
-                      << " but current schedule_features_version is " << ScheduleFeatures::version() << "; the weights may be "
-                                                                                                        "invalid. Using anyway.\n";
+            std::cout << "WARNING: loaded weights have schedule_features_version = "
+                      << weights.schedule_features_version
+                      << " but current schedule_features_version is " << ScheduleFeatures::version()
+                      << "; the weights may be invalid. Using anyway.\n";
         }
 
         if (need_randomize) {

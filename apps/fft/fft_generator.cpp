@@ -143,13 +143,11 @@ public:
         const int input_comps = (input_number_type == FFTNumberType::Real) ? 1 : 2;
         const int output_comps = (output_number_type == FFTNumberType::Real) ? 1 : 2;
 
-        // clang-format off
-        input.dim(0).set_stride(input_comps)
-             .dim(2).set_min(0).set_extent(input_comps).set_stride(1);
+        input.dim(0).set_stride(input_comps);
+        input.dim(2).set_min(0).set_extent(input_comps).set_stride(1);
 
-        output.dim(0).set_stride(output_comps)
-              .dim(2).set_min(0).set_extent(output_comps).set_stride(1);
-        // clang-format on
+        output.dim(0).set_stride(output_comps);
+        output.dim(2).set_min(0).set_extent(output_comps).set_stride(1);
 
         if (output_comps != 1) {
             output.reorder(c, x, y).unroll(c);

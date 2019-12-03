@@ -492,15 +492,35 @@ public:
             auto schedule_conv = [&](Func conv, Func relu, RVar r_channels) {
                 Var ci, wi;
                 if (!training) {
-                    relu.compute_at(prediction_output, n).store_at(prediction_output, no).tile(c, w, ci, wi, vec, 4, TailStrategy::RoundUp).vectorize(ci);
+                    relu
+                        .compute_at(prediction_output, n)
+                        .store_at(prediction_output, no)
+                        .tile(c, w, ci, wi, vec, 4, TailStrategy::RoundUp)
+                        .vectorize(ci);
                     conv.compute_at(relu, c);
                 } else {
                     // In training mode, we need the conv activations pre-relu too
-                    conv.in().compute_root().tile(c, w, ci, wi, vec, 1, TailStrategy::RoundUp).vectorize(ci).unroll(wi).parallel(n, 8);
+                    conv.in()
+                        .compute_root()
+                        .tile(c, w, ci, wi, vec, 1, TailStrategy::RoundUp)
+                        .vectorize(ci)
+                        .unroll(wi)
+                        .parallel(n, 8);
                     conv.compute_at(conv.in(), c);
-                    relu.compute_root().reorder_storage(c, w, n).reorder(c, w, n).vectorize(c, vec).parallel(n, 8);
+                    relu
+                        .compute_root()
+                        .reorder_storage(c, w, n)
+                        .reorder(c, w, n)
+                        .vectorize(c, vec)
+                        .parallel(n, 8);
                 }
-                conv.vectorize(c).unroll(w).update().vectorize(c).unroll(w).reorder(c, w, r_channels);
+                conv
+                    .vectorize(c)
+                    .unroll(w)
+                    .update()
+                    .vectorize(c)
+                    .unroll(w)
+                    .reorder(c, w, r_channels);
             };
 
             // Pipeline features processing

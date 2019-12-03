@@ -221,10 +221,12 @@ class PerfectHashMap {
 public:
     // Jump straight to the large state
     void make_large(int n) {
-        if (state == Empty)
+        if (state == Empty) {
             upgrade_from_empty_to_large(n);
-        else if (state == Small)
+        }
+        else if (state == Small) {
             upgrade_from_small_to_large(n);
+        }
     }
 
     T &emplace(const K *n, T &&t) {

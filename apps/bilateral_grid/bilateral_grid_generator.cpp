@@ -101,16 +101,20 @@ public:
             histogram.update().reorder(c, r.x, r.y, x, y).gpu_threads(x, y).unroll(c);
 
             // Schedule the remaining blurs and the sampling at the end similarly.
-            // clang-format off
-            blurx.compute_root().reorder(c, x, y, z)
-                 .reorder_storage(c, x, y, z).vectorize(c)
-                 .unroll(y, 2, TailStrategy::RoundUp)
-                 .gpu_tile(x, y, z, xi, yi, zi, 32, 8, 1, TailStrategy::RoundUp);
-            blury.compute_root().reorder(c, x, y, z)
-                 .reorder_storage(c, x, y, z).vectorize(c)
-                 .unroll(y, 2, TailStrategy::RoundUp)
-                 .gpu_tile(x, y, z, xi, yi, zi, 32, 8, 1, TailStrategy::RoundUp);
-            // clang-format on
+            blurx
+                .compute_root()
+                .reorder(c, x, y, z)
+                .reorder_storage(c, x, y, z)
+                .vectorize(c)
+                .unroll(y, 2, TailStrategy::RoundUp)
+                .gpu_tile(x, y, z, xi, yi, zi, 32, 8, 1, TailStrategy::RoundUp);
+            blury
+                .compute_root()
+                .reorder(c, x, y, z)
+                .reorder_storage(c, x, y, z)
+                .vectorize(c)
+                .unroll(y, 2, TailStrategy::RoundUp)
+                .gpu_tile(x, y, z, xi, yi, zi, 32, 8, 1, TailStrategy::RoundUp);
             bilateral_grid.compute_root().gpu_tile(x, y, xi, yi, 32, 8);
             interpolated.compute_at(bilateral_grid, xi).vectorize(c);
         } else {
