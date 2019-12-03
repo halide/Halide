@@ -21,19 +21,19 @@ namespace {
 using namespace Halide;
 
 using Halide::Runtime::Buffer;
-using std::vector;
-using std::string;
 using std::map;
+using std::string;
+using std::vector;
 
 struct Flags {
-    int                 epochs = 0;
-    std::vector<float>  rates = {0.0001f};
-    string              initial_weights_path;
-    string              weights_out_path;
-    int                 num_cores = 32;
-    bool                randomize_weights = false;
-    string              best_benchmark_path;
-    string              best_schedule_path;
+    int epochs = 0;
+    std::vector<float> rates = {0.0001f};
+    string initial_weights_path;
+    string weights_out_path;
+    int num_cores = 32;
+    bool randomize_weights = false;
+    string best_benchmark_path;
+    string best_schedule_path;
 
     Flags(int argc, char **argv) {
         cmdline::parser a;
@@ -85,12 +85,15 @@ struct Flags {
     std::vector<float> parse_floats(const std::string &s) {
         const char *c = s.c_str();
         std::vector<float> v;
-        while (isspace(*c)) ++c;
+        while (isspace(*c))
+            ++c;
         while (*c) {
             string f;
-            while (*c && !isspace(*c)) f += *c++;
+            while (*c && !isspace(*c))
+                f += *c++;
             v.push_back(std::atof(f.c_str()));
-            while (isspace(*c)) ++c;
+            while (isspace(*c))
+                ++c;
         }
         return v;
     }
@@ -99,28 +102,28 @@ struct Flags {
 constexpr int kModels = 1;
 
 struct Sample {
-    vector<float>   runtimes;  // in msec
-    double          prediction[kModels];
-    string          filename;
-    int32_t         schedule_id;
-    Buffer<float>   schedule_features;
+    vector<float> runtimes;  // in msec
+    double prediction[kModels];
+    string filename;
+    int32_t schedule_id;
+    Buffer<float> schedule_features;
 };
 
 struct PipelineSample {
-    int32_t                 pipeline_id;
-    int32_t                 num_stages;
-    Buffer<float>           pipeline_features;
-    map<uint64_t, Sample>   schedules;
-    uint64_t                fastest_schedule_hash;
-    float                   fastest_runtime;   // in msec
-    uint64_t                pipeline_hash;
+    int32_t pipeline_id;
+    int32_t num_stages;
+    Buffer<float> pipeline_features;
+    map<uint64_t, Sample> schedules;
+    uint64_t fastest_schedule_hash;
+    float fastest_runtime;  // in msec
+    uint64_t pipeline_hash;
 };
 
 uint64_t hash_floats(uint64_t h, const float *begin, const float *end) {
     while (begin != end) {
         uint32_t bits = *((const uint32_t *)begin);
         // From boost
-        h ^= (bits + 0x9e3779b9 + (h<<6) + (h>>2));
+        h ^= (bits + 0x9e3779b9 + (h << 6) + (h >> 2));
         begin++;
     }
     return h;
@@ -130,7 +133,7 @@ bool ends_with(const string &str, const string &suffix) {
     if (str.size() < suffix.size()) return false;
     size_t off = str.size() - suffix.size();
     for (size_t i = 0; i < suffix.size(); i++) {
-        if (str[off+i] != suffix[i]) return false;
+        if (str[off + i] != suffix[i]) return false;
     }
     return true;
 }
@@ -193,7 +196,7 @@ map<int, PipelineSample> load_samples(const Flags &flags) {
         const size_t num_stages = num_features / features_per_stage;
 
         const float runtime = scratch[num_features];
-        if (runtime > 100000) { // Don't try to predict runtime over 100s
+        if (runtime > 100000) {  // Don't try to predict runtime over 100s
             std::cout << "Implausible runtime in ms: " << runtime << "\n";
             continue;
         }
@@ -228,9 +231,7 @@ map<int, PipelineSample> load_samples(const Flags &flags) {
             }
 
             ps.pipeline_hash = hash_floats(0, ps.pipeline_features.begin(), ps.pipeline_features.end());
-
         }
-
 
         uint64_t schedule_hash = 0;
         for (size_t i = 0; i < num_stages; i++) {
@@ -239,8 +240,6 @@ map<int, PipelineSample> load_samples(const Flags &flags) {
                             &scratch[i * features_per_stage],
                             &scratch[i * features_per_stage + head2_w]);
         }
-
-
 
         auto it = ps.schedules.find(schedule_hash);
         if (it != ps.schedules.end()) {
@@ -337,7 +336,7 @@ map<int, PipelineSample> load_samples(const Flags &flags) {
     std::cout << "Distinct pipelines: " << result.size() << "\n";
 
     std::ostringstream o;
-    o << "Best runtime is " << best_runtime << " msec, from schedule id "<< best << " in file " << best_path << "\n";
+    o << "Best runtime is " << best_runtime << " msec, from schedule id " << best << " in file " << best_path << "\n";
     std::cout << o.str();
     if (!flags.best_benchmark_path.empty()) {
         std::ofstream f(flags.best_benchmark_path, std::ios_base::trunc);
@@ -377,7 +376,7 @@ int main(int argc, char **argv) {
     std::cout.precision(4);
 
     auto seed = time(NULL);
-    std::mt19937 rng((uint32_t) seed);
+    std::mt19937 rng((uint32_t)seed);
 
     std::cout << "Iterating over " << samples.size() << " samples using seed = " << seed << "\n";
     decltype(samples) validation_set;
@@ -426,14 +425,14 @@ int main(int argc, char **argv) {
             } worst_inversion;
 
 #if defined(_OPENMP)
-            #pragma omp parallel for
+#pragma omp parallel for
 #endif
             for (int model = 0; model < kModels; model++) {
                 for (int train = 0; train < 2; train++) {
                     auto &tp = tpp[model];
 
                     for (auto &p : train ? samples : validation_set) {
-                        if (kModels > 1 && rng() & 1) continue; // If we are training multiple kModels, allow them to diverge.
+                        if (kModels > 1 && rng() & 1) continue;  // If we are training multiple kModels, allow them to diverge.
                         if (p.second.schedules.size() < 8) {
                             continue;
                         }
@@ -469,7 +468,7 @@ int main(int argc, char **argv) {
                             loss = tp->backprop(runtimes, learning_rate);
                             assert(!std::isnan(loss));
                             loss_sum[model] += loss;
-                            loss_sum_counter[model] ++;
+                            loss_sum_counter[model]++;
 
                             auto it = p.second.schedules.begin();
                             std::advance(it, first);
@@ -494,7 +493,7 @@ int main(int argc, char **argv) {
                                 if (sched.second.prediction[model] == 0) continue;
                                 assert(sched.second.runtimes[0] >= ref.runtimes[0]);
                                 float runtime_ratio = sched.second.runtimes[0] / ref.runtimes[0];
-                                if (runtime_ratio <= 1.3f) continue; // Within 30% of the runtime of the best
+                                if (runtime_ratio <= 1.3f) continue;  // Within 30% of the runtime of the best
                                 if (sched.second.prediction[model] >= ref.prediction[model]) {
                                     good++;
                                 } else {

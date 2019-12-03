@@ -9,7 +9,9 @@
 struct PerfectHashMapAsserter {
     const bool c;
 
-    PerfectHashMapAsserter(bool c) : c(c) {}
+    PerfectHashMapAsserter(bool c)
+        : c(c) {
+    }
 
     template<typename T>
     PerfectHashMapAsserter &operator<<(T &&t) {
@@ -60,9 +62,9 @@ class PerfectHashMap {
     }
 
     enum {
-        Empty = 0, // No storage allocated
-        Small = 1, // Storage is just an array of key/value pairs
-        Large = 2  // Storage is an array with empty slots, indexed by the 'id' field of each key
+        Empty = 0,  // No storage allocated
+        Small = 1,  // Storage is just an array of key/value pairs
+        Large = 2   // Storage is an array with empty slots, indexed by the 'id' field of each key
     } state = Empty;
 
     void upgrade_from_empty_to_small() {
@@ -217,19 +219,23 @@ class PerfectHashMap {
     }
 
 public:
-
     // Jump straight to the large state
     void make_large(int n) {
-        if (state == Empty) upgrade_from_empty_to_large(n);
-        else if (state == Small) upgrade_from_small_to_large(n);
+        if (state == Empty)
+            upgrade_from_empty_to_large(n);
+        else if (state == Small)
+            upgrade_from_small_to_large(n);
     }
 
     T &emplace(const K *n, T &&t) {
         check_key(n);
-        switch(state) {
-        case Empty: return emplace_empty(n, std::move(t));
-        case Small: return emplace_small(n, std::move(t));
-        case Large: return emplace_large(n, std::move(t));
+        switch (state) {
+        case Empty:
+            return emplace_empty(n, std::move(t));
+        case Small:
+            return emplace_small(n, std::move(t));
+        case Large:
+            return emplace_large(n, std::move(t));
         }
         return unreachable_value();
     }
@@ -237,52 +243,67 @@ public:
     T &insert(const K *n, const T &t) {
         check_key(n);
         T tmp(t);
-        switch(state) {
-        case Empty: return emplace_empty(n, std::move(tmp));
-        case Small: return emplace_small(n, std::move(tmp));
-        case Large: return emplace_large(n, std::move(tmp));
+        switch (state) {
+        case Empty:
+            return emplace_empty(n, std::move(tmp));
+        case Small:
+            return emplace_small(n, std::move(tmp));
+        case Large:
+            return emplace_large(n, std::move(tmp));
         }
         return unreachable_value();
     }
 
     const T &get(const K *n) const {
         check_key(n);
-        switch(state) {
-        case Empty: return get_empty(n);
-        case Small: return get_small(n);
-        case Large: return get_large(n);
+        switch (state) {
+        case Empty:
+            return get_empty(n);
+        case Small:
+            return get_small(n);
+        case Large:
+            return get_large(n);
         }
         return unreachable_value();
     }
 
     T &get(const K *n) {
         check_key(n);
-        switch(state) {
-        case Empty: return get_empty(n);
-        case Small: return get_small(n);
-        case Large: return get_large(n);
+        switch (state) {
+        case Empty:
+            return get_empty(n);
+        case Small:
+            return get_small(n);
+        case Large:
+            return get_large(n);
         }
         return unreachable_value();
     }
 
     T &get_or_create(const K *n) {
         check_key(n);
-        switch(state) {
-        case Empty: return get_or_create_empty(n);
-        case Small: return get_or_create_small(n);
-        case Large: return get_or_create_large(n);
+        switch (state) {
+        case Empty:
+            return get_or_create_empty(n);
+        case Small:
+            return get_or_create_small(n);
+        case Large:
+            return get_or_create_large(n);
         }
         return unreachable_value();
     }
 
     bool contains(const K *n) const {
         check_key(n);
-        switch(state) {
-        case Empty: return contains_empty(n);
-        case Small: return contains_small(n);
-        case Large: return contains_large(n);
+        switch (state) {
+        case Empty:
+            return contains_empty(n);
+        case Small:
+            return contains_small(n);
+        case Large:
+            return contains_large(n);
         }
-        return false; // Unreachable
+        return false;  // Unreachable
     }
 
     size_t size() const {
