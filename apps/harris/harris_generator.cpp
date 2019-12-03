@@ -75,12 +75,13 @@ public:
         if (!auto_schedule) {
             Var xi("xi"), yi("yi");
             if (get_target().has_gpu_feature()) {
-
+                // 0.334ms on a 2060 RTX
                 output.gpu_tile(x, y, xi, yi, 30, 14);
                 Ix.compute_at(output, x).gpu_threads(x, y);
                 Iy.compute_at(output, x).gpu_threads(x, y);
                 Ix.compute_with(Iy, x);
             } else {
+                // 0.92ms on an Intel i9-9960X using 16 threads
                 const int vec = natural_vector_size<float>();
                 output.split(y, y, yi, 32).parallel(y).vectorize(x, vec);
                 gray.store_at(output, y).compute_at(output, yi).vectorize(x, vec);

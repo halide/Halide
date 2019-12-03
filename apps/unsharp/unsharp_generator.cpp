@@ -64,6 +64,9 @@ public:
         // Schedule
         if (!auto_schedule) {
             if (get_target().has_gpu_feature()) {
+                // The timing of this schedule is oddly noisy. Runs
+                // from 0.4ms to 0.5ms on a 2060 RTX.  Oddly, the
+                // better runtimes occur when running under nvprof.
                 Var xi, yi;
                 output_.compute_root()
                     .reorder(c, x, y)
@@ -79,6 +82,7 @@ public:
                     .unroll(x, 2)
                     .gpu_threads(x, y);
             } else {
+                // 1.93ms on an Intel i9-9960X using 16 threads
                 Var yo, yi;
                 const int vec = natural_vector_size<float>();
 
