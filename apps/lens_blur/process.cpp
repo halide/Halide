@@ -3,7 +3,7 @@
 
 #include "lens_blur.h"
 #include "lens_blur_auto_schedule.h"
-#include "bilateral_grid_gradient_auto_schedule.h"
+#include "lens_blur_gradient_auto_schedule.h"
 
 #include "benchmark_util.h"
 #include "HalideBuffer.h"

@@ -4,6 +4,7 @@ include ../support/autoscheduler.inc
 HL_TARGET=host-cuda
 
 GRADIENT_AUTOSCHED_BIN=../gradient_autoscheduler/bin
+CXXFLAGS += -I../support/
 
 all: $(BIN)/$(HL_TARGET)/process
 

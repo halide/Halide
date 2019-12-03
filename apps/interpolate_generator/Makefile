@@ -14,7 +14,7 @@ $(GENERATOR_BIN)/interpolate.generator: interpolate_generator.cpp $(GENERATOR_DE
 
 $(BIN)/%/interpolate.a: $(GENERATOR_BIN)/interpolate.generator
 	@mkdir -p $(@D)
-	$< -g interpolate -f interpolate -o $(BIN) target=$(HL_TARGET) auto_schedule=false
+	$< -g interpolate -f interpolate -o $(@D) target=$* auto_schedule=false
 
 $(BIN)/%/interpolate_classic_auto_schedule.a: $(GENERATOR_BIN)/interpolate.generator $(AUTOSCHED_BIN)/libauto_schedule.so
 	@mkdir -p $(@D)
@@ -23,7 +23,7 @@ $(BIN)/%/interpolate_classic_auto_schedule.a: $(GENERATOR_BIN)/interpolate.gener
 	HL_DEBUG_CODEGEN=1 \
 	HL_SHARED_MEMORY_LIMIT=48 \
 	HL_COMPUTE_ROOT_AND_INLINE_ONLY=1 \
-	$< -g interpolate -f interpolate_classic_auto_schedule -o $(BIN) target=$(HL_TARGET) auto_schedule=true -p $(AUTOSCHED_BIN)/libauto_schedule.so machine_params=$(HL_MACHINE_PARAMS) -e static_library,h,assembly,stmt 2> stderr_classic.txt > stdout_classic.txt
+	$< -g interpolate -f interpolate_classic_auto_schedule -o $(@D) target=$* auto_schedule=true -p $(AUTOSCHED_BIN)/libauto_schedule.so machine_params=$(HL_MACHINE_PARAMS) -e static_library,h,assembly,stmt 2> stderr_classic.txt > stdout_classic.txt
 
 $(BIN)/%/interpolate_auto_schedule.a: $(GENERATOR_BIN)/interpolate.generator $(AUTOSCHED_BIN)/libauto_schedule.so
 	@mkdir -p $(@D)
