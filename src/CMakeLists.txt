@@ -772,6 +772,8 @@ endif()
 if(LLVM_USE_SHARED_LLVM_LIBRARY)
   set(LLVM_USE_SHARED "USE_SHARED")
 endif()
+message(WARNING "LLVM_COMPONENTS is ${LLVM_COMPONENTS}")
+message(WARNING "llvm_config is ${llvm_config}")
 llvm_config(Halide ${LLVM_USE_SHARED} ${LLVM_COMPONENTS})
 
 if (NOT MSVC AND NOT LLVM_USE_SHARED_LLVM_LIBRARY)

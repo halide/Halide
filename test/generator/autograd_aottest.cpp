@@ -9,7 +9,7 @@
 
 using namespace Halide::Runtime;
 
-const int kSize = 32;
+constexpr int kSize = 64;
 
 int main(int argc, char **argv) {
     int result;
