@@ -2148,13 +2148,14 @@ Func &Func::set_estimate(Var var, Expr min, Expr extent) {
     return *this;
 }
 
-Func &Func::set_estimates(const std::vector<std::pair<Expr, Expr>> &estimates) {
+Func &Func::set_estimates(const Region &estimates) {
     const std::vector<Var> a = args();
     user_assert(estimates.size() == a.size())
         << "Func " << name() << " has " << a.size() << " dimensions, "
         << "but the estimates passed to set_estimates contains " << estimates.size() << " pairs.\n";
     for (size_t i = 0; i < a.size(); i++) {
-        set_estimate(a[i], estimates[i].first, estimates[i].second);
+        const Range &r = estimates[i];
+        set_estimate(a[i], r.min, r.extent);
     }
     return *this;
 }

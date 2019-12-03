@@ -1,6 +1,7 @@
 #include "WasmExecutor.h"
 
 #include "Error.h"
+#include "Float16.h"
 #include "Func.h"
 #include "ImageParam.h"
 #include "JITModule.h"
@@ -247,8 +248,8 @@ using JITExternMap = std::map<std::string, Halide::JITExtern>;
 
 #define V8_API_VERSION ((V8_MAJOR_VERSION * 10) + V8_MINOR_VERSION)
 
-static_assert(V8_API_VERSION >= 73,
-              "Halide requires V8 v7.3 or later when compiling WITH_V8.");
+static_assert(V8_API_VERSION >= 75,
+              "Halide requires V8 v7.5 or later when compiling WITH_V8.");
 
 namespace Halide {
 namespace Internal {
@@ -1010,6 +1011,28 @@ void wasm_jit___cxa_atexit_callback(const v8::FunctionCallbackInfo<v8::Value> &a
     // nothing
 }
 
+void wasm_jit___extendhfsf2_callback(const v8::FunctionCallbackInfo<v8::Value> &args) {
+    Isolate *isolate = args.GetIsolate();
+    Local<Context> context = isolate->GetCurrentContext();
+    HandleScope scope(isolate);
+
+    const uint16_t in = args[0]->NumberValue(context).ToChecked();
+    const float out = (float) float16_t::make_from_bits(in);
+
+    args.GetReturnValue().Set(wrap_scalar(context, out));
+}
+
+void wasm_jit___truncsfhf2_callback(const v8::FunctionCallbackInfo<v8::Value> &args) {
+    Isolate *isolate = args.GetIsolate();
+    Local<Context> context = isolate->GetCurrentContext();
+    HandleScope scope(isolate);
+
+    const float in = args[0]->NumberValue(context).ToChecked();
+    const uint16_t out = float16_t(in).to_bits();
+
+    args.GetReturnValue().Set(wrap_scalar(context, out));
+}
+
 template<typename T, T some_func(T)>
 void wasm_jit_posix_math_callback(const v8::FunctionCallbackInfo<v8::Value> &args) {
     Isolate *isolate = args.GetIsolate();
@@ -1282,15 +1305,6 @@ WasmModuleContents::WasmModuleContents(
 
     wdebug(0) << "Compiling wasm function " << fn_name << "\n";
 
-#if V8_API_VERSION < 75
-    // V8 v7.4 works fine for non-SIMD work, but has various SIMD-related issues
-    // that will make some of our self-tests fail (and thus probably cause user
-    // code to be flaky as well); issue a warning if someone tries to test in this way.
-    if (target.has_feature(Target::WasmSimd128)) {
-        user_warning << "Versions of V8 prior to v7.5 may not work correctly with wasm_simd128 enabled.\n";
-    }
-#endif
-
 #ifdef WITH_V8
     static std::once_flag init_v8_once;
     std::call_once(init_v8_once, []() {
@@ -1351,9 +1365,6 @@ WasmModuleContents::WasmModuleContents(
 
     std::vector<char> final_wasm = compile_to_wasm(module, fn_name);
 
-#if V8_API_VERSION < 74
-    using WasmModuleObject = WasmCompiledModule;
-#endif
     MaybeLocal<WasmModuleObject> maybe_compiled = WasmModuleObject::DeserializeOrCompile(isolate,
                                                                                          /* serialized_module */ {nullptr, 0},
                                                                                          /* wire_bytes */ {(const uint8_t *)final_wasm.data(), final_wasm.size()});
@@ -1404,6 +1415,8 @@ WasmModuleContents::WasmModuleContents(
     ADD_CALLBACK(memset)
     ADD_CALLBACK(strlen)
     ADD_CALLBACK(write)
+    ADD_CALLBACK(__extendhfsf2)
+    ADD_CALLBACK(__truncsfhf2)
 
 #undef ADD_CALLBACK
 
