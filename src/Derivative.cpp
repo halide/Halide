@@ -44,7 +44,7 @@ class ReverseAccumulationVisitor : public IRVisitor {
 public:
     void propagate_adjoints(const Func &output,
                             const Func &adjoint,
-                            const vector<pair<Expr, Expr>> &output_bounds);
+                            const Region &output_bounds);
 
     map<FuncKey, Func> get_adjoint_funcs() const {
         return adjoint_funcs;
@@ -178,7 +178,7 @@ private:
 void ReverseAccumulationVisitor::propagate_adjoints(
     const Func &output,
     const Func &adjoint,
-    const vector<pair<Expr, Expr>> &output_bounds) {
+    const Region &output_bounds) {
     // Topologically sort the functions
     map<string, Function> env = find_transitive_calls(output.function());
     vector<string> order =
@@ -482,7 +482,8 @@ void ReverseAccumulationVisitor::propagate_adjoints(
     // Bounds inference
     Box output_box;
     for (const auto &p : output_bounds) {
-        output_box.push_back(Interval(p.first, p.second));
+        // Convert from min,extent to min,max
+        output_box.push_back(Interval(p.min, p.min + p.extent));
     }
     func_bounds = inference_bounds(output, output_box);
     for (const auto &it : func_bounds) {
@@ -1924,7 +1925,7 @@ Func Derivative::operator()(const Param<> &param) const {
 
 Derivative propagate_adjoints(const Func &output,
                               const Func &adjoint,
-                              const vector<pair<Expr, Expr>> &output_bounds) {
+                              const Region &output_bounds) {
     user_assert(output.dimensions() == adjoint.dimensions())
         << "output dimensions and adjoint dimensions must match\n";
     user_assert((int)output_bounds.size() == adjoint.dimensions())
@@ -1940,7 +1941,7 @@ Derivative propagate_adjoints(const Func &output,
 Derivative propagate_adjoints(const Func &output,
                               const Buffer<float> &adjoint) {
     user_assert(output.dimensions() == adjoint.dimensions());
-    vector<pair<Expr, Expr>> bounds;
+    Region bounds;
     for (int dim = 0; dim < adjoint.dimensions(); dim++) {
         bounds.emplace_back(adjoint.min(dim), adjoint.min(dim) + adjoint.extent(dim) - 1);
     }
@@ -1951,7 +1952,7 @@ Derivative propagate_adjoints(const Func &output,
 Derivative propagate_adjoints(const Func &output) {
     Func adjoint("adjoint");
     adjoint(output.args()) = Internal::make_one(output.value().type());
-    vector<pair<Expr, Expr>> output_bounds;
+    Region output_bounds;
     output_bounds.reserve(output.dimensions());
     for (int i = 0; i < output.dimensions(); i++) {
         output_bounds.push_back({0, 0});

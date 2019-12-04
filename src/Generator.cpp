@@ -1532,9 +1532,9 @@ Module GeneratorBase::build_gradient_module(const std::string &function_name) {
     for (size_t i = 0; i < original_outputs.size(); ++i) {
         const Func &original_output = original_outputs.at(i);
         const ImageParam &d_output = d_output_imageparams.at(i);
-        std::vector<std::pair<Expr, Expr>> bounds;
+        Region bounds;
         for (int i = 0; i < d_output.dimensions(); i++) {
-            bounds.emplace_back(d_output.dim(i).min(), d_output.dim(i).max());
+            bounds.emplace_back(d_output.dim(i).min(), d_output.dim(i).extent());
         }
         Func adjoint_func = BoundaryConditions::constant_exterior(d_output, make_zero(d_output.type()));
         Derivative d = propagate_adjoints(original_output, adjoint_func, bounds);
