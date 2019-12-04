@@ -22,11 +22,11 @@ Func blur_cols_transpose(Func input, Expr height, Expr alpha, bool skip_schedule
     // Update 1: run the IIR filter down the columns.
     RDom ry(1, height - 1);
     blur(x, ry, c) =
-        (1 - alpha)*blur(x, ry - 1, c) + alpha*input(x, ry, c);
+        (1 - alpha) * blur(x, ry - 1, c) + alpha * input(x, ry, c);
     // Update 2: run the IIR blur up the columns.
     Expr flip_ry = height - ry - 1;
     blur(x, flip_ry, c) =
-        (1 - alpha)*blur(x, flip_ry + 1, c) + alpha*blur(x, flip_ry, c);
+        (1 - alpha) * blur(x, flip_ry + 1, c) + alpha * blur(x, flip_ry, c);
 
     // Transpose the blur.
     Func transpose("transpose");
@@ -41,7 +41,7 @@ Func blur_cols_transpose(Func input, Expr height, Expr alpha, bool skip_schedule
             // and strips (Halide supports nested parallelism).
             Var xo, yo, t;
             transpose.compute_root()
-                .tile(x, y, xo, yo, x, y, vec, vec*4)
+                .tile(x, y, xo, yo, x, y, vec, vec * 4)
                 .vectorize(x)
                 .parallel(yo)
                 .parallel(c);
@@ -91,7 +91,6 @@ Func blur_cols_transpose(Func input, Expr height, Expr alpha, bool skip_schedule
                 .gpu_blocks(x, c)
                 .gpu_threads(xi);
         }
-
     }
 
     return transpose;
@@ -130,13 +129,13 @@ public:
 
         // Estimates
         {
-            input.dim(0).set_estimate(0, 1536)
-                   .dim(1).set_estimate(0, 2560)
-                   .dim(2).set_estimate(0, 3);
+            input.dim(0).set_estimate(0, 1536);
+            input.dim(1).set_estimate(0, 2560);
+            input.dim(2).set_estimate(0, 3);
             alpha.set_estimate(0.1f);
-            output.dim(0).set_estimate(0, 1536)
-                   .dim(1).set_estimate(0, 2560)
-                   .dim(2).set_estimate(0, 3);
+            output.dim(0).set_estimate(0, 1536);
+            output.dim(1).set_estimate(0, 2560);
+            output.dim(2).set_estimate(0, 3);
         }
     }
 };

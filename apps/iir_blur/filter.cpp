@@ -1,9 +1,9 @@
+#include <cassert>
 #include <cstdio>
 #include <cstdlib>
-#include <cassert>
 
-#include "HalideRuntime.h"
 #include "HalideBuffer.h"
+#include "HalideRuntime.h"
 
 #include "iir_blur.h"
 #include "iir_blur_auto_schedule.h"

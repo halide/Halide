@@ -1,9 +1,9 @@
+#include <cassert>
 #include <cstdio>
 #include <cstdlib>
-#include <cassert>
 
-#include "HalideRuntime.h"
 #include "HalideBuffer.h"
+#include "HalideRuntime.h"
 
 #include "harris.h"
 #include "harris_auto_schedule.h"
@@ -24,7 +24,6 @@ int main(int argc, char **argv) {
     // The harris app doesn't use a boundary condition
     Halide::Runtime::Buffer<float> output(input.width() - 6, input.height() - 6);
     output.set_min(3, 3);
-
 
     double best_manual = benchmark([&]() {
         harris(input, output);
