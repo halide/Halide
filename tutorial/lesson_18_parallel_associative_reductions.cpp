@@ -238,7 +238,7 @@ int main(int argc, char **argv) {
         for (int r_y = 0; r_y < input.height(); r_y++) {
             for (int u = 0; u < input.width() / 8; u++) {
                 /* vectorize */ for (int u_i = 0; u_i < 8; u_i++) {
-                    c_intm[u*4 + u_i][input(u*8 + u_i, r_y) / 32] += 1;
+                    c_intm[u*8 + u_i][input(u*8 + u_i, r_y) / 32] += 1;
                 }
             }
         }
