@@ -19,7 +19,7 @@ $(BIN)/%/interpolate.a: $(GENERATOR_BIN)/interpolate.generator
 $(BIN)/%/interpolate_classic_auto_schedule.a: $(GENERATOR_BIN)/interpolate.generator $(AUTOSCHED_BIN)/libauto_schedule.so
 	@mkdir -p $(@D)
 	HL_PERMIT_FAILED_UNROLL=1 \
-	HL_WEIGHTS_DIR=$(AUTOSCHED_SRC)/weights \
+	HL_WEIGHTS_DIR=$(AUTOSCHED_SRC)/gpu.weights \
 	HL_DEBUG_CODEGEN=1 \
 	HL_SHARED_MEMORY_LIMIT=48 \
 	HL_COMPUTE_ROOT_AND_INLINE_ONLY=1 \
@@ -28,7 +28,7 @@ $(BIN)/%/interpolate_classic_auto_schedule.a: $(GENERATOR_BIN)/interpolate.gener
 $(BIN)/%/interpolate_auto_schedule.a: $(GENERATOR_BIN)/interpolate.generator $(AUTOSCHED_BIN)/libauto_schedule.so
 	@mkdir -p $(@D)
 	HL_PERMIT_FAILED_UNROLL=1 \
-	HL_WEIGHTS_DIR=$(AUTOSCHED_SRC)/weights \
+	HL_WEIGHTS_DIR=$(AUTOSCHED_SRC)/gpu.weights \
 	HL_DEBUG_CODEGEN=1 \
 	HL_SHARED_MEMORY_LIMIT=48 \
 	$< -g interpolate -e $(GENERATOR_OUTPUTS) -o $(@D) -f interpolate_auto_schedule target=$* auto_schedule=true -p $(AUTOSCHED_BIN)/libauto_schedule.so -s Adams2019 machine_params=$(HL_MACHINE_PARAMS) 2> stderr.txt > stdout.txt
@@ -53,8 +53,9 @@ BATCH_ID ?= 0
 TRAIN_ONLY ?= 0
 SAMPLES_DIR ?= autotuned_samples
 autotune: $(GENERATOR_BIN)/interpolate.generator $(AUTOSCHED_BIN)/featurization_to_sample $(AUTOSCHED_BIN)/retrain_cost_model $(AUTOSCHED_BIN)/libauto_schedule.so $(AUTOSCHED_SRC)/autotune_loop.sh
+	HL_MACHINE_PARAMS=80,1,1 \
+	SAMPLES_DIR=$(SAMPLES_DIR) \
 	HL_PERMIT_FAILED_UNROLL=1 \
-	HL_WEIGHTS_DIR=$(AUTOSCHED_SRC)/weights \
 	HL_DEBUG_CODEGEN=1 \
 	HL_SHARED_MEMORY_LIMIT=48 \
 	bash $(AUTOSCHED_SRC)/autotune_loop.sh \
