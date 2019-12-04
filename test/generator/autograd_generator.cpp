@@ -2,6 +2,8 @@
 
 namespace {
 
+constexpr int kSize = 64;
+
 class Autograd : public Halide::Generator<Autograd> {
 public:
     Input<Buffer<float>> input_a{ "input_a", 1 };
@@ -26,14 +28,14 @@ public:
 
         output_lut(x) = lut(lut_indices(x));
 
-        input_a.set_estimates({{0, 32}});
-        input_b.set_estimates({{0, 32}});
-        input_c.set_estimates({{0, 32}});
-        output.set_estimates({{0, 32}});
+        input_a.set_estimates({{0, kSize}});
+        input_b.set_estimates({{0, kSize}});
+        input_c.set_estimates({{0, kSize}});
+        output.set_estimates({{0, kSize}});
 
         lut.set_estimates({{0, 256}});
-        lut_indices.set_estimates({{0, 32}});
-        output_lut.set_estimates({{0, 32}});
+        lut_indices.set_estimates({{0, kSize}});
+        output_lut.set_estimates({{0, kSize}});
 
         output.vectorize(x, natural_vector_size<float>());
     }

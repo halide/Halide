@@ -73,6 +73,19 @@ void test_copy(Buffer<float> a, Buffer<float> b) {
     a.fill(1.0f);
     a_void.copy_from(b_void_window);
     check_equal(a_window, b_window);
+
+    // Check copy_to_interleaved()
+    assert(a.stride(0) == 1);
+    auto a_interleaved = a.copy_to_interleaved();
+    assert(a_interleaved.stride(0) == a_interleaved.channels());
+    assert(a_interleaved.stride(2) == 1);
+    check_equal(a, a_interleaved);
+
+    // Check copy_to_planar()
+    auto a_planar = a_interleaved.copy_to_planar();
+    assert(a_planar.stride(0) == 1);
+    check_equal(a, a_planar);
+
 }
 
 int main(int argc, char **argv) {
