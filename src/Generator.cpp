@@ -1532,9 +1532,9 @@ Module GeneratorBase::build_gradient_module(const std::string &function_name) {
     for (size_t i = 0; i < original_outputs.size(); ++i) {
         const Func &original_output = original_outputs.at(i);
         const ImageParam &d_output = d_output_imageparams.at(i);
-        std::vector<std::pair<Expr, Expr>> bounds;
+        Region bounds;
         for (int i = 0; i < d_output.dimensions(); i++) {
-            bounds.emplace_back(d_output.dim(i).min(), d_output.dim(i).max());
+            bounds.emplace_back(d_output.dim(i).min(), d_output.dim(i).extent());
         }
         Func adjoint_func = BoundaryConditions::constant_exterior(d_output, make_zero(d_output.type()));
         Derivative d = propagate_adjoints(original_output, adjoint_func, bounds);
@@ -1568,11 +1568,7 @@ Module GeneratorBase::build_gradient_module(const std::string &function_name) {
                     d_out_wrt_in(vars) = make_zero(d_output.type());
                 }
 
-                std::vector<std::pair<Expr, Expr>> est_pairs;
-                for (const auto e : p.get_argument_estimates().buffer_estimates) {
-                    est_pairs.emplace_back(e.min, e.extent);
-                }
-                d_out_wrt_in.set_estimates(est_pairs);
+                d_out_wrt_in.set_estimates(p.get_argument_estimates().buffer_estimates);
 
                 // Useful for debugging; ordinarily better to leave out
                 // debug(0) << "\n\n"
@@ -1937,7 +1933,7 @@ void GeneratorInputBase::set_estimate_impl(Var var, Expr min, Expr extent) {
     }
 }
 
-void GeneratorInputBase::set_estimates_impl(const std::vector<std::pair<Expr, Expr>> &estimates) {
+void GeneratorInputBase::set_estimates_impl(const Region &estimates) {
     internal_assert(exprs_.empty() && !funcs_.empty() && parameters_.size() == funcs_.size());
     for (size_t i = 0; i < funcs_.size(); ++i) {
         Func &f = funcs_[i];
@@ -1946,8 +1942,9 @@ void GeneratorInputBase::set_estimates_impl(const std::vector<std::pair<Expr, Ex
         // we end up compiling this for toplevel.
         for (size_t dim = 0; dim < estimates.size(); ++dim) {
             Parameter &p = parameters_[i];
-            p.set_min_constraint_estimate(dim, estimates[dim].first);
-            p.set_extent_constraint_estimate(dim, estimates[dim].second);
+            const Range &r = estimates[dim];
+            p.set_min_constraint_estimate(dim, r.min);
+            p.set_extent_constraint_estimate(dim, r.extent);
         }
     }
 }

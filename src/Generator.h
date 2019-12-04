@@ -1549,7 +1549,7 @@ protected:
     }
 
     void set_estimate_impl(Var var, Expr min, Expr extent);
-    void set_estimates_impl(const std::vector<std::pair<Expr, Expr>> &estimates);
+    void set_estimates_impl(const Region &estimates);
 
 public:
     ~GeneratorInputBase() override;
@@ -1719,7 +1719,7 @@ public:
         return set_estimate(var, min, extent);
     }
 
-    GeneratorInput_Buffer<T> &set_estimates(const std::vector<std::pair<Expr, Expr>> &estimates) {
+    GeneratorInput_Buffer<T> &set_estimates(const Region &estimates) {
         this->check_gio_access();
         this->set_estimates_impl(estimates);
         return *this;
@@ -1883,7 +1883,7 @@ public:
         return set_estimate(var, min, extent);
     }
 
-    GeneratorInput_Func<T> &set_estimates(const std::vector<std::pair<Expr, Expr>> &estimates) {
+    GeneratorInput_Func<T> &set_estimates(const Region &estimates) {
         this->check_gio_access();
         this->set_estimates_impl(estimates);
         return *this;
@@ -2518,7 +2518,7 @@ public:
     // 'perfect forwarding' won't work with initializer lists,
     // so hand-roll our own forwarding method for set_estimates,
     // rather than using HALIDE_FORWARD_METHOD.
-    GeneratorOutput_Buffer<T> &set_estimates(const std::vector<std::pair<Expr, Expr>> &estimates) {
+    GeneratorOutput_Buffer<T> &set_estimates(const Region &estimates) {
         this->as<OutputImageParam>().set_estimates(estimates);
         return *this;
     }
@@ -2608,7 +2608,7 @@ public:
         return set_estimate(var, min, extent);
     }
 
-    GeneratorOutput_Func<T> &set_estimates(const std::vector<std::pair<Expr, Expr>> &estimates) {
+    GeneratorOutput_Func<T> &set_estimates(const Region &estimates) {
         this->check_gio_access();
         internal_assert(this->exprs_.empty() && !this->funcs_.empty());
         for (Func &f : this->funcs_) {
