@@ -256,7 +256,7 @@ class CSEInControlFlowBranches : public IRMutator {
 
     using IRMutator::visit;
 
-    Expr visit(const Call *op) {
+    Expr visit(const Call *op) override {
         if (op->is_intrinsic(Call::if_then_else)) {
             internal_assert(op->args.size() == 3);
             Expr condition = mutate(op->args[0]);
