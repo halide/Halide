@@ -686,7 +686,7 @@ void Function::define_update(const vector<Expr> &_args, vector<Expr> values) {
 void Function::define_extern(const std::string &function_name,
                              const std::vector<ExternFuncArgument> &extern_args,
                              const std::vector<Type> &types,
-                             const std::vector<string> &args,
+                             const std::vector<Var> &args,
                              NameMangling mangling,
                              DeviceAPI device_api) {
 
@@ -698,7 +698,13 @@ void Function::define_extern(const std::string &function_name,
         << "In extern definition for Func \"" << name() << "\":\n"
         << "Func already has an extern definition.\n";
 
-    contents->args = args;
+    std::vector<string> arg_names;
+    std::vector<Expr> arg_exprs;
+    for (size_t i = 0; i < args.size(); i++) {
+      arg_names.push_back(args[i].name());
+      arg_exprs.push_back(args[i]);
+    }
+    contents->args = arg_names;
     contents->extern_function_name = function_name;
     contents->extern_arguments = extern_args;
     contents->output_types = types;
@@ -718,20 +724,15 @@ void Function::define_extern(const std::string &function_name,
         values.push_back(undef(types[i]));
     }
 
-    std::vector<Expr> arg_exprs;
-    for (size_t i = 0; i < args.size(); i++) {
-        arg_exprs.push_back(Var(args[i]));
-    }
-
     contents->init_def = Definition(arg_exprs, values, ReductionDomain(), true);
 
     // Reset the storage dims to match the pure args
     contents->func_schedule.storage_dims().clear();
     contents->init_def.schedule().dims().clear();
     for (size_t i = 0; i < args.size(); i++) {
-        contents->func_schedule.storage_dims().push_back(StorageDim{args[i]});
+        contents->func_schedule.storage_dims().push_back(StorageDim{arg_names[i]});
         contents->init_def.schedule().dims().push_back(
-            Dim{args[i], ForType::Extern, DeviceAPI::None, Dim::Type::PureVar});
+            Dim{arg_names[i], ForType::Extern, DeviceAPI::None, Dim::Type::PureVar});
     }
     // Add the dummy outermost dim
     contents->init_def.schedule().dims().push_back(
