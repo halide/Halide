@@ -720,7 +720,7 @@ void Function::define_extern(const std::string &function_name,
 
     std::vector<Expr> arg_exprs;
     for (size_t i = 0; i < args.size(); i++) {
-        arg_exprs.push_back(args[i]);
+        arg_exprs.push_back(Var(args[i]));
     }
 
     contents->init_def = Definition(arg_exprs, values, ReductionDomain(), true);
