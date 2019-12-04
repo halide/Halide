@@ -12,7 +12,7 @@ public:
     void generate() {
         Var x("x"), y("y"), c("c");
 
-        const float kPi = 3.14159265358979310000;
+        const float kPi = 3.14159265358979310000f;
 
         Func kernel("kernel");
         kernel(x) = exp(-x * x / (2 * sigma * sigma)) / (sqrtf(2 * kPi) * sigma);
