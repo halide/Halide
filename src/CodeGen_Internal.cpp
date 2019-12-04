@@ -380,7 +380,10 @@ Expr lower_euclidean_div(Expr a, Expr b) {
         Expr bs = b >> make_const(b.type(), (a.type().bits() - 1));
         Expr rs = r >> make_const(r.type(), (a.type().bits() - 1));
         q = q - (rs & bs) + (rs & ~bs);
-        Expr would_overflow = (b == -1 && a == a.type().min());
+        Type unsigned_type = a.type().with_code(halide_type_uint);
+        Expr would_overflow = (b == -1 &&
+                               (reinterpret(unsigned_type, a) ==
+                                reinterpret(unsigned_type, a.type().min())));
         if (!can_prove(!would_overflow)) {
             q = Call::make(a.type(),
                            Call::if_then_else,
@@ -422,8 +425,10 @@ Expr lower_euclidean_mod(Expr a, Expr b) {
     Expr zero = make_zero(a.type());
     Expr would_trap = (b == zero);
     if (a.type().is_int()) {
+        Type unsigned_type = a.type().with_code(halide_type_uint);
         would_trap = would_trap || (b == make_const(a.type(), -1) &&
-                                    a == a.type().min());
+                                    (reinterpret(unsigned_type, a) ==
+                                     reinterpret(unsigned_type, a.type().min())));
     }
     if (!can_prove(!would_trap)) {
         Expr zero = make_zero(a.type());
