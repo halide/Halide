@@ -3,8 +3,8 @@
 #include <cstdlib>
 
 #include "HalideBuffer.h"
-#include "pipeline_cpp_native.h"
 #include "pipeline_cpp_cpp.h"
+#include "pipeline_cpp_native.h"
 
 using namespace Halide::Runtime;
 
@@ -20,7 +20,7 @@ namespace namespace1 {
 int cpp_extern(int a1, float a2) {
     return (int)(a1 + a2);
 }
-}
+}  // namespace namespace1
 
 namespace namespace2 {
 int cpp_extern_1(int a1, float a2) {
@@ -32,7 +32,7 @@ int cpp_extern_2(int a1, float a2) {
 int cpp_extern_3(int a1, float a2) {
     return (int)(a1 + a2);
 }
-}
+}  // namespace namespace2
 
 namespace namespace_outer {
 int cpp_extern(int a1, float a2) {
@@ -43,8 +43,8 @@ namespace namespace_inner {
 int cpp_extern(int a1, float a2) {
     return (int)(a1 + a2);
 }
-}
-}
+}  // namespace namespace_inner
+}  // namespace namespace_outer
 
 namespace namespace_shared_outer {
 int cpp_extern_1(int a1, float a2) {
@@ -61,9 +61,9 @@ int cpp_extern_1(int a1, float a2) {
 int cpp_extern_2(int a1, float a2) {
     return (int)(a1 + a2);
 }
-}
+}  // namespace inner
 
-}
+}  // namespace namespace_shared_outer
 
 int main(int argc, char **argv) {
     Buffer<uint16_t> in(100, 100);

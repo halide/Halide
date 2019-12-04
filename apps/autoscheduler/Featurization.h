@@ -1,9 +1,9 @@
 #ifndef FEATURIZATION_H
 #define FEATURIZATION_H
 
-#include <stdint.h>
-#include <iostream>
 #include <cstring>
+#include <iostream>
+#include <stdint.h>
 
 #include "ASLog.h"
 
@@ -35,24 +35,35 @@ struct PipelineFeatures {
         Cast,
         Variable,
         Param,
-        Add, Sub, Mod, Mul, Div, Min, Max,
-        EQ, NE, LT, LE,
-        And, Or, Not,
+        Add,
+        Sub,
+        Mod,
+        Mul,
+        Div,
+        Min,
+        Max,
+        EQ,
+        NE,
+        LT,
+        LE,
+        And,
+        Or,
+        Not,
         Select,
-        ImageCall,  // Loads to an input buffer
-        FuncCall,   // Calls to another pipeline stage
-        SelfCall,   // Recursive calls from a Func to itself
-        ExternCall, // Math intrinsics, typically
+        ImageCall,   // Loads to an input buffer
+        FuncCall,    // Calls to another pipeline stage
+        SelfCall,    // Recursive calls from a Func to itself
+        ExternCall,  // Math intrinsics, typically
         Let,
         NumOpTypes
     };
 
     enum class ScalarType {
         Bool,
-        UInt8,  // or Int8
-        UInt16, // or Int16
-        UInt32, // or Int32
-        UInt64, // or Int64
+        UInt8,   // or Int8
+        UInt16,  // or Int16
+        UInt32,  // or Int32
+        UInt64,  // or Int64
         Float,
         Double,
         NumScalarTypes
@@ -94,59 +105,56 @@ struct PipelineFeatures {
             // Skip printing for types not used
             if (!types_in_use[i]) continue;
 
-
-            aslog(0)  << "    Featurization for type " << type_names[i] << '\n'
-                      << "     Op histogram:\n"
-                      << "      Constant:   " << op_histogram[(int)OpType::Const][i] << '\n'
-                      << "      Cast:       " << op_histogram[(int)OpType::Cast][i] << '\n'
-                      << "      Variable:   " << op_histogram[(int)OpType::Variable][i] << '\n'
-                      << "      Param:      " << op_histogram[(int)OpType::Param][i] << '\n'
-                      << "      Add:        " << op_histogram[(int)OpType::Add][i] << '\n'
-                      << "      Sub:        " << op_histogram[(int)OpType::Sub][i] << '\n'
-                      << "      Mod:        " << op_histogram[(int)OpType::Mod][i] << '\n'
-                      << "      Mul:        " << op_histogram[(int)OpType::Mul][i] << '\n'
-                      << "      Div:        " << op_histogram[(int)OpType::Div][i] << '\n'
-                      << "      Min:        " << op_histogram[(int)OpType::Min][i] << '\n'
-                      << "      Max:        " << op_histogram[(int)OpType::Max][i] << '\n'
-                      << "      EQ:         " << op_histogram[(int)OpType::EQ][i] << '\n'
-                      << "      NE:         " << op_histogram[(int)OpType::NE][i] << '\n'
-                      << "      LT:         " << op_histogram[(int)OpType::LT][i] << '\n'
-                      << "      LE:         " << op_histogram[(int)OpType::LE][i] << '\n'
-                      << "      And:        " << op_histogram[(int)OpType::And][i] << '\n'
-                      << "      Or:         " << op_histogram[(int)OpType::Or][i] << '\n'
-                      << "      Not:        " << op_histogram[(int)OpType::Not][i] << '\n'
-                      << "      Select:     " << op_histogram[(int)OpType::Select][i] << '\n'
-                      << "      ImageCall:  " << op_histogram[(int)OpType::ImageCall][i] << '\n'
-                      << "      FuncCall:   " << op_histogram[(int)OpType::FuncCall][i] << '\n'
-                      << "      SelfCall:   " << op_histogram[(int)OpType::SelfCall][i] << '\n'
-                      << "      ExternCall: " << op_histogram[(int)OpType::ExternCall][i] << '\n'
-                      << "      Let:        " << op_histogram[(int)OpType::Let][i] << '\n'
-                      << "     Memory access patterns. Columns are calls to other Funcs, self-calls, input image access, and stores\n"
-                      << "      Pointwise:      "
-                      << pointwise_accesses[0][i] << ' '
-                      << pointwise_accesses[1][i] << ' '
-                      << pointwise_accesses[2][i] << ' '
-                      << pointwise_accesses[3][i] << '\n'
-                      << "      Transpose:      "
-                      << transpose_accesses[0][i] << ' '
-                      << transpose_accesses[1][i] << ' '
-                      << transpose_accesses[2][i] << ' '
-                      << transpose_accesses[3][i] << '\n'
-                      << "      Broadcast:      "
-                      << broadcast_accesses[0][i] << ' '
-                      << broadcast_accesses[1][i] << ' '
-                      << broadcast_accesses[2][i] << ' '
-                      << broadcast_accesses[3][i] << '\n'
-                      << "      Slice:          "
-                      << slice_accesses[0][i] << ' '
-                      << slice_accesses[1][i] << ' '
-                      << slice_accesses[2][i] << ' '
-                      << slice_accesses[3][i] << '\n';
+            aslog(0) << "    Featurization for type " << type_names[i] << '\n'
+                     << "     Op histogram:\n"
+                     << "      Constant:   " << op_histogram[(int)OpType::Const][i] << '\n'
+                     << "      Cast:       " << op_histogram[(int)OpType::Cast][i] << '\n'
+                     << "      Variable:   " << op_histogram[(int)OpType::Variable][i] << '\n'
+                     << "      Param:      " << op_histogram[(int)OpType::Param][i] << '\n'
+                     << "      Add:        " << op_histogram[(int)OpType::Add][i] << '\n'
+                     << "      Sub:        " << op_histogram[(int)OpType::Sub][i] << '\n'
+                     << "      Mod:        " << op_histogram[(int)OpType::Mod][i] << '\n'
+                     << "      Mul:        " << op_histogram[(int)OpType::Mul][i] << '\n'
+                     << "      Div:        " << op_histogram[(int)OpType::Div][i] << '\n'
+                     << "      Min:        " << op_histogram[(int)OpType::Min][i] << '\n'
+                     << "      Max:        " << op_histogram[(int)OpType::Max][i] << '\n'
+                     << "      EQ:         " << op_histogram[(int)OpType::EQ][i] << '\n'
+                     << "      NE:         " << op_histogram[(int)OpType::NE][i] << '\n'
+                     << "      LT:         " << op_histogram[(int)OpType::LT][i] << '\n'
+                     << "      LE:         " << op_histogram[(int)OpType::LE][i] << '\n'
+                     << "      And:        " << op_histogram[(int)OpType::And][i] << '\n'
+                     << "      Or:         " << op_histogram[(int)OpType::Or][i] << '\n'
+                     << "      Not:        " << op_histogram[(int)OpType::Not][i] << '\n'
+                     << "      Select:     " << op_histogram[(int)OpType::Select][i] << '\n'
+                     << "      ImageCall:  " << op_histogram[(int)OpType::ImageCall][i] << '\n'
+                     << "      FuncCall:   " << op_histogram[(int)OpType::FuncCall][i] << '\n'
+                     << "      SelfCall:   " << op_histogram[(int)OpType::SelfCall][i] << '\n'
+                     << "      ExternCall: " << op_histogram[(int)OpType::ExternCall][i] << '\n'
+                     << "      Let:        " << op_histogram[(int)OpType::Let][i] << '\n'
+                     << "     Memory access patterns. Columns are calls to other Funcs, self-calls, input image access, and stores\n"
+                     << "      Pointwise:      "
+                     << pointwise_accesses[0][i] << ' '
+                     << pointwise_accesses[1][i] << ' '
+                     << pointwise_accesses[2][i] << ' '
+                     << pointwise_accesses[3][i] << '\n'
+                     << "      Transpose:      "
+                     << transpose_accesses[0][i] << ' '
+                     << transpose_accesses[1][i] << ' '
+                     << transpose_accesses[2][i] << ' '
+                     << transpose_accesses[3][i] << '\n'
+                     << "      Broadcast:      "
+                     << broadcast_accesses[0][i] << ' '
+                     << broadcast_accesses[1][i] << ' '
+                     << broadcast_accesses[2][i] << ' '
+                     << broadcast_accesses[3][i] << '\n'
+                     << "      Slice:          "
+                     << slice_accesses[0][i] << ' '
+                     << slice_accesses[1][i] << ' '
+                     << slice_accesses[2][i] << ' '
+                     << slice_accesses[3][i] << '\n';
         }
     }
-
 };
-
 
 // The schedule-dependent portion of the featurization of a stage
 struct ScheduleFeatures {
@@ -300,50 +308,49 @@ struct ScheduleFeatures {
     double working_set_at_root = 0;
 
     void dump() const {
-        aslog(0)  << "    num_realizations:                      " << num_realizations << '\n'
-                  << "    num_productions:                       " << num_productions << '\n'
-                  << "    points_computed_per_realization:       " << points_computed_per_realization << '\n'
-                  << "    points_computed_per_production:        " << points_computed_per_production << '\n'
-                  << "    points_computed_total:                 " << points_computed_total << '\n'
-                  << "    points_computed_minimum:               " << points_computed_minimum << '\n'
-                  << "    innermost_loop_extent:                 " << innermost_loop_extent << '\n'
-                  << "    innermost_pure_loop_extent:            " << innermost_pure_loop_extent << '\n'
-                  << "    unrolled_loop_extent:                  " << unrolled_loop_extent << '\n'
-                  << "    inner_parallelism:                     " << inner_parallelism << '\n'
-                  << "    outer_parallelism:                     " << outer_parallelism << '\n'
-                  << "    bytes_at_realization:                  " << bytes_at_realization << '\n'
-                  << "    bytes_at_production:                   " << bytes_at_production << '\n'
-                  << "    bytes_at_root:                         " << bytes_at_root << '\n'
-                  << "    innermost_bytes_at_realization:        " << innermost_bytes_at_realization << '\n'
-                  << "    innermost_bytes_at_production:         " << innermost_bytes_at_production << '\n'
-                  << "    innermost_bytes_at_root:               " << innermost_bytes_at_root << '\n'
-                  << "    inlined_calls:                         " << inlined_calls << '\n'
-                  << "    unique_bytes_read_per_realization:     " << unique_bytes_read_per_realization << '\n'
-                  << "    unique_lines_read_per_realization:     " << unique_lines_read_per_realization << '\n'
-                  << "    allocation_bytes_read_per_realization: " << allocation_bytes_read_per_realization << '\n'
-                  << "    working_set:                           " << working_set << '\n'
-                  << "    vector_size:                           " << vector_size << '\n'
-                  << "    native_vector_size:                    " << native_vector_size << '\n'
-                  << "    num_vectors:                           " << num_vectors << '\n'
-                  << "    num_scalars:                           " << num_scalars << '\n'
-                  << "    scalar_loads_per_vector:               " << scalar_loads_per_vector << '\n'
-                  << "    vector_loads_per_vector:               " << vector_loads_per_vector << '\n'
-                  << "    scalar_loads_per_scalar:               " << scalar_loads_per_scalar << '\n'
-                  << "    bytes_at_task:                         " << bytes_at_task << '\n'
-                  << "    innermost_bytes_at_task:               " << innermost_bytes_at_task << '\n'
-                  << "    unique_bytes_read_per_vector:          " << unique_bytes_read_per_vector << '\n'
-                  << "    unique_lines_read_per_vector:          " << unique_lines_read_per_vector << '\n'
-                  << "    unique_bytes_read_per_task:            " << unique_bytes_read_per_task << '\n'
-                  << "    unique_lines_read_per_task:            " << unique_lines_read_per_task << '\n'
-                  << "    working_set_at_task:                   " << working_set_at_task << '\n'
-                  << "    working_set_at_production:             " << working_set_at_production << '\n'
-                  << "    working_set_at_realization:            " << working_set_at_realization << '\n'
-                  << "    working_set_at_root:                   " << working_set_at_root << '\n';
-
+        aslog(0) << "    num_realizations:                      " << num_realizations << '\n'
+                 << "    num_productions:                       " << num_productions << '\n'
+                 << "    points_computed_per_realization:       " << points_computed_per_realization << '\n'
+                 << "    points_computed_per_production:        " << points_computed_per_production << '\n'
+                 << "    points_computed_total:                 " << points_computed_total << '\n'
+                 << "    points_computed_minimum:               " << points_computed_minimum << '\n'
+                 << "    innermost_loop_extent:                 " << innermost_loop_extent << '\n'
+                 << "    innermost_pure_loop_extent:            " << innermost_pure_loop_extent << '\n'
+                 << "    unrolled_loop_extent:                  " << unrolled_loop_extent << '\n'
+                 << "    inner_parallelism:                     " << inner_parallelism << '\n'
+                 << "    outer_parallelism:                     " << outer_parallelism << '\n'
+                 << "    bytes_at_realization:                  " << bytes_at_realization << '\n'
+                 << "    bytes_at_production:                   " << bytes_at_production << '\n'
+                 << "    bytes_at_root:                         " << bytes_at_root << '\n'
+                 << "    innermost_bytes_at_realization:        " << innermost_bytes_at_realization << '\n'
+                 << "    innermost_bytes_at_production:         " << innermost_bytes_at_production << '\n'
+                 << "    innermost_bytes_at_root:               " << innermost_bytes_at_root << '\n'
+                 << "    inlined_calls:                         " << inlined_calls << '\n'
+                 << "    unique_bytes_read_per_realization:     " << unique_bytes_read_per_realization << '\n'
+                 << "    unique_lines_read_per_realization:     " << unique_lines_read_per_realization << '\n'
+                 << "    allocation_bytes_read_per_realization: " << allocation_bytes_read_per_realization << '\n'
+                 << "    working_set:                           " << working_set << '\n'
+                 << "    vector_size:                           " << vector_size << '\n'
+                 << "    native_vector_size:                    " << native_vector_size << '\n'
+                 << "    num_vectors:                           " << num_vectors << '\n'
+                 << "    num_scalars:                           " << num_scalars << '\n'
+                 << "    scalar_loads_per_vector:               " << scalar_loads_per_vector << '\n'
+                 << "    vector_loads_per_vector:               " << vector_loads_per_vector << '\n'
+                 << "    scalar_loads_per_scalar:               " << scalar_loads_per_scalar << '\n'
+                 << "    bytes_at_task:                         " << bytes_at_task << '\n'
+                 << "    innermost_bytes_at_task:               " << innermost_bytes_at_task << '\n'
+                 << "    unique_bytes_read_per_vector:          " << unique_bytes_read_per_vector << '\n'
+                 << "    unique_lines_read_per_vector:          " << unique_lines_read_per_vector << '\n'
+                 << "    unique_bytes_read_per_task:            " << unique_bytes_read_per_task << '\n'
+                 << "    unique_lines_read_per_task:            " << unique_lines_read_per_task << '\n'
+                 << "    working_set_at_task:                   " << working_set_at_task << '\n'
+                 << "    working_set_at_production:             " << working_set_at_production << '\n'
+                 << "    working_set_at_realization:            " << working_set_at_realization << '\n'
+                 << "    working_set_at_root:                   " << working_set_at_root << '\n';
     }
 };
 
-}
-}
+}  // namespace Internal
+}  // namespace Halide
 
 #endif
