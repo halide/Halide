@@ -1964,7 +1964,7 @@ Func Func::copy_to_device(DeviceAPI d) {
 
     ExternFuncArgument device_interface = make_device_interface_call(d);
     func.define_extern("halide_buffer_copy", {buffer, device_interface},
-                       {call->type}, args(),      // Reuse the existing dimension names
+                       {call->type}, args(),  // Reuse the existing dimension names
                        NameMangling::C, d);
     return *this;
 }

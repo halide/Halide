@@ -701,8 +701,8 @@ void Function::define_extern(const std::string &function_name,
     std::vector<string> arg_names;
     std::vector<Expr> arg_exprs;
     for (size_t i = 0; i < args.size(); i++) {
-      arg_names.push_back(args[i].name());
-      arg_exprs.push_back(args[i]);
+        arg_names.push_back(args[i].name());
+        arg_exprs.push_back(args[i]);
     }
     contents->args = arg_names;
     contents->extern_function_name = function_name;
