@@ -2213,16 +2213,9 @@ Expr undef(Type t) {
 
 Range::Range(const Expr &min_in, const Expr &extent_in)
     : min(min_in), extent(extent_in) {
-    // It's common to pass literal-0 for min, so add a little coercion
-    // to ensure that it matches the type of extent in that case, to avoid
-    // noise at the call site.
-    if (Internal::is_zero(min) && extent.defined()) {
-        min = Internal::make_zero(extent.type());
+    if (min.defined() && extent.defined()) {
+        match_types(min, extent);
     }
-    internal_assert(!min.defined() ||
-                    !extent.defined() ||
-                    min.type() == extent.type())
-        << "Region min and extent must have same type\n";
 }
 
 }  // namespace Halide
