@@ -10,7 +10,7 @@ std::string get_env_variable(char const *env_var_name) {
         return "";
     }
 
-    #ifdef _MSC_VER
+#ifdef _MSC_VER
     // call getenv_s without a buffer to determine the correct string length:
     size_t length = 0;
     if ((getenv_s(&length, NULL, 0, env_var_name) != 0) || (length == 0)) {
@@ -24,10 +24,10 @@ std::string get_env_variable(char const *env_var_name) {
         return "";
     }
     return lvl;
-    #else
+#else
     char *lvl = getenv(env_var_name);
     if (lvl) return std::string(lvl);
-    #endif
+#endif
 
     return "";
 }

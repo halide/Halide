@@ -44,14 +44,14 @@ private:
 /**
  *  Given a Func and a corresponding adjoint, (back)propagate the
  *  adjoint to all dependent Funcs, buffers, and parameters.
- *  The bounds of output and adjoint need to be specified with pair {min, max}
+ *  The bounds of output and adjoint need to be specified with pair {min, extent}
  *  For each Func the output depends on, and for the pure definition and
  *  each update of that Func, it generates a derivative Func stored in
  *  the Derivative.
  */
 Derivative propagate_adjoints(const Func &output,
                               const Func &adjoint,
-                              const std::vector<std::pair<Expr, Expr>> &output_bounds);
+                              const Region &output_bounds);
 /**
  *  Given a Func and a corresponding adjoint buffer, (back)propagate the
  *  adjoint to all dependent Funcs, buffers, and parameters.

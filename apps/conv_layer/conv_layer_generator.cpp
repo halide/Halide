@@ -6,9 +6,9 @@ using namespace Halide;
 
 class ConvolutionLayer : public Halide::Generator<ConvolutionLayer> {
 public:
-    Input<Buffer<float>>  input{"input", 4};
-    Input<Buffer<float>>  filter{"filter", 4};
-    Input<Buffer<float>>  bias{"bias", 1};
+    Input<Buffer<float>> input{"input", 4};
+    Input<Buffer<float>> filter{"filter", 4};
+    Input<Buffer<float>> bias{"bias", 1};
 
     Output<Buffer<float>> f_ReLU{"ReLU", 4};
 
@@ -56,7 +56,8 @@ public:
                 .unroll(r.x, 3)
                 .unroll(r.y, 3)
                 .gpu_threads(x, y, z);
-        }*/ else {
+        }*/
+        else {
             // Blocking spatially with vectorization
             Var z_t("z_t"), y_t("y_t"), par("par");
             int vec_len = 8;
@@ -76,10 +77,9 @@ public:
                 .parallel(par);
             f_ReLU.reorder(n, z).parallel(z).vectorize(x, 8);
         }
-   }
+    }
 };
 
 }  // namespace
 
 HALIDE_REGISTER_GENERATOR(ConvolutionLayer, conv_layer)
-

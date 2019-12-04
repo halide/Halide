@@ -7,8 +7,8 @@
 #include <ctime>
 #include <map>
 #include <random>
-#include <string>
 #include <sstream>
+#include <string>
 
 #include "ASLog.h"
 #include "DefaultCostModel.h"
@@ -27,17 +27,17 @@ extern "C" int baseline_weights_length;
 namespace Halide {
 namespace {
 
-using Halide::Runtime::Buffer;
 using Halide::Internal::aslog;
 using Halide::Internal::PipelineFeatures;
 using Halide::Internal::ScheduleFeatures;
 using Halide::Internal::Weights;
+using Halide::Runtime::Buffer;
 
 bool ends_with(const std::string &str, const std::string &suffix) {
     if (str.size() < suffix.size()) return false;
     size_t off = str.size() - suffix.size();
     for (size_t i = 0; i < suffix.size(); i++) {
-        if (str[off+i] != suffix[i]) return false;
+        if (str[off + i] != suffix[i]) return false;
     }
     return true;
 }
@@ -51,14 +51,13 @@ class DefaultCostModel : public CostModel {
     const std::string weights_in_path, weights_out_path;
     const bool randomize_weights;
 
- public:
-
+public:
     DefaultCostModel(const std::string &weights_in_path,
                      const std::string &weights_out_path,
-                     bool randomize_weights) :
-        weights_in_path(weights_in_path),
-        weights_out_path(weights_out_path),
-        randomize_weights(randomize_weights) {
+                     bool randomize_weights)
+        : weights_in_path(weights_in_path),
+          weights_out_path(weights_out_path),
+          randomize_weights(randomize_weights) {
 
         load_weights();
     }
@@ -75,7 +74,7 @@ class DefaultCostModel : public CostModel {
         // We know the most stages that will ever be enqueued from the schedule features
         assert(pipeline_feat_queue.data() && "Call set_schedule_features before calling enqueue\n");
         const int max_num_stages = pipeline_feat_queue.dim(2).extent();
-        if (num_stages > max_num_stages){
+        if (num_stages > max_num_stages) {
             std::cerr
                 << "schedule features has more stages (" << num_stages
                 << ") than pipeline features (" << max_num_stages << ")\n";
@@ -154,22 +153,22 @@ class DefaultCostModel : public CostModel {
         }
 
         int result = train_cost_model(num_stages,
-                         cursor,
-                         num_cores,
-                         pipeline_feat_queue,
-                         schedule_feat_queue,
-                         weights.head1_filter, weights.head1_bias,
-                         weights.head2_filter, weights.head2_bias,
-                         weights.conv1_filter, weights.conv1_bias,
-                         learning_rate, timestep++,
-                         fastest_idx,
-                         true_runtimes.alias(),
-                         head1_filter_update, head1_bias_update,
-                         head2_filter_update, head2_bias_update,
-                         conv1_filter_update, conv1_bias_update,
-                         dst,
-                         loss);
-        (void) result;
+                                      cursor,
+                                      num_cores,
+                                      pipeline_feat_queue,
+                                      schedule_feat_queue,
+                                      weights.head1_filter, weights.head1_bias,
+                                      weights.head2_filter, weights.head2_bias,
+                                      weights.conv1_filter, weights.conv1_bias,
+                                      learning_rate, timestep++,
+                                      fastest_idx,
+                                      true_runtimes.alias(),
+                                      head1_filter_update, head1_bias_update,
+                                      head2_filter_update, head2_bias_update,
+                                      conv1_filter_update, conv1_bias_update,
+                                      dst,
+                                      loss);
+        (void)result;
         assert(result == 0);
 
         bool any_nans = false;
@@ -197,7 +196,7 @@ class DefaultCostModel : public CostModel {
 
         // Update weights locally
         auto update_weight = [](const Buffer<float> &src, Buffer<float> &dst) {
-            dst.copy_from(src.sliced(src.dimensions()-1, 0));
+            dst.copy_from(src.sliced(src.dimensions() - 1, 0));
         };
         update_weight(head1_filter_update, weights.head1_filter);
         update_weight(head1_bias_update, weights.head1_bias);
@@ -222,16 +221,16 @@ class DefaultCostModel : public CostModel {
         auto loss = Buffer<float>::make_scalar();
 
         int result = cost_model(num_stages,
-                   cursor,
-                   num_cores,
-                   pipeline_feat_queue,
-                   schedule_feat_queue,
-                   weights.head1_filter, weights.head1_bias,
-                   weights.head2_filter, weights.head2_bias,
-                   weights.conv1_filter, weights.conv1_bias,
-                   0.0f, 0, 0, nullptr,
-                   dst, loss);
-        (void) result;
+                                cursor,
+                                num_cores,
+                                pipeline_feat_queue,
+                                schedule_feat_queue,
+                                weights.head1_filter, weights.head1_bias,
+                                weights.head2_filter, weights.head2_bias,
+                                weights.conv1_filter, weights.conv1_bias,
+                                0.0f, 0, 0, nullptr,
+                                dst, loss);
+        (void)result;
         assert(result == 0);
 
         for (int i = 0; i < cursor; i++) {
@@ -250,7 +249,7 @@ class DefaultCostModel : public CostModel {
             // This copy shouldn't be necessary, but std::istream in C++ doesn't seem
             // to have a convenient wrap-around-constant-data variant... and since
             // this isn't much data, just copy it.
-            const std::string baseline_weights_data((const char*) &baseline_weights[0], baseline_weights_length);
+            const std::string baseline_weights_data((const char *)&baseline_weights[0], baseline_weights_length);
             std::istringstream i(baseline_weights_data);
             if (!weights.load(i)) {
                 std::cerr << "The built-in baseline weights should never fail to load\n";
@@ -276,23 +275,25 @@ class DefaultCostModel : public CostModel {
         if (!need_randomize && weights.pipeline_features_version != PipelineFeatures::version()) {
             // Emit to cout (rather than cerr) because the latter is hidden during the autotune loop,
             // and we want this to be seen.
-            std::cout << "WARNING: loaded weights have pipeline_version = " << weights.pipeline_features_version
-                << " but current pipeline_version is " << PipelineFeatures::version() << "; the weights may be "
-                "invalid. Using anyway.\n";
+            std::cout << "WARNING: loaded weights have pipeline_version = "
+                      << weights.pipeline_features_version
+                      << " but current pipeline_version is " << PipelineFeatures::version()
+                      << "; the weights may be invalid. Using anyway.\n";
         }
 
         if (!need_randomize && weights.schedule_features_version != ScheduleFeatures::version()) {
             // Emit to cout (rather than cerr) because the latter is hidden during the autotune loop,
             // and we want this to be seen.
-            std::cout << "WARNING: loaded weights have schedule_features_version = " << weights.schedule_features_version
-                << " but current schedule_features_version is " << ScheduleFeatures::version() << "; the weights may be "
-                "invalid. Using anyway.\n";
+            std::cout << "WARNING: loaded weights have schedule_features_version = "
+                      << weights.schedule_features_version
+                      << " but current schedule_features_version is " << ScheduleFeatures::version()
+                      << "; the weights may be invalid. Using anyway.\n";
         }
 
         if (need_randomize) {
             auto seed = time(NULL);
             std::cout << "Randomizing weights using seed = " << seed << "\n";
-            weights.randomize((uint32_t) seed);
+            weights.randomize((uint32_t)seed);
         }
 
         // Update so that any version of this we save will have the current version
@@ -324,7 +325,6 @@ class DefaultCostModel : public CostModel {
     void reset() override {
         cursor = 0;
     }
-
 };
 
 }  // namespace

@@ -47,4 +47,3 @@ struct Weights {
 
 }  // namespace Internal
 }  // namespace Halide
-
