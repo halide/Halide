@@ -1238,12 +1238,21 @@ std::vector<char> compile_to_wasm(const Module &module, const std::string &fn_na
     for (int i = 0; i < c; ++i)
         lld_args[i] = lld_arg_strs[i].c_str();
 
+#if LLVM_VERSION >= 100
+    std::string lld_errs_string;
+    llvm::raw_string_ostream lld_errs(lld_errs_string);
+
+    if (!lld::wasm::link(lld_args, /*CanExitEarly*/ false, llvm::outs(), lld_errs)) {
+        internal_error << "lld::wasm::link failed: (" << lld_errs.str() << ")\n";
+    }
+#else
     std::string lld_errs_string;
     llvm::raw_string_ostream lld_errs(lld_errs_string);
 
     if (!lld::wasm::link(lld_args, /*CanExitEarly*/ false, lld_errs)) {
         internal_error << "lld::wasm::link failed: (" << lld_errs.str() << ")\n";
     }
+#endif
 
 #if WASM_DEBUG_LEVEL
     wasm_output.detach();
