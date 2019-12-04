@@ -1137,6 +1137,24 @@ struct LoopNest {
         return pure->vectorized_loop_index;
     }
 
+    int get_vectorized_loop_index_from_pure_stage(const LoopNest& root) const {
+        int v = vectorized_loop_index;
+        if (v < 0) {
+            v = root.get_pure_stage_vectorized_loop_index(node);
+        }
+
+        // For update stages, it's possible that the pure stage's vectorized
+        // loop index is larger than the dimensions of the update stage e.g.
+        // the pure stage's vectorized loop index is 3, but the update stage
+        // has 3 or fewer dimensions. In this case, the vectorized loop
+        // index should just be its innermost dimension i.e. 0
+        if ((size_t)v >= stage->loop.size()) {
+            v = 0;
+        }
+
+        return v;
+    }
+
     // Get the stride over "node's" storage for a unit increment in the vectorized loop's
     // index
     double storage_stride(const LoadJacobian& jac, int innermost_storage_dim, const FunctionDAG::Node* storage_node, const Bound& store_bounds, const LoopNest& root) const {
@@ -1160,10 +1178,7 @@ struct LoopNest {
             storage_stride *= store_bounds->region_required(storage_dims[i]).extent();
         }
 
-        int v = vectorized_loop_index;
-        if (v < 0) {
-            v = root.get_pure_stage_vectorized_loop_index(node);
-        }
+        int v = get_vectorized_loop_index_from_pure_stage(root);
 
         double stride = 0;
         for (std::size_t i = 0; i < storage_dims.size(); i++) {
@@ -1177,10 +1192,8 @@ struct LoopNest {
     }
 
     bool all_strides_exist(const LoadJacobian& jac, const FunctionDAG::Node* storage_node, const LoopNest& root) const {
-        int v = vectorized_loop_index;
-        if (v < 0) {
-            v = root.get_pure_stage_vectorized_loop_index(node);
-        }
+        int v = get_vectorized_loop_index_from_pure_stage(root);
+
         for (int i = 0; i < storage_node->dimensions; i++) {
             auto stride = jac(i, v);
 
