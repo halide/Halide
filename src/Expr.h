@@ -391,13 +391,7 @@ struct Range {
     Expr min, extent;
 
     Range() = default;
-    Range(const Expr &min, const Expr &extent)
-        : min(min), extent(extent) {
-        internal_assert(!min.defined() ||
-                        !extent.defined() ||
-                        min.type() == extent.type())
-            << "Region min and extent must have same type\n";
-    }
+    Range(const Expr &min_in, const Expr &extent_in);
 };
 
 /** A multi-dimensional box. The outer product of the elements */
