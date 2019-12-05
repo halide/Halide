@@ -72,17 +72,17 @@
 #include <unordered_map>
 #include <unordered_set>
 
-#include "Halide.h"
 #include "ASLog.h"
+#include "AutoSchedule.h"
 #include "CostModel.h"
 #include "DefaultCostModel.h"
+#include "Errors.h"
 #include "Featurization.h"
 #include "FunctionDAG.h"
+#include "Halide.h"
 #include "LoopNest.h"
-#include "PerfectHashMap.h"
-#include "Errors.h"
 #include "NetworkSize.h"
-#include "AutoSchedule.h"
+#include "PerfectHashMap.h"
 
 #ifdef _WIN32
 #include <io.h>
@@ -93,11 +93,11 @@ namespace Halide {
 namespace Internal {
 namespace Autoscheduler {
 
+using std::map;
+using std::pair;
+using std::set;
 using std::string;
 using std::vector;
-using std::map;
-using std::set;
-using std::pair;
 
 struct ProgressBar {
     void set(double progress) {
@@ -105,7 +105,7 @@ struct ProgressBar {
         counter++;
         const int bits = 11;
         if (counter & ((1 << bits) - 1)) return;
-        const int pos = (int) (progress * 78);
+        const int pos = (int)(progress * 78);
         aslog(0) << '[';
         for (int j = 0; j < 78; j++) {
             if (j < pos) {
@@ -124,15 +124,19 @@ struct ProgressBar {
 
     void clear() {
         if (counter) {
-            for (int j = 0; j < 80; j++) aslog(0) << ' ';
-            for (int j = 0; j < 80; j++) aslog(0) << '\b';
+            for (int j = 0; j < 80; j++) {
+                aslog(0) << ' ';
+            }
+            for (int j = 0; j < 80; j++) {
+                aslog(0) << '\b';
+            }
         }
     }
+
 private:
     uint32_t counter = 0;
     const bool draw_progress_bar = isatty(2);
 };
-
 
 // Get the HL_RANDOM_DROPOUT environment variable. Purpose of this is described above.
 uint32_t get_dropout_threshold() {
@@ -163,7 +167,6 @@ bool random_dropout(std::mt19937 &rng, size_t num_decisions) {
     return drop_it;
 }
 
-
 struct State {
     mutable RefCount ref_count;
     IntrusivePtr<const LoopNest> root;
@@ -192,7 +195,7 @@ struct State {
                                    const LoopNest *here, int depth) {
         for (const auto &c : here->children) {
             p.emplace(c.get(), pair<const LoopNest *, int>{here, depth});
-            compute_loop_nest_parents(p, c.get(), depth+1);
+            compute_loop_nest_parents(p, c.get(), depth + 1);
         }
     }
 
@@ -344,7 +347,7 @@ struct State {
 
         // Perform some addition pruning before burdening the cost model with silly states
         for (auto it = features.begin(); it != features.end(); it++) {
-            if (!it.key()->node->is_wrapper) { // It's OK to repeatedly stage data
+            if (!it.key()->node->is_wrapper) {  // It's OK to repeatedly stage data
                 auto &feat = it.value();
                 if (feat.points_computed_total + feat.inlined_calls > 8 * feat.points_computed_minimum) {
                     cost = 1e50;
@@ -424,7 +427,7 @@ struct State {
                            std::function<void(IntrusivePtr<State> &&)> &accept_child) const {
         internal_assert(root.defined() && root->is_root());
 
-        if (num_decisions_made == 2*(int)dag.nodes.size()) {
+        if (num_decisions_made == 2 * (int)dag.nodes.size()) {
             return;
         }
 
@@ -628,7 +631,7 @@ struct State {
                             const double tasks_per_core = ((double)total) / params.parallelism;
                             o.idle_core_wastage = std::max(o.idle_core_wastage,
                                                            std::ceil(tasks_per_core) /
-                                                           tasks_per_core);
+                                                               tasks_per_core);
                         }
                     }
 
@@ -677,14 +680,14 @@ struct State {
                                 vector<int64_t> tiling = c->size;
                                 int64_t total = 1;
                                 for (size_t i = c->size.size(); i > 0; i--) {
-                                    if (!c->stage->loop[i-1].pure || total >= params.parallelism) {
-                                        tiling[i-1] = 1;
+                                    if (!c->stage->loop[i - 1].pure || total >= params.parallelism) {
+                                        tiling[i - 1] = 1;
                                     }
-                                    while (tiling[i-1] > 1 &&
-                                           total * tiling[i-1] > params.parallelism * 8) {
-                                        tiling[i-1] /= 2;
+                                    while (tiling[i - 1] > 1 &&
+                                           total * tiling[i - 1] > params.parallelism * 8) {
+                                        tiling[i - 1] /= 2;
                                     }
-                                    total *= tiling[i-1];
+                                    total *= tiling[i - 1];
                                 }
                                 c = c->parallelize_in_tiles(params, tiling, new_root);
                             }
@@ -700,7 +703,6 @@ struct State {
             }
         }
 
-
         if (num_children == 0) {
             aslog(0) << "Warning: Found no legal way to schedule "
                      << node->func.name() << " in the following State:\n";
@@ -708,7 +710,6 @@ struct State {
             // All our children died. Maybe other states have had
             // children. Carry on.
         }
-
     }
 
     void dump() const {
@@ -814,9 +815,9 @@ struct State {
                     // Outermost, and next outermost. Preserve the inner
                     // name to not invalidate any compute_ats.
                     p.second->schedule_source << "\n    .fuse(" << parallel_vars[i].name()
-                                              << ", " << parallel_vars[i-1].name()
+                                              << ", " << parallel_vars[i - 1].name()
                                               << ", " << parallel_vars[i].name() << ")";
-                    stage.fuse(parallel_vars[i], parallel_vars[i-1], parallel_vars[i]);
+                    stage.fuse(parallel_vars[i], parallel_vars[i - 1], parallel_vars[i]);
                 }
                 if (!parallel_vars.empty()) {
                     p.second->schedule_source << "\n    .parallel(" << parallel_vars.back().name() << ")";
@@ -833,7 +834,7 @@ struct State {
             if (p.first->index == 0 && p.second->vector_dim > 0) {
                 vector<Var> storage_vars = Func(p.first->node->func).args();
                 for (int i = p.second->vector_dim; i > 0; i--) {
-                    std::swap(storage_vars[i], storage_vars[i-1]);
+                    std::swap(storage_vars[i], storage_vars[i - 1]);
                 }
                 p.second->schedule_source << "\n    .reorder_storage(";
                 bool first = true;
@@ -879,6 +880,7 @@ private:
 
     std::vector<IntrusivePtr<State>> storage;
     size_t sz = 0;
+
 public:
     void emplace(IntrusivePtr<State> &&s) {
         if (sz >= storage.size()) {
@@ -939,7 +941,7 @@ void configure_pipeline_features(const FunctionDAG &dag,
     // We ignore the first seven pipeline features in the cost
     // model. It's just a mask of which types are in use.
     static_assert(sizeof(PipelineFeatures) - 7 * sizeof(int) ==
-                  sizeof(int) * pipeline_feat_size,
+                      sizeof(int) * pipeline_feat_size,
                   "Incorrect size for pipeline features");
     int num_stages = 0;
     for (const auto &n : dag.nodes) {
@@ -954,8 +956,8 @@ void configure_pipeline_features(const FunctionDAG &dag,
             const int *pipeline_feats = (const int *)(&(s.features)) + 7;
             // skip the first 7 features
             for (int i = 0; i < pipeline_feat_size; i++) {
-                int x = i/7;
-                int y = i%7;
+                int x = i / 7;
+                int y = i % 7;
                 pipeline_features(x, y, stage) = pipeline_feats[i];
             }
             stage += 1;
@@ -994,29 +996,28 @@ IntrusivePtr<State> optimal_schedule_pass(FunctionDAG &dag,
 
     std::function<void(IntrusivePtr<State> &&)> enqueue_new_children =
         [&](IntrusivePtr<State> &&s) {
+            // aslog(0) << "\n** Generated child: ";
+            // s->dump();
+            // s->calculate_cost(dag, params, nullptr, true);
 
-        // aslog(0) << "\n** Generated child: ";
-        // s->dump();
-        // s->calculate_cost(dag, params, nullptr, true);
+            // Each child should have one more decision made than its parent state.
+            internal_assert(s->num_decisions_made == s->parent->num_decisions_made + 1);
 
-        // Each child should have one more decision made than its parent state.
-        internal_assert(s->num_decisions_made == s->parent->num_decisions_made + 1);
+            int progress = s->num_decisions_made * beam_size + expanded;
+            size_t max_progress = dag.nodes.size() * beam_size * 2;
 
-        int progress = s->num_decisions_made * beam_size + expanded;
-        size_t max_progress = dag.nodes.size() * beam_size * 2;
+            // Update the progress bar
+            tick.set(double(progress) / max_progress);
+            s->penalized = false;
 
-        // Update the progress bar
-        tick.set(double(progress) / max_progress);
-        s->penalized = false;
-
-        // Add the state to the list of states to evaluate
-        q.emplace(std::move(s));
-    };
+            // Add the state to the list of states to evaluate
+            q.emplace(std::move(s));
+        };
 
     string cyos_str = get_env_variable("HL_CYOS");
 
     // This loop is beam search over the sequence of decisions to make.
-    for (int i = 0; ; i++) {
+    for (int i = 0;; i++) {
         std::unordered_map<uint64_t, int> hashes;
         q.swap(pending);
 
@@ -1047,7 +1048,7 @@ IntrusivePtr<State> optimal_schedule_pass(FunctionDAG &dag,
         expanded = 0;
         while (expanded < beam_size && !pending.empty()) {
 
-            IntrusivePtr<State> state {pending.pop()};
+            IntrusivePtr<State> state{pending.pop()};
 
             if (beam_size > 1 && num_passes > 1) {
                 // We are doing coarse-to-fine beam search using the
@@ -1091,7 +1092,7 @@ IntrusivePtr<State> optimal_schedule_pass(FunctionDAG &dag,
                 continue;
             }
 
-            if (state->num_decisions_made == 2*(int)dag.nodes.size()) {
+            if (state->num_decisions_made == 2 * (int)dag.nodes.size()) {
                 // We've reached the end of the pass. The first state
                 // must be the best, because we're pulling off a
                 // priority queue.
@@ -1194,7 +1195,7 @@ IntrusivePtr<State> optimal_schedule(FunctionDAG &dag,
         ProgressBar tick;
 
         auto pass = optimal_schedule_pass(dag, outputs, params, cost_model,
-            rng, beam_size, i, num_passes, tick, permitted_hashes);
+                                          rng, beam_size, i, num_passes, tick, permitted_hashes);
 
         tick.clear();
 
@@ -1219,9 +1220,9 @@ IntrusivePtr<State> optimal_schedule(FunctionDAG &dag,
 
 // The main entrypoint to generate a schedule for a pipeline.
 void generate_schedule(const std::vector<Function> &outputs,
-                              const Target &target,
-                              const MachineParams &params,
-                              AutoSchedulerResults *auto_scheduler_results) {
+                       const Target &target,
+                       const MachineParams &params,
+                       AutoSchedulerResults *auto_scheduler_results) {
     aslog(0) << "generate_schedule for target=" << target.to_string() << "\n";
 
     // Start a timer
@@ -1237,7 +1238,7 @@ void generate_schedule(const std::vector<Function> &outputs,
         seed = atoi(seed_str.c_str());
     }
     aslog(1) << "Dropout seed = " << seed << '\n';
-    std::mt19937 rng((uint32_t) seed);
+    std::mt19937 rng((uint32_t)seed);
 
     // Get the beam size
     string beam_size_str = get_env_variable("HL_BEAM_SIZE");
@@ -1341,14 +1342,13 @@ struct RegisterAutoscheduler {
     }
 } register_auto_scheduler;
 
-
 // An alternative entrypoint for other uses
-void find_and_apply_schedule(FunctionDAG& dag,
+void find_and_apply_schedule(FunctionDAG &dag,
                              const std::vector<Function> &outputs,
                              const MachineParams &params,
-                             CostModel* cost_model,
+                             CostModel *cost_model,
                              int beam_size,
-                             StageMap<ScheduleFeatures>* schedule_features) {
+                             StageMap<ScheduleFeatures> *schedule_features) {
 
     std::mt19937 rng(12345);
     IntrusivePtr<State> optimal = optimal_schedule(dag, outputs, params, cost_model, rng, beam_size);
@@ -1361,21 +1361,28 @@ void find_and_apply_schedule(FunctionDAG& dag,
     }
 }
 
-}
-
+}  // namespace Autoscheduler
 
 // Intrusive shared ptr helpers.
 template<>
-RefCount &ref_count<Autoscheduler::LoopNest>(const Autoscheduler::LoopNest *t) noexcept {return t->ref_count;}
-
-template<>
-void destroy<Autoscheduler::LoopNest>(const Autoscheduler::LoopNest *t) {delete t;}
-
-template<>
-RefCount &ref_count<Autoscheduler::State>(const Autoscheduler::State *t) noexcept {return t->ref_count;}
-
-template<>
-void destroy<Autoscheduler::State>(const Autoscheduler::State *t) {delete t;}
-
+RefCount &ref_count<Autoscheduler::LoopNest>(const Autoscheduler::LoopNest *t) noexcept {
+    return t->ref_count;
 }
+
+template<>
+void destroy<Autoscheduler::LoopNest>(const Autoscheduler::LoopNest *t) {
+    delete t;
 }
+
+template<>
+RefCount &ref_count<Autoscheduler::State>(const Autoscheduler::State *t) noexcept {
+    return t->ref_count;
+}
+
+template<>
+void destroy<Autoscheduler::State>(const Autoscheduler::State *t) {
+    delete t;
+}
+
+}  // namespace Internal
+}  // namespace Halide

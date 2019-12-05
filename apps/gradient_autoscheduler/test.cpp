@@ -13,7 +13,7 @@ int main(int argc, char **argv) {
 
     Var x("x"), y("y");
 
-    { // Simple 1D pointwise operations. Should inline.
+    {  // Simple 1D pointwise operations. Should inline.
         Func in("in");
         in(x) = cast<float>(x);
         Func f0("f0");
@@ -32,7 +32,7 @@ int main(int argc, char **argv) {
         std::cout << std::endl;
     }
 
-    { // Simple 2D pointwise operations. Should inline.
+    {  // Simple 2D pointwise operations. Should inline.
         Func in("in");
         in(x, y) = cast<float>(x + y);
         Func f0("f0");
@@ -43,7 +43,7 @@ int main(int argc, char **argv) {
         f2(x, y) = f1(x, y) * f1(x, y);
 
         f2.set_estimate(x, 0, 1000)
-          .set_estimate(y, 0, 1000);
+            .set_estimate(y, 0, 1000);
 
         AutoSchedulerResults result =
             Pipeline(f2).auto_schedule(target, params);
@@ -52,7 +52,7 @@ int main(int argc, char **argv) {
         std::cout << std::endl;
     }
 
-    { // 1D Convolution.
+    {  // 1D Convolution.
         Func in("in");
         in(x) = cast<float>(x);
         RDom r(0, 5);
@@ -68,7 +68,7 @@ int main(int argc, char **argv) {
         std::cout << std::endl;
     }
 
-    { // 2D Convolution.
+    {  // 2D Convolution.
         Func in("in");
         in(x, y) = cast<float>(x + y);
         RDom r(0, 5, 0, 5);
@@ -76,7 +76,7 @@ int main(int argc, char **argv) {
         f0(x, y) += in(x + r.x, y + r.y) / 25.f;
 
         f0.set_estimate(x, 0, 1000)
-          .set_estimate(y, 0, 1000);
+            .set_estimate(y, 0, 1000);
 
         AutoSchedulerResults result =
             Pipeline(f0).auto_schedule(target, params);
@@ -85,7 +85,7 @@ int main(int argc, char **argv) {
         std::cout << std::endl;
     }
 
-    { // 1D Histogram.
+    {  // 1D Histogram.
         Func in("in");
         in(x) = x % 10;
         RDom r(0, 1000);
@@ -102,7 +102,7 @@ int main(int argc, char **argv) {
         std::cout << std::endl;
     }
 
-    { // 2D Histogram.
+    {  // 2D Histogram.
         Func in("in");
         in(x, y) = (x + y) % 10;
         RDom r(0, 1000, 0, 1000);
@@ -119,7 +119,7 @@ int main(int argc, char **argv) {
         std::cout << std::endl;
     }
 
-    { // 2D Histogram, but the domain is much larger.
+    {  // 2D Histogram, but the domain is much larger.
         Func in("in");
         in(x, y) = (x + y) % 10000;
         RDom r(0, 1000, 0, 1000);
@@ -136,7 +136,7 @@ int main(int argc, char **argv) {
         std::cout << std::endl;
     }
 
-    { // Test for conjunction use of bound and estimates.
+    {  // Test for conjunction use of bound and estimates.
         Func in("in");
         in(x, y) = cast<float>(x + y);
         Func f0("f0");
@@ -149,7 +149,7 @@ int main(int argc, char **argv) {
         f2.bound(x, 0, 4);
         // make sure it also works if we reverse the estimate order
         f2.set_estimate(y, 0, 1024)
-          .set_estimate(x, 0, 4);
+            .set_estimate(x, 0, 4);
 
         AutoSchedulerResults result =
             Pipeline(f2).auto_schedule(target, params);

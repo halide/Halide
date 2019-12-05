@@ -4,8 +4,8 @@
 
 #include "Halide.h"
 
-#include "cost_model_schedule.h"
 #include "NetworkSize.h"
+#include "cost_model_schedule.h"
 
 using namespace Halide;
 using Halide::Derivative;
@@ -13,12 +13,16 @@ using Halide::Derivative;
 // A model weight is either just an input, or an input and an output
 // (the updated weights and the ADAM state) depending on whether we're
 // doing inference or training.
-template<bool training> struct ModelWeight;
+template<bool training>
+struct ModelWeight;
 
 template<>
 struct ModelWeight<false> : public GeneratorInput<Buffer<float>> {
-    ModelWeight(const std::string &name, int dim) : GeneratorInput<Buffer<float>>(name, dim) {}
-    void backprop(const Derivative &d, Expr learning_rate, Expr timestep) {}
+    ModelWeight(const std::string &name, int dim)
+        : GeneratorInput<Buffer<float>>(name, dim) {
+    }
+    void backprop(const Derivative &d, Expr learning_rate, Expr timestep) {
+    }
     void set_shape(int s0 = 0, int s1 = 0, int s2 = 0) {
         if (s0) dim(0).set_bounds(0, s0);
         if (s1) dim(1).set_bounds(0, s1);
@@ -30,10 +34,13 @@ template<>
 struct ModelWeight<true> : public GeneratorInput<Buffer<float>> {
     GeneratorOutput<Buffer<float>> grad;
 
-    ModelWeight(const std::string &name, int dim) : GeneratorInput<Buffer<float>>(name, dim), grad("updated_" + name, dim + 1) {}
+    ModelWeight(const std::string &name, int dim)
+        : GeneratorInput<Buffer<float>>(name, dim), grad("updated_" + name, dim + 1) {
+    }
     void backprop(const Derivative &d, Expr learning_rate, Expr timestep) {
         std::vector<Expr> args(dimensions() + 1);
-        for (auto &e : args) e = Var();
+        for (auto &e : args)
+            e = Var();
         grad(args) = undef<float>();
 
         // We'll report back the new weights and the loss gradients,
@@ -86,7 +93,6 @@ struct ModelWeight<true> : public GeneratorInput<Buffer<float>> {
             grad.dim(1).set_estimate(0, s1);
             grad.bound(grad.args()[1], 0, s1);
             grad.set_estimate(grad.args()[1], 0, s1);
-
         }
         if (s2) {
             dim(2).set_bounds(0, s2);
@@ -104,54 +110,56 @@ struct ModelWeight<true> : public GeneratorInput<Buffer<float>> {
 template<bool training>
 class CostModel : public Generator<CostModel<training>> {
 public:
-    template<typename T> using Input = GeneratorInput<T>;
-    template<typename T> using Output = GeneratorOutput<T>;
+    template<typename T>
+    using Input = GeneratorInput<T>;
+    template<typename T>
+    using Output = GeneratorOutput<T>;
     using Generator<CostModel<training>>::auto_schedule;
     using Generator<CostModel<training>>::get_pipeline;
 
     // Number of pipeline stages
-    Input<int> num_stages{ "num_stages", 1 };
+    Input<int> num_stages{"num_stages", 1};
 
     // Batch size. Every item in the batch is a different schedule for
     // the same algorithm.
-    Input<int> batch_size{ "batch_size", 1 };
+    Input<int> batch_size{"batch_size", 1};
 
     // Number of cores on the target machine. Used to reason about idle cores.
-    Input<int> num_cores{ "num_cores", 1 };
+    Input<int> num_cores{"num_cores", 1};
 
     // Algorithm-specific features
-    Input<Buffer<float>> pipeline_features{ "pipeline_features", 3 };
+    Input<Buffer<float>> pipeline_features{"pipeline_features", 3};
 
     // Schedule-specific features
-    Input<Buffer<float>> schedule_features{ "schedule_features", 3 };
+    Input<Buffer<float>> schedule_features{"schedule_features", 3};
 
     // Network weights. We use some template-fu so that they are
     // inputs in inference mode, and inputs and outputs in training
     // mode.
     using Weight = ModelWeight<training>;
-    Weight head1_filter{ "head1_filter", 3 };
-    Weight head1_bias{ "head1_bias", 1 };
-    Weight head2_filter{ "head2_filter", 2 };
-    Weight head2_bias{ "head2_bias", 1 };
-    Weight filter1{ "filter1", 2 };
-    Weight bias1{ "bias1", 1 };
+    Weight head1_filter{"head1_filter", 3};
+    Weight head1_bias{"head1_bias", 1};
+    Weight head2_filter{"head2_filter", 2};
+    Weight head2_bias{"head2_bias", 1};
+    Weight filter1{"filter1", 2};
+    Weight bias1{"bias1", 1};
 
     // Some extra inputs for training mode.
-    Input<float> learning_rate{ "learning_rate", 1.0f };
-    Input<int> timestep{ "timestep", 0 }; // Needed by ADAM
+    Input<float> learning_rate{"learning_rate", 1.0f};
+    Input<int> timestep{"timestep", 0};  // Needed by ADAM
 
     // The index of the fastest schedule in the batch. Used as a
     // reference point for computing relative throughput.
-    Input<int> reference{ "reference", 0 };
+    Input<int> reference{"reference", 0};
 
     // The true runtimes obtained by benchmarking.
-    Input<Buffer<float>> true_runtime{ "true_runtime", 1 };
+    Input<Buffer<float>> true_runtime{"true_runtime", 1};
 
     // The predicted runtimes
-    Output<Buffer<float>> prediction_output{ "prediction_output", 1 };
+    Output<Buffer<float>> prediction_output{"prediction_output", 1};
 
     // The loss. L2 on relative throughput.
-    Output<Buffer<float>> loss_output { "loss_output", 0 };
+    Output<Buffer<float>> loss_output{"loss_output", 0};
 
     // Zero pad alone the last dimension of a Func
     Func pad_stages(Func f, Expr stages) {
@@ -409,7 +417,7 @@ public:
             // Our loss will be L2 on relative throughput.
 
             // Get the reference runtime.
-            Expr n2 = clamp(reference, 0, batch_size-1);
+            Expr n2 = clamp(reference, 0, batch_size - 1);
             Expr scale = 1.0f / true_runtime(n2);
 
             // Compute the relative true runtime and the relative predicted runtime
@@ -417,7 +425,7 @@ public:
             Expr r1 = true_runtime(n) * scale;
 
             // Invert them to get relative throughput, and compute L2 loss.
-            Expr delta = pow(1.0f/max(p1, 1e-10f) - 1.0f/r1, 2);
+            Expr delta = pow(1.0f / max(p1, 1e-10f) - 1.0f / r1, 2);
 
             // Add the regulization with a small weight.
             err(n) = delta + 1e-5f * regularize;
@@ -484,19 +492,35 @@ public:
             auto schedule_conv = [&](Func conv, Func relu, RVar r_channels) {
                 Var ci, wi;
                 if (!training) {
-                    relu.compute_at(prediction_output, n).store_at(prediction_output, no)
+                    relu
+                        .compute_at(prediction_output, n)
+                        .store_at(prediction_output, no)
                         .tile(c, w, ci, wi, vec, 4, TailStrategy::RoundUp)
                         .vectorize(ci);
                     conv.compute_at(relu, c);
                 } else {
                     // In training mode, we need the conv activations pre-relu too
-                    conv.in().compute_root()
+                    conv.in()
+                        .compute_root()
                         .tile(c, w, ci, wi, vec, 1, TailStrategy::RoundUp)
-                        .vectorize(ci).unroll(wi).parallel(n, 8);
+                        .vectorize(ci)
+                        .unroll(wi)
+                        .parallel(n, 8);
                     conv.compute_at(conv.in(), c);
-                    relu.compute_root().reorder_storage(c, w, n).reorder(c, w, n).vectorize(c, vec).parallel(n, 8);
+                    relu
+                        .compute_root()
+                        .reorder_storage(c, w, n)
+                        .reorder(c, w, n)
+                        .vectorize(c, vec)
+                        .parallel(n, 8);
                 }
-                conv.vectorize(c).unroll(w).update().vectorize(c).unroll(w).reorder(c, w, r_channels);
+                conv
+                    .vectorize(c)
+                    .unroll(w)
+                    .update()
+                    .vectorize(c)
+                    .unroll(w)
+                    .reorder(c, w, r_channels);
             };
 
             // Pipeline features processing
@@ -508,10 +532,12 @@ public:
             // across the batch.
             if (!training) {
                 normalized_schedule_features
-                    .compute_at(prediction_output, no).vectorize(n);
+                    .compute_at(prediction_output, no)
+                    .vectorize(n);
             } else {
                 normalized_schedule_features
-                    .compute_root().vectorize(n, 8);
+                    .compute_root()
+                    .vectorize(n, 8);
             }
 
             // conv+relu layers

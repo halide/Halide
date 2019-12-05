@@ -50,7 +50,7 @@ HalideExtern_2(int, an_extern_c_func, int, float);
 
 class PipelineCpp : public Halide::Generator<PipelineCpp> {
 public:
-    Input<Buffer<uint16_t>>  input{"input", 2};
+    Input<Buffer<uint16_t>> input{"input", 2};
     Output<Buffer<uint16_t>> output{"output", 2};
 
     void generate() {

@@ -1,9 +1,9 @@
 #include <time.h>
 
+#include <iostream>
 #include <map>
 #include <random>
 #include <vector>
-#include <iostream>
 
 #include "PerfectHashMap.h"
 
@@ -12,7 +12,9 @@ using std::vector;
 
 struct Key {
     int id, max_id;
-    Key(int i, int m) : id(i), max_id(m) {}
+    Key(int i, int m)
+        : id(i), max_id(m) {
+    }
 };
 
 int main(int argc, char **argv) {

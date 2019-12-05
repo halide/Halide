@@ -19,8 +19,7 @@ void define_derivative(py::module &m) {
         });
 
     m.def("propagate_adjoints",
-        (Derivative (*)(const Func &, const Func &,
-            const std::vector<std::pair<Expr, Expr>> &))&propagate_adjoints);
+        (Derivative (*)(const Func &, const Func &, const Region &))&propagate_adjoints);
     m.def("propagate_adjoints",
         (Derivative (*)(const Func &, const Buffer<float> &))&propagate_adjoints);
     m.def("propagate_adjoints",

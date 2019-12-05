@@ -56,11 +56,11 @@ bool Weights::load(std::istream &i) {
     const auto load_one = [&i](Buffer<float> &buf) -> bool {
         uint32_t dimension_count;
         i.read((char *)&dimension_count, sizeof(dimension_count));
-        if (i.fail() || dimension_count != (uint32_t) buf.dimensions()) return false;
+        if (i.fail() || dimension_count != (uint32_t)buf.dimensions()) return false;
         for (uint32_t d = 0; d < dimension_count; d++) {
             uint32_t extent;
             i.read((char *)&extent, sizeof(extent));
-            if (i.fail() || (int) extent != (int) buf.extent(d)) return false;
+            if (i.fail() || (int)extent != (int)buf.extent(d)) return false;
         }
         i.read((char *)(buf.data()), buf.size_in_bytes());
         if (i.fail()) return false;
@@ -168,4 +168,3 @@ bool Weights::save_to_dir(const std::string &dir) const {
 
 }  // namespace Internal
 }  // namespace Halide
-
