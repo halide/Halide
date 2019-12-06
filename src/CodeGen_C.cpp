@@ -35,6 +35,24 @@ extern "C" unsigned char halide_internal_runtime_header_HalideRuntimeD3D12Comput
 
 namespace {
 
+// HALIDE_MUST_USE_RESULT defined here is intended to exactly
+// duplicate the definition in HalideRuntime.h (so that either or
+// both can be present, in any order).
+const char * const kDefineMustUseResult = R"INLINE_CODE(#ifndef HALIDE_MUST_USE_RESULT
+#ifdef __has_attribute
+#if __has_attribute(nodiscard)
+#define HALIDE_MUST_USE_RESULT [[nodiscard]]
+#elif __has_attribute(warn_unused_result)
+#define HALIDE_MUST_USE_RESULT __attribute__((warn_unused_result))
+#else
+#define HALIDE_MUST_USE_RESULT
+#endif
+#else
+#define HALIDE_MUST_USE_RESULT
+#endif
+#endif
+)INLINE_CODE";
+
 const string headers =
     "#include <iostream>\n"
     "#include <math.h>\n"
@@ -352,6 +370,8 @@ CodeGen_C::CodeGen_C(ostream &s, Target t, OutputKind output_kind, const std::st
         add_common_macros(stream);
         stream << '\n';
     }
+
+    stream << kDefineMustUseResult << '\n';
 
     // Throw in a default (empty) definition of HALIDE_FUNCTION_ATTRS
     // (some hosts may define this to e.g. __attribute__((warn_unused_result)))
@@ -1665,6 +1685,7 @@ void CodeGen_C::compile(const LoweredFunc &f) {
         // If the function isn't public, mark it static.
         stream << "static ";
     }
+    stream << "HALIDE_FUNCTION_ATTRS\n";
     stream << "int " << simple_name << "(";
     for (size_t i = 0; i < args.size(); i++) {
         if (args[i].is_buffer()) {
@@ -1680,9 +1701,9 @@ void CodeGen_C::compile(const LoweredFunc &f) {
     }
 
     if (is_header_or_extern_decl()) {
-        stream << ") HALIDE_FUNCTION_ATTRS;\n";
+        stream << ");\n";
     } else {
-        stream << ") HALIDE_FUNCTION_ATTRS {\n";
+        stream << ") {\n";
         indent += 1;
 
         if (uses_gpu_for_loops) {
@@ -1711,10 +1732,10 @@ void CodeGen_C::compile(const LoweredFunc &f) {
 
     if (is_header_or_extern_decl() && f.linkage == LinkageType::ExternalPlusMetadata) {
         // Emit the argv version
-        stream << "int " << simple_name << "_argv(void **args) HALIDE_FUNCTION_ATTRS;\n";
+        stream << "\nHALIDE_FUNCTION_ATTRS\nint " << simple_name << "_argv(void **args);\n";
 
         // And also the metadata.
-        stream << "const struct halide_filter_metadata_t *" << simple_name << "_metadata() HALIDE_FUNCTION_ATTRS;\n";
+        stream << "\nHALIDE_FUNCTION_ATTRS\nconst struct halide_filter_metadata_t *" << simple_name << "_metadata();\n";
     }
 
     if (!namespaces.empty()) {
@@ -2854,7 +2875,7 @@ void CodeGen_C::test() {
         globals +
         string((const char *)halide_internal_runtime_header_HalideRuntime_h) + '\n' +
         string((const char *)halide_internal_initmod_inlined_c) + '\n' +
-        macros.str() + R"GOLDEN_CODE(
+        macros.str() + '\n' + kDefineMustUseResult + R"GOLDEN_CODE(
 #ifndef HALIDE_FUNCTION_ATTRS
 #define HALIDE_FUNCTION_ATTRS
 #endif
@@ -2865,7 +2886,8 @@ void CodeGen_C::test() {
 extern "C" {
 #endif
 
-int test1(struct halide_buffer_t *_buf_buffer, float _alpha, int32_t _beta, void const *__user_context) HALIDE_FUNCTION_ATTRS {
+HALIDE_FUNCTION_ATTRS
+int test1(struct halide_buffer_t *_buf_buffer, float _alpha, int32_t _beta, void const *__user_context) {
  void * const _ucon = const_cast<void *>(__user_context);
  void *_0 = _halide_buffer_get_host(_buf_buffer);
  void * _buf = _0;
