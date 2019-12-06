@@ -30,6 +30,22 @@ extern "C" {
 #define HALIDE_NEVER_INLINE __attribute__((noinline))
 #endif
 
+#ifndef HALIDE_MUST_USE_RESULT
+#ifdef __has_attribute
+#if __has_attribute(nodiscard)
+// C++17 or later
+#define HALIDE_MUST_USE_RESULT [[nodiscard]]
+#elif __has_attribute(warn_unused_result)
+// Clang/GCC
+#define HALIDE_MUST_USE_RESULT __attribute__((warn_unused_result))
+#else
+#define HALIDE_MUST_USE_RESULT
+#endif
+#else
+#define HALIDE_MUST_USE_RESULT
+#endif
+#endif
+
 /** \file
  *
  * This file declares the routines used by Halide internally in its
