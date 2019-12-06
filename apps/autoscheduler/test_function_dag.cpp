@@ -32,7 +32,6 @@ extern "C" int mul_by_two(
 }
 
 void test_coeff_wise(const MachineParams &params, const Target &target) {
-
     Var x("x"), y("y");
 
     std::ostringstream with_extern;
@@ -48,7 +47,7 @@ void test_coeff_wise(const MachineParams &params, const Target &target) {
             {arg},
             input_type,
             vars,
-            Halide::NameMangling::C /*PlusPlus*/);
+            Halide::NameMangling::C);
         g.function().extern_definition_proxy_expr() = f(x, y) * 2.0f;
 
         h(x, y) = g(x, y) * 2 + 1;
@@ -84,7 +83,6 @@ extern "C" int matmul(
     halide_buffer_t *input1,
     halide_buffer_t *input2,
     halide_buffer_t *output) {
-
     if (input1->is_bounds_query() || input2->is_bounds_query()) {
         // Bounds query: infer the input dimensions from the output dimensions.
         // We leave the k dimension alone since we can't infer it from the output dimensions.
@@ -108,8 +106,6 @@ extern "C" int matmul(
                 float *in1 = (float *)input1->address_of(pos1);
                 int pos2[2] = {k, j};
                 float *in2 = (float *)input2->address_of(pos2);
-                //std::cout << "Adding " << *in1 << " * " << *in2 << std::endl;
-
                 (*out) += (*in1) * (*in2);
             }
         }
@@ -118,7 +114,6 @@ extern "C" int matmul(
 }
 
 void test_matmul(const MachineParams &params, const Target &target) {
-
     Var x("x"), y("y"), k("k");
     RDom r(0, 200);
     Halide::Buffer<float> input1(200, 200);
