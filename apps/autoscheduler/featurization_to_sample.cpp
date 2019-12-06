@@ -13,14 +13,14 @@ int main(int argc, char **argv) {
 
     std::ifstream src(argv[1], std::ios::binary);
     if (!src) {
-      std::cerr << "Unable to open input file: " << argv[1] << "\n";
-      return -1;
+        std::cerr << "Unable to open input file: " << argv[1] << "\n";
+        return -1;
     }
 
     std::ofstream dst(argv[5], std::ios::binary);
     if (!dst) {
-      std::cerr << "Unable to open output file: " << argv[5] << "\n";
-      return -1;
+        std::cerr << "Unable to open output file: " << argv[5] << "\n";
+        return -1;
     }
 
     dst << src.rdbuf();
@@ -31,13 +31,12 @@ int main(int argc, char **argv) {
     int32_t pid = atoi(argv[3]);
     int32_t sid = atoi(argv[4]);
 
-    dst.write((const char*) &r, 4);
-    dst.write((const char*) &pid, 4);
-    dst.write((const char*) &sid, 4);
+    dst.write((const char *)&r, 4);
+    dst.write((const char *)&pid, 4);
+    dst.write((const char *)&sid, 4);
 
     src.close();
     dst.close();
 
     return 0;
-
 }

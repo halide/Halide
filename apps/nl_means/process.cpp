@@ -1,11 +1,11 @@
-#include <cstdio>
 #include <chrono>
+#include <cstdio>
 
 #include "nl_means.h"
 #include "nl_means_auto_schedule.h"
 
-#include "halide_benchmark.h"
 #include "HalideBuffer.h"
+#include "halide_benchmark.h"
 #include "halide_image_io.h"
 
 using namespace Halide::Runtime;
@@ -30,7 +30,7 @@ int main(int argc, char **argv) {
     // Timing code
 
     printf("Input size: %d by %d, patch size: %d, search area: %d, sigma: %f\n",
-            input.width(), input.height(), patch_size, search_area, sigma);
+           input.width(), input.height(), patch_size, search_area, sigma);
 
     // Manually-tuned version
     double min_t_manual = benchmark(timing_iterations, 1, [&]() {

@@ -8,8 +8,8 @@
 
 #include "halide_benchmark.h"
 
-#include "common_reference.h"
 #include "Convolution.h"
+#include "common_reference.h"
 
 #include "HalideBuffer.h"
 
@@ -151,10 +151,10 @@ int main(int argc, char **argv) {
                     int y_offset = y * stride + filter_y - pad_height;
                     if ((x_offset >= 0) && (x_offset < W) && (y_offset >= 0) && (y_offset < H)) {
                         input_value = static_cast<int32_t>(
-                            (int16_t) input_tensor(index_c, x_offset, y_offset, b) + input_offset);
+                            (int16_t)input_tensor(index_c, x_offset, y_offset, b) + input_offset);
                     }
                     int32_t filter_value = static_cast<int32_t>(
-                        (int16_t) filter_tensor(index_c, filter_x, filter_y, c) + filter_offset);
+                        (int16_t)filter_tensor(index_c, filter_x, filter_y, c) + filter_offset);
 
                     output += input_value * filter_value;
                 }
@@ -163,8 +163,8 @@ int main(int argc, char **argv) {
 
         output = multiply_quantized_multiplier_reference(output, output_multiplier, output_shift);
         output += output_offset;
-        output = std::max(output, (int32_t) output_min);
-        output = std::min(output, (int32_t) output_max);
+        output = std::max(output, (int32_t)output_min);
+        output = std::min(output, (int32_t)output_max);
         if (output != output_tensor(c, x, y, b)) {
             printf("Mismatch at %d %d: %d != %d\n", x, y, output, output_tensor(c, x, y, b));
             abort();

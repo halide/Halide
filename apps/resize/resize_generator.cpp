@@ -3,7 +3,10 @@
 using namespace Halide;
 
 enum InterpolationType {
-    Box, Linear, Cubic, Lanczos
+    Box,
+    Linear,
+    Cubic,
+    Lanczos
 };
 
 Expr kernel_box(Expr x) {
@@ -23,8 +26,8 @@ Expr kernel_cubic(Expr x) {
     float a = -0.5f;
 
     return select(xx < 1.0f, (a + 2.0f) * xx3 - (a + 3.0f) * xx2 + 1,
-                  select (xx < 2.0f, a * xx3 - 5 * a * xx2 + 8 * a * xx - 4.0f * a,
-                          0.0f));
+                  select(xx < 2.0f, a * xx3 - 5 * a * xx2 + 8 * a * xx - 4.0f * a,
+                         0.0f));
 }
 
 Expr sinc(Expr x) {
@@ -33,9 +36,9 @@ Expr sinc(Expr x) {
 }
 
 Expr kernel_lanczos(Expr x) {
-    Expr value = sinc(x) * sinc(x/3);
-    value = select(x == 0.0f, 1.0f, value); // Take care of singularity at zero
-    value = select(x > 3 || x < -3, 0.0f, value); // Clamp to zero out of bounds
+    Expr value = sinc(x) * sinc(x / 3);
+    value = select(x == 0.0f, 1.0f, value);        // Take care of singularity at zero
+    value = select(x > 3 || x < -3, 0.0f, value);  // Clamp to zero out of bounds
     return value;
 }
 
@@ -46,20 +49,14 @@ struct KernelInfo {
 };
 
 static KernelInfo kernel_info[] = {
-    { "box", 1, kernel_box },
-    { "linear", 2, kernel_linear },
-    { "cubic", 4, kernel_cubic },
-    { "lanczos", 6, kernel_lanczos }
-};
+    {"box", 1, kernel_box},
+    {"linear", 2, kernel_linear},
+    {"cubic", 4, kernel_cubic},
+    {"lanczos", 6, kernel_lanczos}};
 
 class Resize : public Halide::Generator<Resize> {
 public:
-    GeneratorParam<InterpolationType> interpolation_type
-        {"interpolation_type", Cubic,
-         {{"box", Box},
-          {"linear", Linear},
-          {"cubic", Cubic},
-          {"lanczos", Lanczos}}};
+    GeneratorParam<InterpolationType> interpolation_type{"interpolation_type", Cubic, {{"box", Box}, {"linear", Linear}, {"cubic", Cubic}, {"lanczos", Lanczos}}};
 
     // If we statically know whether we're upsampling or downsampling,
     // we can generate different pipelines (we want to reorder the
@@ -82,8 +79,8 @@ public:
     void generate() {
 
         clamped = BoundaryConditions::repeat_edge(input,
-                 {{input.dim(0).min(), input.dim(0).extent()},
-                  {input.dim(1).min(), input.dim(1).extent()}});
+                                                  {{input.dim(0).min(), input.dim(0).extent()},
+                                                   {input.dim(1).min(), input.dim(1).extent()}});
 
         // Handle different types by just casting to float
         as_float(x, y, c) = cast<float>(clamped(x, y, c));
@@ -107,7 +104,7 @@ public:
         Expr beginx = cast<int>(ceil(sourcex - kernel_radius));
         Expr beginy = cast<int>(ceil(sourcey - kernel_radius));
 
-        RDom r(0, kernel_taps);
+        RDom r(0, cast<int>(kernel_taps));
         const KernelInfo &info = kernel_info[interpolation_type];
 
         unnormalized_kernel_x(x, k) = info.kernel((k + beginx - sourcex) * kernel_scaling);
@@ -161,7 +158,8 @@ public:
             .vectorize(y);
         kernel_y
             .compute_at(output, y)
-            .reorder(k, y).vectorize(y, 8);
+            .reorder(k, y)
+            .vectorize(y, 8);
 
         if (upsample) {
             output
@@ -211,7 +209,6 @@ public:
                             input.dim(2).stride() == 1 &&
                             input.dim(2).min() == 0 &&
                             input.dim(2).extent() == 4);
-
 
         output.specialize(planar);
 

@@ -1491,7 +1491,7 @@ public:
      * at once; this is equivalent to calling `set_estimate(args()[n], min, extent)`
      * repeatedly, but slightly terser. The size of the estimates vector
      * must match the dimensionality of the Func. */
-    Func &set_estimates(const std::vector<std::pair<Expr, Expr>> &estimates);
+    Func &set_estimates(const Region &estimates);
 
     /** Expand the region computed so that the min coordinates is
      * congruent to 'remainder' modulo 'modulus', and the extent is a
@@ -1554,9 +1554,9 @@ public:
      * Halide fails to prove associativity. Use override_associativity_test
      * to disable the associativity test if you believe the function is
      * associative or the order of reduction variable execution does not
-     * matter. 
-     * Halide compiles this into hardware atomic operations whenever possible, 
-     * and falls back to a mutex lock per storage element if it is impossible 
+     * matter.
+     * Halide compiles this into hardware atomic operations whenever possible,
+     * and falls back to a mutex lock per storage element if it is impossible
      * to atomically update.
      * There are three possible outcomes of the compiled code:
      * atomic add, compare-and-swap loop, and mutex lock.
