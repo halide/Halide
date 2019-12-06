@@ -162,6 +162,23 @@ void test_matmul(const MachineParams &params, const Target &target) {
               << "\n\nwithout_extern:\n " << without_extern.str() << std::endl;
 }
 
+void test_hyperbolic_funcs(const MachineParams &params, const Target &target) {
+    Var x("x");
+    Halide::Buffer<float> input(27);
+
+    Func activation_func("af");
+    activation_func(x) = Halide::tanh(input(x));
+    activation_func.set_estimate(x, 0, 27);
+    std::vector<Halide::Internal::Function> v;
+    v.push_back(activation_func.function());
+    Halide::Internal::Autoscheduler::FunctionDAG d(v, params, target);
+
+    std::ostringstream features;
+    d.dump(features);
+    std::cout << "features: \n"
+              << features.str() << std::endl;
+}
+
 int main(int argc, char **argv) {
     // Use a fixed target for the analysis to get consistent results from this test.
     MachineParams params(32, 16000000, 40);
@@ -169,6 +186,7 @@ int main(int argc, char **argv) {
 
     test_coeff_wise(params, target);
     test_matmul(params, target);
+    test_hyperbolic_funcs(params, target);
 
     return 0;
 }

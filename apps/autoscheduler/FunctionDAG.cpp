@@ -151,9 +151,22 @@ class Featurizer : public IRVisitor {
                 visit_memory_access(op->name, op->type, op->args, PipelineFeatures::AccessType::LoadFunc);
                 op_bucket(PipelineFeatures::OpType::FuncCall, op->type)++;
             }
-        } else if (op->call_type == Call::Extern || op->call_type == Call::PureExtern ||
-                   op->call_type == Call::Intrinsic || op->call_type == Call::PureIntrinsic) {
+        } else if (op->call_type == Call::Extern || op->call_type == Call::Intrinsic ||
+                   op->call_type == Call::PureIntrinsic) {
             op_bucket(PipelineFeatures::OpType::ExternCall, op->type)++;
+        } else if (op->call_type == Call::PureExtern) {
+            if (op->name == "tanh_f32") {
+                // Number of ops derived the the eigen implementation of tanh.
+                op_bucket(PipelineFeatures::OpType::Const, op->type) += 13;
+                op_bucket(PipelineFeatures::OpType::Min, op->type) += 1;
+                op_bucket(PipelineFeatures::OpType::Max, op->type) += 1;
+                op_bucket(PipelineFeatures::OpType::Add, op->type) += 9;
+                op_bucket(PipelineFeatures::OpType::Mul, op->type) += 11;
+                op_bucket(PipelineFeatures::OpType::Div, op->type) += 1;
+            } else {
+                // Catch all
+                op_bucket(PipelineFeatures::OpType::ExternCall, op->type)++;
+            }
         } else if (op->call_type == Call::Image) {
             visit_memory_access(op->name, op->type, op->args, PipelineFeatures::AccessType::LoadImage);
             op_bucket(PipelineFeatures::OpType::ImageCall, op->type)++;
