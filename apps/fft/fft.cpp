@@ -723,8 +723,8 @@ ComplexFunc fft2d_r2c(Func r,
     // DFT down the columns first.
     ComplexFunc dft1 = fft_dim1(zipped,
                                 R1,
-                                -1,                           // sign
-                                std::min(zip_width, N0 / 2),  // extent of dim 0
+                                -1,     // sign
+                                N0 / 2, // extent of dim 0
                                 1.0f,
                                 false,  // We parallelize unzipped below instead.
                                 prefix,
@@ -838,18 +838,19 @@ ComplexFunc fft2d_r2c(Func r,
     }
 
     // Schedule the final DFT transpose and unzipping updates.
-    dft.vectorize(n0, target.natural_vector_size<float>())
-        .unroll(n0, gcd(N0 / target.natural_vector_size<float>(), 4));
+    int vector_size = gcd(target.natural_vector_size<float>(), N0);
+    dft.vectorize(n0, vector_size)
+        .unroll(n0, gcd(N0 / vector_size, 4));
 
     // The Nyquist bin at n0z = N0/2 looks like a race condition because it
     // simplifies to an expression similar to the DC bin. However, we include it
     // in the reduction because it makes the reduction have length N/2, which is
     // convenient for vectorization, and just ignore the resulting appearance of
     // a race condition.
-    dft.update(1).allow_race_conditions().vectorize(n0z1, target.natural_vector_size<float>());
-    dft.update(2).allow_race_conditions().vectorize(n0z2, target.natural_vector_size<float>());
-    dft.update(4).allow_race_conditions().vectorize(n0z1, target.natural_vector_size<float>());
-    dft.update(5).allow_race_conditions().vectorize(n0z2, target.natural_vector_size<float>());
+    dft.update(1).allow_race_conditions().vectorize(n0z1, vector_size);
+    dft.update(2).allow_race_conditions().vectorize(n0z2, vector_size);
+    dft.update(4).allow_race_conditions().vectorize(n0z1, vector_size);
+    dft.update(5).allow_race_conditions().vectorize(n0z2, vector_size);
 
     // Our result is undefined outside these bounds.
     dft.bound(n0, 0, N0);
