@@ -254,8 +254,6 @@ ComplexFunc dftN(ComplexFunc x, int N, int sign, const string &prefix) {
 ComplexFunc dft1d_c2c(ComplexFunc x, int N, int sign,
                       const string &prefix) {
     switch (N) {
-    case 1:
-        return x;
     case 2:
         return dft2(x, prefix);
     case 4:
@@ -317,6 +315,7 @@ ComplexFunc fft_dim1(ComplexFunc x,
     int vector_width = 1;
     for (size_t i = 0; i < NR.size(); i++) {
         int R = NR[i];
+        assert(R != 1);
 
         std::stringstream stage_id;
         stage_id << prefix;
@@ -374,14 +373,19 @@ ComplexFunc fft_dim1(ComplexFunc x,
         if (S > 1) {
             v.compute_at(exchange, s_).unroll(r);
             v.reorder_storage(n0, r, s);
+        } else {
+            // On the first stage, the twiddle factors are 1, so we can inline this (no-op).
         }
 
         V.compute_at(exchange, s_);
         V.reorder_storage(V.args()[2], V.args()[0], V.args()[1]);
 
-        // The last stage needs explicit vectorization. I'm not completely sure why.
+        // The last stage needs explicit vectorization, because it doesn't get computed
+        // at the vectorized context exchange (below).
         if (S == N / R) {
-            v.vectorize(n0);
+            if (S > 1) {
+                v.vectorize(n0);
+            }
             V.vectorize(V.args()[2]);
             for (int i = 0; i < V.num_update_definitions(); i++) {
                 V.update(i).vectorize(V.args()[2]);
