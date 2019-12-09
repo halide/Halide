@@ -2182,6 +2182,38 @@ void CodeGen_C::visit(const Call *op) {
             internal_assert(op->type.handle_type);
             // Add explicit cast so that different structs can't cache to the same value
             rhs << "(" << print_type(op->type) << ")(NULL)";
+        } else if (op->type == type_of<halide_dimension_t *>()) {
+            // Emit a shape
+
+            // Get the args
+            vector<string> values;
+            for (size_t i = 0; i < op->args.size(); i++) {
+                values.push_back(print_expr(op->args[i]));
+            }
+
+            static_assert(sizeof(halide_dimension_t) == 4 * sizeof(int32_t),
+                          "CodeGen_C assumes a halide_dimension_t is four densely-packed int32_ts");
+
+            internal_assert(values.size() % 4 == 0);
+            int dimension = values.size() / 4;
+
+            string shape_name = unique_name('s');
+            stream
+                << get_indent() << "struct halide_dimension_t " << shape_name
+                << "[" << dimension << "] = {\n";
+            indent++;
+            for (int i = 0; i < dimension; i++) {
+                stream
+                    << get_indent() << "{"
+                    << values[i*4 + 0] << ", "
+                    << values[i*4 + 1] << ", "
+                    << values[i*4 + 2] << ", "
+                    << values[i*4 + 3] << "},\n";
+            }
+            indent--;
+            stream << get_indent() << "};\n";
+
+            rhs << shape_name;
         } else {
             // Emit a declaration like:
             // struct {const int f_0, const char f_1, const int f_2} foo = {3, 'c', 4};
@@ -2209,7 +2241,12 @@ void CodeGen_C::visit(const Call *op) {
             }
             indent--;
             stream << get_indent() << "};\n";
+
             // Return a pointer to it of the appropriate type
+
+            // TODO: This is dubious type-punning. We really need to
+            // find a better way to do this. We dodge the problem for
+            // the specific case of buffer shapes in the case above.
             if (op->type.handle_type) {
                 rhs << "(" << print_type(op->type) << ")";
             }
