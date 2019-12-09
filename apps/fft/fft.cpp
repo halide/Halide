@@ -914,7 +914,7 @@ Func fft2d_c2r(ComplexFunc c,
     // The vector width of the zipping performed below.
     int zip_width = desc.vector_width;
     if (zip_width <= 0) {
-        zip_width = target.natural_vector_size(dft0T.output_types()[0]);
+        zip_width = std::min(target.natural_vector_size(dft0T.output_types()[0]), N1 / 2);
     }
 
     // transpose so we can take the DFT of the columns again.

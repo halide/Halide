@@ -21,6 +21,9 @@ $(BIN)/%/bench_fft: main.cpp fft.cpp fft.h complex.h funct.h $(LIB_HALIDE)
 	@mkdir -p $(@D)
 	$(CXX) $(CXXFLAGS) $(filter-out %.h,$^) -o $@ $(LDFLAGS) $(HALIDE_SYSTEM_LIBS)
 
+bench_8x8: $(BIN)/$(HL_TARGET)/bench_fft
+	$< 8 8 $(<D)
+
 bench_16x16: $(BIN)/$(HL_TARGET)/bench_fft
 	$< 16 16 $(<D)
 
@@ -68,6 +71,7 @@ all: fft_aot_test bench_16x16 bench_32x32 bench_48x48 bench_64x64
 
 # Ensure these are run sequentially and not in parallel
 test: $(BIN)/$(HL_TARGET)/bench_fft
+	$< 8 8 $(<D)
 	$< 16 16 $(<D)
 	$< 32 32 $(<D)
 	$< 48 48 $(<D)
