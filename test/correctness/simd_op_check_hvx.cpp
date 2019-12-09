@@ -24,7 +24,9 @@ public:
     void setup_images() override {
         for (auto p : image_params) {
             p.reset();
-            p.set_host_alignment(128);
+            // HVX needs 128 byte alignment
+            constexpr int kHostAlignmentBytes = 128;
+            p.set_host_alignment(kHostAlignmentBytes);
             Expr min = p.dim(0).min();
             p.dim(0).set_min((min/128) * 128);
         }
@@ -291,11 +293,14 @@ public:
 
         check("vlut32(v*.b,v*.b,r*)", hvx_width/1, in_u8(3*x/2));
         check("vlut16(v*.b,v*.h,r*)", hvx_width/2, in_u16(3*x/2));
+        check("vlut16(v*.b,v*.h,r*)", hvx_width/2, in_u32(3*x/2));
 
         check("vlut32(v*.b,v*.b,r*)", hvx_width/1, in_u8(u8_1));
         check("vlut32(v*.b,v*.b,r*)", hvx_width/1, in_u8(clamp(u16_1, 0, 63)));
         check("vlut16(v*.b,v*.h,r*)", hvx_width/2, in_u16(u8_1));
         check("vlut16(v*.b,v*.h,r*)", hvx_width/2, in_u16(clamp(u16_1, 0, 15)));
+        check("vlut16(v*.b,v*.h,r*)", hvx_width/2, in_u32(u8_1));
+        check("vlut16(v*.b,v*.h,r*)", hvx_width/2, in_u32(clamp(u16_1, 0, 15)));
 
         check("v*.ub = vpack(v*.h,v*.h):sat", hvx_width/1, u8_sat(i16_1));
         check("v*.b = vpack(v*.h,v*.h):sat", hvx_width/1, i8_sat(i16_1));

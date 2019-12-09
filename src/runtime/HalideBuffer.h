@@ -375,7 +375,7 @@ private:
 
     /** Crop as many dimensions as are in rect, without handling device allocation. */
     void crop_host(const std::vector<std::pair<int, int>> &rect) {
-        assert(rect.size() <= std::numeric_limits<int>::max());
+        assert(rect.size() <= static_cast<decltype(rect.size())>(std::numeric_limits<int>::max()));
         int limit = (int)rect.size();
         assert(limit <= dimensions());
         for (int i = 0; i < limit; i++) {
@@ -532,20 +532,22 @@ public:
         return buf.type;
     }
 
-    /** A pointer to the element with the lowest address. If all
-     * strides are positive, equal to the host pointer. */
-    T *begin() const {
+private:
+    /** Offset to the element with the lowest address. If all
+     * strides are positive, equal to zero. Offset is in elements, not bytes. */
+    ptrdiff_t begin_offset() const {
         ptrdiff_t index = 0;
         for (int i = 0; i < dimensions(); i++) {
             if (dim(i).stride() < 0) {
                 index += dim(i).stride() * (dim(i).extent() - 1);
             }
         }
-        return (T *)(buf.host + index * type().bytes());
+        return index;
     }
 
-    /** A pointer to one beyond the element with the highest address. */
-    T *end() const {
+    /** An offset to one beyond the element with the highest address.
+     * Offset is in elements, not bytes. */
+    ptrdiff_t end_offset() const {
         ptrdiff_t index = 0;
         for (int i = 0; i < dimensions(); i++) {
             if (dim(i).stride() > 0) {
@@ -553,12 +555,26 @@ public:
             }
         }
         index += 1;
-        return (T *)(buf.host + index * type().bytes());
+        return index;
+    }
+
+public:
+    /** A pointer to the element with the lowest address. If all
+     * strides are positive, equal to the host pointer. */
+    T *begin() const {
+        assert(buf.host != nullptr); // Cannot call begin() on an unallocated Buffer.
+        return (T *)(buf.host + begin_offset() * type().bytes());
+    }
+
+    /** A pointer to one beyond the element with the highest address. */
+    T *end() const {
+        assert(buf.host != nullptr); // Cannot call end() on an unallocated Buffer.
+        return (T *)(buf.host + end_offset() * type().bytes());
     }
 
     /** The total number of bytes spanned by the data in memory. */
     size_t size_in_bytes() const {
-        return (size_t)((const uint8_t *)end() - (const uint8_t *)begin());
+        return (size_t)(end_offset() - begin_offset()) * type().bytes();
     }
 
     /** Reset the Buffer to be equivalent to a default-constructed Buffer
@@ -1151,6 +1167,40 @@ public:
         return dst;
     }
 
+    /** Like copy(), but the copy is created in interleaved memory layout
+     * (vs. keeping the same memory layout as the original). Requires that 'this'
+     * has exactly 3 dimensions.
+     */
+    Buffer<not_const_T, D> copy_to_interleaved(void *(*allocate_fn)(size_t) = nullptr,
+                                               void (*deallocate_fn)(void *) = nullptr) const {
+        assert(dimensions() == 3);
+        Buffer<not_const_T, D> dst = Buffer<not_const_T, D>::make_interleaved(nullptr, width(), height(), channels());
+        dst.set_min(min(0), min(1), min(2));
+        dst.allocate(allocate_fn, deallocate_fn);
+        dst.copy_from(*this);
+        return dst;
+    }
+
+    /** Like copy(), but the copy is created in planar memory layout
+     * (vs. keeping the same memory layout as the original).
+     */
+    Buffer<not_const_T, D> copy_to_planar(void *(*allocate_fn)(size_t) = nullptr,
+                                          void (*deallocate_fn)(void *) = nullptr) const {
+        std::vector<int> mins, extents;
+        const int dims = dimensions();
+        mins.reserve(dims);
+        extents.reserve(dims);
+        for (int d = 0; d < dims; ++d) {
+            mins.push_back(dim(d).min());
+            extents.push_back(dim(d).extent());
+        }
+        Buffer<not_const_T, D> dst = Buffer<not_const_T, D>(nullptr, extents);
+        dst.set_min(mins);
+        dst.allocate(allocate_fn, deallocate_fn);
+        dst.copy_from(*this);
+        return dst;
+    }
+
     /** Make a copy of the Buffer which shares the underlying host and/or device
      * allocations as the existing Buffer. This is purely syntactic sugar for
      * cases where you have a const reference to a Buffer but need a temporary
@@ -1329,7 +1379,7 @@ public:
      * how it is indexed. Does not move any data around in memory. */
     void translate(const std::vector<int> &delta) {
         device_deallocate();
-        assert(delta.size() <= std::numeric_limits<int>::max());
+        assert(delta.size() <= static_cast<decltype(delta.size())>(std::numeric_limits<int>::max()));
         int limit = (int)delta.size();
         assert(limit <= dimensions());
         for (int i = 0; i < limit; i++) {
@@ -1340,7 +1390,7 @@ public:
     /** Set the min coordinate of an image in the first N dimensions. */
     // @{
     void set_min(const std::vector<int> &mins) {
-        assert(mins.size() <= (size_t)dimensions());
+        assert(mins.size() <= static_cast<decltype(mins.size())>(dimensions()));
         device_deallocate();
         for (size_t i = 0; i < mins.size(); i++) {
             buf.dim[i].min = mins[i];
@@ -1356,7 +1406,7 @@ public:
     /** Test if a given coordinate is within the bounds of an image. */
     // @{
     bool contains(const std::vector<int> &coords) const {
-        assert(coords.size() <= (size_t)dimensions());
+        assert(coords.size() <= static_cast<decltype(coords.size())>(dimensions()));
         for (size_t i = 0; i < coords.size(); i++) {
             if (coords[i] < dim((int) i).min() || coords[i] > dim((int) i).max()) {
                 return false;

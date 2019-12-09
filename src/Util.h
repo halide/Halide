@@ -48,6 +48,19 @@
 #endif
 
 namespace Halide {
+
+/** Load a plugin in the form of a dynamic library (e.g. for custom autoschedulers).
+ * If the string doesn't contain any . characters, the proper prefix and/or suffix
+ * for the platform will be added:
+ *
+ *   foo -> libfoo.so (Linux/OSX/etc -- note that .dylib is not supported)
+ *   foo -> foo.dll (Windows)
+ *
+ * otherwise, it is assumed to be an appropriate pathname.
+ *
+ * Any error in loading will assert-fail. */
+void load_plugin(const std::string &lib_name);
+
 namespace Internal {
 
 /** Some numeric conversions are UB if the value won't fit in the result;
@@ -177,19 +190,6 @@ T fold_right(const std::vector<T> &vec, Fn f) {
         result = f(vec[i - 1], result);
     }
     return result;
-}
-
-template<typename T1, typename T2, typename T3, typename T4>
-inline HALIDE_NO_USER_CODE_INLINE void collect_paired_args(std::vector<std::pair<T1, T2>> &collected_args,
-                                                           const T3 &a1, const T4 &a2) {
-    collected_args.push_back(std::pair<T1, T2>(a1, a2));
-}
-
-template<typename T1, typename T2, typename T3, typename T4, typename... Args>
-inline HALIDE_NO_USER_CODE_INLINE void collect_paired_args(std::vector<std::pair<T1, T2>> &collected_args,
-                                                           const T3 &a1, const T4 &a2, Args &&... args) {
-    collected_args.push_back(std::pair<T1, T2>(a1, a2));
-    collect_paired_args(collected_args, std::forward<Args>(args)...);
 }
 
 template<typename... T>

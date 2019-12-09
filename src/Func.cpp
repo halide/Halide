@@ -168,11 +168,7 @@ void Func::define_extern(const std::string &function_name,
                          const std::vector<Type> &types,
                          const std::vector<Var> &arguments,
                          NameMangling mangling, DeviceAPI device_api) {
-    vector<string> dim_names(arguments.size());
-    for (size_t i = 0; i < arguments.size(); i++) {
-        dim_names[i] = arguments[i].name();
-    }
-    func.define_extern(function_name, args, types, dim_names, mangling,
+    func.define_extern(function_name, args, types, arguments, mangling,
                        device_api);
 }
 
@@ -1968,7 +1964,7 @@ Func Func::copy_to_device(DeviceAPI d) {
 
     ExternFuncArgument device_interface = make_device_interface_call(d);
     func.define_extern("halide_buffer_copy", {buffer, device_interface},
-                       {call->type}, func.args(),  // Reuse the existing dimension names
+                       {call->type}, args(),  // Reuse the existing dimension names
                        NameMangling::C, d);
     return *this;
 }
@@ -2148,13 +2144,14 @@ Func &Func::set_estimate(Var var, Expr min, Expr extent) {
     return *this;
 }
 
-Func &Func::set_estimates(const std::vector<std::pair<Expr, Expr>> &estimates) {
+Func &Func::set_estimates(const Region &estimates) {
     const std::vector<Var> a = args();
     user_assert(estimates.size() == a.size())
         << "Func " << name() << " has " << a.size() << " dimensions, "
         << "but the estimates passed to set_estimates contains " << estimates.size() << " pairs.\n";
     for (size_t i = 0; i < a.size(); i++) {
-        set_estimate(a[i], estimates[i].first, estimates[i].second);
+        const Range &r = estimates[i];
+        set_estimate(a[i], r.min, r.extent);
     }
     return *this;
 }

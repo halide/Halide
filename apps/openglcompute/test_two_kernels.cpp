@@ -2,7 +2,7 @@
 
 using namespace Halide;
 
-int main(int argc, char** argv) {
+int main(int argc, char **argv) {
     ImageParam input(UInt(32), 3, "input");
     input.dim(2).set_bounds(0, 4).set_stride(1).dim(0).set_stride(4);
 

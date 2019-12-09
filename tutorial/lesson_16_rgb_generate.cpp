@@ -9,10 +9,10 @@
 // g++ lesson_16_rgb_generate.cpp ../tools/GenGen.cpp -g -std=c++11 -fno-rtti -I ../include -L ../bin -lHalide -lpthread -ldl -o lesson_16_generate
 // export LD_LIBRARY_PATH=../bin   # For linux
 // export DYLD_LIBRARY_PATH=../bin # For OS X
-// ./lesson_16_generate -o . -f brighten_planar      target=host layout=planar
-// ./lesson_16_generate -o . -f brighten_interleaved target=host layout=interleaved
-// ./lesson_16_generate -o . -f brighten_either      target=host layout=either
-// ./lesson_16_generate -o . -f brighten_specialized target=host layout=specialized
+// ./lesson_16_generate -g brighten -o . -f brighten_planar      target=host layout=planar
+// ./lesson_16_generate -g brighten -o . -f brighten_interleaved target=host layout=interleaved
+// ./lesson_16_generate -g brighten -o . -f brighten_either      target=host layout=either
+// ./lesson_16_generate -g brighten -o . -f brighten_specialized target=host layout=specialized
 // g++ lesson_16_rgb_run.cpp brighten_*.o -ldl -lpthread -o lesson_16_run
 // ./lesson_16_run
 

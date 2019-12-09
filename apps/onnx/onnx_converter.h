@@ -2,7 +2,7 @@
 #define CONVERT_MODEL_H_
 
 #include "Halide.h"
-#include "onnx/onnx_pb.h"
+#include "onnx/onnx.pb.h"
 #include <unordered_map>
 #include <vector>
 
@@ -33,13 +33,26 @@ struct Model {
     std::vector<Halide::Expr> requirements;
 };
 
-Model convert_model(const onnx::ModelProto &model);
+// Layout of the inputs and outputs to the model.
+enum IOLayout {
+    Native = 0,
+    NumPy = 1,
+};
+Model convert_model(const onnx::ModelProto &model, const std::unordered_map<std::string, int> &expected_dim_sizes, IOLayout layout);
 
 Halide::Type get_halide_type(const Tensor &tensor);
 
 void compute_output_shapes(
     const Model &model,
     const std::map<std::string, std::vector<int>> &input_shapes,
+    std::map<std::string, std::vector<int>> *output_shapes);
+
+void extract_expected_input_shapes(
+    const Model &model,
+    std::map<std::string, std::vector<int>> *input_shapes);
+
+void compute_expected_output_shapes(
+    const Model &model,
     std::map<std::string, std::vector<int>> *output_shapes);
 
 #endif

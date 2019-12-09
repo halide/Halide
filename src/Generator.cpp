@@ -2,15 +2,8 @@
 #include <fstream>
 #include <unordered_map>
 
-#if defined(_MSC_VER) && !defined(NOMINMAX)
-#define NOMINMAX
-#endif
-#ifdef _WIN32
-#include <windows.h>
-#else
-#include <dlfcn.h>
-#endif
-
+#include "BoundaryConditions.h"
+#include "Derivative.h"
 #include "Generator.h"
 #include "IRPrinter.h"
 #include "Module.h"
@@ -751,9 +744,12 @@ std::string halide_type_to_c_type(const Type &t) {
 int generate_filter_main_inner(int argc, char **argv, std::ostream &cerr) {
     const char kUsage[] =
         "gengen \n"
-        "  [-g GENERATOR_NAME] [-f FUNCTION_NAME] [-o OUTPUT_DIR] [-r RUNTIME_NAME]\n"
-        "  [-e EMIT_OPTIONS] [-n FILE_BASE_NAME] [-p PLUGIN_NAME]\n"
+        "  [-g GENERATOR_NAME] [-f FUNCTION_NAME] [-o OUTPUT_DIR] [-r RUNTIME_NAME] [-d 1|0]\n"
+        "  [-e EMIT_OPTIONS] [-n FILE_BASE_NAME] [-p PLUGIN_NAME] [-s AUTOSCHEDULER_NAME]\n"
         "       target=target-string[,target-string...] [generator_arg=value [...]]\n"
+        "\n"
+        " -d  Build a module that is suitable for using for gradient descent calculationn\n"
+        "     in TensorFlow or PyTorch. See Generator::build_gradient_module() documentation.\n"
         "\n"
         " -e  A comma separated list of files to emit. Accepted values are:\n"
         "     [assembly, bitcode, cpp, h, html, o, static_library,\n"
@@ -764,20 +760,28 @@ int generate_filter_main_inner(int argc, char **argv, std::ostream &cerr) {
         "     generator is run. Useful for custom auto-schedulers. The generator must\n"
         "     either be linked against a shared libHalide or compiled with -rdynamic\n"
         "     so that references in the shared library to libHalide can resolve.\n"
+        "     (Note that this does not change the default autoscheduler; use the -s flag\n"
+        "     to set that value.)"
         "\n"
-        "-r   The name of a standalone runtime to generate. Only honors EMIT_OPTIONS 'o'\n"
+        " -r   The name of a standalone runtime to generate. Only honors EMIT_OPTIONS 'o'\n"
         "     and 'static_library'. When multiple targets are specified, it picks a\n"
         "     runtime that is compatible with all of the targets, or fails if it cannot\n"
         "     find one. Flags across all of the targets that do not affect runtime code\n"
-        "     generation, such as `no_asserts` and `no_runtime`, are ignored.\n";
+        "     generation, such as `no_asserts` and `no_runtime`, are ignored.\n"
+        "\n"
+        " -s  The name of an autoscheduler to set as the default.\n";
 
-    std::map<std::string, std::string> flags_info = {{"-f", ""},
-                                                     {"-g", ""},
-                                                     {"-o", ""},
-                                                     {"-e", ""},
-                                                     {"-n", ""},
-                                                     {"-r", ""},
-                                                     {"-p", ""}};
+    std::map<std::string, std::string> flags_info = {
+        {"-d", "0"},
+        {"-e", ""},
+        {"-f", ""},
+        {"-g", ""},
+        {"-n", ""},
+        {"-o", ""},
+        {"-p", ""},
+        {"-r", ""},
+        {"-s", ""},
+    };
     GeneratorParamsMap generator_args;
 
     for (int i = 1; i < argc; ++i) {
@@ -808,40 +812,21 @@ int generate_filter_main_inner(int argc, char **argv, std::ostream &cerr) {
     // It's possible that in the future loaded plugins might change
     // how arguments are parsed, so we handle those first.
     for (const auto &lib : split_string(flags_info["-p"], ",")) {
-        if (lib.empty()) continue;
-#ifdef _WIN32
-        int wide_len = MultiByteToWideChar(CP_UTF8, 0, lib.c_str(), -1, nullptr, 0);
-        if (wide_len < 1) {
-            cerr << "Failed to load: " << lib << " (unconvertible character)\n";
-            return 1;
+        if (!lib.empty()) {
+            load_plugin(lib);
         }
+    }
 
-        std::vector<wchar_t> wide_lib(wide_len);
-        wide_len = MultiByteToWideChar(CP_UTF8, 0, lib.c_str(), -1, wide_lib.data(), wide_len);
-        if (wide_len < 1) {
-            cerr << "Failed to load: " << lib << " (unconvertible character)\n";
-            return 1;
-        }
+    if (flags_info["-d"] != "1" && flags_info["-d"] != "0") {
+        cerr << "-d must be 0 or 1\n";
+        cerr << kUsage;
+        return 1;
+    }
+    const int build_gradient_module = flags_info["-d"] == "1";
 
-        if (!LoadLibraryW(wide_lib.data())) {
-            DWORD last_err = GetLastError();
-            LPVOID last_err_msg;
-            FormatMessageA(FORMAT_MESSAGE_ALLOCATE_BUFFER | FORMAT_MESSAGE_FROM_SYSTEM |
-                               FORMAT_MESSAGE_IGNORE_INSERTS,
-                           nullptr, last_err, MAKELANGID(LANG_NEUTRAL, SUBLANG_DEFAULT),
-                           reinterpret_cast<LPSTR>(&last_err_msg), 0, nullptr);
-            cerr << "Failed to load: " << lib << "\n";
-            cerr << "LoadLibraryW failed with error " << last_err << ": "
-                 << static_cast<char *>(last_err_msg) << "\n";
-            LocalFree(last_err_msg);
-            return 1;
-        }
-#else
-        if (dlopen(lib.c_str(), RTLD_LAZY) == nullptr) {
-            cerr << "Failed to load: " << lib << ": " << dlerror() << "\n";
-            return 1;
-        }
-#endif
+    std::string autoscheduler_name = flags_info["-s"];
+    if (!autoscheduler_name.empty()) {
+        Pipeline::set_default_autoscheduler_name(autoscheduler_name);
     }
 
     std::string runtime_name = flags_info["-r"];
@@ -976,13 +961,13 @@ int generate_filter_main_inner(int argc, char **argv, std::ostream &cerr) {
         // Don't bother with this if we're just emitting a cpp_stub.
         if (!stub_only) {
             auto output_files = compute_output_files(targets[0], base_path, outputs);
-            auto module_producer = [&generator_name, &generator_args](const std::string &name, const Target &target) -> Module {
+            auto module_producer = [&generator_name, &generator_args, build_gradient_module](const std::string &name, const Target &target) -> Module {
                 auto sub_generator_args = generator_args;
                 sub_generator_args.erase("target");
                 // Must re-create each time since each instance will have a different Target.
                 auto gen = GeneratorRegistry::create(generator_name, GeneratorContext(target));
                 gen->set_generator_param_values(sub_generator_args);
-                return gen->build_module(name);
+                return build_gradient_module ? gen->build_gradient_module(name) : gen->build_module(name);
             };
             if (targets.size() > 1) {
                 compile_multitarget(function_name, output_files, targets, module_producer);
@@ -1425,22 +1410,21 @@ Module GeneratorBase::build_module(const std::string &function_name,
         auto_schedule_results = pipeline.auto_schedule(get_target(), get_machine_params());
     }
 
-    GeneratorParamInfo &pi = param_info();
+    const GeneratorParamInfo &pi = param_info();
     std::vector<Argument> filter_arguments;
-    for (auto *input : pi.inputs()) {
+    for (const auto *input : pi.inputs()) {
         for (const auto &p : input->parameters_) {
             filter_arguments.push_back(to_argument(p, p.is_buffer() ? Expr() : input->get_def_expr()));
         }
     }
 
-    Module result = pipeline.compile_to_module(filter_arguments, function_name, target, linkage_type);
+    Module result = pipeline.compile_to_module(filter_arguments, function_name, get_target(), linkage_type);
     std::shared_ptr<ExternsMap> externs_map = get_externs_map();
     for (const auto &map_entry : *externs_map) {
         result.append(map_entry.second);
     }
 
-    auto outputs = pipeline.outputs();
-    for (auto *output : pi.outputs()) {
+    for (const auto *output : pi.outputs()) {
         for (size_t i = 0; i < output->funcs().size(); ++i) {
             auto from = output->funcs()[i].name();
             auto to = output->array_name(i);
@@ -1451,6 +1435,167 @@ Module GeneratorBase::build_module(const std::string &function_name,
             }
         }
     }
+
+    result.set_auto_scheduler_results(auto_schedule_results);
+
+    return result;
+}
+
+Module GeneratorBase::build_gradient_module(const std::string &function_name) {
+    constexpr int DBG = 1;
+
+    // I doubt these ever need customizing; if they do, we can make them arguments to this function.
+    const std::string grad_input_pattern = "_grad_loss_for_$OUT$";
+    const std::string grad_output_pattern = "_grad_loss_$OUT$_wrt_$IN$";
+    const LinkageType linkage_type = LinkageType::ExternalPlusMetadata;
+
+    user_assert(!function_name.empty()) << "build_gradient_module(): function_name cannot be empty\n";
+
+    call_configure();
+    Pipeline original_pipeline = build_pipeline();
+    std::vector<Func> original_outputs = original_pipeline.outputs();
+
+    // Construct the adjoint pipeline, which has:
+    // - All the same inputs as the original, in the same order
+    // - Followed by one grad-input for each original output
+    // - Followed by one output for each unique pairing of original-output + original-input.
+
+    const GeneratorParamInfo &pi = param_info();
+
+    // Even though propagate_adjoints() supports Funcs-of-Tuples just fine,
+    // we aren't going to support them here (yet); AFAICT, neither PyTorch nor
+    // TF support Tensors with Tuples-as-values, so we'd have to split the
+    // tuples up into separate Halide inputs and outputs anyway; since Generator
+    // doesn't support Tuple-valued Inputs at all, and Tuple-valued Outputs
+    // are quite rare, we're going to just fail up front, with the assumption
+    // that the coder will explicitly adapt their code as needed. (Note that
+    // support for Tupled outputs could be added with some effort, so if this
+    // is somehow deemed critical, go for it)
+    for (const auto *input : pi.inputs()) {
+        const size_t tuple_size = input->types_defined() ? input->types().size() : 1;
+        // Note: this should never happen
+        internal_assert(tuple_size == 1) << "Tuple Inputs are not yet supported by build_gradient_module()";
+    }
+    for (const auto *output : pi.outputs()) {
+        const size_t tuple_size = output->types_defined() ? output->types().size() : 1;
+        internal_assert(tuple_size == 1) << "Tuple Outputs are not yet supported by build_gradient_module";
+    }
+
+    std::vector<Argument> gradient_inputs;
+
+    // First: the original inputs. Note that scalar inputs remain scalar,
+    // rather being promoted into zero-dimensional buffers.
+    for (const auto *input : pi.inputs()) {
+        // There can be multiple Funcs/Parameters per input if the input is an Array
+        internal_assert(input->parameters_.size() == input->funcs_.size());
+        for (const auto &p : input->parameters_) {
+            gradient_inputs.push_back(to_argument(p, p.is_buffer() ? Expr() : input->get_def_expr()));
+            debug(DBG) << "    gradient copied input is: " << gradient_inputs.back().name << "\n";
+        }
+    }
+
+    // Next: add a grad-input for each *original* output; these will
+    // be the same shape as the output (so we should copy estimates from
+    // those outputs onto these estimates).
+    // - If an output is an Array, we'll have a separate input for each array element.
+
+    std::vector<ImageParam> d_output_imageparams;
+    for (const auto *output : pi.outputs()) {
+        for (size_t i = 0; i < output->funcs().size(); ++i) {
+            const Func &f = output->funcs()[i];
+            const std::string output_name = output->array_name(i);
+            // output_name is something like "funcname_i"
+            const std::string grad_in_name = replace_all(grad_input_pattern, "$OUT$", output_name);
+            // TODO(srj): does it make sense for gradient to be a non-float type?
+            // For now, assume it's always float32 (unless the output is already some float).
+            const Type grad_in_type = output->type().is_float() ? output->type() : Float(32);
+            const int grad_in_dimensions = f.dimensions();
+            const ArgumentEstimates grad_in_estimates = f.output_buffer().parameter().get_argument_estimates();
+            internal_assert((int) grad_in_estimates.buffer_estimates.size() == grad_in_dimensions);
+
+            ImageParam d_im(grad_in_type, grad_in_dimensions, grad_in_name);
+            for (int d = 0; d < grad_in_dimensions; d++) {
+                d_im.parameter().set_min_constraint_estimate(d, grad_in_estimates.buffer_estimates[i].min);
+                d_im.parameter().set_extent_constraint_estimate(d, grad_in_estimates.buffer_estimates[i].extent);
+            }
+            d_output_imageparams.push_back(d_im);
+            gradient_inputs.push_back(to_argument(d_im.parameter(), Expr()));
+
+            debug(DBG) << "    gradient synthesized input is: " << gradient_inputs.back().name << "\n";
+        }
+    }
+
+    // Finally: define the output Func(s), one for each unique output/input pair.
+    // Note that original_outputs.size() != pi.outputs().size() if any outputs are arrays.
+    internal_assert(original_outputs.size() == d_output_imageparams.size());
+    std::vector<Func> gradient_outputs;
+    for (size_t i = 0; i < original_outputs.size(); ++i) {
+        const Func &original_output = original_outputs.at(i);
+        const ImageParam &d_output = d_output_imageparams.at(i);
+        Region bounds;
+        for (int i = 0; i < d_output.dimensions(); i++) {
+            bounds.emplace_back(d_output.dim(i).min(), d_output.dim(i).extent());
+        }
+        Func adjoint_func = BoundaryConditions::constant_exterior(d_output, make_zero(d_output.type()));
+        Derivative d = propagate_adjoints(original_output, adjoint_func, bounds);
+
+        const std::string output_name = original_output.name();
+        for (const auto *input : pi.inputs()) {
+            for (size_t i = 0; i < input->funcs_.size(); ++i) {
+                const std::string input_name = input->array_name(i);
+                const auto &f = input->funcs_[i];
+                const auto &p = input->parameters_[i];
+
+                Func d_f = d(f);
+
+                std::string grad_out_name = replace_all(replace_all(grad_output_pattern, "$OUT$", output_name), "$IN$", input_name);
+                if (!d_f.defined()) {
+                    grad_out_name = "_dummy" + grad_out_name;
+                }
+
+                Func d_out_wrt_in(grad_out_name);
+                if (d_f.defined()) {
+                    d_out_wrt_in(Halide::_) = d_f(Halide::_);
+                } else {
+                    debug(DBG) << "    No Derivative found for output " << output_name << " wrt input " << input_name << "\n";
+                    // If there was no Derivative found, don't skip the output;
+                    // just replace with a dummy Func that is all zeros. This ensures
+                    // that the signature of the Pipeline we produce is always predictable.
+                    std::vector<Var> vars;
+                    for (int i = 0; i < d_output.dimensions(); i++) {
+                        vars.push_back(Var::implicit(i));
+                    }
+                    d_out_wrt_in(vars) = make_zero(d_output.type());
+                }
+
+                d_out_wrt_in.set_estimates(p.get_argument_estimates().buffer_estimates);
+
+                // Useful for debugging; ordinarily better to leave out
+                // debug(0) << "\n\n"
+                //          << "output:\n" << FuncWithDependencies(original_output) << "\n"
+                //          << "d_output:\n" << FuncWithDependencies(adjoint_func) << "\n"
+                //          << "input:\n" << FuncWithDependencies(f) << "\n"
+                //          << "d_out_wrt_in:\n" << FuncWithDependencies(d_out_wrt_in) << "\n";
+
+                gradient_outputs.push_back(d_out_wrt_in);
+                debug(DBG) << "    gradient output is: " << d_out_wrt_in.name() << "\n";
+            }
+        }
+    }
+
+    Pipeline grad_pipeline = Pipeline(gradient_outputs);
+
+    AutoSchedulerResults auto_schedule_results;
+    if (get_auto_schedule()) {
+        auto_schedule_results = grad_pipeline.auto_schedule(get_target(), get_machine_params());
+    } else {
+        user_warning << "Autoscheduling is not enabled in build_gradient_module(), so the resulting "
+                        "gradient module will be unscheduled; this is very unlikely to be what you want.\n";
+    }
+
+    Module result = grad_pipeline.compile_to_module(gradient_inputs, function_name, get_target(), linkage_type);
+    user_assert(get_externs_map()->empty())
+        << "Building a gradient-descent module for a Generator with ExternalCode is not supported.\n";
 
     result.set_auto_scheduler_results(auto_schedule_results);
 
@@ -1788,7 +1933,7 @@ void GeneratorInputBase::set_estimate_impl(Var var, Expr min, Expr extent) {
     }
 }
 
-void GeneratorInputBase::set_estimates_impl(const std::vector<std::pair<Expr, Expr>> &estimates) {
+void GeneratorInputBase::set_estimates_impl(const Region &estimates) {
     internal_assert(exprs_.empty() && !funcs_.empty() && parameters_.size() == funcs_.size());
     for (size_t i = 0; i < funcs_.size(); ++i) {
         Func &f = funcs_[i];
@@ -1797,8 +1942,9 @@ void GeneratorInputBase::set_estimates_impl(const std::vector<std::pair<Expr, Ex
         // we end up compiling this for toplevel.
         for (size_t dim = 0; dim < estimates.size(); ++dim) {
             Parameter &p = parameters_[i];
-            p.set_min_constraint_estimate(dim, estimates[dim].first);
-            p.set_extent_constraint_estimate(dim, estimates[dim].second);
+            const Range &r = estimates[dim];
+            p.set_min_constraint_estimate(dim, r.min);
+            p.set_extent_constraint_estimate(dim, r.extent);
         }
     }
 }

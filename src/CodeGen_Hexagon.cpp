@@ -279,7 +279,7 @@ void CodeGen_Hexagon::compile_func(const LoweredFunc &f,
     debug(2) << "Lowering after unpredicating loads/stores:\n"
              << body << "\n\n";
 
-    if (target.has_feature(Target::HVX_v65)) {
+    if (is_hvx_v65_or_later()) {
         // Generate vscatter-vgathers before optimize_hexagon_shuffles.
         debug(1) << "Looking for vscatter-vgather...\n";
         body = scatter_gather_generator(body);
@@ -1602,7 +1602,7 @@ Value *CodeGen_Hexagon::shuffle_vectors(Value *a, Value *b,
     // Try to rewrite shuffles of (maybe strided) ramps.
     int start = 0, stride = 0;
     if (!is_strided_ramp(indices, start, stride)) {
-        if (is_concat_or_slice(indices) || element_bits > 16) {
+        if (is_concat_or_slice(indices)) {
             // Let LLVM handle concat or slices.
             return CodeGen_Posix::shuffle_vectors(a, b, indices);
         }
@@ -1699,15 +1699,11 @@ Value *CodeGen_Hexagon::shuffle_vectors(Value *a, Value *b,
     // TODO: There are more HVX permute instructions that could be
     // implemented here, such as vdelta/vrdelta.
 
-    if (element_bits <= 16) {
-        return vlut(concat_vectors({a, b}), indices);
-    } else {
-        return CodeGen_Posix::shuffle_vectors(a, b, indices);
-    }
+    return vlut(concat_vectors({a, b}), indices);
 }
 
-Value *CodeGen_Hexagon::vlut(Value *lut, Value *idx, int min_index,
-                             int max_index) {
+Value *CodeGen_Hexagon::vlut256(Value *lut, Value *idx, int min_index,
+                                int max_index) {
     bool is_128B = target.has_feature(Halide::Target::HVX_128);
     llvm::Type *lut_ty = lut->getType();
     llvm::Type *idx_ty = idx->getType();
@@ -1716,7 +1712,7 @@ Value *CodeGen_Hexagon::vlut(Value *lut, Value *idx, int min_index,
     internal_assert(isa<VectorType>(idx_ty));
     internal_assert(idx_ty->getScalarSizeInBits() == 8);
     internal_assert(min_index >= 0);
-    internal_assert(max_index <= 255);
+    internal_assert(max_index < 256);
 
     IdPair vlut, vlut_acc, vshuff;
     if (lut_ty->getScalarSizeInBits() == 8) {
@@ -1725,14 +1721,7 @@ Value *CodeGen_Hexagon::vlut(Value *lut, Value *idx, int min_index,
         vlut_acc = MAKE_ID_PAIR(Intrinsic::hexagon_V6_vlutvvb_oracc);
         vshuff = MAKE_ID_PAIR(Intrinsic::hexagon_V6_vshuffb);
     } else {
-        // We can use vlut16. If the LUT has greater than 16 bit
-        // elements, we replicate the LUT indices.
-        int replicate = lut_ty->getScalarSizeInBits() / 16;
-        if (replicate > 1) {
-            // TODO: Reinterpret this as a LUT lookup of 16 bit entries.
-            internal_error
-                << "LUT with greater than 16 bit entries not implemented.\n";
-        }
+        // We can use vlut16.
         vlut = MAKE_ID_PAIR(Intrinsic::hexagon_V6_vlutvwh);
         vlut_acc = MAKE_ID_PAIR(Intrinsic::hexagon_V6_vlutvwh_oracc);
         vshuff = MAKE_ID_PAIR(Intrinsic::hexagon_V6_vshuffh);
@@ -1821,7 +1810,6 @@ Value *CodeGen_Hexagon::vlut(Value *lut, Value *idx, int min_index,
 
         result.push_back(result_i);
     }
-
     return slice_vector(concat_vectors(result), 0, idx_elements);
 }
 
@@ -2032,42 +2020,67 @@ Value *CodeGen_Hexagon::vdelta(Value *lut, const vector<int> &indices) {
     return vlut(lut, indices);
 }
 
-Value *CodeGen_Hexagon::vlut(Value *lut, const vector<int> &indices) {
-    // TODO: We can take advantage of the fact that we know the
-    // indices at compile time to implement a few
-    // optimizations. First, we can avoid running the vlut
-    // instructions for ranges of the LUT for which we know we don't
-    // have any indices. This wil happen often for strided
-    // ramps. Second, we can do the shuffling of the indices necessary
-    // at compile time.
-    vector<Constant *> llvm_indices;
-    llvm_indices.reserve(indices.size());
-    int min_index = lut->getType()->getVectorNumElements();
-    int max_index = 0;
-    for (int i : indices) {
-        if (i != -1) {
-            min_index = std::min(min_index, i);
-            max_index = std::max(max_index, i);
+static Value *create_vector(llvm::Type *ty, int val) {
+    llvm::Type *scalar_ty = ty->getScalarType();
+    Constant *value = ConstantInt::get(scalar_ty, val);
+    return ConstantVector::getSplat(ty->getVectorNumElements(), value);
+}
+
+Value *CodeGen_Hexagon::vlut(Value *lut, Value *idx, int min_index, int max_index) {
+    const unsigned idx_elem_size = idx->getType()->getScalarSizeInBits();
+    internal_assert(idx_elem_size <= 16)
+        << "Index element for lookup tables must be <= 16 bits in size.\n";
+    llvm::Type *lut_ty = lut->getType();
+    llvm::Type *result_ty = VectorType::get(lut_ty->getVectorElementType(),
+                                            idx->getType()->getVectorNumElements());
+    const unsigned idx_elems = idx->getType()->getVectorNumElements();
+
+    // Construct a new index with 16-bit elements.
+    unsigned idx16_elems = idx_elems;
+    Value *idx16 = (idx_elem_size == 8) ?
+                    call_intrin(VectorType::get(i16_t, idx16_elems),
+                    "halide.hexagon.unpack.vub", {idx}) : idx;
+
+    const int replicate = lut_ty->getScalarSizeInBits()/16;
+    if (replicate > 1) {
+        // Replicate the LUT indices and use vlut16.
+        // For LUT32: create two indices:
+        //   - 2 * index
+        //   - 2 * index + 1
+        // Interleave the two index vectors and use vlut16 with the new index
+        // vector.
+        vector<Value *> indices;
+        Value *replicate_val = ConstantInt::get(i8_t, replicate);
+        for (int i = 0; i < replicate; i++) {
+            Value *pos = ConstantInt::get(idx16->getType(), i);
+            indices.emplace_back(call_intrin(idx16->getType(),
+                                             "halide.hexagon.add_mul.vh.vh.b",
+                                             {pos, idx16, replicate_val}));
         }
-        llvm_indices.push_back(ConstantInt::get(i8_t, i));
+        idx16 = interleave_vectors(indices);
+        idx16_elems *= replicate;
+        min_index = min_index * replicate;
+        max_index = (max_index + 1) * replicate - 1;
+        internal_assert(max_index <= 32676)
+            << "Index range for lookup table must be <= 32676\n";
+        lut_ty = VectorType::get(i16_t,
+                                 lut_ty->getVectorNumElements() * replicate);
+        lut = builder->CreateBitCast(lut, lut_ty);
     }
 
-    if (max_index <= 255) {
-        // If we can do this with one vlut, do it now.
-        return vlut(lut, ConstantVector::get(llvm_indices), min_index, max_index);
+    llvm::Type *i8x_t  = VectorType::get(i8_t,  idx16_elems);
+    llvm::Type *i16x_t = VectorType::get(i16_t, idx16_elems);
+    Value *minus_one = create_vector(i16x_t, -1);
+
+    // If we can do this with one vlut, do it now.
+    if (max_index < 256) {
+        // If the idx already had 8 bit elements and no replication was needed,
+        // we can use idx else we need to pack idx16.
+        Value *idx8 = (idx_elem_size == 16 || idx_elems != idx16_elems) ?
+                       call_intrin(i8x_t, "halide.hexagon.pack.vh", {idx16}) : idx;
+        Value *result_val = vlut256(lut, idx8, min_index, max_index);
+        return builder->CreateBitCast(result_val, result_ty);
     }
-
-    llvm::Type *i8x_t = VectorType::get(i8_t, indices.size());
-    llvm::Type *i16x_t = VectorType::get(i16_t, indices.size());
-
-    // We use i16 indices because we can't support LUTs with more than
-    // 32k elements anyways without massive stack spilling (the LUT
-    // must fit in registers), and it costs some runtime performance
-    // due to the conversion to 8 bit. This is also crazy and should
-    // never happen.
-    internal_assert(max_index < std::numeric_limits<int16_t>::max())
-        << "vlut of more than 32k elements not supported \n";
-
     // We need to break the index up into ranges of up to 256, and mux
     // the ranges together after using vlut on each range. This vector
     // contains the result of each range, and a condition vector
@@ -2075,31 +2088,26 @@ Value *CodeGen_Hexagon::vlut(Value *lut, const vector<int> &indices) {
     vector<std::pair<Value *, Value *>> ranges;
     for (int min_index_i = 0; min_index_i < max_index; min_index_i += 256) {
         // Make a vector of the indices shifted such that the min of
-        // this range is at 0.
-        vector<Constant *> llvm_indices;
-        llvm_indices.reserve(indices.size());
-        for (int i : indices) {
-            llvm_indices.push_back(ConstantInt::get(i16_t, i - min_index_i));
-        }
-        Value *llvm_index = ConstantVector::get(llvm_indices);
+        // this range is at 0. Use 16-bit indices for this.
+        Value *min_index_i_val = create_vector(i16x_t, min_index_i);
+        Value *indices = call_intrin(i16x_t, "halide.hexagon.sub.vh.vh",
+                                     {idx16, min_index_i_val});
 
-        // Create a condition value for which elements of the range are valid for
-        // this index. We can't make a constant vector of <1024 x i1>, it crashes
-        // the Hexagon LLVM backend.
-        Value *minus_one = codegen(make_const(UInt(16, indices.size()), -1));
-        Value *use_index =
-            call_intrin(i16x_t, "halide.hexagon.gt.vh.vh", {llvm_index, minus_one});
+        // Create a condition value for which elements of the range are valid
+        // for this index.
+        Value *use_index = call_intrin(i16x_t, "halide.hexagon.gt.vh.vh",
+                                       {indices, minus_one});
 
         // After we've eliminated the invalid elements, we can
         // truncate to 8 bits, as vlut requires.
-        llvm_index = call_intrin(i8x_t, "halide.hexagon.pack.vh", {llvm_index});
-        use_index = call_intrin(i8x_t, "halide.hexagon.pack.vh", {use_index});
+        indices = call_intrin(i8x_t, "halide.hexagon.pack.vh", {indices});
+        use_index = (lut_ty->getScalarSizeInBits() == 8) ?
+                    call_intrin(i8x_t, "halide.hexagon.pack.vh", {use_index}) : use_index;
 
         int range_extent_i = std::min(max_index - min_index_i, 255);
-        Value *range_i = vlut(slice_vector(lut, min_index_i, range_extent_i),
-                              llvm_index, 0, range_extent_i);
-
-        ranges.push_back({range_i, use_index});
+        Value *range_i = vlut256(slice_vector(lut, min_index_i, range_extent_i),
+                                 indices, 0, range_extent_i);
+        ranges.push_back({ range_i, use_index });
     }
 
     // TODO: This could be reduced hierarchically instead of in
@@ -2126,7 +2134,38 @@ Value *CodeGen_Hexagon::vlut(Value *lut, const vector<int> &indices) {
         result = call_intrin(result->getType(), mux,
                              {ranges[i].second, ranges[i].first, result});
     }
-    return result;
+    return builder->CreateBitCast(result, result_ty);
+}
+
+Value *CodeGen_Hexagon::vlut(Value *lut, const vector<int> &indices) {
+    // TODO: We can take advantage of the fact that we know the
+    // indices at compile time to implement a few
+    // optimizations. First, we can avoid running the vlut
+    // instructions for ranges of the LUT for which we know we don't
+    // have any indices. This wil happen often for strided
+    // ramps. Second, we can do the shuffling of the indices necessary
+    // at compile time.
+    vector<Constant *> llvm_indices;
+    llvm_indices.reserve(indices.size());
+    int min_index = lut->getType()->getVectorNumElements();
+    int max_index = 0;
+    for (int i : indices) {
+        if (i != -1) {
+            min_index = std::min(min_index, i);
+            max_index = std::max(max_index, i);
+        }
+        llvm_indices.push_back(ConstantInt::get(i16_t, i));
+    }
+
+    // We use i16 indices because we can't support LUTs with more than
+    // 32k elements anyways without massive stack spilling (the LUT
+    // must fit in registers), and it costs some runtime performance
+    // due to the conversion to 8 bit. This is also crazy and should
+    // never happen.
+    internal_assert(max_index < std::numeric_limits<int16_t>::max())
+        << "vlut of more than 32k elements not supported \n";
+
+    return vlut(lut, ConstantVector::get(llvm_indices), min_index, max_index);
 }
 
 namespace {
@@ -2871,8 +2910,8 @@ void CodeGen_Hexagon::visit(const Allocate *alloc) {
         }
     } else if (alloc->memory_type == MemoryType::VTCM &&
                !alloc->new_expr.defined()) {
-        if (!target.has_feature(Target::HVX_v65)) {
-            user_error << "VTCM store_in requires hvx_v65 target feature.\n";
+        if (!is_hvx_v65_or_later()) {
+            user_error << "VTCM store_in requires HVX_v65 or later.\n";
         }
         // Calculate size of allocation.
         Expr size = alloc->type.bytes();

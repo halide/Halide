@@ -4,6 +4,12 @@ IMAGES ?= ../images
 UNAME ?= $(shell uname)
 SHELL = bash
 
+PYTHON ?= python3
+
+# TODO(srj): the python bindings need to be put into the distrib folders;
+# this is a hopefully-temporary workaround (https://github.com/halide/Halide/issues/4368)
+HALIDE_PYTHON_BINDINGS_PATH ?= $(realpath ../../bin/python3_bindings)
+
 BIN_DIR ?= bin
 
 # Most build outputs go into $(BIN)/$(HL_TARGET)/$(HL_TARGET)/, so that you can vary the test
@@ -131,7 +137,7 @@ endif
 GENERATOR_DEPS ?= $(LIB_HALIDE) $(HALIDE_DISTRIB_PATH)/include/Halide.h $(HALIDE_DISTRIB_PATH)/tools/GenGen.cpp
 
 # Generators which use autoscheduler plugin need to specify the linker where to find libHalide.so required by the plugin.
-GENERATOR_LDFLAGS ?= -Wl,-rpath,$(dir $(LIB_HALIDE))
+GENERATOR_LDFLAGS ?= -Wl,-rpath,$(dir $(LIB_HALIDE)) -L $(dir $(LIB_HALIDE)) -lHalide $(LDFLAGS)
 
 LIBPNG_LIBS_DEFAULT = $(shell libpng-config --ldflags)
 LIBPNG_CXX_FLAGS ?= $(shell libpng-config --cflags)

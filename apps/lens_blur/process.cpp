@@ -1,11 +1,11 @@
-#include <cstdio>
 #include <chrono>
+#include <cstdio>
 
 #include "lens_blur.h"
 #include "lens_blur_auto_schedule.h"
 
-#include "halide_benchmark.h"
 #include "HalideBuffer.h"
+#include "halide_benchmark.h"
 #include "halide_image_io.h"
 
 using namespace Halide::Runtime;
@@ -42,7 +42,7 @@ int main(int argc, char **argv) {
         lens_blur(left_im, right_im, slices, focus_depth, blur_radius_scale,
                   aperture_samples, output);
         output.device_sync();
-        });
+    });
     printf("Manually-tuned time: %gms\n", min_t_manual * 1e3);
 
     // Auto-scheduled version

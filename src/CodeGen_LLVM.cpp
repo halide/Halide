@@ -1217,12 +1217,11 @@ void CodeGen_LLVM::optimize_module() {
     const bool do_loop_opt = !get_target().has_feature(Target::DisableLLVMLoopOpt) ||
                              get_target().has_feature(Target::EnableLLVMLoopOpt);
 
-// Temporarily disabled, see https://github.com/halide/Halide/issues/3957
-// #if LLVM_VERSION >= 90
-#if 0
+#if LLVM_VERSION >= 90
     PipelineTuningOptions pto;
     pto.LoopInterleaving = do_loop_opt;
     pto.LoopVectorization = do_loop_opt;
+    pto.SLPVectorization = true;  // Note: SLP vectorization has no analogue in the Halide scheduling model
     pto.LoopUnrolling = do_loop_opt;
     // Clear ScEv info for all loops. Certain Halide applications spend a very
     // long time compiling in forgetLoop, and prefer to forget everything
@@ -1259,21 +1258,22 @@ void CodeGen_LLVM::optimize_module() {
             mpm.addPass(
                 RequireAnalysisPass<ASanGlobalsMetadataAnalysis, llvm::Module>());
         });
-        bool recover = true;
-        bool use_after_scope = true;
         pb.registerOptimizerLastEPCallback(
-            [recover, use_after_scope](FunctionPassManager &fpm,
-                                     PassBuilder::OptimizationLevel level) {
+            [](FunctionPassManager &fpm, PassBuilder::OptimizationLevel level) {
+                constexpr bool compile_kernel = false;
+                constexpr bool recover = false;
+                constexpr bool use_after_scope = true;
                 fpm.addPass(AddressSanitizerPass(
-                    /*CompileKernel=*/false, recover, use_after_scope));
+                    compile_kernel, recover, use_after_scope));
             });
-        bool module_use_after_scope = false;
-        bool use_odr_indicator = true;
         pb.registerPipelineStartEPCallback(
-            [recover, module_use_after_scope,
-             use_odr_indicator](ModulePassManager &mpm) {
+            [](ModulePassManager &mpm) {
+                constexpr bool compile_kernel = false;
+                constexpr bool recover = false;
+                constexpr bool module_use_after_scope = false;
+                constexpr bool use_odr_indicator = true;
                 mpm.addPass(ModuleAddressSanitizerPass(
-                    /*CompileKernel=*/false, recover, module_use_after_scope,
+                    compile_kernel, recover, module_use_after_scope,
                     use_odr_indicator));
             });
     }
@@ -3004,6 +3004,16 @@ void CodeGen_LLVM::visit(const Call *op) {
                     call_args.push_back(codegen(op->args[i]));
                     dst = builder->CreateCall(append_pointer, call_args);
                 }
+            }
+            if (get_target().has_feature(Target::MSAN)) {
+              // Note that we mark the entire buffer as initialized;
+              // it would be more accurate to just mark (dst - buf)
+              llvm::Function *annotate = module->getFunction("halide_msan_annotate_memory_is_initialized");
+              vector<Value *> annotate_args(3);
+              annotate_args[0] = get_user_context();
+              annotate_args[1] = buf;
+              annotate_args[2] = codegen(Cast::make(Int(64), buf_size));
+              builder->CreateCall(annotate, annotate_args);
             }
             value = buf;
         }
