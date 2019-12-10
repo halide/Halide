@@ -73,5 +73,6 @@ all: fft_aot_test bench_16x16 bench_32x32 bench_48x48 bench_64x64
 test: $(BIN)/$(HL_TARGET)/bench_fft
 	$< 8 8 $(<D)
 	$< 16 16 $(<D)
+	$< 24 24 $(<D)
 	$< 32 32 $(<D)
 	$< 48 48 $(<D)
