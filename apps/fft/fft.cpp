@@ -400,11 +400,8 @@ ComplexFunc fft_dim1(ComplexFunc x,
         S *= R;
     }
 
-    // Ensure that the vector width is not larger than the vectorization dimension
-    // extent. Note that we don't use the GCD here because Halide can handle
-    // the case where the vectorization width does not divide the extent (but not
-    // the case where the vectorization width exceeds the extent).
-    vector_width = std::min(vector_width, extent_0);
+    // Ensure that the vector width divides the vectorization dimension extent.
+    vector_width = gcd(vector_width, extent_0);
 
     // Split the tile into groups of DFTs, and vectorize within the
     // group.
@@ -690,6 +687,31 @@ ComplexFunc fft2d_r2c(Func r,
     int N0 = product(R0);
     int N1 = product(R1);
 
+    const int natural_vector_size = target.natural_vector_size(r.output_types()[0]);
+
+    // If this FFT is small, the logic related to zipping and unzipping
+    // the FFT may be expensive compared to just brute forcing with a complex
+    // FFT.
+    bool skip_zip = N0 < natural_vector_size * 2;
+    // We also are bad at handling zipping when the zip size is a small non-integer
+    // factor of the vector size.
+    skip_zip = skip_zip || (N0 < natural_vector_size * 4 && (N0 % (natural_vector_size * 2) != 0));
+    if (skip_zip) {
+        ComplexFunc r_complex("r_complex");
+        r_complex(A({n0, n1}, args)) = ComplexExpr(r(A({n0, n1}, args)), 0.0f);
+        ComplexFunc dft = fft2d_c2c(r_complex, R0, R1, -1, target, desc);
+
+        // fft2d_c2c produces a N0 x N1 buffer, but the caller of this probably only expects
+        // an N0 x N1 / 2 + 1 buffer.
+        ComplexFunc result(prefix + "r2c");
+        result(A({n0, n1}, args)) = dft(A({n0, n1}, args));
+        result.bound(n0, 0, N0);
+        result.bound(n1, 0, (N1 + 1) / 2 + 1);
+        result.vectorize(n0, std::min(N0, target.natural_vector_size(result.output_types()[0])));
+        dft.compute_at(result, outer);
+        return result;
+    }
+
     // Cache of twiddle factors for this FFT.
     TwiddleFactorSet twiddle_cache;
 
@@ -880,140 +902,162 @@ Func fft2d_c2r(ComplexFunc c,
     int N0 = product(R0);
     int N1 = product(R1);
 
-    // Cache of twiddle factors for this FFT.
-    TwiddleFactorSet twiddle_cache;
-
-    int zipped_extent0 = (N1 + 1) / 2;
-
     // Add a boundary condition to prevent scheduling from causing the
     // algorithms below to reach out of the bounds we promise to define in
     // forward FFTs.
     c = ComplexFunc(repeat_edge((Func)c, Expr(0), Expr(N0), Expr(0), Expr((N1 + 1) / 2 + 1)));
 
-    // The DC and Nyquist bins must be real, so we zip those two DFTs together
-    // into one complex DFT. Note that this select gets eliminated due to the
-    // scheduling done by tiled_transpose below.
-    ComplexFunc c_zipped(prefix + "c_zipped");
-    {
-        // Stuff the Nyquist bin DFT into the imaginary part of the DC bin DFT.
-        ComplexExpr X = c(A({n0, 0}, args));
-        ComplexExpr Y = c(A({n0, N1 / 2}, args));
-        c_zipped(A({n0, n1}, args)) = select(n1 > 0, likely(c(A({n0, n1}, args))), X + j * Y);
-    }
+    // If this FFT is small, the logic related to zipping and unzipping
+    // the FFT may be expensive compared to just brute forcing with a complex
+    // FFT.
+    const int natural_vector_size = target.natural_vector_size(c.output_types()[0]);
 
-    // transpose the input.
-    ComplexFunc cT, cT_tiled;
-    std::tie(cT, cT_tiled) =
-        tiled_transpose(c_zipped, zipped_extent0, target, prefix);
+    bool skip_zip = N0 < natural_vector_size * 2;
 
-    // Take the inverse DFT of the columns (rows in the final result).
-    ComplexFunc dft0T = fft_dim1(cT,
-                                 R0,
-                                 1,  // sign
-                                 zipped_extent0,
-                                 1.0f,
-                                 desc.parallel,
-                                 prefix,
-                                 target,
-                                 &twiddle_cache);
-
-    // The vector width of the zipping performed below.
-    int zip_width = desc.vector_width;
-    if (zip_width <= 0) {
-        zip_width = gcd(target.natural_vector_size(dft0T.output_types()[0]), N1 / 2);
-    }
-
-    // transpose so we can take the DFT of the columns again.
-    ComplexFunc dft0, dft0_tiled;
-    std::tie(dft0, dft0_tiled) = tiled_transpose(dft0T, zip_width, target, prefix, true);
-
-    // Unzip the DC and Nyquist DFTs.
-    ComplexFunc dft0_unzipped("dft0_unzipped");
-    {
-        dft0_unzipped(A({n0, n1}, args)) =
-            select(n1 <= 0, re(dft0(A({n0, 0}, args))),
-                   n1 >= N1 / 2, im(dft0(A({n0, 0}, args))),
-                   likely(dft0(A({n0, min(n1, (N1 / 2) - 1)}, args))));
-    }
-
-
-    // Zip two real DFTs X and Y into one complex DFT Z = X + j Y. For more
-    // information, see the large comment above fft2d_r2c.
-    //
-    // As an implementation detail, this zip operation is done in groups of
-    // columns to enable dense vector loads. X is taken from the even indexed
-    // groups of columns, Y is taken from the odd indexed groups of columns.
-    //
-    // Ensure the zip width divides the zipped extent.
-    zip_width = gcd(zip_width, N0 / 2);
-
-    ComplexFunc zipped(prefix + "zipped");
-    {
-        // Construct the whole DFT domain of X and Y via conjugate symmetry.
-        Expr n0_X = (n0 / zip_width) * zip_width * 2 + (n0 % zip_width);
-        Expr n1_sym = (N1 - n1) % N1;
-        ComplexExpr X = select(n1 < N1 / 2,
-                               dft0_unzipped(A({n0_X, n1}, args)),
-                               conj(dft0_unzipped(A({n0_X, n1_sym}, args))));
-
-        Expr n0_Y = n0_X + zip_width;
-        ComplexExpr Y = select(n1 < N1 / 2,
-                               dft0_unzipped(A({n0_Y, n1}, args)),
-                               conj(dft0_unzipped(A({n0_Y, n1_sym}, args))));
-        zipped(A({n0, n1}, args)) = X + j * Y;
-    }
-
-    // Take the inverse DFT of the columns again.
-    ComplexFunc dft = fft_dim1(zipped,
-                               R1,
-                               1,                            // sign
-                               std::min(zip_width, N0 / 2),  // extent of dim 0
-                               desc.gain,
-                               desc.parallel,
-                               prefix,
-                               target,
-                               &twiddle_cache);
-
-    ComplexFunc dft_padded = ComplexFunc(repeat_edge((Func)dft, Expr(), Expr(), Expr(0), Expr(N1)));
-
-    // Extract the real inverse DFTs.
+    ComplexFunc dft;
     Func unzipped(prefix + "unzipped");
-    {
+    if (skip_zip) {
+        // Because fft2d_c2c expects the full complex domain, we need to reconstruct
+        // it via conjugate symmetry.
+        ComplexFunc c_extended(prefix + "c_extended");
+        c_extended(A({n0, n1}, args)) =
+            select(n1 <= (N1 + 1) / 2, c(A({n0, n1}, args)), conj(c(A({(N0 - n0) % N0, (N1 - n1) % N1}, args))));
+        dft = fft2d_c2c(c_extended, R0, R1, 1, target, desc);
+        unzipped(A({n0, n1}, args)) = re(dft(A({n0, n1}, args)));
+
+        dft.compute_at(unzipped, outer);
+
+        // We want to unroll by at least two zip_widths to simplify the zip group
+        // logic.
+        int vector_size = std::min(N0, natural_vector_size);
+        unzipped.vectorize(n0, vector_size);
+    } else {
+        // Cache of twiddle factors for this FFT.
+        TwiddleFactorSet twiddle_cache;
+
+        int zipped_extent0 = (N1 + 1) / 2;
+
+        // The DC and Nyquist bins must be real, so we zip those two DFTs together
+        // into one complex DFT. Note that this select gets eliminated due to the
+        // scheduling done by tiled_transpose below.
+        ComplexFunc c_zipped(prefix + "c_zipped");
+        {
+            // Stuff the Nyquist bin DFT into the imaginary part of the DC bin DFT.
+            ComplexExpr X = c(A({n0, 0}, args));
+            ComplexExpr Y = c(A({n0, N1 / 2}, args));
+            c_zipped(A({n0, n1}, args)) = select(n1 > 0, likely(c(A({n0, n1}, args))), X + j * Y);
+        }
+
+        // transpose the input.
+        ComplexFunc cT, cT_tiled;
+        std::tie(cT, cT_tiled) =
+            tiled_transpose(c_zipped, zipped_extent0, target, prefix);
+
+        // Take the inverse DFT of the columns (rows in the final result).
+        ComplexFunc dft0T = fft_dim1(cT,
+                                     R0,
+                                     1,  // sign
+                                     zipped_extent0,
+                                     1.0f,
+                                     desc.parallel,
+                                     prefix,
+                                     target,
+                                     &twiddle_cache);
+
+        // The vector width of the zipping performed below.
+        int zip_width = desc.vector_width;
+        if (zip_width <= 0) {
+            zip_width = gcd(target.natural_vector_size(dft0T.output_types()[0]), N1 / 2);
+        }
+
+        // transpose so we can take the DFT of the columns again.
+        ComplexFunc dft0, dft0_tiled;
+        std::tie(dft0, dft0_tiled) = tiled_transpose(dft0T, zip_width, target, prefix, true);
+
+        // Unzip the DC and Nyquist DFTs.
+        ComplexFunc dft0_unzipped("dft0_unzipped");
+        {
+            dft0_unzipped(A({n0, n1}, args)) =
+                select(n1 <= 0, re(dft0(A({n0, 0}, args))),
+                       n1 >= N1 / 2, im(dft0(A({n0, 0}, args))),
+                       likely(dft0(A({n0, min(n1, (N1 / 2) - 1)}, args))));
+        }
+
+
+        // Zip two real DFTs X and Y into one complex DFT Z = X + j Y. For more
+        // information, see the large comment above fft2d_r2c.
+        //
+        // As an implementation detail, this zip operation is done in groups of
+        // columns to enable dense vector loads. X is taken from the even indexed
+        // groups of columns, Y is taken from the odd indexed groups of columns.
+        //
+        // Ensure the zip width divides the zipped extent.
+        zip_width = gcd(zip_width, N0 / 2);
+
+        ComplexFunc zipped(prefix + "zipped");
+        {
+            // Construct the whole DFT domain of X and Y via conjugate symmetry.
+            Expr n0_X = (n0 / zip_width) * zip_width * 2 + (n0 % zip_width);
+            Expr n1_sym = (N1 - n1) % N1;
+            ComplexExpr X = select(n1 < N1 / 2,
+                                   dft0_unzipped(A({n0_X, n1}, args)),
+                                   conj(dft0_unzipped(A({n0_X, n1_sym}, args))));
+
+            Expr n0_Y = n0_X + zip_width;
+            ComplexExpr Y = select(n1 < N1 / 2,
+                                   dft0_unzipped(A({n0_Y, n1}, args)),
+                                   conj(dft0_unzipped(A({n0_Y, n1_sym}, args))));
+            zipped(A({n0, n1}, args)) = X + j * Y;
+        }
+
+        // Take the inverse DFT of the columns again.
+        dft = fft_dim1(zipped,
+                       R1,
+                       1,                            // sign
+                       std::min(zip_width, N0 / 2),  // extent of dim 0
+                       desc.gain,
+                       desc.parallel,
+                       prefix,
+                       target,
+                       &twiddle_cache);
+
+        ComplexFunc dft_padded = ComplexFunc(repeat_edge((Func)dft, Expr(), Expr(), Expr(0), Expr(N1)));
+
+        // Extract the real inverse DFTs.
         Expr unzip_n0 = (n0 / (zip_width * 2)) * zip_width + (n0 % zip_width);
         unzipped(A({n0, n1}, args)) =
             select(n0 % (zip_width * 2) < zip_width,
                    re(dft_padded(A({unzip_n0, n1}, args))),
                    im(dft_padded(A({unzip_n0, n1}, args))));
+
+        // Schedule.
+
+        // Schedule the transpose step.
+        if (cT_tiled.defined()) {
+            cT_tiled.compute_at(dft0T, group);
+        }
+        dft0_tiled.compute_at(dft, outer);
+
+        // Schedule the input, if requested.
+        if (desc.schedule_input) {
+            // We should want to compute this at dft0T, group. However, due to the zip
+            // operation, the bounds are bigger than we'd like (we need the last row for
+            // the first group).
+            c.compute_at(dft, outer);
+        }
+
+        dft0T.compute_at(dft, outer);
+
+        // We want to unroll by at least two zip_widths to simplify the zip group
+        // logic.
+        unzipped
+            .vectorize(n0, zip_width)
+            .unroll(n0, gcd(N0 / zip_width, 4));
     }
-
-    // Schedule.
-
-    // Schedule the transpose step.
-    if (cT_tiled.defined()) {
-        cT_tiled.compute_at(dft0T, group);
-    }
-    dft0_tiled.compute_at(dft, outer);
-
-    // Schedule the input, if requested.
-    if (desc.schedule_input) {
-        // We should want to compute this at dft0T, group. However, due to the zip
-        // operation, the bounds are bigger than we'd like (we need the last row for
-        // the first group).
-        c.compute_at(dft, outer);
-    }
-
-    dft0T.compute_at(dft, outer);
-
     dft.compute_at(unzipped, outer);
 
     unzipped.bound(n0, 0, N0);
     unzipped.bound(n1, 0, N1);
-
-    // We want to unroll by at least two zip_widths to simplify the zip group
-    // logic.
-    unzipped
-        .vectorize(n0, zip_width)
-        .unroll(n0, gcd(N0 / zip_width, 4));
 
     return unzipped;
 }
