@@ -42,10 +42,8 @@ CodeGen_Hexagon::CodeGen_Hexagon(Target t)
         isa_version = 66;
     } else if (target.has_feature(Halide::Target::HVX_v65)) {
         isa_version = 65;
-    } else if (target.has_feature(Halide::Target::HVX_v62)) {
-        isa_version = 62;
     } else {
-        isa_version = 60;
+        isa_version = 62;
     }
     user_assert(!target.features_all_of(
         {Halide::Target::HVX_128, Halide::Target::HVX_64}))
@@ -459,7 +457,7 @@ static const HvxIntrinsic intrinsic_wrappers[] = {
     {MAKE_ID_PAIR(Intrinsic::hexagon_V6_vsatuwuh),
      u16v1,
      "trunc_satuh.vuw",
-     {u32v2}},  // v62 or later
+     {u32v2}},
 
     {MAKE_ID_PAIR(Intrinsic::hexagon_V6_vroundhub),
      u8v1,
@@ -607,7 +605,7 @@ static const HvxIntrinsic intrinsic_wrappers[] = {
     {MAKE_ID_PAIR(Intrinsic::hexagon_V6_vadduwsat),
      u32v1,
      "satuw_add.vuw.vuw",
-     {u32v1, u32v1}},  // v62 or later
+     {u32v1, u32v1}},
     {MAKE_ID_PAIR(Intrinsic::hexagon_V6_vaddhsat),
      i16v1,
      "sath_add.vh.vh",
@@ -627,7 +625,7 @@ static const HvxIntrinsic intrinsic_wrappers[] = {
     {MAKE_ID_PAIR(Intrinsic::hexagon_V6_vadduwsat_dv),
      u32v2,
      "satuw_add.vuw.vuw.dv",
-     {u32v2, u32v2}},  // v62 or later
+     {u32v2, u32v2}},
     {MAKE_ID_PAIR(Intrinsic::hexagon_V6_vaddhsat_dv),
      i16v2,
      "sath_add.vh.vh.dv",
@@ -1208,14 +1206,8 @@ static const HvxIntrinsic intrinsic_wrappers[] = {
     {MAKE_ID_PAIR(Intrinsic::hexagon_V6_vnot), u32v1, "not.vw", {u32v1}},
 
     // Broadcasts
-    {MAKE_ID_PAIR(Intrinsic::hexagon_V6_lvsplatb),
-     u8v1,
-     "splat_v62.b",
-     {u8}},  // v62 or later
-    {MAKE_ID_PAIR(Intrinsic::hexagon_V6_lvsplath),
-     u16v1,
-     "splat_v62.h",
-     {u16}},  // v62 or later
+    {MAKE_ID_PAIR(Intrinsic::hexagon_V6_lvsplatb), u8v1, "splat.b", {u8}},
+    {MAKE_ID_PAIR(Intrinsic::hexagon_V6_lvsplath), u16v1, "splat.h", {u16}},
     {MAKE_ID_PAIR(Intrinsic::hexagon_V6_lvsplatw), u32v1, "splat.w", {u32}},
 
     // Bit counting
@@ -2257,10 +2249,8 @@ string CodeGen_Hexagon::mcpu() const {
         return "hexagonv66";
     } else if (target.has_feature(Halide::Target::HVX_v65)) {
         return "hexagonv65";
-    } else if (target.has_feature(Halide::Target::HVX_v62)) {
-        return "hexagonv62";
     } else {
-        return "hexagonv60";
+        return "hexagonv62";
     }
 }
 
@@ -2634,13 +2624,8 @@ void CodeGen_Hexagon::visit(const Broadcast *op) {
         CodeGen_Posix::visit(op);
     } else {
         // TODO: Use vd0?
-        string v62orLater_suffix = "";
-        if (is_hvx_v62_or_later() &&
-            (op->value.type().bits() == 8 || op->value.type().bits() == 16))
-            v62orLater_suffix = "_v62";
-
         value = call_intrin(op->type,
-                            "halide.hexagon.splat" + v62orLater_suffix +
+                            "halide.hexagon.splat" +
                                 type_suffix(op->value, false),
                             {op->value});
     }

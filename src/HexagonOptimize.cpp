@@ -160,7 +160,6 @@ struct Pattern {
         NarrowUnsignedOp2 = 1 << 17,
         NarrowUnsignedOps = NarrowUnsignedOp0 | NarrowUnsignedOp1 | NarrowUnsignedOp2,
 
-        v62orLater = 1 << 20,  // Pattern should be matched only for v62 target or later
         v65orLater = 1 << 21,  // Pattern should be matched only for v65 target or later
         v66orLater = 1 << 22,  // Pattern should be matched only for v66 target or later
     };
@@ -195,10 +194,6 @@ Expr wild_i64x = Variable::make(Type(Type::Int, 64, 0), "*");
 
 // Check if a pattern with flags 'flags' is supported on the target.
 bool check_pattern_target(int flags, const Target &target) {
-    if ((flags & (Pattern::v62orLater)) &&
-        !target.features_any_of({Target::HVX_v62, Target::HVX_v65, Target::HVX_v66})) {
-        return false;
-    }
     if ((flags & (Pattern::v65orLater)) &&
         !target.features_any_of({Target::HVX_v65, Target::HVX_v66})) {
         return false;
@@ -892,7 +887,7 @@ private:
             // Saturating add/subtract
             {"halide.hexagon.satub_add.vub.vub", u8_sat(wild_u16x + wild_u16x), Pattern::NarrowOps},
             {"halide.hexagon.satuh_add.vuh.vuh", u16_sat(wild_u32x + wild_u32x), Pattern::NarrowOps},
-            {"halide.hexagon.satuw_add.vuw.vuw", u32_sat(wild_u64x + wild_u64x), Pattern::NarrowOps | Pattern::v62orLater},
+            {"halide.hexagon.satuw_add.vuw.vuw", u32_sat(wild_u64x + wild_u64x), Pattern::NarrowOps},
             {"halide.hexagon.sath_add.vh.vh", i16_sat(wild_i32x + wild_i32x), Pattern::NarrowOps},
             {"halide.hexagon.satw_add.vw.vw", i32_sat(wild_i64x + wild_i64x), Pattern::NarrowOps},
 
@@ -928,7 +923,7 @@ private:
             {"halide.hexagon.pack_sath.vw", i16_sat(wild_i32x)},
 
             // We don't have a vpack equivalent to this one, so we match it directly.
-            {"halide.hexagon.trunc_satuh.vuw", u16_sat(wild_u32x), Pattern::DeinterleaveOp0 | Pattern::v62orLater},
+            {"halide.hexagon.trunc_satuh.vuw", u16_sat(wild_u32x), Pattern::DeinterleaveOp0},
 
             // Narrowing casts. These may interleave later with trunclo.
             {"halide.hexagon.packhi.vh", u8(wild_u16x / 256)},
