@@ -885,6 +885,8 @@ Func fft2d_c2r(ComplexFunc c,
 
     int zipped_extent0 = (N1 + 1) / 2;
 
+    c = ComplexFunc(repeat_edge((Func)c, 0, N0, 0, (N1 + 1) / 2 + 1));
+
     // The DC and Nyquist bins must be real, so we zip those two DFTs together
     // into one complex DFT. Note that this select gets eliminated due to the
     // scheduling done by tiled_transpose below.
@@ -915,7 +917,7 @@ Func fft2d_c2r(ComplexFunc c,
     // The vector width of the zipping performed below.
     int zip_width = desc.vector_width;
     if (zip_width <= 0) {
-        zip_width = std::min(target.natural_vector_size(dft0T.output_types()[0]), N1 / 2);
+        zip_width = gcd(target.natural_vector_size(dft0T.output_types()[0]), N1 / 2);
     }
 
     // transpose so we can take the DFT of the columns again.
