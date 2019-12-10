@@ -885,7 +885,10 @@ Func fft2d_c2r(ComplexFunc c,
 
     int zipped_extent0 = (N1 + 1) / 2;
 
-    c = ComplexFunc(repeat_edge((Func)c, 0, N0, 0, (N1 + 1) / 2 + 1));
+    // Add a boundary condition to prevent scheduling from causing the
+    // algorithms below to reach out of the bounds we promise to define in
+    // forward FFTs.
+    c = ComplexFunc(repeat_edge((Func)c, Expr(0), Expr(N0), Expr(0), Expr((N1 + 1) / 2 + 1)));
 
     // The DC and Nyquist bins must be real, so we zip those two DFTs together
     // into one complex DFT. Note that this select gets eliminated due to the
@@ -933,8 +936,6 @@ Func fft2d_c2r(ComplexFunc c,
                    likely(dft0(A({n0, min(n1, (N1 / 2) - 1)}, args))));
     }
 
-    ComplexFunc dft0_bounded =
-        ComplexFunc(repeat_edge((Func)dft0_unzipped, Expr(0), Expr(N0), Expr(0), Expr((N1 + 1) / 2 + 1)));
 
     // Zip two real DFTs X and Y into one complex DFT Z = X + j Y. For more
     // information, see the large comment above fft2d_r2c.
@@ -952,13 +953,13 @@ Func fft2d_c2r(ComplexFunc c,
         Expr n0_X = (n0 / zip_width) * zip_width * 2 + (n0 % zip_width);
         Expr n1_sym = (N1 - n1) % N1;
         ComplexExpr X = select(n1 < N1 / 2,
-                               dft0_bounded(A({n0_X, n1}, args)),
-                               conj(dft0_bounded(A({n0_X, n1_sym}, args))));
+                               dft0_unzipped(A({n0_X, n1}, args)),
+                               conj(dft0_unzipped(A({n0_X, n1_sym}, args))));
 
         Expr n0_Y = n0_X + zip_width;
         ComplexExpr Y = select(n1 < N1 / 2,
-                               dft0_bounded(A({n0_Y, n1}, args)),
-                               conj(dft0_bounded(A({n0_Y, n1_sym}, args))));
+                               dft0_unzipped(A({n0_Y, n1}, args)),
+                               conj(dft0_unzipped(A({n0_Y, n1_sym}, args))));
         zipped(A({n0, n1}, args)) = X + j * Y;
     }
 
