@@ -937,34 +937,7 @@ void configure_pipeline_features(const FunctionDAG &dag,
                                  const MachineParams &params,
                                  CostModel *cost_model) {
     cost_model->reset();
-    const int pipeline_feat_size = head1_w * head1_h;
-    // We ignore the first seven pipeline features in the cost
-    // model. It's just a mask of which types are in use.
-    static_assert(sizeof(PipelineFeatures) - 7 * sizeof(int) ==
-                      sizeof(int) * pipeline_feat_size,
-                  "Incorrect size for pipeline features");
-    int num_stages = 0;
-    for (const auto &n : dag.nodes) {
-        if (!n.is_input) num_stages += (int)n.stages.size();
-    }
-    Runtime::Buffer<float> pipeline_features(head1_w, head1_h, num_stages);
-    int stage = 0;
-    for (const auto &n : dag.nodes) {
-        if (n.is_input) continue;
-        for (auto it = n.stages.rbegin(); it != n.stages.rend(); it++) {
-            const auto &s = *it;
-            const int *pipeline_feats = (const int *)(&(s.features)) + 7;
-            // skip the first 7 features
-            for (int i = 0; i < pipeline_feat_size; i++) {
-                int x = i / 7;
-                int y = i % 7;
-                pipeline_features(x, y, stage) = pipeline_feats[i];
-            }
-            stage += 1;
-        }
-    }
-    internal_assert(stage == num_stages);
-    cost_model->set_pipeline_features(pipeline_features, params.parallelism);
+    cost_model->set_pipeline_features(dag, params);
 }
 
 // A single pass of coarse-to-fine beam search.

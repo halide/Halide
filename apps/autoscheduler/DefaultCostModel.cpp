@@ -62,10 +62,39 @@ public:
         load_weights();
     }
 
-    void set_pipeline_features(const Buffer<float> &pipeline_feats, int n) override {
-        pipeline_feat_queue = pipeline_feats;
-        assert(n > 0);
-        num_cores = n;
+    void set_pipeline_features(const Internal::Autoscheduler::FunctionDAG &dag,
+                               const MachineParams &params) override {
+
+        const int pipeline_feat_size = head1_w * head1_h;
+        // We ignore the first seven pipeline features in the cost
+        // model. It's just a mask of which types are in use.
+        static_assert(sizeof(PipelineFeatures) - 7 * sizeof(int) ==
+                          sizeof(int) * pipeline_feat_size,
+                      "Incorrect size for pipeline features");
+        int num_stages = 0;
+        for (const auto &n : dag.nodes) {
+            if (!n.is_input) num_stages += (int)n.stages.size();
+        }
+        Runtime::Buffer<float> pipeline_features(head1_w, head1_h, num_stages);
+        int stage = 0;
+        for (const auto &n : dag.nodes) {
+            if (n.is_input) continue;
+            for (auto it = n.stages.rbegin(); it != n.stages.rend(); it++) {
+                const auto &s = *it;
+                const int *pipeline_feats = (const int *)(&(s.features)) + 7;
+                // skip the first 7 features
+                for (int i = 0; i < pipeline_feat_size; i++) {
+                    int x = i / 7;
+                    int y = i % 7;
+                    pipeline_features(x, y, stage) = pipeline_feats[i];
+                }
+                stage += 1;
+            }
+        }
+        internal_assert(stage == num_stages);
+        pipeline_feat_queue = pipeline_features;
+        assert(params.parallelism > 0);
+        num_cores = params.parallelism;
     }
 
     void enqueue(int ns, Buffer<float> *schedule_feats, double *cost_ptr) override {
