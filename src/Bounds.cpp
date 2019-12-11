@@ -499,21 +499,20 @@ private:
         Interval b = interval;
 
         if (!b.is_bounded()) {
-            // Division can only make things smaller in magnitude
-            // (but can flip the sign).
-            if (a.is_bounded()) {
+            // Integer division can only make things smaller in
+            // magnitude (but can flip the sign).
+            if (a.is_bounded() && op->type.is_int() && op->type.bits >= 32) {
+                // Restrict to no-overflow types to avoid worrying
+                // about overflow due to negating the most negative int.
                 if (can_prove(a.min >= 0)) {
                     interval.min = -a.max;
                     interval.max = a.max;
                 } else if (can_prove(a.max <= 0)) {
                     interval.min = a.min;
                     interval.max = -a.min;
-                } else if (a.is_single_point()) {
-                    interval.min = -cast(op->type, abs(a.min));
-                    interval.max = cast(op->type, abs(a.min));
                 } else {
-                    interval.min = -cast(op->type, max(abs(a.min), abs(a.max)));
-                    interval.max = cast(op->type, max(abs(a.min), abs(a.max)));
+                    interval.min = min(-a.max, a.min);
+                    interval.max = max(-a.max, a.min);
                 }
             } else {
                 interval = Interval::everything();
