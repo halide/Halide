@@ -233,17 +233,29 @@ Expr strided_ramp_base(Expr e, int stride = 1);
  *
  /code
  (a/b)*b + a%b = a
- 0 <= a%b < |b|
+ when b != 0, 0 <= a%b < |b|
  /endcode
  *
+ * Additionally, mod by zero returns the first argument, and div by
+ * zero returns 0. In both cases a second argument of zero is treated
+ * somewhat like an infinity. This makes mod and div total functions.
  */
 // @{
 template<typename T>
 inline T mod_imp(T a, T b) {
     Type t = type_of<T>();
-    if (t.is_int()) {
-        T r = a % b;
-        r = r + (r < 0 ? (T)std::abs((int64_t)b) : 0);
+    if (!t.is_float() && b == 0) {
+        return a;
+    } else if (t.is_int()) {
+        int64_t ia = a;
+        int64_t ib = b;
+        int64_t a_neg = ia >> 63;
+        int64_t b_neg = ib >> 63;
+        int64_t b_zero = (ib == 0) ? -1 : 0;
+        ia -= a_neg;
+        int64_t r = ia % (ib | b_zero);
+        r += (a_neg & ((ib ^ b_neg) + ~b_neg));
+        r += b_zero & ia;
         return r;
     } else {
         return a % b;
@@ -253,12 +265,21 @@ inline T mod_imp(T a, T b) {
 template<typename T>
 inline T div_imp(T a, T b) {
     Type t = type_of<T>();
-    if (t.is_int()) {
-        int64_t q = a / b;
-        int64_t r = a - q * b;
-        int64_t bs = b >> (t.bits() - 1);
-        int64_t rs = r >> (t.bits() - 1);
-        return (T)(q - (rs & bs) + (rs & ~bs));
+    if (!t.is_float() && b == 0) {
+        return (T)0;
+    } else if (t.is_int()) {
+        // Do it as 64-bit
+        int64_t ia = a;
+        int64_t ib = b;
+        int64_t a_neg = ia >> 63;
+        int64_t b_neg = ib >> 63;
+        int64_t b_zero = (ib == 0) ? -1 : 0;
+        ib -= b_zero;
+        ia -= a_neg;
+        int64_t q = ia / ib;
+        q += a_neg & (~b_neg - b_neg);
+        q &= ~b_zero;
+        return (T)q;
     } else {
         return a / b;
     }

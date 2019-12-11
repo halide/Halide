@@ -9,6 +9,7 @@ Expr Simplify::visit(const Div *op, ExprInfo *bounds) {
     Expr b = mutate(op->b, &b_bounds);
 
     if (bounds && no_overflow_int(op->type)) {
+        // TODO: encode that div can only make things smaller and maybe flip the sign
         bounds->min = INT64_MAX;
         bounds->max = INT64_MIN;
 
@@ -80,6 +81,12 @@ Expr Simplify::visit(const Div *op, ExprInfo *bounds) {
         bounds->trim_bounds_using_alignment();
     }
 
+    bool denominator_non_zero =
+        (no_overflow_int(op->type) &&
+         ((b_bounds.min_defined && b_bounds.min > 0) ||
+          (b_bounds.max_defined && b_bounds.max < 0) ||
+          (b_bounds.alignment.remainder != 0)));
+
     if (may_simplify(op->type)) {
 
         int lanes = op->type.lanes();
@@ -89,17 +96,19 @@ Expr Simplify::visit(const Div *op, ExprInfo *bounds) {
         if (rewrite(IRMatcher::Overflow() / x, a) ||
             rewrite(x / IRMatcher::Overflow(), b) ||
             rewrite(x / 1, x) ||
-            (!op->type.is_float() &&
-             rewrite(x / 0, 0)) ||
+            rewrite(c0 / c1, fold(c0 / c1)) ||
+            (!op->type.is_float() && rewrite(x / 0, 0)) ||
+            (!op->type.is_float() && denominator_non_zero && rewrite(x / x, 1)) ||
             rewrite(0 / x, 0) ||
-            rewrite(x / x, 1) ||
-            rewrite(c0 / c1, fold(c0 / c1))) {
+            false) {
             return rewrite.result;
         }
 
         if (EVAL_IN_LAMBDA
             (rewrite(broadcast(x) / broadcast(y), broadcast(x / y, lanes)) ||
              rewrite(select(x, c0, c1) / c2, select(x, fold(c0/c2), fold(c1/c2))) ||
+             (!op->type.is_float() &&
+              rewrite(x / x, select(x == 0, 0, 1))) ||
              (no_overflow(op->type) &&
               (// Fold repeated division
                rewrite((x / c0) / c2, x / fold(c0 * c2),                          c0 > 0 && c2 > 0 && !overflows(c0 * c2)) ||
@@ -143,25 +152,30 @@ Expr Simplify::visit(const Div *op, ExprInfo *bounds) {
                rewrite((w + (z + (x * c0 + y))) / c1, (y + z + w) / c1 + x * fold(c0 / c1), c0 % c1 == 0 && c1 > 0) ||
                rewrite((w + (z + (y + x * c0))) / c1, (y + z + w) / c1 + x * fold(c0 / c1), c0 % c1 == 0 && c1 > 0) ||
 
-               rewrite((x + c0) / c1, x / c1 + fold(c0 / c1),                     c0 % c1 == 0) ||
-               rewrite((x + y)/x, y/x + 1) ||
-               rewrite((y + x)/x, y/x + 1) ||
-               rewrite((x - y)/x, (-y)/x + 1) ||
-               rewrite((y - x)/x, y/x - 1) ||
-               rewrite(((x + y) + z)/x, (y + z)/x + 1) ||
-               rewrite(((y + x) + z)/x, (y + z)/x + 1) ||
-               rewrite((z + (x + y))/x, (z + y)/x + 1) ||
-               rewrite((z + (y + x))/x, (z + y)/x + 1) ||
-               rewrite((x*y)/x, y) ||
-               rewrite((y*x)/x, y) ||
-               rewrite((x*y + z)/x, y + z/x) ||
-               rewrite((y*x + z)/x, y + z/x) ||
-               rewrite((z + x*y)/x, z/x + y) ||
-               rewrite((z + y*x)/x, z/x + y) ||
-               rewrite((x*y - z)/x, y + (-z)/x) ||
-               rewrite((y*x - z)/x, y + (-z)/x) ||
-               rewrite((z - x*y)/x, z/x - y) ||
-               rewrite((z - y*x)/x, z/x - y) ||
+               // Finally, pull out constant additions that are a multiple of the denominator
+               rewrite((x + c0) / c1, x / c1 + fold(c0 / c1), c0 % c1 == 0 && c1 > 0) ||
+               rewrite((c0 - y)/c1, fold(c0 / c1) - y / c1, (c0 + 1) % c1 == 0 && c1 > 0) ||
+               (denominator_non_zero &&
+                (rewrite((x + y)/x, y/x + 1) ||
+                 rewrite((y + x)/x, y/x + 1) ||
+                 rewrite((x - y)/x, (-y)/x + 1) ||
+                 rewrite((y - x)/x, y/x - 1) ||
+                 rewrite(((x + y) + z)/x, (y + z)/x + 1) ||
+                 rewrite(((y + x) + z)/x, (y + z)/x + 1) ||
+                 rewrite((z + (x + y))/x, (z + y)/x + 1) ||
+                 rewrite((z + (y + x))/x, (z + y)/x + 1) ||
+                 rewrite((x*y)/x, y) ||
+                 rewrite((y*x)/x, y) ||
+                 rewrite((x*y + z)/x, y + z/x) ||
+                 rewrite((y*x + z)/x, y + z/x) ||
+                 rewrite((z + x*y)/x, z/x + y) ||
+                 rewrite((z + y*x)/x, z/x + y) ||
+                 rewrite((x*y - z)/x, y + (-z)/x) ||
+                 rewrite((y*x - z)/x, y + (-z)/x) ||
+                 rewrite((z - x*y)/x, z/x - y) ||
+                 rewrite((z - y*x)/x, z/x - y) ||
+                 false)) ||
+
                (op->type.is_float() && rewrite(x/c0, x * fold(1/c0))))) ||
              (no_overflow_int(op->type) &&
               (rewrite(ramp(x, c0) / broadcast(c1), ramp(x / c1, fold(c0 / c1), lanes), c0 % c1 == 0) ||

@@ -358,45 +358,66 @@ Expr lower_int_uint_mod(Expr a, Expr b) {
 Expr lower_euclidean_div(Expr a, Expr b) {
     internal_assert(a.type() == b.type());
 
-    // IROperator's div_round_to_zero will replace this with a / b for
-    // unsigned ops, so create the intrinsic directly.
-    Expr q = Call::make(a.type(), Call::div_round_to_zero, {a, b}, Call::Intrinsic);
-    if (a.type().is_int()) {
+    Expr q;
+
+    if (a.type().is_uint()) {
+        // IROperator's div_round_to_zero will replace this with a / b for
+        // unsigned ops, so create the intrinsic directly.
+        Expr b_is_zero = (b == 0);
+        if (!can_prove(!b_is_zero)) {
+            b = b | cast(a.type(), b_is_zero);
+        }
+        q = Call::make(a.type(), Call::div_round_to_zero, {a, b}, Call::Intrinsic);
+        q = select(b_is_zero, 0, q);
+    } else {
+        internal_assert(a.type().is_int());
+
         // Signed integer division sucks. It should be defined such
         // that it satisifies (a/b)*b + a%b = a, where 0 <= a%b < |b|,
         // i.e. Euclidean division.
+        //
+        // We additionally define division by zero to be zero, and
+        // division of the most negative integer by -1 to be the most
+        // negative integer.
 
-        // We get rounding to work by examining the implied remainder
-        // and correcting the quotient.
+        // See div_imp in IROperator.h for the C code we're trying to match.
 
-        /* Here's the C code that we're trying to match:
-           int q = a / b;
-           int r = a - q * b;
-           int bs = b >> (t.bits() - 1);
-           int rs = r >> (t.bits() - 1);
-           return q - (rs & bs) + (rs & ~bs);
-        */
-        Expr r = a - q * b;
-        Expr bs = b >> make_const(b.type(), (a.type().bits() - 1));
-        Expr rs = r >> make_const(r.type(), (a.type().bits() - 1));
-        q = q - (rs & bs) + (rs & ~bs);
-        Type unsigned_type = a.type().with_code(halide_type_uint);
-        Expr would_overflow = (b == -1 &&
-                               (reinterpret(unsigned_type, a) ==
-                                reinterpret(unsigned_type, a.type().min())));
-        if (!can_prove(!would_overflow)) {
-            q = Call::make(a.type(),
-                           Call::if_then_else,
-                           {would_overflow, a.type().min(), q},
-                           Call::PureIntrinsic);
-        }
-    }
-
-    Expr zero = make_zero(a.type());
-    Expr would_trap = b == zero;
-    if (!can_prove(!would_trap)) {
         Expr zero = make_zero(a.type());
-        q = Call::make(a.type(), Call::if_then_else, {would_trap, zero, q}, Call::Intrinsic);
+        Expr minus_one = make_const(a.type(), -1);
+
+        Expr a_neg = a >> make_const(a.type(), (a.type().bits() - 1));
+        Expr b_neg = b >> make_const(a.type(), (a.type().bits() - 1));
+        Expr b_zero = select(b == zero, minus_one, zero);
+
+        // Give the simplifier the chance to skip some of this nonsense
+        if (can_prove(b != zero)) {
+            b_zero = zero;
+        }
+        if (can_prove(a >= zero)) {
+            a_neg = zero;
+        } else if (can_prove(a < zero)) {
+            a_neg = minus_one;
+        }
+        if (can_prove(b >= zero)) {
+            b_neg = zero;
+        } else if (can_prove(b < zero)) {
+            b_neg = minus_one;
+        }
+
+        // If b is zero, set it to one instead to avoid faulting
+        b -= b_zero;
+        // If a is negative, add one to it to get the rounding to work out.
+        a -= a_neg;
+        // Do the C-style division
+        q = Call::make(a.type(), Call::div_round_to_zero, {a, b}, Call::Intrinsic);
+        // If a is negative, either add or subtract one, depending on
+        // the sign of b, to fix the rounding. This can't overflow,
+        // because we move the result towards zero in either case (we
+        // add zero or one when q is negative, and subtract zero or
+        // one when it's positive).
+        q += a_neg & (~b_neg - b_neg);
+        // Set the result to zero when b is zero
+        q = q & ~b_zero;
     }
 
     q = common_subexpression_elimination(q);
@@ -405,39 +426,56 @@ Expr lower_euclidean_div(Expr a, Expr b) {
 }
 
 Expr lower_euclidean_mod(Expr a, Expr b) {
-    internal_assert(a.type() == b.type());
+    Expr q;
 
-    // IROperator's mod_round_to_zero will replace this with a % b for
-    // unsigned ops, so create the intrinsic directly.
-    Expr r = Call::make(a.type(), Call::mod_round_to_zero, {a, b}, Call::Intrinsic);
-    if (a.type().is_int()) {
-        // Match this non-overflowing C code
-        /*
-          T r = a % b;
-          T sign_mask = (r >> (sizeof(r)*8 - 1));
-          r = r + sign_mask & abs(b);
-        */
+    if (a.type().is_uint()) {
+        Expr b_is_zero = (b == 0);
+        if (!can_prove(!b_is_zero)) {
+            b = b | cast(a.type(), b_is_zero);
+        }
+        q = Call::make(a.type(), Call::mod_round_to_zero, {a, b}, Call::Intrinsic);
+        q = select(b_is_zero, a, q);
+    } else {
+        internal_assert(a.type().is_int());
 
-        Expr sign_mask = r >> cast(r.type(), (a.type().bits() - 1));
-        r += sign_mask & cast(sign_mask.type(), abs(b));
-    }
-
-    Expr zero = make_zero(a.type());
-    Expr would_trap = (b == zero);
-    if (a.type().is_int()) {
-        Type unsigned_type = a.type().with_code(halide_type_uint);
-        would_trap = would_trap || (b == make_const(a.type(), -1) &&
-                                    (reinterpret(unsigned_type, a) ==
-                                     reinterpret(unsigned_type, a.type().min())));
-    }
-    if (!can_prove(!would_trap)) {
         Expr zero = make_zero(a.type());
-        r = Call::make(a.type(), Call::if_then_else, {would_trap, zero, r}, Call::Intrinsic);
+        Expr minus_one = make_const(a.type(), -1);
+
+        Expr a_neg = a >> make_const(a.type(), (a.type().bits() - 1));
+        Expr b_neg = b >> make_const(a.type(), (a.type().bits() - 1));
+        Expr b_zero = select(b == zero, minus_one, zero);
+
+        // Give the simplifier the chance to skip some of this nonsense
+        if (can_prove(b != zero)) {
+            b_zero = zero;
+        }
+        if (can_prove(a >= zero)) {
+            a_neg = zero;
+        } else if (can_prove(a < zero)) {
+            a_neg = minus_one;
+        }
+        if (can_prove(b >= zero)) {
+            b_neg = zero;
+        } else if (can_prove(b < zero)) {
+            b_neg = minus_one;
+        }
+
+        // If a is negative, add one to get the rounding to work out
+        a -= a_neg;
+        // Do the mod, avoiding taking mod by zero
+        q = Call::make(a.type(), Call::mod_round_to_zero, {a, (b | b_zero)}, Call::Intrinsic);
+        // If a is negative, we either need to add b - 1 to the
+        // result, or -b - 1, depending on the sign of b.
+        q += (a_neg & ((b ^ b_neg) + ~b_neg));
+        // When b is zero, q is currently a_neg. If we add the current
+        // adjusted value of a, we'll get back to the original value
+        // of a.
+        q += b_zero & a;
     }
 
-    r = common_subexpression_elimination(r);
+    q = common_subexpression_elimination(q);
 
-    return r;
+    return q;
 }
 
 Expr lower_signed_shift_left(Expr a, Expr b) {

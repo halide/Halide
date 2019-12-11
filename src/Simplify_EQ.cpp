@@ -79,10 +79,19 @@ Expr Simplify::visit(const EQ *op, ExprInfo *bounds) {
         rewrite(y - min(y, x) == 0, y <= x) ||
         rewrite(max(x, c0) + c1 == 0, x == fold(-c1), c0 + c1 < 0) ||
         rewrite(min(x, c0) + c1 == 0, x == fold(-c1), c0 + c1 > 0) ||
+        rewrite(max(x, c0) + c1 == 0, false, c0 + c1 > 0) ||
+        rewrite(min(x, c0) + c1 == 0, false, c0 + c1 < 0) ||
         rewrite(max(x, c0) + c1 == 0, x <= c0, c0 + c1 == 0) ||
         rewrite(min(x, c0) + c1 == 0, c0 <= x, c0 + c1 == 0) ||
+        // Special case the above where c1 == 0
+        rewrite(max(x, c0) == 0, x == 0, c0 < 0) ||
+        rewrite(min(x, c0) == 0, x == 0, c0 > 0) ||
+        rewrite(max(x, c0) == 0, false, c0 > 0) ||
+        rewrite(min(x, c0) == 0, false, c0 < 0) ||
         rewrite(max(x, 0) == 0, x <= 0) ||
-        rewrite(min(x, 0) == 0, 0 <= x)) {
+        rewrite(min(x, 0) == 0, 0 <= x) ||
+
+        false) {
 
         return mutate(std::move(rewrite.result), bounds);
     }

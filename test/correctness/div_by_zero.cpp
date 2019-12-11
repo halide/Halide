@@ -7,7 +7,8 @@ template<typename T>
 void test() {
     // Division by zero in Halide is defined to return zero, and
     // division by the most negative integer by -1 returns the most
-    // negative integer.
+    // negative integer. To preserve the Euclidean identity, this
+    // means that x % 0 == x.
 
     Type t = halide_type_of<T>();
 
@@ -17,7 +18,7 @@ void test() {
 
     Expr test = simplify(x / zero == zero);
     _halide_user_assert(is_one(test)) << test << '\n';
-    test = simplify(x % zero == zero);
+    test = simplify(x % zero == x);
     _halide_user_assert(is_one(test)) << test << '\n';
 
     if (t.is_int() && t.bits() < 32) {
@@ -36,7 +37,7 @@ void test() {
     T result = evaluate<T>(a / b);
     _halide_user_assert(result == T{0}) << result << '\n';
     result = evaluate<T>(a % b);
-    _halide_user_assert(result == T{0}) << result << '\n';
+    _halide_user_assert(result == T{5}) << result << '\n';
     if (t.is_int() && t.bits() < 32) {
         uint64_t bits = 1;
         bits <<= (t.bits() - 1);

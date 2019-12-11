@@ -986,17 +986,13 @@ HALIDE_ALWAYS_INLINE auto mod(A a, B b) -> decltype(IRMatcher::operator%(a, b)) 
 
 template<>
 HALIDE_ALWAYS_INLINE int64_t constant_fold_bin_op<Mod>(halide_type_t &t, int64_t a, int64_t b) noexcept {
-    if (b == 0) {
-        return 0;
-    } else {
-        return mod_imp(a, b);
-    }
+    return mod_imp(a, b);
 }
 
 template<>
 HALIDE_ALWAYS_INLINE uint64_t constant_fold_bin_op<Mod>(halide_type_t &t, uint64_t a, uint64_t b) noexcept {
     if (b == 0) {
-        return 0;
+        return a;
     } else {
         return a % b;
     }

@@ -100,18 +100,18 @@ Expr Simplify::visit(const Add *op, ExprInfo *bounds) {
                rewrite(x + y*x, (y + 1) * x) ||
                rewrite(x*y + x, x * (y + 1)) ||
                rewrite(y*x + x, (y + 1) * x, !is_const(x)) ||
-               rewrite((x + c0)/c1 + c2, (x + fold(c0 + c1*c2))/c1) ||
-               rewrite((x + (y + c0)/c1) + c2, x + (y + fold(c0 + c1*c2))/c1) ||
-               rewrite(((y + c0)/c1 + x) + c2, x + (y + fold(c0 + c1*c2))/c1) ||
+               rewrite((x + c0)/c1 + c2, (x + fold(c0 + c1*c2))/c1, c1 != 0) ||
+               rewrite((x + (y + c0)/c1) + c2, x + (y + fold(c0 + c1*c2))/c1, c1 != 0) ||
+               rewrite(((y + c0)/c1 + x) + c2, x + (y + fold(c0 + c1*c2))/c1, c1 != 0) ||
                rewrite((c0 - x)/c1 + c2, (fold(c0 + c1*c2) - x)/c1, c0 != 0 && c1 != 0) || // When c0 is zero, this would fight another rule
-               rewrite(x + (x + y)/c0, (fold(c0 + 1)*x + y)/c0) ||
-               rewrite(x + (y + x)/c0, (fold(c0 + 1)*x + y)/c0) ||
-               rewrite(x + (y - x)/c0, (fold(c0 - 1)*x + y)/c0) ||
-               rewrite(x + (x - y)/c0, (fold(c0 + 1)*x - y)/c0) ||
-               rewrite((x - y)/c0 + x, (fold(c0 + 1)*x - y)/c0) ||
-               rewrite((y - x)/c0 + x, (y + fold(c0 - 1)*x)/c0) ||
-               rewrite((x + y)/c0 + x, (fold(c0 + 1)*x + y)/c0) ||
-               rewrite((y + x)/c0 + x, (y + fold(c0 + 1)*x)/c0) ||
+               rewrite(x + (x + y)/c0, (fold(c0 + 1)*x + y)/c0, c0 != 0) ||
+               rewrite(x + (y + x)/c0, (fold(c0 + 1)*x + y)/c0, c0 != 0) ||
+               rewrite(x + (y - x)/c0, (fold(c0 - 1)*x + y)/c0, c0 != 0) ||
+               rewrite(x + (x - y)/c0, (fold(c0 + 1)*x - y)/c0, c0 != 0) ||
+               rewrite((x - y)/c0 + x, (fold(c0 + 1)*x - y)/c0, c0 != 0) ||
+               rewrite((y - x)/c0 + x, (y + fold(c0 - 1)*x)/c0, c0 != 0) ||
+               rewrite((x + y)/c0 + x, (fold(c0 + 1)*x + y)/c0, c0 != 0) ||
+               rewrite((y + x)/c0 + x, (y + fold(c0 + 1)*x)/c0, c0 != 0) ||
                rewrite(min(x, y - z) + z, min(x + z, y)) ||
                rewrite(min(y - z, x) + z, min(y, x + z)) ||
                rewrite(min(x, y + c0) + c1, min(x + c1, y), c0 + c1 == 0) ||

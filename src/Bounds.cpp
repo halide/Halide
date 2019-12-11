@@ -499,7 +499,25 @@ private:
         Interval b = interval;
 
         if (!b.is_bounded()) {
-            interval = Interval::everything();
+            // Division can only make things smaller in magnitude
+            // (but can flip the sign).
+            if (a.is_bounded()) {
+                if (can_prove(a.min >= 0)) {
+                    interval.min = -a.max;
+                    interval.max = a.max;
+                } else if (can_prove(a.max <= 0)) {
+                    interval.min = a.min;
+                    interval.max = -a.min;
+                } else if (a.is_single_point()) {
+                    interval.min = -cast(op->type, abs(a.min));
+                    interval.max = cast(op->type, abs(a.min));
+                } else {
+                    interval.min = -cast(op->type, max(abs(a.min), abs(a.max)));
+                    interval.max = cast(op->type, max(abs(a.min), abs(a.max)));
+                }
+            } else {
+                interval = Interval::everything();
+            }
         } else if (a.is_single_point(op->a) && b.is_single_point(op->b)) {
             interval = Interval::single_point(op);
         } else if (can_prove(b.min == b.max)) {
@@ -516,9 +534,7 @@ private:
                 }
                 interval = Interval(e2, e1);
             } else if (a.is_bounded()) {
-                // Sign of b is unknown. Note that this might divide
-                // by zero, but only in cases where the original code
-                // divides by zero.
+                // Sign of b is unknown.
                 Expr cmp = b.min > make_zero(b.min.type().element_of());
                 interval = Interval(select(cmp, e1, e2), select(cmp, e2, e1));
             } else {
@@ -550,11 +566,26 @@ private:
         Interval a = interval;
 
         op->b.accept(this);
-        if (!interval.is_bounded()) {
-            // Uses interval produced by op->b which might be half bound.
+        Interval b = interval;
+
+        if (!b.is_bounded()) {
+            interval = Interval::everything();
+            if (a.has_lower_bound()) {
+                if (can_prove(op->b != 0)) {
+                    // Mod by something non-zero is always positive
+                    interval.min = make_zero(op->type);
+                } else {
+                    // Mod cannot make values more negative
+                    interval.min = min(make_zero(op->type), a.min);
+                }
+
+                if (a.has_upper_bound() && can_prove(a.min >= 0)) {
+                    // Mod cannot positive values larger
+                    interval.max = a.max;
+                }
+            }
             return;
         }
-        Interval b = interval;
 
         if (a.is_single_point(op->a) && b.is_single_point(op->b)) {
             interval = Interval::single_point(op);
@@ -571,16 +602,23 @@ private:
                 // If the RHS is a positive integer, the result is in [0, max_b-1]
                 interval = Interval(make_zero(t), b.max - make_one(t));
             } else if (b.max.type().is_int()) {
-                // mod is always positive
+                // mod by something non-zero is always positive
                 // x % [4,10] -> [0,9]
                 // x % [-8,-3] -> [0,7]
                 // x % [-8, 10] -> [0,9]
-                interval = Interval(make_zero(t), Max::make(abs(b.min), abs(b.max)) - make_one(t));
-            } else {
+                interval = Interval(make_zero(t), max(b.max - make_one(t), make_one(t) - b.min));
+
+                if (!can_prove(op->b != 0)) {
+                    // b could be zero, in which case the expression
+                    // evaluates to a and has the bounds of a.
+                    debug(0) << "Might be zero: " << op->b << "\n";
+                    interval = Interval::make_union(interval, a);
+                }
+            } else if (b.max.type().is_float()) {
                 // The floating point version has the same sign rules,
                 // but can reach all the way up to the original value,
                 // so there's no -1.
-                interval = Interval(make_zero(t), Max::make(abs(b.min), abs(b.max)));
+                interval = Interval(make_zero(t), cast(t, Max::make(b.max, -b.min)));
             }
         }
     }
@@ -2800,7 +2838,7 @@ void bounds_test() {
     check(scope, select(y == 5, x, -3 * x + 8), select(y == 5, 0, -22), select(y == 5, 10, 8));
     check(scope, select(y == x, x, -3 * x + 8), -22, select(y <= 10 && 0 <= y, 10, 8));
 
-    check(scope, cast<int32_t>(abs(cast<int16_t>(x / y))), 0, 32768);
+    check(scope, cast<int32_t>(abs(cast<int16_t>(x ^ y))), 0, 32768);
     check(scope, cast<float>(x), 0.0f, 10.0f);
 
     check(scope, cast<int32_t>(abs(cast<float>(x))), 0, 10);
@@ -2821,6 +2859,22 @@ void bounds_test() {
     check(scope, (cast<uint8_t>(x) + 10) * 10, u8(100), u8(200));
     check(scope, (cast<uint8_t>(x) + 10) * (cast<uint8_t>(x)), u8(0), u8(200));
     check(scope, (cast<uint8_t>(x) + 20) - (cast<uint8_t>(x) + 5), u8(5), u8(25));
+
+    // Check div/mod by unbounded unknowns. div and mod can only ever
+    // make things smaller in magnitude.
+    scope.push("x", Interval::everything());
+    check(scope, -3 / x, -3, 3);
+    check(scope, 3 / x, -3, 3);
+    check(scope, y / x, -cast<int>(abs(y)), cast<int>(abs(y)));
+    check(scope, -3 % x, -3, Interval::pos_inf());
+    check(scope, 3 % x, 0, 3);
+    // Mod can't make values more negative
+    check(scope, y % x, min(y, 0), Interval::pos_inf());
+    // Mod can't make positive values larger
+    check(scope, max(y, 0) % x, 0, max(y, 0));
+    // Mod by something non-zero is positive
+    check(scope, y % (2*x + 1), 0, Interval::pos_inf());
+    scope.pop("x");
 
     // Check some bitwise ops.
     check(scope, (cast<uint8_t>(x) & cast<uint8_t>(7)), u8(0), u8(7));
@@ -2844,12 +2898,15 @@ void bounds_test() {
     check(scope, x & 123, 0, 10);           // Doesn't have to be a precise bitmask
     check(scope, (x - 1) & 4095, 0, 4095);  // LHS could be -1
 
+    // If we clamp something unbounded as one type, the bounds should
+    // propagate through casts whenever the cast can be proved to not
+    // overflow.
     check(scope,
-          cast<uint16_t>(clamp(cast<float>(x / y), 0.0f, 4095.0f)),
+          cast<uint16_t>(clamp(cast<float>(x ^ y), 0.0f, 4095.0f)),
           u16(0), u16(4095));
 
     check(scope,
-          cast<uint8_t>(clamp(cast<uint16_t>(x / y), cast<uint16_t>(0), cast<uint16_t>(128))),
+          cast<uint8_t>(clamp(cast<uint16_t>(x ^ y), cast<uint16_t>(0), cast<uint16_t>(128))),
           u8(0), u8(128));
 
     Expr u8_1 = cast<uint8_t>(Load::make(Int(8), "buf", x, Buffer<>(), Parameter(), const_true(), ModulusRemainder()));
