@@ -30,15 +30,15 @@ public:
     Input<Buffer<int32_t>> bias_{"bias", 1};
 
     // Offsets and multipliers for the input, filter, and output.
-    Input<int16_t> mat_a_offset_{ "mat_a_offset", 0, -255, 0 };
-    Input<int16_t> mat_b_offset_{ "mat_b_offset", 0, -255, 0 };
-    Input<int> output_multiplier_{ "output_multiplier" };
-    Input<int> output_shift_{ "output_shift" };
-    Input<int> output_offset_{ "output_offset", 0, 0, 255 };
-    Input<uint8_t> output_min_{ "output_min" };
-    Input<uint8_t> output_max_{ "output_max" };
+    Input<int16_t> mat_a_offset_{"mat_a_offset", 0, -255, 0};
+    Input<int16_t> mat_b_offset_{"mat_b_offset", 0, -255, 0};
+    Input<int> output_multiplier_{"output_multiplier"};
+    Input<int> output_shift_{"output_shift"};
+    Input<int> output_offset_{"output_offset", 0, 0, 255};
+    Input<uint8_t> output_min_{"output_min"};
+    Input<uint8_t> output_max_{"output_max"};
 
-    Output<Buffer<uint8_t>> output_{ "output", 2 };
+    Output<Buffer<uint8_t>> output_{"output", 2};
 
     void generate() {
         // We take two 8 bit matrices as input.

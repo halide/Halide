@@ -6,10 +6,10 @@ using namespace Halide;
 
 class NonLocalMeans : public Halide::Generator<NonLocalMeans> {
 public:
-    Input<Buffer<float>>  input{"input", 3};
-    Input<int>            patch_size{"patch_size"};
-    Input<int>            search_area{"search_area"};
-    Input<float>          sigma{"sigma"};
+    Input<Buffer<float>> input{"input", 3};
+    Input<int> patch_size{"patch_size"};
+    Input<int> search_area{"search_area"};
+    Input<float> sigma{"sigma"};
 
     Output<Buffer<float>> non_local_means{"non_local_means", 3};
 
@@ -21,7 +21,7 @@ public:
 
         Var x("x"), y("y"), c("c");
 
-        Expr inv_sigma_sq = -1.0f/(sigma*sigma*patch_size*patch_size);
+        Expr inv_sigma_sq = -1.0f / (sigma * sigma * patch_size * patch_size);
 
         // Add a boundary condition
         Func clamped = BoundaryConditions::repeat_edge(input);
@@ -37,7 +37,7 @@ public:
         d(x, y, dx, dy) = sum(dc(x, y, dx, dy, channels));
 
         // Find the patch differences by blurring the difference images
-        RDom patch_dom(-(patch_size/2), patch_size);
+        RDom patch_dom(-(patch_size / 2), patch_size);
         Func blur_d_y("blur_d_y");
         blur_d_y(x, y, dx, dy) = sum(d(x, y + patch_dom, dx, dy));
 
@@ -46,7 +46,7 @@ public:
 
         // Compute the weights from the patch differences
         Func w("w");
-        w(x, y, dx, dy) = fast_exp(blur_d(x, y, dx, dy)*inv_sigma_sq);
+        w(x, y, dx, dy) = fast_exp(blur_d(x, y, dx, dy) * inv_sigma_sq);
 
         // Add an alpha channel
         Func clamped_with_alpha("clamped_with_alpha");
@@ -56,7 +56,7 @@ public:
                                              1.0f);
 
         // Define a reduction domain for the search area
-        RDom s_dom(-(search_area/2), search_area, -(search_area/2), search_area);
+        RDom s_dom(-(search_area / 2), search_area, -(search_area / 2), search_area);
 
         // Compute the sum of the pixels in the search area
         Func non_local_means_sum("non_local_means_sum");
@@ -108,7 +108,8 @@ public:
                 .update()
                 .reorder(x, y, c, s_dom.x, s_dom.y)
                 .gpu_threads(x, y);
-        }*/ else {
+        }*/
+        else {
             non_local_means.compute_root()
                 .reorder(c, x, y)
                 .tile(x, y, tx, ty, x, y, 16, 8)
@@ -121,7 +122,8 @@ public:
                 .vectorize(x, 8);
             non_local_means_sum.compute_at(non_local_means, x)
                 .reorder(c, x, y)
-                .bound(c, 0, 4).unroll(c)
+                .bound(c, 0, 4)
+                .unroll(c)
                 .vectorize(x, 8);
             non_local_means_sum.update(0)
                 .reorder(c, x, y, s_dom.x, s_dom.y)

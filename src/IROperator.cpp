@@ -380,7 +380,7 @@ Expr const_false(int w) {
 }
 
 Expr lossless_cast(Type t, Expr e) {
-    if (t == e.type()) {
+    if (!e.defined() || t == e.type()) {
         return e;
     } else if (t.can_represent(e.type())) {
         return cast(t, std::move(e));
@@ -2183,6 +2183,16 @@ Expr undef(Type t) {
     return Internal::Call::make(t, Internal::Call::undef,
                                 std::vector<Expr>(),
                                 Internal::Call::PureIntrinsic);
+}
+
+Range::Range(const Expr &min_in, const Expr &extent_in)
+    : min(lossless_cast(Int(32), min_in)), extent(lossless_cast(Int(32), extent_in)) {
+    if (min_in.defined() && !min.defined()) {
+        user_error << "Min cannot be losslessly cast to an int32: " << min_in;
+    }
+    if (extent_in.defined() && !extent.defined()) {
+        user_error << "Extent cannot be losslessly cast to an int32: " << extent_in;
+    }
 }
 
 }  // namespace Halide

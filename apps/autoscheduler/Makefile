@@ -6,7 +6,7 @@ include ../support/autoscheduler.inc
 # autoscheduler can't find the libHalide symbols that it needs.
 $(GENERATOR_BIN)/demo.generator: demo_generator.cpp $(GENERATOR_DEPS)
 	@mkdir -p $(@D)
-	$(CXX) $(CXXFLAGS) $(USE_EXPORT_DYNAMIC) -g $(filter-out %.h,$^) -o $@ $(LDFLAGS) $(HALIDE_SYSTEM_LIBS) $(GENERATOR_LDFLAGS)
+	$(CXX) $(CXXFLAGS) $(USE_EXPORT_DYNAMIC) -g $(filter %.cpp,$^) -o $@ $(GENERATOR_LDFLAGS)
 
 # To use the autoscheduler, set a few environment variables and use the -p flag to the generator to load the autoscheduler as a plugin
 $(BIN)/%/demo.a: $(GENERATOR_BIN)/demo.generator $(AUTOSCHED_BIN)/libauto_schedule.so
@@ -38,12 +38,19 @@ $(BIN)/test_perfect_hash_map: test_perfect_hash_map.cpp PerfectHashMap.h
 	@mkdir -p $(@D)
 	$(CXX) $(CXXFLAGS) $< -o $@
 
+$(BIN)/test_function_dag: test_function_dag.cpp FunctionDAG.h FunctionDAG.cpp ASLog.h ASLog.cpp
+	@mkdir -p $(@D)
+	$(CXX) $(CXXFLAGS) $(USE_EXPORT_DYNAMIC) $(filter-out %.h,$^) -o $@ $(LDFLAGS) $(LIB_HALIDE) $(HALIDE_SYSTEM_LIBS)
+
 # Simple jit-based test
 $(BIN)/%/test: test.cpp $(AUTOSCHED_BIN)/libauto_schedule.so
 	@mkdir -p $(@D)
 	$(CXX) $(CXXFLAGS) $(USE_EXPORT_DYNAMIC) $^ -o $@ $(LDFLAGS) $(LIB_HALIDE) $(HALIDE_SYSTEM_LIBS)
 
 test_perfect_hash_map: $(BIN)/test_perfect_hash_map
+	$^
+
+test_function_dag: $(BIN)/test_function_dag
 	$^
 
 run_test: $(BIN)/$(HL_TARGET)/test
@@ -61,7 +68,7 @@ test: AUTOSCHED_SAMPLES_OUT = $(BIN)/test_samples_out
 # Note that 'make test' is used by Halide buildbots to spot-check changes,
 # so it's important to try a little of each of the important paths here,
 # including single-shot and autotune-loop
-test: run_test test_perfect_hash_map demo included_schedule_file autotune
+test: run_test test_perfect_hash_map test_function_dag demo included_schedule_file autotune
 
 clean:
 	rm -rf $(BIN)

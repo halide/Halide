@@ -647,9 +647,11 @@ FunctionDAG::FunctionDAG(const vector<Function> &outputs, const MachineParams &p
             if (s == 0) {
                 node.region_computed.resize(consumer.dimensions());
             }
+
+            FuncValueBounds func_value_bounds = compute_function_value_bounds(order, env);
             for (int j = 0; j < consumer.dimensions(); j++) {
                 // The region computed always uses the full extent of the rvars
-                Interval in = bounds_of_expr_in_scope(def.args()[j], stage_scope_with_concrete_rvar_bounds);
+                Interval in = bounds_of_expr_in_scope(def.args()[j], stage_scope_with_concrete_rvar_bounds, func_value_bounds);
                 internal_assert(in.is_bounded())
                     << "Region computed of " << consumer.name()
                     << " is unbounded: [" << in.min << " " << in.max << "]\n";
@@ -884,7 +886,6 @@ FunctionDAG::FunctionDAG(const vector<Function> &outputs, const MachineParams &p
 
             exprs = apply_param_estimates.mutate(exprs);
 
-            FuncValueBounds func_value_bounds = compute_function_value_bounds(order, env);
             for (auto &p : func_value_bounds) {
                 p.second.min = apply_param_estimates.mutate(p.second.min);
                 p.second.max = apply_param_estimates.mutate(p.second.max);
@@ -996,64 +997,82 @@ void FunctionDAG::featurize() {
 
             Featurizer featurizer(node.func, stage);
 
-            Definition def = node.func.definition();
-            if (stage_idx > 0) {
-                def = node.func.updates()[stage_idx - 1];
-            }
-            stage.features = PipelineFeatures();
+            if (node.func.extern_definition_proxy_expr().get()) {
+                // Extern function call with a proxy implementation specified: generate the featurization from the proxy
+                Expr v = simplify(node.func.extern_definition_proxy_expr());
+                v = common_subexpression_elimination(v);
+                v.accept(&featurizer);
+            } else {
+                Definition def = node.func.definition();
+                if (stage_idx > 0) {
+                    def = node.func.updates()[stage_idx - 1];
+                }
+                stage.features = PipelineFeatures();
 
-            for (auto v : def.values()) {
-                featurizer.visit_store_args(node.func.name(), v.type(), def.args());
-                v = common_subexpression_elimination(simplify(v));  // Get things into canonical form
-                v.accept(&featurizer);
-            }
-            for (auto v : def.args()) {
-                v = common_subexpression_elimination(simplify(v));  // Get things into canonical form
-                v.accept(&featurizer);
+                for (auto v : def.values()) {
+                    featurizer.visit_store_args(node.func.name(), v.type(), def.args());
+                    v = common_subexpression_elimination(simplify(v));  // Get things into canonical form
+                    v.accept(&featurizer);
+                }
+                for (auto v : def.args()) {
+                    v = common_subexpression_elimination(simplify(v));  // Get things into canonical form
+                    v.accept(&featurizer);
+                }
             }
         }
     }
 }
 
-void FunctionDAG::dump() const {
+template<typename OS>
+void FunctionDAG::dump_internal(OS &os) const {
     for (const Node &n : nodes) {
-        aslog(0) << "Node: " << n.func.name() << '\n'
-                 << "  Symbolic region required: \n";
+        os << "Node: " << n.func.name() << '\n'
+           << "  Symbolic region required: \n";
         for (const Interval &i : n.region_required) {
-            aslog(0) << "    " << i.min << ", " << i.max << '\n';
+            os << "    " << i.min << ", " << i.max << '\n';
         }
-        aslog(0) << "  Region computed: \n";
+        os << "  Region computed: \n";
         for (const auto &i : n.region_computed) {
-            aslog(0) << "    " << i.in.min << ", " << i.in.max << '\n';
+            os << "    " << i.in.min << ", " << i.in.max << '\n';
         }
         for (size_t i = 0; i < n.stages.size(); i++) {
-            aslog(0) << "  Stage " << i << ":\n";
+            os << "  Stage " << i << ":\n";
             for (const auto &l : n.stages[i].loop) {
-                aslog(0) << "    " << l.var << " " << l.min << " " << l.max << '\n';
+                os << "    " << l.var << " " << l.min << " " << l.max << '\n';
             }
-            n.stages[i].features.dump();
+            n.stages[i].features.dump(os);
         }
-        aslog(0) << "  pointwise: " << n.is_pointwise
-                 << " boundary condition: " << n.is_boundary_condition
-                 << " wrapper: " << n.is_wrapper
-                 << " input: " << n.is_input
-                 << " output: " << n.is_output << "\n";
+        os << "  pointwise: " << n.is_pointwise
+           << " boundary condition: " << n.is_boundary_condition
+           << " wrapper: " << n.is_wrapper
+           << " input: " << n.is_input
+           << " output: " << n.is_output << "\n";
     }
     for (const Edge &e : edges) {
-        aslog(0) << "Edge: " << e.producer->func.name() << " -> " << e.consumer->name << '\n'
-                 << "  Footprint: \n";
+        os << "Edge: " << e.producer->func.name() << " -> " << e.consumer->name << '\n'
+           << "  Footprint: \n";
         int j = 0;
         for (const auto &i : e.bounds) {
-            aslog(0) << "    Min " << j << ": " << i.first.expr << '\n';
-            aslog(0) << "    Max " << j << ": " << i.second.expr << '\n';
+            os << "    Min " << j << ": " << i.first.expr << '\n';
+            os << "    Max " << j << ": " << i.second.expr << '\n';
             j++;
         }
 
-        aslog(0) << "  Load Jacobians:\n";
+        os << "  Load Jacobians:\n";
         for (const auto &jac : e.load_jacobians) {
             jac.dump("  ");
         }
     }
+}
+
+void FunctionDAG::dump() const {
+    auto os = aslog(0);
+    dump_internal(os);
+}
+
+std::ostream &FunctionDAG::dump(std::ostream &os) const {
+    dump_internal(os);
+    return os;
 }
 
 }  // namespace Autoscheduler
