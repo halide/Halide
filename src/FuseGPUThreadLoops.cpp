@@ -312,7 +312,7 @@ class ExtractSharedAllocations : public IRMutator {
             for (SharedAllocation &s : allocations) {
                 if (expr_uses_var(s.size, op->name)) {
                     auto interval_bounds = bounds_of_expr_in_scope(s.size, scope);
-                    user_assert(!interval_bounds.max.same_as(Interval::pos_inf()))
+                    user_assert(interval_bounds.has_upper_bound())
                         << "Couldn't infer bounds for " << s.name << " shared memory allocation\n";
                     s.size = interval_bounds.max;
                 }
