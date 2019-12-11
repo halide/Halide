@@ -568,21 +568,15 @@ private:
         op->b.accept(this);
         Interval b = interval;
 
+        Type t = op->type.element_of();
+
         if (!b.is_bounded()) {
             interval = Interval::everything();
-            if (a.has_lower_bound()) {
-                if (can_prove(op->b != 0)) {
-                    // Mod by something non-zero is always positive
-                    interval.min = make_zero(op->type);
-                } else {
-                    // Mod cannot make values more negative
-                    interval.min = min(make_zero(op->type), a.min);
-                }
-
-                if (a.has_upper_bound() && can_prove(a.min >= 0)) {
-                    // Mod cannot positive values larger
-                    interval.max = a.max;
-                }
+            // Mod is always positive
+            interval.min = make_zero(t);
+            if (a.has_lower_bound() && can_prove(a.min >= 0)) {
+                // Mod cannot positive values larger
+                interval.max = a.max;
             }
             return;
         }
@@ -591,8 +585,6 @@ private:
             interval = Interval::single_point(op);
             return;
         }
-
-        Type t = op->type.element_of();
 
         if (a.is_single_point() && b.is_single_point()) {
             interval = Interval::single_point(a.min % b.min);
@@ -606,14 +598,10 @@ private:
                 // x % [4,10] -> [0,9]
                 // x % [-8,-3] -> [0,7]
                 // x % [-8, 10] -> [0,9]
-                interval = Interval(make_zero(t), max(b.max - make_one(t), make_one(t) - b.min));
-
-                if (!can_prove(op->b != 0)) {
-                    // b could be zero, in which case the expression
-                    // evaluates to a and has the bounds of a.
-                    debug(0) << "Might be zero: " << op->b << "\n";
-                    interval = Interval::make_union(interval, a);
-                }
+                interval = Interval(make_zero(t),
+                                    Max::make(make_zero(t),
+                                              Max::make(b.max - make_one(t),
+                                                        make_const(t, -1) - b.min)));
             } else if (b.max.type().is_float()) {
                 // The floating point version has the same sign rules,
                 // but can reach all the way up to the original value,
@@ -2866,14 +2854,12 @@ void bounds_test() {
     check(scope, -3 / x, -3, 3);
     check(scope, 3 / x, -3, 3);
     check(scope, y / x, -cast<int>(abs(y)), cast<int>(abs(y)));
-    check(scope, -3 % x, -3, Interval::pos_inf());
+    check(scope, -3 % x, 0, Interval::pos_inf());
     check(scope, 3 % x, 0, 3);
-    // Mod can't make values more negative
-    check(scope, y % x, min(y, 0), Interval::pos_inf());
+    // Mod can't make values negative
+    check(scope, y % x, 0, Interval::pos_inf());
     // Mod can't make positive values larger
     check(scope, max(y, 0) % x, 0, max(y, 0));
-    // Mod by something non-zero is positive
-    check(scope, y % (2*x + 1), 0, Interval::pos_inf());
     scope.pop("x");
 
     // Check some bitwise ops.

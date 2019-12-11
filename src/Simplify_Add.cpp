@@ -127,15 +127,15 @@ Expr Simplify::visit(const Add *op, ExprInfo *bounds) {
                rewrite(max(x, y) + min(x, y), x + y) ||
                rewrite(max(x, y) + min(y, x), x + y))) ||
              (no_overflow_int(op->type) &&
-              (rewrite((x/y)*y + x%y, x) ||
-               rewrite((z + x/y)*y + x%y, z*y + x) ||
-               rewrite((x/y + z)*y + x%y, x + z*y) ||
-               rewrite(x%y + ((x/y)*y + z), x + z) ||
-               rewrite(x%y + ((x/y)*y - z), x - z) ||
-               rewrite(x%y + (z + (x/y)*y), x + z) ||
-               rewrite((x/y)*y + (x%y + z), x + z) ||
-               rewrite((x/y)*y + (x%y - z), x - z) ||
-               rewrite((x/y)*y + (z + x%y), x + z) ||
+              (rewrite((x/c0)*c0 + x%c0, x, c0 != 0) ||
+               rewrite((z + x/c0)*c0 + x%c0, z*c0 + x, c0 != 0) ||
+               rewrite((x/c0 + z)*c0 + x%c0, x + z*c0, c0 != 0) ||
+               rewrite(x%c0 + ((x/c0)*c0 + z), x + z, c0 != 0) ||
+               rewrite(x%c0 + ((x/c0)*c0 - z), x - z, c0 != 0) ||
+               rewrite(x%c0 + (z + (x/c0)*c0), x + z, c0 != 0) ||
+               rewrite((x/c0)*c0 + (x%c0 + z), x + z, c0 != 0) ||
+               rewrite((x/c0)*c0 + (x%c0 - z), x - z, c0 != 0) ||
+               rewrite((x/c0)*c0 + (z + x%c0), x + z, c0 != 0) ||
                rewrite(x/2 + x%2, (x + 1) / 2) ||
 
                rewrite(x + ((c0 - x)/c1)*c1, c0 - ((c0 - x) % c1), c1 > 0) ||

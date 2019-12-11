@@ -7,6 +7,17 @@
 namespace Halide {
 namespace Internal {
 
+namespace {
+// A version of mod where a % 0 == a
+int64_t mod(int64_t a, int64_t b) {
+    if (b == 0) {
+        return a;
+    } else {
+        return mod_imp(a, b);
+    }
+}
+}
+
 class ComputeModulusRemainder : public IRVisitor {
 public:
     ModulusRemainder analyze(Expr e);
@@ -85,8 +96,8 @@ bool reduce_expr_modulo(Expr expr, int64_t modulus, int64_t *remainder) {
      * return false.
      */
 
-    if (mod_imp(result.modulus, modulus) == 0) {
-        *remainder = mod_imp(result.remainder, modulus);
+    if (mod(result.modulus, modulus) == 0) {
+        *remainder = mod(result.remainder, modulus);
         return true;
     } else {
         return false;
@@ -95,8 +106,8 @@ bool reduce_expr_modulo(Expr expr, int64_t modulus, int64_t *remainder) {
 bool reduce_expr_modulo(Expr expr, int64_t modulus, int64_t *remainder, const Scope<ModulusRemainder> &scope) {
     ModulusRemainder result = modulus_remainder(expr, scope);
 
-    if (mod_imp(result.modulus, modulus) == 0) {
-        *remainder = mod_imp(result.remainder, modulus);
+    if (mod(result.modulus, modulus) == 0) {
+        *remainder = mod(result.remainder, modulus);
         return true;
     } else {
         return false;
@@ -204,7 +215,7 @@ ModulusRemainder operator+(const ModulusRemainder &a, const ModulusRemainder &b)
         return {1, 0};
     } else {
         int64_t modulus = gcd(a.modulus, b.modulus);
-        int64_t remainder = mod_imp(a.remainder + b.remainder, modulus);
+        int64_t remainder = mod(a.remainder + b.remainder, modulus);
         return {modulus, remainder};
     }
 }
@@ -218,7 +229,7 @@ ModulusRemainder operator-(const ModulusRemainder &a, const ModulusRemainder &b)
         return {1, 0};
     } else {
         int64_t modulus = gcd(a.modulus, b.modulus);
-        int64_t remainder = mod_imp(a.remainder - b.remainder, modulus);
+        int64_t remainder = mod(a.remainder - b.remainder, modulus);
         return {modulus, remainder};
     }
 }
@@ -257,7 +268,7 @@ ModulusRemainder operator*(const ModulusRemainder &a, const ModulusRemainder &b)
         // Convert them to the same modulus and multiply
         if (!mul_would_overflow(64, a.remainder, b.remainder)) {
             int64_t modulus = gcd(a.modulus, b.modulus);
-            int64_t remainder = mod_imp(a.remainder * b.remainder, modulus);
+            int64_t remainder = mod(a.remainder * b.remainder, modulus);
             return {modulus, remainder};
         }
     }
@@ -280,7 +291,7 @@ ModulusRemainder operator/(const ModulusRemainder &a, const ModulusRemainder &b)
     // E.g. (8x + 3) / 2 -> (4x + 1)
 
     if (b.modulus == 0 && b.remainder != 0) {
-        if (mod_imp(a.modulus, b.remainder) == 0) {
+        if (mod(a.modulus, b.remainder) == 0) {
             return {a.modulus / b.remainder, div_imp(a.remainder, b.remainder)};
         }
     }
@@ -314,9 +325,9 @@ ModulusRemainder ModulusRemainder::unify(const ModulusRemainder &a, const Modulu
 
     modulus = gcd(diff, modulus);
 
-    int64_t ra = mod_imp(a.remainder, modulus);
+    int64_t ra = mod(a.remainder, modulus);
 
-    internal_assert(ra == mod_imp(b.remainder, modulus))
+    internal_assert(ra == mod(b.remainder, modulus))
         << "There's a bug inside ModulusRemainder in unify_alternatives:\n"
         << "a.modulus         = " << a.modulus << "\n"
         << "a.remainder       = " << a.remainder << "\n"
@@ -365,7 +376,7 @@ ModulusRemainder operator%(const ModulusRemainder &a, const ModulusRemainder &b)
     // 2w + 1
     int64_t modulus = gcd(a.modulus, b.modulus);
     modulus = gcd(modulus, b.remainder);
-    int64_t remainder = mod_imp(a.remainder, modulus);
+    int64_t remainder = mod(a.remainder, modulus);
     return {modulus, remainder};
 }
 

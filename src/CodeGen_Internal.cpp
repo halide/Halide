@@ -434,7 +434,7 @@ Expr lower_euclidean_mod(Expr a, Expr b) {
             b = b | cast(a.type(), b_is_zero);
         }
         q = Call::make(a.type(), Call::mod_round_to_zero, {a, b}, Call::Intrinsic);
-        q = select(b_is_zero, a, q);
+        q = select(b_is_zero, make_zero(a.type()), q);
     } else {
         internal_assert(a.type().is_int());
 
@@ -467,10 +467,8 @@ Expr lower_euclidean_mod(Expr a, Expr b) {
         // If a is negative, we either need to add b - 1 to the
         // result, or -b - 1, depending on the sign of b.
         q += (a_neg & ((b ^ b_neg) + ~b_neg));
-        // When b is zero, q is currently a_neg. If we add the current
-        // adjusted value of a, we'll get back to the original value
-        // of a.
-        q += b_zero & a;
+        // If b is zero, return zero by masking off the current result.
+        q = q & ~b_zero;
     }
 
     q = common_subexpression_elimination(q);

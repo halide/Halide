@@ -18,7 +18,7 @@ void test() {
 
     Expr test = simplify(x / zero == zero);
     _halide_user_assert(is_one(test)) << test << '\n';
-    test = simplify(x % zero == x);
+    test = simplify(x % zero == zero);
     _halide_user_assert(is_one(test)) << test << '\n';
 
     if (t.is_int() && t.bits() < 32) {
@@ -37,7 +37,7 @@ void test() {
     T result = evaluate<T>(a / b);
     _halide_user_assert(result == T{0}) << result << '\n';
     result = evaluate<T>(a % b);
-    _halide_user_assert(result == T{5}) << result << '\n';
+    _halide_user_assert(result == T{0}) << result << '\n';
     if (t.is_int() && t.bits() < 32) {
         uint64_t bits = 1;
         bits <<= (t.bits() - 1);

@@ -14,42 +14,30 @@ Expr Simplify::visit(const Mod *op, ExprInfo *bounds) {
     ExprInfo mod_bounds;
 
     if (no_overflow_int(op->type)) {
-        const bool b_positive = (b_bounds.min_defined && b_bounds.min > 0);
-        const bool b_negative = (b_bounds.max_defined && b_bounds.max < 0);
-        const bool b_non_zero =
-            (b_positive || b_negative || b_bounds.alignment.remainder != 0);
+        // The result is at least zero.
+        mod_bounds.min_defined = true;
+        mod_bounds.min = 0;
 
-        if (b_non_zero) {
-            // If b is non-zero, the the result is at least zero.
-            mod_bounds.min_defined = true;
-            mod_bounds.min = 0;
+        // Mod by produces a result between 0
+        // and max(0, abs(modulus) - 1). However, if b is unbounded in
+        // either direction, abs(modulus) could be arbitrarily
+        // large.
+        if (b_bounds.max_defined && b_bounds.min_defined) {
+            mod_bounds.max_defined = true;
+            mod_bounds.max = 0; // When b == 0
+            mod_bounds.max = std::max(mod_bounds.max, b_bounds.max - 1); // When b > 0
+            mod_bounds.max = std::max(mod_bounds.max, -1 - b_bounds.min); // When b < 0
+        }
 
-            // Mod by something non-zero produces a result between 0
-            // and abs(modulus) - 1. However, if b is unbounded in
-            // either direction, abs(modulus) could be arbitrarily
-            // large.
-            if (b_bounds.max_defined && b_bounds.min_defined) {
-                // b crosses zero but isn't zero
-                mod_bounds.max_defined = true;
-                mod_bounds.max = std::max(b_bounds.max - 1, // b > 0
-                                          1 - b_bounds.min); // b < 0
+        // If a is positive, mod can't make it larger
+        if (a_bounds.min_defined && a_bounds.min >= 0 && a_bounds.max_defined) {
+            if (mod_bounds.max_defined) {
+                mod_bounds.max = std::min(mod_bounds.max, a_bounds.max);
+            } else {
+                mod_bounds.max = a_bounds.max;
             }
-        } else {
-            if (a_bounds.min_defined) {
-                // Even if b is zero, mod can't make something more negative.
-                mod_bounds.min_defined = true;
-                mod_bounds.min = std::min(a_bounds.min, (int64_t)0);
-            }
+        }
 
-            if (b_bounds.min_defined && b_bounds.max_defined && a_bounds.max_defined) {
-                // b is bounded and spans zero, and a has an upper
-                // bound. The result has an upper bound.
-                mod_bounds.max_defined = true;
-                mod_bounds.max =
-                    std::max(a_bounds.max, // Achieved when b == 0
-                             std::max(b_bounds.max - 1, // b > 0
-                                      1 - b_bounds.min)); // b < 0
-            }
         }
 
         mod_bounds.alignment = a_bounds.alignment % b_bounds.alignment;
@@ -81,9 +69,9 @@ Expr Simplify::visit(const Mod *op, ExprInfo *bounds) {
             rewrite(x % IRMatcher::Overflow(), b) ||
             rewrite(0 % x, 0) ||
             rewrite(x % x, 0) ||
+            rewrite(x % 0, 0) ||
             (!op->type.is_float() &&
-             (rewrite(x % 0, x) ||
-              rewrite(x % 1, 0)))) {
+             rewrite(x % 1, 0))) {
             return rewrite.result;
         }
 

@@ -232,20 +232,19 @@ Expr strided_ramp_base(Expr e, int stride = 1);
  * the Euclidean definition of division for integers a and b:
  *
  /code
- (a/b)*b + a%b = a
- when b != 0, 0 <= a%b < |b|
+ when b != 0, (a/b)*b + a%b = a
+ 0 <= a%b < |b|
  /endcode
  *
- * Additionally, mod by zero returns the first argument, and div by
- * zero returns 0. In both cases a second argument of zero is treated
- * somewhat like an infinity. This makes mod and div total functions.
+ * Additionally, mod by zero returns zero, and div by zero returns
+ * zero. This makes mod and div total functions.
  */
 // @{
 template<typename T>
 inline T mod_imp(T a, T b) {
     Type t = type_of<T>();
     if (!t.is_float() && b == 0) {
-        return a;
+        return 0;
     } else if (t.is_int()) {
         int64_t ia = a;
         int64_t ib = b;
@@ -255,7 +254,7 @@ inline T mod_imp(T a, T b) {
         ia -= a_neg;
         int64_t r = ia % (ib | b_zero);
         r += (a_neg & ((ib ^ b_neg) + ~b_neg));
-        r += b_zero & ia;
+        r &= ~b_zero;
         return r;
     } else {
         return a % b;

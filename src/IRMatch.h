@@ -953,25 +953,17 @@ HALIDE_ALWAYS_INLINE auto div(A a, B b) -> decltype(IRMatcher::operator/(a, b)) 
 
 template<>
 HALIDE_ALWAYS_INLINE int64_t constant_fold_bin_op<Div>(halide_type_t &t, int64_t a, int64_t b) noexcept {
-    if (b == 0) {
-        return 0;
-    } else {
-        return div_imp(a, b);
-    }
+    return div_imp(a, b);
 }
 
 template<>
 HALIDE_ALWAYS_INLINE uint64_t constant_fold_bin_op<Div>(halide_type_t &t, uint64_t a, uint64_t b) noexcept {
-    if (b == 0) {
-        return 0;
-    } else {
-        return a / b;
-    }
+    return div_imp(a, b);
 }
 
 template<>
 HALIDE_ALWAYS_INLINE double constant_fold_bin_op<Div>(halide_type_t &t, double a, double b) noexcept {
-    return a / b;
+    return div_imp(a, b);
 }
 
 template<typename A, typename B>
@@ -991,11 +983,7 @@ HALIDE_ALWAYS_INLINE int64_t constant_fold_bin_op<Mod>(halide_type_t &t, int64_t
 
 template<>
 HALIDE_ALWAYS_INLINE uint64_t constant_fold_bin_op<Mod>(halide_type_t &t, uint64_t a, uint64_t b) noexcept {
-    if (b == 0) {
-        return a;
-    } else {
-        return a % b;
-    }
+    return mod_imp(a, b);
 }
 
 template<>
