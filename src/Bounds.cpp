@@ -501,7 +501,7 @@ private:
         if (!b.is_bounded()) {
             // Integer division can only make things smaller in
             // magnitude (but can flip the sign).
-            if (a.is_bounded() && op->type.is_int() && op->type.bits >= 32) {
+            if (a.is_bounded() && op->type.is_int() && op->type.bits() >= 32) {
                 // Restrict to no-overflow types to avoid worrying
                 // about overflow due to negating the most negative int.
                 if (can_prove(a.min >= 0)) {
@@ -510,6 +510,13 @@ private:
                 } else if (can_prove(a.max <= 0)) {
                     interval.min = a.min;
                     interval.max = -a.min;
+                } else if (a.is_single_point()) {
+                    // The following case would also be correct, but
+                    // would duplicate the expression, which is
+                    // generally a bad thing for any later interval
+                    // arithmetic.
+                    interval.min = -cast(a.min.type(), abs(a.min));
+                    interval.max = cast(a.min.type(), abs(a.max));
                 } else {
                     interval.min = min(-a.max, a.min);
                     interval.max = max(-a.max, a.min);
