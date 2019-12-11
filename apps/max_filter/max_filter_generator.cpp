@@ -66,6 +66,8 @@ public:
         // Schedule
         if (!auto_schedule) {
             if (get_target().has_gpu_feature()) {
+                // 11.8ms on a 2060 RTX
+
                 slice_for_radius.compute_root();
                 filter_height.compute_root();
                 Var xi, xo, yi;
@@ -84,6 +86,8 @@ public:
                     .gpu_blocks(xo, c).gpu_threads(xi);
 
             } else {
+                // 47ms on an Intel i9-9960X using 16 threads
+
                 Var tx;
                 // These don't matter, just LUTs
                 slice_for_radius.compute_root();
