@@ -9,7 +9,6 @@ Expr Simplify::visit(const Div *op, ExprInfo *bounds) {
     Expr b = mutate(op->b, &b_bounds);
 
     if (bounds && no_overflow_int(op->type)) {
-        // TODO: encode that div can only make things smaller and maybe flip the sign
         bounds->min = INT64_MAX;
         bounds->max = INT64_MIN;
 
@@ -53,6 +52,25 @@ Expr Simplify::visit(const Div *op, ExprInfo *bounds) {
                                (a_bounds.max_defined && b_negative));
         bounds->max_defined = ((a_bounds.max_defined && b_positive) ||
                                (a_bounds.min_defined && b_negative));
+
+        // That's as far as we can get knowing the sign of the
+        // denominator. For bounded numerators, we additionally know
+        // that div can't make anything larger in magnitude, so we can
+        // take the intersection with that.
+        if (a_bounds.max_defined && a_bounds.min_defined) {
+            int64_t v = std::max(a_bounds.max, -a_bounds.min);
+            if (bounds->min_defined) {
+                bounds->min = std::max(bounds->min, -v);
+            } else {
+                bounds->min = -v;
+            }
+            if (bounds->max_defined) {
+                bounds->max = std::min(bounds->max, v);
+            } else {
+                bounds->max = v;
+            }
+            bounds->min_defined = bounds->max_defined = true;
+        }
 
         // Bounded numerator divided by constantish
         // denominator can sometimes collapse things to a

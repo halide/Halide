@@ -34,10 +34,9 @@ Expr Simplify::visit(const Mod *op, ExprInfo *bounds) {
             if (mod_bounds.max_defined) {
                 mod_bounds.max = std::min(mod_bounds.max, a_bounds.max);
             } else {
+                mod_bounds.max_defined = true;
                 mod_bounds.max = a_bounds.max;
             }
-        }
-
         }
 
         mod_bounds.alignment = a_bounds.alignment % b_bounds.alignment;

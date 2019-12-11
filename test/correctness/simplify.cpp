@@ -407,6 +407,16 @@ void check_algebra() {
     check(1 - (-y + 1)/2 - 1, y/2);
     check(1 - (0 - y)/5, (y + 9)/5);
 
+    // Div/mod can't make things larger
+    check(5 / x < 6, const_true());
+    check(5 / x > -6, const_true());
+    check(5 / x < 5, 5 / x < 5);
+    check(5 / x > -5, -5 < 5/x);
+    check(5 % x < 6, const_true());
+    check(5 % x < 5, 5 % x < 5);
+    check(5 % x >= 0, const_true());
+    check(5 % x > 0, 0 < 5 % x);
+
     // Test case with most negative 32-bit number, as constant to check that it is not negated.
     check(((x * (int32_t)0x80000000) + (z * (int32_t)0x80000000 + y)),
           ((x * (int32_t)0x80000000) + (z * (int32_t)0x80000000 + y)));

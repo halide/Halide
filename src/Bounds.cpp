@@ -568,45 +568,38 @@ private:
         op->b.accept(this);
         Interval b = interval;
 
-        Type t = op->type.element_of();
-
-        if (!b.is_bounded()) {
-            interval = Interval::everything();
-            // Mod is always positive
-            interval.min = make_zero(t);
-            if (a.has_lower_bound() && can_prove(a.min >= 0)) {
-                // Mod cannot positive values larger
-                interval.max = a.max;
-            }
-            return;
-        }
-
         if (a.is_single_point(op->a) && b.is_single_point(op->b)) {
             interval = Interval::single_point(op);
             return;
         }
 
-        if (a.is_single_point() && b.is_single_point()) {
-            interval = Interval::single_point(a.min % b.min);
+        Type t = op->type.element_of();
+
+        // Mod is always positive
+        interval.min = make_zero(t);
+        interval.max = Interval::pos_inf();
+
+        if (!b.is_bounded()) {
+            if (a.has_lower_bound() && can_prove(a.min >= 0)) {
+                // Mod cannot positive values larger
+                interval.max = a.max;
+            }
         } else {
-            // Only consider B (so A can be unbounded)
+            // b is bounded
             if (b.max.type().is_uint() || (b.max.type().is_int() && is_positive_const(b.min))) {
                 // If the RHS is a positive integer, the result is in [0, max_b-1]
-                interval = Interval(make_zero(t), b.max - make_one(t));
+                interval.max = Max::make(interval.min, b.max - make_one(t));
             } else if (b.max.type().is_int()) {
-                // mod by something non-zero is always positive
                 // x % [4,10] -> [0,9]
                 // x % [-8,-3] -> [0,7]
                 // x % [-8, 10] -> [0,9]
-                interval = Interval(make_zero(t),
-                                    Max::make(make_zero(t),
-                                              Max::make(b.max - make_one(t),
-                                                        make_const(t, -1) - b.min)));
+                interval.max = Max::make(interval.min, b.max - make_one(t));
+                interval.max = Max::make(interval.max, make_const(t, -1) - b.min);
             } else if (b.max.type().is_float()) {
                 // The floating point version has the same sign rules,
                 // but can reach all the way up to the original value,
                 // so there's no -1.
-                interval = Interval(make_zero(t), cast(t, Max::make(b.max, -b.min)));
+                interval.max = Max::make(b.max, -b.min);
             }
         }
     }
