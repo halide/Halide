@@ -3,6 +3,7 @@
 namespace {
 
 using namespace Halide::ConciseCasts;
+using namespace Halide::BoundaryConditions;
 
 class Max : public Halide::Generator<Max> {
 public:
@@ -13,7 +14,9 @@ public:
     void generate() {
         Var x("x"), y("y"), c("c"), t("t");
 
-        Func input = Halide::BoundaryConditions::repeat_edge(input_);
+        Func input = repeat_edge(input_,
+                                 {{input_.dim(0).min(), input_.dim(0).extent()},
+                                  {input_.dim(1).min(), input_.dim(1).extent()}});
 
         const int radius = radius_;
         const int slices = (int)(ceilf(logf(radius) / logf(2))) + 1;
@@ -67,25 +70,26 @@ public:
                 filter_height.compute_root();
                 Var xi, xo, yi;
 
-                output_
-                    .split(x, xo, xi, 128)
-                    .reorder(xi, xo, y, c)
-                    .gpu_blocks(xo, y, c).gpu_threads(xi);
+                output_.gpu_tile(x, y, xi, yi, 32, 8)
+                    .gpu_blocks(x, y, c);
 
+                // There's a boundary condition on the input, so let's
+                // keep things simple with a RoundUp tail strategy.
                 vert_log.compute_root()
                     .reorder(c, t, x, y)
-                    .gpu_tile(x, y, xi, yi, 16, 16)
+                    .gpu_tile(x, y, xi, yi, 16, 16, TailStrategy::RoundUp)
                     .update()
-                    .split(x, xo, xi, 128)
+                    .split(x, xo, xi, 32, TailStrategy::RoundUp)
                     .reorder(r.x, r.y, xi, xo, c)
                     .gpu_blocks(xo, c).gpu_threads(xi);
+
             } else {
                 Var tx;
                 // These don't matter, just LUTs
                 slice_for_radius.compute_root();
                 filter_height.compute_root();
 
-                // vert_log.update(1) doesn't have enough parallelism, but I
+                // vert_log.update() doesn't have enough parallelism, but I
                 // can't figure out how to give it more... Split whole image
                 // into slices.
 
