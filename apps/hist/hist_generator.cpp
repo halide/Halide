@@ -14,8 +14,9 @@ public:
 
         // Algorithm
         Func Y("Y");
-        Y(x, y) = 0.299f * input(x, y, 0) + 0.587f * input(x, y, 1)
-                  + 0.114f * input(x, y, 2);
+        Y(x, y) = (0.299f * input(x, y, 0) +
+                   0.587f * input(x, y, 1) +
+                   0.114f * input(x, y, 2));
 
         Func Cr("Cr");
         Expr R = input(x, y, 0);
@@ -27,13 +28,13 @@ public:
 
         Func hist_rows("hist_rows");
         hist_rows(x, y) = 0;
-        RDom rx(0, 1536);
+        RDom rx(0, input.width());
         Expr bin = cast<int>(clamp(Y(rx, y), 0, 255));
         hist_rows(bin, y) += 1;
 
         Func hist("hist");
         hist(x) = 0;
-        RDom ry(0, 2560);
+        RDom ry(0, input.height());
         hist(x) += hist_rows(x, ry);
 
         Func cdf("cdf");
@@ -44,7 +45,7 @@ public:
         Func eq("equalize");
 
         Expr cdf_bin = u8(clamp(Y(x, y), 0, 255));
-        eq(x, y) = clamp(cdf(cdf_bin) * (255.0f/(input.height() * input.width())), 0 , 255);
+        eq(x, y) = clamp(cdf(cdf_bin) * (255.0f/(input.height() * input.width())), 0, 255);
 
         Expr red = u8(clamp(eq(x, y) + (Cr(x, y) - 128) * 1.4f, 0, 255));
         Expr green = u8(clamp(eq(x, y) - 0.343f * (Cb(x, y) - 128) - 0.711f * (Cr(x, y) -128), 0, 255));
@@ -70,41 +71,75 @@ public:
 
             Var xi("xi"), yi("yi");
             if (get_target().has_gpu_feature()) {
-                Y.compute_root().gpu_tile(x, y, xi, yi, 16, 16);
-                hist_rows.compute_root().gpu_tile(y, yi, 16).update().gpu_tile(y, yi, 16);
-                hist.compute_root().gpu_tile(x, xi, 16).update().gpu_tile(x, xi, 16);
-                cdf.compute_root().gpu_single_thread();
-                Cr.compute_at(output, x);
-                Cb.compute_at(output, x);
-                eq.compute_at(output, x);
-                output.compute_root()
-                      .reorder(c, x, y).bound(c, 0, 3).unroll(c)
-                      .gpu_tile(x, y, xi, yi, 16, 16);
-            } else {
-                Y.compute_root().parallel(y, 8).vectorize(x, 8);
+                // 0.42ms on a 2060 RTX
+                Var yii;
+                RVar rxo, rxi;
+                Y.clone_in(hist_rows)
+                    .compute_at(hist_rows, rxo)
+                    .bound_extent(x, 16)
+                    .gpu_threads(x);
+                // TODO: bound_extent above should not be necessary,
+                // but otherwise I get a shared memory
+                // blow-up. Something might be overconservative.
                 hist_rows.compute_root()
-                    .vectorize(x, 8)
-                    .parallel(y, 8)
+                    .gpu_tile(x, y, xi, yi, 32, 8)
                     .update()
-                    .parallel(y, 8);
+                    .split(y, y, yi, 32)
+                    .split(rx, rxo, rxi, 16)
+                    .reorder(rxi, yi, rxo, y)
+                    .atomic()
+                    .gpu_blocks(rxo, y)
+                    .gpu_threads(yi);
                 hist.compute_root()
-                    .vectorize(x, 8)
+                    .gpu_tile(x, xi, 16)
+                    .update()
+                    .gpu_tile(x, xi, 16);
+                cdf.compute_root()
+                    .gpu_single_thread();
+                output.compute_root()
+                    .reorder(c, x, y)
+                    .bound(c, 0, 3)
+                    .unroll(c)
+                    .gpu_tile(x, y, xi, yi, 32, 8);
+            } else {
+                // Runtime is noisy. 0.8ms - 1.1ms on an Intel
+                // i9-9960X using 16 threads
+
+                const int vec = natural_vector_size<float>();
+                // Make separate copies of Y to use while
+                // histogramming and while computing the output. It's
+                // better to redundantly luminance than reload it, but
+                // you don't want to inline it into the histogram
+                // computation because then it doesn't vectorize.
+                RVar rxo, rxi;
+                Y.clone_in(hist_rows)
+                    .compute_at(hist_rows.in(), y)
+                    .vectorize(x, vec);
+
+                hist_rows.in()
+                    .compute_root()
+                    .vectorize(x, vec)
+                    .parallel(y, 4);
+                hist_rows.compute_at(hist_rows.in(), y)
+                    .vectorize(x, vec)
+                    .update()
+                    .reorder(y, rx)
+                    .unroll(y);
+                hist.compute_root()
+                    .vectorize(x, vec)
                     .update()
                     .reorder(x, ry)
-                    .vectorize(x, 8)
+                    .vectorize(x, vec)
                     .unroll(x, 4)
                     .parallel(x)
                     .reorder(ry, x);
 
                 cdf.compute_root();
-                eq.compute_at(output, x).unroll(x);
-                Cb.compute_at(output, x).vectorize(x);
-                Cr.compute_at(output, x).vectorize(x);
                 output.reorder(c, x, y)
-                      .bound(c, 0, 3)
-                      .unroll(c)
-                      .parallel(y, 8)
-                      .vectorize(x, 8);
+                    .bound(c, 0, 3)
+                    .unroll(c)
+                    .parallel(y, 8)
+                    .vectorize(x, vec * 2);
             }
         }
     }
