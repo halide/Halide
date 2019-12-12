@@ -1113,6 +1113,38 @@ struct LoopNest {
         return false;
     }
 
+    bool node_has_dynamic_region_computed(const FunctionDAG::Node* f) const {
+        for (int i = 0; i < f->dimensions; i++) {
+            const auto& region = get_bounds(f)->region_computed(i);
+
+            if (!region.constant_extent()) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    bool has_dynamic_allocation_inside_thread(bool in_thread_loop) const {
+        in_thread_loop = in_thread_loop || (gpu_label == thread);
+
+        if (in_thread_loop) {
+            for (const auto& f : store_at) {
+                if (node_has_dynamic_region_computed(f)) {
+                    return true;
+                }
+            }
+        }
+
+        for (const auto& child : children) {
+            if (child->has_dynamic_allocation_inside_thread(in_thread_loop)) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
     const LoopNest* find_pure_stage_loop_nest(const FunctionDAG::Node* node) const {
         const LoopNest* pure;
         for (const auto &c : children) {
@@ -3112,13 +3144,14 @@ struct LoopNest {
             union_counts = get_union_thread_counts(f);
         }
 
+        bool can_allocate_here = !target.has_gpu_feature() || in_realization || !in_threads_loop || !node_has_dynamic_region_computed(f);
 
         // Place the computation directly inside this loop (provided it's not a SIMD loop)
         if (!innermost &&
             (!in_realization ||
              size.empty() ||
              vector_dim == -1 ||
-             size[vector_dim] == 1)) {
+             size[vector_dim] == 1) && can_allocate_here) {
 
             std::unique_ptr<LoopNest> r{new LoopNest};
             r->copy_from(*this);
@@ -3288,13 +3321,15 @@ struct LoopNest {
                             // create (threads, serial) option
 
                             internal_assert(in_threads_loop); // threads loop can't be inside threads loop
-                            outer->gpu_label = thread;
-                            inner->gpu_label = serial;
+                            if (in_realization || !node_has_dynamic_region_computed(f)) {
+                                outer->gpu_label = thread;
+                                inner->gpu_label = serial;
 
-                            outer->children.emplace_back(inner.release());
-                            outer->compute_here(f, true, v, true, target);
+                                outer->children.emplace_back(inner.release());
+                                outer->compute_here(f, true, v, true, target);
 
-                            result.emplace_back(outer.release());
+                                result.emplace_back(outer.release());
+                            }
                             break;
                         }
 
@@ -3316,21 +3351,23 @@ struct LoopNest {
                         }
 
                         case serial: {
-                            outer->gpu_label = serial;
-                            inner->gpu_label = serial;
+                            if (in_realization || !in_threads_loop || !node_has_dynamic_region_computed(f)) {
+                                outer->gpu_label = serial;
+                                inner->gpu_label = serial;
 
-                            outer->children.emplace_back(inner.release());
-                            outer->compute_here(f, true, v, in_threads_loop, target);
+                                outer->children.emplace_back(inner.release());
+                                outer->compute_here(f, true, v, in_threads_loop, target);
 
-                            if (!in_threads_loop) {
-                                bool made_child = outer->add_gpu_thread_tilings(f, params, target, v, result, union_counts);
+                                if (!in_threads_loop) {
+                                    bool made_child = outer->add_gpu_thread_tilings(f, params, target, v, result, union_counts);
 
-                                // no good thread tilings, just add the untiled thread loop
-                                if (!made_child) {
+                                    // no good thread tilings, just add the untiled thread loop
+                                    if (!made_child) {
+                                        result.emplace_back(outer.release());
+                                    }
+                                } else { // inside a threads loop, can't generate thread loop tilings
                                     result.emplace_back(outer.release());
                                 }
-                            } else { // inside a threads loop, can't generate thread loop tilings
-                                result.emplace_back(outer.release());
                             }
                             break;
                         }
@@ -4271,6 +4308,11 @@ struct State {
         return false;
     }
 
+
+    bool has_dynamic_allocation_inside_thread() {
+        return root->has_dynamic_allocation_inside_thread(false);
+    }
+
     std::pair<int64_t, int64_t> working_set_total(const StageMap<ScheduleFeatures>& features, const IntrusivePtr<const LoopNest>& loop_nest) {
         int64_t working_set_r = 0;
         int64_t working_set_p = 0;
@@ -4321,6 +4363,10 @@ struct State {
 
     bool calculate_cost(const FunctionDAG &dag, const MachineParams &params, const Target& target, CostModel *cost_model, bool verbose = false) {
         if (!are_valid_thread_extents(root->get_union_thread_counts(nullptr))) {
+            return false;
+        }
+
+        if (has_dynamic_allocation_inside_thread()) {
             return false;
         }
 
