@@ -128,6 +128,10 @@ public:
     LoadJacobian(vector<vector<OptionalRational>> &&matrix, int64_t c = 1) :
         coeffs(matrix), c(c) {}
 
+    bool empty() const {
+        return coeffs.empty();
+    }
+
     size_t producer_storage_dims() const {
         return coeffs.size();
     }

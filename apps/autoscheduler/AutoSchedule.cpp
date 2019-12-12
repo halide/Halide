@@ -842,6 +842,10 @@ struct LoopNest {
         return target.has_gpu_feature() && gpu_label == block;
     }
 
+    bool is_scalar() const {
+        return size.size() == 0;
+    }
+
     // given a newly inserted node f into this LoopNest, get union of thread counts in each dimension
     // across all siblings of f.
     vector<int64_t> get_union_thread_counts(const FunctionDAG::Node *f) const {
@@ -2142,7 +2146,7 @@ struct LoopNest {
 
             std::vector<int64_t> inner_serial_loop_extents;
 
-            if (innermost) {
+            if (innermost && !stage->store_jacobian->empty()) {
                 const auto& bounds = consumer_site.store->get_bounds(stage->node);
                 inner_serial_loop_extents = gpu_loop_info.get_inner_serial_loop_extents(this);
                 auto store_jac = *stage->store_jacobian * inner_serial_loop_extents;
@@ -2589,7 +2593,7 @@ struct LoopNest {
 
         compute_shared_mem_occupancy(target, working_set_here, feat);
 
-        if (innermost) {
+        if (innermost && !is_scalar()) {
             compute_warp_features(feat, gpu_loop_info);
             compute_warp_and_block_occupancy(feat, gpu_loop_info);
         }
@@ -4034,6 +4038,10 @@ struct State {
                 }
 
                 int vectorized_loop_index = c->vectorized_loop_index;
+
+                if (c->size.size() == 0) {
+                    continue;
+                }
 
                 // Make the vectorized dimension of the inner loop 32 (or as
                 // close as possible)

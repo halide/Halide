@@ -304,10 +304,10 @@ struct ScheduleFeatures {
     double block_occupancy = 1.0 / 1024.0;
 
     double warp_lane_utilization = 1.0 / 32.0;
-    double warp_lane_utilization_at_block = 0;
-    double warp_lane_utilization_at_block_x = 0;
-    double warp_lane_utilization_at_block_y = 0;
-    double warp_lane_utilization_at_block_z = 0;
+    double warp_lane_utilization_at_block = 1;
+    double warp_lane_utilization_at_block_x = 1;
+    double warp_lane_utilization_at_block_y = 1;
+    double warp_lane_utilization_at_block_z = 1;
 
     double num_shared_mem_loads = 0;
     double num_shared_mem_loads_per_block = 0;
