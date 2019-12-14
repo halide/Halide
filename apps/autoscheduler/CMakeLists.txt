@@ -36,7 +36,7 @@ set_target_properties(retrain_cost_model_process
 target_include_directories(retrain_cost_model_process
                            PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/../support)
 target_link_libraries(retrain_cost_model_process
-                      PRIVATE cost_model train_cost_model)
+                      PRIVATE cost_model train_cost_model Halide)
 
 # =======================================================
 
