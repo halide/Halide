@@ -26,12 +26,6 @@ public:
 
     // Discard all schedules in the queue.
     virtual void reset() = 0;
-
-    // Update model weights using true measured runtimes.
-    virtual float backprop(const Halide::Runtime::Buffer<const float> &true_runtimes, float learning_rate) = 0;
-
-    // Save the model weights to disk.
-    virtual void save_weights() = 0;
 };
 
 }  // namespace Halide

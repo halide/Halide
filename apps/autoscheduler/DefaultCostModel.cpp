@@ -14,7 +14,6 @@
 #include "DefaultCostModel.h"
 #include "HalideBuffer.h"
 #include "NetworkSize.h"
-#include "Weights.h"
 #include "cost_model.h"
 #include "train_cost_model.h"
 
@@ -42,326 +41,306 @@ bool ends_with(const std::string &str, const std::string &suffix) {
     return true;
 }
 
-class DefaultCostModel : public CostModel {
-    Weights weights;
-    Buffer<float> schedule_feat_queue, pipeline_feat_queue, costs;
-    Buffer<double *> cost_ptrs;
-    int cursor, num_stages, num_cores;
-
-    const std::string weights_in_path, weights_out_path;
-    const bool randomize_weights;
-
-public:
-    DefaultCostModel(const std::string &weights_in_path,
-                     const std::string &weights_out_path,
-                     bool randomize_weights)
-        : weights_in_path(weights_in_path),
-          weights_out_path(weights_out_path),
-          randomize_weights(randomize_weights) {
-
-        load_weights();
-    }
-
-    void set_pipeline_features(const Internal::Autoscheduler::FunctionDAG &dag,
-                               const MachineParams &params) override {
-
-        const int pipeline_feat_size = head1_w * head1_h;
-        // We ignore the first seven pipeline features in the cost
-        // model. It's just a mask of which types are in use.
-        static_assert(sizeof(PipelineFeatures) - 7 * sizeof(int) ==
-                          sizeof(int) * pipeline_feat_size,
-                      "Incorrect size for pipeline features");
-        int num_stages = 0;
-        for (const auto &n : dag.nodes) {
-            if (!n.is_input) num_stages += (int)n.stages.size();
-        }
-        Runtime::Buffer<float> pipeline_features(head1_w, head1_h, num_stages);
-        int stage = 0;
-        for (const auto &n : dag.nodes) {
-            if (n.is_input) continue;
-            for (auto it = n.stages.rbegin(); it != n.stages.rend(); it++) {
-                const auto &s = *it;
-                const int *pipeline_feats = (const int *)(&(s.features)) + 7;
-                // skip the first 7 features
-                for (int i = 0; i < pipeline_feat_size; i++) {
-                    int x = i / 7;
-                    int y = i % 7;
-                    pipeline_features(x, y, stage) = pipeline_feats[i];
-                }
-                stage += 1;
-            }
-        }
-        internal_assert(stage == num_stages);
-        pipeline_feat_queue = pipeline_features;
-        assert(params.parallelism > 0);
-        num_cores = params.parallelism;
-    }
-
-    void enqueue(int ns, Buffer<float> *schedule_feats, double *cost_ptr) override {
-        num_stages = ns;
-
-        // We know the most stages that will ever be enqueued from the schedule features
-        assert(pipeline_feat_queue.data() && "Call set_schedule_features before calling enqueue\n");
-        const int max_num_stages = pipeline_feat_queue.dim(2).extent();
-        if (num_stages > max_num_stages) {
-            std::cerr
-                << "schedule features has more stages (" << num_stages
-                << ") than pipeline features (" << max_num_stages << ")\n";
-            abort();
-        }
-
-        const int batch_size = 1024;
-        if (!schedule_feat_queue.data() ||
-            schedule_feat_queue.dim(2).extent() < max_num_stages) {
-            assert(cursor == 0);
-            schedule_feat_queue = Buffer<float>(batch_size, head2_w, max_num_stages);
-            if (!costs.data()) {
-                assert(!cost_ptrs.data());
-                costs = Buffer<float>(batch_size);
-                cost_ptrs = Buffer<double *>(batch_size);
-            }
-        }
-
-        if (cursor == batch_size) {
-            evaluate_costs();
-        }
-
-        *schedule_feats = schedule_feat_queue.sliced(0, cursor);
-        cost_ptrs(cursor) = cost_ptr;
-
-        cursor++;
-    }
-
-    // Backprop state. To run ADAM we need a running average of the
-    // gradients and gradients squared. We add an outer dimension of
-    // size 3 to the new weight outputs to track this state. So buf(_,
-    // 0) is the new weight, buf(_, 1) is the ADAM running average of
-    // the first moment, and buf(_, 2) is the ADAM running average of
-    // the second moment.
-    Buffer<float>
-        head1_filter_update, head1_bias_update,
-        head2_filter_update, head2_bias_update,
-        conv1_filter_update, conv1_bias_update;
-    int timestep = 0;
-
-    float backprop(const Buffer<const float> &true_runtimes, float learning_rate) override {
-        assert(cursor != 0);
-        assert(pipeline_feat_queue.data());
-        assert(schedule_feat_queue.data());
-
-        auto loss = Buffer<float>::make_scalar();
-
-        if (!head1_filter_update.data()) {
-            auto weight_update_buffer = [](const Buffer<float> &w) {
-                std::vector<int> size;
-                for (int i = 0; i < w.dimensions(); i++) {
-                    size.push_back(w.dim(i).extent());
-                }
-                size.push_back(4);
-                auto buf = Buffer<float>(size);
-                buf.fill(0.0f);
-                return buf;
-            };
-
-            head1_filter_update = weight_update_buffer(weights.head1_filter);
-            head1_bias_update = weight_update_buffer(weights.head1_bias);
-            head2_filter_update = weight_update_buffer(weights.head2_filter);
-            head2_bias_update = weight_update_buffer(weights.head2_bias);
-            conv1_filter_update = weight_update_buffer(weights.conv1_filter);
-            conv1_bias_update = weight_update_buffer(weights.conv1_bias);
-            timestep = 0;
-        }
-
-        Buffer<float> dst = costs.cropped(0, 0, cursor);
-
-        int fastest_idx = 0;
-        for (int i = 0; i < cursor; i++) {
-            if (true_runtimes(i) < true_runtimes(fastest_idx)) {
-                fastest_idx = i;
-            }
-        }
-
-        int result = train_cost_model(num_stages,
-                                      cursor,
-                                      num_cores,
-                                      pipeline_feat_queue,
-                                      schedule_feat_queue,
-                                      weights.head1_filter, weights.head1_bias,
-                                      weights.head2_filter, weights.head2_bias,
-                                      weights.conv1_filter, weights.conv1_bias,
-                                      learning_rate, timestep++,
-                                      fastest_idx,
-                                      true_runtimes.alias(),
-                                      head1_filter_update, head1_bias_update,
-                                      head2_filter_update, head2_bias_update,
-                                      conv1_filter_update, conv1_bias_update,
-                                      dst,
-                                      loss);
-        (void)result;
-        assert(result == 0);
-
-        bool any_nans = false;
-        for (int i = 0; i < cursor; i++) {
-            assert(cost_ptrs(i));
-            *(cost_ptrs(i)) = dst(i);
-            if (std::isnan(dst(i))) {
-                any_nans = true;
-                aslog(0) << "Prediction " << i << " is NaN. True runtime is " << true_runtimes(i) << "\n";
-                aslog(0) << "Checking pipeline features for NaNs...\n";
-                pipeline_feat_queue.for_each_value([&](float f) { if (std::isnan(f)) abort(); });
-                aslog(0) << "None found\n";
-                aslog(0) << "Checking schedule features for NaNs...\n";
-                schedule_feat_queue.for_each_value([&](float f) { if (std::isnan(f)) abort(); });
-                aslog(0) << "None found\n";
-                aslog(0) << "Checking network weights for NaNs...\n";
-                weights.for_each_buffer([&](const Buffer<float> &buf) {
-                    buf.for_each_value([&](float f) { if (std::isnan(f)) abort(); });
-                });
-                aslog(0) << "None found\n";
-            }
-            assert(true_runtimes(i) > 0);
-        }
-        if (any_nans) abort();
-
-        // Update weights locally
-        auto update_weight = [](const Buffer<float> &src, Buffer<float> &dst) {
-            dst.copy_from(src.sliced(src.dimensions() - 1, 0));
-        };
-        update_weight(head1_filter_update, weights.head1_filter);
-        update_weight(head1_bias_update, weights.head1_bias);
-        update_weight(head2_filter_update, weights.head2_filter);
-        update_weight(head2_bias_update, weights.head2_bias);
-        update_weight(conv1_filter_update, weights.conv1_filter);
-        update_weight(conv1_bias_update, weights.conv1_bias);
-
-        assert(cursor != 0);
-
-        return loss();
-    }
-
-    void evaluate_costs() override {
-        if (cursor == 0 || !schedule_feat_queue.data()) return;
-
-        assert(pipeline_feat_queue.data());
-        assert(schedule_feat_queue.data());
-
-        Buffer<float> dst = costs.cropped(0, 0, cursor);
-
-        auto loss = Buffer<float>::make_scalar();
-
-        int result = cost_model(num_stages,
-                                cursor,
-                                num_cores,
-                                pipeline_feat_queue,
-                                schedule_feat_queue,
-                                weights.head1_filter, weights.head1_bias,
-                                weights.head2_filter, weights.head2_bias,
-                                weights.conv1_filter, weights.conv1_bias,
-                                0.0f, 0, 0, nullptr,
-                                dst, loss);
-        (void)result;
-        assert(result == 0);
-
-        for (int i = 0; i < cursor; i++) {
-            assert(cost_ptrs(i));
-            *(cost_ptrs(i)) = dst(i);
-        }
-
-        cursor = 0;
-    }
-
-    void load_weights() {
-        bool need_randomize = randomize_weights;
-
-        if (weights_in_path.empty()) {
-            aslog(1) << "Loading weights from built-in data...\n";
-            // This copy shouldn't be necessary, but std::istream in C++ doesn't seem
-            // to have a convenient wrap-around-constant-data variant... and since
-            // this isn't much data, just copy it.
-            const std::string baseline_weights_data((const char *)&baseline_weights[0], baseline_weights_length);
-            std::istringstream i(baseline_weights_data);
-            if (!weights.load(i)) {
-                std::cerr << "The built-in baseline weights should never fail to load\n";
-                assert(0);
-            }
-        } else if (ends_with(weights_in_path, ".weights")) {
-            aslog(1) << "Loading weights from " << weights_in_path << " ...\n";
-            if (!weights.load_from_file(weights_in_path)) {
-                // Emit to cout (rather than cerr) because the latter is hidden during the autotune loop,
-                // and we want this to be seen.
-                std::cout << "WARNING, error in reading weights from " << weights_in_path << ", randomizing...\n";
-                need_randomize = true;
-            }
-        } else {
-            aslog(1) << "Loading weights from directory " << weights_in_path << " ...\n";
-            std::cerr << "Loading weights from a directory is deprecated; please convert to a .weights file\n";
-            if (!weights.load_from_dir(weights_in_path)) {
-                std::cout << "WARNING, error in reading weights from " << weights_in_path << ", randomizing...\n";
-                need_randomize = true;
-            }
-        }
-
-        if (!need_randomize && weights.pipeline_features_version != PipelineFeatures::version()) {
-            // Emit to cout (rather than cerr) because the latter is hidden during the autotune loop,
-            // and we want this to be seen.
-            std::cout << "WARNING: loaded weights have pipeline_version = "
-                      << weights.pipeline_features_version
-                      << " but current pipeline_version is " << PipelineFeatures::version()
-                      << "; the weights may be invalid. Using anyway.\n";
-        }
-
-        if (!need_randomize && weights.schedule_features_version != ScheduleFeatures::version()) {
-            // Emit to cout (rather than cerr) because the latter is hidden during the autotune loop,
-            // and we want this to be seen.
-            std::cout << "WARNING: loaded weights have schedule_features_version = "
-                      << weights.schedule_features_version
-                      << " but current schedule_features_version is " << ScheduleFeatures::version()
-                      << "; the weights may be invalid. Using anyway.\n";
-        }
-
-        if (need_randomize) {
-            auto seed = time(NULL);
-            std::cout << "Randomizing weights using seed = " << seed << "\n";
-            weights.randomize((uint32_t)seed);
-        }
-
-        // Update so that any version of this we save will have the current version
-        weights.pipeline_features_version = PipelineFeatures::version();
-        weights.schedule_features_version = ScheduleFeatures::version();
-    }
-
-    void save_weights() override {
-        if (weights_out_path.empty()) {
-            std::cerr << "Unable to save weights: no output path specified\n";
-            abort();
-        }
-
-        if (ends_with(weights_out_path, ".weights")) {
-            if (!weights.save_to_file(weights_out_path)) {
-                std::cerr << "Unable to save weights to file: " << weights_out_path << "\n";
-                abort();
-            }
-        } else {
-            std::cerr << "Saving weights to a directory is deprecated; please convert to a .weights file\n";
-            if (!weights.save_to_dir(weights_out_path)) {
-                std::cerr << "Unable to save weights to file: " << weights_out_path << "\n";
-                abort();
-            }
-        }
-    }
-
-    // Discard any enqueued but unevaluated schedules
-    void reset() override {
-        cursor = 0;
-    }
-};
-
 }  // namespace
+  
+void DefaultCostModel::set_pipeline_features(const Internal::Autoscheduler::FunctionDAG &dag,
+                                             const MachineParams &params) {
 
-std::unique_ptr<CostModel> make_default_cost_model(const std::string &weights_in_path,
+    const int pipeline_feat_size = head1_w * head1_h;
+    // We ignore the first seven pipeline features in the cost
+    // model. It's just a mask of which types are in use.
+    static_assert(sizeof(PipelineFeatures) - 7 * sizeof(int) ==
+                      sizeof(int) * pipeline_feat_size,
+                  "Incorrect size for pipeline features");
+    int num_stages = 0;
+    for (const auto &n : dag.nodes) {
+        if (!n.is_input) num_stages += (int)n.stages.size();
+    }
+    Runtime::Buffer<float> pipeline_features(head1_w, head1_h, num_stages);
+    int stage = 0;
+    for (const auto &n : dag.nodes) {
+        if (n.is_input) continue;
+        for (auto it = n.stages.rbegin(); it != n.stages.rend(); it++) {
+            const auto &s = *it;
+            const int *pipeline_feats = (const int *)(&(s.features)) + 7;
+            // skip the first 7 features
+            for (int i = 0; i < pipeline_feat_size; i++) {
+                int x = i / 7;
+                int y = i % 7;
+                pipeline_features(x, y, stage) = pipeline_feats[i];
+            }
+            stage += 1;
+        }
+    }
+    internal_assert(stage == num_stages);
+    pipeline_feat_queue = pipeline_features;
+    assert(params.parallelism > 0);
+    num_cores = params.parallelism;
+}
+
+  void DefaultCostModel::set_pipeline_features(const Runtime::Buffer<float> &pipeline_feats, int n) {
+    pipeline_feat_queue = pipeline_feats;
+    assert(n > 0);
+    num_cores = n;
+}
+
+  void DefaultCostModel::enqueue(int ns, Runtime::Buffer<float> *schedule_feats, double *cost_ptr) {
+    num_stages = ns;
+
+    // We know the most stages that will ever be enqueued from the schedule features
+    assert(pipeline_feat_queue.data() && "Call set_schedule_features before calling enqueue\n");
+    const int max_num_stages = pipeline_feat_queue.dim(2).extent();
+    if (num_stages > max_num_stages) {
+        std::cerr
+            << "schedule features has more stages (" << num_stages
+            << ") than pipeline features (" << max_num_stages << ")\n";
+        abort();
+    }
+
+    const int batch_size = 1024;
+    if (!schedule_feat_queue.data() ||
+        schedule_feat_queue.dim(2).extent() < max_num_stages) {
+        assert(cursor == 0);
+        schedule_feat_queue = Runtime::Buffer<float>(batch_size, head2_w, max_num_stages);
+        if (!costs.data()) {
+            assert(!cost_ptrs.data());
+            costs = Runtime::Buffer<float>(batch_size);
+            cost_ptrs = Runtime::Buffer<double *>(batch_size);
+        }
+    }
+
+    if (cursor == batch_size) {
+        evaluate_costs();
+    }
+
+    *schedule_feats = schedule_feat_queue.sliced(0, cursor);
+    cost_ptrs(cursor) = cost_ptr;
+
+    cursor++;
+}
+
+// Backprop state. To run ADAM we need a running average of the
+// gradients and gradients squared. We add an outer dimension of
+// size 3 to the new weight outputs to track this state. So buf(_,
+// 0) is the new weight, buf(_, 1) is the ADAM running average of
+// the first moment, and buf(_, 2) is the ADAM running average of
+// the second moment.
+  float DefaultCostModel::backprop(const Runtime::Buffer<const float> &true_runtimes, float learning_rate) {
+    assert(cursor != 0);
+    assert(pipeline_feat_queue.data());
+    assert(schedule_feat_queue.data());
+
+    auto loss = Runtime::Buffer<float>::make_scalar();
+
+    if (!head1_filter_update.data()) {
+      auto weight_update_buffer = [](const Runtime::Buffer<float> &w) {
+            std::vector<int> size;
+            for (int i = 0; i < w.dimensions(); i++) {
+                size.push_back(w.dim(i).extent());
+            }
+            size.push_back(4);
+            auto buf = Runtime::Buffer<float>(size);
+            buf.fill(0.0f);
+            return buf;
+        };
+
+        head1_filter_update = weight_update_buffer(weights.head1_filter);
+        head1_bias_update = weight_update_buffer(weights.head1_bias);
+        head2_filter_update = weight_update_buffer(weights.head2_filter);
+        head2_bias_update = weight_update_buffer(weights.head2_bias);
+        conv1_filter_update = weight_update_buffer(weights.conv1_filter);
+        conv1_bias_update = weight_update_buffer(weights.conv1_bias);
+        timestep = 0;
+    }
+
+    Runtime::Buffer<float> dst = costs.cropped(0, 0, cursor);
+
+    int fastest_idx = 0;
+    for (int i = 0; i < cursor; i++) {
+        if (true_runtimes(i) < true_runtimes(fastest_idx)) {
+            fastest_idx = i;
+        }
+    }
+
+    int result = train_cost_model(num_stages,
+                                  cursor,
+                                  num_cores,
+                                  pipeline_feat_queue,
+                                  schedule_feat_queue,
+                                  weights.head1_filter, weights.head1_bias,
+                                  weights.head2_filter, weights.head2_bias,
+                                  weights.conv1_filter, weights.conv1_bias,
+                                  learning_rate, timestep++,
+                                  fastest_idx,
+                                  true_runtimes.alias(),
+                                  head1_filter_update, head1_bias_update,
+                                  head2_filter_update, head2_bias_update,
+                                  conv1_filter_update, conv1_bias_update,
+                                  dst,
+                                  loss);
+    (void)result;
+    assert(result == 0);
+
+    bool any_nans = false;
+    for (int i = 0; i < cursor; i++) {
+        assert(cost_ptrs(i));
+        *(cost_ptrs(i)) = dst(i);
+        if (std::isnan(dst(i))) {
+            any_nans = true;
+            aslog(0) << "Prediction " << i << " is NaN. True runtime is " << true_runtimes(i) << "\n";
+            aslog(0) << "Checking pipeline features for NaNs...\n";
+            pipeline_feat_queue.for_each_value([&](float f) { if (std::isnan(f)) abort(); });
+            aslog(0) << "None found\n";
+            aslog(0) << "Checking schedule features for NaNs...\n";
+            schedule_feat_queue.for_each_value([&](float f) { if (std::isnan(f)) abort(); });
+            aslog(0) << "None found\n";
+            aslog(0) << "Checking network weights for NaNs...\n";
+            weights.for_each_buffer([&](const Runtime::Buffer<float> &buf) {
+                buf.for_each_value([&](float f) { if (std::isnan(f)) abort(); });
+            });
+            aslog(0) << "None found\n";
+        }
+        assert(true_runtimes(i) > 0);
+    }
+    if (any_nans) abort();
+
+    // Update weights locally
+    auto update_weight = [](const Runtime::Buffer<float> &src, Runtime::Buffer<float> &dst) {
+        dst.copy_from(src.sliced(src.dimensions() - 1, 0));
+    };
+    update_weight(head1_filter_update, weights.head1_filter);
+    update_weight(head1_bias_update, weights.head1_bias);
+    update_weight(head2_filter_update, weights.head2_filter);
+    update_weight(head2_bias_update, weights.head2_bias);
+    update_weight(conv1_filter_update, weights.conv1_filter);
+    update_weight(conv1_bias_update, weights.conv1_bias);
+
+    assert(cursor != 0);
+
+    return loss();
+}
+
+void DefaultCostModel::evaluate_costs() {
+    if (cursor == 0 || !schedule_feat_queue.data()) return;
+
+    assert(pipeline_feat_queue.data());
+    assert(schedule_feat_queue.data());
+
+    Runtime::Buffer<float> dst = costs.cropped(0, 0, cursor);
+
+    auto loss = Runtime::Buffer<float>::make_scalar();
+
+    int result = cost_model(num_stages,
+                            cursor,
+                            num_cores,
+                            pipeline_feat_queue,
+                            schedule_feat_queue,
+                            weights.head1_filter, weights.head1_bias,
+                            weights.head2_filter, weights.head2_bias,
+                            weights.conv1_filter, weights.conv1_bias,
+                            0.0f, 0, 0, nullptr,
+                            dst, loss);
+    (void)result;
+    assert(result == 0);
+
+    for (int i = 0; i < cursor; i++) {
+        assert(cost_ptrs(i));
+        *(cost_ptrs(i)) = dst(i);
+    }
+
+    cursor = 0;
+}
+
+void DefaultCostModel::load_weights() {
+    bool need_randomize = randomize_weights;
+
+    if (weights_in_path.empty()) {
+        aslog(1) << "Loading weights from built-in data...\n";
+        // This copy shouldn't be necessary, but std::istream in C++ doesn't seem
+        // to have a convenient wrap-around-constant-data variant... and since
+        // this isn't much data, just copy it.
+        const std::string baseline_weights_data((const char *)&baseline_weights[0], baseline_weights_length);
+        std::istringstream i(baseline_weights_data);
+        if (!weights.load(i)) {
+            std::cerr << "The built-in baseline weights should never fail to load\n";
+            assert(0);
+        }
+    } else if (ends_with(weights_in_path, ".weights")) {
+        aslog(1) << "Loading weights from " << weights_in_path << " ...\n";
+        if (!weights.load_from_file(weights_in_path)) {
+            // Emit to cout (rather than cerr) because the latter is hidden during the autotune loop,
+            // and we want this to be seen.
+            std::cout << "WARNING, error in reading weights from " << weights_in_path << ", randomizing...\n";
+            need_randomize = true;
+        }
+    } else {
+        aslog(1) << "Loading weights from directory " << weights_in_path << " ...\n";
+        std::cerr << "Loading weights from a directory is deprecated; please convert to a .weights file\n";
+        if (!weights.load_from_dir(weights_in_path)) {
+            std::cout << "WARNING, error in reading weights from " << weights_in_path << ", randomizing...\n";
+            need_randomize = true;
+        }
+    }
+
+    if (!need_randomize && weights.pipeline_features_version != PipelineFeatures::version()) {
+        // Emit to cout (rather than cerr) because the latter is hidden during the autotune loop,
+        // and we want this to be seen.
+        std::cout << "WARNING: loaded weights have pipeline_version = "
+                  << weights.pipeline_features_version
+                  << " but current pipeline_version is " << PipelineFeatures::version()
+                  << "; the weights may be invalid. Using anyway.\n";
+    }
+
+    if (!need_randomize && weights.schedule_features_version != ScheduleFeatures::version()) {
+        // Emit to cout (rather than cerr) because the latter is hidden during the autotune loop,
+        // and we want this to be seen.
+        std::cout << "WARNING: loaded weights have schedule_features_version = "
+                  << weights.schedule_features_version
+                  << " but current schedule_features_version is " << ScheduleFeatures::version()
+                  << "; the weights may be invalid. Using anyway.\n";
+    }
+
+    if (need_randomize) {
+        auto seed = time(NULL);
+        std::cout << "Randomizing weights using seed = " << seed << "\n";
+        weights.randomize((uint32_t)seed);
+    }
+
+    // Update so that any version of this we save will have the current version
+    weights.pipeline_features_version = PipelineFeatures::version();
+    weights.schedule_features_version = ScheduleFeatures::version();
+}
+
+void DefaultCostModel::save_weights() {
+    if (weights_out_path.empty()) {
+        std::cerr << "Unable to save weights: no output path specified\n";
+        abort();
+    }
+
+    if (ends_with(weights_out_path, ".weights")) {
+        if (!weights.save_to_file(weights_out_path)) {
+            std::cerr << "Unable to save weights to file: " << weights_out_path << "\n";
+            abort();
+        }
+    } else {
+        std::cerr << "Saving weights to a directory is deprecated; please convert to a .weights file\n";
+        if (!weights.save_to_dir(weights_out_path)) {
+            std::cerr << "Unable to save weights to file: " << weights_out_path << "\n";
+            abort();
+        }
+    }
+}
+
+// Discard any enqueued but unevaluated schedules
+void DefaultCostModel::reset() {
+    cursor = 0;
+}
+
+
+std::unique_ptr<DefaultCostModel> make_default_cost_model(const std::string &weights_in_path,
                                                    const std::string &weights_out_path,
                                                    bool randomize_weights) {
-    return std::unique_ptr<CostModel>(new DefaultCostModel(weights_in_path, weights_out_path, randomize_weights));
+    return std::unique_ptr<DefaultCostModel>(new DefaultCostModel(weights_in_path, weights_out_path, randomize_weights));
 }
 
 }  // namespace Halide
