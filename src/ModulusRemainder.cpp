@@ -363,7 +363,8 @@ void ComputeModulusRemainder::visit(const Mod *op) {
 }
 
 ModulusRemainder operator%(const ModulusRemainder &a, const ModulusRemainder &b) {
-    // We can treat x mod y as x + z*y, where we know nothing about z.
+    // For non-zero y, we can treat x mod y as x + z*y, where we know
+    // nothing about z.
     // (ax + b) + z (cx + d) ->
     // ax + b + zcx + dz ->
     // gcd(a, c, d) * w + b
@@ -377,6 +378,19 @@ ModulusRemainder operator%(const ModulusRemainder &a, const ModulusRemainder &b)
     int64_t modulus = gcd(a.modulus, b.modulus);
     modulus = gcd(modulus, b.remainder);
     int64_t remainder = mod(a.remainder, modulus);
+
+    if (b.remainder == 0 && remainder != 0) {
+        // b could be zero, so the result could also just be zero.
+        if (modulus == 0) {
+            remainder = 0;
+        } else {
+            // This can no longer be expressed as ax + b
+            remainder = 0;
+            modulus = 1;
+        }
+    }
+
+
     return {modulus, remainder};
 }
 
