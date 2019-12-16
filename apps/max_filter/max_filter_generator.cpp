@@ -57,7 +57,7 @@ public:
         {
             input_.dim(0).set_estimate(0, 1536);
             input_.dim(1).set_estimate(0, 2560);
-            intput_.dim(2).set_estimate(0, 3);
+            input_.dim(2).set_estimate(0, 3);
             output_.dim(0).set_estimate(0, 1536);
             output_.dim(1).set_estimate(0, 2560);
             output_.dim(2).set_estimate(0, 3);
