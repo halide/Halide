@@ -6,7 +6,7 @@ using namespace Halide::ConciseCasts;
 
 class Hist : public Halide::Generator<Hist> {
 public:
-    Input<Buffer<uint8_t>>  input{"input", 3};
+    Input<Buffer<uint8_t>> input{"input", 3};
     Output<Buffer<uint8_t>> output{"output", 3};
 
     void generate() {
@@ -45,24 +45,23 @@ public:
         Func eq("equalize");
 
         Expr cdf_bin = u8(clamp(Y(x, y), 0, 255));
-        eq(x, y) = clamp(cdf(cdf_bin) * (255.0f/(input.height() * input.width())), 0, 255);
+        eq(x, y) = clamp(cdf(cdf_bin) * (255.0f / (input.height() * input.width())), 0, 255);
 
         Expr red = u8(clamp(eq(x, y) + (Cr(x, y) - 128) * 1.4f, 0, 255));
-        Expr green = u8(clamp(eq(x, y) - 0.343f * (Cb(x, y) - 128) - 0.711f * (Cr(x, y) -128), 0, 255));
+        Expr green = u8(clamp(eq(x, y) - 0.343f * (Cb(x, y) - 128) - 0.711f * (Cr(x, y) - 128), 0, 255));
         Expr blue = u8(clamp(eq(x, y) + 1.765f * (Cb(x, y) - 128), 0, 255));
         output(x, y, c) = select(c == 0, red,
                                  c == 1, green,
-                                         blue);
-
+                                 blue);
 
         // Estimates (for autoscheduler; ignored otherwise)
         {
-            input.dim(0).set_estimate(0, 1536)
-                 .dim(1).set_estimate(0, 2560)
-                 .dim(2).set_estimate(0, 3);
-            output.dim(0).set_estimate(0, 1536)
-                  .dim(1).set_estimate(0, 2560)
-                  .dim(2).set_estimate(0, 3);
+            input.dim(0).set_estimate(0, 1536);
+            input.dim(1).set_estimate(0, 2560);
+            input.dim(2).set_estimate(0, 3);
+            output.dim(0).set_estimate(0, 1536);
+            output.dim(1).set_estimate(0, 2560);
+            output.dim(2).set_estimate(0, 3);
         }
 
         // Schedule

@@ -84,10 +84,10 @@ Matrix<M, N> solve(Matrix<M, M> A, Matrix<M, N> b, Func compute, Var at, bool sk
     }
 
     // eliminate lower left
-    for (int k = 0; k < M-1; k++) {
-        for (int i = k+1; i < M; i++) {
+    for (int k = 0; k < M - 1; k++) {
+        for (int i = k + 1; i < M; i++) {
             f(x, y, z, -1, 0) = f(x, y, z, i, k) / f(x, y, z, k, k);
-            for (int j = k+1; j < M+N; j++) {
+            for (int j = k + 1; j < M + N; j++) {
                 f(x, y, z, i, j) -= f(x, y, z, k, j) * f(x, y, z, -1, 0);
             }
             f(x, y, z, i, k) = 0.0f;
@@ -95,10 +95,10 @@ Matrix<M, N> solve(Matrix<M, M> A, Matrix<M, N> b, Func compute, Var at, bool sk
     }
 
     // eliminate upper right
-    for (int k = M-1; k > 0; k--) {
+    for (int k = M - 1; k > 0; k--) {
         for (int i = 0; i < k; i++) {
             f(x, y, z, -1, 0) = f(x, y, z, i, k) / f(x, y, z, k, k);
-            for (int j = k+1; j < M+N; j++) {
+            for (int j = k + 1; j < M + N; j++) {
                 f(x, y, z, i, j) -= f(x, y, z, k, j) * f(x, y, z, -1, 0);
             }
             f(x, y, z, i, k) = 0.0f;
@@ -107,9 +107,9 @@ Matrix<M, N> solve(Matrix<M, M> A, Matrix<M, N> b, Func compute, Var at, bool sk
 
     // Divide by diagonal and put it in the output matrix.
     for (int i = 0; i < M; i++) {
-        f(x, y, z, i, i) = 1.0f/f(x, y, z, i, i);
+        f(x, y, z, i, i) = 1.0f / f(x, y, z, i, i);
         for (int j = 0; j < N; j++) {
-            b(i, j) = f(x, y, z, i, j+M) * f(x, y, z, i, i);
+            b(i, j) = f(x, y, z, i, j + M) * f(x, y, z, i, i);
         }
     }
 
@@ -126,7 +126,6 @@ Matrix<M, N> solve(Matrix<M, M> A, Matrix<M, N> b, Func compute, Var at, bool sk
     return b;
 };
 
-
 template<int N, int M>
 Matrix<M, N> transpose(const Matrix<N, M> &in) {
     Matrix<M, N> out;
@@ -137,7 +136,6 @@ Matrix<M, N> transpose(const Matrix<N, M> &in) {
     }
     return out;
 }
-
 
 Expr pack_channels(Var c, std::vector<Expr> exprs) {
     Expr e = exprs.back();
@@ -192,10 +190,10 @@ public:
         {
             histogram(x, y, z, c) = 0.0f;
 
-            Expr sx = x * s_sigma + r.x - s_sigma/2, sy = y * s_sigma + r.y - s_sigma/2;
+            Expr sx = x * s_sigma + r.x - s_sigma / 2, sy = y * s_sigma + r.y - s_sigma / 2;
             Expr pos = gray_splat_loc(sx, sy);
             pos = clamp(pos, 0.0f, 1.0f);
-            Expr zi = cast<int>(round(pos * (1.0f/r_sigma)));
+            Expr zi = cast<int>(round(pos * (1.0f / r_sigma)));
 
             // Sum all the terms we need to fit a line relating
             // low-res input to low-res output within this bilateral grid
@@ -205,14 +203,13 @@ public:
 
             histogram(x, y, zi, c) +=
                 pack_channels(c,
-                           {sr*sr, sr*sg, sr*sb, sr,
-                                   sg*sg, sg*sb, sg,
-                                          sb*sb, sb,
-                                               1.0f,
-                            vr*sr, vr*sg, vr*sb, vr,
-                            vg*sr, vg*sg, vg*sb, vg,
-                            vb*sr, vb*sg, vb*sb, vb});
-
+                              {sr * sr, sr * sg, sr * sb, sr,
+                               sg * sg, sg * sb, sg,
+                               sb * sb, sb,
+                               1.0f,
+                               vr * sr, vr * sg, vr * sb, vr,
+                               vg * sr, vg * sg, vg * sb, vg,
+                               vb * sr, vb * sg, vb * sb, vb});
         }
 
         // Convolution pyramids (Farbman et al.) suggests convolving by
@@ -220,32 +217,32 @@ public:
         // that. We could also just use a convolution pyramid here, but
         // these grids are really small, so it's OK for the filter to drop
         // sharply and truncate early.
-        Expr t0 = 1.0f/64, t1 = 1.0f/27, t2 = 1.0f/8, t3 = 1.0f;
+        Expr t0 = 1.0f / 64, t1 = 1.0f / 27, t2 = 1.0f / 8, t3 = 1.0f;
 
         // Blur the grid using a seven-tap filter
         Func blurx("blurx"), blury("blury"), blurz("blurz");
 
-        blurz(x, y, z, c) = (histogram(x, y, z-3, c)*t0 +
-                             histogram(x, y, z-2, c)*t1 +
-                             histogram(x, y, z-1, c)*t2 +
-                             histogram(x, y, z  , c)*t3 +
-                             histogram(x, y, z+1, c)*t2 +
-                             histogram(x, y, z+2, c)*t1 +
-                             histogram(x, y, z+3, c)*t0);
-        blury(x, y, z, c) = (blurz(x, y-3, z, c)*t0 +
-                             blurz(x, y-2, z, c)*t1 +
-                             blurz(x, y-1, z, c)*t2 +
-                             blurz(x, y  , z, c)*t3 +
-                             blurz(x, y+1, z, c)*t2 +
-                             blurz(x, y+2, z, c)*t1 +
-                             blurz(x, y+3, z, c)*t0);
-        blurx(x, y, z, c) = (blury(x-3, y, z, c)*t0 +
-                             blury(x-2, y, z, c)*t1 +
-                             blury(x-1, y, z, c)*t2 +
-                             blury(x  , y, z, c)*t3 +
-                             blury(x+1, y, z, c)*t2 +
-                             blury(x+2, y, z, c)*t1 +
-                             blury(x+3, y, z, c)*t0);
+        blurz(x, y, z, c) = (histogram(x, y, z - 3, c) * t0 +
+                             histogram(x, y, z - 2, c) * t1 +
+                             histogram(x, y, z - 1, c) * t2 +
+                             histogram(x, y, z, c) * t3 +
+                             histogram(x, y, z + 1, c) * t2 +
+                             histogram(x, y, z + 2, c) * t1 +
+                             histogram(x, y, z + 3, c) * t0);
+        blury(x, y, z, c) = (blurz(x, y - 3, z, c) * t0 +
+                             blurz(x, y - 2, z, c) * t1 +
+                             blurz(x, y - 1, z, c) * t2 +
+                             blurz(x, y, z, c) * t3 +
+                             blurz(x, y + 1, z, c) * t2 +
+                             blurz(x, y + 2, z, c) * t1 +
+                             blurz(x, y + 3, z, c) * t0);
+        blurx(x, y, z, c) = (blury(x - 3, y, z, c) * t0 +
+                             blury(x - 2, y, z, c) * t1 +
+                             blury(x - 1, y, z, c) * t2 +
+                             blury(x, y, z, c) * t3 +
+                             blury(x + 1, y, z, c) * t2 +
+                             blury(x + 2, y, z, c) * t1 +
+                             blury(x + 3, y, z, c) * t0);
 
         // Do the solve, to convert the accumulated values to the affine
         // matrices.
@@ -324,19 +321,18 @@ public:
             Matrix<3, 4> result = transpose(solve(A, b, line, x, auto_schedule, get_target()));
 
             // Pack the resulting matrix into the output Func.
-            line(x, y, z, c) = pack_channels(c, {
-                        result(0, 0),
-                        result(0, 1),
-                        result(0, 2),
-                        result(0, 3),
-                        result(1, 0),
-                        result(1, 1),
-                        result(1, 2),
-                        result(1, 3),
-                        result(2, 0),
-                        result(2, 1),
-                        result(2, 2),
-                        result(2, 3)});
+            line(x, y, z, c) = pack_channels(c, {result(0, 0),
+                                                 result(0, 1),
+                                                 result(0, 2),
+                                                 result(0, 3),
+                                                 result(1, 0),
+                                                 result(1, 1),
+                                                 result(1, 2),
+                                                 result(1, 3),
+                                                 result(2, 0),
+                                                 result(2, 1),
+                                                 result(2, 2),
+                                                 result(2, 3)});
         }
 
         // If using the shader we stop there, and the Func "line" is the
@@ -383,7 +379,7 @@ public:
 
             interpolated_matrix_z(x, y, c) =
                 lerp(interpolated_matrix_x(x, y, slice_loc_z(x, y)[0], c),
-                     interpolated_matrix_x(x, y, slice_loc_z(x, y)[0]+1, c),
+                     interpolated_matrix_x(x, y, slice_loc_z(x, y)[0] + 1, c),
                      slice_loc_z(x, y)[1]);
 
             // Multiply by 3x4 by 4x1.
@@ -563,18 +559,18 @@ public:
         {
             r_sigma.set_estimate(1.f / 8.f);
             s_sigma.set_estimate(16.f);
-            splat_loc.dim(0).set_estimate(0, 192)
-                   .dim(1).set_estimate(0, 320)
-                   .dim(2).set_estimate(0, 3);
-            values.dim(0).set_estimate(0, 192)
-                   .dim(1).set_estimate(0, 320)
-                   .dim(2).set_estimate(0, 3);
-            slice_loc.dim(0).set_estimate(0, 1536)
-                   .dim(1).set_estimate(0, 2560)
-                   .dim(2).set_estimate(0, 3);
-            output.dim(0).set_estimate(0, 1536)
-                   .dim(1).set_estimate(0, 2560)
-                   .dim(2).set_estimate(0, 3);
+            splat_loc.dim(0).set_estimate(0, 192);
+            splat_loc.dim(1).set_estimate(0, 320);
+            splat_loc.dim(2).set_estimate(0, 3);
+            values.dim(0).set_estimate(0, 192);
+            values.dim(1).set_estimate(0, 320);
+            values.dim(2).set_estimate(0, 3);
+            slice_loc.dim(0).set_estimate(0, 1536);
+            slice_loc.dim(1).set_estimate(0, 2560);
+            slice_loc.dim(2).set_estimate(0, 3);
+            output.dim(0).set_estimate(0, 1536);
+            output.dim(1).set_estimate(0, 2560);
+            output.dim(2).set_estimate(0, 3);
         }
     }
 };

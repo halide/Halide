@@ -7,9 +7,9 @@ using namespace Halide::BoundaryConditions;
 
 class Max : public Halide::Generator<Max> {
 public:
-    GeneratorParam<int>     radius_{"radius", 26};
-    Input<Buffer<float>>    input_{"input", 3};
-    Output<Buffer<float>>   output_{"output", 3};
+    GeneratorParam<int> radius_{"radius", 26};
+    Input<Buffer<float>> input_{"input", 3};
+    Output<Buffer<float>> output_{"output", 3};
 
     void generate() {
         Var x("x"), y("y"), c("c"), t("t");
@@ -26,41 +26,41 @@ public:
         // are downward-looking.
         Func vert_log("vert_log");
         vert_log(x, y, c, t) = input(x, y, c);
-        RDom r(-radius, input_.height() + radius, 1, slices-1);
+        RDom r(-radius, input_.height() + radius, 1, slices - 1);
         vert_log(x, r.x, c, r.y) = max(vert_log(x, r.x, c, r.y - 1),
-                                       vert_log(x, r.x + clamp((1<<(r.y-1)), 0, radius*2), c, r.y - 1));
+                                       vert_log(x, r.x + clamp((1 << (r.y - 1)), 0, radius * 2), c, r.y - 1));
 
         // We're going to take a max filter of arbitrary diameter
         // by maxing two samples from its floor log 2 (e.g. maxing two
         // 8-high overlapping samples). This next Func tells us which
         // slice to draw from for a given radius:
         Func slice_for_radius("slice_for_radius");
-        slice_for_radius(t) = cast<int>(floor(log(2*t+1) / logf(2)));
+        slice_for_radius(t) = cast<int>(floor(log(2 * t + 1) / logf(2)));
 
         // Produce every possible vertically-max-filtered version of the image:
         Func vert("vert");
         // t is the blur radius
         Expr slice = clamp(slice_for_radius(t), 0, slices);
         Expr first_sample = vert_log(x, y - t, c, slice);
-        Expr second_sample = vert_log(x, y + t + 1 - clamp(1 << slice, 0, 2*radius), c, slice);
+        Expr second_sample = vert_log(x, y + t + 1 - clamp(1 << slice, 0, 2 * radius), c, slice);
         vert(x, y, c, t) = max(first_sample, second_sample);
 
         Func filter_height("filter_height");
-        RDom dy(0, radius+1);
-        filter_height(x) = sum(select(x*x + dy*dy < (radius+0.25f)*(radius+0.25f), 1, 0));
+        RDom dy(0, radius + 1);
+        filter_height(x) = sum(select(x * x + dy * dy < (radius + 0.25f) * (radius + 0.25f), 1, 0));
 
         // Now take an appropriate horizontal max of them at each output pixel
-        RDom dx(-radius, 2*radius+1);
-        output_(x, y, c) = maximum(vert(x + dx, y, c, clamp(filter_height(dx), 0, radius+1)));
+        RDom dx(-radius, 2 * radius + 1);
+        output_(x, y, c) = maximum(vert(x + dx, y, c, clamp(filter_height(dx), 0, radius + 1)));
 
         // Estimates (for autoscheduler; ignored otherwise)
         {
-            input_.dim(0).set_estimate(0, 1536)
-                  .dim(1).set_estimate(0, 2560)
-                  .dim(2).set_estimate(0, 3);
-            output_.dim(0).set_estimate(0, 1536)
-                  .dim(1).set_estimate(0, 2560)
-                  .dim(2).set_estimate(0, 3);
+            input_.dim(0).set_estimate(0, 1536);
+            input_.dim(1).set_estimate(0, 2560);
+            intput_.dim(2).set_estimate(0, 3);
+            output_.dim(0).set_estimate(0, 1536);
+            output_.dim(1).set_estimate(0, 2560);
+            output_.dim(2).set_estimate(0, 3);
         }
 
         // Schedule
@@ -83,7 +83,8 @@ public:
                     .update()
                     .split(x, xo, xi, 32, TailStrategy::RoundUp)
                     .reorder(r.x, r.y, xi, xo, c)
-                    .gpu_blocks(xo, c).gpu_threads(xi);
+                    .gpu_blocks(xo, c)
+                    .gpu_threads(xi);
 
             } else {
                 // 47ms on an Intel i9-9960X using 16 threads
