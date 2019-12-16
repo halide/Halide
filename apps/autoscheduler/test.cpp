@@ -462,5 +462,21 @@ int main(int argc, char **argv) {
         Pipeline(casted).auto_schedule(target, params);
     }
 
+    if (1) {
+        ImageParam im(Int(32), 2);
+
+        Func f("f"), hist("hist"), output("output");
+        Var i("i");
+        f(x, y) = clamp(im(x, y), 0, 255);
+        RDom r(0, 2000, 0, 2000);
+        hist(i) = cast<uint32_t>(0);
+        hist(f(r.x, r.y)) += cast<uint32_t>(1);
+        output(i) = hist(i);
+
+        f.set_estimate(x, 0, 2000).set_estimate(y, 0, 2000);
+        output.set_estimate(i, 0, 256);
+        Pipeline(output).auto_schedule(target, params);
+    }
+
     return 0;
 }

@@ -4337,7 +4337,11 @@ Value *CodeGen_LLVM::create_alloca_at_entry(llvm::Type *t, int n, bool zero_init
         if (n == 1) {
             builder->CreateStore(Constant::getNullValue(t), ptr);
         } else {
+#if LLVM_VERSION >= 100
+            builder->CreateMemSet(ptr, Constant::getNullValue(t), n, MaybeAlign(align));
+#else
             builder->CreateMemSet(ptr, Constant::getNullValue(t), n, align);
+#endif
         }
     }
     builder->restoreIP(here);
