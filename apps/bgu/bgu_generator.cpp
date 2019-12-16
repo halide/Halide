@@ -69,7 +69,7 @@ Matrix<R, T> mat_mul(const Matrix<R, S> &A, const Matrix<S, T> &B) {
 
 // Solve Ax = b at each x, y, z. Compute the result at the given Func and Var.
 template<int M, int N>
-Matrix<M, N> solve(Matrix<M, M> A, Matrix<M, N> b, Func compute, Var at, bool skip_schedule) {
+Matrix<M, N> solve(Matrix<M, M> A, Matrix<M, N> b, Func compute, Var at, bool skip_schedule, Target target) {
     // Put the input matrices in a Func to do the Gaussian elimination.
     Var vi, vj;
     Func f;
@@ -114,8 +114,10 @@ Matrix<M, N> solve(Matrix<M, M> A, Matrix<M, N> b, Func compute, Var at, bool sk
     }
 
     if (!skip_schedule) {
-        for (int i = 0; i < f.num_update_definitions(); i++) {
-            f.update(i).vectorize(x);
+        if (!target.has_gpu_feature()) {
+            for (int i = 0; i < f.num_update_definitions(); i++) {
+                f.update(i).vectorize(x);
+            }
         }
 
         f.compute_at(compute, at);
@@ -319,7 +321,7 @@ public:
             b(2, 2) += weighted_lambda * gain;
 
             // Now solve Ax = b
-            Matrix<3, 4> result = transpose(solve(A, b, line, x, auto_schedule));
+            Matrix<3, 4> result = transpose(solve(A, b, line, x, auto_schedule, get_target()));
 
             // Pack the resulting matrix into the output Func.
             line(x, y, z, c) = pack_channels(c, {
@@ -400,86 +402,161 @@ public:
 
         // Schedule
         if (!auto_schedule) {
-            // Fitting the curves.
+            if (!get_target().has_gpu_feature()) {
+                // 7.09 ms on an Intel i9-9960X using 16 threads
+                //
+                // The original manual version of this schedule was
+                // more than 10x slower than the autoscheduled one
+                // from Adams et al. 2018. It's probable that because
+                // the slicing half of the algorithm is intended to be
+                // run on GPU using a shader, the CPU schedule was
+                // never seriously optimized.
+                //
+                // This new CPU schedule takes inspiration from that
+                // solution. In particular, certain stages were poorly or
+                // not parallelized, and others had unhelpful storage
+                // layout reorderings.
 
-            // Compute the per tile histograms and splatting locations within
-            // rows of the blur in z.
-            histogram
-                .compute_at(blurz, y);
-            histogram.update()
-                .reorder(c, r.x, r.y, x, y)
-                .unroll(c);
+                // AVX512 vector widths seem to hurt performance, here so
+                // we stick to 8 instead of using natural_vector_size.
+                const int vec = 8;
 
-            gray_splat_loc
-                .compute_at(blurz, y)
-                .vectorize(x, 8);
+                // Fitting the curves.
 
-            // Compute the blur in z at root
-            blurz
-                .compute_root()
-                .reorder(c, z, x, y)
-                .parallel(y)
-                .vectorize(x, 8);
+                // Compute the per tile histograms and splatting locations within
+                // rows of the blur in z.
+                histogram
+                    .compute_at(blurz, y);
+                histogram.update()
+                    .reorder(c, r.x, r.y, x, y)
+                    .unroll(c);
 
-            // The blurs of the Gram matrices across x and y will be computed
-            // within the outer loops of the matrix solve.
-            blury
-                .compute_at(line, z)
-                .vectorize(x, 4);
+                gray_splat_loc
+                    .compute_at(blurz, y)
+                    .vectorize(x, vec);
 
-            blurx
-                .compute_at(line, x)
-                .vectorize(x);
+                // Compute the blur in z at root
+                blurz
+                    .compute_root()
+                    .reorder(c, z, x, y)
+                    .parallel(y)
+                    .vectorize(x, vec);
 
-            // The matrix solve. Store c innermost, because subsequent stages
-            // will do vectorized loads from this across c. If you just want
-            // the matrices, you probably want to remove this reorder storage
-            // call.
-            line
-                .compute_root()
-                .reorder_storage(c, x, y, z)
-                .reorder(c, x, z, y)
-                .parallel(y)
-                .vectorize(x, 8)
-                .bound(c, 0, 12)
-                .unroll(c);
+                // The blurs of the Gram matrices across x and y will be computed
+                // within the outer loops of the matrix solve.
+                blury
+                    .compute_at(line, z)
+                    .store_in(MemoryType::Stack)
+                    .vectorize(x, vec);
 
-            // Applying the curves.
+                blurx
+                    .compute_at(line, x)
+                    .vectorize(x);
 
-            // You should really do the trilerp on the GPU in a shader. We can
-            // make the CPU implementation a little faster though by factoring
-            // it into a few stages. At scanline of output we first slice out
-            // a 2D array of matrices that we'll bilerp into. We'll be
-            // accessing it in vectors across the c dimension, so store c
-            // innermost.
-            interpolated_matrix_y
-                .compute_root()
-                .reorder_storage(c, x, y, z)
-                .bound(c, 0, 12)
-                .vectorize(c, 4);
+                line
+                    .compute_root()
+                    .parallel(y)
+                    .vectorize(x, vec)
+                    .reorder(c, x, y)
+                    .unroll(c);
 
-            // Compute the output in vectors across x.
-            slice
-                .compute_root()
-                .parallel(y)
-                .vectorize(x, 8)
-                .reorder(c, x, y)
-                .bound(c, 0, 3)
-                .unroll(c);
+                // Applying the curves.
+                interpolated_matrix_y
+                    .compute_root()
+                    .parallel(c)
+                    .parallel(z)
+                    .vectorize(x, vec);
 
-            // Computing where to slice vectorizes nicely across x.
-            gray_slice_loc
-                .compute_root()
-                .vectorize(x, 8);
+                interpolated_matrix_z
+                    .store_at(slice, x)
+                    .compute_at(slice, c)
+                    .reorder(c, x, y)
+                    .unroll(c)
+                    .vectorize(x);
 
-            slice_loc_z
-                .compute_root()
-                .vectorize(x, 8);
+                slice
+                    .compute_root()
+                    .parallel(y)
+                    .vectorize(x, vec)
+                    .reorder(c, x, y)
+                    .bound(c, 0, 3)
+                    .unroll(c);
 
-            // But sampling the matrix vectorizes better across c.
-            interpolated_matrix_z
-                .compute_root()
-                .vectorize(c, 4);
+            } else {
+                // Runtime is bimodal. 0.76ms on a 2060 RTX when run
+                // under nvprof, but 0.96ms when run without
+                // nvprof. Unclear what is taking the extra time.
+
+                Var xi, yi, zi, xo, yo, t;
+                histogram
+                    .compute_root()
+                    .reorder(c, x, y, z)
+                    .unroll(c)
+                    .tile(x, y, xo, yo, xi, yi, 16, 8)
+                    .gpu_threads(xi, yi)
+                    .gpu_blocks(xo, yo, z);
+
+                histogram
+                    .update()
+                    .atomic()
+                    .split(x, xo, xi, 16)
+                    .reorder(xi, c, r.x, r.y, xo, y)
+                    .unroll(c)
+                    .gpu_blocks(r.y, xo, y)
+                    .gpu_threads(xi);
+
+                clamped_values
+                    .compute_root()
+                    .gpu_tile(Halide::_0, Halide::_1, xi, yi, 16, 8, TailStrategy::RoundUp)
+                    .gpu_blocks(Halide::_0, Halide::_1, Halide::_2);
+                clamped_splat_loc.compute_root()
+                    .gpu_tile(Halide::_0, Halide::_1, xi, yi, 16, 8, TailStrategy::RoundUp)
+                    .gpu_blocks(Halide::_0, Halide::_1, Halide::_2);
+
+                blurz
+                    .compute_root()
+                    .tile(x, y, xi, yi, 16, 8, TailStrategy::RoundUp)
+                    .gpu_threads(xi, yi)
+                    .gpu_blocks(y, z, c);
+                blurx.compute_root()
+                    .tile(x, y, xi, yi, 16, 8, TailStrategy::RoundUp)
+                    .gpu_threads(xi, yi)
+                    .gpu_blocks(y, z, c);
+                blury.compute_root()
+                    .tile(x, y, xi, yi, 16, 8, TailStrategy::RoundUp)
+                    .gpu_threads(xi, yi)
+                    .gpu_blocks(y, z, c);
+
+                // The solve is compute_at (line, x), so we need to be
+                // careful what we call x.
+                line.compute_root()
+                    .split(x, xo, x, 32, TailStrategy::RoundUp)
+                    .reorder(c, x, xo, y, z)
+                    .gpu_blocks(xo, y, z)
+                    .gpu_threads(x)
+                    .unroll(c);
+
+                // Using CUDA for the interpolation part of this is
+                // somewhat silly, as the algorithm is designed for
+                // texture sampling hardware. That said, for the sake
+                // of making a meaningful benchmark we have an
+                // optimized cuda schedule here too.
+                interpolated_matrix_y
+                    .compute_root()
+                    .tile(x, y, xi, yi, 8, 8, TailStrategy::RoundUp)
+                    .gpu_threads(xi, yi)
+                    .gpu_blocks(y, z, c);
+
+                // 2/3 of the runtime (512us) is in the slicing kernel
+                slice
+                    .compute_root()
+                    .reorder(c, x, y)
+                    .bound(c, 0, 3)
+                    .unroll(c)
+                    .tile(x, y, xi, yi, 16, 8, TailStrategy::RoundUp)
+                    .gpu_threads(xi, yi)
+                    .gpu_blocks(x, y);
+            }
         }
 
         // Estimates
