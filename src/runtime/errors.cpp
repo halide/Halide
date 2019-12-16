@@ -270,7 +270,7 @@ WEAK int halide_error_no_device_interface(void *user_context) {
 }
 
 WEAK int halide_error_device_interface_no_device(void *user_context) {
-    error(user_context) << "Buffer has a non-null devie_interface but device is 0.\n";
+    error(user_context) << "Buffer has a non-null device_interface but device is 0.\n";
     return halide_error_code_device_interface_no_device;
 }
 
