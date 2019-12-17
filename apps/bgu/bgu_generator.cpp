@@ -492,14 +492,26 @@ public:
                     .gpu_threads(xi, yi)
                     .gpu_blocks(xo, yo, z);
 
-                histogram
-                    .update()
-                    .atomic()
-                    .split(x, xo, xi, 16)
-                    .reorder(xi, c, r.x, r.y, xo, y)
-                    .unroll(c)
-                    .gpu_blocks(r.y, xo, y)
-                    .gpu_threads(xi);
+                if (get_target().has_feature(Target::CUDA)) {
+                    // The CUDA backend supports atomics. Useful for
+                    // histograms.
+                    histogram
+                        .update()
+                        .atomic()
+                        .split(x, xo, xi, 16)
+                        .reorder(xi, c, r.x, r.y, xo, y)
+                        .unroll(c)
+                        .gpu_blocks(r.y, xo, y)
+                        .gpu_threads(xi);
+                } else {
+                    histogram
+                        .update()
+                        .split(x, xo, xi, 16)
+                        .reorder(xi, c, r.x, r.y, xo, y, c)
+                        .unroll(c)
+                        .gpu_blocks(xo, y)
+                        .gpu_threads(xi);
+                }
 
                 clamped_values
                     .compute_root()

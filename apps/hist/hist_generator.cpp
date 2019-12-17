@@ -73,27 +73,62 @@ public:
                 // 0.42ms on a 2060 RTX
                 Var yii;
                 RVar rxo, rxi;
-                Y.clone_in(hist_rows)
-                    .compute_at(hist_rows, rxo)
-                    .bound_extent(x, 16)
-                    .gpu_threads(x);
+
                 // TODO: bound_extent above should not be necessary,
                 // but otherwise I get a shared memory
                 // blow-up. Something might be overconservative.
                 hist_rows.compute_root()
-                    .gpu_tile(x, y, xi, yi, 32, 8)
-                    .update()
-                    .split(y, y, yi, 32)
-                    .split(rx, rxo, rxi, 16)
-                    .reorder(rxi, yi, rxo, y)
-                    .atomic()
-                    .gpu_blocks(rxo, y)
-                    .gpu_threads(yi);
+                    .gpu_tile(x, y, xi, yi, 32, 8);
+                if (get_target().has_feature(Target::CUDA)) {
+                    hist_rows.update()
+                        .split(y, y, yi, 32)
+                        .split(rx, rxo, rxi, 16)
+                        .reorder(rxi, yi, rxo, y)
+                        .atomic()
+                        .gpu_blocks(rxo, y)
+                        .gpu_threads(yi);
+
+                    Y.clone_in(hist_rows)
+                        .compute_at(hist_rows, rxo)
+                        .bound_extent(x, 16)
+                        .gpu_threads(x);
+                } else {
+                    const int slice_width = 256;
+                    // Get more parallelism by not just taking
+                    // histograms of rows, but histograms of small
+                    // pieces of each row.
+                    hist_rows.update()
+                        .split(rx, rxo, rxi, slice_width);
+                    Var z, zi;
+                    Func intm = hist_rows.update().rfactor(rxo, z);
+
+                    intm.in()
+                        .compute_root()
+                        .gpu_tile(y, z, yi, zi, 16, 1);
+
+                    intm.compute_at(intm.in(), y)
+                        .split(x, x, xi, 16)
+                        .gpu_threads(xi)
+                        .update()
+                        .gpu_threads(y);
+
+                    // hist_rows now just sums up the mini-histograms
+                    // along the z dimension.
+                    hist_rows.update().gpu_tile(x, y, xi, yi, 32, 8);
+
+                    Y.clone_in(intm)
+                        .compute_at(intm.in(), y)
+                        .bound_extent(x, slice_width)
+                        .split(x, x, xi, 16)
+                        .gpu_threads(xi);
+                }
                 hist.compute_root()
                     .gpu_tile(x, xi, 16)
                     .update()
                     .gpu_tile(x, xi, 16);
                 cdf.compute_root()
+                    .gpu_tile(x, xi, 16)
+                    .update()
                     .gpu_single_thread();
                 output.compute_root()
                     .reorder(c, x, y)
