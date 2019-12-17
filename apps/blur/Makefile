@@ -4,7 +4,7 @@ all: $(BIN)/$(HL_TARGET)/test
 
 $(GENERATOR_BIN)/halide_blur.generator: halide_blur_generator.cpp $(GENERATOR_DEPS)
 	@mkdir -p $(@D)
-	$(CXX) $(CXXFLAGS) $(filter-out %.h,$^) -o $@ $(LDFLAGS) $(HALIDE_SYSTEM_LIBS)
+	$(CXX) $(CXXFLAGS) $(filter %.cpp,$^) -o $@ $(GENERATOR_LDFLAGS)
 
 $(BIN)/%/halide_blur.a: $(GENERATOR_BIN)/halide_blur.generator
 	@mkdir -p $(@D)

@@ -249,7 +249,7 @@ int main(int argc, char **argv) {
 
         // The performance characteristics of this strategy are in
         // between inlining and compute root. We still allocate some
-        // temporary memory, but less that compute_root, and with
+        // temporary memory, but less than compute_root, and with
         // better locality (we load from it soon after writing to it,
         // so for larger images, values should still be in cache). We
         // still do some redundant work, but less than full inlining:
@@ -338,7 +338,7 @@ int main(int argc, char **argv) {
         printf("\n");
 
         // The performance characteristics of this strategy are pretty
-        // good! The numbers are similar compute_root, except locality
+        // good! The numbers are similar to compute_root, except locality
         // is better. We're doing the minimum number of sin calls,
         // and we load values soon after they are stored, so we're
         // probably making good use of the cache:
@@ -379,8 +379,8 @@ int main(int argc, char **argv) {
         }
     }
 
-    // We can do even better, by leaving the storage outermost, but
-    // moving the computation into the innermost loop:
+    // We can do even better, by leaving the storage in the outermost
+    // loop, but moving the computation into the innermost loop:
     {
         Func producer("producer_root_x"), consumer("consumer_root_x");
         producer(x, y) = sin(x * y);
@@ -454,7 +454,7 @@ int main(int argc, char **argv) {
     // code?
     //
     // The answer is parallelism. In both of the previous two
-    // strategies we've assumed that values computed on previous
+    // strategies we've assumed that values computed in previous
     // iterations are lying around for us to reuse. This assumes that
     // previous values of x or y happened earlier in time and have
     // finished. This is not true if you parallelize or vectorize

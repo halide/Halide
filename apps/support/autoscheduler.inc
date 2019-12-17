@@ -33,7 +33,7 @@ $(AUTOSCHED_BIN)/cost_model.generator: $(AUTOSCHED_SRC)/cost_model_generator.cpp
 							$(AUTOSCHED_SRC)/NetworkSize.h \
 							$(GENERATOR_DEPS)
 	@mkdir -p $(@D)
-	$(CXX) $(CXXFLAGS) $(filter-out %.h,$^) -o $@ $(HALIDE_SYSTEM_LIBS) $(USE_EXPORT_DYNAMIC)
+	$(CXX) $(CXXFLAGS) $(filter %.cpp,$^) -o $@ $(GENERATOR_LDFLAGS) $(USE_EXPORT_DYNAMIC)
 
 $(AUTOSCHED_BIN)/auto_schedule_runtime.a: $(AUTOSCHED_BIN)/cost_model.generator
 	@mkdir -p $(@D)
@@ -86,7 +86,7 @@ $(AUTOSCHED_BIN)/featurization_to_sample: $(AUTOSCHED_SRC)/featurization_to_samp
 
 $(AUTOSCHED_BIN)/get_host_target: $(AUTOSCHED_SRC)/get_host_target.cpp $(LIB_HALIDE) $(HALIDE_DISTRIB_PATH)/include/Halide.h
 	@mkdir -p $(@D)
-	$(CXX) $(CXXFLAGS) $(filter-out %.h,$^) $(OPTIMIZE) -o $@
+	$(CXX) $(CXXFLAGS) $(filter %.cpp,$^) $(GENERATOR_LDFLAGS) $(OPTIMIZE) -o $@
 
 $(AUTOSCHED_BIN)/weightsdir_to_weightsfile: $(AUTOSCHED_SRC)/weightsdir_to_weightsfile.cpp $(AUTOSCHED_SRC)/Weights.cpp
 	@mkdir -p $(@D)
