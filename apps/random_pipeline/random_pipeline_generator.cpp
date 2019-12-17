@@ -1,5 +1,4 @@
 #include "Halide.h"
-#include "../autoscheduler/SimpleAutoSchedule.h"
 #include <iostream>
 #include <iomanip>
 #include <random>
@@ -245,7 +244,7 @@ class RandomPipeline : public Halide::Generator<RandomPipeline> {
 public:
     int num_stage_types = 18;
     // The random seed to use to generate the pipeline.
-    GeneratorParam<int> seed{"seed", 1};
+    GeneratorParam<int> seed{"pipeline_seed", 1};
     // The approximate max number of stages to generate in the random pipeline.
     GeneratorParam<int> max_stages{"max_stages", 20};
 
@@ -410,13 +409,14 @@ public:
      *****/
     Stage padding(Stage f) {
         std::cout << "Padding\n";
-        std::vector<std::pair<Expr, Expr>> bounds(3); // assuming all stages have 3 dims
-        bounds.at(0).first = 0;
-        bounds.at(0).second = f.w;
-        bounds.at(1).first = 0;
-        bounds.at(1).second = f.h;
-        bounds.at(2).first = 0;
-        bounds.at(2).second = f.c;
+        //std::vector<std::pair<Expr, Expr>> bounds(3); // assuming all stages have 3 dims
+        Halide::Region bounds(3); // assuming all stages have 3 dims
+        bounds.at(0).min = 0;
+        bounds.at(0).extent = f.w;
+        bounds.at(1).min = 0;
+        bounds.at(1).extent = f.h;
+        bounds.at(2).min = 0;
+        bounds.at(2).extent = f.c;
         Expr zero = cast(f.func.value().type(), 0);
         return {BoundaryConditions::constant_exterior(f.func, zero, bounds), f.w, f.h, f.c};
     }
@@ -1201,9 +1201,7 @@ public:
     }
 
     void generate() {
-        std::string use_simple_autoscheduler =
-            Halide::Internal::get_env_variable("HL_USE_SIMPLE_AUTOSCHEDULER");
-        bool skip_schedule = auto_schedule || use_simple_autoscheduler == "1";
+        bool skip_schedule = auto_schedule;
 
         rng.seed((int)seed);
 
@@ -1244,124 +1242,49 @@ public:
         output = casted.func;
 
         if (!auto_schedule) {
-            if (use_simple_autoscheduler == "1") {
-                Halide::SimpleAutoscheduleOptions options;
-                options.gpu = get_target().has_gpu_feature();
-                options.gpu_tile_channel = 3;
-                Func output_func = output;
-                Halide::simple_autoschedule(output_func,
-                                    {{"input.min.0", 0},
-                                     {"input.extent.0", 2000},
-                                     {"input.min.1", 0},
-                                     {"input.extent.1", 2000},
-                                     {"input.min.2", 0},
-                                     {"input.extent.2", 3},
-                                     {"uint8_weights.min.0", 0},
-                                     {"uint8_weights.extent.0", 512},
-                                     {"uint8_weights.min.1", -5},
-                                     {"uint8_weights.extent.1", 5},
-                                     {"uint8_weights.min.2", -5},
-                                     {"uint8_weights.extent.2", 5},
-                                     {"uint8_weights.min.3", 0},
-                                     {"uint8_weights.extent.3", 512},
-                                     {"uint16_weights.min.0", 0},
-                                     {"uint16_weights.extent.0", 512},
-                                     {"uint16_weights.min.1", -5},
-                                     {"uint16_weights.extent.1", 5},
-                                     {"uint16_weights.min.2", -5},
-                                     {"uint16_weights.extent.2", 5},
-                                     {"uint16_weights.min.3", 0},
-                                     {"uint16_weights.extent.3", 512},
-                                     {"uint32_weights.min.0", 0},
-                                     {"uint32_weights.extent.0", 512},
-                                     {"uint32_weights.min.1", -5},
-                                     {"uint32_weights.extent.1", 5},
-                                     {"uint32_weights.min.2", -5},
-                                     {"uint32_weights.extent.2", 5},
-                                     {"uint32_weights.min.3", 0},
-                                     {"uint32_weights.extent.3", 512},
-                                     {"int8_weights.min.0", 0},
-                                     {"int8_weights.extent.0", 512},
-                                     {"int8_weights.min.1", -5},
-                                     {"int8_weights.extent.1", 5},
-                                     {"int8_weights.min.2", -5},
-                                     {"int8_weights.extent.2", 5},
-                                     {"int8_weights.min.3", 0},
-                                     {"int8_weights.extent.3", 512},
-                                     {"int16_weights.min.0", 0},
-                                     {"int16_weights.extent.0", 512},
-                                     {"int16_weights.min.1", -5},
-                                     {"int16_weights.extent.1", 5},
-                                     {"int16_weights.min.2", -5},
-                                     {"int16_weights.extent.2", 5},
-                                     {"int16_weights.min.3", 0},
-                                     {"int16_weights.extent.3", 512},
-                                     {"int32_weights.min.0", 0},
-                                     {"int32_weights.extent.0", 512},
-                                     {"int32_weights.min.1", -5},
-                                     {"int32_weights.extent.1", 5},
-                                     {"int32_weights.min.2", -5},
-                                     {"int32_weights.extent.2", 5},
-                                     {"int32_weights.min.3", 0},
-                                     {"int32_weights.extent.3", 512},
-                                     {"float32_weights.min.0", 0},
-                                     {"float32_weights.extent.0", 512},
-                                     {"float32_weights.min.1", -5},
-                                     {"float32_weights.extent.1", 5},
-                                     {"float32_weights.min.2", -5},
-                                     {"float32_weights.extent.2", 5},
-                                     {"float32_weights.min.3", 0},
-                                     {"float32_weights.extent.3", 512}
-                                     },
-                                    {{0, 2000},
-                                     {0, 2000},
-                                     {0, 3}},
-                                    options);
-            } else {
-                output.compute_root().reorder(x, c, y).vectorize(x, 8).parallel(y);
-            }
+            output.compute_root().reorder(x, c, y).vectorize(x, 8).parallel(y);
         }
 
         if (auto_schedule) {
-            input.dim(0).set_bounds_estimate(0, 2000)
-                .dim(1).set_bounds_estimate(0, 2000)
-                .dim(2).set_bounds_estimate(0, 3);
-            uint8_weights.dim(0).set_bounds_estimate(0, 512)
-                .dim(1).set_bounds_estimate(-5, 5)
-                .dim(2).set_bounds_estimate(-5, 5)
-                .dim(3).set_bounds_estimate(0, 512);
-            uint16_weights.dim(0).set_bounds_estimate(0, 512)
-                .dim(1).set_bounds_estimate(-5, 5)
-                .dim(2).set_bounds_estimate(-5, 5)
-                .dim(3).set_bounds_estimate(0, 512);
-            uint32_weights.dim(0).set_bounds_estimate(0, 512)
-                .dim(1).set_bounds_estimate(-5, 5)
-                .dim(2).set_bounds_estimate(-5, 5)
-                .dim(3).set_bounds_estimate(0, 512);
-            int8_weights.dim(0).set_bounds_estimate(0, 512)
-                .dim(1).set_bounds_estimate(-5, 5)
-                .dim(2).set_bounds_estimate(-5, 5)
-                .dim(3).set_bounds_estimate(0, 512);
-            int16_weights.dim(0).set_bounds_estimate(0, 512)
-                .dim(1).set_bounds_estimate(-5, 5)
-                .dim(2).set_bounds_estimate(-5, 5)
-                .dim(3).set_bounds_estimate(0, 512);
-            int32_weights.dim(0).set_bounds_estimate(0, 512)
-                .dim(1).set_bounds_estimate(-5, 5)
-                .dim(2).set_bounds_estimate(-5, 5)
-                .dim(3).set_bounds_estimate(0, 512);
-            float32_weights.dim(0).set_bounds_estimate(0, 512)
-                .dim(1).set_bounds_estimate(-5, 5)
-                .dim(2).set_bounds_estimate(-5, 5)
-                .dim(3).set_bounds_estimate(0, 512);
+            input.dim(0).set_estimate(0, 2000)
+                .dim(1).set_estimate(0, 2000)
+                .dim(2).set_estimate(0, 3);
+            uint8_weights.dim(0).set_estimate(0, 512)
+                .dim(1).set_estimate(-5, 5)
+                .dim(2).set_estimate(-5, 5)
+                .dim(3).set_estimate(0, 512);
+            uint16_weights.dim(0).set_estimate(0, 512)
+                .dim(1).set_estimate(-5, 5)
+                .dim(2).set_estimate(-5, 5)
+                .dim(3).set_estimate(0, 512);
+            uint32_weights.dim(0).set_estimate(0, 512)
+                .dim(1).set_estimate(-5, 5)
+                .dim(2).set_estimate(-5, 5)
+                .dim(3).set_estimate(0, 512);
+            int8_weights.dim(0).set_estimate(0, 512)
+                .dim(1).set_estimate(-5, 5)
+                .dim(2).set_estimate(-5, 5)
+                .dim(3).set_estimate(0, 512);
+            int16_weights.dim(0).set_estimate(0, 512)
+                .dim(1).set_estimate(-5, 5)
+                .dim(2).set_estimate(-5, 5)
+                .dim(3).set_estimate(0, 512);
+            int32_weights.dim(0).set_estimate(0, 512)
+                .dim(1).set_estimate(-5, 5)
+                .dim(2).set_estimate(-5, 5)
+                .dim(3).set_estimate(0, 512);
+            float32_weights.dim(0).set_estimate(0, 512)
+                .dim(1).set_estimate(-5, 5)
+                .dim(2).set_estimate(-5, 5)
+                .dim(3).set_estimate(0, 512);
 
-            output.estimate(output.args()[0], 0, 2000);
-            output.estimate(output.args()[1], 0, 2000);
-            output.estimate(output.args()[2], 0, 3);
+            output.set_estimate(output.args()[0], 0, 2000);
+            output.set_estimate(output.args()[1], 0, 2000);
+            output.set_estimate(output.args()[2], 0, 3);
 
-            output.dim(0).set_bounds_estimate(0, 2000);
-            output.dim(1).set_bounds_estimate(0, 2000);
-            output.dim(2).set_bounds_estimate(0, 3);
+            output.dim(0).set_estimate(0, 2000);
+            output.dim(1).set_estimate(0, 2000);
+            output.dim(2).set_estimate(0, 3);
         }
     }
 };

@@ -4,8 +4,8 @@
 # autoscheduler's cost model training pipeline, which is large enough
 # to be interesting.
 if [ $# -lt 7 -o $# -gt 8 ]; then
-  echo "Usage: $0 /path/to/some.generator generatorname halide_target weights_file autoschedule_bin_dir batch_id train_only [generator_args_sets]"
-  exit
+    echo "Usage: $0 /path/to/some.generator generatorname halide_target weights_file autoschedule_bin_dir batch_id train_only [generator_args_sets]"
+    exit
 fi
 
 source $(dirname $0)/scripts/utils.sh
@@ -84,7 +84,7 @@ NUM_CORES=80
 EPOCHS=100
 
 if [[ $TRAIN_ONLY != 1 ]]; then
-  get_timeout_cmd TIMEOUT_CMD
+    get_timeout_cmd TIMEOUT_CMD
 fi
 
 record_command() {
@@ -106,7 +106,7 @@ record_command() {
 # Build a single featurization of the pipeline with a random schedule
 make_featurization() {
     D=${1}
-    SEED=${2}
+    RANDOM_DROPOUT_SEED=${2}
     FNAME=${3}
     EXTRA_GENERATOR_ARGS=${4}
     BATCH=${5}
@@ -126,7 +126,7 @@ make_featurization() {
 
     local -r shared_memory_limit=48
 
-    CMD="HL_SEED=${SEED} \
+    CMD="HL_SEED=${RANDOM_DROPOUT_SEED} \
         HL_WEIGHTS_DIR=${WEIGHTS} \
         HL_RANDOM_DROPOUT=${dropout} \
         HL_BEAM_SIZE=${beam} \
@@ -235,10 +235,10 @@ benchmark_sample() {
 }
 
 if [[ $BATCH_ID == 0 ]]; then
-  # Don't clobber existing samples
-  FIRST=$(ls -d ${SAMPLES}/batch_* 2>/dev/null | sed -e "s|.*/batch_||;s|_.*||" | sort -n | tail -n1)
+    # Don't clobber existing samples
+    FIRST=$(ls -d ${SAMPLES}/batch_* 2>/dev/null | sed -e "s|.*/batch_||;s|_.*||" | sort -n | tail -n1)
 else
-  FIRST=$((BATCH_ID-1))
+    FIRST=$((BATCH_ID-1))
 fi
 
 if [ $(uname -s) = "Darwin" ]; then
@@ -254,52 +254,57 @@ for ((BATCH_ID=$((FIRST+1));BATCH_ID<$((FIRST+1+NUM_BATCHES));BATCH_ID++)); do
     SECONDS=0
 
     if [[ $TRAIN_ONLY != 1 ]]; then
-      for ((EXTRA_ARGS_IDX=0;EXTRA_ARGS_IDX<${#GENERATOR_ARGS_SETS_ARRAY[@]};EXTRA_ARGS_IDX++)); do
+        for ((EXTRA_ARGS_IDX=0;EXTRA_ARGS_IDX<${#GENERATOR_ARGS_SETS_ARRAY[@]};EXTRA_ARGS_IDX++)); do
 
-          # Compile a batch of samples using the generator in parallel
-          BATCH=batch_${BATCH_ID}_${EXTRA_ARGS_IDX}
-          DIR=${SAMPLES}/${BATCH}
+            # Compile a batch of samples using the generator in parallel
+            BATCH=batch_${BATCH_ID}_${EXTRA_ARGS_IDX}
+            DIR=${SAMPLES}/${BATCH}
 
-          # Copy the weights being used into the batch folder so that we can repro failures
-          mkdir -p ${DIR}/
-          cp ${WEIGHTS} ${DIR}/used.weights
+            # Copy the weights being used into the batch folder so that we can repro failures
+            mkdir -p ${DIR}/
+            cp ${WEIGHTS} ${DIR}/used.weights
 
-          EXTRA_GENERATOR_ARGS=${GENERATOR_ARGS_SETS_ARRAY[EXTRA_ARGS_IDX]/;/ }
-          if [ ! -z "${EXTRA_GENERATOR_ARGS}" ]; then
-              echo "Adding extra generator args (${EXTRA_GENERATOR_ARGS}) for batch_${BATCH_ID}"
-          fi
+            EXTRA_GENERATOR_ARGS=${GENERATOR_ARGS_SETS_ARRAY[EXTRA_ARGS_IDX]/;/ }
 
-          echo ${EXTRA_GENERATOR_ARGS} > ${DIR}/extra_generator_args.txt
+            if [ $PIPELINE == "random_pipeline" ]; then
+                EXTRA_GENERATOR_ARGS+=" pipeline_seed=${BATCH_ID}"
+            fi
 
-          # Do parallel compilation in batches, so that machines with fewer than BATCH_SIZE cores
-          # don't get swamped and timeout unnecessarily
-          first=$(printf "%04d%04d" $BATCH_ID 0)
-          last=$(printf "%04d%04d" $BATCH_ID $(($BATCH_SIZE-1)))
-          echo Compiling ${BATCH_SIZE} samples from ${first} to ${last}
-          for ((SAMPLE_ID=0;SAMPLE_ID<${BATCH_SIZE};SAMPLE_ID++)); do
-              while [[ 1 ]]; do
-                  RUNNING=$(jobs -r | wc -l)
-                  if [[ RUNNING -ge LOCAL_CORES ]]; then
-                      sleep 1
-                  else
-                      break
-                  fi
-              done
+            if [ ! -z "${EXTRA_GENERATOR_ARGS}" ]; then
+                echo "Adding extra generator args (${EXTRA_GENERATOR_ARGS}) for batch_${BATCH_ID}"
+            fi
 
-              S=$(printf "%04d%04d" $BATCH_ID $SAMPLE_ID)
-              FNAME=$(printf "%s_batch_%04d_sample_%04d" ${PIPELINE} $BATCH_ID $SAMPLE_ID)
-              make_featurization "${DIR}/${SAMPLE_ID}" $S $FNAME "$EXTRA_GENERATOR_ARGS" $BATCH $SAMPLE_ID &
-          done
-          wait
-          echo done.
+            echo ${EXTRA_GENERATOR_ARGS} > ${DIR}/extra_generator_args.txt
 
-          # benchmark them serially using rungen
-          for ((SAMPLE_ID=0;SAMPLE_ID<${BATCH_SIZE};SAMPLE_ID++)); do
-              S=$(printf "%04d%04d" $BATCH_ID $SAMPLE_ID)
-              FNAME=$(printf "%s_batch_%04d_sample_%04d" ${PIPELINE} $BATCH_ID $SAMPLE_ID)
-              benchmark_sample "${DIR}/${SAMPLE_ID}" $S $BATCH $SAMPLE_ID $EXTRA_ARGS_IDX $FNAME
-          done
-      done
+            # Do parallel compilation in batches, so that machines with fewer than BATCH_SIZE cores
+            # don't get swamped and timeout unnecessarily
+            first=$(printf "%04d%04d" $BATCH_ID 0)
+            last=$(printf "%04d%04d" $BATCH_ID $(($BATCH_SIZE-1)))
+            echo Compiling ${BATCH_SIZE} samples from ${first} to ${last}
+            for ((SAMPLE_ID=0;SAMPLE_ID<${BATCH_SIZE};SAMPLE_ID++)); do
+                while [[ 1 ]]; do
+                    RUNNING=$(jobs -r | wc -l)
+                    if [[ RUNNING -ge LOCAL_CORES ]]; then
+                        sleep 1
+                    else
+                        break
+                    fi
+                done
+
+                RANDOM_DROPOUT_SEED=$(printf "%04d%04d" $BATCH_ID $SAMPLE_ID)
+                FNAME=$(printf "%s_batch_%04d_sample_%04d" ${PIPELINE} $BATCH_ID $SAMPLE_ID)
+                make_featurization "${DIR}/${SAMPLE_ID}" $RANDOM_DROPOUT_SEED $FNAME "$EXTRA_GENERATOR_ARGS" $BATCH $SAMPLE_ID &
+            done
+            wait
+            echo done.
+
+            # benchmark them serially using rungen
+            for ((SAMPLE_ID=0;SAMPLE_ID<${BATCH_SIZE};SAMPLE_ID++)); do
+                S=$(printf "%04d%04d" $BATCH_ID $SAMPLE_ID)
+                FNAME=$(printf "%s_batch_%04d_sample_%04d" ${PIPELINE} $BATCH_ID $SAMPLE_ID)
+                benchmark_sample "${DIR}/${SAMPLE_ID}" $S $BATCH $SAMPLE_ID $EXTRA_ARGS_IDX $FNAME
+            done
+        done
     fi
 
     # retrain model weights on all samples seen so far
@@ -308,8 +313,8 @@ for ((BATCH_ID=$((FIRST+1));BATCH_ID<$((FIRST+1+NUM_BATCHES));BATCH_ID++)); do
     retrain_cost_model ${HALIDE_ROOT} ${SAMPLES} ${WEIGHTS} ${NUM_CORES} ${EPOCHS} ${PIPELINE}
 
     if [[ $TRAIN_ONLY == 1 ]]; then
-      echo Batch ${BATCH_ID} took ${SECONDS} seconds to retrain
+        echo Batch ${BATCH_ID} took ${SECONDS} seconds to retrain
     else
-      echo Batch ${BATCH_ID} took ${SECONDS} seconds to compile, benchmark, and retrain
+        echo Batch ${BATCH_ID} took ${SECONDS} seconds to compile, benchmark, and retrain
     fi
 done
