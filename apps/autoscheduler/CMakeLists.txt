@@ -153,5 +153,11 @@ endif()
 
 add_executable(test_perfect_hash_map test_perfect_hash_map.cpp)
 
+add_executable(test_function_dag test_function_dag.cpp FunctionDAG.cpp ASLog.cpp)
+target_include_directories(
+  test_function_dag
+  PRIVATE "${HALIDE_INCLUDE_DIR}" "${HALIDE_TOOLS_DIR}")
+target_link_libraries(test_function_dag PRIVATE Halide)
+
 add_executable(weightsdir_to_weightsfile weightsdir_to_weightsfile.cpp
                Weights.cpp)

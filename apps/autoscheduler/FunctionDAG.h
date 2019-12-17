@@ -549,6 +549,7 @@ struct FunctionDAG {
     FunctionDAG(const vector<Function> &outputs, const MachineParams &params, const Target &target);
 
     void dump() const;
+    std::ostream &dump(std::ostream &os) const;
 
 private:
     // Compute the featurization for the entire DAG
@@ -557,6 +558,9 @@ private:
     // This class uses a lot of internal pointers, so we'll hide the copy constructor.
     FunctionDAG(const FunctionDAG &other) = delete;
     void operator=(const FunctionDAG &other) = delete;
+
+    template<typename OS>
+    void dump_internal(OS &os) const;
 };
 
 }  // namespace Autoscheduler

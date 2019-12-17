@@ -403,7 +403,7 @@ WEAK int create_opencl_context(void *user_context, cl_context *ctx, cl_command_q
     }
 
     // Get all the devices of the specified type.
-    const cl_uint maxDevices = 4;
+    const cl_uint maxDevices = 128;
     cl_device_id devices[maxDevices];
     cl_uint deviceCount = 0;
     err = clGetDeviceIDs(platform, device_type, maxDevices, devices, &deviceCount );
