@@ -6,9 +6,9 @@ using namespace Halide;
 
 class ConvolutionLayer : public Halide::Generator<ConvolutionLayer> {
 public:
-    Input<Buffer<float>>  input{"input", 4};
-    Input<Buffer<float>>  filter{"filter", 4};
-    Input<Buffer<float>>  bias{"bias", 1};
+    Input<Buffer<float>> input{"input", 4};
+    Input<Buffer<float>> filter{"filter", 4};
+    Input<Buffer<float>> bias{"bias", 1};
 
     Output<Buffer<float>> f_ReLU{"ReLU", 4};
 
@@ -74,34 +74,29 @@ public:
             f_conv.compute_at(f_ReLU, n)
                 .gpu_threads(x, y, z)
                 .update()
-                .split(r.x, rxo, rxi, 8)
-                .split(c, co, ci, 8)
-                .reorder(ci, x, co, rxi, r.y, rxo, r.z, y, n)
-                .vectorize(ci).unroll(x).unroll(co).unroll(rxi).unroll(r.y);
-            input.in().compute_at(f_conv, rxi).unroll(_1);
-            filter.in().compute_at(f_conv, co).vectorize(_0).unroll(_3);
-            */
-
-            // Best schedule for (N = 5, CI = 120, CO = 24, W = 120, H
-            // = 80).
-
+                .unroll(r.x, 3)
+                .unroll(r.y, 3)
+                .gpu_threads(x, y, z);
+        }*/
         else {
-            Var co, ci, xo, xi, yo, yi, t;
-            f_ReLU.split(c, co, ci, 24)
-                .split(x, xo, xi, 4)
-                .reorder(ci, xi, xo, y, n, co)
-                .vectorize(ci, 8).unroll(ci).unroll(xi)
-                .parallel(y).parallel(n).parallel(co);
-            f_conv.compute_at(f_ReLU, xo)
-                .vectorize(c, 8).unroll(c).unroll(x).unroll(y)
-                .update().reorder(c, x, y, r.x, r.y, r.z, n)
-                .vectorize(c, 8).unroll(c).unroll(x).unroll(y).unroll(r.x, 2);
-            filter.in().compute_at(f_conv, r.x).vectorize(_0, 8).unroll(_0).unroll(_3);
-            input.in().compute_at(f_conv, x).unroll(_0);
-
-            // Sane schedule that should work for any size
-            // f_ReLU.parallel(n).parallel(y).vectorize(c, 8);
-
+            // Blocking spatially with vectorization
+            Var z_t("z_t"), y_t("y_t"), par("par");
+            int vec_len = 8;
+            int o_block_size = 32;
+            int y_block = 32;
+            f_conv.compute_root();
+            f_conv.fuse(z, n, par).parallel(par);
+            f_conv.update()
+                .reorder(x, y, r.z)
+                .split(y, y, y_t, y_block)
+                .split(z, z, z_t, o_block_size)
+                .reorder(y_t, z_t, y, r.z, z)
+                .vectorize(x, vec_len)
+                .unroll(r.x, 3)
+                .unroll(r.y, 3)
+                .fuse(z, n, par)
+                .parallel(par);
+            f_ReLU.reorder(n, z).parallel(z).vectorize(x, 8);
         }
     }
 };

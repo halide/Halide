@@ -1,8 +1,8 @@
-#include "Halide.h"
 #include "CostModel.h"
-#include "FunctionDAG.h"
-#include "PerfectHashMap.h"
 #include "Featurization.h"
+#include "FunctionDAG.h"
+#include "Halide.h"
+#include "PerfectHashMap.h"
 #include <vector>
 
 namespace Halide {
@@ -13,6 +13,6 @@ typedef PerfectHashMap<FunctionDAG::Node::Stage, ScheduleFeatures> StageMapOfSch
 
 void find_and_apply_schedule(FunctionDAG& dag, const std::vector<Function> &outputs, const MachineParams &params, const Target &target, CostModel* cost_model, int beam_size, StageMapOfScheduleFeatures* schedule_features);
 
-}
-}
-}
+}  // namespace Autoscheduler
+}  // namespace Internal
+}  // namespace Halide

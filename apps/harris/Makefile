@@ -6,15 +6,15 @@ HL_TARGET=host-cuda
 GRADIENT_AUTOSCHED_BIN=../gradient_autoscheduler/bin
 CXXFLAGS += -I../support/
 
-all: $(BIN)/$(HL_TARGET)/process
+all: $(BIN)/$(HL_TARGET)/filter
 
 $(GENERATOR_BIN)/harris.generator: harris_generator.cpp $(GENERATOR_DEPS)
 	@mkdir -p $(@D)
-	$(CXX) $(CXXFLAGS) -g $(filter-out %.h,$^) -o $@ $(LDFLAGS) $(HALIDE_SYSTEM_LIBS) $(USE_EXPORT_DYNAMIC)
+	$(CXX) $(CXXFLAGS) -g $(filter %.cpp,$^) -o $@ $(GENERATOR_LDFLAGS)
 
 $(BIN)/%/harris.a: $(GENERATOR_BIN)/harris.generator
 	@mkdir -p $(@D)
-	$< -g harris -f harris -o $(@D) target=$(HL_TARGET) auto_schedule=false
+	$< -g harris -f harris -o $(@D) target=$*-no_runtime auto_schedule=false
 
 $(BIN)/%/harris_auto_schedule.a: $(GENERATOR_BIN)/harris.generator $(AUTOSCHED_BIN)/libauto_schedule.so
 	@mkdir -p $(@D)
@@ -22,23 +22,27 @@ $(BIN)/%/harris_auto_schedule.a: $(GENERATOR_BIN)/harris.generator $(AUTOSCHED_B
 	HL_WEIGHTS_DIR=$(AUTOSCHED_SRC)/gpu.weights \
 	HL_DEBUG_CODEGEN=1 \
 	HL_SHARED_MEMORY_LIMIT=48 \
-	$< -g harris -e $(GENERATOR_OUTPUTS) -o $(@D) -f harris_auto_schedule target=$* auto_schedule=true -p $(AUTOSCHED_BIN)/libauto_schedule.so -s Adams2019 machine_params=$(HL_MACHINE_PARAMS) 2> stderr.txt > stdout.txt
+	$< -g harris -e $(GENERATOR_OUTPUTS) -o $(@D) -f harris_auto_schedule target=$*-no_runtime auto_schedule=true -p $(AUTOSCHED_BIN)/libauto_schedule.so -s Adams2019 machine_params=$(HL_MACHINE_PARAMS) 2> stderr.txt > stdout.txt
 
 $(BIN)/%/harris_gradient_auto_schedule.a: $(GENERATOR_BIN)/harris.generator
 	@mkdir -p $(@D)
 	$^ -g harris -e $(GENERATOR_OUTPUTS) -o $(@D) -f harris_gradient_auto_schedule target=$*-no_runtime auto_schedule=true -p $(GRADIENT_AUTOSCHED_BIN)/libgradient_autoscheduler.so -s Li2018
 
-$(BIN)/%/filter: filter.cpp $(BIN)/%/harris.a $(BIN)/%/harris_auto_schedule.a $(BIN)/%/harris_gradient_auto_schedule.a
+$(BIN)/%/runtime.a: $(GENERATOR_BIN)/harris.generator
 	@mkdir -p $(@D)
-	$(CXX) $(CXXFLAGS) -I$(BIN)/$* -Wall -O3 $^ -o $@ $(LDFLAGS) $(IMAGE_IO_FLAGS) $(CUDA_LDFLAGS) $(OPENCL_LDFLAGS) $(OPENGL_LDFLAGS)
+	$< -r runtime -o $(@D) target=$*
+
+$(BIN)/%/filter: filter.cpp $(BIN)/%/harris.a $(BIN)/%/harris_auto_schedule.a $(BIN)/%/harris_gradient_auto_schedule.a $(BIN)/%/runtime.a
+	@mkdir -p $(@D)
+	$(CXX) $(CXXFLAGS) -I$(@D) -Wall -O3 $^ -o $@ $(LDFLAGS) $(IMAGE_IO_FLAGS) $(CUDA_LDFLAGS) $(OPENCL_LDFLAGS) $(OPENGL_LDFLAGS)
 
 clean:
 	rm -rf $(BIN)
 
-$(BIN)/%/out.tiff: $(BIN)/%/filter
-	$< ../images/rgb.png $@
+$(BIN)/%/out.png: $(BIN)/%/filter
+	$< ../images/rgba.png $@
 
-test: $(BIN)/$(HL_TARGET)/out.tiff
+test: $(BIN)/$(HL_TARGET)/out.png
 
 BATCH_ID ?= 0
 TRAIN_ONLY ?= 0

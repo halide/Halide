@@ -20,7 +20,7 @@ public:
         Expr sum = cast(accumulator_type, 0);
         for (int i = -1; i <= 1; i++) {
             for (int j = -1; j <= 1; j++) {
-                sum += cast<int16_t>(bounded_input(x+j, y+i)) * cast<int16_t>(mask(j+1, i+1));
+                sum += cast<int16_t>(bounded_input(x + j, y + i)) * cast<int16_t>(mask(j + 1, i + 1));
             }
         }
         output(x, y) = cast<uint8_t>(clamp(sum >> 4, 0, 255));
@@ -38,10 +38,10 @@ public:
         if (get_target().features_any_of({Target::HVX_64, Target::HVX_128})) {
             const int vector_size = get_target().has_feature(Target::HVX_128) ? 128 : 64;
             Expr input_stride = input.dim(1).stride();
-            input.dim(1).set_stride((input_stride/vector_size) * vector_size);
+            input.dim(1).set_stride((input_stride / vector_size) * vector_size);
 
             Expr output_stride = output.dim(1).stride();
-            output.dim(1).set_stride((output_stride/vector_size) * vector_size);
+            output.dim(1).set_stride((output_stride / vector_size) * vector_size);
             bounded_input
                 .compute_at(Func(output), y)
                 .align_storage(x, 128)
@@ -65,6 +65,7 @@ public:
                 .parallel(y, 16);
         }
     }
+
 private:
     Var x{"x"}, y{"y"};
     Func bounded_input{"input_bounded"};

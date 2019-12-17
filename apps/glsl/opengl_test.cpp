@@ -2,9 +2,9 @@
 #include <stdlib.h>
 #include <string.h>
 
+#include "HalideBuffer.h"
 #include "HalideRuntime.h"
 #include "HalideRuntimeOpenGL.h"
-#include "HalideBuffer.h"
 
 using Halide::Runtime::Buffer;
 
@@ -51,7 +51,7 @@ void test_device_sync() {
     }
 }
 
-int main(int argc, char* argv[]) {
+int main(int argc, char *argv[]) {
     test_blur();
     test_ycc();
     test_device_sync();

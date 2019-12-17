@@ -4,9 +4,9 @@
 // algorithms.
 
 #include "Halide.h"
+#include <cmath>  // for log2
 #include <cstdio>
 #include <vector>
-#include <cmath>  // for log2
 
 #include "fft.h"
 #include "halide_benchmark.h"
@@ -20,14 +20,14 @@ using namespace Halide::Tools;
 
 Var x("x"), y("y");
 
-template <typename T>
+template<typename T>
 Func make_real(const Buffer<T> &re) {
     Func ret;
     ret(x, y) = re(x, y);
     return ret;
 }
 
-template <typename T>
+template<typename T>
 ComplexFunc make_complex(const Buffer<T> &re) {
     ComplexFunc ret;
     ret(x, y) = re(x, y);
@@ -50,7 +50,7 @@ int main(int argc, char **argv) {
     Buffer<float> in(W, H);
     for (int y = 0; y < H; y++) {
         for (int x = 0; x < W; x++) {
-            in(x, y) = (float)rand()/(float)RAND_MAX;
+            in(x, y) = (float)rand() / (float)RAND_MAX;
         }
     }
 
@@ -61,7 +61,7 @@ int main(int argc, char **argv) {
         for (int x = 0; x < W; x++) {
             int u = x < (W - x) ? x : (W - x);
             int v = y < (H - y) ? y : (H - y);
-            kernel(x, y) = u <= box/2 && v <= box/2 ? 1.0f/(box*box) : 0.0f;
+            kernel(x, y) = u <= box / 2 && v <= box / 2 ? 1.0f / (box * box) : 0.0f;
         }
     }
 
@@ -69,7 +69,7 @@ int main(int argc, char **argv) {
 
     Fft2dDesc fwd_desc;
     Fft2dDesc inv_desc;
-    inv_desc.gain = 1.0f/(W*H);
+    inv_desc.gain = 1.0f / (W * H);
 
     Func filtered_c2c;
     {
@@ -113,12 +113,12 @@ int main(int argc, char **argv) {
     for (int y = 0; y < H; y++) {
         for (int x = 0; x < W; x++) {
             float correct = 0;
-            for (int i = -box/2; i <= box/2; i++) {
-                for (int j = -box/2; j <= box/2; j++) {
-                    correct += in((x + j + W)%W, (y + i + H)%H);
+            for (int i = -box / 2; i <= box / 2; i++) {
+                for (int j = -box / 2; j <= box / 2; j++) {
+                    correct += in((x + j + W) % W, (y + i + H) % H);
                 }
             }
-            correct /= box*box;
+            correct /= box * box;
             if (fabs(result_c2c(x, y) - correct) > 1e-6f) {
                 printf("result_c2c(%d, %d) = %f instead of %f\n", x, y, result_c2c(x, y), correct);
                 return -1;
@@ -163,21 +163,21 @@ int main(int argc, char **argv) {
     R_c2c[0].raw_buffer()->dim[2].stride = 0;
     R_c2c[1].raw_buffer()->dim[2].stride = 0;
 
-    double halide_t = benchmark(samples, 1, [&]() { bench_c2c.realize(R_c2c); })*1e6/reps;
+    double halide_t = benchmark(samples, 1, [&]() { bench_c2c.realize(R_c2c); }) * 1e6 / reps;
 #ifdef WITH_FFTW
     std::vector<std::pair<float, float>> fftw_c1(W * H);
     std::vector<std::pair<float, float>> fftw_c2(W * H);
-    fftwf_plan c2c_plan = fftwf_plan_dft_2d(W, H, (fftwf_complex*)&fftw_c1[0], (fftwf_complex*)&fftw_c2[0], FFTW_FORWARD, FFTW_EXHAUSTIVE);
-    double fftw_t = benchmark(samples, reps, [&]() { fftwf_execute(c2c_plan); })*1e6;
+    fftwf_plan c2c_plan = fftwf_plan_dft_2d(W, H, (fftwf_complex *)&fftw_c1[0], (fftwf_complex *)&fftw_c2[0], FFTW_FORWARD, FFTW_EXHAUSTIVE);
+    double fftw_t = benchmark(samples, reps, [&]() { fftwf_execute(c2c_plan); }) * 1e6;
 #else
     double fftw_t = 0;
 #endif
     printf("%12s %10.3f %10.2f %10.3f %10.2f %10.3g\n",
            "c2c",
            halide_t,
-           5*W*H*(log2(W) + log2(H))/halide_t,
+           5 * W * H * (log2(W) + log2(H)) / halide_t,
            fftw_t,
-           5*W*H*(log2(W) + log2(H))/fftw_t,
+           5 * W * H * (log2(W) + log2(H)) / fftw_t,
            fftw_t / halide_t);
 
     Func r2c_in;
@@ -185,25 +185,25 @@ int main(int argc, char **argv) {
     r2c_in(x, y, rep) = re_in(x, y);
     Func bench_r2c = fft2d_r2c(r2c_in, W, H, target, fwd_desc);
     bench_r2c.compile_to_lowered_stmt(output_dir + "r2c.html", bench_r2c.infer_arguments(), HTML);
-    Realization R_r2c = bench_r2c.realize(W, H/2 + 1, reps, target);
+    Realization R_r2c = bench_r2c.realize(W, H / 2 + 1, reps, target);
     // Write all reps to the same place in memory. See notes on R_c2c.
     R_r2c[0].raw_buffer()->dim[2].stride = 0;
     R_r2c[1].raw_buffer()->dim[2].stride = 0;
 
-    halide_t = benchmark(samples, 1, [&]() { bench_r2c.realize(R_r2c); })*1e6/reps;
+    halide_t = benchmark(samples, 1, [&]() { bench_r2c.realize(R_r2c); }) * 1e6 / reps;
 #ifdef WITH_FFTW
     std::vector<float> fftw_r(W * H);
-    fftwf_plan r2c_plan = fftwf_plan_dft_r2c_2d(W, H, &fftw_r[0], (fftwf_complex*)&fftw_c1[0], FFTW_EXHAUSTIVE);
-    fftw_t = benchmark(samples, reps, [&]() { fftwf_execute(r2c_plan); })*1e6;
+    fftwf_plan r2c_plan = fftwf_plan_dft_r2c_2d(W, H, &fftw_r[0], (fftwf_complex *)&fftw_c1[0], FFTW_EXHAUSTIVE);
+    fftw_t = benchmark(samples, reps, [&]() { fftwf_execute(r2c_plan); }) * 1e6;
 #else
     fftw_t = 0;
 #endif
     printf("%12s %10.3f %10.2f %10.3f %10.2f %10.3g\n",
            "r2c",
            halide_t,
-           2.5*W*H*(log2(W) + log2(H))/halide_t,
+           2.5 * W * H * (log2(W) + log2(H)) / halide_t,
            fftw_t,
-           2.5*W*H*(log2(W) + log2(H))/fftw_t,
+           2.5 * W * H * (log2(W) + log2(H)) / fftw_t,
            fftw_t / halide_t);
 
     ComplexFunc c2r_in;
@@ -215,19 +215,19 @@ int main(int argc, char **argv) {
     // Write all reps to the same place in memory. See notes on R_c2c.
     R_c2r[0].raw_buffer()->dim[2].stride = 0;
 
-    halide_t = benchmark(samples, 1, [&]() { bench_c2r.realize(R_c2r); })*1e6/reps;
+    halide_t = benchmark(samples, 1, [&]() { bench_c2r.realize(R_c2r); }) * 1e6 / reps;
 #ifdef WITH_FFTW
-    fftwf_plan c2r_plan = fftwf_plan_dft_c2r_2d(W, H, (fftwf_complex*)&fftw_c1[0], &fftw_r[0], FFTW_EXHAUSTIVE);
-    fftw_t = benchmark(samples, reps, [&]() { fftwf_execute(c2r_plan); })*1e6;
+    fftwf_plan c2r_plan = fftwf_plan_dft_c2r_2d(W, H, (fftwf_complex *)&fftw_c1[0], &fftw_r[0], FFTW_EXHAUSTIVE);
+    fftw_t = benchmark(samples, reps, [&]() { fftwf_execute(c2r_plan); }) * 1e6;
 #else
     fftw_t = 0;
 #endif
     printf("%12s %10.3f %10.2f %10.3f %10.2f %10.3g\n",
            "c2r",
            halide_t,
-           2.5*W*H*(log2(W) + log2(H))/halide_t,
+           2.5 * W * H * (log2(W) + log2(H)) / halide_t,
            fftw_t,
-           2.5*W*H*(log2(W) + log2(H))/fftw_t,
+           2.5 * W * H * (log2(W) + log2(H)) / fftw_t,
            fftw_t / halide_t);
 
 #ifdef WITH_FFTW

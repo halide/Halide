@@ -21,6 +21,7 @@ int main(int argc, char **argv) {
     }
 
     Halide::Runtime::Buffer<float> input = load_and_convert_image(argv[1]);
+    // The harris app doesn't use a boundary condition
     Halide::Runtime::Buffer<float> output(input.width() - 6, input.height() - 6);
 
     multi_way_bench({

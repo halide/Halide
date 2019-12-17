@@ -10,11 +10,11 @@ all: $(BIN)/$(HL_TARGET)/test
 
 $(GENERATOR_BIN)/unsharp.generator: unsharp_generator.cpp $(GENERATOR_DEPS)
 	@mkdir -p $(@D)
-	$(CXX) $(CXXFLAGS) -g $(filter-out %.h,$^) -o $@ $(LDFLAGS) $(HALIDE_SYSTEM_LIBS) $(USE_EXPORT_DYNAMIC)
+	$(CXX) $(CXXFLAGS) -g $(filter %.cpp,$^) -o $@ $(GENERATOR_LDFLAGS)
 
 $(BIN)/%/unsharp.a: $(GENERATOR_BIN)/unsharp.generator
 	@mkdir -p $(@D)
-	$< -g unsharp -f unsharp -o $(@D) target=$(HL_TARGET) auto_schedule=false
+	$< -g unsharp -f unsharp -o $(@D) target=$*-no_runtime auto_schedule=false
 
 $(BIN)/%/unsharp_auto_schedule.a: $(GENERATOR_BIN)/unsharp.generator $(AUTOSCHED_BIN)/libauto_schedule.so
 	@mkdir -p $(@D)
@@ -28,17 +28,21 @@ $(BIN)/%/unsharp_gradient_auto_schedule.a: $(GENERATOR_BIN)/unsharp.generator
 	@mkdir -p $(@D)
 	$^ -g unsharp -e $(GENERATOR_OUTPUTS) -o $(@D) -f unsharp_gradient_auto_schedule target=$*-no_runtime auto_schedule=true -p $(GRADIENT_AUTOSCHED_BIN)/libgradient_autoscheduler.so -s Li2018
 
-$(BIN)/%/filter: filter.cpp $(BIN)/%/unsharp.a $(BIN)/%/unsharp_auto_schedule.a $(BIN)/%/unsharp_gradient_auto_schedule.a
+$(BIN)/%/runtime.a: $(GENERATOR_BIN)/unsharp.generator
 	@mkdir -p $(@D)
-	$(CXX) $(CXXFLAGS) -I$(BIN)/$* -Wall -O3 $^ -o $@ $(LDFLAGS) $(IMAGE_IO_FLAGS) $(CUDA_LDFLAGS) $(OPENCL_LDFLAGS) $(OPENGL_LDFLAGS)
+	$< -r runtime -o $(@D) target=$*
+
+$(BIN)/%/filter: filter.cpp $(BIN)/%/unsharp.a $(BIN)/%/unsharp_auto_schedule.a $(BIN)/%/unsharp_gradient_auto_schedule.a $(BIN)/%/runtime.a
+	@mkdir -p $(@D)
+	$(CXX) $(CXXFLAGS) -I$(@D) -Wall -O3 $^ -o $@ $(LDFLAGS) $(IMAGE_IO_FLAGS) $(CUDA_LDFLAGS) $(OPENCL_LDFLAGS) $(OPENGL_LDFLAGS)
 
 clean:
 	rm -rf $(BIN)
 
-$(BIN)/%/out.tiff: $(BIN)/%/filter
-	$< ../images/rgb.png $@
+$(BIN)/%/out.png: $(BIN)/%/filter
+	$< ../images/rgba.png $@
 
-test: $(BIN)/$(HL_TARGET)/out.tiff
+test: $(BIN)/$(HL_TARGET)/out.png
 
 BATCH_ID ?= 0
 TRAIN_ONLY ?= 0

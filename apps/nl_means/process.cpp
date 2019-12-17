@@ -1,5 +1,5 @@
-#include <cstdio>
 #include <chrono>
+#include <cstdio>
 
 #include "nl_means.h"
 #include "nl_means_auto_schedule.h"
@@ -7,6 +7,7 @@
 
 #include "benchmark_util.h"
 #include "HalideBuffer.h"
+#include "halide_benchmark.h"
 #include "halide_image_io.h"
 
 using namespace Halide::Runtime;
@@ -26,7 +27,7 @@ int main(int argc, char **argv) {
     Buffer<float> output(input.width(), input.height(), 3);
 
     printf("Input size: %d by %d, patch size: %d, search area: %d, sigma: %f\n",
-            input.width(), input.height(), patch_size, search_area, sigma);
+           input.width(), input.height(), patch_size, search_area, sigma);
 
     multi_way_bench({
         {"Manual", [&]() { nl_means(input, patch_size, search_area, sigma, output); output.device_sync(); }},

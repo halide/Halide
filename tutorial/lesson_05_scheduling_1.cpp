@@ -14,7 +14,7 @@
 
 // If you have the entire Halide source tree, you can also build it by
 // running:
-//    make tutorial_lesson_05_schedule_1
+//    make tutorial_lesson_05_scheduling_1
 // in a shell with the current directory at the top of the halide
 // source tree.
 
@@ -443,7 +443,7 @@ int main(int argc, char **argv) {
         // make things slightly clearer:
         //
         // gradient
-        //     .tile(x, y, x_outer, y_outer, x_inner, y_inner, 2, 2)
+        //     .tile(x, y, x_outer, y_outer, x_inner, y_inner, 4, 4)
         //     .fuse(x_outer, y_outer, tile_index)
         //     .parallel(tile_index);
 

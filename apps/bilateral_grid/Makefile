@@ -11,7 +11,7 @@ all: $(BIN)/$(HL_TARGET)/filter
 
 $(GENERATOR_BIN)/bilateral_grid.generator: bilateral_grid_generator.cpp $(GENERATOR_DEPS)
 	@mkdir -p $(@D)
-	$(CXX) $(CXXFLAGS) $(USE_EXPORT_DYNAMIC) -g $(filter-out %.h,$^) -o $@ $(LDFLAGS) $(HALIDE_SYSTEM_LIBS)
+	$(CXX) $(CXXFLAGS) $(filter %.cpp,$^) -o $@ $(GENERATOR_LDFLAGS)
 
 $(BIN)/%/bilateral_grid.a: $(GENERATOR_BIN)/bilateral_grid.generator
 	@mkdir -p $(@D)
@@ -31,7 +31,7 @@ $(BIN)/%/bilateral_grid_gradient_auto_schedule.a: $(GENERATOR_BIN)/bilateral_gri
 
 $(BIN)/%/filter: filter.cpp $(BIN)/%/bilateral_grid.a $(BIN)/%/bilateral_grid_auto_schedule.a $(BIN)/%/bilateral_grid_gradient_auto_schedule.a
 	@mkdir -p $(@D)
-	$(CXX) $(CXXFLAGS) -I$(BIN)/$* $^ -o $@ $(IMAGE_IO_FLAGS) $(LDFLAGS)
+	$(CXX) $(CXXFLAGS) -I$(@D) $^ -o $@ $(IMAGE_IO_FLAGS) $(LDFLAGS)
 
 $(BIN)/%/filter_viz: filter.cpp $(BIN)/%-trace_all/bilateral_grid.a
 	@mkdir -p $(@D)

@@ -71,7 +71,8 @@ void CodeGen_PyTorch::compile(const LoweredFunc &f, bool is_cuda) {
     const std::vector<LoweredArgument> &args = f.args;
     std::vector<LoweredArgument> buffer_args;
 
-    stream << "int " << simple_name << "_th_(";
+    stream << "HALIDE_FUNCTION_ATTRS\n";
+    stream << "inline int " << simple_name << "_th_(";
     for (size_t i = 0; i < args.size(); i++) {
         if (args[i].name == "__user_context") {
             continue;
@@ -245,6 +246,20 @@ void CodeGen_PyTorch::test() {
 struct halide_buffer_t;
 struct halide_filter_metadata_t;
 
+#ifndef HALIDE_MUST_USE_RESULT
+#ifdef __has_attribute
+#if __has_attribute(nodiscard)
+#define HALIDE_MUST_USE_RESULT [[nodiscard]]
+#elif __has_attribute(warn_unused_result)
+#define HALIDE_MUST_USE_RESULT __attribute__((warn_unused_result))
+#else
+#define HALIDE_MUST_USE_RESULT
+#endif
+#else
+#define HALIDE_MUST_USE_RESULT
+#endif
+#endif
+
 #ifndef HALIDE_FUNCTION_ATTRS
 #define HALIDE_FUNCTION_ATTRS
 #endif
@@ -255,13 +270,15 @@ struct halide_filter_metadata_t;
 extern "C" {
 #endif
 
-int test1(struct halide_buffer_t *_buf_buffer, float _alpha, int32_t _beta) HALIDE_FUNCTION_ATTRS;
+HALIDE_FUNCTION_ATTRS
+int test1(struct halide_buffer_t *_buf_buffer, float _alpha, int32_t _beta);
 
 #ifdef __cplusplus
 }  // extern "C"
 #endif
 
-int test1_th_(at::Tensor &_buf, float _alpha, int32_t _beta) {
+HALIDE_FUNCTION_ATTRS
+inline int test1_th_(at::Tensor &_buf, float _alpha, int32_t _beta) {
     // Check tensors have contiguous memory and are on the correct device
     HLPT_CHECK_CONTIGUOUS(_buf);
 
@@ -284,6 +301,20 @@ int test1_th_(at::Tensor &_buf, float _alpha, int32_t _beta) {
 struct halide_buffer_t;
 struct halide_filter_metadata_t;
 
+#ifndef HALIDE_MUST_USE_RESULT
+#ifdef __has_attribute
+#if __has_attribute(nodiscard)
+#define HALIDE_MUST_USE_RESULT [[nodiscard]]
+#elif __has_attribute(warn_unused_result)
+#define HALIDE_MUST_USE_RESULT __attribute__((warn_unused_result))
+#else
+#define HALIDE_MUST_USE_RESULT
+#endif
+#else
+#define HALIDE_MUST_USE_RESULT
+#endif
+#endif
+
 #ifndef HALIDE_FUNCTION_ATTRS
 #define HALIDE_FUNCTION_ATTRS
 #endif
@@ -294,13 +325,15 @@ struct halide_filter_metadata_t;
 extern "C" {
 #endif
 
-int test1(struct halide_buffer_t *_buf_buffer, float _alpha, int32_t _beta) HALIDE_FUNCTION_ATTRS;
+HALIDE_FUNCTION_ATTRS
+int test1(struct halide_buffer_t *_buf_buffer, float _alpha, int32_t _beta);
 
 #ifdef __cplusplus
 }  // extern "C"
 #endif
 
-int test1_th_(at::Tensor &_buf, float _alpha, int32_t _beta) {
+HALIDE_FUNCTION_ATTRS
+inline int test1_th_(at::Tensor &_buf, float _alpha, int32_t _beta) {
     // Setup CUDA
     int device_id = at::cuda::current_device();
     CUcontext ctx = 0;

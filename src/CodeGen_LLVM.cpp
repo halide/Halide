@@ -3005,6 +3005,16 @@ void CodeGen_LLVM::visit(const Call *op) {
                     dst = builder->CreateCall(append_pointer, call_args);
                 }
             }
+            if (get_target().has_feature(Target::MSAN)) {
+              // Note that we mark the entire buffer as initialized;
+              // it would be more accurate to just mark (dst - buf)
+              llvm::Function *annotate = module->getFunction("halide_msan_annotate_memory_is_initialized");
+              vector<Value *> annotate_args(3);
+              annotate_args[0] = get_user_context();
+              annotate_args[1] = buf;
+              annotate_args[2] = codegen(Cast::make(Int(64), buf_size));
+              builder->CreateCall(annotate, annotate_args);
+            }
             value = buf;
         }
     } else if (op->is_intrinsic(Call::memoize_expr)) {
@@ -4327,7 +4337,11 @@ Value *CodeGen_LLVM::create_alloca_at_entry(llvm::Type *t, int n, bool zero_init
         if (n == 1) {
             builder->CreateStore(Constant::getNullValue(t), ptr);
         } else {
+#if LLVM_VERSION >= 100
+            builder->CreateMemSet(ptr, Constant::getNullValue(t), n, MaybeAlign(align));
+#else
             builder->CreateMemSet(ptr, Constant::getNullValue(t), n, align);
+#endif
         }
     }
     builder->restoreIP(here);

@@ -4,7 +4,7 @@ namespace {
 
 class StencilChain : public Halide::Generator<StencilChain> {
 public:
-    GeneratorParam<int>     stencils{"stencils", 5, 1, 100};
+    GeneratorParam<int> stencils{"stencils", 32, 1, 100};
 
     Input<Buffer<uint16_t>> input{"input", 2};
     Output<Buffer<uint16_t>> output{"output", 2};
@@ -24,7 +24,7 @@ public:
             Expr e = cast<uint16_t>(0);
             for (int i = -2; i <= 2; i++) {
                 for (int j = -2; j <= 2; j++) {
-                    e += ((i+3)*(j+3))*stages.back()(x+i, y+j);
+                    e += ((i + 3) * (j + 3)) * stages.back()(x + i, y + j);
                 }
             }
             f(x, y) = e;

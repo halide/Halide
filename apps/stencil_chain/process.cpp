@@ -1,5 +1,5 @@
-#include <cstdio>
 #include <chrono>
+#include <cstdio>
 
 #include "stencil_chain.h"
 #include "stencil_chain_auto_schedule.h"
@@ -7,6 +7,7 @@
 
 #include "benchmark_util.h"
 #include "HalideBuffer.h"
+#include "halide_benchmark.h"
 #include "halide_image_io.h"
 
 using namespace Halide::Runtime;

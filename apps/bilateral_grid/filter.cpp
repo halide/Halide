@@ -1,6 +1,6 @@
+#include <cassert>
 #include <cstdio>
 #include <cstdlib>
-#include <cassert>
 
 #include "bilateral_grid.h"
 #ifndef NO_AUTO_SCHEDULE
@@ -10,6 +10,7 @@
 
 #include "benchmark_util.h"
 #include "HalideBuffer.h"
+#include "halide_benchmark.h"
 #include "halide_image_io.h"
 
 using namespace Halide::Tools;
@@ -22,7 +23,7 @@ int main(int argc, char **argv) {
         return 0;
     }
 
-    float r_sigma = (float) atof(argv[3]);
+    float r_sigma = (float)atof(argv[3]);
 
     Buffer<float> input = load_and_convert_image(argv[1]);
     Buffer<float> output(input.width(), input.height());

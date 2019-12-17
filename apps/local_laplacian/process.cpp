@@ -1,5 +1,5 @@
-#include <cstdio>
 #include <chrono>
+#include <cstdio>
 
 #include "local_laplacian.h"
 #ifndef NO_AUTO_SCHEDULE
@@ -9,6 +9,7 @@
 
 #include "benchmark_util.h"
 #include "HalideBuffer.h"
+#include "halide_benchmark.h"
 #include "halide_image_io.h"
 
 using namespace Halide::Runtime;
@@ -36,7 +37,6 @@ int main(int argc, char **argv) {
     #endif
         }
     );
-
 
     convert_and_save_image(output, argv[6]);
 

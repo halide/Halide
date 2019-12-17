@@ -16,15 +16,14 @@ int main(int argc, char **argv) {
 
     Halide::Internal::Weights w;
     if (!w.load_from_dir(argv[1])) {
-      std::cerr << "Unable to read input dir: " << argv[1] << "\n";
-      return -1;
+        std::cerr << "Unable to read input dir: " << argv[1] << "\n";
+        return -1;
     }
 
     if (!w.save_to_file(argv[2])) {
-      std::cerr << "Unable to save output file: " << argv[2] << "\n";
-      return -1;
+        std::cerr << "Unable to save output file: " << argv[2] << "\n";
+        return -1;
     }
 
     return 0;
-
 }

@@ -21,15 +21,15 @@ public:
     // [x * stride, y * stride] is a valid spatial location in the input buffer.
     // Generally, this means setting the output buffer's [width, height] to be
     // the input buffer's [width, height] / stride.
-    Input<int> stride_{ "stride" };
-    Input<int> pad_width_{ "pad_width" };
-    Input<int> pad_height_{ "pad_height" };
+    Input<int> stride_{"stride"};
+    Input<int> pad_width_{"pad_width"};
+    Input<int> pad_height_{"pad_height"};
 
-    Input<int> filter_width_{ "filter_width" };
-    Input<int> filter_height_{ "filter_height" };
+    Input<int> filter_width_{"filter_width"};
+    Input<int> filter_height_{"filter_height"};
 
-    Input<uint8_t> output_min_{ "output_min" };
-    Input<uint8_t> output_max_{ "output_max" };
+    Input<uint8_t> output_min_{"output_min"};
+    Input<uint8_t> output_max_{"output_max"};
 
     Output<Buffer<uint8_t>> output_{"output", 4};
 
@@ -41,10 +41,10 @@ public:
 
         // Add a zero boundary condition to x and y dimensions of the input.
         Func input_bounded = constant_exterior(input_, 0,
-                                               { { Expr(), Expr() },
-                                                 { 0, input_.dim(1).extent() },
-                                                 { 0, input_.dim(2).extent() },
-                                                 { Expr(), Expr() } });
+                                               {{Expr(), Expr()},
+                                                {0, input_.dim(1).extent()},
+                                                {0, input_.dim(2).extent()},
+                                                {Expr(), Expr()}});
 
         // Shift the input spatially in [x, y] by -[pad_width, pad_height].
         Func shifted_input_bounded("shifted_input_bounded");
@@ -80,7 +80,7 @@ public:
             min(output_max_, max(output_min_, u8_sat(average(depth, x, y, batch))));
 
         bool use_hexagon =
-            get_target().features_any_of({ Target::HVX_64, Target::HVX_128 });
+            get_target().features_any_of({Target::HVX_64, Target::HVX_128});
         // Specifying .hexagon() on a Func will generate an RPC to run this stage
         // on Hexagon. If Hexagon is the host (that is, the architecture is
         // Hexagon), we have to omit the .hexagon() directive as we are already
@@ -114,7 +114,7 @@ public:
             int filter_height;
         };
 
-        std::vector<SpecialCase> special_cases = { { 1, 4, 4 }, { 2, 7, 7 } };
+        std::vector<SpecialCase> special_cases = {{1, 4, 4}, {2, 7, 7}};
         for (const SpecialCase &special_case : special_cases) {
             Expr params_matched = (filter_width_ == special_case.filter_width &&
                                    filter_height_ == special_case.filter_height &&

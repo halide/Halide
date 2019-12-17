@@ -1,5 +1,5 @@
-#include <cstdio>
 #include <chrono>
+#include <cstdio>
 
 #include "lens_blur.h"
 #include "lens_blur_auto_schedule.h"
@@ -7,6 +7,7 @@
 
 #include "benchmark_util.h"
 #include "HalideBuffer.h"
+#include "halide_benchmark.h"
 #include "halide_image_io.h"
 
 using namespace Halide::Runtime;

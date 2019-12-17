@@ -345,7 +345,10 @@ class ExtractSharedAllocations : public IRMutator {
                             host_side_preamble = update_size;
                         }
                     } else {
-                        s.size = bounds_of_expr_in_scope(s.size, scope).max;
+                        auto interval_bounds = bounds_of_expr_in_scope(s.size, scope);
+                        user_assert(interval_bounds.has_upper_bound())
+                            << "Couldn't infer bounds for " << s.name << " shared memory allocation\n";
+                        s.size = interval_bounds.max;
                     }
                 }
             }

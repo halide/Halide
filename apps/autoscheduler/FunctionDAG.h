@@ -19,11 +19,11 @@ namespace Halide {
 namespace Internal {
 namespace Autoscheduler {
 
-using std::pair;
-using std::vector;
 using std::map;
+using std::pair;
 using std::string;
 using std::unique_ptr;
+using std::vector;
 
 template<typename T, typename... Args>
 std::unique_ptr<T> make_unique(Args&&... args) {
@@ -38,7 +38,9 @@ struct OptionalRational {
     int64_t numerator = 0, denominator = 0;
 
     OptionalRational() = default;
-    OptionalRational(bool e, int64_t n, int64_t d) : exists(e), numerator(n), denominator(d) {}
+    OptionalRational(bool e, int64_t n, int64_t d)
+        : exists(e), numerator(n), denominator(d) {
+    }
 
     void operator+=(const OptionalRational &other) {
         if (!exists || !other.exists) {
@@ -71,7 +73,7 @@ struct OptionalRational {
         int64_t num = numerator * other.numerator;
         int64_t den = denominator * other.denominator;
         bool e = exists && other.exists;
-        return OptionalRational {e, num, den};
+        return OptionalRational{e, num, den};
     }
 
     // Because this type is optional (exists may be false), we don't
@@ -219,7 +221,7 @@ public:
         for (size_t i = 0; i < producer_storage_dims(); i++) {
             matrix[i].resize(other.consumer_loop_dims());
             for (size_t j = 0; j < other.consumer_loop_dims(); j++) {
-                matrix[i][j] = OptionalRational {true, 0, 1};
+                matrix[i][j] = OptionalRational{true, 0, 1};
                 for (size_t k = 0; k < consumer_loop_dims(); k++) {
                     matrix[i][j] += (*this)(i, k) * other(k, j);
                 }
@@ -249,11 +251,20 @@ public:
 class Span {
     int64_t min_, max_;
     bool constant_extent_;
+
 public:
-    int64_t min() const { return min_; }
-    int64_t max() const { return max_; }
-    int64_t extent() const { return max_ - min_ + 1; }
-    bool constant_extent() const { return constant_extent_; }
+    int64_t min() const {
+        return min_;
+    }
+    int64_t max() const {
+        return max_;
+    }
+    int64_t extent() const {
+        return max_ - min_ + 1;
+    }
+    bool constant_extent() const {
+        return constant_extent_;
+    }
 
     void union_with(const Span &other) {
         min_ = std::min(min_, other.min());
@@ -270,7 +281,9 @@ public:
         max_ += x;
     }
 
-    Span(int64_t a, int64_t b, bool c) : min_(a), max_(b), constant_extent_(c) {}
+    Span(int64_t a, int64_t b, bool c)
+        : min_(a), max_(b), constant_extent_(c) {
+    }
     Span() = default;
     Span(const Span &other) = default;
     static Span empty_span() {
@@ -305,7 +318,6 @@ struct BoundContents {
     Span &loops(int i, int j) {
         return data()[j + layout->loop_offset[i]];
     }
-
 
     const Span &region_required(int i) const {
         return data()[i];
@@ -493,7 +505,9 @@ struct FunctionDAG {
                 return dependencies[n.id];
             };
 
-            Stage(Halide::Stage s) : stage(s) {}
+            Stage(Halide::Stage s)
+                : stage(s) {
+            }
         };
         vector<Stage> stages;
 
@@ -583,6 +597,7 @@ struct FunctionDAG {
     FunctionDAG(const vector<Function> &outputs, const MachineParams &params, const Target &target);
 
     void dump() const;
+    std::ostream &dump(std::ostream &os) const;
 
 private:
     // Compute the featurization for the entire DAG
@@ -592,6 +607,8 @@ private:
     FunctionDAG(const FunctionDAG &other) = delete;
     void operator=(const FunctionDAG &other) = delete;
 
+    template<typename OS>
+    void dump_internal(OS &os) const;
 };
 
 }  // namespace Autoscheduler

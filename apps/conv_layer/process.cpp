@@ -1,5 +1,5 @@
-#include <cstdio>
 #include <chrono>
+#include <cstdio>
 
 #include "conv_layer.h"
 #include "conv_layer_auto_schedule.h"
@@ -7,6 +7,7 @@
 
 #include "benchmark_util.h"
 #include "HalideBuffer.h"
+#include "halide_benchmark.h"
 
 using namespace Halide::Tools;
 using namespace Halide::Runtime;

@@ -2,6 +2,8 @@
 #include "mat_mul_gradient_auto_schedule.h"
 #include "halide_benchmark.h"
 #include "HalideBuffer.h"
+#include "halide_benchmark.h"
+#include "mat_mul.h"
 #include <cublas_v2.h>
 #include <cuda_runtime.h>
 
@@ -19,8 +21,8 @@ int main(int argc, char **argv) {
     // Check correctness using small-integer matrices
     if (1) {
         Buffer<float> A(size, size), B(size, size), C(size, size);
-        A.for_each_value([](float &v) {v = (rand() & 3) - 1;});
-        B.for_each_value([](float &v) {v = (rand() & 3) - 1;});
+        A.for_each_value([](float &v) { v = (rand() & 3) - 1; });
+        B.for_each_value([](float &v) { v = (rand() & 3) - 1; });
         A.set_host_dirty();
         B.set_host_dirty();
         mat_mul(A, B, C);
@@ -52,17 +54,17 @@ int main(int argc, char **argv) {
     // Benchmark cublas
     {
         float *A, *B, *C;
-        cudaMalloc((void **)&A, size*size*4);
-        cudaMalloc((void **)&B, size*size*4);
-        cudaMalloc((void **)&C, size*size*4);
+        cudaMalloc((void **)&A, size * size * 4);
+        cudaMalloc((void **)&B, size * size * 4);
+        cudaMalloc((void **)&C, size * size * 4);
         cublasHandle_t handle;
         cublasCreate(&handle);
         float alpha = 1.0f, beta = 1.0f;
         double t = Halide::Tools::benchmark(3, 3, [&]() {
-                cublasSgemm(handle, CUBLAS_OP_N, CUBLAS_OP_N,
+            cublasSgemm(handle, CUBLAS_OP_N, CUBLAS_OP_N,
                         size, size, size, &alpha, A, size, B, size, &beta, C, size);
-                cudaDeviceSynchronize();
-            });
+            cudaDeviceSynchronize();
+        });
         cudaFree(A);
         cudaFree(B);
         cudaFree(C);
