@@ -507,7 +507,7 @@ public:
                     histogram
                         .update()
                         .split(x, xo, xi, 16)
-                        .reorder(xi, c, r.x, r.y, xo, y, c)
+                        .reorder(xi, c, r.x, r.y, xo, y)
                         .unroll(c)
                         .gpu_blocks(xo, y)
                         .gpu_threads(xi);
