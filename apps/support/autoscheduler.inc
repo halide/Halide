@@ -78,7 +78,7 @@ $(AUTOSCHED_BIN)/retrain_cost_model: $(AUTOSCHED_SRC)/retrain_cost_model.cpp \
 									$(AUTOSCHED_WEIGHT_OBJECTS) \
 									$(AUTOSCHED_BIN)/auto_schedule_runtime.a
 	@mkdir -p $(@D)
-	$(CXX) $(CXXFLAGS) -frtti -Wall -I ../support -I $(AUTOSCHED_BIN)/cost_model $(OPTIMIZE) $(filter-out %.h,$^) -o $@ $(LDFLAGS) $(USE_OPEN_MP)
+	$(CXX) $(CXXFLAGS) -frtti -Wall -I ../support -I $(AUTOSCHED_BIN)/cost_model $(OPTIMIZE) $(filter-out %.h,$^) -o $@ $(LIB_HALIDE) $(LDFLAGS) $(USE_OPEN_MP)
 
 $(AUTOSCHED_BIN)/featurization_to_sample: $(AUTOSCHED_SRC)/featurization_to_sample.cpp
 	@mkdir -p $(@D)
