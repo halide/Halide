@@ -116,11 +116,17 @@ public:
                     // along the z dimension.
                     hist_rows.update().gpu_tile(x, y, xi, yi, 32, 8);
 
-                    Y.clone_in(intm)
-                        .compute_at(intm.in(), y)
-                        .bound_extent(x, slice_width)
-                        .split(x, x, xi, 16)
-                        .gpu_threads(xi);
+                    if (!get_target().has_feature(Target::Metal)) {
+                        // bound_extent doesn't currently work inside
+                        // metal kernels because we can't compile the
+                        // assertion. For metal we just inline the
+                        // luma computation.
+                        Y.clone_in(intm)
+                            .compute_at(intm.in(), y)
+                            .split(x, x, xi, 16)
+                            .bound_extent(x, 16)
+                            .gpu_threads(xi);
+                    }
                 }
                 hist.compute_root()
                     .gpu_tile(x, xi, 16)
