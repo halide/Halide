@@ -1,9 +1,10 @@
 #include "mat_mul.h"
+#ifndef NO_AUTO_SCHEDULE
 #include "mat_mul_gradient_auto_schedule.h"
+#endif
 #include "halide_benchmark.h"
 #include "HalideBuffer.h"
 #include "halide_benchmark.h"
-#include "mat_mul.h"
 #include <cublas_v2.h>
 #include <cuda_runtime.h>
 
@@ -47,7 +48,9 @@ int main(int argc, char **argv) {
         Buffer<float> A(size, size), B(size, size), C(size, size);
         multi_way_bench({
             {"Manual", [&]() { mat_mul(A, B, C); C.device_sync(); }},
+        #ifndef NO_AUTO_SCHEDULE
             {"Gradient auto-schedule", [&]() { mat_mul_gradient_auto_schedule(A, B, C); C.device_sync(); }}
+        #endif
         });
     }
 

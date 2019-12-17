@@ -6,6 +6,14 @@ HL_TARGET=host-cuda
 GRADIENT_AUTOSCHED_BIN=../gradient_autoscheduler/bin
 CXXFLAGS += -I../support/
 
+FILTER_DEPS=$(BIN)/%/harris.a
+
+ifndef NO_AUTO_SCHEDULE
+	FILTER_DEPS += $(BIN)/%/harris_auto_schedule.a $(BIN)/%/harris_gradient_auto_schedule.a
+else
+	CXXFLAGS += -DNO_AUTO_SCHEDULE
+endif
+
 all: $(BIN)/$(HL_TARGET)/filter
 
 $(GENERATOR_BIN)/harris.generator: harris_generator.cpp $(GENERATOR_DEPS)
@@ -32,7 +40,7 @@ $(BIN)/%/runtime.a: $(GENERATOR_BIN)/harris.generator
 	@mkdir -p $(@D)
 	$< -r runtime -o $(@D) target=$*
 
-$(BIN)/%/filter: filter.cpp $(BIN)/%/harris.a $(BIN)/%/harris_auto_schedule.a $(BIN)/%/harris_gradient_auto_schedule.a $(BIN)/%/runtime.a
+$(BIN)/%/filter: filter.cpp $(FILTER_DEPS) $(BIN)/%/runtime.a
 	@mkdir -p $(@D)
 	$(CXX) $(CXXFLAGS) -I$(@D) -Wall -O3 $^ -o $@ $(LDFLAGS) $(IMAGE_IO_FLAGS) $(CUDA_LDFLAGS) $(OPENCL_LDFLAGS) $(OPENGL_LDFLAGS)
 
@@ -41,6 +49,7 @@ clean:
 
 $(BIN)/%/out.png: $(BIN)/%/filter
 	$< ../images/rgba.png $@
+	rm $@
 
 test: $(BIN)/$(HL_TARGET)/out.png
 

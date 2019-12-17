@@ -6,8 +6,10 @@
 #include "HalideBuffer.h"
 
 #include "max_filter.h"
+#ifndef NO_AUTO_SCHEDULE
 #include "max_filter_auto_schedule.h"
 #include "max_filter_gradient_auto_schedule.h"
+#endif
 
 #include "benchmark_util.h"
 #include "halide_image_io.h"
@@ -25,8 +27,10 @@ int main(int argc, char **argv) {
 
     multi_way_bench({
         {"Manual", [&]() { max_filter(input, output); output.device_sync(); }},
+    #ifndef NO_AUTO_SCHEDULE
         {"Auto-scheduler", [&]() { max_filter_auto_schedule(input, output); output.device_sync(); }},
         {"Gradient auto-scheduler", [&]() { max_filter_gradient_auto_schedule(input, output); output.device_sync();}}
+    #endif
         });
 
     convert_and_save_image(output, argv[2]);

@@ -6,6 +6,14 @@ HL_TARGET=host-cuda
 GRADIENT_AUTOSCHED_BIN=../gradient_autoscheduler/bin
 CXXFLAGS += -I../support/
 
+FILTER_DEPS=$(BIN)/%/unsharp.a
+
+ifndef NO_AUTO_SCHEDULE
+	FILTER_DEPS += $(BIN)/%/unsharp_auto_schedule.a $(BIN)/%/unsharp_gradient_auto_schedule.a
+else
+	CXXFLAGS += -DNO_AUTO_SCHEDULE
+endif
+
 all: $(BIN)/$(HL_TARGET)/test
 
 $(GENERATOR_BIN)/unsharp.generator: unsharp_generator.cpp $(GENERATOR_DEPS)
@@ -32,8 +40,9 @@ $(BIN)/%/runtime.a: $(GENERATOR_BIN)/unsharp.generator
 	@mkdir -p $(@D)
 	$< -r runtime -o $(@D) target=$*
 
-$(BIN)/%/filter: filter.cpp $(BIN)/%/unsharp.a $(BIN)/%/unsharp_auto_schedule.a $(BIN)/%/unsharp_gradient_auto_schedule.a $(BIN)/%/runtime.a
+$(BIN)/%/filter: filter.cpp $(FILTER_DEPS) $(BIN)/%/runtime.a
 	@mkdir -p $(@D)
+	echo $(CXXFLAGS)
 	$(CXX) $(CXXFLAGS) -I$(@D) -Wall -O3 $^ -o $@ $(LDFLAGS) $(IMAGE_IO_FLAGS) $(CUDA_LDFLAGS) $(OPENCL_LDFLAGS) $(OPENGL_LDFLAGS)
 
 clean:
@@ -41,6 +50,7 @@ clean:
 
 $(BIN)/%/out.png: $(BIN)/%/filter
 	$< ../images/rgba.png $@
+	rm $@
 
 test: $(BIN)/$(HL_TARGET)/out.png
 

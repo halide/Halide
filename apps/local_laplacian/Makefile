@@ -6,6 +6,14 @@ HL_TARGET=host-cuda
 GRADIENT_AUTOSCHED_BIN=../gradient_autoscheduler/bin
 CXXFLAGS += -I../support/
 
+PROCESS_DEPS=$(BIN)/%/local_laplacian.a
+
+ifndef NO_AUTO_SCHEDULE
+	PROCESS_DEPS += $(BIN)/%/local_laplacian_auto_schedule.a $(BIN)/%/local_laplacian_gradient_auto_schedule.a
+else
+	CXXFLAGS += -DNO_AUTO_SCHEDULE
+endif
+
 all: $(BIN)/$(HL_TARGET)/process
 
 $(GENERATOR_BIN)/local_laplacian.generator: local_laplacian_generator.cpp $(GENERATOR_DEPS)
@@ -28,17 +36,19 @@ $(BIN)/%/local_laplacian_gradient_auto_schedule.a: $(GENERATOR_BIN)/local_laplac
 	@mkdir -p $(@D)
 	$^ -g local_laplacian -e $(GENERATOR_OUTPUTS) -o $(@D) -f local_laplacian_gradient_auto_schedule target=$*-no_runtime auto_schedule=true -p $(GRADIENT_AUTOSCHED_BIN)/libgradient_autoscheduler.so -s Li2018
 
-$(BIN)/%/process: process.cpp $(BIN)/%/local_laplacian.a $(BIN)/%/local_laplacian_auto_schedule.a $(BIN)/%/local_laplacian_gradient_auto_schedule.a
+$(BIN)/%/process: process.cpp $(PROCESS_DEPS)
 	@mkdir -p $(@D)
 	$(CXX) $(CXXFLAGS) -I$(@D) -Wall $^ -o $@ $(LDFLAGS) $(IMAGE_IO_FLAGS) $(CUDA_LDFLAGS) $(OPENCL_LDFLAGS) $(OPENGL_LDFLAGS)
 
 $(BIN)/%/out.png: $(BIN)/%/process
 	@mkdir -p $(@D)
 	$< $(IMAGES)/rgb.png 8 1 1 10 $@
+	rm $@
 
 $(BIN)/%/out.tiff: $(BIN)/%/process
 	@mkdir -p $(@D)
 	$< $(IMAGES)/rgb.png 8 1 1 10 $@
+	rm $@
 
 $(BIN)/%/process_viz: process.cpp $(BIN)/%-trace_all/local_laplacian.a
 	@mkdir -p $(@D)

@@ -8,6 +8,14 @@ HL_TARGET=host-cuda
 GRADIENT_AUTOSCHED_BIN=../gradient_autoscheduler/bin
 CXXFLAGS += -I../support/
 
+PROCESS_DEPS=$(BIN)/%/iir_blur.a
+
+ifndef NO_AUTO_SCHEDULE
+	PROCESS_DEPS += $(BIN)/%/iir_blur_auto_schedule.a $(BIN)/%/iir_blur_gradient_auto_schedule.a
+else
+	CXXFLAGS += -DNO_AUTO_SCHEDULE
+endif
+
 $(GENERATOR_BIN)/iir_blur.generator: iir_blur_generator.cpp $(GENERATOR_DEPS)
 	@mkdir -p $(@D)
 	$(CXX) $(CXXFLAGS) -g $(filter-out %.h,$^) -o $@ $(LDFLAGS) $(HALIDE_SYSTEM_LIBS) $(USE_EXPORT_DYNAMIC)
@@ -28,7 +36,7 @@ $(BIN)/%/iir_blur_gradient_auto_schedule.a: $(GENERATOR_BIN)/iir_blur.generator
 	@mkdir -p $(@D)
 	$^ -g iir_blur -f iir_blur_gradient_auto_schedule -e $(GENERATOR_OUTPUTS) -o $(@D) target=$*-no_runtime auto_schedule=true -p $(GRADIENT_AUTOSCHED_BIN)/libgradient_autoscheduler.so -s Li2018
 
-$(BIN)/%/process: process.cpp $(BIN)/%/iir_blur.a $(BIN)/%/iir_blur_auto_schedule.a $(BIN)/%/iir_blur_gradient_auto_schedule.a
+$(BIN)/%/process: process.cpp $(PROCESS_DEPS)
 	@mkdir -p $(@D)
 	$(CXX) $(CXXFLAGS) -I$(BIN)/$* -Wall -O3 $^ -o $@ $(LDFLAGS) $(IMAGE_IO_FLAGS) $(CUDA_LDFLAGS) $(OPENCL_LDFLAGS) $(OPENGL_LDFLAGS)
 

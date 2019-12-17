@@ -2,8 +2,10 @@
 #include <cstdio>
 
 #include "stencil_chain.h"
+#ifndef NO_AUTO_SCHEDULE
 #include "stencil_chain_auto_schedule.h"
 #include "stencil_chain_gradient_auto_schedule.h"
+#endif
 
 #include "benchmark_util.h"
 #include "HalideBuffer.h"
@@ -29,8 +31,10 @@ int main(int argc, char **argv) {
 
     multi_way_bench({
         {"Manual", [&]() { stencil_chain(input, output); output.device_sync(); }},
+    #ifndef NO_AUTO_SCHEDULE
         {"Auto-scheduled", [&]() { stencil_chain_auto_schedule(input, output); output.device_sync(); }},
         {"Gradient auto-scheduled", [&]() { stencil_chain_gradient_auto_schedule(input, output); output.device_sync();}}
+    #endif
         }
     );
 

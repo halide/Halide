@@ -6,6 +6,14 @@ HL_TARGET=host-cuda
 GRADIENT_AUTOSCHED_BIN=../gradient_autoscheduler/bin
 CXXFLAGS += -I../support/
 
+PROCESS_DEPS=$(BIN)/%/conv_layer.a
+
+ifndef NO_AUTO_SCHEDULE
+	PROCESS_DEPS += $(BIN)/%/conv_layer_auto_schedule.a $(BIN)/%/conv_layer_gradient_auto_schedule.a
+else
+	CXXFLAGS += -DNO_AUTO_SCHEDULE
+endif
+
 all: $(BIN)/$(HL_TARGET)/process
 
 $(GENERATOR_BIN)/conv_layer.generator: conv_layer_generator.cpp $(GENERATOR_DEPS)
@@ -32,7 +40,7 @@ $(BIN)/%/conv_layer_gradient_auto_schedule.a: $(GENERATOR_BIN)/conv_layer.genera
 	@mkdir -p $(@D)
 	$^ -g conv_layer -f conv_layer_gradient_auto_schedule -e $(GENERATOR_OUTPUTS) -o $(@D) target=$*-no_runtime auto_schedule=true -p $(GRADIENT_AUTOSCHED_BIN)/libgradient_autoscheduler.so -s Li2018
 
-$(BIN)/%/process: process.cpp $(BIN)/%/conv_layer.a $(BIN)/%/conv_layer_auto_schedule.a $(BIN)/%/conv_layer_gradient_auto_schedule.a
+$(BIN)/%/process: process.cpp $(PROCESS_DEPS)
 	@-mkdir -p $(BIN)
 	$(CXX) $(CXXFLAGS) -I$(BIN)/$* -Wall $^ -o $@ $(LDFLAGS)
 

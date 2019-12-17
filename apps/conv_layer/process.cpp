@@ -2,8 +2,10 @@
 #include <cstdio>
 
 #include "conv_layer.h"
+#ifndef NO_AUTO_SCHEDULE
 #include "conv_layer_auto_schedule.h"
 #include "conv_layer_gradient_auto_schedule.h"
+#endif
 
 #include "benchmark_util.h"
 #include "HalideBuffer.h"
@@ -28,8 +30,10 @@ int main(int argc, char **argv) {
 
     multi_way_bench({
         {"Manual", [&]() { conv_layer(input, filter, bias, output); output.device_sync(); }},
+    #ifndef NO_AUTO_SCHEDULE
         {"Auto-schedule", [&]() { conv_layer_auto_schedule(input, filter, bias, output); output.device_sync(); }},
         {"Gradient auto-schedule", [&]() { conv_layer_gradient_auto_schedule(input, filter, bias, output); output.device_sync(); }}
+    #endif
     });
 
     return 0;

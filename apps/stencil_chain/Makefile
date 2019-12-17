@@ -7,6 +7,14 @@ GRADIENT_AUTOSCHED_BIN=../gradient_autoscheduler/bin
 
 CXXFLAGS += -I../support/
 
+PROCESS_DEPS=$(BIN)/%/stencil_chain.a
+
+ifndef NO_AUTO_SCHEDULE
+	PROCESS_DEPS += $(BIN)/%/stencil_chain_auto_schedule.a $(BIN)/%/stencil_chain_gradient_auto_schedule.a
+else
+	CXXFLAGS += -DNO_AUTO_SCHEDULE
+endif
+
 all: $(BIN)/$(HL_TARGET)/process
 
 $(GENERATOR_BIN)/stencil_chain.generator: stencil_chain_generator.cpp $(GENERATOR_DEPS)
@@ -29,13 +37,14 @@ $(BIN)/%/stencil_chain_gradient_auto_schedule.a: $(GENERATOR_BIN)/stencil_chain.
 	@mkdir -p $(@D)
 	$^ -g stencil_chain -e $(GENERATOR_OUTPUTS) -o $(@D) -f stencil_chain_gradient_auto_schedule target=$*-no_runtime auto_schedule=true -p $(GRADIENT_AUTOSCHED_BIN)/libgradient_autoscheduler.so -s Li2018
 
-$(BIN)/%/process: process.cpp $(BIN)/%/stencil_chain.a $(BIN)/%/stencil_chain_auto_schedule.a $(BIN)/%/stencil_chain_gradient_auto_schedule.a
+$(BIN)/%/process: process.cpp $(PROCESS_DEPS)
 	@mkdir -p $(@D)
 	$(CXX) $(CXXFLAGS) -I$(@D) -Wall $^ -o $@ $(LDFLAGS) $(IMAGE_IO_FLAGS) $(CUDA_LDFLAGS) $(OPENCL_LDFLAGS) $(OPENGL_LDFLAGS)
 
 $(BIN)/%/out.png: $(BIN)/%/process
 	@mkdir -p $(@D)
 	$< $(IMAGES)/rgb.png 10 $@
+	rm $@
 
 clean:
 	rm -rf $(BIN)

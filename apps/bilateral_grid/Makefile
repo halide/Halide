@@ -7,6 +7,14 @@ CXXFLAGS += -I../support/
 
 GRADIENT_AUTOSCHED_BIN=../gradient_autoscheduler/bin
 
+FILTER_DEPS=$(BIN)/%/bilateral_grid.a
+
+ifndef NO_AUTO_SCHEDULE
+	FILTER_DEPS += $(BIN)/%/bilateral_grid_auto_schedule.a $(BIN)/%/bilateral_grid_gradient_auto_schedule.a
+else
+	CXXFLAGS += -DNO_AUTO_SCHEDULE
+endif
+
 all: $(BIN)/$(HL_TARGET)/filter
 
 $(GENERATOR_BIN)/bilateral_grid.generator: bilateral_grid_generator.cpp $(GENERATOR_DEPS)
@@ -29,9 +37,9 @@ $(BIN)/%/bilateral_grid_gradient_auto_schedule.a: $(GENERATOR_BIN)/bilateral_gri
 	@mkdir -p $(@D)
 	$^ -g bilateral_grid -e $(GENERATOR_OUTPUTS) -o $(@D) -f bilateral_grid_gradient_auto_schedule target=$*-no_runtime auto_schedule=true -p $(GRADIENT_AUTOSCHED_BIN)/libgradient_autoscheduler.so -s Li2018
 
-$(BIN)/%/filter: filter.cpp $(BIN)/%/bilateral_grid.a $(BIN)/%/bilateral_grid_auto_schedule.a $(BIN)/%/bilateral_grid_gradient_auto_schedule.a
+$(BIN)/%/filter: filter.cpp $(FILTER_DEPS)
 	@mkdir -p $(@D)
-	$(CXX) $(CXXFLAGS) -I$(@D) $^ -o $@ $(IMAGE_IO_FLAGS) $(LDFLAGS)
+	$(CXX) $(CXXFLAGS) -I$(@D) $^ -o $@ $(IMAGE_IO_FLAGS) $(LDFLAGS) 
 
 $(BIN)/%/filter_viz: filter.cpp $(BIN)/%-trace_all/bilateral_grid.a
 	@mkdir -p $(@D)
@@ -47,10 +55,12 @@ $(BIN)/%/bilateral_grid.mp4: $(BIN)/%/filter_viz viz.sh ../../bin/HalideTraceViz
 $(BIN)/%/out.png: $(BIN)/%/filter
 	@mkdir -p $(@D)
 	$< $(IMAGES)/gray.png $@ 0.1 10
+	rm $@
 
 $(BIN)/%/out.tiff: $(BIN)/%/filter
 	@mkdir -p $(@D)
 	$< $(IMAGES)/gray.png $@ 0.1 10
+	rm $@
 
 clean:
 	rm -rf $(BIN)

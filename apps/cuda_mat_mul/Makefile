@@ -12,6 +12,14 @@ HL_TARGET = host-cuda-cuda_capability_50
 
 GRADIENT_AUTOSCHED_BIN=../gradient_autoscheduler/bin
 
+RUNNER_DEPS=$(BIN)/%/mat_mul.a
+
+ifndef NO_AUTO_SCHEDULE
+	RUNNER_DEPS += $(BIN)/%/mat_mul_auto_schedule.a $(BIN)/%/mat_mul_gradient_auto_schedule.a
+else
+	CXXFLAGS += -DNO_AUTO_SCHEDULE
+endif
+
 all: $(BIN)/$(HL_TARGET)/runner
 
 $(GENERATOR_BIN)/mat_mul.generator: mat_mul_generator.cpp $(GENERATOR_DEPS)
@@ -26,9 +34,9 @@ $(BIN)/%/mat_mul_gradient_auto_schedule.a: $(GENERATOR_BIN)/mat_mul.generator
 	@mkdir -p $(@D)
 	$^ -g mat_mul -e $(GENERATOR_OUTPUTS) -o $(@D) -f mat_mul_gradient_auto_schedule target=$*-no_runtime auto_schedule=true -p $(GRADIENT_AUTOSCHED_BIN)/libgradient_autoscheduler.so -s Li2018
 
-$(BIN)/%/runner: runner.cpp $(BIN)/%/mat_mul.a $(BIN)/%/mat_mul_gradient_auto_schedule.a
+$(BIN)/%/runner: runner.cpp $(RUNNER_DEPS)
 	@mkdir -p $(@D)
-	$(CXX) $(CXXFLAGS) -I$(BIN)/$* -Wall $^ -o $@ $(LDFLAGS) -lcudart -lcublas
+	$(CXX) $(CXXFLAGS) -I$(@D) -Wall $^ -o $@ $(LDFLAGS) -lcudart -lcublas
 
 test: $(BIN)/$(HL_TARGET)/runner
 	HL_CUDA_JIT_MAX_REGISTERS=256 $^ $(MATRIX_SIZE)

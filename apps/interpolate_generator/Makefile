@@ -6,6 +6,14 @@ HL_TARGET=host-cuda
 GRADIENT_AUTOSCHED_BIN=../gradient_autoscheduler/bin
 CXXFLAGS += -I../support/
 
+FILTER_DEPS=$(BIN)/%/interpolate.a
+
+ifndef NO_AUTO_SCHEDULE
+	FILTER_DEPS += $(BIN)/%/interpolate_auto_schedule.a $(BIN)/%/interpolate_gradient_auto_schedule.a
+else
+	CXXFLAGS += -DNO_AUTO_SCHEDULE
+endif
+
 all: $(BIN)/$(HL_TARGET)/test
 
 $(GENERATOR_BIN)/interpolate.generator: interpolate_generator.cpp $(GENERATOR_DEPS)
@@ -37,7 +45,7 @@ $(BIN)/%/interpolate_gradient_auto_schedule.a: $(GENERATOR_BIN)/interpolate.gene
 	@mkdir -p $(@D)
 	$^ -g interpolate -e $(GENERATOR_OUTPUTS) -o $(@D) -f interpolate_gradient_auto_schedule target=$*-no_runtime auto_schedule=true -p $(GRADIENT_AUTOSCHED_BIN)/libgradient_autoscheduler.so -s Li2018
 
-$(BIN)/%/filter: filter.cpp $(BIN)/%/interpolate.a $(BIN)/%/interpolate_auto_schedule.a $(BIN)/%/interpolate_gradient_auto_schedule.a
+$(BIN)/%/filter: filter.cpp $(FILTER_DEPS)
 	@mkdir -p $(@D)
 	$(CXX) $(CXXFLAGS) -I$(BIN)/$* -Wall -O3 $^ -o $@ $(LDFLAGS) $(IMAGE_IO_FLAGS) $(CUDA_LDFLAGS) $(OPENCL_LDFLAGS) $(OPENGL_LDFLAGS)
 

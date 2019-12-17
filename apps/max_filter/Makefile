@@ -6,6 +6,14 @@ HL_TARGET=host-cuda
 GRADIENT_AUTOSCHED_BIN=../gradient_autoscheduler/bin
 CXXFLAGS += -I../support/
 
+FILTER_DEPS=$(BIN)/%/max_filter.a
+
+ifndef NO_AUTO_SCHEDULE
+	FILTER_DEPS += $(BIN)/%/max_filter_auto_schedule.a $(BIN)/%/max_filter_gradient_auto_schedule.a
+else
+	CXXFLAGS += -DNO_AUTO_SCHEDULE
+endif
+
 all: $(BIN)/test
 
 $(GENERATOR_BIN)/max_filter.generator: max_filter_generator.cpp $(GENERATOR_DEPS)
@@ -28,7 +36,7 @@ $(BIN)/%/max_filter_gradient_auto_schedule.a: $(GENERATOR_BIN)/max_filter.genera
 	@mkdir -p $(@D)
 	$^ -g max_filter -e $(GENERATOR_OUTPUTS) -o $(@D) -f max_filter_gradient_auto_schedule target=$*-no_runtime auto_schedule=true -p $(GRADIENT_AUTOSCHED_BIN)/libgradient_autoscheduler.so -s Li2018
 
-$(BIN)/%/filter: filter.cpp $(BIN)/%/max_filter.a $(BIN)/%/max_filter_auto_schedule.a $(BIN)/%/max_filter_gradient_auto_schedule.a
+$(BIN)/%/filter: filter.cpp $(FILTER_DEPS)
 	@mkdir -p $(@D)
 	$(CXX) $(CXXFLAGS) -I$(BIN)/$* -Wall -O3 $^ -o $@ $(LDFLAGS) $(IMAGE_IO_FLAGS) $(CUDA_LDFLAGS) $(OPENCL_LDFLAGS) $(OPENGL_LDFLAGS)
 

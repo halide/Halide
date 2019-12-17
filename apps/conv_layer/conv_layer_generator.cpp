@@ -78,26 +78,26 @@ public:
                 .unroll(r.y, 3)
                 .gpu_threads(x, y, z);
         }*/
-        else {
-            // Blocking spatially with vectorization
-            Var z_t("z_t"), y_t("y_t"), par("par");
-            int vec_len = 8;
-            int o_block_size = 32;
-            int y_block = 32;
-            f_conv.compute_root();
-            f_conv.fuse(z, n, par).parallel(par);
-            f_conv.update()
-                .reorder(x, y, r.z)
-                .split(y, y, y_t, y_block)
-                .split(z, z, z_t, o_block_size)
-                .reorder(y_t, z_t, y, r.z, z)
-                .vectorize(x, vec_len)
-                .unroll(r.x, 3)
-                .unroll(r.y, 3)
-                .fuse(z, n, par)
-                .parallel(par);
-            f_ReLU.reorder(n, z).parallel(z).vectorize(x, 8);
-        }
+        //else {
+            //// Blocking spatially with vectorization
+            //Var z_t("z_t"), y_t("y_t"), par("par");
+            //int vec_len = 8;
+            //int o_block_size = 32;
+            //int y_block = 32;
+            //f_conv.compute_root();
+            //f_conv.fuse(z, n, par).parallel(par);
+            //f_conv.update()
+                //.reorder(x, y, r.z)
+                //.split(y, y, y_t, y_block)
+                //.split(z, z, z_t, o_block_size)
+                //.reorder(y_t, z_t, y, r.z, z)
+                //.vectorize(x, vec_len)
+                //.unroll(r.x, 3)
+                //.unroll(r.y, 3)
+                //.fuse(z, n, par)
+                //.parallel(par);
+            //f_ReLU.reorder(n, z).parallel(z).vectorize(x, 8);
+        //}
     }
 };
 

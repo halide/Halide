@@ -6,6 +6,14 @@ HL_TARGET=host-cuda
 GRADIENT_AUTOSCHED_BIN=../gradient_autoscheduler/bin
 CXXFLAGS += -I../support/
 
+PROCESS_DEPS=$(BIN)/%/camera_pipe.a
+
+ifndef NO_AUTO_SCHEDULE
+	PROCESS_DEPS += $(BIN)/%/camera_pipe_auto_schedule.a $(BIN)/%/camera_pipe_gradient_auto_schedule.a
+else
+	CXXFLAGS += -DNO_AUTO_SCHEDULE
+endif
+
 all: $(BIN)/$(HL_TARGET)/process
 
 TIMING_ITERATIONS ?= 5
@@ -30,9 +38,9 @@ $(BIN)/%/camera_pipe_gradient_auto_schedule.a: $(GENERATOR_BIN)/camera_pipe.gene
 	@mkdir -p $(@D)
 	$^ -g camera_pipe -e $(GENERATOR_OUTPUTS) -o $(@D) -f camera_pipe_gradient_auto_schedule target=$*-no_runtime auto_schedule=true -p $(GRADIENT_AUTOSCHED_BIN)/libgradient_autoscheduler.so -s Li2018
 
-$(BIN)/%/process: process.cpp $(BIN)/%/camera_pipe.a $(BIN)/%/camera_pipe_auto_schedule.a $(BIN)/%/camera_pipe_gradient_auto_schedule.a
+$(BIN)/%/process: process.cpp $(PROCESS_DEPS)
 	@mkdir -p $(@D)
-	$(CXX) $(CXXFLAGS) -Wall -I$(BIN)/$* $^ -o $@ $(IMAGE_IO_FLAGS) $(LDFLAGS)
+	$(CXX) $(CXXFLAGS) -Wall -I$(@D) $^ -o $@ $(IMAGE_IO_FLAGS) $(LDFLAGS)
 
 $(BIN)/%/process_viz: process.cpp $(BIN)/%-trace_all/camera_pipe.a
 	@mkdir -p $(@D)
@@ -41,6 +49,7 @@ $(BIN)/%/process_viz: process.cpp $(BIN)/%-trace_all/camera_pipe.a
 $(BIN)/%/out.png: $(BIN)/%/process
 	@mkdir -p $(@D)
 	$(BIN)/$*/process $(IMAGES)/bayer_raw.png 3700 2.0 50 1.0 $(TIMING_ITERATIONS) $@ $(BIN)/$*/h_auto.png
+	rm $@
 
 ../../bin/HalideTraceViz: ../../util/HalideTraceViz.cpp
 	$(MAKE) -C ../../ bin/HalideTraceViz
