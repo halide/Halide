@@ -54,6 +54,11 @@ public:
 
         bias.dim(0).set_bounds(0, CO).set_stride(1);
 
+        input.set_host_alignment(128);
+        bias.set_host_alignment(128);
+        filter.set_host_alignment(128);
+        relu.set_host_alignment(128);
+
         if (auto_schedule) {
             input.dim(0).set_estimate(0, CI);
             input.dim(1).set_estimate(0, W + 2);
@@ -73,14 +78,16 @@ public:
             relu.dim(3).set_estimate(0, N);
 
         } else if (get_target().has_gpu_feature()) {
-            // A basic GPU schedule. Could use some more work - it's
-            // currently slower than the CPU schedule!  Currently does
-            // no staging of inputs.
+            // GPU schedule, tuned for a gtx 980
+
+            // 2.41 ms on a GTX 980. According to nvprof this is about
+            // 88% of peak flops.
+
             Var ni, no, xi, xo, yi, yo, ci, co, t;
-            RVar rxo, rxi;
+            RVar rxo, rxi, rxii;
             relu.compute_root()
-                .split(x, xo, xi, 4)
-                .split(y, yo, yi, 4)
+                .split(x, xo, xi, 5)
+                .split(y, yo, yi, 5)
                 .split(c, co, ci, 32)
                 .reorder(xi, yi, ci, xo, yo, co, n)
                 .gpu_lanes(ci)
@@ -95,84 +102,87 @@ public:
                 .unroll(x)
                 .unroll(y)
                 .update()
+                .split(r.x, rxo, rxi, 16)
+                .split(rxi, rxi, rxii, 2)
+                .reorder(c, rxii, x, y, r.y, r.z, rxi, rxo)
                 .gpu_lanes(c)
-                .reorder(c, x, y, r.y, r.z, r.x)
                 .unroll(x)
                 .unroll(y)
                 .unroll(r.y)
                 .unroll(r.z)
-                .split(r.x, rxo, rxi, 32);
+                .unroll(rxii);
 
             input.in().compute_at(conv, rxo)
-                .store_in(MemoryType::Register)
-                .gpu_lanes(_0)
-                .unroll(_1)
+                .vectorize(_0, 2)
+                .split(_1, xo, xi, 4)
+                .fuse(_0, xi, t)
+                .gpu_lanes(t)
+                .unroll(xo)
                 .unroll(_2);
 
-        } else if (get_target().has_feature(Target::AVX512_Skylake)) {
-            // On Skylake we have one load per fma and there are more
-            // registers available, so there's considerable
-            // flexibility in the schedule. We'll use 20 accumulator
-            // registers in a 4x5 tile.
-            Var co, ci, xo, xi, yo, yi, t;
-            relu.split(c, co, ci, 16*4)
-                .split(x, xo, xi, 5)
-                .reorder(ci, xi, xo, y, n, co)
-                .vectorize(ci, 16)
-                .unroll(ci)
-                .unroll(xi)
-                .parallel(y)
-                .parallel(n)
-                .parallel(co);
-            conv.compute_at(relu, xo)
-                .vectorize(c, 16)
-                .unroll(c)
-                .unroll(x)
-                .unroll(y)
-                .update()
-                .reorder(c, x, y, r.x, r.y, r.z, n)
-                .vectorize(c, 16)
-                .unroll(c)
-                .unroll(x)
-                .unroll(y)
-                .unroll(r.x, 2);
-            filter.in()
-                .compute_at(conv, r.x)
-                .vectorize(_0, 16)
-                .unroll(_0)
-                .unroll(_3);
-            input.in()
-                .compute_at(conv, x)
-                .unroll(_0);
         } else {
-            // With AVX2 only we can only do one load per two fmas,
-            // which constrains the schedule to have to be a squarish
-            // 12-register tile of the output.
+
+            int tile_w = 1;
+            int tile_h = 1;
+            const int vec = natural_vector_size<float>();
+
+            if (get_target().has_feature(Target::AVX512_Skylake) ||
+                (get_target().arch == Target::ARM &&
+                 get_target().bits == 64)) {
+                // On Skylake we have one load per fma and 32
+                // registers available, so there's considerable
+                // flexibility in the schedule. We'll use 20 accumulator
+                // registers in a 4x5 tile. This is also a reasonable
+                // choice for ARMv8, which also has 32 registers.
+                tile_w = 4;
+                tile_h = 5;
+            } else if (get_target().arch == Target::X86) {
+                // With 16-register ISAs like x86 with AVX2, we can
+                // only do one load per two fmas, which constrains the
+                // schedule to have to be a squarish 12-register tile
+                // of the output.
+                tile_w = 3;
+                tile_h = 4;
+            } else {
+                // The above should also be reasonable schedule for
+                // ARMv7 and other 16-register machines, but I see
+                // some spills on arm-32, so we use a 2x4 block of 8
+                // accumulators instead. This could probably be better
+                // tuned, because in principle 12 accumulators should
+                // be possible. I believe the issue is that there's no
+                // fused multiply-add instruction, and so we're
+                // fighting llvm's instruction scheduler, which wants
+                // to move the muls well ahead of the adds to cover
+                // instruction latencies.
+                tile_w = 2;
+                tile_h = 4;
+            }
+
             Var co, ci, xo, xi, yo, yi, t;
-            relu.split(c, co, ci, 24, TailStrategy::GuardWithIf)
-                .split(x, xo, xi, 4)
+            relu.split(c, co, ci, vec * tile_w)
+                .split(x, xo, xi, tile_h)
                 .reorder(ci, xi, xo, y, n, co)
-                .vectorize(ci, 8)
+                .vectorize(ci, vec)
                 .unroll(ci)
                 .unroll(xi)
                 .parallel(y)
                 .parallel(n)
                 .parallel(co);
             conv.compute_at(relu, xo)
-                .vectorize(c, 8)
+                .vectorize(c, vec)
                 .unroll(c)
                 .unroll(x)
                 .unroll(y)
                 .update()
                 .reorder(c, x, y, r.x, r.y, r.z, n)
-                .vectorize(c, 8)
+                .vectorize(c, vec)
                 .unroll(c)
                 .unroll(x)
                 .unroll(y)
                 .unroll(r.x, 2);
             filter.in()
                 .compute_at(conv, r.x)
-                .vectorize(_0, 8)
+                .vectorize(_0, vec)
                 .unroll(_0)
                 .unroll(_3);
             input.in()
