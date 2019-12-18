@@ -13,7 +13,7 @@ using namespace Halide::Runtime;
 int main(int argc, char **argv) {
     const int N = 5, CI = 128, CO = 128, W = 100, H = 80;
 
-    Buffer<float> input(CI, W+2, H+2, N);
+    Buffer<float> input(CI, W + 2, H + 2, N);
     Buffer<float> filter(CO, 3, 3, CI);
     Buffer<float> bias(CO);
 
