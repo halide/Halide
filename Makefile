@@ -1969,15 +1969,18 @@ time_compilation_generator_%: $(BIN_DIR)/%.generator
 TEST_APPS=\
 	HelloMatlab \
 	bilateral_grid \
+	bgu \
 	blur \
 	c_backend \
 	camera_pipe \
 	conv_layer \
 	fft \
+	hist \
 	interpolate \
 	lens_blur \
 	linear_algebra \
 	local_laplacian \
+	max_filter \
 	nl_means \
 	onnx \
 	resize \
