@@ -50,7 +50,7 @@ public:
         filter.dim(0).set_bounds(0, CO).set_stride(1);
         filter.dim(1).set_bounds(0, 3).set_stride(CO);
         filter.dim(2).set_bounds(0, 3).set_stride(CO * 3);
-        folter.dim(3).set_bounds(0, CI).set_stride(CO * 3 * 3);
+        filter.dim(3).set_bounds(0, CI).set_stride(CO * 3 * 3);
 
         bias.dim(0).set_bounds(0, CO).set_stride(1);
 
