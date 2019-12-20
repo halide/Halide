@@ -32,10 +32,6 @@ public:
         // MKL JITs code for the specific size and strides, so we'll
         // do the same and ask Halide to compile for this specific
         // size:
-        relu.bound(x, 0, W)
-            .bound(y, 0, H)
-            .bound(c, 0, CO)
-            .bound(n, 0, N);
 
         relu.dim(0).set_bounds(0, CO).set_stride(1);
         relu.dim(1).set_bounds(0, W).set_stride(CO);
@@ -53,11 +49,6 @@ public:
         filter.dim(3).set_bounds(0, CI).set_stride(CO * 3 * 3);
 
         bias.dim(0).set_bounds(0, CO).set_stride(1);
-
-        input.set_host_alignment(128);
-        bias.set_host_alignment(128);
-        filter.set_host_alignment(128);
-        relu.set_host_alignment(128);
 
         if (auto_schedule) {
             input.dim(0).set_estimate(0, CI);
