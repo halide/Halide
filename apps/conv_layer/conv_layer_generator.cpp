@@ -68,11 +68,14 @@ public:
             relu.dim(2).set_estimate(0, CO);
             relu.dim(3).set_estimate(0, N);
 
-        } else if (get_target().has_gpu_feature()) {
+        } else if (get_target().has_feature(Target::CUDA)) {
             // GPU schedule, tuned for a gtx 980
 
             // 2.41 ms on a GTX 980. According to nvprof this is about
             // 88% of peak flops.
+
+            // We use cuda-specific scheduling directives (gpu_lanes),
+            // so this is not a general GPGPU schedule.
 
             Var ni, no, xi, xo, yi, yo, ci, co, t;
             RVar rxo, rxi, rxii;
