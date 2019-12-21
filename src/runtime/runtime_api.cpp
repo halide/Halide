@@ -128,6 +128,8 @@ extern "C" __attribute__((used)) void *halide_runtime_api_functions[] = {
     (void *)&halide_msan_annotate_buffer_is_initialized,
     (void *)&halide_msan_annotate_buffer_is_initialized_as_destructor,
     (void *)&halide_msan_annotate_memory_is_initialized,
+    (void *)&halide_msan_check_buffer_is_initialized,
+    (void *)&halide_msan_check_memory_is_initialized,
     (void *)&halide_mutex_lock,
     (void *)&halide_mutex_unlock,
     (void *)&halide_mutex_array_create,

@@ -934,10 +934,33 @@ extern void halide_memoization_cache_release(void *user_context, void *host);
  */
 extern void halide_memoization_cache_cleanup();
 
+/** Verify that a given range of memory has been initialized; only used when Target::MSAN is enabled.
+ *
+ * The default implementation simply calls the LLVM-provided __msan_check_mem_is_initialized() function.
+ *
+ * The return value should always be zero.
+ */
+extern int halide_msan_check_memory_is_initialized(void *user_context, const void *ptr, uint64_t len);
+
+/** Verify that the data pointed to by the buffer_t is initialized (but *not* the buffer_t itself),
+ * using halide_msan_check_memory_is_initialized() for checking.
+ *
+ * The default implementation takes pains to only check the active memory ranges
+ * (skipping padding), and sorting into ranges to always check the smallest number of
+ * ranges, in monotonically increasing memory order.
+ *
+ * Most client code should never need to replace the default implementation.
+ *
+ * The return value should always be zero.
+ */
+extern int halide_msan_check_buffer_is_initialized(void *user_context, struct halide_buffer_t *buffer);
+
 /** Annotate that a given range of memory has been initialized;
  * only used when Target::MSAN is enabled.
  *
- * The default implementation uses the LLVM-provided AnnotateMemoryIsInitialized() function.
+ * The default implementation simply calls the LLVM-provided __msan_unpoison() function.
+ *
+ * The return value should always be zero.
  */
 extern int halide_msan_annotate_memory_is_initialized(void *user_context, const void *ptr, uint64_t len);
 
@@ -949,6 +972,8 @@ extern int halide_msan_annotate_memory_is_initialized(void *user_context, const 
  * ranges, in monotonically increasing memory order.
  *
  * Most client code should never need to replace the default implementation.
+ *
+ * The return value should always be zero.
  */
 extern int halide_msan_annotate_buffer_is_initialized(void *user_context, struct halide_buffer_t *buffer);
 extern void halide_msan_annotate_buffer_is_initialized_as_destructor(void *user_context, void *buffer);

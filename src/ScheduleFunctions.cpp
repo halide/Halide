@@ -422,6 +422,7 @@ Stmt build_extern_produce(const map<string, Function> &env, Function f, const Ta
     // extern function call.
     vector<pair<Expr, int>> buffers_to_annotate;
     vector<Expr> buffers_contents_to_annotate;
+    vector<Expr> buffers_to_check;
     vector<pair<Expr, Expr>> cropped_buffers;
     for (const ExternFuncArgument &arg : args) {
         if (arg.is_expr()) {
@@ -529,6 +530,7 @@ Stmt build_extern_produce(const map<string, Function> &env, Function f, const Ta
             // Since this is a temporary, internal-only buffer, make sure it's marked.
             // (but not the contents! callee is expected to fill that in.)
             buffers_to_annotate.emplace_back(buffer, f.dimensions());
+            buffers_to_check.push_back(buffer);
         }
     } else {
         // Store level doesn't match compute level. Make an output
@@ -575,10 +577,11 @@ Stmt build_extern_produce(const map<string, Function> &env, Function f, const Ta
             buffers_to_annotate.emplace_back(extern_call_args.back(), f.dimensions());
             cropped_buffers.emplace_back(extern_call_args.back(), src_buffer);
             lets.emplace_back(buf_name, output_buffer_t);
+            buffers_to_check.push_back(extern_call_args.back());
         }
     }
 
-    Stmt annotate;
+    Stmt pre_call, post_call;
     if (target.has_feature(Target::MSAN)) {
         // Mark the buffers as initialized before calling out.
         for (const auto &p : buffers_to_annotate) {
@@ -600,10 +603,10 @@ Stmt build_extern_produce(const map<string, Function> &env, Function f, const Ta
 
             mark_buffer = Block::make(mark_buffer, mark_shape);
 
-            if (!is_no_op(annotate)) {
-                annotate = Block::make(annotate, mark_buffer);
+            if (!is_no_op(pre_call)) {
+                pre_call = Block::make(pre_call, mark_buffer);
             } else {
-                annotate = mark_buffer;
+                pre_call = mark_buffer;
             }
         }
         for (const auto &buffer : buffers_contents_to_annotate) {
@@ -611,10 +614,20 @@ Stmt build_extern_produce(const map<string, Function> &env, Function f, const Ta
             // Precedent (from halide_print, etc) is to use Int(32) and ignore the result.
             Stmt mark_contents = Evaluate::make(
                 Call::make(Int(32), "halide_msan_annotate_buffer_is_initialized", {buffer}, Call::Extern));
-            if (!is_no_op(annotate)) {
-                annotate = Block::make(annotate, mark_contents);
+            if (!is_no_op(pre_call)) {
+                pre_call = Block::make(pre_call, mark_contents);
             } else {
-                annotate = mark_contents;
+                pre_call = mark_contents;
+            }
+        }
+        // Check the output buffer(s) to be sure they are fully initialized.
+        for (const auto &buffer : buffers_to_check) {
+            Stmt check_contents = Evaluate::make(
+                Call::make(Int(32), "halide_msan_check_buffer_is_initialized", {buffer}, Call::Extern));
+            if (!is_no_op(post_call)) {
+                post_call = Block::make(post_call, check_contents);
+            } else {
+                post_call = check_contents;
             }
         }
     }
@@ -661,12 +674,16 @@ Stmt build_extern_produce(const map<string, Function> &env, Function f, const Ta
 
     check = LetStmt::make(result_name, e, check);
 
-    if (annotate.defined()) {
-        check = Block::make(annotate, check);
+    if (pre_call.defined()) {
+        check = Block::make(pre_call, check);
     }
 
     for (const auto &let : lets) {
         check = LetStmt::make(let.first, let.second, check);
+    }
+
+    if (post_call.defined()) {
+        check = Block::make(check, post_call);
     }
 
     Definition f_def_no_pred = f.definition().get_copy();
