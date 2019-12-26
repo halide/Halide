@@ -235,6 +235,26 @@ string CodeGen_OpenCL_Dev::CodeGen_OpenCL_C::print_extern_call(const Call *op) {
     return rhs.str();
 }
 
+string CodeGen_OpenCL_Dev::CodeGen_OpenCL_C::print_array_access(const string& name,
+                                                                const Type& type,
+                                                                const string& id_index) {
+    ostringstream rhs;
+    bool type_cast_needed = !(allocations.contains(name) &&
+                              allocations.get(name).type == type);
+
+    if (type_cast_needed) {
+        rhs << "((" << get_memory_space(name) << " "
+            << print_type(type) << " *)"
+            << print_name(name)
+            << ")";
+    } else {
+        rhs << print_name(name);
+    }
+    rhs << "[" << id_index << "]";
+
+    return rhs.str();
+}
+
 void CodeGen_OpenCL_Dev::CodeGen_OpenCL_C::visit(const Load *op) {
     user_assert(is_one(op->predicate)) << "Predicated load is not supported inside OpenCL kernel.\n";
 
@@ -242,14 +262,21 @@ void CodeGen_OpenCL_Dev::CodeGen_OpenCL_C::visit(const Load *op) {
     Expr ramp_base = strided_ramp_base(op->index);
     if (ramp_base.defined()) {
         internal_assert(op->type.is_vector());
-        string id_ramp_base = print_expr(ramp_base);
 
         ostringstream rhs;
-        rhs << "vload" << op->type.lanes()
-            << "(0, (" << get_memory_space(op->name) << " "
-            << print_type(op->type.element_of()) << "*)"
-            << print_name(op->name) << " + " << id_ramp_base << ")";
+        if((op->alignment.modulus % op->type.lanes() == 0) && (op->alignment.modulus % op->type.lanes() == 0)) {
+            // Get the rhs just for the cache.
+            string id_ramp_base = print_expr(ramp_base / op->type.lanes());
+            string array_indexing = print_array_access(op->name, op->type, id_ramp_base);
 
+            rhs << array_indexing;
+        } else {
+            string id_ramp_base = print_expr(ramp_base);
+            rhs << "vload" << op->type.lanes()
+                << "(0, (" << get_memory_space(op->name) << " "
+                << print_type(op->type.element_of()) << "*)"
+                << print_name(op->name) << " + " << id_ramp_base << ")";
+        }
         print_assignment(op->type, rhs.str());
         return;
     }
@@ -257,20 +284,9 @@ void CodeGen_OpenCL_Dev::CodeGen_OpenCL_C::visit(const Load *op) {
     string id_index = print_expr(op->index);
 
     // Get the rhs just for the cache.
-    bool type_cast_needed = !(allocations.contains(op->name) &&
-                              allocations.get(op->name).type == op->type);
-    ostringstream rhs;
-    if (type_cast_needed) {
-        rhs << "((" << get_memory_space(op->name) << " "
-            << print_type(op->type) << " *)"
-            << print_name(op->name)
-            << ")";
-    } else {
-        rhs << print_name(op->name);
-    }
-    rhs << "[" << id_index << "]";
+    string array_indexing = print_array_access(op->name, op->type, id_index);
 
-    std::map<string, string>::iterator cached = cache.find(rhs.str());
+    std::map<string, string>::iterator cached = cache.find(array_indexing);
     if (cached != cache.end()) {
         id = cached->second;
         return;
@@ -281,7 +297,7 @@ void CodeGen_OpenCL_Dev::CodeGen_OpenCL_C::visit(const Load *op) {
         internal_assert(op->type.is_vector());
 
         id = "_" + unique_name('V');
-        cache[rhs.str()] = id;
+        cache[array_indexing] = id;
 
         stream << get_indent() << print_type(op->type)
                << " " << id << ";\n";
@@ -296,7 +312,7 @@ void CodeGen_OpenCL_Dev::CodeGen_OpenCL_C::visit(const Load *op) {
                 << "[" << id_index << ".s" << vector_elements[i] << "];\n";
         }
     } else {
-        print_assignment(op->type, rhs.str());
+        print_assignment(op->type, array_indexing);
     }
 }
 
@@ -413,15 +429,23 @@ void CodeGen_OpenCL_Dev::CodeGen_OpenCL_C::visit(const Store *op) {
     Expr ramp_base = strided_ramp_base(op->index);
     if (ramp_base.defined()) {
         internal_assert(op->value.type().is_vector());
-        string id_ramp_base = print_expr(ramp_base);
 
-        stream << get_indent() << "vstore" << t.lanes() << "("
-               << id_value << ","
-               << 0 << ", (" << get_memory_space(op->name) << " "
-               << print_type(t.element_of()) << "*)"
-               << print_name(op->name) << " + " << id_ramp_base
-               << ");\n";
+        if((op->alignment.modulus % op->value.type().lanes() == 0)
+           && (op->alignment.modulus % op->value.type().lanes() == 0)) {
+            stream << get_indent();
+            string id_ramp_base = print_expr(ramp_base / op->value.type().lanes());
 
+            std::string array_indexing = print_array_access(op->name, t, id_ramp_base);
+            stream << array_indexing << " = " << id_value << ";\n";
+        } else {
+            string id_ramp_base = print_expr(ramp_base);
+            stream << get_indent() << "vstore" << t.lanes() << "("
+                   << id_value << ","
+                   << 0 << ", (" << get_memory_space(op->name) << " "
+                   << print_type(t.element_of()) << "*)"
+                   << print_name(op->name) << " + " << id_ramp_base
+                   << ");\n";
+        }
     } else if (op->index.type().is_vector()) {
         // If index is a vector, scatter vector elements.
         internal_assert(t.is_vector());
@@ -437,24 +461,10 @@ void CodeGen_OpenCL_Dev::CodeGen_OpenCL_C::visit(const Store *op) {
                    << id_value << ".s" << vector_elements[i] << ";\n";
         }
     } else {
-        bool type_cast_needed = !(allocations.contains(op->name) &&
-                                  allocations.get(op->name).type == t);
-
         string id_index = print_expr(op->index);
         stream << get_indent();
-
-        if (type_cast_needed) {
-            stream << "(("
-                   << get_memory_space(op->name) << " "
-                   << print_type(t)
-                   << " *)"
-                   << print_name(op->name)
-                   << ")";
-        } else {
-            stream << print_name(op->name);
-        }
-        stream << "[" << id_index << "] = "
-               << id_value << ";\n";
+        std::string array_indexing = print_array_access(op->name, t, id_index);
+        stream << array_indexing << " = " << id_value << ";\n";
     }
 
     cache.clear();

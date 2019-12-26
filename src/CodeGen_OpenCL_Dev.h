@@ -57,6 +57,9 @@ protected:
         std::string print_type(Type type, AppendSpaceIfNeeded append_space = DoNotAppendSpace) override;
         std::string print_reinterpret(Type type, Expr e) override;
         std::string print_extern_call(const Call *op) override;
+        std::string print_array_access(const std::string& name,
+                                       const Type& type,
+                                       const std::string& id_index);
         void add_vector_typedefs(const std::set<Type> &vector_types) override;
 
         std::string get_memory_space(const std::string &);
