@@ -620,7 +620,7 @@ Stmt build_extern_produce(const map<string, Function> &env, Function f, const Ta
                 pre_call = mark_contents;
             }
         }
-        // Check the output buffer(s) to be sure they are fully initialized.
+        // Check the output buffer(s) from define_extern() calls to be sure they are fully initialized.
         for (const auto &buffer : buffers_to_check) {
             Stmt check_contents = Evaluate::make(
                 Call::make(Int(32), "halide_msan_check_buffer_is_initialized", {buffer}, Call::Extern));

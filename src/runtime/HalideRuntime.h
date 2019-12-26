@@ -942,7 +942,7 @@ extern void halide_memoization_cache_cleanup();
  */
 extern int halide_msan_check_memory_is_initialized(void *user_context, const void *ptr, uint64_t len);
 
-/** Verify that the data pointed to by the buffer_t is initialized (but *not* the buffer_t itself),
+/** Verify that the data pointed to by the halide_buffer_t is initialized (but *not* the halide_buffer_t itself),
  * using halide_msan_check_memory_is_initialized() for checking.
  *
  * The default implementation takes pains to only check the active memory ranges
@@ -964,7 +964,7 @@ extern int halide_msan_check_buffer_is_initialized(void *user_context, struct ha
  */
 extern int halide_msan_annotate_memory_is_initialized(void *user_context, const void *ptr, uint64_t len);
 
-/** Mark the data pointed to by the buffer_t as initialized (but *not* the buffer_t itself),
+/** Mark the data pointed to by the halide_buffer_t as initialized (but *not* the halide_buffer_t itself),
  * using halide_msan_annotate_memory_is_initialized() for marking.
  *
  * The default implementation takes pains to only mark the active memory ranges

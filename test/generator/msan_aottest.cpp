@@ -20,23 +20,23 @@ using namespace std;
 using namespace Halide::Runtime;
 
 enum {
-    kAnnotate_bounds_inference_buffer,
-    kAnnotate_intermediate_buffer,
-    kAnnotate_intermediate_shape,
-    kAnnotate_output_buffer,
-    kAnnotate_output_shape,
-    kAnnotate_intermediate_contents,
-    kAnnotate_output_contents,
-} annotate_stage = kAnnotate_bounds_inference_buffer;
+    AnnotateBoundsInferenceBuffer,
+    AnnotateIntermediateBuffer,
+    AnnotateIntermediateShape,
+    AnnotateOutputBuffer,
+    AnnotateOutputShape,
+    AnnotateIntermediateContents,
+    AnnotateOutputContents,
+} annotate_stage = AnnotateBoundsInferenceBuffer;
 
 enum {
-    kCheck_input_buffer,
-    kCheck_input_shape,
-    kCheck_input_contents,
-    kCheck_externresult_buffer,
-    kCheck_externresult_shape,
-    kCheck_externresult_contents,
-} check_stage = kCheck_input_buffer;
+    CheckInputBuffer,
+    CheckInputShape,
+    CheckInputContents,
+    CheckExternResultBuffer,
+    CheckExternResultShape,
+    CheckExternResultContents,
+} check_stage = CheckInputBuffer;
 
 const void *output_base = nullptr;
 const void *output_previous = nullptr;
@@ -50,8 +50,8 @@ uint64_t externresult_contents_uninitialized = 0;
 uint64_t output_contents_annotated = 0;
 
 void reset_state(const Buffer<uint8_t> &in, const Buffer<uint8_t> &out) {
-    annotate_stage = kAnnotate_bounds_inference_buffer;
-    check_stage = kCheck_input_buffer;
+    annotate_stage = AnnotateBoundsInferenceBuffer;
+    check_stage = CheckInputBuffer;
     output_base = out.data();
     output_previous = nullptr;
     bounds_inference_count = 0;
@@ -126,37 +126,37 @@ extern "C" void __msan_unpoison(const void *mem, size_t size) {
 
 extern "C" int halide_msan_check_memory_is_initialized(void *user_context, const void *ptr, uint64_t len) {
     // printf("CHECK-MEM: %d:%p:%08x\n", (int)check_stage, ptr, (unsigned int)len);
-    if (check_stage == kCheck_input_buffer) {
+    if (check_stage == CheckInputBuffer) {
         if (len != sizeof(halide_buffer_t)) {
             fprintf(stderr, "Failure: Expected sizeof(halide_buffer_t), saw %d\n", (unsigned int)len);
             exit(-1);
         }
-        check_stage = kCheck_input_shape;
-    } else if (check_stage == kCheck_input_shape) {
+        check_stage = CheckInputShape;
+    } else if (check_stage == CheckInputShape) {
         if (len != sizeof(halide_dimension_t) * 3) {
             fprintf(stderr, "Failure: Expected sizeof(halide_dimension_t) * 3, saw %d\n", (unsigned int)len);
             exit(-1);
         }
-        check_stage = kCheck_input_contents;
-    } else if (check_stage == kCheck_input_contents) {
+        check_stage = CheckInputContents;
+    } else if (check_stage == CheckInputContents) {
         for (uint64_t i = 0; i < len; ++i) {
             input_contents_uninitialized += (((const uint8_t *)ptr)[i] == 0);
         }
         input_contents_checked += len;
-        check_stage = kCheck_externresult_buffer;
-    } else if (check_stage == kCheck_externresult_buffer) {
+        check_stage = CheckExternResultBuffer;
+    } else if (check_stage == CheckExternResultBuffer) {
         if (len != sizeof(halide_buffer_t)) {
             fprintf(stderr, "Failure: Expected sizeof(halide_buffer_t), saw %d\n", (unsigned int)len);
             exit(-1);
         }
-        check_stage = kCheck_externresult_shape;
-    } else if (check_stage == kCheck_externresult_shape) {
+        check_stage = CheckExternResultShape;
+    } else if (check_stage == CheckExternResultShape) {
         if (len != sizeof(halide_dimension_t) * 3) {
             fprintf(stderr, "Failure: Expected sizeof(halide_dimension_t) * 3, saw %d\n", (unsigned int)len);
             exit(-1);
         }
-        check_stage = kCheck_externresult_contents;
-    } else if (check_stage == kCheck_externresult_contents) {
+        check_stage = CheckExternResultContents;
+    } else if (check_stage == CheckExternResultContents) {
         for (uint64_t i = 0; i < len; ++i) {
             externresult_contents_uninitialized += (((const uint8_t *)ptr)[i] == 0);
         }
@@ -170,16 +170,16 @@ extern "C" int halide_msan_check_memory_is_initialized(void *user_context, const
 
 extern "C" int halide_msan_annotate_memory_is_initialized(void *user_context, const void *ptr, uint64_t len) {
     // printf("ANNOTATE: %d:%p:%08x\n", (int)annotate_stage, ptr, (unsigned int)len);
-    if (annotate_stage == kAnnotate_bounds_inference_buffer) {
+    if (annotate_stage == AnnotateBoundsInferenceBuffer) {
         if (output_previous != nullptr || len != sizeof(halide_buffer_t)) {
             fprintf(stderr, "Failure: Expected sizeof(halide_buffer_t), saw %d\n", (unsigned int)len);
             exit(-1);
         }
         bounds_inference_count += 1;
         if (bounds_inference_count == 4) {
-            annotate_stage = kAnnotate_intermediate_buffer;
+            annotate_stage = AnnotateIntermediateBuffer;
         }
-    } else if (annotate_stage == kAnnotate_intermediate_buffer) {
+    } else if (annotate_stage == AnnotateIntermediateBuffer) {
         if (expect_intermediate_buffer_error) {
             if (len != 80) {
                 fprintf(stderr, "Failure: Expected error message of len=80, saw %d bytes\n", (unsigned int)len);
@@ -191,32 +191,32 @@ extern "C" int halide_msan_annotate_memory_is_initialized(void *user_context, co
             fprintf(stderr, "Failure: Expected sizeof(halide_buffer_t), saw %d\n", (unsigned int)len);
             exit(-1);
         }
-        annotate_stage = kAnnotate_intermediate_shape;
-    } else if (annotate_stage == kAnnotate_intermediate_shape) {
+        annotate_stage = AnnotateIntermediateShape;
+    } else if (annotate_stage == AnnotateIntermediateShape) {
         if (output_previous != nullptr || len != sizeof(halide_dimension_t) * 3) {
             fprintf(stderr, "Failure: Expected sizeof(halide_dimension_t) * 3, saw %d\n", (unsigned int)len);
             exit(-1);
         }
-        annotate_stage = kAnnotate_output_buffer;
-    } else if (annotate_stage == kAnnotate_output_buffer) {
+        annotate_stage = AnnotateOutputBuffer;
+    } else if (annotate_stage == AnnotateOutputBuffer) {
         if (output_previous != nullptr || len != sizeof(halide_buffer_t)) {
             fprintf(stderr, "Failure: Expected sizeof(halide_buffer_t), saw %d\n", (unsigned int)len);
             exit(-1);
         }
-        annotate_stage = kAnnotate_output_shape;
-    } else if (annotate_stage == kAnnotate_output_shape) {
+        annotate_stage = AnnotateOutputShape;
+    } else if (annotate_stage == AnnotateOutputShape) {
         if (output_previous != nullptr || len != sizeof(halide_dimension_t) * 3) {
             fprintf(stderr, "Failure: Expected sizeof(halide_dimension_t) * 3, saw %d\n", (unsigned int)len);
             exit(-1);
         }
-        annotate_stage = kAnnotate_intermediate_contents;
-    } else if (annotate_stage == kAnnotate_intermediate_contents) {
+        annotate_stage = AnnotateIntermediateContents;
+    } else if (annotate_stage == AnnotateIntermediateContents) {
         if (output_previous != nullptr || len != 4 * 4 * 3) {
             fprintf(stderr, "Failure: Expected %d, saw %d\n", 4 * 4 * 3, (unsigned int)len);
             exit(-1);
         }
-        annotate_stage = kAnnotate_output_contents;
-    } else if (annotate_stage == kAnnotate_output_contents) {
+        annotate_stage = AnnotateOutputContents;
+    } else if (annotate_stage == AnnotateOutputContents) {
         if (output_previous == nullptr) {
             if (ptr != output_base) {
                 fprintf(stderr, "Failure: Expected base p %p but saw %p\n", output_base, ptr);
