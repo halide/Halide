@@ -369,6 +369,7 @@ const std::map<std::string, Target::Feature> feature_name_map = {
     {"wasm_signext", Target::WasmSignExt},
     {"sve", Target::SVE},
     {"sve2", Target::SVE2},
+    {"armv83a", Target::ARMv83a},
     // NOTE: When adding features to this map, be sure to update
     // PyEnums.cpp and halide.cmake as well.
 };
@@ -880,7 +881,7 @@ bool Target::get_runtime_compatible_target(const Target &other, Target &result) 
                                                      CUDACapability30, CUDACapability32, CUDACapability35, CUDACapability50, CUDACapability61,
                                                      HVX_v62, HVX_v65, HVX_v66}};
 
-    const std::array<Feature, 12> intersection_features = {{SSE41, AVX, AVX2, FMA, FMA4, F16C, ARMv7s, VSX, AVX512, AVX512_KNL, AVX512_Skylake, AVX512_Cannonlake}};
+    const std::array<Feature, 13> intersection_features = {{SSE41, AVX, AVX2, FMA, FMA4, F16C, ARMv7s, ARMv83a, VSX, AVX512, AVX512_KNL, AVX512_Skylake, AVX512_Cannonlake}};
 
     const std::array<Feature, 10> matching_features = {{SoftFloatABI, Debug, TSAN, ASAN, MSAN, HVX_64, HVX_128, MinGW, HexagonDma, HVX_shared_object}};
 

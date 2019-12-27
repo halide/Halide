@@ -515,6 +515,7 @@ function(_halide_runtime_target_name HALIDE_TARGET OUTVAR)
         wasm_signext
         sve
         sve2
+        armv83a
       )
     # Synthesize a one-or-two-char abbreviation based on the feature's position
     # in the KNOWN_FEATURES list.

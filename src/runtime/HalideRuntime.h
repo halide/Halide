@@ -1330,6 +1330,7 @@ typedef enum halide_target_feature_t {
     halide_target_feature_sve, ///< Enable ARM Scalable Vector Extensions
     halide_target_feature_sve2, ///< Enable ARM Scalable Vector Extensions v2
     halide_target_feature_egl,            ///< Force use of EGL support.
+    halide_target_feature_armv83a,  ///< Generate code for ARMv8.3a. Only relevant for 64-bit ARM.
 
     halide_target_feature_end ///< A sentinel. Every target is considered to have this feature, and setting this feature does nothing.
 } halide_target_feature_t;

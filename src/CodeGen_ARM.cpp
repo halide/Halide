@@ -1017,7 +1017,14 @@ string CodeGen_ARM::mcpu() const {
         }
     } else {
         if (target.os == Target::IOS) {
-            return "cyclone";
+            if (target.has_feature(Target::ARMv83a)) {
+                // TODO: we can assume at least Apple A12 (Vortex/Tempest),
+                // but LLVM doesn't seem to have specialzations for those yet.
+                // Continue using 'cyclone' for now.
+                return "cyclone";
+            } else {
+                return "cyclone";  // aka Apple A7
+            }
         } else {
             return "generic";
         }
@@ -1037,17 +1044,24 @@ string CodeGen_ARM::mattrs() const {
     } else {
         // TODO: Should Halide's SVE flags be 64-bit only?
         string arch_flags;
+        string separator;
         if (target.has_feature(Target::SVE2)) {
-            arch_flags = "+sve2";
+            arch_flags += "+sve2";
+            separator = ",";
         } else if (target.has_feature(Target::SVE)) {
-            arch_flags = "+sve";
+            arch_flags += "+sve";
+            separator = ",";
+        }
+        if (target.has_feature(Target::ARMv83a)) {
+            arch_flags += separator + "+v8.3a";
+            separator = ",";
         }
 
         if (target.os == Target::IOS || target.os == Target::OSX) {
-            return arch_flags + "+reserve-x18";
-        } else {
-            return arch_flags;
+            arch_flags += separator + "+reserve-x18";
+            separator = ",";
         }
+        return arch_flags;
     }
 }
 

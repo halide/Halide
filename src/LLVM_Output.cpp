@@ -325,7 +325,7 @@ std::unique_ptr<llvm::Module> clone_module(const llvm::Module &module_in) {
 
 }  // namespace
 
-void emit_file(const llvm::Module &module_in, Internal::LLVMOStream &out, 
+void emit_file(const llvm::Module &module_in, Internal::LLVMOStream &out,
 #if LLVM_VERSION >= 100
                 llvm::CodeGenFileType file_type
 #else

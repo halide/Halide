@@ -76,7 +76,7 @@ class SimdOpCheckTest {
                     Target::AVX2, Target::AVX512,
                     Target::FMA, Target::FMA4, Target::F16C,
                     Target::VSX, Target::POWER_ARCH_2_07,
-                    Target::ARMv7s, Target::NoNEON, Target::MinGW,
+                    Target::ARMv7s, Target::ARMv83a, Target::NoNEON, Target::MinGW,
                     Target::WasmSimd128}) {
             if (target.has_feature(f) != host_target.has_feature(f)) {
                 can_run_the_code = false;

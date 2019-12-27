@@ -21,6 +21,7 @@ int main(int argc, char **argv) {
         "arm-32-linux",
         "arm-64-android",
         "arm-64-ios",
+        "arm-64-ios-armv83a",
         "arm-64-linux",
         "x86-32-linux",
         "x86-32-osx",

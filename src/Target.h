@@ -123,6 +123,7 @@ struct Target {
         WasmSignExt = halide_target_feature_wasm_signext,
         SVE = halide_target_feature_sve,
         SVE2 = halide_target_feature_sve2,
+        ARMv83a = halide_target_feature_armv83a,
         FeatureEnd = halide_target_feature_end
     };
     Target()
