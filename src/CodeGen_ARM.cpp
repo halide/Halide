@@ -1057,7 +1057,7 @@ string CodeGen_ARM::mattrs() const {
             arch_flags += separator + "+v8.3a";
             separator = ",";
 #else
-            internal_error << "ARMv83a support requires LLVM 10.0+";
+            user_warning << "ARMv83a support requires LLVM 10.0+; this feature will be ignored";
 #endif
         }
 
