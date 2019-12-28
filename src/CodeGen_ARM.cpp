@@ -1053,8 +1053,12 @@ string CodeGen_ARM::mattrs() const {
             separator = ",";
         }
         if (target.has_feature(Target::ARMv83a)) {
+#if LLVM_VERSION >= 100
             arch_flags += separator + "+v8.3a";
             separator = ",";
+#else
+            internal_error << "ARMv83a support requires LLVM 10.0+";
+#endif
         }
 
         if (target.os == Target::IOS || target.os == Target::OSX) {
