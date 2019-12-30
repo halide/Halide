@@ -12,8 +12,11 @@ void define_expr(py::module &m) {
     auto to_bool = [](const Expr &e) -> bool {
         std::ostringstream o;
         o << e;
-        throw py::value_error("The halide.Expr (" + o.str() + ") cannot be converted to a bool. "
-                                                              "If this error occurs using the 'and'/'or' keywords, consider using the '&'/'|' operators instead.");
+        throw py::value_error("The halide.Expr (" +
+                              o.str() +
+                              ") cannot be converted to a bool. "
+                              "If this error occurs using the 'and'/'or' keywords, "
+                              "consider using the '&'/'|' operators instead.");
         return false;
     };
 
@@ -37,8 +40,10 @@ void define_expr(py::module &m) {
                     oss << std::fixed << v;
                     PyErr_WarnEx(
                         PyExc_RuntimeWarning,
-                        ("The floating-point value " + oss.str() + " will be interpreted as a float32 by Halide and lose precision;"
-                                                                   " add an explicit `f32()` or `f64()`` cast to avoid this warning.")
+                        ("The floating-point value " +
+                         oss.str() +
+                         " will be interpreted as a float32 by Halide and lose precision;"
+                         " add an explicit `f32()` or `f64()`` cast to avoid this warning.")
                             .c_str(),
                         0);
                 }
