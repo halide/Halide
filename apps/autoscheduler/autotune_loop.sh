@@ -187,9 +187,19 @@ benchmark_sample() {
 
     CMD="HL_NUM_THREADS=${NUM_CORES} \
         ${TIMEOUT_CMD} -k ${BENCHMARKING_TIMEOUT} ${BENCHMARKING_TIMEOUT} \
-        ${D}/bench \
-        --estimate_all \
-        --benchmarks=all"
+        ${D}/bench"
+
+    if [ $PIPELINE == "random_pipeline" ]; then
+        CMD="${CMD} \
+            --output_extents=estimate \
+            --default_input_buffers=random:0:auto \
+            --default_input_scalars=estimate \
+            --benchmarks=all"
+    else
+        CMD="${CMD} \
+            --estimate_all \
+            --benchmarks=all"
+    fi
 
     eval $CMD | tee ${D}/bench.txt
     FAILED=0

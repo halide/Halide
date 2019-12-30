@@ -35,6 +35,12 @@ export HL_MACHINE_PARAMS=80,24000000,160
 export HL_PERMIT_FAILED_UNROLL=1
 export HL_TARGET=host-cuda
 
+if [ -z ${SAMPLES_DIR} ]; then
+    SAMPLES_DIR_NAME=autotuned_samples
+else
+    SAMPLES_DIR_NAME=${SAMPLES_DIR}
+fi
+
 if [ -z $APP ]; then
     APPS="resnet_50_blockwise bgu bilateral_grid local_laplacian nl_means lens_blur camera_pipe stencil_chain harris hist max_filter unsharp interpolate_generator conv_layer cuda_mat_mul iir_blur_generator"
 else
@@ -49,7 +55,7 @@ echo "Autotuning on $APPS for $MAX_ITERATIONS iteration(s)"
 
 for app in $APPS; do
     APP_DIR="${HALIDE_ROOT}/apps/${app}"
-    SAMPLES_DIR="${APP_DIR}/autotuned_samples"
+    SAMPLES_DIR="${APP_DIR}/${SAMPLES_DIR_NAME}"
     OUTPUT_FILE="${SAMPLES_DIR}/autotune_out.txt"
     PREDICTIONS_FILE="${SAMPLES_DIR}/predictions"
     BEST_TIMES_FILE="${SAMPLES_DIR}/best_times"
@@ -61,7 +67,6 @@ for app in $APPS; do
     ITERATION=1
 
     while [[ DONE -ne 1 ]]; do
-        echo ${SAMPLES_DIR}
         SAMPLES_DIR=${SAMPLES_DIR} make -C ${APP_DIR} autotune | tee -a ${OUTPUT_FILE}
 
         if [[ $ITERATION -ge $MAX_ITERATIONS ]]; then
