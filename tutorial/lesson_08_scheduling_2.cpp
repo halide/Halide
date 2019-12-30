@@ -19,6 +19,11 @@
 
 using namespace Halide;
 
+// clang-format makes some odd choices in this file;
+// we'll disable it here to maintain our choices.
+//
+// clang-format off
+
 int main(int argc, char **argv) {
     // First we'll declare some Vars to use below.
     Var x("x"), y("y");
@@ -38,8 +43,7 @@ int main(int argc, char **argv) {
         consumer(x, y) = (producer(x, y) +
                           producer(x, y + 1) +
                           producer(x + 1, y) +
-                          producer(x + 1, y + 1)) /
-                         4;
+                          producer(x + 1, y + 1)) / 4;
 
         // We'll turn on tracing for both functions.
         consumer.trace_stores();
@@ -70,8 +74,7 @@ int main(int argc, char **argv) {
                 result[y][x] = (sin(x * y) +
                                 sin(x * (y + 1)) +
                                 sin((x + 1) * y) +
-                                sin((x + 1) * (y + 1))) /
-                               4;
+                                sin((x + 1) * (y + 1))) / 4;
             }
         }
         printf("\n");
@@ -93,8 +96,7 @@ int main(int argc, char **argv) {
         consumer(x, y) = (producer(x, y) +
                           producer(x, y + 1) +
                           producer(x + 1, y) +
-                          producer(x + 1, y + 1)) /
-                         4;
+                          producer(x + 1, y + 1)) / 4;
 
         // Tell Halide to evaluate all of producer before any of consumer.
         producer.compute_root();
@@ -136,8 +138,7 @@ int main(int argc, char **argv) {
                 result[y][x] = (producer_storage[y][x] +
                                 producer_storage[y + 1][x] +
                                 producer_storage[y][x + 1] +
-                                producer_storage[y + 1][x + 1]) /
-                               4;
+                                producer_storage[y + 1][x + 1]) / 4;
             }
         }
 
@@ -197,8 +198,7 @@ int main(int argc, char **argv) {
         consumer(x, y) = (producer(x, y) +
                           producer(x, y + 1) +
                           producer(x + 1, y) +
-                          producer(x + 1, y + 1)) /
-                         4;
+                          producer(x + 1, y + 1)) / 4;
 
         // Tell Halide to evaluate producer as needed per y coordinate
         // of the consumer:
@@ -242,8 +242,7 @@ int main(int argc, char **argv) {
                 result[y][x] = (producer_storage[0][x] +
                                 producer_storage[1][x] +
                                 producer_storage[0][x + 1] +
-                                producer_storage[1][x + 1]) /
-                               4;
+                                producer_storage[1][x + 1]) / 4;
             }
         }
 
@@ -278,8 +277,7 @@ int main(int argc, char **argv) {
         consumer(x, y) = (producer(x, y) +
                           producer(x, y + 1) +
                           producer(x + 1, y) +
-                          producer(x + 1, y + 1)) /
-                         4;
+                          producer(x + 1, y + 1)) / 4;
 
         // Tell Halide to make a buffer to store all of producer at
         // the outermost level:
@@ -335,8 +333,7 @@ int main(int argc, char **argv) {
                 result[y][x] = (producer_storage[y][x] +
                                 producer_storage[y + 1][x] +
                                 producer_storage[y][x + 1] +
-                                producer_storage[y + 1][x + 1]) /
-                               4;
+                                producer_storage[y + 1][x + 1]) / 4;
             }
         }
 
@@ -380,8 +377,7 @@ int main(int argc, char **argv) {
                     result[y][x] = (producer_storage[y & 1][x] +
                                     producer_storage[(y + 1) & 1][x] +
                                     producer_storage[y & 1][x + 1] +
-                                    producer_storage[(y + 1) & 1][x + 1]) /
-                                   4;
+                                    producer_storage[(y + 1) & 1][x + 1]) / 4;
                 }
             }
         }
@@ -395,8 +391,7 @@ int main(int argc, char **argv) {
         consumer(x, y) = (producer(x, y) +
                           producer(x, y + 1) +
                           producer(x + 1, y) +
-                          producer(x + 1, y + 1)) /
-                         4;
+                          producer(x + 1, y + 1)) / 4;
 
         // Store outermost, compute innermost.
         producer.store_root().compute_at(consumer, x);
@@ -427,19 +422,21 @@ int main(int argc, char **argv) {
                 // Compute enough of the producer to satisfy this
                 // pixel of the consumer, but skip values that we've
                 // already computed:
-                if (y == 0 && x == 0)
+                if (y == 0 && x == 0) {
                     producer_storage[y & 1][x] = sin(x * y);
-                if (y == 0)
+                }
+                if (y == 0) {
                     producer_storage[y & 1][x + 1] = sin((x + 1) * y);
-                if (x == 0)
+                }
+                if (x == 0) {
                     producer_storage[(y + 1) & 1][x] = sin(x * (y + 1));
+                }
                 producer_storage[(y + 1) & 1][x + 1] = sin((x + 1) * (y + 1));
 
                 result[y][x] = (producer_storage[y & 1][x] +
                                 producer_storage[(y + 1) & 1][x] +
                                 producer_storage[y & 1][x + 1] +
-                                producer_storage[(y + 1) & 1][x + 1]) /
-                               4;
+                                producer_storage[(y + 1) & 1][x + 1]) / 4;
             }
         }
 
@@ -484,8 +481,7 @@ int main(int argc, char **argv) {
         consumer(x, y) = (producer(x, y) +
                           producer(x, y + 1) +
                           producer(x + 1, y) +
-                          producer(x + 1, y + 1)) /
-                         4;
+                          producer(x + 1, y + 1)) / 4;
 
         // We'll compute 8x8 of the consumer, in 4x4 tiles.
         Var x_outer, y_outer, x_inner, y_inner;
@@ -542,8 +538,7 @@ int main(int argc, char **argv) {
                             (producer_storage[y - y_base][x - x_base] +
                              producer_storage[y - y_base + 1][x - x_base] +
                              producer_storage[y - y_base][x - x_base + 1] +
-                             producer_storage[y - y_base + 1][x - x_base + 1]) /
-                            4;
+                             producer_storage[y - y_base + 1][x - x_base + 1]) / 4;
                     }
                 }
             }
@@ -571,8 +566,7 @@ int main(int argc, char **argv) {
         consumer(x, y) = (producer(x, y) +
                           producer(x, y + 1) +
                           producer(x + 1, y) +
-                          producer(x + 1, y + 1)) /
-                         4;
+                          producer(x + 1, y + 1)) / 4;
 
         // Split the y coordinate of the consumer into strips of 16 scanlines:
         Var yo, yi;

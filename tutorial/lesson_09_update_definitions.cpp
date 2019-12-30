@@ -356,434 +356,434 @@ int main(int argc, char **argv) {
 
     // Now let's consider a reduction as a consumer in a
     // producer-consumer pair. This is a little more involved.
+    // Case 1: The consumer references the producer in the pure step only.
     {
-        {// Case 1: The consumer references the producer in the pure step only.
-         Func producer, consumer;
-    // The producer is pure.
-    producer(x) = x * 17;
-    consumer(x) = 2 * producer(x);
-    consumer(x) += 50;
+        Func producer, consumer;
 
-    // The valid schedules for the producer in this case are
-    // the default schedule - inlined, and also:
-    //
-    // 1) producer.compute_at(x), which places the computation of
-    // the producer inside the loop over x in the pure step of the
-    // consumer.
-    //
-    // 2) producer.compute_root(), which computes all of the
-    // producer ahead of time.
-    //
-    // 3) producer.store_root().compute_at(x), which allocates
-    // space for the consumer outside the loop over x, but fills
-    // it in as needed inside the loop.
-    //
-    // Let's use option 1.
+        // The producer is pure.
+        producer(x) = x * 17;
+        consumer(x) = 2 * producer(x);
+        consumer(x) += 50;
 
-    producer.compute_at(consumer, x);
+        // The valid schedules for the producer in this case are
+        // the default schedule - inlined, and also:
+        //
+        // 1) producer.compute_at(x), which places the computation of
+        // the producer inside the loop over x in the pure step of the
+        // consumer.
+        //
+        // 2) producer.compute_root(), which computes all of the
+        // producer ahead of time.
+        //
+        // 3) producer.store_root().compute_at(x), which allocates
+        // space for the consumer outside the loop over x, but fills
+        // it in as needed inside the loop.
+        //
+        // Let's use option 1.
 
-    Buffer<int> halide_result = consumer.realize(10);
+        producer.compute_at(consumer, x);
 
-    // See figures/lesson_09_compute_at_pure.gif for a visualization.
+        Buffer<int> halide_result = consumer.realize(10);
 
-    // The equivalent C is:
-    int c_result[10];
-    // Pure step for the consumer
-    for (int x = 0; x < 10; x++) {
-        // Pure step for producer
-        int producer_storage[1];
-        producer_storage[0] = x * 17;
-        c_result[x] = 2 * producer_storage[0];
-    }
-    // Update step for the consumer
-    for (int x = 0; x < 10; x++) {
-        c_result[x] += 50;
-    }
+        // See figures/lesson_09_compute_at_pure.gif for a visualization.
 
-    // All of the pure step is evaluated before any of the
-    // update step, so there are two separate loops over x.
-
-    // Check the results match
-    for (int x = 0; x < 10; x++) {
-        if (halide_result(x) != c_result[x]) {
-            printf("halide_result(%d) = %d instead of %d\n",
-                   x, halide_result(x), c_result[x]);
-            return -1;
-        }
-    }
-}
-
-{
-    // Case 2: The consumer references the producer in the update step only
-    Func producer, consumer;
-    producer(x) = x * 17;
-    consumer(x) = 100 - x * 10;
-    consumer(x) += producer(x);
-
-    // Again we compute the producer per x coordinate of the
-    // consumer. This places producer code inside the update
-    // step of the consumer, because that's the only step that
-    // uses the producer.
-    producer.compute_at(consumer, x);
-
-    // Note however, that we didn't say:
-    //
-    // producer.compute_at(consumer.update(0), x).
-    //
-    // Scheduling is done with respect to Vars of a Func, and
-    // the Vars of a Func are shared across the pure and
-    // update steps.
-
-    Buffer<int> halide_result = consumer.realize(10);
-
-    // See figures/lesson_09_compute_at_update.gif for a visualization.
-
-    // The equivalent C is:
-    int c_result[10];
-    // Pure step for the consumer
-    for (int x = 0; x < 10; x++) {
-        c_result[x] = 100 - x * 10;
-    }
-    // Update step for the consumer
-    for (int x = 0; x < 10; x++) {
-        // Pure step for producer
-        int producer_storage[1];
-        producer_storage[0] = x * 17;
-        c_result[x] += producer_storage[0];
-    }
-
-    // Check the results match
-    for (int x = 0; x < 10; x++) {
-        if (halide_result(x) != c_result[x]) {
-            printf("halide_result(%d) = %d instead of %d\n",
-                   x, halide_result(x), c_result[x]);
-            return -1;
-        }
-    }
-}
-
-{
-    // Case 3: The consumer references the producer in
-    // multiple steps that share common variables
-    Func producer, consumer;
-    producer(x) = x * 17;
-    consumer(x) = 170 - producer(x);
-    consumer(x) += producer(x) / 2;
-
-    // Again we compute the producer per x coordinate of the
-    // consumer. This places producer code inside both the
-    // pure and the update step of the consumer. So there end
-    // up being two separate realizations of the producer, and
-    // redundant work occurs.
-    producer.compute_at(consumer, x);
-
-    Buffer<int> halide_result = consumer.realize(10);
-
-    // See figures/lesson_09_compute_at_pure_and_update.gif for a visualization.
-
-    // The equivalent C is:
-    int c_result[10];
-    // Pure step for the consumer
-    for (int x = 0; x < 10; x++) {
-        // Pure step for producer
-        int producer_storage[1];
-        producer_storage[0] = x * 17;
-        c_result[x] = 170 - producer_storage[0];
-    }
-    // Update step for the consumer
-    for (int x = 0; x < 10; x++) {
-        // Another copy of the pure step for producer
-        int producer_storage[1];
-        producer_storage[0] = x * 17;
-        c_result[x] += producer_storage[0] / 2;
-    }
-
-    // Check the results match
-    for (int x = 0; x < 10; x++) {
-        if (halide_result(x) != c_result[x]) {
-            printf("halide_result(%d) = %d instead of %d\n",
-                   x, halide_result(x), c_result[x]);
-            return -1;
-        }
-    }
-}
-
-{
-    // Case 4: The consumer references the producer in
-    // multiple steps that do not share common variables
-    Func producer, consumer;
-    producer(x, y) = (x * y) / 10 + 8;
-    consumer(x, y) = x + y;
-    consumer(x, 0) = producer(x, x);
-    consumer(0, y) = producer(y, 9 - y);
-
-    // In this case neither producer.compute_at(consumer, x)
-    // nor producer.compute_at(consumer, y) will work, because
-    // either one fails to cover one of the uses of the
-    // producer. So we'd have to inline producer, or use
-    // producer.compute_root().
-
-    // Let's say we really really want producer to be
-    // compute_at the inner loops of both consumer update
-    // steps. Halide doesn't allow multiple different
-    // schedules for a single Func, but we can work around it
-    // by making two wrappers around producer, and scheduling
-    // those instead:
-
-    // Attempt 2:
-    Func producer_1, producer_2, consumer_2;
-    producer_1(x, y) = producer(x, y);
-    producer_2(x, y) = producer(x, y);
-
-    consumer_2(x, y) = x + y;
-    consumer_2(x, 0) += producer_1(x, x);
-    consumer_2(0, y) += producer_2(y, 9 - y);
-
-    // The wrapper functions give us two separate handles on
-    // the producer, so we can schedule them differently.
-    producer_1.compute_at(consumer_2, x);
-    producer_2.compute_at(consumer_2, y);
-
-    Buffer<int> halide_result = consumer_2.realize(10, 10);
-
-    // See figures/lesson_09_compute_at_multiple_updates.mp4 for a visualization.
-
-    // The equivalent C is:
-    int c_result[10][10];
-    // Pure step for the consumer
-    for (int y = 0; y < 10; y++) {
+        // The equivalent C is:
+        int c_result[10];
+        // Pure step for the consumer
         for (int x = 0; x < 10; x++) {
-            c_result[y][x] = x + y;
+            // Pure step for producer
+            int producer_storage[1];
+            producer_storage[0] = x * 17;
+            c_result[x] = 2 * producer_storage[0];
         }
-    }
-    // First update step for consumer
-    for (int x = 0; x < 10; x++) {
-        int producer_1_storage[1];
-        producer_1_storage[0] = (x * x) / 10 + 8;
-        c_result[0][x] += producer_1_storage[0];
-    }
-    // Second update step for consumer
-    for (int y = 0; y < 10; y++) {
-        int producer_2_storage[1];
-        producer_2_storage[0] = (y * (9 - y)) / 10 + 8;
-        c_result[y][0] += producer_2_storage[0];
-    }
-
-    // Check the results match
-    for (int y = 0; y < 10; y++) {
+        // Update step for the consumer
         for (int x = 0; x < 10; x++) {
-            if (halide_result(x, y) != c_result[y][x]) {
-                printf("halide_result(%d, %d) = %d instead of %d\n",
-                       x, y, halide_result(x, y), c_result[y][x]);
+            c_result[x] += 50;
+        }
+
+        // All of the pure step is evaluated before any of the
+        // update step, so there are two separate loops over x.
+
+        // Check the results match
+        for (int x = 0; x < 10; x++) {
+            if (halide_result(x) != c_result[x]) {
+                printf("halide_result(%d) = %d instead of %d\n",
+                       x, halide_result(x), c_result[x]);
                 return -1;
             }
         }
     }
-}
 
-{
-    // Case 5: Scheduling a producer under a reduction domain
-    // variable of the consumer.
+    {
+        // Case 2: The consumer references the producer in the update step only
+        Func producer, consumer;
+        producer(x) = x * 17;
+        consumer(x) = 100 - x * 10;
+        consumer(x) += producer(x);
 
-    // We are not just restricted to scheduling producers at
-    // the loops over the pure variables of the consumer. If a
-    // producer is only used within a loop over a reduction
-    // domain (RDom) variable, we can also schedule the
-    // producer there.
+        // Again we compute the producer per x coordinate of the
+        // consumer. This places producer code inside the update
+        // step of the consumer, because that's the only step that
+        // uses the producer.
+        producer.compute_at(consumer, x);
 
-    Func producer, consumer;
+        // Note however, that we didn't say:
+        //
+        // producer.compute_at(consumer.update(0), x).
+        //
+        // Scheduling is done with respect to Vars of a Func, and
+        // the Vars of a Func are shared across the pure and
+        // update steps.
 
-    RDom r(0, 5);
-    producer(x) = x % 8;
-    consumer(x) = x + 10;
-    consumer(x) += r + producer(x + r);
+        Buffer<int> halide_result = consumer.realize(10);
 
-    producer.compute_at(consumer, r);
+        // See figures/lesson_09_compute_at_update.gif for a visualization.
 
-    Buffer<int> halide_result = consumer.realize(10);
-
-    // See figures/lesson_09_compute_at_rvar.gif for a visualization.
-
-    // The equivalent C is:
-    int c_result[10];
-    // Pure step for the consumer.
-    for (int x = 0; x < 10; x++) {
-        c_result[x] = x + 10;
-    }
-    // Update step for the consumer.
-    for (int x = 0; x < 10; x++) {
-        // The loop over the reduction domain is always the inner loop.
-        for (int r = 0; r < 5; r++) {
-            // We've schedule the storage and computation of
-            // the producer here. We just need a single value.
+        // The equivalent C is:
+        int c_result[10];
+        // Pure step for the consumer
+        for (int x = 0; x < 10; x++) {
+            c_result[x] = 100 - x * 10;
+        }
+        // Update step for the consumer
+        for (int x = 0; x < 10; x++) {
+            // Pure step for producer
             int producer_storage[1];
-            // Pure step of the producer.
-            producer_storage[0] = (x + r) % 8;
+            producer_storage[0] = x * 17;
+            c_result[x] += producer_storage[0];
+        }
 
-            // Now use it in the update step of the consumer.
-            c_result[x] += r + producer_storage[0];
+        // Check the results match
+        for (int x = 0; x < 10; x++) {
+            if (halide_result(x) != c_result[x]) {
+                printf("halide_result(%d) = %d instead of %d\n",
+                       x, halide_result(x), c_result[x]);
+                return -1;
+            }
         }
     }
 
-    // Check the results match
-    for (int x = 0; x < 10; x++) {
-        if (halide_result(x) != c_result[x]) {
-            printf("halide_result(%d) = %d instead of %d\n",
-                   x, halide_result(x), c_result[x]);
-            return -1;
+    {
+        // Case 3: The consumer references the producer in
+        // multiple steps that share common variables
+        Func producer, consumer;
+        producer(x) = x * 17;
+        consumer(x) = 170 - producer(x);
+        consumer(x) += producer(x) / 2;
+
+        // Again we compute the producer per x coordinate of the
+        // consumer. This places producer code inside both the
+        // pure and the update step of the consumer. So there end
+        // up being two separate realizations of the producer, and
+        // redundant work occurs.
+        producer.compute_at(consumer, x);
+
+        Buffer<int> halide_result = consumer.realize(10);
+
+        // See figures/lesson_09_compute_at_pure_and_update.gif for a visualization.
+
+        // The equivalent C is:
+        int c_result[10];
+        // Pure step for the consumer
+        for (int x = 0; x < 10; x++) {
+            // Pure step for producer
+            int producer_storage[1];
+            producer_storage[0] = x * 17;
+            c_result[x] = 170 - producer_storage[0];
+        }
+        // Update step for the consumer
+        for (int x = 0; x < 10; x++) {
+            // Another copy of the pure step for producer
+            int producer_storage[1];
+            producer_storage[0] = x * 17;
+            c_result[x] += producer_storage[0] / 2;
+        }
+
+        // Check the results match
+        for (int x = 0; x < 10; x++) {
+            if (halide_result(x) != c_result[x]) {
+                printf("halide_result(%d) = %d instead of %d\n",
+                       x, halide_result(x), c_result[x]);
+                return -1;
+            }
         }
     }
-}
-}
 
-// A real-world example of a reduction inside a producer-consumer chain.
-{
-    // The default schedule for a reduction is a good one for
-    // convolution-like operations. For example, the following
-    // computes a 5x5 box-blur of our grayscale test image with a
-    // clamp-to-edge boundary condition:
+    {
+        // Case 4: The consumer references the producer in
+        // multiple steps that do not share common variables
+        Func producer, consumer;
+        producer(x, y) = (x * y) / 10 + 8;
+        consumer(x, y) = x + y;
+        consumer(x, 0) = producer(x, x);
+        consumer(0, y) = producer(y, 9 - y);
 
-    // First add the boundary condition.
-    Func clamped = BoundaryConditions::repeat_edge(input);
+        // In this case neither producer.compute_at(consumer, x)
+        // nor producer.compute_at(consumer, y) will work, because
+        // either one fails to cover one of the uses of the
+        // producer. So we'd have to inline producer, or use
+        // producer.compute_root().
 
-    // Define a 5x5 box that starts at (-2, -2)
-    RDom r(-2, 5, -2, 5);
+        // Let's say we really really want producer to be
+        // compute_at the inner loops of both consumer update
+        // steps. Halide doesn't allow multiple different
+        // schedules for a single Func, but we can work around it
+        // by making two wrappers around producer, and scheduling
+        // those instead:
 
-    // Compute the 5x5 sum around each pixel.
-    Func local_sum;
-    local_sum(x, y) = 0;  // Compute the sum as a 32-bit integer
-    local_sum(x, y) += clamped(x + r.x, y + r.y);
+        // Attempt 2:
+        Func producer_1, producer_2, consumer_2;
+        producer_1(x, y) = producer(x, y);
+        producer_2(x, y) = producer(x, y);
 
-    // Divide the sum by 25 to make it an average
-    Func blurry;
-    blurry(x, y) = cast<uint8_t>(local_sum(x, y) / 25);
+        consumer_2(x, y) = x + y;
+        consumer_2(x, 0) += producer_1(x, x);
+        consumer_2(0, y) += producer_2(y, 9 - y);
 
-    Buffer<uint8_t> halide_result = blurry.realize(input.width(), input.height());
+        // The wrapper functions give us two separate handles on
+        // the producer, so we can schedule them differently.
+        producer_1.compute_at(consumer_2, x);
+        producer_2.compute_at(consumer_2, y);
 
-    // The default schedule will inline 'clamped' into the update
-    // step of 'local_sum', because clamped only has a pure
-    // definition, and so its default schedule is fully-inlined.
-    // We will then compute local_sum per x coordinate of blurry,
-    // because the default schedule for reductions is
-    // compute-innermost. Here's the equivalent C:
+        Buffer<int> halide_result = consumer_2.realize(10, 10);
 
-    Buffer<uint8_t> c_result(input.width(), input.height());
-    for (int y = 0; y < input.height(); y++) {
-        for (int x = 0; x < input.width(); x++) {
-            int local_sum[1];
-            // Pure step of local_sum
-            local_sum[0] = 0;
-            // Update step of local_sum
-            for (int r_y = -2; r_y <= 2; r_y++) {
-                for (int r_x = -2; r_x <= 2; r_x++) {
-                    // The clamping has been inlined into the update step.
-                    int clamped_x = std::min(std::max(x + r_x, 0), input.width() - 1);
-                    int clamped_y = std::min(std::max(y + r_y, 0), input.height() - 1);
-                    local_sum[0] += input(clamped_x, clamped_y);
+        // See figures/lesson_09_compute_at_multiple_updates.mp4 for a visualization.
+
+        // The equivalent C is:
+        int c_result[10][10];
+        // Pure step for the consumer
+        for (int y = 0; y < 10; y++) {
+            for (int x = 0; x < 10; x++) {
+                c_result[y][x] = x + y;
+            }
+        }
+        // First update step for consumer
+        for (int x = 0; x < 10; x++) {
+            int producer_1_storage[1];
+            producer_1_storage[0] = (x * x) / 10 + 8;
+            c_result[0][x] += producer_1_storage[0];
+        }
+        // Second update step for consumer
+        for (int y = 0; y < 10; y++) {
+            int producer_2_storage[1];
+            producer_2_storage[0] = (y * (9 - y)) / 10 + 8;
+            c_result[y][0] += producer_2_storage[0];
+        }
+
+        // Check the results match
+        for (int y = 0; y < 10; y++) {
+            for (int x = 0; x < 10; x++) {
+                if (halide_result(x, y) != c_result[y][x]) {
+                    printf("halide_result(%d, %d) = %d instead of %d\n",
+                           x, y, halide_result(x, y), c_result[y][x]);
+                    return -1;
                 }
             }
-            // Pure step of blurry
-            c_result(x, y) = (uint8_t)(local_sum[0] / 25);
         }
     }
 
-    // Check the results match
-    for (int y = 0; y < input.height(); y++) {
-        for (int x = 0; x < input.width(); x++) {
-            if (halide_result(x, y) != c_result(x, y)) {
-                printf("halide_result(%d, %d) = %d instead of %d\n",
-                       x, y, halide_result(x, y), c_result(x, y));
+    {
+        // Case 5: Scheduling a producer under a reduction domain
+        // variable of the consumer.
+
+        // We are not just restricted to scheduling producers at
+        // the loops over the pure variables of the consumer. If a
+        // producer is only used within a loop over a reduction
+        // domain (RDom) variable, we can also schedule the
+        // producer there.
+
+        Func producer, consumer;
+
+        RDom r(0, 5);
+        producer(x) = x % 8;
+        consumer(x) = x + 10;
+        consumer(x) += r + producer(x + r);
+
+        producer.compute_at(consumer, r);
+
+        Buffer<int> halide_result = consumer.realize(10);
+
+        // See figures/lesson_09_compute_at_rvar.gif for a visualization.
+
+        // The equivalent C is:
+        int c_result[10];
+        // Pure step for the consumer.
+        for (int x = 0; x < 10; x++) {
+            c_result[x] = x + 10;
+        }
+        // Update step for the consumer.
+        for (int x = 0; x < 10; x++) {
+            // The loop over the reduction domain is always the inner loop.
+            for (int r = 0; r < 5; r++) {
+                // We've schedule the storage and computation of
+                // the producer here. We just need a single value.
+                int producer_storage[1];
+                // Pure step of the producer.
+                producer_storage[0] = (x + r) % 8;
+
+                // Now use it in the update step of the consumer.
+                c_result[x] += r + producer_storage[0];
+            }
+        }
+
+        // Check the results match
+        for (int x = 0; x < 10; x++) {
+            if (halide_result(x) != c_result[x]) {
+                printf("halide_result(%d) = %d instead of %d\n",
+                       x, halide_result(x), c_result[x]);
                 return -1;
             }
         }
     }
-}
 
-// Reduction helpers.
-{
-    // There are several reduction helper functions provided in
-    // Halide.h, which compute small reductions and schedule them
-    // innermost into their consumer. The most useful one is
-    // "sum".
-    Func f1;
-    RDom r(0, 100);
-    f1(x) = sum(r + x) * 7;
+    // A real-world example of a reduction inside a producer-consumer chain.
+    {
+        // The default schedule for a reduction is a good one for
+        // convolution-like operations. For example, the following
+        // computes a 5x5 box-blur of our grayscale test image with a
+        // clamp-to-edge boundary condition:
 
-    // Sum creates a small anonymous Func to do the reduction. It's equivalent to:
-    Func f2;
-    Func anon;
-    anon(x) = 0;
-    anon(x) += r + x;
-    f2(x) = anon(x) * 7;
+        // First add the boundary condition.
+        Func clamped = BoundaryConditions::repeat_edge(input);
 
-    // So even though f1 references a reduction domain, it is a
-    // pure function. The reduction domain has been swallowed to
-    // define the inner anonymous reduction.
+        // Define a 5x5 box that starts at (-2, -2)
+        RDom r(-2, 5, -2, 5);
 
-    Buffer<int> halide_result_1 = f1.realize(10);
-    Buffer<int> halide_result_2 = f2.realize(10);
+        // Compute the 5x5 sum around each pixel.
+        Func local_sum;
+        local_sum(x, y) = 0;  // Compute the sum as a 32-bit integer
+        local_sum(x, y) += clamped(x + r.x, y + r.y);
 
-    // The equivalent C is:
-    int c_result[10];
-    for (int x = 0; x < 10; x++) {
-        int anon[1];
-        anon[0] = 0;
-        for (int r = 0; r < 100; r++) {
-            anon[0] += r + x;
+        // Divide the sum by 25 to make it an average
+        Func blurry;
+        blurry(x, y) = cast<uint8_t>(local_sum(x, y) / 25);
+
+        Buffer<uint8_t> halide_result = blurry.realize(input.width(), input.height());
+
+        // The default schedule will inline 'clamped' into the update
+        // step of 'local_sum', because clamped only has a pure
+        // definition, and so its default schedule is fully-inlined.
+        // We will then compute local_sum per x coordinate of blurry,
+        // because the default schedule for reductions is
+        // compute-innermost. Here's the equivalent C:
+
+        Buffer<uint8_t> c_result(input.width(), input.height());
+        for (int y = 0; y < input.height(); y++) {
+            for (int x = 0; x < input.width(); x++) {
+                int local_sum[1];
+                // Pure step of local_sum
+                local_sum[0] = 0;
+                // Update step of local_sum
+                for (int r_y = -2; r_y <= 2; r_y++) {
+                    for (int r_x = -2; r_x <= 2; r_x++) {
+                        // The clamping has been inlined into the update step.
+                        int clamped_x = std::min(std::max(x + r_x, 0), input.width() - 1);
+                        int clamped_y = std::min(std::max(y + r_y, 0), input.height() - 1);
+                        local_sum[0] += input(clamped_x, clamped_y);
+                    }
+                }
+                // Pure step of blurry
+                c_result(x, y) = (uint8_t)(local_sum[0] / 25);
+            }
         }
-        c_result[x] = anon[0] * 7;
+
+        // Check the results match
+        for (int y = 0; y < input.height(); y++) {
+            for (int x = 0; x < input.width(); x++) {
+                if (halide_result(x, y) != c_result(x, y)) {
+                    printf("halide_result(%d, %d) = %d instead of %d\n",
+                           x, y, halide_result(x, y), c_result(x, y));
+                    return -1;
+                }
+            }
+        }
     }
 
-    // Check they all match.
-    for (int x = 0; x < 10; x++) {
-        if (halide_result_1(x) != c_result[x]) {
-            printf("halide_result_1(%d) = %d instead of %d\n",
-                   x, halide_result_1(x), c_result[x]);
-            return -1;
+    // Reduction helpers.
+    {
+        // There are several reduction helper functions provided in
+        // Halide.h, which compute small reductions and schedule them
+        // innermost into their consumer. The most useful one is
+        // "sum".
+        Func f1;
+        RDom r(0, 100);
+        f1(x) = sum(r + x) * 7;
+
+        // Sum creates a small anonymous Func to do the reduction. It's equivalent to:
+        Func f2;
+        Func anon;
+        anon(x) = 0;
+        anon(x) += r + x;
+        f2(x) = anon(x) * 7;
+
+        // So even though f1 references a reduction domain, it is a
+        // pure function. The reduction domain has been swallowed to
+        // define the inner anonymous reduction.
+
+        Buffer<int> halide_result_1 = f1.realize(10);
+        Buffer<int> halide_result_2 = f2.realize(10);
+
+        // The equivalent C is:
+        int c_result[10];
+        for (int x = 0; x < 10; x++) {
+            int anon[1];
+            anon[0] = 0;
+            for (int r = 0; r < 100; r++) {
+                anon[0] += r + x;
+            }
+            c_result[x] = anon[0] * 7;
         }
-        if (halide_result_2(x) != c_result[x]) {
-            printf("halide_result_2(%d) = %d instead of %d\n",
-                   x, halide_result_2(x), c_result[x]);
-            return -1;
+
+        // Check they all match.
+        for (int x = 0; x < 10; x++) {
+            if (halide_result_1(x) != c_result[x]) {
+                printf("halide_result_1(%d) = %d instead of %d\n",
+                       x, halide_result_1(x), c_result[x]);
+                return -1;
+            }
+            if (halide_result_2(x) != c_result[x]) {
+                printf("halide_result_2(%d) = %d instead of %d\n",
+                       x, halide_result_2(x), c_result[x]);
+                return -1;
+            }
         }
     }
-}
 
-// A complex example that uses reduction helpers.
-{
-    // Other reduction helpers include "product", "minimum",
-    // "maximum", "argmin", and "argmax". Using argmin and argmax
-    // requires understanding tuples, which come in a later
-    // lesson. Let's use minimum and maximum to compute the local
-    // spread of our grayscale image.
+    // A complex example that uses reduction helpers.
+    {
+        // Other reduction helpers include "product", "minimum",
+        // "maximum", "argmin", and "argmax". Using argmin and argmax
+        // requires understanding tuples, which come in a later
+        // lesson. Let's use minimum and maximum to compute the local
+        // spread of our grayscale image.
 
-    // First, add a boundary condition to the input.
-    Func clamped;
-    Expr x_clamped = clamp(x, 0, input.width() - 1);
-    Expr y_clamped = clamp(y, 0, input.height() - 1);
-    clamped(x, y) = input(x_clamped, y_clamped);
+        // First, add a boundary condition to the input.
+        Func clamped;
+        Expr x_clamped = clamp(x, 0, input.width() - 1);
+        Expr y_clamped = clamp(y, 0, input.height() - 1);
+        clamped(x, y) = input(x_clamped, y_clamped);
 
-    RDom box(-2, 5, -2, 5);
-    // Compute the local maximum minus the local minimum:
-    Func spread;
-    spread(x, y) = (maximum(clamped(x + box.x, y + box.y)) -
-                    minimum(clamped(x + box.x, y + box.y)));
+        RDom box(-2, 5, -2, 5);
+        // Compute the local maximum minus the local minimum:
+        Func spread;
+        spread(x, y) = (maximum(clamped(x + box.x, y + box.y)) -
+                        minimum(clamped(x + box.x, y + box.y)));
 
-    // Compute the result in strips of 32 scanlines
-    Var yo, yi;
-    spread.split(y, yo, yi, 32).parallel(yo);
+        // Compute the result in strips of 32 scanlines
+        Var yo, yi;
+        spread.split(y, yo, yi, 32).parallel(yo);
 
-    // Vectorize across x within the strips. This implicitly
-    // vectorizes stuff that is computed within the loop over x in
-    // spread, which includes our minimum and maximum helpers, so
-    // they get vectorized too.
-    spread.vectorize(x, 16);
+        // Vectorize across x within the strips. This implicitly
+        // vectorizes stuff that is computed within the loop over x in
+        // spread, which includes our minimum and maximum helpers, so
+        // they get vectorized too.
+        spread.vectorize(x, 16);
 
-    // We'll apply the boundary condition by padding each scanline
-    // as we need it in a circular buffer (see lesson 08).
-    clamped.store_at(spread, yo).compute_at(spread, yi);
+        // We'll apply the boundary condition by padding each scanline
+        // as we need it in a circular buffer (see lesson 08).
+        clamped.store_at(spread, yo).compute_at(spread, yi);
 
-    Buffer<uint8_t> halide_result = spread.realize(input.width(), input.height());
+        Buffer<uint8_t> halide_result = spread.realize(input.width(), input.height());
 
 // The C equivalent is almost too horrible to contemplate (and
 // took me a long time to debug). This time I want to time
@@ -792,143 +792,142 @@ int main(int argc, char **argv) {
 // parallel for loop (you'll need to compile with -fopenmp or
 // similar to get correct timing).
 #ifdef __SSE2__
-
-    // Don't include the time required to allocate the output buffer.
-    Buffer<uint8_t> c_result(input.width(), input.height());
+        // Don't include the time required to allocate the output buffer.
+        Buffer<uint8_t> c_result(input.width(), input.height());
 
 #ifdef _OPENMP
-    double t1 = current_time();
+        double t1 = current_time();
 #endif
 
-    // Run this one hundred times so we can average the timing results.
-    for (int iters = 0; iters < 100; iters++) {
+        // Run this one hundred times so we can average the timing results.
+        for (int iters = 0; iters < 100; iters++) {
 
 #pragma omp parallel for
-        for (int yo = 0; yo < (input.height() + 31) / 32; yo++) {
-            int y_base = std::min(yo * 32, input.height() - 32);
+            for (int yo = 0; yo < (input.height() + 31) / 32; yo++) {
+                int y_base = std::min(yo * 32, input.height() - 32);
 
-            // Compute clamped in a circular buffer of size 8
-            // (smallest power of two greater than 5). Each thread
-            // needs its own allocation, so it must occur here.
+                // Compute clamped in a circular buffer of size 8
+                // (smallest power of two greater than 5). Each thread
+                // needs its own allocation, so it must occur here.
 
-            int clamped_width = input.width() + 4;
-            uint8_t *clamped_storage = (uint8_t *)malloc(clamped_width * 8);
+                int clamped_width = input.width() + 4;
+                uint8_t *clamped_storage = (uint8_t *)malloc(clamped_width * 8);
 
-            for (int yi = 0; yi < 32; yi++) {
-                int y = y_base + yi;
+                for (int yi = 0; yi < 32; yi++) {
+                    int y = y_base + yi;
 
-                uint8_t *output_row = &c_result(0, y);
+                    uint8_t *output_row = &c_result(0, y);
 
-                // Compute clamped for this scanline, skipping rows
-                // already computed within this slice.
-                int min_y_clamped = (yi == 0) ? (y - 2) : (y + 2);
-                int max_y_clamped = (y + 2);
-                for (int cy = min_y_clamped; cy <= max_y_clamped; cy++) {
-                    // Figure out which row of the circular buffer
-                    // we're filling in using bitmasking:
-                    uint8_t *clamped_row =
-                        clamped_storage + (cy & 7) * clamped_width;
-
-                    // Figure out which row of the input we're reading
-                    // from by clamping the y coordinate:
-                    int clamped_y = std::min(std::max(cy, 0), input.height() - 1);
-                    uint8_t *input_row = &input(0, clamped_y);
-
-                    // Fill it in with the padding.
-                    for (int x = -2; x < input.width() + 2; x++) {
-                        int clamped_x = std::min(std::max(x, 0), input.width() - 1);
-                        *clamped_row++ = input_row[clamped_x];
-                    }
-                }
-
-                // Now iterate over vectors of x for the pure step of the output.
-                for (int x_vec = 0; x_vec < (input.width() + 15) / 16; x_vec++) {
-                    int x_base = std::min(x_vec * 16, input.width() - 16);
-
-                    // Allocate storage for the minimum and maximum
-                    // helpers. One vector is enough.
-                    __m128i minimum_storage, maximum_storage;
-
-                    // The pure step for the maximum is a vector of zeros
-                    maximum_storage = _mm_setzero_si128();
-
-                    // The update step for maximum
-                    for (int max_y = y - 2; max_y <= y + 2; max_y++) {
+                    // Compute clamped for this scanline, skipping rows
+                    // already computed within this slice.
+                    int min_y_clamped = (yi == 0) ? (y - 2) : (y + 2);
+                    int max_y_clamped = (y + 2);
+                    for (int cy = min_y_clamped; cy <= max_y_clamped; cy++) {
+                        // Figure out which row of the circular buffer
+                        // we're filling in using bitmasking:
                         uint8_t *clamped_row =
-                            clamped_storage + (max_y & 7) * clamped_width;
-                        for (int max_x = x_base - 2; max_x <= x_base + 2; max_x++) {
-                            __m128i v = _mm_loadu_si128(
-                                (__m128i const *)(clamped_row + max_x + 2));
-                            maximum_storage = _mm_max_epu8(maximum_storage, v);
+                            clamped_storage + (cy & 7) * clamped_width;
+
+                        // Figure out which row of the input we're reading
+                        // from by clamping the y coordinate:
+                        int clamped_y = std::min(std::max(cy, 0), input.height() - 1);
+                        uint8_t *input_row = &input(0, clamped_y);
+
+                        // Fill it in with the padding.
+                        for (int x = -2; x < input.width() + 2; x++) {
+                            int clamped_x = std::min(std::max(x, 0), input.width() - 1);
+                            *clamped_row++ = input_row[clamped_x];
                         }
                     }
 
-                    // The pure step for the minimum is a vector of
-                    // ones. Create it by comparing something to
-                    // itself.
-                    minimum_storage = _mm_cmpeq_epi32(_mm_setzero_si128(),
-                                                      _mm_setzero_si128());
+                    // Now iterate over vectors of x for the pure step of the output.
+                    for (int x_vec = 0; x_vec < (input.width() + 15) / 16; x_vec++) {
+                        int x_base = std::min(x_vec * 16, input.width() - 16);
 
-                    // The update step for minimum.
-                    for (int min_y = y - 2; min_y <= y + 2; min_y++) {
-                        uint8_t *clamped_row =
-                            clamped_storage + (min_y & 7) * clamped_width;
-                        for (int min_x = x_base - 2; min_x <= x_base + 2; min_x++) {
-                            __m128i v = _mm_loadu_si128(
-                                (__m128i const *)(clamped_row + min_x + 2));
-                            minimum_storage = _mm_min_epu8(minimum_storage, v);
+                        // Allocate storage for the minimum and maximum
+                        // helpers. One vector is enough.
+                        __m128i minimum_storage, maximum_storage;
+
+                        // The pure step for the maximum is a vector of zeros
+                        maximum_storage = _mm_setzero_si128();
+
+                        // The update step for maximum
+                        for (int max_y = y - 2; max_y <= y + 2; max_y++) {
+                            uint8_t *clamped_row =
+                                clamped_storage + (max_y & 7) * clamped_width;
+                            for (int max_x = x_base - 2; max_x <= x_base + 2; max_x++) {
+                                __m128i v = _mm_loadu_si128(
+                                    (__m128i const *)(clamped_row + max_x + 2));
+                                maximum_storage = _mm_max_epu8(maximum_storage, v);
+                            }
                         }
+
+                        // The pure step for the minimum is a vector of
+                        // ones. Create it by comparing something to
+                        // itself.
+                        minimum_storage = _mm_cmpeq_epi32(_mm_setzero_si128(),
+                                                          _mm_setzero_si128());
+
+                        // The update step for minimum.
+                        for (int min_y = y - 2; min_y <= y + 2; min_y++) {
+                            uint8_t *clamped_row =
+                                clamped_storage + (min_y & 7) * clamped_width;
+                            for (int min_x = x_base - 2; min_x <= x_base + 2; min_x++) {
+                                __m128i v = _mm_loadu_si128(
+                                    (__m128i const *)(clamped_row + min_x + 2));
+                                minimum_storage = _mm_min_epu8(minimum_storage, v);
+                            }
+                        }
+
+                        // Now compute the spread.
+                        __m128i spread = _mm_sub_epi8(maximum_storage, minimum_storage);
+
+                        // Store it.
+                        _mm_storeu_si128((__m128i *)(output_row + x_base), spread);
                     }
-
-                    // Now compute the spread.
-                    __m128i spread = _mm_sub_epi8(maximum_storage, minimum_storage);
-
-                    // Store it.
-                    _mm_storeu_si128((__m128i *)(output_row + x_base), spread);
                 }
+
+                free(clamped_storage);
             }
-
-            free(clamped_storage);
         }
-    }
 
 // Skip the timing comparison if we don't have openmp
 // enabled. Otherwise it's unfair to C.
 #ifdef _OPENMP
-    double t2 = current_time();
+        double t2 = current_time();
 
-    // Now run the Halide version again without the
-    // jit-compilation overhead. Also run it one hundred times.
-    for (int iters = 0; iters < 100; iters++) {
-        spread.realize(halide_result);
-    }
+        // Now run the Halide version again without the
+        // jit-compilation overhead. Also run it one hundred times.
+        for (int iters = 0; iters < 100; iters++) {
+            spread.realize(halide_result);
+        }
 
-    double t3 = current_time();
+        double t3 = current_time();
 
-    // Report the timings. On my machine they both take about 3ms
-    // for the 4-megapixel input (fast!), which makes sense,
-    // because they're using the same vectorization and
-    // parallelization strategy. However I find the Halide easier
-    // to read, write, debug, modify, and port.
-    printf("Halide spread took %f ms. C equivalent took %f ms\n",
-           (t3 - t2) / 100, (t2 - t1) / 100);
+        // Report the timings. On my machine they both take about 3ms
+        // for the 4-megapixel input (fast!), which makes sense,
+        // because they're using the same vectorization and
+        // parallelization strategy. However I find the Halide easier
+        // to read, write, debug, modify, and port.
+        printf("Halide spread took %f ms. C equivalent took %f ms\n",
+               (t3 - t2) / 100, (t2 - t1) / 100);
 
 #endif  // _OPENMP
 
-    // Check the results match:
-    for (int y = 0; y < input.height(); y++) {
-        for (int x = 0; x < input.width(); x++) {
-            if (halide_result(x, y) != c_result(x, y)) {
-                printf("halide_result(%d, %d) = %d instead of %d\n",
-                       x, y, halide_result(x, y), c_result(x, y));
-                return -1;
+        // Check the results match:
+        for (int y = 0; y < input.height(); y++) {
+            for (int x = 0; x < input.width(); x++) {
+                if (halide_result(x, y) != c_result(x, y)) {
+                    printf("halide_result(%d, %d) = %d instead of %d\n",
+                           x, y, halide_result(x, y), c_result(x, y));
+                    return -1;
+                }
             }
         }
-    }
 
 #endif  // __SSE2__
-}
+    }
 
-printf("Success!\n");
-return 0;
+    printf("Success!\n");
+    return 0;
 }

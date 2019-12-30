@@ -21,7 +21,13 @@ using namespace Halide;
 
 // Support code for loading pngs.
 #include "halide_image_io.h"
+
 using namespace Halide::Tools;
+
+// clang-format makes some odd choices in this file;
+// we'll disable it here to maintain our choices.
+//
+// clang-format off
 
 int main(int argc, char **argv) {
     // First we'll declare some Vars to use below.
@@ -41,15 +47,13 @@ int main(int argc, char **argv) {
         Func blur_x("blur_x");
         blur_x(x, y, c) = (input_16(x - 1, y, c) +
                            2 * input_16(x, y, c) +
-                           input_16(x + 1, y, c)) /
-                          4;
+                           input_16(x + 1, y, c)) / 4;
 
         // Blur it vertically:
         Func blur_y("blur_y");
         blur_y(x, y, c) = (blur_x(x, y - 1, c) +
                            2 * blur_x(x, y, c) +
-                           blur_x(x, y + 1, c)) /
-                          4;
+                           blur_x(x, y + 1, c)) / 4;
 
         // Convert back to 8-bit.
         Func output("output");
@@ -145,15 +149,13 @@ int main(int argc, char **argv) {
         Func blur_x("blur_x");
         blur_x(x, y, c) = (input_16(x - 1, y, c) +
                            2 * input_16(x, y, c) +
-                           input_16(x + 1, y, c)) /
-                          4;
+                           input_16(x + 1, y, c)) / 4;
 
         // Blur it vertically:
         Func blur_y("blur_y");
         blur_y(x, y, c) = (blur_x(x, y - 1, c) +
                            2 * blur_x(x, y, c) +
-                           blur_x(x, y + 1, c)) /
-                          4;
+                           blur_x(x, y + 1, c)) / 4;
 
         // Convert back to 8-bit.
         Func output("output");

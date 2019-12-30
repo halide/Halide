@@ -152,14 +152,15 @@ int main(int argc, char **argv) {
         Var fizz("fizz"), buzz("buzz");
         Expr e = 1;
         for (int i = 2; i < 100; i++) {
-            if (i % 3 == 0 && i % 5 == 0)
+            if (i % 3 == 0 && i % 5 == 0) {
                 e += fizz * buzz;
-            else if (i % 3 == 0)
+            } else if (i % 3 == 0) {
                 e += fizz;
-            else if (i % 5 == 0)
+            } else if (i % 5 == 0) {
                 e += buzz;
-            else
+            } else {
                 e += i;
+            }
         }
         std::cout << "Printing a complex Expr: " << e << "\n";
     }

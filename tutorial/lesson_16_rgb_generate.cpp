@@ -127,17 +127,11 @@ public:
             // in c is one. We can tell Halide to assume (and assert)
             // that this is the case for the input and output like so:
 
-            input
-                .dim(0)
-                .set_stride(3)  // stride in dimension 0 (x) is three
-                .dim(2)
-                .set_stride(1);  // stride in dimension 2 (c) is one
+            input.dim(0).set_stride(3);  // stride in dimension 0 (x) is three
+            input.dim(2).set_stride(1);  // stride in dimension 2 (c) is one
 
-            brighter
-                .dim(0)
-                .set_stride(3)
-                .dim(2)
-                .set_stride(1);
+            brighter.dim(0).set_stride(3);
+            brighter.dim(2).set_stride(1);
 
             // For interleaved layout, you may want to use a different
             // schedule. We'll tell Halide to additionally assume and
