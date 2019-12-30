@@ -42,8 +42,8 @@ int main(int argc, char **argv) {
 
     // The remaining levels should be averaging of the levels above them.
     for (int l = 1; l < 10; l++) {
-        for (int y = 0; y<input.height()> > l; y++) {
-            for (int x = 0; x<input.width()> > l; x++) {
+        for (int y = 0; y < (input.height() >> l); y++) {
+            for (int x = 0; x < (input.width() >> l); x++) {
                 float correct = (levels[l - 1](2 * x, 2 * y) +
                                  levels[l - 1](2 * x + 1, 2 * y) +
                                  levels[l - 1](2 * x, 2 * y + 1) +
