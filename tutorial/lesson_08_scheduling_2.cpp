@@ -19,11 +19,6 @@
 
 using namespace Halide;
 
-// clang-format makes some odd choices in this file;
-// we'll disable it here to maintain our choices.
-//
-// clang-format off
-
 int main(int argc, char **argv) {
     // First we'll declare some Vars to use below.
     Var x("x"), y("y");
