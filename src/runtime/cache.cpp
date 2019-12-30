@@ -3,7 +3,9 @@
 #include "printer.h"
 #include "scoped_mutex_lock.h"
 
-namespace Halide { namespace Runtime { namespace Internal {
+namespace Halide {
+namespace Runtime {
+namespace Internal {
 
 #define CACHE_DEBUGGING 0
 
@@ -16,7 +18,6 @@ WEAK void debug_print_buffer(void *user_context, const char *buf_name, const hal
                             << ", " << buf.dim[i].stride << ") ";
     }
     debug(user_context) << "\n";
-
 }
 
 WEAK char to_hex_char(int val) {
@@ -30,9 +31,9 @@ WEAK void debug_print_key(void *user_context, const char *msg, const uint8_t *ca
     debug(user_context) << "Key for " << msg << "\n";
     char buf[1024];
     bool append_ellipses = false;
-    if ((size_t)key_size > (sizeof(buf) / 2) - 1) { // Each byte in key can take two bytes in output
+    if ((size_t)key_size > (sizeof(buf) / 2) - 1) {  // Each byte in key can take two bytes in output
         append_ellipses = true;
-        key_size = (sizeof(buf) / 2) - 4; // room for NUL and "..."
+        key_size = (sizeof(buf) / 2) - 4;  // room for NUL and "..."
     }
     char *buf_ptr = buf;
     for (int i = 0; i < key_size; i++) {
@@ -57,7 +58,6 @@ WEAK bool keys_equal(const uint8_t *key1, const uint8_t *key2, size_t key_size) 
     return memcmp(key1, key2, key_size) == 0;
 }
 
-
 WEAK bool buffer_has_shape(const halide_buffer_t *buf, const halide_dimension_t *shape) {
     for (int i = 0; i < buf->dimensions; i++) {
         if (buf->dim[i] != shape[i]) return false;
@@ -73,7 +73,7 @@ struct CacheEntry {
     size_t key_size;
     uint8_t *key;
     uint32_t hash;
-    uint32_t in_use_count; // 0 if none returned from halide_cache_lookup
+    uint32_t in_use_count;  // 0 if none returned from halide_cache_lookup
     uint32_t tuple_count;
     // The shape of the computed data. There may be more data allocated than this.
     int32_t dimensions;
@@ -87,7 +87,6 @@ struct CacheEntry {
               int32_t tuples, halide_buffer_t **tuple_buffers);
     void destroy();
     halide_buffer_t &buffer(int32_t i);
-
 };
 
 struct CacheBlockHeader {
@@ -106,7 +105,7 @@ WEAK __attribute((always_inline)) size_t header_bytes() {
     return (s + mask) & ~mask;
 }
 
-WEAK CacheBlockHeader *get_pointer_to_header(uint8_t * host) {
+WEAK CacheBlockHeader *get_pointer_to_header(uint8_t *host) {
     return (CacheBlockHeader *)(host - header_bytes());
 }
 
@@ -161,7 +160,7 @@ WEAK bool CacheEntry::init(const uint8_t *cache_key, size_t cache_key_size,
     // Copy over the tuple buffers and the shapes of the allocated regions
     for (uint32_t i = 0; i < tuple_count; i++) {
         buf[i] = *tuple_buffers[i];
-        buf[i].dim = computed_bounds + (i+1)*dimensions;
+        buf[i].dim = computed_bounds + (i + 1) * dimensions;
         for (int j = 0; j < dimensions; j++) {
             buf[i].dim[j] = tuple_buffers[i]->dim[j];
         }
@@ -177,7 +176,7 @@ WEAK void CacheEntry::destroy() {
     halide_free(NULL, metadata_storage);
 }
 
-WEAK uint32_t djb_hash(const uint8_t *key, size_t key_size)  {
+WEAK uint32_t djb_hash(const uint8_t *key, size_t key_size) {
     uint32_t h = 5381;
     for (size_t i = 0; i < key_size; i++) {
         h = (h << 5) + h + key[i];
@@ -185,7 +184,7 @@ WEAK uint32_t djb_hash(const uint8_t *key, size_t key_size)  {
     return h;
 }
 
-WEAK halide_mutex memoization_lock = { { 0 } };
+WEAK halide_mutex memoization_lock = {{0}};
 
 const size_t kHashTableSize = 256;
 
@@ -307,7 +306,9 @@ WEAK void prune_cache() {
 #endif
 }
 
-}}} // namespace Halide::Runtime::Internal
+}  // namespace Internal
+}  // namespace Runtime
+}  // namespace Halide
 
 extern "C" {
 
@@ -460,7 +461,6 @@ WEAK int halide_memoization_cache_store(void *user_context, const uint8_t *cache
                 // so halide_memoization_cache_release can free the buffer.
                 for (int32_t i = 0; i < tuple_count; i++) {
                     get_pointer_to_header(tuple_buffers[i]->host)->entry = NULL;
-
                 }
                 return 0;
             }
@@ -563,10 +563,10 @@ WEAK void halide_memoization_cache_cleanup() {
 namespace {
 
 __attribute__((destructor))
-WEAK void halide_cache_cleanup() {
+WEAK void
+halide_cache_cleanup() {
     halide_memoization_cache_cleanup();
 }
 
-}
-
+}  // namespace
 }

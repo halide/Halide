@@ -8,10 +8,14 @@
 
 extern "C" WIN32API int32_t Sleep(int32_t timeout);
 
-namespace Halide { namespace Runtime { namespace Internal {
+namespace Halide {
+namespace Runtime {
+namespace Internal {
 
 WEAK void halide_thread_yield() {
     Sleep(0);
 }
 
-}}}
+}  // namespace Internal
+}  // namespace Runtime
+}  // namespace Halide

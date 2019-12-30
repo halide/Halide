@@ -1,10 +1,13 @@
 #include "HalideRuntime.h"
-#include "mini_hexagon_dma.h"
-#include "scoped_mutex_lock.h"
 #include "hexagon_dma_pool.h"
+#include "mini_hexagon_dma.h"
 #include "printer.h"
+#include "scoped_mutex_lock.h"
 
-namespace Halide { namespace Runtime { namespace Internal { namespace Hexagon {
+namespace Halide {
+namespace Runtime {
+namespace Internal {
+namespace Hexagon {
 
 typedef struct hexagon_local_cache {
     void *l2memory;
@@ -13,18 +16,21 @@ typedef struct hexagon_local_cache {
     struct hexagon_local_cache *next;
 } hexagon_cache_pool_t;
 
-typedef hexagon_cache_pool_t* pcache_pool;
+typedef hexagon_cache_pool_t *pcache_pool;
 
 WEAK pcache_pool hexagon_cache_pool = NULL;
 WEAK halide_mutex hexagon_cache_mutex;
 
-}}}}
+}  // namespace Hexagon
+}  // namespace Internal
+}  // namespace Runtime
+}  // namespace Halide
 
 using namespace Halide::Runtime::Internal::Hexagon;
 
 namespace {
 
-inline void* free_unused_buffers(void* user_context) {
+inline void *free_unused_buffers(void *user_context) {
     // Walk the list and deallocate unused blocks.
     ScopedMutexLock lock(&hexagon_cache_mutex);
     pcache_pool temp2 = hexagon_cache_pool;
@@ -55,7 +61,7 @@ inline void* free_unused_buffers(void* user_context) {
 
 // Retry logic if enabled will walk the list and deallocate unused blocks to make room for a larger block size
 // Once all unused blocks are deallocated it will try to allocate a larger block
-inline void *hexagon_cache_pool_get (void *user_context, size_t size, bool retry) {
+inline void *hexagon_cache_pool_get(void *user_context, size_t size, bool retry) {
 
     pcache_pool prev = NULL;
     pcache_pool temp = hexagon_cache_pool;
@@ -74,14 +80,14 @@ inline void *hexagon_cache_pool_get (void *user_context, size_t size, bool retry
     }
 
     // If we are still here that means temp was null.
-    temp = (pcache_pool) malloc(sizeof(hexagon_cache_pool_t));
+    temp = (pcache_pool)malloc(sizeof(hexagon_cache_pool_t));
     if (temp == NULL) {
         error(user_context) << "Hexagon: Out of memory (Cache Pool Allocation Failed)\n";
         return NULL;
     }
     uint8_t *mem = (uint8_t *)HAP_cache_lock(sizeof(char) * size, NULL);
     if ((mem == NULL) && retry) {
-        pcache_pool prev_node = (pcache_pool) free_unused_buffers(user_context);
+        pcache_pool prev_node = (pcache_pool)free_unused_buffers(user_context);
         // Retry one more time after deallocating unused nodes.
         mem = (uint8_t *)HAP_cache_lock(sizeof(char) * size, NULL);
         prev = prev_node;
@@ -100,7 +106,7 @@ inline void *hexagon_cache_pool_get (void *user_context, size_t size, bool retry
     temp->used = true;
     temp->next = NULL;
 
-    { 
+    {
         ScopedMutexLock lock_obj(&hexagon_cache_mutex);
         if (prev != NULL) {
             prev->next = temp;
@@ -108,7 +114,7 @@ inline void *hexagon_cache_pool_get (void *user_context, size_t size, bool retry
             hexagon_cache_pool = temp;
         }
     }
-    return (void*) temp->l2memory;
+    return (void *)temp->l2memory;
 }
 
 inline void hexagon_cache_pool_put(void *user_context, void *cache_mem) {
@@ -172,5 +178,4 @@ WEAK int halide_hexagon_free_l2_pool(void *user_context) {
     debug(user_context) << "halide_hexagon_free_l2_pool\n";
     return hexagon_cache_pool_free(user_context);
 }
-
 }

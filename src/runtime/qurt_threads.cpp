@@ -21,7 +21,7 @@ void spawn_thread_helper(void *arg) {
     spawned_thread *t = (spawned_thread *)arg;
     t->f(t->closure);
 }
-}
+}  // namespace
 
 extern "C" {
 
@@ -32,15 +32,15 @@ int halide_host_cpu_count() {
     return 4;
 }
 
-#define STACK_SIZE 256*1024
+#define STACK_SIZE 256 * 1024
 
 WEAK uint16_t halide_qurt_default_thread_priority = 100;
 
 WEAK void halide_set_default_thread_priority(int priority) {
     if (priority > 0xFF) {
-        priority = 0xFF;        // Clamp to max priority
+        priority = 0xFF;  // Clamp to max priority
     } else if (priority <= 0) {
-        return;                 // Ignore settings of zero and below
+        return;  // Ignore settings of zero and below
     }
     halide_qurt_default_thread_priority = priority;
 }
@@ -73,9 +73,11 @@ WEAK void halide_join_thread(struct halide_thread *thread_arg) {
     free(t);
 }
 
-} // extern "C"
+}  // extern "C"
 
-namespace Halide { namespace Runtime { namespace Internal {
+namespace Halide {
+namespace Runtime {
+namespace Internal {
 
 namespace Synchronization {
 
@@ -88,7 +90,8 @@ struct thread_parker {
     thread_parker(const thread_parker &) = delete;
 #endif
 
-    __attribute__((always_inline)) thread_parker() : should_park(false) {
+    __attribute__((always_inline)) thread_parker()
+        : should_park(false) {
         qurt_mutex_init(&mutex);
         qurt_cond_init(&condvar);
         should_park = false;
@@ -125,7 +128,10 @@ struct thread_parker {
     }
 };
 
-}}}} // namespace Halide::Runtime::Internal::Synchronization
+}  // namespace Synchronization
+}  // namespace Internal
+}  // namespace Runtime
+}  // namespace Halide
 
 #include "synchronization_common.h"
 

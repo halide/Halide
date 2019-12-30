@@ -21,7 +21,7 @@ extern void halide_qurt_hvx_unlock_as_destructor(void *user_context, void * /*ob
 // @}
 
 #ifdef __cplusplus
-} // End extern "C"
+}  // End extern "C"
 #endif
 
-#endif // HALIDE_HALIDERUNTIMEQURT_H
+#endif  // HALIDE_HALIDERUNTIMEQURT_H

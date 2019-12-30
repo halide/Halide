@@ -14,7 +14,9 @@ WEAK halide_profiler_state *halide_profiler_get_state() {
 }
 }
 
-namespace Halide { namespace Runtime { namespace Internal {
+namespace Halide {
+namespace Runtime {
+namespace Internal {
 
 WEAK halide_profiler_pipeline_stats *find_or_create_pipeline(const char *pipeline_name, int num_funcs, const uint64_t *func_names) {
     halide_profiler_state *s = halide_profiler_get_state();
@@ -133,11 +135,13 @@ WEAK void sampling_profiler_thread(void *) {
     halide_mutex_unlock(&s->lock);
 }
 
-}}}
+}  // namespace Internal
+}  // namespace Runtime
+}  // namespace Halide
 
 namespace {
 
-template <typename T>
+template<typename T>
 void sync_compare_max_and_swap(T *ptr, T val) {
     T old_val = *ptr;
     while (val > old_val) {
@@ -149,7 +153,7 @@ void sync_compare_max_and_swap(T *ptr, T val) {
     }
 }
 
-}
+}  // namespace
 
 extern "C" {
 // Returns the address of the pipeline state associated with pipeline_name.
@@ -197,7 +201,7 @@ WEAK int halide_profiler_pipeline_start(void *user_context,
 WEAK void halide_profiler_stack_peak_update(void *user_context,
                                             void *pipeline_state,
                                             uint64_t *f_values) {
-    halide_profiler_pipeline_stats *p_stats = (halide_profiler_pipeline_stats *) pipeline_state;
+    halide_profiler_pipeline_stats *p_stats = (halide_profiler_pipeline_stats *)pipeline_state;
     halide_assert(user_context, p_stats != NULL);
 
     // Note: Update to the counter is done without grabbing the state's lock to
@@ -224,7 +228,7 @@ WEAK void halide_profiler_memory_allocate(void *user_context,
         return;
     }
 
-    halide_profiler_pipeline_stats *p_stats = (halide_profiler_pipeline_stats *) pipeline_state;
+    halide_profiler_pipeline_stats *p_stats = (halide_profiler_pipeline_stats *)pipeline_state;
     halide_assert(user_context, p_stats != NULL);
     halide_assert(user_context, func_id >= 0);
     halide_assert(user_context, func_id < p_stats->num_funcs);
@@ -260,7 +264,7 @@ WEAK void halide_profiler_memory_free(void *user_context,
         return;
     }
 
-    halide_profiler_pipeline_stats *p_stats = (halide_profiler_pipeline_stats *) pipeline_state;
+    halide_profiler_pipeline_stats *p_stats = (halide_profiler_pipeline_stats *)pipeline_state;
     halide_assert(user_context, p_stats != NULL);
     halide_assert(user_context, func_id >= 0);
     halide_assert(user_context, func_id < p_stats->num_funcs);
@@ -292,7 +296,7 @@ WEAK void halide_profiler_report_unlocked(void *user_context, halide_profiler_st
         sstr.clear();
         int alloc_avg = 0;
         if (p->num_allocs != 0) {
-            alloc_avg = p->memory_total/p->num_allocs;
+            alloc_avg = p->memory_total / p->num_allocs;
         }
         bool serial = p->active_threads_numerator == p->active_threads_denominator;
         float threads = p->active_threads_numerator / (p->active_threads_denominator + 1e-10);
@@ -331,7 +335,8 @@ WEAK void halide_profiler_report_unlocked(void *user_context, halide_profiler_st
 
                 sstr << "  " << fs->name << ": ";
                 cursor += 25;
-                while (sstr.size() < cursor) sstr << " ";
+                while (sstr.size() < cursor)
+                    sstr << " ";
 
                 float ft = fs->time / (p->runs * 1000000.0f);
                 sstr << ft;
@@ -339,36 +344,41 @@ WEAK void halide_profiler_report_unlocked(void *user_context, halide_profiler_st
                 sstr.erase(3);
                 sstr << "ms";
                 cursor += 10;
-                while (sstr.size() < cursor) sstr << " ";
+                while (sstr.size() < cursor)
+                    sstr << " ";
 
                 int percent = 0;
                 if (p->time != 0) {
-                    percent = (100*fs->time) / p->time;
+                    percent = (100 * fs->time) / p->time;
                 }
                 sstr << "(" << percent << "%)";
                 cursor += 8;
-                while (sstr.size() < cursor) sstr << " ";
+                while (sstr.size() < cursor)
+                    sstr << " ";
 
                 if (!serial) {
                     float threads = fs->active_threads_numerator / (fs->active_threads_denominator + 1e-10);
                     sstr << "threads: " << threads;
                     sstr.erase(3);
                     cursor += 15;
-                    while (sstr.size() < cursor) sstr << " ";
+                    while (sstr.size() < cursor)
+                        sstr << " ";
                 }
 
                 int alloc_avg = 0;
                 if (fs->num_allocs != 0) {
-                    alloc_avg = fs->memory_total/fs->num_allocs;
+                    alloc_avg = fs->memory_total / fs->num_allocs;
                 }
 
                 if (fs->memory_peak) {
                     cursor += 15;
                     sstr << " peak: " << fs->memory_peak;
-                    while (sstr.size() < cursor) sstr << " ";
+                    while (sstr.size() < cursor)
+                        sstr << " ";
                     sstr << " num: " << fs->num_allocs;
                     cursor += 15;
-                    while (sstr.size() < cursor) sstr << " ";
+                    while (sstr.size() < cursor)
+                        sstr << " ";
                     sstr << " avg: " << alloc_avg;
                 }
                 if (fs->stack_peak > 0) {
@@ -387,7 +397,6 @@ WEAK void halide_profiler_report(void *user_context) {
     ScopedMutexLock lock(&s->lock);
     halide_profiler_report_unlocked(user_context, s);
 }
-
 
 WEAK void halide_profiler_reset_unlocked(halide_profiler_state *s) {
     while (s->pipelines) {
@@ -412,7 +421,8 @@ WEAK void halide_profiler_reset() {
 #ifndef WINDOWS
 __attribute__((destructor))
 #endif
-WEAK void halide_profiler_shutdown() {
+WEAK void
+halide_profiler_shutdown() {
     halide_profiler_state *s = halide_profiler_get_state();
     if (!s->sampling_thread) {
         return;
@@ -450,10 +460,10 @@ WEAK void halide_windows_profiler_shutdown() {
     halide_profiler_report_unlocked(NULL, s);
 }
 #endif
-}
+}  // namespace
 
 WEAK void halide_profiler_pipeline_end(void *user_context, void *state) {
     ((halide_profiler_state *)state)->current_func = halide_profiler_outside_of_halide;
 }
 
-} // extern "C"
+}  // extern "C"

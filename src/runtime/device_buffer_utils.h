@@ -5,8 +5,9 @@
 #include "device_interface.h"
 #include "printer.h"
 
-namespace Halide { namespace Runtime { namespace Internal {
-
+namespace Halide {
+namespace Runtime {
+namespace Internal {
 
 // A host <-> dev copy should be done with the fewest possible number
 // of contiguous copies to minimize driver overhead. If our
@@ -43,10 +44,10 @@ struct device_copy {
     uint64_t chunk_size;
 };
 
-
 WEAK void copy_memory_helper(const device_copy &copy, int d, int64_t src_off, int64_t dst_off) {
     // Skip size-1 dimensions
-    while (d >= 0 && copy.extent[d] == 1) d--;
+    while (d >= 0 && copy.extent[d] == 1)
+        d--;
 
     if (d == -1) {
         const void *from = (void *)(copy.src + src_off);
@@ -64,7 +65,7 @@ WEAK void copy_memory_helper(const device_copy &copy, int d, int64_t src_off, in
 WEAK void copy_memory(const device_copy &copy, void *user_context) {
     // If this is a zero copy buffer, these pointers will be the same.
     if (copy.src != copy.dst) {
-        copy_memory_helper(copy, MAX_COPY_DIMS-1, copy.src_begin, 0);
+        copy_memory_helper(copy, MAX_COPY_DIMS - 1, copy.src_begin, 0);
     } else {
         debug(user_context) << "copy_memory: no copy needed as pointers are the same.\n";
     }
@@ -147,13 +148,13 @@ WEAK device_copy make_buffer_copy(const halide_buffer_t *src, bool src_host,
         // Erase the innermost dimension from the list of dimensions to
         // iterate over.
         for (int j = 1; j < MAX_COPY_DIMS; j++) {
-            c.extent[j-1] = c.extent[j];
-            c.src_stride_bytes[j-1] = c.src_stride_bytes[j];
-            c.dst_stride_bytes[j-1] = c.dst_stride_bytes[j];
+            c.extent[j - 1] = c.extent[j];
+            c.src_stride_bytes[j - 1] = c.src_stride_bytes[j];
+            c.dst_stride_bytes[j - 1] = c.dst_stride_bytes[j];
         }
-        c.extent[MAX_COPY_DIMS-1] = 1;
-        c.src_stride_bytes[MAX_COPY_DIMS-1] = 0;
-        c.dst_stride_bytes[MAX_COPY_DIMS-1] = 0;
+        c.extent[MAX_COPY_DIMS - 1] = 1;
+        c.src_stride_bytes[MAX_COPY_DIMS - 1] = 0;
+        c.dst_stride_bytes[MAX_COPY_DIMS - 1] = 0;
     }
     return c;
 }
@@ -168,7 +169,8 @@ WEAK device_copy make_device_to_host_copy(const halide_buffer_t *buf) {
 
 // Caller is expected to verify that src->dimensions == dst->dimensions
 inline __attribute__((always_inline))
-int64_t calc_device_crop_byte_offset(const struct halide_buffer_t *src, struct halide_buffer_t *dst) {
+int64_t
+calc_device_crop_byte_offset(const struct halide_buffer_t *src, struct halide_buffer_t *dst) {
     int64_t offset = 0;
     for (int i = 0; i < src->dimensions; i++) {
         offset += (dst->dim[i].min - src->dim[i].min) * src->dim[i].stride;
@@ -180,12 +182,15 @@ int64_t calc_device_crop_byte_offset(const struct halide_buffer_t *src, struct h
 // Caller is expected to verify that src->dimensions == dst->dimensions + 1,
 // and that slice_dim and slice_pos are valid within src
 inline __attribute__((always_inline))
-int64_t calc_device_slice_byte_offset(const struct halide_buffer_t *src, int slice_dim, int slice_pos) {
+int64_t
+calc_device_slice_byte_offset(const struct halide_buffer_t *src, int slice_dim, int slice_pos) {
     int64_t offset = (slice_pos - src->dim[slice_dim].min) * src->dim[slice_dim].stride;
     offset *= src->type.bytes();
     return offset;
 }
 
-}}} // namespace Halide::Runtime::Internal
+}  // namespace Internal
+}  // namespace Runtime
+}  // namespace Halide
 
-#endif // HALIDE_DEVICE_BUFFER_UTILS_H
+#endif  // HALIDE_DEVICE_BUFFER_UTILS_H

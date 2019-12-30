@@ -9,12 +9,12 @@ extern "C" {
 #endif
 
 int WIN32API MultiByteToWideChar(
-        unsigned int CodePage,
-        unsigned long dwFlags,
-        const char* lpMultiByteStr,
-        int cbMultiByte,
-        wchar_t* lpWideCharStr,
-        int cchWideChar);
+    unsigned int CodePage,
+    unsigned long dwFlags,
+    const char *lpMultiByteStr,
+    int cbMultiByte,
+    wchar_t *lpWideCharStr,
+    int cchWideChar);
 WIN32API void *LoadLibraryW(const wchar_t *);
 WIN32API void *GetProcAddress(void *, const char *);
 WIN32API unsigned SetErrorMode(unsigned);
@@ -29,10 +29,10 @@ WEAK void *halide_default_get_symbol(const char *name) {
 WEAK void *halide_default_load_library(const char *name) {
     // Suppress dialog windows during library open.
     unsigned old_mode = SetErrorMode(SEM_FAILCRITICALERRORS | SEM_NOOPENFILEERRORBOX);
-    void* lib = NULL;
+    void *lib = NULL;
     int wide_len = MultiByteToWideChar(CP_UTF8, 0, name, -1, NULL, 0);
     if (wide_len > 0) {
-        wchar_t* wide_lib = (wchar_t*)malloc(wide_len * sizeof(*wide_lib));
+        wchar_t *wide_lib = (wchar_t *)malloc(wide_len * sizeof(*wide_lib));
         wide_len = MultiByteToWideChar(CP_UTF8, 0, name, -1, wide_lib, wide_len);
         if (wide_len > 0) {
             lib = LoadLibraryW(wide_lib);
@@ -49,13 +49,17 @@ WEAK void *halide_default_get_library_symbol(void *lib, const char *name) {
 
 }  // extern "C"
 
-namespace Halide { namespace Runtime { namespace Internal {
+namespace Halide {
+namespace Runtime {
+namespace Internal {
 
 WEAK halide_get_symbol_t custom_get_symbol = halide_default_get_symbol;
 WEAK halide_load_library_t custom_load_library = halide_default_load_library;
 WEAK halide_get_library_symbol_t custom_get_library_symbol = halide_default_get_library_symbol;
 
-}}} // namespace Halide::Runtime::Internal
+}  // namespace Internal
+}  // namespace Runtime
+}  // namespace Halide
 
 extern "C" {
 

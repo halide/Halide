@@ -59,18 +59,18 @@ extern void halide_hexagon_power_hvx_off_as_destructor(void *user_context, void 
 
 /** Power modes for Hexagon. */
 typedef enum halide_hexagon_power_mode_t {
-    halide_hexagon_power_low          = 0,
-    halide_hexagon_power_nominal      = 1,
-    halide_hexagon_power_turbo        = 2,
-    halide_hexagon_power_default      = 3, /// Resets power to its default state.
-    halide_hexagon_power_low_plus     = 4,
-    halide_hexagon_power_low_2        = 5,
+    halide_hexagon_power_low = 0,
+    halide_hexagon_power_nominal = 1,
+    halide_hexagon_power_turbo = 2,
+    halide_hexagon_power_default = 3,  /// Resets power to its default state.
+    halide_hexagon_power_low_plus = 4,
+    halide_hexagon_power_low_2 = 5,
     halide_hexagon_power_nominal_plus = 6,
 
     // These are deprecated.
-    halide_hvx_power_low     = halide_hexagon_power_low,
+    halide_hvx_power_low = halide_hexagon_power_low,
     halide_hvx_power_nominal = halide_hexagon_power_nominal,
-    halide_hvx_power_turbo   = halide_hexagon_power_turbo,
+    halide_hvx_power_turbo = halide_hexagon_power_turbo,
     halide_hvx_power_default = halide_hexagon_power_default,
 } halide_hexagon_power_mode_t;
 
@@ -138,11 +138,11 @@ extern int halide_hexagon_run(void *user_context,
                               uint64_t arg_sizes[],
                               void *args[],
                               int arg_flags[]);
-extern int halide_hexagon_device_release(void* user_context);
+extern int halide_hexagon_device_release(void *user_context);
 // @}
 
 #ifdef __cplusplus
-} // End extern "C"
+}  // End extern "C"
 #endif
 
-#endif // HALIDE_HALIDERUNTIMEHEXAGONHOST_H
+#endif  // HALIDE_HALIDERUNTIMEHEXAGONHOST_H
