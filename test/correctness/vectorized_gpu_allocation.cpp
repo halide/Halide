@@ -27,7 +27,17 @@ int main(int argc, char **argv) {
     func(x, y, c) = sum(input(x + r.x, y + r.y, c));
 
     // Schedule.
-    func.bound(x, 0, 2).bound(y, 0, 2).bound(c, 0, 3).split(x, xo, xi, 2).split(y, yo, yi, 2).split(c, co, ci, 3).gpu_blocks(xo, yo, co).gpu_threads(xi, yi).reorder(xi, yi, ci, xo, yo, co).vectorize(ci);
+    func
+        .bound(x, 0, 2)
+        .bound(y, 0, 2)
+        .bound(c, 0, 3)
+        .split(x, xo, xi, 2)
+        .split(y, yo, yi, 2)
+        .split(c, co, ci, 3)
+        .gpu_blocks(xo, yo, co)
+        .gpu_threads(xi, yi)
+        .reorder(xi, yi, ci, xo, yo, co)
+        .vectorize(ci);
 
     func.realize(output);
 

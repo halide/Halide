@@ -12,17 +12,19 @@ using namespace Halide;
 // Some helper functions for rounding
 int round_down(int, int);
 int round_up(int x, int m) {
-    if (x < 0)
+    if (x < 0) {
         return -round_down(-x, m);
-    else
+    } else {
         return ((x + m - 1) / m) * m;
+    }
 }
 
 int round_down(int x, int m) {
-    if (x < 0)
+    if (x < 0) {
         return -round_up(-x, m);
-    else
+    } else {
         return (x / m) * m;
+    }
 }
 
 // Imagine that this loads from a file, or tiled storage. Here we'll just fill in the data using sinf.

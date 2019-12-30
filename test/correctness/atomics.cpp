@@ -63,9 +63,13 @@ void test_parallel_hist(const Backend &backend) {
         if (is_float_16) {
             // Associativity prover doesn't support float16.
             // Set override_associativity_test to true to remove the check.
-            hist.update().atomic(true /*override_associativity_test*/).parallel(r);
+            hist.update()
+                .atomic(true /*override_associativity_test*/)
+                .parallel(r);
         } else {
-            hist.update().atomic().parallel(r);
+            hist.update()
+                .atomic()
+                .parallel(r);
         }
     } break;
     case Backend::CPUVectorize: {
@@ -91,9 +95,17 @@ void test_parallel_hist(const Backend &backend) {
         if (is_float_16) {
             // Associativity prover doesn't support float16.
             // Set override_associativity_test to true to remove the check.
-            hist.update().atomic(true /*override_associativity_test*/).split(r, ro, ri, 32).gpu_blocks(ro, DeviceAPI::OpenCL).gpu_threads(ri, DeviceAPI::OpenCL);
+            hist.update()
+                .atomic(true /*override_associativity_test*/)
+                .split(r, ro, ri, 32)
+                .gpu_blocks(ro, DeviceAPI::OpenCL)
+                .gpu_threads(ri, DeviceAPI::OpenCL);
         } else {
-            hist.update().atomic().split(r, ro, ri, 32).gpu_blocks(ro, DeviceAPI::OpenCL).gpu_threads(ri, DeviceAPI::OpenCL);
+            hist.update()
+                .atomic()
+                .split(r, ro, ri, 32)
+                .gpu_blocks(ro, DeviceAPI::OpenCL)
+                .gpu_threads(ri, DeviceAPI::OpenCL);
         }
     } break;
     case Backend::CUDA: {
@@ -101,16 +113,30 @@ void test_parallel_hist(const Backend &backend) {
             RVar ro, ri;
             // Associativity prover doesn't support float16.
             // Set override_associativity_test to true to remove the check.
-            hist.update().atomic(true /*override_associativity_test*/).split(r, ro, ri, 32).gpu_blocks(ro, DeviceAPI::CUDA).gpu_threads(ri, DeviceAPI::CUDA);
+            hist.update()
+                .atomic(true /*override_associativity_test*/)
+                .split(r, ro, ri, 32)
+                .gpu_blocks(ro, DeviceAPI::CUDA)
+                .gpu_threads(ri, DeviceAPI::CUDA);
         } else {
             RVar ro, ri;
-            hist.update().atomic().split(r, ro, ri, 32).gpu_blocks(ro, DeviceAPI::CUDA).gpu_threads(ri, DeviceAPI::CUDA);
+            hist.update()
+                .atomic()
+                .split(r, ro, ri, 32)
+                .gpu_blocks(ro, DeviceAPI::CUDA)
+                .gpu_threads(ri, DeviceAPI::CUDA);
         }
     } break;
     case Backend::CUDAVectorize: {
         RVar ro, ri;
         RVar rio, rii;
-        hist.update().atomic().split(r, ro, ri, 32).split(ri, rio, rii, 4).gpu_blocks(ro, DeviceAPI::CUDA).gpu_threads(rio, DeviceAPI::CUDA).vectorize(rii);
+        hist.update()
+            .atomic()
+            .split(r, ro, ri, 32)
+            .split(ri, rio, rii, 4)
+            .gpu_blocks(ro, DeviceAPI::CUDA)
+            .gpu_threads(rio, DeviceAPI::CUDA)
+            .vectorize(rii);
     } break;
     default: {
         _halide_user_assert(false) << "Unsupported backend.\n";
@@ -153,7 +179,9 @@ void test_parallel_cas_update(const Backend &backend) {
     case Backend::CPU: {
         // Halide cannot prove that this is associative.
         // Set override_associativity_test to true to remove the check.
-        hist.update().atomic(true /*override_associativity_test*/).parallel(r);
+        hist.update()
+            .atomic(true /*override_associativity_test*/)
+            .parallel(r);
     } break;
     case Backend::CPUVectorize: {
         RVar ro, ri;
@@ -169,18 +197,32 @@ void test_parallel_cas_update(const Backend &backend) {
         RVar ro, ri;
         // Halide cannot prove that this is associative.
         // Set override_associativity_test to true to remove the check.
-        hist.update().atomic(true /*override_associativity_test*/).split(r, ro, ri, 32).gpu_blocks(ro, DeviceAPI::OpenCL).gpu_threads(ri, DeviceAPI::OpenCL);
+        hist.update()
+            .atomic(true /*override_associativity_test*/)
+            .split(r, ro, ri, 32)
+            .gpu_blocks(ro, DeviceAPI::OpenCL)
+            .gpu_threads(ri, DeviceAPI::OpenCL);
     } break;
     case Backend::CUDA: {
         RVar ro, ri;
         // Halide cannot prove that this is associative.
         // Set override_associativity_test to true to remove the check.
-        hist.update().atomic(true /*override_associativity_test*/).split(r, ro, ri, 32).gpu_blocks(ro, DeviceAPI::CUDA).gpu_threads(ri, DeviceAPI::CUDA);
+        hist.update()
+            .atomic(true /*override_associativity_test*/)
+            .split(r, ro, ri, 32)
+            .gpu_blocks(ro, DeviceAPI::CUDA)
+            .gpu_threads(ri, DeviceAPI::CUDA);
     } break;
     case Backend::CUDAVectorize: {
         RVar ro, ri;
         RVar rio, rii;
-        hist.update().atomic(true /*override_assciativity_test*/).split(r, ro, ri, 32).split(ri, rio, rii, 4).gpu_blocks(ro, DeviceAPI::CUDA).gpu_threads(rio, DeviceAPI::CUDA).vectorize(rii);
+        hist.update()
+            .atomic(true /*override_assciativity_test*/)
+            .split(r, ro, ri, 32)
+            .split(ri, rio, rii, 4)
+            .gpu_blocks(ro, DeviceAPI::CUDA)
+            .gpu_threads(rio, DeviceAPI::CUDA)
+            .vectorize(rii);
     } break;
     default: {
         _halide_user_assert(false) << "Unsupported backend.\n";
@@ -225,9 +267,13 @@ void test_parallel_hist_tuple(const Backend &backend) {
     if (is_float_16) {
         // Associativity prover doesn't support float16,
         // Set override_associativity_test to true to remove the check.
-        hist.update().atomic(true /*override_associativity_test*/).parallel(r);
+        hist.update()
+            .atomic(true /*override_associativity_test*/)
+            .parallel(r);
     } else {
-        hist.update().atomic().parallel(r);
+        hist.update()
+            .atomic()
+            .parallel(r);
     }
 
     Buffer<T> correct0(hist_size);
@@ -280,7 +326,9 @@ void test_predicated_hist(const Backend &backend) {
         case Backend::CPU: {
             // Can't prove associativity.
             // Set override_associativity_test to true to remove the check.
-            hist.update(update_id).atomic(true /*override_associativity_test*/).parallel(r);
+            hist.update(update_id)
+                .atomic(true /*override_associativity_test*/)
+                .parallel(r);
         } break;
         case Backend::CPUVectorize: {
             // Doesn't support predicated store yet.
@@ -290,18 +338,32 @@ void test_predicated_hist(const Backend &backend) {
             // Can't prove associativity.
             // Set override_associativity_test to true to remove the check.
             RVar ro, ri;
-            hist.update(update_id).atomic(true /*override_associativity_test*/).split(r, ro, ri, 32).gpu_blocks(ro, DeviceAPI::OpenCL).gpu_threads(ri, DeviceAPI::OpenCL);
+            hist.update(update_id)
+                .atomic(true /*override_associativity_test*/)
+                .split(r, ro, ri, 32)
+                .gpu_blocks(ro, DeviceAPI::OpenCL)
+                .gpu_threads(ri, DeviceAPI::OpenCL);
         } break;
         case Backend::CUDA: {
             // Can't prove associativity.
             // Set override_associativity_test to true to remove the check.
             RVar ro, ri;
-            hist.update(update_id).atomic(true /*override_associativity_test*/).split(r, ro, ri, 32).gpu_blocks(ro, DeviceAPI::CUDA).gpu_threads(ri, DeviceAPI::CUDA);
+            hist.update(update_id)
+                .atomic(true /*override_associativity_test*/)
+                .split(r, ro, ri, 32)
+                .gpu_blocks(ro, DeviceAPI::CUDA)
+                .gpu_threads(ri, DeviceAPI::CUDA);
         } break;
         case Backend::CUDAVectorize: {
             RVar ro, ri;
             RVar rio, rii;
-            hist.update().atomic(true /*override_assciativity_test*/).split(r, ro, ri, 32).split(ri, rio, rii, 4).gpu_blocks(ro, DeviceAPI::CUDA).gpu_threads(rio, DeviceAPI::CUDA).vectorize(rii);
+            hist.update()
+                .atomic(true /*override_assciativity_test*/)
+                .split(r, ro, ri, 32)
+                .split(ri, rio, rii, 4)
+                .gpu_blocks(ro, DeviceAPI::CUDA)
+                .gpu_threads(rio, DeviceAPI::CUDA)
+                .vectorize(rii);
         } break;
         default: {
             _halide_user_assert(false) << "Unsupported backend.\n";
@@ -368,7 +430,9 @@ void test_parallel_hist_tuple2(const Backend &backend) {
     case Backend::CPU: {
         // Halide cannot prove that this is associative.
         // Set override_associativity_test to true to remove the check.
-        hist.update().atomic(true /*override_associativity_test*/).parallel(r);
+        hist.update()
+            .atomic(true /*override_associativity_test*/)
+            .parallel(r);
     } break;
     default: {
         // All other backends do not support mutex locking.
@@ -424,7 +488,9 @@ void test_tuple_reduction(const Backend &backend) {
     case Backend::CPU: {
         // This is in fact not an associative reduction if
         // there is more than one winner.
-        arg_max.update().atomic(true /*override_associativity_test*/).parallel(r);
+        arg_max.update()
+            .atomic(true /*override_associativity_test*/)
+            .parallel(r);
     } break;
     default: {
         // All other backends do not support mutex locking.
@@ -467,7 +533,9 @@ void test_nested_atomics(const Backend &backend) {
     case Backend::CPU: {
         // This is in fact not an associative reduction if
         // there is more than one winner.
-        arg_max.update().atomic(true /*override_associativity_test*/).parallel(r);
+        arg_max.update()
+            .atomic(true /*override_associativity_test*/)
+            .parallel(r);
     } break;
     default: {
         // All other backends do not support mutex locking.
@@ -511,9 +579,13 @@ void test_hist_compute_at(const Backend &backend) {
         if (is_float_16) {
             // Associativity prover doesn't support float16.
             // Set override_associativity_test to true to remove the check.
-            hist.update().atomic(true /*override_associativity_test*/).parallel(r);
+            hist.update()
+                .atomic(true /*override_associativity_test*/)
+                .parallel(r);
         } else {
-            hist.update().atomic().parallel(r);
+            hist.update()
+                .atomic()
+                .parallel(r);
         }
     } break;
     case Backend::CPUVectorize: {

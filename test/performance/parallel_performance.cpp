@@ -13,8 +13,9 @@ int main(int argc, char **argv) {
     Func f, g;
 
     Expr math = cast<float>(x + y);
-    for (int i = 0; i < 50; i++)
+    for (int i = 0; i < 50; i++) {
         math = sqrt(cos(sin(math)));
+    }
     f(x, y) = math;
     g(x, y) = math;
 

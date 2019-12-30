@@ -63,7 +63,8 @@ bool relatively_equal(value_t a, value_t b) {
 
         if (relative_error < .0000002)
             return true;
-        std::cerr << "relatively_equal failed for (" << a << ", " << b << ") with relative error " << relative_error << std::endl;
+        std::cerr << "relatively_equal failed for (" << a << ", " << b << ") "
+                  << "with relative error " << relative_error << std::endl;
     }
     return false;
 }
@@ -112,7 +113,13 @@ void check_range(int32_t zero_min, int32_t zero_extent, value_t zero_offset, val
                 value_t computed_val = result(i, j, k);
 
                 if (!relatively_equal(verify_val, computed_val)) {
-                    std::cerr << "Expected " << (typename promote_if_char<value_t>::promoted)(verify_val) << " got " << (typename promote_if_char<value_t>::promoted)(computed_val) << " for lerp(" << (typename promote_if_char<value_t>::promoted)(zero_verify) << ", " << (typename promote_if_char<value_t>::promoted)(one_verify) << ", " << (typename promote_if_char<weight_t>::promoted)(weight_verify) << ") " << actual_weight << ". " << name << std::endl;
+                    std::cerr << "Expected "
+                              << (typename promote_if_char<value_t>::promoted)(verify_val)
+                              << " got " << (typename promote_if_char<value_t>::promoted)(computed_val)
+                              << " for lerp(" << (typename promote_if_char<value_t>::promoted)(zero_verify)
+                              << ", " << (typename promote_if_char<value_t>::promoted)(one_verify)
+                              << ", " << (typename promote_if_char<weight_t>::promoted)(weight_verify)
+                              << ") " << actual_weight << ". " << name << std::endl;
                     assert(false);
                 }
             }

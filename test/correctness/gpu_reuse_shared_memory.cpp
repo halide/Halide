@@ -58,9 +58,14 @@ int pyramid_test() {
         funcs[i](x, y) = funcs[i - 1](2 * x, y);
     }
 
-    funcs[levels - 1].compute_root().gpu_tile(x, y, thread_x, thread_y, 3, 4);
+    funcs[levels - 1]
+        .compute_root()
+        .gpu_tile(x, y, thread_x, thread_y, 3, 4);
     for (int i = levels - 2; i >= 0; --i) {
-        funcs[i].compute_at(funcs[levels - 1], x).split(x, xo, xi, 1 << (levels - i - 1)).gpu_threads(xo, y);
+        funcs[i]
+            .compute_at(funcs[levels - 1], x)
+            .split(x, xo, xi, 1 << (levels - i - 1))
+            .gpu_threads(xo, y);
     }
 
     Buffer<int> out = funcs[levels - 1].realize(size_x, size_y);
@@ -94,12 +99,22 @@ int inverted_pyramid_test() {
         funcs[i](x, y) = funcs[i - 1](x / 2, y);
     }
 
-    funcs[levels - 1].compute_root().tile(x, y, xi, yi, 64, 64).gpu_blocks(x, y).tile(xi, yi, xii, yii, 16, 16).gpu_threads(xi, yi);
+    funcs[levels - 1]
+        .compute_root()
+        .tile(x, y, xi, yi, 64, 64)
+        .gpu_blocks(x, y)
+        .tile(xi, yi, xii, yii, 16, 16)
+        .gpu_threads(xi, yi);
     for (int i = levels - 2; i >= 0; --i) {
-        funcs[i].compute_at(funcs[levels - 1], x).tile(x, y, xi, yi, 4, 4).gpu_threads(xi, yi);
+        funcs[i]
+            .compute_at(funcs[levels - 1], x)
+            .tile(x, y, xi, yi, 4, 4)
+            .gpu_threads(xi, yi);
     }
 
-    funcs[levels - 1].bound(x, 0, size_x).bound(y, 0, size_y);
+    funcs[levels - 1]
+        .bound(x, 0, size_x)
+        .bound(y, 0, size_y);
 
     Buffer<int> out = funcs[levels - 1].realize(size_x, size_y);
 

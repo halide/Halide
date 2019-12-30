@@ -35,7 +35,8 @@ int main(int argc, char **argv) {
     // Compute the sum of the convolution of the image with both kernels.
     Func blur("blur");
     RDom r(-1, 3, -1, 3);
-    blur(x, y) = sum(box1(r.x, r.y) * input(x + r.x, y + r.y)) + sum(cast<uint16_t>(box2(r.x, r.y)) * input(x + r.x, y + r.y));
+    blur(x, y) = sum(box1(r.x, r.y) * input(x + r.x, y + r.y)) +
+                 sum(cast<uint16_t>(box2(r.x, r.y)) * input(x + r.x, y + r.y));
 
     Target target = get_jit_target_from_environment();
     if (target.has_gpu_feature()) {

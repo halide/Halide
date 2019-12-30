@@ -6,6 +6,8 @@
 
 using namespace Halide;
 
+namespace {
+
 static int num_errors = 0;
 
 template<typename T, typename std::enable_if<std::is_floating_point<T>::value>::type * = nullptr>
@@ -94,124 +96,8 @@ uint32_t absd(uint32_t a, uint32_t b) {
     return a < b ? b - a : a - b;
 }
 
-// Using macros to expand name as both a C function and an Expr fragment.
-// It may well be possible to do this without macros, but that is left
-// for another day.
-
-// Version for a one argument function.
-#define fun_1(type_ret, type, name, c_name)                                                                                                                                   \
-    void test_##type##_##name(Buffer<type> in) {                                                                                                                              \
-        Target target = get_jit_target_from_environment();                                                                                                                    \
-        if (!target.supports_type(type_of<type>())) {                                                                                                                         \
-            return;                                                                                                                                                           \
-        }                                                                                                                                                                     \
-        Func test_##name("test_" #name);                                                                                                                                      \
-        Var x("x"), xi("xi");                                                                                                                                                 \
-        test_##name(x) = name(in(x));                                                                                                                                         \
-        if (target.has_gpu_feature()) {                                                                                                                                       \
-            test_##name.gpu_tile(x, xi, 8);                                                                                                                                   \
-        }                                                                                                                                                                     \
-        if (target.has_feature(Target::OpenGLCompute)) {                                                                                                                      \
-            test_##name.gpu_tile(x, xi, 8, TailStrategy::Auto,                                                                                                                \
-                                 DeviceAPI::OpenGLCompute);                                                                                                                   \
-        } else if (target.features_any_of({Target::HVX_64, Target::HVX_128})) {                                                                                               \
-            test_##name.hexagon();                                                                                                                                            \
-        }                                                                                                                                                                     \
-        Buffer<type_ret> result = test_##name.realize(in.extent(0), target);                                                                                                  \
-        for (int i = 0; i < in.extent(0); i++) {                                                                                                                              \
-            type_ret c_result = c_name(in(i));                                                                                                                                \
-            if (!relatively_equal(c_result, result(i), target)) {                                                                                                             \
-                fprintf(stderr, "For " #name "(%.20f) == %.20f from C and %.20f from %s.\n", (double)in(i), (double)c_result, (double)result(i), target.to_string().c_str()); \
-                num_errors++;                                                                                                                                                 \
-            }                                                                                                                                                                 \
-        }                                                                                                                                                                     \
-    }
-
-// Version for a two argument function
-#define fun_2(type_ret, type, name, c_name)                                                                                                                                                               \
-    void test_##type##_##name(Buffer<type> in) {                                                                                                                                                          \
-        Target target = get_jit_target_from_environment();                                                                                                                                                \
-        if (!target.supports_type(type_of<type>())) {                                                                                                                                                     \
-            return;                                                                                                                                                                                       \
-        }                                                                                                                                                                                                 \
-        Func test_##name("test_" #name);                                                                                                                                                                  \
-        Var x("x"), xi("xi");                                                                                                                                                                             \
-        test_##name(x) = name(in(0, x), in(1, x));                                                                                                                                                        \
-        if (target.has_gpu_feature()) {                                                                                                                                                                   \
-            test_##name.gpu_tile(x, xi, 8);                                                                                                                                                               \
-        }                                                                                                                                                                                                 \
-        if (target.has_feature(Target::OpenGLCompute)) {                                                                                                                                                  \
-            test_##name.gpu_tile(x, xi, 8, TailStrategy::Auto,                                                                                                                                            \
-                                 DeviceAPI::OpenGLCompute);                                                                                                                                               \
-        } else if (target.features_any_of({Target::HVX_64, Target::HVX_128})) {                                                                                                                           \
-            test_##name.hexagon();                                                                                                                                                                        \
-        }                                                                                                                                                                                                 \
-        Buffer<type_ret> result = test_##name.realize(in.height(), target);                                                                                                                               \
-        for (int i = 0; i < in.height(); i++) {                                                                                                                                                           \
-            type_ret c_result = c_name(in(0, i), in(1, i));                                                                                                                                               \
-            if (!relatively_equal(c_result, result(i), target)) {                                                                                                                                         \
-                fprintf(stderr, "For " #name "(%.20f, %.20f) == %.20f from C and %.20f from %s.\n", (double)in(0, i), (double)in(1, i), (double)c_result, (double)result(i), target.to_string().c_str()); \
-                num_errors++;                                                                                                                                                                             \
-            }                                                                                                                                                                                             \
-        }                                                                                                                                                                                                 \
-    }
-
-#define fun_1_float_types(name)     \
-    fun_1(float, float, name, name) \
-        fun_1(double, double, name, name)
-
-#define fun_2_float_types(name)     \
-    fun_2(float, float, name, name) \
-        fun_2(double, double, name, name)
-
-#define fun_1_all_types(name)                                 \
-    fun_1_float_types(name)                                   \
-        fun_1(int8_t, int8_t, name, name)                     \
-            fun_1(int16_t, int16_t, name, name)               \
-                fun_1(int32_t, int32_t, name, name)           \
-                    fun_1(uint8_t, uint8_t, name, name)       \
-                        fun_1(uint16_t, uint16_t, name, name) \
-                            fun_1(uint32_t, uint32_t, name, name)
-
-fun_1_float_types(sqrt)
-    fun_1_float_types(sin)
-        fun_1_float_types(cos)
-            fun_1_float_types(exp)
-                fun_1_float_types(log)
-                    fun_1_float_types(floor)
-                        fun_1_float_types(ceil)
-                            fun_1_float_types(trunc)
-                                fun_1_float_types(asin)
-                                    fun_1_float_types(acos)
-                                        fun_1_float_types(tan)
-                                            fun_1_float_types(atan)
-                                                fun_1_float_types(sinh)
-                                                    fun_1_float_types(cosh)
-                                                        fun_1_float_types(tanh)
-                                                            fun_1_float_types(asinh)
-                                                                fun_1_float_types(acosh)
-                                                                    fun_1_float_types(atanh)
-                                                                        fun_1_float_types(round)
-
-                                                                            fun_2_float_types(pow)
-                                                                                fun_2_float_types(atan2)
-
-                                                                                    fun_1(float, float, abs, fabsf)
-                                                                                        fun_1(double, double, abs, fabs)
-                                                                                            fun_1(uint8_t, int8_t, abs, abs)
-                                                                                                fun_1(uint16_t, int16_t, abs, abs)
-                                                                                                    fun_1(uint32_t, int32_t, abs, abs)
-
-                                                                                                        fun_2_float_types(absd)
-                                                                                                            fun_2(uint8_t, int8_t, absd, absd)
-                                                                                                                fun_2(uint16_t, int16_t, absd, absd)
-                                                                                                                    fun_2(uint32_t, int32_t, absd, absd)
-                                                                                                                        fun_2(uint8_t, uint8_t, absd, absd)
-                                                                                                                            fun_2(uint16_t, uint16_t, absd, absd)
-                                                                                                                                fun_2(uint32_t, uint32_t, absd, absd)
-
-                                                                                                                                    template<typename T>
-                                                                                                                                    struct TestArgs {
+template<typename T>
+struct TestArgs {
     Buffer<T> data;
 
     TestArgs(int steps, T start, T end)
@@ -232,6 +118,121 @@ fun_1_float_types(sqrt)
     }
 };
 
+// Using macros to expand name as both a C function and an Expr fragment.
+// It may well be possible to do this without macros, but that is left
+// for another day.
+
+// Version for a one argument function.
+#define fun_1(type_ret, type, name, c_name)                                                  \
+    void test_##type##_##name(Buffer<type> in) {                                             \
+        Target target = get_jit_target_from_environment();                                   \
+        if (!target.supports_type(type_of<type>())) {                                        \
+            return;                                                                          \
+        }                                                                                    \
+        Func test_##name("test_" #name);                                                     \
+        Var x("x"), xi("xi");                                                                \
+        test_##name(x) = name(in(x));                                                        \
+        if (target.has_gpu_feature()) {                                                      \
+            test_##name.gpu_tile(x, xi, 8);                                                  \
+        }                                                                                    \
+        if (target.has_feature(Target::OpenGLCompute)) {                                     \
+            test_##name.gpu_tile(x, xi, 8, TailStrategy::Auto,                               \
+                                 DeviceAPI::OpenGLCompute);                                  \
+        } else if (target.features_any_of({Target::HVX_64, Target::HVX_128})) {              \
+            test_##name.hexagon();                                                           \
+        }                                                                                    \
+        Buffer<type_ret> result = test_##name.realize(in.extent(0), target);                 \
+        for (int i = 0; i < in.extent(0); i++) {                                             \
+            type_ret c_result = c_name(in(i));                                               \
+            if (!relatively_equal(c_result, result(i), target)) {                            \
+                fprintf(stderr, "For " #name "(%.20f) == %.20f from C and %.20f from %s.\n", \
+                        (double)in(i), (double)c_result, (double)result(i),                  \
+                        target.to_string().c_str());                                         \
+                num_errors++;                                                                \
+            }                                                                                \
+        }                                                                                    \
+    }
+
+// Version for a two argument function
+#define fun_2(type_ret, type, name, c_name)                                                         \
+    void test_##type##_##name(Buffer<type> in) {                                                    \
+        Target target = get_jit_target_from_environment();                                          \
+        if (!target.supports_type(type_of<type>())) {                                               \
+            return;                                                                                 \
+        }                                                                                           \
+        Func test_##name("test_" #name);                                                            \
+        Var x("x"), xi("xi");                                                                       \
+        test_##name(x) = name(in(0, x), in(1, x));                                                  \
+        if (target.has_gpu_feature()) {                                                             \
+            test_##name.gpu_tile(x, xi, 8);                                                         \
+        }                                                                                           \
+        if (target.has_feature(Target::OpenGLCompute)) {                                            \
+            test_##name.gpu_tile(x, xi, 8, TailStrategy::Auto,                                      \
+                                 DeviceAPI::OpenGLCompute);                                         \
+        } else if (target.features_any_of({Target::HVX_64, Target::HVX_128})) {                     \
+            test_##name.hexagon();                                                                  \
+        }                                                                                           \
+        Buffer<type_ret> result = test_##name.realize(in.height(), target);                         \
+        for (int i = 0; i < in.height(); i++) {                                                     \
+            type_ret c_result = c_name(in(0, i), in(1, i));                                         \
+            if (!relatively_equal(c_result, result(i), target)) {                                   \
+                fprintf(stderr, "For " #name "(%.20f, %.20f) == %.20f from C and %.20f from %s.\n", \
+                        (double)in(0, i), (double)in(1, i), (double)c_result, (double)result(i),    \
+                        target.to_string().c_str());                                                \
+                num_errors++;                                                                       \
+            }                                                                                       \
+        }                                                                                           \
+    }
+
+// clang-format off
+
+#define fun_1_float_types(name)       \
+    fun_1(float, float, name, name)   \
+    fun_1(double, double, name, name)
+
+#define fun_2_float_types(name)       \
+    fun_2(float, float, name, name)   \
+    fun_2(double, double, name, name)
+
+fun_1_float_types(sqrt)
+fun_1_float_types(sin)
+fun_1_float_types(cos)
+fun_1_float_types(exp)
+fun_1_float_types(log)
+fun_1_float_types(floor)
+fun_1_float_types(ceil)
+fun_1_float_types(trunc)
+fun_1_float_types(asin)
+fun_1_float_types(acos)
+fun_1_float_types(tan)
+fun_1_float_types(atan)
+fun_1_float_types(sinh)
+fun_1_float_types(cosh)
+fun_1_float_types(tanh)
+fun_1_float_types(asinh)
+fun_1_float_types(acosh)
+fun_1_float_types(atanh)
+fun_1_float_types(round)
+
+fun_2_float_types(pow)
+fun_2_float_types(atan2)
+
+fun_1(float, float, abs, fabsf)
+fun_1(double, double, abs, fabs)
+fun_1(uint8_t, int8_t, abs, abs)
+fun_1(uint16_t, int16_t, abs, abs)
+fun_1(uint32_t, int32_t, abs, abs)
+
+fun_2_float_types(absd)
+fun_2(uint8_t, int8_t, absd, absd)
+fun_2(uint16_t, int16_t, absd, absd)
+fun_2(uint32_t, int32_t, absd, absd)
+fun_2(uint8_t, uint8_t, absd, absd)
+fun_2(uint16_t, uint16_t, absd, absd)
+fun_2(uint32_t, uint32_t, absd, absd)
+
+// clang-format on
+
 // Note this test is more oriented toward making sure the paths
 // through to math functions all work on a given target rather
 // than usefully testing the accuracy of mathematical operations.
@@ -239,26 +240,32 @@ fun_1_float_types(sqrt)
 // other than making sure they are valid for each function.
 
 #define call_1(type, name, steps, start, end)     \
-    {                                             \
+    do {                                          \
         printf("Testing " #name "(" #type ")\n"); \
         TestArgs<type> args(steps, start, end);   \
         test_##type##_##name(args.data);          \
-    }
+    } while (0)
 
 #define call_2(type, name, steps, start1, end1, start2, end2)   \
-    {                                                           \
+    do {                                                        \
         printf("Testing " #name "(" #type ")\n");               \
         TestArgs<type> args(steps, start1, end1, start2, end2); \
         test_##type##_##name(args.data);                        \
-    }
+    } while (0)
 
 #define call_1_float_types(name, steps, start, end) \
-    call_1(float, name, steps, start, end)          \
-        call_1(double, name, steps, start, end)
+    do {                                            \
+        call_1(float, name, steps, start, end);     \
+        call_1(double, name, steps, start, end);    \
+    } while (0)
 
 #define call_2_float_types(name, steps, start1, end1, start2, end2) \
-    call_2(float, name, steps, start1, end1, start2, end2)          \
-        call_2(double, name, steps, start1, end1, start2, end2)
+    do {                                                            \
+        call_2(float, name, steps, start1, end1, start2, end2);     \
+        call_2(double, name, steps, start1, end1, start2, end2);    \
+    } while (0)
+
+}  // namespace
 
 int main(int argc, char **argv) {
     call_1_float_types(abs, 256, -1000, 1000);
