@@ -15,13 +15,13 @@ int main(int argc, char **argv) {
     // valgrind would complain).
     Func f, g;
     Var x;
-    f(x) = im(2*x);
+    f(x) = im(2 * x);
     f.compute_root().vectorize(x, 16).bound(x, 0, 849);
 
     // However, it's safe to apply it to this step, because f is an
     // internal allocation, and halide_malloc adds a safety margin.
-    g(x) = f(2*x);
-    g.compute_root().vectorize(x, 16).bound(x, 0, 425); // 24 * 2 = 48 < 49
+    g(x) = f(2 * x);
+    g.compute_root().vectorize(x, 16).bound(x, 0, 425);  // 24 * 2 = 48 < 49
 
     //g.compile_to_assembly("/dev/stdout", std::vector<Argument>(), "g");
 

@@ -1,9 +1,9 @@
 #include "Halide.h"
-#include <stdio.h>
 #include <limits>
+#include <stdio.h>
 
 #ifdef _MSC_VER
-#pragma warning(disable:4800)  // forcing value to bool 'true' or 'false'
+#pragma warning(disable : 4800)  // forcing value to bool 'true' or 'false'
 #endif
 
 using namespace Halide;
@@ -13,7 +13,6 @@ template<typename T>
 bool bit_flip(T a) {
     return ~a;
 }
-
 
 template<typename T>
 bool scalar_from_constant_expr(Expr e, T *val) {
@@ -36,7 +35,6 @@ bool scalar_from_constant_expr(Expr e, T *val) {
         return false;
     }
 }
-
 
 template<typename T>
 void test_expr(T value) {
@@ -90,32 +88,32 @@ int main(int argc, char **argv) {
     // Test various edge cases for int64 and double, since we do extra voodoo to
     // disassemble and reassemble them.
     test_expr<int64_t>(-64);
-    test_expr<int64_t>((int64_t) 0x000000007fffffff);
-    test_expr<int64_t>((int64_t) 0x0000000080000000);
-    test_expr<int64_t>((int64_t) 0x0000000080000001);
-    test_expr<int64_t>((int64_t) 0x00000000ffffffff);
-    test_expr<int64_t>((int64_t) 0x00000001ffffffff);
-    test_expr<int64_t>((int64_t) 0x7fffffff00000000);
-    test_expr<int64_t>((int64_t) 0x7fffffff80000000);
-    test_expr<int64_t>((int64_t) 0xffffffff80000000);
-    test_expr<int64_t>((int64_t) 0xffffffff00000001);
-    test_expr<int64_t>((int64_t) 0x7FFFFFFFFFFFFFFF);
-    test_expr<int64_t>((int64_t) 0x8000000000000000);
-    test_expr<int64_t>((int64_t) 0x8000000000000001);
+    test_expr<int64_t>((int64_t)0x000000007fffffff);
+    test_expr<int64_t>((int64_t)0x0000000080000000);
+    test_expr<int64_t>((int64_t)0x0000000080000001);
+    test_expr<int64_t>((int64_t)0x00000000ffffffff);
+    test_expr<int64_t>((int64_t)0x00000001ffffffff);
+    test_expr<int64_t>((int64_t)0x7fffffff00000000);
+    test_expr<int64_t>((int64_t)0x7fffffff80000000);
+    test_expr<int64_t>((int64_t)0xffffffff80000000);
+    test_expr<int64_t>((int64_t)0xffffffff00000001);
+    test_expr<int64_t>((int64_t)0x7FFFFFFFFFFFFFFF);
+    test_expr<int64_t>((int64_t)0x8000000000000000);
+    test_expr<int64_t>((int64_t)0x8000000000000001);
 
     test_expr<uint64_t>(-64);
-    test_expr<uint64_t>((uint64_t) 0x000000007fffffff);
-    test_expr<uint64_t>((uint64_t) 0x0000000080000000);
-    test_expr<uint64_t>((uint64_t) 0x0000000080000001);
-    test_expr<uint64_t>((uint64_t) 0x00000000ffffffff);
-    test_expr<uint64_t>((uint64_t) 0x00000001ffffffff);
-    test_expr<uint64_t>((uint64_t) 0x7fffffff00000000);
-    test_expr<uint64_t>((uint64_t) 0x7fffffff80000000);
-    test_expr<uint64_t>((uint64_t) 0xffffffff80000000);
-    test_expr<uint64_t>((uint64_t) 0xffffffff00000001);
-    test_expr<uint64_t>((uint64_t) 0x7FFFFFFFFFFFFFFF);
-    test_expr<uint64_t>((uint64_t) 0x8000000000000000);
-    test_expr<uint64_t>((uint64_t) 0x8000000000000001);
+    test_expr<uint64_t>((uint64_t)0x000000007fffffff);
+    test_expr<uint64_t>((uint64_t)0x0000000080000000);
+    test_expr<uint64_t>((uint64_t)0x0000000080000001);
+    test_expr<uint64_t>((uint64_t)0x00000000ffffffff);
+    test_expr<uint64_t>((uint64_t)0x00000001ffffffff);
+    test_expr<uint64_t>((uint64_t)0x7fffffff00000000);
+    test_expr<uint64_t>((uint64_t)0x7fffffff80000000);
+    test_expr<uint64_t>((uint64_t)0xffffffff80000000);
+    test_expr<uint64_t>((uint64_t)0xffffffff00000001);
+    test_expr<uint64_t>((uint64_t)0x7FFFFFFFFFFFFFFF);
+    test_expr<uint64_t>((uint64_t)0x8000000000000000);
+    test_expr<uint64_t>((uint64_t)0x8000000000000001);
 
     test_expr<float>(3.141592f);
     test_expr<float>(3.40282e+38f);

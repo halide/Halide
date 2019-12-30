@@ -42,11 +42,10 @@ int main(int argc, char **argv) {
     Buffer<int16_t> out_s = sum.realize(W, target);
     Buffer<int16_t> out_d = diff.realize(W, target);
 
-    for (int x = 1; x < W-1; x++) {
+    for (int x = 1; x < W - 1; x++) {
         int16_t correct_p = input(x) * 2;
         int16_t correct_s = input(x) + 2;
         int16_t correct_d = input(x) - 2;
-
 
         if (out_p(x) != correct_p) {
             std::cout << "out_p(" << x << ") = " << out_p(x) << " instead of " << correct_p << "\n";

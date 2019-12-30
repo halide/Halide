@@ -16,7 +16,7 @@ int main() {
 
     Var x, y, c;
     Func g;
-    g(x, y, c) = { input(x, y, c), input(x, y, c) / 2 };
+    g(x, y, c) = {input(x, y, c), input(x, y, c) / 2};
 
     // h will be an opengl stage with tuple input. Tuple outputs
     // aren't supported because OpenGL ES 2.0 doesn't support multiple

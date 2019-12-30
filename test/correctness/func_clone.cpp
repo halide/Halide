@@ -1,8 +1,8 @@
 #include "Halide.h"
 #include "test/common/check_call_graphs.h"
 
-#include <stdio.h>
 #include <map>
+#include <stdio.h>
 
 namespace {
 
@@ -145,7 +145,7 @@ int update_defined_after_clone_test() {
     // still call f's clone.
     RDom r(0, 100, 0, 100);
     r.where(r.x < r.y);
-    g(r.x, r.y) += 2*f(r.x, r.y);
+    g(r.x, r.y) += 2 * f(r.x, r.y);
 
     Param<bool> param;
 
@@ -176,7 +176,7 @@ int update_defined_after_clone_test() {
 
         Buffer<int> im = g.realize(200, 200);
         auto func = [](int x, int y) {
-            return ((0 <= x && x <= 99) && (0 <= y && y <= 99) && (x < y)) ? 3*(x + y) : (x + y);
+            return ((0 <= x && x <= 99) && (0 <= y && y <= 99) && (x < y)) ? 3 * (x + y) : (x + y);
         };
         if (check_image(im, func)) {
             return -1;
@@ -203,7 +203,7 @@ int update_defined_after_clone_test() {
 
         Buffer<int> im = g.realize(200, 200);
         auto func = [](int x, int y) {
-            return ((0 <= x && x <= 99) && (0 <= y && y <= 99) && (x < y)) ? 3*(x + y) : (x + y);
+            return ((0 <= x && x <= 99) && (0 <= y && y <= 99) && (x < y)) ? 3 * (x + y) : (x + y);
         };
         if (check_image(im, func)) {
             return -1;
@@ -331,11 +331,11 @@ int clone_on_clone_test() {
     if (check_image(img_d, func_d)) {
         return -1;
     }
-    auto func_e = [](int x, int y) { return 2*x + 2*y + 1; };
+    auto func_e = [](int x, int y) { return 2 * x + 2 * y + 1; };
     if (check_image(img_e, func_e)) {
         return -1;
     }
-    auto func_f = [](int x, int y) { return 2*x + 2*y + 2; };
+    auto func_f = [](int x, int y) { return 2 * x + 2 * y + 2; };
     if (check_image(img_f, func_f)) {
         return -1;
     }

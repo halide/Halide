@@ -8,7 +8,9 @@ class CountStores : public IRVisitor {
 public:
     int count;
 
-    CountStores() : count(0) {}
+    CountStores()
+        : count(0) {
+    }
 
 protected:
     using IRVisitor::visit;
@@ -20,8 +22,11 @@ protected:
 
 class CheckStoreCount : public IRMutator {
     int correct;
+
 public:
-    CheckStoreCount(int correct) : correct(correct) {}
+    CheckStoreCount(int correct)
+        : correct(correct) {
+    }
     using IRMutator::mutate;
 
     Stmt mutate(const Stmt &s) override {
@@ -39,8 +44,8 @@ public:
 
 int main(int argc, char **argv) {
     Buffer<int> a(1024, 1024), b(1024, 1024);
-    const int A = (int) 0xdeadbeef;
-    const int B = (int) 0xf00dcafe;
+    const int A = (int)0xdeadbeef;
+    const int B = (int)0xf00dcafe;
 
     printf("Test 1...\n");
     {
@@ -76,7 +81,7 @@ int main(int argc, char **argv) {
         Func f("f");
 
         f(x, y) = Tuple(x, y);
-        f(x, y) = Tuple(undef<int>(), select(x < 20, 20*f(x, y)[0], undef<int>()));
+        f(x, y) = Tuple(undef<int>(), select(x < 20, 20 * f(x, y)[0], undef<int>()));
 
         // There should be three stores: the undef store to the 1st element of
         // the Tuple in the update definition should have been removed.
@@ -88,7 +93,7 @@ int main(int argc, char **argv) {
         for (int y = 0; y < a.height(); y++) {
             for (int x = 0; x < a.width(); x++) {
                 int correct_a = x;
-                int correct_b = (x < 20) ? 20*x : y;
+                int correct_b = (x < 20) ? 20 * x : y;
                 if (a(x, y) != correct_a || b(x, y) != correct_b) {
                     printf("result(%d, %d) = (%d, %d) instead of (%d, %d)\n",
                            x, y, a(x, y), b(x, y), correct_a, correct_b);

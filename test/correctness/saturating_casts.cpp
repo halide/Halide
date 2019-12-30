@@ -1,11 +1,11 @@
 #include "Halide.h"
-#include <stdio.h>
 #include <iostream>
 #include <limits>
+#include <stdio.h>
 
 // Disable a warning in MSVC that we know will be triggered here.
 #ifdef _MSC_VER
-#pragma warning(disable:4756)  // "overflow in constant arithmetic"
+#pragma warning(disable : 4756)  // "overflow in constant arithmetic"
 #endif
 
 using namespace Halide;
@@ -20,8 +20,7 @@ DST safe_cast(SRC s) {
     return Internal::safe_numeric_cast<DST, SRC>(s);
 }
 
-
-template <typename source_t, typename target_t>
+template<typename source_t, typename target_t>
 void test_saturating() {
     source_t source_min, source_max;
     if (std::numeric_limits<source_t>::has_infinity) {
@@ -94,7 +93,7 @@ void test_saturating() {
             } else {
                 if (sizeof(source_t) >= sizeof(target_t)) {
                     correct_result = (target_t)std::min(in(i), safe_cast<source_t>(target_max));
-                } else { // dest is signed, but larger so unsigned source_t guaranteed to fit
+                } else {  // dest is signed, but larger so unsigned source_t guaranteed to fit
                     correct_result = std::min((target_t)in(i), target_max);
                 }
             }
@@ -132,7 +131,7 @@ void test_saturating() {
     }
 }
 
-template <typename source_t, typename target_t>
+template<typename source_t, typename target_t>
 void test_concise(cast_maker_t cast_maker, bool saturating) {
     source_t source_min = std::numeric_limits<source_t>::min();
     source_t source_max = std::numeric_limits<source_t>::max();
@@ -178,7 +177,7 @@ void test_concise(cast_maker_t cast_maker, bool saturating) {
                                                                  safe_cast<source_t>(target_min)),
                                                         safe_cast<source_t>(target_max));
                 } else {
-                  correct_result = (target_t)in(i);
+                    correct_result = (target_t)in(i);
                 }
             } else {
                 if (source_signed) {
@@ -191,7 +190,7 @@ void test_concise(cast_maker_t cast_maker, bool saturating) {
                 } else {
                     if (sizeof(source_t) >= sizeof(target_t)) {
                         correct_result = (target_t)std::min(in(i), safe_cast<source_t>(target_max));
-                    } else { // dest is signed, but larger so unsigned source_t guaranteed to fit
+                    } else {  // dest is signed, but larger so unsigned source_t guaranteed to fit
                         correct_result = std::min((target_t)in(i), target_max);
                     }
                 }
@@ -210,9 +209,9 @@ void test_concise(cast_maker_t cast_maker, bool saturating) {
                         simpler_correct_result = (int64_t)bounded_lower;
                     }
                 } else {
-                  simpler_correct_result = std::min(std::max((int64_t)in(i),
-                                                             (int64_t)target_min),
-                                                    (int64_t)target_max);
+                    simpler_correct_result = std::min(std::max((int64_t)in(i),
+                                                               (int64_t)target_min),
+                                                      (int64_t)target_max);
                 }
 
                 if (simpler_correct_result != (int64_t)correct_result) {
@@ -243,7 +242,7 @@ void test_concise(cast_maker_t cast_maker, bool saturating) {
     }
 }
 
-template <typename source_t>
+template<typename source_t>
 void test_one_source_saturating() {
     test_saturating<source_t, int8_t>();
     test_saturating<source_t, uint8_t>();
@@ -261,8 +260,7 @@ void test_one_source_saturating() {
     test_saturating<source_t, double>();
 }
 
-
-template <typename source_t>
+template<typename source_t>
 void test_one_source_concise() {
     test_concise<source_t, int8_t>(i8, false);
     test_concise<source_t, uint8_t>(u8, false);
@@ -285,7 +283,7 @@ void test_one_source_concise() {
     test_concise<source_t, uint64_t>(u64_sat, true);
 }
 
-template <typename source_t>
+template<typename source_t>
 void test_one_source() {
     test_one_source_saturating<source_t>();
     test_one_source_concise<source_t>();

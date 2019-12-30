@@ -10,9 +10,9 @@ int main(int argc, char **argv) {
     RDom r(2, 18);
 
     fib(x) = 1;
-    fib(r) = fib(r-2) + fib(r-1);
+    fib(r) = fib(r - 2) + fib(r - 1);
 
-    g(x) = fib(x+10);
+    g(x) = fib(x + 10);
 
     fib.compute_root();
     Buffer<int> out = g.realize(10);
@@ -20,10 +20,10 @@ int main(int argc, char **argv) {
     int fib_ref[20];
     fib_ref[0] = fib_ref[1] = 1;
     for (int i = 2; i < 20; i++) {
-        fib_ref[i] = fib_ref[i-1] + fib_ref[i-2];
+        fib_ref[i] = fib_ref[i - 1] + fib_ref[i - 2];
         if (i >= 10) {
-            if (fib_ref[i] != out(i-10)) {
-                printf("out(%d) = %d instead of %d\n", i-10, out(i-10), fib_ref[i]);
+            if (fib_ref[i] != out(i - 10)) {
+                printf("out(%d) = %d instead of %d\n", i - 10, out(i - 10), fib_ref[i]);
                 return -1;
             }
         }
@@ -32,5 +32,4 @@ int main(int argc, char **argv) {
     printf("Success!\n");
 
     return 0;
-
 }

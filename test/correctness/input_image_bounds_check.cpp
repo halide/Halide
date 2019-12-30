@@ -22,7 +22,7 @@ int main(int argc, char **argv) {
     }
     Var x;
     Func f;
-    f(x) = input(x)*2;
+    f(x) = input(x) * 2;
 
     f.set_error_handler(&halide_error);
 
@@ -39,7 +39,7 @@ int main(int argc, char **argv) {
     // bounds expansion when vectorizing. This used to be an
     // out-of-bounds error, but now isn't! Hooray!
     Func g, h;
-    g(x) = input(x)*2;
+    g(x) = input(x) * 2;
     h(x) = g(x);
     g.compute_root().vectorize(x, 4);
 

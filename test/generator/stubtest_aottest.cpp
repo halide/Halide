@@ -1,8 +1,8 @@
 #include <algorithm>
 #include <cstdio>
 
-#include "HalideRuntime.h"
 #include "HalideBuffer.h"
+#include "HalideRuntime.h"
 #include "stubtest.h"
 
 using Halide::Runtime::Buffer;
@@ -26,7 +26,7 @@ template<typename InputType, typename OutputType>
 void verify(const Buffer<InputType> &input, float float_arg, int int_arg, const Buffer<OutputType> &output) {
     if (input.width() != output.width() ||
         input.height() != output.height()) {
-        fprintf(stderr, "size mismatch: %dx%d vs %dx%d\n",input.width(),input.height(),output.width(),output.height());
+        fprintf(stderr, "size mismatch: %dx%d vs %dx%d\n", input.width(), input.height(), output.width(), output.height());
         exit(-1);
     }
     int channels = std::max(1, std::min(input.channels(), output.channels()));
@@ -77,8 +77,7 @@ int main(int argc, char **argv) {
         untyped_buffer_output,
         tupled_output0, tupled_output1,
         static_compiled_buffer_output,
-        array_buffer_output0, array_buffer_output1
-    );
+        array_buffer_output0, array_buffer_output1);
 
     verify(buffer_input, 1.f, 0, typed_buffer_output);
     verify(buffer_input, 1.f, 0, untyped_buffer_output);

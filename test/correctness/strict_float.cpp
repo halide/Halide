@@ -1,9 +1,9 @@
 #include "Halide.h"
 
 #include <algorithm>
+#include <iomanip>
 #include <ios>
 #include <iostream>
-#include <iomanip>
 
 using namespace Halide;
 
@@ -16,7 +16,7 @@ float no_fma_dot_prod_sse(const float *in, int count) {
     __m128 sum = _mm_set1_ps(0.0f);
     const __m128 *in_v = (const __m128 *)in;
     for (int i = 0; i < count / 4; i++) {
-      __m128 prod = _mm_mul_ps(in_v[i], in_v[i]);
+        __m128 prod = _mm_mul_ps(in_v[i], in_v[i]);
         sum = _mm_add_ps(prod, sum);
     }
     float *f = (float *)&sum;
@@ -87,12 +87,12 @@ Buffer<float> one_million_rando_floats() {
 ImageParam in(Float(32), 1);
 
 Expr term(Expr index) {
-    return in(index) * in(index);
+    return in(index)*in(index);
 }
 
 enum class FloatStrictness {
-  Default,
-  Strict
+    Default,
+    Strict
 } global_strictness = FloatStrictness::Default;
 
 std::string strictness_to_string(FloatStrictness strictness) {
@@ -109,7 +109,7 @@ Expr apply_strictness(Expr x) {
     return x;
 }
 
-template <typename Accum>
+template<typename Accum>
 Func simple_sum(int vectorize) {
     Func total("total");
     // Can't use rfactor because strict_float is not associative.
@@ -157,7 +157,7 @@ Func kahan_sum(int vectorize) {
         Var i("i");
         k_sum_inner(i) = Tuple(0.0f, 0.0f);
         k_sum_inner(i) = Tuple(apply_strictness(k_sum_inner(i)[0] + (term(r_outer * vectorize + i) - k_sum_inner(i)[1])),
-                               apply_strictness((k_sum_inner(i)[0] + (term(r_outer * vectorize + i)- k_sum_inner(i)[1])) - k_sum_inner(i)[0]) - (term(r_outer * vectorize + i) - k_sum_inner(i)[1]));
+                               apply_strictness((k_sum_inner(i)[0] + (term(r_outer * vectorize + i) - k_sum_inner(i)[1])) - k_sum_inner(i)[0]) - (term(r_outer * vectorize + i) - k_sum_inner(i)[1]));
         k_sum() = Tuple(0.0f, 0.0f);
         k_sum() = Tuple(apply_strictness(k_sum()[0] + (k_sum_inner(r_lanes)[0] - k_sum()[1])),
                         apply_strictness((k_sum()[0] + (k_sum_inner(r_lanes)[0] - k_sum()[1])) - k_sum()[0]) - (k_sum_inner(r_lanes)[0] - k_sum()[1]));
@@ -228,7 +228,7 @@ void run_one_condition(const Target &t, FloatStrictness strictness, Buffer<float
         assert((fabs(simple_double - kahan_vec_4) <= fabs(simple_double - simple_float)));
         assert((fabs(simple_double - kahan_vec_8) <= fabs(simple_double - simple_float)));
         // Just use some vars for now.
-        assert(simple_double_vec_4 != 0 &&  simple_double_vec_8 != 0 && simple_float_vec_4 != 0 && simple_float_vec_8 != 0);
+        assert(simple_double_vec_4 != 0 && simple_double_vec_8 != 0 && simple_float_vec_4 != 0 && simple_float_vec_8 != 0);
     }
 }
 
@@ -237,7 +237,7 @@ void run_all_conditions(const char *name, Buffer<float> &vals) {
 
     Target loose{get_jit_target_from_environment().without_feature(Target::StrictFloat)};
     Target strict{loose.with_feature(Target::StrictFloat)};
-  
+
     run_one_condition(loose, FloatStrictness::Default, vals);
     run_one_condition(strict, FloatStrictness::Default, vals);
     run_one_condition(loose, FloatStrictness::Strict, vals);
@@ -269,7 +269,7 @@ int main(int argc, char **argv) {
     transposed = block_transposed_by_n(vals, 4);
     in.set(transposed);
     run_all_conditions("random transposed", transposed);
-    
+
     // Ascending, best case for error.
     std::sort(vals.begin(), vals.end());
     in.set(vals);
@@ -287,6 +287,6 @@ int main(int argc, char **argv) {
     run_all_conditions("sorted descending transposed", transposed);
 
     printf("Success!\n");
-    
+
     return 0;
 }

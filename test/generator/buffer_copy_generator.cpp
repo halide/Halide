@@ -2,12 +2,11 @@
 
 using namespace Halide;
 
-
 class BufferCopy : public Halide::Generator<BufferCopy> {
 public:
-    Input<Func> input {"input", Float(32), 2 };
+    Input<Func> input{"input", Float(32), 2};
 
-    Output<Func> output {"output", Float(32), 2 };
+    Output<Func> output{"output", Float(32), 2};
 
     Func dev_1, host_1, dev_2;
     Var x, y;

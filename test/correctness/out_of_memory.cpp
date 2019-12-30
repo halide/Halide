@@ -16,7 +16,7 @@ extern "C" void *test_malloc(void *user_context, size_t x) {
     if (total_allocated + x > mem_limit)
         return nullptr;
 
-    void * result = malloc(x);
+    void *result = malloc(x);
     if (result != nullptr) {
         total_allocated += x;
         allocation_sizes[result] = x;
@@ -31,7 +31,7 @@ extern "C" void test_free(void *user_context, void *ptr) {
     free(ptr);
 }
 
-bool error_occurred  = false;
+bool error_occurred = false;
 extern "C" void handler(void *user_context, const char *msg) {
     printf("%s\n", msg);
     error_occurred = true;
@@ -57,9 +57,9 @@ int main(int argc, char **argv) {
     // Limit ourselves to two stages worth of address space
     mem_limit = big << 1;
 
-    funcs[funcs.size()-1].set_custom_allocator(&test_malloc, &test_free);
-    funcs[funcs.size()-1].set_error_handler(&handler);
-    funcs[funcs.size()-1].realize(1);
+    funcs[funcs.size() - 1].set_custom_allocator(&test_malloc, &test_free);
+    funcs[funcs.size() - 1].set_error_handler(&handler);
+    funcs[funcs.size() - 1].realize(1);
 
     if (!error_occurred) {
         printf("There should have been an error\n");

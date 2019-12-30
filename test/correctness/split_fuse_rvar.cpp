@@ -1,6 +1,6 @@
 #include "Halide.h"
-#include <stdio.h>
 #include <iostream>
+#include <stdio.h>
 
 using namespace Halide;
 
@@ -14,7 +14,7 @@ int main(int argc, char **argv) {
         Func g;
         g(x, y) = undef<int>();
         RDom r(0, 4, 0, 4);
-        g(r.x, r.y) = f(r.y*4 + r.x);
+        g(r.x, r.y) = f(r.y * 4 + r.x);
 
         RVar rxy, rxyo, rxyi;
         g.update(0).fuse(r.x, r.y, rxy).split(rxy, rxyo, rxyi, 2);
@@ -23,7 +23,7 @@ int main(int argc, char **argv) {
 
         for (int i = 0; i < 4; i++) {
             for (int j = 0; j < 4; j++) {
-                int expected = i*4 + j;
+                int expected = i * 4 + j;
                 if (Rg(j, i) != expected) {
                     printf("Error! Expected %d at g(%d, %d), got %d\n", expected, j, i, Rg(j, i));
                     return -1;

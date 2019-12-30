@@ -10,7 +10,7 @@ bool custom_free_called = false;
 
 void *my_malloc(void *user_context, size_t x) {
     custom_malloc_called = true;
-    void *orig = malloc(x+32);
+    void *orig = malloc(x + 32);
     void *ptr = (void *)((((size_t)orig + 32) >> 5) << 5);
     ((void **)ptr)[-1] = orig;
     return ptr;
@@ -18,7 +18,7 @@ void *my_malloc(void *user_context, size_t x) {
 
 void my_free(void *user_context, void *ptr) {
     custom_free_called = true;
-    free(((void**)ptr)[-1]);
+    free(((void **)ptr)[-1]);
 }
 
 int main(int argc, char **argv) {

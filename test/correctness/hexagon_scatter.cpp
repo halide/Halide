@@ -20,15 +20,15 @@ int test() {
     Buffer<uint8_t> x_idx(W);
     Buffer<uint8_t> y_idx(H);
     for (int x = 0; x < W; x++) {
-        x_idx(x) = (uint8_t) x;
+        x_idx(x) = (uint8_t)x;
     }
     for (int x = 0; x < H; x++) {
-        y_idx(x) = (uint8_t) x;
+        y_idx(x) = (uint8_t)x;
     }
     // Create a random permutation for x_idx and y_idx by randomly shuffling
     // elements. All indices should be unique for scatters to avoid race
     // conditions.
-    for(int i = 0; i < 1000; i++) {
+    for (int i = 0; i < 1000; i++) {
         swap(x_idx, rand() % W, rand() % W);
         swap(y_idx, rand() % H, rand() % H);
     }
@@ -49,8 +49,8 @@ int test() {
     Func f, g;
 
     RDom r(0, W, 0, H);
-    Expr xCoord = clamp(cast<int32_t>(x_idx(r.x)), 0, W-1);
-    Expr yCoord = clamp(cast<int32_t>(y_idx(r.y)), 0, H-1);
+    Expr xCoord = clamp(cast<int32_t>(x_idx(r.x)), 0, W - 1);
+    Expr yCoord = clamp(cast<int32_t>(y_idx(r.y)), 0, H - 1);
     // Scatter values all over f
     f(x, y) = cast<DTYPE>(19);
     f(xCoord, yCoord) = cast<DTYPE>(x_idx(r.x)) + cast<DTYPE>(r.x);
@@ -63,18 +63,18 @@ int test() {
 
         f
             .compute_at(g, Var::outermost())
-            .vectorize(x, vector_size/2);
+            .vectorize(x, vector_size / 2);
 
         f
             .update(0)
             .allow_race_conditions()
-            .vectorize(r.x, vector_size/2);
+            .vectorize(r.x, vector_size / 2);
 
         g
             .hexagon()
-            .split(y, y, yi, H/2)
+            .split(y, y, yi, H / 2)
             .parallel(y)
-            .vectorize(x, vector_size/2);
+            .vectorize(x, vector_size / 2);
 
         if (target.features_any_of({Target::HVX_v65, Target::HVX_v66})) {
             f.store_in(MemoryType::VTCM);
@@ -98,7 +98,7 @@ int test() {
 
 int main() {
     if (!test<uint16_t>() ||
-        !test<int16_t>()  ||
+        !test<int16_t>() ||
         !test<uint32_t>() ||
         !test<int32_t>()) return 1;
     printf("Success!\n");

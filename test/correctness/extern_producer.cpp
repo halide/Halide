@@ -3,7 +3,6 @@
 
 using namespace Halide;
 
-
 #ifdef _WIN32
 #define DLLEXPORT __declspec(dllexport)
 #else
@@ -13,13 +12,17 @@ using namespace Halide;
 // Some helper functions for rounding
 int round_down(int, int);
 int round_up(int x, int m) {
-    if (x < 0) return -round_down(-x, m);
-    else return ((x + m - 1) / m) * m;
+    if (x < 0)
+        return -round_down(-x, m);
+    else
+        return ((x + m - 1) / m) * m;
 }
 
 int round_down(int x, int m) {
-    if (x < 0) return -round_up(-x, m);
-    else return (x / m) * m;
+    if (x < 0)
+        return -round_up(-x, m);
+    else
+        return (x / m) * m;
 }
 
 // Imagine that this loads from a file, or tiled storage. Here we'll just fill in the data using sinf.
@@ -47,7 +50,7 @@ extern "C" DLLEXPORT int make_data(halide_buffer_t *out) {
     assert(out->dimensions == 2);
     assert(out->dim[0].stride == 1);
     // Check that the row stride is 128B/32-element aligned.
-    assert(out->dim[1].stride == (out->dim[1].stride)/32*32);
+    assert(out->dim[1].stride == (out->dim[1].stride) / 32 * 32);
     // Check that the row extent is not changed due to alignment.
     assert(out->dim[0].extent == desired_row_extent);
     printf("Generating data over [%d %d] x [%d %d]\n",
@@ -132,7 +135,7 @@ int main(int argc, char **argv) {
                             types, {x, y});
         Func sink_multi;
         sink_multi(x, y) = multi(x, y)[0] - sin(x + y) +
-                multi(x, y)[1] - cos(x + y);
+                           multi(x, y)[1] - cos(x + y);
 
         sink_multi.tile(x, y, xi, yi, 32, 32);
 
@@ -152,5 +155,4 @@ int main(int argc, char **argv) {
 
     printf("Success!\n");
     return 0;
-
 }

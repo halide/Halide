@@ -24,17 +24,15 @@ int main(int argc, char **argv) {
             f(0) = 1;
 
         Stage rewrites[] = {
-            f(r*2) = 13,
-            f(r*4) = 14
-        };
+            f(r * 2) = 13,
+            f(r * 4) = 14};
 
         struct {
             Stage a, b, c;
         } more_updates = {
-            f(3*r) = 4,
-            f(2*r) = 8,
-            f(5*r) = 2
-        };
+            f(3 * r) = 4,
+            f(2 * r) = 8,
+            f(5 * r) = 2};
 
         f.compute_root();
 
@@ -51,11 +49,11 @@ int main(int argc, char **argv) {
     {
         ref(x) = x;
         ref(0) = 1;
-        ref(r*2) = 13;
-        ref(r*4) = 14;
-        ref(3*r) = 4;
-        ref(2*r) = 8;
-        ref(5*r) = 2;
+        ref(r * 2) = 13;
+        ref(r * 4) = 14;
+        ref(3 * r) = 4;
+        ref(2 * r) = 8;
+        ref(5 * r) = 2;
     }
 
     Buffer<int> result = f.realize(128);

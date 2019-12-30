@@ -1,6 +1,6 @@
 #include "Halide.h"
-#include <cstdio>
 #include "halide_benchmark.h"
+#include <cstdio>
 
 using namespace Halide;
 using namespace Halide::Tools;
@@ -12,8 +12,9 @@ int main(int argc, char **argv) {
     Var x, y;
     Func f, g;
 
-    Expr math = cast<float>(x+y);
-    for (int i = 0; i < 50; i++) math = sqrt(cos(sin(math)));
+    Expr math = cast<float>(x + y);
+    for (int i = 0; i < 50; i++)
+        math = sqrt(cos(sin(math)));
     f(x, y) = math;
     g(x, y) = math;
 

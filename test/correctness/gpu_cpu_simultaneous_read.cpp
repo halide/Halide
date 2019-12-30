@@ -19,8 +19,8 @@ int main() {
     // GPU if a load from it gets lifted into a predicate used by skip
     // stages. This tests that path.
 
-    f(x, y) = x*2 + y + table(x);
-    g(x, y) = x + y*2 + table(y);
+    f(x, y) = x * 2 + y + table(x);
+    g(x, y) = x + y * 2 + table(y);
     h(x, y) = select(table(0) == 0, f(x, y), g(x, y));
 
     f.compute_root().gpu_tile(x, y, xi, yi, 8, 8);
@@ -38,8 +38,8 @@ int main() {
 
     for (int y = 0; y < 20; y++) {
         for (int x = 0; x < 20; x++) {
-            int c1 = x*2 + y + (x == 0 ? 0 : 17);
-            int c2 = x + y*2 + (y == 0 ? 1 : 17);
+            int c1 = x * 2 + y + (x == 0 ? 0 : 17);
+            int c2 = x + y * 2 + (y == 0 ? 1 : 17);
             if (result1(x, y) != c1) {
                 printf("result1(%d, %d) = %d instead of %d\n",
                        x, y, result1(x, y), c1);

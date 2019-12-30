@@ -21,8 +21,8 @@ extern "C" DLLEXPORT int translate(buffer_t *in, int dx, int dy, buffer_t *out) 
             for (int x = out->min[0]; x < out->min[0] + out->extent[0]; x++) {
                 int in_x = x + dx;
                 int in_y = y + dy;
-                uint8_t *in_ptr = in->host + (in_x - in->min[0])*in->stride[0] + (in_y - in->min[1])*in->stride[1];
-                uint8_t *out_ptr = out->host + (x - out->min[0])*out->stride[0] + (y - out->min[1])*out->stride[1];
+                uint8_t *in_ptr = in->host + (in_x - in->min[0]) * in->stride[0] + (in_y - in->min[1]) * in->stride[1];
+                uint8_t *out_ptr = out->host + (x - out->min[0]) * out->stride[0] + (y - out->min[1]) * out->stride[1];
                 *out_ptr = *in_ptr;
             }
         }

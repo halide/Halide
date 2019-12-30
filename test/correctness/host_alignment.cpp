@@ -1,20 +1,22 @@
 #include "Halide.h"
-#include <stdio.h>
 #include <map>
+#include <stdio.h>
 #include <string>
 
 namespace {
 
-using std::vector;
 using std::map;
 using std::string;
+using std::vector;
 using namespace Halide;
 using namespace Halide::Internal;
 
 class FindErrorHandler : public IRVisitor {
 public:
     bool result;
-    FindErrorHandler() : result(false) {}
+    FindErrorHandler()
+        : result(false) {
+    }
     using IRVisitor::visit;
     void visit(const Call *op) override {
         if (op->name == "halide_error_unaligned_host_ptr" &&
@@ -24,7 +26,6 @@ public:
         }
         IRVisitor::visit(op);
     }
-
 };
 
 class ParseCondition : public IRVisitor {
@@ -42,8 +43,10 @@ class CountHostAlignmentAsserts : public IRVisitor {
 public:
     int count;
     std::map<string, int> alignments_needed;
-    CountHostAlignmentAsserts(std::map<string, int> m) : count(0),
-                                                        alignments_needed(m){}
+    CountHostAlignmentAsserts(std::map<string, int> m)
+        : count(0),
+          alignments_needed(m) {
+    }
 
     using IRVisitor::visit;
 
@@ -59,7 +62,7 @@ public:
                 const Call *reinterpret_call = p.left.as<Call>();
                 if (!reinterpret_call ||
                     !reinterpret_call->is_intrinsic(Call::reinterpret)) return;
-                Expr name =  reinterpret_call->args[0];
+                Expr name = reinterpret_call->args[0];
                 const Variable *V = name.as<Variable>();
                 string name_host_ptr = V->name;
                 int expected_alignment = alignments_needed[name_host_ptr];

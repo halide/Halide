@@ -1,15 +1,17 @@
 #include "Halide.h"
-#include <stdio.h>
 #include <future>
+#include <stdio.h>
 
 using namespace Halide;
 
 template<typename A>
 const char *string_of_type();
 
-#define DECL_SOT(name)                                          \
-    template<>                                                  \
-    const char *string_of_type<name>() {return #name;}
+#define DECL_SOT(name)                   \
+    template<>                           \
+    const char *string_of_type<name>() { \
+        return #name;                    \
+    }
 
 DECL_SOT(uint8_t);
 DECL_SOT(int8_t);
@@ -20,7 +22,7 @@ DECL_SOT(int32_t);
 DECL_SOT(float);
 DECL_SOT(double);
 
-template <typename T>
+template<typename T>
 bool is_type_supported(int vec_width, const Target &target) {
     DeviceAPI device = DeviceAPI::Default_GPU;
 
@@ -45,7 +47,7 @@ bool test(int vec_width, const Target &target) {
         for (int x = 0; x < W; x++) {
             // Casting from an out-of-range float to an int is UB, so
             // we have to pick our values a little carefully.
-            input(x, y) = (A)((rand() & 0xffff)/512.0);
+            input(x, y) = (A)((rand() & 0xffff) / 512.0);
         }
     }
 
@@ -84,13 +86,13 @@ bool test(int vec_width, const Target &target) {
 
             if (!ok) {
                 fprintf(stderr, "%s x %d -> %s x %d failed\n",
-                       string_of_type<A>(), vec_width,
-                       string_of_type<B>(), vec_width);
+                        string_of_type<A>(), vec_width,
+                        string_of_type<B>(), vec_width);
                 fprintf(stderr, "At %d %d, %f -> %f instead of %f\n",
-                       x, y,
-                       (double)(input(x, y)),
-                       (double)(output(x, y)),
-                       (double)((B)(input(x, y))));
+                        x, y,
+                        (double)(input(x, y)),
+                        (double)(output(x, y)),
+                        (double)((B)(input(x, y))));
                 return false;
             }
         }
@@ -113,24 +115,23 @@ bool test_all(int vec_width, const Target &target) {
     return success;
 }
 
-
 int main(int argc, char **argv) {
 
-    // We don't test this on windows, because float-to-int conversions
-    // on windows use _ftol2, which has its own unique calling
-    // convention, and older LLVMs (e.g. pnacl) don't do it right so
-    // you get clobbered registers.
-    #ifdef WIN32
+// We don't test this on windows, because float-to-int conversions
+// on windows use _ftol2, which has its own unique calling
+// convention, and older LLVMs (e.g. pnacl) don't do it right so
+// you get clobbered registers.
+#ifdef WIN32
     printf("Not testing on windows\n");
     return 0;
-    #endif
+#endif
 
     Target target = get_jit_target_from_environment();
 
     // We only test power-of-two vector widths for now
     Halide::Internal::ThreadPool<bool> pool;
     std::vector<std::future<bool>> futures;
-    for (int vec_width = 1; vec_width <= 64; vec_width*=2) {
+    for (int vec_width = 1; vec_width <= 64; vec_width *= 2) {
         futures.push_back(pool.async([=]() {
             bool success = true;
             success = success && test_all<float>(vec_width, target);
