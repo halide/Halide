@@ -271,13 +271,14 @@ void finish_dump(map<string, FuncInfo> &func_info, BufferOutputOpts output_opts)
 
 void usage(char *const *argv) {
     const string usage =
-        "Usage: " + string(argv[0]) + " -i trace_file -t {png,jpg,pgm,tmp,mat}\n"
-                                      "\n"
-                                      "This tool reads a binary trace produced by Halide, and dumps all\n"
-                                      "Funcs into individual image files in the current directory.\n"
-                                      "To generate a suitable binary trace, use Func::trace_stores(), or the\n"
-                                      "target features trace_stores and trace_realizations, and run with\n"
-                                      "HL_TRACE_FILE=<filename>.\n";
+        "Usage: " + string(argv[0]) +
+        " -i trace_file -t {png,jpg,pgm,tmp,mat}\n"
+        "\n"
+        "This tool reads a binary trace produced by Halide, and dumps all\n"
+        "Funcs into individual image files in the current directory.\n"
+        "To generate a suitable binary trace, use Func::trace_stores(), or the\n"
+        "target features trace_stores and trace_realizations, and run with\n"
+        "HL_TRACE_FILE=<filename>.\n";
     fprintf(stderr, "%s\n", usage.c_str());
     exit(1);
 }

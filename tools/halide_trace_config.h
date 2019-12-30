@@ -271,7 +271,19 @@ struct FuncConfig {
         // 'nan', 'inf', etc for floating-point values, so read these as
         // text and reality-check them ourselves.
         std::string min_text, max_text;
-        is >> start_text >> config.zoom >> config.load_cost >> config.store_cost >> config.pos >> config.strides >> config.color_dim >> min_text >> max_text >> config.labels >> config.blank_on_end_realization >> config.uninitialized_memory_color;
+        is >>
+            start_text >>
+            config.zoom >>
+            config.load_cost >>
+            config.store_cost >>
+            config.pos >>
+            config.strides >>
+            config.color_dim >>
+            min_text >>
+            max_text >>
+            config.labels >>
+            config.blank_on_end_realization >>
+            config.uninitialized_memory_color;
 
         const auto parse_double = [](const std::string &s) -> double {
             double d;
@@ -400,7 +412,17 @@ struct GlobalConfig {
 
     friend std::istream &operator>>(std::istream &is, GlobalConfig &config) {
         std::string start_text;
-        is >> start_text >> config.frame_size >> config.decay_factor_during_compute >> config.decay_factor_after_compute >> config.hold_frames >> config.timestep >> config.auto_layout >> config.auto_layout_grid >> config.auto_layout_pad >> config.default_uninitialized_memory_color;
+        is >>
+            start_text >>
+            config.frame_size >>
+            config.decay_factor_during_compute >>
+            config.decay_factor_after_compute >>
+            config.hold_frames >>
+            config.timestep >>
+            config.auto_layout >>
+            config.auto_layout_grid >>
+            config.auto_layout_pad >>
+            config.default_uninitialized_memory_color;
         if (start_text != tag_start_text()) {
             is.setstate(std::ios::failbit);
         }
