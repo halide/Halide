@@ -29,16 +29,16 @@ using namespace Halide;
 // We will define a generator to auto-schedule.
 class AutoScheduled : public Halide::Generator<AutoScheduled> {
 public:
-    Input<Buffer<float>>  input{"input", 3};
-    Input<float>          factor{"factor"};
+    Input<Buffer<float>> input{"input", 3};
+    Input<float> factor{"factor"};
 
     Output<Buffer<float>> output1{"output1", 2};
     Output<Buffer<float>> output2{"output2", 2};
 
     Expr sum3x3(Func f, Var x, Var y) {
-        return f(x-1, y-1) + f(x-1, y) + f(x-1, y+1) +
-               f(x, y-1)   + f(x, y)   + f(x, y+1) +
-               f(x+1, y-1) + f(x+1, y) + f(x+1, y+1);
+        return f(x - 1, y - 1) + f(x - 1, y) + f(x - 1, y + 1) +
+               f(x, y - 1) + f(x, y) + f(x, y + 1) +
+               f(x + 1, y - 1) + f(x + 1, y) + f(x + 1, y + 1);
     }
 
     void generate() {
@@ -47,13 +47,13 @@ public:
 
         gray(x, y) = 0.299f * in_b(x, y, 0) + 0.587f * in_b(x, y, 1) + 0.114f * in_b(x, y, 2);
 
-        Iy(x, y) = gray(x-1, y-1)*(-1.0f/12) + gray(x-1, y+1)*(1.0f/12) +
-                   gray(x, y-1)*(-2.0f/12) + gray(x, y+1)*(2.0f/12) +
-                   gray(x+1, y-1)*(-1.0f/12) + gray(x+1, y+1)*(1.0f/12);
+        Iy(x, y) = gray(x - 1, y - 1) * (-1.0f / 12) + gray(x - 1, y + 1) * (1.0f / 12) +
+                   gray(x, y - 1) * (-2.0f / 12) + gray(x, y + 1) * (2.0f / 12) +
+                   gray(x + 1, y - 1) * (-1.0f / 12) + gray(x + 1, y + 1) * (1.0f / 12);
 
-        Ix(x, y) = gray(x-1, y-1)*(-1.0f/12) + gray(x+1, y-1)*(1.0f/12) +
-                   gray(x-1, y)*(-2.0f/12) + gray(x+1, y)*(2.0f/12) +
-                   gray(x-1, y+1)*(-1.0f/12) + gray(x+1, y+1)*(1.0f/12);
+        Ix(x, y) = gray(x - 1, y - 1) * (-1.0f / 12) + gray(x + 1, y - 1) * (1.0f / 12) +
+                   gray(x - 1, y) * (-2.0f / 12) + gray(x + 1, y) * (2.0f / 12) +
+                   gray(x - 1, y + 1) * (-1.0f / 12) + gray(x + 1, y + 1) * (1.0f / 12);
 
         Ixx(x, y) = Ix(x, y) * Ix(x, y);
         Iyy(x, y) = Iy(x, y) * Iy(x, y);
@@ -219,6 +219,7 @@ public:
             Ix.compute_root();
         }
     }
+
 private:
     Var x{"x"}, y{"y"}, c{"c"};
     Func gray, Iy, Ix, Ixx, Iyy, Ixy, Sxx, Syy, Sxy, det, trace, harris;
