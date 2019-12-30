@@ -1,15 +1,15 @@
-#include "HalideTraceUtils.h"
 #include "HalideBuffer.h"
+#include "HalideTraceUtils.h"
 #include "halide_image_io.h"
 
+#include <fcntl.h>
+#include <map>
+#include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
-#include <stdint.h>
-#include <vector>
-#include <map>
-#include <string>
-#include <fcntl.h>
 #include <string.h>
+#include <string>
+#include <vector>
 
 /** \file
  *
@@ -22,10 +22,10 @@
 using namespace Halide;
 using namespace Internal;
 
-using std::map;
-using std::vector;
-using std::string;
 using Halide::Runtime::Buffer;
+using std::map;
+using std::string;
+using std::vector;
 
 struct BufferOutputOpts {
     enum OutputType {
@@ -46,9 +46,10 @@ struct FuncInfo {
     halide_type_t type;
     Buffer<> values;
 
-    FuncInfo() {}
+    FuncInfo() {
+    }
     FuncInfo(Packet *p) {
-        int real_dims = p->dimensions/p->type.lanes;
+        int real_dims = p->dimensions / p->type.lanes;
         if (real_dims > 16) {
             fprintf(stderr, "Error: found trace packet with dimensionality > 16. Aborting.\n");
             exit(-1);
@@ -63,7 +64,7 @@ struct FuncInfo {
     }
 
     void add_preprocess(Packet *p) {
-        int real_dims = p->dimensions/p->type.lanes;
+        int real_dims = p->dimensions / p->type.lanes;
         int lanes = p->type.lanes;
 
         halide_type_t scalar_type = p->type;
@@ -80,11 +81,11 @@ struct FuncInfo {
 
         for (int lane = 0; lane < lanes; lane++) {
             for (int i = 0; i < real_dims; i++) {
-                if (p->coordinates()[lanes*i+lane] < min_coords[i]) {
-                    min_coords[i] = p->coordinates()[lanes*i+lane];
+                if (p->coordinates()[lanes * i + lane] < min_coords[i]) {
+                    min_coords[i] = p->coordinates()[lanes * i + lane];
                 }
-                if (p->coordinates()[lanes*i+lane] > max_coords[i]) {
-                    max_coords[i] = p->coordinates()[lanes*i+lane];
+                if (p->coordinates()[lanes * i + lane] > max_coords[i]) {
+                    max_coords[i] = p->coordinates()[lanes * i + lane];
                 }
             }
         }
@@ -162,7 +163,7 @@ struct FuncInfo {
     }
 };
 
-bool check_and_continue(bool condition, const char* msg) {
+bool check_and_continue(bool condition, const char *msg) {
     if (!condition) {
         fprintf(stderr, "Failed to dump func: %s\n", msg);
     }
@@ -178,7 +179,7 @@ void dump_func(string name, FuncInfo &func, BufferOutputOpts output_opts) {
     }
 
     string filename;
-    switch(output_opts.type) {
+    switch (output_opts.type) {
     case BufferOutputOpts::PNG:
         filename = name + ".png";
         break;
@@ -231,17 +232,17 @@ void finish_dump(map<string, FuncInfo> &func_info, BufferOutputOpts output_opts)
         // Size of the func
         printf("      Size: ");
         for (int idx = 0; idx < info.dimensions; idx++) {
-            if (idx>0) {
+            if (idx > 0) {
                 printf("x");
             }
-            printf("%d", (info.max_coords[idx]-info.min_coords[idx])+1);
+            printf("%d", (info.max_coords[idx] - info.min_coords[idx]) + 1);
         }
         printf("\n");
 
         // Minima
         printf("      Minimum stored to in each dim: {");
         for (int idx = 0; idx < info.dimensions; idx++) {
-            if (idx>0) {
+            if (idx > 0) {
                 printf(", ");
             }
             printf("%d", info.min_coords[idx]);
@@ -251,7 +252,7 @@ void finish_dump(map<string, FuncInfo> &func_info, BufferOutputOpts output_opts)
         // Maxima
         printf("      Maximum stored to in each dim: {");
         for (int idx = 0; idx < info.dimensions; idx++) {
-            if (idx>0) {
+            if (idx > 0) {
                 printf(", ");
             }
             printf("%d", info.max_coords[idx]);
@@ -268,20 +269,20 @@ void finish_dump(map<string, FuncInfo> &func_info, BufferOutputOpts output_opts)
     printf("Done.\n");
 }
 
-void usage(char * const *argv) {
+void usage(char *const *argv) {
     const string usage =
         "Usage: " + string(argv[0]) + " -i trace_file -t {png,jpg,pgm,tmp,mat}\n"
-        "\n"
-        "This tool reads a binary trace produced by Halide, and dumps all\n"
-        "Funcs into individual image files in the current directory.\n"
-        "To generate a suitable binary trace, use Func::trace_stores(), or the\n"
-        "target features trace_stores and trace_realizations, and run with\n"
-        "HL_TRACE_FILE=<filename>.\n";
+                                      "\n"
+                                      "This tool reads a binary trace produced by Halide, and dumps all\n"
+                                      "Funcs into individual image files in the current directory.\n"
+                                      "To generate a suitable binary trace, use Func::trace_stores(), or the\n"
+                                      "target features trace_stores and trace_realizations, and run with\n"
+                                      "HL_TRACE_FILE=<filename>.\n";
     fprintf(stderr, "%s\n", usage.c_str());
     exit(1);
 }
 
-int main(int argc, char * const *argv) {
+int main(int argc, char *const *argv) {
     char *buf_filename = nullptr;
     char *buf_imagetype = nullptr;
     BufferOutputOpts outputopts;
@@ -324,7 +325,6 @@ int main(int argc, char * const *argv) {
         exit(1);
     }
 
-
     printf("[INFO] Starting parse of binary trace...\n");
     int packet_count = 0;
 
@@ -346,7 +346,7 @@ int main(int argc, char * const *argv) {
         }
 
         // Check if this was a store packet.
-        if ( (p.event == halide_trace_store) || (p.event == halide_trace_load) ) {
+        if ((p.event == halide_trace_store) || (p.event == halide_trace_load)) {
             if (func_info.find(string(p.func())) == func_info.end()) {
                 printf("[INFO] Found Func with tracked accesses: %s\n", p.func());
                 func_info[string(p.func())] = FuncInfo(&p);
@@ -357,7 +357,7 @@ int main(int argc, char * const *argv) {
 
     packet_count = 0;
     fseek(file_desc, 0, SEEK_SET);
-    if (ferror(file_desc)){
+    if (ferror(file_desc)) {
         fprintf(stderr, "Error: couldn't seek back to beginning of trace file. Aborting.\n");
         exit(-1);
     }
@@ -384,7 +384,7 @@ int main(int argc, char * const *argv) {
         }
 
         // Check if this was a store packet.
-        if ( (p.event == halide_trace_store) || (p.event == halide_trace_load) ) {
+        if ((p.event == halide_trace_store) || (p.event == halide_trace_load)) {
             if (func_info.find(string(p.func())) == func_info.end()) {
                 fprintf(stderr, "Unable to find Func on 2nd pass. Aborting.\n");
                 exit(-1);
