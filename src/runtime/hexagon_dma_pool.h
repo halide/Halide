@@ -1,6 +1,8 @@
 #ifndef _HEXAGON_DMA_POOL_H_
 #define _HEXAGON_DMA_POOL_H_
 
+#include "runtime_internal.h"
+
 #ifdef __cplusplus
 extern "C" {
 #endif

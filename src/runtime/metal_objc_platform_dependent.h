@@ -1,6 +1,8 @@
 #ifndef HALIDE_OBJC_METAL_PLATFORM_DEPENDENT_H
 #define HALIDE_OBJC_METAL_PLATFORM_DEPENDENT_H
 
+#include "runtime_internal.h"
+
 namespace Halide {
 namespace Runtime {
 namespace Internal {
