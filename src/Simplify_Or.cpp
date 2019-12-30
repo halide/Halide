@@ -17,63 +17,62 @@ Expr Simplify::visit(const Or *op, ExprInfo *bounds) {
 
     auto rewrite = IRMatcher::rewriter(IRMatcher::or_op(a, b), op->type);
 
-    if (EVAL_IN_LAMBDA
-        (rewrite(x || true, b) ||
-         rewrite(x || false, a) ||
-         rewrite(x || x, a) ||
+    if (EVAL_IN_LAMBDA(rewrite(x || true, b) ||
+                       rewrite(x || false, a) ||
+                       rewrite(x || x, a) ||
 
-         rewrite((x || y) || x, a) ||
-         rewrite(x || (x || y), b) ||
-         rewrite((x || y) || y, a) ||
-         rewrite(y || (x || y), b) ||
+                       rewrite((x || y) || x, a) ||
+                       rewrite(x || (x || y), b) ||
+                       rewrite((x || y) || y, a) ||
+                       rewrite(y || (x || y), b) ||
 
-         rewrite(((x || y) || z) || x, a) ||
-         rewrite(x || ((x || y) || z), b) ||
-         rewrite((z || (x || y)) || x, a) ||
-         rewrite(x || (z || (x || y)), b) ||
-         rewrite(((x || y) || z) || y, a) ||
-         rewrite(y || ((x || y) || z), b) ||
-         rewrite((z || (x || y)) || y, a) ||
-         rewrite(y || (z || (x || y)), b) ||
+                       rewrite(((x || y) || z) || x, a) ||
+                       rewrite(x || ((x || y) || z), b) ||
+                       rewrite((z || (x || y)) || x, a) ||
+                       rewrite(x || (z || (x || y)), b) ||
+                       rewrite(((x || y) || z) || y, a) ||
+                       rewrite(y || ((x || y) || z), b) ||
+                       rewrite((z || (x || y)) || y, a) ||
+                       rewrite(y || (z || (x || y)), b) ||
 
-         rewrite((x && y) || x, b) ||
-         rewrite(x || (x && y), a) ||
-         rewrite((x && y) || y, b) ||
-         rewrite(y || (x && y), a) ||
+                       rewrite((x && y) || x, b) ||
+                       rewrite(x || (x && y), a) ||
+                       rewrite((x && y) || y, b) ||
+                       rewrite(y || (x && y), a) ||
 
-         rewrite(((x || y) || z) || x, a) ||
-         rewrite(x || ((x || y) || z), b) ||
-         rewrite((z || (x || y)) || x, a) ||
-         rewrite(x || (z || (x || y)), b) ||
-         rewrite(((x || y) || z) || y, a) ||
-         rewrite(y || ((x || y) || z), b) ||
-         rewrite((z || (x || y)) || y, a) ||
-         rewrite(y || (z || (x || y)), b) ||
+                       rewrite(((x || y) || z) || x, a) ||
+                       rewrite(x || ((x || y) || z), b) ||
+                       rewrite((z || (x || y)) || x, a) ||
+                       rewrite(x || (z || (x || y)), b) ||
+                       rewrite(((x || y) || z) || y, a) ||
+                       rewrite(y || ((x || y) || z), b) ||
+                       rewrite((z || (x || y)) || y, a) ||
+                       rewrite(y || (z || (x || y)), b) ||
 
-         rewrite(x != y || x == y, true) ||
-         rewrite(x != y || y == x, true) ||
-         rewrite((z || x != y) || x == y, true) ||
-         rewrite((z || x != y) || y == x, true) ||
-         rewrite((x != y || z) || x == y, true) ||
-         rewrite((x != y || z) || y == x, true) ||
-         rewrite((z || x == y) || x != y, true) ||
-         rewrite((z || x == y) || y != x, true) ||
-         rewrite((x == y || z) || x != y, true) ||
-         rewrite((x == y || z) || y != x, true) ||
-         rewrite(x || !x, true) ||
-         rewrite(!x || x, true) ||
-         rewrite(y <= x || x < y, true) ||
-         rewrite(x != c0 || x == c1, a, c0 != c1) ||
-         rewrite(x <= c0 || c1 <= x, true, !is_float(x) && c1 <= c0 + 1) ||
-         rewrite(c1 <= x || x <= c0, true, !is_float(x) && c1 <= c0 + 1) ||
-         rewrite(x <= c0 || c1 < x, true, c1 <= c0) ||
-         rewrite(c1 <= x || x < c0, true, c1 <= c0) ||
-         rewrite(x < c0 || c1 < x, true, c1 < c0) ||
-         rewrite(c1 < x || x < c0, true, c1 < c0) ||
-         rewrite(c0 < x || c1 < x, fold(min(c0, c1)) < x) ||
-         rewrite(c0 <= x || c1 <= x, fold(min(c0, c1)) <= x) ||
-         rewrite(x < c0 || x < c1, x < fold(max(c0, c1))) ||
-         rewrite(x <= c0 || x <= c1, x <= fold(max(c0, c1))))) {
+                       rewrite(x != y || x == y, true) ||
+                       rewrite(x != y || y == x, true) ||
+                       rewrite((z || x != y) || x == y, true) ||
+                       rewrite((z || x != y) || y == x, true) ||
+                       rewrite((x != y || z) || x == y, true) ||
+                       rewrite((x != y || z) || y == x, true) ||
+                       rewrite((z || x == y) || x != y, true) ||
+                       rewrite((z || x == y) || y != x, true) ||
+                       rewrite((x == y || z) || x != y, true) ||
+                       rewrite((x == y || z) || y != x, true) ||
+                       rewrite(x || !x, true) ||
+                       rewrite(!x || x, true) ||
+                       rewrite(y <= x || x < y, true) ||
+                       rewrite(x != c0 || x == c1, a, c0 != c1) ||
+                       rewrite(x <= c0 || c1 <= x, true, !is_float(x) && c1 <= c0 + 1) ||
+                       rewrite(c1 <= x || x <= c0, true, !is_float(x) && c1 <= c0 + 1) ||
+                       rewrite(x <= c0 || c1 < x, true, c1 <= c0) ||
+                       rewrite(c1 <= x || x < c0, true, c1 <= c0) ||
+                       rewrite(x < c0 || c1 < x, true, c1 < c0) ||
+                       rewrite(c1 < x || x < c0, true, c1 < c0) ||
+                       rewrite(c0 < x || c1 < x, fold(min(c0, c1)) < x) ||
+                       rewrite(c0 <= x || c1 <= x, fold(min(c0, c1)) <= x) ||
+                       rewrite(x < c0 || x < c1, x < fold(max(c0, c1))) ||
+                       rewrite(x <= c0 || x <= c1, x <= fold(max(c0, c1))))) {
         return rewrite.result;
     }
 

@@ -292,11 +292,11 @@ inline int test1_th_(at::Tensor &_buf, float _alpha, int32_t _beta) {
     return 0;
 }
 
-#include "torch/extension.h"
-#include "HalideBuffer.h"
-#include "HalidePyTorchHelpers.h"
 #include "ATen/cuda/CUDAContext.h"
+#include "HalideBuffer.h"
 #include "HalidePyTorchCudaHelpers.h"
+#include "HalidePyTorchHelpers.h"
+#include "torch/extension.h"
 
 struct halide_buffer_t;
 struct halide_filter_metadata_t;

@@ -49,100 +49,99 @@ Expr Simplify::visit(const Add *op, ExprInfo *bounds) {
             return rewrite.result;
         }
 
-        if (EVAL_IN_LAMBDA
-            (rewrite(x + x, x * 2) ||
-             rewrite(ramp(x, y) + ramp(z, w), ramp(x + z, y + w, lanes)) ||
-             rewrite(ramp(x, y) + broadcast(z), ramp(x + z, y, lanes)) ||
-             rewrite(broadcast(x) + broadcast(y), broadcast(x + y, lanes)) ||
-             rewrite(select(x, y, z) + select(x, w, u), select(x, y + w, z + u)) ||
-             rewrite(select(x, c0, c1) + c2, select(x, fold(c0 + c2), fold(c1 + c2))) ||
-             rewrite(select(x, y, c1) + c2, select(x, y + c2, fold(c1 + c2))) ||
-             rewrite(select(x, c0, y) + c2, select(x, fold(c0 + c2), y + c2)) ||
+        if (EVAL_IN_LAMBDA(rewrite(x + x, x * 2) ||
+                           rewrite(ramp(x, y) + ramp(z, w), ramp(x + z, y + w, lanes)) ||
+                           rewrite(ramp(x, y) + broadcast(z), ramp(x + z, y, lanes)) ||
+                           rewrite(broadcast(x) + broadcast(y), broadcast(x + y, lanes)) ||
+                           rewrite(select(x, y, z) + select(x, w, u), select(x, y + w, z + u)) ||
+                           rewrite(select(x, c0, c1) + c2, select(x, fold(c0 + c2), fold(c1 + c2))) ||
+                           rewrite(select(x, y, c1) + c2, select(x, y + c2, fold(c1 + c2))) ||
+                           rewrite(select(x, c0, y) + c2, select(x, fold(c0 + c2), y + c2)) ||
 
-             rewrite((select(x, y, z) + w) + select(x, u, v), select(x, y + u, z + v) + w) ||
-             rewrite((w + select(x, y, z)) + select(x, u, v), select(x, y + u, z + v) + w) ||
-             rewrite(select(x, y, z) + (select(x, u, v) + w), select(x, y + u, z + v) + w) ||
-             rewrite(select(x, y, z) + (w + select(x, u, v)), select(x, y + u, z + v) + w) ||
-             rewrite((select(x, y, z) - w) + select(x, u, v), select(x, y + u, z + v) - w) ||
-             rewrite(select(x, y, z) + (select(x, u, v) - w), select(x, y + u, z + v) - w) ||
-             rewrite((w - select(x, y, z)) + select(x, u, v), select(x, u - y, v - z) + w) ||
-             rewrite(select(x, y, z) + (w - select(x, u, v)), select(x, y - u, z - v) + w) ||
+                           rewrite((select(x, y, z) + w) + select(x, u, v), select(x, y + u, z + v) + w) ||
+                           rewrite((w + select(x, y, z)) + select(x, u, v), select(x, y + u, z + v) + w) ||
+                           rewrite(select(x, y, z) + (select(x, u, v) + w), select(x, y + u, z + v) + w) ||
+                           rewrite(select(x, y, z) + (w + select(x, u, v)), select(x, y + u, z + v) + w) ||
+                           rewrite((select(x, y, z) - w) + select(x, u, v), select(x, y + u, z + v) - w) ||
+                           rewrite(select(x, y, z) + (select(x, u, v) - w), select(x, y + u, z + v) - w) ||
+                           rewrite((w - select(x, y, z)) + select(x, u, v), select(x, u - y, v - z) + w) ||
+                           rewrite(select(x, y, z) + (w - select(x, u, v)), select(x, y - u, z - v) + w) ||
 
-             rewrite((x + c0) + c1, x + fold(c0 + c1)) ||
-             rewrite((x + c0) + y, (x + y) + c0) ||
-             rewrite(x + (y + c0), (x + y) + c0) ||
-             rewrite((c0 - x) + c1, fold(c0 + c1) - x) ||
-             rewrite((c0 - x) + y, (y - x) + c0) ||
+                           rewrite((x + c0) + c1, x + fold(c0 + c1)) ||
+                           rewrite((x + c0) + y, (x + y) + c0) ||
+                           rewrite(x + (y + c0), (x + y) + c0) ||
+                           rewrite((c0 - x) + c1, fold(c0 + c1) - x) ||
+                           rewrite((c0 - x) + y, (y - x) + c0) ||
 
-             rewrite((x - y) + y, x) ||
-             rewrite(x + (y - x), y) ||
+                           rewrite((x - y) + y, x) ||
+                           rewrite(x + (y - x), y) ||
 
-             rewrite(((x - y) + z) + y, x + z) ||
-             rewrite((z + (x - y)) + y, z + x) ||
-             rewrite(x + ((y - x) + z), y + z) ||
-             rewrite(x + (z + (y - x)), z + y) ||
+                           rewrite(((x - y) + z) + y, x + z) ||
+                           rewrite((z + (x - y)) + y, z + x) ||
+                           rewrite(x + ((y - x) + z), y + z) ||
+                           rewrite(x + (z + (y - x)), z + y) ||
 
-             rewrite(x + (c0 - y), (x - y) + c0) ||
-             rewrite((x - y) + (y - z), x - z) ||
-             rewrite((x - y) + (z - x), z - y) ||
-             rewrite(x + y*c0, x - y*(-c0), c0 < 0 && -c0 > 0) ||
+                           rewrite(x + (c0 - y), (x - y) + c0) ||
+                           rewrite((x - y) + (y - z), x - z) ||
+                           rewrite((x - y) + (z - x), z - y) ||
+                           rewrite(x + y * c0, x - y * (-c0), c0 < 0 && -c0 > 0) ||
 
-             rewrite(x + (y*c0 - z), x - y*(-c0) - z, c0 < 0 && -c0 > 0) ||
-             rewrite((y*c0 - z) + x, x - y*(-c0) - z, c0 < 0 && -c0 > 0) ||
+                           rewrite(x + (y * c0 - z), x - y * (-c0) - z, c0 < 0 && -c0 > 0) ||
+                           rewrite((y * c0 - z) + x, x - y * (-c0) - z, c0 < 0 && -c0 > 0) ||
 
-             rewrite(x*c0 + y, y - x*(-c0), c0 < 0 && -c0 > 0 && !is_const(y)) ||
-             rewrite(x*y + z*y, (x + z)*y) ||
-             rewrite(x*y + y*z, (x + z)*y) ||
-             rewrite(y*x + z*y, y*(x + z)) ||
-             rewrite(y*x + y*z, y*(x + z)) ||
-             rewrite(x*c0 + y*c1, (x + y*fold(c1/c0)) * c0, c1 % c0 == 0) ||
-             rewrite(x*c0 + y*c1, (x*fold(c0/c1) + y) * c1, c0 % c1 == 0) ||
-             (no_overflow(op->type) &&
-              (rewrite(x + x*y, x * (y + 1)) ||
-               rewrite(x + y*x, (y + 1) * x) ||
-               rewrite(x*y + x, x * (y + 1)) ||
-               rewrite(y*x + x, (y + 1) * x, !is_const(x)) ||
-               rewrite((x + c0)/c1 + c2, (x + fold(c0 + c1*c2))/c1) ||
-               rewrite((x + (y + c0)/c1) + c2, x + (y + fold(c0 + c1*c2))/c1) ||
-               rewrite(((y + c0)/c1 + x) + c2, x + (y + fold(c0 + c1*c2))/c1) ||
-               rewrite((c0 - x)/c1 + c2, (fold(c0 + c1*c2) - x)/c1, c0 != 0 && c1 != 0) || // When c0 is zero, this would fight another rule
-               rewrite(x + (x + y)/c0, (fold(c0 + 1)*x + y)/c0) ||
-               rewrite(x + (y + x)/c0, (fold(c0 + 1)*x + y)/c0) ||
-               rewrite(x + (y - x)/c0, (fold(c0 - 1)*x + y)/c0) ||
-               rewrite(x + (x - y)/c0, (fold(c0 + 1)*x - y)/c0) ||
-               rewrite((x - y)/c0 + x, (fold(c0 + 1)*x - y)/c0) ||
-               rewrite((y - x)/c0 + x, (y + fold(c0 - 1)*x)/c0) ||
-               rewrite((x + y)/c0 + x, (fold(c0 + 1)*x + y)/c0) ||
-               rewrite((y + x)/c0 + x, (y + fold(c0 + 1)*x)/c0) ||
-               rewrite(min(x, y - z) + z, min(x + z, y)) ||
-               rewrite(min(y - z, x) + z, min(y, x + z)) ||
-               rewrite(min(x, y + c0) + c1, min(x + c1, y), c0 + c1 == 0) ||
-               rewrite(min(y + c0, x) + c1, min(y, x + c1), c0 + c1 == 0) ||
-               rewrite(z + min(x, y - z), min(z + x, y)) ||
-               rewrite(z + min(y - z, x), min(y, z + x)) ||
-               rewrite(z + max(x, y - z), max(z + x, y)) ||
-               rewrite(z + max(y - z, x), max(y, z + x)) ||
-               rewrite(max(x, y - z) + z, max(x + z, y)) ||
-               rewrite(max(y - z, x) + z, max(y, x + z)) ||
-               rewrite(max(x, y + c0) + c1, max(x + c1, y), c0 + c1 == 0) ||
-               rewrite(max(y + c0, x) + c1, max(y, x + c1), c0 + c1 == 0) ||
-               rewrite(max(x, y) + min(x, y), x + y) ||
-               rewrite(max(x, y) + min(y, x), x + y))) ||
-             (no_overflow_int(op->type) &&
-              (rewrite((x/y)*y + x%y, x) ||
-               rewrite((z + x/y)*y + x%y, z*y + x) ||
-               rewrite((x/y + z)*y + x%y, x + z*y) ||
-               rewrite(x%y + ((x/y)*y + z), x + z) ||
-               rewrite(x%y + ((x/y)*y - z), x - z) ||
-               rewrite(x%y + (z + (x/y)*y), x + z) ||
-               rewrite((x/y)*y + (x%y + z), x + z) ||
-               rewrite((x/y)*y + (x%y - z), x - z) ||
-               rewrite((x/y)*y + (z + x%y), x + z) ||
-               rewrite(x/2 + x%2, (x + 1) / 2) ||
+                           rewrite(x * c0 + y, y - x * (-c0), c0 < 0 && -c0 > 0 && !is_const(y)) ||
+                           rewrite(x * y + z * y, (x + z) * y) ||
+                           rewrite(x * y + y * z, (x + z) * y) ||
+                           rewrite(y * x + z * y, y * (x + z)) ||
+                           rewrite(y * x + y * z, y * (x + z)) ||
+                           rewrite(x * c0 + y * c1, (x + y * fold(c1 / c0)) * c0, c1 % c0 == 0) ||
+                           rewrite(x * c0 + y * c1, (x * fold(c0 / c1) + y) * c1, c0 % c1 == 0) ||
+                           (no_overflow(op->type) &&
+                            (rewrite(x + x * y, x * (y + 1)) ||
+                             rewrite(x + y * x, (y + 1) * x) ||
+                             rewrite(x * y + x, x * (y + 1)) ||
+                             rewrite(y * x + x, (y + 1) * x, !is_const(x)) ||
+                             rewrite((x + c0) / c1 + c2, (x + fold(c0 + c1 * c2)) / c1) ||
+                             rewrite((x + (y + c0) / c1) + c2, x + (y + fold(c0 + c1 * c2)) / c1) ||
+                             rewrite(((y + c0) / c1 + x) + c2, x + (y + fold(c0 + c1 * c2)) / c1) ||
+                             rewrite((c0 - x) / c1 + c2, (fold(c0 + c1 * c2) - x) / c1, c0 != 0 && c1 != 0) ||  // When c0 is zero, this would fight another rule
+                             rewrite(x + (x + y) / c0, (fold(c0 + 1) * x + y) / c0) ||
+                             rewrite(x + (y + x) / c0, (fold(c0 + 1) * x + y) / c0) ||
+                             rewrite(x + (y - x) / c0, (fold(c0 - 1) * x + y) / c0) ||
+                             rewrite(x + (x - y) / c0, (fold(c0 + 1) * x - y) / c0) ||
+                             rewrite((x - y) / c0 + x, (fold(c0 + 1) * x - y) / c0) ||
+                             rewrite((y - x) / c0 + x, (y + fold(c0 - 1) * x) / c0) ||
+                             rewrite((x + y) / c0 + x, (fold(c0 + 1) * x + y) / c0) ||
+                             rewrite((y + x) / c0 + x, (y + fold(c0 + 1) * x) / c0) ||
+                             rewrite(min(x, y - z) + z, min(x + z, y)) ||
+                             rewrite(min(y - z, x) + z, min(y, x + z)) ||
+                             rewrite(min(x, y + c0) + c1, min(x + c1, y), c0 + c1 == 0) ||
+                             rewrite(min(y + c0, x) + c1, min(y, x + c1), c0 + c1 == 0) ||
+                             rewrite(z + min(x, y - z), min(z + x, y)) ||
+                             rewrite(z + min(y - z, x), min(y, z + x)) ||
+                             rewrite(z + max(x, y - z), max(z + x, y)) ||
+                             rewrite(z + max(y - z, x), max(y, z + x)) ||
+                             rewrite(max(x, y - z) + z, max(x + z, y)) ||
+                             rewrite(max(y - z, x) + z, max(y, x + z)) ||
+                             rewrite(max(x, y + c0) + c1, max(x + c1, y), c0 + c1 == 0) ||
+                             rewrite(max(y + c0, x) + c1, max(y, x + c1), c0 + c1 == 0) ||
+                             rewrite(max(x, y) + min(x, y), x + y) ||
+                             rewrite(max(x, y) + min(y, x), x + y))) ||
+                           (no_overflow_int(op->type) &&
+                            (rewrite((x / y) * y + x % y, x) ||
+                             rewrite((z + x / y) * y + x % y, z * y + x) ||
+                             rewrite((x / y + z) * y + x % y, x + z * y) ||
+                             rewrite(x % y + ((x / y) * y + z), x + z) ||
+                             rewrite(x % y + ((x / y) * y - z), x - z) ||
+                             rewrite(x % y + (z + (x / y) * y), x + z) ||
+                             rewrite((x / y) * y + (x % y + z), x + z) ||
+                             rewrite((x / y) * y + (x % y - z), x - z) ||
+                             rewrite((x / y) * y + (z + x % y), x + z) ||
+                             rewrite(x / 2 + x % 2, (x + 1) / 2) ||
 
-               rewrite(x + ((c0 - x)/c1)*c1, c0 - ((c0 - x) % c1), c1 > 0) ||
-               rewrite(x + ((c0 - x)/c1 + y)*c1, y * c1 - ((c0 - x) % c1) + c0, c1 > 0) ||
-               rewrite(x + (y + (c0 - x)/c1)*c1, y * c1 - ((c0 - x) % c1) + c0, c1 > 0))))) {
+                             rewrite(x + ((c0 - x) / c1) * c1, c0 - ((c0 - x) % c1), c1 > 0) ||
+                             rewrite(x + ((c0 - x) / c1 + y) * c1, y * c1 - ((c0 - x) % c1) + c0, c1 > 0) ||
+                             rewrite(x + (y + (c0 - x) / c1) * c1, y * c1 - ((c0 - x) % c1) + c0, c1 > 0))))) {
             return mutate(std::move(rewrite.result), bounds);
         }
 

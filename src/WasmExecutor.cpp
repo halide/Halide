@@ -16,8 +16,8 @@
 #include <vector>
 
 #ifdef WITH_V8
-#include "v8.h"
 #include "libplatform/libplatform.h"
+#include "v8.h"
 #endif
 
 // ---------------------
@@ -1017,7 +1017,7 @@ void wasm_jit___extendhfsf2_callback(const v8::FunctionCallbackInfo<v8::Value> &
     HandleScope scope(isolate);
 
     const uint16_t in = args[0]->NumberValue(context).ToChecked();
-    const float out = (float) float16_t::make_from_bits(in);
+    const float out = (float)float16_t::make_from_bits(in);
 
     args.GetReturnValue().Set(wrap_scalar(context, out));
 }

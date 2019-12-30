@@ -1339,15 +1339,15 @@ public:
             // Insert two new for-loops for vertex buffer generation on the host
             // before the two GPU scheduled for-loops
             return LetStmt::make("glsl.num_coords_dim0", dont_simplify((int)(coords[0].size())),
-                   LetStmt::make("glsl.num_coords_dim1", dont_simplify((int)(coords[1].size())),
-                   LetStmt::make("glsl.num_padded_attributes", dont_simplify(num_padded_attributes),
-                   Allocate::make(vs.vertex_buffer_name, Float(32), MemoryType::Auto, {vertex_buffer_size}, const_true(),
-                   Block::make(vertex_setup,
-                   Block::make(loop_stmt,
-                   Block::make(used_in_codegen(Int(32), "glsl.num_coords_dim0"),
-                   Block::make(used_in_codegen(Int(32), "glsl.num_coords_dim1"),
-                   Block::make(used_in_codegen(Int(32), "glsl.num_padded_attributes"),
-                   Free::make(vs.vertex_buffer_name))))))))));
+                                 LetStmt::make("glsl.num_coords_dim1", dont_simplify((int)(coords[1].size())),
+                                               LetStmt::make("glsl.num_padded_attributes", dont_simplify(num_padded_attributes),
+                                                             Allocate::make(vs.vertex_buffer_name, Float(32), MemoryType::Auto, {vertex_buffer_size}, const_true(),
+                                                                            Block::make(vertex_setup,
+                                                                                        Block::make(loop_stmt,
+                                                                                                    Block::make(used_in_codegen(Int(32), "glsl.num_coords_dim0"),
+                                                                                                                Block::make(used_in_codegen(Int(32), "glsl.num_coords_dim1"),
+                                                                                                                            Block::make(used_in_codegen(Int(32), "glsl.num_padded_attributes"),
+                                                                                                                                        Free::make(vs.vertex_buffer_name))))))))));
         } else {
             return IRMutator::visit(op);
         }

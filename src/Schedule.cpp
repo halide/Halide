@@ -287,7 +287,7 @@ struct StageScheduleContents {
     StageScheduleContents()
         : fuse_level(FuseLoopLevel()), touched(false),
           allow_race_conditions(false), atomic(false),
-          override_atomic_associativity_test(false) {};
+          override_atomic_associativity_test(false){};
 
     // Pass an IRMutator through to all Exprs referenced in the StageScheduleContents
     void mutate(IRMutator *mutator) {
