@@ -1,7 +1,9 @@
 #ifndef HALIDE_DEVICE_INTERFACE_H
 #define HALIDE_DEVICE_INTERFACE_H
 
-#include "runtime_internal.h"
+#ifndef WEAK
+#define WEAK __attribute__((weak))
+#endif
 
 extern "C" {
 
