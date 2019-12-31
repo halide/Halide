@@ -1,6 +1,6 @@
 #include "Halide.h"
-#include <stdio.h>
 #include <math.h>
+#include <stdio.h>
 
 using std::vector;
 using namespace Halide;
@@ -9,7 +9,9 @@ using namespace Halide::Internal;
 class CountInterleaves : public IRVisitor {
 public:
     int result;
-    CountInterleaves() : result(0) {}
+    CountInterleaves()
+        : result(0) {
+    }
 
     using IRVisitor::visit;
 
@@ -96,7 +98,7 @@ int main(int argc, char **argv) {
         define(g(x), g_def);
         std::vector<Expr> h_def;
         for (int i = 0; i < elements; i++) {
-            h_def.push_back(select(x % 2 == 0, element(f(x/2), i), element(g(x/2), i)*17.0f));
+            h_def.push_back(select(x % 2 == 0, element(f(x / 2), i), element(g(x / 2), i) * 17.0f));
             g_def.push_back(cos(x + i));
         }
         define(h(x), h_def);
@@ -111,7 +113,7 @@ int main(int argc, char **argv) {
         for (int i = 0; i < elements; i++) {
             Buffer<float> result = results[i];
             for (int x = 0; x < 16; x++) {
-                float correct = ((x % 2) == 0) ? ((sinf(x/2 + i))) : (cosf(x/2 + i)*17.0f);
+                float correct = ((x % 2) == 0) ? ((sinf(x / 2 + i))) : (cosf(x / 2 + i) * 17.0f);
                 float delta = result(x) - correct;
                 if (delta > 0.01 || delta < -0.01) {
                     printf("result(%d) = %f instead of %f\n", x, result(x), correct);
@@ -124,7 +126,7 @@ int main(int argc, char **argv) {
     {
         // Test interleave 3 vectors:
         Func planar, interleaved;
-        planar(x, y) = Halide::cast<float>( 3 * x + y );
+        planar(x, y) = Halide::cast<float>(3 * x + y);
         interleaved(x, y) = planar(x, y);
 
         Var xy("xy");
@@ -142,11 +144,11 @@ int main(int argc, char **argv) {
         interleaved
             .output_buffer()
             .dim(0)
-                .set_stride(3)
+            .set_stride(3)
             .dim(1)
-                .set_min(0)
-                .set_stride(1)
-                .set_extent(3);
+            .set_min(0)
+            .set_stride(1)
+            .set_extent(3);
 
         Buffer<float> buff3(3, 16);
         buff3.transpose(0, 1);
@@ -157,10 +159,10 @@ int main(int argc, char **argv) {
 
         for (int x = 0; x < 16; x++) {
             for (int y = 0; y < 3; y++) {
-                float correct = 3*x + y;
+                float correct = 3 * x + y;
                 float delta = buff3(x, y) - correct;
                 if (delta > 0.01 || delta < -0.01) {
-                    printf("result(%d) = %f instead of %f\n", x, buff3(x,y), correct);
+                    printf("result(%d) = %f instead of %f\n", x, buff3(x, y), correct);
                     return -1;
                 }
             }
@@ -171,10 +173,10 @@ int main(int argc, char **argv) {
         // Test interleave 4 vectors:
         Func f1, f2, f3, f4, f5;
         f1(x) = sin(x);
-        f2(x) = sin(2*x);
-        f3(x) = sin(3*x);
-        f4(x) = sin(4*x);
-        f5(x) = sin(5*x);
+        f2(x) = sin(2 * x);
+        f3(x) = sin(3 * x);
+        f4(x) = sin(4 * x);
+        f5(x) = sin(5 * x);
 
         Func output4;
         output4(x, y) = select(y == 0, f1(x),
@@ -190,11 +192,11 @@ int main(int argc, char **argv) {
 
         output4.output_buffer()
             .dim(0)
-                .set_stride(4)
+            .set_stride(4)
             .dim(1)
-                .set_min(0)
-                .set_stride(1)
-                .set_extent(4);
+            .set_min(0)
+            .set_stride(1)
+            .set_extent(4);
 
         check_interleave_count(output4, 1);
 
@@ -205,10 +207,10 @@ int main(int argc, char **argv) {
 
         for (int x = 0; x < 16; x++) {
             for (int y = 0; y < 4; y++) {
-                float correct = sin((y+1)*x);
+                float correct = sin((y + 1) * x);
                 float delta = buff4(x, y) - correct;
                 if (delta > 0.01 || delta < -0.01) {
-                    printf("result(%d) = %f instead of %f\n", x, buff4(x,y), correct);
+                    printf("result(%d) = %f instead of %f\n", x, buff4(x, y), correct);
                     return -1;
                 }
             }
@@ -230,12 +232,11 @@ int main(int argc, char **argv) {
 
         output5.output_buffer()
             .dim(0)
-                .set_stride(5)
+            .set_stride(5)
             .dim(1)
-                .set_min(0)
-                .set_stride(1)
-                .set_extent(5);
-
+            .set_min(0)
+            .set_stride(1)
+            .set_extent(5);
 
         check_interleave_count(output5, 1);
 
@@ -246,10 +247,10 @@ int main(int argc, char **argv) {
 
         for (int x = 0; x < 16; x++) {
             for (int y = 0; y < 5; y++) {
-                float correct = sin((y+1)*x);
+                float correct = sin((y + 1) * x);
                 float delta = buff5(x, y) - correct;
                 if (delta > 0.01 || delta < -0.01) {
-                    printf("result(%d) = %f instead of %f\n", x, buff5(x,y), correct);
+                    printf("result(%d) = %f instead of %f\n", x, buff5(x, y), correct);
                     return -1;
                 }
             }
@@ -262,9 +263,8 @@ int main(int argc, char **argv) {
         f1(x) = sin(x);
         f1.compute_root();
 
-        f2(x) = sin(2*x);
+        f2(x) = sin(2 * x);
         f2.compute_root();
-
 
         Func unrolled;
         unrolled(x, y) = select(x % 2 == 0, f1(x), f2(x)) + y;
@@ -288,38 +288,38 @@ int main(int argc, char **argv) {
         }
 
         // Make sure we don't interleave when the reordering would change the meaning.
-        Realization* refs = nullptr;
+        Realization *refs = nullptr;
         for (int i = 0; i < 2; i++) {
             Func output6;
             define(output6(x, y), cast<uint8_t>(x), elements);
             RDom r(0, 16);
 
             // A not-safe-to-merge pair of updates
-            define(output6(2*r, 0), cast<uint8_t>(3), elements);
-            define(output6(2*r+1, 0), cast<uint8_t>(4), elements);
+            define(output6(2 * r, 0), cast<uint8_t>(3), elements);
+            define(output6(2 * r + 1, 0), cast<uint8_t>(4), elements);
 
             // A safe-to-merge pair of updates
-            define(output6(2*r, 1), cast<uint8_t>(3), elements);
-            define(output6(2*r+1, 1), cast<uint8_t>(4), elements);
+            define(output6(2 * r, 1), cast<uint8_t>(3), elements);
+            define(output6(2 * r + 1, 1), cast<uint8_t>(4), elements);
 
             // A safe-to-merge-but-not-complete triple of updates:
-            define(output6(3*r, 3), cast<uint8_t>(3), elements);
-            define(output6(3*r+1, 3), cast<uint8_t>(4), elements);
+            define(output6(3 * r, 3), cast<uint8_t>(3), elements);
+            define(output6(3 * r + 1, 3), cast<uint8_t>(4), elements);
 
             // A safe-to-merge-but-we-don't pair of updates, because they
             // load recursively, so we conservatively bail out.
             std::vector<Expr> rdef0, rdef1;
             for (int i = 0; i < elements; i++) {
-                rdef0.push_back(element(output6(2*r, 2), i) + 1);
-                rdef1.push_back(element(output6(2*r+1, 2), i) + 1);
+                rdef0.push_back(element(output6(2 * r, 2), i) + 1);
+                rdef1.push_back(element(output6(2 * r + 1, 2), i) + 1);
             }
-            define(output6(2*r, 2), rdef0);
-            define(output6(2*r+1, 2), rdef1);
+            define(output6(2 * r, 2), rdef0);
+            define(output6(2 * r + 1, 2), rdef1);
 
             // A safe-to-merge triple of updates:
-            define(output6(3*r, 3), cast<uint8_t>(7), elements);
-            define(output6(3*r+2, 3), cast<uint8_t>(9), elements);
-            define(output6(3*r+1, 3), cast<uint8_t>(8), elements);
+            define(output6(3 * r, 3), cast<uint8_t>(7), elements);
+            define(output6(3 * r + 2, 3), cast<uint8_t>(9), elements);
+            define(output6(3 * r + 1, 3), cast<uint8_t>(8), elements);
 
             if (i == 0) {
                 // Making the reference output.
@@ -330,7 +330,7 @@ int main(int argc, char **argv) {
                     output6.update(j).vectorize(r);
                 }
 
-                check_interleave_count(output6, 2*elements);
+                check_interleave_count(output6, 2 * elements);
 
                 Realization outs = output6.realize(50, 4);
                 for (int e = 0; e < elements; e++) {
@@ -354,7 +354,7 @@ int main(int argc, char **argv) {
     {
         // Test that transposition works when vectorizing either dimension:
         Func square("square");
-        square(x, y) = cast(UInt(16), 5*x + y);
+        square(x, y) = cast(UInt(16), 5 * x + y);
 
         Func trans1("trans1");
         trans1(x, y) = square(y, x);
@@ -380,23 +380,23 @@ int main(int argc, char **argv) {
 
         trans1.output_buffer()
             .dim(0)
-                .set_min(0)
-                .set_stride(1)
-                .set_extent(8)
+            .set_min(0)
+            .set_stride(1)
+            .set_extent(8)
             .dim(1)
-                .set_min(0)
-                .set_stride(8)
-                .set_extent(8);
+            .set_min(0)
+            .set_stride(8)
+            .set_extent(8);
 
         trans2.output_buffer()
             .dim(0)
-                .set_min(0)
-                .set_stride(1)
-                .set_extent(8)
+            .set_min(0)
+            .set_stride(1)
+            .set_extent(8)
             .dim(1)
-                .set_min(0)
-                .set_stride(8)
-                .set_extent(8);
+            .set_min(0)
+            .set_stride(8)
+            .set_extent(8);
 
         Buffer<uint16_t> result6(8, 8);
         Buffer<uint16_t> result7(8, 8);
@@ -405,14 +405,14 @@ int main(int argc, char **argv) {
 
         for (int x = 0; x < 8; x++) {
             for (int y = 0; y < 8; y++) {
-                int correct = 5*y + x;
-                if (result6(x,y) != correct) {
-                    printf("result(%d) = %d instead of %d\n", x, result6(x,y), correct);
+                int correct = 5 * y + x;
+                if (result6(x, y) != correct) {
+                    printf("result(%d) = %d instead of %d\n", x, result6(x, y), correct);
                     return -1;
                 }
 
-                if (result7(x,y) != correct) {
-                    printf("result(%d) = %d instead of %d\n", x, result7(x,y), correct);
+                if (result7(x, y) != correct) {
+                    printf("result(%d) = %d instead of %d\n", x, result7(x, y), correct);
                     return -1;
                 }
             }

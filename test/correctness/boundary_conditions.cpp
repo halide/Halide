@@ -9,10 +9,10 @@ using namespace Halide::BoundaryConditions;
 
 Var x("x"), y("y"), xo("xo"), yo("yo"), xi("xi"), yi("yi");
 
-template <typename T>
+template<typename T>
 bool expect_eq(T actual, T expected) {
     if (expected != actual) {
-        fprintf(stderr, "Failed: expected %d, actual %d\n", (int) expected, (int) actual);
+        fprintf(stderr, "Failed: expected %d, actual %d\n", (int)expected, (int)actual);
         return false;
     }
     return true;
@@ -30,7 +30,7 @@ void schedule_test(Func f, int vector_width, const Target &t) {
     }
 }
 
-template <typename T>
+template<typename T>
 bool check_constant_exterior(const Buffer<T> &input, T exterior, Func f,
                              int test_min_x, int test_extent_x, int test_min_y, int test_extent_y,
                              int vector_width,
@@ -56,7 +56,7 @@ bool check_constant_exterior(const Buffer<T> &input, T exterior, Func f,
     return success;
 }
 
-template <typename T>
+template<typename T>
 bool check_repeat_edge(const Buffer<T> &input, Func f,
                        int test_min_x, int test_extent_x, int test_min_y, int test_extent_y,
                        int vector_width,
@@ -80,7 +80,7 @@ bool check_repeat_edge(const Buffer<T> &input, Func f,
     return success;
 }
 
-template <typename T>
+template<typename T>
 bool check_repeat_image(const Buffer<T> &input, Func f,
                         int test_min_x, int test_extent_x, int test_min_y, int test_extent_y,
                         int vector_width,
@@ -98,17 +98,21 @@ bool check_repeat_image(const Buffer<T> &input, Func f,
         for (int32_t x = test_min_x; x < test_min_x + test_extent_x; x++) {
             int32_t mapped_x = x;
             int32_t mapped_y = y;
-            while (mapped_x < 0) mapped_x += input.width();
-            while (mapped_x > input.width() - 1) mapped_x -= input.width();
-            while (mapped_y < 0) mapped_y += input.height();
-            while (mapped_y > input.height() - 1) mapped_y -= input.height();
+            while (mapped_x < 0)
+                mapped_x += input.width();
+            while (mapped_x > input.width() - 1)
+                mapped_x -= input.width();
+            while (mapped_y < 0)
+                mapped_y += input.height();
+            while (mapped_y > input.height() - 1)
+                mapped_y -= input.height();
             success &= expect_eq(result(x, y), input(mapped_x, mapped_y));
         }
     }
     return success;
 }
 
-template <typename T>
+template<typename T>
 bool check_mirror_image(const Buffer<T> &input, Func f,
                         int test_min_x, int test_extent_x, int test_min_y, int test_extent_y,
                         int vector_width,
@@ -140,7 +144,7 @@ bool check_mirror_image(const Buffer<T> &input, Func f,
     return success;
 }
 
-template <typename T>
+template<typename T>
 bool check_mirror_interior(const Buffer<T> &input, Func f,
                            int test_min_x, int test_extent_x, int test_min_y, int test_extent_y,
                            int vector_width,

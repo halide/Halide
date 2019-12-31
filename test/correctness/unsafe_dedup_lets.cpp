@@ -17,7 +17,8 @@ int main(int argc, char **argv) {
     // The worst-case number of iterations occurs when the smaller
     // number is 1. Iterating up to 'a' should suffice.
     RDom r(0, a);
-    a = f()[0]; b = f()[1];
+    a = f()[0];
+    b = f()[1];
 
     // Stop looping when b hits zero. It would be nice if this created
     // an early-exit from the reduction loop, but that doesn't

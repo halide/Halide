@@ -11,8 +11,8 @@ int main(int argc, char **argv) {
     Var x;
     Expr t = x / 1000.f;
     const float two_pi = 2.0f * static_cast<float>(M_PI);
-    sin_f(x) = fast_sin(-two_pi * t + (1-t) * two_pi);
-    cos_f(x) = fast_cos(-two_pi * t + (1-t) * two_pi);
+    sin_f(x) = fast_sin(-two_pi * t + (1 - t) * two_pi);
+    cos_f(x) = fast_cos(-two_pi * t + (1 - t) * two_pi);
     sin_f.vectorize(x, 8);
     cos_f.vectorize(x, 8);
 

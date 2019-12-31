@@ -7,7 +7,7 @@ Var x;
 
 Func upsample(Func f) {
     Func u;
-    u(x) = f(x/2+1);
+    u(x) = f(x / 2 + 1);
     return u;
 }
 

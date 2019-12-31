@@ -36,7 +36,7 @@ int main(int argc, char **argv) {
     f.realize(out);
 
     // Check correctness of result
-    int expected[] = { -10, -20, -30, 4, 5, 6, 7, 8, 90, 100 };
+    int expected[] = {-10, -20, -30, 4, 5, 6, 7, 8, 90, 100};
     for (int i = 0; i < out.width(); i++) {
         if (out(i + OUTOFF) != expected[i]) {
             printf("Unexpected output: %d != %d\n", out(i + OUTOFF), expected[i]);

@@ -52,10 +52,9 @@ int main(int argc, char **argv) {
     Buffer<float> simple_input = make_image<float>(0);
     Buffer<float> array_input[kArrayCount] = {
         make_image<float>(0),
-        make_image<float>(1)
-    };
+        make_image<float>(1)};
 
-    std::vector<int> int_args = { 33, 66 };
+    std::vector<int> int_args = {33, 66};
 
     // the Stub wants Expr, so make a conversion in place
     std::vector<Expr> int_args_expr(int_args.begin(), int_args.end());
@@ -69,12 +68,11 @@ int main(int argc, char **argv) {
         {
             buffer_input,  // typed_buffer_input
             buffer_input,  // untyped_buffer_input
-            { buffer_input, buffer_input },
+            {buffer_input, buffer_input},
             Func(simple_input),
-            { Func(array_input[0]), Func(array_input[1]) },
+            {Func(array_input[0]), Func(array_input[1])},
             1.25f,
-            int_args_expr
-        },
+            int_args_expr},
         gp);
 
     gp.intermediate_level.set(LoopLevel(gen.tuple_output, gen.tuple_output.args().at(1)));

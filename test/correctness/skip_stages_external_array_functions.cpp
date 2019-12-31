@@ -149,7 +149,6 @@ int main(int argc, char **argv) {
         f4.realize(out);
         check_queries(2, 2, 2);
         check_counts(0, 0, 0);
-
     }
 
     {
@@ -169,7 +168,7 @@ int main(int argc, char **argv) {
                               {identity, 1, 1},
                               UInt(8), 1);
 
-        f1(x) = Tuple(extern1(x), extern2(x+1));
+        f1(x) = Tuple(extern1(x), extern2(x + 1));
         f2(x) = select(toggle1, f1(x)[0], 0) + f1(x)[1];
 
         identity.compute_root();
@@ -208,7 +207,7 @@ int main(int argc, char **argv) {
                               {identity, 1, 1},
                               UInt(8), 1);
 
-        f1(x) = Tuple(extern1(x), extern2(x+1));
+        f1(x) = Tuple(extern1(x), extern2(x + 1));
         f2(x) = select(toggle1, f1(x)[0], 0);
 
         identity.compute_root();
@@ -298,5 +297,4 @@ int main(int argc, char **argv) {
 
     printf("Success!\n");
     return 0;
-
 }

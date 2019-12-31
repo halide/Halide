@@ -6,7 +6,7 @@ class GpuOnly : public Halide::Generator<GpuOnly> {
 public:
     Input<Buffer<int32_t>> input{"input", 2};
 
-    Output<Buffer<int32_t>>  output{"output", 2};
+    Output<Buffer<int32_t>> output{"output", 2};
 
     void generate() {
         Var x("x"), y("y");

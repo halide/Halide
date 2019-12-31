@@ -11,7 +11,7 @@ int main(int argc, char **argv) {
     f(x) = x;
 
     g(x) = 0;
-    g(x) = f(g(x-1)) + r;
+    g(x) = f(g(x - 1)) + r;
 
     f.compute_at(g, r.x);
 

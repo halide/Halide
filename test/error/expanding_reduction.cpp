@@ -17,7 +17,7 @@ int main(int argc, char **argv) {
     // into the error category.
     ImageParam input(Int(32), 2);
     f(x, y) = input(x, y);
-    f(r, y) = f(r, y-1) + f(r, y+1);
+    f(r, y) = f(r, y - 1) + f(r, y + 1);
 
     f.compute_root();
 

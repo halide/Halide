@@ -11,8 +11,7 @@ using namespace Halide;
 #define DLLEXPORT
 #endif
 
-extern "C" DLLEXPORT
-int copy_row_plus_xcoord(halide_buffer_t *input, halide_buffer_t *output) {
+extern "C" DLLEXPORT int copy_row_plus_xcoord(halide_buffer_t *input, halide_buffer_t *output) {
     // Note the final output buffer argument is unused.
     if (input->is_bounds_query()) {
         for (int d = 0; d < 2; d++) {
@@ -29,7 +28,7 @@ int copy_row_plus_xcoord(halide_buffer_t *input, halide_buffer_t *output) {
         assert(output->dim[0].extent == 1 || output->dim[1].extent == 1);
         for (int y = min_y; y <= max_y; y++) {
             for (int x = min_x; x <= max_x; x++) {
-                int coords[2] = { x, y };
+                int coords[2] = {x, y};
                 *(int *)output->address_of(coords) = *(int *)input->address_of(coords) + x;
             }
         }
@@ -43,7 +42,7 @@ int main(int argc, char **argv) {
     for (int extern_dim = 0; extern_dim < 2; extern_dim++) {
         Func input;
         Var x, y;
-        input(x, y) = x*y;
+        input(x, y) = x * y;
 
         Func output;
         output.define_extern("copy_row_plus_xcoord", {input}, Int(32), {x, y});
@@ -60,7 +59,7 @@ int main(int argc, char **argv) {
 
         for (int y = 0; y < buf.height(); y++) {
             for (int x = 0; x < buf.width(); x++) {
-                assert(buf(x, y) == x*y + x);
+                assert(buf(x, y) == x * y + x);
             }
         }
     }

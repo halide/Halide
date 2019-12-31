@@ -31,8 +31,8 @@ struct Test {
         Buffer<float> out = g.realize(W, H);
 
         time = benchmark([&]() {
-                g.realize(out);
-                out.device_sync();
+            g.realize(out);
+            out.device_sync();
         });
 
         printf("%-20s: %f us\n", name, time * 1e6);
@@ -44,7 +44,7 @@ struct Test {
 
         Func g(name);
         Var x, y, xi, yi;
-        RDom r(-blur_radius, 2*blur_radius+1, -blur_radius, 2*blur_radius+1);
+        RDom r(-blur_radius, 2 * blur_radius + 1, -blur_radius, 2 * blur_radius + 1);
         g(x, y) = sum(f(x + r.x, y + r.y));
         if (target.has_gpu_feature()) {
             Var xo, yo, xi, yi;
@@ -56,8 +56,8 @@ struct Test {
         Buffer<float> out = g.realize(W, H);
 
         time = benchmark([&]() {
-                g.realize(out);
-                out.device_sync();
+            g.realize(out);
+            out.device_sync();
         });
 
         printf("%-20s: %f us\n", name, time * 1e6);
@@ -85,13 +85,13 @@ int main(int argc, char **argv) {
 
     // Apply several different boundary conditions.
     Test tests[] = {
-        {"unbounded", lambda(x, y, padded_input(x+8, y+8)), 0.0},
+        {"unbounded", lambda(x, y, padded_input(x + 8, y + 8)), 0.0},
         {"constant_exterior", constant_exterior(input, 0.0f), 0.0},
         {"repeat_edge", repeat_edge(input), 0.0},
         {"repeat_image", repeat_image(input), 0.0},
         {"mirror_image", mirror_image(input), 0.0},
         {"mirror_interior", mirror_interior(input), 0.0},
-        {nullptr, Func(), 0.0}}; // Sentinel
+        {nullptr, Func(), 0.0}};  // Sentinel
 
     // Time each
     for (int i = 0; tests[i].name; i++) {

@@ -36,10 +36,10 @@ int main(int argc, char **argv) {
     for (int i = 0; i < iters; i++) {
         // For each iteration, first copy the diagonal up and
         // down. Pure in x.
-        g(x, x+1) = g(x, x);
-        g(x, x-1) = g(x, x);
+        g(x, x + 1) = g(x, x);
+        g(x, x - 1) = g(x, x);
         // Then blur the diagonal horizontally. Pure in y.
-        g(y, y) = (g(y, y) + g(y-1, y) + g(y+1, y))/3.0f;
+        g(y, y) = (g(y, y) + g(y - 1, y) + g(y + 1, y)) / 3.0f;
     }
 
     g.compute_root();
@@ -61,12 +61,12 @@ int main(int argc, char **argv) {
     int output_extent = 19;
 
     int last_iteration_extent = output_extent;
-    int first_iteration_extent = output_extent + 2*iters;
+    int first_iteration_extent = output_extent + 2 * iters;
 
-    int expected = (first_iteration_extent + // pure definition
-                    iters * (last_iteration_extent + 2 + first_iteration_extent) / 2 + // first update
-                    iters * (last_iteration_extent + 2 + first_iteration_extent) / 2 + // second update
-                    iters * (last_iteration_extent + first_iteration_extent - 2) / 2); // third update
+    int expected = (first_iteration_extent +                                            // pure definition
+                    iters * (last_iteration_extent + 2 + first_iteration_extent) / 2 +  // first update
+                    iters * (last_iteration_extent + 2 + first_iteration_extent) / 2 +  // second update
+                    iters * (last_iteration_extent + first_iteration_extent - 2) / 2);  // third update
 
     g.trace_stores();
     h.set_custom_trace(&my_trace);

@@ -20,8 +20,8 @@ int main(int argc, char **argv) {
         f[i](r.x, r.y) += 1;
         f[i](r.x, r.y) += f[i](r.x + 20, r.y);
 
-        f[i](2*r2 + 1, 0) += f[i](2*r2, 0);
-        f[i](r2, 0) += f[i](r2-1, 1);
+        f[i](2 * r2 + 1, 0) += f[i](2 * r2, 0);
+        f[i](r2, 0) += f[i](r2 - 1, 1);
     }
 
     f[0].compute_root();

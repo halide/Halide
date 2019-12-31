@@ -1,9 +1,9 @@
 #ifndef SIMD_OP_CHECK_H
 #define SIMD_OP_CHECK_H
 
-#include <fstream>
 #include "Halide.h"
 #include "test/common/halide_test_dirs.h"
+#include <fstream>
 
 namespace Halide {
 struct TestResult {
@@ -19,7 +19,7 @@ struct Task {
 };
 
 class SimdOpCheckTest {
- public:
+public:
     std::string filter{"*"};
     std::string output_directory{Internal::get_test_tmp_dir()};
     std::vector<Task> tasks;
@@ -28,8 +28,8 @@ class SimdOpCheckTest {
 
     ImageParam in_f32{Float(32), 1, "in_f32"};
     ImageParam in_f64{Float(64), 1, "in_f64"};
-    ImageParam in_i8 {Int(8), 1, "in_i8"};
-    ImageParam in_u8 {UInt(8), 1, "in_u8"};
+    ImageParam in_i8{Int(8), 1, "in_i8"};
+    ImageParam in_u8{UInt(8), 1, "in_u8"};
     ImageParam in_i16{Int(16), 1, "in_i16"};
     ImageParam in_u16{UInt(16), 1, "in_u16"};
     ImageParam in_i32{Int(32), 1, "in_i32"};
@@ -42,12 +42,13 @@ class SimdOpCheckTest {
     int W;
     int H;
 
-    SimdOpCheckTest(const Target t, int w, int h) :  target(t), W(w), H(h) {
+    SimdOpCheckTest(const Target t, int w, int h)
+        : target(t), W(w), H(h) {
         target = target
-            .with_feature(Target::NoBoundsQuery)
-            .with_feature(Target::NoAsserts)
-            .with_feature(Target::NoRuntime)
-            .with_feature(Target::DisableLLVMLoopOpt);
+                     .with_feature(Target::NoBoundsQuery)
+                     .with_feature(Target::NoAsserts)
+                     .with_feature(Target::NoRuntime)
+                     .with_feature(Target::DisableLLVMLoopOpt);
         num_threads = Internal::ThreadPool<void>::num_processors_online();
     }
     virtual ~SimdOpCheckTest() = default;
@@ -73,11 +74,11 @@ class SimdOpCheckTest {
         // A bunch of feature flags also need to match between the
         // compiled code and the host in order to run the code.
         for (Target::Feature f : {Target::SSE41, Target::AVX,
-                    Target::AVX2, Target::AVX512,
-                    Target::FMA, Target::FMA4, Target::F16C,
-                    Target::VSX, Target::POWER_ARCH_2_07,
-                    Target::ARMv7s, Target::NoNEON, Target::MinGW,
-                    Target::WasmSimd128}) {
+                                  Target::AVX2, Target::AVX512,
+                                  Target::FMA, Target::FMA4, Target::F16C,
+                                  Target::VSX, Target::POWER_ARCH_2_07,
+                                  Target::ARMv7s, Target::NoNEON, Target::MinGW,
+                                  Target::WasmSimd128}) {
             if (target.has_feature(f) != host_target.has_feature(f)) {
                 can_run_the_code = false;
             }
@@ -86,7 +87,7 @@ class SimdOpCheckTest {
     }
 
     // Check if pattern p matches str, allowing for wildcards (*).
-    bool wildcard_match(const char* p, const char* str) const {
+    bool wildcard_match(const char *p, const char *str) const {
         // Match all non-wildcard characters.
         while (*p && *str && *p == *str && *p != '*') {
             str++;
@@ -101,13 +102,13 @@ class SimdOpCheckTest {
                 if (wildcard_match(p, str)) {
                     return true;
                 }
-            } while(*str++);
-        } else if (*p == ' ') {     // ignore whitespace in pattern
+            } while (*str++);
+        } else if (*p == ' ') {  // ignore whitespace in pattern
             p++;
             if (wildcard_match(p, str)) {
                 return true;
             }
-        } else if (*str == ' ') {   // ignore whitespace in string
+        } else if (*str == ' ') {  // ignore whitespace in string
             str++;
             if (wildcard_match(p, str)) {
                 return true;
@@ -116,12 +117,12 @@ class SimdOpCheckTest {
         return !*p;
     }
 
-    bool wildcard_match(const std::string& p, const std::string& str) const {
+    bool wildcard_match(const std::string &p, const std::string &str) const {
         return wildcard_match(p.c_str(), str.c_str());
     }
 
     // Check if a substring of str matches a pattern p.
-    bool wildcard_search(const std::string& p, const std::string& str) const {
+    bool wildcard_search(const std::string &p, const std::string &str) const {
         return wildcard_match("*" + p + "*", str);
     }
 
@@ -181,9 +182,9 @@ class SimdOpCheckTest {
         bool can_run_the_code = can_run_code();
         if (can_run_the_code) {
             Target run_target = target
-                .without_feature(Target::NoRuntime)
-                .without_feature(Target::NoAsserts)
-                .without_feature(Target::NoBoundsQuery);
+                                    .without_feature(Target::NoRuntime)
+                                    .without_feature(Target::NoAsserts)
+                                    .without_feature(Target::NoBoundsQuery);
 
             error.compile_jit(run_target);
             error.infer_input_bounds();
@@ -198,9 +199,9 @@ class SimdOpCheckTest {
                 // subject to rounding error that may differ between
                 // vectorized and non-vectorized versions
                 if (t == Float(32)) {
-                    buf.as<float>().for_each_value([&](float &f) {f = (rng() & 0xfff) / 8.0f - 0xff;});
+                    buf.as<float>().for_each_value([&](float &f) { f = (rng() & 0xfff) / 8.0f - 0xff; });
                 } else if (t == Float(64)) {
-                    buf.as<double>().for_each_value([&](double &f) {f = (rng() & 0xfff) / 8.0 - 0xff;});
+                    buf.as<double>().for_each_value([&](double &f) { f = (rng() & 0xfff) / 8.0 - 0xff; });
                 } else {
                     // Random bits is fine
                     for (uint32_t *ptr = (uint32_t *)buf.data();
@@ -211,7 +212,6 @@ class SimdOpCheckTest {
                         *ptr = ((uint32_t)rng()) & 0x0fffffff;
                     }
                 }
-
             }
             Realization r = error.realize();
             double e = Buffer<double>(r[0])();
@@ -238,7 +238,7 @@ class SimdOpCheckTest {
             }
         }
 
-        return { op, error_msg.str() };
+        return {op, error_msg.str()};
     }
 
     void check(std::string op, int vector_width, Expr e) {
@@ -255,7 +255,7 @@ class SimdOpCheckTest {
         // settings.
         if (!wildcard_match(filter, op)) return;
 
-        tasks.emplace_back(Task {op, name, vector_width, e});
+        tasks.emplace_back(Task{op, name, vector_width, e});
     }
     virtual void add_tests() = 0;
     virtual void setup_images() {
@@ -286,9 +286,10 @@ class SimdOpCheckTest {
 
         return success;
     }
+
 private:
     size_t num_threads;
     const Halide::Var x{"x"}, y{"y"};
 };
-} // Halide
-#endif // SIMD_OP_CHECK_H
+}  // namespace Halide
+#endif  // SIMD_OP_CHECK_H

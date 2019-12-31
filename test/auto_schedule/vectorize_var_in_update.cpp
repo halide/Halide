@@ -21,7 +21,7 @@ int main(int argc, char **argv) {
     in(x, y) = x + y;
     in(x, y) += input(x) - input(y);
 
-    f(x, y) = x*y;
+    f(x, y) = x * y;
     f(r.x, r.y) += in(r.x, r.y) + 3;
     f(x, y) += in(r.x, r.y) + 3;
 

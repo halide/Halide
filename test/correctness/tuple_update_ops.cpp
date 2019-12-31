@@ -38,8 +38,8 @@ int main(int argc, char **argv) {
         Buffer<int> a = result[0], b = result[1];
         for (int y = 0; y < a.height(); y++) {
             for (int x = 0; x < a.width(); x++) {
-                int correct_a = x + 2*y;
-                int correct_b = 4*(x + 13) - y;
+                int correct_a = x + 2 * y;
+                int correct_b = 4 * (x + 13) - y;
                 if (a(x, y) != correct_a || b(x, y) != correct_b) {
                     printf("result(%d, %d) = (%d, %d) instead of (%d, %d)\n",
                            x, y, a(x, y), b(x, y), correct_a, correct_b);
@@ -56,7 +56,7 @@ int main(int argc, char **argv) {
         g(i, j) = i + j;
 
         f(x, _) = Tuple(cast<int16_t>(x), cast<int32_t>(g(_)));
-        f(x, _) += Tuple(cast<int16_t>(2*x), cast<int32_t>(x));
+        f(x, _) += Tuple(cast<int16_t>(2 * x), cast<int32_t>(x));
 
         Realization result = f.realize(100, 100, 100);
         Buffer<int16_t> a = result[0];
@@ -64,7 +64,7 @@ int main(int argc, char **argv) {
         for (int j = 0; j < a.channels(); j++) {
             for (int i = 0; i < a.height(); i++) {
                 for (int x = 0; x < a.width(); x++) {
-                    int correct_a = 3*x;
+                    int correct_a = 3 * x;
                     int correct_b = x + i + j;
                     if (a(x, i, j) != correct_a || b(x, i, j) != correct_b) {
                         printf("result(%d, %d, %d) = (%d, %d) instead of (%d, %d)\n",
@@ -87,8 +87,8 @@ int main(int argc, char **argv) {
         Buffer<int> a = result[0], b = result[1];
         for (int y = 0; y < a.height(); y++) {
             for (int x = 0; x < a.width(); x++) {
-                int correct_a = (x + 13)*(x + 13);
-                int correct_b = (x + y)*(x + y);
+                int correct_a = (x + 13) * (x + 13);
+                int correct_b = (x + y) * (x + y);
                 if (a(x, y) != correct_a || b(x, y) != correct_b) {
                     printf("result(%d, %d) = (%d, %d) instead of (%d, %d)\n",
                            x, y, a(x, y), b(x, y), correct_a, correct_b);
@@ -110,7 +110,7 @@ int main(int argc, char **argv) {
         Buffer<int> a = result[0];
         for (int y = 0; y < a.height(); y++) {
             for (int x = 0; x < a.width(); x++) {
-                int correct_a = (2*x + y)*(2*x + y);
+                int correct_a = (2 * x + y) * (2 * x + y);
                 if (a(x, y) != correct_a) {
                     printf("result(%d, %d) = (%d) instead of (%d)\n",
                            x, y, a(x, y), correct_a);

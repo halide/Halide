@@ -6,9 +6,9 @@ namespace {
 
 class Matlab : public Halide::Generator<Matlab> {
 public:
-    Input<Buffer<float>>  input{"input", 2};
-    Input<float>          scale{"scale"};
-    Input<bool>           negate{"negate"};
+    Input<Buffer<float>> input{"input", 2};
+    Input<float> scale{"scale"};
+    Input<bool> negate{"negate"};
 
     Output<Buffer<float>> output{"output", 2};
 
