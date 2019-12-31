@@ -60,6 +60,7 @@ Expr Simplify::visit(const Mod *op, ExprInfo *bounds) {
             return rewrite.result;
         }
 
+        // clang-format off
         if (EVAL_IN_LAMBDA
             (rewrite(broadcast(x) % broadcast(y), broadcast(x % y, lanes)) ||
              (no_overflow_int(op->type) &&
@@ -82,6 +83,7 @@ Expr Simplify::visit(const Mod *op, ExprInfo *bounds) {
                rewrite(ramp(y + x * c0, c2) % broadcast(c1), ramp(y, fold(c2 % c1), lanes) % c1, c0 % c1 == 0))))) {
             return mutate(std::move(rewrite.result), bounds);
         }
+        // clang-format on
     }
 
     if (a.same_as(op->a) && b.same_as(op->b)) {

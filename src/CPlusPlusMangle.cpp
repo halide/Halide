@@ -943,14 +943,12 @@ void cplusplus_mangle_test() {
         Target(Target::IOS, Target::ARM, 32),
         Target(Target::IOS, Target::ARM, 64),
         Target(Target::Windows, Target::X86, 32),
-        Target(Target::Windows, Target::X86, 64)
-    };
+        Target(Target::Windows, Target::X86, 64)};
     MangleResult *expecteds[kTestTargetCount]{
         ItaniumABIMangling_main, ItaniumABIMangling_main,
         ItaniumABIMangling_main, ItaniumABIMangling_main,
         ItaniumABIMangling_main, ItaniumABIMangling_main,
-        win32_expecteds, win64_expecteds
-    };
+        win32_expecteds, win64_expecteds};
 
     size_t i = 0;
     for (const auto &target : targets) {

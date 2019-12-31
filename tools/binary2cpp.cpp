@@ -1,12 +1,12 @@
 
-#include <stdlib.h>
-#include <stdio.h>
-#include <string.h>
 #include <assert.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
 
 #ifdef _WIN32
-#include <fcntl.h> // O_BINARY
-#include <io.h> // setmode
+#include <fcntl.h>  // O_BINARY
+#include <io.h>     // setmode
 #endif
 
 // Embeds a binary blob (from stdin) in a C++ source array of unsigned
@@ -37,7 +37,7 @@ int main(int argc, const char **argv) {
     }
 
 #ifdef _WIN32
-    setmode(fileno(stdin), O_BINARY); // On windows bad things will happen unless we read stdin in binary mode
+    setmode(fileno(stdin), O_BINARY);  // On windows bad things will happen unless we read stdin in binary mode
 #endif
     printf("extern \"C\" {\n");
     printf("unsigned char %s[] = {\n", target);

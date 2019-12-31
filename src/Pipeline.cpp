@@ -162,7 +162,7 @@ Pipeline::Pipeline(const vector<Func> &outputs)
 
 vector<Func> Pipeline::outputs() const {
     vector<Func> funcs;
-    for (const Function& f : contents->outputs) {
+    for (const Function &f : contents->outputs) {
         funcs.emplace_back(f);
     }
     return funcs;
@@ -188,8 +188,7 @@ void Pipeline::auto_schedule_Mullapudi2016(Pipeline pipeline, const Target &targ
 /* static */
 std::map<std::string, AutoSchedulerFn> &Pipeline::get_autoscheduler_map() {
     static std::map<std::string, AutoSchedulerFn> autoschedulers = {
-        { "Mullapudi2016", auto_schedule_Mullapudi2016 }
-    };
+        {"Mullapudi2016", auto_schedule_Mullapudi2016}};
     return autoschedulers;
 }
 
@@ -239,7 +238,7 @@ void Pipeline::add_autoscheduler(const std::string &autoscheduler_name, const Au
 
 /* static */
 void Pipeline::set_default_autoscheduler_name(const std::string &autoscheduler_name) {
-    (void) find_autoscheduler(autoscheduler_name);  // ensure it's valid
+    (void)find_autoscheduler(autoscheduler_name);  // ensure it's valid
     get_default_autoscheduler_name() = autoscheduler_name;
 }
 
