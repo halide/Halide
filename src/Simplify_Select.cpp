@@ -22,6 +22,7 @@ Expr Simplify::visit(const Select *op, ExprInfo *bounds) {
     if (may_simplify(op->type)) {
         auto rewrite = IRMatcher::rewriter(IRMatcher::select(condition, true_value, false_value), op->type);
 
+        // clang-format off
         if (EVAL_IN_LAMBDA
             (rewrite(select(IRMatcher::intrin(Call::likely, true), x, y), x) ||
              rewrite(select(IRMatcher::intrin(Call::likely, false), x, y), y) ||
@@ -48,7 +49,9 @@ Expr Simplify::visit(const Select *op, ExprInfo *bounds) {
              rewrite(select(x, IRMatcher::Indeterminate(), y), y))) {
             return rewrite.result;
         }
+        // clang-format on
 
+        // clang-format off
         if (EVAL_IN_LAMBDA
             (rewrite(select(broadcast(x), y, z), select(x, y, z)) ||
              rewrite(select(x != y, z, w), select(x == y, w, z)) ||
@@ -133,6 +136,7 @@ Expr Simplify::visit(const Select *op, ExprInfo *bounds) {
                rewrite(select(x, true, y), x || y))))) {
             return mutate(std::move(rewrite.result), bounds);
         }
+        // clang-format on
     }
 
     if (condition.same_as(op->condition) &&

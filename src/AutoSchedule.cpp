@@ -3018,7 +3018,6 @@ void validate_no_partial_schedules(const Function &f, bool is_output) {
         << "AutoSchedule: cannot auto-schedule function \"" << f.name()
         << "\" since it has partially specified bounds\n";
 
-
     int num_stages = f.updates().size() + 1;
     for (int stage = 0; stage < num_stages; ++stage) {
         const Definition &def = get_stage_definition(f, stage);

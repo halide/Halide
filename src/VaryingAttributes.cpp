@@ -1336,6 +1336,7 @@ public:
             // snap the value back to the integer grid.
             loop_stmt = CastVaryingVariables().mutate(loop_stmt);
 
+            // clang-format off
             // Insert two new for-loops for vertex buffer generation on the host
             // before the two GPU scheduled for-loops
             return LetStmt::make("glsl.num_coords_dim0", dont_simplify((int)(coords[0].size())),
@@ -1348,6 +1349,7 @@ public:
                    Block::make(used_in_codegen(Int(32), "glsl.num_coords_dim1"),
                    Block::make(used_in_codegen(Int(32), "glsl.num_padded_attributes"),
                    Free::make(vs.vertex_buffer_name))))))))));
+            // clang-format on
         } else {
             return IRMutator::visit(op);
         }
