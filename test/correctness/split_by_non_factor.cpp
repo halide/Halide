@@ -20,7 +20,6 @@ int main(int argc, char **argv) {
                 return -1;
             }
         }
-
     }
 
     {
@@ -50,7 +49,7 @@ int main(int argc, char **argv) {
         // Test something compute_at the inside and outside of a dimension split this way
         Func f, g, h;
         g(x) = x - 3;
-        h(x) = x*7;
+        h(x) = x * 7;
         f(x) = 0;
         f(x) += g(x) + h(x);
         Var xo, xi;
@@ -59,7 +58,7 @@ int main(int argc, char **argv) {
         h.compute_at(f, xi);
         Buffer<int> result = f.realize(15);
         for (int i = 0; i < result.width(); i++) {
-            int correct = (i - 3) + i*7;
+            int correct = (i - 3) + i * 7;
             int actual = result(i);
             if (actual != correct) {
                 printf("result(%d) = %d instead of %d\n", i, actual, correct);

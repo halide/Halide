@@ -1,8 +1,8 @@
 #include "Halide.h"
 #include "test/common/check_call_graphs.h"
 
-#include <stdio.h>
 #include <map>
+#include <stdio.h>
 
 namespace {
 
@@ -194,7 +194,7 @@ int global_wrapper_test() {
     }
 
     Buffer<int> im = h.realize(200, 200);
-    auto func = [](int x, int y) { return 2*(x + y); };
+    auto func = [](int x, int y) { return 2 * (x + y); };
     if (check_image(im, func)) {
         return -1;
     }
@@ -218,7 +218,7 @@ int update_defined_after_wrapper_test() {
     // still call img's wrapper.
     RDom r(0, 100, 0, 100);
     r.where(r.x < r.y);
-    g(r.x, r.y) += 2*img(r.x, r.y);
+    g(r.x, r.y) += 2 * img(r.x, r.y);
 
     Param<bool> param;
 
@@ -251,7 +251,7 @@ int update_defined_after_wrapper_test() {
 
         Buffer<int> im = g.realize(200, 200);
         auto func = [](int x, int y) {
-            return ((0 <= x && x <= 99) && (0 <= y && y <= 99) && (x < y)) ? 3*(x + y) : (x + y);
+            return ((0 <= x && x <= 99) && (0 <= y && y <= 99) && (x < y)) ? 3 * (x + y) : (x + y);
         };
         if (check_image(im, func)) {
             return -1;
@@ -279,7 +279,7 @@ int update_defined_after_wrapper_test() {
 
         Buffer<int> im = g.realize(200, 200);
         auto func = [](int x, int y) {
-            return ((0 <= x && x <= 99) && (0 <= y && y <= 99) && (x < y)) ? 3*(x + y) : (x + y);
+            return ((0 <= x && x <= 99) && (0 <= y && y <= 99) && (x < y)) ? 3 * (x + y) : (x + y);
         };
         if (check_image(im, func)) {
             return -1;
@@ -327,7 +327,7 @@ int rdom_wrapper_test() {
     }
 
     Buffer<int> im = wrapper.realize(200, 200);
-    auto func = [](int x, int y) { return 4*x + 6* y + 10; };
+    auto func = [](int x, int y) { return 4 * x + 6 * y + 10; };
     if (check_image(im, func)) {
         return -1;
     }
@@ -371,13 +371,12 @@ int global_and_custom_wrapper_test() {
     }
 
     Buffer<int> im = result.realize(200, 200);
-    auto func = [](int x, int y) { return 2*x; };
+    auto func = [](int x, int y) { return 2 * x; };
     if (check_image(im, func)) {
         return -1;
     }
     return 0;
 }
-
 
 int wrapper_depend_on_mutated_func_test() {
     Func source("sourceo"), f("f"), g("g"), h("h");
@@ -468,7 +467,7 @@ int wrapper_on_wrapper_test() {
     }
 
     Buffer<int> im = h.realize(200, 200);
-    auto func = [](int x, int y) { return 4*(x + y); };
+    auto func = [](int x, int y) { return 4 * (x + y); };
     if (check_image(im, func)) {
         return -1;
     }
@@ -530,7 +529,7 @@ int two_fold_wrapper_test() {
     Func source("source"), img_in_output_in_output, img_in_output, output("output");
     Var x("x"), y("y");
 
-    source(x, y) = 2*x + 3*y;
+    source(x, y) = 2 * x + 3 * y;
     ImageParam img(Int(32), 2, "img");
     Buffer<int> buf = source.realize(1024, 1024);
     img.set(buf);
@@ -562,7 +561,7 @@ int two_fold_wrapper_test() {
     }
 
     Buffer<int> im = output.realize(1024, 1024);
-    auto func = [](int x, int y) { return 3*x + 2*y; };
+    auto func = [](int x, int y) { return 3 * x + 2 * y; };
     if (check_image(im, func)) {
         return -1;
     }
@@ -573,7 +572,7 @@ int multi_folds_wrapper_test() {
     Func source("source"), img_in_g_in_g, img_in_g, img_in_g_in_g_in_h, img_in_g_in_g_in_h_in_h, g("g"), h("h");
     Var x("x"), y("y");
 
-    source(x, y) = 2*x + 3*y;
+    source(x, y) = 2 * x + 3 * y;
     ImageParam img(Int(32), 2, "img");
     Buffer<int> buf = source.realize(1024, 1024);
     img.set(buf);
@@ -615,7 +614,7 @@ int multi_folds_wrapper_test() {
     Realization r = p.realize(1024, 1024);
     Buffer<int> img_g = r[0];
     Buffer<int> img_h = r[1];
-    auto func = [](int x, int y) { return 3*x + 2*y; };
+    auto func = [](int x, int y) { return 3 * x + 2 * y; };
     if (check_image(img_g, func)) {
         return -1;
     }

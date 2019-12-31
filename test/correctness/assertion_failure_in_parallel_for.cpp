@@ -1,6 +1,6 @@
 #include "Halide.h"
-#include <stdio.h>
 #include <atomic>
+#include <stdio.h>
 
 using namespace Halide;
 

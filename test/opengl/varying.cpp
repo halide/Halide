@@ -88,8 +88,8 @@ bool test0(const Target target, Var &x, Var &y, Var &c) {
     p.set(p_value);
 
     Func f0("f0");
-    f0(x, y, c) = select(c == 0, 4.0f,  // Constant term
-                         c == 1, p * 10.0f,  // Linear expression not in terms of a loop parameter
+    f0(x, y, c) = select(c == 0, 4.0f,              // Constant term
+                         c == 1, p * 10.0f,         // Linear expression not in terms of a loop parameter
                          cast<float>(x) * 100.0f);  // Linear expression in terms of x
 
     f0.bound(c, 0, 3);
@@ -108,10 +108,10 @@ struct CoordXform {
     const float c_th = cosf(th);
     const float m[6] = {
         c_th, -s_th, 0.0f,
-        s_th, c_th, 0.0f
-    };
+        s_th, c_th, 0.0f};
     Param<float> m0, m1, m2, m3, m4, m5;
-    CoordXform() : m0("m0"), m1("m1"), m2("m2"), m3("m3"), m4("m4"), m5("m5") {
+    CoordXform()
+        : m0("m0"), m1("m1"), m2("m2"), m3("m3"), m4("m4"), m5("m5") {
         m0.set(m[0]);
         m1.set(m[1]);
         m2.set(m[2]);

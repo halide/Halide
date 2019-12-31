@@ -5,19 +5,16 @@
 
 using namespace Halide;
 
-
 #ifdef _WIN32
 #define DLLEXPORT __declspec(dllexport)
 #else
 #define DLLEXPORT
 #endif
 
-
 extern "C" DLLEXPORT std::list<int> *list_create(int) {
     return new std::list<int>();
 }
 HalideExtern_1(std::list<int> *, list_create, int);
-
 
 extern "C" DLLEXPORT std::list<int> *list_maybe_insert(std::list<int> *list, bool insert, int value) {
     if (insert) {
@@ -26,7 +23,6 @@ extern "C" DLLEXPORT std::list<int> *list_maybe_insert(std::list<int> *list, boo
     return list;
 }
 HalideExtern_3(std::list<int> *, list_maybe_insert, std::list<int> *, bool, int);
-
 
 int main(int argc, char **argv) {
     if (get_jit_target_from_environment().arch == Target::WebAssembly) {
@@ -47,7 +43,7 @@ int main(int argc, char **argv) {
 
     // Because Halide::select evaluates both paths, we need to move
     // the condition into the C function.
-    factors(x) = list_maybe_insert(factors(x), x%r == 0, r);
+    factors(x) = list_maybe_insert(factors(x), x % r == 0, r);
 
     Buffer<std::list<int> *> result = factors.realize(100);
 
@@ -69,5 +65,4 @@ int main(int argc, char **argv) {
 
     printf("Success!\n");
     return 0;
-
 }

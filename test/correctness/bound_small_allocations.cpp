@@ -16,8 +16,8 @@ int main(int argc, char **argv) {
     // Construct a series of operations that will trigger a signed_integer_overflow
     // during simplification
     f(x, y) = calc(max(x + (1 << 28), -(1 << 29) + (1 << 28)));
-    g(x, y) = calc(f(x, y)) + f(x, y)/4 + (1 << 30);
-    h(x, y) = calc(g(x, y)) + g(x, y)/4 + (1 << 30);
+    g(x, y) = calc(f(x, y)) + f(x, y) / 4 + (1 << 30);
+    h(x, y) = calc(g(x, y)) + g(x, y) / 4 + (1 << 30);
     h.vectorize(x, 8).compute_root();
 
     Buffer<int32_t> imf = h.realize(32, 32);

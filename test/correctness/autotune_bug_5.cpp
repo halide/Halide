@@ -15,11 +15,11 @@ int main(int argc, char **argv) {
 
     upsampledx(x, y) = select((x % 2) == 0,
                               clamped(x, y),
-                              clamped(x+1, y));
+                              clamped(x + 1, y));
     upsampled(x, y) = upsampledx(x, y);
 
     Var xi("xi"), yi("yi");
-    clamped.compute_root(); // passes if this is removed, switched to inline
+    clamped.compute_root();  // passes if this is removed, switched to inline
     upsampled
         .split(y, y, yi, 8)
         .reorder(yi, y, x)

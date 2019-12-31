@@ -2038,10 +2038,11 @@ Value *CodeGen_Hexagon::vlut(Value *lut, Value *idx, int min_index, int max_inde
     // Construct a new index with 16-bit elements.
     unsigned idx16_elems = idx_elems;
     Value *idx16 = (idx_elem_size == 8) ?
-                    call_intrin(VectorType::get(i16_t, idx16_elems),
-                    "halide.hexagon.unpack.vub", {idx}) : idx;
+                       call_intrin(VectorType::get(i16_t, idx16_elems),
+                                   "halide.hexagon.unpack.vub", {idx}) :
+                       idx;
 
-    const int replicate = lut_ty->getScalarSizeInBits()/16;
+    const int replicate = lut_ty->getScalarSizeInBits() / 16;
     if (replicate > 1) {
         // Replicate the LUT indices and use vlut16.
         // For LUT32: create two indices:
@@ -2068,7 +2069,7 @@ Value *CodeGen_Hexagon::vlut(Value *lut, Value *idx, int min_index, int max_inde
         lut = builder->CreateBitCast(lut, lut_ty);
     }
 
-    llvm::Type *i8x_t  = VectorType::get(i8_t,  idx16_elems);
+    llvm::Type *i8x_t = VectorType::get(i8_t, idx16_elems);
     llvm::Type *i16x_t = VectorType::get(i16_t, idx16_elems);
     Value *minus_one = create_vector(i16x_t, -1);
 
@@ -2077,7 +2078,8 @@ Value *CodeGen_Hexagon::vlut(Value *lut, Value *idx, int min_index, int max_inde
         // If the idx already had 8 bit elements and no replication was needed,
         // we can use idx else we need to pack idx16.
         Value *idx8 = (idx_elem_size == 16 || idx_elems != idx16_elems) ?
-                       call_intrin(i8x_t, "halide.hexagon.pack.vh", {idx16}) : idx;
+                          call_intrin(i8x_t, "halide.hexagon.pack.vh", {idx16}) :
+                          idx;
         Value *result_val = vlut256(lut, idx8, min_index, max_index);
         return builder->CreateBitCast(result_val, result_ty);
     }
@@ -2102,12 +2104,13 @@ Value *CodeGen_Hexagon::vlut(Value *lut, Value *idx, int min_index, int max_inde
         // truncate to 8 bits, as vlut requires.
         indices = call_intrin(i8x_t, "halide.hexagon.pack.vh", {indices});
         use_index = (lut_ty->getScalarSizeInBits() == 8) ?
-                    call_intrin(i8x_t, "halide.hexagon.pack.vh", {use_index}) : use_index;
+                        call_intrin(i8x_t, "halide.hexagon.pack.vh", {use_index}) :
+                        use_index;
 
         int range_extent_i = std::min(max_index - min_index_i, 255);
         Value *range_i = vlut256(slice_vector(lut, min_index_i, range_extent_i),
                                  indices, 0, range_extent_i);
-        ranges.push_back({ range_i, use_index });
+        ranges.push_back({range_i, use_index});
     }
 
     // TODO: This could be reduced hierarchically instead of in

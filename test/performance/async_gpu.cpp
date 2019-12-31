@@ -64,15 +64,15 @@ int main(int argc, char **argv) {
         cpu.compile_jit();
 
         times[use_async] = benchmark(10, 1, [&]() {
-                cpu.realize(out);
-            });
+            cpu.realize(out);
+        });
 
         printf("%s: %f\n",
                use_async ? "with async" : "without async",
                times[use_async]);
     }
 
-    if (times[1] > 1.2*times[0]) {
+    if (times[1] > 1.2 * times[0]) {
         printf("Using async should have been faster\n");
         return -1;
     }

@@ -28,7 +28,7 @@ int main(int argc, char **argv) {
     f1[1](x, y) = 2.0f;
     f1[1].compute_root().gpu_tile(x, y, xi, yi, 8, 8);
     for (int i = 2; i < N; i++) {
-        f1[i](x, y) = f1[i-1](x, y) + f1[i-2](x, y);
+        f1[i](x, y) = f1[i - 1](x, y) + f1[i - 2](x, y);
         f1[i].compute_root().gpu_tile(x, y, xi, yi, 8, 8);
     }
 
@@ -39,7 +39,7 @@ int main(int argc, char **argv) {
     f2[1](x, y) = 4.0f;
     f2[1].compute_root().gpu_tile(x, y, xi, yi, 8, 8);
     for (int i = 2; i < N; i++) {
-        f2[i](x, y) = f2[i-1](x+1, y) + f2[i-2](x, y);
+        f2[i](x, y) = f2[i - 1](x + 1, y) + f2[i - 2](x, y);
         f2[i].compute_root().gpu_tile(x, y, xi, yi, 8, 8);
     }
 
@@ -49,7 +49,7 @@ int main(int argc, char **argv) {
     f3[1](x, y) = 6.0f;
     f3[1].compute_root().gpu_tile(x, y, xi, yi, 8, 8);
     for (int i = 2; i < N; i++) {
-        f3[i](x, y) = f3[i-1](x, clamp(y, 0, i)) + f3[i-2](x, clamp(y, 0, i));
+        f3[i](x, y) = f3[i - 1](x, clamp(y, 0, i)) + f3[i - 2](x, clamp(y, 0, i));
         f3[i].compute_root().gpu_tile(x, y, xi, yi, 8, 8);
     }
 
@@ -59,15 +59,15 @@ int main(int argc, char **argv) {
         Halide::Internal::JITSharedRuntime::reuse_device_allocations(use_cache);
 
         for (int i = 0; i < 300; i++) {
-            Buffer<float> result = f1[N-1].realize(128, 128);
+            Buffer<float> result = f1[N - 1].realize(128, 128);
             if (validate) {
                 result.copy_to_host();
                 result.for_each_value([=](float f) {
-                        if (f != correct1) {
-                            printf("result is %f instead of %f\n", f, correct1);
-                            abort();
-                        }
-                    });
+                    if (f != correct1) {
+                        printf("result is %f instead of %f\n", f, correct1);
+                        abort();
+                    }
+                });
             } else {
                 result.device_sync();
             }
@@ -80,15 +80,15 @@ int main(int argc, char **argv) {
         Halide::Internal::JITSharedRuntime::reuse_device_allocations(use_cache);
 
         for (int i = 0; i < 300; i++) {
-            Buffer<float> result = f2[N-1].realize(128, 128);
+            Buffer<float> result = f2[N - 1].realize(128, 128);
             if (validate) {
                 result.copy_to_host();
                 result.for_each_value([=](float f) {
-                        if (f != correct2) {
-                            printf("result is %f instead of %f\n", f, correct2);
-                            abort();
-                        }
-                    });
+                    if (f != correct2) {
+                        printf("result is %f instead of %f\n", f, correct2);
+                        abort();
+                    }
+                });
             } else {
                 result.device_sync();
             }
@@ -101,15 +101,15 @@ int main(int argc, char **argv) {
         Halide::Internal::JITSharedRuntime::reuse_device_allocations(use_cache);
         // Increasing size, overlapping lifetimes, looped 300 times. Should OOM on leak.
         for (int i = 0; i < 300; i++) {
-            Buffer<float> result = f3[N-1].realize(128, 128);
+            Buffer<float> result = f3[N - 1].realize(128, 128);
             if (validate) {
                 result.copy_to_host();
                 result.for_each_value([=](float f) {
-                        if (f != correct3) {
-                            printf("result is %f instead of %f\n", f, correct3);
-                            abort();
-                        }
-                    });
+                    if (f != correct3) {
+                        printf("result is %f instead of %f\n", f, correct3);
+                        abort();
+                    }
+                });
             } else {
                 result.device_sync();
             }
@@ -139,17 +139,17 @@ int main(int argc, char **argv) {
     }
 
     // Now benchmark with and without, (just informational, as this isn't a performance test)
-    double t1 = Tools::benchmark([&](){
-            test1(true, false);
-            test2(true, false);
-            test3(true, false);
-        });
+    double t1 = Tools::benchmark([&]() {
+        test1(true, false);
+        test2(true, false);
+        test3(true, false);
+    });
 
-    double t2 = Tools::benchmark([&](){
-            test1(false, false);
-            test2(false, false);
-            test3(false, false);
-        });
+    double t2 = Tools::benchmark([&]() {
+        test1(false, false);
+        test2(false, false);
+        test3(false, false);
+    });
 
     printf("Runtime with cache: %f\n"
            "Without cache: %f\n",

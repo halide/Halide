@@ -1,7 +1,7 @@
 #include "Halide.h"
 #include "halide_benchmark.h"
-#include <stdio.h>
 #include <memory>
+#include <stdio.h>
 
 using namespace Halide;
 using namespace Halide::Tools;
@@ -25,7 +25,7 @@ int one_d_max() {
     maxf() = 0.0f;
     RVar rxo, rxi, rxio, rxii;
     maxf() = max(maxf(), abs(A(r)));
-    maxf.update().split(r.x, rxo, rxi, 4*8192);
+    maxf.update().split(r.x, rxo, rxi, 4 * 8192);
 
     Var u, v;
     Func intm = maxf.update().rfactor(rxo, u);
@@ -57,7 +57,7 @@ int one_d_max() {
         maxf.realize(output);
     });
 
-    float gbits = 32.0f * size / 1e9f; // bits per seconds
+    float gbits = 32.0f * size / 1e9f;  // bits per seconds
 
     printf("Max ref: %fms, %f Gbps\n", t_ref * 1e3, (gbits / t_ref));
     printf("Max with rfactor: %fms, %f Gbps\n", t * 1e3, (gbits / t));
@@ -68,7 +68,7 @@ int one_d_max() {
 }
 
 int two_d_histogram() {
-    int W = 1024*N1, H = 1024*N2;
+    int W = 1024 * N1, H = 1024 * N2;
 
     Buffer<uint8_t> in(W, H);
     for (int y = 0; y < H; y++) {
@@ -96,7 +96,8 @@ int two_d_histogram() {
         .rfactor(ryo, u)
         .compute_root()
         .vectorize(x, 8)
-        .update().parallel(u);
+        .update()
+        .parallel(u);
     hist.update().vectorize(x, 8);
 
     ref.realize(256);
@@ -110,7 +111,7 @@ int two_d_histogram() {
         hist.realize(result);
     });
 
-    double gbits = in.type().bits() * W * H / 1e9; // bits per seconds
+    double gbits = in.type().bits() * W * H / 1e9;  // bits per seconds
 
     printf("Histogram ref: %fms, %f Gbps\n", t_ref * 1e3, (gbits / t_ref));
     printf("Histogram with rfactor: %fms, %f Gbps\n", t * 1e3, (gbits / t));
@@ -179,7 +180,7 @@ int four_d_argmin() {
         amin.realize();
     });
 
-    float gbits = input.type().bits() * vec.number_of_elements() / 1e9; // bits per seconds
+    float gbits = input.type().bits() * vec.number_of_elements() / 1e9;  // bits per seconds
 
     printf("Argmin ref: %fms, %f Gbps\n", t_ref * 1e3, (gbits / t_ref));
     printf("Argmin with rfactor: %fms, %f Gbps\n", t * 1e3, (gbits / t));
@@ -190,7 +191,7 @@ int four_d_argmin() {
 }
 
 int complex_multiply() {
-    const int size = 1024*1024*N1 * N2;
+    const int size = 1024 * 1024 * N1 * N2;
 
     Func mult("mult"), ref("ref");
 
@@ -201,15 +202,15 @@ int complex_multiply() {
     RDom r(0, size);
 
     ref() = Tuple(1, 0);
-    ref() = Tuple(ref()[0]*input0(r.x) - ref()[1]*input1(r.x),
-                  ref()[0]*input1(r.x) + ref()[1]*input0(r.x));
+    ref() = Tuple(ref()[0] * input0(r.x) - ref()[1] * input1(r.x),
+                  ref()[0] * input1(r.x) + ref()[1] * input0(r.x));
 
     mult() = Tuple(1, 0);
-    mult() = Tuple(mult()[0]*input0(r.x) - mult()[1]*input1(r.x),
-                   mult()[0]*input1(r.x) + mult()[1]*input0(r.x));
+    mult() = Tuple(mult()[0] * input0(r.x) - mult()[1] * input1(r.x),
+                   mult()[0] * input1(r.x) + mult()[1] * input0(r.x));
 
     RVar rxi, rxo, rxii, rxio;
-    mult.update(0).split(r.x, rxo, rxi, 2*8192);
+    mult.update(0).split(r.x, rxo, rxi, 2 * 8192);
 
     Var u, v;
     Func intm = mult.update().rfactor(rxo, u);
@@ -245,7 +246,7 @@ int complex_multiply() {
         mult.realize();
     });
 
-    float gbits = input0.type().bits() * size * 2 / 1e9; // bits per seconds
+    float gbits = input0.type().bits() * size * 2 / 1e9;  // bits per seconds
 
     printf("Complex-multiply ref: %fms, %f Gbps\n", t_ref * 1e3, (gbits / t_ref));
     printf("Complex-multiply with rfactor: %fms, %f Gbps\n", t * 1e3, (gbits / t));
@@ -268,13 +269,13 @@ int dot_product() {
     // Reference implementation
     Func dot_ref("dot_ref");
     dot_ref() = 0.0f;
-    dot_ref() += (A(r.x))*B(r.x);
+    dot_ref() += (A(r.x)) * B(r.x);
 
     Func dot("dot");
     dot() = 0.0f;
-    dot() += (A(r.x))*B(r.x);
+    dot() += (A(r.x)) * B(r.x);
     RVar rxo, rxi, rxio, rxii;
-    dot.update().split(r.x, rxo, rxi, 4*8192);
+    dot.update().split(r.x, rxo, rxi, 4 * 8192);
 
     Var u, v;
     Func intm = dot.update().rfactor(rxo, u);
@@ -310,7 +311,7 @@ int dot_product() {
 
     // Note that LLVM autovectorizes the reference!
 
-    float gbits = 32 * size * (2 / 1e9f); // bits per seconds
+    float gbits = 32 * size * (2 / 1e9f);  // bits per seconds
 
     printf("Dot-product ref: %fms, %f Gbps\n", t_ref * 1e3, (gbits / t_ref));
     printf("Dot-product with rfactor: %fms, %f Gbps\n", t * 1e3, (gbits / t));
@@ -329,26 +330,28 @@ int kitchen_sink() {
 
     Func sink_ref("sink_ref");
     sink_ref() = {0, 0, int(0x80000000), 0, int(0x7fffffff), 0, 0, 0};
-    sink_ref() = {sink_ref()[0] * A(r), // Product
-                  sink_ref()[1] + A(r), // Sum
-                  max(sink_ref()[2], A(r)), // Max
-                  select(sink_ref()[2] > A(r), sink_ref()[3], r), // Argmax
-                  min(sink_ref()[4], A(r)), // Min
-                  select(sink_ref()[4] < A(r), sink_ref()[5], r), // Argmin
-                  sink_ref()[6] + A(r)*A(r), // Sum of squares
-                  sink_ref()[7] + select(A(r) % 2 == 0, 1, 0) // Number of even items
+    sink_ref() = {
+        sink_ref()[0] * A(r),                            // Product
+        sink_ref()[1] + A(r),                            // Sum
+        max(sink_ref()[2], A(r)),                        // Max
+        select(sink_ref()[2] > A(r), sink_ref()[3], r),  // Argmax
+        min(sink_ref()[4], A(r)),                        // Min
+        select(sink_ref()[4] < A(r), sink_ref()[5], r),  // Argmin
+        sink_ref()[6] + A(r) * A(r),                     // Sum of squares
+        sink_ref()[7] + select(A(r) % 2 == 0, 1, 0)      // Number of even items
     };
 
     Func sink("sink");
     sink() = {0, 0, int(0x80000000), 0, int(0x7fffffff), 0, 0, 0};
-    sink() = {sink()[0] * A(r), // Product
-              sink()[1] + A(r), // Sum
-              max(sink()[2], A(r)), // Max
-              select(sink()[2] > A(r), sink()[3], r), // Argmax
-              min(sink()[4], A(r)), // Min
-              select(sink()[4] < A(r), sink()[5], r), // Argmin
-              sink()[6] + A(r)*A(r), // Sum of squares
-              sink()[7] + select(A(r) % 2 == 0, 1, 0) // Number of even items
+    sink() = {
+        sink()[0] * A(r),                        // Product
+        sink()[1] + A(r),                        // Sum
+        max(sink()[2], A(r)),                    // Max
+        select(sink()[2] > A(r), sink()[3], r),  // Argmax
+        min(sink()[4], A(r)),                    // Min
+        select(sink()[4] < A(r), sink()[5], r),  // Argmin
+        sink()[6] + A(r) * A(r),                 // Sum of squares
+        sink()[7] + select(A(r) % 2 == 0, 1, 0)  // Number of even items
     };
 
     RVar rxo, rxi, rxio, rxii;
@@ -382,7 +385,7 @@ int kitchen_sink() {
         sink.realize();
     });
 
-    float gbits = 8 * size * (2 / 1e9f); // bits per seconds
+    float gbits = 8 * size * (2 / 1e9f);  // bits per seconds
 
     printf("Kitchen sink ref: %fms, %f Gbps\n", t_ref * 1e3, (gbits / t_ref));
     printf("Kitchen sink with rfactor: %fms, %f Gbps\n", t * 1e3, (gbits / t));

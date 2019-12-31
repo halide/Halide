@@ -4,7 +4,7 @@ namespace {
 
 class UserContextInsanity : public Halide::Generator<UserContextInsanity> {
 public:
-    Input<Buffer<float>>  input{"input", 2};
+    Input<Buffer<float>> input{"input", 2};
     Output<Buffer<float>> output{"output", 2};
 
     void generate() {

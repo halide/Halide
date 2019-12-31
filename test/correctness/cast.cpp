@@ -7,7 +7,7 @@ int main(int argc, char **argv) {
     Var x;
 
     Expr int_expr[4], uint_expr[4], double_expr, float_expr;
-    for (int bits = 8, i = 0; bits <= 64; bits*=2, i++) {
+    for (int bits = 8, i = 0; bits <= 64; bits *= 2, i++) {
         int_expr[i] = cast(Int(bits), x);
         uint_expr[i] = cast(UInt(bits), x);
     }
@@ -37,5 +37,4 @@ int main(int argc, char **argv) {
 
     printf("Success!\n");
     return 0;
-
 }

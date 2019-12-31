@@ -11,10 +11,9 @@ using namespace Halide;
 #define DLLEXPORT
 #endif
 
-extern "C" DLLEXPORT
-int dump_to_file(halide_buffer_t *input, const char *filename,
-                 int desired_min, int desired_extent,
-                 halide_buffer_t *) {
+extern "C" DLLEXPORT int dump_to_file(halide_buffer_t *input, const char *filename,
+                                      int desired_min, int desired_extent,
+                                      halide_buffer_t *) {
     // Note the final output buffer argument is unused.
     if (input->is_bounds_query()) {
         // Request some range of the input buffer
@@ -75,7 +74,7 @@ int main(int argc, char **argv) {
     // external consumer stage.
     Func source;
     Var x;
-    source(x) = x*x;
+    source(x) = x * x;
 
     Param<int> min, extent;
     Param<const char *> filename;
@@ -125,5 +124,4 @@ int main(int argc, char **argv) {
 
     printf("Success!\n");
     return 0;
-
 }

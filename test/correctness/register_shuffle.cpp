@@ -17,17 +17,24 @@ int main(int argc, char **argv) {
         Var x, y;
 
         f(x, y) = x + y;
-        g(x, y) = f(x-1, y) + f(x+1, y);
+        g(x, y) = f(x - 1, y) + f(x + 1, y);
 
         Var xo, xi, yi, yo;
-        g.gpu_tile(x, y, xi, yi, 32, 2, TailStrategy::RoundUp).gpu_lanes(xi);
+        g
+            .gpu_tile(x, y, xi, yi, 32, 2, TailStrategy::RoundUp)
+            .gpu_lanes(xi);
         f.compute_root();
-        f.in(g).compute_at(g, yi).split(x, xo, xi, 32, TailStrategy::RoundUp).gpu_lanes(xi).unroll(xo);
+        f
+            .in(g)
+            .compute_at(g, yi)
+            .split(x, xo, xi, 32, TailStrategy::RoundUp)
+            .gpu_lanes(xi)
+            .unroll(xo);
 
         Buffer<int> out = g.realize(32, 4);
         for (int y = 0; y < out.height(); y++) {
             for (int x = 0; x < out.width(); x++) {
-                int correct = 2*(x + y);
+                int correct = 2 * (x + y);
                 int actual = out(x, y);
                 if (correct != actual) {
                     printf("out(%d, %d) = %d instead of %d\n",
@@ -51,16 +58,21 @@ int main(int argc, char **argv) {
 
         Var xi, yi, yii;
 
-        c.tile(x, y, xi, yi, 32, 32, TailStrategy::RoundUp)
+        c
+            .tile(x, y, xi, yi, 32, 32, TailStrategy::RoundUp)
             .gpu_blocks(x, y)
             .gpu_lanes(xi);
         // We're going to be computing 'a' and 'b' at block level, but
         // we want them in register, not shared, so we explicitly call
         // store_in.
-        a.in(c).compute_at(c, x)
+        a
+            .in(c)
+            .compute_at(c, x)
             .gpu_lanes(x)
             .store_in(MemoryType::Register);
-        b.in(c).compute_at(c, x)
+        b
+            .in(c)
+            .compute_at(c, x)
             .gpu_lanes(y)
             .store_in(MemoryType::Register);
 
@@ -94,12 +106,24 @@ int main(int argc, char **argv) {
 
         Var xi, yi, yii;
 
-        c.tile(x, y, xi, yi, 64, 64, TailStrategy::RoundUp)
+        c
+            .tile(x, y, xi, yi, 64, 64, TailStrategy::RoundUp)
             .gpu_blocks(x, y)
-            .split(yi, yi, yii, 64).unroll(yii, 2).gpu_threads(yi)
-            .vectorize(xi, 2).gpu_lanes(xi);
-        a.in(c).compute_at(c, yi).vectorize(x, 2).gpu_lanes(x);
-        b.in(c).compute_at(c, yi).vectorize(y, 2).gpu_lanes(y);
+            .split(yi, yi, yii, 64)
+            .unroll(yii, 2)
+            .gpu_threads(yi)
+            .vectorize(xi, 2)
+            .gpu_lanes(xi);
+        a
+            .in(c)
+            .compute_at(c, yi)
+            .vectorize(x, 2)
+            .gpu_lanes(x);
+        b
+            .in(c)
+            .compute_at(c, yi)
+            .vectorize(y, 2)
+            .gpu_lanes(y);
 
         Buffer<float> out = c.realize(64, 64);
         for (int y = 0; y < out.height(); y++) {
@@ -124,9 +148,9 @@ int main(int argc, char **argv) {
         a(x, y) = x + y;
         a.compute_root();
 
-        b(x, y) = a(x-1, y) + a(x, y) + a(x+1, y);
-        c(x, y) = b(x-1, y) + b(x, y) + b(x+1, y);
-        d(x, y) = c(x-1, y) + c(x, y) + c(x+1, y);
+        b(x, y) = a(x - 1, y) + a(x, y) + a(x + 1, y);
+        c(x, y) = b(x - 1, y) + b(x, y) + b(x + 1, y);
+        d(x, y) = c(x - 1, y) + c(x, y) + c(x + 1, y);
 
         Var xi, yi;
         // Compute 24-wide pieces of output per block. Should use 32
@@ -134,15 +158,19 @@ int main(int argc, char **argv) {
         // the last two lanes are always inactive. 26-wide blocks
         // would be a more efficient use of the gpu, but a less
         // interesting test.
-        d.gpu_tile(x, y, xi, yi, 24, 2).gpu_lanes(xi);
+        d
+            .gpu_tile(x, y, xi, yi, 24, 2)
+            .gpu_lanes(xi);
         for (Func stage : {a.in(), b, c}) {
-            stage.compute_at(d, yi).gpu_lanes(x);
+            stage
+                .compute_at(d, yi)
+                .gpu_lanes(x);
         }
 
         Buffer<int> out = d.realize(24, 2);
         for (int y = 0; y < out.height(); y++) {
             for (int x = 0; x < out.width(); x++) {
-                int correct = 27*(x + y);
+                int correct = 27 * (x + y);
                 int actual = out(x, y);
                 if (correct != actual) {
                     printf("out(%d, %d) = %d instead of %d\n",
@@ -161,22 +189,26 @@ int main(int argc, char **argv) {
         a(x, y) = x + y;
         a.compute_root();
 
-        b(x, y) = a(x-1, y) + a(x, y) + a(x+1, y);
-        c(x, y) = b(x-1, y) + b(x, y) + b(x+1, y);
-        d(x, y) = c(x-1, y) + c(x, y) + c(x+1, y);
+        b(x, y) = a(x - 1, y) + a(x, y) + a(x + 1, y);
+        c(x, y) = b(x - 1, y) + b(x, y) + b(x + 1, y);
+        d(x, y) = c(x - 1, y) + c(x, y) + c(x + 1, y);
 
         Var xi, yi;
         // Compute 10-wide pieces of output per block. Should use 16
         // warp lanes to do so.
-        d.gpu_tile(x, y, xi, yi, 10, 2).gpu_lanes(xi);
+        d
+            .gpu_tile(x, y, xi, yi, 10, 2)
+            .gpu_lanes(xi);
         for (Func stage : {a.in(), b, c}) {
-            stage.compute_at(d, yi).gpu_lanes(x);
+            stage
+                .compute_at(d, yi)
+                .gpu_lanes(x);
         }
 
         Buffer<int> out = d.realize(24, 2);
         for (int y = 0; y < out.height(); y++) {
             for (int x = 0; x < out.width(); x++) {
-                int correct = 27*(x + y);
+                int correct = 27 * (x + y);
                 int actual = out(x, y);
                 if (correct != actual) {
                     printf("out(%d, %d) = %d instead of %d\n",
@@ -196,13 +228,17 @@ int main(int argc, char **argv) {
         b(x, y) = a(x + y, y);
 
         Var xi, yi;
-        b.gpu_tile(x, y, xi, yi, 16, 8, TailStrategy::RoundUp).gpu_lanes(xi);
-        a.compute_at(b, yi).gpu_lanes(x);
+        b
+            .gpu_tile(x, y, xi, yi, 16, 8, TailStrategy::RoundUp)
+            .gpu_lanes(xi);
+        a
+            .compute_at(b, yi)
+            .gpu_lanes(x);
 
         Buffer<int> out = b.realize(32, 32);
         for (int y = 0; y < out.height(); y++) {
             for (int x = 0; x < out.width(); x++) {
-                int correct = x + 2*y;
+                int correct = x + 2 * y;
                 int actual = out(x, y);
                 if (correct != actual) {
                     printf("out(%d, %d) = %d instead of %d\n",
@@ -221,28 +257,47 @@ int main(int argc, char **argv) {
         f(x, y) = cast<float>(x + y);
         f.compute_root();
 
-        upx(x, y) = 0.25f * f((x/2) - 1 + 2*(x % 2), y) + 0.75f * f(x/2, y);
-        upy(x, y) = 0.25f * upx(x, (y/2) - 1 + 2*(y % 2)) + 0.75f * upx(x, y/2);
+        upx(x, y) = 0.25f * f((x / 2) - 1 + 2 * (x % 2), y) + 0.75f * f(x / 2, y);
+        upy(x, y) = 0.25f * upx(x, (y / 2) - 1 + 2 * (y % 2)) + 0.75f * upx(x, y / 2);
 
         // Compute 128x64 tiles of output, which require 66x34 tiles
         // of input. All intermediate data stored in lanes and
         // accessed using register shuffles.
 
         Var xi, yi, xii, yii;
-        upy.tile(x, y, xi, yi, 128, 64, TailStrategy::RoundUp)
-            .tile(xi, yi, xii, yii, 4, 8).vectorize(xii)
-            .gpu_blocks(x, y).gpu_threads(yi).gpu_lanes(xi);
+        upy
+            .tile(x, y, xi, yi, 128, 64, TailStrategy::RoundUp)
+            .tile(xi, yi, xii, yii, 4, 8)
+            .vectorize(xii)
+            .gpu_blocks(x, y)
+            .gpu_threads(yi)
+            .gpu_lanes(xi);
 
-        upx.compute_at(upy, yi).unroll(x, 4).gpu_lanes(x).unroll(y);
+        upx
+            .compute_at(upy, yi)
+            .unroll(x, 4)
+            .gpu_lanes(x)
+            .unroll(y);
 
         // Stage the input into lanes, doing two dense vector loads
         // per lane, and use register shuffles to do the upsample in x.
-        f.in().compute_at(upy, yi).align_storage(x, 64)
+        f
+            .in()
+            .compute_at(upy, yi)
+            .align_storage(x, 64)
             .vectorize(x, 2, TailStrategy::RoundUp)
             .split(x, x, xi, 32, TailStrategy::GuardWithIf)
-            .reorder(xi, y, x).gpu_lanes(xi).unroll(x).unroll(y);
+            .reorder(xi, y, x)
+            .gpu_lanes(xi)
+            .unroll(x)
+            .unroll(y);
 
-        upy.output_buffer().dim(0).set_min(0).dim(1).set_min(0);
+        upy
+            .output_buffer()
+            .dim(0)
+            .set_min(0)
+            .dim(1)
+            .set_min(0);
         Buffer<float> out = upy.realize(128, 128);
 
         for (int y = 0; y < out.height(); y++) {
@@ -268,17 +323,38 @@ int main(int argc, char **argv) {
 
         Func s1, s2, s3, s4;
 
-        s1(x, y) = f(2*x, y) + f(2*x + 1, y);
-        s2(x, y) = s1(2*x, y) + s1(2*x + 1, y);
-        s3(x, y) = s2(2*x, y) + s2(2*x + 1, y);
+        s1(x, y) = f(2 * x, y) + f(2 * x + 1, y);
+        s2(x, y) = s1(2 * x, y) + s1(2 * x + 1, y);
+        s3(x, y) = s2(2 * x, y) + s2(2 * x + 1, y);
         s4(x, y) = s3(x, y);
 
         Var xi, yi;
-        s4.gpu_tile(x, y, xi, yi, 64, 1, TailStrategy::RoundUp).vectorize(xi, 2).gpu_lanes(xi);
-        s3.compute_at(s4, yi).split(x, x, xi, 32, TailStrategy::RoundUp).gpu_lanes(xi).unroll(x);
-        s2.compute_at(s4, yi).split(x, x, xi, 32, TailStrategy::RoundUp).gpu_lanes(xi).unroll(x);
-        s1.compute_at(s4, yi).split(x, x, xi, 32, TailStrategy::RoundUp).gpu_lanes(xi).unroll(x);
-        f.in().compute_at(s4, yi).split(x, x, xi, 64, TailStrategy::RoundUp).vectorize(xi, 2).gpu_lanes(xi).unroll(x);
+        s4
+            .gpu_tile(x, y, xi, yi, 64, 1, TailStrategy::RoundUp)
+            .vectorize(xi, 2)
+            .gpu_lanes(xi);
+        s3
+            .compute_at(s4, yi)
+            .split(x, x, xi, 32, TailStrategy::RoundUp)
+            .gpu_lanes(xi)
+            .unroll(x);
+        s2
+            .compute_at(s4, yi)
+            .split(x, x, xi, 32, TailStrategy::RoundUp)
+            .gpu_lanes(xi)
+            .unroll(x);
+        s1
+            .compute_at(s4, yi)
+            .split(x, x, xi, 32, TailStrategy::RoundUp)
+            .gpu_lanes(xi)
+            .unroll(x);
+        f
+            .in()
+            .compute_at(s4, yi)
+            .split(x, x, xi, 64, TailStrategy::RoundUp)
+            .vectorize(xi, 2)
+            .gpu_lanes(xi)
+            .unroll(x);
 
         Buffer<float> out = s4.realize(64, 64);
 
@@ -288,7 +364,7 @@ int main(int argc, char **argv) {
                 // One factor of 8 from adding instead of averaging,
                 // and another factor of 8 from the compression of the
                 // coordinate system across x.
-                float correct = (x*8 + y)*8 + 28;
+                float correct = (x * 8 + y) * 8 + 28;
                 if (correct != actual) {
                     printf("out(%d, %d) = %f instead of %f\n",
                            x, y, actual, correct);
@@ -307,24 +383,45 @@ int main(int argc, char **argv) {
 
         Func s1, s2, s3, s4;
 
-        s1(x, y) = f(2*x, y) + f(2*x + 1, y);
-        s2(x, y) = s1(2*x, y) + s1(2*x + 1, y);
-        s3(x, y) = s2(2*x, y) + s2(2*x + 1, y);
+        s1(x, y) = f(2 * x, y) + f(2 * x + 1, y);
+        s2(x, y) = s1(2 * x, y) + s1(2 * x + 1, y);
+        s3(x, y) = s2(2 * x, y) + s2(2 * x + 1, y);
         s4(x, y) = s3(x, y);
 
         Var xi, yi;
-        s4.gpu_tile(x, y, xi, yi, 8, 16, TailStrategy::RoundUp).vectorize(xi, 2).gpu_lanes(xi);
-        s3.compute_at(s4, yi).split(x, x, xi, 4, TailStrategy::RoundUp).gpu_lanes(xi).unroll(x);
-        s2.compute_at(s4, yi).split(x, x, xi, 4, TailStrategy::RoundUp).gpu_lanes(xi).unroll(x);
-        s1.compute_at(s4, yi).split(x, x, xi, 4, TailStrategy::RoundUp).gpu_lanes(xi).unroll(x);
-        f.in().compute_at(s4, yi).split(x, x, xi, 8, TailStrategy::RoundUp).vectorize(xi, 2).gpu_lanes(xi).unroll(x);
+        s4
+            .gpu_tile(x, y, xi, yi, 8, 16, TailStrategy::RoundUp)
+            .vectorize(xi, 2)
+            .gpu_lanes(xi);
+        s3
+            .compute_at(s4, yi)
+            .split(x, x, xi, 4, TailStrategy::RoundUp)
+            .gpu_lanes(xi)
+            .unroll(x);
+        s2
+            .compute_at(s4, yi)
+            .split(x, x, xi, 4, TailStrategy::RoundUp)
+            .gpu_lanes(xi)
+            .unroll(x);
+        s1
+            .compute_at(s4, yi)
+            .split(x, x, xi, 4, TailStrategy::RoundUp)
+            .gpu_lanes(xi)
+            .unroll(x);
+        f
+            .in()
+            .compute_at(s4, yi)
+            .split(x, x, xi, 8, TailStrategy::RoundUp)
+            .vectorize(xi, 2)
+            .gpu_lanes(xi)
+            .unroll(x);
 
         Buffer<float> out = s4.realize(32, 32);
 
         for (int y = 0; y < out.height(); y++) {
             for (int x = 0; x < out.width(); x++) {
                 float actual = out(x, y);
-                float correct = (x*8 + y)*8 + 28;
+                float correct = (x * 8 + y) * 8 + 28;
                 if (correct != actual) {
                     printf("out(%d, %d) = %f instead of %f\n",
                            x, y, actual, correct);
@@ -337,30 +434,47 @@ int main(int argc, char **argv) {
     {
         Buffer<uint8_t> buf(256, 256);
         buf.for_each_value([](uint8_t &x) {
-                x = rand();
-            });
+            x = rand();
+        });
         buf.set_host_dirty();
 
         // Store a small LUT in-register, populated at the warp
         // level.
         Func lut;
         Var x, y;
-        lut(x) = cast<uint16_t>(x)+1;
+        lut(x) = cast<uint16_t>(x) + 1;
 
         Func curved;
         curved(x, y) = lut(buf(x, y));
 
         Var xi, yi, xo;
-        curved.compute_root().tile(x, y, xi, yi, 32, 32)
-            .gpu_blocks(x, y).gpu_threads(yi).gpu_lanes(xi);
+        curved
+            .compute_root()
+            .tile(x, y, xi, yi, 32, 32)
+            .gpu_blocks(x, y)
+            .gpu_threads(yi)
+            .gpu_lanes(xi);
 
         lut.compute_root();
 
         // Load the LUT into shared at the start of each block using warp 0.
-        lut.in().compute_at(curved, x).split(x, xo, xi, 32 * 4).vectorize(xi, 4).gpu_lanes(xi).unroll(xo);
+        lut
+            .in()
+            .compute_at(curved, x)
+            .split(x, xo, xi, 32 * 4)
+            .vectorize(xi, 4)
+            .gpu_lanes(xi)
+            .unroll(xo);
 
         // Load it from shared into registers for each warp.
-        lut.in().in().compute_at(curved, yi).split(x, xo, xi, 32 * 4).vectorize(xi, 4).gpu_lanes(xi).unroll(xo);
+        lut
+            .in()
+            .in()
+            .compute_at(curved, yi)
+            .split(x, xo, xi, 32 * 4)
+            .vectorize(xi, 4)
+            .gpu_lanes(xi)
+            .unroll(xo);
 
         Buffer<uint16_t> out = curved.realize(buf.width(), buf.height());
 

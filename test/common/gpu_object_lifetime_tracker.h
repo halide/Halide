@@ -10,15 +10,16 @@ namespace Internal {
 
 class GpuObjectLifetimeTracker {
     struct ObjectType {
-        const char * const created;
-        const char * const destroyed;
+        const char *const created;
+        const char *const destroyed;
         bool const is_global;
         int total_created;
         int live_count;
 
-        ObjectType(const char *created, const char *destroyed, bool is_global = false) :
-            created(created), destroyed(destroyed),
-            is_global(is_global), total_created(0), live_count(0) {}
+        ObjectType(const char *created, const char *destroyed, bool is_global = false)
+            : created(created), destroyed(destroyed),
+              is_global(is_global), total_created(0), live_count(0) {
+        }
     };
 
     std::array<ObjectType, 13> object_types = {{
@@ -53,8 +54,7 @@ public:
             if (strstr(str, o.created)) {
                 o.total_created++;
                 o.live_count++;
-            }
-            else if (strstr(str, o.destroyed)) {
+            } else if (strstr(str, o.destroyed)) {
                 o.live_count--;
             }
         }
@@ -87,7 +87,7 @@ public:
     }
 };
 
-}  // namespace Halide
 }  // namespace Internal
+}  // namespace Halide
 
 #endif

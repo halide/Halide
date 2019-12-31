@@ -1,10 +1,10 @@
 #include "Halide.h"
-#include <stdio.h>
 #include <cmath>
+#include <stdio.h>
 
 using namespace Halide;
 
-void h_assert(bool condition, const char* msg) {
+void h_assert(bool condition, const char *msg) {
     if (!condition) {
         printf("FAIL: %s\n", msg);
         abort();

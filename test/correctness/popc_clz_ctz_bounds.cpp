@@ -38,7 +38,7 @@ int main(int argc, char **argv) {
     ImageParam in(UInt(8), 1);
     Buffer<uint8_t> mapping(9);
     int i = 0;
-    for (uint8_t v :  { 4, 2, 8, 5, 1, 7, 0, 3, 6 }) { // Random permutation of 0..7
+    for (uint8_t v : {4, 2, 8, 5, 1, 7, 0, 3, 6}) {  // Random permutation of 0..7
         mapping(i++) = v;
     }
 

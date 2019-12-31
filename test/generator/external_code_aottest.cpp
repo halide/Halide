@@ -1,5 +1,5 @@
-#include "HalideRuntime.h"
 #include "HalideBuffer.h"
+#include "HalideRuntime.h"
 
 #include <iostream>
 #include <limits>
@@ -11,8 +11,7 @@
 using namespace std;
 using namespace Halide::Runtime;
 
-int main()
-{
+int main() {
     Buffer<int32_t> buf(10, 10);
 
     for (int i = 0; i < 10; i++) {

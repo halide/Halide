@@ -1,8 +1,8 @@
+#include "HalideBuffer.h"
+#include "HalideRuntime.h"
+#include <assert.h>
 #include <math.h>
 #include <stdio.h>
-#include "HalideRuntime.h"
-#include "HalideBuffer.h"
-#include <assert.h>
 
 #if defined(TEST_CUDA)
 #include "HalideRuntimeCuda.h"
@@ -92,9 +92,9 @@ int main(int argc, char **argv) {
             gpu_object_lifetime(output);
 
             {
-              // Construct a new buffer from the halide_buffer_t and let it destruct.
-              // Verifies this does not deallocate or otherwise disable the device handle.
-              Buffer<int> temp(*output.raw_buffer());
+                // Construct a new buffer from the halide_buffer_t and let it destruct.
+                // Verifies this does not deallocate or otherwise disable the device handle.
+                Buffer<int> temp(*output.raw_buffer());
             }
             output.copy_to_host();
         }
@@ -141,7 +141,7 @@ int main(int argc, char **argv) {
                 output.copy_to_host();
 
                 for (int x = 0; x < output.width(); x++) {
-                  if (output(x) != wrap_test(x)) {
+                    if (output(x) != wrap_test(x)) {
                         printf("Error! (wrap native test %d): %d != %d\n", i, output(x), wrap_test(x));
                         return -1;
                     }
@@ -190,10 +190,10 @@ int main(int argc, char **argv) {
                 output2.copy_to_host();
 
                 for (int x = 0; x < output.width(); x++) {
-                     if (output(x) != output2(x)) {
-                          printf("Error! (device and host allocation test): %d != %d\n", output(x), output2(x));
-                          return -1;
-                     }
+                    if (output(x) != output2(x)) {
+                        printf("Error! (device and host allocation test): %d != %d\n", output(x), output2(x));
+                        return -1;
+                    }
                 }
             }
         }

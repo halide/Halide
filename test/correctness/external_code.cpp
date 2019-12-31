@@ -1,8 +1,8 @@
 #include "Halide.h"
-#include <stdio.h>
-#include <fstream>
 #include <cassert>
+#include <fstream>
 #include <iostream>
+#include <stdio.h>
 
 #include "test/common/halide_test_dirs.h"
 
@@ -35,7 +35,7 @@ int main(int argc, char **argv) {
         ExternalCode::bitcode_wrapper(target, bitcode, "extern");
 
     Func f_extern;
-    f_extern.define_extern("extern", { }, type_of<int32_t>(), 2);
+    f_extern.define_extern("extern", {}, type_of<int32_t>(), 2);
 
     Func result;
     result(x, y) = f_extern(x, y);
@@ -48,7 +48,7 @@ int main(int argc, char **argv) {
 
     Internal::JITModule jit_module(module, forty_two, {});
 
-    auto main_function = (int (*)(halide_buffer_t *buf))jit_module.main_function();
+    auto main_function = (int (*)(halide_buffer_t * buf)) jit_module.main_function();
     Buffer<int32_t> buf(16, 16);
 
     int ret_code = main_function(buf.raw_buffer());

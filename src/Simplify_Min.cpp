@@ -42,6 +42,7 @@ Expr Simplify::visit(const Min *op, ExprInfo *bounds) {
         int lanes = op->type.lanes();
         auto rewrite = IRMatcher::rewriter(IRMatcher::min(a, b), op->type);
 
+        // clang-format off
         if (EVAL_IN_LAMBDA
             (rewrite(min(x, x), x) ||
              rewrite(min(c0, c1), fold(min(c0, c1))) ||
@@ -94,7 +95,9 @@ Expr Simplify::visit(const Min *op, ExprInfo *bounds) {
                rewrite(min(x, ((x + c0)/c1)*c1), b, c1 > 0 && c0 <= 0))))) {
             return rewrite.result;
         }
+        // clang-format on
 
+        // clang-format off
         if (EVAL_IN_LAMBDA
             (rewrite(min(min(x, c0), c1), min(x, fold(min(c0, c1)))) ||
              rewrite(min(min(x, c0), y), min(min(x, y), c0)) ||
@@ -209,6 +212,7 @@ Expr Simplify::visit(const Min *op, ExprInfo *bounds) {
 
             return mutate(std::move(rewrite.result), bounds);
         }
+        // clang-format on
     }
 
     const Shuffle *shuffle_a = a.as<Shuffle>();

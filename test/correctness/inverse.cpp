@@ -35,7 +35,7 @@ int main(int argc, char **argv) {
     Func g1, g2, g3, g4, g5;
 
     Var x, xi;
-    Expr v = x*1.34f + 1.0142f;
+    Expr v = x * 1.34f + 1.0142f;
 
     Param<float> p;
     p.set(1.0f);

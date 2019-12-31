@@ -17,7 +17,7 @@ void sort2(Expr &a, Expr &b) {
 // Bitonic sort a vector of Exprs
 std::vector<Expr> bitonic_sort_inner(std::vector<Expr> v, bool flipped) {
     size_t size = v.size();
-    size_t half_size = size/2;
+    size_t half_size = size / 2;
 
     if (!half_size) return v;
 
@@ -38,7 +38,7 @@ std::vector<Expr> bitonic_sort_inner(std::vector<Expr> v, bool flipped) {
     // Bitonic merge
     for (size_t stride = half_size; stride > 0; stride /= 2) {
         for (size_t i = 0; i < size; i++) {
-            if (i % (2*stride) < stride) {
+            if (i % (2 * stride) < stride) {
                 if (!flipped) {
                     sort2(a[i], a[i + stride]);
                 } else {
@@ -67,7 +67,7 @@ std::vector<Expr> bitonic_sort(std::vector<Expr> v) {
 
 Expr median(std::vector<Expr> v) {
     v = bitonic_sort(v);
-    return v[v.size()/2];
+    return v[v.size() / 2];
 }
 
 int main(int argc, char **argv) {
@@ -104,8 +104,8 @@ int main(int argc, char **argv) {
     }
     printf("\n");
 
-    for (int i = 0; i < N-1; i++) {
-        if (result(i) >= result(i+1)) {
+    for (int i = 0; i < N - 1; i++) {
+        if (result(i) >= result(i + 1)) {
             printf("Results were not in order\n");
             return -1;
         }

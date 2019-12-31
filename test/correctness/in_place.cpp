@@ -14,7 +14,7 @@ int main(int argc, char **argv) {
 
     // But do a sum-scan of it from 0 to 100
     RDom r(1, 99);
-    f(r) += f(r-1);
+    f(r) += f(r - 1);
 
     // Make some test data.
     Buffer<float> data = lambda(x, sin(x)).realize(100);
@@ -25,7 +25,7 @@ int main(int argc, char **argv) {
     Buffer<float> reference_in = lambda(x, sin(x)).realize(100);
     Func g;
     g(x) = reference_in(x);
-    g(r) += g(r-1);
+    g(r) += g(r - 1);
     Buffer<float> reference_out = g.realize(100);
 
     float err = evaluate_may_gpu<float>(sum(abs(data(r) - reference_out(r))));
@@ -34,7 +34,6 @@ int main(int argc, char **argv) {
         printf("Failed\n");
         return -1;
     }
-
 
     // Undef on one side of a select doesn't destroy the entire
     // select. Instead, it makes the containing store conditionally
@@ -69,7 +68,6 @@ int main(int argc, char **argv) {
             return -1;
         }
     }
-
 
     printf("Success!\n");
     return 0;

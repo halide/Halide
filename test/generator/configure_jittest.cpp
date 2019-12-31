@@ -27,7 +27,7 @@ int main(int argc, char **argv) {
     int extra_value = 0;
     for (int i = 0; i < 3; ++i) {
         extras.push_back(Buffer<uint8_t>(kSize, kSize));
-        extras.back().fill((uint8_t) i);
+        extras.back().fill((uint8_t)i);
         extra_value += i;
     }
 
@@ -45,12 +45,12 @@ int main(int argc, char **argv) {
 
     const int bias = 1;
     auto result = configure::generate(context, configure::Inputs{
-            input,
-            bias,
-            extras[0], extras[1], extras[2],
-            typed_extra,
-            func_extra,
-            extra_scalar});
+                                                   input,
+                                                   bias,
+                                                   extras[0], extras[1], extras[2],
+                                                   typed_extra,
+                                                   func_extra,
+                                                   extra_scalar});
 
     Buffer<int32_t> output = result.output.realize(kSize, kSize, 3);
     Buffer<float> extra_buffer_output = result.extra_buffer_output.realize(kSize, kSize, 3);

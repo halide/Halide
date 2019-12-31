@@ -18,16 +18,16 @@
 //---------------------------------------------------------------------------
 
 #include <cstdlib>
-#include <memory>
 #include <iostream>
+#include <memory>
 
 namespace Halide {
 namespace Tools {
 
 static inline void print_meminfoalign(intptr_t val) {
-    intptr_t align_chk = 1024*1024;
+    intptr_t align_chk = 1024 * 1024;
     while (align_chk > 0) {
-        if ((val & (align_chk-1)) == 0) {
+        if ((val & (align_chk - 1)) == 0) {
             char aunit = ' ';
             if (align_chk >= 1024) {
                 align_chk >>= 10;
@@ -52,7 +52,7 @@ void *halide_malloc_trace(void *user_context, size_t x) {
     // read 8 bytes before the start to store the original pointer.
     // Additionally, we also need to align it to the natural vector
     // width.
-    void *orig = malloc(x+128);
+    void *orig = malloc(x + 128);
     if (orig == NULL) {
         // Will result in a failed assertion and a call to halide_error
         return NULL;
@@ -64,7 +64,7 @@ void *halide_malloc_trace(void *user_context, size_t x) {
     void *headend = (orig == ptr) ? orig : (char *)ptr - 1;
     std::cout << "halide_malloc => [0x" << std::hex
               << (intptr_t)ptr << ", 0x"
-              << (intptr_t)ptr + x-1 << std::dec
+              << (intptr_t)ptr + x - 1 << std::dec
               << "], # size:"
               << (intptr_t)x << ", ";
     print_meminfoalign((intptr_t)ptr);
@@ -82,13 +82,13 @@ void *halide_malloc_trace(void *user_context, size_t x) {
 
 void halide_free_trace(void *user_context, void *ptr) {
     std::cout << "halide_free => [0x" << std::hex
-              << (intptr_t)((void**)ptr)[-1] << ", 0x"
+              << (intptr_t)((void **)ptr)[-1] << ", 0x"
               << (intptr_t)ptr - 1 << std::dec
               << "], # size:"
-              << (intptr_t)ptr - (intptr_t)((void**)ptr)[-1] << ", ";
-    print_meminfoalign((intptr_t)((void**)ptr)[-1]);
+              << (intptr_t)ptr - (intptr_t)((void **)ptr)[-1] << ", ";
+    print_meminfoalign((intptr_t)((void **)ptr)[-1]);
     std::cout << std::endl;
-    free(((void**)ptr)[-1]);
+    free(((void **)ptr)[-1]);
 }
 
 void halide_enable_malloc_trace(void) {
@@ -96,7 +96,7 @@ void halide_enable_malloc_trace(void) {
     halide_set_custom_free(halide_free_trace);
 }
 
-} // namespace Tools
-} // namespace Halide
+}  // namespace Tools
+}  // namespace Halide
 
-#endif // HALIDE_MALLOC_TRACE_H
+#endif  // HALIDE_MALLOC_TRACE_H

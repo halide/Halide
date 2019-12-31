@@ -9,7 +9,7 @@ public:
     Input<Buffer<int>> input{"input", 3};
     Input<int> bias{"bias"};
 
-    Output<Buffer<int>> output{ "output", 3 };
+    Output<Buffer<int>> output{"output", 3};
 
     void configure() {
         configure_calls++;

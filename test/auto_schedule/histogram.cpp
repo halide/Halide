@@ -48,14 +48,14 @@ double run_test(bool auto_schedule) {
 
     Func eq("equalize");
 
-    Expr cdf_bin = cast<uint8_t>(clamp(Y(x, y), 0 , 255));
-    eq(x, y) = clamp(cdf(cdf_bin) * (255.0f/(in.height() * in.width())), 0 , 255);
+    Expr cdf_bin = cast<uint8_t>(clamp(Y(x, y), 0, 255));
+    eq(x, y) = clamp(cdf(cdf_bin) * (255.0f / (in.height() * in.width())), 0, 255);
 
     Func color("color");
     Expr red = cast<uint8_t>(clamp(eq(x, y) + (Cr(x, y) - 128) * 1.4f, 0, 255));
-    Expr green = cast<uint8_t> (clamp(eq(x, y) - 0.343f * (Cb(x, y) - 128) - 0.711f * (Cr(x, y) -128), 0, 255));
-    Expr blue = cast<uint8_t> (clamp(eq(x, y) + 1.765f * (Cb(x, y) - 128), 0, 255));
-    color(x, y, c) = select(c == 0, red, select(c == 1, green , blue));
+    Expr green = cast<uint8_t>(clamp(eq(x, y) - 0.343f * (Cb(x, y) - 128) - 0.711f * (Cr(x, y) - 128), 0, 255));
+    Expr blue = cast<uint8_t>(clamp(eq(x, y) + 1.765f * (Cb(x, y) - 128), 0, 255));
+    color(x, y, c) = select(c == 0, red, select(c == 1, green, blue));
 
     Target target = get_jit_target_from_environment();
     Pipeline p(color);
@@ -75,8 +75,10 @@ double run_test(bool auto_schedule) {
         Cb.compute_at(color, xi);
         eq.compute_at(color, xi);
         color.compute_root()
-             .reorder(c, x, y).bound(c, 0, 3).unroll(c)
-             .gpu_tile(x, y, xi, yi, 16, 16);
+            .reorder(c, x, y)
+            .bound(c, 0, 3)
+            .unroll(c)
+            .gpu_tile(x, y, xi, yi, 16, 16);
     } else {
         Y.compute_root().parallel(y, 8).vectorize(x, 8);
 
@@ -99,10 +101,10 @@ double run_test(bool auto_schedule) {
         Cb.compute_at(color, x).vectorize(x);
         Cr.compute_at(color, x).vectorize(x);
         color.reorder(c, x, y)
-             .bound(c, 0, 3)
-             .unroll(c)
-             .parallel(y, 8)
-             .vectorize(x, 8);
+            .bound(c, 0, 3)
+            .unroll(c)
+            .parallel(y, 8)
+            .vectorize(x, 8);
     }
 
     p.compile_to_lowered_stmt("histogram.html", {in}, HTML, target);
@@ -113,7 +115,7 @@ double run_test(bool auto_schedule) {
         p.realize(out);
     });
 
-    return t*1000;
+    return t * 1000;
 }
 
 int main(int argc, char **argv) {

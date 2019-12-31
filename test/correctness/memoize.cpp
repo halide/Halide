@@ -52,10 +52,10 @@ extern "C" DLLEXPORT int count_calls_staged(int32_t stage, uint8_t val, halide_b
             in->dim[i] = out->dim[i];
         }
     } else if (!out->is_bounds_query()) {
-        assert(stage < static_cast<int32_t>(sizeof(call_count_staged)/sizeof(call_count_staged[0])));
+        assert(stage < static_cast<int32_t>(sizeof(call_count_staged) / sizeof(call_count_staged[0])));
         call_count_staged[stage]++;
         Halide::Runtime::Buffer<uint8_t> out_buf(*out), in_buf(*in);
-        out_buf.for_each_value([&](uint8_t &out, uint8_t &in) {out = in + val;}, in_buf);
+        out_buf.for_each_value([&](uint8_t &out, uint8_t &in) { out = in + val; }, in_buf);
     }
     return 0;
 }
@@ -221,7 +221,6 @@ int main(int argc, char **argv) {
         val2.set(57);
         Buffer<uint8_t> out6 = f.realize(256, 256);
 
-
         for (int32_t i = 0; i < 256; i++) {
             for (int32_t j = 0; j < 256; j++) {
                 assert(out1(i, j) == (23 + 42));
@@ -341,7 +340,6 @@ int main(int argc, char **argv) {
         Buffer<uint8_t> out0 = out[0];
         Buffer<int32_t> out1 = out[1];
 
-
         for (int32_t i = 0; i < 100; i++) {
             for (int32_t j = 0; j < 100; j++) {
                 assert(out0(i, j) == (uint8_t)(3 * 23 + i + (i - 1) + (i + 1)));
@@ -351,7 +349,6 @@ int main(int argc, char **argv) {
         out = g.realize(128, 128);
         out0 = out[0];
         out1 = out[1];
-
 
         for (int32_t i = 0; i < 100; i++) {
             for (int32_t j = 0; j < 100; j++) {
@@ -486,7 +483,7 @@ int main(int argc, char **argv) {
 
         // TODO work out an assertion on call counts here.
         for (int i = 0; i < 8; i++) {
-          printf("Call count for thread %d is %d.\n", i, call_count_with_arg_parallel[i]);
+            printf("Call count for thread %d is %d.\n", i, call_count_with_arg_parallel[i]);
         }
 
         // Return cache size to default.
@@ -516,7 +513,7 @@ int main(int argc, char **argv) {
 
         f.compute_root();
         for (int i = 0; i < 3; i++) {
-          stage[i].compute_root();
+            stage[i].compute_root();
         }
         stage[3].compute_root().memoize();
         Func output;
@@ -526,18 +523,7 @@ int main(int argc, char **argv) {
 
         for (int32_t i = 0; i < 128; i++) {
             for (int32_t j = 0; j < 128; j++) {
-              assert(result(i, j) == (uint8_t)((i << 8) + j + 4 * 23));
-            }
-        }
-
-        for (int i = 0; i < 4; i++) {
-          printf("Call count for stage %d is %d.\n", i, call_count_staged[i]);
-        }
-
-        result = output.realize(128, 128);
-        for (int32_t i = 0; i < 128; i++) {
-            for (int32_t j = 0; j < 128; j++) {
-              assert(result(i, j) == (uint8_t)((i << 8) + j + 4 * 23));
+                assert(result(i, j) == (uint8_t)((i << 8) + j + 4 * 23));
             }
         }
 
@@ -545,6 +531,16 @@ int main(int argc, char **argv) {
             printf("Call count for stage %d is %d.\n", i, call_count_staged[i]);
         }
 
+        result = output.realize(128, 128);
+        for (int32_t i = 0; i < 128; i++) {
+            for (int32_t j = 0; j < 128; j++) {
+                assert(result(i, j) == (uint8_t)((i << 8) + j + 4 * 23));
+            }
+        }
+
+        for (int i = 0; i < 4; i++) {
+            printf("Call count for stage %d is %d.\n", i, call_count_staged[i]);
+        }
     }
 
     if (get_jit_target_from_environment().arch == Target::WebAssembly) {
@@ -586,7 +582,7 @@ int main(int argc, char **argv) {
 
                 for (int32_t i = 0; i < 16; i++) {
                     for (int32_t j = 0; j < 16; j++) {
-                      assert(out0(i, j) == (uint8_t)(3 * (23 + trial) + i + (i - 1) + (i + 1)));
+                        assert(out0(i, j) == (uint8_t)(3 * (23 + trial) + i + (i - 1) + (i + 1)));
                         assert(out1(i, j) == i);
                     }
                 }
@@ -601,7 +597,7 @@ int main(int argc, char **argv) {
 
                     for (int32_t i = 0; i < 16; i++) {
                         for (int32_t j = 0; j < 16; j++) {
-                          assert(out0(i, j) == (uint8_t)(3 * (23 + trial) + i + (i - 1) + (i + 1)));
+                            assert(out0(i, j) == (uint8_t)(3 * (23 + trial) + i + (i - 1) + (i + 1)));
                             assert(out1(i, j) == i);
                         }
                     }
@@ -612,8 +608,6 @@ int main(int argc, char **argv) {
         }
 
         printf("In 100 attempts with flakey malloc, %d errors and %d full completions occured.\n", total_errors, completed);
-
-
     }
 
     printf("Success!\n");
