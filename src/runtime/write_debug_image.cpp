@@ -91,10 +91,12 @@ struct halide_tiff_header {
 
 WEAK bool ends_with(const char *filename, const char *suffix) {
     const char *f = filename, *s = suffix;
-    while (*f)
+    while (*f) {
         f++;
-    while (*s)
+    }
+    while (*s) {
         s++;
+    }
     while (s != suffix && f != filename) {
         if (*f != *s) return false;
         f--;
@@ -233,13 +235,17 @@ WEAK extern "C" int32_t halide_debug_to_file(void *user_context, const char *fil
         }
     } else if (ends_with(filename, ".mat")) {
         // Construct a name for the array from the filename
-        const char *start, *end;
-        for (end = filename; *end; end++)
-            ;
-        for (; *end != '.'; end--)
-            ;
-        for (start = end; start != filename && start[-1] != '/'; start--)
-            ;
+        const char *end = filename;
+        while (*end) {
+            end++;
+        }
+        while (*end != '.') {
+            end--;
+        }
+        const char *start = end;
+        while (start != filename && start[-1] != '/') {
+            start--;
+        }
         uint32_t name_size = (uint32_t)(end - start);
         char array_name[256];
         char *dst = array_name;

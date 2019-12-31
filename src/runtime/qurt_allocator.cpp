@@ -48,9 +48,7 @@ WEAK void *mem_buf[num_buffers] = {
     NULL,
 };
 
-__attribute__((destructor))
-WEAK void
-halide_allocator_cleanup() {
+WEAK __attribute__((destructor)) void halide_allocator_cleanup() {
     for (int i = 0; i < num_buffers; ++i) {
         aligned_free(mem_buf[i]);
     }

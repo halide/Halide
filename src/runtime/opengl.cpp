@@ -2038,9 +2038,7 @@ WEAK uintptr_t halide_opengl_get_texture(void *user_context, halide_buffer_t *bu
 }
 
 namespace {
-__attribute__((destructor))
-WEAK void
-halide_opengl_cleanup() {
+WEAK __attribute__((destructor)) void halide_opengl_cleanup() {
     halide_opengl_device_release(NULL);
 }
 }  // namespace

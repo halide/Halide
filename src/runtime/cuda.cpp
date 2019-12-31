@@ -407,12 +407,30 @@ WEAK CUresult create_cuda_context(void *user_context, CUcontext *ctx) {
         }
 
         // threads per core is a function of the compute capability
-        int threads_per_core = (cc_major == 1 ? 8 :
-                                                cc_major == 2 ? (cc_minor == 0 ? 32 : 48) :
-                                                                cc_major == 3 ? 192 :
-                                                                                cc_major == 5 ? 128 :
-                                                                                                cc_major == 6 ? (cc_minor == 0 ? 64 : 128) :
-                                                                                                                cc_major == 7 ? 64 : 0);
+        int threads_per_core;
+        switch (cc_major) {
+        case 1:
+            threads_per_core = 8;
+            break;
+        case 2:
+            threads_per_core = (cc_minor == 0 ? 32 : 48);
+            break;
+        case 3:
+            threads_per_core = 192;
+            break;
+        case 5:
+            threads_per_core = 128;
+            break;
+        case 6:
+            threads_per_core = (cc_minor == 0 ? 64 : 128);
+            break;
+        case 7:
+            threads_per_core = 64;
+            break;
+        default:
+            threads_per_core = 0;
+            break;
+        }
 
         debug(user_context)
             << "      max threads per block: " << max_threads_per_block << "\n"
@@ -590,16 +608,12 @@ namespace Internal {
 
 WEAK halide_device_allocation_pool cuda_allocation_pool;
 
-__attribute__((constructor))
-WEAK void
-register_cuda_allocation_pool() {
+WEAK __attribute__((constructor)) void register_cuda_allocation_pool() {
     cuda_allocation_pool.release_unused = &halide_cuda_release_unused_device_allocations;
     halide_register_device_allocation_pool(&cuda_allocation_pool);
 }
 
-__attribute__((always_inline))
-WEAK uint64_t
-quantize_allocation_size(uint64_t sz) {
+WEAK __attribute__((always_inline)) uint64_t quantize_allocation_size(uint64_t sz) {
     int z = __builtin_clzll(sz);
     if (z < 60) {
         sz--;
@@ -1297,9 +1311,7 @@ WEAK int halide_cuda_compute_capability(void *user_context, int *major, int *min
 }
 
 namespace {
-__attribute__((destructor))
-WEAK void
-halide_cuda_cleanup() {
+WEAK __attribute__((destructor)) void halide_cuda_cleanup() {
     halide_cuda_device_release(NULL);
 }
 }  // namespace

@@ -1301,9 +1301,7 @@ WEAK const struct halide_device_interface_t *halide_opencl_device_interface() {
 }
 
 namespace {
-__attribute__((destructor))
-WEAK void
-halide_opencl_cleanup() {
+WEAK __attribute__((destructor)) void halide_opencl_cleanup() {
     halide_opencl_device_release(NULL);
 }
 }  // namespace

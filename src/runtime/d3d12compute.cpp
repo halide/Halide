@@ -3157,9 +3157,7 @@ WEAK const struct halide_device_interface_t *halide_d3d12compute_device_interfac
 }
 
 namespace {
-__attribute__((destructor))
-WEAK void
-halide_d3d12compute_cleanup() {
+WEAK __attribute__((destructor)) void halide_d3d12compute_cleanup() {
     TRACELOG;
     halide_d3d12compute_device_release(NULL);
 }

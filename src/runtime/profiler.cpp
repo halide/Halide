@@ -335,8 +335,9 @@ WEAK void halide_profiler_report_unlocked(void *user_context, halide_profiler_st
 
                 sstr << "  " << fs->name << ": ";
                 cursor += 25;
-                while (sstr.size() < cursor)
+                while (sstr.size() < cursor) {
                     sstr << " ";
+                }
 
                 float ft = fs->time / (p->runs * 1000000.0f);
                 sstr << ft;
@@ -344,8 +345,9 @@ WEAK void halide_profiler_report_unlocked(void *user_context, halide_profiler_st
                 sstr.erase(3);
                 sstr << "ms";
                 cursor += 10;
-                while (sstr.size() < cursor)
+                while (sstr.size() < cursor) {
                     sstr << " ";
+                }
 
                 int percent = 0;
                 if (p->time != 0) {
@@ -353,16 +355,18 @@ WEAK void halide_profiler_report_unlocked(void *user_context, halide_profiler_st
                 }
                 sstr << "(" << percent << "%)";
                 cursor += 8;
-                while (sstr.size() < cursor)
+                while (sstr.size() < cursor) {
                     sstr << " ";
+                }
 
                 if (!serial) {
                     float threads = fs->active_threads_numerator / (fs->active_threads_denominator + 1e-10);
                     sstr << "threads: " << threads;
                     sstr.erase(3);
                     cursor += 15;
-                    while (sstr.size() < cursor)
+                    while (sstr.size() < cursor) {
                         sstr << " ";
+                    }
                 }
 
                 int alloc_avg = 0;
@@ -373,12 +377,14 @@ WEAK void halide_profiler_report_unlocked(void *user_context, halide_profiler_st
                 if (fs->memory_peak) {
                     cursor += 15;
                     sstr << " peak: " << fs->memory_peak;
-                    while (sstr.size() < cursor)
+                    while (sstr.size() < cursor) {
                         sstr << " ";
+                    }
                     sstr << " num: " << fs->num_allocs;
                     cursor += 15;
-                    while (sstr.size() < cursor)
+                    while (sstr.size() < cursor) {
                         sstr << " ";
+                    }
                     sstr << " avg: " << alloc_avg;
                 }
                 if (fs->stack_peak > 0) {

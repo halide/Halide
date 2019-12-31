@@ -948,9 +948,7 @@ WEAK const halide_device_interface_t *halide_hexagon_device_interface() {
 }
 
 namespace {
-__attribute__((destructor))
-WEAK void
-halide_hexagon_cleanup() {
+WEAK __attribute__((destructor)) void halide_hexagon_cleanup() {
     halide_hexagon_device_release(NULL);
 }
 }  // namespace

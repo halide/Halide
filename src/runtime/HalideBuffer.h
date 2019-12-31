@@ -439,9 +439,10 @@ private:
         assert(old_buf.elem_size == t.bytes());
         buf.host = old_buf.host;
         buf.type = t;
-        int d;
-        for (d = 0; d < 4 && old_buf.extent[d]; d++)
-            ;
+        int d = 0;
+        while (d < 4 && old_buf.extent[d]) {
+            d++;
+        }
         make_shape_storage(d);
         for (int i = 0; i < d; i++) {
             buf.dim[i].min = old_buf.min[i];

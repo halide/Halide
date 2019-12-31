@@ -562,9 +562,7 @@ using namespace Halide::Runtime::Internal;
 extern "C" {
 
 namespace {
-__attribute__((destructor))
-WEAK void
-halide_thread_pool_cleanup() {
+WEAK __attribute__((destructor)) void halide_thread_pool_cleanup() {
     halide_shutdown_thread_pool();
 }
 }  // namespace

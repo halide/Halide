@@ -217,8 +217,9 @@ WEAK int32_t halide_default_trace(void *user_context, const halide_trace_event_t
 
         // Round up bits to 8, 16, 32, or 64
         int print_bits = 8;
-        while (print_bits < e->type.bits)
+        while (print_bits < e->type.bits) {
             print_bits <<= 1;
+        }
         halide_assert(user_context, print_bits <= 64 && "Tracing bad type");
 
         // Otherwise, use halide_print and a plain-text format
@@ -387,9 +388,7 @@ WEAK int halide_shutdown_trace() {
 }
 
 namespace {
-__attribute__((destructor))
-WEAK void
-halide_trace_cleanup() {
+WEAK __attribute__((destructor)) void halide_trace_cleanup() {
     halide_shutdown_trace();
 }
 }  // namespace

@@ -1088,9 +1088,7 @@ WEAK const struct halide_device_interface_t *halide_metal_device_interface() {
 }
 
 namespace {
-__attribute__((destructor))
-WEAK void
-halide_metal_cleanup() {
+WEAK __attribute__((destructor)) void halide_metal_cleanup() {
     halide_metal_device_release(NULL);
 }
 }  // namespace

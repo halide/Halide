@@ -562,9 +562,7 @@ WEAK void halide_memoization_cache_cleanup() {
 
 namespace {
 
-__attribute__((destructor))
-WEAK void
-halide_cache_cleanup() {
+WEAK __attribute__((destructor)) void halide_cache_cleanup() {
     halide_memoization_cache_cleanup();
 }
 
