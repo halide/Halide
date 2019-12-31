@@ -64,7 +64,7 @@ function get_autoscheduler_scripts_dir() {
 function build_featurization_to_sample() {
     local -r halide_root=$1
     get_autoscheduler_dir $halide_root autoscheduler_dir
-    get_autoscheduler_bin_dir autoscheduler_bin_dir
+    get_absolute_autoscheduler_bin_dir $halide_root autoscheduler_bin_dir
 
     echo
     echo "Building featurization_to_sample..."
@@ -75,7 +75,7 @@ function build_featurization_to_sample() {
 function build_libauto_schedule() {
     local -r halide_root=$1
     get_autoscheduler_dir $halide_root autoscheduler_dir
-    get_autoscheduler_bin_dir autoscheduler_bin_dir
+    get_absolute_autoscheduler_bin_dir $halide_root autoscheduler_bin_dir
 
     echo
     echo "Building libauto_schedule..."
@@ -86,7 +86,7 @@ function build_libauto_schedule() {
 function build_retrain_cost_model() {
     local -r halide_root=$1
     get_autoscheduler_dir $halide_root autoscheduler_dir
-    get_autoscheduler_bin_dir autoscheduler_bin_dir
+    get_absolute_autoscheduler_bin_dir $halide_root autoscheduler_bin_dir
 
     echo
     echo "Building retrain_cost_model..."

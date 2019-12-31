@@ -369,7 +369,7 @@ void load_samples(map<int, PipelineSample>& training_set, map<int, PipelineSampl
         }
     }
 
-    std::cout << "Distinct pipelines: " << training_set.size() << "\n";
+    std::cout << "Distinct pipelines: " << training_set.size() + validation_set.size() << "\n";
 
     std::ostringstream o;
     o << "Best runtime is " << best_runtime << " msec, from schedule id " << best << " in file " << best_path << "\n";
