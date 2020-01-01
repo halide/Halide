@@ -12,14 +12,16 @@ int gettid() {
     return syscall(186);
 #endif
 }
-}
+}  // namespace
 
 #define log_message(stuff) print(NULL) << gettid() << ": " << stuff << "\n"
 #else
 #define log_message(stuff)
 #endif
 
-namespace Halide { namespace Runtime { namespace Internal {
+namespace Halide {
+namespace Runtime {
+namespace Internal {
 
 struct work {
     halide_parallel_task_t task;
@@ -33,7 +35,7 @@ struct work {
     int sibling_count;
     work *parent_job;
     int threads_reserved;
-  
+
     void *user_context;
     int active_workers;
     int exit_status;
@@ -206,7 +208,7 @@ WEAK void worker_thread_already_locked(work *owned_job) {
                     }
                     *prev_ptr = job->next_job;
                     job->task.extent = 0;
-                    continue; // So loop exit is always in the same place.
+                    continue;  // So loop exit is always in the same place.
                 }
             } else if (owned_job->parent_job && owned_job->parent_job->exit_status != 0) {
                 owned_job->exit_status = owned_job->parent_job->exit_status;
@@ -247,21 +249,21 @@ WEAK void worker_thread_already_locked(work *owned_job) {
             if (!enough_threads) {
 
                 log_message("Not enough threads for job " << job->task.name << " available: " << threads_available << " min_threads: " << job->task.min_threads);
-            }              
-            bool can_use_this_thread_stack  = !owned_job || (job->siblings == owned_job->siblings) || job->task.min_threads == 0;
+            }
+            bool can_use_this_thread_stack = !owned_job || (job->siblings == owned_job->siblings) || job->task.min_threads == 0;
             if (!can_use_this_thread_stack) {
                 log_message("Cannot run job " << job->task.name << " on this thread.");
-            }              
+            }
             bool can_add_worker = (!job->task.serial || (job->active_workers == 0));
             if (!can_add_worker) {
                 log_message("Cannot add worker to job " << job->task.name);
-            }              
-              
+            }
+
             if (enough_threads && can_use_this_thread_stack && can_add_worker) {
                 if (job->make_runnable()) {
                     break;
                 } else {
-                     log_message("Cannot acquire semaphores for " << job->task.name);
+                    log_message("Cannot acquire semaphores for " << job->task.name);
                 }
             }
             prev_ptr = &(job->next_job);
@@ -338,7 +340,7 @@ WEAK void worker_thread_already_locked(work *owned_job) {
 
             // Put it back on the job stack, if it hasn't failed.
             if (result != 0) {
-                job->task.extent = 0; // Force job to be finished.
+                job->task.extent = 0;  // Force job to be finished.
             } else if (job->task.extent > 0) {
                 job->next_job = work_queue.jobs;
                 work_queue.jobs = job;
@@ -373,7 +375,7 @@ WEAK void worker_thread_already_locked(work *owned_job) {
         }
 
         bool wake_owners = false;
- 
+
         // If this task failed, set the exit status on the job.
         if (result != 0) {
             job->exit_status = result;
@@ -455,7 +457,7 @@ WEAK void enqueue_work_already_locked(int num_jobs, work *jobs, work *task_paren
         if (jobs[i].task.num_semaphores != 0) {
             job_has_acquires = true;
         }
-  
+
         if (jobs[i].task.serial) {
             workers_to_wake++;
         } else {
@@ -477,7 +479,7 @@ WEAK void enqueue_work_already_locked(int num_jobs, work *jobs, work *task_paren
             log_message("enqueue_work_already_locked adding one to min_threads.");
             min_threads += 1;
         }
-    
+
         // Spawn more threads if necessary.
         while (work_queue.threads_created < MAX_THREADS &&
                ((work_queue.threads_created < work_queue.desired_threads_working - 1) ||
@@ -495,7 +497,8 @@ WEAK void enqueue_work_already_locked(int num_jobs, work *jobs, work *task_paren
     } else {
         log_message("enqueue_work_already_locked job " << jobs[0].task.name << " with min_threads " << min_threads << " task_parent " << task_parent->task.name << " task_parent->task.min_threads " << task_parent->task.min_threads << " task_parent->threads_reserved " << task_parent->threads_reserved);
         halide_assert(NULL, (min_threads <= ((task_parent->task.min_threads * task_parent->active_workers) -
-                                             task_parent->threads_reserved)) && "Logic error: thread over commit.\n");
+                                             task_parent->threads_reserved)) &&
+                                "Logic error: thread over commit.\n");
         if (job_has_acquires || job_may_block) {
             task_parent->threads_reserved++;
         }
@@ -533,9 +536,8 @@ WEAK void enqueue_work_already_locked(int num_jobs, work *jobs, work *task_paren
         }
     }
 
-
     if (job_has_acquires || job_may_block) {
-        if (task_parent != NULL) { 
+        if (task_parent != NULL) {
             task_parent->threads_reserved--;
         } else {
             work_queue.threads_reserved--;
@@ -550,19 +552,20 @@ WEAK halide_do_parallel_tasks_t custom_do_parallel_tasks = halide_default_do_par
 WEAK halide_semaphore_init_t custom_semaphore_init = halide_default_semaphore_init;
 WEAK halide_semaphore_try_acquire_t custom_semaphore_try_acquire = halide_default_semaphore_try_acquire;
 WEAK halide_semaphore_release_t custom_semaphore_release = halide_default_semaphore_release;
- 
-}}}  // namespace Halide::Runtime::Internal
+
+}  // namespace Internal
+}  // namespace Runtime
+}  // namespace Halide
 
 using namespace Halide::Runtime::Internal;
 
 extern "C" {
 
 namespace {
-__attribute__((destructor))
-WEAK void halide_thread_pool_cleanup() {
+WEAK __attribute__((destructor)) void halide_thread_pool_cleanup() {
     halide_shutdown_thread_pool();
 }
-}
+}  // namespace
 
 WEAK int halide_default_do_task(void *user_context, halide_task_t f, int idx,
                                 uint8_t *closure) {
@@ -572,7 +575,7 @@ WEAK int halide_default_do_task(void *user_context, halide_task_t f, int idx,
 WEAK int halide_default_do_loop_task(void *user_context, halide_loop_task_t f,
                                      int min, int extent, uint8_t *closure,
                                      void *task_parent) {
-  return f(user_context, min, extent, closure, task_parent);
+    return f(user_context, min, extent, closure, task_parent);
 }
 
 WEAK int halide_default_do_par_for(void *user_context, halide_task_t f,
@@ -597,7 +600,7 @@ WEAK int halide_default_do_par_for(void *user_context, halide_task_t f,
     job.active_workers = 0;
     job.next_semaphore = 0;
     job.owner_is_sleeping = false;
-    job.siblings = &job; // guarantees no other job points to the same siblings.
+    job.siblings = &job;  // guarantees no other job points to the same siblings.
     job.sibling_count = 0;
     job.parent_job = NULL;
     halide_mutex_lock(&work_queue.mutex);
@@ -700,7 +703,7 @@ WEAK int halide_default_semaphore_release(halide_semaphore_t *s, int n) {
     halide_semaphore_impl_t *sem = (halide_semaphore_impl_t *)s;
     int old_val = Halide::Runtime::Internal::Synchronization::atomic_fetch_add_acquire_release(&sem->value, n);
     // TODO(abadams|zvookin): Is this correct if an acquire can be for say count of 2 and the releases are 1 each?
-    if (old_val == 0 && n != 0) { // Don't wake if nothing released.
+    if (old_val == 0 && n != 0) {  // Don't wake if nothing released.
         // We may have just made a job runnable
         halide_mutex_lock(&work_queue.mutex);
         halide_cond_broadcast(&work_queue.wake_a_team);
@@ -737,7 +740,7 @@ WEAK halide_do_loop_task_t halide_set_custom_do_loop_task(halide_do_loop_task_t 
     custom_do_loop_task = f;
     return result;
 }
-  
+
 WEAK halide_do_par_for_t halide_set_custom_do_par_for(halide_do_par_for_t f) {
     halide_do_par_for_t result = custom_do_par_for;
     custom_do_par_for = f;
@@ -773,8 +776,8 @@ WEAK int halide_do_par_for(void *user_context, halide_task_t f,
 }
 
 WEAK int halide_do_loop_task(void *user_context, halide_loop_task_t f,
-                             int min, int size, uint8_t *closure, void *task_parent){
-  return custom_do_loop_task(user_context, f, min, size, closure, task_parent);
+                             int min, int size, uint8_t *closure, void *task_parent) {
+    return custom_do_loop_task(user_context, f, min, size, closure, task_parent);
 }
 
 WEAK int halide_do_parallel_tasks(void *user_context, int num_tasks,
@@ -794,5 +797,4 @@ WEAK int halide_semaphore_release(struct halide_semaphore_t *sema, int count) {
 WEAK bool halide_semaphore_try_acquire(struct halide_semaphore_t *sema, int count) {
     return custom_semaphore_try_acquire(sema, count);
 }
-
 }

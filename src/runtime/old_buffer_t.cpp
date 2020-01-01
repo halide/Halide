@@ -1,8 +1,10 @@
-#include "runtime_internal.h"
 #include "HalideRuntime.h"
 #include "printer.h"
+#include "runtime_internal.h"
 
-namespace Halide { namespace Runtime { namespace Internal {
+namespace Halide {
+namespace Runtime {
+namespace Internal {
 struct old_dev_wrapper {
     uint64_t device;
     const halide_device_interface_t *interface;
@@ -18,10 +20,18 @@ WEAK int guess_type_and_dimensionality(void *user_context, buffer_t *old_buf, ha
     }
 
     switch (old_buf->elem_size) {
-    case 1: new_buf->type = halide_type_of<uint8_t>(); break;
-    case 2: new_buf->type = halide_type_of<uint16_t>(); break;
-    case 4: new_buf->type = halide_type_of<uint32_t>(); break;
-    case 8: new_buf->type = halide_type_of<uint64_t>(); break;
+    case 1:
+        new_buf->type = halide_type_of<uint8_t>();
+        break;
+    case 2:
+        new_buf->type = halide_type_of<uint16_t>();
+        break;
+    case 4:
+        new_buf->type = halide_type_of<uint32_t>();
+        break;
+    case 8:
+        new_buf->type = halide_type_of<uint64_t>();
+        break;
     default:
         return halide_error_failed_to_upgrade_buffer_t(user_context, "",
                                                        "elem_size of buffer was not in [1, 2, 4, 8]");
@@ -29,7 +39,9 @@ WEAK int guess_type_and_dimensionality(void *user_context, buffer_t *old_buf, ha
     return 0;
 }
 
-}}}
+}  // namespace Internal
+}  // namespace Runtime
+}  // namespace Halide
 
 extern "C" {
 
@@ -51,7 +63,7 @@ WEAK int halide_upgrade_buffer_t(void *user_context, const char *name,
                 // wrapper generation: since we already have the upgrade overhead, let's
                 // check and fail loudly rather than just have something weird happen.
                 return halide_error_failed_to_upgrade_buffer_t(user_context, name,
-                    "Internal error: buffer host mismatch in halide_upgrade_buffer_t.");
+                                                               "Internal error: buffer host mismatch in halide_upgrade_buffer_t.");
             }
             return 0;
         }
@@ -128,7 +140,7 @@ WEAK int halide_copy_to_host_legacy(void *user_context, struct buffer_t *old_buf
 }
 
 WEAK int halide_copy_to_device_legacy(void *user_context, struct buffer_t *old_buf,
-                               const struct halide_device_interface_t *device_interface) {
+                                      const struct halide_device_interface_t *device_interface) {
     halide_buffer_t new_buf = {0};
     halide_dimension_t shape[4];
     new_buf.dim = shape;
@@ -151,7 +163,7 @@ WEAK int halide_device_sync_legacy(void *user_context, struct buffer_t *old_buf)
 }
 
 WEAK int halide_device_malloc_legacy(void *user_context, struct buffer_t *old_buf,
-                              const struct halide_device_interface_t *device_interface) {
+                                     const struct halide_device_interface_t *device_interface) {
     halide_buffer_t new_buf = {0};
     halide_dimension_t shape[4];
     new_buf.dim = shape;

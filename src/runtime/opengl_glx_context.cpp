@@ -8,7 +8,7 @@ typedef int Bool;
 typedef void Display;
 
 typedef void (*__GLXextFuncPtr)(void);
-extern __GLXextFuncPtr glXGetProcAddressARB (const char *);
+extern __GLXextFuncPtr glXGetProcAddressARB(const char *);
 extern void *XOpenDisplay(void *);
 extern int XDefaultScreen(void *);
 extern int glXQueryExtension(void *, void *, void *);
@@ -31,11 +31,13 @@ extern int glXMakeContextCurrent(void *, unsigned long, unsigned long, void *);
 
 #define GLX_CONTEXT_MAJOR_VERSION_ARB 0x2091
 #define GLX_CONTEXT_MINOR_VERSION_ARB 0x2092
-typedef GLXContext (*glXCreateContextAttribsARBProc)(Display*, GLXFBConfig, GLXContext, Bool, const int*);
+typedef GLXContext (*glXCreateContextAttribsARBProc)(Display *, GLXFBConfig, GLXContext, Bool, const int *);
 
 }  // extern "C"
 
-namespace Halide { namespace Runtime { namespace Internal {
+namespace Halide {
+namespace Runtime {
+namespace Internal {
 
 // Helper to check for extension string presence. Adapted from:
 //   http://www.opengl.org/resources/features/OGLextensions/
@@ -57,13 +59,14 @@ WEAK bool glx_extension_supported(const char *extlist, const char *extension) {
     return false;
 }
 
-}}}  // namespace Halide::Runtime::Internal
-
+}  // namespace Internal
+}  // namespace Runtime
+}  // namespace Halide
 
 extern "C" {
 
 WEAK void *halide_opengl_get_proc_address(void *user_context, const char *name) {
-    return (void*)glXGetProcAddressARB(name);
+    return (void *)glXGetProcAddressARB(name);
 }
 
 // Initialize OpenGL
@@ -96,10 +99,9 @@ WEAK int halide_opengl_create_context(void *user_context) {
         GLX_GREEN_SIZE, 8,
         GLX_BLUE_SIZE, 8,
         GLX_ALPHA_SIZE, 8,
-        0
-    };
+        0};
     int num_configs = 0;
-    void** fbconfigs = glXChooseFBConfig(dpy, screen, attribs, &num_configs);
+    void **fbconfigs = glXChooseFBConfig(dpy, screen, attribs, &num_configs);
     if (!num_configs) {
         halide_error(user_context, "Could not get framebuffer config.\n");
         return -1;
@@ -120,10 +122,9 @@ WEAK int halide_opengl_create_context(void *user_context) {
         int context_attribs[] = {
             GLX_CONTEXT_MAJOR_VERSION_ARB, desired_major_version,
             GLX_CONTEXT_MINOR_VERSION_ARB, desired_minor_version,
-            0
-        };
+            0};
         context = glXCreateContextAttribsARB(dpy, fbconfig, share_list, direct,
-                                      context_attribs);
+                                             context_attribs);
     }
     if (!context) {
         // Open a legacy context
@@ -135,10 +136,9 @@ WEAK int halide_opengl_create_context(void *user_context) {
     }
 
     int pbuffer_attribs[] = {
-        0x8041 /* GLX_PBUFFER_WIDTH */,  32,
+        0x8041 /* GLX_PBUFFER_WIDTH */, 32,
         0x8040 /* GLX_PBUFFER_HEIGHT */, 32,
-        0
-    };
+        0};
     unsigned long pbuffer = glXCreatePbuffer(dpy, fbconfig, pbuffer_attribs);
 
     XFree(fbconfigs);
@@ -151,5 +151,4 @@ WEAK int halide_opengl_create_context(void *user_context) {
 
     return 0;
 }
-
 }

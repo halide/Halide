@@ -12,5 +12,4 @@ INLINE void call_destructor(void *user_context, void (*fn)(void *user_context, v
         fn(user_context, o);
     }
 }
-
 }

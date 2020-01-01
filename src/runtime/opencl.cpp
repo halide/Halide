@@ -1,19 +1,22 @@
 #include "HalideRuntimeOpenCL.h"
-#include "scoped_spin_lock.h"
 #include "device_buffer_utils.h"
 #include "device_interface.h"
 #include "printer.h"
+#include "scoped_spin_lock.h"
 
 #include "mini_cl.h"
 
 #define INLINE inline __attribute__((always_inline))
 
-namespace Halide { namespace Runtime { namespace Internal { namespace OpenCL {
+namespace Halide {
+namespace Runtime {
+namespace Internal {
+namespace OpenCL {
 
 // Define the function pointers for the OpenCL API. OpenCL 1.2
 // currently disabled so we can work on build bots without it.
 //#define HAVE_OPENCL_12
-#define CL_FN(ret, fn, args) WEAK ret (CL_API_CALL *fn) args;
+#define CL_FN(ret, fn, args) WEAK ret(CL_API_CALL *fn) args;
 #include "cl_functions.h"
 
 // The default implementation of halide_opencl_get_symbol attempts to load
@@ -36,7 +39,7 @@ extern "C" WEAK void *halide_opencl_get_symbol(void *user_context, const char *n
         "/System/Library/Frameworks/OpenCL.framework/OpenCL",
 #endif
     };
-    for (size_t i = 0; i < sizeof(lib_names)/sizeof(lib_names[0]); i++) {
+    for (size_t i = 0; i < sizeof(lib_names) / sizeof(lib_names[0]); i++) {
         lib_opencl = halide_load_library(lib_names[i]);
         if (lib_opencl) {
             debug(user_context) << "    Loaded OpenCL runtime library: " << lib_names[i] << "\n";
@@ -47,7 +50,7 @@ extern "C" WEAK void *halide_opencl_get_symbol(void *user_context, const char *n
     return halide_get_library_symbol(lib_opencl, name);
 }
 
-template <typename T>
+template<typename T>
 INLINE T get_cl_symbol(void *user_context, const char *name) {
     T s = (T)halide_opencl_get_symbol(user_context, name);
     if (!s) {
@@ -61,8 +64,8 @@ WEAK void load_libopencl(void *user_context) {
     debug(user_context) << "    load_libopencl (user_context: " << user_context << ")\n";
     halide_assert(user_context, clCreateContext == NULL);
 
-    #define CL_FN(ret, fn, args) fn = get_cl_symbol<ret (CL_API_CALL *)args>(user_context, #fn);
-    #include "cl_functions.h"
+#define CL_FN(ret, fn, args) fn = get_cl_symbol<ret(CL_API_CALL *) args>(user_context, #fn);
+#include "cl_functions.h"
 }
 
 extern WEAK halide_device_interface_t opencl_device_interface;
@@ -88,7 +91,10 @@ WEAK char build_options[1024];
 WEAK int build_options_lock = 0;
 WEAK bool build_options_initialized = false;
 
-}}}} // namespace Halide::Runtime::Internal::OpenCL
+}  // namespace OpenCL
+}  // namespace Internal
+}  // namespace Runtime
+}  // namespace Halide
 
 using namespace Halide::Runtime::Internal::OpenCL;
 
@@ -152,7 +158,7 @@ const char *halide_opencl_get_build_options_internal(void *user_context) {
     }
     return build_options;
 }
-} // namespace
+}  // namespace
 
 extern "C" {
 
@@ -166,7 +172,6 @@ WEAK const char *halide_opencl_get_platform_name(void *user_context) {
     return halide_opencl_get_platform_name_internal(user_context);
 }
 
-
 WEAK void halide_opencl_set_device_type(const char *n) {
     ScopedSpinLock lock(&device_type_lock);
     halide_opencl_set_device_type_internal(n);
@@ -176,7 +181,6 @@ WEAK const char *halide_opencl_get_device_type(void *user_context) {
     ScopedSpinLock lock(&device_type_lock);
     return halide_opencl_get_device_type_internal(user_context);
 }
-
 
 WEAK void halide_opencl_set_build_options(const char *n) {
     ScopedSpinLock lock(&build_options_lock);
@@ -204,7 +208,7 @@ WEAK int halide_acquire_cl_context(void *user_context, cl_context *ctx, cl_comma
     halide_assert(user_context, q != NULL);
 
     halide_assert(user_context, &thread_lock != NULL);
-    while (__sync_lock_test_and_set(&thread_lock, 1)) { }
+    while (__sync_lock_test_and_set(&thread_lock, 1)) {}
 
     // If the context has not been initialized, initialize it now.
     halide_assert(user_context, &context != NULL);
@@ -227,9 +231,12 @@ WEAK int halide_release_cl_context(void *user_context) {
     return 0;
 }
 
-} // extern "C"
+}  // extern "C"
 
-namespace Halide { namespace Runtime { namespace Internal { namespace OpenCL {
+namespace Halide {
+namespace Runtime {
+namespace Internal {
+namespace OpenCL {
 
 // Helper object to acquire and release the OpenCL context.
 class ClContext {
@@ -241,10 +248,11 @@ public:
     cl_int error;
 
     // Constructor sets 'error' if any occurs.
-    INLINE ClContext(void *user_context) : user_context(user_context),
-                                    context(NULL),
-                                    cmd_queue(NULL),
-                                    error(CL_SUCCESS) {
+    INLINE ClContext(void *user_context)
+        : user_context(user_context),
+          context(NULL),
+          cmd_queue(NULL),
+          error(CL_SUCCESS) {
         if (clCreateContext == NULL) {
             load_libopencl(user_context);
         }
@@ -284,7 +292,7 @@ struct module_state {
 };
 WEAK module_state *state_list = NULL;
 
-WEAK bool validate_device_pointer(void *user_context, halide_buffer_t* buf, size_t size=0) {
+WEAK bool validate_device_pointer(void *user_context, halide_buffer_t *buf, size_t size = 0) {
     if (buf->device == 0) {
         return true;
     }
@@ -347,7 +355,7 @@ WEAK int create_opencl_context(void *user_context, cl_context *ctx, cl_command_q
         for (cl_uint i = 0; i < platform_count; ++i) {
             const cl_uint max_platform_name = 256;
             char platform_name[max_platform_name];
-            err = clGetPlatformInfo(platforms[i], CL_PLATFORM_NAME, max_platform_name, platform_name, NULL );
+            err = clGetPlatformInfo(platforms[i], CL_PLATFORM_NAME, max_platform_name, platform_name, NULL);
             if (err != CL_SUCCESS) continue;
             debug(user_context) << "CL: platform " << i << " " << platform_name << "\n";
 
@@ -360,15 +368,15 @@ WEAK int create_opencl_context(void *user_context, cl_context *ctx, cl_command_q
     } else if (platform_count > 0) {
         platform = platforms[0];
     }
-    if (platform == NULL){
+    if (platform == NULL) {
         error(user_context) << "CL: Failed to find platform\n";
         return CL_INVALID_PLATFORM;
     }
 
-    #ifdef DEBUG_RUNTIME
+#ifdef DEBUG_RUNTIME
     const cl_uint max_platform_name = 256;
     char platform_name[max_platform_name];
-    err = clGetPlatformInfo(platform, CL_PLATFORM_NAME, max_platform_name, platform_name, NULL );
+    err = clGetPlatformInfo(platform, CL_PLATFORM_NAME, max_platform_name, platform_name, NULL);
     if (err != CL_SUCCESS) {
         debug(user_context) << "    clGetPlatformInfo(CL_PLATFORM_NAME) failed: "
                             << get_opencl_error_name(err) << "\n";
@@ -380,11 +388,11 @@ WEAK int create_opencl_context(void *user_context, cl_context *ctx, cl_command_q
                             << halide_current_time_ns(user_context)
                             << ")\n";
     }
-    #endif
+#endif
 
     // Get the types of devices requested.
     cl_device_type device_type = 0;
-    const char * dev_type = halide_opencl_get_device_type(user_context);
+    const char *dev_type = halide_opencl_get_device_type(user_context);
     if (dev_type != NULL && *dev_type != '\0') {
         if (strstr(dev_type, "cpu")) {
             device_type |= CL_DEVICE_TYPE_CPU;
@@ -406,7 +414,7 @@ WEAK int create_opencl_context(void *user_context, cl_context *ctx, cl_command_q
     const cl_uint maxDevices = 128;
     cl_device_id devices[maxDevices];
     cl_uint deviceCount = 0;
-    err = clGetDeviceIDs(platform, device_type, maxDevices, devices, &deviceCount );
+    err = clGetDeviceIDs(platform, device_type, maxDevices, devices, &deviceCount);
     if (err != CL_SUCCESS) {
         error(user_context) << "CL: clGetDeviceIDs failed: "
                             << get_opencl_error_name(err);
@@ -447,7 +455,7 @@ WEAK int create_opencl_context(void *user_context, cl_context *ctx, cl_command_q
 
     cl_device_id dev = devices[device];
 
-    #ifdef DEBUG_RUNTIME
+#ifdef DEBUG_RUNTIME
     // Declare variables for other state we want to query.
     char device_name[256] = "";
     char device_vendor[256] = "";
@@ -460,10 +468,15 @@ WEAK int create_opencl_context(void *user_context, cl_context *ctx, cl_command_q
     cl_uint max_compute_units = 0;
     size_t max_work_group_size = 0;
     cl_uint max_work_item_dimensions = 0;
-    size_t max_work_item_sizes[4] = { 0, };
+    size_t max_work_item_sizes[4] = {
+        0,
+    };
 
-
-    struct {void *dst; size_t sz; cl_device_info param;} infos[] = {
+    struct {
+        void *dst;
+        size_t sz;
+        cl_device_info param;
+    } infos[] = {
         {&device_name[0], sizeof(device_name), CL_DEVICE_NAME},
         {&device_vendor[0], sizeof(device_vendor), CL_DEVICE_VENDOR},
         {&device_profile[0], sizeof(device_profile), CL_DEVICE_PROFILE},
@@ -492,8 +505,8 @@ WEAK int create_opencl_context(void *user_context, cl_context *ctx, cl_command_q
         << "      device name: " << device_name << "\n"
         << "      device vendor: " << device_vendor << "\n"
         << "      device profile: " << device_profile << "\n"
-        << "      global mem size: " << global_mem_size/(1024*1024) << " MB\n"
-        << "      max mem alloc size: " << max_mem_alloc_size/(1024*1024) << " MB\n"
+        << "      global mem size: " << global_mem_size / (1024 * 1024) << " MB\n"
+        << "      max mem alloc size: " << max_mem_alloc_size / (1024 * 1024) << " MB\n"
         << "      local mem size: " << local_mem_size << "\n"
         << "      max compute units: " << max_compute_units << "\n"
         << "      max workgroup size: " << (uint64_t)max_work_group_size << "\n"
@@ -502,11 +515,10 @@ WEAK int create_opencl_context(void *user_context, cl_context *ctx, cl_command_q
         << "x" << (uint64_t)max_work_item_sizes[1]
         << "x" << (uint64_t)max_work_item_sizes[2]
         << "x" << (uint64_t)max_work_item_sizes[3] << "\n";
-    #endif
-
+#endif
 
     // Create context and command queue.
-    cl_context_properties properties[] = { CL_CONTEXT_PLATFORM, (cl_context_properties)platform, 0 };
+    cl_context_properties properties[] = {CL_CONTEXT_PLATFORM, (cl_context_properties)platform, 0};
     debug(user_context) << "    clCreateContext -> ";
     *ctx = clCreateContext(properties, 1, &dev, NULL, NULL, &err);
     if (err != CL_SUCCESS) {
@@ -533,11 +545,14 @@ WEAK int create_opencl_context(void *user_context, cl_context *ctx, cl_command_q
     return err;
 }
 
-}}}} // namespace Halide::Runtime::Internal::OpenCL
+}  // namespace OpenCL
+}  // namespace Internal
+}  // namespace Runtime
+}  // namespace Halide
 
 extern "C" {
 
-WEAK int halide_opencl_device_free(void *user_context, halide_buffer_t* buf) {
+WEAK int halide_opencl_device_free(void *user_context, halide_buffer_t *buf) {
     // halide_opencl_device_free, at present, can be exposed to clients and they
     // should be allowed to call halide_opencl_device_free on any halide_buffer_t
     // including ones that have never been used with a GPU.
@@ -557,9 +572,9 @@ WEAK int halide_opencl_device_free(void *user_context, halide_buffer_t* buf) {
         return ctx.error;
     }
 
-    #ifdef DEBUG_RUNTIME
+#ifdef DEBUG_RUNTIME
     uint64_t t_before = halide_current_time_ns(user_context);
-    #endif
+#endif
 
     halide_assert(user_context, validate_device_pointer(user_context, buf));
     debug(user_context) << "    clReleaseMemObject " << (void *)dev_ptr << "\n";
@@ -576,16 +591,15 @@ WEAK int halide_opencl_device_free(void *user_context, halide_buffer_t* buf) {
         return result;
     }
 
-    #ifdef DEBUG_RUNTIME
+#ifdef DEBUG_RUNTIME
     uint64_t t_after = halide_current_time_ns(user_context);
     debug(user_context) << "    Time: " << (t_after - t_before) / 1.0e6 << " ms\n";
-    #endif
+#endif
 
     return 0;
 }
 
-
-WEAK int halide_opencl_initialize_kernels(void *user_context, void **state_ptr, const char* src, int size) {
+WEAK int halide_opencl_initialize_kernels(void *user_context, void **state_ptr, const char *src, int size) {
     debug(user_context)
         << "CL: halide_opencl_init_kernels (user_context: " << user_context
         << ", state_ptr: " << state_ptr
@@ -597,17 +611,17 @@ WEAK int halide_opencl_initialize_kernels(void *user_context, void **state_ptr, 
         return ctx.error;
     }
 
-    #ifdef DEBUG_RUNTIME
+#ifdef DEBUG_RUNTIME
     uint64_t t_before = halide_current_time_ns(user_context);
-    #endif
+#endif
 
     // Create the state object if necessary. This only happens once, regardless
     // of how many times halide_init_kernels/halide_release is called.
     // halide_release traverses this list and releases the program objects, but
     // it does not modify the list nodes created/inserted here.
-    module_state **state = (module_state**)state_ptr;
+    module_state **state = (module_state **)state_ptr;
     if (!(*state)) {
-        *state = (module_state*)malloc(sizeof(module_state));
+        *state = (module_state *)malloc(sizeof(module_state));
         (*state)->program = NULL;
         (*state)->next = state_list;
         state_list = *state;
@@ -627,7 +641,7 @@ WEAK int halide_opencl_initialize_kernels(void *user_context, void **state_ptr, 
             return err;
         }
 
-        cl_device_id devices[] = { dev };
+        cl_device_id devices[] = {dev};
 
         // Get the max constant buffer size supported by this OpenCL implementation.
         cl_ulong max_constant_buffer_size = 0;
@@ -654,9 +668,9 @@ WEAK int halide_opencl_initialize_kernels(void *user_context, void **state_ptr, 
         const char *extra_options = halide_opencl_get_build_options(user_context);
         options << " " << extra_options;
 
-        const char * sources[] = { src };
+        const char *sources[] = {src};
         debug(user_context) << "    clCreateProgramWithSource -> ";
-        cl_program program = clCreateProgramWithSource(ctx.context, 1, &sources[0], NULL, &err );
+        cl_program program = clCreateProgramWithSource(ctx.context, 1, &sources[0], NULL, &err);
         if (err != CL_SUCCESS) {
             debug(user_context) << get_opencl_error_name(err) << "\n";
             error(user_context) << "CL: clCreateProgramWithSource failed: "
@@ -669,7 +683,7 @@ WEAK int halide_opencl_initialize_kernels(void *user_context, void **state_ptr, 
 
         debug(user_context) << "    clBuildProgram " << (void *)program
                             << " " << options.str() << "\n";
-        err = clBuildProgram(program, 1, devices, options.str(), NULL, NULL );
+        err = clBuildProgram(program, 1, devices, options.str(), NULL, NULL);
         if (err != CL_SUCCESS) {
 
             // Allocate an appropriately sized buffer for the build log.
@@ -692,10 +706,10 @@ WEAK int halide_opencl_initialize_kernels(void *user_context, void **state_ptr, 
         }
     }
 
-    #ifdef DEBUG_RUNTIME
+#ifdef DEBUG_RUNTIME
     uint64_t t_after = halide_current_time_ns(user_context);
     debug(user_context) << "    Time: " << (t_after - t_before) / 1.0e6 << " ms\n";
-    #endif
+#endif
 
     return 0;
 }
@@ -707,9 +721,9 @@ WEAK int halide_opencl_device_sync(void *user_context, halide_buffer_t *) {
     ClContext ctx(user_context);
     halide_assert(user_context, ctx.error == CL_SUCCESS);
 
-    #ifdef DEBUG_RUNTIME
+#ifdef DEBUG_RUNTIME
     uint64_t t_before = halide_current_time_ns(user_context);
-    #endif
+#endif
 
     cl_int err = clFinish(ctx.cmd_queue);
     if (err != CL_SUCCESS) {
@@ -718,10 +732,10 @@ WEAK int halide_opencl_device_sync(void *user_context, halide_buffer_t *) {
         return err;
     }
 
-    #ifdef DEBUG_RUNTIME
+#ifdef DEBUG_RUNTIME
     uint64_t t_after = halide_current_time_ns(user_context);
     debug(user_context) << "    Time: " << (t_after - t_before) / 1.0e6 << " ms\n";
-    #endif
+#endif
 
     return CL_SUCCESS;
 }
@@ -779,7 +793,7 @@ WEAK int halide_opencl_device_release(void *user_context) {
     return 0;
 }
 
-WEAK int halide_opencl_device_malloc(void *user_context, halide_buffer_t* buf) {
+WEAK int halide_opencl_device_malloc(void *user_context, halide_buffer_t *buf) {
     debug(user_context)
         << "CL: halide_opencl_device_malloc (user_context: " << user_context
         << ", buf: " << buf << ")\n";
@@ -800,12 +814,11 @@ WEAK int halide_opencl_device_malloc(void *user_context, halide_buffer_t* buf) {
         halide_assert(user_context, buf->dim[i].stride >= 0);
     }
 
-
     debug(user_context) << "    allocating " << *buf << "\n";
 
-    #ifdef DEBUG_RUNTIME
+#ifdef DEBUG_RUNTIME
     uint64_t t_before = halide_current_time_ns(user_context);
-    #endif
+#endif
 
     device_handle *dev_handle = (device_handle *)malloc(sizeof(device_handle));
     if (dev_handle == NULL) {
@@ -837,10 +850,10 @@ WEAK int halide_opencl_device_malloc(void *user_context, halide_buffer_t* buf) {
 
     halide_assert(user_context, validate_device_pointer(user_context, buf, size));
 
-    #ifdef DEBUG_RUNTIME
+#ifdef DEBUG_RUNTIME
     uint64_t t_after = halide_current_time_ns(user_context);
     debug(user_context) << "    Time: " << (t_after - t_before) / 1.0e6 << " ms\n";
-    #endif
+#endif
 
     return CL_SUCCESS;
 }
@@ -871,7 +884,7 @@ WEAK int opencl_do_multidimensional_copy(void *user_context, ClContext &ctx,
                                        0, NULL, NULL);
         } else if (!from_host && !to_host) {
             err = clEnqueueCopyBuffer(ctx.cmd_queue, ((device_handle *)c.src)->mem, ((device_handle *)c.dst)->mem,
-                                      src_idx + ((device_handle *)c.src)->offset, dst_idx  + ((device_handle *)c.dst)->offset,
+                                      src_idx + ((device_handle *)c.src)->offset, dst_idx + ((device_handle *)c.dst)->offset,
                                       c.chunk_size, 0, NULL, NULL);
         } else if ((c.dst + dst_idx) != (c.src + src_idx)) {
             // Could reach here if a user called directly into the
@@ -886,12 +899,12 @@ WEAK int opencl_do_multidimensional_copy(void *user_context, ClContext &ctx,
         }
     } else {
         ssize_t src_off = 0, dst_off = 0;
-        for (int i = 0; i < (int)c.extent[d-1]; i++) {
+        for (int i = 0; i < (int)c.extent[d - 1]; i++) {
             int err = opencl_do_multidimensional_copy(user_context, ctx, c,
-                                               src_idx + src_off, dst_idx + dst_off,
-                                               d - 1, from_host, to_host);
-            dst_off += c.dst_stride_bytes[d-1];
-            src_off += c.src_stride_bytes[d-1];
+                                                      src_idx + src_off, dst_idx + dst_off,
+                                                      d - 1, from_host, to_host);
+            dst_off += c.dst_stride_bytes[d - 1];
+            src_off += c.src_stride_bytes[d - 1];
             if (err) {
                 return err;
             }
@@ -899,14 +912,14 @@ WEAK int opencl_do_multidimensional_copy(void *user_context, ClContext &ctx,
     }
     return 0;
 }
-}
+}  // namespace
 
 WEAK int halide_opencl_buffer_copy(void *user_context, struct halide_buffer_t *src,
                                    const struct halide_device_interface_t *dst_device_interface,
                                    struct halide_buffer_t *dst) {
     // We only handle copies to opencl or to host
     halide_assert(user_context, dst_device_interface == NULL ||
-                  dst_device_interface == &opencl_device_interface);
+                                    dst_device_interface == &opencl_device_interface);
 
     if ((src->device_dirty() || src->host == NULL) &&
         src->device_interface != &opencl_device_interface) {
@@ -936,7 +949,7 @@ WEAK int halide_opencl_buffer_copy(void *user_context, struct halide_buffer_t *s
             << "CL: halide_opencl_buffer_copy (user_context: " << user_context
             << ", src: " << src << ", dst: " << dst << ")\n";
 
-        #ifdef DEBUG_RUNTIME
+#ifdef DEBUG_RUNTIME
         uint64_t t_before = halide_current_time_ns(user_context);
         if (!from_host) {
             halide_assert(user_context, validate_device_pointer(user_context, src));
@@ -944,7 +957,7 @@ WEAK int halide_opencl_buffer_copy(void *user_context, struct halide_buffer_t *s
         if (!to_host) {
             halide_assert(user_context, validate_device_pointer(user_context, dst));
         }
-        #endif
+#endif
 
         err = opencl_do_multidimensional_copy(user_context, ctx, c, c.src_begin, 0, dst->dimensions, from_host, to_host);
 
@@ -953,34 +966,34 @@ WEAK int halide_opencl_buffer_copy(void *user_context, struct halide_buffer_t *s
         // to the buffer while the above writes are still running.
         clFinish(ctx.cmd_queue);
 
-        #ifdef DEBUG_RUNTIME
+#ifdef DEBUG_RUNTIME
         uint64_t t_after = halide_current_time_ns(user_context);
         debug(user_context) << "    Time: " << (t_after - t_before) / 1.0e6 << " ms\n";
-        #endif
+#endif
     }
 
     return err;
 }
 
-WEAK int halide_opencl_copy_to_device(void *user_context, halide_buffer_t* buf) {
+WEAK int halide_opencl_copy_to_device(void *user_context, halide_buffer_t *buf) {
     return halide_opencl_buffer_copy(user_context, buf, &opencl_device_interface, buf);
 }
 
-WEAK int halide_opencl_copy_to_host(void *user_context, halide_buffer_t* buf) {
+WEAK int halide_opencl_copy_to_host(void *user_context, halide_buffer_t *buf) {
     return halide_opencl_buffer_copy(user_context, buf, NULL, buf);
 }
 
 WEAK int halide_opencl_run(void *user_context,
                            void *state_ptr,
-                           const char* entry_name,
+                           const char *entry_name,
                            int blocksX, int blocksY, int blocksZ,
                            int threadsX, int threadsY, int threadsZ,
                            int shared_mem_bytes,
                            size_t arg_sizes[],
-                           void* args[],
+                           void *args[],
                            int8_t arg_is_buffer[],
                            int num_attributes,
-                           float* vertex_buffer,
+                           float *vertex_buffer,
                            int num_coords_dim0,
                            int num_coords_dim1) {
     debug(user_context)
@@ -990,20 +1003,19 @@ WEAK int halide_opencl_run(void *user_context,
         << "threads: " << threadsX << "x" << threadsY << "x" << threadsZ << ", "
         << "shmem: " << shared_mem_bytes << "\n";
 
-
     cl_int err;
     ClContext ctx(user_context);
     if (ctx.error != CL_SUCCESS) {
         return ctx.error;
     }
 
-    #ifdef DEBUG_RUNTIME
+#ifdef DEBUG_RUNTIME
     uint64_t t_before = halide_current_time_ns(user_context);
-    #endif
+#endif
 
     // Create kernel object for entry_name from the program for this module.
     halide_assert(user_context, state_ptr);
-    cl_program program = ((module_state*)state_ptr)->program;
+    cl_program program = ((module_state *)state_ptr)->program;
 
     halide_assert(user_context, program);
     debug(user_context) << "    clCreateKernel " << entry_name << " -> ";
@@ -1014,15 +1026,15 @@ WEAK int halide_opencl_run(void *user_context,
                             << get_opencl_error_name(err) << "\n";
         return err;
     } else {
-        #ifdef DEBUG_RUNTIME
+#ifdef DEBUG_RUNTIME
         uint64_t t_create_kernel = halide_current_time_ns(user_context);
         debug(user_context) << "    Time: " << (t_create_kernel - t_before) / 1.0e6 << " ms\n";
-        #endif
+#endif
     }
 
     // Pack dims
-    size_t global_dim[3] = {(size_t) blocksX*threadsX,  (size_t) blocksY*threadsY, (size_t) blocksZ*threadsZ};
-    size_t local_dim[3] = {(size_t) threadsX, (size_t) threadsY, (size_t) threadsZ};
+    size_t global_dim[3] = {(size_t)blocksX * threadsX, (size_t)blocksY * threadsY, (size_t)blocksZ * threadsZ};
+    size_t local_dim[3] = {(size_t)threadsX, (size_t)threadsY, (size_t)threadsZ};
 
     // Set args
     int i = 0;
@@ -1126,7 +1138,7 @@ WEAK int halide_opencl_run(void *user_context,
     clReleaseKernel(f);
     debug(user_context) << "    clReleaseKernel finished" << (void *)f << "\n";
 
-    #ifdef DEBUG_RUNTIME
+#ifdef DEBUG_RUNTIME
     err = clFinish(ctx.cmd_queue);
     if (err != CL_SUCCESS) {
         error(user_context) << "CL: clFinish failed (" << err << ")\n";
@@ -1134,7 +1146,7 @@ WEAK int halide_opencl_run(void *user_context,
     }
     uint64_t t_after = halide_current_time_ns(user_context);
     debug(user_context) << "    Time: " << (t_after - t_before) / 1.0e6 << " ms\n";
-    #endif
+#endif
     return 0;
 }
 
@@ -1230,8 +1242,8 @@ WEAK int opencl_device_crop_from_offset(void *user_context,
 }  // namespace
 
 WEAK int halide_opencl_device_crop(void *user_context,
-                                    const struct halide_buffer_t *src,
-                                    struct halide_buffer_t *dst) {
+                                   const struct halide_buffer_t *src,
+                                   struct halide_buffer_t *dst) {
     const int64_t offset = calc_device_crop_byte_offset(src, dst);
     return opencl_device_crop_from_offset(user_context, src, offset, dst);
 }
@@ -1246,7 +1258,7 @@ WEAK int halide_opencl_device_slice(void *user_context,
 }
 
 WEAK int halide_opencl_device_release_crop(void *user_context,
-                                            struct halide_buffer_t *buf) {
+                                           struct halide_buffer_t *buf) {
     // Basically the same code as in halide_opencl_device_free, but with
     // enough differences to require separate code.
 
@@ -1261,9 +1273,9 @@ WEAK int halide_opencl_device_release_crop(void *user_context,
         return ctx.error;
     }
 
-    #ifdef DEBUG_RUNTIME
+#ifdef DEBUG_RUNTIME
     uint64_t t_before = halide_current_time_ns(user_context);
-    #endif
+#endif
 
     halide_assert(user_context, validate_device_pointer(user_context, buf));
     debug(user_context) << "    clReleaseMemObject " << (void *)dev_ptr << "\n";
@@ -1276,10 +1288,10 @@ WEAK int halide_opencl_device_release_crop(void *user_context,
         return result;
     }
 
-    #ifdef DEBUG_RUNTIME
+#ifdef DEBUG_RUNTIME
     uint64_t t_after = halide_current_time_ns(user_context);
     debug(user_context) << "    Time: " << (t_after - t_before) / 1.0e6 << " ms\n";
-    #endif
+#endif
 
     return 0;
 }
@@ -1289,77 +1301,139 @@ WEAK const struct halide_device_interface_t *halide_opencl_device_interface() {
 }
 
 namespace {
-__attribute__((destructor))
-WEAK void halide_opencl_cleanup() {
+WEAK __attribute__((destructor)) void halide_opencl_cleanup() {
     halide_opencl_device_release(NULL);
 }
-}
+}  // namespace
 
-} // extern "C" linkage
+}  // extern "C" linkage
 
-namespace Halide { namespace Runtime { namespace Internal { namespace OpenCL {
+namespace Halide {
+namespace Runtime {
+namespace Internal {
+namespace OpenCL {
 WEAK const char *get_opencl_error_name(cl_int err) {
     switch (err) {
-    case CL_SUCCESS: return "CL_SUCCESS";
-    case CL_DEVICE_NOT_FOUND: return "CL_DEVICE_NOT_FOUND";
-    case CL_DEVICE_NOT_AVAILABLE: return "CL_DEVICE_NOT_AVAILABLE";
-    case CL_COMPILER_NOT_AVAILABLE: return "CL_COMPILER_NOT_AVAILABLE";
-    case CL_MEM_OBJECT_ALLOCATION_FAILURE: return "CL_MEM_OBJECT_ALLOCATION_FAILURE";
-    case CL_OUT_OF_RESOURCES: return "CL_OUT_OF_RESOURCES";
-    case CL_OUT_OF_HOST_MEMORY: return "CL_OUT_OF_HOST_MEMORY";
-    case CL_PROFILING_INFO_NOT_AVAILABLE: return "CL_PROFILING_INFO_NOT_AVAILABLE";
-    case CL_MEM_COPY_OVERLAP: return "CL_MEM_COPY_OVERLAP";
-    case CL_IMAGE_FORMAT_MISMATCH: return "CL_IMAGE_FORMAT_MISMATCH";
-    case CL_IMAGE_FORMAT_NOT_SUPPORTED: return "CL_IMAGE_FORMAT_NOT_SUPPORTED";
-    case CL_BUILD_PROGRAM_FAILURE: return "CL_BUILD_PROGRAM_FAILURE";
-    case CL_MAP_FAILURE: return "CL_MAP_FAILURE";
-    case CL_MISALIGNED_SUB_BUFFER_OFFSET: return "CL_MISALIGNED_SUB_BUFFER_OFFSET";
-    case CL_EXEC_STATUS_ERROR_FOR_EVENTS_IN_WAIT_LIST: return "CL_EXEC_STATUS_ERROR_FOR_EVENTS_IN_WAIT_LIST";
-    case CL_COMPILE_PROGRAM_FAILURE: return "CL_COMPILE_PROGRAM_FAILURE";
-    case CL_LINKER_NOT_AVAILABLE: return "CL_LINKER_NOT_AVAILABLE";
-    case CL_LINK_PROGRAM_FAILURE: return "CL_LINK_PROGRAM_FAILURE";
-    case CL_DEVICE_PARTITION_FAILED: return "CL_DEVICE_PARTITION_FAILED";
-    case CL_KERNEL_ARG_INFO_NOT_AVAILABLE: return "CL_KERNEL_ARG_INFO_NOT_AVAILABLE";
-    case CL_INVALID_VALUE: return "CL_INVALID_VALUE";
-    case CL_INVALID_DEVICE_TYPE: return "CL_INVALID_DEVICE_TYPE";
-    case CL_INVALID_PLATFORM: return "CL_INVALID_PLATFORM";
-    case CL_INVALID_DEVICE: return "CL_INVALID_DEVICE";
-    case CL_INVALID_CONTEXT: return "CL_INVALID_CONTEXT";
-    case CL_INVALID_QUEUE_PROPERTIES: return "CL_INVALID_QUEUE_PROPERTIES";
-    case CL_INVALID_COMMAND_QUEUE: return "CL_INVALID_COMMAND_QUEUE";
-    case CL_INVALID_HOST_PTR: return "CL_INVALID_HOST_PTR";
-    case CL_INVALID_MEM_OBJECT: return "CL_INVALID_MEM_OBJECT";
-    case CL_INVALID_IMAGE_FORMAT_DESCRIPTOR: return "CL_INVALID_IMAGE_FORMAT_DESCRIPTOR";
-    case CL_INVALID_IMAGE_SIZE: return "CL_INVALID_IMAGE_SIZE";
-    case CL_INVALID_SAMPLER: return "CL_INVALID_SAMPLER";
-    case CL_INVALID_BINARY: return "CL_INVALID_BINARY";
-    case CL_INVALID_BUILD_OPTIONS: return "CL_INVALID_BUILD_OPTIONS";
-    case CL_INVALID_PROGRAM: return "CL_INVALID_PROGRAM";
-    case CL_INVALID_PROGRAM_EXECUTABLE: return "CL_INVALID_PROGRAM_EXECUTABLE";
-    case CL_INVALID_KERNEL_NAME: return "CL_INVALID_KERNEL_NAME";
-    case CL_INVALID_KERNEL_DEFINITION: return "CL_INVALID_KERNEL_DEFINITION";
-    case CL_INVALID_KERNEL: return "CL_INVALID_KERNEL";
-    case CL_INVALID_ARG_INDEX: return "CL_INVALID_ARG_INDEX";
-    case CL_INVALID_ARG_VALUE: return "CL_INVALID_ARG_VALUE";
-    case CL_INVALID_ARG_SIZE: return "CL_INVALID_ARG_SIZE";
-    case CL_INVALID_KERNEL_ARGS: return "CL_INVALID_KERNEL_ARGS";
-    case CL_INVALID_WORK_DIMENSION: return "CL_INVALID_WORK_DIMENSION";
-    case CL_INVALID_WORK_GROUP_SIZE: return "CL_INVALID_WORK_GROUP_SIZE";
-    case CL_INVALID_WORK_ITEM_SIZE: return "CL_INVALID_WORK_ITEM_SIZE";
-    case CL_INVALID_GLOBAL_OFFSET: return "CL_INVALID_GLOBAL_OFFSET";
-    case CL_INVALID_EVENT_WAIT_LIST: return "CL_INVALID_EVENT_WAIT_LIST";
-    case CL_INVALID_EVENT: return "CL_INVALID_EVENT";
-    case CL_INVALID_OPERATION: return "CL_INVALID_OPERATION";
-    case CL_INVALID_GL_OBJECT: return "CL_INVALID_GL_OBJECT";
-    case CL_INVALID_BUFFER_SIZE: return "CL_INVALID_BUFFER_SIZE";
-    case CL_INVALID_MIP_LEVEL: return "CL_INVALID_MIP_LEVEL";
-    case CL_INVALID_GLOBAL_WORK_SIZE: return "CL_INVALID_GLOBAL_WORK_SIZE";
-    case CL_INVALID_PROPERTY: return "CL_INVALID_PROPERTY";
-    case CL_INVALID_IMAGE_DESCRIPTOR: return "CL_INVALID_IMAGE_DESCRIPTOR";
-    case CL_INVALID_COMPILER_OPTIONS: return "CL_INVALID_COMPILER_OPTIONS";
-    case CL_INVALID_LINKER_OPTIONS: return "CL_INVALID_LINKER_OPTIONS";
-    case CL_INVALID_DEVICE_PARTITION_COUNT: return "CL_INVALID_DEVICE_PARTITION_COUNT";
-    default: return "<Unknown error>";
+    case CL_SUCCESS:
+        return "CL_SUCCESS";
+    case CL_DEVICE_NOT_FOUND:
+        return "CL_DEVICE_NOT_FOUND";
+    case CL_DEVICE_NOT_AVAILABLE:
+        return "CL_DEVICE_NOT_AVAILABLE";
+    case CL_COMPILER_NOT_AVAILABLE:
+        return "CL_COMPILER_NOT_AVAILABLE";
+    case CL_MEM_OBJECT_ALLOCATION_FAILURE:
+        return "CL_MEM_OBJECT_ALLOCATION_FAILURE";
+    case CL_OUT_OF_RESOURCES:
+        return "CL_OUT_OF_RESOURCES";
+    case CL_OUT_OF_HOST_MEMORY:
+        return "CL_OUT_OF_HOST_MEMORY";
+    case CL_PROFILING_INFO_NOT_AVAILABLE:
+        return "CL_PROFILING_INFO_NOT_AVAILABLE";
+    case CL_MEM_COPY_OVERLAP:
+        return "CL_MEM_COPY_OVERLAP";
+    case CL_IMAGE_FORMAT_MISMATCH:
+        return "CL_IMAGE_FORMAT_MISMATCH";
+    case CL_IMAGE_FORMAT_NOT_SUPPORTED:
+        return "CL_IMAGE_FORMAT_NOT_SUPPORTED";
+    case CL_BUILD_PROGRAM_FAILURE:
+        return "CL_BUILD_PROGRAM_FAILURE";
+    case CL_MAP_FAILURE:
+        return "CL_MAP_FAILURE";
+    case CL_MISALIGNED_SUB_BUFFER_OFFSET:
+        return "CL_MISALIGNED_SUB_BUFFER_OFFSET";
+    case CL_EXEC_STATUS_ERROR_FOR_EVENTS_IN_WAIT_LIST:
+        return "CL_EXEC_STATUS_ERROR_FOR_EVENTS_IN_WAIT_LIST";
+    case CL_COMPILE_PROGRAM_FAILURE:
+        return "CL_COMPILE_PROGRAM_FAILURE";
+    case CL_LINKER_NOT_AVAILABLE:
+        return "CL_LINKER_NOT_AVAILABLE";
+    case CL_LINK_PROGRAM_FAILURE:
+        return "CL_LINK_PROGRAM_FAILURE";
+    case CL_DEVICE_PARTITION_FAILED:
+        return "CL_DEVICE_PARTITION_FAILED";
+    case CL_KERNEL_ARG_INFO_NOT_AVAILABLE:
+        return "CL_KERNEL_ARG_INFO_NOT_AVAILABLE";
+    case CL_INVALID_VALUE:
+        return "CL_INVALID_VALUE";
+    case CL_INVALID_DEVICE_TYPE:
+        return "CL_INVALID_DEVICE_TYPE";
+    case CL_INVALID_PLATFORM:
+        return "CL_INVALID_PLATFORM";
+    case CL_INVALID_DEVICE:
+        return "CL_INVALID_DEVICE";
+    case CL_INVALID_CONTEXT:
+        return "CL_INVALID_CONTEXT";
+    case CL_INVALID_QUEUE_PROPERTIES:
+        return "CL_INVALID_QUEUE_PROPERTIES";
+    case CL_INVALID_COMMAND_QUEUE:
+        return "CL_INVALID_COMMAND_QUEUE";
+    case CL_INVALID_HOST_PTR:
+        return "CL_INVALID_HOST_PTR";
+    case CL_INVALID_MEM_OBJECT:
+        return "CL_INVALID_MEM_OBJECT";
+    case CL_INVALID_IMAGE_FORMAT_DESCRIPTOR:
+        return "CL_INVALID_IMAGE_FORMAT_DESCRIPTOR";
+    case CL_INVALID_IMAGE_SIZE:
+        return "CL_INVALID_IMAGE_SIZE";
+    case CL_INVALID_SAMPLER:
+        return "CL_INVALID_SAMPLER";
+    case CL_INVALID_BINARY:
+        return "CL_INVALID_BINARY";
+    case CL_INVALID_BUILD_OPTIONS:
+        return "CL_INVALID_BUILD_OPTIONS";
+    case CL_INVALID_PROGRAM:
+        return "CL_INVALID_PROGRAM";
+    case CL_INVALID_PROGRAM_EXECUTABLE:
+        return "CL_INVALID_PROGRAM_EXECUTABLE";
+    case CL_INVALID_KERNEL_NAME:
+        return "CL_INVALID_KERNEL_NAME";
+    case CL_INVALID_KERNEL_DEFINITION:
+        return "CL_INVALID_KERNEL_DEFINITION";
+    case CL_INVALID_KERNEL:
+        return "CL_INVALID_KERNEL";
+    case CL_INVALID_ARG_INDEX:
+        return "CL_INVALID_ARG_INDEX";
+    case CL_INVALID_ARG_VALUE:
+        return "CL_INVALID_ARG_VALUE";
+    case CL_INVALID_ARG_SIZE:
+        return "CL_INVALID_ARG_SIZE";
+    case CL_INVALID_KERNEL_ARGS:
+        return "CL_INVALID_KERNEL_ARGS";
+    case CL_INVALID_WORK_DIMENSION:
+        return "CL_INVALID_WORK_DIMENSION";
+    case CL_INVALID_WORK_GROUP_SIZE:
+        return "CL_INVALID_WORK_GROUP_SIZE";
+    case CL_INVALID_WORK_ITEM_SIZE:
+        return "CL_INVALID_WORK_ITEM_SIZE";
+    case CL_INVALID_GLOBAL_OFFSET:
+        return "CL_INVALID_GLOBAL_OFFSET";
+    case CL_INVALID_EVENT_WAIT_LIST:
+        return "CL_INVALID_EVENT_WAIT_LIST";
+    case CL_INVALID_EVENT:
+        return "CL_INVALID_EVENT";
+    case CL_INVALID_OPERATION:
+        return "CL_INVALID_OPERATION";
+    case CL_INVALID_GL_OBJECT:
+        return "CL_INVALID_GL_OBJECT";
+    case CL_INVALID_BUFFER_SIZE:
+        return "CL_INVALID_BUFFER_SIZE";
+    case CL_INVALID_MIP_LEVEL:
+        return "CL_INVALID_MIP_LEVEL";
+    case CL_INVALID_GLOBAL_WORK_SIZE:
+        return "CL_INVALID_GLOBAL_WORK_SIZE";
+    case CL_INVALID_PROPERTY:
+        return "CL_INVALID_PROPERTY";
+    case CL_INVALID_IMAGE_DESCRIPTOR:
+        return "CL_INVALID_IMAGE_DESCRIPTOR";
+    case CL_INVALID_COMPILER_OPTIONS:
+        return "CL_INVALID_COMPILER_OPTIONS";
+    case CL_INVALID_LINKER_OPTIONS:
+        return "CL_INVALID_LINKER_OPTIONS";
+    case CL_INVALID_DEVICE_PARTITION_COUNT:
+        return "CL_INVALID_DEVICE_PARTITION_COUNT";
+    default:
+        return "<Unknown error>";
     }
 }
 
@@ -1398,7 +1472,9 @@ WEAK halide_device_interface_t opencl_device_interface = {
     halide_device_wrap_native,
     halide_device_detach_native,
     NULL,
-    &opencl_device_interface_impl
-};
+    &opencl_device_interface_impl};
 
-}}}} // namespace Halide::Runtime::Internal::OpenCL
+}  // namespace OpenCL
+}  // namespace Internal
+}  // namespace Runtime
+}  // namespace Halide
