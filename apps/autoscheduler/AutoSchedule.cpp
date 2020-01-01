@@ -101,6 +101,19 @@ using std::set;
 using std::string;
 using std::vector;
 
+struct Statistics {
+    int num_featurizations{0};
+    std::chrono::duration<double> featurization_time{0};
+
+    double total_featurization_time() const {
+        return featurization_time.count() * 1000;
+    }
+
+    double average_featurization_time() const {
+        return total_featurization_time() / (double)num_featurizations;
+    }
+};
+
 struct RNG {
     std::mt19937 gen;
     std::uniform_real_distribution<double> dis;
@@ -472,7 +485,7 @@ struct State {
         return new_root;
     }
 
-    void compute_featurization(const FunctionDAG &dag, const MachineParams &params, const Target& target, StageMap<ScheduleFeatures> *features) {
+    void compute_featurization(const FunctionDAG &dag, const MachineParams &params, const Target& target, StageMap<ScheduleFeatures> *features, Statistics& stats) {
         auto feature_root = get_root_for_features(params, target);
 
         StageMap<LoopNest::Sites> sites;
@@ -532,7 +545,9 @@ struct State {
             }
         }
 
+        auto t1 = std::chrono::high_resolution_clock::now();
         feature_root->compute_features(dag, params, target, sites, 1, 1, nullptr, nullptr, *feature_root, nullptr, features, {feature_root.get()});
+        stats.featurization_time += std::chrono::high_resolution_clock::now() - t1;
 
         for (const auto &n : dag.nodes) {
             if (sites.get(&(n.stages[0])).produce == nullptr) {
@@ -545,7 +560,8 @@ struct State {
 
     void save_featurization(const FunctionDAG &dag, const MachineParams &params, const Target& target, std::ostream &out) {
         StageMap<ScheduleFeatures> features;
-        compute_featurization(dag, params, target, &features);
+        Statistics stats;
+        compute_featurization(dag, params, target, &features, stats);
 
         for (const auto &n : dag.nodes) {
             if (n.is_input) continue;
@@ -658,7 +674,7 @@ struct State {
         return false;
     }
 
-    bool calculate_cost(const FunctionDAG &dag, const MachineParams &params, const Target& target, CostModel *cost_model, bool verbose = false) {
+    bool calculate_cost(const FunctionDAG &dag, const MachineParams &params, const Target& target, CostModel *cost_model, Statistics& stats, bool verbose = false) {
         if (!are_valid_thread_extents(root->get_union_thread_counts(nullptr))) {
             return false;
         }
@@ -668,7 +684,9 @@ struct State {
         }
 
         StageMap<ScheduleFeatures> features;
-        compute_featurization(dag, params, target, &features);
+        compute_featurization(dag, params, target, &features, stats);
+
+        ++stats.num_featurizations;
 
         cost = 0;
 
@@ -767,7 +785,8 @@ struct State {
                            const MachineParams &params,
                            const Target &target,
                            CostModel *cost_model,
-                           std::function<void(IntrusivePtr<State> &&)> &accept_child) const {
+                           std::function<void(IntrusivePtr<State> &&)> &accept_child,
+                           Statistics& stats) const {
         internal_assert(root.defined() && root->is_root());
 
         if (num_decisions_made == 2 * (int)dag.nodes.size()) {
@@ -831,7 +850,7 @@ struct State {
                     new_root->inline_func(node);
                     child->root = new_root;
                     child->num_decisions_made++;
-                    if (child->calculate_cost(dag, params, target, cost_model)) {
+                    if (child->calculate_cost(dag, params, target, cost_model, stats)) {
                         num_children++;
                         accept_child(std::move(child));
                     }
@@ -886,7 +905,7 @@ struct State {
                     auto child = make_child();
                     child->root = std::move(n);
                     child->num_decisions_made++;
-                    if (child->calculate_cost(dag, params, target, cost_model)) {
+                    if (child->calculate_cost(dag, params, target, cost_model, stats)) {
                         num_children++;
                         accept_child(std::move(child));
                     }
@@ -999,7 +1018,7 @@ struct State {
                             }
                             child->root = new_root;
                             child->num_decisions_made++;
-                            if (child->calculate_cost(dag, params, target, cost_model)) {
+                            if (child->calculate_cost(dag, params, target, cost_model, stats)) {
                                 num_children++;
                                 accept_child(std::move(child));
                             }
@@ -1017,7 +1036,7 @@ struct State {
                             }
                             child->root = new_root;
                             child->num_decisions_made++;
-                            if (child->calculate_cost(dag, params, target, cost_model)) {
+                            if (child->calculate_cost(dag, params, target, cost_model, stats)) {
                                 num_children++;
                                 accept_child(std::move(child));
                             }
@@ -1032,7 +1051,7 @@ struct State {
                             }
                             adjusted_child->root = new_adjusted_root;
                             adjusted_child->num_decisions_made++;
-                            if (adjusted_child->calculate_cost(dag, params, target, cost_model)) {
+                            if (adjusted_child->calculate_cost(dag, params, target, cost_model, stats)) {
                                 num_children++;
                                 accept_child(std::move(adjusted_child));
                             }
@@ -1143,7 +1162,7 @@ struct State {
                         }
                         child->root = new_root;
                         child->num_decisions_made++;
-                        if (child->calculate_cost(dag, params, target, cost_model)) {
+                        if (child->calculate_cost(dag, params, target, cost_model, stats)) {
                             num_children++;
                             accept_child(std::move(child));
                         }
@@ -1578,7 +1597,8 @@ IntrusivePtr<State> optimal_schedule_pass(FunctionDAG &dag,
                                           int pass_idx,
                                           int num_passes,
                                           ProgressBar &tick,
-                                          std::unordered_set<uint64_t> &permitted_hashes) {
+                                          std::unordered_set<uint64_t> &permitted_hashes,
+                                          Statistics& stats) {
 
     if (cost_model) {
         configure_pipeline_features(dag, params, cost_model);
@@ -1637,7 +1657,8 @@ IntrusivePtr<State> optimal_schedule_pass(FunctionDAG &dag,
                                              pass_idx,
                                              num_passes,
                                              tick,
-                                             permitted_hashes);
+                                             permitted_hashes,
+                                             stats);
             } else {
                 internal_error << "Ran out of legal states with beam size " << beam_size << "\n";
             }
@@ -1723,7 +1744,7 @@ IntrusivePtr<State> optimal_schedule_pass(FunctionDAG &dag,
                 return best;
             }
 
-            state->generate_children(dag, params, target, cost_model, enqueue_new_children);
+            state->generate_children(dag, params, target, cost_model, enqueue_new_children, stats);
             expanded++;
         }
 
@@ -1753,7 +1774,7 @@ IntrusivePtr<State> optimal_schedule_pass(FunctionDAG &dag,
                 auto state = q[choice_label];
                 aslog(0) << "\n[" << choice_label << "]:\n";
                 state->dump();
-                state->calculate_cost(dag, params, target, cost_model, true);
+                state->calculate_cost(dag, params, target, cost_model, stats, true);
             }
             cost_model->evaluate_costs();
 
@@ -1779,7 +1800,8 @@ IntrusivePtr<State> optimal_schedule(FunctionDAG &dag,
                                      const Target &target,
                                      CostModel *cost_model,
                                      std::mt19937 &rng,
-                                     int beam_size) {
+                                     int beam_size,
+                                     Statistics& stats) {
 
     IntrusivePtr<State> best;
 
@@ -1805,7 +1827,7 @@ IntrusivePtr<State> optimal_schedule(FunctionDAG &dag,
         ProgressBar tick;
 
         auto pass = optimal_schedule_pass(dag, outputs, params, target, cost_model,
-            rng, beam_size, i, num_passes, tick, permitted_hashes);
+            rng, beam_size, i, num_passes, tick, permitted_hashes, stats);
 
         tick.clear();
 
@@ -1878,8 +1900,10 @@ void generate_schedule(const std::vector<Function> &outputs,
 
     IntrusivePtr<State> optimal;
 
+    Statistics stats;
+
     // Run beam search
-    optimal = optimal_schedule(dag, outputs, params, target, cost_model.get(), rng, beam_size);
+    optimal = optimal_schedule(dag, outputs, params, target, cost_model.get(), rng, beam_size, stats);
 
     HALIDE_TOC;
 
@@ -1889,7 +1913,7 @@ void generate_schedule(const std::vector<Function> &outputs,
     aslog(1) << "** Optimal schedule:\n";
 
     // Just to get the debugging prints to fire
-    optimal->calculate_cost(dag, params, target, cost_model.get(), aslog::aslog_level() > 0);
+    optimal->calculate_cost(dag, params, target, cost_model.get(), stats, aslog::aslog_level() > 0);
 
     // Apply the schedules to the pipeline
     optimal->apply_schedule(dag, params, target);
@@ -1932,6 +1956,10 @@ void generate_schedule(const std::vector<Function> &outputs,
             memcpy(auto_scheduler_results->featurization.data(), out.str().data(), out.str().size());
         }
     }
+
+    aslog(1) << "Number of featurizations computed: " << stats.num_featurizations << '\n';
+    aslog(1) << "Total featurization time (ms): " << stats.total_featurization_time() << "\n";
+    aslog(1) << "Average featurization time (ms): " << stats.average_featurization_time() << "\n";
 }
 
 // Halide uses a plugin architecture for registering custom
@@ -1962,13 +1990,14 @@ void find_and_apply_schedule(FunctionDAG &dag,
                              StageMap<ScheduleFeatures> *schedule_features) {
 
     std::mt19937 rng(12345);
-    IntrusivePtr<State> optimal = optimal_schedule(dag, outputs, params, target, cost_model, rng, beam_size);
+    Statistics stats;
+    IntrusivePtr<State> optimal = optimal_schedule(dag, outputs, params, target, cost_model, rng, beam_size, stats);
 
     // Apply the schedules
     optimal->apply_schedule(dag, params, target);
 
     if (schedule_features) {
-        optimal->compute_featurization(dag, params, target, schedule_features);
+        optimal->compute_featurization(dag, params, target, schedule_features, stats);
     }
 }
 
