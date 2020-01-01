@@ -7,19 +7,19 @@
 // Halide.h.
 //
 // Instead, it depends on the header files that lesson_16_rgb_generator produced.
-#include "brighten_planar.h"
-#include "brighten_interleaved.h"
 #include "brighten_either.h"
+#include "brighten_interleaved.h"
+#include "brighten_planar.h"
 #include "brighten_specialized.h"
 
 // We'll use the Halide::Runtime::Buffer class for passing data into and out of
 // the pipeline.
 #include "HalideBuffer.h"
 
+#include <assert.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <assert.h>
 
 #include "clock.h"
 
