@@ -626,23 +626,6 @@ struct State {
         return root->has_dynamic_allocation_inside_thread(false);
     }
 
-    std::pair<int64_t, int64_t> working_set_total(const StageMap<ScheduleFeatures>& features, const IntrusivePtr<const LoopNest>& loop_nest) {
-        int64_t working_set_r = 0;
-        int64_t working_set_p = 0;
-        for (const auto* n : loop_nest->store_at) {
-            working_set_r += features.get(&(n->stages[0])).bytes_at_realization;
-            working_set_p += features.get(&(n->stages[0])).bytes_at_production;
-        }
-
-        for (const auto& c : loop_nest->children) {
-            auto result = working_set_total(features, c);
-            working_set_r += result.first;
-            working_set_p += result.second;
-        }
-
-        return {working_set_r, working_set_p};
-    }
-
     bool exceeds_serial_extents_limit(const Target &target) {
         if (!target.has_gpu_feature()) {
             return false;
@@ -663,10 +646,14 @@ struct State {
         }
 
         for (const auto& c : root->children) {
+            auto working_set_inside_block = features.get(c->stage).working_set_at_task;
+            auto working_set_inside_thread = features.get(c->stage).working_set_at_thread;
+
+            auto shared_mem_alloc_size = working_set_inside_block - working_set_inside_thread;
+
             // If the working set is too large on the GPU, shared memory will be
             // exhausted, so reject any such schedules
-            auto result = working_set_total(features, c);
-            if (result.first > limit) {
+            if (shared_mem_alloc_size > limit) {
                 return true;
             }
         }
