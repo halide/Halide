@@ -1,7 +1,7 @@
 #include "Halide.h"
+#include <random>
 #include <stdio.h>
 #include <time.h>
-#include <random>
 
 // Test the simplifier in Halide by testing for equivalence of randomly generated expressions.
 namespace {
@@ -16,20 +16,20 @@ const int fuzz_var_count = 5;
 // use std::mt19937 instead of rand() to ensure consistent behavior on all systems
 std::mt19937 rng(0);
 
-Type fuzz_types[] = { UInt(1), UInt(8), UInt(16), UInt(32), Int(8), Int(16), Int(32) };
-const int fuzz_type_count = sizeof(fuzz_types)/sizeof(fuzz_types[0]);
+Type fuzz_types[] = {UInt(1), UInt(8), UInt(16), UInt(32), Int(8), Int(16), Int(32)};
+const int fuzz_type_count = sizeof(fuzz_types) / sizeof(fuzz_types[0]);
 
 std::string fuzz_var(int i) {
     return std::string(1, 'a' + i);
 }
 
 Expr random_var() {
-    int fuzz_count = rng()%fuzz_var_count;
+    int fuzz_count = rng() % fuzz_var_count;
     return Variable::make(Int(0), fuzz_var(fuzz_count));
 }
 
 Type random_type(int width) {
-    Type T = fuzz_types[rng()%fuzz_type_count];
+    Type T = fuzz_types[rng() % fuzz_type_count];
     if (width > 1) {
         T = T.with_lanes(width);
     }
@@ -41,7 +41,7 @@ Expr random_leaf(Type T, bool overflow_undef = false, bool imm_only = false) {
         overflow_undef = true;
     }
     if (T.is_scalar()) {
-        int var = rng()%fuzz_var_count + 1;
+        int var = rng() % fuzz_var_count + 1;
         if (!imm_only && var < fuzz_var_count) {
             auto v1 = random_var();
             return cast(T, v1);
@@ -50,9 +50,9 @@ Expr random_leaf(Type T, bool overflow_undef = false, bool imm_only = false) {
                 // For Int(32), we don't care about correctness during
                 // overflow, so just use numbers that are unlikely to
                 // overflow.
-                return cast(T, (int)(rng()%256 - 128));
+                return cast(T, (int)(rng() % 256 - 128));
             } else {
-                return cast(T, (int)(rng() - RAND_MAX/2));
+                return cast(T, (int)(rng() - RAND_MAX / 2));
             }
         }
     } else {
@@ -79,7 +79,7 @@ Expr random_condition(Type T, int depth, bool maybe_scalar) {
         GT::make,
         GE::make,
     };
-    const int op_count = sizeof(make_bin_op)/sizeof(make_bin_op[0]);
+    const int op_count = sizeof(make_bin_op) / sizeof(make_bin_op[0]);
 
     if (maybe_scalar && rng() % T.lanes() == 0) {
         T = T.element_of();
@@ -87,7 +87,7 @@ Expr random_condition(Type T, int depth, bool maybe_scalar) {
 
     Expr a = random_expr(T, depth);
     Expr b = random_expr(T, depth);
-    int op = rng()%op_count;
+    int op = rng() % op_count;
     return make_bin_op[op](a, b);
 }
 
@@ -108,8 +108,8 @@ Expr random_expr(Type T, int depth, bool overflow_undef) {
         Max::make,
         Div::make,
         Mod::make,
-        make_absd
-     };
+        make_absd,
+    };
 
     static make_bin_op_fn make_bool_bin_op[] = {
         And::make,
@@ -129,8 +129,9 @@ Expr random_expr(Type T, int depth, bool overflow_undef) {
     const int op_count = bin_op_count + bool_bin_op_count + 5;
 
     int op = rng() % op_count;
-    switch(op) {
-    case 0: return random_leaf(T);
+    switch (op) {
+    case 0:
+        return random_leaf(T);
     case 1: {
         auto c = random_condition(T, depth, true);
         auto e1 = random_expr(T, depth, overflow_undef);
@@ -165,8 +166,7 @@ Expr random_expr(Type T, int depth, bool overflow_undef) {
         }
         break;
 
-    case 6:
-    {
+    case 6: {
         // Get a random type that isn't T or int32 (int32 can overflow and we don't care about that).
         Type subT;
         do {
@@ -179,9 +179,9 @@ Expr random_expr(Type T, int depth, bool overflow_undef) {
     default:
         make_bin_op_fn maker;
         if (T.is_bool()) {
-            maker = make_bool_bin_op[op%bool_bin_op_count];
+            maker = make_bool_bin_op[op % bool_bin_op_count];
         } else {
-            maker = make_bin_op[op%bin_op_count];
+            maker = make_bin_op[op % bin_op_count];
         }
         Expr a = random_expr(T, depth, overflow_undef);
         Expr b = random_expr(T, depth, overflow_undef);
@@ -208,7 +208,7 @@ bool test_simplification(Expr a, Expr b, Type T, const map<string, Expr> &vars) 
             continue;
         }
         if (!equal(a_j_v, b_j_v)) {
-            for(map<string, Expr>::const_iterator i = vars.begin(); i != vars.end(); i++) {
+            for (map<string, Expr>::const_iterator i = vars.begin(); i != vars.end(); i++) {
                 std::cout << i->first << " = " << i->second << '\n';
             }
 
@@ -243,24 +243,60 @@ bool test_expression(Expr test, int samples) {
     return true;
 }
 
-Expr ramp(Expr b, Expr s, int w) { return Ramp::make(b, s, w); }
-Expr x1(Expr x) { return Broadcast::make(x, 2); }
-Expr x2(Expr x) { return Broadcast::make(x, 2); }
-Expr x4(Expr x) { return Broadcast::make(x, 2); }
-Expr uint1(Expr x) { return Cast::make(UInt(1), x); }
-Expr uint8(Expr x) { return Cast::make(UInt(8), x); }
-Expr uint16(Expr x) { return Cast::make(UInt(16), x); }
-Expr uint32(Expr x) { return Cast::make(UInt(32), x); }
-Expr int8(Expr x) { return Cast::make(Int(8), x); }
-Expr int16(Expr x) { return Cast::make(Int(16), x); }
-Expr int32(Expr x) { return Cast::make(Int(32), x); }
-Expr uint1x2(Expr x) { return Cast::make(UInt(1).with_lanes(2), x); }
-Expr uint8x2(Expr x) { return Cast::make(UInt(8).with_lanes(2), x); }
-Expr uint16x2(Expr x) { return Cast::make(UInt(16).with_lanes(2), x); }
-Expr uint32x2(Expr x) { return Cast::make(UInt(32).with_lanes(2), x); }
-Expr int8x2(Expr x) { return Cast::make(Int(8).with_lanes(2), x); }
-Expr int16x2(Expr x) { return Cast::make(Int(16).with_lanes(2), x); }
-Expr int32x2(Expr x) { return Cast::make(Int(32).with_lanes(2), x); }
+Expr ramp(Expr b, Expr s, int w) {
+    return Ramp::make(b, s, w);
+}
+Expr x1(Expr x) {
+    return Broadcast::make(x, 2);
+}
+Expr x2(Expr x) {
+    return Broadcast::make(x, 2);
+}
+Expr x4(Expr x) {
+    return Broadcast::make(x, 2);
+}
+Expr uint1(Expr x) {
+    return Cast::make(UInt(1), x);
+}
+Expr uint8(Expr x) {
+    return Cast::make(UInt(8), x);
+}
+Expr uint16(Expr x) {
+    return Cast::make(UInt(16), x);
+}
+Expr uint32(Expr x) {
+    return Cast::make(UInt(32), x);
+}
+Expr int8(Expr x) {
+    return Cast::make(Int(8), x);
+}
+Expr int16(Expr x) {
+    return Cast::make(Int(16), x);
+}
+Expr int32(Expr x) {
+    return Cast::make(Int(32), x);
+}
+Expr uint1x2(Expr x) {
+    return Cast::make(UInt(1).with_lanes(2), x);
+}
+Expr uint8x2(Expr x) {
+    return Cast::make(UInt(8).with_lanes(2), x);
+}
+Expr uint16x2(Expr x) {
+    return Cast::make(UInt(16).with_lanes(2), x);
+}
+Expr uint32x2(Expr x) {
+    return Cast::make(UInt(32).with_lanes(2), x);
+}
+Expr int8x2(Expr x) {
+    return Cast::make(Int(8).with_lanes(2), x);
+}
+Expr int16x2(Expr x) {
+    return Cast::make(Int(16).with_lanes(2), x);
+}
+Expr int32x2(Expr x) {
+    return Cast::make(Int(32).with_lanes(2), x);
+}
 
 Expr a(Variable::make(Int(0), fuzz_var(0)));
 Expr b(Variable::make(Int(0), fuzz_var(1)));

@@ -21,6 +21,7 @@ using namespace Halide;
 
 // Support code for loading pngs.
 #include "halide_image_io.h"
+
 using namespace Halide::Tools;
 
 int main(int argc, char **argv) {
@@ -39,15 +40,15 @@ int main(int argc, char **argv) {
 
         // Blur it horizontally:
         Func blur_x("blur_x");
-        blur_x(x, y, c) = (input_16(x-1, y, c) +
+        blur_x(x, y, c) = (input_16(x - 1, y, c) +
                            2 * input_16(x, y, c) +
-                           input_16(x+1, y, c)) / 4;
+                           input_16(x + 1, y, c)) / 4;
 
         // Blur it vertically:
         Func blur_y("blur_y");
-        blur_y(x, y, c) = (blur_x(x, y-1, c) +
+        blur_y(x, y, c) = (blur_x(x, y - 1, c) +
                            2 * blur_x(x, y, c) +
-                           blur_x(x, y+1, c)) / 4;
+                           blur_x(x, y + 1, c)) / 4;
 
         // Convert back to 8-bit.
         Func output("output");
@@ -82,7 +83,7 @@ int main(int argc, char **argv) {
         // over a domain shifted inwards by one pixel, we won't be
         // asking the Halide routine to read out of bounds. We saw how
         // to do this in the previous lesson:
-        Buffer<uint8_t> result(input.width()-2, input.height()-2, 3);
+        Buffer<uint8_t> result(input.width() - 2, input.height() - 2, 3);
         result.set_min(1, 1);
         output.realize(result);
 
@@ -107,11 +108,11 @@ int main(int argc, char **argv) {
 
         // Define an expression that clamps x to lie within the
         // range [0, input.width()-1].
-        Expr clamped_x = clamp(x, 0, input.width()-1);
+        Expr clamped_x = clamp(x, 0, input.width() - 1);
         // clamp(x, a, b) is equivalent to max(min(x, b), a).
 
         // Similarly clamp y.
-        Expr clamped_y = clamp(y, 0, input.height()-1);
+        Expr clamped_y = clamp(y, 0, input.height() - 1);
         // Load from input at the clamped coordinates. This means that
         // no matter how we evaluated the Func 'clamped', we'll never
         // read out of bounds on the input. This is a clamp-to-edge
@@ -141,15 +142,15 @@ int main(int argc, char **argv) {
 
         // Blur it horizontally:
         Func blur_x("blur_x");
-        blur_x(x, y, c) = (input_16(x-1, y, c) +
+        blur_x(x, y, c) = (input_16(x - 1, y, c) +
                            2 * input_16(x, y, c) +
-                           input_16(x+1, y, c)) / 4;
+                           input_16(x + 1, y, c)) / 4;
 
         // Blur it vertically:
         Func blur_y("blur_y");
-        blur_y(x, y, c) = (blur_x(x, y-1, c) +
+        blur_y(x, y, c) = (blur_x(x, y - 1, c) +
                            2 * blur_x(x, y, c) +
-                           blur_x(x, y+1, c)) / 4;
+                           blur_x(x, y + 1, c)) / 4;
 
         // Convert back to 8-bit.
         Func output("output");

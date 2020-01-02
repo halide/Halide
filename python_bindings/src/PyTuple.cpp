@@ -1,4 +1,4 @@
- #include "PyTuple.h"
+#include "PyTuple.h"
 
 namespace Halide {
 namespace PythonBindings {
@@ -29,7 +29,7 @@ void define_tuple(py::module &m) {
                     v.push_back(f);
                 } else {
                     for (size_t i = 0; i < f.size(); ++i) {
-                        v.push_back(f[(int) i]);
+                        v.push_back(f[(int)i]);
                     }
                 }
                 return Tuple(v);
@@ -41,8 +41,7 @@ void define_tuple(py::module &m) {
                 std::ostringstream o;
                 o << "<halide.Tuple of size " << t.size() << ">";
                 return o.str();
-            })
-    ;
+            });
     py::implicitly_convertible<py::tuple, Tuple>();
 
     // If we autoconvert from vector<Expr>, we must also special-case FuncRef, alas

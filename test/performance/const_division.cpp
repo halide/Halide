@@ -1,8 +1,8 @@
 #include "Halide.h"
-#include <cstdio>
-#include <cstdint>
-#include <random>
 #include "halide_benchmark.h"
+#include <cstdint>
+#include <cstdio>
+#include <random>
 
 using namespace Halide;
 using namespace Halide::Tools;
@@ -16,7 +16,7 @@ bool test(int w, bool div) {
     Func f, g, h;
     Var x, y;
 
-    size_t bits = sizeof(T)*8;
+    size_t bits = sizeof(T) * 8;
     bool is_signed = (T)(-1) < (T)(0);
 
     printf("%sInt(%2d, %2d)    ",
@@ -38,7 +38,7 @@ bool test(int w, bool div) {
 
     for (int y = 0; y < num_vals; y++) {
         for (int x = 0; x < input.width(); x++) {
-            uint32_t bits = (uint32_t) rng();
+            uint32_t bits = (uint32_t)rng();
             input(x, y) = (T)bits;
         }
     }
@@ -101,7 +101,6 @@ bool test(int w, bool div) {
     }
 
     return true;
-
 }
 
 int main(int argc, char **argv) {

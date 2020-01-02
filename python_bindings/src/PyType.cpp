@@ -76,17 +76,16 @@ void define_type(py::module &m) {
         // .def("__lt__", [](const Type &value, Type *value2) -> bool { return value2 && value < *value2; })
 
         .def("element_of", &Type::element_of)
-        .def("can_represent", (bool (Type::*)(Type) const) &Type::can_represent, py::arg("other"))
+        .def("can_represent", (bool (Type::*)(Type) const) & Type::can_represent, py::arg("other"))
         // Python doesn't have unsigned integers -- all integers are signed --
         // so we'll never see anything that can usefully be routed to the uint64_t
         // overloads of these methods.
-        .def("is_max", (bool (Type::*)(int64_t) const) &Type::is_max, py::arg("value"))
-        .def("is_min", (bool (Type::*)(int64_t) const) &Type::is_min, py::arg("value"))
+        .def("is_max", (bool (Type::*)(int64_t) const) & Type::is_max, py::arg("value"))
+        .def("is_min", (bool (Type::*)(int64_t) const) & Type::is_min, py::arg("value"))
         .def("max", &Type::max)
         .def("min", &Type::min)
         .def("__repr__", &type_repr)
-        .def("__str__", &halide_type_to_string)
-    ;
+        .def("__str__", &halide_type_to_string);
 
     m.def("Int", Int, py::arg("bits"), py::arg("lanes") = 1);
     m.def("UInt", UInt, py::arg("bits"), py::arg("lanes") = 1);

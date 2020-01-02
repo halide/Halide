@@ -7,14 +7,14 @@ class OldBufferT : public Halide::Generator<OldBufferT> {
 public:
     Input<Buffer<int32_t>> in1{"in1", 2};
     Input<Buffer<int32_t>> in2{"in2", 2};
-    Input<int>             scalar_param{"scalar_param", 1, 0, 64};
+    Input<int> scalar_param{"scalar_param", 1, 0, 64};
 
-    Output<Buffer<int32_t>>  output{"output", 2};
+    Output<Buffer<int32_t>> output{"output", 2};
 
     void generate() {
         Func f, g;
         Var x, y;
-        f(x, y) = in1(x-1, y-1) + in1(x+1, y+3) + in2(x, y) + scalar_param;
+        f(x, y) = in1(x - 1, y - 1) + in1(x + 1, y + 3) + in2(x, y) + scalar_param;
         f.compute_root();
 
         if (get_target().has_gpu_feature()) {

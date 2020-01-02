@@ -15,11 +15,11 @@ void halide_python_print(void *, const char *msg) {
 
 class HalidePythonCompileTimeErrorReporter : public CompileTimeErrorReporter {
 public:
-    void warning(const char* msg) {
+    void warning(const char *msg) {
         py::print(msg, py::arg("end") = "");
     }
 
-    void error(const char* msg) {
+    void error(const char *msg) {
         throw Error(msg);
         // This method must not return!
     }
@@ -39,4 +39,3 @@ void define_error(py::module &m) {
 
 }  // namespace PythonBindings
 }  // namespace Halide
-

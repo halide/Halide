@@ -8,6 +8,7 @@ public:
     int count_if = 0;
     int count_select = 0;
     bool in_produce = false;
+
 private:
     using Internal::IRVisitor::visit;
 
@@ -56,7 +57,8 @@ int main(int argc, char **argv) {
         CountConditionals s;
         m.functions().front().body.accept(&s);
         if (s.count != 0) {
-            std::cerr << "There were selects in the lowered code: \n" << m.functions().front().body << "\n";
+            std::cerr << "There were selects in the lowered code: \n"
+                      << m.functions().front().body << "\n";
             return -1;
         }
 
@@ -90,7 +92,8 @@ int main(int argc, char **argv) {
         CountConditionals s;
         m.functions().front().body.accept(&s);
         if (s.count != 0) {
-            std::cerr << "There were selects in the lowered code: \n" << m.functions().front().body << "\n";
+            std::cerr << "There were selects in the lowered code: \n"
+                      << m.functions().front().body << "\n";
             return -1;
         }
 
@@ -99,7 +102,7 @@ int main(int argc, char **argv) {
         for (int y = 0; y < im.height(); y++) {
             for (int x = 0; x < im.width(); x++) {
                 int correct = x + y;
-                correct += ((x == 10) && (x < y))? 1 : 0;
+                correct += ((x == 10) && (x < y)) ? 1 : 0;
                 if (im(x, y) != correct) {
                     printf("im(%d, %d) = %d instead of %d\n",
                            x, y, im(x, y), correct);
@@ -120,7 +123,7 @@ int main(int argc, char **argv) {
         Func hist;
         {
             RDom r(0, 10, 0, 10, 0, 10, 0, 10);
-            Expr xi = r[0] + r[2]*10, yi = r[1] + r[3]*10;
+            Expr xi = r[0] + r[2] * 10, yi = r[1] + r[3] * 10;
             hist(x) = 0;
             hist(f(clamp(xi, 0, 73), clamp(yi, 0, 73))) +=
                 select(xi >= 0 && xi <= 73 && yi >= 0 && yi <= 73, 1, 0);
@@ -129,7 +132,8 @@ int main(int argc, char **argv) {
             CountConditionals s;
             m.functions().front().body.accept(&s);
             if (s.count != 0) {
-                std::cerr << "There were selects in the lowered code: \n" << m.functions().front().body << "\n";
+                std::cerr << "There were selects in the lowered code: \n"
+                          << m.functions().front().body << "\n";
                 return -1;
             }
         }
@@ -159,7 +163,7 @@ int main(int argc, char **argv) {
         // if statement instead of a select.
         Func f;
         Var x, y;
-        f(x, y) = select(2*x < y, 5, undef<int>());
+        f(x, y) = select(2 * x < y, 5, undef<int>());
 
         Var xi, yi;
         f.tile(x, y, xi, yi, 4, 4);
@@ -169,7 +173,8 @@ int main(int argc, char **argv) {
         CountConditionals s;
         m.functions().front().body.accept(&s);
         if (s.count != 0) {
-            std::cerr << "There were selects or ifs in the lowered code: \n" << m.functions().front().body << "\n";
+            std::cerr << "There were selects or ifs in the lowered code: \n"
+                      << m.functions().front().body << "\n";
             return -1;
         }
     }
@@ -205,11 +210,13 @@ int main(int argc, char **argv) {
         CountConditionals s;
         m.functions().front().body.accept(&s);
         if (s.count_select != 0) {
-            std::cerr << "There were selects in the lowered code: \n" << m.functions().front().body << "\n";
+            std::cerr << "There were selects in the lowered code: \n"
+                      << m.functions().front().body << "\n";
             return -1;
         }
         if (s.count_if != 1) {
-            std::cerr << "There should be 1 if in the lowered code: \n" << m.functions().front().body << "\n";
+            std::cerr << "There should be 1 if in the lowered code: \n"
+                      << m.functions().front().body << "\n";
             return -1;
         }
 

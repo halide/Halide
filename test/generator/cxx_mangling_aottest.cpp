@@ -1,7 +1,7 @@
 #include <stdio.h>
 
-#include "HalideRuntime.h"
 #include "HalideBuffer.h"
+#include "HalideRuntime.h"
 #include <assert.h>
 #include <string.h>
 #include <string>
@@ -14,11 +14,16 @@
 using namespace Halide::Runtime;
 
 namespace my_namespace {
-class my_class {public: int foo;};
+class my_class {
+public:
+    int foo;
+};
 namespace my_subnamespace {
-struct my_struct {int foo;};
-}
-}
+struct my_struct {
+    int foo;
+};
+}  // namespace my_subnamespace
+}  // namespace my_namespace
 union my_union {
     float a;
     int b;
@@ -65,7 +70,7 @@ int main(int argc, char **argv) {
              my_union const *,
              halide_buffer_t *) = HalideTest::cxx_mangling_gpu;
 
-    printf("HalideTest::cxx_mangling is at: %p\n", (void*) f);
+    printf("HalideTest::cxx_mangling is at: %p\n", (void *)f);
 #else
     printf("TEST_CUDA is disabled, skipping cxx_mangling_gpu test.\n");
 #endif
@@ -75,11 +80,11 @@ int main(int argc, char **argv) {
     my_union mu;
 
     int r = HalideTest::AnotherNamespace::cxx_mangling(
-                                     input, -1, 0xff, -1, 0xffff, -1, 0xffffffff,
-                                     -1, 0xffffffffffffffffLL, true, 42.0, 4239.0f,
-                                     int_ptr, const_int_ptr, void_ptr, const_void_ptr,
-                                     string_ptr, const_string_ptr,
-                                     &mc, &ms, &mu, result);
+        input, -1, 0xff, -1, 0xffff, -1, 0xffffffff,
+        -1, 0xffffffffffffffffLL, true, 42.0, 4239.0f,
+        int_ptr, const_int_ptr, void_ptr, const_void_ptr,
+        string_ptr, const_string_ptr,
+        &mc, &ms, &mu, result);
     if (r != 0) {
         fprintf(stderr, "Failure!\n");
         exit(1);

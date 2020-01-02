@@ -122,6 +122,7 @@ Expr Simplify::visit(const Div *op, ExprInfo *bounds) {
             return rewrite.result;
         }
 
+        // clang-format off
         if (EVAL_IN_LAMBDA
             (rewrite(broadcast(x) / broadcast(y), broadcast(x / y, lanes)) ||
              rewrite(select(x, c0, c1) / c2, select(x, fold(c0/c2), fold(c1/c2))) ||
@@ -213,6 +214,7 @@ Expr Simplify::visit(const Div *op, ExprInfo *bounds) {
                rewrite((x % 2 + c0) / 2, x % 2 + fold(c0 / 2), c0 % 2 == 1))))) {
             return mutate(std::move(rewrite.result), bounds);
         }
+        // clang-format on
     }
 
     if (a.same_as(op->a) && b.same_as(op->b)) {

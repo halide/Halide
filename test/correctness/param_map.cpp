@@ -1,6 +1,6 @@
 #include "Halide.h"
-#include <stdio.h>
 #include <iostream>
+#include <stdio.h>
 
 using namespace Halide;
 
@@ -18,7 +18,7 @@ int main(int argc, char **argv) {
     Buffer<uint8_t> in2(10, 10);
 
     for (int i = 0; i < 10; i++) {
-      for (int j = 0; j < 10; j++) {
+        for (int j = 0; j < 10; j++) {
             in1(i, j) = i + j * 10;
             in2(i, j) = i * 10 + j;
         }
@@ -35,8 +35,8 @@ int main(int argc, char **argv) {
     params.set(p_img, in2);
 
     Buffer<uint8_t> result2 = f.realize(10, 10, t, params);
-    Buffer<uint8_t> result3 = f.realize(10, 10, t, { { p_int, 12} } );
-    Buffer<uint8_t> result4 = f.realize(10, 10, t, { { p_int, 16}, {p_img, in2} } );
+    Buffer<uint8_t> result3 = f.realize(10, 10, t, {{p_int, 12}});
+    Buffer<uint8_t> result4 = f.realize(10, 10, t, {{p_int, 16}, {p_img, in2}});
 
     for (int i = 0; i < 10; i++) {
         for (int j = 0; j < 10; j++) {
@@ -50,7 +50,7 @@ int main(int argc, char **argv) {
     // Test bounds inference
     Buffer<uint8_t> in_bounds;
 
-    f.infer_input_bounds(20, 20, 0, 0, { { p_img, &in_bounds } });
+    f.infer_input_bounds(20, 20, 0, 0, {{p_img, &in_bounds}});
 
     assert(in_bounds.defined());
     assert(in_bounds.dim(0).extent() == 20);

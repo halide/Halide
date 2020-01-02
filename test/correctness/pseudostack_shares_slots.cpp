@@ -6,14 +6,14 @@ std::vector<size_t> mallocs;
 
 void *my_malloc(void *user_context, size_t x) {
     mallocs.push_back(x);
-    void *orig = malloc(x+32);
+    void *orig = malloc(x + 32);
     void *ptr = (void *)((((size_t)orig + 32) >> 5) << 5);
     ((void **)ptr)[-1] = orig;
     return ptr;
 }
 
 void my_free(void *user_context, void *ptr) {
-    free(((void**)ptr)[-1]);
+    free(((void **)ptr)[-1]);
 }
 
 int main(int argc, char **argv) {
@@ -35,7 +35,7 @@ int main(int argc, char **argv) {
         chain.push_back(in);
         for (int i = 1; i < 20; i++) {
             Func next;
-            next(x) = chain.back()(x-1) + chain.back()(x+1);
+            next(x) = chain.back()(x - 1) + chain.back()(x + 1);
             chain.push_back(next);
         }
 
@@ -52,7 +52,7 @@ int main(int argc, char **argv) {
             mallocs.clear();
             p.set(sz);
             chain.back().realize(1024);
-            size_t sz1 = sz + 2*20 - 1;
+            size_t sz1 = sz + 2 * 20 - 1;
             size_t sz2 = sz1 - 2;
             if (mallocs.size() != 2 || mallocs[0] != sz1 || mallocs[1] != sz2) {
                 printf("Incorrect allocations: %d %d %d\n", (int)mallocs.size(), (int)mallocs[0], (int)mallocs[1]);
@@ -73,9 +73,9 @@ int main(int argc, char **argv) {
         for (int i = 1; i < 20; i++) {
             Func next;
             if (i == 10) {
-                next(x) = chain.back()(x/8);
+                next(x) = chain.back()(x / 8);
             } else {
-                next(x) = chain.back()(x-1) + chain.back()(x+1);
+                next(x) = chain.back()(x - 1) + chain.back()(x + 1);
             }
             chain.push_back(next);
         }
@@ -93,7 +93,7 @@ int main(int argc, char **argv) {
             mallocs.clear();
             p.set(sz);
             chain.back().realize(1024);
-            size_t sz1 = sz/8 + 23;
+            size_t sz1 = sz / 8 + 23;
             size_t sz2 = sz1 - 2;
             size_t sz3 = sz + 19;
             size_t sz4 = sz3 - 2;

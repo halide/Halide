@@ -14,7 +14,7 @@ int main(int argc, char **argv) {
     Var x("x"), y("y");
 
     Param<int> slices;
-    RDom r(0, 3*slices + 1);
+    RDom r(0, 3 * slices + 1);
     slices.set_range(1, 256);
 
     f(x, y) = x + y;

@@ -1309,7 +1309,7 @@ void CodeGen_LLVM::optimize_module() {
     mpm.run(*module, mam);
 
     if (llvm::verifyModule(*module, &errs()))
-      report_fatal_error("Transformation resulted in an invalid module\n");
+        report_fatal_error("Transformation resulted in an invalid module\n");
 
 #else
     // Keep the legacy pass manager for LLVM < 90
@@ -3006,14 +3006,14 @@ void CodeGen_LLVM::visit(const Call *op) {
                 }
             }
             if (get_target().has_feature(Target::MSAN)) {
-              // Note that we mark the entire buffer as initialized;
-              // it would be more accurate to just mark (dst - buf)
-              llvm::Function *annotate = module->getFunction("halide_msan_annotate_memory_is_initialized");
-              vector<Value *> annotate_args(3);
-              annotate_args[0] = get_user_context();
-              annotate_args[1] = buf;
-              annotate_args[2] = codegen(Cast::make(Int(64), buf_size));
-              builder->CreateCall(annotate, annotate_args);
+                // Note that we mark the entire buffer as initialized;
+                // it would be more accurate to just mark (dst - buf)
+                llvm::Function *annotate = module->getFunction("halide_msan_annotate_memory_is_initialized");
+                vector<Value *> annotate_args(3);
+                annotate_args[0] = get_user_context();
+                annotate_args[1] = buf;
+                annotate_args[2] = codegen(Cast::make(Int(64), buf_size));
+                builder->CreateCall(annotate, annotate_args);
             }
             value = buf;
         }

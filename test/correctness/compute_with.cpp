@@ -1,8 +1,8 @@
 #include "Halide.h"
 #include "test/common/check_call_graphs.h"
 
-#include <stdio.h>
 #include <map>
+#include <stdio.h>
 
 namespace {
 
@@ -25,10 +25,14 @@ struct Bound {
         max[2] = max_2;
     }
     Bound(int32_t min_0, int32_t max_0, int32_t min_1, int32_t max_1)
-        : Bound(min_0, max_0, min_1, max_1, 0, 0) {}
+        : Bound(min_0, max_0, min_1, max_1, 0, 0) {
+    }
     Bound(int32_t min_0, int32_t max_0)
-        : Bound(min_0, max_0, 0, 0, 0, 0) {}
-    Bound() : Bound(-1, -1, -1, -1, -1, -1) {}
+        : Bound(min_0, max_0, 0, 0, 0, 0) {
+    }
+    Bound()
+        : Bound(-1, -1, -1, -1, -1, -1) {
+    }
 };
 
 map<string, Bound> stores, loads;
@@ -45,7 +49,8 @@ bool check_coordinates(const Bound &b, const int32_t *coordinates, int32_t dims,
         int32_t i = idx / lanes;
         if ((coordinates[idx] < b.min[i]) || (coordinates[idx] > b.max[i])) {
             printf("Bounds on %s to %s at dimension %d were supposed to be between [%d, %d]\n"
-                   "Instead it is: %d\n", event.c_str(), fname.c_str(), i, b.min[i], b.max[i],
+                   "Instead it is: %d\n",
+                   event.c_str(), fname.c_str(), i, b.min[i], b.max[i],
                    coordinates[idx]);
             return false;
         }
@@ -117,7 +122,7 @@ int split_test() {
         loads = {
             {f.name(), Bound(-1, 198, 1, 200)},
             {g.name(), Bound(2, 201, -2, 197)},
-            {h.name(), Bound()}, // There shouldn't be any load from h
+            {h.name(), Bound()},  // There shouldn't be any load from h
         };
         h.set_custom_trace(&my_trace);
 
@@ -171,7 +176,7 @@ int fuse_test() {
         loads = {
             {f.name(), Bound(2, 101, -1, 98, 3, 102)},
             {g.name(), Bound(-5, 94, -6, 93, 2, 101)},
-            {h.name(), Bound()}, // There shouldn't be any load from h
+            {h.name(), Bound()},  // There shouldn't be any load from h
         };
         h.set_custom_trace(&my_trace);
 
@@ -252,7 +257,7 @@ int multiple_fuse_group_test() {
             {g.name(), Bound(0, 199, 0, 199)},
             {h.name(), Bound(0, 199, 0, 199)},
             {p.name(), Bound(0, 199, 0, 199)},
-            {q.name(), Bound()}, // There shouldn't be any load from q
+            {q.name(), Bound()},  // There shouldn't be any load from q
         };
         q.set_custom_trace(&my_trace);
 
@@ -306,8 +311,8 @@ int multiple_outputs_test() {
         };
         loads = {
             {input.name(), Bound(0, std::max(f_size, g_size) - 1, 0, std::max(f_size, g_size) - 1)},
-            {f.name(), Bound()}, // There shouldn't be any load from f
-            {g.name(), Bound()}, // There shouldn't be any load from g
+            {f.name(), Bound()},  // There shouldn't be any load from f
+            {g.name(), Bound()},  // There shouldn't be any load from g
         };
 
         Pipeline p({f, g});
@@ -390,7 +395,7 @@ int fuse_compute_at_test() {
             {h.name(), Bound(0, 166, -1, 165)},
             {p.name(), Bound(0, 166, -1, 165)},
             {q.name(), Bound(-1, 165, 0, 166)},
-            {r.name(), Bound()}, // There shouldn't be any load from r
+            {r.name(), Bound()},  // There shouldn't be any load from r
         };
         r.set_custom_trace(&my_trace);
 
@@ -447,7 +452,7 @@ int double_split_fuse_test() {
         loads = {
             {f.name(), Bound(0, 199, 0, 199)},
             {g.name(), Bound(0, 199, 0, 199)},
-            {h.name(), Bound()}, // There shouldn't be any load from h
+            {h.name(), Bound()},  // There shouldn't be any load from h
         };
         h.set_custom_trace(&my_trace);
 
@@ -466,8 +471,8 @@ int double_split_fuse_test() {
 int rgb_yuv420_test() {
     // Somewhat approximating the behavior of rgb -> yuv420 (downsample by half in the u and v channels)
     const int size = 256;
-    Buffer<int> y_im(size, size), u_im(size/2, size/2), v_im(size/2, size/2);
-    Buffer<int> y_im_ref(size, size), u_im_ref(size/2, size/2), v_im_ref(size/2, size/2);
+    Buffer<int> y_im(size, size), u_im(size / 2, size / 2), v_im(size / 2, size / 2);
+    Buffer<int> y_im_ref(size, size), u_im_ref(size / 2, size / 2), v_im_ref(size / 2, size / 2);
 
     // Compute a random image
     Buffer<int> input(size, size, 3);
@@ -484,12 +489,12 @@ int rgb_yuv420_test() {
         Func y_part("y_part"), u_part("u_part"), v_part("v_part"), rgb("rgb"), rgb_x("rgb_x");
 
         Func clamped = BoundaryConditions::repeat_edge(input);
-        rgb_x(x, y, z) = (clamped(x - 1, y, z) + 2*clamped(x, y, z) + clamped(x + 1, y, z));
-        rgb(x, y, z) = (rgb_x(x, y - 1, z) + 2*rgb_x(x, y, z) + rgb_x(x, y - 1, z))/16;
+        rgb_x(x, y, z) = (clamped(x - 1, y, z) + 2 * clamped(x, y, z) + clamped(x + 1, y, z));
+        rgb(x, y, z) = (rgb_x(x, y - 1, z) + 2 * rgb_x(x, y, z) + rgb_x(x, y - 1, z)) / 16;
 
-        y_part(x, y) = ((66 * input(x, y, 0) + 129 * input(x, y, 1) +  25 * input(x, y, 2) + 128) >> 8) +  16;
-        u_part(x, y) = (( -38 * rgb(2*x, 2*y, 0) -  74 * rgb(2*x, 2*y, 1) + 112 * rgb(2*x, 2*y, 2) + 128) >> 8) + 128;
-        v_part(x, y) = (( 112 * rgb(2*x, 2*y, 0) -  94 * rgb(2*x, 2*y, 1) -  18 * rgb(2*x, 2*y, 2) + 128) >> 8) + 128;
+        y_part(x, y) = ((66 * input(x, y, 0) + 129 * input(x, y, 1) + 25 * input(x, y, 2) + 128) >> 8) + 16;
+        u_part(x, y) = ((-38 * rgb(2 * x, 2 * y, 0) - 74 * rgb(2 * x, 2 * y, 1) + 112 * rgb(2 * x, 2 * y, 2) + 128) >> 8) + 128;
+        v_part(x, y) = ((112 * rgb(2 * x, 2 * y, 0) - 94 * rgb(2 * x, 2 * y, 1) - 18 * rgb(2 * x, 2 * y, 2) + 128) >> 8) + 128;
 
         Pipeline({y_part, u_part, v_part}).realize({y_im_ref, u_im_ref, v_im_ref});
     }
@@ -499,12 +504,12 @@ int rgb_yuv420_test() {
         Func y_part("y_part"), u_part("u_part"), v_part("v_part"), rgb("rgb"), rgb_x("rgb_x");
 
         Func clamped = BoundaryConditions::repeat_edge(input);
-        rgb_x(x, y, z) = (clamped(x - 1, y, z) + 2*clamped(x, y, z) + clamped(x + 1, y, z));
-        rgb(x, y, z) = (rgb_x(x, y - 1, z) + 2*rgb_x(x, y, z) + rgb_x(x, y - 1, z))/16;
+        rgb_x(x, y, z) = (clamped(x - 1, y, z) + 2 * clamped(x, y, z) + clamped(x + 1, y, z));
+        rgb(x, y, z) = (rgb_x(x, y - 1, z) + 2 * rgb_x(x, y, z) + rgb_x(x, y - 1, z)) / 16;
 
-        y_part(x, y) = ((66 * input(x, y, 0) + 129 * input(x, y, 1) +  25 * input(x, y, 2) + 128) >> 8) +  16;
-        u_part(x, y) = (( -38 * rgb(2*x, 2*y, 0) -  74 * rgb(2*x, 2*y, 1) + 112 * rgb(2*x, 2*y, 2) + 128) >> 8) + 128;
-        v_part(x, y) = (( 112 * rgb(2*x, 2*y, 0) -  94 * rgb(2*x, 2*y, 1) -  18 * rgb(2*x, 2*y, 2) + 128) >> 8) + 128;
+        y_part(x, y) = ((66 * input(x, y, 0) + 129 * input(x, y, 1) + 25 * input(x, y, 2) + 128) >> 8) + 16;
+        u_part(x, y) = ((-38 * rgb(2 * x, 2 * y, 0) - 74 * rgb(2 * x, 2 * y, 1) + 112 * rgb(2 * x, 2 * y, 2) + 128) >> 8) + 128;
+        v_part(x, y) = ((112 * rgb(2 * x, 2 * y, 0) - 94 * rgb(2 * x, 2 * y, 1) - 18 * rgb(2 * x, 2 * y, 2) + 128) >> 8) + 128;
 
         Var xi("xi"), yi("yi");
         y_part.tile(x, y, xi, yi, 16, 2, TailStrategy::RoundUp);
@@ -521,11 +526,11 @@ int rgb_yuv420_test() {
 
         Expr width = v_part.output_buffer().width();
         Expr height = v_part.output_buffer().height();
-        width = (width/8)*8;
+        width = (width / 8) * 8;
 
         u_part.bound(x, 0, width).bound(y, 0, height);
         v_part.bound(x, 0, width).bound(y, 0, height);
-        y_part.bound(x, 0, 2*width).bound(y, 0, 2*height);
+        y_part.bound(x, 0, 2 * width).bound(y, 0, 2 * height);
 
         rgb_x.fold_storage(y, 4);
         rgb_x.store_root();
@@ -541,15 +546,15 @@ int rgb_yuv420_test() {
             {rgb_x.name(), Bound(0, size - 1, -1, size - 2, 0, 2)},
             {rgb.name(), Bound(0, size - 1, 0, size - 1, 0, 2)},
             {y_part.name(), Bound(0, size - 1, 0, size - 1)},
-            {u_part.name(), Bound(0, size/2 - 1, 0, size/2 - 1)},
-            {v_part.name(), Bound(0, size/2 - 1, 0, size/2 - 1)},
+            {u_part.name(), Bound(0, size / 2 - 1, 0, size / 2 - 1)},
+            {v_part.name(), Bound(0, size / 2 - 1, 0, size / 2 - 1)},
         };
         loads = {
             {rgb_x.name(), Bound(0, size - 1, -1, size - 2, 0, 2)},
             {rgb.name(), Bound(0, size - 1, 0, size - 1, 0, 2)},
-            {y_part.name(), Bound()}, // There shouldn't be any load from y_part
-            {u_part.name(), Bound()}, // There shouldn't be any load from u_part
-            {v_part.name(), Bound()}, // There shouldn't be any load from v_part
+            {y_part.name(), Bound()},  // There shouldn't be any load from y_part
+            {u_part.name(), Bound()},  // There shouldn't be any load from u_part
+            {v_part.name(), Bound()},  // There shouldn't be any load from v_part
         };
 
         Pipeline p({y_part, u_part, v_part});
@@ -622,7 +627,7 @@ int vectorize_test() {
         loads = {
             {f.name(), Bound(-1, 109, 1, 111)},
             {g.name(), Bound(2, 112, -2, 108)},
-            {h.name(), Bound()}, // There shouldn't be any load from h
+            {h.name(), Bound()},  // There shouldn't be any load from h
         };
         h.set_custom_trace(&my_trace);
 
@@ -764,8 +769,8 @@ int multiple_outputs_on_gpu_test() {
 
 int mixed_tile_factor_test() {
     const int size = 256;
-    Buffer<int> f_im(size, size), g_im(size/2, size/2), h_im(size/2, size/2);
-    Buffer<int> f_im_ref(size, size), g_im_ref(size/2, size/2), h_im_ref(size/2, size/2);
+    Buffer<int> f_im(size, size), g_im(size / 2, size / 2), h_im(size / 2, size / 2);
+    Buffer<int> f_im_ref(size, size), g_im_ref(size / 2, size / 2), h_im_ref(size / 2, size / 2);
 
     // Compute a random image
     Buffer<int> A(size, size, 3);
@@ -781,10 +786,10 @@ int mixed_tile_factor_test() {
         Var x("x"), y("y"), z("z");
         Func f("f_ref"), g("g_ref"), h("h_ref"), input("input_ref");
 
-        input(x, y, z) = 2*A(x, y, z) + 3;
+        input(x, y, z) = 2 * A(x, y, z) + 3;
         f(x, y) = input(x, y, 0) + 2 * input(x, y, 1);
-        g(x, y) = input(2*x, 2*y, 1) + 2 * input(2*x, 2*y, 2);
-        h(x, y) = input(2*x, 2*y, 2) + 3 * input(2*x, 2*y, 1);
+        g(x, y) = input(2 * x, 2 * y, 1) + 2 * input(2 * x, 2 * y, 2);
+        h(x, y) = input(2 * x, 2 * y, 2) + 3 * input(2 * x, 2 * y, 1);
 
         Pipeline({f, g, h}).realize({f_im_ref, g_im_ref, h_im_ref});
     }
@@ -793,10 +798,10 @@ int mixed_tile_factor_test() {
         Var x("x"), y("y"), z("z");
         Func f("f"), g("g"), h("h"), input("input");
 
-        input(x, y, z) = 2*A(x, y, z) + 3;
+        input(x, y, z) = 2 * A(x, y, z) + 3;
         f(x, y) = input(x, y, 0) + 2 * input(x, y, 1);
-        g(x, y) = input(2*x, 2*y, 1) + 2 * input(2*x, 2*y, 2);
-        h(x, y) = input(2*x, 2*y, 2) + 3 * input(2*x, 2*y, 1);
+        g(x, y) = input(2 * x, 2 * y, 1) + 2 * input(2 * x, 2 * y, 2);
+        h(x, y) = input(2 * x, 2 * y, 2) + 3 * input(2 * x, 2 * y, 1);
 
         Var xi("xi"), yi("yi");
         f.tile(x, y, xi, yi, 32, 16, TailStrategy::ShiftInwards);
@@ -816,14 +821,14 @@ int mixed_tile_factor_test() {
         stores = {
             {input.name(), Bound(0, size - 1, 0, size - 1, 0, 2)},
             {f.name(), Bound(0, size - 1, 0, size - 1)},
-            {g.name(), Bound(0, size/2 - 1, 0, size/2 - 1)},
-            {h.name(), Bound(0, size/2 - 1, 0, size/2 - 1)},
+            {g.name(), Bound(0, size / 2 - 1, 0, size / 2 - 1)},
+            {h.name(), Bound(0, size / 2 - 1, 0, size / 2 - 1)},
         };
         loads = {
             {input.name(), Bound(0, size - 1, 0, size - 1, 0, 2)},
-            {f.name(), Bound()}, // There shouldn't be any load from f
-            {g.name(), Bound()}, // There shouldn't be any load from g
-            {h.name(), Bound()}, // There shouldn't be any load from h
+            {f.name(), Bound()},  // There shouldn't be any load from f
+            {g.name(), Bound()},  // There shouldn't be any load from g
+            {h.name(), Bound()},  // There shouldn't be any load from h
         };
 
         Pipeline p({f, g, h});
@@ -857,8 +862,8 @@ int mixed_tile_factor_test() {
 
 int multi_tile_mixed_tile_factor_test() {
     const int size = 256;
-    Buffer<int> f_im(size, size), g_im(size/2, size/2), h_im(size/2, size/2);
-    Buffer<int> f_im_ref(size, size), g_im_ref(size/2, size/2), h_im_ref(size/2, size/2);
+    Buffer<int> f_im(size, size), g_im(size / 2, size / 2), h_im(size / 2, size / 2);
+    Buffer<int> f_im_ref(size, size), g_im_ref(size / 2, size / 2), h_im_ref(size / 2, size / 2);
 
     // Compute a random image
     Buffer<int> A(size, size, 3);
@@ -874,10 +879,10 @@ int multi_tile_mixed_tile_factor_test() {
         Var x("x"), y("y"), z("z");
         Func f("f_ref"), g("g_ref"), h("h_ref"), input("A_ref");
 
-        input(x, y, z) = 2*A(x, y, z) + 3;
+        input(x, y, z) = 2 * A(x, y, z) + 3;
         f(x, y) = input(x, y, 0) + 2 * input(x, y, 1);
-        g(x, y) = input(2*x, 2*y, 1) + 2 * input(2*x, 2*y, 2);
-        h(x, y) = input(2*x, 2*y, 2) + 3 * input(2*x, 2*y, 1);
+        g(x, y) = input(2 * x, 2 * y, 1) + 2 * input(2 * x, 2 * y, 2);
+        h(x, y) = input(2 * x, 2 * y, 2) + 3 * input(2 * x, 2 * y, 1);
 
         Pipeline({f, g, h}).realize({f_im_ref, g_im_ref, h_im_ref});
     }
@@ -886,10 +891,10 @@ int multi_tile_mixed_tile_factor_test() {
         Var x("x"), y("y"), z("z");
         Func f("f"), g("g"), h("h"), input("A");
 
-        input(x, y, z) = 2*A(x, y, z) + 3;
+        input(x, y, z) = 2 * A(x, y, z) + 3;
         f(x, y) = input(x, y, 0) + 2 * input(x, y, 1);
-        g(x, y) = input(2*x, 2*y, 1) + 2 * input(2*x, 2*y, 2);
-        h(x, y) = input(2*x, 2*y, 2) + 3 * input(2*x, 2*y, 1);
+        g(x, y) = input(2 * x, 2 * y, 1) + 2 * input(2 * x, 2 * y, 2);
+        h(x, y) = input(2 * x, 2 * y, 2) + 3 * input(2 * x, 2 * y, 1);
 
         Var xi("xi"), yi("yi");
         f.tile(x, y, xi, yi, 32, 16, TailStrategy::ShiftInwards);
@@ -914,14 +919,14 @@ int multi_tile_mixed_tile_factor_test() {
         stores = {
             {input.name(), Bound(0, size - 1, 0, size - 1, 0, 2)},
             {f.name(), Bound(0, size - 1, 0, size - 1)},
-            {g.name(), Bound(0, size/2 - 1, 0, size/2 - 1)},
-            {h.name(), Bound(0, size/2 - 1, 0, size/2 - 1)},
+            {g.name(), Bound(0, size / 2 - 1, 0, size / 2 - 1)},
+            {h.name(), Bound(0, size / 2 - 1, 0, size / 2 - 1)},
         };
         loads = {
             {input.name(), Bound(0, size - 1, 0, size - 1, 0, 2)},
-            {f.name(), Bound()}, // There shouldn't be any load from f
-            {g.name(), Bound()}, // There shouldn't be any load from g
-            {h.name(), Bound()}, // There shouldn't be any load from h
+            {f.name(), Bound()},  // There shouldn't be any load from f
+            {g.name(), Bound()},  // There shouldn't be any load from g
+            {h.name(), Bound()},  // There shouldn't be any load from h
         };
 
         Pipeline p({f, g, h});
@@ -955,8 +960,8 @@ int multi_tile_mixed_tile_factor_test() {
 
 int only_some_are_tiled_test() {
     const int size = 256;
-    Buffer<int> f_im(size, size), g_im(size/2, size/2), h_im(size/2, size/2);
-    Buffer<int> f_im_ref(size, size), g_im_ref(size/2, size/2), h_im_ref(size/2, size/2);
+    Buffer<int> f_im(size, size), g_im(size / 2, size / 2), h_im(size / 2, size / 2);
+    Buffer<int> f_im_ref(size, size), g_im_ref(size / 2, size / 2), h_im_ref(size / 2, size / 2);
 
     // Compute a random image
     Buffer<int> A(size, size, 3);
@@ -972,10 +977,10 @@ int only_some_are_tiled_test() {
         Var x("x"), y("y"), z("z");
         Func f("f_ref"), g("g_ref"), h("h_ref"), input("A_ref");
 
-        input(x, y, z) = 2*A(x, y, z) + 3;
+        input(x, y, z) = 2 * A(x, y, z) + 3;
         f(x, y) = input(x, y, 0) + 2 * input(x, y, 1);
-        g(x, y) = input(2*x, 2*y, 1) + 2 * input(2*x, 2*y, 2);
-        h(x, y) = input(2*x, 2*y, 2) + 3 * input(2*x, 2*y, 1);
+        g(x, y) = input(2 * x, 2 * y, 1) + 2 * input(2 * x, 2 * y, 2);
+        h(x, y) = input(2 * x, 2 * y, 2) + 3 * input(2 * x, 2 * y, 1);
 
         Pipeline({f, g, h}).realize({f_im_ref, g_im_ref, h_im_ref});
     }
@@ -984,10 +989,10 @@ int only_some_are_tiled_test() {
         Var x("x"), y("y"), z("z");
         Func f("f"), g("g"), h("h"), input("A");
 
-        input(x, y, z) = 2*A(x, y, z) + 3;
+        input(x, y, z) = 2 * A(x, y, z) + 3;
         f(x, y) = input(x, y, 0) + 2 * input(x, y, 1);
-        g(x, y) = input(2*x, 2*y, 1) + 2 * input(2*x, 2*y, 2);
-        h(x, y) = input(2*x, 2*y, 2) + 3 * input(2*x, 2*y, 1);
+        g(x, y) = input(2 * x, 2 * y, 1) + 2 * input(2 * x, 2 * y, 2);
+        h(x, y) = input(2 * x, 2 * y, 2) + 3 * input(2 * x, 2 * y, 1);
 
         Var xi("xi"), yi("yi");
         f.tile(x, y, xi, yi, 32, 16, TailStrategy::ShiftInwards);
@@ -1005,14 +1010,14 @@ int only_some_are_tiled_test() {
         stores = {
             {input.name(), Bound(0, size - 1, 0, size - 1, 0, 2)},
             {f.name(), Bound(0, size - 1, 0, size - 1)},
-            {g.name(), Bound(0, size/2 - 1, 0, size/2 - 1)},
-            {h.name(), Bound(0, size/2 - 1, 0, size/2 - 1)},
+            {g.name(), Bound(0, size / 2 - 1, 0, size / 2 - 1)},
+            {h.name(), Bound(0, size / 2 - 1, 0, size / 2 - 1)},
         };
         loads = {
             {input.name(), Bound(0, size - 1, 0, size - 1, 0, 2)},
-            {f.name(), Bound()}, // There shouldn't be any load from f
-            {g.name(), Bound()}, // There shouldn't be any load from g
-            {h.name(), Bound()}, // There shouldn't be any load from h
+            {f.name(), Bound()},  // There shouldn't be any load from f
+            {g.name(), Bound()},  // There shouldn't be any load from g
+            {h.name(), Bound()},  // There shouldn't be any load from h
         };
 
         Pipeline p({f, g, h});
@@ -1084,7 +1089,7 @@ int with_specialization_test() {
         loads = {
             {f.name(), Bound(-1, 198, 1, 200)},
             {g.name(), Bound(2, 201, -2, 197)},
-            {h.name(), Bound()}, // There shouldn't be any load from h
+            {h.name(), Bound()},  // There shouldn't be any load from h
         };
         h.set_custom_trace(&my_trace);
 
@@ -1113,9 +1118,9 @@ int nested_compute_with_test() {
 
         input(x, y) = x + y;
         f1(x, y) = input(x, y) + 20;
-        f2(x, y) = input(x, y)*input(x, y);
+        f2(x, y) = input(x, y) * input(x, y);
         g1(x, y) = f1(x, y) + x + y;
-        g2(x, y) = f1(x, y)*f2(x, y);
+        g2(x, y) = f1(x, y) * f2(x, y);
         Pipeline({g1, g2}).realize({g1_im_ref, g2_im_ref});
     }
 
@@ -1125,9 +1130,9 @@ int nested_compute_with_test() {
 
         input(x, y) = x + y;
         f1(x, y) = input(x, y) + 20;
-        f2(x, y) = input(x, y)*input(x, y);
+        f2(x, y) = input(x, y) * input(x, y);
         g1(x, y) = f1(x, y) + x + y;
-        g2(x, y) = f1(x, y)*f2(x, y);
+        g2(x, y) = f1(x, y) * f2(x, y);
 
         input.compute_at(f1, y);
         f2.compute_with(f1, y, LoopAlignStrategy::AlignEnd);
@@ -1148,8 +1153,8 @@ int nested_compute_with_test() {
         loads = {
             {f1.name(), Bound(0, std::max(g1_size, g2_size) - 1, 0, std::max(g1_size + 4, g2_size + 9))},
             {f2.name(), Bound(0, g2_size - 1, 0, g2_size + 9)},
-            {g1.name(), Bound()}, // There shouldn't be any load from g1
-            {g2.name(), Bound()}, // There shouldn't be any load from g2
+            {g1.name(), Bound()},  // There shouldn't be any load from g1
+            {g2.name(), Bound()},  // There shouldn't be any load from g2
         };
 
         Pipeline p({g1, g2});
@@ -1211,10 +1216,10 @@ int main(int argc, char **argv) {
      *       cloning funcs in particular stages via a new (clone_)in overload.
      * TODO: remove this code when the new clone_in is implemented.
      */
-//    printf("Running some are skipped test\n");
-//    if (some_are_skipped_test() != 0) {
-//        return -1;
-//    }
+    //    printf("Running some are skipped test\n");
+    //    if (some_are_skipped_test() != 0) {
+    //        return -1;
+    //    }
 
     printf("Running rgb to yuv420 test\n");
     if (rgb_yuv420_test() != 0) {

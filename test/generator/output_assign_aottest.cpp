@@ -1,7 +1,7 @@
 #include <stdio.h>
 
-#include "output_assign.h"
 #include "HalideBuffer.h"
+#include "output_assign.h"
 
 using namespace Halide::Runtime;
 

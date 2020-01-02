@@ -14,12 +14,12 @@ Func gameOfLife(ImageParam input, int n) {
     if (n == 1) {
         in(x, y) = input(x, y);
     } else {
-        in = gameOfLife(input, n-1);
+        in = gameOfLife(input, n - 1);
         in.compute_root();
     }
 
     Expr w = input.width(), h = input.height();
-    Expr W = (x+w-1) % w, E = (x+1) % w, N = (y+h-1) % h, S = (y+1) % h;
+    Expr W = (x + w - 1) % w, E = (x + 1) % w, N = (y + h - 1) % h, S = (y + 1) % h;
     Expr livingNeighbors = (in(W, N) + in(x, N) +
                             in(E, N) + in(W, y) +
                             in(E, y) + in(W, S) +
@@ -96,14 +96,14 @@ int main(int argc, char **argv) {
         // Update step
         Expr w = input.width(), h = input.height();
         RDom t(0, w, 0, h, 0, 21);
-        Expr lastT = (t.z+1)%2;
-        Expr W = (t.x+w-1) % w, E = (t.x+1) % w, N = (t.y+h-1) % h, S = (t.y+1) % h;
+        Expr lastT = (t.z + 1) % 2;
+        Expr W = (t.x + w - 1) % w, E = (t.x + 1) % w, N = (t.y + h - 1) % h, S = (t.y + 1) % h;
         Expr alive = life(t.x, t.y, lastT) != u8(0);
         Expr livingNeighbors = (life(W, N, lastT) + life(t.x, N, lastT) +
                                 life(E, N, lastT) + life(W, t.y, lastT) +
                                 life(E, t.y, lastT) + life(W, S, lastT) +
                                 life(t.x, S, lastT) + life(E, S, lastT));
-        life(t.x, t.y, t.z%2) = select(livingNeighbors == 3 || (alive && livingNeighbors == 2), u8(1), u8(0));
+        life(t.x, t.y, t.z % 2) = select(livingNeighbors == 3 || (alive && livingNeighbors == 2), u8(1), u8(0));
         life.compute_root();
 
         Func output;
@@ -138,5 +138,4 @@ int main(int argc, char **argv) {
 
     printf("Success!\n");
     return 0;
-
 }

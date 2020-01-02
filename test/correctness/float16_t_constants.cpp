@@ -1,10 +1,10 @@
 #include "Halide.h"
-#include <stdio.h>
 #include <cmath>
+#include <stdio.h>
 
 using namespace Halide;
 
-void h_assert(bool condition, const char* msg) {
+void h_assert(bool condition, const char *msg) {
     if (!condition) {
         printf("FAIL: %s\n", msg);
         abort();
@@ -126,8 +126,8 @@ int main() {
         h_assert((nanValue.to_bits() & 0x03ff) > 0, "NaN significant invalid");
 
         // Try converting to native float types
-        float nanValuef = (float) nanValue;
-        double nanValued = (double) nanValue;
+        float nanValuef = (float)nanValue;
+        double nanValued = (double)nanValue;
         h_assert(std::isnan(nanValuef), "NaN conversion to float invalid");
         h_assert(std::isnan(nanValued), "NaN conversion to double invalid");
     }
@@ -139,16 +139,16 @@ int main() {
     };
 
     test_case tests[] = {
-        {1.0 / (1 << 24), 0x001},   // smallest positive
-        {-1.0 / (1 << 24), 0x8001}, // smallest negative
-        {65504, 0x7bff},            // largest positive
-        {-65504, 0xfbff},           // largest negative
+        {1.0 / (1 << 24), 0x001},    // smallest positive
+        {-1.0 / (1 << 24), 0x8001},  // smallest negative
+        {65504, 0x7bff},             // largest positive
+        {-65504, 0xfbff},            // largest negative
         {0.1, 0x2e66},
         {0.3, 0x34cd},
         {4091, 0x6bfe},
         {-4091, 0xebfe},
-        {1000000, 0x7c00},  // Out of range maps to +infinity
-        {-1000000, 0xfc00}, // Out of range maps to -infinity
+        {1000000, 0x7c00},   // Out of range maps to +infinity
+        {-1000000, 0xfc00},  // Out of range maps to -infinity
     };
 
     for (auto test : tests) {

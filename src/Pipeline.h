@@ -38,7 +38,7 @@ struct MachineParams {
     float balance;
 
     explicit MachineParams(int parallelism, uint64_t llc, float balance)
-            : parallelism(parallelism), last_level_cache_size(llc), balance(balance) {
+        : parallelism(parallelism), last_level_cache_size(llc), balance(balance) {
     }
 
     /** Default machine parameters for generic CPU architecture. */
@@ -183,7 +183,6 @@ public:
     AutoSchedulerResults auto_schedule(const std::string &autoscheduler_name,
                                        const Target &target,
                                        const MachineParams &arch_params = MachineParams::generic());
-
 
     /** Add a new the autoscheduler method with the given name. Does not affect the current default autoscheduler.
      * It is an error to call this with the same name multiple times. */

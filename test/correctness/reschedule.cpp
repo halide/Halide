@@ -18,7 +18,6 @@ int my_trace(void *user_context, const halide_trace_event_t *ev) {
     return 0;
 }
 
-
 int main(int argc, char **argv) {
     Func f;
     Var x;

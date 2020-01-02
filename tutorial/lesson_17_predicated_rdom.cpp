@@ -55,7 +55,7 @@ int main(int argc, char **argv) {
         // bounding box, such that the update is performed only if the
         // given predicate evaluates to true, i.e. within the circular
         // region.
-        r.where((r.x - 3)*(r.x - 3) + (r.y - 3)*(r.y - 3) <= 10);
+        r.where((r.x - 3) * (r.x - 3) + (r.y - 3) * (r.y - 3) <= 10);
 
         // After defining the predicate, we then define the update.
         circle(r.x, r.y) *= 2;
@@ -75,7 +75,7 @@ int main(int argc, char **argv) {
         for (int r_y = 0; r_y < 7; r_y++) {
             for (int r_x = 0; r_x < 7; r_x++) {
                 // Update is only performed if the predicate evaluates to true.
-                if ((r_x - 3)*(r_x - 3) + (r_y - 3)*(r_y - 3) <= 10) {
+                if ((r_x - 3) * (r_x - 3) + (r_y - 3) * (r_y - 3) <= 10) {
                     c_result[r_y][r_x] *= 2;
                 }
             }
@@ -107,8 +107,8 @@ int main(int argc, char **argv) {
         // Next, let's add the three predicates to the RDom using
         // multiple calls to RDom::where
         r.where(r.x + r.y > 5);
-        r.where(3*r.y - 2*r.x < 15);
-        r.where(4*r.x - r.y < 20);
+        r.where(3 * r.y - 2 * r.x < 15);
+        r.where(4 * r.x - r.y < 20);
 
         // We can also pack the multiple predicates into one like so:
         // r.where((r.x + r.y > 5) && (3*r.y - 2*r.x < 15) && (4*r.x - r.y < 20));
@@ -131,7 +131,7 @@ int main(int argc, char **argv) {
         for (int r_y = 0; r_y < 10; r_y++) {
             for (int r_x = 0; r_x < 8; r_x++) {
                 // Update is only performed if the predicate evaluates to true.
-                if ((r_x + r_y > 5) && (3*r_y - 2*r_x < 15) && (4*r_x - r_y < 20)) {
+                if ((r_x + r_y > 5) && (3 * r_y - 2 * r_x < 15) && (4 * r_x - r_y < 20)) {
                     c_result[r_y][r_x] *= 2;
                 }
             }

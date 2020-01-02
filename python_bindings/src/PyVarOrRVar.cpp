@@ -12,8 +12,7 @@ void define_var_or_rvar(py::module &m) {
         .def("name", &VarOrRVar::name)
         .def_readonly("var", &VarOrRVar::var)
         .def_readonly("rvar", &VarOrRVar::rvar)
-        .def_readonly("is_rvar", &VarOrRVar::is_rvar)
-    ;
+        .def_readonly("is_rvar", &VarOrRVar::is_rvar);
 
     py::implicitly_convertible<Var, VarOrRVar>();
     py::implicitly_convertible<RVar, VarOrRVar>();

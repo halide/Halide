@@ -5,10 +5,11 @@
 extern "C" {
 
 typedef int32_t (*trace_fn)(void *, const halide_trace_event_t *);
-
 }
 
-namespace Halide { namespace Runtime { namespace Internal {
+namespace Halide {
+namespace Runtime {
+namespace Internal {
 
 // A spinlock that allows for shared and exclusive access. It's
 // equivalent to a reader-writer lock, but in my case the "readers"
@@ -44,7 +45,7 @@ public:
         }
     }
 
-     __attribute__((always_inline)) void release_shared() {
+    __attribute__((always_inline)) void release_shared() {
         __sync_fetch_and_sub(&lock, 1);
     }
 
@@ -66,10 +67,12 @@ public:
     }
 
     __attribute__((always_inline)) void init() {
-    	lock = 0;
+        lock = 0;
     }
 
-    SharedExclusiveSpinLock() : lock(0) {}
+    SharedExclusiveSpinLock()
+        : lock(0) {
+    }
 };
 
 const static int buffer_size = 1024 * 1024;
@@ -99,7 +102,6 @@ class TraceBuffer {
     }
 
 public:
-
     // Wait for all writers to finish with their packets, stall any
     // new writers, and flush the buffer to the fd.
     __attribute__((always_inline)) void flush(void *user_context, int fd) {
@@ -137,21 +139,25 @@ public:
     }
 
     __attribute__((always_inline)) void init() {
-    	cursor = 0;
-    	overage = 0;
-    	lock.init();
+        cursor = 0;
+        overage = 0;
+        lock.init();
     }
 
-    TraceBuffer() : cursor(0), overage(0) {}
+    TraceBuffer()
+        : cursor(0), overage(0) {
+    }
 };
 
 WEAK TraceBuffer *halide_trace_buffer = NULL;
-WEAK int halide_trace_file = -1; // -1 indicates uninitialized
+WEAK int halide_trace_file = -1;  // -1 indicates uninitialized
 WEAK int halide_trace_file_lock = 0;
 WEAK bool halide_trace_file_initialized = false;
 WEAK void *halide_trace_file_internally_opened = NULL;
 
-}}}
+}  // namespace Internal
+}  // namespace Runtime
+}  // namespace Halide
 
 extern "C" {
 
@@ -211,7 +217,9 @@ WEAK int32_t halide_default_trace(void *user_context, const halide_trace_event_t
 
         // Round up bits to 8, 16, 32, or 64
         int print_bits = 8;
-        while (print_bits < e->type.bits) print_bits <<= 1;
+        while (print_bits < e->type.bits) {
+            print_bits <<= 1;
+        }
         halide_assert(user_context, print_bits <= 64 && "Tracing bad type");
 
         // Otherwise, use halide_print and a plain-text format
@@ -285,7 +293,7 @@ WEAK int32_t halide_default_trace(void *user_context, const halide_trace_event_t
                     if (print_bits == 32) {
                         ss << ((float *)(e->value))[i];
                     } else if (print_bits == 16) {
-                        ss.write_float16_from_bits( ((uint16_t *)(e->value))[i]);
+                        ss.write_float16_from_bits(((uint16_t *)(e->value))[i]);
                     } else {
                         ss << ((double *)(e->value))[i];
                     }
@@ -314,13 +322,17 @@ WEAK int32_t halide_default_trace(void *user_context, const halide_trace_event_t
     return my_id;
 }
 
-} // extern "C"
+}  // extern "C"
 
-namespace Halide { namespace Runtime { namespace Internal {
+namespace Halide {
+namespace Runtime {
+namespace Internal {
 
 WEAK trace_fn halide_custom_trace = halide_default_trace;
 
-}}} // namespace Halide::Runtime::Internal
+}
+}  // namespace Runtime
+}  // namespace Halide
 
 extern "C" {
 
@@ -376,10 +388,8 @@ WEAK int halide_shutdown_trace() {
 }
 
 namespace {
-__attribute__((destructor))
-WEAK void halide_trace_cleanup() {
+WEAK __attribute__((destructor)) void halide_trace_cleanup() {
     halide_shutdown_trace();
 }
-}
-
+}  // namespace
 }

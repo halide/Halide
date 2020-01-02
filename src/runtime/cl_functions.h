@@ -3,6 +3,8 @@
 // the CL_FN macro, and then include this file, sometimes repeatedly
 // within the same compilation unit.
 
+// clang-format off
+
 #ifndef CL_FN
 #define CL_FN(ret, fn, args)
 #endif
@@ -350,3 +352,5 @@ CL_FN(cl_int,
                                cl_event *       /* event */));
 
 #undef CL_FN
+
+// clang-format on

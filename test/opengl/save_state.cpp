@@ -214,7 +214,7 @@ private:
     GLuint initial_vertex_array_binding;
 
 public:
-    bool errors{ false };
+    bool errors{false};
 
     // This sets most values to generated or arbitrary values, which the
     // halide calls would be unlikely to accidentally use.  But for boolean

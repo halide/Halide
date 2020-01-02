@@ -10,7 +10,7 @@ int main(int argc, char **argv) {
     Func f, g, h, j;
     Var x, y;
     f(x, y) = x + y;
-    g(x, y) = cast<float>(f(x, y) + f(x+1, y))*p;
+    g(x, y) = cast<float>(f(x, y) + f(x + 1, y)) * p;
     h(x, y) = f(x, y) + g(x, y);
     j(x, y) = h(x, y) * 2;
 

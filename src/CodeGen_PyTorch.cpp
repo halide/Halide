@@ -17,9 +17,6 @@ CodeGen_PyTorch::CodeGen_PyTorch(std::ostream &s)
 void CodeGen_PyTorch::compile(const Module &module) {
     const Target target = module.target();
 
-    stream << "#include \"torch/extension.h\"\n";
-    stream << "#include \"HalideBuffer.h\"\n";
-    stream << "#include \"HalidePyTorchHelpers.h\"\n";
 
     if (target.has_feature(Target::CUDA)) {
         if (!target.has_feature(Target::UserContext)) {
@@ -28,7 +25,14 @@ void CodeGen_PyTorch::compile(const Module &module) {
                           "Please add \"-user_context\" to the generator's target options.\n";
         }
         stream << "#include \"ATen/cuda/CUDAContext.h\"\n";
+        stream << "#include \"HalideBuffer.h\"\n";
         stream << "#include \"HalidePyTorchCudaHelpers.h\"\n";
+        stream << "#include \"HalidePyTorchHelpers.h\"\n";
+        stream << "#include \"torch/extension.h\"\n";
+    } else {
+        stream << "#include \"HalideBuffer.h\"\n";
+        stream << "#include \"HalidePyTorchHelpers.h\"\n";
+        stream << "#include \"torch/extension.h\"\n";
     }
 
     stream << "\n";
@@ -239,9 +243,9 @@ void CodeGen_PyTorch::test() {
 
     // The correct source concatenates CPU and GPU headers
     std::string correct_src =
-        R"GOLDEN_CODE(#include "torch/extension.h"
-#include "HalideBuffer.h"
+        R"GOLDEN_CODE(#include "HalideBuffer.h"
 #include "HalidePyTorchHelpers.h"
+#include "torch/extension.h"
 
 struct halide_buffer_t;
 struct halide_filter_metadata_t;
@@ -292,11 +296,11 @@ inline int test1_th_(at::Tensor &_buf, float _alpha, int32_t _beta) {
     return 0;
 }
 
-#include "torch/extension.h"
-#include "HalideBuffer.h"
-#include "HalidePyTorchHelpers.h"
 #include "ATen/cuda/CUDAContext.h"
+#include "HalideBuffer.h"
 #include "HalidePyTorchCudaHelpers.h"
+#include "HalidePyTorchHelpers.h"
+#include "torch/extension.h"
 
 struct halide_buffer_t;
 struct halide_filter_metadata_t;

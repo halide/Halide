@@ -33,19 +33,19 @@ WEAK void sincos(double x, double *s, double *c) {
 // weak here, and converted to linkonce in
 // LLVM_Runtime_Linker.cpp. They'll be stripped if not used.
 WEAK float asinhf(float x) {
-    return logf(x + sqrtf(1 + x*x));
+    return logf(x + sqrtf(1 + x * x));
 }
 
 WEAK double asinh(double x) {
-    return log(x + sqrt(1 + x*x));
+    return log(x + sqrt(1 + x * x));
 }
 
 WEAK float acoshf(float x) {
-    return logf(x + sqrtf(x*x - 1));
+    return logf(x + sqrtf(x * x - 1));
 }
 
 WEAK double acosh(double x) {
-    return log(x + sqrt(x*x - 1));
+    return log(x + sqrt(x * x - 1));
 }
 
 WEAK float atanhf(float x) {
@@ -55,5 +55,4 @@ WEAK float atanhf(float x) {
 WEAK double atanh(double x) {
     return 0.5 * log((1 + x) / (1 - x));
 }
-
 }

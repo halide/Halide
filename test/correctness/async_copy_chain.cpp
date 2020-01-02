@@ -7,11 +7,11 @@ Var x, y;
 void check(Func f) {
     Buffer<int> out = f.realize(256, 256);
     out.for_each_element([&](int x, int y) {
-            if (out(x, y) != x + y) {
-                printf("out(%d, %d) = %d instead of %d\n", x, y, out(x, y), x + y);
-                exit(1);
-            }
-        });
+        if (out(x, y) != x + y) {
+            printf("out(%d, %d) = %d instead of %d\n", x, y, out(x, y), x + y);
+            exit(1);
+        }
+    });
 }
 
 void make_pipeline(Func &A, Func &B) {
@@ -61,7 +61,6 @@ int main(int argc, char **argv) {
 
         check(B);
     }
-
 
     // Two copy stages, flat
     {
@@ -155,7 +154,6 @@ int main(int argc, char **argv) {
             check(B);
         }
     }
-
 
     printf("Success!\n");
     return 0;

@@ -38,7 +38,7 @@ namespace {
 // HALIDE_MUST_USE_RESULT defined here is intended to exactly
 // duplicate the definition in HalideRuntime.h (so that either or
 // both can be present, in any order).
-const char * const kDefineMustUseResult = R"INLINE_CODE(#ifndef HALIDE_MUST_USE_RESULT
+const char *const kDefineMustUseResult = R"INLINE_CODE(#ifndef HALIDE_MUST_USE_RESULT
 #ifdef __has_attribute
 #if __has_attribute(nodiscard)
 #define HALIDE_MUST_USE_RESULT [[nodiscard]]
@@ -2195,10 +2195,10 @@ void CodeGen_C::visit(const Call *op) {
             for (int i = 0; i < dimension; i++) {
                 stream
                     << get_indent() << "{"
-                    << values[i*4 + 0] << ", "
-                    << values[i*4 + 1] << ", "
-                    << values[i*4 + 2] << ", "
-                    << values[i*4 + 3] << "},\n";
+                    << values[i * 4 + 0] << ", "
+                    << values[i * 4 + 1] << ", "
+                    << values[i * 4 + 2] << ", "
+                    << values[i * 4 + 3] << "},\n";
             }
             indent--;
             stream << get_indent() << "};\n";

@@ -71,11 +71,11 @@ int main(int argc, char **argv) {
     // Make some input data in the range [-99, 0]
     Buffer<uint8_t> input(100);
     input.set_min(-99);
-    lambda(x, cast<uint8_t>(x*x)).realize(input);
+    lambda(x, cast<uint8_t>(x * x)).realize(input);
 
-    assert(input(-99) == (uint8_t)(-99*-99));
+    assert(input(-99) == (uint8_t)(-99 * -99));
 
-    f(x) = x*x;
+    f(x) = x * x;
 
     std::vector<ExternFuncArgument> args(2);
     args[0] = input;
@@ -94,7 +94,7 @@ int main(int argc, char **argv) {
     p.realize({h_buf, g_buf});
 
     for (int i = 0; i < 100; i++) {
-        uint8_t correct = 4*i*i;
+        uint8_t correct = 4 * i * i;
         if (h_buf(i) != correct) {
             printf("result(%d) = %d instead of %d\n", i, h_buf(i), correct);
             return -1;
