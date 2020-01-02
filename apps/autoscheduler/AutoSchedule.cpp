@@ -634,7 +634,35 @@ struct State {
         return root->exceeds_serial_extents_limit(false);
     }
 
-    bool exceeds_shared_memory_limit(const StageMap<ScheduleFeatures>& features, const Target &target) {
+    int64_t get_shared_mem_alloc_size(const LoopNest* loop) {
+        int64_t result = 0;
+
+        if (loop->gpu_label == thread) {
+            return result;
+        }
+
+        for (const auto *node : loop->store_at) {
+            const auto &bounds = loop->get_bounds(node);
+
+            int64_t alloc_size = node->bytes_per_point;
+            for (int i = 0; i < node->dimensions; i++) {
+                const auto &p = bounds->region_computed(i);
+                alloc_size *= p.extent();
+            }
+
+            if (node->dimensions > 0) {
+                result += alloc_size;
+            }
+        }
+
+        for (const auto& c : loop->children) {
+            result += get_shared_mem_alloc_size(c.get());
+        }
+
+        return result;
+    }
+
+    bool exceeds_shared_memory_limit(const Target &target) {
         if (!target.has_gpu_feature()) {
             return false;
         }
@@ -646,14 +674,9 @@ struct State {
         }
 
         for (const auto& c : root->children) {
-            auto working_set_inside_block = features.get(c->stage).working_set_at_task;
-            auto working_set_inside_thread = features.get(c->stage).working_set_at_thread;
-
-            auto shared_mem_alloc_size = working_set_inside_block - working_set_inside_thread;
-
             // If the working set is too large on the GPU, shared memory will be
             // exhausted, so reject any such schedules
-            if (shared_mem_alloc_size > limit) {
+            if (get_shared_mem_alloc_size(c.get()) > limit) {
                 return true;
             }
         }
@@ -667,6 +690,10 @@ struct State {
         }
 
         if (has_dynamic_allocation_inside_thread()) {
+            return false;
+        }
+
+        if (exceeds_shared_memory_limit(target)) {
             return false;
         }
 
@@ -687,10 +714,6 @@ struct State {
         }
 
         internal_assert(cost_model);
-
-        if (exceeds_shared_memory_limit(features, target)) {
-            return false;
-        }
 
         // Perform some addition pruning before burdening the cost model with silly states
         for (auto it = features.begin(); it != features.end(); it++) {
