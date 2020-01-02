@@ -71,13 +71,9 @@ BENCHMARKS = \
 all: $(BENCHMARKS)
 	make run_benchmarks
 
-ifneq ("$(wildcard /usr/include/cblas.h)","")
+.PHONY: test
 test: $(BIN)/test_halide_blas
 	$(BIN)/test_halide_blas
-else
-test:
-	@echo /usr/include/cblas.h not found: skipping linear_algebra tests...
-endif
 
 clean:
 	rm -rf $(BIN)
