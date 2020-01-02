@@ -27,7 +27,8 @@ public:
 protected:
     using IRGraphVisitor::visit;
 
-    void visit(const Store *op) override {
+    void visit(const Store *op) override
+    {
         IRGraphVisitor::visit(op);
         if (op->name == producer_name || starts_with(op->name, producer_name + ".")) {
             // This is a Store for the desginated Producer.
