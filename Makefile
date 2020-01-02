@@ -2303,9 +2303,9 @@ $(BIN_DIR)/HalideTraceViz: $(ROOT_DIR)/util/HalideTraceViz.cpp $(INCLUDE_DIR)/Ha
 $(BIN_DIR)/HalideTraceDump: $(ROOT_DIR)/util/HalideTraceDump.cpp $(ROOT_DIR)/util/HalideTraceUtils.cpp $(INCLUDE_DIR)/HalideRuntime.h $(ROOT_DIR)/tools/halide_image_io.h
 	$(CXX) $(OPTIMIZE) -std=c++11 $(filter %.cpp,$^) -I$(INCLUDE_DIR) -I$(ROOT_DIR)/tools -I$(ROOT_DIR)/src/runtime -L$(BIN_DIR) $(IMAGE_IO_CXX_FLAGS) $(IMAGE_IO_LIBS) -o $@
 
-# Run clang-format on most of the source. tutorials is explicitly
-# skipped, as those files are manually formatted to maximize
-# readability.
+# Run clang-format on most of the source. The tutorials directory is
+# explicitly skipped, as those files are manually formatted to
+# maximize readability.
 .PHONY: format
 format:
 	find ${ROOT_DIR}/apps ${ROOT_DIR}/src ${ROOT_DIR}/tools ${ROOT_DIR}/test -name *.cpp -o -name *.h -o -name *.c | xargs ${CLANG}-format -i -style=file
