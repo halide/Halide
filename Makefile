@@ -2308,5 +2308,5 @@ $(BIN_DIR)/HalideTraceDump: $(ROOT_DIR)/util/HalideTraceDump.cpp $(ROOT_DIR)/uti
 # maximize readability.
 .PHONY: format
 format:
-	find ${ROOT_DIR}/apps ${ROOT_DIR}/src ${ROOT_DIR}/tools ${ROOT_DIR}/test ${ROOT_DIR}/util ${ROOT_DIR}/python_bindings -name *.cpp -o -name *.h -o -name *.c | xargs ${CLANG}-format -i -style=file
+	find "${ROOT_DIR}/apps" "${ROOT_DIR}/src" "${ROOT_DIR}/tools" "${ROOT_DIR}/test" "${ROOT_DIR}/util" "${ROOT_DIR}/python_bindings" -name *.cpp -o -name *.h -o -name *.c | xargs ${CLANG}-format -i -style=file
 
