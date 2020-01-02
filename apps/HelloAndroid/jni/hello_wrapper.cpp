@@ -51,8 +51,9 @@ JNIEXPORT void JNICALL Java_com_example_hellohalide_CameraPreview_processFrame(
         LOGD("Resetting buffer format");
         ANativeWindow_setBuffersGeometry(win, w, h, 0);
         first_call = false;
-        for (int t = 0; t < 16; t++)
+        for (int t = 0; t < 16; t++) {
             times[t] = 0;
+        }
     }
 
     ANativeWindow_Buffer buf;

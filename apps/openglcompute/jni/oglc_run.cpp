@@ -45,7 +45,7 @@ struct timing {
             }
             gettimeofday(&t2, NULL);
             if (error) {
-                return (error);
+                return error;
             }
             double t = (t2.tv_sec - t1.tv_sec) * 1000.0 + (t2.tv_usec - t1.tv_usec) / 1000.0;
             if (t < best_t) {

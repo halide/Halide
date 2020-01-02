@@ -112,11 +112,11 @@ public:
                     .vectorize(j);
                 accum_vecs_transpose.vectorize(j);
 
-                sum_lanes.specialize(size >= vec_size).vectorize(i, vec_size);           //.unroll(i);
-                sum_lanes.update().specialize(size >= vec_size).vectorize(i, vec_size);  //.unroll(i);
+                sum_lanes.specialize(size >= vec_size).vectorize(i, vec_size);
+                sum_lanes.update().specialize(size >= vec_size).vectorize(i, vec_size);
 
-                sum_tail.specialize(size >= vec_size).vectorize(i, vec_size);           //.unroll(i);
-                sum_tail.update().specialize(size >= vec_size).vectorize(i, vec_size);  //.unroll(i);
+                sum_tail.specialize(size >= vec_size).vectorize(i, vec_size);
+                sum_tail.update().specialize(size >= vec_size).vectorize(i, vec_size);
             }
 
             A_.dim(0).set_min(0).dim(1).set_min(0);
@@ -238,11 +238,8 @@ public:
 
         x_.dim(0).set_min(0);
         y_.dim(0).set_min(0);
-        result_
-            .dim(0)
-            .set_bounds(0, x_.dim(0).extent())
-            .dim(1)
-            .set_bounds(0, y_.dim(0).extent());
+        result_.dim(0).set_bounds(0, x_.dim(0).extent());
+        result_.dim(1).set_bounds(0, y_.dim(0).extent());
     }
 };
 

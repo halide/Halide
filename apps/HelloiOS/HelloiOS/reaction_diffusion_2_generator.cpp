@@ -17,12 +17,8 @@ public:
                 .bound(c, 0, 3)
                 .vectorize(c)
                 .gpu_tile(x, y, xi, yi, 4, 4);
-            output
-                .dim(0)
-                .set_stride(3)
-                .dim(2)
-                .set_bounds(0, 3)
-                .set_stride(1);
+            output.dim(0).set_stride(3);
+            output.dim(2).set_bounds(0, 3).set_stride(1);
         }
     }
 
@@ -140,18 +136,10 @@ public:
                 .unroll(c)
                 .gpu_tile(clobber.x, clobber.y, 1, 1);
 
-            state
-                .dim(0)
-                .set_stride(3)
-                .dim(2)
-                .set_stride(1)
-                .set_extent(3);
-            new_state
-                .dim(0)
-                .set_stride(3)
-                .dim(2)
-                .set_stride(1)
-                .set_extent(3);
+            state.dim(0).set_stride(3);
+            state.dim(2).set_stride(1).set_extent(3);
+            new_state.dim(0).set_stride(3);
+            new_state.dim(2).set_stride(1).set_extent(3);
         } else {
             Var yi;
             new_state
@@ -213,19 +201,11 @@ public:
     }
 
     void schedule() {
-        render
-            .dim(0)
-            .set_stride(4)
-            .dim(2)
-            .set_stride(1)
-            .set_bounds(0, 4);
+        render.dim(0).set_stride(4);
+        render.dim(2).set_stride(1).set_bounds(0, 4);
         if (get_target().has_gpu_feature()) {
-            state
-                .dim(0)
-                .set_stride(3)
-                .dim(2)
-                .set_stride(1)
-                .set_bounds(0, 3);
+            state.dim(0).set_stride(3);
+            state.dim(2).set_stride(1).set_bounds(0, 3);
             render
                 .reorder(c, x, y)
                 .unroll(c)
