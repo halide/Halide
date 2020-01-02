@@ -17,7 +17,6 @@ CodeGen_PyTorch::CodeGen_PyTorch(std::ostream &s)
 void CodeGen_PyTorch::compile(const Module &module) {
     const Target target = module.target();
 
-
     if (target.has_feature(Target::CUDA)) {
         if (!target.has_feature(Target::UserContext)) {
             user_error << "Compile a PyTorch wrapper for a CUDA op requires the "

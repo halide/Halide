@@ -24,9 +24,9 @@ Expr Simplify::visit(const Mod *op, ExprInfo *bounds) {
         // large.
         if (b_bounds.max_defined && b_bounds.min_defined) {
             mod_bounds.max_defined = true;
-            mod_bounds.max = 0; // When b == 0
-            mod_bounds.max = std::max(mod_bounds.max, b_bounds.max - 1); // When b > 0
-            mod_bounds.max = std::max(mod_bounds.max, -1 - b_bounds.min); // When b < 0
+            mod_bounds.max = 0;                                            // When b == 0
+            mod_bounds.max = std::max(mod_bounds.max, b_bounds.max - 1);   // When b > 0
+            mod_bounds.max = std::max(mod_bounds.max, -1 - b_bounds.min);  // When b < 0
         }
 
         // If a is positive, mod can't make it larger

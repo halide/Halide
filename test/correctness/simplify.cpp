@@ -414,7 +414,7 @@ void check_algebra() {
     check(5 / x < 6, const_true());
     check(5 / x > -6, const_true());
     check(5 / x < 5, 5 / x < 5);
-    check(5 / x > -5, -5 < 5/x);
+    check(5 / x > -5, -5 < 5 / x);
     check(5 % x < 6, const_true());
     check(5 % x < 5, 5 % x < 5);
     check(5 % x >= 0, const_true());

@@ -78,7 +78,7 @@ struct MatcherState {
 
     // values of the lanes field with special meaning.
     static constexpr uint16_t signed_integer_overflow = 0x8000;
-    static constexpr uint16_t special_values_mask = 0x8000; // currently only one
+    static constexpr uint16_t special_values_mask = 0x8000;  // currently only one
 
     halide_type_t bound_const_type[max_wild];
 

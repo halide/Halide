@@ -97,7 +97,6 @@ Expr make_absd(Expr a, Expr b) {
     return cast(a.type(), absd(a, b));
 }
 
-
 Expr random_expr(Type T, int depth, bool overflow_undef) {
     typedef Expr (*make_bin_op_fn)(Expr, Expr);
     static make_bin_op_fn make_bin_op[] = {

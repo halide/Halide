@@ -16,7 +16,7 @@ int64_t mod(int64_t a, int64_t b) {
         return mod_imp(a, b);
     }
 }
-}
+}  // namespace
 
 class ComputeModulusRemainder : public IRVisitor {
 public:
@@ -389,7 +389,6 @@ ModulusRemainder operator%(const ModulusRemainder &a, const ModulusRemainder &b)
             modulus = 1;
         }
     }
-
 
     return {modulus, remainder};
 }
