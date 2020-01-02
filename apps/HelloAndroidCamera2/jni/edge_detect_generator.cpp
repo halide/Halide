@@ -4,7 +4,7 @@ namespace {
 
 class EdgeDetect : public Halide::Generator<EdgeDetect> {
 public:
-    Input<Buffer<uint8_t>>  input{"input" , 2};
+    Input<Buffer<uint8_t>> input{"input", 2};
     Output<Buffer<uint8_t>> result{"result", 2};
 
     void generate() {
