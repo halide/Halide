@@ -14,9 +14,9 @@ jobs:
       steps:
       - uses: actions/checkout@v2
       - uses: DoozyX/clang-format-lint-action@v0.5
-      with:
-          source: '.'
-          # Our tutorials have special formatting: skip them
-          exclude: './tutorial'
-          extensions: 'h,c,cpp'
-          clangFormatVersion: 9
+        with:
+            source: '.'
+            # Our tutorials have special formatting: skip them
+            exclude: './tutorial'
+            extensions: 'h,c,cpp'
+            clangFormatVersion: 9
