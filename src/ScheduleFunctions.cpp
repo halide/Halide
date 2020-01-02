@@ -1341,7 +1341,8 @@ private:
             const auto &f2_it = env.find(pair.func_2);
             internal_assert(f2_it != env.end());
             const vector<Dim> &dims_2 =
-                pair.stage_2 == 0 ? f2_it->second.definition().schedule().dims() : f2_it->second.update((int)(pair.stage_2 - 1)).schedule().dims();
+                (pair.stage_2 == 0) ? f2_it->second.definition().schedule().dims() :
+                                      f2_it->second.update((int)(pair.stage_2 - 1)).schedule().dims();
 
             const auto &iter = std::find_if(dims.begin(), dims.end(),
                                             [&pair](const Dim &d) { return var_name_match(d.var, pair.var_name); });
