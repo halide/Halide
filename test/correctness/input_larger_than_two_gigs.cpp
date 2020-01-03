@@ -1,6 +1,6 @@
 #include "Halide.h"
-#include <stdio.h>
 #include <memory>
+#include <stdio.h>
 
 int error_occurred = false;
 void halide_error(void *ctx, const char *msg) {
@@ -24,7 +24,7 @@ int main(int argc, char **argv) {
 
     Var x;
     Func grand_total;
-    grand_total() = cast<uint64_t>(input(0, 0, 0) + input(input.dim(0).extent()-1, input.dim(1).extent()-1, input.dim(2).extent()-1));
+    grand_total() = cast<uint64_t>(input(0, 0, 0) + input(input.dim(0).extent() - 1, input.dim(1).extent() - 1, input.dim(2).extent() - 1));
     grand_total.set_error_handler(&halide_error);
 
     Target t = get_jit_target_from_environment();

@@ -36,7 +36,7 @@ int main(int argc, char **argv) {
         Func f, g;
 
         f(x) = call_counter(x, 0);
-        g(x) = f(x) + f(x-1);
+        g(x) = f(x) + f(x - 1);
 
         f.store_root().compute_at(g, x);
 
@@ -54,7 +54,7 @@ int main(int argc, char **argv) {
         count = 0;
         Func f, g, h;
         f(x) = call_counter(x, 0);
-        g(x) = f(x) + f(x-1);
+        g(x) = f(x) + f(x - 1);
         h(x) = g(x);
 
         f.store_root().compute_at(g, x);
@@ -104,7 +104,7 @@ int main(int argc, char **argv) {
         f(r, y) = call_counter(r, y);
         f.store_root().compute_at(g, y);
 
-        g(x, y) = f(x, y) + f(x, y-1);
+        g(x, y) = f(x, y) + f(x, y - 1);
 
         Buffer<int> im = g.realize(10, 10);
 
@@ -112,7 +112,7 @@ int main(int argc, char **argv) {
         // x, and (y .. y-1) in y. Sliding window optimization means that
         // we can skip the y-1 case in all but the first iteration.
         if (count != 100 * 11) {
-            printf("f was called %d times instead of %d times\n", count, 100*11);
+            printf("f was called %d times instead of %d times\n", count, 100 * 11);
             return -1;
         }
     }
@@ -123,13 +123,13 @@ int main(int argc, char **argv) {
 
         count = 0;
         f(x, y) = call_counter(x, y);
-        g(x, y) = f(x-1, y) + f(x, y) + f(x, y-1);
+        g(x, y) = f(x - 1, y) + f(x, y) + f(x, y - 1);
         f.store_root().compute_at(g, x);
 
         Buffer<int> im = g.realize(10, 10);
 
-        if (count != 11*11) {
-            printf("f was called %d times instead of %d times\n", count, 11*11);
+        if (count != 11 * 11) {
+            printf("f was called %d times instead of %d times\n", count, 11 * 11);
             return -1;
         }
     }
@@ -141,7 +141,7 @@ int main(int argc, char **argv) {
         count = 0;
         f(x, y) = call_counter(x, y);
         // When x was two smaller the second term was computed. When y was two smaller the third term was computed.
-        g(x, y) = f(x+y, x-y) + f((x-2)+y, (x-2)-y) + f(x+(y-2), x-(y-2));
+        g(x, y) = f(x + y, x - y) + f((x - 2) + y, (x - 2) - y) + f(x + (y - 2), x - (y - 2));
         f.store_root().compute_at(g, x);
 
         Buffer<int> im = g.realize(10, 10);
@@ -154,8 +154,8 @@ int main(int argc, char **argv) {
     {
         // Now make sure Halide folds the example in Func.h down to a stack allocation
         Func f, g;
-        f(x, y) = x*y;
-        g(x, y) = f(x, y) + f(x+1, y) + f(x, y+1) + f(x+1, y+1);
+        f(x, y) = x * y;
+        g(x, y) = f(x, y) + f(x + 1, y) + f(x, y + 1) + f(x + 1, y + 1);
         f.store_at(g, y).compute_at(g, x);
         g.set_custom_allocator(&my_malloc, &my_free);
         Buffer<int> im = g.realize(10, 10);
@@ -187,7 +187,7 @@ int main(int argc, char **argv) {
         Func f, g;
 
         f(x) = call_counter(x, 0);
-        g(x) = f(x/3);
+        g(x) = f(x / 3);
 
         f.store_root().compute_at(g, x);
 
@@ -206,8 +206,8 @@ int main(int argc, char **argv) {
         Var x, xi;
         Func f, g;
 
-        f(x) = call_counter(x, 0) + x*x;
-        g(x) = f(x) + f(x-1);
+        f(x) = call_counter(x, 0) + x * x;
+        g(x) = f(x) + f(x - 1);
 
         g.split(x, x, xi, 10);
         f.store_root().compute_at(g, x).unroll(x);

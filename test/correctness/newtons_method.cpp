@@ -27,7 +27,7 @@ int find_pi() {
     // 10 steps is more than sufficient for double precision
     RDom r(0, 10);
     // We have to introduce a dummy dependence on r, because the iteration domain isn't otherwise referenced.
-    f() -= value/deriv + (r*0);
+    f() -= value / deriv + (r * 0);
 
     T newton_result = evaluate_may_gpu<T>(f());
 
@@ -47,7 +47,7 @@ int find_pi() {
     x0 = select(baseline > 0, x0, x1);
 
     // Introduce a dummy dependence on r
-    x0 += r*0;
+    x0 += r * 0;
 
     Expr y0 = sin(x0);
 

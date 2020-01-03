@@ -44,6 +44,7 @@ Expr Simplify::visit(const Sub *op, ExprInfo *bounds) {
             return rewrite.result;
         }
 
+        // clang-format off
         if (EVAL_IN_LAMBDA
             ((!op->type.is_uint() && rewrite(x - c0, x + fold(-c0), !overflows(-c0))) ||
              rewrite(x - x, 0) || // We want to remutate this just to get better bounds
@@ -277,6 +278,7 @@ Expr Simplify::visit(const Sub *op, ExprInfo *bounds) {
             return mutate(std::move(rewrite.result), bounds);
         }
     }
+    // clang-format on
 
     const Shuffle *shuffle_a = a.as<Shuffle>();
     const Shuffle *shuffle_b = b.as<Shuffle>();

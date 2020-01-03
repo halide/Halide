@@ -9,13 +9,13 @@
 
 namespace Testing {
 
-template <typename T>
+template<typename T>
 bool neq(T a, T b, T tol) {
     return std::abs(a - b) > tol;
 }
 
 // Check 3-dimension buffer
-template <typename T, typename F>
+template<typename T, typename F>
 auto check_result(const Halide::Buffer<T> &buf, T tol, F f) -> decltype(std::declval<F>()(0, 0, 0), bool()) {
     class err : std::exception {
     public:
@@ -47,14 +47,14 @@ auto check_result(const Halide::Buffer<T> &buf, T tol, F f) -> decltype(std::dec
                 }
             }
         });
-    } catch (err&) {
+    } catch (err &) {
         return false;
     }
     return true;
 }
 
 // Check 2-dimension buffer
-template <typename T, typename F>
+template<typename T, typename F>
 auto check_result(const Halide::Buffer<T> &buf, T tol, F f) -> decltype(std::declval<F>()(0, 0), bool()) {
     class err : std::exception {};
     try {
@@ -70,17 +70,17 @@ auto check_result(const Halide::Buffer<T> &buf, T tol, F f) -> decltype(std::dec
                 throw err();
             }
         });
-    } catch (err&) {
+    } catch (err &) {
         return false;
     }
     return true;
 }
 
 // Shorthand to check with tolerance=0
-template <typename T, typename Func>
+template<typename T, typename Func>
 bool check_result(const Halide::Buffer<T> &buf, Func f) {
     return check_result<T>(buf, 0, f);
 }
-}
+}  // namespace Testing
 
 #endif  // _TESTING_H_

@@ -9,7 +9,7 @@ int main(int argc, char **argv) {
     Func f;
     Var x, y, xi, yi;
     RDom r(0, 100);
-    f(x, y) = sum(sqrt(sqrt(sqrt(sqrt(x+y+r)))));
+    f(x, y) = sum(sqrt(sqrt(sqrt(sqrt(x + y + r)))));
 
     Target t = get_jit_target_from_environment();
 

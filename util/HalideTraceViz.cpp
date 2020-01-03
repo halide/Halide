@@ -11,8 +11,8 @@
 #include <vector>
 
 #ifdef _MSC_VER
-#include <io.h>
 #include <fcntl.h>
+#include <io.h>
 #ifndef STDIN_FILENO
 #define STDIN_FILENO 0
 #endif
@@ -23,8 +23,8 @@
 #include <unistd.h>
 #endif
 
-#include "inconsolata.h"
 #include "HalideRuntime.h"
+#include "inconsolata.h"
 
 #include "halide_trace_config.h"
 
@@ -87,10 +87,10 @@ struct fail {
         return *this;
     }
 
-    #ifdef _MSC_VER
-    #pragma warning(push)
-    #pragma warning(disable:4722)  // destructor never returns, potential memory leak
-    #endif
+#ifdef _MSC_VER
+#pragma warning(push)
+#pragma warning(disable : 4722)  // destructor never returns, potential memory leak
+#endif
     ~fail() {
         if (msg.str().back() != '\n') {
             msg << '\n';
@@ -98,9 +98,9 @@ struct fail {
         std::cerr << msg.str();
         exit(1);
     }
-    #ifdef _MSC_VER
-    #pragma warning(pop)
-    #endif
+#ifdef _MSC_VER
+#pragma warning(pop)
+#endif
 };
 
 // -------------------------------------------------------------
@@ -108,26 +108,37 @@ struct fail {
 // Combine type-and-code into a single integer to avoid nested switches.
 // Must be constexpr to allow use in case clauses.
 inline static constexpr int halide_type_code(halide_type_code_t code, int bits) {
-    return (((int) code) << 8) | bits;
+    return (((int)code) << 8) | bits;
 }
 
 template<typename T>
-T value_as(const halide_type_t &type, const halide_scalar_value_t& value) {
-    switch (halide_type_code((halide_type_code_t) type.code, type.bits)) {
-        case halide_type_code(halide_type_int, 8):    return (T) value.u.i8;
-        case halide_type_code(halide_type_int, 16):   return (T) value.u.i16;
-        case halide_type_code(halide_type_int, 32):   return (T) value.u.i32;
-        case halide_type_code(halide_type_int, 64):   return (T) value.u.i64;
-        case halide_type_code(halide_type_uint, 1):   return (T) value.u.b;
-        case halide_type_code(halide_type_uint, 8):   return (T) value.u.u8;
-        case halide_type_code(halide_type_uint, 16):  return (T) value.u.u16;
-        case halide_type_code(halide_type_uint, 32):  return (T) value.u.u32;
-        case halide_type_code(halide_type_uint, 64):  return (T) value.u.u64;
-        case halide_type_code(halide_type_float, 32): return (T) value.u.f32;
-        case halide_type_code(halide_type_float, 64): return (T) value.u.f64;
-        default:
-            fail() << "Can't convert packet with type: " << (int) type.code << "bits: " << type.bits;
-            return (T) 0;
+T value_as(const halide_type_t &type, const halide_scalar_value_t &value) {
+    switch (halide_type_code((halide_type_code_t)type.code, type.bits)) {
+    case halide_type_code(halide_type_int, 8):
+        return (T)value.u.i8;
+    case halide_type_code(halide_type_int, 16):
+        return (T)value.u.i16;
+    case halide_type_code(halide_type_int, 32):
+        return (T)value.u.i32;
+    case halide_type_code(halide_type_int, 64):
+        return (T)value.u.i64;
+    case halide_type_code(halide_type_uint, 1):
+        return (T)value.u.b;
+    case halide_type_code(halide_type_uint, 8):
+        return (T)value.u.u8;
+    case halide_type_code(halide_type_uint, 16):
+        return (T)value.u.u16;
+    case halide_type_code(halide_type_uint, 32):
+        return (T)value.u.u32;
+    case halide_type_code(halide_type_uint, 64):
+        return (T)value.u.u64;
+    case halide_type_code(halide_type_float, 32):
+        return (T)value.u.f32;
+    case halide_type_code(halide_type_float, 64):
+        return (T)value.u.f64;
+    default:
+        fail() << "Can't convert packet with type: " << (int)type.code << "bits: " << type.bits;
+        return (T)0;
     }
 }
 
@@ -221,7 +232,7 @@ struct FuncInfo {
             const int *coords = p.coordinates();
             for (int i = 0; i < std::min(16, p.dimensions / p.type.lanes); i++) {
                 for (int lane = 0; lane < p.type.lanes; lane++) {
-                    int coord = coords[i*p.type.lanes + lane];
+                    int coord = coords[i * p.type.lanes + lane];
                     if (loads + stores == 0 && lane == 0) {
                         min_coord[i] = coord;
                         max_coord[i] = coord + 1;
@@ -275,12 +286,11 @@ struct VizState {
 
 // -------------------------------------------------------------
 
-
 // -------------------------------------------------------------
 
 std::string usage() {
     return
-            R"USAGE(
+        R"USAGE(
 HalideTraceViz accepts Halide-generated binary tracing packets from
 stdin, and outputs them as raw 8-bit rgba32 pixel values to
 stdout. You should pipe the output of HalideTraceViz into a video
@@ -392,7 +402,7 @@ Funcs.
 // a zoom factor of 1. This uses the same recursive approach as fill_realization()
 // for simplicity.
 void calc_2d_size(const std::vector<Range> &dims, const std::vector<Point> &strides, Range *x, Range *y,
-                      int current_dimension = 0, int x_off = 0, int y_off = 0) {
+                  int current_dimension = 0, int x_off = 0, int y_off = 0) {
     if (current_dimension == 0) {
         x->min = 2147483647;
         x->extent = -2147483647;
@@ -433,7 +443,7 @@ void finalize_func_config_values(const GlobalConfig &globals, FuncInfo &fi) {
     safe.load_cost = 0;
     safe.store_cost = 1;
     safe.pos = {0, 0};
-    safe.strides = { {1, 0}, {0, 1} };
+    safe.strides = {{1, 0}, {0, 1}};
     safe.color_dim = -1;
     safe.min = 0.0;
     safe.max = 1.0;
@@ -447,9 +457,9 @@ void finalize_func_config_values(const GlobalConfig &globals, FuncInfo &fi) {
         // HTV doesn't deal with Tuple-valued Funcs very well.
         const halide_type_t &type = fi.type_and_dim.types.at(0);
         if (type.code == halide_type_uint) {
-            safe.max = (double) ((1 << type.bits) - 1);
+            safe.max = (double)((1 << type.bits) - 1);
         } else if (type.code == halide_type_int) {
-            double d = (double) (1 << (type.bits - 1));
+            double d = (double)(1 << (type.bits - 1));
             safe.max = d - 1;
             // safe.min = -d;
             // In practice, assuming a min of zero (rather then -INT_MIN)
@@ -479,8 +489,7 @@ void do_auto_layout(const GlobalConfig &globals, const std::string &func_name, F
     const Point &pad = globals.auto_layout_pad;
     Point cell_size = {
         globals.frame_size.x / globals.auto_layout_grid.x,
-        globals.frame_size.y / globals.auto_layout_grid.y
-    };
+        globals.frame_size.y / globals.auto_layout_grid.y};
     info() << "cell_size is " << cell_size << "\n";
     info() << "auto_layout_pad is " << pad << "\n";
 
@@ -496,7 +505,7 @@ void do_auto_layout(const GlobalConfig &globals, const std::string &func_name, F
             } else if ((dims[0].extent == 3 || dims[0].extent == 4)) {
                 fi.config.color_dim = 0;
                 if (fi.config.strides.empty()) {
-                    fi.config.strides = { {0, 0}, {1, 0}, {0, 1} };
+                    fi.config.strides = {{0, 0}, {1, 0}, {0, 1}};
                 }
             }
         }
@@ -508,7 +517,7 @@ void do_auto_layout(const GlobalConfig &globals, const std::string &func_name, F
         // zero-stride pairs as needed (this simplifies rendering checks
         // later on)
         if (fi.config.strides.empty()) {
-            fi.config.strides = { {1, 0}, {0, 1} };
+            fi.config.strides = {{1, 0}, {0, 1}};
         }
         while (fi.config.strides.size() < fi.type_and_dim.dims.size()) {
             fi.config.strides.push_back({0, 0});
@@ -521,8 +530,8 @@ void do_auto_layout(const GlobalConfig &globals, const std::string &func_name, F
 
         // Use that size to calculate the zoom we need -- this chooses
         // a zoom that maximizes the size within the cell.
-        float zoom_x = (float) (cell_size.x - pad.x) / (float) xr.extent;
-        float zoom_y = (float) (cell_size.y - pad.y) / (float) yr.extent;
+        float zoom_x = (float)(cell_size.x - pad.x) / (float)xr.extent;
+        float zoom_y = (float)(cell_size.y - pad.y) / (float)yr.extent;
         fi.config.zoom = std::min(zoom_x, zoom_y);
 
         // Try to choose an even-multiple zoom for better display
@@ -538,7 +547,7 @@ void do_auto_layout(const GlobalConfig &globals, const std::string &func_name, F
         } else if (fi.config.zoom < 1.f) {
             fi.config.zoom = ceil(fi.config.zoom * 20.f) / 20.f;
         }
-        info() << "zoom for " << func_name << " is " << zoom_x  << " " << zoom_y << " -> " << fi.config.zoom << "\n";
+        info() << "zoom for " << func_name << " is " << zoom_x << " " << zoom_y << " -> " << fi.config.zoom << "\n";
     }
 
     // Put the image at the top-left of the cell. (Should we try to
@@ -547,15 +556,15 @@ void do_auto_layout(const GlobalConfig &globals, const std::string &func_name, F
         fi.config.pos.x = col * cell_size.x + pad.x;
         fi.config.pos.y = row * cell_size.y + pad.y;
     }
-    info() << "pos for " << func_name << " is " << fi.config.pos.x  << " " << fi.config.pos.y << "\n";
+    info() << "pos for " << func_name << " is " << fi.config.pos.x << " " << fi.config.pos.y << "\n";
 
     if (fi.config.labels.empty()) {
-        std::string label = func_name + " (" + std::to_string((int) (fi.config.zoom * 100)) + "%)";
+        std::string label = func_name + " (" + std::to_string((int)(fi.config.zoom * 100)) + "%)";
         const int label_width = label.size() * inconsolata_char_width;
-        const int label_space = cell_size.x - pad.x*2;
+        const int label_space = cell_size.x - pad.x * 2;
         float h_scale = 1.f;
         if (label_width > label_space) {
-            h_scale = std::max(0.25f, std::min(1.f, (float) label_space / (float) label_width));
+            h_scale = std::max(0.25f, std::min(1.f, (float)label_space / (float)label_width));
             info() << "h_scale for label (" << label << " is " << h_scale << "\n";
         }
         fi.config.labels.push_back({label, {0, 0}, 10, h_scale});
@@ -577,12 +586,12 @@ void do_auto_layout(VizState &state) {
 }
 
 float calc_side_length(int min_cells, int width, int height) {
-    const float aspect_ratio = (float) width / (float) height;
+    const float aspect_ratio = (float)width / (float)height;
     const float p = ceil(sqrt(min_cells * aspect_ratio));
     const float par = p / aspect_ratio;
     const float s = floor(par) * p < min_cells ?
-                height / ceil(par) :
-                width / p;
+                        height / ceil(par) :
+                        width / p;
     return s;
 }
 
@@ -614,7 +623,8 @@ void process_args(int argc, char **argv, VizState *state) {
     const auto expect = [](bool cond, int i) {
         if (!cond) {
             if (i) {
-                fail() << "Argument parsing failed at argument " << i << "\n" << usage();
+                fail() << "Argument parsing failed at argument " << i << "\n"
+                       << usage();
             } else {
                 fail() << usage();
             }
@@ -626,9 +636,10 @@ void process_args(int argc, char **argv, VizState *state) {
         errno = 0;
         long result = strtol(str, &endptr, 0);
         if (errno == ERANGE || str == endptr) {
-            fail() << "Unable to parse '" << str << "' as an int\n" << usage();
+            fail() << "Unable to parse '" << str << "' as an int\n"
+                   << usage();
         }
-        return (int) result;
+        return (int)result;
     };
 
     const auto parse_float = [](const char *str) -> float {
@@ -636,7 +647,8 @@ void process_args(int argc, char **argv, VizState *state) {
         errno = 0;
         float result = strtof(str, &endptr);
         if (errno == ERANGE || str == endptr) {
-            fail() << "Unable to parse '" << str << "' as a float\n" << usage();
+            fail() << "Unable to parse '" << str << "' as a float\n"
+                   << usage();
         }
         return result;
     };
@@ -646,7 +658,8 @@ void process_args(int argc, char **argv, VizState *state) {
         errno = 0;
         double result = strtod(str, &endptr);
         if (errno == ERANGE || str == endptr) {
-            fail() << "Unable to parse '" << str << "' as a double\n" << usage();
+            fail() << "Unable to parse '" << str << "' as a double\n"
+                   << usage();
         }
         return result;
     };
@@ -733,7 +746,7 @@ void process_args(int argc, char **argv, VizState *state) {
             // A Label's position is relative to its Func's position;
             // the --label flag has always expected an absolute position,
             // so convert it to an offset.
-            Point offset = { config.pos.x - fi.config.pos.x, config.pos.y - fi.config.pos.y };
+            Point offset = {config.pos.x - fi.config.pos.x, config.pos.y - fi.config.pos.y};
             if (!labels_seen.count(func)) {
                 // If there is at least one --label specified for a Func,
                 // it overrides the entire previous std::set of labels, rather
@@ -750,7 +763,7 @@ void process_args(int argc, char **argv, VizState *state) {
             int dy = parse_int(argv[++i]);
             int n = parse_int(argv[++i]);
             FuncInfo &fi = funcs[func];
-            Point offset = { dx, dy };
+            Point offset = {dx, dy};
             if (!labels_seen.count(func)) {
                 // If there is at least one --label specified for a Func,
                 // it overrides the entire previous std::set of labels, rather
@@ -818,9 +831,9 @@ struct Surface {
             *dst = o;
         } else {
             // TODO: this could be done using 64-bit ops more simply
-            const uint8_t *a = (const uint8_t*)under;
-            const uint8_t *b = (const uint8_t*)over;
-            uint8_t *d = (uint8_t*)dst;
+            const uint8_t *a = (const uint8_t *)under;
+            const uint8_t *b = (const uint8_t *)over;
+            uint8_t *d = (uint8_t *)dst;
             d[0] = (alpha * b[0] + (255 - alpha) * a[0]) / 255;
             d[1] = (alpha * b[1] + (255 - alpha) * a[1]) / 255;
             d[2] = (alpha * b[2] + (255 - alpha) * a[2]) / 255;
@@ -844,7 +857,7 @@ struct Surface {
 
     // TODO this doesn't bounds-check against frame_size
     void do_draw_pixel(const float zoom, const int x, const int y, const uint32_t color, uint32_t *dst) {
-        const int izoom = (int) ceil(zoom);
+        const int izoom = (int)ceil(zoom);
         const int y_advance = frame_size.x - izoom;
         dst += frame_size.x * y + x;
         for (int dy = 0; dy < izoom; dy++) {
@@ -892,7 +905,7 @@ struct Surface {
         if (2 * current_dimension == p.dimensions) {
             const int x_min = x_off * fi.config.zoom + fi.config.pos.x;
             const int y_min = y_off * fi.config.zoom + fi.config.pos.y;
-            const int izoom = (int) ceil(fi.config.zoom);
+            const int izoom = (int)ceil(fi.config.zoom);
             fill_rect(x_min, y_min, izoom, izoom, color, dst);
         } else {
             const int *coords = p.coordinates();
@@ -910,7 +923,6 @@ struct Surface {
         }
     }
 
-
 public:
     Surface(const Point &fs)
         : frame_size(fs),
@@ -918,7 +930,8 @@ public:
           anim(frame_elems()),
           anim_decay(frame_elems()),
           text_buf(frame_elems()),
-          blend(frame_elems()) {}
+          blend(frame_elems()) {
+    }
 
     Surface(const Surface &) = delete;
     void operator=(const Surface &) = delete;
@@ -955,7 +968,7 @@ public:
             const int h_scale_numerator = std::ceil(std::min(1.f, h_scale) * 256);
             for (int fy = 0; fy < inconsolata_char_height; fy++) {
                 for (int fx = 0; fx < inconsolata_char_width; fx++) {
-                    int px = pos.x + (((inconsolata_char_width*c + fx) * h_scale_numerator) >> 8);
+                    int px = pos.x + (((inconsolata_char_width * c + fx) * h_scale_numerator) >> 8);
                     int py = pos.y - inconsolata_char_height + fy + 1;
                     if (px < 0 || px >= frame_size.x ||
                         py < 0 || py >= frame_size.y) continue;
@@ -979,10 +992,10 @@ public:
 
     void composite() {
         // Composite text over anim over image
-        uint32_t *anim_decay_px  = anim_decay.data();
-        uint32_t *anim_px  = anim.data();
+        uint32_t *anim_decay_px = anim_decay.data();
+        uint32_t *anim_px = anim.data();
         uint32_t *image_px = image.data();
-        uint32_t *text_px  = text_buf.data();
+        uint32_t *text_px = text_buf.data();
         uint32_t *blend_px = blend.data();
         for (size_t i = 0; i < image.size(); i++) {
             // anim over anim_decay -> anim_decay
@@ -1011,7 +1024,6 @@ public:
         std::fill(anim.begin(), anim.end(), 0);
     }
 };
-
 
 using FlagProcessor = std::function<void(VizState *state)>;
 
@@ -1061,8 +1073,8 @@ int run(bool ignore_trace_tags, FlagProcessor flag_processor) {
             state.globals.auto_layout_grid.y = state.globals.frame_size.y / cell_size.y;
             assert(state.globals.auto_layout_grid.x * state.globals.auto_layout_grid.y >= cells_needed);
             info() << "For cells_needed = " << cells_needed
-                << " using " << state.globals.auto_layout_grid.x << "x" << state.globals.auto_layout_grid.y << " grid"
-                << " with cells of size " << cell_size.x << "x" << cell_size.y;
+                   << " using " << state.globals.auto_layout_grid.x << "x" << state.globals.auto_layout_grid.y << " grid"
+                   << " with cells of size " << cell_size.x << "x" << cell_size.y;
         }
 
         // If globals.default_uninitialized_memory_color was never set, init to black or checkerboard.
@@ -1080,7 +1092,6 @@ int run(bool ignore_trace_tags, FlagProcessor flag_processor) {
         finalize_func_config_values(state.globals, state.funcs);
     };
 
-
     struct PipelineInfo {
         std::string name;
         int32_t id;
@@ -1095,7 +1106,7 @@ int run(bool ignore_trace_tags, FlagProcessor flag_processor) {
         // Hold for some number of frames once the trace has finished.
         if (end_counter) {
             halide_clock += state.globals.timestep;
-            if (end_counter >= (size_t) state.globals.hold_frames) {
+            if (end_counter >= (size_t)state.globals.hold_frames) {
                 break;
             }
         }
@@ -1108,7 +1119,7 @@ int run(bool ignore_trace_tags, FlagProcessor flag_processor) {
             while (halide_clock > video_clock) {
                 // Always render text last, since it's on top of everything
                 // and there's no need to re-render for every packet.
-                for (auto it = labels_being_drawn.begin(); it != labels_being_drawn.end(); ) {
+                for (auto it = labels_being_drawn.begin(); it != labels_being_drawn.end();) {
                     const Label &label = it->first;
                     int first_draw_clock = it->second;
                     int frames_since_first_draw = (halide_clock - first_draw_clock) / state.globals.timestep;
@@ -1169,7 +1180,7 @@ int run(bool ignore_trace_tags, FlagProcessor flag_processor) {
                 // TODO: May need to check parent_id here, as nested
                 // pipelines called via define_extern could emit these.
                 warn() << "trace_tags are only expected at the start of a visualization:"
-                    << " (" << p.trace_tag() << ") for func (" << p.func() << ")";
+                       << " (" << p.trace_tag() << ") for func (" << p.func() << ")";
             }
             if (FuncConfig::match(p.trace_tag())) {
                 if (ignore_trace_tags) {
@@ -1221,8 +1232,7 @@ int run(bool ignore_trace_tags, FlagProcessor flag_processor) {
                 state.funcs[qualified_name] = state.funcs[p.func()];
                 state.funcs.erase(p.func());
             } else {
-                warn() << "ignoring func " << qualified_name << " event " << p.event <<
-                          "; parent event " << p.parent_id << " " << pipeline.name;
+                warn() << "ignoring func " << qualified_name << " event " << p.event << "; parent event " << p.parent_id << " " << pipeline.name;
             }
         }
 
@@ -1242,7 +1252,6 @@ int run(bool ignore_trace_tags, FlagProcessor flag_processor) {
             }
         }
 
-
         if (fi.stats.first_packet_idx < 0) {
             fi.stats.first_packet_idx = packet_clock;
             fi.stats.qualified_name = qualified_name;
@@ -1250,8 +1259,7 @@ int run(bool ignore_trace_tags, FlagProcessor flag_processor) {
 
         switch (p.event) {
         case halide_trace_load:
-        case halide_trace_store:
-        {
+        case halide_trace_store: {
             if (p.event == halide_trace_store) {
                 // Stores take time proportional to the number of
                 // items stored times the cost of the func.
@@ -1267,7 +1275,7 @@ int run(bool ignore_trace_tags, FlagProcessor flag_processor) {
             // fi.config.strides are provided by the --stride flag, so it can contain anything; i
             // if you don't specify them at all, they default to {{1,0},{0,1} (aka size=2).
             // So if we have excess strides, just ignore them.
-            const int dims = std::min(p.dimensions/p.type.lanes, (int) fi.config.strides.size());
+            const int dims = std::min(p.dimensions / p.type.lanes, (int)fi.config.strides.size());
             const int *coords = p.coordinates();
             for (int lane = 0; lane < p.type.lanes; lane++) {
                 // Compute the screen-space x, y coord to draw this.
@@ -1302,7 +1310,7 @@ int run(bool ignore_trace_tags, FlagProcessor flag_processor) {
 
                     // Normalize it.
                     value = std::max(0.0, std::min(255.0, 255.0 * (value - fi.config.min) /
-                                                          (fi.config.max - fi.config.min)));
+                                                              (fi.config.max - fi.config.min)));
 
                     // Convert to 8-bit color.
                     uint8_t int_value = (uint8_t)value;
@@ -1368,7 +1376,7 @@ int run(bool ignore_trace_tags, FlagProcessor flag_processor) {
         info() << dumps.str();
 
         // Print stats about the Func gleaned from the trace.
-        std::vector<std::pair<std::string, FuncInfo> > funcs;
+        std::vector<std::pair<std::string, FuncInfo>> funcs;
         for (std::pair<std::string, FuncInfo> p : state.funcs) {
             funcs.push_back(p);
         }

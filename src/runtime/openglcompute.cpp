@@ -1,8 +1,8 @@
 #include "HalideRuntimeOpenGLCompute.h"
 #include "device_buffer_utils.h"
 #include "device_interface.h"
-#include "printer.h"
 #include "mini_opengl.h"
+#include "printer.h"
 
 // Implementation note: all function that directly or indirectly access the
 // runtime state in halide_openglcompute_state must be declared as WEAK, otherwise
@@ -15,67 +15,89 @@
 //  +GetError, GetString
 //  -CheckAndReportError
 //
-#define USED_GL_FUNCTIONS                                               \
-    GLFUNC(PFNGLATTACHSHADERPROC, AttachShader); \
-    GLFUNC(PFNGLBINDBUFFERPROC, BindBuffer); \
-    GLFUNC(PFNGLBINDBUFFERBASEPROC, BindBufferBase); \
-    GLFUNC(PFNGLBUFFERDATAPROC, BufferData); \
-    GLFUNC(PFNGLCREATEPROGRAMPROC, CreateProgram); \
-    GLFUNC(PFNGLCOMPILESHADERPROC, CompileShader); \
-    GLFUNC(PFNGLCREATESHADERPROC, CreateShader); \
-    GLFUNC(PFNGLDELETEBUFFERSPROC, DeleteBuffers); \
-    GLFUNC(PFNGLDELETEPROGRAMPROC, DeleteProgram); \
-    GLFUNC(PFNGLDELETESHADERPROC, DeleteShader); \
-    GLFUNC(PFNGLDISPATCHCOMPUTEPROC, DispatchCompute); \
-    GLFUNC(PFNGLFINISHPROC, Finish); \
-    GLFUNC(PFNGLGENBUFFERSPROC, GenBuffers); \
-    GLFUNC(PFNGLGETERRORPROC, GetError); \
+#define USED_GL_FUNCTIONS                                  \
+    GLFUNC(PFNGLATTACHSHADERPROC, AttachShader);           \
+    GLFUNC(PFNGLBINDBUFFERPROC, BindBuffer);               \
+    GLFUNC(PFNGLBINDBUFFERBASEPROC, BindBufferBase);       \
+    GLFUNC(PFNGLBUFFERDATAPROC, BufferData);               \
+    GLFUNC(PFNGLCREATEPROGRAMPROC, CreateProgram);         \
+    GLFUNC(PFNGLCOMPILESHADERPROC, CompileShader);         \
+    GLFUNC(PFNGLCREATESHADERPROC, CreateShader);           \
+    GLFUNC(PFNGLDELETEBUFFERSPROC, DeleteBuffers);         \
+    GLFUNC(PFNGLDELETEPROGRAMPROC, DeleteProgram);         \
+    GLFUNC(PFNGLDELETESHADERPROC, DeleteShader);           \
+    GLFUNC(PFNGLDISPATCHCOMPUTEPROC, DispatchCompute);     \
+    GLFUNC(PFNGLFINISHPROC, Finish);                       \
+    GLFUNC(PFNGLGENBUFFERSPROC, GenBuffers);               \
+    GLFUNC(PFNGLGETERRORPROC, GetError);                   \
     GLFUNC(PFNGLGETPROGRAMINFOLOGPROC, GetProgramInfoLog); \
-    GLFUNC(PFNGLGETPROGRAMIVPROC, GetProgramiv); \
-    GLFUNC(PFNGLGETSHADERINFOLOGPROC, GetShaderInfoLog); \
-    GLFUNC(PFNGLGETSHADERIVPROC, GetShaderiv); \
-    GLFUNC(PFNGLGETSTRINGPROC, GetString); \
-    GLFUNC(PFNGLLINKPROGRAMPROC, LinkProgram); \
-    GLFUNC(PFNGLMAPBUFFERRANGEPROC, MapBufferRange); \
-    GLFUNC(PFNGLMEMORYBARRIERPROC,  MemoryBarrier); \
-    GLFUNC(PFNGLSHADERSOURCEPROC, ShaderSource); \
-    GLFUNC(PFNGLUNIFORM1IPROC, Uniform1i); \
-    GLFUNC(PFNGLUNIFORM1IPROC, Uniform1ui); \
-    GLFUNC(PFNGLUNIFORM1FPROC, Uniform1f); \
-    GLFUNC(PFNGLUNMAPBUFFERPROC, UnmapBuffer); \
-    GLFUNC(PFNGLUSEPROGRAMPROC, UseProgram); \
-    GLFUNC(PFNGLGETACTIVEUNIFORM, GetActiveUniform); \
+    GLFUNC(PFNGLGETPROGRAMIVPROC, GetProgramiv);           \
+    GLFUNC(PFNGLGETSHADERINFOLOGPROC, GetShaderInfoLog);   \
+    GLFUNC(PFNGLGETSHADERIVPROC, GetShaderiv);             \
+    GLFUNC(PFNGLGETSTRINGPROC, GetString);                 \
+    GLFUNC(PFNGLLINKPROGRAMPROC, LinkProgram);             \
+    GLFUNC(PFNGLMAPBUFFERRANGEPROC, MapBufferRange);       \
+    GLFUNC(PFNGLMEMORYBARRIERPROC, MemoryBarrier);         \
+    GLFUNC(PFNGLSHADERSOURCEPROC, ShaderSource);           \
+    GLFUNC(PFNGLUNIFORM1IPROC, Uniform1i);                 \
+    GLFUNC(PFNGLUNIFORM1IPROC, Uniform1ui);                \
+    GLFUNC(PFNGLUNIFORM1FPROC, Uniform1f);                 \
+    GLFUNC(PFNGLUNMAPBUFFERPROC, UnmapBuffer);             \
+    GLFUNC(PFNGLUSEPROGRAMPROC, UseProgram);               \
+    GLFUNC(PFNGLGETACTIVEUNIFORM, GetActiveUniform);       \
     GLFUNC(PFNGLGETUNIFORMLOCATION, GetUniformLocation);
 
 using namespace Halide::Runtime::Internal;
 
-namespace Halide { namespace Runtime { namespace Internal { namespace OpenGLCompute {
+namespace Halide {
+namespace Runtime {
+namespace Internal {
+namespace OpenGLCompute {
 
 extern WEAK halide_device_interface_t openglcompute_device_interface;
 
 WEAK const char *gl_error_name(int32_t err) {
-  switch (err) {
-      case 0x500: return "GL_INVALID_ENUM"; break;
-      case 0x501: return "GL_INVALID_VALUE"; break;
-      case 0x502: return "GL_INVALID_OPERATION"; break;
-      case 0x503: return "GL_STACK_OVERFLOW"; break;
-      case 0x504: return "GL_STACK_UNDERFLOW"; break;
-      case 0x505: return "GL_OUT_OF_MEMORY"; break;
-      case 0x506: return "GL_INVALID_FRAMEBUFFER_OPERATION"; break;
-      case 0x507: return "GL_CONTEXT_LOST"; break;
-      case 0x8031: return "GL_TABLE_TOO_LARGE"; break;
-  }
-  return "<unknown GL error>";
+    switch (err) {
+    case 0x500:
+        return "GL_INVALID_ENUM";
+        break;
+    case 0x501:
+        return "GL_INVALID_VALUE";
+        break;
+    case 0x502:
+        return "GL_INVALID_OPERATION";
+        break;
+    case 0x503:
+        return "GL_STACK_OVERFLOW";
+        break;
+    case 0x504:
+        return "GL_STACK_UNDERFLOW";
+        break;
+    case 0x505:
+        return "GL_OUT_OF_MEMORY";
+        break;
+    case 0x506:
+        return "GL_INVALID_FRAMEBUFFER_OPERATION";
+        break;
+    case 0x507:
+        return "GL_CONTEXT_LOST";
+        break;
+    case 0x8031:
+        return "GL_TABLE_TOO_LARGE";
+        break;
+    }
+    return "<unknown GL error>";
 }
 
 struct HalideMalloc {
     __attribute__((always_inline)) HalideMalloc(void *user_context, size_t size)
-        : user_context(user_context), ptr(halide_malloc(user_context, size)) {}
+        : user_context(user_context), ptr(halide_malloc(user_context, size)) {
+    }
     __attribute__((always_inline)) ~HalideMalloc() {
         halide_free(user_context, ptr);
     }
-    void * const user_context;
-    void * const ptr;
+    void *const user_context;
+    void *const ptr;
 };
 
 struct KernelInfo {
@@ -105,7 +127,7 @@ struct GlobalState {
     bool initialized;
 
     // Declare pointers used OpenGL functions
-#define GLFUNC(PTYPE,VAR) PTYPE VAR
+#define GLFUNC(PTYPE, VAR) PTYPE VAR
     USED_GL_FUNCTIONS;
 #undef GLFUNC
 };
@@ -116,7 +138,7 @@ WEAK bool GlobalState::CheckAndReportError(void *user_context, const char *locat
         error(user_context)
             << "OpenGL error " << gl_error_name(err)
             << "(" << (int)err << ")"
-            << " at " << location << ".\n" ;
+            << " at " << location << ".\n";
         return true;
     }
     return false;
@@ -135,11 +157,11 @@ WEAK void debug_buffer(void *user_context, halide_buffer_t *buf) {
         << "  texture_id: " << (GLuint)buf->device << "\n"
         << "  host: " << buf->host << "\n"
         << "  extent: " << buf->dim[0].extent << " " << buf->dim[1].extent
-        << " " << buf->dim[2].extent << " " << buf->dim[3].extent <<  "\n"
+        << " " << buf->dim[2].extent << " " << buf->dim[3].extent << "\n"
         << "  stride: " << buf->dim[0].stride << " " << buf->dim[1].stride
-        << " " << buf->dim[2].stride << " " << buf->dim[3].stride <<  "\n"
+        << " " << buf->dim[2].stride << " " << buf->dim[3].stride << "\n"
         << "  min: " << buf->dim[0].min << " " << buf->dim[1].min
-        << " " << buf->dim[2].min << " " << buf->dim[3].min <<  "\n"
+        << " " << buf->dim[2].min << " " << buf->dim[3].min << "\n"
         << "  type: " << buf->type << "\n"
         << "  host_dirty: " << buf->host_dirty() << "\n"
         << "  device_dirty: " << buf->device_dirty() << "\n";
@@ -177,14 +199,14 @@ WEAK int halide_openglcompute_init(void *user_context) {
     }
 
     // Initialize pointers to OpenGL functions.
-#define GLFUNC(TYPE, VAR)                                                             \
-    if (load_gl_func(user_context, "gl" #VAR, (void**)&global_state.VAR, true) < 0) { \
-        return -1;                                                                    \
+#define GLFUNC(TYPE, VAR)                                                              \
+    if (load_gl_func(user_context, "gl" #VAR, (void **)&global_state.VAR, true) < 0) { \
+        return -1;                                                                     \
     }
     USED_GL_FUNCTIONS;
 #undef GLFUNC
 
-    debug(user_context) << "Halide running on "<< global_state.GetString(GL_VERSION) << "\n";
+    debug(user_context) << "Halide running on " << global_state.GetString(GL_VERSION) << "\n";
 
     global_state.initialized = true;
     return 0;
@@ -258,7 +280,6 @@ WEAK int halide_openglcompute_device_malloc(void *user_context, halide_buffer_t 
     for (int i = 0; i < buf->dimensions; i++) {
         halide_assert(user_context, buf->dim[i].stride >= 0);
     }
-
 
     debug(user_context) << "    allocating buffer, "
                         << "extents: " << buf->dim[0].extent << "x"
@@ -342,10 +363,11 @@ WEAK int halide_openglcompute_device_free(void *user_context, halide_buffer_t *b
 
 namespace {
 
-template <typename Source, typename Dest>
+template<typename Source, typename Dest>
 __attribute__((always_inline)) void converting_copy_memory_helper(const device_copy &copy, int d, int64_t src_off, int64_t dst_off) {
     // Skip size-1 dimensions
-    while (d >= 0 && copy.extent[d] == 1) d--;
+    while (d >= 0 && copy.extent[d] == 1)
+        d--;
 
     if (d == -1) {
         const Source *from = (Source *)(copy.src + src_off);
@@ -362,7 +384,7 @@ __attribute__((always_inline)) void converting_copy_memory_helper(const device_c
     }
 }
 
-}
+}  // namespace
 // Copy image data from host memory to texture.
 WEAK int halide_openglcompute_copy_to_device(void *user_context, halide_buffer_t *buf) {
 #ifdef DEBUG_RUNTIME
@@ -388,10 +410,10 @@ WEAK int halide_openglcompute_copy_to_device(void *user_context, halide_buffer_t
     if (global_state.CheckAndReportError(user_context, "oglc: BindBuffer")) { return 1; }
 
     debug(user_context) << "Calling global_state.MapBufferRange(GL_ARRAY_BUFFER, 0, " << (uint64_t)size << ", GL_MAP_READ_BIT|GL_MAP_WRITE_BIT)\n";
-    void* device_data = global_state.MapBufferRange(GL_ARRAY_BUFFER,
+    void *device_data = global_state.MapBufferRange(GL_ARRAY_BUFFER,
                                                     0,
                                                     size,
-                                                    GL_MAP_READ_BIT|GL_MAP_WRITE_BIT);
+                                                    GL_MAP_READ_BIT | GL_MAP_WRITE_BIT);
     if (global_state.CheckAndReportError(user_context, "oglc: MapBufferRange")) { return 1; }
     halide_buffer_t buf_copy = *buf;
     buf_copy.device = (uint64_t)device_data;
@@ -399,39 +421,39 @@ WEAK int halide_openglcompute_copy_to_device(void *user_context, halide_buffer_t
 
     if (buf->type.code == halide_type_int) {
         if (buf->type.bits == 8) {
-          converting_copy_memory_helper<int8_t, float>(dev_copy, MAX_COPY_DIMS-1, dev_copy.src_begin, 0);
+            converting_copy_memory_helper<int8_t, float>(dev_copy, MAX_COPY_DIMS - 1, dev_copy.src_begin, 0);
         } else if (buf->type.bits == 16) {
             // Convert chunk_size in bytes to the number of items to be copied.
             // This doesn't happen for the 8-bit case because it would be a division by one,
             // and it doesn't happen for the 32-bit case as there is no data conversion and memcpy
             // is used.
             dev_copy.chunk_size /= 2;
-            converting_copy_memory_helper<int16_t, float>(dev_copy, MAX_COPY_DIMS-1, dev_copy.src_begin, 0);
+            converting_copy_memory_helper<int16_t, float>(dev_copy, MAX_COPY_DIMS - 1, dev_copy.src_begin, 0);
         } else if (buf->type.bits == 32) {
-            copy_memory_helper(dev_copy, MAX_COPY_DIMS-1, dev_copy.src_begin, 0);
+            copy_memory_helper(dev_copy, MAX_COPY_DIMS - 1, dev_copy.src_begin, 0);
         } else {
             error(user_context) << "OpenGLCompute does not support 64-bit integers.\n";
             return -1;
         }
     } else if (buf->type.code == halide_type_uint) {
         if (buf->type.bits == 8) {
-            converting_copy_memory_helper<uint8_t, float>(dev_copy, MAX_COPY_DIMS-1, dev_copy.src_begin, 0);
+            converting_copy_memory_helper<uint8_t, float>(dev_copy, MAX_COPY_DIMS - 1, dev_copy.src_begin, 0);
         } else if (buf->type.bits == 16) {
             // Convert chunk_size in bytes to the number of items to be copied.
             // This doesn't happen for the 8-bit case because it would be a division by one,
             // and it doesn't happen for the 32-bit case as there is no data conversion and memcpy
             // is used.
             dev_copy.chunk_size /= 2;
-            converting_copy_memory_helper<uint16_t, float>(dev_copy, MAX_COPY_DIMS-1, dev_copy.src_begin, 0);
+            converting_copy_memory_helper<uint16_t, float>(dev_copy, MAX_COPY_DIMS - 1, dev_copy.src_begin, 0);
         } else if (buf->type.bits == 32) {
-            copy_memory_helper(dev_copy, MAX_COPY_DIMS-1, dev_copy.src_begin, 0);
+            copy_memory_helper(dev_copy, MAX_COPY_DIMS - 1, dev_copy.src_begin, 0);
         } else {
             error(user_context) << "OpenGLCompute does not support 64-bit integers.\n";
             return -1;
         }
     } else if (buf->type.code == halide_type_float) {
         if (buf->type.bits == 32) {
-            copy_memory_helper(dev_copy, MAX_COPY_DIMS-1, dev_copy.src_begin, 0);
+            copy_memory_helper(dev_copy, MAX_COPY_DIMS - 1, dev_copy.src_begin, 0);
         } else {
             error(user_context) << "OpenGLCompute does not support 64-bit floating-point.\n";
         }
@@ -472,7 +494,7 @@ WEAK int halide_openglcompute_copy_to_host(void *user_context, halide_buffer_t *
     global_state.BindBuffer(GL_ARRAY_BUFFER, the_buffer);
     if (global_state.CheckAndReportError(user_context, "oglc: BindBuffer")) { return 1; }
 
-    void* device_data = global_state.MapBufferRange(GL_ARRAY_BUFFER,
+    void *device_data = global_state.MapBufferRange(GL_ARRAY_BUFFER,
                                                     0,
                                                     size,
                                                     GL_MAP_READ_BIT);
@@ -484,39 +506,39 @@ WEAK int halide_openglcompute_copy_to_host(void *user_context, halide_buffer_t *
 
     if (buf->type.code == halide_type_int) {
         if (buf->type.bits == 8) {
-            converting_copy_memory_helper<float, int8_t>(dev_copy, MAX_COPY_DIMS-1, 0, dev_copy.src_begin);
+            converting_copy_memory_helper<float, int8_t>(dev_copy, MAX_COPY_DIMS - 1, 0, dev_copy.src_begin);
         } else if (buf->type.bits == 16) {
             // Convert chunk_size in bytes to the number of items to be copied.
             // This doesn't happen for the 8-bit case because it would be a division by one,
             // and it doesn't happen for the 32-bit case as there is no data conversion and memcpy
             // is used.
             dev_copy.chunk_size /= 2;
-            converting_copy_memory_helper<float, int16_t>(dev_copy, MAX_COPY_DIMS-1, 0, dev_copy.src_begin);
+            converting_copy_memory_helper<float, int16_t>(dev_copy, MAX_COPY_DIMS - 1, 0, dev_copy.src_begin);
         } else if (buf->type.bits == 32) {
-            copy_memory_helper(dev_copy, MAX_COPY_DIMS-1, 0, dev_copy.src_begin);
+            copy_memory_helper(dev_copy, MAX_COPY_DIMS - 1, 0, dev_copy.src_begin);
         } else {
             error(user_context) << "OpenGLCompute does not support 64-bit integers.\n";
             return -1;
         }
     } else if (buf->type.code == halide_type_uint) {
         if (buf->type.bits == 8) {
-            converting_copy_memory_helper<float, uint8_t>(dev_copy, MAX_COPY_DIMS-1, 0, dev_copy.src_begin);
+            converting_copy_memory_helper<float, uint8_t>(dev_copy, MAX_COPY_DIMS - 1, 0, dev_copy.src_begin);
         } else if (buf->type.bits == 16) {
             // Convert chunk_size in bytes to the number of items to be copied.
             // This doesn't happen for the 8-bit case because it would be a division by one,
             // and it doesn't happen for the 32-bit case as there is no data conversion and memcpy
             // is used.
             dev_copy.chunk_size /= 2;
-            converting_copy_memory_helper<float, uint16_t>(dev_copy, MAX_COPY_DIMS-1, 0, dev_copy.src_begin);
+            converting_copy_memory_helper<float, uint16_t>(dev_copy, MAX_COPY_DIMS - 1, 0, dev_copy.src_begin);
         } else if (buf->type.bits == 32) {
-            copy_memory_helper(dev_copy, MAX_COPY_DIMS-1, 0, dev_copy.src_begin);
+            copy_memory_helper(dev_copy, MAX_COPY_DIMS - 1, 0, dev_copy.src_begin);
         } else {
             error(user_context) << "OpenGLCompute does not support 64-bit integers.\n";
             return -1;
         }
     } else if (buf->type.code == halide_type_float) {
         if (buf->type.bits == 32) {
-            copy_memory_helper(dev_copy, MAX_COPY_DIMS-1, 0, dev_copy.src_begin);
+            copy_memory_helper(dev_copy, MAX_COPY_DIMS - 1, 0, dev_copy.src_begin);
         } else {
             error(user_context) << "OpenGLCompute does not support 64-bit floating-point.\n";
         }
@@ -535,7 +557,10 @@ WEAK int halide_openglcompute_copy_to_host(void *user_context, halide_buffer_t *
     return 0;
 }
 
-}}}} // namespace Halide::Runtime::Internal::OpenGLCompute
+}  // namespace OpenGLCompute
+}  // namespace Internal
+}  // namespace Runtime
+}  // namespace Halide
 
 using namespace Halide::Runtime::Internal::OpenGLCompute;
 
@@ -544,12 +569,12 @@ using namespace Halide::Runtime::Internal::OpenGLCompute;
 extern "C" {
 
 WEAK int halide_openglcompute_run(void *user_context, void *state_ptr,
-                       const char *entry_name, int blocksX, int blocksY,
-                       int blocksZ, int threadsX, int threadsY, int threadsZ,
-                       int shared_mem_bytes, halide_type_t arg_types[], void *args[],
-                       int8_t arg_is_buffer[], int num_attributes,
-                       float *vertex_buffer, int num_coords_dim0,
-                       int num_coords_dim1) {
+                                  const char *entry_name, int blocksX, int blocksY,
+                                  int blocksZ, int threadsX, int threadsY, int threadsZ,
+                                  int shared_mem_bytes, halide_type_t arg_types[], void *args[],
+                                  int8_t arg_is_buffer[], int num_attributes,
+                                  float *vertex_buffer, int num_coords_dim0,
+                                  int num_coords_dim1) {
 #ifdef DEBUG_RUNTIME
     uint64_t t_before = halide_current_time_ns(user_context);
 #endif
@@ -559,7 +584,7 @@ WEAK int halide_openglcompute_run(void *user_context, void *state_ptr,
         << "entry: " << entry_name << ", "
         << "blocks: " << blocksX << "x" << blocksY << "x" << blocksZ << ", "
         << "threads: " << threadsX << "x" << threadsY << "x" << threadsZ << ", "
-        << "shmem: " << shared_mem_bytes  << ", "
+        << "shmem: " << shared_mem_bytes << ", "
         << "num_attributes: " << num_attributes << ", "
         << "num_coords_dim0: " << num_coords_dim0 << ", "
         << "num_coords_dim1: " << num_coords_dim1 << "\n";
@@ -604,8 +629,8 @@ WEAK int halide_openglcompute_run(void *user_context, void *state_ptr,
                 } else if (arg_types[i].bits == 32) {
                     value = *((int32_t *)args[i]);
                 } else {
-                  // error
-                  return -1;
+                    // error
+                    return -1;
                 }
                 if (arg_types[i].bits <= 16) {
                     float fp_val = value;
@@ -628,8 +653,8 @@ WEAK int halide_openglcompute_run(void *user_context, void *state_ptr,
                 } else if (arg_types[i].bits == 32) {
                     value = *((uint32_t *)args[i]);
                 } else {
-                  // error
-                  return -1;
+                    // error
+                    return -1;
                 }
                 if (arg_types[i].bits <= 16) {
                     float fp_val = value;
@@ -648,16 +673,16 @@ WEAK int halide_openglcompute_run(void *user_context, void *state_ptr,
                 if (arg_types[i].bits == 32) {
                     value = *((float *)args[i]);
                 } else {
-                  // error
-                  return -1;
+                    // error
+                    return -1;
                 }
                 global_state.Uniform1f(i, value);
                 if (global_state.CheckAndReportError(user_context, "halide_openglcompute_run Uniform1f")) {
                     return -1;
                 }
             } else {
-              // error
-              return -1;
+                // error
+                return -1;
             }
         } else {
             uint64_t arg_value = ((halide_buffer_t *)args[i])->device;
@@ -709,12 +734,12 @@ WEAK int halide_openglcompute_device_sync(void *user_context, halide_buffer_t *)
 namespace {
 WEAK char *get_kernel_name(const char *start, const char *end) {
     const size_t kernel_name_length = end - start;
-    char *kernel_name = (char*)malloc(kernel_name_length + 1);
+    char *kernel_name = (char *)malloc(kernel_name_length + 1);
     memcpy(kernel_name, start, kernel_name_length);
     kernel_name[kernel_name_length] = '\0';
     return kernel_name;
 }
-}
+}  // namespace
 
 // Called at the beginning of a code block generated by Halide. This function
 // is responsible for setting up the OpenGL environment and compiling the GLSL
@@ -746,10 +771,10 @@ WEAK int halide_openglcompute_initialize_kernels(void *user_context, void **stat
     const char *END_OF_KERNEL_MARKER = "\n// end of kernel ";
     const size_t END_OF_KERNEL_MARKER_LENGTH = strlen(END_OF_KERNEL_MARKER);
 
-    while(1) {
+    while (1) {
         const char *end_of_kernel_marker = strstr(src, END_OF_KERNEL_MARKER);
         if (!end_of_kernel_marker) {
-            break; // end of kernels sources is reached
+            break;  // end of kernels sources is reached
         }
 
         const char *just_before_kernel_name = end_of_kernel_marker + END_OF_KERNEL_MARKER_LENGTH;
@@ -769,8 +794,8 @@ WEAK int halide_openglcompute_initialize_kernels(void *user_context, void **stat
 
         GLuint shader = global_state.CreateShader(GL_COMPUTE_SHADER);
         if (global_state.CheckAndReportError(user_context, "create shader")) { return -1; }
-        const GLchar* sources = { src };
-        const GLint sources_lengths = { (GLint) src_len };
+        const GLchar *sources = {src};
+        const GLint sources_lengths = {(GLint)src_len};
 
 #ifdef DEBUG_RUNTIME
         print(user_context) << "Compute shader source for: " << kernel_name;
@@ -790,7 +815,7 @@ WEAK int halide_openglcompute_initialize_kernels(void *user_context, void **stat
             global_state.GetShaderiv(shader, GL_INFO_LOG_LENGTH, &log_len);
             HalideMalloc log_tmp(user_context, log_len);
             if (log_tmp.ptr) {
-                char *log = (char*) log_tmp.ptr;
+                char *log = (char *)log_tmp.ptr;
                 global_state.GetShaderInfoLog(shader, log_len, NULL, log);
                 print(user_context) << log << "\n";
             }
@@ -815,9 +840,10 @@ WEAK int halide_openglcompute_initialize_kernels(void *user_context, void **stat
             global_state.GetProgramiv(program, GL_INFO_LOG_LENGTH, &log_len);
             HalideMalloc log_tmp(user_context, log_len);
             if (log_tmp.ptr) {
-                char *log = (char*) log_tmp.ptr;
+                char *log = (char *)log_tmp.ptr;
                 global_state.GetProgramInfoLog(program, log_len, NULL, log);
-                debug(user_context) << "Could not link GLSL program:\n" << log << "\n";
+                debug(user_context) << "Could not link GLSL program:\n"
+                                    << log << "\n";
             }
             global_state.DeleteProgram(program);
             return -1;
@@ -828,12 +854,12 @@ WEAK int halide_openglcompute_initialize_kernels(void *user_context, void **stat
         GLint i;
         GLint count;
 
-        GLint size; // size of the variable
-        GLenum type; // type of the variable (float, vec3 or mat4, etc)
+        GLint size;   // size of the variable
+        GLenum type;  // type of the variable (float, vec3 or mat4, etc)
 
-        const GLsizei bufSize = 64; // maximum name length
-        GLchar name[bufSize]; // variable name in GLSL
-        GLsizei length; // name length
+        const GLsizei bufSize = 64;  // maximum name length
+        GLchar name[bufSize];        // variable name in GLSL
+        GLsizei length;              // name length
 
         global_state.GetProgramiv(program, GL_ACTIVE_UNIFORMS, &count);
         debug(user_context) << "Active Uniforms: " << count << "\n";
@@ -844,7 +870,7 @@ WEAK int halide_openglcompute_initialize_kernels(void *user_context, void **stat
             debug(user_context) << "Uniform " << i << " Type: " << type << " Name: " << name << " location: " << loc << "\n";
         }
 #endif
-        src += src_len; // moving on to the next kernel
+        src += src_len;  // moving on to the next kernel
     }
 #ifdef DEBUG_RUNTIME
     uint64_t t_after = halide_current_time_ns(user_context);
@@ -852,7 +878,7 @@ WEAK int halide_openglcompute_initialize_kernels(void *user_context, void **stat
                         << " ms\n";
 #endif
 
-   return 0;
+    return 0;
 }
 
 WEAK int halide_openglcompute_device_and_host_malloc(void *user_context, struct halide_buffer_t *buf) {
@@ -867,12 +893,12 @@ WEAK const struct halide_device_interface_t *halide_openglcompute_device_interfa
     return &openglcompute_device_interface;
 }
 
+}  // extern "C"
 
-
-} // extern "C"
-
-
-namespace Halide { namespace Runtime { namespace Internal { namespace OpenGLCompute {
+namespace Halide {
+namespace Runtime {
+namespace Internal {
+namespace OpenGLCompute {
 
 WEAK halide_device_interface_impl_t openglcompute_device_interface_impl = {
     halide_use_jit_module,
@@ -893,7 +919,6 @@ WEAK halide_device_interface_impl_t openglcompute_device_interface_impl = {
     halide_default_device_detach_native,
 };
 
-
 WEAK halide_device_interface_t openglcompute_device_interface = {
     halide_device_malloc,
     halide_device_free,
@@ -910,7 +935,9 @@ WEAK halide_device_interface_t openglcompute_device_interface = {
     halide_device_wrap_native,
     halide_device_detach_native,
     NULL,
-    &openglcompute_device_interface_impl
-};
+    &openglcompute_device_interface_impl};
 
-}}}} // namespace Halide::Runtime::Internal::OpenGLCompute
+}  // namespace OpenGLCompute
+}  // namespace Internal
+}  // namespace Runtime
+}  // namespace Halide

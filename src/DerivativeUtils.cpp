@@ -540,7 +540,9 @@ bool is_calling_function(
 struct SubstituteCallArgWithPureArg : public IRMutator {
 public:
     SubstituteCallArgWithPureArg(Func f, int variable_id)
-        : f(f), variable_id(variable_id) {}
+        : f(f), variable_id(variable_id) {
+    }
+
 protected:
     using IRMutator::visit;
     Expr visit(const Call *op) override {

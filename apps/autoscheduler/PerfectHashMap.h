@@ -223,8 +223,7 @@ public:
     void make_large(int n) {
         if (state == Empty) {
             upgrade_from_empty_to_large(n);
-        }
-        else if (state == Small) {
+        } else if (state == Small) {
             upgrade_from_small_to_large(n);
         }
     }

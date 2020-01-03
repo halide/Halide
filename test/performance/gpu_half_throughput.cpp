@@ -41,11 +41,11 @@ int main(int argc, char **argv) {
     f1.compile_jit(t);
     f2.compile_jit(t);
 
-    double t1 = Tools::benchmark([&]() {f1.realize(f32_out); f32_out.device_sync();});
-    double t2 = Tools::benchmark([&]() {f2.realize(f16_out); f16_out.device_sync();});
+    double t1 = Tools::benchmark([&]() {f1.realize(f32_out); f32_out.device_sync(); });
+    double t2 = Tools::benchmark([&]() {f2.realize(f16_out); f16_out.device_sync(); });
 
     printf("Times: %f %f\n", t1, t2);
-    printf("Speed-up from using half type: %f x\n", t1/t2);
+    printf("Speed-up from using half type: %f x\n", t1 / t2);
 
     if (t2 > t1) {
         printf("Half should not have been slower than float\n");

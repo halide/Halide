@@ -24,7 +24,7 @@ void check(const void *var, const std::string &type,
         exit(-1);
     }
 }
-}
+}  // namespace Halide
 
 using Halide::check;
 
@@ -54,8 +54,11 @@ namespace {
 struct Bar {
     typedef int bint;
     bint bar_int;
-    Bar(int x) : bar_int(x) {}
-    ~Bar() {}
+    Bar(int x)
+        : bar_int(x) {
+    }
+    ~Bar() {
+    }
     void check_bar() {
         check(this, "Foo::_::Bar", "b", __FILE__, __LINE__);
         check(&bar_int, "Foo::_::Bar::bint", "b.bar_int", __FILE__, __LINE__);
@@ -66,22 +69,22 @@ struct Bar {
 };
 
 int g(int x) {
-    Bar b(x*7);
+    Bar b(x * 7);
     b.check_bar();
     return b.get();
 }
 
-}
+}  // namespace
 
 int f(int x) {
     static float static_float_in_f = 0.3f;
-    int y = g(x) + g(x-1);
+    int y = g(x) + g(x - 1);
     check(&y, "int", "y", __FILE__, __LINE__);
     check(&static_float_in_f, "float", "static_float_in_f", __FILE__, __LINE__);
     return y - 1;
 }
 
-}
+}  // namespace Foo
 
 typedef float fancy_float;
 
@@ -89,7 +92,7 @@ struct HeapObject {
     float f;
     fancy_float f2;
     int i;
-    struct  {
+    struct {
         char c;
         double d;
         int i_array[20];
@@ -196,7 +199,6 @@ int main(int argc, char **argv) {
         loc = std::string(__FILE__) + ":" + std::to_string(__LINE__ - 1);
         assert(f.update().source_location() == loc);
     }
-
 
     printf("Success!\n");
 

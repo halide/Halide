@@ -3,19 +3,18 @@
 #ifdef _WIN32
 // This test requires weak linkage
 int main(int argc, char **argv) {
-  printf("Skipping test on windows\n");
-  return 0;
+    printf("Skipping test on windows\n");
+    return 0;
 }
 #else
 
-#include <math.h>
-#include "HalideRuntime.h"
 #include "HalideBuffer.h"
+#include "HalideRuntime.h"
 #include <assert.h>
+#include <math.h>
 #include <string.h>
 
 #include "acquire_release.h"
-
 
 using namespace Halide::Runtime;
 
@@ -78,8 +77,8 @@ int init_context() {
     cl_device_id dev = devices[deviceCount - 1];
 
     // Create context and command queue.
-    cl_context_properties properties[] = { CL_CONTEXT_PLATFORM, (cl_context_properties)platform,
-                                           0 };
+    cl_context_properties properties[] = {CL_CONTEXT_PLATFORM, (cl_context_properties)platform,
+                                          0};
     cl_ctx = clCreateContext(properties, 1, &dev, nullptr, nullptr, &err);
     if (err != CL_SUCCESS) {
         printf("clCreateContext failed (%d)\n", err);
@@ -179,7 +178,7 @@ void destroy_context() {
 // These functions replace the acquire/release implementation in src/runtime/cuda.cpp.
 // Since we don't parallelize access to the GPU in the schedule, we don't need synchronization
 // in our implementation of these functions.
-extern "C" int halide_cuda_acquire_context(void *user_context, CUcontext *ctx, bool create=true) {
+extern "C" int halide_cuda_acquire_context(void *user_context, CUcontext *ctx, bool create = true) {
     printf("Acquired CUDA context %p\n", cuda_ctx);
     *ctx = cuda_ctx;
     return 0;
@@ -195,7 +194,8 @@ int init_context() {
     printf("Using default implementation of acquire/release\n");
     return 0;
 }
-void destroy_context() {}
+void destroy_context() {
+}
 #endif
 
 int main(int argc, char **argv) {

@@ -154,8 +154,8 @@ static __inline void _qaic_memmove(void* dst, void* src, int size) {
 #ifndef _ALLOCATOR_H
 #define _ALLOCATOR_H
 
-#include <stdlib.h>
 #include <stdint.h>
+#include <stdlib.h>
 
 typedef struct _heap _heap;
 struct _heap {
