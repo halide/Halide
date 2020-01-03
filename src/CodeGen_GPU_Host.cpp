@@ -29,15 +29,15 @@ using namespace llvm;
 
 // Sniff the contents of a kernel to extracts the bounds of all the
 // thread indices (so we know how many threads to launch), and the
-// amount of shared memory to allocate.
+// amount of shared and heap memory each block uses.
 class ExtractBounds : public IRVisitor {
 public:
     Expr num_threads[4];
     Expr num_blocks[4];
-    Expr shared_mem_size;
+    Expr shared_mem_size, heap_size;
 
     ExtractBounds()
-        : shared_mem_size(0), found_shared(false) {
+        : shared_mem_size(0), heap_size(0), found_shared(false) {
         for (int i = 0; i < 4; i++) {
             num_threads[i] = num_blocks[i] = 1;
         }
@@ -71,24 +71,69 @@ private:
             num_blocks[3] = op->extent;
         }
 
+        Expr old_heap_size = heap_size;
+        heap_size = 0;
         op->body.accept(this);
+        // Expand the bounds of inner heap allocations to take a max
+        // over the for loop (for serial and block loops), or to
+        // multiply it by the number of loop iterations (for thread/lane
+        // loops). We don't expect to find shared memory allocations
+        // inside loops - those were already hoisted.
+        if (op->for_type == ForType::GPUThread ||
+            op->for_type == ForType::GPULane) {
+            heap_size *= op->extent;
+        } else {
+            Scope<Interval> scope;
+            scope.push(op->name, Interval(op->min, op->min + op->extent - 1));
+            Interval in = bounds_of_expr_in_scope(heap_size, scope);
+            user_assert(in.has_upper_bound())
+                << "Heap usage in GPU kernel potentially unbounded: " << heap_size << "\n";
+            heap_size = simplify(in.max);
+        }
+        heap_size += old_heap_size;
     }
 
     void visit(const LetStmt *op) override {
         if (expr_uses_var(shared_mem_size, op->name)) {
             shared_mem_size = Let::make(op->name, op->value, shared_mem_size);
         }
+        if (expr_uses_var(heap_size, op->name)) {
+            heap_size = Let::make(op->name, op->value, heap_size);
+        }
         op->body.accept(this);
     }
 
+    void visit(const IfThenElse *op) override {
+        // Take the max of the two paths
+        Expr old_heap_size = heap_size;
+        heap_size = 0;
+        op->then_case.accept(this);
+        Expr then_size = heap_size;
+        if (op->else_case.defined()) {
+            heap_size = 0;
+            op->else_case.accept(this);
+            heap_size = max(heap_size, then_size);
+        }
+        heap_size = heap_size + old_heap_size;
+    }
+
     void visit(const Allocate *allocate) override {
-        user_assert(!allocate->new_expr.defined()) << "Allocate node inside GPU kernel has custom new expression.\n"
-                                                   << "(Memoization is not supported inside GPU kernels at present.)\n";
+        user_assert(!allocate->new_expr.defined())
+            << "Allocate node inside GPU kernel has custom new expression.\n"
+            << "(Memoization is not supported inside GPU kernels at present.)\n";
 
         if (allocate->name == "__shared") {
             internal_assert(allocate->type == UInt(8) && allocate->extents.size() == 1);
             shared_mem_size = allocate->extents[0];
             found_shared = true;
+        } else if (allocate->constant_allocation_size() == 0) {
+            // Any dynamic allocation inside a GPU kernel that isn't
+            // in shared has to go on the heap, so don't check the
+            // memory type.
+            Expr allocation_size = fold_left(allocate->extents, Mul::make);
+            if (allocation_size.defined()) {
+                heap_size += allocation_size * allocate->type.bytes();
+            }
         }
         allocate->body.accept(this);
     }
@@ -239,7 +284,9 @@ void CodeGen_GPU_Host<CodeGen_CPU>::visit(const For *loop) {
                  << bounds.num_blocks[0] << ", "
                  << bounds.num_blocks[1] << ", "
                  << bounds.num_blocks[2] << ", "
-                 << bounds.num_blocks[3] << ") blocks\n";
+                 << bounds.num_blocks[3] << ") blocks, "
+                 << bounds.shared_mem_size << " shared memory bytes, "
+                 << bounds.heap_size << " heap bytes\n";
 
         // compile the kernel
         string kernel_name = unique_name("kernel_" + loop->name);
@@ -505,6 +552,7 @@ void CodeGen_GPU_Host<CodeGen_CPU>::visit(const For *loop) {
             codegen(bounds.num_threads[1]),
             codegen(bounds.num_threads[2]),
             codegen(bounds.shared_mem_size),
+            codegen(bounds.heap_size),
             runtime_run_takes_types ? ConstantExpr::getInBoundsGetElementPtr(gpu_arg_types_arr_type, arg_types_array_storage, zeros) : builder->CreateConstGEP2_32(gpu_arg_sizes_arr_type, gpu_arg_sizes_arr, 0, 0, "gpu_arg_sizes_ar_ref" + api_unique_name),
             builder->CreateConstGEP2_32(
                 gpu_args_arr_type,

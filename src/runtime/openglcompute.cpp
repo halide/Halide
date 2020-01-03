@@ -571,7 +571,9 @@ extern "C" {
 WEAK int halide_openglcompute_run(void *user_context, void *state_ptr,
                                   const char *entry_name, int blocksX, int blocksY,
                                   int blocksZ, int threadsX, int threadsY, int threadsZ,
-                                  int shared_mem_bytes, halide_type_t arg_types[], void *args[],
+                                  int shared_mem_bytes,
+                                  int heap_bytes_per_block,
+                                  halide_type_t arg_types[], void *args[],
                                   int8_t arg_is_buffer[], int num_attributes,
                                   float *vertex_buffer, int num_coords_dim0,
                                   int num_coords_dim1) {

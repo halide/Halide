@@ -218,17 +218,17 @@ void CodeGen_PTX_Dev::visit(const Allocate *alloc) {
         // meaningless, so we had better only be dealing with
         // constants here.
         int32_t size = alloc->constant_allocation_size();
-        user_assert(size > 0)
-            << "Allocation " << alloc->name << " has a dynamic size. "
-            << "Only fixed-size allocations are supported on the gpu. "
-            << "Try storing into shared memory instead.";
-
-        BasicBlock *here = builder->GetInsertBlock();
-
-        builder->SetInsertPoint(entry_block);
-        Value *ptr = builder->CreateAlloca(llvm_type_of(alloc->type), ConstantInt::get(i32_t, size));
-        builder->SetInsertPoint(here);
-        sym_push(allocation_name, ptr);
+        if (size == 0) {
+            // TODO: emit call to malloc here instead of dereferencing null
+            Value *ptr = Constant::getNullValue(i8_t->getPointerTo());
+            sym_push(allocation_name, ptr);
+        } else {
+            BasicBlock *here = builder->GetInsertBlock();
+            builder->SetInsertPoint(entry_block);
+            Value *ptr = builder->CreateAlloca(llvm_type_of(alloc->type), ConstantInt::get(i32_t, size));
+            builder->SetInsertPoint(here);
+            sym_push(allocation_name, ptr);
+        }
     }
     codegen(alloc->body);
 }

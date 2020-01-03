@@ -26,6 +26,7 @@ extern int halide_opencl_run(void *user_context,
                              int blocksX, int blocksY, int blocksZ,
                              int threadsX, int threadsY, int threadsZ,
                              int shared_mem_bytes,
+                             int heap_bytes_per_block,
                              size_t arg_sizes[],
                              void *args[],
                              int8_t arg_is_buffer[],
@@ -94,10 +95,10 @@ extern int halide_opencl_wrap_cl_mem(void *user_context, struct halide_buffer_t 
  */
 extern int halide_opencl_detach_cl_mem(void *user_context, struct halide_buffer_t *buf);
 
-/** Return the underlying cl_mem for a halide_buffer_t. This buffer must be
- *  valid on an OpenCL device, or not have any associated device
- *  memory. If there is no device memory (dev field is NULL), this
- *  returns 0.
+/** Return the underlying cl_mem for a halide_buffer_t. This buffer
+ * must be valid on an OpenCL device, or not have any associated
+ * device memory. If there is no device memory (the device field is
+ * zero), this returns 0.
  */
 extern uintptr_t halide_opencl_get_cl_mem(void *user_context, struct halide_buffer_t *buf);
 
