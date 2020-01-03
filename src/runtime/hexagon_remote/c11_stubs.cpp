@@ -8,14 +8,14 @@ extern "C" {
 
 //#define FARF_LOW 1    // Enable debug output
 
-void __attribute__ ((weak)) __cxa_finalize() {
-  FARF(LOW, "Finalizing\n");
-  return;
+void __attribute__((weak)) __cxa_finalize() {
+    FARF(LOW, "Finalizing\n");
+    return;
 }
 
-void __attribute__ ((weak)) __cxa_atexit() {
-  FARF(LOW, "Atexiting\n");
-  return;
+void __attribute__((weak)) __cxa_atexit() {
+    FARF(LOW, "Atexiting\n");
+    return;
 }
 
 }  // extern "C"

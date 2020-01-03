@@ -24,6 +24,6 @@ JNIEXPORT jlong JNICALL Java_com_example_helloandroidcamera2_AndroidBufferUtilit
 JNIEXPORT jboolean JNICALL Java_com_example_helloandroidcamera2_AndroidBufferUtilities_unlockSurface(
     JNIEnv *env, jobject obj, jlong surfaceWrapperHandle);
 
-} // extern "C"
+}  // extern "C"
 
-#endif // ANDROID_BUFFER_UTILITIES_H
+#endif  // ANDROID_BUFFER_UTILITIES_H
