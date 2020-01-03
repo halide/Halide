@@ -11,7 +11,7 @@
 
 # Disable built-in makefile rules for all apps to avoid pointless file-system
 # scanning and general weirdness resulting from implicit rules.
-MAKEFLAGS += --no-builtin-rules --no-builtin-variables
+MAKEFLAGS += --no-builtin-rules 
 .SUFFIXES:
 
 UNAME = $(shell uname)
