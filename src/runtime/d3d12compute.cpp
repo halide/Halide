@@ -100,14 +100,16 @@ static int indent_end = 0;
 #define TRACEPRINT(msg) trace(user_context) << TRACEINDENT << msg;
 struct TraceLogScope {
     TraceLogScope() {
-        while (__sync_lock_test_and_set(&indent_lock, 1)) {}
+        while (__sync_lock_test_and_set(&indent_lock, 1)) {
+        }
         for (const char *p = indent_pattern; *p; ++p) {
             indent[indent_end++] = *p;
         }
         __sync_lock_release(&indent_lock);
     }
     ~TraceLogScope() {
-        while (__sync_lock_test_and_set(&indent_lock, 1)) {}
+        while (__sync_lock_test_and_set(&indent_lock, 1)) {
+        }
         for (const char *p = indent_pattern; *p; ++p) {
             indent[--indent_end] = '\0';
         }
@@ -840,7 +842,8 @@ static void D3D12WaitForPix() {
     TRACELOG;
     TRACEPRINT("[[ delay for attaching to PIX... ]]\n");
     volatile uint32_t x = (1 << 31);
-    while (--x > 0) {}
+    while (--x > 0) {
+    }
 }
 #endif
 
@@ -1829,7 +1832,8 @@ static void wait_until_completed(d3d12_compute_command_list *cmdList) {
 
     HRESULT result_before = (*device)->GetDeviceRemovedReason();
 
-    while (queue_fence->GetCompletedValue() < cmdList->signal) {}
+    while (queue_fence->GetCompletedValue() < cmdList->signal) {
+    }
 
     HRESULT result_after = (*device)->GetDeviceRemovedReason();
     if (FAILED(result_after)) {
@@ -2174,7 +2178,8 @@ WEAK int halide_d3d12compute_acquire_context(void *user_context, halide_d3d12com
     TRACELOG;
 
     halide_assert(user_context, &thread_lock != NULL);
-    while (__sync_lock_test_and_set(&thread_lock, 1)) {}
+    while (__sync_lock_test_and_set(&thread_lock, 1)) {
+    }
 
 #ifdef DEBUG_RUNTIME
     halide_start_clock(user_context);

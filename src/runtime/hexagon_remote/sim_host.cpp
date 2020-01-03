@@ -207,7 +207,9 @@ int send_message(int msg, const std::vector<int> &arguments) {
         printf("HexagonWrapper::ReadSymbolValue(rpcmsg) failed: %d\n", status);
         return -1;
     }
-    if (write_memory(remote_msg, &msg, 4) != 0) { return -1; }
+    if (write_memory(remote_msg, &msg, 4) != 0) {
+        return -1;
+    }
 
     // The arguments are individual numbered variables.
     for (size_t i = 0; i < arguments.size(); i++) {
@@ -218,7 +220,9 @@ int send_message(int msg, const std::vector<int> &arguments) {
             printf("HexagonWrapper::ReadSymbolValue(%s) failed: %d\n", rpc_arg.c_str(), status);
             return -1;
         }
-        if (write_memory(remote_arg, &arguments[i], 4) != 0) { return -1; }
+        if (write_memory(remote_arg, &arguments[i], 4) != 0) {
+            return -1;
+        }
     }
 
     HEX_4u_t remote_ret = 0;
