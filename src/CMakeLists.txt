@@ -777,10 +777,9 @@ llvm_config(Halide ${LLVM_USE_SHARED} ${LLVM_COMPONENTS})
 if (NOT MSVC AND NOT LLVM_USE_SHARED_LLVM_LIBRARY)
   set(LLVM_CONFIG ${LLVM_TOOLS_BINARY_DIR}/llvm-config)
   execute_process(COMMAND "${LLVM_CONFIG}" --system-libs ${LLVM_COMPONENTS} OUTPUT_VARIABLE EXTRA_LIBS)
-  string(STRIP EXTRA_LIBS "${EXTRA_LIBS}")
-  string(REPLACE "-l" ";" EXTRA_LIBS "${EXTRA_LIBS}")
+  string(STRIP EXTRA_LIBS "${EXTRA_LIBS}")   # strip whitespace from start & end
   string(REPLACE "\n" "" EXTRA_LIBS "${EXTRA_LIBS}")
-  string(REPLACE " " "" EXTRA_LIBS "${EXTRA_LIBS}")
+  string(REPLACE " " ";" EXTRA_LIBS "${EXTRA_LIBS}")  # convert into a list
   target_link_libraries(Halide PUBLIC ${EXTRA_LIBS})
 endif()
 

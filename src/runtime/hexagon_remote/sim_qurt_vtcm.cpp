@@ -6,29 +6,29 @@ bool vtcm_ready = false;
 const unsigned int TCM_BASE = 0xD800 << 16;
 const unsigned int VTCM_BASE_ADDRESS = TCM_BASE + (2 << 20);
 
-typedef struct Node{
-    void* addr;
+typedef struct Node {
+    void *addr;
     uint64_t size;
-    Node* next;
+    Node *next;
 } Node;
 
 // Free and used memory blocks list.
-Node* free_blocks = NULL;
-Node* used_blocks = NULL;
+Node *free_blocks = NULL;
+Node *used_blocks = NULL;
 
 // Create a new node with given addr and size.
-Node* createNode(void* addr, uint64_t size) {
+Node *createNode(void *addr, uint64_t size) {
     assert(size > 0);
-    Node* mb = (Node*)malloc(sizeof(Node));
+    Node *mb = (Node *)malloc(sizeof(Node));
     mb->addr = addr;
     mb->size = size;
     return mb;
 }
 
 // Add new node to the given list in ascending order of addr field.
-void addNode(Node* &list, Node* a) {
-    Node* prev = NULL;
-    Node* curr = list;
+void addNode(Node *&list, Node *a) {
+    Node *prev = NULL;
+    Node *curr = list;
     while (curr) {
         if ((uint64_t)curr->addr > (uint64_t)a->addr) {
             break;
@@ -45,10 +45,10 @@ void addNode(Node* &list, Node* a) {
 }
 
 // Merge adjacent nodes representing continuous address range.
-void mergeNodes(Node* &list) {
+void mergeNodes(Node *&list) {
     if (!list) return;
-    Node* prev = list;
-    Node* curr = list->next;
+    Node *prev = list;
+    Node *curr = list->next;
     while (curr) {
         if (curr->size == 0) {
             prev->next = curr->next;
@@ -67,16 +67,16 @@ void mergeNodes(Node* &list) {
 }
 
 // Add and merge new node to list in sorted order.
-void addAndMerge(Node* &list, Node* a) {
+void addAndMerge(Node *&list, Node *a) {
     addNode(list, a);
     mergeNodes(list);
 }
 
 // Returns the node with given address and removes from the list.
 // Return null if no entry found.
-Node* findAndRemove(Node* &list, void* addr) {
-    Node* prev = NULL;
-    Node* curr = list;
+Node *findAndRemove(Node *&list, void *addr) {
+    Node *prev = NULL;
+    Node *curr = list;
     while (curr) {
         if (curr->addr == addr) {
             if (prev) {
@@ -94,12 +94,12 @@ Node* findAndRemove(Node* &list, void* addr) {
 }
 
 // Allocate a node of given size from the list.
-void* allocate(Node* list, uint64_t size) {
+void *allocate(Node *list, uint64_t size) {
     if (size <= 0) return NULL;
-    while(list) {
+    while (list) {
         if (list->size >= size) {
-            void* addr = list->addr;
-            list->addr = (void *) ((uint64_t) list->addr + size);
+            void *addr = list->addr;
+            list->addr = (void *)((uint64_t)list->addr + size);
             list->size -= size;
             return addr;
         }
@@ -112,7 +112,7 @@ void* allocate(Node* list, uint64_t size) {
 // calls. This function needs to be called only once.
 void setup_tcm() {
     uint64_t pa = VTCM_BASE_ADDRESS;
-    void* va = (void *)VTCM_BASE_ADDRESS;
+    void *va = (void *)VTCM_BASE_ADDRESS;
     unsigned int xwru = 15;
     // write back and cacheable
     unsigned int cccc = 7;
@@ -125,7 +125,7 @@ void setup_tcm() {
     // Remap Hexagon memory page using direct access to TLB entry.
     add_translation_extended(1, va, pa, page_size, xwru, cccc, asid, aa, vg);
     // Mark all VTCM memory as free.
-    Node* mb = createNode((void *)VTCM_BASE_ADDRESS, 1 << (10 + page_size));
+    Node *mb = createNode((void *)VTCM_BASE_ADDRESS, 1 << (10 + page_size));
     addAndMerge(free_blocks, mb);
     vtcm_ready = true;
 }
@@ -136,7 +136,7 @@ extern "C" {
 // mandatory for scatter/gather operations as they require to be contained
 // within a single page of memory. The size will be aligned to the closest
 // possible page size - 4KB / 16KB / 64KB / 256KB
-void* HAP_request_VTCM(unsigned int size, unsigned int single_page_flag) {
+void *HAP_request_VTCM(unsigned int size, unsigned int single_page_flag) {
     // Align size to the closest possible page size - 4KB / 16KB / 64KB / 256KB
     if (single_page_flag == 1) {
         unsigned int size_KB = size >> 10;
@@ -152,19 +152,19 @@ void* HAP_request_VTCM(unsigned int size, unsigned int single_page_flag) {
     }
     if (!vtcm_ready) setup_tcm();
     // Check if we have enough free memory in VTCM.
-    void* addr = allocate(free_blocks, size);
+    void *addr = allocate(free_blocks, size);
     if (!addr) {
         return NULL;
     }
     // Add entry to used_blocks. Don't merge Nodes here.
-    Node* mb = createNode(addr, size);
+    Node *mb = createNode(addr, size);
     addNode(used_blocks, mb);
     return addr;
 }
 
-int HAP_release_VTCM(void* pVA) {
+int HAP_release_VTCM(void *pVA) {
     // Remove the entry from the used_blocks list.
-    Node* mb = findAndRemove(used_blocks, pVA);
+    Node *mb = findAndRemove(used_blocks, pVA);
     if (!mb) {
         return -1;
     }
@@ -172,5 +172,4 @@ int HAP_release_VTCM(void* pVA) {
     addAndMerge(free_blocks, mb);
     return 0;
 }
-
 }
