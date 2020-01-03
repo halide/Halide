@@ -218,22 +218,38 @@ void CodeGen_PTX_Dev::visit(const Allocate *alloc) {
         // meaningless, so we had better only be dealing with
         // constants here.
         int32_t size = alloc->constant_allocation_size();
-        user_assert(size > 0)
-            << "Allocation " << alloc->name << " has a dynamic size. "
-            << "Only fixed-size allocations are supported on the gpu. "
-            << "Try storing into shared memory instead.";
 
-        BasicBlock *here = builder->GetInsertBlock();
-
-        builder->SetInsertPoint(entry_block);
-        Value *ptr = builder->CreateAlloca(llvm_type_of(alloc->type), ConstantInt::get(i32_t, size));
-        builder->SetInsertPoint(here);
-        sym_push(allocation_name, ptr);
+        if (size) {
+            BasicBlock *here = builder->GetInsertBlock();
+            builder->SetInsertPoint(entry_block);
+            Value *ptr = builder->CreateAlloca(llvm_type_of(alloc->type), ConstantInt::get(i32_t, size));
+            builder->SetInsertPoint(here);
+            sym_push(allocation_name, ptr);
+        } else {
+            // Directly emit a call to malloc
+            Expr size = cast<uint64_t>(alloc->type.bytes());
+            for (auto e : alloc->extents) {
+                size *= cast<uint64_t>(e);
+            }
+            size = simplify(size);
+            llvm::Function *fn = module->getFunction("malloc_wrapper");
+            internal_assert(fn) << "Could not find malloc in ptx dev initial module";
+            llvm::Value *llvm_size = codegen(size);
+            llvm::Value *ptr = builder->CreateCall(fn, llvm_size);
+            in_kernel_heap_allocations.push(allocation_name);
+            sym_push(allocation_name, ptr);
+        }
     }
     codegen(alloc->body);
 }
 
 void CodeGen_PTX_Dev::visit(const Free *f) {
+    if (in_kernel_heap_allocations.contains(f->name)) {
+        Expr ptr = Variable::make(type_of<uint8_t *>(), f->name);
+        Expr free_call = Call::make(type_of<int>(), "free_wrapper", {ptr}, Call::Extern);
+        codegen(free_call);
+        in_kernel_heap_allocations.pop(f->name);
+    }
     sym_pop(f->name);
 }
 
