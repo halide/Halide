@@ -46,13 +46,12 @@ YuvBufferT LockedSurface::yuvView() const {
     uint8_t *chromaUPtr = lumaPtr + lumaSizeBytes + chromaSizeBytes;
 
     return YuvBufferT(lumaPtr,
-        buffer_.width, buffer_.height,
-        1 /* lumaElementStrideBytes */, lumaRowStrideBytes,
-        chromaUPtr,
-        buffer_.width / 2, buffer_.height / 2,
-        1 /* chromaUElementStrideBytes */, chromaRowStrideBytes,
-        chromaVPtr,
-        buffer_.width / 2, buffer_.height / 2,
-        1 /* chromaVElementStrideBytes */, chromaRowStrideBytes
-    );
+                      buffer_.width, buffer_.height,
+                      1 /* lumaElementStrideBytes */, lumaRowStrideBytes,
+                      chromaUPtr,
+                      buffer_.width / 2, buffer_.height / 2,
+                      1 /* chromaUElementStrideBytes */, chromaRowStrideBytes,
+                      chromaVPtr,
+                      buffer_.width / 2, buffer_.height / 2,
+                      1 /* chromaVElementStrideBytes */, chromaRowStrideBytes);
 }

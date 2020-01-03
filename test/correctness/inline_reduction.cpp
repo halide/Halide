@@ -1,6 +1,6 @@
 #include "Halide.h"
-#include <stdio.h>
 #include <algorithm>
+#include <stdio.h>
 
 using namespace Halide;
 
@@ -11,12 +11,12 @@ int main(int argc, char **argv) {
     // Test a complex summation
     Func input;
     Var x, y, z;
-    input(x, y) = cast<float>(x*y+1);
+    input(x, y) = cast<float>(x * y + 1);
 
     Func local_variance;
-    Expr input_val = input(x+r.x, y+r.y);
+    Expr input_val = input(x + r.x, y + r.y);
     Expr local_mean = sum(input_val) / 9.0f;
-    local_variance(x, y) = sum(input_val*input_val)/81.0f - local_mean*local_mean;
+    local_variance(x, y) = sum(input_val * input_val) / 81.0f - local_mean * local_mean;
 
     Buffer<float> result = local_variance.realize(10, 10);
 
@@ -26,13 +26,13 @@ int main(int argc, char **argv) {
             float local_variance = 0;
             for (int rx = -1; rx < 2; rx++) {
                 for (int ry = -1; ry < 2; ry++) {
-                    float val = (x + rx)*(y + ry) + 1.0f;
+                    float val = (x + rx) * (y + ry) + 1.0f;
                     local_mean += val;
-                    local_variance += val*val;
+                    local_variance += val * val;
                 }
             }
             local_mean /= 9.0f;
-            float correct = local_variance/81.0f - local_mean*local_mean;
+            float correct = local_variance / 81.0f - local_mean * local_mean;
             float r = result(x, y);
             float delta = correct - r;
             if (delta < -0.001 || delta > 0.001) {
@@ -41,7 +41,6 @@ int main(int argc, char **argv) {
             }
         }
     }
-
 
     // Test the other reductions.
     Func local_product, local_max, local_min;
@@ -53,8 +52,8 @@ int main(int argc, char **argv) {
     // in one pipeline.
     Func min_x, min_y;
     RDom kx(-1, 3), ky(-1, 3);
-    min_x(x, y) = minimum(input(x+kx, y));
-    min_y(x, y) = minimum(min_x(x, y+ky));
+    min_x(x, y) = minimum(input(x + kx, y));
+    min_y(x, y) = minimum(min_x(x, y + ky));
 
     // Vectorize them all, to make life more interesting.
     local_product.vectorize(x, 4);
@@ -74,7 +73,7 @@ int main(int argc, char **argv) {
             float correct_max = -1e10f;
             for (int rx = -1; rx < 2; rx++) {
                 for (int ry = -1; ry < 2; ry++) {
-                    float val = (x + rx)*(y + ry) + 1.0f;
+                    float val = (x + rx) * (y + ry) + 1.0f;
                     correct_prod *= val;
                     correct_min = std::min(correct_min, val);
                     correct_max = std::max(correct_max, val);
@@ -82,7 +81,7 @@ int main(int argc, char **argv) {
             }
 
             float delta;
-            delta = (correct_prod+10)/(prod_im(x, y)+10);
+            delta = (correct_prod + 10) / (prod_im(x, y) + 10);
             if (delta < 0.99 || delta > 1.01) {
                 printf("prod_im(%d, %d) = %f instead of %f\n", x, y, prod_im(x, y), correct_prod);
                 return -1;
@@ -177,5 +176,4 @@ int main(int argc, char **argv) {
 
     printf("Success!\n");
     return 0;
-
 }

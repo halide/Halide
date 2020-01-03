@@ -1,21 +1,20 @@
-#include <jni.h>
-#include <android/log.h>
 #include <android/bitmap.h>
+#include <android/log.h>
 #include <android/native_window_jni.h>
-#include <time.h>
-#include <string.h>
+#include <jni.h>
 #include <stdlib.h>
+#include <string.h>
+#include <time.h>
 
-#include "halide_gl_filter.h"
 #include "HalideRuntimeOpenGL.h"
+#include "halide_gl_filter.h"
 
-#define  LOGD(...)  __android_log_print(ANDROID_LOG_DEBUG,"halide_native",__VA_ARGS__)
-#define  LOGE(...)  __android_log_print(ANDROID_LOG_ERROR,"halide_native",__VA_ARGS__)
+#define LOGD(...) __android_log_print(ANDROID_LOG_DEBUG, "halide_native", __VA_ARGS__)
+#define LOGE(...) __android_log_print(ANDROID_LOG_ERROR, "halide_native", __VA_ARGS__)
 
-void * const user_context = NULL;
+void *const user_context = NULL;
 
-extern "C"
-JNIEXPORT void JNICALL Java_org_halide_1lang_hellohalidegl_HalideGLView_processTextureHalide(
+extern "C" JNIEXPORT void JNICALL Java_org_halide_1lang_hellohalidegl_HalideGLView_processTextureHalide(
     JNIEnv *env, jobject obj, jint dst, jint width, jint height) {
 
     buffer_t dstBuf = {0};
@@ -47,7 +46,7 @@ JNIEXPORT void JNICALL Java_org_halide_1lang_hellohalidegl_HalideGLView_processT
     if (int err = halide_gl_filter(time, &dstBuf)) {
         LOGD("Halide filter failed with error code %d\n", err);
     }
-    time += 1.0f/16.0f;
+    time += 1.0f / 16.0f;
 
     uintptr_t detached = halide_opengl_detach_texture(user_context, &dstBuf);
     if (detached != dst) {
@@ -55,9 +54,8 @@ JNIEXPORT void JNICALL Java_org_halide_1lang_hellohalidegl_HalideGLView_processT
     }
 }
 
-extern "C"
-JNIEXPORT void JNICALL Java_org_halide_1lang_hellohalidegl_HalideGLView_halideContextLost(
-    JNIEnv * env, jobject obj) {
+extern "C" JNIEXPORT void JNICALL Java_org_halide_1lang_hellohalidegl_HalideGLView_halideContextLost(
+    JNIEnv *env, jobject obj) {
 
     halide_opengl_context_lost(NULL);
 }

@@ -1,6 +1,6 @@
 #include "Halide.h"
-#include <stdio.h>
 #include <algorithm>
+#include <stdio.h>
 
 using namespace Halide;
 
@@ -13,7 +13,7 @@ int main(int argc, char **argv) {
     // 130MB works on 2GB Quadro 4000 when freshly booted
 
     // Here we'll allocated 10MB/image * 2 buffers, so that the test passes reliably.
-    int W = 1024*10/4, H = 1024;
+    int W = 1024 * 10 / 4, H = 1024;
 
     printf("Defining function...\n");
 
@@ -33,11 +33,11 @@ int main(int argc, char **argv) {
 
     for (int i = 0; i < W; i++) {
         for (int j = 0; j < H; j++) {
-            int m = std::max(i,j);
+            int m = std::max(i, j);
             // printf("img[%d, %d] = %d\n", i, j, img(i, j));
             if (img(i, j) != (m < 20 ? 20 :
-                              m > 100 ? 100 :
-                              m)) {
+                                       m > 100 ? 100 :
+                                                 m)) {
                 printf("img[%d, %d] = %d\n", i, j, img(i, j));
                 return -1;
             }

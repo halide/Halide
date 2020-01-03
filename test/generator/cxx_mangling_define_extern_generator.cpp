@@ -1,7 +1,6 @@
 #include "Halide.h"
 
-class CPlusPlusNameManglingDefineExternGenerator :
-    public Halide::Generator<CPlusPlusNameManglingDefineExternGenerator> {
+class CPlusPlusNameManglingDefineExternGenerator : public Halide::Generator<CPlusPlusNameManglingDefineExternGenerator> {
 public:
     // Use all the parameter types to make sure mangling works for each of them.
     Input<Func> input{"input", UInt(8), 1};
@@ -39,11 +38,11 @@ public:
         args.push_back(string_ptr);
         args.push_back(const_string_ptr);
         output1.define_extern("HalideTest::cxx_mangling_1",
-                         args, Float(64), 1, NameMangling::Default);
+                              args, Float(64), 1, NameMangling::Default);
         output2.define_extern("HalideTest::cxx_mangling_2",
-                         args, Float(64), 1, NameMangling::CPlusPlus);
+                              args, Float(64), 1, NameMangling::CPlusPlus);
         output3.define_extern("cxx_mangling_3",
-                         args, Float(64), 1, NameMangling::C);
+                              args, Float(64), 1, NameMangling::C);
     }
 
     void schedule() {

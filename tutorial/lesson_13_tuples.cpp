@@ -18,8 +18,8 @@
 // source tree.
 
 #include "Halide.h"
-#include <stdio.h>
 #include <algorithm>
+#include <stdio.h>
 using namespace Halide;
 
 int main(int argc, char **argv) {
@@ -37,9 +37,9 @@ int main(int argc, char **argv) {
     // for every x, y coordinate indexed by c.
     Func color_image;
     Var c;
-    color_image(x, y, c) = select(c == 0, 245, // Red value
-                                  c == 1, 42,  // Green value
-                                  132);        // Blue value
+    color_image(x, y, c) = select(c == 0, 245,  // Red value
+                                  c == 1, 42,   // Green value
+                                  132);         // Blue value
 
     // This method is often convenient because it makes it easy to
     // operate on this Func in a way that treats each item in the
@@ -98,12 +98,12 @@ int main(int argc, char **argv) {
     // in the same loop nest, but stored in distinct allocations. The
     // equivalent C++ code to the above is:
     {
-        int multi_valued_0[80*60];
-        float multi_valued_1[80*60];
+        int multi_valued_0[80 * 60];
+        float multi_valued_1[80 * 60];
         for (int y = 0; y < 80; y++) {
             for (int x = 0; x < 60; x++) {
-                multi_valued_0[x + 60*y] = x + y;
-                multi_valued_1[x + 60*y] = sinf(x*y);
+                multi_valued_0[x + 60 * y] = x + y;
+                multi_valued_1[x + 60 * y] = sinf(x * y);
             }
         }
     }
@@ -119,7 +119,7 @@ int main(int argc, char **argv) {
     // can also take advantage of C++11 initializer lists and just
     // enclose your Exprs in braces:
     Func multi_valued_2;
-    multi_valued_2(x, y) = {x + y, sin(x*y)};
+    multi_valued_2(x, y) = {x + y, sin(x * y)};
 
     // Calls to a multi-valued Func cannot be treated as Exprs. The
     // following is a syntax error:
@@ -154,9 +154,9 @@ int main(int argc, char **argv) {
         // Update definition.
         RDom r(1, 99);
         Expr old_index = arg_max()[0];
-        Expr old_max   = arg_max()[1];
+        Expr old_max = arg_max()[1];
         Expr new_index = select(old_max < input(r), r, old_index);
-        Expr new_max   = max(input(r), old_max);
+        Expr new_max = max(input(r), old_max);
         arg_max() = {new_index, new_max};
 
         // The equivalent C++ is:
@@ -203,13 +203,19 @@ int main(int argc, char **argv) {
             Expr real, imag;
 
             // Construct from a Tuple
-            Complex(Tuple t) : real(t[0]), imag(t[1]) {}
+            Complex(Tuple t)
+                : real(t[0]), imag(t[1]) {
+            }
 
             // Construct from a pair of Exprs
-            Complex(Expr r, Expr i) : real(r), imag(i) {}
+            Complex(Expr r, Expr i)
+                : real(r), imag(i) {
+            }
 
             // Construct from a call to a Func by treating it as a Tuple
-            Complex(FuncRef t) : Complex(Tuple(t)) {}
+            Complex(FuncRef t)
+                : Complex(Tuple(t)) {
+            }
 
             // Convert to a Tuple
             operator Tuple() const {
@@ -241,7 +247,7 @@ int main(int argc, char **argv) {
 
         // The initial complex value corresponding to an x, y coordinate
         // in our Func.
-        Complex initial(x/15.0f - 2.5f, y/6.0f - 2.0f);
+        Complex initial(x / 15.0f - 2.5f, y / 6.0f - 2.0f);
 
         // Pure definition.
         Var t;
@@ -249,11 +255,11 @@ int main(int argc, char **argv) {
 
         // We'll use an update definition to take 12 steps.
         RDom r(1, 12);
-        Complex current = mandelbrot(x, y, r-1);
+        Complex current = mandelbrot(x, y, r - 1);
 
         // The following line uses the complex multiplication and
         // addition we defined above.
-        mandelbrot(x, y, r) = current*current + initial;
+        mandelbrot(x, y, r) = current * current + initial;
 
         // We'll use another tuple reduction to compute the iteration
         // number where the value first escapes a circle of radius 4.
@@ -282,7 +288,6 @@ int main(int argc, char **argv) {
             printf("\n");
         }
     }
-
 
     printf("Success!\n");
 

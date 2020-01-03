@@ -27,7 +27,7 @@ bool test() {
     RDom r(in);
     hist(x) = cast<HTYPE>(0);
     hist(clamp(cast<int>(in(r.x, r.y)), 0, 255)) += cast<HTYPE>(1);
-    g(x) = hist(x+10);
+    g(x) = hist(x + 10);
 
     // No parallel reductions
     /*
@@ -62,11 +62,11 @@ bool test() {
         hist.compute_root();
     }
 
-    Buffer<HTYPE> histogram = g.realize(128); // buckets 10-137
+    Buffer<HTYPE> histogram = g.realize(128);  // buckets 10-137
 
     for (int i = 10; i < 138; i++) {
-        if (histogram(i-10) != reference_hist[i]) {
-            printf("Error: bucket %d is %d instead of %d\n", i, histogram(i-10), reference_hist[i]);
+        if (histogram(i - 10) != reference_hist[i]) {
+            printf("Error: bucket %d is %d instead of %d\n", i, histogram(i - 10), reference_hist[i]);
             return false;
         }
     }
@@ -78,9 +78,9 @@ int main(int argc, char **argv) {
     Target target = get_jit_target_from_environment();
 
     if (target.features_any_of({Target::HVX_64, Target::HVX_128})) {
-        if (!test<uint8_t,  int16_t >() ||
+        if (!test<uint8_t, int16_t>() ||
             !test<uint16_t, uint16_t>() ||
-            !test<uint8_t,  int32_t >() ||
+            !test<uint8_t, int32_t>() ||
             !test<uint32_t, uint32_t>()) return 1;
     } else {
         if (!test<float, int>()) return 1;

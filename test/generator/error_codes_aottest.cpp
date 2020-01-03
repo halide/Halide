@@ -25,12 +25,12 @@ int main(int argc, char **argv) {
     halide_dimension_t shape[] = {{0, 64, 1},
                                   {0, 123, 64}};
 
-    in.host = (uint8_t *)malloc(64*123*4);
+    in.host = (uint8_t *)malloc(64 * 123 * 4);
     in.type = halide_type_of<int>();
     in.dim = shape;
     in.dimensions = 2;
 
-    out.host = (uint8_t *)malloc(64*123*4);
+    out.host = (uint8_t *)malloc(64 * 123 * 4);
     out.type = halide_type_of<int>();
     out.dim = shape;
     out.dimensions = 2;
@@ -119,7 +119,7 @@ int main(int argc, char **argv) {
 
     // Violate the custom requirement that the height of the input is 123
     halide_dimension_t too_tall[] = {{0, 64, 1},
-                                      {0, 200, 64}};
+                                     {0, 200, 64}};
     in.dim = too_tall;
     result = error_codes(&in, 64, &out);
     correct = halide_error_code_requirement_failed;

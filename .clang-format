@@ -1,13 +1,12 @@
 ---
-# BasedOnStyle: LLVM
 AccessModifierOffset: -4
 AlignEscapedNewlinesLeft: true
 AlignTrailingComments: true
 AllowAllParametersOfDeclarationOnNextLine: true
+AllowShortBlocksOnASingleLine: Empty
 AllowShortFunctionsOnASingleLine: false
 AllowShortIfStatementsOnASingleLine: true
 AllowShortLoopsOnASingleLine: false
-AllowShortBlocksOnASingleLine: Empty
 AlwaysBreakBeforeMultilineStrings: false
 AlwaysBreakTemplateDeclarations: true
 BinPackParameters: true
@@ -19,7 +18,7 @@ ColumnLimit: 0
 ConstructorInitializerAllOnOneLineOrOnePerLine: false
 ConstructorInitializerIndentWidth: 4
 ContinuationIndentWidth: 4
-Cpp11BracedListStyle: false
+Cpp11BracedListStyle: true
 DerivePointerBinding: false
 ExperimentalAutoDetectBinPacking: false
 IndentCaseLabels: false
@@ -36,6 +35,7 @@ PenaltyExcessCharacter: 1000000
 PenaltyReturnTypeOnItsOwnLine: 60
 PointerBindsToType: false
 SpaceAfterControlStatementKeyword: true
+SpaceAfterCStyleCast: false
 SpaceAfterTemplateKeyword: false
 SpaceBeforeAssignmentOperators: true
 SpaceInEmptyParentheses: false
@@ -45,9 +45,6 @@ SpacesInCStyleCastParentheses: false
 SpacesInParentheses: false
 Standard: Cpp11
 TabWidth: 8
-SpaceAfterCStyleCast: false
 UseTab: Never
-Cpp11BracedListStyle: true
 
 ...
-

@@ -8,13 +8,25 @@ class Complex {
     Tuple t;
 
 public:
-    Complex(Expr real, Expr imag) : t(real, imag) {}
-    Complex(Tuple tup) : t(tup) {}
-    Complex(FuncRef f) : t(Tuple(f)) {}
-    Expr real() const { return t[0]; }
-    Expr imag() const { return t[1]; }
+    Complex(Expr real, Expr imag)
+        : t(real, imag) {
+    }
+    Complex(Tuple tup)
+        : t(tup) {
+    }
+    Complex(FuncRef f)
+        : t(Tuple(f)) {
+    }
+    Expr real() const {
+        return t[0];
+    }
+    Expr imag() const {
+        return t[1];
+    }
 
-    operator Tuple() const { return t; }
+    operator Tuple() const {
+        return t;
+    }
 };
 
 // Define the usual complex arithmetic
@@ -27,9 +39,13 @@ Complex operator*(const Complex &a, const Complex &b) {
                    a.real() * b.imag() + a.imag() * b.real());
 }
 
-Complex conjugate(const Complex &a) { return Complex(a.real(), -a.imag()); }
+Complex conjugate(const Complex &a) {
+    return Complex(a.real(), -a.imag());
+}
 
-Expr magnitude(Complex a) { return (a * conjugate(a)).real(); }
+Expr magnitude(Complex a) {
+    return (a * conjugate(a)).real();
+}
 
 class Mandelbrot : public Generator<Mandelbrot> {
 public:
@@ -39,9 +55,9 @@ public:
     Input<float> y_max{"y_max"};
     Input<float> c_real{"c_real"};
     Input<float> c_imag{"c_imag"};
-    Input<int>   iters{"iters"};
-    Input<int>   w{"w"};
-    Input<int>   h{"h"};
+    Input<int> iters{"iters"};
+    Input<int> w{"w"};
+    Input<int> h{"h"};
 
     Output<Buffer<int32_t>> count{"count", 2};
 
@@ -68,6 +84,7 @@ public:
 
         count.tile(x, y, xo, yo, xi, yi, 8, 8).parallel(yo).vectorize(xi, 4).unroll(xi).unroll(yi, 2);
     }
+
 private:
     // Declared as a member variable to verify that Funcs-as-members won't cause
     // spurious "Invalid Param name: __user_context" errors (Issue #561)

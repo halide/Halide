@@ -77,7 +77,6 @@ int check_error(int exp_heap_peak, int exp_num_mallocs,
     return 0;
 }
 
-
 // Return 0 if there is no error found
 int check_error_parallel(int min_heap_peak, int max_heap_peak, int exp_num_mallocs,
                          int exp_malloc_avg, int exp_stack_peak) {
@@ -120,14 +119,14 @@ int main(int argc, char **argv) {
         const int size_y = 64;
         Func f1("f_1"), g1("g_1");
         g1(x, y) = x;
-        f1(x, y) = g1(x%size_x, y%size_y);
+        f1(x, y) = g1(x % size_x, y % size_y);
         g1.compute_root();
 
         f1.set_custom_print(&my_print);
 
         reset_stats();
         f1.realize(size_x, size_y, t);
-        int stack_size = size_x*size_y*sizeof(int);
+        int stack_size = size_x * size_y * sizeof(int);
         if (check_error(0, 0, 0, stack_size) != 0) {
             return -1;
         }
@@ -141,14 +140,14 @@ int main(int argc, char **argv) {
 
         Func f2("f_2"), g2("g_2");
         g2(x, y) = x;
-        f2(x, y) = g2(x-1, y) + g2(x, y-1);
+        f2(x, y) = g2(x - 1, y) + g2(x, y - 1);
         g2.compute_root();
 
         f2.set_custom_print(&my_print);
 
         reset_stats();
         f2.realize(size_x, size_y, t);
-        int total = (size_x+1)*(size_y+1)*sizeof(int);
+        int total = (size_x + 1) * (size_y + 1) * sizeof(int);
         if (check_error(total, 1, total, 0) != 0) {
             return -1;
         }
@@ -158,8 +157,8 @@ int main(int argc, char **argv) {
         printf("Running heap allocate condition is always false test...\n");
         // Allocate condiiton is always false
         Func f3("f_3"), g3("g_3");
-        g3(x, y) = x*y;
-        f3(x, y) = select(1 == 2, g3(x-1, y), 0);
+        g3(x, y) = x * y;
+        f3(x, y) = select(1 == 2, g3(x - 1, y), 0);
         g3.compute_root();
 
         f3.set_custom_print(&my_print);
@@ -175,8 +174,8 @@ int main(int argc, char **argv) {
         printf("Running stack allocate condition is always false test...\n");
         // Allocate condiiton is always false
         Func f3("f_3"), g3("g_3");
-        g3(x, y) = x*y;
-        f3(x, y) = select(1 == 2, g3((x-1)%10, y%10), 0);
+        g3(x, y) = x * y;
+        f3(x, y) = select(1 == 2, g3((x - 1) % 10, y % 10), 0);
         g3.compute_root();
 
         f3.set_custom_print(&my_print);
@@ -214,7 +213,7 @@ int main(int argc, char **argv) {
         toggle1.set(true);
         toggle2.set(true);
         f6.realize(size_x, t);
-        total = size_x*sizeof(float);
+        total = size_x * sizeof(float);
         if (check_error(total, 1, total, 0) != 0) {
             return -1;
         }
@@ -223,7 +222,7 @@ int main(int argc, char **argv) {
         toggle1.set(true);
         toggle2.set(false);
         f6.realize(size_x, t);
-        total = size_x*sizeof(float);
+        total = size_x * sizeof(float);
         if (check_error(total, 1, total, 0) != 0) {
             return -1;
         }
@@ -232,7 +231,7 @@ int main(int argc, char **argv) {
         toggle1.set(false);
         toggle2.set(true);
         f6.realize(size_x, t);
-        total = size_x*sizeof(float);
+        total = size_x * sizeof(float);
         if (check_error(total, 1, total, 0) != 0) {
             return -1;
         }
@@ -252,7 +251,7 @@ int main(int argc, char **argv) {
         const int size_y = 1000;
 
         Func f7("f_7"), f8("f_8"), g5("g_5");
-        g5(x, y) = x*y;
+        g5(x, y) = x * y;
         f7(x, y) = g5(x, y);
         f8(x, y) = g5(x, y) + f7(x, y);
 
@@ -263,9 +262,9 @@ int main(int argc, char **argv) {
 
         reset_stats();
         f8.realize(size_x, size_y, t);
-        int peak = size_x*sizeof(int);
-        int total = size_x*size_y*sizeof(int);
-        if (check_error(peak, size_y, total/size_y, 0) != 0) {
+        int peak = size_x * sizeof(int);
+        int total = size_x * size_y * sizeof(int);
+        if (check_error(peak, size_y, total / size_y, 0) != 0) {
             return -1;
         }
     }
@@ -276,7 +275,7 @@ int main(int argc, char **argv) {
         const int size_y = 1000;
 
         Func f9("f_9"), f10("f_10"), g6("g_6");
-        g6(x, y) = x*y;
+        g6(x, y) = x * y;
         f9(x, y) = g6(x, y);
         f10(x, y) = g6(x, y) + f9(x, y);
 
@@ -289,9 +288,9 @@ int main(int argc, char **argv) {
 
         reset_stats();
         f10.realize(size_x, size_y, t);
-        int min_heap_peak = size_x*sizeof(int);
-        int total = size_x*size_y*sizeof(int);
-        if (check_error_parallel(min_heap_peak, total, size_y, total/size_y, 0) != 0) {
+        int min_heap_peak = size_x * sizeof(int);
+        int total = size_x * size_y * sizeof(int);
+        if (check_error_parallel(min_heap_peak, total, size_y, total / size_y, 0) != 0) {
             return -1;
         }
     }
@@ -303,14 +302,14 @@ int main(int argc, char **argv) {
         const int size_y = 64;
         Func f11("f_11"), g7("g_7");
         g7(x, y) = x;
-        f11(x, y) = g7(x%size_x, y%size_y);
+        f11(x, y) = g7(x % size_x, y % size_y);
         g7.compute_root();
 
         f11.set_custom_print(&my_print);
 
         reset_stats();
         f11.realize(size_x, size_y, t);
-        int total = size_x*size_y*sizeof(int);
+        int total = size_x * size_y * sizeof(int);
         if (check_error(total, 1, total, 0) != 0) {
             return -1;
         }
@@ -322,7 +321,7 @@ int main(int argc, char **argv) {
         const int size_y = 10;
         Func f12("f_12"), g8("g_8");
         g8(x, y) = x;
-        f12(x, y) = g8(x%size_x, y%size_y);
+        f12(x, y) = g8(x % size_x, y % size_y);
         g8.store_at(f12, y).compute_at(f12, y);
 
         f12.parallel(y);
@@ -331,7 +330,7 @@ int main(int argc, char **argv) {
 
         reset_stats();
         f12.realize(size_x, size_y, t);
-        int stack_size = size_x*size_y*sizeof(int);
+        int stack_size = size_x * size_y * sizeof(int);
         if (check_error(0, 0, 0, stack_size) != 0) {
             return -1;
         }

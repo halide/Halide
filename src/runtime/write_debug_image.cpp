@@ -19,7 +19,9 @@
 // It would be nice to use a format that web browsers read and display
 // directly, but those formats don't tend to satisfy the above goals.
 
-namespace Halide { namespace Runtime { namespace Internal {
+namespace Halide {
+namespace Runtime {
+namespace Internal {
 
 // Mappings from the type_code passed in to the type codes of the
 // formats. See "type_code" in DebugToFile.cpp
@@ -30,17 +32,14 @@ namespace Halide { namespace Runtime { namespace Internal {
 //     3 => Floating-point
 WEAK int16_t pixel_type_to_tiff_sample_type[] = {
     // float, double, uint8, int8, ... uint64, int64
-    3, 3, 1, 2, 1, 2, 1, 2, 1, 2
-};
+    3, 3, 1, 2, 1, 2, 1, 2, 1, 2};
 
 // See the .mat level 5 documentation for matlab class codes.
 WEAK uint8_t pixel_type_to_matlab_class_code[] = {
-    7, 6, 9, 8, 11, 10, 13, 12, 15, 14
-};
+    7, 6, 9, 8, 11, 10, 13, 12, 15, 14};
 
 WEAK uint8_t pixel_type_to_matlab_type_code[] = {
-    7, 9, 2, 1, 4, 3, 6, 5, 13, 12
-};
+    7, 9, 2, 1, 4, 3, 6, 5, 13, 12};
 
 #pragma pack(push)
 #pragma pack(2)
@@ -69,7 +68,7 @@ struct tiff_tag {
         this->value.i32 = value;
     }
 
-    void assign32(uint16_t tag_code, int16_t type_code, int32_t count, int32_t value)  __attribute__((always_inline)) {
+    void assign32(uint16_t tag_code, int16_t type_code, int32_t count, int32_t value) __attribute__((always_inline)) {
         this->tag_code = tag_code;
         this->type_code = type_code;
         this->count = count;
@@ -92,8 +91,12 @@ struct halide_tiff_header {
 
 WEAK bool ends_with(const char *filename, const char *suffix) {
     const char *f = filename, *s = suffix;
-    while (*f) f++;
-    while (*s) s++;
+    while (*f) {
+        f++;
+    }
+    while (*s) {
+        s++;
+    }
     while (s != suffix && f != filename) {
         if (*f != *s) return false;
         f--;
@@ -118,7 +121,9 @@ struct ScopedFile {
     }
 };
 
-}}} // namespace Halide::Runtime::Internal
+}  // namespace Internal
+}  // namespace Runtime
+}  // namespace Halide
 
 WEAK extern "C" int32_t halide_debug_to_file(void *user_context, const char *filename,
                                              int32_t type_code, struct halide_buffer_t *buf) {
@@ -179,28 +184,28 @@ WEAK extern "C" int32_t halide_debug_to_file(void *user_context, const char *fil
         header.entry_count = sizeof(header.entries) / sizeof(header.entries[0]);
 
         tiff_tag *tag = &header.entries[0];
-        tag++->assign32(256, 1, width);                          // Image width
-        tag++->assign32(257, 1, height);                         // Image height
-        tag++->assign16(258, 1, int16_t(bytes_per_element * 8)); // Bits per sample
-        tag++->assign16(259, 1, 1);                              // Compression -- none
-        tag++->assign16(262, 1, channels >= 3 ? 2 : 1);          // PhotometricInterpretation -- black is zero or RGB
-        tag++->assign32(273, channels, sizeof(header));          // Rows per strip
-        tag++->assign16(277, 1, int16_t(channels));              // Samples per pixel
-        tag++->assign32(278, 1, shape[1].extent);                // Rows per strip
+        tag++->assign32(256, 1, width);                           // Image width
+        tag++->assign32(257, 1, height);                          // Image height
+        tag++->assign16(258, 1, int16_t(bytes_per_element * 8));  // Bits per sample
+        tag++->assign16(259, 1, 1);                               // Compression -- none
+        tag++->assign16(262, 1, channels >= 3 ? 2 : 1);           // PhotometricInterpretation -- black is zero or RGB
+        tag++->assign32(273, channels, sizeof(header));           // Rows per strip
+        tag++->assign16(277, 1, int16_t(channels));               // Samples per pixel
+        tag++->assign32(278, 1, shape[1].extent);                 // Rows per strip
         tag++->assign32(279, channels,
                         (channels == 1) ?
                             elts * bytes_per_element :
                             sizeof(header) +
-                                channels * sizeof(int32_t));     // strip byte counts, bug if 32-bit truncation
+                                channels * sizeof(int32_t));  // strip byte counts, bug if 32-bit truncation
         tag++->assign32(282, 5, 1,
-                        __builtin_offsetof(halide_tiff_header, width_resolution));     // Width resolution
+                        __builtin_offsetof(halide_tiff_header, width_resolution));  // Width resolution
         tag++->assign32(283, 5, 1,
-                        __builtin_offsetof(halide_tiff_header, height_resolution));    // Height resolution
-        tag++->assign16(284, 1, 2);                              // Planar configuration -- planar
-        tag++->assign16(296, 1, 1);                              // Resolution Unit -- none
+                        __builtin_offsetof(halide_tiff_header, height_resolution));  // Height resolution
+        tag++->assign16(284, 1, 2);                                                  // Planar configuration -- planar
+        tag++->assign16(296, 1, 1);                                                  // Resolution Unit -- none
         tag++->assign16(339, 1,
-                        pixel_type_to_tiff_sample_type[type_code]);        // Sample type
-        tag++->assign32(32997, 1, depth);                        // Image depth
+                        pixel_type_to_tiff_sample_type[type_code]);  // Sample type
+        tag++->assign32(32997, 1, depth);                            // Image depth
 
         header.ifd0_end = 0;
         header.width_resolution[0] = 1;
@@ -216,24 +221,31 @@ WEAK extern "C" int32_t halide_debug_to_file(void *user_context, const char *fil
             int32_t offset = sizeof(header) + channels * sizeof(int32_t) * 2;
 
             for (int32_t i = 0; i < channels; i++) {
-                if (!f.write((void*)(&offset), 4)) {
+                if (!f.write((void *)(&offset), 4)) {
                     return -4;
                 }
                 offset += shape[0].extent * shape[1].extent * depth * bytes_per_element;
             }
             int32_t count = shape[0].extent * shape[1].extent * depth * bytes_per_element;
             for (int32_t i = 0; i < channels; i++) {
-                if (!f.write((void*)(&count), 4)) {
+                if (!f.write((void *)(&count), 4)) {
                     return -5;
                 }
             }
         }
     } else if (ends_with(filename, ".mat")) {
         // Construct a name for the array from the filename
-        const char *start, *end;
-        for (end = filename; *end; end++);
-        for (; *end != '.'; end--);
-        for (start = end; start != filename && start[-1] != '/'; start--);
+        const char *end = filename;
+        while (*end) {
+            end++;
+        }
+        while (*end != '.') {
+            end--;
+        }
+        const char *start = end;
+        while (start != filename && start[-1] != '/') {
+            start--;
+        }
         uint32_t name_size = (uint32_t)(end - start);
         char array_name[256];
         char *dst = array_name;
@@ -299,8 +311,7 @@ WEAK extern "C" int32_t halide_debug_to_file(void *user_context, const char *fil
 
         // Payload header
         uint32_t payload_header[2] = {
-            pixel_type_to_matlab_type_code[type_code], (uint32_t)payload_bytes
-        };
+            pixel_type_to_matlab_type_code[type_code], (uint32_t)payload_bytes};
         if (!f.write(payload_header, sizeof(payload_header))) {
             return -11;
         }
@@ -316,9 +327,9 @@ WEAK extern "C" int32_t halide_debug_to_file(void *user_context, const char *fil
     }
 
     // Reorder the data according to the strides.
-    const int TEMP_SIZE = 4*1024;
+    const int TEMP_SIZE = 4 * 1024;
     uint8_t temp[TEMP_SIZE];
-    int max_elts = TEMP_SIZE/bytes_per_element;
+    int max_elts = TEMP_SIZE / bytes_per_element;
     int counter = 0;
 
     for (int32_t dim3 = shape[3].min; dim3 < shape[3].extent + shape[3].min; ++dim3) {
@@ -328,7 +339,7 @@ WEAK extern "C" int32_t halide_debug_to_file(void *user_context, const char *fil
                     counter++;
                     int idx[] = {dim0, dim1, dim2, dim3};
                     uint8_t *loc = buf->address_of(idx);
-                    void *dst = temp + (counter-1)*bytes_per_element;
+                    void *dst = temp + (counter - 1) * bytes_per_element;
                     memcpy(dst, loc, bytes_per_element);
 
                     if (counter == max_elts) {

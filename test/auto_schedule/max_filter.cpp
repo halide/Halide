@@ -34,33 +34,33 @@ double run_test(bool auto_schedule) {
     // are downward-looking.
     Func vert_log;
     vert_log(x, y, c, t) = input(x, y, c);
-    RDom r(-radius, in.height() + radius, 1, slices-1);
+    RDom r(-radius, in.height() + radius, 1, slices - 1);
     vert_log(x, r.x, c, r.y) = max(vert_log(x, r.x, c, r.y - 1),
-                                   vert_log(x, r.x + clamp((1 << cast<uint32_t>(r.y-1)), 0, radius*2), c, r.y - 1));
+                                   vert_log(x, r.x + clamp((1 << cast<uint32_t>(r.y - 1)), 0, radius * 2), c, r.y - 1));
 
     // We're going to take a max filter of arbitrary diameter
     // by maxing two samples from its floor log 2 (e.g. maxing two
     // 8-high overlapping samples). This next Func tells us which
     // slice to draw from for a given radius:
     Func slice_for_radius;
-    slice_for_radius(t) = cast<int>(floor(log(2*t+1) / logf(2)));
+    slice_for_radius(t) = cast<int>(floor(log(2 * t + 1) / logf(2)));
 
     // Produce every possible vertically-max-filtered version of the image:
     Func vert;
     // t is the blur radius
     Expr slice = clamp(slice_for_radius(t), 0, slices);
     Expr first_sample = vert_log(x, y - t, c, slice);
-    Expr second_sample = vert_log(x, y + t + 1 - clamp(1 << cast<uint32_t>(slice), 0, 2*radius), c, slice);
+    Expr second_sample = vert_log(x, y + t + 1 - clamp(1 << cast<uint32_t>(slice), 0, 2 * radius), c, slice);
     vert(x, y, c, t) = max(first_sample, second_sample);
 
     Func filter_height;
-    RDom dy(0, radius+1);
-    filter_height(x) = sum(select(x*x + dy*dy < (radius+0.25f)*(radius+0.25f), 1, 0));
+    RDom dy(0, radius + 1);
+    filter_height(x) = sum(select(x * x + dy * dy < (radius + 0.25f) * (radius + 0.25f), 1, 0));
 
     // Now take an appropriate horizontal max of them at each output pixel
     Func final;
-    RDom dx(-radius, 2*radius+1);
-    final(x, y, c) = maximum(vert(x + dx, y, c, clamp(filter_height(dx), 0, radius+1)));
+    RDom dx(-radius, 2 * radius + 1);
+    final(x, y, c) = maximum(vert(x + dx, y, c, clamp(filter_height(dx), 0, radius + 1)));
 
     Target target = get_jit_target_from_environment();
     Pipeline p(final);
@@ -81,7 +81,8 @@ double run_test(bool auto_schedule) {
         final
             .split(x, xo, xi, 128)
             .reorder(xi, xo, y, c)
-            .gpu_blocks(xo, y, c).gpu_threads(xi);
+            .gpu_blocks(xo, y, c)
+            .gpu_threads(xi);
 
         vert_log.compute_root()
             .reorder(c, t, x, y)
@@ -89,7 +90,8 @@ double run_test(bool auto_schedule) {
             .update()
             .split(x, xo, xi, 128)
             .reorder(r.x, r.y, xi, xo, c)
-            .gpu_blocks(xo, c).gpu_threads(xi);
+            .gpu_blocks(xo, c)
+            .gpu_threads(xi);
     } else {
         // These don't matter, just LUTs
         slice_for_radius.compute_root();
@@ -116,7 +118,7 @@ double run_test(bool auto_schedule) {
         p.realize(out);
     });
 
-    return time*1000;
+    return time * 1000;
 }
 
 int main(int argc, char **argv) {

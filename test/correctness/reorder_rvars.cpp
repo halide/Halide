@@ -45,15 +45,15 @@ int main(int argc, char **argv) {
     // And now, a practical use-case for reorder rvars
     {
         Func input;
-        input(x, y) = x*y;
+        input(x, y) = x * y;
 
         // Compute summed-area table
         Func sat;
         sat(x, y) = input(x, y);
 
         RDom r(1, 99);
-        sat(x, r) += sat(x, r-1);
-        sat(r, y) += sat(r-1, y);
+        sat(x, r) += sat(x, r - 1);
+        sat(r, y) += sat(r - 1, y);
 
         // Walk down the columns in vectors.
         Var xo, xi;
@@ -64,7 +64,6 @@ int main(int argc, char **argv) {
         sat.update(1).parallel(y);
 
         sat.realize(100, 100);
-
     }
 
     printf("Success!\n");

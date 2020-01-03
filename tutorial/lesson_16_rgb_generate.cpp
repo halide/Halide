@@ -38,15 +38,18 @@ public:
     // We will compile this generator in several ways to accept
     // several different memory layouts for the input and output. This
     // is a good use of a GeneratorParam (see lesson 15).
-    enum class Layout { Planar, Interleaved, Either, Specialized };
+    enum class Layout { Planar,
+                        Interleaved,
+                        Either,
+                        Specialized };
     GeneratorParam<Layout> layout{"layout",
-            // default value
-            Layout::Planar,
-            // map from names to values
-                {{ "planar",        Layout::Planar },
-                 { "interleaved",   Layout::Interleaved },
-                 { "either",        Layout::Either },
-                 { "specialized",   Layout::Specialized }}};
+                                  // default value
+                                  Layout::Planar,
+                                  // map from names to values
+                                  {{"planar", Layout::Planar},
+                                   {"interleaved", Layout::Interleaved},
+                                   {"either", Layout::Either},
+                                   {"specialized", Layout::Specialized}}};
 
     // We also declare a scalar input to control the amount of
     // brightening.
@@ -124,13 +127,11 @@ public:
             // in c is one. We can tell Halide to assume (and assert)
             // that this is the case for the input and output like so:
 
-            input
-                .dim(0).set_stride(3) // stride in dimension 0 (x) is three
-                .dim(2).set_stride(1); // stride in dimension 2 (c) is one
+            input.dim(0).set_stride(3);  // stride in dimension 0 (x) is three
+            input.dim(2).set_stride(1);  // stride in dimension 2 (c) is one
 
-            brighter
-                .dim(0).set_stride(3)
-                .dim(2).set_stride(1);
+            brighter.dim(0).set_stride(3);
+            brighter.dim(2).set_stride(1);
 
             // For interleaved layout, you may want to use a different
             // schedule. We'll tell Halide to additionally assume and
@@ -138,7 +139,7 @@ public:
             // exploit this fact to make the loop over 'c' innermost
             // and unrolled.
 
-            input.dim(2).set_bounds(0, 3); // Dimension 2 (c) starts at 0 and has extent 3.
+            input.dim(2).set_bounds(0, 3);  // Dimension 2 (c) starts at 0 and has extent 3.
             brighter.dim(2).set_bounds(0, 3);
 
             // Move the loop over color channels innermost and unroll
@@ -155,9 +156,9 @@ public:
             // pipeline that will work with any memory layout. It will
             // probably be slow, because all vector loads become
             // gathers, and all vector stores become scatters.
-            input.dim(0).set_stride(Expr()); // Use a default-constructed
-                                             // undefined Expr to mean
-                                             // there is no constraint.
+            input.dim(0).set_stride(Expr());  // Use a default-constructed
+                                              // undefined Expr to mean
+                                              // there is no constraint.
 
             brighter.dim(0).set_stride(Expr());
 
@@ -168,9 +169,9 @@ public:
             // strides it find. First we relax the default constraint
             // that dim(0).stride() == 1:
 
-            input.dim(0).set_stride(Expr()); // Use an undefined Expr to
-                                             // mean there is no
-                                             // constraint.
+            input.dim(0).set_stride(Expr());  // Use an undefined Expr to
+                                              // mean there is no
+                                              // constraint.
 
             brighter.dim(0).set_stride(Expr());
 
@@ -206,7 +207,8 @@ public:
             // of the code for interleaved layouts, and to reorder and
             // unroll that specialized code.
             brighter.specialize(input_is_interleaved && output_is_interleaved)
-                .reorder(c, x, y).unroll(c);
+                .reorder(c, x, y)
+                .unroll(c);
 
             // We could also add specializations for if the input is
             // interleaved and the output is planar, and vice versa,

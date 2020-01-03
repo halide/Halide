@@ -1,6 +1,6 @@
 #include "Halide.h"
-#include <stdio.h>
 #include <memory>
+#include <stdio.h>
 
 int error_occurred = false;
 void halide_error(void *ctx, const char *msg) {
@@ -49,7 +49,7 @@ static void test(int vector_width) {
     }
 
     p1.set(1);
-    p2.set(kPrime1-1);
+    p2.set(kPrime1 - 1);
     error_occurred = false;
     result = f.realize(realize_width);
     if (error_occurred) {
@@ -64,7 +64,6 @@ static void test(int vector_width) {
             exit(1);
         }
     }
-
 
     ImageParam input(Int(32), 2);
     Expr h = require(p1 == p2, p1);
@@ -102,5 +101,4 @@ int main(int argc, char **argv) {
 
     printf("Success!\n");
     return 0;
-
 }
