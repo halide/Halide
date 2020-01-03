@@ -49,7 +49,7 @@ static_assert(PY_MAJOR_VERSION >= 3, "Python bindings for Halide require Python 
 namespace halide_register_generator {
 namespace HALIDE_CONCAT(HALIDE_PYSTUB_GENERATOR_NAME, _ns) {
     extern std::unique_ptr<Halide::Internal::GeneratorBase> factory(const Halide::GeneratorContext &context);
-}  // namespace )
+}  // namespace HALIDE_CONCAT(HALIDE_PYSTUB_GENERATOR_NAME,_ns)
 }  // namespace halide_register_generator
 
 HALIDE_PLUGIN_IMPL(HALIDE_PYSTUB_MODULE_NAME) {
