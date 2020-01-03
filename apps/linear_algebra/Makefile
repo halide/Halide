@@ -1,5 +1,6 @@
 include ../support/Makefile.inc
 
+AR ?= ar
 BIN ?= bin
 BUILD = $(BIN)/build
 CXXFLAGS += -Wall -march=native -I /opt/local/include
