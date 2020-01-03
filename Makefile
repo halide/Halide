@@ -2003,7 +2003,7 @@ $(TEST_APPS_DEPS): distrib build_python_bindings
 		HALIDE_PYTHON_BINDINGS_PATH=$(CURDIR)/$(BIN_DIR)/python3_bindings \
 		BIN_DIR=$(CURDIR)/$(BIN_DIR)/apps/$(@:%_test_app=%)/bin \
 		HL_TARGET=$(HL_TARGET) \
-		|| exit 1 ; \
+		|| exit 1 ;
 
 .PHONY: test_apps $(BUILD_APPS_DEPS) 
 test_apps: $(BUILD_APPS_DEPS)

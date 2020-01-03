@@ -1,6 +1,8 @@
 
 project(Halide)
-cmake_minimum_required(VERSION 3.3)
+cmake_minimum_required(VERSION 3.12)
+
+cmake_policy(SET CMP0074 NEW)  # find_package() uses <PackageName>_ROOT variables; requires 3.12+
 
 set(HALIDE_BASE_DIR   "${CMAKE_CURRENT_SOURCE_DIR}")
 
@@ -160,8 +162,8 @@ endif()
 if (LLVM_VERSION LESS 80)
   message(FATAL_ERROR "LLVM version must be 8.0 or newer")
 endif()
-if (LLVM_VERSION GREATER 100)
-  message(FATAL_ERROR "LLVM version must be 10.0 or older")
+if (LLVM_VERSION GREATER 110)
+  message(FATAL_ERROR "LLVM version must be 11.0 or older")
 endif()
 
 function(check_llvm_target TARGET HAS_TARGET)

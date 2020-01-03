@@ -1,0 +1,307 @@
+name: Build+Test
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, edited, review_requested]
+
+jobs:
+  test:
+    name: ${{matrix.config.name}}
+    runs-on: ${{matrix.config.os}}
+
+    strategy:
+      fail-fast: false  # Keep running other jobs even if one fails
+      matrix:
+        config:
+        # Ubuntu (x86-64) builds
+        - {
+            name: "Ubuntu g++ llvm8 cmake_shared",
+            build_tool: "cmake_shared",
+            cc: "gcc",
+            cxx: "g++",
+            llvm_version: 8,
+            os: ubuntu-18.04,
+          }
+        # - {
+        #     name: "Ubuntu g++ llvm8 cmake_static",
+        #     build_tool: "cmake_static",
+        #     cc: "gcc",
+        #     cxx: "g++",
+        #     llvm_version: 8,
+        #     os: ubuntu-18.04,
+        #   }
+        # - {
+        #     name: "Ubuntu g++ llvm8 make",
+        #     build_tool: "make",
+        #     cc: "gcc",
+        #     cxx: "g++",
+        #     llvm_version: 8,
+        #     os: ubuntu-18.04,
+        #   }
+        # - {
+        #     name: "Ubuntu g++ llvm9 cmake_shared",
+        #     build_tool: "cmake_shared",
+        #     cc: "gcc",
+        #     cxx: "g++",
+        #     llvm_version: 9,
+        #     os: ubuntu-18.04,
+        #   }
+        # - {
+        #     name: "Ubuntu g++ llvm9 cmake_static",
+        #     build_tool: "cmake_static",
+        #     cc: "gcc",
+        #     cxx: "g++",
+        #     llvm_version: 9,
+        #     os: ubuntu-18.04,
+        #   }
+        # - {
+        #     name: "Ubuntu g++ llvm9 make",
+        #     build_tool: "make",
+        #     cc: "gcc",
+        #     cxx: "g++",
+        #     llvm_version: 9,
+        #     os: ubuntu-18.04,
+        #   }
+
+        # OSX builds
+        - {
+            name: "OSX llvm9 cmake_shared",
+            build_tool: "cmake_shared",
+            cc: "clang",
+            cxx: "clang++",
+            llvm_version: 9,
+            os: macos-latest,
+          }
+
+        # - {
+        #     name: "OSX llvm9 make",
+        #     build_tool: "make",
+        #     cc: "clang",
+        #     cxx: "clang++",
+        #     llvm_version: 9,
+        #     os: macos-latest,
+        #   }
+
+        # - {
+        #     name: "Windows Latest MSVC", artifact: "Windows-MSVC.tar.xz",
+        #     os: windows-latest,
+        #     build_type: "Release", cc: "cl", cxx: "cl",
+        #     environment_script: "C:/Program Files (x86)/Microsoft Visual Studio/2019/Enterprise/VC/Auxiliary/Build/vcvars64.bat"
+        #   }
+        # - {
+        #     name: "Windows Latest MinGW", artifact: "Windows-MinGW.tar.xz",
+        #     os: windows-latest,
+        #     build_type: "Release", cc: "gcc", cxx: "g++"
+        #   }
+
+    steps:
+    - uses: actions/checkout@v2
+      with:
+        path: 'halide'
+
+    - name: Configure Ubuntu
+      if: matrix.config.os == 'ubuntu-18.04'
+      run: |
+        sudo apt-get update
+
+        # The standard Bionic install has gcc 7.4, which is known to be
+        # buggy with LLVM. Use gcc 8 instead.
+        sudo apt-get install gcc-8 g++-8
+        sudo update-alternatives --install /usr/bin/gcc gcc /usr/bin/gcc-8 100
+        sudo update-alternatives --install /usr/bin/g++ g++ /usr/bin/g++-8 100
+
+        # Install OpenGL
+        # TODO(srj): OpenGL is only needed to build the opengl tests (which we don't even run)...
+        sudo apt-get install libglu1-mesa-dev freeglut3-dev mesa-common-dev
+
+        # Install libpng
+        sudo apt-get -y --force-yes install libpng-dev
+
+        # Install doxygen
+        sudo apt-get -y --force-yes --no-install-recommends install doxygen
+
+        du -d 1 ${GITHUB_WORKSPACE}
+
+
+    - name: Configure OSX
+      if: matrix.config.os == 'macos-latest'
+      run: |
+        # Install libpng, jpeg, doxygen
+        brew install libpng jpeg doxygen
+
+        # Don't install LLVM via brew: it can conflict with the existing LLVM
+        # installation in OSX and cause unhappiness. We'll handle it specially below.
+
+        du -d 1 ${GITHUB_WORKSPACE}
+
+    - name: Download LLVM
+      shell: cmake -P {0}
+      run: |
+        # Download LLVM Release.
+        # Use CMake (rather than wget) because we know it's available and will get the job done.
+        if("${{matrix.config.os}}" MATCHES "^ubuntu.*")
+          set(LLVM_URL "https://releases.llvm.org/${{matrix.config.llvm_version}}.0.0/clang+llvm-${{matrix.config.llvm_version}}.0.0-x86_64-linux-gnu-ubuntu-18.04.tar.xz")
+        elseif("${{matrix.config.os}}" MATCHES "^macos.*")
+          set(LLVM_URL "https://releases.llvm.org/${{matrix.config.llvm_version}}.0.0/clang+llvm-${{matrix.config.llvm_version}}.0.0-x86_64-darwin-apple.tar.xz")
+        else()
+          message(FATAL_ERROR "Unknown OS: ${{matrix.config.os}}")
+        endif()
+
+        set(ROOT "$ENV{GITHUB_WORKSPACE}")
+        set(HALIDE_DIR "${ROOT}/halide")
+
+        file(DOWNLOAD "${LLVM_URL}" "${ROOT}/llvm-project.tar.xz")
+        execute_process(COMMAND ${CMAKE_COMMAND} -E tar xvf "${ROOT}/llvm-project.tar.xz")
+        execute_process(COMMAND ${CMAKE_COMMAND} -E remove -f "${ROOT}/llvm-project.tar.xz")
+
+        string(REGEX REPLACE
+          "http[s]*://releases.llvm.org/[0-9\\.]*/([^/]*)\\.tar\\.xz"
+          "\\1"
+          LLVM_UNTAR_DIR
+          "${LLVM_URL}"
+        )
+        message(STATUS "LLVM_UNTAR_DIR ${ROOT}/${LLVM_UNTAR_DIR}")
+        execute_process(
+          COMMAND ${CMAKE_COMMAND}
+            -E rename "${ROOT}/${LLVM_UNTAR_DIR}" "${ROOT}/llvm"
+          RESULT_VARIABLE result
+        )
+        if (NOT result EQUAL 0)
+          message(FATAL_ERROR "Bad exit status: ${result}")
+        endif()
+
+        execute_process(COMMAND du -d 1 $ENV{GITHUB_WORKSPACE})
+
+    - name: Configure Make/CMake
+      shell: cmake -P {0}
+      run: |
+        # Configure Make/CMake
+        set(ENV{CC} "${{matrix.config.cc}}")
+        set(ENV{CXX} "${{matrix.config.cxx}}")
+
+        set(ROOT "$ENV{GITHUB_WORKSPACE}")
+        set(HALIDE_DIR "${ROOT}/halide")
+        set(LLVM_DIR "${ROOT}/llvm")
+        set(HALIDE_BUILD_DIR "${ROOT}/halide_build")
+
+        execute_process(
+          COMMAND ${CMAKE_COMMAND}
+            -E make_directory "${HALIDE_BUILD_DIR}"
+          RESULT_VARIABLE result
+        )
+        if (NOT result EQUAL 0)
+          message(FATAL_ERROR "Bad exit status: ${result}")
+        endif()
+
+        if (${{matrix.config.build_tool}} MATCHES "^cmake.*")
+          # Make sure that our LLVM package is in CMAKE_MODULE_PATH
+          # so that CMake will be able to find it
+          if (${{matrix.config.build_tool}} MATCHES "cmake_shared")
+            set(HALIDE_SHARED_LIBRARY ON)
+          elseif (${{matrix.config.build_tool}} MATCHES "cmake_static")
+            set(HALIDE_SHARED_LIBRARY OFF)
+          else()
+            message(FATAL_ERROR "Unknown build_tool: ${{matrix.config.build_tool}}")
+          endif()
+          execute_process(
+            COMMAND ${CMAKE_COMMAND}
+                -DCMAKE_BUILD_TYPE=Debug
+                -DHALIDE_REQUIRE_LLVM_VERSION=${{matrix.config.llvm_version}}0
+                -DLLVM_ROOT=${LLVM_DIR}
+                -DHALIDE_SHARED_LIBRARY=${HALIDE_SHARED_LIBRARY}
+                -G "Unix Makefiles"
+                ${HALIDE_DIR}
+            WORKING_DIRECTORY ${HALIDE_BUILD_DIR}
+            RESULT_VARIABLE result
+          )
+        elseif (${{matrix.config.build_tool}} STREQUAL "make")
+          # Nothing, we're good to go
+        else()
+          message(FATAL_ERROR "Unknown build_tool: ${{matrix.config.build_tool}}")
+        endif()
+        if (NOT result EQUAL 0)
+          message(FATAL_ERROR "Bad exit status: ${result}")
+        endif()
+
+        execute_process(COMMAND du -d 1 $ENV{GITHUB_WORKSPACE})
+
+
+    - name: Build Halide
+      shell: cmake -P {0}
+      run: |
+        # Build Halide
+        set(ROOT "$ENV{GITHUB_WORKSPACE}")
+        set(HALIDE_DIR "${ROOT}/halide")
+        set(LLVM_DIR "${ROOT}/llvm")
+        set(HALIDE_BUILD_DIR "${ROOT}/halide_build")
+
+        set(ENV{CC} "${{matrix.config.cc}}")
+        set(ENV{CXX} "${{matrix.config.cxx}}")
+        set(ENV{LLVM_CONFIG} "${LLVM_DIR}/bin/llvm-config")
+
+        set(PARALLEL_JOBS 4)  # The VMs have 2 cores, so specify N+2
+        if (${{matrix.config.build_tool}} MATCHES "^cmake.*")
+          foreach(TARGET package build_tests test_internal)
+            # CMake only allows one --target flag per invocation
+            execute_process(
+              COMMAND ${CMAKE_COMMAND} --build ${HALIDE_BUILD_DIR} -j ${PARALLEL_JOBS} --target ${TARGET}
+              WORKING_DIRECTORY ${HALIDE_BUILD_DIR}
+              RESULT_VARIABLE result
+            )
+            if (NOT result EQUAL 0)
+              message(FATAL_ERROR "Bad exit status: ${result}")
+            endif()
+          endforeach()
+        elseif (${{matrix.config.build_tool}} STREQUAL "make")
+          execute_process(
+            COMMAND make -f ${HALIDE_DIR}/Makefile -j ${PARALLEL_JOBS} distrib build_tests test_internal
+            WORKING_DIRECTORY ${HALIDE_BUILD_DIR}
+            RESULT_VARIABLE result
+          )
+          if (NOT result EQUAL 0)
+            message(FATAL_ERROR "Bad exit status: ${result}")
+          endif()
+        else()
+          message(FATAL_ERROR "Unknown build_tool: ${{matrix.config.build_tool}}")
+        endif()
+
+        execute_process(COMMAND du -d 1 $ENV{GITHUB_WORKSPACE})
+
+    - name: Run Tests
+      shell: cmake -P {0}
+      run: |
+        execute_process(COMMAND du -d 1 $ENV{GITHUB_WORKSPACE})
+
+        set(ROOT "$ENV{GITHUB_WORKSPACE}")
+        set(HALIDE_DIR "${ROOT}/halide")
+        set(LLVM_DIR "${ROOT}/llvm")
+        set(HALIDE_BUILD_DIR "${ROOT}/halide_build")
+
+        set(ENV{CC} "${{matrix.config.cc}}")
+        set(ENV{CXX} "${{matrix.config.cxx}}")
+        set(ENV{LLVM_CONFIG} "${LLVM_DIR}/bin/llvm-config")
+
+        set(PARALLEL_JOBS 4)  # The VMs have 2 cores, so specify N+2
+        #-j ${PARALLEL_JOBS}
+        if (${{matrix.config.build_tool}} MATCHES "^cmake.*")
+          execute_process(COMMAND
+            ${CMAKE_CTEST_COMMAND} --extra-verbose --output-on-failure -R correctness_boundary_conditions
+            WORKING_DIRECTORY ${HALIDE_BUILD_DIR}
+            RESULT_VARIABLE result
+          )
+          # execute_process(
+          #   COMMAND make -j ${PARALLEL_JOBS} run_tests
+          #   WORKING_DIRECTORY ${HALIDE_BUILD_DIR}
+          #   RESULT_VARIABLE result
+          # )
+        elseif (${{matrix.config.build_tool}} STREQUAL "make")
+          execute_process(
+            COMMAND make -f ${HALIDE_DIR}/Makefile -j ${PARALLEL_JOBS} run_tests
+            WORKING_DIRECTORY ${HALIDE_BUILD_DIR}
+            RESULT_VARIABLE result
+          )
+        else()
+          message(FATAL_ERROR "Unknown build_tool: ${{matrix.config.build_tool}}")
+        endif()
+        if (NOT result EQUAL 0)
+          message(FATAL_ERROR "Bad exit status: ${result}")
+        endif()

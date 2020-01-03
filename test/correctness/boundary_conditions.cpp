@@ -377,6 +377,7 @@ bool test_all(int vector_width, Target t) {
 
 int main(int argc, char **argv) {
     Target target = get_jit_target_from_environment();
+    printf("BoundaryConditions, target = %s\n", target.to_string().c_str());
 
     Halide::Internal::ThreadPool<bool> pool;
     std::vector<std::future<bool>> futures;
@@ -386,6 +387,7 @@ int main(int argc, char **argv) {
         // https://github.com/halide/Halide/issues/2148
         vector_width_max = 4;
     }
+    printf("BoundaryConditions, vector_width_max = %d\n", vector_width_max);
     for (int vector_width = 1; vector_width <= vector_width_max; vector_width *= 2) {
         std::cout << "Testing vector_width: " << vector_width << "\n";
         futures.push_back(pool.async(test_all, vector_width, target));
