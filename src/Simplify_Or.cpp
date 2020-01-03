@@ -17,6 +17,7 @@ Expr Simplify::visit(const Or *op, ExprInfo *bounds) {
 
     auto rewrite = IRMatcher::rewriter(IRMatcher::or_op(a, b), op->type);
 
+    // clang-format off
     if (EVAL_IN_LAMBDA
         (rewrite(x || true, b) ||
          rewrite(x || false, a) ||
@@ -76,6 +77,7 @@ Expr Simplify::visit(const Or *op, ExprInfo *bounds) {
          rewrite(x <= c0 || x <= c1, x <= fold(max(c0, c1))))) {
         return rewrite.result;
     }
+    // clang-format on
 
     if (rewrite(broadcast(x) || broadcast(y), broadcast(x || y, op->type.lanes())) ||
 

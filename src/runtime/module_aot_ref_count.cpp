@@ -12,7 +12,9 @@
  * the use and release calls.
  */
 
-namespace Halide { namespace Runtime { namespace Internal {
+namespace Halide {
+namespace Runtime {
+namespace Internal {
 
 WEAK void halide_use_jit_module() {
 }
@@ -20,4 +22,6 @@ WEAK void halide_use_jit_module() {
 WEAK void halide_release_jit_module() {
 }
 
-}}}
+}  // namespace Internal
+}  // namespace Runtime
+}  // namespace Halide

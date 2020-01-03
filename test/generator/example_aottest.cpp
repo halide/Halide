@@ -1,5 +1,5 @@
-#include "HalideRuntime.h"
 #include "HalideBuffer.h"
+#include "HalideRuntime.h"
 
 #include <math.h>
 #include <stdio.h>
@@ -20,21 +20,21 @@ void verify(const Buffer<int32_t> &img, float compiletime_factor, float runtime_
 
 int main(int argc, char **argv) {
 
-  Buffer<int32_t> output(kSize, kSize, 3);
+    Buffer<int32_t> output(kSize, kSize, 3);
 
-  // For Ahead-of-time compilation, we don't get to customize any GeneratorParams:
-  // they were baked into the object code by our build system. These are the default values
-  // for Example (replicated here to use in verify()).
-  const float compiletime_factor = 1.0f;
-  const int channels = 3;
+    // For Ahead-of-time compilation, we don't get to customize any GeneratorParams:
+    // they were baked into the object code by our build system. These are the default values
+    // for Example (replicated here to use in verify()).
+    const float compiletime_factor = 1.0f;
+    const int channels = 3;
 
-  // We can, of course, pass whatever values for Param/ImageParam that we like.
-  example(3.3245f, output);
-  verify(output, compiletime_factor, 3.3245f, channels);
+    // We can, of course, pass whatever values for Param/ImageParam that we like.
+    example(3.3245f, output);
+    verify(output, compiletime_factor, 3.3245f, channels);
 
-  example(-1.234f, output);
-  verify(output, compiletime_factor, -1.234f, channels);
+    example(-1.234f, output);
+    verify(output, compiletime_factor, -1.234f, channels);
 
-  printf("Success!\n");
-  return 0;
+    printf("Success!\n");
+    return 0;
 }

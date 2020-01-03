@@ -8,15 +8,18 @@ extern objc_id objc_getClass(const char *name);
 extern objc_sel sel_getUid(const char *string);
 extern objc_id objc_msgSend(objc_id self, objc_sel op, ...);
 
-void NSLog(objc_id /* NSString * */format, ...);
+void NSLog(objc_id /* NSString * */ format, ...);
 }
 
-namespace Halide { namespace Runtime { namespace Internal {
+namespace Halide {
+namespace Runtime {
+namespace Internal {
 
 WEAK objc_id create_autorelease_pool() {
     objc_id pool =
-      objc_msgSend(objc_msgSend(objc_getClass("NSAutoreleasePool"),
-                                sel_getUid("alloc")), sel_getUid("init"));
+        objc_msgSend(objc_msgSend(objc_getClass("NSAutoreleasePool"),
+                                  sel_getUid("alloc")),
+                     sel_getUid("init"));
     return pool;
 }
 
@@ -56,6 +59,8 @@ WEAK void ns_log_object(objc_id obj) {
     release_ns_object(format_string);
 }
 
-}}}
+}  // namespace Internal
+}  // namespace Runtime
+}  // namespace Halide
 
 #endif

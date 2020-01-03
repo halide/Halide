@@ -11,9 +11,11 @@ using namespace Halide::Tools;
 using namespace Halide::Runtime;
 
 int main(int argc, char **argv) {
-    Buffer<float> input(67, 67, 32, 4);
-    Buffer<float> filter(3, 3, 32, 32);
-    Buffer<float> bias(32);
+    const int N = 5, CI = 128, CO = 128, W = 100, H = 80;
+
+    Buffer<float> input(CI, W + 2, H + 2, N);
+    Buffer<float> filter(CO, 3, 3, CI);
+    Buffer<float> bias(CO);
 
     for (int c = 0; c < input.dim(3).extent(); c++) {
         for (int z = 0; z < input.channels(); z++) {
@@ -39,7 +41,16 @@ int main(int argc, char **argv) {
         bias(x) = rand();
     }
 
-    Buffer<float> output(64, 64, 32, 4);
+    Buffer<float> output(CO, W, H, N);
+
+// This is necessary to get the PTX compiler to do a good
+// job. TODO: This should be a scheduling directive or a runtime
+// function.
+#ifdef _WIN32
+    _putenv_s("HL_CUDA_JIT_MAX_REGISTERS", "256");
+#else
+    setenv("HL_CUDA_JIT_MAX_REGISTERS", "256", 1);
+#endif
 
     conv_layer(input, filter, bias, output);
 

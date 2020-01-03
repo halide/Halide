@@ -40,7 +40,8 @@ public:
     Func lut, padded, padded16, sharpen, curved;
     Buffer<uint8_t> input;
 
-    MyPipeline(Buffer<uint8_t> in) : input(in) {
+    MyPipeline(Buffer<uint8_t> in)
+        : input(in) {
         // For this lesson, we'll use a two-stage pipeline that sharpens
         // and then applies a look-up-table (LUT).
 
@@ -49,18 +50,19 @@ public:
         lut(i) = cast<uint8_t>(clamp(pow(i / 255.0f, 1.2f) * 255.0f, 0, 255));
 
         // Augment the input with a boundary condition.
-        padded(x, y, c) = input(clamp(x, 0, input.width()-1),
-                                clamp(y, 0, input.height()-1), c);
+        padded(x, y, c) = input(clamp(x, 0, input.width() - 1),
+                                clamp(y, 0, input.height() - 1), c);
 
         // Cast it to 16-bit to do the math.
         padded16(x, y, c) = cast<uint16_t>(padded(x, y, c));
 
         // Next we sharpen it with a five-tap filter.
-        sharpen(x, y, c) = (padded16(x, y, c) * 2-
+        sharpen(x, y, c) = (padded16(x, y, c) * 2 -
                             (padded16(x - 1, y, c) +
                              padded16(x, y - 1, c) +
                              padded16(x + 1, y, c) +
-                             padded16(x, y + 1, c)) / 4);
+                             padded16(x, y + 1, c)) /
+                                4);
 
         // Then apply the LUT.
         curved(x, y, c) = lut(sharpen(x, y, c));
@@ -75,14 +77,14 @@ public:
         // Compute color channels innermost. Promise that there will
         // be three of them and unroll across them.
         curved.reorder(c, x, y)
-              .bound(c, 0, 3)
-              .unroll(c);
+            .bound(c, 0, 3)
+            .unroll(c);
 
         // Look-up-tables don't vectorize well, so just parallelize
         // curved in slices of 16 scanlines.
         Var yo, yi;
         curved.split(y, yo, yi, 16)
-              .parallel(yo);
+            .parallel(yo);
 
         // Compute sharpen as needed per scanline of curved.
         sharpen.compute_at(curved, yi);
@@ -94,7 +96,7 @@ public:
         // reusing previous values computed within the same strip of
         // 16 scanlines.
         padded.store_at(curved, yo)
-              .compute_at(curved, yi);
+            .compute_at(curved, yi);
 
         // Also vectorize the padding. It's 8-bit, so we'll vectorize
         // 16-wide.
@@ -140,7 +142,7 @@ public:
         // correspond to CUDA's notions of blocks and threads, or
         // OpenCL's notions of thread groups and threads.
         lut.gpu_blocks(block)
-           .gpu_threads(thread);
+            .gpu_threads(thread);
 
         // This is a very common scheduling pattern on the GPU, so
         // there's a shorthand for it:
@@ -155,8 +157,8 @@ public:
         // Compute color channels innermost. Promise that there will
         // be three of them and unroll across them.
         curved.reorder(c, x, y)
-              .bound(c, 0, 3)
-              .unroll(c);
+            .bound(c, 0, 3)
+            .unroll(c);
 
         // Compute curved in 2D 8x8 tiles using the GPU.
         curved.gpu_tile(x, y, xo, yo, xi, yi, 8, 8);
@@ -213,7 +215,7 @@ public:
 
             double t2 = current_time();
 
-            double elapsed = (t2 - t1)/100;
+            double elapsed = (t2 - t1) / 100;
             if (i == 0 || elapsed < best_time) {
                 best_time = elapsed;
             }
@@ -241,7 +243,6 @@ public:
                 }
             }
         }
-
     }
 };
 
@@ -258,7 +259,7 @@ int main(int argc, char **argv) {
     p1.curved.realize(reference_output);
 
     printf("Running pipeline on GPU:\n");
-    MyPipeline p2 (input);
+    MyPipeline p2(input);
     bool has_gpu_target = p2.schedule_for_gpu();
     if (has_gpu_target) {
         printf("Testing GPU correctness:\n");
@@ -277,8 +278,6 @@ int main(int argc, char **argv) {
 
     return 0;
 }
-
-
 
 // A helper function to check if OpenCL, Metal or D3D12 is present on the host machine.
 

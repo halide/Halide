@@ -1,6 +1,6 @@
 #include "Halide.h"
-#include <stdio.h>
 #include <fstream>
+#include <stdio.h>
 
 #include "test/common/halide_test_dirs.h"
 
@@ -19,7 +19,7 @@ int basic_constraints() {
     Buffer<int> image1(128, 73);
     Buffer<int> image2(144, 23);
 
-    f(x, y) = param(x, y)*2;
+    f(x, y) = param(x, y) * 2;
 
     param.dim(0).set_bounds(0, 128);
 
@@ -45,7 +45,7 @@ int basic_constraints() {
     }
 
     // Now try constraining the output buffer of a function
-    g(x, y) = x*y;
+    g(x, y) = x * y;
     g.set_error_handler(my_error_handler);
     g.output_buffer().dim(0).set_stride(2);
     error_occurred = false;
@@ -56,14 +56,14 @@ int basic_constraints() {
     }
 
     Func h;
-    h(x, y) = x*y;
+    h(x, y) = x * y;
     h.set_error_handler(my_error_handler);
     h.output_buffer()
         .dim(0)
-            .set_stride(1)
-            .set_bounds(0, ((h.output_buffer().dim(0).extent())/8)*8)
+        .set_stride(1)
+        .set_bounds(0, ((h.output_buffer().dim(0).extent()) / 8) * 8)
         .dim(1)
-            .set_bounds(0, image1.dim(1).extent());
+        .set_bounds(0, image1.dim(1).extent());
     error_occurred = false;
     h.realize(image1);
 
@@ -82,7 +82,7 @@ int basic_constraints() {
     return 0;
 }
 
-std::string load_file_to_string(const std::string& filename) {
+std::string load_file_to_string(const std::string &filename) {
     std::stringstream contents;
     std::ifstream file(filename);
     std::string line;
@@ -135,10 +135,8 @@ int alignment_constraints() {
         return -1;
     }
 
-
     return 0;
 }
-
 
 int unstructured_constraints() {
     Func f, g;
@@ -147,7 +145,7 @@ int unstructured_constraints() {
     Buffer<int> image1(128, 73);
     Buffer<int> image2(144, 23);
 
-    f(x, y) = param(x, y)*2;
+    f(x, y) = param(x, y) * 2;
 
     Param<int> required_min, required_extent;
     required_min.set(0);
@@ -155,7 +153,7 @@ int unstructured_constraints() {
 
     Pipeline pf(f);
     pf.add_requirement(param.dim(0).min() == required_min && param.dim(0).extent() == required_extent,
-                       "Custom message:",  param.dim(0).min(), param.dim(0).max());
+                       "Custom message:", param.dim(0).min(), param.dim(0).max());
 
     pf.set_error_handler(my_error_handler);
 
@@ -179,7 +177,7 @@ int unstructured_constraints() {
     }
 
     // Now try constraining the output buffer of a function
-    g(x, y) = x*y;
+    g(x, y) = x * y;
 
     Pipeline pg(g);
 
@@ -196,7 +194,7 @@ int unstructured_constraints() {
     }
 
     Func h;
-    h(x, y) = x*y;
+    h(x, y) = x * y;
 
     Pipeline ph(h);
     ph.set_error_handler(my_error_handler);
@@ -217,7 +215,6 @@ int unstructured_constraints() {
 
     return 0;
 }
-
 
 int main(int argc, char **argv) {
     int result;

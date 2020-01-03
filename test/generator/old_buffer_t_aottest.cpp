@@ -2,11 +2,11 @@
 #define HALIDE_ALLOW_DEPRECATED
 
 #include "HalideRuntime.h"
+#include "old_buffer_t.h"
+#include <assert.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include "old_buffer_t.h"
-#include <assert.h>
 
 int &get_pixel(halide_buffer_t *buf, int x, int y) {
     return *((int *)(buf->host) +
@@ -55,7 +55,7 @@ int main(int argc, char **argv) {
     buffer_t in1 = {0}, in2 = {0}, out = {0};
     int scalar_param = 4;
 
-    out.host = (uint8_t *)malloc(60*40*sizeof(int));
+    out.host = (uint8_t *)malloc(60 * 40 * sizeof(int));
     out.extent[0] = 60;
     out.extent[1] = 40;
     out.stride[0] = 1;

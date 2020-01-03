@@ -3,7 +3,7 @@
 
 using namespace Halide;
 
-template <typename T>
+template<typename T>
 int check_result(Buffer<T> output, int n_types, int offset) {
     for (int x = 0; x < output.width(); x++) {
         T correct = n_types * (static_cast<uint16_t>(x) / 16) + offset;
@@ -23,9 +23,9 @@ int main(int argc, char **argv) {
         return 0;
     }
 
-    Type types[] = { Int(8),  Int(16),  Int(32),  Int(64),
+    Type types[] = {Int(8), Int(16), Int(32), Int(64),
                     UInt(8), UInt(16), UInt(32), UInt(64),
-                    Float(32) };
+                    Float(32)};
 
     const int n_types = sizeof(types) / sizeof(types[0]);
 
@@ -63,16 +63,15 @@ int main(int argc, char **argv) {
         }
         offset += off;
 
-        funcs[i](x) = cast(types[i], x/16 + off);
+        funcs[i](x) = cast(types[i], x / 16 + off);
         e += cast(result_type, funcs[i](x));
         funcs[i].compute_at(out, x).gpu_threads(x);
     }
 
-
     out(x) = e;
     out.gpu_tile(x, xi, 23);
 
-    Buffer<> output = out.realize(23*5);
+    Buffer<> output = out.realize(23 * 5);
 
     int result;
     if (t.has_feature(Target::Metal) ||

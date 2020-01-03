@@ -1,6 +1,6 @@
 #include "Halide.h"
-#include <stdio.h>
 #include <iostream>
+#include <stdio.h>
 
 using namespace Halide;
 
@@ -13,7 +13,7 @@ int main(int argc, char **argv) {
 
     f(x, y) = max(x, y);
     g(x, y) = min(x, y);
-    h(x, y) = clamp(x+y, 20, 100);
+    h(x, y) = clamp(x + y, 20, 100);
 
     Var xo("xo"), yo("yo"), xi("xi"), yi("yi");
 
@@ -46,7 +46,7 @@ int main(int argc, char **argv) {
                 printf("img[%d, %d] = %d\n", i, j, img(i, j));
                 return -1;
             }
-            int href = i+j;
+            int href = i + j;
             if (href < 20) href = 20;
             if (href > 100) href = 100;
             if (imh(i, j) != href) {

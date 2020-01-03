@@ -1,11 +1,11 @@
 #include "HalideRuntime.h"
 #include "HalideRuntimeCuda.h"
+#include "HalideRuntimeD3D12Compute.h"
+#include "HalideRuntimeHexagonHost.h"
+#include "HalideRuntimeMetal.h"
+#include "HalideRuntimeOpenCL.h"
 #include "HalideRuntimeOpenGL.h"
 #include "HalideRuntimeOpenGLCompute.h"
-#include "HalideRuntimeOpenCL.h"
-#include "HalideRuntimeMetal.h"
-#include "HalideRuntimeHexagonHost.h"
-#include "HalideRuntimeD3D12Compute.h"
 #include "HalideRuntimeQurt.h"
 #include "cpu_features.h"
 
@@ -128,6 +128,8 @@ extern "C" __attribute__((used)) void *halide_runtime_api_functions[] = {
     (void *)&halide_msan_annotate_buffer_is_initialized,
     (void *)&halide_msan_annotate_buffer_is_initialized_as_destructor,
     (void *)&halide_msan_annotate_memory_is_initialized,
+    (void *)&halide_msan_check_buffer_is_initialized,
+    (void *)&halide_msan_check_memory_is_initialized,
     (void *)&halide_mutex_lock,
     (void *)&halide_mutex_unlock,
     (void *)&halide_mutex_array_create,

@@ -16,7 +16,7 @@ RegisteredFilter *registered_filters = nullptr;
 extern "C" void halide_register_argv_and_metadata(
     int (*filter_argv_call)(void **),
     const struct halide_filter_metadata_t *filter_metadata,
-    const char * const *extra_key_value_pairs) {
+    const char *const *extra_key_value_pairs) {
 
     auto *rf = new RegisteredFilter();
     rf->next = registered_filters;
@@ -39,7 +39,7 @@ std::string replace_all(const std::string &str,
 }
 
 void usage(const char *argv0) {
-const std::string usage = R"USAGE(
+    const std::string usage = R"USAGE(
 Usage: $NAME$ argument=value [argument=value... ] [flags]
 
 Arguments:
@@ -225,7 +225,7 @@ class HalideMemoryTracker {
         }
         size_t x = it->second;
         memory_allocated -= x;
-        memory_size_map. erase(it);
+        memory_size_map.erase(it);
         halide_default_free(user_context, ptr);
     }
 
@@ -237,7 +237,7 @@ class HalideMemoryTracker {
         return active->tracker_free_impl(user_context, ptr);
     }
 
-  public:
+public:
     void install() {
         assert(!active);
         active = this;
@@ -297,7 +297,7 @@ namespace Halide {
 namespace RunGen {
 
 Logger log() {
-    return { do_log_cout, do_log_info, do_log_warn, do_log_fail };
+    return {do_log_cout, do_log_info, do_log_warn, do_log_fail};
 }
 
 }  // namespace RunGen
@@ -313,9 +313,9 @@ int main(int argc, char **argv) {
     std::string filter_name;
     for (int i = 1; i < argc; ++i) {
         if (argv[i][0] == '-') {
-            const char *p = argv[i] + 1; // skip -
+            const char *p = argv[i] + 1;  // skip -
             if (p[0] == '-') {
-                p++; // allow -- as well, because why not
+                p++;  // allow -- as well, because why not
             }
             std::vector<std::string> v = split_string(p, "=");
             std::string flag_name = v[0];
@@ -342,14 +342,14 @@ int main(int argc, char **argv) {
         if (rf->next != nullptr) {
             std::ostringstream o;
             o << "Must specify --name if multiple filters are registered; registered filters are:\n";
-            for (auto *rf = registered_filters ; rf != nullptr; rf = rf->next) {
+            for (auto *rf = registered_filters; rf != nullptr; rf = rf->next) {
                 o << "  " << rf->filter_metadata->name << "\n";
             }
             o << "\n";
             fail() << o.str();
         }
     } else {
-        for ( ; rf != nullptr; rf = rf->next) {
+        for (; rf != nullptr; rf = rf->next) {
             if (filter_name == rf->filter_metadata->name) {
                 break;
             }
@@ -357,7 +357,7 @@ int main(int argc, char **argv) {
         if (rf == nullptr) {
             std::ostringstream o;
             o << "Filter " << filter_name << " not found; registered filters are:\n";
-            for (auto *rf = registered_filters ; rf != nullptr; rf = rf->next) {
+            for (auto *rf = registered_filters; rf != nullptr; rf = rf->next) {
                 o << "  " << rf->filter_metadata->name << "\n";
             }
             o << "\n";
@@ -378,9 +378,9 @@ int main(int argc, char **argv) {
     std::string benchmarks_flag_value;
     for (int i = 1; i < argc; ++i) {
         if (argv[i][0] == '-') {
-            const char *p = argv[i] + 1; // skip -
+            const char *p = argv[i] + 1;  // skip -
             if (p[0] == '-') {
-                p++; // allow -- as well, because why not
+                p++;  // allow -- as well, because why not
             }
             std::vector<std::string> v = split_string(p, "=");
             std::string flag_name = v[0];
@@ -524,7 +524,7 @@ int main(int argc, char **argv) {
         // we report on memory usage.
         r.copy_outputs_to_host();
         std::cout << "Maximum Halide memory: " << tracker.highwater()
-            << " bytes for output of " << r.megapixels_out() << " mpix.\n";
+                  << " bytes for output of " << r.megapixels_out() << " mpix.\n";
     }
 
     // Save the output(s), if necessary.

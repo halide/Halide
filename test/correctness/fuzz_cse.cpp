@@ -34,36 +34,32 @@ Expr random_expr(int depth, vector<Expr> &exprs) {
         next = random_expr(depth - 1, exprs);
         next += random_expr(depth - 1, exprs);
         break;
-    case 4:
-        {
-            Expr a = random_expr(depth - 2, exprs);
-            Expr b = random_expr(depth - 2, exprs);
-            Expr c = random_expr(depth - 2, exprs);
-            Expr d = random_expr(depth - 2, exprs);
-            next = select(a > b, c, d);
-            break;
-        }
-    case 5:
-        {
-            Expr a = random_expr(depth - 1, exprs);
-            Expr b = random_expr(depth - 1, exprs);
-            next = Let::make("x", a, b);
-            break;
-        }
-    case 6:
-        {
-            Expr a = random_expr(depth - 1, exprs);
-            Expr b = random_expr(depth - 1, exprs);
-            next = Let::make("y", a, b);
-            break;
-        }
-    case 7:
-        {
-            Expr a = random_expr(depth - 1, exprs);
-            Expr b = random_expr(depth - 1, exprs);
-            next = Let::make("z", a, b);
-            break;
-        }
+    case 4: {
+        Expr a = random_expr(depth - 2, exprs);
+        Expr b = random_expr(depth - 2, exprs);
+        Expr c = random_expr(depth - 2, exprs);
+        Expr d = random_expr(depth - 2, exprs);
+        next = select(a > b, c, d);
+        break;
+    }
+    case 5: {
+        Expr a = random_expr(depth - 1, exprs);
+        Expr b = random_expr(depth - 1, exprs);
+        next = Let::make("x", a, b);
+        break;
+    }
+    case 6: {
+        Expr a = random_expr(depth - 1, exprs);
+        Expr b = random_expr(depth - 1, exprs);
+        next = Let::make("y", a, b);
+        break;
+    }
+    case 7: {
+        Expr a = random_expr(depth - 1, exprs);
+        Expr b = random_expr(depth - 1, exprs);
+        next = Let::make("z", a, b);
+        break;
+    }
     default:
         next = (int)(rng() % 10 - 5);
     }

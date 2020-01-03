@@ -15,11 +15,11 @@ int main(int argc, char **argv) {
     kx = x / 150.0f;
     ky = y / 150.0f;
 
-    xx = kx + sin(time/3.0f);
-    yy = ky + sin(time/2.0f);
+    xx = kx + sin(time / 3.0f);
+    yy = ky + sin(time / 2.0f);
 
     Expr angle;
-    angle = 2 * pi * sin(time/20.0f);
+    angle = 2 * pi * sin(time / 20.0f);
     kx = kx * cos(angle) - ky * sin(angle);
     ky = kx * sin(angle) + ky * cos(angle);
 
@@ -31,7 +31,9 @@ int main(int argc, char **argv) {
     result(x, y, c) = cast<uint8_t>(
         select(c == 0, 32,
                select(c == 1, cos(pi * v),
-                      sin(pi * v)) * 80 + (255 - 80)));
+                      sin(pi * v)) *
+                       80 +
+                   (255 - 80)));
 
     result.output_buffer().set_stride(0, 4);
     result.bound(c, 0, 4);

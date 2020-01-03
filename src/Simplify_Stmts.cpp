@@ -355,8 +355,7 @@ Stmt Simplify::visit(const Block *op) {
     const Block *block_rest = rest.as<Block>();
     const IfThenElse *if_first = first.as<IfThenElse>();
     const IfThenElse *if_next =
-        rest.as<IfThenElse>() ? rest.as<IfThenElse>()
-                              : (block_rest ? block_rest->first.as<IfThenElse>() : nullptr);
+        rest.as<IfThenElse>() ? rest.as<IfThenElse>() : (block_rest ? block_rest->first.as<IfThenElse>() : nullptr);
     Stmt if_rest = block_rest ? block_rest->rest : Stmt();
 
     if (is_no_op(first) &&

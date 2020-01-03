@@ -147,11 +147,12 @@ Func make_noise(int depth) {
     } else {
         Func g = make_noise(depth - 1);
         Func g_up;
-        f(x, y, c) = (g(x/2, y/2, c) +
-                      g((x+1)/2, y/2, c) +
-                      g(x/2, (y+1)/2, c) +
-                      g((x+1)/2, (y+1)/2, c) +
-                      0.25f * random_float()) / 4.25f;
+        f(x, y, c) = (g(x / 2, y / 2, c) +
+                      g((x + 1) / 2, y / 2, c) +
+                      g(x / 2, (y + 1) / 2, c) +
+                      g((x + 1) / 2, (y + 1) / 2, c) +
+                      0.25f * random_float()) /
+                     4.25f;
     }
     f.compute_root();
     return f;
@@ -172,8 +173,8 @@ void do_test() {
 
     // Inset it a bit to ensure that saving buffers with nonzero mins works
     const int inset = 4;
-    color_buf.crop(0, inset, width-inset*2);
-    color_buf.crop(1, inset, height-inset*2);
+    color_buf.crop(0, inset, width - inset * 2);
+    color_buf.crop(1, inset, height - inset * 2);
 
     test_convert_image_s2s<T>(color_buf);
     test_convert_image_s2d<T>(color_buf);
@@ -184,7 +185,7 @@ void do_test() {
     luma_buf.copy_from(color_buf);
     luma_buf.slice(2);
 
-    std::vector<std::string> formats = {"ppm","pgm","tmp","mat","tiff"};
+    std::vector<std::string> formats = {"ppm", "pgm", "tmp", "mat", "tiff"};
 #ifndef HALIDE_NO_JPEG
     formats.push_back("jpg");
 #endif
@@ -240,19 +241,18 @@ void test_mat_header() {
         abort();
     }
     fs.seekg(0, fs.end);
-    // .mat file begins with a 128 bytes header and a 8 bytes 
+    // .mat file begins with a 128 bytes header and a 8 bytes
     // matrix tag, the second byte of the matrix describe
     // the size of the rest of the file
     uint32_t file_size = uint32_t((int)fs.tellg() - 128 - 8);
     fs.seekg(128 + 4, fs.beg);
     uint32_t stored_file_size = 0;
-    fs.read((char*)&stored_file_size, 4);
+    fs.read((char *)&stored_file_size, 4);
     fs.close();
     if (file_size != stored_file_size) {
-        std::cout << "Wrong file size written for " << filename << ". Expected " <<
-            file_size << ", got" << stored_file_size << std::endl;
+        std::cout << "Wrong file size written for " << filename << ". Expected " << file_size << ", got" << stored_file_size << std::endl;
         abort();
-    } 
+    }
 }
 
 int main(int argc, char **argv) {

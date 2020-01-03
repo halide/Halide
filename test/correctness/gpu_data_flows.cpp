@@ -56,7 +56,6 @@ int main(int argc, char **argv) {
         }
     }
 
-
     {
         // Pipeline 2 will do input -> dev -> dev -> output
         ImageParam in(Int(32), 1);

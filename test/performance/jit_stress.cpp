@@ -1,7 +1,7 @@
 #include "Halide.h"
 
-#include <cstdio>
 #include "halide_benchmark.h"
+#include <cstdio>
 
 using namespace Halide;
 using namespace Halide::Tools;

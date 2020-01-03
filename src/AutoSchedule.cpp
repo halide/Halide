@@ -3004,7 +3004,7 @@ Partitioner::analyze_spatial_locality(const FStage &stg,
 
 // Verify that function 'f' does not have partially specified schedules/bounds.
 // The current auto scheduler cannots handle such cases.
-void validate_no_partial_schedules(const Function &f) {
+void validate_no_partial_schedules(const Function &f, bool is_output) {
     if (f.has_extern_definition()) {
         return;
     }
@@ -3013,7 +3013,8 @@ void validate_no_partial_schedules(const Function &f) {
     user_assert(f.schedule().compute_level().is_inlined())
         << "AutoSchedule: cannot auto-schedule function \"" << f.name()
         << "\" since it is scheduled to be computed at root\n";
-    user_assert(f.schedule().bounds().empty())
+
+    user_assert(is_output || f.schedule().bounds().empty())
         << "AutoSchedule: cannot auto-schedule function \"" << f.name()
         << "\" since it has partially specified bounds\n";
 
@@ -3192,7 +3193,11 @@ string generate_schedules(const vector<Function> &outputs, const Target &target,
     // Validate that none of the functions in the pipeline have partial schedules.
     debug(2) << "Validating no partial schedules...\n";
     for (const auto &iter : env) {
-        validate_no_partial_schedules(iter.second);
+        bool is_output = false;
+        for (const auto &o : outputs) {
+            is_output |= iter.second.same_as(o);
+        }
+        validate_no_partial_schedules(iter.second, is_output);
     }
 
     // The auto scheduling algorithm requires estimates on the outputs of the

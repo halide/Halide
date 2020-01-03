@@ -1511,7 +1511,7 @@ Module GeneratorBase::build_gradient_module(const std::string &function_name) {
             const Type grad_in_type = output->type().is_float() ? output->type() : Float(32);
             const int grad_in_dimensions = f.dimensions();
             const ArgumentEstimates grad_in_estimates = f.output_buffer().parameter().get_argument_estimates();
-            internal_assert((int) grad_in_estimates.buffer_estimates.size() == grad_in_dimensions);
+            internal_assert((int)grad_in_estimates.buffer_estimates.size() == grad_in_dimensions);
 
             ImageParam d_im(grad_in_type, grad_in_dimensions, grad_in_name);
             for (int d = 0; d < grad_in_dimensions; d++) {

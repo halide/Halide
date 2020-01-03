@@ -1,5 +1,5 @@
-#include <stdio.h>
 #include "HalideRuntime.h"
+#include <stdio.h>
 
 #ifdef _WIN32
 
@@ -71,7 +71,7 @@ cl_int init_extern_program() {
     }
 
     const char *ocl_source = "__kernel void add42(__global const int *in, __global int *out) { out[get_global_id(0)] = in[get_global_id(0)] + 42; }";
-    const char *sources[] = { ocl_source };
+    const char *sources[] = {ocl_source};
     ocl_program = clCreateProgramWithSource(ocl_ctx, 1, &sources[0], NULL, &error);
     if (error != CL_SUCCESS) {
         halide_release_cl_context(nullptr);
@@ -114,7 +114,7 @@ void destroy_extern_program() {
     clReleaseProgram(ocl_program);
 }
 
-}
+}  // namespace
 
 extern "C" int32_t gpu_input(halide_buffer_t *input, halide_buffer_t *output) {
     if (input->is_bounds_query()) {
@@ -141,8 +141,8 @@ extern "C" int32_t gpu_input(halide_buffer_t *input, halide_buffer_t *output) {
         printf("clCreateKernel failed (%d).\n", error);
     }
 
-    size_t global_dim[1] = { (size_t)input->dim[0].extent };
-    size_t local_dim[1] = { 16 };
+    size_t global_dim[1] = {(size_t)input->dim[0].extent};
+    size_t local_dim[1] = {16};
 
     // Set args
     void *in = reinterpret_cast<void *>(halide_opencl_get_cl_mem(nullptr, input));
@@ -197,8 +197,8 @@ int main(int argc, char **argv) {
 
     for (int x = 0; x < W; x++) {
         if (input(x) + 1 != output(x)) {
-             printf("Error at (%d): %d != %d\n", x, input(x) + 1, output(x));
-             return -1;
+            printf("Error at (%d): %d != %d\n", x, input(x) + 1, output(x));
+            return -1;
         }
     }
 

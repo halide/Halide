@@ -15,7 +15,6 @@ int main(int argc, char **argv) {
         }
     }
 
-
     Var x("x"), y("y");
 
     Buffer<uint16_t> tent(3, 3);
@@ -30,7 +29,7 @@ int main(int argc, char **argv) {
     tent(2, 2) = 1;
 
     Func input("input");
-    input(x, y) = in(clamp(x, 0, W-1), clamp(y, 0, H-1));
+    input(x, y) = in(clamp(x, 0, W - 1), clamp(y, 0, H - 1));
     input.compute_root();
 
     RDom r(tent);
@@ -50,7 +49,6 @@ int main(int argc, char **argv) {
     Func blur1("blur1");
     blur1(x, y) += tent(r.x, r.y) * input(x + r.x - 1, y + r.y - 1);
 
-
     /* This uses an inline reduction, and is the more traditional way
      * of scheduling a convolution. "sum" creates an anonymous
      * reduction function that is computed within the for loop over x
@@ -67,7 +65,7 @@ int main(int argc, char **argv) {
     blur2(x, y) = sum(tent(r.x, r.y) * input(x + r.x - 1, y + r.y - 1));
 
     Target target = get_jit_target_from_environment();
-    
+
     if (target.has_gpu_feature()) {
         Var xi("xi"), yi("yi");
 
@@ -101,11 +99,11 @@ int main(int argc, char **argv) {
     Buffer<uint16_t> out1 = blur1.realize(W, H, target);
     Buffer<uint16_t> out2 = blur2.realize(W, H, target);
 
-    for (int y = 1; y < H-1; y++) {
-        for (int x = 1; x < W-1; x++) {
-            uint16_t correct = (1*in(x-1, y-1) + 2*in(x, y-1) + 1*in(x+1, y-1) +
-                                2*in(x-1, y)   + 4*in(x, y) +   2*in(x+1, y) +
-                                1*in(x-1, y+1) + 2*in(x, y+1) + 1*in(x+1, y+1));
+    for (int y = 1; y < H - 1; y++) {
+        for (int x = 1; x < W - 1; x++) {
+            uint16_t correct = (1 * in(x - 1, y - 1) + 2 * in(x, y - 1) + 1 * in(x + 1, y - 1) +
+                                2 * in(x - 1, y) + 4 * in(x, y) + 2 * in(x + 1, y) +
+                                1 * in(x - 1, y + 1) + 2 * in(x, y + 1) + 1 * in(x + 1, y + 1));
             if (out1(x, y) != correct) {
                 printf("out1(%d, %d) = %d instead of %d\n", x, y, out1(x, y), correct);
                 return -1;
@@ -120,5 +118,4 @@ int main(int argc, char **argv) {
     printf("Success!\n");
 
     return 0;
-
 }

@@ -143,6 +143,7 @@ Stmt add_image_checks(Stmt s,
     vector<Stmt> asserts_host_alignment;
     vector<Stmt> asserts_host_non_null;
     vector<Stmt> buffer_rewrites;
+    vector<Stmt> msan_checks;
 
     // Inject the code that conditionally returns if we're in inference mode
     Expr maybe_return_condition = const_false();
@@ -257,6 +258,13 @@ Stmt add_image_checks(Stmt s,
         // Come up with a name to refer to this buffer in the error messages
         string error_name = (is_output_buffer ? "Output" : "Input");
         error_name += " buffer " + name;
+
+        if (!is_output_buffer && t.has_feature(Target::MSAN)) {
+            Expr buffer = Variable::make(type_of<struct halide_buffer_t *>(), name + ".buffer");
+            Stmt check_contents = Evaluate::make(
+                Call::make(Int(32), "halide_msan_check_buffer_is_initialized", {buffer}, Call::Extern));
+            msan_checks.push_back(check_contents);
+        }
 
         // Check the type matches the internally-understood type
         {
@@ -648,6 +656,11 @@ Stmt add_image_checks(Stmt s,
     // Inject the code that defines the required sizes produced by bounds inference.
     for (size_t i = lets_required.size(); i > 0; i--) {
         s = LetStmt::make(lets_required[i - 1].first, lets_required[i - 1].second, s);
+    }
+
+    // Inject the code that checks that does msan checks. (Note that this ignores no_asserts.)
+    for (size_t i = msan_checks.size(); i > 0; i--) {
+        s = Block::make(msan_checks[i - 1], s);
     }
 
     return s;

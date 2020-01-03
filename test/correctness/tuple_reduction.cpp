@@ -14,7 +14,7 @@ int main(int argc, char **argv) {
         f(x, y) = Tuple(x + y, x - y);
 
         // Updates to a reduction are atomic.
-        f(x, y) = Tuple(f(x, y)[1]*2, f(x, y)[0]*2);
+        f(x, y) = Tuple(f(x, y)[1] * 2, f(x, y)[0] * 2);
         // now equals ((x - y)*2, (x + y)*2)
 
         if (target.has_gpu_feature()) {
@@ -31,8 +31,8 @@ int main(int argc, char **argv) {
 
         for (int y = 0; y < a.height(); y++) {
             for (int x = 0; x < a.width(); x++) {
-                int correct_a = (x - y)*2;
-                int correct_b = (x + y)*2;
+                int correct_a = (x - y) * 2;
+                int correct_b = (x + y) * 2;
                 if (a(x, y) != correct_a || b(x, y) != correct_b) {
                     printf("result(%d, %d) = (%d, %d) instead of (%d, %d)\n",
                            x, y, a(x, y), b(x, y), correct_a, correct_b);
@@ -60,7 +60,7 @@ int main(int argc, char **argv) {
         } else if (target.features_any_of({Target::HVX_64, Target::HVX_128})) {
             f.hexagon(y).vectorize(x, 32);
         }
-        for (int i = 0; i < 10; i ++) {
+        for (int i = 0; i < 10; i++) {
             if (i & 1) {
                 if (target.has_gpu_feature()) {
                     f.update(i).gpu_tile(x, y, xo, yo, xi, yi, 16, 16);
@@ -87,7 +87,6 @@ int main(int argc, char **argv) {
                 }
             }
         }
-
     }
 
     if (1) {
@@ -103,7 +102,7 @@ int main(int argc, char **argv) {
         }
 
         // Schedule the even update steps on the gpu
-        for (int i = 0; i < 10; i ++) {
+        for (int i = 0; i < 10; i++) {
             if (i & 1) {
                 if (target.has_gpu_feature()) {
                     f.update(i).gpu_tile(x, y, xo, yo, xi, yi, 16, 16);
@@ -130,7 +129,6 @@ int main(int argc, char **argv) {
                 }
             }
         }
-
     }
 
     if (1) {
@@ -174,7 +172,6 @@ int main(int argc, char **argv) {
                 }
             }
         }
-
     }
 
     printf("Success!\n");

@@ -1,6 +1,6 @@
 #include "Halide.h"
-#include <stdio.h>
 #include <memory>
+#include <stdio.h>
 
 int error_occurred = false;
 void halide_error(void *ctx, const char *msg) {
@@ -13,7 +13,7 @@ using namespace Halide;
 int main(int argc, char **argv) {
     Param<int> extent;
     Var x, y, z, w;
-    RDom r(0, extent, 0, extent, 0, extent, 0, extent/2 + 1);
+    RDom r(0, extent, 0, extent, 0, extent, 0, extent / 2 + 1);
     Func big;
     big(x, y, z, w) = cast<uint8_t>(42);
     big.compute_root();
@@ -38,5 +38,4 @@ int main(int argc, char **argv) {
     assert(error_occurred);
 
     printf("Success!\n");
-
 }

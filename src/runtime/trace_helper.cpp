@@ -23,10 +23,9 @@ WEAK int halide_trace_helper(void *user_context,
     event.parent_id = parent_id;
     event.value_index = value_index;
     event.dimensions = dimensions;
-    (void) halide_msan_annotate_memory_is_initialized(user_context, &event, sizeof(event));
-    (void) halide_msan_annotate_memory_is_initialized(user_context, value, type_lanes * ((type_bits + 7) / 8));
-    (void) halide_msan_annotate_memory_is_initialized(user_context, coords, dimensions * sizeof(int32_t));
+    (void)halide_msan_annotate_memory_is_initialized(user_context, &event, sizeof(event));
+    (void)halide_msan_annotate_memory_is_initialized(user_context, value, type_lanes * ((type_bits + 7) / 8));
+    (void)halide_msan_annotate_memory_is_initialized(user_context, coords, dimensions * sizeof(int32_t));
     return halide_trace(user_context, &event);
 }
-
 }
