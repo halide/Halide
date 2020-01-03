@@ -1107,7 +1107,6 @@ WEAK int halide_cuda_run(void *user_context,
                          int blocksX, int blocksY, int blocksZ,
                          int threadsX, int threadsY, int threadsZ,
                          int shared_mem_bytes,
-                         int heap_bytes_per_block,
                          size_t arg_sizes[],
                          void *args[],
                          int8_t arg_is_buffer[],
@@ -1116,14 +1115,12 @@ WEAK int halide_cuda_run(void *user_context,
                          int num_coords_dim0,
                          int num_coords_dim1) {
 
-    debug(user_context)
-        << "CUDA: halide_cuda_run:"
-        << "    user_context: " << user_context << "\n"
-        << "    entry: " << entry_name << "\n"
-        << "    blocks: " << blocksX << "x" << blocksY << "x" << blocksZ << "\n"
-        << "    threads: " << threadsX << "x" << threadsY << "x" << threadsZ << "\n"
-        << "    shared memory: " << shared_mem_bytes << "\n"
-        << "    heap usage per block: " << heap_bytes_per_block << "\n";
+    debug(user_context) << "CUDA: halide_cuda_run ("
+                        << "user_context: " << user_context << ", "
+                        << "entry: " << entry_name << ", "
+                        << "blocks: " << blocksX << "x" << blocksY << "x" << blocksZ << ", "
+                        << "threads: " << threadsX << "x" << threadsY << "x" << threadsZ << ", "
+                        << "shmem: " << shared_mem_bytes << "\n";
 
     CUresult err;
     Context ctx(user_context);
@@ -1148,29 +1145,6 @@ WEAK int halide_cuda_run(void *user_context,
     debug(user_context) << "Got function " << f << "\n";
     if (err != CUDA_SUCCESS) {
         error(user_context) << "CUDA: cuModuleGetFunction failed: "
-                            << get_error_name(err);
-        return err;
-    }
-
-    // Figure out how much heap memory we need
-    int max_resident_blocks = blocksX * blocksY * blocksZ;
-    // TODO: take the min of this and the architectural maximum number
-    // of resident blocks, and the architectural maximum number of
-    // resident threads.
-    size_t peak_heap_usage = (size_t)max_resident_blocks * (size_t)heap_bytes_per_block;
-    // Add 12.5% slop to account for fragmentation
-    peak_heap_usage += peak_heap_usage / 8;
-    // Always allocate at least 8MB (the CUDA default at the time this code was written)
-    const size_t min_heap_size = 8 * 1024 * 1024;
-    if (peak_heap_usage < min_heap_size) {
-        peak_heap_usage = min_heap_size;
-    }
-    // The heap defaults to 8MB. We only need to adjust it upwards if it exceeds that.
-    err = cuCtxSetLimit(CU_LIMIT_MALLOC_HEAP_SIZE, peak_heap_usage);
-    if (err != 0) {
-        error(user_context) << "CUDA: Failed to allocate "
-                            << (uint64_t)peak_heap_usage
-                            << " bytes for CUDA heap: "
                             << get_error_name(err);
         return err;
     }
