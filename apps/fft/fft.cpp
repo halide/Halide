@@ -745,8 +745,8 @@ ComplexFunc fft2d_r2c(Func r,
     // DFT down the columns first.
     ComplexFunc dft1 = fft_dim1(zipped,
                                 R1,
-                                -1,     // sign
-                                N0 / 2, // extent of dim 0
+                                -1,      // sign
+                                N0 / 2,  // extent of dim 0
                                 1.0f,
                                 false,  // We parallelize unzipped below instead.
                                 prefix,
@@ -982,7 +982,6 @@ Func fft2d_c2r(ComplexFunc c,
                        n1 >= N1 / 2, im(dft0(A({n0, 0}, args))),
                        likely(dft0(A({n0, min(n1, (N1 / 2) - 1)}, args))));
         }
-
 
         // Zip two real DFTs X and Y into one complex DFT Z = X + j Y. For more
         // information, see the large comment above fft2d_r2c.
