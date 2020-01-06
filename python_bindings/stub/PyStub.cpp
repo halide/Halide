@@ -46,6 +46,8 @@ static_assert(PY_MAJOR_VERSION >= 3, "Python bindings for Halide require Python 
 
 #define HALIDE_PLUGIN_IMPL(name) extern "C" HALIDE_EXPORT PyObject *PyInit_##name()
 
+// clang-format off
+
 namespace halide_register_generator {
 namespace HALIDE_CONCAT(HALIDE_PYSTUB_GENERATOR_NAME, _ns) {
     extern std::unique_ptr<Halide::Internal::GeneratorBase> factory(const Halide::GeneratorContext &context);
@@ -56,3 +58,5 @@ HALIDE_PLUGIN_IMPL(HALIDE_PYSTUB_MODULE_NAME) {
     const auto factory = halide_register_generator::HALIDE_CONCAT(HALIDE_PYSTUB_GENERATOR_NAME, _ns)::factory;
     return _halide_pystub_impl(HALIDE_TOSTRING(HALIDE_PYSTUB_MODULE_NAME), factory);
 }
+
+// clang-format on
