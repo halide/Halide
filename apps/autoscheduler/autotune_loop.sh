@@ -111,6 +111,8 @@ make_featurization() {
     EXTRA_GENERATOR_ARGS=${4}
     BATCH=${5}
     SAMPLE_ID=${6}
+    USED_WEIGHTS=${7}
+
     mkdir -p ${D}
     rm -f "${D}/${FNAME}.featurization"
     rm -f "${D}/${FNAME}.sample"
@@ -148,7 +150,7 @@ make_featurization() {
 
     FAILED=0
     eval $CMD || FAILED=1
-    record_command $BATCH $SAMPLE_ID "$CMD" "autoschedule_command" $FAILED
+    record_command $BATCH $SAMPLE_ID "${CMD/$WEIGHTS/$USED_WEIGHTS}" "autoschedule_command" $FAILED
     if [[ $FAILED == 1 ]]; then
         echo "Autoschedule failed or timed out for ${D}"
         return
@@ -306,7 +308,7 @@ for ((BATCH_ID=$((FIRST+1));BATCH_ID<$((FIRST+1+NUM_BATCHES));BATCH_ID++)); do
 
                 RANDOM_DROPOUT_SEED=$(printf "%04d%04d" $BATCH_ID $SAMPLE_ID)
                 FNAME=$(printf "%s_batch_%04d_sample_%04d" ${PIPELINE} $BATCH_ID $SAMPLE_ID)
-                make_featurization "${DIR}/${SAMPLE_ID}" $RANDOM_DROPOUT_SEED $FNAME "$EXTRA_GENERATOR_ARGS" $BATCH $SAMPLE_ID &
+                make_featurization "${DIR}/${SAMPLE_ID}" $RANDOM_DROPOUT_SEED $FNAME "$EXTRA_GENERATOR_ARGS" $BATCH $SAMPLE_ID ${DIR}/used.weights &
             done
             wait
             echo done.
