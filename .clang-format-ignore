@@ -1,5 +1,5 @@
 # .clang-format-ignore
 # Our tutorials have special formatting: skip them
-tutorial/*
+./tutorial
 # hexagon_remote/bin/src is also special
-src/runtime/hexagon_remote/bin/src/*
+./src/runtime/hexagon_remote/bin/src
