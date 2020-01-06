@@ -105,6 +105,8 @@ struct Statistics {
     int num_featurizations{0};
     int num_memoized_featurizations{0};
     std::chrono::duration<double> featurization_time{0};
+    int num_schedules_enqueued{0};
+    std::chrono::duration<double> cost_model_evaluation_time{0};
 
     double total_featurization_time() const {
         return featurization_time.count() * 1000;
@@ -112,6 +114,14 @@ struct Statistics {
 
     double average_featurization_time() const {
         return total_featurization_time() / (double)num_featurizations;
+    }
+
+    double total_cost_model_evaluation_time() const {
+        return cost_model_evaluation_time.count() * 1000;
+    }
+
+    double average_cost_model_evaluation_time() const {
+        return total_cost_model_evaluation_time() / (double)num_schedules_enqueued;
     }
 };
 
@@ -757,6 +767,7 @@ struct State {
         // of internal buffer space), so that the evaluations can be
         // batched.
         cost_model->enqueue(num_stages, &schedule_features, &cost);
+        ++stats.num_schedules_enqueued;
 
         // index of current stage whose features we are reading
         int stage = 0;
@@ -1779,7 +1790,9 @@ IntrusivePtr<State> optimal_schedule_pass(FunctionDAG &dag,
 
         if (cost_model) {
             // Now evaluate all the costs and re-sort them in the priority queue
+            auto t1 = std::chrono::high_resolution_clock::now();
             cost_model->evaluate_costs();
+            stats.cost_model_evaluation_time += std::chrono::high_resolution_clock::now() - t1;
             q.resort();
         }
 
@@ -1987,6 +2000,10 @@ void generate_schedule(const std::vector<Function> &outputs,
     aslog(1) << "Number of memoized featurizations: " << stats.num_memoized_featurizations << '\n';
     aslog(1) << "Total featurization time (ms): " << stats.total_featurization_time() << "\n";
     aslog(1) << "Average featurization time (ms): " << stats.average_featurization_time() << "\n";
+
+    aslog(1) << "Number of schedules evaluated by cost model: " << stats.num_schedules_enqueued << '\n';
+    aslog(1) << "Total cost model evaluation time (ms): " << stats.total_cost_model_evaluation_time() << "\n";
+    aslog(1) << "Average cost model evaluation time (ms): " << stats.average_cost_model_evaluation_time() << "\n";
 }
 
 // Halide uses a plugin architecture for registering custom
