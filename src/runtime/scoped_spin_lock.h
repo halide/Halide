@@ -11,7 +11,8 @@ struct ScopedSpinLock {
 
     ScopedSpinLock(volatile int *l) __attribute__((always_inline))
     : lock(l) {
-        while (__sync_lock_test_and_set(lock, 1)) {}
+        while (__sync_lock_test_and_set(lock, 1)) {
+        }
     }
 
     ~ScopedSpinLock() __attribute__((always_inline)) {
