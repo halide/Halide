@@ -1,0 +1,22 @@
+name: Halide Presubmit Checks
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, edited, review_requested]
+    paths:
+    - '**.h'
+    - '**.c'
+    - '**.cpp'
+
+jobs:
+  check_clang_format:
+      name: Check clang-format
+      runs-on: ubuntu-latest
+      steps:
+      - uses: actions/checkout@v2
+      - uses: DoozyX/clang-format-lint-action@v0.5
+        with:
+            source: '.'
+            # Our tutorials have special formatting: skip them
+            exclude: './tutorial'
+            extensions: 'h,c,cpp'
+            clangFormatVersion: 9
