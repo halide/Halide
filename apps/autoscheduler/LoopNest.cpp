@@ -13,6 +13,30 @@ namespace Autoscheduler {
 const int kUnrollLimit = 12;
 const int kUnrollLimitGPU = 16;
 
+bool get_compute_global_mem_load_features() {
+    return get_env_variable("HL_NO_COMPUTE_GLOBAL_MEM_LOAD_FEATURES") != "1";
+}
+
+bool get_compute_shared_mem_load_features() {
+    return get_env_variable("HL_NO_COMPUTE_SHARED_MEM_LOAD_FEATURES") != "1";
+}
+
+bool get_compute_gpu_store_features() {
+    return get_env_variable("HL_NO_COMPUTE_GPU_STORE_FEATURES") != "1";
+}
+
+bool get_compute_shared_mem_occupancy() {
+    return get_env_variable("HL_NO_COMPUTE_SHARED_MEM_OCCUPANCY") != "1";
+}
+
+bool get_compute_warp_features() {
+    return get_env_variable("HL_NO_WARP_FEATURES") != "1";
+}
+
+bool get_compute_warp_and_block_occupancy() {
+    return get_env_variable("HL_NO_COMPUTE_WARP_AND_BLOCK_OCCUPANCY") != "1";
+}
+
 // Get the HL_NO_SUBTILING environment variable. Purpose described above.
 bool get_may_subtile() {
     string no_subtiling_str = get_env_variable("HL_NO_SUBTILING");
@@ -870,7 +894,7 @@ void LoopNest::compute_gpu_store_features(const LoadJacobian& jac, int consumer_
         feat.num_shared_mem_stores_per_block = shared_mem_features.first;
         feat.shared_mem_store_efficiency = shared_mem_features.second;
 
-        internal_assert(in_range_zero_one(feat.shared_mem_store_efficiency)) << "Invalid shared mem store efficiency: " << feat.shared_mem_store_efficiency;
+        internal_assert(in_range_zero_one(feat.shared_mem_store_efficiency)) << "Invalid shared mem store efficiency: " << feat.shared_mem_store_efficiency << " for " << node->func.name();
     } else if (consumer_site.store->is_root()) {
         auto global_mem_info = compute_global_mem_store_features(
             jac,
@@ -886,8 +910,8 @@ void LoopNest::compute_gpu_store_features(const LoadJacobian& jac, int consumer_
         feat.global_mem_store_efficiency = global_mem_info.access_efficiency();
         feat.global_mem_store_coalesce_efficiency = global_mem_info.coalesce_efficiency();
 
-        internal_assert(in_range_zero_one(feat.global_mem_store_efficiency)) << "Invalid global mem store efficiency: " << feat.global_mem_store_efficiency;
-        internal_assert(in_range_zero_one(feat.global_mem_store_coalesce_efficiency)) << "Invalid global mem store coalesce efficiency: " << feat.global_mem_store_coalesce_efficiency;
+        internal_assert(in_range_zero_one(feat.global_mem_store_efficiency)) << "Invalid global mem store efficiency: " << feat.global_mem_store_efficiency << " for " << node->func.name();
+        internal_assert(in_range_zero_one(feat.global_mem_store_coalesce_efficiency)) << "Invalid global mem store coalesce efficiency: " << feat.global_mem_store_coalesce_efficiency << " for " << node->func.name();
     }
 }
 
@@ -1636,24 +1660,26 @@ void LoopNest::compute_features(const FunctionDAG &dag,
 
         std::vector<int64_t> inner_serial_loop_extents;
 
-        if (innermost && !stage->store_jacobian->empty()) {
-            const auto& bounds = consumer_site.store->get_bounds(stage->node);
-            inner_serial_loop_extents = gpu_loop_info.get_inner_serial_loop_extents(this);
-            auto store_jac = *stage->store_jacobian * inner_serial_loop_extents;
+        if (get_compute_gpu_store_features()) {
+            if (innermost && !stage->store_jacobian->empty()) {
+                const auto& bounds = consumer_site.store->get_bounds(stage->node);
+                inner_serial_loop_extents = gpu_loop_info.get_inner_serial_loop_extents(this);
+                auto store_jac = *stage->store_jacobian * inner_serial_loop_extents;
 
-            compute_gpu_store_features(
-                store_jac,
-                vector_dim,
-                stage->node,
-                bounds,
-                *gpu_loop_info.thread_info,
-                gpu_loop_info.total_serial_extents(),
-                consumer_site,
-                feat,
-                root
-            );
+                compute_gpu_store_features(
+                    store_jac,
+                    vector_dim,
+                    stage->node,
+                    bounds,
+                    *gpu_loop_info.thread_info,
+                    gpu_loop_info.total_serial_extents(),
+                    consumer_site,
+                    feat,
+                    root
+                );
 
-            feat.num_shared_mem_stores = gpu_loop_info.num_blocks * feat.num_shared_mem_stores_per_block;
+                feat.num_shared_mem_stores = gpu_loop_info.num_blocks * feat.num_shared_mem_stores_per_block;
+            }
         }
 
         // The parallel loop of the consumer
@@ -1874,38 +1900,40 @@ void LoopNest::compute_features(const FunctionDAG &dag,
                     bool is_global_mem = producer_store_site->is_root();
 
                     // Grab the jacobians that describe the memory dependence
-                    for (const auto &jac : thread_jacobians) {
-                        if (jac.second != e->producer) continue;
-                        double n = jac.first.count();
+                    if (get_compute_shared_mem_load_features() || get_compute_global_mem_load_features()) {
+                        for (const auto &jac : thread_jacobians) {
+                            if (jac.second != e->producer) continue;
+                            double n = jac.first.count();
 
-                        int64_t amortization = compute_licm_amortization(this, parent, feat, jac.first, e->producer->dimensions);
-                        n /= amortization;
+                            int64_t amortization = compute_licm_amortization(this, parent, feat, jac.first, e->producer->dimensions);
+                            n /= amortization;
 
-                        if (is_shared_mem) {
-                            auto shared_mem_features = compute_shared_mem_load_features(
-                                jac.first,
-                                producer_innermost_dim,
-                                e->producer,
-                                producer_store_bounds,
-                                producer_has_been_scheduled,
-                                *gpu_loop_info.thread_info,
-                                root,
-                                total_serial_loop_extents
-                            );
-                            num_shared_mem_loads_per_block += n * shared_mem_features.first;
-                            min_num_shared_mem_loads_per_block += n * shared_mem_features.second;
-                        } else if (is_global_mem) {
-                            compute_global_mem_load_features(
-                                jac.first,
-                                producer_innermost_dim,
-                                e->producer,
-                                producer_store_bounds,
-                                producer_has_been_scheduled,
-                                *gpu_loop_info.thread_info,
-                                global_mem_loads,
-                                n * total_serial_loop_extents,
-                                root
-                            );
+                            if (is_shared_mem) {
+                                auto shared_mem_features = compute_shared_mem_load_features(
+                                    jac.first,
+                                    producer_innermost_dim,
+                                    e->producer,
+                                    producer_store_bounds,
+                                    producer_has_been_scheduled,
+                                    *gpu_loop_info.thread_info,
+                                    root,
+                                    total_serial_loop_extents
+                                );
+                                num_shared_mem_loads_per_block += n * shared_mem_features.first;
+                                min_num_shared_mem_loads_per_block += n * shared_mem_features.second;
+                            } else if (is_global_mem) {
+                                compute_global_mem_load_features(
+                                    jac.first,
+                                    producer_innermost_dim,
+                                    e->producer,
+                                    producer_store_bounds,
+                                    producer_has_been_scheduled,
+                                    *gpu_loop_info.thread_info,
+                                    global_mem_loads,
+                                    n * total_serial_loop_extents,
+                                    root
+                                );
+                            }
                         }
                     }
                 }
@@ -2081,11 +2109,18 @@ void LoopNest::compute_features(const FunctionDAG &dag,
         inlined_feat.outer_parallelism = parallelism;
     }
 
-    compute_shared_mem_occupancy(target, working_set_here, feat);
+    if (get_compute_shared_mem_occupancy()) {
+        compute_shared_mem_occupancy(target, working_set_here, feat);
+    }
 
     if (innermost && !is_scalar()) {
-        compute_warp_features(feat, gpu_loop_info);
-        compute_warp_and_block_occupancy(feat, gpu_loop_info);
+        if (get_compute_warp_features()) {
+            compute_warp_features(feat, gpu_loop_info);
+        }
+
+        if (get_compute_warp_and_block_occupancy()) {
+            compute_warp_and_block_occupancy(feat, gpu_loop_info);
+        }
     }
 }
 
