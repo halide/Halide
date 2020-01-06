@@ -12,8 +12,8 @@ namespace {
 class ExternalCode : public Halide::Generator<ExternalCode> {
 public:
     GeneratorParam<bool> external_code_is_bitcode{"external_code_is_bitcode", true};
-    Input<Buffer<int32_t>> input{ "input", 2 };
-    Output<Buffer<float>> output{ "output", 2 };
+    Input<Buffer<int32_t>> input{"input", 2};
+    Output<Buffer<float>> output{"output", 2};
     HalidePureExtern_1(float, gen_extern_tester, float);
 
     void generate() {
@@ -34,13 +34,13 @@ public:
             }
             std::vector<uint8_t> code_vector(code, code + code_length);
             get_externs_map()->insert({name,
-                  Halide::ExternalCode::bitcode_wrapper(target, code_vector, name)});
+                                       Halide::ExternalCode::bitcode_wrapper(target, code_vector, name)});
         } else {
             code = external_code_extern_cpp_source;
             code_length = external_code_extern_cpp_source_length;
             std::vector<uint8_t> code_vector(code, code + code_length);
             get_externs_map()->insert({name,
-                  Halide::ExternalCode::c_plus_plus_code_wrapper(code_vector, name)});
+                                       Halide::ExternalCode::c_plus_plus_code_wrapper(code_vector, name)});
         }
 
         output(x, y) = gen_extern_tester(cast<float>(input(x, y)));
@@ -53,4 +53,3 @@ public:
 }  // namespace
 
 HALIDE_REGISTER_GENERATOR(ExternalCode, external_code)
-

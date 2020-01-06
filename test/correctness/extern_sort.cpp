@@ -1,6 +1,6 @@
 #include "Halide.h"
-#include <stdio.h>
 #include <algorithm>
+#include <stdio.h>
 
 using namespace Halide;
 
@@ -24,7 +24,6 @@ extern "C" DLLEXPORT int sort_buffer(halide_buffer_t *in, halide_buffer_t *out) 
     }
     return 0;
 }
-
 
 int main(int argc, char **argv) {
     Func data;

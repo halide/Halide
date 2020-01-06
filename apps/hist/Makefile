@@ -9,7 +9,7 @@ CXXFLAGS += -I../support/
 FILTER_DEPS=$(BIN)/%/hist.a
 
 ifndef NO_AUTO_SCHEDULE
-	FILTER_DEPS += $(BIN)/%/hist_auto_schedule.a $(BIN)/%/hist_gradient_auto_schedule.a
+	FILTER_DEPS += $(BIN)/%/hist_auto_schedule.a $(BIN)/%/hist_gradient_auto_schedule.a $(BIN)/%/runtime.a
 else
 	CXXFLAGS += -DNO_AUTO_SCHEDULE
 endif
@@ -23,6 +23,10 @@ $(GENERATOR_BIN)/hist.generator: hist_generator.cpp $(GENERATOR_DEPS)
 $(BIN)/%/hist.a: $(GENERATOR_BIN)/hist.generator
 	@mkdir -p $(@D)
 	$< -g hist -f hist -e $(GENERATOR_OUTPUTS) -o $(@D) target=$* auto_schedule=false
+
+$(BIN)/%/runtime.a: $(GENERATOR_BIN)/hist.generator
+	@mkdir -p $(@D)
+	$< -r runtime -o $(@D) target=$*
 
 $(BIN)/%/hist_auto_schedule.a: $(GENERATOR_BIN)/hist.generator $(AUTOSCHED_BIN)/libauto_schedule.so
 	@mkdir -p $(@D)

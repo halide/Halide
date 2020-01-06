@@ -1,13 +1,13 @@
 extern "C" {
-#include <sys/types.h>
-#include <sys/stat.h>
-#include <fcntl.h>
-#include <stdio.h>
-#include <unistd.h>
-#include <stdlib.h>
-#include <stdint.h>
-#include <string.h>
 #include <dlfcn.h>
+#include <fcntl.h>
+#include <stdint.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <sys/stat.h>
+#include <sys/types.h>
+#include <unistd.h>
 }
 
 #include "HalideRuntime.h"
@@ -35,7 +35,6 @@ struct Ehdr {
     uint16_t e_shnum;
     uint16_t e_shstrndx;
 };
-
 
 enum {
     PT_NULL = 0,
@@ -88,8 +87,12 @@ enum {
 struct Rela {
     elfaddr_t r_offset;
     uint32_t r_info;
-    uint32_t r_type() const {return r_info & 0xff;}
-    uint32_t r_sym() const {return r_info >> 8;}
+    uint32_t r_type() const {
+        return r_info & 0xff;
+    }
+    uint32_t r_sym() const {
+        return r_info >> 8;
+    }
     int32_t r_addend;
 };
 
@@ -146,10 +149,18 @@ struct hash_table {
         return h;
     }
 
-    uint32_t bucket_count() const { return table[0]; }
-    uint32_t chain_count() const { return table[1]; }
-    const uint32_t *buckets() const { return &table[2]; }
-    const uint32_t *chains() const { return buckets() + bucket_count(); }
+    uint32_t bucket_count() const {
+        return table[0];
+    }
+    uint32_t chain_count() const {
+        return table[1];
+    }
+    const uint32_t *buckets() const {
+        return &table[2];
+    }
+    const uint32_t *chains() const {
+        return buckets() + bucket_count();
+    }
 
     uint32_t lookup_chain(const char *name) {
         return buckets()[elf_hash(name) % bucket_count()];
@@ -199,7 +210,7 @@ struct dlib_t {
         }
     }
 
-    template <typename T>
+    template<typename T>
     bool assert_in_bounds(const T *x, size_t count = 1) {
         return assert_in_bounds(x, x + count);
     }
@@ -235,10 +246,18 @@ struct dlib_t {
             }
 
             switch (r.r_type()) {
-            case R_HEX_COPY: *fixup_addr = (uint32_t)S; break;
-            case R_HEX_GLOB_DAT: *fixup_addr = (uint32_t)(S + A); break;
-            case R_HEX_JMP_SLOT: *fixup_addr = (uint32_t)(S + A); break;
-            case R_HEX_RELATIVE: *fixup_addr = (uint32_t)(B + A); break;
+            case R_HEX_COPY:
+                *fixup_addr = (uint32_t)S;
+                break;
+            case R_HEX_GLOB_DAT:
+                *fixup_addr = (uint32_t)(S + A);
+                break;
+            case R_HEX_JMP_SLOT:
+                *fixup_addr = (uint32_t)(S + A);
+                break;
+            case R_HEX_RELATIVE:
+                *fixup_addr = (uint32_t)(B + A);
+                break;
             default:
                 log_printf("Unsupported relocation type %d\n", r.r_type());
                 return false;
@@ -300,10 +319,10 @@ struct dlib_t {
                 rel_count = d.value / sizeof(Rela);
                 break;
             case DT_INIT:
-                init = (init_fini_t) (base_vaddr + d.value);
+                init = (init_fini_t)(base_vaddr + d.value);
                 break;
             case DT_FINI:
-                fini = (init_fini_t) (base_vaddr + d.value);
+                fini = (init_fini_t)(base_vaddr + d.value);
                 break;
             case DT_RELAENT:
                 if (d.value != sizeof(Rela)) {
@@ -461,12 +480,12 @@ struct dlib_t {
         const size_t len = strlen(name);
 
         uint32_t i = hash.lookup_chain(name);
-        while(i != 0) {
+        while (i != 0) {
             const Sym *sym = &symtab[i];
             if (!assert_in_bounds(sym)) return NULL;
             const char *sym_name = &strtab[sym->st_name];
             if (!assert_in_bounds(sym_name)) return NULL;
-            if (strncmp(sym_name, name, len+1) == 0) {
+            if (strncmp(sym_name, name, len + 1) == 0) {
                 return sym;
             }
             i = hash.next_in_chain(i);

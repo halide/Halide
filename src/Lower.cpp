@@ -300,7 +300,7 @@ Module lower(const vector<Function> &output_funcs,
         debug(1) << "Injecting host <-> dev buffer copies...\n";
         s = inject_host_dev_buffer_copies(s, t);
         debug(2) << "Lowering after injecting host <-> dev buffer copies:\n"
-                    << s << "\n\n";
+                 << s << "\n\n";
     }
 
     if (t.has_feature(Target::OpenGL)) {

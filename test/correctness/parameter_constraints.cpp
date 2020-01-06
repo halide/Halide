@@ -22,7 +22,7 @@ int main(int argc, char **argv) {
         g(x, y) = input(x, y) + 1.0f;
 
         g.compute_root();
-        f(x, y) = g(cast<int>(x/p), y);
+        f(x, y) = g(cast<int>(x / p), y);
 
         f.set_error_handler(my_error_handler);
 
@@ -53,7 +53,7 @@ int main(int argc, char **argv) {
         g(x, y) = input(x, y) + 1.0f;
 
         g.compute_root();
-        f(x, y) = g(cast<int>(x/p), y);
+        f(x, y) = g(cast<int>(x / p), y);
 
         f.set_error_handler(my_error_handler);
 

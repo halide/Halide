@@ -19,8 +19,8 @@
 // source tree.
 
 #include "Halide.h"
-#include <stdio.h>
 #include <algorithm>
+#include <stdio.h>
 using namespace Halide;
 
 int main(int argc, char **argv) {
@@ -171,7 +171,7 @@ int main(int argc, char **argv) {
         Buffer<int> output = gradient.realize(4, 4);
 
         printf("Equivalent C:\n");
-        for (int fused = 0; fused < 4*4; fused++) {
+        for (int fused = 0; fused < 4 * 4; fused++) {
             int y = fused / 4;
             int x = fused % 4;
             printf("Evaluating at x = %d, y = %d: %d\n", x, y, x + y);
@@ -370,7 +370,7 @@ int main(int argc, char **argv) {
 
         printf("Equivalent C:\n");
         for (int y = 0; y < 2; y++) {
-            for (int x_outer = 0; x_outer < 3; x_outer++) { // Now runs from 0 to 2
+            for (int x_outer = 0; x_outer < 3; x_outer++) {  // Now runs from 0 to 2
                 for (int x_inner = 0; x_inner < 3; x_inner++) {
                     int x = x_outer * 3;
                     // Before we add x_inner, make sure we don't
@@ -447,7 +447,6 @@ int main(int argc, char **argv) {
         //     .fuse(x_outer, y_outer, tile_index)
         //     .parallel(tile_index);
 
-
         printf("Evaluating gradient tiles in parallel\n");
         Buffer<int> output = gradient.realize(8, 8);
 
@@ -518,17 +517,17 @@ int main(int argc, char **argv) {
         for (int tile_index = 0; tile_index < 6 * 4; tile_index++) {
             int y_outer = tile_index / 4;
             int x_outer = tile_index % 4;
-            for (int y_inner_outer = 0; y_inner_outer < 64/2; y_inner_outer++) {
-                for (int x_inner_outer = 0; x_inner_outer < 64/4; x_inner_outer++) {
+            for (int y_inner_outer = 0; y_inner_outer < 64 / 2; y_inner_outer++) {
+                for (int x_inner_outer = 0; x_inner_outer < 64 / 4; x_inner_outer++) {
                     // We're vectorized across x
-                    int x = std::min(x_outer * 64, 350-64) + x_inner_outer*4;
+                    int x = std::min(x_outer * 64, 350 - 64) + x_inner_outer * 4;
                     int x_vec[4] = {x + 0,
                                     x + 1,
                                     x + 2,
                                     x + 3};
 
                     // And we unrolled across y
-                    int y_base = std::min(y_outer * 64, 250-64) + y_inner_outer*2;
+                    int y_base = std::min(y_outer * 64, 250 - 64) + y_inner_outer * 2;
                     {
                         // y_pairs = 0
                         int y = y_base + 0;
@@ -584,7 +583,6 @@ int main(int argc, char **argv) {
         // hard to debug, and hard to optimize further. This is why Halide
         // exists.
     }
-
 
     printf("Success!\n");
     return 0;

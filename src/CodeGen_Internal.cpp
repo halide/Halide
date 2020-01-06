@@ -183,6 +183,8 @@ bool function_takes_user_context(const std::string &name) {
         "halide_msan_annotate_buffer_is_initialized_as_destructor",
         "halide_msan_annotate_buffer_is_initialized",
         "halide_msan_annotate_memory_is_initialized",
+        "halide_msan_check_buffer_is_initialized",
+        "halide_msan_check_memory_is_initialized",
         "halide_hexagon_initialize_kernels",
         "halide_hexagon_run",
         "halide_hexagon_device_release",

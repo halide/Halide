@@ -4,6 +4,7 @@
 #include "PyBoundaryConditions.h"
 #include "PyBuffer.h"
 #include "PyConciseCasts.h"
+#include "PyDerivative.h"
 #include "PyEnums.h"
 #include "PyError.h"
 #include "PyExpr.h"
@@ -22,10 +23,9 @@
 #include "PyTuple.h"
 #include "PyType.h"
 #include "PyVar.h"
-#include "PyDerivative.h"
 
 #ifndef HALIDE_PYBIND_MODULE_NAME
-  #define HALIDE_PYBIND_MODULE_NAME halide
+#define HALIDE_PYBIND_MODULE_NAME halide
 #endif
 
 PYBIND11_MODULE(HALIDE_PYBIND_MODULE_NAME, m) {

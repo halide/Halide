@@ -9,7 +9,7 @@ CXXFLAGS += -I../support/
 FILTER_DEPS=$(BIN)/%/max_filter.a
 
 ifndef NO_AUTO_SCHEDULE
-	FILTER_DEPS += $(BIN)/%/max_filter_auto_schedule.a $(BIN)/%/max_filter_gradient_auto_schedule.a
+	FILTER_DEPS += $(BIN)/%/max_filter_auto_schedule.a $(BIN)/%/max_filter_gradient_auto_schedule.a $(BIN)/%/runtime.a
 else
 	CXXFLAGS += -DNO_AUTO_SCHEDULE
 endif
@@ -23,6 +23,10 @@ $(GENERATOR_BIN)/max_filter.generator: max_filter_generator.cpp $(GENERATOR_DEPS
 $(BIN)/%/max_filter.a: $(GENERATOR_BIN)/max_filter.generator
 	@mkdir -p $(@D)
 	$< -g max_filter -e $(GENERATOR_OUTPUTS) -o $(@D) -f max_filter target=$* auto_schedule=false
+
+$(BIN)/%/runtime.a: $(GENERATOR_BIN)/max_filter.generator
+	@mkdir -p $(@D)
+	$< -r runtime -o $(@D) target=$*
 
 $(BIN)/%/max_filter_auto_schedule.a: $(GENERATOR_BIN)/max_filter.generator $(AUTOSCHED_BIN)/libauto_schedule.so
 	@mkdir -p $(@D)
@@ -43,10 +47,10 @@ $(BIN)/%/filter: filter.cpp $(FILTER_DEPS)
 clean:
 	rm -rf $(BIN)
 
-$(BIN)/%/out.tiff: $(BIN)/%/filter
+$(BIN)/%/out.png: $(BIN)/%/filter
 	$< ../images/rgb.png $@
 
-test: $(BIN)/$(HL_TARGET)/out.tiff
+test: $(BIN)/$(HL_TARGET)/out.png
 
 BATCH_ID ?= 0
 TRAIN_ONLY ?= 0

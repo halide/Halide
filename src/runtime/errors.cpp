@@ -193,8 +193,8 @@ WEAK int halide_error_failed_to_upgrade_buffer_t(void *user_context,
 }
 
 WEAK int halide_error_failed_to_downgrade_buffer_t(void *user_context,
-                                                 const char *name,
-                                                 const char *reason) {
+                                                   const char *name,
+                                                   const char *reason) {
     error(user_context)
         << "Failed to downgrade halide_buffer_t to buffer_t for " << name << ": " << reason;
     return halide_error_code_failed_to_downgrade_buffer_t;
@@ -270,7 +270,7 @@ WEAK int halide_error_no_device_interface(void *user_context) {
 }
 
 WEAK int halide_error_device_interface_no_device(void *user_context) {
-    error(user_context) << "Buffer has a non-null devie_interface but device is 0.\n";
+    error(user_context) << "Buffer has a non-null device_interface but device is 0.\n";
     return halide_error_code_device_interface_no_device;
 }
 

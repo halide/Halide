@@ -8,12 +8,12 @@ Param<int> divisor;
 
 Func blur(Func in, std::string n) {
     Func blurry(n);
-    blurry(x) = (in(x) + in(x+1)) / divisor;
+    blurry(x) = (in(x) + in(x + 1)) / divisor;
     return blurry;
 }
 
 int main(int argc, char **argv) {
-    Buffer<float> input = lambda(x, sin(10*x) + 1.0f).realize(1000);
+    Buffer<float> input = lambda(x, sin(10 * x) + 1.0f).realize(1000);
 
     std::vector<Func> stages;
     Func first("S0");
@@ -21,10 +21,10 @@ int main(int argc, char **argv) {
 
     stages.push_back(first);
     for (size_t i = 0; i < 30; i++) {
-        stages.push_back(blur(stages.back(), "S" + std::to_string(i+1)));
+        stages.push_back(blur(stages.back(), "S" + std::to_string(i + 1)));
     }
 
-    for (size_t i = 0; i < stages.size()-1; i++) {
+    for (size_t i = 0; i < stages.size() - 1; i++) {
         stages[i].store_root().compute_at(stages.back(), x);
     }
 

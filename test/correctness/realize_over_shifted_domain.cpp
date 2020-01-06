@@ -14,7 +14,7 @@ int main(int argc, char **argv) {
 
     Func f;
     Var x, y;
-    f(x, y) = input(2*x, y/2);
+    f(x, y) = input(2 * x, y / 2);
 
     f.compile_jit();
 
@@ -26,8 +26,8 @@ int main(int argc, char **argv) {
 
     if (result(50, 100) != 123 || result(99, 199) != 234) {
         fprintf(stderr, "Err: f(50, 100) = %d (supposed to be 123)\n"
-               "f(99, 199) = %d (supposed to be 234)\n",
-               result(50, 100), result(99, 199));
+                        "f(99, 199) = %d (supposed to be 234)\n",
+                result(50, 100), result(99, 199));
         return -1;
     }
 

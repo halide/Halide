@@ -17,7 +17,7 @@ struct buffer_t {
     uint64_t dev;
 
     /** A pointer to the start of the data in main memory. */
-    uint8_t* host;
+    uint8_t *host;
 
     /** The size of the buffer in each dimension. */
     int32_t extent[4];
@@ -57,7 +57,7 @@ struct buffer_t {
 };
 
 /* Returns -1 if something went wrong, 0 otherwise */
-int32_t the_sort_func(struct buffer_t* data) {
+int32_t the_sort_func(struct buffer_t *data) {
     // if(data.host == NULL)
     if (data->host == 0) {
         return -1;

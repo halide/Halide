@@ -1,6 +1,6 @@
 #include "Halide.h"
-#include <stdio.h>
 #include <math.h>
+#include <stdio.h>
 
 using namespace Halide;
 

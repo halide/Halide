@@ -49,6 +49,7 @@ Expr Simplify::visit(const Add *op, ExprInfo *bounds) {
             return rewrite.result;
         }
 
+        // clang-format off
         if (EVAL_IN_LAMBDA
             (rewrite(x + x, x * 2) ||
              rewrite(ramp(x, y) + ramp(z, w), ramp(x + z, y + w, lanes)) ||
@@ -193,6 +194,7 @@ Expr Simplify::visit(const Add *op, ExprInfo *bounds) {
                false)))) {
             return mutate(std::move(rewrite.result), bounds);
         }
+        // clang-format on
 
         const Shuffle *shuffle_a = a.as<Shuffle>();
         const Shuffle *shuffle_b = b.as<Shuffle>();

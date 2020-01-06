@@ -1,7 +1,7 @@
+#include <android/log.h>
 #include <dlfcn.h>
 #include <stdint.h>
 #include <sys/stat.h>
-#include <android/log.h>
 
 // This is a shim to allow dynamic loading of either libcdsprpc.so which
 // supports a compute DSP node on hexagon (SDM660 for example) with HVX.
@@ -26,10 +26,9 @@ void *load_libadsprpc() {
     return NULL;
 }
 
-
 void *libadsprpc = load_libadsprpc();
 
-template <typename T>
+template<typename T>
 T get_libadsprpc_symbol(const char *sym) {
     if (!libadsprpc) {
         __android_log_print(ANDROID_LOG_ERROR, "halide", "Failed to load libcdsprpc.so or libadsprpc.so");
@@ -62,7 +61,7 @@ typedef int (*remote_handle_invoke_fn)(remote_handle, uint32_t, remote_arg *pra)
 typedef int (*remote_handle64_invoke_fn)(remote_handle64, uint32_t, remote_arg *pra);
 typedef int (*remote_handle_close_fn)(remote_handle);
 typedef int (*remote_handle64_close_fn)(remote_handle64);
-typedef int (*remote_mmap_fn)(int, uint32_t, uint32_t, int, uint32_t*);
+typedef int (*remote_mmap_fn)(int, uint32_t, uint32_t, int, uint32_t *);
 typedef int (*remote_munmap_fn)(uint32_t, int);
 typedef void (*remote_register_buf_fn)(void *, int, int);
 typedef int (*remote_set_mode_fn)(uint32_t);

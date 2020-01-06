@@ -71,9 +71,14 @@ double run_test(bool auto_schedule) {
 
         Var t;
         prod.update()
-            .tile(x, y, xi, yi, 2, 2).vectorize(xi).unroll(yi)
-            .tile(x, y, xii, yii, 2, 2).unroll(xii).unroll(yii)
-            .unroll(x).unroll(y);
+            .tile(x, y, xi, yi, 2, 2)
+            .vectorize(xi)
+            .unroll(yi)
+            .tile(x, y, xii, yii, 2, 2)
+            .unroll(xii)
+            .unroll(yii)
+            .unroll(x)
+            .unroll(y);
 
         // 36ms
 
@@ -113,7 +118,7 @@ double run_test(bool auto_schedule) {
         p.realize(result);
     });
 
-    return t*1000;
+    return t * 1000;
 }
 
 int main(int argc, char **argv) {

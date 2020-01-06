@@ -17,13 +17,13 @@ namespace Tools {
 #if !defined(__EMSCRIPTEN__)
 
 // Prefer high_resolution_clock, but only if it's steady...
-template <bool HighResIsSteady = std::chrono::high_resolution_clock::is_steady>
+template<bool HighResIsSteady = std::chrono::high_resolution_clock::is_steady>
 struct SteadyClock {
     using type = std::chrono::high_resolution_clock;
 };
 
 // ...otherwise use steady_clock.
-template <>
+template<>
 struct SteadyClock<false> {
     using type = std::chrono::steady_clock;
 };
@@ -33,8 +33,8 @@ inline SteadyClock<>::type::time_point benchmark_now() {
 }
 
 inline double benchmark_duration_seconds(
-        SteadyClock<>::type::time_point start,
-        SteadyClock<>::type::time_point end) {
+    SteadyClock<>::type::time_point start,
+    SteadyClock<>::type::time_point end) {
     return std::chrono::duration_cast<std::chrono::duration<double>>(end - start).count();
 }
 
@@ -140,10 +140,12 @@ struct BenchmarkResult {
     // Will be <= config.accuracy unless max_time is exceeded.
     double accuracy;
 
-    operator double() const { return wall_time; }
+    operator double() const {
+        return wall_time;
+    }
 };
 
-inline BenchmarkResult benchmark(std::function<void()> op, const BenchmarkConfig& config = {}) {
+inline BenchmarkResult benchmark(std::function<void()> op, const BenchmarkConfig &config = {}) {
     BenchmarkResult result{0, 0, 0};
 
     const double min_time = std::max(10 * 1e-6, config.min_time);
@@ -175,7 +177,7 @@ inline BenchmarkResult benchmark(std::function<void()> op, const BenchmarkConfig
         }
         // Use an estimate based on initial times to converge faster.
         double next_iters = std::max(min_time / std::max(times[0] * kMinSamples, 1e-9),
-                                                                 iters_per_sample * 2.0);
+                                     iters_per_sample * 2.0);
         iters_per_sample = (uint64_t)(next_iters + 0.5);
     }
 
@@ -185,7 +187,7 @@ inline BenchmarkResult benchmark(std::function<void()> op, const BenchmarkConfig
     // we happen to get faster results for the first samples, then happen to transition
     // to throttled-down CPU state.
     while ((times[0] * accuracy < times[kMinSamples - 1] || total_time < min_time) &&
-                 total_time < max_time) {
+           total_time < max_time) {
         times[kMinSamples] = benchmark(1, iters_per_sample, op);
         result.samples++;
         result.iterations += iters_per_sample;
@@ -198,7 +200,7 @@ inline BenchmarkResult benchmark(std::function<void()> op, const BenchmarkConfig
     return result;
 }
 
-}   // namespace Tools
-}   // mamespace Halide
+}  // namespace Tools
+}  // namespace Halide
 
 #endif

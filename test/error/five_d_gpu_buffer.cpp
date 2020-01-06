@@ -14,11 +14,10 @@ int main(int argc, char **argv) {
         return -1;
     }
 
-
     Func f;
     Var v0, v1, v2, v3, v4;
 
-    f(v0, v1, v2, v3, v4) = v0 + 2*v1 + 4*v2 + 8*v3 + 16*v4;
+    f(v0, v1, v2, v3, v4) = v0 + 2 * v1 + 4 * v2 + 8 * v3 + 16 * v4;
 
     f.compute_root().gpu_blocks(v3, v4).gpu_threads(v1, v2);
 

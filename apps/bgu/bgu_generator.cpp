@@ -1,4 +1,6 @@
-// Adapted from https://github.com/google/bgu/blob/master/src/halide/fit_and_slice_3x4.cpp
+// A Halide implementation of bilateral-guided upsampling.
+
+// Adapted from https://github.com/google/bgu/blob/master/src/halide/bgu.cpp
 
 // Copyright 2016 Google Inc.
 //
@@ -67,7 +69,7 @@ Matrix<R, T> mat_mul(const Matrix<R, S> &A, const Matrix<S, T> &B) {
 
 // Solve Ax = b at each x, y, z. Compute the result at the given Func and Var.
 template<int M, int N>
-Matrix<M, N> solve(Matrix<M, M> A, Matrix<M, N> b, Func compute, Var at, bool skip_schedule) {
+Matrix<M, N> solve(Matrix<M, M> A, Matrix<M, N> b, Func compute, Var at, bool skip_schedule, Target target) {
     // Put the input matrices in a Func to do the Gaussian elimination.
     Var vi, vj;
     Func f;
@@ -82,10 +84,10 @@ Matrix<M, N> solve(Matrix<M, M> A, Matrix<M, N> b, Func compute, Var at, bool sk
     }
 
     // eliminate lower left
-    for (int k = 0; k < M-1; k++) {
-        for (int i = k+1; i < M; i++) {
+    for (int k = 0; k < M - 1; k++) {
+        for (int i = k + 1; i < M; i++) {
             f(x, y, z, -1, 0) = f(x, y, z, i, k) / f(x, y, z, k, k);
-            for (int j = k+1; j < M+N; j++) {
+            for (int j = k + 1; j < M + N; j++) {
                 f(x, y, z, i, j) -= f(x, y, z, k, j) * f(x, y, z, -1, 0);
             }
             f(x, y, z, i, k) = 0.0f;
@@ -93,10 +95,10 @@ Matrix<M, N> solve(Matrix<M, M> A, Matrix<M, N> b, Func compute, Var at, bool sk
     }
 
     // eliminate upper right
-    for (int k = M-1; k > 0; k--) {
+    for (int k = M - 1; k > 0; k--) {
         for (int i = 0; i < k; i++) {
             f(x, y, z, -1, 0) = f(x, y, z, i, k) / f(x, y, z, k, k);
-            for (int j = k+1; j < M+N; j++) {
+            for (int j = k + 1; j < M + N; j++) {
                 f(x, y, z, i, j) -= f(x, y, z, k, j) * f(x, y, z, -1, 0);
             }
             f(x, y, z, i, k) = 0.0f;
@@ -105,15 +107,17 @@ Matrix<M, N> solve(Matrix<M, M> A, Matrix<M, N> b, Func compute, Var at, bool sk
 
     // Divide by diagonal and put it in the output matrix.
     for (int i = 0; i < M; i++) {
-        f(x, y, z, i, i) = 1.0f/f(x, y, z, i, i);
+        f(x, y, z, i, i) = 1.0f / f(x, y, z, i, i);
         for (int j = 0; j < N; j++) {
-            b(i, j) = f(x, y, z, i, j+M) * f(x, y, z, i, i);
+            b(i, j) = f(x, y, z, i, j + M) * f(x, y, z, i, i);
         }
     }
 
     if (!skip_schedule) {
-        for (int i = 0; i < f.num_update_definitions(); i++) {
-            f.update(i).vectorize(x);
+        if (!target.has_gpu_feature()) {
+            for (int i = 0; i < f.num_update_definitions(); i++) {
+                f.update(i).vectorize(x);
+            }
         }
 
         f.compute_at(compute, at);
@@ -121,7 +125,6 @@ Matrix<M, N> solve(Matrix<M, M> A, Matrix<M, N> b, Func compute, Var at, bool sk
 
     return b;
 };
-
 
 template<int N, int M>
 Matrix<M, N> transpose(const Matrix<N, M> &in) {
@@ -134,7 +137,6 @@ Matrix<M, N> transpose(const Matrix<N, M> &in) {
     return out;
 }
 
-
 Expr pack_channels(Var c, std::vector<Expr> exprs) {
     Expr e = exprs.back();
     for (int i = (int)exprs.size() - 2; i >= 0; i--) {
@@ -143,7 +145,7 @@ Expr pack_channels(Var c, std::vector<Expr> exprs) {
     return e;
 }
 
-class FitAndSlice3x4 : public Generator<FitAndSlice3x4> {
+class BGU : public Generator<BGU> {
 public:
     // Size of each luma bin in the grid. Typically 1/8.
     Input<float> r_sigma{"r_sigma"};
@@ -188,10 +190,10 @@ public:
         {
             histogram(x, y, z, c) = 0.0f;
 
-            Expr sx = x * s_sigma + r.x - s_sigma/2, sy = y * s_sigma + r.y - s_sigma/2;
+            Expr sx = x * s_sigma + r.x - s_sigma / 2, sy = y * s_sigma + r.y - s_sigma / 2;
             Expr pos = gray_splat_loc(sx, sy);
             pos = clamp(pos, 0.0f, 1.0f);
-            Expr zi = cast<int>(round(pos * (1.0f/r_sigma)));
+            Expr zi = cast<int>(round(pos * (1.0f / r_sigma)));
 
             // Sum all the terms we need to fit a line relating
             // low-res input to low-res output within this bilateral grid
@@ -201,14 +203,13 @@ public:
 
             histogram(x, y, zi, c) +=
                 pack_channels(c,
-                           {sr*sr, sr*sg, sr*sb, sr,
-                                   sg*sg, sg*sb, sg,
-                                          sb*sb, sb,
-                                               1.0f,
-                            vr*sr, vr*sg, vr*sb, vr,
-                            vg*sr, vg*sg, vg*sb, vg,
-                            vb*sr, vb*sg, vb*sb, vb});
-
+                              {sr * sr, sr * sg, sr * sb, sr,
+                               sg * sg, sg * sb, sg,
+                               sb * sb, sb,
+                               1.0f,
+                               vr * sr, vr * sg, vr * sb, vr,
+                               vg * sr, vg * sg, vg * sb, vg,
+                               vb * sr, vb * sg, vb * sb, vb});
         }
 
         // Convolution pyramids (Farbman et al.) suggests convolving by
@@ -216,32 +217,32 @@ public:
         // that. We could also just use a convolution pyramid here, but
         // these grids are really small, so it's OK for the filter to drop
         // sharply and truncate early.
-        Expr t0 = 1.0f/64, t1 = 1.0f/27, t2 = 1.0f/8, t3 = 1.0f;
+        Expr t0 = 1.0f / 64, t1 = 1.0f / 27, t2 = 1.0f / 8, t3 = 1.0f;
 
         // Blur the grid using a seven-tap filter
         Func blurx("blurx"), blury("blury"), blurz("blurz");
 
-        blurz(x, y, z, c) = (histogram(x, y, z-3, c)*t0 +
-                             histogram(x, y, z-2, c)*t1 +
-                             histogram(x, y, z-1, c)*t2 +
-                             histogram(x, y, z  , c)*t3 +
-                             histogram(x, y, z+1, c)*t2 +
-                             histogram(x, y, z+2, c)*t1 +
-                             histogram(x, y, z+3, c)*t0);
-        blury(x, y, z, c) = (blurz(x, y-3, z, c)*t0 +
-                             blurz(x, y-2, z, c)*t1 +
-                             blurz(x, y-1, z, c)*t2 +
-                             blurz(x, y  , z, c)*t3 +
-                             blurz(x, y+1, z, c)*t2 +
-                             blurz(x, y+2, z, c)*t1 +
-                             blurz(x, y+3, z, c)*t0);
-        blurx(x, y, z, c) = (blury(x-3, y, z, c)*t0 +
-                             blury(x-2, y, z, c)*t1 +
-                             blury(x-1, y, z, c)*t2 +
-                             blury(x  , y, z, c)*t3 +
-                             blury(x+1, y, z, c)*t2 +
-                             blury(x+2, y, z, c)*t1 +
-                             blury(x+3, y, z, c)*t0);
+        blurz(x, y, z, c) = (histogram(x, y, z - 3, c) * t0 +
+                             histogram(x, y, z - 2, c) * t1 +
+                             histogram(x, y, z - 1, c) * t2 +
+                             histogram(x, y, z, c) * t3 +
+                             histogram(x, y, z + 1, c) * t2 +
+                             histogram(x, y, z + 2, c) * t1 +
+                             histogram(x, y, z + 3, c) * t0);
+        blury(x, y, z, c) = (blurz(x, y - 3, z, c) * t0 +
+                             blurz(x, y - 2, z, c) * t1 +
+                             blurz(x, y - 1, z, c) * t2 +
+                             blurz(x, y, z, c) * t3 +
+                             blurz(x, y + 1, z, c) * t2 +
+                             blurz(x, y + 2, z, c) * t1 +
+                             blurz(x, y + 3, z, c) * t0);
+        blurx(x, y, z, c) = (blury(x - 3, y, z, c) * t0 +
+                             blury(x - 2, y, z, c) * t1 +
+                             blury(x - 1, y, z, c) * t2 +
+                             blury(x, y, z, c) * t3 +
+                             blury(x + 1, y, z, c) * t2 +
+                             blury(x + 2, y, z, c) * t1 +
+                             blury(x + 3, y, z, c) * t0);
 
         // Do the solve, to convert the accumulated values to the affine
         // matrices.
@@ -317,22 +318,21 @@ public:
             b(2, 2) += weighted_lambda * gain;
 
             // Now solve Ax = b
-            Matrix<3, 4> result = transpose(solve(A, b, line, x, auto_schedule));
+            Matrix<3, 4> result = transpose(solve(A, b, line, x, auto_schedule, get_target()));
 
             // Pack the resulting matrix into the output Func.
-            line(x, y, z, c) = pack_channels(c, {
-                        result(0, 0),
-                        result(0, 1),
-                        result(0, 2),
-                        result(0, 3),
-                        result(1, 0),
-                        result(1, 1),
-                        result(1, 2),
-                        result(1, 3),
-                        result(2, 0),
-                        result(2, 1),
-                        result(2, 2),
-                        result(2, 3)});
+            line(x, y, z, c) = pack_channels(c, {result(0, 0),
+                                                 result(0, 1),
+                                                 result(0, 2),
+                                                 result(0, 3),
+                                                 result(1, 0),
+                                                 result(1, 1),
+                                                 result(1, 2),
+                                                 result(1, 3),
+                                                 result(2, 0),
+                                                 result(2, 1),
+                                                 result(2, 2),
+                                                 result(2, 3)});
         }
 
         // If using the shader we stop there, and the Func "line" is the
@@ -378,8 +378,8 @@ public:
             slice_loc_z(x, y) = {zi, zf};
 
             interpolated_matrix_z(x, y, c) =
-                lerp(interpolated_matrix_x(x, y, clamp(slice_loc_z(x, y)[0], 0, num_intensity_bins), c),
-                     interpolated_matrix_x(x, y, clamp(slice_loc_z(x, y)[0]+1, 0, num_intensity_bins+1), c),
+                lerp(interpolated_matrix_x(x, y, slice_loc_z(x, y)[0], c),
+                     interpolated_matrix_x(x, y, slice_loc_z(x, y)[0] + 1, c),
                      slice_loc_z(x, y)[1]);
 
             // Multiply by 3x4 by 4x1.
@@ -398,102 +398,195 @@ public:
 
         // Schedule
         if (!auto_schedule) {
-            // Fitting the curves.
+            if (!get_target().has_gpu_feature()) {
+                // 7.09 ms on an Intel i9-9960X using 16 threads
+                //
+                // The original manual version of this schedule was
+                // more than 10x slower than the autoscheduled one
+                // from Adams et al. 2018. It's probable that because
+                // the slicing half of the algorithm is intended to be
+                // run on GPU using a shader, the CPU schedule was
+                // never seriously optimized.
+                //
+                // This new CPU schedule takes inspiration from that
+                // solution. In particular, certain stages were poorly or
+                // not parallelized, and others had unhelpful storage
+                // layout reorderings.
 
-            // Compute the per tile histograms and splatting locations within
-            // rows of the blur in z.
-            histogram
-                .compute_at(blurz, y);
-            histogram.update()
-                .reorder(c, r.x, r.y, x, y)
-                .unroll(c);
+                // AVX512 vector widths seem to hurt performance, here so
+                // we stick to 8 instead of using natural_vector_size.
+                const int vec = 8;
 
-            gray_splat_loc
-                .compute_at(blurz, y)
-                .vectorize(x, 8);
+                // Fitting the curves.
 
-            // Compute the blur in z at root
-            blurz
-                .compute_root()
-                .reorder(c, z, x, y)
-                .parallel(y)
-                .vectorize(x, 8);
+                // Compute the per tile histograms and splatting locations within
+                // rows of the blur in z.
+                histogram
+                    .compute_at(blurz, y);
+                histogram.update()
+                    .reorder(c, r.x, r.y, x, y)
+                    .unroll(c);
 
-            // The blurs of the Gram matrices across x and y will be computed
-            // within the outer loops of the matrix solve.
-            blury
-                .compute_at(line, z)
-                .vectorize(x, 4);
+                gray_splat_loc
+                    .compute_at(blurz, y)
+                    .vectorize(x, vec);
 
-            blurx
-                .compute_at(line, x)
-                .vectorize(x);
+                // Compute the blur in z at root
+                blurz
+                    .compute_root()
+                    .reorder(c, z, x, y)
+                    .parallel(y)
+                    .vectorize(x, vec);
 
-            // The matrix solve. Store c innermost, because subsequent stages
-            // will do vectorized loads from this across c. If you just want
-            // the matrices, you probably want to remove this reorder storage
-            // call.
-            line
-                .compute_root()
-                .reorder_storage(c, x, y, z)
-                .reorder(c, x, z, y)
-                .parallel(y)
-                .vectorize(x, 8)
-                .bound(c, 0, 12)
-                .unroll(c);
+                // The blurs of the Gram matrices across x and y will be computed
+                // within the outer loops of the matrix solve.
+                blury
+                    .compute_at(line, z)
+                    .store_in(MemoryType::Stack)
+                    .vectorize(x, vec);
 
-            // Applying the curves.
+                blurx
+                    .compute_at(line, x)
+                    .vectorize(x);
 
-            // You should really do the trilerp on the GPU in a shader. We can
-            // make the CPU implementation a little faster though by factoring
-            // it into a few stages. At scanline of output we first slice out
-            // a 2D array of matrices that we'll bilerp into. We'll be
-            // accessing it in vectors across the c dimension, so store c
-            // innermost.
-            interpolated_matrix_y
-                .compute_root()
-                .reorder_storage(c, x, y, z)
-                .bound(c, 0, 12)
-                .vectorize(c, 4);
+                line
+                    .compute_root()
+                    .parallel(y)
+                    .vectorize(x, vec)
+                    .reorder(c, x, y)
+                    .unroll(c);
 
-            // Compute the output in vectors across x.
-            slice
-                .compute_root()
-                .parallel(y)
-                .vectorize(x, 8)
-                .reorder(c, x, y)
-                .bound(c, 0, 3)
-                .unroll(c);
+                // Applying the curves.
+                interpolated_matrix_y
+                    .compute_root()
+                    .parallel(c)
+                    .parallel(z)
+                    .vectorize(x, vec);
 
-            // Computing where to slice vectorizes nicely across x.
-            gray_slice_loc
-                .compute_root()
-                .vectorize(x, 8);
+                interpolated_matrix_z
+                    .store_at(slice, x)
+                    .compute_at(slice, c)
+                    .reorder(c, x, y)
+                    .unroll(c)
+                    .vectorize(x);
 
-            slice_loc_z
-                .compute_root()
-                .vectorize(x, 8);
+                slice
+                    .compute_root()
+                    .parallel(y)
+                    .vectorize(x, vec)
+                    .reorder(c, x, y)
+                    .bound(c, 0, 3)
+                    .unroll(c);
 
-            // But sampling the matrix vectorizes better across c.
-            interpolated_matrix_z
-                .compute_root()
-                .vectorize(c, 4);
+            } else {
+                // Runtime is bimodal. 0.76ms on a 2060 RTX when run
+                // under nvprof, but 0.96ms when run without
+                // nvprof. Unclear what is taking the extra time.
+
+                Var xi, yi, zi, xo, yo, t;
+                histogram
+                    .compute_root()
+                    .reorder(c, x, y, z)
+                    .unroll(c)
+                    .tile(x, y, xo, yo, xi, yi, 16, 8)
+                    .gpu_threads(xi, yi)
+                    .gpu_blocks(xo, yo, z);
+
+                if (get_target().has_feature(Target::CUDA)) {
+                    // The CUDA backend supports atomics. Useful for
+                    // histograms.
+                    histogram
+                        .update()
+                        .atomic()
+                        .split(x, xo, xi, 16)
+                        .reorder(xi, c, r.x, r.y, xo, y)
+                        .unroll(c)
+                        .gpu_blocks(r.y, xo, y)
+                        .gpu_threads(xi);
+                } else {
+                    histogram
+                        .update()
+                        .split(x, xo, xi, 16)
+                        .reorder(xi, c, r.x, r.y, xo, y)
+                        .unroll(c)
+                        .gpu_blocks(xo, y)
+                        .gpu_threads(xi);
+                }
+
+                clamped_values
+                    .compute_root()
+                    .gpu_tile(Halide::_0, Halide::_1, xi, yi, 16, 8, TailStrategy::RoundUp)
+                    .gpu_blocks(Halide::_0, Halide::_1, Halide::_2);
+                clamped_splat_loc.compute_root()
+                    .gpu_tile(Halide::_0, Halide::_1, xi, yi, 16, 8, TailStrategy::RoundUp)
+                    .gpu_blocks(Halide::_0, Halide::_1, Halide::_2);
+
+                blurz
+                    .compute_root()
+                    .tile(x, y, xi, yi, 16, 8, TailStrategy::RoundUp)
+                    .gpu_threads(xi, yi)
+                    .gpu_blocks(y, z, c);
+                blurx.compute_root()
+                    .tile(x, y, xi, yi, 16, 8, TailStrategy::RoundUp)
+                    .gpu_threads(xi, yi)
+                    .gpu_blocks(y, z, c);
+                blury.compute_root()
+                    .tile(x, y, xi, yi, 16, 8, TailStrategy::RoundUp)
+                    .gpu_threads(xi, yi)
+                    .gpu_blocks(y, z, c);
+
+                // The solve is compute_at (line, x), so we need to be
+                // careful what we call x.
+                line.compute_root()
+                    .split(x, xo, x, 32, TailStrategy::RoundUp)
+                    .reorder(c, x, xo, y, z)
+                    .gpu_blocks(xo, y, z)
+                    .gpu_threads(x)
+                    .unroll(c);
+
+                // Using CUDA for the interpolation part of this is
+                // somewhat silly, as the algorithm is designed for
+                // texture sampling hardware. That said, for the sake
+                // of making a meaningful benchmark we have an
+                // optimized cuda schedule here too.
+                interpolated_matrix_y
+                    .compute_root()
+                    .tile(x, y, xi, yi, 8, 8, TailStrategy::RoundUp)
+                    .gpu_threads(xi, yi)
+                    .gpu_blocks(y, z, c);
+
+                // 2/3 of the runtime (512us) is in the slicing kernel
+                slice
+                    .compute_root()
+                    .reorder(c, x, y)
+                    .bound(c, 0, 3)
+                    .unroll(c)
+                    .tile(x, y, xi, yi, 16, 8, TailStrategy::RoundUp)
+                    .gpu_threads(xi, yi)
+                    .gpu_blocks(x, y);
+            }
         }
 
         // Estimates
         {
             r_sigma.set_estimate(1.f / 8.f);
             s_sigma.set_estimate(16.f);
-
-            splat_loc.set_estimates({{0, 192}, {0, 320}, {0, 3}});
-            values.set_estimates({{0, 192}, {0, 320}, {0, 3}});
-            slice_loc.set_estimates({{0, 1536}, {0, 2560}, {0, 3}});
-            output.set_estimates({{0, 1536}, {0, 2560}, {0, 3}});
+            splat_loc.dim(0).set_estimate(0, 192);
+            splat_loc.dim(1).set_estimate(0, 320);
+            splat_loc.dim(2).set_estimate(0, 3);
+            values.dim(0).set_estimate(0, 192);
+            values.dim(1).set_estimate(0, 320);
+            values.dim(2).set_estimate(0, 3);
+            slice_loc.dim(0).set_estimate(0, 1536);
+            slice_loc.dim(1).set_estimate(0, 2560);
+            slice_loc.dim(2).set_estimate(0, 3);
+            output.dim(0).set_estimate(0, 1536);
+            output.dim(1).set_estimate(0, 2560);
+            output.dim(2).set_estimate(0, 3);
         }
     }
 };
 
 }  // namespace
 
-HALIDE_REGISTER_GENERATOR(FitAndSlice3x4, fit_and_slice_3x4)
-
+HALIDE_REGISTER_GENERATOR(BGU, bgu)

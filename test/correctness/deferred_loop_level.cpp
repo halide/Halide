@@ -6,8 +6,9 @@ using namespace Halide::Internal;
 class CheckLoopLevels : public IRVisitor {
 public:
     CheckLoopLevels(const std::string &inner_loop_level,
-                        const std::string &outer_loop_level) :
-        inner_loop_level(inner_loop_level), outer_loop_level(outer_loop_level) {}
+                    const std::string &outer_loop_level)
+        : inner_loop_level(inner_loop_level), outer_loop_level(outer_loop_level) {
+    }
 
 private:
     using IRVisitor::visit;
