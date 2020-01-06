@@ -1,7 +1,7 @@
 #!/bin/bash
 
-if [[ $# -ne 2 && $# -ne 3 ]]; then
-    echo "Usage: $0 mode [greedy|beam_search] max_iterations app"
+if [[ $# -ne 1 && $# -ne 2 ]]; then
+    echo "Usage: $0 max_iterations app"
     exit
 fi
 
@@ -11,22 +11,8 @@ find_halide HALIDE_ROOT
 
 build_autoscheduler_tools ${HALIDE_ROOT}
 
-MODE=${1}
-MAX_ITERATIONS=${2}
-APP=${3}
-
-if [ $MODE == "greedy" ]; then
-    NUM_PASSES=1
-elif [ $MODE == "beam_search" ]; then
-    NUM_PASSES=5
-else
-    echo "Unknown mode: ${MODE}"
-    exit
-fi
-
-echo "Using num_passes=${NUM_PASSES}"
-
-#export HL_NUM_PASSES=${NUM_PASSES}
+MAX_ITERATIONS=${1}
+APP=${2}
 
 export CXX="ccache c++"
 
