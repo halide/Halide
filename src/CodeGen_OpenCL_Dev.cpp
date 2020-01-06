@@ -235,9 +235,9 @@ string CodeGen_OpenCL_Dev::CodeGen_OpenCL_C::print_extern_call(const Call *op) {
     return rhs.str();
 }
 
-string CodeGen_OpenCL_Dev::CodeGen_OpenCL_C::print_array_access(const string& name,
-                                                                const Type& type,
-                                                                const string& id_index) {
+string CodeGen_OpenCL_Dev::CodeGen_OpenCL_C::print_array_access(const string &name,
+                                                                const Type &type,
+                                                                const string &id_index) {
     ostringstream rhs;
     bool type_cast_needed = !(allocations.contains(name) &&
                               allocations.get(name).type == type);
@@ -265,7 +265,7 @@ void CodeGen_OpenCL_Dev::CodeGen_OpenCL_C::visit(const Load *op) {
 
         ostringstream rhs;
         if ((op->alignment.modulus % op->type.lanes() == 0) &&
-             (op->alignment.remainder % op->type.lanes() == 0)) {
+            (op->alignment.remainder % op->type.lanes() == 0)) {
             // Get the rhs just for the cache.
             string id_ramp_base = print_expr(ramp_base / op->type.lanes());
             string array_indexing = print_array_access(op->name, op->type, id_ramp_base);
