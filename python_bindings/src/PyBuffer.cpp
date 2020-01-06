@@ -93,8 +93,10 @@ void call_fill(Buffer<> &b, py::object value) {
 
 bool call_all_equal(Buffer<> &b, py::object value) {
 
-#define HANDLE_BUFFER_TYPE(TYPE) \
-    if (b.type() == type_of<TYPE>()) { return b.as<TYPE>().all_equal(value_cast<TYPE>(value)); }
+#define HANDLE_BUFFER_TYPE(TYPE)                                \
+    if (b.type() == type_of<TYPE>()) {                          \
+        return b.as<TYPE>().all_equal(value_cast<TYPE>(value)); \
+    }
 
     HANDLE_BUFFER_TYPE(bool)
     HANDLE_BUFFER_TYPE(uint8_t)
