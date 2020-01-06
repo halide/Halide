@@ -16,8 +16,5 @@ jobs:
       - uses: DoozyX/clang-format-lint-action@v0.5
         with:
             source: '.'
-            # Our tutorials have special formatting: skip them
-            # hexagon_remote/bin is also special
-            exclude: './tutorial,./src/runtime/hexagon_remote/bin/src'
             extensions: 'h,c,cpp'
             clangFormatVersion: 9
