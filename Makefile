@@ -1986,7 +1986,6 @@ TEST_APPS=\
 	max_filter \
 	nl_means \
 	mat_mul_generator \
-	max_filter \
 	unsharp \
 	onnx \
 	resize \
