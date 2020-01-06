@@ -103,6 +103,7 @@ using std::vector;
 
 struct Statistics {
     int num_featurizations{0};
+    int num_memoized_featurizations{0};
     std::chrono::duration<double> featurization_time{0};
 
     double total_featurization_time() const {
@@ -488,6 +489,17 @@ struct State {
     void compute_featurization(const FunctionDAG &dag, const MachineParams &params, const Target& target, StageMap<ScheduleFeatures> *features, Statistics& stats) {
         auto feature_root = get_root_for_features(params, target);
 
+        static map<uint64_t, StageMap<ScheduleFeatures>> memoized;
+
+        uint64_t loop_nest_hash = 0;
+        feature_root->structural_hash(loop_nest_hash, 10000);
+
+        if (memoized.count(loop_nest_hash) > 0) {
+            *features = memoized[loop_nest_hash];
+            ++stats.num_memoized_featurizations;
+            return;
+        }
+
         StageMap<LoopNest::Sites> sites;
         sites.make_large(dag.nodes[0].stages[0].max_id);
         features->make_large(dag.nodes[0].stages[0].max_id);
@@ -547,7 +559,11 @@ struct State {
 
         auto t1 = std::chrono::high_resolution_clock::now();
         feature_root->compute_features(dag, params, target, sites, 1, 1, nullptr, nullptr, *feature_root, nullptr, features, {feature_root.get()});
+
+        memoized[loop_nest_hash] = *features;
+
         stats.featurization_time += std::chrono::high_resolution_clock::now() - t1;
+        ++stats.num_featurizations;
 
         for (const auto &n : dag.nodes) {
             if (sites.get(&(n.stages[0])).produce == nullptr) {
@@ -1968,6 +1984,7 @@ void generate_schedule(const std::vector<Function> &outputs,
     }
 
     aslog(1) << "Number of featurizations computed: " << stats.num_featurizations << '\n';
+    aslog(1) << "Number of memoized featurizations: " << stats.num_memoized_featurizations << '\n';
     aslog(1) << "Total featurization time (ms): " << stats.total_featurization_time() << "\n";
     aslog(1) << "Average featurization time (ms): " << stats.average_featurization_time() << "\n";
 }
