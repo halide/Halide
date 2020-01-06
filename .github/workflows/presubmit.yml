@@ -18,5 +18,7 @@ jobs:
             source: '.'
             # Our tutorials have special formatting: skip them
             exclude: './tutorial'
+            # hexagon_remote/bin is also special
+            exclude: './src/runtime/hexagon_remote/bin'
             extensions: 'h,c,cpp'
             clangFormatVersion: 9
