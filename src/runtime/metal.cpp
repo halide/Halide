@@ -285,7 +285,8 @@ extern "C" {
 WEAK int halide_metal_acquire_context(void *user_context, mtl_device **device_ret,
                                       mtl_command_queue **queue_ret, bool create) {
     halide_assert(user_context, &thread_lock != NULL);
-    while (__sync_lock_test_and_set(&thread_lock, 1)) {}
+    while (__sync_lock_test_and_set(&thread_lock, 1)) {
+    }
 
 #ifdef DEBUG_RUNTIME
     halide_start_clock(user_context);

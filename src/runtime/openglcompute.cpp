@@ -302,14 +302,20 @@ WEAK int halide_openglcompute_device_malloc(void *user_context, halide_buffer_t 
 
     GLuint the_buffer;
     global_state.GenBuffers(1, &the_buffer);
-    if (global_state.CheckAndReportError(user_context, "oglc: GenBuffers")) { return 1; }
+    if (global_state.CheckAndReportError(user_context, "oglc: GenBuffers")) {
+        return 1;
+    }
     global_state.BindBuffer(GL_ARRAY_BUFFER, the_buffer);
-    if (global_state.CheckAndReportError(user_context, "oglc: BindBuffer")) { return 1; }
+    if (global_state.CheckAndReportError(user_context, "oglc: BindBuffer")) {
+        return 1;
+    }
     // OpenGLCompute only supports int32 and float data types, both of which are 4 bytes.
     size_t size_in_bytes = buf->number_of_elements() * 4;
     halide_assert(user_context, size_in_bytes != 0);
     global_state.BufferData(GL_ARRAY_BUFFER, size_in_bytes, NULL, GL_DYNAMIC_COPY);
-    if (global_state.CheckAndReportError(user_context, "oglc: BufferData")) { return 1; }
+    if (global_state.CheckAndReportError(user_context, "oglc: BufferData")) {
+        return 1;
+    }
 
     buf->device = the_buffer;
     buf->device_interface = &openglcompute_device_interface;
@@ -403,18 +409,24 @@ WEAK int halide_openglcompute_copy_to_device(void *user_context, halide_buffer_t
                         << ", the_buffer:" << the_buffer << ")\n";
 
     global_state.BindBuffer(GL_ARRAY_BUFFER, the_buffer);
-    if (global_state.CheckAndReportError(user_context, "oglc: BindBuffer")) { return 1; }
+    if (global_state.CheckAndReportError(user_context, "oglc: BindBuffer")) {
+        return 1;
+    }
 
     size_t size = buf->number_of_elements() * 4;
     global_state.BindBuffer(GL_ARRAY_BUFFER, the_buffer);
-    if (global_state.CheckAndReportError(user_context, "oglc: BindBuffer")) { return 1; }
+    if (global_state.CheckAndReportError(user_context, "oglc: BindBuffer")) {
+        return 1;
+    }
 
     debug(user_context) << "Calling global_state.MapBufferRange(GL_ARRAY_BUFFER, 0, " << (uint64_t)size << ", GL_MAP_READ_BIT|GL_MAP_WRITE_BIT)\n";
     void *device_data = global_state.MapBufferRange(GL_ARRAY_BUFFER,
                                                     0,
                                                     size,
                                                     GL_MAP_READ_BIT | GL_MAP_WRITE_BIT);
-    if (global_state.CheckAndReportError(user_context, "oglc: MapBufferRange")) { return 1; }
+    if (global_state.CheckAndReportError(user_context, "oglc: MapBufferRange")) {
+        return 1;
+    }
     halide_buffer_t buf_copy = *buf;
     buf_copy.device = (uint64_t)device_data;
     device_copy dev_copy = make_host_to_device_copy(&buf_copy);
@@ -492,13 +504,17 @@ WEAK int halide_openglcompute_copy_to_host(void *user_context, halide_buffer_t *
                         << ", size=" << (unsigned)size << ")\n";
 
     global_state.BindBuffer(GL_ARRAY_BUFFER, the_buffer);
-    if (global_state.CheckAndReportError(user_context, "oglc: BindBuffer")) { return 1; }
+    if (global_state.CheckAndReportError(user_context, "oglc: BindBuffer")) {
+        return 1;
+    }
 
     void *device_data = global_state.MapBufferRange(GL_ARRAY_BUFFER,
                                                     0,
                                                     size,
                                                     GL_MAP_READ_BIT);
-    if (global_state.CheckAndReportError(user_context, "oglc: MapBufferRange")) { return 1; }
+    if (global_state.CheckAndReportError(user_context, "oglc: MapBufferRange")) {
+        return 1;
+    }
 
     halide_buffer_t buf_copy = *buf;
     buf_copy.device = (uint64_t)device_data;
@@ -793,7 +809,9 @@ WEAK int halide_openglcompute_initialize_kernels(void *user_context, void **stat
         module->kernel = kernel;
 
         GLuint shader = global_state.CreateShader(GL_COMPUTE_SHADER);
-        if (global_state.CheckAndReportError(user_context, "create shader")) { return -1; }
+        if (global_state.CheckAndReportError(user_context, "create shader")) {
+            return -1;
+        }
         const GLchar *sources = {src};
         const GLint sources_lengths = {(GLint)src_len};
 
@@ -803,9 +821,13 @@ WEAK int halide_openglcompute_initialize_kernels(void *user_context, void **stat
 #endif
 
         global_state.ShaderSource(shader, 1, &sources, &sources_lengths);
-        if (global_state.CheckAndReportError(user_context, "shader source")) { return -1; }
+        if (global_state.CheckAndReportError(user_context, "shader source")) {
+            return -1;
+        }
         global_state.CompileShader(shader);
-        if (global_state.CheckAndReportError(user_context, "compile shader")) { return -1; }
+        if (global_state.CheckAndReportError(user_context, "compile shader")) {
+            return -1;
+        }
 
         GLint shader_ok = 0;
         global_state.GetShaderiv(shader, GL_COMPILE_STATUS, &shader_ok);
@@ -826,9 +848,13 @@ WEAK int halide_openglcompute_initialize_kernels(void *user_context, void **stat
         // Link GLSL program
         GLuint program = global_state.CreateProgram();
         global_state.AttachShader(program, shader);
-        if (global_state.CheckAndReportError(user_context, "attach shader")) { return -1; }
+        if (global_state.CheckAndReportError(user_context, "attach shader")) {
+            return -1;
+        }
         global_state.LinkProgram(program);
-        if (global_state.CheckAndReportError(user_context, "link program")) { return -1; }
+        if (global_state.CheckAndReportError(user_context, "link program")) {
+            return -1;
+        }
 
         // Release the individual shaders
         global_state.DeleteShader(shader);
