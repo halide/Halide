@@ -345,16 +345,3 @@ define weak_odr i32 @halide_ptx_trap() nounwind uwtable alwaysinline {
        ret i32 0
 }
 
-
-declare dso_local void @free(i8*)
-declare dso_local noalias i8* @malloc(i64)
-
-define weak_odr i32 @free_wrapper(i8* %ptr) nounwind uwtable alwaysinline {
-       call void @free(i8* %ptr)
-       ret i32 0
-}
-
-define weak_odr i8* @malloc_wrapper(i64 %size) nounwind uwtable alwaysinline {
-       %ptr = tail call i8* @malloc(i64 %size)
-       ret i8* %ptr
-}

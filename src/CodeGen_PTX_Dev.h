@@ -67,8 +67,6 @@ protected:
     void visit(const Atomic *) override;
     // @}
 
-    Scope<> in_kernel_heap_allocations;
-
     std::string march() const;
     std::string mcpu() const override;
     std::string mattrs() const override;
