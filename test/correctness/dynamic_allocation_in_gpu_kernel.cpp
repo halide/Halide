@@ -3,6 +3,12 @@
 using namespace Halide;
 
 int main(int argc, char **argv) {
+    Target t(get_jit_target_from_environment());
+    if (!t.has_gpu_feature()) {
+        printf("Not running test because no gpu target enabled\n");
+        return 0;
+    }
+
     Func f, g;
     Var x, y;
     Param<int> p;
