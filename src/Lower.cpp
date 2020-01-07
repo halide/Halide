@@ -294,7 +294,7 @@ Module lower(const vector<Function> &output_funcs,
         s = select_gpu_api(s, t);
         debug(2) << "Lowering after selecting a GPU API for extern stages:\n"
                  << s << "\n\n";
-    } else if (t.arch != Target::Hexagon) {
+    } else {
         // Always mark buffers host dirty. Buffers will otherwise not be correctly copied for
         // other pipelines with device feature enabled.
         debug(1) << "Injecting host <-> dev buffer copies...\n";
