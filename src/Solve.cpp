@@ -1654,6 +1654,10 @@ void solve_test() {
         SolverResult solved = solve_expression(expr, "y");
     }
 
+    // This case was incorrect due to canonicalization of the multiply
+    // occuring after unpacking the LHS.
+    check_solve((y - z) * x, x * (y - z));
+
     debug(0) << "Solve test passed\n";
 }
 
