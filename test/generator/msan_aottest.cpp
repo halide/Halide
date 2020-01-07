@@ -21,6 +21,7 @@ using namespace Halide::Runtime;
 
 enum {
     AnnotateBoundsInferenceBuffer,
+    AnnotateBoundsInferenceShape,
     AnnotateIntermediateBuffer,
     AnnotateIntermediateShape,
     AnnotateOutputBuffer,
@@ -175,9 +176,17 @@ extern "C" int halide_msan_annotate_memory_is_initialized(void *user_context, co
             fprintf(stderr, "Failure: Expected sizeof(halide_buffer_t), saw %d\n", (unsigned int)len);
             exit(-1);
         }
+        annotate_stage = AnnotateBoundsInferenceShape;
+    } else if (annotate_stage == AnnotateBoundsInferenceShape) {
+        if (output_previous != nullptr || len != sizeof(halide_dimension_t) * 3) {
+            fprintf(stderr, "Failure: Expected sizeof(halide_dimension_t) * 3, saw %d\n", (unsigned int)len);
+            exit(-1);
+        }
         bounds_inference_count += 1;
         if (bounds_inference_count == 4) {
             annotate_stage = AnnotateIntermediateBuffer;
+        } else {
+            annotate_stage = AnnotateBoundsInferenceBuffer;
         }
     } else if (annotate_stage == AnnotateIntermediateBuffer) {
         if (expect_intermediate_buffer_error) {

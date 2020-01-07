@@ -208,7 +208,8 @@ WEAK int halide_acquire_cl_context(void *user_context, cl_context *ctx, cl_comma
     halide_assert(user_context, q != NULL);
 
     halide_assert(user_context, &thread_lock != NULL);
-    while (__sync_lock_test_and_set(&thread_lock, 1)) {}
+    while (__sync_lock_test_and_set(&thread_lock, 1)) {
+    }
 
     // If the context has not been initialized, initialize it now.
     halide_assert(user_context, &context != NULL);

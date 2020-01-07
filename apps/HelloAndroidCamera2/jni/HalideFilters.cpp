@@ -1,7 +1,7 @@
-#include <jni.h>
-#include <android/log.h>
 #include <android/bitmap.h>
+#include <android/log.h>
 #include <android/native_window_jni.h>
+#include <jni.h>
 
 #include <algorithm>
 #include <stdlib.h>
@@ -12,10 +12,10 @@
 #define LOGE(...) __android_log_print(ANDROID_LOG_ERROR, "native", __VA_ARGS__)
 
 #include "AndroidBufferUtilities.h"
-#include "deinterleave.h"
-#include "edge_detect.h"
 #include "HalideRuntime.h"
 #include "YuvBufferT.h"
+#include "deinterleave.h"
+#include "edge_detect.h"
 
 #define DEBUG 1
 
@@ -28,29 +28,29 @@ extern "C" int64_t halide_current_time_ns();
 extern "C" void halide_print(void *, const char *msg) {
     static int64_t t0 = halide_current_time_ns();
     int64_t t1 = halide_current_time_ns();
-    LOGD("%d: %s\n", (int)(t1 - t0)/1000000, msg);
+    LOGD("%d: %s\n", (int)(t1 - t0) / 1000000, msg);
     t0 = t1;
 }
 
 extern "C" {
 
 bool checkEqualExtents(YuvBufferT *src, YuvBufferT *dst) {
-    if (src->luma().width()  != dst->luma().width() ||
+    if (src->luma().width() != dst->luma().width() ||
         src->luma().height() != dst->luma().height() ||
-        src->chromaU().width()  != dst->chromaU().width() ||
+        src->chromaU().width() != dst->chromaU().width() ||
         src->chromaU().height() != dst->chromaU().height() ||
-        src->chromaV().width()  != dst->chromaV().width() ||
+        src->chromaV().width() != dst->chromaV().width() ||
         src->chromaV().height() != dst->chromaV().height()) {
 
         LOGE("failed: src and dst extents must be equal.\n\t"
-            "src extents: luma: %d, %d, chromaU: %d, %d, chromaV: %d, %d.\n\t"
-            "dst extents: luma: %d, %d, chromaU: %d, %d, chromaV: %d, %d.",
-            src->luma().width(), src->luma().height(),
-            src->chromaU().width(), src->chromaU().height(),
-            src->chromaV().width(), src->chromaV().height(),
-            dst->luma().width(), dst->luma().height(),
-            dst->chromaU().width(), dst->chromaU().height(),
-            dst->chromaV().width(), dst->chromaV().height());
+             "src extents: luma: %d, %d, chromaU: %d, %d, chromaV: %d, %d.\n\t"
+             "dst extents: luma: %d, %d, chromaU: %d, %d, chromaV: %d, %d.",
+             src->luma().width(), src->luma().height(),
+             src->chromaU().width(), src->chromaU().height(),
+             src->chromaV().width(), src->chromaV().height(),
+             dst->luma().width(), dst->luma().height(),
+             dst->chromaU().width(), dst->chromaU().height(),
+             dst->chromaV().width(), dst->chromaV().height());
         return false;
     } else {
         return true;
@@ -59,7 +59,7 @@ bool checkEqualExtents(YuvBufferT *src, YuvBufferT *dst) {
 
 JNIEXPORT bool JNICALL Java_com_example_helloandroidcamera2_HalideFilters_copyHalide(
     JNIEnv *env, jobject obj, jlong srcYuvBufferTHandle, jlong dstYuvBufferTHandle) {
-    if (srcYuvBufferTHandle == 0L || dstYuvBufferTHandle == 0L ) {
+    if (srcYuvBufferTHandle == 0L || dstYuvBufferTHandle == 0L) {
         LOGE("copyHalide failed: src and dst must not be null");
         return false;
     }
@@ -81,9 +81,9 @@ JNIEXPORT bool JNICALL Java_com_example_helloandroidcamera2_HalideFilters_copyHa
     // Other, fall back to slow copy.
     if ((srcChromaStorage == YuvBufferT::ChromaStorage::kInterleavedUFirst ||
          srcChromaStorage == YuvBufferT::ChromaStorage::kInterleavedVFirst) &&
-         (dstChromaStorage == YuvBufferT::ChromaStorage::kPlanarPackedUFirst ||
-          dstChromaStorage == YuvBufferT::ChromaStorage::kPlanarPackedVFirst ||
-          dstChromaStorage == YuvBufferT::ChromaStorage::kPlanarGeneric)) {
+        (dstChromaStorage == YuvBufferT::ChromaStorage::kPlanarPackedUFirst ||
+         dstChromaStorage == YuvBufferT::ChromaStorage::kPlanarPackedVFirst ||
+         dstChromaStorage == YuvBufferT::ChromaStorage::kPlanarGeneric)) {
 
         // Copy the luma channel directly.
         dst->luma().copy_from(src->luma());
@@ -114,7 +114,7 @@ JNIEXPORT bool JNICALL Java_com_example_helloandroidcamera2_HalideFilters_copyHa
 
 JNIEXPORT bool JNICALL Java_com_example_helloandroidcamera2_HalideFilters_edgeDetectHalide(
     JNIEnv *env, jobject obj, jlong srcYuvBufferTHandle, jlong dstYuvBufferTHandle) {
-    if (srcYuvBufferTHandle == 0L || dstYuvBufferTHandle == 0L ) {
+    if (srcYuvBufferTHandle == 0L || dstYuvBufferTHandle == 0L) {
         LOGE("edgeDetectHalide failed: src and dst must not be null");
         return false;
     }
@@ -165,4 +165,4 @@ JNIEXPORT bool JNICALL Java_com_example_helloandroidcamera2_HalideFilters_edgeDe
     return (err != halide_error_code_success);
 }
 
-} // extern "C"
+}  // extern "C"

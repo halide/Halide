@@ -36,8 +36,8 @@ enum {
     EF_HEXAGON_MACH_V4 = 0x3,
     EF_HEXAGON_MACH_V5 = 0x4,
     EF_HEXAGON_MACH_V55 = 0x5,
-    EF_HEXAGON_MACH_V60 = 0x60,
-    EF_HEXAGON_MACH_V61 = 0x61,
+    EF_HEXAGON_MACH_V60 = 0x60,  // Deprecated
+    EF_HEXAGON_MACH_V61 = 0x61,  // Deprecated?
     EF_HEXAGON_MACH_V62 = 0x62,
     EF_HEXAGON_MACH_V65 = 0x65,
     EF_HEXAGON_MACH_V66 = 0x66,
@@ -553,10 +553,8 @@ public:
             flags = Elf::EF_HEXAGON_MACH_V66;
         } else if (target.has_feature(Target::HVX_v65)) {
             flags = Elf::EF_HEXAGON_MACH_V65;
-        } else if (target.has_feature(Target::HVX_v62)) {
-            flags = Elf::EF_HEXAGON_MACH_V62;
         } else {
-            flags = Elf::EF_HEXAGON_MACH_V60;
+            flags = Elf::EF_HEXAGON_MACH_V62;
         }
     }
 
