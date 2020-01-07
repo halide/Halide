@@ -34,16 +34,18 @@ class ExtractBounds : public IRVisitor {
 public:
     Expr num_threads[4];
     Expr num_blocks[4];
-    Expr shared_mem_size, heap_size;
+    Expr shared_mem_size;
 
     ExtractBounds()
-        : shared_mem_size(0), heap_size(0) {
+        : shared_mem_size(0), found_shared(false) {
         for (int i = 0; i < 4; i++) {
             num_threads[i] = num_blocks[i] = 1;
         }
     }
 
 private:
+    bool found_shared;
+
     using IRVisitor::visit;
 
     void visit(const For *op) override {
@@ -76,23 +78,17 @@ private:
         if (expr_uses_var(shared_mem_size, op->name)) {
             shared_mem_size = Let::make(op->name, op->value, shared_mem_size);
         }
-        if (expr_uses_var(heap_size, op->name)) {
-            heap_size = Let::make(op->name, op->value, heap_size);
-        }
         op->body.accept(this);
     }
 
     void visit(const Allocate *allocate) override {
-        user_assert(!allocate->new_expr.defined())
-            << "Allocate node inside GPU kernel has custom new expression.\n"
-            << "(Memoization is not supported inside GPU kernels at present.)\n";
+        user_assert(!allocate->new_expr.defined()) << "Allocate node inside GPU kernel has custom new expression.\n"
+                                                   << "(Memoization is not supported inside GPU kernels at present.)\n";
 
         if (allocate->name == "__shared") {
             internal_assert(allocate->type == UInt(8) && allocate->extents.size() == 1);
             shared_mem_size = allocate->extents[0];
-        } else if (allocate->name == "__heap") {
-            internal_assert(allocate->type == UInt(8) && allocate->extents.size() == 1);
-            heap_size = allocate->extents[0];
+            found_shared = true;
         }
         allocate->body.accept(this);
     }
@@ -509,7 +505,6 @@ void CodeGen_GPU_Host<CodeGen_CPU>::visit(const For *loop) {
             codegen(bounds.num_threads[1]),
             codegen(bounds.num_threads[2]),
             codegen(bounds.shared_mem_size),
-            codegen(bounds.heap_size),
             runtime_run_takes_types ? ConstantExpr::getInBoundsGetElementPtr(gpu_arg_types_arr_type, arg_types_array_storage, zeros) : builder->CreateConstGEP2_32(gpu_arg_sizes_arr_type, gpu_arg_sizes_arr, 0, 0, "gpu_arg_sizes_ar_ref" + api_unique_name),
             builder->CreateConstGEP2_32(
                 gpu_args_arr_type,

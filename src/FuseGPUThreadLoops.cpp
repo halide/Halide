@@ -26,7 +26,6 @@ namespace {
 string thread_names[] = {"__thread_id_x", "__thread_id_y", "__thread_id_z", "__thread_id_w"};
 string block_names[] = {"__block_id_x", "__block_id_y", "__block_id_z", "__block_id_w"};
 string shared_mem_name = "__shared";
-string heap_mem_name = "__heap";
 }  // namespace
 
 class InjectThreadBarriers : public IRMutator {
@@ -82,7 +81,7 @@ class ExtractBlockSize : public IRVisitor {
 
     using IRVisitor::visit;
 
-    void found_thread_for(int dim, Expr extent) {
+    void found_thread_for(int dim, const string &name, Expr extent) {
         internal_assert(dim >= 0 && dim < 4);
         if (!block_extent[dim].defined()) {
             block_extent[dim] = extent;
@@ -101,7 +100,7 @@ class ExtractBlockSize : public IRVisitor {
     void visit(const For *op) override {
         for (int i = 0; i < 4; i++) {
             if (ends_with(op->name, thread_names[i])) {
-                found_thread_for(i, op->extent);
+                found_thread_for(i, op->name, op->extent);
             } else if (ends_with(op->name, block_names[i])) {
                 found_block_for(i, op->name, op->extent);
             }
@@ -151,6 +150,11 @@ public:
 
     Expr block_var(int d) const {
         return Variable::make(Int(32), block_var_name[d]);
+    }
+
+    Expr thread_var(int d) const {
+        // Thread variables get canonical names
+        return Variable::make(Int(32), "." + thread_names[d]);
     }
 };
 
@@ -274,6 +278,7 @@ class ExtractSharedAllocations : public IRMutator {
         Expr size;
         IntInterval liveness;    // Start and end of the barrier stage at which this allocation is used.
         MemoryType memory_type;  // Should be GPUShared or Heap
+        bool striped_over_threads;
     };
 
     struct AllocGroup {
@@ -315,8 +320,11 @@ class ExtractSharedAllocations : public IRMutator {
 
     const DeviceAPI device_api;
 
+    string thread_id_var_name, num_threads_var_name, heap_name;
+
     Stmt visit(const For *op) override {
-        ScopedValue<bool> old_in_threads(in_threads, in_threads || CodeGen_GPU_Dev::is_gpu_thread_var(op->name));
+        bool is_thread_loop = CodeGen_GPU_Dev::is_gpu_thread_var(op->name);
+        ScopedValue<bool> old_in_threads(in_threads, in_threads || is_thread_loop);
 
         // Set aside the allocations we've found so far.
         vector<SharedAllocation> old;
@@ -328,16 +336,20 @@ class ExtractSharedAllocations : public IRMutator {
         // Expand any new shared allocations found in the body using the loop bounds.
         Scope<Interval> scope;
         scope.push(op->name, Interval(op->min, simplify(op->min + op->extent - 1)));
-
-        // Expand the inner allocations using the loop bounds.
-        // TODO: if it's the threads loop, we need to multiply the size, not take the bounds.
-
         for (SharedAllocation &s : allocations) {
+            // If the size depends on the loop variable, take the max
+            // over all loop iterations
             if (expr_uses_var(s.size, op->name)) {
                 auto interval_bounds = bounds_of_expr_in_scope(s.size, scope);
                 user_assert(interval_bounds.has_upper_bound())
                     << "Couldn't infer bounds for " << s.name << " shared memory allocation\n";
                 s.size = interval_bounds.max;
+            }
+            if (in_threads && op->is_parallel()) {
+                // For parallel inner loops, make a separate slice per loop iteration
+                for (SharedAllocation &s : allocations) {
+                    s.size *= op->extent;
+                }
             }
         }
 
@@ -373,13 +385,14 @@ class ExtractSharedAllocations : public IRMutator {
             << "Allocate node inside GPU kernel has custom new expression.\n"
             << "(Memoization is not supported inside GPU kernels at present.)\n";
 
-        bool dynamic_size = (op->constant_allocation_size() == 0);
+        bool fixed_size_thread_allocation = (op->constant_allocation_size() != 0) && in_threads;
 
-        if ((in_threads && !dynamic_size && op->memory_type != MemoryType::Heap) ||
-            op->memory_type == MemoryType::Stack ||
-            op->memory_type == MemoryType::Register) {
-            // TODO: Support shared allocations inside loops over
-            // threads by giving each loop iteration a unique slice.
+        if ((fixed_size_thread_allocation &&
+             op->memory_type != MemoryType::Heap &&
+             op->memory_type != MemoryType::GPUShared) ||
+            op->memory_type == MemoryType::Register ||
+            op->memory_type == MemoryType::Stack) {
+            // These allocations go in register or local memory
             return IRMutator::visit(op);
         }
 
@@ -399,6 +412,9 @@ class ExtractSharedAllocations : public IRMutator {
         }
         alloc.size = simplify(alloc.size);
         alloc.memory_type = op->memory_type;
+
+        alloc.striped_over_threads = in_threads;
+
         if (alloc.memory_type == MemoryType::Auto) {
             if (in_threads) {
                 // Dynamic allocation within the threads loop go on
@@ -422,23 +438,36 @@ class ExtractSharedAllocations : public IRMutator {
         return op->body;
     }
 
+    Expr mutate_index(SharedAllocation *alloc, const Expr &index) {
+        Expr idx = mutate(index);
+        if (alloc->striped_over_threads) {
+            idx *= Variable::make(Int(32), num_threads_var_name);
+            idx += Variable::make(Int(32), thread_id_var_name);
+        }
+        if (device_api == DeviceAPI::OpenGLCompute) {
+            return idx;
+        }
+        Expr base = Variable::make(Int(32), alloc->name + ".offset");
+        if (alloc->memory_type == MemoryType::Heap) {
+            base += Variable::make(Int(32), heap_name + ".base") / alloc->type.bytes();
+        }
+        return base + idx;
+    }
+
     Expr visit(const Load *op) override {
         auto it = shared.find(op->name);
         if (it != shared.end()) {
             SharedAllocation *alloc = it->second;
             alloc->liveness.max = barrier_stage;
             Expr predicate = mutate(op->predicate);
-            Expr index = mutate(op->index);
+            Expr index = mutate_index(alloc, op->index);
             const string &prefix = name_for_memory_type(alloc->memory_type);
+
             if (device_api == DeviceAPI::OpenGLCompute) {
                 return Load::make(op->type, prefix + "_" + op->name,
                                   index, op->image, op->param, predicate, op->alignment);
             } else {
-                Expr base = Variable::make(Int(32), op->name + ".offset");
-                if (alloc->memory_type == MemoryType::Heap) {
-                    base += Variable::make(Int(32), "__heap.base");
-                }
-                return Load::make(op->type, prefix, base + index,
+                return Load::make(op->type, prefix, index,
                                   op->image, op->param, predicate, ModulusRemainder());
             }
 
@@ -453,18 +482,14 @@ class ExtractSharedAllocations : public IRMutator {
             SharedAllocation *alloc = it->second;
             alloc->liveness.max = barrier_stage;
             Expr predicate = mutate(op->predicate);
-            Expr index = mutate(op->index);
+            Expr index = mutate_index(alloc, op->index);
             Expr value = mutate(op->value);
             const string &prefix = name_for_memory_type(alloc->memory_type);
             if (device_api == DeviceAPI::OpenGLCompute) {
                 return Store::make(prefix + "_" + op->name, value, index,
                                    op->param, predicate, op->alignment);
             } else {
-                Expr base = Variable::make(Int(32), op->name + ".offset");
-                if (alloc->memory_type == MemoryType::Heap) {
-                    base += Variable::make(Int(32), "__heap.base");
-                }
-                return Store::make(prefix, value, base + index, op->param, predicate, ModulusRemainder());
+                return Store::make(prefix, value, index, op->param, predicate, ModulusRemainder());
             }
         } else {
             return IRMutator::visit(op);
@@ -572,9 +597,7 @@ class ExtractSharedAllocations : public IRMutator {
         int start_idx = 0;
 
         for (int stage = 0; stage <= barrier_stage; ++stage) {
-            debug(0) << "Stage = " << stage << "\n";
             for (int i = start_idx; i < (int)allocations.size(); ++i) {
-                debug(0) << "Alloc " << i << " has liveness: " << allocations[i].liveness.min << " " << allocations[i].liveness.max << "\n";
                 if (allocations[i].liveness.min > stage) {
                     break;
                 } else if (allocations[i].liveness.min == stage) {  // Allocate
@@ -607,7 +630,7 @@ class ExtractSharedAllocations : public IRMutator {
         if (t == MemoryType::GPUShared) {
             return shared_mem_name;
         } else {
-            return heap_mem_name;
+            return heap_name;
         }
     }
 
@@ -627,8 +650,6 @@ public:
             // One big combined allocation per memory type
 
             vector<AllocGroup> mem_allocs = allocate_funcs(allocations);
-            debug(0) << "Allocations: " << allocations.size() << "\n";
-            debug(0) << "Groups: " << mem_allocs.size() << "\n";
 
             // Every allocation must belong to one group
             internal_assert(allocations.size() >= mem_allocs.size());
@@ -653,7 +674,6 @@ public:
                 }
 
                 if (is_zero(total_size_bytes)) {
-                    debug(0) << "No allocations of type: " << memory_type << "\n";
                     // No allocations of this type.
                     continue;
                 }
@@ -688,7 +708,7 @@ public:
                         block_id += bs.block_var(d);
                     }
                     Expr base = block_id * total_size_bytes_var;
-                    s = LetStmt::make("__heap.base", simplify(base), s);
+                    s = LetStmt::make(heap_name + ".base", simplify(base), s);
                     heap_bytes_per_block = total_size_bytes;
                 } else {
                     s = Allocate::make(prefix, UInt(8), memory_type,
@@ -732,14 +752,39 @@ public:
             }
         }
 
+        // Resolve thread_id and threads_per_block variables, uses of
+        // which were injected above if any allocation was striped
+        // over the threads.
+        Expr thread_id = 0, num_threads = 1;
+        for (int d = bs.dimensions() - 1; d >= 0; d--) {
+            num_threads *= bs.num_threads(d);
+            thread_id *= bs.num_threads(d);
+            thread_id += bs.thread_var(d);
+        }
+        if (stmt_uses_var(s, thread_id_var_name)) {
+            s = LetStmt::make(thread_id_var_name, thread_id, s);
+        }
+        if (stmt_uses_var(s, num_threads_var_name)) {
+            s = LetStmt::make(num_threads_var_name, num_threads, s);
+        }
+
         return s;
     }
 
     Stmt rewrap_heap(Stmt s, const ExtractBlockSize &bs, DeviceAPI device_api) {
+        if (!heap_bytes_per_block.defined()) {
+            // No heap allocations
+            return s;
+        }
+
         Expr total_size = heap_bytes_per_block;
         for (int d = 0; d < bs.dimensions(); d++) {
             total_size *= bs.num_blocks(d);
         }
+
+        Expr device_interface = make_device_interface_call(device_api);
+        string buffer_name = heap_name + ".buffer";
+        Expr buffer_var = Variable::make(type_of<halide_buffer_t *>(), buffer_name);
 
         BufferBuilder builder;
         builder.mins.push_back(0);
@@ -749,30 +794,30 @@ public:
         builder.dimensions = 1;
         Expr buffer = builder.build();
 
-        Expr buffer_var = Variable::make(type_of<halide_buffer_t *>(), "__heap.buffer");
-        Expr device_interface = make_device_interface_call(device_api);
-        Expr allocate_heap_call = Call::make(Int(32), "halide_device_malloc", {buffer_var, device_interface}, Call::Extern);
+        Expr allocate_heap_call = Call::make(Int(32), "halide_device_malloc",
+                                             {buffer_var, device_interface}, Call::Extern);
         string allocate_heap_result_var_name = unique_name('t');
         Expr allocate_heap_result_var = Variable::make(Int(32), allocate_heap_result_var_name);
-        // TODO: Use an allocate node to scope out a destructor. register_destructor makes one that runs unconditionally, which is not what we want.
-        Stmt free_buffer_on_failure =
-            Evaluate::make(Call::make(Handle(), Call::register_destructor,
-                                      {Expr("halide_device_free_as_destructor"), buffer_var},
-                                      Call::Intrinsic));
-        Stmt free_buffer =
-            Evaluate::make(Call::make(Handle(), "halide_device_free", {buffer_var}, Call::Extern));
         Stmt check_allocated =
             AssertStmt::make(allocate_heap_result_var == 0, allocate_heap_result_var);
         Expr device_field = Call::make(Handle(), Call::buffer_get_device, {buffer_var}, Call::Extern);
-        s = LetStmt::make("__heap", device_field, s);
-        s = Block::make({free_buffer_on_failure, check_allocated, s, free_buffer});
+        s = LetStmt::make(heap_name, device_field, s);
+        s = Block::make(check_allocated, s);
         s = LetStmt::make(allocate_heap_result_var_name, allocate_heap_call, s);
-        s = LetStmt::make("__heap.buffer", buffer, s);
+        s = Allocate::make(buffer_name, UInt(8),
+                           MemoryType::Auto, {}, const_true(), s,
+                           buffer, "halide_device_free_as_destructor");
+
         return s;
     }
 
     ExtractSharedAllocations(DeviceAPI d)
-        : in_threads(false), barrier_stage(0), device_api(d) {
+        : in_threads(false),
+          barrier_stage(0),
+          device_api(d),
+          thread_id_var_name(unique_name('t')),
+          num_threads_var_name(unique_name('t')),
+          heap_name(unique_name("__heap")) {
     }
 };
 
