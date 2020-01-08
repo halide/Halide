@@ -258,7 +258,7 @@ public:
     }
 };
 
-class ExtractSharedAllocations : public IRMutator {
+class ExtractSharedAndHeapAllocations : public IRMutator {
     using IRMutator::visit;
 
     struct IntInterval {
@@ -347,9 +347,7 @@ class ExtractSharedAllocations : public IRMutator {
             }
             if (in_threads && op->is_parallel()) {
                 // For parallel inner loops, make a separate slice per loop iteration
-                for (SharedAllocation &s : allocations) {
-                    s.size *= op->extent;
-                }
+                s.size *= op->extent;
             }
         }
 
@@ -635,12 +633,12 @@ class ExtractSharedAllocations : public IRMutator {
     }
 
 public:
-    Stmt rewrap(Stmt s, const ExtractBlockSize &bs) {
+    Stmt rewrap_block(Stmt s, const ExtractBlockSize &bs) {
 
         if (device_api == DeviceAPI::OpenGLCompute) {
 
             // Individual allocations.
-            for (SharedAllocation alloc : allocations) {
+            for (const SharedAllocation &alloc : allocations) {
                 const string &prefix = name_for_memory_type(alloc.memory_type);
                 s = Allocate::make(prefix + "_" + alloc.name,
                                    alloc.type, alloc.memory_type,
@@ -733,7 +731,7 @@ public:
                     }
                     Expr group_offset = Variable::make(Int(32), "group_" + std::to_string(i) + ".offset");
 
-                    for (SharedAllocation &alloc : mem_allocs[i].group) {
+                    for (const SharedAllocation &alloc : mem_allocs[i].group) {
                         int new_elem_size = alloc.type.bytes();
                         Expr offset = (group_offset / new_elem_size);
                         s = LetStmt::make(alloc.name + ".offset", simplify(offset), s);
@@ -779,7 +777,7 @@ public:
         return s;
     }
 
-    Stmt rewrap_heap(Stmt s, const ExtractBlockSize &bs, DeviceAPI device_api) {
+    Stmt rewrap_kernel_launch(Stmt s, const ExtractBlockSize &bs, DeviceAPI device_api) {
         if (!heap_bytes_per_block.defined()) {
             // No heap allocations
             return s;
@@ -819,7 +817,7 @@ public:
         return s;
     }
 
-    ExtractSharedAllocations(DeviceAPI d)
+    ExtractSharedAndHeapAllocations(DeviceAPI d)
         : in_threads(false),
           barrier_stage(0),
           device_api(d),
@@ -974,7 +972,7 @@ public:
 class FuseGPUThreadLoopsSingleKernel : public IRMutator {
     using IRMutator::visit;
     const ExtractBlockSize &block_size;
-    ExtractSharedAllocations &shared_mem;
+    ExtractSharedAndHeapAllocations &block_allocations;
 
     Stmt visit(const For *op) override {
         if (ends_with(op->name, ".__block_id_x")) {
@@ -1028,7 +1026,8 @@ class FuseGPUThreadLoopsSingleKernel : public IRMutator {
             for (int i = 1; i < block_size.dimensions(); i++) {
                 thread_id = "." + thread_names[i];
                 body = register_allocs.rewrap(body, thread_id);
-                body = For::make("." + thread_names[i], 0, block_size.num_threads(i), ForType::GPUThread, op->device_api, body);
+                body = For::make("." + thread_names[i], 0, block_size.num_threads(i),
+                                 ForType::GPUThread, op->device_api, body);
             }
             thread_id.clear();
             body = register_allocs.rewrap(body, thread_id);
@@ -1037,7 +1036,7 @@ class FuseGPUThreadLoopsSingleKernel : public IRMutator {
                      << body << "\n\n";
 
             // Add back in the shared allocations
-            body = shared_mem.rewrap(body, block_size);
+            body = block_allocations.rewrap_block(body, block_size);
             debug(3) << "Add back in shared allocations:\n"
                      << body << "\n\n";
 
@@ -1053,8 +1052,8 @@ class FuseGPUThreadLoopsSingleKernel : public IRMutator {
 
 public:
     FuseGPUThreadLoopsSingleKernel(const ExtractBlockSize &bs,
-                                   ExtractSharedAllocations &sm)
-        : block_size(bs), shared_mem(sm) {
+                                   ExtractSharedAndHeapAllocations &sm)
+        : block_size(bs), block_allocations(sm) {
     }
 };
 
@@ -1080,16 +1079,16 @@ class FuseGPUThreadLoops : public IRMutator {
             Stmt loop = Stmt(op);
             loop.accept(&block_size);
 
-            ExtractSharedAllocations shared_mem(op->device_api);
-            loop = shared_mem.mutate(loop);
+            ExtractSharedAndHeapAllocations block_allocations(op->device_api);
+            loop = block_allocations.mutate(loop);
 
             debug(3) << "Pulled out shared allocations:\n"
                      << loop << "\n\n";
 
             // Mutate the inside of the kernel
-            loop = FuseGPUThreadLoopsSingleKernel(block_size, shared_mem).mutate(loop);
+            loop = FuseGPUThreadLoopsSingleKernel(block_size, block_allocations).mutate(loop);
 
-            loop = shared_mem.rewrap_heap(loop, block_size, op->device_api);
+            loop = block_allocations.rewrap_kernel_launch(loop, block_size, op->device_api);
 
             return loop;
         } else {
