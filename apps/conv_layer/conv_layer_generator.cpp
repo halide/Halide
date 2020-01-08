@@ -27,7 +27,7 @@ public:
 
         relu(c, x, y, n) = max(0, conv(c, x, y, n));
 
-        f_ReLU.dim(0).set_bounds(0, CO).set_stride(1)
+        relu.dim(0).set_bounds(0, CO).set_stride(1)
             .dim(1).set_bounds(0, W).set_stride(CO)
             .dim(2).set_bounds(0, H).set_stride(CO * W)
             .dim(3).set_bounds(0, N).set_stride(CO * H * W);
