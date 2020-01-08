@@ -667,9 +667,11 @@ public:
             for (MemoryType memory_type : {MemoryType::GPUShared, MemoryType::Heap}) {
 
                 Expr total_size_bytes = 0;
+                int max_type_bytes = 0;
                 for (int i = 0; i < (int)(mem_allocs.size()); i++) {
                     if (mem_allocs[i].memory_type == memory_type) {
                         total_size_bytes += mem_allocs[i].max_size_bytes;
+                        max_type_bytes = std::max(max_type_bytes, mem_allocs[i].max_type_bytes);
                     }
                 }
 
@@ -677,6 +679,12 @@ public:
                     // No allocations of this type.
                     continue;
                 }
+
+                // Align-up the total size in bytes according to the
+                // max byte width of all types involved.
+                total_size_bytes += max_type_bytes - 1;
+                total_size_bytes /= max_type_bytes;
+                total_size_bytes *= max_type_bytes;
 
                 // Remove any dependence on the block vars by taking a max
                 {
