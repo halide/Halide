@@ -103,6 +103,7 @@ using std::vector;
 
 struct Statistics {
     int num_featurizations{0};
+    int num_states_added{0};
     int num_memoized_featurizations{0};
     std::chrono::duration<double> featurization_time{0};
     int num_schedules_enqueued{0};
@@ -1683,6 +1684,8 @@ IntrusivePtr<State> optimal_schedule_pass(FunctionDAG &dag,
             tick.set(double(progress) / max_progress);
             s->penalized = false;
 
+            ++stats.num_states_added;
+
             // Add the state to the list of states to evaluate
             q.emplace(std::move(s));
         };
@@ -2011,6 +2014,7 @@ void generate_schedule(const std::vector<Function> &outputs,
         }
     }
 
+    aslog(1) << "Number of states added: " << stats.num_states_added << '\n';
     aslog(1) << "Number of featurizations computed: " << stats.num_featurizations << '\n';
     aslog(1) << "Number of memoized featurizations: " << stats.num_memoized_featurizations << '\n';
     aslog(1) << "Total featurization time (ms): " << stats.total_featurization_time() << "\n";
