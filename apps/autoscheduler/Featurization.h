@@ -417,6 +417,73 @@ struct ScheduleFeatures {
         auto os = aslog(0);
         dump(os);
     }
+
+    bool equal(const ScheduleFeatures& other) const {
+        return num_realizations                      == other.num_realizations
+            && num_productions                       == other.num_productions
+            && points_computed_per_realization       == other.points_computed_per_realization
+            && points_computed_per_production        == other.points_computed_per_production
+            && points_computed_total                 == other.points_computed_total
+            && points_computed_minimum               == other.points_computed_minimum
+            && innermost_loop_extent                 == other.innermost_loop_extent
+            && innermost_pure_loop_extent            == other.innermost_pure_loop_extent
+            && unrolled_loop_extent                  == other.unrolled_loop_extent
+            && inner_parallelism                     == other.inner_parallelism
+            && outer_parallelism                     == other.outer_parallelism
+            && bytes_at_realization                  == other.bytes_at_realization
+            && bytes_at_production                   == other.bytes_at_production
+            && bytes_at_root                         == other.bytes_at_root
+            && innermost_bytes_at_realization        == other.innermost_bytes_at_realization
+            && innermost_bytes_at_production         == other.innermost_bytes_at_production
+            && innermost_bytes_at_root               == other.innermost_bytes_at_root
+            && inlined_calls                         == other.inlined_calls
+            && unique_bytes_read_per_realization     == other.unique_bytes_read_per_realization
+            && unique_lines_read_per_realization     == other.unique_lines_read_per_realization
+            && allocation_bytes_read_per_realization == other.allocation_bytes_read_per_realization
+            && working_set                           == other.working_set
+            && vector_size                           == other.vector_size
+            && native_vector_size                    == other.native_vector_size
+            && num_vectors                           == other.num_vectors
+            && num_scalars                           == other.num_scalars
+            && scalar_loads_per_vector               == other.scalar_loads_per_vector
+            && vector_loads_per_vector               == other.vector_loads_per_vector
+            && scalar_loads_per_scalar               == other.scalar_loads_per_scalar
+            && bytes_at_task                         == other.bytes_at_task
+            && innermost_bytes_at_task               == other.innermost_bytes_at_task
+            && unique_bytes_read_per_vector          == other.unique_bytes_read_per_vector
+            && unique_lines_read_per_vector          == other.unique_lines_read_per_vector
+            && unique_bytes_read_per_task            == other.unique_bytes_read_per_task
+            && unique_lines_read_per_task            == other.unique_lines_read_per_task
+            && working_set_at_task                   == other.working_set_at_task
+            && working_set_at_production             == other.working_set_at_production
+            && working_set_at_realization            == other.working_set_at_realization
+            && working_set_at_root                   == other.working_set_at_root
+            && num_blocks                            == other.num_blocks
+            && num_warps_per_block                   == other.num_warps_per_block
+            && block_occupancy                       == other.block_occupancy
+            && warp_lane_utilization                 == other.warp_lane_utilization
+            && warp_lane_utilization_at_block        == other.warp_lane_utilization_at_block
+            && warp_lane_utilization_at_block_x      == other.warp_lane_utilization_at_block_x
+            && warp_lane_utilization_at_block_y      == other.warp_lane_utilization_at_block_y
+            && warp_lane_utilization_at_block_z      == other.warp_lane_utilization_at_block_z
+            && num_shared_mem_loads                  == other.num_shared_mem_loads
+            && num_shared_mem_loads_per_block        == other.num_shared_mem_loads_per_block
+            && num_global_mem_loads_per_block        == other.num_global_mem_loads_per_block
+            && num_shared_mem_stores                 == other.num_shared_mem_stores
+            && num_shared_mem_stores_per_block       == other.num_shared_mem_stores_per_block
+            && num_global_mem_stores_per_block       == other.num_global_mem_stores_per_block
+            && shared_mem_store_efficiency           == other.shared_mem_store_efficiency
+            && shared_mem_load_efficiency            == other.shared_mem_load_efficiency
+            && global_mem_store_efficiency           == other.global_mem_store_efficiency
+            && global_mem_load_efficiency            == other.global_mem_load_efficiency
+            && global_mem_store_coalesce_efficiency  == other.global_mem_store_coalesce_efficiency
+            && global_mem_load_coalesce_efficiency   == other.global_mem_load_coalesce_efficiency
+            && working_set_at_thread                 == other.working_set_at_thread
+            && shared_mem_occupancy                  == other.shared_mem_occupancy
+            && shared_mem_block_limit_factor         == other.shared_mem_block_limit_factor
+            && max_warp_occupancy                    == other.max_warp_occupancy
+            && max_block_occupancy                   == other.max_block_occupancy;
+    }
 };
 
 }  // namespace Internal
