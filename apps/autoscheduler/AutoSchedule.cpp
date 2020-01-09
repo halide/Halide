@@ -1077,18 +1077,33 @@ struct State {
                                 num_children++;
                                 accept_child(std::move(child));
                             }
+
+
                             // make another child where tiling is adjusted in case it doesn't evenly divide
                             auto adjusted_child = make_child();
                             LoopNest *new_adjusted_root = new LoopNest;
                             new_adjusted_root->copy_from(*parallel_root); // copies parallel_root's info and intrusive pointers for parallel_root's children
+                            bool create_child = false;
                             for (auto &c : new_adjusted_root->children) {
                                 if (c->node == node) {
+
+                                    // If the tiling evenly divides the loop's
+                                    // extents, then this child will be
+                                    // identical to the one created above. Only
+                                    // create the child if it will produce a
+                                    // different state
+                                    int i = 0;
+                                    for (auto b : block_t) {
+                                        if (c->size[i++] % b != 0) {
+                                            create_child = true;
+                                        }
+                                    }
                                     c = c->parallelize_in_tiles(params, block_t, new_adjusted_root, target, true, true);
                                 }
                             }
                             adjusted_child->root = new_adjusted_root;
                             adjusted_child->num_decisions_made++;
-                            if (adjusted_child->calculate_cost(dag, params, target, cost_model, stats)) {
+                            if (create_child && adjusted_child->calculate_cost(dag, params, target, cost_model, stats)) {
                                 num_children++;
                                 accept_child(std::move(adjusted_child));
                             }
