@@ -17,7 +17,7 @@ int main(int argc, char **argv) {
     g(x, y) = f(x, y) + f(x + p, y + p);
 
     Var xi, yi;
-    g.gpu_tile(x, y, xi, yi, 32, 32);
+    g.gpu_tile(x, y, xi, yi, 32, 16);
     f.compute_at(g, xi);
 
     g.specialize(p == 3);
