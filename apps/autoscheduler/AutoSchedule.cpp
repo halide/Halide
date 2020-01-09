@@ -140,6 +140,11 @@ struct RNG {
     }
 };
 
+bool use_adjusted_tilings() {
+    static bool var = get_env_variable("HL_USE_ADJUSTED_TILINGS") == "1";
+    return var;
+}
+
 bool compute_root_and_inline_only() {
     static bool only = get_env_variable("HL_COMPUTE_ROOT_AND_INLINE_ONLY") == "1";
     return only;
@@ -1079,6 +1084,9 @@ struct State {
                                 accept_child(std::move(child));
                             }
 
+                            if (!use_adjusted_tilings()) {
+                                continue;
+                            }
 
                             // make another child where tiling is adjusted in case it doesn't evenly divide
                             auto adjusted_child = make_child();
