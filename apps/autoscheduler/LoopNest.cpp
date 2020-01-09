@@ -570,6 +570,8 @@ void LoopNest::structural_hash(uint64_t &h, int depth) const {
 
         // Which dimension are we vectorized over?
         hash_combine(h, vectorized_loop_index);
+
+        hash_combine(h, vector_dim);
     }
 
     if (depth > 1) {
