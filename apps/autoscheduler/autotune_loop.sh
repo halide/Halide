@@ -203,7 +203,10 @@ benchmark_sample() {
             --benchmarks=all"
     fi
 
+    CMD="${CMD} 2> ${D}/bench_err.txt"
+
     eval $CMD | tee ${D}/bench.txt
+
     FAILED=0
     if [[ ! -s ${D}/bench.txt ]]; then
         echo "Benchmarking failed or timed out for ${D}"
