@@ -35,12 +35,14 @@ int main(int argc, char **argv) {
     // Manually-tuned version
     double min_t_manual = benchmark(timing_iterations, 1, [&]() {
         nl_means(input, patch_size, search_area, sigma, output);
+        output.device_sync();
     });
     printf("Manually-tuned time: %gms\n", min_t_manual * 1e3);
 
     // Auto-scheduled version
     double min_t_auto = benchmark(timing_iterations, 1, [&]() {
         nl_means_auto_schedule(input, patch_size, search_area, sigma, output);
+        output.device_sync();
     });
     printf("Auto-scheduled time: %gms\n", min_t_auto * 1e3);
 
