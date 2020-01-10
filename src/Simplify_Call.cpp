@@ -601,11 +601,12 @@ Expr Simplify::visit(const Call *op, ExprInfo *bounds) {
             // else fall thru
         }
 
-        internal_error << "Unhandled PureExtern Call: " << op->name;
-        return op;
-    } else {
-        internal_assert(op->call_type != Call::PureExtern);
+        // There are other PureExterns we don't bother with (e.g. fast_inverse_f32)...
+        // just fall thru and take the general case.
+    }
 
+    // No else: we want to fall thru from the PureExtern clause.
+    {
         vector<Expr> new_args(op->args.size());
         bool changed = false;
 
