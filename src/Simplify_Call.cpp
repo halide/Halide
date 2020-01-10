@@ -479,15 +479,15 @@ Expr Simplify::visit(const Call *op, ExprInfo *bounds) {
         {
             static const std::unordered_map<std::string, std::function<bool(double)>>
                 pure_externs_f1b = {
-                    {"is_finite_f16", [](double a) { return std::isfinite(a); }},
-                    {"is_finite_f32", [](double a) { return std::isfinite(a); }},
-                    {"is_finite_f64", [](double a) { return std::isfinite(a); }},
-                    {"is_inf_f16", [](double a) { return std::isinf(a); }},
-                    {"is_inf_f32", [](double a) { return std::isinf(a); }},
-                    {"is_inf_f64", [](double a) { return std::isinf(a); }},
-                    {"is_nan_f16", [](double a) { return std::isnan(a); }},
-                    {"is_nan_f32", [](double a) { return std::isnan(a); }},
-                    {"is_nan_f64", [](double a) { return std::isnan(a); }},
+                    {"is_finite_f16", (bool (*)(double))std::isfinite},
+                    {"is_finite_f32", (bool (*)(double))std::isfinite},
+                    {"is_finite_f64", (bool (*)(double))std::isfinite},
+                    {"is_inf_f16", (bool (*)(double))std::isinf},
+                    {"is_inf_f32", (bool (*)(double))std::isinf},
+                    {"is_inf_f64", (bool (*)(double))std::isinf},
+                    {"is_nan_f16", (bool (*)(double))std::isnan},
+                    {"is_nan_f32", (bool (*)(double))std::isnan},
+                    {"is_nan_f64", (bool (*)(double))std::isnan},
                 };
             auto it = pure_externs_f1b.find(op->name);
             if (it != pure_externs_f1b.end()) {
@@ -511,21 +511,21 @@ Expr Simplify::visit(const Call *op, ExprInfo *bounds) {
         {
             static const std::unordered_map<std::string, std::function<double(double)>>
                 pure_externs_f1 = {
-                    {"acos_f32", [](double a) { return std::acos(a); }},
-                    {"acosh_f32", [](double a) { return std::acosh(a); }},
-                    {"asin_f32", [](double a) { return std::asin(a); }},
-                    {"asinh_f32", [](double a) { return std::asinh(a); }},
-                    {"atan_f32", [](double a) { return std::atan(a); }},
-                    {"atanh_f32", [](double a) { return std::atanh(a); }},
-                    {"cos_f32", [](double a) { return std::cos(a); }},
-                    {"cosh_f32", [](double a) { return std::cosh(a); }},
-                    {"exp_f32", [](double a) { return std::exp(a); }},
-                    {"log_f32", [](double a) { return std::log(a); }},
-                    {"sin_f32", [](double a) { return std::sin(a); }},
-                    {"sinh_f32", [](double a) { return std::sinh(a); }},
-                    {"sqrt_f32", [](double a) { return std::sqrt(a); }},
-                    {"tan_f32", [](double a) { return std::tan(a); }},
-                    {"tanh_f32", [](double a) { return std::tanh(a); }},
+                    {"acos_f32", (double (*)(double))std::acos},
+                    {"acosh_f32", (double (*)(double))std::acosh},
+                    {"asin_f32", (double (*)(double))std::asin},
+                    {"asinh_f32", (double (*)(double))std::asinh},
+                    {"atan_f32", (double (*)(double))std::atan},
+                    {"atanh_f32", (double (*)(double))std::atanh},
+                    {"cos_f32", (double (*)(double))std::cos},
+                    {"cosh_f32", (double (*)(double))std::cosh},
+                    {"exp_f32", (double (*)(double))std::exp},
+                    {"log_f32", (double (*)(double))std::log},
+                    {"sin_f32", (double (*)(double))std::sin},
+                    {"sinh_f32", (double (*)(double))std::sinh},
+                    {"sqrt_f32", (double (*)(double))std::sqrt},
+                    {"tan_f32", (double (*)(double))std::tan},
+                    {"tanh_f32", (double (*)(double))std::tanh},
                 };
             auto it = pure_externs_f1.find(op->name);
             if (it != pure_externs_f1.end()) {
@@ -546,9 +546,9 @@ Expr Simplify::visit(const Call *op, ExprInfo *bounds) {
         {
             static const std::unordered_map<std::string, std::function<double(double)>>
                 pure_externs_truncation = {
-                    {"ceil_f32", [](double a) { return std::ceil(a); }},
-                    {"floor_f32", [](double a) { return std::floor(a); }},
-                    {"round_f32", [](double a) { return std::nearbyint(a); }},
+                    {"ceil_f32", (double (*)(double))std::ceil},
+                    {"floor_f32", (double (*)(double))std::floor},
+                    {"round_f32", (double (*)(double))std::nearbyint},
                     {"trunc_f32", [](double a) { return (a < 0 ? std::ceil(a) : std::floor(a)); }},
                 };
             auto it = pure_externs_truncation.find(op->name);
@@ -578,8 +578,8 @@ Expr Simplify::visit(const Call *op, ExprInfo *bounds) {
         {
             static const std::unordered_map<std::string, std::function<double(double, double)>>
                 pure_externs_f2 = {
-                    {"atan2_f32", [](double a, double b) { return std::atan2(a, b); }},
-                    {"pow_f32", [](double a, double b) { return std::pow(a, b); }},
+                    {"atan2_f32", (double (*)(double, double))std::atan2},
+                    {"pow_f32", (double (*)(double, double))std::pow},
                 };
             auto it = pure_externs_f2.find(op->name);
             if (it != pure_externs_f2.end()) {
