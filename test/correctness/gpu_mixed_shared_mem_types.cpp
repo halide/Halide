@@ -66,6 +66,13 @@ int main(int argc, char **argv) {
         funcs[i](x) = cast(types[i], x / 16 + off);
         e += cast(result_type, funcs[i](x));
         funcs[i].compute_at(out, x).gpu_threads(x);
+
+        // Alternate between shared and global
+        if (i & 1) {
+            funcs[i].store_in(MemoryType::GPUShared);
+        } else {
+            funcs[i].store_in(MemoryType::Heap);
+        }
     }
 
     out(x) = e;

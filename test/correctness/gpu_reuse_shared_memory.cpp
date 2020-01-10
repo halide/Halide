@@ -2,7 +2,7 @@
 
 using namespace Halide;
 
-int multi_thread_ype_test() {
+int multi_thread_type_test(MemoryType memory_type) {
     Func f1("f1"), f2("f2"), f3("f3"), f4("f4"), f5("f5"), f6("f6");
     Var x, y, z;
 
@@ -15,11 +15,11 @@ int multi_thread_ype_test() {
 
     Var thread_x, thread_y;
     f6.compute_root().gpu_tile(x, y, thread_x, thread_y, 1, 1);
-    f5.compute_at(f6, x).gpu_threads(x, y);
-    f4.compute_at(f6, x).gpu_threads(x, y);
-    f3.compute_at(f6, x).gpu_threads(x, y);
-    f2.compute_at(f6, x).gpu_threads(x, y);
-    f1.compute_at(f6, x).gpu_threads(x, y);
+    f5.compute_at(f6, x).gpu_threads(x, y).store_in(memory_type);
+    f4.compute_at(f6, x).gpu_threads(x, y).store_in(memory_type);
+    f3.compute_at(f6, x).gpu_threads(x, y).store_in(memory_type);
+    f2.compute_at(f6, x).gpu_threads(x, y).store_in(memory_type);
+    f1.compute_at(f6, x).gpu_threads(x, y).store_in(memory_type);
 
     const int size_x = 200;
     const int size_y = 200;
@@ -44,7 +44,7 @@ int multi_thread_ype_test() {
     return 0;
 }
 
-int pyramid_test() {
+int pyramid_test(MemoryType memory_type) {
     const int levels = 10;
     const int size_x = 100;
     const int size_y = 100;
@@ -65,7 +65,8 @@ int pyramid_test() {
         funcs[i]
             .compute_at(funcs[levels - 1], x)
             .split(x, xo, xi, 1 << (levels - i - 1))
-            .gpu_threads(xo, y);
+            .gpu_threads(xo, y)
+            .store_in(memory_type);
     }
 
     Buffer<int> out = funcs[levels - 1].realize(size_x, size_y);
@@ -85,7 +86,7 @@ int pyramid_test() {
     return 0;
 }
 
-int inverted_pyramid_test() {
+int inverted_pyramid_test(MemoryType memory_type) {
     const int levels = 6;
     const int size_x = 8 * 16 * 4;
     const int size_y = 8 * 16 * 4;
@@ -109,7 +110,8 @@ int inverted_pyramid_test() {
         funcs[i]
             .compute_at(funcs[levels - 1], x)
             .tile(x, y, xi, yi, 4, 4)
-            .gpu_threads(xi, yi);
+            .gpu_threads(xi, yi)
+            .store_in(memory_type);
     }
 
     funcs[levels - 1]
@@ -133,7 +135,7 @@ int inverted_pyramid_test() {
     return 0;
 }
 
-int dynamic_shared_test() {
+int dynamic_shared_test(MemoryType memory_type) {
     if (!get_jit_target_from_environment().has_gpu_feature()) {
         printf("Not running test because no gpu target enabled\n");
         return 0;
@@ -148,9 +150,9 @@ int dynamic_shared_test() {
     f4(x) = f3(x) + f3(2 * x);
 
     f4.split(x, xo, xi, 16).gpu_tile(xo, thread_xo, 16);
-    f3.compute_at(f4, xo).split(x, xo, xi, 16).gpu_threads(xi);
-    f2.compute_at(f4, xo).split(x, xo, xi, 16).gpu_threads(xi);
-    f1.compute_at(f4, xo).split(x, xo, xi, 16).gpu_threads(xi);
+    f3.compute_at(f4, xo).split(x, xo, xi, 16).gpu_threads(xi).store_in(memory_type);
+    f2.compute_at(f4, xo).split(x, xo, xi, 16).gpu_threads(xi).store_in(memory_type);
+    f1.compute_at(f4, xo).split(x, xo, xi, 16).gpu_threads(xi).store_in(memory_type);
 
     // The amount of shared memory required varies with x
 
@@ -174,24 +176,26 @@ int main(int argc, char **argv) {
         return 0;
     }
 
-    printf("Running multi thread_ype test!\n");
-    if (multi_thread_ype_test() != 0) {
-        return -1;
-    }
+    for (auto memory_type : {MemoryType::GPUShared, MemoryType::Heap}) {
+        printf("Running multi thread type test\n");
+        if (multi_thread_type_test(memory_type) != 0) {
+            return -1;
+        }
 
-    printf("Running pyramid test!\n");
-    if (pyramid_test() != 0) {
-        return -1;
-    }
+        printf("Running pyramid test\n");
+        if (pyramid_test(memory_type) != 0) {
+            return -1;
+        }
 
-    printf("Running inverted pyramid test!\n");
-    if (inverted_pyramid_test() != 0) {
-        return -1;
-    }
+        printf("Running inverted pyramid test\n");
+        if (inverted_pyramid_test(memory_type) != 0) {
+            return -1;
+        }
 
-    printf("Running dynamic shared test!\n");
-    if (dynamic_shared_test() != 0) {
-        return -1;
+        printf("Running dynamic shared test\n");
+        if (dynamic_shared_test(memory_type) != 0) {
+            return -1;
+        }
     }
 
     return 0;

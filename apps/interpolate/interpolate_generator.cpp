@@ -83,7 +83,7 @@ public:
                     .bound(y, 0, input.height())
                     .bound(c, 0, 3)
                     .reorder(c, x, y)
-                    .tile(x, y, xi, yi, 32, 32)
+                    .tile(x, y, xi, yi, 32, 32, TailStrategy::RoundUp)
                     .tile(xi, yi, xii, yii, 2, 2)
                     .gpu_blocks(x, y)
                     .gpu_threads(xi, yi)

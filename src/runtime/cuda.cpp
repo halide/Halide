@@ -1181,6 +1181,9 @@ WEAK int halide_cuda_run(void *user_context,
         int result = halide_cuda_get_stream(user_context, ctx.context, &stream);
         if (result != 0) {
             error(user_context) << "CUDA: In halide_cuda_run, halide_cuda_get_stream returned " << result << "\n";
+            free(dev_handles);
+            free(translated_args);
+            return result;
         }
     }
 
