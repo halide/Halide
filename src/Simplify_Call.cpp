@@ -529,10 +529,9 @@ Expr Simplify::visit(const Call *op, ExprInfo *bounds) {
             auto it = pure_externs_f1.find(op->name);
             if (it != pure_externs_f1.end()) {
                 Expr arg = mutate(op->args[0], nullptr);
-                double f = 0.0;
-                if (const_float(arg, &f)) {
+                if (const double *f = as_const_float(arg)) {
                     auto fn = it->second;
-                    return make_bool(fn(f));
+                    return make_const(arg.type(), fn(*f));
                 } else if (arg.same_as(op->args[0])) {
                     return op;
                 } else {
@@ -551,7 +550,6 @@ Expr Simplify::visit(const Call *op, ExprInfo *bounds) {
                     {"round_f32", [](double a) { return std::nearbyint(a); }},
                     {"trunc_f32", [](double a) { return (a < 0 ? std::ceil(a) : std::floor(a)); }},
                 };
-
             auto it = pure_externs_truncation.find(op->name);
             if (it != pure_externs_truncation.end()) {
                 internal_assert(op->args.size() == 1);
