@@ -506,7 +506,8 @@ Expr Simplify::visit(const Call *op, ExprInfo *bounds) {
         }
 
         // Handle all the PureExtern cases of float -> float
-        // TODO: should we handle the f16 and f64 cases here? We never did before.
+        // TODO: should we handle the f16 and f64 cases here? (We never did before.)
+        // TODO: should we handle fast_inverse and/or fast_inverse_sqrt here?
         {
             static const std::unordered_map<std::string, std::function<double(double)>>
                 pure_externs_f1 = {
@@ -601,6 +602,7 @@ Expr Simplify::visit(const Call *op, ExprInfo *bounds) {
 
         // There are other PureExterns we don't bother with (e.g. fast_inverse_f32)...
         // just fall thru and take the general case.
+        debug(2) << "Simplifier: unhandled PureExtern " << op->name;
     }
 
     // No else: we want to fall thru from the PureExtern clause.
