@@ -67,10 +67,12 @@ Func blur_cols_transpose(Func input, Expr height, Expr alpha, bool skip_schedule
             // heavily under-utilized with this schedule and thus
             // unable to hide the memory latencies to L2.
 
+            const int warp_size = 32;
+
             // 2.06ms on a 2060 RTX
             Var xi, yi;
             transpose.compute_root()
-                .tile(x, y, xi, yi, 32, 32)
+                .tile(x, y, xi, yi, warp_size, warp_size)
                 .gpu_blocks(y, c)
                 .gpu_lanes(xi);
 
@@ -93,9 +95,16 @@ Func blur_cols_transpose(Func input, Expr height, Expr alpha, bool skip_schedule
                 .gpu_lanes(x);
 
             // Stage the transpose input through shared so that we do
-            // strided loads out of shared instead of global.
+            // strided loads out of shared instead of global.  By
+            // default the stride would be the width of the
+            // allocation, which is the warp size. This can cause bank
+            // conflicts. We can improve matters by padding out the
+            // storage horizontally to make the stride coprime with
+            // the warp size, so that each load has a distinct
+            // remainder modulo the warp size. warp_size + 1 will
+            // do. This saves 0.05 ms
             blur.in()
-                .align_storage(x, 33)  // Avoid bank conflicts. Saves 0.05 ms
+                .align_storage(x, warp_size + 1)
                 .compute_at(transpose, x)
                 .gpu_lanes(x);
         }
