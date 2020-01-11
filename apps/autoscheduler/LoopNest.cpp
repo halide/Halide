@@ -2588,6 +2588,40 @@ IntrusivePtr<const LoopNest> LoopNest::parallelize_in_tiles(const MachineParams 
     return outer;
 }
 
+int64_t LoopNest::get_total_local_mem_alloc_size(bool constant_allocs_only, bool in_threads_loop) const {
+    int64_t result = 0;
+
+    in_threads_loop = in_threads_loop || gpu_label == thread;
+
+    if (in_threads_loop) {
+        for (const auto *store_node : store_at) {
+            const auto &bounds = get_bounds(store_node);
+
+            int64_t alloc_size = store_node->bytes_per_point;
+            bool is_constant_alloc = true;
+            for (int i = 0; i < store_node->dimensions; i++) {
+                const auto &p = bounds->region_computed(i);
+                alloc_size *= p.extent();
+                is_constant_alloc = is_constant_alloc && p.constant_extent();
+            }
+
+            if (store_node->dimensions > 0 && (!constant_allocs_only || is_constant_alloc)) {
+                result += alloc_size;
+            }
+        }
+    }
+
+    for (const auto& c : children) {
+        result += c->get_total_local_mem_alloc_size(constant_allocs_only, in_threads_loop);
+    }
+
+    return result;
+}
+
+int64_t LoopNest::get_total_constant_local_mem_alloc_size() const {
+    return get_total_local_mem_alloc_size(true);
+}
+
 // All store ats further in than the block level must be fixed
 // sized allocations. This method checks if f will require a dynamic
 // allocation

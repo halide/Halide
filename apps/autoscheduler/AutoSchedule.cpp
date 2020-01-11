@@ -93,6 +93,17 @@ namespace Halide {
 namespace Internal {
 namespace Autoscheduler {
 
+constexpr int kLocalMemoryLimit = 524288; // 512 KB
+
+// Stack memory limit = Total GPU Memory / (# of SMs * maximum threads per SM)
+//                    = 103232 bytes
+// Not all 103232 bytes will be free for allocations so reduce it by factor to
+// allow a buffer
+int64_t get_stack_memory_limit() {
+    static int64_t stack_factor = std::atof(get_env_variable("HL_STACK_FACTOR").c_str());
+    return stack_factor * 103232;
+}
+
 using std::string;
 using std::vector;
 using std::map;
@@ -716,6 +727,24 @@ struct State {
         return false;
     }
 
+    bool exceeds_local_memory_limit(const Target &target) {
+        if (!target.has_gpu_feature()) {
+            return false;
+        }
+
+        for (const auto& c : root->children) {
+            if (c->get_total_constant_local_mem_alloc_size() > get_stack_memory_limit()) {
+                return true;
+            }
+
+            if (c->get_total_local_mem_alloc_size() > kLocalMemoryLimit) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
     bool calculate_cost(const FunctionDAG &dag, const MachineParams &params, const Target& target, CostModel *cost_model, Statistics& stats, bool verbose = false) {
         if (!are_valid_thread_extents(root->get_union_thread_counts(nullptr))) {
             return false;
@@ -726,6 +755,10 @@ struct State {
         }
 
         if (exceeds_shared_memory_limit(target)) {
+            return false;
+        }
+
+        if (exceeds_local_memory_limit(target)) {
             return false;
         }
 

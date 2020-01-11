@@ -357,6 +357,9 @@ struct LoopNest {
                                                       bool inner_tiling,
                                                       bool adjust_tiling) const;
 
+    int64_t get_total_local_mem_alloc_size(bool constant_allocs_only=false, bool in_threads_loop=false) const;
+    int64_t get_total_constant_local_mem_alloc_size() const;
+
     // All store ats further in than the block level must be fixed
     // sized allocations. This method checks if f will require a dynamic
     // allocation
