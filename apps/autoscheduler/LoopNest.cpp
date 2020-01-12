@@ -772,7 +772,7 @@ double LoopNest::storage_stride(const LoadJacobian& jac, int innermost_storage_d
         stride += s * storage_strides[i];
     }
 
-    return stride;
+    return std::abs(stride);
 }
 
 bool LoopNest::all_strides_exist(const LoadJacobian& jac, const FunctionDAG::Node* storage_node, const LoopNest& root) const {
@@ -913,15 +913,16 @@ std::pair<double, double> LoopNest::compute_shared_mem_load_features(const LoadJ
     return {num_accesses, min_accesses};
 }
 
-void LoopNest::compute_gpu_store_features(const LoadJacobian& jac, int consumer_innermost_dim, const FunctionDAG::Node* node, const Bound& consumer_store_bounds, const ThreadInfo& thread_info, double serial_loop_extents, const Sites& consumer_site, ScheduleFeatures& feat, const LoopNest& root) const {
+void LoopNest::compute_gpu_store_features(const LoadJacobian& jac, int consumer_innermost_dim, const FunctionDAG::Node* node, const Bound& consumer_store_bounds, const ThreadInfo& thread_info, double total_serial_loop_extents, const std::vector<int64_t>& inner_serial_loop_extents, const Sites& consumer_site, ScheduleFeatures& feat, const LoopNest& root) const {
     if (consumer_site.gpu_store_memory_type == GPUMemoryType::shared) {
+        auto store_jac = jac * inner_serial_loop_extents;
         auto shared_mem_features = compute_shared_mem_stores(
-            jac,
+            store_jac,
             consumer_innermost_dim,
             node,
             consumer_store_bounds,
             thread_info,
-            serial_loop_extents,
+            total_serial_loop_extents,
             root
         );
 
@@ -929,14 +930,18 @@ void LoopNest::compute_gpu_store_features(const LoadJacobian& jac, int consumer_
         feat.shared_mem_store_efficiency = shared_mem_features.second;
 
         internal_assert(in_range_zero_one(feat.shared_mem_store_efficiency)) << "Invalid shared mem store efficiency: " << feat.shared_mem_store_efficiency << " for " << node->func.name();
-    } else if (consumer_site.gpu_store_memory_type == GPUMemoryType::global) {
+        return;
+    }
+
+    if (consumer_site.gpu_store_memory_type == GPUMemoryType::global) {
+        auto store_jac = jac * inner_serial_loop_extents;
         auto global_mem_info = compute_global_mem_store_features(
-            jac,
+            store_jac,
             consumer_innermost_dim,
             node,
             consumer_store_bounds,
             thread_info,
-            serial_loop_extents,
+            total_serial_loop_extents,
             root
         );
 
@@ -946,6 +951,13 @@ void LoopNest::compute_gpu_store_features(const LoadJacobian& jac, int consumer_
 
         internal_assert(in_range_zero_one(feat.global_mem_store_efficiency)) << "Invalid global mem store efficiency: " << feat.global_mem_store_efficiency << " for " << node->func.name();
         internal_assert(in_range_zero_one(feat.global_mem_store_coalesce_efficiency)) << "Invalid global mem store coalesce efficiency: " << feat.global_mem_store_coalesce_efficiency << " for " << node->func.name();
+        return;
+    }
+
+    if (consumer_site.gpu_store_memory_type == GPUMemoryType::local) {
+        feat.local_mem_store_efficiency = compute_local_mem_store_features(jac, consumer_innermost_dim, node, consumer_store_bounds, root);
+
+        internal_assert(in_range_zero_one(feat.local_mem_store_efficiency)) << "Invalid local mem store coalesce efficiency: " << feat.local_mem_store_efficiency << " for " << node->func.name();
     }
 }
 
@@ -1052,6 +1064,16 @@ void LoopNest::compute_num_global_mem_accesses_per_block(const LoadJacobian& jac
     }
 
     global_mem_info.add_access_info(serial_loop_extents * num_accesses[0], serial_loop_extents * num_accesses[1], stride);
+}
+
+double LoopNest::compute_local_mem_store_features(const LoadJacobian& jac, int consumer_innermost_dim, const FunctionDAG::Node* node, const Bound& consumer_store_bounds, const LoopNest& root) const {
+    // Assume worst case serialized loads if the stride is unknown
+    double stride = 32.0;
+    if (all_strides_exist(jac, node, root)) {
+        stride = storage_stride(jac, consumer_innermost_dim, node, consumer_store_bounds, root);
+    }
+
+    return 1.0 / std::min(32.0, std::max(1.0, stride));
 }
 
 GlobalMemInfo LoopNest::compute_global_mem_store_features(const LoadJacobian& jac, int consumer_innermost_dim, const FunctionDAG::Node* node, const Bound& consumer_store_bounds, const ThreadInfo& thread_info, double serial_loop_extents, const LoopNest& root) const {
@@ -1698,7 +1720,7 @@ void LoopNest::compute_features(const FunctionDAG &dag,
             if (innermost && !stage->store_jacobian->empty()) {
                 const auto& bounds = consumer_site.store->get_bounds(stage->node);
                 inner_serial_loop_extents = gpu_loop_info.get_inner_serial_loop_extents(this);
-                auto store_jac = *stage->store_jacobian * inner_serial_loop_extents;
+                auto store_jac = *stage->store_jacobian;
 
                 compute_gpu_store_features(
                     store_jac,
@@ -1707,6 +1729,7 @@ void LoopNest::compute_features(const FunctionDAG &dag,
                     bounds,
                     *gpu_loop_info.thread_info,
                     gpu_loop_info.total_serial_extents(),
+                    inner_serial_loop_extents,
                     consumer_site,
                     feat,
                     root
