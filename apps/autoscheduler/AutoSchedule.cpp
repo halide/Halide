@@ -151,6 +151,11 @@ struct RNG {
     }
 };
 
+bool use_memoized_features() {
+    static bool var = get_env_variable("HL_USE_MEMOIZED_FEATURES") == "1";
+    return var;
+}
+
 bool use_adjusted_tilings() {
     static bool var = get_env_variable("HL_USE_ADJUSTED_TILINGS") == "1";
     return var;
@@ -553,7 +558,7 @@ struct State {
         uint64_t loop_nest_hash = 0;
         feature_root->structural_hash(loop_nest_hash, 10000);
 
-        if (memoized.count(loop_nest_hash) > 0) {
+        if (use_memoized_features() && memoized.count(loop_nest_hash) > 0) {
             *features = memoized[loop_nest_hash];
             ++stats.num_memoized_featurizations;
             return;
@@ -623,7 +628,9 @@ struct State {
         auto t1 = std::chrono::high_resolution_clock::now();
         feature_root->compute_features(dag, params, target, sites, 1, 1, nullptr, nullptr, *feature_root, nullptr, features, {feature_root.get()});
 
-        memoized[loop_nest_hash] = *features;
+        if (use_memoized_features()) {
+            memoized[loop_nest_hash] = *features;
+        }
 
         stats.featurization_time += std::chrono::high_resolution_clock::now() - t1;
         ++stats.num_featurizations;
