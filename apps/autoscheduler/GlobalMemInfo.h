@@ -54,6 +54,13 @@ struct GlobalMemInfo {
         ++num_coalesce_entries;
     }
 
+    void add(const GlobalMemInfo& other) {
+        num_coalesce_entries += other.num_coalesce_entries;
+        total_coalesce_efficiency += other.total_coalesce_efficiency;
+        total_required_accesses += other.total_required_accesses;
+        total_min_accesses += other.total_min_accesses;
+    }
+
 private:
     int num_coalesce_entries = 0;
     double total_coalesce_efficiency = 0;

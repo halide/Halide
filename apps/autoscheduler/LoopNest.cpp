@@ -1119,17 +1119,18 @@ void LoopNest::compute_global_mem_load_features(const LoadJacobian& jac, int pro
     // Assume best case if producer has not been scheduled: try all the
     // possible innermost dimensions and take the best
     int min_required_accesses = serial_loop_extents_and_load_count * thread_info.num_threads;
-    int min_accesses = min_required_accesses;
-    double stride = 32.0;
-    global_mem_info.add_access_info(min_required_accesses, min_accesses, stride);
+    GlobalMemInfo min_info;
 
     for (int i = 0; i < node->dimensions; i++) {
         GlobalMemInfo info;
         compute_num_global_mem_accesses_per_block(jac, node, producer_store_bounds, thread_info, i, serial_loop_extents_and_load_count, info, root);
-        if (info.required_accesses() < min_required_accesses) {
-            global_mem_info = info;
+        if (i == 0 || info.required_accesses() < min_required_accesses) {
+            min_info = info;
+            min_required_accesses = info.required_accesses();
         }
     }
+
+    global_mem_info.add(min_info);
 }
 
 void LoopNest::compute_local_mem_load_features(const LoadJacobian& jac, int producer_innermost_dim, const FunctionDAG::Node* node, const Bound& producer_store_bounds, bool producer_has_been_scheduled, LocalMemInfo& local_mem_info, const LoopNest& root) const {
