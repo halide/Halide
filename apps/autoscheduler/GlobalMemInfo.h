@@ -61,6 +61,28 @@ private:
     double total_min_accesses = 0;
 };
 
+struct LocalMemInfo {
+    void add_stride(double stride) {
+        if (stride != 0) {
+            total_stride += std::min(32.0, std::max(1.0, stride));
+        }
+
+        ++num_entries;
+    }
+
+    double average_efficiency() const {
+        if (total_stride == 0) {
+            return 1.0;
+        }
+        return 1.0 / (total_stride / num_entries);
+    }
+
+private:
+    int num_entries = 0;
+    double total_stride = 0;
+};
+
+
 }  // namespace Autoscheduler
 }  // namespace Internal
 }  // namespace Halide

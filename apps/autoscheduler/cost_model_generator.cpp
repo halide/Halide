@@ -300,6 +300,7 @@ public:
         Expr global_mem_load_efficiency = schedule_features(n, idx++, w);
 
         Expr local_mem_store_efficiency = schedule_features(n, idx++, w);
+        Expr local_mem_load_efficiency = schedule_features(n, idx++, w);
 
         Expr global_mem_store_coalesce_efficiency = schedule_features(n, idx++, w);
         Expr global_mem_load_coalesce_efficiency = schedule_features(n, idx++, w);
@@ -354,6 +355,7 @@ public:
         load_cost /= shared_mem_load_efficiency;
         load_cost /= global_mem_load_efficiency;
         load_cost /= global_mem_load_coalesce_efficiency;
+        load_cost /= local_mem_load_efficiency;
 
         // Next we have the cost of stores.
         Expr lines_written_per_realization = inner_parallelism * (bytes_at_task / max(1, innermost_bytes_at_task));

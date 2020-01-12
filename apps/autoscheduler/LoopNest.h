@@ -274,6 +274,8 @@ struct LoopNest {
 
     void compute_global_mem_load_features(const LoadJacobian& jac, int producer_innermost_dim, const FunctionDAG::Node* node, const Bound& producer_store_bounds, bool producer_has_been_scheduled, const ThreadInfo& thread_info, GlobalMemInfo& global_mem_info, double serial_loop_extents_and_load_count, const LoopNest& root) const;
 
+    void compute_local_mem_load_features(const LoadJacobian& jac, int producer_innermost_dim, const FunctionDAG::Node* node, const Bound& producer_store_bounds, bool producer_has_been_scheduled, LocalMemInfo& local_mem_info, const LoopNest& root) const;
+
     // Assumes block, serial, thread or block, thread nesting
     const LoopNest* get_enclosing_block(const LoopNest *parent, const LoopNest *grandparent) const;
 

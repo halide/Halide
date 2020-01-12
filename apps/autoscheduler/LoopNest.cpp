@@ -1132,6 +1132,30 @@ void LoopNest::compute_global_mem_load_features(const LoadJacobian& jac, int pro
     }
 }
 
+void LoopNest::compute_local_mem_load_features(const LoadJacobian& jac, int producer_innermost_dim, const FunctionDAG::Node* node, const Bound& producer_store_bounds, bool producer_has_been_scheduled, LocalMemInfo& local_mem_info, const LoopNest& root) const {
+    // Assume worst case serialized loads if the stride
+    // is unknown
+    if (!all_strides_exist(jac, node, root)) {
+        local_mem_info.add_stride(32.0);
+        return;
+    }
+
+    if (producer_has_been_scheduled) {
+        local_mem_info.add_stride(storage_stride(jac, producer_innermost_dim, node, producer_store_bounds, root));
+        return;
+    }
+
+    // Assume best case if producer has not been scheduled: try all the
+    // possible innermost dimensions and take the best
+    double min_stride = 32.0;
+
+    for (int i = 0; i < node->dimensions; i++) {
+        min_stride = std::min(min_stride, storage_stride(jac, i, node, producer_store_bounds, root));
+    }
+
+    local_mem_info.add_stride(min_stride);
+}
+
 // Assumes block, serial, thread or block, thread nesting
 const LoopNest* LoopNest::get_enclosing_block(const LoopNest *parent, const LoopNest *grandparent) const {
     internal_assert(gpu_label == thread);
@@ -1703,6 +1727,7 @@ void LoopNest::compute_features(const FunctionDAG &dag,
         num_stride_3_loads = 0, num_stride_4_loads = 0,
         num_loads = 0;
     GlobalMemInfo global_mem_loads;
+    LocalMemInfo local_mem_loads;
     double num_shared_mem_loads_per_block = 0;
     double min_num_shared_mem_loads_per_block = 0;
     int64_t total_serial_loop_extents = 1;
@@ -1965,7 +1990,7 @@ void LoopNest::compute_features(const FunctionDAG &dag,
                             int64_t amortization = compute_licm_amortization(this, parent, feat, jac.first, e->producer->dimensions);
                             n /= amortization;
 
-                            if (is_shared_mem) {
+                            if (is_shared_mem && get_compute_shared_mem_load_features()) {
                                 auto shared_mem_features = compute_shared_mem_load_features(
                                     jac.first,
                                     producer_innermost_dim,
@@ -1978,7 +2003,7 @@ void LoopNest::compute_features(const FunctionDAG &dag,
                                 );
                                 num_shared_mem_loads_per_block += n * shared_mem_features.first;
                                 min_num_shared_mem_loads_per_block += n * shared_mem_features.second;
-                            } else if (is_global_mem) {
+                            } else if (is_global_mem && get_compute_global_mem_load_features()) {
 
                                 compute_global_mem_load_features(
                                     jac.first,
@@ -1992,6 +2017,22 @@ void LoopNest::compute_features(const FunctionDAG &dag,
                                     root
                                 );
                             }
+                        }
+                    }
+
+                    if (site.gpu_store_memory_type == GPUMemoryType::local) {
+                        for (const auto &jac : jacobians) {
+                            if (jac.second != e->producer) continue;
+
+                            compute_local_mem_load_features(
+                                jac.first,
+                                producer_innermost_dim,
+                                e->producer,
+                                producer_store_bounds,
+                                producer_has_been_scheduled,
+                                local_mem_loads,
+                                root
+                            );
                         }
                     }
                 }
@@ -2138,8 +2179,12 @@ void LoopNest::compute_features(const FunctionDAG &dag,
         feat.global_mem_load_efficiency = global_mem_loads.access_efficiency();
         feat.global_mem_load_coalesce_efficiency = global_mem_loads.coalesce_efficiency();
 
+        feat.local_mem_load_efficiency = local_mem_loads.average_efficiency();
+
         internal_assert(in_range_zero_one(feat.global_mem_load_efficiency)) << "Invalid global mem load efficiency: " << feat.global_mem_load_efficiency;
-        internal_assert(in_range_zero_one(feat.global_mem_load_coalesce_efficiency)) << "Invalid global mem load coalease efficiency: " << feat.global_mem_load_coalesce_efficiency;
+        internal_assert(in_range_zero_one(feat.global_mem_load_coalesce_efficiency)) << "Invalid global mem load coalesce efficiency: " << feat.global_mem_load_coalesce_efficiency;
+
+        internal_assert(in_range_zero_one(feat.local_mem_load_efficiency)) << "Invalid local mem load efficiency: " << feat.local_mem_load_efficiency;
     }
 
     // Track features for inlined Funcs
