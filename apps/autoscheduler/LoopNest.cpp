@@ -926,7 +926,7 @@ void LoopNest::compute_gpu_store_features(const LoadJacobian& jac, int consumer_
             root
         );
 
-        feat.num_shared_mem_stores_per_block = shared_mem_features.first;
+        feat.num_shared_mem_stores_per_block = shared_mem_features.first * jac.count();
         feat.shared_mem_store_efficiency = shared_mem_features.second;
 
         internal_assert(in_range_zero_one(feat.shared_mem_store_efficiency)) << "Invalid shared mem store efficiency: " << feat.shared_mem_store_efficiency << " for " << node->func.name();
@@ -945,7 +945,7 @@ void LoopNest::compute_gpu_store_features(const LoadJacobian& jac, int consumer_
             root
         );
 
-        feat.num_global_mem_stores_per_block = global_mem_info.required_accesses();
+        feat.num_global_mem_stores_per_block = global_mem_info.required_accesses() * jac.count();
         feat.global_mem_store_efficiency = global_mem_info.access_efficiency();
         feat.global_mem_store_coalesce_efficiency = global_mem_info.coalesce_efficiency();
 
