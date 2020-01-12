@@ -95,15 +95,6 @@ namespace Autoscheduler {
 
 constexpr int kLocalMemoryLimit = 524288; // 512 KB
 
-// Stack memory limit = Total GPU Memory / (# of SMs * maximum threads per SM)
-//                    = 103232 bytes
-// Not all 103232 bytes will be free for allocations so reduce it by factor to
-// allow a buffer
-int64_t get_stack_memory_limit() {
-    static int64_t stack_factor = std::atof(get_env_variable("HL_STACK_FACTOR").c_str());
-    return stack_factor * 103232;
-}
-
 using std::string;
 using std::vector;
 using std::map;
@@ -150,6 +141,24 @@ struct RNG {
         return dis(gen);
     }
 };
+
+double get_stack_memory_adjustment_factor() {
+    string stack_factor_str = get_env_variable("HL_STACK_FACTOR");
+    if (stack_factor_str.empty()) {
+        return 0.95;
+    }
+
+    return std::atof(stack_factor_str.c_str());
+}
+
+// Stack memory limit = Total GPU Memory / (# of SMs * maximum threads per SM)
+//                    = 103232 bytes
+// Not all 103232 bytes will be free for allocations so reduce it by factor to
+// allow a buffer
+int64_t get_stack_memory_limit() {
+    static double stack_factor = get_stack_memory_adjustment_factor();
+    return stack_factor * 103232;
+}
 
 bool use_memoized_features() {
     static bool var = get_env_variable("HL_USE_MEMOIZED_FEATURES") == "1";
