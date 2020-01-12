@@ -766,7 +766,7 @@ double LoopNest::storage_stride(const LoadJacobian& jac, int innermost_storage_d
 
     double stride = 0;
     for (std::size_t i = 0; i < storage_dims.size(); i++) {
-        auto jac_stride = jac(i, v);
+        auto jac_stride = jac(storage_dims[i], v);
 
         float s = (float)jac_stride.numerator / (float)jac_stride.denominator;
         stride += s * storage_strides[i];
