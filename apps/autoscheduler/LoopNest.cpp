@@ -942,6 +942,7 @@ void LoopNest::compute_gpu_store_features(const LoadJacobian& jac, int consumer_
             consumer_store_bounds,
             thread_info,
             total_serial_loop_extents,
+            jac.count(),
             root
         );
 
@@ -1004,13 +1005,13 @@ double LoopNest::min_global_mem_accesses(const FunctionDAG::Node* node, const Th
     return serial_loop_extents * num_accesses;
 }
 
-void LoopNest::compute_num_global_mem_accesses_per_block(const LoadJacobian& jac, const FunctionDAG::Node* node, const Bound& store_bounds, const ThreadInfo& thread_info, int innermost_dim, double serial_loop_extents, GlobalMemInfo& global_mem_info, const LoopNest& root) const {
+void LoopNest::compute_num_global_mem_accesses_per_block(const LoadJacobian& jac, const FunctionDAG::Node* node, const Bound& store_bounds, const ThreadInfo& thread_info, int innermost_dim, double serial_loop_extents, double access_count, GlobalMemInfo& global_mem_info, const LoopNest& root) const {
     double stride = storage_stride(jac, innermost_dim, node, store_bounds, root);
 
     if (stride == 0) {
         // Only need a single access (optimistically assume that it remains
         // cached across warps)
-        global_mem_info.add_access_info(1, 1, stride);
+        global_mem_info.add_access_info(1, 1, stride, access_count);
         return;
     }
 
@@ -1063,7 +1064,7 @@ void LoopNest::compute_num_global_mem_accesses_per_block(const LoadJacobian& jac
         num_accesses[1] = num_accesses[0];
     }
 
-    global_mem_info.add_access_info(serial_loop_extents * num_accesses[0], serial_loop_extents * num_accesses[1], stride);
+    global_mem_info.add_access_info(serial_loop_extents * num_accesses[0], serial_loop_extents * num_accesses[1], stride, access_count);
 }
 
 double LoopNest::compute_local_mem_store_features(const LoadJacobian& jac, int consumer_innermost_dim, const FunctionDAG::Node* node, const Bound& consumer_store_bounds, const LoopNest& root) const {
@@ -1076,7 +1077,7 @@ double LoopNest::compute_local_mem_store_features(const LoadJacobian& jac, int c
     return 1.0 / std::min(32.0, std::max(1.0, stride));
 }
 
-GlobalMemInfo LoopNest::compute_global_mem_store_features(const LoadJacobian& jac, int consumer_innermost_dim, const FunctionDAG::Node* node, const Bound& consumer_store_bounds, const ThreadInfo& thread_info, double serial_loop_extents, const LoopNest& root) const {
+GlobalMemInfo LoopNest::compute_global_mem_store_features(const LoadJacobian& jac, int consumer_innermost_dim, const FunctionDAG::Node* node, const Bound& consumer_store_bounds, const ThreadInfo& thread_info, double serial_loop_extents, double store_count, const LoopNest& root) const {
     GlobalMemInfo global_mem_info;
 
     if (!all_strides_exist(jac, node, root)) {
@@ -1088,42 +1089,42 @@ GlobalMemInfo LoopNest::compute_global_mem_store_features(const LoadJacobian& ja
 
         auto min_accesses = min_global_mem_accesses(node, thread_info, serial_loop_extents, stride);
 
-        global_mem_info.add_access_info(required_accesses, min_accesses, stride);
+        global_mem_info.add_access_info(required_accesses, min_accesses, stride, store_count);
         return global_mem_info;
     }
 
-    compute_num_global_mem_accesses_per_block(jac, node, consumer_store_bounds, thread_info, consumer_innermost_dim, serial_loop_extents, global_mem_info, root);
+    compute_num_global_mem_accesses_per_block(jac, node, consumer_store_bounds, thread_info, consumer_innermost_dim, serial_loop_extents, store_count, global_mem_info, root);
     return global_mem_info;
 }
 
-void LoopNest::compute_global_mem_load_features(const LoadJacobian& jac, int producer_innermost_dim, const FunctionDAG::Node* node, const Bound& producer_store_bounds, bool producer_has_been_scheduled, const ThreadInfo& thread_info, GlobalMemInfo& global_mem_info, double serial_loop_extents_and_load_count, const LoopNest& root) const {
+void LoopNest::compute_global_mem_load_features(const LoadJacobian& jac, int producer_innermost_dim, const FunctionDAG::Node* node, const Bound& producer_store_bounds, bool producer_has_been_scheduled, const ThreadInfo& thread_info, GlobalMemInfo& global_mem_info, double serial_loop_extents, double load_count, const LoopNest& root) const {
     // Assume worst case serialized loads if the stride
     // is unknown
     if (!all_strides_exist(jac, node, root)) {
         double stride = 32.0;
 
-        auto required_accesses = serial_loop_extents_and_load_count * thread_info.num_threads;
+        auto required_accesses = serial_loop_extents * thread_info.num_threads;
 
-        auto min_accesses = min_global_mem_accesses(node, thread_info, serial_loop_extents_and_load_count, stride);
+        auto min_accesses = min_global_mem_accesses(node, thread_info, serial_loop_extents, stride);
 
-        global_mem_info.add_access_info(required_accesses, min_accesses, stride);
+        global_mem_info.add_access_info(required_accesses, min_accesses, stride, load_count);
         return;
     }
 
     if (producer_has_been_scheduled) {
-        compute_num_global_mem_accesses_per_block(jac, node, producer_store_bounds, thread_info, producer_innermost_dim, serial_loop_extents_and_load_count, global_mem_info, root);
+        compute_num_global_mem_accesses_per_block(jac, node, producer_store_bounds, thread_info, producer_innermost_dim, serial_loop_extents, load_count, global_mem_info, root);
 
         return;
     }
 
     // Assume best case if producer has not been scheduled: try all the
     // possible innermost dimensions and take the best
-    int min_required_accesses = serial_loop_extents_and_load_count * thread_info.num_threads;
+    int min_required_accesses = serial_loop_extents * thread_info.num_threads;
     GlobalMemInfo min_info;
 
     for (int i = 0; i < node->dimensions; i++) {
         GlobalMemInfo info;
-        compute_num_global_mem_accesses_per_block(jac, node, producer_store_bounds, thread_info, i, serial_loop_extents_and_load_count, info, root);
+        compute_num_global_mem_accesses_per_block(jac, node, producer_store_bounds, thread_info, i, serial_loop_extents, load_count, info, root);
         if (i == 0 || info.required_accesses() < min_required_accesses) {
             min_info = info;
             min_required_accesses = info.required_accesses();
@@ -2014,7 +2015,8 @@ void LoopNest::compute_features(const FunctionDAG &dag,
                                     producer_has_been_scheduled,
                                     *gpu_loop_info.thread_info,
                                     global_mem_loads,
-                                    n * total_serial_loop_extents,
+                                    total_serial_loop_extents,
+                                    n,
                                     root
                                 );
                             }

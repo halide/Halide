@@ -38,6 +38,20 @@ struct GlobalMemInfo {
         return total_coalesce_efficiency / num_coalesce_entries;
     }
 
+    void add_access_info(double required_accesses, double min_accesses, double stride, int N) {
+        for (int i = 0; i < N; ++i) {
+            add_access_info(required_accesses, min_accesses, stride);
+        }
+    }
+
+    void add(const GlobalMemInfo& other) {
+        num_coalesce_entries += other.num_coalesce_entries;
+        total_coalesce_efficiency += other.total_coalesce_efficiency;
+        total_required_accesses += other.total_required_accesses;
+        total_min_accesses += other.total_min_accesses;
+    }
+
+private:
     void add_access_info(double required_accesses, double min_accesses, double stride) {
         internal_assert(min_accesses <= required_accesses) << "Invalid access values";
 
@@ -54,14 +68,6 @@ struct GlobalMemInfo {
         ++num_coalesce_entries;
     }
 
-    void add(const GlobalMemInfo& other) {
-        num_coalesce_entries += other.num_coalesce_entries;
-        total_coalesce_efficiency += other.total_coalesce_efficiency;
-        total_required_accesses += other.total_required_accesses;
-        total_min_accesses += other.total_min_accesses;
-    }
-
-private:
     int num_coalesce_entries = 0;
     double total_coalesce_efficiency = 0;
     double total_required_accesses = 0;
