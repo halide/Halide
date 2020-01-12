@@ -513,6 +513,38 @@ struct State {
         return new_root;
     }
 
+    void set_gpu_store_site(const map<const LoopNest *, pair<const LoopNest *, int>>& parent, const LoopNest* loop, LoopNest::Sites& site) const {
+        // If site.store is inside a block but outside a loop, the
+        // GPU store site should instead be the block because the shared
+        // mem allocation will be hoisted
+        bool type_has_been_set = false;
+        const LoopNest *candidate_block = loop;
+        while (candidate_block) {
+            if (candidate_block->gpu_label == thread) {
+                site.gpu_store_memory_type = GPUMemoryType::local;
+                type_has_been_set = true;
+                break;
+            }
+
+            if (candidate_block->is_root()) {
+                site.gpu_store_memory_type = GPUMemoryType::global;
+                type_has_been_set = true;
+                break;
+            }
+
+            if (candidate_block->gpu_label == block) {
+                site.store = candidate_block;
+                site.gpu_store_memory_type = GPUMemoryType::shared;
+                type_has_been_set = true;
+                break;
+            }
+
+            candidate_block = parent.at(candidate_block).first;
+        }
+
+        internal_assert(type_has_been_set);
+    }
+
     void compute_featurization(const FunctionDAG &dag, const MachineParams &params, const Target& target, StageMap<ScheduleFeatures> *features, Statistics& stats) {
         auto feature_root = get_root_for_features(params, target);
 
@@ -531,7 +563,7 @@ struct State {
         sites.make_large(dag.nodes[0].stages[0].max_id);
         features->make_large(dag.nodes[0].stages[0].max_id);
         internal_assert(feature_root.defined());
-        feature_root->get_sites(sites);
+        feature_root->get_sites(target, sites);
 
         // For the input nodes and unscheduled outputs, the compute
         // and store sites are root, and the produce and innermost
@@ -543,6 +575,7 @@ struct State {
                     if (s.compute == nullptr) {
                         s.compute = feature_root.get();
                         s.store = feature_root.get();
+                        s.gpu_store_memory_type = GPUMemoryType::global;
                     }
                 }
             }
@@ -581,6 +614,9 @@ struct State {
                 auto &site = sites.get_or_create(&stage);
                 site.compute = loop;
                 site.store = loop;
+                if (target.has_gpu_feature()) {
+                    set_gpu_store_site(parent, loop, site);
+                }
             }
         }
 

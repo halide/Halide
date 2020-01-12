@@ -582,15 +582,39 @@ void LoopNest::structural_hash(uint64_t &h, int depth) const {
     }
 }
 
+GPUMemoryType LoopNest::get_gpu_memory_type(bool in_block, bool in_thread, bool is_inlined) const {
+    if (is_inlined) {
+        return GPUMemoryType::inlined;
+    }
+
+    if (in_thread) {
+        internal_assert(in_block);
+        return GPUMemoryType::local;
+    }
+
+    if (in_block) {
+        return GPUMemoryType::shared;
+    }
+
+    return GPUMemoryType::global;
+}
+
 // Compute all the sites of interest for each pipeline stage
-void LoopNest::get_sites(StageMap<Sites> &sites,
+void LoopNest::get_sites(const Target& target,
+               StageMap<Sites> &sites,
                const LoopNest *task,
-               const LoopNest *parent) const {
+               const LoopNest *parent,
+               const LoopNest *current_thread_loop) const {
+    if (is_gpu_thread(target)) {
+        current_thread_loop = this;
+    }
+
     if (!task && !is_root()) {
         task = this;
     }
+
     for (const auto &c : children) {
-        c->get_sites(sites, task, this);
+        c->get_sites(target, sites, task, this, current_thread_loop);
     }
     if (parent && node != parent->node) {
         auto &s = sites.get_or_create(stage);
@@ -598,19 +622,27 @@ void LoopNest::get_sites(StageMap<Sites> &sites,
         s.produce = this;
         s.task = task;
     }
+
+    bool in_block = task != nullptr;
+    bool in_thread = current_thread_loop != nullptr;
+
     for (auto f : store_at) {
         for (const auto &s : f->stages) {
-            sites.get_or_create(&s).store = this;
+            sites.get_or_create(&s).store = (in_block && !in_thread) ? task : this;
+            auto store_gpu_memory_type = get_gpu_memory_type(in_block, in_thread);
+            sites.get_or_create(&s).gpu_store_memory_type = store_gpu_memory_type;
         }
     }
     for (auto it = inlined.begin(); it != inlined.end(); it++) {
         auto &s = sites.get_or_create(&(it.key()->stages[0]));
         s.inlined = true;
         s.compute = s.store = s.produce = s.innermost = this;
+        s.gpu_store_memory_type = GPUMemoryType::inlined;
         s.task = task;
     }
     if (innermost) {
         sites.get_or_create(stage).innermost = this;
+        sites.get_or_create(stage).thread = current_thread_loop;
     }
 }
 
@@ -882,7 +914,7 @@ std::pair<double, double> LoopNest::compute_shared_mem_load_features(const LoadJ
 }
 
 void LoopNest::compute_gpu_store_features(const LoadJacobian& jac, int consumer_innermost_dim, const FunctionDAG::Node* node, const Bound& consumer_store_bounds, const ThreadInfo& thread_info, double serial_loop_extents, const Sites& consumer_site, ScheduleFeatures& feat, const LoopNest& root) const {
-    if (consumer_site.store->gpu_label == block) {
+    if (consumer_site.gpu_store_memory_type == GPUMemoryType::shared) {
         auto shared_mem_features = compute_shared_mem_stores(
             jac,
             consumer_innermost_dim,
@@ -897,7 +929,7 @@ void LoopNest::compute_gpu_store_features(const LoadJacobian& jac, int consumer_
         feat.shared_mem_store_efficiency = shared_mem_features.second;
 
         internal_assert(in_range_zero_one(feat.shared_mem_store_efficiency)) << "Invalid shared mem store efficiency: " << feat.shared_mem_store_efficiency << " for " << node->func.name();
-    } else if (consumer_site.store->is_root()) {
+    } else if (consumer_site.gpu_store_memory_type == GPUMemoryType::global) {
         auto global_mem_info = compute_global_mem_store_features(
             jac,
             consumer_innermost_dim,
@@ -1897,9 +1929,9 @@ void LoopNest::compute_features(const FunctionDAG &dag,
                          !producer_has_been_scheduled ? -1 :
                          site.produce->vector_dim);
 
-                    // Shared or global memory?
-                    bool is_shared_mem = producer_store_site->gpu_label == block;
-                    bool is_global_mem = producer_store_site->is_root();
+                    // Shared, global, or local memory?
+                    bool is_shared_mem = site.gpu_store_memory_type == GPUMemoryType::shared;
+                    bool is_global_mem = site.gpu_store_memory_type == GPUMemoryType::global;
 
                     // Grab the jacobians that describe the memory dependence
                     if (get_compute_shared_mem_load_features() || get_compute_global_mem_load_features()) {
@@ -1924,6 +1956,7 @@ void LoopNest::compute_features(const FunctionDAG &dag,
                                 num_shared_mem_loads_per_block += n * shared_mem_features.first;
                                 min_num_shared_mem_loads_per_block += n * shared_mem_features.second;
                             } else if (is_global_mem) {
+
                                 compute_global_mem_load_features(
                                     jac.first,
                                     producer_innermost_dim,

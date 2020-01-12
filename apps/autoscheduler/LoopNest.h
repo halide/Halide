@@ -26,6 +26,9 @@ using StageMap = PerfectHashMap<FunctionDAG::Node::Stage, T>;
 
 enum GPU_parallelism { block, thread, serial, simd, parallelized, none };
 
+// inlined => func is inlined so has no memory store location
+enum class GPUMemoryType { global, shared, local, inlined };
+
 bool may_subtile();
 
 int64_t get_shared_memory_limit();
@@ -202,13 +205,19 @@ struct LoopNest {
         const LoopNest *produce = nullptr;   // Its own outermost node
         const LoopNest *innermost = nullptr; // Its innermost node - usually a SIMD loop
         const LoopNest *task = nullptr;      // The parallel for loop it belongs to
+        const LoopNest *thread = nullptr;    // Its containing gpu_thread loop
+        GPUMemoryType gpu_store_memory_type; // global, local, shared?
         bool inlined = false;                // Is the Func inlined?
     };
 
+    GPUMemoryType get_gpu_memory_type(bool in_block, bool in_thread, bool is_inlined=false) const;
+
     // Compute all the sites of interest for each pipeline stage
-    void get_sites(StageMap<Sites> &sites,
+    void get_sites(const Target& target,
+                   StageMap<Sites> &sites,
                    const LoopNest *task = nullptr,
-                   const LoopNest *parent = nullptr) const;
+                   const LoopNest *parent = nullptr,
+                   const LoopNest *current_thread_loop = nullptr) const;
 
     // A helper for the working_set_at_task feature. Most features are
     // computed in the recursive pass 'compute_features' below, but
