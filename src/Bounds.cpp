@@ -954,9 +954,7 @@ private:
 
         if (!const_bound &&
             (op->call_type == Call::PureExtern ||
-             op->call_type == Call::Image ||
-             op->is_intrinsic(Call::quiet_div) ||
-             op->is_intrinsic(Call::quiet_mod))) {
+             op->call_type == Call::Image)) {
 
             // If the args are const we can return the call of those args
             // for pure functions. For other types of functions, the same
