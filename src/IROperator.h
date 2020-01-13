@@ -412,12 +412,27 @@ Expr operator*(int a, Expr b);
 Expr &operator*=(Expr &a, Expr b);
 
 /** Return the ratio of two expressions, doing any necessary type
- * coercion using \ref Internal::match_types. Note that signed integer
- * division in Halide rounds towards minus infinity, unlike C, which
- * rounds towards zero. Division by zero returns zero. For types where
- * overflow is defined behavior, division of the largest negative
- * signed integer by -1 returns the larged negative signed integer for
- * the type (i.e. it wraps). */
+ * coercion using \ref Internal::match_types. Note that integer
+ * division in Halide is not the same as integer division in C-like
+ * languages in two ways.
+ *
+ * First, signed integer division in Halide rounds according to the
+ * sign of the denominator. This means towards minus infinity for
+ * positive denominators, and towards positive infinity for negative
+ * denominators. This is unlike C, which rounds towards zero. This
+ * decision ensures that upsampling expressions like f(x/2, y/2) don't
+ * have funny discontinuities when x and y cross zero.
+ *
+ * Second, division by zero returns zero instead of faulting. For
+ * types where overflow is defined behavior, division of the largest
+ * negative signed integer by -1 returns the larged negative signed
+ * integer for the type (i.e. it wraps). This ensures that a division
+ * operation can never have a side-effect, which is helpful in Halide
+ * because scheduling directives can expand the domain of computation
+ * of a Func, potentially introducing new zero-division.
+ *
+ * Because the mod operator must be defined
+ */
 Expr operator/(Expr a, Expr b);
 
 /** Modify the first expression to be the ratio of two expressions,
@@ -438,11 +453,15 @@ Expr operator/(Expr a, int b);
 Expr operator/(int a, Expr b);
 
 /** Return the first argument reduced modulo the second, doing any
- * necessary type coercion using \ref Internal::match_types. For
- * signed integers, the sign of the result matches the sign of the
- * second argument (unlike in C, where it matches the sign of the
- * first argument). For example, this means that x%2 is always either
- * zero or one, even if x is negative.*/
+ * necessary type coercion using \ref Internal::match_types. There are
+ * two key differences between C-like languages and Halide for the
+ * modulo operation, which complement the way division works.
+ *
+ * First, the result is never negative, so x % 2 is always zero or
+ * one, unlike in C-like languages. x % -2 is equivalent, and is also
+ * always zero or one. Second, mod by zero evaluates to zero (unlike
+ * in C, where it faults). This makes modulo, like division, a
+ * side-effect-free operation. */
 Expr operator%(Expr a, Expr b);
 
 /** Mods an expression by a constant integer. Coerces the type
