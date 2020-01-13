@@ -29,6 +29,9 @@ else
     SAMPLES_DIR_NAME=${SAMPLES_DIR}
 fi
 
+CURRENT_DATE_TIME="`date +%Y-%m-%d-%H-%M-%S`";
+SAMPLES_DIR_NAME=${SAMPLES_DIR_NAME}-${CURRENT_DATE_TIME}
+
 if [ -z $APP ]; then
     APPS="resnet_50_blockwise bgu bilateral_grid local_laplacian nl_means lens_blur camera_pipe stencil_chain harris hist max_filter unsharp interpolate_generator conv_layer cuda_mat_mul iir_blur_generator"
 else
