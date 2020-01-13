@@ -5,6 +5,8 @@ if [[ $# -ne 1 && $# -ne 2 ]]; then
     exit
 fi
 
+trap ctrl_c INT
+
 source $(dirname $0)/../scripts/utils.sh
 
 find_halide HALIDE_ROOT
@@ -38,6 +40,16 @@ for app in $APPS; do
     NUM_APPS=$((NUM_APPS + 1))
 done
 echo "Autotuning on $APPS for $MAX_ITERATIONS iteration(s)"
+
+function ctrl_c() {
+    echo "Trap: CTRL+C received, exiting"
+    pkill -P $$
+
+    for app in $APPS; do
+        ps aux | grep ${app}.generator | awk '{print $2}' | xargs kill
+    done
+    exit
+}
 
 for app in $APPS; do
     APP_DIR="${HALIDE_ROOT}/apps/${app}"
