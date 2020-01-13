@@ -76,10 +76,11 @@ private:
 
 struct LocalMemInfo {
     void add_stride(double stride) {
-        if (stride != 0) {
-            total_stride += std::min(32.0, std::max(1.0, stride));
+        if (stride == 0) {
+            return;
         }
 
+        total_stride += std::min(32.0, std::max(1.0, stride));
         ++num_entries;
     }
 
