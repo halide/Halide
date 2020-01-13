@@ -33,9 +33,6 @@ protected:
                                          std::vector<Type> arg_types,
                                          int flags);
 
-    int is_hvx_v62_or_later() {
-        return (isa_version >= 62);
-    }
     int is_hvx_v65_or_later() {
         return (isa_version >= 65);
     }

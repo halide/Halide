@@ -774,6 +774,16 @@ public:
 }  // namespace
 
 Stmt inject_host_dev_buffer_copies(Stmt s, const Target &t) {
+    // Hexagon code assumes that the host-based wrapper code
+    // handles all copies to/from device, so this isn't necessary;
+    // furthermore, we would actually generate wrong code by proceeding
+    // here, as this implementation assumes we start from the host (which
+    // isn't true for Hexagon), and that it's safe to inject calls to copy
+    // and/or mark things dirty (which also isn't true for Hexagon).
+    if (t.arch == Target::Hexagon) {
+        return s;
+    }
+
     // Handle internal allocations
     s = InjectBufferCopies().mutate(s);
 

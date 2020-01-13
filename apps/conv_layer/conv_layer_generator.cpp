@@ -84,7 +84,11 @@ public:
             relu.dim(3).set_estimate(0, N);
 
         } else if (get_target().has_feature(Target::CUDA)) {
-            // GPU schedule, tuned for a gtx 980
+            // GPU schedule, tuned for a GTX 980. Seems to be good on
+            // an RTX 2060 too (About 90% peak flops on both cards).
+
+            // 1.87 ms on an RTX 2060. According to NVIDIA Nsight
+            // Compute we're at 91.5% utilization of the FMA units
 
             // 2.41 ms on a GTX 980. According to nvprof this is about
             // 88% of peak flops.
@@ -131,6 +135,18 @@ public:
                 .unroll(_2);
 
         } else {
+
+            // 4.06ms on an Intel i9-9960X using 16 threads at 3.0 GHz,
+            // which is 94.5% of peak flops assuming the math below is correct:
+
+            // 16 cores times 2 FMAs per cycle times 3G cycles per
+            // second times 16 vector lanes is a peak throughput of
+            // 1.536 TFlops.
+
+            // This conv does N * CI * CO * W * H * 3 * 3 = 5 * 128 *
+            // 128 * 100 * 80 * 3 * 3 FMAs in 4.06ms is 1.453 TFlops.
+
+            // The ratio of actual to theoretical flops hit is 0.9458
 
             int tile_w = 1;
             int tile_h = 1;
