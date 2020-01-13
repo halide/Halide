@@ -140,20 +140,23 @@ int run(handle_t module_ptr, handle_t function,
     typedef int (*pipeline_argv_t)(void **);
     pipeline_argv_t pipeline = reinterpret_cast<pipeline_argv_t>(function);
 
-    // Construct a list of arguments. This is only part of a
-    // buffer_t. We know that the only field of buffer_t that the
-    // generated code should access is the host field (any other
-    // fields should be passed as their own scalar parameters) so we
-    // can just make this dummy buffer_t type.
-    struct buffer_t {
+    // Construct a list of arguments. This is the way that HexagonOffload
+    // packages arguments for us; despite the name, it really has nothing
+    // to do with the old 'buffer_t' type (or the current 'halide_buffer_t' type).
+    struct hexagon_arg_buffer_t {
         uint64_t dev;
         uint8_t *host;
     };
-    void **args = (void **)__builtin_alloca((input_buffersLen + input_scalarsLen + output_buffersLen) * sizeof(void *));
-    buffer_t *buffers = (buffer_t *)__builtin_alloca((input_buffersLen + output_buffersLen) * sizeof(buffer_t));
+
+    size_t args_size = (input_buffersLen + input_scalarsLen + output_buffersLen) * sizeof(void *);
+    size_t buffers_size = (input_buffersLen + output_buffersLen) * sizeof(hexagon_arg_buffer_t);
+
+    void **args = (void **)__builtin_alloca(args_size);
+    hexagon_arg_buffer_t *buffers = (hexagon_arg_buffer_t *)__builtin_alloca(buffers_size);
+    memset(buffers, 0, buffers_size);
 
     void **next_arg = &args[0];
-    buffer_t *next_buffer_t = &buffers[0];
+    hexagon_arg_buffer_t *next_buffer_t = &buffers[0];
     // Input buffers come first.
     for (int i = 0; i < input_buffersLen; i++, next_arg++, next_buffer_t++) {
         next_buffer_t->host = input_buffersPtrs[i].data;
