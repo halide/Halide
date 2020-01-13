@@ -414,6 +414,8 @@ struct ScheduleFeatures {
             << "    global_mem_store_coalesce_efficiency:  " << global_mem_store_coalesce_efficiency << '\n'
             << "    global_mem_load_coalesce_efficiency:   " << global_mem_load_coalesce_efficiency << '\n'
             << "    working_set_at_thread:                 " << working_set_at_thread << '\n'
+            << "    working_set_local_constant:            " << working_set_local_constant << '\n'
+            << "    working_set_local_dynamic:             " << working_set_local_dynamic << '\n'
             << "    shared_mem_occupancy:                  " << shared_mem_occupancy << '\n'
             << "    shared_mem_block_limit_factor:         " << shared_mem_block_limit_factor << '\n'
             << "    max_warp_occupancy:                    " << max_warp_occupancy << '\n'
@@ -488,6 +490,8 @@ struct ScheduleFeatures {
             && global_mem_store_coalesce_efficiency  == other.global_mem_store_coalesce_efficiency
             && global_mem_load_coalesce_efficiency   == other.global_mem_load_coalesce_efficiency
             && working_set_at_thread                 == other.working_set_at_thread
+            && working_set_local_constant            == other.working_set_local_constant
+            && working_set_local_dynamic             == other.working_set_local_dynamic
             && shared_mem_occupancy                  == other.shared_mem_occupancy
             && shared_mem_block_limit_factor         == other.shared_mem_block_limit_factor
             && max_warp_occupancy                    == other.max_warp_occupancy
