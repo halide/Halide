@@ -430,8 +430,6 @@ Expr &operator*=(Expr &a, Expr b);
  * operation can never have a side-effect, which is helpful in Halide
  * because scheduling directives can expand the domain of computation
  * of a Func, potentially introducing new zero-division.
- *
- * Because the mod operator must be defined
  */
 Expr operator/(Expr a, Expr b);
 
