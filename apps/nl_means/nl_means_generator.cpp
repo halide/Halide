@@ -90,6 +90,12 @@ public:
             // 22 ms on a 2060 RTX
             Var xii, yii;
 
+            // We'll use 32x16 thread blocks throughout. This was
+            // found by just trying lots of sizes, but large thread
+            // blocks are particularly good in the blur_d stage to
+            // avoid doing wasted blurring work at tile boundaries
+            // (especially for large patch sizes).
+
             non_local_means.compute_root()
                 .reorder(c, x, y)
                 .unroll(c)
@@ -110,8 +116,7 @@ public:
             // the thread block size minus 6.
             blur_d.compute_at(non_local_means_sum, s_dom.y)
                 .tile(x, y, xi, yi, 128 - 6, 32 - 6)
-                .split(xi, xi, xii, 32)
-                .split(yi, yi, yii, 16)
+                .tile(xi, yi, xii, yii, 32, 16)
                 .gpu_threads(xii, yii)
                 .gpu_blocks(x, y, dx);
 
