@@ -317,14 +317,12 @@ WEAK int map_arguments(void *user_context, int arg_count,
         if ((arg_flags[i] & flag_mask) != flag_value) continue;
         remote_buffer &mapped_arg = mapped_args[mapped_count++];
         if (arg_flags[i] != 0) {
-            // This is the way that HexagonOffload packages arguments for us;
-            // despite the name, it really has nothing to do with the old 'buffer_t'
-            // type (or the current 'halide_buffer_t' type).
-            struct hexagon_arg_buffer_t {
+            // This is the way that HexagonOffload packages arguments for us.
+            struct hexagon_device_pointer {
                 uint64_t dev;
                 uint8_t *host;
             };
-            const hexagon_arg_buffer_t *b = (hexagon_arg_buffer_t *)args[i];
+            const hexagon_device_pointer *b = (hexagon_device_pointer *)args[i];
             uint64_t device = b->dev;
             uint8_t *host = b->host;
             if (device) {
