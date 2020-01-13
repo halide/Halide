@@ -635,7 +635,7 @@ struct State {
         }
 
         auto t1 = std::chrono::high_resolution_clock::now();
-        feature_root->compute_features(dag, params, target, sites, 1, 1, nullptr, nullptr, *feature_root, nullptr, features, {feature_root.get()});
+        feature_root->compute_features(dag, params, target, sites, 1, 1, nullptr, nullptr, *feature_root, nullptr, nullptr, nullptr, features, {feature_root.get()});
 
         if (use_memoized_features()) {
             memoized[loop_nest_hash] = *features;
@@ -815,6 +815,7 @@ struct State {
         }
 
         StageMap<ScheduleFeatures> features;
+
         compute_featurization(dag, params, target, &features, stats);
 
         ++stats.num_featurizations;

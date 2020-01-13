@@ -306,6 +306,8 @@ public:
         Expr global_mem_load_coalesce_efficiency = schedule_features(n, idx++, w);
 
         Expr working_set_at_thread = schedule_features(n, idx++, w);
+        Expr working_set_local_constant = schedule_features(n, idx++, w);
+        Expr working_set_local_dynamic = schedule_features(n, idx++, w);
 
         Expr shared_mem_occupancy = schedule_features(n, idx++, w);
         Expr shared_mem_block_limit_factor = schedule_features(n, idx++, w);

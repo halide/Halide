@@ -342,6 +342,8 @@ struct ScheduleFeatures {
     double global_mem_load_coalesce_efficiency = 1;
 
     double working_set_at_thread = 0;
+    double working_set_local_constant = 0;
+    double working_set_local_dynamic = 0;
 
     double shared_mem_occupancy = 0;
     double shared_mem_block_limit_factor = 1;

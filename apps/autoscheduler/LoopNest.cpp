@@ -1359,6 +1359,8 @@ void LoopNest::compute_features(const FunctionDAG &dag,
                       const LoopNest *grandparent,
                       const LoopNest &root,
                       int64_t *working_set,
+                      int64_t *working_set_local_constant,
+                      int64_t *working_set_local_dynamic,
                       StageMap<ScheduleFeatures> *features,
                       GPULoopInfo gpu_loop_info) const {
 
@@ -1370,6 +1372,8 @@ void LoopNest::compute_features(const FunctionDAG &dag,
     }
 
     int64_t working_set_here = 0;
+    int64_t working_set_here_local_constant = 0;
+    int64_t working_set_here_local_dynamic = 0;
 
     int64_t loop_instances = 1, parallel_tasks = 1;
     bool in_impure = false;
@@ -1457,7 +1461,7 @@ void LoopNest::compute_features(const FunctionDAG &dag,
     if (is_root()) {
         // TODO: This block of code is repeated below. Refactor
         for (const auto &c : children) {
-            c->compute_features(dag, params, target, sites, subinstances, parallelism, this, parent, root, &working_set_here, features, gpu_loop_info);
+            c->compute_features(dag, params, target, sites, subinstances, parallelism, this, parent, root, &working_set_here, &working_set_here_local_constant, &working_set_here_local_dynamic, features, gpu_loop_info);
         }
 
         for (const auto *node : store_at) {
@@ -1665,11 +1669,31 @@ void LoopNest::compute_features(const FunctionDAG &dag,
 
     // Recurse inwards
     for (const auto &c : children) {
-        c->compute_features(dag, params, target, sites, subinstances, subparallelism, this, parent, root, &working_set_here, features, gpu_loop_info);
+        c->compute_features(dag, params, target, sites, subinstances, subparallelism, this, parent, root, &working_set_here, &working_set_here_local_constant, &working_set_here_local_dynamic, features, gpu_loop_info);
     }
     for (const auto *node : store_at) {
         auto &feat = features->get(&(node->stages[0]));
         working_set_here += feat.bytes_at_production;
+
+        if (gpu_loop_info.at_or_inside_thread()) {
+            const auto &bounds = parent->get_bounds(node);
+
+            auto bytes = node->bytes_per_point;
+            bool is_constant = true;
+            for (int i = 0; i < node->dimensions; i++) {
+                const auto &p = bounds->region_computed(i);
+                bytes *= p.extent();
+                is_constant = is_constant && p.constant_extent();
+            }
+
+            if (node->dimensions > 0) {
+                if (is_constant) {
+                    working_set_here_local_constant += bytes;
+                } else {
+                    working_set_here_local_dynamic += bytes;
+                }
+            }
+        }
     }
     for (const auto *node : store_at) {
         for (const auto &s : node->stages) {
@@ -1694,6 +1718,8 @@ void LoopNest::compute_features(const FunctionDAG &dag,
 
     if (at_production) {
         feat.working_set = working_set_here;
+        feat.working_set_local_constant = working_set_here_local_constant;
+        feat.working_set_local_dynamic = working_set_here_local_dynamic;
     }
 
     if (innermost) {
@@ -1719,6 +1745,8 @@ void LoopNest::compute_features(const FunctionDAG &dag,
     }
 
     *working_set += working_set_here;
+    *working_set_local_constant += working_set_here_local_constant;
+    *working_set_local_dynamic += working_set_here_local_dynamic;
 
     // Analyze all memory dependencies of this stage, looking
     // through any Funcs inlined into it. This is where we track
