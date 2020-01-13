@@ -503,7 +503,6 @@ function(_halide_runtime_target_name HALIDE_TARGET OUTVAR)
         trace_realizations
         d3d12compute
         strict_float
-        legacy_buffer_wrappers
         tsan
         asan
         check_unsafe_promises

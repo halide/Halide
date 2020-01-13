@@ -1,7 +1,7 @@
 /** \file
- * Defines a Buffer type that wraps from buffer_t and adds
+ * Defines a Buffer type that wraps from halide_buffer_t and adds
  * functionality, and methods for more conveniently iterating over the
- * samples in a buffer_t outside of Halide code. */
+ * samples in a halide_buffer_t outside of Halide code. */
 
 #ifndef HALIDE_RUNTIME_BUFFER_H
 #define HALIDE_RUNTIME_BUFFER_H
@@ -126,7 +126,7 @@ struct DeviceRefCount {
  * owned. */
 template<typename T = void, int D = 4>
 class Buffer {
-    /** The underlying buffer_t */
+    /** The underlying halide_buffer_t */
     halide_buffer_t buf = {0};
 
     /** Some in-class storage for shape of the dimensions. */
@@ -432,27 +432,6 @@ private:
         }
     }
 
-    void init_from_legacy_buffer_t(const buffer_t &old_buf, halide_type_t t) {
-        if (!T_is_void) {
-            assert(static_halide_type() == t);
-        }
-        assert(old_buf.elem_size == t.bytes());
-        buf.host = old_buf.host;
-        buf.type = t;
-        int d = 0;
-        while (d < 4 && old_buf.extent[d]) {
-            d++;
-        }
-        make_shape_storage(d);
-        for (int i = 0; i < d; i++) {
-            buf.dim[i].min = old_buf.min[i];
-            buf.dim[i].extent = old_buf.extent[i];
-            buf.dim[i].stride = old_buf.stride[i];
-        }
-        buf.set_host_dirty(old_buf.host_dirty);
-        assert(old_buf.dev == 0 && "Cannot construct a Halide::Runtime::Buffer from a legacy buffer_t with a device allocation. Use halide_upgrade_buffer_t to upgrade it to a halide_buffer_t first.");
-    }
-
 public:
     typedef T ElemType;
 
@@ -614,34 +593,6 @@ public:
                     BufferDeviceOwnership ownership = BufferDeviceOwnership::Unmanaged) {
         assert(T_is_void || buf.type == static_halide_type());
         initialize_from_buffer(buf, ownership);
-    }
-
-    /** Make a Buffer from a legacy buffer_t, with an explicit halide_type. */
-    explicit Buffer(const buffer_t &old_buf, halide_type_t t) {
-        init_from_legacy_buffer_t(old_buf, t);
-    }
-
-    /** Make a Buffer from a legacy buffer_t, which is assumed to match our static
-     * type. (Cannot use with Buffer<void>.) */
-    explicit Buffer(const buffer_t &old_buf) {
-        static_assert(!T_is_void, "Cannot construct a Buffer<void> from a buffer_t without an explicit type.");
-        init_from_legacy_buffer_t(old_buf, static_halide_type());
-    }
-
-    /** Populate the fields of a legacy buffer_t using this
-     * Buffer. Does not copy device metadata. */
-    buffer_t make_legacy_buffer_t() const {
-        buffer_t old_buf = {0};
-        assert(!has_device_allocation() && "Cannot construct a legacy buffer_t from a Halide::Runtime::Buffer with a device allocation. Use halide_downgrade_buffer_t instead.");
-        old_buf.host = buf.host;
-        old_buf.elem_size = buf.type.bytes();
-        assert(dimensions() <= 4 && "Cannot construct a legacy buffer_t from a Halide::Runtime::Buffer with more than four dimensions.");
-        for (int i = 0; i < dimensions(); i++) {
-            old_buf.min[i] = dim(i).min();
-            old_buf.extent[i] = dim(i).extent();
-            old_buf.stride[i] = dim(i).stride();
-        }
-        return old_buf;
     }
 
     /** Give Buffers access to the members of Buffers of different dimensionalities and types. */

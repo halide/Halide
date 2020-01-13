@@ -357,7 +357,6 @@ const std::map<std::string, Target::Feature> feature_name_map = {
     {"trace_pipeline", Target::TracePipeline},
     {"d3d12compute", Target::D3D12Compute},
     {"strict_float", Target::StrictFloat},
-    {"legacy_buffer_wrappers", Target::LegacyBufferWrappers},
     {"tsan", Target::TSAN},
     {"asan", Target::ASAN},
     {"check_unsafe_promises", Target::CheckUnsafePromises},

@@ -18,14 +18,14 @@ using namespace llvm;
 
 namespace {
 
-vector<llvm::Type *> llvm_types(const Closure &closure, llvm::StructType *buffer_t, LLVMContext &context) {
+vector<llvm::Type *> llvm_types(const Closure &closure, llvm::StructType *halide_buffer_t_type, LLVMContext &context) {
     vector<llvm::Type *> res;
     for (const auto &v : closure.vars) {
         res.push_back(llvm_type_of(&context, v.second));
     }
     for (const auto &b : closure.buffers) {
         res.push_back(llvm_type_of(&context, b.second.type)->getPointerTo());
-        res.push_back(buffer_t->getPointerTo());
+        res.push_back(halide_buffer_t_type->getPointerTo());
     }
     return res;
 }
@@ -33,10 +33,10 @@ vector<llvm::Type *> llvm_types(const Closure &closure, llvm::StructType *buffer
 }  // namespace
 
 StructType *build_closure_type(const Closure &closure,
-                               llvm::StructType *buffer_t,
+                               llvm::StructType *halide_buffer_t_type,
                                LLVMContext *context) {
     StructType *struct_t = StructType::create(*context, "closure_t");
-    struct_t->setBody(llvm_types(closure, buffer_t, *context), false);
+    struct_t->setBody(llvm_types(closure, halide_buffer_t_type, *context), false);
     return struct_t;
 }
 
@@ -44,7 +44,7 @@ void pack_closure(llvm::StructType *type,
                   Value *dst,
                   const Closure &closure,
                   const Scope<Value *> &src,
-                  llvm::StructType *buffer_t,
+                  llvm::StructType *halide_buffer_t_type,
                   IRBuilder<> *builder) {
     // type, type of dst should be a pointer to a struct of the type returned by build_type
     int idx = 0;
@@ -68,7 +68,7 @@ void pack_closure(llvm::StructType *type,
             builder->CreateStore(val, ptr);
         }
         {
-            llvm::PointerType *t = buffer_t->getPointerTo();
+            llvm::PointerType *t = halide_buffer_t_type->getPointerTo();
             Value *ptr = builder->CreateConstInBoundsGEP2_32(type, dst, 0, idx++);
             Value *val = nullptr;
             if (src.contains(b.first + ".buffer")) {
@@ -205,9 +205,6 @@ bool function_takes_user_context(const std::string &name) {
         "halide_metal_initialize_kernels",
         "halide_d3d12compute_initialize_kernels",
         "halide_get_gpu_device",
-        "halide_upgrade_buffer_t",
-        "halide_downgrade_buffer_t",
-        "halide_downgrade_buffer_t_device_fields",
         "_halide_buffer_crop",
         "_halide_buffer_retire_crop_after_extern_stage",
         "_halide_buffer_retire_crops_after_extern_stage",

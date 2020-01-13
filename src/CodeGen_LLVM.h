@@ -202,7 +202,7 @@ protected:
     /** Some useful llvm types */
     // @{
     llvm::Type *void_t, *i1_t, *i8_t, *i16_t, *i32_t, *i64_t, *f16_t, *f32_t, *f64_t;
-    llvm::StructType *buffer_t_type,
+    llvm::StructType *halide_buffer_t_type,
         *type_t_type,
         *dimension_t_type,
         *metadata_t_type,

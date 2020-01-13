@@ -1020,11 +1020,11 @@ Pipeline::make_externs_jit_module(const Target &target,
                 // in current trunk Halide, but may be in some side branches that
                 // have not yet landed, e.g. JavaScript). Forcing it to be
                 // the correct type here, just in case.
-                arg_types.push_back(arg.arg.is_buffer() ? type_of<struct buffer_t *>() : arg.arg.type);
+                arg_types.push_back(arg.arg.is_buffer() ? type_of<struct halide_buffer_t *>() : arg.arg.type);
             }
             // Add the outputs of the pipeline
             for (size_t i = 0; i < pipeline_contents.outputs.size(); i++) {
-                arg_types.push_back(type_of<struct buffer_t *>());
+                arg_types.push_back(type_of<struct halide_buffer_t *>());
             }
             ExternSignature signature(Int(32), false, arg_types);
             iter->second = ExternCFunction(address, signature);
@@ -1184,7 +1184,7 @@ void Pipeline::infer_input_bounds(RealizationArg outputs, const ParamMap &param_
 
     struct TrackedBuffer {
         // The query buffer, and a backup to check for changes. We
-        // want wrappers around actual buffer_ts so that we can copy
+        // want wrappers around actual halide_buffer_ts so that we can copy
         // the metadata, not shared pointers to a single buffer, so
         // it's simpler to use the runtime buffer class.
         Runtime::Buffer<> query, orig;

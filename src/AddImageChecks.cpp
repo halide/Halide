@@ -249,7 +249,7 @@ Stmt add_image_checks(Stmt s,
         ReductionDomain rdom;
 
         // An expression returning whether or not we're in inference mode
-        Expr handle = Variable::make(type_of<buffer_t *>(), name + ".buffer",
+        Expr handle = Variable::make(type_of<halide_buffer_t *>(), name + ".buffer",
                                      image, param, rdom);
         Expr inference_mode = Call::make(Bool(), Call::buffer_is_bounds_query,
                                          {handle}, Call::Extern);

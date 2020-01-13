@@ -179,7 +179,7 @@ CodeGen_LLVM::CodeGen_LLVM(Target t)
       void_t(nullptr), i1_t(nullptr), i8_t(nullptr),
       i16_t(nullptr), i32_t(nullptr), i64_t(nullptr),
       f16_t(nullptr), f32_t(nullptr), f64_t(nullptr),
-      buffer_t_type(nullptr),
+      halide_buffer_t_type(nullptr),
       metadata_t_type(nullptr),
       argument_t_type(nullptr),
       scalar_value_t_type(nullptr),
@@ -535,13 +535,13 @@ MangledNames get_mangled_names(const LoweredFunc &f, const Target &target) {
 }  // namespace
 
 llvm::FunctionType *CodeGen_LLVM::signature_to_type(const ExternSignature &signature) {
-    internal_assert(void_t != nullptr && buffer_t_type != nullptr);
+    internal_assert(void_t != nullptr && halide_buffer_t_type != nullptr);
     llvm::Type *ret_type =
         signature.is_void_return() ? void_t : llvm_type_of(upgrade_type_for_argument_passing(signature.ret_type()));
     std::vector<llvm::Type *> llvm_arg_types;
     for (const Type &t : signature.arg_types()) {
         if (t == type_of<struct halide_buffer_t *>()) {
-            llvm_arg_types.push_back(buffer_t_type->getPointerTo());
+            llvm_arg_types.push_back(halide_buffer_t_type->getPointerTo());
         } else {
             llvm_arg_types.push_back(llvm_type_of(upgrade_type_for_argument_passing(t)));
         }
@@ -586,8 +586,8 @@ void CodeGen_LLVM::init_codegen(const std::string &name, bool any_strict_float) 
     module->addModuleFlag(llvm::Module::Warning, "halide_per_instruction_fast_math_flags", any_strict_float);
 
     // Ensure some types we need are defined
-    buffer_t_type = module->getTypeByName("struct.halide_buffer_t");
-    internal_assert(buffer_t_type) << "Did not find halide_buffer_t in initial module";
+    halide_buffer_t_type = module->getTypeByName("struct.halide_buffer_t");
+    internal_assert(halide_buffer_t_type) << "Did not find halide_buffer_t in initial module";
 
     type_t_type = module->getTypeByName("struct.halide_type_t");
     internal_assert(type_t_type) << "Did not find halide_type_t in initial module";
@@ -681,7 +681,7 @@ void CodeGen_LLVM::begin_func(LinkageType linkage, const std::string &name,
     vector<llvm::Type *> arg_types(args.size());
     for (size_t i = 0; i < args.size(); i++) {
         if (args[i].is_buffer()) {
-            arg_types[i] = buffer_t_type->getPointerTo();
+            arg_types[i] = halide_buffer_t_type->getPointerTo();
         } else {
             arg_types[i] = llvm_type_of(upgrade_type_for_argument_passing(args[i].type));
         }
@@ -934,17 +934,17 @@ void CodeGen_LLVM::compile_buffer(const Buffer<> &buf) {
         shape,                                                              // dim
         ConstantPointerNull::get(i8_t->getPointerTo()),                     // padding
     };
-    Constant *buffer_struct = ConstantStruct::get(buffer_t_type, fields);
+    Constant *buffer_struct = ConstantStruct::get(halide_buffer_t_type, fields);
 
     // Embed the halide_buffer_t and make it point to the data array.
-    GlobalVariable *global = new GlobalVariable(*module, buffer_t_type,
+    GlobalVariable *global = new GlobalVariable(*module, halide_buffer_t_type,
                                                 false, GlobalValue::PrivateLinkage,
                                                 0, buf.name() + ".buffer");
     global->setInitializer(buffer_struct);
 
     // Finally, dump it in the symbol table
     Constant *zero[] = {ConstantInt::get(i32_t, 0)};
-    Constant *global_ptr = ConstantExpr::getInBoundsGetElementPtr(buffer_t_type, global, zero);
+    Constant *global_ptr = ConstantExpr::getInBoundsGetElementPtr(halide_buffer_t_type, global, zero);
     sym_push(buf.name() + ".buffer", global_ptr);
 }
 
@@ -1056,9 +1056,9 @@ llvm::Function *CodeGen_LLVM::add_argv_wrapper(llvm::Function *fn,
         // Get the address of the nth argument
         llvm::Value *ptr = builder->CreateConstGEP1_32(arg_array, wrapper_args.size());
         ptr = builder->CreateLoad(ptr);
-        if (i->getType() == buffer_t_type->getPointerTo()) {
-            // Cast the argument to a buffer_t *
-            wrapper_args.push_back(builder->CreatePointerCast(ptr, buffer_t_type->getPointerTo()));
+        if (i->getType() == halide_buffer_t_type->getPointerTo()) {
+            // Cast the argument to a halide_buffer_t *
+            wrapper_args.push_back(builder->CreatePointerCast(ptr, halide_buffer_t_type->getPointerTo()));
         } else {
             // Cast to the appropriate type and load
             ptr = builder->CreatePointerCast(ptr, i->getType()->getPointerTo());
@@ -3034,7 +3034,7 @@ void CodeGen_LLVM::visit(const Call *op) {
         const Call *call = op->args[0].as<Call>();
         if (op->type == type_of<struct halide_buffer_t *>() &&
             call && call->is_intrinsic(Call::size_of_halide_buffer_t)) {
-            value = create_alloca_at_entry(buffer_t_type, 1);
+            value = create_alloca_at_entry(halide_buffer_t_type, 1);
         } else {
             const int64_t *sz = as_const_int(op->args[0]);
             internal_assert(sz);
@@ -3227,7 +3227,7 @@ void CodeGen_LLVM::visit(const Call *op) {
         value = UndefValue::get(llvm_type_of(op->type));
     } else if (op->is_intrinsic(Call::size_of_halide_buffer_t)) {
         llvm::DataLayout d(module.get());
-        value = ConstantInt::get(i32_t, (int)d.getTypeAllocSize(buffer_t_type));
+        value = ConstantInt::get(i32_t, (int)d.getTypeAllocSize(halide_buffer_t_type));
     } else if (op->is_intrinsic(Call::strict_float)) {
         IRBuilder<llvm::ConstantFolder, llvm::IRBuilderDefaultInserter>::FastMathFlagGuard guard(*builder);
         llvm::FastMathFlags safe_flags;
@@ -3647,11 +3647,11 @@ void CodeGen_LLVM::do_parallel_tasks(const vector<ParallelTask> &tasks) {
     }
 
     // Allocate a closure
-    StructType *closure_t = build_closure_type(closure, buffer_t_type, context);
+    StructType *closure_t = build_closure_type(closure, halide_buffer_t_type, context);
     Value *closure_ptr = create_alloca_at_entry(closure_t, 1);
 
     // Fill in the closure
-    pack_closure(closure_t, closure_ptr, closure, symbol_table, buffer_t_type, builder);
+    pack_closure(closure_t, closure_ptr, closure, symbol_table, halide_buffer_t_type, builder);
 
     closure_ptr = builder->CreatePointerCast(closure_ptr, i8_t->getPointerTo());
 
