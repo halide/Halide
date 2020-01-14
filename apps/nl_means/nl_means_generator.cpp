@@ -73,7 +73,16 @@ public:
         Var tx("tx"), ty("ty"), xi("xi"), yi("yi");
 
         if (auto_schedule) {
-            // nothing
+            // Provide estimates on the input image
+            input.set_estimates({{0, 1536}, {0, 2560}, {0, 3}});
+            // Provide estimates on the parameters
+            patch_size.set_estimate(7);
+            search_area.set_estimate(7);
+            sigma.set_estimate(0.12f);
+            // Provide estimates on the output pipeline
+            non_local_means.set_estimate(x, 0, 1536)
+                .set_estimate(y, 0, 2560)
+                .set_estimate(c, 0, 3);
         } else if (get_target().has_gpu_feature()) {
             // 22 ms on a 2060 RTX
             Var xii, yii;
