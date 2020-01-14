@@ -7,6 +7,7 @@
 #include "bgu_gradient_auto_schedule.h"
 #endif
 
+#include "benchmark_util.h"
 #include "halide_benchmark.h"
 #include "halide_image_io.h"
 
