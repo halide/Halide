@@ -48,7 +48,7 @@ int main(int argc, const char **argv) {
         if (c == EOF) break;
         printf("\\x%02x", c);
         // Not necessary, but makes a bit easier to read
-        if (++line_break > 12) {
+        if (++line_break > 16) {
             printf("\"\n\"");
             line_break = 0;
         }
