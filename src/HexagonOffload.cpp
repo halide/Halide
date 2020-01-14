@@ -854,7 +854,10 @@ class InjectHexagonRpc : public IRMutator {
 
         for (const auto &i : c.buffers) {
             // Buffers are passed to the hexagon host runtime as just device
-            // handles (uint64) and host (uint8*) fields.
+            // handles (uint64) and host (uint8*) fields. They correspond
+            // to the 'hexagon_device_pointer' struct declared elsewhere;
+            // we don't use that struct here because it's simple enough that
+            // just using `make_struct`() for it is simpler.
             if (i.first != scalars_buffer_name) {
                 // If this isn't the scalars buffer, assume it has a '.buffer'
                 // description in the IR.
