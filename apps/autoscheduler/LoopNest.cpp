@@ -1676,7 +1676,7 @@ void LoopNest::compute_features(const FunctionDAG &dag,
         working_set_here += feat.bytes_at_production;
 
         if (gpu_loop_info.at_or_inside_thread()) {
-            const auto &bounds = parent->get_bounds(node);
+            const auto &bounds = get_bounds(node);
 
             auto bytes = node->bytes_per_point;
             bool is_constant = true;
