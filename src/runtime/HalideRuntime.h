@@ -947,7 +947,7 @@ extern void halide_memoization_cache_cleanup();
  *
  * The return value should always be zero.
  */
-extern int halide_msan_check_memory_is_initialized(void *user_context, const void *ptr, uint64_t len);
+extern int halide_msan_check_memory_is_initialized(void *user_context, const void *ptr, uint64_t len, const char *name);
 
 /** Verify that the data pointed to by the halide_buffer_t is initialized (but *not* the halide_buffer_t itself),
  * using halide_msan_check_memory_is_initialized() for checking.
@@ -960,7 +960,7 @@ extern int halide_msan_check_memory_is_initialized(void *user_context, const voi
  *
  * The return value should always be zero.
  */
-extern int halide_msan_check_buffer_is_initialized(void *user_context, struct halide_buffer_t *buffer);
+extern int halide_msan_check_buffer_is_initialized(void *user_context, struct halide_buffer_t *buffer, const char *buf_name);
 
 /** Annotate that a given range of memory has been initialized;
  * only used when Target::MSAN is enabled.

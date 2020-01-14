@@ -125,8 +125,13 @@ extern "C" void __msan_unpoison(const void *mem, size_t size) {
     exit(-1);
 }
 
-extern "C" int halide_msan_check_memory_is_initialized(void *user_context, const void *ptr, uint64_t len) {
-    // printf("CHECK-MEM: %d:%p:%08x\n", (int)check_stage, ptr, (unsigned int)len);
+extern "C" long __msan_test_shadow(const void *mem, size_t size) {
+    fprintf(stderr, "Impossible\n");
+    exit(-1);
+}
+
+extern "C" int halide_msan_check_memory_is_initialized(void *user_context, const void *ptr, uint64_t len, const char *name) {
+    // printf("CHECK-MEM: %d:%p:%08x for buf %s\n", (int)check_stage, ptr, (unsigned int)len, name);
     if (check_stage == CheckInputBuffer) {
         if (len != sizeof(halide_buffer_t)) {
             fprintf(stderr, "Failure: Expected sizeof(halide_buffer_t), saw %d\n", (unsigned int)len);
