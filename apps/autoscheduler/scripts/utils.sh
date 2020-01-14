@@ -233,3 +233,24 @@ function average_compile_time_greedy() {
 
     grep "Compile time" ${samples_dir}/*/*/compile_err.txt | awk -F" " '$1 !~ /\/0\/compile_err.txt:Compile$/ {sum += $4}; {count += 1}; END{printf("Average greedy compile time: %fs\n", sum / count)}'
 }
+
+function reset_weights() {
+    local -r halide_root=$1
+    local -r weights=$2
+
+    get_absolute_autoscheduler_bin_dir ${halide_root} autosched_bin
+
+    ${autosched_bin}/retrain_cost_model \
+        --initial_weights=${weights} \
+        --weights_out=${weights} \
+        --randomize_weights=1 \
+        --reset_weights=1 \
+        --epochs=1 \
+        --rates="0.0001" \
+        --num_cores=1 \
+        --best_benchmark="" \
+        --best_schedule="" \
+        --predictions_file="" \
+        --partition_schedules=0 \
+        --verbose=0
+}

@@ -31,6 +31,7 @@ struct Flags {
     string              initial_weights_path;
     string              weights_out_path;
     int                 num_cores = 32;
+    bool                reset_weights = false;
     bool                randomize_weights = false;
     string              best_benchmark_path;
     string              best_schedule_path;
@@ -48,6 +49,7 @@ struct Flags {
         a.add<string>("rates");
         a.add<string>("initial_weights", '\0', kNoDesc, kOptional, "");
         a.add<string>("weights_out");
+        a.add<bool>("reset_weights", '\0', kNoDesc, kOptional, false);
         a.add<bool>("randomize_weights", '\0', kNoDesc, kOptional, false);
         a.add<int>("num_cores");
         a.add<string>("best_benchmark");
@@ -62,6 +64,7 @@ struct Flags {
         rates = parse_floats(a.get<string>("rates"));
         initial_weights_path = a.get<string>("initial_weights");
         weights_out_path = a.get<string>("weights_out");
+        reset_weights = a.exist("reset_weights") && a.get<bool>("reset_weights");
         randomize_weights = a.exist("randomize_weights") && a.get<bool>("randomize_weights");
         best_benchmark_path = a.get<string>("best_benchmark");
         best_schedule_path = a.get<string>("best_schedule");
@@ -69,12 +72,12 @@ struct Flags {
         verbose = a.exist("verbose") && a.get<bool>("verbose");
         partition_schedules = a.exist("partition_schedules") && a.get<bool>("partition_schedules");
 
-        if (epochs <= 0) {
+        if (!reset_weights && epochs <= 0) {
             std::cerr << "--epochs must be specified and > 0.\n";
             std::cerr << a.usage();
             exit(1);
         }
-        if ((!initial_weights_path.empty()) == randomize_weights) {
+        if (!reset_weights && (!initial_weights_path.empty()) == randomize_weights) {
             std::cerr << "You must specify exactly one of --initial_weights or --randomize_weights.\n";
             std::cerr << a.usage();
             exit(1);
@@ -84,7 +87,7 @@ struct Flags {
             std::cerr << a.usage();
             exit(1);
         }
-        if (rates.empty()) {
+        if (!reset_weights && rates.empty()) {
             std::cerr << "--rates cannot be empty.\n";
             std::cerr << a.usage();
             exit(1);
@@ -439,6 +442,20 @@ void print_statistics(const map<int, PipelineSample>& training_set, const map<in
 int main(int argc, char **argv) {
     Flags flags(argc, argv);
 
+    // Iterate through the pipelines
+    vector<std::unique_ptr<CostModel>> tpp;
+    for (int i = 0; i < kModels; i++) {
+        tpp.emplace_back(make_default_cost_model(flags.initial_weights_path, flags.weights_out_path, flags.randomize_weights || flags.reset_weights));
+    }
+
+    if (flags.reset_weights) {
+        std::cout << "Saving new random weights...\n";
+        for (int i = 0; i < kModels; i++) {
+            tpp[i]->save_weights();
+        }
+        return 0;
+    }
+
     map<int, PipelineSample> samples;
     map<int, PipelineSample> validation_set;
     map<int, Pipeline> pipelines;
@@ -449,12 +466,6 @@ int main(int argc, char **argv) {
     if (predict_only) {
         std::cout << "Predicting only (no training)\n";
         flags.epochs = 1;
-    }
-
-    // Iterate through the pipelines
-    vector<std::unique_ptr<CostModel>> tpp;
-    for (int i = 0; i < kModels; i++) {
-        tpp.emplace_back(make_default_cost_model(flags.initial_weights_path, flags.weights_out_path, flags.randomize_weights));
     }
 
     std::cout.setf(std::ios::fixed, std::ios::floatfield);
