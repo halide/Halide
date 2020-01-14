@@ -64,11 +64,11 @@ public:
         {
             const int kWidth = 1536;
             const int kHeight = 2560;
-            input.dim(0).set_estimate(0, kWidth);
-            input.dim(1).set_estimate(0, kHeight);
+            input.dim(0).set_estimate(-32, kWidth + 64);
+            input.dim(1).set_estimate(-32, kHeight + 64);
             input.dim(2).set_estimate(0, 3);
-            output.dim(0).set_estimate(3, kWidth - 6);
-            output.dim(1).set_estimate(3, kHeight - 6);
+            output.dim(0).set_estimate(0, kWidth);
+            output.dim(1).set_estimate(0, kHeight);
         }
 
         // Schedule

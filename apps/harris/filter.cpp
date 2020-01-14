@@ -1,9 +1,9 @@
+#include <cassert>
 #include <cstdio>
 #include <cstdlib>
-#include <cassert>
 
-#include "HalideRuntime.h"
 #include "HalideBuffer.h"
+#include "HalideRuntime.h"
 
 #include "harris.h"
 #ifndef NO_AUTO_SCHEDULE
@@ -23,15 +23,28 @@ int main(int argc, char **argv) {
     }
 
     Halide::Runtime::Buffer<float> input = load_and_convert_image(argv[1]);
-    // The harris app doesn't use a boundary condition
-    Halide::Runtime::Buffer<float> output(input.width() - 6, input.height() - 6);
 
-    multi_way_bench({
-        {"Manual", [&]() { harris(input, output); output.device_sync(); }},
-    #ifndef NO_AUTO_SCHEDULE
-        {"Auto-scheduled", [&]() { harris_auto_schedule(input, output); output.device_sync(); }},
-        {"Gradient auto-scheduled", [&]() { harris_gradient_auto_schedule(input, output); output.device_sync(); }}
-    #endif
+    // The harris app doesn't use a boundary condition, so we just pad out the input instead.
+    Halide::Runtime::Buffer<float> padded_input(input.width() + 64, input.height() + 64, 3);
+    padded_input.set_min(-32, -32, 0);
+    padded_input.copy_from(input);
+
+    Halide::Runtime::Buffer<float> output(input.width(), input.height());
+
+    multi_way_bench({{"Manual", [&]() {
+                          harris(padded_input, output);
+                          output.device_sync();
+                      }},
+#ifndef NO_AUTO_SCHEDULE
+                     {"Auto-scheduled", [&]() {
+                          harris_auto_schedule(padded_input, output);
+                          output.device_sync();
+                      }},
+                     {"Gradient auto-scheduled", [&]() {
+                          harris_gradient_auto_schedule(padded_input, output);
+                          output.device_sync();
+                      }}
+#endif
     });
 
     convert_and_save_image(output, argv[2]);
