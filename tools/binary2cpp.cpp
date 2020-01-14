@@ -24,7 +24,7 @@ int main(int argc, const char **argv) {
             printf("#ifndef _H_%s_binary2cpp\n", target);
             printf("#define _H_%s_binary2cpp\n", target);
             printf("extern \"C\" {\n");
-            printf("extern unsigned char %s[];\n", target);
+            printf("extern const char %s[];\n", target);
             printf("extern int %s_length;\n", target);
             printf("}  // extern \"C\"\n");
             printf("#endif  // _H_%s_binary2cpp\n", target);
@@ -40,21 +40,21 @@ int main(int argc, const char **argv) {
     setmode(fileno(stdin), O_BINARY);  // On windows bad things will happen unless we read stdin in binary mode
 #endif
     printf("extern \"C\" {\n");
-    printf("unsigned char %s[] = {\n", target);
+    printf("extern const char %s[] = \n\"", target);
     int count = 0;
     int line_break = 0;
     while (1) {
         int c = getchar();
         if (c == EOF) break;
-        printf("0x%02x, ", c);
+        printf("\\x%02x", c);
         // Not necessary, but makes a bit easier to read
         if (++line_break > 12) {
-            printf("\n");
+            printf("\"\n\"");
             line_break = 0;
         }
         count++;
     }
-    printf("0};\n");
+    printf("\";\n");
     printf("int %s_length = %d;\n", target, count);
     printf("}  // extern \"C\"\n");
     return 0;
