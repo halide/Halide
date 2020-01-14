@@ -410,6 +410,16 @@ void check_algebra() {
     check(1 - (-y + 1) / 2 - 1, y / 2);
     check(1 - (0 - y) / 5, (y + 9) / 5);
 
+    // Div/mod can't make things larger
+    check(5 / x < 6, const_true());
+    check(5 / x > -6, const_true());
+    check(5 / x < 5, 5 / x < 5);
+    check(5 / x > -5, -5 < 5 / x);
+    check(5 % x < 6, const_true());
+    check(5 % x < 5, 5 % x < 5);
+    check(5 % x >= 0, const_true());
+    check(5 % x > 0, 0 < 5 % x);
+
     // Test case with most negative 32-bit number, as constant to check that it is not negated.
     check(((x * (int32_t)0x80000000) + (z * (int32_t)0x80000000 + y)),
           (((x + z) * (int32_t)0x80000000) + y));
@@ -1150,10 +1160,10 @@ void check_boolean() {
     check(x >= 20 && x <= 20, 20 <= x && x <= 20);
 
     check(min(x, 20) < min(x, 19), const_false());
-    check(min(x, 23) < min(x, 18) + 3, const_false());
+    check(min(x, 23) < min(x, 18) - 3, const_false());
 
     check(max(x, 19) > max(x, 20), const_false());
-    check(max(x, 19) > max(x, 18) + 3, const_false());
+    check(max(x, 18) > max(x, 23) + 3, const_false());
 
     // check for substitution patterns
     check((b1 == t) && (b1 && b2), b1 && b2);

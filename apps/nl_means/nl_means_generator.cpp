@@ -73,52 +73,75 @@ public:
         Var tx("tx"), ty("ty"), xi("xi"), yi("yi");
 
         if (auto_schedule) {
-            // Provide estimates on the input image
-            input.set_estimates({{0, 1536}, {0, 2560}, {0, 3}});
-            // Provide estimates on the parameters
-            patch_size.set_estimate(7);
-            search_area.set_estimate(7);
-            sigma.set_estimate(0.12f);
-            // Provide estimates on the output pipeline
-            non_local_means.set_estimate(x, 0, 1536)
-                .set_estimate(y, 0, 2560)
-                .set_estimate(c, 0, 3);
-        } /*else if (get_target().has_gpu_feature()) {
-            // TODO: the GPU schedule is currently using to much shared memory
-            // because the simplifier can't simplify the expr (it can't cancel
-            // the 'x' term in min(((a + (x + b)) + c) - min(x + d + e))) so
-            // it ends up using the entire image size as the shared memory size.
+            // nothing
+        } else if (get_target().has_gpu_feature()) {
+            // 22 ms on a 2060 RTX
+            Var xii, yii;
+
+            // We'll use 32x16 thread blocks throughout. This was
+            // found by just trying lots of sizes, but large thread
+            // blocks are particularly good in the blur_d stage to
+            // avoid doing wasted blurring work at tile boundaries
+            // (especially for large patch sizes).
+
             non_local_means.compute_root()
-                .gpu_tile(x, y, xi, yi, 32, 8);
+                .reorder(c, x, y)
+                .unroll(c)
+                .gpu_tile(x, y, xi, yi, 32, 16);
+
             non_local_means_sum.compute_root()
-                .reorder(c, x, y).unroll(c)
-                .gpu_tile(x, y, xi, yi, 32, 8)
+                .gpu_tile(x, y, xi, yi, 32, 16)
                 .update()
-                .reorder(x, y, c, s_dom.x, s_dom.y)
-                .gpu_threads(x, y);
-        }*/
-        else {
+                .reorder(c, s_dom.x, x, y, s_dom.y)
+                .tile(x, y, xi, yi, 32, 16)
+                .gpu_blocks(x, y)
+                .gpu_threads(xi, yi)
+                .unroll(c);
+
+            // The patch size we're benchmarking for is 7, which
+            // implies an expansion of 6 pixels for footprint of the
+            // blur, so we'll size tiles of blur_d to be a multiple of
+            // the thread block size minus 6.
+            blur_d.compute_at(non_local_means_sum, s_dom.y)
+                .tile(x, y, xi, yi, 128 - 6, 32 - 6)
+                .tile(xi, yi, xii, yii, 32, 16)
+                .gpu_threads(xii, yii)
+                .gpu_blocks(x, y, dx);
+
+            blur_d_y.compute_at(blur_d, x)
+                .tile(x, y, xi, yi, 32, 16)
+                .gpu_threads(xi, yi);
+
+            d.compute_at(blur_d, x)
+                .tile(x, y, xi, yi, 32, 16)
+                .gpu_threads(xi, yi);
+
+        } else {
+            // 64 ms on an Intel i9-9960X using 32 threads at 3.0 GHz
+
+            const int vec = natural_vector_size<float>();
+
             non_local_means.compute_root()
                 .reorder(c, x, y)
                 .tile(x, y, tx, ty, x, y, 16, 8)
                 .parallel(ty)
-                .vectorize(x, 8);
+                .vectorize(x, vec);
             blur_d_y.compute_at(non_local_means, tx)
                 .reorder(y, x)
-                .vectorize(x, 8);
+                .vectorize(x, vec);
             d.compute_at(non_local_means, tx)
-                .vectorize(x, 8);
+                .vectorize(x, vec);
             non_local_means_sum.compute_at(non_local_means, x)
                 .reorder(c, x, y)
                 .bound(c, 0, 4)
                 .unroll(c)
-                .vectorize(x, 8);
+                .vectorize(x, vec);
             non_local_means_sum.update(0)
                 .reorder(c, x, y, s_dom.x, s_dom.y)
                 .unroll(c)
-                .vectorize(x, 8);
+                .vectorize(x, vec);
             blur_d.compute_at(non_local_means_sum, x)
-                .vectorize(x, 8);
+                .vectorize(x, vec);
         }
     }
 };

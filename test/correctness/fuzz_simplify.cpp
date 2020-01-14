@@ -97,20 +97,6 @@ Expr make_absd(Expr a, Expr b) {
     return cast(a.type(), absd(a, b));
 }
 
-Expr make_div(Expr a, Expr b) {
-    // Avoid UB
-    Expr z = make_zero(b.type());
-    Expr o = make_one(b.type());
-    return a / select(b == z, o, b);
-}
-
-Expr make_mod(Expr a, Expr b) {
-    // Avoid UB
-    Expr z = make_zero(b.type());
-    Expr o = make_one(b.type());
-    return a % select(b == z, o, b);
-}
-
 Expr random_expr(Type T, int depth, bool overflow_undef) {
     typedef Expr (*make_bin_op_fn)(Expr, Expr);
     static make_bin_op_fn make_bin_op[] = {
@@ -119,9 +105,10 @@ Expr random_expr(Type T, int depth, bool overflow_undef) {
         Mul::make,
         Min::make,
         Max::make,
-        make_div,
-        make_mod,
-        make_absd};
+        Div::make,
+        Mod::make,
+        make_absd,
+    };
 
     static make_bin_op_fn make_bool_bin_op[] = {
         And::make,
