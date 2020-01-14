@@ -16,7 +16,7 @@ WEAK int halide_msan_annotate_memory_is_initialized(void *user_context, const vo
 WEAK int halide_msan_check_memory_is_initialized(void *user_context, const void *ptr, uint64_t len, const char *name) {
     long offset = __msan_test_shadow(ptr, (size_t)len);
     if (offset >= 0) {
-        print(user_context) << "MSAN failure detected for " << name << " @ " << ptr << " + " << (int)offset;
+        print(user_context) << "MSAN failure detected for " << name << " @ " << ptr << " + " << (int)offset << "\n";
         // This is slightly redundant but gives better output.
         __msan_check_mem_is_initialized(ptr, (size_t)len);
     }
