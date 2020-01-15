@@ -814,6 +814,10 @@ struct State {
             return false;
         }
 
+        if (exceeds_serial_extents_limit(target)) {
+            return false;
+        }
+
         StageMap<ScheduleFeatures> features;
 
         compute_featurization(dag, params, target, &features, stats);

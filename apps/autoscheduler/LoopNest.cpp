@@ -647,13 +647,13 @@ void LoopNest::get_sites(const Target& target,
 }
 
 bool LoopNest::exceeds_serial_extents_limit(bool in_threads_loop) const {
-    if (gpu_label == serial && in_threads_loop) {
+    if (gpu_label == serial && in_threads_loop && stage->index == 0) {
         int64_t serial_loop_extents = 1;
         for (const auto s : size) {
             serial_loop_extents *= s;
         }
 
-        return serial_loop_extents > 16;
+        return serial_loop_extents > 64;
     }
 
     for (const auto& c : children) {
