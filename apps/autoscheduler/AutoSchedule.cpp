@@ -909,6 +909,79 @@ struct State {
         return s;
     }
 
+    // Sort / filter the options
+    struct ParallelTileOption {
+        vector<int64_t> outer_tiling;
+        vector<int64_t> inner_tiling;
+        double idle_core_wastage;
+        bool entire;
+        bool operator<(const ParallelTileOption &other) const {
+            return idle_core_wastage < other.idle_core_wastage;
+        }
+
+        // Ensure we don't accidentally copy this type
+        ParallelTileOption() = default;
+        ParallelTileOption(ParallelTileOption &&) = default;
+        ParallelTileOption &operator=(ParallelTileOption &&) = default;
+        ParallelTileOption(const ParallelTileOption &) = delete;
+        ParallelTileOption &operator=(const ParallelTileOption &) = delete;
+    };
+
+    vector<ParallelTileOption> filter_parallel_tile_options(const MachineParams &params, const Target &target, const FunctionDAG::Node *node, vector<vector<int64_t>>& inner_tilings, const vector<int64_t>& pure_size) const {
+        vector<ParallelTileOption> options;
+        for (size_t i = 0; i < inner_tilings.size(); i++) {
+            auto &t = inner_tilings[i];
+            ParallelTileOption o;
+            o.inner_tiling = t;
+            o.entire = (i == inner_tilings.size() - 1);
+
+            for (size_t j = 0; j < pure_size.size(); j++) {
+                t[j] = (pure_size[j] + t[j] - 1) / t[j];
+            }
+
+            t.swap(o.outer_tiling);
+
+            // Compute max idle cores across the other stages of the Func
+            int64_t min_total = 0, max_total = 0;
+            o.idle_core_wastage = 1;
+            for (const auto &c : root->children) {
+                if (c->node == node) {
+                    int64_t total = 1;
+                    for (auto &l : c->stage->loop) {
+                        if (!l.rvar) {
+                            total *= o.outer_tiling[l.pure_dim];
+                        }
+                    }
+                    if (min_total != 0) {
+                        min_total = std::min(min_total, total);
+                    } else {
+                        min_total = total;
+                    }
+                    max_total = std::max(max_total, total);
+                    const double tasks_per_core = ((double)total) / params.parallelism;
+                    o.idle_core_wastage = std::max(o.idle_core_wastage,
+                                                   std::ceil(tasks_per_core) /
+                                                       tasks_per_core);
+                }
+            }
+
+            // Filter out the less useful options
+            bool ok =
+                ((o.entire || min_total >= params.parallelism * 2) &&
+                 (max_total <= params.parallelism * 16 || target.has_gpu_feature()));
+
+            if (!ok) {
+                continue;
+            }
+
+            options.emplace_back(std::move(o));
+        }
+
+        std::sort(options.begin(), options.end());
+
+        return options;
+    }
+
     // Generate the successor states to this state
     void generate_children(const FunctionDAG &dag,
                            const MachineParams &params,
@@ -1070,33 +1143,6 @@ struct State {
             } else {
                 internal_assert(pure_size);
 
-                // Generate some candidate parallel task shapes.
-                auto tilings = generate_tilings(*pure_size, node->dimensions - 1, 2, true, target);
-
-                // We could also just parallelize the outer loop entirely
-                std::vector<int64_t> ones;
-                ones.resize(pure_size->size(), 1);
-                tilings.emplace_back(std::move(ones));
-
-                // Sort / filter the options
-                struct Option {
-                    vector<int64_t> tiling;
-                    double idle_core_wastage;
-                    bool entire;
-                    bool operator<(const Option &other) const {
-                        return idle_core_wastage < other.idle_core_wastage;
-                    }
-
-                    // Ensure we don't accidentally copy this type
-                    Option() = default;
-                    Option(Option &&) = default;
-                    Option &operator=(Option &&) = default;
-                    Option(const Option &) = delete;
-                    Option &operator=(const Option &) = delete;
-                };
-
-                internal_assert(pure_size);
-
                 if (target.has_gpu_feature()) {
                     // When GPU scheduling we approach tiling differently and in two steps.
                     // step 1) convert (none, SIMD) loops to (parallel, serial, SIMD) loops with specialized serial sizes
@@ -1154,13 +1200,21 @@ struct State {
                             return;
                         }
 
-                        for (const auto &block_t : block_tilings) {
+                        auto options = filter_parallel_tile_options(params, target, node, block_tilings, stage_sizes[0]);
+
+                        for (const auto &o : options) {
+                            if (num_children >= 1 && o.idle_core_wastage > 1.2) {
+                                // We have considered several options, and the
+                                // remaining ones leave lots of cores idle.
+                                break;
+                            }
+
                             auto child = make_child();
                             LoopNest *new_root = new LoopNest;
                             new_root->copy_from(*parallel_root); // copies parallel_root's info and intrusive pointers for parallel_root's children
                             for (auto &c : new_root->children) {
                                 if (c->node == node) {
-                                    c = c->parallelize_in_tiles(params, block_t, new_root, target, true, false);
+                                    c = c->parallelize_in_tiles(params, o.inner_tiling, new_root, target, true, false);
                                 }
                             }
                             child->root = new_root;
@@ -1188,12 +1242,12 @@ struct State {
                                     // create the child if it will produce a
                                     // different state
                                     int i = 0;
-                                    for (auto b : block_t) {
+                                    for (auto b : o.inner_tiling) {
                                         if (c->size[i++] % b != 0) {
                                             create_child = true;
                                         }
                                     }
-                                    c = c->parallelize_in_tiles(params, block_t, new_adjusted_root, target, true, true);
+                                    c = c->parallelize_in_tiles(params, o.inner_tiling, new_adjusted_root, target, true, true);
                                 }
                             }
                             adjusted_child->root = new_adjusted_root;
@@ -1213,52 +1267,7 @@ struct State {
                     ones.resize(pure_size->size(), 1);
                     tilings.emplace_back(std::move(ones));
 
-                    vector<Option> options;
-                    for (size_t i = 0; i < tilings.size(); i++) {
-                        auto &t = tilings[i];
-                        Option o;
-                        o.entire = (i == tilings.size() - 1);
-
-                        for (size_t j = 0; j < pure_size->size(); j++) {
-                            t[j] = ((*pure_size)[j] + t[j] - 1) / t[j];
-                        }
-
-                        t.swap(o.tiling);
-
-                        // Compute max idle cores across the other stages of the Func
-                        int64_t min_total = 0, max_total = 0;
-                        o.idle_core_wastage = 1;
-                        for (const auto &c : root->children) {
-                            if (c->node == node) {
-                                int64_t total = 1;
-                                for (auto &l : c->stage->loop) {
-                                    if (!l.rvar) {
-                                        total *= o.tiling[l.pure_dim];
-                                    }
-                                }
-                                if (min_total != 0) {
-                                    min_total = std::min(min_total, total);
-                                } else {
-                                    min_total = total;
-                                }
-                                max_total = std::max(max_total, total);
-                                const double tasks_per_core = ((double)total) / params.parallelism;
-                                o.idle_core_wastage = std::max(o.idle_core_wastage,
-                                                               std::ceil(tasks_per_core) /
-                                                                   tasks_per_core);
-                            }
-                        }
-
-                        // Filter out the less useful options
-                        bool ok =
-                            ((o.entire || min_total >= params.parallelism) &&
-                             (max_total <= params.parallelism * 16 || target.has_gpu_feature()));
-
-                        if (!ok) continue;
-
-                        options.emplace_back(std::move(o));
-                    }
-                    std::sort(options.begin(), options.end());
+                    vector<ParallelTileOption> options = filter_parallel_tile_options(params, target, node, tilings, *pure_size);
 
                     // If none of the options were acceptable, don't
                     // parallelize. This tends to happen for things like
@@ -1284,7 +1293,7 @@ struct State {
                         for (auto &c : new_root->children) {
                             if (c->node == node) {
                                 if (may_subtile()) {
-                                    c = c->parallelize_in_tiles(params, o.tiling, new_root, target, false, true);
+                                    c = c->parallelize_in_tiles(params, o.outer_tiling, new_root, target, false, true);
                                 } else {
                                     // We're emulating the old
                                     // autoscheduler for an ablation, so
