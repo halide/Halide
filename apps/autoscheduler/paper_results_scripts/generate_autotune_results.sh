@@ -79,6 +79,5 @@ for app in $APPS; do
 
     predict_all ${HALIDE_ROOT} ${SAMPLES_DIR} ${WEIGHTS_FILE} ${PREDICTIONS_FILE}
     extract_best_times ${HALIDE_ROOT} ${SAMPLES_DIR} ${BEST_TIMES_FILE}
-    average_compile_time_beam_search ${SAMPLES_DIR} >> ${OUTPUT_FILE}
-    average_compile_time_greedy ${SAMPLES_DIR} >> ${OUTPUT_FILE}
+    bash $(dirname $0)/../scripts/average_times.sh ${SAMPLES_DIR} >> ${OUTPUT_FILE}
 done
