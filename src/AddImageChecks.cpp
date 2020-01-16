@@ -250,7 +250,7 @@ Stmt add_image_checks(Stmt s,
 
         // An expression returning whether or not we're in inference mode
         string buf_name = name + ".buffer";
-        Expr handle = Variable::make(type_of<buffer_t *>(), buf_name,
+        Expr handle = Variable::make(type_of<halide_buffer_t *>(), buf_name,
                                      image, param, rdom);
         Expr inference_mode = Call::make(Bool(), Call::buffer_is_bounds_query,
                                          {handle}, Call::Extern);

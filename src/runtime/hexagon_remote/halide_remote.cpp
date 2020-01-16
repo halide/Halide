@@ -378,21 +378,17 @@ int halide_hexagon_remote_run_v2(handle_t module_ptr, handle_t function,
     // Get a pointer to the argv version of the pipeline.
     pipeline_argv_t pipeline = reinterpret_cast<pipeline_argv_t>(function);
 
-    // Construct a list of arguments. This is only part of a
-    // buffer_t. We know that the only field of buffer_t that the
-    // generated code should access is the host field (any other
-    // fields should be passed as their own scalar parameters) so we
-    // can just make this dummy buffer_t type.
-    struct buffer_t {
+    // Construct a list of arguments.
+    struct hexagon_device_pointer {
         uint64_t dev;
         uint8_t *host;
     };
 
     void **args = NULL;
-    buffer_t *buffers = NULL;
+    hexagon_device_pointer *buffers = NULL;
 
     size_t args_size = (input_buffersLen + scalarsLen + output_buffersLen) * sizeof(void *);
-    size_t buffers_size = (input_buffersLen + output_buffersLen) * sizeof(buffer_t);
+    size_t buffers_size = (input_buffersLen + output_buffersLen) * sizeof(hexagon_device_pointer);
 
     // Threshold to allocate on heap vs stack.
     const size_t heap_allocation_threshold = 1024;
@@ -400,14 +396,15 @@ int halide_hexagon_remote_run_v2(handle_t module_ptr, handle_t function,
 
     if (allocated_on_heap) {
         args = (void **)malloc(args_size);
-        buffers = (buffer_t *)malloc(buffers_size);
+        buffers = (hexagon_device_pointer *)malloc(buffers_size);
     } else {
         args = (void **)__builtin_alloca(args_size);
-        buffers = (buffer_t *)__builtin_alloca(buffers_size);
+        buffers = (hexagon_device_pointer *)__builtin_alloca(buffers_size);
     }
+    memset(buffers, 0, buffers_size);
 
     void **next_arg = &args[0];
-    buffer_t *next_buffer_t = &buffers[0];
+    hexagon_device_pointer *next_buffer_t = &buffers[0];
     // Input buffers come first.
     for (int i = 0; i < input_buffersLen; i++, next_arg++, next_buffer_t++) {
         next_buffer_t->host = input_buffersPtrs[i].data;

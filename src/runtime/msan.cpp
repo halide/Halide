@@ -61,8 +61,8 @@ WEAK void check_helper(void *uc, const device_copy &c, int d, int64_t off, const
 }  // namespace Runtime
 }  // namespace Halide
 
-// Default implementation marks the data pointed to by the buffer_t as initialized
-// (but *not* the buffer_t itself); it takes pains to only mark the active memory ranges
+// Default implementation marks the data pointed to by the halide_buffer_t as initialized
+// (but *not* the halide_buffer_t itself); it takes pains to only mark the active memory ranges
 // (skipping padding), and sorting into ranges to always mark the smallest number of
 // ranges, in monotonically increasing memory order.
 WEAK int halide_msan_annotate_buffer_is_initialized(void *user_context, halide_buffer_t *b) {

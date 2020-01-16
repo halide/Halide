@@ -503,7 +503,7 @@ Stmt build_extern_produce(const map<string, Function> &env, Function f, const Ta
             Parameter p = arg.image_param;
             Expr buf = Variable::make(type_of<struct halide_buffer_t *>(), p.name() + ".buffer", p);
             extern_call_args.push_back(buf);
-            // Do not annotate ImageParams: both the buffer_t itself,
+            // Do not annotate ImageParams: both the halide_buffer_t itself,
             // and the contents it points to, should be filled by the caller;
             // if we mark it here, we might mask a missed initialization.
             // buffers_to_annotate.push_back(buf);
@@ -651,7 +651,7 @@ Stmt build_extern_produce(const map<string, Function> &env, Function f, const Ta
 
         // Make a struct with the buffers and their uncropped parents
         for (const auto &p : cropped_buffers) {
-            // The cropped buffer_t
+            // The cropped halide_buffer_t
             cleanup_args.push_back(p.first);
             // Its parent
             cleanup_args.push_back(p.second);

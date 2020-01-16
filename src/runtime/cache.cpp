@@ -124,7 +124,7 @@ WEAK bool CacheEntry::init(const uint8_t *cache_key, size_t cache_key_size,
     // Allocate all the necessary space (or die)
     size_t storage_bytes = 0;
 
-    // First storage for the tuple buffer_t's
+    // First storage for the tuple halide_buffer_t's
     storage_bytes += sizeof(halide_buffer_t) * tuple_count;
 
     // Then storage for the computed shape, and the allocated shape for

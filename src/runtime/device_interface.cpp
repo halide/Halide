@@ -264,7 +264,7 @@ WEAK void halide_device_free_as_destructor(void *user_context, void *obj) {
     halide_device_free(user_context, buf);
 }
 
-/** Allocate host and device memory to back a buffer_t. Ideally this
+/** Allocate host and device memory to back a halide_buffer_t. Ideally this
  * will be a zero copy setup, but the default implementation may
  * separately allocate the host memory using halide_malloc and the
  * device memory using halide_device_malloc. */
@@ -297,7 +297,7 @@ WEAK int halide_device_and_host_malloc(void *user_context, struct halide_buffer_
     return 0;
 }
 
-/** Free host and device memory associated with a buffer_t. */
+/** Free host and device memory associated with a halide_buffer_t. */
 WEAK int halide_device_and_host_free(void *user_context, struct halide_buffer_t *buf) {
     int result = debug_log_and_validate_buf(user_context, buf, "halide_device_and_host_free");
     if (result != 0) {
@@ -429,7 +429,7 @@ WEAK int halide_default_device_detach_native(void *user_context, struct halide_b
     return 0;
 }
 
-/** Free any host and device memory associated with a buffer_t and ignore any
+/** Free any host and device memory associated with a halide_buffer_t and ignore any
  * error. Used when freeing as a destructor on an error. */
 WEAK void halide_device_and_host_free_as_destructor(void *user_context, void *obj) {
     struct halide_buffer_t *buf = (struct halide_buffer_t *)obj;
