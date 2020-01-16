@@ -14,9 +14,9 @@
 using namespace Halide::Tools;
 
 void error_handler(void *, const char *msg) {
-    printf("%s\n", msg);
+    fprintf(stderr, "%s\n", msg);
     if (strstr(msg, "CUDA_ERROR_OUT_OF_MEMORY")) {
-        printf("This GPU doesn't have sufficient memory to run this app. Exiting.\n");
+        fprintf(stderr, "This GPU doesn't have sufficient memory to run this app. Exiting.\n");
         exit(0);
     } else {
         exit(1);
