@@ -1998,6 +1998,16 @@ ifneq ($(OS), Windows_NT)
 endif
 
 TEST_APPS_DEPS=$(TEST_APPS:%=%_test_app)
+BUILD_APPS_DEPS=$(TEST_APPS:%=%_build_app)
+
+$(BUILD_APPS_DEPS): distrib build_python_bindings
+	@echo Building app $(@:%_build_app=%) for ${HL_TARGET}...
+	@$(MAKE) -C $(ROOT_DIR)/apps/$(@:%_build_app=%) build \
+		HALIDE_DISTRIB_PATH=$(CURDIR)/$(DISTRIB_DIR) \
+		HALIDE_PYTHON_BINDINGS_PATH=$(CURDIR)/$(BIN_DIR)/python3_bindings \
+		BIN_DIR=$(CURDIR)/$(BIN_DIR)/apps/$(@:%_build_app=%)/bin \
+		HL_TARGET=$(HL_TARGET) \
+		|| exit 1 ; \
 
 $(TEST_APPS_DEPS): distrib build_python_bindings
 	@echo Testing app $(@:%_test_app=%) for ${HL_TARGET}...
@@ -2008,8 +2018,9 @@ $(TEST_APPS_DEPS): distrib build_python_bindings
 		HL_TARGET=$(HL_TARGET) \
 		|| exit 1 ; \
 
-.PHONY: test_apps $(TEST_APPS_DEPS)
-test_apps: $(TEST_APPS_DEPS)
+.PHONY: test_apps $(BUILD_APPS_DEPS) 
+test_apps: $(BUILD_APPS_DEPS)
+	$(MAKE) -f $(THIS_MAKEFILE) -j1 $(TEST_APPS_DEPS)
 
 BENCHMARK_APPS=\
 	bilateral_grid \
@@ -2039,7 +2050,7 @@ benchmark_apps: $(BENCHMARK_APPS)
 	@for APP in $(BENCHMARK_APPS); do \
 		echo ;\
 		echo Benchmarking $${APP} for ${HL_TARGET}... ; \
-		make -C $(ROOT_DIR)/apps/$${APP} \
+		make -C $(ROOT_DIR)/apps/$${APP} test \
 			$${APP}.benchmark${SUFFIX} \
 			HALIDE_DISTRIB_PATH=$(CURDIR)/$(DISTRIB_DIR) \
 			HALIDE_PYTHON_BINDINGS_PATH=$(CURDIR)/$(BIN_DIR)/python3_bindings \

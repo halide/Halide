@@ -68,15 +68,16 @@ BENCHMARKS = \
 	$(BIN)/eigen_benchmarks \
 	$(BIN)/halide_benchmarks
 
-.PHONY: clean run_benchmarks
-all: $(BENCHMARKS)
-	make run_benchmarks
+.PHONY: build clean run_benchmarks test
+all: build
+	make run_benchmarks 
 
-.PHONY: test
 ifneq ("$(wildcard /usr/include/cblas.h /usr/include/*/cblas.h)","")
+build: $(BENCHMARKS) $(BIN)/test_halide_blas
 test: $(BIN)/test_halide_blas
 	$(BIN)/test_halide_blas
 else
+build: $(BENCHMARKS)
 test:
 	@echo /usr/include/cblas.h not found: skipping linear_algebra tests...
 endif

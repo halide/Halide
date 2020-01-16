@@ -1,7 +1,9 @@
 include ../support/Makefile.inc
 
 
-all: $(BIN)/$(HL_TARGET)/process
+.PHONY: build clean test
+
+build: $(BIN)/$(HL_TARGET)/process
 
 $(GENERATOR_BIN)/lens_blur.generator: lens_blur_generator.cpp $(GENERATOR_DEPS)
 	@mkdir -p $(@D)
