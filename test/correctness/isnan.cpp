@@ -16,12 +16,12 @@ int check_nans(const Buffer<float> &im) {
         for (int y = 0; y < im.dim(1).extent(); y++) {
             if ((x - y) < 0) {
                 if (im(x, y) != 0.0f) {
-                    printf ("undetected Nan for sqrt(%d - %d)\n", x, y);
+                    printf("undetected Nan for sqrt(%d - %d)\n", x, y);
                     return -1;
                 }
             } else {
                 if (im(x, y) != 1.0f) {
-                    printf ("unexpected Nan for sqrt(%d - %d)\n", x, y);
+                    printf("unexpected Nan for sqrt(%d - %d)\n", x, y);
                     return -1;
                 }
             }
@@ -33,15 +33,15 @@ int check_nans(const Buffer<float> &im) {
 int check_infs(const Buffer<float> &im) {
     for (int x = 0; x < im.dim(0).extent(); x++) {
         for (int y = 0; y < im.dim(1).extent(); y++) {
-            float e = (float)(x - w/2) / (float)(y - h/2);
+            float e = (float)(x - w / 2) / (float)(y - h / 2);
             if (std::isinf(e)) {
                 if (im(x, y) != 1.0f) {
-                    printf ("undetected Inf for (%d-%d)/(%d-%d) -> %f\n", x, w/2, y, h/2, e);
+                    printf("undetected Inf for (%d-%d)/(%d-%d) -> %f\n", x, w / 2, y, h / 2, e);
                     return -1;
                 }
             } else {
                 if (im(x, y) != 0.0f) {
-                    printf ("unexpected Inf for (%d-%d)/(%d-%d) -> %f\n", x, w/2, y, h/2, e);
+                    printf("unexpected Inf for (%d-%d)/(%d-%d) -> %f\n", x, w / 2, y, h / 2, e);
                     return -1;
                 }
             }
@@ -53,15 +53,15 @@ int check_infs(const Buffer<float> &im) {
 int check_finites(const Buffer<float> &im) {
     for (int x = 0; x < im.dim(0).extent(); x++) {
         for (int y = 0; y < im.dim(1).extent(); y++) {
-            float e = (float)(x - w/2) / (float)(y - h/2);
+            float e = (float)(x - w / 2) / (float)(y - h / 2);
             if (std::isfinite(e)) {
                 if (im(x, y) != 1.0f) {
-                    printf ("undetected finite for (%d-%d)/(%d-%d) -> %f\n", x, w/2, y, h/2, e);
+                    printf("undetected finite for (%d-%d)/(%d-%d) -> %f\n", x, w / 2, y, h / 2, e);
                     return -1;
                 }
             } else {
                 if (im(x, y) != 0.0f) {
-                    printf ("unexpected finite for (%d-%d)/(%d-%d) -> %f\n", x, w/2, y, h/2, e);
+                    printf("unexpected finite for (%d-%d)/(%d-%d) -> %f\n", x, w / 2, y, h / 2, e);
                     return -1;
                 }
             }
@@ -116,7 +116,7 @@ int main(int argc, char **argv) {
         Var x;
         Var y;
 
-        Expr e = cast<float>(x - w/2) / cast<float>(y - h/2);
+        Expr e = cast<float>(x - w / 2) / cast<float>(y - h / 2);
         f(x, y) = strict_float(select(is_inf(e), 1.0f, 0.0f));
         f.vectorize(x, 8);
 
@@ -130,7 +130,7 @@ int main(int argc, char **argv) {
         Buffer<float> non_halide_produced(w, h);
         for (int x = 0; x < w; x++) {
             for (int y = 0; y < h; y++) {
-                non_halide_produced(x, y) = (float)(x - w/2) / (float)(y - h/2);
+                non_halide_produced(x, y) = (float)(x - w / 2) / (float)(y - h / 2);
             }
         }
 
@@ -155,7 +155,7 @@ int main(int argc, char **argv) {
         Var x;
         Var y;
 
-        Expr e = cast<float>(x - w/2) / cast<float>(y - h/2);
+        Expr e = cast<float>(x - w / 2) / cast<float>(y - h / 2);
         f(x, y) = strict_float(select(is_finite(e), 1.0f, 0.0f));
         f.vectorize(x, 8);
 
@@ -169,7 +169,7 @@ int main(int argc, char **argv) {
         Buffer<float> non_halide_produced(w, h);
         for (int x = 0; x < w; x++) {
             for (int y = 0; y < h; y++) {
-                non_halide_produced(x, y) = (float)(x - w/2) / (float)(y - h/2);
+                non_halide_produced(x, y) = (float)(x - w / 2) / (float)(y - h / 2);
             }
         }
 
@@ -188,6 +188,6 @@ int main(int argc, char **argv) {
         }
     }
 
-    printf ("Success\n");
+    printf("Success\n");
     return 0;
 }

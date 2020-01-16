@@ -1,5 +1,6 @@
 include ../support/Makefile.inc
 
+AR ?= ar
 BIN ?= bin
 BUILD = $(BIN)/build
 CXXFLAGS += -Wall -march=native -I /opt/local/include
@@ -71,7 +72,8 @@ BENCHMARKS = \
 all: $(BENCHMARKS)
 	make run_benchmarks
 
-ifneq ("$(wildcard /usr/include/cblas.h)","")
+.PHONY: test
+ifneq ("$(wildcard /usr/include/cblas.h /usr/include/*/cblas.h)","")
 test: $(BIN)/test_halide_blas
 	$(BIN)/test_halide_blas
 else

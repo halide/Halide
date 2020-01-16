@@ -42,10 +42,8 @@ CodeGen_Hexagon::CodeGen_Hexagon(Target t)
         isa_version = 66;
     } else if (target.has_feature(Halide::Target::HVX_v65)) {
         isa_version = 65;
-    } else if (target.has_feature(Halide::Target::HVX_v62)) {
-        isa_version = 62;
     } else {
-        isa_version = 60;
+        isa_version = 62;
     }
     user_assert(!target.features_all_of(
         {Halide::Target::HVX_128, Halide::Target::HVX_64}))
@@ -459,7 +457,7 @@ static const HvxIntrinsic intrinsic_wrappers[] = {
     {MAKE_ID_PAIR(Intrinsic::hexagon_V6_vsatuwuh),
      u16v1,
      "trunc_satuh.vuw",
-     {u32v2}},  // v62 or later
+     {u32v2}},
 
     {MAKE_ID_PAIR(Intrinsic::hexagon_V6_vroundhub),
      u8v1,
@@ -607,7 +605,7 @@ static const HvxIntrinsic intrinsic_wrappers[] = {
     {MAKE_ID_PAIR(Intrinsic::hexagon_V6_vadduwsat),
      u32v1,
      "satuw_add.vuw.vuw",
-     {u32v1, u32v1}},  // v62 or later
+     {u32v1, u32v1}},
     {MAKE_ID_PAIR(Intrinsic::hexagon_V6_vaddhsat),
      i16v1,
      "sath_add.vh.vh",
@@ -627,7 +625,7 @@ static const HvxIntrinsic intrinsic_wrappers[] = {
     {MAKE_ID_PAIR(Intrinsic::hexagon_V6_vadduwsat_dv),
      u32v2,
      "satuw_add.vuw.vuw.dv",
-     {u32v2, u32v2}},  // v62 or later
+     {u32v2, u32v2}},
     {MAKE_ID_PAIR(Intrinsic::hexagon_V6_vaddhsat_dv),
      i16v2,
      "sath_add.vh.vh.dv",
@@ -1208,14 +1206,8 @@ static const HvxIntrinsic intrinsic_wrappers[] = {
     {MAKE_ID_PAIR(Intrinsic::hexagon_V6_vnot), u32v1, "not.vw", {u32v1}},
 
     // Broadcasts
-    {MAKE_ID_PAIR(Intrinsic::hexagon_V6_lvsplatb),
-     u8v1,
-     "splat_v62.b",
-     {u8}},  // v62 or later
-    {MAKE_ID_PAIR(Intrinsic::hexagon_V6_lvsplath),
-     u16v1,
-     "splat_v62.h",
-     {u16}},  // v62 or later
+    {MAKE_ID_PAIR(Intrinsic::hexagon_V6_lvsplatb), u8v1, "splat.b", {u8}},
+    {MAKE_ID_PAIR(Intrinsic::hexagon_V6_lvsplath), u16v1, "splat.h", {u16}},
     {MAKE_ID_PAIR(Intrinsic::hexagon_V6_lvsplatw), u32v1, "splat.w", {u32}},
 
     // Bit counting
@@ -2038,10 +2030,11 @@ Value *CodeGen_Hexagon::vlut(Value *lut, Value *idx, int min_index, int max_inde
     // Construct a new index with 16-bit elements.
     unsigned idx16_elems = idx_elems;
     Value *idx16 = (idx_elem_size == 8) ?
-                    call_intrin(VectorType::get(i16_t, idx16_elems),
-                    "halide.hexagon.unpack.vub", {idx}) : idx;
+                       call_intrin(VectorType::get(i16_t, idx16_elems),
+                                   "halide.hexagon.unpack.vub", {idx}) :
+                       idx;
 
-    const int replicate = lut_ty->getScalarSizeInBits()/16;
+    const int replicate = lut_ty->getScalarSizeInBits() / 16;
     if (replicate > 1) {
         // Replicate the LUT indices and use vlut16.
         // For LUT32: create two indices:
@@ -2068,7 +2061,7 @@ Value *CodeGen_Hexagon::vlut(Value *lut, Value *idx, int min_index, int max_inde
         lut = builder->CreateBitCast(lut, lut_ty);
     }
 
-    llvm::Type *i8x_t  = VectorType::get(i8_t,  idx16_elems);
+    llvm::Type *i8x_t = VectorType::get(i8_t, idx16_elems);
     llvm::Type *i16x_t = VectorType::get(i16_t, idx16_elems);
     Value *minus_one = create_vector(i16x_t, -1);
 
@@ -2077,7 +2070,8 @@ Value *CodeGen_Hexagon::vlut(Value *lut, Value *idx, int min_index, int max_inde
         // If the idx already had 8 bit elements and no replication was needed,
         // we can use idx else we need to pack idx16.
         Value *idx8 = (idx_elem_size == 16 || idx_elems != idx16_elems) ?
-                       call_intrin(i8x_t, "halide.hexagon.pack.vh", {idx16}) : idx;
+                          call_intrin(i8x_t, "halide.hexagon.pack.vh", {idx16}) :
+                          idx;
         Value *result_val = vlut256(lut, idx8, min_index, max_index);
         return builder->CreateBitCast(result_val, result_ty);
     }
@@ -2102,12 +2096,13 @@ Value *CodeGen_Hexagon::vlut(Value *lut, Value *idx, int min_index, int max_inde
         // truncate to 8 bits, as vlut requires.
         indices = call_intrin(i8x_t, "halide.hexagon.pack.vh", {indices});
         use_index = (lut_ty->getScalarSizeInBits() == 8) ?
-                    call_intrin(i8x_t, "halide.hexagon.pack.vh", {use_index}) : use_index;
+                        call_intrin(i8x_t, "halide.hexagon.pack.vh", {use_index}) :
+                        use_index;
 
         int range_extent_i = std::min(max_index - min_index_i, 255);
         Value *range_i = vlut256(slice_vector(lut, min_index_i, range_extent_i),
                                  indices, 0, range_extent_i);
-        ranges.push_back({ range_i, use_index });
+        ranges.push_back({range_i, use_index});
     }
 
     // TODO: This could be reduced hierarchically instead of in
@@ -2257,10 +2252,8 @@ string CodeGen_Hexagon::mcpu() const {
         return "hexagonv66";
     } else if (target.has_feature(Halide::Target::HVX_v65)) {
         return "hexagonv65";
-    } else if (target.has_feature(Halide::Target::HVX_v62)) {
-        return "hexagonv62";
     } else {
-        return "hexagonv60";
+        return "hexagonv62";
     }
 }
 
@@ -2634,13 +2627,8 @@ void CodeGen_Hexagon::visit(const Broadcast *op) {
         CodeGen_Posix::visit(op);
     } else {
         // TODO: Use vd0?
-        string v62orLater_suffix = "";
-        if (is_hvx_v62_or_later() &&
-            (op->value.type().bits() == 8 || op->value.type().bits() == 16))
-            v62orLater_suffix = "_v62";
-
         value = call_intrin(op->type,
-                            "halide.hexagon.splat" + v62orLater_suffix +
+                            "halide.hexagon.splat" +
                                 type_suffix(op->value, false),
                             {op->value});
     }
@@ -2681,9 +2669,12 @@ void CodeGen_Hexagon::visit(const Min *op) {
 }
 
 void CodeGen_Hexagon::visit(const Select *op) {
-    internal_assert(op->condition.type().is_scalar()) << Expr(op) << "\n";
-
-    if (op->type.is_vector()) {
+    if (!op->condition.type().is_scalar()) {
+        // A vector of bool was recursively introduced while
+        // performing codegen. Eliminate it.
+        Expr equiv = eliminate_bool_vectors(op);
+        equiv.accept(this);
+    } else if (op->type.is_vector()) {
         // Implement scalar conditions on vector values with if-then-else.
         value = codegen(Call::make(op->type, Call::if_then_else,
                                    {op->condition, op->true_value, op->false_value},

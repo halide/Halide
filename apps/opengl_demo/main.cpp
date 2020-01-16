@@ -13,7 +13,7 @@
 #include <HalideRuntimeOpenGL.h>
 
 /*
- * Initializes a halide buffer_t object for 8-bit RGBA data stored
+ * Initializes a halide_buffer_t object for 8-bit RGBA data stored
  * interleaved as rgbargba... in row-major order.
  */
 Halide::Runtime::Buffer<uint8_t> create_buffer(uint8_t *data, int width, int height) {

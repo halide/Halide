@@ -44,7 +44,7 @@ int main(int argc, char **argv) {
     // for the magical extra Halide element).
     int W = 10;
     int H = 11;
-    expected_allocation = (3*W*H + 1)*sizeof(int);
+    expected_allocation = (3 * W * H + 1) * sizeof(int);
 
     g.realize(W, H, 3);
 
@@ -53,7 +53,7 @@ int main(int argc, char **argv) {
 
     // We've aligned the x dimension, make sure the allocation reflects this.
     int W_aligned = (W + x_alignment - 1) & ~(x_alignment - 1);
-    expected_allocation = (W_aligned*H*3 + 1)*sizeof(int);
+    expected_allocation = (W_aligned * H * 3 + 1) * sizeof(int);
 
     // Force g to clear it's cache...
     g.compute_root();

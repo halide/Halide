@@ -8,6 +8,24 @@
 namespace Halide {
 namespace Internal {
 
+std::ostream &operator<<(std::ostream &stream, const Monotonic &m) {
+    switch (m) {
+    case Monotonic::Constant:
+        stream << "Constant";
+        break;
+    case Monotonic::Increasing:
+        stream << "Increasing";
+        break;
+    case Monotonic::Decreasing:
+        stream << "Decreasing";
+        break;
+    case Monotonic::Unknown:
+        stream << "Unknown";
+        break;
+    }
+    return stream;
+}
+
 using std::string;
 
 class MonotonicVisitor : public IRVisitor {

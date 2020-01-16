@@ -68,7 +68,6 @@
 #include "VaryingAttributes.h"
 #include "VectorizeLoops.h"
 #include "WrapCalls.h"
-#include "WrapExternStages.h"
 
 namespace Halide {
 namespace Internal {
@@ -300,7 +299,7 @@ Module lower(const vector<Function> &output_funcs,
         debug(1) << "Injecting host <-> dev buffer copies...\n";
         s = inject_host_dev_buffer_copies(s, t);
         debug(2) << "Lowering after injecting host <-> dev buffer copies:\n"
-                    << s << "\n\n";
+                 << s << "\n\n";
     }
 
     if (t.has_feature(Target::OpenGL)) {
@@ -525,13 +524,6 @@ Module lower(const vector<Function> &output_funcs,
     }
 
     result_module.append(main_func);
-
-    // Append a wrapper for this pipeline that accepts old buffer_ts
-    // and upgrades them. It will use the same name, so it will
-    // require C++ linkage. We don't need it when jitting.
-    if (!t.has_feature(Target::JIT)) {
-        add_legacy_wrapper(result_module, main_func);
-    }
 
     return result_module;
 }

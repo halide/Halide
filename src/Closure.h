@@ -70,7 +70,7 @@ public:
      *
      * When the closure encounters a read or write to 'foo', it
      * assumes that the host pointer is found in the symbol table as
-     * 'foo.host', and any buffer_t pointer is found under
+     * 'foo.host', and any halide_buffer_t pointer is found under
      * 'foo.buffer'. */
     Closure(Stmt s, const std::string &loop_variable = "");
 

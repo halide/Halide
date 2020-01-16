@@ -44,19 +44,16 @@ inline std::string unescape_spaces(const std::string &str) {
 }
 
 inline std::ostream &operator<<(std::ostream &os, const halide_type_t &t) {
-    os << (int) t.code << " " << (int) t.bits << " " << t.lanes;
+    os << (int)t.code << " " << (int)t.bits << " " << t.lanes;
     return os;
 }
-
 
 inline std::istream &operator>>(std::istream &is, halide_type_t &t) {
     // type.code is an enum; type.bits is a uint8 and might be read as char.
     int type_code, type_bits;
-    is >> type_code
-       >> type_bits
-       >> t.lanes;
-    t.code = (halide_type_code_t) type_code;
-    t.bits = (uint8_t) type_bits;
+    is >> type_code >> type_bits >> t.lanes;
+    t.code = (halide_type_code_t)type_code;
+    t.bits = (uint8_t)type_bits;
     return is;
 }
 
@@ -86,7 +83,9 @@ struct Point {
     int x = 0, y = 0;
 
     Point() = default;
-    Point(int x, int y) : x(x), y(y) {}
+    Point(int x, int y)
+        : x(x), y(y) {
+    }
 
     friend std::ostream &operator<<(std::ostream &os, const Point &pt) {
         os << pt.x << " " << pt.y;
@@ -107,7 +106,9 @@ struct Label {
     float h_scale = 1.0f;
 
     Label() = default;
-    Label(const std::string &text, const Point &pos = {0, 0}, int fade_in_frames = 0, float h_scale = 1.f) : text(text), pos(pos), fade_in_frames(fade_in_frames), h_scale(h_scale) {}
+    Label(const std::string &text, const Point &pos = {0, 0}, int fade_in_frames = 0, float h_scale = 1.f)
+        : text(text), pos(pos), fade_in_frames(fade_in_frames), h_scale(h_scale) {
+    }
 
     friend std::ostream &operator<<(std::ostream &os, const Label &label) {
         os << escape_spaces(label.text) << " " << label.pos << " " << label.fade_in_frames << " " << label.h_scale;
@@ -152,7 +153,7 @@ struct FuncConfig {
     // The position on the screen corresponding to the Func's 0, 0 coordinate.
     //
     // Valid values: pos.x and pos.y > std::numeric_limits<int>::lowest()
-    Point pos = { std::numeric_limits<int>::lowest(), std::numeric_limits<int>::lowest() };
+    Point pos = {std::numeric_limits<int>::lowest(), std::numeric_limits<int>::lowest()};
 
     // Specifies the matrix that maps the coordinates of the
     // Func to screen pixels. Specified column major. For example,
@@ -231,17 +232,17 @@ struct FuncConfig {
 
     void dump(std::ostream &os, const std::string &name) const {
         os << std::boolalpha
-            << "Func: " << name << "\n"
-            << "  zoom: " << zoom << "\n"
-            << "  load cost: " << load_cost << "\n"
-            << "  store cost: " << store_cost << "\n"
-            << "  pos: " << pos << "\n"
-            << "  strides: " << strides << "\n"
-            << "  color_dim: " << color_dim << "\n"
-            << "  min: " << min << " max: " << max << "\n"
-            << "  labels: " << labels << "\n"
-            << "  blank: " << blank_on_end_realization << "\n"
-            << "  uninit: " << uninitialized_memory_color << "\n";
+           << "Func: " << name << "\n"
+           << "  zoom: " << zoom << "\n"
+           << "  load cost: " << load_cost << "\n"
+           << "  store cost: " << store_cost << "\n"
+           << "  pos: " << pos << "\n"
+           << "  strides: " << strides << "\n"
+           << "  color_dim: " << color_dim << "\n"
+           << "  min: " << min << " max: " << max << "\n"
+           << "  labels: " << labels << "\n"
+           << "  blank: " << blank_on_end_realization << "\n"
+           << "  uninit: " << uninitialized_memory_color << "\n";
     }
 
     friend std::ostream &operator<<(std::ostream &os, const FuncConfig &config) {
@@ -270,19 +271,19 @@ struct FuncConfig {
         // 'nan', 'inf', etc for floating-point values, so read these as
         // text and reality-check them ourselves.
         std::string min_text, max_text;
-        is
-            >> start_text
-            >> config.zoom
-            >> config.load_cost
-            >> config.store_cost
-            >> config.pos
-            >> config.strides
-            >> config.color_dim
-            >> min_text
-            >> max_text
-            >> config.labels
-            >> config.blank_on_end_realization
-            >> config.uninitialized_memory_color;
+        is >>
+            start_text >>
+            config.zoom >>
+            config.load_cost >>
+            config.store_cost >>
+            config.pos >>
+            config.strides >>
+            config.color_dim >>
+            min_text >>
+            max_text >>
+            config.labels >>
+            config.blank_on_end_realization >>
+            config.uninitialized_memory_color;
 
         const auto parse_double = [](const std::string &s) -> double {
             double d;
@@ -328,7 +329,7 @@ struct FuncConfig {
 // If more than one of these is encountered, the last one wins.
 struct GlobalConfig {
     // The size of the output frames.
-    Point frame_size = { 1920, 1080 };
+    Point frame_size = {1920, 1080};
 
     // How quickly should the yellow and blue highlights decay
     // over time. This is a two-stage exponential decay with a knee in
@@ -356,10 +357,10 @@ struct GlobalConfig {
     // If doing auto-layout, divide the frame into this many rows and columns,
     // filling in each cell in left-to-right, top-to-bottom order. If either
     // value is -1, calculate a cell size based on the number of boxes touched.
-    Point auto_layout_grid = { -1, -1 };
+    Point auto_layout_grid = {-1, -1};
 
     // If doing auto-layout, the padding to use between each cell.
-    Point auto_layout_pad = { 32, 32 };
+    Point auto_layout_pad = {32, 32};
 
     // Specifies the default on-screen color corresponding to uninitialized memory,
     // in 0x00BBGGRR format. 0x00010101 is a "magic" value that will actually
@@ -379,16 +380,16 @@ struct GlobalConfig {
 
     void dump(std::ostream &os) const {
         os << std::boolalpha
-            << "Global:\n"
-            << "  frame_size: " << frame_size << "\n"
-            << "  decay_factor_during_compute: " << decay_factor_during_compute << "\n"
-            << "  decay_factor_after_compute: " << decay_factor_after_compute << "\n"
-            << "  hold_frames: " << hold_frames << "\n"
-            << "  timestep: " << timestep << "\n"
-            << "  auto_layout: " << auto_layout << "\n"
-            << "  auto_layout_grid: " << auto_layout_grid << "\n"
-            << "  auto_layout_pad: " << auto_layout_grid << "\n"
-            << "  default_uninitialized_memory_color: " << default_uninitialized_memory_color << "\n";
+           << "Global:\n"
+           << "  frame_size: " << frame_size << "\n"
+           << "  decay_factor_during_compute: " << decay_factor_during_compute << "\n"
+           << "  decay_factor_after_compute: " << decay_factor_after_compute << "\n"
+           << "  hold_frames: " << hold_frames << "\n"
+           << "  timestep: " << timestep << "\n"
+           << "  auto_layout: " << auto_layout << "\n"
+           << "  auto_layout_grid: " << auto_layout_grid << "\n"
+           << "  auto_layout_pad: " << auto_layout_grid << "\n"
+           << "  default_uninitialized_memory_color: " << default_uninitialized_memory_color << "\n";
     }
 
     friend std::ostream &operator<<(std::ostream &os, const GlobalConfig &config) {
@@ -411,17 +412,17 @@ struct GlobalConfig {
 
     friend std::istream &operator>>(std::istream &is, GlobalConfig &config) {
         std::string start_text;
-        is
-            >> start_text
-            >> config.frame_size
-            >> config.decay_factor_during_compute
-            >> config.decay_factor_after_compute
-            >> config.hold_frames
-            >> config.timestep
-            >> config.auto_layout
-            >> config.auto_layout_grid
-            >> config.auto_layout_pad
-            >> config.default_uninitialized_memory_color;
+        is >>
+            start_text >>
+            config.frame_size >>
+            config.decay_factor_during_compute >>
+            config.decay_factor_after_compute >>
+            config.hold_frames >>
+            config.timestep >>
+            config.auto_layout >>
+            config.auto_layout_grid >>
+            config.auto_layout_pad >>
+            config.default_uninitialized_memory_color;
         if (start_text != tag_start_text()) {
             is.setstate(std::ios::failbit);
         }
@@ -453,7 +454,9 @@ struct Range {
     int min = 0, extent = 0;
 
     Range() = default;
-    Range(int min, int extent) : min(min), extent(extent) {}
+    Range(int min, int extent)
+        : min(min), extent(extent) {
+    }
 
     friend std::ostream &operator<<(std::ostream &os, const Range &dim) {
         os << dim.min << " " << dim.extent;
@@ -480,11 +483,11 @@ struct FuncTypeAndDim {
     }
 
     void dump(std::ostream &os, const std::string &name) const {
-        static const char * const type_name[4] = { "int", "uint", "float", "handle" };
+        static const char *const type_name[4] = {"int", "uint", "float", "handle"};
         os << "FuncTypeAndDim: " << name << "\n";
         os << "  types:";
         for (const auto &type : types) {
-            os << " " << type_name[type.code & 3] << (int) type.bits;
+            os << " " << type_name[type.code & 3] << (int)type.bits;
             if (type.lanes > 1) {
                 os << 'x' << type.lanes;
             }
@@ -502,9 +505,7 @@ struct FuncTypeAndDim {
 
     friend std::istream &operator>>(std::istream &is, FuncTypeAndDim &types_and_ranges) {
         std::string start_text;
-        is >> start_text
-           >> types_and_ranges.types
-           >> types_and_ranges.dims;
+        is >> start_text >> types_and_ranges.types >> types_and_ranges.dims;
         if (start_text != tag_start_text()) {
             is.setstate(std::ios::failbit);
         }

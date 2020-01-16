@@ -78,7 +78,9 @@
 #include <llvm/IR/IRBuilder.h>
 #include <llvm/IR/Intrinsics.h>
 #if LLVM_VERSION >= 100
+#ifdef WITH_HEXAGON
 #include <llvm/IR/IntrinsicsHexagon.h>
+#endif
 #endif
 #include <llvm/IR/MDBuilder.h>
 #include <llvm/IR/Module.h>

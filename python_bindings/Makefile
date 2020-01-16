@@ -120,9 +120,9 @@ $(BIN)/runtime.a: $(BIN)/runtime.gen
 	$< -r runtime -o $(BIN) target=host
 
 # Which target features to use for which test targets.
-target_features_addconstant=-legacy_buffer_wrappers-no_runtime
+target_features_addconstant=-no_runtime
 target_features_bit=-no_runtime
-target_features_user_context=-user_context-legacy_buffer_wrappers-no_runtime
+target_features_user_context=-user_context-no_runtime
 
 # Make the generator generate a Python extension:
 $(BIN)/%.py.cpp $(BIN)/%.halide_generated.cpp $(BIN)/%.h: $(BIN)/%.gen

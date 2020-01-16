@@ -46,7 +46,6 @@ void check(MemoryType t1, MemoryType t2, MemoryType t3) {
                   << "Expected " << expected_mallocs << " got " << mallocs << "\n";
         exit(-1);
     }
-
 }
 
 int main(int argc, char **argv) {

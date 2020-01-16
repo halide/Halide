@@ -11,10 +11,10 @@ int main(int argc, char **argv) {
         Var x;
 
         f(x) = x;
-        g(x) = f(x-1) + f(x+1);
+        g(x) = f(x - 1) + f(x + 1);
         RDom r(0, 10);
         g(x) += sum(r);
-        h(x) = g(x-1) + g(x+1);
+        h(x) = g(x - 1) + g(x + 1);
 
         f.compute_root();
 
@@ -27,7 +27,7 @@ int main(int argc, char **argv) {
         Buffer<int> out = h.realize(512);
 
         for (int x = 0; x < out.width(); x++) {
-            int correct = 4*x + 90;
+            int correct = 4 * x + 90;
             if (out(x) != correct) {
                 printf("out(%d) = %d instead of %d\n",
                        x, out(x), correct);
@@ -42,5 +42,4 @@ int main(int argc, char **argv) {
 
     printf("Success!\n");
     return 0;
-
 }

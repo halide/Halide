@@ -1,11 +1,11 @@
 #include "HalideRuntime.h"
 #include "HalideRuntimeCuda.h"
+#include "HalideRuntimeD3D12Compute.h"
+#include "HalideRuntimeHexagonHost.h"
+#include "HalideRuntimeMetal.h"
+#include "HalideRuntimeOpenCL.h"
 #include "HalideRuntimeOpenGL.h"
 #include "HalideRuntimeOpenGLCompute.h"
-#include "HalideRuntimeOpenCL.h"
-#include "HalideRuntimeMetal.h"
-#include "HalideRuntimeHexagonHost.h"
-#include "HalideRuntimeD3D12Compute.h"
 #include "HalideRuntimeQurt.h"
 #include "cpu_features.h"
 
@@ -24,9 +24,7 @@ extern "C" __attribute__((used)) void *halide_runtime_api_functions[] = {
     (void *)&halide_cond_signal,
     (void *)&halide_cond_wait,
     (void *)&halide_copy_to_device,
-    (void *)&halide_copy_to_device_legacy,
     (void *)&halide_copy_to_host,
-    (void *)&halide_copy_to_host_legacy,
     (void *)&halide_cuda_detach_device_ptr,
     (void *)&halide_cuda_device_interface,
     (void *)&halide_cuda_get_device_ptr,
@@ -40,21 +38,16 @@ extern "C" __attribute__((used)) void *halide_runtime_api_functions[] = {
     (void *)&halide_device_and_host_free_as_destructor,
     (void *)&halide_device_and_host_malloc,
     (void *)&halide_device_free,
-    (void *)&halide_device_free_legacy,
     (void *)&halide_device_free_as_destructor,
     (void *)&halide_device_host_nop_free,
     (void *)&halide_device_malloc,
-    (void *)&halide_device_malloc_legacy,
     (void *)&halide_device_release,
     (void *)&halide_device_sync,
-    (void *)&halide_device_sync_legacy,
     (void *)&halide_do_par_for,
     (void *)&halide_do_parallel_tasks,
     (void *)&halide_do_task,
     (void *)&halide_do_loop_task,
     (void *)&halide_double_to_string,
-    (void *)&halide_downgrade_buffer_t,
-    (void *)&halide_downgrade_buffer_t_device_fields,
     (void *)&halide_error,
     (void *)&halide_error_access_out_of_bounds,
     (void *)&halide_error_bad_dimensions,
@@ -128,6 +121,8 @@ extern "C" __attribute__((used)) void *halide_runtime_api_functions[] = {
     (void *)&halide_msan_annotate_buffer_is_initialized,
     (void *)&halide_msan_annotate_buffer_is_initialized_as_destructor,
     (void *)&halide_msan_annotate_memory_is_initialized,
+    (void *)&halide_msan_check_buffer_is_initialized,
+    (void *)&halide_msan_check_memory_is_initialized,
     (void *)&halide_mutex_lock,
     (void *)&halide_mutex_unlock,
     (void *)&halide_mutex_array_create,
@@ -201,7 +196,6 @@ extern "C" __attribute__((used)) void *halide_runtime_api_functions[] = {
     (void *)&halide_trace,
     (void *)&halide_trace_helper,
     (void *)&halide_uint64_to_string,
-    (void *)&halide_upgrade_buffer_t,
     (void *)&halide_use_jit_module,
     (void *)&halide_d3d12compute_acquire_context,
     (void *)&halide_d3d12compute_device_interface,

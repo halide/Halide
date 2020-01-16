@@ -11,7 +11,6 @@ using namespace Halide;
 #define DLLEXPORT
 #endif
 
-
 int call_counter[] = {0, 0, 0, 0, 0, 0};
 extern "C" DLLEXPORT int my_func(int counter, int x) {
     call_counter[counter]++;
@@ -42,7 +41,7 @@ int main(int argc, char **argv) {
     Var x, y;
     Func f;
 
-    f(x, y) = my_func(0, Expr(0)) + my_func(1, y) + my_func(2, x*32 + y);
+    f(x, y) = my_func(0, Expr(0)) + my_func(1, y) + my_func(2, x * 32 + y);
 
     // llvm rightly refuses to lift loop invariants out of loops that
     // might have an extent of zero. It's possible wasted work.
@@ -53,7 +52,7 @@ int main(int argc, char **argv) {
     // Check the result was what we expected
     for (int y = 0; y < 32; y++) {
         for (int x = 0; x < 32; x++) {
-            int correct = y + 32*x + y;
+            int correct = y + 32 * x + y;
             if (im(x, y) != correct) {
                 printf("im(%d, %d) = %d instead of %d\n", x, y, im(x, y), correct);
                 return -1;
@@ -62,10 +61,10 @@ int main(int argc, char **argv) {
     }
 
     // Check the call counters
-    if (call_counter[0] != 1 || call_counter[1] != 32 || call_counter[2] != 32*32) {
+    if (call_counter[0] != 1 || call_counter[1] != 32 || call_counter[2] != 32 * 32) {
         printf("Call counters were %d %d %d instead of %d %d %d\n",
                call_counter[0], call_counter[1], call_counter[2],
-               1, 32, 32*32);
+               1, 32, 32 * 32);
         return -1;
     }
 

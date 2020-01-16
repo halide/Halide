@@ -4,16 +4,16 @@
 using namespace Halide;
 
 extern "C" {
-    void *my_malloc(void *ctx, size_t sz) {
-        printf("There weren't supposed to be heap allocations!\n");
-        exit(-1);
-        return nullptr;
-    }
+void *my_malloc(void *ctx, size_t sz) {
+    printf("There weren't supposed to be heap allocations!\n");
+    exit(-1);
+    return nullptr;
+}
 
-    void my_free(void *ctx, void *ptr) {
-        printf("There weren't supposed to be heap allocations!\n");
-        exit(-1);
-    }
+void my_free(void *ctx, void *ptr) {
+    printf("There weren't supposed to be heap allocations!\n");
+    exit(-1);
+}
 }
 
 int main(int argc, char **argv) {
@@ -26,8 +26,8 @@ int main(int argc, char **argv) {
     Var x, y;
 
     f(x, y) = x + y;
-    g(x, y) = f(x-1, y+1) * f(x+1, y-1);
-    h(x, y) = g(x+1, y+1) + g(x-1, y-1);
+    g(x, y) = f(x - 1, y + 1) * f(x + 1, y - 1);
+    h(x, y) = g(x + 1, y + 1) + g(x - 1, y - 1);
 
     f.compute_at(h, x);
     g.compute_at(h, x);

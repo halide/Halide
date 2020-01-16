@@ -1,7 +1,7 @@
 #include "Halide.h"
 
-#include <stdio.h>
 #include <map>
+#include <stdio.h>
 
 namespace {
 
@@ -62,7 +62,7 @@ Expr get_max_byte_size(const Target &t) {
 
 Expr get_stride(const Target &t, const Expr &elem_byte_size) {
     Expr max_byte_size = get_max_byte_size(t);
-    return max_byte_size.defined() ? simplify(max_byte_size/elem_byte_size) : 1;
+    return max_byte_size.defined() ? simplify(max_byte_size / elem_byte_size) : 1;
 }
 
 int test1(const Target &t) {
@@ -79,7 +79,7 @@ int test1(const Target &t) {
     CollectPrefetches collect;
     m.functions()[0].body.accept(&collect);
 
-    vector<vector<Expr>> expected = {{Variable::make(Handle(), f.name()) , 0, 1, get_stride(t, 4)}};
+    vector<vector<Expr>> expected = {{Variable::make(Handle(), f.name()), 0, 1, get_stride(t, 4)}};
     if (!check(expected, collect.prefetches)) {
         return -1;
     }
@@ -103,7 +103,7 @@ int test2(const Target &t) {
     CollectPrefetches collect;
     m.functions()[0].body.accept(&collect);
 
-    vector<vector<Expr>> expected = {{Variable::make(Handle(), f.name()) , 0, 1, get_stride(t, 4)}};
+    vector<vector<Expr>> expected = {{Variable::make(Handle(), f.name()), 0, 1, get_stride(t, 4)}};
     if (!check(expected, collect.prefetches)) {
         return -1;
     }
@@ -127,7 +127,7 @@ int test3(const Target &t) {
     CollectPrefetches collect;
     m.functions()[0].body.accept(&collect);
 
-    vector<vector<Expr>> expected = {{Variable::make(Handle(), f.name()) , 0, 1, get_stride(t, 4)}};
+    vector<vector<Expr>> expected = {{Variable::make(Handle(), f.name()), 0, 1, get_stride(t, 4)}};
     if (!check(expected, collect.prefetches)) {
         return -1;
     }

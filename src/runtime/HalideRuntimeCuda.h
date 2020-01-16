@@ -30,7 +30,7 @@ extern int halide_cuda_run(void *user_context,
                            void *args[],
                            int8_t arg_is_buffer[],
                            int num_attributes,
-                           float* vertex_buffer,
+                           float *vertex_buffer,
                            int num_coords_dim0,
                            int num_coords_dim1);
 // @}
@@ -64,7 +64,7 @@ extern uintptr_t halide_cuda_get_device_ptr(void *user_context, struct halide_bu
 extern int halide_cuda_release_unused_device_allocations(void *user_context);
 
 #ifdef __cplusplus
-} // End extern "C"
+}  // End extern "C"
 #endif
 
-#endif // HALIDE_HALIDERUNTIMECUDA_H
+#endif  // HALIDE_HALIDERUNTIMECUDA_H

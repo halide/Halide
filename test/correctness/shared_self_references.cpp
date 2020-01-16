@@ -13,8 +13,8 @@ int main(int argc, char **argv) {
             Expr e = f(2);
             f(0) = e;
             f(1) = e;
-        } // Destroy e
-    } // Destroy f
+        }  // Destroy e
+    }      // Destroy f
 
     // f should have been cleaned up. valgrind will complain if it
     // hasn't been.

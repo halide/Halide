@@ -5,7 +5,6 @@
 
 using namespace Halide;
 
-
 int main(int argc, char **argv) {
     // Make sure it's possible to generate object files for lots of
     // targets. This provides early warning that you may have broken
@@ -35,7 +34,7 @@ int main(int argc, char **argv) {
         Target target(t);
         if (!target.supported()) continue;
 
-        std::cout << "Test generating: "<<target<<"\n";
+        std::cout << "Test generating: " << target << "\n";
         std::string object_name = Internal::get_test_tmp_dir() + "test_object_" + t;
         std::string lib_name = Internal::get_test_tmp_dir() + "test_lib_" + t;
         if (target.os == Target::Windows && !target.has_feature(Target::MinGW)) {

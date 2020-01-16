@@ -162,7 +162,7 @@
  * \endcode
  *
  * Note that the Inputs and Outputs will appear in the C function call in the order
- * they are declared. All Input<Func> and Output<Func> are represented as buffer_t;
+ * they are declared. All Input<Func> and Output<Func> are represented as halide_buffer_t;
  * all other Input<> are the appropriate C++ scalar type. (GeneratorParams are
  * always referenced by name, not position, so their order is irrelevant.)
  *

@@ -6,7 +6,6 @@
 #include <cstdio>
 #include <string>
 
-
 int main(int argc, char **argv) {
 #if defined(TEST_OPENCL)
     std::string platform_name = "custom_platform";

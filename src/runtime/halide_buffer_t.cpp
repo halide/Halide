@@ -6,7 +6,7 @@
 #endif
 
 // Structs are annoying to deal with from within Halide Stmts. These
-// utility functions are for dealing with buffer_t in that
+// utility functions are for dealing with halide_buffer_t in that
 // context. They are not intended for use outside of Halide code, and
 // not exposed in HalideRuntime.h. The symbols are private to the
 // module and should be inlined and then stripped. This blob of code
@@ -161,14 +161,13 @@ halide_buffer_t *_halide_buffer_crop(void *user_context,
     return dst;
 }
 
-
 // Called on return from an extern stage where the output buffer was a
 // crop of some other larger buffer. This happens for extern stages
 // with distinct store_at/compute_at levels. Each call to the stage
 // only fills in part of the buffer.
 HALIDE_BUFFER_HELPER_ATTRS
 int _halide_buffer_retire_crop_after_extern_stage(void *user_context,
-                                                   void *obj) {
+                                                  void *obj) {
     halide_buffer_t **buffers = (halide_buffer_t **)obj;
     halide_buffer_t *crop = buffers[0];
     halide_buffer_t *parent = buffers[1];
@@ -198,7 +197,7 @@ int _halide_buffer_retire_crop_after_extern_stage(void *user_context,
 
 HALIDE_BUFFER_HELPER_ATTRS
 int _halide_buffer_retire_crops_after_extern_stage(void *user_context,
-                                                    void *obj) {
+                                                   void *obj) {
     halide_buffer_t **buffers = (halide_buffer_t **)obj;
     while (*buffers) {
         _halide_buffer_retire_crop_after_extern_stage(user_context, buffers);
@@ -214,7 +213,6 @@ halide_buffer_t *_halide_buffer_set_bounds(halide_buffer_t *buf,
     buf->dim[dim].extent = extent;
     return buf;
 }
-
 }
 
 #undef HALIDE_BUFFER_HELPER_ATTRS
