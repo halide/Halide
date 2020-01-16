@@ -48,10 +48,6 @@ void CodeGen_PyTorch::compile(const Module &module) {
     }
 
     for (const auto &f : module.functions()) {
-        if (f.name.find("old_buffer_t") != std::string::npos) {
-            debug(1) << "ignoring " << f.name;
-            continue;
-        }
         if (target.has_feature(Target::CUDA)) {
             compile(f, true);
         } else {

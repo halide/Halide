@@ -335,12 +335,6 @@ CodeGen_C::CodeGen_C(ostream &s, Target t, OutputKind output_kind, const std::st
         // We just forward declared the following types:
         forward_declared.insert(type_of<halide_buffer_t *>().handle_type);
         forward_declared.insert(type_of<halide_filter_metadata_t *>().handle_type);
-        if (t.has_feature(Target::LegacyBufferWrappers)) {
-            stream << "// The legacy buffer type. Do not use in new code.\n"
-                   << "struct buffer_t;\n"
-                   << "\n";
-            forward_declared.insert(type_of<buffer_t *>().handle_type);
-        }
     } else if (is_extern_decl()) {
         // Extern decls to be wrapped inside other code (eg python extensions);
         // emit the forward decls with a minimum of noise. Note that we never

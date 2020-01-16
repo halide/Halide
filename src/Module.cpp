@@ -16,7 +16,6 @@
 #include "Pipeline.h"
 #include "PythonExtensionGen.h"
 #include "StmtToHtml.h"
-#include "WrapExternStages.h"
 
 using Halide::Internal::debug;
 
@@ -280,7 +279,6 @@ $NAMESPACECLOSE$
     // certainly irrelevant to scheduling issues, to make for easier reading
     const Target::Feature irrelevant_features[] = {
         Target::CPlusPlusMangling,
-        Target::LegacyBufferWrappers,
         Target::NoRuntime,
         Target::UserContext,
     };
@@ -867,10 +865,7 @@ void compile_multitarget(const std::string &fn_name,
         // Always build with NoBoundsQuery: underlying code will implement that (or not).
         //
         // Always build *without* NoAsserts (ie, with Asserts enabled): that's the
-        // only way to propagate a nonzero result code to our caller. (Note that this
-        // does mean we get redundant check-for-null tests in the wrapper code for buffer_t*
-        // arguments; this is regrettable but fairly minor in terms of both code size and speed,
-        // at least for real-world code.)
+        // only way to propagate a nonzero result code to our caller.
         Target wrapper_target = base_target
                                     .with_feature(Target::NoRuntime)
                                     .with_feature(Target::NoBoundsQuery)
@@ -885,9 +880,6 @@ void compile_multitarget(const std::string &fn_name,
         Module wrapper_module(fn_name, wrapper_target);
         wrapper_module.append(LoweredFunc(fn_name, base_target_args, wrapper_body, LinkageType::ExternalPlusMetadata));
 
-        // Add a wrapper to accept old buffer_ts
-        add_legacy_wrapper(wrapper_module, wrapper_module.functions().back());
-
         std::map<Output, std::string> wrapper_out = {{Output::object,
                                                       temp_dir.add_temp_object_file(output_files.at(Output::static_library), "_wrapper", base_target, /* in_front*/ true)}};
         debug(1) << "compile_multitarget: wrapper " << wrapper_out.at(Output::object) << "\n";
@@ -897,8 +889,6 @@ void compile_multitarget(const std::string &fn_name,
     if (contains(output_files, Output::c_header)) {
         Module header_module(fn_name, base_target);
         header_module.append(LoweredFunc(fn_name, base_target_args, {}, LinkageType::ExternalPlusMetadata));
-        // Add a wrapper to accept old buffer_ts
-        add_legacy_wrapper(header_module, header_module.functions().back());
         std::map<Output, std::string> header_out = {{Output::c_header, output_files.at(Output::c_header)}};
         debug(1) << "compile_multitarget: c_header " << header_out.at(Output::c_header) << "\n";
         header_module.compile(header_out);

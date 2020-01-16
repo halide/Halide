@@ -592,8 +592,8 @@ public:
 
             // Iterate through all of the input args to the extern
             // function building a suitable argument list for the
-            // extern function call.  We need a query buffer_t per
-            // producer and a query buffer_t for the output
+            // extern function call.  We need a query halide_buffer_t per
+            // producer and a query halide_buffer_t for the output
 
             Expr null_handle = make_zero(Handle());
 
@@ -714,7 +714,7 @@ public:
                 check = Block::make(annotate, check);
             }
 
-            // Now inner code is free to extract the fields from the buffer_t
+            // Now inner code is free to extract the fields from the halide_buffer_t
             s = Block::make(check, s);
 
             // Wrap in let stmts defining the args
@@ -849,7 +849,7 @@ public:
 
                 const vector<ExternFuncArgument> &args = consumer.func.extern_arguments();
                 // Stage::define_bounds is going to compute a query
-                // buffer_t per producer for bounds inference to
+                // halide_buffer_t per producer for bounds inference to
                 // use. We just need to extract those values.
                 for (size_t j = 0; j < args.size(); j++) {
                     if (args[j].is_func()) {

@@ -259,10 +259,11 @@ link implementations of the following two functions with your Halide code:
     }
 
 Halide allocates and deletes textures as necessary.  Applications may manage
-the textures by hand by setting the `buffer_t::dev` field; this is most useful
-for reusing image data that is already stored in textures. Some rudimentary
-checks are performed to ensure that externally allocated textures have the
-correct format, but in general that's the responsibility of the application.
+the textures by hand by setting the `halide_buffer_t::device` field; this is
+most useful for reusing image data that is already stored in textures. Some
+rudimentary checks are performed to ensure that externally allocated textures
+have the correct format, but in general that's the responsibility of the
+application.
 
 It is possible to let render directly to the current framebuffer; to do this,
 set the `dev` field of the output buffer to the value returned by

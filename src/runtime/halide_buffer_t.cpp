@@ -6,7 +6,7 @@
 #endif
 
 // Structs are annoying to deal with from within Halide Stmts. These
-// utility functions are for dealing with buffer_t in that
+// utility functions are for dealing with halide_buffer_t in that
 // context. They are not intended for use outside of Halide code, and
 // not exposed in HalideRuntime.h. The symbols are private to the
 // module and should be inlined and then stripped. This blob of code
