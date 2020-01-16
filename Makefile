@@ -2050,7 +2050,7 @@ benchmark_apps: $(BENCHMARK_APPS)
 	@for APP in $(BENCHMARK_APPS); do \
 		echo ;\
 		echo Benchmarking $${APP} for ${HL_TARGET}... ; \
-		make -C $(ROOT_DIR)/apps/$${APP} test \
+		make -C $(ROOT_DIR)/apps/$${APP} \
 			$${APP}.benchmark${SUFFIX} \
 			HALIDE_DISTRIB_PATH=$(CURDIR)/$(DISTRIB_DIR) \
 			HALIDE_PYTHON_BINDINGS_PATH=$(CURDIR)/$(BIN_DIR)/python3_bindings \
