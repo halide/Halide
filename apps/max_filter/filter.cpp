@@ -13,6 +13,16 @@
 
 using namespace Halide::Tools;
 
+void error_handler(void *, const char *msg) {
+    printf("%s\n", msg);
+    if (strstr(msg, "CUDA_ERROR_OUT_OF_MEMORY")) {
+        printf("This GPU doesn't have sufficient memory to run this app. Exiting.\n");
+        exit(0);
+    } else {
+        exit(1);
+    }
+}
+
 int main(int argc, char **argv) {
     if (argc != 3) {
         printf("Usage: %s in out\n", argv[0]);
@@ -21,6 +31,11 @@ int main(int argc, char **argv) {
 
     Halide::Runtime::Buffer<float> input = load_and_convert_image(argv[1]);
     Halide::Runtime::Buffer<float> output(input.width(), input.height(), 3);
+
+    // The manual schedule uses ~360MB of GPU memory, which doesn't
+    // seem like much, but is too much for some of our buildbots, so
+    // we'll catch cuda out of memory errors here.
+    halide_set_error_handler(error_handler);
 
     double best_manual = benchmark([&]() {
         max_filter(input, output);
