@@ -77,9 +77,9 @@ build: $(BENCHMARKS) $(BIN)/test_halide_blas
 test: $(BIN)/test_halide_blas
 	$(BIN)/test_halide_blas
 else
-build: $(BENCHMARKS)
-test:
+build:
 	@echo /usr/include/cblas.h not found: skipping linear_algebra tests...
+test: build
 endif
 
 clean:
