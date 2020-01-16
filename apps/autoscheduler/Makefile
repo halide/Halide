@@ -68,7 +68,15 @@ test: AUTOSCHED_SAMPLES_OUT = $(BIN)/test_samples_out
 # Note that 'make build' and 'make test' is used by Halide buildbots
 # to spot-check changes, so it's important to try a little of each of
 # the important paths here, including single-shot and autotune-loop
-build: $(BIN)/$(HL_TARGET)/test $(BIN)/test_perfect_hash_map $(BIN)/test_function_dag $(BIN)/$(HL_TARGET)/included_schedule_file.rungen $(GENERATOR_BIN)/demo.generator $(AUTOSCHED_BIN)/featurization_to_sample $(AUTOSCHED_BIN)/get_host_target $(AUTOSCHED_BIN)/retrain_cost_model $(AUTOSCHED_BIN)/libauto_schedule.so
+build: $(BIN)/$(HL_TARGET)/test \
+	$(BIN)/test_perfect_hash_map \
+	$(BIN)/test_function_dag \
+	$(BIN)/$(HL_TARGET)/included_schedule_file.rungen \
+	$(GENERATOR_BIN)/demo.generator \
+	$(AUTOSCHED_BIN)/featurization_to_sample \
+	$(AUTOSCHED_BIN)/get_host_target \
+	$(AUTOSCHED_BIN)/retrain_cost_model \
+	$(AUTOSCHED_BIN)/libauto_schedule.so
 
 test: run_test test_perfect_hash_map test_function_dag demo included_schedule_file autotune
 
