@@ -390,17 +390,16 @@ struct State {
                 // Make the vectorized dimension of the inner loop 32 (or as
                 // close as possible)
                 int64_t inner_extent = std::min(c->size[vectorized_loop_index], (int64_t)32);
-                int64_t outer_vec_extent = (c->size[vectorized_loop_index] + inner_extent - 1) / inner_extent;
 
                 if (c->stage->index == 0) {
-                    vector<int64_t> tiling = c->size;
+                    vector<int64_t> tiling(c->node->dimensions, 1);
 
                     // Mark as 'parallelized' so this loop is split into blocks and threads
                     c->gpu_label = parallelized;
                     if (vectorized_loop_index >= 0) {
-                        tiling[vectorized_loop_index] = outer_vec_extent;
+                        tiling[vectorized_loop_index] = inner_extent;
                     }
-                    c = c->parallelize_in_tiles(params, tiling, loop_nest, target, false, true);
+                    c = c->parallelize_in_tiles(params, tiling, loop_nest, target, true, false);
                 } else {
                     // An update stage may have more or fewer dimensions than
                     // the pure stage, but the tiling requires its dimensions to
@@ -424,13 +423,14 @@ struct State {
                     // likely does not loop over the vectorized loop of the
                     // pure stage, so it should not be split by the
                     // outer_vec_extent and instead only have a single thread
+                    vector<int64_t> thread_tiling(c->node->dimensions, 1);
                     if (vectorized_loop_index >= 0) {
-                        tiling[c->stage->loop[vectorized_loop_index].pure_dim] = outer_vec_extent;
+                        thread_tiling[c->stage->loop[vectorized_loop_index].pure_dim] = inner_extent;
                     }
 
                     // Now that the RVars have been moved inwards, we can
                     // split the outer loop into blocks and threads
-                    c = c->parallelize_in_tiles(params, tiling, loop_nest, target, false, true);
+                    c = c->parallelize_in_tiles(params, thread_tiling, loop_nest, target, true, false);
                 }
             }
         }
