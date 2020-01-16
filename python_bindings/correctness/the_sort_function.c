@@ -3,7 +3,7 @@
  * gcc -std=c99 the_sort_function.c -shared -o the_sort_function.so
  */
 
-#include "HalideRuntime"
+#include "HalideRuntime.h"
 #include <stdbool.h>
 #include <stddef.h>
 #include <stdint.h>
