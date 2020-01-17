@@ -4,6 +4,7 @@
 #include <random>
 #include <cstdlib>
 #include <unordered_map>
+#include <map>
 
 using namespace Halide;
 using namespace Halide::Internal;
@@ -247,7 +248,8 @@ Expr random_expr(vector<Expr> inputs, int depth, int func_size) {
 template<bool training>
 class RandomPipeline : public Halide::Generator<RandomPipeline<training>> {
 public:
-
+    template<typename T> using Input = GeneratorInput<T>;
+    template<typename T> using Output = GeneratorOutput<T>;
     int num_stage_types = 18;
     // The random seed to use to generate the pipeline.
     GeneratorParam<int> seed{"seed", 1};
