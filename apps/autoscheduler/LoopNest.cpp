@@ -2830,14 +2830,12 @@ vector<IntrusivePtr<const LoopNest>> LoopNest::compute_in_tiles(const FunctionDA
         union_counts = get_union_thread_counts(f);
     }
 
-    bool can_allocate_here = !target.has_gpu_feature() || in_realization || !in_threads_loop || !node_has_dynamic_region_computed(f);
-
     // Place the computation directly inside this loop (provided it's not a SIMD loop)
     if (!innermost &&
         (!in_realization ||
          size.empty() ||
          vector_dim == -1 ||
-         size[vector_dim] == 1) && can_allocate_here) {
+         size[vector_dim] == 1)) {
 
         std::unique_ptr<LoopNest> r{new LoopNest};
         r->copy_from(*this);
@@ -2987,15 +2985,13 @@ vector<IntrusivePtr<const LoopNest>> LoopNest::compute_in_tiles(const FunctionDA
                         // create (threads, serial) option
 
                         internal_assert(in_threads_loop); // threads loop can't be inside threads loop
-                        if (in_realization || !node_has_dynamic_region_computed(f)) {
-                            outer->gpu_label = thread;
-                            inner->gpu_label = serial;
+                        outer->gpu_label = thread;
+                        inner->gpu_label = serial;
 
-                            outer->children.emplace_back(inner.release());
-                            outer->compute_here(f, true, v, true, target);
+                        outer->children.emplace_back(inner.release());
+                        outer->compute_here(f, true, v, true, target);
 
-                            result.emplace_back(outer.release());
-                        }
+                        result.emplace_back(outer.release());
                         break;
                     }
 
@@ -3017,23 +3013,21 @@ vector<IntrusivePtr<const LoopNest>> LoopNest::compute_in_tiles(const FunctionDA
                     }
 
                     case serial: {
-                        if (in_realization || !in_threads_loop || !node_has_dynamic_region_computed(f)) {
-                            outer->gpu_label = serial;
-                            inner->gpu_label = serial;
+                        outer->gpu_label = serial;
+                        inner->gpu_label = serial;
 
-                            outer->children.emplace_back(inner.release());
-                            outer->compute_here(f, true, v, in_threads_loop, target);
+                        outer->children.emplace_back(inner.release());
+                        outer->compute_here(f, true, v, in_threads_loop, target);
 
-                            if (!in_threads_loop) {
-                                bool made_child = outer->add_gpu_thread_tilings(f, params, target, v, result, union_counts);
+                        if (!in_threads_loop) {
+                            bool made_child = outer->add_gpu_thread_tilings(f, params, target, v, result, union_counts);
 
-                                // no good thread tilings, just add the untiled thread loop
-                                if (!made_child) {
-                                    result.emplace_back(outer.release());
-                                }
-                            } else { // inside a threads loop, can't generate thread loop tilings
+                            // no good thread tilings, just add the untiled thread loop
+                            if (!made_child) {
                                 result.emplace_back(outer.release());
                             }
+                        } else { // inside a threads loop, can't generate thread loop tilings
+                            result.emplace_back(outer.release());
                         }
                         break;
                     }

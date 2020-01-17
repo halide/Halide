@@ -802,10 +802,6 @@ struct State {
             return false;
         }
 
-        if (has_dynamic_allocation_inside_thread()) {
-            return false;
-        }
-
         if (exceeds_shared_memory_limit(target)) {
             return false;
         }
