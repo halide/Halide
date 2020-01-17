@@ -443,7 +443,7 @@ int main(int argc, char **argv) {
                         size_t batch_size = std::min((size_t)1024, p.second.schedules.size());
 
                         size_t fastest_idx = 0;
-			Halide::Runtime::Buffer<float> runtimes(batch_size);
+                        Halide::Runtime::Buffer<float> runtimes(batch_size);
 
                         size_t first = 0;
                         if (p.second.schedules.size() > 1024) {
@@ -454,7 +454,7 @@ int main(int argc, char **argv) {
                         std::advance(it, first);
                         for (size_t j = 0; j < batch_size; j++) {
                             auto &sched = it->second;
-			    Halide::Runtime::Buffer<float> buf;
+                            Halide::Runtime::Buffer<float> buf;
                             tp->enqueue(p.second.num_stages, &buf, &sched.prediction[model]);
                             runtimes(j) = sched.runtimes[0];
                             if (runtimes(j) < runtimes(fastest_idx)) {
