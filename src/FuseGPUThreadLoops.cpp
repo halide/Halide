@@ -131,7 +131,16 @@ class ExtractBlockSize : public IRVisitor {
     }
 
 public:
-    int dimensions() const {
+    int blocks_dimensions() const {
+        for (int i = 0; i < 4; i++) {
+            if (!block_count[i].defined()) {
+                return i;
+            }
+        }
+        return 4;
+    }
+
+    int threads_dimensions() const {
         for (int i = 0; i < 4; i++) {
             if (!block_extent[i].defined()) {
                 return i;
@@ -176,7 +185,7 @@ class NormalizeDimensionality : public IRMutator {
         if (is_no_op(s)) {
             return s;
         }
-        while (max_depth < block_size.dimensions()) {
+        while (max_depth < block_size.threads_dimensions()) {
             string name = thread_names[max_depth];
             s = For::make("." + name, 0, 1, ForType::GPUThread, device_api, s);
             max_depth++;
@@ -234,7 +243,7 @@ class ReplaceForWithIf : public IRMutator {
                 }
             }
 
-            internal_assert(dim >= 0 && dim < block_size.dimensions());
+            internal_assert(dim >= 0 && dim < block_size.threads_dimensions());
 
             Stmt body = mutate(op->body);
 
@@ -687,7 +696,7 @@ public:
                 // Remove any dependence on the block vars by taking a max
                 {
                     Scope<Interval> scope;
-                    for (int d = 0; d < bs.dimensions(); d++) {
+                    for (int d = 0; d < bs.blocks_dimensions(); d++) {
                         scope.push(bs.block_var(d).as<Variable>()->name,
                                    Interval(0, bs.num_blocks(d) - 1));
                     }
@@ -709,7 +718,7 @@ public:
                     // heap memory it's one slice of a global
                     // allocation.
                     Expr block_id = 0;
-                    for (int d = bs.dimensions() - 1; d >= 0; d--) {
+                    for (int d = bs.blocks_dimensions() - 1; d >= 0; d--) {
                         block_id *= bs.num_blocks(d);
                         block_id += bs.block_var(d);
                     }
@@ -762,7 +771,7 @@ public:
         // which were injected above if any allocation was striped
         // over the threads.
         Expr thread_id = 0, num_threads = 1;
-        for (int d = bs.dimensions() - 1; d >= 0; d--) {
+        for (int d = bs.threads_dimensions() - 1; d >= 0; d--) {
             num_threads *= bs.num_threads(d);
             thread_id *= bs.num_threads(d);
             thread_id += bs.thread_var(d);
@@ -784,7 +793,7 @@ public:
         }
 
         Expr total_size = heap_bytes_per_block;
-        for (int d = 0; d < bs.dimensions(); d++) {
+        for (int d = 0; d < bs.blocks_dimensions(); d++) {
             total_size *= bs.num_blocks(d);
         }
 
@@ -988,10 +997,10 @@ class FuseGPUThreadLoopsSingleKernel : public IRMutator {
             debug(3) << "Normalized dimensionality:\n"
                      << body << "\n\n";
 
-            Expr block_size_x = block_size.dimensions() ? block_size.num_threads(0) : 1;
+            Expr block_size_x = block_size.threads_dimensions() ? block_size.num_threads(0) : 1;
             ExtractRegisterAllocations register_allocs;
             ForType innermost_loop_type = ForType::GPUThread;
-            if (block_size.dimensions()) {
+            if (block_size.threads_dimensions()) {
                 body = register_allocs.mutate(body);
                 if (register_allocs.has_lane_loop) {
                     innermost_loop_type = ForType::GPULane;
@@ -1023,7 +1032,7 @@ class FuseGPUThreadLoopsSingleKernel : public IRMutator {
             body = For::make(thread_id, 0, block_size_x, innermost_loop_type, op->device_api, body);
 
             // Rewrap the whole thing in other loops over threads
-            for (int i = 1; i < block_size.dimensions(); i++) {
+            for (int i = 1; i < block_size.threads_dimensions(); i++) {
                 thread_id = "." + thread_names[i];
                 body = register_allocs.rewrap(body, thread_id);
                 body = For::make("." + thread_names[i], 0, block_size.num_threads(i),
