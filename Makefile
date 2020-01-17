@@ -1985,6 +1985,16 @@ ifneq ($(OS), Windows_NT)
 endif
 
 TEST_APPS_DEPS=$(TEST_APPS:%=%_test_app)
+BUILD_APPS_DEPS=$(TEST_APPS:%=%_build_app)
+
+$(BUILD_APPS_DEPS): distrib build_python_bindings
+	@echo Building app $(@:%_build_app=%) for ${HL_TARGET}...
+	@$(MAKE) -C $(ROOT_DIR)/apps/$(@:%_build_app=%) build \
+		HALIDE_DISTRIB_PATH=$(CURDIR)/$(DISTRIB_DIR) \
+		HALIDE_PYTHON_BINDINGS_PATH=$(CURDIR)/$(BIN_DIR)/python3_bindings \
+		BIN_DIR=$(CURDIR)/$(BIN_DIR)/apps/$(@:%_build_app=%)/bin \
+		HL_TARGET=$(HL_TARGET) \
+		|| exit 1 ; \
 
 $(TEST_APPS_DEPS): distrib build_python_bindings
 	@echo Testing app $(@:%_test_app=%) for ${HL_TARGET}...
@@ -1995,8 +2005,9 @@ $(TEST_APPS_DEPS): distrib build_python_bindings
 		HL_TARGET=$(HL_TARGET) \
 		|| exit 1 ; \
 
-.PHONY: test_apps $(TEST_APPS_DEPS)
-test_apps: $(TEST_APPS_DEPS)
+.PHONY: test_apps $(BUILD_APPS_DEPS) 
+test_apps: $(BUILD_APPS_DEPS)
+	$(MAKE) -f $(THIS_MAKEFILE) -j1 $(TEST_APPS_DEPS)
 
 BENCHMARK_APPS=\
 	bilateral_grid \
@@ -2103,6 +2114,10 @@ ifneq (,$(findstring clang version 10.0,$(CLANG_VERSION)))
 CLANG_OK=yes
 endif
 
+ifneq (,$(findstring clang version 11.0,$(CLANG_VERSION)))
+CLANG_OK=yes
+endif
+
 ifneq (,$(findstring Apple LLVM version 5.0,$(CLANG_VERSION)))
 CLANG_OK=yes
 endif
@@ -2123,7 +2138,7 @@ $(BUILD_DIR)/clang_ok:
 	@exit 1
 endif
 
-ifneq (,$(findstring $(LLVM_VERSION_TIMES_10), 80 90 100))
+ifneq (,$(findstring $(LLVM_VERSION_TIMES_10), 80 90 100 110))
 LLVM_OK=yes
 endif
 
