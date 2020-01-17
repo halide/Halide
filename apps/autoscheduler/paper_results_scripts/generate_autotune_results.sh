@@ -9,6 +9,8 @@ trap ctrl_c INT
 
 source $(dirname $0)/../scripts/utils.sh
 
+BEST_SCHEDULES_DIR=$(dirname $0)/best
+
 find_halide HALIDE_ROOT
 
 build_autoscheduler_tools ${HALIDE_ROOT}
@@ -50,6 +52,9 @@ function ctrl_c() {
 
     for app in $APPS; do
         ps aux | grep ${app}.generator | awk '{print $2}' | xargs kill
+
+        SAMPLES_DIR="${APP_DIR}/${SAMPLES_DIR_NAME}"
+        save_best_schedule_result ${BEST_SCHEDULES_DIR} ${SAMPLES_DIR}
     done
     exit
 }
@@ -80,4 +85,6 @@ for app in $APPS; do
     predict_all ${HALIDE_ROOT} ${SAMPLES_DIR} ${WEIGHTS_FILE} ${PREDICTIONS_FILE}
     extract_best_times ${HALIDE_ROOT} ${SAMPLES_DIR} ${BEST_TIMES_FILE}
     bash $(dirname $0)/../scripts/average_times.sh ${SAMPLES_DIR} >> ${OUTPUT_FILE}
+
+    save_best_schedule_result ${BEST_SCHEDULES_DIR} ${SAMPLES_DIR}
 done

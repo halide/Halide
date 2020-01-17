@@ -254,3 +254,86 @@ function reset_weights() {
         --partition_schedules=0 \
         --verbose=0
 }
+
+function extract_sample_details() {
+    local -r sample_dir=$1
+    local -r output_dir=$2
+
+    local -r output_file=$output_dir/best.txt
+
+    local -r compile_err=${sample_dir}/compile_err.txt
+    local -r bench=${sample_dir}/bench.txt
+    local -r weights=$(dirname ${sample_dir})/used.weights
+
+    local -r start_line=$(grep -n "Optimal schedule" ${compile_err} | cut -d":" -f 1)
+    local -r end_line=$(grep -n "Number of states added" ${compile_err} | cut -d":" -f 1)
+
+    touch ${output_file}
+
+    head -n $((end_line - 1)) ${compile_err} | tail -n $((end_line - start_line)) > "${output_file}"
+
+    local -r time=$(head -n 1 ${bench} | cut -d" " -f 8)
+
+    local -r time_ms=$(echo "${time} * 1000" | bc -l | awk '{printf "%.6f\n", $0}')
+    echo "" >> ${output_file}
+    echo "Run time (ms) = ${time_ms}" >> ${output_file}
+
+    cp ${weights} ${output_dir}/best.weights
+}
+
+function extract_best_sample_details() {
+    local -r samples_dir=$1
+
+    local -r sample_file=$(grep "Best runtime" ${samples_dir}/autotune_out.txt | tail -n 1 | cut -d" " -f 12)
+
+    local -r best_dir=$(dirname $sample_file)
+
+    extract_sample_details ${best_dir} ${samples_dir}
+}
+
+function save_best_schedule_result() {
+    local -r results_dir=$1
+    local -r samples_dir=$2
+
+    local -r app=$(basename $(dirname $samples_dir))
+
+    echo "Comparing candidate results with current best for ${app}"
+
+    local -r candidate_details_file=${samples_dir}/best.txt
+    local -r candidate_schedule_file=${samples_dir}/best.0.schedule.h
+    local -r candidate_weights_file=${samples_dir}/best.weights
+
+    if [ ! -f $candidate_schedule_file ]; then
+        echo "${candidate_schedule_file} not found. Exiting..."
+        exit
+    fi
+
+    if [ ! -f $candidate_details_file ]; then
+        extract_best_sample_details ${samples_dir}
+    fi
+
+    local -r best_details_file=${results_dir}/$app.txt
+    local -r best_schedule_file=${results_dir}/${app}.h
+    local -r best_weights_file=${results_dir}/${app}.weights
+
+    if [ ! -f $best_details_file ]; then
+        echo "$best_details_file not found. Copying in candidate files as new best results..."
+        cp $candidate_details_file $best_details_file
+        cp $candidate_schedule_file $best_schedule_file
+        cp $candidate_weights_file $best_weights_file
+        exit
+    fi
+
+    local -r current_best_run_time=$(tail -n 1 $best_details_file | cut -d" " -f 5)
+    local -r candidate_run_time=$(tail -n 1 $candidate_details_file | cut -d" " -f 5)
+
+    local -r new_best=$(echo "$candidate_run_time < $current_best_run_time" | bc -l)
+    if [ $new_best -eq 1 ]; then
+        echo "Candidate run time (${candidate_run_time} ms) is faster than the current best run time (${current_best_run_time} ms). Copying in candidate files as new best results..."
+        cp $candidate_details_file $best_details_file
+        cp $candidate_schedule_file $best_schedule_file
+        cp $candidate_weights_file $best_weights_file
+    else
+        echo "Candidate run time (${candidate_run_time} ms) is not faster than the current best run time (${current_best_run_time} ms)"
+    fi
+}
