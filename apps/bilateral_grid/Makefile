@@ -1,6 +1,8 @@
 include ../support/Makefile.inc
 
-all: $(BIN)/$(HL_TARGET)/filter
+.PHONY: build clean test
+
+build: $(BIN)/$(HL_TARGET)/filter
 
 $(GENERATOR_BIN)/bilateral_grid.generator: bilateral_grid_generator.cpp $(GENERATOR_DEPS)
 	@mkdir -p $(@D)

@@ -528,12 +528,39 @@ struct State {
                     }
                 }
             }
+
             // Outputs must be vectorized over their innermost
             // dimension, because we don't have control of the
-            // storage. TODO: Go inspect to see which dimension has a
-            // stride==1 constraint instead of assuming 0.
+            // storage. Infer which dimension(s) is(are) the innermost one(s) by
+            // looking at the stride. Note that there can be more than one in
+            // case some dimensions have an extent of 1.
+            if (node->is_output && !node->func.output_buffers().empty()) {
+                const Parameter &output = node->func.output_buffers()[0];
+                int num_dims = output.dimensions();
+                for (int i = 0; i < num_dims; ++i) {
+                    const Expr stride = output.stride_constraint(i);
+                    const int64_t *s = as_const_int(stride);
+                    if (s && *s == 1) {
+                        vector_dims.push_back(i);
+                    }
+                }
+            }
+
             if (vector_dims.empty()) {
-                vector_dims.push_back(0);
+                // This can happen if the output strides aren't known, or if all
+                // the dimensions are smaller than the vector size.
+                // TBD: consider extending compute_in_tiles to support -1 as a
+                // vector dim to indicate no vectorization.
+                for (int v = 0; v < node->dimensions; v++) {
+                    vector_dims.push_back(v);
+                }
+                // Handle the case of full reductions that generate a scalar.
+                // We need at least one vector dimension to call cmopute_in_tiles
+                // below.
+                // TBD: figure out a better fallback strategy.
+                if (vector_dims.empty()) {
+                    vector_dims.push_back(0);
+                }
             }
 
             // 2) Realize it somewhere

@@ -2,7 +2,7 @@ include ../support/Makefile.inc
 
 CXXFLAGS += -g -Wall
 
-.PHONY: clean
+.PHONY: build clean test
 
 ifeq ($(WITH_FFTW),1)
 CXXFLAGS += -DWITH_FFTW
@@ -16,6 +16,8 @@ UNAME = $(shell uname)
 ifeq ($(UNAME), Darwin)
 	LDFLAGS += -Wl,-stack_size -Wl,0x100000
 endif
+
+build: $(BIN)/$(HL_TARGET)/bench_fft
 
 $(BIN)/%/bench_fft: main.cpp fft.cpp fft.h complex.h funct.h $(LIB_HALIDE)
 	@mkdir -p $(@D)

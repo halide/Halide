@@ -1,6 +1,8 @@
 include ../support/Makefile.inc
 
-all: $(BIN)/$(HL_TARGET)/filter
+.PHONY: build clean test
+
+build: $(BIN)/$(HL_TARGET)/filter
 
 test: $(BIN)/$(HL_TARGET)/out.png
 

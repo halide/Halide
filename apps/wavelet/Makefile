@@ -1,6 +1,8 @@
 include ../support/Makefile.inc
 
-all: test
+.PHONY: build clean test
+
+build: $(BIN)/$(HL_TARGET)/wavelet
 
 clean:
 	@rm -rf $(BIN)
