@@ -822,8 +822,6 @@ struct State {
 
         compute_featurization(dag, params, target, &features, stats);
 
-        ++stats.num_featurizations;
-
         cost = 0;
 
         if (verbose) {
