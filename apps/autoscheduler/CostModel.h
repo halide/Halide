@@ -3,10 +3,21 @@
 
 #include <string>
 
+#include "Featurization.h"
 #include "HalideBuffer.h"
 
 // An abstract base class for a cost model.
 namespace Halide {
+
+// This is an interface, not a concrete implementation.
+class PipelineInfo {
+public:
+    virtual ~PipelineInfo() = default;
+
+    virtual std::vector<Internal::PipelineFeatures> pipeline_features() const = 0;
+
+    virtual int num_cores() const = 0;
+};
 
 class CostModel {
 public:
@@ -14,6 +25,8 @@ public:
 
     // Configure the cost model for the algorithm to be scheduled.
     virtual void set_pipeline_features(const Halide::Runtime::Buffer<float> &pipeline_feats, int n) = 0;
+
+    virtual void configure_from_pipeline(const PipelineInfo &pipeline_info) = 0;
 
     // Enqueue a schedule to be evaluated. Returns a buffer of
     // schedule_features that should be filled in by the caller.

@@ -46,10 +46,16 @@ class DefaultCostModel : public CostModel {
     Weights weights;
     Buffer<float> schedule_feat_queue, pipeline_feat_queue, costs;
     Buffer<double *> cost_ptrs;
-    int cursor, num_stages, num_cores;
+    int cursor = 0, num_stages = 0, num_cores = 0;
 
     const std::string weights_in_path, weights_out_path;
     const bool randomize_weights;
+
+    Buffer<float>
+        head1_filter_update, head1_bias_update,
+        head2_filter_update, head2_bias_update,
+        conv1_filter_update, conv1_bias_update;
+    int timestep = 0;
 
 public:
     DefaultCostModel(const std::string &weights_in_path,
@@ -66,6 +72,32 @@ public:
         pipeline_feat_queue = pipeline_feats;
         assert(n > 0);
         num_cores = n;
+    }
+
+    void configure_from_pipeline(const PipelineInfo &pipeline_info) override {
+        const int pipeline_feat_size = head1_w * head1_h;
+        // We ignore the first seven pipeline features in the cost
+        // model. It's just a mask of which types are in use.
+        static_assert(sizeof(PipelineFeatures) - 7 * sizeof(int) ==
+                          sizeof(int) * pipeline_feat_size,
+                      "Incorrect size for pipeline features");
+
+        std::vector<PipelineFeatures> pipeline_features = pipeline_info.pipeline_features();
+
+        pipeline_feat_queue = Buffer<float>(head1_w, head1_h, (int)pipeline_features.size());
+        int stage = 0;
+        for (const auto &p : pipeline_features) {
+            // skip the first 7 features
+            for (int i = 0; i < pipeline_feat_size; i++) {
+                int x = i / 7;
+                int y = i % 7;
+                pipeline_feat_queue(x, y, stage) = p[i + 7];
+            }
+            stage += 1;
+        }
+
+        num_cores = pipeline_info.num_cores();
+        assert(num_cores > 0);
     }
 
     void enqueue(int ns, Buffer<float> *schedule_feats, double *cost_ptr) override {
@@ -109,12 +141,6 @@ public:
     // 0) is the new weight, buf(_, 1) is the ADAM running average of
     // the first moment, and buf(_, 2) is the ADAM running average of
     // the second moment.
-    Buffer<float>
-        head1_filter_update, head1_bias_update,
-        head2_filter_update, head2_bias_update,
-        conv1_filter_update, conv1_bias_update;
-    int timestep = 0;
-
     float backprop(const Buffer<const float> &true_runtimes, float learning_rate) override {
         assert(cursor != 0);
         assert(pipeline_feat_queue.data());
@@ -321,7 +347,6 @@ public:
         }
     }
 
-    // Discard any enqueued but unevaluated schedules
     void reset() override {
         cursor = 0;
     }
