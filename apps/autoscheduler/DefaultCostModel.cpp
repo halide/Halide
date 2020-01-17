@@ -42,7 +42,7 @@ bool ends_with(const std::string &str, const std::string &suffix) {
 }
 
 }  // namespace
-  
+
 void DefaultCostModel::set_pipeline_features(const Internal::Autoscheduler::FunctionDAG &dag,
                                              const MachineParams &params) {
 
@@ -74,36 +74,33 @@ void DefaultCostModel::set_pipeline_features(const Internal::Autoscheduler::Func
     }
     internal_assert(stage == num_stages);
     pipeline_feat_queue = pipeline_features;
-    assert(params.parallelism > 0);
+    internal_assert(params.parallelism > 0);
     num_cores = params.parallelism;
 }
 
-  void DefaultCostModel::set_pipeline_features(const Runtime::Buffer<float> &pipeline_feats, int n) {
+void DefaultCostModel::set_pipeline_features(const Runtime::Buffer<float> &pipeline_feats, int n) {
     pipeline_feat_queue = pipeline_feats;
-    assert(n > 0);
+    internal_assert(n > 0);
     num_cores = n;
 }
 
-  void DefaultCostModel::enqueue(int ns, Runtime::Buffer<float> *schedule_feats, double *cost_ptr) {
+void DefaultCostModel::enqueue(int ns, Runtime::Buffer<float> *schedule_feats, double *cost_ptr) {
     num_stages = ns;
 
     // We know the most stages that will ever be enqueued from the schedule features
-    assert(pipeline_feat_queue.data() && "Call set_schedule_features before calling enqueue\n");
+    internal_assert(pipeline_feat_queue.data() && "Call set_schedule_features before calling enqueue\n");
     const int max_num_stages = pipeline_feat_queue.dim(2).extent();
-    if (num_stages > max_num_stages) {
-        std::cerr
-            << "schedule features has more stages (" << num_stages
-            << ") than pipeline features (" << max_num_stages << ")\n";
-        abort();
-    }
+    internal_assert(num_stages <= max_num_stages)
+        << "schedule features has more stages (" << num_stages
+        << ") than pipeline features (" << max_num_stages << ")\n";
 
     const int batch_size = 1024;
     if (!schedule_feat_queue.data() ||
         schedule_feat_queue.dim(2).extent() < max_num_stages) {
-        assert(cursor == 0);
+        internal_assert(cursor == 0);
         schedule_feat_queue = Runtime::Buffer<float>(batch_size, head2_w, max_num_stages);
         if (!costs.data()) {
-            assert(!cost_ptrs.data());
+            internal_assert(!cost_ptrs.data());
             costs = Runtime::Buffer<float>(batch_size);
             cost_ptrs = Runtime::Buffer<double *>(batch_size);
         }
@@ -117,7 +114,7 @@ void DefaultCostModel::set_pipeline_features(const Internal::Autoscheduler::Func
     cost_ptrs(cursor) = cost_ptr;
 
     cursor++;
-}
+}  // namespace Halide
 
 // Backprop state. To run ADAM we need a running average of the
 // gradients and gradients squared. We add an outer dimension of
@@ -125,15 +122,15 @@ void DefaultCostModel::set_pipeline_features(const Internal::Autoscheduler::Func
 // 0) is the new weight, buf(_, 1) is the ADAM running average of
 // the first moment, and buf(_, 2) is the ADAM running average of
 // the second moment.
-  float DefaultCostModel::backprop(const Runtime::Buffer<const float> &true_runtimes, float learning_rate) {
-    assert(cursor != 0);
-    assert(pipeline_feat_queue.data());
-    assert(schedule_feat_queue.data());
+float DefaultCostModel::backprop(const Runtime::Buffer<const float> &true_runtimes, float learning_rate) {
+    internal_assert(cursor != 0);
+    internal_assert(pipeline_feat_queue.data());
+    internal_assert(schedule_feat_queue.data());
 
     auto loss = Runtime::Buffer<float>::make_scalar();
 
     if (!head1_filter_update.data()) {
-      auto weight_update_buffer = [](const Runtime::Buffer<float> &w) {
+        auto weight_update_buffer = [](const Runtime::Buffer<float> &w) {
             std::vector<int> size;
             for (int i = 0; i < w.dimensions(); i++) {
                 size.push_back(w.dim(i).extent());
@@ -179,11 +176,11 @@ void DefaultCostModel::set_pipeline_features(const Internal::Autoscheduler::Func
                                   dst,
                                   loss);
     (void)result;
-    assert(result == 0);
+    internal_assert(result == 0);
 
     bool any_nans = false;
     for (int i = 0; i < cursor; i++) {
-        assert(cost_ptrs(i));
+        internal_assert(cost_ptrs(i));
         *(cost_ptrs(i)) = dst(i);
         if (std::isnan(dst(i))) {
             any_nans = true;
@@ -200,7 +197,7 @@ void DefaultCostModel::set_pipeline_features(const Internal::Autoscheduler::Func
             });
             aslog(0) << "None found\n";
         }
-        assert(true_runtimes(i) > 0);
+        internal_assert(true_runtimes(i) > 0);
     }
     if (any_nans) abort();
 
@@ -215,7 +212,7 @@ void DefaultCostModel::set_pipeline_features(const Internal::Autoscheduler::Func
     update_weight(conv1_filter_update, weights.conv1_filter);
     update_weight(conv1_bias_update, weights.conv1_bias);
 
-    assert(cursor != 0);
+    internal_assert(cursor != 0);
 
     return loss();
 }
@@ -223,8 +220,8 @@ void DefaultCostModel::set_pipeline_features(const Internal::Autoscheduler::Func
 void DefaultCostModel::evaluate_costs() {
     if (cursor == 0 || !schedule_feat_queue.data()) return;
 
-    assert(pipeline_feat_queue.data());
-    assert(schedule_feat_queue.data());
+    internal_assert(pipeline_feat_queue.data());
+    internal_assert(schedule_feat_queue.data());
 
     Runtime::Buffer<float> dst = costs.cropped(0, 0, cursor);
 
@@ -241,10 +238,10 @@ void DefaultCostModel::evaluate_costs() {
                             0.0f, 0, 0, nullptr,
                             dst, loss);
     (void)result;
-    assert(result == 0);
+    internal_assert(result == 0);
 
     for (int i = 0; i < cursor; i++) {
-        assert(cost_ptrs(i));
+        internal_assert(cost_ptrs(i));
         *(cost_ptrs(i)) = dst(i);
     }
 
@@ -263,7 +260,7 @@ void DefaultCostModel::load_weights() {
         std::istringstream i(baseline_weights_data);
         if (!weights.load(i)) {
             std::cerr << "The built-in baseline weights should never fail to load\n";
-            assert(0);
+            internal_assert(0);
         }
     } else if (ends_with(weights_in_path, ".weights")) {
         aslog(1) << "Loading weights from " << weights_in_path << " ...\n";
@@ -312,22 +309,16 @@ void DefaultCostModel::load_weights() {
 }
 
 void DefaultCostModel::save_weights() {
-    if (weights_out_path.empty()) {
-        std::cerr << "Unable to save weights: no output path specified\n";
-        abort();
-    }
+    internal_assert(!weights_out_path.empty())
+        << "Unable to save weights: no output path specified\n";
 
     if (ends_with(weights_out_path, ".weights")) {
-        if (!weights.save_to_file(weights_out_path)) {
-            std::cerr << "Unable to save weights to file: " << weights_out_path << "\n";
-            abort();
-        }
+        internal_assert(weights.save_to_file(weights_out_path))
+            << "Unable to save weights to file: " << weights_out_path << "\n";
     } else {
         std::cerr << "Saving weights to a directory is deprecated; please convert to a .weights file\n";
-        if (!weights.save_to_dir(weights_out_path)) {
-            std::cerr << "Unable to save weights to file: " << weights_out_path << "\n";
-            abort();
-        }
+        internal_assert(weights.save_to_dir(weights_out_path))
+            << "Unable to save weights to file: " << weights_out_path << "\n";
     }
 }
 
@@ -336,10 +327,9 @@ void DefaultCostModel::reset() {
     cursor = 0;
 }
 
-
 std::unique_ptr<DefaultCostModel> make_default_cost_model(const std::string &weights_in_path,
-                                                   const std::string &weights_out_path,
-                                                   bool randomize_weights) {
+                                                          const std::string &weights_out_path,
+                                                          bool randomize_weights) {
     return std::unique_ptr<DefaultCostModel>(new DefaultCostModel(weights_in_path, weights_out_path, randomize_weights));
 }
 
