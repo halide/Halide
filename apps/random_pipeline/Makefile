@@ -3,8 +3,8 @@ include ../support/autoscheduler.inc
 
 all: $(BIN)/test
 
-PIPELINE_SEED ?= 0
-PIPELINE_STAGES ?= 20
+PIPELINE_SEED ?= 1
+PIPELINE_STAGES ?= 1
 HL_RANDOM_DROPOUT ?= 100
 HL_SEED ?= 0
 HL_BEAM_SIZE ?= 1
@@ -27,6 +27,10 @@ endif
 $(BIN)/runtime.a: $(BIN)/random_pipeline.generator
 	$^ -r runtime target=$(HL_TARGET) -o $(BIN)
 
+$(BIN)/new_generator.generator: new_generator.cpp $(GENERATOR_DEPS) 
+	@mkdir -p $(@D)
+	$(CXX) $(CXXFLAGS) $(USE_EXPORT_DYNAMIC) -g -fno-rtti $(filter-out %.h,$^) -o $@ $(LDFLAGS) $(HALIDE_SYSTEM_LIBS)
+
 $(BIN)/random_pipeline.generator: random_pipeline_generator.cpp $(GENERATOR_DEPS)
 	@mkdir -p $(@D)
 	$(CXX) $(CXXFLAGS) $(USE_EXPORT_DYNAMIC) -fno-rtti $(filter-out %.h,$^) -o $@ $(LDFLAGS) $(HALIDE_SYSTEM_LIBS)
@@ -46,11 +50,31 @@ $(BIN)/$(ID)/test: test.cpp $(BIN)/$(ID)/random_pipeline.a $(BIN)/runtime.a
 	@mkdir -p $(@D)
 	$(CXX) $(CXXFLAGS) -I$(BIN)/$(ID) -Wall -O3 $^ -o $@ $(LDFLAGS)
 
+TRAINING_BIN=./random_pipeline_training
+INFERENCE_BIN=./random_pipeline_inference
+
 clean:
 	rm -rf $(BIN)
+	rm -rf $(TRAINING_BIN)
+	rm -rf $(INFERENCE_BIN)
 
 $(BIN)/$(ID)/times.txt: $(BIN)/$(ID)/test
 	$(BIN)/$(ID)/test > $(BIN)/$(ID)/times.txt
 
 build: $(BIN)/$(ID)/test
 bench: $(BIN)/$(ID)/times.txt
+
+
+$(TRAINING_BIN)/random_pipeline_training.a: $(BIN)/new_generator.generator
+	@mkdir -p $(@D)
+	$(BIN)/new_generator.generator -g random_pipeline_training -o $(TRAINING_BIN) -e static_library,h,stmt,assembly,registration target=$(HL_TARGET) auto_schedule=false max_stages=$(PIPELINE_STAGES) seed=$(PIPELINE_SEED) 2> $(TRAINING_BIN)/compile_log_stderr.txt > $(TRAINING_BIN)/compile_log_stdout.txt
+
+$(INFERENCE_BIN)/random_pipeline_inference.a: $(BIN)/new_generator.generator
+	@mkdir -p $(@D)
+	$(BIN)/new_generator.generator -g random_pipeline_inference -o $(INFERENCE_BIN) -e static_library,h,stmt,assembly,registration target=$(HL_TARGET) auto_schedule=false max_stages=$(PIPELINE_STAGES) seed=$(PIPELINE_SEED) 2> $(INFERENCE_BIN)/compile_log_stderr.txt > $(INFERENCE_BIN)/compile_log_stdout.txt
+
+$(BIN)/test_gen: testing.cpp $(TRAINING_BIN)/random_pipeline_training.a $(INFERENCE_BIN)/random_pipeline_inference.a
+	@mkdir -p $(@D)
+	$(CXX) $(CXXFLAGS) -g -Wall -I $(TRAINING_BIN) -I $(INFERENCE_BIN) $(filter-out %.h,$^) -o $@ $(LDFLAGS) $(USE_OPEN_MP)
+
+test_gen: $(BIN)/test_gen
