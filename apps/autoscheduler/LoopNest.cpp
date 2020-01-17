@@ -208,10 +208,10 @@ vector<vector<int64_t>> generate_gpu_tilings(const vector<vector<int64_t>> &stag
                         lowered_dims(stage_thread_t, vectorized_indices[stage], stage_lowered_size);
                         // adjust max_size to account for other stages thread counts when we apply this tiling
                         for (size_t dim = 0; dim < stage_lowered_size.size(); dim++) {
-                            if ( dim >= max_s.size() ) {
+                            if (dim >= new_max_s.size()) {
                                 new_max_s.push_back(stage_lowered_size[dim]);
                             } else {
-                                new_max_s[dim] = std::max(max_s[dim], stage_lowered_size[dim]);
+                                new_max_s[dim] = std::max(new_max_s[dim], stage_lowered_size[dim]);
                             }
                         }
                     }
