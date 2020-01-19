@@ -106,6 +106,21 @@ bool are_valid_thread_extents(const vector<int64_t>& counts) {
     return true;
 }
 
+double get_idle_lane_wastage_limit_env_var() {
+    std::string limit_str = get_env_variable("HL_IDLE_LANE_WASTAGE_LIMIT");
+    if (limit_str.empty()) {
+        return 0.25;
+    }
+
+    double limit = std::atof(limit_str.c_str());
+    internal_assert(limit >= 0 && limit <= 1);
+    return limit;
+}
+
+double get_idle_lane_wastage_limit() {
+    static double limit = get_idle_lane_wastage_limit_env_var();
+    return limit;
+}
 
 
 
@@ -3422,6 +3437,25 @@ void LoopNest::apply(LoopLevel here,
             }
         }
     }
+}
+
+double LoopNest::max_idle_lane_wastage(const Target& target, GPULoopInfo gpu_loop_info) const {
+    gpu_loop_info.update(target, this);
+    std::unique_ptr<ThreadInfo> thread_info;
+
+    if (is_gpu_thread(target)) {
+        thread_info = gpu_loop_info.create_thread_info();
+
+        return thread_info->idle_lane_wastage();
+    }
+
+    double max_wastage = 0;
+
+    for (const auto &c : children) {
+        max_wastage = std::max(max_wastage, c->max_idle_lane_wastage(target, gpu_loop_info));
+    }
+
+    return max_wastage;
 }
 
 }  // namespace Autoscheduler

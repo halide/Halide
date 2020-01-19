@@ -907,7 +907,7 @@ struct State {
         return s;
     }
 
-    // Sort / filter the options
+    // Sort / filter parallel tile options
     struct ParallelTileOption {
         vector<int64_t> outer_tiling;
         vector<int64_t> inner_tiling;
@@ -972,6 +972,20 @@ struct State {
                 continue;
             }
 
+            options.emplace_back(std::move(o));
+        }
+
+        std::sort(options.begin(), options.end());
+
+        return options;
+    }
+
+    vector<ThreadTileOption> filter_thread_tile_options(const MachineParams &params, const Target &target, vector<IntrusivePtr<const LoopNest>>& loop_nests) const {
+        vector<ThreadTileOption> options;
+        for (const auto& loop_nest : loop_nests) {
+            ThreadTileOption o;
+            o.loop_nest = loop_nest;
+            o.max_idle_lane_wastage = loop_nest->max_idle_lane_wastage(target, {loop_nest.get()});
             options.emplace_back(std::move(o));
         }
 
@@ -1101,9 +1115,14 @@ struct State {
             // 2) Realize it somewhere
             for (int vector_dim : vector_dims) {
                 auto tile_options = root->compute_in_tiles(node, nullptr, params, target, vector_dim, false, false);
-                for (IntrusivePtr<const LoopNest> &n : tile_options) {
+                auto options = filter_thread_tile_options(params, target, tile_options);
+                for (const auto& o : options) {
+                    if (num_children >= 1 && o.max_idle_lane_wastage > 0.25) {
+                        break;
+                    }
+
                     auto child = make_child();
-                    child->root = std::move(n);
+                    child->root = std::move(o.loop_nest);
                     child->num_decisions_made++;
                     if (child->calculate_cost(dag, params, target, cost_model, stats)) {
                         num_children++;

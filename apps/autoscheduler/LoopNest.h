@@ -43,6 +43,9 @@ bool in_range_zero_one(double x);
 
 bool are_valid_thread_extents(const vector<int64_t>& counts);
 
+double get_idle_lane_wastage_limit_env_var();
+double get_idle_lane_wastage_limit();
+
 
 /** moves vectorized dimension first and also removes dimensions with size 1
     to reflect actual thread dimensions when loop nests are lowered **/
@@ -467,6 +470,8 @@ struct LoopNest {
                const LoopNest *compute_site,
                const Target& target,
                std::vector<StageScheduleState*>& ancestors) const;
+
+    double max_idle_lane_wastage(const Target& target, GPULoopInfo gpu_loop_info) const;
 };
 
 }  // namespace Autoscheduler

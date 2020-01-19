@@ -321,6 +321,7 @@ struct ScheduleFeatures {
     double warp_lane_utilization_at_block_x = 1;
     double warp_lane_utilization_at_block_y = 1;
     double warp_lane_utilization_at_block_z = 1;
+    double idle_lane_wastage = 0;
 
     double num_shared_mem_loads = 0;
     double num_shared_mem_loads_per_block = 0;
@@ -399,6 +400,7 @@ struct ScheduleFeatures {
             << "    warp_lane_utilization_at_block_x:      " << warp_lane_utilization_at_block_x << '\n'
             << "    warp_lane_utilization_at_block_y:      " << warp_lane_utilization_at_block_y << '\n'
             << "    warp_lane_utilization_at_block_z:      " << warp_lane_utilization_at_block_z << '\n'
+            << "    idle_lane_wastage:                     " << idle_lane_wastage << '\n'
             << "    num_shared_mem_loads:                  " << num_shared_mem_loads << '\n'
             << "    num_shared_mem_loads_per_block:        " << num_shared_mem_loads_per_block << '\n'
             << "    num_global_mem_loads_per_block:        " << num_global_mem_loads_per_block << '\n'
@@ -475,6 +477,7 @@ struct ScheduleFeatures {
             && warp_lane_utilization_at_block_x      == other.warp_lane_utilization_at_block_x
             && warp_lane_utilization_at_block_y      == other.warp_lane_utilization_at_block_y
             && warp_lane_utilization_at_block_z      == other.warp_lane_utilization_at_block_z
+            && idle_lane_wastage                     == other.idle_lane_wastage
             && num_shared_mem_loads                  == other.num_shared_mem_loads
             && num_shared_mem_loads_per_block        == other.num_shared_mem_loads_per_block
             && num_global_mem_loads_per_block        == other.num_global_mem_loads_per_block

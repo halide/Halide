@@ -18,6 +18,24 @@ namespace Autoscheduler {
 
 #define MAX_THREADS_PER_BLOCK 1024
 
+struct LoopNest;
+
+// Sort / filter thread tile options
+struct ThreadTileOption {
+    IntrusivePtr<const LoopNest> loop_nest;
+    double max_idle_lane_wastage;
+    bool operator<(const ThreadTileOption &other) const {
+        return max_idle_lane_wastage < other.max_idle_lane_wastage;
+    }
+
+    // Ensure we don't accidentally copy this type
+    ThreadTileOption() = default;
+    ThreadTileOption(ThreadTileOption &&) = default;
+    ThreadTileOption &operator=(ThreadTileOption &&) = default;
+    ThreadTileOption(const ThreadTileOption &) = delete;
+    ThreadTileOption &operator=(const ThreadTileOption &) = delete;
+};
+
 struct ThreadInfo {
     ThreadInfo(const std::vector<int64_t>& max_thread_counts) {
         init_threads_in_this_block(max_thread_counts);
@@ -109,6 +127,10 @@ struct ThreadInfo {
 
     double warp_lane_utilization() const {
         return (double)num_threads / (double)(num_warps_per_block * 32);
+    }
+
+    double idle_lane_wastage() const {
+        return ((double)(num_warps_per_block * 32) - (double)num_threads) / MAX_THREADS_PER_BLOCK;
     }
 
     double block_occupancy() const {
