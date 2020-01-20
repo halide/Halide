@@ -323,19 +323,23 @@ vector<vector<int64_t>> generate_gpu_tilings(const vector<vector<int64_t>> &stag
 // used for creating default serial loop tiling options inside gpu threads loop
 vector<vector<int64_t>> generate_serial_tilings(const vector<int64_t> &s, int d,
                                                 int vectorized_index,
-                                                const vector<int> &vec_dim_serial_sizes) {
+                                                const vector<int> &vec_dim_serial_sizes,
+                                                bool filter_small_outer_extents) {
     vector<vector<int64_t>> result;
     if (d == -1) {
         result.push_back(vector<int64_t>());
     } else {
         vector<vector<int64_t>> v;
-        v = generate_serial_tilings(s, d - 1, vectorized_index, vec_dim_serial_sizes);
+        v = generate_serial_tilings(s, d - 1, vectorized_index, vec_dim_serial_sizes, filter_small_outer_extents);
         for (auto t : v) {
             t.push_back(0);
             // include odd serial sizes that encourage multiples of 16 as thread tile size
             if (vec_dim_serial_sizes.size() > 0 && d == vectorized_index) {
                 for (int inner : vec_dim_serial_sizes) {
                     int outer = (s[d] + inner - 1) / inner;
+                    if (filter_small_outer_extents && outer < 16) {
+                        continue;
+                    }
                     t.back() = outer;
                     result.push_back(t);
                 }
@@ -346,6 +350,9 @@ vector<vector<int64_t>> generate_serial_tilings(const vector<int64_t> &s, int d,
                     break;
                 }
                 int outer = (s[d] + inner - 1) / inner;
+                if (d == vectorized_index && filter_small_outer_extents && outer < 16) {
+                    continue;
+                }
                 t.back() = outer;
                 result.push_back(t);
             }
@@ -2882,7 +2889,13 @@ vector<IntrusivePtr<const LoopNest>> LoopNest::compute_in_tiles(const FunctionDA
         internal_assert(parent != nullptr);
 
         // Generate a list of tile sizes to try
-        auto tilings = generate_tilings(size, (int)(size.size() - 1), 2, !in_realization, target);
+        vector<vector<int64_t>> tilings;
+
+        if (gpu_label == thread) {
+            tilings = generate_serial_tilings(size, node->dimensions - 1, vectorized_loop_index, {}, true);
+        } else {
+            tilings = generate_tilings(size, (int)(size.size() - 1), 2, !in_realization, target);
+        }
 
         if (tilings.size() > 10000) {
             aslog(0) << "Warning: lots of tilings: " << tilings.size() << "\n";

@@ -1117,7 +1117,7 @@ struct State {
                 auto tile_options = root->compute_in_tiles(node, nullptr, params, target, vector_dim, false, false);
                 auto options = filter_thread_tile_options(params, target, tile_options);
                 for (const auto& o : options) {
-                    if (num_children >= 1 && o.max_idle_lane_wastage > 0.25) {
+                    if (num_children >= 1 && o.max_idle_lane_wastage > 0.5) {
                         break;
                     }
 
@@ -1169,7 +1169,7 @@ struct State {
                     auto parallel_tilings = generate_serial_tilings(*pure_size,
                                                                     node->dimensions-1,
                                                                     pure_stage->vectorized_loop_index,
-                                                                    vec_dim_serial_sizes);
+                                                                    vec_dim_serial_sizes, true);
 
                     internal_assert(parallel_tilings.size() > 0) << " zero parallel tilings\n";
 

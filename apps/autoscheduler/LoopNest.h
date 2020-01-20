@@ -67,7 +67,8 @@ vector<vector<int64_t>> generate_gpu_tilings(const vector<vector<int64_t>> &stag
 // used for creating default serial loop tiling options inside gpu threads loop
 vector<vector<int64_t>> generate_serial_tilings(const vector<int64_t> &s, int d,
                                                 int vectorized_index,
-                                                const vector<int> &vec_dim_serial_sizes);
+                                                const vector<int> &vec_dim_serial_sizes,
+                                                bool filter_small_outer_extents=false);
 
 
 // Given a multi-dimensional box of dimensionality d, generate a list
