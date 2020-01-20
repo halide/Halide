@@ -234,7 +234,7 @@ struct LoopNest {
         }
     }
 
-    bool exceeds_serial_extents_limit(bool in_threads_loop) const;
+    bool exceeds_serial_extents_limit(const Target& target, const LoopNest* parent, bool in_threads_loop) const;
 
     bool node_has_dynamic_region_computed(const FunctionDAG::Node* f) const;
 

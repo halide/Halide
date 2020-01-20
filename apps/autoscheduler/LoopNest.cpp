@@ -668,18 +668,28 @@ void LoopNest::get_sites(const Target& target,
     }
 }
 
-bool LoopNest::exceeds_serial_extents_limit(bool in_threads_loop) const {
+bool LoopNest::exceeds_serial_extents_limit(const Target& target, const LoopNest* parent, bool in_threads_loop) const {
+    bool parent_of_innermost = false;
+    for (const auto& c : children) {
+        if (c->node == node && c->innermost) {
+            parent_of_innermost = true;
+        }
+    }
+
     if (gpu_label == serial && in_threads_loop && stage->index == 0) {
         int64_t serial_loop_extents = 1;
         for (const auto s : size) {
             serial_loop_extents *= s;
         }
 
+        if (parent_of_innermost) {
+            return serial_loop_extents > get_unroll_limit(target);
+        }
         return serial_loop_extents > 64;
     }
 
     for (const auto& c : children) {
-        if (c->exceeds_serial_extents_limit(in_threads_loop || c->gpu_label == thread)) {
+        if (c->exceeds_serial_extents_limit(target, this, in_threads_loop || c->gpu_label == thread)) {
             return true;
         }
     }

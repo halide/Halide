@@ -726,7 +726,7 @@ struct State {
             return false;
         }
 
-        return root->exceeds_serial_extents_limit(false);
+        return root->exceeds_serial_extents_limit(target, nullptr, false);
     }
 
     int64_t get_shared_mem_alloc_size(const LoopNest* loop) {
