@@ -517,7 +517,7 @@ bool LoopNest::add_gpu_thread_tilings(const FunctionDAG::Node *f,
         new_parent->copy_from(*(this));
         for (auto &c : new_parent->children) {
             if (c->node == f) {
-                c = c->parallelize_in_tiles(params, t, new_parent, target, false, true);
+                c = c->parallelize_in_tiles(params, t, new_parent, target, false, false);
             }
         }
         result.emplace_back(new_parent);
