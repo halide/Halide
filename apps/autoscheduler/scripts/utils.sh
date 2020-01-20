@@ -308,9 +308,7 @@ function save_best_schedule_result() {
         return
     fi
 
-    if [ ! -f $candidate_details_file ]; then
-        extract_best_sample_details ${samples_dir}
-    fi
+    extract_best_sample_details ${samples_dir}
 
     local -r best_details_file=${results_dir}/$app.txt
     local -r best_schedule_file=${results_dir}/${app}.h
