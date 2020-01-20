@@ -676,10 +676,14 @@ bool LoopNest::exceeds_serial_extents_limit(const Target& target, const LoopNest
         }
     }
 
-    if (gpu_label == serial && in_threads_loop && stage->index == 0) {
+    if (gpu_label == serial && stage->index == 0) {
         int64_t serial_loop_extents = 1;
-        for (const auto s : size) {
-            serial_loop_extents *= s;
+        for (size_t i = 0; i < stage->loop.size(); i++) {
+            if (!stage->loop[i].pure) {
+                continue;
+            }
+
+            serial_loop_extents *= size[stage->loop[i].pure_dim];
         }
 
         if (parent_of_innermost) {
@@ -2901,8 +2905,8 @@ vector<IntrusivePtr<const LoopNest>> LoopNest::compute_in_tiles(const FunctionDA
         // Generate a list of tile sizes to try
         vector<vector<int64_t>> tilings;
 
-        if (gpu_label == thread) {
-            tilings = generate_serial_tilings(size, node->dimensions - 1, vectorized_loop_index, {}, true);
+        if (gpu_label == thread || gpu_label == block || gpu_label == serial) {
+            tilings = generate_serial_tilings(size, node->dimensions - 1, vectorized_loop_index, {}, gpu_label == thread);
         } else {
             tilings = generate_tilings(size, (int)(size.size() - 1), 2, !in_realization, target);
         }
