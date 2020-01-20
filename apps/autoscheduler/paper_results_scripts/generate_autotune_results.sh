@@ -1,7 +1,7 @@
 #!/bin/bash
 
-if [[ $# -ne 1 && $# -ne 2 ]]; then
-    echo "Usage: $0 max_iterations app"
+if [[ $# -ne 2 && $# -ne 3 ]]; then
+    echo "Usage: $0 max_iterations resume app"
     exit
 fi
 
@@ -16,7 +16,8 @@ find_halide HALIDE_ROOT
 build_autoscheduler_tools ${HALIDE_ROOT}
 
 MAX_ITERATIONS=${1}
-APP=${2}
+RESUME=${2}
+APP=${3}
 
 export CXX="ccache c++"
 
@@ -32,7 +33,6 @@ else
 fi
 
 CURRENT_DATE_TIME="`date +%Y-%m-%d-%H-%M-%S`";
-SAMPLES_DIR_NAME=${SAMPLES_DIR_NAME}-${CURRENT_DATE_TIME}
 
 if [ -z $APP ]; then
     APPS="resnet_50_blockwise bgu bilateral_grid local_laplacian nl_means lens_blur camera_pipe stencil_chain harris hist max_filter unsharp interpolate_generator conv_layer cuda_mat_mul iir_blur_generator"
@@ -46,24 +46,18 @@ for app in $APPS; do
 done
 echo "Autotuning on $APPS for $MAX_ITERATIONS iteration(s)"
 
-function ctrl_c() {
-    echo "Trap: CTRL+C received, exiting"
-    pkill -P $$
-
-    for app in $APPS; do
-        ps aux | grep ${app}.generator | awk '{print $2}' | xargs kill
-
-        SAMPLES_DIR="${APP_DIR}/${SAMPLES_DIR_NAME}"
-        save_best_schedule_result ${BEST_SCHEDULES_DIR} ${SAMPLES_DIR}
-    done
-
-    print_best_schedule_times $(dirname $0)/best
-    exit
-}
-
 for app in $APPS; do
     APP_DIR="${HALIDE_ROOT}/apps/${app}"
-    SAMPLES_DIR="${APP_DIR}/${SAMPLES_DIR_NAME}"
+
+    if [ ${RESUME} -eq 1 ]; then
+        SAMPLES_DIR=$(ls -ld $APP_DIR/${SAMPLES_DIR_NAME}* | tail -n 1 | rev | cut -d" " -f 1 | rev)
+        echo "Resuming from existing run: ${SAMPLES_DIR}"
+    else
+        SAMPLES_DIR_NAME=${SAMPLES_DIR_NAME}-${CURRENT_DATE_TIME}
+        SAMPLES_DIR="${APP_DIR}/${SAMPLES_DIR_NAME}"
+        echo "Starting new run in: ${SAMPLES_DIR}"
+    fi
+
     OUTPUT_FILE="${SAMPLES_DIR}/autotune_out.txt"
     PREDICTIONS_FILE="${SAMPLES_DIR}/predictions"
     BEST_TIMES_FILE="${SAMPLES_DIR}/best_times"
@@ -92,3 +86,23 @@ for app in $APPS; do
 done
 
 print_best_schedule_times $(dirname $0)/best
+
+function ctrl_c() {
+    echo "Trap: CTRL+C received, exiting"
+    pkill -P $$
+
+    for app in $APPS; do
+        ps aux | grep ${app}.generator | awk '{print $2}' | xargs kill
+
+        if [ ${RESUME} -eq 1 ]; then
+            SAMPLES_DIR=$(ls -ld $APP_DIR/${SAMPLES_DIR_NAME}* | tail -n 1 | rev | cut -d" " -f 1 | rev)
+        else
+            SAMPLES_DIR_NAME=${SAMPLES_DIR_NAME}-${CURRENT_DATE_TIME}
+            SAMPLES_DIR="${APP_DIR}/${SAMPLES_DIR_NAME}"
+        fi
+        save_best_schedule_result ${BEST_SCHEDULES_DIR} ${SAMPLES_DIR}
+    done
+
+    print_best_schedule_times $(dirname $0)/best
+    exit
+}
