@@ -1274,6 +1274,7 @@ void LoopNest::compute_warp_features(ScheduleFeatures& features, const GPULoopIn
     features.warp_lane_utilization_at_block_x = thread_info->warp_lane_utilization_at_block_x();
     features.warp_lane_utilization_at_block_y = thread_info->warp_lane_utilization_at_block_y();
     features.warp_lane_utilization_at_block_z = thread_info->warp_lane_utilization_at_block_z();
+    features.idle_lane_wastage = thread_info->idle_lane_wastage();
     features.num_warps_per_block = thread_info->num_warps_per_block;
     features.num_blocks = gpu_loop_info.num_blocks;
     features.block_occupancy = thread_info->block_occupancy();

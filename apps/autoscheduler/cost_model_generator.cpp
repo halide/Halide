@@ -339,7 +339,7 @@ public:
         compute_cost /= select(inlined_calls == 0, warp_lane_utilization_at_block_x, 1.f);
         compute_cost /= select(inlined_calls == 0, warp_lane_utilization_at_block_y, 1.f);
         compute_cost /= select(inlined_calls == 0, warp_lane_utilization_at_block_z, 1.f);
-        compute_cost *= select(inlined_calls == 0, idle_lane_wastage, 1.f);
+        compute_cost /= select(inlined_calls == 0, 1 - idle_lane_wastage, 1.f);
 
         // Next comes a long list of plausible terms to capture the cost of loads.
         Expr load_cost = (num_realizations * unique_lines_read_per_realization * relu1(5, w, n) +
