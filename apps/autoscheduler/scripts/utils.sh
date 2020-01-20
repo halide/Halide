@@ -316,8 +316,10 @@ function save_best_schedule_result() {
     local -r best_schedule_file=${results_dir}/${app}.h
     local -r best_weights_file=${results_dir}/${app}.weights
 
+    local -r candidate_run_time=$(tail -n 1 $candidate_details_file | cut -d" " -f 5)
+
     if [ ! -f $best_details_file ]; then
-        echo "$best_details_file not found. Copying in candidate files as new best results..."
+        echo "$best_details_file not found. Copying in candidate (${candidate_run_time} ms) files as new best results..."
         cp $candidate_details_file $best_details_file
         cp $candidate_schedule_file $best_schedule_file
         cp $candidate_weights_file $best_weights_file
@@ -325,7 +327,6 @@ function save_best_schedule_result() {
     fi
 
     local -r current_best_run_time=$(tail -n 1 $best_details_file | cut -d" " -f 5)
-    local -r candidate_run_time=$(tail -n 1 $candidate_details_file | cut -d" " -f 5)
 
     local -r new_best=$(echo "$candidate_run_time < $current_best_run_time" | bc -l)
     if [ $new_best -eq 1 ]; then
