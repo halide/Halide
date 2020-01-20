@@ -470,6 +470,8 @@ class ExtractSharedAndHeapAllocations : public IRMutator {
         return IfThenElse::make(condition, then_case, else_case);
     }
 
+    int alloc_node_counter = 0;
+
     Stmt visit(const Allocate *op) override {
         user_assert(!op->new_expr.defined())
             << "Allocate node inside GPU kernel has custom new expression.\n"
@@ -493,7 +495,7 @@ class ExtractSharedAndHeapAllocations : public IRMutator {
             << "but is scheduled to live in " << op->memory_type << " memory.\n";
 
         SharedAllocation alloc;
-        alloc.name = op->name;
+        alloc.name = op->name + "." + std::to_string(alloc_node_counter++);
         alloc.type = op->type;
         alloc.liveness = IntInterval(barrier_stage, barrier_stage);
         alloc.size = 1;
@@ -554,7 +556,7 @@ class ExtractSharedAndHeapAllocations : public IRMutator {
             const string &prefix = name_for_memory_type(alloc->memory_type);
 
             if (device_api == DeviceAPI::OpenGLCompute) {
-                return Load::make(op->type, prefix + "_" + op->name,
+                return Load::make(op->type, prefix + "_" + alloc->name,
                                   index, op->image, op->param, predicate, op->alignment);
             } else {
                 return Load::make(op->type, prefix, index,
@@ -576,7 +578,7 @@ class ExtractSharedAndHeapAllocations : public IRMutator {
             Expr value = mutate(op->value);
             const string &prefix = name_for_memory_type(alloc->memory_type);
             if (device_api == DeviceAPI::OpenGLCompute) {
-                return Store::make(prefix + "_" + op->name, value, index,
+                return Store::make(prefix + "_" + alloc->name, value, index,
                                    op->param, predicate, op->alignment);
             } else {
                 return Store::make(prefix, value, index, op->param, predicate, ModulusRemainder());
@@ -588,17 +590,41 @@ class ExtractSharedAndHeapAllocations : public IRMutator {
 
     Stmt visit(const LetStmt *op) override {
         Expr value = mutate(op->value);
+
+        // Set aside the allocations we've found so far.
+        Stmt old_preamble = host_side_preamble;
+        host_side_preamble = Stmt();
+        vector<SharedAllocation> old;
+        old.swap(allocations);
+
         Stmt body = mutate(op->body);
 
+        // Wrap let expression for any allocations found within
         for (SharedAllocation &s : allocations) {
             if (expr_uses_var(s.size, op->name) && !s.size_computed_on_host) {
-                s.size = simplify(Let::make(op->name, op->value, s.size));
+                s.size = Let::make(op->name, op->value, s.size);
+                s.size = simplify(s.size);
             }
         }
 
         if (host_side_preamble.defined() &&
             stmt_uses_var(host_side_preamble, op->name)) {
             host_side_preamble = LetStmt::make(op->name, op->value, host_side_preamble);
+        }
+
+        if (old_preamble.defined()) {
+            if (host_side_preamble.defined()) {
+                host_side_preamble = Block::make(old_preamble, host_side_preamble);
+            } else {
+                host_side_preamble = old_preamble;
+            }
+        }
+
+        // Add back on the allocations we set aside.
+        if (!allocations.empty()) {
+            allocations.insert(allocations.end(), old.begin(), old.end());
+        } else {
+            allocations.swap(old);
         }
 
         if (op->body.same_as(body) && value.same_as(op->value)) {
@@ -1028,6 +1054,9 @@ class ExtractRegisterAllocations : public IRMutator {
         }
     }
 
+    int alloc_node_counter = 0;
+    Scope<string> alloc_renaming;
+
     Stmt visit(const Allocate *op) override {
         if (in_lane_loop) {
             return IRMutator::visit(op);
@@ -1044,7 +1073,7 @@ class ExtractRegisterAllocations : public IRMutator {
         ScopedBinding<int> p(register_allocations, op->name, 0);
 
         RegisterAllocation alloc;
-        alloc.name = op->name;
+        alloc.name = op->name + "." + std::to_string(alloc_node_counter++);
         alloc.type = op->type;
         alloc.size = 1;
         alloc.loop_var = loop_var;
@@ -1055,7 +1084,29 @@ class ExtractRegisterAllocations : public IRMutator {
         alloc.memory_type = op->memory_type;
 
         allocations.push_back(alloc);
-        return mutate(op->body);
+        {
+            ScopedBinding<string> bind(alloc_renaming, op->name, alloc.name);
+            return mutate(op->body);
+        }
+    }
+
+    Expr visit(const Load *op) override {
+        string new_name = op->name;
+        if (alloc_renaming.contains(op->name)) {
+            new_name = alloc_renaming.get(op->name);
+        }
+        return Load::make(op->type, new_name, mutate(op->index),
+                          op->image, op->param, mutate(op->predicate),
+                          op->alignment);
+    }
+
+    Stmt visit(const Store *op) override {
+        string new_name = op->name;
+        if (alloc_renaming.contains(op->name)) {
+            new_name = alloc_renaming.get(op->name);
+        }
+        return Store::make(new_name, mutate(op->value), mutate(op->index),
+                           op->param, mutate(op->predicate), op->alignment);
     }
 
     template<typename ExprOrStmt, typename LetOrLetStmt>
