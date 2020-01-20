@@ -338,3 +338,20 @@ function save_best_schedule_result() {
         echo "Candidate run time (${candidate_run_time} ms) is not faster than the current best run time (${current_best_run_time} ms)"
     fi
 }
+
+function print_best_schedule_times() {
+    local -r dir=$1
+
+    local -r apps="resnet_50_blockwise bgu bilateral_grid local_laplacian nl_means lens_blur camera_pipe stencil_chain harris hist max_filter unsharp interpolate_generator conv_layer cuda_mat_mul iir_blur_generator"
+
+    for app in $apps; do
+        local file=$dir/$app.txt
+        if [ ! -f $file ]; then
+            echo "$app not found."
+            continue
+        fi
+
+        local current_best_run_time=$(tail -n 1 $file | cut -d" " -f 5)
+        echo "$app: $current_best_run_time ms"
+    done
+}

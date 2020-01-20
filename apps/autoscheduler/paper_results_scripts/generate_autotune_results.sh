@@ -56,6 +56,8 @@ function ctrl_c() {
         SAMPLES_DIR="${APP_DIR}/${SAMPLES_DIR_NAME}"
         save_best_schedule_result ${BEST_SCHEDULES_DIR} ${SAMPLES_DIR}
     done
+
+    print_best_schedule_times $(dirname $0)/best
     exit
 }
 
@@ -88,3 +90,5 @@ for app in $APPS; do
 
     save_best_schedule_result ${BEST_SCHEDULES_DIR} ${SAMPLES_DIR}
 done
+
+print_best_schedule_times $(dirname $0)/best
