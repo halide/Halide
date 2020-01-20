@@ -305,7 +305,7 @@ function save_best_schedule_result() {
 
     if [ ! -f $candidate_schedule_file ]; then
         echo "${candidate_schedule_file} not found. Exiting..."
-        exit
+        return
     fi
 
     if [ ! -f $candidate_details_file ]; then
@@ -321,7 +321,7 @@ function save_best_schedule_result() {
         cp $candidate_details_file $best_details_file
         cp $candidate_schedule_file $best_schedule_file
         cp $candidate_weights_file $best_weights_file
-        exit
+        return
     fi
 
     local -r current_best_run_time=$(tail -n 1 $best_details_file | cut -d" " -f 5)
