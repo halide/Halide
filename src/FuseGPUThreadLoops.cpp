@@ -1080,7 +1080,7 @@ class ExtractRegisterAllocations : public IRMutator {
         for (size_t i = 0; i < op->extents.size(); i++) {
             alloc.size *= op->extents[i];
         }
-        alloc.size = simplify(alloc.size);
+        alloc.size = simplify(mutate(alloc.size));
         alloc.memory_type = op->memory_type;
 
         allocations.push_back(alloc);
@@ -1114,17 +1114,18 @@ class ExtractRegisterAllocations : public IRMutator {
         ExprOrStmt body = op->body;
 
         body = mutate(op->body);
+        Expr value = mutate(op->value);
 
         for (RegisterAllocation &s : allocations) {
             if (expr_uses_var(s.size, op->name)) {
-                s.size = simplify(Let::make(op->name, op->value, s.size));
+                s.size = simplify(Let::make(op->name, value, s.size));
             }
         }
 
         if (op->body.same_as(body)) {
             return op;
         } else {
-            return LetOrLetStmt::make(op->name, op->value, body);
+            return LetOrLetStmt::make(op->name, value, body);
         }
     }
 
