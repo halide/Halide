@@ -170,20 +170,20 @@ class Featurizer : public IRVisitor {
 
     OptionalRational differentiate(const Expr &e, const string &v) {
         if (!expr_uses_var(e, v, lets)) {
-            return {true, 0, 1};
+            return {0, 1};
         } else if (const Variable *var = e.as<Variable>()) {
             if (var->name == v) {
-                return {true, 1, 1};
+                return {1, 1};
             }
             for (const auto &l : stage.loop) {
                 if (var->name == l.var) {
                     // Some other loop variable
-                    return {true, 0, 1};
+                    return {0, 1};
                 }
             }
             if (var->param.defined()) {
                 // An argument
-                return {true, 0, 1};
+                return {0, 1};
             } else if (lets.contains(var->name)) {
                 string key = v + " " + var->name;
                 if (dlets.contains(key)) {
@@ -195,7 +195,7 @@ class Featurizer : public IRVisitor {
             }
             // Some mystery variable. Who knows what it depends on.
             internal_error << "Encountered unbound variable in call args: " << var->name << "\n";
-            return {false, 0, 0};
+            return {0, 0};
         } else if (const Add *op = e.as<Add>()) {
             auto a = differentiate(op->a, v);
             a += differentiate(op->b, v);
@@ -212,7 +212,7 @@ class Featurizer : public IRVisitor {
                 a.numerator *= *ib;
                 return a;
             } else {
-                return {false, 0, 0};
+                return {0, 0};
             }
         } else if (const Div *op = e.as<Div>()) {
             auto a = differentiate(op->a, v);
@@ -222,7 +222,7 @@ class Featurizer : public IRVisitor {
                 }
                 return a;
             } else {
-                return {false, 0, 0};
+                return {0, 0};
             }
         } else if (const Call *op = e.as<Call>()) {
             if (op->is_intrinsic(Call::likely)) {
@@ -231,7 +231,7 @@ class Featurizer : public IRVisitor {
             }
         }
 
-        return {false, 0, 0};
+        return {0, 0};
     }
 
     void visit_memory_access(const std::string &name, Type t, const vector<Expr> &args, PipelineFeatures::AccessType type) {
@@ -315,7 +315,7 @@ void LoadJacobian::dump(const char *prefix) const {
 
         for (size_t j = 0; j < consumer_loop_dims(); j++) {
             const auto &c = (*this)(i, j);
-            if (!c.exists) {
+            if (!c.exists()) {
                 aslog(0) << " _  ";
             } else if (c.denominator == 1) {
                 aslog(0) << " " << c.numerator << "  ";

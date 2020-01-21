@@ -34,17 +34,20 @@ std::unique_ptr<T> make_unique(Args &&... args) {
 
 // An optional rational type used when analyzing memory dependencies.
 struct OptionalRational {
-    bool exists = false;
-    int64_t numerator = 0, denominator = 0;
+    int32_t numerator = 0, denominator = 0;
+
+    bool exists() const {
+        return denominator != 0;
+    }
 
     OptionalRational() = default;
-    OptionalRational(bool e, int64_t n, int64_t d)
-        : exists(e), numerator(n), denominator(d) {
+    OptionalRational(int64_t n, int64_t d)
+        : numerator(n), denominator(d) {
     }
 
     void operator+=(const OptionalRational &other) {
-        if (!exists || !other.exists) {
-            exists = false;
+        if ((denominator & other.denominator) == 0) {
+            numerator = denominator = 0;
             return;
         }
         if (denominator == other.denominator) {
@@ -64,7 +67,7 @@ struct OptionalRational {
     OptionalRational operator*(int64_t factor) const {
         if ((*this) == 0) return *this;
         int64_t num = numerator * factor;
-        return OptionalRational{exists, num, denominator};
+        return OptionalRational{num, denominator};
     }
 
     OptionalRational operator*(const OptionalRational &other) const {
@@ -72,8 +75,7 @@ struct OptionalRational {
         if (other == 0) return other;
         int64_t num = numerator * other.numerator;
         int64_t den = denominator * other.denominator;
-        bool e = exists && other.exists;
-        return OptionalRational{e, num, den};
+        return OptionalRational{num, den};
     }
 
     // Because this type is optional (exists may be false), we don't
@@ -81,8 +83,9 @@ struct OptionalRational {
     // operators are not comparable, so a < b is not the same as !(a
     // >= b).
     bool operator<(int x) const {
-        if (!exists) return false;
-        if (denominator > 0) {
+        if (denominator == 0) {
+            return false;
+        } else if (denominator > 0) {
             return numerator < x * denominator;
         } else {
             return numerator > x * denominator;
@@ -90,8 +93,9 @@ struct OptionalRational {
     }
 
     bool operator<=(int x) const {
-        if (!exists) return false;
-        if (denominator > 0) {
+        if (denominator == 0) {
+            return false;
+        } else if (denominator > 0) {
             return numerator <= x * denominator;
         } else {
             return numerator >= x * denominator;
@@ -99,21 +103,21 @@ struct OptionalRational {
     }
 
     bool operator>(int x) const {
-        if (!exists) return false;
+        if (!exists()) return false;
         return !((*this) <= x);
     }
 
     bool operator>=(int x) const {
-        if (!exists) return false;
+        if (!exists()) return false;
         return !((*this) < x);
     }
 
     bool operator==(int x) const {
-        return exists && (numerator == (x * denominator));
+        return exists() && (numerator == (x * denominator));
     }
 
     bool operator==(const OptionalRational &other) const {
-        return (exists == other.exists) && (numerator * other.denominator == denominator * other.numerator);
+        return (exists() == other.exists()) && (numerator * other.denominator == denominator * other.numerator);
     }
 };
 

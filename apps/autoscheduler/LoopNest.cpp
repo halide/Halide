@@ -55,7 +55,7 @@ bool may_subtile() {
 int64_t get_shared_memory_limit() {
     // HL_SHARED_MEMORY_LIMIT is in KB
     std::string limit = get_env_variable("HL_SHARED_MEMORY_LIMIT");
-    return atoi(limit.c_str()) * 1024; // Convert to bytes
+    return atoi(limit.c_str()) * 1024;  // Convert to bytes
 }
 
 int64_t get_active_block_hardware_limit() {
@@ -74,7 +74,7 @@ int64_t get_active_warp_hardware_limit() {
     return atoi(limit.c_str());
 }
 
-int get_unroll_limit(const Target& target) {
+int get_unroll_limit(const Target &target) {
     if (target.has_gpu_feature()) {
         return kUnrollLimitGPU;
     }
@@ -86,7 +86,7 @@ bool in_range_zero_one(double x) {
     return x > 0 && x <= 1;
 }
 
-bool are_valid_thread_extents(const vector<int64_t>& counts) {
+bool are_valid_thread_extents(const vector<int64_t> &counts) {
     int num_thread_loops = 0;
     int num_threads = 1;
 
@@ -122,12 +122,10 @@ double get_idle_lane_wastage_limit() {
     return limit;
 }
 
-
-
 // given a newly inserted node f into this LoopNest, get union of thread counts in each dimension
 // across all siblings of f.
 vector<int64_t> LoopNest::get_union_thread_counts(const FunctionDAG::Node *f) const {
-    vector<int64_t> max_size{1,1,1};
+    vector<int64_t> max_size{1, 1, 1};
     // find the loop nests we just created and get max gpu_thread extents of other children
     for (auto &c : children) {
         if (c->node != f) {
@@ -135,13 +133,13 @@ vector<int64_t> LoopNest::get_union_thread_counts(const FunctionDAG::Node *f) co
                 vector<int64_t> lowered_size;
                 lowered_dims(c->size, c->vectorized_loop_index, lowered_size);
                 for (int dim = 0; dim < (int)(lowered_size.size()); dim++) {
-                    if ( dim >= (int)(max_size.size()) ) {
+                    if (dim >= (int)(max_size.size())) {
                         max_size.push_back(lowered_size[dim]);
                     } else {
                         max_size[dim] = std::max(max_size[dim], lowered_size[dim]);
                     }
                 }
-            } else if (c->children.size() > 0) { // descend into children for thread blocks in serial loops
+            } else if (c->children.size() > 0) {  // descend into children for thread blocks in serial loops
                 vector<int64_t> child_max_sizes = c->get_union_thread_counts(f);
                 for (int dim = 0; dim < (int)(child_max_sizes.size()); dim++) {
                     if (dim >= (int)(max_size.size())) {
@@ -150,7 +148,7 @@ vector<int64_t> LoopNest::get_union_thread_counts(const FunctionDAG::Node *f) co
                         max_size[dim] = std::max(max_size[dim], child_max_sizes[dim]);
                     }
                 }
-            } // otherwise this a serial loop with no threaded descendants
+            }  // otherwise this a serial loop with no threaded descendants
         }
     }
     return max_size;
@@ -178,22 +176,24 @@ void lowered_dims(const vector<int64_t> &size, int vector_loop_i, vector<int64_t
 // max_s hold max gpu_thread counts of all siblings in each dimension. Used to make sure union of
 // thread counts is under 1024 threshold.
 vector<vector<int64_t>> generate_gpu_tilings(const vector<vector<int64_t>> &stage_sizes,
-        const vector<vector<int>> &pure_dims,
-        const vector<int64_t> &max_s,
-        int d, const vector<int> &vectorized_indices, bool serial_inner) {
+                                             const vector<vector<int>> &pure_dims,
+                                             const vector<int64_t> &max_s,
+                                             int d, const vector<int> &vectorized_indices, bool serial_inner) {
     vector<vector<int64_t>> result;
     if (d == -1) {
         result.push_back(vector<int64_t>());
     } else {
         // set max thread count 64 for now in all dims
-        int64_t max_threads_extent = 64, total_threads_limit = 1024; // less than 1024 to limit states
+        int64_t max_threads_extent = 64, total_threads_limit = 1024;  // less than 1024 to limit states
         int factor = 2, warp_width = 32, max_serial_ext = 8;
 
         vector<vector<int64_t>> v;
         v = generate_gpu_tilings(stage_sizes, pure_dims, max_s, d - 1, vectorized_indices, serial_inner);
 
         for (auto t : v) {
-            enum validity{ serial_count_err, thread_count_err, valid_tiling };
+            enum validity { serial_count_err,
+                            thread_count_err,
+                            valid_tiling };
 
             // helper function detects whether tiling is legal: cannot exceed max thread count,
             // have more than three dimensions with ext > 1, or result in large serial loops
@@ -216,7 +216,7 @@ vector<vector<int64_t>> generate_gpu_tilings(const vector<vector<int64_t>> &stag
                         for (size_t i = 0; i < pure_dims[stage].size(); i++) {
                             if (pure_dims[stage][i] >= 0) {
                                 stage_thread_t.push_back(thread_t[pure_dims[stage][i]]);
-                            } else { // impure dims have extent 1
+                            } else {  // impure dims have extent 1
                                 stage_thread_t.push_back(1);
                             }
                         }
@@ -241,7 +241,7 @@ vector<vector<int64_t>> generate_gpu_tilings(const vector<vector<int64_t>> &stag
                         } else {
                             union_threads = std::max(lowered_size[dim], new_max_s[dim]);
                         }
-                        not_ext1 = not_ext1 + ( (union_threads > 1) ? 1 : 0 );
+                        not_ext1 = not_ext1 + ((union_threads > 1) ? 1 : 0);
                         total_threads_used *= union_threads;
                     }
                     if (total_threads_used > total_threads_limit || not_ext1 > 3) {
@@ -262,7 +262,7 @@ vector<vector<int64_t>> generate_gpu_tilings(const vector<vector<int64_t>> &stag
             t.push_back(0);
 
             // if the vector dimension has extent < warp_width we use 1 warp for it
-            int64_t min_threads = ( (d == vectorized_indices[0]) ? std::min(warp_width, (int)stage_sizes[0][d]) : 1 );
+            int64_t min_threads = ((d == vectorized_indices[0]) ? std::min(warp_width, (int)stage_sizes[0][d]) : 1);
             bool full_extent_considered = false;
             for (int64_t threads_ext = min_threads; threads_ext <= stage_sizes[0][d]; threads_ext *= factor) {
                 full_extent_considered |= threads_ext == stage_sizes[0][d];
@@ -282,7 +282,7 @@ vector<vector<int64_t>> generate_gpu_tilings(const vector<vector<int64_t>> &stag
                 } else if (valid_result == thread_count_err) {
                     break;
                 } else {
-                   result.push_back(t);
+                    result.push_back(t);
                 }
             }
 
@@ -298,8 +298,8 @@ vector<vector<int64_t>> generate_gpu_tilings(const vector<vector<int64_t>> &stag
                 else
                     t.back() = threads16;
                 validity valid_result = is_valid_tiling();
-                if (valid_result == valid_tiling ) {
-                   result.push_back(t);
+                if (valid_result == valid_tiling) {
+                    result.push_back(t);
                 }
             }
 
@@ -312,7 +312,7 @@ vector<vector<int64_t>> generate_gpu_tilings(const vector<vector<int64_t>> &stag
             if (!full_extent_considered && stage_sizes[0][d] <= max_threads_extent) {
                 t.back() = stage_sizes[0][d];
                 if (is_valid_tiling() == valid_tiling) {
-                   result.push_back(t);
+                    result.push_back(t);
                 }
             }
         }
@@ -361,7 +361,6 @@ vector<vector<int64_t>> generate_serial_tilings(const vector<int64_t> &s, int d,
     return result;
 }
 
-
 // Given a multi-dimensional box of dimensionality d, generate a list
 // of candidate tile sizes for it, logarithmically spacing the sizes
 // using the given factor. If 'allow_splits' is false, every dimension
@@ -371,7 +370,7 @@ vector<vector<int64_t>> generate_serial_tilings(const vector<int64_t> &s, int d,
 // inner_sizes is optional vector of fixed sizes to choose from for inner loop.
 // used for GPU schedules when we split a 'none' loop into a parallel loop and a serial loop
 vector<vector<int64_t>> generate_tilings(const vector<int64_t> &s, int d, int factor,
-                                         bool allow_splits, const Target& target,
+                                         bool allow_splits, const Target &target,
                                          const vector<int> &inner_sizes) {
     vector<vector<int64_t>> result;
     if (d == -1) {
@@ -407,7 +406,7 @@ vector<vector<int64_t>> generate_tilings(const vector<int64_t> &s, int d, int fa
                     result.push_back(t);
                 }
             } else {
-                if (!inner_sizes.empty()) { // using fixed set of inner loop extents
+                if (!inner_sizes.empty()) {  // using fixed set of inner loop extents
                     for (int inner : inner_sizes) {
                         int outer = (s[d] + inner - 1) / inner;
                         if (is_one && outer == 1) continue;
@@ -462,9 +461,9 @@ vector<vector<int64_t>> generate_tilings(const vector<int64_t> &s, int d, int fa
 // given a newly inserted node f into this LoopNest, gets the size of
 // all of f's stages and their pure_dim indices
 void LoopNest::get_stage_sizes(const FunctionDAG::Node *f,
-    vector<vector<int64_t>> &stage_sizes,
-    vector<vector<int>> &pure_dims,
-    vector<int> &vectorized_indices) {
+                               vector<vector<int64_t>> &stage_sizes,
+                               vector<vector<int>> &pure_dims,
+                               vector<int> &vectorized_indices) {
     stage_sizes.resize(f->stages.size());
     pure_dims.resize(f->stages.size());
     vectorized_indices.resize(f->stages.size());
@@ -499,11 +498,11 @@ void LoopNest::generate_vec_dim_serial_tilings(vector<int> &serial_sizes) const 
 // the newly inserted loop nests of f into a threads loop outside a serial loop.
 // V is the vectorized dimension of f. Adds loopnests created from each tiling option in result.
 bool LoopNest::add_gpu_thread_tilings(const FunctionDAG::Node *f,
-                            const MachineParams &params,
-                            const Target &target,
-                            int v,
-                            vector<IntrusivePtr<const LoopNest>> &result,
-                            vector<int64_t> max_size) {
+                                      const MachineParams &params,
+                                      const Target &target,
+                                      int v,
+                                      vector<IntrusivePtr<const LoopNest>> &result,
+                                      vector<int64_t> max_size) {
     vector<vector<int64_t>> stage_sizes;
     vector<vector<int>> pure_dims;
     vector<int> vectorized_indices;
@@ -523,7 +522,7 @@ bool LoopNest::add_gpu_thread_tilings(const FunctionDAG::Node *f,
         result.emplace_back(new_parent);
         made_child = true;
     }
-    if (!made_child) { // if we can't tile into gpu threads the inserted node, make it serial
+    if (!made_child) {  // if we can't tile into gpu threads the inserted node, make it serial
         for (auto &c : children) {
             if (c->node == f)
                 c->gpu_label = serial;
@@ -622,11 +621,11 @@ GPUMemoryType LoopNest::get_gpu_memory_type(bool in_block, bool in_thread, bool 
 }
 
 // Compute all the sites of interest for each pipeline stage
-void LoopNest::get_sites(const Target& target,
-               StageMap<Sites> &sites,
-               const LoopNest *task,
-               const LoopNest *parent,
-               const LoopNest *current_thread_loop) const {
+void LoopNest::get_sites(const Target &target,
+                         StageMap<Sites> &sites,
+                         const LoopNest *task,
+                         const LoopNest *parent,
+                         const LoopNest *current_thread_loop) const {
     if (is_gpu_thread(target)) {
         current_thread_loop = this;
     }
@@ -668,9 +667,9 @@ void LoopNest::get_sites(const Target& target,
     }
 }
 
-bool LoopNest::exceeds_serial_extents_limit(const Target& target, const LoopNest* parent, bool in_threads_loop) const {
+bool LoopNest::exceeds_serial_extents_limit(const Target &target, const LoopNest *parent, bool in_threads_loop) const {
     bool parent_of_innermost = false;
-    for (const auto& c : children) {
+    for (const auto &c : children) {
         if (c->node == node && c->innermost) {
             parent_of_innermost = true;
         }
@@ -692,7 +691,7 @@ bool LoopNest::exceeds_serial_extents_limit(const Target& target, const LoopNest
         return serial_loop_extents > 64;
     }
 
-    for (const auto& c : children) {
+    for (const auto &c : children) {
         if (c->exceeds_serial_extents_limit(target, this, in_threads_loop || c->gpu_label == thread)) {
             return true;
         }
@@ -701,9 +700,9 @@ bool LoopNest::exceeds_serial_extents_limit(const Target& target, const LoopNest
     return false;
 }
 
-bool LoopNest::node_has_dynamic_region_computed(const FunctionDAG::Node* f) const {
+bool LoopNest::node_has_dynamic_region_computed(const FunctionDAG::Node *f) const {
     for (int i = 0; i < f->dimensions; i++) {
-        const auto& region = get_bounds(f)->region_computed(i);
+        const auto &region = get_bounds(f)->region_computed(i);
 
         if (!region.constant_extent()) {
             return true;
@@ -717,14 +716,14 @@ bool LoopNest::has_dynamic_allocation_inside_thread(bool in_thread_loop) const {
     in_thread_loop = in_thread_loop || (gpu_label == thread);
 
     if (in_thread_loop) {
-        for (const auto& f : store_at) {
+        for (const auto &f : store_at) {
             if (node_has_dynamic_region_computed(f)) {
                 return true;
             }
         }
     }
 
-    for (const auto& child : children) {
+    for (const auto &child : children) {
         if (child->has_dynamic_allocation_inside_thread(in_thread_loop)) {
             return true;
         }
@@ -733,8 +732,8 @@ bool LoopNest::has_dynamic_allocation_inside_thread(bool in_thread_loop) const {
     return false;
 }
 
-const LoopNest* LoopNest::find_pure_stage_loop_nest(const FunctionDAG::Node* node) const {
-    const LoopNest* pure;
+const LoopNest *LoopNest::find_pure_stage_loop_nest(const FunctionDAG::Node *node) const {
+    const LoopNest *pure;
     for (const auto &c : children) {
         if (node == c->node) {
             if (c->stage->index == 0) {
@@ -751,13 +750,13 @@ const LoopNest* LoopNest::find_pure_stage_loop_nest(const FunctionDAG::Node* nod
     return nullptr;
 }
 
-int LoopNest::get_pure_stage_vectorized_loop_index(const FunctionDAG::Node* node) const {
-    const auto* pure = find_pure_stage_loop_nest(node);
+int LoopNest::get_pure_stage_vectorized_loop_index(const FunctionDAG::Node *node) const {
+    const auto *pure = find_pure_stage_loop_nest(node);
     internal_assert(pure) << "No pure stage found for " << node->func.name() << "\n";
     return pure->vectorized_loop_index;
 }
 
-int LoopNest::get_vectorized_loop_index_from_pure_stage(const LoopNest& root) const {
+int LoopNest::get_vectorized_loop_index_from_pure_stage(const LoopNest &root) const {
     int v = vectorized_loop_index;
     if (v < 0) {
         v = root.get_pure_stage_vectorized_loop_index(node);
@@ -777,7 +776,7 @@ int LoopNest::get_vectorized_loop_index_from_pure_stage(const LoopNest& root) co
 
 // Get the stride over "node's" storage for a unit increment in the vectorized loop's
 // index
-double LoopNest::storage_stride(const LoadJacobian& jac, int innermost_storage_dim, const FunctionDAG::Node* storage_node, const Bound& store_bounds, const LoopNest& root) const {
+double LoopNest::storage_stride(const LoadJacobian &jac, int innermost_storage_dim, const FunctionDAG::Node *storage_node, const Bound &store_bounds, const LoopNest &root) const {
     internal_assert(innermost_storage_dim >= 0);
 
     // The node's storage dimensions (from innermost outward)
@@ -811,20 +810,20 @@ double LoopNest::storage_stride(const LoadJacobian& jac, int innermost_storage_d
     return std::abs(stride);
 }
 
-bool LoopNest::all_strides_exist(const LoadJacobian& jac, const FunctionDAG::Node* storage_node, const LoopNest& root) const {
+bool LoopNest::all_strides_exist(const LoadJacobian &jac, const FunctionDAG::Node *storage_node, const LoopNest &root) const {
     int v = get_vectorized_loop_index_from_pure_stage(root);
 
     for (int i = 0; i < storage_node->dimensions; i++) {
         auto stride = jac(i, v);
 
-        if (!stride.exists) {
+        if (!stride.exists()) {
             return false;
         }
     }
     return true;
 }
 
-std::pair<int, double> LoopNest::num_shared_mem_accesses(const FunctionDAG::Node* node, const ThreadInfo& thread_info, double serial_loop_extents, double stride) const {
+std::pair<int, double> LoopNest::num_shared_mem_accesses(const FunctionDAG::Node *node, const ThreadInfo &thread_info, double serial_loop_extents, double stride) const {
     // No bank conflicts when stride is 0
     if (stride == 0) {
         // No caching for shared mem so each warp needs to load the value
@@ -877,12 +876,12 @@ std::pair<int, double> LoopNest::num_shared_mem_accesses(const FunctionDAG::Node
     return {num_accesses, stride};
 }
 
-int LoopNest::num_banks_per_access(const FunctionDAG::Node* node) const {
+int LoopNest::num_banks_per_access(const FunctionDAG::Node *node) const {
     double bytes = node->bytes_per_point;
     return std::max(1.0, bytes / 4);
 }
 
-int LoopNest::compute_min_accesses(const FunctionDAG::Node* node, const ThreadInfo& thread_info, double stride, double serial_loop_extents) const {
+int LoopNest::compute_min_accesses(const FunctionDAG::Node *node, const ThreadInfo &thread_info, double stride, double serial_loop_extents) const {
     // In the best case, each warp requires only a single access per serial
     // loop iteration
     double min_accesses = serial_loop_extents * thread_info.num_active_warps_per_block;
@@ -897,7 +896,7 @@ int LoopNest::compute_min_accesses(const FunctionDAG::Node* node, const ThreadIn
     return min_accesses * num_banks_per_access(node);
 }
 
-std::pair<double, double> LoopNest::compute_shared_mem_stores(const LoadJacobian& jac, int consumer_innermost_dim, const FunctionDAG::Node* node, const Bound& consumer_store_bounds, const ThreadInfo& thread_info, double serial_loop_extents, const LoopNest& root) const {
+std::pair<double, double> LoopNest::compute_shared_mem_stores(const LoadJacobian &jac, int consumer_innermost_dim, const FunctionDAG::Node *node, const Bound &consumer_store_bounds, const ThreadInfo &thread_info, double serial_loop_extents, const LoopNest &root) const {
     if (all_strides_exist(jac, node, root)) {
         double stride = storage_stride(jac, consumer_innermost_dim, node, consumer_store_bounds, root);
         auto num_accesses = num_shared_mem_accesses(node, thread_info, serial_loop_extents, stride).first;
@@ -912,7 +911,7 @@ std::pair<double, double> LoopNest::compute_shared_mem_stores(const LoadJacobian
     return {num_accesses, min_accesses / num_accesses};
 }
 
-std::pair<double, double> LoopNest::compute_shared_mem_load_features(const LoadJacobian& jac, int producer_innermost_dim, const FunctionDAG::Node* node, const Bound& producer_store_bounds, bool producer_has_been_scheduled, const ThreadInfo& thread_info, const LoopNest& root, double serial_loop_extents) const {
+std::pair<double, double> LoopNest::compute_shared_mem_load_features(const LoadJacobian &jac, int producer_innermost_dim, const FunctionDAG::Node *node, const Bound &producer_store_bounds, bool producer_has_been_scheduled, const ThreadInfo &thread_info, const LoopNest &root, double serial_loop_extents) const {
     // Assume worst case serialized loads if the stride
     // is unknown
     if (!all_strides_exist(jac, node, root)) {
@@ -949,7 +948,7 @@ std::pair<double, double> LoopNest::compute_shared_mem_load_features(const LoadJ
     return {num_accesses, min_accesses};
 }
 
-void LoopNest::compute_gpu_store_features(const LoadJacobian& jac, int consumer_innermost_dim, const FunctionDAG::Node* node, const Bound& consumer_store_bounds, const ThreadInfo& thread_info, double total_serial_loop_extents, const std::vector<int64_t>& inner_serial_loop_extents, const Sites& consumer_site, ScheduleFeatures& feat, const LoopNest& root) const {
+void LoopNest::compute_gpu_store_features(const LoadJacobian &jac, int consumer_innermost_dim, const FunctionDAG::Node *node, const Bound &consumer_store_bounds, const ThreadInfo &thread_info, double total_serial_loop_extents, const std::vector<int64_t> &inner_serial_loop_extents, const Sites &consumer_site, ScheduleFeatures &feat, const LoopNest &root) const {
     if (consumer_site.gpu_store_memory_type == GPUMemoryType::shared) {
         auto store_jac = jac * inner_serial_loop_extents;
         auto shared_mem_features = compute_shared_mem_stores(
@@ -959,8 +958,7 @@ void LoopNest::compute_gpu_store_features(const LoadJacobian& jac, int consumer_
             consumer_store_bounds,
             thread_info,
             total_serial_loop_extents,
-            root
-        );
+            root);
 
         feat.num_shared_mem_stores_per_block = shared_mem_features.first * jac.count();
         feat.shared_mem_store_efficiency = shared_mem_features.second;
@@ -979,8 +977,7 @@ void LoopNest::compute_gpu_store_features(const LoadJacobian& jac, int consumer_
             thread_info,
             total_serial_loop_extents,
             jac.count(),
-            root
-        );
+            root);
 
         feat.num_global_mem_stores_per_block = global_mem_info.required_accesses() * jac.count();
         feat.global_mem_store_efficiency = global_mem_info.access_efficiency();
@@ -998,17 +995,17 @@ void LoopNest::compute_gpu_store_features(const LoadJacobian& jac, int consumer_
     }
 }
 
-int LoopNest::word_stride(const FunctionDAG::Node* node) const {
+int LoopNest::word_stride(const FunctionDAG::Node *node) const {
     double bytes = node->bytes_per_point;
     return std::max(1.0, bytes / 4);
 }
 
-int LoopNest::num_words_per_access(const FunctionDAG::Node* node) const {
+int LoopNest::num_words_per_access(const FunctionDAG::Node *node) const {
     double bytes = node->bytes_per_point;
     return std::max(1.0, bytes / 4);
 }
 
-double LoopNest::min_global_mem_accesses(const FunctionDAG::Node* node, const ThreadInfo& thread_info, double serial_loop_extents, double stride) const {
+double LoopNest::min_global_mem_accesses(const FunctionDAG::Node *node, const ThreadInfo &thread_info, double serial_loop_extents, double stride) const {
     if (stride == 0) {
         // Only need a single access (optimistically assume that it remains
         // cached across warps)
@@ -1041,7 +1038,7 @@ double LoopNest::min_global_mem_accesses(const FunctionDAG::Node* node, const Th
     return serial_loop_extents * num_accesses;
 }
 
-void LoopNest::compute_num_global_mem_accesses_per_block(const LoadJacobian& jac, const FunctionDAG::Node* node, const Bound& store_bounds, const ThreadInfo& thread_info, int innermost_dim, double serial_loop_extents, double access_count, GlobalMemInfo& global_mem_info, const LoopNest& root) const {
+void LoopNest::compute_num_global_mem_accesses_per_block(const LoadJacobian &jac, const FunctionDAG::Node *node, const Bound &store_bounds, const ThreadInfo &thread_info, int innermost_dim, double serial_loop_extents, double access_count, GlobalMemInfo &global_mem_info, const LoopNest &root) const {
     double stride = storage_stride(jac, innermost_dim, node, store_bounds, root);
 
     if (stride == 0) {
@@ -1103,7 +1100,7 @@ void LoopNest::compute_num_global_mem_accesses_per_block(const LoadJacobian& jac
     global_mem_info.add_access_info(serial_loop_extents * num_accesses[0], serial_loop_extents * num_accesses[1], stride, access_count);
 }
 
-double LoopNest::compute_local_mem_store_features(const LoadJacobian& jac, int consumer_innermost_dim, const FunctionDAG::Node* node, const Bound& consumer_store_bounds, const LoopNest& root) const {
+double LoopNest::compute_local_mem_store_features(const LoadJacobian &jac, int consumer_innermost_dim, const FunctionDAG::Node *node, const Bound &consumer_store_bounds, const LoopNest &root) const {
     // Assume worst case serialized loads if the stride is unknown
     double stride = 32.0;
     if (all_strides_exist(jac, node, root)) {
@@ -1113,7 +1110,7 @@ double LoopNest::compute_local_mem_store_features(const LoadJacobian& jac, int c
     return 1.0 / std::min(32.0, std::max(1.0, stride));
 }
 
-GlobalMemInfo LoopNest::compute_global_mem_store_features(const LoadJacobian& jac, int consumer_innermost_dim, const FunctionDAG::Node* node, const Bound& consumer_store_bounds, const ThreadInfo& thread_info, double serial_loop_extents, double store_count, const LoopNest& root) const {
+GlobalMemInfo LoopNest::compute_global_mem_store_features(const LoadJacobian &jac, int consumer_innermost_dim, const FunctionDAG::Node *node, const Bound &consumer_store_bounds, const ThreadInfo &thread_info, double serial_loop_extents, double store_count, const LoopNest &root) const {
     GlobalMemInfo global_mem_info;
 
     if (!all_strides_exist(jac, node, root)) {
@@ -1133,7 +1130,7 @@ GlobalMemInfo LoopNest::compute_global_mem_store_features(const LoadJacobian& ja
     return global_mem_info;
 }
 
-void LoopNest::compute_global_mem_load_features(const LoadJacobian& jac, int producer_innermost_dim, const FunctionDAG::Node* node, const Bound& producer_store_bounds, bool producer_has_been_scheduled, const ThreadInfo& thread_info, GlobalMemInfo& global_mem_info, double serial_loop_extents, double load_count, const LoopNest& root) const {
+void LoopNest::compute_global_mem_load_features(const LoadJacobian &jac, int producer_innermost_dim, const FunctionDAG::Node *node, const Bound &producer_store_bounds, bool producer_has_been_scheduled, const ThreadInfo &thread_info, GlobalMemInfo &global_mem_info, double serial_loop_extents, double load_count, const LoopNest &root) const {
     // Assume worst case serialized loads if the stride
     // is unknown
     if (!all_strides_exist(jac, node, root)) {
@@ -1170,7 +1167,7 @@ void LoopNest::compute_global_mem_load_features(const LoadJacobian& jac, int pro
     global_mem_info.add(min_info);
 }
 
-void LoopNest::compute_local_mem_load_features(const LoadJacobian& jac, int producer_innermost_dim, const FunctionDAG::Node* node, const Bound& producer_store_bounds, bool producer_has_been_scheduled, LocalMemInfo& local_mem_info, const LoopNest& root) const {
+void LoopNest::compute_local_mem_load_features(const LoadJacobian &jac, int producer_innermost_dim, const FunctionDAG::Node *node, const Bound &producer_store_bounds, bool producer_has_been_scheduled, LocalMemInfo &local_mem_info, const LoopNest &root) const {
     // Assume worst case serialized loads if the stride
     // is unknown
     if (!all_strides_exist(jac, node, root)) {
@@ -1195,7 +1192,7 @@ void LoopNest::compute_local_mem_load_features(const LoadJacobian& jac, int prod
 }
 
 // Assumes block, serial, thread or block, thread nesting
-const LoopNest* LoopNest::get_enclosing_block(const LoopNest *parent, const LoopNest *grandparent) const {
+const LoopNest *LoopNest::get_enclosing_block(const LoopNest *parent, const LoopNest *grandparent) const {
     internal_assert(gpu_label == thread);
 
     if (parent->gpu_label == block && grandparent->is_root()) {
@@ -1210,7 +1207,7 @@ const LoopNest* LoopNest::get_enclosing_block(const LoopNest *parent, const Loop
     return nullptr;
 }
 
-std::pair<int64_t, int64_t> LoopNest::get_block_and_serial_extents(const LoopNest* block) const {
+std::pair<int64_t, int64_t> LoopNest::get_block_and_serial_extents(const LoopNest *block) const {
     int max_blocks[3] = {2147483647, 65535, 65535};
 
     std::vector<int64_t> lowered_size;
@@ -1267,8 +1264,8 @@ bool LoopNest::has_thread_loop_descendant() const {
     return false;
 }
 
-void LoopNest::compute_warp_features(ScheduleFeatures& features, const GPULoopInfo& gpu_loop_info) const {
-    const ThreadInfo* thread_info = gpu_loop_info.thread_info;
+void LoopNest::compute_warp_features(ScheduleFeatures &features, const GPULoopInfo &gpu_loop_info) const {
+    const ThreadInfo *thread_info = gpu_loop_info.thread_info;
     features.warp_lane_utilization = thread_info->warp_lane_utilization();
     features.warp_lane_utilization_at_block = thread_info->total_warp_lane_utilization_at_block();
     features.warp_lane_utilization_at_block_x = thread_info->warp_lane_utilization_at_block_x();
@@ -1288,7 +1285,7 @@ void LoopNest::compute_warp_features(ScheduleFeatures& features, const GPULoopIn
 }
 
 // Assume that when a block is active, all its warps are active
-void LoopNest::compute_warp_and_block_occupancy(ScheduleFeatures &feat, const GPULoopInfo& gpu_loop_info) const {
+void LoopNest::compute_warp_and_block_occupancy(ScheduleFeatures &feat, const GPULoopInfo &gpu_loop_info) const {
     // Only compute these features for stage's that actually have a block
     // loop
     if (node != gpu_loop_info.current_block_loop->node) {
@@ -1311,7 +1308,7 @@ void LoopNest::compute_warp_and_block_occupancy(ScheduleFeatures &feat, const GP
     feat.max_block_occupancy = (double)max_active_blocks / (double)active_block_hardware_limit;
 }
 
-void LoopNest::compute_shared_mem_occupancy(const Target& target, int64_t working_set_here, ScheduleFeatures &feat) const {
+void LoopNest::compute_shared_mem_occupancy(const Target &target, int64_t working_set_here, ScheduleFeatures &feat) const {
     if (!is_gpu_block(target)) {
         return;
     }
@@ -1329,14 +1326,14 @@ void LoopNest::compute_shared_mem_occupancy(const Target& target, int64_t workin
     }
 }
 
-std::pair<const LoopNest*, const LoopNest*> LoopNest::find_innermost_and_parent() const {
+std::pair<const LoopNest *, const LoopNest *> LoopNest::find_innermost_and_parent() const {
     internal_assert(!innermost);
 
-    const LoopNest* parent = this;
-    const LoopNest* child = nullptr;
+    const LoopNest *parent = this;
+    const LoopNest *child = nullptr;
 
     while (true) {
-        for (const auto& c : parent->children) {
+        for (const auto &c : parent->children) {
             if (c->node != node) {
                 continue;
             }
@@ -1356,7 +1353,7 @@ std::pair<const LoopNest*, const LoopNest*> LoopNest::find_innermost_and_parent(
     return {child, parent};
 }
 
-int64_t LoopNest::compute_licm_amortization(const LoopNest* innermost, const LoopNest* parent, const ScheduleFeatures& feat, const LoadJacobian& jac, int producer_dims) const {
+int64_t LoopNest::compute_licm_amortization(const LoopNest *innermost, const LoopNest *parent, const ScheduleFeatures &feat, const LoadJacobian &jac, int producer_dims) const {
     // Is this load loop-invariant over an
     // unrolled block? If so, we amortize the
     // number of loads to account for LICM.
@@ -1387,19 +1384,19 @@ int64_t LoopNest::compute_licm_amortization(const LoopNest* innermost, const Loo
 
 // Do a recursive walk over the loop nest computing features to feed the cost model.
 void LoopNest::compute_features(const FunctionDAG &dag,
-                      const MachineParams &params,
-                      const Target& target,
-                      const StageMap<Sites> &sites,
-                      int64_t instances,
-                      int64_t parallelism,
-                      const LoopNest *parent,
-                      const LoopNest *grandparent,
-                      const LoopNest &root,
-                      int64_t *working_set,
-                      int64_t *working_set_local_constant,
-                      int64_t *working_set_local_dynamic,
-                      StageMap<ScheduleFeatures> *features,
-                      GPULoopInfo gpu_loop_info) const {
+                                const MachineParams &params,
+                                const Target &target,
+                                const StageMap<Sites> &sites,
+                                int64_t instances,
+                                int64_t parallelism,
+                                const LoopNest *parent,
+                                const LoopNest *grandparent,
+                                const LoopNest &root,
+                                int64_t *working_set,
+                                int64_t *working_set_local_constant,
+                                int64_t *working_set_local_dynamic,
+                                StageMap<ScheduleFeatures> *features,
+                                GPULoopInfo gpu_loop_info) const {
 
     gpu_loop_info.update(target, this);
     std::unique_ptr<ThreadInfo> thread_info;
@@ -1571,7 +1568,7 @@ void LoopNest::compute_features(const FunctionDAG &dag,
     ScheduleFeatures &feat = features->get_or_create(stage);
 
     if (innermost) {
-        if (vectorized_loop_index >= 0 && vectorized_loop_index < (int) size.size()) {
+        if (vectorized_loop_index >= 0 && vectorized_loop_index < (int)size.size()) {
             feat.vector_size = size[vectorized_loop_index];
         } else {
             feat.vector_size = 1;
@@ -1654,8 +1651,8 @@ void LoopNest::compute_features(const FunctionDAG &dag,
                 int64_t bytes = e->producer->bytes_per_point, lines = 1;
                 int64_t max_extent = 1;
                 int vector_dim = (e->producer->is_input ? 0 :
-                                  site.produce != nullptr ? site.produce->vector_dim :
-                                  -1);
+                                                          site.produce != nullptr ? site.produce->vector_dim :
+                                                                                    -1);
                 for (int i = 0; i < e->producer->dimensions; i++) {
                     int64_t extent = b->region_required(i).extent();
                     max_extent = std::max(extent, max_extent);
@@ -1790,16 +1787,16 @@ void LoopNest::compute_features(const FunctionDAG &dag,
     // things like vector gathers.
     int64_t bytes_loaded = 0, lines_loaded = 0, allocation_bytes_loaded = 0;
     double num_dense_loads = 0, num_broadcasts = 0,
-        num_gathers = 0, num_stride_2_loads = 0,
-        num_stride_3_loads = 0, num_stride_4_loads = 0,
-        num_loads = 0;
+           num_gathers = 0, num_stride_2_loads = 0,
+           num_stride_3_loads = 0, num_stride_4_loads = 0,
+           num_loads = 0;
     GlobalMemInfo global_mem_loads;
     LocalMemInfo local_mem_loads;
     double num_shared_mem_loads_per_block = 0;
     double min_num_shared_mem_loads_per_block = 0;
     int64_t total_serial_loop_extents = 1;
 
-    if (innermost || at_production) { // These are the sites at which we compute load footprints
+    if (innermost || at_production) {  // These are the sites at which we compute load footprints
         // Pick the site at which we will compute the footprint relationship
         const auto &consumer_site = sites.get(stage);
 
@@ -1810,7 +1807,7 @@ void LoopNest::compute_features(const FunctionDAG &dag,
 
         if (get_compute_gpu_store_features()) {
             if (innermost && !stage->store_jacobian->empty()) {
-                const auto& bounds = consumer_site.store->get_bounds(stage->node);
+                const auto &bounds = consumer_site.store->get_bounds(stage->node);
                 inner_serial_loop_extents = gpu_loop_info.get_inner_serial_loop_extents(this);
                 auto store_jac = *stage->store_jacobian;
 
@@ -1824,8 +1821,7 @@ void LoopNest::compute_features(const FunctionDAG &dag,
                     inner_serial_loop_extents,
                     consumer_site,
                     feat,
-                    root
-                );
+                    root);
 
                 feat.num_shared_mem_stores = gpu_loop_info.num_blocks * feat.num_shared_mem_stores_per_block;
             }
@@ -1946,9 +1942,9 @@ void LoopNest::compute_features(const FunctionDAG &dag,
                         bool stride_3_vector_load = true;
                         bool stride_4_vector_load = true;
                         int producer_innermost_dim =
-                            (e->producer->is_input ? 0 : // Assume default storage layout for inputs
-                             !producer_has_been_scheduled ? -1 :
-                             site.produce->vector_dim);
+                            (e->producer->is_input ? 0 :  // Assume default storage layout for inputs
+                                 !producer_has_been_scheduled ? -1 :
+                                                                site.produce->vector_dim);
                         if (vectorized_loop_index >= 0) {
                             if (!producer_has_been_scheduled) {
                                 // Operate optimistically and just
@@ -1959,11 +1955,16 @@ void LoopNest::compute_features(const FunctionDAG &dag,
                                 for (int i = 0; i < e->producer->dimensions; i++) {
                                     auto stride = jac.first(i, vectorized_loop_index);
                                     // stride is a rational. Check to see if it's a small integer.
-                                    if (stride == 0) count[0]++;
-                                    else if (stride == 1) count[1]++;
-                                    else if (stride == 2) count[2]++;
-                                    else if (stride == 3) count[3]++;
-                                    else if (stride == 4) count[4]++;
+                                    if (stride == 0)
+                                        count[0]++;
+                                    else if (stride == 1)
+                                        count[1]++;
+                                    else if (stride == 2)
+                                        count[2]++;
+                                    else if (stride == 3)
+                                        count[3]++;
+                                    else if (stride == 4)
+                                        count[4]++;
                                 }
                                 vector_broadcast = (count[0] == e->producer->dimensions);
                                 dense_vector_load = (count[0] == e->producer->dimensions - 1 && count[1] == 1);
@@ -2040,9 +2041,9 @@ void LoopNest::compute_features(const FunctionDAG &dag,
 
                 if (innermost) {
                     int producer_innermost_dim =
-                        (e->producer->is_input ? 0 : // Assume default storage layout for inputs
-                         !producer_has_been_scheduled ? -1 :
-                         site.produce->vector_dim);
+                        (e->producer->is_input ? 0 :  // Assume default storage layout for inputs
+                             !producer_has_been_scheduled ? -1 :
+                                                            site.produce->vector_dim);
 
                     // Shared, global, or local memory?
                     bool is_shared_mem = site.gpu_store_memory_type == GPUMemoryType::shared;
@@ -2066,8 +2067,7 @@ void LoopNest::compute_features(const FunctionDAG &dag,
                                     producer_has_been_scheduled,
                                     *gpu_loop_info.thread_info,
                                     root,
-                                    total_serial_loop_extents
-                                );
+                                    total_serial_loop_extents);
                                 num_shared_mem_loads_per_block += n * shared_mem_features.first;
                                 min_num_shared_mem_loads_per_block += n * shared_mem_features.second;
                             } else if (is_global_mem && get_compute_global_mem_load_features()) {
@@ -2082,8 +2082,7 @@ void LoopNest::compute_features(const FunctionDAG &dag,
                                     global_mem_loads,
                                     total_serial_loop_extents,
                                     n,
-                                    root
-                                );
+                                    root);
                             }
                         }
                     }
@@ -2099,8 +2098,7 @@ void LoopNest::compute_features(const FunctionDAG &dag,
                                 producer_store_bounds,
                                 producer_has_been_scheduled,
                                 local_mem_loads,
-                                root
-                            );
+                                root);
                         }
                     }
                 }
@@ -2191,8 +2189,8 @@ void LoopNest::compute_features(const FunctionDAG &dag,
                 // We compute (but never use) these; computing them is cheap,
                 // so let's leave in for future reference, but mark as 'ignore me'
                 // to avoid clang-tidy warnings.
-                (void) compute_line_footprint;
-                (void) task_line_footprint;
+                (void)compute_line_footprint;
+                (void)task_line_footprint;
             }
         }
     }
@@ -2372,7 +2370,7 @@ void LoopNest::dump(string prefix, const LoopNest *parent) const {
         for (size_t i = 0; i < size.size(); i++) {
             aslog(0) << " " << size[i];
             // The vectorized loop gets a 'v' suffix
-            if (innermost && i == (size_t) vectorized_loop_index) {
+            if (innermost && i == (size_t)vectorized_loop_index) {
                 aslog(0) << 'v';
             }
             // Loops that have a known constant size get a
@@ -2422,7 +2420,7 @@ void LoopNest::dump(string prefix, const LoopNest *parent) const {
             if (i > 0) {
                 aslog(0) << ", ";
             }
-            const auto& region = get_bounds(p)->region_computed(i);
+            const auto &region = get_bounds(p)->region_computed(i);
             aslog(0) << region.extent();
             if (region.constant_extent()) {
                 aslog(0) << "c";
@@ -2431,7 +2429,7 @@ void LoopNest::dump(string prefix, const LoopNest *parent) const {
         aslog(0) << "] with " << p->stages.size() << " stages\n";
     }
     for (size_t i = children.size(); i > 0; i--) {
-        children[i-1]->dump(prefix, this);
+        children[i - 1]->dump(prefix, this);
     }
     for (auto it = inlined.begin(); it != inlined.end(); it++) {
         aslog(0) << prefix << "inlined: " << it.key()->func.name() << " " << it.value() << '\n';
@@ -2547,10 +2545,10 @@ void LoopNest::inline_func(const FunctionDAG::Node *f) {
 
 // Compute a Func at this site.
 void LoopNest::compute_here(const FunctionDAG::Node *f,
-                  bool tileable,
-                  int v,
-                  bool in_threads_loop,
-                  const Target &target) {
+                            bool tileable,
+                            int v,
+                            bool in_threads_loop,
+                            const Target &target) {
     const auto &bounds = get_bounds(f);
 
     if (!may_subtile()) {
@@ -2633,9 +2631,9 @@ void LoopNest::compute_here(const FunctionDAG::Node *f,
             node->innermost = false;
 
             LoopNest *one_vector = new LoopNest;
-            one_vector->node      = node->node;
-            one_vector->stage     = node->stage;
-            one_vector->tileable  = false;
+            one_vector->node = node->node;
+            one_vector->stage = node->stage;
+            one_vector->tileable = false;
             one_vector->vectorized_loop_index = node->vectorized_loop_index;
             one_vector->vector_dim = v;
             one_vector->size.resize(loop_dim, 1);
@@ -2656,17 +2654,17 @@ void LoopNest::compute_here(const FunctionDAG::Node *f,
 
 // Parallelize this loop according to the given tiling.
 IntrusivePtr<const LoopNest> LoopNest::parallelize_in_tiles(const MachineParams &params,
-                                                  const vector<int64_t> &tiling,
-                                                  const LoopNest *parent,
-                                                  const Target& target,
-                                                  bool inner_tiling,
-                                                  bool adjust_tiling) const {
+                                                            const vector<int64_t> &tiling,
+                                                            const LoopNest *parent,
+                                                            const Target &target,
+                                                            bool inner_tiling,
+                                                            bool adjust_tiling) const {
 
     // Split this loop and move factors to the inner loop
     LoopNest *inner = new LoopNest, *outer = new LoopNest;
-    inner->node      = outer->node      = node;
-    inner->stage     = outer->stage     = stage;
-    inner->tileable  = outer->tileable  = tileable && may_subtile();
+    inner->node = outer->node = node;
+    inner->stage = outer->stage = stage;
+    inner->tileable = outer->tileable = tileable && may_subtile();
     inner->vector_dim = outer->vector_dim = vector_dim;
     inner->vectorized_loop_index = outer->vectorized_loop_index = vectorized_loop_index;
 
@@ -2676,7 +2674,7 @@ IntrusivePtr<const LoopNest> LoopNest::parallelize_in_tiles(const MachineParams 
             outer->gpu_label = parallelized;
             outer->parallel = true;
         } else if (gpu_label == parallelized) {
-            inner->gpu_label = thread; // compute root funcs always allowed to use GPU threads
+            inner->gpu_label = thread;  // compute root funcs always allowed to use GPU threads
             outer->gpu_label = block;
             outer->parallel = true;
         } else if (gpu_label == thread) {
@@ -2780,7 +2778,7 @@ int64_t LoopNest::get_total_local_mem_alloc_size(bool constant_allocs_only, bool
         }
     }
 
-    for (const auto& c : children) {
+    for (const auto &c : children) {
         result += c->get_total_local_mem_alloc_size(constant_allocs_only, in_threads_loop);
     }
 
@@ -2813,13 +2811,13 @@ bool LoopNest::requires_dynamic_allocation(const FunctionDAG::Node *f, const Tar
 // in_threads_loop tracks whether or not function is going to be placed inside a
 // loop marked gpu_threads, in which case f's loops cannot be gpu_threads
 vector<IntrusivePtr<const LoopNest>> LoopNest::compute_in_tiles(const FunctionDAG::Node *f,
-                                                      const LoopNest *parent,
-                                                      const MachineParams &params,
-                                                      const Target &target,
-                                                      int v,
-                                                      bool in_realization,
-                                                      bool in_threads_loop,
-                                                      vector<int64_t> union_counts) const {
+                                                                const LoopNest *parent,
+                                                                const MachineParams &params,
+                                                                const Target &target,
+                                                                int v,
+                                                                bool in_realization,
+                                                                bool in_threads_loop,
+                                                                vector<int64_t> union_counts) const {
     internal_assert(f);
 
     vector<IntrusivePtr<const LoopNest>> result;
@@ -2884,12 +2882,12 @@ vector<IntrusivePtr<const LoopNest>> LoopNest::compute_in_tiles(const FunctionDA
         }
 
         // if GPU and creating a threads loop INSIDE a block loop, create child for each thread tiling
-        if ( !is_root() && !in_threads_loop && target.has_gpu_feature() ) {
+        if (!is_root() && !in_threads_loop && target.has_gpu_feature()) {
             bool made_child = r->add_gpu_thread_tilings(f, params, target, v, result, union_counts);
-            if (!made_child) { // no good thread tilings, just keep r with the untiled loop inserted as serial
+            if (!made_child) {  // no good thread tilings, just keep r with the untiled loop inserted as serial
                 result.emplace_back(r.release());
             }
-        } else { // computing at root or inside a threads loop
+        } else {  // computing at root or inside a threads loop
             result.emplace_back(r.release());
         }
     }
@@ -2941,9 +2939,9 @@ vector<IntrusivePtr<const LoopNest>> LoopNest::compute_in_tiles(const FunctionDA
             // Tile this loop and place the computation at some coarser granularity
             std::unique_ptr<LoopNest> inner{new LoopNest};
             std::unique_ptr<LoopNest> outer{new LoopNest};
-            inner->node      = outer->node      = node;
-            inner->stage     = outer->stage     = stage;
-            inner->tileable  = outer->tileable  = tileable && may_subtile();
+            inner->node = outer->node = node;
+            inner->stage = outer->stage = stage;
+            inner->tileable = outer->tileable = tileable && may_subtile();
             inner->vector_dim = outer->vector_dim = vector_dim;
             inner->vectorized_loop_index = outer->vectorized_loop_index = vectorized_loop_index;
             outer->size = size;
@@ -2994,7 +2992,7 @@ vector<IntrusivePtr<const LoopNest>> LoopNest::compute_in_tiles(const FunctionDA
 
             bool may_slide = (!in_realization &&
                               f->stages.size() == 1 &&
-                              !target.has_gpu_feature()); // disable sliding for GPU, often not useful
+                              !target.has_gpu_feature());  // disable sliding for GPU, often not useful
             if (may_slide) {
                 // should NEVER get here for GPU schedules, no sliding on GPU
                 // Store here, but compute further in. Currently
@@ -3024,68 +3022,68 @@ vector<IntrusivePtr<const LoopNest>> LoopNest::compute_in_tiles(const FunctionDA
                 // block loops can only be split into: blocks, serial
                 // serial loops can only be split into: serial, serial
                 switch (gpu_label) {
-                    case thread: {
-                        // create (threads, serial) option
+                case thread: {
+                    // create (threads, serial) option
 
-                        internal_assert(in_threads_loop); // threads loop can't be inside threads loop
-                        outer->gpu_label = thread;
-                        inner->gpu_label = serial;
+                    internal_assert(in_threads_loop);  // threads loop can't be inside threads loop
+                    outer->gpu_label = thread;
+                    inner->gpu_label = serial;
 
-                        outer->children.emplace_back(inner.release());
-                        outer->compute_here(f, true, v, true, target);
+                    outer->children.emplace_back(inner.release());
+                    outer->compute_here(f, true, v, true, target);
 
+                    result.emplace_back(outer.release());
+                    break;
+                }
+
+                case block: {
+                    internal_assert(!in_threads_loop);
+                    outer->gpu_label = block;
+                    inner->gpu_label = serial;
+
+                    outer->children.emplace_back(inner.release());
+                    outer->compute_here(f, true, v, false, target);
+
+                    bool made_child = outer->add_gpu_thread_tilings(f, params, target, v, result, union_counts);
+
+                    // no good thread tilings, just add the untiled thread loop
+                    if (!made_child) {
                         result.emplace_back(outer.release());
-                        break;
                     }
+                    break;
+                }
 
-                    case block: {
-                        internal_assert(!in_threads_loop);
-                        outer->gpu_label = block;
-                        inner->gpu_label = serial;
+                case serial: {
+                    outer->gpu_label = serial;
+                    inner->gpu_label = serial;
 
-                        outer->children.emplace_back(inner.release());
-                        outer->compute_here(f, true, v, false, target);
+                    outer->children.emplace_back(inner.release());
+                    outer->compute_here(f, true, v, in_threads_loop, target);
 
+                    if (!in_threads_loop) {
                         bool made_child = outer->add_gpu_thread_tilings(f, params, target, v, result, union_counts);
 
                         // no good thread tilings, just add the untiled thread loop
                         if (!made_child) {
                             result.emplace_back(outer.release());
                         }
-                        break;
+                    } else {  // inside a threads loop, can't generate thread loop tilings
+                        result.emplace_back(outer.release());
                     }
-
-                    case serial: {
-                        outer->gpu_label = serial;
-                        inner->gpu_label = serial;
-
-                        outer->children.emplace_back(inner.release());
-                        outer->compute_here(f, true, v, in_threads_loop, target);
-
-                        if (!in_threads_loop) {
-                            bool made_child = outer->add_gpu_thread_tilings(f, params, target, v, result, union_counts);
-
-                            // no good thread tilings, just add the untiled thread loop
-                            if (!made_child) {
-                                result.emplace_back(outer.release());
-                            }
-                        } else { // inside a threads loop, can't generate thread loop tilings
-                            result.emplace_back(outer.release());
-                        }
-                        break;
-                    }
-                    case simd: {
-                        internal_error << "attempting to split a SIMD loop\n";
-                        break;
-                    }
-                    case none: {
-                        internal_error << "attempting to split a loop with none gpu_label " << is_root() << " num children " << (int)(children.size()) << "\n";
-                        break;
-                    }
-                    case parallelized: {
-                        internal_error << "attempting to split a loop with parallelized gpu_label\n";
-                        break;
-                    }
+                    break;
+                }
+                case simd: {
+                    internal_error << "attempting to split a SIMD loop\n";
+                    break;
+                }
+                case none: {
+                    internal_error << "attempting to split a loop with none gpu_label " << is_root() << " num children " << (int)(children.size()) << "\n";
+                    break;
+                }
+                case parallelized: {
+                    internal_error << "attempting to split a loop with parallelized gpu_label\n";
+                    break;
+                }
                 }
             }
         }
@@ -3155,13 +3153,13 @@ vector<IntrusivePtr<const LoopNest>> LoopNest::compute_in_tiles(const FunctionDA
 
 // Apply the schedule represented by this loop nest to a Halide pipeline.
 void LoopNest::apply(LoopLevel here,
-           StageMap<std::unique_ptr<StageScheduleState>> &state_map,
-           double num_cores,
-           int depth,
-           const LoopNest *parent,
-           const LoopNest *compute_site,
-           const Target& target,
-           std::vector<StageScheduleState*>& ancestors) const {
+                     StageMap<std::unique_ptr<StageScheduleState>> &state_map,
+                     double num_cores,
+                     int depth,
+                     const LoopNest *parent,
+                     const LoopNest *compute_site,
+                     const Target &target,
+                     std::vector<StageScheduleState *> &ancestors) const {
     if (is_root()) {
         for (auto &c : children) {
             Func(c->node->func).compute_root();
@@ -3203,13 +3201,13 @@ void LoopNest::apply(LoopLevel here,
                 fv.exists = true;
                 fv.pure = l.pure;
                 fv.index = i;
-                fv.innermost_pure_dim = (i == (size_t) vectorized_loop_index);
+                fv.innermost_pure_dim = (i == (size_t)vectorized_loop_index);
                 state->vars.push_back(fv);
             }
             // Bubble the innermost pure dimension to the front of the pure dimensions
             for (int i = vectorized_loop_index - 1;
                  i >= 0 && state->vars[i].pure; i--) {
-                std::swap(state->vars[i], state->vars[i+1]);
+                std::swap(state->vars[i], state->vars[i + 1]);
             }
             state_map.emplace(stage, std::unique_ptr<StageScheduleState>(state));
         }
@@ -3242,7 +3240,7 @@ void LoopNest::apply(LoopLevel here,
 
         // Pick a tail strategy for any splits of pure vars. RVars always use guardwithif
         auto pure_var_tail_strategy = TailStrategy::Auto;
-        const bool might_access_gpu_shared = true; // Conservatively always true for now
+        const bool might_access_gpu_shared = true;  // Conservatively always true for now
         if (!might_access_gpu_shared && !compute_site->accesses_input_buffer() && !node->is_output) {
             // Roundup is lowest overhead, provided it doesn't
             // expand the bounds read on the input or written on
@@ -3270,7 +3268,8 @@ void LoopNest::apply(LoopLevel here,
 
                 if (vectorized_loop_index >= 0) {
                     size_t i = 0;
-                    while (!state.vars[i].innermost_pure_dim) i++;
+                    while (!state.vars[i].innermost_pure_dim)
+                        i++;
                     auto &v = state.vars[i];
                     internal_assert(v.innermost_pure_dim && v.exists) << v.var.name() << "\n";
                     // Is the result of a split
@@ -3425,7 +3424,6 @@ void LoopNest::apply(LoopLevel here,
             return;
         }
 
-
         for (auto f : store_at) {
             Func(f->func).store_at(here);
         }
@@ -3467,7 +3465,7 @@ void LoopNest::apply(LoopLevel here,
     }
 }
 
-double LoopNest::max_idle_lane_wastage(const Target& target, GPULoopInfo gpu_loop_info) const {
+double LoopNest::max_idle_lane_wastage(const Target &target, GPULoopInfo gpu_loop_info) const {
     gpu_loop_info.update(target, this);
     std::unique_ptr<ThreadInfo> thread_info;
 
