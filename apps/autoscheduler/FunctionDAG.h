@@ -26,7 +26,7 @@ using std::unique_ptr;
 using std::vector;
 
 template<typename T, typename... Args>
-std::unique_ptr<T> make_unique(Args&&... args) {
+std::unique_ptr<T> make_unique(Args &&... args) {
     return std::unique_ptr<T>(new T(std::forward<Args>(args)...));
 }
 
@@ -120,46 +120,41 @@ struct OptionalRational {
 // A LoadJacobian records the derivative of the coordinate accessed in
 // some producer w.r.t the loops of the consumer.
 class LoadJacobian {
-    vector<vector<OptionalRational>> coeffs;
+    std::vector<OptionalRational> coeffs;
     int64_t c;
+    size_t rows, cols;
 
 public:
-    LoadJacobian(const vector<vector<OptionalRational>>& matrix, int64_t c = 1) :
-        coeffs(matrix), c(c) {}
-
-    LoadJacobian(vector<vector<OptionalRational>> &&matrix, int64_t c = 1) :
-        coeffs(matrix), c(c) {}
+    LoadJacobian(size_t producer_storage_dims, size_t consumer_loop_dims, int64_t count)
+        : c(count), rows(producer_storage_dims), cols(consumer_loop_dims) {
+        coeffs.resize(rows * cols);
+    }
 
     bool empty() const {
-        return coeffs.empty();
+        return rows == 0;
     }
 
     size_t producer_storage_dims() const {
-        return coeffs.size();
+        return rows;
     }
 
     size_t consumer_loop_dims() const {
-        if (coeffs.empty() || coeffs[0].empty()) {
-            // The producer is scalar, and we don't know how
-            // many consumer loops there are.
-            return 0;
-        }
-        return coeffs[0].size();
+        return cols;
     }
 
     OptionalRational operator()(int producer_storage_dim, int consumer_loop_dim) const {
-        if (coeffs.empty()) {
-            // The producer is scalar, so all strides are zero.
+        /*
+          // TODO: Unclear if this code is used. Re-add if something with a scalar Func behaves oddly
+        if (producer_storage_dims() == 0 || consumer_loop_dims() == 0) {
+            // The producer or consumer is scalar, so all strides are zero.
             return {true, 0, 1};
         }
-        internal_assert(producer_storage_dim >= 0 && producer_storage_dim < (int) coeffs.size());
-        const auto &p = coeffs[producer_storage_dim];
-        if (p.empty()) {
-            // The consumer is scalar, so all strides are zero.
-            return {true, 0, 1};
-        }
-        internal_assert(consumer_loop_dim >= 0 && consumer_loop_dim < (int) p.size());
-        return p[consumer_loop_dim];
+        */
+        return coeffs[producer_storage_dim * cols + consumer_loop_dim];
+    }
+
+    OptionalRational &operator()(int producer_storage_dim, int consumer_loop_dim) {
+        return coeffs[producer_storage_dim * cols + consumer_loop_dim];
     }
 
     // To avoid redundantly re-recording copies of the same
@@ -172,62 +167,36 @@ public:
     // Try to merge another LoadJacobian into this one, increasing the
     // count if the coefficients match.
     bool merge(const LoadJacobian &other) {
-        if (other.coeffs.size() != coeffs.size()) return false;
-        for (size_t i = 0; i < coeffs.size(); i++) {
-            if (other.coeffs[i].size() != coeffs[i].size()) return false;
-            for (size_t j = 0; j < coeffs[i].size(); j++) {
-                if (!(other.coeffs[i][j] == coeffs[i][j])) return false;
-            }
+        if (other.rows != rows || other.cols != cols) return false;
+        for (size_t i = 0; i < rows * cols; i++) {
+            if (!(other.coeffs[i] == coeffs[i])) return false;
         }
         c += other.count();
         return true;
     }
 
-    // Scale the matrix coeffcients by the given factors
-    LoadJacobian operator*(const std::vector<int64_t>& factors) const {
-        bool all_one = true;
-        for (const auto& f : factors) {
-            if (f != 1) {
-                all_one = false;
-                break;
-            }
-        }
-
-        // If the scale factors are all one, nothing changes
-        if (all_one) {
-            return *this;
-        }
-
-        internal_assert(consumer_loop_dims() == 0 || consumer_loop_dims() == factors.size());
-
-        vector<vector<OptionalRational>> matrix;
-        matrix.resize(producer_storage_dims());
+    // Scale the matrix coefficients by the given factors
+    LoadJacobian operator*(const std::vector<int64_t> &factors) const {
+        LoadJacobian result(rows, cols, c);
         for (size_t i = 0; i < producer_storage_dims(); i++) {
-            matrix[i].resize(consumer_loop_dims());
             for (size_t j = 0; j < consumer_loop_dims(); j++) {
-                matrix[i][j] = (*this)(i, j) * factors[j];
+                result(i, j) = (*this)(i, j) * factors[j];
             }
         }
-        LoadJacobian result(std::move(matrix), count());
         return result;
     }
 
     // Multiply Jacobians, used to look at memory dependencies through
     // inlined functions.
     LoadJacobian operator*(const LoadJacobian &other) const {
-        vector<vector<OptionalRational>> matrix;
-        internal_assert(consumer_loop_dims() == 0 || (consumer_loop_dims() == other.producer_storage_dims()));
-        matrix.resize(producer_storage_dims());
+        LoadJacobian result(producer_storage_dims(), other.consumer_loop_dims(), count() * other.count());
         for (size_t i = 0; i < producer_storage_dims(); i++) {
-            matrix[i].resize(other.consumer_loop_dims());
             for (size_t j = 0; j < other.consumer_loop_dims(); j++) {
-                matrix[i][j] = OptionalRational{true, 0, 1};
                 for (size_t k = 0; k < consumer_loop_dims(); k++) {
-                    matrix[i][j] += (*this)(i, k) * other(k, j);
+                    result(i, j) += (*this)(i, k) * other(k, j);
                 }
             }
         }
-        LoadJacobian result(std::move(matrix), count() * other.count());
         return result;
     }
 
