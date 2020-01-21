@@ -1122,7 +1122,7 @@ class ExtractRegisterAllocations : public IRMutator {
             }
         }
 
-        if (op->body.same_as(body)) {
+        if (op->body.same_as(body) && op->value.same_as(value)) {
             return op;
         } else {
             return LetOrLetStmt::make(op->name, value, body);
