@@ -516,7 +516,7 @@ class ExtractSharedAndHeapAllocations : public IRMutator {
 
         // Wrap let expression for any allocations found within
         for (SharedAllocation &s : allocations) {
-            if (expr_uses_var(s.size, op->name) && !s.size_computed_on_host) {
+            if (expr_uses_var(s.size, op->name)) {
                 s.size = Let::make(op->name, op->value, s.size);
                 s.size = simplify(s.size);
             }
