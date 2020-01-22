@@ -988,13 +988,6 @@ void FunctionDAG::featurize() {
         for (size_t stage_idx = 0; stage_idx < node.stages.size(); stage_idx++) {
             Node::Stage &stage = node.stages[stage_idx];
 
-            // Pick a dimension to vectorize over - the innermost pure loop
-            size_t vector_dim = 0;
-            while (vector_dim < stage.loop.size() && !stage.loop[vector_dim].pure) {
-                vector_dim++;
-            }
-            // bool vectorized = vector_dim < stage.loop.size();
-
             Featurizer featurizer(node.func, stage);
 
             if (node.func.extern_definition_proxy_expr().get()) {
