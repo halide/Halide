@@ -249,7 +249,8 @@ Stmt add_image_checks(Stmt s,
         ReductionDomain rdom;
 
         // An expression returning whether or not we're in inference mode
-        Expr handle = Variable::make(type_of<halide_buffer_t *>(), name + ".buffer",
+        string buf_name = name + ".buffer";
+        Expr handle = Variable::make(type_of<halide_buffer_t *>(), buf_name,
                                      image, param, rdom);
         Expr inference_mode = Call::make(Bool(), Call::buffer_is_bounds_query,
                                          {handle}, Call::Extern);
@@ -260,9 +261,9 @@ Stmt add_image_checks(Stmt s,
         error_name += " buffer " + name;
 
         if (!is_output_buffer && t.has_feature(Target::MSAN)) {
-            Expr buffer = Variable::make(type_of<struct halide_buffer_t *>(), name + ".buffer");
+            Expr buffer = Variable::make(type_of<struct halide_buffer_t *>(), buf_name);
             Stmt check_contents = Evaluate::make(
-                Call::make(Int(32), "halide_msan_check_buffer_is_initialized", {buffer}, Call::Extern));
+                Call::make(Int(32), "halide_msan_check_buffer_is_initialized", {buffer, Expr(buf_name)}, Call::Extern));
             msan_checks.push_back(check_contents);
         }
 
@@ -402,7 +403,7 @@ Stmt add_image_checks(Stmt s,
 
         // Create code that mutates the input buffers if we're in bounds inference mode.
         BufferBuilder builder;
-        builder.buffer_memory = Variable::make(type_of<struct halide_buffer_t *>(), name + ".buffer");
+        builder.buffer_memory = Variable::make(type_of<struct halide_buffer_t *>(), buf_name);
         builder.shape_memory = Call::make(type_of<struct halide_dimension_t *>(),
                                           Call::buffer_get_shape, {builder.buffer_memory},
                                           Call::Extern);
