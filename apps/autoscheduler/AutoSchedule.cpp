@@ -112,7 +112,7 @@ struct Statistics {
     std::chrono::duration<double> cost_model_evaluation_time{0};
 
     double total_featurization_time() const {
-        return featurization_time.count() * 1000;
+        return std::chrono::duration_cast<std::chrono::milliseconds>(featurization_time).count();
     }
 
     double average_featurization_time() const {
@@ -120,7 +120,7 @@ struct Statistics {
     }
 
     double total_cost_model_evaluation_time() const {
-        return cost_model_evaluation_time.count() * 1000;
+        return std::chrono::duration_cast<std::chrono::milliseconds>(cost_model_evaluation_time).count();
     }
 
     double average_cost_model_evaluation_time() const {
@@ -2029,6 +2029,7 @@ void generate_schedule(const std::vector<Function> &outputs,
                        const Target &target,
                        const MachineParams &params,
                        AutoSchedulerResults *auto_scheduler_results) {
+    auto start = std::chrono::high_resolution_clock::now();
     aslog(0) << "generate_schedule for target=" << target.to_string() << "\n";
 
     // Start a timer
@@ -2140,6 +2141,8 @@ void generate_schedule(const std::vector<Function> &outputs,
     aslog(1) << "Number of schedules evaluated by cost model: " << stats.num_schedules_enqueued << '\n';
     aslog(1) << "Total cost model evaluation time (ms): " << stats.total_cost_model_evaluation_time() << "\n";
     aslog(1) << "Average cost model evaluation time (ms): " << stats.average_cost_model_evaluation_time() << "\n";
+    std::chrono::duration<double> total_time = std::chrono::high_resolution_clock::now() - start;
+    aslog(1) << "Time taken for autoscheduler (s): " << std::chrono::duration_cast<std::chrono::seconds>(total_time).count() << '\n';
 }
 
 // Halide uses a plugin architecture for registering custom
