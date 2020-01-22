@@ -2412,7 +2412,11 @@ Value *CodeGen_LLVM::codegen_dense_vector_load(const Load *load, Value *vpred) {
         Instruction *load_inst;
         if (vpred != nullptr) {
             Value *slice_mask = slice_vector(vpred, i, slice_lanes);
+#if LLVM_VERSION >= 100
+            load_inst = builder->CreateMaskedLoad(vec_ptr, Align(alignment), slice_mask);
+#else
             load_inst = builder->CreateMaskedLoad(vec_ptr, alignment, slice_mask);
+#endif
         } else {
             load_inst = builder->CreateAlignedLoad(vec_ptr, alignment);
         }
