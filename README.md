@@ -71,18 +71,6 @@ then to point Halide to it:
 
 (Note that you *must* add `clang` to `LLVM_ENABLE_PROJECTS`; adding `lld` to `LLVM_ENABLE_PROJECTS` is only required when using WebAssembly, but we recommend enabling it in all cases, to simplify builds.)
 
-#### Building Halide - Using vcpkg
-
-You can download and install Halide using the [vcpkg](https://github.com/Microsoft/vcpkg) dependency manager:
-
-    git clone https://github.com/Microsoft/vcpkg.git
-    cd vcpkg
-    ./bootstrap-vcpkg.sh
-    ./vcpkg integrate install
-    ./vcpkg install halide
-
-The Halide port in vcpkg is kept up to date by Microsoft team members and community contributors. If the version is out of date, please [create an issue or pull request](https://github.com/Microsoft/vcpkg) on the vcpkg repository.
-
 #### Building Halide with make
 
 With `LLVM_CONFIG` set (or `llvm-config` in your path), you should be
@@ -142,6 +130,18 @@ To configure and build Halide:
     % cd C:\Code\halide-build
     % cmake -DLLVM_DIR=../llvm-install/lib/cmake/llvm -DCMAKE_BUILD_TYPE=Release -G "Visual Studio 14 Win64" ../halide
     % MSBuild.exe /m /t:Build /p:Configuration=Release .\ALL_BUILD.vcxproj
+
+#### Building Halide - Using vcpkg
+
+You can download and install Halide using the [vcpkg](https://github.com/Microsoft/vcpkg) dependency manager:
+
+    git clone https://github.com/Microsoft/vcpkg.git
+    cd vcpkg
+    ./bootstrap-vcpkg.sh
+    ./vcpkg integrate install
+    ./vcpkg install halide
+
+The Halide port in vcpkg is kept up to date by Microsoft team members and community contributors. If the version is out of date, please [create an issue or pull request](https://github.com/Microsoft/vcpkg) on the vcpkg repository.
 
 #### Building Halide and LLVM on Windows using mingw
 
