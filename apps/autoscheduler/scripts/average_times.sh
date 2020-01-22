@@ -22,6 +22,10 @@ find ${SAMPLES_DIR} -regextype sed -regex ".*/.*/[1-9][0-9]*/compile_err.txt" | 
 
 grep "Number of featurizations computed:" ${SAMPLES_DIR}/*/0/compile_err.txt | awk -F" " '{sum += $5}; END{printf("Average number of featurizations computed (beam search): %f\n", sum / NR);}'
 
+find ${SAMPLES_DIR} -regextype sed -regex ".*/.*/[1-9][0-9]*/compile_err.txt" | xargs grep "Number of schedules evaluated by cost model" | awk -F" " '{sum += $8}; END{printf("Average number of schedules evaluated by cost model (greedy): %f\n", sum / NR);}'
+
+grep "Number of schedules evaluated by cost model" ${SAMPLES_DIR}/*/0/compile_err.txt | awk -F" " '{sum += $8}; END{printf("Average number of schedules evaluated by cost model (beam search): %f\n", sum / NR);}'
+
 find ${SAMPLES_DIR} -regextype sed -regex ".*/.*/[1-9][0-9]*/compile_err.txt" | xargs grep "Compile time" | awk '{sum += $4}; END{printf("Average greedy compile time: %f s\n", sum / NR);}'
 
 grep "Compile time" ${SAMPLES_DIR}/*/0/compile_err.txt | awk -F" " '{sum += $4}; END{printf("Average beam search compile time: %f s\n", sum / NR);}'
