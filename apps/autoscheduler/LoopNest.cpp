@@ -832,9 +832,6 @@ std::pair<int, double> LoopNest::num_shared_mem_accesses(const FunctionDAG::Node
         return {num_accesses, stride};
     }
 
-    int num_bank_accesses[32] = {0};
-    int largest_index[32] = {-1};
-
     stride = std::abs(stride);
 
     double bytes = node->bytes_per_point;
@@ -842,38 +839,12 @@ std::pair<int, double> LoopNest::num_shared_mem_accesses(const FunctionDAG::Node
     // Each bank is 4 bytes so adjust the stride based
     // on width of data being loaded
     double bank_stride = (bytes / 4);
-    int num_banks_per_access = std::max(1.0, bank_stride);
     stride *= bank_stride;
 
-    int total_accesses = 0;
+    stride = std::min(32.0, std::max(1.0, stride));
 
-    thread_info.for_each_thread_id([&](int thread_id, bool is_active, bool is_last_thread) {
-        if (is_active) {
-            // Compute counts of which banks are accessed
-            // Multiple accesses to the same bank with different
-            // indices will be serialized
-            for (int j = 0; j < num_banks_per_access; j++) {
-                int index = (int)(thread_id * stride) + j;
-                int bank = index % 32;
-                if (largest_index[bank] != index) {
-                    num_bank_accesses[bank]++;
-                }
-                largest_index[bank] = index;
-            }
-        }
-
-        if ((thread_id + 1) % 32 == 0 || is_last_thread) {
-            int max_accesses_this_warp = 0;
-            for (int j = 0; j < 32; ++j) {
-                max_accesses_this_warp = std::max(max_accesses_this_warp, num_bank_accesses[j]);
-                num_bank_accesses[j] = 0;
-                largest_index[j] = -1;
-            }
-            total_accesses += max_accesses_this_warp;
-        }
-    });
-
-    int num_accesses = total_accesses * serial_loop_extents;
+    // 32 banks can be accessed concurrently
+    int num_accesses = serial_loop_extents * std::ceil(stride * thread_info.num_threads / 32.0);
     return {num_accesses, stride};
 }
 
@@ -1023,22 +994,16 @@ double LoopNest::min_global_mem_accesses(const FunctionDAG::Node* node, const Th
     int words_per_access = std::max(1.0, word_stride);
     stride *= words_per_access;
 
-    int num_accesses = 0;
-    int last_segment_accessed = -1;
+    // If the stride is larger than 8 words (32 bytes), it is guaranteed to
+    // traverse at least one segment each iteration. Any stride larger than
+    // 2 segments will just traverse empty segments so we reduce it here to
+    // avoid potential overflow below
+    if (stride > 8.0) {
+        stride = 8.0 + std::fmod(stride, 8.0);
+    }
 
-    thread_info.for_each_active_thread_id([&](int thread_id, bool is_last_thread) {
-        // Compute counts of which segments are accessed
-        for (int j = 0; j < words_per_access; j++) {
-            int64_t index = (int64_t)(thread_id * stride) + j;
-            int segment = index / 8;
-            if (segment != last_segment_accessed) {
-                last_segment_accessed = segment;
-                num_accesses++;
-            }
-        }
-    });
-
-    return serial_loop_extents * num_accesses;
+    int num_accesses = serial_loop_extents * std::ceil(stride * thread_info.num_threads / 8.0);
+    return num_accesses;
 }
 
 void LoopNest::compute_num_global_mem_accesses_per_block(const LoadJacobian& jac, const FunctionDAG::Node* node, const Bound& store_bounds, const ThreadInfo& thread_info, int innermost_dim, double serial_loop_extents, double access_count, GlobalMemInfo& global_mem_info, const LoopNest& root) const {
@@ -1068,39 +1033,17 @@ void LoopNest::compute_num_global_mem_accesses_per_block(const LoadJacobian& jac
         stride = 8.0 + std::fmod(stride, 8.0);
     }
 
-    double min_stride = words_per_access;
-
-    // If the stride is less than min_stride, the minimum number of accesses
-    // should be equal to the actual number of accesses
-    bool min_equals_actual = stride < min_stride;
+    double min_stride = std::min(stride, (double)words_per_access);
 
     double strides[2] = {stride, min_stride};
+
     int num_accesses[2] = {0, 0};
-    int last_segment_accessed[2] = {-1, -1};
-
-    thread_info.for_each_active_thread_id([&](int thread_id, bool is_last_thread) {
-        for (int s = 0; s < 2; ++s) {
-            if (s == 1 && min_equals_actual) {
-                break;
-            }
-
-            // Compute counts of which segments are accessed
-            for (int j = 0; j < words_per_access; j++) {
-                int64_t index = (int64_t)(thread_id * strides[s]) + j;
-                int segment = index / 8;
-                if (segment != last_segment_accessed[s]) {
-                    last_segment_accessed[s] = segment;
-                    num_accesses[s]++;
-                }
-            }
-        }
-    });
-
-    if (min_equals_actual) {
-        num_accesses[1] = num_accesses[0];
+    for (int s = 0; s < 2; ++s) {
+        // Memory is accessed in 8 word segments
+        num_accesses[s] = serial_loop_extents * std::ceil((strides[s] * thread_info.num_threads) / 8.0);
     }
 
-    global_mem_info.add_access_info(serial_loop_extents * num_accesses[0], serial_loop_extents * num_accesses[1], stride, access_count);
+    global_mem_info.add_access_info(num_accesses[0], num_accesses[1], stride, access_count);
 }
 
 double LoopNest::compute_local_mem_store_features(const LoadJacobian& jac, int consumer_innermost_dim, const FunctionDAG::Node* node, const Bound& consumer_store_bounds, const LoopNest& root) const {
