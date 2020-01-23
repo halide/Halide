@@ -166,6 +166,19 @@ llvm::GlobalValue::LinkageTypes llvm_linkage(LinkageType t) {
     // }
 }
 
+// A local helper to make an llvm value type representing
+// alignment. Can't be declared in a header without introducing a
+// dependence on the LLVM headers.
+#if LLVM_VERSION >= 100
+llvm::Align make_alignment(int a) {
+    return llvm::Align(a);
+}
+#else
+int make_alignment(int a) {
+    return a;
+}
+#endif
+
 }  // namespace
 
 CodeGen_LLVM::CodeGen_LLVM(Target t)
@@ -990,11 +1003,7 @@ Constant *CodeGen_LLVM::embed_constant_scalar_value_t(Expr e) {
         ConstantArray::get(array_type, array_entries));
 
     // Ensure that the storage is aligned for halide_scalar_value_t
-#if LLVM_VERSION >= 100
-    storage->setAlignment(MaybeAlign((unsigned)sizeof(halide_scalar_value_t)));
-#else
-    storage->setAlignment((unsigned)sizeof(halide_scalar_value_t));
-#endif
+    storage->setAlignment(make_alignment((int)sizeof(halide_scalar_value_t)));
 
     Constant *zero[] = {ConstantInt::get(i32_t, 0)};
     return ConstantExpr::getBitCast(
@@ -2021,7 +2030,7 @@ void CodeGen_LLVM::visit(const Load *op) {
     if (op->type.is_scalar()) {
         // Scalar loads
         Value *ptr = codegen_buffer_pointer(op->name, op->type, op->index);
-        LoadInst *load = builder->CreateAlignedLoad(ptr, op->type.bytes());
+        LoadInst *load = builder->CreateAlignedLoad(ptr, make_alignment(op->type.bytes()));
         add_tbaa_metadata(load, op->name, op->index);
         value = load;
     } else {
@@ -2320,7 +2329,8 @@ void CodeGen_LLVM::codegen_predicated_vector_store(const Store *op) {
             Value *vec_ptr = builder->CreatePointerCast(elt_ptr, slice_val->getType()->getPointerTo());
 
             Value *slice_mask = slice_vector(vpred, i, slice_lanes);
-            Instruction *store_inst = builder->CreateMaskedStore(slice_val, vec_ptr, alignment, slice_mask);
+            Instruction *store_inst =
+                builder->CreateMaskedStore(slice_val, vec_ptr, make_alignment(alignment), slice_mask);
             add_tbaa_metadata(store_inst, op->name, slice_index);
         }
     } else {  // It's not dense vector store, we need to scalarize it
@@ -2348,7 +2358,7 @@ void CodeGen_LLVM::codegen_predicated_vector_store(const Store *op) {
 
             // Scalar
             Value *ptr = codegen_buffer_pointer(op->name, value_type, idx);
-            builder->CreateAlignedStore(v, ptr, value_type.bytes());
+            builder->CreateAlignedStore(v, ptr, make_alignment(value_type.bytes()));
 
             builder->CreateBr(after_bb);
             builder->SetInsertPoint(after_bb);
@@ -2412,9 +2422,9 @@ Value *CodeGen_LLVM::codegen_dense_vector_load(const Load *load, Value *vpred) {
         Instruction *load_inst;
         if (vpred != nullptr) {
             Value *slice_mask = slice_vector(vpred, i, slice_lanes);
-            load_inst = builder->CreateMaskedLoad(vec_ptr, alignment, slice_mask);
+            load_inst = builder->CreateMaskedLoad(vec_ptr, make_alignment(alignment), slice_mask);
         } else {
-            load_inst = builder->CreateAlignedLoad(vec_ptr, alignment);
+            load_inst = builder->CreateAlignedLoad(vec_ptr, make_alignment(alignment));
         }
         add_tbaa_metadata(load_inst, load->name, slice_index);
         slices.push_back(load_inst);
@@ -2552,7 +2562,7 @@ void CodeGen_LLVM::codegen_atomic_store(const Store *op) {
                 Value *idx = builder->CreateExtractElement(vec_index, ConstantInt::get(i32_t, lane_id));
                 ptr = codegen_buffer_pointer(op->name, value_type.element_of(), idx);
             }
-            LoadInst *orig = builder->CreateAlignedLoad(ptr, value_type.bytes());
+            LoadInst *orig = builder->CreateAlignedLoad(ptr, make_alignment(value_type.bytes()));
             orig->setOrdering(AtomicOrdering::Monotonic);
             add_tbaa_metadata(orig, op->name, op->index);
             // Explicit fall through from the current block to the cas loop body.
@@ -3507,11 +3517,7 @@ Constant *CodeGen_LLVM::create_binary_blob(const vector<char> &data, const strin
     if (data.size() > alignment && native_vector_bytes > alignment) {
         alignment = native_vector_bytes;
     }
-#if LLVM_VERSION >= 100
-    global->setAlignment(MaybeAlign((unsigned)alignment));
-#else
-    global->setAlignment((unsigned)alignment);
-#endif
+    global->setAlignment(make_alignment(alignment));
 
     Constant *zero = ConstantInt::get(i32_t, 0);
     Constant *zeros[] = {zero, zero};
@@ -4074,7 +4080,7 @@ void CodeGen_LLVM::visit(const Store *op) {
     // Scalar
     if (value_type.is_scalar()) {
         Value *ptr = codegen_buffer_pointer(op->name, value_type, op->index);
-        StoreInst *store = builder->CreateAlignedStore(val, ptr, value_type.bytes());
+        StoreInst *store = builder->CreateAlignedStore(val, ptr, make_alignment(value_type.bytes()));
         add_tbaa_metadata(store, op->name, op->index);
     } else if (const Let *let = op->index.as<Let>()) {
         Stmt s = Store::make(op->name, op->value, let->body, op->param, op->predicate, op->alignment);
@@ -4118,7 +4124,7 @@ void CodeGen_LLVM::visit(const Store *op) {
                 Value *slice_val = slice_vector(val, i, slice_lanes);
                 Value *elt_ptr = codegen_buffer_pointer(op->name, value_type.element_of(), slice_base);
                 Value *vec_ptr = builder->CreatePointerCast(elt_ptr, slice_val->getType()->getPointerTo());
-                StoreInst *store = builder->CreateAlignedStore(slice_val, vec_ptr, alignment);
+                StoreInst *store = builder->CreateAlignedStore(slice_val, vec_ptr, make_alignment(alignment));
                 add_tbaa_metadata(store, op->name, slice_index);
             }
         } else if (ramp) {
@@ -4308,22 +4314,14 @@ Value *CodeGen_LLVM::create_alloca_at_entry(llvm::Type *t, int n, bool zero_init
     AllocaInst *ptr = builder->CreateAlloca(t, size, name);
     int align = native_vector_bits() / 8;
     if (t->isVectorTy() || n > 1) {
-#if LLVM_VERSION >= 100
-        ptr->setAlignment(MaybeAlign(align));
-#else
-        ptr->setAlignment(align);
-#endif
+        ptr->setAlignment(make_alignment(align));
     }
 
     if (zero_initialize) {
         if (n == 1) {
             builder->CreateStore(Constant::getNullValue(t), ptr);
         } else {
-#if LLVM_VERSION >= 100
-            builder->CreateMemSet(ptr, Constant::getNullValue(t), n, MaybeAlign(align));
-#else
-            builder->CreateMemSet(ptr, Constant::getNullValue(t), n, align);
-#endif
+            builder->CreateMemSet(ptr, Constant::getNullValue(t), n, make_alignment(align));
         }
     }
     builder->restoreIP(here);
