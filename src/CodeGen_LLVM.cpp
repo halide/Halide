@@ -2330,7 +2330,7 @@ void CodeGen_LLVM::codegen_predicated_vector_store(const Store *op) {
 
             Value *slice_mask = slice_vector(vpred, i, slice_lanes);
             Instruction *store_inst =
-                builder->CreateMaskedStore(slice_val, vec_ptr, alignment, slice_mask);
+                builder->CreateMaskedStore(slice_val, vec_ptr, make_alignment(alignment), slice_mask);
             add_tbaa_metadata(store_inst, op->name, slice_index);
         }
     } else {  // It's not dense vector store, we need to scalarize it
