@@ -193,6 +193,14 @@ WEAK int halide_error_unaligned_host_ptr(void *user_context, const char *func,
     return halide_error_code_unaligned_host_ptr;
 }
 
+WEAK int halide_error_device_dirty_with_no_device_support(void *user_context, const char *func) {
+    error(user_context)
+        << "The buffer " << func
+        << " is dirty on device, but this pipeline was compiled "
+        << "with no support for device to host copies.";
+    return halide_error_code_device_dirty_with_no_device_support;
+}
+
 WEAK int halide_error_host_is_null(void *user_context, const char *func) {
     error(user_context)
         << "The host pointer of " << func
@@ -266,11 +274,6 @@ WEAK int halide_error_host_and_device_dirty(void *user_context) {
 WEAK int halide_error_buffer_is_null(void *user_context, const char *routine) {
     error(user_context) << "Buffer pointer passed to " << routine << " is null.\n";
     return halide_error_code_buffer_is_null;
-}
-
-WEAK int halide_error_integer_division_by_zero(void *user_context) {
-    error(user_context) << "Integer division or modulo by zero.\n";
-    return halide_error_code_integer_division_by_zero;
 }
 
 }  // extern "C"

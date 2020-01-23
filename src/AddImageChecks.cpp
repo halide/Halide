@@ -98,7 +98,8 @@ Stmt add_image_checks(Stmt s,
                       const Target &t,
                       const vector<string> &order,
                       const map<string, Function> &env,
-                      const FuncValueBounds &fb) {
+                      const FuncValueBounds &fb,
+                      bool will_inject_host_copies) {
 
     bool no_asserts = t.has_feature(Target::NoAsserts);
     bool no_bounds_query = t.has_feature(Target::NoBoundsQuery);
@@ -142,6 +143,7 @@ Stmt add_image_checks(Stmt s,
     vector<Stmt> asserts_type_checks;
     vector<Stmt> asserts_host_alignment;
     vector<Stmt> asserts_host_non_null;
+    vector<Stmt> asserts_device_not_dirty;
     vector<Stmt> buffer_rewrites;
     vector<Stmt> msan_checks;
 
@@ -564,6 +566,18 @@ Stmt add_image_checks(Stmt s,
                 check = !touched.used || check;
             }
             asserts_host_non_null.push_back(AssertStmt::make(check, error));
+
+            if (!will_inject_host_copies) {
+                Expr device_dirty = Variable::make(Bool(), name + ".device_dirty",
+                                                   image, param, ReductionDomain());
+
+                Expr error = Call::make(Int(32), "halide_error_device_dirty_with_no_device_support",
+                                        {error_name}, Call::Extern);
+
+                // If we have no device support, we can't handle
+                // device_dirty, so every buffer touched needs checking.
+                asserts_device_not_dirty.push_back(AssertStmt::make(!device_dirty, error));
+            }
         }
 
         // and check alignment of the host field
@@ -577,17 +591,22 @@ Stmt add_image_checks(Stmt s,
         }
     }
 
-    // Inject the code that checks the host pointers.
     if (!no_asserts) {
+        // Inject the code that checks the host pointers.
         for (size_t i = asserts_host_non_null.size(); i > 0; i--) {
             s = Block::make(asserts_host_non_null[i - 1], s);
         }
+
         for (size_t i = asserts_host_alignment.size(); i > 0; i--) {
             s = Block::make(asserts_host_alignment[i - 1], s);
         }
-    }
-    // Inject the code that checks that no dimension math overflows
-    if (!no_asserts) {
+
+        // Check the device_dirty fields
+        for (size_t i = asserts_device_not_dirty.size(); i > 0; i--) {
+            s = Block::make(asserts_device_not_dirty[i - 1], s);
+        }
+
+        // Inject the code that checks that no dimension math overflows
         for (size_t i = dims_no_overflow_asserts.size(); i > 0; i--) {
             s = Block::make(dims_no_overflow_asserts[i - 1], s);
         }
