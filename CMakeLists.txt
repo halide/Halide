@@ -1,10 +1,8 @@
 cmake_minimum_required(VERSION 3.14)
 project(Halide)
 
-set(HALIDE_BASE_DIR   "${CMAKE_CURRENT_SOURCE_DIR}")
-
 set(CPACK_PACKAGE_VENDOR "Halide")
-set(CPACK_RESOURCE_FILE_LICENSE "${HALIDE_BASE_DIR}/LICENSE.txt")
+set(CPACK_RESOURCE_FILE_LICENSE "${Halide_SOURCE_DIR}/LICENSE.txt")
 set(CPACK_MONOLITHIC_INSTALL OFF)
 if (WIN32)
   set(CPACK_GENERATOR "ZIP")
@@ -242,8 +240,8 @@ function(halide_project name folder)
     endif()
   endif()
   target_link_libraries("${name}" PRIVATE ${HALIDE_COMPILER_LIB} ${CMAKE_DL_LIBS} ${CMAKE_THREAD_LIBS_INIT})
-  target_include_directories("${name}" PRIVATE "${HALIDE_BASE_DIR}/src")
-  target_include_directories("${name}" PRIVATE "${HALIDE_BASE_DIR}/tools")
+  target_include_directories("${name}" PRIVATE "${Halide_SOURCE_DIR}/src")
+  target_include_directories("${name}" PRIVATE "${Halide_SOURCE_DIR}/tools")
   set_target_properties("${name}" PROPERTIES FOLDER "${folder}")
   if (MSVC)
     target_link_libraries("${name}" PRIVATE Kernel32)
@@ -312,7 +310,7 @@ endif()
 # For in-tree builds, we need to set the input variables for halide.cmake
 # to specific values, rather than relying on HALIDE_DISTRIB_DIR to be set correctly.
 set(HALIDE_INCLUDE_DIR "${CMAKE_BINARY_DIR}/include")
-set(HALIDE_TOOLS_DIR "${HALIDE_BASE_DIR}/tools")
+set(HALIDE_TOOLS_DIR "${Halide_SOURCE_DIR}/tools")
 set(HALIDE_COMPILER_LIB Halide)
 set(HALIDE_DISTRIB_DIR "/bad-path")
 include(halide.cmake)
@@ -383,7 +381,7 @@ function(add_halide_test TARGET)
   get_target_property(TARGET_TYPE "${TARGET}" TYPE)
   if("${TARGET_TYPE}" STREQUAL "EXECUTABLE")
     if(${args_EXPECT_FAILURE})
-      set(COMMAND "${HALIDE_BASE_DIR}/test/common/expect_failure.sh" "${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/${TARGET}")
+      set(COMMAND "${Halide_SOURCE_DIR}/test/common/expect_failure.sh" "${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/${TARGET}")
     else()
       set(COMMAND "${TARGET}")
     endif()
@@ -452,7 +450,7 @@ find_package(Doxygen)
     message(FATAL_ERROR "Could not find Doxygen. Either install it or set WITH_DOCS to OFF")
   endif()
 
-  configure_file(${HALIDE_BASE_DIR}/Doxyfile.in ${CMAKE_BINARY_DIR}/Doxyfile @ONLY)
+  configure_file(${Halide_SOURCE_DIR}/Doxyfile.in ${CMAKE_BINARY_DIR}/Doxyfile @ONLY)
   # Note documentation is not built by default, the user needs to build the "doc" target
   add_custom_target(doc
     COMMAND ${DOXYGEN_EXECUTABLE} ${CMAKE_BINARY_DIR}/Doxyfile
@@ -503,22 +501,22 @@ foreach(F mex_halide.m
           halide_image_info.h
           halide_malloc_trace.h
           halide_trace_config.h)
-  install(FILES "${HALIDE_BASE_DIR}/tools/${F}"
+  install(FILES "${Halide_SOURCE_DIR}/tools/${F}"
           DESTINATION tools)
 endforeach()
 
 # ---- README
-file(GLOB FILES "${HALIDE_BASE_DIR}/*.md")
+file(GLOB FILES "${Halide_SOURCE_DIR}/*.md")
 install(FILES ${FILES}
         DESTINATION .)
 
 # ---- halide.cmake
-file(GLOB FILES "${HALIDE_BASE_DIR}/*.cmake")
+file(GLOB FILES "${Halide_SOURCE_DIR}/*.cmake")
 install(FILES ${FILES}
         DESTINATION .)
 
 # ---- halide_config
-file(GLOB FILES "${HALIDE_BASE_DIR}/tools/halide_config.*.tpl")
+file(GLOB FILES "${Halide_SOURCE_DIR}/tools/halide_config.*.tpl")
 foreach(F ${FILES})
   get_filename_component(FNAME "${F}" NAME)  # Extract filename
   string(REGEX REPLACE "\\.tpl$" "" FNAME "${FNAME}")  # Strip .tpl extension
@@ -531,4 +529,4 @@ add_custom_target(distrib
   COMMAND cmake -E echo "\\'make distrib\\' is not available under CMake. Use \\'make package\\' instead.")
 
 add_custom_target(format
-  COMMAND find "${HALIDE_BASE_DIR}/apps" "${HALIDE_BASE_DIR}/src" "${HALIDE_BASE_DIR}/tools" "${HALIDE_BASE_DIR}/test" "${HALIDE_BASE_DIR}/util" "${HALIDE_BASE_DIR}/python_bindings" -name *.cpp -o -name *.h -o -name *.c | xargs ${CLANG}-format -i -style=file)
+  COMMAND find "${Halide_SOURCE_DIR}/apps" "${Halide_SOURCE_DIR}/src" "${Halide_SOURCE_DIR}/tools" "${Halide_SOURCE_DIR}/test" "${Halide_SOURCE_DIR}/util" "${Halide_SOURCE_DIR}/python_bindings" -name *.cpp -o -name *.h -o -name *.c | xargs ${CLANG}-format -i -style=file)
