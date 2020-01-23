@@ -147,13 +147,10 @@ public:
     }
 
     OptionalRational operator()(int producer_storage_dim, int consumer_loop_dim) const {
-        /*
-          // TODO: Unclear if this code is used. Re-add if something with a scalar Func behaves oddly
         if (producer_storage_dims() == 0 || consumer_loop_dims() == 0) {
             // The producer or consumer is scalar, so all strides are zero.
-            return {true, 0, 1};
+            return {0, 1};
         }
-        */
         return coeffs[producer_storage_dim * cols + consumer_loop_dim];
     }
 

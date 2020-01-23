@@ -103,30 +103,10 @@ using std::set;
 using std::string;
 using std::vector;
 
-struct Statistics {
-    int num_featurizations{0};
-    int num_states_added{0};
-    int num_memoized_featurizations{0};
-    std::chrono::duration<double> featurization_time{0};
-    int num_schedules_enqueued{0};
-    std::chrono::duration<double> cost_model_evaluation_time{0};
-
-    double total_featurization_time() const {
-        return std::chrono::duration_cast<std::chrono::milliseconds>(featurization_time).count();
-    }
-
-    double average_featurization_time() const {
-        return total_featurization_time() / (double)num_featurizations;
-    }
-
-    double total_cost_model_evaluation_time() const {
-        return std::chrono::duration_cast<std::chrono::milliseconds>(cost_model_evaluation_time).count();
-    }
-
-    double average_cost_model_evaluation_time() const {
-        return total_cost_model_evaluation_time() / (double)num_schedules_enqueued;
-    }
-};
+bool verify_memoized_features() {
+    static bool var = get_env_variable("HL_VERIFY_MEMOIZED_FEATURES") == "1";
+    return var;
+}
 
 struct RNG {
     std::mt19937 gen;
@@ -158,11 +138,6 @@ double get_stack_memory_adjustment_factor() {
 int64_t get_stack_memory_limit() {
     static double stack_factor = get_stack_memory_adjustment_factor();
     return stack_factor * 103232;
-}
-
-bool use_memoized_features() {
-    static bool var = get_env_variable("HL_USE_MEMOIZED_FEATURES") == "1";
-    return var;
 }
 
 bool use_adjusted_tilings() {
@@ -562,17 +537,6 @@ struct State {
     void compute_featurization(const FunctionDAG &dag, const MachineParams &params, const Target& target, StageMap<ScheduleFeatures> *features, Statistics& stats) {
         auto feature_root = get_root_for_features(params, target);
 
-        static map<uint64_t, StageMap<ScheduleFeatures>> memoized;
-
-        uint64_t loop_nest_hash = 0;
-        feature_root->structural_hash(loop_nest_hash, 10000);
-
-        if (use_memoized_features() && memoized.count(loop_nest_hash) > 0) {
-            *features = memoized[loop_nest_hash];
-            ++stats.num_memoized_featurizations;
-            return;
-        }
-
         StageMap<LoopNest::Sites> sites;
         sites.make_large(dag.nodes[0].stages[0].max_id);
         features->make_large(dag.nodes[0].stages[0].max_id);
@@ -634,12 +598,38 @@ struct State {
             }
         }
 
-        auto t1 = std::chrono::high_resolution_clock::now();
-        feature_root->compute_features(dag, params, target, sites, 1, 1, nullptr, nullptr, *feature_root, nullptr, nullptr, nullptr, features, {feature_root.get()});
-
-        if (use_memoized_features()) {
-            memoized[loop_nest_hash] = *features;
+        for (const auto& c : feature_root->children) {
+            sites.get(c->stage).hash_of_producers_stored_at_root = c->compute_hash_of_producers_stored_at_root(sites);
         }
+
+        if (verify_memoized_features()) {
+            StageMap<ScheduleFeatures> base_features;
+            base_features.make_large(dag.nodes[0].stages[0].max_id);
+            feature_root->compute_features(dag, params, target, sites, 1, 1, nullptr, nullptr, *feature_root, nullptr, nullptr, nullptr, &base_features, {feature_root.get()}, false, stats);
+
+            StageMap<ScheduleFeatures> verification_features;
+            verification_features.make_large(dag.nodes[0].stages[0].max_id);
+            feature_root->compute_features(dag, params, target, sites, 1, 1, nullptr, nullptr, *feature_root, nullptr, nullptr, nullptr, &verification_features, {feature_root.get()}, true, stats);
+
+            for (auto it = base_features.begin(); it != base_features.end(); it++) {
+                auto &stage = *(it.key());
+                const auto &feat = it.value();
+
+                if (!feat.equal(verification_features.get(&stage))) {
+                    feature_root->dump("", nullptr);
+                    std::cerr << "Feature Mismatch: " << stage.node->func.name() << "\n";
+                    feat.dump();
+                    std::cerr << "\n";
+                    verification_features.get(&stage).dump();
+                    std::cerr << "\n";
+
+                    internal_assert(false);
+                }
+            }
+        }
+
+        auto t1 = std::chrono::high_resolution_clock::now();
+        feature_root->compute_features(dag, params, target, sites, 1, 1, nullptr, nullptr, *feature_root, nullptr, nullptr, nullptr, features, {feature_root.get()}, use_memoized_features(), stats);
 
         stats.featurization_time += std::chrono::high_resolution_clock::now() - t1;
         ++stats.num_featurizations;
@@ -2134,7 +2124,8 @@ void generate_schedule(const std::vector<Function> &outputs,
 
     aslog(1) << "Number of states added: " << stats.num_states_added << '\n';
     aslog(1) << "Number of featurizations computed: " << stats.num_featurizations << '\n';
-    aslog(1) << "Number of memoized featurizations: " << stats.num_memoized_featurizations << '\n';
+    aslog(1) << "Number of memoization hits: " << stats.num_memoization_hits << '\n';
+    aslog(1) << "Number of memoization misses: " << stats.num_memoization_misses << '\n';
     aslog(1) << "Total featurization time (ms): " << stats.total_featurization_time() << "\n";
     aslog(1) << "Average featurization time (ms): " << stats.average_featurization_time() << "\n";
 
@@ -2142,7 +2133,7 @@ void generate_schedule(const std::vector<Function> &outputs,
     aslog(1) << "Total cost model evaluation time (ms): " << stats.total_cost_model_evaluation_time() << "\n";
     aslog(1) << "Average cost model evaluation time (ms): " << stats.average_cost_model_evaluation_time() << "\n";
     std::chrono::duration<double> total_time = std::chrono::high_resolution_clock::now() - start;
-    aslog(1) << "Time taken for autoscheduler (s): " << std::chrono::duration_cast<std::chrono::seconds>(total_time).count() << '\n';
+    aslog(1) << "Time taken for autoscheduler (s): " << std::chrono::duration_cast<std::chrono::milliseconds>(total_time).count() / 1000.0 << '\n';
 }
 
 // Halide uses a plugin architecture for registering custom

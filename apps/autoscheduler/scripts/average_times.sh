@@ -38,8 +38,12 @@ find ${SAMPLES_DIR} | grep "compile_err.txt" | xargs grep "Average featurization
 
 find ${SAMPLES_DIR} | grep "compile_err.txt" | xargs grep "Average cost model evaluation time" | awk -F" " '{sum += $7}; END{printf("Average cost model evaluation time: %f ms\n", sum / NR);}'
 
-find ${SAMPLES_DIR} -regextype sed -regex ".*/.*/[1-9][0-9]*/compile_err.txt" | xargs grep "Number of memoized featurizations:" | awk -F" " '{sum += $5}; END{printf("Average number of memoized featurizations (greedy): %f\n", sum / NR);}'
+find ${SAMPLES_DIR} -regextype sed -regex ".*/.*/[1-9][0-9]*/compile_err.txt" | xargs grep "Number of memoization hits:" | awk -F" " '{sum += $5}; END{printf("Average number of memoization hits (greedy): %d\n", sum / NR);}'
 
-grep "Number of memoized featurizations:" ${SAMPLES_DIR}/*/0/compile_err.txt | awk -F" " '{sum += $5}; END{printf("Average number of memoized featurizations (beam search): %f\n", sum / NR);}'
+grep "Number of memoization hits:" ${SAMPLES_DIR}/*/0/compile_err.txt | awk -F" " '{sum += $5}; END{printf("Average number of memoization hits (beam search): %d\n", sum / NR);}'
+
+find ${SAMPLES_DIR} -regextype sed -regex ".*/.*/[1-9][0-9]*/compile_err.txt" | xargs grep "Number of memoization misses:" | awk -F" " '{sum += $5}; END{printf("Average number of memoization misses (greedy): %d\n", sum / NR);}'
+
+grep "Number of memoization misses:" ${SAMPLES_DIR}/*/0/compile_err.txt | awk -F" " '{sum += $5}; END{printf("Average number of memoization misses (beam search): %d\n", sum / NR);}'
 
 echo

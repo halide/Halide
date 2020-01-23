@@ -18,6 +18,34 @@ namespace Halide {
 namespace Internal {
 namespace Autoscheduler {
 
+struct Statistics {
+    int num_featurizations{0};
+    int num_states_added{0};
+    int num_memoized_featurizations{0};
+    int num_memoization_hits{0};
+    int num_memoization_misses{0};
+    std::chrono::duration<double> featurization_time{0};
+    int num_schedules_enqueued{0};
+    std::chrono::duration<double> cost_model_evaluation_time{0};
+
+    double total_featurization_time() const {
+        return std::chrono::duration_cast<std::chrono::milliseconds>(featurization_time).count();
+    }
+
+    double average_featurization_time() const {
+        return total_featurization_time() / (double)num_featurizations;
+    }
+
+    double total_cost_model_evaluation_time() const {
+        return std::chrono::duration_cast<std::chrono::milliseconds>(cost_model_evaluation_time).count();
+    }
+
+    double average_cost_model_evaluation_time() const {
+        return total_cost_model_evaluation_time() / (double)num_schedules_enqueued;
+    }
+};
+
+
 template<typename T>
 using NodeMap = PerfectHashMap<FunctionDAG::Node, T>;
 
@@ -28,6 +56,8 @@ enum GPU_parallelism { block, thread, serial, simd, parallelized, none };
 
 // inlined => func is inlined so has no memory store location
 enum class GPUMemoryType { global, shared, local, inlined };
+
+bool use_memoized_features();
 
 bool may_subtile();
 
@@ -138,6 +168,18 @@ struct LoopNest {
     // Apply gpu threads to this loop nest
     mutable GPU_parallelism gpu_label = none;
 
+    struct FeatureIntermediates {
+        double inlined_calls;
+        double num_vectors;
+        double num_scalars;
+        double vector_size;
+        double innermost_pure_loop_extent;
+        double outer_parallelism;
+    };
+
+    mutable std::map<uint64_t, StageMap<StageMap<FeatureIntermediates>>> feature_intermediates;
+    mutable std::map<uint64_t, StageMap<ScheduleFeatures>> features;
+
     bool is_gpu_serial(const Target& target) const {
         return target.has_gpu_feature() && gpu_label == serial;
     }
@@ -212,6 +254,7 @@ struct LoopNest {
         const LoopNest *thread = nullptr;    // Its containing gpu_thread loop
         GPUMemoryType gpu_store_memory_type; // global, local, shared?
         bool inlined = false;                // Is the Func inlined?
+        uint64_t hash_of_producers_stored_at_root;
     };
 
     GPUMemoryType get_gpu_memory_type(bool in_block, bool in_thread, bool is_inlined=false) const;
@@ -300,6 +343,21 @@ struct LoopNest {
 
     int64_t compute_licm_amortization(const LoopNest* innermost, const LoopNest* parent, const ScheduleFeatures& feat, const LoadJacobian& jac, int producer_dims) const;
 
+    void memoize_points_computed_minimum(StageMap<ScheduleFeatures>& memoized_features, const StageMap<ScheduleFeatures> *features) const;
+
+    vector<pair<int, int>> collect_producers(const StageMap<Sites> &sites) const;
+
+    uint64_t compute_hash_of_producers_stored_at_root(const StageMap<Sites> &sites) const;
+
+    void collect_stages(std::set<const FunctionDAG::Node::Stage *>& stages) const;
+
+    void memoize_features(StageMap<ScheduleFeatures>& memoized_features, const StageMap<ScheduleFeatures> *features) const;
+
+    void compute_working_set_from_features(int64_t *working_set,
+                              const StageMap<ScheduleFeatures> *features) const;
+
+    void recompute_inlined_features(const StageMap<Sites> &sites, StageMap<ScheduleFeatures> *features) const;
+
     // Do a recursive walk over the loop nest computing features to feed the cost model.
     void compute_features(const FunctionDAG &dag,
                           const MachineParams &params,
@@ -314,7 +372,9 @@ struct LoopNest {
                           int64_t *working_set_local_constant,
                           int64_t *working_set_local_dynamic,
                           StageMap<ScheduleFeatures> *features,
-                          GPULoopInfo gpu_loop_info) const;
+                          GPULoopInfo gpu_loop_info,
+                          bool use_memoized_features,
+                          Statistics& stats) const;
 
     bool is_root() const {
         // The root is the sole node without a Func associated with

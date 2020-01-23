@@ -120,6 +120,8 @@ make_featurization() {
         # Sample 0 in each batch is best effort beam search, with no randomness
         dropout=100
         beam=32
+        #dropout=1  # 1% chance of operating entirely greedily
+        #beam=1
     else
         # The other samples are random probes biased by the cost model
         dropout=1  # 1% chance of operating entirely greedily
@@ -130,6 +132,7 @@ make_featurization() {
 
     CMD="HL_SEED=${RANDOM_DROPOUT_SEED} \
         HL_WEIGHTS_DIR=${WEIGHTS} \
+        HL_USE_MEMOIZED_FEATURES=1 \
         HL_RANDOM_DROPOUT=${dropout} \
         HL_BEAM_SIZE=${beam} \
         HL_SHARED_MEMORY_LIMIT=${shared_memory_limit} \
