@@ -30,6 +30,7 @@ Expr Simplify::visit(const LT *op, ExprInfo *bounds) {
 
         auto rewrite = IRMatcher::rewriter(IRMatcher::lt(a, b), op->type, ty);
 
+        // clang-format off
         if (EVAL_IN_LAMBDA
             (rewrite(c0 < c1, fold(c0 < c1)) ||
              rewrite(x < x, false) ||
@@ -51,7 +52,9 @@ Expr Simplify::visit(const LT *op, ExprInfo *bounds) {
                rewrite(broadcast(z) < ramp(x, c1), false, can_prove(z >= x + fold(max(0, c1 * (lanes - 1))), this)))))) {
             return rewrite.result;
         }
+        // clang-format on
 
+        // clang-format off
         if (rewrite(broadcast(x) < broadcast(y), broadcast(x < y, lanes)) ||
             (no_overflow(ty) && EVAL_IN_LAMBDA
              (rewrite(ramp(x, y) < ramp(z, y), broadcast(x < z, lanes)) ||
@@ -341,9 +344,9 @@ Expr Simplify::visit(const LT *op, ExprInfo *bounds) {
 
               // Comparison of two mins/maxes that don't cancel when subtracted
               rewrite(min(x, c0) < min(x, c1), false, c0 >= c1) ||
-              rewrite(min(x, c0) < min(x, c1) + c2, false, c0 >= c1 + c2) ||
+              rewrite(min(x, c0) < min(x, c1) + c2, false, c0 >= c1 + c2 && c2 <= 0) ||
               rewrite(max(x, c0) < max(x, c1), false, c0 >= c1) ||
-              rewrite(max(x, c0) < max(x, c1) + c2, false, c0 >= c1 + c2) ||
+              rewrite(max(x, c0) < max(x, c1) + c2, false, c0 >= c1 + c2 && c2 <= 0) ||
 
               // Comparison of aligned ramps can simplify to a comparison of the base
               rewrite(ramp(x * c3 + c2, c1) < broadcast(z * c0),
@@ -359,6 +362,7 @@ Expr Simplify::visit(const LT *op, ExprInfo *bounds) {
                       c1 * (lanes - 1) >= 0)))) {
             return mutate(std::move(rewrite.result), bounds);
         }
+        // clang-format on
     }
 
     if (a.same_as(op->a) && b.same_as(op->b)) {

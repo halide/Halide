@@ -36,8 +36,7 @@ int main(int argc, char **argv) {
     Type valid_halide_types[] = {
         UInt(8), UInt(16), UInt(32), UInt(64),
         Int(8), Int(16), Int(32), Int(64),
-        Float(32), Float(64), Handle()
-    };
+        Float(32), Float(64), Handle()};
 
     // Constructing and inspecting types.
     {
@@ -87,7 +86,6 @@ int main(int argc, char **argv) {
         assert(f2.output_types()[0] == Int(32) &&
                f2.output_types()[1] == Float(32));
     }
-
 
     // Type promotion rules.
     {
@@ -185,7 +183,7 @@ int main(int argc, char **argv) {
         // Handle is used to represent opaque pointers. Applying
         // type_of to any pointer type will return Handle()
         assert(type_of<void *>() == Handle());
-        assert(type_of<const char * const **>() == Handle());
+        assert(type_of<const char *const **>() == Handle());
 
         // Handles are always stored as 64-bit, regardless of the compilation
         // target.
@@ -222,7 +220,7 @@ Expr average(Expr a, Expr b) {
     if (a.type().is_float()) {
         // The '2' will be promoted to the floating point type due to
         // rule 3 above.
-        return (a + b)/2;
+        return (a + b) / 2;
     }
 
     // For integer types, we must compute the intermediate value in a
@@ -231,5 +229,5 @@ Expr average(Expr a, Expr b) {
     Type wider = narrow.with_bits(narrow.bits() * 2);
     a = cast(wider, a);
     b = cast(wider, b);
-    return cast(narrow, (a + b)/2);
+    return cast(narrow, (a + b) / 2);
 }

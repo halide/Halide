@@ -32,12 +32,12 @@ int main(int arch, char **argv) {
     Func max_x("max_x"), min_x("min_x"), mid_x("mid_x");
     max_x(x, y) = max(input(x - 1, y), input(x, y), input(x + 1, y));
     min_x(x, y) = min(input(x - 1, y), input(x, y), input(x + 1, y));
-    mid_x(x, y) = mid3(input(x-1, y), input(x, y), input(x+1, y));
+    mid_x(x, y) = mid3(input(x - 1, y), input(x, y), input(x + 1, y));
 
     Func min_max("min_max"), max_min("max_min"), mid_mid("mid_mid");
     min_max(x, y) = min(max_x(x, y - 1), max_x(x, y), max_x(x, y + 1));
     max_min(x, y) = max(min_x(x, y - 1), min_x(x, y), min_x(x, y + 1));
-    mid_mid(x, y) = mid3(mid_x(x, y-1), mid_x(x, y), mid_x(x, y+1));
+    mid_mid(x, y) = mid3(mid_x(x, y - 1), mid_x(x, y), mid_x(x, y + 1));
 
     Func median3x3("median3x3");
     median3x3(x, y) = mid3(min_max(x, y), max_min(x, y), mid_mid(x, y));
@@ -56,11 +56,11 @@ int main(int arch, char **argv) {
     // Run the pipeline and verify the results are correct.
     Buffer<uint8_t> out = median3x3.realize(W, H, target);
 
-    for (int y = 1; y < H-1; y++) {
-        for (int x = 1; x < W-1; x++) {
-            uint8_t inp[9] = {in(x-1, y-1), in(x, y-1), in(x+1, y-1),
-                             in(x-1, y), in(x, y), in(x+1, y),
-                             in(x-1, y+1), in(x, y+1), in(x+1, y+1)};
+    for (int y = 1; y < H - 1; y++) {
+        for (int x = 1; x < W - 1; x++) {
+            uint8_t inp[9] = {in(x - 1, y - 1), in(x, y - 1), in(x + 1, y - 1),
+                              in(x - 1, y), in(x, y), in(x + 1, y),
+                              in(x - 1, y + 1), in(x, y + 1), in(x + 1, y + 1)};
             std::nth_element(&inp[0], &inp[4], &inp[9]);
             uint8_t correct = inp[4];
             if (correct != out(x, y)) {

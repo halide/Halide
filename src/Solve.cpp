@@ -309,15 +309,15 @@ private:
         uses_var = old_uses_var || a_uses_var || b_uses_var;
         failed = old_failed || a_failed || b_failed;
 
-        const Add *add_a = a.as<Add>();
-        const Sub *sub_a = a.as<Sub>();
-        const Mul *mul_a = a.as<Mul>();
-
         if (b_uses_var && !a_uses_var) {
             std::swap(a, b);
             std::swap(a_uses_var, b_uses_var);
             std::swap(a_failed, b_failed);
         }
+
+        const Add *add_a = a.as<Add>();
+        const Sub *sub_a = a.as<Sub>();
+        const Mul *mul_a = a.as<Mul>();
 
         Expr expr;
         if (a_uses_var && !b_uses_var) {
@@ -1653,6 +1653,10 @@ void solve_test() {
         Expr expr = Add::make(z, Sub::make(x, y));
         SolverResult solved = solve_expression(expr, "y");
     }
+
+    // This case was incorrect due to canonicalization of the multiply
+    // occuring after unpacking the LHS.
+    check_solve((y - z) * x, x * (y - z));
 
     debug(0) << "Solve test passed\n";
 }

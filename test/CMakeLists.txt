@@ -304,9 +304,6 @@ if (WITH_TEST_GENERATOR)
                            HALIDE_TARGET_FEATURES debug)
   # endif()
 
-  halide_define_aot_test(old_buffer_t
-                         HALIDE_TARGET_FEATURES legacy_buffer_wrappers)
-
   halide_define_aot_test(pyramid
                          GENERATOR_ARGS levels=10)
   halide_define_aot_test(string_param
@@ -369,6 +366,15 @@ if (WITH_TEST_GENERATOR)
                                 GENERATOR_ARGS "${MDTEST_GEN_ARGS}"
                                 EXTRA_OUTPUTS stmt assembly)
   target_link_libraries(generator_aot_metadata_tester PUBLIC metadata_tester_ucon)
+
+  # needs gradient-descent variant as well
+  halide_define_aot_test(autograd)
+  halide_library_from_generator(autograd_grad
+                                GENERATOR autograd.generator
+                                FUNCTION_NAME autograd_grad
+                                GRADIENT_DESCENT 1
+                                GENERATOR_ARGS "auto_schedule=true")
+  target_link_libraries(generator_aot_autograd PUBLIC autograd_grad)
 
   # Needs an extra library from this Generator
   halide_define_aot_test(alias)

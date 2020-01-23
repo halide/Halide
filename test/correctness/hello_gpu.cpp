@@ -1,6 +1,6 @@
 #include "Halide.h"
-#include <stdio.h>
 #include <iostream>
+#include <stdio.h>
 
 using namespace Halide;
 
@@ -11,7 +11,7 @@ int main(int argc, char **argv) {
 
     printf("Defining function...\n");
 
-    f(x, y) = x*y + 2.4f;
+    f(x, y) = x * y + 2.4f;
 
     Target target = get_jit_target_from_environment();
     if (target.has_gpu_feature()) {
@@ -25,7 +25,7 @@ int main(int argc, char **argv) {
     // Check the result was what we expected
     for (int i = 0; i < 32; i++) {
         for (int j = 0; j < 32; j++) {
-            float correct = i*j + 2.4f;
+            float correct = i * j + 2.4f;
             if (fabs(imf(i, j) - correct) > 0.001f) {
                 printf("imf[%d, %d] = %f instead of %f\n", i, j, imf(i, j), correct);
                 return -1;

@@ -4,13 +4,13 @@
 using namespace Halide;
 
 #define CHECK(f, s32, s64) \
-    static_assert(offsetof(halide_buffer_t, f) == (sizeof(void*) == 8 ? (s64) : (s32)), #f " is wrong")
+    static_assert(offsetof(halide_buffer_t, f) == (sizeof(void *) == 8 ? (s64) : (s32)), #f " is wrong")
 
 #ifdef _MSC_VER
-    // VC2013 doesn't support alignof, apparently
-    #define ALIGN_OF(x) __alignof(x)
+// VC2013 doesn't support alignof, apparently
+#define ALIGN_OF(x) __alignof(x)
 #else
-    #define ALIGN_OF(x) alignof(x)
+#define ALIGN_OF(x) alignof(x)
 #endif
 
 int main(int argc, char **argv) {
@@ -25,13 +25,13 @@ int main(int argc, char **argv) {
     CHECK(padding, 36, 48);
 
     static_assert((sizeof(void *) == 8 && sizeof(halide_buffer_t) == 56) ||
-                  (sizeof(void *) == 4 && sizeof(halide_buffer_t) == 40),
+                      (sizeof(void *) == 4 && sizeof(halide_buffer_t) == 40),
                   "size is wrong");
 
     static_assert(sizeof(halide_dimension_t) == 16, "size of halide_dimension_t is wrong");
 
     // Ensure alignment is at least that of a pointer.
-    static_assert(ALIGN_OF(halide_buffer_t) >= ALIGN_OF(uint8_t*), "align is wrong");
+    static_assert(ALIGN_OF(halide_buffer_t) >= ALIGN_OF(uint8_t *), "align is wrong");
 
     // Also check that Halide understands the size correctly:
     int runtime_size = evaluate<int>(

@@ -42,7 +42,7 @@ struct DeviceArgument {
     /** If this is a scalar parameter, then this is its type.
      *
      * If this is a buffer parameter, this is used to determine elem_size
-     * of the buffer_t.
+     * of the halide_buffer_t.
      *
      * Note that type.lanes() should always be 1 here. */
     Type type;

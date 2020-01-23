@@ -1,10 +1,10 @@
+#include <android/log.h>
+#include <fcntl.h>
 #include <pthread.h>
 #include <stdlib.h>
-#include <unistd.h>
 #include <sys/ioctl.h>
 #include <sys/mman.h>
-#include <fcntl.h>
-#include <android/log.h>
+#include <unistd.h>
 
 namespace {
 
@@ -66,8 +66,7 @@ ion_user_handle_t ion_alloc(int ion_fd, size_t len, size_t align, unsigned int h
             align,
             heap_id_mask,
             flags,
-            0
-        };
+            0};
         if (ioctl(ion_fd, ION_IOC_ALLOC, &alloc) >= 0) {
             return alloc.handle;
         }
@@ -79,8 +78,7 @@ ion_user_handle_t ion_alloc(int ion_fd, size_t len, size_t align, unsigned int h
         heap_id_mask,
         flags,
         0,
-        0
-    };
+        0};
     if (ioctl(ion_fd, ION_IOC_ALLOC_NEWER, &alloc_newer) >= 0) {
         use_newer_ioctl = true;
         return alloc_newer.fd;
@@ -92,8 +90,7 @@ ion_user_handle_t ion_alloc(int ion_fd, size_t len, size_t align, unsigned int h
 int ion_map(int ion_fd, ion_user_handle_t handle) {
     ion_fd_data data = {
         handle,
-        0
-    };
+        0};
     if (ioctl(ion_fd, ION_IOC_MAP, &data) < 0) {
         return -1;
     }
@@ -101,7 +98,7 @@ int ion_map(int ion_fd, ion_user_handle_t handle) {
 }
 
 int ion_free(int ion_fd, ion_user_handle_t ion_handle) {
-    if(ioctl(ion_fd, ION_IOC_FREE, &ion_handle) < 0) {
+    if (ioctl(ion_fd, ION_IOC_FREE, &ion_handle) < 0) {
         return -1;
     }
     return 0;
@@ -120,7 +117,9 @@ struct allocation_record {
 
 // Make a dummy allocation so we don't need a special case for the
 // head list node.
-allocation_record allocations = { NULL, };
+allocation_record allocations = {
+    NULL,
+};
 pthread_mutex_t allocations_mutex = PTHREAD_MUTEX_INITIALIZER;
 
 int ion_fd = -1;
@@ -132,7 +131,7 @@ extern "C" {
 // If this symbol is defined in the stub library we are going to link
 // to, we need to call this in order to actually get zero copy
 // behavior from our buffers.
-__attribute__((weak)) void remote_register_buf(void* buf, int size, int fd);
+__attribute__((weak)) void remote_register_buf(void *buf, int size, int fd);
 
 void halide_hexagon_host_malloc_init() {
     if (ion_fd != -1) return;
@@ -158,7 +157,7 @@ void *halide_hexagon_host_malloc(size_t size) {
     // Hexagon can only access a small number of mappings of these
     // sizes. We reduce the number of mappings required by aligning
     // large allocations to these sizes.
-    static const size_t alignments[] = { 0x1000, 0x4000, 0x10000, 0x40000, 0x100000 };
+    static const size_t alignments[] = {0x1000, 0x4000, 0x10000, 0x40000, 0x100000};
     size_t alignment = alignments[0];
 
     // Align the size up to the minimum alignment.
@@ -177,18 +176,18 @@ void *halide_hexagon_host_malloc(size_t size) {
     handle = ion_alloc(ion_fd, size, alignment, 1 << heap_id, ion_flags);
     if (handle < 0) {
         __android_log_print(ANDROID_LOG_ERROR, "halide", "ion_alloc(%d, %lld, %lld, %d, %d) failed",
-                            ion_fd, (long long) size, (long long) alignment, 1 << heap_id, ion_flags);
+                            ion_fd, (long long)size, (long long)alignment, 1 << heap_id, ion_flags);
         return NULL;
     }
     // Map the ion handle to a file buffer.
     if (use_newer_ioctl) {
-       buf_fd = handle;
+        buf_fd = handle;
     } else {
         buf_fd = ion_map(ion_fd, handle);
         if (buf_fd < 0) {
-           __android_log_print(ANDROID_LOG_ERROR, "halide", "ion_map(%d, %d) failed", ion_fd, handle);
-           ion_free(ion_fd, handle);
-           return NULL;
+            __android_log_print(ANDROID_LOG_ERROR, "halide", "ion_map(%d, %d) failed", ion_fd, handle);
+            ion_free(ion_fd, handle);
+            return NULL;
         }
     }
 
@@ -196,7 +195,7 @@ void *halide_hexagon_host_malloc(size_t size) {
     void *buf = mmap(NULL, size, PROT_READ | PROT_WRITE, MAP_SHARED, buf_fd, 0);
     if (buf == MAP_FAILED) {
         __android_log_print(ANDROID_LOG_ERROR, "halide", "mmap(NULL, %lld, PROT_READ | PROT_WRITE, MAP_SHARED, %d, 0) failed",
-                            (long long) size, buf_fd);
+                            (long long)size, buf_fd);
         close(buf_fd);
         if (!use_newer_ioctl) {
             ion_free(ion_fd, handle);

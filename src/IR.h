@@ -394,20 +394,6 @@ struct Free : public StmtNode<Free> {
     static const IRNodeType _node_type = IRNodeType::Free;
 };
 
-/** A single-dimensional span. Includes all numbers between min and
- * (min + extent - 1) */
-struct Range {
-    Expr min, extent;
-    Range() = default;
-    Range(Expr min, Expr extent)
-        : min(min), extent(extent) {
-        internal_assert(min.type() == extent.type()) << "Region min and extent must have same type\n";
-    }
-};
-
-/** A multi-dimensional box. The outer product of the elements */
-typedef std::vector<Range> Region;
-
 /** Allocate a multi-dimensional buffer of the given type and
  * size. Create some scratch memory that will back the function 'name'
  * over the range specified in 'bounds'. The bounds are a vector of
@@ -531,7 +517,6 @@ struct Call : public ExprNode<Call> {
         if_then_else_mask,
         image_load,
         image_store,
-        indeterminate_expression,
         lerp,
         likely,
         likely_if_innermost,
@@ -541,8 +526,6 @@ struct Call : public ExprNode<Call> {
         mulhi_shr,  // Compute high_half(arg[0] * arg[1]) >> arg[3]. Note that this is a shift in addition to taking the upper half of multiply result. arg[3] must be an unsigned integer immediate.
         popcount,
         prefetch,
-        quiet_div,
-        quiet_mod,
         random,
         register_destructor,
         reinterpret,

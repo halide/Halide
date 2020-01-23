@@ -33,15 +33,15 @@ typedef ptrdiff_t ssize_t;
 #define WEAK __attribute__((weak))
 
 #ifdef BITS_64
-#define INT64_C(c)  c ## L
-#define UINT64_C(c) c ## UL
+#define INT64_C(c) c##L
+#define UINT64_C(c) c##UL
 typedef uint64_t uintptr_t;
 typedef int64_t intptr_t;
 #endif
 
 #ifdef BITS_32
-#define INT64_C(c)  c ## LL
-#define UINT64_C(c) c ## ULL
+#define INT64_C(c) c##LL
+#define UINT64_C(c) c##ULL
 typedef uint32_t uintptr_t;
 typedef int32_t intptr_t;
 #endif
@@ -64,12 +64,12 @@ void free(void *);
 void *malloc(size_t);
 const char *strstr(const char *, const char *);
 int atoi(const char *);
-int strcmp(const char* s, const char* t);
-int strncmp(const char* s, const char* t, size_t n);
-size_t strlen(const char* s);
-const char *strchr(const char* s, int c);
-void* memcpy(void* s1, const void* s2, size_t n);
-int memcmp(const void* s1, const void* s2, size_t n);
+int strcmp(const char *s, const char *t);
+int strncmp(const char *s, const char *t, size_t n);
+size_t strlen(const char *s);
+const char *strchr(const char *s, int c);
+void *memcpy(void *s1, const void *s2, size_t n);
+int memcmp(const void *s1, const void *s2, size_t n);
 void *memset(void *s, int val, size_t n);
 // Use fopen+fileno+fclose instead of open+close - the value of the
 // flags passed to open are different on every platform
@@ -162,29 +162,31 @@ struct halide_pseudostack_slot_t {
 
 // A convenient namespace for weak functions that are internal to the
 // halide runtime.
-namespace Halide { namespace Runtime { namespace Internal {
+namespace Halide {
+namespace Runtime {
+namespace Internal {
 
 extern WEAK void halide_use_jit_module();
 extern WEAK void halide_release_jit_module();
 
-template <typename T>
+template<typename T>
 __attribute__((always_inline)) void swap(T &a, T &b) {
     T t = a;
     a = b;
     b = t;
 }
 
-template <typename T>
+template<typename T>
 __attribute__((always_inline)) T max(const T &a, const T &b) {
     return a > b ? a : b;
 }
 
-template <typename T>
+template<typename T>
 __attribute__((always_inline)) T min(const T &a, const T &b) {
     return a < b ? a : b;
 }
 
-template <typename T, typename U>
+template<typename T, typename U>
 __attribute__((always_inline)) T reinterpret(const U &x) {
     T ret;
     memcpy(&ret, &x, min(sizeof(T), sizeof(U)));
@@ -197,17 +199,19 @@ extern WEAK __attribute__((always_inline)) void halide_abort();
 
 void halide_thread_yield();
 
-}}}
+}  // namespace Internal
+}  // namespace Runtime
+}  // namespace Halide
 
 /** A macro that calls halide_print if the supplied condition is
  * false, then aborts. Used for unrecoverable errors, or
  * should-never-happen errors. */
 #define _halide_stringify(x) #x
 #define _halide_expand_and_stringify(x) _halide_stringify(x)
-#define halide_assert(user_context, cond)                               \
-    if (!(cond)) {                                                      \
+#define halide_assert(user_context, cond)                                                                              \
+    if (!(cond)) {                                                                                                     \
         halide_print(user_context, __FILE__ ":" _halide_expand_and_stringify(__LINE__) " Assert failed: " #cond "\n"); \
-        halide_abort();                                                        \
+        halide_abort();                                                                                                \
     }
 
 using namespace Halide::Runtime::Internal;

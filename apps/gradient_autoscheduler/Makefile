@@ -23,7 +23,7 @@ $(BIN)/%/demo.rungen: $(BIN)/%/RunGenMain.o $(BIN)/%/demo.registration.cpp $(BIN
 	@mkdir -p $(@D)
 	$(CXX) $(CXXFLAGS) -I$(BIN)/$* $^ -o $@ $(HALIDE_SYSTEM_LIBS) $(IMAGE_IO_FLAGS)
 
-.PHONY: test clean run_test_cpp run_test_py test_generator
+.PHONY: build test clean run_test_cpp run_test_py test_generator
 
 # demonstrates single-shot use of the autoscheduler
 test_generator: $(BIN)/$(HL_TARGET)/demo.rungen $(BIN)/libgradient_autoscheduler.so
@@ -36,6 +36,8 @@ run_test_py: test.py $(BIN)/libgradient_autoscheduler.so
 	PYTHONPATH=$(BIN):$(HALIDE_PYTHON_BINDINGS_PATH):$(HALIDE_DISTRIB_PATH)/bin:$$PYTHONPATH \
 		LD_LIBRARY_PATH=$(BIN):$(HALIDE_PYTHON_BINDINGS_PATH):$(HALIDE_DISTRIB_PATH)/bin \
 		$(PYTHON) test.py
+
+build: $(BIN)/test $(BIN)/$(HL_TARGET)/demo.rungen $(BIN)/libgradient_autoscheduler.so
 
 test: run_test_cpp run_test_py test_generator
 

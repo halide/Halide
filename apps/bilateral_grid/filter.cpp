@@ -1,14 +1,14 @@
+#include <cassert>
 #include <cstdio>
 #include <cstdlib>
-#include <cassert>
 
 #include "bilateral_grid.h"
 #ifndef NO_AUTO_SCHEDULE
 #include "bilateral_grid_auto_schedule.h"
 #endif
 
-#include "halide_benchmark.h"
 #include "HalideBuffer.h"
+#include "halide_benchmark.h"
 #include "halide_image_io.h"
 
 using namespace Halide::Tools;
@@ -21,7 +21,7 @@ int main(int argc, char **argv) {
         return 0;
     }
 
-    float r_sigma = (float) atof(argv[3]);
+    float r_sigma = (float)atof(argv[3]);
     int timing_iterations = atoi(argv[4]);
 
     Buffer<float> input = load_and_convert_image(argv[1]);
@@ -39,14 +39,14 @@ int main(int argc, char **argv) {
     });
     printf("Manually-tuned time: %gms\n", min_t_manual * 1e3);
 
-    #ifndef NO_AUTO_SCHEDULE
+#ifndef NO_AUTO_SCHEDULE
     // Auto-scheduled version
     double min_t_auto = benchmark(timing_iterations, 10, [&]() {
         bilateral_grid_auto_schedule(input, r_sigma, output);
         output.device_sync();
     });
     printf("Auto-scheduled time: %gms\n", min_t_auto * 1e3);
-    #endif
+#endif
 
     convert_and_save_image(output, argv[2]);
 

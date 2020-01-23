@@ -192,19 +192,6 @@ T fold_right(const std::vector<T> &vec, Fn f) {
     return result;
 }
 
-template<typename T1, typename T2, typename T3, typename T4>
-inline HALIDE_NO_USER_CODE_INLINE void collect_paired_args(std::vector<std::pair<T1, T2>> &collected_args,
-                                                           const T3 &a1, const T4 &a2) {
-    collected_args.push_back(std::pair<T1, T2>(a1, a2));
-}
-
-template<typename T1, typename T2, typename T3, typename T4, typename... Args>
-inline HALIDE_NO_USER_CODE_INLINE void collect_paired_args(std::vector<std::pair<T1, T2>> &collected_args,
-                                                           const T3 &a1, const T4 &a2, Args &&... args) {
-    collected_args.push_back(std::pair<T1, T2>(a1, a2));
-    collect_paired_args(collected_args, std::forward<Args>(args)...);
-}
-
 template<typename... T>
 struct meta_and : std::true_type {};
 

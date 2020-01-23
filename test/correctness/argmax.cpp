@@ -33,7 +33,7 @@ int main(int argc, char **argv) {
     g(x, y) = x * (100 - x) + y * (80 - y);
     g.compute_root();
 
-    arg_max_g() = Tuple(0, 0, g(0,0));
+    arg_max_g() = Tuple(0, 0, g(0, 0));
     arg_max_g() = tuple_select(g(r.x, r.y) > arg_max_g()[2],
                                Tuple(r.x, r.y, g(r.x, r.y)),
                                arg_max_g());
@@ -69,7 +69,6 @@ int main(int argc, char **argv) {
         return -1;
     }
 
-
     // Try an in place argmax, using an elements at various places in
     // the sequence as the initial guess.  This tests some edge cases
     // for the atomicity of provides.
@@ -82,7 +81,7 @@ int main(int argc, char **argv) {
         100,
         101,
     };
-    for (size_t i = 0; i < sizeof(starts)/sizeof(starts[0]); i++) {
+    for (size_t i = 0; i < sizeof(starts) / sizeof(starts[0]); i++) {
         int init = starts[i];
         Func h;
         r = RDom(0, 100);

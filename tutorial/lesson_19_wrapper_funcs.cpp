@@ -274,7 +274,7 @@ int main(int argc, char **argv) {
         // We will compute a small blur of the input.
         Func blur("blur");
         blur(x, y) = (img(x - 1, y - 1) + img(x, y - 1) + img(x + 1, y - 1) +
-                      img(x - 1, y    ) + img(x, y    ) + img(x + 1, y    ) +
+                      img(x - 1, y) + img(x, y) + img(x + 1, y) +
                       img(x - 1, y + 1) + img(x, y + 1) + img(x + 1, y + 1));
 
         blur.compute_root().gpu_tile(x, y, xo, yo, xi, yi, 8, 8);
@@ -315,7 +315,7 @@ int main(int argc, char **argv) {
             for (int x = out.left(); x <= out.right(); x++) {
                 int val = out(x, y);
                 int expected = (input(x - 1, y - 1) + input(x, y - 1) + input(x + 1, y - 1) +
-                                input(x - 1, y    ) + input(x, y    ) + input(x + 1, y    ) +
+                                input(x - 1, y) + input(x, y) + input(x + 1, y) +
                                 input(x - 1, y + 1) + input(x, y + 1) + input(x + 1, y + 1));
                 if (val != expected) {
                     printf("out(%d, %d) = %d instead of %d\n",

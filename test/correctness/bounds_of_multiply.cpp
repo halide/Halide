@@ -5,7 +5,7 @@
 
 using namespace Halide;
 
-template <typename T>
+template<typename T>
 void test() {
     Param<T> bound;
     ImageParam in(UInt(8), 1);

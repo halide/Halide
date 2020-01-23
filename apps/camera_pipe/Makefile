@@ -1,6 +1,8 @@
 include ../support/Makefile.inc
 
-all: $(BIN)/$(HL_TARGET)/process
+.PHONY: build clean test
+
+build: $(BIN)/$(HL_TARGET)/process
 
 TIMING_ITERATIONS ?= 5
 

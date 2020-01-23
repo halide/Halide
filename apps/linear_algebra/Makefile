@@ -1,5 +1,6 @@
 include ../support/Makefile.inc
 
+AR ?= ar
 BIN ?= bin
 BUILD = $(BIN)/build
 CXXFLAGS += -Wall -march=native -I /opt/local/include
@@ -67,16 +68,18 @@ BENCHMARKS = \
 	$(BIN)/eigen_benchmarks \
 	$(BIN)/halide_benchmarks
 
-.PHONY: clean run_benchmarks
-all: $(BENCHMARKS)
-	make run_benchmarks
+.PHONY: build clean run_benchmarks test
+all: build
+	make run_benchmarks 
 
-ifneq ("$(wildcard /usr/include/cblas.h)","")
+ifneq ("$(wildcard /usr/include/cblas.h /usr/include/*/cblas.h)","")
+build: $(BENCHMARKS) $(BIN)/test_halide_blas
 test: $(BIN)/test_halide_blas
 	$(BIN)/test_halide_blas
 else
-test:
+build:
 	@echo /usr/include/cblas.h not found: skipping linear_algebra tests...
+test: build
 endif
 
 clean:
@@ -203,7 +206,7 @@ $(BIN)/halide_benchmarks: benchmarks/halide_benchmarks.cpp benchmarks/clock.h be
 
 $(BUILD)/%.generator: src/%_generators.cpp $(GENERATOR_DEPS)
 	@mkdir -p $(@D)
-	$(CXX) $(CXXFLAGS) $(filter-out %.h,$^) $(LDFLAGS) -o $@
+	$(CXX) $(CXXFLAGS) $(filter %.cpp,$^) $(GENERATOR_LDFLAGS) -o $@
 
 # This can use any of the generators; pick an arbitrary one
 $(BUILD)/halide_runtime.o: $(BUILD)/blas_l1.generator

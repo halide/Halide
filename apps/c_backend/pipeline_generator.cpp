@@ -14,7 +14,7 @@ public:
         Var x, y;
 
         Func f, h;
-        f(x, y) = (input(clamp(x+2, 0, input.dim(0).extent()-1), clamp(y-2, 0, input.dim(1).extent()-1)) * 17)/13;
+        f(x, y) = (input(clamp(x + 2, 0, input.dim(0).extent() - 1), clamp(y - 2, 0, input.dim(1).extent() - 1)) * 17) / 13;
         h.define_extern("an_extern_stage", {f}, Int(16), 0, NameMangling::C);
         output(x, y) = cast<uint16_t>(max(0, f(y, x) + f(x, y) + an_extern_func(x, y) + h()));
 

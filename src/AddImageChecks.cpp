@@ -144,6 +144,7 @@ Stmt add_image_checks_inner(Stmt s,
     vector<Stmt> asserts_host_alignment;
     vector<Stmt> asserts_host_non_null;
     vector<Stmt> buffer_rewrites;
+    vector<Stmt> msan_checks;
 
     // Inject the code that conditionally returns if we're in inference mode
     Expr maybe_return_condition = const_false();
@@ -249,7 +250,8 @@ Stmt add_image_checks_inner(Stmt s,
         ReductionDomain rdom;
 
         // An expression returning whether or not we're in inference mode
-        Expr handle = Variable::make(type_of<buffer_t *>(), name + ".buffer",
+        string buf_name = name + ".buffer";
+        Expr handle = Variable::make(type_of<halide_buffer_t *>(), buf_name,
                                      image, param, rdom);
         Expr inference_mode = Call::make(Bool(), Call::buffer_is_bounds_query,
                                          {handle}, Call::Extern);
@@ -258,6 +260,13 @@ Stmt add_image_checks_inner(Stmt s,
         // Come up with a name to refer to this buffer in the error messages
         string error_name = (is_output_buffer ? "Output" : "Input");
         error_name += " buffer " + name;
+
+        if (!is_output_buffer && t.has_feature(Target::MSAN)) {
+            Expr buffer = Variable::make(type_of<struct halide_buffer_t *>(), buf_name);
+            Stmt check_contents = Evaluate::make(
+                Call::make(Int(32), "halide_msan_check_buffer_is_initialized", {buffer, Expr(buf_name)}, Call::Extern));
+            msan_checks.push_back(check_contents);
+        }
 
         // Check the type matches the internally-understood type
         {
@@ -395,7 +404,7 @@ Stmt add_image_checks_inner(Stmt s,
 
         // Create code that mutates the input buffers if we're in bounds inference mode.
         BufferBuilder builder;
-        builder.buffer_memory = Variable::make(type_of<struct halide_buffer_t *>(), name + ".buffer");
+        builder.buffer_memory = Variable::make(type_of<struct halide_buffer_t *>(), buf_name);
         builder.shape_memory = Call::make(type_of<struct halide_dimension_t *>(),
                                           Call::buffer_get_shape, {builder.buffer_memory},
                                           Call::Extern);
@@ -649,6 +658,11 @@ Stmt add_image_checks_inner(Stmt s,
     // Inject the code that defines the required sizes produced by bounds inference.
     for (size_t i = lets_required.size(); i > 0; i--) {
         s = LetStmt::make(lets_required[i - 1].first, lets_required[i - 1].second, s);
+    }
+
+    // Inject the code that checks that does msan checks. (Note that this ignores no_asserts.)
+    for (size_t i = msan_checks.size(); i > 0; i--) {
+        s = Block::make(msan_checks[i - 1], s);
     }
 
     return s;

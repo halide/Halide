@@ -1,9 +1,9 @@
 #include "HalideRuntime.h"
 
+#include <cassert>
 #include <math.h>
 #include <stdio.h>
 #include <vector>
-#include <cassert>
 
 // Provide a simple mock implementation of matlab's API so we can test the mexFunction.
 
@@ -23,9 +23,16 @@ enum mxComplexity {
     mxCOMPLEX,
 };
 
-template <typename T> mxClassID get_class_id();
-template <> mxClassID get_class_id<float>() { return mxSINGLE_CLASS; }
-template <> mxClassID get_class_id<int32_t>() { return mxINT32_CLASS; }
+template<typename T>
+mxClassID get_class_id();
+template<>
+mxClassID get_class_id<float>() {
+    return mxSINGLE_CLASS;
+}
+template<>
+mxClassID get_class_id<int32_t>() {
+    return mxINT32_CLASS;
+}
 
 class mxArray {
 public:
@@ -37,27 +44,48 @@ public:
     virtual double get_scalar() const = 0;
     virtual size_t get_element_size() const = 0;
 
-    virtual ~mxArray() {}
+    virtual ~mxArray() {
+    }
 };
 
-template <typename T>
+template<typename T>
 class mxArrayImpl : public mxArray {
     std::vector<T> data;
     std::vector<size_t> dims;
 
 public:
-    mxArrayImpl(size_t M, size_t N) : data(M * N), dims({M, N}) {}
+    mxArrayImpl(size_t M, size_t N)
+        : data(M * N), dims({M, N}) {
+    }
 
-    void *get_data() override { return &data[0]; }
-    const void *get_data() const override { return &data[0]; }
-    const size_t *get_dimensions() const override { return &dims[0]; }
-    size_t get_number_of_dimensions() const override { return dims.size(); }
-    mxClassID get_class_id() const override { return ::get_class_id<T>(); }
-    double get_scalar() const override { return data[0]; }
-    size_t get_element_size() const override { return sizeof(T); }
+    void *get_data() override {
+        return &data[0];
+    }
+    const void *get_data() const override {
+        return &data[0];
+    }
+    const size_t *get_dimensions() const override {
+        return &dims[0];
+    }
+    size_t get_number_of_dimensions() const override {
+        return dims.size();
+    }
+    mxClassID get_class_id() const override {
+        return ::get_class_id<T>();
+    }
+    double get_scalar() const override {
+        return data[0];
+    }
+    size_t get_element_size() const override {
+        return sizeof(T);
+    }
 
-    T &operator () (int i, int j) { return data[i * dims[0] + j]; }
-    T operator () (int i, int j) const { return data[i * dims[0] + j]; }
+    T &operator()(int i, int j) {
+        return data[i * dims[0] + j];
+    }
+    T operator()(int i, int j) const {
+        return data[i * dims[0] + j];
+    }
 };
 
 extern "C" {
@@ -73,7 +101,7 @@ DLLEXPORT size_t mxGetNumberOfDimensions_730(const mxArray *a) {
 }
 
 DLLEXPORT int mxGetNumberOfDimensions_700(const mxArray *a) {
-    return (int) a->get_number_of_dimensions();
+    return (int)a->get_number_of_dimensions();
 }
 
 DLLEXPORT const size_t *mxGetDimensions_730(const mxArray *a) {
@@ -115,9 +143,12 @@ DLLEXPORT double mxGetScalar(const mxArray *a) {
 DLLEXPORT mxArray *mxCreateNumericMatrix_730(size_t M, size_t N, mxClassID type, mxComplexity complexity) {
     assert(complexity == mxREAL);
     switch (type) {
-    case mxSINGLE_CLASS: return new mxArrayImpl<float>(M, N);
-    case mxINT32_CLASS: return new mxArrayImpl<int32_t>(M, N);
-    default: return nullptr;
+    case mxSINGLE_CLASS:
+        return new mxArrayImpl<float>(M, N);
+    case mxINT32_CLASS:
+        return new mxArrayImpl<int32_t>(M, N);
+    default:
+        return nullptr;
     }
 }
 
@@ -125,13 +156,14 @@ DLLEXPORT mxArray *mxCreateNumericMatrix_700(int M, int N, mxClassID type, mxCom
     return mxCreateNumericMatrix_730(M, N, type, complexity);
 }
 
-void mexFunction(int, mxArray**, int, mxArray**);
-
+void mexFunction(int, mxArray **, int, mxArray **);
 }
 
 int main(int argc, char **argv) {
-    mxArray *lhs[1] = { nullptr };
-    mxArray *rhs[4] = { nullptr, };
+    mxArray *lhs[1] = {nullptr};
+    mxArray *rhs[4] = {
+        nullptr,
+    };
 
     mxArrayImpl<float> input(3, 5);
     mxArrayImpl<float> scale(1, 1);

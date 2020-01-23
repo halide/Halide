@@ -5,6 +5,7 @@
 #include "Associativity.h"
 #include "BoundaryConditions.h"
 #include "CSE.h"
+#include "Debug.h"
 #include "Derivative.h"
 #include "DerivativeUtils.h"
 #include "Error.h"
@@ -43,7 +44,7 @@ class ReverseAccumulationVisitor : public IRVisitor {
 public:
     void propagate_adjoints(const Func &output,
                             const Func &adjoint,
-                            const vector<pair<Expr, Expr>> &output_bounds);
+                            const Region &output_bounds);
 
     map<FuncKey, Func> get_adjoint_funcs() const {
         return adjoint_funcs;
@@ -177,7 +178,7 @@ private:
 void ReverseAccumulationVisitor::propagate_adjoints(
     const Func &output,
     const Func &adjoint,
-    const vector<pair<Expr, Expr>> &output_bounds) {
+    const Region &output_bounds) {
     // Topologically sort the functions
     map<string, Function> env = find_transitive_calls(output.function());
     vector<string> order =
@@ -481,7 +482,8 @@ void ReverseAccumulationVisitor::propagate_adjoints(
     // Bounds inference
     Box output_box;
     for (const auto &p : output_bounds) {
-        output_box.push_back(Interval(p.first, p.second));
+        // Convert from min,extent to min,max
+        output_box.push_back(Interval(p.min, p.min + p.extent));
     }
     func_bounds = inference_bounds(output, output_box);
     for (const auto &it : func_bounds) {
@@ -1318,7 +1320,7 @@ void ReverseAccumulationVisitor::propagate_halide_function_call(
     // f'(x, y, z) += g'(x, x + 1, z - 1)
     //
     // Note that g' would correctly returns 0 outside g's boundary,
-    // therefore we do not need to impose bounds on g'. 
+    // therefore we do not need to impose bounds on g'.
     // However, consider the case where f'(...) += g'(...) * h(...):
     // we need to clamp h's arguments such that it never goes out of g's domain,
     // otherwise we may get unwanted out-of-bound buffer access.
@@ -1410,11 +1412,11 @@ void ReverseAccumulationVisitor::propagate_halide_function_call(
 
     // Sometimes the canonicalization above fails.
     // We replace the pure variables inside lhs with RDoms for general scattering
-    vector<pair<Expr, Expr>> bounds;
+    Region bounds;
     bounds.reserve(current_args.size());
     for (int arg_id = 0; arg_id < (int)current_args.size(); arg_id++) {
-        bounds.push_back({current_bounds[arg_id].min,
-                          current_bounds[arg_id].max - current_bounds[arg_id].min + 1});
+        const Interval &interval = current_bounds[arg_id];
+        bounds.emplace_back(interval.min, interval.max - interval.min + 1);
     }
     RDom r_bounds(bounds);
     for (int lhs_id = 0; lhs_id < (int)lhs.size(); lhs_id++) {
@@ -1452,7 +1454,7 @@ void ReverseAccumulationVisitor::propagate_halide_function_call(
     //      replaced by the new substitution variable e.g. u_0
 
     // First gather all free variables
-    vector<pair<Expr, Expr>> bounds_subset;
+    Region bounds_subset;
     vector<int> arg_id_to_substitute;
     bounds_subset.reserve(current_args.size());
     arg_id_to_substitute.reserve(current_args.size());
@@ -1694,7 +1696,7 @@ void ReverseAccumulationVisitor::propagate_halide_function_call(
     std::sort(old_rvar_vec.begin(), old_rvar_vec.end(), cmp_rv);
     // Flatten to an array
     vector<string> var_names;
-    vector<pair<Expr, Expr>> merged_bounds;
+    Region merged_bounds;
     for (const auto &it : new_rvar_vec) {
         var_names.push_back(it.name);
         merged_bounds.emplace_back(it.min, it.extent);
@@ -1896,25 +1898,34 @@ void ReverseAccumulationVisitor::propagate_halide_function_call(
 
 Func Derivative::operator()(const Func &func, int update_id) const {
     auto it = adjoints.find(FuncKey{func.name(), update_id});
-    internal_assert(it != adjoints.end()) << "Could not find Func " << func.name() << "\n";
+    if (it == adjoints.end()) {
+        Internal::debug(1) << "Could not find Func " << func.name() << "\n";
+        return Func();
+    }
     return it->second;
 }
 
 Func Derivative::operator()(const Buffer<> &buffer) const {
     auto it = adjoints.find(FuncKey{buffer.name(), -1});
-    internal_assert(it != adjoints.end()) << "Could not find Buffer " << buffer.name() << "\n";
+    if (it == adjoints.end()) {
+        Internal::debug(1) << "Could not find Buffer " << buffer.name() << "\n";
+        return Func();
+    }
     return it->second;
 }
 
 Func Derivative::operator()(const Param<> &param) const {
     auto it = adjoints.find(FuncKey{param.name(), -1});
-    internal_assert(it != adjoints.end()) << "Could not find Param " << param.name() << "\n";
+    if (it == adjoints.end()) {
+        Internal::debug(1) << "Could not find Param " << param.name() << "\n";
+        return Func();
+    }
     return it->second;
 }
 
 Derivative propagate_adjoints(const Func &output,
                               const Func &adjoint,
-                              const vector<pair<Expr, Expr>> &output_bounds) {
+                              const Region &output_bounds) {
     user_assert(output.dimensions() == adjoint.dimensions())
         << "output dimensions and adjoint dimensions must match\n";
     user_assert((int)output_bounds.size() == adjoint.dimensions())
@@ -1930,7 +1941,7 @@ Derivative propagate_adjoints(const Func &output,
 Derivative propagate_adjoints(const Func &output,
                               const Buffer<float> &adjoint) {
     user_assert(output.dimensions() == adjoint.dimensions());
-    vector<pair<Expr, Expr>> bounds;
+    Region bounds;
     for (int dim = 0; dim < adjoint.dimensions(); dim++) {
         bounds.emplace_back(adjoint.min(dim), adjoint.min(dim) + adjoint.extent(dim) - 1);
     }
@@ -1941,7 +1952,7 @@ Derivative propagate_adjoints(const Func &output,
 Derivative propagate_adjoints(const Func &output) {
     Func adjoint("adjoint");
     adjoint(output.args()) = Internal::make_one(output.value().type());
-    vector<pair<Expr, Expr>> output_bounds;
+    Region output_bounds;
     output_bounds.reserve(output.dimensions());
     for (int i = 0; i < output.dimensions(); i++) {
         output_bounds.push_back({0, 0});

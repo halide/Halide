@@ -186,12 +186,12 @@ class RDom {
 
     void init_vars(const std::string &name);
 
-    void initialize_from_ranges(const std::vector<std::pair<Expr, Expr>> &ranges, std::string name = "");
+    void initialize_from_region(const Region &region, std::string name = "");
 
     template<typename... Args>
-    HALIDE_NO_USER_CODE_INLINE void initialize_from_ranges(std::vector<std::pair<Expr, Expr>> &ranges, Expr min, Expr extent, Args &&... args) {
-        ranges.push_back({min, extent});
-        initialize_from_ranges(ranges, std::forward<Args>(args)...);
+    HALIDE_NO_USER_CODE_INLINE void initialize_from_region(Region &region, Expr min, Expr extent, Args &&... args) {
+        region.push_back({min, extent});
+        initialize_from_region(region, std::forward<Args>(args)...);
     }
 
 public:
@@ -201,16 +201,16 @@ public:
     /** Construct a multi-dimensional reduction domain with the given name. If the name
      * is left blank, a unique one is auto-generated. */
     // @{
-    HALIDE_NO_USER_CODE_INLINE RDom(const std::vector<std::pair<Expr, Expr>> &ranges, std::string name = "") {
-        initialize_from_ranges(ranges, name);
+    HALIDE_NO_USER_CODE_INLINE RDom(const Region &region, std::string name = "") {
+        initialize_from_region(region, name);
     }
 
     template<typename... Args>
     HALIDE_NO_USER_CODE_INLINE RDom(Expr min, Expr extent, Args &&... args) {
         // This should really just be a delegating constructor, but I couldn't make
         // that work with variadic template unpacking in visual studio 2013
-        std::vector<std::pair<Expr, Expr>> ranges;
-        initialize_from_ranges(ranges, min, extent, std::forward<Args>(args)...);
+        Region region;
+        initialize_from_region(region, min, extent, std::forward<Args>(args)...);
     }
     // @}
 

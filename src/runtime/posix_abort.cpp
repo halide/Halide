@@ -10,4 +10,6 @@ WEAK __attribute__((always_inline)) void halide_abort() {
     abort();
 }
 
-}}}
+}  // namespace Internal
+}  // namespace Runtime
+}  // namespace Halide

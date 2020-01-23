@@ -33,9 +33,6 @@ protected:
                                          std::vector<Type> arg_types,
                                          int flags);
 
-    int is_hvx_v62_or_later() {
-        return (isa_version >= 62);
-    }
     int is_hvx_v65_or_later() {
         return (isa_version >= 65);
     }
@@ -118,6 +115,9 @@ private:
      * (halide_error) if the size overflows 2^31 -1, the maximum
      * positive number an int32_t can hold. */
     llvm::Value *codegen_cache_allocation_size(const std::string &name, Type type, const std::vector<Expr> &extents);
+
+    /** Generate a LUT (8/16 bit, max_index < 256) lookup using vlut instructions. */
+    llvm::Value *vlut256(llvm::Value *lut, llvm::Value *indices, int min_index = 0, int max_index = 255);
 };
 
 }  // namespace Internal

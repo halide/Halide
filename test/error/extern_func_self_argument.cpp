@@ -2,8 +2,7 @@
 
 using namespace Halide;
 
-extern "C"
-int extern_func() {
+extern "C" int extern_func() {
     return 0;
 }
 

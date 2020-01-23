@@ -112,7 +112,6 @@ struct Target {
         TracePipeline = halide_target_feature_trace_pipeline,
         D3D12Compute = halide_target_feature_d3d12compute,
         StrictFloat = halide_target_feature_strict_float,
-        LegacyBufferWrappers = halide_target_feature_legacy_buffer_wrappers,
         TSAN = halide_target_feature_tsan,
         ASAN = halide_target_feature_asan,
         CheckUnsafePromises = halide_target_feature_check_unsafe_promises,

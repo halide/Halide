@@ -1,12 +1,12 @@
 #include "Halide.h"
 #include "linear_to_srgb.stub.h"
-#include "srgb_to_linear.stub.h"
 #include "simple_blur.stub.h"
+#include "srgb_to_linear.stub.h"
 
 namespace {
 
 struct LinearBlur : public Halide::Generator<LinearBlur> {
-    Input<Buffer<float>>  input{"input", 3};
+    Input<Buffer<float>> input{"input", 3};
     Output<Buffer<float>> output{"output", 3};
 
     void generate() {

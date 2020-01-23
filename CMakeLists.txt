@@ -265,7 +265,7 @@ if (NOT MSVC)
                       -Wcast-qual
                       -Woverloaded-virtual
                       -Wignored-qualifiers)
-  if (CMAKE_COMPILER_IS_GNUCC AND CMAKE_CXX_COMPILER_VERSION VERSION_GREATER 5.1)
+  if (CMAKE_CXX_COMPILER_IS_GNUCC AND CMAKE_CXX_COMPILER_VERSION VERSION_GREATER 5.1)
     add_compile_options(-Wsuggest-override)
   endif()
   if (WARNINGS_AS_ERRORS)
@@ -530,3 +530,6 @@ endforeach()
 
 add_custom_target(distrib
   COMMAND cmake -E echo "\\'make distrib\\' is not available under CMake. Use \\'make package\\' instead.")
+
+add_custom_target(format
+  COMMAND find "${HALIDE_BASE_DIR}/apps" "${HALIDE_BASE_DIR}/src" "${HALIDE_BASE_DIR}/tools" "${HALIDE_BASE_DIR}/test" "${HALIDE_BASE_DIR}/util" "${HALIDE_BASE_DIR}/python_bindings" -name *.cpp -o -name *.h -o -name *.c | xargs ${CLANG}-format -i -style=file)

@@ -17,12 +17,15 @@ lanczos_uint8_up lanczos_uint8_down
 LIBRARIES = $(foreach V,$(VARIANTS),$(BIN)/%/resize_$(V).a)
 OUTPUTS = $(foreach V,$(VARIANTS),$(BIN)/$(HL_TARGET)/out_$(V).png)
 
-all: $(OUTPUTS)
+.PHONY: build clean test
+
+build: $(BIN)/$(HL_TARGET)/resize
+
+test: $(OUTPUTS)
 
 $(GENERATOR_BIN)/resize.generator: resize_generator.cpp $(GENERATOR_DEPS)
 	@mkdir -p $(@D)
-	$(CXX) $(CXXFLAGS) $(filter-out %.h,$^) -o $@ $(LDFLAGS) $(HALIDE_SYSTEM_LIBS)
-
+	$(CXX) $(CXXFLAGS) $(filter %.cpp,$^) -o $@ $(GENERATOR_LDFLAGS)
 
 # Can't have multiple wildcards in Make, so we'll use a macro
 # to stamp out all the rules we need
@@ -76,10 +79,6 @@ $(BIN)/$(HL_TARGET)/out_%_down.png: $(BIN)/$(HL_TARGET)/resize
 
 clean:
 	rm -rf $(BIN)
-
-
-test: all
-
 
 ../../bin/HalideTraceViz: ../../util/HalideTraceViz.cpp
 	$(MAKE) -C ../../ bin/HalideTraceViz

@@ -18,7 +18,7 @@ set(RUNTIME_CPP
   android_host_cpu_count
   android_io
   arm_cpu_features
-  buffer_t
+  halide_buffer_t
   cache
   can_use_target
   cuda
@@ -53,7 +53,6 @@ set(RUNTIME_CPP
   module_jit_ref_count
   msan
   msan_stubs
-  old_buffer_t
   opencl
   opengl
   openglcompute
@@ -247,9 +246,9 @@ foreach (i ${RUNTIME_BC} )
 endforeach()
 
 add_custom_command(OUTPUT "${INITMOD_PREFIX}inlined_c.cpp"
-  # COMMENT "buffer_t.cpp -> ${INITMOD_PREFIX}inlined_c.cpp"
-  DEPENDS "${NATIVE_RUNTIME_DIR}buffer_t.cpp" binary2cpp
-  COMMAND binary2cpp "halide_internal_initmod_inlined_c" < "${NATIVE_RUNTIME_DIR}buffer_t.cpp" > "${INITMOD_PREFIX}inlined_c.cpp"
+  # COMMENT "halide_buffer_t.cpp -> ${INITMOD_PREFIX}inlined_c.cpp"
+  DEPENDS "${NATIVE_RUNTIME_DIR}halide_buffer_t.cpp" binary2cpp
+  COMMAND binary2cpp "halide_internal_initmod_inlined_c" < "${NATIVE_RUNTIME_DIR}halide_buffer_t.cpp" > "${INITMOD_PREFIX}inlined_c.cpp"
   )
 list(APPEND INITIAL_MODULES "${INITMOD_PREFIX}inlined_c.cpp")
 
@@ -442,7 +441,6 @@ set(HEADER_FILES
   VectorizeLoops.h
   WasmExecutor.h
   WrapCalls.h
-  WrapExternStages.h
 )
 
 file(MAKE_DIRECTORY "${CMAKE_BINARY_DIR}/include")
@@ -628,7 +626,6 @@ add_library(Halide ${HALIDE_LIBRARY_TYPE}
   VectorizeLoops.cpp
   WasmExecutor.cpp
   WrapCalls.cpp
-  WrapExternStages.cpp
   ${HEADER_FILES}
   ${INITIAL_MODULES}
 )
@@ -777,10 +774,9 @@ llvm_config(Halide ${LLVM_USE_SHARED} ${LLVM_COMPONENTS})
 if (NOT MSVC AND NOT LLVM_USE_SHARED_LLVM_LIBRARY)
   set(LLVM_CONFIG ${LLVM_TOOLS_BINARY_DIR}/llvm-config)
   execute_process(COMMAND "${LLVM_CONFIG}" --system-libs ${LLVM_COMPONENTS} OUTPUT_VARIABLE EXTRA_LIBS)
-  string(STRIP EXTRA_LIBS "${EXTRA_LIBS}")
-  string(REPLACE "-l" ";" EXTRA_LIBS "${EXTRA_LIBS}")
+  string(STRIP EXTRA_LIBS "${EXTRA_LIBS}")   # strip whitespace from start & end
   string(REPLACE "\n" "" EXTRA_LIBS "${EXTRA_LIBS}")
-  string(REPLACE " " "" EXTRA_LIBS "${EXTRA_LIBS}")
+  string(REPLACE " " ";" EXTRA_LIBS "${EXTRA_LIBS}")  # convert into a list
   target_link_libraries(Halide PUBLIC ${EXTRA_LIBS})
 endif()
 
