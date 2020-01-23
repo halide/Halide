@@ -191,7 +191,6 @@ check_llvm_target(RISCV WITH_RISCV)
 # AMDGPU target is WIP
 check_llvm_target(AMDGPU WITH_AMDGPU)
 
-option(TARGET_NATIVE_CLIENT "Include Native Client" OFF)
 option(TARGET_X86 "Include x86 target" ${WITH_X86})
 option(TARGET_ARM "Include ARM target" ${WITH_ARM})
 option(TARGET_AARCH64 "Include AARCH64 (arm64) target" ${WITH_AARCH64})
