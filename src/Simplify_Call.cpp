@@ -477,17 +477,23 @@ Expr Simplify::visit(const Call *op, ExprInfo *bounds) {
 
         // Handle all the PureExtern cases of float -> bool
         {
-            static const std::unordered_map<std::string, std::function<bool(double)>>
+            using FnType = bool (*)(double);
+            // Some GCC versions are unable to resolve std::isnan (etc) directly, so
+            // wrap them in lambdas.
+            const FnType is_finite = [](double a) -> bool { return std::isfinite(a); };
+            const FnType is_inf = [](double a) -> bool { return std::isinf(a); };
+            const FnType is_nan = [](double a) -> bool { return std::isnan(a); };
+            static const std::unordered_map<std::string, FnType>
                 pure_externs_f1b = {
-                    {"is_finite_f16", (bool (*)(double))std::isfinite},
-                    {"is_finite_f32", (bool (*)(double))std::isfinite},
-                    {"is_finite_f64", (bool (*)(double))std::isfinite},
-                    {"is_inf_f16", (bool (*)(double))std::isinf},
-                    {"is_inf_f32", (bool (*)(double))std::isinf},
-                    {"is_inf_f64", (bool (*)(double))std::isinf},
-                    {"is_nan_f16", (bool (*)(double))std::isnan},
-                    {"is_nan_f32", (bool (*)(double))std::isnan},
-                    {"is_nan_f64", (bool (*)(double))std::isnan},
+                    {"is_finite_f16", is_finite},
+                    {"is_finite_f32", is_finite},
+                    {"is_finite_f64", is_finite},
+                    {"is_inf_f16", is_inf},
+                    {"is_inf_f32", is_inf},
+                    {"is_inf_f64", is_inf},
+                    {"is_nan_f16", is_nan},
+                    {"is_nan_f32", is_nan},
+                    {"is_nan_f64", is_nan},
                 };
             auto it = pure_externs_f1b.find(op->name);
             if (it != pure_externs_f1b.end()) {
@@ -509,23 +515,24 @@ Expr Simplify::visit(const Call *op, ExprInfo *bounds) {
         // TODO: should we handle the f16 and f64 cases here? (We never did before.)
         // TODO: should we handle fast_inverse and/or fast_inverse_sqrt here?
         {
-            static const std::unordered_map<std::string, std::function<double(double)>>
+            using FnType = double (*)(double);
+            static const std::unordered_map<std::string, FnType>
                 pure_externs_f1 = {
-                    {"acos_f32", (double (*)(double))std::acos},
-                    {"acosh_f32", (double (*)(double))std::acosh},
-                    {"asin_f32", (double (*)(double))std::asin},
-                    {"asinh_f32", (double (*)(double))std::asinh},
-                    {"atan_f32", (double (*)(double))std::atan},
-                    {"atanh_f32", (double (*)(double))std::atanh},
-                    {"cos_f32", (double (*)(double))std::cos},
-                    {"cosh_f32", (double (*)(double))std::cosh},
-                    {"exp_f32", (double (*)(double))std::exp},
-                    {"log_f32", (double (*)(double))std::log},
-                    {"sin_f32", (double (*)(double))std::sin},
-                    {"sinh_f32", (double (*)(double))std::sinh},
-                    {"sqrt_f32", (double (*)(double))std::sqrt},
-                    {"tan_f32", (double (*)(double))std::tan},
-                    {"tanh_f32", (double (*)(double))std::tanh},
+                    {"acos_f32", std::acos},
+                    {"acosh_f32", std::acosh},
+                    {"asin_f32", std::asin},
+                    {"asinh_f32", std::asinh},
+                    {"atan_f32", std::atan},
+                    {"atanh_f32", std::atanh},
+                    {"cos_f32", std::cos},
+                    {"cosh_f32", std::cosh},
+                    {"exp_f32", std::exp},
+                    {"log_f32", std::log},
+                    {"sin_f32", std::sin},
+                    {"sinh_f32", std::sinh},
+                    {"sqrt_f32", std::sqrt},
+                    {"tan_f32", std::tan},
+                    {"tanh_f32", std::tanh},
                 };
             auto it = pure_externs_f1.find(op->name);
             if (it != pure_externs_f1.end()) {
@@ -544,12 +551,13 @@ Expr Simplify::visit(const Call *op, ExprInfo *bounds) {
 
         // Handle all the PureExtern cases of float -> integerized-float
         {
-            static const std::unordered_map<std::string, std::function<double(double)>>
+            using FnType = double (*)(double);
+            static const std::unordered_map<std::string, FnType>
                 pure_externs_truncation = {
-                    {"ceil_f32", (double (*)(double))std::ceil},
-                    {"floor_f32", (double (*)(double))std::floor},
-                    {"round_f32", (double (*)(double))std::nearbyint},
-                    {"trunc_f32", [](double a) { return (a < 0 ? std::ceil(a) : std::floor(a)); }},
+                    {"ceil_f32", std::ceil},
+                    {"floor_f32", std::floor},
+                    {"round_f32", std::nearbyint},
+                    {"trunc_f32", [](double a) -> double { return (a < 0 ? std::ceil(a) : std::floor(a)); }},
                 };
             auto it = pure_externs_truncation.find(op->name);
             if (it != pure_externs_truncation.end()) {
@@ -576,10 +584,11 @@ Expr Simplify::visit(const Call *op, ExprInfo *bounds) {
 
         // Handle all the PureExtern cases of (float, float) -> integerized-float
         {
-            static const std::unordered_map<std::string, std::function<double(double, double)>>
+            using FnType = double (*)(double, double);
+            static const std::unordered_map<std::string, FnType>
                 pure_externs_f2 = {
-                    {"atan2_f32", (double (*)(double, double))std::atan2},
-                    {"pow_f32", (double (*)(double, double))std::pow},
+                    {"atan2_f32", std::atan2},
+                    {"pow_f32", std::pow},
                 };
             auto it = pure_externs_f2.find(op->name);
             if (it != pure_externs_f2.end()) {

@@ -422,7 +422,7 @@ Stmt build_extern_produce(const map<string, Function> &env, Function f, const Ta
     // extern function call.
     vector<pair<Expr, int>> buffers_to_annotate;
     vector<Expr> buffers_contents_to_annotate;
-    vector<Expr> buffers_to_check;
+    vector<pair<Expr, string>> buffers_to_check;
     vector<pair<Expr, Expr>> cropped_buffers;
     for (const ExternFuncArgument &arg : args) {
         if (arg.is_expr()) {
@@ -530,7 +530,7 @@ Stmt build_extern_produce(const map<string, Function> &env, Function f, const Ta
             // Since this is a temporary, internal-only buffer, make sure it's marked.
             // (but not the contents! callee is expected to fill that in.)
             buffers_to_annotate.emplace_back(buffer, f.dimensions());
-            buffers_to_check.push_back(buffer);
+            buffers_to_check.emplace_back(buffer, buf_name);
         }
     } else {
         // Store level doesn't match compute level. Make an output
@@ -577,7 +577,7 @@ Stmt build_extern_produce(const map<string, Function> &env, Function f, const Ta
             buffers_to_annotate.emplace_back(extern_call_args.back(), f.dimensions());
             cropped_buffers.emplace_back(extern_call_args.back(), src_buffer);
             lets.emplace_back(buf_name, output_buffer_t);
-            buffers_to_check.push_back(extern_call_args.back());
+            buffers_to_check.emplace_back(extern_call_args.back(), buf_name);
         }
     }
 
@@ -621,9 +621,11 @@ Stmt build_extern_produce(const map<string, Function> &env, Function f, const Ta
             }
         }
         // Check the output buffer(s) from define_extern() calls to be sure they are fully initialized.
-        for (const auto &buffer : buffers_to_check) {
+        for (const auto &p : buffers_to_check) {
+            Expr buffer = p.first;
+            string buf_name = p.second;
             Stmt check_contents = Evaluate::make(
-                Call::make(Int(32), "halide_msan_check_buffer_is_initialized", {buffer}, Call::Extern));
+                Call::make(Int(32), "halide_msan_check_buffer_is_initialized", {buffer, Expr(buf_name)}, Call::Extern));
             if (!is_no_op(post_call)) {
                 post_call = Block::make(post_call, check_contents);
             } else {
