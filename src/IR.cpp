@@ -860,7 +860,6 @@ bool Shuffle::is_extract_element() const {
     return indices.size() == 1;
 }
 
-
 template<>
 void ExprNode<IntImm>::accept(IRVisitor *v) const {
     v->visit((const IntImm *)this);

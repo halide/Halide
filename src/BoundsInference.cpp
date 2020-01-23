@@ -1173,7 +1173,8 @@ Stmt bounds_inference(Stmt s,
     s = For::make("<outermost>", 0, 1, ForType::Serial, DeviceAPI::None, s);
 
     s = BoundsInference(funcs, fused_func_groups, fused_pairs_in_groups,
-                        outputs, func_bounds, target).mutate(s);
+                        outputs, func_bounds, target)
+            .mutate(s);
     return s.as<For>()->body;
 }
 

@@ -166,7 +166,8 @@ Module lower(const vector<Function> &output_funcs,
 
     debug(1) << "Adding checks for images\n";
     s = add_image_checks(s, outputs, t, order, env, func_bounds);
-    debug(2) << "Lowering after injecting image checks:\n" << s << '\n';
+    debug(2) << "Lowering after injecting image checks:\n"
+             << s << '\n';
 
     debug(1) << "Removing extern loops...\n";
     s = remove_extern_loops(s);

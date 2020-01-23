@@ -1,6 +1,6 @@
 #include "AddImageChecks.h"
-#include "IRVisitor.h"
 #include "IRMutator.h"
+#include "IRVisitor.h"
 #include "Simplify.h"
 #include "Substitute.h"
 #include "Target.h"
@@ -697,13 +697,15 @@ Stmt add_image_checks(Stmt s,
         const vector<string> &order;
         const map<string, Function> &env;
         const FuncValueBounds &fb;
+
     public:
         Injector(const vector<Function> &outputs,
                  const Target &t,
                  const vector<string> &order,
                  const map<string, Function> &env,
-                 const FuncValueBounds &fb) :
-            outputs(outputs), t(t), order(order), env(env), fb(fb) {}
+                 const FuncValueBounds &fb)
+            : outputs(outputs), t(t), order(order), env(env), fb(fb) {
+        }
     } injector(outputs, t, order, env, fb);
 
     return injector.mutate(s);
