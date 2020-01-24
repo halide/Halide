@@ -14,4 +14,4 @@ then
 fi
 
 echo "Expected Failure from '$1', but got Success"
-exit -1
+exit 255
