@@ -242,7 +242,9 @@ function(halide_project name folder)
   target_link_libraries("${name}" PRIVATE ${HALIDE_COMPILER_LIB} ${CMAKE_DL_LIBS} ${CMAKE_THREAD_LIBS_INIT})
   target_include_directories("${name}" PRIVATE "${Halide_SOURCE_DIR}/src")
   target_include_directories("${name}" PRIVATE "${Halide_SOURCE_DIR}/tools")
-  set_target_properties("${name}" PROPERTIES FOLDER "${folder}")
+  set_target_properties("${name}" PROPERTIES
+          FOLDER "${folder}"
+          ENABLE_EXPORTS True)
   if (MSVC)
     target_link_libraries("${name}" PRIVATE Kernel32)
   endif()
