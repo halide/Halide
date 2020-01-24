@@ -149,6 +149,8 @@ halide_define_aot_test(external_code)
 # Tests that require nonstandard targets, namespaces, args, etc.
 halide_define_aot_test(matlab
         HALIDE_TARGET_FEATURES matlab)
+set_target_properties(generator_aot_matlab
+        PROPERTIES ENABLE_EXPORTS True)
 
 halide_define_aot_test(memory_profiler_mandelbrot
         HALIDE_TARGET_FEATURES profile)
