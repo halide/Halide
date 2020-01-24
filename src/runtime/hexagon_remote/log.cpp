@@ -1,8 +1,8 @@
 #include "log.h"
 
-#include <stdlib.h>
-#include <stdio.h>
 #include <qurt.h>
+#include <stdio.h>
+#include <stdlib.h>
 
 // On device, we make a circular buffer that log_printf writes to, and
 // we can read from in a remote RPC call.
@@ -16,7 +16,8 @@ class Log {
 
 public:
     // The size must be a power of 2.
-    Log(int size) : buffer(NULL), size(size), read_cursor(0), write_cursor(0) {
+    Log(int size)
+        : buffer(NULL), size(size), read_cursor(0), write_cursor(0) {
         qurt_mutex_init(&lock);
         buffer = (char *)malloc(size);
     }
@@ -58,7 +59,9 @@ public:
 Log global_log(1024 * 64);
 
 void log_printf(const char *fmt, ...) {
-    char message[1024] = { 0, };
+    char message[1024] = {
+        0,
+    };
     va_list ap;
     va_start(ap, fmt);
     int message_size = vsnprintf(message, sizeof(message) - 1, fmt, ap);

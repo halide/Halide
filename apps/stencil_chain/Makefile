@@ -1,7 +1,8 @@
 include ../support/Makefile.inc
 
+.PHONY: build clean test
 
-all: $(BIN)/$(HL_TARGET)/process
+build: $(BIN)/$(HL_TARGET)/process
 
 $(GENERATOR_BIN)/stencil_chain.generator: stencil_chain_generator.cpp $(GENERATOR_DEPS)
 	@mkdir -p $(@D)

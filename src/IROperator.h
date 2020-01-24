@@ -116,9 +116,6 @@ inline Expr make_const(Type t, float16_t val) {
 }
 // @}
 
-/** Construct a unique indeterminate_expression Expr */
-Expr make_indeterminate_expression(Type type);
-
 /** Construct a unique signed_integer_overflow Expr */
 Expr make_signed_integer_overflow(Type type);
 
@@ -235,18 +232,29 @@ Expr strided_ramp_base(Expr e, int stride = 1);
  * the Euclidean definition of division for integers a and b:
  *
  /code
- (a/b)*b + a%b = a
+ when b != 0, (a/b)*b + a%b = a
  0 <= a%b < |b|
  /endcode
  *
+ * Additionally, mod by zero returns zero, and div by zero returns
+ * zero. This makes mod and div total functions.
  */
 // @{
 template<typename T>
 inline T mod_imp(T a, T b) {
     Type t = type_of<T>();
-    if (t.is_int()) {
-        T r = a % b;
-        r = r + (r < 0 ? (T)std::abs((int64_t)b) : 0);
+    if (!t.is_float() && b == 0) {
+        return 0;
+    } else if (t.is_int()) {
+        int64_t ia = a;
+        int64_t ib = b;
+        int64_t a_neg = ia >> 63;
+        int64_t b_neg = ib >> 63;
+        int64_t b_zero = (ib == 0) ? -1 : 0;
+        ia -= a_neg;
+        int64_t r = ia % (ib | b_zero);
+        r += (a_neg & ((ib ^ b_neg) + ~b_neg));
+        r &= ~b_zero;
         return r;
     } else {
         return a % b;
@@ -256,12 +264,21 @@ inline T mod_imp(T a, T b) {
 template<typename T>
 inline T div_imp(T a, T b) {
     Type t = type_of<T>();
-    if (t.is_int()) {
-        int64_t q = a / b;
-        int64_t r = a - q * b;
-        int64_t bs = b >> (t.bits() - 1);
-        int64_t rs = r >> (t.bits() - 1);
-        return (T)(q - (rs & bs) + (rs & ~bs));
+    if (!t.is_float() && b == 0) {
+        return (T)0;
+    } else if (t.is_int()) {
+        // Do it as 64-bit
+        int64_t ia = a;
+        int64_t ib = b;
+        int64_t a_neg = ia >> 63;
+        int64_t b_neg = ib >> 63;
+        int64_t b_zero = (ib == 0) ? -1 : 0;
+        ib -= b_zero;
+        ia -= a_neg;
+        int64_t q = ia / ib;
+        q += a_neg & (~b_neg - b_neg);
+        q &= ~b_zero;
+        return (T)q;
     } else {
         return a / b;
     }
@@ -395,9 +412,25 @@ Expr operator*(int a, Expr b);
 Expr &operator*=(Expr &a, Expr b);
 
 /** Return the ratio of two expressions, doing any necessary type
- * coercion using \ref Internal::match_types. Note that signed integer
- * division in Halide rounds towards minus infinity, unlike C, which
- * rounds towards zero. */
+ * coercion using \ref Internal::match_types. Note that integer
+ * division in Halide is not the same as integer division in C-like
+ * languages in two ways.
+ *
+ * First, signed integer division in Halide rounds according to the
+ * sign of the denominator. This means towards minus infinity for
+ * positive denominators, and towards positive infinity for negative
+ * denominators. This is unlike C, which rounds towards zero. This
+ * decision ensures that upsampling expressions like f(x/2, y/2) don't
+ * have funny discontinuities when x and y cross zero.
+ *
+ * Second, division by zero returns zero instead of faulting. For
+ * types where overflow is defined behavior, division of the largest
+ * negative signed integer by -1 returns the larged negative signed
+ * integer for the type (i.e. it wraps). This ensures that a division
+ * operation can never have a side-effect, which is helpful in Halide
+ * because scheduling directives can expand the domain of computation
+ * of a Func, potentially introducing new zero-division.
+ */
 Expr operator/(Expr a, Expr b);
 
 /** Modify the first expression to be the ratio of two expressions,
@@ -418,11 +451,15 @@ Expr operator/(Expr a, int b);
 Expr operator/(int a, Expr b);
 
 /** Return the first argument reduced modulo the second, doing any
- * necessary type coercion using \ref Internal::match_types. For
- * signed integers, the sign of the result matches the sign of the
- * second argument (unlike in C, where it matches the sign of the
- * first argument). For example, this means that x%2 is always either
- * zero or one, even if x is negative.*/
+ * necessary type coercion using \ref Internal::match_types. There are
+ * two key differences between C-like languages and Halide for the
+ * modulo operation, which complement the way division works.
+ *
+ * First, the result is never negative, so x % 2 is always zero or
+ * one, unlike in C-like languages. x % -2 is equivalent, and is also
+ * always zero or one. Second, mod by zero evaluates to zero (unlike
+ * in C, where it faults). This makes modulo, like division, a
+ * side-effect-free operation. */
 Expr operator%(Expr a, Expr b);
 
 /** Mods an expression by a constant integer. Coerces the type
@@ -1108,14 +1145,15 @@ Expr count_trailing_zeros(Expr x);
 /** Divide two integers, rounding towards zero. This is the typical
  * behavior of most hardware architectures, which differs from
  * Halide's division operator, which is Euclidean (rounds towards
- * -infinity). */
+ * -infinity). Will throw a runtime error if y is zero, or if y is -1
+ * and x is the minimum signed integer. */
 Expr div_round_to_zero(Expr x, Expr y);
 
 /** Compute the remainder of dividing two integers, when division is
  * rounding toward zero. This is the typical behavior of most hardware
  * architectures, which differs from Halide's mod operator, which is
  * Euclidean (produces the remainder when division rounds towards
- * -infinity). */
+ * -infinity). Will throw a runtime error if y is zero. */
 Expr mod_round_to_zero(Expr x, Expr y);
 
 /** Return a random variable representing a uniformly distributed

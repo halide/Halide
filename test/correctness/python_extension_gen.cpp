@@ -1,7 +1,7 @@
 #include "Halide.h"
 
-#include <stdio.h>
 #include <iostream>
+#include <stdio.h>
 
 #include "test/common/halide_test_dirs.h"
 
@@ -26,11 +26,11 @@ int main(int argc, char **argv) {
     Param<double> double_param;
 
     std::vector<Argument> params{
-      buffer_u8, buffer_u16, buffer_u32,
-      buffer_i8, buffer_i16, buffer_i32,
-      int_param8, int_param16, int_param32, int_param64,
-      uint_param8, uint_param16, uint_param32, uint_param64,
-      float_param, double_param};
+        buffer_u8, buffer_u16, buffer_u32,
+        buffer_i8, buffer_i16, buffer_i32,
+        int_param8, int_param16, int_param32, int_param64,
+        uint_param8, uint_param16, uint_param32, uint_param64,
+        float_param, double_param};
 
     Var x("x"), y("y");
     Func f("f");
@@ -44,14 +44,11 @@ int main(int argc, char **argv) {
     std::string function_name = "org::halide::halide_python::f";
 
     f.compile_to(
-        {
-            {Output::c_source, c_filename},
-            {Output::python_extension, pyext_filename}
-        },
+        {{Output::c_source, c_filename},
+         {Output::python_extension, pyext_filename}},
         params,
         function_name,
-        target
-    );
+        target);
 
     Internal::assert_file_exists(c_filename);
     Internal::assert_file_exists(pyext_filename);

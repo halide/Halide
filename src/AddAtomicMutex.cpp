@@ -19,7 +19,8 @@ namespace {
 class CollectProducerStoreNames : public IRGraphVisitor {
 public:
     CollectProducerStoreNames(const std::string &producer_name)
-        : producer_name(producer_name) {}
+        : producer_name(producer_name) {
+    }
 
     Scope<void> store_names;
 
@@ -42,16 +43,17 @@ protected:
 class FindProducerStoreIndex : public IRGraphVisitor {
 public:
     FindProducerStoreIndex(const std::string &producer_name)
-        : producer_name(producer_name) {}
+        : producer_name(producer_name) {
+    }
 
-    Expr index; // The returned index.
+    Expr index;  // The returned index.
 
 protected:
     using IRGraphVisitor::visit;
 
     // Need to also extract the let bindings of a Store index.
     void visit(const Let *op) override {
-        IRGraphVisitor::visit(op); // Make sure we visit the Store first.
+        IRGraphVisitor::visit(op);  // Make sure we visit the Store first.
         if (index.defined()) {
             if (expr_uses_var(index, op->name)) {
                 index = Let::make(op->name, op->value, index);
@@ -59,7 +61,7 @@ protected:
         }
     }
     void visit(const LetStmt *op) override {
-        IRGraphVisitor::visit(op); // Make sure we visit the Store first.
+        IRGraphVisitor::visit(op);  // Make sure we visit the Store first.
         if (index.defined()) {
             if (expr_uses_var(index, op->name)) {
                 index = Let::make(op->name, op->value, index);
@@ -120,7 +122,8 @@ protected:
 class FindAtomicLetBindings : public IRGraphVisitor {
 public:
     FindAtomicLetBindings(const Scope<void> &store_names)
-        : store_names(store_names) {}
+        : store_names(store_names) {
+    }
 
     bool found = false;
 
@@ -205,7 +208,8 @@ public:
     using IRGraphVisitor::visit;
 
     FindStoreInAtomicMutex(const std::set<std::string> &store_names)
-        : store_names(store_names) {}
+        : store_names(store_names) {
+    }
 
     bool found = false;
     string producer_name;
@@ -243,8 +247,9 @@ protected:
 /** Replace the indices in the Store nodes with the specified variable. */
 class ReplaceStoreIndexWithVar : public IRMutator {
 public:
-    ReplaceStoreIndexWithVar(const std::string &producer_name, Expr var) :
-        producer_name(producer_name), var(var) {}
+    ReplaceStoreIndexWithVar(const std::string &producer_name, Expr var)
+        : producer_name(producer_name), var(var) {
+    }
 
 protected:
     using IRMutator::visit;
@@ -268,7 +273,8 @@ protected:
 class AddAtomicMutex : public IRMutator {
 public:
     AddAtomicMutex(const map<string, Function> &env)
-        : env(env) {}
+        : env(env) {
+    }
 
 protected:
     using IRMutator::visit;
@@ -395,7 +401,7 @@ protected:
         Stmt body = op->body;
 
         Expr index = find.index;
-        Expr index_let; // If defined, represents the value of the lifted let binding.
+        Expr index_let;  // If defined, represents the value of the lifted let binding.
         if (!index.defined()) {
             // Scalar output.
             index = Expr(0);

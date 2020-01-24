@@ -162,7 +162,7 @@ Pipeline::Pipeline(const vector<Func> &outputs)
 
 vector<Func> Pipeline::outputs() const {
     vector<Func> funcs;
-    for (const Function& f : contents->outputs) {
+    for (const Function &f : contents->outputs) {
         funcs.emplace_back(f);
     }
     return funcs;
@@ -188,8 +188,7 @@ void Pipeline::auto_schedule_Mullapudi2016(Pipeline pipeline, const Target &targ
 /* static */
 std::map<std::string, AutoSchedulerFn> &Pipeline::get_autoscheduler_map() {
     static std::map<std::string, AutoSchedulerFn> autoschedulers = {
-        { "Mullapudi2016", auto_schedule_Mullapudi2016 }
-    };
+        {"Mullapudi2016", auto_schedule_Mullapudi2016}};
     return autoschedulers;
 }
 
@@ -239,7 +238,7 @@ void Pipeline::add_autoscheduler(const std::string &autoscheduler_name, const Au
 
 /* static */
 void Pipeline::set_default_autoscheduler_name(const std::string &autoscheduler_name) {
-    (void) find_autoscheduler(autoscheduler_name);  // ensure it's valid
+    (void)find_autoscheduler(autoscheduler_name);  // ensure it's valid
     get_default_autoscheduler_name() = autoscheduler_name;
 }
 
@@ -1021,11 +1020,11 @@ Pipeline::make_externs_jit_module(const Target &target,
                 // in current trunk Halide, but may be in some side branches that
                 // have not yet landed, e.g. JavaScript). Forcing it to be
                 // the correct type here, just in case.
-                arg_types.push_back(arg.arg.is_buffer() ? type_of<struct buffer_t *>() : arg.arg.type);
+                arg_types.push_back(arg.arg.is_buffer() ? type_of<struct halide_buffer_t *>() : arg.arg.type);
             }
             // Add the outputs of the pipeline
             for (size_t i = 0; i < pipeline_contents.outputs.size(); i++) {
-                arg_types.push_back(type_of<struct buffer_t *>());
+                arg_types.push_back(type_of<struct halide_buffer_t *>());
             }
             ExternSignature signature(Int(32), false, arg_types);
             iter->second = ExternCFunction(address, signature);
@@ -1185,7 +1184,7 @@ void Pipeline::infer_input_bounds(RealizationArg outputs, const ParamMap &param_
 
     struct TrackedBuffer {
         // The query buffer, and a backup to check for changes. We
-        // want wrappers around actual buffer_ts so that we can copy
+        // want wrappers around actual halide_buffer_ts so that we can copy
         // the metadata, not shared pointers to a single buffer, so
         // it's simpler to use the runtime buffer class.
         Runtime::Buffer<> query, orig;

@@ -10,7 +10,7 @@ int main(int argc, char **argv) {
     Var x;
     RDom r(0, img_size);
 
-    im(x) = (x*x) % hist_size;
+    im(x) = (x * x) % hist_size;
 
     hist(x) = Tuple(0, 0);
     hist(im(r)) += Tuple(1, 2);

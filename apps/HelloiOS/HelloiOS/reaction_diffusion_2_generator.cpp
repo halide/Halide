@@ -17,9 +17,8 @@ public:
                 .bound(c, 0, 3)
                 .vectorize(c)
                 .gpu_tile(x, y, xi, yi, 4, 4);
-            output
-                .dim(0).set_stride(3)
-                .dim(2).set_bounds(0, 3).set_stride(1);
+            output.dim(0).set_stride(3);
+            output.dim(2).set_bounds(0, 3).set_stride(1);
         }
     }
 
@@ -38,17 +37,17 @@ public:
     void generate() {
         clamped = Halide::BoundaryConditions::repeat_edge(state);
 
-        blur_x(x, y, c) = (clamped(x-3, y, c) +
-                           clamped(x-1, y, c) +
+        blur_x(x, y, c) = (clamped(x - 3, y, c) +
+                           clamped(x - 1, y, c) +
                            clamped(x, y, c) +
-                           clamped(x+1, y, c) +
-                           clamped(x+3, y, c));
-        blur_y(x, y, c) = (clamped(x, y-3, c) +
-                           clamped(x, y-1, c) +
+                           clamped(x + 1, y, c) +
+                           clamped(x + 3, y, c));
+        blur_y(x, y, c) = (clamped(x, y - 3, c) +
+                           clamped(x, y - 1, c) +
                            clamped(x, y, c) +
-                           clamped(x, y+1, c) +
-                           clamped(x, y+3, c));
-        blur(x, y, c) = (blur_x(x, y, c) + blur_y(x, y, c))/10;
+                           clamped(x, y + 1, c) +
+                           clamped(x, y + 3, c));
+        blur(x, y, c) = (blur_x(x, y, c) + blur_y(x, y, c)) / 10;
 
         Expr R = blur(x, y, 0);
         Expr G = blur(x, y, 1);
@@ -68,7 +67,7 @@ public:
         Expr bump = (frame % 1024) / 1024.0f;
         bump *= 1 - bump;
         Expr alpha = lerp(0.3f, 0.7f, bump);
-        dR = select(dR > 0, dR*alpha, dR);
+        dR = select(dR > 0, dR * alpha, dR);
 
         Expr t = 0.1f;
 
@@ -82,19 +81,19 @@ public:
 
         new_state(x, y, c) = select(c == 0, R,
                                     c == 1, G,
-                                            B);
+                                    B);
 
         // Noise at the edges
-        new_state(x, state.dim(1).min(), c) = random_float(frame)*0.2f;
-        new_state(x, state.dim(1).max(), c) = random_float(frame)*0.2f;
-        new_state(state.dim(0).min(), y, c) = random_float(frame)*0.2f;
-        new_state(state.dim(0).max(), y, c) = random_float(frame)*0.2f;
+        new_state(x, state.dim(1).min(), c) = random_float(frame) * 0.2f;
+        new_state(x, state.dim(1).max(), c) = random_float(frame) * 0.2f;
+        new_state(state.dim(0).min(), y, c) = random_float(frame) * 0.2f;
+        new_state(state.dim(0).max(), y, c) = random_float(frame) * 0.2f;
 
         // Add some white where the mouse is
-        Expr min_x = clamp(mouse_x - 20, 0, state.dim(0).extent()-1);
-        Expr max_x = clamp(mouse_x + 20, 0, state.dim(0).extent()-1);
-        Expr min_y = clamp(mouse_y - 20, 0, state.dim(1).extent()-1);
-        Expr max_y = clamp(mouse_y + 20, 0, state.dim(1).extent()-1);
+        Expr min_x = clamp(mouse_x - 20, 0, state.dim(0).extent() - 1);
+        Expr max_x = clamp(mouse_x + 20, 0, state.dim(0).extent() - 1);
+        Expr min_y = clamp(mouse_y - 20, 0, state.dim(1).extent() - 1);
+        Expr max_y = clamp(mouse_y + 20, 0, state.dim(1).extent() - 1);
         clobber = RDom(min_x, max_x - min_x + 1, min_y, max_y - min_y + 1);
 
         Expr dx = clobber.x - mouse_x;
@@ -137,12 +136,10 @@ public:
                 .unroll(c)
                 .gpu_tile(clobber.x, clobber.y, 1, 1);
 
-            state
-                .dim(0).set_stride(3)
-                .dim(2).set_stride(1).set_extent(3);
-            new_state
-                .dim(0).set_stride(3)
-                .dim(2).set_stride(1).set_extent(3);
+            state.dim(0).set_stride(3);
+            state.dim(2).set_stride(1).set_extent(3);
+            new_state.dim(0).set_stride(3);
+            new_state.dim(2).set_stride(1).set_extent(3);
         } else {
             Var yi;
             new_state
@@ -182,7 +179,7 @@ public:
         Expr c2 = contour(x, y, 2);
 
         Expr R = min(c0, max(c1, c2));
-        Expr G = (c0 + c1 + c2)/3;
+        Expr G = (c0 + c1 + c2) / 3;
         Expr B = max(c0, max(c1, c2));
         Expr A = 1.0f;
 
@@ -193,24 +190,22 @@ public:
         Expr bgra = select(c == 0, cast<uint8_t>(B * 255),
                            c == 1, cast<uint8_t>(G * 255),
                            c == 2, cast<uint8_t>(R * 255),
-                           /*c==3*/cast<uint8_t>(A * 255));
+                           /*c==3*/ cast<uint8_t>(A * 255));
 
         Expr rgba = select(c == 0, cast<uint8_t>(R * 255),
                            c == 1, cast<uint8_t>(G * 255),
                            c == 2, cast<uint8_t>(B * 255),
-                           /*c==3*/cast<uint8_t>(A * 255));
+                           /*c==3*/ cast<uint8_t>(A * 255));
 
         render(x, y, c) = select(output_bgra == true, bgra, rgba);
     }
 
     void schedule() {
-        render
-            .dim(0).set_stride(4)
-            .dim(2).set_stride(1).set_bounds(0, 4);
+        render.dim(0).set_stride(4);
+        render.dim(2).set_stride(1).set_bounds(0, 4);
         if (get_target().has_gpu_feature()) {
-            state
-                .dim(0).set_stride(3)
-                .dim(2).set_stride(1).set_bounds(0, 3);
+            state.dim(0).set_stride(3);
+            state.dim(2).set_stride(1).set_bounds(0, 3);
             render
                 .reorder(c, x, y)
                 .unroll(c)
@@ -237,5 +232,3 @@ private:
 HALIDE_REGISTER_GENERATOR(ReactionDiffusion2Init, reaction_diffusion_2_init)
 HALIDE_REGISTER_GENERATOR(ReactionDiffusion2Update, reaction_diffusion_2_update)
 HALIDE_REGISTER_GENERATOR(ReactionDiffusion2Render, reaction_diffusion_2_render)
-
-

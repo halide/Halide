@@ -4,26 +4,26 @@
 using namespace Halide;
 
 Halide::Runtime::Buffer<int32_t> make_gpu_buffer(bool hexagon_rpc) {
-  Var x, y;
-  Func f;
-  f(x, y) = x + y * 256;
+    Var x, y;
+    Func f;
+    f(x, y) = x + y * 256;
 
-  if (hexagon_rpc) {
-      f.hexagon();
-  } else {
-      Var xi, yi;
-      f.gpu_tile(x, y, xi, yi, 8, 8);
-  }
+    if (hexagon_rpc) {
+        f.hexagon();
+    } else {
+        Var xi, yi;
+        f.gpu_tile(x, y, xi, yi, 8, 8);
+    }
 
-  Buffer<int32_t>  result = f.realize(128, 128);
-  return *result.get();
+    Buffer<int32_t> result = f.realize(128, 128);
+    return *result.get();
 }
 
 int main(int argc, char **argv) {
     Target target = get_jit_target_from_environment();
 
     bool hexagon_rpc = (target.arch != Target::Hexagon) &&
-                       target.features_any_of({ Target::HVX_64, Target::HVX_128 });
+                       target.features_any_of({Target::HVX_64, Target::HVX_128});
 
     if (!hexagon_rpc && !target.has_gpu_feature()) {
         printf("This is a gpu-specific test. Skipping it.\n");
@@ -35,7 +35,7 @@ int main(int argc, char **argv) {
         Halide::Runtime::Buffer<int32_t> gpu_buf = make_gpu_buffer(hexagon_rpc);
         assert(gpu_buf.raw_buffer()->device_interface != nullptr);
 
-        gpu_buf.crop({ {32, 64} , {32, 64} });
+        gpu_buf.crop({{32, 64}, {32, 64}});
         assert(gpu_buf.raw_buffer()->device_interface != nullptr);
 
         gpu_buf.copy_to_host();
@@ -51,7 +51,7 @@ int main(int argc, char **argv) {
         Halide::Runtime::Buffer<int32_t> gpu_buf = make_gpu_buffer(hexagon_rpc);
         assert(gpu_buf.raw_buffer()->device_interface != nullptr);
 
-        Halide::Runtime::Buffer<int32_t> cropped = gpu_buf.cropped({ {32, 64} , {32, 64} });
+        Halide::Runtime::Buffer<int32_t> cropped = gpu_buf.cropped({{32, 64}, {32, 64}});
         assert(cropped.raw_buffer()->device_interface != nullptr);
 
         cropped.copy_to_host();
@@ -67,10 +67,10 @@ int main(int argc, char **argv) {
         Halide::Runtime::Buffer<int32_t> gpu_buf = make_gpu_buffer(hexagon_rpc);
         assert(gpu_buf.raw_buffer()->device_interface != nullptr);
 
-        Halide::Runtime::Buffer<int32_t> cropped = gpu_buf.cropped({ {32, 64} , {32, 64} });
+        Halide::Runtime::Buffer<int32_t> cropped = gpu_buf.cropped({{32, 64}, {32, 64}});
         assert(cropped.raw_buffer()->device_interface != nullptr);
 
-        Halide::Runtime::Buffer<int32_t> cropped2 = cropped.cropped({ {40, 16} , {40, 16} });
+        Halide::Runtime::Buffer<int32_t> cropped2 = cropped.cropped({{40, 16}, {40, 16}});
         assert(cropped2.raw_buffer()->device_interface != nullptr);
 
         cropped.copy_to_host();
@@ -96,7 +96,7 @@ int main(int argc, char **argv) {
             Halide::Runtime::Buffer<int32_t> gpu_buf = make_gpu_buffer(hexagon_rpc);
             assert(gpu_buf.raw_buffer()->device_interface != nullptr);
 
-            cropped = gpu_buf.cropped({ {32, 64} , {32, 64} });
+            cropped = gpu_buf.cropped({{32, 64}, {32, 64}});
             assert(cropped.raw_buffer()->device_interface != nullptr);
         }
 
@@ -125,8 +125,8 @@ int main(int argc, char **argv) {
         Halide::Buffer<int32_t> gpu_input = make_gpu_buffer(hexagon_rpc);
         Halide::Buffer<int32_t> gpu_output = make_gpu_buffer(hexagon_rpc);
 
-        gpu_input.crop({ { 64, 64 }, { 64, 64 } });
-        gpu_output.crop({ { 64, 64 }, { 64, 64 } });
+        gpu_input.crop({{64, 64}, {64, 64}});
+        gpu_output.crop({{64, 64}, {64, 64}});
 
         in.set(gpu_input);
 

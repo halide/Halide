@@ -592,12 +592,12 @@ public:
 
             // Iterate through all of the input args to the extern
             // function building a suitable argument list for the
-            // extern function call.  We need a query buffer_t per
-            // producer and a query buffer_t for the output
+            // extern function call.  We need a query halide_buffer_t per
+            // producer and a query halide_buffer_t for the output
 
             Expr null_handle = make_zero(Handle());
 
-            vector<Expr> buffers_to_annotate;
+            vector<pair<Expr, int>> buffers_to_annotate;
             for (size_t j = 0; j < args.size(); j++) {
                 if (args[j].is_expr()) {
                     bounds_inference_args.push_back(args[j].expr);
@@ -613,7 +613,7 @@ public:
 
                         lets.push_back({name, buf});
                         bounds_inference_args.push_back(Variable::make(type_of<struct halide_buffer_t *>(), name));
-                        buffers_to_annotate.push_back(bounds_inference_args.back());
+                        buffers_to_annotate.emplace_back(bounds_inference_args.back(), input.dimensions());
                     }
                 } else if (args[j].is_image_param() || args[j].is_buffer()) {
                     Parameter p = args[j].image_param;
@@ -639,7 +639,7 @@ public:
                     bounds_inference_args.push_back(buf);
                     // Although we expect ImageParams to be properly initialized and sanitized by the caller,
                     // we create a copy with copy_memory (not msan-aware), so we need to annotate it as initialized.
-                    buffers_to_annotate.push_back(bounds_inference_args.back());
+                    buffers_to_annotate.emplace_back(bounds_inference_args.back(), dims);
                 } else {
                     internal_error << "Bad ExternFuncArgument type";
                 }
@@ -665,21 +665,31 @@ public:
                 bounds_inference_args.push_back(Variable::make(type_of<struct halide_buffer_t *>(), buf_name));
                 // Since this is a temporary, internal-only buffer used for bounds inference,
                 // we need to mark it
-                buffers_to_annotate.push_back(bounds_inference_args.back());
+                buffers_to_annotate.emplace_back(bounds_inference_args.back(), func.dimensions());
                 lets.push_back({buf_name, output_buffer_t});
             }
 
             Stmt annotate;
             if (target.has_feature(Target::MSAN)) {
                 // Mark the buffers as initialized before calling out.
-                for (const auto &buffer : buffers_to_annotate) {
+                for (const auto &p : buffers_to_annotate) {
+                    Expr buffer = p.first;
+                    int dimensions = p.second;
                     // Return type is really 'void', but no way to represent that in our IR.
                     // Precedent (from halide_print, etc) is to use Int(32) and ignore the result.
-                    Expr sizeof_buffer_t =
-                        cast<uint64_t>(Call::make(Int(32), Call::size_of_halide_buffer_t, {}, Call::Intrinsic));
+                    Expr sizeof_buffer_t = cast<uint64_t>(
+                        Call::make(Int(32), Call::size_of_halide_buffer_t, {}, Call::Intrinsic));
                     Stmt mark_buffer =
                         Evaluate::make(Call::make(Int(32), "halide_msan_annotate_memory_is_initialized",
                                                   {buffer, sizeof_buffer_t}, Call::Extern));
+                    Expr shape = Call::make(type_of<halide_dimension_t *>(), Call::buffer_get_shape, {buffer},
+                                            Call::Extern);
+                    Expr shape_size = Expr((uint64_t)(sizeof(halide_dimension_t) * dimensions));
+                    Stmt mark_shape =
+                        Evaluate::make(Call::make(Int(32), "halide_msan_annotate_memory_is_initialized",
+                                                  {shape, shape_size}, Call::Extern));
+
+                    mark_buffer = Block::make(mark_buffer, mark_shape);
                     if (annotate.defined()) {
                         annotate = Block::make(annotate, mark_buffer);
                     } else {
@@ -704,7 +714,7 @@ public:
                 check = Block::make(annotate, check);
             }
 
-            // Now inner code is free to extract the fields from the buffer_t
+            // Now inner code is free to extract the fields from the halide_buffer_t
             s = Block::make(check, s);
 
             // Wrap in let stmts defining the args
@@ -839,7 +849,7 @@ public:
 
                 const vector<ExternFuncArgument> &args = consumer.func.extern_arguments();
                 // Stage::define_bounds is going to compute a query
-                // buffer_t per producer for bounds inference to
+                // halide_buffer_t per producer for bounds inference to
                 // use. We just need to extract those values.
                 for (size_t j = 0; j < args.size(); j++) {
                     if (args[j].is_func()) {

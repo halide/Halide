@@ -191,7 +191,6 @@ check_llvm_target(RISCV WITH_RISCV)
 # AMDGPU target is WIP
 check_llvm_target(AMDGPU WITH_AMDGPU)
 
-option(TARGET_NATIVE_CLIENT "Include Native Client" OFF)
 option(TARGET_X86 "Include x86 target" ${WITH_X86})
 option(TARGET_ARM "Include ARM target" ${WITH_ARM})
 option(TARGET_AARCH64 "Include AARCH64 (arm64) target" ${WITH_AARCH64})
@@ -530,3 +529,6 @@ endforeach()
 
 add_custom_target(distrib
   COMMAND cmake -E echo "\\'make distrib\\' is not available under CMake. Use \\'make package\\' instead.")
+
+add_custom_target(format
+  COMMAND find "${HALIDE_BASE_DIR}/apps" "${HALIDE_BASE_DIR}/src" "${HALIDE_BASE_DIR}/tools" "${HALIDE_BASE_DIR}/test" "${HALIDE_BASE_DIR}/util" "${HALIDE_BASE_DIR}/python_bindings" -name *.cpp -o -name *.h -o -name *.c | xargs ${CLANG}-format -i -style=file)

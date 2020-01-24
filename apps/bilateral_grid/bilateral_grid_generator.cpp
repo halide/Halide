@@ -84,6 +84,8 @@ public:
         if (auto_schedule) {
             // nothing
         } else if (get_target().has_gpu_feature()) {
+            // 0.50ms on an RTX 2060
+
             Var xi("xi"), yi("yi"), zi("zi");
 
             // Schedule blurz in 8x8 tiles. This is a tile in
@@ -118,13 +120,37 @@ public:
             bilateral_grid.compute_root().gpu_tile(x, y, xi, yi, 32, 8);
             interpolated.compute_at(bilateral_grid, xi).vectorize(c);
         } else {
-            // The CPU schedule.
-            blurz.compute_root().reorder(c, z, x, y).parallel(y).vectorize(x, 8).unroll(c);
+            // CPU schedule.
+
+            // 3.98ms on an Intel i9-9960X using 32 threads at 3.7 GHz
+            // using target x86-64-avx2. This is a little less
+            // SIMD-friendly than some of the other apps, so we
+            // benefit from hyperthreading, and don't benefit from
+            // AVX-512, which on my machine reduces the clock to 3.0
+            // GHz.
+
+            blurz.compute_root()
+                .reorder(c, z, x, y)
+                .parallel(y)
+                .vectorize(x, 8)
+                .unroll(c);
             histogram.compute_at(blurz, y);
-            histogram.update().reorder(c, r.x, r.y, x, y).unroll(c);
-            blurx.compute_root().reorder(c, x, y, z).parallel(z).vectorize(x, 8).unroll(c);
-            blury.compute_root().reorder(c, x, y, z).parallel(z).vectorize(x, 8).unroll(c);
-            bilateral_grid.compute_root().parallel(y).vectorize(x, 8);
+            histogram.update()
+                .reorder(c, r.x, r.y, x, y)
+                .unroll(c);
+            blurx.compute_root()
+                .reorder(c, x, y, z)
+                .parallel(z)
+                .vectorize(x, 8)
+                .unroll(c);
+            blury.compute_root()
+                .reorder(c, x, y, z)
+                .parallel(z)
+                .vectorize(x, 8)
+                .unroll(c);
+            bilateral_grid.compute_root()
+                .parallel(y)
+                .vectorize(x, 8);
         }
 
         /* Optional tags to specify layout for HalideTraceViz */

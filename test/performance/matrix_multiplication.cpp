@@ -1,11 +1,11 @@
 #include "Halide.h"
-#include <cstdio>
 #include "halide_benchmark.h"
+#include <cstdio>
 
 using namespace Halide;
 using namespace Halide::Tools;
 
-void simple_version(float* A, float *B, float *C, int width, int stride) {
+void simple_version(float *A, float *B, float *C, int width, int stride) {
     for (int iy = 0; iy < width; iy++) {
         for (int ix = 0; ix < width; ix++) {
             float *cc = C + iy * stride + ix;
@@ -17,7 +17,6 @@ void simple_version(float* A, float *B, float *C, int width, int stride) {
         }
     }
 }
-
 
 int main(int argc, char **argv) {
     const int matrix_size = 992;
@@ -39,14 +38,16 @@ int main(int argc, char **argv) {
     Var xy;
 
     out.tile(x, y, xi, yi, 24, 32)
-        .fuse(x, y, xy).parallel(xy)
+        .fuse(x, y, xy)
+        .parallel(xy)
         .split(yi, yi, yii, 4)
         .vectorize(xi, 8)
         .unroll(xi)
         .unroll(yii);
 
     matrix_mul.compute_at(out, yi)
-        .vectorize(x, 8).unroll(y);
+        .vectorize(x, 8)
+        .unroll(y);
 
     matrix_mul.update(0)
         .reorder(x, y, k)

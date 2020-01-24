@@ -77,10 +77,6 @@ class BoundSmallAllocations : public IRMutator {
             << "Allocation " << op->name << " has a dynamic size. "
             << "Only fixed-size allocations can be stored in registers. "
             << "Try storing on the heap or stack instead.";
-        user_assert(!in_thread_loop || bound.defined())
-            << "Allocation " << op->name << " has a dynamic size. "
-            << "Only fixed-size allocations are supported on the gpu. "
-            << "Try storing into shared memory instead.";
 
         const int64_t *size_ptr = bound.defined() ? as_const_int(bound) : nullptr;
         int64_t size = size_ptr ? *size_ptr : 0;

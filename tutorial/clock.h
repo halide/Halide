@@ -24,8 +24,8 @@ double current_time() {
     } else {
         timeval t;
         gettimeofday(&t, NULL);
-        return ((t.tv_sec - reference_time.tv_sec)*1000.0 +
-                (t.tv_usec - reference_time.tv_usec)/1000.0);
+        return ((t.tv_sec - reference_time.tv_sec) * 1000.0 +
+                (t.tv_usec - reference_time.tv_usec) / 1000.0);
     }
 }
 #endif

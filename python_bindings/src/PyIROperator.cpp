@@ -34,7 +34,7 @@ void define_operators(py::module &m) {
         if (args.size() < 2) {
             throw py::value_error("max() must have at least 2 arguments");
         }
-        int pos = (int) args.size() - 1;
+        int pos = (int)args.size() - 1;
         Expr value = args[pos--].cast<Expr>();
         while (pos >= 0) {
             value = max(args[pos--].cast<Expr>(), value);
@@ -46,7 +46,7 @@ void define_operators(py::module &m) {
         if (args.size() < 2) {
             throw py::value_error("min() must have at least 2 arguments");
         }
-        int pos = (int) args.size() - 1;
+        int pos = (int)args.size() - 1;
         Expr value = args[pos--].cast<Expr>();
         while (pos >= 0) {
             value = min(args[pos--].cast<Expr>(), value);
@@ -65,7 +65,7 @@ void define_operators(py::module &m) {
         if ((args.size() % 2) == 0) {
             throw py::value_error("select() must have an odd number of arguments");
         }
-        int pos = (int) args.size() - 1;
+        int pos = (int)args.size() - 1;
         Expr false_value = args[pos--].cast<Expr>();
         while (pos > 0) {
             Expr true_value = args[pos--].cast<Expr>();
@@ -81,11 +81,12 @@ void define_operators(py::module &m) {
         _halide_user_assert((args.size() % 2) != 0)
             << "tuple_select() must have an odd number of arguments";
 
-        int pos = (int) args.size() - 1;
+        int pos = (int)args.size() - 1;
         Tuple false_value = args[pos--].cast<Tuple>();
         bool has_tuple_cond = false, has_expr_cond = false;
         while (pos > 0) {
-            Tuple true_value = args[pos--].cast<Tuple>();;
+            Tuple true_value = args[pos--].cast<Tuple>();
+            ;
             // Note that 'condition' can be either Expr or Tuple, but must be consistent across all
             py::object py_cond = args[pos--];
             Expr expr_cond;
@@ -105,7 +106,7 @@ void define_operators(py::module &m) {
             }
         }
         _halide_user_assert(!(has_tuple_cond && has_expr_cond))
-            <<"tuple_select() may not mix Expr and Tuple for the condition elements.";
+            << "tuple_select() may not mix Expr and Tuple for the condition elements.";
         return to_python_tuple(false_value);
     });
 
@@ -142,38 +143,44 @@ void define_operators(py::module &m) {
     m.def("is_nan", &is_nan);
     m.def("is_inf", &is_inf);
     m.def("is_finite", &is_finite);
-    m.def("reinterpret", (Expr (*)(Type, Expr)) &reinterpret);
-    m.def("cast", (Expr (*)(Type, Expr)) &cast);
+    m.def("reinterpret", (Expr(*)(Type, Expr)) & reinterpret);
+    m.def("cast", (Expr(*)(Type, Expr)) & cast);
     m.def("print", [](py::args args) -> Expr {
         return print(args_to_vector_for_print(args));
     });
-    m.def("print_when", [](Expr condition, py::args args) -> Expr {
-        return print_when(condition, args_to_vector_for_print(args));
-    }, py::arg("condition"));
-    m.def("require", [](Expr condition, Expr value, py::args args) -> Expr {
-        auto v = args_to_vector<Expr>(args);
-        v.insert(v.begin(), value);
-        return require(condition, v);
-    }, py::arg("condition"), py::arg("value"));
+    m.def(
+        "print_when", [](Expr condition, py::args args) -> Expr {
+            return print_when(condition, args_to_vector_for_print(args));
+        },
+        py::arg("condition"));
+    m.def(
+        "require", [](Expr condition, Expr value, py::args args) -> Expr {
+            auto v = args_to_vector<Expr>(args);
+            v.insert(v.begin(), value);
+            return require(condition, v);
+        },
+        py::arg("condition"), py::arg("value"));
     m.def("lerp", &lerp);
     m.def("popcount", &popcount);
     m.def("count_leading_zeros", &count_leading_zeros);
     m.def("count_trailing_zeros", &count_trailing_zeros);
     m.def("div_round_to_zero", &div_round_to_zero);
     m.def("mod_round_to_zero", &mod_round_to_zero);
-    m.def("random_float", (Expr (*)()) &random_float);
-    m.def("random_uint", (Expr (*)()) &random_uint);
-    m.def("random_int", (Expr (*)()) &random_int);
-    m.def("random_float", (Expr (*)(Expr)) &random_float, py::arg("seed"));
-    m.def("random_uint", (Expr (*)(Expr)) &random_uint, py::arg("seed"));
-    m.def("random_int", (Expr (*)(Expr)) &random_int, py::arg("seed"));
-    m.def("undef", (Expr (*)(Type)) &undef);
-    m.def("memoize_tag", [](Expr result, py::args cache_key_values) -> Expr {
-        return Internal::memoize_tag_helper(result, args_to_vector<Expr>(cache_key_values));
-    }, py::arg("result"));
+    m.def("random_float", (Expr(*)()) & random_float);
+    m.def("random_uint", (Expr(*)()) & random_uint);
+    m.def("random_int", (Expr(*)()) & random_int);
+    m.def("random_float", (Expr(*)(Expr)) & random_float, py::arg("seed"));
+    m.def("random_uint", (Expr(*)(Expr)) & random_uint, py::arg("seed"));
+    m.def("random_int", (Expr(*)(Expr)) & random_int, py::arg("seed"));
+    m.def("undef", (Expr(*)(Type)) & undef);
+    m.def(
+        "memoize_tag", [](Expr result, py::args cache_key_values) -> Expr {
+            return Internal::memoize_tag_helper(result, args_to_vector<Expr>(cache_key_values));
+        },
+        py::arg("result"));
     m.def("likely", &likely);
     m.def("likely_if_innermost", &likely_if_innermost);
-    m.def("saturating_cast", (Expr (*)(Type, Expr))&saturating_cast);
+    m.def("saturating_cast", (Expr(*)(Type, Expr)) & saturating_cast);
     m.def("strict_float", &strict_float);
 }
 

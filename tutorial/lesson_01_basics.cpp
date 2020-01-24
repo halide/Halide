@@ -93,7 +93,7 @@ int main(int argc, char **argv) {
             if (output(i, j) != i + j) {
                 printf("Something went wrong!\n"
                        "Pixel %d, %d was supposed to be %d, but instead it's %d\n",
-                       i, j, i+j, output(i, j));
+                       i, j, i + j, output(i, j));
                 return -1;
             }
         }

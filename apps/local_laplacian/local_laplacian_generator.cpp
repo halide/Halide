@@ -102,7 +102,8 @@ public:
         if (auto_schedule) {
             // Nothing.
         } else if (get_target().has_gpu_feature()) {
-            // gpu schedule
+            // GPU schedule.
+            // 3.19ms on an RTX 2060.
             remap.compute_root();
             Var xi, yi;
             output.compute_root().gpu_tile(x, y, xi, yi, 16, 8);
@@ -119,7 +120,16 @@ public:
                 outGPyramid[j].compute_root().gpu_tile(x, y, xi, yi, blockw, blockh);
             }
         } else {
-            // cpu schedule
+            // CPU schedule.
+
+            // 21.4ms on an Intel i9-9960X using 32 threads at 3.7
+            // GHz, using the target x86-64-avx2.
+
+            // This app is dominated by data-dependent loads from
+            // memory, so we're better off leaving the AVX-512 units
+            // off in exchange for a higher clock, and we benefit from
+            // hyperthreading.
+
             remap.compute_root();
             Var yo;
             output.reorder(c, x, y).split(y, yo, y, 64).parallel(yo).vectorize(x, 8);

@@ -17,13 +17,12 @@ int main(int argc, char **argv) {
     RDom r(0, 4);
 
     f(x) = x;
-    f(r) = f(r-1) + f(r+1);
+    f(r) = f(r - 1) + f(r + 1);
     f.compute_root().vectorize(x, 4);
     f.update();
 
     g(x) = f(x);
     Buffer<int> result = g.realize(4);
-
 
     // The sequence generated should be:
     // -1, (-1 + 1) = 0, 0 + 2 = 2, 2 + 3 = 5, 5 + 4 = 9

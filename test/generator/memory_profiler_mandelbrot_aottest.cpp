@@ -1,12 +1,12 @@
-#include <map>
-#include <cstring>
-#include <string>
 #include <assert.h>
 #include <cmath>
+#include <cstring>
+#include <map>
 #include <stdio.h>
+#include <string>
 
-#include "HalideRuntime.h"
 #include "HalideBuffer.h"
+#include "HalideRuntime.h"
 #include "memory_profiler_mandelbrot.h"
 
 using namespace Halide::Runtime;
@@ -26,13 +26,13 @@ const int iters = 20;
 const int tile_x = 8, tile_y = 8, vectorize = 4;
 
 // Expected stack size for argmin
-const int argmin_stack_peak = vectorize*sizeof(uint8_t) + vectorize*sizeof(int32_t);
+const int argmin_stack_peak = vectorize * sizeof(uint8_t) + vectorize * sizeof(int32_t);
 
 // Expected heap size for mandelbrot
-const int y_niters = (height + tile_y - 1)/tile_y;
-const int x_niters = (width + tile_x - 1)/tile_x;
+const int y_niters = (height + tile_y - 1) / tile_y;
+const int x_niters = (width + tile_x - 1) / tile_x;
 const int mandelbrot_n_mallocs = 2 * y_niters * x_niters * num_launcher_tasks;
-const uint64_t mandelbrot_heap_per_iter = 2*tile_x*tile_y*4*(iters+1); // Heap per iter for one task
+const uint64_t mandelbrot_heap_per_iter = 2 * tile_x * tile_y * 4 * (iters + 1);  // Heap per iter for one task
 const uint64_t mandelbrot_heap_total = mandelbrot_heap_per_iter * y_niters * x_niters * num_launcher_tasks;
 
 void validate(halide_profiler_state *s) {
@@ -59,7 +59,6 @@ void validate(halide_profiler_state *s) {
     }
 }
 
-
 int launcher_task(void *user_context, int index, uint8_t *closure) {
     Buffer<int> output(width, height);
     float fx = cos(index / 10.0f), fy = sin(index / 10.0f);
@@ -78,8 +77,8 @@ int main(int argc, char **argv) {
     printf("mandelbrot expected value\n  nmalocs (all tasks): %d, heap/iter "
            "(per task): %d K, heap total (all tasks): %d K\n",
            mandelbrot_n_mallocs,
-           (int)(mandelbrot_heap_per_iter/1024),
-           (int)(mandelbrot_heap_total/1024));
+           (int)(mandelbrot_heap_per_iter / 1024),
+           (int)(mandelbrot_heap_total / 1024));
     printf("argmin expected value\n  stack peak: %d\n", argmin_stack_peak);
     printf("\n");
 

@@ -12,7 +12,7 @@ double square(double x) {
     return x * x;
 }
 
-template <typename T>
+template<typename T>
 void test_function(Expr e, Buffer<T> &cpu_result, Buffer<T> &gpu_result) {
     Func cpu("cpu"), gpu("gpu");
 
@@ -28,7 +28,7 @@ void test_function(Expr e, Buffer<T> &cpu_result, Buffer<T> &gpu_result) {
     gpu_result.copy_to_host();
 }
 
-template <typename T>
+template<typename T>
 bool test_exact(Expr r, Expr g, Expr b) {
     Expr e = cast<T>(select(c == T(0), r,
                             c == T(1), g,
@@ -59,7 +59,7 @@ bool test_exact(Expr r, Expr g, Expr b) {
     return true;
 }
 
-template <typename T>
+template<typename T>
 bool test_approx(Expr r, Expr g, Expr b, double rms_error) {
     Expr e = cast<T>(select(c == 0, r, c == 1, g, b));
     const int W = 256, H = 256;

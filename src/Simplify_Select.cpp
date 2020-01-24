@@ -22,6 +22,7 @@ Expr Simplify::visit(const Select *op, ExprInfo *bounds) {
     if (may_simplify(op->type)) {
         auto rewrite = IRMatcher::rewriter(IRMatcher::select(condition, true_value, false_value), op->type);
 
+        // clang-format off
         if (EVAL_IN_LAMBDA
             (rewrite(select(IRMatcher::intrin(Call::likely, true), x, y), x) ||
              rewrite(select(IRMatcher::intrin(Call::likely, false), x, y), y) ||
@@ -34,21 +35,12 @@ Expr Simplify::visit(const Select *op, ExprInfo *bounds) {
              rewrite(select(x, y, intrin(Call::likely, y)), false_value) ||
              rewrite(select(x, intrin(Call::likely_if_innermost, y), y), true_value) ||
              rewrite(select(x, y, intrin(Call::likely_if_innermost, y)), false_value) ||
-
-             // Select evaluates both sides, so if we have an
-             // unreachable expression on one side we can't use a
-             // signalling error. Call it UB and assume it can't
-             // happen. The tricky case to consider is:
-             // select(x > 0, a/x, select(x < 0, b/x, indeterminate()))
-             // If we use a signalling error and x > 0, then this will
-             // evaluate indeterminate(), because the top-level select
-             // evaluates both sides.
-
-             rewrite(select(x, y, IRMatcher::Indeterminate()), y) ||
-             rewrite(select(x, IRMatcher::Indeterminate(), y), y))) {
+             false)) {
             return rewrite.result;
         }
+        // clang-format on
 
+        // clang-format off
         if (EVAL_IN_LAMBDA
             (rewrite(select(broadcast(x), y, z), select(x, y, z)) ||
              rewrite(select(x != y, z, w), select(x == y, w, z)) ||
@@ -133,6 +125,7 @@ Expr Simplify::visit(const Select *op, ExprInfo *bounds) {
                rewrite(select(x, true, y), x || y))))) {
             return mutate(std::move(rewrite.result), bounds);
         }
+        // clang-format on
     }
 
     if (condition.same_as(op->condition) &&
