@@ -1,0 +1,7 @@
+find_package(OpenGL)
+if (OpenGL_FOUND)
+    tests(opengl)
+    foreach (test_name ${TEST_NAMES})
+        target_link_libraries("${test_name}" PRIVATE OpenGL::GL)
+    endforeach ()
+endif ()
