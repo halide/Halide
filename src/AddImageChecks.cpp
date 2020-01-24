@@ -591,30 +591,28 @@ Stmt add_image_checks(Stmt s,
         }
     }
 
+    auto prepend_stmts = [&](vector<Stmt> *stmts) {
+        while (!stmts->empty()) {
+            s = Block::make(std::move(stmts->back()), s);
+            stmts->pop_back();
+        }
+    };
+
+    auto prepend_lets = [&](vector<pair<string, Expr>> *lets) {
+        while (!lets->empty()) {
+            auto &p = lets->back();
+            s = LetStmt::make(std::move(p.first), std::move(p.second), s);
+            lets->pop_back();
+        }
+    };
+
     if (!no_asserts) {
         // Inject the code that checks the host pointers.
-        for (size_t i = asserts_host_non_null.size(); i > 0; i--) {
-            s = Block::make(asserts_host_non_null[i - 1], s);
-        }
-
-        for (size_t i = asserts_host_alignment.size(); i > 0; i--) {
-            s = Block::make(asserts_host_alignment[i - 1], s);
-        }
-
-        // Check the device_dirty fields
-        for (size_t i = asserts_device_not_dirty.size(); i > 0; i--) {
-            s = Block::make(asserts_device_not_dirty[i - 1], s);
-        }
-
-        // Inject the code that checks that no dimension math overflows
-        for (size_t i = dims_no_overflow_asserts.size(); i > 0; i--) {
-            s = Block::make(dims_no_overflow_asserts[i - 1], s);
-        }
-
-        // Inject the code that defines the proposed sizes.
-        for (size_t i = lets_overflow.size(); i > 0; i--) {
-            s = LetStmt::make(lets_overflow[i - 1].first, lets_overflow[i - 1].second, s);
-        }
+        prepend_stmts(&asserts_host_non_null);
+        prepend_stmts(&asserts_host_alignment);
+        prepend_stmts(&asserts_device_not_dirty);
+        prepend_stmts(&dims_no_overflow_asserts);
+        prepend_lets(&lets_overflow);
     }
 
     // Replace uses of the var with the constrained versions in the
@@ -630,58 +628,34 @@ Stmt add_image_checks(Stmt s,
     // Inject the code that checks the constraints are correct. We
     // need these regardless of how NoAsserts is set, because they are
     // what gets Halide to actually exploit the constraint.
-    for (size_t i = asserts_constrained.size(); i > 0; i--) {
-        s = Block::make(asserts_constrained[i - 1], s);
-    }
+    prepend_stmts(&asserts_constrained);
 
     if (!no_asserts) {
-        // Inject the code that checks for out-of-bounds access to the buffers.
-        for (size_t i = asserts_required.size(); i > 0; i--) {
-            s = Block::make(asserts_required[i - 1], s);
-        }
-
-        // Inject the code that checks that elem_sizes are ok.
-        for (size_t i = asserts_type_checks.size(); i > 0; i--) {
-            s = Block::make(asserts_type_checks[i - 1], s);
-        }
+        prepend_stmts(&asserts_required);
+        prepend_stmts(&asserts_type_checks);
     }
 
     // Inject the code that returns early for inference mode.
     if (!no_bounds_query) {
         s = IfThenElse::make(!maybe_return_condition, s);
-
-        // Inject the code that does the buffer rewrites for inference mode.
-        for (size_t i = buffer_rewrites.size(); i > 0; i--) {
-            s = Block::make(buffer_rewrites[i - 1], s);
-        }
+        prepend_stmts(&buffer_rewrites);
     }
 
     if (!no_asserts) {
-        // Inject the code that checks the proposed sizes still pass the bounds checks
-        for (size_t i = asserts_proposed.size(); i > 0; i--) {
-            s = Block::make(asserts_proposed[i - 1], s);
-        }
+        prepend_stmts(&asserts_proposed);
     }
 
     // Inject the code that defines the proposed sizes.
-    for (size_t i = lets_proposed.size(); i > 0; i--) {
-        s = LetStmt::make(lets_proposed[i - 1].first, lets_proposed[i - 1].second, s);
-    }
+    prepend_lets(&lets_proposed);
 
     // Inject the code that defines the constrained sizes.
-    for (size_t i = lets_constrained.size(); i > 0; i--) {
-        s = LetStmt::make(lets_constrained[i - 1].first, lets_constrained[i - 1].second, s);
-    }
+    prepend_lets(&lets_constrained);
 
     // Inject the code that defines the required sizes produced by bounds inference.
-    for (size_t i = lets_required.size(); i > 0; i--) {
-        s = LetStmt::make(lets_required[i - 1].first, lets_required[i - 1].second, s);
-    }
+    prepend_lets(&lets_required);
 
     // Inject the code that checks that does msan checks. (Note that this ignores no_asserts.)
-    for (size_t i = msan_checks.size(); i > 0; i--) {
-        s = Block::make(msan_checks[i - 1], s);
-    }
+    prepend_stmts(&msan_checks);
 
     return s;
 }
