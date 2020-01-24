@@ -412,6 +412,7 @@ endif()
 # ------------------------------------------------
 # install
 
+# TODO: the use of glob here is almost certainly brittle if not outright wrong.
 file(GLOB FILES "${CMAKE_BINARY_DIR}/include/HalideRuntime*.h")
 install(FILES
         "${CMAKE_BINARY_DIR}/include/Halide.h"
@@ -433,29 +434,30 @@ install(DIRECTORY tutorial
         PATTERN "*.png")
 
 # ---- Tools
-foreach(F mex_halide.m
-          GenGen.cpp
-          RunGen.h
-          RunGenMain.cpp
-          halide_benchmark.h
-          halide_image.h
-          halide_image_io.h
-          halide_image_info.h
-          halide_malloc_trace.h
-          halide_trace_config.h)
-  install(FILES "${Halide_SOURCE_DIR}/tools/${F}"
-          DESTINATION tools)
-endforeach()
+install(FILES
+        tools/mex_halide.m
+        tools/GenGen.cpp
+        tools/RunGen.h
+        tools/RunGenMain.cpp
+        tools/halide_benchmark.h
+        tools/halide_image.h
+        tools/halide_image_io.h
+        tools/halide_image_info.h
+        tools/halide_malloc_trace.h
+        tools/halide_trace_config.h
+        DESTINATION tools)
 
 # ---- README
-file(GLOB FILES "${Halide_SOURCE_DIR}/*.md")
-install(FILES ${FILES}
+install(FILES
+        CODE_OF_CONDUCT.md
+        README_cmake.md
+        README.md
+        README_rungen.md
+        README_webassembly.md
         DESTINATION .)
 
 # ---- halide.cmake
-file(GLOB FILES "${Halide_SOURCE_DIR}/*.cmake")
-install(FILES ${FILES}
-        DESTINATION .)
+install(FILES halide.cmake DESTINATION .)
 
 # ---- halide_config
 file(GLOB FILES "${Halide_SOURCE_DIR}/tools/halide_config.*.tpl")
