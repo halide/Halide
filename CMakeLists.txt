@@ -336,27 +336,8 @@ foreach (build_config Debug Release RelWithDebInfo MinSizeRel)
   endforeach()
 endforeach()
 
-function(define_test_group GROUP)
-  if(TARGET "${GROUP}")
-    message(FATAL_ERROR "Group ${GROUP} is already defined.")
-  endif()
-  add_custom_target("${GROUP}")
-  set_target_properties("${GROUP}" PROPERTIES EXCLUDE_FROM_ALL TRUE)
-endfunction()
-
-define_test_group(build_tests)
-define_test_group(run_tests)
-
-# Make a target that aggregates a number of other targets;
-# this can be used to group builds (e.g. "build_tests")
-# or to execute targets (by adding executable custom-commands);
-# the latter is used to execute test targets.
-#
-# Note that the target will be excluded from the "all" target, so it won't
-# be built by "make all" by default.
-#
 # TODO: this is intended to eventually replicate all of the interesting test targets
-# from our Make build, but not all are implemented yet:
+#       from our Make build, but not all are implemented yet:
 # TODO(srj): add test_aotcpp_generators support
 # TODO(srj): add test_valgrind variant
 # TODO(srj): add test_avx512 variant
@@ -367,55 +348,16 @@ function(add_halide_test TARGET)
   set(oneValueArgs WORKING_DIRECTORY)
   set(multiValueArgs GROUPS)
   cmake_parse_arguments(args "${options}" "${oneValueArgs}" "${multiValueArgs}" ${ARGN})
-  foreach(GROUP ${args_GROUPS})
-    if(NOT TARGET "${GROUP}")
-      define_test_group("${GROUP}")
-    endif()
-  endforeach()
 
-  set(BUILD_NAME "${TARGET}")
-  set_target_properties("${BUILD_NAME}" PROPERTIES EXCLUDE_FROM_ALL TRUE)
-  add_dependencies(build_tests "${BUILD_NAME}")
+  add_test(NAME ${TARGET}
+          COMMAND ${TARGET}
+          WORKING_DIRECTORY "${WORKING_DIRECTORY}")
 
-  set(EXEC_NAME "run_${TARGET}")
-  get_target_property(TARGET_TYPE "${TARGET}" TYPE)
-  if("${TARGET_TYPE}" STREQUAL "EXECUTABLE")
-    if(${args_EXPECT_FAILURE})
-      set(COMMAND "${Halide_SOURCE_DIR}/test/common/expect_failure.sh" "${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/${TARGET}")
-    else()
-      set(COMMAND "${TARGET}")
-    endif()
-    add_custom_target("${EXEC_NAME}"
-                     COMMAND ${COMMAND}
-                     WORKING_DIRECTORY ${args_WORKING_DIRECTORY}
-                     COMMENT "Executing ${TARGET}"
-                     DEPENDS "${TARGET}")
-  elseif("${TARGET_TYPE}" STREQUAL "UTILITY")
-    # It's probably a custom target or a group: just depend on it.
-    add_custom_target("${EXEC_NAME}" DEPENDS "${TARGET}")
-  else()
-    message(FATAL_ERROR "add_halide_test(): unsupported type ${TARGET_TYPE} for ${TARGET}")
-  endif()
-  set_target_properties("${EXEC_NAME}" PROPERTIES EXCLUDE_FROM_ALL TRUE)
-  foreach(GROUP ${args_GROUPS})
-    add_dependencies("${GROUP}" "${EXEC_NAME}")
-  endforeach()
-  add_test(NAME ${TARGET} COMMAND ${COMMAND})
-
+  set_tests_properties(${TARGET} PROPERTIES LABELS "${args_GROUPS}")
+  if (${args_EXPECT_FAILURE})
+    set_tests_properties(${TARGET} PROPERTIES WILL_FAIL true)
+  endif ()
 endfunction()
-
-# Only groups that are defined in *this file* will have projects reliably
-# defined for them in MSVC builds; pre-define the targets we want to be available
-# here to ensure that happens.
-define_test_group(test_auto_schedule)
-define_test_group(test_correctness)
-define_test_group(test_error)
-define_test_group(test_generator)
-define_test_group(test_internal)
-define_test_group(test_opengl)
-define_test_group(test_performance)
-define_test_group(test_tutorial)
-define_test_group(test_warning)
 
 add_subdirectory(src)
 option(WITH_TESTS "Build tests" ON)

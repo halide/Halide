@@ -8,7 +8,7 @@ option(WITH_TEST_AUTO_SCHEDULE "Build auto_schedule tests" ON)
 
 halide_project(_test_internal internal internal.cpp)
 target_include_directories(_test_internal PRIVATE "${Halide_SOURCE_DIR}/src")
-add_halide_test(_test_internal GROUPS test_internal run_tests)
+add_halide_test(_test_internal GROUPS internal)
 
 function(test_plain_c_includes)
     set(folder "correctness")
