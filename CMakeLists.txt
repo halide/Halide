@@ -468,7 +468,7 @@ foreach(F ${FILES})
 endforeach()
 
 add_custom_target(distrib
-  COMMAND cmake -E echo "\\'make distrib\\' is not available under CMake. Use \\'make package\\' instead.")
+  COMMAND ${CMAKE_COMMAND} -E echo "\\'make distrib\\' is not available under CMake. Use \\'make package\\' instead.")
 
 add_custom_target(format
   COMMAND find "${Halide_SOURCE_DIR}/apps" "${Halide_SOURCE_DIR}/src" "${Halide_SOURCE_DIR}/tools" "${Halide_SOURCE_DIR}/test" "${Halide_SOURCE_DIR}/util" "${Halide_SOURCE_DIR}/python_bindings" -name *.cpp -o -name *.h -o -name *.c | xargs ${CLANG}-format -i -style=file)
