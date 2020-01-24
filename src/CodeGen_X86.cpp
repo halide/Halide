@@ -283,7 +283,7 @@ void CodeGen_X86::visit(const Cast *op) {
          u16((wild_u32x_ * wild_u32x_) / 65536)},
         {Target::AVX2, true, Int(16, 16), 9, "llvm.x86.avx2.pmul.hr.sw",
          i16((((wild_i32x_ * wild_i32x_) + 16384)) / 32768)},
- 
+
         {Target::FeatureEnd, true, Int(16, 8), 0, "llvm.x86.sse2.pmulh.w",
          i16((wild_i32x_ * wild_i32x_) / 65536)},
         {Target::FeatureEnd, true, UInt(16, 8), 0, "llvm.x86.sse2.pmulhu.w",
