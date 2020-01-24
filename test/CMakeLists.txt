@@ -14,7 +14,7 @@ function(tests folder)
     file(GLOB TESTS RELATIVE "${CMAKE_CURRENT_SOURCE_DIR}" "*.cpp")
     set(TEST_NAMES "")
     foreach (file ${TESTS})
-        string(REPLACE ".cpp" "" name "${file}")
+        get_filename_component(name "${file}" NAME_WLE)
 
         set(TARGET "${folder}_${name}")
         list(APPEND TEST_NAMES "${TARGET}")
@@ -38,22 +38,19 @@ function(tests folder)
             target_include_directories("${TARGET}" PRIVATE "${CMAKE_SOURCE_DIR}/src")
         endif ()
 
-        set(GROUPS "test_${folder}")
+        set(GROUPS "${folder}")
         if ("${folder}" STREQUAL "performance" OR "${folder}" STREQUAL "auto_schedule" OR "${folder}" STREQUAL "opengl")
             # These shouldn't be part of run_tests, since they must be run with -j for timing purposes
             # Exception: opengl is excluded because Makefile excludes it too. Why?
         else ()
-            list(APPEND GROUPS run_tests)
-        endif ()
-        if ("${folder}" STREQUAL "error")
-            add_halide_test("${TARGET}"
-                    GROUPS ${GROUPS}
-                    EXPECT_FAILURE)
-        else ()
-            add_halide_test("${TARGET}"
-                    GROUPS ${GROUPS})
+            list(APPEND GROUPS all)
         endif ()
 
+        if ("${folder}" STREQUAL "error")
+            add_halide_test("${TARGET}" GROUPS ${GROUPS} EXPECT_FAILURE)
+        else ()
+            add_halide_test("${TARGET}" GROUPS ${GROUPS})
+        endif ()
     endforeach ()
     set(TEST_NAMES "${TEST_NAMES}" PARENT_SCOPE)
 endfunction(tests)
