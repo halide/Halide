@@ -281,11 +281,15 @@ void CodeGen_X86::visit(const Cast *op) {
          i16((wild_i32x_ * wild_i32x_) / 65536)},
         {Target::AVX2, true, UInt(16, 16), 9, "llvm.x86.avx2.pmulhu.w",
          u16((wild_u32x_ * wild_u32x_) / 65536)},
-
+        {Target::AVX2, true, Int(16, 16), 9, "llvm.x86.avx2.pmul.hr.sw",
+         i16((((wild_i32x_ * wild_i32x_) + 16384)) / 32768)},
+ 
         {Target::FeatureEnd, true, Int(16, 8), 0, "llvm.x86.sse2.pmulh.w",
          i16((wild_i32x_ * wild_i32x_) / 65536)},
         {Target::FeatureEnd, true, UInt(16, 8), 0, "llvm.x86.sse2.pmulhu.w",
          u16((wild_u32x_ * wild_u32x_) / 65536)},
+        {Target::SSE41, true, Int(16, 8), 0, "llvm.x86.ssse3.pmul.hr.sw.128",
+         i16((((wild_i32x_ * wild_i32x_) + 16384)) / 32768)},
         // LLVM 6.0+ require using helpers from x86.ll, x86_avx.ll
         {Target::AVX2, true, UInt(8, 32), 17, "pavgbx32",
          u8(((wild_u16x_ + wild_u16x_) + 1) / 2)},
