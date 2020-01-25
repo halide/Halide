@@ -16,7 +16,6 @@ cmake_minimum_required(VERSION 3.3)
 
 # Add the include paths and link dependencies for halide_image_io.
 add_library(halide_image_io INTERFACE)
-
 foreach(LIB IN ITEMS PNG JPEG)
   find_package(${LIB} QUIET)
   if(${LIB}_FOUND)
@@ -27,9 +26,11 @@ foreach(LIB IN ITEMS PNG JPEG)
     target_compile_definitions(halide_image_io INTERFACE HALIDE_NO_${LIB})
   endif()
 endforeach()
+add_library(Halide::ImageIO ALIAS halide_image_io)
 
 function(halide_use_image_io TARGET)
-  target_link_libraries(${TARGET} PRIVATE halide_image_io)
+  message(DEPRECATION "Use: target_link_libraries(${TARGET} PRIVATE Halide::ImageIO)")
+  target_link_libraries(${TARGET} PRIVATE Halide::ImageIO)
 endfunction()
 
 # Make a build target for a Generator.
