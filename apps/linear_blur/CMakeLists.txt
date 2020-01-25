@@ -24,6 +24,4 @@ halide_library(linear_blur
                EXTRA_OUTPUTS stmt schedule)
 
 add_executable(run_linear_blur run_linear_blur.cpp)
-halide_use_image_io(run_linear_blur)
-
-target_link_libraries(run_linear_blur PRIVATE linear_blur simple_blur)
+target_link_libraries(run_linear_blur PRIVATE Halide::ImageIO linear_blur simple_blur)

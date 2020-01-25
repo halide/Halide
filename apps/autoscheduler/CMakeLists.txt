@@ -92,7 +92,7 @@ add_executable(demo_apps_autoscheduler ${HALIDE_TOOLS_DIR}/RunGenMain.cpp
 target_include_directories(
   demo_apps_autoscheduler
   PRIVATE "${HALIDE_INCLUDE_DIR}" "${HALIDE_TOOLS_DIR}")
-halide_use_image_io(demo_apps_autoscheduler)
+target_link_libraries(demo_apps_autoscheduler PRIVATE Halide::ImageIO)
 target_link_libraries(demo_apps_autoscheduler PRIVATE demo)
 add_dependencies(demo_apps_autoscheduler demo auto_schedule)
 
@@ -121,9 +121,7 @@ add_executable(demo_included_schedule_file ${HALIDE_TOOLS_DIR}/RunGenMain.cpp
 target_include_directories(
   demo_included_schedule_file
   PRIVATE "${HALIDE_INCLUDE_DIR}" "${HALIDE_TOOLS_DIR}")
-halide_use_image_io(demo_included_schedule_file)
-target_link_libraries(demo_included_schedule_file
-                      PRIVATE included_schedule_file)
+target_link_libraries(demo_included_schedule_file PRIVATE Halide::ImageIO included_schedule_file)
 add_dependencies(demo_included_schedule_file included_schedule_file
                  auto_schedule)
 
