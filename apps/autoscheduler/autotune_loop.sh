@@ -83,6 +83,9 @@ BATCH_SIZE=32
 NUM_CORES=80
 EPOCHS=100
 
+# Latest git hash
+GIT_HASH=$(git rev-parse --verify HEAD)
+
 if [[ $TRAIN_ONLY != 1 ]]; then
     get_timeout_cmd TIMEOUT_CMD
 fi
@@ -120,8 +123,6 @@ make_featurization() {
         # Sample 0 in each batch is best effort beam search, with no randomness
         dropout=100
         beam=32
-        #dropout=1  # 1% chance of operating entirely greedily
-        #beam=1
     else
         # The other samples are random probes biased by the cost model
         dropout=1  # 1% chance of operating entirely greedily
@@ -153,6 +154,9 @@ make_featurization() {
 
     FAILED=0
     eval $CMD || FAILED=1
+
+    echo "git rev-parse --verify HEAD = ${GIT_HASH}" >> ${D}/compile_err.txt
+
     record_command $BATCH $SAMPLE_ID "${CMD/$WEIGHTS/$USED_WEIGHTS}" "autoschedule_command" $FAILED
     if [[ $FAILED == 1 ]]; then
         echo "Autoschedule failed or timed out for ${D}"

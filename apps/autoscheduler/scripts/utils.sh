@@ -272,6 +272,10 @@ function extract_sample_details() {
 
     head -n $((end_line - 1)) ${compile_err} | tail -n $((end_line - start_line)) > "${output_file}"
 
+    echo "" >> ${output_file}
+    local -r git_hash=$(grep "git rev-parse" ${compile_err} | tail -n 1 | cut -d" " -f 6)
+    echo "git rev-parse --verify HEAD = ${git_hash}" >> ${output_file}
+
     local -r time=$(head -n 1 ${bench} | cut -d" " -f 8)
 
     local -r time_ms=$(echo "${time} * 1000" | bc -l | awk '{printf "%.6f\n", $0}')
