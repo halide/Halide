@@ -353,7 +353,7 @@ function(add_halide_test TARGET)
 
   add_test(NAME ${TARGET}
           COMMAND ${TARGET}
-          WORKING_DIRECTORY "${WORKING_DIRECTORY}")
+          WORKING_DIRECTORY "${args_WORKING_DIRECTORY}")
 
   set_tests_properties(${TARGET} PROPERTIES LABELS "${args_GROUPS}")
   if (${args_EXPECT_FAILURE})

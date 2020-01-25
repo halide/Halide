@@ -15,18 +15,21 @@ cmake_minimum_required(VERSION 3.3)
 #
 
 # Add the include paths and link dependencies for halide_image_io.
-function(halide_use_image_io TARGET)
-  foreach(PKG PNG JPEG)
-    find_package(${PKG} QUIET)
-    if(${PKG}_FOUND)
-      target_compile_definitions(${TARGET} PRIVATE ${${PKG}_DEFINITIONS})
-      target_include_directories(${TARGET} PRIVATE ${${PKG}_INCLUDE_DIRS})
-      target_link_libraries(${TARGET} PRIVATE ${${PKG}_LIBRARIES})
+add_library(halide_image_io INTERFACE)
+
+foreach(LIB IN ITEMS PNG JPEG)
+  find_package(${LIB} QUIET)
+  if(${LIB}_FOUND)
+    message(STATUS "Found ${LIB} version ${${LIB}_VERSION}")
+    target_link_libraries(halide_image_io INTERFACE ${LIB}::${LIB})
     else()
-      message(STATUS "${PKG} not found for ${TARGET}; compiling with -DHALIDE_NO_${PKG}")
-      target_compile_definitions(${TARGET} PRIVATE -DHALIDE_NO_${PKG})
-    endif()
-  endforeach()
+    message(STATUS "${LIB} not found; compiling with -DHALIDE_NO_${LIB}")
+    target_compile_definitions(halide_image_io INTERFACE HALIDE_NO_${LIB})
+  endif()
+endforeach()
+
+function(halide_use_image_io TARGET)
+  target_link_libraries(${TARGET} PRIVATE halide_image_io)
 endfunction()
 
 # Make a build target for a Generator.
