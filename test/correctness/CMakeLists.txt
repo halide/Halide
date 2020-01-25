@@ -1,7 +1,7 @@
 tests(correctness)
 
 # Make sure the test that needs image_io has it
-halide_use_image_io(correctness_image_io)
+target_link_libraries(correctness_image_io PRIVATE Halide::ImageIO)
 
 # Add the one C-language test manually
 add_executable(correctness_plain_c_includes plain_c_includes.c)
