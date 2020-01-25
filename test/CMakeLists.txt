@@ -2,7 +2,7 @@ function(tests folder)
     file(GLOB TESTS RELATIVE "${CMAKE_CURRENT_SOURCE_DIR}" "*.cpp")
     set(TEST_NAMES "")
     foreach (file ${TESTS})
-        get_filename_component(name "${file}" NAME_WLE)
+        get_filename_component(name "${file}" NAME_WE)
 
         set(TARGET "${folder}_${name}")
         list(APPEND TEST_NAMES "${TARGET}")
