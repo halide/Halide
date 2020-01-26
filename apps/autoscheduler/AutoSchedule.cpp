@@ -1385,7 +1385,7 @@ struct State {
             new_serial_vars.insert(new_outer.name());
             stage.split(v.var, new_outer, v.var, (int)v.extent, TailStrategy::GuardWithIf);
             stage.gpu_threads(v.var);
-            state->schedule_source << "\n    .split(" << v.var.name() << ", " << new_outer.name() << ", " << v.var.name() << ", " << v.extent << ")";
+            state->schedule_source << "\n    .split(" << v.var.name() << ", " << new_outer.name() << ", " << v.var.name() << ", " << v.extent << ", TailStrategy::GuardWithIf)";
             state->schedule_source << "\n    .gpu_threads(" << v.var.name() << ")";
             num_loops_tagged_gpu_thread++;
         }
@@ -1596,6 +1596,14 @@ struct State {
                     Var new_outer(outer_var.var.name() + "_outer");
                     stage.split(outer_var.var, new_outer, outer_var.var, (int)outer_var.extent);
 
+                    new_serial_vars.insert(new_outer.name());
+                    p.second->schedule_source
+                        << "\n    .split("
+                        << outer_var.var.name() << ", "
+                        << new_outer.name() << ", "
+                        << outer_var.var.name() << ", "
+                        << outer_var.extent << ")";
+
                     // If there are store_ats at Var::outermost(), we need to ensure
                     // that those store_ats are retained at the Var::outermost level
                     vars.push_back(new_outer);
@@ -1608,7 +1616,11 @@ struct State {
                         if (!first) {
                             p.second->schedule_source << ", ";
                         }
-                        p.second->schedule_source << v.name();
+                        if (v.name() == "__outermost") {
+                            p.second->schedule_source << "Var::outermost()";
+                        } else {
+                            p.second->schedule_source << v.name();
+                        }
                         first = false;
                     }
                     p.second->schedule_source << ")";
