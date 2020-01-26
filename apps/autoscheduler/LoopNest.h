@@ -24,9 +24,15 @@ struct Statistics {
     int num_memoized_featurizations{0};
     int num_memoization_hits{0};
     int num_memoization_misses{0};
+    std::chrono::duration<double> calculate_cost_time{0};
+    std::chrono::duration<double> enqueue_time{0};
     std::chrono::duration<double> featurization_time{0};
     int num_schedules_enqueued{0};
     std::chrono::duration<double> cost_model_evaluation_time{0};
+
+    double total_calculate_cost_time() const {
+        return std::chrono::duration_cast<std::chrono::milliseconds>(calculate_cost_time).count();
+    }
 
     double total_featurization_time() const {
         return std::chrono::duration_cast<std::chrono::milliseconds>(featurization_time).count();
@@ -36,8 +42,12 @@ struct Statistics {
         return total_featurization_time() / (double)num_featurizations;
     }
 
+    double total_enqueue_time() const {
+        return std::chrono::duration_cast<std::chrono::milliseconds>(enqueue_time).count();
+    }
+
     double total_cost_model_evaluation_time() const {
-        return std::chrono::duration_cast<std::chrono::milliseconds>(cost_model_evaluation_time).count();
+        return std::chrono::duration_cast<std::chrono::milliseconds>(enqueue_time + cost_model_evaluation_time).count();
     }
 
     double average_cost_model_evaluation_time() const {

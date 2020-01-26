@@ -788,6 +788,7 @@ struct State {
     }
 
     bool calculate_cost(const FunctionDAG &dag, const MachineParams &params, const Target& target, CostModel *cost_model, Statistics& stats, bool verbose = false) {
+        auto t1 = std::chrono::high_resolution_clock::now();
         if (!are_valid_thread_extents(root->get_union_thread_counts(nullptr))) {
             return false;
         }
@@ -803,6 +804,8 @@ struct State {
         if (exceeds_serial_extents_limit(target)) {
             return false;
         }
+
+        stats.calculate_cost_time += std::chrono::high_resolution_clock::now() - t1;
 
         StageMap<ScheduleFeatures> features;
 
@@ -846,7 +849,9 @@ struct State {
         // evaluate it until we call evaluate_costs (or if it runs out
         // of internal buffer space), so that the evaluations can be
         // batched.
+        t1 = std::chrono::high_resolution_clock::now();
         cost_model->enqueue(num_stages, &schedule_features, &cost);
+        stats.enqueue_time += std::chrono::high_resolution_clock::now() - t1;
         ++stats.num_schedules_enqueued;
 
         // index of current stage whose features we are reading
@@ -2140,6 +2145,8 @@ void generate_schedule(const std::vector<Function> &outputs,
     aslog(1) << "Number of memoization misses: " << stats.num_memoization_misses << '\n';
     aslog(1) << "Total featurization time (ms): " << stats.total_featurization_time() << "\n";
     aslog(1) << "Average featurization time (ms): " << stats.average_featurization_time() << "\n";
+    aslog(1) << "Total enqueue time (ms): " << stats.total_enqueue_time() << "\n";
+    aslog(1) << "Total calculate cost time (ms): " << stats.total_calculate_cost_time() << "\n";
 
     aslog(1) << "Number of schedules evaluated by cost model: " << stats.num_schedules_enqueued << '\n';
     aslog(1) << "Total cost model evaluation time (ms): " << stats.total_cost_model_evaluation_time() << "\n";
