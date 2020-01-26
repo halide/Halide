@@ -259,14 +259,14 @@ else()
 endif()
 
 if (NOT MSVC)
-  add_compile_options(-Wall
-                      -Wno-unused-function
-                      -Wcast-qual
-                      -Woverloaded-virtual
-                      -Wignored-qualifiers)
-  if (CMAKE_CXX_COMPILER_IS_GNUCC AND CMAKE_CXX_COMPILER_VERSION VERSION_GREATER 5.1)
-    add_compile_options(-Wsuggest-override)
-  endif()
+  add_compile_options(
+          -Wall
+          -Wno-unused-function
+          -Wcast-qual
+          -Woverloaded-virtual
+          -Wignored-qualifiers
+          $<$<AND:$<COMPILE_LANGUAGE:CXX>,$<CXX_COMPILER_ID:GNU>,$<VERSION_GREATER:$<CXX_COMPILER_VERSION>,5.1>>:-Wsuggest-override>
+  )
   if (WARNINGS_AS_ERRORS)
     add_compile_options(-Werror)
   endif()
