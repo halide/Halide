@@ -1,7 +1,5 @@
 include(CMakeParseArguments)
 
-cmake_minimum_required(VERSION 3.3)
-
 # ----------------------- Public Functions.
 # These are all documented in README_cmake.md.
 #
@@ -313,16 +311,20 @@ function(halide_library NAME)
 endfunction()
 
 # ----------------------- Private Functions.
-# All functions, properties, variables, etc. that being with an underscore
+# All functions, properties, variables, etc. that begin with an underscore
 # should be assumed to be private implementation details; don't rely on them externally.
 
 # Set the C++ options necessary for using libHalide.
 function(_halide_set_cxx_options TARGET)
   if (MSVC)
-    target_compile_definitions("${TARGET}" PUBLIC "-D_CRT_SECURE_NO_WARNINGS" "-D_SCL_SECURE_NO_WARNINGS")
-    target_compile_options("${TARGET}" PRIVATE "/GR-")
-  else()
-    target_compile_options("${TARGET}" PRIVATE "-fno-rtti")
+    target_compile_definitions("${TARGET}" PRIVATE "-D_CRT_SECURE_NO_WARNINGS" "-D_SCL_SECURE_NO_WARNINGS")
+  endif()
+  if(NOT HALIDE_ENABLE_RTTI)
+    if(MSVC)
+      target_compile_options("${TARGET}" PRIVATE "/GR-")
+    else()
+      target_compile_options("${TARGET}" PRIVATE "-fno-rtti")
+    endif()
   endif()
 endfunction()
 

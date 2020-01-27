@@ -67,9 +67,9 @@ endif()
 
 if(NOT HALIDE_ENABLE_RTTI)
   if(NOT MSVC)
-    target_compile_options(auto_schedule PUBLIC "-fno-rtti")
+    target_compile_options(auto_schedule PRIVATE "-fno-rtti")
   else()
-    target_compile_options(auto_schedule PUBLIC "/GR-")
+    target_compile_options(auto_schedule PRIVATE "/GR-")
   endif()
 endif()
 
