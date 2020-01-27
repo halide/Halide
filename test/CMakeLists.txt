@@ -1,45 +1,42 @@
-function(tests folder)
-    file(GLOB TESTS RELATIVE "${CMAKE_CURRENT_SOURCE_DIR}" "*.cpp")
+function(tests)
+    set(options EXPECT_FAILURE)
+    set(oneValueArgs)
+    set(multiValueArgs SOURCES GROUPS)
+    cmake_parse_arguments(args "${options}" "${oneValueArgs}" "${multiValueArgs}" ${ARGN})
+
+    list(GET args_GROUPS 0 PRIMARY_GROUP)
+
     set(TEST_NAMES "")
-    foreach (file ${TESTS})
+    foreach (file ${args_SOURCES})
         get_filename_component(name "${file}" NAME_WE)
 
-        set(TARGET "${folder}_${name}")
+        set(TARGET "${PRIMARY_GROUP}_${name}")
         list(APPEND TEST_NAMES "${TARGET}")
 
-        halide_project("${TARGET}" "${CMAKE_CURRENT_SOURCE_DIR}" "${CMAKE_CURRENT_SOURCE_DIR}/${file}")
-        target_compile_definitions("${TARGET}" PRIVATE "-DLLVM_VERSION=${LLVM_VERSION}")
+        halide_project("${TARGET}" "${CMAKE_CURRENT_SOURCE_DIR}" "${file}")
+        target_compile_definitions("${TARGET}" PRIVATE "LLVM_VERSION=${LLVM_VERSION}")
         # Tests are built with the equivalent of OPTIMIZE_FOR_BUILD_TIME (-O0 or /Od).
         if (MSVC)
             target_compile_options("${TARGET}" PRIVATE "$<$<CONFIG:RELEASE>:/Od>")
         else ()
-            target_compile_options("${TARGET}" PRIVATE "$<$<CONFIG:RELEASE>:-O0>")
             # Also allow tests, via conditional compilation, to use the entire
             # capability of the CPU being compiled on via -march=native. This
             # presumes tests are run on the same machine they are compiled on.
-            target_compile_options("${TARGET}" PRIVATE "-march=native")
+            target_compile_options("${TARGET}" PRIVATE "$<$<CONFIG:RELEASE>:-O0>" "-march=native")
         endif ()
 
-        target_include_directories("${TARGET}" PRIVATE "${HALIDE_INCLUDE_DIR}")
-        target_include_directories("${TARGET}" PRIVATE "${CMAKE_SOURCE_DIR}")
-        if ("${folder}" STREQUAL "opengl")
-            target_include_directories("${TARGET}" PRIVATE "${CMAKE_SOURCE_DIR}/src")
-        endif ()
+        target_include_directories("${TARGET}"
+                PRIVATE
+                "${HALIDE_INCLUDE_DIR}"
+                "${Halide_SOURCE_DIR}")
 
-        set(GROUPS "${folder}")
-        if ("${folder}" STREQUAL "performance" OR "${folder}" STREQUAL "auto_schedule" OR "${folder}" STREQUAL "opengl")
-            # These shouldn't be part of run_tests, since they must be run with -j for timing purposes
-            # Exception: opengl is excluded because Makefile excludes it too. Why?
+        if (args_EXPECT_FAILURE)
+            add_halide_test("${TARGET}" GROUPS ${args_GROUPS} EXPECT_FAILURE)
         else ()
-            list(APPEND GROUPS all)
-        endif ()
-
-        if ("${folder}" STREQUAL "error")
-            add_halide_test("${TARGET}" GROUPS ${GROUPS} EXPECT_FAILURE)
-        else ()
-            add_halide_test("${TARGET}" GROUPS ${GROUPS})
+            add_halide_test("${TARGET}" GROUPS ${args_GROUPS})
         endif ()
     endforeach ()
+
     set(TEST_NAMES "${TEST_NAMES}" PARENT_SCOPE)
 endfunction(tests)
 
