@@ -1,5 +1,5 @@
-#include <cstdlib>
 #include <csignal>
+#include <cstdlib>
 
 // This is a hack to implement death tests in CTest.
 extern "C" void hl_error_test_handle_abort(int) {
