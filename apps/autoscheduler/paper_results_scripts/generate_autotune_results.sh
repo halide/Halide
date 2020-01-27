@@ -68,6 +68,7 @@ done
 echo "Autotuning on $APPS for $MAX_ITERATIONS iteration(s)"
 
 for app in $APPS; do
+    SECONDS=0
     APP_DIR="${HALIDE_ROOT}/apps/${app}"
 
     LATEST_SAMPLES_DIR=$(ls -ld $APP_DIR/${DEFAULT_SAMPLES_DIR_NAME}* | tail -n 1 | rev | cut -d" " -f 1 | rev)
@@ -103,6 +104,7 @@ for app in $APPS; do
     predict_all ${HALIDE_ROOT} ${SAMPLES_DIR} ${WEIGHTS_FILE} ${PREDICTIONS_FILE}
     extract_best_times ${HALIDE_ROOT} ${SAMPLES_DIR} ${BEST_TIMES_FILE}
     bash $(dirname $0)/../scripts/average_times.sh ${SAMPLES_DIR} >> ${OUTPUT_FILE}
+    echo "Total autotune time (s): ${SECONDS}" >> ${OUTPUT_FILE}
 
     save_best_schedule_result ${BEST_SCHEDULES_DIR} ${SAMPLES_DIR}
 done
