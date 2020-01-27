@@ -13,11 +13,11 @@ fi
 : ${BUILD_SYSTEM:?"BUILD_SYSTEM must be specified"}
 : ${CXX:?"CXX must be specified"}
 
+alias cmake='/usr/bin/cmake'
+
 if [ ${BUILD_SYSTEM} = 'CMAKE' ]; then
   : ${HALIDE_SHARED_LIBRARY:?"HALIDE_SHARED_LIBRARY must be set"}
   LLVM_VERSION_NO_DOT="$( echo ${LLVM_VERSION} | sed 's/\([0-9][0-9]*\)\.\([0-9]\).*/\1\2/' )"
-  which cmake
-  cmake --version
   mkdir -p build/ && cd build/
   # Require a specific version of LLVM, just in case the Travis instance has
   # an older clang/llvm version present
