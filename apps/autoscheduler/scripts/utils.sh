@@ -304,7 +304,8 @@ function save_best_schedule_result() {
     echo "Comparing candidate results with current best for ${app}"
 
     local -r candidate_details_file=${samples_dir}/best.txt
-    local -r candidate_schedule_file=${samples_dir}/best.${app%"_generator"}.schedule.h
+    local -r generator_name=${app#"cuda_"}
+    local -r candidate_schedule_file=${samples_dir}/best.${generator_name%"_generator"}.schedule.h
     local -r candidate_weights_file=${samples_dir}/best.weights
 
     if [ ! -f $candidate_schedule_file ]; then
