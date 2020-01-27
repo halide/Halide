@@ -25,7 +25,7 @@ function(halide_define_aot_test NAME)
     endif ()
 
     add_halide_test("${TARGET}"
-            GROUPS test_generator run_tests)
+            GROUPS generator travis)
 endfunction(halide_define_aot_test)
 
 # Find all the files of form "foo_generator.cpp" in test/generator
@@ -92,7 +92,7 @@ foreach (FILE ${JITTEST_SRCS})
     halide_project("${TARGET}" "generator" "${GEN_TEST_DIR}/${FILE}")
     target_link_libraries("${TARGET}" PRIVATE "${NAME}.generator")
     add_halide_test("${TARGET}"
-            GROUPS test_generator run_tests)
+            GROUPS generator travis)
 endforeach ()
 
 # ------ Generator tests for ahead-of-time mode: ------

@@ -1,4 +1,4 @@
-tests(GROUPS failing_with_issue travis
+tests(GROUPS failing_with_issue
         SOURCES
         3292_async_specialize.cpp
         3293_storage_folding_async.cpp

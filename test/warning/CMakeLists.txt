@@ -1,4 +1,4 @@
-tests(GROUPS warning travis
+tests(GROUPS warning
         SOURCES
         double_vectorize.cpp
         hidden_pure_definition.cpp
