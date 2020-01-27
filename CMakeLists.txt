@@ -232,11 +232,11 @@ function(halide_project name folder)
   add_executable("${name}" ${ARGN})
   if (MSVC)
     if(NOT HALIDE_ENABLE_RTTI)
-      target_compile_options("${name}" PUBLIC "/GR-")
+      target_compile_options("${name}" PUBLIC $<$<COMPILE_LANGUAGE:CXX>:/GR- >)
     endif()
   else()
     if (NOT HALIDE_ENABLE_RTTI)
-      target_compile_options("${name}" PUBLIC "-fno-rtti")
+      target_compile_options("${name}" PUBLIC $<$<COMPILE_LANGUAGE:CXX>:-fno-rtti>)
     endif()
   endif()
   target_link_libraries("${name}" PRIVATE ${HALIDE_COMPILER_LIB} ${CMAKE_DL_LIBS} ${CMAKE_THREAD_LIBS_INIT})
@@ -263,8 +263,8 @@ if (NOT MSVC)
           -Wall
           -Wno-unused-function
           -Wcast-qual
-          -Woverloaded-virtual
           -Wignored-qualifiers
+          $<$<COMPILE_LANGUAGE:CXX>:-Woverloaded-virtual>
           $<$<AND:$<COMPILE_LANGUAGE:CXX>,$<CXX_COMPILER_ID:GNU>,$<VERSION_GREATER:$<CXX_COMPILER_VERSION>,5.1>>:-Wsuggest-override>
   )
   if (WARNINGS_AS_ERRORS)
