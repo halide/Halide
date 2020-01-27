@@ -13,7 +13,7 @@ fi
 : ${BUILD_SYSTEM:?"BUILD_SYSTEM must be specified"}
 : ${CXX:?"CXX must be specified"}
 
-alias cmake='/usr/bin/cmake'
+sudo find / -type f -executable -name cmake -printf '\n\n###\n%p\n###\n' -exec '{}' --version \;
 
 if [ ${BUILD_SYSTEM} = 'CMAKE' ]; then
   : ${HALIDE_SHARED_LIBRARY:?"HALIDE_SHARED_LIBRARY must be set"}
