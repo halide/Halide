@@ -1,3 +1,8 @@
+set(Halide_TEST_ROOT "${CMAKE_CURRENT_LIST_DIR}")
+
+# Add an OBJECT (not static) library to convert abort calls into exit(1).
+add_library(Halide_expect_abort OBJECT common/expect_abort.cpp)
+
 function(tests)
     set(options EXPECT_FAILURE)
     set(oneValueArgs)
@@ -32,6 +37,7 @@ function(tests)
 
         if (args_EXPECT_FAILURE)
             add_halide_test("${TARGET}" GROUPS ${args_GROUPS} EXPECT_FAILURE)
+            target_link_libraries("${TARGET}" PRIVATE Halide_expect_abort)
         else ()
             add_halide_test("${TARGET}" GROUPS ${args_GROUPS})
         endif ()
