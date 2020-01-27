@@ -38,8 +38,6 @@ env:
 cache: ccache
 dist: bionic
 install:
-  # Travis Xenial uses gcc5.4 / cmake 3.12.4 by default, which are fine
-  #
   # Download the right llvm release.
   - wget https://releases.llvm.org/${LLVM_VERSION}/clang+llvm-${LLVM_VERSION}-x86_64-linux-gnu-ubuntu-18.04.tar.xz
   - tar xvf clang+llvm-${LLVM_VERSION}-x86_64-linux-gnu-ubuntu-18.04.tar.xz

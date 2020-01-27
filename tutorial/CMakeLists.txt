@@ -1,6 +1,6 @@
 include(CMakeParseArguments)
 
-# Detect if we need suppress -Wunused-but-set-variable warning.  This warning
+# Detect if we need to suppress -Wunused-but-set-variable warning. This warning
 # might be emitted by gcc for the tutorials as they don't always use a result
 # when showing a demonstration of a computation in C code.
 check_cxx_compiler_flag("-Wno-unused-but-set-variable" SUPPORT_NO_UNUSED_BUT_SET_VARIABLE)
