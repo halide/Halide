@@ -3,6 +3,24 @@ set(Halide_TEST_ROOT "${CMAKE_CURRENT_LIST_DIR}")
 # Add an OBJECT (not static) library to convert abort calls into exit(1).
 add_library(Halide_expect_abort OBJECT common/expect_abort.cpp)
 
+# Capture common halide test features in a single target.
+add_library(halide_test INTERFACE)
+target_include_directories(halide_test INTERFACE
+        "${HALIDE_INCLUDE_DIR}"
+        "${Halide_SOURCE_DIR}" # TODO: break this dependency.
+        common)
+target_compile_definitions(halide_test INTERFACE "LLVM_VERSION=${LLVM_VERSION}")
+
+# Tests are built with the equivalent of OPTIMIZE_FOR_BUILD_TIME (-O0 or /Od).
+if (MSVC)
+    target_compile_options(halide_test INTERFACE "$<$<CONFIG:RELEASE>:/Od>")
+else ()
+    # Also allow tests, via conditional compilation, to use the entire
+    # capability of the CPU being compiled on via -march=native. This
+    # presumes tests are run on the same machine they are compiled on.
+    target_compile_options(halide_test INTERFACE "$<$<CONFIG:RELEASE>:-O0>" "-march=native")
+endif ()
+
 function(tests)
     set(options EXPECT_FAILURE)
     set(oneValueArgs)
@@ -14,26 +32,12 @@ function(tests)
     set(TEST_NAMES "")
     foreach (file ${args_SOURCES})
         get_filename_component(name "${file}" NAME_WE)
-
         set(TARGET "${PRIMARY_GROUP}_${name}")
+
         list(APPEND TEST_NAMES "${TARGET}")
 
         halide_project("${TARGET}" "${CMAKE_CURRENT_SOURCE_DIR}" "${file}")
-        target_compile_definitions("${TARGET}" PRIVATE "LLVM_VERSION=${LLVM_VERSION}")
-        # Tests are built with the equivalent of OPTIMIZE_FOR_BUILD_TIME (-O0 or /Od).
-        if (MSVC)
-            target_compile_options("${TARGET}" PRIVATE "$<$<CONFIG:RELEASE>:/Od>")
-        else ()
-            # Also allow tests, via conditional compilation, to use the entire
-            # capability of the CPU being compiled on via -march=native. This
-            # presumes tests are run on the same machine they are compiled on.
-            target_compile_options("${TARGET}" PRIVATE "$<$<CONFIG:RELEASE>:-O0>" "-march=native")
-        endif ()
-
-        target_include_directories("${TARGET}"
-                PRIVATE
-                "${HALIDE_INCLUDE_DIR}"
-                "${Halide_SOURCE_DIR}")
+        target_link_libraries("${TARGET}" PRIVATE halide_test)
 
         if (args_EXPECT_FAILURE)
             add_halide_test("${TARGET}" GROUPS ${args_GROUPS} EXPECT_FAILURE)
