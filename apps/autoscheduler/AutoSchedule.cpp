@@ -854,6 +854,7 @@ struct State {
         stats.enqueue_time += std::chrono::high_resolution_clock::now() - t1;
         ++stats.num_schedules_enqueued;
 
+        t1 = std::chrono::high_resolution_clock::now();
         // index of current stage whose features we are reading
         int stage = 0;
         // load schedule features into input buffer
@@ -882,6 +883,7 @@ struct State {
                 stage += 1;
             }
         }
+        stats.feature_write_time += std::chrono::high_resolution_clock::now() - t1;
         // Check we considered everything we were supposed to.
         internal_assert(stage == num_stages);
 
@@ -2147,6 +2149,7 @@ void generate_schedule(const std::vector<Function> &outputs,
     aslog(1) << "Average featurization time (ms): " << stats.average_featurization_time() << "\n";
     aslog(1) << "Total enqueue time (ms): " << stats.total_enqueue_time() << "\n";
     aslog(1) << "Total calculate cost time (ms): " << stats.total_calculate_cost_time() << "\n";
+    aslog(1) << "Total feature write time (ms): " << stats.total_feature_write_time() << "\n";
 
     aslog(1) << "Number of schedules evaluated by cost model: " << stats.num_schedules_enqueued << '\n';
     aslog(1) << "Total cost model evaluation time (ms): " << stats.total_cost_model_evaluation_time() << "\n";
