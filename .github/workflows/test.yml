@@ -137,14 +137,40 @@ jobs:
 
     - name: Configure Windows
       if: matrix.config.os == 'windows-latest'
+      shell: cmake -P {0}
       run: |
         # Install libpng, jpeg, doxygen
         # choco install libpng -- TBD, not on choco?
-        choco install libjpeg-turbo
-        choco install doxygen.install
+        # choco install libjpeg-turbo
+        # choco install doxygen.install
 
-        # Set all the VCVars (via PowerShell)
-        call .github\workflows\vcvars.ps1 -arch x64 -hostArch x64
+        # See: https://github.com/microsoft/vswhere/wiki/Start-Developer-Command-Prompt
+        set(VSWHERE "C:/Program Files (x86)/Microsoft Visual Studio/Installer/vswhere.exe")
+        execute_process(
+          COMMAND "${VSWHERE}" -latest -property installationPath
+          OUTPUT_VARIABLE VS_INSTALLATION_PATH
+          RESULT_VARIABLE result
+        )
+        if (NOT result EQUAL 0)
+          message(FATAL_ERROR "Bad exit status: ${result}")
+        endif()
+        execute_process(
+          COMMAND "${VS_INSTALLATION_PATH}/Common7/Tools/vsdevcmd.bat"" && set
+          OUTPUT_VARIABLE VS_ENV_VARS
+          RESULT_VARIABLE result
+        )
+        if (NOT result EQUAL 0)
+          message(FATAL_ERROR "Bad exit status: ${result}")
+        endif()
+        # file(STRINGS environment_script_output.txt output_lines)
+        foreach(line IN LISTS VS_ENV_VARS)
+          message(STATUS "line is: ${line}")
+          if (line MATCHES "^([a-zA-Z0-9_-]+)=(.*)$")
+            message(STATUS "ENV ${CMAKE_MATCH_1} is ${CMAKE_MATCH_2}")
+            # This is magic that GitHub Actions uses to allow global env var setting
+            message(STATUS "::set-env name=${CMAKE_MATCH_1}::${CMAKE_MATCH_2}")
+          endif()
+        endforeach()
 
     - name: Download LLVM (Non-Windows)
       if: matrix.config.os != 'windows-latest'
@@ -272,30 +298,29 @@ jobs:
           message(FATAL_ERROR "Unknown build_tool: ${{matrix.config.build_tool}}")
         endif()
 
-        message(STATUS "runner.os is ${{runner.os}}")
-
+        # message(STATUS "runner.os is ${{runner.os}}")
         # Nonsense for MSVC to get vc vars set up
-        if ("${{runner.os}}" STREQUAL "Windows" AND NOT "x${{matrix.config.environment_script}}" STREQUAL "x")
-          message(STATUS "executing ${{matrix.config.environment_script}}")
-          execute_process(
-            COMMAND "${{matrix.config.environment_script}}" && set
-            OUTPUT_FILE environment_script_output.txt
-            ERROR_VARIABLE eee
-            RESULT_VARIABLE result
-          )
-          message(STATUS "stderr is: ${eee}")
-          if (NOT result EQUAL 0)
-            message(FATAL_ERROR "Bad exit status: ${result}")
-          endif()
-          file(STRINGS environment_script_output.txt output_lines)
-          foreach(line IN LISTS output_lines)
-            message(STATUS "line is: ${line}")
-            if (line MATCHES "^([a-zA-Z0-9_-]+)=(.*)$")
-              message(STATUS "ENV ${CMAKE_MATCH_1} is ${CMAKE_MATCH_2}")
-              set(ENV{ ${CMAKE_MATCH_1} } "${CMAKE_MATCH_2}")
-            endif()
-          endforeach()
-        endif()
+        # if ("${{runner.os}}" STREQUAL "Windows" AND NOT "x${{matrix.config.environment_script}}" STREQUAL "x")
+        #   message(STATUS "executing ${{matrix.config.environment_script}}")
+        #   execute_process(
+        #     COMMAND "${{matrix.config.environment_script}}" && set
+        #     OUTPUT_FILE environment_script_output.txt
+        #     ERROR_VARIABLE eee
+        #     RESULT_VARIABLE result
+        #   )
+        #   message(STATUS "stderr is: ${eee}")
+        #   if (NOT result EQUAL 0)
+        #     message(FATAL_ERROR "Bad exit status: ${result}")
+        #   endif()
+        #   file(STRINGS environment_script_output.txt output_lines)
+        #   foreach(line IN LISTS output_lines)
+        #     message(STATUS "line is: ${line}")
+        #     if (line MATCHES "^([a-zA-Z0-9_-]+)=(.*)$")
+        #       message(STATUS "ENV ${CMAKE_MATCH_1} is ${CMAKE_MATCH_2}")
+        #       set(ENV{ ${CMAKE_MATCH_1} } "${CMAKE_MATCH_2}")
+        #     endif()
+        #   endforeach()
+        # endif()
 
         execute_process(
           COMMAND ${CMAKE_COMMAND}
@@ -379,9 +404,10 @@ jobs:
 
         set(PARALLEL_JOBS 4)  # The VMs have 2 cores, so specify N+2
         if (${{matrix.config.build_tool}} MATCHES "^cmake.*")
+          set(TEST_GROUPS_TO_SKIP "opengl|performance|auto_schedule")
           # skip OpenGL and Performance tests
           execute_process(
-            COMMAND ${CMAKE_CTEST_COMMAND} -j ${PARALLEL_JOBS} -LE opengl -LE performance --output-on-failure
+            COMMAND ${CMAKE_CTEST_COMMAND} -j ${PARALLEL_JOBS} -LE "${TEST_GROUPS_TO_SKIP}" --output-on-failure
             WORKING_DIRECTORY ${HALIDE_BUILD_DIR}
             RESULT_VARIABLE result
           )
