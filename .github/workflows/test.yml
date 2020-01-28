@@ -13,14 +13,14 @@ jobs:
       matrix:
         config:
         # Ubuntu (x86-64) builds
-        - {
-            name: "Ubuntu g++ llvm8 cmake_shared",
-            build_tool: "cmake_shared",
-            cc: "gcc",
-            cxx: "g++",
-            llvm_version: 8,
-            os: ubuntu-18.04,
-          }
+        # - {
+        #     name: "Ubuntu g++ llvm8 cmake_shared",
+        #     build_tool: "cmake_shared",
+        #     cc: "gcc",
+        #     cxx: "g++",
+        #     llvm_version: 8,
+        #     os: ubuntu-18.04,
+        #   }
         # - {
         #     name: "Ubuntu g++ llvm8 cmake_static",
         #     build_tool: "cmake_static",
@@ -81,12 +81,20 @@ jobs:
         #     os: macos-latest,
         #   }
 
-        # - {
-        #     name: "Windows Latest MSVC", artifact: "Windows-MSVC.tar.xz",
-        #     os: windows-latest,
-        #     build_type: "Release", cc: "cl", cxx: "cl",
-        #     environment_script: "C:/Program Files (x86)/Microsoft Visual Studio/2019/Enterprise/VC/Auxiliary/Build/vcvars64.bat"
-        #   }
+        - {
+            name: "MSVC llvm9 cmake_shared",
+            build_tool: "cmake_shared",
+            cc: "cl",
+            cxx: "cl",
+            llvm_version: 9,
+            os: windows-latest,
+
+            # name: "Windows Latest MSVC", artifact: "Windows-MSVC.tar.xz",
+            # os: windows-latest,
+            # build_type: "Release", cc: "cl", cxx: "cl",
+            # environment_script: "C:/Program Files (x86)/Microsoft Visual Studio/2019/Enterprise/VC/Auxiliary/Build/vcvars64.bat"
+          }
+
         # - {
         #     name: "Windows Latest MinGW", artifact: "Windows-MinGW.tar.xz",
         #     os: windows-latest,
@@ -119,8 +127,6 @@ jobs:
         # Install doxygen
         sudo apt-get -y --force-yes --no-install-recommends install doxygen
 
-        du -d 1 ${GITHUB_WORKSPACE}
-
 
     - name: Configure OSX
       if: matrix.config.os == 'macos-latest'
@@ -131,7 +137,13 @@ jobs:
         # Don't install LLVM via brew: it can conflict with the existing LLVM
         # installation in OSX and cause unhappiness. We'll handle it specially below.
 
-        du -d 1 ${GITHUB_WORKSPACE}
+    - name: Configure Windows
+      if: matrix.config.os == 'windows-latest'
+      run: |
+        # Install libpng, jpeg, doxygen
+        choco install libpng jpeg doxygen
+
+        # Choco only provides LVM9 prebuilts.
 
     - name: Download LLVM
       shell: cmake -P {0}
@@ -142,6 +154,8 @@ jobs:
           set(LLVM_URL "https://releases.llvm.org/${{matrix.config.llvm_version}}.0.0/clang+llvm-${{matrix.config.llvm_version}}.0.0-x86_64-linux-gnu-ubuntu-18.04.tar.xz")
         elseif("${{matrix.config.os}}" MATCHES "^macos.*")
           set(LLVM_URL "https://releases.llvm.org/${{matrix.config.llvm_version}}.0.0/clang+llvm-${{matrix.config.llvm_version}}.0.0-x86_64-darwin-apple.tar.xz")
+        elseif("${{matrix.config.os}}" MATCHES "^windows.*")
+          set(LLVM_URL "https://releases.llvm.org/${{matrix.config.llvm_version}}.0.0/LLVM-${{matrix.config.llvm_version}}.0.0-win64.exe")
         else()
           message(FATAL_ERROR "Unknown OS: ${{matrix.config.os}}")
         endif()
@@ -168,8 +182,6 @@ jobs:
         if (NOT result EQUAL 0)
           message(FATAL_ERROR "Bad exit status: ${result}")
         endif()
-
-        execute_process(COMMAND du -d 1 $ENV{GITHUB_WORKSPACE})
 
     - name: Configure Make/CMake
       shell: cmake -P {0}
@@ -222,8 +234,6 @@ jobs:
           message(FATAL_ERROR "Bad exit status: ${result}")
         endif()
 
-        execute_process(COMMAND du -d 1 $ENV{GITHUB_WORKSPACE})
-
 
     - name: Build Halide
       shell: cmake -P {0}
@@ -251,6 +261,14 @@ jobs:
             if (NOT result EQUAL 0)
               message(FATAL_ERROR "Bad exit status: ${result}")
             endif()
+            execute_process(
+              COMMAND bin/correctness_boundary_conditions
+              WORKING_DIRECTORY ${HALIDE_BUILD_DIR}
+              RESULT_VARIABLE result
+            )
+            if (NOT result EQUAL 0)
+              message(FATAL_ERROR "Bad exit status: ${result}")
+            endif()
           endforeach()
         elseif (${{matrix.config.build_tool}} STREQUAL "make")
           execute_process(
@@ -265,13 +283,9 @@ jobs:
           message(FATAL_ERROR "Unknown build_tool: ${{matrix.config.build_tool}}")
         endif()
 
-        execute_process(COMMAND du -d 1 $ENV{GITHUB_WORKSPACE})
-
     - name: Run Tests
       shell: cmake -P {0}
       run: |
-        execute_process(COMMAND du -d 1 $ENV{GITHUB_WORKSPACE})
-
         set(ROOT "$ENV{GITHUB_WORKSPACE}")
         set(HALIDE_DIR "${ROOT}/halide")
         set(LLVM_DIR "${ROOT}/llvm")
@@ -289,11 +303,6 @@ jobs:
             WORKING_DIRECTORY ${HALIDE_BUILD_DIR}
             RESULT_VARIABLE result
           )
-          # execute_process(
-          #   COMMAND make -j ${PARALLEL_JOBS} run_tests
-          #   WORKING_DIRECTORY ${HALIDE_BUILD_DIR}
-          #   RESULT_VARIABLE result
-          # )
         elseif (${{matrix.config.build_tool}} STREQUAL "make")
           execute_process(
             COMMAND make -f ${HALIDE_DIR}/Makefile -j ${PARALLEL_JOBS} run_tests
