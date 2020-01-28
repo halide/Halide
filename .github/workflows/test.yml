@@ -72,14 +72,14 @@ jobs:
             os: macos-latest,
           }
 
-        # - {
-        #     name: "OSX llvm9 make",
-        #     build_tool: "make",
-        #     cc: "clang",
-        #     cxx: "clang++",
-        #     llvm_version: 9,
-        #     os: macos-latest,
-        #   }
+        - {
+            name: "OSX llvm9 make",
+            build_tool: "make",
+            cc: "clang",
+            cxx: "clang++",
+            llvm_version: 9,
+            os: macos-latest,
+          }
 
         - {
             name: "MSVC llvm9 cmake_shared",
@@ -91,6 +91,7 @@ jobs:
             # 16 == VC2019
             cmake_gen: "Visual Studio 16",
             cmake_arch: "Win64",
+            environment_script: "C:/Program Files (x86)/Microsoft Visual Studio/2019/Enterprise/VC/Auxiliary/Build/vcvars64.bat"
 
             # name: "Windows Latest MSVC", artifact: "Windows-MSVC.tar.xz",
             # os: windows-latest,
@@ -209,10 +210,11 @@ jobs:
           message(FATAL_ERROR "Bad exit status: ${result}")
         endif()
 
-    - name: Configure Make/CMake
+    - name: Configure Make
+      if: startsWith(${{matrix.config.build_tool}}, "make")
       shell: cmake -P {0}
       run: |
-        # Configure Make/CMake
+        # Configure Make
         set(ENV{CC} "${{matrix.config.cc}}")
         set(ENV{CXX} "${{matrix.config.cxx}}")
 
@@ -230,50 +232,84 @@ jobs:
           message(FATAL_ERROR "Bad exit status: ${result}")
         endif()
 
-        if (${{matrix.config.build_tool}} MATCHES "^cmake.*")
-          if (NOT "${{matrix.config.cmake_gen}}" STREQUAL "")
-            set(CMAKE_GEN "${{matrix.config.cmake_gen}}")
-          else()
-            set(CMAKE_GEN "Unix Makefiles")
-          endif()
-          if (NOT "${{matrix.config.cmake_arch}}" STREQUAL "")
-            set(CMAKE_ARCH "-A ${{matrix.config.cmake_arch}}")
-          else()
-            set(CMAKE_ARCH "")
-          endif()
 
+    - name: Configure CMake
+      if: startsWith(${{matrix.config.build_tool}}, "cmake")
+      shell: cmake -P {0}
+      run: |
+        # Configure CMake
+        set(ENV{CC} "${{matrix.config.cc}}")
+        set(ENV{CXX} "${{matrix.config.cxx}}")
 
+        set(ROOT "$ENV{GITHUB_WORKSPACE}")
+        set(HALIDE_DIR "${ROOT}/halide")
+        set(LLVM_DIR "${ROOT}/llvm")
+        set(HALIDE_BUILD_DIR "${ROOT}/halide_build")
 
-          # Make sure that our LLVM package is in CMAKE_MODULE_PATH
-          # so that CMake will be able to find it
-          if (${{matrix.config.build_tool}} MATCHES "cmake_shared")
-            set(HALIDE_SHARED_LIBRARY ON)
-          elseif (${{matrix.config.build_tool}} MATCHES "cmake_static")
-            set(HALIDE_SHARED_LIBRARY OFF)
-          else()
-            message(FATAL_ERROR "Unknown build_tool: ${{matrix.config.build_tool}}")
-          endif()
-          execute_process(
-            COMMAND ${CMAKE_COMMAND}
-                -DCMAKE_BUILD_TYPE=Debug
-                -DHALIDE_REQUIRE_LLVM_VERSION=${{matrix.config.llvm_version}}0
-                -DLLVM_ROOT=${LLVM_DIR}
-                -DHALIDE_SHARED_LIBRARY=${HALIDE_SHARED_LIBRARY}
-                -G "${CMAKE_GEN}"
-                ${CMAKE_ARCH}
-                ${HALIDE_DIR}
-            WORKING_DIRECTORY ${HALIDE_BUILD_DIR}
-            RESULT_VARIABLE result
-          )
-        elseif (${{matrix.config.build_tool}} STREQUAL "make")
-          # Nothing, we're good to go
-        else()
-          message(FATAL_ERROR "Unknown build_tool: ${{matrix.config.build_tool}}")
-        endif()
+        execute_process(
+          COMMAND ${CMAKE_COMMAND}
+            -E make_directory "${HALIDE_BUILD_DIR}"
+          RESULT_VARIABLE result
+        )
         if (NOT result EQUAL 0)
           message(FATAL_ERROR "Bad exit status: ${result}")
         endif()
 
+        if (NOT "${{matrix.config.cmake_gen}}" STREQUAL "")
+          set(CMAKE_GEN "${{matrix.config.cmake_gen}}")
+        else()
+          set(CMAKE_GEN "Unix Makefiles")
+        endif()
+
+        if (NOT "${{matrix.config.cmake_arch}}" STREQUAL "")
+          set(CMAKE_ARCH "-A ${{matrix.config.cmake_arch}}")
+        else()
+          set(CMAKE_ARCH "")
+        endif()
+
+        # Make sure that our LLVM package is in CMAKE_MODULE_PATH
+        # so that CMake will be able to find it
+        if (${{matrix.config.build_tool}} MATCHES "cmake_shared")
+          set(HALIDE_SHARED_LIBRARY ON)
+        elseif (${{matrix.config.build_tool}} MATCHES "cmake_static")
+          set(HALIDE_SHARED_LIBRARY OFF)
+        else()
+          message(FATAL_ERROR "Unknown build_tool: ${{matrix.config.build_tool}}")
+        endif()
+
+        # Nonsense for MSVC to get vc vars set up
+        if ("${{runner.os}}" STREQUAL "Windows" AND NOT "${{matrix.config.environment_script}}" STREQUAL "")
+          execute_process(
+            COMMAND "${{matrix.config.environment_script}}" && set
+            OUTPUT_FILE environment_script_output.txt
+            RESULT_VARIABLE result
+          )
+          if (NOT result EQUAL 0)
+            message(FATAL_ERROR "Bad exit status: ${result}")
+          endif()
+          file(STRINGS environment_script_output.txt output_lines)
+          foreach(line IN LISTS output_lines)
+            if (line MATCHES "^([a-zA-Z0-9_-]+)=(.*)$")
+              set(ENV{${CMAKE_MATCH_1} } "${CMAKE_MATCH_2}")
+            endif()
+          endforeach()
+        endif()
+
+        execute_process(
+          COMMAND ${CMAKE_COMMAND}
+              -DCMAKE_BUILD_TYPE=Release
+              -DHALIDE_REQUIRE_LLVM_VERSION=${{matrix.config.llvm_version}}0
+              -DLLVM_ROOT=${LLVM_DIR}
+              -DHALIDE_SHARED_LIBRARY=${HALIDE_SHARED_LIBRARY}
+              -G "${CMAKE_GEN}"
+              ${CMAKE_ARCH}
+              ${HALIDE_DIR}
+          WORKING_DIRECTORY ${HALIDE_BUILD_DIR}
+          RESULT_VARIABLE result
+        )
+        if (NOT result EQUAL 0)
+          message(FATAL_ERROR "Bad exit status: ${result}")
+        endif()
 
     - name: Build Halide
       shell: cmake -P {0}

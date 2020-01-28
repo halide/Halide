@@ -13,6 +13,7 @@ template<typename T>
 bool expect_eq(T actual, T expected) {
     if (expected != actual) {
         fprintf(stderr, "Failed: expected %d, actual %d\n", (int)expected, (int)actual);
+        fflush(stderr);
         return false;
     }
     return true;
@@ -406,6 +407,7 @@ int main(int argc, char **argv) {
 
     if (!success) {
         fprintf(stderr, "Failed!\n");
+        fflush(stderr);
         return -1;
     }
 
