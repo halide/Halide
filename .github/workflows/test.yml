@@ -90,6 +90,7 @@ jobs:
             os: windows-latest,
             # 16 == VC2019
             cmake_gen: "Visual Studio 16 Win64"
+            cmake_arch: "Win64"
 
             # name: "Windows Latest MSVC", artifact: "Windows-MSVC.tar.xz",
             # os: windows-latest,
@@ -230,11 +231,18 @@ jobs:
         endif()
 
         if (${{matrix.config.build_tool}} MATCHES "^cmake.*")
-          if ("${{matrix.config.cmake_gen}}" STREQUAL "")
-            set(CMAKE_GEN "Unix Makefiles")
-          else()
+          if (NOT "${{matrix.config.cmake_gen}}" STREQUAL "")
             set(CMAKE_GEN "${{matrix.config.cmake_gen}}")
+          else()
+            set(CMAKE_GEN "Unix Makefiles")
           endif()
+          if (NOT "${{matrix.config.cmake_arch}}" STREQUAL "")
+            set(CMAKE_ARCH "-A ${{matrix.config.cmake_arch}}")
+          else()
+            set(CMAKE_ARCH "")
+          endif()
+
+
 
           # Make sure that our LLVM package is in CMAKE_MODULE_PATH
           # so that CMake will be able to find it
@@ -252,6 +260,7 @@ jobs:
                 -DLLVM_ROOT=${LLVM_DIR}
                 -DHALIDE_SHARED_LIBRARY=${HALIDE_SHARED_LIBRARY}
                 -G "${CMAKE_GEN}"
+                ${CMAKE_ARCH}
                 ${HALIDE_DIR}
             WORKING_DIRECTORY ${HALIDE_BUILD_DIR}
             RESULT_VARIABLE result
