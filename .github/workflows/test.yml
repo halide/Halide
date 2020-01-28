@@ -211,7 +211,7 @@ jobs:
         endif()
 
     - name: Configure Make
-      if: startsWith("${{matrix.config.build_tool}}", "make")
+      if: startsWith(matrix.config.build_tool, "make")
       shell: cmake -P {0}
       run: |
         # Configure Make
@@ -234,7 +234,7 @@ jobs:
 
 
     - name: Configure CMake
-      if: startsWith("${{matrix.config.build_tool}}", "cmake")
+      if: startsWith(matrix.config.build_tool, "cmake")
       shell: cmake -P {0}
       run: |
         # Configure CMake
