@@ -12,7 +12,7 @@ jobs:
       fail-fast: false  # Keep running other jobs even if one fails
       matrix:
         config:
-        Ubuntu (x86-64) builds
+        # Ubuntu (x86-64) builds
         - {
             name: "Ubuntu g++ llvm8 cmake_shared",
             build_tool: "cmake_shared",
