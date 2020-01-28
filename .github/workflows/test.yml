@@ -290,7 +290,7 @@ jobs:
           foreach(line IN LISTS output_lines)
             message(STATUS "line is: ${line}")
             if (line MATCHES "^([a-zA-Z0-9_-]+)=(.*)$")
-              message(STATUS "ENV:${CMAKE_MATCH_1} is ${CMAKE_MATCH_2})
+              message(STATUS "ENV ${CMAKE_MATCH_1} is ${CMAKE_MATCH_2}")
               set(ENV{ ${CMAKE_MATCH_1} } "${CMAKE_MATCH_2}")
             endif()
           endforeach()
