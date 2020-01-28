@@ -91,7 +91,7 @@ jobs:
             # 16 == VC2019
             cmake_gen: "Visual Studio 16",
             cmake_arch: "Win64",
-            environment_script: "C:/Program Files (x86)/Microsoft Visual Studio/2019/Enterprise/VC/Auxiliary/Build/vcvars64.bat"
+            environment_script: "C:/Program Files (x86)/Microsoft Visual Studio/2019/Enterprise/VC/Auxiliary/Build/vcvars64.bat",
 
             # name: "Windows Latest MSVC", artifact: "Windows-MSVC.tar.xz",
             # os: windows-latest,
@@ -211,7 +211,7 @@ jobs:
         endif()
 
     - name: Configure Make
-      if: startsWith(${{matrix.config.build_tool}}, "make")
+      if: {{ startsWith(${{matrix.config.build_tool}}, "make") }}
       shell: cmake -P {0}
       run: |
         # Configure Make
