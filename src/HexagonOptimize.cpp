@@ -2055,9 +2055,9 @@ private:
                         Expr b = mpys[i].second;
                         int lanes = op->type.lanes();
 
-                        if (a.type().lanes() < lanes)
+                        if (a.type().is_scalar())
                             a = Broadcast::make(a, lanes);
-                        if (b.type().lanes() < lanes)
+                        if (b.type().is_scalar())
                             b = Broadcast::make(b, lanes);
 
                         Expr mpy_a = lossless_cast(op->type, a);
