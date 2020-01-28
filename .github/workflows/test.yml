@@ -332,8 +332,7 @@ jobs:
 
         set(PARALLEL_JOBS 4)  # The VMs have 2 cores, so specify N+2
         if (${{matrix.config.build_tool}} MATCHES "^cmake.*")
-          #foreach(TARGET package build_tests test_internal)
-          foreach(TARGET correctness_boundary_conditions)
+          foreach(TARGET package build_tests test_internal)
             # CMake only allows one --target flag per invocation
             execute_process(
               COMMAND ${CMAKE_COMMAND} --build ${HALIDE_BUILD_DIR} -j ${PARALLEL_JOBS} --target ${TARGET}
@@ -343,19 +342,19 @@ jobs:
             if (NOT result EQUAL 0)
               message(FATAL_ERROR "Bad exit status: ${result}")
             endif()
-            message(STATUS "running bin/correctness_boundary_conditions...")
-            execute_process(
-              COMMAND bin/correctness_boundary_conditions
-              WORKING_DIRECTORY ${HALIDE_BUILD_DIR}
-              OUTPUT_VARIABLE ooo
-              ERROR_VARIABLE eee
-              RESULT_VARIABLE result
-            )
-            message(STATUS "stdout is: ${ooo}")
-            message(STATUS "stderr is: ${eee}")
-            if (NOT result EQUAL 0)
-              message(FATAL_ERROR "Bad exit status: ${result}")
-            endif()
+            # message(STATUS "running bin/correctness_boundary_conditions...")
+            # execute_process(
+            #   COMMAND bin/correctness_boundary_conditions
+            #   WORKING_DIRECTORY ${HALIDE_BUILD_DIR}
+            #   OUTPUT_VARIABLE ooo
+            #   ERROR_VARIABLE eee
+            #   RESULT_VARIABLE result
+            # )
+            # message(STATUS "stdout is: ${ooo}")
+            # message(STATUS "stderr is: ${eee}")
+            # if (NOT result EQUAL 0)
+            #   message(FATAL_ERROR "Bad exit status: ${result}")
+            # endif()
           endforeach()
         elseif (${{matrix.config.build_tool}} STREQUAL "make")
           execute_process(
@@ -383,10 +382,10 @@ jobs:
         set(ENV{LLVM_CONFIG} "${LLVM_DIR}/bin/llvm-config")
 
         set(PARALLEL_JOBS 4)  # The VMs have 2 cores, so specify N+2
-        #-j ${PARALLEL_JOBS}
         if (${{matrix.config.build_tool}} MATCHES "^cmake.*")
+          # ${CMAKE_CTEST_COMMAND} --extra-verbose --output-on-failure -R correctness_boundary_conditions
           execute_process(COMMAND
-            ${CMAKE_CTEST_COMMAND} --extra-verbose --output-on-failure -R correctness_boundary_conditions
+            ${CMAKE_CTEST_COMMAND} --output-on-failure -j ${PARALLEL_JOBS}
             WORKING_DIRECTORY ${HALIDE_BUILD_DIR}
             RESULT_VARIABLE result
           )
