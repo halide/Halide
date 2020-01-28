@@ -1,13 +1,12 @@
-
+cmake_minimum_required(VERSION 3.14)
 project(Halide)
-cmake_minimum_required(VERSION 3.12)
 
 cmake_policy(SET CMP0074 NEW)  # find_package() uses <PackageName>_ROOT variables; requires 3.12+
 
 set(HALIDE_BASE_DIR   "${CMAKE_CURRENT_SOURCE_DIR}")
 
 set(CPACK_PACKAGE_VENDOR "Halide")
-set(CPACK_RESOURCE_FILE_LICENSE "${HALIDE_BASE_DIR}/LICENSE.txt")
+set(CPACK_RESOURCE_FILE_LICENSE "${Halide_SOURCE_DIR}/LICENSE.txt")
 set(CPACK_MONOLITHIC_INSTALL OFF)
 if (WIN32)
   set(CPACK_GENERATOR "ZIP")
@@ -236,17 +235,19 @@ function(halide_project name folder)
   add_executable("${name}" ${ARGN})
   if (MSVC)
     if(NOT HALIDE_ENABLE_RTTI)
-      target_compile_options("${name}" PUBLIC "/GR-")
+      target_compile_options("${name}" PUBLIC $<$<COMPILE_LANGUAGE:CXX>:/GR- >)
     endif()
   else()
     if (NOT HALIDE_ENABLE_RTTI)
-      target_compile_options("${name}" PUBLIC "-fno-rtti")
+      target_compile_options("${name}" PUBLIC $<$<COMPILE_LANGUAGE:CXX>:-fno-rtti>)
     endif()
   endif()
   target_link_libraries("${name}" PRIVATE ${HALIDE_COMPILER_LIB} ${CMAKE_DL_LIBS} ${CMAKE_THREAD_LIBS_INIT})
-  target_include_directories("${name}" PRIVATE "${HALIDE_BASE_DIR}/src")
-  target_include_directories("${name}" PRIVATE "${HALIDE_BASE_DIR}/tools")
-  set_target_properties("${name}" PROPERTIES FOLDER "${folder}")
+  target_include_directories("${name}" PRIVATE "${Halide_SOURCE_DIR}/src")
+  target_include_directories("${name}" PRIVATE "${Halide_SOURCE_DIR}/tools")
+  set_target_properties("${name}" PROPERTIES
+          FOLDER "${folder}"
+          ENABLE_EXPORTS True)
   if (MSVC)
     target_link_libraries("${name}" PRIVATE Kernel32)
   endif()
@@ -261,14 +262,14 @@ else()
 endif()
 
 if (NOT MSVC)
-  add_compile_options(-Wall
-                      -Wno-unused-function
-                      -Wcast-qual
-                      -Woverloaded-virtual
-                      -Wignored-qualifiers)
-  if (CMAKE_CXX_COMPILER_IS_GNUCC AND CMAKE_CXX_COMPILER_VERSION VERSION_GREATER 5.1)
-    add_compile_options(-Wsuggest-override)
-  endif()
+  add_compile_options(
+          -Wall
+          -Wno-unused-function
+          -Wcast-qual
+          -Wignored-qualifiers
+          $<$<COMPILE_LANGUAGE:CXX>:-Woverloaded-virtual>
+          $<$<AND:$<COMPILE_LANGUAGE:CXX>,$<CXX_COMPILER_ID:GNU>,$<VERSION_GREATER:$<CXX_COMPILER_VERSION>,5.1>>:-Wsuggest-override>
+  )
   if (WARNINGS_AS_ERRORS)
     add_compile_options(-Werror)
   endif()
@@ -314,7 +315,7 @@ endif()
 # For in-tree builds, we need to set the input variables for halide.cmake
 # to specific values, rather than relying on HALIDE_DISTRIB_DIR to be set correctly.
 set(HALIDE_INCLUDE_DIR "${CMAKE_BINARY_DIR}/include")
-set(HALIDE_TOOLS_DIR "${HALIDE_BASE_DIR}/tools")
+set(HALIDE_TOOLS_DIR "${Halide_SOURCE_DIR}/tools")
 set(HALIDE_COMPILER_LIB Halide)
 set(HALIDE_DISTRIB_DIR "/bad-path")
 include(halide.cmake)
@@ -340,27 +341,8 @@ foreach (build_config Debug Release RelWithDebInfo MinSizeRel)
   endforeach()
 endforeach()
 
-function(define_test_group GROUP)
-  if(TARGET "${GROUP}")
-    message(FATAL_ERROR "Group ${GROUP} is already defined.")
-  endif()
-  add_custom_target("${GROUP}")
-  set_target_properties("${GROUP}" PROPERTIES EXCLUDE_FROM_ALL TRUE)
-endfunction()
-
-define_test_group(build_tests)
-define_test_group(run_tests)
-
-# Make a target that aggregates a number of other targets;
-# this can be used to group builds (e.g. "build_tests")
-# or to execute targets (by adding executable custom-commands);
-# the latter is used to execute test targets.
-#
-# Note that the target will be excluded from the "all" target, so it won't
-# be built by "make all" by default.
-#
 # TODO: this is intended to eventually replicate all of the interesting test targets
-# from our Make build, but not all are implemented yet:
+#       from our Make build, but not all are implemented yet:
 # TODO(srj): add test_aotcpp_generators support
 # TODO(srj): add test_valgrind variant
 # TODO(srj): add test_avx512 variant
@@ -371,55 +353,16 @@ function(add_halide_test TARGET)
   set(oneValueArgs WORKING_DIRECTORY)
   set(multiValueArgs GROUPS)
   cmake_parse_arguments(args "${options}" "${oneValueArgs}" "${multiValueArgs}" ${ARGN})
-  foreach(GROUP ${args_GROUPS})
-    if(NOT TARGET "${GROUP}")
-      define_test_group("${GROUP}")
-    endif()
-  endforeach()
 
-  set(BUILD_NAME "${TARGET}")
-  set_target_properties("${BUILD_NAME}" PROPERTIES EXCLUDE_FROM_ALL TRUE)
-  add_dependencies(build_tests "${BUILD_NAME}")
+  add_test(NAME ${TARGET}
+          COMMAND ${TARGET}
+          WORKING_DIRECTORY "${args_WORKING_DIRECTORY}")
 
-  set(EXEC_NAME "run_${TARGET}")
-  get_target_property(TARGET_TYPE "${TARGET}" TYPE)
-  if("${TARGET_TYPE}" STREQUAL "EXECUTABLE")
-    if(${args_EXPECT_FAILURE})
-      set(COMMAND "${HALIDE_BASE_DIR}/test/common/expect_failure.sh" "${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/${TARGET}")
-    else()
-      set(COMMAND "${TARGET}")
-    endif()
-    add_custom_target("${EXEC_NAME}"
-                     COMMAND ${COMMAND}
-                     WORKING_DIRECTORY ${args_WORKING_DIRECTORY}
-                     COMMENT "Executing ${TARGET}"
-                     DEPENDS "${TARGET}")
-  elseif("${TARGET_TYPE}" STREQUAL "UTILITY")
-    # It's probably a custom target or a group: just depend on it.
-    add_custom_target("${EXEC_NAME}" DEPENDS "${TARGET}")
-  else()
-    message(FATAL_ERROR "add_halide_test(): unsupported type ${TARGET_TYPE} for ${TARGET}")
-  endif()
-  set_target_properties("${EXEC_NAME}" PROPERTIES EXCLUDE_FROM_ALL TRUE)
-  foreach(GROUP ${args_GROUPS})
-    add_dependencies("${GROUP}" "${EXEC_NAME}")
-  endforeach()
-  add_test(NAME ${TARGET} COMMAND ${COMMAND})
-
+  set_tests_properties(${TARGET} PROPERTIES LABELS "${args_GROUPS}")
+  if (${args_EXPECT_FAILURE})
+    set_tests_properties(${TARGET} PROPERTIES WILL_FAIL true)
+  endif ()
 endfunction()
-
-# Only groups that are defined in *this file* will have projects reliably
-# defined for them in MSVC builds; pre-define the targets we want to be available
-# here to ensure that happens.
-define_test_group(test_auto_schedule)
-define_test_group(test_correctness)
-define_test_group(test_error)
-define_test_group(test_generator)
-define_test_group(test_internal)
-define_test_group(test_opengl)
-define_test_group(test_performance)
-define_test_group(test_tutorial)
-define_test_group(test_warning)
 
 add_subdirectory(src)
 option(WITH_TESTS "Build tests" ON)
@@ -454,7 +397,7 @@ find_package(Doxygen)
     message(FATAL_ERROR "Could not find Doxygen. Either install it or set WITH_DOCS to OFF")
   endif()
 
-  configure_file(${HALIDE_BASE_DIR}/Doxyfile.in ${CMAKE_BINARY_DIR}/Doxyfile @ONLY)
+  configure_file(${Halide_SOURCE_DIR}/Doxyfile.in ${CMAKE_BINARY_DIR}/Doxyfile @ONLY)
   # Note documentation is not built by default, the user needs to build the "doc" target
   add_custom_target(doc
     COMMAND ${DOXYGEN_EXECUTABLE} ${CMAKE_BINARY_DIR}/Doxyfile
@@ -474,6 +417,7 @@ endif()
 # ------------------------------------------------
 # install
 
+# TODO: the use of glob here is almost certainly brittle if not outright wrong.
 file(GLOB FILES "${CMAKE_BINARY_DIR}/include/HalideRuntime*.h")
 install(FILES
         "${CMAKE_BINARY_DIR}/include/Halide.h"
@@ -495,32 +439,33 @@ install(DIRECTORY tutorial
         PATTERN "*.png")
 
 # ---- Tools
-foreach(F mex_halide.m
-          GenGen.cpp
-          RunGen.h
-          RunGenMain.cpp
-          halide_benchmark.h
-          halide_image.h
-          halide_image_io.h
-          halide_image_info.h
-          halide_malloc_trace.h
-          halide_trace_config.h)
-  install(FILES "${HALIDE_BASE_DIR}/tools/${F}"
-          DESTINATION tools)
-endforeach()
+install(FILES
+        tools/mex_halide.m
+        tools/GenGen.cpp
+        tools/RunGen.h
+        tools/RunGenMain.cpp
+        tools/halide_benchmark.h
+        tools/halide_image.h
+        tools/halide_image_io.h
+        tools/halide_image_info.h
+        tools/halide_malloc_trace.h
+        tools/halide_trace_config.h
+        DESTINATION tools)
 
 # ---- README
-file(GLOB FILES "${HALIDE_BASE_DIR}/*.md")
-install(FILES ${FILES}
+install(FILES
+        CODE_OF_CONDUCT.md
+        README_cmake.md
+        README.md
+        README_rungen.md
+        README_webassembly.md
         DESTINATION .)
 
 # ---- halide.cmake
-file(GLOB FILES "${HALIDE_BASE_DIR}/*.cmake")
-install(FILES ${FILES}
-        DESTINATION .)
+install(FILES halide.cmake DESTINATION .)
 
 # ---- halide_config
-file(GLOB FILES "${HALIDE_BASE_DIR}/tools/halide_config.*.tpl")
+file(GLOB FILES "${Halide_SOURCE_DIR}/tools/halide_config.*.tpl")
 foreach(F ${FILES})
   get_filename_component(FNAME "${F}" NAME)  # Extract filename
   string(REGEX REPLACE "\\.tpl$" "" FNAME "${FNAME}")  # Strip .tpl extension
@@ -530,7 +475,7 @@ foreach(F ${FILES})
 endforeach()
 
 add_custom_target(distrib
-  COMMAND cmake -E echo "\\'make distrib\\' is not available under CMake. Use \\'make package\\' instead.")
+  COMMAND ${CMAKE_COMMAND} -E echo "\\'make distrib\\' is not available under CMake. Use \\'make package\\' instead.")
 
 add_custom_target(format
-  COMMAND find "${HALIDE_BASE_DIR}/apps" "${HALIDE_BASE_DIR}/src" "${HALIDE_BASE_DIR}/tools" "${HALIDE_BASE_DIR}/test" "${HALIDE_BASE_DIR}/util" "${HALIDE_BASE_DIR}/python_bindings" -name *.cpp -o -name *.h -o -name *.c | xargs ${CLANG}-format -i -style=file)
+  COMMAND find "${Halide_SOURCE_DIR}/apps" "${Halide_SOURCE_DIR}/src" "${Halide_SOURCE_DIR}/tools" "${Halide_SOURCE_DIR}/test" "${Halide_SOURCE_DIR}/util" "${Halide_SOURCE_DIR}/python_bindings" -name *.cpp -o -name *.h -o -name *.c | xargs ${CLANG}-format -i -style=file)
