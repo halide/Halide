@@ -277,17 +277,23 @@ jobs:
           message(FATAL_ERROR "Unknown build_tool: ${{matrix.config.build_tool}}")
         endif()
 
+        message(STATUS "runner.os is ${{runner.os}}")
+
         # Nonsense for MSVC to get vc vars set up
-        if ("${{runner.os}}" STREQUAL "Windows" AND NOT "${{matrix.config.environment_script}}" STREQUAL "")
+        if ("${{runner.os}}" STREQUAL "Windows" AND NOT "x${{matrix.config.environment_script}}" STREQUAL "x")
+          message(STATUS "executing ${{matrix.config.environment_script}}")
           execute_process(
             COMMAND "${{matrix.config.environment_script}}" && set
             OUTPUT_FILE environment_script_output.txt
+            ERROR_VARIABLE eee
             RESULT_VARIABLE result
           )
+          message(STATUS "stderr is: ${eee}")
           if (NOT result EQUAL 0)
             message(FATAL_ERROR "Bad exit status: ${result}")
           endif()
           file(STRINGS environment_script_output.txt output_lines)
+          message(STATUS "output_lines is: ${output_lines}")
           foreach(line IN LISTS output_lines)
             if (line MATCHES "^([a-zA-Z0-9_-]+)=(.*)$")
               set(ENV{${CMAKE_MATCH_1} } "${CMAKE_MATCH_2}")
