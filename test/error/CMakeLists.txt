@@ -31,6 +31,7 @@ tests(GROUPS error travis
         constrain_wrong_output_buffer.cpp
         define_after_realize.cpp
         define_after_use.cpp
+        device_dirty_with_no_device_support.cpp
         device_target_mismatch.cpp
         expanding_reduction.cpp
         extern_func_self_argument.cpp
