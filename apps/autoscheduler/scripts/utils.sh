@@ -307,6 +307,7 @@ function save_best_schedule_result() {
     local -r generator_name=${app#"cuda_"}
     local -r candidate_schedule_file=${samples_dir}/best.${generator_name%"_generator"}.schedule.h
     local -r candidate_weights_file=${samples_dir}/best.weights
+    local -r candidate_autotune_out_file=${samples_dir}/autotune_out.txt
 
     if [ ! -f $candidate_schedule_file ]; then
         echo "${candidate_schedule_file} not found. Exiting..."
@@ -318,6 +319,7 @@ function save_best_schedule_result() {
     local -r best_details_file=${results_dir}/$app.txt
     local -r best_schedule_file=${results_dir}/${app}.h
     local -r best_weights_file=${results_dir}/${app}.weights
+    local -r best_autotune_out_file=${results_dir}/${app}.autotune_out
 
     local -r candidate_run_time=$(tail -n 1 $candidate_details_file | cut -d" " -f 5)
 
@@ -326,6 +328,7 @@ function save_best_schedule_result() {
         cp $candidate_details_file $best_details_file
         cp $candidate_schedule_file $best_schedule_file
         cp $candidate_weights_file $best_weights_file
+        cp $candidate_autotune_out_file $best_autotune_out_file
         return
     fi
 
@@ -337,6 +340,7 @@ function save_best_schedule_result() {
         cp $candidate_details_file $best_details_file
         cp $candidate_schedule_file $best_schedule_file
         cp $candidate_weights_file $best_weights_file
+        cp $candidate_autotune_out_file $best_autotune_out_file
     else
         echo "Candidate run time (${candidate_run_time} ms) is not faster than the current best run time (${current_best_run_time} ms)"
     fi
