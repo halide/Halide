@@ -13,14 +13,14 @@ jobs:
       matrix:
         config:
         # Ubuntu (x86-64) builds
-        - {
-            name: "Ubuntu g++ llvm8 cmake_shared",
-            build_tool: "cmake_shared",
-            cc: "gcc",
-            cxx: "g++",
-            llvm_version: 8,
-            os: ubuntu-18.04,
-          }
+        # - {
+        #     name: "Ubuntu g++ llvm8 cmake_shared",
+        #     build_tool: "cmake_shared",
+        #     cc: "gcc",
+        #     cxx: "g++",
+        #     llvm_version: 8,
+        #     os: ubuntu-18.04,
+        #   }
         # - {
         #     name: "Ubuntu g++ llvm8 cmake_static",
         #     build_tool: "cmake_static",
@@ -63,14 +63,14 @@ jobs:
         #   }
 
         # OSX builds
-        - {
-            name: "OSX llvm9 cmake_shared",
-            build_tool: "cmake_shared",
-            cc: "clang",
-            cxx: "clang++",
-            llvm_version: 9,
-            os: macos-latest,
-          }
+        # - {
+        #     name: "OSX llvm9 cmake_shared",
+        #     build_tool: "cmake_shared",
+        #     cc: "clang",
+        #     cxx: "clang++",
+        #     llvm_version: 9,
+        #     os: macos-latest,
+        #   }
 
         # - {
         #     name: "OSX llvm9 make",
@@ -143,8 +143,8 @@ jobs:
         choco install libjpeg-turbo
         choco install doxygen.install
 
-        # Set all the VCVars
-        & .github\workflows\vcvars.ps1 -arch x64 -hostArch x64
+        # Set all the VCVars (via PowerShell)
+        call .github\workflows\vcvars.ps1 -arch x64 -hostArch x64
 
     - name: Download LLVM (Non-Windows)
       if: matrix.config.os != 'windows-latest'
@@ -379,9 +379,9 @@ jobs:
 
         set(PARALLEL_JOBS 4)  # The VMs have 2 cores, so specify N+2
         if (${{matrix.config.build_tool}} MATCHES "^cmake.*")
-          # skip OpenGL tests
+          # skip OpenGL and Performance tests
           execute_process(
-            COMMAND ${CMAKE_CTEST_COMMAND} -j ${PARALLEL_JOBS} -LE opengl --output-on-failure
+            COMMAND ${CMAKE_CTEST_COMMAND} -j ${PARALLEL_JOBS} -LE opengl -LE performance --output-on-failure
             WORKING_DIRECTORY ${HALIDE_BUILD_DIR}
             RESULT_VARIABLE result
           )
