@@ -12,15 +12,15 @@ jobs:
       fail-fast: false  # Keep running other jobs even if one fails
       matrix:
         config:
-        # Ubuntu (x86-64) builds
-        # - {
-        #     name: "Ubuntu g++ llvm8 cmake_shared",
-        #     build_tool: "cmake_shared",
-        #     cc: "gcc",
-        #     cxx: "g++",
-        #     llvm_version: 8,
-        #     os: ubuntu-18.04,
-        #   }
+        Ubuntu (x86-64) builds
+        - {
+            name: "Ubuntu g++ llvm8 cmake_shared",
+            build_tool: "cmake_shared",
+            cc: "gcc",
+            cxx: "g++",
+            llvm_version: 8,
+            os: ubuntu-18.04,
+          }
         # - {
         #     name: "Ubuntu g++ llvm8 cmake_static",
         #     build_tool: "cmake_static",
@@ -72,14 +72,14 @@ jobs:
             os: macos-latest,
           }
 
-        - {
-            name: "OSX llvm9 make",
-            build_tool: "make",
-            cc: "clang",
-            cxx: "clang++",
-            llvm_version: 9,
-            os: macos-latest,
-          }
+        # - {
+        #     name: "OSX llvm9 make",
+        #     build_tool: "make",
+        #     cc: "clang",
+        #     cxx: "clang++",
+        #     llvm_version: 9,
+        #     os: macos-latest,
+        #   }
 
         - {
             name: "MSVC llvm9 cmake_shared",
@@ -88,15 +88,9 @@ jobs:
             cxx: "cl",
             llvm_version: 9,
             os: windows-latest,
-            # 16 == VC2019
             cmake_gen: "Visual Studio 16",
             cmake_arch: "Win64",
             environment_script: "C:/Program Files (x86)/Microsoft Visual Studio/2019/Enterprise/VC/Auxiliary/Build/vcvars64.bat",
-
-            # name: "Windows Latest MSVC", artifact: "Windows-MSVC.tar.xz",
-            # os: windows-latest,
-            # build_type: "Release", cc: "cl", cxx: "cl",
-            # environment_script: "C:/Program Files (x86)/Microsoft Visual Studio/2019/Enterprise/VC/Auxiliary/Build/vcvars64.bat"
           }
 
         # - {
@@ -293,10 +287,11 @@ jobs:
             message(FATAL_ERROR "Bad exit status: ${result}")
           endif()
           file(STRINGS environment_script_output.txt output_lines)
-          message(STATUS "output_lines is: ${output_lines}")
           foreach(line IN LISTS output_lines)
+            message(STATUS "line is: ${line}")
             if (line MATCHES "^([a-zA-Z0-9_-]+)=(.*)$")
-              set(ENV{${CMAKE_MATCH_1} } "${CMAKE_MATCH_2}")
+              message(STATUS "ENV:${CMAKE_MATCH_1} is ${CMAKE_MATCH_2})
+              set(ENV{ ${CMAKE_MATCH_1} } "${CMAKE_MATCH_2}")
             endif()
           endforeach()
         endif()
@@ -383,9 +378,9 @@ jobs:
 
         set(PARALLEL_JOBS 4)  # The VMs have 2 cores, so specify N+2
         if (${{matrix.config.build_tool}} MATCHES "^cmake.*")
-          # ${CMAKE_CTEST_COMMAND} --extra-verbose --output-on-failure -R correctness_boundary_conditions
+          # skip OpenGL tests
           execute_process(COMMAND
-            ${CMAKE_CTEST_COMMAND} --output-on-failure -j ${PARALLEL_JOBS}
+            ${CMAKE_CTEST_COMMAND} --output-on-failure -j ${PARALLEL_JOBS} -LE opengl
             WORKING_DIRECTORY ${HALIDE_BUILD_DIR}
             RESULT_VARIABLE result
           )
