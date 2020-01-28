@@ -325,8 +325,27 @@ vector<vector<int64_t>> generate_gpu_tilings(const vector<vector<int64_t>> &stag
     return result;
 }
 
+bool all_ones(const std::vector<int64_t>& nums) {
+    for (const auto& n : nums) {
+        if (n != 1) {
+            return false;
+        }
+    }
+    return true;
+}
+
+bool equal_to_existing_size(const std::vector<int64_t>& s, const std::vector<int64_t>& nums) {
+    for (size_t i = 0; i < s.size(); ++i) {
+        if (s[i] != nums[i]) {
+            return false;
+        }
+    }
+    return true;
+}
+
 // used for creating default serial loop tiling options inside gpu threads loop
 vector<vector<int64_t>> generate_serial_tilings(const vector<int64_t> &s, int d,
+                                                int last_d,
                                                 int vectorized_index,
                                                 const vector<int> &vec_dim_serial_sizes,
                                                 bool filter_small_outer_extents) {
@@ -335,7 +354,7 @@ vector<vector<int64_t>> generate_serial_tilings(const vector<int64_t> &s, int d,
         result.push_back(vector<int64_t>());
     } else {
         vector<vector<int64_t>> v;
-        v = generate_serial_tilings(s, d - 1, vectorized_index, vec_dim_serial_sizes, filter_small_outer_extents);
+        v = generate_serial_tilings(s, d - 1, last_d, vectorized_index, vec_dim_serial_sizes, filter_small_outer_extents);
         for (auto t : v) {
             t.push_back(0);
             // include odd serial sizes that encourage multiples of 16 as thread tile size
@@ -346,6 +365,10 @@ vector<vector<int64_t>> generate_serial_tilings(const vector<int64_t> &s, int d,
                         continue;
                     }
                     t.back() = outer;
+
+                    if (d == last_d && (equal_to_existing_size(s, t) || all_ones(t))) {
+                        continue;
+                    }
                     result.push_back(t);
                 }
             }
@@ -359,6 +382,9 @@ vector<vector<int64_t>> generate_serial_tilings(const vector<int64_t> &s, int d,
                     continue;
                 }
                 t.back() = outer;
+                if (d == last_d && (equal_to_existing_size(s, t) || all_ones(t))) {
+                    continue;
+                }
                 result.push_back(t);
             }
         }
@@ -696,7 +722,10 @@ bool LoopNest::exceeds_serial_extents_limit(const Target &target, const LoopNest
         if (parent_of_innermost) {
             return serial_loop_extents > get_unroll_limit(target);
         }
-        return serial_loop_extents > 64;
+
+        if (serial_loop_extents > 64) {
+            return true;
+        }
     }
 
     for (const auto &c : children) {
@@ -3086,7 +3115,7 @@ vector<IntrusivePtr<const LoopNest>> LoopNest::compute_in_tiles(const FunctionDA
         vector<vector<int64_t>> tilings;
 
         if (gpu_label == thread || gpu_label == block || gpu_label == serial) {
-            tilings = generate_serial_tilings(size, node->dimensions - 1, vectorized_loop_index, {}, gpu_label == thread);
+            tilings = generate_serial_tilings(size, node->dimensions - 1, node->dimensions - 1, vectorized_loop_index, {}, gpu_label == thread);
         } else {
             tilings = generate_tilings(size, (int)(size.size() - 1), 2, !in_realization, target);
         }

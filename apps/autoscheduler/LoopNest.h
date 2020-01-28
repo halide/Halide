@@ -109,8 +109,12 @@ vector<vector<int64_t>> generate_gpu_tilings(const vector<vector<int64_t>> &stag
         const vector<int64_t> &max_s,
         int d, const vector<int> &vectorized_indices, bool serial_inner);
 
+bool all_ones(const std::vector<int64_t>& nums);
+bool equal_to_existing_size(const std::vector<int64_t>& s, const std::vector<int64_t>& nums);
+
 // used for creating default serial loop tiling options inside gpu threads loop
 vector<vector<int64_t>> generate_serial_tilings(const vector<int64_t> &s, int d,
+                                                int last_d,
                                                 int vectorized_index,
                                                 const vector<int> &vec_dim_serial_sizes,
                                                 bool filter_small_outer_extents=false);
