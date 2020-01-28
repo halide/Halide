@@ -383,7 +383,7 @@ int main(int argc, char **argv) {
     printf("BoundaryConditions, target = %s\n", target.to_string().c_str());
     fflush(stdout);
 
-    Halide::Internal::ThreadPool<bool> pool;
+    Halide::Internal::ThreadPool<bool> pool(1);
     std::vector<std::future<bool>> futures;
     int vector_width_max = 32;
     if (target.has_feature(Target::Metal) ||

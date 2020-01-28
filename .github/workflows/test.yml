@@ -89,7 +89,7 @@ jobs:
             llvm_version: 9,
             os: windows-latest,
             # 16 == VC2019
-            cmake_gen: "Visual Studio 16 Win64",
+            cmake_gen: "Visual Studio 16",
             cmake_arch: "Win64",
 
             # name: "Windows Latest MSVC", artifact: "Windows-MSVC.tar.xz",
