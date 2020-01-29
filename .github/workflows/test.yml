@@ -151,6 +151,7 @@ jobs:
           OUTPUT_VARIABLE VS_INSTALLATION_PATH
           RESULT_VARIABLE result
         )
+        string(STRIP VS_INSTALLATION_PATH "${VS_INSTALLATION_PATH}")   # strip whitespace from start & end
         if (NOT result EQUAL 0)
           message(FATAL_ERROR "Bad exit status: ${result}")
         endif()
