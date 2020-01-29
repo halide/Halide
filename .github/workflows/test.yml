@@ -194,18 +194,12 @@ jobs:
         # endforeach()
 
     - name: Configure Env Vars
-      shell: cmake -P {0}
       run: |
-        message(STATUS "::set-env name=CC::${{matrix.config.cc}}")
-        message(STATUS "::set-env name=CXX::${{matrix.config.cxx}}")
-
-        set(ROOT "$ENV{GITHUB_WORKSPACE}")
-        string(REPLACE "\\" "/" ROOT "${ROOT}")
-
-        message(STATUS "::set-env name=ROOT::${ROOT}")
-        message(STATUS "::set-env name=LLVM_DIR::${ROOT}/llvm")
-        message(STATUS "::set-env name=HALIDE_DIR::${ROOT}/halide")
-        message(STATUS "::set-env name=HALIDE_BUILD_DIR::${ROOT}/halide_build")
+        echo ::set-env name=CC::${{matrix.config.cc}}
+        echo ::set-env name=CXX::${{matrix.config.cxx}}
+        echo ::set-env name=LLVM_DIR::${GITHUB_WORKSPACE}/llvm
+        echo ::set-env name=HALIDE_DIR::${GITHUB_WORKSPACE}/halide
+        echo ::set-env name=HALIDE_BUILD_DIR::${GITHUB_WORKSPACE}/halide_build
 
     - name: Download LLVM (Non-Windows)
       if: matrix.config.os != 'windows-latest'
