@@ -329,15 +329,34 @@ jobs:
 
         # Make sure that our LLVM package is in CMAKE_MODULE_PATH
         # so that CMake will be able to find it
-        #          -DCMAKE_MODULE_PATH="${LLVM_DIR}/lib/cmake/llvm/;${CMAKE_MODULE_PATH}"
+        #          -DCMAKE_MODULE_PATH="${LLVM_DIR}/lib/cmake/llvm/"
+
+        if("${{matrix.config.os}}" MATCHES "^windows.*")
+          set(CMAKE_HOST "-Thost=x64")
+          execute_process(
+            COMMAND dir "${LLVM_DIR}/lib/cmake/llvm/"
+            OUTPUT_VARIABLE foo
+          )
+          message(STATUS "foo: ${foo}")
+        else()
+          set(CMAKE_HOST "")
+          execute_process(
+            COMMAND ls "${LLVM_DIR}/lib/cmake/llvm/"
+            OUTPUT_VARIABLE foo
+          )
+          message(STATUS "foo: ${foo}")
+        endif()
+
         execute_process(
           COMMAND ${CMAKE_COMMAND}
                   -DCMAKE_BUILD_TYPE=Release
                   -DLLVM_DIR="${LLVM_DIR}/lib/cmake/llvm/"
+                  -DCMAKE_MODULE_PATH="${LLVM_DIR}/lib/cmake/llvm/"
                   -DHALIDE_REQUIRE_LLVM_VERSION=${{matrix.config.llvm_version}}0
                   -DHALIDE_SHARED_LIBRARY=${HALIDE_SHARED_LIBRARY}
                   -G "${CMAKE_GEN}"
                   -A "${CMAKE_ARCH}"
+                  ${CMAKE_HOST}
                   --debug-output
                   --check-system-vars
                   "${HALIDE_DIR}"
