@@ -329,7 +329,7 @@ jobs:
 
         # Make sure that our LLVM package is in CMAKE_MODULE_PATH
         # so that CMake will be able to find it
-#                  -DCMAKE_MODULE_PATH="${LLVM_DIR}/lib/cmake/llvm/;${CMAKE_MODULE_PATH}"
+        #          -DCMAKE_MODULE_PATH="${LLVM_DIR}/lib/cmake/llvm/;${CMAKE_MODULE_PATH}"
         execute_process(
           COMMAND ${CMAKE_COMMAND}
                   -DCMAKE_BUILD_TYPE=Release
