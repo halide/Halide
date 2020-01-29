@@ -1,5 +1,5 @@
 add_executable(iir_blur_filter filter.cpp)
-halide_use_image_io(iir_blur_filter)
+target_link_libraries(iir_blur_filter PRIVATE Halide::ImageIO)
 
 halide_generator(iir_blur.generator SRCS iir_blur_generator.cpp)
 foreach(AUTO_SCHEDULE false true)

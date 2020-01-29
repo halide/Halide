@@ -433,11 +433,9 @@ void CodeGen_OpenCL_Dev::CodeGen_OpenCL_C::visit(const Store *op) {
 
         if ((op->alignment.modulus % op->value.type().lanes() == 0) &&
             (op->alignment.remainder % op->value.type().lanes() == 0)) {
-            stream << get_indent();
             string id_ramp_base = print_expr(ramp_base / op->value.type().lanes());
-
-            std::string array_indexing = print_array_access(op->name, t, id_ramp_base);
-            stream << array_indexing << " = " << id_value << ";\n";
+            string array_indexing = print_array_access(op->name, t, id_ramp_base);
+            stream << get_indent() << array_indexing << " = " << id_value << ";\n";
         } else {
             string id_ramp_base = print_expr(ramp_base);
             stream << get_indent() << "vstore" << t.lanes() << "("
