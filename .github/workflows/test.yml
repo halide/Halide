@@ -1,7 +1,5 @@
 name: Build+Test
-on:
-  pull_request:
-    types: [opened, synchronize, reopened, edited, review_requested]
+on: [push, pull_request]
 
 jobs:
   test:
@@ -144,7 +142,7 @@ jobs:
         # choco install libjpeg-turbo
         # choco install doxygen.install
 
-    - name: Configure Windows Env Vars
+    - name: Configure Env Vars (Windows)
       if: matrix.config.os == 'windows-latest'
       shell: powershell
       run: |
@@ -192,6 +190,13 @@ jobs:
         #     message(STATUS "::set-env name=${CMAKE_MATCH_1}::${CMAKE_MATCH_2}")
         #   endif()
         # endforeach()
+
+    - name: Configure Env Vars
+      shell: cmake -P {0}
+      run: |
+        set(ENV{CC} "${{matrix.config.cc}}")
+        set(ENV{CXX} "${{matrix.config.cxx}}")
+        set(ENV{LLVM_CONFIG} "${LLVM_DIR}/bin/llvm-config")
 
     - name: Download LLVM (Non-Windows)
       if: matrix.config.os != 'windows-latest'
@@ -257,9 +262,6 @@ jobs:
       shell: cmake -P {0}
       run: |
         # Configure Make
-        set(ENV{CC} "${{matrix.config.cc}}")
-        set(ENV{CXX} "${{matrix.config.cxx}}")
-
         set(ROOT "$ENV{GITHUB_WORKSPACE}")
         set(HALIDE_DIR "${ROOT}/halide")
         set(LLVM_DIR "${ROOT}/llvm")
@@ -280,9 +282,6 @@ jobs:
       shell: cmake -P {0}
       run: |
         # Configure CMake
-        set(ENV{CC} "${{matrix.config.cc}}")
-        set(ENV{CXX} "${{matrix.config.cxx}}")
-
         set(ROOT "$ENV{GITHUB_WORKSPACE}")
         set(HALIDE_DIR "${ROOT}/halide")
         set(LLVM_DIR "${ROOT}/llvm")
@@ -320,6 +319,14 @@ jobs:
           message(FATAL_ERROR "Unknown build_tool: ${{matrix.config.build_tool}}")
         endif()
 
+        message(STATUS "${CMAKE_COMMAND}
+              -DCMAKE_BUILD_TYPE=Release
+              -DHALIDE_REQUIRE_LLVM_VERSION=${{matrix.config.llvm_version}}0
+              -DLLVM_ROOT=${LLVM_DIR}
+              -DHALIDE_SHARED_LIBRARY=${HALIDE_SHARED_LIBRARY}
+              -G "${CMAKE_GEN}"
+              ${CMAKE_ARCH}
+              ${HALIDE_DIR")
         execute_process(
           COMMAND ${CMAKE_COMMAND}
               -DCMAKE_BUILD_TYPE=Release
@@ -344,10 +351,6 @@ jobs:
         set(HALIDE_DIR "${ROOT}/halide")
         set(LLVM_DIR "${ROOT}/llvm")
         set(HALIDE_BUILD_DIR "${ROOT}/halide_build")
-
-        set(ENV{CC} "${{matrix.config.cc}}")
-        set(ENV{CXX} "${{matrix.config.cxx}}")
-        set(ENV{LLVM_CONFIG} "${LLVM_DIR}/bin/llvm-config")
 
         set(PARALLEL_JOBS 4)  # The VMs have 2 cores, so specify N+2
         if (${{matrix.config.build_tool}} MATCHES "^cmake.*")
@@ -395,10 +398,6 @@ jobs:
         set(HALIDE_DIR "${ROOT}/halide")
         set(LLVM_DIR "${ROOT}/llvm")
         set(HALIDE_BUILD_DIR "${ROOT}/halide_build")
-
-        set(ENV{CC} "${{matrix.config.cc}}")
-        set(ENV{CXX} "${{matrix.config.cxx}}")
-        set(ENV{LLVM_CONFIG} "${LLVM_DIR}/bin/llvm-config")
 
         set(PARALLEL_JOBS 4)  # The VMs have 2 cores, so specify N+2
         if (${{matrix.config.build_tool}} MATCHES "^cmake.*")
