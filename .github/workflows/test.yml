@@ -326,7 +326,8 @@ jobs:
               -DHALIDE_SHARED_LIBRARY=${HALIDE_SHARED_LIBRARY}
               -G "${CMAKE_GEN}"
               ${CMAKE_ARCH}
-              ${HALIDE_DIR)
+              ${HALIDE_DIR})
+
         execute_process(
           COMMAND ${CMAKE_COMMAND}
               -DCMAKE_BUILD_TYPE=Release
@@ -354,7 +355,7 @@ jobs:
 
         set(PARALLEL_JOBS 4)  # The VMs have 2 cores, so specify N+2
         if (${{matrix.config.build_tool}} MATCHES "^cmake.*")
-          foreach(TARGET package build_tests test_internal)
+          foreach(TARGET all package)
             # CMake only allows one --target flag per invocation
             execute_process(
               COMMAND ${CMAKE_COMMAND} --build ${HALIDE_BUILD_DIR} -j ${PARALLEL_JOBS} --target ${TARGET}
@@ -401,10 +402,16 @@ jobs:
 
         set(PARALLEL_JOBS 4)  # The VMs have 2 cores, so specify N+2
         if (${{matrix.config.build_tool}} MATCHES "^cmake.*")
-          set(TEST_GROUPS_TO_SKIP "opengl|performance|auto_schedule")
+          set(TEST_GROUPS_BROKEN "opengl")
+          set(TEST_GROUPS_SERIAL "performance|auto_schedule")
           # skip OpenGL and Performance tests
           execute_process(
-            COMMAND ${CMAKE_CTEST_COMMAND} -j ${PARALLEL_JOBS} -LE "${TEST_GROUPS_TO_SKIP}" --output-on-failure
+            COMMAND ${CMAKE_CTEST_COMMAND} -j ${PARALLEL_JOBS} -LE "${TEST_GROUPS_BROKEN}|${TEST_GROUPS_SERIAL}" --output-on-failure
+            WORKING_DIRECTORY ${HALIDE_BUILD_DIR}
+            RESULT_VARIABLE result
+          )
+          execute_process(
+            COMMAND ${CMAKE_CTEST_COMMAND} -L "${TEST_GROUPS_SERIAL}" --output-on-failure
             WORKING_DIRECTORY ${HALIDE_BUILD_DIR}
             RESULT_VARIABLE result
           )
