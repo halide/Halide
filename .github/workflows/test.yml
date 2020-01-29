@@ -196,9 +196,16 @@ jobs:
     - name: Configure Env Vars
       shell: cmake -P {0}
       run: |
-        set(ENV{CC} "${{matrix.config.cc}}")
-        set(ENV{CXX} "${{matrix.config.cxx}}")
-        set(ENV{LLVM_CONFIG} "${LLVM_DIR}/bin/llvm-config")
+        message(STATUS "::set-env name=CC::${{matrix.config.cc}}")
+        message(STATUS "::set-env name=CXX::${{matrix.config.cxx}}")
+
+        set(ROOT "$ENV{GITHUB_WORKSPACE}")
+        string(REPLACE "\\" "/" ROOT "${ROOT}")
+
+        message(STATUS "::set-env name=ROOT::${ROOT}")
+        message(STATUS "::set-env name=LLVM_DIR::${ROOT}/llvm")
+        message(STATUS "::set-env name=HALIDE_DIR::${ROOT}/halide")
+        message(STATUS "::set-env name=HALIDE_BUILD_DIR::${ROOT}/halide_build")
 
     - name: Download LLVM (Non-Windows)
       if: matrix.config.os != 'windows-latest'
@@ -214,12 +221,9 @@ jobs:
           message(FATAL_ERROR "Unknown OS: ${{matrix.config.os}}")
         endif()
 
-        set(ROOT "$ENV{GITHUB_WORKSPACE}")
-        string(REPLACE "\\" "/" ROOT "${ROOT}")
-
-        file(DOWNLOAD "${LLVM_URL}" "${ROOT}/llvm-project.tar.xz")
-        execute_process(COMMAND ${CMAKE_COMMAND} -E tar xvf "${ROOT}/llvm-project.tar.xz")
-        execute_process(COMMAND ${CMAKE_COMMAND} -E remove -f "${ROOT}/llvm-project.tar.xz")
+        file(DOWNLOAD "${LLVM_URL}" "$ENV{ROOT}/llvm-project.tar.xz")
+        execute_process(COMMAND ${CMAKE_COMMAND} -E tar xvf "$ENV{ROOT}/llvm-project.tar.xz")
+        execute_process(COMMAND ${CMAKE_COMMAND} -E remove -f "$ENV{ROOT}/llvm-project.tar.xz")
 
         string(REGEX REPLACE
           "http[s]*://releases.llvm.org/[0-9\\.]*/([^/]*)\\.tar\\.xz"
@@ -227,10 +231,10 @@ jobs:
           LLVM_UNTAR_DIR
           "${LLVM_URL}"
         )
-        message(STATUS "LLVM_UNTAR_DIR ${ROOT}/${LLVM_UNTAR_DIR}")
+        message(STATUS "LLVM_UNTAR_DIR $ENV{ROOT}/${LLVM_UNTAR_DIR}")
         execute_process(
           COMMAND ${CMAKE_COMMAND}
-            -E rename "${ROOT}/${LLVM_UNTAR_DIR}" "${ROOT}/llvm"
+            -E rename "$ENV{ROOT}/${LLVM_UNTAR_DIR}" "$ENV{ROOT}/llvm"
           RESULT_VARIABLE result
         )
         if (NOT result EQUAL 0)
@@ -243,14 +247,11 @@ jobs:
       run: |
         set(LLVM_URL "https://releases.llvm.org/${{matrix.config.llvm_version}}.0.0/LLVM-${{matrix.config.llvm_version}}.0.0-win64.exe")
 
-        set(ROOT "$ENV{GITHUB_WORKSPACE}")
-        string(REPLACE "\\" "/" ROOT "${ROOT}")
-
-        file(DOWNLOAD "${LLVM_URL}" "${ROOT}/llvm.exe")
+        file(DOWNLOAD "${LLVM_URL}" "$ENV{ROOT}/llvm.exe")
         # Note that the Windows VMs run as admin with UAC disabled; otherwise, this wouldn't work
         execute_process(
-          COMMAND "${ROOT}/llvm.exe" "/S" "/D${ROOT}\\llvm"
-          WORKING_DIRECTORY ${ROOT}
+          COMMAND "$ENV{ROOT}/llvm.exe" "/S" "/D$ENV{ROOT}\\llvm"
+          WORKING_DIRECTORY $ENV{ROOT}
           RESULT_VARIABLE result
         )
         if (NOT result EQUAL 0)
@@ -262,16 +263,9 @@ jobs:
       shell: cmake -P {0}
       run: |
         # Configure Make
-        set(ROOT "$ENV{GITHUB_WORKSPACE}")
-        string(REPLACE "\\" "/" ROOT "${ROOT}")
-
-        set(HALIDE_DIR "${ROOT}/halide")
-        set(LLVM_DIR "${ROOT}/llvm")
-        set(HALIDE_BUILD_DIR "${ROOT}/halide_build")
-
         execute_process(
           COMMAND ${CMAKE_COMMAND}
-            -E make_directory "${HALIDE_BUILD_DIR}"
+            -E make_directory "$ENV{HALIDE_BUILD_DIR}"
           RESULT_VARIABLE result
         )
         if (NOT result EQUAL 0)
@@ -284,16 +278,9 @@ jobs:
       shell: cmake -P {0}
       run: |
         # Configure CMake
-        set(ROOT "$ENV{GITHUB_WORKSPACE}")
-        string(REPLACE "\\" "/" ROOT "${ROOT}")
-
-        set(HALIDE_DIR "${ROOT}/halide")
-        set(LLVM_DIR "${ROOT}/llvm")
-        set(HALIDE_BUILD_DIR "${ROOT}/halide_build")
-
         execute_process(
           COMMAND ${CMAKE_COMMAND}
-            -E make_directory "${HALIDE_BUILD_DIR}"
+            -E make_directory "$ENV{HALIDE_BUILD_DIR}"
           RESULT_VARIABLE result
         )
         if (NOT result EQUAL 0)
@@ -320,28 +307,28 @@ jobs:
           message(FATAL_ERROR "Unknown build_tool: ${{matrix.config.build_tool}}")
         endif()
 
-        message(STATUS "LLVM_DIR: ${LLVM_DIR}")
+        message(STATUS "LLVM_DIR: $ENV{LLVM_DIR}")
         message(STATUS "CMAKE_MODULE_PATH: ${CMAKE_MODULE_PATH}")
         message(STATUS "HALIDE_SHARED_LIBRARY: ${HALIDE_SHARED_LIBRARY}")
         message(STATUS "CMAKE_GEN: ${CMAKE_GEN}")
         message(STATUS "CMAKE_ARCH: ${CMAKE_ARCH}")
-        message(STATUS "HALIDE_DIR: ${HALIDE_DIR}")
+        message(STATUS "HALIDE_DIR: $ENV{HALIDE_DIR}")
 
         # Make sure that our LLVM package is in CMAKE_MODULE_PATH
         # so that CMake will be able to find it
-        #          -DCMAKE_MODULE_PATH="${LLVM_DIR}/lib/cmake/llvm/"
+        #          -DCMAKE_MODULE_PATH="$ENV{LLVM_DIR}/lib/cmake/llvm/"
 
         if("${{matrix.config.os}}" MATCHES "^windows.*")
           set(CMAKE_HOST "-Thost=x64")
           execute_process(
-            COMMAND dir "${LLVM_DIR}/lib/cmake/llvm/"
+            COMMAND dir "$ENV{LLVM_DIR}/lib/cmake/llvm/"
             OUTPUT_VARIABLE foo
           )
           message(STATUS "foo: ${foo}")
         else()
           set(CMAKE_HOST "")
           execute_process(
-            COMMAND ls "${LLVM_DIR}/lib/cmake/llvm/"
+            COMMAND ls "$ENV{LLVM_DIR}/lib/cmake/llvm/"
             OUTPUT_VARIABLE foo
           )
           message(STATUS "foo: ${foo}")
@@ -350,8 +337,8 @@ jobs:
         execute_process(
           COMMAND ${CMAKE_COMMAND}
                   -DCMAKE_BUILD_TYPE=Release
-                  -DLLVM_DIR="${LLVM_DIR}/lib/cmake/llvm/"
-                  -DCMAKE_MODULE_PATH="${LLVM_DIR}/lib/cmake/llvm/"
+                  -DLLVM_DIR="$ENV{LLVM_DIR}/lib/cmake/llvm/"
+                  -DCMAKE_MODULE_PATH="$ENV{LLVM_DIR}/lib/cmake/llvm/"
                   -DHALIDE_REQUIRE_LLVM_VERSION=${{matrix.config.llvm_version}}0
                   -DHALIDE_SHARED_LIBRARY=${HALIDE_SHARED_LIBRARY}
                   -G "${CMAKE_GEN}"
@@ -359,8 +346,8 @@ jobs:
                   ${CMAKE_HOST}
                   --debug-output
                   --check-system-vars
-                  "${HALIDE_DIR}"
-          WORKING_DIRECTORY ${HALIDE_BUILD_DIR}
+                  "$ENV{HALIDE_DIR}"
+          WORKING_DIRECTORY $ENV{HALIDE_BUILD_DIR}
           RESULT_VARIABLE result
         )
 
@@ -372,20 +359,13 @@ jobs:
       shell: cmake -P {0}
       run: |
         # Build Halide
-        set(ROOT "$ENV{GITHUB_WORKSPACE}")
-        string(REPLACE "\\" "/" ROOT "${ROOT}")
-
-        set(HALIDE_DIR "${ROOT}/halide")
-        set(LLVM_DIR "${ROOT}/llvm")
-        set(HALIDE_BUILD_DIR "${ROOT}/halide_build")
-
         set(PARALLEL_JOBS 4)  # The VMs have 2 cores, so specify N+2
         if (${{matrix.config.build_tool}} MATCHES "^cmake.*")
           foreach(TARGET all package)
             # CMake only allows one --target flag per invocation
             execute_process(
-              COMMAND ${CMAKE_COMMAND} --build ${HALIDE_BUILD_DIR} -j ${PARALLEL_JOBS} --target ${TARGET}
-              WORKING_DIRECTORY ${HALIDE_BUILD_DIR}
+              COMMAND ${CMAKE_COMMAND} --build $ENV{HALIDE_BUILD_DIR} -j ${PARALLEL_JOBS} --target ${TARGET}
+              WORKING_DIRECTORY $ENV{HALIDE_BUILD_DIR}
               RESULT_VARIABLE result
             )
             if (NOT result EQUAL 0)
@@ -394,8 +374,8 @@ jobs:
           endforeach()
         elseif (${{matrix.config.build_tool}} STREQUAL "make")
           execute_process(
-            COMMAND make -f ${HALIDE_DIR}/Makefile -j ${PARALLEL_JOBS} distrib build_tests test_internal
-            WORKING_DIRECTORY ${HALIDE_BUILD_DIR}
+            COMMAND make -f $ENV{HALIDE_DIR}/Makefile -j ${PARALLEL_JOBS} distrib build_tests test_internal
+            WORKING_DIRECTORY $ENV{HALIDE_BUILD_DIR}
             RESULT_VARIABLE result
           )
           if (NOT result EQUAL 0)
@@ -408,13 +388,6 @@ jobs:
     - name: Run Tests
       shell: cmake -P {0}
       run: |
-        set(ROOT "$ENV{GITHUB_WORKSPACE}")
-        string(REPLACE "\\" "/" ROOT "${ROOT}")
-
-        set(HALIDE_DIR "${ROOT}/halide")
-        set(LLVM_DIR "${ROOT}/llvm")
-        set(HALIDE_BUILD_DIR "${ROOT}/halide_build")
-
         # set TEST_TMPDIR for the tests that need it
         set(ENV{TEST_TMPDIR} "${{runner.temp}}")
 
@@ -426,7 +399,7 @@ jobs:
           # Parallel
           execute_process(
             COMMAND ${CMAKE_CTEST_COMMAND} -j ${PARALLEL_JOBS} -LE "${TEST_GROUPS_BROKEN}|${TEST_GROUPS_SERIAL}" --output-on-failure
-            WORKING_DIRECTORY ${HALIDE_BUILD_DIR}
+            WORKING_DIRECTORY $ENV{HALIDE_BUILD_DIR}
             RESULT_VARIABLE result
           )
           if (NOT result EQUAL 0)
@@ -436,7 +409,7 @@ jobs:
           # Serial
           execute_process(
             COMMAND ${CMAKE_CTEST_COMMAND} -L "${TEST_GROUPS_SERIAL}" --output-on-failure
-            WORKING_DIRECTORY ${HALIDE_BUILD_DIR}
+            WORKING_DIRECTORY $ENV{HALIDE_BUILD_DIR}
             RESULT_VARIABLE result
           )
           if (NOT result EQUAL 0)
@@ -444,8 +417,8 @@ jobs:
           endif()
         elseif (${{matrix.config.build_tool}} STREQUAL "make")
           execute_process(
-            COMMAND make -f ${HALIDE_DIR}/Makefile -j ${PARALLEL_JOBS} run_tests
-            WORKING_DIRECTORY ${HALIDE_BUILD_DIR}
+            COMMAND make -f $ENV{HALIDE_DIR}/Makefile -j ${PARALLEL_JOBS} run_tests
+            WORKING_DIRECTORY $ENV{HALIDE_BUILD_DIR}
             RESULT_VARIABLE result
           )
           if (NOT result EQUAL 0)
