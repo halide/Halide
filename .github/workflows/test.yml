@@ -335,7 +335,7 @@ jobs:
               -DHALIDE_SHARED_LIBRARY=${HALIDE_SHARED_LIBRARY}
               -G "${CMAKE_GEN}"
               ${CMAKE_ARCH}
-              ${HALIDE_DIR}
+              ${HALIDE_DIR})
           WORKING_DIRECTORY ${HALIDE_BUILD_DIR}
           RESULT_VARIABLE result
         )
