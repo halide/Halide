@@ -25,6 +25,7 @@ find_package(Threads QUIET)
 #   message(STATUS "CMAKE_MODULE_PATH is now ${CMAKE_MODULE_PATH}")
 # endif()
 
+message("LLVM_DIR is ${LLVM_DIR}")
 if("${HALIDE_REQUIRE_LLVM_VERSION}" STREQUAL "")
   # Find any version present.
   find_package(LLVM REQUIRED CONFIG)
