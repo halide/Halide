@@ -163,43 +163,14 @@ jobs:
           Write-Output "::set-env name=$name::$value"
         }
 
-        # # See: https://github.com/microsoft/vswhere/wiki/Start-Developer-Command-Prompt
-        # set(VSWHERE "C:/Program Files (x86)/Microsoft Visual Studio/Installer/vswhere.exe")
-        # execute_process(
-        #   COMMAND "${VSWHERE}" -latest -property installationPath
-        #   OUTPUT_VARIABLE VS_INSTALLATION_PATH
-        #   RESULT_VARIABLE result
-        # )
-        # if (NOT result EQUAL 0)
-        #   message(FATAL_ERROR "Bad exit status: ${result}")
-        # endif()
-        # string(STRIP VS_INSTALLATION_PATH "${VS_INSTALLATION_PATH}")   # strip whitespace from start & end
-        # string(REPLACE "\n" "" VS_INSTALLATION_PATH "${VS_INSTALLATION_PATH}")
-        # string(REPLACE "\\" "/" ${{runner.temp}} "${TEMP}")
-        # execute_process(
-        #   COMMAND "${VS_INSTALLATION_PATH}/Common7/Tools/VsDevCmd.bat" -no_logo -arch=x64 -host_arch=x64 && set
-        #   OUTPUT_FILE "${TEMP}/vc_env_vars.txt"
-        #   RESULT_VARIABLE result
-        # )
-        # if (NOT result EQUAL 0)
-        #   message(FATAL_ERROR "Bad exit status: ${result}")
-        # endif()
-        # file(STRINGS "${TEMP}/vc_env_vars.txt" ENV_LINES)
-        # foreach(line IN LISTS ENV_LINES)
-        #   message(STATUS "line is: ${line}")
-        #   if (line MATCHES "^([a-zA-Z0-9_-]+)=(.*)$")
-        #     # This is magic that GitHub Actions uses to allow global env var setting
-        #     message(STATUS "::set-env name=${CMAKE_MATCH_1}::${CMAKE_MATCH_2}")
-        #   endif()
-        # endforeach()
-
     - name: Configure Env Vars
       run: |
-        echo ::set-env name=CC::${{matrix.config.cc}}
-        echo ::set-env name=CXX::${{matrix.config.cxx}}
-        echo ::set-env name=LLVM_DIR::${GITHUB_WORKSPACE}/llvm
-        echo ::set-env name=HALIDE_DIR::${GITHUB_WORKSPACE}/halide
-        echo ::set-env name=HALIDE_BUILD_DIR::${GITHUB_WORKSPACE}/halide_build
+        echo "::set-env name=CC::${{matrix.config.cc}}"
+        echo "::set-env name=CXX::${{matrix.config.cxx}}"
+        echo "::set-env name=LLVM_DIR::${GITHUB_WORKSPACE}/llvm"
+        echo "::set-env name=LLVM_CONFIG::${GITHUB_WORKSPACE}/llvm/bin/llvm-config"
+        echo "::set-env name=HALIDE_DIR::${GITHUB_WORKSPACE}/halide"
+        echo "::set-env name=HALIDE_BUILD_DIR::${GITHUB_WORKSPACE}/halide_build"
 
     - name: Download LLVM (Non-Windows)
       if: matrix.config.os != 'windows-latest'
