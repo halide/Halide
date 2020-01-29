@@ -215,9 +215,10 @@ jobs:
           message(FATAL_ERROR "Unknown OS: ${{matrix.config.os}}")
         endif()
 
-        file(DOWNLOAD "${LLVM_URL}" "$ENV{ROOT}/llvm-project.tar.xz")
-        execute_process(COMMAND ${CMAKE_COMMAND} -E tar xvf "$ENV{ROOT}/llvm-project.tar.xz")
-        execute_process(COMMAND ${CMAKE_COMMAND} -E remove -f "$ENV{ROOT}/llvm-project.tar.xz")
+        set(ROOT "$ENV{GITHUB_WORKSPACE}")
+        file(DOWNLOAD "${LLVM_URL}" "${ROOT}/llvm-project.tar.xz")
+        execute_process(COMMAND ${CMAKE_COMMAND} -E tar xvf "${ROOT}/llvm-project.tar.xz")
+        execute_process(COMMAND ${CMAKE_COMMAND} -E remove -f "${ROOT}/llvm-project.tar.xz")
 
         string(REGEX REPLACE
           "http[s]*://releases.llvm.org/[0-9\\.]*/([^/]*)\\.tar\\.xz"
@@ -225,10 +226,10 @@ jobs:
           LLVM_UNTAR_DIR
           "${LLVM_URL}"
         )
-        message(STATUS "LLVM_UNTAR_DIR $ENV{ROOT}/${LLVM_UNTAR_DIR}")
+        message(STATUS "LLVM_UNTAR_DIR ${ROOT}/${LLVM_UNTAR_DIR}")
         execute_process(
           COMMAND ${CMAKE_COMMAND}
-            -E rename "$ENV{ROOT}/${LLVM_UNTAR_DIR}" "$ENV{ROOT}/llvm"
+            -E rename "${ROOT}/${LLVM_UNTAR_DIR}" "${ROOT}/llvm"
           RESULT_VARIABLE result
         )
         if (NOT result EQUAL 0)
@@ -241,11 +242,12 @@ jobs:
       run: |
         set(LLVM_URL "https://releases.llvm.org/${{matrix.config.llvm_version}}.0.0/LLVM-${{matrix.config.llvm_version}}.0.0-win64.exe")
 
-        file(DOWNLOAD "${LLVM_URL}" "$ENV{ROOT}/llvm.exe")
+        string(REPLACE "\\" "/" TEMP "${{runner.temp}}")
+        file(DOWNLOAD "${LLVM_URL}" "${TEMP}/llvm.exe")
         # Note that the Windows VMs run as admin with UAC disabled; otherwise, this wouldn't work
         execute_process(
-          COMMAND "$ENV{ROOT}/llvm.exe" "/S" "/D$ENV{ROOT}\\llvm"
-          WORKING_DIRECTORY $ENV{ROOT}
+          COMMAND "${TEMP}/llvm.exe" "/S" "/D${TEMP}/llvm"
+          WORKING_DIRECTORY ${TEMP}
           RESULT_VARIABLE result
         )
         if (NOT result EQUAL 0)
