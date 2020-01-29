@@ -1,5 +1,7 @@
 name: Build+Test
-on: [push, pull_request]
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, edited, review_requested]
 
 jobs:
   test:
@@ -303,7 +305,7 @@ jobs:
         endif()
 
         if (NOT "${{matrix.config.cmake_arch}}" STREQUAL "")
-          set(CMAKE_ARCH "-A${{matrix.config.cmake_arch}}")
+          set(CMAKE_ARCH "{{matrix.config.cmake_arch}}")
         else()
           set(CMAKE_ARCH "")
         endif()
@@ -337,7 +339,7 @@ jobs:
               -DLLVM_ROOT=${LLVM_DIR}
               -DHALIDE_SHARED_LIBRARY=${HALIDE_SHARED_LIBRARY}
               -G "${CMAKE_GEN}"
-              ${CMAKE_ARCH}
+              -A "${CMAKE_ARCH}""
               ${HALIDE_DIR})
           WORKING_DIRECTORY ${HALIDE_BUILD_DIR}
           RESULT_VARIABLE result
