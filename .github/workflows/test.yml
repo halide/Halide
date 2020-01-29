@@ -215,7 +215,7 @@ jobs:
         endif()
 
         set(ROOT "$ENV{GITHUB_WORKSPACE}")
-        string(REPLACE "\\" "/" ${ROOT} "${ROOT}")
+        string(REPLACE "\\" "/" ROOT "${ROOT}")
 
         file(DOWNLOAD "${LLVM_URL}" "${ROOT}/llvm-project.tar.xz")
         execute_process(COMMAND ${CMAKE_COMMAND} -E tar xvf "${ROOT}/llvm-project.tar.xz")
@@ -244,7 +244,7 @@ jobs:
         set(LLVM_URL "https://releases.llvm.org/${{matrix.config.llvm_version}}.0.0/LLVM-${{matrix.config.llvm_version}}.0.0-win64.exe")
 
         set(ROOT "$ENV{GITHUB_WORKSPACE}")
-        string(REPLACE "\\" "/" ${ROOT} "${ROOT}")
+        string(REPLACE "\\" "/" ROOT "${ROOT}")
 
         file(DOWNLOAD "${LLVM_URL}" "${ROOT}/llvm.exe")
         # Note that the Windows VMs run as admin with UAC disabled; otherwise, this wouldn't work
@@ -263,7 +263,7 @@ jobs:
       run: |
         # Configure Make
         set(ROOT "$ENV{GITHUB_WORKSPACE}")
-        string(REPLACE "\\" "/" ${ROOT} "${ROOT}")
+        string(REPLACE "\\" "/" ROOT "${ROOT}")
 
         set(HALIDE_DIR "${ROOT}/halide")
         set(LLVM_DIR "${ROOT}/llvm")
@@ -285,7 +285,7 @@ jobs:
       run: |
         # Configure CMake
         set(ROOT "$ENV{GITHUB_WORKSPACE}")
-        string(REPLACE "\\" "/" ${ROOT} "${ROOT}")
+        string(REPLACE "\\" "/" ROOT "${ROOT}")
 
         set(HALIDE_DIR "${ROOT}/halide")
         set(LLVM_DIR "${ROOT}/llvm")
@@ -345,7 +345,7 @@ jobs:
       run: |
         # Build Halide
         set(ROOT "$ENV{GITHUB_WORKSPACE}")
-        string(REPLACE "\\" "/" ${ROOT} "${ROOT}")
+        string(REPLACE "\\" "/" ROOT "${ROOT}")
 
         set(HALIDE_DIR "${ROOT}/halide")
         set(LLVM_DIR "${ROOT}/llvm")
@@ -381,7 +381,7 @@ jobs:
       shell: cmake -P {0}
       run: |
         set(ROOT "$ENV{GITHUB_WORKSPACE}")
-        string(REPLACE "\\" "/" ${ROOT} "${ROOT}")
+        string(REPLACE "\\" "/" ROOT "${ROOT}")
 
         set(HALIDE_DIR "${ROOT}/halide")
         set(LLVM_DIR "${ROOT}/llvm")
