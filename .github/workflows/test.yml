@@ -11,14 +11,14 @@ jobs:
       matrix:
         config:
         # Ubuntu (x86-64) builds
-        - {
-            name: "Ubuntu g++ llvm8 cmake_shared",
-            build_tool: "cmake_shared",
-            cc: "gcc",
-            cxx: "g++",
-            llvm_version: 8,
-            os: ubuntu-18.04,
-          }
+        # - {
+        #     name: "Ubuntu g++ llvm8 cmake_shared",
+        #     build_tool: "cmake_shared",
+        #     cc: "gcc",
+        #     cxx: "g++",
+        #     llvm_version: 8,
+        #     os: ubuntu-18.04,
+        #   }
         # - {
         #     name: "Ubuntu g++ llvm8 cmake_static",
         #     build_tool: "cmake_static",
@@ -35,14 +35,14 @@ jobs:
         #     llvm_version: 8,
         #     os: ubuntu-18.04,
         #   }
-        # - {
-        #     name: "Ubuntu g++ llvm9 cmake_shared",
-        #     build_tool: "cmake_shared",
-        #     cc: "gcc",
-        #     cxx: "g++",
-        #     llvm_version: 9,
-        #     os: ubuntu-18.04,
-        #   }
+        - {
+            name: "Ubuntu g++ llvm9 cmake_shared",
+            build_tool: "cmake_shared",
+            cc: "gcc",
+            cxx: "g++",
+            llvm_version: 9,
+            os: ubuntu-18.04,
+          }
         # - {
         #     name: "Ubuntu g++ llvm9 cmake_static",
         #     build_tool: "cmake_static",
@@ -319,14 +319,14 @@ jobs:
           message(FATAL_ERROR "Unknown build_tool: ${{matrix.config.build_tool}}")
         endif()
 
-        message(STATUS "${CMAKE_COMMAND}
+        message(STATUS ${CMAKE_COMMAND}
               -DCMAKE_BUILD_TYPE=Release
               -DHALIDE_REQUIRE_LLVM_VERSION=${{matrix.config.llvm_version}}0
               -DLLVM_ROOT=${LLVM_DIR}
               -DHALIDE_SHARED_LIBRARY=${HALIDE_SHARED_LIBRARY}
               -G "${CMAKE_GEN}"
               ${CMAKE_ARCH}
-              ${HALIDE_DIR")
+              ${HALIDE_DIR)
         execute_process(
           COMMAND ${CMAKE_COMMAND}
               -DCMAKE_BUILD_TYPE=Release
