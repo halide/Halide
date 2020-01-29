@@ -161,22 +161,22 @@ jobs:
           COMMAND dir "${VS_INSTALLATION_PATH}"
           OUTPUT_VARIABLE foo
         )
-        message(STATUS "foo: ${foo}")
+        message(STATUS "${VS_INSTALLATION_PATH}: ${foo}")
         execute_process(
           COMMAND dir "${VS_INSTALLATION_PATH}/Common7"
           OUTPUT_VARIABLE foo
         )
-        message(STATUS "foo: ${foo}")
+        message(STATUS "${VS_INSTALLATION_PATH}/Common7: ${foo}")
         execute_process(
           COMMAND dir "${VS_INSTALLATION_PATH}/Common7/Tools"
           OUTPUT_VARIABLE foo
         )
-        message(STATUS "foo: ${foo}")
+        message(STATUS "${VS_INSTALLATION_PATH}/Common7/Tools: ${foo}")
         execute_process(
           COMMAND dir "${VS_INSTALLATION_PATH}/Common7/Tools/VsDevCmd.bat"
           OUTPUT_VARIABLE foo
         )
-        message(STATUS "foo: ${foo}")
+        message(STATUS "${VS_INSTALLATION_PATH}/Common7/Tools/VsDevCmd.bat: ${foo}")
         execute_process(
           COMMAND "${VS_INSTALLATION_PATH}/Common7/Tools/VsDevCmd.bat" -no_logo -arch=x64 -host_arch=x64 && set
           OUTPUT_VARIABLE VS_ENV_VARS
