@@ -319,14 +319,16 @@ jobs:
           message(FATAL_ERROR "Unknown build_tool: ${{matrix.config.build_tool}}")
         endif()
 
-        message(STATUS ${CMAKE_COMMAND}
-              -DCMAKE_BUILD_TYPE=Release
-              -DHALIDE_REQUIRE_LLVM_VERSION=${{matrix.config.llvm_version}}0
-              -DLLVM_ROOT=${LLVM_DIR}
-              -DHALIDE_SHARED_LIBRARY=${HALIDE_SHARED_LIBRARY}
-              -G "${CMAKE_GEN}"
-              ${CMAKE_ARCH}
-              ${HALIDE_DIR})
+        # message(STATUS ${CMAKE_COMMAND}
+        #       -DCMAKE_BUILD_TYPE=Release
+        #       -DHALIDE_REQUIRE_LLVM_VERSION=${{matrix.config.llvm_version}}0
+        #       -DLLVM_ROOT=${LLVM_DIR}
+        #       -DHALIDE_SHARED_LIBRARY=${HALIDE_SHARED_LIBRARY}
+        #       -G "${CMAKE_GEN}"
+        #       ${CMAKE_ARCH}
+        #       ${HALIDE_DIR})
+
+        message(STATUS "HERE WE GO")
 
         execute_process(
           COMMAND ${CMAKE_COMMAND}
