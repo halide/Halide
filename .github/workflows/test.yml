@@ -305,10 +305,8 @@ jobs:
         endif()
 
         if (NOT "${{matrix.config.cmake_arch}}" STREQUAL "")
-          message(STATUS "CMAKE_ARCH: ${{matrix.config.cmake_arch}}")
-          set(CMAKE_ARCH "{{matrix.config.cmake_arch}}")
+          set(CMAKE_ARCH "${{matrix.config.cmake_arch}}")
         else()
-          message(STATUS "CMAKE_ARCH: EMPTY")
           set(CMAKE_ARCH "")
         endif()
 
