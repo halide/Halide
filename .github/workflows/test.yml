@@ -13,14 +13,14 @@ jobs:
       matrix:
         config:
         # Ubuntu (x86-64) builds
-        # - {
-        #     name: "Ubuntu g++ llvm8 cmake_shared",
-        #     build_tool: "cmake_shared",
-        #     cc: "gcc",
-        #     cxx: "g++",
-        #     llvm_version: 8,
-        #     os: ubuntu-18.04,
-        #   }
+        - {
+            name: "Ubuntu g++ llvm8 cmake_shared",
+            build_tool: "cmake_shared",
+            cc: "gcc",
+            cxx: "g++",
+            llvm_version: 8,
+            os: ubuntu-18.04,
+          }
         # - {
         #     name: "Ubuntu g++ llvm8 cmake_static",
         #     build_tool: "cmake_static",
@@ -63,14 +63,14 @@ jobs:
         #   }
 
         # OSX builds
-        # - {
-        #     name: "OSX llvm9 cmake_shared",
-        #     build_tool: "cmake_shared",
-        #     cc: "clang",
-        #     cxx: "clang++",
-        #     llvm_version: 9,
-        #     os: macos-latest,
-        #   }
+        - {
+            name: "OSX llvm9 cmake_shared",
+            build_tool: "cmake_shared",
+            cc: "clang",
+            cxx: "clang++",
+            llvm_version: 9,
+            os: macos-latest,
+          }
 
         # - {
         #     name: "OSX llvm9 make",
@@ -311,6 +311,7 @@ jobs:
 
         # Make sure that our LLVM package is in CMAKE_MODULE_PATH
         # so that CMake will be able to find it
+
         if (${{matrix.config.build_tool}} MATCHES "cmake_shared")
           set(HALIDE_SHARED_LIBRARY ON)
         elseif (${{matrix.config.build_tool}} MATCHES "cmake_static")
@@ -318,30 +319,6 @@ jobs:
         else()
           message(FATAL_ERROR "Unknown build_tool: ${{matrix.config.build_tool}}")
         endif()
-
-        # message(STATUS "runner.os is ${{runner.os}}")
-        # Nonsense for MSVC to get vc vars set up
-        # if ("${{runner.os}}" STREQUAL "Windows" AND NOT "x${{matrix.config.environment_script}}" STREQUAL "x")
-        #   message(STATUS "executing ${{matrix.config.environment_script}}")
-        #   execute_process(
-        #     COMMAND "${{matrix.config.environment_script}}" && set
-        #     OUTPUT_FILE environment_script_output.txt
-        #     ERROR_VARIABLE eee
-        #     RESULT_VARIABLE result
-        #   )
-        #   message(STATUS "stderr is: ${eee}")
-        #   if (NOT result EQUAL 0)
-        #     message(FATAL_ERROR "Bad exit status: ${result}")
-        #   endif()
-        #   file(STRINGS environment_script_output.txt output_lines)
-        #   foreach(line IN LISTS output_lines)
-        #     message(STATUS "line is: ${line}")
-        #     if (line MATCHES "^([a-zA-Z0-9_-]+)=(.*)$")
-        #       message(STATUS "ENV ${CMAKE_MATCH_1} is ${CMAKE_MATCH_2}")
-        #       set(ENV{ ${CMAKE_MATCH_1} } "${CMAKE_MATCH_2}")
-        #     endif()
-        #   endforeach()
-        # endif()
 
         execute_process(
           COMMAND ${CMAKE_COMMAND}
