@@ -89,7 +89,7 @@ jobs:
             llvm_version: 9,
             os: windows-latest,
             cmake_gen: "Visual Studio 16",
-            cmake_arch: "Win64",
+            cmake_arch: "x64",
             #environment_script: "C:/Program Files (x86)/Microsoft Visual Studio/2019/Enterprise/VC/Auxiliary/Build/vcvars64.bat",
           }
 
@@ -305,8 +305,10 @@ jobs:
         endif()
 
         if (NOT "${{matrix.config.cmake_arch}}" STREQUAL "")
+          message(STATUS "CMAKE_ARCH: ${{matrix.config.cmake_arch}}")
           set(CMAKE_ARCH "{{matrix.config.cmake_arch}}")
         else()
+          message(STATUS "CMAKE_ARCH: EMPTY")
           set(CMAKE_ARCH "")
         endif()
 
@@ -321,28 +323,15 @@ jobs:
           message(FATAL_ERROR "Unknown build_tool: ${{matrix.config.build_tool}}")
         endif()
 
-        message(STATUS
-              ${CMAKE_COMMAND}
-              -DCMAKE_BUILD_TYPE=Release
-              -DHALIDE_REQUIRE_LLVM_VERSION=${{matrix.config.llvm_version}}0
-              -DLLVM_ROOT=${LLVM_DIR}
-              -DHALIDE_SHARED_LIBRARY=${HALIDE_SHARED_LIBRARY}
-              -G "${CMAKE_GEN}"
-              ${CMAKE_ARCH}
-              ${HALIDE_DIR}
-        )
-
-        message(STATUS "HERE WE GO")
-
         execute_process(
           COMMAND ${CMAKE_COMMAND}
-              -DCMAKE_BUILD_TYPE=Release
-              -DHALIDE_REQUIRE_LLVM_VERSION=${{matrix.config.llvm_version}}0
-              -DLLVM_ROOT=${LLVM_DIR}
-              -DHALIDE_SHARED_LIBRARY=${HALIDE_SHARED_LIBRARY}
-              -G "${CMAKE_GEN}"
-              -A "${CMAKE_ARCH}"
-              ${HALIDE_DIR}
+                  -DCMAKE_BUILD_TYPE=Release
+                  -DHALIDE_REQUIRE_LLVM_VERSION=${{matrix.config.llvm_version}}0
+                  -DLLVM_ROOT=${LLVM_DIR}
+                  -DHALIDE_SHARED_LIBRARY=${HALIDE_SHARED_LIBRARY}
+                  -G "${CMAKE_GEN}"
+                  -A "${CMAKE_ARCH}"
+                  ${HALIDE_DIR}
           WORKING_DIRECTORY ${HALIDE_BUILD_DIR}
           RESULT_VARIABLE result
         )
