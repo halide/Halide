@@ -173,7 +173,12 @@ jobs:
         )
         message(STATUS "foo: ${foo}")
         execute_process(
-          COMMAND "${VS_INSTALLATION_PATH}/Common7/Tools/vsdevcmd.bat -no_logo -arch=x64 -host_arch=x64" && set
+          COMMAND dir "${VS_INSTALLATION_PATH}/Common7/Tools/VsDevCmd.bat"
+          OUTPUT_VARIABLE foo
+        )
+        message(STATUS "foo: ${foo}")
+        execute_process(
+          COMMAND "${VS_INSTALLATION_PATH}/Common7/Tools/VsDevCmd.bat" -no_logo -arch=x64 -host_arch=x64 && set
           OUTPUT_VARIABLE VS_ENV_VARS
           RESULT_VARIABLE result
         )
