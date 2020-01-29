@@ -82,7 +82,7 @@ private:
         // loop printout.
         if (loop_var_names.count(simplified_loop_var_name) > 0) {
             op->body.accept(this);
-            return ;
+            return;
         }
 
         out << get_indent() << op->for_type << ' ' << simplified_loop_var_name;
