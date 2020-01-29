@@ -316,11 +316,10 @@ jobs:
 
         # Make sure that our LLVM package is in CMAKE_MODULE_PATH
         # so that CMake will be able to find it
-        message(STATUS "BEGIN")
-
         execute_process(
           COMMAND ${CMAKE_COMMAND}
                   -DCMAKE_BUILD_TYPE=Release
+                  -DLLVM_DIR="${LLVM_DIR}"
                   -DHALIDE_REQUIRE_LLVM_VERSION=${{matrix.config.llvm_version}}0
                   -DCMAKE_MODULE_PATH="${LLVM_DIR};${CMAKE_MODULE_PATH}"
                   -DHALIDE_SHARED_LIBRARY=${HALIDE_SHARED_LIBRARY}
@@ -330,8 +329,6 @@ jobs:
           WORKING_DIRECTORY ${HALIDE_BUILD_DIR}
           RESULT_VARIABLE result
         )
-
-        message(STATUS "END")
 
         if (NOT result EQUAL 0)
           message(FATAL_ERROR "Bad exit status: ${result}")
