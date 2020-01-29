@@ -73,6 +73,7 @@ protected:
     virtual void visit(const IfThenElse *);
     virtual void visit(const Evaluate *);
     virtual void visit(const Shuffle *);
+    virtual void visit(const VectorReduce *);
     virtual void visit(const Prefetch *);
     virtual void visit(const Fork *);
     virtual void visit(const Acquire *);
@@ -142,6 +143,7 @@ protected:
     void visit(const IfThenElse *) override;
     void visit(const Evaluate *) override;
     void visit(const Shuffle *) override;
+    void visit(const VectorReduce *) override;
     void visit(const Prefetch *) override;
     void visit(const Acquire *) override;
     void visit(const Fork *) override;
@@ -219,6 +221,8 @@ private:
             return ((T *)this)->visit((const Let *)node, std::forward<Args>(args)...);
         case IRNodeType::Shuffle:
             return ((T *)this)->visit((const Shuffle *)node, std::forward<Args>(args)...);
+        case IRNodeType::VectorReduce:
+            return ((T *)this)->visit((const VectorReduce *)node, std::forward<Args>(args)...);
             // Explicitly list the Stmt types rather than using a
             // default case so that when new IR nodes are added we
             // don't miss them here.
@@ -276,6 +280,7 @@ private:
         case IRNodeType::Call:
         case IRNodeType::Let:
         case IRNodeType::Shuffle:
+        case IRNodeType::VectorReduce:
             internal_error << "Unreachable";
             break;
         case IRNodeType::LetStmt:

@@ -1339,6 +1339,34 @@ private:
         interval = result;
     }
 
+    void visit(const VectorReduce *op) override {
+        TRACK_BOUNDS_INTERVAL;
+        op->value.accept(this);
+        int factor = op->value.type().lanes() / op->type.lanes();
+        switch (op->op) {
+        case VectorReduce::Add:
+            if (interval.has_upper_bound()) {
+                interval.max *= factor;
+            }
+            if (interval.has_lower_bound()) {
+                interval.min *= factor;
+            }
+            break;
+        case VectorReduce::Mul:
+            interval = Interval::everything();
+            break;
+        case VectorReduce::Min:
+        case VectorReduce::Max:
+            // The bounds of a single lane are sufficient
+            break;
+        case VectorReduce::And:
+        case VectorReduce::Or:
+            // Don't try for now
+            interval = Interval::everything();
+            break;
+        }
+    }
+
     void visit(const LetStmt *) override {
         internal_error << "Bounds of statement\n";
     }

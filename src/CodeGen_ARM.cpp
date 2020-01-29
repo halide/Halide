@@ -247,6 +247,74 @@ CodeGen_ARM::CodeGen_ARM(Target target)
     multiplies.push_back(Pattern("vmullu.v8i16", "umull.v8i16", 8,
                                  wild_u16x_ * wild_u16x_,
                                  Pattern::NarrowArgs));
+
+    auto pairwise_add = [](const Expr &e) {
+        return VectorReduce::make(VectorReduce::Add, e, e.type().lanes() / 2);
+    };
+
+    // 128 -> 128 bit widening pairwise adds
+    pairwise.emplace_back("vpaddls.v8i16.v16i8", "saddlp.v8i16.v16i8", 8,
+                          pairwise_add(wild_i16x_), Pattern::NarrowArgs);
+    pairwise.emplace_back("vpaddls.v4i32.v8i16", "saddlp.v4i32.v8i16", 4,
+                          pairwise_add(wild_i32x_), Pattern::NarrowArgs);
+    pairwise.emplace_back("vpaddls.v2i64.v4i32", "saddlp.v2i64.v4i32", 2,
+                          pairwise_add(wild_i64x_), Pattern::NarrowArgs);
+
+    pairwise.emplace_back("vpaddlu.v8i16.v16i8", "uaddlp.v8i16.v16i8", 8,
+                          pairwise_add(wild_u16x_), Pattern::NarrowArgs);
+    pairwise.emplace_back("vpaddlu.v4i32.v8i16", "uaddlp.v4i32.v8i16", 4,
+                          pairwise_add(wild_u32x_), Pattern::NarrowArgs);
+    pairwise.emplace_back("vpaddlu.v2i64.v4i32", "uaddlp.v2i64.v4i32", 2,
+                          pairwise_add(wild_u64x_), Pattern::NarrowArgs);
+
+    // 64 -> 64 bit widening pairwise adds
+    pairwise.emplace_back("vpaddls.v4i16.v8i8", "saddlp.v4i16.v8i8", 4,
+                          pairwise_add(wild_i16x_), Pattern::NarrowArgs);
+    pairwise.emplace_back("vpaddls.v2i32.v4i16", "saddlp.v2i32.v4i16", 2,
+                          pairwise_add(wild_i32x_), Pattern::NarrowArgs);
+    pairwise.emplace_back("vpaddls.v1i64.v2i32", "saddlp.v1i64.v2i32", 1,
+                          pairwise_add(wild_i64x_), Pattern::NarrowArgs);
+
+    pairwise.emplace_back("vpaddlu.v4i16.v8i8", "uaddlp.v4i16.v8i8", 4,
+                          pairwise_add(wild_u16x_), Pattern::NarrowArgs);
+    pairwise.emplace_back("vpaddlu.v2i32.v4i16", "uaddlp.v2i32.v4i16", 2,
+                          pairwise_add(wild_u32x_), Pattern::NarrowArgs);
+    pairwise.emplace_back("vpaddlu.v1i64.v2i32", "uaddlp.v1i64.v2i32", 1,
+                          pairwise_add(wild_u64x_), Pattern::NarrowArgs);
+
+    // 256 -> 128 bit pairwise adds
+    pairwise.emplace_back("", "addp.v16i8", 16, pairwise_add(wild_i8x_));
+    pairwise.emplace_back("", "addp.v8i16", 8, pairwise_add(wild_i16x_));
+    pairwise.emplace_back("", "addp.v4i32", 4, pairwise_add(wild_i32x_));
+    pairwise.emplace_back("", "addp.v2i64", 2, pairwise_add(wild_i64x_));
+
+    pairwise.emplace_back("", "addp.v16i8", 16, pairwise_add(wild_u8x_));
+    pairwise.emplace_back("", "addp.v8i16", 8, pairwise_add(wild_u16x_));
+    pairwise.emplace_back("", "addp.v4i32", 4, pairwise_add(wild_u32x_));
+    pairwise.emplace_back("", "addp.v2i64", 2, pairwise_add(wild_u64x_));
+
+    // 128 -> 64 bit pairwise adds
+    pairwise.emplace_back("vpadd.v8i8", "addp.v8i8", 8, pairwise_add(wild_i8x_));
+    pairwise.emplace_back("vpadd.v4i16", "addp.v4i16", 4, pairwise_add(wild_i16x_));
+    pairwise.emplace_back("vpadd.v2i32", "addp.v2i32", 2, pairwise_add(wild_i32x_));
+
+    pairwise.emplace_back("vpadd.v8i8", "addp.v8i8", 8, pairwise_add(wild_u8x_));
+    pairwise.emplace_back("vpadd.v4i16", "addp.v4i16", 4, pairwise_add(wild_u16x_));
+    pairwise.emplace_back("vpadd.v2i32", "addp.v2i32", 2, pairwise_add(wild_u32x_));
+
+    // TODO: widening variants with an accumulator, only for arm32 (llvm pattern-matches these for arm64)
+
+    // TODO: aarch64 has total reduction instructions: ADDV, and dot product instructions: SDOT
+
+    /*
+    auto pairwise_max = [](const Expr &e) {
+        return VectorReduce::make(VectorReduce::Max, e, e.type().lanes() / 2);
+    };
+
+    auto pairwise_min = [](const Expr &e) {
+        return VectorReduce::make(VectorReduce::Min, e, e.type().lanes() / 2);
+    };
+    */
 }
 
 Value *CodeGen_ARM::call_pattern(const Pattern &p, Type t, const vector<Expr> &args) {
@@ -1002,6 +1070,182 @@ void CodeGen_ARM::visit(const Call *op) {
         Type wide_ty = ty.with_bits(ty.bits() * 2);
         // This will codegen to vhaddu (arm32) or uhadd (arm64).
         value = codegen(cast(ty, (cast(wide_ty, op->args[0]) + cast(wide_ty, op->args[1])) / 2));
+        return;
+    }
+
+    CodeGen_Posix::visit(op);
+}
+
+/*
+void CodeGen_ARM::visit(const VectorReduce *op) {
+    // ARM has a variety of pairwise reduction ops. The
+    // versions that do not widen take two 64-bit args and return one
+    // 64-bit vector of the same type. The versions that widen take
+    // one arg and return something with half the vector lanes and
+    // double the bit-width.
+    Type value_type = op->value.type();
+    int factor = value_type.lanes() / op->type.lanes();
+    if (factor == 2 && op->op == VectorReduce::Add) {
+        // Attempt to losslessly narrow the arg so that we can use the
+        // widening variants.
+        Expr narrower;
+        if (op->type.bits() > 8 &&
+            (op->type.is_int() ||
+             op->type.is_uint())) {
+            Type narrower_type = value_type.with_bits(value_type.bits() / 2);
+            narrower = lossless_cast(narrower_type, op->value);
+        }
+
+        if (narrower.defined()) {
+            string name;
+            int intrinsic_bits = (op->type.lanes() * op->type.bits()) > 64 ? 128 : 64;
+            switch (narrower.type().bytes()) {
+            case 1:
+                if (op->type.is_int()) {
+                    if (intrinsic_bits == 128) {
+                        name = "llvm.arm.neon.vpaddls.v8i16.v16i8";
+                    } else {
+                        name = "llvm.arm.neon.vpaddls.v4i16.v8i8";
+                    }
+                } else {
+                    if (intrinsic_bits == 128) {
+                        name = "llvm.arm.neon.vpaddlu.v8i16.v16i8";
+                    } else {
+                        name = "llvm.arm.neon.vpaddlu.v4i16.v8i8";
+                    }
+                }
+                break;
+            case 2:
+                if (op->type.is_int()) {
+                    if (intrinsic_bits == 128) {
+                        name = "llvm.arm.neon.vpaddls.v4i32.v8i16";
+                    } else {
+                        name = "llvm.arm.neon.vpaddls.v2i32.v4i16";
+                    }
+                } else {
+                    if (intrinsic_bits == 128) {
+                        name = "llvm.arm.neon.vpaddlu.v4i32.v8i16";
+                    } else {
+                        name = "llvm.arm.neon.vpaddlu.v2i32.v4i16";
+                    }
+                }
+                break;
+            case 4:
+                if (op->type.is_int()) {
+                    if (intrinsic_bits == 128) {
+                        name = "llvm.arm.neon.vpaddls.v2i64.v4i32";
+                    } else {
+                        name = "llvm.arm.neon.vpaddls.v1i64.v2i32";
+                    }
+                } else {
+                    if (intrinsic_bits == 128) {
+                        name = "llvm.arm.neon.vpaddlu.v2i64.v4i32";
+                    } else {
+                        name = "llvm.arm.neon.vpaddlu.v1i64.v2i32";
+                    }
+                }
+                break;
+            default:
+                CodeGen_Posix::visit(op);
+                return;
+            }
+            value = call_intrin(op->type, intrinsic_bits / op->type.bits(), name, {narrower});
+            return;
+        } else {
+            string name;
+            switch (op->type.bytes()) {
+            case 1:
+                name = "llvm.arm.neon.vpadd.v8i8";
+                break;
+            case 2:
+                if (op->type.is_float()) {
+                    name = "llvm.arm.neon.vpadd.v4f16";
+                } else {
+                    name = "llvm.arm.neon.vpadd.v4i16";
+                }
+                break;
+            case 4:
+                if (op->type.is_float()) {
+                    name = "llvm.arm.neon.vpadd.v2f32";
+                } else {
+                    name = "llvm.arm.neon.vpadd.v2i32";
+                }
+                break;
+            default:
+                CodeGen_Posix::visit(op);
+                return;
+            }
+            int l = op->type.lanes();
+            Expr a = Shuffle::make_slice(op->value, 0, 1, l);
+            Expr b = Shuffle::make_slice(op->value, l, 1, l);
+            value = call_intrin(op->type, 8 / op->type.bytes(), name, {a, b});
+            return;
+        }
+    } else if (factor > 2 && ((factor & 1) == 0)) {
+        Expr equiv = VectorReduce::make(op->op, op->value, value_type.lanes() / 2);
+        equiv = VectorReduce::make(op->op, equiv, op->type.lanes());
+        equiv.accept(this);
+    } else {
+        CodeGen_Posix::visit(op);
+    }
+}
+*/
+
+void CodeGen_ARM::visit(const VectorReduce *op) {
+    // TODO: NoNeon
+
+    // ARM has a variety of pairwise reduction ops. The versions that
+    // do not widen take two 64-bit args and return one 64-bit vector
+    // of the same type. The versions that widen take one arg and
+    // return something with half the vector lanes and double the
+    // bit-width.
+    Type value_type = op->value.type();
+    int factor = value_type.lanes() / op->type.lanes();
+    if (op->type.lanes() * 2 == value_type.lanes()) {
+        bool use_128 = value_type.bits() * value_type.lanes() > 64;
+        vector<Expr> args;
+        debug(0) << "Matching: " << pairwise.size() << "\n";
+        for (const auto &pattern : pairwise) {
+            const int pattern_bits = pattern.intrin_lanes * op->type.bits();
+            if (!use_128 && pattern_bits >= 128) {
+                // Skip the 128-bit version of this and wait until we
+                // find the 64-bit version in the list. There's a
+                // 64-bit version of every pairwise reduction.
+                continue;
+            }
+            if ((pattern.intrin32.empty() && target.bits == 32) ||
+                (pattern.intrin64.empty() && target.bits == 64)) {
+                // Some patterns only exist on armv7 or armv8
+                continue;
+            }
+            if (expr_match(pattern.pattern, op, args)) {
+                internal_assert(args.size() == 1);
+                if (pattern.type == Pattern::NarrowArgs) {
+                    Type narrower = value_type.with_bits(value_type.bits() / 2);
+                    args[0] = lossless_cast(narrower, args[0]);
+                    if (args[0].defined()) {
+                        value = call_pattern(pattern, op->type, args);
+                        return;
+                    }
+                } else {
+                    // The non-widening ones need their arg split in two half vectors
+                    // TODO: this interacts incorrectly with the slicing down to a native vector. Probably need to do this with runtime functions instead.
+                    int l = op->type.lanes();
+                    Expr a = Shuffle::make_slice(args[0], 0, 1, l);
+                    Expr b = Shuffle::make_slice(args[0], l, 1, l);
+                    args[0] = std::move(a);
+                    args.emplace_back(std::move(b));
+                    value = call_pattern(pattern, op->type, args);
+                    return;
+                }
+            }
+        }
+    }
+
+    if (factor > 2 && ((factor & 1) == 0)) {
+        Expr equiv = VectorReduce::make(op->op, op->value, value_type.lanes() / 2);
+        equiv = VectorReduce::make(op->op, equiv, op->type.lanes());
+        equiv.accept(this);
         return;
     }
 

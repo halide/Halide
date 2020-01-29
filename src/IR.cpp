@@ -818,6 +818,27 @@ Stmt Atomic::make(const std::string &producer_name,
     return node;
 }
 
+Expr VectorReduce::make(VectorReduce::Operator op,
+                        Expr vec,
+                        int lanes) {
+    if (vec.type().is_bool()) {
+        internal_assert(op == VectorReduce::And || op == VectorReduce::Or)
+            << "The only legal operators for VectorReduce on a Bool"
+            << "vector are VectorReduce::And and VectorReduce::Or";
+    }
+    internal_assert(!vec.type().is_handle()) << "VectorReduce of handle type";
+    // Check the output lanes is a factor of the input lanes. They can
+    // also both be zero if we're constructing a wildcard expression.
+    internal_assert((lanes == 0 && vec.type().lanes() == 0) ||
+                    vec.type().lanes() % lanes == 0)
+        << "Vector reduce output lanes must be a divisor of the number of lanes in the argument\n";
+    VectorReduce *node = new VectorReduce;
+    node->type = vec.type().with_lanes(lanes);
+    node->op = op;
+    node->value = std::move(vec);
+    return node;
+}
+
 namespace {
 
 // Helper function to determine if a sequence of indices is a
@@ -970,6 +991,10 @@ void ExprNode<Call>::accept(IRVisitor *v) const {
 template<>
 void ExprNode<Shuffle>::accept(IRVisitor *v) const {
     v->visit((const Shuffle *)this);
+}
+template<>
+void ExprNode<VectorReduce>::accept(IRVisitor *v) const {
+    v->visit((const VectorReduce *)this);
 }
 template<>
 void ExprNode<Let>::accept(IRVisitor *v) const {
@@ -1151,6 +1176,10 @@ Expr ExprNode<Call>::mutate_expr(IRMutator *v) const {
 template<>
 Expr ExprNode<Shuffle>::mutate_expr(IRMutator *v) const {
     return v->visit((const Shuffle *)this);
+}
+template<>
+Expr ExprNode<VectorReduce>::mutate_expr(IRMutator *v) const {
+    return v->visit((const VectorReduce *)this);
 }
 template<>
 Expr ExprNode<Let>::mutate_expr(IRMutator *v) const {

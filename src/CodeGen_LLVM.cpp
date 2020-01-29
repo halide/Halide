@@ -4288,6 +4288,70 @@ void CodeGen_LLVM::visit(const Shuffle *op) {
     }
 }
 
+void CodeGen_LLVM::visit(const VectorReduce *op) {
+    Expr val = op->value;
+    const int output_lanes = op->type.lanes();
+    const int native_lanes = native_vector_bits() / op->type.bits();
+    while (val.type().lanes() > output_lanes) {
+        int factor = val.type().lanes() / output_lanes;
+        // Divide the vector into several parts and combine using the
+        // scalar version of the op.
+        vector<Expr> parts;
+
+        if (output_lanes == 1 &&
+            factor > native_lanes &&
+            factor % native_lanes == 0) {
+            debug(0) << "A\n";
+            // Slice into whole vectors and combine
+            for (int i = 0; i < factor / native_lanes; i++) {
+                parts.push_back(Shuffle::make_slice(val, i * native_lanes, 1, native_lanes));
+            }
+        } else if ((factor & 1) == 0) {
+            debug(0) << "B\n";
+            // Extract even/odd lanes and combine once
+            parts.push_back(Shuffle::make_slice(val, 0, 2, val.type().lanes() / 2));
+            parts.push_back(Shuffle::make_slice(val, 1, 2, val.type().lanes() / 2));
+        } else {
+            debug(0) << "C\n";
+            // Extract every nth lane and combine
+            for (int i = 0; i < factor; i++) {
+                parts.push_back(Shuffle::make_slice(val, i, factor, val.type().lanes() / factor));
+            }
+        }
+
+        while (parts.size() > 1) {
+            Expr a = parts.back();
+            parts.pop_back();
+            switch (op->op) {
+            case VectorReduce::Add:
+                parts.back() = parts.back() + a;
+                break;
+            case VectorReduce::Mul:
+                parts.back() = parts.back() * a;
+                break;
+            case VectorReduce::Min:
+                parts.back() = min(parts.back(), a);
+                break;
+            case VectorReduce::Max:
+                parts.back() = max(parts.back(), a);
+                break;
+            case VectorReduce::And:
+                parts.back() = parts.back() & a;
+                break;
+            case VectorReduce::Or:
+                parts.back() = parts.back() | a;
+                break;
+            }
+        }
+
+        val = parts[0];
+        debug(0) << val << "\n";
+    }
+    internal_assert(val.type().lanes() == output_lanes);
+    val = common_subexpression_elimination(val);
+    codegen(val);
+}
+
 void CodeGen_LLVM::visit(const Atomic *op) {
     if (op->mutex_name != "") {
         internal_assert(!inside_atomic_mutex_node)
@@ -4402,6 +4466,10 @@ Value *CodeGen_LLVM::call_intrin(llvm::Type *result_type, int intrin_lanes,
 
     call->setDoesNotAccessMemory();
     call->setDoesNotThrow();
+
+    debug(0) << "Intrin: ";
+    call->dump();
+    debug(0) << "\n";
 
     return call;
 }

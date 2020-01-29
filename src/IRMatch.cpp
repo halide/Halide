@@ -281,6 +281,16 @@ public:
             result = false;
         }
     }
+
+    void visit(const VectorReduce *op) override {
+        const VectorReduce *e = expr.as<VectorReduce>();
+        if (result && e && op->op == e->op) {
+            expr = e->value;
+            op->value.accept(this);
+        } else {
+            result = false;
+        }
+    }
 };
 
 bool expr_match(Expr pattern, Expr expr, vector<Expr> &matches) {
@@ -412,6 +422,10 @@ bool equal_helper(const BaseExprNode &a, const BaseExprNode &b) noexcept {
     case IRNodeType::Shuffle:
         return (equal_helper(((const Shuffle &)a).vectors, ((const Shuffle &)b).vectors) &&
                 equal_helper(((const Shuffle &)a).indices, ((const Shuffle &)b).indices));
+    case IRNodeType::VectorReduce:
+        return (((const VectorReduce &)a).op == ((const VectorReduce &)b).op &&
+                equal_helper(((const VectorReduce &)a).value, ((const VectorReduce &)b).value));
+
     // Explicitly list all the Stmts instead of using a default
     // clause so that if new Exprs are added without being handled
     // here we get a compile-time error.

@@ -42,6 +42,51 @@ Expr Simplify::visit(const Broadcast *op, ExprInfo *bounds) {
     }
 }
 
+Expr Simplify::visit(const VectorReduce *op, ExprInfo *bounds) {
+    Expr value = mutate(op->value, bounds);
+    if (bounds && op->type.is_int()) {
+        int factor = op->value.type().lanes() / op->type.lanes();
+        switch (op->op) {
+        case VectorReduce::Add:
+            // Alignment of result is the alignment of the arg. Bounds
+            // of the result can grow according to the reduction
+            // factor.
+            if (bounds->min_defined) {
+                bounds->min *= factor;
+            }
+            if (bounds->max_defined) {
+                bounds->max *= factor;
+            }
+            break;
+        case VectorReduce::Mul:
+            // Don't try to infer anything about bounds. Leave the
+            // alignment unchanged even though we could theoretically
+            // upgrade it.
+            bounds->min_defined = bounds->max_defined = false;
+            break;
+        case VectorReduce::Min:
+        case VectorReduce::Max:
+            // Bounds and alignment of the result are just the bounds and alignment of the arg.
+            break;
+        case VectorReduce::And:
+        case VectorReduce::Or:
+            // For integer types this is a bitwise operator. Don't try
+            // to infer anything for now.
+            bounds->min_defined = bounds->max_defined = false;
+            bounds->alignment = ModulusRemainder{};
+            break;
+        }
+    };
+
+    // TODO: VectorReduce of Ramp or Broadcast can be simplified.
+
+    if (value.same_as(op->value)) {
+        return op;
+    } else {
+        return VectorReduce::make(op->op, value, op->type.lanes());
+    }
+}
+
 Expr Simplify::visit(const Variable *op, ExprInfo *bounds) {
     if (bounds_and_alignment_info.contains(op->name)) {
         const ExprInfo &b = bounds_and_alignment_info.get(op->name);

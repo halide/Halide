@@ -184,6 +184,82 @@ Interval bounds_of_lanes(Expr e) {
     return {min_lane, max_lane};
 };
 
+// A ramp with the lanes repeated (e.g. <0 0 2 2 4 4 6 6>)
+struct InterleavedRamp {
+    Expr base, stride;
+    int lanes, repetitions;
+};
+
+bool is_interleaved_ramp(const Expr &e, InterleavedRamp *result) {
+    debug(0) << "is_interleaved_ramp of " << e << "\n";
+    if (const Ramp *r = e.as<Ramp>()) {
+        result->base = r->base;
+        result->stride = r->stride;
+        result->lanes = r->lanes;
+        result->repetitions = 1;
+        return true;
+    } else if (const Broadcast *b = e.as<Broadcast>()) {
+        result->base = b->value;
+        result->stride = 0;
+        result->lanes = b->lanes;
+        result->repetitions = 0;
+        return true;
+    } else if (const Add *add = e.as<Add>()) {
+        InterleavedRamp ra;
+        if (is_interleaved_ramp(add->a, &ra) &&
+            is_interleaved_ramp(add->b, result) &&
+            (ra.repetitions == 0 ||
+             result->repetitions == 0 ||
+             ra.repetitions == result->repetitions)) {
+            result->base = simplify(result->base + ra.base);
+            result->stride = simplify(result->stride + ra.stride);
+            if (!result->repetitions) {
+                result->repetitions = ra.repetitions;
+            }
+            return true;
+        }
+    } else if (const Sub *sub = e.as<Sub>()) {
+        InterleavedRamp ra;
+        if (is_interleaved_ramp(sub->a, &ra) &&
+            is_interleaved_ramp(sub->b, result) &&
+            (ra.repetitions == 0 ||
+             result->repetitions == 0 ||
+             ra.repetitions == result->repetitions)) {
+            result->base = simplify(ra.base - result->base);
+            result->stride = simplify(ra.stride - result->stride);
+            if (!result->repetitions) {
+                result->repetitions = ra.repetitions;
+            }
+            return true;
+        }
+    } else if (const Mul *mul = e.as<Mul>()) {
+        const int64_t *b = nullptr;
+        if (is_interleaved_ramp(mul->a, result) &&
+            (b = as_const_int(mul->b))) {
+            result->base = simplify(result->base * (int)(*b));
+            result->stride = simplify(result->stride * (int)(*b));
+            return true;
+        }
+    } else if (const Div *div = e.as<Div>()) {
+        const int64_t *b = nullptr;
+        if (is_interleaved_ramp(div->a, result) &&
+            (b = as_const_int(div->b)) &&
+            is_one(result->stride) &&
+            (result->repetitions == 1 ||
+             result->repetitions == 0) &&
+            can_prove((result->base % (int)(*b)) == 0)) {
+            // TODO: Generalize this. Currently only matches
+            // ramp(base*b, 1, lanes) / b
+            // broadcast(base * b, lanes) / b
+            result->base = simplify(result->base / (int)(*b));
+            result->repetitions *= (int)(*b);
+            return true;
+        }
+    }
+    debug(0) << "Not interleaved ramp: " << e << "\n";
+    return false;
+}
+
 // Allocations inside vectorized loops grow an additional inner
 // dimension to represent the separate copy of the allocation per
 // vector lane. This means loads and stores to them need to be
@@ -612,7 +688,7 @@ class VectorSubs : public IRMutator {
 
         // If the value was vectorized by this mutator, add a new name to
         // the scope for the vectorized value expression.
-        std::string vectorized_name;
+        string vectorized_name;
         if (was_vectorized) {
             vectorized_name = op->name + widening_suffix;
             scope.push(op->name, mutated_value);
@@ -633,7 +709,7 @@ class VectorSubs : public IRMutator {
 
     Stmt visit(const LetStmt *op) override {
         Expr mutated_value = mutate(op->value);
-        std::string mutated_name = op->name;
+        string mutated_name = op->name;
 
         // Check if the value was vectorized by this mutator.
         bool was_vectorized = (!op->value.type().is_vector() &&
@@ -892,7 +968,7 @@ class VectorSubs : public IRMutator {
     }
 
     Stmt visit(const Allocate *op) override {
-        std::vector<Expr> new_extents;
+        vector<Expr> new_extents;
         Expr new_expr;
 
         int lanes = replacement.type().lanes();
@@ -940,7 +1016,106 @@ class VectorSubs : public IRMutator {
         return Allocate::make(op->name, op->type, op->memory_type, new_extents, op->condition, body, new_expr, op->free_function);
     }
 
-    Stmt scalarize(Stmt s) {
+    Stmt visit(const Atomic *op) override {
+        debug(0) << "ELEPHANT: " << Stmt(op) << "\n";
+        // Recognize a few special cases that we can handle as reduction trees.
+        do {
+            // f[x] = f[x] + y
+            const Store *store = op->body.as<Store>();
+            if (!store) break;
+
+            VectorReduce::Operator reduce_op;
+            Expr a, b;
+            if (const Add *add = store->value.as<Add>()) {
+                a = add->a;
+                b = add->b;
+                reduce_op = VectorReduce::Add;
+            } else if (const Mul *mul = store->value.as<Mul>()) {
+                a = mul->a;
+                b = mul->b;
+                reduce_op = VectorReduce::Mul;
+            } else if (const Min *min = store->value.as<Min>()) {
+                a = min->a;
+                b = min->b;
+                reduce_op = VectorReduce::Min;
+            } else if (const Max *max = store->value.as<Max>()) {
+                a = max->a;
+                b = max->b;
+                reduce_op = VectorReduce::Max;
+            } else if (const And *and_op = store->value.as<And>()) {
+                a = and_op->a;
+                b = and_op->b;
+                reduce_op = VectorReduce::And;
+            } else if (const Or *or_op = store->value.as<Or>()) {
+                a = or_op->a;
+                b = or_op->b;
+                reduce_op = VectorReduce::Or;
+            } else {
+                // TODO: bitwise and/or
+                break;
+            }
+
+            if (b.as<Load>() && !a.as<Load>()) {
+                std::swap(a, b);
+            }
+
+            const Variable *var_b = b.as<Variable>();
+            if (!var_b) break;
+
+            if (!scope.contains(var_b->name)) break;
+            Expr b_val = scope.get(var_b->name);
+            b = Variable::make(b_val.type(), var_b->name + widening_suffix);
+
+            const Load *load_a = a.as<Load>();
+            if (!load_a) break;
+
+            if (load_a->name != store->name ||
+                !can_prove(load_a->index == store->index) ||
+                !is_one(load_a->predicate) ||
+                !is_one(store->predicate)) {
+                break;
+            }
+
+            Expr idx = store->index;
+            if (const Variable *idx_var = store->index.as<Variable>()) {
+                if (scope.contains(idx_var->name)) {
+                    idx = scope.get(idx_var->name);
+                }
+            } else if (is_const(store->index)) {
+                idx = store->index;
+            } else {
+                break;
+            }
+
+            debug(0) << idx << "\n";
+
+            if (idx.type().is_scalar()) {
+                // The index doesn't depend on the value being
+                // vectorized, so it's a total reduction.
+
+                b = VectorReduce::make(reduce_op, b, 1);
+            } else {
+
+                InterleavedRamp ir;
+                if (!is_interleaved_ramp(idx, &ir)) break;
+                int output_lanes = idx.type().lanes() / ir.repetitions;
+
+                idx = Ramp::make(ir.base, ir.stride, output_lanes);
+                b = VectorReduce::make(reduce_op, b, output_lanes);
+            }
+
+            return Store::make(store->name, b, idx, store->param,
+                               const_true(b.type().lanes()), store->alignment);
+
+        } while (0);
+
+        // In the general case, if a whole stmt has to be done
+        // atomically, we need to serialize.
+        return scalarize(op);
+    }
+
+    Stmt
+    scalarize(Stmt s) {
         // Wrap a serial loop around it. Maybe LLVM will have
         // better luck vectorizing it.
 
@@ -993,6 +1168,148 @@ public:
         : var(v), replacement(r), target(t), in_hexagon(in_hexagon) {
         widening_suffix = ".x" + std::to_string(replacement.type().lanes());
     }
+};  // namespace
+
+class FindVectorizableExprsInAtomicNode : public IRMutator {
+    Scope<> poisoned_names;
+    bool poison = false;
+
+    template<typename T>
+    const T *visit_let(const T *op) {
+        mutate(op->value);
+        ScopedBinding<> bind_if(poison, poisoned_names, op->name);
+        mutate(op->body);
+        return op;
+    }
+
+    Stmt visit(const LetStmt *op) override {
+        return visit_let(op);
+    }
+
+    Expr visit(const Let *op) override {
+        return visit_let(op);
+    }
+
+    Expr visit(const Load *op) override {
+        // Even if the load is bad, maybe we can lift the index
+        IRMutator::visit(op);
+
+        // TODO: tuples?
+        poison |= poisoned_names.contains(op->name);
+        return op;
+    }
+
+    Expr visit(const Variable *op) override {
+        poison = poisoned_names.contains(op->name);
+        return op;
+    }
+
+    Stmt visit(const Store *op) override {
+        // A store poisons all subsequent loads, but loads before the
+        // first store can be lifted.
+        mutate(op->index);
+        mutate(op->value);
+        poisoned_names.push(op->name);
+        return op;
+    }
+
+    Expr visit(const Call *op) override {
+        IRMutator::visit(op);
+        poison |= !op->is_pure();
+        return op;
+    }
+
+public:
+    using IRMutator::mutate;
+
+    Expr mutate(const Expr &e) override {
+        bool old_poison = poison;
+        poison = false;
+        IRMutator::mutate(e);
+        if (!poison) {
+            liftable.insert(e);
+        }
+        poison |= old_poison;
+        // We're not actually mutating anything. This class is only a
+        // mutator so that we can override a generic mutate() method.
+        return e;
+    }
+
+    FindVectorizableExprsInAtomicNode(const string &buf) {
+        poisoned_names.push(buf);
+    }
+
+    std::set<Expr, ExprCompare> liftable;
+};
+
+class LiftVectorizableExprsOutOfSingleAtomicNode : public IRMutator {
+    const std::set<Expr, ExprCompare> &liftable;
+
+    template<typename StmtOrExpr, typename LetStmtOrLet>
+    StmtOrExpr visit_let(const LetStmtOrLet *op) {
+        if (liftable.count(op->value)) {
+            // Lift it under its current name to avoid having to
+            // rewrite the variables in other lifted exprs.
+            // TODO: duplicate non-overlapping liftable let stmts due to unrolling.
+            lifted.emplace_back(op->name, op->value);
+            return mutate(op->body);
+        } else {
+            return IRMutator::visit(op);
+        }
+    }
+
+    Stmt visit(const LetStmt *op) override {
+        return visit_let<Stmt>(op);
+    }
+
+    Expr visit(const Let *op) override {
+        return visit_let<Expr>(op);
+    }
+
+public:
+    std::map<Expr, string, IRDeepCompare> already_lifted;
+    vector<pair<string, Expr>> lifted;
+
+    using IRMutator::mutate;
+
+    Expr mutate(const Expr &e) override {
+        if (liftable.count(e) && !is_const(e) && !e.as<Variable>()) {
+            auto it = already_lifted.find(e);
+            string name;
+            if (it != already_lifted.end()) {
+                name = it->second;
+            } else {
+                name = unique_name('t');
+                lifted.emplace_back(name, e);
+                already_lifted.emplace(e, name);
+            }
+            return Variable::make(e.type(), name);
+        } else {
+            return IRMutator::mutate(e);
+        }
+    }
+
+    LiftVectorizableExprsOutOfSingleAtomicNode(const std::set<Expr, ExprCompare> &liftable)
+        : liftable(liftable) {
+    }
+};
+
+class LiftVectorizableExprsOutOfAllAtomicNodes : public IRMutator {
+    using IRMutator::visit;
+
+    Stmt visit(const Atomic *op) override {
+        FindVectorizableExprsInAtomicNode finder(op->producer_name);
+        finder.mutate(op->body);
+        LiftVectorizableExprsOutOfSingleAtomicNode lifter(finder.liftable);
+        Stmt new_body = lifter.mutate(op->body);
+        new_body = Atomic::make(op->producer_name, op->mutex_name, new_body);
+        while (!lifter.lifted.empty()) {
+            auto p = lifter.lifted.back();
+            new_body = LetStmt::make(p.first, p.second, new_body);
+            lifter.lifted.pop_back();
+        }
+        return new_body;
+    }
 };
 
 // Vectorize all loops marked as such in a Stmt
@@ -1021,6 +1338,7 @@ class VectorizeLoops : public IRMutator {
             // Replace the var with a ramp within the body
             Expr for_var = Variable::make(Int(32), for_loop->name);
             Expr replacement = Ramp::make(for_loop->min, 1, extent->value);
+            stmt = for_loop->body;
             stmt = VectorSubs(for_loop->name, replacement, in_hexagon, target).mutate(for_loop->body);
         } else {
             stmt = IRMutator::visit(for_loop);
@@ -1039,10 +1357,18 @@ public:
     }
 };
 
-}  // Anonymous namespace
+}  // namespace
 
 Stmt vectorize_loops(Stmt s, const Target &t) {
-    return VectorizeLoops(t).mutate(s);
+    // Limit the scope of atomic nodes to just the necessary stuff.
+    // TODO: Should this be an earlier pass? It's probably a good idea
+    // for non-vectorizing stuff too.
+    debug(0) << s << "\n";
+    s = LiftVectorizableExprsOutOfAllAtomicNodes().mutate(s);
+    debug(0) << s << "\n";
+    s = VectorizeLoops(t).mutate(s);
+    debug(0) << s << "\n";
+    return s;
 }
 
 }  // namespace Internal

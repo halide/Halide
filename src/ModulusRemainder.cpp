@@ -72,6 +72,7 @@ public:
     void visit(const Free *) override;
     void visit(const Evaluate *) override;
     void visit(const Shuffle *) override;
+    void visit(const VectorReduce *) override;
     void visit(const Prefetch *) override;
     void visit(const Atomic *) override;
 };
@@ -488,8 +489,14 @@ void ComputeModulusRemainder::visit(const Let *op) {
 }
 
 void ComputeModulusRemainder::visit(const Shuffle *op) {
-    // It's possible that scalar expressions are extracting a lane of a vector - don't fail in this case, but stop
+    // It's possible that scalar expressions are extracting a lane of
+    // a vector - don't faiql in this case, but stop
     internal_assert(op->indices.size() == 1) << "modulus_remainder of vector\n";
+    result = ModulusRemainder{};
+}
+
+void ComputeModulusRemainder::visit(const VectorReduce *op) {
+    internal_assert(op->type.is_scalar()) << "modulus_remainder of vector\n";
     result = ModulusRemainder{};
 }
 

@@ -303,6 +303,7 @@ private:
 
     Expr visit(const Shuffle *op) override {
         if (op->is_interleave()) {
+            // Special case where we can discard some of the vector arguments entirely.
             internal_assert(starting_lane >= 0 && starting_lane < lane_stride);
             if ((int)op->vectors.size() == lane_stride) {
                 return op->vectors[starting_lane];
@@ -313,24 +314,18 @@ private:
                     new_vectors[i] = op->vectors[i * lane_stride + starting_lane];
                 }
                 return Shuffle::make_interleave(new_vectors);
-            } else {
-                // Interleave some vectors then deinterleave by some other factor...
-                // Brute force!
-                std::vector<int> indices;
-                for (int i = 0; i < new_lanes; i++) {
-                    indices.push_back(i * lane_stride + starting_lane);
-                }
-                return Shuffle::make({op}, indices);
             }
-        } else {
-            // Extract every nth numeric arg to the shuffle.
-            std::vector<int> indices;
-            for (int i = 0; i < new_lanes; i++) {
-                int idx = i * lane_stride + starting_lane;
-                indices.push_back(op->indices[idx]);
-            }
-            return Shuffle::make({op}, indices);
         }
+
+        // Keep the same set of vectors and extract every nth numeric
+        // arg to the shuffle.
+        std::vector<int> indices;
+        for (int i = 0; i < new_lanes; i++) {
+            int idx = i * lane_stride + starting_lane;
+            indices.push_back(op->indices[idx]);
+            debug(0) << indices.back() << "\n";
+        }
+        return Shuffle::make(op->vectors, indices);
     }
 };
 

@@ -368,6 +368,14 @@ Expr IRMutator::visit(const Shuffle *op) {
     return Shuffle::make(new_vectors, op->indices);
 }
 
+Expr IRMutator::visit(const VectorReduce *op) {
+    Expr value = mutate(op->value);
+    if (value.same_as(op->value)) {
+        return op;
+    }
+    return VectorReduce::make(op->op, op->value, op->type.lanes());
+}
+
 Stmt IRMutator::visit(const Fork *op) {
     Stmt first = mutate(op->first);
     Stmt rest = mutate(op->rest);

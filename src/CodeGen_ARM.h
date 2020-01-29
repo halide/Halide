@@ -31,6 +31,7 @@ protected:
     void visit(const Store *) override;
     void visit(const Load *) override;
     void visit(const Call *) override;
+    void visit(const VectorReduce *) override;
     // @}
 
     /** Various patterns to peephole match against */
@@ -52,7 +53,7 @@ protected:
               intrin_lanes(l), pattern(p), type(t) {
         }
     };
-    std::vector<Pattern> casts, averagings, negations, multiplies;
+    std::vector<Pattern> casts, averagings, negations, multiplies, pairwise;
 
     // Call an intrinsic as defined by a pattern. Dispatches to the
     // 32- or 64-bit name depending on the target's bit width.

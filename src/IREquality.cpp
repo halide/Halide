@@ -97,6 +97,7 @@ private:
     void visit(const Shuffle *) override;
     void visit(const Prefetch *) override;
     void visit(const Atomic *) override;
+    void visit(const VectorReduce *) override;
 };
 
 template<typename T>
@@ -587,6 +588,14 @@ void IRComparer::visit(const Atomic *op) {
     compare_names(s->producer_name, op->producer_name);
     compare_names(s->mutex_name, op->mutex_name);
     compare_stmt(s->body, op->body);
+}
+
+void IRComparer::visit(const VectorReduce *op) {
+    const VectorReduce *e = expr.as<VectorReduce>();
+
+    compare_scalar(op->op, e->op);
+    // We've already compared types, so it's enough to compare the arg vector
+    compare_expr(op->value, e->value);
 }
 
 }  // namespace
