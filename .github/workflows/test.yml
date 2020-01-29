@@ -316,6 +316,7 @@ jobs:
 
         # Make sure that our LLVM package is in CMAKE_MODULE_PATH
         # so that CMake will be able to find it
+        message(STATUS "BEGIN")
 
         execute_process(
           COMMAND ${CMAKE_COMMAND}
@@ -325,10 +326,13 @@ jobs:
                   -DHALIDE_SHARED_LIBRARY=${HALIDE_SHARED_LIBRARY}
                   -G "${CMAKE_GEN}"
                   -A "${CMAKE_ARCH}"
-                  ${HALIDE_DIR}
+                  "${HALIDE_DIR}"
           WORKING_DIRECTORY ${HALIDE_BUILD_DIR}
           RESULT_VARIABLE result
         )
+
+        message(STATUS "END")
+
         if (NOT result EQUAL 0)
           message(FATAL_ERROR "Bad exit status: ${result}")
         endif()
@@ -376,30 +380,42 @@ jobs:
         set(LLVM_DIR "${ROOT}/llvm")
         set(HALIDE_BUILD_DIR "${ROOT}/halide_build")
 
+        # set TEST_TMPDIR for the tests that need it
+        set(ENV{TEST_TMPDIR} "${{runner.temp}}")
+
         set(PARALLEL_JOBS 4)  # The VMs have 2 cores, so specify N+2
         if (${{matrix.config.build_tool}} MATCHES "^cmake.*")
           set(TEST_GROUPS_BROKEN "opengl")
           set(TEST_GROUPS_SERIAL "performance|auto_schedule")
-          # skip OpenGL and Performance tests
+
+          # Parallel
           execute_process(
             COMMAND ${CMAKE_CTEST_COMMAND} -j ${PARALLEL_JOBS} -LE "${TEST_GROUPS_BROKEN}|${TEST_GROUPS_SERIAL}" --output-on-failure
             WORKING_DIRECTORY ${HALIDE_BUILD_DIR}
             RESULT_VARIABLE result
           )
+          if (NOT result EQUAL 0)
+            message(FATAL_ERROR "Bad exit status: ${result}")
+          endif()
+
+          # Serial
           execute_process(
             COMMAND ${CMAKE_CTEST_COMMAND} -L "${TEST_GROUPS_SERIAL}" --output-on-failure
             WORKING_DIRECTORY ${HALIDE_BUILD_DIR}
             RESULT_VARIABLE result
           )
+          if (NOT result EQUAL 0)
+            message(FATAL_ERROR "Bad exit status: ${result}")
+          endif()
         elseif (${{matrix.config.build_tool}} STREQUAL "make")
           execute_process(
             COMMAND make -f ${HALIDE_DIR}/Makefile -j ${PARALLEL_JOBS} run_tests
             WORKING_DIRECTORY ${HALIDE_BUILD_DIR}
             RESULT_VARIABLE result
           )
+          if (NOT result EQUAL 0)
+            message(FATAL_ERROR "Bad exit status: ${result}")
+          endif()
         else()
           message(FATAL_ERROR "Unknown build_tool: ${{matrix.config.build_tool}}")
-        endif()
-        if (NOT result EQUAL 0)
-          message(FATAL_ERROR "Bad exit status: ${result}")
         endif()
