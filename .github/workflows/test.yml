@@ -321,7 +321,7 @@ jobs:
                   -DCMAKE_BUILD_TYPE=Release
                   -DLLVM_DIR="${LLVM_DIR}"
                   -DHALIDE_REQUIRE_LLVM_VERSION=${{matrix.config.llvm_version}}0
-                  -DCMAKE_MODULE_PATH="${LLVM_DIR};${CMAKE_MODULE_PATH}"
+                  # -DCMAKE_MODULE_PATH="${LLVM_DIR};${CMAKE_MODULE_PATH}"
                   -DHALIDE_SHARED_LIBRARY=${HALIDE_SHARED_LIBRARY}
                   -G "${CMAKE_GEN}"
                   -A "${CMAKE_ARCH}"

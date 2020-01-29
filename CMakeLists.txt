@@ -20,6 +20,11 @@ include(CPack)
 
 find_package(Threads QUIET)
 
+if(NOT "${LLVM_DIR}" STREQUAL "")
+  set(CMAKE_MODULE_PATH "${LLVM_DIR};${CMAKE_MODULE_PATH}")
+  message(STATUS "CMAKE_MODULE_PATH is now ${CMAKE_MODULE_PATH}")
+endif()
+
 if("${HALIDE_REQUIRE_LLVM_VERSION}" STREQUAL "")
   # Find any version present.
   find_package(LLVM REQUIRED CONFIG)
