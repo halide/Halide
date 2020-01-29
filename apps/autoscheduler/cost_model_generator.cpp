@@ -317,6 +317,8 @@ public:
 
         assert(idx == head2_w);
 
+        num_blocks = max(1, num_blocks);
+
         // Count up the number of things computed, applying a
         // different cost to vectors and scalars, and a different cost
         // depending on whether we were inlined.
@@ -325,9 +327,11 @@ public:
                                     num_scalars * relu1(1, w, n)),
                                    (vector_size * num_vectors * relu1(2, w, n) +
                                     num_scalars * relu1(3, w, n)));
-        compute_cost += num_warps_per_block * num_blocks * relu1(4, w, n);
+        compute_cost += select(inlined_calls == 0,
+                               (num_warps_per_block * relu1(31, w, n)),
+                               (num_warps_per_block * num_blocks * relu1(4, w, n)));
 
-        Expr num_tasks = num_blocks;
+        Expr num_tasks = max(1, inner_parallelism * outer_parallelism);
         Expr tasks_per_core = num_tasks / num_cores;
         Expr idle_core_wastage = ceil(tasks_per_core) / max(1, tasks_per_core);
         compute_cost *= idle_core_wastage;

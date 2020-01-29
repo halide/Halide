@@ -194,6 +194,7 @@ struct LoopNest {
         double vector_size;
         double innermost_pure_loop_extent;
         double outer_parallelism;
+        double num_warps_per_block;
     };
 
     mutable std::map<uint64_t, StageMap<StageMap<FeatureIntermediates>>> feature_intermediates;
