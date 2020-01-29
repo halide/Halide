@@ -16,16 +16,18 @@
 // in a shell with the current directory at the top of the halide
 // source tree.
 
-#include "Halide.h"
 #include <stdio.h>
-using namespace Halide;
 
-// Include some support code for loading pngs.
-#include "halide_image_io.h"
-using namespace Halide::Tools;
+#include "Halide.h"
 
 // Include a clock to do performance testing.
 #include "clock.h"
+
+// Include some support code for loading pngs.
+#include "halide_image_io.h"
+
+using namespace Halide;
+using namespace Halide::Tools;
 
 Target find_gpu_target();
 
