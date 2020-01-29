@@ -320,6 +320,13 @@ jobs:
           message(FATAL_ERROR "Unknown build_tool: ${{matrix.config.build_tool}}")
         endif()
 
+        message(STATUS "LLVM_DIR: ${LLVM_DIR}")
+        message(STATUS "CMAKE_MODULE_PATH: ${CMAKE_MODULE_PATH}")
+        message(STATUS "HALIDE_SHARED_LIBRARY: ${HALIDE_SHARED_LIBRARY}")
+        message(STATUS "CMAKE_GEN: ${CMAKE_GEN}")
+        message(STATUS "CMAKE_ARCH: ${CMAKE_ARCH}")
+        message(STATUS "HALIDE_DIR: ${HALIDE_DIR}")
+
         # Make sure that our LLVM package is in CMAKE_MODULE_PATH
         # so that CMake will be able to find it
         execute_process(
