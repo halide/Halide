@@ -156,6 +156,21 @@ jobs:
         endif()
         message(STATUS "VS_INSTALLATION_PATH: ${VS_INSTALLATION_PATH}")
         execute_process(
+          COMMAND dir "${VS_INSTALLATION_PATH}"
+          OUTPUT_VARIABLE foo
+        )
+        message(STATUS "foo: ${foo}")
+        execute_process(
+          COMMAND dir "${VS_INSTALLATION_PATH}/Common7"
+          OUTPUT_VARIABLE foo
+        )
+        message(STATUS "foo: ${foo}")
+        execute_process(
+          COMMAND dir "${VS_INSTALLATION_PATH}/Common7/Tools"
+          OUTPUT_VARIABLE foo
+        )
+        message(STATUS "foo: ${foo}")
+        execute_process(
           COMMAND "${VS_INSTALLATION_PATH}/Common7/Tools/vsdevcmd.bat -no_logo -arch=x64 -host_arch=x64" && set
           OUTPUT_VARIABLE VS_ENV_VARS
           RESULT_VARIABLE result
