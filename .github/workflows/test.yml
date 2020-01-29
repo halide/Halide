@@ -359,6 +359,7 @@ jobs:
                   ${CMAKE_HOST}
                   --debug-output
                   --check-system-vars
+                  --trace-expand
                   "${HALIDE_DIR}"
           WORKING_DIRECTORY ${HALIDE_BUILD_DIR}
           RESULT_VARIABLE result
