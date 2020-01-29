@@ -154,8 +154,9 @@ jobs:
         if (NOT result EQUAL 0)
           message(FATAL_ERROR "Bad exit status: ${result}")
         endif()
+        message(STATUS "VS_INSTALLATION_PATH: ${VS_INSTALLATION_PATH}")
         execute_process(
-          COMMAND "${VS_INSTALLATION_PATH}/Common7/Tools/vsdevcmd.bat" && set
+          COMMAND "${VS_INSTALLATION_PATH}/Common7/Tools/vsdevcmd.bat -no_logo -arch=x64 -host_arch=x64" && set
           OUTPUT_VARIABLE VS_ENV_VARS
           RESULT_VARIABLE result
         )
