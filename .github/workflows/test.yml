@@ -339,8 +339,8 @@ jobs:
               -DLLVM_ROOT=${LLVM_DIR}
               -DHALIDE_SHARED_LIBRARY=${HALIDE_SHARED_LIBRARY}
               -G "${CMAKE_GEN}"
-              -A "${CMAKE_ARCH}""
-              ${HALIDE_DIR})
+              -A "${CMAKE_ARCH}"
+              ${HALIDE_DIR}
           WORKING_DIRECTORY ${HALIDE_BUILD_DIR}
           RESULT_VARIABLE result
         )
