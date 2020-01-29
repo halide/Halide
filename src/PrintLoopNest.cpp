@@ -31,6 +31,7 @@ private:
     int indent;
 
     Scope<Expr> constants;
+    std::set<string> loop_var_names;
 
     using IRVisitor::visit;
 
@@ -75,7 +76,16 @@ private:
     }
 
     void visit(const For *op) override {
-        out << get_indent() << op->for_type << ' ' << simplify_var_name(op->name);
+        string simplified_loop_var_name = simplify_var_name(op->name);
+        // In order to handle compute_with case, we check if we have seen this
+        // variable in this sequence of loops already and if we did then skip
+        // loop printout.
+        if (loop_var_names.count(simplified_loop_var_name) > 0) {
+            op->body.accept(this);
+            return ;
+        }
+
+        out << get_indent() << op->for_type << ' ' << simplified_loop_var_name;
 
         // If the min or extent are constants, print them. At this
         // stage they're all variables.
@@ -100,7 +110,9 @@ private:
 
         out << ":\n";
         indent += 2;
+        loop_var_names.insert(simplified_loop_var_name);
         op->body.accept(this);
+        loop_var_names.erase(simplified_loop_var_name);
         indent -= 2;
     }
 
