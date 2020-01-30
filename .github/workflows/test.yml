@@ -255,9 +255,9 @@ jobs:
           -DCMAKE_MODULE_PATH="${LLVM_DIR/D://D}/lib/cmake/llvm/" \
           -DHALIDE_REQUIRE_LLVM_VERSION=${{matrix.config.llvm_version}}0 \
           -DHALIDE_SHARED_LIBRARY=${HALIDE_SHARED_LIBRARY} \
-          -G \"${CMAKE_GEN}\" \
-          -A \"${CMAKE_ARCH}\" \
-          -T \"${CMAKE_TOOLSET}\" \
+          -G "${CMAKE_GEN}" \
+          -A "${CMAKE_ARCH}" \
+          -T "${CMAKE_TOOLSET}" \
           -S "${HALIDE_DIR}" \
           -B "${HALIDE_BUILD_DIR}"
 
