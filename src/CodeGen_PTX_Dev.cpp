@@ -540,7 +540,7 @@ int CodeGen_PTX_Dev::native_vector_bits() const {
 }
 
 string CodeGen_PTX_Dev::get_current_kernel_name() {
-    return function->getName();
+    return get_llvm_function_name(function);
 }
 
 void CodeGen_PTX_Dev::dump() {

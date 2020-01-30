@@ -3439,7 +3439,7 @@ void CodeGen_LLVM::visit(const Call *op) {
 
             if (vec_fn) {
                 value = call_intrin(llvm_type_of(op->type), w,
-                                    vec_fn->getName(), args);
+                                    get_llvm_function_name(vec_fn), args);
             } else {
 
                 // No vector version found. Scalarize. Extract each simd
