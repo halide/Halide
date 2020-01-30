@@ -137,12 +137,13 @@ jobs:
 
     - name: Configure Windows
       if: matrix.config.os == 'windows-latest'
-      shell: cmake -P {0}
+      shell: bash
       run: |
         # Install libpng, jpeg, doxygen
         # choco install libpng -- TBD, not on choco?
         # choco install libjpeg-turbo
         # choco install doxygen.install
+        choco install wget
 
     - name: Configure Env Vars (Windows)
       if: matrix.config.os == 'windows-latest'
@@ -181,43 +182,59 @@ jobs:
         echo ::set-env name=HALIDE_TEMP_DIR::"${_TEMP}"
         echo ::set-env name=TEST_TMPDIR::"${_TEMP}"
 
-    - name: Download LLVM (Non-Windows)
-      if: matrix.config.os != 'windows-latest'
-      shell: cmake -P {0}
+    - name: Download LLVM (Linux)
+      if: startsWith(matrix.config.os, 'ubuntu')
+      shell: bash
       run: |
-        # Download LLVM Release.
-        # Use CMake (rather than wget) because we know it's available and will get the job done.
-        if("${{matrix.config.os}}" MATCHES "^ubuntu.*")
-          set(LLVM_URL "https://releases.llvm.org/${{matrix.config.llvm_version}}.0.0/clang+llvm-${{matrix.config.llvm_version}}.0.0-x86_64-linux-gnu-ubuntu-18.04.tar.xz")
-        elseif("${{matrix.config.os}}" MATCHES "^macos.*")
-          set(LLVM_URL "https://releases.llvm.org/${{matrix.config.llvm_version}}.0.0/clang+llvm-${{matrix.config.llvm_version}}.0.0-x86_64-darwin-apple.tar.xz")
-        else()
-          message(FATAL_ERROR "Unknown OS: ${{matrix.config.os}}")
-        endif()
+        LLVM_URL="https://releases.llvm.org/${{matrix.config.llvm_version}}.0.0/clang+llvm-${{matrix.config.llvm_version}}.0.0-x86_64-linux-gnu-ubuntu-18.04.tar.xz"
+        wget ${LLVM_URL} -O ${HALIDE_TEMP_DIR}/llvm-project.tar.xz
+        mkdir ${LLVM_DIR}
+        tar xvf ${HALIDE_TEMP_DIR}/llvm-project.tar.xz -C ${LLVM_DIR} --strip-components=1
 
-        set(ROOT "$ENV{GITHUB_WORKSPACE}")
-        file(DOWNLOAD "${LLVM_URL}" "${ROOT}/llvm-project.tar.xz")
-        execute_process(COMMAND ${CMAKE_COMMAND} -E tar xvf "${ROOT}/llvm-project.tar.xz")
-        execute_process(COMMAND ${CMAKE_COMMAND} -E remove -f "${ROOT}/llvm-project.tar.xz")
+    - name: Download LLVM (MacOS)
+      if: startsWith(matrix.config.os, 'macos')
+      shell: bash
+      run: |
+        LLVM_URL="https://releases.llvm.org/${{matrix.config.llvm_version}}.0.0/clang+llvm-${{matrix.config.llvm_version}}.0.0-x86_64-darwin-apple.tar.xz"
+        wget ${LLVM_URL} -O ${HALIDE_TEMP_DIR}/llvm-project.tar.xz
+        mkdir ${LLVM_DIR}
+        tar xvf ${HALIDE_TEMP_DIR}/llvm-project.tar.xz -C ${LLVM_DIR} --strip-components=1
 
-        string(REGEX REPLACE
-          "http[s]*://releases.llvm.org/[0-9\\.]*/([^/]*)\\.tar\\.xz"
-          "\\1"
-          LLVM_UNTAR_DIR
-          "${LLVM_URL}"
-        )
-        message(STATUS "LLVM_UNTAR_DIR ${ROOT}/${LLVM_UNTAR_DIR}")
-        execute_process(
-          COMMAND ${CMAKE_COMMAND}
-            -E rename "${ROOT}/${LLVM_UNTAR_DIR}" "${ROOT}/llvm"
-          RESULT_VARIABLE result
-        )
-        if (NOT result EQUAL 0)
-          message(FATAL_ERROR "Bad exit status: ${result}")
-        endif()
+      # shell: cmake -P {0}
+      # run: |
+      #   # Download LLVM Release.
+      #   # Use CMake (rather than wget) because we know it's available and will get the job done.
+      #   if("${{matrix.config.os}}" MATCHES "^ubuntu.*")
+      #     set(LLVM_URL "https://releases.llvm.org/${{matrix.config.llvm_version}}.0.0/clang+llvm-${{matrix.config.llvm_version}}.0.0-x86_64-linux-gnu-ubuntu-18.04.tar.xz")
+      #   elseif("${{matrix.config.os}}" MATCHES "^macos.*")
+      #     set(LLVM_URL "https://releases.llvm.org/${{matrix.config.llvm_version}}.0.0/clang+llvm-${{matrix.config.llvm_version}}.0.0-x86_64-darwin-apple.tar.xz")
+      #   else()
+      #     message(FATAL_ERROR "Unknown OS: ${{matrix.config.os}}")
+      #   endif()
+
+      #   set(ROOT "$ENV{GITHUB_WORKSPACE}")
+      #   file(DOWNLOAD "${LLVM_URL}" "${ROOT}/llvm-project.tar.xz")
+      #   execute_process(COMMAND ${CMAKE_COMMAND} -E tar xvf "${ROOT}/llvm-project.tar.xz")
+      #   execute_process(COMMAND ${CMAKE_COMMAND} -E remove -f "${ROOT}/llvm-project.tar.xz")
+
+      #   string(REGEX REPLACE
+      #     "http[s]*://releases.llvm.org/[0-9\\.]*/([^/]*)\\.tar\\.xz"
+      #     "\\1"
+      #     LLVM_UNTAR_DIR
+      #     "${LLVM_URL}"
+      #   )
+      #   message(STATUS "LLVM_UNTAR_DIR ${ROOT}/${LLVM_UNTAR_DIR}")
+      #   execute_process(
+      #     COMMAND ${CMAKE_COMMAND}
+      #       -E rename "${ROOT}/${LLVM_UNTAR_DIR}" "${ROOT}/llvm"
+      #     RESULT_VARIABLE result
+      #   )
+      #   if (NOT result EQUAL 0)
+      #     message(FATAL_ERROR "Bad exit status: ${result}")
+      #   endif()
 
     - name: Download LLVM (Windows)
-      if: matrix.config.os == 'windows-latest'
+      if: startsWith(matrix.config.os, 'windows')
       shell: bash
       run: |
         LLVM_URL="https://releases.llvm.org/${{matrix.config.llvm_version}}.0.0/LLVM-${{matrix.config.llvm_version}}.0.0-win64.exe"
