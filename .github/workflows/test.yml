@@ -231,7 +231,7 @@ jobs:
         name: llvm-${{matrix.config.llvm_version}}-${{matrix.config.os}}-${{matrix.config.bits}}-install
 
     - name: Build LLVM ${{matrix.config.llvm_version}} ${{matrix.config.os}} ${{matrix.config.bits}}
-      if: failed()
+      if: failure()
       shell: bash
       run: |
         LLVM_ID="llvm-${{matrix.config.llvm_version}}-${{matrix.config.os}}-${{matrix.config.bits}}"
