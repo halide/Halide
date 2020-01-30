@@ -1,5 +1,5 @@
 add_executable(harris_filter filter.cpp)
-halide_use_image_io(harris_filter)
+target_link_libraries(harris_filter PRIVATE Halide::ImageIO)
 
 halide_generator(harris.generator SRCS harris_generator.cpp)
 foreach(AUTO_SCHEDULE false true)
