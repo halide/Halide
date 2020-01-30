@@ -63,14 +63,14 @@ jobs:
         #   }
 
         # OSX builds
-        # - {
-        #     name: "OSX llvm9 cmake_shared",
-        #     build_tool: "cmake_shared",
-        #     cc: "clang",
-        #     cxx: "clang++",
-        #     llvm_version: 9,
-        #     os: macos-latest,
-        #   }
+        - {
+            name: "OSX llvm9 cmake_shared",
+            build_tool: "cmake_shared",
+            cc: "clang",
+            cxx: "clang++",
+            llvm_version: 9,
+            os: macos-latest,
+          }
 
         # - {
         #     name: "OSX llvm9 make",
@@ -236,17 +236,19 @@ jobs:
          cmake_static) HALIDE_SHARED_LIBRARY=OFF ;;
         esac
 
-        echo cmake \
+        echo 'cmake \
           -DCMAKE_BUILD_TYPE=Release \
           -DLLVM_DIR="${LLVM_DIR}/lib/cmake/llvm/" \
           -DCMAKE_MODULE_PATH="${LLVM_DIR}/lib/cmake/llvm/" \
           -DHALIDE_REQUIRE_LLVM_VERSION=${{matrix.config.llvm_version}}0 \
           -DHALIDE_SHARED_LIBRARY=${HALIDE_SHARED_LIBRARY} \
-          -G "${CMAKE_GEN}" \
-          -A "${CMAKE_ARCH}" \
-          -T "${CMAKE_TOOLSET}" \
-          -S "${HALIDE_DIR}" \
-          -B "${HALIDE_BUILD_DIR}"
+          -G"${CMAKE_GEN}" \
+          -A"${CMAKE_ARCH}" \
+          -T"${CMAKE_TOOLSET}" \
+          -S"${HALIDE_DIR}" \
+          -B"${HALIDE_BUILD_DIR}"'
+
+        ls ${LLVM_DIR}/lib/cmake/llvm/
 
         cmake \
           -DCMAKE_BUILD_TYPE=Release \
@@ -254,11 +256,11 @@ jobs:
           -DCMAKE_MODULE_PATH="${LLVM_DIR}/lib/cmake/llvm/" \
           -DHALIDE_REQUIRE_LLVM_VERSION=${{matrix.config.llvm_version}}0 \
           -DHALIDE_SHARED_LIBRARY=${HALIDE_SHARED_LIBRARY} \
-          -G "${CMAKE_GEN}" \
-          -A "${CMAKE_ARCH}" \
-          -T "${CMAKE_TOOLSET}" \
-          -S "${HALIDE_DIR}" \
-          -B "${HALIDE_BUILD_DIR}"
+          -G"${CMAKE_GEN}" \
+          -A"${CMAKE_ARCH}" \
+          -T"${CMAKE_TOOLSET}" \
+          -S"${HALIDE_DIR}" \
+          -B"${HALIDE_BUILD_DIR}"
 
     - name: Build Halide (Make)
       shell: bash
