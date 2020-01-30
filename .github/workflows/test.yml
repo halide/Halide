@@ -90,6 +90,7 @@ jobs:
             os: windows-latest,
             cmake_gen: "Visual Studio 16",
             cmake_arch: "x64",
+            cmake_toolset: "host=x64",
             #environment_script: "C:/Program Files (x86)/Microsoft Visual Studio/2019/Enterprise/VC/Auxiliary/Build/vcvars64.bat",
           }
 
@@ -105,7 +106,7 @@ jobs:
         path: 'halide'
 
     - name: Configure Ubuntu
-      if: matrix.config.os == 'ubuntu-18.04'
+      if: startsWith(matrix.config.os, 'ubuntu')
       run: |
         sudo apt-get update
 
@@ -127,7 +128,7 @@ jobs:
 
 
     - name: Configure OSX
-      if: matrix.config.os == 'macos-latest'
+      if: startsWith(matrix.config.os, 'macos')
       run: |
         # Install libpng, jpeg, doxygen
         brew install libpng jpeg doxygen
@@ -136,7 +137,7 @@ jobs:
         # installation in OSX and cause unhappiness. We'll handle it specially below.
 
     - name: Configure Windows
-      if: matrix.config.os == 'windows-latest'
+      if: startsWith(matrix.config.os, 'windows')
       shell: bash
       run: |
         # Install libpng, jpeg, doxygen
@@ -145,24 +146,24 @@ jobs:
         # choco install doxygen.install
         choco install wget
 
-    - name: Configure Env Vars (Windows)
-      if: matrix.config.os == 'windows-latest'
-      shell: powershell
-      run: |
-        # PowerShell script to set the MSVC env vars globally for all the steps in our job.
-        # Adapted from https://github.com/microsoft/vswhere/wiki/Start-Developer-Command-Prompt
-        # (No, I don't know PowerShell; this is heavily cargo-culted.)
-        $arch = "x64"
-        $hostArch = "x64"
-        $vswherePath = "C:\Program Files (x86)\Microsoft Visual Studio\Installer\vswhere.exe"
-        $vsInstallationPath = & "$vswherePath" -latest -property installationPath
-        $vsDevCmdPath = "`"$vsInstallationPath\Common7\Tools\VsDevCmd.bat`""
-        $command = "$vsDevCmdPath -no_logo -arch=$arch -host_arch=$hostArch"
+    # - name: Configure Env Vars (Windows)
+    #   if: startsWith(matrix.config.os, 'windows')
+    #   shell: powershell
+    #   run: |
+    #     # PowerShell script to set the MSVC env vars globally for all the steps in our job.
+    #     # Adapted from https://github.com/microsoft/vswhere/wiki/Start-Developer-Command-Prompt
+    #     # (No, I don't know PowerShell; this is heavily cargo-culted.)
+    #     $arch = "x64"
+    #     $hostArch = "x64"
+    #     $vswherePath = "C:\Program Files (x86)\Microsoft Visual Studio\Installer\vswhere.exe"
+    #     $vsInstallationPath = & "$vswherePath" -latest -property installationPath
+    #     $vsDevCmdPath = "`"$vsInstallationPath\Common7\Tools\VsDevCmd.bat`""
+    #     $command = "$vsDevCmdPath -no_logo -arch=$arch -host_arch=$hostArch"
 
-        & "${env:COMSPEC}" /s /c "$command && set" | ForEach-Object {
-          $name, $value = $_ -split '=', 2
-          Write-Output "::set-env name=$name::$value"
-        }
+    #     & "${env:COMSPEC}" /s /c "$command && set" | ForEach-Object {
+    #       $name, $value = $_ -split '=', 2
+    #       Write-Output "::set-env name=$name::$value"
+    #     }
 
     - name: Configure Env Vars
       shell: bash
@@ -181,6 +182,7 @@ jobs:
         echo ::set-env name=HALIDE_BUILD_DIR::"${_ROOT}/halide_build"
         echo ::set-env name=HALIDE_TEMP_DIR::"${_TEMP}"
         echo ::set-env name=TEST_TMPDIR::"${_TEMP}"
+        echo ::set-env name=PARALLEL_JOBS::"$(expr $(nproc) + 2)"
 
     - name: Download LLVM (Linux)
       if: startsWith(matrix.config.os, 'ubuntu')
@@ -200,39 +202,6 @@ jobs:
         mkdir ${LLVM_DIR}
         tar xvf ${HALIDE_TEMP_DIR}/llvm-project.tar.xz -C ${LLVM_DIR} --strip-components=1
 
-      # shell: cmake -P {0}
-      # run: |
-      #   # Download LLVM Release.
-      #   # Use CMake (rather than wget) because we know it's available and will get the job done.
-      #   if("${{matrix.config.os}}" MATCHES "^ubuntu.*")
-      #     set(LLVM_URL "https://releases.llvm.org/${{matrix.config.llvm_version}}.0.0/clang+llvm-${{matrix.config.llvm_version}}.0.0-x86_64-linux-gnu-ubuntu-18.04.tar.xz")
-      #   elseif("${{matrix.config.os}}" MATCHES "^macos.*")
-      #     set(LLVM_URL "https://releases.llvm.org/${{matrix.config.llvm_version}}.0.0/clang+llvm-${{matrix.config.llvm_version}}.0.0-x86_64-darwin-apple.tar.xz")
-      #   else()
-      #     message(FATAL_ERROR "Unknown OS: ${{matrix.config.os}}")
-      #   endif()
-
-      #   set(ROOT "$ENV{GITHUB_WORKSPACE}")
-      #   file(DOWNLOAD "${LLVM_URL}" "${ROOT}/llvm-project.tar.xz")
-      #   execute_process(COMMAND ${CMAKE_COMMAND} -E tar xvf "${ROOT}/llvm-project.tar.xz")
-      #   execute_process(COMMAND ${CMAKE_COMMAND} -E remove -f "${ROOT}/llvm-project.tar.xz")
-
-      #   string(REGEX REPLACE
-      #     "http[s]*://releases.llvm.org/[0-9\\.]*/([^/]*)\\.tar\\.xz"
-      #     "\\1"
-      #     LLVM_UNTAR_DIR
-      #     "${LLVM_URL}"
-      #   )
-      #   message(STATUS "LLVM_UNTAR_DIR ${ROOT}/${LLVM_UNTAR_DIR}")
-      #   execute_process(
-      #     COMMAND ${CMAKE_COMMAND}
-      #       -E rename "${ROOT}/${LLVM_UNTAR_DIR}" "${ROOT}/llvm"
-      #     RESULT_VARIABLE result
-      #   )
-      #   if (NOT result EQUAL 0)
-      #     message(FATAL_ERROR "Bad exit status: ${result}")
-      #   endif()
-
     - name: Download LLVM (Windows)
       if: startsWith(matrix.config.os, 'windows')
       shell: bash
@@ -244,186 +213,83 @@ jobs:
         chmod +x ${HALIDE_TEMP_DIR}/llvm.exe
         ${HALIDE_TEMP_DIR}/llvm.exe /S /D"${HALIDE_TEMP_DIR}/llvm"
 
-    # - name: Download LLVM (Windows)
-    #   if: matrix.config.os == 'windows-latest'
-    #   shell: cmake -P {0}
-    #   run: |
-    #     set(LLVM_URL "https://releases.llvm.org/${{matrix.config.llvm_version}}.0.0/LLVM-${{matrix.config.llvm_version}}.0.0-win64.exe")
-
-    #     file(DOWNLOAD "${LLVM_URL}" "$ENV{HALIDE_TEMP_DIR}/llvm.exe")
-    #     # Note that the Windows VMs run as admin with UAC disabled; otherwise, this wouldn't work
-    #     execute_process(
-    #       COMMAND "$ENV{HALIDE_TEMP_DIR}/llvm.exe" "/S" "/D$ENV{HALIDE_TEMP_DIR}/llvm"
-    #       WORKING_DIRECTORY $ENV{HALIDE_TEMP_DIR}
-    #       RESULT_VARIABLE result
-    #     )
-    #     if (NOT result EQUAL 0)
-    #       message(FATAL_ERROR "Bad exit status: ${result}")
-    #     endif()
-
     - name: Configure Make
       if: startsWith(matrix.config.build_tool, 'make')
-      shell: cmake -P {0}
+      shell: bash
       run: |
         # Configure Make
-        execute_process(
-          COMMAND ${CMAKE_COMMAND}
-            -E make_directory "$ENV{HALIDE_BUILD_DIR}"
-          RESULT_VARIABLE result
-        )
-        if (NOT result EQUAL 0)
-          message(FATAL_ERROR "Bad exit status: ${result}")
-        endif()
-
+        mkdir ${HALIDE_BUILD_DIR}
 
     - name: Configure CMake
       if: startsWith(matrix.config.build_tool, 'cmake')
-      shell: cmake -P {0}
+      shell: bash
       run: |
         # Configure CMake
-        execute_process(
-          COMMAND ${CMAKE_COMMAND}
-            -E make_directory "$ENV{HALIDE_BUILD_DIR}"
-          RESULT_VARIABLE result
-        )
-        if (NOT result EQUAL 0)
-          message(FATAL_ERROR "Bad exit status: ${result}")
-        endif()
+        mkdir ${HALIDE_BUILD_DIR}
 
-        if (NOT "${{matrix.config.cmake_gen}}" STREQUAL "")
-          set(CMAKE_GEN "${{matrix.config.cmake_gen}}")
-        else()
-          set(CMAKE_GEN "Unix Makefiles")
-        endif()
+        CMAKE_GEN="${{matrix.config.cmake_gen}}"
+        CMAKE_GEN=${CMAKE_GEN:-"Unix Makefiles"}
 
-        if (NOT "${{matrix.config.cmake_arch}}" STREQUAL "")
-          set(CMAKE_ARCH "${{matrix.config.cmake_arch}}")
-        else()
-          set(CMAKE_ARCH "")
-        endif()
+        CMAKE_ARCH="${{matrix.config.cmake_arch}}"
 
-        if (${{matrix.config.build_tool}} MATCHES "cmake_shared")
-          set(HALIDE_SHARED_LIBRARY ON)
-        elseif (${{matrix.config.build_tool}} MATCHES "cmake_static")
-          set(HALIDE_SHARED_LIBRARY OFF)
-        else()
-          message(FATAL_ERROR "Unknown build_tool: ${{matrix.config.build_tool}}")
-        endif()
+        CMAKE_TOOLSET="${{matrix.config.cmake_toolset}}"
 
-        message(STATUS "LLVM_DIR: $ENV{LLVM_DIR}")
-        message(STATUS "CMAKE_MODULE_PATH: ${CMAKE_MODULE_PATH}")
-        message(STATUS "HALIDE_SHARED_LIBRARY: ${HALIDE_SHARED_LIBRARY}")
-        message(STATUS "CMAKE_GEN: ${CMAKE_GEN}")
-        message(STATUS "CMAKE_ARCH: ${CMAKE_ARCH}")
-        message(STATUS "HALIDE_DIR: $ENV{HALIDE_DIR}")
+        case "${{matrix.config.build_tool}}" in
+         cmake_shared) HALIDE_SHARED_LIBRARY=ON  ;;
+         cmake_static) HALIDE_SHARED_LIBRARY=OFF ;;
+        esac
 
-        # Make sure that our LLVM package is in CMAKE_MODULE_PATH
-        # so that CMake will be able to find it
-        #          -DCMAKE_MODULE_PATH="$ENV{LLVM_DIR}/lib/cmake/llvm/"
+        cmake \
+          -DCMAKE_BUILD_TYPE=Release \
+          -DLLVM_DIR="${LLVM_DIR}/lib/cmake/llvm/" \
+          -DCMAKE_MODULE_PATH="${LLVM_DIR}/lib/cmake/llvm/" \
+          -DHALIDE_REQUIRE_LLVM_VERSION=${{matrix.config.llvm_version}}0 \
+          -DHALIDE_SHARED_LIBRARY=${HALIDE_SHARED_LIBRARY} \
+          -G "${CMAKE_GEN}" \
+          -A "${CMAKE_ARCH}" \
+          -T "${CMAKE_TOOLSET}" \
+          -S "${HALIDE_DIR}" \
+          -B "${HALIDE_BUILD_DIR}"
 
-        if("${{matrix.config.os}}" MATCHES "^windows.*")
-          set(CMAKE_HOST "-Thost=x64")
-          execute_process(
-            COMMAND dir "$ENV{LLVM_DIR}/lib/cmake/llvm/"
-            OUTPUT_VARIABLE foo
-          )
-          message(STATUS "foo: ${foo}")
-        else()
-          set(CMAKE_HOST "")
-          execute_process(
-            COMMAND ls "$ENV{LLVM_DIR}/lib/cmake/llvm/"
-            OUTPUT_VARIABLE foo
-          )
-          message(STATUS "foo: ${foo}")
-        endif()
-
-        execute_process(
-          COMMAND ${CMAKE_COMMAND}
-                  -DCMAKE_BUILD_TYPE=Release
-                  -DLLVM_DIR="$ENV{LLVM_DIR}/lib/cmake/llvm/"
-                  -DCMAKE_MODULE_PATH="$ENV{LLVM_DIR}/lib/cmake/llvm/"
-                  -DHALIDE_REQUIRE_LLVM_VERSION=${{matrix.config.llvm_version}}0
-                  -DHALIDE_SHARED_LIBRARY=${HALIDE_SHARED_LIBRARY}
-                  -G "${CMAKE_GEN}"
-                  -A "${CMAKE_ARCH}"
-                  ${CMAKE_HOST}
-                  --debug-output
-                  --check-system-vars
-                  "$ENV{HALIDE_DIR}"
-          WORKING_DIRECTORY $ENV{HALIDE_BUILD_DIR}
-          RESULT_VARIABLE result
-        )
-
-        if (NOT result EQUAL 0)
-          message(FATAL_ERROR "Bad exit status: ${result}")
-        endif()
-
-    - name: Build Halide
-      shell: cmake -P {0}
+    - name: Build Halide (Make)
+      shell: bash
       run: |
         # Build Halide
-        set(PARALLEL_JOBS 4)  # The VMs have 2 cores, so specify N+2
-        if (${{matrix.config.build_tool}} MATCHES "^cmake.*")
-          foreach(TARGET all package)
-            # CMake only allows one --target flag per invocation
-            execute_process(
-              COMMAND ${CMAKE_COMMAND} --build $ENV{HALIDE_BUILD_DIR} -j ${PARALLEL_JOBS} --target ${TARGET}
-              WORKING_DIRECTORY $ENV{HALIDE_BUILD_DIR}
-              RESULT_VARIABLE result
-            )
-            if (NOT result EQUAL 0)
-              message(FATAL_ERROR "Bad exit status: ${result}")
-            endif()
-          endforeach()
-        elseif (${{matrix.config.build_tool}} STREQUAL "make")
-          execute_process(
-            COMMAND make -f $ENV{HALIDE_DIR}/Makefile -j ${PARALLEL_JOBS} distrib build_tests test_internal
-            WORKING_DIRECTORY $ENV{HALIDE_BUILD_DIR}
-            RESULT_VARIABLE result
-          )
-          if (NOT result EQUAL 0)
-            message(FATAL_ERROR "Bad exit status: ${result}")
-          endif()
-        else()
-          message(FATAL_ERROR "Unknown build_tool: ${{matrix.config.build_tool}}")
-        endif()
+        cd ${HALIDE_BUILD_DIR}
+        make -f ${HALIDE_DIR}/Makefile -j ${PARALLEL_JOBS} distrib build_tests test_internal
 
-    - name: Run Tests
-      shell: cmake -P {0}
+    - name: Build Halide (CMake)
+      shell: bash
       run: |
-        set(PARALLEL_JOBS 4)  # The VMs have 2 cores, so specify N+2
-        if (${{matrix.config.build_tool}} MATCHES "^cmake.*")
-          set(TEST_GROUPS_BROKEN "opengl")
-          set(TEST_GROUPS_SERIAL "performance")  # |auto_schedule
+        # Build Halide
+        cd ${HALIDE_BUILD_DIR}
+        cmake --build ${HALIDE_BUILD_DIR} -j ${PARALLEL_JOBS} --target all
+        # cmake --build ${HALIDE_BUILD_DIR} -j ${PARALLEL_JOBS} --target package  # TODO?
 
-          # Parallel
-          execute_process(
-            COMMAND ${CMAKE_CTEST_COMMAND} -j ${PARALLEL_JOBS} -LE "${TEST_GROUPS_BROKEN}|${TEST_GROUPS_SERIAL}" --output-on-failure
-            WORKING_DIRECTORY $ENV{HALIDE_BUILD_DIR}
-            RESULT_VARIABLE result
-          )
-          if (NOT result EQUAL 0)
-            message(FATAL_ERROR "Bad exit status: ${result}")
-          endif()
+    - name: Run Tests (Make)
+      shell: bash
+      run: |
+        # Test Halide
+        cd ${HALIDE_BUILD_DIR}
+        make -f ${HALIDE_DIR}/Makefile -j ${PARALLEL_JOBS} run_tests
 
-          # Serial
-          execute_process(
-            COMMAND ${CMAKE_CTEST_COMMAND} -L "${TEST_GROUPS_SERIAL}" --output-on-failure
-            WORKING_DIRECTORY $ENV{HALIDE_BUILD_DIR}
-            RESULT_VARIABLE result
-          )
-          if (NOT result EQUAL 0)
-            message(FATAL_ERROR "Bad exit status: ${result}")
-          endif()
-        elseif (${{matrix.config.build_tool}} STREQUAL "make")
-          execute_process(
-            COMMAND make -f $ENV{HALIDE_DIR}/Makefile -j ${PARALLEL_JOBS} run_tests
-            WORKING_DIRECTORY $ENV{HALIDE_BUILD_DIR}
-            RESULT_VARIABLE result
-          )
-          if (NOT result EQUAL 0)
-            message(FATAL_ERROR "Bad exit status: ${result}")
-          endif()
-        else()
-          message(FATAL_ERROR "Unknown build_tool: ${{matrix.config.build_tool}}")
-        endif()
+    - name: Run Tests (CMake)
+      shell: bash
+      run: |
+        # Test Halide
+        TEST_GROUPS_BROKEN="opengl|auto_schedule"
+        TEST_GROUPS_SERIAL="performance"
+
+        cd ${HALIDE_BUILD_DIR}
+
+        # Parallel
+        ctest \
+          -j ${PARALLEL_JOBS} \
+          -LE "${TEST_GROUPS_BROKEN}|${TEST_GROUPS_SERIAL}" \
+          --output-on-failure
+
+        # Serial
+        ctest \
+          -L "${TEST_GROUPS_SERIAL}" \
+          --output-on-failure
+
