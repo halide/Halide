@@ -208,10 +208,21 @@ jobs:
         LLVM_URL="https://releases.llvm.org/${{matrix.config.llvm_version}}.0.0/LLVM-${{matrix.config.llvm_version}}.0.0-win64.exe"
         wget ${LLVM_URL} -O ${HALIDE_TEMP_DIR}/llvm.exe
 
+        echo DONE
+
+        echo HALIDE_TEMP_DIR
+        ls ${HALIDE_TEMP_DIR}
+
         # Note that the Windows VMs run as admin with UAC disabled; otherwise, this wouldn't work
         chmod +x ${HALIDE_TEMP_DIR}/llvm.exe
         mkdir ${LLVM_DIR}
-        ${HALIDE_TEMP_DIR}/llvm.exe /S /D${LLVM_DIR}
+
+        echo LLVM_DIR
+        ls ${LLVM_DIR}
+
+        echo Installing...
+        ${HALIDE_TEMP_DIR}/llvm.exe -S -D${LLVM_DIR}
+        echo Installing...DONE
 
     - name: Configure Make
       if: startsWith(matrix.config.build_tool, 'make')
