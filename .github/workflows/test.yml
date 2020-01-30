@@ -250,11 +250,13 @@ jobs:
 
         set -eux
         cmake \
-          -DCMAKE_BUILD_TYPE=Release \
-          -DLLVM_DIR="${LLVM_DIR/D://D}/lib/cmake/llvm/" \
-          -DCMAKE_MODULE_PATH="${LLVM_DIR/D://D}/lib/cmake/llvm/" \
-          -DHALIDE_REQUIRE_LLVM_VERSION=${{matrix.config.llvm_version}}0 \
-          -DHALIDE_SHARED_LIBRARY=${HALIDE_SHARED_LIBRARY} \
+        --debug-output --check-system-vars \
+          -D CMAKE_BUILD_TYPE=Release \
+          -D LLVM_DIR="${LLVM_DIR}/lib/cmake/llvm/" \
+          -D CMAKE_MODULE_PATH="${LLVM_DIR}/lib/cmake/llvm/" \
+          -D CMAKE_INSTALL_PREFIX="${LLVM_DIR}/lib/cmake/llvm/" \
+          -D HALIDE_REQUIRE_LLVM_VERSION=${{matrix.config.llvm_version}}0 \
+          -D HALIDE_SHARED_LIBRARY=${HALIDE_SHARED_LIBRARY} \
           -G "${CMAKE_GEN}" \
           -A "${CMAKE_ARCH}" \
           -T "${CMAKE_TOOLSET}" \
