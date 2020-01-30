@@ -85,13 +85,22 @@ jobs:
         #build_tool: [cmake_shared, cmake_static, make]
         os: [windows-latest]
         bits: [64]
-        llvm_version: [8, 9]
+        llvm_version: [8]
         build_tool: [cmake_shared]
+        cmake_gen: "Unix Makefiles"
+        cmake_arch: ""
+        cmake_toolset: ""
         include:
           - llvm_version: 8
             llvm_branch: release/8.x
           - llvm_version: 9
             llvm_branch: release/9.x
+          - os: macos-latest
+            cc: clang
+            cxx: clang++
+          - os: ubuntu-18.04
+            cc: gcc
+            cxx: g++
           - os: windows-latest
             cc: cl
             cxx: cl
@@ -335,9 +344,10 @@ jobs:
           -D LLVM_ENABLE_PROJECTS="clang;lld" \
           -D LLVM_ENABLE_RTTI=ON \
           -D LLVM_ENABLE_TERMINFO=OFF \
+          -D LLVM_ENABLE_SUPPORT_XCODE_SIGNPOSTS=FORCE_OFF \
           -D LLVM_TARGETS_TO_BUILD="X86;ARM;NVPTX;AArch64;Mips;PowerPC;Hexagon" \
           -B "${LLVM_BUILD_DIR}" \
-          -S "${LLVM_SOURCE_DIR}"
+          -S "${LLVM_SOURCE_DIR}/llvm"
 
         PARALLEL_JOBS=$(expr $(nproc) + 2)
         cmake --build "${LLVM_BUILD_DIR}" -j ${PARALLEL_JOBS} --target install
