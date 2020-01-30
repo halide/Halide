@@ -1514,7 +1514,7 @@ void LoopNest::recompute_inlined_features(const StageMap<Sites> &sites, StageMap
         }
         inlined_feat.outer_parallelism = intermediate.outer_parallelism;
         inlined_feat.num_blocks = intermediate.outer_parallelism;
-        inlined_feat.num_warps_per_block += intermediate.num_warps_per_block * intermediate.outer_parallelism;
+        inlined_feat.num_warps_per_block += intermediate.num_warps_per_block;
     }
 }
 
@@ -2479,7 +2479,8 @@ void LoopNest::compute_features(const FunctionDAG &dag,
         inlined_feat.num_blocks = parallelism;
 
         internal_assert(gpu_loop_info.thread_info);
-        inlined_feat.num_warps_per_block += gpu_loop_info.thread_info->num_warps_per_block * inlined_feat.num_blocks;
+        auto num_warps = it.value() * gpu_loop_info.total_serial_extents() * gpu_loop_info.thread_info->num_warps_per_block * inlined_feat.num_blocks;
+        inlined_feat.num_warps_per_block += num_warps;
 
         if (use_memoized_features) {
             const auto &block = sites.get(stage).task;
@@ -2493,7 +2494,7 @@ void LoopNest::compute_features(const FunctionDAG &dag,
             intermediate.vector_size = feat.vector_size;
             intermediate.innermost_pure_loop_extent = feat.innermost_pure_loop_extent;
             intermediate.outer_parallelism = parallelism;
-            intermediate.num_warps_per_block = gpu_loop_info.thread_info->num_warps_per_block;
+            intermediate.num_warps_per_block = num_warps;
         }
     }
 
