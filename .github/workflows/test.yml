@@ -87,6 +87,7 @@ jobs:
         bits: [64]
         llvm_version: [8]
         build_tool: [cmake_shared]
+        cmake_gen: ["Unix Makefiles"]
         include:
           - llvm_version: 8
             llvm_branch: release/8.x
@@ -104,101 +105,6 @@ jobs:
             cmake_gen: "Visual Studio 16"
             cmake_arch: "x64"
             cmake_toolset: "host=x64"
-
-        #config:
-        # Ubuntu (x86-64) builds
-        # - {
-        #     name: "Ubuntu g++ llvm8 cmake_shared",
-        #     build_tool: "cmake_shared",
-        #     cc: "gcc",
-        #     cxx: "g++",
-        #     llvm_version: 8,
-        #     os: ubuntu-18.04,
-        #   }
-        # - {
-        #     name: "Ubuntu g++ llvm8 cmake_static",
-        #     build_tool: "cmake_static",
-        #     cc: "gcc",
-        #     cxx: "g++",
-        #     llvm_version: 8,
-        #     os: ubuntu-18.04,
-        #   }
-        # - {
-        #     name: "Ubuntu g++ llvm8 make",
-        #     build_tool: "make",
-        #     cc: "gcc",
-        #     cxx: "g++",
-        #     llvm_version: 8,
-        #     os: ubuntu-18.04,
-        #   }
-        # - {
-        #     name: "Ubuntu g++ llvm9 cmake_shared",
-        #     build_tool: "cmake_shared",
-        #     cc: "gcc",
-        #     cxx: "g++",
-        #     llvm_version: 9,
-        #     os: ubuntu-18.04,
-        #   }
-        # - {
-        #     name: "Ubuntu g++ llvm9 cmake_static",
-        #     build_tool: "cmake_static",
-        #     cc: "gcc",
-        #     cxx: "g++",
-        #     llvm_version: 9,
-        #     os: ubuntu-18.04,
-        #   }
-        # - {
-        #     name: "Ubuntu g++ llvm9 make",
-        #     build_tool: "make",
-        #     cc: "gcc",
-        #     cxx: "g++",
-        #     llvm_version: 9,
-        #     os: ubuntu-18.04,
-        #   }
-
-        # OSX builds
-        # - {
-        #     name: "OSX llvm9 cmake_shared",
-        #     build_tool: "cmake_shared",
-        #     cc: "clang",
-        #     cxx: "clang++",
-        #     llvm_version: 9,
-        #     os: macos-latest,
-        #   }
-
-        # - {
-        #     name: "OSX llvm9 make",
-        #     build_tool: "make",
-        #     cc: "clang",
-        #     cxx: "clang++",
-        #     llvm_version: 9,
-        #     os: macos-latest,
-        #   }
-
-        # - {
-        #     name: "MSVC llvm9 cmake_shared",
-        #     build_tool: "cmake_shared",
-        #     cc: "cl",
-        #     cxx: "cl",
-        #     llvm_version: 9,
-        #     bits: 64,
-        #     os: windows-latest,
-        #     cmake_gen: "Visual Studio 16",
-        #     cmake_arch: "x64",
-        #     cmake_toolset: "host=x64",
-        #   }
-
-        # - {
-        #     name: "Windows Latest MinGW", artifact: "Windows-MinGW.tar.xz",
-        #     os: windows-latest,
-        #     build_type: "Release", cc: "gcc", cxx: "g++"
-        #   }
-
-        # include:
-        #   - llvm_version: 8
-        #     llvm_branch: release/8.x
-        #   - llvm_version: 9
-        #     llvm_branch: release/9.x
 
     steps:
     - uses: actions/checkout@v2
@@ -343,6 +249,9 @@ jobs:
           -D LLVM_ENABLE_TERMINFO=OFF \
           -D LLVM_ENABLE_SUPPORT_XCODE_SIGNPOSTS=FORCE_OFF \
           -D LLVM_TARGETS_TO_BUILD="X86;ARM;NVPTX;AArch64;Mips;PowerPC;Hexagon" \
+          -G "${{matrix.cmake_gen}}" \
+          -A "${{matrix.cmake_arch}}" \
+          -T "${{matrix.cmake_toolset}}" \
           -B "${LLVM_BUILD_DIR}" \
           -S "${LLVM_SOURCE_DIR}/llvm"
 
