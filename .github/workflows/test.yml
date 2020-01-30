@@ -145,24 +145,24 @@ jobs:
         # choco install doxygen.install
         choco install wget
 
-    # - name: Configure Env Vars (Windows)
-    #   if: startsWith(matrix.config.os, 'windows')
-    #   shell: powershell
-    #   run: |
-    #     # PowerShell script to set the MSVC env vars globally for all the steps in our job.
-    #     # Adapted from https://github.com/microsoft/vswhere/wiki/Start-Developer-Command-Prompt
-    #     # (No, I don't know PowerShell; this is heavily cargo-culted.)
-    #     $arch = "x64"
-    #     $hostArch = "x64"
-    #     $vswherePath = "C:\Program Files (x86)\Microsoft Visual Studio\Installer\vswhere.exe"
-    #     $vsInstallationPath = & "$vswherePath" -latest -property installationPath
-    #     $vsDevCmdPath = "`"$vsInstallationPath\Common7\Tools\VsDevCmd.bat`""
-    #     $command = "$vsDevCmdPath -no_logo -arch=$arch -host_arch=$hostArch"
+    - name: Configure Env Vars (Windows)
+      if: startsWith(matrix.config.os, 'windows')
+      shell: powershell
+      run: |
+        # PowerShell script to set the MSVC env vars globally for all the steps in our job.
+        # Adapted from https://github.com/microsoft/vswhere/wiki/Start-Developer-Command-Prompt
+        # (No, I don't know PowerShell; this is heavily cargo-culted.)
+        $arch = "x64"
+        $hostArch = "x64"
+        $vswherePath = "C:\Program Files (x86)\Microsoft Visual Studio\Installer\vswhere.exe"
+        $vsInstallationPath = & "$vswherePath" -latest -property installationPath
+        $vsDevCmdPath = "`"$vsInstallationPath\Common7\Tools\VsDevCmd.bat`""
+        $command = "$vsDevCmdPath -no_logo -arch=$arch -host_arch=$hostArch"
 
-    #     & "${env:COMSPEC}" /s /c "$command && set" | ForEach-Object {
-    #       $name, $value = $_ -split '=', 2
-    #       Write-Output "::set-env name=$name::$value"
-    #     }
+        & "${env:COMSPEC}" /s /c "$command && set" | ForEach-Object {
+          $name, $value = $_ -split '=', 2
+          Write-Output "::set-env name=$name::$value"
+        }
 
     - name: Configure Env Vars
       shell: bash
@@ -201,30 +201,6 @@ jobs:
         mkdir ${LLVM_DIR}
         tar xvf ${HALIDE_TEMP_DIR}/llvm-project.tar.xz -C ${LLVM_DIR} --strip-components=1
 
-    # - name: Download LLVM (Windows)
-    #   if: startsWith(matrix.config.os, 'windows')
-    #   shell: bash
-    #   run: |
-    #     LLVM_URL="https://releases.llvm.org/${{matrix.config.llvm_version}}.0.0/LLVM-${{matrix.config.llvm_version}}.0.0-win64.exe"
-    #     wget ${LLVM_URL} -O ${HALIDE_TEMP_DIR}/llvm.exe
-
-    #     # echo DONE
-
-    #     # echo HALIDE_TEMP_DIR ${HALIDE_TEMP_DIR}
-    #     # ls ${HALIDE_TEMP_DIR}
-
-    #     # Note that the Windows VMs run as admin with UAC disabled; otherwise, this wouldn't work
-    #     # chmod +x ${HALIDE_TEMP_DIR}/llvm.exe
-    #     # mkdir ${LLVM_DIR}
-
-    #     # echo LLVM_DIR ${LLVM_DIR}
-    #     # ls ${LLVM_DIR}
-
-    #     # echo Installing...
-    #     # echo ${HALIDE_TEMP_DIR}/llvm.exe -S -D${LLVM_DIR}
-    #     # ${HALIDE_TEMP_DIR}/llvm.exe -S -D${LLVM_DIR}
-    #     # echo Installing...DONE
-
     # Note 1: the Windows VMs run as admin with UAC disabled; otherwise, this wouldn't work
     # Note 2: the LLVM installer hangs when run from bash, so this step uses 'cmd'
     - name: Download LLVM (Windows)
@@ -232,17 +208,16 @@ jobs:
       shell: cmd
       run: |
         wget "https://releases.llvm.org/${{matrix.config.llvm_version}}.0.0/LLVM-${{matrix.config.llvm_version}}.0.0-win64.exe" -O %HALIDE_TEMP_DIR%/llvm.exe
-        echo %HALIDE_TEMP_DIR%/llvm.exe /S /D%LLVM_DIR%
         %HALIDE_TEMP_DIR%/llvm.exe /S /D%LLVM_DIR%
 
-    - name: Configure Make
+    - name: Configure Halide (Make)
       if: startsWith(matrix.config.build_tool, 'make')
       shell: bash
       run: |
         # Configure Make
         mkdir ${HALIDE_BUILD_DIR}
 
-    - name: Configure CMake
+    - name: Configure Halide (CMake)
       if: startsWith(matrix.config.build_tool, 'cmake')
       shell: bash
       run: |
@@ -260,6 +235,18 @@ jobs:
          cmake_shared) HALIDE_SHARED_LIBRARY=ON  ;;
          cmake_static) HALIDE_SHARED_LIBRARY=OFF ;;
         esac
+
+        echo cmake \
+          -DCMAKE_BUILD_TYPE=Release \
+          -DLLVM_DIR="${LLVM_DIR}/lib/cmake/llvm/" \
+          -DCMAKE_MODULE_PATH="${LLVM_DIR}/lib/cmake/llvm/" \
+          -DHALIDE_REQUIRE_LLVM_VERSION=${{matrix.config.llvm_version}}0 \
+          -DHALIDE_SHARED_LIBRARY=${HALIDE_SHARED_LIBRARY} \
+          -G "${CMAKE_GEN}" \
+          -A "${CMAKE_ARCH}" \
+          -T "${CMAKE_TOOLSET}" \
+          -S "${HALIDE_DIR}" \
+          -B "${HALIDE_BUILD_DIR}"
 
         cmake \
           -DCMAKE_BUILD_TYPE=Release \
