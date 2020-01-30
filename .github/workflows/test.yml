@@ -37,14 +37,14 @@ jobs:
         #     llvm_version: 8,
         #     os: ubuntu-18.04,
         #   }
-        - {
-            name: "Ubuntu g++ llvm9 cmake_shared",
-            build_tool: "cmake_shared",
-            cc: "gcc",
-            cxx: "g++",
-            llvm_version: 9,
-            os: ubuntu-18.04,
-          }
+        # - {
+        #     name: "Ubuntu g++ llvm9 cmake_shared",
+        #     build_tool: "cmake_shared",
+        #     cc: "gcc",
+        #     cxx: "g++",
+        #     llvm_version: 9,
+        #     os: ubuntu-18.04,
+        #   }
         # - {
         #     name: "Ubuntu g++ llvm9 cmake_static",
         #     build_tool: "cmake_static",
@@ -53,24 +53,24 @@ jobs:
         #     llvm_version: 9,
         #     os: ubuntu-18.04,
         #   }
-        - {
-            name: "Ubuntu g++ llvm9 make",
-            build_tool: "make",
-            cc: "gcc",
-            cxx: "g++",
-            llvm_version: 9,
-            os: ubuntu-18.04,
-          }
+        # - {
+        #     name: "Ubuntu g++ llvm9 make",
+        #     build_tool: "make",
+        #     cc: "gcc",
+        #     cxx: "g++",
+        #     llvm_version: 9,
+        #     os: ubuntu-18.04,
+        #   }
 
         # OSX builds
-        - {
-            name: "OSX llvm9 cmake_shared",
-            build_tool: "cmake_shared",
-            cc: "clang",
-            cxx: "clang++",
-            llvm_version: 9,
-            os: macos-latest,
-          }
+        # - {
+        #     name: "OSX llvm9 cmake_shared",
+        #     build_tool: "cmake_shared",
+        #     cc: "clang",
+        #     cxx: "clang++",
+        #     llvm_version: 9,
+        #     os: macos-latest,
+        #   }
 
         # - {
         #     name: "OSX llvm9 make",
@@ -91,7 +91,6 @@ jobs:
             cmake_gen: "Visual Studio 16",
             cmake_arch: "x64",
             cmake_toolset: "host=x64",
-            #environment_script: "C:/Program Files (x86)/Microsoft Visual Studio/2019/Enterprise/VC/Auxiliary/Build/vcvars64.bat",
           }
 
         # - {
@@ -211,7 +210,8 @@ jobs:
 
         # Note that the Windows VMs run as admin with UAC disabled; otherwise, this wouldn't work
         chmod +x ${HALIDE_TEMP_DIR}/llvm.exe
-        ${HALIDE_TEMP_DIR}/llvm.exe /S /D"${LLVM_DIR}"
+        mkdir ${LLVM_DIR}
+        ${HALIDE_TEMP_DIR}/llvm.exe /S /D${LLVM_DIR}
 
     - name: Configure Make
       if: startsWith(matrix.config.build_tool, 'make')
