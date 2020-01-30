@@ -87,9 +87,6 @@ jobs:
         bits: [64]
         llvm_version: [8]
         build_tool: [cmake_shared]
-        cmake_gen: "Unix Makefiles"
-        cmake_arch: ""
-        cmake_toolset: ""
         include:
           - llvm_version: 8
             llvm_branch: release/8.x
