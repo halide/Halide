@@ -11,7 +11,24 @@ jobs:
     strategy:
       fail-fast: false  # Keep running other jobs even if one fails
       matrix:
-        config:
+        # os: [ubuntu-18.04, macos-latest, windows-latest]
+        os: [windows-latest]
+        bits: [64]
+        llvm_version: [8, 9]
+        #build_tool: [cmake_shared, cmake_static, make]
+        build_tool: [cmake_shared]
+        include:
+          - llvm_version: 8
+            llvm_branch: release/8.x
+          - llvm_version: 9
+            llvm_branch: release/9.x
+          - os: windows-latest
+            cc: cl
+            cxx: cl
+            cmake_gen: "Visual Studio 16"
+            cmake_arch: "x64"
+            cmake_toolset: "host=x64"
+        #config:
         # Ubuntu (x86-64) builds
         # - {
         #     name: "Ubuntu g++ llvm8 cmake_shared",
@@ -81,18 +98,18 @@ jobs:
         #     os: macos-latest,
         #   }
 
-        - {
-            name: "MSVC llvm9 cmake_shared",
-            build_tool: "cmake_shared",
-            cc: "cl",
-            cxx: "cl",
-            llvm_version: 9,
-            llvm_bits: 64,
-            os: windows-latest,
-            cmake_gen: "Visual Studio 16",
-            cmake_arch: "x64",
-            cmake_toolset: "host=x64",
-          }
+        # - {
+        #     name: "MSVC llvm9 cmake_shared",
+        #     build_tool: "cmake_shared",
+        #     cc: "cl",
+        #     cxx: "cl",
+        #     llvm_version: 9,
+        #     bits: 64,
+        #     os: windows-latest,
+        #     cmake_gen: "Visual Studio 16",
+        #     cmake_arch: "x64",
+        #     cmake_toolset: "host=x64",
+        #   }
 
         # - {
         #     name: "Windows Latest MinGW", artifact: "Windows-MinGW.tar.xz",
@@ -100,11 +117,11 @@ jobs:
         #     build_type: "Release", cc: "gcc", cxx: "g++"
         #   }
 
-        include:
-          - llvm_version: 8
-            llvm_branch: release/8.x
-          - llvm_version: 9
-            llvm_branch: release/9.x
+        # include:
+        #   - llvm_version: 8
+        #     llvm_branch: release/8.x
+        #   - llvm_version: 9
+        #     llvm_branch: release/9.x
 
     steps:
     - uses: actions/checkout@v2
@@ -208,16 +225,16 @@ jobs:
     #     mkdir ${LLVM_DIR}
     #     tar xvf ${HALIDE_TEMP_DIR}/llvm-project.tar.xz -C ${LLVM_DIR} --strip-components=1
 
-    - name: Download LLVM ${{matrix.config.llvm_version}} ${{matrix.config.os}} ${{matrix.config.llvm_bits}}
+    - name: Download LLVM ${{matrix.config.llvm_version}} ${{matrix.config.os}} ${{matrix.config.bits}}
       uses: actions/download-artifact@v1
       with:
-        name: llvm-${{matrix.config.llvm_version}}-${{matrix.config.os}}-${{matrix.config.llvm_bits}}-install
+        name: llvm-${{matrix.config.llvm_version}}-${{matrix.config.os}}-${{matrix.config.bits}}-install
 
-    - name: Build LLVM ${{matrix.config.llvm_version}} ${{matrix.config.os}} ${{matrix.config.llvm_bits}}
+    - name: Build LLVM ${{matrix.config.llvm_version}} ${{matrix.config.os}} ${{matrix.config.bits}}
       if: failed()
       shell: bash
       run: |
-        LLVM_ID="llvm-${{matrix.config.llvm_version}}-${{matrix.config.os}}-${{matrix.config.llvm_bits}}"
+        LLVM_ID="llvm-${{matrix.config.llvm_version}}-${{matrix.config.os}}-${{matrix.config.bits}}"
         LLVM_BUILD_DIR="${GITHUB_WORKSPACE}/${LLVM_ID}-build"
         LLVM_INSTALL_DIR="${GITHUB_WORKSPACE}/${LLVM_ID}-install"
         LLVM_SOURCE_DIR="${GITHUB_WORKSPACE}/${LLVM_ID}-source"
@@ -228,7 +245,7 @@ jobs:
           --single-branch \
           --depth 1
 
-        LLVM_BUILD_32_BITS=$([ ${{matrix.config.llvm_bits}} == 32 ] && echo "ON" || echo "OFF")
+        LLVM_BUILD_32_BITS=$([ ${{matrix.config.bits}} == 32 ] && echo "ON" || echo "OFF")
 
         # TODO: add WebAssembly for trunk
         # TODO: disable assertions for mingw?
@@ -248,12 +265,12 @@ jobs:
         PARALLEL_JOBS=$(expr $(nproc) + 2)
         cmake --build "${LLVM_BUILD_DIR}" -j ${PARALLEL_JOBS} --target install
 
-    - name: Upload LLVM ${{matrix.config.llvm_version}} ${{matrix.config.os}} ${{matrix.config.llvm_bits}}
+    - name: Upload LLVM ${{matrix.config.llvm_version}} ${{matrix.config.os}} ${{matrix.config.bits}}
       if: success()
       uses: actions/upload-artifact@v1
       with:
-        name: llvm-${{matrix.config.llvm_version}}-${{matrix.config.os}}-${{matrix.config.llvm_bits}}
-        path: llvm-${{matrix.config.llvm_version}}-${{matrix.config.os}}-${{matrix.config.llvm_bits}}-install
+        name: llvm-${{matrix.config.llvm_version}}-${{matrix.config.os}}-${{matrix.config.bits}}
+        path: llvm-${{matrix.config.llvm_version}}-${{matrix.config.os}}-${{matrix.config.bits}}-install
 
     # # Note 1: the Windows VMs run as admin with UAC disabled; otherwise, this wouldn't work
     # # Note 2: the LLVM installer hangs when run from bash, so this step uses 'cmd'
@@ -298,7 +315,7 @@ jobs:
           HALIDE_REQUIRE_LLVM_VERSION="${{matrix.config.llvm_version}}0"
         fi
 
-        LLVM_ID="llvm-${{matrix.config.llvm_version}}-${{matrix.config.os}}-${{matrix.config.llvm_bits}}"
+        LLVM_ID="llvm-${{matrix.config.llvm_version}}-${{matrix.config.os}}-${{matrix.config.bits}}"
         LLVM_INSTALL_DIR="${GITHUB_WORKSPACE}/${LLVM_ID}-install"
 
         set -eux
