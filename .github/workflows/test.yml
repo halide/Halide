@@ -218,20 +218,31 @@ jobs:
 
     - name: Download LLVM (Windows)
       if: matrix.config.os == 'windows-latest'
-      shell: cmake -P {0}
+      shell: bash
       run: |
-        set(LLVM_URL "https://releases.llvm.org/${{matrix.config.llvm_version}}.0.0/LLVM-${{matrix.config.llvm_version}}.0.0-win64.exe")
+        LLVM_URL="https://releases.llvm.org/${{matrix.config.llvm_version}}.0.0/LLVM-${{matrix.config.llvm_version}}.0.0-win64.exe"
+        wget ${LLVM_URL} -O ${HALIDE_TEMP_DIR}/llvm.exe
 
-        file(DOWNLOAD "${LLVM_URL}" "${HALIDE_TEMP_DIR}/llvm.exe")
         # Note that the Windows VMs run as admin with UAC disabled; otherwise, this wouldn't work
-        execute_process(
-          COMMAND "${HALIDE_TEMP_DIR}/llvm.exe" "/S" "/D${HALIDE_TEMP_DIR}/llvm"
-          WORKING_DIRECTORY ${HALIDE_TEMP_DIR}
-          RESULT_VARIABLE result
-        )
-        if (NOT result EQUAL 0)
-          message(FATAL_ERROR "Bad exit status: ${result}")
-        endif()
+        chmod +x ${HALIDE_TEMP_DIR}/llvm.exe
+        ${HALIDE_TEMP_DIR}/llvm.exe /S /D"${HALIDE_TEMP_DIR}/llvm"
+
+    # - name: Download LLVM (Windows)
+    #   if: matrix.config.os == 'windows-latest'
+    #   shell: cmake -P {0}
+    #   run: |
+    #     set(LLVM_URL "https://releases.llvm.org/${{matrix.config.llvm_version}}.0.0/LLVM-${{matrix.config.llvm_version}}.0.0-win64.exe")
+
+    #     file(DOWNLOAD "${LLVM_URL}" "$ENV{HALIDE_TEMP_DIR}/llvm.exe")
+    #     # Note that the Windows VMs run as admin with UAC disabled; otherwise, this wouldn't work
+    #     execute_process(
+    #       COMMAND "$ENV{HALIDE_TEMP_DIR}/llvm.exe" "/S" "/D$ENV{HALIDE_TEMP_DIR}/llvm"
+    #       WORKING_DIRECTORY $ENV{HALIDE_TEMP_DIR}
+    #       RESULT_VARIABLE result
+    #     )
+    #     if (NOT result EQUAL 0)
+    #       message(FATAL_ERROR "Bad exit status: ${result}")
+    #     endif()
 
     - name: Configure Make
       if: startsWith(matrix.config.build_tool, 'make')
