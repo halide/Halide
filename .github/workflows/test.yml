@@ -254,7 +254,7 @@ jobs:
           -D CMAKE_BUILD_TYPE=Release \
           -D LLVM_DIR="${LLVM_DIR}/lib/cmake/llvm/" \
           -D CMAKE_MODULE_PATH="${LLVM_DIR}/lib/cmake/llvm/" \
-          -D CMAKE_INSTALL_PREFIX="${LLVM_DIR}/lib/cmake/llvm/" \
+          -D CMAKE_PREFIX_PATH="${LLVM_DIR}/lib/cmake/llvm/" \
           -D HALIDE_REQUIRE_LLVM_VERSION=${{matrix.config.llvm_version}}0 \
           -D HALIDE_SHARED_LIBRARY=${HALIDE_SHARED_LIBRARY} \
           -G "${CMAKE_GEN}" \
