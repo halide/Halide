@@ -237,7 +237,8 @@ jobs:
         esac
 
         if [ "${{matrix.config.os}}" = "windows-latest" ]; then
-          # TODO(srj)
+          # TODO(srj) -- this should work for windows but does not,
+          # because wtf.
           HALIDE_REQUIRE_LLVM_VERSION=""
         else
           HALIDE_REQUIRE_LLVM_VERSION="${{matrix.config.llvm_version}}0"
@@ -249,7 +250,7 @@ jobs:
         set -eux
         cmake \
           -D CMAKE_BUILD_TYPE=Release \
-          -D LLVM_DIR="${LLVM_DIR}/lib/cmake/llvm/" \
+          -D LLVM_DIR="${LLVM_DIR}/lib/cmake/llvm" \
           -D HALIDE_REQUIRE_LLVM_VERSION="${HALIDE_REQUIRE_LLVM_VERSION}" \
           -D HALIDE_SHARED_LIBRARY=${HALIDE_SHARED_LIBRARY} \
           -G "${CMAKE_GEN}" \
