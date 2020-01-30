@@ -164,18 +164,22 @@ jobs:
         }
 
     - name: Configure Env Vars
+      shell: bash
       run: |
-        # ${GITHUB_WORKSPACE}, ${{runner.temp}} (etc) will contain backslashes on windows;
-        # CMake will choke on string literals with backslashes, so extract them here
-        # in a bash/cmd shell into env vars
-        echo "::set-env name=CC::${{matrix.config.cc}}"
-        echo "::set-env name=CXX::${{matrix.config.cxx}}"
-        echo "::set-env name=LLVM_DIR::${GITHUB_WORKSPACE}/llvm"
-        echo "::set-env name=LLVM_CONFIG::${GITHUB_WORKSPACE}/llvm/bin/llvm-config"
-        echo "::set-env name=HALIDE_DIR::${GITHUB_WORKSPACE}/halide"
-        echo "::set-env name=HALIDE_BUILD_DIR::${GITHUB_WORKSPACE}/halide_build"
-        echo "::set-env name=HALIDE_TEMP_DIR::${{runner.temp}}"
-        echo "::set-env name=TEST_TMPDIR::${{runner.temp}}"
+        # Demangle Windows names, to simplify CMake stuff later
+        _ROOT=${GITHUB_WORKSPACE/\\//}
+        _TEMP_RAW="${{runner.temp}}"
+        _TEMP=${_TEMP_RAW/\\//}
+
+        # This is the trick GitHub Actions uses to allow us to set env vars across all job steps
+        echo ::set-env name=CC::"${{matrix.config.cc}}"
+        echo ::set-env name=CXX::"${{matrix.config.cxx}}"
+        echo ::set-env name=LLVM_DIR::"${_ROOT}/llvm"
+        echo ::set-env name=LLVM_CONFIG::"${_ROOT}/llvm/bin/llvm-config"
+        echo ::set-env name=HALIDE_DIR::"${_ROOT}/halide"
+        echo ::set-env name=HALIDE_BUILD_DIR::"${_ROOT}/halide_build"
+        echo ::set-env name=HALIDE_TEMP_DIR::"${_TEMP}"
+        echo ::set-env name=TEST_TMPDIR::"${_TEMP}"
 
     - name: Download LLVM (Non-Windows)
       if: matrix.config.os != 'windows-latest'
