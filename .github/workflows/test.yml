@@ -211,7 +211,7 @@ jobs:
 
         # Note that the Windows VMs run as admin with UAC disabled; otherwise, this wouldn't work
         chmod +x ${HALIDE_TEMP_DIR}/llvm.exe
-        ${HALIDE_TEMP_DIR}/llvm.exe /S /D"${HALIDE_TEMP_DIR}/llvm"
+        ${HALIDE_TEMP_DIR}/llvm.exe /S /D"${LLVM_DIR}"
 
     - name: Configure Make
       if: startsWith(matrix.config.build_tool, 'make')
