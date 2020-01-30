@@ -165,12 +165,17 @@ jobs:
 
     - name: Configure Env Vars
       run: |
+        # ${GITHUB_WORKSPACE}, ${{runner.temp}} (etc) will contain backslashes on windows;
+        # CMake will choke on string literals with backslashes, so extract them here
+        # in a bash/cmd shell into env vars
         echo "::set-env name=CC::${{matrix.config.cc}}"
         echo "::set-env name=CXX::${{matrix.config.cxx}}"
         echo "::set-env name=LLVM_DIR::${GITHUB_WORKSPACE}/llvm"
         echo "::set-env name=LLVM_CONFIG::${GITHUB_WORKSPACE}/llvm/bin/llvm-config"
         echo "::set-env name=HALIDE_DIR::${GITHUB_WORKSPACE}/halide"
         echo "::set-env name=HALIDE_BUILD_DIR::${GITHUB_WORKSPACE}/halide_build"
+        echo "::set-env name=HALIDE_TEMP_DIR::${{runner.temp}}"
+        echo "::set-env name=TEST_TMPDIR::${{runner.temp}}"
 
     - name: Download LLVM (Non-Windows)
       if: matrix.config.os != 'windows-latest'
@@ -213,12 +218,11 @@ jobs:
       run: |
         set(LLVM_URL "https://releases.llvm.org/${{matrix.config.llvm_version}}.0.0/LLVM-${{matrix.config.llvm_version}}.0.0-win64.exe")
 
-        string(REPLACE "\\" "/" TEMP "${{runner.temp}}")
-        file(DOWNLOAD "${LLVM_URL}" "${TEMP}/llvm.exe")
+        file(DOWNLOAD "${LLVM_URL}" "${HALIDE_TEMP_DIR}/llvm.exe")
         # Note that the Windows VMs run as admin with UAC disabled; otherwise, this wouldn't work
         execute_process(
-          COMMAND "${TEMP}/llvm.exe" "/S" "/D${TEMP}/llvm"
-          WORKING_DIRECTORY ${TEMP}
+          COMMAND "${HALIDE_TEMP_DIR}/llvm.exe" "/S" "/D${HALIDE_TEMP_DIR}/llvm"
+          WORKING_DIRECTORY ${HALIDE_TEMP_DIR}
           RESULT_VARIABLE result
         )
         if (NOT result EQUAL 0)
@@ -355,13 +359,10 @@ jobs:
     - name: Run Tests
       shell: cmake -P {0}
       run: |
-        # set TEST_TMPDIR for the tests that need it
-        set(ENV{TEST_TMPDIR} "${{runner.temp}}")
-
         set(PARALLEL_JOBS 4)  # The VMs have 2 cores, so specify N+2
         if (${{matrix.config.build_tool}} MATCHES "^cmake.*")
           set(TEST_GROUPS_BROKEN "opengl")
-          set(TEST_GROUPS_SERIAL "performance|auto_schedule")
+          set(TEST_GROUPS_SERIAL "performance")  # |auto_schedule
 
           # Parallel
           execute_process(
