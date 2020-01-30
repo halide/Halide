@@ -329,7 +329,7 @@ jobs:
         # TODO: LLVM_ENABLE_SUPPORT_XCODE_SIGNPOSTS = FORCE_OFF for macos
         cmake \
           -D CMAKE_BUILD_TYPE=Release \
-          -D CMAKE_INSTALL_PREFIX="${LLVM_INSTALL_DIR}"
+          -D CMAKE_INSTALL_PREFIX="${LLVM_INSTALL_DIR}" \
           -D LLVM_BUILD_32_BITS=${LLVM_BUILD_32_BITS} \
           -D LLVM_ENABLE_ASSERTIONS=ON \
           -D LLVM_ENABLE_PROJECTS="clang;lld" \
