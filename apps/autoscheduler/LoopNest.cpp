@@ -1993,7 +1993,6 @@ void LoopNest::compute_features(const FunctionDAG &dag,
     LocalMemInfo local_mem_loads;
     double num_shared_mem_loads_per_block = 0;
     double min_num_shared_mem_loads_per_block = 0;
-    int64_t total_serial_loop_extents = 1;
 
     if (innermost || at_production) {  // These are the sites at which we compute load footprints
         // Pick the site at which we will compute the footprint relationship
@@ -2266,7 +2265,8 @@ void LoopNest::compute_features(const FunctionDAG &dag,
                                     producer_has_been_scheduled,
                                     *gpu_loop_info.thread_info,
                                     root,
-                                    total_serial_loop_extents);
+                                    gpu_loop_info.total_serial_extents()
+                                );
                                 num_shared_mem_loads_per_block += n * shared_mem_features.first;
                                 min_num_shared_mem_loads_per_block += n * shared_mem_features.second;
                             } else if (is_global_mem && get_compute_global_mem_load_features()) {
@@ -2279,9 +2279,10 @@ void LoopNest::compute_features(const FunctionDAG &dag,
                                     producer_has_been_scheduled,
                                     *gpu_loop_info.thread_info,
                                     global_mem_loads,
-                                    total_serial_loop_extents,
+                                    gpu_loop_info.total_serial_extents(),
                                     n,
-                                    root);
+                                    root
+                                );
                             }
                         }
                     }
