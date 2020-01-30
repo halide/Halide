@@ -4,8 +4,78 @@ on:
     types: [opened, synchronize, reopened, edited, review_requested]
 
 jobs:
-  test:
-    name: ${{matrix.name}}
+  # prep_llvm:
+  #   name: Halide ${{matrix.os}}-${{matrix.bits}} llvm-${{matrix.llvm_version}} ${{matrix.build_tool}}
+  #   runs-on: ${{matrix.os}}
+  #     fail-fast: false  # Keep running other jobs even if one fails
+  #     matrix:
+  #       os: [windows-latest]
+  #       bits: [32, 64]
+  #       llvm_version: [8, 9]
+  #       build_tool: [cmake_shared]
+  #       include:
+  #         - llvm_version: 8
+  #           llvm_branch: release/8.x
+  #         - llvm_version: 9
+  #           llvm_branch: release/9.x
+  #         - os: windows-latest
+  #           cc: cl
+  #           cxx: cl
+  #           cmake_gen: "Visual Studio 16"
+  #           cmake_arch: "x64"
+  #           cmake_toolset: "host=x64"
+
+  #   # We don't actually need LLVM here, this is just a way to see if we need
+  #   # to rebuild it.
+  #   - name: Download LLVM ${{matrix.llvm_version}} ${{matrix.os}} ${{matrix.bits}}
+  #     uses: actions/download-artifact@v1
+  #     with:
+  #       name: llvm-${{matrix.llvm_version}}-${{matrix.os}}-${{matrix.bits}}-install
+
+  #   - name: Build LLVM ${{matrix.llvm_version}} ${{matrix.os}} ${{matrix.bits}}
+  #     if: failure()
+  #     shell: bash
+  #     run: |
+  #       LLVM_ID="llvm-${{matrix.llvm_version}}-${{matrix.os}}-${{matrix.bits}}"
+  #       LLVM_BUILD_DIR="${GITHUB_WORKSPACE}/${LLVM_ID}-build"
+  #       LLVM_INSTALL_DIR="${GITHUB_WORKSPACE}/${LLVM_ID}-install"
+  #       LLVM_SOURCE_DIR="${GITHUB_WORKSPACE}/${LLVM_ID}-source"
+
+  #       git clone https://github.com/llvm/llvm-project.git \
+  #         "${LLVM_SOURCE_DIR}" \
+  #         --branch ${{matrix.llvm_branch}} \
+  #         --single-branch \
+  #         --depth 1
+
+  #       LLVM_BUILD_32_BITS=$([ ${{matrix.bits}} == 32 ] && echo "ON" || echo "OFF")
+
+  #       # TODO: add WebAssembly for trunk
+  #       # TODO: disable assertions for mingw?
+  #       # TODO: LLVM_ENABLE_SUPPORT_XCODE_SIGNPOSTS = FORCE_OFF for macos
+  #       cmake \
+  #         -D CMAKE_BUILD_TYPE=Release \
+  #         -D CMAKE_INSTALL_PREFIX="${LLVM_INSTALL_DIR}"
+  #         -D LLVM_BUILD_32_BITS=${LLVM_BUILD_32_BITS} \
+  #         -D LLVM_ENABLE_ASSERTIONS=ON \
+  #         -D LLVM_ENABLE_PROJECTS="clang;lld" \
+  #         -D LLVM_ENABLE_RTTI=ON \
+  #         -D LLVM_ENABLE_TERMINFO=OFF \
+  #         -D LLVM_TARGETS_TO_BUILD="X86;ARM;NVPTX;AArch64;Mips;PowerPC;Hexagon" \
+  #         -B "${LLVM_BUILD_DIR}" \
+  #         -S "${LLVM_SOURCE_DIR}"
+
+  #       PARALLEL_JOBS=$(expr $(nproc) + 2)
+  #       cmake --build "${LLVM_BUILD_DIR}" -j ${PARALLEL_JOBS} --target install
+
+  #   - name: Upload LLVM ${{matrix.llvm_version}} ${{matrix.os}} ${{matrix.bits}}
+  #     if: success()
+  #     uses: actions/upload-artifact@v1
+  #     with:
+  #       name: llvm-${{matrix.llvm_version}}-${{matrix.os}}-${{matrix.bits}}
+  #       path: llvm-${{matrix.llvm_version}}-${{matrix.os}}-${{matrix.bits}}-install
+
+  test_halide:
+    name: Halide ${{matrix.os}}-${{matrix.bits}} llvm-${{matrix.llvm_version}} ${{matrix.build_tool}}
     runs-on: ${{matrix.os}}
 
     strategy:
@@ -168,7 +238,7 @@ jobs:
         # choco install libpng -- TBD, not on choco?
         # choco install libjpeg-turbo
         # choco install doxygen.install
-        choco install wget
+        # choco install wget
 
     # - name: Configure Env Vars (Windows)
     #   if: startsWith(matrix.os, 'windows')
@@ -240,6 +310,10 @@ jobs:
         LLVM_INSTALL_DIR="${GITHUB_WORKSPACE}/${LLVM_ID}-install"
         LLVM_SOURCE_DIR="${GITHUB_WORKSPACE}/${LLVM_ID}-source"
 
+        echo "LLVM_BUILD_DIR is ${LLVM_BUILD_DIR}"
+        echo "LLVM_INSTALL_DIR is ${LLVM_INSTALL_DIR}"
+        echo "LLVM_SOURCE_DIR is ${LLVM_SOURCE_DIR}"
+
         git clone https://github.com/llvm/llvm-project.git \
           "${LLVM_SOURCE_DIR}" \
           --branch ${{matrix.llvm_branch}} \
@@ -247,6 +321,8 @@ jobs:
           --depth 1
 
         LLVM_BUILD_32_BITS=$([ ${{matrix.bits}} == 32 ] && echo "ON" || echo "OFF")
+
+        set -eux
 
         # TODO: add WebAssembly for trunk
         # TODO: disable assertions for mingw?
