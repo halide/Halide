@@ -87,6 +87,7 @@ jobs:
             cc: "cl",
             cxx: "cl",
             llvm_version: 9,
+            llvm_bits: 64,
             os: windows-latest,
             cmake_gen: "Visual Studio 16",
             cmake_arch: "x64",
@@ -98,6 +99,12 @@ jobs:
         #     os: windows-latest,
         #     build_type: "Release", cc: "gcc", cxx: "g++"
         #   }
+
+        include:
+          - llvm_version: 8
+            llvm_branch: release/8.x
+          - llvm_version: 9
+            llvm_branch: release/9.x
 
     steps:
     - uses: actions/checkout@v2
@@ -175,40 +182,87 @@ jobs:
         # This is the trick GitHub Actions uses to allow us to set env vars across all job steps
         echo ::set-env name=CC::"${{matrix.config.cc}}"
         echo ::set-env name=CXX::"${{matrix.config.cxx}}"
-        echo ::set-env name=LLVM_DIR::"${_ROOT}/llvm"
-        echo ::set-env name=LLVM_CONFIG::"${_ROOT}/llvm/bin/llvm-config"
+        # echo ::set-env name=LLVM_DIR::"${_ROOT}/llvm"
+        # echo ::set-env name=LLVM_CONFIG::"${_ROOT}/llvm/bin/llvm-config"
         echo ::set-env name=HALIDE_DIR::"${_ROOT}/halide"
         echo ::set-env name=HALIDE_BUILD_DIR::"${_ROOT}/halide_build"
         echo ::set-env name=HALIDE_TEMP_DIR::"${_TEMP}"
         echo ::set-env name=TEST_TMPDIR::"${_TEMP}"
         echo ::set-env name=PARALLEL_JOBS::"$(expr $(nproc) + 2)"
 
-    - name: Download LLVM (Linux)
-      if: startsWith(matrix.config.os, 'ubuntu')
+    # - name: Install LLVM (Linux)
+    #   if: startsWith(matrix.config.os, 'ubuntu')
+    #   shell: bash
+    #   run: |
+    #     LLVM_URL="https://releases.llvm.org/${{matrix.config.llvm_version}}.0.0/clang+llvm-${{matrix.config.llvm_version}}.0.0-x86_64-linux-gnu-ubuntu-18.04.tar.xz"
+    #     wget ${LLVM_URL} -O ${HALIDE_TEMP_DIR}/llvm-project.tar.xz
+    #     mkdir ${LLVM_DIR}
+    #     tar xvf ${HALIDE_TEMP_DIR}/llvm-project.tar.xz -C ${LLVM_DIR} --strip-components=1
+
+    # - name: Install LLVM (MacOS)
+    #   if: startsWith(matrix.config.os, 'macos')
+    #   shell: bash
+    #   run: |
+    #     LLVM_URL="https://releases.llvm.org/${{matrix.config.llvm_version}}.0.0/clang+llvm-${{matrix.config.llvm_version}}.0.0-x86_64-darwin-apple.tar.xz"
+    #     wget ${LLVM_URL} -O ${HALIDE_TEMP_DIR}/llvm-project.tar.xz
+    #     mkdir ${LLVM_DIR}
+    #     tar xvf ${HALIDE_TEMP_DIR}/llvm-project.tar.xz -C ${LLVM_DIR} --strip-components=1
+
+    - name: Download LLVM ${{matrix.config.llvm_version}} ${{matrix.config.os}} ${{matrix.config.llvm_bits}}
+      uses: actions/download-artifact@v1
+      with:
+        name: llvm-${{matrix.config.llvm_version}}-${{matrix.config.os}}-${{matrix.config.llvm_bits}}-install
+
+    - name: Build LLVM ${{matrix.config.llvm_version}} ${{matrix.config.os}} ${{matrix.config.llvm_bits}}
+      if: failed()
       shell: bash
       run: |
-        LLVM_URL="https://releases.llvm.org/${{matrix.config.llvm_version}}.0.0/clang+llvm-${{matrix.config.llvm_version}}.0.0-x86_64-linux-gnu-ubuntu-18.04.tar.xz"
-        wget ${LLVM_URL} -O ${HALIDE_TEMP_DIR}/llvm-project.tar.xz
-        mkdir ${LLVM_DIR}
-        tar xvf ${HALIDE_TEMP_DIR}/llvm-project.tar.xz -C ${LLVM_DIR} --strip-components=1
+        LLVM_ID="llvm-${{matrix.config.llvm_version}}-${{matrix.config.os}}-${{matrix.config.llvm_bits}}"
+        LLVM_BUILD_DIR="${GITHUB_WORKSPACE}/${LLVM_ID}-build"
+        LLVM_INSTALL_DIR="${GITHUB_WORKSPACE}/${LLVM_ID}-install"
+        LLVM_SOURCE_DIR="${GITHUB_WORKSPACE}/${LLVM_ID}-source"
 
-    - name: Download LLVM (MacOS)
-      if: startsWith(matrix.config.os, 'macos')
-      shell: bash
-      run: |
-        LLVM_URL="https://releases.llvm.org/${{matrix.config.llvm_version}}.0.0/clang+llvm-${{matrix.config.llvm_version}}.0.0-x86_64-darwin-apple.tar.xz"
-        wget ${LLVM_URL} -O ${HALIDE_TEMP_DIR}/llvm-project.tar.xz
-        mkdir ${LLVM_DIR}
-        tar xvf ${HALIDE_TEMP_DIR}/llvm-project.tar.xz -C ${LLVM_DIR} --strip-components=1
+        git clone https://github.com/llvm/llvm-project.git \
+          "${LLVM_SOURCE_DIR}" \
+          --branch ${{matrix.config.llvm_branch}} \
+          --single-branch \
+          --depth 1
 
-    # Note 1: the Windows VMs run as admin with UAC disabled; otherwise, this wouldn't work
-    # Note 2: the LLVM installer hangs when run from bash, so this step uses 'cmd'
-    - name: Download LLVM (Windows)
-      if: startsWith(matrix.config.os, 'windows')
-      shell: cmd
-      run: |
-        wget "https://releases.llvm.org/${{matrix.config.llvm_version}}.0.0/LLVM-${{matrix.config.llvm_version}}.0.0-win64.exe" -O %HALIDE_TEMP_DIR%/llvm.exe
-        %HALIDE_TEMP_DIR%/llvm.exe /S /D%LLVM_DIR%
+        LLVM_BUILD_32_BITS=$([ ${{matrix.config.llvm_bits}} == 32 ] && echo "ON" || echo "OFF")
+
+        # TODO: add WebAssembly for trunk
+        # TODO: disable assertions for mingw?
+        # TODO: LLVM_ENABLE_SUPPORT_XCODE_SIGNPOSTS = FORCE_OFF for macos
+        cmake \
+          -D CMAKE_BUILD_TYPE=Release \
+          -D CMAKE_INSTALL_PREFIX="${LLVM_INSTALL_DIR}"
+          -D LLVM_BUILD_32_BITS=${LLVM_BUILD_32_BITS} \
+          -D LLVM_ENABLE_ASSERTIONS=ON \
+          -D LLVM_ENABLE_PROJECTS="clang;lld" \
+          -D LLVM_ENABLE_RTTI=ON \
+          -D LLVM_ENABLE_TERMINFO=OFF \
+          -D LLVM_TARGETS_TO_BUILD="X86;ARM;NVPTX;AArch64;Mips;PowerPC;Hexagon" \
+          -B "${LLVM_BUILD_DIR}" \
+          -S "${LLVM_SOURCE_DIR}"
+
+        PARALLEL_JOBS=$(expr $(nproc) + 2)
+        cmake --build "${LLVM_BUILD_DIR}" -j ${PARALLEL_JOBS} --target install
+
+    - name: Upload LLVM ${{matrix.config.llvm_version}} ${{matrix.config.os}} ${{matrix.config.llvm_bits}}
+      if: success()
+      uses: actions/upload-artifact@v1
+      with:
+        name: llvm-${{matrix.config.llvm_version}}-${{matrix.config.os}}-${{matrix.config.llvm_bits}}
+        path: llvm-${{matrix.config.llvm_version}}-${{matrix.config.os}}-${{matrix.config.llvm_bits}}-install
+
+    # # Note 1: the Windows VMs run as admin with UAC disabled; otherwise, this wouldn't work
+    # # Note 2: the LLVM installer hangs when run from bash, so this step uses 'cmd'
+    # - name: Download LLVM (Windows)
+    #   if: startsWith(matrix.config.os, 'windows')
+    #   shell: cmd
+    #   run: |
+    #     wget "https://releases.llvm.org/${{matrix.config.llvm_version}}.0.0/LLVM-${{matrix.config.llvm_version}}.0.0-win64.exe" -O %HALIDE_TEMP_DIR%/llvm.exe
+    #     %HALIDE_TEMP_DIR%/llvm.exe /S /D%LLVM_DIR%
 
     - name: Configure Halide (Make)
       if: startsWith(matrix.config.build_tool, 'make')
@@ -244,13 +298,13 @@ jobs:
           HALIDE_REQUIRE_LLVM_VERSION="${{matrix.config.llvm_version}}0"
         fi
 
-          # -D CMAKE_MODULE_PATH="${LLVM_DIR}/lib/cmake/llvm/" \
-          # -D CMAKE_PREFIX_PATH="${LLVM_DIR}/lib/cmake/llvm/" \
+        LLVM_ID="llvm-${{matrix.config.llvm_version}}-${{matrix.config.os}}-${{matrix.config.llvm_bits}}"
+        LLVM_INSTALL_DIR="${GITHUB_WORKSPACE}/${LLVM_ID}-install"
 
         set -eux
         cmake \
           -D CMAKE_BUILD_TYPE=Release \
-          -D LLVM_DIR="${LLVM_DIR}/lib/cmake/llvm" \
+          -D LLVM_DIR="${LLVM_INSTALL_DIR}/lib/cmake/llvm" \
           -D HALIDE_REQUIRE_LLVM_VERSION="${HALIDE_REQUIRE_LLVM_VERSION}" \
           -D HALIDE_SHARED_LIBRARY=${HALIDE_SHARED_LIBRARY} \
           -G "${CMAKE_GEN}" \
@@ -259,12 +313,12 @@ jobs:
           -S "${HALIDE_DIR}" \
           -B "${HALIDE_BUILD_DIR}"
 
-    - name: Build Halide (Make)
-      shell: bash
-      run: |
-        # Build Halide
-        cd ${HALIDE_BUILD_DIR}
-        make -f ${HALIDE_DIR}/Makefile -j ${PARALLEL_JOBS} distrib build_tests test_internal
+    # - name: Build Halide (Make)
+    #   shell: bash
+    #   run: |
+    #     # Build Halide
+    #     cd ${HALIDE_BUILD_DIR}
+    #     make -f ${HALIDE_DIR}/Makefile -j ${PARALLEL_JOBS} distrib build_tests test_internal
 
     - name: Build Halide (CMake)
       shell: bash
@@ -274,12 +328,12 @@ jobs:
         cmake --build ${HALIDE_BUILD_DIR} -j ${PARALLEL_JOBS} --target all
         # cmake --build ${HALIDE_BUILD_DIR} -j ${PARALLEL_JOBS} --target package  # TODO?
 
-    - name: Run Tests (Make)
-      shell: bash
-      run: |
-        # Test Halide
-        cd ${HALIDE_BUILD_DIR}
-        make -f ${HALIDE_DIR}/Makefile -j ${PARALLEL_JOBS} run_tests
+    # - name: Run Tests (Make)
+    #   shell: bash
+    #   run: |
+    #     # Test Halide
+    #     cd ${HALIDE_BUILD_DIR}
+    #     make -f ${HALIDE_DIR}/Makefile -j ${PARALLEL_JOBS} run_tests
 
     - name: Run Tests (CMake)
       shell: bash
