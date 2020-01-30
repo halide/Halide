@@ -3,28 +3,29 @@
 using namespace Halide;
 
 int main(int argc, char **argv) {
-    Func f, g, c;
-    Var x;
+    // TO test: min/max/add/dot/mul for lots of src/dst type pairs
 
-    c(x) = cast<uint8_t>(x);
-    f(x) = cast<uint8_t>(x);
+    // Fused combinations of x and a reduction at various combos
+
+    Func f, g, c;
+    Var x, y;
+
+    c(x) = cast<uint16_t>(x);
+    f(y, x) = cast<uint16_t>(x);
     f.compute_root();
     c.compute_root();
 
-    /*
-    RDom r(0, 16);
+    RDom r(0, 2);
 
-    g(x) += cast<uint16_t>(f(x + r)) * c(r);
-    */
-
-    RDom r(0, 4);
-    g(x) += cast<uint16_t>(f(4 * x + r));  // * c(r);
+    g(x) += cast<uint32_t>(f(r, x)) * c(r);
 
     Var xo, xi;
     RVar rx;
-    g.bound(x, 0, 128).update().atomic().split(x, xo, xi, 32).fuse(r, xi, rx).vectorize(rx);
+    g.bound(x, 0, 128).update().atomic().split(x, xo, xi, 1).fuse(r, xi, rx).vectorize(rx);
 
-    g.compile_to_assembly("/dev/stdout", {}, Target("arm-64-no_asserts-no_bounds_query-no_runtime-disable_llvm_loop_opt"));
+    //g.compile_to_assembly("/dev/stdout", {}, Target("arm-64-no_asserts-no_bounds_query-no_runtime-disable_llvm_loop_opt"));
+    //g.compile_to_assembly("/dev/stdout", {}, Target("arm-32-no_asserts-no_bounds_query-no_runtime-disable_llvm_loop_opt"));
+    g.compile_to_assembly("/dev/stdout", {}, Target("x86-64-no_asserts-no_bounds_query-no_runtime-disable_llvm_loop_opt"));
 
     return 0;
 }

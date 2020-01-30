@@ -53,7 +53,7 @@ protected:
               intrin_lanes(l), pattern(p), type(t) {
         }
     };
-    std::vector<Pattern> casts, averagings, negations, multiplies, pairwise;
+    std::vector<Pattern> casts, averagings, negations, multiplies;
 
     // Call an intrinsic as defined by a pattern. Dispatches to the
     // 32- or 64-bit name depending on the target's bit width.

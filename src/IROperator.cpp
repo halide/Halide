@@ -428,6 +428,43 @@ Expr lossless_cast(Type t, Expr e) {
         }
     }
 
+    if ((t.is_int() || t.is_uint()) && t.bits() >= 16) {
+        if (const Add *add = e.as<Add>()) {
+            // If we can losslessly narrow the args even more
+            // aggressively, we're good.
+            // E.g. lossless_cast(uint16, (uint32)(a_u8) + 37
+            // = (uint16)(a_u8) + 37
+            Expr a = lossless_cast(t.with_bits(t.bits() / 2), add->a);
+            Expr b = lossless_cast(t.with_bits(t.bits() / 2), add->b);
+            if (a.defined() && b.defined()) {
+                return cast(t, a) + cast(t, b);
+            } else {
+                return Expr();
+            }
+        }
+
+        if (const Sub *sub = e.as<Sub>()) {
+            Expr a = lossless_cast(t.with_bits(t.bits() / 2), sub->a);
+            Expr b = lossless_cast(t.with_bits(t.bits() / 2), sub->b);
+            if (a.defined() && b.defined()) {
+                return cast(t, a) + cast(t, b);
+            } else {
+                return Expr();
+            }
+        }
+
+        if (const Mul *mul = e.as<Mul>()) {
+            debug(0) << "Widening mul: " << e << "\n";
+            Expr a = lossless_cast(t.with_bits(t.bits() / 2), mul->a);
+            Expr b = lossless_cast(t.with_bits(t.bits() / 2), mul->b);
+            if (a.defined() && b.defined()) {
+                return cast(t, a) * cast(t, b);
+            } else {
+                return Expr();
+            }
+        }
+    }
+
     return Expr();
 }
 

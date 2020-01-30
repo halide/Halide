@@ -4283,7 +4283,7 @@ void CodeGen_LLVM::visit(const Shuffle *op) {
         }
     }
 
-    if (op->type.is_scalar()) {
+    if (op->type.is_scalar() && value->getType()->isVectorTy()) {
         value = builder->CreateExtractElement(value, ConstantInt::get(i32_t, 0));
     }
 }
@@ -4407,7 +4407,12 @@ Value *CodeGen_LLVM::call_intrin(const Type &result_type, int intrin_lanes,
         arg_values[i] = codegen(args[i]);
     }
 
-    return call_intrin(llvm_type_of(result_type),
+    llvm::Type *t = llvm_type_of(result_type);
+    if (!t->isVectorTy()) {
+        t = llvm::VectorType::get(t, 1);
+    }
+
+    return call_intrin(t,
                        intrin_lanes,
                        name, arg_values);
 }
@@ -4479,6 +4484,10 @@ Value *CodeGen_LLVM::slice_vector(Value *vec, int start, int size) {
 
     if (start == 0 && size == vec_lanes) {
         return vec;
+    }
+
+    if (size == 1) {
+        return builder->CreateExtractElement(vec, (uint64_t)start);
     }
 
     vector<int> indices(size);

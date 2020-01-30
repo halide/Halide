@@ -247,74 +247,6 @@ CodeGen_ARM::CodeGen_ARM(Target target)
     multiplies.push_back(Pattern("vmullu.v8i16", "umull.v8i16", 8,
                                  wild_u16x_ * wild_u16x_,
                                  Pattern::NarrowArgs));
-
-    auto pairwise_add = [](const Expr &e) {
-        return VectorReduce::make(VectorReduce::Add, e, e.type().lanes() / 2);
-    };
-
-    // 128 -> 128 bit widening pairwise adds
-    pairwise.emplace_back("vpaddls.v8i16.v16i8", "saddlp.v8i16.v16i8", 8,
-                          pairwise_add(wild_i16x_), Pattern::NarrowArgs);
-    pairwise.emplace_back("vpaddls.v4i32.v8i16", "saddlp.v4i32.v8i16", 4,
-                          pairwise_add(wild_i32x_), Pattern::NarrowArgs);
-    pairwise.emplace_back("vpaddls.v2i64.v4i32", "saddlp.v2i64.v4i32", 2,
-                          pairwise_add(wild_i64x_), Pattern::NarrowArgs);
-
-    pairwise.emplace_back("vpaddlu.v8i16.v16i8", "uaddlp.v8i16.v16i8", 8,
-                          pairwise_add(wild_u16x_), Pattern::NarrowArgs);
-    pairwise.emplace_back("vpaddlu.v4i32.v8i16", "uaddlp.v4i32.v8i16", 4,
-                          pairwise_add(wild_u32x_), Pattern::NarrowArgs);
-    pairwise.emplace_back("vpaddlu.v2i64.v4i32", "uaddlp.v2i64.v4i32", 2,
-                          pairwise_add(wild_u64x_), Pattern::NarrowArgs);
-
-    // 64 -> 64 bit widening pairwise adds
-    pairwise.emplace_back("vpaddls.v4i16.v8i8", "saddlp.v4i16.v8i8", 4,
-                          pairwise_add(wild_i16x_), Pattern::NarrowArgs);
-    pairwise.emplace_back("vpaddls.v2i32.v4i16", "saddlp.v2i32.v4i16", 2,
-                          pairwise_add(wild_i32x_), Pattern::NarrowArgs);
-    pairwise.emplace_back("vpaddls.v1i64.v2i32", "saddlp.v1i64.v2i32", 1,
-                          pairwise_add(wild_i64x_), Pattern::NarrowArgs);
-
-    pairwise.emplace_back("vpaddlu.v4i16.v8i8", "uaddlp.v4i16.v8i8", 4,
-                          pairwise_add(wild_u16x_), Pattern::NarrowArgs);
-    pairwise.emplace_back("vpaddlu.v2i32.v4i16", "uaddlp.v2i32.v4i16", 2,
-                          pairwise_add(wild_u32x_), Pattern::NarrowArgs);
-    pairwise.emplace_back("vpaddlu.v1i64.v2i32", "uaddlp.v1i64.v2i32", 1,
-                          pairwise_add(wild_u64x_), Pattern::NarrowArgs);
-
-    // 256 -> 128 bit pairwise adds
-    pairwise.emplace_back("", "addp.v16i8", 16, pairwise_add(wild_i8x_));
-    pairwise.emplace_back("", "addp.v8i16", 8, pairwise_add(wild_i16x_));
-    pairwise.emplace_back("", "addp.v4i32", 4, pairwise_add(wild_i32x_));
-    pairwise.emplace_back("", "addp.v2i64", 2, pairwise_add(wild_i64x_));
-
-    pairwise.emplace_back("", "addp.v16i8", 16, pairwise_add(wild_u8x_));
-    pairwise.emplace_back("", "addp.v8i16", 8, pairwise_add(wild_u16x_));
-    pairwise.emplace_back("", "addp.v4i32", 4, pairwise_add(wild_u32x_));
-    pairwise.emplace_back("", "addp.v2i64", 2, pairwise_add(wild_u64x_));
-
-    // 128 -> 64 bit pairwise adds
-    pairwise.emplace_back("vpadd.v8i8", "addp.v8i8", 8, pairwise_add(wild_i8x_));
-    pairwise.emplace_back("vpadd.v4i16", "addp.v4i16", 4, pairwise_add(wild_i16x_));
-    pairwise.emplace_back("vpadd.v2i32", "addp.v2i32", 2, pairwise_add(wild_i32x_));
-
-    pairwise.emplace_back("vpadd.v8i8", "addp.v8i8", 8, pairwise_add(wild_u8x_));
-    pairwise.emplace_back("vpadd.v4i16", "addp.v4i16", 4, pairwise_add(wild_u16x_));
-    pairwise.emplace_back("vpadd.v2i32", "addp.v2i32", 2, pairwise_add(wild_u32x_));
-
-    // TODO: widening variants with an accumulator, only for arm32 (llvm pattern-matches these for arm64)
-
-    // TODO: aarch64 has total reduction instructions: ADDV, and dot product instructions: SDOT
-
-    /*
-    auto pairwise_max = [](const Expr &e) {
-        return VectorReduce::make(VectorReduce::Max, e, e.type().lanes() / 2);
-    };
-
-    auto pairwise_min = [](const Expr &e) {
-        return VectorReduce::make(VectorReduce::Min, e, e.type().lanes() / 2);
-    };
-    */
 }
 
 Value *CodeGen_ARM::call_pattern(const Pattern &p, Type t, const vector<Expr> &args) {
@@ -1192,58 +1124,115 @@ void CodeGen_ARM::visit(const VectorReduce *op) {
 */
 
 void CodeGen_ARM::visit(const VectorReduce *op) {
-    // TODO: NoNeon
+    if (target.has_feature(Target::NoNEON)) {
+        CodeGen_Posix::visit(op);
+        return;
+    }
+
+    if (op->type.is_bool() && op->op == VectorReduce::Or) {
+        // Cast to u8, use max, cast back to bool.
+        Expr equiv = cast(op->value.type().with_bits(8), op->value);
+        equiv = VectorReduce::make(VectorReduce::Max, equiv, op->type.lanes());
+        equiv = cast(op->type, equiv);
+        equiv.accept(this);
+        return;
+    }
+
+    if (op->type.is_bool() && op->op == VectorReduce::And) {
+        // Cast to u8, use min, cast back to bool.
+        Expr equiv = cast(op->value.type().with_bits(8), op->value);
+        equiv = VectorReduce::make(VectorReduce::Min, equiv, op->type.lanes());
+        equiv = cast(op->type, equiv);
+        equiv.accept(this);
+        return;
+    }
 
     // ARM has a variety of pairwise reduction ops. The versions that
     // do not widen take two 64-bit args and return one 64-bit vector
     // of the same type. The versions that widen take one arg and
     // return something with half the vector lanes and double the
     // bit-width.
-    Type value_type = op->value.type();
-    int factor = value_type.lanes() / op->type.lanes();
-    if (op->type.lanes() * 2 == value_type.lanes()) {
-        bool use_128 = value_type.bits() * value_type.lanes() > 64;
-        vector<Expr> args;
-        debug(0) << "Matching: " << pairwise.size() << "\n";
-        for (const auto &pattern : pairwise) {
-            const int pattern_bits = pattern.intrin_lanes * op->type.bits();
-            if (!use_128 && pattern_bits >= 128) {
-                // Skip the 128-bit version of this and wait until we
-                // find the 64-bit version in the list. There's a
-                // 64-bit version of every pairwise reduction.
-                continue;
+    int factor = op->value.type().lanes() / op->type.lanes();
+    if ((op->op == VectorReduce::Add ||
+         op->op == VectorReduce::Min ||
+         op->op == VectorReduce::Max) &&
+        (op->type.is_int() ||
+         op->type.is_uint() ||
+         op->type.is_float()) &&
+        factor == 2) {
+        Expr arg = op->value;
+        if (op->op == VectorReduce::Add &&
+            op->type.bits() >= 16 &&
+            !op->type.is_float()) {
+            Type narrower_type = arg.type().with_bits(arg.type().bits() / 2);
+            Expr narrower = lossless_cast(narrower_type, arg);
+            if (!narrower.defined() && arg.type().is_int()) {
+                // We can also safely accumulate from a uint into a
+                // wider int, because the addition uses at most one
+                // extra bit.
+                narrower = lossless_cast(narrower_type.with_code(Type::UInt), arg);
             }
-            if ((pattern.intrin32.empty() && target.bits == 32) ||
-                (pattern.intrin64.empty() && target.bits == 64)) {
-                // Some patterns only exist on armv7 or armv8
-                continue;
-            }
-            if (expr_match(pattern.pattern, op, args)) {
-                internal_assert(args.size() == 1);
-                if (pattern.type == Pattern::NarrowArgs) {
-                    Type narrower = value_type.with_bits(value_type.bits() / 2);
-                    args[0] = lossless_cast(narrower, args[0]);
-                    if (args[0].defined()) {
-                        value = call_pattern(pattern, op->type, args);
-                        return;
-                    }
-                } else {
-                    // The non-widening ones need their arg split in two half vectors
-                    // TODO: this interacts incorrectly with the slicing down to a native vector. Probably need to do this with runtime functions instead.
-                    int l = op->type.lanes();
-                    Expr a = Shuffle::make_slice(args[0], 0, 1, l);
-                    Expr b = Shuffle::make_slice(args[0], l, 1, l);
-                    args[0] = std::move(a);
-                    args.emplace_back(std::move(b));
-                    value = call_pattern(pattern, op->type, args);
-                    return;
-                }
+            if (narrower.defined()) {
+                arg = narrower;
             }
         }
+        int output_bits;
+        if (target.bits == 32 && arg.type().bits() == op->type.bits()) {
+            // For the non-widening version, the output must be 64-bit
+            output_bits = 64;
+        } else if (op->type.bits() * op->type.lanes() <= 64) {
+            // No point using the 128-bit version of the instruction is the output is narrow.
+            output_bits = 64;
+        } else {
+            output_bits = 128;
+        }
+        const int output_lanes = output_bits / op->type.bits();
+        Type intrin_type = op->type.with_lanes(output_lanes);
+        Type arg_type = arg.type().with_lanes(output_lanes * 2);
+        if (op->op == VectorReduce::Add &&
+            arg.type().bits() == op->type.bits() &&
+            arg_type.is_uint()) {
+            // For non-widening additions, there is only a signed
+            // version (because it's equivalent).
+            arg_type = arg_type.with_code(Type::Int);
+            intrin_type = intrin_type.with_code(Type::Int);
+        } else if (arg.type().is_uint() && intrin_type.is_int()) {
+            // Use the uint version
+            intrin_type = intrin_type.with_code(Type::UInt);
+        }
+
+        std::stringstream intrin_name;
+        intrin_name << "pairwise_" << op->op << "_" << intrin_type << "_" << arg_type;
+        value = call_intrin(op->type, output_lanes, intrin_name.str(), {arg});
+        return;
     }
 
+    // TODO: When sdot and udot become available (armv8.4), pattern match those here.
+
     if (factor > 2 && ((factor & 1) == 0)) {
-        Expr equiv = VectorReduce::make(op->op, op->value, value_type.lanes() / 2);
+        // Factor the reduce into multiple stages. If we're going to
+        // be widen the type by 4x or more we should also factor the
+        // widening into multiple stages.
+        Type intermediate_type = op->value.type().with_lanes(op->value.type().lanes() / 2);
+        Expr equiv = VectorReduce::make(op->op, op->value, intermediate_type.lanes());
+        if (op->op == VectorReduce::Add &&
+            (op->type.is_int() || op->type.is_uint()) &&
+            op->type.bits() >= 32) {
+            Type narrower_type = op->value.type().with_bits(op->type.bits() / 4);
+            Expr narrower = lossless_cast(narrower_type, op->value);
+            if (!narrower.defined() && narrower_type.is_int()) {
+                // Maybe we can narrow to an uint instead.
+                narrower_type = narrower_type.with_code(Type::UInt);
+                narrower = lossless_cast(narrower_type, op->value);
+            }
+            if (narrower.defined()) {
+                // Widen it by 2x before the horizontal add
+                narrower = cast(narrower.type().with_bits(narrower.type().bits() * 2), narrower);
+                equiv = VectorReduce::make(op->op, narrower, intermediate_type.lanes());
+                // Then widen it by 2x again afterwards
+                equiv = cast(intermediate_type, equiv);
+            }
+        }
         equiv = VectorReduce::make(op->op, equiv, op->type.lanes());
         equiv.accept(this);
         return;

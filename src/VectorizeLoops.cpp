@@ -1017,8 +1017,7 @@ class VectorSubs : public IRMutator {
     }
 
     Stmt visit(const Atomic *op) override {
-        debug(0) << "ELEPHANT: " << Stmt(op) << "\n";
-        // Recognize a few special cases that we can handle as reduction trees.
+        // Recognize a few special cases that we can handle as within-vector reduction trees.
         do {
             // f[x] = f[x] + y
             const Store *store = op->body.as<Store>();
@@ -1042,20 +1041,39 @@ class VectorSubs : public IRMutator {
                 a = max->a;
                 b = max->b;
                 reduce_op = VectorReduce::Max;
-            } else if (const And *and_op = store->value.as<And>()) {
-                a = and_op->a;
-                b = and_op->b;
-                reduce_op = VectorReduce::And;
-            } else if (const Or *or_op = store->value.as<Or>()) {
-                a = or_op->a;
-                b = or_op->b;
-                reduce_op = VectorReduce::Or;
-            } else {
-                // TODO: bitwise and/or
+            } else if (const Cast *cast_op = store->value.as<Cast>()) {
+                if (cast_op->type.element_of() == UInt(8) &&
+                    cast_op->value.type().is_bool()) {
+                    if (const And *and_op = cast_op->value.as<And>()) {
+                        a = and_op->a;
+                        b = and_op->b;
+                        reduce_op = VectorReduce::And;
+                    } else if (const Or *or_op = cast_op->value.as<Or>()) {
+                        a = or_op->a;
+                        b = or_op->b;
+                        reduce_op = VectorReduce::Or;
+                    }
+                }
+            }
+
+            if (!a.defined() || !b.defined()) {
                 break;
             }
 
-            if (b.as<Load>() && !a.as<Load>()) {
+            if (b.type().is_bool()) {
+                const Cast *cast_op = b.as<Cast>();
+                if (cast_op) {
+                    b = cast_op->value;
+                }
+            }
+            if (a.type().is_bool()) {
+                const Cast *cast_op = b.as<Cast>();
+                if (cast_op) {
+                    a = cast_op->value;
+                }
+            }
+
+            if (a.as<Variable>() && !b.as<Variable>()) {
                 std::swap(a, b);
             }
 
@@ -1063,8 +1081,12 @@ class VectorSubs : public IRMutator {
             if (!var_b) break;
 
             if (!scope.contains(var_b->name)) break;
-            Expr b_val = scope.get(var_b->name);
-            b = Variable::make(b_val.type(), var_b->name + widening_suffix);
+            b = scope.get(var_b->name);
+
+            const Cast *cast_a = a.as<Cast>();
+            if (cast_a && a.type().is_bool()) {
+                a = cast_a->value;
+            }
 
             const Load *load_a = a.as<Load>();
             if (!load_a) break;
@@ -1087,8 +1109,7 @@ class VectorSubs : public IRMutator {
                 break;
             }
 
-            debug(0) << idx << "\n";
-
+            int output_lanes = 1;
             if (idx.type().is_scalar()) {
                 // The index doesn't depend on the value being
                 // vectorized, so it's a total reduction.
@@ -1098,10 +1119,36 @@ class VectorSubs : public IRMutator {
 
                 InterleavedRamp ir;
                 if (!is_interleaved_ramp(idx, &ir)) break;
-                int output_lanes = idx.type().lanes() / ir.repetitions;
+                output_lanes = idx.type().lanes() / ir.repetitions;
 
                 idx = Ramp::make(ir.base, ir.stride, output_lanes);
                 b = VectorReduce::make(reduce_op, b, output_lanes);
+            }
+
+            Expr new_load = Load::make(load_a->type.with_lanes(output_lanes),
+                                       load_a->name, idx, load_a->image,
+                                       load_a->param, const_true(output_lanes),
+                                       ModulusRemainder{});
+
+            switch (reduce_op) {
+            case VectorReduce::Add:
+                b = new_load + b;
+                break;
+            case VectorReduce::Mul:
+                b = new_load * b;
+                break;
+            case VectorReduce::Min:
+                b = min(new_load, b);
+                break;
+            case VectorReduce::Max:
+                b = max(new_load, b);
+                break;
+            case VectorReduce::And:
+                b = cast(new_load.type(), cast(b.type(), new_load) && b);
+                break;
+            case VectorReduce::Or:
+                b = cast(new_load.type(), cast(b.type(), new_load) || b);
+                break;
             }
 
             return Store::make(store->name, b, idx, store->param,
@@ -1157,8 +1204,6 @@ class VectorSubs : public IRMutator {
                 result = Select::make(cond, Broadcast::make(e, lanes), result);
             }
         }
-
-        debug(0) << e << " -> " << result << "\n";
 
         return result;
     }
@@ -1363,11 +1408,8 @@ Stmt vectorize_loops(Stmt s, const Target &t) {
     // Limit the scope of atomic nodes to just the necessary stuff.
     // TODO: Should this be an earlier pass? It's probably a good idea
     // for non-vectorizing stuff too.
-    debug(0) << s << "\n";
     s = LiftVectorizableExprsOutOfAllAtomicNodes().mutate(s);
-    debug(0) << s << "\n";
     s = VectorizeLoops(t).mutate(s);
-    debug(0) << s << "\n";
     return s;
 }
 
