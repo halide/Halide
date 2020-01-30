@@ -210,17 +210,18 @@ jobs:
 
         echo DONE
 
-        echo HALIDE_TEMP_DIR
+        echo HALIDE_TEMP_DIR ${HALIDE_TEMP_DIR}
         ls ${HALIDE_TEMP_DIR}
 
         # Note that the Windows VMs run as admin with UAC disabled; otherwise, this wouldn't work
         chmod +x ${HALIDE_TEMP_DIR}/llvm.exe
         mkdir ${LLVM_DIR}
 
-        echo LLVM_DIR
+        echo LLVM_DIR ${LLVM_DIR}
         ls ${LLVM_DIR}
 
         echo Installing...
+        echo ${HALIDE_TEMP_DIR}/llvm.exe -S -D${LLVM_DIR}
         ${HALIDE_TEMP_DIR}/llvm.exe -S -D${LLVM_DIR}
         echo Installing...DONE
 
