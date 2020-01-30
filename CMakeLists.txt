@@ -20,11 +20,6 @@ include(CPack)
 
 find_package(Threads QUIET)
 
-# if(NOT "${LLVM_DIR}" STREQUAL "")
-#   set(CMAKE_MODULE_PATH "${LLVM_DIR};${CMAKE_MODULE_PATH}")
-#   message(STATUS "CMAKE_MODULE_PATH is now ${CMAKE_MODULE_PATH}")
-# endif()
-
 message("LLVM_DIR is ${LLVM_DIR}")
 if("${HALIDE_REQUIRE_LLVM_VERSION}" STREQUAL "")
   # Find any version present.
@@ -43,7 +38,7 @@ else()
     "${HALIDE_REQUIRE_LLVM_VERSION}")
   message("HALIDE_REQUIRE_LLVM_VERSION ${HALIDE_REQUIRE_LLVM_VERSION}")
   message("Looking for LLVM version ${MAJOR}.${MINOR}")
-  find_package(LLVM "${MAJOR}.${MINOR}" REQUIRED CONFIG QUIET)
+  find_package(LLVM "${MAJOR}.${MINOR}"  CONFIG QUIET)
   message("LLVM_CONFIG is ${LLVM_CONFIG}")
   message("LLVM_CONSIDERED_CONFIGS is ${LLVM_CONSIDERED_CONFIGS}")
   message("LLVM_CONSIDERED_VERSIONS is ${LLVM_CONSIDERED_VERSIONS}")
