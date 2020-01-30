@@ -12,10 +12,10 @@ jobs:
       fail-fast: false  # Keep running other jobs even if one fails
       matrix:
         # os: [ubuntu-18.04, macos-latest, windows-latest]
+        #build_tool: [cmake_shared, cmake_static, make]
         os: [windows-latest]
         bits: [64]
         llvm_version: [8, 9]
-        #build_tool: [cmake_shared, cmake_static, make]
         build_tool: [cmake_shared]
         include:
           - llvm_version: 8
@@ -28,6 +28,7 @@ jobs:
             cmake_gen: "Visual Studio 16"
             cmake_arch: "x64"
             cmake_toolset: "host=x64"
+
         #config:
         # Ubuntu (x86-64) builds
         # - {
