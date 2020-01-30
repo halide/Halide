@@ -168,9 +168,9 @@ jobs:
       shell: bash
       run: |
         # Demangle Windows names, to simplify CMake stuff later
-        _ROOT=${GITHUB_WORKSPACE/\\//}
+        _ROOT=${GITHUB_WORKSPACE//\\//}
         _TEMP_RAW="${{runner.temp}}"
-        _TEMP=${_TEMP_RAW/\\//}
+        _TEMP=${_TEMP_RAW//\\//}
 
         # This is the trick GitHub Actions uses to allow us to set env vars across all job steps
         echo ::set-env name=CC::"${{matrix.config.cc}}"
@@ -201,35 +201,37 @@ jobs:
         mkdir ${LLVM_DIR}
         tar xvf ${HALIDE_TEMP_DIR}/llvm-project.tar.xz -C ${LLVM_DIR} --strip-components=1
 
+    # - name: Download LLVM (Windows)
+    #   if: startsWith(matrix.config.os, 'windows')
+    #   shell: bash
+    #   run: |
+    #     LLVM_URL="https://releases.llvm.org/${{matrix.config.llvm_version}}.0.0/LLVM-${{matrix.config.llvm_version}}.0.0-win64.exe"
+    #     wget ${LLVM_URL} -O ${HALIDE_TEMP_DIR}/llvm.exe
+
+    #     # echo DONE
+
+    #     # echo HALIDE_TEMP_DIR ${HALIDE_TEMP_DIR}
+    #     # ls ${HALIDE_TEMP_DIR}
+
+    #     # Note that the Windows VMs run as admin with UAC disabled; otherwise, this wouldn't work
+    #     # chmod +x ${HALIDE_TEMP_DIR}/llvm.exe
+    #     # mkdir ${LLVM_DIR}
+
+    #     # echo LLVM_DIR ${LLVM_DIR}
+    #     # ls ${LLVM_DIR}
+
+    #     # echo Installing...
+    #     # echo ${HALIDE_TEMP_DIR}/llvm.exe -S -D${LLVM_DIR}
+    #     # ${HALIDE_TEMP_DIR}/llvm.exe -S -D${LLVM_DIR}
+    #     # echo Installing...DONE
+
+    # Note 1: the Windows VMs run as admin with UAC disabled; otherwise, this wouldn't work
+    # Note 2: the LLVM installer hangs when run from bash, so this step uses 'cmd'
     - name: Download LLVM (Windows)
-      if: startsWith(matrix.config.os, 'windows')
-      shell: bash
-      run: |
-        LLVM_URL="https://releases.llvm.org/${{matrix.config.llvm_version}}.0.0/LLVM-${{matrix.config.llvm_version}}.0.0-win64.exe"
-        wget ${LLVM_URL} -O ${HALIDE_TEMP_DIR}/llvm.exe
-
-        # echo DONE
-
-        # echo HALIDE_TEMP_DIR ${HALIDE_TEMP_DIR}
-        # ls ${HALIDE_TEMP_DIR}
-
-        # Note that the Windows VMs run as admin with UAC disabled; otherwise, this wouldn't work
-        # chmod +x ${HALIDE_TEMP_DIR}/llvm.exe
-        # mkdir ${LLVM_DIR}
-
-        # echo LLVM_DIR ${LLVM_DIR}
-        # ls ${LLVM_DIR}
-
-        # echo Installing...
-        # echo ${HALIDE_TEMP_DIR}/llvm.exe -S -D${LLVM_DIR}
-        # ${HALIDE_TEMP_DIR}/llvm.exe -S -D${LLVM_DIR}
-        # echo Installing...DONE
-
-    # Note that the Windows VMs run as admin with UAC disabled; otherwise, this wouldn't work
-    - name: Install LLVM (Windows)
       if: startsWith(matrix.config.os, 'windows')
       shell: cmd
       run: |
+        wget "https://releases.llvm.org/${{matrix.config.llvm_version}}.0.0/LLVM-${{matrix.config.llvm_version}}.0.0-win64.exe" -O %HALIDE_TEMP_DIR%/llvm.exe
         echo %HALIDE_TEMP_DIR%/llvm.exe /S /D%LLVM_DIR%
         %HALIDE_TEMP_DIR%/llvm.exe /S /D%LLVM_DIR%
 
