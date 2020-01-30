@@ -145,24 +145,24 @@ jobs:
         # choco install doxygen.install
         choco install wget
 
-    - name: Configure Env Vars (Windows)
-      if: startsWith(matrix.config.os, 'windows')
-      shell: powershell
-      run: |
-        # PowerShell script to set the MSVC env vars globally for all the steps in our job.
-        # Adapted from https://github.com/microsoft/vswhere/wiki/Start-Developer-Command-Prompt
-        # (No, I don't know PowerShell; this is heavily cargo-culted.)
-        $arch = "x64"
-        $hostArch = "x64"
-        $vswherePath = "C:\Program Files (x86)\Microsoft Visual Studio\Installer\vswhere.exe"
-        $vsInstallationPath = & "$vswherePath" -latest -property installationPath
-        $vsDevCmdPath = "`"$vsInstallationPath\Common7\Tools\VsDevCmd.bat`""
-        $command = "$vsDevCmdPath -no_logo -arch=$arch -host_arch=$hostArch"
+    # - name: Configure Env Vars (Windows)
+    #   if: startsWith(matrix.config.os, 'windows')
+    #   shell: powershell
+    #   run: |
+    #     # PowerShell script to set the MSVC env vars globally for all the steps in our job.
+    #     # Adapted from https://github.com/microsoft/vswhere/wiki/Start-Developer-Command-Prompt
+    #     # (No, I don't know PowerShell; this is heavily cargo-culted.)
+    #     $arch = "x64"
+    #     $hostArch = "x64"
+    #     $vswherePath = "C:\Program Files (x86)\Microsoft Visual Studio\Installer\vswhere.exe"
+    #     $vsInstallationPath = & "$vswherePath" -latest -property installationPath
+    #     $vsDevCmdPath = "`"$vsInstallationPath\Common7\Tools\VsDevCmd.bat`""
+    #     $command = "$vsDevCmdPath -no_logo -arch=$arch -host_arch=$hostArch"
 
-        & "${env:COMSPEC}" /s /c "$command && set" | ForEach-Object {
-          $name, $value = $_ -split '=', 2
-          Write-Output "::set-env name=$name::$value"
-        }
+    #     & "${env:COMSPEC}" /s /c "$command && set" | ForEach-Object {
+    #       $name, $value = $_ -split '=', 2
+    #       Write-Output "::set-env name=$name::$value"
+    #     }
 
     - name: Configure Env Vars
       shell: bash
@@ -236,19 +236,17 @@ jobs:
          cmake_static) HALIDE_SHARED_LIBRARY=OFF ;;
         esac
 
-        echo 'cmake \
+        echo cmake \
           -DCMAKE_BUILD_TYPE=Release \
           -DLLVM_DIR="${LLVM_DIR}/lib/cmake/llvm/" \
           -DCMAKE_MODULE_PATH="${LLVM_DIR}/lib/cmake/llvm/" \
           -DHALIDE_REQUIRE_LLVM_VERSION=${{matrix.config.llvm_version}}0 \
           -DHALIDE_SHARED_LIBRARY=${HALIDE_SHARED_LIBRARY} \
-          -G"${CMAKE_GEN}" \
-          -A"${CMAKE_ARCH}" \
-          -T"${CMAKE_TOOLSET}" \
-          -S"${HALIDE_DIR}" \
-          -B"${HALIDE_BUILD_DIR}"'
-
-        ls ${LLVM_DIR}/lib/cmake/llvm/
+          -G "${CMAKE_GEN}" \
+          -A "${CMAKE_ARCH}" \
+          -T "${CMAKE_TOOLSET}" \
+          -S "${HALIDE_DIR}" \
+          -B "${HALIDE_BUILD_DIR}"
 
         cmake \
           -DCMAKE_BUILD_TYPE=Release \
@@ -256,11 +254,11 @@ jobs:
           -DCMAKE_MODULE_PATH="${LLVM_DIR}/lib/cmake/llvm/" \
           -DHALIDE_REQUIRE_LLVM_VERSION=${{matrix.config.llvm_version}}0 \
           -DHALIDE_SHARED_LIBRARY=${HALIDE_SHARED_LIBRARY} \
-          -G"${CMAKE_GEN}" \
-          -A"${CMAKE_ARCH}" \
-          -T"${CMAKE_TOOLSET}" \
-          -S"${HALIDE_DIR}" \
-          -B"${HALIDE_BUILD_DIR}"
+          -G "${CMAKE_GEN}" \
+          -A "${CMAKE_ARCH}" \
+          -T "${CMAKE_TOOLSET}" \
+          -S "${HALIDE_DIR}" \
+          -B "${HALIDE_BUILD_DIR}"
 
     - name: Build Halide (Make)
       shell: bash
