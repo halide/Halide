@@ -5,8 +5,8 @@ on:
 
 jobs:
   test:
-    name: ${{matrix.config.name}}
-    runs-on: ${{matrix.config.os}}
+    name: ${{matrix.name}}
+    runs-on: ${{matrix.os}}
 
     strategy:
       fail-fast: false  # Keep running other jobs even if one fails
@@ -130,7 +130,7 @@ jobs:
         path: 'halide'
 
     - name: Configure Ubuntu
-      if: startsWith(matrix.config.os, 'ubuntu')
+      if: startsWith(matrix.os, 'ubuntu')
       run: |
         sudo apt-get update
 
@@ -152,7 +152,7 @@ jobs:
 
 
     - name: Configure OSX
-      if: startsWith(matrix.config.os, 'macos')
+      if: startsWith(matrix.os, 'macos')
       run: |
         # Install libpng, jpeg, doxygen
         brew install libpng jpeg doxygen
@@ -161,7 +161,7 @@ jobs:
         # installation in OSX and cause unhappiness. We'll handle it specially below.
 
     - name: Configure Windows
-      if: startsWith(matrix.config.os, 'windows')
+      if: startsWith(matrix.os, 'windows')
       shell: bash
       run: |
         # Install libpng, jpeg, doxygen
@@ -171,7 +171,7 @@ jobs:
         choco install wget
 
     # - name: Configure Env Vars (Windows)
-    #   if: startsWith(matrix.config.os, 'windows')
+    #   if: startsWith(matrix.os, 'windows')
     #   shell: powershell
     #   run: |
     #     # PowerShell script to set the MSVC env vars globally for all the steps in our job.
@@ -198,8 +198,8 @@ jobs:
         _TEMP=${_TEMP_RAW//\\//}
 
         # This is the trick GitHub Actions uses to allow us to set env vars across all job steps
-        echo ::set-env name=CC::"${{matrix.config.cc}}"
-        echo ::set-env name=CXX::"${{matrix.config.cxx}}"
+        echo ::set-env name=CC::"${{matrix.cc}}"
+        echo ::set-env name=CXX::"${{matrix.cxx}}"
         # echo ::set-env name=LLVM_DIR::"${_ROOT}/llvm"
         # echo ::set-env name=LLVM_CONFIG::"${_ROOT}/llvm/bin/llvm-config"
         echo ::set-env name=HALIDE_DIR::"${_ROOT}/halide"
@@ -209,44 +209,44 @@ jobs:
         echo ::set-env name=PARALLEL_JOBS::"$(expr $(nproc) + 2)"
 
     # - name: Install LLVM (Linux)
-    #   if: startsWith(matrix.config.os, 'ubuntu')
+    #   if: startsWith(matrix.os, 'ubuntu')
     #   shell: bash
     #   run: |
-    #     LLVM_URL="https://releases.llvm.org/${{matrix.config.llvm_version}}.0.0/clang+llvm-${{matrix.config.llvm_version}}.0.0-x86_64-linux-gnu-ubuntu-18.04.tar.xz"
+    #     LLVM_URL="https://releases.llvm.org/${{matrix.llvm_version}}.0.0/clang+llvm-${{matrix.llvm_version}}.0.0-x86_64-linux-gnu-ubuntu-18.04.tar.xz"
     #     wget ${LLVM_URL} -O ${HALIDE_TEMP_DIR}/llvm-project.tar.xz
     #     mkdir ${LLVM_DIR}
     #     tar xvf ${HALIDE_TEMP_DIR}/llvm-project.tar.xz -C ${LLVM_DIR} --strip-components=1
 
     # - name: Install LLVM (MacOS)
-    #   if: startsWith(matrix.config.os, 'macos')
+    #   if: startsWith(matrix.os, 'macos')
     #   shell: bash
     #   run: |
-    #     LLVM_URL="https://releases.llvm.org/${{matrix.config.llvm_version}}.0.0/clang+llvm-${{matrix.config.llvm_version}}.0.0-x86_64-darwin-apple.tar.xz"
+    #     LLVM_URL="https://releases.llvm.org/${{matrix.llvm_version}}.0.0/clang+llvm-${{matrix.llvm_version}}.0.0-x86_64-darwin-apple.tar.xz"
     #     wget ${LLVM_URL} -O ${HALIDE_TEMP_DIR}/llvm-project.tar.xz
     #     mkdir ${LLVM_DIR}
     #     tar xvf ${HALIDE_TEMP_DIR}/llvm-project.tar.xz -C ${LLVM_DIR} --strip-components=1
 
-    - name: Download LLVM ${{matrix.config.llvm_version}} ${{matrix.config.os}} ${{matrix.config.bits}}
+    - name: Download LLVM ${{matrix.llvm_version}} ${{matrix.os}} ${{matrix.bits}}
       uses: actions/download-artifact@v1
       with:
-        name: llvm-${{matrix.config.llvm_version}}-${{matrix.config.os}}-${{matrix.config.bits}}-install
+        name: llvm-${{matrix.llvm_version}}-${{matrix.os}}-${{matrix.bits}}-install
 
-    - name: Build LLVM ${{matrix.config.llvm_version}} ${{matrix.config.os}} ${{matrix.config.bits}}
+    - name: Build LLVM ${{matrix.llvm_version}} ${{matrix.os}} ${{matrix.bits}}
       if: failure()
       shell: bash
       run: |
-        LLVM_ID="llvm-${{matrix.config.llvm_version}}-${{matrix.config.os}}-${{matrix.config.bits}}"
+        LLVM_ID="llvm-${{matrix.llvm_version}}-${{matrix.os}}-${{matrix.bits}}"
         LLVM_BUILD_DIR="${GITHUB_WORKSPACE}/${LLVM_ID}-build"
         LLVM_INSTALL_DIR="${GITHUB_WORKSPACE}/${LLVM_ID}-install"
         LLVM_SOURCE_DIR="${GITHUB_WORKSPACE}/${LLVM_ID}-source"
 
         git clone https://github.com/llvm/llvm-project.git \
           "${LLVM_SOURCE_DIR}" \
-          --branch ${{matrix.config.llvm_branch}} \
+          --branch ${{matrix.llvm_branch}} \
           --single-branch \
           --depth 1
 
-        LLVM_BUILD_32_BITS=$([ ${{matrix.config.bits}} == 32 ] && echo "ON" || echo "OFF")
+        LLVM_BUILD_32_BITS=$([ ${{matrix.bits}} == 32 ] && echo "ON" || echo "OFF")
 
         # TODO: add WebAssembly for trunk
         # TODO: disable assertions for mingw?
@@ -266,57 +266,57 @@ jobs:
         PARALLEL_JOBS=$(expr $(nproc) + 2)
         cmake --build "${LLVM_BUILD_DIR}" -j ${PARALLEL_JOBS} --target install
 
-    - name: Upload LLVM ${{matrix.config.llvm_version}} ${{matrix.config.os}} ${{matrix.config.bits}}
+    - name: Upload LLVM ${{matrix.llvm_version}} ${{matrix.os}} ${{matrix.bits}}
       if: success()
       uses: actions/upload-artifact@v1
       with:
-        name: llvm-${{matrix.config.llvm_version}}-${{matrix.config.os}}-${{matrix.config.bits}}
-        path: llvm-${{matrix.config.llvm_version}}-${{matrix.config.os}}-${{matrix.config.bits}}-install
+        name: llvm-${{matrix.llvm_version}}-${{matrix.os}}-${{matrix.bits}}
+        path: llvm-${{matrix.llvm_version}}-${{matrix.os}}-${{matrix.bits}}-install
 
     # # Note 1: the Windows VMs run as admin with UAC disabled; otherwise, this wouldn't work
     # # Note 2: the LLVM installer hangs when run from bash, so this step uses 'cmd'
     # - name: Download LLVM (Windows)
-    #   if: startsWith(matrix.config.os, 'windows')
+    #   if: startsWith(matrix.os, 'windows')
     #   shell: cmd
     #   run: |
-    #     wget "https://releases.llvm.org/${{matrix.config.llvm_version}}.0.0/LLVM-${{matrix.config.llvm_version}}.0.0-win64.exe" -O %HALIDE_TEMP_DIR%/llvm.exe
+    #     wget "https://releases.llvm.org/${{matrix.llvm_version}}.0.0/LLVM-${{matrix.llvm_version}}.0.0-win64.exe" -O %HALIDE_TEMP_DIR%/llvm.exe
     #     %HALIDE_TEMP_DIR%/llvm.exe /S /D%LLVM_DIR%
 
     - name: Configure Halide (Make)
-      if: startsWith(matrix.config.build_tool, 'make')
+      if: startsWith(matrix.build_tool, 'make')
       shell: bash
       run: |
         # Configure Make
         mkdir ${HALIDE_BUILD_DIR}
 
     - name: Configure Halide (CMake)
-      if: startsWith(matrix.config.build_tool, 'cmake')
+      if: startsWith(matrix.build_tool, 'cmake')
       shell: bash
       run: |
         # Configure CMake
         mkdir ${HALIDE_BUILD_DIR}
 
-        CMAKE_GEN="${{matrix.config.cmake_gen}}"
+        CMAKE_GEN="${{matrix.cmake_gen}}"
         CMAKE_GEN=${CMAKE_GEN:-"Unix Makefiles"}
 
-        CMAKE_ARCH="${{matrix.config.cmake_arch}}"
+        CMAKE_ARCH="${{matrix.cmake_arch}}"
 
-        CMAKE_TOOLSET="${{matrix.config.cmake_toolset}}"
+        CMAKE_TOOLSET="${{matrix.cmake_toolset}}"
 
-        case "${{matrix.config.build_tool}}" in
+        case "${{matrix.build_tool}}" in
          cmake_shared) HALIDE_SHARED_LIBRARY=ON  ;;
          cmake_static) HALIDE_SHARED_LIBRARY=OFF ;;
         esac
 
-        if [ "${{matrix.config.os}}" = "windows-latest" ]; then
+        if [ "${{matrix.os}}" = "windows-latest" ]; then
           # TODO(srj) -- this should work for windows but does not,
           # because wtf.
           HALIDE_REQUIRE_LLVM_VERSION=""
         else
-          HALIDE_REQUIRE_LLVM_VERSION="${{matrix.config.llvm_version}}0"
+          HALIDE_REQUIRE_LLVM_VERSION="${{matrix.llvm_version}}0"
         fi
 
-        LLVM_ID="llvm-${{matrix.config.llvm_version}}-${{matrix.config.os}}-${{matrix.config.bits}}"
+        LLVM_ID="llvm-${{matrix.llvm_version}}-${{matrix.os}}-${{matrix.bits}}"
         LLVM_INSTALL_DIR="${GITHUB_WORKSPACE}/${LLVM_ID}-install"
 
         set -eux
