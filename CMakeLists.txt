@@ -38,7 +38,7 @@ else()
     "${HALIDE_REQUIRE_LLVM_VERSION}")
   message("HALIDE_REQUIRE_LLVM_VERSION ${HALIDE_REQUIRE_LLVM_VERSION}")
   message("Looking for LLVM version ${MAJOR}.${MINOR}")
-  find_package(LLVM "${MAJOR}.${MINOR}" REQUIRED CONFIG)
+  find_package(LLVM "${MAJOR}.${MINOR}" REQUIRED)
   message("LLVM_CONFIG is ${LLVM_CONFIG}")
   message("LLVM_CONSIDERED_CONFIGS is ${LLVM_CONSIDERED_CONFIGS}")
   message("LLVM_CONSIDERED_VERSIONS is ${LLVM_CONSIDERED_VERSIONS}")
@@ -53,7 +53,7 @@ endif()
 
 # Notify the user what paths and LLVM version we are using
 message(STATUS "Found LLVM ${LLVM_PACKAGE_VERSION}")
-message(STATUS "Using LLVMConfig.cmake in: ${LLVM_DIR}")
+message(STATUS "Using LLVM in: ${LLVM_DIR}")
 
 if (MSVC AND NOT CMAKE_CONFIGURATION_TYPES)
   # LLVM5.x on Windows can include "$(Configuration)" in the path;
