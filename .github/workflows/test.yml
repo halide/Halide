@@ -107,10 +107,10 @@ jobs:
       if: failure()
       shell: bash
       run: |
-        LIBPNG_ID="llvm-${{matrix.os}}-${{matrix.bits}}"
-        LIBPNG_BUILD_DIR="${GITHUB_WORKSPACE}/${LLVM_ID}-build"
-        LIBPNG_INSTALL_DIR="${GITHUB_WORKSPACE}/${LLVM_ID}-install"
-        LIBPNG_SOURCE_DIR="${GITHUB_WORKSPACE}/${LLVM_ID}-source"
+        LIBPNG_ID="libpng-${{matrix.os}}-${{matrix.bits}}"
+        LIBPNG_BUILD_DIR="${GITHUB_WORKSPACE}/${LIBPNG_ID}-build"
+        LIBPNG_INSTALL_DIR="${GITHUB_WORKSPACE}/${LIBPNG_ID}-install"
+        LIBPNG_SOURCE_DIR="${GITHUB_WORKSPACE}/${LIBPNG_ID}-source"
 
         git clone https://github.com/glennrp/libpng.git \
           "${LIBPNG_SOURCE_DIR}" \
