@@ -748,7 +748,7 @@ JITModule &make_module(llvm::Module *for_module, Target target,
         for (auto &f : *module) {
             // LLVM_Runtime_Linker has marked everything that should be exported as weak
             if (f.hasWeakLinkage()) {
-                halide_exports_unique.insert(f.getName());
+                halide_exports_unique.insert(get_llvm_function_name(f));
             }
         }
 
