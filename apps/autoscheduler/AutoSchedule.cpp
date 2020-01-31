@@ -789,8 +789,10 @@ struct State {
 
     bool calculate_cost(const FunctionDAG &dag, const MachineParams &params, const Target& target, CostModel *cost_model, Statistics& stats, bool verbose = false) {
         auto t1 = std::chrono::high_resolution_clock::now();
-        if (!are_valid_thread_extents(root->get_union_thread_counts(nullptr))) {
-            return false;
+        for (const auto& c : root->children) {
+            if (!are_valid_thread_extents(c->get_union_thread_counts(nullptr))) {
+                return false;
+            }
         }
 
         if (exceeds_shared_memory_limit(target)) {
