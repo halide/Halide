@@ -2329,8 +2329,13 @@ void CodeGen_LLVM::codegen_predicated_vector_store(const Store *op) {
             Value *vec_ptr = builder->CreatePointerCast(elt_ptr, slice_val->getType()->getPointerTo());
 
             Value *slice_mask = slice_vector(vpred, i, slice_lanes);
+#if LLVM_VERSION >= 110
             Instruction *store_inst =
                 builder->CreateMaskedStore(slice_val, vec_ptr, make_alignment(alignment), slice_mask);
+#else
+            Instruction *store_inst =
+                builder->CreateMaskedStore(slice_val, vec_ptr, alignment, slice_mask);
+#endif
             add_tbaa_metadata(store_inst, op->name, slice_index);
         }
     } else {  // It's not dense vector store, we need to scalarize it
@@ -2422,7 +2427,11 @@ Value *CodeGen_LLVM::codegen_dense_vector_load(const Load *load, Value *vpred) {
         Instruction *load_inst;
         if (vpred != nullptr) {
             Value *slice_mask = slice_vector(vpred, i, slice_lanes);
+#if LLVM_VERSION >= 110
             load_inst = builder->CreateMaskedLoad(vec_ptr, make_alignment(alignment), slice_mask);
+#else
+            load_inst = builder->CreateMaskedLoad(vec_ptr, alignment, slice_mask);
+#endif
         } else {
             load_inst = builder->CreateAlignedLoad(vec_ptr, make_alignment(alignment));
         }
