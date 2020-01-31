@@ -1,0 +1,203 @@
+name: Build+Test
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, edited, review_requested]
+
+jobs:
+  test_halide:
+    name: Halide ${{matrix.os}}-${{matrix.bits}} llvm-${{matrix.llvm_version}} ${{matrix.build_tool}}
+    runs-on: ${{matrix.os}}
+
+    strategy:
+      fail-fast: false  # Keep running other jobs even if one fails
+      matrix:
+        # os: [ubuntu-18.04, macos-latest, windows-latest]
+        #build_tool: [cmake_shared, cmake_static, make]
+        os: [windows-latest]
+        bits: [64]
+        llvm_version: [8]
+        build_tool: [cmake_shared]
+        cmake_gen: ["Unix Makefiles"]
+        include:
+          - llvm_version: 8
+            llvm_branch: release/8.x
+          - llvm_version: 9
+            llvm_branch: release/9.x
+          - llvm_version: 10
+            llvm_branch: release/10.x
+          - llvm_version: trunk
+            llvm_branch: master
+          - os: macos-latest
+            cc: clang
+            cxx: clang++
+          - os: ubuntu-18.04
+            cc: gcc
+            cxx: g++
+          - os: windows-latest
+            cc: cl
+            cxx: cl
+            cmake_gen: "Visual Studio 16"
+            cmake_arch: "x64"
+            cmake_toolset: "host=x64"
+
+    steps:
+    - uses: actions/checkout@v2
+      with:
+        path: 'halide'
+
+    - name: Configure Ubuntu
+      if: startsWith(matrix.os, 'ubuntu')
+      run: |
+        sudo apt-get update
+
+        # The standard Bionic install has gcc 7.4, which is known to be
+        # buggy with LLVM. Use gcc 8 instead.
+        # sudo apt-get install gcc-8 g++-8
+        # sudo update-alternatives --install /usr/bin/gcc gcc /usr/bin/gcc-8 100
+        # sudo update-alternatives --install /usr/bin/g++ g++ /usr/bin/g++-8 100
+
+        # Install OpenGL
+        # TODO(srj): OpenGL is only needed to build the opengl tests (which we don't even run)...
+        sudo apt-get install libglu1-mesa-dev freeglut3-dev mesa-common-dev
+
+        # Install libpng
+        sudo apt-get -y --force-yes install libpng-dev
+
+        # Install doxygen
+        sudo apt-get -y --force-yes --no-install-recommends install doxygen
+
+    - name: Configure OSX
+      if: startsWith(matrix.os, 'macos')
+      run: |
+        # Install libpng, jpeg, doxygen
+        brew install libpng jpeg doxygen
+
+    - name: Configure Windows
+      if: startsWith(matrix.os, 'windows')
+      shell: bash
+      run: |
+        # Install libpng, jpeg, doxygen
+        # choco install libpng -- TBD, not on choco?
+        # choco install libjpeg-turbo
+        # choco install doxygen.install
+        # choco install wget
+
+    - name: Configure Env Vars
+      shell: bash
+      run: |
+        # Demangle Windows names, to simplify CMake stuff later
+        _ROOT=${GITHUB_WORKSPACE//\\//}
+        _TEMP_RAW="${{runner.temp}}"
+        _TEMP=${_TEMP_RAW//\\//}
+
+        # This is the trick GitHub Actions uses to allow us to set env vars across all job steps
+        echo ::set-env name=CC::"${{matrix.cc}}"
+        echo ::set-env name=CXX::"${{matrix.cxx}}"
+        echo ::set-env name=HALIDE_DIR::"${_ROOT}/halide"
+        echo ::set-env name=HALIDE_BUILD_DIR::"${_ROOT}/halide_build"
+        echo ::set-env name=TEST_TMPDIR::"${_TEMP}"
+        echo ::set-env name=PARALLEL_JOBS::"$(expr $(nproc) + 2)"
+
+    - name: Download libpng ${{matrix.os}} ${{matrix.bits}}
+      uses: actions/download-artifact@v1
+      with:
+        name: libpng-${{matrix.os}}-${{matrix.bits}}-install.zip
+
+    - name: Build libpng ${{matrix.os}} ${{matrix.bits}}
+      if: failure()
+      shell: bash
+      run: |
+        LIBPNG_ID="llvm-${{matrix.os}}-${{matrix.bits}}"
+        LIBPNG_BUILD_DIR="${GITHUB_WORKSPACE}/${LLVM_ID}-build"
+        LIBPNG_INSTALL_DIR="${GITHUB_WORKSPACE}/${LLVM_ID}-install"
+        LIBPNG_SOURCE_DIR="${GITHUB_WORKSPACE}/${LLVM_ID}-source"
+
+        git clone https://github.com/glennrp/libpng.git \
+          "${LIBPNG_SOURCE_DIR}" \
+          --branch libpng16 \
+          --single-branch \
+          --depth 1
+
+        cmake \
+          -D CMAKE_BUILD_TYPE=Release \
+          -D CMAKE_INSTALL_PREFIX="${LIBPNG_INSTALL_DIR}" \
+          -G "${{matrix.cmake_gen}}" \
+          -A "${{matrix.cmake_arch}}" \
+          -T "${{matrix.cmake_toolset}}" \
+          -B "${LIBPNG_BUILD_DIR}" \
+          -S "${LIBPNG_SOURCE_DIR}"
+
+        PARALLEL_JOBS=$(expr $(nproc) + 2)
+        cmake --build "${LIBPNG_BUILD_DIR}" -j ${PARALLEL_JOBS} --target install
+
+        zip -r ${LIBPNG_INSTALL_DIR}.zip ${LIBPNG_INSTALL_DIR}
+
+    - name: Upload libpng ${{matrix.os}} ${{matrix.bits}}
+      if: success()
+      uses: actions/upload-artifact@v1
+      with:
+        name: libpng-${{matrix.os}}-${{matrix.bits}}-install.zip
+        path: libpng-${{matrix.os}}-${{matrix.bits}}-install.zip
+
+    - name: Unpack Deps
+      shell: bash
+      run: |
+        unzip "${GITHUB_WORKSPACE}/libpng-${{matrix.os}}-${{matrix.bits}}-install.zip" -d "${GITHUB_WORKSPACE}/libpng-${{matrix.os}}-${{matrix.bits}}-install"
+        ls -l "${GITHUB_WORKSPACE}/libpng-${{matrix.os}}-${{matrix.bits}}-install"
+
+
+    - name: Configure Halide (CMake)
+      if: startsWith(matrix.build_tool, 'cmake')
+      shell: bash
+      run: |
+        # Configure CMake
+        mkdir ${HALIDE_BUILD_DIR}
+
+        case "${{matrix.build_tool}}" in
+         cmake_shared) HALIDE_SHARED_LIBRARY=ON  ;;
+         cmake_static) HALIDE_SHARED_LIBRARY=OFF ;;
+        esac
+
+        LLVM_ID="llvm-${{matrix.llvm_version}}-${{matrix.os}}-${{matrix.bits}}"
+        LLVM_INSTALL_DIR="${GITHUB_WORKSPACE}/${LLVM_ID}-install"
+
+        set -eux
+        cmake \
+          -D CMAKE_BUILD_TYPE=Release \
+          -D LLVM_DIR="${LLVM_INSTALL_DIR}/lib/cmake/llvm" \
+          -D HALIDE_REQUIRE_LLVM_VERSION="${{matrix.llvm_version}}0" \
+          -D HALIDE_SHARED_LIBRARY=${HALIDE_SHARED_LIBRARY} \
+          -G "${{matrix.cmake_gen}}" \
+          -A "${{matrix.cmake_arch}}" \
+          -T "${{matrix.cmake_toolset}}" \
+          -S "${HALIDE_DIR}" \
+          -B "${HALIDE_BUILD_DIR}"
+
+    - name: Build Halide (CMake)
+      shell: bash
+      run: |
+        # Build Halide
+        cd ${HALIDE_BUILD_DIR}
+        cmake --build ${HALIDE_BUILD_DIR} -j ${PARALLEL_JOBS} --target all
+        # cmake --build ${HALIDE_BUILD_DIR} -j ${PARALLEL_JOBS} --target package  # TODO?
+
+    - name: Run Tests (CMake)
+      shell: bash
+      run: |
+        # Test Halide
+        TEST_GROUPS_BROKEN="opengl|auto_schedule"
+        TEST_GROUPS_SERIAL="performance"
+
+        cd ${HALIDE_BUILD_DIR}
+
+        # Parallel
+        ctest \
+          -j ${PARALLEL_JOBS} \
+          -LE "${TEST_GROUPS_BROKEN}|${TEST_GROUPS_SERIAL}" \
+          --output-on-failure
+
+        # Serial
+        ctest \
+          -L "${TEST_GROUPS_SERIAL}" \
+          --output-on-failure
+
