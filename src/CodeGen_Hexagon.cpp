@@ -2225,7 +2225,7 @@ Value *CodeGen_Hexagon::call_intrin(Type result_type, const string &name,
         }
     }
     return call_intrin(result_type, fn->getReturnType()->getVectorNumElements(),
-                       fn->getName(), args);
+                       get_llvm_function_name(fn), args);
 }
 
 Value *CodeGen_Hexagon::call_intrin(llvm::Type *result_type, const string &name,
@@ -2244,7 +2244,7 @@ Value *CodeGen_Hexagon::call_intrin(llvm::Type *result_type, const string &name,
         }
     }
     return call_intrin(result_type, fn->getReturnType()->getVectorNumElements(),
-                       fn->getName(), args);
+                       get_llvm_function_name(fn), args);
 }
 
 string CodeGen_Hexagon::mcpu() const {
