@@ -27,17 +27,26 @@ jobs:
             llvm_branch: release/10.x
           - llvm_version: trunk
             llvm_branch: master
+
           - os: macos-latest
             cc: clang
+          - os: macos-latest
             cxx: clang++
+
           - os: ubuntu-18.04
             cc: gcc
+          - os: ubuntu-18.04
             cxx: g++
+
           - os: windows-latest
             cc: cl
+          - os: windows-latest
             cxx: cl
+          - os: windows-latest
             cmake_gen: "Visual Studio 16"
+          - os: windows-latest
             cmake_arch: "x64"
+          - os: windows-latest
             cmake_toolset: "host=x64"
 
     steps:
@@ -86,6 +95,8 @@ jobs:
       shell: bash
       run: |
         # Demangle Windows names, to simplify CMake stuff later
+        set -eux
+
         _ROOT=${GITHUB_WORKSPACE//\\//}
         _TEMP_RAW="${{runner.temp}}"
         _TEMP=${_TEMP_RAW//\\//}
