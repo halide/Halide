@@ -100,9 +100,26 @@
 
 namespace Halide {
 namespace Internal {
+
 template<typename T>
 auto iterator_to_pointer(T iter) -> decltype(&*std::declval<T>()) {
     return &*iter;
+}
+
+inline std::string get_llvm_function_name(const llvm::Function *f) {
+#if LLVM_VERSION >= 110
+    return f->getName().str();
+#else
+    return f->getName();
+#endif
+}
+
+inline std::string get_llvm_function_name(const llvm::Function &f) {
+#if LLVM_VERSION >= 110
+    return f.getName().str();
+#else
+    return f.getName();
+#endif
 }
 
 }  // namespace Internal

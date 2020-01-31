@@ -627,7 +627,11 @@ bool get_md_string(llvm::Metadata *value, std::string &result) {
     }
     llvm::MDString *c = llvm::dyn_cast<llvm::MDString>(value);
     if (c) {
+#if LLVM_VERSION >= 110
+        result = c->getString().str();
+#else
         result = c->getString();
+#endif
         return true;
     }
     return false;
