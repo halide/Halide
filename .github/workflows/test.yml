@@ -112,6 +112,8 @@ jobs:
         LIBPNG_INSTALL_DIR="${GITHUB_WORKSPACE}/${LIBPNG_ID}-install"
         LIBPNG_SOURCE_DIR="${GITHUB_WORKSPACE}/${LIBPNG_ID}-source"
 
+        set -eux
+
         git clone https://github.com/glennrp/libpng.git \
           "${LIBPNG_SOURCE_DIR}" \
           --branch libpng16 \
