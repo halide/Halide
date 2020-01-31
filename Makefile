@@ -18,12 +18,12 @@ UNAME = $(shell uname)
 
 ifeq ($(OS), Windows_NT)
     # assume we are building for the MinGW environment
-    COMMON_LD_FLAGS=-luuid -lole32 -lpthread -lz -Wl,--stack,8388608
+    COMMON_LD_FLAGS=$(LDFLAGS) -luuid -lole32 -lpthread -lz -Wl,--stack,8388608
     SHARED_EXT=dll
     FPIC=
 else
     # let's assume "normal" UNIX such as linux
-    COMMON_LD_FLAGS=-ldl -lpthread -lz
+    COMMON_LD_FLAGS=$(LDFLAGS) -ldl -lpthread -lz
     FPIC=-fPIC
 ifeq ($(UNAME), Darwin)
     SHARED_EXT=dylib
@@ -236,7 +236,7 @@ ifneq (,$(findstring clang,$(CXX_VERSION)))
 LLVM_CXX_FLAGS_LIBCPP := $(findstring -stdlib=libc++, $(LLVM_CXX_FLAGS))
 endif
 
-CXX_FLAGS = $(CXX_WARNING_FLAGS) $(RTTI_CXX_FLAGS) -Woverloaded-virtual $(FPIC) $(OPTIMIZE) -fno-omit-frame-pointer -DCOMPILING_HALIDE
+CXX_FLAGS = $(CXXFLAGS) $(CXX_WARNING_FLAGS) $(RTTI_CXX_FLAGS) -Woverloaded-virtual $(FPIC) $(OPTIMIZE) -fno-omit-frame-pointer -DCOMPILING_HALIDE
 
 CXX_FLAGS += $(LLVM_CXX_FLAGS)
 CXX_FLAGS += $(PTX_CXX_FLAGS)
