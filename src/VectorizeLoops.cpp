@@ -1023,7 +1023,7 @@ class VectorSubs : public IRMutator {
             const Store *store = op->body.as<Store>();
             if (!store) break;
 
-            VectorReduce::Operator reduce_op;
+            VectorReduce::Operator reduce_op = VectorReduce::Add;
             Expr a, b;
             if (const Add *add = store->value.as<Add>()) {
                 a = add->a;
@@ -1219,6 +1219,8 @@ class FindVectorizableExprsInAtomicNode : public IRMutator {
     Scope<> poisoned_names;
     bool poison = false;
 
+    using IRMutator::visit;
+
     template<typename T>
     const T *visit_let(const T *op) {
         mutate(op->value);
@@ -1289,6 +1291,8 @@ public:
 
 class LiftVectorizableExprsOutOfSingleAtomicNode : public IRMutator {
     const std::set<Expr, ExprCompare> &liftable;
+
+    using IRMutator::visit;
 
     template<typename StmtOrExpr, typename LetStmtOrLet>
     StmtOrExpr visit_let(const LetStmtOrLet *op) {

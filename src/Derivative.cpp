@@ -77,64 +77,67 @@ protected:
     void visit(const Let *op) override;
     void visit(const Call *op) override;
     void visit(const Load *op) override {
-        internal_assert(false) << "Encounter unexpected statement \"Load\" when differentiating.";
+        internal_error << "Encounter unexpected expression \"Load\" when differentiating.";
     }
     void visit(const Ramp *op) override {
-        internal_assert(false) << "Encounter unexpected statement \"Ramp\" when differentiating.";
+        internal_error << "Encounter unexpected expression \"Ramp\" when differentiating.";
     }
     void visit(const Broadcast *op) override {
-        internal_assert(false) << "Encounter unexpected statement \"Broadcast\" when differentiating.";
-    }
-    void visit(const LetStmt *op) override {
-        internal_assert(false) << "Encounter unexpected statement \"LetStmt\" when differentiating.";
-    }
-    void visit(const AssertStmt *op) override {
-        internal_assert(false) << "Encounter unexpected statement \"AssertStmt\" when differentiating.";
-    }
-    void visit(const ProducerConsumer *op) override {
-        internal_assert(false) << "Encounter unexpected statement \"ProducerConsumer\" when differentiating.";
-    }
-    void visit(const For *op) override {
-        internal_assert(false) << "Encounter unexpected statement \"For\" when differentiating.";
-    }
-    void visit(const Store *op) override {
-        internal_assert(false) << "Encounter unexpected statement \"Store\" when differentiating.";
-    }
-    void visit(const Provide *op) override {
-        internal_assert(false) << "Encounter unexpected statement \"Provide\" when differentiating.";
-    }
-    void visit(const Allocate *op) override {
-        internal_assert(false) << "Encounter unexpected statement \"Allocate\" when differentiating.";
-    }
-    void visit(const Free *op) override {
-        internal_assert(false) << "Encounter unexpected statement \"Free\" when differentiating.";
-    }
-    void visit(const Realize *op) override {
-        internal_assert(false) << "Encounter unexpected statement \"Realize\" when differentiating.";
-    }
-    void visit(const Block *op) override {
-        internal_assert(false) << "Encounter unexpected statement \"Block\" when differentiating.";
-    }
-    void visit(const IfThenElse *op) override {
-        internal_assert(false) << "Encounter unexpected statement \"IfThenElse\" when differentiating.";
-    }
-    void visit(const Evaluate *op) override {
-        internal_assert(false) << "Encounter unexpected statement \"Evaluate\" when differentiating.";
+        internal_error << "Encounter unexpected expression \"Broadcast\" when differentiating.";
     }
     void visit(const Shuffle *op) override {
-        internal_assert(false) << "Encounter unexpected statement \"Shuffle\" when differentiating.";
+        internal_error << "Encounter unexpected expression \"Shuffle\" when differentiating.";
+    }
+    void visit(const VectorReduce *op) override {
+        internal_error << "Encounter unexpected expression \"VectorReduce\" when differentiating.";
+    }
+    void visit(const LetStmt *op) override {
+        internal_error << "Encounter unexpected statement \"LetStmt\" when differentiating.";
+    }
+    void visit(const AssertStmt *op) override {
+        internal_error << "Encounter unexpected statement \"AssertStmt\" when differentiating.";
+    }
+    void visit(const ProducerConsumer *op) override {
+        internal_error << "Encounter unexpected statement \"ProducerConsumer\" when differentiating.";
+    }
+    void visit(const For *op) override {
+        internal_error << "Encounter unexpected statement \"For\" when differentiating.";
+    }
+    void visit(const Store *op) override {
+        internal_error << "Encounter unexpected statement \"Store\" when differentiating.";
+    }
+    void visit(const Provide *op) override {
+        internal_error << "Encounter unexpected statement \"Provide\" when differentiating.";
+    }
+    void visit(const Allocate *op) override {
+        internal_error << "Encounter unexpected statement \"Allocate\" when differentiating.";
+    }
+    void visit(const Free *op) override {
+        internal_error << "Encounter unexpected statement \"Free\" when differentiating.";
+    }
+    void visit(const Realize *op) override {
+        internal_error << "Encounter unexpected statement \"Realize\" when differentiating.";
+    }
+    void visit(const Block *op) override {
+        internal_error << "Encounter unexpected statement \"Block\" when differentiating.";
+    }
+    void visit(const IfThenElse *op) override {
+        internal_error << "Encounter unexpected statement \"IfThenElse\" when differentiating.";
+    }
+    void visit(const Evaluate *op) override {
+        internal_error << "Encounter unexpected statement \"Evaluate\" when differentiating.";
     }
     void visit(const Prefetch *op) override {
-        internal_assert(false) << "Encounter unexpected statement \"Prefetch\" when differentiating.";
+        internal_error << "Encounter unexpected statement \"Prefetch\" when differentiating.";
     }
     void visit(const Fork *op) override {
-        internal_assert(false) << "Encounter unexpected statement \"Fork\" when differentiating.";
+        internal_error << "Encounter unexpected statement \"Fork\" when differentiating.";
     }
     void visit(const Acquire *op) override {
-        internal_assert(false) << "Encounter unexpected statement \"Acquire\" when differentiating.";
+        internal_error << "Encounter unexpected statement \"Acquire\" when differentiating.";
     }
     void visit(const Atomic *op) override {
-        internal_assert(false) << "Encounter unexpected statement \"Atomic\" when differentiating.";
+        internal_error << "Encounter unexpected statement \"Atomic\" when differentiating.";
     }
 
 private:
