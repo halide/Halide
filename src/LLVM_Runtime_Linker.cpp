@@ -601,16 +601,17 @@ void link_modules(std::vector<std::unique_ptr<llvm::Module>> &modules, Target t,
 
     // Enumerate the functions.
     for (auto &f : *modules[0]) {
+        std::string f_name = Internal::get_llvm_function_name(f);
         bool can_strip = true;
         for (const string &r : retain) {
-            if (f.getName() == r) {
+            if (f_name == r) {
                 can_strip = false;
             }
         }
 
-        bool is_halide_extern_c_sym = Internal::starts_with(f.getName(), "halide_");
+        bool is_halide_extern_c_sym = Internal::starts_with(f_name, "halide_");
         internal_assert(!is_halide_extern_c_sym || f.isWeakForLinker() || f.isDeclaration())
-            << " for function " << (std::string)f.getName() << "\n";
+            << " for function " << f_name << "\n";
         can_strip = can_strip && !is_halide_extern_c_sym;
         if (can_strip || make_weak_symbols_strong) {
             Internal::convert_weak_to_strong(f);
@@ -646,7 +647,7 @@ void undo_win32_name_mangling(llvm::Module *m) {
     // For every function prototype...
     for (llvm::Module::iterator iter = m->begin(); iter != m->end(); ++iter) {
         llvm::Function &f = *iter;
-        string n = f.getName();
+        string n = get_llvm_function_name(f);
         // if it's a __stdcall call that starts with \01_, then we're making a win32 api call
         if (f.getCallingConv() == llvm::CallingConv::X86_StdCall &&
             f.empty() &&
