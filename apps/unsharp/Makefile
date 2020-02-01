@@ -42,7 +42,6 @@ $(BIN)/%/runtime.a: $(GENERATOR_BIN)/unsharp.generator
 
 $(BIN)/%/filter: filter.cpp $(FILTER_DEPS) $(BIN)/%/runtime.a
 	@mkdir -p $(@D)
-	echo $(CXXFLAGS)
 	$(CXX) $(CXXFLAGS) -I$(@D) -Wall -O3 $^ -o $@ $(LDFLAGS) $(IMAGE_IO_FLAGS) $(CUDA_LDFLAGS) $(OPENCL_LDFLAGS) $(OPENGL_LDFLAGS)
 
 clean:
