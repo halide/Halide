@@ -30,6 +30,14 @@ $(BIN)/%/mat_mul.a: $(GENERATOR_BIN)/mat_mul.generator
 	@mkdir -p $(@D)
 	$^ -g mat_mul -e $(GENERATOR_OUTPUTS) -o $(@D) target=$* size=$(MATRIX_SIZE)
 
+$(BIN)/%/mat_mul_auto_schedule.a: $(GENERATOR_BIN)/mat_mul.generator $(AUTOSCHED_BIN)/libauto_schedule.so
+	@mkdir -p $(@D)
+	HL_PERMIT_FAILED_UNROLL=1 \
+	HL_WEIGHTS_DIR=$(AUTOSCHED_SRC)/gpu.weights \
+	HL_DEBUG_CODEGEN=1 \
+	HL_SHARED_MEMORY_LIMIT=48 \
+	$< -g mat_mul -e $(GENERATOR_OUTPUTS) -o $(@D) -f mat_mul_auto_schedule target=$* auto_schedule=true machine_params=$(HL_MACHINE_PARAMS) -p $(AUTOSCHED_BIN)/libauto_schedule.so -s Adams2019 2> stderr.txt > stdout.txt
+
 $(BIN)/%/mat_mul_gradient_auto_schedule.a: $(GENERATOR_BIN)/mat_mul.generator
 	@mkdir -p $(@D)
 	$^ -g mat_mul -e $(GENERATOR_OUTPUTS) -o $(@D) -f mat_mul_gradient_auto_schedule target=$*-no_runtime auto_schedule=true -p $(GRADIENT_AUTOSCHED_BIN)/libgradient_autoscheduler.so -s Li2018
