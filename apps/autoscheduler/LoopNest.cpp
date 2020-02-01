@@ -272,7 +272,7 @@ vector<vector<int64_t>> generate_gpu_tilings(const vector<vector<int64_t>> &stag
             for (int64_t threads_ext = min_threads; threads_ext <= stage_sizes[0][d]; threads_ext *= factor) {
                 full_extent_considered |= threads_ext == stage_sizes[0][d];
                 // reject if inner exceeds hardware thread limit
-                if (threads_ext > max_threads_extent) {
+                if ((d == vectorized_indices[0] && threads_ext > max_threads_extent) || (d != vectorized_indices[0] && threads_ext > 16)) {
                     break;
                 }
                 if (false) {
