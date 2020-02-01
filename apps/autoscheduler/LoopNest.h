@@ -442,7 +442,7 @@ struct LoopNest {
     void inline_func(const FunctionDAG::Node *f);
 
     // Compute a Func at this site.
-    void compute_here(const FunctionDAG::Node *f,
+    bool compute_here(const FunctionDAG::Node *f,
                       bool tileable,
                       int v,
                       bool in_threads_loop,

@@ -2764,7 +2764,7 @@ void LoopNest::inline_func(const FunctionDAG::Node *f) {
 }
 
 // Compute a Func at this site.
-void LoopNest::compute_here(const FunctionDAG::Node *f,
+bool LoopNest::compute_here(const FunctionDAG::Node *f,
                             bool tileable,
                             int v,
                             bool in_threads_loop,
@@ -2777,6 +2777,8 @@ void LoopNest::compute_here(const FunctionDAG::Node *f,
         // we may not subtile this loop.
         this->tileable = false;
     }
+
+    bool skip_vector_dim = false;
 
     for (int s = (int)f->stages.size() - 1; s >= 0; s--) {
         LoopNest *node = new LoopNest;
@@ -2809,6 +2811,7 @@ void LoopNest::compute_here(const FunctionDAG::Node *f,
 
         int64_t total_extent = 1;
         int64_t vector_size = 1;
+        bool all_ones = true;
         for (size_t i = 0; i < loop_dim; i++) {
             const auto &l = bounds->loops(s, i);
             // Initialize the loop nest
@@ -2840,11 +2843,17 @@ void LoopNest::compute_here(const FunctionDAG::Node *f,
                 int64_t shift = node->size[i] / 2;
                 single_point->loops(s, i).translate(shift);
             }
+
+            all_ones = all_ones && node->size[i] == 1;
         }
 
         // Leave region required blank inside the computation of a Func
         node->set_bounds(f, std::move(single_point));
         node->vector_dim = v;
+
+        if (s == 0) {
+            skip_vector_dim = !all_ones && node->size[v] == 1;
+        }
 
         if (node->vectorized_loop_index >= 0) {
             // Split off the single vector as an inner loop nest.
@@ -2870,6 +2879,8 @@ void LoopNest::compute_here(const FunctionDAG::Node *f,
 
         children.emplace_back(node);
     }
+
+    return skip_vector_dim;
 }
 
 // Parallelize this loop according to the given tiling.
@@ -3080,8 +3091,23 @@ vector<IntrusivePtr<const LoopNest>> LoopNest::compute_in_tiles(const FunctionDA
         }
     }
 
-    // once we enter a gpu block loop compute union thread counts to pass down
+    bool skip_compute_here = false;
+    const auto &bounds_here = get_bounds(f);
+    const auto &p = bounds_here->region_computed(v);
+
+    if (p.extent() == 1) {
+        bool all_one = true;
+        for (int i = 0; i < f->dimensions; i++) {
+            all_one = all_one && bounds_here->region_computed(i).extent() == 1;
+        }
+
+        // Don't compute here if the vectorized dimension has extent
+        // 1 and there is some other dimension that does not have extent 1
+        skip_compute_here = !all_one || v != 0;
+    }
+
     if (gpu_label == block) {
+        // once we enter a gpu block loop compute union thread counts to pass down
         union_counts = get_union_thread_counts(f);
     }
 
@@ -3090,7 +3116,7 @@ vector<IntrusivePtr<const LoopNest>> LoopNest::compute_in_tiles(const FunctionDA
         (!in_realization ||
          size.empty() ||
          vector_dim == -1 ||
-         size[vector_dim] == 1)) {
+         size[vector_dim] == 1) && !skip_compute_here) {
 
         std::unique_ptr<LoopNest> r{new LoopNest};
         r->copy_from(*this);
@@ -3250,9 +3276,9 @@ vector<IntrusivePtr<const LoopNest>> LoopNest::compute_in_tiles(const FunctionDA
                     inner->gpu_label = serial;
 
                     outer->children.emplace_back(inner.release());
-                    outer->compute_here(f, true, v, true, target);
-
-                    result.emplace_back(outer.release());
+                    if (!outer->compute_here(f, true, v, true, target)) {
+                        result.emplace_back(outer.release());
+                    }
                     break;
                 }
 
@@ -3262,13 +3288,15 @@ vector<IntrusivePtr<const LoopNest>> LoopNest::compute_in_tiles(const FunctionDA
                     inner->gpu_label = serial;
 
                     outer->children.emplace_back(inner.release());
-                    outer->compute_here(f, true, v, false, target);
+                    bool skip_compute_here = outer->compute_here(f, true, v, false, target);
 
-                    bool made_child = outer->add_gpu_thread_tilings(f, params, target, v, result, union_counts);
+                    if (!skip_compute_here) {
+                        bool made_child = outer->add_gpu_thread_tilings(f, params, target, v, result, union_counts);
 
-                    // no good thread tilings, just add the untiled thread loop
-                    if (!made_child) {
-                        result.emplace_back(outer.release());
+                        // no good thread tilings, just add the untiled thread loop
+                        if (!made_child) {
+                            result.emplace_back(outer.release());
+                        }
                     }
                     break;
                 }
@@ -3278,17 +3306,19 @@ vector<IntrusivePtr<const LoopNest>> LoopNest::compute_in_tiles(const FunctionDA
                     inner->gpu_label = serial;
 
                     outer->children.emplace_back(inner.release());
-                    outer->compute_here(f, true, v, in_threads_loop, target);
+                    bool skip_compute_here = outer->compute_here(f, true, v, in_threads_loop, target);
 
-                    if (!in_threads_loop) {
-                        bool made_child = outer->add_gpu_thread_tilings(f, params, target, v, result, union_counts);
+                    if (!skip_compute_here) {
+                        if (!in_threads_loop) {
+                            bool made_child = outer->add_gpu_thread_tilings(f, params, target, v, result, union_counts);
 
-                        // no good thread tilings, just add the untiled thread loop
-                        if (!made_child) {
+                            // no good thread tilings, just add the untiled thread loop
+                            if (!made_child) {
+                                result.emplace_back(outer.release());
+                            }
+                        } else {  // inside a threads loop, can't generate thread loop tilings
                             result.emplace_back(outer.release());
                         }
-                    } else {  // inside a threads loop, can't generate thread loop tilings
-                        result.emplace_back(outer.release());
                     }
                     break;
                 }

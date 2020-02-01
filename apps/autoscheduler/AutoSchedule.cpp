@@ -1096,7 +1096,7 @@ struct State {
             if (!node->is_input && !node->is_output) {
                 for (int v = 0; v < node->dimensions; v++) {
                     const auto &p = root->get_bounds(node)->region_computed(v);
-                    if (p.extent() >= node->vector_size) {
+                    if (p.extent() >= node->vector_size && p.extent() > 1) {
                         vector_dims.push_back(v);
                     }
                 }
