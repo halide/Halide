@@ -390,6 +390,32 @@ void CodeGen_X86::visit(const Call *op) {
     CodeGen_Posix::visit(op);
 }
 
+void CodeGen_X86::visit(const VectorReduce *op) {
+    const int factor = op->value.type().lanes() / op->type.lanes();
+
+    // Match pmaddwd
+    if (const Mul *mul = op->value.as<Mul>()) {
+        Type narrower = Int(16, mul->type.lanes());
+        Expr a = lossless_cast(narrower, mul->a);
+        Expr b = lossless_cast(narrower, mul->b);
+        if (op->type.is_int() &&
+            op->type.bits() == 32 &&
+            a.defined() &&
+            b.defined() &&
+            factor == 2 &&
+            op->op == VectorReduce::Add) {
+            if (target.has_feature(Target::AVX2) && op->type.lanes() > 4) {
+                value = call_intrin(op->type, 8, "llvm.x86.avx2.pmadd.wd", {a, b});
+            } else {
+                value = call_intrin(op->type, 4, "llvm.x86.sse2.pmadd.wd", {a, b});
+            }
+            return;
+        }
+    }
+
+    CodeGen_Posix::visit(op);
+}
+
 string CodeGen_X86::mcpu() const {
     if (target.has_feature(Target::AVX512_Cannonlake)) return "cannonlake";
     if (target.has_feature(Target::AVX512_Skylake)) return "skylake-avx512";

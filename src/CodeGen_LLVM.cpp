@@ -4301,64 +4301,110 @@ void CodeGen_LLVM::visit(const VectorReduce *op) {
     Expr val = op->value;
     const int output_lanes = op->type.lanes();
     const int native_lanes = native_vector_bits() / op->type.bits();
-    while (val.type().lanes() > output_lanes) {
-        int factor = val.type().lanes() / output_lanes;
-        // Divide the vector into several parts and combine using the
-        // scalar version of the op.
-        vector<Expr> parts;
+    const int factor = val.type().lanes() / output_lanes;
 
-        if (output_lanes == 1 &&
-            factor > native_lanes &&
-            factor % native_lanes == 0) {
-            debug(0) << "A\n";
-            // Slice into whole vectors and combine
-            for (int i = 0; i < factor / native_lanes; i++) {
-                parts.push_back(Shuffle::make_slice(val, i * native_lanes, 1, native_lanes));
-            }
-        } else if ((factor & 1) == 0) {
-            debug(0) << "B\n";
-            // Extract even/odd lanes and combine once
-            parts.push_back(Shuffle::make_slice(val, 0, 2, val.type().lanes() / 2));
-            parts.push_back(Shuffle::make_slice(val, 1, 2, val.type().lanes() / 2));
-        } else {
-            debug(0) << "C\n";
-            // Extract every nth lane and combine
-            for (int i = 0; i < factor; i++) {
-                parts.push_back(Shuffle::make_slice(val, i, factor, val.type().lanes() / factor));
-            }
-        }
-
-        while (parts.size() > 1) {
-            Expr a = parts.back();
-            parts.pop_back();
-            switch (op->op) {
-            case VectorReduce::Add:
-                parts.back() = parts.back() + a;
-                break;
-            case VectorReduce::Mul:
-                parts.back() = parts.back() * a;
-                break;
-            case VectorReduce::Min:
-                parts.back() = min(parts.back(), a);
-                break;
-            case VectorReduce::Max:
-                parts.back() = max(parts.back(), a);
-                break;
-            case VectorReduce::And:
-                parts.back() = parts.back() & a;
-                break;
-            case VectorReduce::Or:
-                parts.back() = parts.back() | a;
-                break;
-            }
-        }
-
-        val = parts[0];
-        debug(0) << val << "\n";
+    if (op->type.is_bool() && op->op == VectorReduce::Or) {
+        // Cast to u8, use max, cast back to bool.
+        Expr equiv = cast(op->value.type().with_bits(8), op->value);
+        equiv = VectorReduce::make(VectorReduce::Max, equiv, op->type.lanes());
+        equiv = cast(op->type, equiv);
+        equiv.accept(this);
+        return;
     }
-    internal_assert(val.type().lanes() == output_lanes);
-    val = common_subexpression_elimination(val);
-    codegen(val);
+
+    if (op->type.is_bool() && op->op == VectorReduce::And) {
+        // Cast to u8, use min, cast back to bool.
+        Expr equiv = cast(op->value.type().with_bits(8), op->value);
+        equiv = VectorReduce::make(VectorReduce::Min, equiv, op->type.lanes());
+        equiv = cast(op->type, equiv);
+        equiv.accept(this);
+        return;
+    }
+
+    Expr (*binop)(Expr, Expr) = nullptr;
+    switch (op->op) {
+    case VectorReduce::Add:
+        binop = Add::make;
+        break;
+    case VectorReduce::Mul:
+        binop = Mul::make;
+        break;
+    case VectorReduce::Min:
+        binop = Min::make;
+        break;
+    case VectorReduce::Max:
+        binop = Max::make;
+        break;
+    case VectorReduce::And:
+        binop = And::make;
+        break;
+    case VectorReduce::Or:
+        binop = Or::make;
+        break;
+    }
+
+    if (output_lanes == 1 &&
+        factor > native_lanes &&
+        factor % native_lanes == 0) {
+        // It's a total reduction of multiple native
+        // vectors. Start by adding the vectors together.
+        Expr equiv;
+        for (int i = 0; i < factor / native_lanes; i++) {
+            Expr next = Shuffle::make_slice(val, i * native_lanes, 1, native_lanes);
+            if (equiv.defined()) {
+                equiv = binop(equiv, next);
+            } else {
+                equiv = next;
+            }
+        }
+        equiv = VectorReduce::make(op->op, equiv, 1);
+        equiv = common_subexpression_elimination(equiv);
+        codegen(equiv);
+        return;
+    }
+
+    if (factor > 2 && ((factor & 1) == 0)) {
+        // Factor the reduce into multiple stages. If we're going to
+        // be widen the type by 4x or more we should also factor the
+        // widening into multiple stages.
+        Type intermediate_type = op->value.type().with_lanes(op->value.type().lanes() / 2);
+        Expr equiv = VectorReduce::make(op->op, op->value, intermediate_type.lanes());
+        if (op->op == VectorReduce::Add &&
+            (op->type.is_int() || op->type.is_uint()) &&
+            op->type.bits() >= 32) {
+            Type narrower_type = op->value.type().with_bits(op->type.bits() / 4);
+            Expr narrower = lossless_cast(narrower_type, op->value);
+            if (!narrower.defined() && narrower_type.is_int()) {
+                // Maybe we can narrow to an uint instead.
+                narrower_type = narrower_type.with_code(Type::UInt);
+                narrower = lossless_cast(narrower_type, op->value);
+            }
+            if (narrower.defined()) {
+                // Widen it by 2x before the horizontal add
+                narrower = cast(narrower.type().with_bits(narrower.type().bits() * 2), narrower);
+                equiv = VectorReduce::make(op->op, narrower, intermediate_type.lanes());
+                // Then widen it by 2x again afterwards
+                equiv = cast(intermediate_type, equiv);
+            }
+        }
+        equiv = VectorReduce::make(op->op, equiv, op->type.lanes());
+        equiv = common_subexpression_elimination(equiv);
+        codegen(equiv);
+        return;
+    }
+
+    // Extract each slice and combine
+    Expr equiv;
+    for (int i = 0; i < factor; i++) {
+        Expr next = Shuffle::make_slice(val, i, factor, val.type().lanes() / factor);
+        if (equiv.defined()) {
+            equiv = binop(equiv, next);
+        } else {
+            equiv = next;
+        }
+    }
+    equiv = common_subexpression_elimination(equiv);
+    codegen(equiv);
 }
 
 void CodeGen_LLVM::visit(const Atomic *op) {

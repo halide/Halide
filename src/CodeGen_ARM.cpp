@@ -1129,24 +1129,6 @@ void CodeGen_ARM::visit(const VectorReduce *op) {
         return;
     }
 
-    if (op->type.is_bool() && op->op == VectorReduce::Or) {
-        // Cast to u8, use max, cast back to bool.
-        Expr equiv = cast(op->value.type().with_bits(8), op->value);
-        equiv = VectorReduce::make(VectorReduce::Max, equiv, op->type.lanes());
-        equiv = cast(op->type, equiv);
-        equiv.accept(this);
-        return;
-    }
-
-    if (op->type.is_bool() && op->op == VectorReduce::And) {
-        // Cast to u8, use min, cast back to bool.
-        Expr equiv = cast(op->value.type().with_bits(8), op->value);
-        equiv = VectorReduce::make(VectorReduce::Min, equiv, op->type.lanes());
-        equiv = cast(op->type, equiv);
-        equiv.accept(this);
-        return;
-    }
-
     // ARM has a variety of pairwise reduction ops. The versions that
     // do not widen take two 64-bit args and return one 64-bit vector
     // of the same type. The versions that widen take one arg and
@@ -1208,35 +1190,6 @@ void CodeGen_ARM::visit(const VectorReduce *op) {
     }
 
     // TODO: When sdot and udot become available (armv8.4), pattern match those here.
-
-    if (factor > 2 && ((factor & 1) == 0)) {
-        // Factor the reduce into multiple stages. If we're going to
-        // be widen the type by 4x or more we should also factor the
-        // widening into multiple stages.
-        Type intermediate_type = op->value.type().with_lanes(op->value.type().lanes() / 2);
-        Expr equiv = VectorReduce::make(op->op, op->value, intermediate_type.lanes());
-        if (op->op == VectorReduce::Add &&
-            (op->type.is_int() || op->type.is_uint()) &&
-            op->type.bits() >= 32) {
-            Type narrower_type = op->value.type().with_bits(op->type.bits() / 4);
-            Expr narrower = lossless_cast(narrower_type, op->value);
-            if (!narrower.defined() && narrower_type.is_int()) {
-                // Maybe we can narrow to an uint instead.
-                narrower_type = narrower_type.with_code(Type::UInt);
-                narrower = lossless_cast(narrower_type, op->value);
-            }
-            if (narrower.defined()) {
-                // Widen it by 2x before the horizontal add
-                narrower = cast(narrower.type().with_bits(narrower.type().bits() * 2), narrower);
-                equiv = VectorReduce::make(op->op, narrower, intermediate_type.lanes());
-                // Then widen it by 2x again afterwards
-                equiv = cast(intermediate_type, equiv);
-            }
-        }
-        equiv = VectorReduce::make(op->op, equiv, op->type.lanes());
-        equiv.accept(this);
-        return;
-    }
 
     CodeGen_Posix::visit(op);
 }

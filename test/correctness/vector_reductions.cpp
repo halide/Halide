@@ -10,14 +10,14 @@ int main(int argc, char **argv) {
     Func f, g, c;
     Var x, y;
 
-    c(x) = cast<uint16_t>(x);
-    f(y, x) = cast<uint16_t>(x);
+    c(x) = cast<int16_t>(x);
+    f(y, x) = cast<int16_t>(x);
     f.compute_root();
     c.compute_root();
 
-    RDom r(0, 2);
+    RDom r(0, 16);
 
-    g(x) += cast<uint32_t>(f(r, x)) * c(r);
+    g(x) += cast<int32_t>(f(r, x)) * c(r);
 
     Var xo, xi;
     RVar rx;
@@ -25,7 +25,7 @@ int main(int argc, char **argv) {
 
     //g.compile_to_assembly("/dev/stdout", {}, Target("arm-64-no_asserts-no_bounds_query-no_runtime-disable_llvm_loop_opt"));
     //g.compile_to_assembly("/dev/stdout", {}, Target("arm-32-no_asserts-no_bounds_query-no_runtime-disable_llvm_loop_opt"));
-    g.compile_to_assembly("/dev/stdout", {}, Target("x86-64-no_asserts-no_bounds_query-no_runtime-disable_llvm_loop_opt"));
+    g.compile_to_assembly("/dev/stdout", {}, Target("host-no_asserts-no_bounds_query-no_runtime-disable_llvm_loop_opt"));
 
     return 0;
 }
