@@ -355,7 +355,7 @@ struct LoopNest {
     void compute_warp_features(ScheduleFeatures& features, const GPULoopInfo& gpu_loop_info) const;
 
     // Assume that when a block is active, all its warps are active
-    void compute_warp_and_block_occupancy(ScheduleFeatures &feat, const GPULoopInfo& gpu_loop_info) const;
+    void compute_warp_and_block_occupancy(const MachineParams& params, ScheduleFeatures &feat, const GPULoopInfo& gpu_loop_info) const;
 
     void compute_shared_mem_occupancy(const Target& target, int64_t working_set_here, ScheduleFeatures &feat) const;
 
