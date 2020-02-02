@@ -11,12 +11,46 @@
 #include "GPULoopInfo.h"
 #include "PerfectHashMap.h"
 #include "ThreadInfo.h"
+#include "ASLog.h"
 #include <set>
 #include <vector>
 
 namespace Halide {
 namespace Internal {
 namespace Autoscheduler {
+
+template <typename T>
+struct ScopedStatistic {
+    const T& value;
+    std::string msg;
+
+    ScopedStatistic(const T& value, const std::string& msg)
+        : value{value}
+        , msg{msg}
+    {}
+
+    ~ScopedStatistic() {
+        aslog(0) << msg << " = " <<  value << "\n";
+    }
+};
+
+struct ScopedTimer {
+    std::chrono::time_point<std::chrono::high_resolution_clock> start;
+    std::string msg;
+
+    ScopedTimer(const std::string& msg)
+        : start{std::chrono::high_resolution_clock::now()}
+        , msg{msg}
+    {
+        aslog(0) << "Start: " << msg << "\n";
+    }
+
+    ~ScopedTimer() {
+        auto duration = std::chrono::high_resolution_clock::now() - start;
+        auto ms = std::chrono::duration_cast<std::chrono::milliseconds>(duration).count();
+        aslog(0) << "Duration (ms): " << msg << " = " << ms << "\n";
+    }
+};
 
 struct Statistics {
     int num_featurizations{0};
