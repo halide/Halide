@@ -134,6 +134,7 @@ make_featurization() {
     CMD="HL_SEED=${RANDOM_DROPOUT_SEED} \
         HL_WEIGHTS_DIR=${WEIGHTS} \
         HL_USE_MEMOIZED_FEATURES=1 \
+        HL_MEMOIZE_BLOCKS=1 \
         HL_RANDOM_DROPOUT=${dropout} \
         HL_BEAM_SIZE=${beam} \
         HL_SHARED_MEMORY_LIMIT=${shared_memory_limit} \

@@ -995,13 +995,100 @@ struct State {
         return options;
     }
 
+    void memoize_blocks(const FunctionDAG::Node *node, LoopNest* new_root, NodeMap<std::map<int, std::vector<IntrusivePtr<const LoopNest>>>>& compute_root_options) const {
+        if (get_env_variable("HL_MEMOIZE_BLOCKS") != "1") {
+            return;
+        }
+
+        int vector_dim = -1;
+        bool loop_nest_found = false;
+        for (auto &c : new_root->children) {
+            if (c->node == node && c->stage->index == 0) {
+                vector_dim = c->vector_dim;
+                loop_nest_found = true;
+                break;
+            }
+        }
+
+        internal_assert(loop_nest_found);
+
+        auto& blocks = compute_root_options.get_or_create(node)[vector_dim];
+
+        for (auto &c : new_root->children) {
+            if (c->node == node) {
+                LoopNest *new_block = new LoopNest;
+                new_block->copy_from_including_features(*c.get());
+                blocks.push_back(new_block);
+            }
+        }
+    }
+
+    bool add_states_from_memoized_blocks(const FunctionDAG &dag,
+                                         const MachineParams &params,
+                                         const Target &target,
+                                         CostModel *cost_model,
+                                         std::function<void(IntrusivePtr<State> &&)> &accept_child,
+                                         Statistics& stats,
+                                         const FunctionDAG::Node *node,
+                                         const NodeMap<std::map<int, std::vector<IntrusivePtr<const LoopNest>>>>& compute_root_options,
+                                         int& num_children) const {
+        if (get_env_variable("HL_MEMOIZE_BLOCKS") != "1" || !compute_root_options.contains(node)) {
+            return false;
+        }
+
+        int vector_dim = -1;
+        for (const auto& c : root->children) {
+            if (c->node == node && c->stage->index == 0) {
+                vector_dim = c->vector_dim;
+                break;
+            }
+        }
+
+        if (compute_root_options.get(node).count(vector_dim) == 0) {
+            return false;
+        }
+
+        auto blocks = compute_root_options.get(node).at(vector_dim);
+
+        size_t num_stages = node->stages.size();
+        for (size_t i = 0; i < blocks.size(); i += num_stages) {
+            auto child = make_child();
+            LoopNest *new_root = new LoopNest;
+            new_root->copy_from(*root);
+            child->root = new_root;
+            child->num_decisions_made++;
+
+            int block_index = 0;
+            for (const auto& c : new_root->children) {
+                if (c->node == node) {
+                    break;
+                }
+                ++block_index;
+            }
+
+            for (size_t j = 0; j < num_stages; ++j) {
+                LoopNest* new_block = new LoopNest;
+                new_block->copy_from_including_features(*blocks[i + j]);
+                new_root->children[block_index++] = new_block;
+            }
+
+            if (child->calculate_cost(dag, params, target, cost_model, stats)) {
+                num_children++;
+                accept_child(std::move(child));
+            }
+        }
+
+        return true;
+    }
+
     // Generate the successor states to this state
     void generate_children(const FunctionDAG &dag,
                            const MachineParams &params,
                            const Target &target,
                            CostModel *cost_model,
                            std::function<void(IntrusivePtr<State> &&)> &accept_child,
-                           Statistics& stats) const {
+                           Statistics& stats,
+                           NodeMap<std::map<int, std::vector<IntrusivePtr<const LoopNest>>>>& compute_root_options) const {
         internal_assert(root.defined() && root->is_root());
 
         if (num_decisions_made == 2 * (int)dag.nodes.size()) {
@@ -1026,6 +1113,8 @@ struct State {
                 << "Partially scheduled code doesn't compute " << e->consumer->name
                 << ", which is one of the consumers of " << node->func.name();
         }
+
+        ScopedTimer scoped_timer{"generate_children() for " + node->func.name()};
 
         if (node->is_input) {
             // We don't need to schedule nodes that represent inputs,
@@ -1053,6 +1142,7 @@ struct State {
         }
 
         int num_children = 0;
+        ScopedStatistic<int> num_children_stat{num_children, "end phase " + std::to_string(phase) + "; num_children generated for " + node->func.name()};
 
         if (phase == 0) {
             // Injecting realizations
@@ -1162,6 +1252,10 @@ struct State {
                 internal_assert(pure_size);
 
                 if (target.has_gpu_feature()) {
+                    if (add_states_from_memoized_blocks(dag, params, target, cost_model, accept_child, stats, node, compute_root_options, num_children)) {
+                        return;
+                    }
+
                     // When GPU scheduling we approach tiling differently and in two steps.
                     // step 1) convert (none, SIMD) loops to (parallel, serial, SIMD) loops with specialized serial sizes
                     vector<int> vec_dim_serial_sizes;
@@ -1211,6 +1305,7 @@ struct State {
                             if (child->calculate_cost(dag, params, target, cost_model, stats)) {
                                 num_children++;
                                 accept_child(std::move(child));
+                                memoize_blocks(node, new_root, compute_root_options);
                             }
                             return;
                         }
@@ -1237,6 +1332,7 @@ struct State {
                             if (child->calculate_cost(dag, params, target, cost_model, stats)) {
                                 num_children++;
                                 accept_child(std::move(child));
+                                memoize_blocks(node, new_root, compute_root_options);
                             }
 
                             if (!use_adjusted_tilings()) {
@@ -1781,7 +1877,8 @@ IntrusivePtr<State> optimal_schedule_pass(FunctionDAG &dag,
                                           int num_passes,
                                           ProgressBar &tick,
                                           std::unordered_set<uint64_t> &permitted_hashes,
-                                          Statistics& stats) {
+                                          Statistics& stats,
+                                          NodeMap<std::map<int, std::vector<IntrusivePtr<const LoopNest>>>>& compute_root_options) {
 
     if (cost_model) {
         configure_pipeline_features(dag, params, cost_model);
@@ -1843,7 +1940,8 @@ IntrusivePtr<State> optimal_schedule_pass(FunctionDAG &dag,
                                              num_passes,
                                              tick,
                                              permitted_hashes,
-                                             stats);
+                                             stats,
+                                             compute_root_options);
             } else {
                 internal_error << "Ran out of legal states with beam size " << beam_size << "\n";
             }
@@ -1929,7 +2027,7 @@ IntrusivePtr<State> optimal_schedule_pass(FunctionDAG &dag,
                 return best;
             }
 
-            state->generate_children(dag, params, target, cost_model, enqueue_new_children, stats);
+            state->generate_children(dag, params, target, cost_model, enqueue_new_children, stats, compute_root_options);
             expanded++;
         }
 
@@ -2010,11 +2108,14 @@ IntrusivePtr<State> optimal_schedule(FunctionDAG &dag,
         num_passes = std::atoi(num_passes_str.c_str());
     }
 
+    NodeMap<std::map<int, std::vector<IntrusivePtr<const LoopNest>>>> compute_root_options;
+    compute_root_options.make_large(dag.nodes.size());
+
     for (int i = 0; i < num_passes; i++) {
         ProgressBar tick;
 
         auto pass = optimal_schedule_pass(dag, outputs, params, target, cost_model,
-            rng, beam_size, i, num_passes, tick, permitted_hashes, stats);
+            rng, beam_size, i, num_passes, tick, permitted_hashes, stats, compute_root_options);
 
         tick.clear();
 

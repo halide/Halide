@@ -579,6 +579,24 @@ void LoopNest::copy_from(const LoopNest &n) {
     features.clear();
 };
 
+void LoopNest::copy_from_including_features(const LoopNest &n) {
+    size = n.size;
+    children = n.children;
+    inlined = n.inlined;
+    store_at = n.store_at;
+    bounds = n.bounds;
+    node = n.node;
+    stage = n.stage;
+    innermost = n.innermost;
+    tileable = n.tileable;
+    parallel = n.parallel;
+    vector_dim = n.vector_dim;
+    vectorized_loop_index = n.vectorized_loop_index;
+    gpu_label = n.gpu_label;
+    features = n.features;
+    feature_intermediates = n.feature_intermediates;
+};
+
 // Hash the loop structure and sizes up to a fixed depth. This is
 // used as the hash function for the coarse-to-fine beam search in
 // the paper.

@@ -277,6 +277,7 @@ struct LoopNest {
                                 vector<int64_t> max_size);
 
     void copy_from(const LoopNest &n);
+    void copy_from_including_features(const LoopNest &n);
 
     static void hash_combine(uint64_t &h, uint64_t next) {
         // From boost
