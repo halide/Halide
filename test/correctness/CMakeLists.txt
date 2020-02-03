@@ -277,6 +277,7 @@ tests(GROUPS correctness travis
         stmt_to_html.cpp
         storage_folding.cpp
         store_in.cpp
+        store_with.cpp
         stream_compaction.cpp
         strict_float_bounds.cpp
         strict_float.cpp
