@@ -27,14 +27,15 @@ class TargetMachine;
 class TargetOptions;
 class Type;
 class Value;
-template<typename, typename> class IRBuilder;
+template<typename, typename>
+class IRBuilder;
 }  // namespace llvm
 
 namespace Halide {
 namespace Internal {
 
 /** The llvm type of a struct containing all of the externally referenced state of a Closure. */
-llvm::StructType *build_closure_type(const Closure &closure, llvm::StructType *buffer_t, llvm::LLVMContext *context);
+llvm::StructType *build_closure_type(const Closure &closure, llvm::StructType *halide_buffer_t_type, llvm::LLVMContext *context);
 
 /** Emit code that builds a struct containing all the externally
  * referenced state. Requires you to pass it a type and struct to fill in,
@@ -44,7 +45,7 @@ void pack_closure(llvm::StructType *type,
                   llvm::Value *dst,
                   const Closure &closure,
                   const Scope<llvm::Value *> &src,
-                  llvm::StructType *buffer_t,
+                  llvm::StructType *halide_buffer_t_type,
                   llvm::IRBuilder<llvm::ConstantFolder, llvm::IRBuilderDefaultInserter> *builder);
 
 /** Emit code that unpacks a struct containing all the externally
@@ -73,8 +74,8 @@ bool can_allocation_fit_on_stack(int64_t size);
  * Can introduce mulhi_shr and sorted_avg intrinsics as well as those from the
  * lower_euclidean_ operation -- div_round_to_zero or mod_round_to_zero. */
 ///@{
- Expr lower_int_uint_div(Expr a, Expr b);
- Expr lower_int_uint_mod(Expr a, Expr b);
+Expr lower_int_uint_div(Expr a, Expr b);
+Expr lower_int_uint_mod(Expr a, Expr b);
 ///@}
 
 /** Given a Halide Euclidean division/mod operation, define it in terms of
@@ -82,6 +83,13 @@ bool can_allocation_fit_on_stack(int64_t size);
 ///@{
 Expr lower_euclidean_div(Expr a, Expr b);
 Expr lower_euclidean_mod(Expr a, Expr b);
+///@}
+
+/** Given a Halide shift operation with a signed shift amount (may be negative), define
+ * an equivalent expression using only shifts by unsigned amounts. */
+///@{
+Expr lower_signed_shift_left(Expr a, Expr b);
+Expr lower_signed_shift_right(Expr a, Expr b);
 ///@}
 
 /** Replace predicated loads/stores with unpredicated equivalents

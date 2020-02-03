@@ -12,13 +12,13 @@ set(RUNTIME_CPP
   aarch64_cpu_features
   alignment_128
   alignment_32
+  allocation_cache
   alignment_64
   android_clock
   android_host_cpu_count
   android_io
-  android_opengl_context
   arm_cpu_features
-  buffer_t
+  halide_buffer_t
   cache
   can_use_target
   cuda
@@ -41,7 +41,6 @@ set(RUNTIME_CPP
   ios_io
   linux_clock
   linux_host_cpu_count
-  linux_opengl_context
   linux_yield
   matlab
   metadata
@@ -54,10 +53,11 @@ set(RUNTIME_CPP
   module_jit_ref_count
   msan
   msan_stubs
-  old_buffer_t
   opencl
   opengl
   openglcompute
+  opengl_egl_context
+  opengl_glx_context
   osx_clock
   osx_get_symbol
   osx_host_cpu_count
@@ -142,6 +142,7 @@ endif()
 # Commands to build initial module objects.
 file(MAKE_DIRECTORY "${PROJECT_BINARY_DIR}/${PROJECT_NAME}.build")
 set (CXX_WARNING_FLAGS -Wall -Werror -Wno-unused-function -Wcast-qual)
+set (RUNTIME_CXX_FLAGS -O3 -fno-vectorize -ffreestanding -fno-blocks -fno-exceptions -fno-unwind-tables -fpic -std=gnu++98)
 set (INITMOD_PREFIX "_initmod_")
 set (ARCHS 32 64)
 set(INITIAL_MODULES )
@@ -172,36 +173,43 @@ function(add_runtime_modules TARGET_RUNTIME_FILES TARGET_RUNTIME_DIR)
       # -std=gnu++98 is deliberate; we do NOT want c++11 here,
       # as we don't want static locals to get thread synchronization stuff.
       add_custom_command(OUTPUT "${LL_D}"
+                         # COMMENT "${SOURCE} -> ${LL_D}"
                          DEPENDS "${SOURCE}"
-                         COMMAND ${CLANG} ${CXX_WARNING_FLAGS} ${RUNTIME_DEBUG_FLAG} -DDEBUG_RUNTIME -O3 -fno-ms-compatibility -ffreestanding -fno-blocks -fno-exceptions -fno-unwind-tables -std=gnu++98 -m${j} -target "${TARGET}" "-I${TARGET_RUNTIME_DIR}" -DCOMPILING_HALIDE_RUNTIME "-DLLVM_VERSION=${LLVM_VERSION}" -DBITS_${j} -emit-llvm -S "${SOURCE}" -o "${LL_D}"
-                         COMMENT "${SOURCE} -> ${LL_D}"
+                         VERBATIM
+                         COMMAND ${CLANG} ${CXX_WARNING_FLAGS} ${RUNTIME_DEBUG_FLAG} -DDEBUG_RUNTIME ${RUNTIME_CXX_FLAGS} -m${j} -target ${TARGET} -I${TARGET_RUNTIME_DIR} -DCOMPILING_HALIDE_RUNTIME -DLLVM_VERSION=${LLVM_VERSION} -DBITS_${j} -emit-llvm -S ${SOURCE} -o ${LL_D}
                          # Make sure that the output of this command also depends
                          # on the header files that ${SOURCE} uses
                          # FIXME: Only works for makefile generator
                          IMPLICIT_DEPENDS CXX "${SOURCE}"
                         )
       add_custom_command(OUTPUT "${LL}"
+                         # COMMENT "${SOURCE} -> ${LL}"
                          DEPENDS "${SOURCE}"
-                         COMMAND ${CLANG} ${CXX_WARNING_FLAGS} -O3 -fno-ms-compatibility -ffreestanding -fno-blocks -fno-exceptions -fno-unwind-tables -std=gnu++98 -m${j} -target "${TARGET}" "-I${TARGET_RUNTIME_DIR}" -DCOMPILING_HALIDE_RUNTIME "-DLLVM_VERSION=${LLVM_VERSION}" -DBITS_${j} -emit-llvm -S "${SOURCE}" -o "${LL}"
-                         COMMENT "${SOURCE} -> ${LL}")
+                         VERBATIM
+                         COMMAND ${CLANG} ${CXX_WARNING_FLAGS} ${RUNTIME_CXX_FLAGS} -m${j} -target ${TARGET} -I${TARGET_RUNTIME_DIR} -DCOMPILING_HALIDE_RUNTIME -DLLVM_VERSION=${LLVM_VERSION} -DBITS_${j} -emit-llvm -S ${SOURCE} -o ${LL}
+                         )
 
       add_custom_command(OUTPUT "${BC_D}"
+                         # COMMENT "${LL_D} -> ${BC_D}"
                          DEPENDS "${LL_D}"
                          COMMAND "${LLVM_AS}" "${LL_D}" -o "${BC_D}"
-                         COMMENT "${LL_D} -> ${BC_D}")
+                         )
       add_custom_command(OUTPUT "${BC}"
+                         # COMMENT "${LL} -> ${BC}"
                          DEPENDS "${LL}"
                          COMMAND "${LLVM_AS}" "${LL}" -o "${BC}"
-                         COMMENT "${LL} -> ${BC}")
+                         )
 
       add_custom_command(OUTPUT "${INITMOD_D}"
-                         DEPENDS "${BC_D}"
+                         # COMMENT "${BC_D} -> ${INITMOD_D}"
+                         DEPENDS "${BC_D}" binary2cpp
                          COMMAND binary2cpp "halide_internal_initmod_${i}_${j}_debug" < "${BC_D}" > "${INITMOD_D}"
-                         COMMENT "${BC_D} -> ${INITMOD_D}")
+                         )
       add_custom_command(OUTPUT "${INITMOD}"
-                         DEPENDS "${BC}"
+                         # COMMENT "${BC} -> ${INITMOD}"
+                         DEPENDS "${BC}" binary2cpp
                          COMMAND binary2cpp "halide_internal_initmod_${i}_${j}" < "${BC}" > "${INITMOD}"
-                         COMMENT "${BC} -> ${INITMOD}")
+                         )
       list(APPEND INITIAL_MODULES ${INITMOD})
       list(APPEND INITIAL_MODULES ${INITMOD_D})
     endforeach()
@@ -218,28 +226,32 @@ foreach (i ${RUNTIME_LL} )
   set(BC "${PROJECT_BINARY_DIR}/${PROJECT_NAME}.build/${NATIVE_INT_DIR}initmod.${i}.bc")
   set(INITMOD "${INITMOD_PREFIX}${i}.cpp")
   add_custom_command(OUTPUT "${BC}"
+                     # COMMENT "${LL} -> ${BC}"
                      DEPENDS "${LL}"
                      COMMAND "${LLVM_AS}" "${LL}" -o "${BC}"
-                     COMMENT "${LL} -> ${BC}")
+                     )
   add_custom_command(OUTPUT "${INITMOD}"
-                     DEPENDS "${BC}"
+                     # COMMENT "${BC} -> ${INITMOD}"
+                     DEPENDS "${BC}" binary2cpp
                      COMMAND binary2cpp "halide_internal_initmod_${i}_ll" < "${BC}" > "${INITMOD}"
-                     COMMENT "${BC} -> ${INITMOD}")
+                     )
   list(APPEND INITIAL_MODULES "${INITMOD}")
 endforeach()
 foreach (i ${RUNTIME_BC} )
   set(INITMOD "${INITMOD_PREFIX}ptx_${i}.cpp")
   add_custom_command(OUTPUT "${INITMOD}"
+                     # COMMENT "Building initial module ptx_${i}..."
+                     DEPENDS binary2cpp
                      COMMAND binary2cpp "halide_internal_initmod_ptx_${i}_ll" < "${NATIVE_RUNTIME_DIR}nvidia_libdevice_bitcode/libdevice.${i}.10.bc" > "${INITMOD}"
-                     COMMENT "Building initial module ptx_${i}..."
                      VERBATIM)
   list(APPEND INITIAL_MODULES "${INITMOD}")
 endforeach()
 
 add_custom_command(OUTPUT "${INITMOD_PREFIX}inlined_c.cpp"
-  DEPENDS "${NATIVE_RUNTIME_DIR}buffer_t.cpp"
-  COMMAND binary2cpp "halide_internal_initmod_inlined_c" < "${NATIVE_RUNTIME_DIR}buffer_t.cpp" > "${INITMOD_PREFIX}inlined_c.cpp"
-  COMMENT "buffer_t.cpp -> ${INITMOD_PREFIX}inlined_c.cpp")
+  # COMMENT "halide_buffer_t.cpp -> ${INITMOD_PREFIX}inlined_c.cpp"
+  DEPENDS "${NATIVE_RUNTIME_DIR}halide_buffer_t.cpp" binary2cpp
+  COMMAND binary2cpp "halide_internal_initmod_inlined_c" < "${NATIVE_RUNTIME_DIR}halide_buffer_t.cpp" > "${INITMOD_PREFIX}inlined_c.cpp"
+  )
 list(APPEND INITIAL_MODULES "${INITMOD_PREFIX}inlined_c.cpp")
 
 set(RUNTIME_HEADER_FILES
@@ -254,14 +266,17 @@ set(RUNTIME_HEADER_FILES
   HalideRuntimeD3D12Compute.h
   HalideRuntimeQurt.h
   HalideBuffer.h
+  HalidePyTorchHelpers.h
+  HalidePyTorchCudaHelpers.h
 )
 
 foreach (i ${RUNTIME_HEADER_FILES})
   string(REPLACE "." "_" SYM_NAME "${i}")
   add_custom_command(OUTPUT "${INITMOD_PREFIX}${SYM_NAME}.cpp"
-    DEPENDS "${NATIVE_RUNTIME_DIR}${i}"
+    # COMMENT "${i} -> ${INITMOD_PREFIX}${SYM_NAME}.cpp"
+    DEPENDS "${NATIVE_RUNTIME_DIR}${i}" binary2cpp
     COMMAND binary2cpp "halide_internal_runtime_header_${SYM_NAME}" < "${NATIVE_RUNTIME_DIR}${i}" > "${INITMOD_PREFIX}${SYM_NAME}.cpp"
-    COMMENT "${i} -> ${INITMOD_PREFIX}${SYM_NAME}.cpp")
+    )
   list(APPEND INITIAL_MODULES "${INITMOD_PREFIX}${SYM_NAME}.cpp")
 endforeach()
 
@@ -269,6 +284,7 @@ endforeach()
 # Don't include anything here that includes llvm headers.
 # Keep this list sorted in alphabetical order.
 set(HEADER_FILES
+  AddAtomicMutex.h
   AddImageChecks.h
   AddParameterChecks.h
   AlignLoads.h
@@ -302,6 +318,7 @@ set(HEADER_FILES
   CodeGen_Posix.h
   CodeGen_PowerPC.h
   CodeGen_PTX_Dev.h
+  CodeGen_PyTorch.h
   CodeGen_RISCV.h
   CodeGen_WebAssembly.h
   CodeGen_X86.h
@@ -321,6 +338,7 @@ set(HEADER_FILES
   EarlyFree.h
   Elf.h
   EliminateBoolVectors.h
+  EmulateFloat16Math.h
   Error.h
   Expr.h
   ExprUsesVar.h
@@ -370,7 +388,6 @@ set(HEADER_FILES
   Monotonic.h
   ObjectInstanceRegistry.h
   OutputImageParam.h
-  Outputs.h
   ParallelRVar.h
   Param.h
   Parameter.h
@@ -384,6 +401,7 @@ set(HEADER_FILES
   Qualify.h
   Random.h
   RDom.h
+  Realization.h
   RealizationOrder.h
   Reduction.h
   RegionCosts.h
@@ -425,7 +443,6 @@ set(HEADER_FILES
   VectorizeLoops.h
   WasmExecutor.h
   WrapCalls.h
-  WrapExternStages.h
 )
 
 file(MAKE_DIRECTORY "${CMAKE_BINARY_DIR}/include")
@@ -445,6 +462,7 @@ endforeach()
 
 # Keep this list sorted in alphabetical order.
 add_library(Halide ${HALIDE_LIBRARY_TYPE}
+  AddAtomicMutex.cpp
   AddImageChecks.cpp
   AddParameterChecks.cpp
   AlignLoads.cpp
@@ -479,6 +497,7 @@ add_library(Halide ${HALIDE_LIBRARY_TYPE}
   CodeGen_Posix.cpp
   CodeGen_PowerPC.cpp
   CodeGen_PTX_Dev.cpp
+  CodeGen_PyTorch.cpp
   CodeGen_RISCV.cpp
   CodeGen_WebAssembly.cpp
   CodeGen_X86.cpp
@@ -497,6 +516,7 @@ add_library(Halide ${HALIDE_LIBRARY_TYPE}
   EarlyFree.cpp
   Elf.cpp
   EliminateBoolVectors.cpp
+  EmulateFloat16Math.cpp
   Error.cpp
   FastIntegerDivide.cpp
   FindCalls.cpp
@@ -608,7 +628,6 @@ add_library(Halide ${HALIDE_LIBRARY_TYPE}
   VectorizeLoops.cpp
   WasmExecutor.cpp
   WrapCalls.cpp
-  WrapExternStages.cpp
   ${HEADER_FILES}
   ${INITIAL_MODULES}
 )
@@ -621,12 +640,7 @@ target_compile_options(Halide PUBLIC $<$<CXX_COMPILER_ID:MSVC>:/MP>)
 
 # Define Halide_SHARED or Halide_STATIC depending on library type
 target_compile_definitions(Halide PRIVATE "-DHalide_${HALIDE_LIBRARY_TYPE}")
-# Ensure that these tools are build first
-add_dependencies(Halide
-  binary2cpp
-  build_halide_h
-  HalideIncludes
-)
+add_dependencies(Halide HalideIncludes)
 
 # List of LLVM Components required
 # This list will be appended to depending on the targets we need to support
@@ -740,30 +754,31 @@ if (MSVC)
 else()
   if (NOT HALIDE_ENABLE_RTTI)
     if (NOT MSVC)
-      target_compile_options(Halide PUBLIC "-fno-rtti")
+      target_compile_options(Halide PUBLIC $<$<COMPILE_LANGUAGE:CXX>:-fno-rtti>)
     else()
-      target_compile_options(Halide PUBLIC "/GR-")
+      target_compile_options(Halide PUBLIC $<$<COMPILE_LANGUAGE:CXX>:/GR- >)
     endif()
   endif()
 endif()
 
-# Get the LLVM libraries we need
-llvm_map_components_to_libnames(LIBS ${LLVM_COMPONENTS})
+# When building a shared library the LLVM libraries will either be
+# embedded or linked into the Halide library. When building a static library
+# LLVM is not embedded/linked but CMake knows that when building an executable
+# against Halide static library that it needs to link LLVM too, IFF the
+# halide is being built as a subproject. (Which means, statically-built Halide
+# doesn't work out-of-installation directory.)
+# FIXME: migrate to proper cmake config magic.
+if(LLVM_USE_SHARED_LLVM_LIBRARY)
+  set(LLVM_USE_SHARED "USE_SHARED")
+endif()
+llvm_config(Halide ${LLVM_USE_SHARED} ${LLVM_COMPONENTS})
 
-# When building a shared library the LLVM libraries will be
-# embedded in the Halide library. When building a static library
-# LLVM is not embedded but CMake knows that when building an executable
-# against the Halide static library that it needs to link LLVM too so
-# PRIVATE scope is the correct choice here.
-target_link_libraries(Halide PRIVATE ${LIBS})
-
-if (NOT MSVC)
+if (NOT MSVC AND NOT LLVM_USE_SHARED_LLVM_LIBRARY)
   set(LLVM_CONFIG ${LLVM_TOOLS_BINARY_DIR}/llvm-config)
   execute_process(COMMAND "${LLVM_CONFIG}" --system-libs ${LLVM_COMPONENTS} OUTPUT_VARIABLE EXTRA_LIBS)
-  string(STRIP EXTRA_LIBS "${EXTRA_LIBS}")
-  string(REPLACE "-l" ";" EXTRA_LIBS "${EXTRA_LIBS}")
+  string(STRIP EXTRA_LIBS "${EXTRA_LIBS}")   # strip whitespace from start & end
   string(REPLACE "\n" "" EXTRA_LIBS "${EXTRA_LIBS}")
-  string(REPLACE " " "" EXTRA_LIBS "${EXTRA_LIBS}")
+  string(REPLACE " " ";" EXTRA_LIBS "${EXTRA_LIBS}")  # convert into a list
   target_link_libraries(Halide PUBLIC ${EXTRA_LIBS})
 endif()
 

@@ -1,8 +1,31 @@
 #ifndef PERFECT_HASH_MAP_H
 #define PERFECT_HASH_MAP_H
 
-#include <vector>
 #include <algorithm>
+#include <iostream>
+#include <vector>
+
+// Avoid a dependence on libHalide by defining a local variant we can use
+struct PerfectHashMapAsserter {
+    const bool c;
+
+    PerfectHashMapAsserter(bool c)
+        : c(c) {
+    }
+
+    template<typename T>
+    PerfectHashMapAsserter &operator<<(T &&t) {
+        if (!c) {
+            std::cerr << t;
+        }
+        return *this;
+    }
+    ~PerfectHashMapAsserter() {
+        if (!c) {
+            exit(-1);
+        }
+    }
+};
 
 // A specialized hash map used in the autoscheduler. It can only grow,
 // and it requires a perfect hash in the form of "id" and "max_id"
@@ -11,8 +34,9 @@
 // think that might be happening, uncomment the assertions below for
 // some extra checking.
 
-template<typename K, typename T, int max_small_size = 4>
+template<typename K, typename T, int max_small_size = 4, typename phm_assert = PerfectHashMapAsserter>
 class PerfectHashMap {
+
     using storage_type = std::vector<std::pair<const K *, T>>;
 
     storage_type storage;
@@ -23,7 +47,7 @@ class PerfectHashMap {
     // to allow for bounds checks when debugging this.
     std::pair<const K *, T> &storage_bucket(int i) {
         /*
-        internal_assert(i >= 0 && i < (int)storage.size())
+        phm_assert(i >= 0 && i < (int)storage.size())
             << "Out of bounds access: " << i << " " << storage.size() << "\n";
         */
         return storage[i];
@@ -31,16 +55,16 @@ class PerfectHashMap {
 
     const std::pair<const K *, T> &storage_bucket(int i) const {
         /*
-        internal_assert(i >= 0 && i < (int)storage.size())
+        phm_assert(i >= 0 && i < (int)storage.size())
             << "Out of bounds access: " << i << " " << storage.size() << "\n";
         */
         return storage[i];
     }
 
     enum {
-        Empty = 0, // No storage allocated
-        Small = 1, // Storage is just an array of key/value pairs
-        Large = 2  // Storage is an array with empty slots, indexed by the 'id' field of each key
+        Empty = 0,  // No storage allocated
+        Small = 1,  // Storage is just an array of key/value pairs
+        Large = 2   // Storage is an array with empty slots, indexed by the 'id' field of each key
     } state = Empty;
 
     void upgrade_from_empty_to_small() {
@@ -54,7 +78,7 @@ class PerfectHashMap {
     }
 
     void upgrade_from_small_to_large(int n) {
-        internal_assert(occupied <= max_small_size) << occupied << " " << max_small_size << "\n";
+        phm_assert(occupied <= max_small_size) << occupied << " " << max_small_size << "\n";
         storage_type tmp(n);
         state = Large;
         tmp.swap(storage);
@@ -75,12 +99,12 @@ class PerfectHashMap {
     }
 
     const T &get_empty(const K *n) const {
-        internal_error << "Calling get on an empty PerfectHashMap";
+        phm_assert(0) << "Calling get on an empty PerfectHashMap";
         return unreachable_value();
     }
 
     T &get_empty(const K *n) {
-        internal_error << "Calling get on an empty PerfectHashMap";
+        phm_assert(0) << "Calling get on an empty PerfectHashMap";
         return unreachable_value();
     }
 
@@ -178,9 +202,9 @@ class PerfectHashMap {
 
     void check_key(const K *n) const {
         /*
-        internal_assert(n->id >= 0 && n->id < n->max_id)
+        phm_assert(n->id >= 0 && n->id < n->max_id)
             << "Invalid hash key: " << n->id << " " << n->max_id << "\n";
-        internal_assert(state != Large || (int)storage.size() == n->max_id)
+        phm_assert(state != Large || (int)storage.size() == n->max_id)
             << "Inconsistent key count: " << n->max_id << " vs " << storage.size() << "\n";
         */
     }
@@ -195,19 +219,24 @@ class PerfectHashMap {
     }
 
 public:
-
     // Jump straight to the large state
     void make_large(int n) {
-        if (state == Empty) upgrade_from_empty_to_large(n);
-        else if (state == Small) upgrade_from_small_to_large(n);
+        if (state == Empty) {
+            upgrade_from_empty_to_large(n);
+        } else if (state == Small) {
+            upgrade_from_small_to_large(n);
+        }
     }
 
     T &emplace(const K *n, T &&t) {
         check_key(n);
-        switch(state) {
-        case Empty: return emplace_empty(n, std::move(t));
-        case Small: return emplace_small(n, std::move(t));
-        case Large: return emplace_large(n, std::move(t));
+        switch (state) {
+        case Empty:
+            return emplace_empty(n, std::move(t));
+        case Small:
+            return emplace_small(n, std::move(t));
+        case Large:
+            return emplace_large(n, std::move(t));
         }
         return unreachable_value();
     }
@@ -215,52 +244,67 @@ public:
     T &insert(const K *n, const T &t) {
         check_key(n);
         T tmp(t);
-        switch(state) {
-        case Empty: return emplace_empty(n, std::move(tmp));
-        case Small: return emplace_small(n, std::move(tmp));
-        case Large: return emplace_large(n, std::move(tmp));
+        switch (state) {
+        case Empty:
+            return emplace_empty(n, std::move(tmp));
+        case Small:
+            return emplace_small(n, std::move(tmp));
+        case Large:
+            return emplace_large(n, std::move(tmp));
         }
         return unreachable_value();
     }
 
     const T &get(const K *n) const {
         check_key(n);
-        switch(state) {
-        case Empty: return get_empty(n);
-        case Small: return get_small(n);
-        case Large: return get_large(n);
+        switch (state) {
+        case Empty:
+            return get_empty(n);
+        case Small:
+            return get_small(n);
+        case Large:
+            return get_large(n);
         }
         return unreachable_value();
     }
 
     T &get(const K *n) {
         check_key(n);
-        switch(state) {
-        case Empty: return get_empty(n);
-        case Small: return get_small(n);
-        case Large: return get_large(n);
+        switch (state) {
+        case Empty:
+            return get_empty(n);
+        case Small:
+            return get_small(n);
+        case Large:
+            return get_large(n);
         }
         return unreachable_value();
     }
 
     T &get_or_create(const K *n) {
         check_key(n);
-        switch(state) {
-        case Empty: return get_or_create_empty(n);
-        case Small: return get_or_create_small(n);
-        case Large: return get_or_create_large(n);
+        switch (state) {
+        case Empty:
+            return get_or_create_empty(n);
+        case Small:
+            return get_or_create_small(n);
+        case Large:
+            return get_or_create_large(n);
         }
         return unreachable_value();
     }
 
     bool contains(const K *n) const {
         check_key(n);
-        switch(state) {
-        case Empty: return contains_empty(n);
-        case Small: return contains_small(n);
-        case Large: return contains_large(n);
+        switch (state) {
+        case Empty:
+            return contains_empty(n);
+        case Small:
+            return contains_small(n);
+        case Large:
+            return contains_large(n);
         }
-        return false; // Unreachable
+        return false;  // Unreachable
     }
 
     size_t size() const {
@@ -341,7 +385,7 @@ public:
         it.iter = storage.data();
         it.end = it.iter + storage.size();
         if (it.key() == nullptr) it++;
-        internal_assert(it.iter == it.end || it.key());
+        phm_assert(it.iter == it.end || it.key());
         return it;
     }
 
@@ -357,7 +401,7 @@ public:
         it.iter = storage.data();
         it.end = it.iter + storage.size();
         if (it.key() == nullptr) it++;
-        internal_assert(it.iter == it.end || it.key());
+        phm_assert(it.iter == it.end || it.key());
         return it;
     }
 

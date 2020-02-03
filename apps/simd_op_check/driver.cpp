@@ -1,7 +1,7 @@
-#include <stdlib.h>
-#include <stdio.h>
-#include <HalideRuntime.h>
 #include "filter_headers.h"
+#include <HalideRuntime.h>
+#include <stdio.h>
+#include <stdlib.h>
 
 #ifndef __APPLE__
 extern "C" void *memalign(size_t alignment, size_t size);
@@ -9,17 +9,17 @@ extern "C" void *memalign(size_t alignment, size_t size);
 
 struct filter {
     const char *name;
-    int (*fn)(halide_buffer_t *, // float32
-              halide_buffer_t *, // float64
-              halide_buffer_t *, // int8
-              halide_buffer_t *, // uint8
-              halide_buffer_t *, // int16
-              halide_buffer_t *, // uint16
-              halide_buffer_t *, // int32
-              halide_buffer_t *, // uint32
-              halide_buffer_t *, // int64
-              halide_buffer_t *, // uint64
-              halide_buffer_t *); // output
+    int (*fn)(halide_buffer_t *,   // float32
+              halide_buffer_t *,   // float64
+              halide_buffer_t *,   // int8
+              halide_buffer_t *,   // uint8
+              halide_buffer_t *,   // int16
+              halide_buffer_t *,   // uint16
+              halide_buffer_t *,   // int32
+              halide_buffer_t *,   // uint32
+              halide_buffer_t *,   // int64
+              halide_buffer_t *,   // uint64
+              halide_buffer_t *);  // output
 };
 
 template<typename T>
@@ -37,19 +37,19 @@ halide_buffer_t make_buffer(int w, int h) {
     T *mem = NULL;
 #ifdef __APPLE__
     // memalign() isn't present on OSX, but posix_memalign is
-    int result = posix_memalign((void **)&mem, 128, w*h*sizeof(T));
+    int result = posix_memalign((void **)&mem, 128, w * h * sizeof(T));
     if (result != 0 || mem == NULL) {
         exit(-1);
     }
 #else
-    mem = (T *)memalign(128, w*h*sizeof(T));
+    mem = (T *)memalign(128, w * h * sizeof(T));
     if (mem == NULL) {
         exit(-1);
     }
 #endif
 
     halide_buffer_t buf = {0};
-    buf.dim = (halide_dimension_t *)malloc(sizeof(halide_dimension_t)*2);
+    buf.dim = (halide_dimension_t *)malloc(sizeof(halide_dimension_t) * 2);
     buf.host = (uint8_t *)mem;
     buf.dim[0].extent = w;
     buf.dim[1].extent = h;
@@ -59,7 +59,7 @@ halide_buffer_t make_buffer(int w, int h) {
     buf.dim[0].min = -128;
     buf.dim[1].min = 0;
 
-    for (int i = 0; i < w*h; i++) {
+    for (int i = 0; i < w * h; i++) {
         mem[i] = rand_value<T>();
     }
 
@@ -82,8 +82,7 @@ int main(int argc, char **argv) {
         make_buffer<int32_t>(W, H),
         make_buffer<uint32_t>(W, H),
         make_buffer<int64_t>(W, H),
-        make_buffer<uint64_t>(W, H)
-    };
+        make_buffer<uint64_t>(W, H)};
 
     halide_buffer_t out = make_buffer<double>(1, 1);
 
@@ -109,7 +108,7 @@ int main(int argc, char **argv) {
         }
     }
 
-    for (int i = 0; i < sizeof(bufs)/sizeof(halide_buffer_t); i++) {
+    for (int i = 0; i < sizeof(bufs) / sizeof(halide_buffer_t); i++) {
         free(bufs[i].dim);
         free(bufs[i].host);
     }
@@ -117,10 +116,10 @@ int main(int argc, char **argv) {
     free(out.host);
 
     if (!error) {
-        printf ("Success!\n");
+        printf("Success!\n");
         return 0;
     } else {
-        printf ("Error occurred\n");
+        printf("Error occurred\n");
         return -1;
     }
 }

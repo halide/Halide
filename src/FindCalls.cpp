@@ -7,7 +7,6 @@ namespace Internal {
 using std::map;
 using std::pair;
 using std::string;
-using std::vector;
 
 namespace {
 /* Find all the internal halide calls in an expr */

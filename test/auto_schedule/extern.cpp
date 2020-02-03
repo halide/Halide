@@ -8,24 +8,17 @@
 #endif
 
 // An extern stage that translates.
-extern "C" DLLEXPORT int translate(buffer_t *in, int dx, int dy, buffer_t *out) {
-    if (in->host == nullptr) {
-        in->min[0] = out->min[0] + dx;
-        in->min[1] = out->min[1] + dy;
-        in->extent[0] = out->extent[0];
-        in->extent[1] = out->extent[1];
+extern "C" DLLEXPORT int translate(halide_buffer_t *in, int dx, int dy, halide_buffer_t *out) {
+
+    if (in->is_bounds_query()) {
+        in->dim[0].min = out->dim[0].min + dx;
+        in->dim[1].min = out->dim[1].min + dy;
+        in->dim[0].extent = out->dim[0].extent;
+        in->dim[1].extent = out->dim[1].extent;
     } else {
-        assert(in->elem_size == 1);
-        assert(out->elem_size == 1);
-        for (int y = out->min[1]; y < out->min[1] + out->extent[1]; y++) {
-            for (int x = out->min[0]; x < out->min[0] + out->extent[0]; x++) {
-                int in_x = x + dx;
-                int in_y = y + dy;
-                uint8_t *in_ptr = in->host + (in_x - in->min[0])*in->stride[0] + (in_y - in->min[1])*in->stride[1];
-                uint8_t *out_ptr = out->host + (x - out->min[0])*out->stride[0] + (y - out->min[1])*out->stride[1];
-                *out_ptr = *in_ptr;
-            }
-        }
+        Halide::Runtime::Buffer<uint8_t> out_buf(*out);
+        out_buf.translate(dx, dy);
+        out_buf.copy_from(Halide::Runtime::Buffer<uint8_t>(*in));
     }
 
     return 0;
@@ -56,11 +49,10 @@ void test_case_1() {
     g(x, y) = f1(x, y) + f2(x, y);
 
     // Provide estimates on the pipeline output
-    g.estimate(x, 0, 1000).estimate(y, 0, 1000);
+    g.set_estimates({{0, 1000}, {0, 1000}});
 
     // Provide estimates on the ImageParam
-    input.dim(0).set_bounds_estimate(0, 1000);
-    input.dim(1).set_bounds_estimate(0, 1000);
+    input.set_estimates({{0, 1000}, {0, 1000}});
 
     // Auto-schedule the pipeline
     Target target = get_jit_target_from_environment();
@@ -89,9 +81,8 @@ void test_case_2() {
 
     g(x, y) = f2(x, y);
 
-    g.estimate(x, 0, 10).estimate(y, 0, 10);
-    input.dim(0).set_bounds_estimate(0, 10);
-    input.dim(1).set_bounds_estimate(0, 10);
+    g.set_estimates({{0, 10}, {0, 10}});
+    input.set_estimates({{0, 10}, {0, 10}});
 
     // Auto-schedule the pipeline
     Target target = get_jit_target_from_environment();
@@ -122,9 +113,8 @@ void test_case_3() {
 
     g(x, y) = f2(x, y);
 
-    g.estimate(x, 0, 10).estimate(y, 0, 10);
-    input.dim(0).set_bounds_estimate(0, 10);
-    input.dim(1).set_bounds_estimate(0, 10);
+    g.set_estimates({{0, 10}, {0, 10}});
+    input.set_estimates({{0, 10}, {0, 10}});
 
     // Auto-schedule the pipeline
     Target target = get_jit_target_from_environment();

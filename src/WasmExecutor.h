@@ -34,8 +34,7 @@ struct WasmModule {
         const std::vector<Argument> &arguments,
         const std::string &fn_name,
         const std::map<std::string, JITExtern> &externs,
-        const std::vector<JITModule> &extern_deps
-    );
+        const std::vector<JITModule> &extern_deps);
 
     /** Run generated previously compiled wasm code with a set of arguments. */
     int run(const void **args);

@@ -224,9 +224,9 @@ declare <64 x i32> @llvm.hexagon.V6.vzb.128B(<32 x i32>)
 declare <64 x i32> @llvm.hexagon.V6.vsb.128B(<32 x i32>)
 declare <32 x i32> @llvm.hexagon.V6.vshuffeb.128B(<32 x i32>, <32 x i32>)
 
-define weak_odr <128 x i8> @halide.hexagon.shl.vub.ub(<128 x i8> %a, i8 %b) nounwind uwtable readnone alwaysinline {
+define weak_odr <128 x i8> @halide.hexagon.shl.vub.b(<128 x i8> %a, i8 %b) nounwind uwtable readnone alwaysinline {
   %a_32 = bitcast <128 x i8> %a to <32 x i32>
-  %bw = zext i8 %b to i32
+  %bw = sext i8 %b to i32
   %aw = call <64 x i32> @llvm.hexagon.V6.vzb.128B(<32 x i32> %a_32)
   %aw_lo = call <32 x i32> @llvm.hexagon.V6.lo.128B(<64 x i32> %aw)
   %sw_lo = call <32 x i32> @llvm.hexagon.V6.vaslh.128B(<32 x i32> %aw_lo, i32 %bw)
@@ -239,13 +239,13 @@ define weak_odr <128 x i8> @halide.hexagon.shl.vub.ub(<128 x i8> %a, i8 %b) noun
 
 define weak_odr <128 x i8> @halide.hexagon.shl.vb.b(<128 x i8> %a, i8 %b) nounwind uwtable readnone alwaysinline {
   ; A shift left is the same whether it is signed or not.
-  %u = tail call <128 x i8> @halide.hexagon.shl.vub.ub(<128 x i8> %a, i8 %b)
+  %u = tail call <128 x i8> @halide.hexagon.shl.vub.b(<128 x i8> %a, i8 %b)
   ret <128 x i8> %u
 }
 
-define weak_odr <128 x i8> @halide.hexagon.shr.vub.ub(<128 x i8> %a, i8 %b) nounwind uwtable readnone alwaysinline {
+define weak_odr <128 x i8> @halide.hexagon.shr.vub.b(<128 x i8> %a, i8 %b) nounwind uwtable readnone alwaysinline {
   %a_32 = bitcast <128 x i8> %a to <32 x i32>
-  %bw = zext i8 %b to i32
+  %bw = sext i8 %b to i32
   %aw = call <64 x i32> @llvm.hexagon.V6.vzb.128B(<32 x i32> %a_32)
   %aw_lo = call <32 x i32> @llvm.hexagon.V6.lo.128B(<64 x i32> %aw)
   %sw_lo = call <32 x i32> @llvm.hexagon.V6.vlsrh.128B(<32 x i32> %aw_lo, i32 %bw)
@@ -256,9 +256,9 @@ define weak_odr <128 x i8> @halide.hexagon.shr.vub.ub(<128 x i8> %a, i8 %b) noun
   ret <128 x i8> %r
 }
 
-define weak_odr <128 x i8> @halide.hexagon.shr.vb.ub(<128 x i8> %a, i8 %b) nounwind uwtable readnone alwaysinline {
+define weak_odr <128 x i8> @halide.hexagon.shr.vb.b(<128 x i8> %a, i8 %b) nounwind uwtable readnone alwaysinline {
   %a_32 = bitcast <128 x i8> %a to <32 x i32>
-  %bw = zext i8 %b to i32
+  %bw = sext i8 %b to i32
   %aw = call <64 x i32> @llvm.hexagon.V6.vsb.128B(<32 x i32> %a_32)
   %aw_lo = call <32 x i32> @llvm.hexagon.V6.lo.128B(<64 x i32> %aw)
   %sw_lo = call <32 x i32> @llvm.hexagon.V6.vasrh.128B(<32 x i32> %aw_lo, i32 %bw)
@@ -270,11 +270,12 @@ define weak_odr <128 x i8> @halide.hexagon.shr.vb.ub(<128 x i8> %a, i8 %b) nounw
 }
 
 
-define weak_odr <128 x i8> @halide.hexagon.shl.vub.vub(<128 x i8> %a, <128 x i8> %b) nounwind uwtable readnone alwaysinline {
+
+define weak_odr <128 x i8> @halide.hexagon.shl.vub.vb(<128 x i8> %a, <128 x i8> %b) nounwind uwtable readnone alwaysinline {
   %a_32 = bitcast <128 x i8> %a to <32 x i32>
   %b_32 = bitcast <128 x i8> %b to <32 x i32>
   %aw = call <64 x i32> @llvm.hexagon.V6.vzb.128B(<32 x i32> %a_32)
-  %bw = call <64 x i32> @llvm.hexagon.V6.vzb.128B(<32 x i32> %b_32)
+  %bw = call <64 x i32> @llvm.hexagon.V6.vsb.128B(<32 x i32> %b_32)
   %aw_lo = call <32 x i32> @llvm.hexagon.V6.lo.128B(<64 x i32> %aw)
   %bw_lo = call <32 x i32> @llvm.hexagon.V6.lo.128B(<64 x i32> %bw)
   %sw_lo = call <32 x i32> @llvm.hexagon.V6.vaslhv.128B(<32 x i32> %aw_lo, <32 x i32> %bw_lo)
@@ -286,17 +287,17 @@ define weak_odr <128 x i8> @halide.hexagon.shl.vub.vub(<128 x i8> %a, <128 x i8>
   ret <128 x i8> %r
 }
 
-define weak_odr <128 x i8> @halide.hexagon.shl.vb.vub(<128 x i8> %a, <128 x i8> %b) nounwind uwtable readnone alwaysinline {
+define weak_odr <128 x i8> @halide.hexagon.shl.vb.vb(<128 x i8> %a, <128 x i8> %b) nounwind uwtable readnone alwaysinline {
   ; A shift left is the same whether it is signed or not.
-  %u = tail call <128 x i8> @halide.hexagon.shl.vub.vub(<128 x i8> %a, <128 x i8> %b)
+  %u = tail call <128 x i8> @halide.hexagon.shl.vub.vb(<128 x i8> %a, <128 x i8> %b)
   ret <128 x i8> %u
 }
 
-define weak_odr <128 x i8> @halide.hexagon.shr.vub.vub(<128 x i8> %a, <128 x i8> %b) nounwind uwtable readnone alwaysinline {
+define weak_odr <128 x i8> @halide.hexagon.shr.vub.vb(<128 x i8> %a, <128 x i8> %b) nounwind uwtable readnone alwaysinline {
   %a_32 = bitcast <128 x i8> %a to <32 x i32>
   %b_32 = bitcast <128 x i8> %b to <32 x i32>
   %aw = call <64 x i32> @llvm.hexagon.V6.vzb.128B(<32 x i32> %a_32)
-  %bw = call <64 x i32> @llvm.hexagon.V6.vzb.128B(<32 x i32> %b_32)
+  %bw = call <64 x i32> @llvm.hexagon.V6.vsb.128B(<32 x i32> %b_32)
   %aw_lo = call <32 x i32> @llvm.hexagon.V6.lo.128B(<64 x i32> %aw)
   %bw_lo = call <32 x i32> @llvm.hexagon.V6.lo.128B(<64 x i32> %bw)
   %sw_lo = call <32 x i32> @llvm.hexagon.V6.vlsrhv.128B(<32 x i32> %aw_lo, <32 x i32> %bw_lo)
@@ -308,11 +309,11 @@ define weak_odr <128 x i8> @halide.hexagon.shr.vub.vub(<128 x i8> %a, <128 x i8>
   ret <128 x i8> %r
 }
 
-define weak_odr <128 x i8> @halide.hexagon.shr.vb.vub(<128 x i8> %a, <128 x i8> %b) nounwind uwtable readnone alwaysinline {
+define weak_odr <128 x i8> @halide.hexagon.shr.vb.vb(<128 x i8> %a, <128 x i8> %b) nounwind uwtable readnone alwaysinline {
   %a_32 = bitcast <128 x i8> %a to <32 x i32>
   %b_32 = bitcast <128 x i8> %b to <32 x i32>
   %aw = call <64 x i32> @llvm.hexagon.V6.vsb.128B(<32 x i32> %a_32)
-  %bw = call <64 x i32> @llvm.hexagon.V6.vzb.128B(<32 x i32> %b_32)
+  %bw = call <64 x i32> @llvm.hexagon.V6.vsb.128B(<32 x i32> %b_32)
   %aw_lo = call <32 x i32> @llvm.hexagon.V6.lo.128B(<64 x i32> %aw)
   %bw_lo = call <32 x i32> @llvm.hexagon.V6.lo.128B(<64 x i32> %bw)
   %sw_lo = call <32 x i32> @llvm.hexagon.V6.vasrhv.128B(<32 x i32> %aw_lo, <32 x i32> %bw_lo)

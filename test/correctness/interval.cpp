@@ -16,9 +16,11 @@ void check(Interval result, Interval expected, int line) {
 int main(int argc, char **argv) {
     Interval e = Interval::everything();
     Interval n = Interval::nothing();
+    Expr pos_inf = Interval::pos_inf();
+    Expr neg_inf = Interval::neg_inf();
     Expr x = Variable::make(Int(32), "x");
-    Interval xp{x, Interval::pos_inf};
-    Interval xn{Interval::neg_inf, x};
+    Interval xp{x, pos_inf};
+    Interval xn{neg_inf, x};
     Interval xx{x, x};
 
     assert(e.is_everything());
@@ -70,11 +72,11 @@ int main(int argc, char **argv) {
     check(Interval::make_intersection(n, xp), n, __LINE__);
     check(Interval::make_intersection(xp, xp), xp, __LINE__);
 
-    check(Interval::make_union({3, Interval::pos_inf}, {5, Interval::pos_inf}), {3, Interval::pos_inf}, __LINE__);
-    check(Interval::make_intersection({3, Interval::pos_inf}, {5, Interval::pos_inf}), {5, Interval::pos_inf}, __LINE__);
+    check(Interval::make_union({3, pos_inf}, {5, pos_inf}), {3, pos_inf}, __LINE__);
+    check(Interval::make_intersection({3, pos_inf}, {5, pos_inf}), {5, pos_inf}, __LINE__);
 
-    check(Interval::make_union({Interval::neg_inf, 3}, {Interval::neg_inf, 5}), {Interval::neg_inf, 5}, __LINE__);
-    check(Interval::make_intersection({Interval::neg_inf, 3}, {Interval::neg_inf, 5}), {Interval::neg_inf, 3}, __LINE__);
+    check(Interval::make_union({neg_inf, 3}, {neg_inf, 5}), {neg_inf, 5}, __LINE__);
+    check(Interval::make_intersection({neg_inf, 3}, {neg_inf, 5}), {neg_inf, 3}, __LINE__);
 
     check(Interval::make_union({3, 4}, {9, 10}), {3, 10}, __LINE__);
     check(Interval::make_intersection({3, 4}, {9, 10}), {9, 4}, __LINE__);

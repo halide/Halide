@@ -184,22 +184,6 @@ WEAK int halide_error_debug_to_file_failed(void *user_context, const char *func,
     return halide_error_code_debug_to_file_failed;
 }
 
-WEAK int halide_error_failed_to_upgrade_buffer_t(void *user_context,
-                                                 const char *name,
-                                                 const char *reason) {
-    error(user_context)
-        << "Failed to upgrade buffer_t to halide_buffer_t for " << name << ": " << reason;
-    return halide_error_code_failed_to_upgrade_buffer_t;
-}
-
-WEAK int halide_error_failed_to_downgrade_buffer_t(void *user_context,
-                                                 const char *name,
-                                                 const char *reason) {
-    error(user_context)
-        << "Failed to downgrade halide_buffer_t to buffer_t for " << name << ": " << reason;
-    return halide_error_code_failed_to_downgrade_buffer_t;
-}
-
 WEAK int halide_error_unaligned_host_ptr(void *user_context, const char *func,
                                          int alignment) {
     error(user_context)
@@ -207,6 +191,14 @@ WEAK int halide_error_unaligned_host_ptr(void *user_context, const char *func,
         << " is not aligned to a " << alignment
         << " bytes boundary.";
     return halide_error_code_unaligned_host_ptr;
+}
+
+WEAK int halide_error_device_dirty_with_no_device_support(void *user_context, const char *func) {
+    error(user_context)
+        << "The buffer " << func
+        << " is dirty on device, but this pipeline was compiled "
+        << "with no support for device to host copies.";
+    return halide_error_code_device_dirty_with_no_device_support;
 }
 
 WEAK int halide_error_host_is_null(void *user_context, const char *func) {
@@ -270,7 +262,7 @@ WEAK int halide_error_no_device_interface(void *user_context) {
 }
 
 WEAK int halide_error_device_interface_no_device(void *user_context) {
-    error(user_context) << "Buffer has a non-null devie_interface but device is 0.\n";
+    error(user_context) << "Buffer has a non-null device_interface but device is 0.\n";
     return halide_error_code_device_interface_no_device;
 }
 
@@ -282,11 +274,6 @@ WEAK int halide_error_host_and_device_dirty(void *user_context) {
 WEAK int halide_error_buffer_is_null(void *user_context, const char *routine) {
     error(user_context) << "Buffer pointer passed to " << routine << " is null.\n";
     return halide_error_code_buffer_is_null;
-}
-
-WEAK int halide_error_integer_division_by_zero(void *user_context) {
-    error(user_context) << "Integer division or modulo by zero.\n";
-    return halide_error_code_integer_division_by_zero;
 }
 
 }  // extern "C"

@@ -26,9 +26,9 @@
 #if HAS_METAL_SDK
 @property bool use_metal;
 // view has a handle to the metal device when created
-@property (nonatomic, readonly) id <MTLDevice> device;
+@property(nonatomic, readonly) id<MTLDevice> device;
 // view has a handle to the metal device when created
-@property (nonatomic, readonly) id <MTLCommandQueue> commandQueue;
+@property(nonatomic, readonly) id<MTLCommandQueue> commandQueue;
 #endif  // HAS_METAL_SDK
 
 - (void)initiateRender;

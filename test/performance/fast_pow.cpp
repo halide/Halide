@@ -1,7 +1,7 @@
 #include "Halide.h"
-#include <cstdio>
-#include <algorithm>
 #include "halide_benchmark.h"
+#include <algorithm>
+#include <cstdio>
 
 using namespace Halide;
 using namespace Halide::Tools;
@@ -25,9 +25,9 @@ int main(int argc, char **argv) {
     Param<int> pows_per_pixel;
 
     RDom s(0, pows_per_pixel);
-    f(x, y) = sum(pow_ref((x+1)/512.0f, (y+1+s)/512.0f));
-    g(x, y) = sum(pow((x+1)/512.0f, (y+1+s)/512.0f));
-    h(x, y) = sum(fast_pow((x+1)/512.0f, (y+1+s)/512.0f));
+    f(x, y) = sum(pow_ref((x + 1) / 512.0f, (y + 1 + s) / 512.0f));
+    g(x, y) = sum(pow((x + 1) / 512.0f, (y + 1 + s) / 512.0f));
+    h(x, y) = sum(fast_pow((x + 1) / 512.0f, (y + 1 + s) / 512.0f));
     f.vectorize(x, 8);
     g.vectorize(x, 8);
     h.vectorize(x, 8);
@@ -63,15 +63,15 @@ int main(int argc, char **argv) {
 
     int timing_N = timing_scratch.width() * timing_scratch.height() * 10;
     int correctness_N = fast_result.width() * fast_result.height();
-    fast_err(0) = sqrt(fast_err(0)/correctness_N);
-    faster_err(0) = sqrt(faster_err(0)/correctness_N);
+    fast_err(0) = sqrt(fast_err(0) / correctness_N);
+    faster_err(0) = sqrt(faster_err(0) / correctness_N);
 
     printf("powf: %f ns per pixel\n"
            "Halide's pow: %f ns per pixel (rms error = %0.10f)\n"
            "Halide's fast_pow: %f ns per pixel (rms error = %0.10f)\n",
-           1000000*t1 / timing_N,
-           1000000*t2 / timing_N, fast_err(0),
-           1000000*t3 / timing_N, faster_err(0));
+           1000000 * t1 / timing_N,
+           1000000 * t2 / timing_N, fast_err(0),
+           1000000 * t3 / timing_N, faster_err(0));
 
     if (fast_err(0) > 0.000001) {
         printf("Error for pow too large\n");
@@ -88,7 +88,7 @@ int main(int argc, char **argv) {
         return -1;
     }
 
-    if (t2*1.5 < t3) {
+    if (t2 * 1.5 < t3) {
         printf("pow is more than 1.5x faster than fast_pow\n");
         return -1;
     }

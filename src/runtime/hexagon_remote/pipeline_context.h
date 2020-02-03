@@ -78,9 +78,9 @@ public:
 
     void set_priority(int priority) {
         if (priority > 0xFF) {
-            priority = 0xFF;        // Clamp to max priority
+            priority = 0xFF;  // Clamp to max priority
         } else if (priority <= 0) {
-            return;                 // Ignore settings of zero and below
+            return;  // Ignore settings of zero and below
         }
         qurt_thread_set_priority(thread, priority);
     }

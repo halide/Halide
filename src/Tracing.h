@@ -18,6 +18,7 @@ namespace Internal {
  * allocations. Should be done before storage flattening, but after
  * all bounds inference. */
 Stmt inject_tracing(Stmt, const std::string &pipeline_name,
+                    bool trace_pipeline,
                     const std::map<std::string, Function> &env,
                     const std::vector<Function> &outputs,
                     const Target &Target);

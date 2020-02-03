@@ -1,29 +1,9 @@
 #include <time.h>
 
+#include <iostream>
 #include <map>
 #include <random>
 #include <vector>
-#include <iostream>
-
-// Avoid a dependence on libHalide by defining a local internal_assert
-struct Asserter {
-    bool c;
-    Asserter(bool c) : c(c) {};
-    template<typename T>
-    Asserter &operator<<(T &&t) {
-        if (!c) {
-            std::cerr << t;
-        }
-        return *this;
-    }
-    ~Asserter() {
-        if (!c) {
-            exit(-1);
-        }
-    }
-};
-#define internal_assert(c) Asserter(c)
-#define internal_error Asserter(false)
 
 #include "PerfectHashMap.h"
 
@@ -32,7 +12,9 @@ using std::vector;
 
 struct Key {
     int id, max_id;
-    Key(int i, int m) : id(i), max_id(m) {}
+    Key(int i, int m)
+        : id(i), max_id(m) {
+    }
 };
 
 int main(int argc, char **argv) {

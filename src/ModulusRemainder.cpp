@@ -8,12 +8,15 @@ namespace Halide {
 namespace Internal {
 
 namespace {
-// Mod, with mod by zero defined to be the identity for the convenience of the operators below.
-int64_t mod(int64_t a, int64_t m) {
-    if (m == 0) return a;
-    return mod_imp(a, m);
+// A version of mod where a % 0 == a
+int64_t mod(int64_t a, int64_t b) {
+    if (b == 0) {
+        return a;
+    } else {
+        return mod_imp(a, b);
+    }
 }
-}
+}  // namespace
 
 class ComputeModulusRemainder : public IRVisitor {
 public:
@@ -70,6 +73,7 @@ public:
     void visit(const Evaluate *) override;
     void visit(const Shuffle *) override;
     void visit(const Prefetch *) override;
+    void visit(const Atomic *) override;
 };
 
 ModulusRemainder modulus_remainder(Expr e) {
@@ -134,19 +138,18 @@ void modulus_remainder_test() {
     Expr x = Variable::make(Int(32), "x");
     Expr y = Variable::make(Int(32), "y");
 
-    check((30*x + 3) + (40*y + 2), 10, 5);
-    check((6*x + 3) * (4*y + 1), 2, 1);
-    check(max(30*x - 24, 40*y + 31), 5, 1);
-    check(10*x - 33*y, 1, 0);
-    check(10*x - 35*y, 5, 0);
+    check((30 * x + 3) + (40 * y + 2), 10, 5);
+    check((6 * x + 3) * (4 * y + 1), 2, 1);
+    check(max(30 * x - 24, 40 * y + 31), 5, 1);
+    check(10 * x - 33 * y, 1, 0);
+    check(10 * x - 35 * y, 5, 0);
     check(123, 0, 123);
-    check(Let::make("y", x*3 + 4, y*3 + 4), 9, 7);
+    check(Let::make("y", x * 3 + 4, y * 3 + 4), 9, 7);
     // Check overflow
-    check((5045320*x + 4) * (405713 * y + 3) * (8000123 * x + 4354), 1, 0);
+    check((5045320 * x + 4) * (405713 * y + 3) * (8000123 * x + 4354), 1, 0);
 
     std::cout << "modulus_remainder test passed\n";
 }
-
 
 void ComputeModulusRemainder::visit(const IntImm *op) {
     // Equal to op->value modulo anything. We'll use zero as the
@@ -360,7 +363,8 @@ void ComputeModulusRemainder::visit(const Mod *op) {
 }
 
 ModulusRemainder operator%(const ModulusRemainder &a, const ModulusRemainder &b) {
-    // We can treat x mod y as x + z*y, where we know nothing about z.
+    // For non-zero y, we can treat x mod y as x + z*y, where we know
+    // nothing about z.
     // (ax + b) + z (cx + d) ->
     // ax + b + zcx + dz ->
     // gcd(a, c, d) * w + b
@@ -374,6 +378,18 @@ ModulusRemainder operator%(const ModulusRemainder &a, const ModulusRemainder &b)
     int64_t modulus = gcd(a.modulus, b.modulus);
     modulus = gcd(modulus, b.remainder);
     int64_t remainder = mod(a.remainder, modulus);
+
+    if (b.remainder == 0 && remainder != 0) {
+        // b could be zero, so the result could also just be zero.
+        if (modulus == 0) {
+            remainder = 0;
+        } else {
+            // This can no longer be expressed as ax + b
+            remainder = 0;
+            modulus = 1;
+        }
+    }
+
     return {modulus, remainder};
 }
 
@@ -534,6 +550,10 @@ void ComputeModulusRemainder::visit(const Evaluate *) {
 }
 
 void ComputeModulusRemainder::visit(const Prefetch *) {
+    internal_assert(false) << "modulus_remainder of statement\n";
+}
+
+void ComputeModulusRemainder::visit(const Atomic *) {
     internal_assert(false) << "modulus_remainder of statement\n";
 }
 

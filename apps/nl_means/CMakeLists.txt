@@ -1,5 +1,5 @@
 add_executable(nl_means_process process.cpp)
-halide_use_image_io(nl_means_process)
+target_link_libraries(nl_means_process PRIVATE Halide::ImageIO)
 
 halide_generator(nl_means.generator SRCS nl_means_generator.cpp)
 foreach(AUTO_SCHEDULE false true)

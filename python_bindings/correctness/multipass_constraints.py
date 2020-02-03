@@ -1,5 +1,3 @@
-from __future__ import print_function
-from __future__ import division
 
 import halide as hl
 
@@ -22,9 +20,9 @@ def test_multipass_constraints():
         extent = input.dim(1).extent() + o.dim(0).extent()
     )
 
-    o.dim(0).set_bounds(min = 0, 
-                        extent = hl.select(o.dim(0).extent() < 22, 
-                                           o.dim(0).extent() + 1, 
+    o.dim(0).set_bounds(min = 0,
+                        extent = hl.select(o.dim(0).extent() < 22,
+                                           o.dim(0).extent() + 1,
                                            o.dim(0).extent()))
 
     # Make a bounds query buffer
@@ -44,14 +42,14 @@ def test_multipass_constraints():
 
         print("Constraints not correctly satisfied:\n",
                "in:",
-               input.get().dim(0).min(), 
+               input.get().dim(0).min(),
                input.get().dim(0).extent(),
-               input.get().dim(1).min(), 
+               input.get().dim(1).min(),
                input.get().dim(1).extent(),
                "out:",
-               query_buf.dim(0).min(), 
+               query_buf.dim(0).min(),
                query_buf.dim(0).extent(),
-               query_buf.dim(1).min(), 
+               query_buf.dim(1).min(),
                query_buf.dim(1).extent())
         assert False
 

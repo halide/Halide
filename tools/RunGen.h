@@ -1,5 +1,5 @@
-#include "HalideRuntime.h"
 #include "HalideBuffer.h"
+#include "HalideRuntime.h"
 #include "halide_benchmark.h"
 #include "halide_image_io.h"
 
@@ -24,17 +24,25 @@ using ::Halide::Runtime::Buffer;
 // provide a typedef for it (and doesn't use a vector for it in any event).
 using Shape = std::vector<halide_dimension_t>;
 
+// A ShapePromise is a function that returns a Shape. If the Promise can't
+// return a valid Shape, it may fail. This allows us to defer error reporting
+// for situations until the Shape is actually needed; in particular, it allows
+// us to attempt doing bounds-query for the shape of input buffers early,
+// but to ignore the error unless we actually need it... which we won't if an
+// estimate is provided for the input in question.
+using ShapePromise = std::function<Shape()>;
+
 // Standard stream output for halide_type_t
 inline std::ostream &operator<<(std::ostream &stream, const halide_type_t &type) {
     if (type.code == halide_type_uint && type.bits == 1) {
         stream << "bool";
     } else {
         assert(type.code >= 0 && type.code <= 3);
-        static const char * const names[4] = { "int", "uint", "float", "handle" };
-        stream << names[type.code] << (int) type.bits;
+        static const char *const names[4] = {"int", "uint", "float", "handle"};
+        stream << names[type.code] << (int)type.bits;
     }
     if (type.lanes > 1) {
-        stream << "x" << (int) type.lanes;
+        stream << "x" << (int)type.lanes;
     }
     return stream;
 }
@@ -66,8 +74,12 @@ struct Logger {
 
     const LogFn out, info, warn, fail;
 
-    Logger() : out(log_out), info(log_cerr), warn(log_cerr), fail(log_fail) {}
-    Logger(LogFn o, LogFn i, LogFn w, LogFn f) : out(o), info(i), warn(w), fail(f) {}
+    Logger()
+        : out(log_out), info(log_cerr), warn(log_cerr), fail(log_fail) {
+    }
+    Logger(LogFn o, LogFn i, LogFn w, LogFn f)
+        : out(o), info(i), warn(w), fail(f) {
+    }
 
 private:
     static void log_out(const std::string &s) {
@@ -103,7 +115,9 @@ struct LogEmitter {
     }
 
 protected:
-    explicit LogEmitter(Logger::LogFn f) : f(f) {}
+    explicit LogEmitter(Logger::LogFn f)
+        : f(f) {
+    }
 
 private:
     const Logger::LogFn f;
@@ -112,26 +126,34 @@ private:
 
 // Emit ordinary non-error output that should never be suppressed (ie, stdout)
 struct out : LogEmitter {
-    out() : LogEmitter(log().out) {}
+    out()
+        : LogEmitter(log().out) {
+    }
 };
 
 // Log detailed informational output
 struct info : LogEmitter {
-    info() : LogEmitter(log().info) {}
+    info()
+        : LogEmitter(log().info) {
+    }
 };
 
 // Log warnings
 struct warn : LogEmitter {
-    warn() : LogEmitter(log().warn) {}
+    warn()
+        : LogEmitter(log().warn) {
+    }
 };
 
 // Log unrecoverable errors, then abort
 struct fail : LogEmitter {
-    fail() : LogEmitter(log().fail) {}
+    fail()
+        : LogEmitter(log().fail) {
+    }
 };
 
 // Replace the failure handlers from halide_image_io to fail()
-inline bool IOCheckFail(bool condition, const char* msg) {
+inline bool IOCheckFail(bool condition, const char *msg) {
     if (!condition) {
         fail() << "Error in I/O: " << msg;
     }
@@ -158,7 +180,7 @@ inline std::vector<std::string> split_string(const std::string &source,
 
 // Must be constexpr to allow use in case clauses.
 inline constexpr int halide_type_code(halide_type_code_t code, int bits) {
-    return (((int) code) << 8) | bits;
+    return (((int)code) << 8) | bits;
 }
 
 // dynamic_type_dispatch is a utility for functors that want to be able
@@ -177,12 +199,12 @@ inline constexpr int halide_type_code(halide_type_code_t code, int bits) {
 // variants *will* be instantiated (increasing code size), so this approach
 // should only be used when strictly necessary.
 template<template<typename> class Functor, typename... Args>
-auto dynamic_type_dispatch(const halide_type_t &type, Args&&... args) ->
-    decltype(std::declval<Functor<uint8_t>>()(std::forward<Args>(args)...)) {
+auto dynamic_type_dispatch(const halide_type_t &type, Args &&... args) -> decltype(std::declval<Functor<uint8_t>>()(std::forward<Args>(args)...)) {
 
-#define HANDLE_CASE(CODE, BITS, TYPE) \
-    case halide_type_code(CODE, BITS): return Functor<TYPE>()(std::forward<Args>(args)...);
-    switch (halide_type_code((halide_type_code_t) type.code, type.bits)) {
+#define HANDLE_CASE(CODE, BITS, TYPE)  \
+    case halide_type_code(CODE, BITS): \
+        return Functor<TYPE>()(std::forward<Args>(args)...);
+    switch (halide_type_code((halide_type_code_t)type.code, type.bits)) {
         HANDLE_CASE(halide_type_float, 32, float)
         HANDLE_CASE(halide_type_float, 64, double)
         HANDLE_CASE(halide_type_int, 8, int8_t)
@@ -194,11 +216,11 @@ auto dynamic_type_dispatch(const halide_type_t &type, Args&&... args) ->
         HANDLE_CASE(halide_type_uint, 16, uint16_t)
         HANDLE_CASE(halide_type_uint, 32, uint32_t)
         HANDLE_CASE(halide_type_uint, 64, uint64_t)
-        HANDLE_CASE(halide_type_handle, 64, void*)
-        default:
-            fail() << "Unsupported type: " << type << "\n";
-            using ReturnType = decltype(std::declval<Functor<uint8_t>>()(std::forward<Args>(args)...));
-            return ReturnType();
+        HANDLE_CASE(halide_type_handle, 64, void *)
+    default:
+        fail() << "Unsupported type: " << type << "\n";
+        using ReturnType = decltype(std::declval<Functor<uint8_t>>()(std::forward<Args>(args)...));
+        return ReturnType();
     }
 #undef HANDLE_CASE
 }
@@ -209,7 +231,7 @@ struct ScalarParser {
     bool operator()(const std::string &str, halide_scalar_value_t *v) {
         std::istringstream iss(str);
         // std::setbase(0) means "infer base from input", and allows hex and octal constants
-        iss >> std::setbase(0) >> *(T*)v;
+        iss >> std::setbase(0) >> *(T *)v;
         return !iss.fail() && iss.get() == EOF;
     }
 };
@@ -221,9 +243,9 @@ inline bool ScalarParser<int8_t>::operator()(const std::string &str, halide_scal
     int i;
     iss >> std::setbase(0) >> i;
     if (!(!iss.fail() && iss.get() == EOF) || i < -128 || i > 127) {
-      return false;
+        return false;
     }
-    v->u.i8 = (int8_t) i;
+    v->u.i8 = (int8_t)i;
     return true;
 }
 
@@ -233,9 +255,9 @@ inline bool ScalarParser<uint8_t>::operator()(const std::string &str, halide_sca
     unsigned int u;
     iss >> std::setbase(0) >> u;
     if (!(!iss.fail() && iss.get() == EOF) || u > 255) {
-      return false;
+        return false;
     }
-    v->u.u8 = (uint8_t) u;
+    v->u.u8 = (uint8_t)u;
     return true;
 }
 
@@ -255,7 +277,7 @@ inline bool ScalarParser<bool>::operator()(const std::string &str, halide_scalar
 
 // Override for handle, since we only accept "nullptr".
 template<>
-inline bool ScalarParser<void*>::operator()(const std::string &str, halide_scalar_value_t *v) {
+inline bool ScalarParser<void *>::operator()(const std::string &str, halide_scalar_value_t *v) {
     if (str == "nullptr") {
         v->u.handle = nullptr;
         return true;
@@ -266,13 +288,13 @@ inline bool ScalarParser<void*>::operator()(const std::string &str, halide_scala
 // Parse a scalar when we know the corresponding C++ type at compile time.
 template<typename T>
 inline bool parse_scalar(const std::string &str, T *scalar) {
-    return ScalarParser<T>()(str, (halide_scalar_value_t *) scalar);
+    return ScalarParser<T>()(str, (halide_scalar_value_t *)scalar);
 }
 
 // Dynamic-dispatch wrapper around ScalarParser.
 inline bool parse_scalar(const halide_type_t &type,
-                  const std::string &str,
-                  halide_scalar_value_t *scalar) {
+                         const std::string &str,
+                         halide_scalar_value_t *scalar) {
     return dynamic_type_dispatch<ScalarParser>(type, str, scalar);
 }
 
@@ -291,10 +313,10 @@ inline Shape parse_extents(const std::string &extent_list) {
     if (extent_list == "[]") {
         return result;
     }
-    std::vector<std::string> extents = split_string(extent_list.substr(1, extent_list.size()-2), ",");
+    std::vector<std::string> extents = split_string(extent_list.substr(1, extent_list.size() - 2), ",");
     for (size_t i = 0; i < extents.size(); i++) {
-      const std::string &s = extents[i];
-        const int stride = (i == 0) ? 1 : result[i-1].stride * result[i-1].extent;
+        const std::string &s = extents[i];
+        const int stride = (i == 0) ? 1 : result[i - 1].stride * result[i - 1].extent;
         halide_dimension_t d = {0, 0, stride};
         if (!parse_scalar(s, &d.extent)) {
             fail() << "Invalid value for extents: " << s << " (" << extent_list << ")";
@@ -318,13 +340,13 @@ inline bool try_parse_metadata_buffer_estimates(const halide_filter_argument_t *
     Shape result(md->dimensions);
     int32_t stride = 1;
     for (int i = 0; i < md->dimensions; i++) {
-        const int64_t *min = md->buffer_estimates[i*2];
-        const int64_t *extent = md->buffer_estimates[i*2+1];
+        const int64_t *min = md->buffer_estimates[i * 2];
+        const int64_t *extent = md->buffer_estimates[i * 2 + 1];
         if (!min || !extent) {
             return false;
             fail() << "Argument " << md->name << " was specified as 'estimate', but no estimate was provided for dimension " << i << " of " << md->dimensions;
         }
-        result[i] = halide_dimension_t{(int32_t) *min, (int32_t) *extent, stride};
+        result[i] = halide_dimension_t{(int32_t)*min, (int32_t)*extent, stride};
         stride *= result[i].extent;
     }
     *shape = result;
@@ -353,7 +375,7 @@ inline Shape get_shape(const Buffer<> &b) {
 
 // Given a type and shape, create a new Buffer<> but *don't* allocate allocate storage for it.
 inline Buffer<> make_with_shape(const halide_type_t &type, const Shape &shape) {
-    return Buffer<>(type, nullptr, (int) shape.size(), &shape[0]);
+    return Buffer<>(type, nullptr, (int)shape.size(), &shape[0]);
 }
 
 // Given a type and shape, create a new Buffer<> and allocate storage for it.
@@ -370,7 +392,7 @@ inline Buffer<> allocate_buffer(const halide_type_t &type, const Shape &shape) {
 inline Shape choose_output_extents(int dimensions, const Shape &defaults) {
     Shape s(dimensions);
     for (int i = 0; i < dimensions; ++i) {
-        if ((size_t) i < defaults.size()) {
+        if ((size_t)i < defaults.size()) {
             s[i] = defaults[i];
         } else {
             // If the defaults don't provide enough dimensions, make a guess.
@@ -428,8 +450,8 @@ inline Buffer<> adjust_buffer_dims(const std::string &title, const std::string &
         // ignored dimensions has extent > 1
         if (!dims_in_range_are_trivial(b, dims_needed, dims_actual - 1)) {
             warn() << "Image for " << title << " \"" << name << "\" has "
-                 << dims_actual << " dimensions, but only the first "
-                 << dims_needed << " were used; data loss may have occurred.";
+                   << dims_actual << " dimensions, but only the first "
+                   << dims_needed << " were used; data loss may have occurred.";
         }
         auto old_shape = get_shape(b);
         while (b.dimensions() > dims_needed) {
@@ -438,8 +460,8 @@ inline Buffer<> adjust_buffer_dims(const std::string &title, const std::string &
         info() << "Shape for " << name << " changed: " << old_shape << " -> " << get_shape(b);
     } else if (dims_actual < dims_needed) {
         warn() << "Image for " << title << " \"" << name << "\" has "
-             << dims_actual << " dimensions, but this argument requires at least "
-             << dims_needed << " dimensions: adding dummy dimensions of extent 1.";
+               << dims_actual << " dimensions, but this argument requires at least "
+               << dims_needed << " dimensions: adding dummy dimensions of extent 1.";
         auto old_shape = get_shape(b);
         while (b.dimensions() < dims_needed) {
             b = b.embedded(b.dimensions(), 0);
@@ -452,7 +474,7 @@ inline Buffer<> adjust_buffer_dims(const std::string &title, const std::string &
 // Load a buffer from a pathname, adjusting the type and dimensions to
 // fit the metadata's requirements as needed.
 inline Buffer<> load_input_from_file(const std::string &pathname,
-                              const halide_filter_argument_t &metadata) {
+                                     const halide_filter_argument_t &metadata) {
     Buffer<> b = Buffer<>(metadata.type, 0);
     info() << "Loading input " << metadata.name << " from " << pathname << " ...";
     if (!Halide::Tools::load<Buffer<>, IOCheckFail>(pathname, &b)) {
@@ -463,8 +485,8 @@ inline Buffer<> load_input_from_file(const std::string &pathname,
     }
     if (b.type() != metadata.type) {
         warn() << "Image loaded for argument \"" << metadata.name << "\" is type "
-             << b.type() << " but this argument expects type "
-             << metadata.type << "; data loss may have occurred.";
+               << b.type() << " but this argument expects type "
+               << metadata.type << "; data loss may have occurred.";
         b = Halide::Tools::ImageTypeConversion::convert_image(b, metadata.type);
     }
     return b;
@@ -480,7 +502,8 @@ public:
     }
 
 private:
-    template<typename T2 = T, typename std::enable_if<std::is_integral<T2>::value && !std::is_same<T2, bool>::value>::type * = nullptr>
+    template<typename T2 = T,
+             typename std::enable_if<std::is_integral<T2>::value && !std::is_same<T2, bool>::value && !std::is_same<T2, char>::value && !std::is_same<T2, signed char>::value && !std::is_same<T2, unsigned char>::value>::type * = nullptr>
     void fill(Buffer<T2> &b, std::mt19937 &rng) {
         std::uniform_int_distribution<T2> dis;
         b.for_each_value([&rng, &dis](T2 &value) {
@@ -500,7 +523,37 @@ private:
     void fill(Buffer<T2> &b, std::mt19937 &rng) {
         std::uniform_int_distribution<int> dis(0, 1);
         b.for_each_value([&rng, &dis](T2 &value) {
-            value = dis(rng);
+            value = static_cast<T2>(dis(rng));
+        });
+    }
+
+    // std::uniform_int_distribution<char> is UB in C++11,
+    // so special-case to avoid compiler variation
+    template<typename T2 = T, typename std::enable_if<std::is_same<T2, char>::value>::type * = nullptr>
+    void fill(Buffer<T2> &b, std::mt19937 &rng) {
+        std::uniform_int_distribution<int> dis(-128, 127);
+        b.for_each_value([&rng, &dis](T2 &value) {
+            value = static_cast<T2>(dis(rng));
+        });
+    }
+
+    // std::uniform_int_distribution<signed char> is UB in C++11,
+    // so special-case to avoid compiler variation
+    template<typename T2 = T, typename std::enable_if<std::is_same<T2, signed char>::value>::type * = nullptr>
+    void fill(Buffer<T2> &b, std::mt19937 &rng) {
+        std::uniform_int_distribution<int> dis(-128, 127);
+        b.for_each_value([&rng, &dis](T2 &value) {
+            value = static_cast<T2>(dis(rng));
+        });
+    }
+
+    // std::uniform_int_distribution<unsigned char> is UB in C++11,
+    // so special-case to avoid compiler variation
+    template<typename T2 = T, typename std::enable_if<std::is_same<T2, unsigned char>::value>::type * = nullptr>
+    void fill(Buffer<T2> &b, std::mt19937 &rng) {
+        std::uniform_int_distribution<int> dis(0, 255);
+        b.for_each_value([&rng, &dis](T2 &value) {
+            value = static_cast<T2>(dis(rng));
         });
     }
 
@@ -525,34 +578,46 @@ private:
     // Segregate into pointer and non-pointer clauses to avoid compiler warnings
     // about casting from (e.g.) int8 to void*
     template<typename T2 = T, typename std::enable_if<!std::is_pointer<T2>::value>::type * = nullptr>
-    T as_T(const halide_scalar_value_t& value) {
+    T as_T(const halide_scalar_value_t &value) {
         const halide_type_t type = halide_type_of<T>();
-        switch (halide_type_code((halide_type_code_t) type.code, type.bits)) {
-            case halide_type_code(halide_type_int, 8):    return (T) value.u.i8;
-            case halide_type_code(halide_type_int, 16):   return (T) value.u.i16;
-            case halide_type_code(halide_type_int, 32):   return (T) value.u.i32;
-            case halide_type_code(halide_type_int, 64):   return (T) value.u.i64;
-            case halide_type_code(halide_type_uint, 1):   return (T) value.u.b;
-            case halide_type_code(halide_type_uint, 8):   return (T) value.u.u8;
-            case halide_type_code(halide_type_uint, 16):  return (T) value.u.u16;
-            case halide_type_code(halide_type_uint, 32):  return (T) value.u.u32;
-            case halide_type_code(halide_type_uint, 64):  return (T) value.u.u64;
-            case halide_type_code(halide_type_float, 32): return (T) value.u.f32;
-            case halide_type_code(halide_type_float, 64): return (T) value.u.f64;
-            default:
-                fail() << "Can't convert value with type: " << (int) type.code << "bits: " << type.bits;
-                return (T) 0;
+        switch (halide_type_code((halide_type_code_t)type.code, type.bits)) {
+        case halide_type_code(halide_type_int, 8):
+            return (T)value.u.i8;
+        case halide_type_code(halide_type_int, 16):
+            return (T)value.u.i16;
+        case halide_type_code(halide_type_int, 32):
+            return (T)value.u.i32;
+        case halide_type_code(halide_type_int, 64):
+            return (T)value.u.i64;
+        case halide_type_code(halide_type_uint, 1):
+            return (T)value.u.b;
+        case halide_type_code(halide_type_uint, 8):
+            return (T)value.u.u8;
+        case halide_type_code(halide_type_uint, 16):
+            return (T)value.u.u16;
+        case halide_type_code(halide_type_uint, 32):
+            return (T)value.u.u32;
+        case halide_type_code(halide_type_uint, 64):
+            return (T)value.u.u64;
+        case halide_type_code(halide_type_float, 32):
+            return (T)value.u.f32;
+        case halide_type_code(halide_type_float, 64):
+            return (T)value.u.f64;
+        default:
+            fail() << "Can't convert value with type: " << (int)type.code << "bits: " << type.bits;
+            return (T)0;
         }
     }
 
     template<typename T2 = T, typename std::enable_if<std::is_pointer<T2>::value>::type * = nullptr>
-    T as_T(const halide_scalar_value_t& value) {
+    T as_T(const halide_scalar_value_t &value) {
         const halide_type_t type = halide_type_of<T>();
-        switch (halide_type_code((halide_type_code_t) type.code, type.bits)) {
-            case halide_type_code(halide_type_handle, 64): return (T) value.u.handle;
-            default:
-                fail() << "Can't convert value with type: " << (int) type.code << "bits: " << type.bits;
-                return (T) 0;
+        switch (halide_type_code((halide_type_code_t)type.code, type.bits)) {
+        case halide_type_code(halide_type_handle, 64):
+            return (T)value.u.handle;
+        default:
+            fail() << "Can't convert value with type: " << (int)type.code << "bits: " << type.bits;
+            return (T)0;
         }
     }
 };
@@ -587,19 +652,43 @@ inline Halide::Tools::FormatInfo best_save_format(const Buffer<> &b, const std::
 inline std::string scalar_to_string(const halide_type_t &type,
                                     const halide_scalar_value_t &value) {
     std::ostringstream o;
-    switch (halide_type_code((halide_type_code_t) type.code, type.bits)) {
-    case halide_type_code(halide_type_float, 32):  o << value.u.f32; break;
-    case halide_type_code(halide_type_float, 64):  o << value.u.f64; break;
-    case halide_type_code(halide_type_int, 8):     o << (int) value.u.i8; break;
-    case halide_type_code(halide_type_int, 16):    o << value.u.i16; break;
-    case halide_type_code(halide_type_int, 32):    o << value.u.i32; break;
-    case halide_type_code(halide_type_int, 64):    o << value.u.i64; break;
-    case halide_type_code(halide_type_uint, 1):    o << (value.u.b ? "true" : "false"); break;
-    case halide_type_code(halide_type_uint, 8):    o << (int) value.u.u8; break;
-    case halide_type_code(halide_type_uint, 16):   o << value.u.u16; break;
-    case halide_type_code(halide_type_uint, 32):   o << value.u.u32; break;
-    case halide_type_code(halide_type_uint, 64):   o << value.u.u64; break;
-    case halide_type_code(halide_type_handle, 64): o << (uint64_t) value.u.handle; break;
+    switch (halide_type_code((halide_type_code_t)type.code, type.bits)) {
+    case halide_type_code(halide_type_float, 32):
+        o << value.u.f32;
+        break;
+    case halide_type_code(halide_type_float, 64):
+        o << value.u.f64;
+        break;
+    case halide_type_code(halide_type_int, 8):
+        o << (int)value.u.i8;
+        break;
+    case halide_type_code(halide_type_int, 16):
+        o << value.u.i16;
+        break;
+    case halide_type_code(halide_type_int, 32):
+        o << value.u.i32;
+        break;
+    case halide_type_code(halide_type_int, 64):
+        o << value.u.i64;
+        break;
+    case halide_type_code(halide_type_uint, 1):
+        o << (value.u.b ? "true" : "false");
+        break;
+    case halide_type_code(halide_type_uint, 8):
+        o << (int)value.u.u8;
+        break;
+    case halide_type_code(halide_type_uint, 16):
+        o << value.u.u16;
+        break;
+    case halide_type_code(halide_type_uint, 32):
+        o << value.u.u32;
+        break;
+    case halide_type_code(halide_type_uint, 64):
+        o << value.u.u64;
+        break;
+    case halide_type_code(halide_type_handle, 64):
+        o << (uint64_t)value.u.handle;
+        break;
     default:
         fail() << "Unsupported type: " << type << "\n";
         break;
@@ -617,13 +706,14 @@ struct ArgData {
 
     ArgData() = default;
 
-    ArgData(size_t index, const std::string &name, const halide_filter_argument_t * metadata)
-        : index(index), name(name), metadata(metadata) {}
+    ArgData(size_t index, const std::string &name, const halide_filter_argument_t *metadata)
+        : index(index), name(name), metadata(metadata) {
+    }
 
-    Buffer<> load_buffer(const Shape &auto_shape, const halide_filter_argument_t *argument_metadata) {
+    Buffer<> load_buffer(ShapePromise shape_promise, const halide_filter_argument_t *argument_metadata) {
         const auto parse_optional_extents = [&](const std::string &s) -> Shape {
             if (s == "auto") {
-                return auto_shape;
+                return shape_promise();
             }
             if (s == "estimate") {
                 return parse_metadata_buffer_estimates(argument_metadata);
@@ -632,7 +722,7 @@ struct ArgData {
                 Shape shape;
                 if (!try_parse_metadata_buffer_estimates(argument_metadata, &shape)) {
                     info() << "Input " << argument_metadata->name << " has no estimates; using bounds-query result instead.";
-                    shape = auto_shape;
+                    shape = shape_promise();
                 }
                 return shape;
             }
@@ -650,7 +740,7 @@ struct ArgData {
             if (v.size() != 3) fail() << "Invalid syntax: " << raw_string;
             halide_scalar_value_t value;
             if (!parse_scalar(metadata->type, v[1], &value)) {
-              fail() << "Invalid value for constant value";
+                fail() << "Invalid value for constant value";
             }
             auto shape = parse_optional_extents(v[2]);
             Buffer<> b = allocate_buffer(metadata->type, shape);
@@ -680,6 +770,11 @@ struct ArgData {
         } else {
             return load_input_from_file(v[0], *metadata);
         }
+    }
+
+    Buffer<> load_buffer(Shape shape, const halide_filter_argument_t *argument_metadata) {
+        ShapePromise promise = [shape]() -> Shape { return shape; };
+        return load_buffer(promise, argument_metadata);
     }
 
     void adapt_input_buffer(const Shape &constrained_shape) {
@@ -786,14 +881,14 @@ public:
     using ArgvCall = int (*)(void **);
 
     RunGen(ArgvCall halide_argv_call,
-           const struct halide_filter_metadata_t *halide_metadata) :
-        halide_argv_call(halide_argv_call), md(halide_metadata) {
+           const struct halide_filter_metadata_t *halide_metadata)
+        : halide_argv_call(halide_argv_call), md(halide_metadata) {
         if (md->version != halide_filter_metadata_t::VERSION) {
             fail() << "Unexpected metadata version " << md->version;
         }
-        for (size_t i = 0; i < (size_t) md->num_arguments; ++i) {
+        for (size_t i = 0; i < (size_t)md->num_arguments; ++i) {
             std::string name = md->arguments[i].name;
-            if (name.size() > 2 && name[name.size()-2] == '$' && isdigit(name[name.size()-1])) {
+            if (name.size() > 2 && name[name.size() - 2] == '$' && isdigit(name[name.size() - 1])) {
                 // If it ends in "$3" or similar, just lop it off
                 name = name.substr(0, name.size() - 2);
             }
@@ -804,8 +899,12 @@ public:
         halide_set_custom_print(rungen_halide_print);
     }
 
-    ArgvCall get_halide_argv_call() const { return halide_argv_call; }
-    const struct halide_filter_metadata_t *get_halide_metadata() const { return md; }
+    ArgvCall get_halide_argv_call() const {
+        return halide_argv_call;
+    }
+    const struct halide_filter_metadata_t *get_halide_metadata() const {
+        return md;
+    }
 
     int argument_kind(const std::string &name) const {
         auto it = args.find(name);
@@ -875,7 +974,7 @@ public:
         assert(output_shapes.empty());
 
         Shape first_input_shape;
-        std::map<std::string, Shape> auto_input_shapes;
+        std::map<std::string, ShapePromise> auto_input_shape_promises;
 
         // First, set all the scalar inputs: we need those to be correct
         // in order to get useful values from the bound-query for input buffers.
@@ -889,7 +988,7 @@ public:
                     info() << "Argument value for: __user_context is special-cased as: nullptr";
                     break;
                 }
-                std::vector<std::pair<const halide_scalar_value_t*, const char*>> values;
+                std::vector<std::pair<const halide_scalar_value_t *, const char *>> values;
                 // If this gets any more complex, smarten it up, but for now,
                 // simpleminded code is fine.
                 if (arg.raw_string == "default") {
@@ -920,8 +1019,8 @@ public:
                 } else {
                     if (!parse_scalar(arg.metadata->type, arg.raw_string, &arg.scalar_value)) {
                         fail() << "Argument value for: " << arg_name << " could not be parsed as type "
-                             << arg.metadata->type << ": "
-                             << arg.raw_string;
+                               << arg.metadata->type << ": "
+                               << arg.raw_string;
                     }
                 }
                 break;
@@ -950,7 +1049,7 @@ public:
                     }
                 }
             }
-            auto_input_shapes = bounds_query_input_shapes();
+            auto_input_shape_promises = bounds_query_input_shapes();
         }
 
         for (auto &arg_pair : args) {
@@ -958,7 +1057,7 @@ public:
             auto &arg = arg_pair.second;
             switch (arg.metadata->kind) {
             case halide_argument_kind_input_buffer:
-                arg.buffer_value = arg.load_buffer(auto_input_shapes[arg_name], arg.metadata);
+                arg.buffer_value = arg.load_buffer(auto_input_shape_promises[arg_name], arg.metadata);
                 info() << "Input " << arg_name << ": Shape is " << get_shape(arg.buffer_value);
                 if (first_input_shape.empty()) {
                     first_input_shape = get_shape(arg.buffer_value);
@@ -1015,8 +1114,8 @@ public:
             }
             if (best.type != b.type()) {
                 warn() << "Image for argument \"" << arg_name << "\" is of type "
-                     << b.type() << " but is being saved as type "
-                     << best.type << "; data loss may have occurred.";
+                       << b.type() << " but is being saved as type "
+                       << best.type << "; data loss may have occurred.";
                 b = Halide::Tools::ImageTypeConversion::convert_image(b, best.type);
             }
             if (!Halide::Tools::save<Buffer<const void>, IOCheckFail>(b.as<const void>(), arg.raw_string)) {
@@ -1050,27 +1149,27 @@ public:
         for (const auto &arg_pair : args) {
             const auto &arg = arg_pair.second;
             switch (arg.metadata->kind) {
-                case halide_argument_kind_output_buffer: {
-                    // TODO: this assumes that most output is "pixel-ish", and counting the size of the first
-                    // two dimensions approximates the "pixel size". This is not, in general, a valid assumption,
-                    // but is a useful metric for benchmarking.
-                    Shape shape = get_shape(arg.buffer_value);
-                    if (shape.size() >= 2) {
-                        pixels_out += shape[0].extent * shape[1].extent;
-                    } else if (!shape.empty()) {
-                        pixels_out += shape[0].extent;
-                    } else {
-                        pixels_out += 1;
-                    }
-                    break;
+            case halide_argument_kind_output_buffer: {
+                // TODO: this assumes that most output is "pixel-ish", and counting the size of the first
+                // two dimensions approximates the "pixel size". This is not, in general, a valid assumption,
+                // but is a useful metric for benchmarking.
+                Shape shape = get_shape(arg.buffer_value);
+                if (shape.size() >= 2) {
+                    pixels_out += shape[0].extent * shape[1].extent;
+                } else if (!shape.empty()) {
+                    pixels_out += shape[0].extent;
+                } else {
+                    pixels_out += 1;
                 }
+                break;
+            }
             }
         }
         return pixels_out;
     }
 
     double megapixels_out() const {
-        return (double) pixels_out() / (1024.0 * 1024.0);
+        return (double)pixels_out() / (1024.0 * 1024.0);
     }
 
     uint64_t elements_out() const {
@@ -1078,10 +1177,10 @@ public:
         for (const auto &arg_pair : args) {
             const auto &arg = arg_pair.second;
             switch (arg.metadata->kind) {
-                case halide_argument_kind_output_buffer: {
-                    elements_out += arg.buffer_value.number_of_elements();
-                    break;
-                }
+            case halide_argument_kind_output_buffer: {
+                elements_out += arg.buffer_value.number_of_elements();
+                break;
+            }
             }
         }
         return elements_out;
@@ -1092,12 +1191,12 @@ public:
         for (const auto &arg_pair : args) {
             const auto &arg = arg_pair.second;
             switch (arg.metadata->kind) {
-                case halide_argument_kind_output_buffer: {
-                    // size_in_bytes() is not necessarily the same, since
-                    // it may include unused space for padding.
-                    bytes_out += arg.buffer_value.number_of_elements() * arg.buffer_value.type().bytes();
-                    break;
-                }
+            case halide_argument_kind_output_buffer: {
+                // size_in_bytes() is not necessarily the same, since
+                // it may include unused space for padding.
+                bytes_out += arg.buffer_value.number_of_elements() * arg.buffer_value.type().bytes();
+                break;
+            }
             }
         }
         return bytes_out;
@@ -1106,7 +1205,7 @@ public:
     // Run a bounds-query call with the given args, and return the shapes
     // to which we are constrained.
     std::vector<Shape> run_bounds_query() const {
-        std::vector<void*> filter_argv(args.size(), nullptr);
+        std::vector<void *> filter_argv(args.size(), nullptr);
         // These vectors are larger than needed, but simplifies logic downstream.
         std::vector<Buffer<>> bounds_query_buffers(args.size());
         std::vector<Shape> constrained_shapes(args.size());
@@ -1115,13 +1214,13 @@ public:
             auto &arg = arg_pair.second;
             switch (arg.metadata->kind) {
             case halide_argument_kind_input_scalar:
-                filter_argv[arg.index] = const_cast<halide_scalar_value_t*>(&arg.scalar_value);
+                filter_argv[arg.index] = const_cast<halide_scalar_value_t *>(&arg.scalar_value);
                 break;
             case halide_argument_kind_input_buffer:
             case halide_argument_kind_output_buffer:
                 Shape shape = (arg.metadata->kind == halide_argument_kind_input_buffer) ?
-                               get_shape(arg.buffer_value) :
-                               choose_output_extents(arg.metadata->dimensions, output_shapes.at(arg_name));
+                                  get_shape(arg.buffer_value) :
+                                  choose_output_extents(arg.metadata->dimensions, output_shapes.at(arg_name));
                 bounds_query_buffers[arg.index] = make_with_shape(arg.metadata->type, shape);
                 filter_argv[arg.index] = bounds_query_buffers[arg.index].raw_buffer();
                 break;
@@ -1130,7 +1229,7 @@ public:
 
         info() << "Running bounds query...";
         // Ignore result since our halide_error() should catch everything.
-        (void) halide_argv_call(&filter_argv[0]);
+        (void)halide_argv_call(&filter_argv[0]);
 
         for (const auto &arg_pair : args) {
             auto &arg = arg_pair.second;
@@ -1160,14 +1259,12 @@ public:
         }
     }
 
-    void run_for_benchmark(double benchmark_min_time,
-                           uint64_t benchmark_min_iters,
-                           uint64_t benchmark_max_iters) {
-        std::vector<void*> filter_argv = build_filter_argv();
+    void run_for_benchmark(double benchmark_min_time) {
+        std::vector<void *> filter_argv = build_filter_argv();
 
         const auto benchmark_inner = [this, &filter_argv]() {
             // Ignore result since our halide_error() should catch everything.
-            (void) halide_argv_call(&filter_argv[0]);
+            (void)halide_argv_call(&filter_argv[0]);
             // Ensure that all outputs are finished, otherwise we may just be
             // measuring how long it takes to do a kernel launch for GPU code.
             this->device_sync_outputs();
@@ -1178,8 +1275,6 @@ public:
         Halide::Tools::BenchmarkConfig config;
         config.min_time = benchmark_min_time;
         config.max_time = benchmark_min_time * 4;
-        config.min_iters = benchmark_min_iters;
-        config.max_iters = benchmark_max_iters;
         auto result = Halide::Tools::benchmark(benchmark_inner, config);
 
         if (!parsable_output) {
@@ -1232,7 +1327,7 @@ public:
 
     void describe() const {
         out() << "Filter name: \"" << md->name << "\"\n";
-        for (size_t i = 0; i < (size_t) md->num_arguments; ++i) {
+        for (size_t i = 0; i < (size_t)md->num_arguments; ++i) {
             std::ostringstream o;
             auto &a = md->arguments[i];
             bool is_input = a.kind != halide_argument_kind_output_buffer;
@@ -1247,24 +1342,26 @@ public:
         }
     }
 
-    std::vector<void*> build_filter_argv() {
-        std::vector<void*> filter_argv(args.size(), nullptr);
+    std::vector<void *> build_filter_argv() {
+        std::vector<void *> filter_argv(args.size(), nullptr);
         for (auto &arg_pair : args) {
             auto &arg = arg_pair.second;
             switch (arg.metadata->kind) {
-                case halide_argument_kind_input_scalar:
-                    filter_argv[arg.index] = &arg.scalar_value;
-                    break;
-                case halide_argument_kind_input_buffer:
-                case halide_argument_kind_output_buffer:
-                    filter_argv[arg.index] = arg.buffer_value.raw_buffer();
-                    break;
+            case halide_argument_kind_input_scalar:
+                filter_argv[arg.index] = &arg.scalar_value;
+                break;
+            case halide_argument_kind_input_buffer:
+            case halide_argument_kind_output_buffer:
+                filter_argv[arg.index] = arg.buffer_value.raw_buffer();
+                break;
             }
         }
         return filter_argv;
     }
 
-    std::string name() const { return md->name; }
+    std::string name() const {
+        return md->name;
+    }
 
     void set_quiet(bool quiet = true) {
         halide_set_custom_print(quiet ? rungen_halide_print_quiet : rungen_halide_print);
@@ -1275,16 +1372,20 @@ public:
     }
 
 private:
-    std::map<std::string, Shape> bounds_query_input_shapes() const {
+    static void rungen_ignore_error(void *user_context, const char *message) {
+        // nothing
+    }
+
+    std::map<std::string, ShapePromise> bounds_query_input_shapes() const {
         assert(!output_shapes.empty());
-        std::vector<void*> filter_argv(args.size(), nullptr);
+        std::vector<void *> filter_argv(args.size(), nullptr);
         std::vector<Buffer<>> bounds_query_buffers(args.size());
         for (const auto &arg_pair : args) {
             auto &arg_name = arg_pair.first;
             auto &arg = arg_pair.second;
             switch (arg.metadata->kind) {
             case halide_argument_kind_input_scalar:
-                filter_argv[arg.index] = const_cast<halide_scalar_value_t*>(&arg.scalar_value);
+                filter_argv[arg.index] = const_cast<halide_scalar_value_t *>(&arg.scalar_value);
                 break;
             case halide_argument_kind_input_buffer:
                 // Make a Buffer<> that has the right dimension count and extent=0 for all of them
@@ -1298,19 +1399,30 @@ private:
             }
         }
 
-        // Ignore result since our halide_error() should catch everything.
-        (void) halide_argv_call(&filter_argv[0]);
+        auto previous_error_handler = halide_set_error_handler(rungen_ignore_error);
+        int result = halide_argv_call(&filter_argv[0]);
+        halide_set_error_handler(previous_error_handler);
 
-        std::map<std::string, Shape> input_shapes;
+        std::map<std::string, ShapePromise> input_shape_promises;
         for (const auto &arg_pair : args) {
             auto &arg_name = arg_pair.first;
             auto &arg = arg_pair.second;
             if (arg.metadata->kind == halide_argument_kind_input_buffer) {
-                input_shapes[arg_name] = get_shape(bounds_query_buffers[arg.index]);
-                info() << "Input " << arg_name << " has a bounds-query shape of " << input_shapes[arg_name];
+                if (result == 0) {
+                    Shape shape = get_shape(bounds_query_buffers[arg.index]);
+                    input_shape_promises[arg_name] = [shape]() -> Shape { return shape; };
+                    info() << "Input " << arg_name << " has a bounds-query shape of " << shape;
+                } else {
+                    input_shape_promises[arg_name] = [arg_name]() -> Shape {
+                        fail() << "Input " << arg_name << " could not calculate a shape satisfying bounds-query constraints.\n"
+                               << "Try relaxing the constraints, or providing an explicit estimate for the input.\n";
+                        return Shape();
+                    };
+                    info() << "Input " << arg_name << " failed bounds-query\n";
+                }
             }
         }
-        return input_shapes;
+        return input_shape_promises;
     }
 
     // Replace the standard Halide runtime function to capture print output to stdout
@@ -1328,7 +1440,7 @@ private:
     }
 
     ArgvCall halide_argv_call;
-    const struct halide_filter_metadata_t * const md;
+    const struct halide_filter_metadata_t *const md;
     std::map<std::string, ArgData> args;
     std::map<std::string, Shape> output_shapes;
     bool parsable_output = false;

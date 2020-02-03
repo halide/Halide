@@ -5,8 +5,8 @@
 #include "Simplify.h"
 #include "Substitute.h"
 
-using std::vector;
 using std::pair;
+using std::vector;
 
 namespace Halide {
 namespace Internal {
@@ -38,9 +38,11 @@ class UnrollLoops : public IRMutator {
                 // We're about to hard fail. Get really aggressive
                 // with the simplifier.
                 for (auto it = lets.rbegin(); it != lets.rend(); it++) {
-                    extent = graph_substitute(it->first, it->second, extent);
+                    extent = Let::make(it->first, it->second, extent);
                 }
-                extent = simplify(common_subexpression_elimination(extent));
+                extent = remove_likelies(extent);
+                extent = substitute_in_all_lets(extent);
+                extent = simplify(extent);
                 e = extent.as<IntImm>();
             }
 
@@ -59,6 +61,7 @@ class UnrollLoops : public IRMutator {
             if (e == nullptr && permit_failed_unroll) {
                 // Still no luck, but we're allowed to fail. Rewrite
                 // to a serial loop.
+                user_warning << "HL_PERMIT_FAILED_UNROLL is allowing us to unroll a non-constant loop into a serial loop. Did you mean to do this?\n";
                 body = mutate(body);
                 return For::make(for_loop->name, for_loop->min, for_loop->extent,
                                  ForType::Serial, for_loop->device_api, std::move(body));
@@ -93,6 +96,7 @@ class UnrollLoops : public IRMutator {
         }
     }
     bool permit_failed_unroll = false;
+
 public:
     UnrollLoops() {
         // Experimental autoschedulers may want to unroll without

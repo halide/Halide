@@ -87,7 +87,9 @@ class DebugToFile : public IRMutator {
     }
 
 public:
-    DebugToFile(const map<string, Function> &e) : env(e) {}
+    DebugToFile(const map<string, Function> &e)
+        : env(e) {
+    }
 };
 
 class RemoveDummyRealizations : public IRMutator {
@@ -105,7 +107,9 @@ class RemoveDummyRealizations : public IRMutator {
     }
 
 public:
-    RemoveDummyRealizations(const vector<Function> &o) : outputs(o) {}
+    RemoveDummyRealizations(const vector<Function> &o)
+        : outputs(o) {
+    }
 };
 
 class AddDummyRealizations : public IRMutator {
@@ -120,7 +124,7 @@ class AddDummyRealizations : public IRMutator {
                 std::vector<Range> output_bounds;
                 for (int i = 0; i < out.dimensions(); i++) {
                     string dim = std::to_string(i);
-                    Expr min    = Variable::make(Int(32), out.name() + ".min." + dim);
+                    Expr min = Variable::make(Int(32), out.name() + ".min." + dim);
                     Expr extent = Variable::make(Int(32), out.name() + ".extent." + dim);
                     output_bounds.push_back(Range(min, extent));
                 }
@@ -136,7 +140,9 @@ class AddDummyRealizations : public IRMutator {
     }
 
 public:
-    AddDummyRealizations(const vector<Function> &o) : outputs(o) {}
+    AddDummyRealizations(const vector<Function> &o)
+        : outputs(o) {
+    }
 };
 
 Stmt debug_to_file(Stmt s, const vector<Function> &outputs, const map<string, Function> &env) {

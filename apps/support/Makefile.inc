@@ -1,8 +1,19 @@
-HALIDE_DISTRIB_PATH ?= ../../distrib
+# Disable built-in makefile rules for all apps to avoid pointless file-system
+# scanning and general weirdness resulting from implicit rules. 
+MAKEFLAGS += --no-builtin-rules
+.SUFFIXES:
+
+HALIDE_DISTRIB_PATH ?= $(realpath ../../distrib)
 LDFLAGS ?=
 IMAGES ?= ../images
 UNAME ?= $(shell uname)
 SHELL = bash
+
+PYTHON ?= python3
+
+# TODO(srj): the python bindings need to be put into the distrib folders;
+# this is a hopefully-temporary workaround (https://github.com/halide/Halide/issues/4368)
+HALIDE_PYTHON_BINDINGS_PATH ?= $(realpath ../../bin/python3_bindings)
 
 BIN_DIR ?= bin
 
@@ -47,6 +58,11 @@ OPTIMIZE ?= -O3
 CFLAGS += $(OPTIMIZE) -I $(HALIDE_DISTRIB_PATH)/include/ -I $(HALIDE_DISTRIB_PATH)/tools/ -I $(HALIDE_DISTRIB_PATH)/apps/support/
 CXXFLAGS += $(OPTIMIZE) -std=c++11 -I $(HALIDE_DISTRIB_PATH)/include/ -I $(HALIDE_DISTRIB_PATH)/tools/ $(SANITIZER_FLAGS) -Wall -Werror -Wno-unused-function -Wcast-qual -Wignored-qualifiers -Wno-comment -Wsign-compare -Wno-unknown-warning-option -Wno-psabi
 
+CXX_VERSION = $(shell $(CXX) --version | head -n1)
+ifneq (,$(findstring clang,$(CXX_VERSION)))
+CXXFLAGS += $(findstring -stdlib=libc++, $(HALIDE_LLVM_CXX_FLAGS))
+endif
+
 ifeq (0, $(HALIDE_RTTI))
 CXXFLAGS += -fno-rtti
 endif
@@ -86,6 +102,7 @@ CXX-host-cuda ?= $(CXX)
 CXX-host-metal ?= $(CXX)
 CXX-host-hvx_128 ?= $(CXX)
 CXX-host-hvx_64 ?= $(CXX)
+CXX-$(HL_TARGET) ?= $(CXX)
 CXX-arm-64-android ?= $(ANDROID_ARM64_TOOLCHAIN)/bin/aarch64-linux-android-c++
 CXX-arm-32-android ?= $(ANDROID_ARM_TOOLCHAIN)/bin/arm-linux-androideabi-c++
 
@@ -96,6 +113,7 @@ CXXFLAGS-host-cuda ?= $(CXXFLAGS)
 CXXFLAGS-host-metal ?= $(CXXFLAGS)
 CXXFLAGS-host-hvx_128 ?= $(CXXFLAGS)
 CXXFLAGS-host-hvx_64 ?= $(CXXFLAGS)
+CXXFLAGS-$(HL_TARGET) ?= $(CXXFLAGS)
 CXXFLAGS-arm-64-android ?= $(CXXFLAGS)
 CXXFLAGS-arm-32-android ?= $(CXXFLAGS)
 
@@ -106,6 +124,7 @@ LDFLAGS-host-cuda ?= $(LDFLAGS)
 LDFLAGS-host-metal ?= $(LDFLAGS)
 LDFLAGS-host-hvx_128 ?= $(LDFLAGS)
 LDFLAGS-host-hvx_64 ?= $(LDFLAGS)
+LDFLAGS-$(HL_TARGET) ?= $(LDFLAGS)
 LDFLAGS-arm-64-android ?= -llog -fPIE -pie
 LDFLAGS-arm-32-android ?= -llog -fPIE -pie
 
@@ -121,6 +140,9 @@ LIB_HALIDE = $(HALIDE_DISTRIB_PATH)/bin/libHalide.$(SHARED_EXT)
 endif
 
 GENERATOR_DEPS ?= $(LIB_HALIDE) $(HALIDE_DISTRIB_PATH)/include/Halide.h $(HALIDE_DISTRIB_PATH)/tools/GenGen.cpp
+
+# Generators which use autoscheduler plugin need to specify the linker where to find libHalide.so required by the plugin.
+GENERATOR_LDFLAGS ?= -Wl,-rpath,$(dir $(LIB_HALIDE)) -L $(dir $(LIB_HALIDE)) -lHalide $(LDFLAGS)
 
 LIBPNG_LIBS_DEFAULT = $(shell libpng-config --ldflags)
 LIBPNG_CXX_FLAGS ?= $(shell libpng-config --cflags)
@@ -204,7 +226,7 @@ $(BIN)/%.run: $(BIN)/%.rungen
 .PHONY: %.benchmark
 %.benchmark: $(BIN)/$(HL_TARGET)/%.rungen
 	@[[ "$(HL_TARGET)" != "wasm-32-wasmrt"* ]] || (echo "HL_TARGET must NOT begin with wasm-32-wasmrt for target $@" && exit 1)
-	@$^ --benchmarks=all --default_input_buffers --default_input_scalars --output_extents=estimate --parsable_output
+	@$^ --benchmarks=all --estimate_all --parsable_output
 
 # ------- wasm support
 
@@ -271,4 +293,4 @@ $(BIN)/%.rungen_wasm: $(BIN)/%.rungen.js
 .PHONY: %.benchmark_wasm
 %.benchmark_wasm: $(BIN)/$(HL_TARGET)/%.rungen.js
 	@[[ "$(HL_TARGET)" == "wasm-32-wasmrt"* ]] || (echo "HL_TARGET must begin with wasm-32-wasmrt for target $@" && exit 1)
-	@cd $(<D); $(WASM_SHELL) $(<F) $(WASM_SHELL_ARG_SEP) --benchmarks=all --default_input_buffers --default_input_scalars --output_extents=estimate --parsable_output
+	@cd $(<D); $(WASM_SHELL) $(<F) $(WASM_SHELL_ARG_SEP) --benchmarks=all --estimate_all --parsable_output

@@ -1,5 +1,3 @@
-from __future__ import print_function
-from __future__ import division
 
 import halide as hl
 import numpy as np
@@ -240,6 +238,12 @@ def test_overflow():
     except ValueError as e:
         assert 'Out of range arguments to make_dim_vec.' in str(e)
 
+def test_buffer_to_str():
+    b = hl.Buffer()
+    assert str(b) == '<undefined halide.Buffer>'
+    b = hl.Buffer(hl.Int(32), [128, 256])
+    assert str(b) == '<halide.Buffer of type int32 shape:[[0,128,1],[0,256,128]]>'
+
 if __name__ == "__main__":
     test_make_interleaved()
     test_interleaved_ndarray()
@@ -252,3 +256,4 @@ if __name__ == "__main__":
     test_int64()
     test_reorder()
     test_overflow()
+    test_buffer_to_str()

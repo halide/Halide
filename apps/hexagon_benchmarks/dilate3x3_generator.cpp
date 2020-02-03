@@ -14,9 +14,9 @@ public:
 
     void generate() {
         bounded_input(x, y) = BoundaryConditions::repeat_edge(input)(x, y);
-        max_y(x, y) = max(bounded_input(x, y-1), bounded_input(x, y), bounded_input(x, y+1));
+        max_y(x, y) = max(bounded_input(x, y - 1), bounded_input(x, y), bounded_input(x, y + 1));
 
-        output(x, y) = max(max_y(x-1, y), max_y(x, y), max_y(x+1, y));
+        output(x, y) = max(max_y(x - 1, y), max_y(x, y), max_y(x + 1, y));
     }
 
     void schedule() {
@@ -31,10 +31,10 @@ public:
         if (get_target().features_any_of({Target::HVX_64, Target::HVX_128})) {
             const int vector_size = get_target().has_feature(Target::HVX_128) ? 128 : 64;
             Expr input_stride = input.dim(1).stride();
-            input.dim(1).set_stride((input_stride/vector_size) * vector_size);
+            input.dim(1).set_stride((input_stride / vector_size) * vector_size);
 
             Expr output_stride = output.dim(1).stride();
-            output.dim(1).set_stride((output_stride/vector_size) * vector_size);
+            output.dim(1).set_stride((output_stride / vector_size) * vector_size);
             bounded_input
                 .compute_at(Func(output), y)
                 .align_storage(x, 128)
@@ -58,6 +58,7 @@ public:
                 .parallel(y, 16);
         }
     }
+
 private:
     Var x{"x"}, y{"y"};
     Func max_y{"max_y"};

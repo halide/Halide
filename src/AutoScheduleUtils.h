@@ -47,8 +47,8 @@ int string_to_int(const std::string &s);
 /** Substitute every variable in an Expr or a Stmt with its estimate
  * if specified. */
 //@{
-Expr subsitute_var_estimates(Expr e);
-Stmt subsitute_var_estimates(Stmt s);
+Expr substitute_var_estimates(Expr e);
+Stmt substitute_var_estimates(Stmt s);
 //@}
 
 /** Return the size of an interval. Return an undefined expr if the interval
@@ -111,6 +111,24 @@ V &get_element(std::map<K, V> &m, const K &key) {
     return iter->second;
 }
 // @}
+
+/** If the cost of computing a Func is about the same as calling the Func,
+ * inline the Func. Return true of any of the Funcs is inlined. */
+bool inline_all_trivial_functions(const std::vector<Function> &outputs,
+                                  const std::vector<std::string> &order,
+                                  const std::map<std::string, Function> &env);
+
+/** Determine if a Func (order[index]) is only consumed by another single Func
+ * in element-wise manner. If it is, return the name of the consumer Func;
+ * otherwise, return an empty string. */
+std::string is_func_called_element_wise(const std::vector<std::string> &order, size_t index,
+                                        const std::map<std::string, Function> &env);
+
+/** Inline a Func if its values are only consumed by another single Func in
+ * element-wise manner. */
+bool inline_all_element_wise_functions(const std::vector<Function> &outputs,
+                                       const std::vector<std::string> &order,
+                                       const std::map<std::string, Function> &env);
 
 void propagate_estimate_test();
 

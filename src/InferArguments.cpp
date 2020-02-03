@@ -50,7 +50,7 @@ private:
         return false;
     }
 
-    void visit_exprs(const vector<Expr>& v) {
+    void visit_exprs(const vector<Expr> &v) {
         for (Expr i : v) {
             visit_expr(i);
         }
@@ -61,7 +61,7 @@ private:
         e.accept(this);
     }
 
-    void visit_function(const Function& func) {
+    void visit_function(const Function &func) {
         if (visited_functions.count(func.name())) return;
         visited_functions.insert(func.name());
 

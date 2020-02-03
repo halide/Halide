@@ -1,9 +1,10 @@
 ---
-# BasedOnStyle: LLVM
 AccessModifierOffset: -4
 AlignEscapedNewlinesLeft: true
-AlignTrailingComments: false
+AlignTrailingComments: true
 AllowAllParametersOfDeclarationOnNextLine: true
+# Requires Clang-Format 10+
+# AllowShortBlocksOnASingleLine: 'Empty'
 AllowShortFunctionsOnASingleLine: false
 AllowShortIfStatementsOnASingleLine: true
 AllowShortLoopsOnASingleLine: false
@@ -12,13 +13,13 @@ AlwaysBreakTemplateDeclarations: true
 BinPackParameters: true
 BreakBeforeBinaryOperators: false
 BreakBeforeBraces: Attach
-BreakBeforeTernaryOperators: true
+BreakBeforeTernaryOperators: false
 BreakConstructorInitializersBeforeComma: false
 ColumnLimit: 0
 ConstructorInitializerAllOnOneLineOrOnePerLine: false
 ConstructorInitializerIndentWidth: 4
 ContinuationIndentWidth: 4
-Cpp11BracedListStyle: false
+Cpp11BracedListStyle: true
 DerivePointerBinding: false
 ExperimentalAutoDetectBinPacking: false
 IndentCaseLabels: false
@@ -34,8 +35,8 @@ PenaltyBreakString: 1000
 PenaltyExcessCharacter: 1000000
 PenaltyReturnTypeOnItsOwnLine: 60
 PointerBindsToType: false
-SpaceAfterCStyleCast: true
 SpaceAfterControlStatementKeyword: true
+SpaceAfterCStyleCast: false
 SpaceAfterTemplateKeyword: false
 SpaceBeforeAssignmentOperators: true
 SpaceInEmptyParentheses: false
@@ -46,5 +47,5 @@ SpacesInParentheses: false
 Standard: Cpp11
 TabWidth: 8
 UseTab: Never
-...
 
+...

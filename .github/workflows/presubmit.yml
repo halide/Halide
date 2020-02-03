@@ -1,0 +1,35 @@
+name: Halide Presubmit Checks
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, edited, review_requested]
+    paths:
+      - '**.h'
+      - '**.c'
+      - '**.cpp'
+
+jobs:
+  check_clang_format:
+    name: Check clang-format
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v2
+      - uses: DoozyX/clang-format-lint-action@v0.5
+        with:
+          source: '.'
+          extensions: 'h,c,cpp'
+          clangFormatVersion: 9
+  check_cmake_file_lists:
+    name: Check CMake file lists
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v2
+      - name: bash script
+        run: |
+          shopt -s nullglob
+          diff <(awk '/SOURCES/{flag=1;next} /\)/{flag=0} flag{print$1}' test/auto_schedule/CMakeLists.txt | sort) <(cd test/auto_schedule; ls -1 *.{c,cpp} | sort)
+          diff <(awk '/SOURCES/{flag=1;next} /\)/{flag=0} flag{print$1}' test/correctness/CMakeLists.txt | sort) <(cd test/correctness; ls -1 *.{c,cpp} | sort)
+          diff <(awk '/SOURCES/{flag=1;next} /\)/{flag=0} flag{print$1}' test/error/CMakeLists.txt | sort) <(cd test/error; ls -1 *.{c,cpp} | sort)
+          diff <(awk '/SOURCES/{flag=1;next} /\)/{flag=0} flag{print$1}' test/failing_with_issue/CMakeLists.txt | sort) <(cd test/failing_with_issue; ls -1 *.{c,cpp} | sort)
+          diff <(awk '/SOURCES/{flag=1;next} /\)/{flag=0} flag{print$1}' test/opengl/CMakeLists.txt | sort) <(cd test/opengl; ls -1 *.{c,cpp} | sort)
+          diff <(awk '/SOURCES/{flag=1;next} /\)/{flag=0} flag{print$1}' test/performance/CMakeLists.txt | sort) <(cd test/performance; ls -1 *.{c,cpp} | sort)
+          diff <(awk '/SOURCES/{flag=1;next} /\)/{flag=0} flag{print$1}' test/warning/CMakeLists.txt | sort) <(cd test/warning; ls -1 *.{c,cpp} | sort)

@@ -17,13 +17,8 @@ Expr Simplify::visit(const Cast *op, ExprInfo *bounds) {
         double f = 0.0;
         int64_t i = 0;
         uint64_t u = 0;
-        if (call && (call->is_intrinsic(Call::indeterminate_expression) ||
-                     call->is_intrinsic(Call::signed_integer_overflow))) {
-            if (call->is_intrinsic(Call::indeterminate_expression)) {
-                return make_indeterminate_expression(op->type);
-            } else {
-                return make_signed_integer_overflow(op->type);
-            }
+        if (call && call->is_intrinsic(Call::signed_integer_overflow)) {
+            return make_signed_integer_overflow(op->type);
         } else if (value.type() == op->type) {
             return value;
         } else if (op->type.is_int() &&
@@ -94,7 +89,8 @@ Expr Simplify::visit(const Cast *op, ExprInfo *bounds) {
             // cast(ramp(a, b, w)) -> ramp(cast(a), cast(b), w)
             return mutate(Ramp::make(Cast::make(op->type.element_of(), ramp_value->base),
                                      Cast::make(op->type.element_of(), ramp_value->stride),
-                                     ramp_value->lanes), bounds);
+                                     ramp_value->lanes),
+                          bounds);
         }
     }
 
@@ -105,5 +101,5 @@ Expr Simplify::visit(const Cast *op, ExprInfo *bounds) {
     }
 }
 
-}
-}
+}  // namespace Internal
+}  // namespace Halide

@@ -73,9 +73,9 @@ public:
 
     // ... and another representing a constant scale factor to use:
     GeneratorParam<float> scale{"scale",
-            1.0f /* default value */,
-            0.0f /* minimum value */,
-            100.0f /* maximum value */};
+                                1.0f /* default value */,
+                                0.0f /* minimum value */,
+                                100.0f /* maximum value */};
 
     // You can define GeneratorParams of all the basic scalar
     // types. For numeric types you can optionally provide a minimum
@@ -84,14 +84,16 @@ public:
     // You can also define GeneratorParams for enums. To make this
     // work you must provide a mapping from strings to your enum
     // values.
-    enum class Rotation { None, Clockwise, CounterClockwise };
+    enum class Rotation { None,
+                          Clockwise,
+                          CounterClockwise };
     GeneratorParam<Rotation> rotation{"rotation",
-            /* default value */
-            Rotation::None,
-            /* map from names to values */
-            {{ "none", Rotation::None },
-             { "cw",   Rotation::Clockwise },
-             { "ccw",  Rotation::CounterClockwise }}};
+                                      /* default value */
+                                      Rotation::None,
+                                      /* map from names to values */
+                                      {{"none", Rotation::None},
+                                       {"cw", Rotation::Clockwise},
+                                       {"ccw", Rotation::CounterClockwise}}};
 
     // We'll use the same Inputs as before:
     Input<uint8_t> offset{"offset"};
@@ -122,10 +124,10 @@ public:
             rotated(x, y) = brighter(x, y);
             break;
         case Rotation::Clockwise:
-            rotated(x, y) = brighter(y, 100-x);
+            rotated(x, y) = brighter(y, 100 - x);
             break;
         case Rotation::CounterClockwise:
-            rotated(x, y) = brighter(100-y, x);
+            rotated(x, y) = brighter(100 - y, x);
             break;
         }
 
@@ -156,7 +158,6 @@ public:
                 .vectorize(x, natural_vector_size(rotated.output_types()[0]));
         }
     }
-
 };
 
 // Register our second generator:

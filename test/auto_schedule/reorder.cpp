@@ -13,19 +13,19 @@ double run_test_1(bool auto_schedule) {
     f(x, y, dx, dy) = x + y + dx + dy;
 
     int search_area = 7;
-    RDom dom(-search_area/2, search_area, -search_area/2, search_area, "dom");
+    RDom dom(-search_area / 2, search_area, -search_area / 2, search_area, "dom");
 
     // If 'f' is inlined into 'r', the only storage layout that the auto scheduler
     // needs to care about is that of 'r'.
     Func r("r");
-    r(x, y, c) += f(x, y+1, dom.x, dom.y) * f(x, y-1, dom.x, dom.y) * c;
+    r(x, y, c) += f(x, y + 1, dom.x, dom.y) * f(x, y - 1, dom.x, dom.y) * c;
 
     Target target = get_jit_target_from_environment();
     Pipeline p(r);
 
     if (auto_schedule) {
         // Provide estimates on the pipeline output
-        r.estimate(x, 0, 1024).estimate(y, 0, 1024).estimate(c, 0, 3);
+        r.set_estimates({{0, 1024}, {0, 1024}, {0, 3}});
         // Auto-schedule the pipeline
         p.auto_schedule(target);
     } else {
@@ -45,7 +45,7 @@ double run_test_1(bool auto_schedule) {
         p.realize(out);
     });
 
-    return t*1000;
+    return t * 1000;
 }
 
 double run_test_2(bool auto_schedule) {
@@ -69,18 +69,15 @@ double run_test_2(bool auto_schedule) {
     Func right = BoundaryConditions::repeat_edge(right_im);
 
     Func diff;
-    diff(x, y, z, c) = min(absd(left(x, y, c), right(x + 2*z, y, c)),
-                           absd(left(x, y, c), right(x + 2*z + 1, y, c)));
+    diff(x, y, z, c) = min(absd(left(x, y, c), right(x + 2 * z, y, c)),
+                           absd(left(x, y, c), right(x + 2 * z + 1, y, c)));
 
     Target target = get_jit_target_from_environment();
     Pipeline p(diff);
 
     if (auto_schedule) {
         // Provide estimates on the pipeline output
-        diff.estimate(x, 0, left_im.width()).
-             estimate(y, 0, left_im.height()).
-             estimate(z, 0, 32).
-             estimate(c, 0, 3);
+        diff.set_estimates({{0, left_im.width()}, {0, left_im.height()}, {0, 32}, {0, 3}});
         // Auto-schedule the pipeline
         p.auto_schedule(target);
     } else {
@@ -96,7 +93,7 @@ double run_test_2(bool auto_schedule) {
         p.realize(out);
     });
 
-    return t*1000;
+    return t * 1000;
 }
 
 double run_test_3(bool auto_schedule) {
@@ -108,18 +105,18 @@ double run_test_3(bool auto_schedule) {
     f(x, y, dx, dy) = im(x, y, dx, dy);
 
     int search_area = 7;
-    RDom dom(-search_area/2, search_area, -search_area/2, search_area, "dom");
+    RDom dom(-search_area / 2, search_area, -search_area / 2, search_area, "dom");
 
     Func r("r");
-    r(x, y, c) += f(x, y+1, search_area/2 + dom.x, search_area/2 + dom.y) *
-                  f(x, y+2, search_area/2 + dom.x, search_area/2 + dom.y) * c;
+    r(x, y, c) += f(x, y + 1, search_area / 2 + dom.x, search_area / 2 + dom.y) *
+                  f(x, y + 2, search_area / 2 + dom.x, search_area / 2 + dom.y) * c;
 
     Target target = get_jit_target_from_environment();
     Pipeline p(r);
 
     if (auto_schedule) {
         // Provide estimates on the pipeline output
-        r.estimate(x, 0, 1024).estimate(y, 0, 1024).estimate(c, 0, 3);
+        r.set_estimates({{0, 1024}, {0, 1024}, {0, 3}});
         // Auto-schedule the pipeline
         p.auto_schedule(target);
     } else {
@@ -136,7 +133,7 @@ double run_test_3(bool auto_schedule) {
         p.realize(out);
     });
 
-    return t*1000;
+    return t * 1000;
 }
 
 int main(int argc, char **argv) {

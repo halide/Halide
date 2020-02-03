@@ -39,7 +39,9 @@ public:
 
     std::string print_gpu_name(const std::string &name) override;
 
-    std::string api_unique_name() override { return "cuda"; }
+    std::string api_unique_name() override {
+        return "cuda";
+    }
 
 protected:
     using CodeGen_LLVM::visit;
@@ -62,18 +64,28 @@ protected:
     void visit(const AssertStmt *) override;
     void visit(const Load *) override;
     void visit(const Store *) override;
+    void visit(const Atomic *) override;
     // @}
 
     std::string march() const;
     std::string mcpu() const override;
-    std::string mattrs()  const override;
-    bool use_soft_float_abi()  const override;
-    int native_vector_bits()  const override;
-    bool promote_indices()  const override {return false;}
+    std::string mattrs() const override;
+    bool use_soft_float_abi() const override;
+    int native_vector_bits() const override;
+    bool promote_indices() const override {
+        return false;
+    }
+
+    Type upgrade_type_for_arithmetic(const Type &t) const override {
+        return t;
+    }
+    Type upgrade_type_for_storage(const Type &t) const override;
 
     /** Map from simt variable names (e.g. foo.__block_id_x) to the llvm
      * ptx intrinsic functions to call to get them. */
     std::string simt_intrinsic(const std::string &name);
+
+    bool supports_atomic_add(const Type &t) const override;
 };
 
 }  // namespace Internal

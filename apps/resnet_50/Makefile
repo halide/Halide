@@ -2,7 +2,9 @@ include ../support/Makefile.inc
 
 SEED = 123
 
-all: $(BIN)/$(HL_TARGET)/process
+.PHONY: build clean test
+
+build: $(BIN)/$(HL_TARGET)/process
 
 $(BIN)/%/pytorch_weights/ok:
 	@mkdir -p $(@D)
@@ -11,7 +13,7 @@ $(BIN)/%/pytorch_weights/ok:
 
 $(GENERATOR_BIN)/resnet50.generator: Resnet50Generator.cpp $(GENERATOR_DEPS)
 	@mkdir -p $(@D)
-	$(CXX) $(CXXFLAGS) -g -fno-rtti $(filter-out %.h,$^) -o $@ $(LDFLAGS) $(HALIDE_SYSTEM_LIBS)
+	$(CXX) $(CXXFLAGS) -g -fno-rtti $(filter %.cpp,$^) -o $@ $(GENERATOR_LDFLAGS) 
 
 $(BIN)/%/resnet50.a: $(GENERATOR_BIN)/resnet50.generator
 	@mkdir -p $(@D)
@@ -28,4 +30,5 @@ benchmark_and_validate: $(BIN)/$(HL_TARGET)/process $(BIN)/$(HL_TARGET)/pytorch_
 clean:
 	rm -rf $(BIN)
 
-test: $(BIN)/$(HL_TARGET)/process
+test:
+	@echo "Only currently testing that resnet builds"

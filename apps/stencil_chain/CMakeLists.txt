@@ -1,5 +1,5 @@
 add_executable(stencil_chain_process process.cpp)
-halide_use_image_io(stencil_chain_process)
+target_link_libraries(stencil_chain_process PRIVATE Halide::ImageIO)
 
 halide_generator(stencil_chain.generator SRCS stencil_chain_generator.cpp)
 foreach(AUTO_SCHEDULE false true)

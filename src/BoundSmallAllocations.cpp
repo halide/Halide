@@ -1,8 +1,8 @@
 #include "BoundSmallAllocations.h"
 #include "Bounds.h"
+#include "CodeGen_Internal.h"
 #include "IRMutator.h"
 #include "Simplify.h"
-#include "CodeGen_Internal.h"
 
 namespace Halide {
 namespace Internal {
@@ -20,9 +20,10 @@ class BoundSmallAllocations : public IRMutator {
         struct Frame {
             const T *op;
             ScopedBinding<Interval> binding;
-            Frame(const T *op, Scope<Interval> &scope) :
-                op(op),
-                binding(scope, op->name, find_constant_bounds(op->value, scope)) {}
+            Frame(const T *op, Scope<Interval> &scope)
+                : op(op),
+                  binding(scope, op->name, find_constant_bounds(op->value, scope)) {
+            }
         };
         std::vector<Frame> frames;
         Body result;
@@ -58,8 +59,10 @@ class BoundSmallAllocations : public IRMutator {
         b.min = simplify(b.min);
         b.max = simplify(b.max);
         ScopedBinding<Interval> bind(scope, op->name, b);
-        ScopedValue<bool> old_in_thread_loop(in_thread_loop, in_thread_loop ||
-                                             op->for_type == ForType::GPUThread);
+        bool new_in_thread_loop =
+            in_thread_loop || op->for_type == ForType::GPUThread;
+        ScopedValue<bool> old_in_thread_loop(in_thread_loop, new_in_thread_loop);
+
         return IRMutator::visit(op);
     }
 
@@ -74,10 +77,6 @@ class BoundSmallAllocations : public IRMutator {
             << "Allocation " << op->name << " has a dynamic size. "
             << "Only fixed-size allocations can be stored in registers. "
             << "Try storing on the heap or stack instead.";
-        user_assert(!in_thread_loop || bound.defined())
-            << "Allocation " << op->name << " has a dynamic size. "
-            << "Only fixed-size allocations are supported on the gpu. "
-            << "Try storing into shared memory instead.";
 
         const int64_t *size_ptr = bound.defined() ? as_const_int(bound) : nullptr;
         int64_t size = size_ptr ? *size_ptr : 0;

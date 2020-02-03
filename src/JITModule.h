@@ -15,7 +15,6 @@
 
 namespace llvm {
 class Module;
-class Type;
 }
 
 namespace Halide {
@@ -36,7 +35,9 @@ struct JITModule {
     struct Symbol {
         void *address = nullptr;
         Symbol() = default;
-        explicit Symbol(void *address) : address(address) {}
+        explicit Symbol(void *address)
+            : address(address) {
+        }
     };
 
     JITModule();
@@ -123,8 +124,11 @@ struct JITModule {
                         const std::vector<JITModule> &dependencies = std::vector<JITModule>(),
                         const std::vector<std::string> &requested_exports = std::vector<std::string>());
 
-    /** Encapsulate device (GPU) and buffer interactions. */
+    /** See JITSharedRuntime::memoization_cache_set_size */
     void memoization_cache_set_size(int64_t size) const;
+
+    /** See JITSharedRuntime::reuse_device_allocations */
+    void reuse_device_allocations(bool) const;
 
     /** Return true if compile_module has been called on this module. */
     bool compiled() const;
@@ -162,6 +166,13 @@ public:
      * and call halide_memoization_cache_set_size() instead.
      */
     static void memoization_cache_set_size(int64_t size);
+
+    /** Set whether or not Halide may hold onto and reuse device
+     * allocations to avoid calling expensive device API allocation
+     * functions. If you are compiling statically, you should include
+     * HalideRuntime.h and call halide_reuse_device_allocations
+     * instead. */
+    static void reuse_device_allocations(bool);
 
     static void release_all();
 };

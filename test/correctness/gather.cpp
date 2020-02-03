@@ -6,11 +6,11 @@ using namespace Halide;
 // hexagon DSP.
 template<typename ITYPE>
 bool test() {
-
+    const Target target = get_jit_target_from_environment();
     const int W_img = 128;
     const int H_img = 8;
     const int W_lut = 256;
-    const int H_lut = 32;
+    const int H_lut = (target.has_feature(Target::HVX_v65)) ? 32 : 1;
 
     srand(time(0));
 
@@ -33,34 +33,32 @@ bool test() {
 
     // Implement: output(x, y) = lut(input(x, 0), input(x, 1))
     // output and lut must have store_in(MemoryType::VTCM) to generate vgathers.
-    Expr xCoord = clamp(cast<int32_t>(input(x, 0)), 0, W_lut-1);
-    Expr yCoord = clamp(cast<int32_t>(input(x, 1)), 0, H_lut-1);
+    Expr xCoord = clamp(cast<int32_t>(input(x, 0)), 0, W_lut - 1);
+    Expr yCoord = clamp(cast<int32_t>(input(x, 1)), 0, H_lut - 1);
     lut_vtcm(x, y) = lut(x, y);
     output_vtcm(x, y) = lut_vtcm(xCoord, yCoord);
     output(x, y) = output_vtcm(x, y);
 
-    Target target = get_jit_target_from_environment();
     if (target.features_any_of({Target::HVX_64, Target::HVX_128})) {
         const int vector_size = target.has_feature(Target::HVX_128) ? 128 : 64;
         Var yi;
 
-        lut_vtcm
-            .compute_at(output, Var::outermost())
-            .vectorize(x, vector_size/2);
-
-        output_vtcm
-            .compute_at(output, y)
-            .vectorize(x, vector_size/2);
-
         output
             .hexagon()
-            .split(y, y, yi, H_img/2)
+            .split(y, y, yi, H_img / 2)
             .parallel(y)
-            .vectorize(x, vector_size/2);
+            .vectorize(x, vector_size);
 
-        if (target.has_feature(Target::HVX_v65)) {
-            lut_vtcm.store_in(MemoryType::VTCM);
-            output_vtcm.store_in(MemoryType::VTCM);
+        if (target.features_any_of({Target::HVX_v65, Target::HVX_v66})) {
+            lut_vtcm
+                .store_in(MemoryType::VTCM)
+                .compute_at(output, Var::outermost())
+                .vectorize(x, vector_size);
+
+            output_vtcm
+                .store_in(MemoryType::VTCM)
+                .compute_at(output, y)
+                .vectorize(x, vector_size);
         }
     }
 
@@ -68,8 +66,8 @@ bool test() {
 
     for (int y = 0; y < H_img; y++) {
         for (int x = 0; x < W_img; x++) {
-            int xCoord = std::max(std::min((int)(input(x, 0)), W_lut-1), 0);
-            int yCoord = std::max(std::min((int)(input(x, 1)), H_lut-1), 0);
+            int xCoord = std::max(std::min((int)(input(x, 0)), W_lut - 1), 0);
+            int yCoord = std::max(std::min((int)(input(x, 1)), H_lut - 1), 0);
             ITYPE correct = lut(xCoord, yCoord);
             if (output_buf(x, y) != correct) {
                 printf("output(%d, %d) = %d instead of %d\n", x, y, output_buf(x, y), correct);
@@ -82,7 +80,13 @@ bool test() {
 }
 
 int main() {
-    if (!test<uint16_t>() ||
+    // With hexagon targets >=v65 with hvx, we expect to see gathers for
+    // uint16_t, int16_t, uint32_t, int32_t
+    // For targets <v65 with hvx, we should generate dynamic_shuffle which are
+    // compiled to vlut instructions.
+    if (!test<uint8_t>() ||
+        !test<int8_t>() ||
+        !test<uint16_t>() ||
         !test<int16_t>() ||
         !test<uint32_t>() ||
         !test<int32_t>()) return 1;

@@ -31,7 +31,7 @@ extern int halide_opengl_run(void *user_context,
                              void *args[],
                              int8_t is_buffer[],
                              int num_attributes,
-                             float* vertex_buffer,
+                             float *vertex_buffer,
                              int num_coords_dim0,
                              int num_coords_dim1);
 // @}
@@ -79,13 +79,12 @@ extern void halide_opengl_context_lost(void *user_context);
  *  to OpenGL API functions. */
 void *halide_opengl_get_proc_address(void *user_context, const char *name);
 
-
 /** This functions MUST be provided by the host environment to create an OpenGL
  *  context for use by the OpenGL backend. */
 int halide_opengl_create_context(void *user_context);
 
 #ifdef __cplusplus
-} // End extern "C"
+}  // End extern "C"
 #endif
 
-#endif // HALIDE_HALIDERUNTIMEOPENGL_H
+#endif  // HALIDE_HALIDERUNTIMEOPENGL_H

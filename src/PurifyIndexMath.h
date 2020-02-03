@@ -20,7 +20,7 @@ namespace Internal {
  */
 Expr purify_index_math(Expr);
 
-}
-}
+}  // namespace Internal
+}  // namespace Halide
 
 #endif

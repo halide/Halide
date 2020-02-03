@@ -1,11 +1,12 @@
 include ../support/Makefile.inc
 
+.PHONY: build clean test
 
-all: $(BIN)/$(HL_TARGET)/process
+build: $(BIN)/$(HL_TARGET)/process
 
 $(GENERATOR_BIN)/stencil_chain.generator: stencil_chain_generator.cpp $(GENERATOR_DEPS)
 	@mkdir -p $(@D)
-	$(CXX) $(CXXFLAGS) $(filter-out %.h,$^) -o $@ $(LDFLAGS) $(HALIDE_SYSTEM_LIBS)
+	$(CXX) $(CXXFLAGS) $(filter %.cpp,$^) -o $@ $(GENERATOR_LDFLAGS) 
 
 $(BIN)/%/stencil_chain.a: $(GENERATOR_BIN)/stencil_chain.generator
 	@mkdir -p $(@D)

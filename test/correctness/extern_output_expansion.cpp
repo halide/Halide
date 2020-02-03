@@ -16,7 +16,7 @@ extern "C" DLLEXPORT int extern_stage(halide_buffer_t *in, halide_buffer_t *out)
         // we'll require that the output size must be a multiple of 17
 
         if (out->is_bounds_query()) {
-            out->dim[0].extent = ((out->dim[0].extent + 16)/17)*17;
+            out->dim[0].extent = ((out->dim[0].extent + 16) / 17) * 17;
         }
         if (in->is_bounds_query()) {
             in->dim[0].extent = out->dim[0].extent;
@@ -45,7 +45,7 @@ int main(int argc, char **argv) {
     for (int i = 0; i < 2; i++) {
         Func f, g, h;
         Var x;
-        f(x) = x*x;
+        f(x) = x * x;
 
         g.define_extern("extern_stage", {f}, Int(32), 1);
 
@@ -64,7 +64,7 @@ int main(int argc, char **argv) {
         Buffer<int32_t> result = h.realize(100);
 
         for (int i = 0; i < 100; i++) {
-            int32_t correct = i*i*i*2;
+            int32_t correct = i * i * i * 2;
             if (result(i) != correct) {
                 printf("result(%d) = %d instead of %d\n", i, result(i), correct);
                 return -1;
