@@ -775,16 +775,16 @@ void CodeGen_ARM::visit(const Store *op) {
         llvm::Function *fn = dyn_cast_or_null<llvm::Function>(module->getOrInsertFunction(instr.str(), fn_type));
 #endif
         internal_assert(fn);
-#else  // not USE_CUSTOM_STRIDED_STORE
+#else   // not USE_CUSTOM_STRIDED_STORE
         Value *shuffle_part1, *shuffle_part2;
         if (num_vecs > 2) {
             int mask_size = 2 * t.lanes();
-            SmallVector<Constant*, 256> constants;
-            for(int j = 0; j < mask_size; j++) {
+            SmallVector<Constant *, 256> constants;
+            for (int j = 0; j < mask_size; j++) {
                 Constant *constant = ConstantInt::get(i32_t, j);
                 constants.push_back(constant);
             }
-            Constant* constants_vec = ConstantVector::get(constants);
+            Constant *constants_vec = ConstantVector::get(constants);
 
             Value *args3 = (num_vecs >= 3) ? UndefValue::get(llvm_type_of(t)) : args[3];
 
@@ -827,15 +827,15 @@ void CodeGen_ARM::visit(const Store *op) {
             }
 
             CallInst *store = builder->CreateCall(fn, slice_args);
-#else  // not USE_CUSTOM_STRIDED_STORE
-            SmallVector<Constant*, 256> constants;
+#else   // not USE_CUSTOM_STRIDED_STORE
+            SmallVector<Constant *, 256> constants;
             for (int j = 0; j < intrin_type.lanes(); j++) {
                 for (int k = 0; k < num_vecs; k++) {
-                    Constant *constant = ConstantInt::get(i32_t, i + j + k*t.lanes());
+                    Constant *constant = ConstantInt::get(i32_t, i + j + k * t.lanes());
                     constants.push_back(constant);
                 }
             }
-            Constant* constants_vec = ConstantVector::get(constants);
+            Constant *constants_vec = ConstantVector::get(constants);
             Value *all_shuffle = builder->CreateShuffleVector(shuffle_part1, shuffle_part2, constants_vec);
             Value *bitcast = builder->CreateBitOrPointerCast(ptr, store_return_pointer_type);
             StoreInst *store = cast<StoreInst>(builder->CreateStore(all_shuffle, bitcast));
