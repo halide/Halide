@@ -270,9 +270,9 @@ vector<vector<int64_t>> generate_gpu_tilings(const vector<vector<int64_t>> &stag
             int64_t min_threads = ((d == vectorized_indices[0]) ? std::min(warp_width, (int)stage_sizes[0][d]) : 1);
             bool full_extent_considered = false;
 
-            size_t successor_index = vectorized_indices[0] > 0 ? 0 : 1;
+            int successor_index = vectorized_indices[0] > 0 ? 0 : 1;
             for (size_t i = 0; i < stage_sizes[0].size(); ++i) {
-                if (d == vectorized_indices[0] || stage_size[0][i] == 1) {
+                if (d == vectorized_indices[0] || stage_sizes[0][i] == 1) {
                     continue;
                 }
 
