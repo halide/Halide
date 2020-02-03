@@ -14,8 +14,8 @@ namespace Halide {
 /** Create a zero-dimensional halide function that returns the given
  * expression. The function may have more dimensions if the expression
  * contains implicit arguments. */
-inline Func lambda(Expr e) {
-    Func f("lambda" + Internal::unique_name('_'));
+inline Func lambda(Expr e, std::string n = "lambda") {
+    Func f(n + Internal::unique_name('_'));
     f(_) = e;
     return f;
 }
@@ -24,8 +24,8 @@ inline Func lambda(Expr e) {
  * the second argument. The function may have more dimensions if the
  * expression contains implicit arguments and the list of Var
  * arguments contains a placeholder ("_"). */
-inline Func lambda(Var x, Expr e) {
-    Func f("lambda" + Internal::unique_name('_'));
+inline Func lambda(Var x, Expr e, std::string n = "lambda") {
+    Func f(n + Internal::unique_name('_'));
     f(x) = e;
     return f;
 }
@@ -34,8 +34,8 @@ inline Func lambda(Var x, Expr e) {
  * returns the last argument. The function may have more dimensions if
  * the expression contains implicit arguments and the list of Var
  * arguments contains a placeholder ("_"). */
-inline Func lambda(Var x, Var y, Expr e) {
-    Func f("lambda" + Internal::unique_name('_'));
+inline Func lambda(Var x, Var y, Expr e, std::string n = "lambda") {
+    Func f(n + Internal::unique_name('_'));
     f(x, y) = e;
     return f;
 }
@@ -44,8 +44,8 @@ inline Func lambda(Var x, Var y, Expr e) {
  * returns the last argument.  The function may have more dimensions
  * if the expression contains implicit arguments and the list of Var
  * arguments contains a placeholder ("_"). */
-inline Func lambda(Var x, Var y, Var z, Expr e) {
-    Func f("lambda" + Internal::unique_name('_'));
+inline Func lambda(Var x, Var y, Var z, Expr e, std::string n = "lambda") {
+    Func f(n + Internal::unique_name('_'));
     f(x, y, z) = e;
     return f;
 }
@@ -54,8 +54,8 @@ inline Func lambda(Var x, Var y, Var z, Expr e) {
  * returns the last argument. The function may have more dimensions if
  * the expression contains implicit arguments and the list of Var
  * arguments contains a placeholder ("_"). */
-inline Func lambda(Var x, Var y, Var z, Var w, Expr e) {
-    Func f("lambda" + Internal::unique_name('_'));
+inline Func lambda(Var x, Var y, Var z, Var w, Expr e, std::string n = "lambda") {
+    Func f(n + Internal::unique_name('_'));
     f(x, y, z, w) = e;
     return f;
 }
@@ -64,8 +64,8 @@ inline Func lambda(Var x, Var y, Var z, Var w, Expr e) {
  * returns the last argument. The function may have more dimensions if
  * the expression contains implicit arguments and the list of Var
  * arguments contains a placeholder ("_"). */
-inline Func lambda(Var x, Var y, Var z, Var w, Var v, Expr e) {
-    Func f("lambda" + Internal::unique_name('_'));
+inline Func lambda(Var x, Var y, Var z, Var w, Var v, Expr e, std::string n = "lambda") {
+    Func f(n + Internal::unique_name('_'));
     f(x, y, z, w, v) = e;
     return f;
 }
