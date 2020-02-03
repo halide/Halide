@@ -978,7 +978,7 @@ $(BUILD_DIR)/llvm_objects/list: $(OBJECTS) $(INITIAL_MODULES)
 	# is no list from a previous build, then delete any old object
 	# files and re-extract the required object files
 	cd $(BUILD_DIR)/llvm_objects; \
-	cat list.all |  grep "\[" |  grep "libLLVM" | grep ")"  | sed "s/\[.*\] //" > list.new; \
+	cat list.all |  grep "libLLVM" | grep ")"  | sed "s/\[.*\] //" | grep "^/" > list.new; \
 	rm list.all; \
 	if cmp -s list.new list; \
 	then \
