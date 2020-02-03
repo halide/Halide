@@ -151,7 +151,11 @@ static inline std::string demangle(const std::string &name) {
 
 template<class T>
 std::string readable_typename() {
+#ifndef HALIDE_ENABLE_RTTI
+    return "unrecognized type";
+#else
     return demangle(typeid(T).name());
+#endif
 }
 
 template<class T>
@@ -163,6 +167,18 @@ template<>
 inline std::string readable_typename<std::string>() {
     return "string";
 }
+
+#ifndef HALIDE_ENABLE_RTTI
+template<>
+inline std::string readable_typename<bool>() {
+    return "bool";
+}
+
+template<>
+inline std::string readable_typename<int>() {
+    return "int";
+}
+#endif
 
 }  // namespace detail
 
@@ -408,9 +424,14 @@ public:
     template<class T>
     const T &get(const std::string &name) const {
         if (options.count(name) == 0) throw_cmdline_error("there is no flag: --" + name);
+#ifndef HALIDE_ENABLE_RTTI
+        const option_with_value<T> *p = reinterpret_cast<const option_with_value<T> *>(options.find(name)->second);
+        return p->get();
+#else
         const option_with_value<T> *p = dynamic_cast<const option_with_value<T> *>(options.find(name)->second);
         if (p == NULL) throw_cmdline_error("type mismatch flag '" + name + "'");
         return p->get();
+#endif
     }
 
     const std::vector<std::string> &rest() const {

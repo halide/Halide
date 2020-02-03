@@ -18,12 +18,12 @@ UNAME = $(shell uname)
 
 ifeq ($(OS), Windows_NT)
     # assume we are building for the MinGW environment
-    COMMON_LD_FLAGS=-luuid -lole32 -lpthread -lz -Wl,--stack,8388608
+    COMMON_LD_FLAGS=$(LDFLAGS) -luuid -lole32 -lpthread -lz -Wl,--stack,8388608
     SHARED_EXT=dll
     FPIC=
 else
     # let's assume "normal" UNIX such as linux
-    COMMON_LD_FLAGS=-ldl -lpthread -lz
+    COMMON_LD_FLAGS=$(LDFLAGS) -ldl -lpthread -lz
     FPIC=-fPIC
 ifeq ($(UNAME), Darwin)
     SHARED_EXT=dylib
@@ -236,7 +236,7 @@ ifneq (,$(findstring clang,$(CXX_VERSION)))
 LLVM_CXX_FLAGS_LIBCPP := $(findstring -stdlib=libc++, $(LLVM_CXX_FLAGS))
 endif
 
-CXX_FLAGS = $(CXX_WARNING_FLAGS) $(RTTI_CXX_FLAGS) -Woverloaded-virtual $(FPIC) $(OPTIMIZE) -fno-omit-frame-pointer -DCOMPILING_HALIDE
+CXX_FLAGS = $(CXXFLAGS) $(CXX_WARNING_FLAGS) $(RTTI_CXX_FLAGS) -Woverloaded-virtual $(FPIC) $(OPTIMIZE) -fno-omit-frame-pointer -DCOMPILING_HALIDE
 
 CXX_FLAGS += $(LLVM_CXX_FLAGS)
 CXX_FLAGS += $(PTX_CXX_FLAGS)
@@ -444,9 +444,9 @@ HEXAGON_RUNTIME_LIBS = \
   $(HEXAGON_RUNTIME_LIBS_DIR)/arm-32-android/libhalide_hexagon_host.so \
   $(HEXAGON_RUNTIME_LIBS_DIR)/arm-64-android/libhalide_hexagon_host.so \
   $(HEXAGON_RUNTIME_LIBS_DIR)/host/libhalide_hexagon_host.so \
-  $(HEXAGON_RUNTIME_LIBS_DIR)/v60/hexagon_sim_remote \
-  $(HEXAGON_RUNTIME_LIBS_DIR)/v60/libhalide_hexagon_remote_skel.so \
-  $(HEXAGON_RUNTIME_LIBS_DIR)/v60/signed_by_debug/libhalide_hexagon_remote_skel.so
+  $(HEXAGON_RUNTIME_LIBS_DIR)/v62/hexagon_sim_remote \
+  $(HEXAGON_RUNTIME_LIBS_DIR)/v62/libhalide_hexagon_remote_skel.so \
+  $(HEXAGON_RUNTIME_LIBS_DIR)/v62/signed_by_debug/libhalide_hexagon_remote_skel.so
 
 # Keep this list sorted in alphabetical order.
 SOURCE_FILES = \
@@ -2213,15 +2213,15 @@ endif
 
 # This is a specialized 'install' for users who need Hexagon support libraries as well.
 install_qc: install $(HEXAGON_RUNTIME_LIBS)
-	mkdir -p $(PREFIX)/lib/arm-32-android $(PREFIX)/lib/arm-64-android $(PREFIX)/lib/host $(PREFIX)/lib/v60 $(PREFIX)/tools
+	mkdir -p $(PREFIX)/lib/arm-32-android $(PREFIX)/lib/arm-64-android $(PREFIX)/lib/host $(PREFIX)/lib/v62 $(PREFIX)/tools
 	cp $(HEXAGON_RUNTIME_LIBS_DIR)/arm-32-android/* $(PREFIX)/lib/arm-32-android
 	cp $(HEXAGON_RUNTIME_LIBS_DIR)/arm-64-android/* $(PREFIX)/lib/arm-64-android
 	cp $(HEXAGON_RUNTIME_LIBS_DIR)/host/* $(PREFIX)/lib/host
-	cp -r $(HEXAGON_RUNTIME_LIBS_DIR)/v60/* $(PREFIX)/lib/v60
+	cp -r $(HEXAGON_RUNTIME_LIBS_DIR)/v62/* $(PREFIX)/lib/v62
 	ln -sf $(PREFIX)/share/halide/tools/GenGen.cpp $(PREFIX)/tools/GenGen.cpp
-	ln -sf $(PREFIX)/lib/v60/hexagon_sim_remote $(PREFIX)/bin/hexagon_sim_remote
-	ln -sf $(PREFIX)/lib/v60/libsim_qurt.a $(PREFIX)/lib/libsim_qurt.a
-	ln -sf $(PREFIX)/lib/v60/libsim_qurt_vtcm.a $(PREFIX)/lib/libsim_qurt_vtcm.a
+	ln -sf $(PREFIX)/lib/v62/hexagon_sim_remote $(PREFIX)/bin/hexagon_sim_remote
+	ln -sf $(PREFIX)/lib/v62/libsim_qurt.a $(PREFIX)/lib/libsim_qurt.a
+	ln -sf $(PREFIX)/lib/v62/libsim_qurt_vtcm.a $(PREFIX)/lib/libsim_qurt_vtcm.a
 
 # We need to capture the system libraries that we'll need to link
 # against, so that downstream consumers of our build rules don't

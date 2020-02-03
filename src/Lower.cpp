@@ -164,8 +164,15 @@ Module lower(const vector<Function> &output_funcs,
     debug(2) << "Lowering after computation bounds inference:\n"
              << s << '\n';
 
+    bool will_inject_host_copies =
+        (t.has_gpu_feature() ||
+         t.has_feature(Target::OpenGLCompute) ||
+         t.has_feature(Target::OpenGL) ||
+         t.has_feature(Target::HexagonDma) ||
+         (t.arch != Target::Hexagon && (t.features_any_of({Target::HVX_64, Target::HVX_128}))));
+
     debug(1) << "Adding checks for images\n";
-    s = add_image_checks(s, outputs, t, order, env, func_bounds);
+    s = add_image_checks(s, outputs, t, order, env, func_bounds, will_inject_host_copies);
     debug(2) << "Lowering after injecting image checks:\n"
              << s << '\n';
 
@@ -272,11 +279,7 @@ Module lower(const vector<Function> &output_funcs,
         debug(1) << "Skipping rewriting memoized allocations...\n";
     }
 
-    if (t.has_gpu_feature() ||
-        t.has_feature(Target::OpenGLCompute) ||
-        t.has_feature(Target::OpenGL) ||
-        t.has_feature(Target::HexagonDma) ||
-        (t.arch != Target::Hexagon && (t.features_any_of({Target::HVX_64, Target::HVX_128})))) {
+    if (will_inject_host_copies) {
         debug(1) << "Selecting a GPU API for GPU loops...\n";
         s = select_gpu_api(s, t);
         debug(2) << "Lowering after selecting a GPU API:\n"
@@ -290,13 +293,6 @@ Module lower(const vector<Function> &output_funcs,
         debug(1) << "Selecting a GPU API for extern stages...\n";
         s = select_gpu_api(s, t);
         debug(2) << "Lowering after selecting a GPU API for extern stages:\n"
-                 << s << "\n\n";
-    } else {
-        // Always mark buffers host dirty. Buffers will otherwise not be correctly copied for
-        // other pipelines with device feature enabled.
-        debug(1) << "Injecting host <-> dev buffer copies...\n";
-        s = inject_host_dev_buffer_copies(s, t);
-        debug(2) << "Lowering after injecting host <-> dev buffer copies:\n"
                  << s << "\n\n";
     }
 

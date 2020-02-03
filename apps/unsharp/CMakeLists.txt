@@ -1,5 +1,5 @@
 add_executable(unsharp_filter filter.cpp)
-halide_use_image_io(unsharp_filter)
+target_link_libraries(unsharp_filter PRIVATE Halide::ImageIO)
 
 halide_generator(unsharp.generator SRCS unsharp_generator.cpp)
 foreach(AUTO_SCHEDULE false true)

@@ -1,5 +1,5 @@
 add_executable(local_laplacian_process process.cpp)
-halide_use_image_io(local_laplacian_process)
+target_link_libraries(local_laplacian_process PRIVATE Halide::ImageIO)
 
 halide_generator(local_laplacian.generator SRCS local_laplacian_generator.cpp)
 foreach(AUTO_SCHEDULE false true)

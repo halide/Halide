@@ -43,7 +43,7 @@ bool relatively_equal(value_t a, value_t b, Target target) {
             relative_error = fabs((db - da) / db);
         }
 
-        if (relative_error < .000001) {
+        if (relative_error < .00000125) {
             return true;
         }
 
@@ -268,6 +268,9 @@ fun_2(uint32_t, uint32_t, absd, absd)
 }  // namespace
 
 int main(int argc, char **argv) {
+    printf("host is:      %s\n", get_host_target().to_string().c_str());
+    printf("HL_JIT_TARGET is: %s\n", get_jit_target_from_environment().to_string().c_str());
+
     call_1_float_types(abs, 256, -1000, 1000);
     call_1_float_types(sqrt, 256, 0, 1000000);
 
