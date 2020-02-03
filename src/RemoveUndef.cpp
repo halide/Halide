@@ -13,6 +13,7 @@ using std::vector;
 class RemoveUndef : public IRMutator {
 public:
     Expr predicate;
+
 private:
     using IRMutator::visit;
 
@@ -50,21 +51,51 @@ private:
         }
     }
 
-    Expr visit(const Add *op) override {return mutate_binary_operator(op);}
-    Expr visit(const Sub *op) override {return mutate_binary_operator(op);}
-    Expr visit(const Mul *op) override {return mutate_binary_operator(op);}
-    Expr visit(const Div *op) override {return mutate_binary_operator(op);}
-    Expr visit(const Mod *op) override {return mutate_binary_operator(op);}
-    Expr visit(const Min *op) override {return mutate_binary_operator(op);}
-    Expr visit(const Max *op) override {return mutate_binary_operator(op);}
-    Expr visit(const EQ *op)  override {return mutate_binary_operator(op);}
-    Expr visit(const NE *op)  override {return mutate_binary_operator(op);}
-    Expr visit(const LT *op)  override {return mutate_binary_operator(op);}
-    Expr visit(const LE *op)  override {return mutate_binary_operator(op);}
-    Expr visit(const GT *op)  override {return mutate_binary_operator(op);}
-    Expr visit(const GE *op)  override {return mutate_binary_operator(op);}
-    Expr visit(const And *op) override {return mutate_binary_operator(op);}
-    Expr visit(const Or *op)  override {return mutate_binary_operator(op);}
+    Expr visit(const Add *op) override {
+        return mutate_binary_operator(op);
+    }
+    Expr visit(const Sub *op) override {
+        return mutate_binary_operator(op);
+    }
+    Expr visit(const Mul *op) override {
+        return mutate_binary_operator(op);
+    }
+    Expr visit(const Div *op) override {
+        return mutate_binary_operator(op);
+    }
+    Expr visit(const Mod *op) override {
+        return mutate_binary_operator(op);
+    }
+    Expr visit(const Min *op) override {
+        return mutate_binary_operator(op);
+    }
+    Expr visit(const Max *op) override {
+        return mutate_binary_operator(op);
+    }
+    Expr visit(const EQ *op) override {
+        return mutate_binary_operator(op);
+    }
+    Expr visit(const NE *op) override {
+        return mutate_binary_operator(op);
+    }
+    Expr visit(const LT *op) override {
+        return mutate_binary_operator(op);
+    }
+    Expr visit(const LE *op) override {
+        return mutate_binary_operator(op);
+    }
+    Expr visit(const GT *op) override {
+        return mutate_binary_operator(op);
+    }
+    Expr visit(const GE *op) override {
+        return mutate_binary_operator(op);
+    }
+    Expr visit(const And *op) override {
+        return mutate_binary_operator(op);
+    }
+    Expr visit(const Or *op) override {
+        return mutate_binary_operator(op);
+    }
 
     Expr visit(const Not *op) override {
         Expr a = mutate(op->a);
@@ -106,8 +137,8 @@ private:
             }
             return t;
         } else if (cond.same_as(op->condition) &&
-            t.same_as(op->true_value) &&
-            f.same_as(op->false_value)) {
+                   t.same_as(op->true_value) &&
+                   f.same_as(op->false_value)) {
             return op;
         } else {
             return Select::make(cond, t, f);
@@ -181,9 +212,10 @@ private:
             const T *op;
             Expr new_value;
             ScopedBinding<> binding;
-            Frame(const T * op, Expr v, Scope<> &scope) :
-                op(op), new_value(std::move(v)),
-                binding(!new_value.defined(), scope, op->name) {}
+            Frame(const T *op, Expr v, Scope<> &scope)
+                : op(op), new_value(std::move(v)),
+                  binding(!new_value.defined(), scope, op->name) {
+            }
         };
         vector<Frame> frames;
 
@@ -317,9 +349,9 @@ private:
         }
 
         for (size_t i = 1; i < args_predicates.size(); i++) {
-            user_assert(equal(args_predicates[i-1], args_predicates[i]))
+            user_assert(equal(args_predicates[i - 1], args_predicates[i]))
                 << "Conditionally-undef args in a Tuple should have the same conditions\n"
-                << "  Condition " << i-1 << ": " << args_predicates[i-1] << "\n"
+                << "  Condition " << i - 1 << ": " << args_predicates[i - 1] << "\n"
                 << "  Condition " << i << ": " << args_predicates[i] << "\n";
         }
 
@@ -343,9 +375,9 @@ private:
         }
 
         for (size_t i = 1; i < values_predicates.size(); i++) {
-            user_assert(equal(values_predicates[i-1], values_predicates[i]))
+            user_assert(equal(values_predicates[i - 1], values_predicates[i]))
                 << "Conditionally-undef values in a Tuple should have the same conditions\n"
-                << "  Condition " << i-1 << ": " << values_predicates[i-1] << "\n"
+                << "  Condition " << i - 1 << ": " << values_predicates[i - 1] << "\n"
                 << "  Condition " << i << ": " << values_predicates[i] << "\n";
         }
 
@@ -402,9 +434,9 @@ private:
 
         // Mutate the bounds
         for (size_t i = 0; i < op->bounds.size(); i++) {
-            Expr old_min    = op->bounds[i].min;
+            Expr old_min = op->bounds[i].min;
             Expr old_extent = op->bounds[i].extent;
-            Expr new_min    = mutate(old_min);
+            Expr new_min = mutate(old_min);
             if (!new_min.defined()) {
                 return Stmt();
             }
@@ -412,8 +444,12 @@ private:
             if (!new_extent.defined()) {
                 return Stmt();
             }
-            if (!new_min.same_as(old_min))       bounds_changed = true;
-            if (!new_extent.same_as(old_extent)) bounds_changed = true;
+            if (!new_min.same_as(old_min)) {
+                bounds_changed = true;
+            }
+            if (!new_extent.same_as(old_extent)) {
+                bounds_changed = true;
+            }
             new_bounds[i] = Range(new_min, new_extent);
         }
 

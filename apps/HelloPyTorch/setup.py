@@ -48,7 +48,7 @@ if __name__ == "__main__":
     include_dirs = [build_dir, os.path.join(halide_dir, "include")]
     compile_args = ["-std=c++11", "-g"]
     if platform.system() == "Darwin":  # on osx libstdc++ causes trouble
-        compile_args += ["-stdlib=libc++"]  
+        compile_args += ["-stdlib=libc++"]
 
     re_cc = re.compile(r".*\.pytorch\.h")
     hl_srcs = [f for f in os.listdir(build_dir) if re_cc.match(f)]
@@ -77,6 +77,7 @@ if __name__ == "__main__":
         generate_pybind_wrapper(wrapper_path, hl_headers, True)
         from torch.utils.cpp_extension import CUDAExtension
         extension = CUDAExtension(ext_name, sources,
+                                  include_dirs=include_dirs,
                                   extra_objects=hl_libs,
                                   libraries=["cuda"],  # Halide ops need the full cuda lib, not just the RT library
                                   extra_compile_args=compile_args)
@@ -85,6 +86,7 @@ if __name__ == "__main__":
         generate_pybind_wrapper(wrapper_path, hl_headers, False)
         from torch.utils.cpp_extension import CppExtension
         extension = CppExtension(ext_name, sources,
+                                 include_dirs=include_dirs,
                                  extra_objects=hl_libs,
                                  extra_compile_args=compile_args)
 
@@ -96,6 +98,5 @@ if __name__ == "__main__":
           author="Some Author",
           version="0.0.0",
           ext_modules=[extension],
-          include_dirs=include_dirs,
           cmdclass={"build_ext": BuildExtension}
           )

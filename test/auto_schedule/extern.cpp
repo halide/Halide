@@ -8,24 +8,17 @@
 #endif
 
 // An extern stage that translates.
-extern "C" DLLEXPORT int translate(buffer_t *in, int dx, int dy, buffer_t *out) {
-    if (in->host == nullptr) {
-        in->min[0] = out->min[0] + dx;
-        in->min[1] = out->min[1] + dy;
-        in->extent[0] = out->extent[0];
-        in->extent[1] = out->extent[1];
+extern "C" DLLEXPORT int translate(halide_buffer_t *in, int dx, int dy, halide_buffer_t *out) {
+
+    if (in->is_bounds_query()) {
+        in->dim[0].min = out->dim[0].min + dx;
+        in->dim[1].min = out->dim[1].min + dy;
+        in->dim[0].extent = out->dim[0].extent;
+        in->dim[1].extent = out->dim[1].extent;
     } else {
-        assert(in->elem_size == 1);
-        assert(out->elem_size == 1);
-        for (int y = out->min[1]; y < out->min[1] + out->extent[1]; y++) {
-            for (int x = out->min[0]; x < out->min[0] + out->extent[0]; x++) {
-                int in_x = x + dx;
-                int in_y = y + dy;
-                uint8_t *in_ptr = in->host + (in_x - in->min[0])*in->stride[0] + (in_y - in->min[1])*in->stride[1];
-                uint8_t *out_ptr = out->host + (x - out->min[0])*out->stride[0] + (y - out->min[1])*out->stride[1];
-                *out_ptr = *in_ptr;
-            }
-        }
+        Halide::Runtime::Buffer<uint8_t> out_buf(*out);
+        out_buf.translate(dx, dy);
+        out_buf.copy_from(Halide::Runtime::Buffer<uint8_t>(*in));
     }
 
     return 0;

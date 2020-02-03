@@ -16,6 +16,7 @@ namespace Halide {
  * Int(32). */
 class Var {
     std::string _name;
+
 public:
     /** Construct a Var with the given name */
     Var(const std::string &n);
@@ -24,10 +25,14 @@ public:
     Var();
 
     /** Get the name of a Var */
-    const std::string &name() const {return _name;}
+    const std::string &name() const {
+        return _name;
+    }
 
     /** Test if two Vars are the same. This simply compares the names. */
-    bool same_as(const Var &other) const {return _name == other._name;}
+    bool same_as(const Var &other) const {
+        return _name == other._name;
+    }
 
     /** Implicit var constructor. Implicit variables are injected
      * automatically into a function call if the number of arguments

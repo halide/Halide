@@ -18,13 +18,13 @@ public:
     // [x * stride, y * stride] is a valid spatial location in the input buffer.
     // Generally, this means setting the output buffer's [width, height] to be
     // the input buffer's [width, height] / stride.
-    Input<int> stride_{ "stride" };
-    Input<int> pad_width_{ "pad_width" };
-    Input<int> pad_height_{ "pad_height" };
-    Input<int> filter_width_{ "filter_width" };
-    Input<int> filter_height_{ "filter_height" };
-    Input<uint8_t> output_min_{ "output_min" };
-    Input<uint8_t> output_max_{ "output_max" };
+    Input<int> stride_{"stride"};
+    Input<int> pad_width_{"pad_width"};
+    Input<int> pad_height_{"pad_height"};
+    Input<int> filter_width_{"filter_width"};
+    Input<int> filter_height_{"filter_height"};
+    Input<uint8_t> output_min_{"output_min"};
+    Input<uint8_t> output_max_{"output_max"};
 
     Output<Buffer<uint8_t>> output_{"output", 4};
 
@@ -45,10 +45,10 @@ public:
         // handle boundary cases.
         constexpr int kMinValue = -2147483648;
         Func input_bounded = constant_exterior(input_upcast, kMinValue,
-                                               { { Expr(), Expr() },
-                                                 { 0, input_.dim(1).extent() },
-                                                 { 0, input_.dim(2).extent() },
-                                                 { Expr(), Expr() } });
+                                               {{Expr(), Expr()},
+                                                {0, input_.dim(1).extent()},
+                                                {0, input_.dim(2).extent()},
+                                                {Expr(), Expr()}});
 
         // Shift the input spatially in [x, y] by -[pad_width, pad_height].
         Func shifted_input_bounded("shifted_input_bounded");
@@ -72,7 +72,7 @@ public:
         // The schedule.
 
         const bool use_hexagon =
-            get_target().features_any_of({ Target::HVX_64, Target::HVX_128 });
+            get_target().features_any_of({Target::HVX_64, Target::HVX_128});
 
         if (use_hexagon) {
             output_.hexagon();

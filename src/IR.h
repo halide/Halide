@@ -13,9 +13,9 @@
 #include "Expr.h"
 #include "Function.h"
 #include "IntrusivePtr.h"
+#include "ModulusRemainder.h"
 #include "Parameter.h"
 #include "Type.h"
-#include "ModulusRemainder.h"
 #include "Util.h"
 #include "runtime/HalideBuffer.h"
 
@@ -394,19 +394,6 @@ struct Free : public StmtNode<Free> {
     static const IRNodeType _node_type = IRNodeType::Free;
 };
 
-/** A single-dimensional span. Includes all numbers between min and
- * (min + extent - 1) */
-struct Range {
-    Expr min, extent;
-    Range() = default;
-    Range(Expr min, Expr extent) : min(min), extent(extent) {
-        internal_assert(min.type() == extent.type()) << "Region min and extent must have same type\n";
-    }
-};
-
-/** A multi-dimensional box. The outer product of the elements */
-typedef std::vector<Range> Region;
-
 /** Allocate a multi-dimensional buffer of the given type and
  * size. Create some scratch memory that will back the function 'name'
  * over the range specified in 'bounds'. The bounds are a vector of
@@ -424,7 +411,6 @@ struct Realize : public StmtNode<Realize> {
     static Stmt make(const std::string &name, const std::vector<Type> &types, MemoryType memory_type, const Region &bounds, Expr condition, Stmt body);
 
     static const IRNodeType _node_type = IRNodeType::Realize;
-
 };
 
 /** A sequence of statements to be executed in-order. 'rest' may be
@@ -479,13 +465,13 @@ struct Evaluate : public StmtNode<Evaluate> {
 struct Call : public ExprNode<Call> {
     std::string name;
     std::vector<Expr> args;
-    typedef enum {Image,        ///< A load from an input image
-                  Extern,       ///< A call to an external C-ABI function, possibly with side-effects
-                  ExternCPlusPlus, ///< A call to an external C-ABI function, possibly with side-effects
-                  PureExtern,   ///< A call to a guaranteed-side-effect-free external function
-                  Halide,       ///< A call to a Func
-                  Intrinsic,    ///< A possibly-side-effecty compiler intrinsic, which has special handling during codegen
-                  PureIntrinsic ///< A side-effect-free version of the above.
+    typedef enum { Image,            ///< A load from an input image
+                   Extern,           ///< A call to an external C-ABI function, possibly with side-effects
+                   ExternCPlusPlus,  ///< A call to an external C-ABI function, possibly with side-effects
+                   PureExtern,       ///< A call to a guaranteed-side-effect-free external function
+                   Halide,           ///< A call to a Func
+                   Intrinsic,        ///< A possibly-side-effecty compiler intrinsic, which has special handling during codegen
+                   PureIntrinsic     ///< A side-effect-free version of the above.
     } CallType;
     CallType call_type;
 
@@ -530,18 +516,15 @@ struct Call : public ExprNode<Call> {
         if_then_else_mask,
         image_load,
         image_store,
-        indeterminate_expression,
         lerp,
         likely,
         likely_if_innermost,
         make_struct,
         memoize_expr,
         mod_round_to_zero,
-        mulhi_shr, // Compute high_half(arg[0] * arg[1]) >> arg[3]. Note that this is a shift in addition to taking the upper half of multiply result. arg[3] must be an unsigned integer immediate.
+        mulhi_shr,  // Compute high_half(arg[0] * arg[1]) >> arg[3]. Note that this is a shift in addition to taking the upper half of multiply result. arg[3] must be an unsigned integer immediate.
         popcount,
         prefetch,
-        quiet_div,
-        quiet_mod,
         random,
         register_destructor,
         reinterpret,
@@ -557,12 +540,12 @@ struct Call : public ExprNode<Call> {
         shift_right,
         signed_integer_overflow,
         size_of_halide_buffer_t,
-        sorted_avg, // Compute (arg[0] + arg[1]) / 2, assuming arg[0] < arg[1].
+        sorted_avg,  // Compute (arg[0] + arg[1]) / 2, assuming arg[0] < arg[1].
         strict_float,
         stringify,
         undef,
         unsafe_promise_clamped,
-        IntrinsicOpCount // Sentinel: keep last.
+        IntrinsicOpCount  // Sentinel: keep last.
     };
 
     static const char *get_intrinsic_name(IntrinsicOp op);
@@ -780,8 +763,12 @@ struct Shuffle : public ExprNode<Shuffle> {
      * slice. */
     ///@{
     bool is_slice() const;
-    int slice_begin() const { return indices[0]; }
-    int slice_stride() const { return indices.size() >= 2 ? indices[1] - indices[0] : 1; }
+    int slice_begin() const {
+        return indices[0];
+    }
+    int slice_stride() const {
+        return indices.size() >= 2 ? indices[1] - indices[0] : 1;
+    }
     ///@}
 
     /** Check if this shuffle is extracting a scalar from the vector
@@ -808,6 +795,24 @@ struct Prefetch : public StmtNode<Prefetch> {
                      Expr condition, Stmt body);
 
     static const IRNodeType _node_type = IRNodeType::Prefetch;
+};
+
+/** Lock all the Store nodes in the body statement.
+ *  Typically the lock is implemented by an atomic operation
+ *  (e.g. atomic add or atomic compare-and-swap).
+ *  However, if necessary, the node can access a mutex buffer through
+ *  mutex_name and mutex_args, by lowering this node into
+ *  calls to acquire and release the lock. */
+struct Atomic : public StmtNode<Atomic> {
+    std::string producer_name;
+    std::string mutex_name;  // empty string if not using mutex
+    Stmt body;
+
+    static Stmt make(const std::string &producer_name,
+                     const std::string &mutex_name,
+                     Stmt body);
+
+    static const IRNodeType _node_type = IRNodeType::Atomic;
 };
 
 }  // namespace Internal

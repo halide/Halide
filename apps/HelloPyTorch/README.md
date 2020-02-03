@@ -11,7 +11,7 @@ path, see `Makefile`).
 The build proceeds in four steps:
 1. Build the Halide generator
 2. Build Halide code for each each datatype and each architecture (`-e
-   static_library,h` flag in the generator). 
+   static_library,h` flag in the generator).
 3. Build the PyTorch C++ interface code (`-e pytorch_wrapper` flag in the
    generator). Note that the PyTorch wrapper requires the `user_context`
    feature be enabled in the generator `target` for CUDA ops. This allows Halide's and

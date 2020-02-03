@@ -1,5 +1,5 @@
 add_executable(bilateral_grid_process filter.cpp)
-halide_use_image_io(bilateral_grid_process)
+target_link_libraries(bilateral_grid_process PRIVATE Halide::ImageIO)
 
 halide_generator(bilateral_grid.generator SRCS bilateral_grid_generator.cpp)
 foreach(AUTO_SCHEDULE false true)

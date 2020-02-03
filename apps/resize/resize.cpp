@@ -2,33 +2,33 @@
 #include <limits>
 
 #include "HalideBuffer.h"
-#include "halide_image_io.h"
 #include "halide_benchmark.h"
+#include "halide_image_io.h"
 
-#include "resize_box_float32_up.h"
-#include "resize_cubic_float32_up.h"
-#include "resize_linear_float32_up.h"
-#include "resize_lanczos_float32_up.h"
 #include "resize_box_float32_down.h"
-#include "resize_cubic_float32_down.h"
-#include "resize_linear_float32_down.h"
-#include "resize_lanczos_float32_down.h"
-#include "resize_box_uint8_up.h"
-#include "resize_cubic_uint8_up.h"
-#include "resize_linear_uint8_up.h"
-#include "resize_lanczos_uint8_up.h"
-#include "resize_box_uint8_down.h"
-#include "resize_cubic_uint8_down.h"
-#include "resize_linear_uint8_down.h"
-#include "resize_lanczos_uint8_down.h"
-#include "resize_box_uint16_up.h"
-#include "resize_cubic_uint16_up.h"
-#include "resize_linear_uint16_up.h"
-#include "resize_lanczos_uint16_up.h"
+#include "resize_box_float32_up.h"
 #include "resize_box_uint16_down.h"
+#include "resize_box_uint16_up.h"
+#include "resize_box_uint8_down.h"
+#include "resize_box_uint8_up.h"
+#include "resize_cubic_float32_down.h"
+#include "resize_cubic_float32_up.h"
 #include "resize_cubic_uint16_down.h"
-#include "resize_linear_uint16_down.h"
+#include "resize_cubic_uint16_up.h"
+#include "resize_cubic_uint8_down.h"
+#include "resize_cubic_uint8_up.h"
+#include "resize_lanczos_float32_down.h"
+#include "resize_lanczos_float32_up.h"
 #include "resize_lanczos_uint16_down.h"
+#include "resize_lanczos_uint16_up.h"
+#include "resize_lanczos_uint8_down.h"
+#include "resize_lanczos_uint8_up.h"
+#include "resize_linear_float32_down.h"
+#include "resize_linear_float32_up.h"
+#include "resize_linear_uint16_down.h"
+#include "resize_linear_uint16_up.h"
+#include "resize_linear_uint8_down.h"
+#include "resize_linear_uint8_up.h"
 
 std::string infile, outfile, input_type, interpolation_type;
 float scale_factor = 1.0f;
@@ -46,17 +46,17 @@ void show_usage_and_exit() {
 }
 
 void parse_commandline(int argc, char **argv) {
-for (int i = 1; i < argc; i++) {
+    for (int i = 1; i < argc; i++) {
         std::string arg = argv[i];
-        if (arg == "-f" && i+1 < argc) {
+        if (arg == "-f" && i + 1 < argc) {
             scale_factor = atof(argv[++i]);
-        } else if (arg == "-i" && i+1 < argc) {
+        } else if (arg == "-i" && i + 1 < argc) {
             interpolation_type = argv[++i];
-        } else if (arg == "-t" && i+1 < argc) {
+        } else if (arg == "-t" && i + 1 < argc) {
             input_type = argv[++i];
-        } else if (arg == "-b" && i+1 < argc) {
+        } else if (arg == "-b" && i + 1 < argc) {
             benchmark_iters = atoi(argv[++i]);
-        } else if (arg == "-p" && i+1 < argc) {
+        } else if (arg == "-p" && i + 1 < argc) {
             packed = atoi(argv[++i]) != 0;
         } else if (infile.empty()) {
             infile = arg;
@@ -81,32 +81,31 @@ int main(int argc, char **argv) {
     int out_height = in.height() * scale_factor;
 
     decltype(&resize_box_float32_up) variants[3][2][4] =
-    {
-        {{&resize_box_float32_up,
-          &resize_cubic_float32_up,
-          &resize_linear_float32_up,
-          &resize_lanczos_float32_up},
-         {&resize_box_float32_down,
-          &resize_cubic_float32_down,
-          &resize_linear_float32_down,
-          &resize_lanczos_float32_down}},
-        {{&resize_box_uint8_up,
-          &resize_cubic_uint8_up,
-          &resize_linear_uint8_up,
-          &resize_lanczos_uint8_up},
-         {&resize_box_uint8_down,
-          &resize_cubic_uint8_down,
-          &resize_linear_uint8_down,
-          &resize_lanczos_uint8_down}},
-        {{&resize_box_uint16_up,
-          &resize_cubic_uint16_up,
-          &resize_linear_uint16_up,
-          &resize_lanczos_uint16_up},
-         {&resize_box_uint16_down,
-          &resize_cubic_uint16_down,
-          &resize_linear_uint16_down,
-          &resize_lanczos_uint16_down}}
-    };
+        {
+            {{&resize_box_float32_up,
+              &resize_cubic_float32_up,
+              &resize_linear_float32_up,
+              &resize_lanczos_float32_up},
+             {&resize_box_float32_down,
+              &resize_cubic_float32_down,
+              &resize_linear_float32_down,
+              &resize_lanczos_float32_down}},
+            {{&resize_box_uint8_up,
+              &resize_cubic_uint8_up,
+              &resize_linear_uint8_up,
+              &resize_lanczos_uint8_up},
+             {&resize_box_uint8_down,
+              &resize_cubic_uint8_down,
+              &resize_linear_uint8_down,
+              &resize_lanczos_uint8_down}},
+            {{&resize_box_uint16_up,
+              &resize_cubic_uint16_up,
+              &resize_linear_uint16_up,
+              &resize_lanczos_uint16_up},
+             {&resize_box_uint16_down,
+              &resize_cubic_uint16_down,
+              &resize_linear_uint16_down,
+              &resize_lanczos_uint16_down}}};
 
     int interpolation_idx = 0;
     if (interpolation_type == "box") {
@@ -163,7 +162,7 @@ int main(int argc, char **argv) {
         time = Halide::Tools::benchmark(benchmark_iters, benchmark_iters, [&]() { resize_fn(in_packed, scale_factor, out_packed); });
         printf("packed  %8s  %8s  %1.2f  time: %f ms\n",
                interpolation_type.c_str(), input_type.c_str(), scale_factor, time * 1000);
-      }
+    }
 
     return 0;
 }

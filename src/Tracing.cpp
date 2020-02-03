@@ -1,9 +1,9 @@
 #include "Tracing.h"
+#include "Bounds.h"
 #include "IRMutator.h"
 #include "IROperator.h"
-#include "runtime/HalideRuntime.h"
-#include "Bounds.h"
 #include "RealizationOrder.h"
+#include "runtime/HalideRuntime.h"
 
 namespace Halide {
 namespace Internal {
@@ -77,19 +77,20 @@ private:
     void add_func_touched(const string &name, int value_index, const Type &type) {
         auto it = funcs_touched.find(name);
         if (it == funcs_touched.end()) {
-            vector<Type> types(value_index+1);
+            vector<Type> types(value_index + 1);
             types[value_index] = type;
             funcs_touched[name] = types;
         } else {
             // If the type already present is missing, or "handle0" (aka "we don't know yet",
             // replace it with the given type. Otherwise, assert the types match.
             vector<Type> &types = it->second;
-            if ((int) types.size() <= value_index) {
-                types.resize(value_index+1);
+            if ((int)types.size() <= value_index) {
+                types.resize(value_index + 1);
                 types[value_index] = type;
             } else {
-                internal_assert(type == Type() || type == types[value_index]) <<
-                    "Type was already specified as " << types[value_index] << " but now is " << type;
+                internal_assert(type == Type() || type == types[value_index])
+                    << "Type was already specified as " << types[value_index]
+                    << " but now is " << type;
             }
         }
     }
@@ -181,7 +182,7 @@ private:
             builder.parent_id = Variable::make(Int(32), op->name + ".trace_id");
             for (size_t i = 0; i < values.size(); i++) {
                 Type t = values[i].type();
-                add_func_touched(f.name(), (int) i, t);
+                add_func_touched(f.name(), (int)i, t);
                 string value_var_name = unique_name('t');
                 Expr value_var = Variable::make(t, value_var_name);
 
@@ -284,16 +285,11 @@ private:
                 builder.coordinates.push_back(extent);
             }
 
-            builder.event = (op->is_producer ?
-                             halide_trace_produce :
-                             halide_trace_consume);
+            builder.event = (op->is_producer ? halide_trace_produce : halide_trace_consume);
             Expr begin_op_call = builder.build();
 
-            builder.event = (op->is_producer ?
-                             halide_trace_end_produce :
-                             halide_trace_end_consume);
+            builder.event = (op->is_producer ? halide_trace_end_produce : halide_trace_end_consume);
             Expr end_op_call = builder.build();
-
 
             Stmt new_body = Block::make(op->body, Evaluate::make(end_op_call));
 
@@ -318,7 +314,9 @@ class RemoveRealizeOverOutput : public IRMutator {
     }
 
 public:
-    RemoveRealizeOverOutput(const vector<Function> &o) : outputs(o) {}
+    RemoveRealizeOverOutput(const vector<Function> &o)
+        : outputs(o) {
+    }
 };
 
 Stmt inject_tracing(Stmt s, const string &pipeline_name, bool trace_pipeline,
@@ -410,7 +408,7 @@ Stmt inject_tracing(Stmt s, const string &pipeline_name, bool trace_pipeline,
             vector<Expr> strings;
             strings.push_back(Expr("func_type_and_dim:"));
             strings.push_back(space);
-            strings.push_back((int) func_types.size());
+            strings.push_back((int)func_types.size());
             for (const auto &func_type : func_types) {
                 strings.push_back(space);
                 strings.push_back(func_type.code());
@@ -423,7 +421,7 @@ Stmt inject_tracing(Stmt s, const string &pipeline_name, bool trace_pipeline,
             internal_assert(it != bt.end());
             const Box &box = it->second;
             strings.push_back(space);
-            strings.push_back(Expr((int) box.bounds.size()));
+            strings.push_back(Expr((int)box.bounds.size()));
             for (const Interval &i : box.bounds) {
                 internal_assert(i.min.defined() && i.max.defined());
                 if (i.is_bounded()) {
@@ -442,8 +440,11 @@ Stmt inject_tracing(Stmt s, const string &pipeline_name, bool trace_pipeline,
                     strings.push_back(Expr(0));
                 }
             }
-            builder.trace_tag_expr = Internal::Call::make(type_of<const char *>(),
-                Internal::Call::stringify, strings, Internal::Call::Intrinsic);
+            builder.trace_tag_expr =
+                Internal::Call::make(type_of<const char *>(),
+                                     Internal::Call::stringify,
+                                     strings,
+                                     Internal::Call::Intrinsic);
             s = Block::make(Evaluate::make(builder.build()), s);
         }
 

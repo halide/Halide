@@ -5,8 +5,8 @@
  * Methods for simplifying halide statements and expressions
  */
 
-#include "IR.h"
 #include "Bounds.h"
+#include "IR.h"
 #include "ModulusRemainder.h"
 
 namespace Halide {

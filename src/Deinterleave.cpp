@@ -26,7 +26,7 @@ public:
     std::vector<Stmt> &stores;
 
     StoreCollector(const std::string &name, int stride, int ms,
-                   std::vector<Stmt> &lets,  std::vector<Stmt> &ss)
+                   std::vector<Stmt> &lets, std::vector<Stmt> &ss)
         : store_name(name), store_stride(stride), max_stores(ms),
           let_stmts(lets), stores(ss), collecting(true) {
     }
@@ -86,7 +86,7 @@ private:
         // By default, do nothing.
         Stmt stmt = op;
 
-        if (stores.size() >= (size_t) max_stores) {
+        if (stores.size() >= (size_t)max_stores) {
             // Already have enough stores.
             collecting = false;
             return stmt;
@@ -257,7 +257,7 @@ private:
                 for (int i = 0; i < new_lanes; i++) {
                     indices.push_back(starting_lane + lane_stride * i);
                 }
-                return Shuffle::make({ op }, indices);
+                return Shuffle::make({op}, indices);
             }
         }
     }
@@ -284,7 +284,7 @@ private:
             for (int i = 0; i < new_lanes; i++) {
                 indices.push_back(i * lane_stride + starting_lane);
             }
-            return Shuffle::make({ op }, indices);
+            return Shuffle::make({op}, indices);
         } else {
 
             // Vector calls are always parallel across the lanes, so we
@@ -304,9 +304,9 @@ private:
     Expr visit(const Shuffle *op) override {
         if (op->is_interleave()) {
             internal_assert(starting_lane >= 0 && starting_lane < lane_stride);
-            if ((int) op->vectors.size() == lane_stride) {
+            if ((int)op->vectors.size() == lane_stride) {
                 return op->vectors[starting_lane];
-            } else if ((int) op->vectors.size() % lane_stride == 0) {
+            } else if ((int)op->vectors.size() % lane_stride == 0) {
                 // Pick up every lane-stride vector.
                 std::vector<Expr> new_vectors(op->vectors.size() / lane_stride);
                 for (size_t i = 0; i < new_vectors.size(); i++) {
@@ -320,7 +320,7 @@ private:
                 for (int i = 0; i < new_lanes; i++) {
                     indices.push_back(i * lane_stride + starting_lane);
                 }
-                return Shuffle::make({ op }, indices);
+                return Shuffle::make({op}, indices);
             }
         } else {
             // Extract every nth numeric arg to the shuffle.
@@ -329,7 +329,7 @@ private:
                 int idx = i * lane_stride + starting_lane;
                 indices.push_back(op->indices[idx]);
             }
-            return Shuffle::make({ op }, indices);
+            return Shuffle::make({op}, indices);
         }
     }
 };
@@ -392,12 +392,12 @@ class Interleaver : public IRMutator {
         } else if (num_lanes == 2) {
             Expr a = extract_even_lanes(e, vector_lets);
             Expr b = extract_odd_lanes(e, vector_lets);
-            return Shuffle::make_interleave({ a, b });
+            return Shuffle::make_interleave({a, b});
         } else if (num_lanes == 3) {
             Expr a = extract_mod3_lanes(e, 0, vector_lets);
             Expr b = extract_mod3_lanes(e, 1, vector_lets);
             Expr c = extract_mod3_lanes(e, 2, vector_lets);
-            return Shuffle::make_interleave({ a, b, c });
+            return Shuffle::make_interleave({a, b, c});
         } else if (num_lanes == 4) {
             Expr a = extract_even_lanes(e, vector_lets);
             Expr b = extract_odd_lanes(e, vector_lets);
@@ -405,7 +405,7 @@ class Interleaver : public IRMutator {
             Expr ab = extract_odd_lanes(a, vector_lets);
             Expr ba = extract_even_lanes(b, vector_lets);
             Expr bb = extract_odd_lanes(b, vector_lets);
-            return Shuffle::make_interleave({ aa, ba, ab, bb });
+            return Shuffle::make_interleave({aa, ba, ab, bb});
         } else {
             // Give up and don't do anything clever for >4
             return e;
@@ -419,10 +419,11 @@ class Interleaver : public IRMutator {
             const T *op;
             Expr new_value;
             ScopedBinding<> binding;
-            Frame(const T *op, Expr v, Scope<void> &scope) :
-                op(op),
-                new_value(std::move(v)),
-                binding(new_value.type().is_vector(), scope, op->name) {}
+            Frame(const T *op, Expr v, Scope<void> &scope)
+                : op(op),
+                  new_value(std::move(v)),
+                  binding(new_value.type().is_vector(), scope, op->name) {
+            }
         };
         std::vector<Frame> frames;
         Body result;
@@ -608,10 +609,10 @@ class Interleaver : public IRMutator {
 
         // Check the store collector didn't collect too many
         // stores (that would be a bug).
-        internal_assert(stores.size() <= (size_t) expected_stores);
+        internal_assert(stores.size() <= (size_t)expected_stores);
 
         // Not enough stores collected.
-        if (stores.size() != (size_t) expected_stores) return Stmt();
+        if (stores.size() != (size_t)expected_stores) return Stmt();
 
         Type t = store->value.type();
         Expr base;
@@ -681,7 +682,7 @@ class Interleaver : public IRMutator {
             }
 
             // The offset is not between zero and the stride.
-            if (j < 0 || (size_t) j >= stores.size()) return Stmt();
+            if (j < 0 || (size_t)j >= stores.size()) return Stmt();
 
             // We already have a store for this offset.
             if (args[j].defined()) return Stmt();
@@ -737,9 +738,10 @@ class Interleaver : public IRMutator {
         }
     }
 
-
 public:
-    Interleaver() : should_deinterleave(false) {}
+    Interleaver()
+        : should_deinterleave(false) {
+    }
 };
 
 }  // namespace

@@ -25,7 +25,7 @@ int main(int argc, char **argv) {
     Target target = get_jit_target_from_environment();
 
     bool hexagon_rpc = (target.arch != Target::Hexagon) &&
-                       target.features_any_of({ Target::HVX_64, Target::HVX_128 });
+                       target.features_any_of({Target::HVX_64, Target::HVX_128});
 
     if (!hexagon_rpc && !target.has_gpu_feature()) {
         printf("This is a gpu-specific test. Skipping it.\n");
@@ -40,7 +40,7 @@ int main(int argc, char **argv) {
         Halide::Runtime::Buffer<int32_t> cpu_buf(128, 128);
         cpu_buf.fill(0);
         assert(gpu_buf.raw_buffer()->device_interface->buffer_copy(nullptr, cpu_buf, gpu_buf.raw_buffer()->device_interface, gpu_buf) == 0);
-        
+
         gpu_buf.copy_to_host();
         for (int i = 0; i < 128; i++) {
             for (int j = 0; j < 128; j++) {
@@ -56,7 +56,7 @@ int main(int argc, char **argv) {
 
         Halide::Runtime::Buffer<int32_t> cpu_buf(128, 128);
         assert(gpu_buf.raw_buffer()->device_interface->buffer_copy(nullptr, gpu_buf, nullptr, cpu_buf) == 0);
-        
+
         for (int i = 0; i < 128; i++) {
             for (int j = 0; j < 128; j++) {
                 assert(cpu_buf(i, j) == (i + j * 256));
@@ -89,7 +89,7 @@ int main(int argc, char **argv) {
         Halide::Runtime::Buffer<int32_t> gpu_buf1 = make_gpu_buffer(hexagon_rpc);
         assert(gpu_buf1.raw_buffer()->device_interface != nullptr);
 
-        Halide::Runtime::Buffer<int32_t> gpu_buf2 = gpu_buf1.cropped({ {32, 64} , {32, 64} });
+        Halide::Runtime::Buffer<int32_t> gpu_buf2 = gpu_buf1.cropped({{32, 64}, {32, 64}});
         assert(gpu_buf2.raw_buffer()->device_interface != nullptr);
 
         assert(gpu_buf1.raw_buffer()->device_interface->buffer_copy(nullptr, cpu_buf, gpu_buf2.raw_buffer()->device_interface, gpu_buf2) == 0);
@@ -111,8 +111,8 @@ int main(int argc, char **argv) {
     {
         Halide::Runtime::Buffer<int32_t> cpu_buf(128, 128);
         cpu_buf.fill(0);
-        Halide::Runtime::Buffer<int32_t> cpu_buf1 = cpu_buf.cropped({ {32, 64} , {32, 64} });
-        
+        Halide::Runtime::Buffer<int32_t> cpu_buf1 = cpu_buf.cropped({{32, 64}, {32, 64}});
+
         Halide::Runtime::Buffer<int32_t> gpu_buf = make_gpu_buffer(hexagon_rpc);
         assert(gpu_buf.raw_buffer()->device_interface != nullptr);
 
@@ -137,7 +137,7 @@ int main(int argc, char **argv) {
         Halide::Runtime::Buffer<int32_t> gpu_buf2 = make_gpu_buffer(hexagon_rpc, 256000);
         assert(gpu_buf2.raw_buffer()->device_interface != nullptr);
 
-        Halide::Runtime::Buffer<int32_t> gpu_buf3 = gpu_buf2.cropped({ {32, 64} , {32, 64} });
+        Halide::Runtime::Buffer<int32_t> gpu_buf3 = gpu_buf2.cropped({{32, 64}, {32, 64}});
         assert(gpu_buf3.raw_buffer()->device_interface != nullptr);
 
         assert(gpu_buf1.raw_buffer()->device_interface->buffer_copy(nullptr, gpu_buf1, gpu_buf3.raw_buffer()->device_interface, gpu_buf3) == 0);
@@ -165,7 +165,7 @@ int main(int argc, char **argv) {
 
         Halide::Runtime::Buffer<int32_t> cpu_buf(128, 128);
         assert(gpu_buf.raw_buffer()->device_interface->buffer_copy(nullptr, &no_host_src, nullptr, cpu_buf) == 0);
-        
+
         for (int i = 0; i < 128; i++) {
             for (int j = 0; j < 128; j++) {
                 assert(cpu_buf(i, j) == (i + j * 256));
@@ -238,7 +238,7 @@ int main(int argc, char **argv) {
             Halide::Runtime::Buffer<int32_t> gpu_buf2 = make_gpu_buffer(false, 256000, DeviceAPI::OpenCL);
             assert(gpu_buf2.raw_buffer()->device_interface != nullptr);
 
-            Halide::Runtime::Buffer<int32_t> gpu_buf3 = gpu_buf2.cropped({ {32, 64} , {32, 64} });
+            Halide::Runtime::Buffer<int32_t> gpu_buf3 = gpu_buf2.cropped({{32, 64}, {32, 64}});
             assert(gpu_buf3.raw_buffer()->device_interface != nullptr);
 
             assert(gpu_buf1.raw_buffer()->device_interface->buffer_copy(nullptr, gpu_buf1, gpu_buf3.raw_buffer()->device_interface, gpu_buf3) == 0);
@@ -358,7 +358,7 @@ int main(int argc, char **argv) {
             assert(gpu_buf1.raw_buffer()->device_interface->buffer_copy(nullptr, gpu_buf1, nullptr, &no_host_dst) == halide_error_code_host_is_null);
         }
     }
-    
+
     printf("Success!\n");
 
     return 0;

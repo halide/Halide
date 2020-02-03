@@ -1,9 +1,9 @@
 #ifndef HALIDE_FLOAT16_H
 #define HALIDE_FLOAT16_H
+#include "Util.h"
 #include "runtime/HalideRuntime.h"
 #include <stdint.h>
 #include <string>
-#include "Util.h"
 
 namespace Halide {
 
@@ -12,7 +12,7 @@ namespace Halide {
  *
  *  This type is enforced to be 16-bits wide and maintains no state
  *  other than the raw IEEE754 binary16 bits so that it can passed
- *  to code that checks a type's size and used for buffer_t allocation.
+ *  to code that checks a type's size and used for halide_buffer_t allocation.
  * */
 struct float16_t {
 
@@ -72,20 +72,34 @@ struct float16_t {
     float16_t operator-(float16_t rhs) const;
     float16_t operator*(float16_t rhs) const;
     float16_t operator/(float16_t rhs) const;
-    float16_t operator+=(float16_t rhs) { return (*this = *this + rhs); }
-    float16_t operator-=(float16_t rhs) { return (*this = *this - rhs); }
-    float16_t operator*=(float16_t rhs) { return (*this = *this * rhs); }
-    float16_t operator/=(float16_t rhs) { return (*this = *this / rhs); }
+    float16_t operator+=(float16_t rhs) {
+        return (*this = *this + rhs);
+    }
+    float16_t operator-=(float16_t rhs) {
+        return (*this = *this - rhs);
+    }
+    float16_t operator*=(float16_t rhs) {
+        return (*this = *this * rhs);
+    }
+    float16_t operator/=(float16_t rhs) {
+        return (*this = *this / rhs);
+    }
     // @}
 
     /** Comparison operators */
     // @{
     bool operator==(float16_t rhs) const;
-    bool operator!=(float16_t rhs) const { return !(*this == rhs); }
+    bool operator!=(float16_t rhs) const {
+        return !(*this == rhs);
+    }
     bool operator>(float16_t rhs) const;
     bool operator<(float16_t rhs) const;
-    bool operator>=(float16_t rhs) const { return (*this > rhs) || (*this == rhs); }
-    bool operator<=(float16_t rhs) const { return (*this < rhs) || (*this == rhs); }
+    bool operator>=(float16_t rhs) const {
+        return (*this > rhs) || (*this == rhs);
+    }
+    bool operator<=(float16_t rhs) const {
+        return (*this < rhs) || (*this == rhs);
+    }
     // @}
 
     /** Properties */
@@ -124,7 +138,7 @@ namespace Halide {
  *
  *  This type is enforced to be 16-bits wide and maintains no state
  *  other than the raw bits so that it can passed to code that checks
- *  a type's size and used for buffer_t allocation. */
+ *  a type's size and used for halide_buffer_t allocation. */
 struct bfloat16_t {
 
     static const int mantissa_bits = 7;
@@ -185,20 +199,34 @@ struct bfloat16_t {
     bfloat16_t operator-(bfloat16_t rhs) const;
     bfloat16_t operator*(bfloat16_t rhs) const;
     bfloat16_t operator/(bfloat16_t rhs) const;
-    bfloat16_t operator+=(bfloat16_t rhs) { return (*this = *this + rhs); }
-    bfloat16_t operator-=(bfloat16_t rhs) { return (*this = *this - rhs); }
-    bfloat16_t operator*=(bfloat16_t rhs) { return (*this = *this * rhs); }
-    bfloat16_t operator/=(bfloat16_t rhs) { return (*this = *this / rhs); }
+    bfloat16_t operator+=(bfloat16_t rhs) {
+        return (*this = *this + rhs);
+    }
+    bfloat16_t operator-=(bfloat16_t rhs) {
+        return (*this = *this - rhs);
+    }
+    bfloat16_t operator*=(bfloat16_t rhs) {
+        return (*this = *this * rhs);
+    }
+    bfloat16_t operator/=(bfloat16_t rhs) {
+        return (*this = *this / rhs);
+    }
     // @}
 
     /** Comparison operators */
     // @{
     bool operator==(bfloat16_t rhs) const;
-    bool operator!=(bfloat16_t rhs) const { return !(*this == rhs); }
+    bool operator!=(bfloat16_t rhs) const {
+        return !(*this == rhs);
+    }
     bool operator>(bfloat16_t rhs) const;
     bool operator<(bfloat16_t rhs) const;
-    bool operator>=(bfloat16_t rhs) const { return (*this > rhs) || (*this == rhs); }
-    bool operator<=(bfloat16_t rhs) const { return (*this < rhs) || (*this == rhs); }
+    bool operator>=(bfloat16_t rhs) const {
+        return (*this > rhs) || (*this == rhs);
+    }
+    bool operator<=(bfloat16_t rhs) const {
+        return (*this < rhs) || (*this == rhs);
+    }
     // @}
 
     /** Properties */

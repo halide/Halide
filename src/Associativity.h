@@ -66,7 +66,9 @@ struct AssociativeOp {
         Expr expr;
 
         Replacement() = default;
-        Replacement(const std::string &var, Expr expr) : var(var), expr(expr) {}
+        Replacement(const std::string &var, Expr expr)
+            : var(var), expr(expr) {
+        }
 
         bool operator==(const Replacement &other) const {
             return (var == other.var) && equal(expr, other.expr);
@@ -82,15 +84,26 @@ struct AssociativeOp {
     std::vector<Replacement> ys;
     bool is_associative;
 
-    AssociativeOp() : is_associative(false) {}
-    AssociativeOp(size_t size) : pattern(size), xs(size), ys(size), is_associative(false) {}
+    AssociativeOp()
+        : is_associative(false) {
+    }
+    AssociativeOp(size_t size)
+        : pattern(size), xs(size), ys(size), is_associative(false) {
+    }
     AssociativeOp(const AssociativePattern &p, const std::vector<Replacement> &xs,
                   const std::vector<Replacement> &ys, bool is_associative)
-        : pattern(p), xs(xs), ys(ys), is_associative(is_associative) {}
+        : pattern(p), xs(xs), ys(ys), is_associative(is_associative) {
+    }
 
-    bool associative() const { return is_associative; }
-    bool commutative() const { return pattern.is_commutative; }
-    size_t size() const { return pattern.size(); }
+    bool associative() const {
+        return is_associative;
+    }
+    bool commutative() const {
+        return pattern.is_commutative;
+    }
+    size_t size() const {
+        return pattern.size();
+    }
 };
 
 /**

@@ -7,25 +7,51 @@
  */
 
 #include <functional>
+#include <map>
+#include <set>
+#include <string>
 
 #include "Argument.h"
 #include "ExternalCode.h"
 #include "IR.h"
 #include "ModulusRemainder.h"
-#include "Outputs.h"
 #include "Target.h"
 
 namespace Halide {
 
+/** Enums specifying various kinds of outputs that can be produced from a Halide Pipeline. */
+enum class Output {
+    assembly,
+    bitcode,
+    c_header,
+    c_source,
+    cpp_stub,
+    featurization,
+    llvm_assembly,
+    object,
+    python_extension,
+    pytorch_wrapper,
+    registration,
+    schedule,
+    static_library,
+    stmt,
+    stmt_html,
+};
+
 /** Type of linkage a function in a lowered Halide module can have.
     Also controls whether auxiliary functions and metadata are generated. */
 enum class LinkageType {
-    External, ///< Visible externally.
-    ExternalPlusMetadata, ///< Visible externally. Argument metadata and an argv wrapper are also generated.
-    Internal, ///< Not visible externally, similar to 'static' linkage in C.
+    External,              ///< Visible externally.
+    ExternalPlusMetadata,  ///< Visible externally. Argument metadata and an argv wrapper are also generated.
+    Internal,              ///< Not visible externally, similar to 'static' linkage in C.
 };
 
 namespace Internal {
+
+struct OutputInfo {
+    std::string name, extension;
+};
+std::map<Output, OutputInfo> get_output_info(const Target &target);
 
 /** Definition of an argument to a LoweredFunc. This is similar to
  * Argument, except it enables passing extra information useful to
@@ -36,9 +62,12 @@ struct LoweredArgument : public Argument {
     ModulusRemainder alignment;
 
     LoweredArgument() = default;
-    explicit LoweredArgument(const Argument &arg) : Argument(arg) {}
+    explicit LoweredArgument(const Argument &arg)
+        : Argument(arg) {
+    }
     LoweredArgument(const std::string &_name, Kind _kind, const Type &_type, uint8_t _dimensions, const ArgumentEstimates &argument_estimates)
-        : Argument(_name, _kind, _type, _dimensions, argument_estimates) {}
+        : Argument(_name, _kind, _type, _dimensions, argument_estimates) {
+    }
 };
 
 /** Definition of a lowered function. This object provides a concrete
@@ -125,7 +154,7 @@ public:
 
     /** Compile a halide Module to variety of outputs, depending on
      * the fields set in output_files. */
-    void compile(const Outputs &output_files_arg) const;
+    void compile(const std::map<Output, std::string> &output_files) const;
 
     /** Compile a halide Module to in-memory object code. Currently
      * only supports LLVM based compilation, but should be extended to
@@ -162,18 +191,17 @@ void compile_standalone_runtime(const std::string &object_filename, Target t);
 /** Create an object and/or static library file containing the Halide runtime
  * for a given target. For use with Target::NoRuntime. Standalone runtimes are
  * only compatible with pipelines compiled by the same build of Halide used to
- * call this function. Return an Outputs with just the actual outputs filled in
- * (typically, object_name and/or static_library_name).
+ * call this function. Return a map with just the actual outputs filled in
+ * (typically, Output::object and/or Output::static_library).
  */
-Outputs compile_standalone_runtime(const Outputs &output_files, Target t);
+std::map<Output, std::string> compile_standalone_runtime(const std::map<Output, std::string> &output_files, Target t);
 
 typedef std::function<Module(const std::string &, const Target &)> ModuleProducer;
 
 void compile_multitarget(const std::string &fn_name,
-                         const Outputs &output_files,
+                         const std::map<Output, std::string> &output_files,
                          const std::vector<Target> &targets,
-                         ModuleProducer module_producer,
-                         const std::map<std::string, std::string> &suffixes = {});
+                         ModuleProducer module_producer);
 
 }  // namespace Halide
 

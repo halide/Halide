@@ -70,18 +70,18 @@ enum : uint32_t {
     STN_UNDEF = 0
 };
 
-static const char elf_magic[] = { 0x7f, 'E', 'L', 'F' };
+static const char elf_magic[] = {0x7f, 'E', 'L', 'F'};
 
-template <int bits>
+template<int bits>
 struct Types;
 
-template <>
+template<>
 struct Types<32> {
     typedef uint32_t addr_t;
     typedef int32_t addr_off_t;
 };
 
-template <typename T>
+template<typename T>
 struct Ehdr {
     typedef typename T::addr_t addr_t;
     typedef typename T::addr_off_t addr_off_t;
@@ -102,8 +102,7 @@ struct Ehdr {
     uint16_t e_shstrndx;
 };
 
-
-template <typename T>
+template<typename T>
 struct Phdr {
     typedef typename T::addr_t addr_t;
     typedef typename T::addr_off_t addr_off_t;
@@ -118,7 +117,7 @@ struct Phdr {
     uint32_t p_align;
 };
 
-template <typename T>
+template<typename T>
 struct Shdr {
     typedef typename T::addr_t addr_t;
     typedef typename T::addr_off_t addr_off_t;
@@ -135,7 +134,7 @@ struct Shdr {
     addr_t sh_entsize;
 };
 
-template <typename T>
+template<typename T>
 struct Rel {
     typedef typename T::addr_t addr_t;
     typedef typename T::addr_off_t addr_off_t;
@@ -176,13 +175,15 @@ struct Rel {
     }
 
     Rel(addr_t offset, addr_t info)
-        : r_offset(offset), r_info(info) {}
+        : r_offset(offset), r_info(info) {
+    }
 
     Rel(addr_t offset, uint32_t type, uint32_t sym)
-        : r_offset(offset), r_info(make_info(type, sym)) {}
+        : r_offset(offset), r_info(make_info(type, sym)) {
+    }
 };
 
-template <typename T>
+template<typename T>
 struct Rela : public Rel<T> {
     typedef typename T::addr_t addr_t;
     typedef typename T::addr_off_t addr_off_t;
@@ -190,16 +191,18 @@ struct Rela : public Rel<T> {
     addr_off_t r_addend;
 
     Rela(addr_t offset, addr_t info, addr_off_t addend)
-        : Rel<T>(offset, info), r_addend(addend) {}
+        : Rel<T>(offset, info), r_addend(addend) {
+    }
 
     Rela(addr_t offset, uint32_t type, uint32_t sym, addr_off_t addend)
-        : Rel<T>(offset, type, sym), r_addend(addend) {}
+        : Rel<T>(offset, type, sym), r_addend(addend) {
+    }
 };
 
-template <typename T>
+template<typename T>
 struct Sym;
 
-template <>
+template<>
 struct Sym<Types<32>> {
     uint32_t st_name;
     uint32_t st_value;
@@ -208,8 +211,12 @@ struct Sym<Types<32>> {
     uint8_t st_other;
     uint16_t st_shndx;
 
-    uint8_t get_binding() const { return st_info >> 4; }
-    uint8_t get_type() const { return st_info & 0xf; }
+    uint8_t get_binding() const {
+        return st_info >> 4;
+    }
+    uint8_t get_type() const {
+        return st_info & 0xf;
+    }
 
     static uint8_t make_info(uint8_t binding, uint8_t type) {
         return (binding << 4) | (type & 0xf);
@@ -223,7 +230,7 @@ struct Sym<Types<32>> {
     }
 };
 
-template <typename T>
+template<typename T>
 struct Dyn {
     typedef typename T::addr_t addr_t;
     typedef typename T::addr_off_t addr_off_t;
@@ -267,14 +274,14 @@ const char *assert_string_valid(const char *name, const char *data, size_t size)
     return name;
 }
 
-template <typename T>
+template<typename T>
 void append_object(std::vector<char> &buf, const T &data) {
     buf.insert(buf.end(), (const char *)&data, (const char *)(&data + 1));
 }
 
-template <typename It>
+template<typename It>
 void append(std::vector<char> &buf, It begin, It end) {
-    buf.reserve(buf.size() + std::distance(begin, end)*sizeof(*begin));
+    buf.reserve(buf.size() + std::distance(begin, end) * sizeof(*begin));
     for (It i = begin; i != end; i++) {
         append_object(buf, *i);
     }
@@ -290,7 +297,7 @@ void append_padding(std::vector<char> &buf, size_t alignment) {
 
 // Cast one type to another, asserting that the type is in the range
 // of the target type.
-template <typename T, typename U>
+template<typename T, typename U>
 T safe_cast(U x) {
     internal_assert(std::numeric_limits<T>::min() <= x && x <= std::numeric_limits<T>::max());
     return static_cast<T>(x);
@@ -298,7 +305,7 @@ T safe_cast(U x) {
 
 // Assign a type from a potentially different type, using safe_cast
 // above to validate the assignment.
-template <typename T, typename U>
+template<typename T, typename U>
 void safe_assign(T &dest, U src) {
     dest = safe_cast<T>(src);
 }
@@ -317,7 +324,7 @@ unsigned long elf_hash(const char *name) {
     return h;
 }
 
-template <typename T>
+template<typename T>
 std::unique_ptr<Object> parse_object_internal(const char *data, size_t size) {
     Ehdr<T> header = *(const Ehdr<T> *)data;
     internal_assert(memcmp(header.e_ident, elf_magic, sizeof(elf_magic)) == 0);
@@ -330,8 +337,8 @@ std::unique_ptr<Object> parse_object_internal(const char *data, size_t size) {
         .set_entry(header.e_entry)
         .set_flags(header.e_flags);
 
-    auto get_section_header = [&](int idx) -> const Shdr<T>* {
-        const char *at = data + header.e_shoff + idx*header.e_shentsize;
+    auto get_section_header = [&](int idx) -> const Shdr<T> * {
+        const char *at = data + header.e_shoff + idx * header.e_shentsize;
         internal_assert(data <= at && at + sizeof(Shdr<T>) <= data + size)
             << "Section header out of bounds.\n";
         return (const Shdr<T> *)at;
@@ -381,7 +388,7 @@ std::unique_ptr<Object> parse_object_internal(const char *data, size_t size) {
             internal_assert(sh->sh_entsize == sizeof(Sym<T>));
             // Skip symbol 0, which is a null symbol.
             for (uint64_t j = 1; j < sh->sh_size / sizeof(Sym<T>); ++j) {
-                const char *sym_ptr = data + sh->sh_offset + j*sizeof(Sym<T>);
+                const char *sym_ptr = data + sh->sh_offset + j * sizeof(Sym<T>);
                 internal_assert(data <= sym_ptr && sym_ptr + sizeof(Sym<T>) <= data + size);
                 const Sym<T> &sym = *(const Sym<T> *)sym_ptr;
                 const char *name = assert_string_valid(&strings[sym.st_name], data, size);
@@ -411,10 +418,10 @@ std::unique_ptr<Object> parse_object_internal(const char *data, size_t size) {
             // isn't a reliable test. We rely on the names intead.
             //internal_assert(&*to_relocate == section_map[sh->sh_link]);
             for (uint64_t i = 0; i < sh->sh_size / sh->sh_entsize; i++) {
-                const char *rela_ptr = data + sh->sh_offset + i*sh->sh_entsize;
+                const char *rela_ptr = data + sh->sh_offset + i * sh->sh_entsize;
                 internal_assert(data <= rela_ptr && rela_ptr + sizeof(Rela<T>) <= data + size);
                 const Rela<T> &rela = *(const Rela<T> *)rela_ptr;
-                Relocation reloc(rela.r_type(), rela.r_offset,  rela.r_addend, symbol_map[rela.r_sym()]);
+                Relocation reloc(rela.r_type(), rela.r_offset, rela.r_addend, symbol_map[rela.r_sym()]);
                 to_relocate->add_relocation(reloc);
             }
         }
@@ -523,7 +530,7 @@ Object::section_iterator Object::merge_text_sections() {
     return text;
 }
 
-template <typename T>
+template<typename T>
 std::vector<char> write_shared_object_internal(Object &obj, Linker *linker, const std::vector<std::string> &dependencies,
                                                const std::string &soname) {
     typedef typename T::addr_t addr_t;
@@ -705,7 +712,7 @@ std::vector<char> write_shared_object_internal(Object &obj, Linker *linker, cons
             }
 
             const Symbol *sym = get_symbol(r);
-            const Symbol *& plt_def = plt_defs[sym];
+            const Symbol *&plt_def = plt_defs[sym];
             if (plt_def) {
                 // We already made a PLT entry for this symbol.
                 continue;
@@ -723,7 +730,7 @@ std::vector<char> write_shared_object_internal(Object &obj, Linker *linker, cons
 
     // Leave room for the header, and program headers at the beginning of the file.
     append_zeros(output, sizeof(ehdr));
-    append_zeros(output, sizeof(phdrs[0])*3);
+    append_zeros(output, sizeof(phdrs[0]) * 3);
 
     // We need to perform the relocations. To do that, we need to position the sections
     // where they will go in the final shared object.
@@ -766,10 +773,9 @@ std::vector<char> write_shared_object_internal(Object &obj, Linker *linker, cons
         sorted_symbols.push_back(i);
     }
     std::sort(sorted_symbols.begin(), sorted_symbols.end(),
-        [&](const std::pair<const Symbol *, const Symbol *> &lhs, const std::pair<const Symbol *, const Symbol *> &rhs) {
-            return lhs.first->get_name() < rhs.first->get_name();
-        }
-    );
+              [&](const std::pair<const Symbol *, const Symbol *> &lhs, const std::pair<const Symbol *, const Symbol *> &rhs) {
+                  return lhs.first->get_name() < rhs.first->get_name();
+              });
 
     std::map<const Symbol *, uint16_t> symbol_idxs;
     uint64_t local_count = 0;
@@ -952,7 +958,7 @@ std::vector<char> write_shared_object_internal(Object &obj, Linker *linker, cons
     dyn.push_back(make_dyn(DT_PLTGOT, get_section_offset(got)));
 
     // Relocations associated with the PLT.
-    addr_t pltrelsz = sizeof(Rela<T>)*plt_symbols.size();
+    addr_t pltrelsz = sizeof(Rela<T>) * plt_symbols.size();
     dyn.push_back(make_dyn(DT_JMPREL, shdrs[rela_got_idx].sh_offset));
     dyn.push_back(make_dyn(DT_PLTREL, DT_RELA));
     dyn.push_back(make_dyn(DT_PLTRELSZ, pltrelsz));

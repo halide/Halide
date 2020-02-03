@@ -1,8 +1,8 @@
 #include "Halide.h"
 #include "test/common/check_call_graphs.h"
 
-#include <stdio.h>
 #include <map>
+#include <stdio.h>
 
 namespace {
 
@@ -157,7 +157,6 @@ int multi_split_rfactor_test(bool compile_module) {
     return 0;
 }
 
-
 int reorder_fuse_wrapper_rfactor_test(bool compile_module) {
     Func f("f"), g("g");
     Var x("x"), y("y"), z("z");
@@ -201,7 +200,9 @@ int reorder_fuse_wrapper_rfactor_test(bool compile_module) {
         Buffer<int> im = g.realize(20, 20, 20);
         auto func = [](int x, int y, int z) {
             return ((5 <= x && x <= 14) && (5 <= y && y <= 14) &&
-                    (5 <= z && z <= 14)) ? x + y + z + 1 : 1;
+                    (5 <= z && z <= 14)) ?
+                       x + y + z + 1 :
+                       1;
         };
         if (check_image(im, func)) {
             return -1;
@@ -234,7 +235,7 @@ int non_trivial_lhs_rfactor_test(bool compile_module) {
         f(x_clamped, y_clamped) += c(r.x, r.y, r.z);
         f.compute_root();
 
-        g(x, y, z) = 2*f(x, y);
+        g(x, y, z) = 2 * f(x, y);
         im_ref = g.realize(20, 20, 20);
     }
 
@@ -246,7 +247,7 @@ int non_trivial_lhs_rfactor_test(bool compile_module) {
         f(x_clamped, y_clamped) += c(r.x, r.y, r.z);
         f.compute_root();
 
-        g(x, y, z) = 2*f(x, y);
+        g(x, y, z) = 2 * f(x, y);
 
         Var u("u"), v("v");
         RVar rzi("rzi"), rzo("rzo");
@@ -352,7 +353,7 @@ int rdom_with_predicate_rfactor_test(bool compile_module) {
     g(x, y, z) = 1;
     RDom r(5, 10, 5, 10, 0, 20);
     r.where(r.x < r.y);
-    r.where(r.x + 2*r.y <= r.z);
+    r.where(r.x + 2 * r.y <= r.z);
     g(r.x, r.y, r.z) += f(r.x, r.y, r.z);
 
     Var u("u"), v("v");
@@ -380,7 +381,9 @@ int rdom_with_predicate_rfactor_test(bool compile_module) {
         Buffer<int> im = g.realize(20, 20, 20);
         auto func = [](int x, int y, int z) {
             return (5 <= x && x <= 14) && (5 <= y && y <= 14) &&
-                   (0 <= z && z <= 19) && (x < y) && (x + 2*y <= z) ? x + y + z + 1 : 1;
+                           (0 <= z && z <= 19) && (x < y) && (x + 2 * y <= z) ?
+                       x + y + z + 1 :
+                       1;
         };
         if (check_image(im, func)) {
             return -1;
@@ -406,7 +409,6 @@ int histogram_rfactor_test(bool compile_module) {
         }
     }
 
-
     Func hist("hist"), g("g");
     Var x("x");
 
@@ -420,7 +422,7 @@ int histogram_rfactor_test(bool compile_module) {
     intm.compute_root();
     intm.update(0).parallel(u);
 
-    g(x) = hist(x+10);
+    g(x) = hist(x + 10);
 
     if (compile_module) {
         // Check the call graphs.
@@ -438,11 +440,11 @@ int histogram_rfactor_test(bool compile_module) {
             return -1;
         }
     } else {
-        Buffer<int32_t> histogram = g.realize(10); // buckets 10-20 only
+        Buffer<int32_t> histogram = g.realize(10);  // buckets 10-20 only
         for (int i = 10; i < 20; i++) {
-            if (histogram(i-10) != reference_hist[i]) {
+            if (histogram(i - 10) != reference_hist[i]) {
                 printf("Error: bucket %d is %d instead of %d\n",
-                        i, histogram(i), reference_hist[i]);
+                       i, histogram(i), reference_hist[i]);
                 return -1;
             }
         }
@@ -457,7 +459,7 @@ int parallel_dot_product_rfactor_test(bool compile_module) {
     Var x("x");
 
     a(x) = x;
-    b(x) = x+2;
+    b(x) = x + 2;
     a.compute_root();
     b.compute_root();
 
@@ -465,12 +467,12 @@ int parallel_dot_product_rfactor_test(bool compile_module) {
 
     Func dot_ref("dot");
     dot_ref() = 0;
-    dot_ref() += a(r.x)*b(r.x);
+    dot_ref() += a(r.x) * b(r.x);
     Buffer<int32_t> ref = dot_ref.realize();
 
     Func dot("dot");
     dot() = 0;
-    dot() += a(r.x)*b(r.x);
+    dot() += a(r.x) * b(r.x);
     RVar rxo("rxo"), rxi("rxi");
     dot.update(0).split(r.x, rxo, rxi, 128);
 
@@ -526,11 +528,11 @@ int tuple_rfactor_test(bool compile_module) {
 
     Func ref("ref");
     ref(x, y) = Tuple(1, 3);
-    ref(x, y) = Tuple(ref(x , y)[0] + f(r.x, r.y)[0] + 3, min(ref(x , y)[1], f(r.x, r.y)[1]));
+    ref(x, y) = Tuple(ref(x, y)[0] + f(r.x, r.y)[0] + 3, min(ref(x, y)[1], f(r.x, r.y)[1]));
     Realization ref_rn = ref.realize(80, 80);
 
     g(x, y) = Tuple(1, 3);
-    g(x , y) = Tuple(g(x , y)[0] + f(r.x, r.y)[0] + 3, min(g(x , y)[1], f(r.x, r.y)[1]));
+    g(x, y) = Tuple(g(x, y)[0] + f(r.x, r.y)[0] + 3, min(g(x, y)[1], f(r.x, r.y)[1]));
     g.reorder({y, x});
 
     Var xi("xi"), yi("yi");
@@ -556,12 +558,9 @@ int tuple_rfactor_test(bool compile_module) {
         m.functions().front().body.accept(&checker);
 
         CallGraphs expected = {
-            {g.name(), {intm1.name() + ".0", intm1.name() + ".1",
-                        g.name() + ".0", g.name() + ".1"}},
-            {intm1.name(), {intm2.name() + ".0", intm2.name() + ".1",
-                            intm1.name() + ".0", intm1.name() + ".1"}},
-            {intm2.name(), {f.name() + ".0", f.name() + ".1",
-                            intm2.name() + ".0", intm2.name() + ".1"}},
+            {g.name(), {intm1.name() + ".0", intm1.name() + ".1", g.name() + ".0", g.name() + ".1"}},
+            {intm1.name(), {intm2.name() + ".0", intm2.name() + ".1", intm1.name() + ".0", intm1.name() + ".1"}},
+            {intm2.name(), {f.name() + ".0", f.name() + ".1", intm2.name() + ".0", intm2.name() + ".1"}},
             {f.name(), {}},
         };
         if (check_call_graphs(checker.calls, expected) != 0) {
@@ -600,17 +599,17 @@ int tuple_specialize_rdom_predicate_rfactor_test(bool compile_module) {
     f.compute_root();
 
     RDom r(5, 20, 5, 20, 5, 20);
-    r.where(r.x*r.x + r.z*r.z <= 200);
-    r.where(r.y*r.z + r.z*r.z > 100);
+    r.where(r.x * r.x + r.z * r.z <= 200);
+    r.where(r.y * r.z + r.z * r.z > 100);
 
     Func ref("ref");
     ref(x, y) = Tuple(1, 3);
-    ref(x, y) = Tuple(ref(x, y)[0]*f(r.x, r.y, r.z)[0], ref(x, y)[1] + 2*f(r.x, r.y, r.z)[1]);
+    ref(x, y) = Tuple(ref(x, y)[0] * f(r.x, r.y, r.z)[0], ref(x, y)[1] + 2 * f(r.x, r.y, r.z)[1]);
     Realization ref_rn = ref.realize(10, 10);
 
     g(x, y) = Tuple(1, 3);
 
-    g(x, y) = Tuple(g(x, y)[0]*f(r.x, r.y, r.z)[0], g(x, y)[1] + 2*f(r.x, r.y, r.z)[1]);
+    g(x, y) = Tuple(g(x, y)[0] * f(r.x, r.y, r.z)[0], g(x, y)[1] + 2 * f(r.x, r.y, r.z)[1]);
 
     Param<int> p;
     Param<bool> q;
@@ -635,18 +634,11 @@ int tuple_specialize_rdom_predicate_rfactor_test(bool compile_module) {
         m.functions().front().body.accept(&checker);
 
         CallGraphs expected = {
-            {g.name(), {intm1.name() + ".0", intm1.name() + ".1",
-                        intm4.name() + ".0", intm4.name() + ".1",
-                        g.name() + ".0", g.name() + ".1"}},
-            {intm1.name(), {intm2.name() + ".0", intm2.name() + ".1",
-                            intm3.name() + ".0", intm3.name() + ".1",
-                            intm1.name() + ".0", intm1.name() + ".1"}},
-            {intm2.name(), {f.name() + ".0", f.name() + ".1",
-                            intm2.name() + ".0", intm2.name() + ".1"}},
-            {intm3.name(), {f.name() + ".0", f.name() + ".1",
-                            intm3.name() + ".0", intm3.name() + ".1"}},
-            {intm4.name(), {f.name() + ".0", f.name() + ".1",
-                            intm4.name() + ".0", intm4.name() + ".1"}},
+            {g.name(), {intm1.name() + ".0", intm1.name() + ".1", intm4.name() + ".0", intm4.name() + ".1", g.name() + ".0", g.name() + ".1"}},
+            {intm1.name(), {intm2.name() + ".0", intm2.name() + ".1", intm3.name() + ".0", intm3.name() + ".1", intm1.name() + ".0", intm1.name() + ".1"}},
+            {intm2.name(), {f.name() + ".0", f.name() + ".1", intm2.name() + ".0", intm2.name() + ".1"}},
+            {intm3.name(), {f.name() + ".0", f.name() + ".1", intm3.name() + ".0", intm3.name() + ".1"}},
+            {intm4.name(), {f.name() + ".0", f.name() + ".1", intm4.name() + ".0", intm4.name() + ".1"}},
             {f.name(), {}},
         };
         if (check_call_graphs(checker.calls, expected) != 0) {
@@ -762,12 +754,12 @@ int complex_multiply_rfactor_test() {
     outer_extent.set(40);
 
     ref(x, y) = Tuple(10, 20);
-    ref(x, y) = Tuple(ref(x, y)[0]*f(r.x, r.y)[0] - ref(x, y)[1]*f(r.x, r.y)[1],
-                      ref(x, y)[0]*f(r.x, r.y)[1] + ref(x, y)[1]*f(r.x, r.y)[0]);
+    ref(x, y) = Tuple(ref(x, y)[0] * f(r.x, r.y)[0] - ref(x, y)[1] * f(r.x, r.y)[1],
+                      ref(x, y)[0] * f(r.x, r.y)[1] + ref(x, y)[1] * f(r.x, r.y)[0]);
 
     g(x, y) = Tuple(10, 20);
-    g(x, y) = Tuple(g(x, y)[0]*f(r.x, r.y)[0] - g(x, y)[1]*f(r.x, r.y)[1],
-                    g(x, y)[0]*f(r.x, r.y)[1] + g(x, y)[1]*f(r.x, r.y)[0]);
+    g(x, y) = Tuple(g(x, y)[0] * f(r.x, r.y)[0] - g(x, y)[1] * f(r.x, r.y)[1],
+                    g(x, y)[0] * f(r.x, r.y)[1] + g(x, y)[1] * f(r.x, r.y)[0]);
 
     RVar rxi("rxi"), rxo("rxo");
     g.update(0).split(r.x, rxo, rxi, 2);
@@ -869,7 +861,8 @@ int allocation_bound_test_trace(void *user_context, const halide_trace_event_t *
     if (e->event == 2 && std::string(e->func) == "f") {
         if (e->coordinates[1] != 2) {
             printf("Bounds on realization of f were supposed to be [0, 2]\n"
-                   "Instead they are: [%d, %d]\n", e->coordinates[0], e->coordinates[1]);
+                   "Instead they are: [%d, %d]\n",
+                   e->coordinates[0], e->coordinates[1]);
             exit(-1);
         }
     }
@@ -920,8 +913,10 @@ int rfactor_tile_reorder_test() {
     f.update()
         .rfactor({{r.x, u}, {r.y, v}})
         .compute_root()
-        .update().tile(u, v, ui, vi, 4, 4)
-        .parallel(u).parallel(v);
+        .update()
+        .tile(u, v, ui, vi, 4, 4)
+        .parallel(u)
+        .parallel(v);
 
     Buffer<int> im_ref = ref.realize(8);
     Buffer<int> im = f.realize(8);
@@ -946,11 +941,11 @@ int tuple_partial_reduction_rfactor_test(bool compile_module) {
 
     Func ref("ref");
     ref(x, y) = Tuple(1, 3);
-    ref(x, y) = Tuple(ref(x , y)[0] + f(r.x, r.y)[0] + 3, ref(x , y)[1]);
+    ref(x, y) = Tuple(ref(x, y)[0] + f(r.x, r.y)[0] + 3, ref(x, y)[1]);
     Realization ref_rn = ref.realize(80, 80);
 
     g(x, y) = Tuple(1, 3);
-    g(x , y) = Tuple(g(x , y)[0] + f(r.x, r.y)[0] + 3, g(x , y)[1]);
+    g(x, y) = Tuple(g(x, y)[0] + f(r.x, r.y)[0] + 3, g(x, y)[1]);
     g.reorder({y, x});
 
     Var xi("xi"), yi("yi");
@@ -977,10 +972,8 @@ int tuple_partial_reduction_rfactor_test(bool compile_module) {
 
         CallGraphs expected = {
             {g.name(), {intm1.name() + ".0", g.name() + ".0", g.name() + ".1"}},
-            {intm1.name(), {intm2.name() + ".0",
-                            intm1.name() + ".0", intm1.name() + ".1"}},
-            {intm2.name(), {f.name() + ".0",
-                            intm2.name() + ".0", intm2.name() + ".1"}},
+            {intm1.name(), {intm2.name() + ".0", intm1.name() + ".0", intm1.name() + ".1"}},
+            {intm2.name(), {f.name() + ".0", intm2.name() + ".0", intm2.name() + ".1"}},
             {f.name(), {}},
         };
         if (check_call_graphs(checker.calls, expected) != 0) {

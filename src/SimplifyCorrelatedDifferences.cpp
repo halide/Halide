@@ -2,8 +2,8 @@
 
 #include "CSE.h"
 #include "ExprUsesVar.h"
-#include "IROperator.h"
 #include "IRMutator.h"
+#include "IROperator.h"
 #include "Monotonic.h"
 #include "Scope.h"
 #include "Simplify.h"
@@ -14,9 +14,9 @@ namespace Halide {
 namespace Internal {
 namespace {
 
+using std::pair;
 using std::string;
 using std::vector;
-using std::pair;
 
 class SimplifyCorrelatedDifferences : public IRMutator {
     using IRMutator::visit;
@@ -33,10 +33,14 @@ class SimplifyCorrelatedDifferences : public IRMutator {
         struct Frame {
             const LetStmtOrLet *op;
             ScopedBinding<Monotonic> binding;
-            Frame(const LetStmtOrLet *op, const string &loop_var, Scope<Monotonic> &scope) :
-                op(op),
-                binding(scope, op->name, is_monotonic(op->value, loop_var, scope)) {}
-            Frame(const LetStmtOrLet *op) : op(op) {}
+            Expr new_value;
+            Frame(const LetStmtOrLet *op, const string &loop_var, Scope<Monotonic> &scope)
+                : op(op),
+                  binding(scope, op->name, is_monotonic(op->value, loop_var, scope)) {
+            }
+            Frame(const LetStmtOrLet *op)
+                : op(op) {
+            }
         };
         std::vector<Frame> frames;
         StmtOrExpr result;
@@ -45,7 +49,9 @@ class SimplifyCorrelatedDifferences : public IRMutator {
             result = op->body;
             if (op->value.type() == Int(32) && is_pure(op->value)) {
                 frames.emplace_back(op, loop_var, monotonic);
-                lets.emplace_back(op->name, op->value);
+                Expr new_value = mutate(op->value);
+                lets.emplace_back(op->name, new_value);
+                frames.back().new_value = std::move(new_value);
             } else {
                 frames.emplace_back(op);
             }
@@ -54,7 +60,11 @@ class SimplifyCorrelatedDifferences : public IRMutator {
         result = mutate(result);
 
         for (auto it = frames.rbegin(); it != frames.rend(); it++) {
-            result = LetStmtOrLet::make(it->op->name, it->op->value, result);
+            if (it->new_value.defined()) {
+                result = LetStmtOrLet::make(it->op->name, it->new_value, result);
+            } else {
+                result = LetStmtOrLet::make(it->op->name, it->op->value, result);
+            }
             if (it->binding.bound()) {
                 lets.pop_back();
             }
@@ -145,5 +155,5 @@ Stmt simplify_correlated_differences(const Stmt &s) {
     return SimplifyCorrelatedDifferences().mutate(s);
 }
 
-}
-}
+}  // namespace Internal
+}  // namespace Halide

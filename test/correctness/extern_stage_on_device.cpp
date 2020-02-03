@@ -58,8 +58,8 @@ int main(int argc, char **argv) {
     Var x, y;
     Var xi, yi;
 
-    for (int extern_on_device : {0, 1} ) {
-        for (int sink_on_device : {0, 1} ) {
+    for (int extern_on_device : {0, 1}) {
+        for (int sink_on_device : {0, 1}) {
             Func source("source");
             std::vector<ExternFuncArgument> args;
             args.push_back(extern_on_device);
@@ -77,7 +77,7 @@ int main(int argc, char **argv) {
             source.compute_root();
             sink.compute_root();
             if (sink_on_device > 0) {
-              sink.gpu_tile(x, y, xi, yi, 32, 32);
+                sink.gpu_tile(x, y, xi, yi, 32, 32);
             }
 
             Buffer<int32_t> output = sink.realize(100, 100);
@@ -86,15 +86,14 @@ int main(int argc, char **argv) {
             RDom r(output);
             uint32_t error = evaluate_may_gpu<uint32_t>(sum(abs(output(r.x, r.y))));
             if (error != 0) {
-              printf("Something went wrong when "
-                     "extern_on_device=%d, sink_on_device=%d \n",
-                     extern_on_device, sink_on_device);
-              return -1;
+                printf("Something went wrong when "
+                       "extern_on_device=%d, sink_on_device=%d \n",
+                       extern_on_device, sink_on_device);
+                return -1;
             }
         }
     }
 
     printf("Success!\n");
     return 0;
-
 }

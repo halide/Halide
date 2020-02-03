@@ -2,12 +2,12 @@
 
 #include "AlignLoads.h"
 #include "Bounds.h"
+#include "HexagonAlignment.h"
 #include "IRMutator.h"
 #include "IROperator.h"
 #include "ModulusRemainder.h"
 #include "Scope.h"
 #include "Simplify.h"
-#include "HexagonAlignment.h"
 using std::vector;
 
 namespace Halide {
@@ -22,7 +22,8 @@ namespace {
 class AlignLoads : public IRMutator {
 public:
     AlignLoads(int alignment)
-        : alignment_analyzer(alignment), required_alignment(alignment) {}
+        : alignment_analyzer(alignment), required_alignment(alignment) {
+    }
 
 private:
     HexagonAlignmentAnalyzer alignment_analyzer;
@@ -93,7 +94,7 @@ private:
             // Load a dense vector covering all of the addresses in the load.
             Expr dense_base = simplify(ramp->base - shift);
             ModulusRemainder alignment = op->alignment - shift;
-            Expr dense_index = Ramp::make(dense_base, 1, lanes*stride);
+            Expr dense_index = Ramp::make(dense_base, 1, lanes * stride);
             Expr dense = make_load(op, dense_index, alignment);
 
             // Shuffle the dense load.
@@ -130,7 +131,7 @@ private:
             // native vectors, followed by a shuffle.
             Expr aligned_base = simplify(ramp->base - (int)aligned_offset);
             ModulusRemainder alignment = op->alignment - (int)aligned_offset;
-            Expr aligned_load = make_load(op, Ramp::make(aligned_base, 1, lanes*2), alignment);
+            Expr aligned_load = make_load(op, Ramp::make(aligned_base, 1, lanes * 2), alignment);
 
             return Shuffle::make_slice(aligned_load, (int)aligned_offset, 1, lanes);
         }
@@ -145,5 +146,5 @@ Stmt align_loads(Stmt s, int alignment) {
     return AlignLoads(alignment).mutate(s);
 }
 
-} // namespace Internal
-} // namespace Halide
+}  // namespace Internal
+}  // namespace Halide

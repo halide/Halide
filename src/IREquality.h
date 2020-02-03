@@ -35,7 +35,7 @@ private:
         uint64_t pb = (uint64_t)(b.get());
         uint64_t mix = (pa + pb) + (pa ^ pb);
         mix ^= (mix >> bits);
-        mix ^= (mix >> (bits*2));
+        mix ^= (mix >> (bits * 2));
         uint32_t bottom = mix & ((1 << bits) - 1);
         return bottom;
     }
@@ -64,7 +64,9 @@ public:
     }
 
     IRCompareCache() = default;
-    IRCompareCache(int b) : bits(b), entries(static_cast<size_t>(1) << bits) {}
+    IRCompareCache(int b)
+        : bits(b), entries(static_cast<size_t>(1) << bits) {
+    }
 };
 
 /** A wrapper about Exprs so that they can be deeply compared with a
@@ -94,8 +96,12 @@ struct ExprWithCompareCache {
     Expr expr;
     mutable IRCompareCache *cache;
 
-    ExprWithCompareCache() : cache(nullptr) {}
-    ExprWithCompareCache(const Expr &e, IRCompareCache *c) : expr(e), cache(c) {}
+    ExprWithCompareCache()
+        : cache(nullptr) {
+    }
+    ExprWithCompareCache(const Expr &e, IRCompareCache *c)
+        : expr(e), cache(c) {
+    }
 
     /** The comparison uses (and updates) the cache */
     bool operator<(const ExprWithCompareCache &other) const;

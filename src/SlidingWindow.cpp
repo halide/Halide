@@ -33,12 +33,13 @@ class ExprDependsOnVar : public IRVisitor {
             op->body.accept(this);
         }
     }
-public:
 
+public:
     bool result;
     string var;
 
-    ExprDependsOnVar(string v) : result(false), var(v) {
+    ExprDependsOnVar(string v)
+        : result(false), var(v) {
     }
 };
 
@@ -47,7 +48,6 @@ bool expr_depends_on_var(Expr e, string v) {
     e.accept(&depends);
     return depends.result;
 }
-
 
 class ExpandExpr : public IRMutator {
     using IRMutator::visit;
@@ -64,8 +64,9 @@ class ExpandExpr : public IRMutator {
     }
 
 public:
-    ExpandExpr(const Scope<Expr> &s) : scope(s) {}
-
+    ExpandExpr(const Scope<Expr> &s)
+        : scope(s) {
+    }
 };
 
 // Perform all the substitutions in a scope
@@ -76,7 +77,7 @@ Expr expand_expr(Expr e, const Scope<Expr> &scope) {
     return result;
 }
 
-}
+}  // namespace
 
 // Perform sliding window optimization for a function over a
 // particular serial for loop
@@ -92,7 +93,7 @@ class SlidingWindowOnFunctionAndLoop : public IRMutator {
 
     // Check if the dimension at index 'dim_idx' is always pure (i.e. equal to 'dim')
     // in the definition (including in its specializations)
-    bool is_dim_always_pure(const Definition &def, const string& dim, int dim_idx) {
+    bool is_dim_always_pure(const Definition &def, const string &dim, int dim_idx) {
         const Variable *var = def.args()[dim_idx].as<Variable>();
         if ((!var) || (var->name != dim)) {
             return false;
@@ -135,7 +136,7 @@ class SlidingWindowOnFunctionAndLoop : public IRMutator {
                 min_req = expand_expr(min_req, scope);
                 max_req = expand_expr(max_req, scope);
 
-                debug(3) << func_args[i] << ":" << min_req << ", " << max_req  << "\n";
+                debug(3) << func_args[i] << ":" << min_req << ", " << max_req << "\n";
                 if (expr_depends_on_var(min_req, loop_var) ||
                     expr_depends_on_var(max_req, loop_var)) {
                     if (!dim.empty()) {
@@ -328,7 +329,9 @@ class SlidingWindowOnFunctionAndLoop : public IRMutator {
     }
 
 public:
-    SlidingWindowOnFunctionAndLoop(Function f, string v, Expr v_min) : func(f), loop_var(v), loop_min(v_min) {}
+    SlidingWindowOnFunctionAndLoop(Function f, string v, Expr v_min)
+        : func(f), loop_var(v), loop_min(v_min) {
+    }
 };
 
 // Perform sliding window optimization for a particular function
@@ -357,7 +360,9 @@ class SlidingWindowOnFunction : public IRMutator {
     }
 
 public:
-    SlidingWindowOnFunction(Function f) : func(f) {}
+    SlidingWindowOnFunction(Function f)
+        : func(f) {
+    }
 };
 
 // Perform sliding window optimization for all functions
@@ -398,9 +403,11 @@ class SlidingWindow : public IRMutator {
                                  op->bounds, op->condition, new_body);
         }
     }
-public:
-    SlidingWindow(const map<string, Function> &e) : env(e) {}
 
+public:
+    SlidingWindow(const map<string, Function> &e)
+        : env(e) {
+    }
 };
 
 Stmt sliding_window(Stmt s, const map<string, Function> &env) {

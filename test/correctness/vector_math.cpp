@@ -1,11 +1,11 @@
 #include "Halide.h"
+#include <algorithm>
+#include <cmath>
+#include <future>
 #include <math.h>
+#include <random>
 #include <stdio.h>
 #include <string.h>
-#include <cmath>
-#include <algorithm>
-#include <future>
-#include <random>
 
 using namespace Halide;
 
@@ -13,9 +13,11 @@ using namespace Halide;
 template<typename A>
 const char *string_of_type();
 
-#define DECL_SOT(name)                                          \
-    template<>                                                  \
-    const char *string_of_type<name>() {return #name;}
+#define DECL_SOT(name)                   \
+    template<>                           \
+    const char *string_of_type<name>() { \
+        return #name;                    \
+    }
 
 DECL_SOT(uint8_t);
 DECL_SOT(int8_t);
@@ -63,12 +65,12 @@ bool close_enough(A x, A y) {
 
 template<>
 bool close_enough<float>(float x, float y) {
-    return fabs(x-y) < 1e-4;
+    return fabs(x - y) < 1e-4;
 }
 
 template<>
 bool close_enough<double>(double x, double y) {
-    return fabs(x-y) < 1e-5;
+    return fabs(x - y) < 1e-5;
 }
 
 template<>
@@ -96,25 +98,25 @@ T divide(T x, T y) {
 
 template<>
 float divide(float x, float y) {
-    return x/y;
+    return x / y;
 }
 
 template<>
 double divide(double x, double y) {
-    return x/y;
+    return x / y;
 }
 
 template<>
 float16_t divide(float16_t x, float16_t y) {
-    return x/y;
+    return x / y;
 }
 
 template<>
 bfloat16_t divide(bfloat16_t x, bfloat16_t y) {
-    return x/y;
+    return x / y;
 }
 
-template <typename A>
+template<typename A>
 A absd(A x, A y) {
     return x > y ? x - y : y - x;
 }
@@ -125,31 +127,30 @@ int mantissa(float x) {
     return bits & 0x007fffff;
 }
 
-template <typename T>
+template<typename T>
 struct with_unsigned {
     typedef T type;
 };
 
-template <>
+template<>
 struct with_unsigned<int8_t> {
     typedef uint8_t type;
 };
 
-template <>
+template<>
 struct with_unsigned<int16_t> {
     typedef uint16_t type;
 };
 
-template <>
+template<>
 struct with_unsigned<int32_t> {
     typedef uint32_t type;
 };
 
-template <>
+template<>
 struct with_unsigned<int64_t> {
     typedef uint64_t type;
 };
-
 
 template<typename A>
 bool test(int lanes, int seed) {
@@ -164,12 +165,12 @@ bool test(int lanes, int seed) {
     std::mt19937 rng(seed);
     std::uniform_int_distribution<> dis(0, 1023);
 
-    Buffer<A> input(W+16, H+16);
-    for (int y = 0; y < H+16; y++) {
-        for (int x = 0; x < W+16; x++) {
+    Buffer<A> input(W + 16, H + 16);
+    for (int y = 0; y < H + 16; y++) {
+        for (int x = 0; x < W + 16; x++) {
             // We must ensure that the result of casting is not out-of-range:
             // float->int casts are UB if the result doesn't fit.
-            input(x, y) = (A)(dis(rng)*0.0625 + 1.0);
+            input(x, y) = (A)(dis(rng) * 0.0625 + 1.0);
             if ((A)(-1) < (A)(0)) {
                 input(x, y) -= (A)(10);
             }
@@ -181,13 +182,13 @@ bool test(int lanes, int seed) {
     {
         if (verbose) printf("Add\n");
         Func f1;
-        f1(x, y) = input(x, y) + input(x+1, y);
+        f1(x, y) = input(x, y) + input(x + 1, y);
         f1.vectorize(x, lanes);
         Buffer<A> im1 = f1.realize(W, H);
 
         for (int y = 0; y < H; y++) {
             for (int x = 0; x < W; x++) {
-                A correct = input(x, y) + input(x+1, y);
+                A correct = input(x, y) + input(x + 1, y);
                 if (im1(x, y) != correct) {
                     printf("im1(%d, %d) = %f instead of %f\n", x, y, (double)(im1(x, y)), (double)(correct));
                     return false;
@@ -200,13 +201,13 @@ bool test(int lanes, int seed) {
     {
         if (verbose) printf("Subtract\n");
         Func f2;
-        f2(x, y) = input(x, y) - input(x+1, y);
+        f2(x, y) = input(x, y) - input(x + 1, y);
         f2.vectorize(x, lanes);
         Buffer<A> im2 = f2.realize(W, H);
 
         for (int y = 0; y < H; y++) {
             for (int x = 0; x < W; x++) {
-                A correct = input(x, y) - input(x+1, y);
+                A correct = input(x, y) - input(x + 1, y);
                 if (im2(x, y) != correct) {
                     printf("im2(%d, %d) = %f instead of %f\n", x, y, (double)(im2(x, y)), (double)(correct));
                     return false;
@@ -219,13 +220,13 @@ bool test(int lanes, int seed) {
     {
         if (verbose) printf("Multiply\n");
         Func f3;
-        f3(x, y) = input(x, y) * input(x+1, y);
+        f3(x, y) = input(x, y) * input(x + 1, y);
         f3.vectorize(x, lanes);
         Buffer<A> im3 = f3.realize(W, H);
 
         for (int y = 0; y < H; y++) {
             for (int x = 0; x < W; x++) {
-                A correct = input(x, y) * input(x+1, y);
+                A correct = input(x, y) * input(x + 1, y);
                 if (im3(x, y) != correct) {
                     printf("im3(%d, %d) = %f instead of %f\n", x, y, (double)(im3(x, y)), (double)(correct));
                     return false;
@@ -238,13 +239,13 @@ bool test(int lanes, int seed) {
     {
         if (verbose) printf("Select\n");
         Func f4;
-        f4(x, y) = select(input(x, y) > input(x+1, y), input(x+2, y), input(x+3, y));
+        f4(x, y) = select(input(x, y) > input(x + 1, y), input(x + 2, y), input(x + 3, y));
         f4.vectorize(x, lanes);
         Buffer<A> im4 = f4.realize(W, H);
 
         for (int y = 0; y < H; y++) {
             for (int x = 0; x < W; x++) {
-                A correct = input(x, y) > input(x+1, y) ? input(x+2, y) : input(x+3, y);
+                A correct = input(x, y) > input(x + 1, y) ? input(x + 2, y) : input(x + 3, y);
                 if (im4(x, y) != correct) {
                     printf("im4(%d, %d) = %f instead of %f\n", x, y, (double)(im4(x, y)), (double)(correct));
                     return false;
@@ -257,8 +258,8 @@ bool test(int lanes, int seed) {
     {
         if (verbose) printf("Gather\n");
         Func f5;
-        Expr xCoord = clamp(cast<int>(input(x, y)), 0, W-1);
-        Expr yCoord = clamp(cast<int>(input(x+1, y)), 0, H-1);
+        Expr xCoord = clamp(cast<int>(input(x, y)), 0, W - 1);
+        Expr yCoord = clamp(cast<int>(input(x + 1, y)), 0, H - 1);
         f5(x, y) = input(xCoord, yCoord);
         f5.vectorize(x, lanes);
         Buffer<A> im5 = f5.realize(W, H);
@@ -266,11 +267,11 @@ bool test(int lanes, int seed) {
         for (int y = 0; y < H; y++) {
             for (int x = 0; x < W; x++) {
                 int xCoord = (int)(input(x, y));
-                if (xCoord >= W) xCoord = W-1;
+                if (xCoord >= W) xCoord = W - 1;
                 if (xCoord < 0) xCoord = 0;
 
-                int yCoord = (int)(input(x+1, y));
-                if (yCoord >= H) yCoord = H-1;
+                int yCoord = (int)(input(x + 1, y));
+                if (yCoord >= H) yCoord = H - 1;
                 if (yCoord < 0) yCoord = 0;
 
                 A correct = input(xCoord, yCoord);
@@ -286,7 +287,7 @@ bool test(int lanes, int seed) {
     // Gather and scatter with constant but unknown stride
     {
         Func f5a;
-        f5a(x, y) = input(x, y)*cast<A>(2);
+        f5a(x, y) = input(x, y) * cast<A>(2);
         f5a.vectorize(y, lanes);
         Buffer<A> im5a = f5a.realize(W, H);
 
@@ -307,15 +308,15 @@ bool test(int lanes, int seed) {
         Func f6;
         // Set one entry in each column high
         f6(x, y) = 0;
-        f6(x, clamp(x*x, 0, H-1)) = 1;
+        f6(x, clamp(x * x, 0, H - 1)) = 1;
 
         f6.update().vectorize(x, lanes);
 
         Buffer<int> im6 = f6.realize(W, H);
 
         for (int x = 0; x < W; x++) {
-            int yCoord = x*x;
-            if (yCoord >= H) yCoord = H-1;
+            int yCoord = x * x;
+            if (yCoord >= H) yCoord = H - 1;
             if (yCoord < 0) yCoord = 0;
             for (int y = 0; y < H; y++) {
                 int correct = y == yCoord ? 1 : 0;
@@ -369,13 +370,13 @@ bool test(int lanes, int seed) {
     {
         if (verbose) printf("Division\n");
         Func f9;
-        f9(x, y) = input(x, y) / clamp(input(x+1, y), cast<A>(1), cast<A>(3));
+        f9(x, y) = input(x, y) / clamp(input(x + 1, y), cast<A>(1), cast<A>(3));
         f9.vectorize(x, lanes);
         Buffer<A> im9 = f9.realize(W, H);
 
         for (int y = 0; y < H; y++) {
             for (int x = 0; x < W; x++) {
-                A clamped = input(x+1, y);
+                A clamped = input(x + 1, y);
                 if (clamped < (A)1) clamped = (A)1;
                 if (clamped > (A)3) clamped = (A)3;
                 A correct = divide(input(x, y), clamped);
@@ -421,13 +422,13 @@ bool test(int lanes, int seed) {
     {
         if (verbose) printf("Interleaving store\n");
         Func f11;
-        f11(x, y) = select((x%2)==0, input(x/2, y), input(x/2, y+1));
+        f11(x, y) = select((x % 2) == 0, input(x / 2, y), input(x / 2, y + 1));
         f11.vectorize(x, lanes);
         Buffer<A> im11 = f11.realize(W, H);
 
         for (int y = 0; y < H; y++) {
             for (int x = 0; x < W; x++) {
-                A correct = ((x%2)==0) ? input(x/2, y) : input(x/2, y+1);
+                A correct = ((x % 2) == 0) ? input(x / 2, y) : input(x / 2, y + 1);
                 if (im11(x, y) != correct) {
                     printf("im11(%d, %d) = %f instead of %f\n", x, y, (double)(im11(x, y)), (double)(correct));
                     return false;
@@ -440,13 +441,13 @@ bool test(int lanes, int seed) {
     {
         if (verbose) printf("Reversing\n");
         Func f12;
-        f12(x, y) = input(W-1-x, H-1-y);
+        f12(x, y) = input(W - 1 - x, H - 1 - y);
         f12.vectorize(x, lanes);
         Buffer<A> im12 = f12.realize(W, H);
 
         for (int y = 0; y < H; y++) {
             for (int x = 0; x < W; x++) {
-                A correct = input(W-1-x, H-1-y);
+                A correct = input(W - 1 - x, H - 1 - y);
                 if (im12(x, y) != correct) {
                     printf("im12(%d, %d) = %f instead of %f\n", x, y, (double)(im12(x, y)), (double)(correct));
                     return false;
@@ -459,13 +460,13 @@ bool test(int lanes, int seed) {
     {
         if (verbose) printf("Unaligned load\n");
         Func f13;
-        f13(x, y) = input(x+3, y);
+        f13(x, y) = input(x + 3, y);
         f13.vectorize(x, lanes);
         Buffer<A> im13 = f13.realize(W, H);
 
         for (int y = 0; y < H; y++) {
             for (int x = 0; x < W; x++) {
-                A correct = input(x+3, y);
+                A correct = input(x + 3, y);
                 if (im13(x, y) != correct) {
                     printf("im13(%d, %d) = %f instead of %f\n", x, y, (double)(im13(x, y)), (double)(correct));
                 }
@@ -498,16 +499,16 @@ bool test(int lanes, int seed) {
         if (type_of<A>() == Int(16)) {
             if (verbose) printf("pmaddwd\n");
             Func f15, f16;
-            f15(x, y) = cast<int>(input(x, y)) * input(x, y+2) + cast<int>(input(x, y+1)) * input(x, y+3);
-            f16(x, y) = cast<int>(input(x, y)) * input(x, y+2) - cast<int>(input(x, y+1)) * input(x, y+3);
+            f15(x, y) = cast<int>(input(x, y)) * input(x, y + 2) + cast<int>(input(x, y + 1)) * input(x, y + 3);
+            f16(x, y) = cast<int>(input(x, y)) * input(x, y + 2) - cast<int>(input(x, y + 1)) * input(x, y + 3);
             f15.vectorize(x, lanes);
             f16.vectorize(x, lanes);
             Buffer<int32_t> im15 = f15.realize(W, H);
             Buffer<int32_t> im16 = f16.realize(W, H);
             for (int y = 0; y < H; y++) {
                 for (int x = 0; x < W; x++) {
-                    int correct15 = int(input(x, y)*input(x, y+2) + input(x, y+1)*input(x, y+3));
-                    int correct16 = int(input(x, y)*input(x, y+2) - input(x, y+1)*input(x, y+3));
+                    int correct15 = int(input(x, y) * input(x, y + 2) + input(x, y + 1) * input(x, y + 3));
+                    int correct16 = int(input(x, y) * input(x, y + 2) - input(x, y + 1) * input(x, y + 3));
                     if (im15(x, y) != correct15) {
                         printf("im15(%d, %d) = %d instead of %d\n", x, y, im15(x, y), correct15);
                     }
@@ -524,7 +525,7 @@ bool test(int lanes, int seed) {
         if (verbose) printf("Fast transcendentals\n");
         Buffer<float> im15, im16, im17, im18, im19, im20;
         Expr a = input(x, y) * 0.5f;
-        Expr b = input((x+1)%W, y) * 0.5f;
+        Expr b = input((x + 1) % W, y) * 0.5f;
         {
             Func f15;
             f15(x, y) = log(a);
@@ -537,7 +538,7 @@ bool test(int lanes, int seed) {
         }
         {
             Func f17;
-            f17(x, y) = pow(a, b/16.0f);
+            f17(x, y) = pow(a, b / 16.0f);
             im17 = f17.realize(W, H);
         }
         {
@@ -552,7 +553,7 @@ bool test(int lanes, int seed) {
         }
         {
             Func f20;
-            f20(x, y) = fast_pow(a, b/16.0f);
+            f20(x, y) = fast_pow(a, b / 16.0f);
             im20 = f20.realize(W, H);
         }
 
@@ -566,10 +567,10 @@ bool test(int lanes, int seed) {
         for (int y = 0; y < H; y++) {
             for (int x = 0; x < W; x++) {
                 float a = float(input(x, y)) * 0.5f;
-                float b = float(input((x+1)%W, y)) * 0.5f;
+                float b = float(input((x + 1) % W, y)) * 0.5f;
                 float correct_log = logf(a);
                 float correct_exp = expf(b);
-                float correct_pow = powf(a, b/16.0f);
+                float correct_pow = powf(a, b / 16.0f);
 
                 int correct_log_mantissa = mantissa(correct_log);
                 int correct_exp_mantissa = mantissa(correct_exp);
@@ -620,7 +621,7 @@ bool test(int lanes, int seed) {
                 }
                 if (a >= 0 && pow_mantissa_error > 64) {
                     printf("pow(%f, %f) = %1.10f instead of %1.10f (mantissa: %d vs %d)\n",
-                           a, b/16.0f, im17(x, y), correct_pow, correct_pow_mantissa, pow_mantissa);
+                           a, b / 16.0f, im17(x, y), correct_pow, correct_pow_mantissa, pow_mantissa);
                 }
                 if (std::isfinite(correct_log) && fast_log_mantissa_error > 64) {
                     printf("fast_log(%f) = %1.10f instead of %1.10f (mantissa: %d vs %d)\n",
@@ -632,7 +633,7 @@ bool test(int lanes, int seed) {
                 }
                 if (a >= 0 && std::isfinite(correct_pow) && fast_pow_mantissa_error > 128) {
                     printf("fast_pow(%f, %f) = %1.10f instead of %1.10f (mantissa: %d vs %d)\n",
-                           a, b/16.0f, im20(x, y), correct_pow, correct_pow_mantissa, fast_pow_mantissa);
+                           a, b / 16.0f, im20(x, y), correct_pow, correct_pow_mantissa, fast_pow_mantissa);
                 }
             }
         }
@@ -651,21 +652,21 @@ bool test(int lanes, int seed) {
     {
         if (verbose) printf("Lerp\n");
         Func f21;
-        Expr weight = input(x+2, y);
+        Expr weight = input(x + 2, y);
         Type t = type_of<A>();
         if (t.is_float()) {
             weight = clamp(weight, cast<A>(0), cast<A>(1));
         } else if (t.is_int()) {
             weight = cast(UInt(t.bits(), t.lanes()), max(0, weight));
         }
-        f21(x, y) = lerp(input(x, y), input(x+1, y), weight);
+        f21(x, y) = lerp(input(x, y), input(x + 1, y), weight);
         Buffer<A> im21 = f21.realize(W, H);
 
         for (int y = 0; y < H; y++) {
             for (int x = 0; x < W; x++) {
                 double a = (double)(input(x, y));
-                double b = (double)(input(x+1, y));
-                double w = (double)(input(x+2, y));
+                double b = (double)(input(x + 1, y));
+                double w = (double)(input(x + 2, y));
                 if (w < 0) w = 0;
                 if (!t.is_float()) {
                     uint64_t divisor = 1;
@@ -675,7 +676,7 @@ bool test(int lanes, int seed) {
                 }
                 w = std::min(std::max(w, 0.0), 1.0);
 
-                double lerped = (a*(1.0-w) + b*w);
+                double lerped = (a * (1.0 - w) + b * w);
                 if (!t.is_float()) {
                     lerped = floor(lerped + 0.5);
                 }
@@ -692,14 +693,14 @@ bool test(int lanes, int seed) {
     {
         if (verbose) printf("Absolute difference\n");
         Func f22;
-        f22(x, y) = absd(input(x, y), input(x+1, y));
+        f22(x, y) = absd(input(x, y), input(x + 1, y));
         f22.vectorize(x, lanes);
         Buffer<typename with_unsigned<A>::type> im22 = f22.realize(W, H);
 
         for (int y = 0; y < H; y++) {
             for (int x = 0; x < W; x++) {
                 using T = typename with_unsigned<A>::type;
-                T correct = T(absd((double)input(x, y), (double)input(x+1, y)));
+                T correct = T(absd((double)input(x, y), (double)input(x + 1, y)));
                 if (im22(x, y) != correct) {
                     printf("im22(%d, %d) = %f instead of %f\n", x, y, (double)(im22(x, y)), (double)(correct));
                     return false;

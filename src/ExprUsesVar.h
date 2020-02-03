@@ -80,8 +80,10 @@ class ExprUsesVars : public IRGraphVisitor {
         visit_name(op->name);
         IRGraphVisitor::visit(op);
     }
+
 public:
-    ExprUsesVars(const Scope<T> &v, const Scope<Expr> *s = nullptr) : vars(v), result(false) {
+    ExprUsesVars(const Scope<T> &v, const Scope<Expr> *s = nullptr)
+        : vars(v), result(false) {
         scope.set_containing_scope(s);
     }
     bool result;

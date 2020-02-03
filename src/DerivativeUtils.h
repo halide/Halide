@@ -19,12 +19,12 @@ namespace Internal {
 Expr remove_let_definitions(const Expr &expr);
 
 /**
- * Return a list of variables that expr depends on and are in the filter
+ * Return a list of variables' indices that expr depends on and are in the filter
  */
-std::vector<std::string> gather_variables(const Expr &expr,
-                                          const std::vector<std::string> &filter);
-std::vector<std::string> gather_variables(const Expr &expr,
-                                          const std::vector<Var> &filter);
+std::vector<int> gather_variables(const Expr &expr,
+                                  const std::vector<std::string> &filter);
+std::vector<int> gather_variables(const Expr &expr,
+                                  const std::vector<Var> &filter);
 
 /**
  * Return a list of reduction variables the expression or tuple depends on
@@ -48,7 +48,8 @@ Expr add_let_expression(const Expr &expr,
  */
 std::vector<Expr> sort_expressions(const Expr &expr);
 /**
- * Compute the bounds of funcs
+ * Compute the bounds of funcs. The bounds represent a conservative region
+ * that is used by the "consumers" of the function, except of itself.
  */
 std::map<std::string, Box> inference_bounds(const std::vector<Func> &funcs,
                                             const std::vector<Box> &output_bounds);
@@ -94,18 +95,27 @@ std::set<std::string> find_implicit_variables(Expr expr);
  */
 Expr substitute_rdom_predicate(
     const std::string &name, const Expr &replacement, const Expr &expr);
+
 /**
  * Return true if expr contains call to func_name
  */
 bool is_calling_function(
-    const std::string &func_name, const Expr &expr,
+    const std::string &func_name, Expr expr,
     const std::map<std::string, Expr> &let_var_mapping);
 /**
  * Return true if expr depends on any function or buffer
  */
 bool is_calling_function(
-    const Expr &expr,
+    Expr expr,
     const std::map<std::string, Expr> &let_var_mapping);
+
+/**
+ * Replaces call to Func f in Expr e such that the call argument at variable_id
+ * is the pure argument.
+ */
+Expr substitute_call_arg_with_pure_arg(Func f,
+                                       int variable_id,
+                                       Expr e);
 
 }  // namespace Internal
 }  // namespace Halide

@@ -48,7 +48,9 @@ struct CodeGen_GPU_Dev {
      * values to be passed to the kernel_run routine rather than just
      * argument type sizes.
      */
-    virtual bool kernel_run_takes_types() const { return false; }
+    virtual bool kernel_run_takes_types() const {
+        return false;
+    }
 
     static bool is_gpu_var(const std::string &name);
     static bool is_gpu_block_var(const std::string &name);

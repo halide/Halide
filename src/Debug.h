@@ -52,10 +52,12 @@ class debug {
     const bool logging;
 
 public:
-    debug(int verbosity) : logging(verbosity <= debug_level()) {}
+    debug(int verbosity)
+        : logging(verbosity <= debug_level()) {
+    }
 
     template<typename T>
-    debug &operator<<(T&& x) {
+    debug &operator<<(T &&x) {
         if (logging) {
             std::cerr << std::forward<T>(x);
         }

@@ -5,8 +5,8 @@
 #include "Simplify.h"
 #include "Substitute.h"
 
-using std::vector;
 using std::pair;
+using std::vector;
 
 namespace Halide {
 namespace Internal {
@@ -96,6 +96,7 @@ class UnrollLoops : public IRMutator {
         }
     }
     bool permit_failed_unroll = false;
+
 public:
     UnrollLoops() {
         // Experimental autoschedulers may want to unroll without

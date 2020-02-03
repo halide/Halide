@@ -1,7 +1,5 @@
 include(CMakeParseArguments)
 
-cmake_minimum_required(VERSION 3.3)
-
 # ----------------------- Public Functions.
 # These are all documented in README_cmake.md.
 #
@@ -15,18 +13,22 @@ cmake_minimum_required(VERSION 3.3)
 #
 
 # Add the include paths and link dependencies for halide_image_io.
-function(halide_use_image_io TARGET)
-  foreach(PKG PNG JPEG)
-    find_package(${PKG} QUIET)
-    if(${PKG}_FOUND)
-      target_compile_definitions(${TARGET} PRIVATE ${${PKG}_DEFINITIONS})
-      target_include_directories(${TARGET} PRIVATE ${${PKG}_INCLUDE_DIRS})
-      target_link_libraries(${TARGET} PRIVATE ${${PKG}_LIBRARIES})
+add_library(halide_image_io INTERFACE)
+foreach(LIB IN ITEMS PNG JPEG)
+  find_package(${LIB} QUIET)
+  if(${LIB}_FOUND)
+    message(STATUS "Found ${LIB} version ${${LIB}_VERSION}")
+    target_link_libraries(halide_image_io INTERFACE ${LIB}::${LIB})
     else()
-      message(STATUS "${PKG} not found for ${TARGET}; compiling with -DHALIDE_NO_${PKG}")
-      target_compile_definitions(${TARGET} PRIVATE -DHALIDE_NO_${PKG})
-    endif()
-  endforeach()
+    message(STATUS "${LIB} not found; compiling with -DHALIDE_NO_${LIB}")
+    target_compile_definitions(halide_image_io INTERFACE HALIDE_NO_${LIB})
+  endif()
+endforeach()
+add_library(Halide::ImageIO ALIAS halide_image_io)
+
+function(halide_use_image_io TARGET)
+  message(DEPRECATION "Use: target_link_libraries(${TARGET} PRIVATE Halide::ImageIO)")
+  target_link_libraries(${TARGET} PRIVATE Halide::ImageIO)
 endfunction()
 
 # Make a build target for a Generator.
@@ -110,7 +112,7 @@ endfunction()
 # Use a Generator target to emit a code library.
 function(halide_library_from_generator BASENAME)
   set(options )
-  set(oneValueArgs FUNCTION_NAME GENERATOR HALIDE_TARGET)
+  set(oneValueArgs FUNCTION_NAME GENERATOR HALIDE_TARGET GRADIENT_DESCENT)
   set(multiValueArgs EXTRA_OUTPUTS FILTER_DEPS GENERATOR_ARGS HALIDE_TARGET_FEATURES INCLUDES)
   cmake_parse_arguments(args "" "${oneValueArgs}" "${multiValueArgs}" ${ARGN})
 
@@ -122,6 +124,9 @@ function(halide_library_from_generator BASENAME)
   endif()
   if ("${args_HALIDE_TARGET}" STREQUAL "")
     set(args_HALIDE_TARGET "host")
+  endif()
+  if ("${args_GRADIENT_DESCENT}" STREQUAL "")
+    set(args_GRADIENT_DESCENT "0")
   endif()
   # It's fine for EXTRA_OUTPUTS, GENERATOR_ARGS, FILTER_DEPS, HALIDE_TARGET_FEATURES to be empty
 
@@ -154,13 +159,24 @@ function(halide_library_from_generator BASENAME)
     endif()
   endforeach()
 
-  set(OUTPUTS static_library h registration)
+  set(OUTPUTS static_library c_header registration)
   foreach(E ${args_EXTRA_OUTPUTS})
-    if("${E}" STREQUAL "cpp")
-      message(FATAL_ERROR "halide_library('${BASENAME}') doesn't support 'cpp' in EXTRA_OUTPUTS; please depend on '${BASENAME}_cc' instead.")
+    # Convert legacy aliases
+    set(cpp_current "c_source")
+    set(h_current "c_header")
+    set(html_current "stmt_html")
+    set(o_current "object")
+    set(py.c_current "python_extension")
+    if (DEFINED ${E}_current)
+      message(DEPRECATION "'${E}' in EXTRA_OUTPUTS is deprecated, please use ${${E}_current}")
+      set(E ${${E}_current})
+    endif()
+
+    if("${E}" STREQUAL "c_source")
+      message(FATAL_ERROR "halide_library('${BASENAME}') doesn't support '${E}' in EXTRA_OUTPUTS; please depend on '${BASENAME}_cc' instead.")
     endif()
     if("${E}" STREQUAL "cpp_stub")
-      message(FATAL_ERROR "halide_library('${BASENAME}') doesn't support 'cpp_stub' in EXTRA_OUTPUTS; please depend on '${BASENAME}.generator' instead.")
+      message(FATAL_ERROR "halide_library('${BASENAME}') doesn't support '${E}' in EXTRA_OUTPUTS; please depend on '${BASENAME}.generator' instead.")
     endif()
     list(FIND OUTPUTS ${E} index)
     if (${index} GREATER -1)
@@ -184,40 +200,34 @@ function(halide_library_from_generator BASENAME)
   _halide_add_target_features("${TARGET_WITH_FEATURES}" "no_runtime" TARGET_WITH_FEATURES)
 
   set(GENERATOR_EXEC_ARGS "-o" "${GENFILES_DIR}")
+  list(APPEND GENERATOR_EXEC_ARGS "-d" "${args_GRADIENT_DESCENT}")
   list(APPEND GENERATOR_EXEC_ARGS "-g" "${GENERATOR_NAME}")
   list(APPEND GENERATOR_EXEC_ARGS "-f" "${args_FUNCTION_NAME}" )
-  list(APPEND GENERATOR_EXEC_ARGS "-x" ".s=.s.txt,.cpp=.generated.cpp")
   list(APPEND GENERATOR_EXEC_ARGS "target=${TARGET_WITH_FEATURES}")
   # GENERATOR_ARGS always come last
   list(APPEND GENERATOR_EXEC_ARGS ${args_GENERATOR_ARGS})
 
-  # CMake has no map type, and no switch statement. Whee!
+  set(assembly_ext ".s")
+  set(bitcode_ext ".bc")
+  set(c_header_ext ".h")
+  set(featurization_ext ".featurization")
+  set(llvm_assembly_ext ".ll")
+  set(object_ext ${CMAKE_C_OUTPUT_EXTENSION})
+  set(python_extension_ext ".py.cpp")
+  set(pytorch_wrapper_ext ".pytorch.h")
+  set(registration_ext ".registration.cpp")
+  set(schedule_ext ".schedule.h")
+  set(static_library_ext ${CMAKE_STATIC_LIBRARY_SUFFIX})
+  set(stmt_ext ".stmt")
+  set(stmt_html_ext ".stmt.html")
+
   set(OUTPUT_FILES )
   foreach(OUTPUT ${OUTPUTS})
-    if ("${OUTPUT}" STREQUAL "static_library")
-      list(APPEND OUTPUT_FILES "${GENFILES_DIR}/${BASENAME}${CMAKE_STATIC_LIBRARY_SUFFIX}")
-    elseif ("${OUTPUT}" STREQUAL "o")
-      # Apparently CMake has no predefined variable for this suffix.
-      if(MSVC)
-        list(APPEND OUTPUT_FILES "${GENFILES_DIR}/${BASENAME}.obj")
-      else()
-        list(APPEND OUTPUT_FILES "${GENFILES_DIR}/${BASENAME}.o")
-      endif()
-    elseif ("${OUTPUT}" STREQUAL "h")
-      list(APPEND OUTPUT_FILES "${GENFILES_DIR}/${BASENAME}.h")
-    elseif ("${OUTPUT}" STREQUAL "assembly")
-      list(APPEND OUTPUT_FILES "${GENFILES_DIR}/${BASENAME}.s.txt")
-    elseif ("${OUTPUT}" STREQUAL "bitcode")
-      list(APPEND OUTPUT_FILES "${GENFILES_DIR}/${BASENAME}.bc")
-    elseif ("${OUTPUT}" STREQUAL "stmt")
-      list(APPEND OUTPUT_FILES "${GENFILES_DIR}/${BASENAME}.stmt")
-    elseif ("${OUTPUT}" STREQUAL "schedule")
-      list(APPEND OUTPUT_FILES "${GENFILES_DIR}/${BASENAME}.schedule")
-    elseif ("${OUTPUT}" STREQUAL "html")
-      list(APPEND OUTPUT_FILES "${GENFILES_DIR}/${BASENAME}.html")
-    elseif ("${OUTPUT}" STREQUAL "registration")
-      list(APPEND OUTPUT_FILES "${GENFILES_DIR}/${BASENAME}.registration.cpp")
+    if(NOT DEFINED ${OUTPUT}_ext)
+        message(FATAL_ERROR "halide_library('${BASENAME}'): output '${OUTPUT}' is not supported!")
     endif()
+
+    list(APPEND OUTPUT_FILES "${GENFILES_DIR}/${BASENAME}${${OUTPUT}_ext}")
   endforeach()
 
   # Output everything (except for the generated .cpp file)
@@ -240,15 +250,15 @@ function(halide_library_from_generator BASENAME)
   # A separate invocation for the generated .cpp file,
   # since it's rarely used, and some code will fail at Generation
   # time at present (e.g. code with predicated loads or stores).
-  set(ARGS_WITH_OUTPUTS "-e" "cpp" ${GENERATOR_EXEC_ARGS})
+  set(ARGS_WITH_OUTPUTS "-e" "c_source" ${GENERATOR_EXEC_ARGS})
   _halide_add_exec_generator_target(
     "${BASENAME}_cc_gen"
     GENERATOR_BINARY "${args_GENERATOR}_binary"
     GENERATOR_ARGS   "${ARGS_WITH_OUTPUTS}"
-    OUTPUTS          "${GENFILES_DIR}/${BASENAME}.generated.cpp"
+    OUTPUTS          "${GENFILES_DIR}/${BASENAME}.halide_generated.cpp"
   )
 
-  add_library("${BASENAME}_cc" STATIC "${GENFILES_DIR}/${BASENAME}.generated.cpp")
+  add_library("${BASENAME}_cc" STATIC "${GENFILES_DIR}/${BASENAME}.halide_generated.cpp")
   # Needs _lib_gen as well, to get the .h file
   add_dependencies("${BASENAME}_cc" "${BASENAME}_lib_gen" "${BASENAME}_cc_gen")
   target_link_libraries("${BASENAME}_cc" PRIVATE ${args_FILTER_DEPS})
@@ -301,17 +311,20 @@ function(halide_library NAME)
 endfunction()
 
 # ----------------------- Private Functions.
-# All functions, properties, variables, etc. that being with an underscore
+# All functions, properties, variables, etc. that begin with an underscore
 # should be assumed to be private implementation details; don't rely on them externally.
 
 # Set the C++ options necessary for using libHalide.
 function(_halide_set_cxx_options TARGET)
-  set_target_properties("${TARGET}" PROPERTIES CXX_STANDARD 11 CXX_STANDARD_REQUIRED YES CXX_EXTENSIONS NO)
   if (MSVC)
-    target_compile_definitions("${TARGET}" PUBLIC "-D_CRT_SECURE_NO_WARNINGS" "-D_SCL_SECURE_NO_WARNINGS")
-    target_compile_options("${TARGET}" PRIVATE "/GR-")
-  else()
-    target_compile_options("${TARGET}" PRIVATE "-fno-rtti")
+    target_compile_definitions("${TARGET}" PRIVATE "-D_CRT_SECURE_NO_WARNINGS" "-D_SCL_SECURE_NO_WARNINGS")
+  endif()
+  if(NOT HALIDE_ENABLE_RTTI)
+    if(MSVC)
+      target_compile_options("${TARGET}" PRIVATE "/GR-")
+    else()
+      target_compile_options("${TARGET}" PRIVATE "-fno-rtti")
+    endif()
   endif()
 endfunction()
 
@@ -466,6 +479,7 @@ function(_halide_runtime_target_name HALIDE_TARGET OUTVAR)
         opencl
         cl_doubles
         cl_half
+        cl_atomics64
         opengl
         openglcompute
         egl
@@ -495,7 +509,6 @@ function(_halide_runtime_target_name HALIDE_TARGET OUTVAR)
         trace_realizations
         d3d12compute
         strict_float
-        legacy_buffer_wrappers
         tsan
         asan
         check_unsafe_promises
@@ -713,7 +726,7 @@ if("${HALIDE_TOOLS_DIR}" STREQUAL "" OR
   endif()
 endif()
 
-if("${HALIDE_SYSTEM_LIBS}" STREQUAL "")
+if(NOT DEFINED HALIDE_SYSTEM_LIBS)
   # If HALIDE_SYSTEM_LIBS isn't defined, we are compiling against a Halide distribution
   # folder; this is normally captured in the halide_config.cmake file. If that file
   # exists in the same directory as this one, just include it here.
@@ -730,6 +743,6 @@ define_property(TARGET PROPERTY _HALIDE_GENERATOR_NAME
 
 add_library(_halide_library_from_generator_rungen "${HALIDE_TOOLS_DIR}/RunGenMain.cpp")
 target_include_directories(_halide_library_from_generator_rungen PRIVATE "${HALIDE_INCLUDE_DIR}" "${HALIDE_TOOLS_DIR}")
-halide_use_image_io(_halide_library_from_generator_rungen)
+target_link_libraries(_halide_library_from_generator_rungen PRIVATE Halide::ImageIO)
 _halide_set_cxx_options(_halide_library_from_generator_rungen)
 set_target_properties(_halide_library_from_generator_rungen PROPERTIES EXCLUDE_FROM_ALL TRUE)

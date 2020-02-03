@@ -1,5 +1,5 @@
-#include <stdio.h>
 #include "Halide.h"
+#include <stdio.h>
 
 using namespace Halide;
 
@@ -9,14 +9,14 @@ size_t custom_malloc_size = 0;
 
 void *my_malloc(void *user_context, size_t x) {
     custom_malloc_size = x;
-    void *orig = malloc(x+32);
+    void *orig = malloc(x + 32);
     void *ptr = (void *)((((size_t)orig + 32) >> 5) << 5);
     ((void **)ptr)[-1] = orig;
     return ptr;
 }
 
 void my_free(void *user_context, void *ptr) {
-    free(((void**)ptr)[-1]);
+    free(((void **)ptr)[-1]);
 }
 
 #ifdef _WIN32
@@ -46,7 +46,7 @@ int main(int argc, char **argv) {
         Func f, g;
 
         f(x, y) = x;
-        g(x, y) = f(x-1, y+1) + f(x, y-1);
+        g(x, y) = f(x - 1, y + 1) + f(x, y - 1);
         f.store_root().compute_at(g, y).fold_storage(y, 3).async();
         g.specialize(g.output_buffer().width() > 4).vectorize(x, 4);
 
@@ -59,7 +59,7 @@ int main(int argc, char **argv) {
 
         Buffer<int> im = g.realize(100, 1000);
 
-        size_t expected_size = 101*3*sizeof(int) + sizeof(int);
+        size_t expected_size = 101 * 3 * sizeof(int) + sizeof(int);
         if (custom_malloc_size == 0 || custom_malloc_size != expected_size) {
             printf("Scratch space allocated was %d instead of %d\n", (int)custom_malloc_size, (int)expected_size);
             return -1;

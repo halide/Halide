@@ -40,9 +40,10 @@ protected:
     OutputImageParam(const Internal::Parameter &p, Argument::Kind k, Func f);
 
 public:
-
     /** Construct a null image parameter handle. */
-    OutputImageParam() : kind(Argument::InputScalar) {}
+    OutputImageParam()
+        : kind(Argument::InputScalar) {
+    }
 
     /** Get the name of this Param */
     const std::string &name() const;
@@ -115,7 +116,7 @@ public:
      * at once; this is equivalent to calling `dim(n).set_estimate(min, extent)`
      * repeatedly, but slightly terser. The size of the estimates vector
      * must match the dimensionality of the ImageParam. */
-    OutputImageParam &set_estimates(const std::vector<std::pair<Expr, Expr>> &estimates);
+    OutputImageParam &set_estimates(const Region &estimates);
 };
 
 }  // namespace Halide

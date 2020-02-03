@@ -4,7 +4,7 @@ namespace {
 
 class EmbedImage : public Halide::Generator<EmbedImage> {
 public:
-    Input<Buffer<float>>  input{"input", 3};
+    Input<Buffer<float>> input{"input", 3};
     Output<Buffer<float>> output{"output", 3};
 
     void generate() {
@@ -27,4 +27,3 @@ public:
 }  // namespace
 
 HALIDE_REGISTER_GENERATOR(EmbedImage, embed_image)
-

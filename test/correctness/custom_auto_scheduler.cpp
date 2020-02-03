@@ -14,13 +14,17 @@ void inline_everything(Pipeline,
 
 int main(int argc, char **argv) {
 
-    // All pipelines built within this process should use my autoscheduler
-    Pipeline::set_custom_auto_scheduler(inline_everything);
+    const char *kSchedulerName = "inline_everything";
+
+    // Add a very simple 'autoscheduler'
+    Pipeline::add_autoscheduler(kSchedulerName, inline_everything);
 
     Func f;
     Var x;
     f(x) = 3;
-    Pipeline(f).auto_schedule(Target("host"));
+    Pipeline(f).auto_schedule(kSchedulerName, Target("host"));
+
+    Pipeline::set_default_autoscheduler_name(kSchedulerName);
 
     Func g;
     g(x) = 3;

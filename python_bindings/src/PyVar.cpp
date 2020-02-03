@@ -22,20 +22,13 @@ void define_var(py::module &m) {
             .def(py::init<std::string>())
             .def("name", &Var::name)
             .def("same_as", &Var::same_as)
-            .def("is_implicit", (bool (Var::*)() const) &Var::is_implicit)
-            .def("implicit_index", (int (Var::*)() const) &Var::implicit_index)
-            .def("is_placeholder", (bool (Var::*)() const) &Var::is_placeholder)
-            .def_static("implicit", (Var (*)(int)) &Var::implicit)
+            .def("is_implicit", (bool (Var::*)() const) & Var::is_implicit)
+            .def("implicit_index", (int (Var::*)() const) & Var::implicit_index)
+            .def("is_placeholder", (bool (Var::*)() const) & Var::is_placeholder)
+            .def_static("implicit", (Var(*)(int)) & Var::implicit)
             .def_static("outermost", &Var::outermost)
             .def("__repr__", &var_repr)
-            .def("__str__", &Var::name)
-
-            // Cannot overload a method as both static and instance with PyBind11 and Python2.x
-            // .def_static("is_implicit", (bool (*)(const std::string &)) &Var::is_implicit)
-            // .def_static("implicit_index", (int (*)(const std::string &)) &Var::implicit_index)
-            // .def_static("is_placeholder",  (bool (*)(const std::string &)) &Var::is_placeholder)
-    ;
-
+            .def("__str__", &Var::name);
 
     add_binary_operators_with<Expr>(var_class);
 

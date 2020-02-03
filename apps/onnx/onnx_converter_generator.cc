@@ -8,7 +8,7 @@ namespace {
 class OnnxModelConverterGenerator
     : public Halide::Generator<OnnxModelConverterGenerator> {
 public:
-    GeneratorParam<std::string> model_file_path{ "model_file_path", "" };
+    GeneratorParam<std::string> model_file_path{"model_file_path", ""};
 
     void configure() {
         onnx::ModelProto onnx_model;
@@ -24,7 +24,8 @@ public:
             abort();
         }
 
-        converted_model_ = convert_model(onnx_model);
+        std::unordered_map<std::string, int> expected_dim_sizes;
+        converted_model_ = convert_model(onnx_model, expected_dim_sizes, IOLayout::Native);
         for (const auto &input : converted_model_.inputs) {
             model_inputs_[input.first] = add_input<Buffer<>>(
                 input.first,

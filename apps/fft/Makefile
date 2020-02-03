@@ -2,7 +2,7 @@ include ../support/Makefile.inc
 
 CXXFLAGS += -g -Wall
 
-.PHONY: clean
+.PHONY: build clean test
 
 ifeq ($(WITH_FFTW),1)
 CXXFLAGS += -DWITH_FFTW
@@ -17,12 +17,23 @@ ifeq ($(UNAME), Darwin)
 	LDFLAGS += -Wl,-stack_size -Wl,0x100000
 endif
 
+build: $(BIN)/$(HL_TARGET)/bench_fft
+
 $(BIN)/%/bench_fft: main.cpp fft.cpp fft.h complex.h funct.h $(LIB_HALIDE)
 	@mkdir -p $(@D)
 	$(CXX) $(CXXFLAGS) $(filter-out %.h,$^) -o $@ $(LDFLAGS) $(HALIDE_SYSTEM_LIBS)
 
+bench_8x8: $(BIN)/$(HL_TARGET)/bench_fft
+	$< 8 8 $(<D)
+
+bench_12x12: $(BIN)/$(HL_TARGET)/bench_fft
+	$< 12 12 $(<D)
+
 bench_16x16: $(BIN)/$(HL_TARGET)/bench_fft
 	$< 16 16 $(<D)
+
+bench_24x24: $(BIN)/$(HL_TARGET)/bench_fft
+	$< 24 24 $(<D)
 
 bench_32x32: $(BIN)/$(HL_TARGET)/bench_fft
 	$< 32 32 $(<D)
@@ -35,7 +46,7 @@ bench_64x64: $(BIN)/$(HL_TARGET)/bench_fft
 
 $(GENERATOR_BIN)/fft.generator: fft_generator.cpp fft.cpp fft.h $(GENERATOR_DEPS)
 	@mkdir -p $(@D)
-	$(CXX) $(CXXFLAGS) $(filter-out %.h,$^) -o $@ $(LDFLAGS) $(HALIDE_SYSTEM_LIBS)
+	$(CXX) $(CXXFLAGS) $(filter %.cpp,$^) -o $@ $(GENERATOR_LDFLAGS) 
 
 # Generate four AOT compiled FFT variants. Forward versions have gain set to 1 / 256.0
 $(BIN)/%/fft_forward_r2c.a: $(GENERATOR_BIN)/fft.generator
@@ -68,6 +79,9 @@ all: fft_aot_test bench_16x16 bench_32x32 bench_48x48 bench_64x64
 
 # Ensure these are run sequentially and not in parallel
 test: $(BIN)/$(HL_TARGET)/bench_fft
+	$< 8 8 $(<D)
+	$< 12 12 $(<D)
 	$< 16 16 $(<D)
+	$< 24 24 $(<D)
 	$< 32 32 $(<D)
 	$< 48 48 $(<D)

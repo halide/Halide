@@ -50,10 +50,10 @@ public:
 
     virtual ~Parameter() = default;
 
-    Parameter(const Parameter&) = default;
-    Parameter& operator=(const Parameter&) = default;
-    Parameter(Parameter&&) = default;
-    Parameter& operator=(Parameter&&) = default;
+    Parameter(const Parameter &) = default;
+    Parameter &operator=(const Parameter &) = default;
+    Parameter(Parameter &&) = default;
+    Parameter &operator=(Parameter &&) = default;
 
     /** Get the type of this parameter */
     Type type() const;

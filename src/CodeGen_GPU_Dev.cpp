@@ -42,7 +42,8 @@ class IsBlockUniform : public IRVisitor {
 public:
     bool result;
 
-    IsBlockUniform() : result(true) {
+    IsBlockUniform()
+        : result(true) {
     }
 };
 }  // namespace
@@ -83,7 +84,8 @@ public:
     bool result;
     const std::string &buffer;
 
-    IsBufferConstant(const std::string &b) : result(true), buffer(b) {
+    IsBufferConstant(const std::string &b)
+        : result(true), buffer(b) {
     }
 };
 }  // namespace

@@ -6,33 +6,44 @@
 namespace Halide {
 namespace PythonBindings {
 
-template <typename other_t, typename PythonClass>
+template<typename other_t, typename PythonClass>
 void add_binary_operators_with(PythonClass &class_instance) {
     using self_t = typename PythonClass::type;
 
-#define BINARY_OP(op, method) \
-    .def("__" #method "__", [](const self_t &self, const other_t &other) -> decltype(self op other) { return self op other; }, py::is_operator()) \
-    .def("__r" #method "__", [](const self_t &self, const other_t &other) -> decltype(self op other) { return other op self; }, py::is_operator())
+#define BINARY_OP(op, method)                                                         \
+    do {                                                                              \
+        class_instance.def(                                                           \
+            "__" #method "__",                                                        \
+            [](const self_t &self, const other_t &other) -> decltype(self op other) { \
+                return self op other;                                                 \
+            },                                                                        \
+            py::is_operator());                                                       \
+        class_instance.def(                                                           \
+            "__r" #method "__",                                                       \
+            [](const self_t &self, const other_t &other) -> decltype(self op other) { \
+                return other op self;                                                 \
+            },                                                                        \
+            py::is_operator());                                                       \
+    } while (0)
 
-    class_instance
-        BINARY_OP(+, add)
-        BINARY_OP(-, sub)
-        BINARY_OP(*, mul)
-        BINARY_OP(/, div)  // TODO: verify only needed for python 2.x (harmless for Python 3.x)
-        BINARY_OP(/, truediv)
-        BINARY_OP(%, mod)
-        BINARY_OP(<<, lshift)
-        BINARY_OP(>>, rshift)
-        BINARY_OP(&, and)
-        BINARY_OP(|, or)
-        BINARY_OP(^, xor)
-        BINARY_OP(<, lt)
-        BINARY_OP(<=, le)
-        BINARY_OP(==, eq)
-        BINARY_OP(!=, ne)
-        BINARY_OP(>=, ge)
-        BINARY_OP(>, gt)
-    ;
+    BINARY_OP(+, add);
+    BINARY_OP(-, sub);
+    BINARY_OP(*, mul);
+    BINARY_OP(/, div);  // TODO: verify only needed for python 2.x (harmless for Python 3.x)
+    BINARY_OP(/, truediv);
+    BINARY_OP(%, mod);
+    BINARY_OP(<<, lshift);
+    BINARY_OP(>>, rshift);
+    BINARY_OP(&, and);
+    BINARY_OP(|, or);
+    BINARY_OP(^, xor);
+    BINARY_OP(<, lt);
+    BINARY_OP(<=, le);
+    BINARY_OP(==, eq);
+    BINARY_OP(!=, ne);
+    BINARY_OP(>=, ge);
+    BINARY_OP(>, gt);
+
 #undef BINARY_OP
 
     const auto pow_wrap = [](const self_t &self, const other_t &other) -> decltype(Halide::pow(self, other)) {
@@ -52,11 +63,10 @@ void add_binary_operators_with(PythonClass &class_instance) {
         .def("__pow__", pow_wrap, py::is_operator())
         .def("__rpow__", pow_wrap, py::is_operator())
         .def("__floordiv__", floordiv_wrap, py::is_operator())
-        .def("__rfloordiv__", floordiv_wrap, py::is_operator())
-    ;
-}
+        .def("__rfloordiv__", floordiv_wrap, py::is_operator());
+}  // namespace PythonBindings
 
-template <typename PythonClass>
+template<typename PythonClass>
 void add_binary_operators(PythonClass &class_instance) {
     using self_t = typename PythonClass::type;
 

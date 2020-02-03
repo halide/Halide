@@ -14,7 +14,7 @@ int main(int argc, char **argv) {
     Func approx_sin;
     Var x, y;
 
-    Expr fx = (x / cast<double>(samples)) * Expr(M_PI/2);
+    Expr fx = (x / cast<double>(samples)) * Expr(M_PI / 2);
 
     // We'll evaluate polynomial using a slightly modified Horner's
     // method. We need to save the intermediate results for the
@@ -23,7 +23,7 @@ int main(int argc, char **argv) {
     RDom r(0, order);
     Expr r_flipped = order - 1 - r;
     approx_sin(x, y) = cast<double>(0);
-    approx_sin(x, r_flipped) = (approx_sin(x, r_flipped + 1)*fx + coeffs(r_flipped)) * fx;
+    approx_sin(x, r_flipped) = (approx_sin(x, r_flipped + 1) * fx + coeffs(r_flipped)) * fx;
 
     Func exact_sin;
     exact_sin(x) = sin(fx);
@@ -54,29 +54,20 @@ int main(int argc, char **argv) {
     exact_sin.compute_root().vectorize(x, 4);
     average_err.compute_root();
 
-    // d_err_d(coeffs) is just a Func, and you can schedule
-    // it. However, each Func in the pipeline actually creates a
-    // sequence of synthesized Funcs to compute its derivative, and
-    // you may want to schedule all of them (or just use the
-    // autoscheduler). Here we will write a quick-and-dirty
-    // autoscheduler for this pipeline to illustrate how you can
-    // access the new synthesized derivative Funcs.
+    // d_err_d(coeffs) is just a Func, and you can schedule it.
+    // Each Func in the forward pipeline has a corresponding
+    // derivative Func for each update, including the pure definition.
+    // Here we will write a quick-and-dirty autoscheduler for this
+    // pipeline to illustrate how you can access the new synthesized
+    // derivative Funcs.
     Var v;
     Func fs[] = {coeffs, approx_sin, err};
     for (Func f : fs) {
-        // Iterate over the derivative Funcs for this Func. We get
-        // them in order from output to input. The first Func in the
-        // vector is the one returned by operator(), and is the
-        // fully-computed derivative. It is always a zero boundary
-        // condition which defines the region in which the derivative
-        // is non-zero, and we always want to inline that into the
-        // consumer, so we'll skip the first one.
-        bool first = true;
-        for (Func df : d_err_d.funcs(f)) {
-            if (first) {
-                first = false;
-                continue;
-            }
+        // Schedule the derivative Funcs for this Func.
+        // For each Func we need to schedule all its updates.
+        // update_id == -1 represents the pure definition.
+        for (int update_id = -1; update_id < f.num_update_definitions(); update_id++) {
+            Func df = d_err_d(f, update_id);
             df.compute_root().vectorize(df.args()[0], 4);
             for (int i = 0; i < df.num_update_definitions(); i++) {
                 // Find a pure var to vectorize over
@@ -103,7 +94,7 @@ int main(int argc, char **argv) {
     // Initialize to the Taylor series for sin about zero
     c(0) = 1;
     for (int i = 1; i < terms; i++) {
-        c(i) = -c(i-1)/(i*2*(i*2 + 1));
+        c(i) = -c(i - 1) / (i * 2 * (i * 2 + 1));
     }
 
     // This gradient descent is not particularly well-conditioned,
@@ -115,10 +106,11 @@ int main(int argc, char **argv) {
     const int steps = 10000;
     double initial_error = 0.0;
     for (int i = 0; i <= steps; i++) {
-        bool should_print = (i == 0 || i == steps/2 || i == steps);
+        bool should_print = (i == 0 || i == steps / 2 || i == steps);
         if (should_print) {
             printf("Iteration %d\n"
-                   "Coefficients: ", i);
+                   "Coefficients: ",
+                   i);
             for (int j = 0; j < terms; j++) {
                 printf("%g ", c(j));
             }

@@ -116,7 +116,7 @@ vector<ApplySplitResult> apply_split(const Split &split, bool is_update, string 
         map<string, Expr>::iterator outer_dim = dim_extent_alignment.find(split.outer);
         if (inner_dim != dim_extent_alignment.end() &&
             outer_dim != dim_extent_alignment.end()) {
-            dim_extent_alignment[split.old_var] = inner_dim->second*outer_dim->second;
+            dim_extent_alignment[split.old_var] = inner_dim->second * outer_dim->second;
         }
     } else {
         // rename or purify
@@ -139,25 +139,25 @@ vector<std::pair<string, Expr>> compute_loop_bounds_after_split(const Split &spl
     Expr old_var_min = Variable::make(Int(32), prefix + split.old_var + ".loop_min");
     if (split.is_split()) {
         Expr inner_extent = split.factor;
-        Expr outer_extent = (old_var_max - old_var_min + split.factor)/split.factor;
-        let_stmts.push_back({ prefix + split.inner + ".loop_min", 0 });
-        let_stmts.push_back({ prefix + split.inner + ".loop_max", inner_extent-1 });
-        let_stmts.push_back({ prefix + split.inner + ".loop_extent", inner_extent });
-        let_stmts.push_back({ prefix + split.outer + ".loop_min", 0 });
-        let_stmts.push_back({ prefix + split.outer + ".loop_max", outer_extent-1 });
-        let_stmts.push_back({ prefix + split.outer + ".loop_extent", outer_extent });
+        Expr outer_extent = (old_var_max - old_var_min + split.factor) / split.factor;
+        let_stmts.push_back({prefix + split.inner + ".loop_min", 0});
+        let_stmts.push_back({prefix + split.inner + ".loop_max", inner_extent - 1});
+        let_stmts.push_back({prefix + split.inner + ".loop_extent", inner_extent});
+        let_stmts.push_back({prefix + split.outer + ".loop_min", 0});
+        let_stmts.push_back({prefix + split.outer + ".loop_max", outer_extent - 1});
+        let_stmts.push_back({prefix + split.outer + ".loop_extent", outer_extent});
     } else if (split.is_fuse()) {
         // Define bounds on the fused var using the bounds on the inner and outer
         Expr inner_extent = Variable::make(Int(32), prefix + split.inner + ".loop_extent");
         Expr outer_extent = Variable::make(Int(32), prefix + split.outer + ".loop_extent");
         Expr fused_extent = inner_extent * outer_extent;
-        let_stmts.push_back({ prefix + split.old_var + ".loop_min", 0 });
-        let_stmts.push_back({ prefix + split.old_var + ".loop_max", fused_extent - 1 });
-        let_stmts.push_back({ prefix + split.old_var + ".loop_extent", fused_extent });
+        let_stmts.push_back({prefix + split.old_var + ".loop_min", 0});
+        let_stmts.push_back({prefix + split.old_var + ".loop_max", fused_extent - 1});
+        let_stmts.push_back({prefix + split.old_var + ".loop_extent", fused_extent});
     } else if (split.is_rename()) {
-        let_stmts.push_back({ prefix + split.outer + ".loop_min", old_var_min });
-        let_stmts.push_back({ prefix + split.outer + ".loop_max", old_var_max });
-        let_stmts.push_back({ prefix + split.outer + ".loop_extent", old_var_extent });
+        let_stmts.push_back({prefix + split.outer + ".loop_min", old_var_min});
+        let_stmts.push_back({prefix + split.outer + ".loop_max", old_var_max});
+        let_stmts.push_back({prefix + split.outer + ".loop_extent", old_var_extent});
     }
     // Do nothing for purify
 

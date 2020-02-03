@@ -17,7 +17,6 @@
 #    make tutorial_lesson_13_tuples
 # in a shell with the current directory at the top of the halide
 # source tree.
-from __future__ import print_function
 
 import halide as hl
 
@@ -118,9 +117,9 @@ def main():
 
 
     # When compiling ahead-of-time, a Tuple-valued hl.Func evaluates
-    # into multiple distinct output buffer_t structs. These appear in
+    # into multiple distinct output halide_buffer_t structs. These appear in
     # order at the end of the function signature:
-    # int multi_valued(...input buffers and params..., buffer_t *output_1, buffer_t *output_2)
+    # int multi_valued(...input buffers and params..., halide_buffer_t *output_1, halide_buffer_t *output_2)
 
     # You can construct a Tuple by passing multiple Exprs to the
     # Tuple constructor as we did above. Perhaps more elegantly, you

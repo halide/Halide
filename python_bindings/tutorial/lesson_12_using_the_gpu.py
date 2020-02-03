@@ -24,7 +24,7 @@ import halide as hl
 
 # Include some support code for loading pngs.
 #include "image_io.h"
-from scipy.misc import imread
+import imageio
 import os.path
 
 # Include a clock to do performance testing.
@@ -218,7 +218,7 @@ class MyPipeline:
     def test_performance(self):
         # Test the performance of the scheduled MyPipeline.
 
-        output = hl.Buffer(hl.UInt(8), 
+        output = hl.Buffer(hl.UInt(8),
                         [self.input.width(), self.input.height(), self.input.channels()])
 
         # Run the filter once to initialize any GPU runtime state.
@@ -273,7 +273,7 @@ class MyPipeline:
 def main():
     # Load an input image.
     image_path = os.path.join(os.path.dirname(__file__), "../../tutorial/images/rgb.png")
-    input = hl.Buffer(imread(image_path))
+    input = hl.Buffer(imageio.imread(image_path))
 
     # Allocated an image that will store the correct output
     reference_output = hl.Buffer(hl.UInt(8), [input.width(), input.height(), input.channels()])

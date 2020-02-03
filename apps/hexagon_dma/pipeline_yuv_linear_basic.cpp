@@ -12,16 +12,20 @@ public:
     Output<Buffer<>> output_y{"output_y", 2};
     Output<Buffer<>> output_uv{"output_uv", 3};
 
-    enum class Schedule { Basic, Fold, Async, Split, Split_Async };
+    enum class Schedule { Basic,
+                          Fold,
+                          Async,
+                          Split,
+                          Split_Async };
     GeneratorParam<Schedule> schedule{"schedule",
-            /* default value */
-             Schedule::Basic,
-            /* map from names to values */
-            {{ "none", Schedule::Basic },
-             { "fold", Schedule::Fold },
-             { "async", Schedule::Async },
-             { "split", Schedule::Split },
-             { "split_async", Schedule::Split_Async }}};
+                                      /* default value */
+                                      Schedule::Basic,
+                                      /* map from names to values */
+                                      {{"none", Schedule::Basic},
+                                       {"fold", Schedule::Fold},
+                                       {"async", Schedule::Async},
+                                       {"split", Schedule::Split},
+                                       {"split_async", Schedule::Split_Async}}};
 
     GeneratorParam<bool> use_dma_for_output{"use_dma_for_output", true};
 
@@ -74,121 +78,119 @@ public:
         const int tile_height = 32;
 
         switch ((Schedule)schedule) {
-            case Schedule::Basic:
-            default:
-                output_y
-                    .tile(x, y, tx, ty, x, y, tile_width, tile_height, TailStrategy::RoundUp);
+        case Schedule::Basic:
+        default:
+            output_y
+                .tile(x, y, tx, ty, x, y, tile_width, tile_height, TailStrategy::RoundUp);
 
-                output_uv
-                    .tile(x, y, tx, ty, x, y, tile_width, tile_height, TailStrategy::RoundUp);
+            output_uv
+                .tile(x, y, tx, ty, x, y, tile_width, tile_height, TailStrategy::RoundUp);
 
-                input_y_copy
-                    .compute_at(output_y, tx)
-                    .copy_to_host();
+            input_y_copy
+                .compute_at(output_y, tx)
+                .copy_to_host();
 
-                input_uv_copy
-                    .compute_at(output_uv, tx)
-                    .copy_to_host()
-                    .reorder_storage(c, x, y);
+            input_uv_copy
+                .compute_at(output_uv, tx)
+                .copy_to_host()
+                .reorder_storage(c, x, y);
             break;
-            case Schedule::Fold:
-                output_y
-                    .tile(x, y, tx, ty, x, y, tile_width, tile_height, TailStrategy::RoundUp);
+        case Schedule::Fold:
+            output_y
+                .tile(x, y, tx, ty, x, y, tile_width, tile_height, TailStrategy::RoundUp);
 
-                output_uv
-                    .tile(x, y, tx, ty, x, y, tile_width, tile_height, TailStrategy::RoundUp);
+            output_uv
+                .tile(x, y, tx, ty, x, y, tile_width, tile_height, TailStrategy::RoundUp);
 
-                input_y_copy
-                    .copy_to_host()
-                    .compute_at(output_y, tx)
-                    .store_at(output_y, ty)
-                    .fold_storage(x, tile_width * 2);
+            input_y_copy
+                .copy_to_host()
+                .compute_at(output_y, tx)
+                .store_at(output_y, ty)
+                .fold_storage(x, tile_width * 2);
 
-                input_uv_copy
-                    .copy_to_host()
-                    .compute_at(output_uv, tx)
-                    .store_at(output_uv, ty)
-                    .reorder_storage(c, x, y)
-                    .fold_storage(x, tile_width * 2);
+            input_uv_copy
+                .copy_to_host()
+                .compute_at(output_uv, tx)
+                .store_at(output_uv, ty)
+                .reorder_storage(c, x, y)
+                .fold_storage(x, tile_width * 2);
             break;
-            case Schedule::Async:
-                output_y
-                    .tile(x, y, tx, ty, x, y, tile_width, tile_height, TailStrategy::RoundUp);
+        case Schedule::Async:
+            output_y
+                .tile(x, y, tx, ty, x, y, tile_width, tile_height, TailStrategy::RoundUp);
 
-                output_uv
-                    .tile(x, y, tx, ty, x, y, tile_width, tile_height, TailStrategy::RoundUp);
+            output_uv
+                .tile(x, y, tx, ty, x, y, tile_width, tile_height, TailStrategy::RoundUp);
 
-                input_y_copy
-                    .copy_to_host()
-                    .async()
-                    .compute_at(output_y, tx)
-                    .store_at(output_y, ty)
-                    .fold_storage(x, tile_width * 2);
+            input_y_copy
+                .copy_to_host()
+                .async()
+                .compute_at(output_y, tx)
+                .store_at(output_y, ty)
+                .fold_storage(x, tile_width * 2);
 
-                input_uv_copy
-                    .copy_to_host()
-                    .async()
-                    .compute_at(output_uv, tx)
-                    .store_at(output_uv, ty)
-                    .reorder_storage(c, x, y)
-                    .fold_storage(x, tile_width * 2);
+            input_uv_copy
+                .copy_to_host()
+                .async()
+                .compute_at(output_uv, tx)
+                .store_at(output_uv, ty)
+                .reorder_storage(c, x, y)
+                .fold_storage(x, tile_width * 2);
             break;
-            case Schedule::Split: {
-                Var yo, yi;
+        case Schedule::Split: {
+            Var yo, yi;
 
-                Expr fac_y = output_y.dim(1).extent()/2;
-                output_y
-                    .split(y, yo, yi, fac_y)
-                    .tile(x, yi, tx, ty, x, y, tile_width, tile_height, TailStrategy::RoundUp)
-                    .parallel(yo);
+            Expr fac_y = output_y.dim(1).extent() / 2;
+            output_y
+                .split(y, yo, yi, fac_y)
+                .tile(x, yi, tx, ty, x, y, tile_width, tile_height, TailStrategy::RoundUp)
+                .parallel(yo);
 
-                Expr fac_uv = output_uv.dim(1).extent()/2;
-                output_uv
-                    .split(y, yo, yi, fac_uv)
-                    .tile(x, yi, tx, ty, x, y, tile_width, tile_height, TailStrategy::RoundUp)
-                    .parallel(yo);
+            Expr fac_uv = output_uv.dim(1).extent() / 2;
+            output_uv
+                .split(y, yo, yi, fac_uv)
+                .tile(x, yi, tx, ty, x, y, tile_width, tile_height, TailStrategy::RoundUp)
+                .parallel(yo);
 
-                input_y_copy
-                    .copy_to_host()
-                    .compute_at(output_y, tx);
+            input_y_copy
+                .copy_to_host()
+                .compute_at(output_y, tx);
 
-                input_uv_copy
-                    .copy_to_host()
-                    .compute_at(output_uv, tx)
-                    .reorder_storage(c, x, y);
-            }
-            break;
-            case Schedule::Split_Async: {
-                Var yo, yi;
+            input_uv_copy
+                .copy_to_host()
+                .compute_at(output_uv, tx)
+                .reorder_storage(c, x, y);
+        } break;
+        case Schedule::Split_Async: {
+            Var yo, yi;
 
-                Expr fac_y = output_y.dim(1).extent()/2;
-                output_y
-                    .split(y, yo, yi, fac_y)
-                    .tile(x, yi, tx, ty, x, y, tile_width, tile_height, TailStrategy::RoundUp)
-                    .parallel(yo);
+            Expr fac_y = output_y.dim(1).extent() / 2;
+            output_y
+                .split(y, yo, yi, fac_y)
+                .tile(x, yi, tx, ty, x, y, tile_width, tile_height, TailStrategy::RoundUp)
+                .parallel(yo);
 
-                Expr fac_uv = output_uv.dim(1).extent()/2;
-                output_uv
-                    .split(y, yo, yi, fac_uv)
-                    .tile(x, yi, tx, ty, x, y, tile_width, tile_height, TailStrategy::RoundUp)
-                    .parallel(yo);
+            Expr fac_uv = output_uv.dim(1).extent() / 2;
+            output_uv
+                .split(y, yo, yi, fac_uv)
+                .tile(x, yi, tx, ty, x, y, tile_width, tile_height, TailStrategy::RoundUp)
+                .parallel(yo);
 
-                input_y_copy
-                    .copy_to_host()
-                    .compute_at(output_y, tx)
-                    .store_at(output_y, ty)
-                    .async()
-                    .fold_storage(x, tile_width * 2);
+            input_y_copy
+                .copy_to_host()
+                .compute_at(output_y, tx)
+                .store_at(output_y, ty)
+                .async()
+                .fold_storage(x, tile_width * 2);
 
-                input_uv_copy
-                    .copy_to_host()
-                    .compute_at(output_uv, tx)
-                    .store_at(output_uv, ty)
-                    .async()
-                    .reorder_storage(c, x, y)
-                    .fold_storage(x, tile_width * 2);
-            }
-            break;
+            input_uv_copy
+                .copy_to_host()
+                .compute_at(output_uv, tx)
+                .store_at(output_uv, ty)
+                .async()
+                .reorder_storage(c, x, y)
+                .fold_storage(x, tile_width * 2);
+        } break;
         }
 
         // async tiled output

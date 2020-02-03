@@ -18,7 +18,7 @@ int main(int argc, char **argv) {
     g(x, y) = 0.0f;
     g(r.x, y) += noise(r.x);
 
-    f(x, y, z) = g(x, y) + g(x+1, y);
+    f(x, y, z) = g(x, y) + g(x + 1, y);
 
     RVar rxo, rxi;
     g.compute_at(f, y).update().split(r.x, rxo, rxi, 2).unroll(rxi);

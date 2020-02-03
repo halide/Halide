@@ -5,6 +5,7 @@
 #include "ImageParam.h"
 #include "Inline.h"
 #include "Param.h"
+#include "RegionCosts.h"
 #include "Simplify.h"
 #include "Var.h"
 
@@ -17,7 +18,7 @@ using std::string;
 using std::vector;
 
 namespace {
-class SubstituteVarEstimates: public IRMutator {
+class SubstituteVarEstimates : public IRMutator {
     using IRMutator::visit;
 
     Expr visit(const Variable *var) override {
@@ -27,17 +28,17 @@ class SubstituteVarEstimates: public IRMutator {
             // XXX.extent.[dim_index]
             std::vector<std::string> v = split_string(var->name, ".");
             user_assert(v.size() >= 3);
-            int d = string_to_int(v[v.size()-1]);
-            if (v[v.size()-2] == "min") {
+            int d = string_to_int(v[v.size() - 1]);
+            if (v[v.size() - 2] == "min") {
                 Expr est = var->param.min_constraint_estimate(d);
                 return est.defined() ? est : var;
             } else {
-                internal_assert(v[v.size()-2] == "extent");
+                internal_assert(v[v.size() - 2] == "extent");
                 Expr est = var->param.extent_constraint_estimate(d);
                 return est.defined() ? est : var;
             }
         } else if (var->param.defined() && !var->param.is_buffer() &&
-            var->param.estimate().defined()) {
+                   var->param.estimate().defined()) {
             // This is a var from a Param object
             return var->param.estimate();
         } else {
@@ -45,14 +46,14 @@ class SubstituteVarEstimates: public IRMutator {
         }
     }
 };
-} // anonymous namespace
+}  // anonymous namespace
 
-Expr subsitute_var_estimates(Expr e) {
+Expr substitute_var_estimates(Expr e) {
     if (!e.defined()) return e;
     return simplify(SubstituteVarEstimates().mutate(e));
 }
 
-Stmt subsitute_var_estimates(Stmt s) {
+Stmt substitute_var_estimates(Stmt s) {
     if (!s.defined()) return s;
     return simplify(SubstituteVarEstimates().mutate(s));
 }
@@ -136,8 +137,8 @@ DimBounds get_stage_bounds(Function f, int stage_num, const DimBounds &pure_boun
     if (!f.has_extern_definition()) {
         Definition def = get_stage_definition(f, stage_num);
         for (const auto &rvar : def.schedule().rvars()) {
-            Expr lower = subsitute_var_estimates(rvar.min);
-            Expr upper = subsitute_var_estimates(rvar.min + rvar.extent - 1);
+            Expr lower = substitute_var_estimates(rvar.min);
+            Expr upper = substitute_var_estimates(rvar.min + rvar.extent - 1);
             bounds.emplace(rvar.var, Interval(lower, upper));
         }
     }
@@ -176,12 +177,11 @@ Expr perform_inline(Expr e, const map<string, Function> &env,
         // if provided (i.e. last to be realized comes first).
         if (!order.empty()) {
             std::sort(calls.begin(), calls.end(),
-                [&order](const string &lhs, const string &rhs){
-                    const auto &iter_lhs = std::find(order.begin(), order.end(), lhs);
-                    const auto &iter_rhs = std::find(order.begin(), order.end(), rhs);
-                    return iter_lhs > iter_rhs;
-                }
-            );
+                      [&order](const string &lhs, const string &rhs) {
+                          const auto &iter_lhs = std::find(order.begin(), order.end(), lhs);
+                          const auto &iter_rhs = std::find(order.begin(), order.end(), rhs);
+                          return iter_lhs > iter_rhs;
+                      });
         }
 
         // Check if any of the calls are in the set of functions to be inlined.
@@ -243,13 +243,142 @@ void disp_regions(const map<string, Box> &regions) {
     }
 }
 
+// If the cost of computing a Func is about the same as calling the Func,
+// inline the Func. Return true of any of the Funcs is inlined.
+bool inline_all_trivial_functions(const vector<Function> &outputs,
+                                  const vector<string> &order,
+                                  const map<string, Function> &env) {
+    bool inlined = false;
+    // The very last few functions in 'order' are the last to be realized in the
+    // pipeline (the final producers) so there is no point in checking it.
+    for (int i = 0; i < (int)order.size() - (int)outputs.size(); ++i) {
+        bool is_output = false;
+        for (const Function &f : outputs) {
+            if (order[i] == f.name()) {
+                is_output = true;
+                break;
+            }
+        }
+        if (is_output) {
+            // Should not inline output Func
+            debug(5) << "Skip inlining " << order[i] << " since it is an output\n";
+            continue;
+        }
+        Function f1 = env.at(order[i]);
+        if (is_func_trivial_to_inline(f1)) {
+            inlined = true;
+            debug(4) << "Function \"" << order[i] << "\" is trivial to inline\n";
+            for (int j = i + 1; j < (int)order.size() - (int)outputs.size(); ++j) {
+                internal_assert(order[i] != order[j]);
+                Function f2 = env.at(order[j]);
+
+                if (f2.has_extern_definition() && !f1.is_wrapper()) {
+                    debug(5) << "Skip inlining of function \"" << f1.name()
+                             << "\" inside \"" << f2.name() << "\", because "
+                             << "non-wrapper functions cannot be inlined inside "
+                             << "extern functions.\n";
+                } else {
+                    debug(5) << "Inline trivial function \"" << f1.name()
+                             << "\" inside \"" << f2.name() << "\"\n";
+                    inline_function(f2, f1);
+                }
+            }
+        }
+    }
+    return inlined;
+}
+
+// Determine if a Func (order[index]) is only consumed by another single Func
+// in element-wise manner. If it is, return the name of the consumer Func;
+// otherwise, return an empty string.
+string is_func_called_element_wise(const vector<string> &order, size_t index,
+                                   const map<string, Function> &env) {
+    Function f1 = env.at(order[index]);
+    if (f1.has_extern_definition() || !f1.can_be_inlined()) {
+        return "";
+    }
+    internal_assert(index < order.size());
+
+    string caller = "";
+    for (size_t i = index + 1; i < order.size(); ++i) {
+        Function f2 = env.at(order[i]);
+        if (f2.has_extern_definition()) {
+            continue;
+        }
+        int num_stages = f2.updates().size() + 1;
+        for (int s = 0; s < num_stages; ++s) {
+            Definition def = get_stage_definition(f2, s);
+            FindAllCalls find;
+            def.accept(&find);
+
+            if (find.funcs_called.count(f1.name())) {
+                if (caller.empty()) {
+                    caller = f2.name();
+                } else {
+                    // Found another caller of 'f1'
+                    return "";
+                }
+            }
+            for (const auto &iter : find.call_args) {
+                if (iter.first != f1.name()) {
+                    continue;
+                }
+                if (def.args().size() != iter.second.size()) {
+                    // It's not an element-wise access
+                    return "";
+                }
+                for (size_t j = 0; j < iter.second.size(); ++j) {
+                    if (!equal(def.args()[j], iter.second[j])) {
+                        // It's not an element-wise access
+                        return "";
+                    }
+                }
+            }
+        }
+    }
+    return caller;
+}
+
+// Inline a Func if its values are only consumed by another single Func in
+// element-wise manner.
+bool inline_all_element_wise_functions(const vector<Function> &outputs,
+                                       const vector<string> &order,
+                                       const map<string, Function> &env) {
+    bool inlined = false;
+    // The very last few functions in 'order' are the last to be realized in the
+    // pipeline (the final producers) so there is no point in checking it.
+    for (int i = 0; i < (int)order.size() - (int)outputs.size(); ++i) {
+        bool is_output = false;
+        for (const Function &f : outputs) {
+            if (order[i] == f.name()) {
+                is_output = true;
+                break;
+            }
+        }
+        if (is_output) {
+            // Should not inline output Func
+            debug(5) << "Skip inlining " << order[i] << " since it is an output\n";
+            continue;
+        }
+        string caller = is_func_called_element_wise(order, i, env);
+        if (!caller.empty()) {
+            inlined = true;
+            debug(4) << "Inline function \"" << order[i] << "\" since it is called only by "
+                     << caller << " in element-wise manner\n";
+            internal_assert(order[i] != caller);
+            inline_function(env.at(caller), get_element(env, order[i]));
+        }
+    }
+    return inlined;
+}
+
 namespace {
 void check(Expr input, Expr expected) {
-    Expr result = simplify(subsitute_var_estimates(input));
+    Expr result = simplify(substitute_var_estimates(input));
     expected = simplify(expected);
     if (!equal(result, expected)) {
         internal_error
-            << "\nsubsitute_var_estimates() failure:\n"
+            << "\nsubstitute_var_estimates() failure:\n"
             << "Input: " << input << '\n'
             << "Result: " << result << '\n'
             << "Expected result: " << expected << '\n';
@@ -268,7 +397,7 @@ void propagate_estimate_test() {
     Var x("x"), y("y");
     check(p + x + y, x + y + 10);
     check(img.dim(0).min() + img.dim(1).min() + x, x + 2);
-    check(img.dim(0).extent() + img.dim(1).min() + img.dim(1).extent()*x, 55*x + 38);
+    check(img.dim(0).extent() + img.dim(1).min() + img.dim(1).extent() * x, 55 * x + 38);
 
     std::cout << "Propagate estimate test passed" << std::endl;
 }

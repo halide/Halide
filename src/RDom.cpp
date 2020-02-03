@@ -17,18 +17,16 @@ using std::vector;
 
 namespace {
 
-static const char * const dom_var_names[] = {"$x", "$y", "$z", "$w"};
+static const char *const dom_var_names[] = {"$x", "$y", "$z", "$w"};
 
 // T is an ImageParam, Buffer<>, Input<Buffer<>>
 template<typename T>
 Internal::ReductionDomain make_dom_from_dimensions(const T &t, const std::string &name) {
     std::vector<Internal::ReductionVariable> vars;
     for (int i = 0; i < t.dimensions(); i++) {
-        vars.push_back({
-            name + dom_var_names[i],
-            t.dim(i).min(),
-            t.dim(i).extent()
-        });
+        vars.push_back({name + dom_var_names[i],
+                        t.dim(i).min(),
+                        t.dim(i).extent()});
     }
 
     return Internal::ReductionDomain(vars);
@@ -38,8 +36,7 @@ Internal::ReductionDomain make_dom_from_dimensions(const T &t, const std::string
 
 RVar::operator Expr() const {
     if (!min().defined() || !extent().defined()) {
-        user_error << "Use of undefined RDom dimension: " <<
-            (name().empty() ? "<unknown>" : name()) << "\n";
+        user_error << "Use of undefined RDom dimension: " << (name().empty() ? "<unknown>" : name()) << "\n";
     }
     return Variable::make(Int(32), name(), domain());
 }
@@ -68,8 +65,7 @@ const std::string &RVar::name() const {
     }
 }
 
-
-template <int N>
+template<int N>
 ReductionDomain build_domain(ReductionVariable (&vars)[N]) {
     vector<ReductionVariable> d(&vars[0], &vars[N]);
     ReductionDomain dom(d);
@@ -79,9 +75,9 @@ ReductionDomain build_domain(ReductionVariable (&vars)[N]) {
 // This just initializes the predefined x, y, z, w members of RDom.
 void RDom::init_vars(const string &name) {
     const std::vector<ReductionVariable> &dom_vars = dom.domain();
-    RVar *vars[] = { &x, &y, &z, &w };
+    RVar *vars[] = {&x, &y, &z, &w};
 
-    for (size_t i = 0; i < sizeof(vars)/sizeof(vars[0]); i++) {
+    for (size_t i = 0; i < sizeof(vars) / sizeof(vars[0]); i++) {
         if (i < dom_vars.size()) {
             *(vars[i]) = RVar(dom, i);
         } else {
@@ -90,7 +86,8 @@ void RDom::init_vars(const string &name) {
     }
 }
 
-RDom::RDom(ReductionDomain d) : dom(d) {
+RDom::RDom(ReductionDomain d)
+    : dom(d) {
     if (d.defined()) {
         init_vars("");
     }
@@ -121,51 +118,62 @@ class CheckRDomBounds : public IRGraphVisitor {
         IRGraphVisitor::visit(op);
     }
     Scope<int> internal_vars;
+
 public:
     string offending_func;
     string offending_free_var;
 };
-}
+}  // namespace
 
-void RDom::initialize_from_ranges(const std::vector<std::pair<Expr, Expr>> &ranges, string name) {
+void RDom::initialize_from_region(const Region &region, string name) {
     if (name.empty()) {
         name = make_entity_name(this, "Halide:.*:RDom", 'r');
     }
 
     std::vector<ReductionVariable> vars;
-    for (size_t i = 0; i < ranges.size(); i++) {
+    for (size_t i = 0; i < region.size(); i++) {
         CheckRDomBounds checker;
-        user_assert(ranges[i].first.defined() && ranges[i].second.defined())
+        user_assert(region[i].min.defined() && region[i].extent.defined())
             << "The RDom " << name << " may not be constructed with undefined Exprs.\n";
-        ranges[i].first.accept(&checker);
-        ranges[i].second.accept(&checker);
+        region[i].min.accept(&checker);
+        region[i].extent.accept(&checker);
         user_assert(checker.offending_func.empty())
             << "The bounds of the RDom " << name
             << " in dimension " << i
             << " are:\n"
-            << "  " << ranges[i].first << " ... " << ranges[i].second << "\n"
+            << "  " << region[i].min << " ... " << region[i].extent << "\n"
             << "These depend on a call to the Func " << checker.offending_func << ".\n"
             << "The bounds of an RDom may not depend on a call to a Func.\n";
         user_assert(checker.offending_free_var.empty())
             << "The bounds of the RDom " << name
             << " in dimension " << i
             << " are:\n"
-            << "  " << ranges[i].first << " ... " << ranges[i].second << "\n"
+            << "  " << region[i].min << " ... " << region[i].extent << "\n"
             << "These depend on the variable " << checker.offending_free_var << ".\n"
             << "The bounds of an RDom may not depend on a free variable.\n";
 
         std::string rvar_uniquifier;
         switch (i) {
-            case 0: rvar_uniquifier = "x"; break;
-            case 1: rvar_uniquifier = "y"; break;
-            case 2: rvar_uniquifier = "z"; break;
-            case 3: rvar_uniquifier = "w"; break;
-            default: rvar_uniquifier = std::to_string(i); break;
+        case 0:
+            rvar_uniquifier = "x";
+            break;
+        case 1:
+            rvar_uniquifier = "y";
+            break;
+        case 2:
+            rvar_uniquifier = "z";
+            break;
+        case 3:
+            rvar_uniquifier = "w";
+            break;
+        default:
+            rvar_uniquifier = std::to_string(i);
+            break;
         }
         ReductionVariable rv;
         rv.var = name + "$" + rvar_uniquifier;
-        rv.min = cast<int32_t>(ranges[i].first);
-        rv.extent = cast<int32_t>(ranges[i].second);
+        rv.min = cast<int32_t>(region[i].min);
+        rv.extent = cast<int32_t>(region[i].extent);
         vars.push_back(rv);
     }
     dom = ReductionDomain(vars);
@@ -197,7 +205,7 @@ RVar RDom::operator[](int i) const {
         return RVar(dom, i);
     }
     user_error << "Reduction domain index out of bounds: " << i << "\n";
-    return x; // Keep the compiler happy
+    return x;  // Keep the compiler happy
 }
 
 RDom::operator Expr() const {
