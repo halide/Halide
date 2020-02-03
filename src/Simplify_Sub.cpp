@@ -275,6 +275,14 @@ Expr Simplify::visit(const Sub *op, ExprInfo *bounds) {
                rewrite((x - y)/c0 - x/c0, ((x % c0) - y)/c0, c0 > 0))))) {
             return mutate(std::move(rewrite.result), bounds);
         }
+
+        if (no_overflow_int(op->type) &&
+            use_synthesized_rules &&
+            (
+#include "Simplify_Sub.inc"
+             )) {
+            return mutate(std::move(rewrite.result), bounds);
+        }
     }
     // clang-format on
 

@@ -98,6 +98,13 @@ Expr Simplify::visit(const Mod *op, ExprInfo *bounds) {
             return mutate(std::move(rewrite.result), bounds);
         }
         // clang-format on
+        if (no_overflow_int(op->type) &&
+            use_synthesized_rules &&
+            (
+#include "Simplify_Mod.inc"
+             )) {
+            return mutate(std::move(rewrite.result), bounds);
+        }
     }
 
     if (a.same_as(op->a) && b.same_as(op->b)) {

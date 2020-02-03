@@ -207,7 +207,14 @@ Expr Simplify::visit(const Min *op, ExprInfo *bounds) {
                rewrite(min(select(x, y, z), select(x, w, u)), select(x, min(y, w), min(z, u))) ||
 
                rewrite(min(c0 - x, c1), c0 - max(x, fold(c0 - c1))))))) {
+            return mutate(std::move(rewrite.result), bounds);
+        }
 
+        if (no_overflow_int(op->type) &&
+            use_synthesized_rules &&
+            (
+#include "Simplify_Min.inc"
+              )) {
             return mutate(std::move(rewrite.result), bounds);
         }
         // clang-format on

@@ -31,6 +31,8 @@ namespace Internal {
 class Simplify : public VariadicVisitor<Simplify, Expr, Stmt> {
     using Super = VariadicVisitor<Simplify, Expr, Stmt>;
 
+    bool use_synthesized_rules = true;
+
 public:
     Simplify(bool r, const Scope<Interval> *bi, const Scope<ModulusRemainder> *ai);
 

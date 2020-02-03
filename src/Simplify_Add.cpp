@@ -144,6 +144,14 @@ Expr Simplify::visit(const Add *op, ExprInfo *bounds) {
                rewrite(x + (y + (c0 - x)/c1)*c1, y * c1 - ((c0 - x) % c1) + c0, c1 > 0))))) {
             return mutate(std::move(rewrite.result), bounds);
         }
+
+        if (no_overflow_int(op->type) &&
+            use_synthesized_rules &&
+            (
+#include "Simplify_Add.inc"
+             )) {
+            return mutate(std::move(rewrite.result), bounds);
+        }
         // clang-format on
 
         const Shuffle *shuffle_a = a.as<Shuffle>();

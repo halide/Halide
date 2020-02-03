@@ -362,6 +362,14 @@ Expr Simplify::visit(const LT *op, ExprInfo *bounds) {
                       c1 * (lanes - 1) >= 0)))) {
             return mutate(std::move(rewrite.result), bounds);
         }
+
+        if (no_overflow_int(op->a.type()) &&
+            use_synthesized_rules &&
+            (
+#include "Simplify_LT.inc"
+             )) {
+            return mutate(std::move(rewrite.result), bounds);
+        }
         // clang-format on
     }
 

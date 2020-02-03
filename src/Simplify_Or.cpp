@@ -110,7 +110,13 @@ Expr Simplify::visit(const Or *op, ExprInfo *bounds) {
         rewrite(y < x || z < x, min(y, z) < x) ||
         rewrite(x <= y || x <= z, x <= max(y, z)) ||
         rewrite(y <= x || z <= x, min(y, z) <= x)) {
+        return mutate(std::move(rewrite.result), bounds);
+    }
 
+    if (use_synthesized_rules &&
+        (
+#include "Simplify_Or.inc"
+            )) {
         return mutate(std::move(rewrite.result), bounds);
     }
 
