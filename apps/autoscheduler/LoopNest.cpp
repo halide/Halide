@@ -1265,7 +1265,7 @@ void LoopNest::compute_warp_features(ScheduleFeatures &features, const GPULoopIn
 }
 
 // Assume that when a block is active, all its warps are active
-void LoopNest::compute_warp_and_block_occupancy(ScheduleFeatures &feat, const GPULoopInfo &gpu_loop_info) const {
+void LoopNest::compute_warp_and_block_occupancy(const MachineParams& params, ScheduleFeatures &feat, const GPULoopInfo &gpu_loop_info) const {
     // Only compute these features for stage's that actually have a block
     // loop
     if (node != gpu_loop_info.current_block_loop->node) {
@@ -1277,7 +1277,7 @@ void LoopNest::compute_warp_and_block_occupancy(ScheduleFeatures &feat, const GP
 
     int64_t num_warps_per_block = gpu_loop_info.thread_info->num_warps_per_block;
 
-    auto num_blocks = gpu_loop_info.num_blocks;
+    int64_t num_blocks = std::ceil(gpu_loop_info.num_blocks / (double)params.parallelism);
 
     auto max_theoretical_active_blocks = std::min(active_block_hardware_limit, num_blocks);
     auto max_active_warps = std::min(active_warp_hardware_limit, max_theoretical_active_blocks * num_warps_per_block);
@@ -2508,7 +2508,7 @@ void LoopNest::compute_features(const FunctionDAG &dag,
         }
 
         if (get_compute_warp_and_block_occupancy()) {
-            compute_warp_and_block_occupancy(feat, gpu_loop_info);
+            compute_warp_and_block_occupancy(params, feat, gpu_loop_info);
         }
     }
 }
@@ -3732,6 +3732,16 @@ double LoopNest::max_idle_lane_wastage(const Target &target, GPULoopInfo gpu_loo
     }
 
     return max_wastage;
+}
+
+bool LoopNest::has_valid_thread_extents() const {
+    for (const auto& c : children) {
+        if (!are_valid_thread_extents(c->get_union_thread_counts(nullptr))) {
+            return false;
+        }
+    }
+
+    return true;
 }
 
 }  // namespace Autoscheduler
