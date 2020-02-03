@@ -995,7 +995,7 @@ struct State {
         return options;
     }
 
-    void memoize_blocks(const FunctionDAG::Node *node, LoopNest* new_root, NodeMap<std::map<int, std::vector<IntrusivePtr<const LoopNest>>>>& compute_root_options) const {
+    void memoize_blocks(const FunctionDAG::Node *node, LoopNest* new_root, NodeMap<std::map<int, std::vector<IntrusivePtr<const LoopNest>>>>& compute_root_options, Statistics& stats) const {
         if (get_env_variable("HL_MEMOIZE_BLOCKS") != "1") {
             return;
         }
@@ -1019,6 +1019,7 @@ struct State {
                 LoopNest *new_block = new LoopNest;
                 new_block->copy_from_including_features(*c.get());
                 blocks.push_back(new_block);
+                ++stats.num_block_memoization_misses;
             }
         }
     }
@@ -1075,6 +1076,7 @@ struct State {
             if (child->calculate_cost(dag, params, target, cost_model, stats)) {
                 num_children++;
                 accept_child(std::move(child));
+                ++stats.num_block_memoization_hits;
             }
         }
 
@@ -1305,7 +1307,7 @@ struct State {
                             if (child->calculate_cost(dag, params, target, cost_model, stats)) {
                                 num_children++;
                                 accept_child(std::move(child));
-                                memoize_blocks(node, new_root, compute_root_options);
+                                memoize_blocks(node, new_root, compute_root_options, stats);
                             }
                             return;
                         }
@@ -1332,7 +1334,7 @@ struct State {
                             if (child->calculate_cost(dag, params, target, cost_model, stats)) {
                                 num_children++;
                                 accept_child(std::move(child));
-                                memoize_blocks(node, new_root, compute_root_options);
+                                memoize_blocks(node, new_root, compute_root_options, stats);
                             }
 
                             if (!use_adjusted_tilings()) {
@@ -2250,6 +2252,8 @@ void generate_schedule(const std::vector<Function> &outputs,
     aslog(1) << "Number of featurizations computed: " << stats.num_featurizations << '\n';
     aslog(1) << "Number of memoization hits: " << stats.num_memoization_hits << '\n';
     aslog(1) << "Number of memoization misses: " << stats.num_memoization_misses << '\n';
+    aslog(1) << "Number of block memoization hits: " << stats.num_block_memoization_hits << '\n';
+    aslog(1) << "Number of block memoization misses: " << stats.num_block_memoization_misses << '\n';
     aslog(1) << "Total featurization time (ms): " << stats.total_featurization_time() << "\n";
     aslog(1) << "Average featurization time (ms): " << stats.average_featurization_time() << "\n";
     aslog(1) << "Total enqueue time (ms): " << stats.total_enqueue_time() << "\n";

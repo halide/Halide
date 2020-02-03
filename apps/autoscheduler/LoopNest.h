@@ -55,6 +55,8 @@ struct ScopedTimer {
 struct Statistics {
     int num_featurizations{0};
     int num_states_added{0};
+    int num_block_memoization_hits{0};
+    int num_block_memoization_misses{0};
     int num_memoized_featurizations{0};
     int num_memoization_hits{0};
     int num_memoization_misses{0};
