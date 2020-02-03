@@ -171,6 +171,11 @@ Module lower(const vector<Function> &output_funcs,
          t.has_feature(Target::HexagonDma) ||
          (t.arch != Target::Hexagon && (t.features_any_of({Target::HVX_64, Target::HVX_128}))));
 
+    debug(1) << "Simplifying correlated differences...\n";
+    s = simplify_correlated_differences(s);
+    debug(2) << "Lowering after simplifying correlated differences:\n"
+             << s << '\n';
+
     debug(1) << "Adding checks for images\n";
     s = add_image_checks(s, outputs, t, order, env, func_bounds, will_inject_host_copies);
     debug(2) << "Lowering after injecting image checks:\n"
@@ -184,11 +189,6 @@ Module lower(const vector<Function> &output_funcs,
     debug(1) << "Performing sliding window optimization...\n";
     s = sliding_window(s, env);
     debug(2) << "Lowering after sliding window:\n"
-             << s << '\n';
-
-    debug(1) << "Simplifying correlated differences...\n";
-    s = simplify_correlated_differences(s);
-    debug(2) << "Lowering after simplifying correlated differences:\n"
              << s << '\n';
 
     debug(1) << "Performing allocation bounds inference...\n";
