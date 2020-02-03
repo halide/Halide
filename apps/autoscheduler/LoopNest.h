@@ -553,6 +553,8 @@ struct LoopNest {
                std::vector<StageScheduleState*>& ancestors) const;
 
     double max_idle_lane_wastage(const Target& target, GPULoopInfo gpu_loop_info) const;
+
+    bool has_valid_thread_extents() const;
 };
 
 }  // namespace Autoscheduler

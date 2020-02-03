@@ -3734,6 +3734,16 @@ double LoopNest::max_idle_lane_wastage(const Target &target, GPULoopInfo gpu_loo
     return max_wastage;
 }
 
+bool LoopNest::has_valid_thread_extents() const {
+    for (const auto& c : children) {
+        if (!are_valid_thread_extents(c->get_union_thread_counts(nullptr))) {
+            return false;
+        }
+    }
+
+    return true;
+}
+
 }  // namespace Autoscheduler
 }  // namespace Internal
 }  // namespace Halide
