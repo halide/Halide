@@ -288,8 +288,7 @@ void learn_false_helper(const Expr &fact, Simplify *simplify, Simplify::ScopedFa
         }
     }
 }
-}
-
+}  // namespace
 
 void Simplify::ScopedFact::learn_true(const Expr &fact) {
     learn_true_helper(fact, simplify, this);

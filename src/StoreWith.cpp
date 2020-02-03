@@ -9,8 +9,8 @@
 #include "PartitionLoops.h"
 #include "Simplify.h"
 #include "Simplify_Internal.h"
-#include "Substitute.h"
 #include "Solve.h"
+#include "Substitute.h"
 #include "UniquifyVariableNames.h"
 #include "Var.h"
 
@@ -21,9 +21,9 @@ namespace Internal {
 
 using std::map;
 using std::pair;
+using std::set;
 using std::string;
 using std::vector;
-using std::set;
 
 namespace {
 
@@ -37,9 +37,10 @@ Expr aux() {
 struct ClockDim {
     Expr t;
     ForType loop_type;
-    ClockDim(const Expr &t, ForType loop_type) : t(t), loop_type(loop_type) {}
+    ClockDim(const Expr &t, ForType loop_type)
+        : t(t), loop_type(loop_type) {
+    }
 };
-
 
 // A mostly-linear constraint. Represented as a linear combination
 // of terms that sum to zero. The terms are usually Variables, but
@@ -92,7 +93,6 @@ struct Equality {
             num_vars++;
         }
     }
-
 
     Equality(const EQ *eq) {
         find_terms(eq->a, 1);
@@ -177,9 +177,10 @@ struct System {
     static uint64_t id_counter;
     uint64_t id, parent_id;
 
-    System(Simplify *s, Expr subs, int pid) :
-        simplifier(s), most_recent_substitution(subs),
-        id(id_counter++), parent_id(pid) {}
+    System(Simplify *s, Expr subs, int pid)
+        : simplifier(s), most_recent_substitution(subs),
+          id(id_counter++), parent_id(pid) {
+    }
 
     void add_equality(const EQ *eq) {
         equalities.emplace_back(eq);
@@ -278,7 +279,7 @@ struct System {
             debug(0) << " non-linear: " << non_linear_term << "\n";
         }
         const auto &info = simplifier->bounds_and_alignment_info;
-        for (auto it = info.cbegin(); it != info.cend(); ++it){
+        for (auto it = info.cbegin(); it != info.cend(); ++it) {
             bool used = false;
             for (auto &e : equalities) {
                 used |= expr_uses_var(e.to_expr(), it.name());
@@ -364,7 +365,7 @@ struct System {
         // by tracking which states lead to success in the
         // store_with test and minimizing cross-entropy loss on a
         // linear classifier.
-        float coeffs[] = {0.0006f,  0.3839f,  0.1992f,  0.0388f, -0.0215f, -0.4192f};
+        float coeffs[] = {0.0006f, 0.3839f, 0.1992f, 0.0388f, -0.0215f, -0.4192f};
         c = 0.0f;
         for (int i = 0; i < 6; i++) {
             c += terms[i] * coeffs[i];
@@ -692,9 +693,9 @@ struct Use {
         const string &n,
         const vector<string> &loops,
         const vector<pair<string, Expr>> &lets,
-        Stmt store, Expr load) :
-        time(t), site(s), predicate(const_true()), name(n),
-        original_store(store), original_load(load) {
+        Stmt store, Expr load)
+        : time(t), site(s), predicate(const_true()), name(n),
+          original_store(store), original_load(load) {
 
         // Wrap the lets around the site.
         for (auto it = lets.rbegin(); it != lets.rend(); it++) {
@@ -1048,9 +1049,12 @@ std::vector<Use> get_times_of_all_uses(const Stmt &s, string buf, const map<stri
         }
 
         const std::map<string, Function> &env;
+
     public:
         vector<Use> uses;
-        PolyhedralClock(std::string &b, const std::map<string, Function> &env) : buf(b), env(env) {}
+        PolyhedralClock(std::string &b, const std::map<string, Function> &env)
+            : buf(b), env(env) {
+        }
     } clock(buf, env);
 
     s.accept(&clock);
@@ -1127,8 +1131,11 @@ Stmt lower_store_with(const Stmt &s, const vector<Function> &outputs, const map<
         }
 
         const map<string, Function> &env;
+
     public:
-        RemapArgs(const map<string, Function> &env) : env(env) {}
+        RemapArgs(const map<string, Function> &env)
+            : env(env) {
+        }
     } remap_args(env);
 
     Stmt stmt = remap_args.mutate(s);
@@ -1295,7 +1302,8 @@ Stmt lower_store_with(const Stmt &s, const vector<Function> &outputs, const map<
                             if (!u1.safely_before(u2, beam_size)) {
                                 std::ostringstream err;
                                 err << "Cannot store " << n << " in the same buffer as " << op->name << "\n"
-                                    << "In this code:\n" << Stmt(op) << "\n"
+                                    << "In this code:\n"
+                                    << Stmt(op) << "\n"
                                     << "Failed to prove that at every site, this ";
                                 u1.dump(err);
                                 err << "Always happens before than this ";
@@ -1320,7 +1328,7 @@ Stmt lower_store_with(const Stmt &s, const vector<Function> &outputs, const map<
                     const string &n1 = names[i];
                     auto uses_1 = get_times_of_all_uses(op->body, n1, env);
 
-                    for (size_t j = i+1; j < names.size(); j++) {
+                    for (size_t j = i + 1; j < names.size(); j++) {
                         const string &n2 = names[j];
 
                         auto uses_2 = get_times_of_all_uses(op->body, n2, env);
@@ -1337,7 +1345,8 @@ Stmt lower_store_with(const Stmt &s, const vector<Function> &outputs, const map<
                                 if (!u1.safely_before(u2, beam_size)) {
                                     std::ostringstream err;
                                     err << "Cannot store " << n1 << " in the same buffer as " << n2 << "\n"
-                                        << "In this code:\n" << Stmt(op) << "\n"
+                                        << "In this code:\n"
+                                        << Stmt(op) << "\n"
                                         << "Failed to prove that at every site, this ";
                                     u1.dump(err);
                                     err << "Always happens before than this ";
@@ -1391,8 +1400,9 @@ Stmt lower_store_with(const Stmt &s, const vector<Function> &outputs, const map<
 
         public:
             CheckEachRealization(const std::map<string, vector<string>> &groups,
-                                 const std::map<string, Function> &env) : groups(groups), env(env) {
-                for (const auto &p : groups)  {
+                                 const std::map<string, Function> &env)
+                : groups(groups), env(env) {
+                for (const auto &p : groups) {
                     for (const auto &c : p.second) {
                         parent[c] = p.first;
                     }
@@ -1470,14 +1480,15 @@ Stmt lower_store_with(const Stmt &s, const vector<Function> &outputs, const map<
         }
 
         const map<string, Function> &env;
+
     public:
-        RemapNames(const map<string, Function> &env) : env(env) {}
+        RemapNames(const map<string, Function> &env)
+            : env(env) {
+        }
     } remap_names(env);
 
     return remap_names.mutate(stmt);
-
 }
-
 
 }  // namespace Internal
 }  // namespace Halide

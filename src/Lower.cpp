@@ -75,9 +75,9 @@ namespace Internal {
 
 using std::map;
 using std::ostringstream;
+using std::pair;
 using std::string;
 using std::vector;
-using std::pair;
 
 Module lower(const vector<Function> &output_funcs,
              const string &pipeline_name,
@@ -197,7 +197,8 @@ Module lower(const vector<Function> &output_funcs,
 
     debug(1) << "Merging buffers using store_with directives...\n";
     s = lower_store_with(s, outputs, env);
-    debug(2) << "Lowering after merging buffers:\n" << s << '\n';
+    debug(2) << "Lowering after merging buffers:\n"
+             << s << '\n';
 
     debug(1) << "Performing allocation bounds inference...\n";
     s = allocation_bounds_inference(s, env, func_bounds);

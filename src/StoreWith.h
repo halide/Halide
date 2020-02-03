@@ -23,7 +23,7 @@ Stmt lower_store_with(const Stmt &s,
                       const std::vector<Function> &outputs,
                       const std::map<std::string, Function> &env);
 
-}
-}
+}  // namespace Internal
+}  // namespace Halide
 
 #endif

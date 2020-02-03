@@ -70,7 +70,7 @@ int main(int argc, char **argv) {
         Var x;
 
         f(x) = x;
-        g(x) = f(x+8);
+        g(x) = f(x + 8);
         h(x) = g(x);
 
         f.compute_at(g, x).vectorize(x, 8, TailStrategy::GuardWithIf);
@@ -121,14 +121,14 @@ int main(int argc, char **argv) {
         Func f, g, h;
         Var x;
         f(x) = x;
-        g(x) = f(x-1) + f(x) + f(x+1);
+        g(x) = f(x - 1) + f(x) + f(x + 1);
         h(x) = g(x);
         // If f is compute_root, then the realization of f is not
         // within the realization of g, so it's actually an
         // error. Need to add error checking, or place the realization
         // somewhere that includes both. Right now it just produced a
         // missing symbol error.
-        f.compute_at(g, Var::outermost()).store_with(g, {x+1});
+        f.compute_at(g, Var::outermost()).store_with(g, {x + 1});
         g.compute_root();
         Buffer<int> buf = h.realize(100);
         for (int i = 0; i < 100; i++) {
@@ -145,17 +145,17 @@ int main(int argc, char **argv) {
         Func f, g, h;
         Var x, y;
         f(x, y) = x + y;
-        g(x, y) = f(x-1, y-1) + f(x+1, y+1);
+        g(x, y) = f(x - 1, y - 1) + f(x + 1, y + 1);
         h(x, y) = g(x, y);
 
         g.compute_root();
         // Computation of f must be nested inside computation of g
-        f.compute_at(g, Var::outermost()).store_with(g, {x+1, y+1});
+        f.compute_at(g, Var::outermost()).store_with(g, {x + 1, y + 1});
         Buffer<int> buf = h.realize(100, 100);
 
         for (int y = 0; y < 100; y++) {
             for (int x = 0; x < 100; x++) {
-                int correct = 2*(x + y);
+                int correct = 2 * (x + y);
                 if (buf(x, y) != correct) {
                     printf("%d: buf(%d, %d) = %d instead of %d\n", __LINE__, x, y, buf(x, y), correct);
                 }
@@ -168,17 +168,17 @@ int main(int argc, char **argv) {
         Func f, g, h;
         Var x, y;
         f(x, y) = x + y;
-        g(x, y) = f(x-1, y-1) + f(x+1, y+1);
+        g(x, y) = f(x - 1, y - 1) + f(x + 1, y + 1);
         h(x, y) = g(x, y);
 
         g.compute_root();
         // Store slices of f two scanlines down in the as-yet-unused region of g
-        f.compute_at(g, y).store_with(g, {x, y+2});
+        f.compute_at(g, y).store_with(g, {x, y + 2});
         Buffer<int> buf = h.realize(100, 100);
 
         for (int y = 0; y < 100; y++) {
             for (int x = 0; x < 100; x++) {
-                int correct = 2*(x + y);
+                int correct = 2 * (x + y);
                 if (buf(x, y) != correct) {
                     printf("%d: buf(%d, %d) = %d instead of %d\n", __LINE__, x, y, buf(x, y), correct);
                 }
@@ -191,11 +191,11 @@ int main(int argc, char **argv) {
         Func f, g, h;
         Var x, y;
         f(x, y) = x + y;
-        g(x, y) = f(x-1, y-1) + f(x+1, y+1);
+        g(x, y) = f(x - 1, y - 1) + f(x + 1, y + 1);
         h(x, y) = g(x, y);
 
         g.compute_root();
-        f.store_root().compute_at(g, y).store_with(g, {x, y+3});
+        f.store_root().compute_at(g, y).store_with(g, {x, y + 3});
         h.realize(100, 100);
     }
 
@@ -204,13 +204,13 @@ int main(int argc, char **argv) {
         Func f, g, h, out;
         Var x;
         f(x) = x;
-        g(x) = f(2*x) + 1;
-        h(x) = f(2*x+1) * 2;
-        out(x) = select(x % 2 == 0, g(x/2), h(x/2));
+        g(x) = f(2 * x) + 1;
+        h(x) = f(2 * x + 1) * 2;
+        out(x) = select(x % 2 == 0, g(x / 2), h(x / 2));
 
         f.compute_root().store_with(out);
-        g.compute_root().store_with(out, {2*x}); // Store g at the even spots in out
-        h.compute_root().store_with(out, {2*x+1});  // Store h in the odd spots
+        g.compute_root().store_with(out, {2 * x});      // Store g at the even spots in out
+        h.compute_root().store_with(out, {2 * x + 1});  // Store h in the odd spots
 
         Buffer<int> buf = out.realize(100);
 
@@ -228,15 +228,15 @@ int main(int argc, char **argv) {
         Func f, g, h, out;
         Var x;
         f(x) = x;
-        g(x) = f(2*x) + 1;
-        h(x) = f(2*x+1) * 2;
-        out(x) = select(x % 2 == 0, g(x/2), h(x/2));
+        g(x) = f(2 * x) + 1;
+        h(x) = f(2 * x + 1) * 2;
+        out(x) = select(x % 2 == 0, g(x / 2), h(x / 2));
 
         f.compute_root().vectorize(x, 8).store_with(out);
         // Store g at the even spots in out
-        g.compute_root().vectorize(x, 8, TailStrategy::RoundUp).store_with(out, {2*x});
+        g.compute_root().vectorize(x, 8, TailStrategy::RoundUp).store_with(out, {2 * x});
         // Store h in the odd spots
-        h.compute_root().vectorize(x, 8, TailStrategy::RoundUp).store_with(out, {2*x+1});
+        h.compute_root().vectorize(x, 8, TailStrategy::RoundUp).store_with(out, {2 * x + 1});
         out.vectorize(x, 8, TailStrategy::RoundUp);
 
         Buffer<int> buf = out.realize(128);
@@ -257,9 +257,9 @@ int main(int argc, char **argv) {
         f(x) = x;
         RDom r(1, 99);
         g(x) = f(x);
-        g(r) += g(r-1);
+        g(r) += g(r - 1);
         h(x) = g(x);
-        h(r) += h(r-1);
+        h(r) += h(r - 1);
 
         f.compute_root().store_with(h);
         g.compute_root().store_with(h);
@@ -303,34 +303,34 @@ int main(int argc, char **argv) {
 
         f(x, y) = x + y;
 
-        g(x, y) = f(x/2, y/2) + 1;
-        h(x, y) = g(x/2, y/2) + 2;
+        g(x, y) = f(x / 2, y / 2) + 1;
+        h(x, y) = g(x / 2, y / 2) + 2;
 
         // Store a 4x4 block of f densely in the top left of every 16x16 tile of h
         f.compute_at(h, Var::outermost())
-            .store_with(h, {16*(x/4) + x%4, 16*(y/4) + y%4})
-            .vectorize(x).unroll(y);
+            .store_with(h, {16 * (x / 4) + x % 4, 16 * (y / 4) + y % 4})
+            .vectorize(x)
+            .unroll(y);
 
         // Store an 8x8 block of g similarly compacted in the bottom
         // right. It doesn't collide with f, and we're OK to overwrite
         // it when computing h because we compute h serially across y
         // and vectorized across x.
         g.compute_at(h, Var::outermost())
-            .store_with(h, {16*(x/8) + x%8 + 8, 16*(y/8) + y%8 + 8})
-            .vectorize(x).unroll(y);
+            .store_with(h, {16 * (x / 8) + x % 8 + 8, 16 * (y / 8) + y % 8 + 8})
+            .vectorize(x)
+            .unroll(y);
 
         Var xi, yi;
         h.compute_at(h.in(), x).vectorize(x).unroll(y);
         h = h.in();
-        h.align_bounds(x, 16).align_bounds(y, 16)
-            .tile(x, y, xi, yi, 16, 16)
-            .vectorize(xi).unroll(yi);
+        h.align_bounds(x, 16).align_bounds(y, 16).tile(x, y, xi, yi, 16, 16).vectorize(xi).unroll(yi);
 
         Buffer<int> buf = h.realize(128, 128);
 
         for (int y = 0; y < 128; y++) {
             for (int x = 0; x < 128; x++) {
-                int correct = x/4 + y/4 + 3;
+                int correct = x / 4 + y / 4 + 3;
                 if (buf(x, y) != correct) {
                     printf("%d: buf(%d, %d) = %d instead of %d\n", __LINE__, x, y, buf(x, y), correct);
                     return -1;
@@ -361,7 +361,7 @@ int main(int argc, char **argv) {
         Buffer<int> buf = h.realize(128);
 
         for (int i = 0; i < 128; i++) {
-            int correct = 4950 + i*3;
+            int correct = 4950 + i * 3;
             if (buf(i) != correct) {
                 printf("%d: buf(%d) = %d instead of %d\n", __LINE__, i, buf(i), correct);
                 return -1;
@@ -388,14 +388,13 @@ int main(int argc, char **argv) {
             int actual1 = (int)b1(i);
             int actual2 = (int)b2(i);
             int correct1 = i;
-            int correct2 = 2*i;
+            int correct2 = 2 * i;
             if (correct1 != actual1 || correct2 != actual2) {
                 printf("%d: buf(%d) = {%d, %d} instead of {%d, %d}\n",
                        __LINE__, i, actual1, actual2, correct1, correct2);
                 return -1;
             }
         }
-
     }
 
     if (1) {
@@ -430,7 +429,7 @@ int main(int argc, char **argv) {
         Func f1, f2, f3, g;
         Var x;
         f1(x) = x;
-        f2(x) = 3*x;
+        f2(x) = 3 * x;
         f3(x) = f1(x);
         g(x) = f2(x % 8) + f3(x % 8 + 8);
 
@@ -440,7 +439,8 @@ int main(int argc, char **argv) {
         Buffer<int> buf = g.realize(128);
 
         for (int i = 0; i < 128; i++) {
-            int correct = (i % 8)*3 + (i % 8) + 8;;
+            int correct = (i % 8) * 3 + (i % 8) + 8;
+            ;
             if (buf(i) != correct) {
                 printf("%d: buf(%d) = %d instead of %d\n", __LINE__, i, buf(i), correct);
                 return -1;
@@ -453,11 +453,11 @@ int main(int argc, char **argv) {
         Func f, g, h;
         Var x, y;
         f(x) = x;
-        g(x, y) = f(x + 4*y);
-        h(x) = g(x%4, x/4);
+        g(x, y) = f(x + 4 * y);
+        h(x) = g(x % 4, x / 4);
 
         f.compute_root().store_with(h);
-        g.bound(x, 0, 4).compute_root().store_with(h, {x + 4*y});
+        g.bound(x, 0, 4).compute_root().store_with(h, {x + 4 * y});
         Buffer<int> buf = h.realize(128);
 
         for (int i = 0; i < 128; i++) {
@@ -507,18 +507,18 @@ int main(int argc, char **argv) {
         Func f, g, h;
         Var x;
         f(x) = x;
-        g(x) = f(x+1) + f(x-1);
-        h(x) = g(x+1) + g(x-1);
+        g(x) = f(x + 1) + f(x - 1);
+        h(x) = g(x + 1) + g(x - 1);
 
         f.store_root().compute_at(h, x);
         g.store_root().compute_at(h, x);
-        f.store_with(g, {x+1});
+        f.store_with(g, {x + 1});
         g.fold_storage(x, 5);
 
         Buffer<int> buf = h.realize(128);
 
         for (int i = 0; i < 128; i++) {
-            int correct = 4*i;
+            int correct = 4 * i;
             if (buf(i) != correct) {
                 printf("%d: buf(%d) = %d instead of %d\n", __LINE__, i, buf(i), correct);
                 return -1;
@@ -583,8 +583,8 @@ int main(int argc, char **argv) {
         Var x;
 
         f(x) = x;
-        g(x) = f(x-1) + f(x+1);
-        h(x) = g(x-1) + g(x+1);
+        g(x) = f(x - 1) + f(x + 1);
+        h(x) = g(x - 1) + g(x + 1);
 
         Var xi;
         h.split(x, x, xi, 8);
@@ -608,7 +608,7 @@ int main(int argc, char **argv) {
         Pipeline p({h, scratch});
         p.realize({h_buf, scratch_buf});
 
-        int correct_scratch_size = 2*h_buf.dim(0).extent() + 13;
+        int correct_scratch_size = 2 * h_buf.dim(0).extent() + 13;
         if (scratch_buf.data() != nullptr ||
             scratch_buf.dim(0).extent() != correct_scratch_size) {
             printf("Scratch buf was supposed to be unallocated and of size %d. "
@@ -624,7 +624,7 @@ int main(int argc, char **argv) {
         p.realize({h_buf, scratch_buf});
 
         for (int i = 0; i < 128; i++) {
-            int correct = 4*i;
+            int correct = 4 * i;
             if (h_buf(i) != correct) {
                 printf("%d: h_buf(%d) = %d instead of %d\n", __LINE__, i, h_buf(i), correct);
                 return -1;
@@ -639,7 +639,11 @@ int main(int argc, char **argv) {
 
 #ifdef WITH_EXCEPTIONS
 
-#define ASSERT_UNREACHABLE do {printf("There was supposed to be an error before line %d\n", __LINE__); return -1;} while (0)
+#define ASSERT_UNREACHABLE                                                      \
+    do {                                                                        \
+        printf("There was supposed to be an error before line %d\n", __LINE__); \
+        return -1;                                                              \
+    } while (0)
 
     const bool verbose = false;
 
@@ -662,7 +666,7 @@ int main(int argc, char **argv) {
         Func f, g;
         Var x;
         f(x) = x;
-        g(x) = f(x) + f(x+100);
+        g(x) = f(x) + f(x + 100);
         f.compute_root().store_with(g);
         g.realize(100);
         ASSERT_UNREACHABLE;
@@ -675,7 +679,7 @@ int main(int argc, char **argv) {
         Func f, g, h;
         Var x;
         f(x) = x;
-        g(x) = f(x-1) + f(x) + f(x+1);
+        g(x) = f(x - 1) + f(x) + f(x + 1);
         h(x) = g(x);
         f.compute_at(g, Var::outermost()).store_with(g);
         g.compute_root();
@@ -690,9 +694,9 @@ int main(int argc, char **argv) {
         Func f, g, h;
         Var x;
         f(x) = x;
-        g(x) = f(x-1) + f(x) + f(x+1);
+        g(x) = f(x - 1) + f(x) + f(x + 1);
         h(x) = g(x);
-        f.compute_at(g, Var::outermost()).store_with(g, {x/2 + 1000});
+        f.compute_at(g, Var::outermost()).store_with(g, {x / 2 + 1000});
         g.compute_root().bound(x, 0, 100);
         h.compile_jit();
         ASSERT_UNREACHABLE;
@@ -749,7 +753,7 @@ int main(int argc, char **argv) {
         g(x) = f(x);
         h(x) = g(x);
 
-        f.compute_root().store_with(g); // g is inlined!
+        f.compute_root().store_with(g);  // g is inlined!
         h.realize(128);
         ASSERT_UNREACHABLE;
     } catch (CompileError &e) {
@@ -839,7 +843,7 @@ int main(int argc, char **argv) {
         Func f, g, h;
         Var x;
         f(x) = x;
-        g(x) = f(x) + f(x+1);
+        g(x) = f(x) + f(x + 1);
         h(x) = g(x);
         f.store_root().compute_at(g, x).store_with(g).async();
         g.compute_root();
@@ -855,7 +859,7 @@ int main(int argc, char **argv) {
         Var x;
         f1(x) = x;
         f2(x) = f1(x);
-        g(x) = f2(x) + f2(x+1);
+        g(x) = f2(x) + f2(x + 1);
         h(x) = g(x);
         f1.store_at(g, Var::outermost()).compute_at(f2, Var::outermost()).store_with(g);
         f2.store_at(g, Var::outermost()).compute_at(g, x).async();
@@ -871,7 +875,7 @@ int main(int argc, char **argv) {
         Func f, g, h;
         Var x;
         f(x) = x;
-        g(x) = f(x+1) + f(x-1);
+        g(x) = f(x + 1) + f(x - 1);
         h(x) = g(0) + g(100);
         g.compute_root();
         // Use folded storage for f and place the ring buffer just
