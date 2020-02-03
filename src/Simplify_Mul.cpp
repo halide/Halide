@@ -86,10 +86,19 @@ Expr Simplify::visit(const Mul *op, ExprInfo *bounds) {
             rewrite((x * c0) * c1, x * fold(c0 * c1), !overflows(c0 * c1)) ||
             rewrite((x * c0) * y, (x * y) * c0, !is_const(y)) ||
             rewrite(x * (y * c0), (x * y) * c0) ||
+            rewrite(x * -1, 0 - x) ||
             rewrite(max(x, y) * min(x, y), x * y) ||
             rewrite(max(x, y) * min(y, x), y * x) ||
             rewrite(broadcast(x) * broadcast(y), broadcast(x * y, op->type.lanes())) ||
-            rewrite(ramp(x, y) * broadcast(z), ramp(x * z, y * z, op->type.lanes()))) {
+            rewrite(ramp(x, y) * broadcast(z), ramp(x * z, y * z, op->type.lanes())) ||
+
+            // Added during the synthesis work to clean up some of the
+            // interpreter expressions we generate for masking
+            // operations.
+            rewrite(select(x, 1, 0) * y, select(x, y, 0)) ||
+            rewrite(select(x, 0, 1) * y, select(x, 0, y)) ||
+
+            false) {
             return mutate(std::move(rewrite.result), bounds);
         }
         if (no_overflow_int(op->type) &&

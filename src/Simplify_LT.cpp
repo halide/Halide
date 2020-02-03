@@ -58,12 +58,12 @@ Expr Simplify::visit(const LT *op, ExprInfo *bounds) {
         if (rewrite(broadcast(x) < broadcast(y), broadcast(x < y, lanes)) ||
             (no_overflow(ty) && EVAL_IN_LAMBDA
              (rewrite(ramp(x, y) < ramp(z, y), broadcast(x < z, lanes)) ||
-              // Move constants to the RHS
-              rewrite(x + c0 < y, x < y + fold(-c0)) ||
-
               // Merge RHS constant additions with a constant LHS
+              rewrite(x + c0 < c1, x < fold(c1 - c0)) ||
               rewrite(c0 < x + c1, fold(c0 - c1) < x) ||
 
+              // Move constants to the RHS
+              rewrite(x + c0 < y, x < y + fold(-c0)) ||
               // Normalize subtractions to additions to cut down on cases to consider
               rewrite(x - y < z, x < z + y) ||
               rewrite(z < x - y, z + y < x) ||
@@ -359,7 +359,8 @@ Expr Simplify::visit(const LT *op, ExprInfo *bounds) {
                       broadcast(x * fold(c3/c0) < z, lanes),
                       c0 > 0 && (c3 % c0 == 0) &&
                       c1 * (lanes - 1) < c0 &&
-                      c1 * (lanes - 1) >= 0)))) {
+                      c1 * (lanes - 1) >= 0) ||
+              false))) {
             return mutate(std::move(rewrite.result), bounds);
         }
 

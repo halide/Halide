@@ -177,7 +177,7 @@ Expr Simplify::visit(const Div *op, ExprInfo *bounds) {
                (denominator_non_zero &&
                 (rewrite((x + y)/x, y/x + 1) ||
                  rewrite((y + x)/x, y/x + 1) ||
-                 rewrite((x - y)/x, (-y)/x + 1) ||
+                 //rewrite((x - y)/x, (-y)/x + 1) ||
                  rewrite((y - x)/x, y/x - 1) ||
                  rewrite(((x + y) + z)/x, (y + z)/x + 1) ||
                  rewrite(((y + x) + z)/x, (y + z)/x + 1) ||
@@ -219,7 +219,7 @@ Expr Simplify::visit(const Div *op, ExprInfo *bounds) {
             use_synthesized_rules &&
             (
 #include "Simplify_Div.inc"
-             )) {
+                )) {
             return mutate(std::move(rewrite.result), bounds);
         }
     }
