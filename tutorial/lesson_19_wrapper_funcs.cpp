@@ -23,12 +23,6 @@
 // We'll also include stdio for printf.
 #include <stdio.h>
 
-#ifdef _WIN32
-#include <windows.h>
-#else
-#include <dlfcn.h>
-#endif
-
 using namespace Halide;
 
 Target find_gpu_target();
@@ -406,6 +400,12 @@ int main(int argc, char **argv) {
 
     return 0;
 }
+
+#ifdef _WIN32
+#include <windows.h>
+#else
+#include <dlfcn.h>
+#endif
 
 Target find_gpu_target() {
     // Start with a target suitable for the machine you're running this on.
