@@ -270,20 +270,7 @@ vector<vector<int64_t>> generate_gpu_tilings(const vector<vector<int64_t>> &stag
             int64_t min_threads = ((d == vectorized_indices[0]) ? std::min(warp_width, (int)stage_sizes[0][d]) : 1);
             bool full_extent_considered = false;
 
-            int successor_index = vectorized_indices[0] > 0 ? 0 : 1;
-            for (size_t i = 0; i < stage_sizes[0].size(); ++i) {
-                if (d == vectorized_indices[0] || stage_sizes[0][i] == 1) {
-                    continue;
-                }
-
-                successor_index = i;
-            }
-
-            bool is_vec_dim = d == vectorized_indices[0];
-            bool is_successor_to_vim_dim = d == successor_index;
-            int64_t max_extent = (is_vec_dim || is_successor_to_vim_dim) ? stage_sizes[0][d] : 1;
-
-            for (int64_t threads_ext = min_threads; threads_ext <= max_extent; threads_ext *= factor) {
+            for (int64_t threads_ext = min_threads; threads_ext <= stage_sizes[0][d]; threads_ext *= factor) {
                 full_extent_considered |= threads_ext == stage_sizes[0][d];
                 // reject if inner exceeds hardware thread limit
                 if ((d == vectorized_indices[0] && threads_ext > max_threads_extent) || (d != vectorized_indices[0] && threads_ext > 16)) {
