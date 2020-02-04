@@ -33,7 +33,7 @@ else
 
   # These are for Ubuntu Linux
   DTX_FONT       = /usr/share/fonts/truetype/dejavu/DejaVuSans.ttf
-  OPENGL_LIBS    = `pkg-config glfw --libs` -lGL -lglut -lX11 -lpthread -ldl -lXxf86vm -lXinerama -lXcursor -lXrandr
+  OPENGL_LIBS    = `pkg-config glfw3 --libs` -lGL -lglut -lX11 -lpthread -ldl -lXxf86vm -lXinerama -lXcursor -lXrandr
   GENERATOR_LIBS = -lHalide -lz -lcurses -Wl,--rpath=$(HALIDE_LIB_PATH)
 
 endif

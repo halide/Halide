@@ -52,7 +52,17 @@ brew install halide
 On Ubuntu Linux, everything but libdrawtext can be installed via system packages:
 
 ```sh
-sudo apt-get install libglfw-dev libx11-dev freeglut3-dev libfreetype6-dev libgl-dev libpng
+sudo apt-get install libglfw3-dev libx11-dev freeglut3-dev libfreetype6-dev libgl-dev libpng-dev
+```
+
+For libdrawtext, try this:
+
+```
+git clone https://github.com/jtsiomb/libdrawtext.git
+cd libdrawtext
+./configure
+make
+sudo make install
 ```
 
 ### Files:
