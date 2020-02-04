@@ -562,6 +562,8 @@ struct FunctionDAG {
     // auxiliary data structures.
     map<Function, Node *, Function::Compare> node_map;
 
+    map<int, const Node *> stage_id_to_node_map;
+
     // Create the function DAG, and do all the dependency and cost
     // analysis. This is done once up-front before the tree search.
     FunctionDAG(const vector<Function> &outputs, const MachineParams &params, const Target &target);

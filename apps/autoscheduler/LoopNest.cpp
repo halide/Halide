@@ -3056,6 +3056,7 @@ vector<IntrusivePtr<const LoopNest>> LoopNest::compute_in_tiles(const FunctionDA
                                                                 int v,
                                                                 bool in_realization,
                                                                 bool in_threads_loop,
+                                                                bool is_pre_pass,
                                                                 vector<int64_t> union_counts) const {
     internal_assert(f);
 
@@ -3146,7 +3147,7 @@ vector<IntrusivePtr<const LoopNest>> LoopNest::compute_in_tiles(const FunctionDA
         }
     }
 
-    if (f->is_output) {
+    if (f->is_output || is_pre_pass) {
         // Outputs must be compute_root, so we're done.
         return result;
     }
@@ -3253,7 +3254,7 @@ vector<IntrusivePtr<const LoopNest>> LoopNest::compute_in_tiles(const FunctionDA
                 // don't have to worry about the constraints this
                 // places on parallelism, as we forced all the
                 // parallelism to the outer loop.
-                auto opts = inner->compute_in_tiles(f, outer.get(), params, target, v, true, in_threads_loop);
+                auto opts = inner->compute_in_tiles(f, outer.get(), params, target, v, true, in_threads_loop, false);
                 for (IntrusivePtr<const LoopNest> &n : opts) {
                     LoopNest *store_at_outer_compute_further_in = new LoopNest;
                     store_at_outer_compute_further_in->copy_from(*outer);
@@ -3390,7 +3391,7 @@ vector<IntrusivePtr<const LoopNest>> LoopNest::compute_in_tiles(const FunctionDA
 
             in_threads_loop |= (children[child]->gpu_label == thread);
             // we must pass down union thread count constraints computed at block level when computing further in
-            auto opts = children[child]->compute_in_tiles(f, this, params, target, v, store_here, in_threads_loop, union_counts);
+            auto opts = children[child]->compute_in_tiles(f, this, params, target, v, store_here, in_threads_loop, false, union_counts);
             for (IntrusivePtr<const LoopNest> &n : opts) {
                 // (Only valid if one child calls f) Push the
                 // computation into the child. Possibly leaving
@@ -3750,6 +3751,22 @@ bool LoopNest::has_valid_thread_extents() const {
     }
 
     return true;
+}
+
+void LoopNest::collect_nodes_that_should_be_inlined(const NodeMap<bool>& nodes_to_freeze, NodeMap<bool>& inlined_nodes) const {
+    if (innermost) {
+        for (auto it = inlined.begin(); it != inlined.end(); it++) {
+            const auto *f = it.key();
+            if (nodes_to_freeze.contains(f)) {
+                inlined_nodes.insert(f, true);
+                std::cerr << "Freezing as inlined: " << f->func.name() << "\n";
+            }
+        }
+    }
+
+    for (const auto& c : children) {
+        c->collect_nodes_that_should_be_inlined(nodes_to_freeze, inlined_nodes);
+    }
 }
 
 }  // namespace Autoscheduler

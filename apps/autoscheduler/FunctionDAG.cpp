@@ -959,6 +959,7 @@ FunctionDAG::FunctionDAG(const vector<Function> &outputs, const MachineParams &p
             for (auto &s : n.stages) {
                 s.id = i;
                 s.max_id = stage_count;
+                stage_id_to_node_map[s.id] = &n;
                 i++;
             }
         }

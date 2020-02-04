@@ -532,6 +532,7 @@ struct LoopNest {
                                                           int v,
                                                           bool in_realization,
                                                           bool in_threads_loop,
+                                                          bool is_pre_pass,
                                                           vector<int64_t> union_counts=vector<int64_t>()) const;
 
     // Below here we have methods that apply a schedule to a Halide pipeline.
@@ -612,6 +613,8 @@ struct LoopNest {
     double max_idle_lane_wastage(const Target& target, GPULoopInfo gpu_loop_info) const;
 
     bool has_valid_thread_extents() const;
+
+    void collect_nodes_that_should_be_inlined(const NodeMap<bool>& nodes_to_freeze, NodeMap<bool>& inlined_nodes) const;
 };
 
 }  // namespace Autoscheduler

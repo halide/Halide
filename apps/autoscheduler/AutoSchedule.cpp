@@ -223,6 +223,30 @@ bool random_dropout(std::mt19937 &rng, size_t num_decisions) {
     return drop_it;
 }
 
+template <typename PostCreateMutator>
+void deep_copy_loop_nest(LoopNest* new_loop_nest, const LoopNest* new_loop_nest_parent, const IntrusivePtr<const LoopNest>& existing_loop_nest, const PostCreateMutator& post_create_mutator) {
+    new_loop_nest->copy_from(*existing_loop_nest);
+
+    for (std::size_t i = 0, N = new_loop_nest->children.size(); i < N; ++i) {
+        LoopNest* new_child = new LoopNest;
+        new_loop_nest->children[i] = new_child;
+        deep_copy_loop_nest(new_child, new_loop_nest, existing_loop_nest->children[i], post_create_mutator);
+    }
+
+    post_create_mutator(new_loop_nest);
+}
+
+struct NoOpMutator {
+    void operator()(LoopNest* new_loop_nest) const {
+    }
+};
+
+template <typename PostCreateMutator>
+LoopNest* deep_copy_loop_nest(const IntrusivePtr<const LoopNest>& loop_nest, const PostCreateMutator& post_create_mutator) {
+    LoopNest* new_loop_nest = new LoopNest;
+    deep_copy_loop_nest(new_loop_nest, nullptr, loop_nest, post_create_mutator);
+    return new_loop_nest;
+}
 
 struct State {
     mutable RefCount ref_count;
@@ -290,25 +314,12 @@ struct State {
         return nullptr;
     }
 
-    template <typename PostCreateMutator>
-    void deep_copy_loop_nest(LoopNest* new_loop_nest, const LoopNest* new_loop_nest_parent, const IntrusivePtr<const LoopNest>& existing_loop_nest, const PostCreateMutator& post_create_mutator) const {
-        new_loop_nest->copy_from(*existing_loop_nest);
-
-        for (std::size_t i = 0, N = new_loop_nest->children.size(); i < N; ++i) {
-            LoopNest* new_child = new LoopNest;
-            new_loop_nest->children[i] = new_child;
-            deep_copy_loop_nest(new_child, new_loop_nest, existing_loop_nest->children[i], post_create_mutator);
-        }
-
-        post_create_mutator(new_loop_nest);
-    }
-
     // We use the post_create_mutator so that the loop nests can be modified
     // before they become IntrusivePtr<const LoopNest> as children and cannot be modified
     template <typename PostCreateMutator>
-    LoopNest* deep_copy_loop_nest(const PostCreateMutator& post_create_mutator) const {
+    LoopNest* create_feature_root(const PostCreateMutator& post_create_mutator) const {
         LoopNest* new_root = new LoopNest;
-        deep_copy_loop_nest(new_root, nullptr, root, post_create_mutator);
+        deep_copy_loop_nest<PostCreateMutator>(new_root, nullptr, root, post_create_mutator);
         return new_root;
     }
 
@@ -504,7 +515,7 @@ struct State {
         // thread loop nest, we create a surrounding thread loop nest with
         // extents 1 (which Halide will do when the schedule is compiled) so
         // that we can more easily compute features
-        auto new_root = deep_copy_loop_nest(mutator);
+        auto new_root = create_feature_root(mutator);
         return new_root;
     }
 
@@ -1002,7 +1013,7 @@ struct State {
         return options;
     }
 
-    void memoize_blocks(const FunctionDAG::Node *node, LoopNest* new_root, NodeMap<std::map<int, std::vector<IntrusivePtr<const LoopNest>>>>& compute_root_options, Statistics& stats) const {
+    void memoize_blocks(const FunctionDAG::Node *node, LoopNest* new_root, NodeMap<std::map<int, std::vector<IntrusivePtr<const LoopNest>>>>& memoized_compute_root_blocks, Statistics& stats) const {
         if (!is_memoize_blocks_enabled()) {
             return;
         }
@@ -1019,7 +1030,7 @@ struct State {
 
         internal_assert(loop_nest_found);
 
-        auto& blocks = compute_root_options.get_or_create(node)[vector_dim];
+        auto& blocks = memoized_compute_root_blocks.get_or_create(node)[vector_dim];
 
         for (auto &c : new_root->children) {
             if (c->node == node) {
@@ -1038,9 +1049,9 @@ struct State {
                                          std::function<void(IntrusivePtr<State> &&)> &accept_child,
                                          Statistics& stats,
                                          const FunctionDAG::Node *node,
-                                         const NodeMap<std::map<int, std::vector<IntrusivePtr<const LoopNest>>>>& compute_root_options,
+                                         const NodeMap<std::map<int, std::vector<IntrusivePtr<const LoopNest>>>>& memoized_compute_root_blocks,
                                          int& num_children) const {
-        if (!is_memoize_blocks_enabled() || !compute_root_options.contains(node)) {
+        if (!is_memoize_blocks_enabled() || !memoized_compute_root_blocks.contains(node)) {
             return false;
         }
 
@@ -1052,11 +1063,11 @@ struct State {
             }
         }
 
-        if (compute_root_options.get(node).count(vector_dim) == 0) {
+        if (memoized_compute_root_blocks.get(node).count(vector_dim) == 0) {
             return false;
         }
 
-        auto blocks = compute_root_options.get(node).at(vector_dim);
+        auto blocks = memoized_compute_root_blocks.get(node).at(vector_dim);
 
         size_t num_stages = node->stages.size();
         for (size_t i = 0; i < blocks.size(); i += num_stages) {
@@ -1097,7 +1108,10 @@ struct State {
                            CostModel *cost_model,
                            std::function<void(IntrusivePtr<State> &&)> &accept_child,
                            Statistics& stats,
-                           NodeMap<std::map<int, std::vector<IntrusivePtr<const LoopNest>>>>& compute_root_options) const {
+                           bool is_pre_pass,
+                           const NodeMap<bool>& inlined_nodes,
+                           const NodeMap<std::vector<IntrusivePtr<const LoopNest>>>& compute_root_nodes,
+                           NodeMap<std::map<int, std::vector<IntrusivePtr<const LoopNest>>>>& memoized_compute_root_blocks) const {
         internal_assert(root.defined() && root->is_root());
 
         if (num_decisions_made == 2 * (int)dag.nodes.size()) {
@@ -1123,9 +1137,11 @@ struct State {
                 << ", which is one of the consumers of " << node->func.name();
         }
 
-        ScopedTimer scoped_timer{"generate_children() for " + node->func.name()};
+        //ScopedTimer scoped_timer{"generate_children() for " + node->func.name()};
+        bool must_inline = inlined_nodes.contains(node);
+        bool must_compute_root = compute_root_nodes.contains(node);
 
-        if (node->is_input) {
+        if (node->is_input || (phase == 1 && must_compute_root)) {
             // We don't need to schedule nodes that represent inputs,
             // and there are no other decisions to be made about them
             // at this time.
@@ -1151,13 +1167,13 @@ struct State {
         }
 
         int num_children = 0;
-        ScopedStatistic<int> num_children_stat{num_children, "end phase " + std::to_string(phase) + "; num_children generated for " + node->func.name()};
+        //ScopedStatistic<int> num_children_stat{num_children, "end phase " + std::to_string(phase) + "; num_children generated for " + node->func.name()};
 
         if (phase == 0) {
             // Injecting realizations
             {
                 // 1) Inline it
-                if (node->stages.size() == 1 && !node->is_output) {
+                if (node->stages.size() == 1 && !node->is_output && !must_compute_root) {
                     auto child = make_child();
                     LoopNest *new_root = new LoopNest;
                     new_root->copy_from(*root);
@@ -1171,11 +1187,20 @@ struct State {
                 }
             }
 
+            if (must_inline && num_children > 0) {
+                std::cerr << "Must inline success: " << node->func.name() << "\n";
+                return;
+            }
+
+            if (must_inline) {
+                std::cerr << "Unable to inline: " << node->func.name() << "\n";
+            }
+
             // Some search-space pruning. If a node is pointwise, and
             // so are all its inputs and so is its sole output, and
             // inlining it is legal, just inline it. This saves time
             // on long chains of pointwise things.
-            bool must_inline = (node->is_pointwise &&
+            must_inline = (node->is_pointwise &&
                                 (num_children > 0) &&
                                 (node->outgoing_edges.size() == 1));
             if (must_inline) {
@@ -1189,6 +1214,26 @@ struct State {
                 if (must_inline) {
                     return;
                 }
+            }
+
+            if (must_compute_root) {
+                LoopNest *new_root = new LoopNest;
+                new_root->copy_from(*root);
+                const auto &nodes = compute_root_nodes.get(node);
+                for (const auto &n : nodes) {
+                    const auto* compute_root_loop = deep_copy_loop_nest(n.get(), NoOpMutator{});
+                    new_root->children.push_back(compute_root_loop);
+                }
+                new_root->store_at.insert(node);
+
+                auto child = make_child();
+                child->root = std::move(new_root);
+                child->num_decisions_made++;
+                if (child->calculate_cost(dag, params, target, cost_model, stats)) {
+                    num_children++;
+                    accept_child(std::move(child));
+                }
+                return;
             }
 
             // Construct a list of plausible dimensions to vectorize
@@ -1215,7 +1260,7 @@ struct State {
             // 2) Realize it somewhere
             for (int vector_dim : vector_dims) {
                 auto t1 = std::chrono::high_resolution_clock::now();
-                auto tile_options = root->compute_in_tiles(node, nullptr, params, target, vector_dim, false, false);
+                auto tile_options = root->compute_in_tiles(node, nullptr, params, target, vector_dim, false, false, is_pre_pass);
                 stats.compute_in_tiles_time += std::chrono::high_resolution_clock::now() - t1;
 
                 t1 = std::chrono::high_resolution_clock::now();
@@ -1267,7 +1312,7 @@ struct State {
                 internal_assert(pure_size);
 
                 if (target.has_gpu_feature()) {
-                    if (add_states_from_memoized_blocks(dag, params, target, cost_model, accept_child, stats, node, compute_root_options, num_children)) {
+                    if (add_states_from_memoized_blocks(dag, params, target, cost_model, accept_child, stats, node, memoized_compute_root_blocks, num_children)) {
                         return;
                     }
 
@@ -1320,7 +1365,7 @@ struct State {
                             if (child->calculate_cost(dag, params, target, cost_model, stats)) {
                                 num_children++;
                                 accept_child(std::move(child));
-                                memoize_blocks(node, new_root, compute_root_options, stats);
+                                memoize_blocks(node, new_root, memoized_compute_root_blocks, stats);
                             }
                             return;
                         }
@@ -1349,7 +1394,7 @@ struct State {
                             if (child->calculate_cost(dag, params, target, cost_model, stats)) {
                                 num_children++;
                                 accept_child(std::move(child));
-                                memoize_blocks(node, new_root, compute_root_options, stats);
+                                memoize_blocks(node, new_root, memoized_compute_root_blocks, stats);
                             }
 
                             if (!use_adjusted_tilings()) {
@@ -1895,7 +1940,9 @@ IntrusivePtr<State> optimal_schedule_pass(FunctionDAG &dag,
                                           ProgressBar &tick,
                                           std::unordered_set<uint64_t> &permitted_hashes,
                                           Statistics& stats,
-                                          NodeMap<std::map<int, std::vector<IntrusivePtr<const LoopNest>>>>& compute_root_options) {
+                                          const NodeMap<bool>& inlined_nodes,
+                                          const NodeMap<std::vector<IntrusivePtr<const LoopNest>>>& compute_root_nodes,
+                                          NodeMap<std::map<int, std::vector<IntrusivePtr<const LoopNest>>>>& memoized_compute_root_blocks) {
 
     if (cost_model) {
         configure_pipeline_features(dag, params, cost_model);
@@ -1958,7 +2005,9 @@ IntrusivePtr<State> optimal_schedule_pass(FunctionDAG &dag,
                                              tick,
                                              permitted_hashes,
                                              stats,
-                                             compute_root_options);
+                                             inlined_nodes,
+                                             compute_root_nodes,
+                                             memoized_compute_root_blocks);
             } else {
                 internal_error << "Ran out of legal states with beam size " << beam_size << "\n";
             }
@@ -1973,7 +2022,7 @@ IntrusivePtr<State> optimal_schedule_pass(FunctionDAG &dag,
 
             IntrusivePtr<State> state{pending.pop()};
 
-            if (beam_size > 1 && num_passes > 1) {
+            if (beam_size > 1 && num_passes > 1 && pass_idx >= 0) {
                 // We are doing coarse-to-fine beam search using the
                 // hashing strategy mentioned in the paper.
                 //
@@ -2029,7 +2078,7 @@ IntrusivePtr<State> optimal_schedule_pass(FunctionDAG &dag,
                 // reasonable as having a cost no more than 20% higher
                 // than the cost of the best thing. Only do this if
                 // there are more coarse-to-fine passes yet to come.
-                if (pass_idx + 1 < num_passes) {
+                if (pass_idx >= 0 && pass_idx + 1 < num_passes) {
                     int blessed = 0;
                     while (state->cost <= 1.2 * best->cost && blessed < beam_size) {
                         const State *s = state.get();
@@ -2048,7 +2097,7 @@ IntrusivePtr<State> optimal_schedule_pass(FunctionDAG &dag,
             }
 
             auto t1 = std::chrono::high_resolution_clock::now();
-            state->generate_children(dag, params, target, cost_model, enqueue_new_children, stats, compute_root_options);
+            state->generate_children(dag, params, target, cost_model, enqueue_new_children, stats, pass_idx == -1, inlined_nodes, compute_root_nodes, memoized_compute_root_blocks);
             stats.generate_children_time += std::chrono::high_resolution_clock::now() - t1;
             expanded++;
         }
@@ -2115,6 +2164,64 @@ IntrusivePtr<State> optimal_schedule_pass(FunctionDAG &dag,
     }
 }
 
+struct ClearInlinedMutator {
+    void operator()(LoopNest* new_loop_nest) const {
+        new_loop_nest->inlined = {};
+    }
+};
+
+void freeze_lowest_cost_stages(const FunctionDAG& dag, const IntrusivePtr<State> best, NodeMap<bool>& inlined_nodes, NodeMap<std::vector<IntrusivePtr<const LoopNest>>>& compute_root_nodes) {
+
+    std::vector<std::pair<int, double>> node_ids_and_costs;
+    size_t num_stages = 0;
+    size_t num_nodes = 0;
+    for (const auto& n : dag.nodes) {
+        if (n.is_input) {
+            continue;
+        }
+        num_stages += n.stages.size();
+        ++num_nodes;
+    }
+
+    node_ids_and_costs.resize(num_nodes, {-1, 0});
+    inlined_nodes.make_large(num_nodes);
+
+    for (size_t i = 0; i < num_stages; ++i) {
+        auto node_id = dag.stage_id_to_node_map.at(i)->id;
+
+        node_ids_and_costs[node_id].first = node_id;
+        node_ids_and_costs[node_id].second += best->cost_per_stage[i];
+    }
+
+    for (const auto& n : node_ids_and_costs) {
+        internal_assert(n.first >= 0);
+    }
+
+    std::sort(node_ids_and_costs.begin(), node_ids_and_costs.end(), [](const std::pair<int, double>& a, const std::pair<int, double>& b) {
+        return a.second < b.second;
+    });
+
+    size_t num_to_freeze = num_nodes - std::log2(num_nodes);
+    NodeMap<bool> nodes_to_freeze;
+    for (size_t i = 0; i < num_to_freeze; ++i) {
+        auto id = node_ids_and_costs[i].first;
+        std::cerr << "Freezing " << dag.nodes[id].func.name() << " with cost = " << node_ids_and_costs[i].second << "\n";
+        nodes_to_freeze.insert(&dag.nodes[id], true);
+    }
+
+    best->root->collect_nodes_that_should_be_inlined(nodes_to_freeze, inlined_nodes);
+
+    ClearInlinedMutator mutator{};
+
+    for (const auto& c : best->root->children) {
+        if (nodes_to_freeze.contains(c->node)) {
+            auto new_loop_nest = deep_copy_loop_nest(c, mutator);
+            compute_root_nodes.get_or_create(c->node).push_back(new_loop_nest);
+            std::cerr << "Freezing as compute_root: " << c->node->func.name() << "\n";
+        }
+    }
+}
+
 // Performance coarse-to-fine beam search and return the best state found.
 IntrusivePtr<State> optimal_schedule(FunctionDAG &dag,
                                      vector<Function> outputs,
@@ -2145,25 +2252,39 @@ IntrusivePtr<State> optimal_schedule(FunctionDAG &dag,
         num_passes = std::atoi(num_passes_str.c_str());
     }
 
-    NodeMap<std::map<int, std::vector<IntrusivePtr<const LoopNest>>>> compute_root_options;
-    compute_root_options.make_large(dag.nodes.size());
+    NodeMap<std::map<int, std::vector<IntrusivePtr<const LoopNest>>>> memoized_compute_root_blocks;
+    memoized_compute_root_blocks.make_large(dag.nodes.size());
 
-    for (int i = 0; i < num_passes; i++) {
+    bool use_pre_pass = num_passes > 1 && get_env_variable("HL_FREEZE_INLINE_COMPUTE_ROOT") == "1";
+    int pass_idx = use_pre_pass ? -1 : 0;
+
+    if (use_pre_pass) {
+        --num_passes;
+    }
+
+    NodeMap<bool> inlined_nodes;
+    NodeMap<std::vector<IntrusivePtr<const LoopNest>>> compute_root_nodes;
+
+    for (; pass_idx < num_passes; pass_idx++) {
         ProgressBar tick;
 
         auto pass = optimal_schedule_pass(dag, outputs, params, target, cost_model,
-            rng, beam_size, i, num_passes, tick, permitted_hashes, stats, compute_root_options);
+            rng, beam_size, pass_idx, num_passes, tick, permitted_hashes, stats, inlined_nodes, compute_root_nodes, memoized_compute_root_blocks);
 
         tick.clear();
 
         if (aslog::aslog_level() == 0) {
-            aslog(0) << "Pass " << i + 1 << " of " << num_passes << ", cost: " << pass->cost << "\n";
+            aslog(0) << "Pass " << pass_idx + 1 << " of " << num_passes << ", cost: " << pass->cost << "\n";
         } else {
-            aslog(0) << "Pass " << i + 1 << " result: ";
+            aslog(0) << "Pass " << pass_idx + 1 << " result: ";
             pass->dump();
         }
 
-        if (i == 0 || pass->cost < best->cost) {
+        if (pass_idx == -1) {
+            freeze_lowest_cost_stages(dag, pass, inlined_nodes, compute_root_nodes);
+        }
+
+        if (pass_idx >= 0 && (pass_idx == 0 || pass->cost < best->cost)) {
             // Track which pass produced the lowest-cost state. It's
             // not necessarily the final one.
             best = pass;
