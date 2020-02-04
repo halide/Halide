@@ -289,6 +289,8 @@ vector<vector<int64_t>> generate_gpu_tilings(const vector<vector<int64_t>> &stag
                 if ((d == vectorized_indices[0] && threads_ext > max_threads_extent) || (d != vectorized_indices[0] && threads_ext > 16)) {
                     break;
                 }
+                int64_t other_ext = (stage_sizes[0][d] + threads_ext - 1) / threads_ext;
+                if (threads_ext > 1 && threads_ext * other_ext * 7 > stage_sizes[0][d] * 8) break;
                 if (false) {
                     int64_t other_ext = (stage_sizes[0][d] + threads_ext - 1) / threads_ext;
                     t.back() = other_ext;
@@ -318,19 +320,6 @@ vector<vector<int64_t>> generate_gpu_tilings(const vector<vector<int64_t>> &stag
                     t.back() = threads16;
                 validity valid_result = is_valid_tiling();
                 if (valid_result == valid_tiling) {
-                    result.push_back(t);
-                }
-            }
-
-            // It's possible that the loop's full extent has not been considered
-            // as a size, e.g., if the loop has size 18 and is not in the
-            // vectorized dimension, then the above loop will consider only
-            // sizes 1, 2, 4, 8, 16, i.e., the loop will always involve a split
-            // and the full extent of 18 will not be considered as a size. If
-            // so, add it as a possibility here
-            if (!full_extent_considered && stage_sizes[0][d] <= max_threads_extent) {
-                t.back() = stage_sizes[0][d];
-                if (is_valid_tiling() == valid_tiling) {
                     result.push_back(t);
                 }
             }
