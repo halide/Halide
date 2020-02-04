@@ -25,6 +25,8 @@
 
 using namespace Halide;
 
+Target find_gpu_target();
+
 int main(int argc, char **argv) {
     // First we'll declare some Vars to use below.
     Var x("x"), y("y"), xo("xo"), yo("yo"), xi("xi"), yi("yi");
@@ -290,12 +292,7 @@ int main(int argc, char **argv) {
         // does 8*8*9 loads to shared/local memory.
 
         // Select an appropriate GPU API, as we did in lesson 12
-        Target target = get_host_target();
-        if (target.os == Target::OSX) {
-            target.set_feature(Target::Metal);
-        } else {
-            target.set_feature(Target::OpenCL);
-        }
+        Target target = find_gpu_target();
 
         // Create an interesting input image to use.
         Buffer<int> input(258, 258);
@@ -402,4 +399,42 @@ int main(int argc, char **argv) {
     printf("Success!\n");
 
     return 0;
+}
+
+Target find_gpu_target() {
+    // Start with a target suitable for the machine you're running this on.
+    Target target = get_host_target();
+
+    if (target.os == Target::OSX) {
+        // OS X doesn't update its OpenCL drivers, so they tend to be broken.
+        // CUDA would also be a fine choice on machines with NVidia GPUs.
+        if (dlopen("/System/Library/Frameworks/Metal.framework/Versions/Current/Metal", RTLD_LAZY) == NULL) {
+           printf("Unable to load Metal framework, assuming no GPU\n");
+           return target;
+        }
+        target.set_feature(Target::Metal);
+    } else {
+        void* ocl = dlopen("libOpenCL.so", RTLD_LAZY);
+        if (ocl != NULL) {
+            // Do a little more sniffing, as some Linux systems might have libOpenCL installed,
+            // but no GPU available (e.g. on buildbots / VMs)
+            typedef int32_t (*clGetPlatformIDsFunc)(uint32_t, void**, uint32_t*);
+            clGetPlatformIDsFunc clGetPlatformIDs = (clGetPlatformIDsFunc) dlsym(ocl, "clGetPlatformIDs");
+            if (!clGetPlatformIDs) {
+                printf("Unable to find clGetPlatformIDs(), assuming no GPU\n");
+                return target;
+            }
+
+            const uint32_t max_platforms = 4;
+            void* platforms[max_platforms];
+            uint32_t platform_count = 0;
+            if (clGetPlatformIDs(max_platforms, platforms, &platform_count) != 0) {
+                printf("clGetPlatformIDs() returned an error, assuming no GPU\n");
+                return target;
+            }
+            target.set_feature(Target::OpenCL);
+        }
+    }
+
+    return target;
 }

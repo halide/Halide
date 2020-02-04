@@ -317,7 +317,7 @@ Target find_gpu_target() {
         typedef int32_t (*clGetPlatformIDsFunc)(uint32_t, void**, uint32_t*);
         clGetPlatformIDsFunc clGetPlatformIDs = (clGetPlatformIDsFunc) dlsym(ocl, "clGetPlatformIDs");
         if (!clGetPlatformIDs) {
-            printf("Unable to find clGetPlatformIDs, assuming no GPU\n");
+            printf("Unable to find clGetPlatformIDs(), assuming no GPU\n");
             return target;
         }
 
