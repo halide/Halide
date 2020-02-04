@@ -310,7 +310,24 @@ Target find_gpu_target() {
         target.set_feature(Target::Metal);
     }
 #else
-    if (dlopen("libOpenCL.so", RTLD_LAZY) != NULL) {
+    void* ocl = dlopen("libOpenCL.so", RTLD_LAZY);
+    if (ocl != NULL) {
+        // Do a little more sniffing, as some Linux systems might have libOpenCL installed,
+        // but no GPU available (e.g. on buildbots / VMs)
+        typedef int32_t (*clGetPlatformIDsFunc)(uint32_t, void**, uint32_t*);
+        clGetPlatformIDsFunc clGetPlatformIDs = (clGetPlatformIDsFunc) dlsym(ocl, "clGetPlatformIDs");
+        if (!clGetPlatformIDs) {
+            printf("Unable to find clGetPlatformIDs, assuming no GPU\n");
+            return target;
+        }
+
+        const uint32_t max_platforms = 4;
+        void* platforms[max_platforms];
+        uint32_t platform_count = 0;
+        if (clGetPlatformIDs(max_platforms, platforms, &platform_count) != 0) {
+            printf("clGetPlatformIDs() returned an error, assuming no GPU\n");
+            return target;
+        }
         target.set_feature(Target::OpenCL);
     }
 #endif
