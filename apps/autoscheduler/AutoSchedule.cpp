@@ -108,6 +108,11 @@ bool verify_memoized_features() {
     return var;
 }
 
+bool is_memoize_blocks_enabled() {
+    static bool var = get_env_variable("HL_MEMOIZE_BLOCKS") == "1";
+    return var;
+}
+
 struct RNG {
     std::mt19937 gen;
     std::uniform_real_distribution<double> dis;
@@ -996,7 +1001,7 @@ struct State {
     }
 
     void memoize_blocks(const FunctionDAG::Node *node, LoopNest* new_root, NodeMap<std::map<int, std::vector<IntrusivePtr<const LoopNest>>>>& compute_root_options, Statistics& stats) const {
-        if (get_env_variable("HL_MEMOIZE_BLOCKS") != "1") {
+        if (!is_memoize_blocks_enabled()) {
             return;
         }
 
@@ -1033,7 +1038,7 @@ struct State {
                                          const FunctionDAG::Node *node,
                                          const NodeMap<std::map<int, std::vector<IntrusivePtr<const LoopNest>>>>& compute_root_options,
                                          int& num_children) const {
-        if (get_env_variable("HL_MEMOIZE_BLOCKS") != "1" || !compute_root_options.contains(node)) {
+        if (!is_memoize_blocks_enabled() || !compute_root_options.contains(node)) {
             return false;
         }
 
