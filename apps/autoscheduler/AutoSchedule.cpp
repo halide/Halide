@@ -2255,10 +2255,10 @@ IntrusivePtr<State> optimal_schedule(FunctionDAG &dag,
     NodeMap<std::map<int, std::vector<IntrusivePtr<const LoopNest>>>> memoized_compute_root_blocks;
     memoized_compute_root_blocks.make_large(dag.nodes.size());
 
-    bool use_pre_pass = num_passes > 1 && get_env_variable("HL_FREEZE_INLINE_COMPUTE_ROOT") == "1";
+    bool use_pre_pass = get_env_variable("HL_FREEZE_INLINE_COMPUTE_ROOT") == "1";
     int pass_idx = use_pre_pass ? -1 : 0;
 
-    if (use_pre_pass) {
+    if (use_pre_pass && num_passes > 1) {
         --num_passes;
     }
 
