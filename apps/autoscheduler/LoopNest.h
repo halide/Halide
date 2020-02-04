@@ -60,12 +60,32 @@ struct Statistics {
     int num_memoized_featurizations{0};
     int num_memoization_hits{0};
     int num_memoization_misses{0};
+    std::chrono::duration<double> generate_children_time{0};
     std::chrono::duration<double> calculate_cost_time{0};
     std::chrono::duration<double> enqueue_time{0};
+    std::chrono::duration<double> compute_in_tiles_time{0};
+    std::chrono::duration<double> filter_thread_tiles_time{0};
+    std::chrono::duration<double> filter_parallel_tiles_time{0};
     std::chrono::duration<double> feature_write_time{0};
     std::chrono::duration<double> featurization_time{0};
     int num_schedules_enqueued{0};
     std::chrono::duration<double> cost_model_evaluation_time{0};
+
+    double total_generate_children_time() const {
+        return std::chrono::duration_cast<std::chrono::milliseconds>(generate_children_time).count();
+    }
+
+    double total_compute_in_tiles_time() const {
+        return std::chrono::duration_cast<std::chrono::milliseconds>(compute_in_tiles_time).count();
+    }
+
+    double total_filter_thread_tiles_time() const {
+        return std::chrono::duration_cast<std::chrono::milliseconds>(filter_thread_tiles_time).count();
+    }
+
+    double total_filter_parallel_tiles_time() const {
+        return std::chrono::duration_cast<std::chrono::milliseconds>(filter_parallel_tiles_time).count();
+    }
 
     double total_feature_write_time() const {
         return std::chrono::duration_cast<std::chrono::milliseconds>(feature_write_time).count();

@@ -158,6 +158,9 @@ public:
     // The predicted runtimes
     Output<Buffer<float>> prediction_output{"prediction_output", 1};
 
+    // Predicted per stage run times
+    Output<Buffer<float>> cost_per_stage_output{"cost_per_stage_output", 2};
+
     // The loss. L2 on relative throughput.
     Output<Buffer<float>> loss_output{"loss_output", 0};
 
@@ -452,11 +455,12 @@ public:
         Func runtime_per_stage;
         // Change units so that network weights are in a human-readable range.
         runtime_per_stage(n, w) = cost * 1e-9f;
+        cost_per_stage_output(n, w) = runtime_per_stage(n, w);
 
         // Sum across the stages.
         Func prediction;
         RDom r_reduce(0, num_stages);
-        prediction(n) += runtime_per_stage(n, r_reduce);
+        prediction(n) += cost_per_stage_output(n, r_reduce);
 
         prediction_output(n) = prediction(n);
 
@@ -551,6 +555,9 @@ public:
             prediction_output.compute_root().split(n, no, n, 8).parallel(no);
             prediction_output.bound(n, 0, batch_size);
 
+            cost_per_stage_output.specialize(batch_size < 8).split(n, no, n, 1);
+            cost_per_stage_output.compute_root().split(n, no, n, 8).parallel(no);
+
             // schedule for the forwards path
             const int vec = 8;
 
@@ -559,8 +566,7 @@ public:
                 Var ci, wi;
                 if (!training) {
                     relu
-                        .compute_at(prediction_output, n)
-                        .store_at(prediction_output, no)
+                        .compute_at(cost_per_stage_output, n)
                         .tile(c, w, ci, wi, vec, 4, TailStrategy::RoundUp)
                         .vectorize(ci);
                     conv.compute_at(relu, c);
@@ -598,7 +604,7 @@ public:
             // across the batch.
             if (!training) {
                 normalized_schedule_features
-                    .compute_at(prediction_output, no)
+                    .compute_at(cost_per_stage_output, n)
                     .vectorize(n);
             } else {
                 normalized_schedule_features

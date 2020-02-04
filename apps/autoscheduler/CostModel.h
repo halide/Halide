@@ -17,7 +17,7 @@ public:
 
     // Enqueue a schedule to be evaluated. Returns a buffer of
     // schedule_features that should be filled in by the caller.
-    virtual void enqueue(int ns, Halide::Runtime::Buffer<float> *schedule_feats, double *cost_ptr) = 0;
+    virtual void enqueue(int ns, Halide::Runtime::Buffer<float> *schedule_feats, double *cost_ptr, std::vector<double>* cost_per_stage_ptr) = 0;
 
     // Evaluate all schedules in the queue.
     virtual void evaluate_costs() = 0;

@@ -229,6 +229,7 @@ struct State {
     IntrusivePtr<const LoopNest> root;
     IntrusivePtr<const State> parent;
     double cost = 0;
+    std::vector<double> cost_per_stage;
     int num_decisions_made = 0;
     bool penalized = false;
 
@@ -855,7 +856,7 @@ struct State {
         // of internal buffer space), so that the evaluations can be
         // batched.
         t1 = std::chrono::high_resolution_clock::now();
-        cost_model->enqueue(num_stages, &schedule_features, &cost);
+        cost_model->enqueue(num_stages, &schedule_features, &cost, &cost_per_stage);
         stats.enqueue_time += std::chrono::high_resolution_clock::now() - t1;
         ++stats.num_schedules_enqueued;
 
@@ -905,6 +906,7 @@ struct State {
         s->parent = this;
         s->root = root;
         s->cost = cost;
+        s->cost_per_stage = cost_per_stage;
         s->num_decisions_made = num_decisions_made;
         return s;
     }
@@ -1212,8 +1214,14 @@ struct State {
 
             // 2) Realize it somewhere
             for (int vector_dim : vector_dims) {
+                auto t1 = std::chrono::high_resolution_clock::now();
                 auto tile_options = root->compute_in_tiles(node, nullptr, params, target, vector_dim, false, false);
+                stats.compute_in_tiles_time += std::chrono::high_resolution_clock::now() - t1;
+
+                t1 = std::chrono::high_resolution_clock::now();
                 auto options = filter_thread_tile_options(params, target, tile_options);
+                stats.filter_thread_tiles_time += std::chrono::high_resolution_clock::now() - t1;
+
                 for (const auto& o : options) {
                     if (num_children >= 1 && o.max_idle_lane_wastage > 0.5) {
                         break;
@@ -1317,7 +1325,9 @@ struct State {
                             return;
                         }
 
+                        auto t1 = std::chrono::high_resolution_clock::now();
                         auto options = filter_parallel_tile_options(params, target, node, block_tilings, stage_sizes[0]);
+                        stats.filter_parallel_tiles_time += std::chrono::high_resolution_clock::now() - t1;
 
                         for (const auto &o : options) {
                             if (num_children >= 1 && o.idle_core_wastage > 1.2) {
@@ -1988,6 +1998,9 @@ IntrusivePtr<State> optimal_schedule_pass(FunctionDAG &dag,
                     if (penalty > 1) {
                         state->penalized = true;
                         state->cost *= penalty;
+                        for (auto& c : state->cost_per_stage) {
+                            c *= penalty;
+                        }
                         // After penalizing this state, if it's no
                         // longer the best, defer it. We set the
                         // 'penalized' flag so that we know not to
@@ -2034,7 +2047,9 @@ IntrusivePtr<State> optimal_schedule_pass(FunctionDAG &dag,
                 return best;
             }
 
+            auto t1 = std::chrono::high_resolution_clock::now();
             state->generate_children(dag, params, target, cost_model, enqueue_new_children, stats, compute_root_options);
+            stats.generate_children_time += std::chrono::high_resolution_clock::now() - t1;
             expanded++;
         }
 
@@ -2050,6 +2065,21 @@ IntrusivePtr<State> optimal_schedule_pass(FunctionDAG &dag,
         }
 
         for (size_t j = 0; j < q.size(); j++) {
+            //float cost_per_stage_sum = 0;
+            //for (const auto& c : q[j]->cost_per_stage) {
+                //cost_per_stage_sum += c;
+            //}
+
+            //if (std::abs(cost_per_stage_sum - q[j]->cost) > 0.1) {
+                //std::cerr << "Sum of per stage costs: " << cost_per_stage_sum << "; cost: " << q[j]->cost << "\n";
+                //for (const auto& c : q[j]->cost_per_stage) {
+                    //std::cerr << c << ", ";
+                //}
+                //q[j]->root->dump("", nullptr);
+                //std::cerr << "\n";
+                //internal_assert(false);
+            //}
+
             if (std::isinf(q[j]->cost)) {
                 debug(0) << "Infinite cost on intermediate state: " << q[j]->cost << "\n";
                 q[j]->dump();
@@ -2264,6 +2294,10 @@ void generate_schedule(const std::vector<Function> &outputs,
     aslog(1) << "Total enqueue time (ms): " << stats.total_enqueue_time() << "\n";
     aslog(1) << "Total calculate cost time (ms): " << stats.total_calculate_cost_time() << "\n";
     aslog(1) << "Total feature write time (ms): " << stats.total_feature_write_time() << "\n";
+    aslog(1) << "Total generate children time (ms): " << stats.total_generate_children_time() << "\n";
+    aslog(1) << "Total compute in tiles time (ms): " << stats.total_compute_in_tiles_time() << "\n";
+    aslog(1) << "Total filter thread tiles time (ms): " << stats.total_filter_thread_tiles_time() << "\n";
+    aslog(1) << "Total filter parallel tiles time (ms): " << stats.total_filter_parallel_tiles_time() << "\n";
 
     aslog(1) << "Number of schedules evaluated by cost model: " << stats.num_schedules_enqueued << '\n';
     aslog(1) << "Total cost model evaluation time (ms): " << stats.total_cost_model_evaluation_time() << "\n";

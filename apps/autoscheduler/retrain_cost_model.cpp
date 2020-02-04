@@ -530,7 +530,8 @@ int main(int argc, char **argv) {
                         for (size_t j = 0; j < batch_size; j++) {
                             auto &sched = it->second;
                             Buffer<float> buf;
-                            tp->enqueue(pipeline.num_stages, &buf, &sched.prediction[model]);
+                            std::vector<double> cost_per_stage;
+                            tp->enqueue(pipeline.num_stages, &buf, &sched.prediction[model], &cost_per_stage);
                             runtimes(j) = sched.runtimes[0];
                             if (runtimes(j) < runtimes(fastest_idx)) {
                                 fastest_idx = j;

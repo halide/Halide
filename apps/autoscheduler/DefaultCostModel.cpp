@@ -44,8 +44,9 @@ bool ends_with(const std::string &str, const std::string &suffix) {
 
 class DefaultCostModel : public CostModel {
     Weights weights;
-    Buffer<float> schedule_feat_queue, pipeline_feat_queue, costs;
+    Buffer<float> schedule_feat_queue, pipeline_feat_queue, costs, costs_per_stage;
     Buffer<double *> cost_ptrs;
+    std::vector<std::vector<double>*> cost_per_stage_ptrs;
     int cursor, num_stages, num_cores;
 
     const std::string weights_in_path, weights_out_path;
@@ -68,7 +69,7 @@ public:
         num_cores = n;
     }
 
-    void enqueue(int ns, Buffer<float> *schedule_feats, double *cost_ptr) override {
+    void enqueue(int ns, Buffer<float> *schedule_feats, double *cost_ptr, std::vector<double> *cost_per_stage_ptr) override {
         num_stages = ns;
 
         // We know the most stages that will ever be enqueued from the schedule features
@@ -89,7 +90,9 @@ public:
             if (!costs.data()) {
                 assert(!cost_ptrs.data());
                 costs = Buffer<float>(batch_size);
+                costs_per_stage = Buffer<float>(batch_size, max_num_stages);
                 cost_ptrs = Buffer<double *>(batch_size);
+                cost_per_stage_ptrs.resize(batch_size);
             }
         }
 
@@ -99,6 +102,8 @@ public:
 
         *schedule_feats = schedule_feat_queue.sliced(0, cursor);
         cost_ptrs(cursor) = cost_ptr;
+        cost_per_stage_ptr->resize(num_stages, 0);
+        cost_per_stage_ptrs[cursor] = cost_per_stage_ptr;
 
         cursor++;
     }
@@ -144,6 +149,7 @@ public:
         }
 
         Buffer<float> dst = costs.cropped(0, 0, cursor);
+        Buffer<float> dst_costs_per_stage = costs_per_stage.cropped({{0, cursor}, {0, num_stages}});
 
         int fastest_idx = 0;
         for (int i = 0; i < cursor; i++) {
@@ -167,6 +173,7 @@ public:
                                       head2_filter_update, head2_bias_update,
                                       conv1_filter_update, conv1_bias_update,
                                       dst,
+                                      dst_costs_per_stage,
                                       loss);
         (void)result;
         assert(result == 0);
@@ -217,6 +224,7 @@ public:
         assert(schedule_feat_queue.data());
 
         Buffer<float> dst = costs.cropped(0, 0, cursor);
+        Buffer<float> dst_costs_per_stage = costs_per_stage.cropped({{0, cursor}, {0, num_stages}});
 
         auto loss = Buffer<float>::make_scalar();
 
@@ -229,16 +237,21 @@ public:
                                 weights.head2_filter, weights.head2_bias,
                                 weights.conv1_filter, weights.conv1_bias,
                                 0.0f, 0, 0, nullptr,
-                                dst, loss);
+                                dst, dst_costs_per_stage, loss);
         (void)result;
         assert(result == 0);
 
         for (int i = 0; i < cursor; i++) {
             assert(cost_ptrs(i));
             *(cost_ptrs(i)) = dst(i);
+
+            for (int s = 0; s < num_stages; ++s) {
+                (*cost_per_stage_ptrs[i])[s] = dst_costs_per_stage(i, s);
+            }
         }
 
         cursor = 0;
+        cost_per_stage_ptrs.clear();
     }
 
     void load_weights() {
