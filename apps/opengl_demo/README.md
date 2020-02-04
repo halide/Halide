@@ -37,7 +37,7 @@ This app depends on:
 On OS X, all three can be installed using [homebrew](http://brew.sh)
 
 ```sh
-brew install glfw3
+brew install glfw
 brew install libpng
 brew install libdrawtext
 ```
@@ -52,7 +52,7 @@ brew install halide
 On Ubuntu Linux, everything but libdrawtext can be installed via system packages:
 
 ```sh
-sudo apt-get install libglfw3-dev libx11-dev freeglut3-dev libfreetype6-dev libgl-dev libpng
+sudo apt-get install libglfw-dev libx11-dev freeglut3-dev libfreetype6-dev libgl-dev libpng
 ```
 
 ### Files:
