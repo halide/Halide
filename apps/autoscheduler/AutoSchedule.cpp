@@ -1321,7 +1321,7 @@ struct State {
                     vector<int> vec_dim_serial_sizes;
                     pure_stage->generate_vec_dim_serial_tilings(vec_dim_serial_sizes);
 
-                    auto parallel_tilings = generate_serial_tilings(*pure_size, node->dimensions-1, node->dimensions-1, pure_stage->vectorized_loop_index, vec_dim_serial_sizes, false);
+                    auto parallel_tilings = generate_serial_tilings(*pure_size, node->dimensions-1, node->dimensions-1, pure_stage->vectorized_loop_index, vec_dim_serial_sizes, false, true);
 
                     internal_assert(parallel_tilings.size() > 0) << " zero parallel tilings\n";
 
