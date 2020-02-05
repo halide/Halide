@@ -263,9 +263,9 @@ public:
 #endif
 
         error = halide_acquire_cl_context(user_context, &context, &cmd_queue);
-        // don't abort: that would prevent host_supports_device_api() from being able
-        // work properly. Setting the error code here should be sufficient.
+        // don't abort: that would prevent host_supports_device_api() from being able work properly.
         if (!context || !cmd_queue) {
+            error(user_context) << "OpenCL: null context or cmd_queue";
             error = -1;
         }
     }
