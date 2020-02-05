@@ -263,7 +263,11 @@ public:
 #endif
 
         error = halide_acquire_cl_context(user_context, &context, &cmd_queue);
-        halide_assert(user_context, context != NULL && cmd_queue != NULL);
+        // don't abort: that would prevent host_supports_device_api() from being able
+        // work properly. Setting the error code here should be sufficient.
+        if (!context || !cmd_queue) {
+            error = -1;
+        }
     }
 
     INLINE ~ClContext() {
@@ -720,7 +724,9 @@ WEAK int halide_opencl_device_sync(void *user_context, halide_buffer_t *) {
     debug(user_context) << "CL: halide_opencl_device_sync (user_context: " << user_context << ")\n";
 
     ClContext ctx(user_context);
-    halide_assert(user_context, ctx.error == CL_SUCCESS);
+    if (ctx.error != CL_SUCCESS) {
+        return ctx.error;
+    }
 
 #ifdef DEBUG_RUNTIME
     uint64_t t_before = halide_current_time_ns(user_context);
