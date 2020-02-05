@@ -291,19 +291,16 @@ int main(int argc, char **argv) {
 
         // Select an appropriate GPU API, as we did in lesson 12
         Target target = get_host_target();
-        DeviceAPI d = DeviceAPI::None;
         if (target.os == Target::OSX) {
             target.set_feature(Target::Metal);
-            d = DeviceAPI::Metal;
         } else {
             target.set_feature(Target::OpenCL);
-            d = DeviceAPI::OpenCL;
         }
 
         // This check isn't strictly necessary, but it allows a more graceful
         // exit if running on a system that doesn't have the expected drivers
         // and/or hardware present.
-        if (!host_supports_device_api(d, target)) {
+        if (!host_supports_target_device(target)) {
             printf("Requested GPU is not supported; skipping this test. (Do you have the proper hardware and/or driver installed?)\n");
             return 0;
         }

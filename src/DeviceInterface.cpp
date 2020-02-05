@@ -30,7 +30,12 @@ bool lookup_runtime_routine(const std::string &name,
 
 }  // namespace
 
-bool host_supports_device_api(DeviceAPI d, const Target &t) {
+bool host_supports_target_device(const Target &t) {
+    const DeviceAPI d = t.get_required_device_api();
+    if (d == DeviceAPI::None) {
+        return true;
+    }
+
     const struct halide_device_interface_t *i = get_device_interface_for_device_api(d, t);
     if (!i) {
         debug(1) << "host_supports_device_api: get_device_interface_for_device_api() failed for d=" << (int)d << " t=" << t << "\n";

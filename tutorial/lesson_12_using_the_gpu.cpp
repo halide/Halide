@@ -287,24 +287,24 @@ Target find_gpu_target() {
     // Start with a target suitable for the machine you're running this on.
     Target target = get_host_target();
 
-    std::vector<std::pair<DeviceAPI, Target::Feature>> devices_to_try;
+    std::vector<Target::Feature> features_to_try;
     if (target.os == Target::Windows) {
         // Try D3D12 first; if that fails, try OpenCL.
-        devices_to_try.emplace_back(DeviceAPI::D3D12Compute, Target::D3D12Compute);
-        devices_to_try.emplace_back(DeviceAPI::OpenCL, Target::OpenCL);
+        features_to_try.push_back(Target::D3D12Compute);
+        features_to_try.push_back(Target::OpenCL);
     } else if (target.os == Target::OSX) {
         // OS X doesn't update its OpenCL drivers, so they tend to be broken.
         // CUDA would also be a fine choice on machines with NVidia GPUs.
-        devices_to_try.emplace_back(DeviceAPI::Metal, Target::Metal);
+        features_to_try.push_back(Target::Metal);
     } else {
-        devices_to_try.emplace_back(DeviceAPI::OpenCL, Target::OpenCL);
+        features_to_try.push_back(Target::OpenCL);
     }
     // Uncomment the following lines to also try CUDA:
-    // devices_to_try.emplace_back(DeviceAPI::CUDA, Target::CUDA);
+    // features_to_try.push_back(Target::CUDA);
 
-    for (const auto &d : devices_to_try) {
-        Target new_target = target.with_feature(d.second);
-        if (host_supports_device_api(d.first, new_target)) {
+    for (Target::Feature f : features_to_try) {
+        Target new_target = target.with_feature(f);
+        if (host_supports_target_device(new_target)) {
             return new_target;
         }
     }
