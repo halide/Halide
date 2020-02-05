@@ -963,8 +963,18 @@ all: distrib test_internal
 # linker map file.
 ifeq ($(UNAME), Darwin)
     MAP_FLAGS= -Wl,-map -Wl,$(BUILD_DIR)/llvm_objects/list.all
+    LIST_OUTPUT = /dev/null
+else
+ifeq ($(OS), Windows_NT)
+    # This is for MinGW: the map file gets written, but the
+    # compilation fails with a file truncation error.  Instead,
+    # we use the old strategy.
+    MAP_FLAGS= -Wl,-t
+    LIST_OUTPUT = $(BUILD_DIR)/llvm_objects/list.all
 else
     MAP_FLAGS= -Wl,-Map=$(BUILD_DIR)/llvm_objects/list.all
+    LIST_OUTPUT = /dev/null
+endif
 endif
 
 $(BUILD_DIR)/llvm_objects/list: $(OBJECTS) $(INITIAL_MODULES)
@@ -973,7 +983,7 @@ $(BUILD_DIR)/llvm_objects/list: $(OBJECTS) $(INITIAL_MODULES)
 	# part of the linker map file, the object files in which archives it uses to
 	# resolve symbols. We only care about the libLLVM ones, which we will filter below.
 	@mkdir -p $(@D)
-	$(CXX) -o /dev/null -shared $(MAP_FLAGS) $(OBJECTS) $(INITIAL_MODULES) $(LLVM_STATIC_LIBS) $(LLVM_SYSTEM_LIBS) $(COMMON_LD_FLAGS) 2>&1 > /dev/null
+	$(CXX) -o /dev/null -shared $(MAP_FLAGS) $(OBJECTS) $(INITIAL_MODULES) $(LLVM_STATIC_LIBS) $(LLVM_SYSTEM_LIBS) $(COMMON_LD_FLAGS) > $(LIST_OUTPUT)
 	# if the list has changed since the previous build, or there
 	# is no list from a previous build, then delete any old object
 	# files and re-extract the required object files
