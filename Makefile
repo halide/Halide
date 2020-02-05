@@ -1787,7 +1787,7 @@ $(FILTERS_DIR)/multi_rungen2: $(BUILD_DIR)/RunGenMain.o $(BIN_DIR)/$(TARGET)/run
 	@mkdir -p $(@D)
 	$(CXX) -std=c++11 -I$(FILTERS_DIR) $^ $(GEN_AOT_LD_FLAGS) $(IMAGE_IO_LIBS) -o $@
 
-$(BIN_DIR)/tutorial_%: $(ROOT_DIR)/tutorial/%.cpp $(BIN_DIR)/libHalide.$(SHARED_EXT) $(INCLUDE_DIR)/Halide.h
+$(BIN_DIR)/tutorial_%: $(ROOT_DIR)/tutorial/%.cpp $(BIN_DIR)/libHalide.$(SHARED_EXT) $(INCLUDE_DIR)/Halide.h $(INCLUDE_DIR)/HalideRuntime.h
 	@ if [[ $@ == *_run ]]; then \
 		export TUTORIAL=$* ;\
 		export LESSON=`echo $${TUTORIAL} | cut -b1-9`; \
@@ -2005,7 +2005,7 @@ $(TEST_APPS_DEPS): distrib build_python_bindings
 		HL_TARGET=$(HL_TARGET) \
 		|| exit 1 ; \
 
-.PHONY: test_apps $(BUILD_APPS_DEPS) 
+.PHONY: test_apps $(BUILD_APPS_DEPS)
 test_apps: $(BUILD_APPS_DEPS)
 	$(MAKE) -f $(THIS_MAKEFILE) -j1 $(TEST_APPS_DEPS)
 
