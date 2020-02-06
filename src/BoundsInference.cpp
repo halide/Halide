@@ -734,6 +734,7 @@ public:
                 result.push(farg,
                             Interval(Variable::make(Int(32), arg + ".min"),
                                      Variable::make(Int(32), arg + ".max")));
+                debug(0) << "populate_scope - " << arg << "\n";
             }
             if (stage > 0) {
                 for (const ReductionVariable &rv : rvars) {
@@ -743,6 +744,7 @@ public:
                 }
             }
 
+            debug(0) << "populate_scope end \n";
             /*for (size_t i = 0; i < func.definition().schedule().bounds().size(); i++) {
                 const Bound &b = func.definition().schedule().bounds()[i];
                 result.push(b.var, Interval(b.min, (b.min + b.extent) - 1));
@@ -795,6 +797,14 @@ public:
                 s.stage_prefix = s.name + ".s" + std::to_string(s.stage) + ".";
                 s.compute_exprs();
                 stages.push_back(s);
+            }
+        }
+
+        for (const auto& group: fused_pairs_in_groups) {
+            debug(0) << "Group: \n";
+            for (const auto& pair: group) {
+                debug(0) << pair.func_1 << " " << pair.stage_1 << " "
+                         << pair.func_2 << " " << pair.stage_2 << "\n";
             }
         }
 
@@ -870,10 +880,12 @@ public:
                 }
             } else {
                 for (const auto &cval : consumer.exprs) {
+                    debug(0) << "consumer.exprs - " << cval.value << "\n";
                     map<string, Box> new_boxes;
                     new_boxes = boxes_required(cval.value, scope, func_bounds);
                     for (auto &i : new_boxes) {
                         // Add the condition on which this value is evaluated to the box before merging
+                        debug(0) << "new_box - " << i.first << " " << i.second << "\n";
                         Box &box = i.second;
                         box.used = cval.cond;
                         merge_boxes(boxes[i.first], box);
@@ -882,6 +894,7 @@ public:
             }
 
             // Expand the bounds required of all the producers found.
+            // We are checking until i, because stages are topologically sorted.
             for (size_t j = 0; j < i; j++) {
                 Stage &producer = stages[j];
                 // A consumer depends on *all* stages of a producer, not just the last one.
@@ -926,6 +939,7 @@ public:
         for (Function output : outputs) {
             Box output_box;
             string buffer_name = output.name();
+            debug(0) << "outputs size " << output.outputs() << "\n";
             if (output.outputs() > 1) {
                 // Use the output size of the first output buffer
                 buffer_name += ".0";
@@ -951,6 +965,7 @@ public:
             for (size_t i = 0; i < stages.size(); i++) {
                 Stage &s = stages[i];
                 if (!s.func.same_as(output)) continue;
+                debug(0) << "Updating to the output box\n";
                 s.bounds[{s.name, s.stage}] = output_box;
             }
         }
@@ -1006,17 +1021,40 @@ public:
         }
 
         // Figure out how much of it we're producing
-        Box box;
+        // Box box;
+        map<string, Box> boxes_for_fused_group;
         if (!no_pipelines && producing >= 0 && !f.has_extern_definition()) {
             Scope<Interval> empty_scope;
-            box = box_provided(body, stages[producing].name, empty_scope, func_bounds);
-            internal_assert((int)box.size() == f.dimensions());
+            // box = box_provided(body, stages[producing].name, empty_scope, func_bounds);
+            // internal_assert((int)box.size() == f.dimensions());
+            // debug(0) << "Box - " << op->name << " " << stages[producing].name << " " << box << "\n";
+
+            auto boxes = boxes_provided(body, empty_scope, func_bounds);
+            boxes_for_fused_group[stage_name] = boxes[stages[producing].name];
+
+            for (const auto& b: boxes) {
+                // debug(0) << "Boxes - " << b.first << " " << b.second << "\n";
+                // TODO: make it nicer.
+                for (const auto& group: fused_pairs_in_groups) {
+                    // debug(0) << "Group: \n";
+                    for (const auto& pair: group) {
+                        if (pair.func_1 == b.first) {
+                            // debug(0) << pair.func_1 << " " << pair.stage_1 << " " 
+                            //        << pair.func_2 << " " << pair.stage_2 << "\n";
+                            boxes_for_fused_group[pair.func_2 + ".s" + std::to_string(pair.stage_2)] = boxes[pair.func_2];
+                        }
+                    }
+                }
+            }
         }
 
         // Recurse.
         body = mutate(body);
 
         if (!no_pipelines) {
+            debug(0) << "visit(const For *op) " << op->name << " " << "\n";
+
+            // debug(0) << "!no_pipelines " << op->name << "\n\n\n\n\n\n";
             // We only care about the bounds of a func if:
             // A) We're not already in a pipeline over that func AND
             // B.1) There's a production of this func somewhere inside this loop OR
@@ -1041,22 +1079,48 @@ public:
                 }
             }
 
+            for (auto prod : inner_productions) {
+                debug(0) << "inner prod - " << prod << "\n";
+            }
             // Finally, define the production bounds for the thing
             // we're producing.
             if (producing >= 0 && !inner_productions.empty()) {
                 const vector<string> f_args = f.args();
-                for (size_t i = 0; i < box.size(); i++) {
-                    internal_assert(box[i].is_bounded());
-                    string var = stage_name + "." + f_args[i];
+                for (const auto& b: boxes_for_fused_group) {
+                    const auto& box = b.second;
+                    for (size_t i = 0; i < box.size(); i++) {
+                        internal_assert(box[i].is_bounded());
+                        string var = b.first + "." + f_args[i];
 
-                    if (box[i].is_single_point()) {
-                        body = LetStmt::make(var + ".max", Variable::make(Int(32), var + ".min"), body);
-                    } else {
-                        body = LetStmt::make(var + ".max", box[i].max, body);
+                        if (box[i].is_single_point()) {
+                            body = LetStmt::make(var + ".max", Variable::make(Int(32), var + ".min"), body);
+                        } else {
+                            body = LetStmt::make(var + ".max", box[i].max, body);
+                        }
+
+                        body = LetStmt::make(var + ".min", box[i].min, body);
+                        debug(0) << "Generating some min max for " << var << "\n" << box[i].min << "\n" << box[i].max << "\n";
                     }
-
-                    body = LetStmt::make(var + ".min", box[i].min, body);
                 }
+                // if(op->name == "l_part.s0.y.fused.y") {
+                //     std::vector<string> fused_names = {"u_part$1", "v_part$1"};
+                //     for (const string& fused_name: fused_names) {
+                //         const auto& u_box = boxes[fused_name];
+                //         for (size_t i = 0; i < u_box.size(); i++) {
+                //             internal_assert(u_box[i].is_bounded());
+                //             string var = fused_name + ".s0." + f_args[i];
+
+                //             if (u_box[i].is_single_point()) {
+                //                 body = LetStmt::make(var + ".max", Variable::make(Int(32), var + ".min"), body);
+                //             } else {
+                //                 body = LetStmt::make(var + ".max", u_box[i].max, body);
+                //             }
+
+                //             body = LetStmt::make(var + ".min", u_box[i].min, body);
+                //             debug(0) << "Generating some min max for " << var << "\n" << u_box[i].min << "\n" << u_box[i].max << "\n";
+                //         }
+                //     }
+                // }
             }
 
             // And the current bounds on its reduction variables, and
@@ -1136,8 +1200,10 @@ Stmt bounds_inference(Stmt s,
     // which loops should be fused together.
     vector<vector<Function>> fused_func_groups;
     for (const vector<string> &group : fused_groups) {
+        debug(0) << "Group *: \n";
         vector<Function> fs;
         for (const string &fname : group) {
+            debug(0) << fname << "\n";
             fs.push_back(env.find(fname)->second);
         }
         fused_func_groups.push_back(fs);

@@ -458,8 +458,8 @@ class AttemptStorageFoldingOfFunction : public IRMutator {
 
             // TODO: should call cse() here, but there can be duplicate names in the Expr.
             // https://github.com/halide/Halide/issues/3793
-            Expr min = simplify(box[dim].min);
-            Expr max = simplify(box[dim].max);
+            Expr min = simplify(common_subexpression_elimination(box[dim].min));
+            Expr max = simplify(common_subexpression_elimination(box[dim].max));
 
             Expr min_provided, max_provided, min_required, max_required;
             if (func.schedule().async() && !explicit_only) {
@@ -489,7 +489,7 @@ class AttemptStorageFoldingOfFunction : public IRMutator {
             Expr extent = Max::make(extent_initial, extent_steady);
             // TODO: should call cse() here, but there can be duplicate names in the Expr.
             // https://github.com/halide/Halide/issues/3793
-            extent = simplify(extent, true, bounds);
+            extent = simplify(common_subexpression_elimination(extent), true, bounds);
 
             // Find the StorageDim corresponding to dim.
             const std::vector<StorageDim> &storage_dims = func.schedule().storage_dims();
