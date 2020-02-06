@@ -200,8 +200,15 @@ jobs:
         export TEST_TMPDIR="${HALIDE_TEMP_DIR}"
         cd ${HALIDE_BUILD_DIR}
 
-        # TODO test_apps
-        make -f ${HALIDE_SOURCE_DIR}/Makefile -j ${PARALLEL_JOBS} run_tests
+        # Parallel
+        for t in test_internal test_correctness test_error test_tutorial test_warning test_generator; do
+          make -f ${HALIDE_SOURCE_DIR}/Makefile -j ${PARALLEL_JOBS} $t
+        done
+
+        # Serial
+        for t in test_performance test_auto_schedule; do
+          make -f ${HALIDE_SOURCE_DIR}/Makefile -j ${PARALLEL_JOBS} $t
+        done
 
     - name: Run Tests (CMake)
       if: startsWith(matrix.build_tool, 'cmake')
