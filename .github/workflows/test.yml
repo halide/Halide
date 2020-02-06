@@ -5,6 +5,7 @@
 #  cmake_static is generally broken.
 #  add test_python.
 #  test_apps (requires python)
+#  test_auto_schedule is flaky.
 
 name: Build+Test
 on:
@@ -152,8 +153,6 @@ jobs:
           --single-branch \
           --depth 1
 
-        ls -l ${PYBIND11_PATH}
-
     - name: Install LLVM
       shell: bash
       run: |
@@ -194,7 +193,7 @@ jobs:
         # Build Halide
         cd ${HALIDE_BUILD_DIR}
         # TODO add build_python_bindings build_apps
-        make -f ${HALIDE_SOURCE_DIR}/Makefile -j ${PARALLEL_JOBS} distrib build_tests
+        make -f ${HALIDE_SOURCE_DIR}/Makefile -j ${PARALLEL_JOBS} distrib build_tests build_python_bindings build_apps
 
     - name: Build Halide (CMake)
       if: startsWith(matrix.build_tool, 'cmake')
@@ -212,14 +211,22 @@ jobs:
         export TEST_TMPDIR="${HALIDE_TEMP_DIR}"
         cd ${HALIDE_BUILD_DIR}
 
+        TEST_GROUPS_PARALLEL="apps internal correctness error warning generator"
+
+        # tutorial has some performance measurements that can be flaky if we run them in parallel
+        TEST_GROUPS_SERIAL="performance tutorial"
+
+        # opengl won't work on the buildbots. auto_schedule is just flaky.
+        TEST_GROUPS_BROKEN="opengl auto_schedule"
+
         # Parallel
-        for t in test_internal test_correctness test_error test_tutorial test_warning test_generator; do
-          make -f ${HALIDE_SOURCE_DIR}/Makefile -j ${PARALLEL_JOBS} $t
+        for t in ${TEST_GROUPS_PARALLEL}; do
+          make -f ${HALIDE_SOURCE_DIR}/Makefile -j ${PARALLEL_JOBS} test_${t}
         done
 
         # Serial
-        for t in test_performance test_auto_schedule; do
-          make -f ${HALIDE_SOURCE_DIR}/Makefile -j ${PARALLEL_JOBS} $t
+        for t in ${TEST_GROUPS_SERIAL}; do
+          make -f ${HALIDE_SOURCE_DIR}/Makefile -j ${PARALLEL_JOBS} test_$t
         done
 
     - name: Run Tests (CMake)
@@ -227,8 +234,13 @@ jobs:
       shell: bash
       run: |
         # Test Halide
+        TEST_GROUPS_PARALLEL="internal|correctness|error|tutorial|warning|generator"
+
+        # tutorial has some performance measurements that can be flaky if we run them in parallel
+        TEST_GROUPS_SERIAL="performance|tutorial"
+
+        # opengl won't work on the buildbots. auto_schedule is just flaky.
         TEST_GROUPS_BROKEN="opengl|auto_schedule"
-        TEST_GROUPS_SERIAL="performance"
 
         export TEST_TMPDIR="${HALIDE_TEMP_DIR}"
         cd ${HALIDE_BUILD_DIR}
@@ -236,7 +248,7 @@ jobs:
         # Parallel
         ctest \
           -j ${PARALLEL_JOBS} \
-          -LE "${TEST_GROUPS_BROKEN}|${TEST_GROUPS_SERIAL}" \
+          -L "${TEST_GROUPS_PARALLEL}" \
           --output-on-failure
 
         # Serial
