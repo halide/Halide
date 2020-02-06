@@ -191,7 +191,6 @@ struct InterleavedRamp {
 };
 
 bool is_interleaved_ramp(const Expr &e, InterleavedRamp *result) {
-    debug(0) << "is_interleaved_ramp of " << e << "\n";
     if (const Ramp *r = e.as<Ramp>()) {
         result->base = r->base;
         result->stride = r->stride;

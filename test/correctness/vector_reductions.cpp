@@ -3,32 +3,79 @@
 using namespace Halide;
 
 int main(int argc, char **argv) {
-    for (int dst_lanes : {1, 2, 3, 4, 8}) {
-        for (int reduce_factor : {2, 3, 4, 8, 16}) {
-            std::vector<Type> types
-            {UInt(8), Int(8), UInt(16), Int(16), UInt(32), Int(32),
-                    UInt(64), Int(64), Float(16), Float(32), Float(64)};
+    for (int dst_lanes : {1, 2, 3, 4}) {
+        for (int reduce_factor : {2, 3, 4, 8}) {
+            std::vector<Type> types =
+                {UInt(8), Int(8), UInt(16), Int(16), UInt(32), Int(32),
+                 UInt(64), Int(64), Float(16), Float(32), Float(64)};
             const int src_lanes = dst_lanes * reduce_factor;
             for (Type src_type : types) {
+                //if (src_type == Float(16)) continue;
+
                 for (int widen_factor : {1, 2, 4}) {
                     Type dst_type = src_type.with_bits(src_type.bits() * widen_factor);
                     if (std::find(types.begin(), types.end(), dst_type) == types.end()) {
                         continue;
                     }
 
-                    Var x, xo, xi;
-                    RDom r(0, reduce_factor);
-                    RVar rx;
-                    {
+                    for (int op = 0; op < 6; op++) {
+                        if (dst_type == Float(16) && reduce_factor > 2) {
+                            // Reductions of float16s is really not very associative
+                            continue;
+                        }
+
+                        Var x, xo, xi;
+                        RDom r(0, reduce_factor);
+                        RVar rx;
                         Func in;
-                        in(x) = cast(src_type, x);
+                        if (src_type.is_float()) {
+                            in(x) = cast(src_type, random_float());
+                        } else {
+                            in(x) = cast(src_type, random_int());
+                        }
                         in.compute_root();
 
                         Expr rhs = cast(dst_type, in(x * reduce_factor + r));
 
-                        Func f, ref;
-                        f(x) += rhs;
-                        ref(x) += rhs;
+                        if (op == 4 || op == 5) {
+                            rhs = rhs > cast(rhs.type(), 5);
+                        }
+
+                        Func f, ref("ref");
+                        switch (op) {
+                        case 0:
+                            f(x) += rhs;
+                            ref(x) += rhs;
+                            break;
+                        case 1:
+                            f(x) *= rhs;
+                            ref(x) *= rhs;
+                            break;
+                        case 2:
+                            f(x) = rhs.type().min();
+                            ref(x) = rhs.type().min();
+                            f(x) = max(f(x), rhs);
+                            ref(x) = max(f(x), rhs);
+                            break;
+                        case 3:
+                            f(x) = rhs.type().max();
+                            ref(x) = rhs.type().max();
+                            f(x) = min(f(x), rhs);
+                            ref(x) = min(f(x), rhs);
+                            break;
+                        case 4:
+                            f(x) = cast<bool>(false);
+                            ref(x) = cast<bool>(false);
+                            f(x) = f(x) || rhs;
+                            ref(x) = f(x) || rhs;
+                            break;
+                        case 5:
+                            f(x) = cast<bool>(true);
+                            ref(x) = cast<bool>(true);
+                            f(x) = f(x) && rhs;
+                            ref(x) = f(x) && rhs;
+                            break;
+                        }
 
                         f.compute_root()
                             .update()
@@ -43,16 +90,16 @@ int main(int argc, char **argv) {
 
                         double e = evaluate<double>(err);
 
-                        if (e > 1e-10) {
+                        if (e > 1e-3) {
                             std::cerr
-                                << "Horizontal reduction produced difference output when vectorized!\n"
+                                << "Horizontal reduction produced different output when vectorized!\n"
                                 << "Maximum error = " << e << "\n"
                                 << "Reducing from " << src_type.with_lanes(src_lanes)
-                                << " to " << dst_type.with_lanes(dst_lanes) << "\n";
+                                << " to " << dst_type.with_lanes(dst_lanes) << "\n"
+                                << "RHS: " << f.update_value() << "\n";
                             exit(-1);
                         }
                     }
-
                 }
             }
         }

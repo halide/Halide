@@ -4321,6 +4321,14 @@ void CodeGen_LLVM::visit(const VectorReduce *op) {
         return;
     }
 
+    if (op->type.element_of() == Float(16)) {
+        Expr equiv = cast(op->value.type().with_bits(32), op->value);
+        equiv = VectorReduce::make(op->op, equiv, op->type.lanes());
+        equiv = cast(op->type, equiv);
+        equiv.accept(this);
+        return;
+    }
+
     Expr (*binop)(Expr, Expr) = nullptr;
     switch (op->op) {
     case VectorReduce::Add:
@@ -4526,10 +4534,6 @@ Value *CodeGen_LLVM::call_intrin(llvm::Type *result_type, int intrin_lanes,
 
     call->setDoesNotAccessMemory();
     call->setDoesNotThrow();
-
-    debug(0) << "Intrin: ";
-    call->dump();
-    debug(0) << "\n";
 
     return call;
 }
