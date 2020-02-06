@@ -3,8 +3,6 @@
 #  LLVM doesn't provide 32-bit Linux prebuilts anymore; we must build our own for x86-32 testing.
 #  LLVM doesn't provide MinGW prebuilts; we must build our own for x86-32 testing.
 #  cmake_static is generally broken.
-#  add test_python.
-#  test_apps (requires python)
 #  test_auto_schedule is flaky.
 
 name: Build+Test
@@ -193,7 +191,8 @@ jobs:
         # Build Halide
         cd ${HALIDE_BUILD_DIR}
         # TODO add build_python_bindings build_apps
-        make -f ${HALIDE_SOURCE_DIR}/Makefile -j ${PARALLEL_JOBS} distrib build_tests build_python_bindings build_apps
+        # make -f ${HALIDE_SOURCE_DIR}/Makefile -j ${PARALLEL_JOBS} distrib build_tests build_python_bindings build_apps
+        make -f ${HALIDE_SOURCE_DIR}/Makefile -j ${PARALLEL_JOBS} distrib build_python_bindings
 
     - name: Build Halide (CMake)
       if: startsWith(matrix.build_tool, 'cmake')
@@ -211,7 +210,9 @@ jobs:
         export TEST_TMPDIR="${HALIDE_TEMP_DIR}"
         cd ${HALIDE_BUILD_DIR}
 
-        TEST_GROUPS_PARALLEL="apps internal correctness error warning generator"
+        make -f ${HALIDE_SOURCE_DIR}/Makefile test_python
+
+        TEST_GROUPS_PARALLEL="python internal correctness error warning generator apps"
 
         # tutorial has some performance measurements that can be flaky if we run them in parallel
         TEST_GROUPS_SERIAL="performance tutorial"
