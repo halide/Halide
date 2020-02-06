@@ -339,6 +339,11 @@ WEAK int create_opencl_context(void *user_context, cl_context *ctx, cl_command_q
     halide_assert(user_context, ctx != NULL && *ctx == NULL);
     halide_assert(user_context, q != NULL && *q == NULL);
 
+    if (clGetPlatformIDs == NULL) {
+        error(user_context) << "CL: clGetPlatformIDs not found\n";
+        return -1;
+    }
+
     cl_int err = 0;
 
     const cl_uint max_platforms = 4;
