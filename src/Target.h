@@ -203,6 +203,12 @@ struct Target {
      * Target. */
     bool supports_device_api(DeviceAPI api) const;
 
+    /** If this Target (including all Features) requires a specific DeviceAPI,
+     * return it. If it doesn't, return DeviceAPI::None.  If the Target has
+     * features with multiple (different) DeviceAPI requirements, the result
+     * will be an arbitrary DeviceAPI. */
+    DeviceAPI get_required_device_api() const;
+
     bool operator==(const Target &other) const {
         return os == other.os &&
                arch == other.arch &&
