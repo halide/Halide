@@ -141,6 +141,18 @@ jobs:
         echo ::set-env name=HALIDE_BUILD_DIR::"${_ROOT}/halide_build"
         echo ::set-env name=HALIDE_TEMP_DIR::"${_TEMP}"
         echo ::set-env name=PARALLEL_JOBS::"$(expr $(nproc) + 2)"
+        echo ::set-env name=PYBIND11_PATH::"${_ROOT}/pybind11"
+
+    - name: Install PyBind
+      shell: bash
+      run: |
+        git clone https://github.com/pybind/pybind11.git \
+          "${PYBIND11_PATH}" \
+          --branch v2.2 \
+          --single-branch \
+          --depth 1
+
+        ls -l ${PYBIND11_PATH}
 
     - name: Install LLVM
       shell: bash
