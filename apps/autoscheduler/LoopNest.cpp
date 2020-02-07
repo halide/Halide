@@ -338,13 +338,14 @@ vector<vector<int64_t>> generate_serial_tilings(const vector<int64_t> &s, int d,
                                                 int last_d,
                                                 int vectorized_index,
                                                 const vector<int> &vec_dim_serial_sizes,
-                                                bool filter_small_outer_extents) {
+                                                bool filter_small_outer_extents,
+                                                bool allow_inner_ones) {
     vector<vector<int64_t>> result;
     if (d == -1) {
         result.push_back(vector<int64_t>());
     } else {
         vector<vector<int64_t>> v;
-        v = generate_serial_tilings(s, d - 1, last_d, vectorized_index, vec_dim_serial_sizes, filter_small_outer_extents);
+        v = generate_serial_tilings(s, d - 1, last_d, vectorized_index, vec_dim_serial_sizes, filter_small_outer_extents, allow_inner_ones);
         for (auto t : v) {
             t.push_back(0);
             // include odd serial sizes that encourage multiples of 16 as thread tile size
@@ -372,7 +373,7 @@ vector<vector<int64_t>> generate_serial_tilings(const vector<int64_t> &s, int d,
                     continue;
                 }
                 t.back() = outer;
-                if (d == last_d && (equal_to_existing_size(s, t) || all_ones(t))) {
+                if (d == last_d && ((!allow_inner_ones && equal_to_existing_size(s, t)) || all_ones(t))) {
                     continue;
                 }
                 result.push_back(t);

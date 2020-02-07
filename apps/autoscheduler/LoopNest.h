@@ -173,7 +173,8 @@ vector<vector<int64_t>> generate_serial_tilings(const vector<int64_t> &s, int d,
                                                 int last_d,
                                                 int vectorized_index,
                                                 const vector<int> &vec_dim_serial_sizes,
-                                                bool filter_small_outer_extents=false);
+                                                bool filter_small_outer_extents=false,
+                                                bool allow_inner_ones=false);
 
 
 // Given a multi-dimensional box of dimensionality d, generate a list
