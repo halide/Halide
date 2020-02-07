@@ -514,6 +514,10 @@ class VectorSubs : public IRMutator {
     }
 
     Expr visit(const Call *op) override {
+        user_assert(!op->is_intrinsic(Call::debug_to_file))
+            << "It is not legal to use debug_to_file() on a Func that is also vectorized. "
+            << "Try removing the .vectorize() directive(s).";
+
         // Widen the call by changing the lanes of all of its
         // arguments and its return type
         vector<Expr> new_args(op->args.size());
