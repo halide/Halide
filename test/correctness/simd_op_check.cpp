@@ -888,12 +888,49 @@ public:
             // VORR     X       -       Bitwise OR
             // check("vorr", bool1 | bool2);
 
-            // VPADAL   I       -       Pairwise Add and Accumulate Long
-            // VPADD    I, F    -       Pairwise Add
-            // VPADDL   I       -       Pairwise Add Long
-            // VPMAX    I, F    -       Pairwise Maximum
-            // VPMIN    I, F    -       Pairwise Minimum
-            // We don't do horizontal ops
+            for (int f : {2, 4}) {
+                RDom r(0, f);
+
+                // VPADAL   I       -       Pairwise Add and Accumulate Long
+                // TODO
+
+                // VPADD    I, F    -       Pairwise Add
+                check("vpadd.s8", 16, sum(in_i8(f * x + r)));
+                check("vpadd.u8", 16, sum(in_u8(f * x + r)));
+                check("vpadd.s16", 8, sum(in_i16(f * x + r)));
+                check("vpadd.u16", 8, sum(in_u16(f * x + r)));
+                check("vpadd.s32", 4, sum(in_i32(f * x + r)));
+                check("vpadd.u32", 4, sum(in_u32(f * x + r)));
+
+                // VPADDL   I       -       Pairwise Add Long
+                check("vpaddl.s8", 16, sum(i16(in_i8(f * x + r))));
+                check("vpaddl.u8", 16, sum(i16(in_u8(f * x + r))));
+                check("vpaddl.u8", 16, sum(u16(in_u8(f * x + r))));
+
+                check("vpaddl.s16", 8, sum(i32(in_i16(f * x + r))));
+                check("vpaddl.u16", 8, sum(i32(in_u16(f * x + r))));
+                check("vpaddl.u16", 8, sum(u32(in_u16(f * x + r))));
+
+                check("vpaddl.s32", 4, sum(i64(in_i32(f * x + r))));
+                check("vpaddl.u32", 4, sum(i64(in_u32(f * x + r))));
+                check("vpaddl.u32", 4, sum(u64(in_u32(f * x + r))));
+
+                // VPMAX    I, F    -       Pairwise Maximum
+                check("vpmax.s8", 16, maximum(in_i8(f * x + r)));
+                check("vpmax.u8", 16, maximum(in_u8(f * x + r)));
+                check("vpmax.s16", 8, maximum(in_i16(f * x + r)));
+                check("vpmax.u16", 8, maximum(in_u16(f * x + r)));
+                check("vpmax.s32", 4, maximum(in_i32(f * x + r)));
+                check("vpmax.u32", 4, maximum(in_u32(f * x + r)));
+
+                // VPMIN    I, F    -       Pairwise Minimum
+                check("vpmin.s8", 16, minimum(in_i8(f * x + r)));
+                check("vpmin.u8", 16, minimum(in_u8(f * x + r)));
+                check("vpmin.s16", 8, minimum(in_i16(f * x + r)));
+                check("vpmin.u16", 8, minimum(in_u16(f * x + r)));
+                check("vpmin.s32", 4, minimum(in_i32(f * x + r)));
+                check("vpmin.u32", 4, minimum(in_u32(f * x + r)));
+            }
 
             // VPOP     X       F, D    Pop from Stack
             // VPUSH    X       F, D    Push to Stack
