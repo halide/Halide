@@ -190,7 +190,8 @@ struct InterleavedRamp {
     int lanes, repetitions;
 };
 
-bool is_interleaved_ramp(const Expr &e, InterleavedRamp *result) {
+bool is_interleaved_ramp(const Expr &e, const Scope<Expr> &scope, InterleavedRamp *result) {
+    debug(0) << "is_interleaved_ramp: " << e << "\n";
     if (const Ramp *r = e.as<Ramp>()) {
         result->base = r->base;
         result->stride = r->stride;
@@ -205,8 +206,8 @@ bool is_interleaved_ramp(const Expr &e, InterleavedRamp *result) {
         return true;
     } else if (const Add *add = e.as<Add>()) {
         InterleavedRamp ra;
-        if (is_interleaved_ramp(add->a, &ra) &&
-            is_interleaved_ramp(add->b, result) &&
+        if (is_interleaved_ramp(add->a, scope, &ra) &&
+            is_interleaved_ramp(add->b, scope, result) &&
             (ra.repetitions == 0 ||
              result->repetitions == 0 ||
              ra.repetitions == result->repetitions)) {
@@ -219,8 +220,8 @@ bool is_interleaved_ramp(const Expr &e, InterleavedRamp *result) {
         }
     } else if (const Sub *sub = e.as<Sub>()) {
         InterleavedRamp ra;
-        if (is_interleaved_ramp(sub->a, &ra) &&
-            is_interleaved_ramp(sub->b, result) &&
+        if (is_interleaved_ramp(sub->a, scope, &ra) &&
+            is_interleaved_ramp(sub->b, scope, result) &&
             (ra.repetitions == 0 ||
              result->repetitions == 0 ||
              ra.repetitions == result->repetitions)) {
@@ -233,7 +234,7 @@ bool is_interleaved_ramp(const Expr &e, InterleavedRamp *result) {
         }
     } else if (const Mul *mul = e.as<Mul>()) {
         const int64_t *b = nullptr;
-        if (is_interleaved_ramp(mul->a, result) &&
+        if (is_interleaved_ramp(mul->a, scope, result) &&
             (b = as_const_int(mul->b))) {
             result->base = simplify(result->base * (int)(*b));
             result->stride = simplify(result->stride * (int)(*b));
@@ -241,7 +242,7 @@ bool is_interleaved_ramp(const Expr &e, InterleavedRamp *result) {
         }
     } else if (const Div *div = e.as<Div>()) {
         const int64_t *b = nullptr;
-        if (is_interleaved_ramp(div->a, result) &&
+        if (is_interleaved_ramp(div->a, scope, result) &&
             (b = as_const_int(div->b)) &&
             is_one(result->stride) &&
             (result->repetitions == 1 ||
@@ -253,6 +254,12 @@ bool is_interleaved_ramp(const Expr &e, InterleavedRamp *result) {
             result->base = simplify(result->base / (int)(*b));
             result->repetitions *= (int)(*b);
             return true;
+        }
+    } else if (const Variable *var = e.as<Variable>()) {
+        if (scope.contains(var->name)) {
+            return is_interleaved_ramp(scope.get(var->name), scope, result);
+        } else {
+            debug(0) << "Not in scope: " << var->name << "\n";
         }
     }
     debug(0) << "Not interleaved ramp: " << e << "\n";
@@ -457,6 +464,9 @@ class VectorSubs : public IRMutator {
     // A scope containing lets and letstmts whose values became
     // vectors.
     Scope<Expr> scope;
+
+    // The same set of Exprs, indexed by the vectorized var name
+    Scope<Expr> vector_scope;
 
     // A stack of all containing lets. We need to reinject the scalar
     // version of them if we scalarize inner code.
@@ -691,6 +701,7 @@ class VectorSubs : public IRMutator {
         if (was_vectorized) {
             vectorized_name = op->name + widening_suffix;
             scope.push(op->name, mutated_value);
+            vector_scope.push(vectorized_name, mutated_value);
         }
 
         Expr mutated_body = mutate(op->body);
@@ -700,6 +711,7 @@ class VectorSubs : public IRMutator {
             return op;
         } else if (was_vectorized) {
             scope.pop(op->name);
+            vector_scope.pop(vectorized_name);
             return Let::make(vectorized_name, mutated_value, mutated_body);
         } else {
             return Let::make(op->name, mutated_value, mutated_body);
@@ -717,6 +729,7 @@ class VectorSubs : public IRMutator {
         if (was_vectorized) {
             mutated_name += widening_suffix;
             scope.push(op->name, mutated_value);
+            vector_scope.push(mutated_name, mutated_value);
             // Also keep track of the original let, in case inner code scalarizes.
             containing_lets.push_back({op->name, op->value});
         }
@@ -726,6 +739,7 @@ class VectorSubs : public IRMutator {
         if (was_vectorized) {
             containing_lets.pop_back();
             scope.pop(op->name);
+            vector_scope.pop(mutated_name);
 
             // Inner code might have extracted my lanes using
             // extract_lane, which introduces a shuffle_vector. If
@@ -1018,7 +1032,7 @@ class VectorSubs : public IRMutator {
     Stmt visit(const Atomic *op) override {
         // Recognize a few special cases that we can handle as within-vector reduction trees.
         do {
-            // f[x] = f[x] + y
+            // f[x] = f[x] <op> y
             const Store *store = op->body.as<Store>();
             if (!store) break;
 
@@ -1117,7 +1131,7 @@ class VectorSubs : public IRMutator {
             } else {
 
                 InterleavedRamp ir;
-                if (!is_interleaved_ramp(idx, &ir)) break;
+                if (!is_interleaved_ramp(idx, vector_scope, &ir)) break;
                 output_lanes = idx.type().lanes() / ir.repetitions;
 
                 idx = Ramp::make(ir.base, ir.stride, output_lanes);
@@ -1150,9 +1164,10 @@ class VectorSubs : public IRMutator {
                 break;
             }
 
-            return Store::make(store->name, b, idx, store->param,
-                               const_true(b.type().lanes()), store->alignment);
+            Stmt s = Store::make(store->name, b, idx, store->param,
+                                 const_true(b.type().lanes()), store->alignment);
 
+            return s;
         } while (0);
 
         // In the general case, if a whole stmt has to be done
