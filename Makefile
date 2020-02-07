@@ -970,6 +970,8 @@ ifeq ($(OS), Windows_NT)
     # compilation fails with a file truncation error.  Instead,
     # we use the old strategy.
     # Note: we do in fact have to pass in this flag twice.
+    # Note: The grep in this line is necessary in order to avoid file truncation errors
+    # in MinGW.
     MAP_FLAGS= -Wl,-t -Wl,-t
     LIST_OUTPUT = 2>&1 | grep "libLLVM" | grep ")" > $(BUILD_DIR)/llvm_objects/list.all
 else
