@@ -1853,8 +1853,13 @@ Func create_in_wrapper(Function wrapped_fn, string wrapper_name) {
 
 Func create_clone_wrapper(Function wrapped_fn, string wrapper_name) {
     Func wrapper(wrapped_fn.new_function_in_same_group(wrapper_name));
-    std::map<FunctionPtr, FunctionPtr> empty;
-    wrapped_fn.deep_copy(wrapper.name(), wrapper.function().get_contents(), empty);
+    std::map<FunctionPtr, FunctionPtr> remapping;
+    wrapped_fn.deep_copy(wrapper.name(), wrapper.function().get_contents(), remapping);
+    // Fix up any self-references in the clone.
+    FunctionPtr self_reference = wrapper.function().get_contents();
+    self_reference.weaken();
+    remapping.emplace(wrapped_fn.get_contents(), self_reference);
+    wrapper.function().substitute_calls(remapping);
     return wrapper;
 }
 
