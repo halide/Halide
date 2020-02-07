@@ -605,7 +605,7 @@ FunctionDAG::FunctionDAG(const vector<Function> &outputs, const MachineParams &p
             Halide::Var max_var(consumer.name() + "." + consumer.args()[j] + ".max");
             Interval interval(min_var, max_var);
             scope.push(consumer.args()[j], interval);
-            node.region_required.push_back(SymbolicInterval{min_var, max_var});
+            node.region_required.emplace_back(SymbolicInterval{min_var, max_var});
         }
 
         auto pure_args = node.func.args();
