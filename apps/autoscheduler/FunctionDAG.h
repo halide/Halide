@@ -348,7 +348,7 @@ struct FunctionDAG {
     // An edge is a producer-consumer relationship
     struct Edge;
 
-    struct SymbolicRange {
+    struct SymbolicInterval {
         Halide::Var min;
         Halide::Var max;
     };
@@ -366,7 +366,7 @@ struct FunctionDAG {
 
         // The min/max variables used to denote a symbolic region of
         // this Func. Used in the cost above, and in the Edges below.
-        vector<SymbolicRange> region_required;
+        vector<SymbolicInterval> region_required;
 
         // A concrete region required from a bounds estimate. Only
         // defined for outputs.

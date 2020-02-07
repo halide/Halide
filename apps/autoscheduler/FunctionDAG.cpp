@@ -605,7 +605,7 @@ FunctionDAG::FunctionDAG(const vector<Function> &outputs, const MachineParams &p
             Halide::Var max_var(consumer.name() + "." + consumer.args()[j] + ".max");
             Interval interval(min_var, max_var);
             scope.push(consumer.args()[j], interval);
-            node.region_required.push_back(SymbolicRange{min_var, max_var});
+            node.region_required.push_back(SymbolicInterval{min_var, max_var});
         }
 
         auto pure_args = node.func.args();
@@ -1020,7 +1020,7 @@ void FunctionDAG::dump_internal(OS &os) const {
     for (const Node &n : nodes) {
         os << "Node: " << n.func.name() << '\n'
            << "  Symbolic region required: \n";
-        for (const SymbolicRange &i : n.region_required) {
+        for (const SymbolicInterval &i : n.region_required) {
             os << "    " << i.min << ", " << i.max << '\n';
         }
         os << "  Region computed: \n";
