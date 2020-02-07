@@ -2173,6 +2173,7 @@ struct ClearInlinedMutator {
 void freeze_lowest_cost_stages(const FunctionDAG& dag, const IntrusivePtr<State> best, NodeMap<bool>& inlined_nodes, NodeMap<std::vector<IntrusivePtr<const LoopNest>>>& compute_root_nodes) {
 
     std::vector<std::pair<int, double>> node_ids_and_costs;
+    NodeMap<double> node_costs;
     size_t num_stages = 0;
     size_t num_nodes = 0;
     for (const auto& n : dag.nodes) {
@@ -2183,14 +2184,20 @@ void freeze_lowest_cost_stages(const FunctionDAG& dag, const IntrusivePtr<State>
         ++num_nodes;
     }
 
-    node_ids_and_costs.resize(num_nodes, {-1, 0});
-    inlined_nodes.make_large(num_nodes);
-
     for (size_t i = 0; i < num_stages; ++i) {
-        auto node_id = dag.stage_id_to_node_map.at(i)->id;
+        if (dag.stage_id_to_node_map.at(i)->is_input) {
+            continue;
+        }
 
-        node_ids_and_costs[node_id].first = node_id;
-        node_ids_and_costs[node_id].second += best->cost_per_stage[i];
+        if (!node_costs.contains(dag.stage_id_to_node_map.at(i))) {
+            node_costs.get_or_create(dag.stage_id_to_node_map.at(i)) = 0;
+        }
+
+        node_costs.get(dag.stage_id_to_node_map.at(i)) += best->cost_per_stage[i];
+    }
+
+    for (auto it = node_costs.begin(); it != node_costs.end(); it++) {
+        node_ids_and_costs.push_back({it.key()->id, it.value()});
     }
 
     for (const auto& n : node_ids_and_costs) {
