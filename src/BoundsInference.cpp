@@ -114,6 +114,19 @@ Interval bounds_of_inner_var(string var, Stmt s) {
     return b.result;
 }
 
+size_t find_fused_group_index(const Function &producing_func,
+                              const vector<vector<Function>> &fused_groups) {
+    const auto &iter = std::find_if(fused_groups.begin(), fused_groups.end(),
+                                    [&producing_func](const vector<Function> &group) {
+                                        return std::any_of(group.begin(), group.end(),
+                                                        [&producing_func](const Function &f) {
+                                                            return (f.name() == producing_func.name());
+                                                        });
+                                    });
+    internal_assert(iter != fused_groups.end());
+    return iter - fused_groups.begin();
+}
+
 }  // namespace
 
 class BoundsInference : public IRMutator {
@@ -147,6 +160,7 @@ public:
         vector<CondValue> exprs;
         set<ReductionVariable, ReductionVariable::Compare> rvars;
         string stage_prefix;
+        size_t fused_group_index;
 
         // Computed expressions on the left and right-hand sides.
         // Note that a function definition might have different LHS or reduction domain
@@ -322,18 +336,7 @@ public:
             }
 
             // Find the fused group this producing stage belongs to.
-            size_t index;
-            {
-                const auto &iter = std::find_if(fused_groups.begin(), fused_groups.end(),
-                                                [&producing_func](const vector<Function> &group) {
-                                                    return std::any_of(group.begin(), group.end(),
-                                                                       [&producing_func](const Function &f) {
-                                                                           return (f.name() == producing_func.name());
-                                                                       });
-                                                });
-                internal_assert(iter != fused_groups.end());
-                index = iter - fused_groups.begin();
-            }
+            size_t index = find_fused_group_index(producing_func, fused_groups);
 
             const vector<Dim> &dims = (producing_stage_index == 0) ? producing_func.definition().schedule().dims() : producing_func.update(producing_stage_index - 1).schedule().dims();
 
@@ -788,6 +791,7 @@ public:
             s.func = f[i];
             s.stage = 0;
             s.name = s.func.name();
+            s.fused_group_index = find_fused_group_index(s.func, fused_groups);
             s.compute_exprs();
             s.stage_prefix = s.name + ".s0.";
             stages.push_back(s);
@@ -804,8 +808,13 @@ public:
             debug(0) << "Group: \n";
             for (const auto& pair: group) {
                 debug(0) << pair.func_1 << " " << pair.stage_1 << " "
-                         << pair.func_2 << " " << pair.stage_2 << "\n";
+                        << pair.func_2 << " " << pair.stage_2 << " "
+                        << pair.var_name << "\n";
             }
+        }
+
+        for (auto& s: stages) {
+            debug(0) << "Looking for a group - " << s.name << " " << s.fused_group_index << "\n";
         }
 
         // Do any pure inlining (TODO: This is currently slow)
@@ -1021,29 +1030,29 @@ public:
         }
 
         // Figure out how much of it we're producing
-        // Box box;
         map<string, Box> boxes_for_fused_group;
         if (!no_pipelines && producing >= 0 && !f.has_extern_definition()) {
             Scope<Interval> empty_scope;
-            // box = box_provided(body, stages[producing].name, empty_scope, func_bounds);
-            // internal_assert((int)box.size() == f.dimensions());
-            // debug(0) << "Box - " << op->name << " " << stages[producing].name << " " << box << "\n";
+            debug(0) << "Vars:" << op->name << " \n";
+            const vector<Dim> &dims = (stage_index == 0) ? f.definition().schedule().dims() : f.update(stage_index - 1).schedule().dims();
+            for (const auto& d: dims) {
+                debug(0) << d.var << "\n";
+            }
 
-            auto boxes = boxes_provided(body, empty_scope, func_bounds);
-            boxes_for_fused_group[stage_name] = boxes[stages[producing].name];
+            if (fused_groups[stages[producing].fused_group_index].size() == 1) {
+                debug(0) << "Isn't fused with anything\n";
+                boxes_for_fused_group[stage_name] = box_provided(body, stages[producing].name, empty_scope, func_bounds);
+                internal_assert((int)boxes_for_fused_group[stage_name].size() == f.dimensions());
+            } else {
+                auto boxes = boxes_provided(body, empty_scope, func_bounds);
+                boxes_for_fused_group[stage_name] = boxes[stages[producing].name];
 
-            for (const auto& b: boxes) {
                 // debug(0) << "Boxes - " << b.first << " " << b.second << "\n";
                 // TODO: make it nicer.
-                for (const auto& group: fused_pairs_in_groups) {
-                    // debug(0) << "Group: \n";
-                    for (const auto& pair: group) {
-                        if (pair.func_1 == b.first) {
-                            // debug(0) << pair.func_1 << " " << pair.stage_1 << " " 
-                            //        << pair.func_2 << " " << pair.stage_2 << "\n";
-                            boxes_for_fused_group[pair.func_2 + ".s" + std::to_string(pair.stage_2)] = boxes[pair.func_2];
-                        }
-                    }
+                // debug(0) << "Group: \n";
+                for (const auto& pair: fused_pairs_in_groups[stages[producing].fused_group_index]) {
+                    boxes_for_fused_group[pair.func_1 + ".s" + std::to_string(pair.stage_1)] = boxes[pair.func_1];
+                    boxes_for_fused_group[pair.func_2 + ".s" + std::to_string(pair.stage_2)] = boxes[pair.func_2];
                 }
             }
         }
@@ -1102,25 +1111,6 @@ public:
                         debug(0) << "Generating some min max for " << var << "\n" << box[i].min << "\n" << box[i].max << "\n";
                     }
                 }
-                // if(op->name == "l_part.s0.y.fused.y") {
-                //     std::vector<string> fused_names = {"u_part$1", "v_part$1"};
-                //     for (const string& fused_name: fused_names) {
-                //         const auto& u_box = boxes[fused_name];
-                //         for (size_t i = 0; i < u_box.size(); i++) {
-                //             internal_assert(u_box[i].is_bounded());
-                //             string var = fused_name + ".s0." + f_args[i];
-
-                //             if (u_box[i].is_single_point()) {
-                //                 body = LetStmt::make(var + ".max", Variable::make(Int(32), var + ".min"), body);
-                //             } else {
-                //                 body = LetStmt::make(var + ".max", u_box[i].max, body);
-                //             }
-
-                //             body = LetStmt::make(var + ".min", u_box[i].min, body);
-                //             debug(0) << "Generating some min max for " << var << "\n" << u_box[i].min << "\n" << u_box[i].max << "\n";
-                //         }
-                //     }
-                // }
             }
 
             // And the current bounds on its reduction variables, and
@@ -1200,10 +1190,8 @@ Stmt bounds_inference(Stmt s,
     // which loops should be fused together.
     vector<vector<Function>> fused_func_groups;
     for (const vector<string> &group : fused_groups) {
-        debug(0) << "Group *: \n";
         vector<Function> fs;
         for (const string &fname : group) {
-            debug(0) << fname << "\n";
             fs.push_back(env.find(fname)->second);
         }
         fused_func_groups.push_back(fs);
