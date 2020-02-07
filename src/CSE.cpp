@@ -229,6 +229,38 @@ class RemoveLets : public IRGraphMutator {
 class CSEEveryExprInStmt : public IRMutator {
     bool lift_all;
 
+    using IRMutator::visit;
+
+    Stmt visit(const Provide *op) override {
+        // We'll jointly CSE the args and the values. They both get
+        // evaluated at the same time, and in the case of reductions,
+        // they can contain complex common subexpressions.
+        vector<Expr> exprs = op->args;
+        exprs.insert(exprs.end(), op->values.begin(), op->values.end());
+        Expr dummy = Call::make(Int(32), "dummy", exprs, Call::PureExtern);
+        dummy = common_subexpression_elimination(dummy, lift_all);
+
+        vector<pair<string, Expr>> lets;
+        while (const Let *let = dummy.as<Let>()) {
+            lets.emplace_back(let->name, let->value);
+            dummy = let->body;
+        }
+        const Call *call = dummy.as<Call>();
+        internal_assert(call);
+
+        vector<Expr> new_args(call->args.begin(), call->args.begin() + op->args.size());
+        vector<Expr> new_values(call->args.begin() + op->args.size(), call->args.end());
+
+        Stmt s = Provide::make(op->name, new_values, new_args);
+        while (!lets.empty()) {
+            const auto &p = lets.back();
+            s = LetStmt::make(p.first, p.second, s);
+            lets.pop_back();
+        }
+
+        return s;
+    }
+
 public:
     using IRMutator::mutate;
 
