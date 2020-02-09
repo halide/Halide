@@ -190,7 +190,7 @@ vector<vector<int64_t>> generate_gpu_tilings(const vector<vector<int64_t>> &stag
     } else {
         // set max thread count 64 for now in all dims
         int64_t max_threads_extent = 64, total_threads_limit = 1024;  // less than 1024 to limit states
-        int factor = 2, warp_width = 32, max_serial_ext = 8;
+        int factor = 2, innermost_warp_extent = 16, max_serial_ext = 8;
 
         vector<vector<int64_t>> v;
         v = generate_gpu_tilings(stage_sizes, pure_dims, max_s, d - 1, vectorized_indices, serial_inner);
@@ -266,18 +266,18 @@ vector<vector<int64_t>> generate_gpu_tilings(const vector<vector<int64_t>> &stag
 
             t.push_back(0);
 
-            // if the vector dimension has extent < warp_width we use 1 warp for it
-            int64_t min_threads = ((d == vectorized_indices[0]) ? std::min(warp_width, (int)stage_sizes[0][d]) : 1);
+            // if the vector dimension has extent < innermost_warp_extent we use 1 warp for it
+            int64_t min_threads = (d == vectorized_indices[0]) ? innermost_warp_extent : 1;
             bool full_extent_considered = false;
 
-            for (int64_t threads_ext = min_threads; threads_ext <= stage_sizes[0][d]; threads_ext *= factor) {
+            for (int64_t threads_ext = min_threads; threads_ext <= max_threads_extent; threads_ext *= factor) {
                 full_extent_considered |= threads_ext == stage_sizes[0][d];
                 // reject if inner exceeds hardware thread limit
                 if ((d == vectorized_indices[0] && threads_ext > max_threads_extent) || (d != vectorized_indices[0] && threads_ext > 16)) {
                     break;
                 }
                 int64_t other_ext = (stage_sizes[0][d] + threads_ext - 1) / threads_ext;
-                if (threads_ext > 1 && threads_ext * other_ext * 7 > stage_sizes[0][d] * 8) break;
+                if (d != vectorized_indices[0] && threads_ext > 1 && threads_ext * other_ext * 7 > stage_sizes[0][d] * 8) break;
                 if (false) {
                     int64_t other_ext = (stage_sizes[0][d] + threads_ext - 1) / threads_ext;
                     t.back() = other_ext;
@@ -292,22 +292,9 @@ vector<vector<int64_t>> generate_gpu_tilings(const vector<vector<int64_t>> &stag
                 } else {
                     result.push_back(t);
                 }
-            }
 
-            // The sequence above (in terms of the inner loop) goes
-            // (32 64 128 256 512 ... ) x (1 2 4 8 16 ... )
-            // but 16 may be an important threads tiling factor
-            int64_t threads16 = 16;
-            int64_t other16 = (stage_sizes[0][d] + threads16 - 1) / threads16;
-            if ((d == vectorized_indices[0]) && threads16 < stage_sizes[0][d] && other16 > 1) {
-                full_extent_considered |= threads16 == stage_sizes[0][d];
-                if (false)
-                    t.back() = other16;
-                else
-                    t.back() = threads16;
-                validity valid_result = is_valid_tiling();
-                if (valid_result == valid_tiling) {
-                    result.push_back(t);
+                if (threads_ext >= stage_sizes[0][d]) {
+                    break;
                 }
             }
         }
