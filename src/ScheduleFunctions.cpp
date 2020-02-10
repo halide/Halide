@@ -356,7 +356,7 @@ Stmt build_provide_loop_nest(const map<string, Function> &env,
     if (def.schedule().atomic()) {  // Add atomic node.
         bool any_unordered_parallel = false;
         for (auto d : def.schedule().dims()) {
-            any_unordered_parallel = is_unordered_parallel(d.for_type);
+            any_unordered_parallel |= is_unordered_parallel(d.for_type);
         }
         if (any_unordered_parallel) {
             // If required, we will allocate a mutex buffer called func.name() + ".mutex"
