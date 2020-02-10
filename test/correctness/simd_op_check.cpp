@@ -895,41 +895,46 @@ public:
                 // TODO
 
                 // VPADD    I, F    -       Pairwise Add
-                check("vpadd.s8", 16, sum(in_i8(f * x + r)));
-                check("vpadd.u8", 16, sum(in_u8(f * x + r)));
-                check("vpadd.s16", 8, sum(in_i16(f * x + r)));
-                check("vpadd.u16", 8, sum(in_u16(f * x + r)));
-                check("vpadd.s32", 4, sum(in_i32(f * x + r)));
-                check("vpadd.u32", 4, sum(in_u32(f * x + r)));
+                check(arm32 ? "vpadd.i8" : "addp", 16, sum(in_i8(f * x + r)));
+                check(arm32 ? "vpadd.i8" : "addp", 16, sum(in_u8(f * x + r)));
+                check(arm32 ? "vpadd.i16" : "addp", 8, sum(in_i16(f * x + r)));
+                check(arm32 ? "vpadd.i16" : "addp", 8, sum(in_u16(f * x + r)));
+                check(arm32 ? "vpadd.i32" : "addp", 4, sum(in_i32(f * x + r)));
+                check(arm32 ? "vpadd.i32" : "addp", 4, sum(in_u32(f * x + r)));
+                check(arm32 ? "vpadd.f32" : "addp", 4, sum(in_f32(f * x + r)));
+                // In 32-bit, we don't have a pairwise op for doubles,
+                // and expect to just get vadd instructions on d
+                // registers.
+                check(arm32 ? "vadd.f64" : "addp", 4, sum(in_f64(f * x + r)));
 
                 // VPADDL   I       -       Pairwise Add Long
-                check("vpaddl.s8", 16, sum(i16(in_i8(f * x + r))));
-                check("vpaddl.u8", 16, sum(i16(in_u8(f * x + r))));
-                check("vpaddl.u8", 16, sum(u16(in_u8(f * x + r))));
+                check(arm32 ? "vpaddl.s8" : "saddlp", 16, sum(i16(in_i8(f * x + r))));
+                check(arm32 ? "vpaddl.u8" : "uaddlp", 16, sum(i16(in_u8(f * x + r))));
+                check(arm32 ? "vpaddl.u8" : "uaddlp", 16, sum(u16(in_u8(f * x + r))));
 
-                check("vpaddl.s16", 8, sum(i32(in_i16(f * x + r))));
-                check("vpaddl.u16", 8, sum(i32(in_u16(f * x + r))));
-                check("vpaddl.u16", 8, sum(u32(in_u16(f * x + r))));
+                check(arm32 ? "vpaddl.s16" : "saddlp", 8, sum(i32(in_i16(f * x + r))));
+                check(arm32 ? "vpaddl.u16" : "uaddlp", 8, sum(i32(in_u16(f * x + r))));
+                check(arm32 ? "vpaddl.u16" : "uaddlp", 8, sum(u32(in_u16(f * x + r))));
 
-                check("vpaddl.s32", 4, sum(i64(in_i32(f * x + r))));
-                check("vpaddl.u32", 4, sum(i64(in_u32(f * x + r))));
-                check("vpaddl.u32", 4, sum(u64(in_u32(f * x + r))));
+                check(arm32 ? "vpaddl.s32" : "saddlp", 4, sum(i64(in_i32(f * x + r))));
+                check(arm32 ? "vpaddl.u32" : "uaddlp", 4, sum(i64(in_u32(f * x + r))));
+                check(arm32 ? "vpaddl.u32" : "uaddlp", 4, sum(u64(in_u32(f * x + r))));
 
                 // VPMAX    I, F    -       Pairwise Maximum
-                check("vpmax.s8", 16, maximum(in_i8(f * x + r)));
-                check("vpmax.u8", 16, maximum(in_u8(f * x + r)));
-                check("vpmax.s16", 8, maximum(in_i16(f * x + r)));
-                check("vpmax.u16", 8, maximum(in_u16(f * x + r)));
-                check("vpmax.s32", 4, maximum(in_i32(f * x + r)));
-                check("vpmax.u32", 4, maximum(in_u32(f * x + r)));
+                check(arm32 ? "vpmax.s8" : "smaxp", 16, maximum(in_i8(f * x + r)));
+                check(arm32 ? "vpmax.u8" : "umaxp", 16, maximum(in_u8(f * x + r)));
+                check(arm32 ? "vpmax.s16" : "smaxp", 8, maximum(in_i16(f * x + r)));
+                check(arm32 ? "vpmax.u16" : "umaxp", 8, maximum(in_u16(f * x + r)));
+                check(arm32 ? "vpmax.s32" : "smaxp", 4, maximum(in_i32(f * x + r)));
+                check(arm32 ? "vpmax.u32" : "umaxp", 4, maximum(in_u32(f * x + r)));
 
                 // VPMIN    I, F    -       Pairwise Minimum
-                check("vpmin.s8", 16, minimum(in_i8(f * x + r)));
-                check("vpmin.u8", 16, minimum(in_u8(f * x + r)));
-                check("vpmin.s16", 8, minimum(in_i16(f * x + r)));
-                check("vpmin.u16", 8, minimum(in_u16(f * x + r)));
-                check("vpmin.s32", 4, minimum(in_i32(f * x + r)));
-                check("vpmin.u32", 4, minimum(in_u32(f * x + r)));
+                check(arm32 ? "vpmin.s8" : "sminp", 16, minimum(in_i8(f * x + r)));
+                check(arm32 ? "vpmin.u8" : "uminp", 16, minimum(in_u8(f * x + r)));
+                check(arm32 ? "vpmin.s16" : "sminp", 8, minimum(in_i16(f * x + r)));
+                check(arm32 ? "vpmin.u16" : "uminp", 8, minimum(in_u16(f * x + r)));
+                check(arm32 ? "vpmin.s32" : "sminp", 4, minimum(in_i32(f * x + r)));
+                check(arm32 ? "vpmin.u32" : "uminp", 4, minimum(in_u32(f * x + r)));
             }
 
             // VPOP     X       F, D    Pop from Stack

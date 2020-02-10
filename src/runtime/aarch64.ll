@@ -313,7 +313,7 @@ define weak_odr <2 x float> @pairwise_Add_float32x2_float32x4(<4 x float> %x) no
 }
 
 
-define weak_odr <2 x double> @pairwise_Add_float64x4(<4 x double> %x) nounwind alwaysinline {
+define weak_odr <2 x double> @pairwise_Add_float64x2_float64x4(<4 x double> %x) nounwind alwaysinline {
        %a = shufflevector <4 x double> %x, <4 x double> undef, <2 x i32> <i32 0, i32 1>
        %b = shufflevector <4 x double> %x, <4 x double> undef, <2 x i32> <i32 2, i32 3>
        %result = tail call <2 x double> @llvm.aarch64.neon.faddp.v2f64(<2 x double> %a, <2 x double> %b)
