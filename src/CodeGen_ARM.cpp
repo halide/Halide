@@ -1008,123 +1008,8 @@ void CodeGen_ARM::visit(const Call *op) {
     CodeGen_Posix::visit(op);
 }
 
-/*
 void CodeGen_ARM::visit(const VectorReduce *op) {
-    // ARM has a variety of pairwise reduction ops. The
-    // versions that do not widen take two 64-bit args and return one
-    // 64-bit vector of the same type. The versions that widen take
-    // one arg and return something with half the vector lanes and
-    // double the bit-width.
-    Type value_type = op->value.type();
-    int factor = value_type.lanes() / op->type.lanes();
-    if (factor == 2 && op->op == VectorReduce::Add) {
-        // Attempt to losslessly narrow the arg so that we can use the
-        // widening variants.
-        Expr narrower;
-        if (op->type.bits() > 8 &&
-            (op->type.is_int() ||
-             op->type.is_uint())) {
-            Type narrower_type = value_type.with_bits(value_type.bits() / 2);
-            narrower = lossless_cast(narrower_type, op->value);
-        }
-
-        if (narrower.defined()) {
-            string name;
-            int intrinsic_bits = (op->type.lanes() * op->type.bits()) > 64 ? 128 : 64;
-            switch (narrower.type().bytes()) {
-            case 1:
-                if (op->type.is_int()) {
-                    if (intrinsic_bits == 128) {
-                        name = "llvm.arm.neon.vpaddls.v8i16.v16i8";
-                    } else {
-                        name = "llvm.arm.neon.vpaddls.v4i16.v8i8";
-                    }
-                } else {
-                    if (intrinsic_bits == 128) {
-                        name = "llvm.arm.neon.vpaddlu.v8i16.v16i8";
-                    } else {
-                        name = "llvm.arm.neon.vpaddlu.v4i16.v8i8";
-                    }
-                }
-                break;
-            case 2:
-                if (op->type.is_int()) {
-                    if (intrinsic_bits == 128) {
-                        name = "llvm.arm.neon.vpaddls.v4i32.v8i16";
-                    } else {
-                        name = "llvm.arm.neon.vpaddls.v2i32.v4i16";
-                    }
-                } else {
-                    if (intrinsic_bits == 128) {
-                        name = "llvm.arm.neon.vpaddlu.v4i32.v8i16";
-                    } else {
-                        name = "llvm.arm.neon.vpaddlu.v2i32.v4i16";
-                    }
-                }
-                break;
-            case 4:
-                if (op->type.is_int()) {
-                    if (intrinsic_bits == 128) {
-                        name = "llvm.arm.neon.vpaddls.v2i64.v4i32";
-                    } else {
-                        name = "llvm.arm.neon.vpaddls.v1i64.v2i32";
-                    }
-                } else {
-                    if (intrinsic_bits == 128) {
-                        name = "llvm.arm.neon.vpaddlu.v2i64.v4i32";
-                    } else {
-                        name = "llvm.arm.neon.vpaddlu.v1i64.v2i32";
-                    }
-                }
-                break;
-            default:
-                CodeGen_Posix::visit(op);
-                return;
-            }
-            value = call_intrin(op->type, intrinsic_bits / op->type.bits(), name, {narrower});
-            return;
-        } else {
-            string name;
-            switch (op->type.bytes()) {
-            case 1:
-                name = "llvm.arm.neon.vpadd.v8i8";
-                break;
-            case 2:
-                if (op->type.is_float()) {
-                    name = "llvm.arm.neon.vpadd.v4f16";
-                } else {
-                    name = "llvm.arm.neon.vpadd.v4i16";
-                }
-                break;
-            case 4:
-                if (op->type.is_float()) {
-                    name = "llvm.arm.neon.vpadd.v2f32";
-                } else {
-                    name = "llvm.arm.neon.vpadd.v2i32";
-                }
-                break;
-            default:
-                CodeGen_Posix::visit(op);
-                return;
-            }
-            int l = op->type.lanes();
-            Expr a = Shuffle::make_slice(op->value, 0, 1, l);
-            Expr b = Shuffle::make_slice(op->value, l, 1, l);
-            value = call_intrin(op->type, 8 / op->type.bytes(), name, {a, b});
-            return;
-        }
-    } else if (factor > 2 && ((factor & 1) == 0)) {
-        Expr equiv = VectorReduce::make(op->op, op->value, value_type.lanes() / 2);
-        equiv = VectorReduce::make(op->op, equiv, op->type.lanes());
-        equiv.accept(this);
-    } else {
-        CodeGen_Posix::visit(op);
-    }
-}
-*/
-
-void CodeGen_ARM::visit(const VectorReduce *op) {
-    if (target.has_feature(Target::NoNEON)) {
+    if (neon_intrinsics_disabled()) {
         CodeGen_Posix::visit(op);
         return;
     }
@@ -1141,6 +1026,8 @@ void CodeGen_ARM::visit(const VectorReduce *op) {
         (op->type.is_int() ||
          op->type.is_uint() ||
          op->type.is_float()) &&
+        (op->type.element_of() != Float(64) ||
+         target.bits == 64) &&
         factor == 2) {
         Expr arg = op->value;
         if (op->op == VectorReduce::Add &&
