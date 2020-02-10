@@ -17,6 +17,7 @@
 namespace Halide {
 namespace Internal {
 
+using std::map;
 using std::pair;
 using std::string;
 using std::vector;
@@ -1175,8 +1176,7 @@ class VectorSubs : public IRMutator {
         return scalarize(op);
     }
 
-    Stmt
-    scalarize(Stmt s) {
+    Stmt scalarize(Stmt s) {
         // Wrap a serial loop around it. Maybe LLVM will have
         // better luck vectorizing it.
 
@@ -1296,8 +1296,18 @@ public:
         return e;
     }
 
-    FindVectorizableExprsInAtomicNode(const string &buf) {
+    FindVectorizableExprsInAtomicNode(const string &buf, const map<string, Function> &env) {
         poisoned_names.push(buf);
+        auto it = env.find(buf);
+        if (it != env.end()) {
+            // Handle tuples
+            size_t n = it->second.values().size();
+            if (n > 1) {
+                for (size_t i = 0; i < n; i++) {
+                    poisoned_names.push(buf + "." + std::to_string(i));
+                }
+            }
+        }
     }
 
     std::set<Expr, ExprCompare> liftable;
@@ -1330,7 +1340,7 @@ class LiftVectorizableExprsOutOfSingleAtomicNode : public IRMutator {
     }
 
 public:
-    std::map<Expr, string, IRDeepCompare> already_lifted;
+    map<Expr, string, IRDeepCompare> already_lifted;
     vector<pair<string, Expr>> lifted;
 
     using IRMutator::mutate;
@@ -1361,7 +1371,7 @@ class LiftVectorizableExprsOutOfAllAtomicNodes : public IRMutator {
     using IRMutator::visit;
 
     Stmt visit(const Atomic *op) override {
-        FindVectorizableExprsInAtomicNode finder(op->producer_name);
+        FindVectorizableExprsInAtomicNode finder(op->producer_name, env);
         finder.mutate(op->body);
         LiftVectorizableExprsOutOfSingleAtomicNode lifter(finder.liftable);
         Stmt new_body = lifter.mutate(op->body);
@@ -1372,6 +1382,13 @@ class LiftVectorizableExprsOutOfAllAtomicNodes : public IRMutator {
             lifter.lifted.pop_back();
         }
         return new_body;
+    }
+
+    const map<string, Function> &env;
+
+public:
+    LiftVectorizableExprsOutOfAllAtomicNodes(const map<string, Function> &env)
+        : env(env) {
     }
 };
 
@@ -1422,11 +1439,11 @@ public:
 
 }  // namespace
 
-Stmt vectorize_loops(Stmt s, const Target &t) {
+Stmt vectorize_loops(Stmt s, const map<string, Function> &env, const Target &t) {
     // Limit the scope of atomic nodes to just the necessary stuff.
     // TODO: Should this be an earlier pass? It's probably a good idea
     // for non-vectorizing stuff too.
-    s = LiftVectorizableExprsOutOfAllAtomicNodes().mutate(s);
+    s = LiftVectorizableExprsOutOfAllAtomicNodes(env).mutate(s);
     s = VectorizeLoops(t).mutate(s);
     return s;
 }
