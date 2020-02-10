@@ -131,10 +131,6 @@ To configure and build Halide:
     % cmake -DLLVM_DIR=../llvm-install/lib/cmake/llvm -DCMAKE_BUILD_TYPE=Release -G "Visual Studio 14 Win64" ../halide
     % MSBuild.exe /m /t:Build /p:Configuration=Release .\ALL_BUILD.vcxproj
 
-#### Building Halide and LLVM on Windows using mingw
-
-Halide no longer supports building via the Makefile under mingw. Windows users should use the CMake build process instead.
-
 #### If all else fails...
 
 Do what the build-bots do: https://buildbot.halide-lang.org/master/#/builders
