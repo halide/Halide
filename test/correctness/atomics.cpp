@@ -22,7 +22,9 @@ template<typename T,
          typename std::enable_if<std::is_floating_point<T>::value>::type * = nullptr>
 inline void check(int line_number, T x, T target, T threshold = T(1e-6)) {
     _halide_user_assert(std::fabs((x) - (target)) < threshold)
-        << "Line " << line_number << ": Expected " << (target) << " instead of " << (x) << "\n";
+        << "Line " << line_number
+        << ": Expected " << (target)
+        << " instead of " << (x) << "\n";
 }
 
 inline void check(int line_number, float16_t x, float16_t target) {
@@ -37,7 +39,9 @@ template<typename T,
          typename std::enable_if<std::is_integral<T>::value, int>::type * = nullptr>
 inline void check(int line_number, T x, T target) {
     _halide_user_assert(x == target)
-        << "Line " << line_number << ": Expected " << (target) << " instead of " << (x) << "\n";
+        << "Line " << line_number
+        << ": Expected " << (int64_t)(target)
+        << " instead of " << (int64_t)(x) << "\n";
 }
 
 template<typename T>
