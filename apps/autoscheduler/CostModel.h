@@ -13,7 +13,7 @@ namespace Halide {
 namespace Internal {
 namespace Autoscheduler {
 typedef PerfectHashMap<FunctionDAG::Node::Stage, ScheduleFeatures> StageMapOfScheduleFeatures;
-}
+}  // namespace Autoscheduler
 }  // namespace Internal
 
 class CostModel {
@@ -25,8 +25,10 @@ public:
                                        const MachineParams &params) = 0;
 
     // Enqueue a schedule to be evaluated. Will annotate the value located at cost_ptr when the evaluation takes place.
-    // Note that the dag argument should correspond to the dag specified previously when callig set_pipeline_features.
-    virtual void enqueue(const Internal::Autoscheduler::FunctionDAG &dag, const Halide::Internal::Autoscheduler::StageMapOfScheduleFeatures &schedule_feats, double *cost_ptr) = 0;
+    // Note that the dag argument should correspond to the dag specified previously when calling set_pipeline_features.
+    virtual void enqueue(const Internal::Autoscheduler::FunctionDAG &dag,
+                         const Halide::Internal::Autoscheduler::StageMapOfScheduleFeatures &schedule_feats,
+                         double *cost_ptr) = 0;
 
     // Evaluate all schedules in the queue.
     virtual void evaluate_costs() = 0;

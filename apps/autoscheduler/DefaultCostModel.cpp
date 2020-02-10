@@ -84,8 +84,10 @@ void DefaultCostModel::set_pipeline_features(const Runtime::Buffer<float> &pipel
     num_cores = n;
 }
 
-void DefaultCostModel::enqueue(const Internal::Autoscheduler::FunctionDAG &dag, const Halide::Internal::Autoscheduler::StageMapOfScheduleFeatures &features, double *cost_ptr) {
-    num_stages = (int)features.size();
+void DefaultCostModel::enqueue(const Internal::Autoscheduler::FunctionDAG &dag,
+                               const Halide::Internal::Autoscheduler::StageMapOfScheduleFeatures &schedule_feats,
+                               double *cost_ptr) {
+    num_stages = (int)schedule_feats.size();
 
     Runtime::Buffer<float> schedule_features;
 
@@ -103,7 +105,7 @@ void DefaultCostModel::enqueue(const Internal::Autoscheduler::FunctionDAG &dag, 
         // Inputs are computed outside of the pipeline and don't count.
         if (n.is_input) continue;
 
-        // The remaining stage are not yet
+        // The remaining stages are not yet
         // scheduled. Optimistically assume their internal costs
         // will not depend on the decisions made already, so
         // there's no point adding it on to the total because it's
@@ -115,9 +117,8 @@ void DefaultCostModel::enqueue(const Internal::Autoscheduler::FunctionDAG &dag, 
 
         // Load up the schedule features for all stages of this Func.
         for (auto it = n.stages.rbegin(); it != n.stages.rend(); it++) {
-            internal_assert(features.contains(&*it)) << n.func.name() << "\\
-n";
-            const auto &feat = features.get(&*it);
+            internal_assert(schedule_feats.contains(&*it)) << n.func.name() << "\\n";
+            const auto &feat = schedule_feats.get(&*it);
             for (size_t i = 0; i < ScheduleFeatures::num_features(); i++) {
                 schedule_features(i, stage) = feat[i];
             }

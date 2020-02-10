@@ -42,7 +42,9 @@ public:
 
     // Enqueue a schedule to be evaluated. The second version of this method returns a buffer of
     // schedule_features that should be filled in by the caller.
-    void enqueue(const Internal::Autoscheduler::FunctionDAG &dag, const Halide::Internal::Autoscheduler::StageMapOfScheduleFeatures &schedule_feats, double *cost_ptr) override;
+    void enqueue(const Internal::Autoscheduler::FunctionDAG &dag,
+                 const Halide::Internal::Autoscheduler::StageMapOfScheduleFeatures &schedule_feats,
+                 double *cost_ptr) override;
     void enqueue(int ns, Runtime::Buffer<float> *schedule_feats, double *cost_ptr);
 
     // Evaluate all schedules in the queue.
