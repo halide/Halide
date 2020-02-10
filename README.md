@@ -133,8 +133,7 @@ To configure and build Halide:
 
 #### Building Halide and LLVM on Windows using mingw
 
-The makefile method above should work from inside a "mingw64" shell
-(not the default shell) in an msys2 installation.
+Halide no longer supports building via the Makefile under mingw. Windows users should use the CMake build process instead.
 
 #### If all else fails...
 

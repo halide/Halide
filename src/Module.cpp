@@ -35,8 +35,7 @@ namespace Internal {
 // and in practice, it's extremely unlikely that anyone needs to rely on this
 // being pure C output (vs possibly C++).
 std::map<Output, OutputInfo> get_output_info(const Target &target) {
-    const bool is_windows_coff = target.os == Target::Windows &&
-                                 !target.has_feature(Target::MinGW);
+    const bool is_windows_coff = target.os == Target::Windows;
     std::map<Output, OutputInfo> ext = {
         {Output::assembly, {"assembly", ".s"}},
         {Output::bitcode, {"bitcode", ".bc"}},
@@ -76,7 +75,7 @@ public:
                                      const std::string &suffix,
                                      const Target &target,
                                      bool in_front = false) {
-        const char *ext = (target.os == Target::Windows && !target.has_feature(Target::MinGW)) ? ".obj" : ".o";
+        const char *ext = (target.os == Target::Windows) ? ".obj" : ".o";
         size_t slash_idx = base_path_name.rfind('/');
         size_t backslash_idx = base_path_name.rfind('\\');
         if (slash_idx == std::string::npos) {
