@@ -1,5 +1,7 @@
 #include "SplitTuples.h"
+
 #include "Bounds.h"
+#include "CSE.h"
 #include "IRMutator.h"
 
 namespace Halide {
@@ -202,6 +204,7 @@ public:
 }  // namespace
 
 Stmt split_tuples(Stmt s, const map<string, Function> &env) {
+    s = common_subexpression_elimination(s);
     return SplitTuples(env).mutate(s);
 }
 
