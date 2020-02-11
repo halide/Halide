@@ -95,18 +95,14 @@ jobs:
 
         # The standard Bionic install has gcc 7.4, which is known to be
         # buggy with LLVM. Use gcc 8 instead.
-        sudo apt-get install gcc-8 g++-8
-        sudo update-alternatives --install /usr/bin/gcc gcc /usr/bin/gcc-8 100
-        sudo update-alternatives --install /usr/bin/g++ g++ /usr/bin/g++-8 100
+        # NO
+        # sudo apt-get install gcc-8 g++-8
+        # sudo update-alternatives --install /usr/bin/gcc gcc /usr/bin/gcc-8 100
+        # sudo update-alternatives --install /usr/bin/g++ g++ /usr/bin/g++-8 100
 
         # Install OpenGL
         # TODO(srj): OpenGL is only needed to build the opengl tests (which we don't even run)...
         sudo apt-get install libglu1-mesa-dev freeglut3-dev mesa-common-dev
-
-        # Install a CPU-only version of OpenCL.
-        # sudo add-apt-repository ppa:intel-opencl/intel-opencl
-        # sudo apt-get update
-        # sudo apt-get install intel-opencl-icd
 
         # Install libjpeg
         sudo apt-get -y --force-yes install libjpeg-dev
