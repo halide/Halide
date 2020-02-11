@@ -78,7 +78,82 @@ Expr Simplify::visit(const VectorReduce *op, ExprInfo *bounds) {
         }
     };
 
-    // TODO: VectorReduce of Ramp or Broadcast can be simplified.
+    // We can pull multiplications by a broadcast out of horizontal
+    // additions and do the horizontal addition earlier. This means we
+    // do the multiplication on a vector with fewer lanes. This
+    // approach applies whenever we have a distributive law. We'll
+    // exploit the following distributive laws here:
+    // - Multiplication distributes over addition
+    // - min/max distributes over min/max
+    // - and/or distributes over and/or
+
+    // Further, we can collapse min/max/and/or of a broadcast down to
+    // a narrower broadcast.
+
+    // TODO: There are other rules we could apply here if they ever
+    // come up in practice:
+    // - a horizontal min/max/add of a ramp is a different ramp
+    // - horizontal add of a broadcast is a broadcast + multiply
+    // - horizontal reduce of an shuffle_vectors may be simplifiable to the
+    //   underlying op on different shuffle_vectors calls
+
+    const int lanes = op->type.lanes();
+    switch (op->op) {
+    case VectorReduce::Add: {
+        auto rewrite = IRMatcher::rewriter(IRMatcher::horizontal_add(value, lanes), op->type);
+        if (rewrite(horizontal_add(x * broadcast(y)), horizontal_add(x, lanes) * broadcast(y, lanes)) ||
+            rewrite(horizontal_add(broadcast(x) * y), broadcast(x, lanes) * horizontal_add(x, lanes))) {
+            return mutate(rewrite.result, bounds);
+        }
+        break;
+    }
+    case VectorReduce::Min: {
+        auto rewrite = IRMatcher::rewriter(IRMatcher::horizontal_min(value, lanes), op->type);
+        if (rewrite(horizontal_min(min(x, broadcast(y))), min(horizontal_min(x, lanes), broadcast(y, lanes))) ||
+            rewrite(horizontal_min(min(broadcast(x), y)), min(broadcast(x, lanes), horizontal_min(y, lanes))) ||
+            rewrite(horizontal_min(max(x, broadcast(y))), max(horizontal_min(x, lanes), broadcast(y, lanes))) ||
+            rewrite(horizontal_min(max(broadcast(x), y)), max(broadcast(x, lanes), horizontal_min(y, lanes))) ||
+            rewrite(horizontal_min(broadcast(x)), broadcast(x, lanes))) {
+            return mutate(rewrite.result, bounds);
+        }
+        break;
+    }
+    case VectorReduce::Max: {
+        auto rewrite = IRMatcher::rewriter(IRMatcher::horizontal_max(value, lanes), op->type);
+        if (rewrite(horizontal_max(min(x, broadcast(y))), min(horizontal_max(x, lanes), broadcast(y, lanes))) ||
+            rewrite(horizontal_max(min(broadcast(x), y)), min(broadcast(x, lanes), horizontal_max(y, lanes))) ||
+            rewrite(horizontal_max(max(x, broadcast(y))), max(horizontal_max(x, lanes), broadcast(y, lanes))) ||
+            rewrite(horizontal_max(max(broadcast(x), y)), max(broadcast(x, lanes), horizontal_max(y, lanes))) ||
+            rewrite(horizontal_max(broadcast(x)), broadcast(x, lanes))) {
+            return mutate(rewrite.result, bounds);
+        }
+        break;
+    }
+    case VectorReduce::And: {
+        auto rewrite = IRMatcher::rewriter(IRMatcher::horizontal_and(value, lanes), op->type);
+        if (rewrite(horizontal_and(x || broadcast(y)), horizontal_and(x, lanes) || broadcast(y, lanes)) ||
+            rewrite(horizontal_and(broadcast(x) || y), broadcast(x, lanes) || horizontal_and(y, lanes)) ||
+            rewrite(horizontal_and(x && broadcast(y)), horizontal_and(x, lanes) && broadcast(y, lanes)) ||
+            rewrite(horizontal_and(broadcast(x) && y), broadcast(x, lanes) && horizontal_and(y, lanes)) ||
+            rewrite(horizontal_and(broadcast(x)), broadcast(x, lanes))) {
+            return mutate(rewrite.result, bounds);
+        }
+        break;
+    }
+    case VectorReduce::Or: {
+        auto rewrite = IRMatcher::rewriter(IRMatcher::horizontal_or(value, lanes), op->type);
+        if (rewrite(horizontal_or(x || broadcast(y)), horizontal_or(x, lanes) || broadcast(y, lanes)) ||
+            rewrite(horizontal_or(broadcast(x) || y), broadcast(x, lanes) || horizontal_or(y, lanes)) ||
+            rewrite(horizontal_or(x && broadcast(y)), horizontal_or(x, lanes) && broadcast(y, lanes)) ||
+            rewrite(horizontal_or(broadcast(x) && y), broadcast(x, lanes) && horizontal_or(y, lanes)) ||
+            rewrite(horizontal_or(broadcast(x)), broadcast(x, lanes))) {
+            return mutate(rewrite.result, bounds);
+        }
+        break;
+    }
+    default:
+        break;
+    }
 
     if (value.same_as(op->value)) {
         return op;
