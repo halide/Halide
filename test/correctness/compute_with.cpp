@@ -578,12 +578,12 @@ int rgb_yuv420_test() {
         // , get_jit_target_from_environment().with_feature(Target::TraceLoads).with_feature(Target::TraceStores));
         bool too_many_memops = false;
         if (stores_total > 2 * store_count_ref) {
-            printf("Store count for correctness_compute_with rgb to yuv420 case exceeds reference by more than 2x. (Reference: %lu, compute_with: %lu).\n",
+            printf("Store count for correctness_compute_with rgb to yuv420 case exceeds reference by more than 2x. (Reference: %llu, compute_with: %llu).\n",
                    store_count_ref, stores_total);
             too_many_memops = true;
         }
         if (loads_total > 2 * load_count_ref) {
-            printf("Load count for correctness_compute_with rgb to yuv420 case exceeds reference by more than 2x. (Reference: %lu, compute_with: %lu).\n",
+            printf("Load count for correctness_compute_with rgb to yuv420 case exceeds reference by more than 2x. (Reference: %llu, compute_with: %llu).\n",
                    load_count_ref, loads_total);
             too_many_memops = true;
         }
