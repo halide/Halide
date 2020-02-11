@@ -432,8 +432,8 @@ Expr lossless_cast(Type t, Expr e) {
         if (const Add *add = e.as<Add>()) {
             // If we can losslessly narrow the args even more
             // aggressively, we're good.
-            // E.g. lossless_cast(uint16, (uint32)(a_u8) + 37
-            // = (uint16)(a_u8) + 37
+            // E.g. lossless_cast(uint16, (uint32)(some_u8) + 37)
+            // = (uint16)(some_u8) + 37
             Expr a = lossless_cast(t.with_bits(t.bits() / 2), add->a);
             Expr b = lossless_cast(t.with_bits(t.bits() / 2), add->b);
             if (a.defined() && b.defined()) {
@@ -454,13 +454,37 @@ Expr lossless_cast(Type t, Expr e) {
         }
 
         if (const Mul *mul = e.as<Mul>()) {
-            debug(0) << "Widening mul: " << e << "\n";
             Expr a = lossless_cast(t.with_bits(t.bits() / 2), mul->a);
             Expr b = lossless_cast(t.with_bits(t.bits() / 2), mul->b);
             if (a.defined() && b.defined()) {
                 return cast(t, a) * cast(t, b);
             } else {
                 return Expr();
+            }
+        }
+
+        if (const VectorReduce *red = e.as<VectorReduce>()) {
+            const int factor = red->value.type().lanes() / red->type.lanes();
+            switch (red->op) {
+            case VectorReduce::Add:
+                if (t.bits() >= 16 && factor < (1 << (t.bits() / 2))) {
+                    Type narrower = red->value.type().with_bits(t.bits() / 2);
+                    Expr val = lossless_cast(narrower, red->value);
+                    if (val.defined()) {
+                        return VectorReduce::make(red->op, val, red->type.lanes());
+                    }
+                }
+                break;
+            case VectorReduce::Max:
+            case VectorReduce::Min: {
+                Expr val = lossless_cast(t, red->value);
+                if (val.defined()) {
+                    return VectorReduce::make(red->op, val, red->type.lanes());
+                }
+                break;
+            }
+            default:
+                break;
             }
         }
     }

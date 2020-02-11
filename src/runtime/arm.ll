@@ -509,6 +509,81 @@ define weak_odr <1 x i64> @pairwise_Add_uint64x1_uint32x2(<2 x i32> %x) nounwind
        ret <1 x i64> %result
 }
 
+declare <4 x i16> @llvm.arm.neon.vpadals.v4i16.v8i8(<4 x i16>, <8 x i8>) nounwind readnone
+declare <2 x i32> @llvm.arm.neon.vpadals.v2i32.v4i16(<2 x i32>, <4 x i16>) nounwind readnone
+declare <1 x i64> @llvm.arm.neon.vpadals.v1i64.v2i32(<1 x i64>, <2 x i32>) nounwind readnone
+declare <4 x i16> @llvm.arm.neon.vpadalu.v4i16.v8i8(<4 x i16>, <8 x i8>) nounwind readnone
+declare <2 x i32> @llvm.arm.neon.vpadalu.v2i32.v4i16(<2 x i32>, <4 x i16>) nounwind readnone
+declare <1 x i64> @llvm.arm.neon.vpadalu.v1i64.v2i32(<1 x i64>, <2 x i32>) nounwind readnone
+declare <8 x i16> @llvm.arm.neon.vpadals.v8i16.v16i8(<8 x i16>, <16 x i8>) nounwind readnone
+declare <4 x i32> @llvm.arm.neon.vpadals.v4i32.v8i16(<4 x i32>, <8 x i16>) nounwind readnone
+declare <2 x i64> @llvm.arm.neon.vpadals.v2i64.v4i32(<2 x i64>, <4 x i32>) nounwind readnone
+declare <8 x i16> @llvm.arm.neon.vpadalu.v8i16.v16i8(<8 x i16>, <16 x i8>) nounwind readnone
+declare <4 x i32> @llvm.arm.neon.vpadalu.v4i32.v8i16(<4 x i32>, <8 x i16>) nounwind readnone
+declare <2 x i64> @llvm.arm.neon.vpadalu.v2i64.v4i32(<2 x i64>, <4 x i32>) nounwind readnone
+
+
+define weak_odr <8 x i16> @pairwise_Add_int16x8_int8x16_accumulate(<8 x i16> %a, <16 x i8> %x) nounwind alwaysinline {
+       %result = tail call <8 x i16> @llvm.arm.neon.vpadals.v8i16.v16i8(<8 x i16> %a, <16 x i8> %x)
+       ret <8 x i16> %result
+}
+
+define weak_odr <4 x i16> @pairwise_Add_int16x4_int8x8_accumulate(<4 x i16> %a, <8 x i8> %x) nounwind alwaysinline {
+       %result = tail call <4 x i16> @llvm.arm.neon.vpadals.v4i16.v8i8(<4 x i16> %a, <8 x i8> %x)
+       ret <4 x i16> %result
+}
+
+define weak_odr <4 x i32> @pairwise_Add_int32x4_int16x8_accumulate(<4 x i32> %a, <8 x i16> %x) nounwind alwaysinline {
+       %result = tail call <4 x i32> @llvm.arm.neon.vpadals.v4i32.v8i16(<4 x i32> %a, <8 x i16> %x)
+       ret <4 x i32> %result
+}
+
+define weak_odr <2 x i32> @pairwise_Add_int32x2_int16x4_accumulate(<2 x i32> %a, <4 x i16> %x) nounwind alwaysinline {
+       %result = tail call <2 x i32> @llvm.arm.neon.vpadals.v2i32.v4i16(<2 x i32> %a, <4 x i16> %x)
+       ret <2 x i32> %result
+}
+
+define weak_odr <2 x i64> @pairwise_Add_int64x2_int32x4_accumulate(<2 x i64> %a, <4 x i32> %x) nounwind alwaysinline {
+       %result = tail call <2 x i64> @llvm.arm.neon.vpadals.v2i64.v4i32(<2 x i64> %a, <4 x i32> %x)
+       ret <2 x i64> %result
+}
+
+define weak_odr <1 x i64> @pairwise_Add_int64x1_int32x2_accumulate(<1 x i64> %a, <2 x i32> %x) nounwind alwaysinline {
+       %result = tail call <1 x i64> @llvm.arm.neon.vpadals.v1i64.v2i32(<1 x i64> %a, <2 x i32> %x)
+       ret <1 x i64> %result
+}
+
+
+define weak_odr <8 x i16> @pairwise_Add_uint16x8_uint8x16_accumulate(<8 x i16> %a, <16 x i8> %x) nounwind alwaysinline {
+       %result = tail call <8 x i16> @llvm.arm.neon.vpadalu.v8i16.v16i8(<8 x i16> %a, <16 x i8> %x)
+       ret <8 x i16> %result
+}
+
+define weak_odr <4 x i16> @pairwise_Add_uint16x4_uint8x8_accumulate(<4 x i16> %a, <8 x i8> %x) nounwind alwaysinline {
+       %result = tail call <4 x i16> @llvm.arm.neon.vpadalu.v4i16.v8i8(<4 x i16> %a, <8 x i8> %x)
+       ret <4 x i16> %result
+}
+
+define weak_odr <4 x i32> @pairwise_Add_uint32x4_uint16x8_accumulate(<4 x i32> %a, <8 x i16> %x) nounwind alwaysinline {
+       %result = tail call <4 x i32> @llvm.arm.neon.vpadalu.v4i32.v8i16(<4 x i32> %a, <8 x i16> %x)
+       ret <4 x i32> %result
+}
+
+define weak_odr <2 x i32> @pairwise_Add_uint32x2_uint16x4_accumulate(<2 x i32> %a, <4 x i16> %x) nounwind alwaysinline {
+       %result = tail call <2 x i32> @llvm.arm.neon.vpadalu.v2i32.v4i16(<2 x i32> %a, <4 x i16> %x)
+       ret <2 x i32> %result
+}
+
+define weak_odr <2 x i64> @pairwise_Add_uint64x2_uint32x4_accumulate(<2 x i64> %a, <4 x i32> %x) nounwind alwaysinline {
+       %result = tail call <2 x i64> @llvm.arm.neon.vpadalu.v2i64.v4i32(<2 x i64> %a, <4 x i32> %x)
+       ret <2 x i64> %result
+}
+
+define weak_odr <1 x i64> @pairwise_Add_uint64x1_uint32x2_accumulate(<1 x i64> %a, <2 x i32> %x) nounwind alwaysinline {
+       %result = tail call <1 x i64> @llvm.arm.neon.vpadalu.v1i64.v2i32(<1 x i64> %a, <2 x i32> %x)
+       ret <1 x i64> %result
+}
+
 declare <2 x float> @llvm.arm.neon.vpmaxs.v2f32(<2 x float>, <2 x float>) nounwind readnone
 declare <2 x i32> @llvm.arm.neon.vpmaxs.v2i32(<2 x i32>, <2 x i32>) nounwind readnone
 declare <2 x i32> @llvm.arm.neon.vpmaxu.v2i32(<2 x i32>, <2 x i32>) nounwind readnone

@@ -395,6 +395,80 @@ define weak_odr <1 x i64> @pairwise_Add_uint64x1_uint32x2(<2 x i32> %x) nounwind
        ret <1 x i64> %result
 }
 
+define weak_odr <8 x i16> @pairwise_Add_int16x8_int8x16_accumulate(<8 x i16> %a, <16 x i8> %x) nounwind alwaysinline {
+       %y = tail call <8 x i16> @llvm.aarch64.neon.saddlp.v8i16.v16i8(<16 x i8> %x)
+       %result = add <8 x i16> %a, %y
+       ret <8 x i16> %result
+}
+
+define weak_odr <4 x i16> @pairwise_Add_int16x4_int8x8_accumulate(<4 x i16> %a, <8 x i8> %x) nounwind alwaysinline {
+       %y = tail call <4 x i16> @llvm.aarch64.neon.saddlp.v4i16.v8i8(<8 x i8> %x)
+       %result = add <4 x i16> %a, %y
+       ret <4 x i16> %result
+}
+
+define weak_odr <4 x i32> @pairwise_Add_int32x4_int16x8_accumulate(<4 x i32> %a, <8 x i16> %x) nounwind alwaysinline {
+       %y = tail call <4 x i32> @llvm.aarch64.neon.saddlp.v4i32.v8i16(<8 x i16> %x)
+       %result = add <4 x i32> %a, %y
+       ret <4 x i32> %result
+}
+
+define weak_odr <2 x i32> @pairwise_Add_int32x2_int16x4_accumulate(<2 x i32> %a, <4 x i16> %x) nounwind alwaysinline {
+       %y = tail call <2 x i32> @llvm.aarch64.neon.saddlp.v2i32.v4i16(<4 x i16> %x)
+       %result = add <2 x i32> %a, %y
+       ret <2 x i32> %result
+}
+
+define weak_odr <2 x i64> @pairwise_Add_int64x2_int32x4_accumulate(<2 x i64> %a, <4 x i32> %x) nounwind alwaysinline {
+       %y = tail call <2 x i64> @llvm.aarch64.neon.saddlp.v2i64.v4i32(<4 x i32> %x)
+       %result = add <2 x i64> %a, %y
+       ret <2 x i64> %result
+}
+
+define weak_odr <1 x i64> @pairwise_Add_int64x1_int32x2_accumulate(<1 x i64> %a, <2 x i32> %x) nounwind alwaysinline {
+       %y = tail call <1 x i64> @llvm.aarch64.neon.saddlp.v1i64.v2i32(<2 x i32> %x)
+       %result = add <1 x i64> %a, %y
+       ret <1 x i64> %result
+}
+
+define weak_odr <8 x i16> @pairwise_Add_uint16x8_uint8x16_accumulate(<8 x i16> %a, <16 x i8> %x) nounwind alwaysinline {
+       %y = tail call <8 x i16> @llvm.aarch64.neon.uaddlp.v8i16.v16i8(<16 x i8> %x)
+       %result = add <8 x i16> %a, %y
+       ret <8 x i16> %result
+}
+
+define weak_odr <4 x i16> @pairwise_Add_uint16x4_uint8x8_accumulate(<4 x i16> %a, <8 x i8> %x) nounwind alwaysinline {
+       %y = tail call <4 x i16> @llvm.aarch64.neon.uaddlp.v4i16.v8i8(<8 x i8> %x)
+       %result = add <4 x i16> %a, %y
+       ret <4 x i16> %result
+}
+
+define weak_odr <4 x i32> @pairwise_Add_uint32x4_uint16x8_accumulate(<4 x i32> %a, <8 x i16> %x) nounwind alwaysinline {
+       %y = tail call <4 x i32> @llvm.aarch64.neon.uaddlp.v4i32.v8i16(<8 x i16> %x)
+       %result = add <4 x i32> %a, %y
+       ret <4 x i32> %result
+}
+
+define weak_odr <2 x i32> @pairwise_Add_uint32x2_uint16x4_accumulate(<2 x i32> %a, <4 x i16> %x) nounwind alwaysinline {
+       %y = tail call <2 x i32> @llvm.aarch64.neon.uaddlp.v2i32.v4i16(<4 x i16> %x)
+       %result = add <2 x i32> %a, %y
+       ret <2 x i32> %result
+}
+
+define weak_odr <2 x i64> @pairwise_Add_uint64x2_uint32x4_accumulate(<2 x i64> %a, <4 x i32> %x) nounwind alwaysinline {
+       %y = tail call <2 x i64> @llvm.aarch64.neon.uaddlp.v2i64.v4i32(<4 x i32> %x)
+       %result = add <2 x i64> %a, %y
+       ret <2 x i64> %result
+}
+
+define weak_odr <1 x i64> @pairwise_Add_uint64x1_uint32x2_accumulate(<1 x i64> %a, <2 x i32> %x) nounwind alwaysinline {
+       %y = tail call <1 x i64> @llvm.aarch64.neon.uaddlp.v1i64.v2i32(<2 x i32> %x)
+       %result = add <1 x i64> %a, %y
+       ret <1 x i64> %result
+}
+
+
+
 declare <16 x i8> @llvm.aarch64.neon.smaxp.v16i8(<16 x i8>, <16 x i8>) nounwind readnone
 declare <16 x i8> @llvm.aarch64.neon.umaxp.v16i8(<16 x i8>, <16 x i8>) nounwind readnone
 declare <2 x double> @llvm.aarch64.neon.fmaxp.v2f64(<2 x double>, <2 x double>) nounwind readnone

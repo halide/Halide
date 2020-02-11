@@ -1,6 +1,7 @@
 #include <iostream>
 #include <sstream>
 
+#include "CSE.h"
 #include "CodeGen_ARM.h"
 #include "ConciseCasts.h"
 #include "Debug.h"
@@ -460,10 +461,6 @@ void CodeGen_ARM::visit(const Div *op) {
             }
         }
     }
-    CodeGen_Posix::visit(op);
-}
-
-void CodeGen_ARM::visit(const Add *op) {
     CodeGen_Posix::visit(op);
 }
 
@@ -1008,11 +1005,12 @@ void CodeGen_ARM::visit(const Call *op) {
     CodeGen_Posix::visit(op);
 }
 
-void CodeGen_ARM::visit(const VectorReduce *op) {
-    if (neon_intrinsics_disabled()) {
-        CodeGen_Posix::visit(op);
-        return;
-    }
+namespace {
+bool pattern_match_vector_reduce(const VectorReduce *op,
+                                 int target_bits,
+                                 std::string *intrin_name,
+                                 int *intrin_lanes,
+                                 Expr *intrin_arg) {
 
     // ARM has a variety of pairwise reduction ops. The versions that
     // do not widen take two 64-bit args and return one 64-bit vector
@@ -1027,7 +1025,7 @@ void CodeGen_ARM::visit(const VectorReduce *op) {
          op->type.is_uint() ||
          op->type.is_float()) &&
         (op->type.element_of() != Float(64) ||
-         target.bits == 64) &&
+         target_bits == 64) &&
         factor == 2) {
         Expr arg = op->value;
         if (op->op == VectorReduce::Add &&
@@ -1046,7 +1044,7 @@ void CodeGen_ARM::visit(const VectorReduce *op) {
             }
         }
         int output_bits;
-        if (target.bits == 32 && arg.type().bits() == op->type.bits()) {
+        if (target_bits == 32 && arg.type().bits() == op->type.bits()) {
             // For the non-widening version, the output must be 64-bit
             output_bits = 64;
         } else if (op->type.bits() * op->type.lanes() <= 64) {
@@ -1070,13 +1068,105 @@ void CodeGen_ARM::visit(const VectorReduce *op) {
             intrin_type = intrin_type.with_code(Type::UInt);
         }
 
-        std::stringstream intrin_name;
-        intrin_name << "pairwise_" << op->op << "_" << intrin_type << "_" << arg_type;
-        value = call_intrin(op->type, output_lanes, intrin_name.str(), {arg});
+        std::stringstream ss;
+        ss << "pairwise_" << op->op << "_" << intrin_type << "_" << arg_type;
+        *intrin_name = ss.str();
+        *intrin_lanes = output_lanes;
+        *intrin_arg = arg;
+        return true;
+    }
+    return false;
+}
+}  // namespace
+
+void CodeGen_ARM::visit(const VectorReduce *op) {
+    if (neon_intrinsics_disabled()) {
+        CodeGen_Posix::visit(op);
+        return;
+    }
+
+    string intrin_name;
+    int intrin_lanes;
+    Expr intrin_arg;
+    if (pattern_match_vector_reduce(op, target.bits,
+                                    &intrin_name, &intrin_lanes, &intrin_arg)) {
+
+        value = call_intrin(op->type, intrin_lanes, intrin_name, {intrin_arg});
         return;
     }
 
     // TODO: When sdot and udot become available (armv8.4), pattern match those here.
+
+    CodeGen_Posix::visit(op);
+}
+
+void CodeGen_ARM::visit(const Add *op) {
+    if (neon_intrinsics_disabled()) {
+        CodeGen_Posix::visit(op);
+        return;
+    }
+
+    Expr a = op->a, b = op->b;
+    const VectorReduce *red_a = a.as<VectorReduce>();
+    const VectorReduce *red_b = b.as<VectorReduce>();
+
+    if (red_a && !red_b) {
+        std::swap(a, b);
+        std::swap(red_a, red_b);
+    }
+
+    if (red_b &&
+        red_b->op == VectorReduce::Add &&
+        (op->type.is_int() || op->type.is_uint()) &&
+        op->type.bits() >= 16) {
+
+        int factor = red_b->value.type().lanes() / op->type.lanes();
+
+        // FIXME: largely copy-pasted from CodeGen_LLVM::visit(VectorReduce *op)
+        if (factor > 2 && ((factor & 1) == 0)) {
+            // Factor the reduce into multiple stages. If we're going to
+            // be widen the type by 4x or more we should also factor the
+            // widening into multiple stages.
+            Type intermediate_type = red_b->value.type().with_lanes(red_b->value.type().lanes() / 2);
+            Expr equiv = VectorReduce::make(red_b->op, red_b->value, intermediate_type.lanes());
+            if (red_b->op == VectorReduce::Add &&
+                (red_b->type.is_int() || red_b->type.is_uint()) &&
+                red_b->type.bits() >= 32) {
+                Type narrower_type = red_b->value.type().with_bits(red_b->type.bits() / 4);
+                Expr narrower = lossless_cast(narrower_type, red_b->value);
+                if (!narrower.defined() && narrower_type.is_int()) {
+                    // Maybe we can narrow to an uint instead.
+                    narrower_type = narrower_type.with_code(Type::UInt);
+                    narrower = lossless_cast(narrower_type, red_b->value);
+                }
+                if (narrower.defined()) {
+                    // Widen it by 2x before the horizontal add
+                    narrower = cast(narrower.type().with_bits(narrower.type().bits() * 2), narrower);
+                    equiv = VectorReduce::make(red_b->op, narrower, intermediate_type.lanes());
+                    // Then widen it by 2x again afterwards
+                    equiv = cast(intermediate_type, equiv);
+                }
+            }
+            equiv = VectorReduce::make(red_b->op, equiv, red_b->type.lanes());
+            equiv = a + equiv;
+            equiv = common_subexpression_elimination(equiv);
+            codegen(equiv);
+            return;
+        }
+
+        string intrin_name;
+        int intrin_lanes;
+        Expr intrin_arg;
+        if (factor == 2 &&
+            pattern_match_vector_reduce(red_b, target.bits,
+                                        &intrin_name, &intrin_lanes, &intrin_arg) &&
+            intrin_arg.type().bits() < op->type.bits()) {
+            // If the factor is two and we got a widening variant, we
+            // can use the accumulating widening version instead.
+            value = call_intrin(op->type, intrin_lanes, intrin_name + "_accumulate", {a, intrin_arg});
+            return;
+        }
+    }
 
     CodeGen_Posix::visit(op);
 }
