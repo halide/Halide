@@ -490,22 +490,20 @@ int rgb_yuv420_test() {
 
     uint64_t load_count_ref, store_count_ref;
     {
-        Var x("x"), y("y"), z("z"), xi("xi");
+        Var x("x"), y("y"), z("z");
         Func y_part("y_part"), u_part("u_part"), v_part("v_part"), rgb("rgb"), rgb_x("rgb_x");
 
-        // Func clamped = BoundaryConditions::repeat_edge(input);
-        Func clamped;
-        clamped(x, y, z) = input(x, y, z);
-        rgb_x(x, y, z) = (clamped(x, y, z) + 2 * clamped(x, y, z) + clamped(x, y, z));
-        // rgb(x, y, z) = (rgb_x(x, y - 1, z) + 2 * rgb_x(x, y, z) + rgb_x(x, y - 1, z));
+        Func clamped = BoundaryConditions::repeat_edge(input);
+        rgb_x(x, y, z) = (clamped(x - 1, y, z) + 2*clamped(x, y, z) + clamped(x + 1, y, z));
+        rgb(x, y, z) = (rgb_x(x, y - 1, z) + 2*rgb_x(x, y, z) + rgb_x(x, y - 1, z))/16;
 
-        y_part(x, y) = input(x, y, 0);// + input(x, y, 0) + input(x, y, 1) + input(x, y, 2);
-        u_part(x, y) = rgb_x(2 * x, 2 * y, 0);//rgb_x(2 * x, 2 * y, 0);// - rgb_x(2 * x, 2 * y, 1) + rgb_x(2 * x, 2 * y, 2);
-        v_part(x, y) = rgb_x(2 * x, 2 * y, 0);//rgb_x(2 * x, 2 * y, 0) - rgb_x(2 * x, 2 * y, 1) - rgb_x(2 * x, 2 * y, 2);
+        y_part(x, y) = ((66 * input(x, y, 0) + 129 * input(x, y, 1) +  25 * input(x, y, 2) + 128) >> 8) +  16;
+        u_part(x, y) = (( -38 * rgb(2*x, 2*y, 0) -  74 * rgb(2*x, 2*y, 1) + 112 * rgb(2*x, 2*y, 2) + 128) >> 8) + 128;
+        v_part(x, y) = (( 112 * rgb(2*x, 2*y, 0) -  94 * rgb(2*x, 2*y, 1) -  18 * rgb(2*x, 2*y, 2) + 128) >> 8) + 128;
 
-        y_part.split(x, x, xi, 8, TailStrategy::RoundUp);//.vectorize(xi);
-        u_part.split(x, x, xi, 8, TailStrategy::RoundUp);//.vectorize(xi);
-        v_part.split(x, x, xi, 8, TailStrategy::RoundUp);//.vectorize(xi);
+        y_part.vectorize(x, 8);
+        u_part.vectorize(x, 8);
+        v_part.vectorize(x, 8);
         loads_total = 0;
         stores_total = 0;
         Pipeline p({y_part, u_part, v_part});
@@ -519,30 +517,28 @@ int rgb_yuv420_test() {
 
     {
         Var x("x"), y("y"), z("z");
-        Func y_part("l_part"), u_part("u_part"), v_part("v_part"), rgb("rgb"), rgb_x("rgb_x");
+        Func y_part("y_part"), u_part("u_part"), v_part("v_part"), rgb("rgb"), rgb_x("rgb_x");
 
-        // Func clamped = BoundaryConditions::repeat_edge(input);
-        Func clamped;
-        clamped(x, y, z) = input(x, y, z);
-        rgb_x(x, y, z) = (clamped(x, y, z) + 2 * clamped(x, y, z) + clamped(x, y, z));
-        // rgb(x, y, z) = (rgb_x(x, y - 1, z) + 2 * rgb_x(x, y, z) + rgb_x(x, y - 1, z));
+        Func clamped = BoundaryConditions::repeat_edge(input);
+        rgb_x(x, y, z) = (clamped(x - 1, y, z) + 2*clamped(x, y, z) + clamped(x + 1, y, z));
+        rgb(x, y, z) = (rgb_x(x, y - 1, z) + 2*rgb_x(x, y, z) + rgb_x(x, y - 1, z))/16;
 
-        y_part(x, y) = input(x, y, 0);// + input(x, y, 0) + input(x, y, 1) + input(x, y, 2);
-        u_part(x, y) = rgb_x(2 * x, 2 * y, 0);// - rgb_x(2 * x, 2 * y, 1) + rgb_x(2 * x, 2 * y, 2);
-        v_part(x, y) = rgb_x(2 * x, 2 * y, 0);//rgb_x(2 * x, 2 * y, 0) - rgb_x(2 * x, 2 * y, 1) - rgb_x(2 * x, 2 * y, 2);
+        y_part(x, y) = ((66 * input(x, y, 0) + 129 * input(x, y, 1) +  25 * input(x, y, 2) + 128) >> 8) +  16;
+        u_part(x, y) = (( -38 * rgb(2*x, 2*y, 0) -  74 * rgb(2*x, 2*y, 1) + 112 * rgb(2*x, 2*y, 2) + 128) >> 8) + 128;
+        v_part(x, y) = (( 112 * rgb(2*x, 2*y, 0) -  94 * rgb(2*x, 2*y, 1) -  18 * rgb(2*x, 2*y, 2) + 128) >> 8) + 128;
 
         Var xi("xi"), yi("yi");
         y_part.tile(x, y, xi, yi, 16, 2, TailStrategy::RoundUp);
         u_part.tile(x, y, xi, yi, 8, 1, TailStrategy::RoundUp);
         v_part.tile(x, y, xi, yi, 8, 1, TailStrategy::RoundUp);
 
-        // y_part.unroll(yi);
-        // y_part.vectorize(xi);
-        // u_part.vectorize(xi);
-        // v_part.vectorize(xi);
+        y_part.unroll(yi);
+        y_part.vectorize(xi);
+        u_part.vectorize(xi);
+        v_part.vectorize(xi);
 
         u_part.compute_with(y_part, x, LoopAlignStrategy::AlignStart);
-        v_part.compute_with(y_part, x, LoopAlignStrategy::AlignStart);
+        v_part.compute_with(u_part, x, LoopAlignStrategy::AlignStart);
 
         Expr width = v_part.output_buffer().width();
         Expr height = v_part.output_buffer().height();
@@ -551,13 +547,12 @@ int rgb_yuv420_test() {
         u_part.bound(x, 0, 128).bound(y, 0, 128);
         v_part.bound(x, 0, 128).bound(y, 0, 128);
         y_part.bound(x, 0, 2 * 128).bound(y, 0, 2 * 128);
-        rgb_x.bound(z, 0, 3);
-        // rgb.bound(z, 0, 3);
+        rgb.bound(z, 0, 3);
 
-        // rgb_x.fold_storage(y, 2);
-        // rgb_x.store_root();
-        rgb_x.compute_at(y_part, y);//.vectorize(x, 8);
-        // rgb.compute_at(y_part, y);//.vectorize(x, 8);
+        rgb_x.fold_storage(y, 2);
+        rgb_x.store_root();
+        rgb_x.compute_at(y_part, y).vectorize(x, 8);
+        rgb.compute_at(y_part, y).vectorize(x, 8);
 
         stores = {
             {rgb_x.name(), Bound(0, size - 1, -1, size - 2, 0, 2)},
@@ -595,7 +590,7 @@ int rgb_yuv420_test() {
         if (too_many_memops) {
             return -1;
         }
-        
+
     }
 
     auto y_func = [y_im_ref](int x, int y) {
@@ -1217,35 +1212,35 @@ int nested_compute_with_test() {
 }  // namespace
 
 int main(int argc, char **argv) {
-    printf("Running split reorder test\n");
-    if (split_test() != 0) {
-        return -1;
-    }
+    // printf("Running split reorder test\n");
+    // if (split_test() != 0) {
+    //     return -1;
+    // }
 
-    printf("Running fuse test\n");
-    if (fuse_test() != 0) {
-        return -1;
-    }
+    // printf("Running fuse test\n");
+    // if (fuse_test() != 0) {
+    //     return -1;
+    // }
 
-    printf("Running multiple fuse group test\n");
-    if (multiple_fuse_group_test() != 0) {
-        return -1;
-    }
+    // printf("Running multiple fuse group test\n");
+    // if (multiple_fuse_group_test() != 0) {
+    //     return -1;
+    // }
 
-    printf("Running multiple outputs test\n");
-    if (multiple_outputs_test() != 0) {
-        return -1;
-    }
+    // printf("Running multiple outputs test\n");
+    // if (multiple_outputs_test() != 0) {
+    //     return -1;
+    // }
 
-    printf("Running double split fuse test\n");
-    if (double_split_fuse_test() != 0) {
-        return -1;
-    }
+    // printf("Running double split fuse test\n");
+    // if (double_split_fuse_test() != 0) {
+    //     return -1;
+    // }
 
-    printf("Running vectorize test\n");
-    if (vectorize_test() != 0) {
-        return -1;
-    }
+    // printf("Running vectorize test\n");
+    // if (vectorize_test() != 0) {
+    //     return -1;
+    // }
 
     /*
      * Note: we are deprecating skipping parts of a fused group in favor of
@@ -1262,40 +1257,40 @@ int main(int argc, char **argv) {
         return -1;
     }
 
-    printf("Running with specialization test\n");
-    if (with_specialization_test() != 0) {
-        return -1;
-    }
+    // printf("Running with specialization test\n");
+    // if (with_specialization_test() != 0) {
+    //     return -1;
+    // }
 
-    printf("Running fuse compute at test\n");
-    if (fuse_compute_at_test() != 0) {
-        return -1;
-    }
+    // printf("Running fuse compute at test\n");
+    // if (fuse_compute_at_test() != 0) {
+    //     return -1;
+    // }
 
-    printf("Running nested compute with test\n");
-    if (nested_compute_with_test() != 0) {
-        return -1;
-    }
+    // printf("Running nested compute with test\n");
+    // if (nested_compute_with_test() != 0) {
+    //     return -1;
+    // }
 
-    printf("Running mixed tile factor test\n");
-    if (mixed_tile_factor_test() != 0) {
-        return -1;
-    }
+    // printf("Running mixed tile factor test\n");
+    // if (mixed_tile_factor_test() != 0) {
+    //     return -1;
+    // }
 
-    printf("Running only some are tiled test\n");
-    if (only_some_are_tiled_test() != 0) {
-        return -1;
-    }
+    // printf("Running only some are tiled test\n");
+    // if (only_some_are_tiled_test() != 0) {
+    //     return -1;
+    // }
 
-    printf("Running multiple outputs on gpu test\n");
-    if (multiple_outputs_on_gpu_test() != 0) {
-        return -1;
-    }
+    // printf("Running multiple outputs on gpu test\n");
+    // if (multiple_outputs_on_gpu_test() != 0) {
+    //     return -1;
+    // }
 
-    printf("Running multi tile mixed tile factor test\n");
-    if (multi_tile_mixed_tile_factor_test() != 0) {
-        return -1;
-    }
+    // printf("Running multi tile mixed tile factor test\n");
+    // if (multi_tile_mixed_tile_factor_test() != 0) {
+    //     return -1;
+    // }
 
     printf("Success!\n");
     return 0;
