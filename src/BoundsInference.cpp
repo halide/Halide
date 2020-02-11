@@ -161,7 +161,7 @@ bool is_fused_with_others(const vector<vector<Function>> &fused_groups,
             const auto &iter = std::find_if(dims.begin(), dims.end(),
                                             [&pair](const Dim &d) { return var_name_match(d.var, pair.var_name); });
             if (iter == dims.end()) {
-                return false;
+                continue;
             }
             size_t idx = iter - dims.begin();
             if (var_index >= idx) {
@@ -1021,21 +1021,19 @@ public:
             string var = op->name.substr(last_dot + 1);
 
             set<pair<string, int>> fused_with_f;
+            debug(0) << "????? if there any fused: " << op->name << "\n";
             for (const auto& pair: fused_pairs_in_groups[stages[producing].fused_group_index]) {
-                if ((pair.func_1 == stages[producing].name)
-                    && ((int)pair.stage_1 == stage_index)
+                if (!((pair.func_1 == stages[producing].name) && ((int)pair.stage_1 == stage_index))
+                    && is_fused_with_others(fused_groups, fused_pairs_in_groups,
+                                             f, stage_index,
+                                             pair.func_1, pair.stage_1, var)) {
+                    fused_with_f.insert(make_pair(pair.func_1, pair.stage_1));
+                }
+                if (!((pair.func_2 == stages[producing].name) && ((int)pair.stage_2 == stage_index))
                     && is_fused_with_others(fused_groups, fused_pairs_in_groups,
                                              f, stage_index,
                                              pair.func_2, pair.stage_2, var)) {
                     fused_with_f.insert(make_pair(pair.func_2, pair.stage_2));
-                } else if ((pair.func_2 == stages[producing].name)
-                        && ((int)pair.stage_2 == stage_index)
-                        && is_fused_with_others(fused_groups, fused_pairs_in_groups,
-                                                f, stage_index,
-                                                pair.func_1, pair.stage_1, var)) {
-                    fused_with_f.insert(make_pair(pair.func_1, pair.stage_1));
-                } else {
-                    continue;
                 }
             }
             for (const auto& fused: fused_with_f) {
@@ -1059,9 +1057,6 @@ public:
         body = mutate(body);
 
         if (!no_pipelines) {
-            debug(0) << "visit(const For *op) " << op->name << " " << "\n";
-
-            // debug(0) << "!no_pipelines " << op->name << "\n\n\n\n\n\n";
             // We only care about the bounds of a func if:
             // A) We're not already in a pipeline over that func AND
             // B.1) There's a production of this func somewhere inside this loop OR
@@ -1086,9 +1081,6 @@ public:
                 }
             }
 
-            for (auto prod : inner_productions) {
-                debug(0) << "inner prod - " << prod << "\n";
-            }
             // Finally, define the production bounds for the thing
             // we're producing.
             if (producing >= 0 && !inner_productions.empty()) {
