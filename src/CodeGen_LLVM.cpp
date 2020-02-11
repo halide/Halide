@@ -4410,6 +4410,98 @@ void CodeGen_LLVM::codegen_vector_reduce(const VectorReduce *op, const Expr &ini
         return;
     }
 
+    if (output_lanes == 1) {
+        const int input_lanes = val.type().lanes();
+        const int input_bytes = input_lanes * val.type().bytes();
+        const bool llvm_has_intrinsic =
+            ((op->op == VectorReduce::Add ||
+              op->op == VectorReduce::Mul ||
+              op->op == VectorReduce::Min ||
+              op->op == VectorReduce::Max) &&
+             (input_lanes >= 2) &&
+             ((input_lanes & (input_lanes - 1)) == 0) &&
+             ((!op->type.is_float() && input_bytes <= 1024) ||  // int versions exist up to 1024 bits
+              input_lanes <= 16));                              // float versions exist up to 16 lanes
+        if (llvm_has_intrinsic) {
+            std::stringstream name;
+            name << "llvm.experimental.vector.reduce.";
+            const int bits = op->type.bits();
+            bool takes_initial_value = false;
+            Expr initial_value = init;
+            if (op->type.is_float()) {
+                switch (op->op) {
+                case VectorReduce::Add:
+                    name << "v2.fadd.f" << bits;
+                    takes_initial_value = true;
+                    if (!initial_value.defined()) {
+                        initial_value = make_zero(op->type);
+                    }
+                    break;
+                case VectorReduce::Mul:
+                    name << "v2.fmul.f" << bits;
+                    takes_initial_value = true;
+                    if (!initial_value.defined()) {
+                        initial_value = make_one(op->type);
+                    }
+                    break;
+                case VectorReduce::Min:
+                    name << "fmin";
+                    break;
+                case VectorReduce::Max:
+                    name << "fmax";
+                    break;
+                default:
+                    break;
+                }
+            } else if (op->type.is_int() || op->type.is_uint()) {
+                switch (op->op) {
+                case VectorReduce::Add:
+                    name << "add";
+                    break;
+                case VectorReduce::Mul:
+                    name << "mul";
+                    break;
+                case VectorReduce::Min:
+                    name << (op->type.is_int() ? 's' : 'u') << "min";
+                    break;
+                case VectorReduce::Max:
+                    name << (op->type.is_int() ? 's' : 'u') << "max";
+                    break;
+                default:
+                    break;
+                }
+            }
+            name << ".v" << val.type().lanes() << (op->type.is_float() ? 'f' : 'i') << bits;
+
+            string intrin_name = name.str();
+
+            vector<Expr> args;
+            if (takes_initial_value) {
+                args.push_back(initial_value);
+                initial_value = Expr();
+            }
+            args.push_back(op->value);
+
+            // Make sure the declaration exists, or the codegen for
+            // call will assume that the args should scalarize.
+            if (!module->getFunction(intrin_name)) {
+                vector<llvm::Type *> arg_types;
+                for (const Expr &e : args) {
+                    arg_types.push_back(llvm_type_of(e.type()));
+                }
+                FunctionType *func_t = FunctionType::get(llvm_type_of(op->type), arg_types, false);
+                llvm::Function::Create(func_t, llvm::Function::ExternalLinkage, intrin_name, module.get());
+            }
+
+            Expr equiv = Call::make(op->type, intrin_name, args, Call::PureExtern);
+            if (initial_value.defined()) {
+                equiv = binop(initial_value, equiv);
+            }
+            equiv.accept(this);
+            return;
+        }
+    }
+
     if (output_lanes == 1 &&
         factor > native_lanes &&
         factor % native_lanes == 0) {
