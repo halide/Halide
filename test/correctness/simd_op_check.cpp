@@ -225,12 +225,8 @@ public:
             check(std::string("packuswb") + check_suffix, 8 * w, u8_sat(i16_1));
         }
 
-        // SSE 3
+        // SSE 3 / SSSE 3
 
-        // We don't do horizontal add/sub ops, so nothing new here
-        // TODO!
-
-        // SSSE 3
         if (use_ssse3) {
             for (int w = 2; w <= 4; w++) {
                 check("pmulhrsw", 4 * w, i16((((i32(i16_1) * i32(i16_2)) + 16384)) / 32768));
@@ -238,6 +234,53 @@ public:
                 check("pabsw", 4 * w, abs(i16_1));
                 check("pabsd", 2 * w, abs(i32_1));
             }
+
+            // Paradoxically, haddps is a bad way to do horizontal
+            // adds down to a single scalar on most x86. A better
+            // sequence (according to Peter Cordes on stackoverflow)
+            // is movshdup, addps, movhlps, addss. haddps is still
+            // good if you're only partially reducing and your result
+            // is at least one native vector, if only to save code
+            // size.
+            //
+            // See:
+            // https://stackoverflow.com/questions/6996764/fastest-way-to-do-horizontal-float-vector-sum-on-x86
+            //
+            // We therefore only expect to see horizontal adds for
+            // output types that are at least one native vector:
+            for (int f : {2, 4}) {
+                RDom r(0, f);
+                check("haddps", 8, sum(in_f32(r + f * x)));
+                check("haddpd", 4, sum(in_f64(r + f * x)));
+            }
+
+            // For reducing down to a scalar we expect to see addps and movshdup.
+            check("movshdup", 1, sum(in_f32(RDom(0, 2) + 2 * x)));
+            check("movshdup", 1, sum(in_f32(RDom(0, 4) + 4 * x)));
+            check("movshdup", 1, sum(in_f32(RDom(0, 16) + 16 * x)));
+
+            // The integer horizontal add operations are pretty
+            // terrible on all x86 variants, and LLVM does its best to
+            // avoid generating them, so we won't test that here.
+
+            // Min reductions should use phminposuw when
+            // possible. This only exists for u16. X86 is weird.
+            check("phminposuw", 1, minimum(in_u16(RDom(0, 8) + 8 * x)));
+
+            // Max reductions can uise the same instruction by first
+            // flipping the bits.
+            check("phminposuw", 1, maximum(in_u16(RDom(0, 8) + 8 * x)));
+
+            // Reductions over signed ints can flip the sign bit
+            // before and after (equivalent to adding 128).
+            check("phminposuw", 1, minimum(in_i16(RDom(0, 8) + 8 * x)));
+            check("phminposuw", 1, maximum(in_i16(RDom(0, 8) + 8 * x)));
+
+            // Reductions over 8-bit ints can widen first
+            check("phminposuw", 1, minimum(in_u8(RDom(0, 16) + 16 * x)));
+            check("phminposuw", 1, maximum(in_u8(RDom(0, 16) + 16 * x)));
+            check("phminposuw", 1, minimum(in_i8(RDom(0, 16) + 16 * x)));
+            check("phminposuw", 1, maximum(in_i8(RDom(0, 16) + 16 * x)));
         }
 
         // SSE 4.1
