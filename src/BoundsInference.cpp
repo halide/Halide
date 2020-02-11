@@ -740,7 +740,6 @@ public:
                 result.push(farg,
                             Interval(Variable::make(Int(32), arg + ".min"),
                                      Variable::make(Int(32), arg + ".max")));
-                debug(0) << "populate_scope - " << arg << "\n";
             }
             if (stage > 0) {
                 for (const ReductionVariable &rv : rvars) {
@@ -750,7 +749,6 @@ public:
                 }
             }
 
-            debug(0) << "populate_scope end \n";
             /*for (size_t i = 0; i < func.definition().schedule().bounds().size(); i++) {
                 const Bound &b = func.definition().schedule().bounds()[i];
                 result.push(b.var, Interval(b.min, (b.min + b.extent) - 1));
@@ -805,19 +803,6 @@ public:
                 s.compute_exprs();
                 stages.push_back(s);
             }
-        }
-
-        for (const auto& group: fused_pairs_in_groups) {
-            debug(0) << "Group: \n";
-            for (const auto& pair: group) {
-                debug(0) << pair.func_1 << " " << pair.stage_1 << " "
-                        << pair.func_2 << " " << pair.stage_2 << " "
-                        << pair.var_name << "\n";
-            }
-        }
-
-        for (auto& s: stages) {
-            debug(0) << "Looking for a group - " << s.name << " " << s.fused_group_index << "\n";
         }
 
         // Do any pure inlining (TODO: This is currently slow)
@@ -892,12 +877,10 @@ public:
                 }
             } else {
                 for (const auto &cval : consumer.exprs) {
-                    debug(0) << "consumer.exprs - " << cval.value << "\n";
                     map<string, Box> new_boxes;
                     new_boxes = boxes_required(cval.value, scope, func_bounds);
                     for (auto &i : new_boxes) {
                         // Add the condition on which this value is evaluated to the box before merging
-                        debug(0) << "new_box - " << i.first << " " << i.second << "\n";
                         Box &box = i.second;
                         box.used = cval.cond;
                         merge_boxes(boxes[i.first], box);
@@ -905,8 +888,8 @@ public:
                 }
             }
 
-            // Expand the bounds required of all the producers found.
-            // We are checking until i, because stages are topologically sorted.
+            // Expand the bounds required of all the producers found
+            // (and are checking until i, because stages are topologically sorted).
             for (size_t j = 0; j < i; j++) {
                 Stage &producer = stages[j];
                 // A consumer depends on *all* stages of a producer, not just the last one.
@@ -951,7 +934,6 @@ public:
         for (Function output : outputs) {
             Box output_box;
             string buffer_name = output.name();
-            debug(0) << "outputs size " << output.outputs() << "\n";
             if (output.outputs() > 1) {
                 // Use the output size of the first output buffer
                 buffer_name += ".0";
@@ -977,7 +959,6 @@ public:
             for (size_t i = 0; i < stages.size(); i++) {
                 Stage &s = stages[i];
                 if (!s.func.same_as(output)) continue;
-                debug(0) << "Updating to the output box\n";
                 s.bounds[{s.name, s.stage}] = output_box;
             }
         }
