@@ -1611,10 +1611,36 @@ void CodeGen_LLVM::visit(const Variable *op) {
     value = sym_get(op->name);
 }
 
+template<typename Op>
+bool CodeGen_LLVM::try_to_fold_vector_reduce(const Op *op) {
+    const VectorReduce *red = op->a.template as<VectorReduce>();
+    Expr b = op->b;
+    if (!red) {
+        red = op->b.template as<VectorReduce>();
+        b = op->a;
+    }
+    if (red &&
+        ((std::is_same<Op, Add>::value && red->op == VectorReduce::Add) ||
+         (std::is_same<Op, Min>::value && red->op == VectorReduce::Min) ||
+         (std::is_same<Op, Max>::value && red->op == VectorReduce::Max) ||
+         (std::is_same<Op, Mul>::value && red->op == VectorReduce::Mul) ||
+         (std::is_same<Op, And>::value && red->op == VectorReduce::And) ||
+         (std::is_same<Op, Or>::value && red->op == VectorReduce::Or))) {
+        codegen_vector_reduce(red, b);
+        return true;
+    }
+    return false;
+}
+
 void CodeGen_LLVM::visit(const Add *op) {
     Type t = upgrade_type_for_arithmetic(op->type);
     if (t != op->type) {
         codegen(cast(op->type, Add::make(cast(t, op->a), cast(t, op->b))));
+        return;
+    }
+
+    // Some backends can fold the add into a vector reduce
+    if (try_to_fold_vector_reduce(op)) {
         return;
     }
 
@@ -1655,6 +1681,10 @@ void CodeGen_LLVM::visit(const Mul *op) {
     Type t = upgrade_type_for_arithmetic(op->type);
     if (t != op->type) {
         codegen(cast(op->type, Mul::make(cast(t, op->a), cast(t, op->b))));
+        return;
+    }
+
+    if (try_to_fold_vector_reduce(op)) {
         return;
     }
 
@@ -1714,6 +1744,10 @@ void CodeGen_LLVM::visit(const Min *op) {
         return;
     }
 
+    if (try_to_fold_vector_reduce(op)) {
+        return;
+    }
+
     string a_name = unique_name('a');
     string b_name = unique_name('b');
     Expr a = Variable::make(op->a.type(), a_name);
@@ -1727,6 +1761,10 @@ void CodeGen_LLVM::visit(const Max *op) {
     Type t = upgrade_type_for_arithmetic(op->type);
     if (t != op->type) {
         codegen(cast(op->type, Max::make(cast(t, op->a), cast(t, op->b))));
+        return;
+    }
+
+    if (try_to_fold_vector_reduce(op)) {
         return;
     }
 
@@ -1845,12 +1883,20 @@ void CodeGen_LLVM::visit(const GE *op) {
 }
 
 void CodeGen_LLVM::visit(const And *op) {
+    if (try_to_fold_vector_reduce(op)) {
+        return;
+    }
+
     Value *a = codegen(op->a);
     Value *b = codegen(op->b);
     value = builder->CreateAnd(a, b);
 }
 
 void CodeGen_LLVM::visit(const Or *op) {
+    if (try_to_fold_vector_reduce(op)) {
+        return;
+    }
+
     Value *a = codegen(op->a);
     Value *b = codegen(op->b);
     value = builder->CreateOr(a, b);
@@ -4298,36 +4344,14 @@ void CodeGen_LLVM::visit(const Shuffle *op) {
 }
 
 void CodeGen_LLVM::visit(const VectorReduce *op) {
+    codegen_vector_reduce(op, Expr());
+}
+
+void CodeGen_LLVM::codegen_vector_reduce(const VectorReduce *op, const Expr &init) {
     Expr val = op->value;
     const int output_lanes = op->type.lanes();
     const int native_lanes = native_vector_bits() / op->type.bits();
     const int factor = val.type().lanes() / output_lanes;
-
-    if (op->type.is_bool() && op->op == VectorReduce::Or) {
-        // Cast to u8, use max, cast back to bool.
-        Expr equiv = cast(op->value.type().with_bits(8), op->value);
-        equiv = VectorReduce::make(VectorReduce::Max, equiv, op->type.lanes());
-        equiv = cast(op->type, equiv);
-        equiv.accept(this);
-        return;
-    }
-
-    if (op->type.is_bool() && op->op == VectorReduce::And) {
-        // Cast to u8, use min, cast back to bool.
-        Expr equiv = cast(op->value.type().with_bits(8), op->value);
-        equiv = VectorReduce::make(VectorReduce::Min, equiv, op->type.lanes());
-        equiv = cast(op->type, equiv);
-        equiv.accept(this);
-        return;
-    }
-
-    if (op->type.element_of() == Float(16)) {
-        Expr equiv = cast(op->value.type().with_bits(32), op->value);
-        equiv = VectorReduce::make(op->op, equiv, op->type.lanes());
-        equiv = cast(op->type, equiv);
-        equiv.accept(this);
-        return;
-    }
 
     Expr (*binop)(Expr, Expr) = nullptr;
     switch (op->op) {
@@ -4351,6 +4375,41 @@ void CodeGen_LLVM::visit(const VectorReduce *op) {
         break;
     }
 
+    if (op->type.is_bool() && op->op == VectorReduce::Or) {
+        // Cast to u8, use max, cast back to bool.
+        Expr equiv = cast(op->value.type().with_bits(8), op->value);
+        equiv = VectorReduce::make(VectorReduce::Max, equiv, op->type.lanes());
+        if (init.defined()) {
+            equiv = max(equiv, init);
+        }
+        equiv = cast(op->type, equiv);
+        equiv.accept(this);
+        return;
+    }
+
+    if (op->type.is_bool() && op->op == VectorReduce::And) {
+        // Cast to u8, use min, cast back to bool.
+        Expr equiv = cast(op->value.type().with_bits(8), op->value);
+        equiv = VectorReduce::make(VectorReduce::Min, equiv, op->type.lanes());
+        equiv = cast(op->type, equiv);
+        if (init.defined()) {
+            equiv = min(equiv, init);
+        }
+        equiv.accept(this);
+        return;
+    }
+
+    if (op->type.element_of() == Float(16)) {
+        Expr equiv = cast(op->value.type().with_bits(32), op->value);
+        equiv = VectorReduce::make(op->op, equiv, op->type.lanes());
+        if (init.defined()) {
+            equiv = binop(equiv, init);
+        }
+        equiv = cast(op->type, equiv);
+        equiv.accept(this);
+        return;
+    }
+
     if (output_lanes == 1 &&
         factor > native_lanes &&
         factor % native_lanes == 0) {
@@ -4366,8 +4425,11 @@ void CodeGen_LLVM::visit(const VectorReduce *op) {
             }
         }
         equiv = VectorReduce::make(op->op, equiv, 1);
+        if (init.defined()) {
+            equiv = binop(equiv, init);
+        }
         equiv = common_subexpression_elimination(equiv);
-        codegen(equiv);
+        equiv.accept(this);
         return;
     }
 
@@ -4396,13 +4458,16 @@ void CodeGen_LLVM::visit(const VectorReduce *op) {
             }
         }
         equiv = VectorReduce::make(op->op, equiv, op->type.lanes());
+        if (init.defined()) {
+            equiv = binop(equiv, init);
+        }
         equiv = common_subexpression_elimination(equiv);
         codegen(equiv);
         return;
     }
 
     // Extract each slice and combine
-    Expr equiv;
+    Expr equiv = init;
     for (int i = 0; i < factor; i++) {
         Expr next = Shuffle::make_slice(val, i, factor, val.type().lanes() / factor);
         if (equiv.defined()) {

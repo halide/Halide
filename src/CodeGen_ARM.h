@@ -31,7 +31,7 @@ protected:
     void visit(const Store *) override;
     void visit(const Load *) override;
     void visit(const Call *) override;
-    void visit(const VectorReduce *) override;
+    void codegen_vector_reduce(const VectorReduce *, const Expr &) override;
     // @}
 
     /** Various patterns to peephole match against */

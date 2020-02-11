@@ -228,6 +228,7 @@ public:
         // SSE 3
 
         // We don't do horizontal add/sub ops, so nothing new here
+        // TODO!
 
         // SSSE 3
         if (use_ssse3) {
@@ -241,7 +242,7 @@ public:
 
         // SSE 4.1
 
-        // skip dot product and argmin
+        // skip dot product and argmin (TODO!)
         for (int w = 2; w <= 4; w++) {
             const char *check_pmaddwd = (use_avx2 && w > 3) ? "vpmaddwd*ymm" : "pmaddwd";
             check(check_pmaddwd, 2 * w, i32(i16_1) * 3 + i32(i16_2) * 4);
