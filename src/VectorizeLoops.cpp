@@ -1164,6 +1164,18 @@ class VectorSubs : public IRMutator {
                 break;
             }
 
+            // b probably also contains interleaved ramps in indexing
+            // expressions. Substitute them in to ensure
+            // simplification.
+            for (auto p = vector_scope.cbegin(); p != vector_scope.cend(); ++p) {
+                if (expr_uses_var(b, p.name())) {
+                    InterleavedRamp ir;
+                    if (is_interleaved_ramp(p.value(), vector_scope, &ir)) {
+                        b = substitute(p.name(), p.value(), b);
+                    }
+                }
+            }
+
             Stmt s = Store::make(store->name, b, idx, store->param,
                                  const_true(b.type().lanes()), store->alignment);
 
