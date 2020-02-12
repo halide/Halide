@@ -1014,6 +1014,24 @@ public:
         }
 
         // Figure out how much of it we're producing
+
+        // Note: the case when functions are fused is a little bit tricky, so may need extra care:
+        // when we're producing some of a Func A, at every loop belonging to A
+        // you potentially need to define symbols for what box is being computed
+        // of A (A.x.min, A.x.max ...), because that any other producer Func P nested
+        // there is going to define its loop bounds in terms of these symbols, to ensure
+        // it computes enough of itself to satisfy the consumer.
+        // Now say we compute B with A, and say B consumes P, not A. Bounds inference
+        // will see the shared loop, and think it belongs to A only. It will define A.x.min and
+        // friends, but that's not very useful, because P's loops are in terms of B.x.min, B.x.max, etc.
+        // So without a local definition of those symbols, P will use the one in the outer scope, and
+        // compute way too much of itself. It'll still be correct, but it's massive over-compute.
+        // The fix is to realize that in this loop belonging to A, we also potentially need to define
+        // a box for B, because B belongs to the same fused group as A, so really this loop belongs to A and B.
+        // We'll get the box using boxes_provided and only filtering for A and B after the fact
+        // Note that even though the loops are fused, the boxes touched of A and B might be totally different,
+        // because e.g. B could be double-resolution (as happens when fusing yuv computations), so this
+        // is not just a matter of giving A's box B's name as an alias.
         map<string, Box> boxes_for_fused_group;
         if (!no_pipelines && producing >= 0 && !f.has_extern_definition()) {
             Scope<Interval> empty_scope;
