@@ -592,13 +592,13 @@ int rgb_yuv420_test() {
         // It should be 4x based on above, but let's make it 5x to account for boundary condtions for rgb_x. 
         if (stores_total > 5 * store_count_ref) {
             printf("Store count for correctness_compute_with rgb to yuv420 case exceeds reference by more than 5x. (Reference: %llu, compute_with: %llu).\n",
-                   store_count_ref, stores_total);
+                   (unsigned long long)store_count_ref, (unsigned long long)stores_total);
             too_many_memops = true;
         }
         // Reference should have more loads, because everything is recomputed.
         if (loads_total >= load_count_ref) {
             printf("Load count for correctness_compute_with rgb to yuv420 case exceeds reference. (Reference: %llu, compute_with: %llu).\n",
-                   load_count_ref, loads_total);
+                   (unsigned long long)load_count_ref, (unsigned long long)loads_total);
             too_many_memops = true;
         }
         if (too_many_memops) {
