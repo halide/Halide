@@ -117,7 +117,7 @@ void DefaultCostModel::enqueue(const Internal::Autoscheduler::FunctionDAG &dag,
 
         // Load up the schedule features for all stages of this Func.
         for (auto it = n.stages.rbegin(); it != n.stages.rend(); it++) {
-            internal_assert(schedule_feats.contains(&*it)) << n.func.name() << "\\n";
+            internal_assert(schedule_feats.contains(&*it)) << n.func.name() << "\n";
             const auto &feat = schedule_feats.get(&*it);
             for (size_t i = 0; i < ScheduleFeatures::num_features(); i++) {
                 schedule_features(i, stage) = feat[i];
