@@ -783,6 +783,18 @@ bool Target::supports_device_api(DeviceAPI api) const {
     }
 }
 
+DeviceAPI Target::get_required_device_api() const {
+    if (has_feature(Target::CUDA)) return DeviceAPI::CUDA;
+    if (has_feature(Target::D3D12Compute)) return DeviceAPI::D3D12Compute;
+    if (has_feature(Target::HVX_128)) return DeviceAPI::Hexagon;
+    if (has_feature(Target::HexagonDma)) return DeviceAPI::HexagonDma;
+    if (has_feature(Target::Metal)) return DeviceAPI::Metal;
+    if (has_feature(Target::OpenCL)) return DeviceAPI::OpenCL;
+    if (has_feature(Target::OpenGL)) return DeviceAPI::GLSL;
+    if (has_feature(Target::OpenGLCompute)) return DeviceAPI::OpenGLCompute;
+    return DeviceAPI::None;
+}
+
 Target::Feature target_feature_for_device_api(DeviceAPI api) {
     switch (api) {
     case DeviceAPI::CUDA:

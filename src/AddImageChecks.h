@@ -27,7 +27,8 @@ Stmt add_image_checks(Stmt s,
                       const Target &t,
                       const std::vector<std::string> &order,
                       const std::map<std::string, Function> &env,
-                      const FuncValueBounds &fb);
+                      const FuncValueBounds &fb,
+                      bool will_inject_host_copies);
 
 }  // namespace Internal
 }  // namespace Halide

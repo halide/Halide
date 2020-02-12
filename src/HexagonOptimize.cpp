@@ -451,12 +451,12 @@ private:
             {"halide.hexagon.mpy.vh.h", wild_i32x * bc(wild_i32), Pattern::InterleaveResult | Pattern::NarrowOps},
 
             // Multiplication by powers of 2.
-            {"halide.hexagon.shl.vub.ub", wild_u8x * bc(wild_u8), Pattern::ExactLog2Op1},
-            {"halide.hexagon.shl.vuh.uh", wild_u16x * bc(wild_u16), Pattern::ExactLog2Op1},
-            {"halide.hexagon.shl.vuw.uw", wild_u32x * bc(wild_u32), Pattern::ExactLog2Op1},
-            {"halide.hexagon.shl.vb.ub", wild_i8x * bc(wild_i8), Pattern::ExactLog2Op1},
-            {"halide.hexagon.shl.vh.uh", wild_i16x * bc(wild_i16), Pattern::ExactLog2Op1},
-            {"halide.hexagon.shl.vw.uw", wild_i32x * bc(wild_i32), Pattern::ExactLog2Op1},
+            {"halide.hexagon.shl.vub.b", wild_u8x * bc(wild_u8), Pattern::ExactLog2Op1},
+            {"halide.hexagon.shl.vuh.h", wild_u16x * bc(wild_u16), Pattern::ExactLog2Op1},
+            {"halide.hexagon.shl.vuw.w", wild_u32x * bc(wild_u32), Pattern::ExactLog2Op1},
+            {"halide.hexagon.shl.vb.b", wild_i8x * bc(wild_i8), Pattern::ExactLog2Op1},
+            {"halide.hexagon.shl.vh.h", wild_i16x * bc(wild_i16), Pattern::ExactLog2Op1},
+            {"halide.hexagon.shl.vw.w", wild_i32x * bc(wild_i32), Pattern::ExactLog2Op1},
 
             // Non-widening scalar multiplication.
             {"halide.hexagon.mul.vh.b", wild_i16x * bc(wild_i16), Pattern::NarrowOp1},

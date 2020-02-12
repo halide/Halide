@@ -1,5 +1,5 @@
 add_executable(interpolate_filter filter.cpp)
-halide_use_image_io(interpolate_filter)
+target_link_libraries(interpolate_filter PRIVATE Halide::ImageIO)
 
 halide_generator(interpolate.generator SRCS interpolate_generator.cpp)
 foreach(AUTO_SCHEDULE false true)

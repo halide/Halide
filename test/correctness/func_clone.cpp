@@ -342,6 +342,30 @@ int clone_on_clone_test() {
     return 0;
 }
 
+int clone_reduction_test() {
+    // Check that recursive references from a Func back to itself get
+    // rewritten too in a clone. This schedule would be illegal if
+    // they did not.
+
+    RDom r(0, 8);
+    Var x;
+    Func sum;
+    sum(x) += r * x;
+
+    Func f, g;
+
+    f(x) = sum(x);
+    g(x) = sum(x);
+
+    sum.clone_in(g).compute_at(g, x);
+    sum.compute_at(f, x);
+
+    Pipeline p({f, g});
+    p.realize(128);
+
+    return 0;
+}
+
 }  // namespace
 
 int main(int argc, char **argv) {
@@ -372,6 +396,11 @@ int main(int argc, char **argv) {
 
     printf("Running clone on clone test\n");
     if (clone_on_clone_test() != 0) {
+        return -1;
+    }
+
+    printf("Running clone reduction test\n");
+    if (clone_reduction_test() != 0) {
         return -1;
     }
 

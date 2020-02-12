@@ -86,3 +86,5 @@ test/*.lowered
 src/.tags
 src/.tags_sorted_by_file
 
+/.vs
+/CMakeSettings.json

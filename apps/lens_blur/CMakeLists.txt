@@ -1,5 +1,5 @@
 add_executable(lens_blur_process process.cpp)
-halide_use_image_io(lens_blur_process)
+target_link_libraries(lens_blur_process PRIVATE Halide::ImageIO)
 
 halide_generator(lens_blur.generator SRCS lens_blur_generator.cpp)
 foreach(AUTO_SCHEDULE false true)

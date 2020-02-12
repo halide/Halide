@@ -1155,7 +1155,7 @@ enum halide_error_code_t {
 
     /** An expression that would perform an integer division or modulo
      * by zero was evaluated. */
-    halide_error_code_integer_division_by_zero = -44,
+    halide_error_code_device_dirty_with_no_device_support = -44,
 
 };
 
@@ -1227,7 +1227,7 @@ extern int halide_error_no_device_interface(void *user_context);
 extern int halide_error_device_interface_no_device(void *user_context);
 extern int halide_error_host_and_device_dirty(void *user_context);
 extern int halide_error_buffer_is_null(void *user_context, const char *routine);
-extern int halide_error_integer_division_by_zero(void *user_context);
+extern int halide_error_device_dirty_with_no_device_support(void *user_context, const char *buffer_name);
 // @}
 
 /** Optional features a compilation Target can have.
