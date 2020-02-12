@@ -494,12 +494,12 @@ int rgb_yuv420_test() {
         Func y_part("y_part"), u_part("u_part"), v_part("v_part"), rgb("rgb"), rgb_x("rgb_x");
 
         Func clamped = BoundaryConditions::repeat_edge(input);
-        rgb_x(x, y, z) = (clamped(x - 1, y, z) + 2*clamped(x, y, z) + clamped(x + 1, y, z));
-        rgb(x, y, z) = (rgb_x(x, y - 1, z) + 2*rgb_x(x, y, z) + rgb_x(x, y + 1, z))/16;
+        rgb_x(x, y, z) = (clamped(x - 1, y, z) + 2 * clamped(x, y, z) + clamped(x + 1, y, z));
+        rgb(x, y, z) = (rgb_x(x, y - 1, z) + 2 * rgb_x(x, y, z) + rgb_x(x, y + 1, z)) / 16;
 
-        y_part(x, y) = ((66 * input(x, y, 0) + 129 * input(x, y, 1) +  25 * input(x, y, 2) + 128) >> 8) +  16;
-        u_part(x, y) = (( -38 * rgb(2*x, 2*y, 0) -  74 * rgb(2*x, 2*y, 1) + 112 * rgb(2*x, 2*y, 2) + 128) >> 8) + 128;
-        v_part(x, y) = (( 112 * rgb(2*x, 2*y, 0) -  94 * rgb(2*x, 2*y, 1) -  18 * rgb(2*x, 2*y, 2) + 128) >> 8) + 128;
+        y_part(x, y) = ((66 * input(x, y, 0) + 129 * input(x, y, 1) + 25 * input(x, y, 2) + 128) >> 8) + 16;
+        u_part(x, y) = ((-38 * rgb(2 * x, 2 * y, 0) - 74 * rgb(2 * x, 2 * y, 1) + 112 * rgb(2 * x, 2 * y, 2) + 128) >> 8) + 128;
+        v_part(x, y) = ((112 * rgb(2 * x, 2 * y, 0) - 94 * rgb(2 * x, 2 * y, 1) - 18 * rgb(2 * x, 2 * y, 2) + 128) >> 8) + 128;
 
         y_part.vectorize(x, 8);
         u_part.vectorize(x, 8);
@@ -519,12 +519,12 @@ int rgb_yuv420_test() {
         Func y_part("y_part"), u_part("u_part"), v_part("v_part"), rgb("rgb"), rgb_x("rgb_x");
 
         Func clamped = BoundaryConditions::repeat_edge(input);
-        rgb_x(x, y, z) = (clamped(x - 1, y, z) + 2*clamped(x, y, z) + clamped(x + 1, y, z));
-        rgb(x, y, z) = (rgb_x(x, y - 1, z) + 2*rgb_x(x, y, z) + rgb_x(x, y + 1, z))/16;
+        rgb_x(x, y, z) = (clamped(x - 1, y, z) + 2 * clamped(x, y, z) + clamped(x + 1, y, z));
+        rgb(x, y, z) = (rgb_x(x, y - 1, z) + 2 * rgb_x(x, y, z) + rgb_x(x, y + 1, z)) / 16;
 
-        y_part(x, y) = ((66 * input(x, y, 0) + 129 * input(x, y, 1) +  25 * input(x, y, 2) + 128) >> 8) +  16;
-        u_part(x, y) = (( -38 * rgb(2*x, 2*y, 0) -  74 * rgb(2*x, 2*y, 1) + 112 * rgb(2*x, 2*y, 2) + 128) >> 8) + 128;
-        v_part(x, y) = (( 112 * rgb(2*x, 2*y, 0) -  94 * rgb(2*x, 2*y, 1) -  18 * rgb(2*x, 2*y, 2) + 128) >> 8) + 128;
+        y_part(x, y) = ((66 * input(x, y, 0) + 129 * input(x, y, 1) + 25 * input(x, y, 2) + 128) >> 8) + 16;
+        u_part(x, y) = ((-38 * rgb(2 * x, 2 * y, 0) - 74 * rgb(2 * x, 2 * y, 1) + 112 * rgb(2 * x, 2 * y, 2) + 128) >> 8) + 128;
+        v_part(x, y) = ((112 * rgb(2 * x, 2 * y, 0) - 94 * rgb(2 * x, 2 * y, 1) - 18 * rgb(2 * x, 2 * y, 2) + 128) >> 8) + 128;
 
         Var xi("xi"), yi("yi");
         y_part.tile(x, y, xi, yi, 16, 2, TailStrategy::RoundUp);
