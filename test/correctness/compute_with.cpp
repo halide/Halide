@@ -495,7 +495,7 @@ int rgb_yuv420_test() {
 
         Func clamped = BoundaryConditions::repeat_edge(input);
         rgb_x(x, y, z) = (clamped(x - 1, y, z) + 2*clamped(x, y, z) + clamped(x + 1, y, z));
-        rgb(x, y, z) = (rgb_x(x, y - 1, z) + 2*rgb_x(x, y, z) + rgb_x(x, y - 1, z))/16;
+        rgb(x, y, z) = (rgb_x(x, y - 1, z) + 2*rgb_x(x, y, z) + rgb_x(x, y + 1, z))/16;
 
         y_part(x, y) = ((66 * input(x, y, 0) + 129 * input(x, y, 1) +  25 * input(x, y, 2) + 128) >> 8) +  16;
         u_part(x, y) = (( -38 * rgb(2*x, 2*y, 0) -  74 * rgb(2*x, 2*y, 1) + 112 * rgb(2*x, 2*y, 2) + 128) >> 8) + 128;
@@ -504,13 +504,12 @@ int rgb_yuv420_test() {
         y_part.vectorize(x, 8);
         u_part.vectorize(x, 8);
         v_part.vectorize(x, 8);
+
         loads_total = 0;
         stores_total = 0;
         Pipeline p({y_part, u_part, v_part});
-        // p.set_custom_trace(&my_trace);
-        p.realize({y_im_ref, u_im_ref, v_im_ref}
-                );
-                //   , get_jit_target_from_environment().with_feature(Target::TraceLoads).with_feature(Target::TraceStores));
+        p.set_custom_trace(&my_trace);
+        p.realize({y_im_ref, u_im_ref, v_im_ref}, get_jit_target_from_environment().with_feature(Target::TraceLoads).with_feature(Target::TraceStores));
         load_count_ref = loads_total;
         store_count_ref = stores_total;
     }
@@ -521,7 +520,7 @@ int rgb_yuv420_test() {
 
         Func clamped = BoundaryConditions::repeat_edge(input);
         rgb_x(x, y, z) = (clamped(x - 1, y, z) + 2*clamped(x, y, z) + clamped(x + 1, y, z));
-        rgb(x, y, z) = (rgb_x(x, y - 1, z) + 2*rgb_x(x, y, z) + rgb_x(x, y - 1, z))/16;
+        rgb(x, y, z) = (rgb_x(x, y - 1, z) + 2*rgb_x(x, y, z) + rgb_x(x, y + 1, z))/16;
 
         y_part(x, y) = ((66 * input(x, y, 0) + 129 * input(x, y, 1) +  25 * input(x, y, 2) + 128) >> 8) +  16;
         u_part(x, y) = (( -38 * rgb(2*x, 2*y, 0) -  74 * rgb(2*x, 2*y, 1) + 112 * rgb(2*x, 2*y, 2) + 128) >> 8) + 128;
@@ -533,12 +532,12 @@ int rgb_yuv420_test() {
         v_part.tile(x, y, xi, yi, 8, 1, TailStrategy::RoundUp);
 
         y_part.unroll(yi);
-        y_part.vectorize(xi);
+        y_part.vectorize(xi, 8);
         u_part.vectorize(xi);
         v_part.vectorize(xi);
 
-        u_part.compute_with(y_part, x, LoopAlignStrategy::AlignStart);
-        v_part.compute_with(u_part, x, LoopAlignStrategy::AlignStart);
+        u_part.compute_with(y_part, x, LoopAlignStrategy::AlignEnd);
+        v_part.compute_with(u_part, x, LoopAlignStrategy::AlignEnd);
 
         Expr width = v_part.output_buffer().width();
         Expr height = v_part.output_buffer().height();
@@ -549,20 +548,20 @@ int rgb_yuv420_test() {
         y_part.bound(x, 0, 2 * 128).bound(y, 0, 2 * 128);
         rgb.bound(z, 0, 3);
 
-        rgb_x.fold_storage(y, 2);
+        rgb_x.fold_storage(y, 4);
         rgb_x.store_root();
         rgb_x.compute_at(y_part, y).vectorize(x, 8);
         rgb.compute_at(y_part, y).vectorize(x, 8);
 
         stores = {
-            {rgb_x.name(), Bound(0, size - 1, -1, size - 2, 0, 2)},
+            {rgb_x.name(), Bound(0, size - 1, -1, size - 1, 0, 2)},
             {rgb.name(), Bound(0, size - 1, 0, size - 1, 0, 2)},
             {y_part.name(), Bound(0, size - 1, 0, size - 1)},
             {u_part.name(), Bound(0, size / 2 - 1, 0, size / 2 - 1)},
             {v_part.name(), Bound(0, size / 2 - 1, 0, size / 2 - 1)},
         };
         loads = {
-            {rgb_x.name(), Bound(0, size - 1, -1, size - 2, 0, 2)},
+            {rgb_x.name(), Bound(0, size - 1, -1, size - 1, 0, 2)},
             {rgb.name(), Bound(0, size - 1, 0, size - 1, 0, 2)},
             {y_part.name(), Bound()},  // There shouldn't be any load from y_part
             {u_part.name(), Bound()},  // There shouldn't be any load from u_part
@@ -572,18 +571,33 @@ int rgb_yuv420_test() {
         loads_total = 0;
         stores_total = 0;
         Pipeline p({y_part, u_part, v_part});
-        // p.set_custom_trace(&my_trace);
-        p.realize({y_im, u_im, v_im}
-        );
-        // , get_jit_target_from_environment().with_feature(Target::TraceLoads).with_feature(Target::TraceStores));
+        p.set_custom_trace(&my_trace);
+        p.realize({y_im, u_im, v_im}, get_jit_target_from_environment().with_feature(Target::TraceLoads).with_feature(Target::TraceStores));
+
         bool too_many_memops = false;
-        if (stores_total > 2 * store_count_ref) {
-            printf("Store count for correctness_compute_with rgb to yuv420 case exceeds reference by more than 2x. (Reference: %llu, compute_with: %llu).\n",
+        // Store count for reference:
+        // y_part: width * height
+        // u_part: (width / 2) * (height / 2)
+        // v_part: (width / 2) * (height / 2)
+        // Total: width * height * 1.5
+        // Store count for compute_with:
+        // rgb: width * (height / 2) * 3 [we only need every other line of rgb for u, v]
+        // rgb_x: width * height * 3
+        // y_part: width * height
+        // u_part: (width / 2) * (height / 2)
+        // v_part: (width / 2) * (height / 2)
+        // Total: width * height * 6
+        // Note: each of the items above also needs to be divided by vector_width, but it doesn't change
+        // the ratio between reference and compute_with.
+        // It should be 4x based on above, but let's make it 5x to account for boundary condtions for rgb_x. 
+        if (stores_total > 5 * store_count_ref) {
+            printf("Store count for correctness_compute_with rgb to yuv420 case exceeds reference by more than 5x. (Reference: %llu, compute_with: %llu).\n",
                    store_count_ref, stores_total);
             too_many_memops = true;
         }
-        if (loads_total > 2 * load_count_ref) {
-            printf("Load count for correctness_compute_with rgb to yuv420 case exceeds reference by more than 2x. (Reference: %llu, compute_with: %llu).\n",
+        // Reference should have more loads, because everything is recomputed.
+        if (loads_total >= load_count_ref) {
+            printf("Load count for correctness_compute_with rgb to yuv420 case exceeds reference. (Reference: %llu, compute_with: %llu).\n",
                    load_count_ref, loads_total);
             too_many_memops = true;
         }
