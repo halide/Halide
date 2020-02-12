@@ -37,7 +37,7 @@ struct Bound {
 
 map<string, Bound> stores, loads;
 uint64_t loads_total = 0, stores_total = 0;
-  
+
 // These mutexes (mutices?) are only needed for accessing stores/loads
 // from the my_trace callback (which can be called by multiple threads);
 // the ordinary code that initializes stores/loads is single-threaded
@@ -589,7 +589,7 @@ int rgb_yuv420_test() {
         // Total: width * height * 6
         // Note: each of the items above also needs to be divided by vector_width, but it doesn't change
         // the ratio between reference and compute_with.
-        // It should be 4x based on above, but let's make it 5x to account for boundary condtions for rgb_x. 
+        // It should be 4x based on above, but let's make it 5x to account for boundary condtions for rgb_x.
         if (stores_total > 5 * store_count_ref) {
             printf("Store count for correctness_compute_with rgb to yuv420 case exceeds reference by more than 5x. (Reference: %llu, compute_with: %llu).\n",
                    (unsigned long long)store_count_ref, (unsigned long long)stores_total);
@@ -604,7 +604,6 @@ int rgb_yuv420_test() {
         if (too_many_memops) {
             return -1;
         }
-
     }
 
     auto y_func = [y_im_ref](int x, int y) {

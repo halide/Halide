@@ -119,9 +119,9 @@ size_t find_fused_group_index(const Function &producing_func,
     const auto &iter = std::find_if(fused_groups.begin(), fused_groups.end(),
                                     [&producing_func](const vector<Function> &group) {
                                         return std::any_of(group.begin(), group.end(),
-                                                        [&producing_func](const Function &f) {
-                                                            return (f.name() == producing_func.name());
-                                                        });
+                                                           [&producing_func](const Function &f) {
+                                                               return (f.name() == producing_func.name());
+                                                           });
                                     });
     internal_assert(iter != fused_groups.end());
     return iter - fused_groups.begin();
@@ -130,10 +130,10 @@ size_t find_fused_group_index(const Function &producing_func,
 // Determine if the current producing stage is fused with other
 // stage (i.e. the consumer stage) at dimension 'var'.
 bool is_fused_with_others(const vector<vector<Function>> &fused_groups,
-                            const vector<set<FusedPair>> &fused_pairs_in_groups,
-                            const Function &producing_func, int producing_stage_index,
-                            string consumer_name, int consumer_stage,
-                            string var) {
+                          const vector<set<FusedPair>> &fused_pairs_in_groups,
+                          const Function &producing_func, int producing_stage_index,
+                          string consumer_name, int consumer_stage,
+                          string var) {
     if (producing_func.has_extern_definition()) {
         return false;
     }
@@ -1039,17 +1039,15 @@ public:
             string var = op->name.substr(last_dot + 1);
 
             set<pair<string, int>> fused_with_f;
-            for (const auto& pair: fused_pairs_in_groups[stages[producing].fused_group_index]) {
-                if (!((pair.func_1 == stages[producing].name) && ((int)pair.stage_1 == stage_index))
-                    && is_fused_with_others(fused_groups, fused_pairs_in_groups,
-                                             f, stage_index,
-                                             pair.func_1, pair.stage_1, var)) {
+            for (const auto &pair : fused_pairs_in_groups[stages[producing].fused_group_index]) {
+                if (!((pair.func_1 == stages[producing].name) && ((int)pair.stage_1 == stage_index)) && is_fused_with_others(fused_groups, fused_pairs_in_groups,
+                                                                                                                             f, stage_index,
+                                                                                                                             pair.func_1, pair.stage_1, var)) {
                     fused_with_f.insert(make_pair(pair.func_1, pair.stage_1));
                 }
-                if (!((pair.func_2 == stages[producing].name) && ((int)pair.stage_2 == stage_index))
-                    && is_fused_with_others(fused_groups, fused_pairs_in_groups,
-                                             f, stage_index,
-                                             pair.func_2, pair.stage_2, var)) {
+                if (!((pair.func_2 == stages[producing].name) && ((int)pair.stage_2 == stage_index)) && is_fused_with_others(fused_groups, fused_pairs_in_groups,
+                                                                                                                             f, stage_index,
+                                                                                                                             pair.func_2, pair.stage_2, var)) {
                     fused_with_f.insert(make_pair(pair.func_2, pair.stage_2));
                 }
             }
@@ -1061,7 +1059,7 @@ public:
                 auto boxes = boxes_provided(body, empty_scope, func_bounds);
                 boxes_for_fused_group[stage_name] = boxes[stages[producing].name];
 
-                for (const auto& fused: fused_with_f) {
+                for (const auto &fused : fused_with_f) {
                     boxes_for_fused_group[fused.first + ".s" + std::to_string(fused.second)] = boxes[fused.first];
                 }
             }
@@ -1099,8 +1097,8 @@ public:
             // we're producing.
             if (producing >= 0 && !inner_productions.empty()) {
                 const vector<string> f_args = f.args();
-                for (const auto& b: boxes_for_fused_group) {
-                    const auto& box = b.second;
+                for (const auto &b : boxes_for_fused_group) {
+                    const auto &box = b.second;
                     for (size_t i = 0; i < box.size(); i++) {
                         internal_assert(box[i].is_bounded());
                         string var = b.first + "." + f_args[i];
