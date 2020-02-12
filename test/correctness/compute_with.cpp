@@ -543,9 +543,9 @@ int rgb_yuv420_test() {
         Expr height = v_part.output_buffer().height();
         width = (width / 8) * 8;
 
-        u_part.bound(x, 0, 128).bound(y, 0, 128);
-        v_part.bound(x, 0, 128).bound(y, 0, 128);
-        y_part.bound(x, 0, 2 * 128).bound(y, 0, 2 * 128);
+        u_part.bound(x, 0, width).bound(y, 0, height);
+        v_part.bound(x, 0, width).bound(y, 0, height);
+        y_part.bound(x, 0, 2 * width).bound(y, 0, 2 * height);
         rgb.bound(z, 0, 3);
 
         rgb_x.fold_storage(y, 4);
