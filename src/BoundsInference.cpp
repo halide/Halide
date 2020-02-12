@@ -889,7 +889,7 @@ public:
             }
 
             // Expand the bounds required of all the producers found
-            // (and are checking until i, because stages are topologically sorted).
+            // (and we are checking until i, because stages are topologically sorted).
             for (size_t j = 0; j < i; j++) {
                 Stage &producer = stages[j];
                 // A consumer depends on *all* stages of a producer, not just the last one.
@@ -1021,7 +1021,6 @@ public:
             string var = op->name.substr(last_dot + 1);
 
             set<pair<string, int>> fused_with_f;
-            debug(0) << "????? if there any fused: " << op->name << "\n";
             for (const auto& pair: fused_pairs_in_groups[stages[producing].fused_group_index]) {
                 if (!((pair.func_1 == stages[producing].name) && ((int)pair.stage_1 == stage_index))
                     && is_fused_with_others(fused_groups, fused_pairs_in_groups,
@@ -1036,11 +1035,8 @@ public:
                     fused_with_f.insert(make_pair(pair.func_2, pair.stage_2));
                 }
             }
-            for (const auto& fused: fused_with_f) {
-                debug(0) << "Fused with " << fused.first << " " << fused.second << " at " << op->name << "\n";
-            }
+
             if (fused_with_f.size() == 0) {
-                debug(0) << "Isn't fused with anything\n";
                 boxes_for_fused_group[stage_name] = box_provided(body, stages[producing].name, empty_scope, func_bounds);
                 internal_assert((int)boxes_for_fused_group[stage_name].size() == f.dimensions());
             } else {
@@ -1098,7 +1094,6 @@ public:
                         }
 
                         body = LetStmt::make(var + ".min", box[i].min, body);
-                        debug(0) << "Generating some min max for " << var << "\n" << box[i].min << "\n" << box[i].max << "\n";
                     }
                 }
             }
