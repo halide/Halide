@@ -1226,35 +1226,35 @@ int nested_compute_with_test() {
 }  // namespace
 
 int main(int argc, char **argv) {
-    // printf("Running split reorder test\n");
-    // if (split_test() != 0) {
-    //     return -1;
-    // }
+    printf("Running split reorder test\n");
+    if (split_test() != 0) {
+        return -1;
+    }
 
-    // printf("Running fuse test\n");
-    // if (fuse_test() != 0) {
-    //     return -1;
-    // }
+    printf("Running fuse test\n");
+    if (fuse_test() != 0) {
+        return -1;
+    }
 
-    // printf("Running multiple fuse group test\n");
-    // if (multiple_fuse_group_test() != 0) {
-    //     return -1;
-    // }
+    printf("Running multiple fuse group test\n");
+    if (multiple_fuse_group_test() != 0) {
+        return -1;
+    }
 
-    // printf("Running multiple outputs test\n");
-    // if (multiple_outputs_test() != 0) {
-    //     return -1;
-    // }
+    printf("Running multiple outputs test\n");
+    if (multiple_outputs_test() != 0) {
+        return -1;
+    }
 
-    // printf("Running double split fuse test\n");
-    // if (double_split_fuse_test() != 0) {
-    //     return -1;
-    // }
+    printf("Running double split fuse test\n");
+    if (double_split_fuse_test() != 0) {
+        return -1;
+    }
 
-    // printf("Running vectorize test\n");
-    // if (vectorize_test() != 0) {
-    //     return -1;
-    // }
+    printf("Running vectorize test\n");
+    if (vectorize_test() != 0) {
+        return -1;
+    }
 
     /*
      * Note: we are deprecating skipping parts of a fused group in favor of
@@ -1271,40 +1271,40 @@ int main(int argc, char **argv) {
         return -1;
     }
 
-    // printf("Running with specialization test\n");
-    // if (with_specialization_test() != 0) {
-    //     return -1;
-    // }
+    printf("Running with specialization test\n");
+    if (with_specialization_test() != 0) {
+        return -1;
+    }
 
-    // printf("Running fuse compute at test\n");
-    // if (fuse_compute_at_test() != 0) {
-    //     return -1;
-    // }
+    printf("Running fuse compute at test\n");
+    if (fuse_compute_at_test() != 0) {
+        return -1;
+    }
 
-    // printf("Running nested compute with test\n");
-    // if (nested_compute_with_test() != 0) {
-    //     return -1;
-    // }
+    printf("Running nested compute with test\n");
+    if (nested_compute_with_test() != 0) {
+        return -1;
+    }
 
-    // printf("Running mixed tile factor test\n");
-    // if (mixed_tile_factor_test() != 0) {
-    //     return -1;
-    // }
+    printf("Running mixed tile factor test\n");
+    if (mixed_tile_factor_test() != 0) {
+        return -1;
+    }
 
-    // printf("Running only some are tiled test\n");
-    // if (only_some_are_tiled_test() != 0) {
-    //     return -1;
-    // }
+    printf("Running only some are tiled test\n");
+    if (only_some_are_tiled_test() != 0) {
+        return -1;
+    }
 
-    // printf("Running multiple outputs on gpu test\n");
-    // if (multiple_outputs_on_gpu_test() != 0) {
-    //     return -1;
-    // }
+    printf("Running multiple outputs on gpu test\n");
+    if (multiple_outputs_on_gpu_test() != 0) {
+        return -1;
+    }
 
-    // printf("Running multi tile mixed tile factor test\n");
-    // if (multi_tile_mixed_tile_factor_test() != 0) {
-    //     return -1;
-    // }
+    printf("Running multi tile mixed tile factor test\n");
+    if (multi_tile_mixed_tile_factor_test() != 0) {
+        return -1;
+    }
 
     printf("Success!\n");
     return 0;
