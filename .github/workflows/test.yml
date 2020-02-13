@@ -97,9 +97,12 @@ jobs:
       shell: bash
       run: |
         set -eux
-        apt-cache search python3
+        # apt-cache search python3
 
-        sudo apt-get install gcc-multilib g++-multilib lib32z1-dev python3.6:i386
+        sudo apt-get install gcc-multilib g++-multilib lib32z1-dev
+
+        sudo apt-get update
+        sudo apt-get install python3.6:i386
 
         echo ::set-env name=CC::"${CC} -m32 "
         echo ::set-env name=CXX::"${CXX} -m32 "
