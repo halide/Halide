@@ -768,7 +768,7 @@ Halide::Func generate_padding_expr(
     assert(skip_dims >= 0);
 
     // Pad the input with zeros as needed.
-    std::vector<std::pair<Halide::Expr, Halide::Expr>> padding_extents;
+    Halide::Region padding_extents;
     bool maybe_has_padding = false;
     for (int i = 0; i < rank - skip_dims; ++i) {
         Halide::Expr pad_before = pads[i];
@@ -792,29 +792,28 @@ Halide::Func generate_padding_expr(
     }
     Halide::Expr pad = Halide::cast<bool>(false);
     for (int i = skip_dims; i < rank; ++i) {
-        const std::pair<Halide::Expr, Halide::Expr> &paddings =
-            padding_extents[i - skip_dims];
-        Halide::Expr pad_before = vars[i] < paddings.first;
+        const Halide::Range &paddings = padding_extents[i - skip_dims];
+        Halide::Expr pad_before = vars[i] < paddings.min;
         assert(pad_before.type().is_bool());
-        Halide::Expr pad_after = vars[i] > paddings.second;
+        Halide::Expr pad_after = vars[i] > paddings.extent;
         assert(pad_after.type().is_bool());
         pad = pad || pad_before;
         pad = pad || pad_after;
         assert(pad.type().is_bool());
         if (mode == PaddingMode::CONSTANT || mode == PaddingMode::EDGE) {
             input_vars[i] =
-                Halide::clamp(vars[i] - paddings.first, 0, Halide::cast<int32_t>(input_shape[i] - 1));
+                Halide::clamp(vars[i] - paddings.min, 0, Halide::cast<int32_t>(input_shape[i] - 1));
         } else if (mode == PaddingMode::REFLECT) {
-            Halide::Expr pad_size = paddings.second - paddings.first + 1;
-            Halide::Expr mirror_before = (paddings.first - vars[i]) % pad_size;
+            Halide::Expr pad_size = paddings.extent - paddings.min + 1;
+            Halide::Expr mirror_before = (paddings.min - vars[i]) % pad_size;
             Halide::Expr mirror_after =
-                pad_size - ((vars[i] - paddings.second) % pad_size) - 1;
+                pad_size - ((vars[i] - paddings.extent) % pad_size) - 1;
             input_vars[i] = Halide::clamp(
                 Halide::select(
                     pad_before,
                     mirror_before,
                     Halide::select(
-                        pad_after, mirror_after, Halide::cast<int32_t>(vars[i] - paddings.first))),
+                        pad_after, mirror_after, Halide::cast<int32_t>(vars[i] - paddings.min))),
                 0,
                 input_shape[i] - 1);
         }
@@ -831,7 +830,7 @@ Halide::Func generate_padding_expr(
 
 Halide::Func
 direct_conv(const Tensor &W, const Halide::Func &input, int rank, int groups) {
-    std::vector<std::pair<Halide::Expr, Halide::Expr>> extents;
+    Halide::Region extents;
     for (int i = 1; i < rank; ++i) {
         extents.emplace_back(0, W.shape[i]);
     }
@@ -1213,7 +1212,7 @@ Node convert_reduction_node(
     std::vector<Halide::Expr> &output_shape = result.outputs[0].shape;
 
     Halide::Expr num_reduced_elems = 1;
-    std::vector<std::pair<Halide::Expr, Halide::Expr>> extents;
+    Halide::Region extents;
     for (int i = 0; i < input_shape.size(); ++i) {
         if (reduction_axes.find(i) != reduction_axes.end()) {
             Halide::Expr in_dim = inline_func_call(input_shape[i]);
@@ -1672,7 +1671,7 @@ Node convert_pooling_node(
         generate_padding_expr(inputs[0].rep, inputs[0].shape, padding_val, hpads);
 
     // Pool the input values.
-    std::vector<std::pair<Halide::Expr, Halide::Expr>> extents;
+    Halide::Region extents;
     for (int i = 0; i < rank - 2; ++i) {
         extents.emplace_back(0, kernel_shape[i]);
     }
@@ -1789,7 +1788,7 @@ Node convert_softmax_node(
     result.outputs[0].type = inputs[0].type;
     result.outputs[0].rep = func_for_node_output(node, 0);
 
-    std::vector<std::pair<Halide::Expr, Halide::Expr>> extents;
+    Halide::Region extents;
     for (int i = axis; i < rank; ++i) {
         extents.emplace_back(0, inputs[0].shape[i]);
     }
@@ -4770,12 +4769,12 @@ Halide::Type get_halide_type(const Tensor &tensor) {
 
 static int64_t infer_dim_from_inputs(
     Halide::Expr dim,
-    const std::vector<std::pair<Halide::Expr, Halide::Expr>> &replacements,
+    const Halide::Region &replacements,
     const std::string &name) {
     Halide::Expr result = dim;
     for (const auto &replacement : replacements) {
         result = Halide::Internal::substitute(
-            replacement.first, replacement.second, result);
+            replacement.min, replacement.extent, result);
     }
     result = Halide::Internal::simplify(result);
     const int64_t *actual_dim = Halide::Internal::as_const_int(result);
@@ -4791,7 +4790,7 @@ void compute_output_shapes(
     const std::map<std::string, std::vector<int>> &input_shapes,
     std::map<std::string, std::vector<int>> *output_shapes) {
     std::unordered_map<std::string, Halide::ImageParam> inputs;
-    std::vector<std::pair<Halide::Expr, Halide::Expr>> replacements;
+    Halide::Region replacements;
     for (auto it = model.inputs.begin(); it != model.inputs.end(); ++it) {
         const std::string &input_name = it->first;
         const Halide::ImageParam &input = it->second;
