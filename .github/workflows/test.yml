@@ -142,8 +142,8 @@ jobs:
         fi
 
         mkdir ${LLVM_INSTALL_DIR}
-        tar ${TAR_FLAGS} -xvf ${HALIDE_TEMP_DIR}/llvm-prebuilt.tar.xz -C ${LLVM_INSTALL_DIR} --strip-components=1
-        rm -rf ${HALIDE_TEMP_DIR}/llvm-prebuilt.tar.xz
+        tar ${TAR_FLAGS} -xvf ${HALIDE_TEMP_DIR}/llvm-prebuilt.tgz -C ${LLVM_INSTALL_DIR} --strip-components=1
+        rm -rf ${HALIDE_TEMP_DIR}/llvm-prebuilt.tgz
 
     - name: Configure Halide (Make)
       if: startsWith(matrix.build_tool, 'make')
