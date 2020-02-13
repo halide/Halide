@@ -90,6 +90,10 @@ jobs:
       run: |
         sudo apt-get install gcc-multilib g++-multilib
 
+        echo ::set-env name=CC::"${CC} -m32 "
+        echo ::set-env name=CXX::"${CXX} -m32 "
+        echo ::set-env name=LD::"${LD} -melf_i386 "
+
     - name: Configure OSX
       if: startsWith(matrix.os, 'macos')
       run: |
@@ -141,7 +145,10 @@ jobs:
         fi
 
         mkdir ${LLVM_INSTALL_DIR}
-        tar ${TAR_FLAGS} -xvf ${HALIDE_TEMP_DIR}/llvm-prebuilt.tgz -C ${LLVM_INSTALL_DIR} --strip-components=1
+        tar ${TAR_FLAGS} -xvf ${HALIDE_TEMP_DIR}/llvm-prebuilt.tgz -C ${LLVM_INSTALL_DIR}
+
+        ls -l ${LLVM_INSTALL_DIR}
+
         rm -rf ${HALIDE_TEMP_DIR}/llvm-prebuilt.tgz
 
         LLVM_COMMIT_HASH=`cat ${LLVM_INSTALL_DIR}/.halide_builder_llvm_commit`
@@ -161,14 +168,21 @@ jobs:
         # Configure CMake
         mkdir ${HALIDE_BUILD_DIR}
 
-        CMAKE_GEN="Ninja"
+        CMAKE_GEN="Unix Makefiles"
         CONFIG=Release
         EXTRA_DEFS=
-        PARALLEL_JOBS=4  # GHA VMs have 2 cores
 
         if [[ ${{matrix.os}} == windows* ]]; then
           EXTRA_DEFS="-A x64 -T host=x64"
           CMAKE_GEN="Visual Studio 16"
+        fi
+
+        if [[ ${{matrix.os}} == ubuntu* && ${{matrix.bits}} == 32 ]]; then
+          EXTRA_DEFS="-D CMAKE_FIND_ROOT_PATH=/usr/lib/i386-linux-gnu -D CMAKE_FIND_ROOT_PATH_MODE_LIBRARY=ONLY"
+        fi
+
+        if [[ ${{matrix.os}} == macos* ]]; then
+          EXTRA_DEFS="-D LLVM_ENABLE_SUPPORT_XCODE_SIGNPOSTS=FORCE_OFF"
         fi
 
         cmake \
