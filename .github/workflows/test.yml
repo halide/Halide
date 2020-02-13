@@ -28,7 +28,6 @@ jobs:
         os: [windows-latest, ubuntu-18.04, macos-latest]
         llvm_version: [8, 9, 10, trunk]
         build_tool: [make, cmake_shared]
-        cmake_gen: ["Unix Makefiles"]
         include:
           - llvm_version: 8
             llvm_branch: release/8.x
@@ -145,6 +144,9 @@ jobs:
         tar ${TAR_FLAGS} -xvf ${HALIDE_TEMP_DIR}/llvm-prebuilt.tgz -C ${LLVM_INSTALL_DIR} --strip-components=1
         rm -rf ${HALIDE_TEMP_DIR}/llvm-prebuilt.tgz
 
+        LLVM_COMMIT_HASH=`cat ${LLVM_INSTALL_DIR}/.halide_builder_llvm_commit`
+        echo "Using LLVM v${{matrix.llvm_version}} commit=${LLVM_COMMIT_HASH}"
+
     - name: Configure Halide (Make)
       if: startsWith(matrix.build_tool, 'make')
       shell: bash
@@ -159,14 +161,23 @@ jobs:
         # Configure CMake
         mkdir ${HALIDE_BUILD_DIR}
 
+        CMAKE_GEN="Ninja"
+        CONFIG=Release
+        EXTRA_DEFS=
+        PARALLEL_JOBS=4  # GHA VMs have 2 cores
+
+        if [[ ${{matrix.os}} == windows* ]]; then
+          EXTRA_DEFS="-A x64 -T host=x64"
+          CMAKE_GEN="Visual Studio 16"
+        fi
+
         cmake \
-          -D CMAKE_BUILD_TYPE=Release \
+          -D CMAKE_BUILD_TYPE=${CONFIG} \
           -D LLVM_DIR="${LLVM_INSTALL_DIR}/lib/cmake/llvm" \
           -D HALIDE_REQUIRE_LLVM_VERSION="${{matrix.llvm_version}}0" \
           -D HALIDE_SHARED_LIBRARY=${{matrix.shared_library}} \
-          -G "${{matrix.cmake_gen}}" \
-          -A "${{matrix.cmake_arch}}" \
-          -T "${{matrix.cmake_toolset}}" \
+          -G "${CMAKE_GEN}" \
+          ${EXTRA_DEFS} \
           -S "${HALIDE_SOURCE_DIR}" \
           -B "${HALIDE_BUILD_DIR}"
 
