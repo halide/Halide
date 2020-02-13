@@ -111,7 +111,7 @@ public:
 
     // Now a schedule that uses CUDA or OpenCL.
     bool schedule_for_gpu() {
-        Target target = find_gpu_target().with_feature(Target::Debug);
+        Target target = find_gpu_target();//.with_feature(Target::Debug);
         if (!target.has_gpu_feature()) {
             return false;
         }
