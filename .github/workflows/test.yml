@@ -24,10 +24,14 @@ jobs:
         # matrix (and since we are limited to 8 concurrent tests, it would be
         # useful to prune this a bit).
         arch: [x86]
-        bits: [32, 64]
-        os: [windows-latest, ubuntu-18.04, macos-latest]
-        llvm_version: [8, 9, 10, trunk]
-        build_tool: [make, cmake_shared]
+        bits: [32]
+        os: [ubuntu-18.04]
+        llvm_version: [8]
+        build_tool: [make]
+        # bits: [32, 64]
+        # os: [windows-latest, ubuntu-18.04, macos-latest]
+        # llvm_version: [8, 9, 10, trunk]
+        # build_tool: [make, cmake_shared]
         include:
           - llvm_version: 8
             llvm_branch: release/8.x
@@ -85,8 +89,8 @@ jobs:
         sudo dpkg --add-architecture i386
         sudo apt-get update
         sudo apt-get install gcc-multilib g++-multilib lib32z1-dev
-        sudo apt-get -y --force-yes install libjpeg-dev:i386 libpng-dev:i386
-        sudo apt-get install python3:i386 dh-python:i386 python3-distutils:i386 python3-dev:i386
+        sudo apt-get install libjpeg-dev:i386 libpng-dev:i386
+        sudo apt-get install python3-minimal:i386 python3.6:i386 dh-python:i386 python3-distutils:i386 python3-dev:i386
 
         echo ::set-env name=CC::"${CC} -m32 "
         echo ::set-env name=CXX::"${CXX} -m32 "
@@ -102,8 +106,8 @@ jobs:
         # TODO(srj): OpenGL is only needed to build the opengl tests (which we don't even run)...
         sudo apt-get install libglu1-mesa-dev freeglut3-dev mesa-common-dev
 
-        sudo apt-get -y --force-yes install libjpeg-dev libpng-dev
-        sudo apt-get -y --force-yes --no-install-recommends install doxygen
+        sudo apt-get install libjpeg-dev libpng-dev
+        sudo apt-get --no-install-recommends install doxygen
 
     - name: Configure OSX
       if: startsWith(matrix.os, 'macos')
