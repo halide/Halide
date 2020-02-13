@@ -76,7 +76,7 @@ jobs:
       uses: actions/setup-python@v1
       with:
         python-version: '3.x' # Any 3.x is OK
-        architecture: 'x64' # N.B.: 'x86' is only available for Windows (Ubuntu special-cased below)
+        architecture: 'x64' # N.B.: 'x86' is only available for Windows (Ubuntu is special-cased below)
 
     - name: Configure Ubuntu-32
       if: startsWith(matrix.os, 'ubuntu') && matrix.bits == 32
@@ -85,7 +85,8 @@ jobs:
         sudo dpkg --add-architecture i386
         sudo apt-get update
         sudo apt-get install gcc-multilib g++-multilib lib32z1-dev
-        sudo apt-get install python3.6-minimal:i386 python3.6:i386
+        sudo apt-get install python3.6-minimal:i386 python3.6:i386 python3-dev:i386
+        sudo apt-get -y --force-yes install libjpeg-dev:i386 libpng-dev:i386
 
         echo ::set-env name=CC::"${CC} -m32 "
         echo ::set-env name=CXX::"${CXX} -m32 "
@@ -101,8 +102,7 @@ jobs:
         # TODO(srj): OpenGL is only needed to build the opengl tests (which we don't even run)...
         sudo apt-get install libglu1-mesa-dev freeglut3-dev mesa-common-dev
 
-        sudo apt-get -y --force-yes install libjpeg-dev
-        sudo apt-get -y --force-yes install libpng-dev
+        sudo apt-get -y --force-yes install libjpeg-dev libpng-dev
         sudo apt-get -y --force-yes --no-install-recommends install doxygen
 
     - name: Configure OSX
