@@ -86,6 +86,8 @@ jobs:
       if: startsWith(matrix.os, 'ubuntu') && matrix.bits == 32
       shell: bash
       run: |
+        sudo remove python3-minimal python3.6 dh-python python3-distutils python3-dev
+
         sudo dpkg --add-architecture i386
         sudo apt-get update
         sudo apt-get install gcc-multilib g++-multilib lib32z1-dev
