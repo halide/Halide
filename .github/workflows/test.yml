@@ -108,6 +108,7 @@ jobs:
         _TEMP=${_TEMP_RAW//\\//}
 
         # This is the trick GitHub Actions uses to allow us to set env vars across all subsequent job steps
+        echo ::set-env name=BUILD_TYPE::"Release"
         echo ::set-env name=LLVM_INSTALL_DIR::"${_ROOT}/llvm"
         echo ::set-env name=LLVM_CONFIG::"${_ROOT}/llvm/bin/llvm-config"
         echo ::set-env name=HALIDE_SOURCE_DIR::"${_ROOT}/halide"
@@ -167,10 +168,11 @@ jobs:
       shell: bash
       run: |
         # Configure CMake
+        set -eux
+
         mkdir ${HALIDE_BUILD_DIR}
 
         CMAKE_GEN="Unix Makefiles"
-        CONFIG=Release
         EXTRA_DEFS=
 
         if [[ ${{matrix.os}} == windows* ]]; then
@@ -191,7 +193,7 @@ jobs:
         fi
 
         cmake \
-          -D CMAKE_BUILD_TYPE=${CONFIG} \
+          -D CMAKE_BUILD_TYPE=${BUILD_TYPE} \
           -D LLVM_DIR="${LLVM_INSTALL_DIR}/lib/cmake/llvm" \
           -D HALIDE_REQUIRE_LLVM_VERSION="${{matrix.llvm_version}}0" \
           -D HALIDE_SHARED_LIBRARY=${{matrix.shared_library}} \
@@ -215,10 +217,11 @@ jobs:
       shell: bash
       run: |
         # Build Halide
+        set -eux
         cd ${HALIDE_BUILD_DIR}
         cmake \
           --build ${HALIDE_BUILD_DIR} \
-          --config Release \
+          --config ${BUILD_TYPE} \
           -j ${PARALLEL_JOBS} \
           --target all
 
