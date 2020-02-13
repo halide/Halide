@@ -96,6 +96,9 @@ jobs:
       if: startsWith(matrix.os, 'ubuntu') && matrix.bits == 32
       shell: bash
       run: |
+        set -eux
+        apt-cache search python3
+
         sudo apt-get install gcc-multilib g++-multilib lib32z1-dev python3.6:i386
 
         echo ::set-env name=CC::"${CC} -m32 "
@@ -106,7 +109,8 @@ jobs:
       if: startsWith(matrix.os, 'macos')
       shell: bash
       run: |
-        brew install libpng jpeg doxygen
+        # coreutils is for gtimeout
+        brew install libpng jpeg doxygen coreutils
 
     - name: Configure Env Vars
       shell: bash
@@ -261,15 +265,17 @@ jobs:
         # opengl won't work on the buildbots. auto_schedule is just flaky.
         TEST_GROUPS_BROKEN="opengl auto_schedule"
 
-        # Parallel
-        for t in ${TEST_GROUPS_PARALLEL}; do
-          make -f ${HALIDE_SOURCE_DIR}/Makefile -j ${PARALLEL_JOBS} test_${t}
-        done
+        make -f ${HALIDE_SOURCE_DIR}/Makefile tutorial_lesson_12_using_the_gpu
 
-        # Serial
-        for t in ${TEST_GROUPS_SERIAL}; do
-          make -f ${HALIDE_SOURCE_DIR}/Makefile -j ${PARALLEL_JOBS} test_$t
-        done
+        # Parallel
+        # for t in ${TEST_GROUPS_PARALLEL}; do
+        #   make -f ${HALIDE_SOURCE_DIR}/Makefile -j ${PARALLEL_JOBS} test_${t}
+        # done
+
+        # # Serial
+        # for t in ${TEST_GROUPS_SERIAL}; do
+        #   make -f ${HALIDE_SOURCE_DIR}/Makefile -j ${PARALLEL_JOBS} test_$t
+        # done
 
     - name: Run Tests (CMake)
       if: startsWith(matrix.build_tool, 'cmake')

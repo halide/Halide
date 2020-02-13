@@ -271,7 +271,7 @@ class MyPipeline:
 
 
 def main():
-    print("Skipping")
+    print("Skipping zzz")
     return 0
 
     # # Load an input image.
