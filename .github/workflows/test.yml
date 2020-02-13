@@ -123,6 +123,7 @@ jobs:
         python-version: '3.x' # Any 3.x is OK
 
     - name: Install Python Dependencies
+      shell: bash
       run: |
         python -m pip install --upgrade pip
         pip install -r ${HALIDE_SOURCE_DIR}/python_bindings/requirements.txt
