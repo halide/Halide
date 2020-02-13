@@ -254,11 +254,10 @@ jobs:
         TEST_GROUPS_PARALLEL="python internal correctness error warning generator apps"
 
         # tutorial has some performance measurements that can be flaky if we run them in parallel
-        TEST_GROUPS_SERIAL="performance"
+        TEST_GROUPS_SERIAL="performance tutorial"
 
         # opengl won't work on the buildbots. auto_schedule is just flaky.
-        # TODO: tutorial has OpenCL issues on VMs, but only with Make?
-        TEST_GROUPS_BROKEN="opengl auto_schedule tutorial"
+        TEST_GROUPS_BROKEN="opengl auto_schedule"
 
         # Parallel
         for t in ${TEST_GROUPS_PARALLEL}; do
