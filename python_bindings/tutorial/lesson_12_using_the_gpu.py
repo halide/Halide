@@ -271,30 +271,33 @@ class MyPipeline:
 
 
 def main():
-    # Load an input image.
-    image_path = os.path.join(os.path.dirname(__file__), "../../tutorial/images/rgb.png")
-    input = hl.Buffer(imageio.imread(image_path))
-
-    # Allocated an image that will store the correct output
-    reference_output = hl.Buffer(hl.UInt(8), [input.width(), input.height(), input.channels()])
-
-    print("Testing performance on CPU:")
-    p1 = MyPipeline(input)
-    p1.schedule_for_cpu()
-    p1.test_performance()
-    p1.curved.realize(reference_output)
-
-    if have_opencl():
-        print("Testing performance on GPU:")
-        p2 = MyPipeline(input)
-        p2.schedule_for_gpu()
-        p2.test_performance()
-        p2.test_correctness(reference_output)
-    else:
-        print("Not testing performance on GPU, "
-              "because I can't find the opencl library")
-
+    print("Skipping")
     return 0
+
+    # # Load an input image.
+    # image_path = os.path.join(os.path.dirname(__file__), "../../tutorial/images/rgb.png")
+    # input = hl.Buffer(imageio.imread(image_path))
+
+    # # Allocated an image that will store the correct output
+    # reference_output = hl.Buffer(hl.UInt(8), [input.width(), input.height(), input.channels()])
+
+    # print("Testing performance on CPU:")
+    # p1 = MyPipeline(input)
+    # p1.schedule_for_cpu()
+    # p1.test_performance()
+    # p1.curved.realize(reference_output)
+
+    # if have_opencl():
+    #     print("Testing performance on GPU:")
+    #     p2 = MyPipeline(input)
+    #     p2.schedule_for_gpu()
+    #     p2.test_performance()
+    #     p2.test_correctness(reference_output)
+    # else:
+    #     print("Not testing performance on GPU, "
+    #           "because I can't find the opencl library")
+
+    # return 0
 
 
 

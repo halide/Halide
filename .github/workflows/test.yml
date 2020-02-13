@@ -283,7 +283,7 @@ jobs:
       shell: bash
       run: |
         # Test Halide
-        TEST_GROUPS_PARALLEL="internal|correctness|error|tutorial|warning|generator"
+        TEST_GROUPS_PARALLEL="internal|correctness|error|warning|generator"
 
         # tutorial has some performance measurements that can be flaky if we run them in parallel
         TEST_GROUPS_SERIAL="performance|tutorial"
