@@ -78,6 +78,19 @@ jobs:
         python-version: '3.x' # Any 3.x is OK
         architecture: 'x64' # N.B.: 'x86' is only available for Windows (Ubuntu special-cased below)
 
+    - name: Configure Ubuntu-32
+      if: startsWith(matrix.os, 'ubuntu') && matrix.bits == 32
+      shell: bash
+      run: |
+        sudo dpkg --add-architecture i386
+        sudo apt-get update
+        sudo apt-get install gcc-multilib g++-multilib lib32z1-dev
+        sudo apt-get install python3.6-minimal:i386 python3.6:i386
+
+        echo ::set-env name=CC::"${CC} -m32 "
+        echo ::set-env name=CXX::"${CXX} -m32 "
+        echo ::set-env name=LD::"${LD} -melf_i386 "
+
     - name: Configure Ubuntu
       if: startsWith(matrix.os, 'ubuntu')
       shell: bash
@@ -91,19 +104,6 @@ jobs:
         sudo apt-get -y --force-yes install libjpeg-dev
         sudo apt-get -y --force-yes install libpng-dev
         sudo apt-get -y --force-yes --no-install-recommends install doxygen
-
-    - name: Configure Ubuntu-32
-      if: startsWith(matrix.os, 'ubuntu') && matrix.bits == 32
-      shell: bash
-      run: |
-        sudo dpkg --add-architecture i386
-        sudo apt-get update
-        sudo apt-get install gcc-multilib g++-multilib lib32z1-dev
-        sudo apt-get install python3.6-minimal:i386 python3.6:i386
-
-        echo ::set-env name=CC::"${CC} -m32 "
-        echo ::set-env name=CXX::"${CXX} -m32 "
-        echo ::set-env name=LD::"${LD} -melf_i386 "
 
     - name: Configure OSX
       if: startsWith(matrix.os, 'macos')
