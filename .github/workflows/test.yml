@@ -1,7 +1,4 @@
 # TODO:
-#  LLVM prebuilts for Windows aren't useful for our purposes; we must build our own.
-#  LLVM doesn't provide 32-bit Linux prebuilts anymore; we must build our own for x86-32 testing.
-#  LLVM doesn't provide MinGW prebuilts; we must build our own for x86-32 testing.
 #  cmake_static is generally broken.
 #  test_auto_schedule is flaky.
 
@@ -13,8 +10,12 @@ on:
 
 jobs:
   test_halide:
-    name: ${{matrix.arch}}-${{matrix.bits}}-${{matrix.shortname}}-testbranch-${{matrix.llvm_version}}00 (${{matrix.build_tool}})
+    name: ${{matrix.llvm_version}}-${{matrix.arch}}-${{matrix.bits}}-${{matrix.halide_os}} (${{matrix.build_tool}})
     runs-on: ${{matrix.os}}
+    env:
+      CC: ${{matrix.cc}}
+      CXX: ${{matrix.cxx}}
+      LD: ld
 
     strategy:
       fail-fast: false  # Keep running other jobs even if one fails
@@ -23,60 +24,40 @@ jobs:
         # matrix (and since we are limited to 8 concurrent tests, it would be
         # useful to prune this a bit).
         arch: [x86]
-        bits: [64]
-        os: [ubuntu-18.04, macos-latest]
+        bits: [32, 64]
+        os: [windows-latest, ubuntu-18.04, macos-latest]
+        llvm_version: [8, 9, 10, trunk]
         build_tool: [make, cmake_shared]
-        llvm_version: [8, 9]
         cmake_gen: ["Unix Makefiles"]
         include:
-          - os: ubuntu-18.04
-            shortname: linux
+          - llvm_version: 8
+            llvm_branch: release/8.x
+          - llvm_version: 9
+            llvm_branch: release/9.x
+          - llvm_version: 10
+            llvm_branch: release/10.x
+          - llvm_version: trunk
+            llvm_branch: master
+
           - os: macos-latest
-            shortname: osx
+            cc: clang
+            cxx: clang++
+            halide_os: osx
+
+          - os: ubuntu-18.04
+            cc: gcc
+            cxx: g++
+            halide_os: linux
+
           - os: windows-latest
-            shortname: windows
+            cc: cl.exe
+            cxx: cl.exe
+            halide_os: windows
 
           - build_tool: cmake_shared
             shared_library: ON
           - build_tool: cmake_static
             shared_library: OFF
-
-          # Map (os+llvm-version) -> download url
-          - os: ubuntu-18.04
-            llvm_version: 8
-            llvm_url: https://releases.llvm.org/8.0.0/clang+llvm-8.0.0-x86_64-linux-gnu-ubuntu-18.04.tar.xz
-          - os: ubuntu-18.04
-            llvm_version: 9
-            llvm_url: https://releases.llvm.org/9.0.0/clang+llvm-9.0.0-x86_64-linux-gnu-ubuntu-18.04.tar.xz
-
-          - os: macos-latest
-            llvm_version: 8
-            llvm_url: https://releases.llvm.org/8.0.0/clang+llvm-8.0.0-x86_64-apple-darwin.tar.xz
-          - os: macos-latest
-            llvm_version: 9
-            llvm_url: https://releases.llvm.org/9.0.0/clang+llvm-9.0.0-x86_64-darwin-apple.tar.xz
-
-          - os: macos-latest
-            cc: clang
-          - os: macos-latest
-            cxx: clang++
-
-          - os: ubuntu-18.04
-            cc: gcc
-          - os: ubuntu-18.04
-            cxx: g++
-
-          # Not used (yet), but will be soon, hopefully
-          # - os: windows-latest
-          #   cc: cl
-          # - os: windows-latest
-          #   cxx: cl
-          # - os: windows-latest
-          #   cmake_gen: "Visual Studio 16"
-          # - os: windows-latest
-          #   cmake_arch: "x64"
-          # - os: windows-latest
-          #   cmake_toolset: "host=x64"
 
         exclude:
           # Don't attempt 32-bit builds for macos
@@ -93,30 +74,23 @@ jobs:
       run: |
         sudo apt-get update
 
-        # The standard Bionic install has gcc 7.4, which is known to be
-        # buggy with LLVM. Use gcc 8 instead.
-        # NO
-        # sudo apt-get install gcc-8 g++-8
-        # sudo update-alternatives --install /usr/bin/gcc gcc /usr/bin/gcc-8 100
-        # sudo update-alternatives --install /usr/bin/g++ g++ /usr/bin/g++-8 100
-
         # Install OpenGL
         # TODO(srj): OpenGL is only needed to build the opengl tests (which we don't even run)...
         sudo apt-get install libglu1-mesa-dev freeglut3-dev mesa-common-dev
 
-        # Install libjpeg
         sudo apt-get -y --force-yes install libjpeg-dev
-
-        # Install libpng
         sudo apt-get -y --force-yes install libpng-dev
-
-        # Install doxygen
         sudo apt-get -y --force-yes --no-install-recommends install doxygen
+
+    - name: Configure Ubuntu-32
+      if: startsWith(matrix.os, 'ubuntu') && matrix.bits == 32
+      shell: bash
+      run: |
+        sudo apt-get install gcc-multilib g++-multilib
 
     - name: Configure OSX
       if: startsWith(matrix.os, 'macos')
       run: |
-        # Install libpng, jpeg, doxygen
         brew install libpng jpeg doxygen
 
     - name: Configure Env Vars
@@ -128,14 +102,12 @@ jobs:
         _TEMP=${_TEMP_RAW//\\//}
 
         # This is the trick GitHub Actions uses to allow us to set env vars across all subsequent job steps
-        echo ::set-env name=CC::"${{matrix.cc}}"
-        echo ::set-env name=CXX::"${{matrix.cxx}}"
         echo ::set-env name=LLVM_INSTALL_DIR::"${_ROOT}/llvm"
         echo ::set-env name=LLVM_CONFIG::"${_ROOT}/llvm/bin/llvm-config"
         echo ::set-env name=HALIDE_SOURCE_DIR::"${_ROOT}/halide"
         echo ::set-env name=HALIDE_BUILD_DIR::"${_ROOT}/halide_build"
         echo ::set-env name=HALIDE_TEMP_DIR::"${_TEMP}"
-        echo ::set-env name=PARALLEL_JOBS::"$(expr $(nproc) + 2)"
+        echo ::set-env name=PARALLEL_JOBS::"4"
         echo ::set-env name=PYBIND11_PATH::"${_ROOT}/pybind11"
 
     - name: Install PyBind
@@ -150,9 +122,15 @@ jobs:
     - name: Install LLVM
       shell: bash
       run: |
-        wget ${{matrix.llvm_url}} -O ${HALIDE_TEMP_DIR}/llvm-prebuilt.tar.xz
+        LLVM_ID="llvm-${{matrix.llvm_version}}-${{matrix.arch}}-${{matrix.bits}}-${{matrix.halide_os}}"
+
+        curl \
+          --user llvm_user:${{secrets.LLVM_USER_PASSWORD}} \
+          --output ${HALIDE_TEMP_DIR}/llvm-prebuilt.tgz \
+          https://buildbot.halide-lang.org/llvm/${LLVM_ID}.tgz
+
         mkdir ${LLVM_INSTALL_DIR}
-        tar xvf ${HALIDE_TEMP_DIR}/llvm-prebuilt.tar.xz -C ${LLVM_INSTALL_DIR} --strip-components=1
+        tar -xvf ${HALIDE_TEMP_DIR}/llvm-prebuilt.tar.xz -C ${LLVM_INSTALL_DIR} --strip-components=1
         rm -rf ${HALIDE_TEMP_DIR}/llvm-prebuilt.tar.xz
 
     - name: Configure Halide (Make)
@@ -186,7 +164,7 @@ jobs:
       run: |
         # Build Halide
         cd ${HALIDE_BUILD_DIR}
-        # TODO add build_python_bindings build_apps
+
         # make -f ${HALIDE_SOURCE_DIR}/Makefile -j ${PARALLEL_JOBS} distrib build_tests build_python_bindings build_apps
         make -f ${HALIDE_SOURCE_DIR}/Makefile -j ${PARALLEL_JOBS} distrib build_python_bindings
 
@@ -196,7 +174,11 @@ jobs:
       run: |
         # Build Halide
         cd ${HALIDE_BUILD_DIR}
-        cmake --build ${HALIDE_BUILD_DIR} -j ${PARALLEL_JOBS} --target all
+        cmake \
+          --build ${HALIDE_BUILD_DIR} \
+          --config Release \
+          -j ${PARALLEL_JOBS} \
+          --target all
 
     - name: Run Tests (Make)
       if: startsWith(matrix.build_tool, 'make')
