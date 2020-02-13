@@ -396,8 +396,8 @@ void FunctionDAG::Node::loop_nest_for_region(int stage_idx, const Span *computed
     map<string, Expr> computed_map;
     if (!s.loop_nest_all_common_cases) {
         for (int i = 0; i < func.dimensions(); i++) {
-            computed_map[region_required[i].min.as<Variable>()->name] = (int)computed[i].min();
-            computed_map[region_required[i].max.as<Variable>()->name] = (int)computed[i].max();
+            computed_map[region_required[i].min.name()] = (int)computed[i].min();
+            computed_map[region_required[i].max.name()] = (int)computed[i].max();
         }
     }
 
@@ -423,8 +423,8 @@ void FunctionDAG::Node::required_to_computed(const Span *required, Span *compute
     if (!region_computed_all_common_cases) {
         // Make a binding for the value of each symbolic variable
         for (int i = 0; i < func.dimensions(); i++) {
-            required_map[region_required[i].min.as<Variable>()->name] = (int)required[i].min();
-            required_map[region_required[i].max.as<Variable>()->name] = (int)required[i].max();
+            required_map[region_required[i].min.name()] = (int)required[i].min();
+            required_map[region_required[i].max.name()] = (int)required[i].max();
         }
     }
     for (int i = 0; i < func.dimensions(); i++) {
@@ -601,12 +601,11 @@ FunctionDAG::FunctionDAG(const vector<Function> &outputs, const MachineParams &p
 
         // Create a symbolic region for this Func.
         for (int j = 0; j < consumer.dimensions(); j++) {
-            Expr min_var = Variable::make(Int(32), consumer.name() + "." + consumer.args()[j] + ".min");
-            Expr max_var = Variable::make(Int(32), consumer.name() + "." + consumer.args()[j] + ".max");
-            Expr extent = max_var - min_var + 1;
+            Halide::Var min_var(consumer.name() + "." + consumer.args()[j] + ".min");
+            Halide::Var max_var(consumer.name() + "." + consumer.args()[j] + ".max");
             Interval interval(min_var, max_var);
             scope.push(consumer.args()[j], interval);
-            node.region_required.push_back(interval);
+            node.region_required.emplace_back(SymbolicInterval{min_var, max_var});
         }
 
         auto pure_args = node.func.args();
@@ -1021,7 +1020,7 @@ void FunctionDAG::dump_internal(OS &os) const {
     for (const Node &n : nodes) {
         os << "Node: " << n.func.name() << '\n'
            << "  Symbolic region required: \n";
-        for (const Interval &i : n.region_required) {
+        for (const SymbolicInterval &i : n.region_required) {
             os << "    " << i.min << ", " << i.max << '\n';
         }
         os << "  Region computed: \n";

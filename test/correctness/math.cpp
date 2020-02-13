@@ -43,7 +43,7 @@ bool relatively_equal(value_t a, value_t b, Target target) {
             relative_error = fabs((db - da) / db);
         }
 
-        if (relative_error < .000001) {
+        if (relative_error < .00000125) {
             return true;
         }
 
