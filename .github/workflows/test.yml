@@ -63,6 +63,9 @@ jobs:
           # Don't attempt 32-bit builds for macos
           - os: macos-latest
             bits: 32
+          # Don't use make on windows
+          - os: windows-latest
+            build_tool: make
 
     steps:
     - uses: actions/checkout@v2
@@ -129,8 +132,15 @@ jobs:
           --output ${HALIDE_TEMP_DIR}/llvm-prebuilt.tgz \
           https://buildbot.halide-lang.org/llvm/${LLVM_ID}.tgz
 
+        TAR_FLAGS=
+        if [[ ${{matrix.os}} == windows* ]]; then
+          # Must use --force-local to avoid tar misinterpreting the : in
+          # a Windows pathname as a hostname.
+          TAR_FLAGS=" --force-local "
+        fi
+
         mkdir ${LLVM_INSTALL_DIR}
-        tar -xvf ${HALIDE_TEMP_DIR}/llvm-prebuilt.tar.xz -C ${LLVM_INSTALL_DIR} --strip-components=1
+        tar ${TAR_FLAGS} -xvf ${HALIDE_TEMP_DIR}/llvm-prebuilt.tar.xz -C ${LLVM_INSTALL_DIR} --strip-components=1
         rm -rf ${HALIDE_TEMP_DIR}/llvm-prebuilt.tar.xz
 
     - name: Configure Halide (Make)
