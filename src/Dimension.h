@@ -75,10 +75,7 @@ public:
         return set_estimate(min, extent);
     }
 
-    HALIDE_ATTRIBUTE_DEPRECATED("min_estimate() will be removed soon, do not use")
     Expr min_estimate() const;
-
-    HALIDE_ATTRIBUTE_DEPRECATED("extent_estimate() will be removed soon, do not use")
     Expr extent_estimate() const;
 
     /** Get a different dimension of the same buffer */
