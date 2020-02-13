@@ -10,7 +10,7 @@ on:
 
 jobs:
   test_halide:
-    name: ${{matrix.arch}}-${{matrix.bits}}-${{matrix.halide_os}} llvm-${{matrix.llvm_version} (${{matrix.build_tool}})
+    name: ${{matrix.arch}}-${{matrix.bits}}-${{matrix.halide_os}} llvm-${{matrix.llvm_version}} (${{matrix.build_tool}})
     runs-on: ${{matrix.os}}
     env:
       CC: ${{matrix.cc}}
