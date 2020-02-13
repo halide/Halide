@@ -119,10 +119,19 @@ jobs:
         echo ::set-env name=PARALLEL_JOBS::"4"
         echo ::set-env name=PYBIND11_PATH::"${_ROOT}/pybind11"
 
-    - name: Configure Python
+    - name: Configure Python (32-bit)
+      if: matrix.bits == 32
       uses: actions/setup-python@v1
       with:
         python-version: '3.x' # Any 3.x is OK
+        architecture: 'x86'
+
+    - name: Configure Python (64-bit)
+      if: matrix.bits == 64
+      uses: actions/setup-python@v1
+      with:
+        python-version: '3.x' # Any 3.x is OK
+        architecture: 'x64'
 
     - name: Install Python Dependencies
       shell: bash
