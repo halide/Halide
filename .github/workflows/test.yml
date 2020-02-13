@@ -73,6 +73,7 @@ jobs:
 
     - name: Configure Ubuntu
       if: startsWith(matrix.os, 'ubuntu')
+      shell: bash
       run: |
         sudo apt-get update
 
@@ -88,7 +89,7 @@ jobs:
       if: startsWith(matrix.os, 'ubuntu') && matrix.bits == 32
       shell: bash
       run: |
-        sudo apt-get install gcc-multilib g++-multilib
+        sudo apt-get install gcc-multilib g++-multilib lib32z1
 
         echo ::set-env name=CC::"${CC} -m32 "
         echo ::set-env name=CXX::"${CXX} -m32 "
@@ -96,6 +97,7 @@ jobs:
 
     - name: Configure OSX
       if: startsWith(matrix.os, 'macos')
+      shell: bash
       run: |
         brew install libpng jpeg doxygen
 
@@ -232,19 +234,12 @@ jobs:
         # Build Halide
         set -eux
 
-        TARGET_ALL="all"
-        if [[ ${{matrix.os}} == windows* ]]; then
-          # Apaprently CMake doesn't accept "--target=all" as an acceptable
-          # synonym for this for MSVC, because reasons?
-          TARGET_ALL="ALL_BUILD"
-        fi
-
         cd ${HALIDE_BUILD_DIR}
+        # Omitting the --target flag implies "all/all_build"
         cmake \
           --build ${HALIDE_BUILD_DIR} \
           --config ${BUILD_TYPE} \
-          -j ${PARALLEL_JOBS} \
-          --target ${TARGET_ALL}
+          -j ${PARALLEL_JOBS}
 
     - name: Run Tests (Make)
       if: startsWith(matrix.build_tool, 'make')
