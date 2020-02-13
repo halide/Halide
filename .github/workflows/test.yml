@@ -147,7 +147,8 @@ jobs:
         mkdir ${LLVM_INSTALL_DIR}
         tar ${TAR_FLAGS} -xvf ${HALIDE_TEMP_DIR}/llvm-prebuilt.tgz -C ${LLVM_INSTALL_DIR}
 
-        ls -l ${LLVM_INSTALL_DIR}
+        ls -l ${LLVM_INSTALL_DIR}/bin
+        ls -l ${LLVM_INSTALL_DIR}/lib/cmake/llvm
 
         rm -rf ${HALIDE_TEMP_DIR}/llvm-prebuilt.tgz
 
