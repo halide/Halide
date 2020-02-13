@@ -76,7 +76,7 @@ jobs:
       uses: actions/setup-python@v1
       with:
         python-version: '3.x' # Any 3.x is OK
-        architecture: 'x64'
+        architecture: 'x64' # N.B.: 'x86' is only available for Windows (Ubuntu special-cased below)
 
     - name: Configure Ubuntu
       if: startsWith(matrix.os, 'ubuntu')
