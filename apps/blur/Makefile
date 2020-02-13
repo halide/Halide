@@ -3,9 +3,11 @@ include ../support/Makefile.inc
 .PHONY: build clean test
 build: $(BIN)/$(HL_TARGET)/test
 
-$(GENERATOR_BIN)/halide_blur.generator: halide_blur_generator.cpp $(GENERATOR_DEPS)
+# In order to ensure our static library works, we arbitrarily link against
+# the static library for this app.
+$(GENERATOR_BIN)/halide_blur.generator: halide_blur_generator.cpp $(GENERATOR_DEPS_STATIC)
 	@mkdir -p $(@D)
-	$(CXX) $(CXXFLAGS) $(filter %.cpp,$^) -o $@ $(GENERATOR_LDFLAGS)
+	$(CXX) $(CXXFLAGS) $(filter %.cpp,$^) -o $@ $(GENERATOR_LDFLAGS_STATIC)
 
 $(BIN)/%/halide_blur.a: $(GENERATOR_BIN)/halide_blur.generator
 	@mkdir -p $(@D)

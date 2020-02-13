@@ -958,17 +958,41 @@ endif
 .PHONY: all
 all: distrib test_internal
 
+# Depending on which linker we're using,
+# we need a different invocation to get the
+# linker map file.
+ifeq ($(UNAME), Darwin)
+    MAP_FLAGS= -Wl,-map -Wl,$(BUILD_DIR)/llvm_objects/list.all
+    LIST_OUTPUT = > /dev/null
+else
+ifeq ($(OS), Windows_NT)
+    # This is for MinGW: the map file gets written, but the
+    # compilation fails with a file truncation error.  Instead,
+    # we use the old strategy.
+    # Note: we do in fact have to pass in this flag twice.
+    # Note: The grep in this line is necessary in order to avoid file truncation errors
+    # in MinGW.
+    MAP_FLAGS= -Wl,-t -Wl,-t
+    LIST_OUTPUT = 2>&1 | grep "libLLVM" | grep ")" > $(BUILD_DIR)/llvm_objects/list.all
+else
+    MAP_FLAGS= -Wl,-Map=$(BUILD_DIR)/llvm_objects/list.all
+    LIST_OUTPUT = > /dev/null
+endif
+endif
+
 $(BUILD_DIR)/llvm_objects/list: $(OBJECTS) $(INITIAL_MODULES)
 	# Determine the relevant object files from llvm with a dummy
-	# compilation. Passing -t to the linker gets it to list which
-	# object files in which archives it uses to resolve
-	# symbols. We only care about the libLLVM ones.
+	# compilation. Passing -map to the linker gets it to list, as
+	# part of the linker map file, the object files in which archives it uses to
+	# resolve symbols. We only care about the libLLVM ones, which we will filter below.
 	@mkdir -p $(@D)
-	$(CXX) -o /dev/null -shared -Wl,-t -Wl,-t $(OBJECTS) $(INITIAL_MODULES) $(LLVM_STATIC_LIBS) $(LLVM_SYSTEM_LIBS) $(COMMON_LD_FLAGS) 2>&1 | grep "libLLVM" | grep ")" > $(BUILD_DIR)/llvm_objects/list.new
+	$(CXX) -o /dev/null -shared $(MAP_FLAGS) $(OBJECTS) $(INITIAL_MODULES) $(LLVM_STATIC_LIBS) $(LLVM_SYSTEM_LIBS) $(COMMON_LD_FLAGS)  $(LIST_OUTPUT)
 	# if the list has changed since the previous build, or there
 	# is no list from a previous build, then delete any old object
 	# files and re-extract the required object files
 	cd $(BUILD_DIR)/llvm_objects; \
+	cat list.all |  grep "libLLVM" | grep ")"  | sed "s/\[.*\] //" | egrep "^/|^\(" > list.new; \
+	rm list.all; \
 	if cmp -s list.new list; \
 	then \
 	echo "No changes in LLVM deps"; \
