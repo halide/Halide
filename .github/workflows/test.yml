@@ -16,6 +16,7 @@ jobs:
       CC: ${{matrix.cc}}
       CXX: ${{matrix.cxx}}
       LD: ld
+      PYTHON: python3
 
     strategy:
       fail-fast: false  # Keep running other jobs even if one fails
@@ -88,36 +89,19 @@ jobs:
       run: |
         set -eux
 
-        # Remove every python2 and python3 package we can find, to be sure that we don't use the wrong one later
-        # sudo apt update
-        # sudo apt remove "^python.*"
-        # sudo apt autoremove
-
-        # apt list --installed | grep python3
-
-        # python3 - << EOF
-        # import platform
-        # print(platform.architecture()[0])
-        # EOF
-
-        # file $(which python3)
-
         sudo dpkg --add-architecture i386
         sudo apt-get update
         sudo apt-get install gcc-multilib g++-multilib
         sudo apt-get install zlib1g-dev:i386 libjpeg-dev:i386 libpng-dev:i386
         sudo apt-get install python3.7:i386 python3.7-dev:i386
 
-        # python3.7 - << EOF
-        # import platform
-        # print(platform.architecture()[0])
-        # EOF
+        file $(which python3.7)
 
-        # file $(which python3)
-        # file $(which python3.7)
-
-        # sudo apt-get install python3-minimal:i386 python3.6:i386 python3.6-dev:i386 python3-lib2to3 python3.6-minimal:i386 python3:i386 python3-dev:i386 python3-setuptools:i386 python3-distutils:i386 dh-python:i386 python3-pip
-        # dh-python:i386 python3-distutils:i386 python3-dev:i386 lib32z1-dev
+        # Verify that we have a 32-bit build
+        python3.7 - << EOF
+        import platform
+        print(platform.architecture()[0])
+        EOF
 
         echo ::set-env name=CC::"${CC} -m32 "
         echo ::set-env name=CXX::"${CXX} -m32 "
@@ -160,31 +144,16 @@ jobs:
         echo ::set-env name=HALIDE_BUILD_DIR::"${_ROOT}/halide_build"
         echo ::set-env name=HALIDE_TEMP_DIR::"${_TEMP}"
         echo ::set-env name=PARALLEL_JOBS::"4"
-        echo ::set-env name=PYBIND11_PATH::"${_ROOT}/pybind11"
 
     - name: Install Python Dependencies
       shell: bash
       run: |
         set -eux
-        which python
-        python --version
-        which python3
-        python3 --version
-        python3 -m pip --version
-        which pip3
-        pip3 --version
-        pip install --upgrade pip
-        pip install -r ${HALIDE_SOURCE_DIR}/python_bindings/requirements.txt
-        pip list
-
-    - name: Install PyBind
-      shell: bash
-      run: |
-        git clone https://github.com/pybind/pybind11.git \
-          "${PYBIND11_PATH}" \
-          --branch v2.2 \
-          --single-branch \
-          --depth 1
+        ${PYTHON} -m pip --version
+        ${PYTHON} -m pip --version
+        ${PYTHON} -m pip install --upgrade pip
+        ${PYTHON} -m pip install -r ${HALIDE_SOURCE_DIR}/python_bindings/requirements.txt
+        ${PYTHON} -m pip list
 
     - name: Install LLVM
       shell: bash
