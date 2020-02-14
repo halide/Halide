@@ -16,7 +16,8 @@ jobs:
       CC: ${{matrix.cc}}
       CXX: ${{matrix.cxx}}
       LD: ld
-      PYTHON: python3
+      PYTHON: python3.7
+      OPTIMIZE: -g
 
     strategy:
       fail-fast: false  # Keep running other jobs even if one fails
@@ -79,6 +80,13 @@ jobs:
         python-version: '3.7'
         architecture: 'x64' # N.B.: 'x86' is only available for Windows (Ubuntu is special-cased below)
 
+    - name: Configure Python (32-bit)
+      if: startsWith(matrix.os, 'windows') && matrix.bits == 32
+      uses: actions/setup-python@v1
+      with:
+        python-version: '3.7'
+        architecture: 'x86'
+
     - name: Configure Ubuntu-32
       if: startsWith(matrix.os, 'ubuntu') && matrix.bits == 32
       shell: bash
@@ -94,15 +102,19 @@ jobs:
         file $(which python3.7)
 
         # Verify that we have a 32-bit build
-        python3.7 - << EOF
+        PYVERSION=`python3.7 - << EOF
         import platform
         print(platform.architecture()[0])
-        EOF
+        EOF`
+
+        if [[ $PYVERSION != 32bit ]]; then
+          echo Expected 32-bit version of Python 3.7, found ${PYVERSION}
+          exit 1
+        fi
 
         echo ::set-env name=CC::"${CC} -m32"
         echo ::set-env name=CXX::"${CXX} -m32"
         echo ::set-env name=LD::"${LD} -melf_i386"
-        echo ::set-env name=PYTHON::"python3.7"
 
     - name: Configure Ubuntu
       if: startsWith(matrix.os, 'ubuntu')
