@@ -168,11 +168,6 @@ jobs:
       run: |
         set -eux
 
-        which python
-        which python3
-        which ${PYTHON}
-        file $(which ${PYTHON})
-
         ${PYTHON} -m pip --version
         ${PYTHON} -m pip install --upgrade pip
         ${PYTHON} -m pip install -r ${HALIDE_SOURCE_DIR}/python_bindings/requirements.txt
