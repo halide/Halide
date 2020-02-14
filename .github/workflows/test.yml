@@ -88,11 +88,8 @@ jobs:
       run: |
         set -eux
 
-        apt list --installed | grep python3
-
-        # Remove existing versions to avoid confusion when installing i386 versions below
-        # (This probably shouldn't be necessary, but apparently is)
-        #sudo apt remove python3-minimal python3.6 dh-python python3-distutils python3-dev python3-pip
+        # Remove every python2 and python3 package we can find, to be sure that we don't use the wrong one later
+        sudo apt update
         sudo apt remove "^python.*"
         sudo apt autoremove
 
@@ -102,7 +99,7 @@ jobs:
         sudo apt-get update
         sudo apt-get install gcc-multilib g++-multilib lib32z1-dev
         sudo apt-get install libjpeg-dev:i386 libpng-dev:i386
-        sudo apt-get install python3-minimal:i386 python3.6:i386
+        sudo apt-get install python3-minimal:i386 python3.6:i386 python3-pip
         # dh-python:i386 python3-distutils:i386 python3-dev:i386
 
         echo ::set-env name=CC::"${CC} -m32 "
