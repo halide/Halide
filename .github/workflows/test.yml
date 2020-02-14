@@ -26,13 +26,9 @@ jobs:
         # useful to prune this a bit).
         arch: [x86]
         bits: [32, 64]
-        os: [ubuntu-18.04, macos-latest]
-        llvm_version: [8]
-        build_tool: [make]
-        # bits: [32, 64]
-        # os: [windows-latest, ubuntu-18.04, macos-latest]
-        # llvm_version: [8, 9, 10, trunk]
-        # build_tool: [make, cmake_shared]
+        os: [windows-latest, ubuntu-18.04, macos-latest]
+        llvm_version: [8, 9, 10, trunk]
+        build_tool: [make, cmake_shared]  # TODO: cmake_static is still dodgy?
         include:
           - llvm_version: 8
             llvm_branch: release/8.x
@@ -103,9 +99,9 @@ jobs:
         print(platform.architecture()[0])
         EOF
 
-        echo ::set-env name=CC::"${CC} -m32 "
-        echo ::set-env name=CXX::"${CXX} -m32 "
-        echo ::set-env name=LD::"${LD} -melf_i386 "
+        echo ::set-env name=CC::"${CC} -m32"
+        echo ::set-env name=CXX::"${CXX} -m32"
+        echo ::set-env name=LD::"${LD} -melf_i386"
         echo ::set-env name=PYTHON::"python3.7"
 
     - name: Configure Ubuntu
@@ -150,10 +146,8 @@ jobs:
       run: |
         set -eux
         ${PYTHON} -m pip --version
-        ${PYTHON} -m pip --version
         ${PYTHON} -m pip install --upgrade pip
         ${PYTHON} -m pip install -r ${HALIDE_SOURCE_DIR}/python_bindings/requirements.txt
-        ${PYTHON} -m pip list
 
     - name: Install LLVM
       shell: bash
