@@ -136,6 +136,11 @@ jobs:
         # coreutils is for gtimeout
         brew install libpng jpeg doxygen coreutils
 
+    - name: Configure Windows
+      if: startsWith(matrix.os, 'windows')
+      run: |
+        choco install libjpeg-turbo
+
     - name: Configure Env Vars
       shell: bash
       run: |
@@ -157,6 +162,12 @@ jobs:
       shell: bash
       run: |
         set -eux
+
+        which python
+        which python3
+        which ${PYTHON}
+        file $(which ${PYTHON})
+
         ${PYTHON} -m pip --version
         ${PYTHON} -m pip install --upgrade pip
         ${PYTHON} -m pip install -r ${HALIDE_SOURCE_DIR}/python_bindings/requirements.txt
