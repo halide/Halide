@@ -142,6 +142,12 @@ jobs:
     - name: Install Python Dependencies
       shell: bash
       run: |
+        set -eux
+        which python
+        which python3
+        which python-config
+        which python3-config
+        python --version
         python -m pip install --upgrade pip
         python -m pip install -r ${HALIDE_SOURCE_DIR}/python_bindings/requirements.txt
 
