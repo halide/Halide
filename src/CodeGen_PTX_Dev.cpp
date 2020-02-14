@@ -360,7 +360,6 @@ void CodeGen_PTX_Dev::codegen_vector_reduce(const VectorReduce *op, const Expr &
                 b = lossless_cast(UInt(8, input_lanes), mul->b);
             }
         }
-        debug(0) << "ELEPHANT: " << a.defined() << " " << b.defined() << "\n";
         if (a.defined() && b.defined()) {
             std::ostringstream ss;
             ss << "dp4a";
@@ -428,12 +427,10 @@ void CodeGen_PTX_Dev::codegen_vector_reduce(const VectorReduce *op, const Expr &
                     acc = Call::make(acc.type(), name, {slice_a, slice_b, acc}, Call::PureExtern);
                 }
                 acc = simplify(acc);
-                debug(0) << "Simpler: " << acc << "\n";
                 acc = common_subexpression_elimination(acc);
                 result.push_back(acc);
             }
             Expr equiv = Shuffle::make_concat(result);
-            debug(0) << "EQUIV: " << equiv << "\n";
             equiv.accept(this);
             return;
         }
