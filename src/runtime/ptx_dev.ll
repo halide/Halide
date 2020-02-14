@@ -350,3 +350,19 @@ define weak_odr i32 @dp4a_s32_s32(i32 %a, i32 %b, i32 %i) nounwind readnone alwa
        %d = tail call i32 asm "dp4a.s32.s32    $0, $1, $2, $3;", "=r,r,r,r"(i32 %a, i32 %b, i32 %i) nounwind readnone
        ret i32 %d
 }
+
+define weak_odr i32 @dp4a_s32_u32(i32 %a, i32 %b, i32 %i) nounwind readnone alwaysinline {
+       %d = tail call i32 asm "dp4a.s32.u32    $0, $1, $2, $3;", "=r,r,r,r"(i32 %a, i32 %b, i32 %i) nounwind readnone
+       ret i32 %d
+}
+
+define weak_odr i32 @dp4a_u32_s32(i32 %a, i32 %b, i32 %i) nounwind readnone alwaysinline {
+       %d = tail call i32 asm "dp4a.u32.s32    $0, $1, $2, $3;", "=r,r,r,r"(i32 %a, i32 %b, i32 %i) nounwind readnone
+       ret i32 %d
+}
+
+define weak_odr i32 @dp4a_u32_u32(i32 %a, i32 %b, i32 %i) nounwind readnone alwaysinline {
+       %d = tail call i32 asm "dp4a.u32.u32    $0, $1, $2, $3;", "=r,r,r,r"(i32 %a, i32 %b, i32 %i) nounwind readnone
+       ret i32 %d
+}
+

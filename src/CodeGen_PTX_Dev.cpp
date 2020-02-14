@@ -333,20 +333,83 @@ void CodeGen_PTX_Dev::visit(const Atomic *op) {
 
 void CodeGen_PTX_Dev::codegen_vector_reduce(const VectorReduce *op, const Expr &init) {
     // Pattern match 8-bit dot products
-    // TODO: unsigned, other factors, vector outputs
-    //const int factor = op->value.type().lanes() / op->type.type().lanes();
+    const int input_lanes = op->value.type().lanes();
+    const int factor = input_lanes / op->type.lanes();
     const Mul *mul = op->value.as<Mul>();
-    if (op->type == Int(32) && mul && mul->type == Int(32, 4)) {
+    if (op->op == VectorReduce::Add &&
+        mul &&
+        (factor % 4 == 0) &&
+        (op->type.element_of() == Int(32) ||
+         op->type.element_of() == UInt(32))) {
         Expr i = init;
         if (!i.defined()) {
             i = cast(mul->type, 0);
         }
-        Expr a = lossless_cast(Int(8, 4), mul->a);
-        Expr b = lossless_cast(Int(8, 4), mul->b);
+        Expr a = mul->a, b = mul->b;
+        if (op->type.is_uint()) {
+            a = lossless_cast(UInt(8, input_lanes), a);
+            b = lossless_cast(UInt(8, input_lanes), b);
+        } else {
+            a = lossless_cast(Int(8, input_lanes), a);
+            b = lossless_cast(Int(8, input_lanes), b);
+            if (!a.defined()) {
+                // try uint
+                a = lossless_cast(UInt(8, input_lanes), mul->a);
+            }
+            if (!b.defined()) {
+                b = lossless_cast(UInt(8, input_lanes), mul->b);
+            }
+        }
+        debug(0) << "ELEPHANT: " << a.defined() << " " << b.defined() << "\n";
         if (a.defined() && b.defined()) {
-            a = reinterpret(Int(32), a);
-            b = reinterpret(Int(32), b);
-            Expr equiv = Call::make(Int(32), "dp4a_s32_s32", {a, b, i}, Call::PureExtern);
+            std::ostringstream ss;
+            ss << "dp4a";
+            if (a.type().is_int()) {
+                ss << "_s32";
+            } else {
+                ss << "_u32";
+            }
+            if (b.type().is_int()) {
+                ss << "_s32";
+            } else {
+                ss << "_u32";
+            }
+            string name = ss.str();
+            vector<Expr> result;
+            for (int l = 0; l < op->type.lanes(); l++) {
+                // For each lane of the output...
+                Expr i_lane, a_lane, b_lane;
+                if (op->type.is_scalar()) {
+                    i_lane = i;
+                    a_lane = a;
+                    b_lane = b;
+                } else {
+                    i_lane = Shuffle::make_extract_element(i, l);
+                    a_lane = Shuffle::make_slice(a, l * factor, 1, factor);
+                    b_lane = Shuffle::make_slice(a, l * factor, 1, factor);
+                }
+                Expr acc = i_lane;
+                for (int i = 0; i < factor / 4; i++) {
+                    // For each group of 4 input lanes that hit this output lane
+                    Expr slice_a, slice_b;
+                    if (factor == 4) {
+                        slice_a = a_lane;
+                        slice_b = b_lane;
+                    } else {
+                        slice_a = Shuffle::make_slice(a_lane, i * 4, 1, 4);
+                        slice_b = Shuffle::make_slice(b_lane, i * 4, 1, 4);
+                    }
+                    slice_a = reinterpret(op->type.element_of(), slice_a);
+                    slice_b = reinterpret(op->type.element_of(), slice_b);
+                    acc = Call::make(acc.type(), name, {slice_a, slice_b, acc}, Call::PureExtern);
+                }
+                acc = simplify(acc);
+                debug(0) << "Simpler: " << acc << "\n";
+                acc = common_subexpression_elimination(acc);
+                result.push_back(acc);
+            }
+            Expr equiv = Shuffle::make_concat(result);
+            debug(0) << "EQUIV: " << equiv << "\n";
             equiv.accept(this);
             return;
         }

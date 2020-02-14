@@ -2459,7 +2459,7 @@ Value *CodeGen_LLVM::codegen_dense_vector_load(const Load *load, Value *vpred) {
     // For dense vector loads wider than the native vector
     // width, bust them up into native vectors
     int load_lanes = load->type.lanes();
-    int native_lanes = native_bits / load->type.bits();
+    int native_lanes = std::max(1, native_bits / load->type.bits());
     vector<Value *> slices;
     for (int i = 0; i < load_lanes; i += native_lanes) {
         int slice_lanes = std::min(native_lanes, load_lanes - i);
