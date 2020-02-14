@@ -1274,7 +1274,6 @@ typedef enum halide_target_feature_t {
     halide_target_feature_no_runtime,  ///< Do not include a copy of the Halide runtime in any generated object file or assembly
 
     halide_target_feature_metal,  ///< Enable the (Apple) Metal runtime.
-    halide_target_feature_mingw,  ///< For Windows compile to MinGW toolset rather then Visual Studio
 
     halide_target_feature_c_plus_plus_mangling,  ///< Generate C++ mangled names for result function, et al
 

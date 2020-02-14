@@ -89,7 +89,6 @@ struct Target {
         Profile = halide_target_feature_profile,
         NoRuntime = halide_target_feature_no_runtime,
         Metal = halide_target_feature_metal,
-        MinGW = halide_target_feature_mingw,
         CPlusPlusMangling = halide_target_feature_c_plus_plus_mangling,
         LargeBuffers = halide_target_feature_large_buffers,
         HexagonDma = halide_target_feature_hexagon_dma,

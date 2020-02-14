@@ -111,7 +111,6 @@ void define_enums(py::module &m) {
         .value("Profile", Target::Feature::Profile)
         .value("NoRuntime", Target::Feature::NoRuntime)
         .value("Metal", Target::Feature::Metal)
-        .value("MinGW", Target::Feature::MinGW)
         .value("CPlusPlusMangling", Target::Feature::CPlusPlusMangling)
         .value("LargeBuffers", Target::Feature::LargeBuffers)
         .value("HVX_64", Target::Feature::HVX_64)
