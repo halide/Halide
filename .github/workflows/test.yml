@@ -142,9 +142,9 @@ jobs:
     - name: Install Python Dependencies
       shell: bash
       run: |
-        python3 -m pip install --upgrade pip
-        python3 -m pip install -r ${HALIDE_SOURCE_DIR}/python_bindings/requirements.txt
-        python3 -m pip list
+        pip3 install --upgrade pip
+        pip3 install -r ${HALIDE_SOURCE_DIR}/python_bindings/requirements.txt
+        pip3 list
 
     - name: Install PyBind
       shell: bash
