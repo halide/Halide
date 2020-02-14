@@ -39,16 +39,7 @@ LIBHALIDE ?= $(HALIDE_DISTRIB_PATH)/bin/libHalide.$(SHARED_EXT)
 SUFFIX = $(shell $(PYTHON)-config --extension-suffix)
 
 # Discover PyBind path from `python3 -m pybind11 --includes`
-# if it is pip/conda installed, which is a common case.
-# Cf. https://github.com/pybind/pybind11/blob/master/docs/compiling.rst#building-manually
 PYBIND11_CFLAGS = $(shell $(PYTHON) -m pybind11 --includes)
-ifeq ($(PYBIND11_CFLAGS),)
-    ifndef PYBIND11_PATH
-        $(error PYBIND11_PATH is undefined)
-    endif
-    PYBIND11_PATH ?= /path/to/pybind11
-    PYBIND11_CFLAGS = -I $(PYBIND11_PATH)/include
-endif
 
 OPTIMIZE ?= -O3
 
