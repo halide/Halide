@@ -95,27 +95,26 @@ jobs:
 
         # apt list --installed | grep python3
 
-        python3 - << EOF
-        import platform
-        print(platform.architecture()[0])
-        EOF
+        # python3 - << EOF
+        # import platform
+        # print(platform.architecture()[0])
+        # EOF
 
-        file $(which python3)
+        # file $(which python3)
 
         sudo dpkg --add-architecture i386
         sudo apt-get update
         sudo apt-get install gcc-multilib g++-multilib
         sudo apt-get install zlib1g-dev:i386 libjpeg-dev:i386 libpng-dev:i386
-
         sudo apt-get install python3.7:i386 python3.7-dev:i386
 
-        python3.7 - << EOF
-        import platform
-        print(platform.architecture()[0])
-        EOF
+        # python3.7 - << EOF
+        # import platform
+        # print(platform.architecture()[0])
+        # EOF
 
-        file $(which python3)
-        file $(which python3.7)
+        # file $(which python3)
+        # file $(which python3.7)
 
         # sudo apt-get install python3-minimal:i386 python3.6:i386 python3.6-dev:i386 python3-lib2to3 python3.6-minimal:i386 python3:i386 python3-dev:i386 python3-setuptools:i386 python3-distutils:i386 dh-python:i386 python3-pip
         # dh-python:i386 python3-distutils:i386 python3-dev:i386 lib32z1-dev
@@ -123,6 +122,7 @@ jobs:
         echo ::set-env name=CC::"${CC} -m32 "
         echo ::set-env name=CXX::"${CXX} -m32 "
         echo ::set-env name=LD::"${LD} -melf_i386 "
+        echo ::set-env name=PYTHON::"python3.7"
 
     - name: Configure Ubuntu
       if: startsWith(matrix.os, 'ubuntu')

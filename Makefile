@@ -75,6 +75,8 @@ LLVM_CXX_FLAGS = -std=c++11  $(filter-out -O% -g -fomit-frame-pointer -pedantic 
 OPTIMIZE ?= -O3
 OPTIMIZE_FOR_BUILD_TIME ?= -O0
 
+PYTHON ?= python3
+
 CLANG ?= $(LLVM_BINDIR)/clang
 CLANG_VERSION = $(shell $(CLANG) --version)
 
@@ -2081,7 +2083,7 @@ build_python_bindings: distrib $(BIN_DIR)/host/runtime.a
 		build_python_bindings \
 		HALIDE_DISTRIB_PATH=$(CURDIR)/$(DISTRIB_DIR) \
 		BIN=$(CURDIR)/$(BIN_DIR)/python3_bindings \
-		PYTHON=python3 \
+		PYTHON=$(PYTHON) \
 		PYBIND11_PATH=$(REAL_PYBIND11_PATH)
 else
 # No Python support for MinGW yet
@@ -2095,7 +2097,7 @@ test_python: distrib $(BIN_DIR)/host/runtime.a build_python_bindings
 		test \
 		HALIDE_DISTRIB_PATH=$(CURDIR)/$(DISTRIB_DIR) \
 		BIN=$(CURDIR)/$(BIN_DIR)/python3_bindings \
-		PYTHON=python3 \
+		PYTHON=$(PYTHON) \
 		PYBIND11_PATH=$(REAL_PYBIND11_PATH)
 
 # It's just for compiling the runtime, so earlier clangs *might* work,
