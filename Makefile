@@ -412,15 +412,6 @@ THIS_MAKEFILE = $(realpath $(filter %Makefile, $(MAKEFILE_LIST)))
 ROOT_DIR = $(strip $(shell dirname $(THIS_MAKEFILE)))
 SRC_DIR  = $(ROOT_DIR)/src
 
-# Allow the user to specify PYBIND11_PATH as a relative path,
-# but canonicalize it to an absolute path since the sub-makefile
-# we call may have a different working dir.
-ifdef PYBIND11_PATH
-	REAL_PYBIND11_PATH = $(realpath $(PYBIND11_PATH))
-else
-	REAL_PYBIND11_PATH = /PYBIND11_PATH/is/undefined
-endif
-
 TARGET=$(if $(HL_TARGET),$(HL_TARGET),host)
 
 # The following directories are all relative to the output directory (i.e. $(CURDIR), not $(SRC_DIR))
@@ -2051,8 +2042,7 @@ build_python_bindings: distrib $(BIN_DIR)/host/runtime.a
 		build_python_bindings \
 		HALIDE_DISTRIB_PATH=$(CURDIR)/$(DISTRIB_DIR) \
 		BIN=$(CURDIR)/$(BIN_DIR)/python3_bindings \
-		PYTHON=python3 \
-		PYBIND11_PATH=$(REAL_PYBIND11_PATH)
+		PYTHON=python3
 
 .PHONY: test_python
 test_python: distrib $(BIN_DIR)/host/runtime.a build_python_bindings
@@ -2061,8 +2051,7 @@ test_python: distrib $(BIN_DIR)/host/runtime.a build_python_bindings
 		test \
 		HALIDE_DISTRIB_PATH=$(CURDIR)/$(DISTRIB_DIR) \
 		BIN=$(CURDIR)/$(BIN_DIR)/python3_bindings \
-		PYTHON=python3 \
-		PYBIND11_PATH=$(REAL_PYBIND11_PATH)
+		PYTHON=python3
 
 # It's just for compiling the runtime, so earlier clangs *might* work,
 # but best to peg it to the minimum llvm version.
