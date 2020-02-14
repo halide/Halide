@@ -86,15 +86,22 @@ jobs:
       if: startsWith(matrix.os, 'ubuntu') && matrix.bits == 32
       shell: bash
       run: |
+        set -eux
+
+        apt search python
+        apt search python3
+
         # Remove existing versions to avoid confusion when installing i386 versions below
         # (This probably shouldn't be necessary, but apparently is)
         sudo apt remove python3-minimal python3.6 dh-python python3-distutils python3-dev python3-pip
+
+        apt search python3
 
         sudo dpkg --add-architecture i386
         sudo apt-get update
         sudo apt-get install gcc-multilib g++-multilib lib32z1-dev
         sudo apt-get install libjpeg-dev:i386 libpng-dev:i386
-        sudo apt-get install python3-minimal:i386 python3.6:i386 python3-pip
+        sudo apt-get install python3-minimal:i386 python3.6:i386
         # dh-python:i386 python3-distutils:i386 python3-dev:i386
 
         echo ::set-env name=CC::"${CC} -m32 "
