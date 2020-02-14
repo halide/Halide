@@ -4,7 +4,7 @@
 
 name: Build+Test
 on:
-  # TODO: not sure if this is the proper set of events/activity-types we want
+  # TODO: not sure if this is the proper set of events/activity-types we want?
   pull_request:
     types: [opened, synchronize, reopened, edited, review_requested]
 
