@@ -65,6 +65,7 @@ protected:
     void visit(const Load *) override;
     void visit(const Store *) override;
     void visit(const Atomic *) override;
+    void codegen_vector_reduce(const VectorReduce *op, const Expr &init) override;
     // @}
 
     std::string march() const;

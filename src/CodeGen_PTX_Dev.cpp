@@ -331,6 +331,29 @@ void CodeGen_PTX_Dev::visit(const Atomic *op) {
     IRVisitor::visit(op);
 }
 
+void CodeGen_PTX_Dev::codegen_vector_reduce(const VectorReduce *op, const Expr &init) {
+    // Pattern match 8-bit dot products
+    // TODO: unsigned, other factors, vector outputs
+    //const int factor = op->value.type().lanes() / op->type.type().lanes();
+    const Mul *mul = op->value.as<Mul>();
+    if (op->type == Int(32) && mul && mul->type == Int(32, 4)) {
+        Expr i = init;
+        if (!i.defined()) {
+            i = cast(mul->type, 0);
+        }
+        Expr a = lossless_cast(Int(8, 4), mul->a);
+        Expr b = lossless_cast(Int(8, 4), mul->b);
+        if (a.defined() && b.defined()) {
+            a = reinterpret(Int(32), a);
+            b = reinterpret(Int(32), b);
+            Expr equiv = Call::make(Int(32), "dp4a_s32_s32", {a, b, i}, Call::PureExtern);
+            equiv.accept(this);
+            return;
+        }
+    }
+    CodeGen_LLVM::codegen_vector_reduce(op, init);
+}
+
 string CodeGen_PTX_Dev::march() const {
     return "nvptx64";
 }

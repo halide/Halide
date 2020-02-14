@@ -345,3 +345,8 @@ define weak_odr i32 @halide_ptx_trap() nounwind uwtable alwaysinline {
        ret i32 0
 }
 
+; llvm doesn't expose dot product instructions as intrinsics
+define weak_odr i32 @dp4a_s32_s32(i32 %a, i32 %b, i32 %i) nounwind readnone alwaysinline {
+       %d = tail call i32 asm "dp4a.s32.s32    $0, $1, $2, $3;", "=r,r,r,r"(i32 %a, i32 %b, i32 %i) nounwind readnone
+       ret i32 %d
+}
