@@ -47,7 +47,6 @@ set(RUNTIME_CPP
   metal
   metal_objc_arm
   metal_objc_x86
-  mingw_math
   mips_cpu_features
   module_aot_ref_count
   module_jit_ref_count

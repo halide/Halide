@@ -9,11 +9,6 @@ BIN ?= $(ROOT_DIR)/bin
 PYTHON ?= python3
 TEST_TMP ?= $(BIN)/tmp
 
-ifeq ($(OS), Windows_NT)
-    # assume we are building for the MinGW environment
-    FPIC=
-    SHARED_EXT=dll
-else
     FPIC=-fPIC
 ifeq ($(UNAME), Darwin)
     SHARED_EXT=dylib
@@ -21,7 +16,6 @@ ifeq ($(UNAME), Darwin)
     SUFFIX=.so
 else
     SHARED_EXT=so
-endif
 endif
 
 ifeq ($(UNAME), Linux)

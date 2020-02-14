@@ -17,10 +17,7 @@ MAKEFLAGS += --no-builtin-rules
 UNAME = $(shell uname)
 
 ifeq ($(OS), Windows_NT)
-    # assume we are building for the MinGW environment
-    COMMON_LD_FLAGS=$(LDFLAGS) -luuid -lole32 -lpthread -lz -Wl,--stack,8388608
-    SHARED_EXT=dll
-    FPIC=
+	$(error Halide no longer supports the MinGW environment.)
 else
     # let's assume "normal" UNIX such as linux
     COMMON_LD_FLAGS=$(LDFLAGS) -ldl -lpthread -lz
@@ -128,11 +125,7 @@ WITH_OPENCL ?= not-empty
 WITH_METAL ?= not-empty
 WITH_OPENGL ?= not-empty
 WITH_D3D12 ?= not-empty
-ifeq ($(OS), Windows_NT)
-    WITH_INTROSPECTION ?=
-else
-    WITH_INTROSPECTION ?= not-empty
-endif
+WITH_INTROSPECTION ?= not-empty
 WITH_EXCEPTIONS ?=
 WITH_LLVM_INSIDE_SHARED_LIBHALIDE ?= not-empty
 
@@ -814,7 +807,6 @@ RUNTIME_CPP_COMPONENTS = \
   metal \
   metal_objc_arm \
   metal_objc_x86 \
-  mingw_math \
   mips_cpu_features \
   module_aot_ref_count \
   module_jit_ref_count \
@@ -954,21 +946,8 @@ all: distrib test_internal
 # linker map file.
 ifeq ($(UNAME), Darwin)
     MAP_FLAGS= -Wl,-map -Wl,$(BUILD_DIR)/llvm_objects/list.all
-    LIST_OUTPUT = > /dev/null
-else
-ifeq ($(OS), Windows_NT)
-    # This is for MinGW: the map file gets written, but the
-    # compilation fails with a file truncation error.  Instead,
-    # we use the old strategy.
-    # Note: we do in fact have to pass in this flag twice.
-    # Note: The grep in this line is necessary in order to avoid file truncation errors
-    # in MinGW.
-    MAP_FLAGS= -Wl,-t -Wl,-t
-    LIST_OUTPUT = 2>&1 | grep "libLLVM" | grep ")" > $(BUILD_DIR)/llvm_objects/list.all
 else
     MAP_FLAGS= -Wl,-Map=$(BUILD_DIR)/llvm_objects/list.all
-    LIST_OUTPUT = > /dev/null
-endif
 endif
 
 $(BUILD_DIR)/llvm_objects/list: $(OBJECTS) $(INITIAL_MODULES)
@@ -977,7 +956,7 @@ $(BUILD_DIR)/llvm_objects/list: $(OBJECTS) $(INITIAL_MODULES)
 	# part of the linker map file, the object files in which archives it uses to
 	# resolve symbols. We only care about the libLLVM ones, which we will filter below.
 	@mkdir -p $(@D)
-	$(CXX) -o /dev/null -shared $(MAP_FLAGS) $(OBJECTS) $(INITIAL_MODULES) $(LLVM_STATIC_LIBS) $(LLVM_SYSTEM_LIBS) $(COMMON_LD_FLAGS)  $(LIST_OUTPUT)
+	$(CXX) -o /dev/null -shared $(MAP_FLAGS) $(OBJECTS) $(INITIAL_MODULES) $(LLVM_STATIC_LIBS) $(LLVM_SYSTEM_LIBS) $(COMMON_LD_FLAGS) > /dev/null
 	# if the list has changed since the previous build, or there
 	# is no list from a previous build, then delete any old object
 	# files and re-extract the required object files
@@ -998,8 +977,7 @@ $(LIB_DIR)/libHalide.a: $(OBJECTS) $(INITIAL_MODULES) $(BUILD_DIR)/llvm_objects/
 	# Archive together all the halide and llvm object files
 	@mkdir -p $(@D)
 	@rm -f $(LIB_DIR)/libHalide.a
-	# ar breaks on MinGW with all objects at the same time.
-	echo $(OBJECTS) $(INITIAL_MODULES) $(BUILD_DIR)/llvm_objects/llvm_*.o* | xargs -n200 ar q $(LIB_DIR)/libHalide.a
+	ar q $(LIB_DIR)/libHalide.a $(OBJECTS) $(INITIAL_MODULES) $(BUILD_DIR)/llvm_objects/llvm_*.o*
 	ranlib $(LIB_DIR)/libHalide.a
 
 $(BIN_DIR)/libHalide.$(SHARED_EXT): $(OBJECTS) $(INITIAL_MODULES) $(V8_DEPS)
@@ -1972,6 +1950,7 @@ time_compilation_generator_%: $(BIN_DIR)/%.generator
 
 TEST_APPS=\
 	HelloMatlab \
+	autoscheduler \
 	bilateral_grid \
 	bgu \
 	blur \
@@ -1979,6 +1958,7 @@ TEST_APPS=\
 	camera_pipe \
 	conv_layer \
 	fft \
+	gradient_autoscheduler \
 	hist \
 	interpolate \
 	lens_blur \
@@ -1991,13 +1971,6 @@ TEST_APPS=\
 	resnet_50 \
 	stencil_chain \
 	wavelet
-
-# TODO: apps/autoscheduler doesn't yet build properly for MinGW
-# (see https://github.com/halide/Halide/issues/4069)
-ifneq ($(OS), Windows_NT)
-	TEST_APPS += autoscheduler
-	TEST_APPS += gradient_autoscheduler
-endif
 
 TEST_APPS_DEPS=$(TEST_APPS:%=%_test_app)
 BUILD_APPS_DEPS=$(TEST_APPS:%=%_build_app)
@@ -2063,7 +2036,6 @@ benchmark_apps: $(BENCHMARK_APPS)
 # TODO(srj): the python bindings need to be put into the distrib folders;
 # this is a hopefully-temporary workaround (https://github.com/halide/Halide/issues/4368)
 .PHONY: build_python_bindings
-ifneq ($(OS), Windows_NT)
 build_python_bindings: distrib $(BIN_DIR)/host/runtime.a
 	$(MAKE) -C $(ROOT_DIR)/python_bindings \
 		-f $(ROOT_DIR)/python_bindings/Makefile \
@@ -2071,10 +2043,6 @@ build_python_bindings: distrib $(BIN_DIR)/host/runtime.a
 		HALIDE_DISTRIB_PATH=$(CURDIR)/$(DISTRIB_DIR) \
 		BIN=$(CURDIR)/$(BIN_DIR)/python3_bindings \
 		PYTHON=python3
-else
-# No Python support for MinGW yet
-build_python_bindings: ;
-endif
 
 .PHONY: test_python
 test_python: distrib $(BIN_DIR)/host/runtime.a build_python_bindings
