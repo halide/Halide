@@ -79,7 +79,7 @@ jobs:
       if: matrix.bits == 64
       uses: actions/setup-python@v1
       with:
-        python-version: '3.x' # Any 3.x is OK
+        python-version: '3.7'
         architecture: 'x64' # N.B.: 'x86' is only available for Windows (Ubuntu is special-cased below)
 
     - name: Configure Ubuntu-32
@@ -95,14 +95,27 @@ jobs:
 
         # apt list --installed | grep python3
 
+        python3 - << EOF
+        import platform
+        print(platform.architecture()[0])
+        EOF
+
+        file $(which python3)
+
         sudo dpkg --add-architecture i386
         sudo apt-get update
         sudo apt-get install gcc-multilib g++-multilib
         sudo apt-get install zlib1g-dev:i386 libjpeg-dev:i386 libpng-dev:i386
 
-        sudo apt-get install python3.7:i386
+        sudo apt-get install python3.7:i386 python3.7-dev:i386
+
+        python3.7 - << EOF
+        import platform
+        print(platform.architecture()[0])
+        EOF
 
         file $(which python3)
+        file $(which python3.7)
 
         # sudo apt-get install python3-minimal:i386 python3.6:i386 python3.6-dev:i386 python3-lib2to3 python3.6-minimal:i386 python3:i386 python3-dev:i386 python3-setuptools:i386 python3-distutils:i386 dh-python:i386 python3-pip
         # dh-python:i386 python3-distutils:i386 python3-dev:i386 lib32z1-dev
