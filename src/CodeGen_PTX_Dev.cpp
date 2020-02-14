@@ -374,6 +374,32 @@ void CodeGen_PTX_Dev::codegen_vector_reduce(const VectorReduce *op, const Expr &
             } else {
                 ss << "_u32";
             }
+            // Reinterpret a and b as 32-bit values with fewer
+            // lanes. If they're aligned dense loads we should just do a
+            // different load.
+            for (Expr *e : {&a, &b}) {
+                const Load *load = e->as<Load>();
+                const Ramp *idx = load ? load->index.as<Ramp>() : nullptr;
+                if (idx &&
+                    is_one(idx->stride) &&
+                    load->alignment.modulus % 4 == 0 &&
+                    load->alignment.remainder % 4 == 0) {
+                    Expr new_idx = simplify(idx->base / 4);
+                    int load_lanes = input_lanes / 4;
+                    if (input_lanes > 4) {
+                        new_idx = Ramp::make(new_idx, 1, load_lanes);
+                    }
+                    *e = Load::make(Int(32, load_lanes),
+                                    load->name,
+                                    new_idx,
+                                    load->image,
+                                    load->param,
+                                    const_true(load_lanes),
+                                    load->alignment / 4);
+                } else {
+                    *e = reinterpret(Int(32, input_lanes / 4), *e);
+                }
+            }
             string name = ss.str();
             vector<Expr> result;
             for (int l = 0; l < op->type.lanes(); l++) {
@@ -385,8 +411,8 @@ void CodeGen_PTX_Dev::codegen_vector_reduce(const VectorReduce *op, const Expr &
                     b_lane = b;
                 } else {
                     i_lane = Shuffle::make_extract_element(i, l);
-                    a_lane = Shuffle::make_slice(a, l * factor, 1, factor);
-                    b_lane = Shuffle::make_slice(a, l * factor, 1, factor);
+                    a_lane = Shuffle::make_slice(a, l * (factor / 4), 1, (factor / 4));
+                    b_lane = Shuffle::make_slice(a, l * (factor / 4), 1, (factor / 4));
                 }
                 Expr acc = i_lane;
                 for (int i = 0; i < factor / 4; i++) {
@@ -396,11 +422,9 @@ void CodeGen_PTX_Dev::codegen_vector_reduce(const VectorReduce *op, const Expr &
                         slice_a = a_lane;
                         slice_b = b_lane;
                     } else {
-                        slice_a = Shuffle::make_slice(a_lane, i * 4, 1, 4);
-                        slice_b = Shuffle::make_slice(b_lane, i * 4, 1, 4);
+                        slice_a = Shuffle::make_extract_element(a_lane, i);
+                        slice_b = Shuffle::make_extract_element(b_lane, i);
                     }
-                    slice_a = reinterpret(op->type.element_of(), slice_a);
-                    slice_b = reinterpret(op->type.element_of(), slice_b);
                     acc = Call::make(acc.type(), name, {slice_a, slice_b, acc}, Call::PureExtern);
                 }
                 acc = simplify(acc);
