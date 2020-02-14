@@ -306,17 +306,18 @@ jobs:
         # opengl won't work on the buildbots. auto_schedule is just flaky.
         TEST_GROUPS_BROKEN="opengl auto_schedule"
 
+        # TODO
         make -f ${HALIDE_SOURCE_DIR}/Makefile tutorial_lesson_12_using_the_gpu
 
-        # TODO Parallel
-        # for t in ${TEST_GROUPS_PARALLEL}; do
-        #   make -f ${HALIDE_SOURCE_DIR}/Makefile -j ${PARALLEL_JOBS} test_${t}
-        # done
+        # Parallel
+        for t in ${TEST_GROUPS_PARALLEL}; do
+          make -f ${HALIDE_SOURCE_DIR}/Makefile -j ${PARALLEL_JOBS} test_${t}
+        done
 
-        # TODO Serial
-        # for t in ${TEST_GROUPS_SERIAL}; do
-        #   make -f ${HALIDE_SOURCE_DIR}/Makefile -j ${PARALLEL_JOBS} test_$t
-        # done
+        # Serial
+        for t in ${TEST_GROUPS_SERIAL}; do
+          make -f ${HALIDE_SOURCE_DIR}/Makefile -j ${PARALLEL_JOBS} test_$t
+        done
 
     - name: Run Tests (CMake)
       if: startsWith(matrix.build_tool, 'cmake')
