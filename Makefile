@@ -72,6 +72,8 @@ LLVM_CXX_FLAGS = -std=c++11  $(filter-out -O% -g -fomit-frame-pointer -pedantic 
 OPTIMIZE ?= -O3
 OPTIMIZE_FOR_BUILD_TIME ?= -O0
 
+PYTHON ?= python3
+
 CLANG ?= $(LLVM_BINDIR)/clang
 CLANG_VERSION = $(shell $(CLANG) --version)
 
@@ -125,7 +127,6 @@ WITH_OPENCL ?= not-empty
 WITH_METAL ?= not-empty
 WITH_OPENGL ?= not-empty
 WITH_D3D12 ?= not-empty
-WITH_INTROSPECTION ?= not-empty
 WITH_EXCEPTIONS ?=
 WITH_LLVM_INSIDE_SHARED_LIBHALIDE ?= not-empty
 
@@ -1993,7 +1994,9 @@ $(TEST_APPS_DEPS): distrib build_python_bindings
 		HL_TARGET=$(HL_TARGET) \
 		|| exit 1 ; \
 
-.PHONY: test_apps $(BUILD_APPS_DEPS)
+.PHONY: test_apps build_apps $(BUILD_APPS_DEPS)
+build_apps: $(BUILD_APPS_DEPS)
+
 test_apps: $(BUILD_APPS_DEPS)
 	$(MAKE) -f $(THIS_MAKEFILE) -j1 $(TEST_APPS_DEPS)
 
@@ -2042,7 +2045,7 @@ build_python_bindings: distrib $(BIN_DIR)/host/runtime.a
 		build_python_bindings \
 		HALIDE_DISTRIB_PATH=$(CURDIR)/$(DISTRIB_DIR) \
 		BIN=$(CURDIR)/$(BIN_DIR)/python3_bindings \
-		PYTHON=python3
+		PYTHON=$(PYTHON)
 
 .PHONY: test_python
 test_python: distrib $(BIN_DIR)/host/runtime.a build_python_bindings
@@ -2051,7 +2054,7 @@ test_python: distrib $(BIN_DIR)/host/runtime.a build_python_bindings
 		test \
 		HALIDE_DISTRIB_PATH=$(CURDIR)/$(DISTRIB_DIR) \
 		BIN=$(CURDIR)/$(BIN_DIR)/python3_bindings \
-		PYTHON=python3
+		PYTHON=$(PYTHON)
 
 # It's just for compiling the runtime, so earlier clangs *might* work,
 # but best to peg it to the minimum llvm version.
