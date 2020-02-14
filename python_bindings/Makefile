@@ -7,6 +7,11 @@ HALIDE_PATH ?= $(ROOT_DIR)/..
 HALIDE_DISTRIB_PATH ?= $(HALIDE_PATH)/distrib
 BIN ?= $(ROOT_DIR)/bin
 PYTHON ?= python3
+PYTHON_CONFIG ?= $(PYTHON)-config
+ifeq ($(shell which $(PYTHON_CONFIG)),)
+ 	# Some python3-only installs won't provide python3-config, so fall back to python-config
+    PYTHON_CONFIG = python-config
+endif
 TEST_TMP ?= $(BIN)/tmp
 
 ifeq ($(OS), Windows_NT)
@@ -36,7 +41,7 @@ endif
 
 LIBHALIDE ?= $(HALIDE_DISTRIB_PATH)/bin/libHalide.$(SHARED_EXT)
 
-SUFFIX = $(shell $(PYTHON)-config --extension-suffix)
+SUFFIX = $(shell $(PYTHON_CONFIG) --extension-suffix)
 
 # Discover PyBind path from `python3 -m pybind11 --includes`
 # if it is pip/conda installed, which is a common case.
@@ -56,7 +61,7 @@ OPTIMIZE ?= -O3
 # OPTIMIZE ?= -g -DDEBUG=1 -UNDEBUG
 
 # Compiling with -fvisibility=hidden saves ~80k on optimized x64 builds
-CCFLAGS=$(shell $(PYTHON)-config --cflags) $(PYBIND11_CFLAGS) -I $(HALIDE_DISTRIB_PATH)/include -I $(ROOT_DIR) -std=c++11 $(FPIC) -fvisibility=hidden -fvisibility-inlines-hidden $(OPTIMIZE) $(CXXFLAGS)
+CCFLAGS=$(shell $(PYTHON_CONFIG) --cflags) $(PYBIND11_CFLAGS) -I $(HALIDE_DISTRIB_PATH)/include -I $(ROOT_DIR) -std=c++11 $(FPIC) -fvisibility=hidden -fvisibility-inlines-hidden $(OPTIMIZE) $(CXXFLAGS)
 # Filter out a pointless warning present in some Python installs
 CCFLAGS := $(filter-out -Wstrict-prototypes,$(CCFLAGS))
 

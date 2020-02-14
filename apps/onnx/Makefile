@@ -78,12 +78,17 @@ test: build
 	LD_LIBRARY_PATH=$(BIN) $(BIN)/$(HL_TARGET)/onnx_converter_generator_test
 
 PYTHON ?= python3
-PYBIND11_CFLAGS = $(shell $(PYTHON)-config --includes) -frtti
+PYTHON_CONFIG ?= $(PYTHON)-config
+ifeq ($(shell which $(PYTHON_CONFIG)),)
+	PYTHON_CONFIG = python-config
+endif
+
+PYBIND11_CFLAGS = $(shell $(PYTHON_CONFIG) --includes) -frtti
 ifeq ($(UNAME), Darwin)
     # Keep OS X builds from complaining about missing libpython symbols
     PYBIND11_CFLAGS += -undefined dynamic_lookup
 endif
-PY_EXT = $(shell $(PYTHON)-config --extension-suffix)
+PY_EXT = $(shell $(PYTHON_CONFIG) --extension-suffix)
 PY_MODEL_EXT = model_cpp$(PY_EXT)
 PYCXXFLAGS =  $(CXXFLAGS) $(PYBIND11_CFLAGS) -Wno-deprecated-register -Wno-deprecated-declarations
 
