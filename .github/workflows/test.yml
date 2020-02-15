@@ -282,12 +282,12 @@ jobs:
         export TEST_TMPDIR="${HALIDE_TEMP_DIR}"
         cd ${HALIDE_BUILD_DIR}
 
-        if [[ ${{matrix.os}} == ubuntu* && ${{matrix.bits}} == 32 ]]; then
-          # TOOD: test_python is crashing on 32-bit linux?
-          TEST_GROUPS_PARALLEL="internal correctness error warning generator apps"
-        else
-          TEST_GROUPS_PARALLEL="internal correctness error warning generator python apps"
-        fi
+        # if [[ ${{matrix.os}} == ubuntu* && ${{matrix.bits}} == 32 ]]; then
+        #   # TOOD: test_python is crashing on 32-bit linux?
+        #   TEST_GROUPS_PARALLEL="internal correctness error warning generator apps"
+        # else
+        TEST_GROUPS_PARALLEL="internal correctness error warning generator python apps"
+        # fi
 
         # tutorial has some performance measurements that can be flaky if we run them in parallel
         TEST_GROUPS_SERIAL="performance tutorial"
