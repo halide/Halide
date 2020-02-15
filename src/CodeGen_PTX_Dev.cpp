@@ -333,6 +333,9 @@ void CodeGen_PTX_Dev::visit(const Atomic *op) {
 
 void CodeGen_PTX_Dev::codegen_vector_reduce(const VectorReduce *op, const Expr &init) {
     // Pattern match 8-bit dot products
+
+    // TODO: d2pa if we can narrow to 16-bit but not 8-bit
+
     const int input_lanes = op->value.type().lanes();
     const int factor = input_lanes / op->type.lanes();
     const Mul *mul = op->value.as<Mul>();

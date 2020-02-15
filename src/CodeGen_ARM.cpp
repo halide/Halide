@@ -1108,7 +1108,45 @@ void CodeGen_ARM::codegen_vector_reduce(const VectorReduce *op, const Expr &init
         return;
     }
 
-    // TODO: When sdot and udot become available (armv8.4), pattern match those here.
+    // Pattern-match 8-bit dot product instructions available on newer
+    // ARM cores. TODO: add some sort of feature flag to guard this.
+    if (factor == 4 &&  // TODO: test reduction by 8x
+        op->op == VectorReduce::Add &&
+        target.bits == 64 &&
+        (op->type.element_of() == Int(32) ||
+         op->type.element_of() == UInt(32))) {
+        const Mul *mul = op->value.as<Mul>();
+        if (mul) {
+            Expr a = lossless_cast(UInt(8), mul->a);
+            Expr b = lossless_cast(UInt(8), mul->b);
+            if (!a.defined()) {
+                a = lossless_cast(Int(8), mul->a);
+                b = lossless_cast(Int(8), mul->b);
+            }
+            if (a.defined() && b.defined()) {
+                Expr i = init;
+                if (!i.defined()) {
+                    i = make_zero(op->type);
+                }
+                vector<Expr> args{i, a, b};
+                if (op->type.lanes() <= 2) {
+                    if (op->type.is_uint()) {
+                        value = call_intrin(op->type, 2, "llvm.aarch64.neon.udot.v2i32.v8i8", args);
+                    } else {
+                        value = call_intrin(op->type, 2, "llvm.aarch64.neon.sdot.v2i32.v8i8", args);
+                    }
+                } else {
+                    if (op->type.is_uint()) {
+                        value = call_intrin(op->type, 4, "llvm.aarch64.neon.udot.v4i32.v16i8", args);
+                    } else {
+                        value = call_intrin(op->type, 4, "llvm.aarch64.neon.sdot.v4i32.v16i8", args);
+                    }
+                }
+                return;
+            }
+        }
+    }
+
     CodeGen_Posix::codegen_vector_reduce(op, init);
 }
 
