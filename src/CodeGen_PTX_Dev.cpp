@@ -411,7 +411,7 @@ void CodeGen_PTX_Dev::codegen_vector_reduce(const VectorReduce *op, const Expr &
                 } else {
                     i_lane = Shuffle::make_extract_element(i, l);
                     a_lane = Shuffle::make_slice(a, l * (factor / 4), 1, (factor / 4));
-                    b_lane = Shuffle::make_slice(a, l * (factor / 4), 1, (factor / 4));
+                    b_lane = Shuffle::make_slice(b, l * (factor / 4), 1, (factor / 4));
                 }
                 Expr acc = i_lane;
                 for (int i = 0; i < factor / 4; i++) {
