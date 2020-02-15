@@ -140,8 +140,8 @@ jobs:
       if: startsWith(matrix.os, 'windows')
       shell: bash
       run: |
-        # TODO: zlib and libpng aren't in choco?
-        choco install libjpeg-turbo
+        # Chocolatey doesn't have zlib or libpng.
+        vcpkg install zlib libpng libjpeg-turbo
 
         # On Windows, it's just 'python', apparently
         echo ::set-env name=PYTHON::"python"
