@@ -651,6 +651,7 @@ GPUMemoryType LoopNest::get_gpu_memory_type(bool in_block, bool in_thread, bool 
 // Compute all the sites of interest for each pipeline stage
 void LoopNest::get_sites(const Target &target,
                          StageMap<Sites> &sites,
+                         StageMap<int64_t> &total_shared_mem_alloc_sizes,
                          const LoopNest *task,
                          const LoopNest *parent,
                          const LoopNest *current_thread_loop) const {
@@ -663,7 +664,7 @@ void LoopNest::get_sites(const Target &target,
     }
 
     for (const auto &c : children) {
-        c->get_sites(target, sites, task, this, current_thread_loop);
+        c->get_sites(target, sites, total_shared_mem_alloc_sizes, task, this, current_thread_loop);
     }
     if (parent && node != parent->node) {
         auto &s = sites.get_or_create(stage);
@@ -680,6 +681,12 @@ void LoopNest::get_sites(const Target &target,
             sites.get_or_create(&s).store = (in_block && !in_thread) ? task : this;
             auto store_gpu_memory_type = get_gpu_memory_type(in_block, in_thread);
             sites.get_or_create(&s).gpu_store_memory_type = store_gpu_memory_type;
+
+            const LoopNest* store_site = sites.get_or_create(&s).store;
+            if (store_site->gpu_label == block) {
+                auto alloc = store_site->compute_alloc_size_of_node_here(f);
+                total_shared_mem_alloc_sizes.get_or_create(store_site->stage) += alloc.first;
+            }
         }
     }
     for (auto it = inlined.begin(); it != inlined.end(); it++) {
@@ -1289,7 +1296,7 @@ void LoopNest::compute_warp_and_block_occupancy(const MachineParams& params, Sch
     feat.max_block_occupancy = (double)max_active_blocks / (double)active_block_hardware_limit;
 }
 
-void LoopNest::compute_shared_mem_occupancy(const Target &target, int64_t working_set_here, ScheduleFeatures &feat) const {
+void LoopNest::compute_shared_mem_occupancy(const Target &target, int64_t total_shared_mem_alloc_size, ScheduleFeatures &feat) const {
     if (!is_gpu_block(target)) {
         return;
     }
@@ -1297,10 +1304,11 @@ void LoopNest::compute_shared_mem_occupancy(const Target &target, int64_t workin
     auto shared_mem_limit = get_shared_memory_limit();
     auto active_block_hardware_limit = get_active_block_hardware_limit();
 
-    feat.shared_mem_occupancy = (double)working_set_here / (double)shared_mem_limit;
+    feat.shared_mem_occupancy = (double)total_shared_mem_alloc_size / (double)shared_mem_limit;
+    internal_assert(feat.shared_mem_occupancy <= 1) << "Invalid shared mem occupancy: " << feat.shared_mem_occupancy;
 
-    if (working_set_here > 0) {
-        auto shared_mem_max_active_blocks = std::min(active_block_hardware_limit, shared_mem_limit / working_set_here);
+    if (total_shared_mem_alloc_size > 0) {
+        auto shared_mem_max_active_blocks = std::min(active_block_hardware_limit, shared_mem_limit / total_shared_mem_alloc_size);
         feat.shared_mem_block_limit_factor = (double)shared_mem_max_active_blocks / (double)active_block_hardware_limit;
 
         internal_assert(feat.shared_mem_block_limit_factor <= 1) << "Invalid shared mem block limit factor: " << feat.shared_mem_block_limit_factor;
@@ -1519,6 +1527,20 @@ void LoopNest::recompute_inlined_features(const StageMap<Sites> &sites, StageMap
     }
 }
 
+std::pair<int64_t, bool> LoopNest::compute_alloc_size_of_node_here(const FunctionDAG::Node *f) const {
+    const auto &bounds = get_bounds(f);
+
+    auto bytes = f->bytes_per_point;
+    bool is_constant = true;
+    for (int i = 0; i < f->dimensions; i++) {
+        const auto &p = bounds->region_computed(i);
+        bytes *= p.extent();
+        is_constant = is_constant && p.constant_extent();
+    }
+
+    return {bytes, is_constant};
+}
+
 // Do a recursive walk over the loop nest computing features to feed the cost model.
 void LoopNest::compute_features(const FunctionDAG &dag,
                                 const MachineParams &params,
@@ -1535,6 +1557,7 @@ void LoopNest::compute_features(const FunctionDAG &dag,
                                 StageMap<ScheduleFeatures> *features,
                                 GPULoopInfo gpu_loop_info,
                                 bool use_memoized_features,
+                                const StageMap<int64_t> &total_shared_mem_alloc_sizes,
                                 Statistics& stats) const {
 
     gpu_loop_info.update(target, this);
@@ -1660,7 +1683,7 @@ void LoopNest::compute_features(const FunctionDAG &dag,
                 ++stats.num_memoization_misses;
             }
 
-            c->compute_features(dag, params, target, sites, subinstances, parallelism, this, parent, root, &working_set_here, &working_set_here_local_constant, &working_set_here_local_dynamic, features, gpu_loop_info, use_memoized_features, stats);
+            c->compute_features(dag, params, target, sites, subinstances, parallelism, this, parent, root, &working_set_here, &working_set_here_local_constant, &working_set_here_local_dynamic, features, gpu_loop_info, use_memoized_features, total_shared_mem_alloc_sizes, stats);
 
             if (use_memoized_features) {
                 c->features[hash_of_producers].make_large(dag.nodes[0].stages[0].max_id);
@@ -1903,7 +1926,7 @@ void LoopNest::compute_features(const FunctionDAG &dag,
 
     // Recurse inwards
     for (const auto &c : children) {
-        c->compute_features(dag, params, target, sites, subinstances, subparallelism, this, parent, root, &working_set_here, &working_set_here_local_constant, &working_set_here_local_dynamic, features, gpu_loop_info, use_memoized_features, stats);
+        c->compute_features(dag, params, target, sites, subinstances, subparallelism, this, parent, root, &working_set_here, &working_set_here_local_constant, &working_set_here_local_dynamic, features, gpu_loop_info, use_memoized_features, total_shared_mem_alloc_sizes, stats);
     }
     for (const auto *node : store_at) {
         auto &feat = features->get(&(node->stages[0]));
@@ -2500,7 +2523,7 @@ void LoopNest::compute_features(const FunctionDAG &dag,
     }
 
     if (get_compute_shared_mem_occupancy()) {
-        compute_shared_mem_occupancy(target, working_set_here, feat);
+        compute_shared_mem_occupancy(target, total_shared_mem_alloc_sizes.get(stage), feat);
     }
 
     if (innermost && !is_scalar()) {

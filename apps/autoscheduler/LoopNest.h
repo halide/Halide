@@ -340,6 +340,7 @@ struct LoopNest {
     // Compute all the sites of interest for each pipeline stage
     void get_sites(const Target& target,
                    StageMap<Sites> &sites,
+                   StageMap<int64_t> &shared_mem_alloc_sizes,
                    const LoopNest *task = nullptr,
                    const LoopNest *parent = nullptr,
                    const LoopNest *current_thread_loop = nullptr) const;
@@ -415,7 +416,7 @@ struct LoopNest {
     // Assume that when a block is active, all its warps are active
     void compute_warp_and_block_occupancy(const MachineParams& params, ScheduleFeatures &feat, const GPULoopInfo& gpu_loop_info) const;
 
-    void compute_shared_mem_occupancy(const Target& target, int64_t working_set_here, ScheduleFeatures &feat) const;
+    void compute_shared_mem_occupancy(const Target& target, int64_t total_shared_mem_alloc_size, ScheduleFeatures &feat) const;
 
     std::pair<const LoopNest*, const LoopNest*> find_innermost_and_parent() const;
 
@@ -436,6 +437,8 @@ struct LoopNest {
 
     void recompute_inlined_features(const StageMap<Sites> &sites, StageMap<ScheduleFeatures> *features) const;
 
+    std::pair<int64_t, bool> compute_alloc_size_of_node_here(const FunctionDAG::Node *f) const;
+
     // Do a recursive walk over the loop nest computing features to feed the cost model.
     void compute_features(const FunctionDAG &dag,
                           const MachineParams &params,
@@ -452,6 +455,7 @@ struct LoopNest {
                           StageMap<ScheduleFeatures> *features,
                           GPULoopInfo gpu_loop_info,
                           bool use_memoized_features,
+                          const StageMap<int64_t> &total_shared_mem_alloc_sizes,
                           Statistics& stats) const;
 
     bool is_root() const {

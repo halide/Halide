@@ -558,7 +558,9 @@ struct State {
         sites.make_large(dag.nodes[0].stages[0].max_id);
         features->make_large(dag.nodes[0].stages[0].max_id);
         internal_assert(feature_root.defined());
-        feature_root->get_sites(target, sites);
+        StageMap<int64_t> total_shared_mem_alloc_sizes;
+        total_shared_mem_alloc_sizes.make_large(dag.nodes[0].stages[0].max_id);
+        feature_root->get_sites(target, sites, total_shared_mem_alloc_sizes);
 
         // For the input nodes and unscheduled outputs, the compute
         // and store sites are root, and the produce and innermost
@@ -622,11 +624,11 @@ struct State {
         if (verify_memoized_features()) {
             StageMap<ScheduleFeatures> base_features;
             base_features.make_large(dag.nodes[0].stages[0].max_id);
-            feature_root->compute_features(dag, params, target, sites, 1, 1, nullptr, nullptr, *feature_root, nullptr, nullptr, nullptr, &base_features, {feature_root.get()}, false, stats);
+            feature_root->compute_features(dag, params, target, sites, 1, 1, nullptr, nullptr, *feature_root, nullptr, nullptr, nullptr, &base_features, {feature_root.get()}, false, total_shared_mem_alloc_sizes, stats);
 
             StageMap<ScheduleFeatures> verification_features;
             verification_features.make_large(dag.nodes[0].stages[0].max_id);
-            feature_root->compute_features(dag, params, target, sites, 1, 1, nullptr, nullptr, *feature_root, nullptr, nullptr, nullptr, &verification_features, {feature_root.get()}, true, stats);
+            feature_root->compute_features(dag, params, target, sites, 1, 1, nullptr, nullptr, *feature_root, nullptr, nullptr, nullptr, &verification_features, {feature_root.get()}, true, total_shared_mem_alloc_sizes, stats);
 
             for (auto it = base_features.begin(); it != base_features.end(); it++) {
                 auto &stage = *(it.key());
@@ -646,7 +648,7 @@ struct State {
         }
 
         auto t1 = std::chrono::high_resolution_clock::now();
-        feature_root->compute_features(dag, params, target, sites, 1, 1, nullptr, nullptr, *feature_root, nullptr, nullptr, nullptr, features, {feature_root.get()}, use_memoized_features(), stats);
+        feature_root->compute_features(dag, params, target, sites, 1, 1, nullptr, nullptr, *feature_root, nullptr, nullptr, nullptr, features, {feature_root.get()}, use_memoized_features(), total_shared_mem_alloc_sizes, stats);
 
         stats.featurization_time += std::chrono::high_resolution_clock::now() - t1;
         ++stats.num_featurizations;
