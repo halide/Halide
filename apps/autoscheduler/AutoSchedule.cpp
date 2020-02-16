@@ -1517,6 +1517,45 @@ struct State {
 
     string schedule_source;
 
+    void fuse_gpu_blocks(LoopNest::StageScheduleState* state, Stage& stage, const vector<VarOrRVar>& parallel_vars, const vector<int64_t>& parallel_extents) {
+        if (parallel_vars.empty() || parallel_extents.empty()) {
+            return;
+        }
+
+        constexpr int max_blocks[3] = {2147483647, 65535, 65535};
+        int block_extents[3] = {1, 1, 1};
+
+        std::vector<size_t> block_var_assignments[3];
+
+        int i = parallel_vars.size() - 1;
+        for (size_t block_i = 0; block_i < 3; ++block_i) {
+            for (; i >= 0 && parallel_extents[i] * block_extents[block_i] <= max_blocks[block_i]; --i) {
+                block_extents[block_i] *= parallel_extents[i];
+                block_var_assignments[block_i].push_back(i);
+            }
+        }
+
+        for (size_t block_i = 0; block_i < 3; ++block_i) {
+            for (size_t i = 1; i < block_var_assignments[block_i].size(); ++i) {
+                auto inner_i = block_var_assignments[block_i][0];
+                auto outer_i = block_var_assignments[block_i][i];
+                state->schedule_source << "\n    .fuse(" << parallel_vars[inner_i].name()
+                                          << ", " << parallel_vars[outer_i].name()
+                                          << ", " << parallel_vars[inner_i].name() << ")";
+                stage.fuse(parallel_vars[inner_i],
+                           parallel_vars[outer_i],
+                           parallel_vars[inner_i]);
+            }
+
+            if (block_var_assignments[block_i].size() > 0) {
+                auto inner_i = block_var_assignments[block_i][0];
+                state->schedule_source << "\n    .gpu_blocks(" << parallel_vars[inner_i].name() << ")";
+                stage.gpu_blocks(parallel_vars[inner_i]);
+                state->parallel = true;
+            }
+        }
+    }
+
     void mark_gpu_blocks(LoopNest::StageScheduleState* state, Stage& stage, const vector<VarOrRVar>& parallel_vars, const vector<int64_t>& parallel_extents) {
         int max_blocks[3] = {2147483647, 65535, 65535};
         uint8_t n_loops_tagged_gpu_blocks = 0;
@@ -1668,25 +1707,9 @@ struct State {
 
             // Halide doesn't let you fuse an RVar with a Var, even if
             // they are both pure.
-            bool can_fuse = !(any_parallel_vars && any_parallel_rvars) && (!target.has_gpu_feature() || false /* can_fuse_gpu(parallel_extents) */);
+            bool can_fuse = !(any_parallel_vars && any_parallel_rvars);
             if (can_fuse) {
-                for (size_t i = 1; i < parallel_vars.size(); i++) {
-                    // Outermost, and next outermost. Preserve the inner
-                    // name to not invalidate any compute_ats.
-                    p.second->schedule_source << "\n    .fuse(" << parallel_vars[i].name()
-                                              << ", " << parallel_vars[i - 1].name()
-                                              << ", " << parallel_vars[i].name() << ")";
-                    stage.fuse(parallel_vars[i], parallel_vars[i - 1], parallel_vars[i]);
-                }
-                if (!parallel_vars.empty()) {
-                    if (target.has_gpu_feature()) {
-                        p.second->schedule_source << "\n    .gpu_blocks(" << parallel_vars.back().name() << ")";
-                        stage.gpu_blocks(parallel_vars.back());
-                    } else {
-                        p.second->schedule_source << "\n    .parallel(" << parallel_vars.back().name() << ")";
-                        stage.parallel(parallel_vars.back());
-                    }
-                }
+                fuse_gpu_blocks(p.second.get(), stage, parallel_vars, parallel_extents);
             } else {
                 if (target.has_gpu_feature()) {
                     mark_gpu_blocks(p.second.get(), stage, parallel_vars, parallel_extents);
@@ -2145,7 +2168,7 @@ IntrusivePtr<State> optimal_schedule_pass(FunctionDAG &dag,
                 auto state = q[choice_label];
                 aslog(0) << "\n[" << choice_label << "]:\n";
                 state->dump();
-                state->calculate_cost(dag, params, target, cost_model, stats, true);
+                //state->calculate_cost(dag, params, target, cost_model, stats, true);
             }
             cost_model->evaluate_costs();
 

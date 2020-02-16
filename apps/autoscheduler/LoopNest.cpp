@@ -1184,28 +1184,33 @@ const LoopNest *LoopNest::get_enclosing_block(const LoopNest *parent, const Loop
 }
 
 std::pair<int64_t, int64_t> LoopNest::get_block_and_serial_extents(const LoopNest *block) const {
-    int max_blocks[3] = {2147483647, 65535, 65535};
+    constexpr int max_blocks[3] = {2147483647, 65535, 65535};
+    int block_extents[3] = {1, 1, 1};
 
     std::vector<int64_t> lowered_size;
     lowered_dims(block->size, block->vectorized_loop_index, lowered_size);
 
-    int64_t block_extents = 1;
+    int64_t total_block_extents = 1;
 
-    int i = 0;
-    for (int N = std::min(3, (int)lowered_size.size()); i < N; ++i) {
-        if (lowered_size[i] > max_blocks[i]) {
-            break;
+    size_t i = 0;
+    size_t block_i = 0;
+    for (size_t N = lowered_size.size(); i < N && block_i < 3; ++i) {
+        if (lowered_size[i] * block_extents[block_i] > max_blocks[block_i]) {
+            ++block_i;
+            continue;
         }
 
-        block_extents *= lowered_size[i];
+        block_extents[block_i] *= lowered_size[i];
+        total_block_extents *= lowered_size[i];
     }
 
     int64_t serial_extents = 1;
-    for (; i < (int)lowered_size.size(); ++i) {
+    for (; i < lowered_size.size(); ++i) {
         serial_extents *= lowered_size[i];
     }
 
-    return {block_extents, serial_extents};
+    internal_assert(serial_extents == 1);
+    return {total_block_extents, serial_extents};
 }
 
 bool LoopNest::all_paths_to_leaves_have_thread_loop() const {
