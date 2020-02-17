@@ -1,0 +1,290 @@
+#ifndef STATE_H
+#define STATE_H
+
+#include "CostModel.h"
+#include "DefaultCostModel.h"
+#include "Featurization.h"
+#include "FunctionDAG.h"
+#include "LoopNest.h"
+#include "PerfectHashMap.h"
+#include "ASLog.h"
+#include <set>
+#include <unordered_set>
+#include <vector>
+
+namespace Halide {
+namespace Internal {
+namespace Autoscheduler {
+
+using std::string;
+using std::vector;
+using std::map;
+using std::pair;
+using std::set;
+using std::unordered_set;
+using std::string;
+using std::vector;
+
+bool verify_memoized_features();
+
+bool is_memoize_blocks_enabled();
+
+double get_stack_memory_adjustment_factor();
+
+constexpr int kLocalMemoryLimit = 524288; // 512 KB
+
+// Stack memory limit = Total GPU Memory / (# of SMs * maximum threads per SM)
+//                    = 103232 bytes
+// Not all 103232 bytes will be free for allocations so reduce it by factor to
+// allow a buffer
+int64_t get_stack_memory_limit();
+
+bool use_adjusted_tilings();
+
+bool compute_root_and_inline_only();
+
+struct NoOpMutator {
+    void operator()(LoopNest* new_loop_nest) const {}
+};
+
+template <typename PostCreateMutator>
+void deep_copy_loop_nest(LoopNest* new_loop_nest, const LoopNest* new_loop_nest_parent, const IntrusivePtr<const LoopNest>& existing_loop_nest, const PostCreateMutator& post_create_mutator) {
+    new_loop_nest->copy_from(*existing_loop_nest);
+
+    for (std::size_t i = 0, N = new_loop_nest->children.size(); i < N; ++i) {
+        LoopNest* new_child = new LoopNest;
+        new_loop_nest->children[i] = new_child;
+        deep_copy_loop_nest(new_child, new_loop_nest, existing_loop_nest->children[i], post_create_mutator);
+    }
+
+    post_create_mutator(new_loop_nest);
+}
+
+template <typename PostCreateMutator>
+LoopNest* deep_copy_loop_nest(const IntrusivePtr<const LoopNest>& loop_nest, const PostCreateMutator& post_create_mutator) {
+    LoopNest* new_loop_nest = new LoopNest;
+    deep_copy_loop_nest(new_loop_nest, nullptr, loop_nest, post_create_mutator);
+    return new_loop_nest;
+}
+
+struct State {
+    mutable RefCount ref_count;
+    IntrusivePtr<const LoopNest> root;
+    IntrusivePtr<const State> parent;
+    double cost = 0;
+    std::vector<double> cost_per_stage;
+    int num_decisions_made = 0;
+    bool penalized = false;
+    string schedule_source;
+
+    State() = default;
+    State(const State &) = delete;
+    State(State &&) = delete;
+    void operator=(const State &) = delete;
+    void operator=(State &&) = delete;
+
+    uint64_t structural_hash(int depth) const;
+
+    // Compute the parent and depth of every loop nest node
+    void compute_loop_nest_parents(map<const LoopNest *, pair<const LoopNest *, int>> &p,
+                                   const LoopNest *here, int depth) const;
+
+    const LoopNest *deepest_common_ancestor(const map<const LoopNest *, pair<const LoopNest *, int>> &parent,
+                                            const LoopNest *a, const LoopNest *b) const;
+
+    // We use the post_create_mutator so that the loop nests can be modified
+    // before they become IntrusivePtr<const LoopNest> as children and cannot be modified
+    template <typename PostCreateMutator>
+    LoopNest* create_feature_root(const PostCreateMutator& post_create_mutator) const {
+        LoopNest* new_root = new LoopNest;
+        deep_copy_loop_nest<PostCreateMutator>(new_root, nullptr, root, post_create_mutator);
+        return new_root;
+    }
+
+    bool has_loop_nest_without_thread_loops() const;
+
+    bool has_compute_root_loops_without_blocks() const;
+
+    struct FeatureLoopNestMutator {
+        const MachineParams& params;
+        const Target& target;
+
+        void operator()(LoopNest* new_loop_nest) const;
+
+        // In phase 2, any compute_root loop marked 'none' will be split into
+        // blocks, threads, and serial loops. To enable the cost model to make a
+        // meaningful prediction on these pre-split loops, we assume a split into
+        // blocks and threads with a single full warp (if possible)
+        void split_compute_root_loops(LoopNest* loop_nest) const;
+
+        // If a loop nest does not have thread loops, split the outermost serial
+        // loops to create thread loops with extents 1
+        void add_outer_thread_loops(LoopNest* loop_nest) const;
+    };
+
+    IntrusivePtr<const LoopNest> get_root_for_features(const MachineParams &params, const Target& target) const;
+
+    void set_gpu_store_site(const map<const LoopNest *, pair<const LoopNest *, int>>& parent, const LoopNest* loop, LoopNest::Sites& site) const;
+
+    void compute_featurization(const FunctionDAG &dag, const MachineParams &params, const Target& target, StageMap<ScheduleFeatures> *features, Statistics& stats) const;
+
+    void save_featurization(const FunctionDAG &dag, const MachineParams &params, const Target& target, std::ostream &out) const;
+
+    bool contains_store_at(const set<const FunctionDAG::Node *>& outermost_store_at, const IntrusivePtr<const LoopNest>& parent) const;
+
+    // For GPU, only allow store_at root or inside the outermost loop nest. Any
+    // store_ats further in will be hoisted and expanded, increasing the
+    // amount of shared memory required.
+    bool contains_store_at_further_in_than_outermost() const;
+
+    bool has_dynamic_allocation_inside_thread() const;
+
+    bool exceeds_serial_extents_limit(const Target &target) const;
+
+    int64_t get_shared_mem_alloc_size(const LoopNest* loop) const;
+
+    bool exceeds_shared_memory_limit(const Target &target) const;
+
+    bool exceeds_local_memory_limit(const Target &target) const;
+
+    bool calculate_cost(const FunctionDAG &dag, const MachineParams &params, const Target& target, CostModel *cost_model, Statistics& stats, bool verbose = false);
+
+    // Make a child copy of this state. The loop nest is const (we
+    // make mutated copies of it, rather than mutating it), so we can
+    // continue to point to the same one and so this is a cheap
+    // operation.
+    IntrusivePtr<State> make_child() const;
+
+    // Sort / filter parallel tile options
+    struct ParallelTileOption {
+        vector<int64_t> outer_tiling;
+        vector<int64_t> inner_tiling;
+        double idle_core_wastage;
+        bool entire;
+        bool operator<(const ParallelTileOption &other) const {
+            return idle_core_wastage < other.idle_core_wastage;
+        }
+
+        // Ensure we don't accidentally copy this type
+        ParallelTileOption() = default;
+        ParallelTileOption(ParallelTileOption &&) = default;
+        ParallelTileOption &operator=(ParallelTileOption &&) = default;
+        ParallelTileOption(const ParallelTileOption &) = delete;
+        ParallelTileOption &operator=(const ParallelTileOption &) = delete;
+    };
+
+    vector<ParallelTileOption> filter_parallel_tile_options(const MachineParams &params, const Target &target, const FunctionDAG::Node *node, vector<vector<int64_t>>& inner_tilings, const vector<int64_t>& pure_size) const;
+
+    vector<ThreadTileOption> filter_thread_tile_options(const MachineParams &params, const Target &target, vector<IntrusivePtr<const LoopNest>>& loop_nests) const;
+
+    void memoize_blocks(const FunctionDAG::Node *node, LoopNest* new_root, NodeMap<std::map<int, std::vector<IntrusivePtr<const LoopNest>>>>& memoized_compute_root_blocks, Statistics& stats) const;
+
+    bool add_states_from_memoized_blocks(const FunctionDAG &dag,
+                                         const MachineParams &params,
+                                         const Target &target,
+                                         CostModel *cost_model,
+                                         std::function<void(IntrusivePtr<State> &&)> &accept_child,
+                                         Statistics& stats,
+                                         const FunctionDAG::Node *node,
+                                         const NodeMap<std::map<int, std::vector<IntrusivePtr<const LoopNest>>>>& memoized_compute_root_blocks,
+                                         int& num_children) const;
+
+    // Generate the successor states to this state
+    void generate_children(const FunctionDAG &dag,
+                           const MachineParams &params,
+                           const Target &target,
+                           CostModel *cost_model,
+                           std::function<void(IntrusivePtr<State> &&)> &accept_child,
+                           Statistics& stats,
+                           bool is_pre_pass,
+                           const NodeMap<bool>& inlined_nodes,
+                           const NodeMap<std::vector<IntrusivePtr<const LoopNest>>>& compute_root_nodes,
+                           NodeMap<std::map<int, std::vector<IntrusivePtr<const LoopNest>>>>& memoized_compute_root_blocks) const;
+
+    void dump() const;
+
+    void fuse_gpu_blocks(LoopNest::StageScheduleState* state, Stage& stage, const vector<VarOrRVar>& parallel_vars, const vector<int64_t>& parallel_extents) const;
+
+    void mark_gpu_blocks(LoopNest::StageScheduleState* state, Stage& stage, const vector<VarOrRVar>& parallel_vars, const vector<int64_t>& parallel_extents) const;
+
+    bool mark_gpu_threads(LoopNest::StageScheduleState* state, Stage& stage, std::unordered_set<std::string>& new_serial_vars) const;
+
+    bool can_fuse_gpu(const vector<int64_t>& parallel_extents) const;
+
+    // Apply the schedule represented by this state to a Halide
+    // Pipeline. Also generate source code for the schedule for the
+    // user to copy-paste to freeze this schedule as permanent artifact.
+    void apply_schedule(const FunctionDAG &dag, const MachineParams &params, const Target &target);
+};
+
+// A priority queue of states, sorted according to increasing
+// cost. Never shrinks, to avoid reallocations.
+// Can't use std::priority_queue because it doesn't support unique_ptr.
+class StateQueue {
+private:
+    struct CompareStates {
+        bool operator()(const IntrusivePtr<State> &a, const IntrusivePtr<State> &b) const {
+            return a->cost > b->cost;
+        }
+    };
+
+    std::vector<IntrusivePtr<State>> storage;
+    size_t sz = 0;
+
+public:
+    void emplace(IntrusivePtr<State> &&s) {
+        if (sz >= storage.size()) {
+            storage.resize(std::max(sz * 2, (size_t)64));
+        }
+        internal_assert(sz < storage.size()) << sz << " " << storage.size() << "\n";
+        storage[sz] = std::move(s);
+        sz++;
+        std::push_heap(storage.begin(), storage.begin() + sz, CompareStates{});
+    }
+
+    IntrusivePtr<State> pop() {
+        internal_assert(sz <= storage.size()) << sz << " " << storage.size() << "\n";
+        std::pop_heap(storage.begin(), storage.begin() + sz, CompareStates{});
+        sz--;
+        return std::move(storage[sz]);
+    }
+
+    const IntrusivePtr<State> &top() {
+        return storage[0];
+    }
+
+    bool empty() const {
+        return sz == 0;
+    }
+
+    size_t size() const {
+        return sz;
+    }
+
+    void swap(StateQueue &other) {
+        storage.swap(other.storage);
+        std::swap(sz, other.sz);
+    }
+
+    IntrusivePtr<State> operator[](int idx) const {
+        return storage[idx];
+    }
+
+    void resort() {
+        std::make_heap(storage.begin(), storage.begin() + sz, CompareStates{});
+    }
+
+    void clear() {
+        for (size_t i = 0; i < sz; i++) {
+            storage[i] = IntrusivePtr<State>{};
+        }
+        sz = 0;
+    }
+};
+
+
+}  // namespace Autoscheduler
+}  // namespace Internal
+}  // namespace Halide
+
+#endif  // LOOP_NEST_H

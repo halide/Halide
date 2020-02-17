@@ -63,6 +63,8 @@ $(AUTOSCHED_BIN)/libauto_schedule.so: $(AUTOSCHED_SRC)/AutoSchedule.cpp \
 										$(AUTOSCHED_SRC)/Featurization.h \
 										$(AUTOSCHED_SRC)/CostModel.h \
 										$(AUTOSCHED_SRC)/PerfectHashMap.h \
+										$(AUTOSCHED_SRC)/State.h \
+										$(AUTOSCHED_SRC)/State.cpp \
 										$(AUTOSCHED_WEIGHT_OBJECTS) \
 										$(AUTOSCHED_COST_MODEL_LIBS) \
 										$(GENERATOR_DEPS) \
