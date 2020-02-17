@@ -37,8 +37,8 @@ vector<T> get_subvector(const vector<T> &v, const set<int> &indices) {
 
 // Replace self-references to 'func' with arguments 'args' at
 // 'value_index' in the Expr/Stmt with some Var
-class ConvertSelfRef : public IRMutator {
-    using IRMutator::visit;
+class ConvertSelfRef : public IRGraphMutator {
+    using IRGraphMutator::visit;
 
     const string &func;
     const vector<Expr> &args;
@@ -51,7 +51,7 @@ class ConvertSelfRef : public IRMutator {
         if (!is_solvable) {
             return op;
         }
-        Expr expr = IRMutator::visit(op);
+        Expr expr = IRGraphMutator::visit(op);
         op = expr.as<Call>();
         internal_assert(op);
 
