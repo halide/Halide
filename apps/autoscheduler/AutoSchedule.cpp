@@ -66,7 +66,6 @@
 #include <fstream>
 #include <iostream>
 #include <queue>
-#include <random>
 #include <set>
 #include <sstream>
 #include <unordered_map>
@@ -101,59 +100,6 @@ using std::pair;
 using std::set;
 using std::string;
 using std::vector;
-
-struct RNG {
-    std::mt19937 gen;
-    std::uniform_real_distribution<double> dis;
-
-    RNG(uint32_t seed)
-        : gen{seed}
-        , dis{0.0, 100.0}
-    {}
-
-    double operator()() {
-        return dis(gen);
-    }
-};
-
-struct ProgressBar {
-    void set(double progress) {
-        if (!draw_progress_bar) return;
-        counter++;
-        const int bits = 11;
-        if (counter & ((1 << bits) - 1)) return;
-        const int pos = (int)(progress * 78);
-        aslog(0) << '[';
-        for (int j = 0; j < 78; j++) {
-            if (j < pos) {
-                aslog(0) << '.';
-            } else if (j - 1 < pos) {
-                aslog(0) << "/-\\|"[(counter >> bits) % 4];
-            } else {
-                aslog(0) << ' ';
-            }
-        }
-        aslog(0) << ']';
-        for (int j = 0; j < 80; j++) {
-            aslog(0) << '\b';
-        }
-    }
-
-    void clear() {
-        if (counter) {
-            for (int j = 0; j < 80; j++) {
-                aslog(0) << ' ';
-            }
-            for (int j = 0; j < 80; j++) {
-                aslog(0) << '\b';
-            }
-        }
-    }
-
-private:
-    uint32_t counter = 0;
-    const bool draw_progress_bar = isatty(2);
-};
 
 // Get the HL_RANDOM_DROPOUT environment variable. Purpose of this is described above.
 double get_dropout_threshold() {
@@ -219,27 +165,24 @@ void configure_pipeline_features(const FunctionDAG &dag,
     cost_model->set_pipeline_features(pipeline_features, params.parallelism);
 }
 
+AutoSchedule::AutoSchedule(const FunctionDAG &dag, const MachineParams &params, const Target &target, const std::vector<Function>& outputs, uint32_t seed, CostModel *cost_model)
+    : dag{dag}
+    , params{params}
+    , target{target}
+    , outputs{outputs}
+    , rng{seed}
+    , cost_model{cost_model}
+{
+    memoized_compute_root_blocks.make_large(dag.nodes.size());
+    configure_pipeline_features(dag, params, cost_model);
+}
+
 // A single pass of coarse-to-fine beam search.
-IntrusivePtr<State> optimal_schedule_pass(FunctionDAG &dag,
-                                          vector<Function> outputs,
-                                          const MachineParams &params,
-                                          const Target &target,
-                                          CostModel *cost_model,
-                                          std::mt19937 &rng,
-                                          int beam_size,
-                                          int pass_idx,
-                                          int num_passes,
-                                          ProgressBar &tick,
-                                          std::unordered_set<uint64_t> &permitted_hashes,
-                                          Statistics& stats,
-                                          const NodeMap<bool>& inlined_nodes,
-                                          const NodeMap<std::vector<IntrusivePtr<const LoopNest>>>& compute_root_nodes,
-                                          NodeMap<std::map<int, std::vector<IntrusivePtr<const LoopNest>>>>& memoized_compute_root_blocks) {
-
-    if (cost_model) {
-        configure_pipeline_features(dag, params, cost_model);
-    }
-
+IntrusivePtr<State> AutoSchedule::optimal_schedule_pass(int beam_size,
+                                                        int pass_idx,
+                                                        int num_passes,
+                                                        ProgressBar &tick,
+                                                        std::unordered_set<uint64_t> &permitted_hashes) {
     StateQueue q, pending;
 
     // The initial state, with no decisions made
@@ -285,21 +228,11 @@ IntrusivePtr<State> optimal_schedule_pass(FunctionDAG &dag,
                 // Total mortality. Double the beam size and
                 // restart. Disabled for now because total mortality
                 // may indicate a bug.
-                return optimal_schedule_pass(dag,
-                                             outputs,
-                                             params,
-                                             target,
-                                             cost_model,
-                                             rng,
-                                             beam_size * 2,
+                return optimal_schedule_pass(beam_size * 2,
                                              pass_idx,
                                              num_passes,
                                              tick,
-                                             permitted_hashes,
-                                             stats,
-                                             inlined_nodes,
-                                             compute_root_nodes,
-                                             memoized_compute_root_blocks);
+                                             permitted_hashes);
             } else {
                 internal_error << "Ran out of legal states with beam size " << beam_size << "\n";
             }
@@ -462,8 +395,7 @@ struct ClearInlinedMutator {
     }
 };
 
-void freeze_lowest_cost_stages(const FunctionDAG& dag, const IntrusivePtr<State> best, NodeMap<bool>& inlined_nodes, NodeMap<std::vector<IntrusivePtr<const LoopNest>>>& compute_root_nodes) {
-
+void AutoSchedule::freeze_lowest_cost_stages(const IntrusivePtr<State> best) {
     std::vector<std::pair<int, double>> node_ids_and_costs;
     NodeMap<double> node_costs;
     size_t num_stages = 0;
@@ -522,15 +454,7 @@ void freeze_lowest_cost_stages(const FunctionDAG& dag, const IntrusivePtr<State>
 }
 
 // Performance coarse-to-fine beam search and return the best state found.
-IntrusivePtr<State> optimal_schedule(FunctionDAG &dag,
-                                     vector<Function> outputs,
-                                     const MachineParams &params,
-                                     const Target &target,
-                                     CostModel *cost_model,
-                                     std::mt19937 &rng,
-                                     int beam_size,
-                                     Statistics& stats) {
-
+IntrusivePtr<State> AutoSchedule::optimal_schedule(int beam_size) {
     IntrusivePtr<State> best;
 
     std::unordered_set<uint64_t> permitted_hashes;
@@ -551,9 +475,6 @@ IntrusivePtr<State> optimal_schedule(FunctionDAG &dag,
         num_passes = std::atoi(num_passes_str.c_str());
     }
 
-    NodeMap<std::map<int, std::vector<IntrusivePtr<const LoopNest>>>> memoized_compute_root_blocks;
-    memoized_compute_root_blocks.make_large(dag.nodes.size());
-
     bool use_pre_pass = get_env_variable("HL_FREEZE_INLINE_COMPUTE_ROOT") == "1";
     int pass_idx = use_pre_pass ? -1 : 0;
 
@@ -561,14 +482,10 @@ IntrusivePtr<State> optimal_schedule(FunctionDAG &dag,
         --num_passes;
     }
 
-    NodeMap<bool> inlined_nodes;
-    NodeMap<std::vector<IntrusivePtr<const LoopNest>>> compute_root_nodes;
-
     for (; pass_idx < num_passes; pass_idx++) {
         ProgressBar tick;
 
-        auto pass = optimal_schedule_pass(dag, outputs, params, target, cost_model,
-            rng, beam_size, pass_idx, num_passes, tick, permitted_hashes, stats, inlined_nodes, compute_root_nodes, memoized_compute_root_blocks);
+        auto pass = optimal_schedule_pass(beam_size, pass_idx, num_passes, tick, permitted_hashes);
 
         tick.clear();
 
@@ -580,7 +497,7 @@ IntrusivePtr<State> optimal_schedule(FunctionDAG &dag,
         }
 
         if (pass_idx == -1) {
-            freeze_lowest_cost_stages(dag, pass, inlined_nodes, compute_root_nodes);
+            freeze_lowest_cost_stages(pass);
         }
 
         if (pass_idx >= 0 && (pass_idx == 0 || pass->cost < best->cost)) {
@@ -614,7 +531,6 @@ void generate_schedule(const std::vector<Function> &outputs,
         seed = atoi(seed_str.c_str());
     }
     aslog(1) << "Dropout seed = " << seed << '\n';
-    std::mt19937 rng((uint32_t)seed);
 
     // Get the beam size
     string beam_size_str = get_env_variable("HL_BEAM_SIZE");
@@ -646,8 +562,10 @@ void generate_schedule(const std::vector<Function> &outputs,
 
     Statistics stats;
 
+    AutoSchedule autoschedule{dag, params, target, outputs, (uint32_t)seed, cost_model.get()};
+
     // Run beam search
-    optimal = optimal_schedule(dag, outputs, params, target, cost_model.get(), rng, beam_size, stats);
+    optimal = autoschedule.optimal_schedule(beam_size);
 
     HALIDE_TOC;
 
@@ -749,15 +667,15 @@ void find_and_apply_schedule(FunctionDAG &dag,
                              int beam_size,
                              StageMap<ScheduleFeatures> *schedule_features) {
 
-    std::mt19937 rng(12345);
-    Statistics stats;
-    IntrusivePtr<State> optimal = optimal_schedule(dag, outputs, params, target, cost_model, rng, beam_size, stats);
+    AutoSchedule autoschedule{dag, params, target, outputs, (uint32_t)12345, cost_model};
+
+    IntrusivePtr<State> optimal = autoschedule.optimal_schedule(beam_size);
 
     // Apply the schedules
     optimal->apply_schedule(dag, params, target);
 
     if (schedule_features) {
-        optimal->compute_featurization(dag, params, target, schedule_features, stats);
+        optimal->compute_featurization(dag, params, target, schedule_features, autoschedule.stats);
     }
 }
 

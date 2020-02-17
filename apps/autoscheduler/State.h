@@ -287,4 +287,4 @@ public:
 }  // namespace Internal
 }  // namespace Halide
 
-#endif  // LOOP_NEST_H
+#endif // STATE_H
