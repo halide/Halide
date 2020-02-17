@@ -165,15 +165,23 @@ void configure_pipeline_features(const FunctionDAG &dag,
     cost_model->set_pipeline_features(pipeline_features, params.parallelism);
 }
 
-AutoSchedule::AutoSchedule(const FunctionDAG &dag, const MachineParams &params, const Target &target, const std::vector<Function>& outputs, uint32_t seed, CostModel *cost_model)
+AutoSchedule::AutoSchedule(const FunctionDAG &dag,
+                           const MachineParams &params,
+                           const Target &target,
+                           const std::vector<Function>& outputs,
+                           uint32_t seed,
+                           CostModel *cost_model,
+                           Statistics &stats,
+                           SearchSpace &search_space)
     : dag{dag}
     , params{params}
     , target{target}
     , outputs{outputs}
     , rng{seed}
     , cost_model{cost_model}
+    , stats{stats}
+    , search_space{search_space}
 {
-    memoized_compute_root_blocks.make_large(dag.nodes.size());
     configure_pipeline_features(dag, params, cost_model);
 }
 
@@ -322,7 +330,7 @@ IntrusivePtr<State> AutoSchedule::optimal_schedule_pass(int beam_size,
             }
 
             auto t1 = std::chrono::high_resolution_clock::now();
-            state->generate_children(dag, params, target, cost_model, enqueue_new_children, stats, pass_idx == -1, inlined_nodes, compute_root_nodes, memoized_compute_root_blocks);
+            search_space.generate_children(state, enqueue_new_children, pass_idx == -1);
             stats.generate_children_time += std::chrono::high_resolution_clock::now() - t1;
             expanded++;
         }
@@ -389,70 +397,6 @@ IntrusivePtr<State> AutoSchedule::optimal_schedule_pass(int beam_size,
     }
 }
 
-struct ClearInlinedMutator {
-    void operator()(LoopNest* new_loop_nest) const {
-        new_loop_nest->inlined = {};
-    }
-};
-
-void AutoSchedule::freeze_lowest_cost_stages(const IntrusivePtr<State> best) {
-    std::vector<std::pair<int, double>> node_ids_and_costs;
-    NodeMap<double> node_costs;
-    size_t num_stages = 0;
-    size_t num_nodes = 0;
-    for (const auto& n : dag.nodes) {
-        if (n.is_input) {
-            continue;
-        }
-        num_stages += n.stages.size();
-        ++num_nodes;
-    }
-
-    for (size_t i = 0; i < num_stages; ++i) {
-        if (dag.stage_id_to_node_map.at(i)->is_input) {
-            continue;
-        }
-
-        if (!node_costs.contains(dag.stage_id_to_node_map.at(i))) {
-            node_costs.get_or_create(dag.stage_id_to_node_map.at(i)) = 0;
-        }
-
-        node_costs.get(dag.stage_id_to_node_map.at(i)) += best->cost_per_stage[i];
-    }
-
-    for (auto it = node_costs.begin(); it != node_costs.end(); it++) {
-        node_ids_and_costs.push_back({it.key()->id, it.value()});
-    }
-
-    for (const auto& n : node_ids_and_costs) {
-        internal_assert(n.first >= 0);
-    }
-
-    std::sort(node_ids_and_costs.begin(), node_ids_and_costs.end(), [](const std::pair<int, double>& a, const std::pair<int, double>& b) {
-        return a.second < b.second;
-    });
-
-    size_t num_to_freeze = num_nodes - std::log2(num_nodes);
-    NodeMap<bool> nodes_to_freeze;
-    for (size_t i = 0; i < num_to_freeze; ++i) {
-        auto id = node_ids_and_costs[i].first;
-        std::cerr << "Freezing " << dag.nodes[id].func.name() << " with cost = " << node_ids_and_costs[i].second << "\n";
-        nodes_to_freeze.insert(&dag.nodes[id], true);
-    }
-
-    best->root->collect_nodes_that_should_be_inlined(nodes_to_freeze, inlined_nodes);
-
-    ClearInlinedMutator mutator{};
-
-    for (const auto& c : best->root->children) {
-        if (nodes_to_freeze.contains(c->node)) {
-            auto new_loop_nest = deep_copy_loop_nest(c, mutator);
-            compute_root_nodes.get_or_create(c->node).push_back(new_loop_nest);
-            std::cerr << "Freezing as compute_root: " << c->node->func.name() << "\n";
-        }
-    }
-}
-
 // Performance coarse-to-fine beam search and return the best state found.
 IntrusivePtr<State> AutoSchedule::optimal_schedule(int beam_size) {
     IntrusivePtr<State> best;
@@ -497,7 +441,7 @@ IntrusivePtr<State> AutoSchedule::optimal_schedule(int beam_size) {
         }
 
         if (pass_idx == -1) {
-            freeze_lowest_cost_stages(pass);
+            search_space.freeze_lowest_cost_stages(pass);
         }
 
         if (pass_idx >= 0 && (pass_idx == 0 || pass->cost < best->cost)) {
@@ -561,8 +505,8 @@ void generate_schedule(const std::vector<Function> &outputs,
     IntrusivePtr<State> optimal;
 
     Statistics stats;
-
-    AutoSchedule autoschedule{dag, params, target, outputs, (uint32_t)seed, cost_model.get()};
+    SearchSpace search_space{dag, params, target, cost_model.get(), stats};
+    AutoSchedule autoschedule{dag, params, target, outputs, (uint32_t)seed, cost_model.get(), stats, search_space};
 
     // Run beam search
     optimal = autoschedule.optimal_schedule(beam_size);
@@ -667,7 +611,9 @@ void find_and_apply_schedule(FunctionDAG &dag,
                              int beam_size,
                              StageMap<ScheduleFeatures> *schedule_features) {
 
-    AutoSchedule autoschedule{dag, params, target, outputs, (uint32_t)12345, cost_model};
+    Statistics stats;
+    SearchSpace search_space{dag, params, target, cost_model, stats};
+    AutoSchedule autoschedule{dag, params, target, outputs, (uint32_t)12345, cost_model, stats, search_space};
 
     IntrusivePtr<State> optimal = autoschedule.optimal_schedule(beam_size);
 
@@ -675,7 +621,7 @@ void find_and_apply_schedule(FunctionDAG &dag,
     optimal->apply_schedule(dag, params, target);
 
     if (schedule_features) {
-        optimal->compute_featurization(dag, params, target, schedule_features, autoschedule.stats);
+        optimal->compute_featurization(dag, params, target, schedule_features, stats);
     }
 }
 

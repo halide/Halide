@@ -47,6 +47,7 @@ $(AUTOSCHED_BIN)/cost_model/%.a: $(AUTOSCHED_BIN)/cost_model.generator
 # is expected to be present (in the loading binary), so we explicitly make the symbols
 # undefined rather than dependent on libHalide.so.
 $(AUTOSCHED_BIN)/libauto_schedule.so: $(AUTOSCHED_SRC)/AutoSchedule.cpp \
+		  							$(AUTOSCHED_SRC)/AutoSchedule.h \
 		  							$(AUTOSCHED_SRC)/ASLog.cpp \
 										$(AUTOSCHED_SRC)/DefaultCostModel.h \
 										$(AUTOSCHED_SRC)/DefaultCostModel.cpp \
@@ -63,6 +64,8 @@ $(AUTOSCHED_BIN)/libauto_schedule.so: $(AUTOSCHED_SRC)/AutoSchedule.cpp \
 										$(AUTOSCHED_SRC)/Featurization.h \
 										$(AUTOSCHED_SRC)/CostModel.h \
 										$(AUTOSCHED_SRC)/PerfectHashMap.h \
+										$(AUTOSCHED_SRC)/SearchSpace.h \
+										$(AUTOSCHED_SRC)/SearchSpace.cpp \
 										$(AUTOSCHED_SRC)/State.h \
 										$(AUTOSCHED_SRC)/State.cpp \
 										$(AUTOSCHED_WEIGHT_OBJECTS) \

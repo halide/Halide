@@ -155,52 +155,6 @@ struct State {
     // operation.
     IntrusivePtr<State> make_child() const;
 
-    // Sort / filter parallel tile options
-    struct ParallelTileOption {
-        vector<int64_t> outer_tiling;
-        vector<int64_t> inner_tiling;
-        double idle_core_wastage;
-        bool entire;
-        bool operator<(const ParallelTileOption &other) const {
-            return idle_core_wastage < other.idle_core_wastage;
-        }
-
-        // Ensure we don't accidentally copy this type
-        ParallelTileOption() = default;
-        ParallelTileOption(ParallelTileOption &&) = default;
-        ParallelTileOption &operator=(ParallelTileOption &&) = default;
-        ParallelTileOption(const ParallelTileOption &) = delete;
-        ParallelTileOption &operator=(const ParallelTileOption &) = delete;
-    };
-
-    vector<ParallelTileOption> filter_parallel_tile_options(const MachineParams &params, const Target &target, const FunctionDAG::Node *node, vector<vector<int64_t>>& inner_tilings, const vector<int64_t>& pure_size) const;
-
-    vector<ThreadTileOption> filter_thread_tile_options(const MachineParams &params, const Target &target, vector<IntrusivePtr<const LoopNest>>& loop_nests) const;
-
-    void memoize_blocks(const FunctionDAG::Node *node, LoopNest* new_root, NodeMap<std::map<int, std::vector<IntrusivePtr<const LoopNest>>>>& memoized_compute_root_blocks, Statistics& stats) const;
-
-    bool add_states_from_memoized_blocks(const FunctionDAG &dag,
-                                         const MachineParams &params,
-                                         const Target &target,
-                                         CostModel *cost_model,
-                                         std::function<void(IntrusivePtr<State> &&)> &accept_child,
-                                         Statistics& stats,
-                                         const FunctionDAG::Node *node,
-                                         const NodeMap<std::map<int, std::vector<IntrusivePtr<const LoopNest>>>>& memoized_compute_root_blocks,
-                                         int& num_children) const;
-
-    // Generate the successor states to this state
-    void generate_children(const FunctionDAG &dag,
-                           const MachineParams &params,
-                           const Target &target,
-                           CostModel *cost_model,
-                           std::function<void(IntrusivePtr<State> &&)> &accept_child,
-                           Statistics& stats,
-                           bool is_pre_pass,
-                           const NodeMap<bool>& inlined_nodes,
-                           const NodeMap<std::vector<IntrusivePtr<const LoopNest>>>& compute_root_nodes,
-                           NodeMap<std::map<int, std::vector<IntrusivePtr<const LoopNest>>>>& memoized_compute_root_blocks) const;
-
     void dump() const;
 
     void fuse_gpu_blocks(LoopNest::StageScheduleState* state, Stage& stage, const vector<VarOrRVar>& parallel_vars, const vector<int64_t>& parallel_extents) const;

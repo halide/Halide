@@ -9,6 +9,7 @@
 #include "FunctionDAG.h"
 #include "Halide.h"
 #include "PerfectHashMap.h"
+#include "SearchSpace.h"
 #include "State.h"
 
 namespace Halide {
@@ -78,13 +79,17 @@ struct AutoSchedule {
     const std::vector<Function>& outputs;
     std::mt19937 rng;
     CostModel *cost_model;
+    Statistics &stats;
+    SearchSpace &search_space;
 
-    Statistics stats;
-    NodeMap<bool> inlined_nodes;
-    NodeMap<std::vector<IntrusivePtr<const LoopNest>>> compute_root_nodes;
-    NodeMap<std::map<int, std::vector<IntrusivePtr<const LoopNest>>>> memoized_compute_root_blocks;
-
-    AutoSchedule(const FunctionDAG &dag, const MachineParams &params, const Target &target, const std::vector<Function>& outputs, uint32_t seed, CostModel *cost_model);
+    AutoSchedule(const FunctionDAG &dag,
+                 const MachineParams &params,
+                 const Target &target,
+                 const std::vector<Function>& outputs,
+                 uint32_t seed,
+                 CostModel *cost_model,
+                 Statistics &stats,
+                 SearchSpace &search_space);
 
     IntrusivePtr<State> optimal_schedule_pass(int beam_size,
                                               int pass_idx,
@@ -94,9 +99,6 @@ struct AutoSchedule {
 
     // Performance coarse-to-fine beam search and return the best state found.
     IntrusivePtr<State> optimal_schedule(int beam_size);
-
-    void freeze_lowest_cost_stages(const IntrusivePtr<State> best);
-
 };
 
 void find_and_apply_schedule(FunctionDAG& dag, const std::vector<Function> &outputs, const MachineParams &params, const Target &target, CostModel* cost_model, int beam_size, StageMapOfScheduleFeatures* schedule_features);
