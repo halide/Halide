@@ -332,9 +332,7 @@ void CodeGen_PTX_Dev::visit(const Atomic *op) {
 }
 
 void CodeGen_PTX_Dev::codegen_vector_reduce(const VectorReduce *op, const Expr &init) {
-    // Pattern match 8-bit dot products
-
-    // TODO: d2pa if we can narrow to 16-bit but not 8-bit
+    // Pattern match 8/16-bit dot products
 
     const int input_lanes = op->value.type().lanes();
     const int factor = input_lanes / op->type.lanes();
@@ -348,6 +346,7 @@ void CodeGen_PTX_Dev::codegen_vector_reduce(const VectorReduce *op, const Expr &
         if (!i.defined()) {
             i = cast(mul->type, 0);
         }
+        // Try to narrow the multiply args to 8-bit
         Expr a = mul->a, b = mul->b;
         if (op->type.is_uint()) {
             a = lossless_cast(UInt(8, input_lanes), a);
@@ -363,9 +362,28 @@ void CodeGen_PTX_Dev::codegen_vector_reduce(const VectorReduce *op, const Expr &
                 b = lossless_cast(UInt(8, input_lanes), mul->b);
             }
         }
+        // If we only managed to narrow one of them, try to narrow the
+        // other to 16-bit. Swap the args so that it's always 'a'.
+        Expr a_orig = mul->a;
+        if (a.defined() && !b.defined()) {
+            std::swap(a, b);
+            a_orig = mul->b;
+        }
+        if (b.defined() && !a.defined()) {
+            // Try 16-bit instead
+            a = lossless_cast(UInt(16, input_lanes), a_orig);
+            if (!a.defined() && !op->type.is_uint()) {
+                a = lossless_cast(Int(16, input_lanes), a_orig);
+            }
+        }
+
         if (a.defined() && b.defined()) {
             std::ostringstream ss;
-            ss << "dp4a";
+            if (a.type().bits() == 8) {
+                ss << "dp4a";
+            } else {
+                ss << "dp2a";
+            }
             if (a.type().is_int()) {
                 ss << "_s32";
             } else {
@@ -376,19 +394,22 @@ void CodeGen_PTX_Dev::codegen_vector_reduce(const VectorReduce *op, const Expr &
             } else {
                 ss << "_u32";
             }
+            const int a_32_bit_words_per_sum = (factor * a.type().bits()) / 32;
+            const int b_32_bit_words_per_sum = (factor * b.type().bits()) / 32;
             // Reinterpret a and b as 32-bit values with fewer
             // lanes. If they're aligned dense loads we should just do a
             // different load.
             for (Expr *e : {&a, &b}) {
+                int sub_lanes = 32 / e->type().bits();
                 const Load *load = e->as<Load>();
                 const Ramp *idx = load ? load->index.as<Ramp>() : nullptr;
                 if (idx &&
                     is_one(idx->stride) &&
-                    load->alignment.modulus % 4 == 0 &&
-                    load->alignment.remainder % 4 == 0) {
-                    Expr new_idx = simplify(idx->base / 4);
-                    int load_lanes = input_lanes / 4;
-                    if (input_lanes > 4) {
+                    load->alignment.modulus % sub_lanes == 0 &&
+                    load->alignment.remainder % sub_lanes == 0) {
+                    Expr new_idx = simplify(idx->base / sub_lanes);
+                    int load_lanes = input_lanes / sub_lanes;
+                    if (input_lanes > sub_lanes) {
                         new_idx = Ramp::make(new_idx, 1, load_lanes);
                     }
                     *e = Load::make(Int(32, load_lanes),
@@ -397,41 +418,62 @@ void CodeGen_PTX_Dev::codegen_vector_reduce(const VectorReduce *op, const Expr &
                                     load->image,
                                     load->param,
                                     const_true(load_lanes),
-                                    load->alignment / 4);
+                                    load->alignment / sub_lanes);
                 } else {
-                    *e = reinterpret(Int(32, input_lanes / 4), *e);
+                    *e = reinterpret(Int(32, input_lanes / sub_lanes), *e);
                 }
             }
             string name = ss.str();
             vector<Expr> result;
             for (int l = 0; l < op->type.lanes(); l++) {
                 // For each lane of the output...
-                Expr i_lane, a_lane, b_lane;
-                if (op->type.is_scalar()) {
-                    i_lane = i;
-                    a_lane = a;
-                    b_lane = b;
+                Expr i_slice, a_slice, b_slice;
+                if (i.type().is_scalar()) {
+                    i_slice = i;
                 } else {
-                    i_lane = Shuffle::make_extract_element(i, l);
-                    a_lane = Shuffle::make_slice(a, l * (factor / 4), 1, (factor / 4));
-                    b_lane = Shuffle::make_slice(b, l * (factor / 4), 1, (factor / 4));
+                    i_slice = Shuffle::make_extract_element(i, l);
                 }
-                Expr acc = i_lane;
-                for (int i = 0; i < factor / 4; i++) {
-                    // For each group of 4 input lanes that hit this output lane
-                    Expr slice_a, slice_b;
-                    if (factor == 4) {
-                        slice_a = a_lane;
-                        slice_b = b_lane;
+                if (a.type().is_scalar()) {
+                    a_slice = a;
+                } else {
+                    a_slice = Shuffle::make_slice(a, l * a_32_bit_words_per_sum, 1, a_32_bit_words_per_sum);
+                }
+                if (b.type().is_scalar()) {
+                    b_slice = b;
+                } else {
+                    b_slice = Shuffle::make_slice(b, l * b_32_bit_words_per_sum, 1, b_32_bit_words_per_sum);
+                }
+                for (int i = 0; i < b_32_bit_words_per_sum; i++) {
+                    if (a_slice.type().lanes() == b_slice.type().lanes()) {
+                        Expr a_lane, b_lane;
+                        if (b_slice.type().is_scalar()) {
+                            a_lane = a_slice;
+                            b_lane = b_slice;
+                        } else {
+                            a_lane = Shuffle::make_extract_element(a_slice, i);
+                            b_lane = Shuffle::make_extract_element(b_slice, i);
+                        }
+                        i_slice = Call::make(i_slice.type(), name,
+                                             {a_lane, b_lane, i_slice},
+                                             Call::PureExtern);
                     } else {
-                        slice_a = Shuffle::make_extract_element(a_lane, i);
-                        slice_b = Shuffle::make_extract_element(b_lane, i);
+                        internal_assert(a_slice.type().lanes() == 2 * b_slice.type().lanes());
+                        Expr a_lane_lo, a_lane_hi, b_lane;
+                        if (b_slice.type().is_scalar()) {
+                            b_lane = b_slice;
+                        } else {
+                            b_lane = Shuffle::make_extract_element(b_slice, i);
+                        }
+                        a_lane_lo = Shuffle::make_extract_element(a_slice, 2*i);
+                        a_lane_hi = Shuffle::make_extract_element(a_slice, 2*i + 1);
+                        i_slice = Call::make(i_slice.type(), name,
+                                             {a_lane_lo, a_lane_hi, b_lane, i_slice},
+                                             Call::PureExtern);
                     }
-                    acc = Call::make(acc.type(), name, {slice_a, slice_b, acc}, Call::PureExtern);
                 }
-                acc = simplify(acc);
-                acc = common_subexpression_elimination(acc);
-                result.push_back(acc);
+                i_slice = simplify(i_slice);
+                i_slice = common_subexpression_elimination(i_slice);
+                result.push_back(i_slice);
             }
             Expr equiv = Shuffle::make_concat(result);
             equiv.accept(this);
