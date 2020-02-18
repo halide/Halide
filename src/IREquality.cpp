@@ -594,7 +594,7 @@ void IRComparer::visit(const VectorReduce *op) {
     const VectorReduce *e = expr.as<VectorReduce>();
 
     compare_scalar(op->op, e->op);
-    // We've already compared types, so it's enough to compare the arg vector
+    // We've already compared types, so it's enough to compare the value
     compare_expr(op->value, e->value);
 }
 
