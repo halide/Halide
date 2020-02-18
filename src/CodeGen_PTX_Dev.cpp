@@ -464,8 +464,8 @@ void CodeGen_PTX_Dev::codegen_vector_reduce(const VectorReduce *op, const Expr &
                         } else {
                             b_lane = Shuffle::make_extract_element(b_slice, i);
                         }
-                        a_lane_lo = Shuffle::make_extract_element(a_slice, 2*i);
-                        a_lane_hi = Shuffle::make_extract_element(a_slice, 2*i + 1);
+                        a_lane_lo = Shuffle::make_extract_element(a_slice, 2 * i);
+                        a_lane_hi = Shuffle::make_extract_element(a_slice, 2 * i + 1);
                         i_slice = Call::make(i_slice.type(), name,
                                              {a_lane_lo, a_lane_hi, b_lane, i_slice},
                                              Call::PureExtern);

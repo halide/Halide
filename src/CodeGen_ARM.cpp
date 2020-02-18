@@ -1197,7 +1197,6 @@ string CodeGen_ARM::mattrs() const {
             arch_flags = "+sve";
         }
 
-
         if (target.has_feature(Target::ARMDotProd)) {
             arch_flags += "+dotprod";
         }

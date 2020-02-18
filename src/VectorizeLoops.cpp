@@ -707,7 +707,7 @@ class VectorSubs : public IRMutator {
         if (is_interleaved_ramp(mutated_value, vector_scope, &ir)) {
             return substitute(vectorized_name, mutated_value, mutated_body);
         } else if (mutated_value.same_as(op->value) &&
-            mutated_body.same_as(op->body)) {
+                   mutated_body.same_as(op->body)) {
             return op;
         } else if (was_vectorized) {
             scope.pop(op->name);
@@ -780,7 +780,7 @@ class VectorSubs : public IRMutator {
         if (is_interleaved_ramp(mutated_value, vector_scope, &ir)) {
             return substitute(mutated_name, mutated_value, mutated_body);
         } else if (mutated_value.same_as(op->value) &&
-            mutated_body.same_as(op->body)) {
+                   mutated_body.same_as(op->body)) {
             return op;
         } else {
             return LetStmt::make(mutated_name, mutated_value, mutated_body);
