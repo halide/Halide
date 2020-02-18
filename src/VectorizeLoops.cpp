@@ -258,11 +258,8 @@ bool is_interleaved_ramp(const Expr &e, const Scope<Expr> &scope, InterleavedRam
     } else if (const Variable *var = e.as<Variable>()) {
         if (scope.contains(var->name)) {
             return is_interleaved_ramp(scope.get(var->name), scope, result);
-        } else {
-            debug(0) << "Not in scope: " << var->name << "\n";
         }
     }
-    debug(0) << "Not interleaved ramp: " << e << "\n";
     return false;
 }
 
@@ -706,7 +703,10 @@ class VectorSubs : public IRMutator {
 
         Expr mutated_body = mutate(op->body);
 
-        if (mutated_value.same_as(op->value) &&
+        InterleavedRamp ir;
+        if (is_interleaved_ramp(mutated_value, vector_scope, &ir)) {
+            return substitute(vectorized_name, mutated_value, mutated_body);
+        } else if (mutated_value.same_as(op->value) &&
             mutated_body.same_as(op->body)) {
             return op;
         } else if (was_vectorized) {
@@ -776,7 +776,10 @@ class VectorSubs : public IRMutator {
             }
         }
 
-        if (mutated_value.same_as(op->value) &&
+        InterleavedRamp ir;
+        if (is_interleaved_ramp(mutated_value, vector_scope, &ir)) {
+            return substitute(mutated_name, mutated_value, mutated_body);
+        } else if (mutated_value.same_as(op->value) &&
             mutated_body.same_as(op->body)) {
             return op;
         } else {
@@ -1162,18 +1165,6 @@ class VectorSubs : public IRMutator {
             case VectorReduce::Or:
                 b = cast(new_load.type(), cast(b.type(), new_load) || b);
                 break;
-            }
-
-            // b probably also contains interleaved ramps in indexing
-            // expressions. Substitute them in to ensure
-            // simplification.
-            for (auto p = vector_scope.cbegin(); p != vector_scope.cend(); ++p) {
-                if (expr_uses_var(b, p.name())) {
-                    InterleavedRamp ir;
-                    if (is_interleaved_ramp(p.value(), vector_scope, &ir)) {
-                        b = substitute(p.name(), p.value(), b);
-                    }
-                }
             }
 
             Stmt s = Store::make(store->name, b, idx, store->param,
