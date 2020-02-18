@@ -361,7 +361,7 @@ void test_predicated_hist(const Backend &backend) {
         case Backend::CUDAVectorize: {
             RVar ro, ri;
             RVar rio, rii;
-            hist.update()
+            hist.update(update_id)
                 .atomic(true /*override_assciativity_test*/)
                 .split(r, ro, ri, 32)
                 .split(ri, rio, rii, 4)
@@ -828,7 +828,7 @@ void test_hist_rfactor(const Backend &backend) {
 
     Func intermediate =
         hist.update()
-            .rfactor({{r.y, y}});
+            .rfactor(r.y, y);
     intermediate.compute_root();
     hist.compute_root();
     switch (backend) {
@@ -862,7 +862,13 @@ void test_hist_rfactor(const Backend &backend) {
     case Backend::CUDAVectorize: {
         RVar ro, ri;
         RVar rio, rii;
-        hist.update().atomic(true).split(r, ro, ri, 32).split(ri, rio, rii, 4).gpu_blocks(ro, DeviceAPI::CUDA).gpu_threads(rio, DeviceAPI::CUDA).vectorize(rii);
+        intermediate.update()
+            .atomic(true)
+            .split(r.x, ro, ri, 32)
+            .split(ri, rio, rii, 4)
+            .gpu_blocks(ro, DeviceAPI::CUDA)
+            .gpu_threads(rio, DeviceAPI::CUDA)
+            .vectorize(rii);
     } break;
     default: {
         _halide_user_assert(false) << "Unsupported backend.\n";
@@ -1254,5 +1260,7 @@ int main(int argc, char **argv) {
     test_async(Backend::CPU);
     test_async(Backend::CPUVectorize);
     test_async_tuple(Backend::CPU);
+
+    printf("Success!\n");
     return 0;
 }

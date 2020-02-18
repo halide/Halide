@@ -314,6 +314,9 @@ TUTORIAL_CXX_FLAGS ?= -std=c++11 -g -fno-omit-frame-pointer $(RTTI_CXX_FLAGS) -I
 TEST_CXX_FLAGS ?= $(TUTORIAL_CXX_FLAGS) $(CXX_WARNING_FLAGS) -march=native
 TEST_LD_FLAGS = -L$(BIN_DIR) -lHalide $(COMMON_LD_FLAGS)
 
+# In the tests, some of our expectations change depending on the llvm version
+TEST_CXX_FLAGS += -DLLVM_VERSION=$(LLVM_VERSION_TIMES_10)
+
 # gcc 4.8 fires a bogus warning on old versions of png.h
 ifneq (,$(findstring g++,$(CXX_VERSION)))
 ifneq (,$(findstring 4.8,$(CXX_VERSION)))
