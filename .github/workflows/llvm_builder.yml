@@ -5,7 +5,7 @@ on:
     - cron:  '0 1 * * *'
   # Uncomment this for debugging purposes:
   # Run immediately after every push (only for debugging)
-  push:
+  # push:
 
 jobs:
   build_llvm:
