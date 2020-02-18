@@ -16,20 +16,6 @@ namespace Halide {
 namespace Internal {
 namespace Autoscheduler {
 
-struct RNG {
-    std::mt19937 gen;
-    std::uniform_real_distribution<double> dis;
-
-    RNG(uint32_t seed)
-        : gen{seed}
-        , dis{0.0, 100.0}
-    {}
-
-    double operator()() {
-        return dis(gen);
-    }
-};
-
 struct ProgressBar {
     void set(double progress) {
         if (!draw_progress_bar) return;
@@ -77,7 +63,7 @@ struct AutoSchedule {
     const MachineParams &params;
     const Target &target;
     const std::vector<Function>& outputs;
-    std::mt19937 rng;
+    std::mt19937 &rng;
     CostModel *cost_model;
     Statistics &stats;
     SearchSpace &search_space;
@@ -86,7 +72,7 @@ struct AutoSchedule {
                  const MachineParams &params,
                  const Target &target,
                  const std::vector<Function>& outputs,
-                 uint32_t seed,
+                 std::mt19937 &rng,
                  CostModel *cost_model,
                  Statistics &stats,
                  SearchSpace &search_space);

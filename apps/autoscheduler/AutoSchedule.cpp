@@ -169,7 +169,7 @@ AutoSchedule::AutoSchedule(const FunctionDAG &dag,
                            const MachineParams &params,
                            const Target &target,
                            const std::vector<Function>& outputs,
-                           uint32_t seed,
+                           std::mt19937 &rng,
                            CostModel *cost_model,
                            Statistics &stats,
                            SearchSpace &search_space)
@@ -177,7 +177,7 @@ AutoSchedule::AutoSchedule(const FunctionDAG &dag,
     , params{params}
     , target{target}
     , outputs{outputs}
-    , rng{seed}
+    , rng{rng}
     , cost_model{cost_model}
     , stats{stats}
     , search_space{search_space}
@@ -330,7 +330,7 @@ IntrusivePtr<State> AutoSchedule::optimal_schedule_pass(int beam_size,
             }
 
             auto t1 = std::chrono::high_resolution_clock::now();
-            search_space.generate_children(state, enqueue_new_children, pass_idx == -1);
+            search_space.generate_children(state, enqueue_new_children, pass_idx, pass_idx == -1);
             stats.generate_children_time += std::chrono::high_resolution_clock::now() - t1;
             expanded++;
         }
@@ -505,8 +505,9 @@ void generate_schedule(const std::vector<Function> &outputs,
     IntrusivePtr<State> optimal;
 
     Statistics stats;
-    SearchSpace search_space{dag, params, target, cost_model.get(), stats};
-    AutoSchedule autoschedule{dag, params, target, outputs, (uint32_t)seed, cost_model.get(), stats, search_space};
+    std::mt19937 rng{(uint32_t)seed};
+    SearchSpace search_space{dag, params, target, rng, cost_model.get(), stats};
+    AutoSchedule autoschedule{dag, params, target, outputs, rng, cost_model.get(), stats, search_space};
 
     // Run beam search
     optimal = autoschedule.optimal_schedule(beam_size);
@@ -612,8 +613,9 @@ void find_and_apply_schedule(FunctionDAG &dag,
                              StageMap<ScheduleFeatures> *schedule_features) {
 
     Statistics stats;
-    SearchSpace search_space{dag, params, target, cost_model, stats};
-    AutoSchedule autoschedule{dag, params, target, outputs, (uint32_t)12345, cost_model, stats, search_space};
+    std::mt19937 rng{(uint32_t)12345};
+    SearchSpace search_space{dag, params, target, rng, cost_model, stats};
+    AutoSchedule autoschedule{dag, params, target, outputs, rng, cost_model, stats, search_space};
 
     IntrusivePtr<State> optimal = autoschedule.optimal_schedule(beam_size);
 

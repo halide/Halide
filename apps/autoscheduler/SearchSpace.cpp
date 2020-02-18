@@ -10,11 +10,13 @@ namespace Autoscheduler {
 SearchSpace::SearchSpace(const FunctionDAG &dag,
                          const MachineParams &params,
                          const Target &target,
+                         std::mt19937 &rng,
                          CostModel *cost_model,
                          Statistics &stats)
     : dag{dag}
     , params{params}
     , target{target}
+    , rng{rng}
     , cost_model{cost_model}
     , stats{stats}
 {
@@ -182,6 +184,7 @@ vector<ThreadTileOption> SearchSpace::filter_thread_tile_options(vector<Intrusiv
 
 void SearchSpace::generate_children(IntrusivePtr<State> state,
                                     std::function<void(IntrusivePtr<State> &&)> &accept_child,
+                                    int pass_idx,
                                     bool is_pre_pass) {
     const IntrusivePtr<const LoopNest> root = state->root;
 

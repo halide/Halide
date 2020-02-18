@@ -11,6 +11,7 @@
 #include "State.h"
 #include <set>
 #include <unordered_set>
+#include <unordered_map>
 #include <vector>
 
 namespace Halide {
@@ -21,6 +22,7 @@ struct SearchSpace {
     const FunctionDAG &dag;
     const MachineParams &params;
     const Target &target;
+    std::mt19937 &rng;
     CostModel *cost_model;
     Statistics &stats;
 
@@ -31,6 +33,7 @@ struct SearchSpace {
     SearchSpace(const FunctionDAG &dag,
                 const MachineParams &params,
                 const Target &target,
+                std::mt19937 &rng,
                 CostModel *cost_model,
                 Statistics &stats);
 
@@ -70,6 +73,7 @@ struct SearchSpace {
     // Generate successor states for given 'state'
     void generate_children(IntrusivePtr<State> state,
                            std::function<void(IntrusivePtr<State> &&)> &accept_child,
+                           int pass_idx,
                            bool is_pre_pass);
 
     void freeze_lowest_cost_stages(const IntrusivePtr<State> best);
