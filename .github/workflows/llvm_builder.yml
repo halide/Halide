@@ -21,7 +21,7 @@ jobs:
       matrix:
         arch: [x86]
         bits: [32, 64]
-        os: [windows-latest, ubuntu-18.04, macos-latest]
+        os: [windows-2019, ubuntu-18.04, macos-10.15]
         llvm_version: [8, 9, 10, 11]
         include:
           - llvm_version: 8
@@ -33,7 +33,7 @@ jobs:
           - llvm_version: 11
             llvm_branch: master
 
-          - os: macos-latest
+          - os: macos-10.15
             cc: clang
             cxx: clang++
             halide_os: osx
@@ -43,14 +43,14 @@ jobs:
             cxx: g++
             halide_os: linux
 
-          - os: windows-latest
+          - os: windows-2019
             cc: cl.exe
             cxx: cl.exe
             halide_os: windows
 
         exclude:
           # We don't support 32-bit macos builds
-          - os: macos-latest
+          - os: macos-10.15
             bits: 32
 
     steps:
