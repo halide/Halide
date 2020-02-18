@@ -1158,10 +1158,6 @@ void CodeGen_ARM::codegen_vector_reduce(const VectorReduce *op, const Expr &init
     CodeGen_Posix::codegen_vector_reduce(op, init);
 }
 
-void CodeGen_ARM::visit(const Add *op) {
-    CodeGen_Posix::visit(op);
-}
-
 string CodeGen_ARM::mcpu() const {
     if (target.bits == 32) {
         if (target.has_feature(Target::ARMv7s)) {

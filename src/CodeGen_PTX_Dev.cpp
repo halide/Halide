@@ -426,7 +426,11 @@ void CodeGen_PTX_Dev::codegen_vector_reduce(const VectorReduce *op, const Expr &
             string name = ss.str();
             vector<Expr> result;
             for (int l = 0; l < op->type.lanes(); l++) {
-                // For each lane of the output...
+                // To compute a single lane of the output, we'll
+                // extract the appropriate slice of the args, which
+                // have been reinterpreted as 32-bit vectors, then
+                // call either dp4a or dp2a the appropriate number of
+                // times, and finally sum the result.
                 Expr i_slice, a_slice, b_slice;
                 if (i.type().is_scalar()) {
                     i_slice = i;
@@ -475,6 +479,7 @@ void CodeGen_PTX_Dev::codegen_vector_reduce(const VectorReduce *op, const Expr &
                 i_slice = common_subexpression_elimination(i_slice);
                 result.push_back(i_slice);
             }
+            // Concatenate the per-lane results to get the full vector result
             Expr equiv = Shuffle::make_concat(result);
             equiv.accept(this);
             return;
