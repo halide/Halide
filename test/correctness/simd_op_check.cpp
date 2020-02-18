@@ -1029,6 +1029,18 @@ public:
                 check(arm32 ? "vpmin.u32" : "uminp", 4, minimum(in_u32(f * x + r)));
             }
 
+            // UDOT/SDOT
+            // TODO: Guard with target feature flag
+            if (!arm32) {
+                for (int f : {4, 8}) {
+                    RDom r(0, f);
+                    for (int v : {2, 4}) {
+                        check("udot", v, sum(u32(in_u8(f * x + r)) * in_u8(f * x + r + 32)));
+                        check("sdot", v, sum(i32(in_i8(f * x + r)) * in_i8(f * x + r + 32)));
+                    }
+                }
+            }
+
             // VPOP     X       F, D    Pop from Stack
             // VPUSH    X       F, D    Push to Stack
             // Not used by us

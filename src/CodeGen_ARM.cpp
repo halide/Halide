@@ -1110,20 +1110,27 @@ void CodeGen_ARM::codegen_vector_reduce(const VectorReduce *op, const Expr &init
 
     // Pattern-match 8-bit dot product instructions available on newer
     // ARM cores. TODO: add some sort of feature flag to guard this.
-    if (factor == 4 &&  // TODO: test reduction by 8x
+    if (factor % 4 == 0 &&
         op->op == VectorReduce::Add &&
         target.bits == 64 &&
         (op->type.element_of() == Int(32) ||
          op->type.element_of() == UInt(32))) {
         const Mul *mul = op->value.as<Mul>();
         if (mul) {
-            Expr a = lossless_cast(UInt(8), mul->a);
-            Expr b = lossless_cast(UInt(8), mul->b);
+            const int input_lanes = mul->type.lanes();
+            Expr a = lossless_cast(UInt(8, input_lanes), mul->a);
+            Expr b = lossless_cast(UInt(8, input_lanes), mul->b);
             if (!a.defined()) {
-                a = lossless_cast(Int(8), mul->a);
-                b = lossless_cast(Int(8), mul->b);
+                a = lossless_cast(Int(8, input_lanes), mul->a);
+                b = lossless_cast(Int(8, input_lanes), mul->b);
             }
             if (a.defined() && b.defined()) {
+                if (factor != 4) {
+                    Expr equiv = VectorReduce::make(op->op, op->value, input_lanes / 4);
+                    equiv = VectorReduce::make(op->op, equiv, op->type.lanes());
+                    codegen_vector_reduce(equiv.as<VectorReduce>(), init);
+                    return;
+                }
                 Expr i = init;
                 if (!i.defined()) {
                     i = make_zero(op->type);
@@ -1187,6 +1194,11 @@ string CodeGen_ARM::mattrs() const {
             arch_flags = "+sve2";
         } else if (target.has_feature(Target::SVE)) {
             arch_flags = "+sve";
+        }
+
+
+        if (true /* TODO: some feature flag */) {
+            arch_flags += "+dotprod";
         }
 
         if (target.os == Target::IOS || target.os == Target::OSX) {
