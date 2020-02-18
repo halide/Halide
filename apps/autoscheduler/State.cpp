@@ -499,7 +499,7 @@ bool State::exceeds_serial_extents_limit(const Target &target) const {
     return root->exceeds_serial_extents_limit(target, nullptr, false);
 }
 
-int64_t State::get_shared_mem_alloc_size(const LoopNest* loop) const {
+int64_t State::get_shared_mem_alloc_size(const LoopNest* block, const LoopNest* loop) const {
     int64_t result = 0;
 
     if (loop->gpu_label == thread) {
@@ -507,7 +507,7 @@ int64_t State::get_shared_mem_alloc_size(const LoopNest* loop) const {
     }
 
     for (const auto *node : loop->store_at) {
-        const auto &bounds = loop->get_bounds(node);
+        const auto &bounds = block->get_bounds(node);
 
         int64_t alloc_size = node->bytes_per_point;
         for (int i = 0; i < node->dimensions; i++) {
@@ -521,7 +521,7 @@ int64_t State::get_shared_mem_alloc_size(const LoopNest* loop) const {
     }
 
     for (const auto& c : loop->children) {
-        result += get_shared_mem_alloc_size(c.get());
+        result += get_shared_mem_alloc_size(block, c.get());
     }
 
     return result;
@@ -541,7 +541,7 @@ bool State::exceeds_shared_memory_limit(const Target &target) const {
     for (const auto& c : root->children) {
         // If the working set is too large on the GPU, shared memory will be
         // exhausted, so reject any such schedules
-        if (get_shared_mem_alloc_size(c.get()) > limit) {
+        if (get_shared_mem_alloc_size(c.get(), c.get()) > limit) {
             return true;
         }
     }

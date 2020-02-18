@@ -683,7 +683,7 @@ void LoopNest::get_sites(const Target &target,
             sites.get_or_create(&s).gpu_store_memory_type = store_gpu_memory_type;
 
             const LoopNest* store_site = sites.get_or_create(&s).store;
-            if (store_site->gpu_label == block) {
+            if (store_site->gpu_label == block && s.index == 0) {
                 auto alloc = store_site->compute_alloc_size_of_node_here(f);
                 total_shared_mem_alloc_sizes.get_or_create(store_site->stage) += alloc.first;
             }

@@ -141,7 +141,7 @@ struct State {
 
     bool exceeds_serial_extents_limit(const Target &target) const;
 
-    int64_t get_shared_mem_alloc_size(const LoopNest* loop) const;
+    int64_t get_shared_mem_alloc_size(const LoopNest* block, const LoopNest* loop) const;
 
     bool exceeds_shared_memory_limit(const Target &target) const;
 
