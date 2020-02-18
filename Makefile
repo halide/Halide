@@ -17,10 +17,7 @@ MAKEFLAGS += --no-builtin-rules
 UNAME = $(shell uname)
 
 ifeq ($(OS), Windows_NT)
-    # assume we are building for the MinGW environment
-    COMMON_LD_FLAGS=$(LDFLAGS) -luuid -lole32 -lpthread -lz -Wl,--stack,8388608
-    SHARED_EXT=dll
-    FPIC=
+	$(error Halide no longer supports the MinGW environment.)
 else
     # let's assume "normal" UNIX such as linux
     COMMON_LD_FLAGS=$(LDFLAGS) -ldl -lpthread -lz
@@ -128,11 +125,7 @@ WITH_OPENCL ?= not-empty
 WITH_METAL ?= not-empty
 WITH_OPENGL ?= not-empty
 WITH_D3D12 ?= not-empty
-ifeq ($(OS), Windows_NT)
-    WITH_INTROSPECTION ?=
-else
-    WITH_INTROSPECTION ?= not-empty
-endif
+WITH_INTROSPECTION ?= not-empty
 WITH_EXCEPTIONS ?=
 WITH_LLVM_INSIDE_SHARED_LIBHALIDE ?= not-empty
 
@@ -421,15 +414,6 @@ IMAGE_IO_CXX_FLAGS = $(LIBPNG_CXX_FLAGS) $(LIBJPEG_CXX_FLAGS)
 THIS_MAKEFILE = $(realpath $(filter %Makefile, $(MAKEFILE_LIST)))
 ROOT_DIR = $(strip $(shell dirname $(THIS_MAKEFILE)))
 SRC_DIR  = $(ROOT_DIR)/src
-
-# Allow the user to specify PYBIND11_PATH as a relative path,
-# but canonicalize it to an absolute path since the sub-makefile
-# we call may have a different working dir.
-ifdef PYBIND11_PATH
-	REAL_PYBIND11_PATH = $(realpath $(PYBIND11_PATH))
-else
-	REAL_PYBIND11_PATH = /PYBIND11_PATH/is/undefined
-endif
 
 TARGET=$(if $(HL_TARGET),$(HL_TARGET),host)
 
@@ -826,7 +810,6 @@ RUNTIME_CPP_COMPONENTS = \
   metal \
   metal_objc_arm \
   metal_objc_x86 \
-  mingw_math \
   mips_cpu_features \
   module_aot_ref_count \
   module_jit_ref_count \
@@ -961,17 +944,28 @@ endif
 .PHONY: all
 all: distrib test_internal
 
+# Depending on which linker we're using,
+# we need a different invocation to get the
+# linker map file.
+ifeq ($(UNAME), Darwin)
+    MAP_FLAGS= -Wl,-map -Wl,$(BUILD_DIR)/llvm_objects/list.all
+else
+    MAP_FLAGS= -Wl,-Map=$(BUILD_DIR)/llvm_objects/list.all
+endif
+
 $(BUILD_DIR)/llvm_objects/list: $(OBJECTS) $(INITIAL_MODULES)
 	# Determine the relevant object files from llvm with a dummy
-	# compilation. Passing -t to the linker gets it to list which
-	# object files in which archives it uses to resolve
-	# symbols. We only care about the libLLVM ones.
+	# compilation. Passing -map to the linker gets it to list, as
+	# part of the linker map file, the object files in which archives it uses to
+	# resolve symbols. We only care about the libLLVM ones, which we will filter below.
 	@mkdir -p $(@D)
-	$(CXX) -o /dev/null -shared -Wl,-t -Wl,-t $(OBJECTS) $(INITIAL_MODULES) $(LLVM_STATIC_LIBS) $(LLVM_SYSTEM_LIBS) $(COMMON_LD_FLAGS) 2>&1 | grep "libLLVM" | grep ")" > $(BUILD_DIR)/llvm_objects/list.new
+	$(CXX) -o /dev/null -shared $(MAP_FLAGS) $(OBJECTS) $(INITIAL_MODULES) $(LLVM_STATIC_LIBS) $(LLVM_SYSTEM_LIBS) $(COMMON_LD_FLAGS) > /dev/null
 	# if the list has changed since the previous build, or there
 	# is no list from a previous build, then delete any old object
 	# files and re-extract the required object files
 	cd $(BUILD_DIR)/llvm_objects; \
+	cat list.all |  grep "libLLVM" | grep ")"  | sed "s/\[.*\] //" | egrep "^/|^\(" > list.new; \
+	rm list.all; \
 	if cmp -s list.new list; \
 	then \
 	echo "No changes in LLVM deps"; \
@@ -986,8 +980,7 @@ $(LIB_DIR)/libHalide.a: $(OBJECTS) $(INITIAL_MODULES) $(BUILD_DIR)/llvm_objects/
 	# Archive together all the halide and llvm object files
 	@mkdir -p $(@D)
 	@rm -f $(LIB_DIR)/libHalide.a
-	# ar breaks on MinGW with all objects at the same time.
-	echo $(OBJECTS) $(INITIAL_MODULES) $(BUILD_DIR)/llvm_objects/llvm_*.o* | xargs -n200 ar q $(LIB_DIR)/libHalide.a
+	ar q $(LIB_DIR)/libHalide.a $(OBJECTS) $(INITIAL_MODULES) $(BUILD_DIR)/llvm_objects/llvm_*.o*
 	ranlib $(LIB_DIR)/libHalide.a
 
 $(BIN_DIR)/libHalide.$(SHARED_EXT): $(OBJECTS) $(INITIAL_MODULES) $(V8_DEPS)
@@ -1790,7 +1783,7 @@ $(FILTERS_DIR)/multi_rungen2: $(BUILD_DIR)/RunGenMain.o $(BIN_DIR)/$(TARGET)/run
 	@mkdir -p $(@D)
 	$(CXX) -std=c++11 -I$(FILTERS_DIR) $^ $(GEN_AOT_LD_FLAGS) $(IMAGE_IO_LIBS) -o $@
 
-$(BIN_DIR)/tutorial_%: $(ROOT_DIR)/tutorial/%.cpp $(BIN_DIR)/libHalide.$(SHARED_EXT) $(INCLUDE_DIR)/Halide.h
+$(BIN_DIR)/tutorial_%: $(ROOT_DIR)/tutorial/%.cpp $(BIN_DIR)/libHalide.$(SHARED_EXT) $(INCLUDE_DIR)/Halide.h $(INCLUDE_DIR)/HalideRuntime.h
 	@ if [[ $@ == *_run ]]; then \
 		export TUTORIAL=$* ;\
 		export LESSON=`echo $${TUTORIAL} | cut -b1-9`; \
@@ -1960,6 +1953,7 @@ time_compilation_generator_%: $(BIN_DIR)/%.generator
 
 TEST_APPS=\
 	HelloMatlab \
+	autoscheduler \
 	bilateral_grid \
 	bgu \
 	blur \
@@ -1967,6 +1961,7 @@ TEST_APPS=\
 	camera_pipe \
 	conv_layer \
 	fft \
+	gradient_autoscheduler \
 	hist \
 	interpolate \
 	lens_blur \
@@ -1979,13 +1974,6 @@ TEST_APPS=\
 	resnet_50 \
 	stencil_chain \
 	wavelet
-
-# TODO: apps/autoscheduler doesn't yet build properly for MinGW
-# (see https://github.com/halide/Halide/issues/4069)
-ifneq ($(OS), Windows_NT)
-	TEST_APPS += autoscheduler
-	TEST_APPS += gradient_autoscheduler
-endif
 
 TEST_APPS_DEPS=$(TEST_APPS:%=%_test_app)
 BUILD_APPS_DEPS=$(TEST_APPS:%=%_build_app)
@@ -2008,7 +1996,7 @@ $(TEST_APPS_DEPS): distrib build_python_bindings
 		HL_TARGET=$(HL_TARGET) \
 		|| exit 1 ; \
 
-.PHONY: test_apps $(BUILD_APPS_DEPS) 
+.PHONY: test_apps $(BUILD_APPS_DEPS)
 test_apps: $(BUILD_APPS_DEPS)
 	$(MAKE) -f $(THIS_MAKEFILE) -j1 $(TEST_APPS_DEPS)
 
@@ -2051,19 +2039,13 @@ benchmark_apps: $(BENCHMARK_APPS)
 # TODO(srj): the python bindings need to be put into the distrib folders;
 # this is a hopefully-temporary workaround (https://github.com/halide/Halide/issues/4368)
 .PHONY: build_python_bindings
-ifneq ($(OS), Windows_NT)
 build_python_bindings: distrib $(BIN_DIR)/host/runtime.a
 	$(MAKE) -C $(ROOT_DIR)/python_bindings \
 		-f $(ROOT_DIR)/python_bindings/Makefile \
 		build_python_bindings \
 		HALIDE_DISTRIB_PATH=$(CURDIR)/$(DISTRIB_DIR) \
 		BIN=$(CURDIR)/$(BIN_DIR)/python3_bindings \
-		PYTHON=python3 \
-		PYBIND11_PATH=$(REAL_PYBIND11_PATH)
-else
-# No Python support for MinGW yet
-build_python_bindings: ;
-endif
+		PYTHON=python3
 
 .PHONY: test_python
 test_python: distrib $(BIN_DIR)/host/runtime.a build_python_bindings
@@ -2072,8 +2054,7 @@ test_python: distrib $(BIN_DIR)/host/runtime.a build_python_bindings
 		test \
 		HALIDE_DISTRIB_PATH=$(CURDIR)/$(DISTRIB_DIR) \
 		BIN=$(CURDIR)/$(BIN_DIR)/python3_bindings \
-		PYTHON=python3 \
-		PYBIND11_PATH=$(REAL_PYBIND11_PATH)
+		PYTHON=python3
 
 # It's just for compiling the runtime, so earlier clangs *might* work,
 # but best to peg it to the minimum llvm version.

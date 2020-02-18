@@ -89,7 +89,6 @@ struct Target {
         Profile = halide_target_feature_profile,
         NoRuntime = halide_target_feature_no_runtime,
         Metal = halide_target_feature_metal,
-        MinGW = halide_target_feature_mingw,
         CPlusPlusMangling = halide_target_feature_c_plus_plus_mangling,
         LargeBuffers = halide_target_feature_large_buffers,
         HexagonDma = halide_target_feature_hexagon_dma,
@@ -203,6 +202,12 @@ struct Target {
     /** Returns whether a particular device API can be used with this
      * Target. */
     bool supports_device_api(DeviceAPI api) const;
+
+    /** If this Target (including all Features) requires a specific DeviceAPI,
+     * return it. If it doesn't, return DeviceAPI::None.  If the Target has
+     * features with multiple (different) DeviceAPI requirements, the result
+     * will be an arbitrary DeviceAPI. */
+    DeviceAPI get_required_device_api() const;
 
     bool operator==(const Target &other) const {
         return os == other.os &&

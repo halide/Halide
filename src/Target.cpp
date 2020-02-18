@@ -158,12 +158,6 @@ Target calculate_host_target() {
             }
         }
     }
-#ifdef _WIN32
-#ifndef _MSC_VER
-    initial_features.push_back(Target::MinGW);
-#endif
-#endif
-
 #endif
 #endif
 #endif
@@ -335,7 +329,6 @@ const std::map<std::string, Target::Feature> feature_name_map = {
     {"profile", Target::Profile},
     {"no_runtime", Target::NoRuntime},
     {"metal", Target::Metal},
-    {"mingw", Target::MinGW},
     {"c_plus_plus_name_mangling", Target::CPlusPlusMangling},
     {"large_buffers", Target::LargeBuffers},
     {"hvx_64", Target::HVX_64},
@@ -784,6 +777,18 @@ bool Target::supports_device_api(DeviceAPI api) const {
     }
 }
 
+DeviceAPI Target::get_required_device_api() const {
+    if (has_feature(Target::CUDA)) return DeviceAPI::CUDA;
+    if (has_feature(Target::D3D12Compute)) return DeviceAPI::D3D12Compute;
+    if (has_feature(Target::HVX_128)) return DeviceAPI::Hexagon;
+    if (has_feature(Target::HexagonDma)) return DeviceAPI::HexagonDma;
+    if (has_feature(Target::Metal)) return DeviceAPI::Metal;
+    if (has_feature(Target::OpenCL)) return DeviceAPI::OpenCL;
+    if (has_feature(Target::OpenGL)) return DeviceAPI::GLSL;
+    if (has_feature(Target::OpenGLCompute)) return DeviceAPI::OpenGLCompute;
+    return DeviceAPI::None;
+}
+
 Target::Feature target_feature_for_device_api(DeviceAPI api) {
     switch (api) {
     case DeviceAPI::CUDA:
@@ -882,7 +887,7 @@ bool Target::get_runtime_compatible_target(const Target &other, Target &result) 
 
     const std::array<Feature, 12> intersection_features = {{SSE41, AVX, AVX2, FMA, FMA4, F16C, ARMv7s, VSX, AVX512, AVX512_KNL, AVX512_Skylake, AVX512_Cannonlake}};
 
-    const std::array<Feature, 10> matching_features = {{SoftFloatABI, Debug, TSAN, ASAN, MSAN, HVX_64, HVX_128, MinGW, HexagonDma, HVX_shared_object}};
+    const std::array<Feature, 10> matching_features = {{SoftFloatABI, Debug, TSAN, ASAN, MSAN, HVX_64, HVX_128, HexagonDma, HVX_shared_object}};
 
     // bitsets need to be the same width.
     decltype(result.features) union_mask;
@@ -909,7 +914,7 @@ bool Target::get_runtime_compatible_target(const Target &other, Target &result) 
     }
 
     if ((features & matching_mask) != (other.features & matching_mask)) {
-        Internal::debug(1) << "runtime targets must agree on SoftFloatABI, Debug, TSAN, ASAN, MSAN, HVX_64, HVX_128, MinGW, HexagonDma, and HVX_shared_object\n"
+        Internal::debug(1) << "runtime targets must agree on SoftFloatABI, Debug, TSAN, ASAN, MSAN, HVX_64, HVX_128, HexagonDma, and HVX_shared_object\n"
                            << "  this:  " << *this << "\n"
                            << "  other: " << other << "\n";
         return false;

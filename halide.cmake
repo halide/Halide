@@ -488,7 +488,6 @@ function(_halide_runtime_target_name HALIDE_TARGET OUTVAR)
         profile
         no_runtime
         metal
-        mingw
         c_plus_plus_name_mangling
         large_buffers
         hvx_64

@@ -297,6 +297,14 @@ int main(int argc, char **argv) {
             target.set_feature(Target::OpenCL);
         }
 
+        // This check isn't strictly necessary, but it allows a more graceful
+        // exit if running on a system that doesn't have the expected drivers
+        // and/or hardware present.
+        if (!host_supports_target_device(target)) {
+            printf("Requested GPU is not supported; skipping this test. (Do you have the proper hardware and/or driver installed?)\n");
+            return 0;
+        }
+
         // Create an interesting input image to use.
         Buffer<int> input(258, 258);
         input.set_min(-1, -1);

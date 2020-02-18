@@ -246,14 +246,14 @@ class ClContext {
 public:
     cl_context context;
     cl_command_queue cmd_queue;
-    cl_int error;
+    cl_int error_code;
 
-    // Constructor sets 'error' if any occurs.
+    // Constructor sets 'error_code' if any occurs.
     INLINE ClContext(void *user_context)
         : user_context(user_context),
           context(NULL),
           cmd_queue(NULL),
-          error(CL_SUCCESS) {
+          error_code(CL_SUCCESS) {
         if (clCreateContext == NULL) {
             load_libopencl(user_context);
         }
@@ -262,8 +262,12 @@ public:
         halide_start_clock(user_context);
 #endif
 
-        error = halide_acquire_cl_context(user_context, &context, &cmd_queue);
-        halide_assert(user_context, context != NULL && cmd_queue != NULL);
+        error_code = halide_acquire_cl_context(user_context, &context, &cmd_queue);
+        // don't abort: that would prevent host_supports_device_api() from being able work properly.
+        if (!context || !cmd_queue) {
+            error(user_context) << "OpenCL: null context or cmd_queue";
+            error_code = -1;
+        }
     }
 
     INLINE ~ClContext() {
@@ -334,6 +338,11 @@ WEAK int create_opencl_context(void *user_context, cl_context *ctx, cl_command_q
 
     halide_assert(user_context, ctx != NULL && *ctx == NULL);
     halide_assert(user_context, q != NULL && *q == NULL);
+
+    if (clGetPlatformIDs == NULL) {
+        error(user_context) << "CL: clGetPlatformIDs not found\n";
+        return -1;
+    }
 
     cl_int err = 0;
 
@@ -569,8 +578,8 @@ WEAK int halide_opencl_device_free(void *user_context, halide_buffer_t *buf) {
         << ", buf: " << buf << ") cl_mem: " << dev_ptr << "\n";
 
     ClContext ctx(user_context);
-    if (ctx.error != CL_SUCCESS) {
-        return ctx.error;
+    if (ctx.error_code != CL_SUCCESS) {
+        return ctx.error_code;
     }
 
 #ifdef DEBUG_RUNTIME
@@ -608,8 +617,8 @@ WEAK int halide_opencl_initialize_kernels(void *user_context, void **state_ptr, 
         << ", size: " << size << "\n";
 
     ClContext ctx(user_context);
-    if (ctx.error != CL_SUCCESS) {
-        return ctx.error;
+    if (ctx.error_code != CL_SUCCESS) {
+        return ctx.error_code;
     }
 
 #ifdef DEBUG_RUNTIME
@@ -720,7 +729,9 @@ WEAK int halide_opencl_device_sync(void *user_context, halide_buffer_t *) {
     debug(user_context) << "CL: halide_opencl_device_sync (user_context: " << user_context << ")\n";
 
     ClContext ctx(user_context);
-    halide_assert(user_context, ctx.error == CL_SUCCESS);
+    if (ctx.error_code != CL_SUCCESS) {
+        return ctx.error_code;
+    }
 
 #ifdef DEBUG_RUNTIME
     uint64_t t_before = halide_current_time_ns(user_context);
@@ -800,8 +811,8 @@ WEAK int halide_opencl_device_malloc(void *user_context, halide_buffer_t *buf) {
         << ", buf: " << buf << ")\n";
 
     ClContext ctx(user_context);
-    if (ctx.error != CL_SUCCESS) {
-        return ctx.error;
+    if (ctx.error_code != CL_SUCCESS) {
+        return ctx.error_code;
     }
 
     size_t size = buf->size_in_bytes();
@@ -942,8 +953,8 @@ WEAK int halide_opencl_buffer_copy(void *user_context, struct halide_buffer_t *s
     int err = 0;
     {
         ClContext ctx(user_context);
-        if (ctx.error != CL_SUCCESS) {
-            return ctx.error;
+        if (ctx.error_code != CL_SUCCESS) {
+            return ctx.error_code;
         }
 
         debug(user_context)
@@ -1006,8 +1017,8 @@ WEAK int halide_opencl_run(void *user_context,
 
     cl_int err;
     ClContext ctx(user_context);
-    if (ctx.error != CL_SUCCESS) {
-        return ctx.error;
+    if (ctx.error_code != CL_SUCCESS) {
+        return ctx.error_code;
     }
 
 #ifdef DEBUG_RUNTIME
@@ -1220,8 +1231,8 @@ WEAK int opencl_device_crop_from_offset(void *user_context,
                                         int64_t offset,
                                         struct halide_buffer_t *dst) {
     ClContext ctx(user_context);
-    if (ctx.error != CL_SUCCESS) {
-        return ctx.error;
+    if (ctx.error_code != CL_SUCCESS) {
+        return ctx.error_code;
     }
 
     dst->device_interface = src->device_interface;
@@ -1270,8 +1281,8 @@ WEAK int halide_opencl_device_release_crop(void *user_context,
         << ", buf: " << buf << ") cl_mem: " << dev_ptr << " offset: " << ((device_handle *)buf->device)->offset << "\n";
 
     ClContext ctx(user_context);
-    if (ctx.error != CL_SUCCESS) {
-        return ctx.error;
+    if (ctx.error_code != CL_SUCCESS) {
+        return ctx.error_code;
     }
 
 #ifdef DEBUG_RUNTIME
