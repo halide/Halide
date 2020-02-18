@@ -285,11 +285,15 @@ public:
 
         // SSE 4.1
 
-        // skip dot product and argmin (TODO!)
         for (int w = 2; w <= 4; w++) {
+            // We generated pmaddwd when we do a sum of widening multiplies
             const char *check_pmaddwd = (use_avx2 && w > 3) ? "vpmaddwd*ymm" : "pmaddwd";
             check(check_pmaddwd, 2 * w, i32(i16_1) * 3 + i32(i16_2) * 4);
             check(check_pmaddwd, 2 * w, i32(i16_1) * 3 - i32(i16_2) * 4);
+
+            // And also for dot-products
+            RDom r(0, 4);
+            check(check_pmaddwd, 2 * w, sum(i32(in_i16(x * 4 + r)) * in_i16(x * 4 + r + 32)));
         }
 
         // llvm doesn't distinguish between signed and unsigned multiplies
