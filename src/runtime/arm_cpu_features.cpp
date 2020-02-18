@@ -20,6 +20,8 @@ WEAK CpuFeatures halide_get_cpu_features() {
     //    features.set_available(halide_target_feature_armv7s);
     // }
 
+    // TODO: add runtime detection for ARMDotProd extension
+
     return features;
 }
 

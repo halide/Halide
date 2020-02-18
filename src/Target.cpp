@@ -368,6 +368,7 @@ const std::map<std::string, Target::Feature> feature_name_map = {
     {"wasm_signext", Target::WasmSignExt},
     {"sve", Target::SVE},
     {"sve2", Target::SVE2},
+    {"arm_dot_prod", Target::ARMDotProd},
     // NOTE: When adding features to this map, be sure to update
     // PyEnums.cpp and halide.cmake as well.
 };

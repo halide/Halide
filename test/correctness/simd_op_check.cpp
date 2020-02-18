@@ -1030,8 +1030,7 @@ public:
             }
 
             // UDOT/SDOT
-            // TODO: Guard with target feature flag
-            if (!arm32) {
+            if (target.has_feature(Target::ARMDotProd)) {
                 for (int f : {4, 8}) {
                     RDom r(0, f);
                     for (int v : {2, 4}) {

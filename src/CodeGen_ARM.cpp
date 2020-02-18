@@ -1109,8 +1109,9 @@ void CodeGen_ARM::codegen_vector_reduce(const VectorReduce *op, const Expr &init
     }
 
     // Pattern-match 8-bit dot product instructions available on newer
-    // ARM cores. TODO: add some sort of feature flag to guard this.
-    if (factor % 4 == 0 &&
+    // ARM cores.
+    if (target.has_feature(Target::ARMDotProd) &&
+        factor % 4 == 0 &&
         op->op == VectorReduce::Add &&
         target.bits == 64 &&
         (op->type.element_of() == Int(32) ||
@@ -1197,7 +1198,7 @@ string CodeGen_ARM::mattrs() const {
         }
 
 
-        if (true /* TODO: some feature flag */) {
+        if (target.has_feature(Target::ARMDotProd)) {
             arch_flags += "+dotprod";
         }
 
