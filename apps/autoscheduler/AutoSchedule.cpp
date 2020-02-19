@@ -329,9 +329,9 @@ IntrusivePtr<State> AutoSchedule::optimal_schedule_pass(int beam_size,
                 return best;
             }
 
-            auto t1 = std::chrono::high_resolution_clock::now();
+            Timer timer;
             search_space.generate_children(state, enqueue_new_children, pass_idx, pass_idx == -1);
-            stats.generate_children_time += std::chrono::high_resolution_clock::now() - t1;
+            stats.generate_children_time += timer.elapsed();
             expanded++;
         }
 
@@ -340,9 +340,9 @@ IntrusivePtr<State> AutoSchedule::optimal_schedule_pass(int beam_size,
 
         if (cost_model) {
             // Now evaluate all the costs and re-sort them in the priority queue
-            auto t1 = std::chrono::high_resolution_clock::now();
+            Timer timer;
             cost_model->evaluate_costs();
-            stats.cost_model_evaluation_time += std::chrono::high_resolution_clock::now() - t1;
+            stats.cost_model_evaluation_time += timer.elapsed();
             q.resort();
         }
 
@@ -461,7 +461,7 @@ void generate_schedule(const std::vector<Function> &outputs,
                        const Target &target,
                        const MachineParams &params,
                        AutoSchedulerResults *auto_scheduler_results) {
-    auto start = std::chrono::high_resolution_clock::now();
+    Timer timer;
     aslog(0) << "generate_schedule for target=" << target.to_string() << "\n";
 
     // Start a timer
@@ -581,7 +581,7 @@ void generate_schedule(const std::vector<Function> &outputs,
     aslog(1) << "Number of schedules evaluated by cost model: " << stats.num_schedules_enqueued << '\n';
     aslog(1) << "Total cost model evaluation time (ms): " << stats.total_cost_model_evaluation_time() << "\n";
     aslog(1) << "Average cost model evaluation time (ms): " << stats.average_cost_model_evaluation_time() << "\n";
-    std::chrono::duration<double> total_time = std::chrono::high_resolution_clock::now() - start;
+    std::chrono::duration<double> total_time = timer.elapsed();
     aslog(1) << "Time taken for autoscheduler (s): " << std::chrono::duration_cast<std::chrono::milliseconds>(total_time).count() / 1000.0 << '\n';
 }
 

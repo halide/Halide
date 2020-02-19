@@ -325,13 +325,13 @@ void SearchSpace::generate_children(IntrusivePtr<State> state,
 
         // 2) Realize it somewhere
         for (int vector_dim : vector_dims) {
-            auto t1 = std::chrono::high_resolution_clock::now();
+            Timer timer;
             auto tile_options = root->compute_in_tiles(node, nullptr, params, target, vector_dim, false, false, is_pre_pass);
-            stats.compute_in_tiles_time += std::chrono::high_resolution_clock::now() - t1;
+            stats.compute_in_tiles_time += timer.elapsed();
 
-            t1 = std::chrono::high_resolution_clock::now();
+            timer.restart();
             auto options = filter_thread_tile_options(tile_options);
-            stats.filter_thread_tiles_time += std::chrono::high_resolution_clock::now() - t1;
+            stats.filter_thread_tiles_time += timer.elapsed();
 
             for (const auto& o : options) {
                 if (num_children >= 1 && o.max_idle_lane_wastage > 0.5) {
@@ -421,9 +421,9 @@ void SearchSpace::generate_children(IntrusivePtr<State> state,
                 return;
             }
 
-            auto t1 = std::chrono::high_resolution_clock::now();
+            Timer timer;
             auto options = filter_parallel_tile_options(state, node, block_tilings, stage_sizes[0]);
-            stats.filter_parallel_tiles_time += std::chrono::high_resolution_clock::now() - t1;
+            stats.filter_parallel_tiles_time += timer.elapsed();
 
             for (const auto &o : options) {
                 if (num_children >= 1 && o.idle_core_wastage > 1.2) {

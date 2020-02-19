@@ -408,10 +408,10 @@ void State::compute_featurization(const FunctionDAG &dag, const MachineParams &p
         }
     }
 
-    auto t1 = std::chrono::high_resolution_clock::now();
+    Timer timer;
     feature_root->compute_features(dag, params, target, sites, 1, 1, nullptr, nullptr, *feature_root, nullptr, nullptr, nullptr, features, {feature_root.get()}, use_memoized_features(), total_shared_mem_alloc_sizes, stats);
 
-    stats.featurization_time += std::chrono::high_resolution_clock::now() - t1;
+    stats.featurization_time += timer.elapsed();
     ++stats.num_featurizations;
 
     for (const auto &n : dag.nodes) {
@@ -568,7 +568,7 @@ bool State::exceeds_local_memory_limit(const Target &target) const {
 }
 
 bool State::calculate_cost(const FunctionDAG &dag, const MachineParams &params, const Target& target, CostModel *cost_model, Statistics& stats, bool verbose) {
-    auto t1 = std::chrono::high_resolution_clock::now();
+    Timer timer;
     if (!root->has_valid_thread_extents()) {
         return false;
     }
@@ -585,7 +585,7 @@ bool State::calculate_cost(const FunctionDAG &dag, const MachineParams &params, 
         return false;
     }
 
-    stats.calculate_cost_time += std::chrono::high_resolution_clock::now() - t1;
+    stats.calculate_cost_time += timer.elapsed();
 
     StageMap<ScheduleFeatures> features;
 
@@ -629,12 +629,12 @@ bool State::calculate_cost(const FunctionDAG &dag, const MachineParams &params, 
     // evaluate it until we call evaluate_costs (or if it runs out
     // of internal buffer space), so that the evaluations can be
     // batched.
-    t1 = std::chrono::high_resolution_clock::now();
+    timer.restart();
     cost_model->enqueue(num_stages, &schedule_features, &cost, &cost_per_stage);
-    stats.enqueue_time += std::chrono::high_resolution_clock::now() - t1;
+    stats.enqueue_time += timer.elapsed();
     ++stats.num_schedules_enqueued;
 
-    t1 = std::chrono::high_resolution_clock::now();
+    timer.restart();
     // index of current stage whose features we are reading
     int stage = 0;
     // load schedule features into input buffer
@@ -663,7 +663,7 @@ bool State::calculate_cost(const FunctionDAG &dag, const MachineParams &params, 
             stage += 1;
         }
     }
-    stats.feature_write_time += std::chrono::high_resolution_clock::now() - t1;
+    stats.feature_write_time += timer.elapsed();
     // Check we considered everything we were supposed to.
     internal_assert(stage == num_stages);
 

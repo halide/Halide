@@ -68,6 +68,7 @@ $(AUTOSCHED_BIN)/libauto_schedule.so: $(AUTOSCHED_SRC)/AutoSchedule.cpp \
 										$(AUTOSCHED_SRC)/SearchSpace.cpp \
 										$(AUTOSCHED_SRC)/State.h \
 										$(AUTOSCHED_SRC)/State.cpp \
+										$(AUTOSCHED_SRC)/Statistics.h \
 										$(AUTOSCHED_WEIGHT_OBJECTS) \
 										$(AUTOSCHED_COST_MODEL_LIBS) \
 										$(GENERATOR_DEPS) \
