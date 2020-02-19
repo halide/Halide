@@ -1,0 +1,208 @@
+name: Halide LLVM Builder
+on:
+  # Run every day at 1AM (...presumably US Pacific Time?)
+  schedule:
+    - cron:  '0 1 * * *'
+  # Uncomment this for debugging purposes:
+  # Run immediately after every push (only for debugging)
+  # push:
+
+jobs:
+  build_llvm:
+    name: llvm-${{matrix.llvm_version}}-${{matrix.arch}}-${{matrix.bits}}-${{matrix.halide_os}}
+    runs-on: ${{matrix.os}}
+    env:
+      CC: ${{matrix.cc}}
+      CXX: ${{matrix.cxx}}
+      LD: ld
+
+    strategy:
+      fail-fast: false  # Keep running even if one job fails
+      matrix:
+        arch: [x86]
+        bits: [32, 64]
+        os: [windows-2019, ubuntu-18.04, macos-10.15]
+        llvm_version: [8, 9, 10, 11]
+        include:
+          - llvm_version: 8
+            llvm_branch: release/8.x
+          - llvm_version: 9
+            llvm_branch: release/9.x
+          - llvm_version: 10
+            llvm_branch: release/10.x
+          - llvm_version: 11
+            llvm_branch: master
+
+          - os: macos-10.15
+            cc: clang
+            cxx: clang++
+            halide_os: osx
+
+          - os: ubuntu-18.04
+            cc: gcc
+            cxx: g++
+            halide_os: linux
+
+          - os: windows-2019
+            cc: cl.exe
+            cxx: cl.exe
+            halide_os: windows
+
+        exclude:
+          # We don't support 32-bit macos builds
+          - os: macos-10.15
+            bits: 32
+
+    steps:
+
+    - name: Configure Ubuntu
+      if: startsWith(matrix.os, 'ubuntu')
+      run: |
+        sudo apt-get update
+        sudo apt-get install ninja-build
+
+    - name: Configure Ubuntu-32
+      if: startsWith(matrix.os, 'ubuntu') && matrix.bits == 32
+      shell: bash
+      run: |
+        sudo apt-get update
+        sudo apt-get install gcc-multilib g++-multilib
+
+    - name: Configure OSX
+      if: startsWith(matrix.os, 'macos')
+      run: |
+        brew install ninja
+
+    - name: Configure Windows
+      if: startsWith(matrix.os, 'windows')
+      run: |
+        # We don't use ninja on Windows (yet)
+        # choco install ninja
+
+    - name: Build llvm-${{matrix.llvm_version}}-${{matrix.arch}}-${{matrix.bits}}-${{matrix.halide_os}}
+      shell: bash
+      run: |
+        set -eux
+
+        # Demangle Windows names, to simplify CMake stuff later
+        _ROOT=${GITHUB_WORKSPACE//\\//}
+
+        LLVM_ID="llvm-${{matrix.llvm_version}}-${{matrix.arch}}-${{matrix.bits}}-${{matrix.halide_os}}"
+        LLVM_SOURCE_DIR="${_ROOT}/${LLVM_ID}-source"
+        LLVM_BUILD_DIR="${_ROOT}/${LLVM_ID}-build"
+        LLVM_INSTALL_DIR="${_ROOT}/${LLVM_ID}-install"
+        LLVM_INSTALL_TGZ="${_ROOT}/${LLVM_ID}.tgz"
+        LLVM_INSTALL_URL="https://buildbot.halide-lang.org/llvm/${LLVM_ID}.tgz"
+        LLVM_COMMIT_HASH_FILE=".halide_builder_llvm_commit"
+
+        TAR_FLAGS=
+        if [[ ${{matrix.os}} == windows* ]]; then
+          # Must use --force-local to avoid tar misinterpreting the : in
+          # a Windows pathname as a hostname.
+          TAR_FLAGS=" --force-local "
+        fi
+
+        # get the hash of the last llvm we built
+        # by downloading the existing .tgz (if any)
+        # and extracting the value from .halide_builder_llvm_commit.
+        # (This isn't very efficient, but that's ok.)
+
+        set +e
+        LLVM_OLD_COMMIT=bogus
+        curl --fail --user llvm_user:${{secrets.LLVM_USER_PASSWORD}} --output ${_ROOT}/old_llvm.tgz ${LLVM_INSTALL_URL}
+        if [ $? -eq 0 ]; then
+          LLVM_OLD_COMMIT=`tar ${TAR_FLAGS} -O -xf ${_ROOT}/old_llvm.tgz ./${LLVM_COMMIT_HASH_FILE}`
+          if [ $? -ne 0 ]; then
+            LLVM_OLD_COMMIT=bogus_2
+          fi
+        fi
+        set -e
+
+        rm -rf ${_ROOT}/old_llvm.tgz
+
+        echo "LLVM_OLD_COMMIT is ${LLVM_OLD_COMMIT}"
+
+        # Clone current top of tree.
+        git clone https://github.com/llvm/llvm-project.git \
+          "${LLVM_SOURCE_DIR}" \
+          --branch ${{matrix.llvm_branch}} \
+          --single-branch \
+          --depth 1
+
+        # Find the new commit.
+        cd ${LLVM_SOURCE_DIR}
+        LLVM_NEW_COMMIT=`git rev-parse HEAD`
+
+        echo "LLVM_NEW_COMMIT is ${LLVM_NEW_COMMIT}"
+
+        if [ ${LLVM_NEW_COMMIT} == ${LLVM_OLD_COMMIT} ]; then
+          echo "LLVM is already up to date, no need to rebuild"
+        else
+          echo "LLVM needs rebuilding!"
+
+          LLVM_BUILD_32_BITS=$([ ${{matrix.bits}} == 32 ] && echo "ON" || echo "OFF")
+
+          CMAKE_GEN="Ninja"
+          BUILD_TYPE=Release
+          EXTRA_DEFS=
+          PARALLEL_JOBS=4  # GHA VMs have 2 cores
+
+          if [[ ${{matrix.os}} == windows* ]]; then
+            # TODO: can we use Ninja with MSVC? It might be faster.
+            if [[ ${{matrix.bits}} == 64 ]]; then
+              EXTRA_DEFS=" -T host=x64 -A x64 "
+            else
+              EXTRA_DEFS=" -T host=x64 "
+            fi
+            CMAKE_GEN="Visual Studio 16"
+          fi
+
+          if [[ ${{matrix.os}} == ubuntu* && ${{matrix.bits}} == 32 ]]; then
+            EXTRA_DEFS="-D CMAKE_FIND_ROOT_PATH=/usr/lib/i386-linux-gnu -D CMAKE_FIND_ROOT_PATH_MODE_LIBRARY=ONLY"
+            export CC="${CC} -m32 "
+            export CXX="${CXX} -m32 "
+            export LD="${LD} -melf_i386 "
+          fi
+
+          if [[ ${{matrix.os}} == macos* ]]; then
+            EXTRA_DEFS="-D LLVM_ENABLE_SUPPORT_XCODE_SIGNPOSTS=FORCE_OFF"
+          fi
+
+          # TODO: LLVM_TEMPORARILY_ALLOW_OLD_TOOLCHAIN is temporary,
+          # until MSVC 16.5 is available
+          cmake \
+            -D CMAKE_BUILD_TYPE=${BUILD_TYPE} \
+            -D CMAKE_INSTALL_PREFIX="${LLVM_INSTALL_DIR}" \
+            -D LLVM_BUILD_32_BITS=${LLVM_BUILD_32_BITS} \
+            -D LLVM_ENABLE_ASSERTIONS=ON \
+            -D LLVM_ENABLE_PROJECTS="clang;lld" \
+            -D LLVM_ENABLE_RTTI=ON \
+            -D LLVM_ENABLE_TERMINFO=OFF \
+            -D LLVM_TARGETS_TO_BUILD="X86;ARM;NVPTX;AArch64;Mips;PowerPC;Hexagon;WebAssembly" \
+            -D LLVM_TEMPORARILY_ALLOW_OLD_TOOLCHAIN=ON \
+            -G "${CMAKE_GEN}" \
+            ${EXTRA_DEFS} \
+            -B "${LLVM_BUILD_DIR}" \
+            -S "${LLVM_SOURCE_DIR}/llvm"
+
+          # Re-specifying --config here is essential
+          # to avoid Windows builds from building some subtargets
+          # in Debug mode and using up all available disk space
+          cmake \
+            --build "${LLVM_BUILD_DIR}" \
+            --config ${BUILD_TYPE} \
+            -j ${PARALLEL_JOBS} \
+            --target install
+
+          echo ${LLVM_NEW_COMMIT} > ${LLVM_INSTALL_DIR}/${LLVM_COMMIT_HASH_FILE}
+
+          cd ${LLVM_INSTALL_DIR}
+          tar ${TAR_FLAGS} -czf ${LLVM_INSTALL_TGZ} .
+
+          curl \
+            --upload-file ${LLVM_INSTALL_TGZ} \
+            --user llvm_user:${{secrets.LLVM_USER_PASSWORD}} \
+            ${LLVM_INSTALL_URL}
+
+        fi
+
