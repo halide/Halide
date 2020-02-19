@@ -439,10 +439,6 @@ struct FunctionDAG {
             // narrowest type used.
             int vector_size;
 
-            // The vector size used for storing outputs. Corresponds
-            // to the natural width for the output type.
-            int output_vector_size;
-
             // The featurization of the compute done
             PipelineFeatures features;
 

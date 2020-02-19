@@ -826,7 +826,6 @@ FunctionDAG::FunctionDAG(const vector<Function> &outputs, const MachineParams &p
             }
 
             stage.vector_size = target.natural_vector_size(checker.narrowest_type);
-            stage.output_vector_size = target.natural_vector_size(widest_output_type);
 
             if (s == 0) {
                 node.vector_size = stage.vector_size;
