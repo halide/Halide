@@ -172,7 +172,7 @@ string leaf(const string &path) {
 }
 
 // Load all the samples, reading filenames from stdin
-void load_samples(map<int, PipelineSample>& training_set, map<int, PipelineSample>& validation_set, map<int, Pipeline>& pipelines, const Flags& flags) {
+void load_samples(map<int, PipelineSample>& training_set, map<int, PipelineSample>& validation_set, map<int, Pipeline>& pipelines, const Flags& flags, bool predict_only) {
     vector<float> scratch(10 * 1024 * 1024);
 
     int best = -1;
@@ -377,13 +377,13 @@ void load_samples(map<int, PipelineSample>& training_set, map<int, PipelineSampl
     std::ostringstream o;
     o << "Best runtime is " << best_runtime << " msec, from schedule id " << best << " in file " << best_path << "\n";
     std::cout << o.str();
-    if (!flags.best_benchmark_path.empty()) {
+    if (!predict_only && !flags.best_benchmark_path.empty()) {
         std::ofstream f(flags.best_benchmark_path, std::ios_base::trunc);
         f << o.str();
         f.close();
         assert(!f.fail());
     }
-    if (!flags.best_schedule_path.empty()) {
+    if (!predict_only && !flags.best_schedule_path.empty()) {
         // best_path points to a .sample file; look for a .schedule.h file in the same dir
         size_t dot = best_path.rfind('.');
         assert(dot != string::npos && best_path.substr(dot) == ".sample");
@@ -459,10 +459,10 @@ int main(int argc, char **argv) {
     map<int, PipelineSample> samples;
     map<int, PipelineSample> validation_set;
     map<int, Pipeline> pipelines;
-    load_samples(samples, validation_set, pipelines, flags);
+    bool predict_only = !flags.predictions_file.empty();
+    load_samples(samples, validation_set, pipelines, flags, predict_only);
     print_statistics(samples, validation_set);
 
-    bool predict_only = !flags.predictions_file.empty();
     if (predict_only) {
         std::cout << "Predicting only (no training)\n";
         flags.epochs = 1;

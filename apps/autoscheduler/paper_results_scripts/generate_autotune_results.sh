@@ -84,7 +84,6 @@ for app in $APPS; do
     OUTPUT_FILE="${SAMPLES_DIR}/autotune_out.txt"
     PREDICTIONS_FILE="${SAMPLES_DIR}/predictions"
     BEST_TIMES_FILE="${SAMPLES_DIR}/best_times"
-    WEIGHTS_FILE="${SAMPLES_DIR}/updated.weights"
 
     mkdir -p ${SAMPLES_DIR}
     touch ${OUTPUT_FILE}
@@ -101,6 +100,7 @@ for app in $APPS; do
         ITERATION=$((ITERATION + 1))
     done
 
+    WEIGHTS_FILE="$(ls -td ${SAMPLES_DIR}/batch* | head -n 1)/used.weights"
     predict_all ${HALIDE_ROOT} ${SAMPLES_DIR} ${WEIGHTS_FILE} ${PREDICTIONS_FILE}
     extract_best_times ${HALIDE_ROOT} ${SAMPLES_DIR} ${BEST_TIMES_FILE}
     bash $(dirname $0)/../scripts/average_times.sh ${SAMPLES_DIR} >> ${OUTPUT_FILE}
