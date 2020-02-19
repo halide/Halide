@@ -1,7 +1,11 @@
 #ifndef HALIDE_HALIDERUNTIMEQURT_H
 #define HALIDE_HALIDERUNTIMEQURT_H
 
+#ifndef HALIDE_HALIDERUNTIME_H
+
 #include "HalideRuntime.h"
+
+#endif
 
 #ifdef __cplusplus
 extern "C" {

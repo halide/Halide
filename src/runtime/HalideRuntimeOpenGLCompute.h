@@ -1,7 +1,11 @@
 #ifndef HALIDE_HALIDERUNTIMEOPENGLCOMPUTE_H
 #define HALIDE_HALIDERUNTIMEOPENGLCOMPUTE_H
 
+#ifndef HALIDE_HALIDERUNTIME_H
+
 #include "HalideRuntime.h"
+
+#endif
 
 #ifdef __cplusplus
 extern "C" {
