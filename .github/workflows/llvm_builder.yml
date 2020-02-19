@@ -3,9 +3,21 @@ on:
   # Run every day at 1AM Pacific; GitHub uses UTC for cron, so that's 9AM
   schedule:
     - cron:  '0 9 * * *'
-  # Uncomment this for debugging purposes:
-  # Run immediately after every push (only for debugging)
-  # push:
+  #
+  # This is a webhook to allow forcing rebuilds. To use, do thisL
+  #
+  #    curl -X POST https://api.github.com/repos/halide/Halide/dispatches \
+  #       -H 'Accept: application/vnd.github.everest-preview+json' \
+  #       -H 'Authorization: token AUTH_TOKEN' \
+  #       --data '{"event_type": "halide_llvm_builder_force_rebuild:GLOB"}'
+  #
+  #    ...where GLOB is a glob pattern for the LLVM versions to rebuild
+  #    (e.g., * = all, *osx* is all osx builds, etc) matching the job name
+  #
+  #    ...and AUTH_TOKEN is a personal access token for your account
+  #    (see https://help.github.com/en/github/authenticating-to-github/creating-a-personal-access-token-for-the-command-line)
+  #
+  repository_dispatch:
 
 jobs:
   build_llvm:
@@ -135,10 +147,29 @@ jobs:
 
         echo "LLVM_NEW_COMMIT is ${LLVM_NEW_COMMIT}"
 
+        NEED_REBUILD=0
+
+        echo "github.event.action is ${{github.event.action}}"
+        if [[ ${{github.event.action}} == halide_llvm_builder_force_rebuild* ]]; then
+          # extract the second half; it is expected to be a glob pattern that is compared
+          # against LLVM_ID (so we can rebuild some or all), thus halide_llvm_builder_force_rebuild:*
+          # should rebuild all, halide_llvm_builder_force_rebuild:*osx* would rebuild all osx, etc
+          GLOB=`echo "${{github.event.action}}" | cut -d':' -f2`
+          if [[ ${LLVM_ID} == ${GLOB} ]]; then
+            echo "LLVM_ID ${LLVM_ID} matches glob ${GLOB}, forcing rebuild"
+            NEED_REBUILD=1
+          fi
+        fi
+
         if [ ${LLVM_NEW_COMMIT} == ${LLVM_OLD_COMMIT} ]; then
           echo "LLVM is already up to date, no need to rebuild"
         else
-          echo "LLVM needs rebuilding!"
+          echo "LLVM commit mismatch, needs rebuilding!"
+          NEED_REBUILD=1
+        fi
+
+        if ((NEED_REBUILD)); then
+          echo "LLVM is being rebuilt!"
 
           LLVM_BUILD_32_BITS=$([ ${{matrix.bits}} == 32 ] && echo "ON" || echo "OFF")
 
