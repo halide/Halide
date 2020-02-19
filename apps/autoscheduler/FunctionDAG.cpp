@@ -583,6 +583,7 @@ FunctionDAG::FunctionDAG(const vector<Function> &outputs, const MachineParams &p
 
     // Construct the mapping from Funcs to Nodes
     nodes.resize(order.size());
+    map<Function, Node *, Function::Compare> node_map;
     for (size_t i = 0; i < order.size(); i++) {
         Function f = env[order[order.size() - i - 1]];
         nodes[i].func = f;

@@ -544,11 +544,6 @@ struct FunctionDAG {
     vector<Node> nodes;
     vector<Edge> edges;
 
-    // We're going to be querying this DAG a lot while searching for
-    // an optimal schedule, so we'll also create a variety of
-    // auxiliary data structures.
-    map<Function, Node *, Function::Compare> node_map;
-
     // Create the function DAG, and do all the dependency and cost
     // analysis. This is done once up-front before the tree search.
     FunctionDAG(const vector<Function> &outputs, const MachineParams &params, const Target &target);
