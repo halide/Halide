@@ -5,6 +5,7 @@
 
 #include "ApplySplit.h"
 #include "CodeGen_GPU_Dev.h"
+#include "CSE.h"
 #include "ExprUsesVar.h"
 #include "Func.h"
 #include "IREquality.h"
@@ -1507,7 +1508,7 @@ private:
     }
 };
 
-class ComputeLegalSchedules : public IRVisitor {
+class ComputeLegalSchedules : public IRGraphVisitor {
 public:
     struct Site {
         bool is_parallel;
@@ -1521,7 +1522,7 @@ public:
     }
 
 private:
-    using IRVisitor::visit;
+    using IRGraphVisitor::visit;
 
     vector<Site> sites;
     Function func;
@@ -1542,7 +1543,9 @@ private:
             loop_level = LoopLevel::root();
         } else {
             auto it = env.find(func);
-            internal_assert(it != env.end()) << "Unable to find Function " << func << " in env (Var = " << var << ")\n";
+            internal_assert(it != env.end())
+                << "Unable to find Function " << func
+                << " in env (Var = " << var << ")\n";
             loop_level = LoopLevel(it->second, Var(var));
         }
         // Since we are now in the lowering phase, we expect all LoopLevels to be locked;
@@ -1576,7 +1579,7 @@ private:
     }
 
     void visit(const Call *c) override {
-        IRVisitor::visit(c);
+        IRGraphVisitor::visit(c);
 
         if (c->name == func.name()) {
             register_use();
@@ -1623,14 +1626,14 @@ string schedule_to_source(const Function &f, const LoopLevel &store_at, const Lo
     return ss.str();
 }
 
-class StmtUsesFunc : public IRVisitor {
-    using IRVisitor::visit;
+class StmtUsesFunc : public IRGraphVisitor {
+    using IRGraphVisitor::visit;
     const string &func;
     void visit(const Call *op) override {
         if (op->name == func) {
             result = true;
         }
-        IRVisitor::visit(op);
+        IRGraphVisitor::visit(op);
     }
     void visit(const Variable *op) override {
         if (op->type.is_handle() &&
@@ -1638,7 +1641,7 @@ class StmtUsesFunc : public IRVisitor {
             ends_with(op->name, ".buffer")) {
             result = true;
         }
-        IRVisitor::visit(op);
+        IRGraphVisitor::visit(op);
     }
 
 public:
@@ -1648,8 +1651,8 @@ public:
     }
 };
 
-class PrintUsesOfFunc : public IRVisitor {
-    using IRVisitor::visit;
+class PrintUsesOfFunc : public IRGraphVisitor {
+    using IRGraphVisitor::visit;
 
     int indent = 1;
     string func, caller;
@@ -1663,7 +1666,7 @@ class PrintUsesOfFunc : public IRVisitor {
     void visit(const For *op) override {
         if (ends_with(op->name, Var::outermost().name()) ||
             ends_with(op->name, LoopLevel::root().lock().to_string())) {
-            IRVisitor::visit(op);
+            IRGraphVisitor::visit(op);
         } else {
 
             int old_indent = indent;
@@ -1681,7 +1684,7 @@ class PrintUsesOfFunc : public IRVisitor {
                 indent++;
             }
 
-            IRVisitor::visit(op);
+            IRGraphVisitor::visit(op);
             indent = old_indent;
         }
     }
@@ -1693,7 +1696,7 @@ class PrintUsesOfFunc : public IRVisitor {
             op->body.accept(this);
             caller = old_caller;
         } else {
-            IRVisitor::visit(op);
+            IRGraphVisitor::visit(op);
         }
     }
 
@@ -1702,7 +1705,7 @@ class PrintUsesOfFunc : public IRVisitor {
             stream << get_indent() << caller << " uses " << func << "\n";
             last_print_was_ellipsis = false;
         } else {
-            IRVisitor::visit(op);
+            IRGraphVisitor::visit(op);
         }
     }
 
@@ -1713,7 +1716,7 @@ class PrintUsesOfFunc : public IRVisitor {
             stream << get_indent() << caller << " uses " << func << "\n";
             last_print_was_ellipsis = false;
         } else {
-            IRVisitor::visit(op);
+            IRGraphVisitor::visit(op);
         }
     }
 
@@ -1891,6 +1894,8 @@ bool validate_schedule(Function f, const Stmt &s, const Target &target, bool is_
                        << " be scheduled compute_root (which is the default).\n";
         }
     }
+
+    return true;
 
     // Otherwise inspect the uses to see what's ok.
     ComputeLegalSchedules legal(f, env);
@@ -2167,6 +2172,9 @@ Stmt schedule_functions(const vector<Function> &outputs,
 
         debug(2) << s << '\n';
     }
+
+    // Inlining creates common subexpressions
+    s = common_subexpression_elimination(s);
 
     // We can remove the loop over root now
     const For *root_loop = s.as<For>();

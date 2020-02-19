@@ -2,6 +2,7 @@
 
 #include "CSE.h"
 #include "Debug.h"
+#include "IREquality.h"
 #include "IRMutator.h"
 #include "IROperator.h"
 #include "IRPrinter.h"
@@ -92,13 +93,20 @@ void validate_schedule_inlined_function(Function f) {
     }
 }
 
-class Inliner : public IRMutator {
+class Inliner : public IRGraphMutator {
     using IRMutator::visit;
 
     Function func;
 
+    std::map<Expr, Expr, IRDeepCompare> replacement_map;
+
     Expr visit(const Call *op) override {
         if (op->name == func.name()) {
+
+            auto it = replacement_map.find(Expr(op));
+            if (it != replacement_map.end()) {
+                return it->second;
+            }
 
             // Mutate the args
             vector<Expr> args(op->args.size());
@@ -121,7 +129,7 @@ class Inliner : public IRMutator {
                 }
             }
 
-            found++;
+            replacement_map[Expr(op)] = body;
 
             return body;
 
@@ -155,21 +163,7 @@ class Inliner : public IRMutator {
         }
     }
 
-    Stmt visit(const Provide *op) override {
-        ScopedValue<int> old_found(found, 0);
-        Stmt stmt = IRMutator::visit(op);
-
-        // TODO: making this > 1 should be desirable,
-        // but explodes compiletimes in some situations.
-        if (found > 0) {
-            stmt = common_subexpression_elimination(stmt);
-        }
-
-        return stmt;
-    }
-
 public:
-    int found = 0;
 
     Inliner(Function f)
         : func(f) {
@@ -187,12 +181,7 @@ Stmt inline_function(Stmt s, Function f) {
 Expr inline_function(Expr e, Function f) {
     Inliner i(f);
     e = i.mutate(e);
-    // TODO: making this > 1 should be desirable,
-    // but explodes compiletimes in some situations.
-    if (i.found > 0) {
-        e = common_subexpression_elimination(e);
-    }
-    return e;
+    return common_subexpression_elimination(e);
 }
 
 // Inline all calls to 'f' inside 'caller'

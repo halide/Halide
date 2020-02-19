@@ -143,7 +143,7 @@ Module lower(const vector<Function> &output_funcs,
 
     debug(1) << "Injecting tracing...\n";
     s = inject_tracing(s, pipeline_name, trace_pipeline, env, outputs, t);
-    debug(2) << "Lowering after injecting tracing:\n"
+    debug(1) << "Lowering after injecting tracing:\n"
              << s << '\n';
 
     debug(1) << "Adding checks for parameters\n";
@@ -208,12 +208,12 @@ Module lower(const vector<Function> &output_funcs,
     // equivalence means semantic equivalence.
     debug(1) << "Uniquifying variable names...\n";
     s = uniquify_variable_names(s);
-    debug(2) << "Lowering after uniquifying variable names:\n"
+    debug(1) << "Lowering after uniquifying variable names:\n"
              << s << "\n\n";
 
     debug(1) << "Simplifying...\n";
     s = simplify(s, false);  // Storage folding needs .loop_max symbols
-    debug(2) << "Lowering after first simplification:\n"
+    debug(1) << "Lowering after first simplification:\n"
              << s << "\n\n";
 
     debug(1) << "Performing storage folding optimization...\n";
