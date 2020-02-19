@@ -1,8 +1,8 @@
 name: Halide LLVM Builder
 on:
-  # Run every day at 1AM (...presumably US Pacific Time?)
+  # Run every day at 1AM Pacific; GitHub uses UTC for cron, so that's 9AM
   schedule:
-    - cron:  '0 1 * * *'
+    - cron:  '0 9 * * *'
   #
   # This is a webhook to allow forcing rebuilds. To use, do thisL
   #
