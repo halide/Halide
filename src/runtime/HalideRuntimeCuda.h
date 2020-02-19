@@ -1,6 +1,7 @@
 #ifndef HALIDE_HALIDERUNTIMECUDA_H
 #define HALIDE_HALIDERUNTIMECUDA_H
 
+// Don't include HalideRuntime.h if the contents of it were already pasted into a generated header above this one
 #ifndef HALIDE_HALIDERUNTIME_H
 
 #include "HalideRuntime.h"

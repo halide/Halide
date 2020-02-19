@@ -5,12 +5,14 @@
  *  Routines specific to the Halide Hexagon DMA host-side runtime.
  */
 
+// Don't include HalideRuntime.h if the contents of it were already pasted into a generated header above this one
 #ifndef HALIDE_HALIDERUNTIME_H
 
 #include "HalideRuntime.h"
 
 #endif
 
+// Don't include HalideRuntimeHexagonHost.h if the contents of it were already pasted into a generated header above this one
 #ifndef HALIDE_HALIDERUNTIMEHEXAGONHOST_H
 
 #include "HalideRuntimeHexagonHost.h"
