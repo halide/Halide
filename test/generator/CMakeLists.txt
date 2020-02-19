@@ -156,7 +156,7 @@ halide_define_aot_test(memory_profiler_mandelbrot
         HALIDE_TARGET_FEATURES profile)
 
 halide_define_aot_test(multitarget
-        HALIDE_TARGET host,host-debug
+        HALIDE_TARGET host-no_bounds_query,host
         HALIDE_TARGET_FEATURES c_plus_plus_name_mangling
         FUNCTION_NAME HalideTest::multitarget)
 
