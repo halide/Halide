@@ -250,15 +250,11 @@ void SearchSpace::generate_children(IntrusivePtr<State> state,
         {
             // 1) Inline it
             if (node->stages.size() == 1 && !node->is_output && !must_compute_root) {
-                auto child = state->make_child();
                 LoopNest *new_root = new LoopNest;
                 new_root->copy_from(*root);
                 new_root->inline_func(node);
-                child->root = new_root;
-                child->num_decisions_made++;
-                if (child->calculate_cost(dag, params, target, cost_model, stats)) {
+                if (add_child(state, new_root, accept_child)) {
                     num_children++;
-                    accept_child(std::move(child));
                 }
             }
         }
@@ -302,13 +298,7 @@ void SearchSpace::generate_children(IntrusivePtr<State> state,
             }
             new_root->store_at.insert(node);
 
-            auto child = state->make_child();
-            child->root = std::move(new_root);
-            child->num_decisions_made++;
-            if (child->calculate_cost(dag, params, target, cost_model, stats)) {
-                num_children++;
-                accept_child(std::move(child));
-            }
+            add_child(state, new_root, accept_child);
             return;
         }
 
@@ -348,12 +338,8 @@ void SearchSpace::generate_children(IntrusivePtr<State> state,
                     break;
                 }
 
-                auto child = state->make_child();
-                child->root = std::move(o.loop_nest);
-                child->num_decisions_made++;
-                if (child->calculate_cost(dag, params, target, cost_model, stats)) {
+                if (add_child(state, o.loop_nest, accept_child)) {
                     num_children++;
-                    accept_child(std::move(child));
                 }
             }
         }
@@ -361,14 +347,12 @@ void SearchSpace::generate_children(IntrusivePtr<State> state,
         // We are parallelizing the loops of the func we just injected a realization for.
 
         bool should_parallelize = false;
-        const vector<int64_t> *pure_size = nullptr;
         IntrusivePtr<const LoopNest> pure_stage;
 
         if (params.parallelism > 1) {
             for (auto &c : root->children) {
                 if (c->node == node && node->dimensions > 0) {
                     if (c->stage->index == 0) {
-                        pure_size = &(c->size);
                         pure_stage = c;
                     }
                     should_parallelize = true;
@@ -384,193 +368,81 @@ void SearchSpace::generate_children(IntrusivePtr<State> state,
             auto child = state->make_child();
             child->num_decisions_made++;
             accept_child(std::move(child));
-        } else {
-            internal_assert(pure_size);
+            return;
+        }
 
-            if (target.has_gpu_feature()) {
-                if (add_states_from_memoized_blocks(state, accept_child, node, num_children)) {
-                    return;
+        if (add_states_from_memoized_blocks(state, accept_child, node, num_children)) {
+            return;
+        }
+
+        // When GPU scheduling we approach tiling in two steps.
+        // step 1) convert (none, SIMD) loops to (parallel, serial, SIMD) loops with specialized serial sizes
+        auto parallel_tilings = generate_compute_root_serial_tilings(pure_stage, node);
+
+        internal_assert(parallel_tilings.size() > 0) << " zero parallel tilings\n";
+
+        for (auto &parallel_t: parallel_tilings) {
+            LoopNest parallel_root;
+            parallel_root.copy_from(*root);
+
+            // step 1) parallelize all loop nests for this node into (parallel, serial) with given serial tiles
+            for (auto &c : parallel_root.children) {
+                if (c->node == node) {
+                    c = c->parallelize_in_tiles(params, parallel_t, &parallel_root, target, false, true);
                 }
+            }
 
-                // When GPU scheduling we approach tiling differently and in two steps.
-                // step 1) convert (none, SIMD) loops to (parallel, serial, SIMD) loops with specialized serial sizes
-                vector<int> vec_dim_serial_sizes;
-                pure_stage->generate_vec_dim_serial_tilings(vec_dim_serial_sizes);
+            // step 2) split all parallel loops for this node into to (blocks, thread) loop
+            vector<vector<int64_t>> stage_sizes;
+            vector<vector<int>> pure_dims;
+            vector<int> vectorized_indices;
+            parallel_root.get_stage_sizes(node, stage_sizes, pure_dims, vectorized_indices);
+            // at root level sibling thread counts are in separate blocks, extents are irrelevant
+            vector<int64_t> max_size((int)(stage_sizes[0].size()), 1);
 
-                auto parallel_tilings = generate_serial_tilings(*pure_size, node->dimensions-1, node->dimensions-1, pure_stage->vectorized_loop_index, vec_dim_serial_sizes, false, true);
+            auto block_tilings = generate_gpu_tilings(stage_sizes, pure_dims, max_size, node->dimensions-1, vectorized_indices, false);
 
-                internal_assert(parallel_tilings.size() > 0) << " zero parallel tilings\n";
-
-                for (auto &parallel_t: parallel_tilings) {
-                    LoopNest *parallel_root = new LoopNest;
-                    parallel_root->copy_from(*root);
-
-                    // step 1) parallelize all loop nests for this node into (parallel, serial) with given serial tiles
-                    for (auto &c : parallel_root->children) {
-                        if (c->node == node) { // c is a reference to a IntrusivePtr<const LoopNest>
-                            c = c->parallelize_in_tiles(params, parallel_t, parallel_root, target, false, true);
-                        }
+            // If no options, create a thread tiling as large as possible with block size (1,1,1).
+            // This can happen if the loops are too small to generate desired gpu tiles.
+            if (block_tilings.empty()) {
+                LoopNest *new_root = new LoopNest;
+                new_root->copy_from(parallel_root);
+                for (auto &c : new_root->children) {
+                    if (c->node == node) {
+                        vector<int64_t> tiling((int)(c->size.size()), 1);
+                        c = c->parallelize_in_tiles(params, tiling, new_root, target, false, true);
                     }
-                    // step 2) split all parallel loops for this node into to (blocks, thread) loop
-                    //const vector<int64_t> *parallel_size = nullptr;
-                    //int vectorized_loop_i = -1;
-
-                    vector<vector<int64_t>> stage_sizes;
-                    vector<vector<int>> pure_dims;
-                    vector<int> vectorized_indices;
-                    parallel_root->get_stage_sizes(node, stage_sizes, pure_dims, vectorized_indices);
-                    // at root level sibling thread counts are in separate blocks, extents are irrelevant
-                    vector<int64_t> max_size((int)(stage_sizes[0].size()), 1);
-
-                    auto block_tilings = generate_gpu_tilings(stage_sizes, pure_dims, max_size, node->dimensions-1, vectorized_indices, false);
-
-                    // If no options, create a thread tiling as large as possible with block size (1,1,1).
-                    // This can happen if the loops are too small to generate desired gpu tiles.
-                    if (block_tilings.empty()) {
-                        auto child = state->make_child();
-                        LoopNest *new_root = new LoopNest;
-                        new_root->copy_from(*parallel_root);
-                        for (auto &c : new_root->children) {
-                            if (c->node == node) {
-                                vector<int64_t> tiling((int)(c->size.size()), 1);
-                                c = c->parallelize_in_tiles(params, tiling, new_root, target, false, true);
-                            }
-                        }
-                        child->root = new_root;
-                        child->num_decisions_made++;
-                        if (child->calculate_cost(dag, params, target, cost_model, stats)) {
-                            num_children++;
-                            accept_child(std::move(child));
-                            memoize_blocks(node, new_root);
-                        }
-                        return;
-                    }
-
-                    auto t1 = std::chrono::high_resolution_clock::now();
-                    auto options = filter_parallel_tile_options(state, node, block_tilings, stage_sizes[0]);
-                    stats.filter_parallel_tiles_time += std::chrono::high_resolution_clock::now() - t1;
-
-                    for (const auto &o : options) {
-                        if (num_children >= 1 && o.idle_core_wastage > 1.2) {
-                            // We have considered several options, and the
-                            // remaining ones leave lots of cores idle.
-                            break;
-                        }
-
-                        auto child = state->make_child();
-                        LoopNest *new_root = new LoopNest;
-                        new_root->copy_from(*parallel_root); // copies parallel_root's info and intrusive pointers for parallel_root's children
-                        for (auto &c : new_root->children) {
-                            if (c->node == node) {
-                                c = c->parallelize_in_tiles(params, o.inner_tiling, new_root, target, true, false);
-                            }
-                        }
-                        child->root = new_root;
-                        child->num_decisions_made++;
-                        if (child->calculate_cost(dag, params, target, cost_model, stats)) {
-                            num_children++;
-                            accept_child(std::move(child));
-                            memoize_blocks(node, new_root);
-                        }
-
-                        if (!use_adjusted_tilings()) {
-                            continue;
-                        }
-
-                        // make another child where tiling is adjusted in case it doesn't evenly divide
-                        auto adjusted_child = state->make_child();
-                        LoopNest *new_adjusted_root = new LoopNest;
-                        new_adjusted_root->copy_from(*parallel_root); // copies parallel_root's info and intrusive pointers for parallel_root's children
-                        bool create_child = false;
-                        for (auto &c : new_adjusted_root->children) {
-                            if (c->node == node) {
-
-                                // If the tiling evenly divides the loop's
-                                // extents, then this child will be
-                                // identical to the one created above. Only
-                                // create the child if it will produce a
-                                // different state
-                                int i = 0;
-                                for (auto b : o.inner_tiling) {
-                                    if (c->size[i++] % b != 0) {
-                                        create_child = true;
-                                    }
-                                }
-                                c = c->parallelize_in_tiles(params, o.inner_tiling, new_adjusted_root, target, true, true);
-                            }
-                        }
-                        adjusted_child->root = new_adjusted_root;
-                        adjusted_child->num_decisions_made++;
-                        if (create_child && adjusted_child->calculate_cost(dag, params, target, cost_model, stats)) {
-                            num_children++;
-                            accept_child(std::move(adjusted_child));
-                        }
-                    }
-                    delete parallel_root;
                 }
-            } else { // scheduling for CPU, just do regular tilings
-                // Deciding on parallel task size/shape.
-                auto tilings = generate_tilings(*pure_size, node->dimensions - 1, 2, true, target);
-                // We could just parallelize the outer loop entirely
-                std::vector<int64_t> ones;
-                ones.resize(pure_size->size(), 1);
-                tilings.emplace_back(std::move(ones));
-
-                vector<ParallelTileOption> options = filter_parallel_tile_options(state, node, tilings, *pure_size);
-
-                // If none of the options were acceptable, don't
-                // parallelize. This tends to happen for things like
-                // compute_root color matrices.
-                if (options.empty()) {
+                if (add_child(state, new_root, accept_child)) {
                     num_children++;
-                    auto child = state->make_child();
-                    child->num_decisions_made++;
-                    accept_child(std::move(child));
-                    return;
+                    memoize_blocks(node, new_root);
+                }
+                internal_assert(false) << "block tilings empty";
+                return;
+            }
+
+            auto t1 = std::chrono::high_resolution_clock::now();
+            auto options = filter_parallel_tile_options(state, node, block_tilings, stage_sizes[0]);
+            stats.filter_parallel_tiles_time += std::chrono::high_resolution_clock::now() - t1;
+
+            for (const auto &o : options) {
+                if (num_children >= 1 && o.idle_core_wastage > 1.2) {
+                    // We have considered several options, and the
+                    // remaining ones leave lots of cores idle.
+                    break;
                 }
 
-                for (const auto &o : options) {
-                    if (num_children >= 1 && (o.idle_core_wastage > 1.2 || !may_subtile())) {
-                        // We have considered several options, and the
-                        // remaining ones leave lots of cores idle.
-                        break;
+                LoopNest *new_root = new LoopNest;
+                new_root->copy_from(parallel_root);
+                for (auto &c : new_root->children) {
+                    if (c->node == node) {
+                        c = c->parallelize_in_tiles(params, o.inner_tiling, new_root, target, true, false);
                     }
+                }
 
-                    auto child = state->make_child();
-                    LoopNest *new_root = new LoopNest;
-                    new_root->copy_from(*root);
-                    for (auto &c : new_root->children) {
-                        if (c->node == node) {
-                            if (may_subtile()) {
-                                c = c->parallelize_in_tiles(params, o.outer_tiling, new_root, target, false, true);
-                            } else {
-                                // We're emulating the old
-                                // autoscheduler for an ablation, so
-                                // emulate its parallelism strategy:
-                                // just keep parallelizing outer loops
-                                // until enough are parallel.
-                                vector<int64_t> tiling = c->size;
-                                int64_t total = 1;
-                                for (size_t i = c->size.size(); i > 0; i--) {
-                                    if (!c->stage->loop[i - 1].pure || total >= params.parallelism) {
-                                        tiling[i - 1] = 1;
-                                    }
-                                    while (tiling[i - 1] > 1 &&
-                                           total * tiling[i - 1] > params.parallelism * 8) {
-                                        tiling[i - 1] /= 2;
-                                    }
-                                    total *= tiling[i - 1];
-                                }
-                                c = c->parallelize_in_tiles(params, tiling, new_root, target, false, true);
-                            }
-                        }
-                    }
-                    child->root = new_root;
-                    child->num_decisions_made++;
-                    if (child->calculate_cost(dag, params, target, cost_model, stats)) {
-                        num_children++;
-                        accept_child(std::move(child));
-                    }
+                if (add_child(state, new_root, accept_child)) {
+                    num_children++;
+                    memoize_blocks(node, new_root);
                 }
             }
         }
@@ -647,6 +519,32 @@ void SearchSpace::freeze_lowest_cost_stages(const IntrusivePtr<State> best) {
             std::cerr << "Freezing as compute_root: " << c->node->func.name() << "\n";
         }
     }
+}
+
+vector<vector<int64_t>> SearchSpace::generate_compute_root_serial_tilings(const IntrusivePtr<const LoopNest>& pure_stage, const FunctionDAG::Node *node) const {
+    std::vector<int> vec_dim_serial_sizes;
+    pure_stage->generate_vec_dim_serial_tilings(vec_dim_serial_sizes);
+
+    return generate_serial_tilings(pure_stage->size,
+                                   node->dimensions - 1,
+                                   node->dimensions - 1,
+                                   pure_stage->vectorized_loop_index,
+                                   vec_dim_serial_sizes,
+                                   false,
+                                   true);
+}
+
+bool SearchSpace::add_child(const IntrusivePtr<State>& state,
+                            const IntrusivePtr<const LoopNest>& new_root,
+                            std::function<void(IntrusivePtr<State> &&)> &accept_child) const {
+    auto child = state->make_child();
+    child->root = std::move(new_root);
+    child->num_decisions_made++;
+    if (child->calculate_cost(dag, params, target, cost_model, stats)) {
+        accept_child(std::move(child));
+        return true;
+    }
+    return false;
 }
 
 }  // namespace Autoscheduler

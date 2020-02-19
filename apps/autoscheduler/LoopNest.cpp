@@ -472,7 +472,7 @@ vector<vector<int64_t>> generate_tilings(const vector<int64_t> &s, int d, int fa
 void LoopNest::get_stage_sizes(const FunctionDAG::Node *f,
                                vector<vector<int64_t>> &stage_sizes,
                                vector<vector<int>> &pure_dims,
-                               vector<int> &vectorized_indices) {
+                               vector<int> &vectorized_indices) const {
     stage_sizes.resize(f->stages.size());
     pure_dims.resize(f->stages.size());
     vectorized_indices.resize(f->stages.size());

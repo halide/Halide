@@ -280,9 +280,9 @@ struct LoopNest {
     // given a newly inserted node f into this LoopNest, gets the size of
     // all of f's stages and their pure_dim indices
     void get_stage_sizes(const FunctionDAG::Node *f,
-        vector<vector<int64_t>> &stage_sizes,
-        vector<vector<int>> &pure_dims,
-        vector<int> &vectorized_indices);
+                         vector<vector<int64_t>> &stage_sizes,
+                         vector<vector<int>> &pure_dims,
+                         vector<int> &vectorized_indices) const;
 
     // given the loop nest of a stage to parallelize at root, figure out if using odd tile sizes
     // for the vectorized dimension will allow the resulting thread tiles to be multiples of 32

@@ -77,6 +77,12 @@ struct SearchSpace {
                            bool is_pre_pass);
 
     void freeze_lowest_cost_stages(const IntrusivePtr<State> best);
+
+    vector<vector<int64_t>> generate_compute_root_serial_tilings(const IntrusivePtr<const LoopNest>& pure_stage, const FunctionDAG::Node *node) const;
+
+    bool add_child(const IntrusivePtr<State>& state,
+                   const IntrusivePtr<const LoopNest>& new_root,
+                   std::function<void(IntrusivePtr<State> &&)> &accept_child) const;
 };
 
 
