@@ -6,10 +6,10 @@ on:
   #
   # This is a webhook to allow forcing rebuilds. To use, do thisL
   #
-  #    curl -X POST https://api.github.com/repos/halide/Halide/dispatches \
-  #       -H 'Accept: application/vnd.github.everest-preview+json' \
-  #       -H 'Authorization: token AUTH_TOKEN' \
-  #       --data '{"event_type": "halide_llvm_builder_force_rebuild:GLOB"}'
+  #    echo curl -X POST https://api.github.com/repos/halide/Halide/dispatches \
+  #       -H "Accept: application/vnd.github.everest-preview+json" \
+  #       -H "Authorization: token ${AUTH_TOKEN}" \
+  #       --data "{'event_type': 'halide_llvm_builder_force_rebuild:${GLOB}'}"
   #
   #    ...where GLOB is a glob pattern for the LLVM versions to rebuild
   #    (e.g., * = all, *osx* is all osx builds, etc) matching the job name
