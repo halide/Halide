@@ -150,7 +150,7 @@ jobs:
         NEED_REBUILD=0
 
         echo "github.event.action is ${{github.event.action}}"
-        if [[ ${{github.event.action}} == halide_llvm_builder_force_rebuild* ]]; then
+        if [[ "${{github.event.action}}" == halide_llvm_builder_force_rebuild* ]]; then
           # extract the second half; it is expected to be a glob pattern that is compared
           # against LLVM_ID (so we can rebuild some or all), thus halide_llvm_builder_force_rebuild:*
           # should rebuild all, halide_llvm_builder_force_rebuild:*osx* would rebuild all osx, etc
