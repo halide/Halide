@@ -1,6 +1,5 @@
 name: Halide LLVM Builder
 on:
-  push:
   # Run every day at 1AM Pacific; GitHub uses UTC for cron, so that's 9AM
   schedule:
     - cron:  '0 9 * * *'
