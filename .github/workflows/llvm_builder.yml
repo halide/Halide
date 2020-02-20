@@ -4,7 +4,7 @@ on:
   schedule:
     - cron:  '0 9 * * *'
   #
-  # This is a webhook to allow forcing rebuilds. To use, do thisL
+  # This is a webhook to allow forcing rebuilds. To use, do this:
   #
   #    echo curl -X POST https://api.github.com/repos/halide/Halide/dispatches \
   #       -H "Accept: application/vnd.github.everest-preview+json" \
@@ -21,19 +21,19 @@ on:
 
 jobs:
   build_llvm:
-    name: llvm-${{matrix.llvm_version}}-${{matrix.arch}}-${{matrix.bits}}-${{matrix.halide_os}}
-    runs-on: ${{matrix.os}}
+    name: llvm-${{matrix.llvm_version}}-${{matrix.target_arch}}-${{matrix.target_bits}}-${{matrix.target_os}}
+    runs-on: ${{matrix.host_os}}
     env:
       CC: ${{matrix.cc}}
       CXX: ${{matrix.cxx}}
-      LD: ld
+      LD: ${{matrix.ld}}
 
     strategy:
       fail-fast: false  # Keep running even if one job fails
       matrix:
-        arch: [x86]
-        bits: [32, 64]
-        os: [windows-2019, ubuntu-18.04, macos-10.15]
+        target_arch: [x86, arm]
+        target_bits: [32, 64]
+        target_os: [windows, linux, osx]
         llvm_version: [8, 9, 10, 11]
         include:
           - llvm_version: 8
@@ -45,61 +45,82 @@ jobs:
           - llvm_version: 11
             llvm_branch: master
 
-          - os: macos-10.15
+          # map things to the necessary host cross-compiler host
+          - target_os: osx
+            host_os: macos-10.15
             cc: clang
             cxx: clang++
-            halide_os: osx
+            ld: ld
 
-          - os: ubuntu-18.04
-            cc: gcc
-            cxx: g++
-            halide_os: linux
+          - target_os: linux
+            host_os: ubuntu-18.04
+            # GHA has clang 6, 8, and 9 and GCC 7.4, 8.3, 9.2 preinstalled.
+            # We will explicitly choose gcc 7.x (even though the default is gcc 7.4)
+            # To ensure we match gcc versions with the arm crosscompiler.
+            cc: gcc-7
+            cxx: g++-7
+            ld: ld
 
-          - os: windows-2019
+          - target_os: windows
+            host_os: windows-2019
             cc: cl.exe
             cxx: cl.exe
-            halide_os: windows
+            ld: ld.exe
 
         exclude:
           # We don't support 32-bit macos builds
-          - os: macos-10.15
-            bits: 32
+          - target_os: osx
+            target_bits: 32
+          # arm is only supported for target_os == linux, but GHA doesn't
+          # allow adding new entries to the matrix (only excluding them)
+          - target_os: windows
+            target_arch: arm
+          - target_os: osx
+            target_arch: arm
 
     steps:
-
-    - name: Configure Ubuntu
-      if: startsWith(matrix.os, 'ubuntu')
+    - name: Configure Ubuntu Host
+      if: startsWith(matrix.host_os, 'ubuntu')
+      shell: bash
       run: |
         sudo apt-get update
         sudo apt-get install ninja-build
 
-    - name: Configure Ubuntu-32
-      if: startsWith(matrix.os, 'ubuntu') && matrix.bits == 32
-      shell: bash
-      run: |
-        sudo apt-get update
-        sudo apt-get install gcc-multilib g++-multilib
+        if [[ ${{matrix.target_arch}} == x86 && \
+              ${{matrix.target_os}} == linux && \
+              ${{matrix.target_bits}} == 32 ]]; then
+          sudo apt-get install ${{matrix.cc}}-multilib ${{matrix.cxx}}-multilib
+        fi
 
-    - name: Configure OSX
-      if: startsWith(matrix.os, 'macos')
+        if [[ ${{matrix.target_arch}} == arm ]]; then
+          if [[ ${{matrix.target_bits}} == 32 ]]; then
+            sudo apt-get install ${{matrix.cc}}-arm-linux-gnueabihf ${{matrix.cxx}}-arm-linux-gnueabihf
+          else
+            sudo apt-get install ${{matrix.cc}}-aarch64-linux-gnu ${{matrix.cxx}}-aarch64-linux-gnu
+          fi
+        fi
+
+    - name: Configure MacOS Host
+      if: startsWith(matrix.host_os, 'macos')
+      shell: bash
       run: |
         brew install ninja
 
-    - name: Configure Windows
-      if: startsWith(matrix.os, 'windows')
+    - name: Configure Windows Host
+      if: startsWith(matrix.host_os, 'windows')
       run: |
         # We don't use ninja on Windows (yet)
         # choco install ninja
 
-    - name: Build llvm-${{matrix.llvm_version}}-${{matrix.arch}}-${{matrix.bits}}-${{matrix.halide_os}}
+    - name: Build llvm-${{matrix.llvm_version}}-${{matrix.target_arch}}-${{matrix.target_bits}}-${{matrix.target_os}}
       shell: bash
       run: |
-        set -eux
+        set -eu
 
         # Demangle Windows names, to simplify CMake stuff later
         _ROOT=${GITHUB_WORKSPACE//\\//}
 
-        LLVM_ID="llvm-${{matrix.llvm_version}}-${{matrix.arch}}-${{matrix.bits}}-${{matrix.halide_os}}"
+        LLVM_ID="llvm-${{matrix.llvm_version}}-${{matrix.target_arch}}-${{matrix.target_bits}}-${{matrix.target_os}}"
         LLVM_SOURCE_DIR="${_ROOT}/${LLVM_ID}-source"
         LLVM_BUILD_DIR="${_ROOT}/${LLVM_ID}-build"
         LLVM_INSTALL_DIR="${_ROOT}/${LLVM_ID}-install"
@@ -107,23 +128,22 @@ jobs:
         LLVM_INSTALL_URL="https://buildbot.halide-lang.org/llvm/${LLVM_ID}.tgz"
         LLVM_COMMIT_HASH_FILE=".halide_builder_llvm_commit"
 
-        TAR_FLAGS=
-        if [[ ${{matrix.os}} == windows* ]]; then
+        TAR_CMD="tar"
+        if [[ ${{matrix.host_os}} == windows* ]]; then
           # Must use --force-local to avoid tar misinterpreting the : in
           # a Windows pathname as a hostname.
-          TAR_FLAGS=" --force-local "
+          TAR_CMD="tar --force-local"
         fi
 
         # get the hash of the last llvm we built
         # by downloading the existing .tgz (if any)
         # and extracting the value from .halide_builder_llvm_commit.
         # (This isn't very efficient, but that's ok.)
-
         set +e
         LLVM_OLD_COMMIT=bogus
         curl --fail --user llvm_user:${{secrets.LLVM_USER_PASSWORD}} --output ${_ROOT}/old_llvm.tgz ${LLVM_INSTALL_URL}
         if [ $? -eq 0 ]; then
-          LLVM_OLD_COMMIT=`tar ${TAR_FLAGS} -O -xf ${_ROOT}/old_llvm.tgz ./${LLVM_COMMIT_HASH_FILE}`
+          LLVM_OLD_COMMIT=`tar ${TAR_CMD} -O -xf ${_ROOT}/old_llvm.tgz ./${LLVM_COMMIT_HASH_FILE}`
           if [ $? -ne 0 ]; then
             LLVM_OLD_COMMIT=bogus_2
           fi
@@ -171,48 +191,99 @@ jobs:
         if ((NEED_REBUILD)); then
           echo "LLVM is being rebuilt!"
 
-          LLVM_BUILD_32_BITS=$([ ${{matrix.bits}} == 32 ] && echo "ON" || echo "OFF")
+          LLVM_BUILD_32_BITS=$([ ${{matrix.target_bits}} == 32 ] && echo "ON" || echo "OFF")
 
           CMAKE_GEN="Ninja"
           BUILD_TYPE=Release
-          EXTRA_DEFS=
+          EXTRA_CMAKE_FLAGS=
           PARALLEL_JOBS=4  # GHA VMs have 2 cores
 
-          if [[ ${{matrix.os}} == windows* ]]; then
-            # TODO: can we use Ninja with MSVC? It might be faster.
-            if [[ ${{matrix.bits}} == 64 ]]; then
-              EXTRA_DEFS=" -T host=x64 -A x64 "
-            else
-              EXTRA_DEFS=" -T host=x64 "
-            fi
+          if [[ ${{matrix.host_os}} == windows* ]]; then
             CMAKE_GEN="Visual Studio 16"
+
+            EXTRA_CMAKE_FLAGS="-T host=x64"
+            if [[ ${{matrix.target_bits}} == 64 ]]; then
+              EXTRA_CMAKE_FLAGS="${EXTRA_CMAKE_FLAGS} -A x64"
+            fi
+
+            # TODO: LLVM_TEMPORARILY_ALLOW_OLD_TOOLCHAIN is temporary,
+            # until MSVC 16.5 is available on the GHA VMs
+            EXTRA_CMAKE_FLAGS="${EXTRA_CMAKE_FLAGS} \
+                               -D LLVM_TEMPORARILY_ALLOW_OLD_TOOLCHAIN=ON"
           fi
 
-          if [[ ${{matrix.os}} == ubuntu* && ${{matrix.bits}} == 32 ]]; then
-            EXTRA_DEFS="-D CMAKE_FIND_ROOT_PATH=/usr/lib/i386-linux-gnu -D CMAKE_FIND_ROOT_PATH_MODE_LIBRARY=ONLY"
-            export CC="${CC} -m32 "
-            export CXX="${CXX} -m32 "
-            export LD="${LD} -melf_i386 "
+          if [[ ${{matrix.target_arch}} == x86 && \
+                ${{matrix.target_os}} == linux && \
+                ${{matrix.target_bits}} == 32 ]]; then
+            # Assume host_os is ubuntu*
+            EXTRA_CMAKE_FLAGS="${EXTRA_CMAKE_FLAGS} \
+                               -D CMAKE_FIND_ROOT_PATH=/usr/lib/i386-linux-gnu \
+                               -D CMAKE_FIND_ROOT_PATH_MODE_LIBRARY=ONLY"
+            export CC="${CC} -m32"
+            export CXX="${CXX} -m32"
+            export LD="${LD} -melf_i386"
           fi
 
-          if [[ ${{matrix.os}} == macos* ]]; then
-            EXTRA_DEFS="-D LLVM_ENABLE_SUPPORT_XCODE_SIGNPOSTS=FORCE_OFF"
+          if [[ ${{matrix.target_os}} == macos* ]]; then
+            # LLVM_ENABLE_SUPPORT_XCODE_SIGNPOSTS=OFF is needed for compatibility with older XCode versions
+            EXTRA_CMAKE_FLAGS="${EXTRA_CMAKE_FLAGS} \
+                               -D LLVM_ENABLE_SUPPORT_XCODE_SIGNPOSTS=FORCE_OFF"
           fi
 
-          # TODO: LLVM_TEMPORARILY_ALLOW_OLD_TOOLCHAIN is temporary,
-          # until MSVC 16.5 is available
+          if [[ ${{matrix.target_arch}} == arm ]]; then
+            # (Assume the host is Ubuntu)
+            #
+            # To cross-compile, we need llvm-tblgen and clang-tblgen in forms that will
+            # run on the host machine. We don't try to pull them from an install because
+            # (1) mixing tblgen builds between versions can be problematic, and
+            # (2) clang-tblgen isn't part of the install package (yes, this makes crosscompiling
+            # more painful than it needs to be). We're just build the two tools we need here;
+            # we'll only use these for bootstrapping, then discard them.
+            #
+            LLVM_TBLGEN_BUILD_DIR="${_ROOT}/${LLVM_ID}-tblgen"
+            cmake \
+                -D CMAKE_BUILD_TYPE=Release \
+                -D LLVM_ENABLE_ASSERTIONS=ON \
+                -D LLVM_ENABLE_PROJECTS="clang" \
+                -D LLVM_ENABLE_RTTI=OFF \
+                -D LLVM_ENABLE_TERMINFO=OFF \
+                -G Ninja \
+                -B "${LLVM_TBLGEN_BUILD_DIR}" \
+                -S "${LLVM_SOURCE_DIR}/llvm"
+            ninja -C ${LLVM_TBLGEN_BUILD_DIR} llvm-tblgen clang-tblgen
+
+            EXTRA_CMAKE_FLAGS="\
+              -D CMAKE_CROSSCOMPILING=True \
+              -D LLVM_TABLEGEN=${LLVM_TBLGEN_BUILD_DIR}/bin/llvm-tblgen \
+              -D CLANG_TABLEGEN=${LLVM_TBLGEN_BUILD_DIR}/bin/clang-tblgen"
+
+            if [[ ${{matrix.target_bits}} == 32 ]]; then
+              export CC="arm-linux-gnueabihf-${{matrix.cc}}"
+              export CXX="arm-linux-gnueabihf-${{matrix.cxx}}"
+              EXTRA_CMAKE_FLAGS="${EXTRA_CMAKE_FLAGS} \
+                                -D LLVM_TARGET_ARCH=ARM \
+                                -D LLVM_DEFAULT_TARGET_TRIPLE=arm-linux-gnueabihf"
+            else
+              export CC="aarch64-linux-gnu-${{matrix.cc}}"
+              export CXX="aarch64-linux-gnu-${{matrix.cxx}}"
+              EXTRA_CMAKE_FLAGS="${EXTRA_CMAKE_FLAGS} \
+                                 -D LLVM_TARGET_ARCH=AArch64 \
+                                 -D LLVM_DEFAULT_TARGET_TRIPLE=aarch64-linux-gnu"
+            fi
+          fi
+
           cmake \
             -D CMAKE_BUILD_TYPE=${BUILD_TYPE} \
             -D CMAKE_INSTALL_PREFIX="${LLVM_INSTALL_DIR}" \
             -D LLVM_BUILD_32_BITS=${LLVM_BUILD_32_BITS} \
             -D LLVM_ENABLE_ASSERTIONS=ON \
+            -D LLVM_ENABLE_LIBXML2=OFF \
             -D LLVM_ENABLE_PROJECTS="clang;lld" \
             -D LLVM_ENABLE_RTTI=ON \
             -D LLVM_ENABLE_TERMINFO=OFF \
             -D LLVM_TARGETS_TO_BUILD="X86;ARM;NVPTX;AArch64;Mips;PowerPC;Hexagon;WebAssembly" \
-            -D LLVM_TEMPORARILY_ALLOW_OLD_TOOLCHAIN=ON \
             -G "${CMAKE_GEN}" \
-            ${EXTRA_DEFS} \
+            ${EXTRA_CMAKE_FLAGS} \
             -B "${LLVM_BUILD_DIR}" \
             -S "${LLVM_SOURCE_DIR}/llvm"
 
@@ -228,7 +299,7 @@ jobs:
           echo ${LLVM_NEW_COMMIT} > ${LLVM_INSTALL_DIR}/${LLVM_COMMIT_HASH_FILE}
 
           cd ${LLVM_INSTALL_DIR}
-          tar ${TAR_FLAGS} -czf ${LLVM_INSTALL_TGZ} .
+          ${TAR_CMD} -czf ${LLVM_INSTALL_TGZ} .
 
           curl \
             --upload-file ${LLVM_INSTALL_TGZ} \
@@ -236,4 +307,3 @@ jobs:
             ${LLVM_INSTALL_URL}
 
         fi
-
