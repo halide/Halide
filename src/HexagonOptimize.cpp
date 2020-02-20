@@ -1078,24 +1078,6 @@ private:
             // that they generate.
             internal_assert(op->args.size() == 3);
             return mutate(lower_lerp(op->args[0], op->args[1], op->args[2]));
-        } else if (op->is_intrinsic(Call::cast_mask)) {
-            internal_assert(op->args.size() == 1);
-            Type src_type = op->args[0].type();
-            Type dst_type = op->type;
-            if (dst_type.bits() < src_type.bits()) {
-                // For narrowing, we can truncate
-                return mutate(Cast::make(dst_type, op->args[0]));
-            } else {
-                // Hexagon masks only use the bottom bit in each byte,
-                // so duplicate each lane until we're wide enough.
-                Expr e = op->args[0];
-                while (src_type.bits() < dst_type.bits()) {
-                    e = Shuffle::make_interleave({e, e});
-                    src_type = src_type.with_bits(src_type.bits() * 2);
-                    e = reinterpret(src_type, e);
-                }
-                return mutate(e);
-            }
         } else {
             return IRMutator::visit(op);
         }
@@ -1120,10 +1102,6 @@ class EliminateInterleaves : public IRMutator {
 
     // Alignment analyzer for loads and stores
     HexagonAlignmentAnalyzer alignment_analyzer;
-
-    // We can't interleave booleans, so we handle them specially.
-    bool in_bool_to_mask = false;
-    bool interleave_mask = false;
 
     // Check if x is an expression that is either an interleave, or
     // transitively is an interleave.
@@ -1226,12 +1204,7 @@ class EliminateInterleaves : public IRMutator {
             a = remove_interleave(a);
             b = remove_interleave(b);
             expr = T::make(a, b);
-            if (expr.type().bits() == 1) {
-                internal_assert(!interleave_mask);
-                interleave_mask = true;
-            } else {
-                expr = native_interleave(expr);
-            }
+            expr = native_interleave(expr);
         } else if (!a.same_as(op->a) || !b.same_as(op->b)) {
             expr = T::make(a, b);
         } else {
@@ -1280,32 +1253,14 @@ class EliminateInterleaves : public IRMutator {
         return visit_binary(op);
     }
 
-    // These next 3 nodes should not exist if we're vectorized, they
-    // should have been replaced with bitwise operations.
-    Expr visit(const And *op) override {
-        internal_assert(op->type.is_scalar());
-        return IRMutator::visit(op);
-    }
-    Expr visit(const Or *op) override {
-        internal_assert(op->type.is_scalar());
-        return IRMutator::visit(op);
-    }
-    Expr visit(const Not *op) override {
-        internal_assert(op->type.is_scalar());
-        return IRMutator::visit(op);
-    }
-
     Expr visit(const Select *op) override {
         Expr true_value = mutate(op->true_value);
         Expr false_value = mutate(op->false_value);
-
-        internal_assert(op->condition.type().is_scalar());
-
         Expr cond = mutate(op->condition);
 
         // The condition isn't a vector, so we can just check if we
         // should move an interleave from the true/false values.
-        if (yields_removable_interleave({true_value, false_value})) {
+        if (cond.type().is_scalar() && yields_removable_interleave({true_value, false_value})) {
             true_value = remove_interleave(true_value);
             false_value = remove_interleave(false_value);
             return native_interleave(Select::make(cond, true_value, false_value));
@@ -1440,8 +1395,7 @@ class EliminateInterleaves : public IRMutator {
             Call::get_intrinsic_name(Call::shift_left),
             Call::get_intrinsic_name(Call::shift_right),
             Call::get_intrinsic_name(Call::abs),
-            Call::get_intrinsic_name(Call::absd),
-            Call::get_intrinsic_name(Call::select_mask)};
+            Call::get_intrinsic_name(Call::absd)};
         if (interleavable.count(op->name) != 0) return true;
 
         // ...these calls cannot. Furthermore, these calls have the
@@ -1474,28 +1428,7 @@ class EliminateInterleaves : public IRMutator {
         return true;
     }
 
-    Expr visit_bool_to_mask(const Call *op) {
-        Expr expr;
-        ScopedValue<bool> old_in_bool_to_mask(in_bool_to_mask, true);
-
-        Expr arg = mutate(op->args[0]);
-        if (!arg.same_as(op->args[0]) || interleave_mask) {
-            expr = Call::make(op->type, Call::bool_to_mask, {arg}, Call::PureIntrinsic);
-            if (interleave_mask) {
-                expr = native_interleave(expr);
-                interleave_mask = false;
-            }
-        } else {
-            expr = op;
-        }
-        return expr;
-    }
-
     Expr visit(const Call *op) override {
-        if (op->is_intrinsic(Call::bool_to_mask)) {
-            return visit_bool_to_mask(op);
-        }
-
         vector<Expr> args(op->args);
 
         // mutate all the args.

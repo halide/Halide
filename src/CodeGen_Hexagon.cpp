@@ -314,11 +314,6 @@ void CodeGen_Hexagon::compile_func(const LoweredFunc &f,
     debug(2) << "Lowering after forwarding stores:\n"
              << body << "\n\n";
 
-    // We can't deal with bool vectors, convert them to integer vectors.
-    debug(1) << "Eliminating boolean vectors from Hexagon code...\n";
-    body = eliminate_bool_vectors(body);
-    debug(2) << "Lowering after eliminating boolean vectors: " << body << "\n\n";
-
     // Optimize the IR for Hexagon.
     debug(1) << "Optimizing Hexagon instructions...\n";
     body = optimize_hexagon_instructions(body, target);
@@ -417,6 +412,13 @@ halide_type_t i32v2 = i32v1.with_lanes(i32v1.lanes * 2);
 halide_type_t u8v2 = u8v1.with_lanes(u8v1.lanes * 2);
 halide_type_t u16v2 = u16v1.with_lanes(u16v1.lanes * 2);
 halide_type_t u32v2 = u32v1.with_lanes(u32v1.lanes * 2);
+
+halide_type_t i1 = halide_type_t(halide_type_int, 1);
+halide_type_t i2 = halide_type_t(halide_type_int, 2);
+halide_type_t i4 = halide_type_t(halide_type_int, 4);
+halide_type_t i1v1 = i1.with_lanes(kOneX / 8);
+halide_type_t i2v1 = i2.with_lanes(kOneX / 16);
+halide_type_t i4v1 = i4.with_lanes(kOneX / 32);
 
 static const HvxIntrinsic intrinsic_wrappers[] = {
     // Zero/sign extension:
@@ -991,45 +993,45 @@ static const HvxIntrinsic intrinsic_wrappers[] = {
     {MAKE_ID_PAIR(Intrinsic::hexagon_V6_vmux),
      i8v1,
      "mux.vb.vb",
-     {i8v1, i8v1, i8v1}},
+     {i1v1, i8v1, i8v1}},
     {MAKE_ID_PAIR(Intrinsic::hexagon_V6_vmux),
      i16v1,
      "mux.vh.vh",
-     {i16v1, i16v1, i16v1}},
+     {i2v1, i16v1, i16v1}},
     {MAKE_ID_PAIR(Intrinsic::hexagon_V6_vmux),
      i32v1,
      "mux.vw.vw",
-     {i32v1, i32v1, i32v1}},
+     {i4v1, i32v1, i32v1}},
 
-    {MAKE_ID_PAIR(Intrinsic::hexagon_V6_veqb), i8v1, "eq.vb.vb", {i8v1, i8v1}},
+    {MAKE_ID_PAIR(Intrinsic::hexagon_V6_veqb), i1v1, "eq.vb.vb", {i8v1, i8v1}},
     {MAKE_ID_PAIR(Intrinsic::hexagon_V6_veqh),
-     i16v1,
+     i2v1,
      "eq.vh.vh",
      {i16v1, i16v1}},
     {MAKE_ID_PAIR(Intrinsic::hexagon_V6_veqw),
-     i32v1,
+     i4v1,
      "eq.vw.vw",
      {i32v1, i32v1}},
 
     {MAKE_ID_PAIR(Intrinsic::hexagon_V6_vgtub),
-     i8v1,
+     i1v1,
      "gt.vub.vub",
      {u8v1, u8v1}},
     {MAKE_ID_PAIR(Intrinsic::hexagon_V6_vgtuh),
-     i16v1,
+     i2v1,
      "gt.vuh.vuh",
      {u16v1, u16v1}},
     {MAKE_ID_PAIR(Intrinsic::hexagon_V6_vgtuw),
-     i32v1,
+     i4v1,
      "gt.vuw.vuw",
      {u32v1, u32v1}},
-    {MAKE_ID_PAIR(Intrinsic::hexagon_V6_vgtb), i8v1, "gt.vb.vb", {i8v1, i8v1}},
+    {MAKE_ID_PAIR(Intrinsic::hexagon_V6_vgtb), i1v1, "gt.vb.vb", {i8v1, i8v1}},
     {MAKE_ID_PAIR(Intrinsic::hexagon_V6_vgth),
-     i16v1,
+     i2v1,
      "gt.vh.vh",
      {i16v1, i16v1}},
     {MAKE_ID_PAIR(Intrinsic::hexagon_V6_vgtw),
-     i32v1,
+     i4v1,
      "gt.vw.vw",
      {i32v1, i32v1}},
 
@@ -2417,35 +2419,6 @@ void CodeGen_Hexagon::visit(const Call *op) {
             Value *idx = codegen(op->args[1]);
             value = vlut(lut, idx, *min_index, *max_index);
             return;
-        } else if (op->is_intrinsic(Call::select_mask)) {
-            internal_assert(op->args.size() == 3);
-            // eliminate_bool_vectors has replaced all boolean vectors
-            // with integer vectors of the appropriate size, so we
-            // just need to convert the select_mask intrinsic to a
-            // hexagon mux intrinsic.
-            value = call_intrin(
-                op->type,
-                "halide.hexagon.mux" + type_suffix(op->args[1], op->args[2], false),
-                op->args);
-            return;
-        } else if (op->is_intrinsic(Call::if_then_else_mask)) {
-            internal_assert(op->args.size() == 3);
-            // Because this is going to be scalarized by CodeGen_LLVM, we can
-            // convert back to a bool vector, because this bool vector will
-            // never be realized.
-            value = codegen(Call::make(op->type, Call::if_then_else,
-                                       {op->args[0] != 0, op->args[1], op->args[2]},
-                                       Call::PureIntrinsic));
-            return;
-        } else if (op->is_intrinsic(Call::require_mask)) {
-            internal_assert(op->args.size() == 3);
-            // Because this is going to be scalarized by CodeGen_LLVM, we can
-            // convert back to a bool vector, because this bool vector will
-            // never be realized.
-            value = codegen(Call::make(op->type, Call::require,
-                                       {op->args[0] != 0, op->args[1], op->args[2]},
-                                       Call::PureIntrinsic));
-            return;
         } else if (op->is_intrinsic(Call::abs)) {
             internal_assert(op->args.size() == 1);
             Type ty = op->args[0].type();
@@ -2461,28 +2434,6 @@ void CodeGen_Hexagon::visit(const Call *op) {
             internal_error
                 << "cast_mask should already have been handled in HexagonOptimize\n";
         }
-    }
-
-    if (op->is_intrinsic(Call::bool_to_mask)) {
-        internal_assert(op->args.size() == 1);
-        if (op->args[0].type().is_vector()) {
-            // The argument is already a mask of the right width.
-            op->args[0].accept(this);
-        } else {
-            // The argument is a scalar bool. Converting it to
-            // all-ones or all-zeros is sufficient for HVX masks
-            // (mux just looks at the LSB of each byte).
-            Expr equiv = -Cast::make(op->type, op->args[0]);
-            equiv.accept(this);
-        }
-        return;
-    } else if (op->is_intrinsic(Call::extract_mask_element)) {
-        internal_assert(op->args.size() == 2);
-        const int64_t *index = as_const_int(op->args[1]);
-        internal_assert(index);
-        value = codegen(
-            Cast::make(Bool(), Shuffle::make_extract_element(op->args[0], *index)));
-        return;
     }
 
     if (op->is_intrinsic(Call::prefetch)) {
@@ -2638,9 +2589,7 @@ void CodeGen_Hexagon::visit(const Max *op) {
             call_intrin(op->type, "halide.hexagon.max" + type_suffix(op->a, op->b),
                         {op->a, op->b}, true /*maybe*/);
         if (!value) {
-            Expr equiv =
-                Call::make(op->type, Call::select_mask, {op->a > op->b, op->a, op->b},
-                           Call::PureIntrinsic);
+            Expr equiv = Select::make(op->a > op->b, op->a, op->b);
             equiv = common_subexpression_elimination(equiv);
             value = codegen(equiv);
         }
@@ -2655,9 +2604,7 @@ void CodeGen_Hexagon::visit(const Min *op) {
             call_intrin(op->type, "halide.hexagon.min" + type_suffix(op->a, op->b),
                         {op->a, op->b}, true /*maybe*/);
         if (!value) {
-            Expr equiv =
-                Call::make(op->type, Call::select_mask, {op->a > op->b, op->b, op->a},
-                           Call::PureIntrinsic);
+            Expr equiv = Select::make(op->a > op->b, op->b, op->a);
             equiv = common_subexpression_elimination(equiv);
             value = codegen(equiv);
         }
@@ -2668,10 +2615,10 @@ void CodeGen_Hexagon::visit(const Min *op) {
 
 void CodeGen_Hexagon::visit(const Select *op) {
     if (!op->condition.type().is_scalar()) {
-        // A vector of bool was recursively introduced while
-        // performing codegen. Eliminate it.
-        Expr equiv = eliminate_bool_vectors(op);
-        equiv.accept(this);
+        value = call_intrin(
+            op->type,
+            "halide.hexagon.mux" + type_suffix(op->true_value, op->false_value, false),
+            {op->condition, op->true_value, op->false_value});
     } else if (op->type.is_vector()) {
         // Implement scalar conditions on vector values with if-then-else.
         value = codegen(Call::make(op->type, Call::if_then_else,
@@ -2705,7 +2652,6 @@ void CodeGen_Hexagon::visit(const EQ *op) {
 void CodeGen_Hexagon::visit(const GE *op) {
     if (op->type.is_vector()) {
         Expr ge = Not::make(GT::make(op->b, op->a));
-        ge = eliminate_bool_vectors(ge);
         ge.accept(this);
     } else {
         CodeGen_Posix::visit(op);
@@ -2715,7 +2661,6 @@ void CodeGen_Hexagon::visit(const GE *op) {
 void CodeGen_Hexagon::visit(const LE *op) {
     if (op->type.is_vector()) {
         Expr le = Not::make(GT::make(op->a, op->b));
-        le = eliminate_bool_vectors(le);
         le.accept(this);
     } else {
         CodeGen_Posix::visit(op);
@@ -2734,7 +2679,6 @@ void CodeGen_Hexagon::visit(const LT *op) {
 void CodeGen_Hexagon::visit(const NE *op) {
     if (op->type.is_vector()) {
         Expr eq = Not::make(EQ::make(op->a, op->b));
-        eq = eliminate_bool_vectors(eq);
         eq.accept(this);
     } else {
         CodeGen_Posix::visit(op);
