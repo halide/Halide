@@ -1067,19 +1067,6 @@ static const HvxIntrinsic intrinsic_wrappers[] = {
      i16v1,
      "trunc_sath_shr.vw.uw",
      {i32v2, u32}},
-
-    // Bit counting
-    {MAKE_ID_PAIR(Intrinsic::hexagon_V6_vcl0h), u16v1, "clz.vh", {u16v1}},
-    {MAKE_ID_PAIR(Intrinsic::hexagon_V6_vcl0w), u32v1, "clz.vw", {u32v1}},
-    {MAKE_ID_PAIR(Intrinsic::hexagon_V6_vnormamth), u16v1, "cls.vh", {u16v1}},
-    {MAKE_ID_PAIR(Intrinsic::hexagon_V6_vnormamtw), u32v1, "cls.vw", {u32v1}},
-    {MAKE_ID_PAIR(Intrinsic::hexagon_V6_vpopcounth),
-     u16v1,
-     "popcount.vh",
-     {u16v1}},
-    // TODO: If we need it, we could implement a popcountw in the
-    // runtime module that uses popcounth, and horizontally add
-    // each pair of lanes.
 };
 
 // TODO: Many variants of the above functions are missing. They
@@ -2160,15 +2147,6 @@ void CodeGen_Hexagon::visit(const Mul *op) {
     }
 }
 
-void CodeGen_Hexagon::visit(const Div *op) {
-    CodeGen_Posix::visit(op);
-}
-
-void CodeGen_Hexagon::visit(const Cast *op) {
-    // TODO: Do we need to handle same-sized vector casts before LLVM sees them?
-    CodeGen_Posix::visit(op);
-}
-
 void CodeGen_Hexagon::visit(const Call *op) {
     internal_assert(op->is_extern() || op->is_intrinsic())
         << "Can only codegen extern calls and intrinsics\n";
@@ -2177,10 +2155,6 @@ void CodeGen_Hexagon::visit(const Call *op) {
     // indicating if the intrinsic has signed variants or not.
     static std::map<string, std::pair<string, bool>> functions = {
         {Call::get_intrinsic_name(Call::absd), {"halide.hexagon.absd", true}},
-        {Call::get_intrinsic_name(Call::count_leading_zeros),
-         {"halide.hexagon.clz", false}},
-        {Call::get_intrinsic_name(Call::popcount),
-         {"halide.hexagon.popcount", false}},
     };
 
     if (is_native_interleave(op) || is_native_deinterleave(op)) {
