@@ -756,9 +756,10 @@ void compile_multitarget(const std::string &fn_name,
             user_error << "All Targets must have matching arch-bits-os for compile_multitarget.\n";
         }
         // Some features must match across all targets.
-        static const std::array<Target::Feature, 8> must_match_features = {{
+        static const std::array<Target::Feature, 9> must_match_features = {{
             Target::ASAN,
             Target::CPlusPlusMangling,
+            Target::Debug,
             Target::JIT,
             Target::Matlab,
             Target::MSAN,
@@ -768,7 +769,7 @@ void compile_multitarget(const std::string &fn_name,
         }};
         for (auto f : must_match_features) {
             if (target.has_feature(f) != base_target.has_feature(f)) {
-                user_error << "All Targets must have feature " << f << " set identically for compile_multitarget.\n";
+                user_error << "All Targets must have feature '" << Target::feature_to_name(f) << "'' set identically for compile_multitarget.\n";
                 break;
             }
         }
