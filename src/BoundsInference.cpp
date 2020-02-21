@@ -1052,7 +1052,7 @@ public:
                 }
             }
 
-            if (fused_with_f.size() == 0) {
+            if (fused_with_f.empty()) {
                 boxes_for_fused_group[stage_name] = box_provided(body, stages[producing].name, empty_scope, func_bounds);
                 internal_assert((int)boxes_for_fused_group[stage_name].size() == f.dimensions());
             } else {
