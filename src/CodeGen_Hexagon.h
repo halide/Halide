@@ -43,19 +43,12 @@ protected:
     ///@{
     void visit(const Add *) override;
     void visit(const Sub *) override;
-    void visit(const Broadcast *) override;
     void visit(const Div *) override;
     void visit(const Max *) override;
     void visit(const Min *) override;
     void visit(const Cast *) override;
     void visit(const Call *) override;
     void visit(const Mul *) override;
-    void visit(const GE *) override;
-    void visit(const LE *) override;
-    void visit(const LT *) override;
-    void visit(const NE *) override;
-    void visit(const GT *) override;
-    void visit(const EQ *) override;
     void visit(const Select *) override;
     void visit(const Allocate *) override;
     ///@}

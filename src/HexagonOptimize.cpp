@@ -1234,24 +1234,6 @@ class EliminateInterleaves : public IRMutator {
     Expr visit(const Max *op) override {
         return visit_binary(op);
     }
-    Expr visit(const EQ *op) override {
-        return visit_binary(op);
-    }
-    Expr visit(const NE *op) override {
-        return visit_binary(op);
-    }
-    Expr visit(const LT *op) override {
-        return visit_binary(op);
-    }
-    Expr visit(const LE *op) override {
-        return visit_binary(op);
-    }
-    Expr visit(const GT *op) override {
-        return visit_binary(op);
-    }
-    Expr visit(const GE *op) override {
-        return visit_binary(op);
-    }
 
     Expr visit(const Select *op) override {
         Expr true_value = mutate(op->true_value);

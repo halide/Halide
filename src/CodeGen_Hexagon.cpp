@@ -988,53 +988,6 @@ static const HvxIntrinsic intrinsic_wrappers[] = {
      {i16v1, i16},
      HvxIntrinsic::BroadcastScalarsToWords},
 
-    // Select/conditionals. Conditions are always signed integer
-    // vectors (so widening sign extends).
-    {MAKE_ID_PAIR(Intrinsic::hexagon_V6_vmux),
-     i8v1,
-     "mux.vb.vb",
-     {i1v1, i8v1, i8v1}},
-    {MAKE_ID_PAIR(Intrinsic::hexagon_V6_vmux),
-     i16v1,
-     "mux.vh.vh",
-     {i2v1, i16v1, i16v1}},
-    {MAKE_ID_PAIR(Intrinsic::hexagon_V6_vmux),
-     i32v1,
-     "mux.vw.vw",
-     {i4v1, i32v1, i32v1}},
-
-    {MAKE_ID_PAIR(Intrinsic::hexagon_V6_veqb), i1v1, "eq.vb.vb", {i8v1, i8v1}},
-    {MAKE_ID_PAIR(Intrinsic::hexagon_V6_veqh),
-     i2v1,
-     "eq.vh.vh",
-     {i16v1, i16v1}},
-    {MAKE_ID_PAIR(Intrinsic::hexagon_V6_veqw),
-     i4v1,
-     "eq.vw.vw",
-     {i32v1, i32v1}},
-
-    {MAKE_ID_PAIR(Intrinsic::hexagon_V6_vgtub),
-     i1v1,
-     "gt.vub.vub",
-     {u8v1, u8v1}},
-    {MAKE_ID_PAIR(Intrinsic::hexagon_V6_vgtuh),
-     i2v1,
-     "gt.vuh.vuh",
-     {u16v1, u16v1}},
-    {MAKE_ID_PAIR(Intrinsic::hexagon_V6_vgtuw),
-     i4v1,
-     "gt.vuw.vuw",
-     {u32v1, u32v1}},
-    {MAKE_ID_PAIR(Intrinsic::hexagon_V6_vgtb), i1v1, "gt.vb.vb", {i8v1, i8v1}},
-    {MAKE_ID_PAIR(Intrinsic::hexagon_V6_vgth),
-     i2v1,
-     "gt.vh.vh",
-     {i16v1, i16v1}},
-    {MAKE_ID_PAIR(Intrinsic::hexagon_V6_vgtw),
-     i4v1,
-     "gt.vw.vw",
-     {i32v1, i32v1}},
-
     // Min/max:
     {MAKE_ID_PAIR(Intrinsic::hexagon_V6_vmaxub),
      u8v1,
@@ -1206,11 +1159,6 @@ static const HvxIntrinsic intrinsic_wrappers[] = {
     {MAKE_ID_PAIR(Intrinsic::hexagon_V6_vnot), u8v1, "not.vb", {u8v1}},
     {MAKE_ID_PAIR(Intrinsic::hexagon_V6_vnot), u16v1, "not.vh", {u16v1}},
     {MAKE_ID_PAIR(Intrinsic::hexagon_V6_vnot), u32v1, "not.vw", {u32v1}},
-
-    // Broadcasts
-    {MAKE_ID_PAIR(Intrinsic::hexagon_V6_lvsplatb), u8v1, "splat.b", {u8}},
-    {MAKE_ID_PAIR(Intrinsic::hexagon_V6_lvsplath), u16v1, "splat.h", {u16}},
-    {MAKE_ID_PAIR(Intrinsic::hexagon_V6_lvsplatw), u32v1, "splat.w", {u32}},
 
     // Bit counting
     {MAKE_ID_PAIR(Intrinsic::hexagon_V6_vcl0h), u16v1, "clz.vh", {u16v1}},
@@ -1725,7 +1673,7 @@ Value *CodeGen_Hexagon::vlut256(Value *lut, Value *idx, int min_index,
     // inputs. First, if the index is larger than a native vector, we
     // need to slice up the operation into native vectors of
     // indices. Second, the LUT may need to be broken into several
-    // stages, and that may need to be further broken up into vmux
+    // stages, and that may need to be further broken up into select
     // operations.
 
     // Split up the LUT into native vectors, using the max_index to
@@ -1948,7 +1896,7 @@ Value *CodeGen_Hexagon::vdelta(Value *lut, const vector<int> &indices) {
 
     // We can only use vdelta to shuffle a single native vector of
     // input. If we have more than one, we need to break it into
-    // multiple vdelta operations, and combine them with vmux.
+    // multiple vdelta operations, and combine them with select.
     if (lut_elements != native_elements) {
         Value *ret = nullptr;
         for (int i = 0; i < lut_elements; i += native_elements) {
@@ -1961,11 +1909,11 @@ Value *CodeGen_Hexagon::vdelta(Value *lut, const vector<int> &indices) {
                 int idx = indices[j] - i;
                 if (0 <= idx && idx < native_elements) {
                     indices_i[j] = idx;
-                    mask[j] = ConstantInt::get(i8_t, 255);
+                    mask[j] = ConstantInt::get(i1_t, 1);
                     none_used = false;
                 } else {
                     indices_i[j] = -1;
-                    mask[j] = ConstantInt::get(i8_t, 0);
+                    mask[j] = ConstantInt::get(i1_t, 0);
                     all_used = false;
                 }
             }
@@ -1976,15 +1924,8 @@ Value *CodeGen_Hexagon::vdelta(Value *lut, const vector<int> &indices) {
                 ret = ret_i;
             } else if (!none_used) {
                 // Create a condition value for which elements of the range are valid
-                // for this index. We can't make a constant vector of <1024 x i1>, it
-                // crashes the Hexagon LLVM backend before LLVM version 6.0.
-                Value *minus_one = codegen(make_const(UInt(8, mask.size()), 255));
-                Value *hack_mask =
-                    call_intrin(lut_i->getType(), "halide.hexagon.eq.vb.vb",
-                                {ConstantVector::get(mask), minus_one});
-
-                ret = call_intrin(lut_i->getType(), "halide.hexagon.mux.vb.vb",
-                                  {hack_mask, ret_i, ret});
+                // for this index.
+                ret = builder->CreateSelect(ConstantVector::get(mask), ret_i, ret);
             }
         }
         return ret;
@@ -2077,7 +2018,7 @@ Value *CodeGen_Hexagon::vlut(Value *lut, Value *idx, int min_index, int max_inde
         Value *result_val = vlut256(lut, idx8, min_index, max_index);
         return builder->CreateBitCast(result_val, result_ty);
     }
-    // We need to break the index up into ranges of up to 256, and mux
+    // We need to break the index up into ranges of up to 256, and select
     // the ranges together after using vlut on each range. This vector
     // contains the result of each range, and a condition vector
     // indicating whether the result should be used.
@@ -2091,8 +2032,7 @@ Value *CodeGen_Hexagon::vlut(Value *lut, Value *idx, int min_index, int max_inde
 
         // Create a condition value for which elements of the range are valid
         // for this index.
-        Value *use_index = call_intrin(i16x_t, "halide.hexagon.gt.vh.vh",
-                                       {indices, minus_one});
+        Value *use_index = builder->CreateICmpSGE(indices, minus_one);
 
         // After we've eliminated the invalid elements, we can
         // truncate to 8 bits, as vlut requires.
@@ -2108,28 +2048,11 @@ Value *CodeGen_Hexagon::vlut(Value *lut, Value *idx, int min_index, int max_inde
     }
 
     // TODO: This could be reduced hierarchically instead of in
-    // order. However, this requires the condition for the mux to be
+    // order. However, this requires the condition for the select to be
     // quite tricky.
     Value *result = ranges[0].first;
-    llvm::Type *element_ty = result->getType()->getVectorElementType();
-    string mux = "halide.hexagon.mux";
-    switch (element_ty->getScalarSizeInBits()) {
-    case 8:
-        mux += ".vb.vb";
-        break;
-    case 16:
-        mux += ".vh.vh";
-        break;
-    case 32:
-        mux += ".vw.vw";
-        break;
-    default:
-        internal_error << "Cannot constant select vector of "
-                       << element_ty->getScalarSizeInBits() << "\n";
-    }
     for (size_t i = 1; i < ranges.size(); i++) {
-        result = call_intrin(result->getType(), mux,
-                             {ranges[i].second, ranges[i].first, result});
+        result = builder->CreateSelect(ranges[i].second, ranges[i].first, result);
     }
     return builder->CreateBitCast(result, result_ty);
 }
@@ -2570,19 +2493,6 @@ void CodeGen_Hexagon::visit(const Call *op) {
     CodeGen_Posix::visit(op);
 }
 
-void CodeGen_Hexagon::visit(const Broadcast *op) {
-    if (op->lanes * op->type.bits() <= 32) {
-        // If the result is not more than 32 bits, just use scalar code.
-        CodeGen_Posix::visit(op);
-    } else {
-        // TODO: Use vd0?
-        value = call_intrin(op->type,
-                            "halide.hexagon.splat" +
-                                type_suffix(op->value, false),
-                            {op->value});
-    }
-}
-
 void CodeGen_Hexagon::visit(const Max *op) {
     if (op->type.is_vector()) {
         value =
@@ -2614,72 +2524,11 @@ void CodeGen_Hexagon::visit(const Min *op) {
 }
 
 void CodeGen_Hexagon::visit(const Select *op) {
-    if (!op->condition.type().is_scalar()) {
-        value = call_intrin(
-            op->type,
-            "halide.hexagon.mux" + type_suffix(op->true_value, op->false_value, false),
-            {op->condition, op->true_value, op->false_value});
-    } else if (op->type.is_vector()) {
+    if (op->condition.type().is_scalar() && op->type.is_vector()) {
         // Implement scalar conditions on vector values with if-then-else.
         value = codegen(Call::make(op->type, Call::if_then_else,
                                    {op->condition, op->true_value, op->false_value},
                                    Call::Intrinsic));
-    } else {
-        CodeGen_Posix::visit(op);
-    }
-}
-
-void CodeGen_Hexagon::visit(const GT *op) {
-    if (op->type.is_vector()) {
-        value = call_intrin(eliminated_bool_type(op->type, op->a.type()),
-                            "halide.hexagon.gt" + type_suffix(op->a, op->b),
-                            {op->a, op->b});
-    } else {
-        CodeGen_Posix::visit(op);
-    }
-}
-
-void CodeGen_Hexagon::visit(const EQ *op) {
-    if (op->type.is_vector()) {
-        value = call_intrin(eliminated_bool_type(op->type, op->a.type()),
-                            "halide.hexagon.eq" + type_suffix(op->a, op->b, false),
-                            {op->a, op->b});
-    } else {
-        CodeGen_Posix::visit(op);
-    }
-}
-
-void CodeGen_Hexagon::visit(const GE *op) {
-    if (op->type.is_vector()) {
-        Expr ge = Not::make(GT::make(op->b, op->a));
-        ge.accept(this);
-    } else {
-        CodeGen_Posix::visit(op);
-    }
-}
-
-void CodeGen_Hexagon::visit(const LE *op) {
-    if (op->type.is_vector()) {
-        Expr le = Not::make(GT::make(op->a, op->b));
-        le.accept(this);
-    } else {
-        CodeGen_Posix::visit(op);
-    }
-}
-
-void CodeGen_Hexagon::visit(const LT *op) {
-    if (op->type.is_vector()) {
-        Expr lt = GT::make(op->b, op->a);
-        lt.accept(this);
-    } else {
-        CodeGen_Posix::visit(op);
-    }
-}
-
-void CodeGen_Hexagon::visit(const NE *op) {
-    if (op->type.is_vector()) {
-        Expr eq = Not::make(EQ::make(op->a, op->b));
-        eq.accept(this);
     } else {
         CodeGen_Posix::visit(op);
     }
