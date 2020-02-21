@@ -493,34 +493,6 @@ static const HvxIntrinsic intrinsic_wrappers[] = {
     {MAKE_ID_PAIR(Intrinsic::hexagon_V6_vpackob), i8v1, "packhi.vh", {i16v2}},
     {MAKE_ID_PAIR(Intrinsic::hexagon_V6_vpackoh), i16v1, "packhi.vw", {i32v2}},
 
-    // Adds/subtracts:
-    // Note that we just use signed arithmetic for unsigned
-    // operands, because it works with two's complement arithmetic.
-    {MAKE_ID_PAIR(Intrinsic::hexagon_V6_vaddb),
-     i8v1,
-     "add.vb.vb",
-     {i8v1, i8v1}},
-    {MAKE_ID_PAIR(Intrinsic::hexagon_V6_vaddh),
-     i16v1,
-     "add.vh.vh",
-     {i16v1, i16v1}},
-    {MAKE_ID_PAIR(Intrinsic::hexagon_V6_vaddw),
-     i32v1,
-     "add.vw.vw",
-     {i32v1, i32v1}},
-    {MAKE_ID_PAIR(Intrinsic::hexagon_V6_vaddb_dv),
-     i8v2,
-     "add.vb.vb.dv",
-     {i8v2, i8v2}},
-    {MAKE_ID_PAIR(Intrinsic::hexagon_V6_vaddh_dv),
-     i16v2,
-     "add.vh.vh.dv",
-     {i16v2, i16v2}},
-    {MAKE_ID_PAIR(Intrinsic::hexagon_V6_vaddw_dv),
-     i32v2,
-     "add.vw.vw.dv",
-     {i32v2, i32v2}},
-
     // Widening adds. There are other instructions that add two vub and two vuh
     // but do not widen.
     // To differentiate those from the widening ones, we encode the return type
@@ -537,31 +509,6 @@ static const HvxIntrinsic intrinsic_wrappers[] = {
      u32v2,
      "add_vuw.vuh.vuh",
      {u16v1, u16v1}},
-
-    {MAKE_ID_PAIR(Intrinsic::hexagon_V6_vsubb),
-     i8v1,
-     "sub.vb.vb",
-     {i8v1, i8v1}},
-    {MAKE_ID_PAIR(Intrinsic::hexagon_V6_vsubh),
-     i16v1,
-     "sub.vh.vh",
-     {i16v1, i16v1}},
-    {MAKE_ID_PAIR(Intrinsic::hexagon_V6_vsubw),
-     i32v1,
-     "sub.vw.vw",
-     {i32v1, i32v1}},
-    {MAKE_ID_PAIR(Intrinsic::hexagon_V6_vsubb_dv),
-     i8v2,
-     "sub.vb.vb.dv",
-     {i8v2, i8v2}},
-    {MAKE_ID_PAIR(Intrinsic::hexagon_V6_vsubh_dv),
-     i16v2,
-     "sub.vh.vh.dv",
-     {i16v2, i16v2}},
-    {MAKE_ID_PAIR(Intrinsic::hexagon_V6_vsubw_dv),
-     i32v2,
-     "sub.vw.vw.dv",
-     {i32v2, i32v2}},
 
     // Widening subtracts. There are other instructions that subtact two vub and
     // two vuh but do not widen.
@@ -2195,26 +2142,6 @@ int CodeGen_Hexagon::native_vector_bits() const {
         return 128 * 8;
     } else {
         return 64 * 8;
-    }
-}
-
-void CodeGen_Hexagon::visit(const Add *op) {
-    if (op->type.is_vector()) {
-        value = call_intrin(op->type,
-                            "halide.hexagon.add" + type_suffix(op->a, op->b, false),
-                            {op->a, op->b});
-    } else {
-        CodeGen_Posix::visit(op);
-    }
-}
-
-void CodeGen_Hexagon::visit(const Sub *op) {
-    if (op->type.is_vector()) {
-        value = call_intrin(op->type,
-                            "halide.hexagon.sub" + type_suffix(op->a, op->b, false),
-                            {op->a, op->b});
-    } else {
-        CodeGen_Posix::visit(op);
     }
 }
 

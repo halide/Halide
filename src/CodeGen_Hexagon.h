@@ -41,8 +41,6 @@ protected:
 
     /** Nodes for which we want to emit specific hexagon intrinsics */
     ///@{
-    void visit(const Add *) override;
-    void visit(const Sub *) override;
     void visit(const Div *) override;
     void visit(const Max *) override;
     void visit(const Min *) override;
