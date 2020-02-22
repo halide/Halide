@@ -583,6 +583,7 @@ FunctionDAG::FunctionDAG(const vector<Function> &outputs, const MachineParams &p
 
     // Construct the mapping from Funcs to Nodes
     nodes.resize(order.size());
+    map<Function, Node *, Function::Compare> node_map;
     for (size_t i = 0; i < order.size(); i++) {
         Function f = env[order[order.size() - i - 1]];
         nodes[i].func = f;
@@ -825,7 +826,6 @@ FunctionDAG::FunctionDAG(const vector<Function> &outputs, const MachineParams &p
             }
 
             stage.vector_size = target.natural_vector_size(checker.narrowest_type);
-            stage.output_vector_size = target.natural_vector_size(widest_output_type);
 
             if (s == 0) {
                 node.vector_size = stage.vector_size;

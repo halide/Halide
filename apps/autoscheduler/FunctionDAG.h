@@ -439,10 +439,6 @@ struct FunctionDAG {
             // narrowest type used.
             int vector_size;
 
-            // The vector size used for storing outputs. Corresponds
-            // to the natural width for the output type.
-            int output_vector_size;
-
             // The featurization of the compute done
             PipelineFeatures features;
 
@@ -543,11 +539,6 @@ struct FunctionDAG {
 
     vector<Node> nodes;
     vector<Edge> edges;
-
-    // We're going to be querying this DAG a lot while searching for
-    // an optimal schedule, so we'll also create a variety of
-    // auxiliary data structures.
-    map<Function, Node *, Function::Compare> node_map;
 
     // Create the function DAG, and do all the dependency and cost
     // analysis. This is done once up-front before the tree search.
