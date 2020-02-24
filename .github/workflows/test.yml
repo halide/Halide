@@ -10,12 +10,12 @@ on:
 
 jobs:
   test_halide:
-    name: ${{matrix.arch}}-${{matrix.bits}}-${{matrix.halide_os}} llvm-${{matrix.llvm_version}} (${{matrix.build_tool}})
-    runs-on: ${{matrix.os}}
+    name: Halide-${{matrix.llvm_version}}-${{matrix.target_arch}}-${{matrix.target_bits}}-${{matrix.target_os}}
+    runs-on: ${{matrix.host_os}}
     env:
       CC: ${{matrix.cc}}
       CXX: ${{matrix.cxx}}
-      LD: ld
+      LD: ${{matrix.ld}}
       PYTHON: python3.7
       OPTIMIZE: -g
 
@@ -25,11 +25,11 @@ jobs:
         # TODO: this is probably overkill; we probably don't need to build the full
         # matrix (and since we are limited to 8 concurrent tests, it would be
         # useful to prune this a bit).
-        arch: [x86]
-        bits: [32, 64]
-        os: [windows-latest, ubuntu-18.04, macos-latest]
-        llvm_version: [8, 9, 10, trunk]
-        build_tool: [make, cmake_shared]  # TODO: cmake_static is still dodgy?
+        target_arch: [x86]  #, arm]
+        target_bits: [64]  # 32, 64]
+        target_os: [windows] #  , linux, osx]
+        llvm_version: [11] #8, 9, 10, 11]
+        build_tool: [cmake_shared] # make, cmake_shared]  # TODO: cmake_static is still dodgy?
         include:
           - llvm_version: 8
             llvm_branch: release/8.x
@@ -37,35 +37,37 @@ jobs:
             llvm_branch: release/9.x
           - llvm_version: 10
             llvm_branch: release/10.x
-          - llvm_version: trunk
+          - llvm_version: 11
             llvm_branch: master
 
-          - os: macos-latest
+          # map things to the necessary host cross-compiler host
+          - target_os: osx
+            host_os: macos-10.15
             cc: clang
             cxx: clang++
-            halide_os: osx
+            ld: ld
 
-          - os: ubuntu-18.04
-            cc: gcc
-            cxx: g++
-            halide_os: linux
+          - target_os: linux
+            host_os: ubuntu-18.04
+            # GHA has clang 6, 8, and 9 and GCC 7.4, 8.3, 9.2 preinstalled.
+            # We will explicitly choose gcc 7.x (even though the default is gcc 7.4)
+            # To ensure we match gcc versions with the arm crosscompiler.
+            cc: gcc-7
+            cxx: g++-7
+            ld: ld
 
-          - os: windows-latest
+          - target_os: windows
+            host_os: windows-2019
             cc: cl.exe
             cxx: cl.exe
-            halide_os: windows
-
-          - build_tool: cmake_shared
-            shared_library: ON
-          - build_tool: cmake_static
-            shared_library: OFF
+            ld: ld.exe
 
         exclude:
           # Don't attempt 32-bit builds for macos
-          - os: macos-latest
+          - os: macos-10.15
             bits: 32
           # Don't use make on windows
-          - os: windows-latest
+          - os: windows-2019
             build_tool: make
 
     steps:
@@ -74,24 +76,24 @@ jobs:
         path: 'halide'
 
     - name: Configure Python (64-bit)
-      if: matrix.bits == 64
+      if: matrix.target_bits == 64
       uses: actions/setup-python@v1
       with:
         python-version: '3.7'
         architecture: 'x64' # N.B.: 'x86' is only available for Windows (Ubuntu is special-cased below)
 
     - name: Configure Python (32-bit)
-      if: startsWith(matrix.os, 'windows') && matrix.bits == 32
+      if: startsWith(matrix.target_os, 'windows') && matrix.target_bits == 32
       uses: actions/setup-python@v1
       with:
         python-version: '3.7'
         architecture: 'x86'
 
     - name: Configure Ubuntu-32
-      if: startsWith(matrix.os, 'ubuntu') && matrix.bits == 32
+      if: startsWith(matrix.target_os, 'ubuntu') && matrix.target_bits == 32
       shell: bash
       run: |
-        set -eux
+        set -eu
 
         sudo dpkg --add-architecture i386
         sudo apt-get update
@@ -116,8 +118,8 @@ jobs:
         echo ::set-env name=CXX::"${CXX} -m32"
         echo ::set-env name=LD::"${LD} -melf_i386"
 
-    - name: Configure Ubuntu
-      if: startsWith(matrix.os, 'ubuntu')
+    - name: Configure Ubuntu Host
+      if: startsWith(matrix.host_os, 'ubuntu')
       shell: bash
       run: |
         sudo apt-get update
@@ -126,18 +128,19 @@ jobs:
         # TODO(srj): OpenGL is only needed to build the opengl tests (which we don't even run)...
         sudo apt-get install libglu1-mesa-dev freeglut3-dev mesa-common-dev
 
+        sudo apt-get install ninja
         sudo apt-get install libjpeg-dev libpng-dev
         sudo apt-get --no-install-recommends install doxygen
 
-    - name: Configure OSX
-      if: startsWith(matrix.os, 'macos')
+    - name: Configure MacOS Host
+      if: startsWith(matrix.host_os, 'macos')
       shell: bash
       run: |
         # coreutils is for gtimeout
-        brew install libpng jpeg doxygen coreutils
+        brew install libpng jpeg doxygen coreutils ninja
 
-    - name: Configure Windows
-      if: startsWith(matrix.os, 'windows')
+    - name: Configure Windows Host
+      if: startsWith(matrix.host_os, 'windows')
       shell: bash
       run: |
         # Chocolatey doesn't have zlib or libpng.
@@ -166,7 +169,7 @@ jobs:
     - name: Install Python Dependencies
       shell: bash
       run: |
-        set -eux
+        set -eu
 
         ${PYTHON} -m pip --version
         ${PYTHON} -m pip install --upgrade pip
@@ -175,24 +178,24 @@ jobs:
     - name: Install LLVM
       shell: bash
       run: |
-        set -eux
+        set -eu
 
-        LLVM_ID="llvm-${{matrix.llvm_version}}-${{matrix.arch}}-${{matrix.bits}}-${{matrix.halide_os}}"
+        LLVM_ID="llvm-${{matrix.llvm_version}}-${{matrix.target_arch}}-${{matrix.target_bits}}-${{matrix.target_os}}"
 
         curl \
           --user llvm_user:${{secrets.LLVM_USER_PASSWORD}} \
           --output ${HALIDE_TEMP_DIR}/llvm-prebuilt.tgz \
           https://buildbot.halide-lang.org/llvm/${LLVM_ID}.tgz
 
-        TAR_FLAGS=
-        if [[ ${{matrix.os}} == windows* ]]; then
+        TAR_CMD="tar"
+        if [[ ${{matrix.host_os}} == windows* ]]; then
           # Must use --force-local to avoid tar misinterpreting the : in
           # a Windows pathname as a hostname.
-          TAR_FLAGS=" --force-local "
+          TAR_CMD="tar --force-local"
         fi
 
         mkdir ${LLVM_INSTALL_DIR}
-        tar ${TAR_FLAGS} -xvf ${HALIDE_TEMP_DIR}/llvm-prebuilt.tgz -C ${LLVM_INSTALL_DIR}
+        ${TAR_CMD} -xvf ${HALIDE_TEMP_DIR}/llvm-prebuilt.tgz -C ${LLVM_INSTALL_DIR}
         rm -rf ${HALIDE_TEMP_DIR}/llvm-prebuilt.tgz
 
         LLVM_COMMIT_HASH=`cat ${LLVM_INSTALL_DIR}/.halide_builder_llvm_commit`
@@ -210,43 +213,54 @@ jobs:
       shell: bash
       run: |
         # Configure CMake
-        set -eux
+        set -eu
 
         mkdir ${HALIDE_BUILD_DIR}
 
-        CMAKE_GEN="Unix Makefiles"
-        EXTRA_DEFS=
+        CMAKE_GEN="Ninja"
+        BUILD_TYPE=Release
+        EXTRA_CMAKE_FLAGS=
+        PARALLEL_JOBS=4  # GHA VMs have 2 cores
 
-        if [[ ${{matrix.os}} == windows* ]]; then
-          if [[ ${{matrix.bits}} == 64 ]]; then
-            EXTRA_DEFS=" -T host=x64 -A x64 "
-          else
-            EXTRA_DEFS=" -T host=x64 "
-          fi
+        if [[ ${{matrix.host_os}} == windows* ]]; then
           CMAKE_GEN="Visual Studio 16"
+
+          EXTRA_CMAKE_FLAGS="-T host=x64"
+          if [[ ${{matrix.target_bits}} == 64 ]]; then
+            EXTRA_CMAKE_FLAGS="${EXTRA_CMAKE_FLAGS} -A x64"
+          fi
         fi
 
-        if [[ ${{matrix.os}} == ubuntu* && ${{matrix.bits}} == 32 ]]; then
-          EXTRA_DEFS="-D CMAKE_FIND_ROOT_PATH=/usr/lib/i386-linux-gnu -D CMAKE_FIND_ROOT_PATH_MODE_LIBRARY=ONLY"
+        if [[ ${{matrix.target_arch}} == x86 && \
+              ${{matrix.target_os}} == linux && \
+              ${{matrix.target_bits}} == 32 ]]; then
+          # Assume host_os is ubuntu*
+          EXTRA_CMAKE_FLAGS="${EXTRA_CMAKE_FLAGS} \
+                             -D CMAKE_FIND_ROOT_PATH=/usr/lib/i386-linux-gnu \
+                             -D CMAKE_FIND_ROOT_PATH_MODE_LIBRARY=ONLY"
+          export CC="${CC} -m32"
+          export CXX="${CXX} -m32"
+          export LD="${LD} -melf_i386"
         fi
 
-        if [[ ${{matrix.os}} == macos* ]]; then
-          EXTRA_DEFS="-D LLVM_ENABLE_SUPPORT_XCODE_SIGNPOSTS=FORCE_OFF"
+        if [[ ${{matrix.target_os}} == macos* ]]; then
+          # LLVM_ENABLE_SUPPORT_XCODE_SIGNPOSTS=OFF is needed for compatibility with older XCode versions
+          EXTRA_CMAKE_FLAGS="${EXTRA_CMAKE_FLAGS} \
+                             -D LLVM_ENABLE_SUPPORT_XCODE_SIGNPOSTS=FORCE_OFF"
         fi
 
-        if [[ ${{matrix.llvm_version}} == trunk ]]; then
-          REQUIRE_LLVM_VERSION="110"
-        else
-          REQUIRE_LLVM_VERSION="${{matrix.llvm_version}}0"
-        fi
+        # TODO: target_arch==arm
+
+        REQUIRE_LLVM_VERSION="${{matrix.llvm_version}}0"
+        SHARED_LIBRARY=$([ ${{matrix.build_tool}} == "cmake_shared" ] && echo "ON" || echo "OFF")
 
         cmake \
           -D CMAKE_BUILD_TYPE=${BUILD_TYPE} \
           -D LLVM_DIR="${LLVM_INSTALL_DIR}/lib/cmake/llvm" \
           -D HALIDE_REQUIRE_LLVM_VERSION="${REQUIRE_LLVM_VERSION}" \
-          -D HALIDE_SHARED_LIBRARY=${{matrix.shared_library}} \
+          -D HALIDE_SHARED_LIBRARY=${SHARED_LIBRARY} \
           -G "${CMAKE_GEN}" \
-          ${EXTRA_DEFS} \
+          ${EXTRA_CMAKE_FLAGS} \
           -S "${HALIDE_SOURCE_DIR}" \
           -B "${HALIDE_BUILD_DIR}"
 
@@ -265,7 +279,7 @@ jobs:
       shell: bash
       run: |
         # Build Halide
-        set -eux
+        set -eu
 
         cd ${HALIDE_BUILD_DIR}
         # Omitting the --target flag implies "all/all_build"
@@ -282,7 +296,7 @@ jobs:
         export TEST_TMPDIR="${HALIDE_TEMP_DIR}"
         cd ${HALIDE_BUILD_DIR}
 
-        # if [[ ${{matrix.os}} == ubuntu* && ${{matrix.bits}} == 32 ]]; then
+        # if [[ ${{matrix.target_os}} == ubuntu* && ${{matrix.target_bits}} == 32 ]]; then
         #   # TOOD: test_python is crashing on 32-bit linux?
         #   TEST_GROUPS_PARALLEL="internal correctness error warning generator apps"
         # else
