@@ -438,9 +438,18 @@ protected:
                                         bool zero_initialize = false,
                                         const std::string &name = "");
 
-    /** Total size of all alloca() storage requested (including alignment padding).
-     * Note that the actual stack space used might be less, as LLVM will promote
-     * register-sized allocas into registers in many cases. */
+    /** A (very) conservative guess at the size of all alloca() storage requested
+     * (including alignment padding). It's currently meant only to be used as
+     * a very coarse way to ensure there is enough stack space when testing
+     * on the WebAssembly backend.
+     *
+     * It is *not* meant to be a useful proxy for "stack space needed", for a
+     * number of reasons:
+     * - allocas with non-overlapping lifetimes will share space
+     * - on some backends, LLVM may promote register-sized allocas into registers
+     * - while this accounts for alloca() calls we know about, it doesn't attempt
+     *   to account for stack spills, function call overhead, etc., so
+     */
     size_t requested_alloca_total = 0;
 
     /** Which buffers came in from the outside world (and so we can't
