@@ -56,7 +56,7 @@ function ctrl_c() {
 trap ctrl_c INT
 
 if [ -z $APP ]; then
-    APPS="resnet_50_blockwise bgu bilateral_grid local_laplacian nl_means lens_blur camera_pipe stencil_chain harris hist max_filter unsharp interpolate_generator conv_layer cuda_mat_mul iir_blur_generator"
+    APPS="bgu bilateral_grid local_laplacian nl_means lens_blur camera_pipe stencil_chain harris hist max_filter unsharp interpolate_generator conv_layer cuda_mat_mul iir_blur_generator"
 else
     APPS=$APP
 fi
@@ -103,6 +103,7 @@ for app in $APPS; do
     WEIGHTS_FILE="$(ls -td ${SAMPLES_DIR}/batch* | head -n 1)/used.weights"
     predict_all ${HALIDE_ROOT} ${SAMPLES_DIR} ${WEIGHTS_FILE} ${PREDICTIONS_FILE}
     extract_best_times ${HALIDE_ROOT} ${SAMPLES_DIR} ${BEST_TIMES_FILE}
+    echo "Computing average statistics..."
     bash $(dirname $0)/../scripts/average_times.sh ${SAMPLES_DIR} >> ${OUTPUT_FILE}
     echo "Total autotune time (s): ${SECONDS}" >> ${OUTPUT_FILE}
 

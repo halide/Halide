@@ -579,6 +579,8 @@ void generate_schedule(const std::vector<Function> &outputs,
     aslog(1) << "Total filter parallel tiles time (ms): " << stats.total_filter_parallel_tiles_time() << "\n";
 
     aslog(1) << "Number of schedules evaluated by cost model: " << stats.num_schedules_enqueued << '\n';
+    aslog(1) << "Number of tilings generated: " << stats.num_tilings_generated << '\n';
+    aslog(1) << "Number of tilings accepted: " << stats.num_tilings_accepted << '\n';
     aslog(1) << "Total cost model evaluation time (ms): " << stats.total_cost_model_evaluation_time() << "\n";
     aslog(1) << "Average cost model evaluation time (ms): " << stats.average_cost_model_evaluation_time() << "\n";
     std::chrono::duration<double> total_time = timer.elapsed();

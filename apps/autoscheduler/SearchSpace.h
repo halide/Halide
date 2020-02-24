@@ -19,12 +19,14 @@ namespace Internal {
 namespace Autoscheduler {
 
 struct SearchSpace {
+    using StateVector = std::vector<IntrusivePtr<State>>;
     const FunctionDAG &dag;
     const MachineParams &params;
     const Target &target;
     std::mt19937 &rng;
     CostModel *cost_model;
     Statistics &stats;
+    bool randomize_tilings;
 
     NodeMap<bool> inlined_nodes;
     NodeMap<std::vector<IntrusivePtr<const LoopNest>>> compute_root_nodes;
@@ -83,6 +85,11 @@ struct SearchSpace {
     bool add_child(const IntrusivePtr<State>& state,
                    const IntrusivePtr<const LoopNest>& new_root,
                    std::function<void(IntrusivePtr<State> &&)> &accept_child) const;
+
+    void process_pending_states(std::unordered_map<uint64_t, StateVector>& primary_options,
+                                std::unordered_map<uint64_t, StateVector>& secondary_options,
+                                int &num_children,
+                                std::function<void(IntrusivePtr<State> &&)> &accept_child);
 };
 
 

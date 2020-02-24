@@ -7,6 +7,11 @@ namespace Halide {
 namespace Internal {
 namespace Autoscheduler {
 
+bool use_randomized_tilings() {
+    static std::string randomization_str = get_env_variable("HL_RANDOMIZE_TILINGS");
+    return randomization_str == "1";
+}
+
 SearchSpace::SearchSpace(const FunctionDAG &dag,
                          const MachineParams &params,
                          const Target &target,
@@ -19,6 +24,7 @@ SearchSpace::SearchSpace(const FunctionDAG &dag,
     , rng{rng}
     , cost_model{cost_model}
     , stats{stats}
+    , randomize_tilings{use_randomized_tilings()}
 {
     memoized_compute_root_blocks.make_large(dag.nodes.size());
 }
@@ -182,6 +188,45 @@ vector<ThreadTileOption> SearchSpace::filter_thread_tile_options(vector<Intrusiv
     return options;
 }
 
+void SearchSpace::process_pending_states(std::unordered_map<uint64_t, StateVector>& primary_options,
+                                         std::unordered_map<uint64_t, StateVector>& secondary_options,
+                                         int &num_children,
+                                         std::function<void(IntrusivePtr<State> &&)> &accept_child) {
+    for (auto& entry : primary_options) {
+        size_t N = entry.second.size();
+        if (N > 1) {
+            N = std::log2(entry.second.size());
+        }
+
+        std::shuffle(entry.second.begin(), entry.second.end(), rng);
+
+        size_t accepted = 0;
+        for (size_t i = 0; i < entry.second.size() && accepted < N; ++i) {
+            if (entry.second[i]->calculate_cost(dag, params, target, cost_model, stats)) {
+                num_children++;
+                accept_child(std::move(entry.second[i]));
+                accepted++;
+                stats.num_tilings_accepted++;
+            }
+        }
+    }
+
+    if (num_children > 0) {
+        return;
+    }
+
+    for (auto& entry : secondary_options) {
+        for (size_t i = 0; i < entry.second.size(); ++i) {
+            if (entry.second[i]->calculate_cost(dag, params, target, cost_model, stats)) {
+                num_children++;
+                accept_child(std::move(entry.second[i]));
+                stats.num_tilings_accepted++;
+                break;
+            }
+        }
+    }
+}
+
 void SearchSpace::generate_children(IntrusivePtr<State> state,
                                     std::function<void(IntrusivePtr<State> &&)> &accept_child,
                                     int pass_idx,
@@ -324,6 +369,8 @@ void SearchSpace::generate_children(IntrusivePtr<State> state,
         }
 
         // 2) Realize it somewhere
+        std::unordered_map<uint64_t, StateVector> primary_options;
+        std::unordered_map<uint64_t, StateVector> secondary_options;
         for (int vector_dim : vector_dims) {
             Timer timer;
             auto tile_options = root->compute_in_tiles(node, nullptr, params, target, vector_dim, false, false, is_pre_pass);
@@ -334,14 +381,33 @@ void SearchSpace::generate_children(IntrusivePtr<State> state,
             stats.filter_thread_tiles_time += timer.elapsed();
 
             for (const auto& o : options) {
-                if (num_children >= 1 && o.max_idle_lane_wastage > 0.5) {
+                if (!randomize_tilings && num_children >= 1 && o.max_idle_lane_wastage > 0.5) {
                     break;
                 }
 
-                if (add_child(state, o.loop_nest, accept_child)) {
+                ++stats.num_tilings_generated;
+
+                if (!randomize_tilings && add_child(state, o.loop_nest, accept_child)) {
                     num_children++;
+                    continue;
                 }
+
+                auto child = state->make_child();
+                child->root = std::move(o.loop_nest);
+                child->num_decisions_made++;
+                uint64_t h = child->structural_hash(pass_idx);
+
+                if (o.max_idle_lane_wastage > 0.5) {
+                    secondary_options[h].push_back(child);
+                    continue;
+                }
+
+                primary_options[h].push_back(child);
             }
+        }
+
+        if (randomize_tilings) {
+            process_pending_states(primary_options, secondary_options, num_children, accept_child);
         }
     } else {
         // We are parallelizing the loops of the func we just injected a realization for.
@@ -381,6 +447,8 @@ void SearchSpace::generate_children(IntrusivePtr<State> state,
 
         internal_assert(parallel_tilings.size() > 0) << " zero parallel tilings\n";
 
+        std::unordered_map<uint64_t, std::vector<IntrusivePtr<State>>> primary_options;
+        std::unordered_map<uint64_t, std::vector<IntrusivePtr<State>>> secondary_options;
         for (auto &parallel_t: parallel_tilings) {
             LoopNest parallel_root;
             parallel_root.copy_from(*root);
@@ -426,11 +494,13 @@ void SearchSpace::generate_children(IntrusivePtr<State> state,
             stats.filter_parallel_tiles_time += timer.elapsed();
 
             for (const auto &o : options) {
-                if (num_children >= 1 && o.idle_core_wastage > 1.2) {
+                if (!randomize_tilings && num_children >= 1 && o.idle_core_wastage > 1.2) {
                     // We have considered several options, and the
                     // remaining ones leave lots of cores idle.
                     break;
                 }
+
+                ++stats.num_tilings_generated;
 
                 LoopNest *new_root = new LoopNest;
                 new_root->copy_from(parallel_root);
@@ -440,11 +510,28 @@ void SearchSpace::generate_children(IntrusivePtr<State> state,
                     }
                 }
 
-                if (add_child(state, new_root, accept_child)) {
+                if (!randomize_tilings && add_child(state, new_root, accept_child)) {
                     num_children++;
                     memoize_blocks(node, new_root);
+                    continue;
                 }
+
+                auto child = state->make_child();
+                child->root = std::move(new_root);
+                child->num_decisions_made++;
+                uint64_t h = child->structural_hash(pass_idx);
+
+                if (o.idle_core_wastage > 1.2) {
+                    secondary_options[h].push_back(child);
+                    continue;
+                }
+
+                primary_options[h].push_back(child);
             }
+        }
+
+        if (randomize_tilings) {
+            process_pending_states(primary_options, secondary_options, num_children, accept_child);
         }
     }
 

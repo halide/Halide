@@ -68,6 +68,8 @@ struct Statistics {
     int num_memoized_featurizations{0};
     int num_memoization_hits{0};
     int num_memoization_misses{0};
+    int num_tilings_accepted{0};
+    int num_tilings_generated{0};
     std::chrono::duration<double> generate_children_time{0};
     std::chrono::duration<double> calculate_cost_time{0};
     std::chrono::duration<double> enqueue_time{0};

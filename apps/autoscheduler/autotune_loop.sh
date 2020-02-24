@@ -135,6 +135,7 @@ make_featurization() {
         HL_WEIGHTS_DIR=${WEIGHTS} \
         HL_USE_MEMOIZED_FEATURES=1 \
         HL_MEMOIZE_BLOCKS=1 \
+        HL_RANDOMIZE_TILINGS=1 \
         HL_FREEZE_INLINE_COMPUTE_ROOT=1 \
         HL_RANDOM_DROPOUT=${dropout} \
         HL_BEAM_SIZE=${beam} \
