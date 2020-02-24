@@ -17,7 +17,7 @@ jobs:
       CXX: ${{matrix.cxx}}
       LD: ${{matrix.ld}}
       PYTHON: python3.7
-      OPTIMIZE: -g
+      OPTIMIZE: -g   # TODO
 
     strategy:
       fail-fast: false  # Keep running other jobs even if one fails
@@ -83,40 +83,11 @@ jobs:
         architecture: 'x64' # N.B.: 'x86' is only available for Windows (Ubuntu is special-cased below)
 
     - name: Configure Python (32-bit)
-      if: startsWith(matrix.target_os, 'windows') && matrix.target_bits == 32
+      if: matrix.target_os == 'windows' && matrix.target_bits == 32
       uses: actions/setup-python@v1
       with:
         python-version: '3.7'
         architecture: 'x86'
-
-    - name: Configure Ubuntu-32
-      if: startsWith(matrix.target_os, 'ubuntu') && matrix.target_bits == 32
-      shell: bash
-      run: |
-        set -eu
-
-        sudo dpkg --add-architecture i386
-        sudo apt-get update
-        sudo apt-get install gcc-multilib g++-multilib
-        sudo apt-get install zlib1g-dev:i386 libjpeg-dev:i386 libpng-dev:i386
-        sudo apt-get install python3.7:i386 python3.7-dev:i386
-
-        file $(which python3.7)
-
-        # Verify that we have a 32-bit build
-        PYVERSION=`python3.7 - << EOF
-        import platform
-        print(platform.architecture()[0])
-        EOF`
-
-        if [[ $PYVERSION != 32bit ]]; then
-          echo Expected 32-bit version of Python 3.7, found ${PYVERSION}
-          exit 1
-        fi
-
-        echo ::set-env name=CC::"${CC} -m32"
-        echo ::set-env name=CXX::"${CXX} -m32"
-        echo ::set-env name=LD::"${LD} -melf_i386"
 
     - name: Configure Ubuntu Host
       if: startsWith(matrix.host_os, 'ubuntu')
@@ -148,6 +119,35 @@ jobs:
 
         # On Windows, it's just 'python', apparently
         echo ::set-env name=PYTHON::"python"
+
+    - name: Configure Ubuntu-32
+      if: matrix.target_os == 'linux' && matrix.target_bits == 32
+      shell: bash
+      run: |
+        set -eu
+
+        sudo dpkg --add-architecture i386
+        sudo apt-get update
+        sudo apt-get install ${{matrix.cc}}-multilib ${{matrix.cxx}}-multilib
+        sudo apt-get install zlib1g-dev:i386 libjpeg-dev:i386 libpng-dev:i386
+        sudo apt-get install python3.7:i386 python3.7-dev:i386
+
+        file $(which python3.7)
+
+        # Verify that we have a 32-bit build
+        PYVERSION=`python3.7 - << EOF
+        import platform
+        print(platform.architecture()[0])
+        EOF`
+
+        if [[ $PYVERSION != 32bit ]]; then
+          echo Expected 32-bit version of Python 3.7, found ${PYVERSION}
+          exit 1
+        fi
+
+        echo ::set-env name=CC::"${CC} -m32"
+        echo ::set-env name=CXX::"${CXX} -m32"
+        echo ::set-env name=LD::"${LD} -melf_i386"
 
     - name: Configure Env Vars
       shell: bash
@@ -243,7 +243,7 @@ jobs:
           export LD="${LD} -melf_i386"
         fi
 
-        if [[ ${{matrix.target_os}} == macos* ]]; then
+        if [[ ${{matrix.target_os}} == osx ]]; then
           # LLVM_ENABLE_SUPPORT_XCODE_SIGNPOSTS=OFF is needed for compatibility with older XCode versions
           EXTRA_CMAKE_FLAGS="${EXTRA_CMAKE_FLAGS} \
                              -D LLVM_ENABLE_SUPPORT_XCODE_SIGNPOSTS=FORCE_OFF"
@@ -302,7 +302,7 @@ jobs:
         export TEST_TMPDIR="${HALIDE_TEMP_DIR}"
         cd ${HALIDE_BUILD_DIR}
 
-        # if [[ ${{matrix.target_os}} == ubuntu* && ${{matrix.target_bits}} == 32 ]]; then
+        # if [[ ${{matrix.target_os}} == linux && ${{matrix.target_bits}} == 32 ]]; then
         #   # TOOD: test_python is crashing on 32-bit linux?
         #   TEST_GROUPS_PARALLEL="internal correctness error warning generator apps"
         # else
