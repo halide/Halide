@@ -84,7 +84,9 @@ public:
         const std::string &suffix,
         const std::vector<std::pair<std::string, ExternSignature>> &externs);
 
-    size_t get_requested_alloca_total() const { return requested_alloca_total; }
+    size_t get_requested_alloca_total() const {
+        return requested_alloca_total;
+    }
 
 protected:
     CodeGen_LLVM(Target t);
