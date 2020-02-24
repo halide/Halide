@@ -527,11 +527,12 @@ int main(int argc, char **argv) {
 
                         auto it = p.second.schedules.begin();
                         std::advance(it, first);
+                        std::vector<std::vector<double>> cost_per_stage;
+                        cost_per_stage.resize(batch_size);
                         for (size_t j = 0; j < batch_size; j++) {
                             auto &sched = it->second;
                             Buffer<float> buf;
-                            std::vector<double> cost_per_stage;
-                            tp->enqueue(pipeline.num_stages, &buf, &sched.prediction[model], &cost_per_stage);
+                            tp->enqueue(pipeline.num_stages, &buf, &sched.prediction[model], &cost_per_stage[j]);
                             runtimes(j) = sched.runtimes[0];
                             if (runtimes(j) < runtimes(fastest_idx)) {
                                 fastest_idx = j;
