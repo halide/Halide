@@ -64,10 +64,10 @@ jobs:
 
         exclude:
           # Don't attempt 32-bit builds for macos
-          - os: macos-10.15
-            bits: 32
+          - target_os: osx
+            target_bits: 32
           # Don't use make on windows
-          - os: windows-2019
+          - target_os: windows
             build_tool: make
 
     steps:
@@ -331,6 +331,11 @@ jobs:
 
         # tutorial has some performance measurements that can be flaky if we run them in parallel
         TEST_GROUPS_SERIAL="performance|tutorial"
+        TEST_GROUPS_SERIAL_BROKEN=""
+        if [[ ${{matrix.host_os}} == windows* ]]; then
+          # TODO: libpng not working yet on windows, exclude the tutorials that need it
+          TEST_GROUPS_SERIAL_BROKEN="lesson_02_input_image|lesson_07_multi_stage_pipelines|lesson_09_update_definitions|lesson_12_using_the_gpu"
+        fi
 
         # opengl won't work on the buildbots. auto_schedule is just flaky.
         TEST_GROUPS_BROKEN="opengl|auto_schedule"
@@ -347,5 +352,6 @@ jobs:
         # Serial
         ctest \
           -L "${TEST_GROUPS_SERIAL}" \
+          -LE "${TEST_GROUPS_SERIAL_BROKEN}" \
           --output-on-failure
 
