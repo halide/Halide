@@ -26,10 +26,10 @@ jobs:
         # matrix (and since we are limited to 8 concurrent tests, it would be
         # useful to prune this a bit).
         target_arch: [x86]  #, arm]
-        target_bits: [64]  # 32, 64]
-        target_os: [windows] #  , linux, osx]
-        llvm_version: [11] #8, 9, 10, 11]
-        build_tool: [cmake_shared] # make, cmake_shared]  # TODO: cmake_static is still dodgy?
+        target_bits: [32, 64]
+        target_os: [windows, linux, osx]
+        llvm_version: [8, 9, 10, 11]
+        build_tool: [make, cmake_shared]  # TODO: cmake_static is still dodgy?
         include:
           - llvm_version: 8
             llvm_branch: release/8.x
@@ -256,6 +256,8 @@ jobs:
 
         cmake \
           -D CMAKE_BUILD_TYPE=${BUILD_TYPE} \
+          -D CMAKE_C_COMPILER="${CC}" \
+          -D CMAKE_CXX_COMPILER="${CXX}" \
           -D LLVM_DIR="${LLVM_INSTALL_DIR}/lib/cmake/llvm" \
           -D HALIDE_REQUIRE_LLVM_VERSION="${REQUIRE_LLVM_VERSION}" \
           -D HALIDE_SHARED_LIBRARY=${SHARED_LIBRARY} \
@@ -269,6 +271,8 @@ jobs:
       shell: bash
       run: |
         # Build Halide
+        set -eu
+
         cd ${HALIDE_BUILD_DIR}
 
         # TODO make -f ${HALIDE_SOURCE_DIR}/Makefile -j ${PARALLEL_JOBS} distrib build_tests build_python_bindings build_apps
@@ -293,6 +297,8 @@ jobs:
       shell: bash
       run: |
         # Test Halide
+        set -eu
+
         export TEST_TMPDIR="${HALIDE_TEMP_DIR}"
         cd ${HALIDE_BUILD_DIR}
 
@@ -327,6 +333,8 @@ jobs:
       shell: bash
       run: |
         # Test Halide
+        set -eux
+
         TEST_GROUPS_PARALLEL="internal|correctness|error|warning|generator"
 
         # tutorial has some performance measurements that can be flaky if we run them in parallel
