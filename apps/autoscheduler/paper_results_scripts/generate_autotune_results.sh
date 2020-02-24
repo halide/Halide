@@ -100,8 +100,8 @@ for app in $APPS; do
         ITERATION=$((ITERATION + 1))
     done
 
-    WEIGHTS_FILE="$(ls -td ${SAMPLES_DIR}/batch* | head -n 1)/used.weights"
-    predict_all ${HALIDE_ROOT} ${SAMPLES_DIR} ${WEIGHTS_FILE} ${PREDICTIONS_FILE}
+    WEIGHTS_FILE="${SAMPLES_DIR}/updated.weights"
+    predict_all ${HALIDE_ROOT} ${SAMPLES_DIR} ${WEIGHTS_FILE} ${PREDICTIONS_FILE} 0
     extract_best_times ${HALIDE_ROOT} ${SAMPLES_DIR} ${BEST_TIMES_FILE}
     echo "Computing average statistics..."
     bash $(dirname $0)/../scripts/average_times.sh ${SAMPLES_DIR} >> ${OUTPUT_FILE}

@@ -208,9 +208,10 @@ function predict_all() {
     local -r samples_dir=$2
     local -r weights_dir=$3
     local -r predictions_file=$4
+    local -r include_filenames=$5
 
     get_autoscheduler_scripts_dir ${halide_root} scripts_dir
-    bash ${scripts_dir}/predict_all.sh ${samples_dir} ${weights_dir} ${predictions_file}
+    bash ${scripts_dir}/predict_all.sh ${samples_dir} ${weights_dir} ${predictions_file} ${include_filenames}
 }
 
 function extract_best_times() {
