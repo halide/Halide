@@ -128,7 +128,7 @@ jobs:
         # TODO(srj): OpenGL is only needed to build the opengl tests (which we don't even run)...
         sudo apt-get install libglu1-mesa-dev freeglut3-dev mesa-common-dev
 
-        sudo apt-get install ninja
+        sudo apt-get install ninja-build
         sudo apt-get install libjpeg-dev libpng-dev
         sudo apt-get --no-install-recommends install doxygen
 
