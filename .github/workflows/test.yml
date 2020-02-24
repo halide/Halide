@@ -271,7 +271,7 @@ jobs:
         cd ${HALIDE_BUILD_DIR}
 
         # TODO make -f ${HALIDE_SOURCE_DIR}/Makefile -j ${PARALLEL_JOBS} distrib build_tests build_python_bindings build_apps
-        make -f ${HALIDE_SOURCE_DIR}/Makefile -j ${PARALLEL_JOBS} distrib build_python_bindings
+        OPTIMIZE=-g make -f ${HALIDE_SOURCE_DIR}/Makefile -j ${PARALLEL_JOBS} distrib build_python_bindings
 
     - name: Build Halide (CMake)
       if: startsWith(matrix.build_tool, 'cmake')
@@ -312,17 +312,17 @@ jobs:
 
         # TODO
         # make -f ${HALIDE_SOURCE_DIR}/Makefile tutorial_lesson_12_using_the_gpu
-        make -f ${HALIDE_SOURCE_DIR}/Makefile test_python
+        OPTIMIZE=-g make -f ${HALIDE_SOURCE_DIR}/Makefile test_python
 
         # Parallel
-        for t in ${TEST_GROUPS_PARALLEL}; do
-          make -f ${HALIDE_SOURCE_DIR}/Makefile -j ${PARALLEL_JOBS} test_${t}
-        done
+        # for t in ${TEST_GROUPS_PARALLEL}; do
+        #   make -f ${HALIDE_SOURCE_DIR}/Makefile -j ${PARALLEL_JOBS} test_${t}
+        # done
 
-        # Serial
-        for t in ${TEST_GROUPS_SERIAL}; do
-          make -f ${HALIDE_SOURCE_DIR}/Makefile -j ${PARALLEL_JOBS} test_$t
-        done
+        # # Serial
+        # for t in ${TEST_GROUPS_SERIAL}; do
+        #   make -f ${HALIDE_SOURCE_DIR}/Makefile -j ${PARALLEL_JOBS} test_$t
+        # done
 
     - name: Run Tests (CMake)
       if: startsWith(matrix.build_tool, 'cmake')
