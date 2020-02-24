@@ -281,7 +281,6 @@ jobs:
         set -eu
 
         cd ${HALIDE_BUILD_DIR}
-        # Omitting the --target flag implies "all/all_build"
         cmake \
           --build ${HALIDE_BUILD_DIR} \
           --config ${BUILD_TYPE} \
