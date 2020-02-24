@@ -84,6 +84,8 @@ public:
         const std::string &suffix,
         const std::vector<std::pair<std::string, ExternSignature>> &externs);
 
+    size_t get_requested_alloca_total() const { return requested_alloca_total; }
+
 protected:
     CodeGen_LLVM(Target t);
 
@@ -433,6 +435,11 @@ protected:
     llvm::Value *create_alloca_at_entry(llvm::Type *type, int n,
                                         bool zero_initialize = false,
                                         const std::string &name = "");
+
+    /** Total size of all alloca() storage requested (including alignment padding).
+     * Note that the actual stack space used might be less, as LLVM will promote
+     * register-sized allocas into registers in many cases. */
+    size_t requested_alloca_total = 0;
 
     /** Which buffers came in from the outside world (and so we can't
      * guarantee their alignment) */
