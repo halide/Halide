@@ -145,6 +145,8 @@ jobs:
         echo ::set-env name=CC::"${CC} -m32"
         echo ::set-env name=CXX::"${CXX} -m32"
         echo ::set-env name=LD::"${LD} -melf_i386"
+        echo ::set-env name=HL_TARGET::"x86-32-linux"
+        echo ::set-env name=HL_JIT_TARGET::"x86-32-linux"
 
     - name: Configure Env Vars
       shell: bash
