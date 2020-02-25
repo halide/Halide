@@ -350,6 +350,6 @@ jobs:
         ctest \
           -C ${BUILD_TYPE} \
           -L "${TEST_GROUPS_SERIAL}" \
-          -RE "${TEST_GROUPS_SERIAL_BROKEN}" \
+          -E "${TEST_GROUPS_SERIAL_BROKEN}" \
           --output-on-failure
 

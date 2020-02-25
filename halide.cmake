@@ -15,7 +15,7 @@ include(CMakeParseArguments)
 # Add the include paths and link dependencies for halide_image_io.
 add_library(halide_image_io INTERFACE)
 foreach(LIB IN ITEMS PNG JPEG)
-  find_package(${LIB} QUIET)
+  find_package(${LIB} CONFIG QUIET)
   if(${LIB}_FOUND)
     message(STATUS "Found ${LIB} version ${${LIB}_VERSION}")
     target_link_libraries(halide_image_io INTERFACE ${LIB}::${LIB})
