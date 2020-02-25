@@ -347,7 +347,7 @@ void LoopNest::compute_features(const FunctionDAG &dag,
                 // Extent of the innermost dimension in the storage layout
                 int64_t innermost_storage_extent = 1;
                 int v = p->vector_dim;
-                if (v >= 0 && node->dimensions > 0) {
+                if (v >= 0 && v < node->dimensions) {
                     innermost_storage_extent = root_bounds->region_computed(v).extent();
                 }
                 feat.innermost_bytes_at_root = node->bytes_per_point * innermost_storage_extent;
