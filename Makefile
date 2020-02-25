@@ -2055,7 +2055,7 @@ build_python_bindings: distrib $(BIN_DIR)/host/runtime.a
 .PHONY: test_python
 test_python: distrib $(BIN_DIR)/host/runtime.a build_python_bindings
 	$(MAKE) -C $(ROOT_DIR)/python_bindings \
-		-f $(ROOT_DIR)/python_bindings/Makefile \
+		-f $(ROOT_DIR)/python_bindings/Makefile -k \
 		test \
 		HALIDE_DISTRIB_PATH=$(CURDIR)/$(DISTRIB_DIR) \
 		BIN=$(CURDIR)/$(BIN_DIR)/python3_bindings \
