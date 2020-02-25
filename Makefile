@@ -2048,7 +2048,9 @@ build_python_bindings: distrib $(BIN_DIR)/host/runtime.a
 		HALIDE_DISTRIB_PATH=$(CURDIR)/$(DISTRIB_DIR) \
 		BIN=$(CURDIR)/$(BIN_DIR)/python3_bindings \
 		PYTHON=$(PYTHON) \
-		OPTIMIZE=$(OPTIMIZE)
+		OPTIMIZE=$(OPTIMIZE) \
+		HL_TARGET=$(HL_TARGET) \
+		HL_JIT_TARGET=$(HL_JIT_TARGET)
 
 .PHONY: test_python
 test_python: distrib $(BIN_DIR)/host/runtime.a build_python_bindings
@@ -2058,7 +2060,9 @@ test_python: distrib $(BIN_DIR)/host/runtime.a build_python_bindings
 		HALIDE_DISTRIB_PATH=$(CURDIR)/$(DISTRIB_DIR) \
 		BIN=$(CURDIR)/$(BIN_DIR)/python3_bindings \
 		PYTHON=$(PYTHON) \
-		OPTIMIZE=$(OPTIMIZE)
+		OPTIMIZE=$(OPTIMIZE) \
+		HL_TARGET=$(HL_TARGET) \
+		HL_JIT_TARGET=$(HL_JIT_TARGET)
 
 # It's just for compiling the runtime, so earlier clangs *might* work,
 # but best to peg it to the minimum llvm version.

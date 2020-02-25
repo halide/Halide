@@ -128,6 +128,8 @@ jobs:
         sudo apt-get install ${{matrix.cc}}-multilib ${{matrix.cxx}}-multilib
         sudo apt-get install zlib1g-dev:i386 libjpeg-dev:i386 libpng-dev:i386
         sudo apt-get install python3.7:i386 python3.7-dev:i386
+        # TODO(srj): OpenGL is only needed to build the opengl tests (which we don't even run)...
+        sudo apt-get install libglu1-mesa-dev:i386 freeglut3-dev:i386 mesa-common-dev:i386
 
         file $(which python3.7)
 
