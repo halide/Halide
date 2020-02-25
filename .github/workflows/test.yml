@@ -25,10 +25,10 @@ jobs:
         # matrix (and since we are limited to 8 concurrent tests, it would be
         # useful to prune this a bit).
         target_arch: [x86]  #, arm]
-        target_bits: [32, 64]
-        target_os: [windows, linux, osx]
-        llvm_version: [9, 10, 11]
-        build_tool: [make, cmake_shared]  # TODO: cmake_static is still dodgy?
+        target_bits: [32] #, 64]
+        target_os: [linux] #, windows, osx]
+        llvm_version: [9] #, 10, 11]
+        build_tool: [make] #, cmake_shared]  # TODO: cmake_static is still dodgy?
         include:
           - llvm_version: 9
             llvm_branch: release/9.x
