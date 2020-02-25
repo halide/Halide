@@ -1067,6 +1067,10 @@ static const HvxIntrinsic intrinsic_wrappers[] = {
      i16v1,
      "trunc_sath_shr.vw.uw",
      {i32v2, u32}},
+
+    // Bit counting
+    {MAKE_ID_PAIR(Intrinsic::hexagon_V6_vnormamth), u16v1, "cls.vh", {u16v1}},
+    {MAKE_ID_PAIR(Intrinsic::hexagon_V6_vnormamtw), u32v1, "cls.vw", {u32v1}},
 };
 
 // TODO: Many variants of the above functions are missing. They
@@ -1922,8 +1926,7 @@ Value *CodeGen_Hexagon::vlut(Value *lut, Value *idx, int min_index, int max_inde
         // Make a vector of the indices shifted such that the min of
         // this range is at 0. Use 16-bit indices for this.
         Value *min_index_i_val = create_vector(i16x_t, min_index_i);
-        Value *indices = call_intrin(i16x_t, "halide.hexagon.sub.vh.vh",
-                                     {idx16, min_index_i_val});
+        Value *indices = builder->CreateSub(idx16, min_index_i_val);
 
         // Create a condition value for which elements of the range are valid
         // for this index.
