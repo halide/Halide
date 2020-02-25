@@ -448,7 +448,7 @@ protected:
      * - allocas with non-overlapping lifetimes will share space
      * - on some backends, LLVM may promote register-sized allocas into registers
      * - while this accounts for alloca() calls we know about, it doesn't attempt
-     *   to account for stack spills, function call overhead, etc., so
+     *   to account for stack spills, function call overhead, etc.
      */
     size_t requested_alloca_total = 0;
 
