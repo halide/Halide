@@ -217,7 +217,6 @@ jobs:
         mkdir ${HALIDE_BUILD_DIR}
 
         CMAKE_GEN="Ninja"
-        BUILD_TYPE=Release
         EXTRA_CMAKE_FLAGS=
         PARALLEL_JOBS=4  # GHA VMs have 2 cores
 
@@ -272,8 +271,7 @@ jobs:
 
         cd ${HALIDE_BUILD_DIR}
 
-        # TODO make -f ${HALIDE_SOURCE_DIR}/Makefile -j ${PARALLEL_JOBS} distrib build_tests build_python_bindings build_apps
-        OPTIMIZE=-g make -f ${HALIDE_SOURCE_DIR}/Makefile -j ${PARALLEL_JOBS} distrib build_python_bindings
+        make -f ${HALIDE_SOURCE_DIR}/Makefile -j ${PARALLEL_JOBS} distrib build_tests build_python_bindings build_apps
 
     - name: Build Halide (CMake)
       if: startsWith(matrix.build_tool, 'cmake')
@@ -298,12 +296,7 @@ jobs:
         export TEST_TMPDIR="${HALIDE_TEMP_DIR}"
         cd ${HALIDE_BUILD_DIR}
 
-        # if [[ ${{matrix.target_os}} == linux && ${{matrix.target_bits}} == 32 ]]; then
-        #   # TOOD: test_python is crashing on 32-bit linux?
-        #   TEST_GROUPS_PARALLEL="internal correctness error warning generator apps"
-        # else
         TEST_GROUPS_PARALLEL="internal correctness error warning generator python apps"
-        # fi
 
         # tutorial has some performance measurements that can be flaky if we run them in parallel
         TEST_GROUPS_SERIAL="performance tutorial"
@@ -311,19 +304,15 @@ jobs:
         # opengl won't work on the buildbots. auto_schedule is just flaky.
         TEST_GROUPS_BROKEN="opengl auto_schedule"
 
-        # TODO
-        # make -f ${HALIDE_SOURCE_DIR}/Makefile tutorial_lesson_12_using_the_gpu
-        OPTIMIZE=-g make -f ${HALIDE_SOURCE_DIR}/Makefile test_python
-
         # Parallel
-        # for t in ${TEST_GROUPS_PARALLEL}; do
-        #   make -f ${HALIDE_SOURCE_DIR}/Makefile -j ${PARALLEL_JOBS} test_${t}
-        # done
+        for t in ${TEST_GROUPS_PARALLEL}; do
+          make -f ${HALIDE_SOURCE_DIR}/Makefile -j ${PARALLEL_JOBS} test_${t}
+        done
 
-        # # Serial
-        # for t in ${TEST_GROUPS_SERIAL}; do
-        #   make -f ${HALIDE_SOURCE_DIR}/Makefile -j ${PARALLEL_JOBS} test_$t
-        # done
+        # Serial
+        for t in ${TEST_GROUPS_SERIAL}; do
+          make -f ${HALIDE_SOURCE_DIR}/Makefile -j ${PARALLEL_JOBS} test_$t
+        done
 
     - name: Run Tests (CMake)
       if: startsWith(matrix.build_tool, 'cmake')
@@ -350,12 +339,14 @@ jobs:
 
         # Parallel
         ctest \
+          -C ${BUILD_TYPE} \
           -j ${PARALLEL_JOBS} \
           -L "${TEST_GROUPS_PARALLEL}" \
           --output-on-failure
 
         # Serial
         ctest \
+          -C ${BUILD_TYPE} \
           -L "${TEST_GROUPS_SERIAL}" \
           -LE "${TEST_GROUPS_SERIAL_BROKEN}" \
           --output-on-failure
