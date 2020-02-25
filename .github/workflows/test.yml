@@ -273,7 +273,8 @@ jobs:
 
         cd ${HALIDE_BUILD_DIR}
 
-        make -f ${HALIDE_SOURCE_DIR}/Makefile -j ${PARALLEL_JOBS} distrib build_tests build_python_bindings build_apps
+        # make -f ${HALIDE_SOURCE_DIR}/Makefile -j ${PARALLEL_JOBS} distrib build_tests build_python_bindings build_apps
+        make -f ${HALIDE_SOURCE_DIR}/Makefile -j ${PARALLEL_JOBS} distrib build_python_bindings
 
     - name: Build Halide (CMake)
       if: startsWith(matrix.build_tool, 'cmake')

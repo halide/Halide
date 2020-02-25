@@ -54,6 +54,10 @@ CCFLAGS := $(filter-out -Wstrict-prototypes,$(CCFLAGS))
 # Cf. https://github.com/pybind/pybind11/blob/master/docs/compiling.rst#building-manually
 LDFLAGS += -lz $(USE_EXPORT_DYNAMIC)
 
+ifneq (,$(findstring -m32,$(CXX)))
+LDFLAGS += -lgcc
+endif
+
 PY_SRCS=$(shell ls $(ROOT_DIR)/src/*.cpp)
 PY_OBJS=$(PY_SRCS:$(ROOT_DIR)/src/%.cpp=$(BIN)/src/%.o)
 
