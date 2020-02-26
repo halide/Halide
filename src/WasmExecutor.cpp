@@ -1,5 +1,6 @@
 #include "WasmExecutor.h"
 
+#include "CodeGen_WebAssembly.h"
 #include "Error.h"
 #include "Float16.h"
 #include "Func.h"
@@ -1202,7 +1203,22 @@ std::vector<char> compile_to_wasm(const Module &module, const std::string &fn_na
     std::lock_guard<std::mutex> lock(link_lock);
 
     llvm::LLVMContext context;
-    std::unique_ptr<llvm::Module> fn_module(compile_module_to_llvm_module(module, context));
+    std::unique_ptr<llvm::Module> fn_module;
+
+    // Default wasm stack size is ~64k, but schedules with lots of
+    // alloca usage (heavily inlined, or tracing enabled) can blow thru
+    // this, which crashes in amusing ways, so ask for extra stack space
+    // for the alloca usage.
+    size_t stack_size = 65536;
+    {
+        std::unique_ptr<CodeGen_WebAssembly> cg(new CodeGen_WebAssembly(module.target()));
+        cg->set_context(context);
+        fn_module = cg->compile(module);
+        stack_size += cg->get_requested_alloca_total();
+    }
+
+    stack_size = align_up(stack_size);
+    wdebug(0) << "Requesting stack size of " << stack_size << "\n";
 
     std::unique_ptr<llvm::Module> llvm_module =
         link_with_wasm_jit_runtime(&context, module.target(), std::move(fn_module));
@@ -1231,6 +1247,7 @@ std::vector<char> compile_to_wasm(const Module &module, const std::string &fn_na
         "--export=__data_end",
         "--export=__heap_base",
         "--allow-undefined",
+        "-zstack-size=" + std::to_string(stack_size),
         obj_file.pathname(),
         "--entry=" + fn_name,
         "-o",
@@ -1241,11 +1258,15 @@ std::vector<char> compile_to_wasm(const Module &module, const std::string &fn_na
     for (int i = 0; i < c; ++i)
         lld_args[i] = lld_arg_strs[i].c_str();
 
-#if LLVM_VERSION >= 100
+#if LLVM_VERSION >= 110
+    if (!lld::wasm::link(lld_args, /*CanExitEarly*/ false, llvm::outs(), llvm::errs())) {
+        internal_error << "lld::wasm::link failed\n";
+    }
+#elif LLVM_VERSION >= 100
     std::string lld_errs_string;
     llvm::raw_string_ostream lld_errs(lld_errs_string);
 
-    if (!lld::wasm::link(lld_args, /*CanExitEarly*/ false, llvm::outs(), lld_errs)) {
+    if (!lld::wasm::link(lld_args, /*CanExitEarly*/ false, llvm::outs(), llvm::errs())) {
         internal_error << "lld::wasm::link failed: (" << lld_errs.str() << ")\n";
     }
 #else

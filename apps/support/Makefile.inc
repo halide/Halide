@@ -1,5 +1,5 @@
 # Disable built-in makefile rules for all apps to avoid pointless file-system
-# scanning and general weirdness resulting from implicit rules. 
+# scanning and general weirdness resulting from implicit rules.
 MAKEFLAGS += --no-builtin-rules
 .SUFFIXES:
 
@@ -43,12 +43,7 @@ GENERATOR_OUTPUTS ?= static_library,h,registration,stmt,assembly
 # This pulls in the definition of HALIDE_SYSTEM_LIBS and HALIDE_RTTI
 include $(HALIDE_DISTRIB_PATH)/halide_config.make
 
-ifeq ($(OS), Windows_NT)
-# Flags for mingw environment
-LDFLAGS += -lz -lole32 -lkernel32 -lpsapi -luuid -Wl,--stack,8388608
-else
 LDFLAGS += -ldl -lpthread -lz
-endif
 
 CXX ?= g++
 GXX ?= g++
@@ -81,14 +76,10 @@ USE_EXPORT_DYNAMIC=
 endif
 endif
 
-ifeq ($(OS), Windows_NT)
-SHARED_EXT=dll
-else
 ifeq ($(UNAME), Darwin)
 SHARED_EXT=dylib
 else
 SHARED_EXT=so
-endif
 endif
 
 # To run apps on android that support this, build a separate toolchain from the Android NDK
@@ -130,16 +121,7 @@ LDFLAGS-arm-32-android ?= -llog -fPIE -pie
 
 LIB_HALIDE_STATIC = $(HALIDE_DISTRIB_PATH)/lib/libHalide.a
 
-ifeq ($(OS), Windows_NT)
-
-# TODO: copy libHalide.dll somewhere that windows can find it, and use it instead
-LIB_HALIDE = $(LIB_HALIDE_STATIC)
-
-else
-
 LIB_HALIDE = $(HALIDE_DISTRIB_PATH)/bin/libHalide.$(SHARED_EXT)
-
-endif
 
 GENERATOR_DEPS ?= $(LIB_HALIDE) $(HALIDE_DISTRIB_PATH)/include/Halide.h $(HALIDE_DISTRIB_PATH)/tools/GenGen.cpp
 GENERATOR_DEPS_STATIC ?= $(LIB_HALIDE_STATIC) $(HALIDE_DISTRIB_PATH)/include/Halide.h $(HALIDE_DISTRIB_PATH)/tools/GenGen.cpp

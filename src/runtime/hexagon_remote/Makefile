@@ -3,8 +3,7 @@
 # in the Halide repo; this is intended to allow end users to compile for
 # Hexagon targets without requiring the Hexagon SDK to be present on the build
 # system. (The Hexagon SDK is of course required to build the glue code itself.)
-# At present, only Linux systems are supported for building and testing; this
-# could probably be made to work on Windows (via MinGW) with a little effort.
+# At present, only Linux systems are supported for building and testing.
 #
 # In order to build this, you'll need to ensure that the following
 # env vars are set correctly:

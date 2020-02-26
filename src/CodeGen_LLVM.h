@@ -84,6 +84,10 @@ public:
         const std::string &suffix,
         const std::vector<std::pair<std::string, ExternSignature>> &externs);
 
+    size_t get_requested_alloca_total() const {
+        return requested_alloca_total;
+    }
+
 protected:
     CodeGen_LLVM(Target t);
 
@@ -433,6 +437,20 @@ protected:
     llvm::Value *create_alloca_at_entry(llvm::Type *type, int n,
                                         bool zero_initialize = false,
                                         const std::string &name = "");
+
+    /** A (very) conservative guess at the size of all alloca() storage requested
+     * (including alignment padding). It's currently meant only to be used as
+     * a very coarse way to ensure there is enough stack space when testing
+     * on the WebAssembly backend.
+     *
+     * It is *not* meant to be a useful proxy for "stack space needed", for a
+     * number of reasons:
+     * - allocas with non-overlapping lifetimes will share space
+     * - on some backends, LLVM may promote register-sized allocas into registers
+     * - while this accounts for alloca() calls we know about, it doesn't attempt
+     *   to account for stack spills, function call overhead, etc.
+     */
+    size_t requested_alloca_total = 0;
 
     /** Which buffers came in from the outside world (and so we can't
      * guarantee their alignment) */

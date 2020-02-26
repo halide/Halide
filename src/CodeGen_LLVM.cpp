@@ -1967,7 +1967,7 @@ void CodeGen_LLVM::add_tbaa_metadata(llvm::Instruction *inst, string buffer, Exp
                 // that contains this ramp.
                 int64_t stride = *pstride;
                 base = *pbase;
-                assert(base >= 0);
+                internal_assert(base >= 0);
                 width = next_power_of_two(ramp->lanes * stride);
 
                 while (base % width) {
@@ -2929,7 +2929,7 @@ void CodeGen_LLVM::visit(const Call *op) {
         }
 
     } else if (op->is_intrinsic(Call::stringify)) {
-        assert(!op->args.empty());
+        internal_assert(!op->args.empty());
 
         if (op->type.is_vector()) {
             scalarize(op);
@@ -4322,9 +4322,12 @@ Value *CodeGen_LLVM::create_alloca_at_entry(llvm::Type *t, int n, bool zero_init
     Value *size = ConstantInt::get(i32_t, n);
     AllocaInst *ptr = builder->CreateAlloca(t, size, name);
     int align = native_vector_bits() / 8;
+    llvm::DataLayout d(module.get());
+    int allocated_size = n * (int)d.getTypeAllocSize(t);
     if (t->isVectorTy() || n > 1) {
         ptr->setAlignment(make_alignment(align));
     }
+    requested_alloca_total += allocated_size;
 
     if (zero_initialize) {
         if (n == 1) {

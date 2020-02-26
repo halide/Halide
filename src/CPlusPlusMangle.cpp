@@ -346,8 +346,7 @@ std::string simple_type_to_mangle_char(const std::string type_name, const Target
     } else if (type_name == "int64_t") {
         if (target.os == Target::OSX ||
             target.os == Target::IOS ||
-            target.bits == 32 ||
-            target.has_feature(Target::MinGW)) {
+            target.bits == 32) {
             return "x";
         } else {
             return "l";
@@ -355,8 +354,7 @@ std::string simple_type_to_mangle_char(const std::string type_name, const Target
     } else if (type_name == "uint64_t") {
         if (target.os == Target::OSX ||
             target.os == Target::IOS ||
-            target.bits == 32 ||
-            target.has_feature(Target::MinGW)) {
+            target.bits == 32) {
             return "y";
         } else {
             return "m";
@@ -537,8 +535,7 @@ std::string mangle_type(const Type &type, const Target &target, PrevPrefixes &pr
         case 64:
             if (target.os == Target::OSX ||
                 target.os == Target::IOS ||
-                target.bits == 32 ||
-                target.has_feature(Target::MinGW)) {
+                target.bits == 32) {
                 return "x";
             } else {
                 return "l";
@@ -559,8 +556,7 @@ std::string mangle_type(const Type &type, const Target &target, PrevPrefixes &pr
         case 64:
             if (target.os == Target::OSX ||
                 target.os == Target::IOS ||
-                target.bits == 32 ||
-                target.has_feature(Target::MinGW)) {
+                target.bits == 32) {
                 return "y";
             } else {
                 return "m";
@@ -608,7 +604,7 @@ std::string cplusplus_function_mangled_name(const std::string &name, const std::
 std::string cplusplus_function_mangled_name(const std::string &name, const std::vector<std::string> &namespaces,
                                             Type return_type, const std::vector<ExternFuncArgument> &args,
                                             const Target &target) {
-    if (target.os == Target::Windows && !target.has_feature(Target::MinGW)) {
+    if (target.os == Target::Windows) {
         return WindowsMangling::cplusplus_function_mangled_name(name, namespaces, return_type, args, target);
     } else {
         return ItaniumABIMangling::cplusplus_function_mangled_name(name, namespaces, return_type, args, target);

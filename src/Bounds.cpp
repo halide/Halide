@@ -940,7 +940,7 @@ private:
         //
         // TODO: are any other intrinsics worth including here as well?
         if (op->is_intrinsic(Call::strict_float)) {
-            assert(op->args.size() == 1);
+            internal_assert(op->args.size() == 1);
             op->args[0].accept(this);
             return;
         }
@@ -1034,18 +1034,18 @@ private:
             full_clamp.accept(this);
         } else if (op->is_intrinsic(Call::likely) ||
                    op->is_intrinsic(Call::likely_if_innermost)) {
-            assert(op->args.size() == 1);
+            internal_assert(op->args.size() == 1);
             op->args[0].accept(this);
         } else if (op->is_intrinsic(Call::return_second)) {
-            assert(op->args.size() == 2);
+            internal_assert(op->args.size() == 2);
             op->args[1].accept(this);
         } else if (op->is_intrinsic(Call::if_then_else)) {
-            assert(op->args.size() == 3);
+            internal_assert(op->args.size() == 3);
             // Probably more conservative than necessary
             Expr equivalent_select = Select::make(op->args[0], op->args[1], op->args[2]);
             equivalent_select.accept(this);
         } else if (op->is_intrinsic(Call::require)) {
-            assert(op->args.size() == 3);
+            internal_assert(op->args.size() == 3);
             op->args[1].accept(this);
         } else if (op->is_intrinsic(Call::shift_left) ||
                    op->is_intrinsic(Call::shift_right) ||
@@ -1768,7 +1768,7 @@ private:
     void visit(const Call *op) override {
         if (consider_calls) {
             if (op->is_intrinsic(Call::if_then_else)) {
-                assert(op->args.size() == 3);
+                internal_assert(op->args.size() == 3);
                 // We wrap 'then_case' and 'else_case' inside 'dummy' call since IfThenElse
                 // only takes Stmts as arguments.
                 Stmt then_case = Evaluate::make(op->args[1]);

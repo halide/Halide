@@ -57,8 +57,6 @@ requirements.txt`)
 
 -   Halide compiled to a distribution (e.g. `make distrib` or similar), with the
     `HALIDE_DISTRIB_PATH` env var pointing to it
--   The PyBind11 package (https://github.com/pybind/pybind11), v2.2.1 or later,
-    with the `PYBIND11_PATH` env var pointing to it
 
 ## Compilation instructions
 

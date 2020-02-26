@@ -67,7 +67,7 @@ static bool can_convert(const LoweredArgument *arg) {
 
 std::pair<string, string> print_type(const LoweredArgument *arg) {
     // Excluded by can_convert() above:
-    assert(!arg->type.is_vector());
+    internal_assert(!arg->type.is_vector());
 
     if (arg->type.is_handle()) {
         /* Handles can be any pointer. However, from Python, all you can pass to
@@ -96,8 +96,8 @@ std::pair<string, string> print_type(const LoweredArgument *arg) {
 }
 
 void PythonExtensionGen::convert_buffer(string name, const LoweredArgument *arg) {
-    assert(arg->is_buffer());
-    assert(arg->dimensions);
+    internal_assert(arg->is_buffer());
+    internal_assert(arg->dimensions);
     dest << "    halide_buffer_t buffer_" << name << ";\n";
     dest << "    halide_dimension_t dimensions_" << name << "[" << (int)arg->dimensions << "];\n";
     dest << "    if (_convert_py_buffer_to_halide(";
