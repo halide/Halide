@@ -84,6 +84,51 @@ void DefaultCostModel::set_pipeline_features(const Runtime::Buffer<float> &pipel
     num_cores = n;
 }
 
+void DefaultCostModel::enqueue(const Internal::Autoscheduler::FunctionDAG &dag,
+                               const Halide::Internal::Autoscheduler::StageMapOfScheduleFeatures &schedule_feats,
+                               double *cost_ptr) {
+    num_stages = (int)schedule_feats.size();
+
+    Runtime::Buffer<float> schedule_features;
+
+    // Tell the cost model about this state. It won't actually
+    // evaluate it until we call evaluate_costs (or if it runs out
+    // of internal buffer space), so that the evaluations can be
+    // batched.
+    enqueue(num_stages, &schedule_features, cost_ptr);
+
+    // index of current stage whose features we are reading
+    int stage = 0;
+    // load schedule features into input buffer
+    for (const auto &n : dag.nodes) {
+
+        // Inputs are computed outside of the pipeline and don't count.
+        if (n.is_input) continue;
+
+        // The remaining stages are not yet
+        // scheduled. Optimistically assume their internal costs
+        // will not depend on the decisions made already, so
+        // there's no point adding it on to the total because it's
+        // the same across all states.  An underestimate of the
+        // cost for loading from these unscheduled stages is
+        // already baked into the scheduled stages that consume
+        // them.
+        if (stage >= num_stages) break;
+
+        // Load up the schedule features for all stages of this Func.
+        for (auto it = n.stages.rbegin(); it != n.stages.rend(); it++) {
+            internal_assert(schedule_feats.contains(&*it)) << n.func.name() << "\n";
+            const auto &feat = schedule_feats.get(&*it);
+            for (size_t i = 0; i < ScheduleFeatures::num_features(); i++) {
+                schedule_features(i, stage) = feat[i];
+            }
+            stage += 1;
+        }
+    }
+    // Check we considered everything we were supposed to.
+    internal_assert(stage == num_stages);
+}
+
 void DefaultCostModel::enqueue(int ns, Runtime::Buffer<float> *schedule_feats, double *cost_ptr) {
     num_stages = ns;
 
