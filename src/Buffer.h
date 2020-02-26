@@ -416,7 +416,7 @@ public:
     HALIDE_BUFFER_FORWARD(translate)
     HALIDE_BUFFER_FORWARD_INITIALIZER_LIST(translate, std::vector<int>)
     HALIDE_BUFFER_FORWARD(transpose)
-    HALIDE_BUFFER_FORWARD(transposed)
+    HALIDE_BUFFER_FORWARD_CONST(transposed)
     HALIDE_BUFFER_FORWARD(add_dimension)
     HALIDE_BUFFER_FORWARD(copy_to_host)
     HALIDE_BUFFER_FORWARD(copy_to_device)
