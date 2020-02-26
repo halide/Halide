@@ -2054,6 +2054,15 @@ build_python_bindings: distrib $(BIN_DIR)/host/runtime.a
 
 .PHONY: test_python
 test_python: distrib $(BIN_DIR)/host/runtime.a build_python_bindings
+	locate libgcc
+	echo
+	echo
+	locate libgcc.a
+	echo
+	echo
+	nm $(CURDIR)/$(BIN_DIR)/python3_bindings/halide.cpython-37m-i386-linux-gnu.so
+	echo
+	echo
 	$(MAKE) -C $(ROOT_DIR)/python_bindings \
 		-f $(ROOT_DIR)/python_bindings/Makefile \
 		test \
