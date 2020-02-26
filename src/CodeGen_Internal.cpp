@@ -476,7 +476,7 @@ Expr lower_euclidean_mod(Expr a, Expr b) {
 }
 
 Expr lower_signed_shift_left(Expr a, Expr b) {
-    assert(b.type().is_int());
+    internal_assert(b.type().is_int());
     const int64_t *const_int_b = as_const_int(b);
     if (const_int_b) {
         Type t = UInt(a.type().bits(), a.type().lanes());
@@ -498,7 +498,7 @@ Expr lower_signed_shift_left(Expr a, Expr b) {
 }
 
 Expr lower_signed_shift_right(Expr a, Expr b) {
-    assert(b.type().is_int());
+    internal_assert(b.type().is_int());
     const int64_t *const_int_b = as_const_int(b);
     if (const_int_b) {
         Type t = UInt(a.type().bits(), a.type().lanes());
