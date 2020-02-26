@@ -1008,6 +1008,38 @@ void CodeGen_ARM::visit(const Call *op) {
     CodeGen_Posix::visit(op);
 }
 
+void CodeGen_ARM::visit(const LT *op) {
+#if LLVM_VERSION >= 100
+    if (op->a.type().is_float() && op->type.is_vector()) {
+        // Fast-math flags confuse LLVM's aarch64 backend, so
+        // temporarily clear them for this instruction.
+        // See https://bugs.llvm.org/show_bug.cgi?id=45036
+        llvm::IRBuilderBase::FastMathFlagGuard guard(*builder);
+        builder->clearFastMathFlags();
+        CodeGen_Posix::visit(op);
+        return;
+    }
+#endif
+
+    CodeGen_Posix::visit(op);
+}
+
+void CodeGen_ARM::visit(const LE *op) {
+#if LLVM_VERSION >= 100
+    if (op->a.type().is_float() && op->type.is_vector()) {
+        // Fast-math flags confuse LLVM's aarch64 backend, so
+        // temporarily clear them for this instruction.
+        // See https://bugs.llvm.org/show_bug.cgi?id=45036
+        llvm::IRBuilderBase::FastMathFlagGuard guard(*builder);
+        builder->clearFastMathFlags();
+        CodeGen_Posix::visit(op);
+        return;
+    }
+#endif
+
+    CodeGen_Posix::visit(op);
+}
+
 string CodeGen_ARM::mcpu() const {
     if (target.bits == 32) {
         if (target.has_feature(Target::ARMv7s)) {
