@@ -387,8 +387,10 @@ void SearchSpace::generate_children(IntrusivePtr<State> state,
 
                 ++stats.num_tilings_generated;
 
-                if (!randomize_tilings && add_child(state, o.loop_nest, accept_child)) {
-                    num_children++;
+                if (!randomize_tilings) {
+                    if (add_child(state, o.loop_nest, accept_child)) {
+                        num_children++;
+                    }
                     continue;
                 }
 
@@ -510,9 +512,11 @@ void SearchSpace::generate_children(IntrusivePtr<State> state,
                     }
                 }
 
-                if (!randomize_tilings && add_child(state, new_root, accept_child)) {
-                    num_children++;
-                    memoize_blocks(node, new_root);
+                if (!randomize_tilings) {
+                    if (add_child(state, new_root, accept_child)) {
+                        num_children++;
+                        memoize_blocks(node, new_root);
+                    }
                     continue;
                 }
 
