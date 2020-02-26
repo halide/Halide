@@ -388,7 +388,7 @@ public:
             size_t last_dot = loop_level.rfind('.');
             string var = loop_level.substr(last_dot + 1);
 
-            for (const pair<pair<string, int>, Box> &i : bounds) {
+            for (const pair<const pair<string, int>, Box> &i : bounds) {
                 string func_name = i.first.first;
                 int func_stage_index = i.first.second;
                 string stage_name = func_name + ".s" + std::to_string(func_stage_index);
@@ -657,7 +657,7 @@ public:
                 BufferBuilder builder;
                 builder.type = func.output_types()[j];
                 builder.dimensions = func.dimensions();
-                for (const string arg : func.args()) {
+                for (const string &arg : func.args()) {
                     string prefix = func.name() + ".s" + std::to_string(stage) + "." + arg;
                     Expr min = Variable::make(Int(32), prefix + ".min");
                     Expr max = Variable::make(Int(32), prefix + ".max");
@@ -735,7 +735,7 @@ public:
         // We need to take into account specializations which may refer to
         // different reduction variables as well.
         void populate_scope(Scope<Interval> &result) {
-            for (const string farg : func.args()) {
+            for (const string &farg : func.args()) {
                 string arg = name + ".s" + std::to_string(stage) + "." + farg;
                 result.push(farg,
                             Interval(Variable::make(Int(32), arg + ".min"),

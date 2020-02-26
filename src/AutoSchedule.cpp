@@ -703,7 +703,7 @@ map<string, Box> get_pipeline_bounds(DependenceAnalysis &analysis,
         }
 
         set<string> prods;
-        for (const pair<string, Function> &fpair : analysis.env) {
+        for (const pair<const string, Function> &fpair : analysis.env) {
             prods.insert(fpair.first);
         }
 
@@ -1261,7 +1261,7 @@ Cost Partitioner::get_pipeline_cost() {
     internal_assert(!group_costs.empty());
 
     Cost total_cost(0, 0);
-    for (const pair<FStage, Group> &g : groups) {
+    for (const pair<const FStage, Group> &g : groups) {
         const GroupAnalysis &analysis = get_element(group_costs, g.first);
         if (!analysis.cost.defined()) {
             return Cost();
@@ -1280,7 +1280,7 @@ void Partitioner::disp_pipeline_costs() {
     debug(0) << "Pipeline costs:" << '\n';
     debug(0) << "===============" << '\n';
     debug(0) << "Group: (name) [arith cost, mem cost, parallelism]" << '\n';
-    for (const pair<FStage, Group> &g : groups) {
+    for (const pair<const FStage, Group> &g : groups) {
         const GroupAnalysis &analysis = get_element(group_costs, g.first);
         if (!total_cost.arith.defined()) {
             continue;
@@ -1641,7 +1641,7 @@ void Partitioner::group(Partitioner::Level level) {
 
         fixpoint = true;
         vector<pair<string, string>> cand;
-        for (const pair<FStage, Group> &g : groups) {
+        for (const pair<const FStage, Group> &g : groups) {
             bool is_output = false;
             for (const Function &f : outputs) {
                 if (g.first.func.name() == f.name()) {
@@ -2867,7 +2867,7 @@ void Partitioner::generate_cpu_schedule(const Target &t, AutoSchedule &sched) {
 
     set<string> inlines;
     // Mark all functions that are inlined.
-    for (const pair<FStage, Group> &g : groups) {
+    for (const pair<const FStage, Group> &g : groups) {
         for (const string &inline_func : g.second.inlined) {
             inlines.insert(inline_func);
         }

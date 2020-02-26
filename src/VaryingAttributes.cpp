@@ -510,7 +510,7 @@ void prune_varying_attributes(Stmt loop_stmt, std::map<std::string, Expr> &varyi
 
     std::vector<std::string> remove_list;
 
-    for (const std::pair<std::string, Expr> &i : varying) {
+    for (const std::pair<const std::string, Expr> &i : varying) {
         const std::string &name = i.first;
         if (find.variables.find(name) == find.variables.end()) {
             debug(2) << "Removed varying attribute " << name << "\n";
@@ -1262,7 +1262,7 @@ public:
             attribute_order["__vertex_y"] = 1;
 
             int idx = 2;
-            for (const std::pair<std::string, Expr> &v : varyings) {
+            for (const std::pair<const std::string, Expr> &v : varyings) {
                 attribute_order[v.first] = idx++;
             }
 
