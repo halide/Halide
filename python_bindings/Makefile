@@ -52,11 +52,11 @@ CCFLAGS := $(filter-out -Wstrict-prototypes,$(CCFLAGS))
 # Cf. https://github.com/pybind/pybind11/blob/master/docs/compiling.rst#building-manually
 LDFLAGS += -lz $(USE_EXPORT_DYNAMIC)
 
-ifneq (,$(findstring -m32,$(CXX)))
-# Hacky workaround for avoiding link errors for 32-bit crosscompiles
-LDFLAGS += -Wl,-Bstatic -lgcc -Wl,-Bdynamic
-# LDFLAGS += -lgcc
-endif
+# ifneq (,$(findstring -m32,$(CXX)))
+# # Hacky workaround for avoiding link errors for 32-bit crosscompiles
+# LDFLAGS += -Wl,-Bstatic -lgcc -Wl,-Bdynamic
+# # LDFLAGS += -lgcc
+# endif
 
 PY_SRCS=$(shell ls $(ROOT_DIR)/src/*.cpp)
 PY_OBJS=$(PY_SRCS:$(ROOT_DIR)/src/%.cpp=$(BIN)/src/%.o)
@@ -160,15 +160,15 @@ test_apps_%: $(ROOT_DIR)/apps/%.py $(MODULE)
 	@echo Testing $*...
 	@mkdir -p $(TEST_TMP)
 	@# Send stdout (but not stderr) from these to /dev/null to reduce noise
-	cd $(TEST_TMP); LD_DEBUG="libs files" PYTHONPATH="$(BIN):$$PYTHONPATH" $(PYTHON) $<
+	cd $(TEST_TMP); PYTHONPATH="$(BIN):$$PYTHONPATH" $(PYTHON) $<
 
 .PHONY: test_correctness
 test_correctness: $(CORRECTNESS:$(ROOT_DIR)/correctness/%.py=test_correctness_%)
 
 test_correctness_%: $(ROOT_DIR)/correctness/%.py $(MODULE)
-	@echo Testing $*... with HL_JIT_TARGET=$(HL_JIT_TARGET)
+	@echo Testing $*... 
 	@mkdir -p $(TEST_TMP)
-	cd $(TEST_TMP); LD_DEBUG="libs files" PYTHONPATH="$(BIN):$$PYTHONPATH" $(PYTHON) $<
+	cd $(TEST_TMP); PYTHONPATH="$(BIN):$$PYTHONPATH" $(PYTHON) $<
 
 .PHONY: test_tutorial
 test_tutorial: $(TUTORIAL:$(ROOT_DIR)/tutorial/%.py=test_tutorial_%)
@@ -178,7 +178,7 @@ test_tutorial_%: $(ROOT_DIR)/tutorial/%.py $(MODULE)
 	@mkdir -p $(TEST_TMP)
 	@# Send stdout (but not stderr) from these to /dev/null to reduce noise
 	@# We need "." in the PYTHONPATH for lesson_10_halide.so.
-	cd $(TEST_TMP); LD_DEBUG="libs files" PYTHONPATH=".:$(BIN):$$PYTHONPATH" $(PYTHON) $<
+	cd $(TEST_TMP); PYTHONPATH=".:$(BIN):$$PYTHONPATH" $(PYTHON) $<
 
 test_tutorial_lesson_10_aot_compilation_run: $(TEST_TMP)/lesson_10_halide.so
 
