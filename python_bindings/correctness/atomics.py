@@ -12,6 +12,7 @@ def test_atomics():
     target = hl.get_jit_target_from_environment()
     print("HL_JIT_TARGET is ", target)
     b = f.realize(5)
+    print("realize done ", target)
 
     ref = [0, 0, 0, 0, 0]
     for i in range(100):
