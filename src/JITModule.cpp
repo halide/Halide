@@ -226,7 +226,7 @@ public:
         // helper functions of this sort crop up in the future, this should be expanded
         // into a "builtins map".)
         if (result == 0 && name == "__udivdi3") {
-            result = (uint64_t) &__udivdi3;
+            result = (uint64_t)&__udivdi3;
         }
 #endif
         return result;
