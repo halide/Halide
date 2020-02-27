@@ -1,0 +1,358 @@
+# TODO:
+#  cmake_static is generally broken.
+#  test_auto_schedule is flaky.
+
+name: Build+Test
+on:
+  # TODO: not sure if this is the proper set of events/activity-types we want?
+  pull_request:
+    types: [opened, synchronize, reopened, edited, review_requested]
+
+jobs:
+  test_halide:
+    name: Halide-${{matrix.llvm_version}}-${{matrix.target_arch}}-${{matrix.target_bits}}-${{matrix.target_os}}-${{matrix.build_tool}}
+    runs-on: ${{matrix.host_os}}
+    env:
+      CC: ${{matrix.cc}}
+      CXX: ${{matrix.cxx}}
+      LD: ${{matrix.ld}}
+      PYTHON: python3.7
+
+    strategy:
+      fail-fast: false  # Keep running other jobs even if one fails
+      matrix:
+        # TODO: this is probably overkill; we probably don't need to build the full
+        # matrix (and since we are limited to 8 concurrent tests, it would be
+        # useful to prune this a bit).
+        target_arch: [x86]  #, arm]
+        target_bits: [32] #, 64]
+        target_os: [linux] #, windows, osx]
+        llvm_version: [9] #, 10, 11]
+        build_tool: [make] #, cmake_shared]  # TODO: cmake_static is still dodgy?
+        include:
+          - llvm_version: 9
+            llvm_branch: release/9.x
+          - llvm_version: 10
+            llvm_branch: release/10.x
+          - llvm_version: 11
+            llvm_branch: master
+
+          # map things to the necessary host cross-compiler host
+          - target_os: osx
+            host_os: macos-10.15
+            cc: clang
+            cxx: clang++
+            ld: ld
+
+          - target_os: linux
+            host_os: ubuntu-18.04
+            # GHA has clang 6, 8, and 9 and GCC 7.4, 8.3, 9.2 preinstalled.
+            # We will explicitly choose gcc 7.x (even though the default is gcc 7.4)
+            # To ensure we match gcc versions with the arm crosscompiler.
+            cc: gcc-7
+            cxx: g++-7
+            ld: ld
+
+          - target_os: windows
+            host_os: windows-2019
+            cc: cl.exe
+            cxx: cl.exe
+            ld: ld.exe
+
+        exclude:
+          # Don't attempt 32-bit builds for macos
+          - target_os: osx
+            target_bits: 32
+          # Don't use make on windows
+          - target_os: windows
+            build_tool: make
+
+    steps:
+    - uses: actions/checkout@v2
+      with:
+        path: 'halide'
+
+    - name: Configure Python (64-bit)
+      if: matrix.target_bits == 64
+      uses: actions/setup-python@v1
+      with:
+        python-version: '3.7'
+        architecture: 'x64' # N.B.: 'x86' is only available for Windows (Ubuntu is special-cased below)
+
+    - name: Configure Python (32-bit)
+      if: matrix.target_os == 'windows' && matrix.target_bits == 32
+      uses: actions/setup-python@v1
+      with:
+        python-version: '3.7'
+        architecture: 'x86'
+
+    - name: Configure Ubuntu Host
+      if: startsWith(matrix.host_os, 'ubuntu')
+      shell: bash
+      run: |
+        sudo apt-get update
+
+        # Install OpenGL
+        # TODO(srj): OpenGL is only needed to build the opengl tests (which we don't even run)...
+        sudo apt-get install libglu1-mesa-dev freeglut3-dev mesa-common-dev
+
+        sudo apt-get install ninja-build
+        sudo apt-get install libjpeg-dev libpng-dev
+        sudo apt-get --no-install-recommends install doxygen
+
+    - name: Configure MacOS Host
+      if: startsWith(matrix.host_os, 'macos')
+      shell: bash
+      run: |
+        # coreutils is for gtimeout
+        brew install libpng jpeg doxygen coreutils ninja
+
+    - name: Configure Windows Host
+      if: startsWith(matrix.host_os, 'windows')
+      shell: bash
+      run: |
+        # Chocolatey doesn't have zlib or libpng.
+        vcpkg install zlib libpng libjpeg-turbo
+
+        # On Windows, it's just 'python', apparently
+        echo ::set-env name=PYTHON::"python"
+
+    - name: Configure Ubuntu-32
+      if: matrix.target_os == 'linux' && matrix.target_bits == 32
+      shell: bash
+      run: |
+        set -eu
+
+        sudo dpkg --add-architecture i386
+        sudo apt-get update
+        sudo apt-get install ${{matrix.cc}}-multilib ${{matrix.cxx}}-multilib
+        sudo apt-get install zlib1g-dev:i386 libjpeg-dev:i386 libpng-dev:i386
+        sudo apt-get install python3.7:i386 python3.7-dev:i386
+        # TODO(srj): OpenGL is only needed to build the opengl tests (which we don't even run)...
+        sudo apt-get install libglu1-mesa-dev:i386 freeglut3-dev:i386 mesa-common-dev:i386
+
+        file $(which python3.7)
+
+        # Verify that we have a 32-bit build
+        PYVERSION=`python3.7 - << EOF
+        import platform
+        print(platform.architecture()[0])
+        EOF`
+
+        if [[ $PYVERSION != 32bit ]]; then
+          echo Expected 32-bit version of Python 3.7, found ${PYVERSION}
+          exit 1
+        fi
+
+        echo ::set-env name=CC::"${CC} -m32"
+        echo ::set-env name=CXX::"${CXX} -m32"
+        echo ::set-env name=LD::"${LD} -melf_i386"
+        echo ::set-env name=HL_TARGET::"x86-32-linux"
+        echo ::set-env name=HL_JIT_TARGET::"x86-32-linux"
+
+    - name: Configure Env Vars
+      shell: bash
+      run: |
+        # Demangle Windows names, to simplify CMake stuff later
+        _ROOT=${GITHUB_WORKSPACE//\\//}
+        _TEMP_RAW="${{runner.temp}}"
+        _TEMP=${_TEMP_RAW//\\//}
+
+        # This is the trick GitHub Actions uses to allow us to set env vars across all subsequent job steps
+        echo ::set-env name=BUILD_TYPE::"Release"
+        echo ::set-env name=LLVM_INSTALL_DIR::"${_ROOT}/llvm"
+        echo ::set-env name=LLVM_CONFIG::"${_ROOT}/llvm/bin/llvm-config"
+        echo ::set-env name=HALIDE_SOURCE_DIR::"${_ROOT}/halide"
+        echo ::set-env name=HALIDE_BUILD_DIR::"${_ROOT}/halide_build"
+        echo ::set-env name=HALIDE_TEMP_DIR::"${_TEMP}"
+        echo ::set-env name=PARALLEL_JOBS::"4"
+
+    - name: Install Python Dependencies
+      shell: bash
+      run: |
+        set -eu
+
+        ${PYTHON} -m pip --version
+        ${PYTHON} -m pip install --upgrade pip
+        ${PYTHON} -m pip install -r ${HALIDE_SOURCE_DIR}/python_bindings/requirements.txt
+
+    - name: Install LLVM
+      shell: bash
+      run: |
+        set -eu
+
+        LLVM_ID="llvm-${{matrix.llvm_version}}-${{matrix.target_arch}}-${{matrix.target_bits}}-${{matrix.target_os}}"
+
+        curl \
+          --user llvm_user:${{secrets.LLVM_USER_PASSWORD}} \
+          --output ${HALIDE_TEMP_DIR}/llvm-prebuilt.tgz \
+          https://buildbot.halide-lang.org/llvm/${LLVM_ID}.tgz
+
+        TAR_CMD="tar"
+        if [[ ${{matrix.host_os}} == windows* ]]; then
+          # Must use --force-local to avoid tar misinterpreting the : in
+          # a Windows pathname as a hostname.
+          TAR_CMD="tar --force-local"
+        fi
+
+        mkdir ${LLVM_INSTALL_DIR}
+        ${TAR_CMD} -xvf ${HALIDE_TEMP_DIR}/llvm-prebuilt.tgz -C ${LLVM_INSTALL_DIR}
+        rm -rf ${HALIDE_TEMP_DIR}/llvm-prebuilt.tgz
+
+        LLVM_COMMIT_HASH=`cat ${LLVM_INSTALL_DIR}/.halide_builder_llvm_commit`
+        echo "Using LLVM v${{matrix.llvm_version}} commit=${LLVM_COMMIT_HASH}"
+
+    - name: Configure Halide (Make)
+      if: startsWith(matrix.build_tool, 'make')
+      shell: bash
+      run: |
+        # Configure Make
+        mkdir ${HALIDE_BUILD_DIR}
+
+    - name: Configure Halide (CMake)
+      if: startsWith(matrix.build_tool, 'cmake')
+      shell: bash
+      run: |
+        # Configure CMake
+        set -eu
+
+        mkdir ${HALIDE_BUILD_DIR}
+
+        CMAKE_GEN="Ninja"
+        EXTRA_CMAKE_FLAGS=
+        PARALLEL_JOBS=4  # GHA VMs have 2 cores
+
+        if [[ ${{matrix.host_os}} == windows* ]]; then
+          CMAKE_GEN="Visual Studio 16"
+
+          EXTRA_CMAKE_FLAGS="-T host=x64"
+          if [[ ${{matrix.target_bits}} == 64 ]]; then
+            EXTRA_CMAKE_FLAGS="${EXTRA_CMAKE_FLAGS} -A x64"
+          fi
+        fi
+
+        if [[ ${{matrix.target_arch}} == x86 && \
+              ${{matrix.target_os}} == linux && \
+              ${{matrix.target_bits}} == 32 ]]; then
+          # Assume host_os is ubuntu*
+          EXTRA_CMAKE_FLAGS="${EXTRA_CMAKE_FLAGS} \
+                             -D CMAKE_FIND_ROOT_PATH=/usr/lib/i386-linux-gnu \
+                             -D CMAKE_FIND_ROOT_PATH_MODE_LIBRARY=ONLY"
+          export CC="${CC} -m32"
+          export CXX="${CXX} -m32"
+          export LD="${LD} -melf_i386"
+        fi
+
+        if [[ ${{matrix.target_os}} == osx ]]; then
+          # LLVM_ENABLE_SUPPORT_XCODE_SIGNPOSTS=OFF is needed for compatibility with older XCode versions
+          EXTRA_CMAKE_FLAGS="${EXTRA_CMAKE_FLAGS} \
+                             -D LLVM_ENABLE_SUPPORT_XCODE_SIGNPOSTS=FORCE_OFF"
+        fi
+
+        # TODO: target_arch==arm
+
+        REQUIRE_LLVM_VERSION="${{matrix.llvm_version}}0"
+        SHARED_LIBRARY=$([ ${{matrix.build_tool}} == "cmake_shared" ] && echo "ON" || echo "OFF")
+
+        cmake \
+          -D CMAKE_BUILD_TYPE=${BUILD_TYPE} \
+          -D LLVM_DIR="${LLVM_INSTALL_DIR}/lib/cmake/llvm" \
+          -D HALIDE_REQUIRE_LLVM_VERSION="${REQUIRE_LLVM_VERSION}" \
+          -D HALIDE_SHARED_LIBRARY=${SHARED_LIBRARY} \
+          -G "${CMAKE_GEN}" \
+          ${EXTRA_CMAKE_FLAGS} \
+          -S "${HALIDE_SOURCE_DIR}" \
+          -B "${HALIDE_BUILD_DIR}"
+
+    - name: Build Halide (Make)
+      if: startsWith(matrix.build_tool, 'make')
+      shell: bash
+      run: |
+        # Build Halide
+        set -eu
+
+        cd ${HALIDE_BUILD_DIR}
+
+        # make -f ${HALIDE_SOURCE_DIR}/Makefile -j ${PARALLEL_JOBS} distrib build_tests build_python_bindings build_apps
+        make -f ${HALIDE_SOURCE_DIR}/Makefile -j ${PARALLEL_JOBS} distrib build_python_bindings
+
+    - name: Build Halide (CMake)
+      if: startsWith(matrix.build_tool, 'cmake')
+      shell: bash
+      run: |
+        # Build Halide
+        set -eu
+
+        cd ${HALIDE_BUILD_DIR}
+        cmake \
+          --build ${HALIDE_BUILD_DIR} \
+          --config ${BUILD_TYPE} \
+          -j ${PARALLEL_JOBS}
+
+    - name: Run Tests (Make)
+      if: startsWith(matrix.build_tool, 'make')
+      shell: bash
+      run: |
+        # Test Halide
+        set -eu
+
+        export TEST_TMPDIR="${HALIDE_TEMP_DIR}"
+        cd ${HALIDE_BUILD_DIR}
+
+        TEST_GROUPS_PARALLEL="internal correctness error warning generator python apps"
+
+        # tutorial has some performance measurements that can be flaky if we run them in parallel
+        TEST_GROUPS_SERIAL="performance tutorial"
+
+        # opengl won't work on the buildbots. auto_schedule is just flaky.
+        TEST_GROUPS_BROKEN="opengl auto_schedule"
+
+         make -f ${HALIDE_SOURCE_DIR}/Makefile test_python
+
+        # # Parallel
+        # for t in ${TEST_GROUPS_PARALLEL}; do
+        #   make -f ${HALIDE_SOURCE_DIR}/Makefile -j ${PARALLEL_JOBS} test_${t}
+        # done
+
+        # # Serial
+        # for t in ${TEST_GROUPS_SERIAL}; do
+        #   make -f ${HALIDE_SOURCE_DIR}/Makefile -j ${PARALLEL_JOBS} test_$t
+        # done
+
+    - name: Run Tests (CMake)
+      if: startsWith(matrix.build_tool, 'cmake')
+      shell: bash
+      run: |
+        # Test Halide
+        set -eux
+
+        TEST_GROUPS_PARALLEL="internal|correctness|error|warning|generator"
+
+        # tutorial has some performance measurements that can be flaky if we run them in parallel
+        TEST_GROUPS_SERIAL="performance|tutorial"
+        TEST_GROUPS_SERIAL_BROKEN=""
+        if [[ ${{matrix.host_os}} == windows* ]]; then
+          # TODO: libpng not working yet on windows, exclude the tutorials that need it
+          TEST_GROUPS_SERIAL_BROKEN="lesson_02_input_image|lesson_07_multi_stage_pipelines|lesson_09_update_definitions|lesson_12_using_the_gpu"
+        fi
+
+        # opengl won't work on the buildbots. auto_schedule is just flaky.
+        TEST_GROUPS_BROKEN="opengl|auto_schedule"
+
+        export TEST_TMPDIR="${HALIDE_TEMP_DIR}"
+        cd ${HALIDE_BUILD_DIR}
+
+        # Parallel
+        ctest \
+          -C ${BUILD_TYPE} \
+          -j ${PARALLEL_JOBS} \
+          -L "${TEST_GROUPS_PARALLEL}" \
+          --output-on-failure
+
+        # Serial
+        ctest \
+          -C ${BUILD_TYPE} \
+          -L "${TEST_GROUPS_SERIAL}" \
+          -E "${TEST_GROUPS_SERIAL_BROKEN}" \
+          --output-on-failure
+

@@ -12,8 +12,6 @@ TEST_TMP ?= $(BIN)/tmp
     FPIC=-fPIC
 ifeq ($(UNAME), Darwin)
     SHARED_EXT=dylib
-	# Note that Python on OSX won't load .dylib; it requires .so
-    SUFFIX=.so
 else
     SHARED_EXT=so
 endif
