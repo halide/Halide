@@ -54,7 +54,8 @@ LDFLAGS += -lz $(USE_EXPORT_DYNAMIC)
 
 ifneq (,$(findstring -m32,$(CXX)))
 # Hacky workaround for avoiding link errors for 32-bit crosscompiles
-LDFLAGS += -lgcc
+LDFLAGS += -Wl,-Bstatic -lgcc -Wl,-Bdynamic
+# LDFLAGS += -lgcc
 endif
 
 PY_SRCS=$(shell ls $(ROOT_DIR)/src/*.cpp)

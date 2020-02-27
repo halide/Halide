@@ -105,7 +105,8 @@ COMMON_LD_FLAGS += $(SANITIZER_FLAGS)
 
 ifneq (,$(findstring -m32,$(CXX)))
 # Hacky workaround for avoiding link errors for 32-bit crosscompiles
-COMMON_LD_FLAGS += -lgcc
+COMMON_LD_FLAGS += -Wl,-Bstatic -lgcc -Wl,-Bdynamic
+# COMMON_LD_FLAGS += -lgcc
 endif
 
 LLVM_VERSION_TIMES_10 = $(shell $(LLVM_CONFIG) --version | sed 's/\([0-9][0-9]*\)\.\([0-9]\).*/\1\2/')
