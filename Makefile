@@ -2059,15 +2059,6 @@ build_python_bindings: distrib $(BIN_DIR)/host/runtime.a
 
 .PHONY: test_python
 test_python: distrib $(BIN_DIR)/host/runtime.a build_python_bindings
-	echo LD_LIBRARY_PATH is $$LD_LIBRARY_PATH
-	echo
-	echo
-	# nm /lib/i386-linux-gnu/libgcc_s.so.1
-	echo
-	echo
-	ldd $(CURDIR)/$(BIN_DIR)/python3_bindings/halide.cpython-37m-i386-linux-gnu.so
-	echo
-	echo
 	$(MAKE) -C $(ROOT_DIR)/python_bindings \
 		-f $(ROOT_DIR)/python_bindings/Makefile \
 		test \
