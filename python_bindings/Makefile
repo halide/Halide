@@ -53,8 +53,8 @@ CCFLAGS := $(filter-out -Wstrict-prototypes,$(CCFLAGS))
 LDFLAGS += -lz $(USE_EXPORT_DYNAMIC)
 
 ifneq (,$(findstring -m32,$(CXX)))
-#LDFLAGS += -Wl,-Bstatic -lgcc -Wl,-Bdynamic
-LDFLAGS += -l:libgcc.a
+LDFLAGS += -Wl,-Bstatic -lgcc -Wl,-Bdynamic
+#LDFLAGS += -l:libgcc.a
 endif
 
 PY_SRCS=$(shell ls $(ROOT_DIR)/src/*.cpp)
