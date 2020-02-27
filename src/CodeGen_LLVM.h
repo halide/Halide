@@ -62,7 +62,7 @@ public:
     static CodeGen_LLVM *new_for_target(const Target &target,
                                         llvm::LLVMContext &context);
 
-    virtual ~CodeGen_LLVM();
+    ~CodeGen_LLVM() override;
 
     /** Takes a halide Module and compiles it to an llvm Module. */
     virtual std::unique_ptr<llvm::Module> compile(const Module &module);
