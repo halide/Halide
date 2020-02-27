@@ -11,7 +11,8 @@ def test_atomics():
     f.compute_root().update().atomic().parallel(r)
     target = hl.get_jit_target_from_environment()
     print("HL_JIT_TARGET is ", target)
-    print("HL_TARGET is ", target)
+    target2 = hl.get_target_from_environment()
+    print("HL_TARGET is ", target2)
     b = f.realize(5)
     print("realize done ", target)
 
