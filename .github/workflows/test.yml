@@ -25,10 +25,10 @@ jobs:
         # matrix (and since we are limited to 8 concurrent tests, it would be
         # useful to prune this a bit).
         target_arch: [x86]  #, arm]
-        target_bits: [32] #, 64]
-        target_os: [linux] #, windows, osx]
-        llvm_version: [9] #, 10, 11]
-        build_tool: [make] #, cmake_shared]  # TODO: cmake_static is still dodgy?
+        target_bits: [32, 64]
+        target_os: [linux, windows, osx]
+        llvm_version: [9, 10, 11]
+        build_tool: [make, cmake_shared]  # TODO: cmake_static is still dodgy?
         include:
           - llvm_version: 9
             llvm_branch: release/9.x
@@ -273,8 +273,7 @@ jobs:
 
         cd ${HALIDE_BUILD_DIR}
 
-        # make -f ${HALIDE_SOURCE_DIR}/Makefile -j ${PARALLEL_JOBS} distrib build_tests build_python_bindings build_apps
-        make -f ${HALIDE_SOURCE_DIR}/Makefile -j ${PARALLEL_JOBS} distrib build_python_bindings
+        make -f ${HALIDE_SOURCE_DIR}/Makefile -j ${PARALLEL_JOBS} distrib build_tests build_python_bindings build_apps
 
     - name: Build Halide (CMake)
       if: startsWith(matrix.build_tool, 'cmake')
@@ -307,24 +306,22 @@ jobs:
         # opengl won't work on the buildbots. auto_schedule is just flaky.
         TEST_GROUPS_BROKEN="opengl auto_schedule"
 
-         make -f ${HALIDE_SOURCE_DIR}/Makefile test_python
+        # Parallel
+        for t in ${TEST_GROUPS_PARALLEL}; do
+          make -f ${HALIDE_SOURCE_DIR}/Makefile -j ${PARALLEL_JOBS} test_${t}
+        done
 
-        # # Parallel
-        # for t in ${TEST_GROUPS_PARALLEL}; do
-        #   make -f ${HALIDE_SOURCE_DIR}/Makefile -j ${PARALLEL_JOBS} test_${t}
-        # done
-
-        # # Serial
-        # for t in ${TEST_GROUPS_SERIAL}; do
-        #   make -f ${HALIDE_SOURCE_DIR}/Makefile -j ${PARALLEL_JOBS} test_$t
-        # done
+        # Serial
+        for t in ${TEST_GROUPS_SERIAL}; do
+          make -f ${HALIDE_SOURCE_DIR}/Makefile -j ${PARALLEL_JOBS} test_$t
+        done
 
     - name: Run Tests (CMake)
       if: startsWith(matrix.build_tool, 'cmake')
       shell: bash
       run: |
         # Test Halide
-        set -eux
+        set -eu
 
         TEST_GROUPS_PARALLEL="internal|correctness|error|warning|generator"
 
