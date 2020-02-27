@@ -4322,9 +4322,12 @@ Value *CodeGen_LLVM::create_alloca_at_entry(llvm::Type *t, int n, bool zero_init
     Value *size = ConstantInt::get(i32_t, n);
     AllocaInst *ptr = builder->CreateAlloca(t, size, name);
     int align = native_vector_bits() / 8;
+    llvm::DataLayout d(module.get());
+    int allocated_size = n * (int)d.getTypeAllocSize(t);
     if (t->isVectorTy() || n > 1) {
         ptr->setAlignment(make_alignment(align));
     }
+    requested_alloca_total += allocated_size;
 
     if (zero_initialize) {
         if (n == 1) {

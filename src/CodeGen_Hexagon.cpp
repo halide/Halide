@@ -1753,7 +1753,7 @@ Value *CodeGen_Hexagon::vdelta(Value *lut, const vector<int> &indices) {
     // indices and cast the LUT.
     if (element_bits != 8) {
         int replicate = element_bits / 8;
-        assert(replicate != 0);
+        internal_assert(replicate != 0);
         llvm::Type *new_lut_ty =
             llvm::VectorType::get(i8_t, lut_elements * replicate);
         Value *i8_lut = builder->CreateBitCast(lut, new_lut_ty);
@@ -1791,7 +1791,7 @@ Value *CodeGen_Hexagon::vdelta(Value *lut, const vector<int> &indices) {
         return concat_vectors(ret);
     }
 
-    assert(result_elements == native_elements);
+    internal_assert(result_elements == native_elements);
 
     // We can only use vdelta to shuffle a single native vector of
     // input. If we have more than one, we need to break it into
