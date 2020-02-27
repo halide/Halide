@@ -54,7 +54,8 @@ int main(int argc, char **argv) {
     assert(f && g && h);
 
     int header[5];
-    assert(fread((void *)(&header[0]), 4, 5, f) == 5);
+    size_t header_bytes = fread((void *)(&header[0]), 4, 5, f);
+    assert(header_bytes == 5);
     assert(header[0] == size_x + 1);
     assert(header[1] == size_y);
     assert(header[2] == 1);
@@ -62,7 +63,8 @@ int main(int argc, char **argv) {
     assert(header[4] == 7);
 
     std::vector<int32_t> f_data((size_x + 1) * size_y);
-    assert(fread((void *)(&f_data[0]), 4, (size_x + 1) * size_y, f) == (size_x + 1) * size_y);
+    size_t f_data_bytes = fread((void *)(&f_data[0]), 4, (size_x + 1) * size_y, f);
+    assert(f_data_bytes == (size_x + 1) * size_y);
     for (int y = 0; y < size_y; y++) {
         for (int x = 0; x < size_x + 1; x++) {
             int32_t val = f_data[y * (size_x + 1) + x];
@@ -74,7 +76,8 @@ int main(int argc, char **argv) {
     }
     fclose(f);
 
-    assert(fread((void *)(&header[0]), 4, 5, g) == 5);
+    header_bytes = fread((void *)(&header[0]), 4, 5, g);
+    assert(header_bytes == 5);
     assert(header[0] == size_x);
     assert(header[1] == size_y);
     assert(header[2] == 1);
@@ -82,7 +85,8 @@ int main(int argc, char **argv) {
     assert(header[4] == 0);
 
     std::vector<float> g_data(size_x * size_y);
-    assert(fread((void *)(&g_data[0]), 4, size_x * size_y, g) == size_x * size_y);
+    size_t g_data_bytes = fread((void *)(&g_data[0]), 4, size_x * size_y, g);
+    assert(g_data_bytes == size_x * size_y);
     for (int y = 0; y < size_y; y++) {
         for (int x = 0; x < size_x; x++) {
             float val = g_data[y * size_x + x];
@@ -95,7 +99,8 @@ int main(int argc, char **argv) {
     }
     fclose(g);
 
-    assert(fread((void *)(&header[0]), 4, 5, h) == 5);
+    header_bytes = fread((void *)(&header[0]), 4, 5, h);
+    assert(header_bytes == 5);
     assert(header[0] == size_x);
     assert(header[1] == size_y);
     assert(header[2] == 1);
@@ -103,7 +108,8 @@ int main(int argc, char **argv) {
     assert(header[4] == 0);
 
     std::vector<float> h_data(size_x * size_y);
-    assert(fread((void *)(&h_data[0]), 4, size_x * size_y, h) == size_x * size_y);
+    size_t h_data_bytes = fread((void *)(&h_data[0]), 4, size_x * size_y, h);
+    assert(h_data_bytes == size_x * size_y);
     for (int y = 0; y < size_y; y++) {
         for (int x = 0; x < size_x; x++) {
             float val = h_data[y * size_x + x];

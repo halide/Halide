@@ -8,7 +8,7 @@ int main(int argc, char **argv) {
 
     Buffer<float> noise(32);
     for (int i = 0; i < 32; i++) {
-        noise(i) = (float)rand() / RAND_MAX;
+        noise(i) = (float)rand() / (float)RAND_MAX;
     }
 
     Func f("f");

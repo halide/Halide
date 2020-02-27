@@ -1169,9 +1169,9 @@ private:
                     continue;
                 }
 
-                assert(abbrev_code <= entry_formats.size());
+                internal_assert(abbrev_code <= entry_formats.size());
                 const EntryFormat &fmt = entry_formats[abbrev_code - 1];
-                assert(fmt.code == abbrev_code);
+                internal_assert(fmt.code == abbrev_code);
 
                 LocalVariable var;
                 GlobalVariable gvar;
@@ -1225,7 +1225,7 @@ private:
                     }
                     case 2:  // There is no case 2
                     {
-                        assert(false && "What's form 2?");
+                        internal_error << "What's form 2?";
                         break;
                     }
                     case 3:  // block2 (2 byte length followed by payload)
@@ -1348,7 +1348,7 @@ private:
                     }
                     case 22:  // indirect
                     {
-                        assert(false && "Can't handle indirect form");
+                        internal_error << "Can't handle indirect form";
                         break;
                     }
                     case 23:  // sec_offset
@@ -1382,7 +1382,7 @@ private:
                         break;
                     }
                     default:
-                        assert(false && "Unknown form");
+                        internal_error << "Unknown form";
                         break;
                     }
 
@@ -1761,15 +1761,15 @@ private:
             while (t) {
                 if (t->type == TypeInfo::Pointer) {
                     suffix.push_back("*");
-                    assert(t->members.size() == 1);
+                    internal_assert(t->members.size() == 1);
                     t = t->members[0].type;
                 } else if (t->type == TypeInfo::Reference) {
                     suffix.push_back("&");
-                    assert(t->members.size() == 1);
+                    internal_assert(t->members.size() == 1);
                     t = t->members[0].type;
                 } else if (t->type == TypeInfo::Const) {
                     suffix.push_back("const");
-                    assert(t->members.size() == 1);
+                    internal_assert(t->members.size() == 1);
                     t = t->members[0].type;
                 } else if (t->type == TypeInfo::Array) {
                     // Do we know the size?
@@ -1780,7 +1780,7 @@ private:
                     } else {
                         suffix.push_back("[]");
                     }
-                    assert(t->members.size() == 1);
+                    internal_assert(t->members.size() == 1);
                     t = t->members[0].type;
                 } else {
                     break;
@@ -1945,7 +1945,7 @@ private:
             debug(5) << "Parsing compilation unit from " << off << " to " << unit_end << "\n";
 
             uint16_t version = e.getU16(&off);
-            assert(version >= 2);
+            internal_assert(version >= 2);
 
             uint32_t header_length = e.getU32(&off);
             llvm_offset_t end_header_off = off + header_length;
@@ -1989,14 +1989,14 @@ private:
                     uint64_t length = e.getULEB128(&off);
                     (void)mod_time;
                     (void)length;
-                    assert(dir <= include_dirs.size());
+                    internal_assert(dir <= include_dirs.size());
                     source_files.push_back(include_dirs[dir] + "/" + name);
                 } else {
                     break;
                 }
             }
 
-            assert(off == end_header_off && "Failed parsing section .debug_line");
+            internal_assert(off == end_header_off) << "Failed parsing section .debug_line";
 
             // Now parse the table. It uses a state machine with the following fields:
             struct {
@@ -2064,7 +2064,7 @@ private:
                         uint64_t length = e.getULEB128(&off);
                         (void)mod_time;
                         (void)length;
-                        assert(dir_index < include_dirs.size());
+                        internal_assert(dir_index < include_dirs.size());
                         source_files.push_back(include_dirs[dir_index] + "/" + name);
                         break;
                     }
@@ -2209,7 +2209,7 @@ private:
         uint8_t byte = 0;
 
         while (1) {
-            assert(shift < 57);
+            internal_assert(shift < 57);
             byte = *ptr++;
             result |= (uint64_t)(byte & 0x7f) << shift;
             shift += 7;
@@ -2233,7 +2233,7 @@ private:
         uint8_t byte = 0;
 
         while (1) {
-            assert(shift < 57);
+            internal_assert(shift < 57);
             byte = *ptr++;
             result |= (uint64_t)(byte & 0x7f) << shift;
             shift += 7;
