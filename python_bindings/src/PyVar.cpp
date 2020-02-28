@@ -30,7 +30,7 @@ void define_var(py::module &m) {
             .def("__repr__", &var_repr)
             .def("__str__", &Var::name);
 
-    add_binary_operators_with<Expr>(var_class);
+    add_binary_operators(var_class);
 
     m.attr("_") = Halide::Var(Halide::_);
     m.attr("_0") = Halide::Var(Halide::_0);
