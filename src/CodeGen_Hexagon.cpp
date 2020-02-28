@@ -493,34 +493,6 @@ static const HvxIntrinsic intrinsic_wrappers[] = {
     {MAKE_ID_PAIR(Intrinsic::hexagon_V6_vpackob), i8v1, "packhi.vh", {i16v2}},
     {MAKE_ID_PAIR(Intrinsic::hexagon_V6_vpackoh), i16v1, "packhi.vw", {i32v2}},
 
-    // Adds/subtracts:
-    // Note that we just use signed arithmetic for unsigned
-    // operands, because it works with two's complement arithmetic.
-    {MAKE_ID_PAIR(Intrinsic::hexagon_V6_vaddb),
-     i8v1,
-     "add.vb.vb",
-     {i8v1, i8v1}},
-    {MAKE_ID_PAIR(Intrinsic::hexagon_V6_vaddh),
-     i16v1,
-     "add.vh.vh",
-     {i16v1, i16v1}},
-    {MAKE_ID_PAIR(Intrinsic::hexagon_V6_vaddw),
-     i32v1,
-     "add.vw.vw",
-     {i32v1, i32v1}},
-    {MAKE_ID_PAIR(Intrinsic::hexagon_V6_vaddb_dv),
-     i8v2,
-     "add.vb.vb.dv",
-     {i8v2, i8v2}},
-    {MAKE_ID_PAIR(Intrinsic::hexagon_V6_vaddh_dv),
-     i16v2,
-     "add.vh.vh.dv",
-     {i16v2, i16v2}},
-    {MAKE_ID_PAIR(Intrinsic::hexagon_V6_vaddw_dv),
-     i32v2,
-     "add.vw.vw.dv",
-     {i32v2, i32v2}},
-
     // Widening adds. There are other instructions that add two vub and two vuh
     // but do not widen.
     // To differentiate those from the widening ones, we encode the return type
@@ -537,31 +509,6 @@ static const HvxIntrinsic intrinsic_wrappers[] = {
      u32v2,
      "add_vuw.vuh.vuh",
      {u16v1, u16v1}},
-
-    {MAKE_ID_PAIR(Intrinsic::hexagon_V6_vsubb),
-     i8v1,
-     "sub.vb.vb",
-     {i8v1, i8v1}},
-    {MAKE_ID_PAIR(Intrinsic::hexagon_V6_vsubh),
-     i16v1,
-     "sub.vh.vh",
-     {i16v1, i16v1}},
-    {MAKE_ID_PAIR(Intrinsic::hexagon_V6_vsubw),
-     i32v1,
-     "sub.vw.vw",
-     {i32v1, i32v1}},
-    {MAKE_ID_PAIR(Intrinsic::hexagon_V6_vsubb_dv),
-     i8v2,
-     "sub.vb.vb.dv",
-     {i8v2, i8v2}},
-    {MAKE_ID_PAIR(Intrinsic::hexagon_V6_vsubh_dv),
-     i16v2,
-     "sub.vh.vh.dv",
-     {i16v2, i16v2}},
-    {MAKE_ID_PAIR(Intrinsic::hexagon_V6_vsubw_dv),
-     i32v2,
-     "sub.vw.vw.dv",
-     {i32v2, i32v2}},
 
     // Widening subtracts. There are other instructions that subtact two vub and
     // two vuh but do not widen.
@@ -1121,50 +1068,9 @@ static const HvxIntrinsic intrinsic_wrappers[] = {
      "trunc_sath_shr.vw.uw",
      {i32v2, u32}},
 
-    // Bitwise operators
-    {MAKE_ID_PAIR(Intrinsic::hexagon_V6_vand), u8v1, "and.vb.vb", {u8v1, u8v1}},
-    {MAKE_ID_PAIR(Intrinsic::hexagon_V6_vand),
-     u16v1,
-     "and.vh.vh",
-     {u16v1, u16v1}},
-    {MAKE_ID_PAIR(Intrinsic::hexagon_V6_vand),
-     u32v1,
-     "and.vw.vw",
-     {u32v1, u32v1}},
-    {MAKE_ID_PAIR(Intrinsic::hexagon_V6_vor), u8v1, "or.vb.vb", {u8v1, u8v1}},
-    {MAKE_ID_PAIR(Intrinsic::hexagon_V6_vor),
-     u16v1,
-     "or.vh.vh",
-     {u16v1, u16v1}},
-    {MAKE_ID_PAIR(Intrinsic::hexagon_V6_vor),
-     u32v1,
-     "or.vw.vw",
-     {u32v1, u32v1}},
-    {MAKE_ID_PAIR(Intrinsic::hexagon_V6_vxor), u8v1, "xor.vb.vb", {u8v1, u8v1}},
-    {MAKE_ID_PAIR(Intrinsic::hexagon_V6_vxor),
-     u16v1,
-     "xor.vh.vh",
-     {u16v1, u16v1}},
-    {MAKE_ID_PAIR(Intrinsic::hexagon_V6_vxor),
-     u32v1,
-     "xor.vw.vw",
-     {u32v1, u32v1}},
-    {MAKE_ID_PAIR(Intrinsic::hexagon_V6_vnot), u8v1, "not.vb", {u8v1}},
-    {MAKE_ID_PAIR(Intrinsic::hexagon_V6_vnot), u16v1, "not.vh", {u16v1}},
-    {MAKE_ID_PAIR(Intrinsic::hexagon_V6_vnot), u32v1, "not.vw", {u32v1}},
-
     // Bit counting
-    {MAKE_ID_PAIR(Intrinsic::hexagon_V6_vcl0h), u16v1, "clz.vh", {u16v1}},
-    {MAKE_ID_PAIR(Intrinsic::hexagon_V6_vcl0w), u32v1, "clz.vw", {u32v1}},
     {MAKE_ID_PAIR(Intrinsic::hexagon_V6_vnormamth), u16v1, "cls.vh", {u16v1}},
     {MAKE_ID_PAIR(Intrinsic::hexagon_V6_vnormamtw), u32v1, "cls.vw", {u32v1}},
-    {MAKE_ID_PAIR(Intrinsic::hexagon_V6_vpopcounth),
-     u16v1,
-     "popcount.vh",
-     {u16v1}},
-    // TODO: If we need it, we could implement a popcountw in the
-    // runtime module that uses popcounth, and horizontally add
-    // each pair of lanes.
 };
 
 // TODO: Many variants of the above functions are missing. They
@@ -2020,8 +1926,7 @@ Value *CodeGen_Hexagon::vlut(Value *lut, Value *idx, int min_index, int max_inde
         // Make a vector of the indices shifted such that the min of
         // this range is at 0. Use 16-bit indices for this.
         Value *min_index_i_val = create_vector(i16x_t, min_index_i);
-        Value *indices = call_intrin(i16x_t, "halide.hexagon.sub.vh.vh",
-                                     {idx16, min_index_i_val});
+        Value *indices = builder->CreateSub(idx16, min_index_i_val);
 
         // Create a condition value for which elements of the range are valid
         // for this index.
@@ -2198,26 +2103,6 @@ int CodeGen_Hexagon::native_vector_bits() const {
     }
 }
 
-void CodeGen_Hexagon::visit(const Add *op) {
-    if (op->type.is_vector()) {
-        value = call_intrin(op->type,
-                            "halide.hexagon.add" + type_suffix(op->a, op->b, false),
-                            {op->a, op->b});
-    } else {
-        CodeGen_Posix::visit(op);
-    }
-}
-
-void CodeGen_Hexagon::visit(const Sub *op) {
-    if (op->type.is_vector()) {
-        value = call_intrin(op->type,
-                            "halide.hexagon.sub" + type_suffix(op->a, op->b, false),
-                            {op->a, op->b});
-    } else {
-        CodeGen_Posix::visit(op);
-    }
-}
-
 namespace {
 
 Expr maybe_scalar(Expr x) {
@@ -2265,15 +2150,6 @@ void CodeGen_Hexagon::visit(const Mul *op) {
     }
 }
 
-void CodeGen_Hexagon::visit(const Div *op) {
-    CodeGen_Posix::visit(op);
-}
-
-void CodeGen_Hexagon::visit(const Cast *op) {
-    // TODO: Do we need to handle same-sized vector casts before LLVM sees them?
-    CodeGen_Posix::visit(op);
-}
-
 void CodeGen_Hexagon::visit(const Call *op) {
     internal_assert(op->is_extern() || op->is_intrinsic())
         << "Can only codegen extern calls and intrinsics\n";
@@ -2282,18 +2158,6 @@ void CodeGen_Hexagon::visit(const Call *op) {
     // indicating if the intrinsic has signed variants or not.
     static std::map<string, std::pair<string, bool>> functions = {
         {Call::get_intrinsic_name(Call::absd), {"halide.hexagon.absd", true}},
-        {Call::get_intrinsic_name(Call::bitwise_and),
-         {"halide.hexagon.and", false}},
-        {Call::get_intrinsic_name(Call::bitwise_or),
-         {"halide.hexagon.or", false}},
-        {Call::get_intrinsic_name(Call::bitwise_xor),
-         {"halide.hexagon.xor", false}},
-        {Call::get_intrinsic_name(Call::bitwise_not),
-         {"halide.hexagon.not", false}},
-        {Call::get_intrinsic_name(Call::count_leading_zeros),
-         {"halide.hexagon.clz", false}},
-        {Call::get_intrinsic_name(Call::popcount),
-         {"halide.hexagon.popcount", false}},
     };
 
     if (is_native_interleave(op) || is_native_deinterleave(op)) {
