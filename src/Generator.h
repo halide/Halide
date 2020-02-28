@@ -3041,7 +3041,7 @@ public:
 
 class GeneratorBase : public NamesInterface, public GeneratorContext {
 public:
-    virtual ~GeneratorBase();
+    ~GeneratorBase() override;
 
     void set_generator_param_values(const GeneratorParamsMap &params);
 

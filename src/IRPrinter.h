@@ -91,7 +91,7 @@ std::ostream &operator<<(std::ostream &stream, const Indentation &);
  */
 class IRPrinter : public IRVisitor {
 public:
-    virtual ~IRPrinter();
+    ~IRPrinter() override;
 
     /** Construct an IRPrinter pointed at a given output stream
      * (e.g. std::cout, or a std::ofstream) */
