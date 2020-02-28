@@ -60,6 +60,10 @@ void define_target(py::module &m) {
     m.def("get_target_from_environment", &get_target_from_environment);
     m.def("get_jit_target_from_environment", &get_jit_target_from_environment);
     m.def("target_feature_for_device_api", &target_feature_for_device_api);
+
+    // TODO: this really belong in PyDeviceInterface.cpp (once it exists);
+    // it's here as an expedient to make our tutorials work more cleanly.
+    m.def("host_supports_target_device", &host_supports_target_device);
 }
 
 }  // namespace PythonBindings
