@@ -36,7 +36,7 @@ public:
 
     void dump() override;
 
-    virtual std::string print_gpu_name(const std::string &name) override;
+    std::string print_gpu_name(const std::string &name) override;
 
     std::string api_unique_name() override {
         return "d3d12compute";
@@ -65,7 +65,7 @@ protected:
         std::string print_cast(Type target_type, Type source_type, std::string value_expr);
         std::string print_reinterpret_cast(Type type, std::string value_expr);
 
-        virtual std::string print_assignment(Type t, const std::string &rhs) override;
+        std::string print_assignment(Type t, const std::string &rhs) override;
 
         void visit(const Evaluate *op) override;
         void visit(const Min *) override;
