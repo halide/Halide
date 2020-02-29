@@ -1,4 +1,5 @@
 #!/usr/bin/python3
+
 # Halide tutorial lesson 10.
 
 # This lesson demonstrates how to use Halide as an more traditional
@@ -11,20 +12,20 @@
 # compiling this code is a multi-step process.
 
 # This lesson can be built by invoking the command:
-#    python tutorial_lesson_10_aot_compilation_run.py
-# in a shell with the Halide Python extension in your PYTHONPATH.
+#    make test_tutorial_lesson_10_aot_compilation_generate
+# in a shell with the current directory at python_bindings/
 
 # This will generate a file lesson_10_halide.py.cpp that still needs
 # to be compiled. Use
-#   g++ -shared -fPIC lesson_10_halide.py.cpp lesson_10_halide.o \
-#       -lpthread -o lesson_10_halide.so
-# to generate a Python module called "lesson_10_halide".
+#    make make test_tutorial_lesson_10_aot_compilation_run
+# to generate and run a Python module called "lesson_10_halide".
 
 # The benefits of this approach are that the final program:
 # - Doesn't do any jit compilation at runtime, so it's fast.
 # - Doesn't depend on libHalide at all, so it's a small, easy-to-deploy binary.
 
 import halide as hl
+
 
 def main():
 
@@ -65,11 +66,12 @@ def main():
     fname = "lesson_10_halide"
     brighter.compile_to({hl.Output.object: "lesson_10_halide.o",
                          hl.Output.python_extension: "lesson_10_halide.py.cpp"},
-                         [input, offset], "lesson_10_halide")
+                        [input, offset], "lesson_10_halide")
 
     print("Halide pipeline compiled, but not yet run.")
 
-    # To continue this lesson, look in the file lesson_10_aot_compilation_run.cpp
+    # To continue this lesson, look in the file
+    # lesson_10_aot_compilation_run.py
 
     return 0
 
