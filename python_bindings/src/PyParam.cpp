@@ -63,7 +63,7 @@ void define_param(py::module &m) {
     add_param_methods<float>(param_class);
     add_param_methods<double>(param_class);
 
-    add_binary_operators_with<Expr>(param_class);
+    add_binary_operators(param_class);
 
     m.def("user_context_value", &user_context_value);
 }

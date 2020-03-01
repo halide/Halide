@@ -1,6 +1,5 @@
 #include "PyFunc.h"
 
-#include "PyBinaryOperators.h"
 #include "PyBuffer.h"
 #include "PyExpr.h"
 #include "PyFuncRef.h"

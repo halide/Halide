@@ -32,6 +32,8 @@ std::vector<T> args_to_vector(const py::args &args, size_t start_offset = 0, siz
     return v;
 }
 
+Expr double_to_expr_check(double v);
+
 }  // namespace PythonBindings
 }  // namespace Halide
 

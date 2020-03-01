@@ -49,6 +49,10 @@ def test():
     assert ctx.occurred, "RuntimeWarning didn't occur."
 
     with AssertWarnsContext(RuntimeWarning) as ctx:
+        x + hl.f64(0.123456789012345678)
+    assert not ctx.occurred, "RuntimeWarning occurred."
+
+    with AssertWarnsContext(RuntimeWarning) as ctx:
         x + 0.75  # 0.5 + 0.25
     assert not ctx.occurred, "RuntimeWarning occurred."
 
