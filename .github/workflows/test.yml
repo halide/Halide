@@ -109,15 +109,11 @@ jobs:
 
     - name: Configure Windows Host
       if: startsWith(matrix.host_os, 'windows')
-      # shell: bash
-      run: |
-        # Chocolatey doesn't have zlib or libpng.
-        vcpkg install zlib libpng libjpeg-turbo
-
-    - name: Configure Windows Host
-      if: startsWith(matrix.host_os, 'windows')
       shell: bash
       run: |
+        # Chocolatey doesn't have zlib or libpng.
+        # vcpkg install zlib libpng libjpeg-turbo
+
         # On Windows, it's just 'python', apparently
         echo ::set-env name=PYTHON::"python"
 
@@ -229,7 +225,11 @@ jobs:
         if [[ ${{matrix.host_os}} == windows* ]]; then
           CMAKE_GEN="Visual Studio 16"
 
-          EXTRA_CMAKE_FLAGS="-T host=x64"
+          EXTRA_CMAKE_FLAGS="${EXTRA_CMAKE_FLAGS} \
+                             -D HALIDE_FETCH_ZLIB=ON" \
+                             -D HALIDE_FETCH_LIBPNG=ON" \
+                             -D HALIDE_FETCH_LIBJPEG=ON" \
+                             -T host=x64"
           if [[ ${{matrix.target_bits}} == 64 ]]; then
             EXTRA_CMAKE_FLAGS="${EXTRA_CMAKE_FLAGS} -A x64"
           fi
