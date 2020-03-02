@@ -231,17 +231,14 @@ class MyPipeline:
                 for xx in range(self.input.width()):
                     assert output[xx, yy, cc] == reference_output[xx, yy, cc], \
                         "Mismatch between output (%d) and reference output (%d) at %d, %d, %d" % (
-                        output[xx, yy, cc],
-                        reference_output[xx, yy, cc],
-                        xx, yy, cc)
+                            output[xx, yy, cc], reference_output[xx, yy, cc], xx, yy, cc)
 
         print("CPU and GPU outputs are consistent.")
 
 
 def main():
     # Load an input image.
-    image_path = os.path.join(os.path.dirname(
-        __file__), "../../tutorial/images/rgb.png")
+    image_path = os.path.join(os.path.dirname(__file__), "../../tutorial/images/rgb.png")
     input = hl.Buffer(imageio.imread(image_path))
 
     # TODO: the image-loading code in the C++ tutorials
@@ -250,8 +247,7 @@ def main():
     input.set_host_dirty()
 
     # Allocated an image that will store the correct output
-    reference_output = hl.Buffer(
-        hl.UInt(8), [input.width(), input.height(), input.channels()])
+    reference_output = hl.Buffer(hl.UInt(8), [input.width(), input.height(), input.channels()])
 
     print("Running pipeline on CPU:")
     p1 = MyPipeline(input)

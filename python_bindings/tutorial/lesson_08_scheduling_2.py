@@ -245,8 +245,8 @@ def main():
     # which we actually compute it. This unlocks a few optimizations.
     if True:
         print("=" * 50)
-        producer, consumer = hl.Func("producer_store_root_compute_y"), hl.Func(
-            "consumer_store_root_compute_y")
+        producer = hl.Func("producer_store_root_compute_y")
+        consumer = hl.Func("consumer_store_root_compute_y")
         producer[x, y] = hl.sqrt(x * y)
         consumer[x, y] = (producer[x, y] +
                           producer[x, y + 1] +
@@ -354,8 +354,8 @@ def main():
     # moving the computation into the innermost loop:
     if True:
         print("=" * 50)
-        producer, consumer = hl.Func("producer_store_root_compute_x"), hl.Func(
-            "consumer_store_root_compute_x")
+        producer = hl.Func("producer_store_root_compute_x")
+        consumer = hl.Func("consumer_store_root_compute_x")
         producer[x, y] = hl.sqrt(x * y)
         consumer[x, y] = (producer[x, y] +
                           producer[x, y + 1] +
@@ -393,11 +393,9 @@ def main():
                 if yy == 0:
                     producer_storage[yy & 1][xx + 1] = math.sqrt((xx + 1) * yy)
                 if xx == 0:
-                    producer_storage[
-                        (yy + 1) & 1][xx] = math.sqrt(xx * (yy + 1))
+                    producer_storage[(yy + 1) & 1][xx] = math.sqrt(xx * (yy + 1))
 
-                producer_storage[(yy + 1) & 1][xx +
-                                               1] = math.sqrt((xx + 1) * (yy + 1))
+                producer_storage[(yy + 1) & 1][xx + 1] = math.sqrt((xx + 1) * (yy + 1))
 
                 result[yy][xx] = (producer_storage[yy & 1][xx] +
                                   producer_storage[(yy + 1) & 1][xx] +
@@ -488,8 +486,7 @@ def main():
                 producer_storage = np.empty((3, 3), dtype=np.float32)
                 for py in range(y_base, y_base + 3):
                     for px in range(x_base + 3):
-                        producer_storage[py - y_base][px -
-                                                      x_base] = math.sqrt(px * py)
+                        producer_storage[py - y_base][px - x_base] = math.sqrt(px * py)
 
                 # Compute this tile of the consumer
                 for y_inner in range(2):
@@ -518,8 +515,7 @@ def main():
     # in Halide.
     if True:
         print("=" * 50)
-        producer, consumer = hl.Func(
-            "producer_mixed"), hl.Func("consumer_mixed")
+        producer, consumer = hl.Func("producer_mixed"), hl.Func("consumer_mixed")
         producer[x, y] = hl.sqrt(x * y)
         consumer[x, y] = (producer[x, y] +
                           producer[x, y + 1] +
@@ -638,8 +634,9 @@ def main():
             for xx in range(800):
                 error = halide_result[xx, yy] - c_result[yy][xx]
                 # It's floating-point math, so we'll allow some slop:
-                assert abs(error) <= 0.001, "halide_result(%d, %d) = %f instead of %f" % (
-                    xx, yy, halide_result[xx, yy], c_result[yy][xx])
+                assert abs(error) <= 0.001, \
+                    "halide_result(%d, %d) = %f instead of %f" % (
+                        xx, yy, halide_result[xx, yy], c_result[yy][xx])
 
     # This stuff is hard. We ended up in a three-way trade-off
     # between memory bandwidth, redundant work, and

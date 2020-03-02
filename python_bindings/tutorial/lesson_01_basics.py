@@ -81,7 +81,8 @@ def main():
         for i in range(output.width()):
             # We can access a pixel of an hl.Buffer object using similar
             # syntax to defining and using functions.
-            assert output[i, j] == i + j, "Something went wrong!\n" \
+            assert output[i, j] == i + j, \
+                "Something went wrong!\n" + \
                 "Pixel %d, %d was supposed to be %d, but instead it's %d\n" % (
                     i, j, i + j, output[i, j])
 

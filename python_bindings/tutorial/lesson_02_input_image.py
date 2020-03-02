@@ -18,8 +18,7 @@ def main():
     # brightens an image.
 
     # First we'll load the input image we wish to brighten.
-    image_path = os.path.join(os.path.dirname(
-        __file__), "../../tutorial/images/rgb.png")
+    image_path = os.path.join(os.path.dirname(__file__), "../../tutorial/images/rgb.png")
 
     # We create a hl.Buffer object to wrap the numpy array
     input = hl.Buffer(imageio.imread(image_path))
@@ -83,8 +82,7 @@ def main():
     # smaller size. If we request a larger size Halide will throw an
     # error at runtime telling us we're trying to read out of bounds
     # on the input image.
-    output_image = brighter.realize(
-        input.width(), input.height(), input.channels())
+    output_image = brighter.realize(input.width(), input.height(), input.channels())
     assert output_image.type() == hl.UInt(8)
 
     # Save the output for inspection. It should look like a bright parrot.

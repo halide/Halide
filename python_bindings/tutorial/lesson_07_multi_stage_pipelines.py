@@ -18,8 +18,7 @@ def main():
     # First we'll declare some Vars to use below.
     x, y, c = hl.Var("x"), hl.Var("y"), hl.Var("c")
 
-    image_path = os.path.join(os.path.dirname(
-        __file__), "../../tutorial/images/rgb.png")
+    image_path = os.path.join(os.path.dirname(__file__), "../../tutorial/images/rgb.png")
 
     # Now we'll express a multi-stage pipeline that blurs an image
     # first horizontally, and then vertically.
@@ -75,8 +74,7 @@ def main():
         # over a domain shifted inwards by one pixel, we won't be
         # asking the Halide routine to read out of bounds. We saw how
         # to do this in the previous lesson:
-        result = hl.Buffer(
-            hl.UInt(8), [input.width() - 2, input.height() - 2, 3])
+        result = hl.Buffer(hl.UInt(8), [input.width() - 2, input.height() - 2, 3])
         result.set_min([1, 1])
         output.realize(result)
 

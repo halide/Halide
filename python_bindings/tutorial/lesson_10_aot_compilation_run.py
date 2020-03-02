@@ -50,8 +50,8 @@ def main():
             correct_val[0] = input_val
             # we add over a uint8 value (will properly model overflow)
             correct_val[0] += offset_value
-            assert output_val == correct_val[0], "output(%d, %d) was %d instead of %d" % (
-                x, y, output_val, correct_val)
+            assert output_val == correct_val[0], \
+                "output(%d, %d) was %d instead of %d" % (x, y, output_val, correct_val)
 
     # Everything worked!
     print("Success!")

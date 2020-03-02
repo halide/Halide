@@ -116,8 +116,7 @@ def main():
             for x_outer in range(2):
                 for x_inner in range(2):
                     xx = x_outer * 2 + x_inner
-                    print("Evaluating at x = %d, y = %d: %d" %
-                          (xx, yy, xx + yy))
+                    print("Evaluating at x = %d, y = %d: %d" % (xx, yy, xx + yy))
 
         print()
 
@@ -193,8 +192,7 @@ def main():
                     for x_inner in range(2):
                         xx = x_outer * 2 + x_inner
                         yy = y_outer * 2 + y_inner
-                        print("Evaluating at x = %d, y = %d: %d" %
-                              (xx, yy, xx + yy))
+                        print("Evaluating at x = %d, y = %d: %d" % (xx, yy, xx + yy))
 
         print()
 
@@ -255,9 +253,7 @@ def main():
                        x_vec[2] + yy,
                        x_vec[3] + yy]
                 print("Evaluating at <%d, %d, %d, %d>, <%d, %d, %d, %d>: <%d, %d, %d, %d>" % (
-                    x_vec[0], x_vec[1], x_vec[2], x_vec[3],
-                    yy, yy, yy, yy,
-                    val[0], val[1], val[2], val[3]))
+                    x_vec[0], x_vec[1], x_vec[2], x_vec[3], yy, yy, yy, yy, val[0], val[1], val[2], val[3]))
 
         print()
 
@@ -295,14 +291,12 @@ def main():
                 if True:
                     x_inner = 0
                     xx = x_outer * 2 + x_inner
-                    print("Evaluating at x = %d, y = %d: %d" %
-                          (xx, yy, xx + yy))
+                    print("Evaluating at x = %d, y = %d: %d" % (xx, yy, xx + yy))
 
                 if True:
                     x_inner = 1
                     xx = x_outer * 2 + x_inner
-                    print("Evaluating at x = %d, y = %d: %d" %
-                          (xx, yy, xx + yy))
+                    print("Evaluating at x = %d, y = %d: %d" % (xx, yy, xx + yy))
 
         print()
 
@@ -341,8 +335,7 @@ def main():
                     if xx > 3:
                         xx = 3
                     xx += x_inner
-                    print("Evaluating at x = %d, y = %d: %d" %
-                          (xx, yy, xx + yy))
+                    print("Evaluating at x = %d, y = %d: %d" % (xx, yy, xx + yy))
 
         print()
 
@@ -425,8 +418,7 @@ def main():
                 for x_inner in range(2):
                     yy = y_outer * 2 + y_inner
                     xx = x_outer * 2 + x_inner
-                    print("Evaluating at x = %d, y = %d: %d" %
-                          (xx, yy, xx + yy))
+                    print("Evaluating at x = %d, y = %d: %d" % (xx, yy, xx + yy))
 
         print()
 
@@ -502,8 +494,8 @@ def main():
 
                         # Check the result.
                         for i in range(4):
-                            assert result[x_vec[i], y_vec[i]] == val[
-                                i], "There was an error at %d %d!" % (x_vec[i], y_vec[i])
+                            assert result[x_vec[i], y_vec[i]] == val[i], \
+                                "There was an error at %d %d!" % (x_vec[i], y_vec[i])
 
                     if True:
                         # y_pairs = 1
@@ -516,8 +508,8 @@ def main():
 
                         # Check the result.
                         for i in range(4):
-                            assert result[x_vec[i], y_vec[i]] == val[
-                                i], "There was an error at %d %d!" % (x_vec[i], y_vec[i])
+                            assert result[x_vec[i], y_vec[i]] == val[i], \
+                                "There was an error at %d %d!" % (x_vec[i], y_vec[i])
 
         print()
 

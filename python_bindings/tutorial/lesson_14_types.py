@@ -68,8 +68,7 @@ def main():
 
         f2 = hl.Func("f2")
         f2[x] = (x, hl.sin(x))
-        assert f2.output_types()[0] == hl.Int(32) and \
-            f2.output_types()[1] == hl.Float(32)
+        assert f2.output_types()[0] == hl.Int(32) and f2.output_types()[1] == hl.Float(32)
 
     # Type promotion rules.
     if True:
@@ -187,8 +186,7 @@ def main():
         x = hl.Var("x")
         assert average(hl.cast(hl.Float(32), x), 3.0).type() == hl.Float(32)
         assert average(x, 3).type() == hl.Int(32)
-        assert average(hl.cast(hl.UInt(8), x), hl.cast(
-            hl.UInt(8), 3)).type() == hl.UInt(8)
+        assert average(hl.cast(hl.UInt(8), x), hl.cast(hl.UInt(8), 3)).type() == hl.UInt(8)
 
     print("Success!")
 

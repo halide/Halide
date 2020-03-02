@@ -53,8 +53,8 @@ def main():
         arm_features = []             # A list of features to set
         target.set_features(arm_features)
         # Pass the target as the last argument.
-        brighter.compile_to_file(
-            "lesson_11_arm_32_android", args, "lesson_11_arm_32_android", target)
+        brighter.compile_to_file("lesson_11_arm_32_android", args,
+                                 "lesson_11_arm_32_android", target)
 
     if create_windows:
         # And now a Windows object file for 64-bit x86 with AVX and SSE 4.1:
@@ -63,8 +63,8 @@ def main():
         target.arch = hl.TargetArch.X86
         target.bits = 64
         target.set_features([hl.TargetFeature.AVX, hl.TargetFeature.SSE41])
-        brighter.compile_to_file(
-            "lesson_11_x86_64_windows", args, "lesson_11_x86_64_windows", target)
+        brighter.compile_to_file("lesson_11_x86_64_windows", args,
+                                 "lesson_11_x86_64_windows", target)
 
     if create_ios:
         # And finally an iOS mach-o object file for one of Apple's 32-bit
@@ -78,8 +78,8 @@ def main():
         target.arch = hl.TargetArch.ARM
         target.bits = 32
         target.set_features([hl.TargetFeature.ARMv7s])
-        brighter.compile_to_file(
-            "lesson_11_arm_32_ios", args, "lesson_11_arm_32_ios", target)
+        brighter.compile_to_file("lesson_11_arm_32_ios", args,
+                                 "lesson_11_arm_32_ios", target)
 
     # Now let's check these files are what they claim, by examining
     # their first few bytes.
@@ -101,7 +101,8 @@ def main():
         f.close()
 
         header = list(unpack("B" * length, header_bytes))
-        assert header == arm_32_android_magic, "Unexpected header bytes in 32-bit arm object file: " + \
+        assert header == arm_32_android_magic, \
+            "Unexpected header bytes in 32-bit arm object file: " +
             str([x == y for x, y in zip(header, arm_32_android_magic)])
 
     if create_windows:

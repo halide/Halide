@@ -89,8 +89,7 @@ def main():
     # rather than having new ones created. (The Buffers must have the correct
     # types and have identical sizes.)
     if True:
-        im1, im2 = hl.Buffer(hl.Int(32), [80, 60]), hl.Buffer(
-            hl.Float(32), [80, 60])
+        im1, im2 = hl.Buffer(hl.Int(32), [80, 60]), hl.Buffer(hl.Float(32), [80, 60])
         multi_valued.realize((im1, im2))
         assert im1[30, 40] == 30 + 40
         assert np.isclose(im2[30, 40], math.sin(30 * 40))
