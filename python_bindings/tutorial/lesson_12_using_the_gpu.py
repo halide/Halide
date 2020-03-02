@@ -241,11 +241,6 @@ def main():
     image_path = os.path.join(os.path.dirname(__file__), "../../tutorial/images/rgb.png")
     input = hl.Buffer(imageio.imread(image_path))
 
-    # TODO: the image-loading code in the C++ tutorials
-    # always implicitly sets this flag; the code here does not.
-    # Should this be necessary?
-    input.set_host_dirty()
-
     # Allocated an image that will store the correct output
     reference_output = hl.Buffer(hl.UInt(8), [input.width(), input.height(), input.channels()])
 
