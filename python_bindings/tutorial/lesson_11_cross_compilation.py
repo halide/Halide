@@ -102,7 +102,7 @@ def main():
 
         header = list(unpack("B" * length, header_bytes))
         assert header == arm_32_android_magic, \
-            "Unexpected header bytes in 32-bit arm object file: " +
+            "Unexpected header bytes in 32-bit arm object file: " + \
             str([x == y for x, y in zip(header, arm_32_android_magic)])
 
     if create_windows:
