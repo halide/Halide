@@ -28,12 +28,12 @@ env:
     # Don't build as a static library with cmake. It risks exceeding the travis memory limit.
     #
     # Note that gcc5.4 is the default install on Travis Xenial, so we'll just use that.
-    - LLVM_VERSION=9.0.0 BUILD_SYSTEM=MAKE
-    - LLVM_VERSION=9.0.0 BUILD_SYSTEM=CMAKE HALIDE_SHARED_LIBRARY=ON
-    - LLVM_VERSION=9.0.0 BUILD_SYSTEM=CMAKE HALIDE_SHARED_LIBRARY=OFF
+    - LLVM_VERSION=10.0.0 BUILD_SYSTEM=MAKE
+    - LLVM_VERSION=10.0.0 BUILD_SYSTEM=CMAKE HALIDE_SHARED_LIBRARY=ON
+    - LLVM_VERSION=10.0.0 BUILD_SYSTEM=CMAKE HALIDE_SHARED_LIBRARY=OFF
 
-    # Just one version of LLVM8 should suffice.
-    - LLVM_VERSION=8.0.0 BUILD_SYSTEM=MAKE
+    # Just one version of LLVM9 should suffice.
+    - LLVM_VERSION=9.0.0 BUILD_SYSTEM=MAKE
 
 cache: ccache
 dist: bionic

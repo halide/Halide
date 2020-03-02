@@ -1226,7 +1226,6 @@ void CodeGen_LLVM::optimize_module() {
     const bool do_loop_opt = !get_target().has_feature(Target::DisableLLVMLoopOpt) ||
                              get_target().has_feature(Target::EnableLLVMLoopOpt);
 
-#if LLVM_VERSION >= 90
     PipelineTuningOptions pto;
     pto.LoopInterleaving = do_loop_opt;
     pto.LoopVectorization = do_loop_opt;
@@ -1239,7 +1238,6 @@ void CodeGen_LLVM::optimize_module() {
     // 21.04 -> 14.78 using current ToT release build. (See also https://reviews.llvm.org/rL358304)
     pto.ForgetAllSCEVInLoopUnroll = true;
 
-    // Note: pto exists only for LLVM_VERSION >= 90
     llvm::PassBuilder pb(tm.get(), pto);
 
     bool debug_pass_manager = false;
@@ -1319,110 +1317,6 @@ void CodeGen_LLVM::optimize_module() {
 
     if (llvm::verifyModule(*module, &errs()))
         report_fatal_error("Transformation resulted in an invalid module\n");
-
-#else
-    // Keep the legacy pass manager for LLVM < 90
-
-    // We override PassManager::add so that we have an opportunity to
-    // blacklist problematic LLVM passes.
-    class MyFunctionPassManager : public legacy::FunctionPassManager {
-    public:
-        MyFunctionPassManager(llvm::Module *m)
-            : legacy::FunctionPassManager(m) {
-        }
-        void add(Pass *p) override {
-            debug(2) << "Adding function pass: " << p->getPassName().str() << "\n";
-            legacy::FunctionPassManager::add(p);
-        }
-    };
-
-    class MyModulePassManager : public legacy::PassManager {
-    public:
-        void add(Pass *p) override {
-            debug(2) << "Adding module pass: " << p->getPassName().str() << "\n";
-            legacy::PassManager::add(p);
-        }
-    };
-
-    MyFunctionPassManager function_pass_manager(module.get());
-    MyModulePassManager module_pass_manager;
-
-    module_pass_manager.add(createTargetTransformInfoWrapperPass(tm ? tm->getTargetIRAnalysis() : TargetIRAnalysis()));
-    function_pass_manager.add(createTargetTransformInfoWrapperPass(tm ? tm->getTargetIRAnalysis() : TargetIRAnalysis()));
-
-    PassManagerBuilder b;
-    b.OptLevel = 3;
-    b.Inliner = createFunctionInliningPass(b.OptLevel, 0, false);
-    b.LoopVectorize = do_loop_opt;
-    b.DisableUnrollLoops = !do_loop_opt;
-    b.SLPVectorize = true;  // Note: SLP vectorization has no analogue in the Halide scheduling model
-#if LLVM_VERSION >= 90
-    // Clear ScEv info for all loops. Certain Halide applications spend a very
-    // long time compiling in forgetLoop, and prefer to forget everything
-    // and rebuild SCEV (aka "Scalar Evolution") from scratch.
-    // Sample difference in compile time reduction at the time of this change was
-    // 21.04 -> 14.78 using current ToT release build. (See also https://reviews.llvm.org/rL358304)
-    b.ForgetAllSCEVInLoopUnroll = true;
-#endif
-
-    if (tm) {
-        tm->adjustPassManager(b);
-    }
-
-    if (get_target().has_feature(Target::ASAN)) {
-        auto addAddressSanitizerPasses = [](const PassManagerBuilder &builder, legacy::PassManagerBase &pm) {
-            constexpr bool compile_kernel = false;   // always false for user code
-            constexpr bool recover = false;          // -fsanitize-recover, always false here
-            constexpr bool use_after_scope = false;  // enable -fsanitize-address-use-after-scope?
-            constexpr bool use_globals_gc = false;   // Should ASan use GC-friendly instrumentation for globals?
-
-            pm.add(createAddressSanitizerFunctionPass(compile_kernel, recover, use_after_scope));
-#if LLVM_VERSION >= 90
-            pm.add(createModuleAddressSanitizerLegacyPassPass(compile_kernel, recover, use_globals_gc));
-#else
-            pm.add(createAddressSanitizerModulePass(compile_kernel, recover, use_globals_gc));
-#endif
-        };
-        b.addExtension(PassManagerBuilder::EP_OptimizerLast, addAddressSanitizerPasses);
-        b.addExtension(PassManagerBuilder::EP_EnabledOnOptLevel0, addAddressSanitizerPasses);
-    }
-
-    if (get_target().has_feature(Target::TSAN)) {
-        auto addThreadSanitizerPass = [](const PassManagerBuilder &builder, legacy::PassManagerBase &pm) {
-            pm.add(createThreadSanitizerLegacyPassPass());
-        };
-        b.addExtension(PassManagerBuilder::EP_OptimizerLast, addThreadSanitizerPass);
-        b.addExtension(PassManagerBuilder::EP_EnabledOnOptLevel0, addThreadSanitizerPass);
-    }
-
-    b.populateFunctionPassManager(function_pass_manager);
-    b.populateModulePassManager(module_pass_manager);
-
-    // Run optimization passes
-    function_pass_manager.doInitialization();
-    for (llvm::Module::iterator i = module->begin(); i != module->end(); i++) {
-        if (get_target().has_feature(Target::ASAN)) {
-            i->addFnAttr(Attribute::SanitizeAddress);
-        }
-        if (get_target().has_feature(Target::TSAN)) {
-            // Do not annotate any of Halide's low-level synchronization code as it has
-            // tsan interface calls to mark its behavior and is much faster if
-            // it is not analyzed instruction by instruction.
-            if (!(i->getName().startswith("_ZN6Halide7Runtime8Internal15Synchronization") ||
-                  // TODO: this is a benign data race that re-initializes the detected features;
-                  // we should really fix it properly inside the implementation, rather than disabling
-                  // it here as a band-aid.
-                  i->getName().startswith("halide_default_can_use_target_features") ||
-                  i->getName().startswith("halide_mutex_") ||
-                  i->getName().startswith("halide_cond_"))) {
-                i->addFnAttr(Attribute::SanitizeThread);
-            }
-        }
-        function_pass_manager.run(*i);
-    }
-    function_pass_manager.doFinalization();
-    module_pass_manager.run(*module);
-#endif
 
     debug(3) << "After LLVM optimizations:\n";
     if (debug::debug_level() >= 2) {
@@ -2510,15 +2404,11 @@ void CodeGen_LLVM::codegen_atomic_store(const Store *op) {
                                                 op->value.type(),
                                                 op->index);
             // llvm 9 has FAdd which can be used for atomic floats.
-#if LLVM_VERSION >= 90
             if (value_type.is_float()) {
                 builder->CreateAtomicRMW(AtomicRMWInst::FAdd, ptr, val, AtomicOrdering::Monotonic);
             } else {
                 builder->CreateAtomicRMW(AtomicRMWInst::Add, ptr, val, AtomicOrdering::Monotonic);
             }
-#else
-            builder->CreateAtomicRMW(AtomicRMWInst::Add, ptr, val, AtomicOrdering::Monotonic);
-#endif
         } else {
             Value *index = codegen(op->index);
             // Scalarize vector store.
@@ -2527,15 +2417,11 @@ void CodeGen_LLVM::codegen_atomic_store(const Store *op) {
                 Value *idx = builder->CreateExtractElement(index, lane);
                 Value *v = builder->CreateExtractElement(val, lane);
                 Value *ptr = codegen_buffer_pointer(op->name, value_type.element_of(), idx);
-#if LLVM_VERSION >= 90
                 if (value_type.is_float()) {
                     builder->CreateAtomicRMW(AtomicRMWInst::FAdd, ptr, v, AtomicOrdering::Monotonic);
                 } else {
                     builder->CreateAtomicRMW(AtomicRMWInst::Add, ptr, v, AtomicOrdering::Monotonic);
                 }
-#else
-                builder->CreateAtomicRMW(AtomicRMWInst::Add, ptr, v, AtomicOrdering::Monotonic);
-#endif
             }
         }
     } else {

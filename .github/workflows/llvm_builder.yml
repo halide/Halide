@@ -34,10 +34,8 @@ jobs:
         target_arch: [x86, arm]
         target_bits: [32, 64]
         target_os: [windows, linux, osx]
-        llvm_version: [8, 9, 10, 11]
+        llvm_version: [9, 10, 11]
         include:
-          - llvm_version: 8
-            llvm_branch: release/8.x
           - llvm_version: 9
             llvm_branch: release/9.x
           - llvm_version: 10
