@@ -215,7 +215,7 @@ jobs:
         fi
 
         mkdir ${LLVM_INSTALL_DIR}
-        ${TAR_CMD} -xvf ${HALIDE_TEMP_DIR}/llvm-prebuilt.tgz -C ${LLVM_INSTALL_DIR}
+        ${TAR_CMD} -xf ${HALIDE_TEMP_DIR}/llvm-prebuilt.tgz -C ${LLVM_INSTALL_DIR}
         rm -rf ${HALIDE_TEMP_DIR}/llvm-prebuilt.tgz
 
         LLVM_COMMIT_HASH=`cat ${LLVM_INSTALL_DIR}/.halide_builder_llvm_commit`
@@ -249,8 +249,7 @@ jobs:
           # CMAKE_TOOLCHAIN_FILE is necessary for CMake to find
           # things installed by vcpkg
           EXTRA_CMAKE_FLAGS="${EXTRA_CMAKE_FLAGS} \
-            -D CMAKE_TOOLCHAIN_FILE=C:/vcpkg/scripts/buildsystems/vcpkg.cmake
-            -T host=x64"
+            -D CMAKE_TOOLCHAIN_FILE=C:/vcpkg/scripts/buildsystems/vcpkg.cmake"
           if [[ ${{matrix.target_bits}} == 64 ]]; then
             EXTRA_CMAKE_FLAGS="${EXTRA_CMAKE_FLAGS} -A x64"
           fi
