@@ -111,14 +111,11 @@ jobs:
       if: startsWith(matrix.host_os, 'windows')
       shell: bash
       run: |
-        echo HEY HERE IS VCPKG
-        which vcpkg
-        echo
-        echo
+        ls -lr /c/vcpkg/
 
         vcpkg install zlib libpng libjpeg-turbo
 
-        echo VCPKG_ROOT is ${VCPKG_ROOT}
+        ls -lr /c/vcpkg/
 
         # On Windows, it's just 'python', apparently
         echo ::set-env name=PYTHON::"python"
