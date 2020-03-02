@@ -24,41 +24,37 @@ set(CMAKE_FIND_FRAMEWORK LAST)
 
 find_package(Threads QUIET)
 
-include(FetchContent)
+# include(FetchContent)
 
-option(HALIDE_FETCH_ZLIB "Fetch + build zlib from source" OFF)
-if(HALIDE_FETCH_ZLIB)
-  FetchContent_Declare(
-    zlib
-    GIT_REPOSITORY https://github.com/madler/zlib.git
-    GIT_TAG        v1.2.11
-  )
-  FetchContent_MakeAvailable(zlib)
-endif()
+# option(HALIDE_FETCH_ZLIB "Fetch + build zlib from source" OFF)
+# if(HALIDE_FETCH_ZLIB)
+#   FetchContent_Declare(
+#     zlib
+#     GIT_REPOSITORY https://github.com/madler/zlib.git
+#     GIT_TAG        v1.2.11
+#   )
+#   FetchContent_MakeAvailable(zlib)
+# endif()
 
-option(HALIDE_FETCH_LIBPNG "Fetch + build libpng from source" OFF)
-if(HALIDE_FETCH_LIBPNG)
-  FetchContent_Declare(
-    libpng
-    GIT_REPOSITORY https://github.com/glennrp/libpng.git
-    GIT_TAG        v1.6.37
-  )
-  FetchContent_MakeAvailable(libpng)
-endif()
+# option(HALIDE_FETCH_LIBPNG "Fetch + build libpng from source" OFF)
+# if(HALIDE_FETCH_LIBPNG)
+#   FetchContent_Declare(
+#     libpng
+#     GIT_REPOSITORY https://github.com/glennrp/libpng.git
+#     GIT_TAG        v1.6.37
+#   )
+#   FetchContent_MakeAvailable(libpng)
+# endif()
 
-option(HALIDE_FETCH_LIBJPEG "Fetch + build libjpeg from source" OFF)
-if(HALIDE_FETCH_LIBJPEG)
-  FetchContent_Declare(
-    jpeg
-    GIT_REPOSITORY https://github.com/libjpeg-turbo/libjpeg-turbo.git
-    GIT_TAG        2.0.4
-  )
-  FetchContent_MakeAvailable(jpeg)
-endif()
-
-# After the following call, the CMake targets defined by googletest and
-# Catch2 will be defined and available to the rest of the build
-FetchContent_MakeAvailable(googletest Catch2)
+# option(HALIDE_FETCH_LIBJPEG "Fetch + build libjpeg from source" OFF)
+# if(HALIDE_FETCH_LIBJPEG)
+#   FetchContent_Declare(
+#     jpeg
+#     GIT_REPOSITORY https://github.com/libjpeg-turbo/libjpeg-turbo.git
+#     GIT_TAG        2.0.4
+#   )
+#   FetchContent_MakeAvailable(jpeg)
+# endif()
 
 if("${HALIDE_REQUIRE_LLVM_VERSION}" STREQUAL "")
   # Find any version present.
