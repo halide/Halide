@@ -114,6 +114,10 @@ jobs:
         # Chocolatey doesn't have zlib or libpng.
         vcpkg install zlib libpng libjpeg-turbo
 
+    - name: Configure Windows Host
+      if: startsWith(matrix.host_os, 'windows')
+      shell: bash
+      run: |
         # On Windows, it's just 'python', apparently
         echo ::set-env name=PYTHON::"python"
 
