@@ -107,10 +107,22 @@ jobs:
         # coreutils is for gtimeout
         brew install libpng jpeg doxygen coreutils ninja
 
+    - name: Sniff Windows Host
+      if: startsWith(matrix.host_os, 'windows')
+      run: |
+        echo VCPKG_ROOT is %VCPKG_ROOT%
+        echo VCPKG_ROOT is ${VCPKG_ROOT}
+        exit 22
+
     - name: Configure Windows Host
       if: startsWith(matrix.host_os, 'windows')
       shell: bash
       run: |
+        echo HEY HERE IS VCPKG
+        which vcpkg
+        echo
+        echo
+
         vcpkg install zlib libpng libjpeg-turbo
 
         echo VCPKG_ROOT is ${VCPKG_ROOT}
