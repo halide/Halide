@@ -26,10 +26,10 @@ jobs:
       - name: Install clang-tidy
         run: |
           sudo apt-get install clang-tidy-9
-      # - name: Build Compilation DB
-      #   run: |
-      #     cmake -DCMAKE_BUILD_TYPE=Debug -DCMAKE_EXPORT_COMPILE_COMMANDS=ON -S . -B build
-      #     [ -a build/compile_commands.json ]
+      - name: Build Compilation DB
+        run: |
+          cmake -DCMAKE_BUILD_TYPE=Debug -DCMAKE_EXPORT_COMPILE_COMMANDS=ON -S . -B build
+          [ -a build/compile_commands.json ]
       - name: Run clang-tidy
         run: |
           clang-tidy-9 --quiet -extra-arg=-Wno-unknown-warning-option -p build src/*.cpp
