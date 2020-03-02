@@ -351,6 +351,10 @@ void ReverseAccumulationVisitor::propagate_adjoints(
 
             // Traverse the expressions in reverse order
             for (auto it = expr_list.rbegin(); it != expr_list.rend(); it++) {
+                if (it->type().is_handle()) {
+                    // Ignore pointer types
+                    continue;
+                }
                 it->accept(this);
             }
 
@@ -700,6 +704,10 @@ void ReverseAccumulationVisitor::propagate_adjoints(
 
                 // Traverse the expressions in reverse order
                 for (auto it = expr_list.rbegin(); it != expr_list.rend(); it++) {
+                    if (it->type().is_handle()) {
+                        // Ignore pointer types
+                        continue;
+                    }
                     // Propagate adjoints
                     it->accept(this);
                 }
@@ -739,6 +747,10 @@ void ReverseAccumulationVisitor::propagate_adjoints(
                 int count = 0;
                 // Traverse the expressions in reverse order
                 for (auto it = expr_list.rbegin(); it != expr_list.rend(); it++) {
+                    if (it->type().is_handle()) {
+                        // Ignore pointer types
+                        continue;
+                    }
                     // Propagate adjoints
                     it->accept(this);
                     count++;
@@ -1136,7 +1148,9 @@ void ReverseAccumulationVisitor::visit(const Call *op) {
             accumulate(op->args[0],
                        neg_half * adjoint * inv_sqrt_x * inv_sqrt_x * inv_sqrt_x);
         } else if (op->name == "halide_print") {
-            accumulate(op->args[0], make_zero(op->type));
+            for (const auto &arg : op->args) {
+                accumulate(arg, make_zero(op->type));
+            }
         } else {
             internal_error << "The derivative of " << op->name << " is not implemented.";
         }
@@ -1156,7 +1170,7 @@ void ReverseAccumulationVisitor::visit(const Call *op) {
         } else if (op->is_intrinsic(Call::likely)) {
             accumulate(op->args[0], adjoint);
         } else if (op->is_intrinsic(Call::return_second)) {
-            // accumulate(op->args[0], make_const(op->type, 0.0));
+            accumulate(op->args[0], make_const(op->type, 0.0));
             accumulate(op->args[1], adjoint);
         } else if (op->is_intrinsic(Call::undef)) {
             // do nothing
