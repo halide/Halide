@@ -153,7 +153,7 @@ struct ExprNode : public BaseExprNode {
     ExprNode()
         : BaseExprNode(T::_node_type) {
     }
-    virtual ~ExprNode() = default;
+    ~ExprNode() override = default;
 };
 
 template<typename T>
@@ -163,7 +163,7 @@ struct StmtNode : public BaseStmtNode {
     StmtNode()
         : BaseStmtNode(T::_node_type) {
     }
-    virtual ~StmtNode() = default;
+    ~StmtNode() override = default;
 };
 
 /** IR nodes are passed around opaque handles to them. This is a

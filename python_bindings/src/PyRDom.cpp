@@ -17,7 +17,7 @@ void define_rvar(py::module &m) {
 
     py::implicitly_convertible<RDom, RVar>();
 
-    add_binary_operators_with<Expr>(rvar_class);
+    add_binary_operators(rvar_class);
 }
 
 void define_rdom(py::module &m) {
@@ -39,7 +39,7 @@ void define_rdom(py::module &m) {
             .def_readonly("z", &RDom::z)
             .def_readonly("w", &RDom::w);
 
-    add_binary_operators_with<Expr>(rdom_class);
+    add_binary_operators(rdom_class);
 }
 
 }  // namespace PythonBindings

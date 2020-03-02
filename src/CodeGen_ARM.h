@@ -31,6 +31,8 @@ protected:
     void visit(const Store *) override;
     void visit(const Load *) override;
     void visit(const Call *) override;
+    void visit(const LT *) override;
+    void visit(const LE *) override;
     // @}
 
     /** Various patterns to peephole match against */

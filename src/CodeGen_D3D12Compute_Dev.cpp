@@ -896,7 +896,7 @@ void CodeGen_D3D12Compute_Dev::CodeGen_D3D12Compute_C::add_kernel(Stmt s,
     struct FindUninitializedSharedLoads : public IRMutator {
         using IRMutator::mutate;
         using IRMutator::visit;
-        virtual Expr visit(const Load *op) override {
+        Expr visit(const Load *op) override {
             if (op->name == "__shared") {
                 if (!latest_store) {
                     // attempting to read from __shared before anything has been
@@ -906,14 +906,14 @@ void CodeGen_D3D12Compute_Dev::CodeGen_D3D12Compute_C::add_kernel(Stmt s,
             }
             return IRMutator::visit(op);
         }
-        virtual Stmt visit(const Store *op) override {
+        Stmt visit(const Store *op) override {
             Stmt store = IRMutator::visit(op);
             if (op->name == "__shared") {
                 latest_store = op;
             }
             return store;
         }
-        virtual Stmt mutate(const Stmt &stmt) override {
+        Stmt mutate(const Stmt &stmt) override {
             if (!bad_load_expr) {
                 current_stmt = &stmt;
             }
@@ -930,7 +930,7 @@ void CodeGen_D3D12Compute_Dev::CodeGen_D3D12Compute_C::add_kernel(Stmt s,
         // use IRMutator to inject a zero-initialization before the load
         struct ZeroInitializeSharedMemory : public IRMutator {
             using IRMutator::mutate;
-            virtual Stmt mutate(const Stmt &op) override {
+            Stmt mutate(const Stmt &op) override {
                 if (&op != uninitialized_load_stmt) {
                     return IRMutator::mutate(op);
                 }

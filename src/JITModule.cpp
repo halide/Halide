@@ -370,7 +370,7 @@ JITModule JITModule::make_trampolines_module(const Target &target_arg,
     JITModule result;
     std::vector<std::pair<std::string, ExternSignature>> extern_signatures;
     std::vector<std::string> requested_exports;
-    for (const std::pair<std::string, JITExtern> &e : externs) {
+    for (const std::pair<const std::string, JITExtern> &e : externs) {
         const std::string &callee_name = e.first;
         const std::string wrapper_name = callee_name + suffix;
         const ExternCFunction &extern_c = e.second.extern_c_function();

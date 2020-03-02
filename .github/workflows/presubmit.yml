@@ -18,12 +18,27 @@ jobs:
           source: '.'
           extensions: 'h,c,cpp'
           clangFormatVersion: 9
+  check_clang_tidy:
+    name: Check clang-tidy
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v2
+      - name: Install clang-tidy
+        run: |
+          sudo apt-get install clang-tidy-9
+      - name: Build Compilation DB
+        run: |
+          cmake -DCMAKE_BUILD_TYPE=Debug -DCMAKE_EXPORT_COMPILE_COMMANDS=ON -S . -B build
+          [ -a build/compile_commands.json ]
+      - name: Run clang-tidy
+        run: |
+          clang-tidy-9 --quiet -extra-arg=-Wno-unknown-warning-option -p build src/*.cpp
   check_cmake_file_lists:
     name: Check CMake file lists
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v2
-      - name: bash script
+      - name: Run test sources check
         run: |
           shopt -s nullglob
           diff <(awk '/SOURCES/{flag=1;next} /\)/{flag=0} flag{print$1}' test/auto_schedule/CMakeLists.txt | sort) <(cd test/auto_schedule; ls -1 *.{c,cpp} | sort)
