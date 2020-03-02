@@ -4,6 +4,7 @@ add_library(gradient_autoscheduler
             ASLog.cpp)
 target_link_libraries(gradient_autoscheduler PRIVATE "${HALIDE_COMPILER_LIB}")
 target_include_directories(gradient_autoscheduler PRIVATE "${HALIDE_INCLUDE_DIR}" "${HALIDE_TOOLS_DIR}")
+install(TARGETS gradient_autoscheduler LIBRARY DESTINATION bin)
 
 add_executable(gradient_autoscheduler_test_cpp test.cpp)
 target_link_libraries(gradient_autoscheduler_test_cpp PRIVATE gradient_autoscheduler "${HALIDE_COMPILER_LIB}")
