@@ -1,0 +1,7 @@
+---
+Checks: '-*,modernize-use-override'
+WarningsAsErrors: '*'
+HeaderFilterRegex: '.*'
+AnalyzeTemporaryDtors: false
+FormatStyle: 'file'
+...
