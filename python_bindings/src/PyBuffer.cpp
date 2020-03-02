@@ -268,6 +268,20 @@ public:
 
     PyBuffer(py::buffer buffer, const std::string &name)
         : PyBuffer(buffer.request(/*writable*/ true), name) {
+        // Default to setting host-dirty on any PyBuffer we create from an existing py::buffer;
+        // this allows (e.g.) code like
+        //
+        //     input = hl.Buffer(imageio.imread(image_path))
+        //
+        // to work as you'd expected when the buffer is used for input. (Without
+        // host_dirty being set, copying to GPU can be skipped and produce surprising
+        // results.)
+        //
+        // Note that this is a bit different from the C++ Buffer<> ctors that
+        // take pointer-to-existing data (which do *not* set host dirty); a crucial
+        // difference there is that those also do not take ownership, but here,
+        // we always take (shared) ownership of the underlying buffer.
+        this->set_host_dirty();
     }
 
     virtual ~PyBuffer() {
