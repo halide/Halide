@@ -122,7 +122,7 @@ jobs:
       if: startsWith(matrix.host_os, 'windows')
       shell: bash
       run: |
-        choco install ninja
+        choco install ninja --limit-output
         # which cl.exe
 
         if [[ ${{matrix.target_bits}} == 32 ]]; then
@@ -249,10 +249,11 @@ jobs:
           # CMAKE_TOOLCHAIN_FILE is necessary for CMake to find
           # things installed by vcpkg
           EXTRA_CMAKE_FLAGS="${EXTRA_CMAKE_FLAGS} \
-            -D CMAKE_TOOLCHAIN_FILE=C:/vcpkg/scripts/buildsystems/vcpkg.cmake"
-          if [[ ${{matrix.target_bits}} == 64 ]]; then
-            EXTRA_CMAKE_FLAGS="${EXTRA_CMAKE_FLAGS} -A x64"
-          fi
+            -D CMAKE_TOOLCHAIN_FILE=C:/vcpkg/scripts/buildsystems/vcpkg.cmake \
+            -T host=x64"
+          # if [[ ${{matrix.target_bits}} == 64 ]]; then
+          #   EXTRA_CMAKE_FLAGS="${EXTRA_CMAKE_FLAGS} -A x64"
+          # fi
         fi
 
         if [[ ${{matrix.target_arch}} == x86 && \
