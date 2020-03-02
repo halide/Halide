@@ -26,9 +26,9 @@ jobs:
         # useful to prune this a bit).
         target_arch: [x86]  #, arm]
         target_bits: [32, 64]
-        target_os: [windows] #, linux, osx]
-        llvm_version: [9] #, 10, 11]
-        build_tool: [cmake_shared] #make]  # TODO: cmake_static is still dodgy?
+        target_os: [linux, osx, windows]
+        llvm_version: [9, 10, 11]
+        build_tool: [cmake_shared, make]  # TODO: cmake_static is still dodgy?
         include:
           - llvm_version: 9
             llvm_branch: release/9.x
@@ -107,10 +107,18 @@ jobs:
         # coreutils is for gtimeout
         brew install libpng jpeg doxygen coreutils ninja
 
+    - name: Sniff Windows Host
+      if: startsWith(matrix.host_os, 'windows')
+      run: |
+        which cl.exe
+        which vcvarsall.bat
+
     - name: Configure Windows Host
       if: startsWith(matrix.host_os, 'windows')
       shell: bash
       run: |
+        which cl.exe
+
         if [[ ${{matrix.target_bits}} == 32 ]]; then
           export VCPKG_DEFAULT_TRIPLET=x86-windows
         else
@@ -220,6 +228,8 @@ jobs:
       run: |
         # Configure CMake
         set -eu
+
+        echo `cmake --version`
 
         mkdir ${HALIDE_BUILD_DIR}
 
