@@ -28,7 +28,7 @@ jobs:
           sudo apt-get install llvm-9 clang-tidy-9
       - name: Build Compilation DB
         run: |
-          cmake -DCMAKE_BUILD_TYPE=Debug -DCMAKE_EXPORT_COMPILE_COMMANDS=ON -S . -B build
+          cmake -DCMAKE_BUILD_TYPE=Debug -DCMAKE_EXPORT_COMPILE_COMMANDS=ON -DHALIDE_REQUIRE_LLVM_VERSION=90 -S . -B build
           [ -a build/compile_commands.json ]
       - name: Run clang-tidy
         run: |
