@@ -25,10 +25,15 @@ jobs:
         # matrix (and since we are limited to 8 concurrent tests, it would be
         # useful to prune this a bit).
         target_arch: [x86]  #, arm]
-        target_bits: [32, 64]
-        target_os: [linux, osx, windows]
-        llvm_version: [9, 10, 11]
-        build_tool: [cmake_shared, make]  # TODO: cmake_static is still dodgy?
+        target_bits: [64]
+        target_os: [windows]
+        llvm_version: [9]
+        build_tool: [cmake_shared]  # TODO: cmake_static is still dodgy?
+        # target_arch: [x86]  #, arm]
+        # target_bits: [32, 64]
+        # target_os: [linux, osx, windows]
+        # llvm_version: [9, 10, 11]
+        # build_tool: [cmake_shared, make]  # TODO: cmake_static is still dodgy?
         include:
           - llvm_version: 9
             llvm_branch: release/9.x
@@ -107,17 +112,18 @@ jobs:
         # coreutils is for gtimeout
         brew install libpng jpeg doxygen coreutils ninja
 
-    - name: Sniff Windows Host
-      if: startsWith(matrix.host_os, 'windows')
-      run: |
-        which cl.exe
-        which vcvarsall.bat
+    # - name: Sniff Windows Host
+    #   if: startsWith(matrix.host_os, 'windows')
+    #   run: |
+    #     which cl.exe
+    #     which vcvarsall.bat
 
     - name: Configure Windows Host
       if: startsWith(matrix.host_os, 'windows')
       shell: bash
       run: |
-        which cl.exe
+        choco install ninja
+        # which cl.exe
 
         if [[ ${{matrix.target_bits}} == 32 ]]; then
           export VCPKG_DEFAULT_TRIPLET=x86-windows
@@ -238,7 +244,7 @@ jobs:
         PARALLEL_JOBS=4  # GHA VMs have 2 cores
 
         if [[ ${{matrix.host_os}} == windows* ]]; then
-          CMAKE_GEN="Visual Studio 16"
+          # CMAKE_GEN="Visual Studio 16"
 
           # CMAKE_TOOLCHAIN_FILE is necessary for CMake to find
           # things installed by vcpkg
@@ -346,11 +352,6 @@ jobs:
 
         # tutorial has some performance measurements that can be flaky if we run them in parallel
         TEST_GROUPS_SERIAL="performance|tutorial"
-        TEST_GROUPS_SERIAL_BROKEN=""
-        if [[ ${{matrix.host_os}} == windows* ]]; then
-          # TODO: libpng not working yet on windows, exclude the tutorials that need it
-          TEST_GROUPS_SERIAL_BROKEN="lesson_02_input_image|lesson_07_multi_stage_pipelines|lesson_09_update_definitions|lesson_12_using_the_gpu"
-        fi
 
         # opengl won't work on the buildbots. auto_schedule is just flaky.
         TEST_GROUPS_BROKEN="opengl|auto_schedule"
@@ -369,6 +370,6 @@ jobs:
         ctest \
           -C ${BUILD_TYPE} \
           -L "${TEST_GROUPS_SERIAL}" \
-          -E "${TEST_GROUPS_SERIAL_BROKEN}" \
+          -E "${TEST_GROUPS_BROKEN}" \
           --output-on-failure
 
