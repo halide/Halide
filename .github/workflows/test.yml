@@ -111,11 +111,7 @@ jobs:
       if: startsWith(matrix.host_os, 'windows')
       shell: bash
       run: |
-        ls -lr /c/vcpkg/
-
         vcpkg install zlib libpng libjpeg-turbo
-
-        ls -lr /c/vcpkg/
 
         # On Windows, it's just 'python', apparently
         echo ::set-env name=PYTHON::"python"
@@ -231,7 +227,7 @@ jobs:
           # CMAKE_TOOLCHAIN_FILE is necessary for CMake to find
           # things installed by vcpkg
           EXTRA_CMAKE_FLAGS="${EXTRA_CMAKE_FLAGS} \
-            -D CMAKE_TOOLCHAIN_FILE=${VCPKG_ROOT//\\//}/scripts/buildsystems/vcpkg.cmake
+            -D CMAKE_TOOLCHAIN_FILE=\"C:/vcpkg/scripts/buildsystems/vcpkg.cmake\"
             -T host=x64"
           if [[ ${{matrix.target_bits}} == 64 ]]; then
             EXTRA_CMAKE_FLAGS="${EXTRA_CMAKE_FLAGS} -A x64"
