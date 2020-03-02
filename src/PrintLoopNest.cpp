@@ -153,7 +153,7 @@ string print_loop_nest(const vector<Function> &output_funcs) {
 
     // Compute an environment
     map<string, Function> env;
-    for (Function f : output_funcs) {
+    for (const Function &f : output_funcs) {
         populate_environment(f, env);
     }
 
@@ -162,7 +162,7 @@ string print_loop_nest(const vector<Function> &output_funcs) {
     std::tie(outputs, env) = deep_copy(output_funcs, env);
 
     // Output functions should all be computed and stored at root.
-    for (Function f : outputs) {
+    for (const Function &f : outputs) {
         Func(f).compute_root().store_root();
     }
 

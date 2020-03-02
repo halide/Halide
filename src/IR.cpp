@@ -1,7 +1,9 @@
 #include "IR.h"
+
 #include "IRMutator.h"
 #include "IRPrinter.h"
 #include "IRVisitor.h"
+#include <utility>
 
 namespace Halide {
 namespace Internal {
@@ -228,7 +230,7 @@ Expr Select::make(Expr condition, Expr true_value, Expr false_value) {
     return node;
 }
 
-Expr Load::make(Type type, const std::string &name, Expr index, Buffer<> image, Parameter param, Expr predicate, ModulusRemainder alignment) {
+Expr Load::make(Type type, const std::string &name, Expr index, const Buffer<> &image, Parameter param, Expr predicate, ModulusRemainder alignment) {
     internal_assert(predicate.defined()) << "Load with undefined predicate\n";
     internal_assert(index.defined()) << "Load of undefined\n";
     internal_assert(type.lanes() == index.type().lanes()) << "Vector lanes of Load must match vector lanes of index\n";
@@ -240,7 +242,7 @@ Expr Load::make(Type type, const std::string &name, Expr index, Buffer<> image, 
     node->name = name;
     node->predicate = std::move(predicate);
     node->index = std::move(index);
-    node->image = std::move(image);
+    node->image = image;
     node->param = std::move(param);
     node->alignment = alignment;
     return node;
@@ -258,7 +260,7 @@ Expr Ramp::make(Expr base, Expr stride, int lanes) {
     node->type = base.type().with_lanes(lanes);
     node->base = std::move(base);
     node->stride = std::move(stride);
-    node->lanes = std::move(lanes);
+    node->lanes = lanes;
     return node;
 }
 
@@ -477,7 +479,7 @@ Stmt Realize::make(const std::string &name, const std::vector<Type> &types, Memo
 Stmt Prefetch::make(const std::string &name, const std::vector<Type> &types,
                     const Region &bounds,
                     const PrefetchDirective &prefetch,
-                    Expr condition, Stmt body) {
+                    const Expr &condition, const Stmt &body) {
     for (size_t i = 0; i < bounds.size(); i++) {
         internal_assert(bounds[i].min.defined()) << "Prefetch of undefined\n";
         internal_assert(bounds[i].extent.defined()) << "Prefetch of undefined\n";
@@ -565,7 +567,7 @@ Stmt Evaluate::make(Expr v) {
     return node;
 }
 
-Expr Call::make(Function func, const std::vector<Expr> &args, int idx) {
+Expr Call::make(const Function &func, const std::vector<Expr> &args, int idx) {
     internal_assert(idx >= 0 &&
                     idx < func.outputs())
         << "Value index out of range in call to halide function\n";
@@ -645,14 +647,14 @@ const char *Call::get_intrinsic_name(IntrinsicOp op) {
 
 Expr Call::make(Type type, Call::IntrinsicOp op, const std::vector<Expr> &args, CallType call_type,
                 FunctionPtr func, int value_index,
-                Buffer<> image, Parameter param) {
+                const Buffer<> &image, Parameter param) {
     internal_assert(call_type == Call::Intrinsic || call_type == Call::PureIntrinsic);
-    return Call::make(type, intrinsic_op_names[op], args, call_type, func, value_index, image, param);
+    return Call::make(type, intrinsic_op_names[op], args, call_type, std::move(func), value_index, image, std::move(param));
 }
 
 Expr Call::make(Type type, const std::string &name, const std::vector<Expr> &args, CallType call_type,
                 FunctionPtr func, int value_index,
-                Buffer<> image, Parameter param) {
+                const Buffer<> &image, Parameter param) {
     if (name == intrinsic_op_names[Call::prefetch] && call_type == Call::Intrinsic) {
         internal_assert(args.size() % 2 == 0)
             << "Number of args to a prefetch call should be even: {base, offset, extent0, stride0, extent1, stride1, ...}\n";
@@ -681,17 +683,17 @@ Expr Call::make(Type type, const std::string &name, const std::vector<Expr> &arg
     node->call_type = call_type;
     node->func = std::move(func);
     node->value_index = value_index;
-    node->image = std::move(image);
+    node->image = image;
     node->param = std::move(param);
     return node;
 }
 
-Expr Variable::make(Type type, const std::string &name, Buffer<> image, Parameter param, ReductionDomain reduction_domain) {
+Expr Variable::make(Type type, const std::string &name, const Buffer<> &image, Parameter param, ReductionDomain reduction_domain) {
     internal_assert(!name.empty());
     Variable *node = new Variable;
     node->type = type;
     node->name = name;
-    node->image = std::move(image);
+    node->image = image;
     node->param = std::move(param);
     node->reduction_domain = std::move(reduction_domain);
     return node;
@@ -703,7 +705,7 @@ Expr Shuffle::make(const std::vector<Expr> &vectors,
     internal_assert(!indices.empty()) << "Shufle with zero indices.\n";
     Type element_ty = vectors.front().type().element_of();
     int input_lanes = 0;
-    for (Expr i : vectors) {
+    for (const Expr &i : vectors) {
         internal_assert(i.type().element_of() == element_ty) << "Shuffle of vectors of mismatched types.\n";
         input_lanes += i.type().lanes();
     }
@@ -727,7 +729,7 @@ Expr Shuffle::make_interleave(const std::vector<Expr> &vectors) {
 
     int lanes = vectors.front().type().lanes();
 
-    for (Expr i : vectors) {
+    for (const Expr &i : vectors) {
         internal_assert(i.type().lanes() == lanes)
             << "Interleave of vectors with different sizes.\n";
     }
@@ -766,6 +768,7 @@ Expr Shuffle::make_slice(Expr vector, int begin, int stride, int size) {
     }
 
     std::vector<int> indices;
+    indices.reserve(size);
     for (int i = 0; i < size; i++) {
         indices.push_back(begin + i * stride);
     }
@@ -785,7 +788,7 @@ bool Shuffle::is_interleave() const {
         return false;
     }
 
-    for (Expr i : vectors) {
+    for (const Expr &i : vectors) {
         if (i.type().lanes() != lanes) {
             return false;
         }
@@ -835,7 +838,7 @@ bool is_ramp(const std::vector<int> &indices, int stride = 1) {
 
 bool Shuffle::is_concat() const {
     size_t input_lanes = 0;
-    for (Expr i : vectors) {
+    for (const Expr &i : vectors) {
         input_lanes += i.type().lanes();
     }
 
@@ -846,7 +849,7 @@ bool Shuffle::is_concat() const {
 
 bool Shuffle::is_slice() const {
     size_t input_lanes = 0;
-    for (Expr i : vectors) {
+    for (const Expr &i : vectors) {
         input_lanes += i.type().lanes();
     }
 

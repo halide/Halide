@@ -9,7 +9,7 @@ using std::map;
 using std::string;
 using std::vector;
 
-vector<ApplySplitResult> apply_split(const Split &split, bool is_update, string prefix,
+vector<ApplySplitResult> apply_split(const Split &split, bool is_update, const string &prefix,
                                      map<string, Expr> &dim_extent_alignment) {
     vector<ApplySplitResult> result;
 
@@ -60,14 +60,14 @@ vector<ApplySplitResult> apply_split(const Split &split, bool is_update, string 
             string rebased_var_name = prefix + split.old_var + ".rebased";
             Expr rebased_var = Variable::make(Int(32), rebased_var_name);
 
-            result.push_back(ApplySplitResult(
-                prefix + split.old_var, rebased_var + old_min, ApplySplitResult::Substitution));
+            result.emplace_back(
+                prefix + split.old_var, rebased_var + old_min, ApplySplitResult::Substitution);
 
             // Tell Halide to optimize for the case in which this
             // condition is true by partitioning some outer loop.
             Expr cond = likely(rebased_var < old_extent);
-            result.push_back(ApplySplitResult(cond));
-            result.push_back(ApplySplitResult(rebased_var_name, rebased, ApplySplitResult::LetStmt));
+            result.emplace_back(cond);
+            result.emplace_back(rebased_var_name, rebased, ApplySplitResult::LetStmt);
 
         } else if (tail == TailStrategy::ShiftInwards) {
             // Adjust the base downwards to not compute off the
@@ -84,10 +84,10 @@ vector<ApplySplitResult> apply_split(const Split &split, bool is_update, string 
         }
 
         // Substitute in the new expression for the split variable ...
-        result.push_back(ApplySplitResult(old_var_name, base_var + inner, ApplySplitResult::Substitution));
+        result.emplace_back(old_var_name, base_var + inner, ApplySplitResult::Substitution);
         // ... but also define it as a let for the benefit of bounds inference.
-        result.push_back(ApplySplitResult(old_var_name, base_var + inner, ApplySplitResult::LetStmt));
-        result.push_back(ApplySplitResult(base_name, base, ApplySplitResult::LetStmt));
+        result.emplace_back(old_var_name, base_var + inner, ApplySplitResult::LetStmt);
+        result.emplace_back(base_name, base, ApplySplitResult::LetStmt);
 
     } else if (split.is_fuse()) {
         // Define the inner and outer in terms of the fused var
@@ -105,10 +105,10 @@ vector<ApplySplitResult> apply_split(const Split &split, bool is_update, string 
         Expr inner = fused % factor + inner_min;
         Expr outer = fused / factor + outer_min;
 
-        result.push_back(ApplySplitResult(prefix + split.inner, inner, ApplySplitResult::Substitution));
-        result.push_back(ApplySplitResult(prefix + split.outer, outer, ApplySplitResult::Substitution));
-        result.push_back(ApplySplitResult(prefix + split.inner, inner, ApplySplitResult::LetStmt));
-        result.push_back(ApplySplitResult(prefix + split.outer, outer, ApplySplitResult::LetStmt));
+        result.emplace_back(prefix + split.inner, inner, ApplySplitResult::Substitution);
+        result.emplace_back(prefix + split.outer, outer, ApplySplitResult::Substitution);
+        result.emplace_back(prefix + split.inner, inner, ApplySplitResult::LetStmt);
+        result.emplace_back(prefix + split.outer, outer, ApplySplitResult::LetStmt);
 
         // Maintain the known size of the fused dim if
         // possible. This is important for possible later splits.
@@ -120,14 +120,14 @@ vector<ApplySplitResult> apply_split(const Split &split, bool is_update, string 
         }
     } else {
         // rename or purify
-        result.push_back(ApplySplitResult(prefix + split.old_var, outer, ApplySplitResult::Substitution));
-        result.push_back(ApplySplitResult(prefix + split.old_var, outer, ApplySplitResult::LetStmt));
+        result.emplace_back(prefix + split.old_var, outer, ApplySplitResult::Substitution);
+        result.emplace_back(prefix + split.old_var, outer, ApplySplitResult::LetStmt);
     }
 
     return result;
 }
 
-vector<std::pair<string, Expr>> compute_loop_bounds_after_split(const Split &split, string prefix) {
+vector<std::pair<string, Expr>> compute_loop_bounds_after_split(const Split &split, const string &prefix) {
     // Define the bounds on the split dimensions using the bounds
     // on the function args. If it is a purify, we should use the bounds
     // from the dims instead.
@@ -140,24 +140,24 @@ vector<std::pair<string, Expr>> compute_loop_bounds_after_split(const Split &spl
     if (split.is_split()) {
         Expr inner_extent = split.factor;
         Expr outer_extent = (old_var_max - old_var_min + split.factor) / split.factor;
-        let_stmts.push_back({prefix + split.inner + ".loop_min", 0});
-        let_stmts.push_back({prefix + split.inner + ".loop_max", inner_extent - 1});
-        let_stmts.push_back({prefix + split.inner + ".loop_extent", inner_extent});
-        let_stmts.push_back({prefix + split.outer + ".loop_min", 0});
-        let_stmts.push_back({prefix + split.outer + ".loop_max", outer_extent - 1});
-        let_stmts.push_back({prefix + split.outer + ".loop_extent", outer_extent});
+        let_stmts.emplace_back(prefix + split.inner + ".loop_min", 0);
+        let_stmts.emplace_back(prefix + split.inner + ".loop_max", inner_extent - 1);
+        let_stmts.emplace_back(prefix + split.inner + ".loop_extent", inner_extent);
+        let_stmts.emplace_back(prefix + split.outer + ".loop_min", 0);
+        let_stmts.emplace_back(prefix + split.outer + ".loop_max", outer_extent - 1);
+        let_stmts.emplace_back(prefix + split.outer + ".loop_extent", outer_extent);
     } else if (split.is_fuse()) {
         // Define bounds on the fused var using the bounds on the inner and outer
         Expr inner_extent = Variable::make(Int(32), prefix + split.inner + ".loop_extent");
         Expr outer_extent = Variable::make(Int(32), prefix + split.outer + ".loop_extent");
         Expr fused_extent = inner_extent * outer_extent;
-        let_stmts.push_back({prefix + split.old_var + ".loop_min", 0});
-        let_stmts.push_back({prefix + split.old_var + ".loop_max", fused_extent - 1});
-        let_stmts.push_back({prefix + split.old_var + ".loop_extent", fused_extent});
+        let_stmts.emplace_back(prefix + split.old_var + ".loop_min", 0);
+        let_stmts.emplace_back(prefix + split.old_var + ".loop_max", fused_extent - 1);
+        let_stmts.emplace_back(prefix + split.old_var + ".loop_extent", fused_extent);
     } else if (split.is_rename()) {
-        let_stmts.push_back({prefix + split.outer + ".loop_min", old_var_min});
-        let_stmts.push_back({prefix + split.outer + ".loop_max", old_var_max});
-        let_stmts.push_back({prefix + split.outer + ".loop_extent", old_var_extent});
+        let_stmts.emplace_back(prefix + split.outer + ".loop_min", old_var_min);
+        let_stmts.emplace_back(prefix + split.outer + ".loop_max", old_var_max);
+        let_stmts.emplace_back(prefix + split.outer + ".loop_extent", old_var_extent);
     }
     // Do nothing for purify
 

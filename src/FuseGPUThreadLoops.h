@@ -12,7 +12,7 @@ namespace Halide {
 namespace Internal {
 
 /** Rewrite all GPU loops to have a min of zero. */
-Stmt zero_gpu_loop_mins(Stmt s);
+Stmt zero_gpu_loop_mins(const Stmt &s);
 
 /** Converts Halide's GPGPU IR to the OpenCL/CUDA/Metal model. Within
  * every loop over gpu block indices, fuse the inner loops over thread

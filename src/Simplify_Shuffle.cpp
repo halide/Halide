@@ -23,7 +23,7 @@ Expr Simplify::visit(const Shuffle *op, ExprInfo *bounds) {
     // Mutate the vectors
     vector<Expr> new_vectors;
     bool changed = false;
-    for (Expr vector : op->vectors) {
+    for (const Expr &vector : op->vectors) {
         ExprInfo v_bounds;
         Expr new_vector = mutate(vector, &v_bounds);
         if (!vector.same_as(new_vector)) {
@@ -49,7 +49,7 @@ Expr Simplify::visit(const Shuffle *op, ExprInfo *bounds) {
         vector<Expr> load_predicates;
         vector<Expr> load_indices;
         bool unpredicated = true;
-        for (Expr e : new_vectors) {
+        for (const Expr &e : new_vectors) {
             const Load *load = e.as<Load>();
             if (load && load->name == first_load->name) {
                 load_predicates.push_back(load->predicate);

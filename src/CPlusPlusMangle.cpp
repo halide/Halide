@@ -77,12 +77,12 @@ struct PreviousDeclarations {
         return check_and_enter(prev_types, mangled.full_name, mangled.with_substitutions);
     }
 
-    std::string check_and_enter_name(std::string name) {
+    std::string check_and_enter_name(const std::string &name) {
         return check_and_enter(prev_names, name, name + "@");
     }
 };
 
-std::string simple_type_to_mangle_char(const std::string type_name, const Target &target) {
+std::string simple_type_to_mangle_char(const std::string &type_name, const Target &target) {
     if (type_name == "void") {
         return "X";
     } else if (type_name == "bool") {
@@ -317,13 +317,13 @@ std::string cplusplus_function_mangled_name(const std::string &name, const std::
 
 namespace ItaniumABIMangling {
 
-std::string itanium_mangle_id(std::string id) {
+std::string itanium_mangle_id(const std::string &id) {
     std::ostringstream oss;
     oss << id.size() << id;
     return oss.str();
 }
 
-std::string simple_type_to_mangle_char(const std::string type_name, const Target &target) {
+std::string simple_type_to_mangle_char(const std::string &type_name, const Target &target) {
     if (type_name == "void") {
         return "v";
     } else if (type_name == "bool") {
@@ -398,7 +398,7 @@ struct PrevPrefixes {
         return !place.second;
     }
 
-    bool extend_name_part(MangledNamePart &name_part, const std::string mangled) {
+    bool extend_name_part(MangledNamePart &name_part, const std::string &mangled) {
         std::string substitute;
         bool found = check_and_enter(name_part.with_substitutions + mangled, substitute);
         if (found) {
@@ -410,7 +410,7 @@ struct PrevPrefixes {
         return found;
     }
 
-    bool prepend_name_part(const std::string mangled, MangledNamePart &name_part) {
+    bool prepend_name_part(const std::string &mangled, MangledNamePart &name_part) {
         std::string substitute;
         bool found = check_and_enter(mangled + name_part.with_substitutions, substitute);
         if (found) {
@@ -465,7 +465,7 @@ MangledNamePart apply_indirection_and_cvr_quals(const Type &type, MangledNamePar
     return name_part;
 }
 
-MangledNamePart mangle_qualified_name(std::string name, const std::vector<std::string> &namespaces,
+MangledNamePart mangle_qualified_name(const std::string &name, const std::vector<std::string> &namespaces,
                                       const std::vector<halide_cplusplus_type_name> &enclosing_types,
                                       bool can_substitute, PrevPrefixes &prevs) {
     MangledNamePart result;
@@ -954,17 +954,17 @@ void cplusplus_mangle_test() {
     {
         // Test all primitive types.
         std::vector<ExternFuncArgument> args;
-        args.push_back(ExternFuncArgument(make_zero(Bool())));
-        args.push_back(ExternFuncArgument(make_zero(Int(8))));
-        args.push_back(ExternFuncArgument(make_zero(UInt(8))));
-        args.push_back(ExternFuncArgument(make_zero(Int(16))));
-        args.push_back(ExternFuncArgument(make_zero(UInt(16))));
-        args.push_back(ExternFuncArgument(make_zero(Int(32))));
-        args.push_back(ExternFuncArgument(make_zero(UInt(32))));
-        args.push_back(ExternFuncArgument(make_zero(Int(64))));
-        args.push_back(ExternFuncArgument(make_zero(UInt(64))));
-        args.push_back(ExternFuncArgument(make_zero(Float(32))));
-        args.push_back(ExternFuncArgument(make_zero(Float(64))));
+        args.emplace_back(make_zero(Bool()));
+        args.emplace_back(make_zero(Int(8)));
+        args.emplace_back(make_zero(UInt(8)));
+        args.emplace_back(make_zero(Int(16)));
+        args.emplace_back(make_zero(UInt(16)));
+        args.emplace_back(make_zero(Int(32)));
+        args.emplace_back(make_zero(UInt(32)));
+        args.emplace_back(make_zero(Int(64)));
+        args.emplace_back(make_zero(UInt(64)));
+        args.emplace_back(make_zero(Float(32)));
+        args.emplace_back(make_zero(Float(64)));
 
         size_t expecteds_index = 0;
         for (const auto &target : targets) {
@@ -988,8 +988,9 @@ void cplusplus_mangle_test() {
                 {}, {halide_handle_cplusplus_type::Pointer}));
             type_info.push_back(t);
         }
+        args.reserve(200);
         for (int i = 0; i < 200; i++) {
-            args.push_back(make_zero(Handle(1, &type_info[i % 100])));
+            args.emplace_back(make_zero(Handle(1, &type_info[i % 100])));
         }
 
         size_t expecteds_index = 0;
@@ -1014,8 +1015,9 @@ void cplusplus_mangle_test() {
                 {}, {halide_handle_cplusplus_type::Pointer}));
             type_info.push_back(t);
         }
+        args.reserve(50);
         for (int i = 0; i < 50; i++) {
-            args.push_back(make_zero(Handle(1, &type_info[i % 25])));
+            args.emplace_back(make_zero(Handle(1, &type_info[i % 25])));
         }
 
         size_t expecteds_index = 0;
@@ -1040,8 +1042,9 @@ void cplusplus_mangle_test() {
                 {}, {}, mods));
             type_info.push_back(t);
         }
+        args.reserve(type_info.size());
         for (const auto &ti : type_info) {
-            args.push_back(ExternFuncArgument(make_zero(Handle(1, &ti))));
+            args.emplace_back(make_zero(Handle(1, &ti)));
         }
         size_t expecteds_index = 0;
         for (const auto &target : targets) {
@@ -1062,9 +1065,9 @@ void cplusplus_mangle_test() {
                 halide_handle_cplusplus_type t3(halide_handle_cplusplus_type(
                     halide_cplusplus_type_name(halide_cplusplus_type_name::Struct, "s"), {}, {}, {mods}, halide_handle_cplusplus_type::RValueReference));
                 std::vector<ExternFuncArgument> args;
-                args.push_back(make_zero(Handle(1, &t1)));
-                args.push_back(make_zero(Handle(1, &t2)));
-                args.push_back(make_zero(Handle(1, &t3)));
+                args.emplace_back(make_zero(Handle(1, &t1)));
+                args.emplace_back(make_zero(Handle(1, &t2)));
+                args.emplace_back(make_zero(Handle(1, &t3)));
 
                 MangleResult *expecteds = (target.os == Target::Windows) ? (target.bits == 64 ? all_mods_win64 : all_mods_win32) : all_mods_itanium;
                 check_result(expecteds, expecteds_index, target,
@@ -1079,8 +1082,8 @@ void cplusplus_mangle_test() {
         for (const auto &target : targets) {
             size_t expecteds_index = 0;
             std::vector<ExternFuncArgument> args;
-            args.push_back(make_zero(Handle(1, nullptr)));
-            args.push_back(make_zero(Handle(1, nullptr)));
+            args.emplace_back(make_zero(Handle(1, nullptr)));
+            args.emplace_back(make_zero(Handle(1, nullptr)));
 
             MangleResult *expecteds = (target.os == Target::Windows) ? (target.bits == 64 ? two_void_stars_win64 : two_void_stars_win32) : two_void_stars_itanium;
             check_result(expecteds, expecteds_index, target,

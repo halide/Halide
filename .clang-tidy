@@ -1,5 +1,5 @@
 ---
-Checks: '-*,modernize-use-override'
+Checks: '-*,modernize-use-override,modernize-make-shared,modernize-use-emplace,performance-*,-performance-inefficient-string-concatenation'
 WarningsAsErrors: '*'
 HeaderFilterRegex: '.*'
 AnalyzeTemporaryDtors: false

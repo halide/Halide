@@ -201,7 +201,7 @@ typedef std::function<Module(const std::string &, const Target &)> ModuleProduce
 void compile_multitarget(const std::string &fn_name,
                          const std::map<Output, std::string> &output_files,
                          const std::vector<Target> &targets,
-                         ModuleProducer module_producer);
+                         const ModuleProducer &module_producer);
 
 }  // namespace Halide
 

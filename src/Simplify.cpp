@@ -273,13 +273,13 @@ Simplify::ScopedFact::~ScopedFact() {
     }
 }
 
-Expr simplify(Expr e, bool remove_dead_lets,
+Expr simplify(const Expr &e, bool remove_dead_lets,
               const Scope<Interval> &bounds,
               const Scope<ModulusRemainder> &alignment) {
     return Simplify(remove_dead_lets, &bounds, &alignment).mutate(e, nullptr);
 }
 
-Stmt simplify(Stmt s, bool remove_dead_lets,
+Stmt simplify(const Stmt &s, bool remove_dead_lets,
               const Scope<Interval> &bounds,
               const Scope<ModulusRemainder> &alignment) {
     return Simplify(remove_dead_lets, &bounds, &alignment).mutate(s);
@@ -293,7 +293,7 @@ public:
     }
 };
 
-Stmt simplify_exprs(Stmt s) {
+Stmt simplify_exprs(const Stmt &s) {
     return SimplifyExprs().mutate(s);
 }
 
@@ -346,7 +346,7 @@ bool can_prove(Expr e, const Scope<Interval> &bounds) {
         static std::mt19937 rng(0);
         for (int i = 0; i < 100; i++) {
             map<string, Expr> s;
-            for (auto p : renamer.out_vars) {
+            for (const auto &p : renamer.out_vars) {
                 if (p.first.is_handle()) {
                     // This aint gonna work
                     return false;

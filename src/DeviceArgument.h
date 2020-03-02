@@ -92,7 +92,7 @@ struct DeviceArgument {
  * produce a vector of DeviceArgument objects. */
 class HostClosure : public Closure {
 public:
-    HostClosure(Stmt s, const std::string &loop_variable = "");
+    HostClosure(const Stmt &s, const std::string &loop_variable = "");
 
     /** Get a description of the captured arguments. */
     std::vector<DeviceArgument> arguments();

@@ -1,6 +1,7 @@
 #include <cmath>
 #include <fstream>
 #include <unordered_map>
+#include <utility>
 
 #include "BoundaryConditions.h"
 #include "Derivative.h"
@@ -117,7 +118,7 @@ Func make_param_func(const Parameter &p, const std::string &name) {
 std::vector<Type> parse_halide_type_list(const std::string &types) {
     const auto &e = get_halide_type_enum_map();
     std::vector<Type> result;
-    for (auto t : split_string(types, ",")) {
+    for (const auto &t : split_string(types, ",")) {
         auto it = e.find(t);
         user_assert(it != e.end()) << "Type not found: " << t;
         result.push_back(it->second);
@@ -162,7 +163,7 @@ void ValueTracker::track_values(const std::string &name, const std::vector<Expr>
             std::ostringstream o;
             o << "Saw too many unique values in ValueTracker[" + std::to_string(i) + "]; "
               << "expected a maximum of " << max_unique_values << ":\n";
-            for (auto e : history[i]) {
+            for (const auto &e : history[i]) {
                 o << "    " << e << "\n";
             }
             user_error << o.str();
@@ -173,7 +174,7 @@ void ValueTracker::track_values(const std::string &name, const std::vector<Expr>
 std::vector<Expr> parameter_constraints(const Parameter &p) {
     internal_assert(p.defined());
     std::vector<Expr> values;
-    values.push_back(Expr(p.host_alignment()));
+    values.emplace_back(p.host_alignment());
     if (p.is_buffer()) {
         for (int i = 0; i < p.dimensions(); ++i) {
             values.push_back(p.min_constraint(i));
@@ -325,7 +326,7 @@ void StubEmitter::emit_inputs_struct() {
     const std::string name = "Inputs";
     stream << get_indent() << "struct " << name << " final {\n";
     indent_level++;
-    for (auto in : in_info) {
+    for (const auto &in : in_info) {
         stream << get_indent() << in.c_type << " " << in.name << ";\n";
     }
     stream << "\n";
@@ -336,7 +337,7 @@ void StubEmitter::emit_inputs_struct() {
         stream << get_indent() << name << "(\n";
         indent_level++;
         std::string comma = "";
-        for (auto in : in_info) {
+        for (const auto &in : in_info) {
             stream << get_indent() << comma << "const " << in.c_type << "& " << in.name << "\n";
             comma = ", ";
         }
@@ -344,7 +345,7 @@ void StubEmitter::emit_inputs_struct() {
         stream << get_indent() << ") : \n";
         indent_level++;
         comma = "";
-        for (auto in : in_info) {
+        for (const auto &in : in_info) {
             stream << get_indent() << comma << in.name << "(" << in.name << ")\n";
             comma = ", ";
         }
@@ -637,12 +638,12 @@ void StubEmitter::emit() {
 }
 
 GeneratorStub::GeneratorStub(const GeneratorContext &context,
-                             GeneratorFactory generator_factory)
+                             const GeneratorFactory &generator_factory)
     : generator(generator_factory(context)) {
 }
 
 GeneratorStub::GeneratorStub(const GeneratorContext &context,
-                             GeneratorFactory generator_factory,
+                             const GeneratorFactory &generator_factory,
                              const GeneratorParamsMap &generator_params,
                              const std::vector<std::vector<Internal::StubInput>> &inputs)
     : GeneratorStub(context, generator_factory) {
@@ -673,7 +674,7 @@ std::vector<std::vector<Func>> GeneratorStub::generate(const GeneratorParamsMap 
         }
     } else {
         // Generators with build() method can't have Output<>, hence can't have array outputs
-        for (auto output : p.outputs()) {
+        for (const auto &output : p.outputs()) {
             v.push_back(std::vector<Func>{output});
         }
     }
@@ -880,6 +881,7 @@ int generate_filter_main_inner(int argc, char **argv, std::ostream &cerr) {
 
     auto target_strings = split_string(generator_args["target"].string_value, ",");
     std::vector<Target> targets;
+    targets.reserve(target_strings.size());
     for (const auto &s : target_strings) {
         targets.emplace_back(s);
     }
@@ -907,7 +909,7 @@ int generate_filter_main_inner(int argc, char **argv, std::ostream &cerr) {
             output_name_to_enum[it.second.name] = it.first;
         }
 
-        for (std::string opt : emit_flags) {
+        for (const std::string &opt : emit_flags) {
             auto it = output_name_to_enum.find(opt);
             if (it == output_name_to_enum.end()) {
                 cerr << "Unrecognized emit option: " << opt << " is not one of [";
@@ -1040,7 +1042,7 @@ void GeneratorRegistry::register_factory(const std::string &name,
     std::lock_guard<std::mutex> lock(registry.mutex);
     internal_assert(registry.factories.find(name) == registry.factories.end())
         << "Duplicate Generator name: " << name;
-    registry.factories[name] = generator_factory;
+    registry.factories[name] = std::move(generator_factory);
 }
 
 /* static */
@@ -1539,7 +1541,7 @@ Module GeneratorBase::build_gradient_module(const std::string &function_name) {
         Func adjoint_func = BoundaryConditions::constant_exterior(d_output, make_zero(d_output.type()));
         Derivative d = propagate_adjoints(original_output, adjoint_func, bounds);
 
-        const std::string output_name = original_output.name();
+        const std::string &output_name = original_output.name();
         for (const auto *input : pi.inputs()) {
             for (size_t i = 0; i < input->funcs_.size(); ++i) {
                 const std::string input_name = input->array_name(i);
@@ -1562,6 +1564,7 @@ Module GeneratorBase::build_gradient_module(const std::string &function_name) {
                     // just replace with a dummy Func that is all zeros. This ensures
                     // that the signature of the Pipeline we produce is always predictable.
                     std::vector<Var> vars;
+                    vars.reserve(d_output.dimensions());
                     for (int i = 0; i < d_output.dimensions(); i++) {
                         vars.push_back(Var::implicit(i));
                     }
@@ -1911,7 +1914,7 @@ void GeneratorInputBase::set_inputs(const std::vector<StubInput> &inputs) {
     verify_internals();
 }
 
-void GeneratorInputBase::set_estimate_impl(Var var, Expr min, Expr extent) {
+void GeneratorInputBase::set_estimate_impl(const Var &var, const Expr &min, const Expr &extent) {
     internal_assert(exprs_.empty() && !funcs_.empty() && parameters_.size() == funcs_.size());
     for (size_t i = 0; i < funcs_.size(); ++i) {
         Func &f = funcs_[i];
@@ -1975,7 +1978,7 @@ void GeneratorOutputBase::init_internals() {
     funcs_.clear();
     if (array_size_defined()) {
         for (size_t i = 0; i < array_size(); ++i) {
-            funcs_.push_back(Func(array_name(i)));
+            funcs_.emplace_back(array_name(i));
         }
     }
 }

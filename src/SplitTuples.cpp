@@ -48,7 +48,7 @@ public:
     bool result;
 };
 
-inline bool uses_extern_image(Stmt s) {
+inline bool uses_extern_image(const Stmt &s) {
     UsesExternImage uses;
     s.accept(&uses);
     return uses.result;
@@ -114,7 +114,7 @@ class SplitTuples : public IRMutator {
                 name += "." + std::to_string(op->value_index);
             }
             vector<Expr> args;
-            for (Expr e : op->args) {
+            for (const Expr &e : op->args) {
                 args.push_back(mutate(e));
             }
             // It's safe to hook up the pointer to the function
@@ -154,7 +154,7 @@ class SplitTuples : public IRMutator {
 
         // Mutate the args
         vector<Expr> args;
-        for (Expr e : op->args) {
+        for (const Expr &e : op->args) {
             args.push_back(mutate(e));
         }
 
@@ -173,7 +173,7 @@ class SplitTuples : public IRMutator {
             string var_name = name + ".value";
             Expr val = mutate(op->values[i]);
             if (!is_undef(val) && atomic) {
-                lets.push_back({var_name, val});
+                lets.emplace_back(var_name, val);
                 val = Variable::make(val.type(), var_name);
             }
             provides.push_back(Provide::make(name, {val}, args));
@@ -201,7 +201,7 @@ public:
 
 }  // namespace
 
-Stmt split_tuples(Stmt s, const map<string, Function> &env) {
+Stmt split_tuples(const Stmt &s, const map<string, Function> &env) {
     return SplitTuples(env).mutate(s);
 }
 

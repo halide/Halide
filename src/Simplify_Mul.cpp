@@ -90,7 +90,7 @@ Expr Simplify::visit(const Mul *op, ExprInfo *bounds) {
             rewrite(max(x, y) * min(y, x), y * x) ||
             rewrite(broadcast(x) * broadcast(y), broadcast(x * y, op->type.lanes())) ||
             rewrite(ramp(x, y) * broadcast(z), ramp(x * z, y * z, op->type.lanes()))) {
-            return mutate(std::move(rewrite.result), bounds);
+            return mutate(rewrite.result, bounds);
         }
     }
 

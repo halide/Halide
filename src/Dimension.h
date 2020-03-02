@@ -5,6 +5,8 @@
  * Defines the Dimension utility class for Halide pipelines
  */
 
+#include <utility>
+
 #include "Func.h"
 #include "Parameter.h"
 
@@ -32,7 +34,7 @@ public:
     /** Set the min in a given dimension to equal the given
      * expression. Setting the mins to zero may simplify some
      * addressing math. */
-    Dimension set_min(Expr min);
+    Dimension set_min(const Expr &min);
 
     /** Set the extent in a given dimension to equal the given
      * expression. Images passed in that fail this check will generate
@@ -55,7 +57,7 @@ public:
      im.dim(0).set_extent((im.dim(0).extent()/32)*32);
      \endcode
      * tells the compiler that the extent is a multiple of 32. */
-    Dimension set_extent(Expr extent);
+    Dimension set_extent(const Expr &extent);
 
     /** Set the stride in a given dimension to equal the given
      * value. This is particularly helpful to set when
@@ -64,14 +66,14 @@ public:
     Dimension set_stride(Expr stride);
 
     /** Set the min and extent in one call. */
-    Dimension set_bounds(Expr min, Expr extent);
+    Dimension set_bounds(const Expr &min, const Expr &extent);
 
     /** Set the min and extent estimates in one call. These values are only
      * used by the auto-scheduler and/or the RunGen tool/ */
-    Dimension set_estimate(Expr min, Expr extent);
+    Dimension set_estimate(const Expr &min, const Expr &extent);
 
     HALIDE_ATTRIBUTE_DEPRECATED("Use set_estimate() instead")
-    Dimension set_bounds_estimate(Expr min, Expr extent) {
+    Dimension set_bounds_estimate(const Expr &min, const Expr &extent) {
         return set_estimate(min, extent);
     }
 

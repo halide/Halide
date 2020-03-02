@@ -12,6 +12,7 @@
 #include "IREquality.h"
 
 #include <functional>
+#include <utility>
 
 namespace Halide {
 namespace Internal {
@@ -67,7 +68,7 @@ struct AssociativeOp {
 
         Replacement() = default;
         Replacement(const std::string &var, Expr expr)
-            : var(var), expr(expr) {
+            : var(var), expr(std::move(expr)) {
         }
 
         bool operator==(const Replacement &other) const {

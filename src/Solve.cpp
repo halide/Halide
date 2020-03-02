@@ -1,4 +1,5 @@
 #include "Solve.h"
+
 #include "CSE.h"
 #include "ConciseCasts.h"
 #include "ExprUsesVar.h"
@@ -6,6 +7,7 @@
 #include "IRMutator.h"
 #include "Simplify.h"
 #include "Substitute.h"
+#include <utility>
 
 namespace Halide {
 namespace Internal {
@@ -86,7 +88,7 @@ private:
 
     // Return the negative of an expr. Does some eager simplification
     // to avoid injecting pointless -1s.
-    Expr negate(Expr e) {
+    Expr negate(const Expr &e) {
         internal_assert(!e.type().is_uint()) << "Negating unsigned is not legal\n";
         const Mul *mul = e.as<Mul>();
         if (mul && is_const(mul->b)) {
@@ -105,7 +107,7 @@ private:
     using IRMutator::visit;
 
     // Admit defeat. Isolated in a method for ease of debugging.
-    Expr fail(Expr e) {
+    Expr fail(const Expr &e) {
         debug(3) << "Failed to solve: " << e << "\n";
         failed = true;
         return Expr();
@@ -953,7 +955,7 @@ class SolveForInterval : public IRVisitor {
     std::map<Expr, Interval, IRDeepCompare> cache_f, cache_t;
 
     // Solve an expression, or set result to the previously found solution.
-    void cached_solve(Expr cond) {
+    void cached_solve(const Expr &cond) {
         auto &cache = target ? cache_t : cache_f;
         auto it = cache.find(cond);
         if (it == cache.end()) {
@@ -1142,7 +1144,7 @@ class AndConditionOverDomain : public IRMutator {
     // tracks that.
     bool flipped = false;
 
-    Interval get_bounds(Expr a) {
+    Interval get_bounds(const Expr &a) {
         Interval bounds = bounds_of_expr_in_scope(a, scope);
         if (!bounds.is_single_point() ||
             !bounds.has_lower_bound() ||
@@ -1152,11 +1154,11 @@ class AndConditionOverDomain : public IRMutator {
         return bounds;
     }
 
-    Expr make_bigger(Expr a) {
+    Expr make_bigger(const Expr &a) {
         return get_bounds(a).max;
     }
 
-    Expr make_smaller(Expr a) {
+    Expr make_smaller(const Expr &a) {
         return get_bounds(a).min;
     }
 
@@ -1367,7 +1369,7 @@ public:
 
 }  // Anonymous namespace
 
-SolverResult solve_expression(Expr e, const std::string &variable, const Scope<Expr> &scope) {
+SolverResult solve_expression(const Expr &e, const std::string &variable, const Scope<Expr> &scope) {
     SolveExpression solver(variable, scope);
     Expr new_e = solver.mutate(e);
     // The process has expanded lets. Re-collect them.
@@ -1378,7 +1380,7 @@ SolverResult solve_expression(Expr e, const std::string &variable, const Scope<E
     return {new_e, !solver.failed};
 }
 
-Interval solve_for_inner_interval(Expr c, const std::string &var) {
+Interval solve_for_inner_interval(const Expr &c, const std::string &var) {
     SolveForInterval s(var, false);
     c.accept(&s);
     internal_assert(s.result.min.defined() && s.result.max.defined())
@@ -1392,7 +1394,7 @@ Interval solve_for_inner_interval(Expr c, const std::string &var) {
     return s.result;
 }
 
-Interval solve_for_outer_interval(Expr c, const std::string &var) {
+Interval solve_for_outer_interval(const Expr &c, const std::string &var) {
     SolveForInterval s(var, true);
     c.accept(&s);
     internal_assert(s.result.min.defined() && s.result.max.defined())
@@ -1406,7 +1408,7 @@ Interval solve_for_outer_interval(Expr c, const std::string &var) {
     return s.result;
 }
 
-Expr and_condition_over_domain(Expr e, const Scope<Interval> &varying) {
+Expr and_condition_over_domain(const Expr &e, const Scope<Interval> &varying) {
     AndConditionOverDomain r(varying);
     return simplify(r.mutate(e));
 }
@@ -1415,7 +1417,7 @@ Expr and_condition_over_domain(Expr e, const Scope<Interval> &varying) {
 
 namespace {
 
-void check_solve(Expr a, Expr b) {
+void check_solve(const Expr &a, const Expr &b) {
     SolverResult solved = solve_expression(a, "x");
     internal_assert(equal(solved.result, b))
         << "Expression: " << a << "\n"
@@ -1423,7 +1425,7 @@ void check_solve(Expr a, Expr b) {
         << " instead of " << b << "\n";
 }
 
-void check_interval(Expr a, Interval i, bool outer) {
+void check_interval(const Expr &a, const Interval &i, bool outer) {
     Interval result =
         outer ? solve_for_outer_interval(a, "x") : solve_for_inner_interval(a, "x");
     result.min = simplify(result.min);
@@ -1437,15 +1439,15 @@ void check_interval(Expr a, Interval i, bool outer) {
         << "  max: " << i.max << "\n";
 }
 
-void check_outer_interval(Expr a, Expr min, Expr max) {
+void check_outer_interval(const Expr &a, const Expr &min, const Expr &max) {
     check_interval(a, Interval(min, max), true);
 }
 
-void check_inner_interval(Expr a, Expr min, Expr max) {
+void check_inner_interval(const Expr &a, const Expr &min, const Expr &max) {
     check_interval(a, Interval(min, max), false);
 }
 
-void check_and_condition(Expr orig, Expr result, Interval i) {
+void check_and_condition(const Expr &orig, const Expr &result, const Interval &i) {
     Scope<Interval> s;
     s.push("x", i);
     Expr cond = and_condition_over_domain(orig, s);

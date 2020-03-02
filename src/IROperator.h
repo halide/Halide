@@ -189,9 +189,9 @@ void match_types_bitwise(Expr &a, Expr &b, const char *op_name);
 
 /** Halide's vectorizable transcendentals. */
 // @{
-Expr halide_log(Expr a);
-Expr halide_exp(Expr a);
-Expr halide_erf(Expr a);
+Expr halide_log(const Expr &a);
+Expr halide_exp(const Expr &a);
+Expr halide_erf(const Expr &a);
 // @}
 
 /** Raise an expression to an integer power by repeatedly multiplying
@@ -224,7 +224,7 @@ struct BufferBuilder {
 
 /** If e is a ramp expression with stride, default 1, return the base,
  * otherwise undefined. */
-Expr strided_ramp_base(Expr e, int stride = 1);
+Expr strided_ramp_base(const Expr &e, int stride = 1);
 
 /** Implementations of division and mod that are specific to Halide.
  * Use these implementations; do not use native C division or mod to
@@ -309,11 +309,11 @@ inline double div_imp<double>(double a, double b) {
 
 /** Return an Expr that is identical to the input Expr, but with
  * all calls to likely() and likely_if_innermost() removed. */
-Expr remove_likelies(Expr e);
+Expr remove_likelies(const Expr &e);
 
 /** Return a Stmt that is identical to the input Stmt, but with
  * all calls to likely() and likely_if_innermost() removed. */
-Stmt remove_likelies(Stmt s);
+Stmt remove_likelies(const Stmt &s);
 
 // Secondary args to print can be Exprs or const char *
 inline HALIDE_NO_USER_CODE_INLINE void collect_print_args(std::vector<Expr> &args) {
@@ -321,7 +321,7 @@ inline HALIDE_NO_USER_CODE_INLINE void collect_print_args(std::vector<Expr> &arg
 
 template<typename... Args>
 inline HALIDE_NO_USER_CODE_INLINE void collect_print_args(std::vector<Expr> &args, const char *arg, Args &&... more_args) {
-    args.push_back(Expr(std::string(arg)));
+    args.emplace_back(std::string(arg));
     collect_print_args(args, std::forward<Args>(more_args)...);
 }
 
@@ -532,13 +532,13 @@ Expr operator>=(Expr a, Expr b);
  * greater than or equal to a constant integer. Coerces the integer to
  * the type of the expression. Errors if the integer is not
  * representable in that type. */
-Expr operator>=(Expr a, int b);
+Expr operator>=(const Expr &a, int b);
 
 /** Return a boolean expression that tests whether a constant integer
  * is greater than or equal to an expression. Coerces the integer to the
  * type of the expression. Errors if the integer is not representable
  * in that type. */
-Expr operator>=(int a, Expr b);
+Expr operator>=(int a, const Expr &b);
 
 /** Return a boolean expression that tests whether the first argument
  * is equal to the second, after doing any necessary type coercion
@@ -745,7 +745,7 @@ inline Expr operator!=(float a, Expr b) {
 
 /** Clamps an expression to lie within the given bounds. The bounds
  * are type-cast to match the expression. Vectorizes as well as min/max. */
-Expr clamp(Expr a, Expr min_val, Expr max_val);
+Expr clamp(Expr a, const Expr &min_val, const Expr &max_val);
 
 /** Returns the absolute value of a signed integer or floating-point
  * expression. Vectorizes cleanly. Unlike in C, abs of a signed
@@ -870,7 +870,7 @@ Expr sqrt(Expr x);
 /** Return the square root of the sum of the squares of two
  * floating-point expressions. If the argument is not floating-point,
  * it is cast to Float(32). Vectorizes cleanly. */
-Expr hypot(Expr x, Expr y);
+Expr hypot(const Expr &x, const Expr &y);
 
 /** Return the exponential of a floating-point expression. If the
  * argument is not floating-point, it is cast to Float(32). For
@@ -901,25 +901,25 @@ Expr pow(Expr x, Expr y);
 /** Evaluate the error function erf. Only available for
  * Float(32). Accurate up to the last three bits of the
  * mantissa. Vectorizes cleanly. */
-Expr erf(Expr x);
+Expr erf(const Expr &x);
 
 /** Fast vectorizable approximation to some trigonometric functions for Float(32).
  * Absolute approximation error is less than 1e-5. */
 // @{
-Expr fast_sin(Expr x);
-Expr fast_cos(Expr x);
+Expr fast_sin(const Expr &x);
+Expr fast_cos(const Expr &x);
 // @}
 
 /** Fast approximate cleanly vectorizable log for Float(32). Returns
  * nonsense for x <= 0.0f. Accurate up to the last 5 bits of the
  * mantissa. Vectorizes cleanly. */
-Expr fast_log(Expr x);
+Expr fast_log(const Expr &x);
 
 /** Fast approximate cleanly vectorizable exp for Float(32). Returns
  * nonsense for inputs that would overflow or underflow. Typically
  * accurate up to the last 5 bits of the mantissa. Gets worse when
  * approaching overflow. Vectorizes cleanly. */
-Expr fast_exp(Expr x);
+Expr fast_exp(const Expr &x);
 
 /** Fast approximate cleanly vectorizable pow for Float(32). Returns
  * nonsense for x < 0.0f. Accurate up to the last 5 bits of the
@@ -986,7 +986,7 @@ Expr is_finite(Expr x);
 /** Return the fractional part of a floating-point expression. If the argument
  *  is not floating-point, it is cast to Float(32). The return value has the
  *  same sign as the original expression. Vectorizes cleanly. */
-Expr fract(Expr x);
+Expr fract(const Expr &x);
 
 /** Reinterpret the bits of one value as another type. */
 Expr reinterpret(Type t, Expr e);
@@ -1370,7 +1370,7 @@ Expr strict_float(Expr e);
  * Unsafe promises can be checked by turning on
  * Target::CheckUnsafePromises. This is intended for debugging only.
  */
-Expr unsafe_promise_clamped(Expr value, Expr min, Expr max);
+Expr unsafe_promise_clamped(const Expr &value, const Expr &min, const Expr &max);
 
 }  // namespace Halide
 

@@ -258,7 +258,7 @@ void ReverseAccumulationVisitor::propagate_adjoints(
                 Interval interval = bounds_of_expr_in_scope(args[arg_id], scope);
                 intervals.push_back(interval);
             }
-            boxes.push_back(Box(intervals));
+            boxes.emplace_back(intervals);
         }
         for (int update_id = 0;
              update_id < func.num_update_definitions(); update_id++) {
@@ -538,8 +538,9 @@ void ReverseAccumulationVisitor::propagate_adjoints(
         // Replace all the dots in the function names to make it legal.
         Func adjoint_func(replace_all(it.first, ".", "_") + "_d__");
         vector<Var> args;
+        args.reserve(it.second.dimension);
         for (int i = 0; i < it.second.dimension; i++) {
-            args.push_back(Var());
+            args.emplace_back();
         }
         adjoint_func(args) = make_zero(it.second.type);
         FuncKey func_key{it.first, -1};
@@ -757,7 +758,7 @@ void ReverseAccumulationVisitor::accumulate(const Expr &stub, Expr adjoint) {
     // select(c, x, 0) / y -> select(c, x / y, 0)
     if (adjoint.as<Mul>() != nullptr) {
         const Mul *mul_op = adjoint.as<Mul>();
-        auto mul_select_with_zero = [&](Expr sel, Expr other) {
+        auto mul_select_with_zero = [&](const Expr &sel, const Expr &other) {
             const Select *sel_op = sel.as<Select>();
             if (is_zero(sel_op->true_value)) {
                 return select(sel_op->condition,
@@ -777,7 +778,7 @@ void ReverseAccumulationVisitor::accumulate(const Expr &stub, Expr adjoint) {
     }
     if (adjoint.as<Div>() != nullptr) {
         const Div *div_op = adjoint.as<Div>();
-        auto div_select_with_zero = [&](Expr sel, Expr other) {
+        auto div_select_with_zero = [&](const Expr &sel, const Expr &other) {
             const Select *sel_op = sel.as<Select>();
             if (is_zero(sel_op->true_value)) {
                 return select(sel_op->condition,
@@ -1341,7 +1342,7 @@ void ReverseAccumulationVisitor::propagate_halide_function_call(
     vector<Var> new_args;
     new_args.reserve(func_to_update.dimensions());
     for (int arg_id = 0; arg_id < (int)func_to_update.dimensions(); arg_id++) {
-        new_args.push_back(Var(unique_name("u" + std::to_string(arg_id))));
+        new_args.emplace_back(unique_name("u" + std::to_string(arg_id)));
     }
 
     // Loop over the left hand side of the update, construct equations

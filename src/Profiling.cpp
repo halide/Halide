@@ -225,7 +225,7 @@ private:
                                          {state}, Call::Extern));
     }
 
-    Stmt visit_parallel_task(Stmt s) {
+    Stmt visit_parallel_task(const Stmt &s) {
         if (const Fork *f = s.as<Fork>()) {
             return Fork::make(visit_parallel_task(f->first), visit_parallel_task(f->rest));
         } else if (const Acquire *a = s.as<Acquire>()) {
@@ -292,7 +292,7 @@ private:
     }
 };
 
-Stmt inject_profiling(Stmt s, string pipeline_name) {
+Stmt inject_profiling(Stmt s, const string &pipeline_name) {
     InjectProfiling profiling(pipeline_name);
     s = profiling.mutate(s);
 

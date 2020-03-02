@@ -98,7 +98,7 @@ public:
         return Stmt();
     }
 
-    ExprWithCompareCache with_cache(Expr e) {
+    ExprWithCompareCache with_cache(const Expr &e) {
         return ExprWithCompareCache(e, &cache);
     }
 
@@ -339,7 +339,7 @@ public:
     }
 };
 
-void check(Expr in, Expr correct) {
+void check(const Expr &in, const Expr &correct) {
     Expr result = common_subexpression_elimination(in);
     NormalizeVarNames n;
     result = n.mutate(result);

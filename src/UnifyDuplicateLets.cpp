@@ -112,7 +112,7 @@ protected:
     }
 };
 
-Stmt unify_duplicate_lets(Stmt s) {
+Stmt unify_duplicate_lets(const Stmt &s) {
     return UnifyDuplicateLets().mutate(s);
 }
 

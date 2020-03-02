@@ -1,5 +1,7 @@
 #include <stdlib.h>
 
+#include <utility>
+
 #include "Definition.h"
 #include "IR.h"
 #include "IRMutator.h"
@@ -31,10 +33,10 @@ struct DefinitionContents {
             predicate.accept(visitor);
         }
 
-        for (Expr val : values) {
+        for (const Expr &val : values) {
             val.accept(visitor);
         }
-        for (Expr arg : args) {
+        for (const Expr &arg : args) {
             arg.accept(visitor);
         }
 
@@ -196,7 +198,7 @@ std::string Definition::source_location() const {
 
 const Specialization &Definition::add_specialization(Expr condition) {
     Specialization s;
-    s.condition = condition;
+    s.condition = std::move(condition);
     s.definition.contents = new DefinitionContents;
     s.definition.contents->is_init = contents->is_init;
     s.definition.contents->predicate = contents->predicate;

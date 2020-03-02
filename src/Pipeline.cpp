@@ -1,4 +1,5 @@
 #include <algorithm>
+#include <utility>
 
 #include "Argument.h"
 #include "AutoSchedule.h"
@@ -146,7 +147,7 @@ bool Pipeline::defined() const {
     return contents.defined();
 }
 
-Pipeline::Pipeline(Func output)
+Pipeline::Pipeline(const Func &output)
     : contents(new PipelineContents) {
     output.function().freeze();
     contents->outputs.push_back(output.function());
@@ -154,7 +155,7 @@ Pipeline::Pipeline(Func output)
 
 Pipeline::Pipeline(const vector<Func> &outputs)
     : contents(new PipelineContents) {
-    for (Func f : outputs) {
+    for (const Func &f : outputs) {
         f.function().freeze();
         contents->outputs.push_back(f.function());
     }
@@ -230,7 +231,7 @@ AutoSchedulerResults Pipeline::auto_schedule(const Target &target, const Machine
 }
 
 /* static */
-void Pipeline::add_autoscheduler(const std::string &autoscheduler_name, const AutoSchedulerFn autoscheduler) {
+void Pipeline::add_autoscheduler(const std::string &autoscheduler_name, const AutoSchedulerFn &autoscheduler) {
     auto &m = get_autoscheduler_map();
     user_assert(m.find(autoscheduler_name) == m.end()) << "'" << autoscheduler_name << "' is already registered as an autoscheduler.\n";
     m[autoscheduler_name] = autoscheduler;
@@ -245,7 +246,7 @@ void Pipeline::set_default_autoscheduler_name(const std::string &autoscheduler_n
 Func Pipeline::get_func(size_t index) {
     // Compute an environment
     std::map<string, Function> env;
-    for (Function f : contents->outputs) {
+    for (const Function &f : contents->outputs) {
         std::map<string, Function> more_funcs = find_transitive_calls(f);
         env.insert(more_funcs.begin(), more_funcs.end());
     }
@@ -358,7 +359,7 @@ void Pipeline::compile_to_file(const string &filename_prefix,
     m.compile(outputs);
 }
 
-vector<Argument> Pipeline::infer_arguments(Stmt body) {
+vector<Argument> Pipeline::infer_arguments(const Stmt &body) {
     Stmt s = body;
     if (!contents->requirements.empty()) {
         s = Block::make(contents->requirements);
@@ -415,7 +416,7 @@ class FindExterns : public IRGraphVisitor {
                 // separate call per lane. Not sure there is anywhere to get
                 // information to make a distinction in the current design.
                 std::vector<Type> arg_types;
-                for (Expr e : op->args) {
+                for (const Expr &e : op->args) {
                     arg_types.push_back(e.type().element_of());
                 }
                 ExternCFunction f(address, ExternSignature(op->type.element_of(), op->type.bits() == 0, arg_types));
@@ -444,7 +445,7 @@ Module Pipeline::compile_to_module(const vector<Argument> &args,
                                    const LinkageType linkage_type) {
     user_assert(defined()) << "Can't compile undefined Pipeline.\n";
 
-    for (Function f : contents->outputs) {
+    for (const Function &f : contents->outputs) {
         user_assert(f.has_pure_definition() || f.has_extern_definition())
             << "Can't compile Pipeline with undefined output Func: " << f.name() << ".\n";
     }
@@ -463,7 +464,7 @@ Module Pipeline::compile_to_module(const vector<Argument> &args,
     // explicitly).
     const bool requires_user_context = target.has_feature(Target::UserContext);
     bool has_user_context = false;
-    for (Argument arg : lowering_args) {
+    for (const Argument &arg : lowering_args) {
         if (arg.name == contents->user_context_arg.arg.name) {
             has_user_context = true;
         }
@@ -498,7 +499,7 @@ Module Pipeline::compile_to_module(const vector<Argument> &args,
         debug(2) << "Reusing old module\n";
     } else {
         vector<IRMutator *> custom_passes;
-        for (CustomLoweringPass p : contents->custom_lowering_passes) {
+        for (const CustomLoweringPass &p : contents->custom_lowering_passes) {
             custom_passes.push_back(p.pass);
         }
 
@@ -666,7 +667,7 @@ const std::map<std::string, JITExtern> &Pipeline::get_jit_externs() {
 void Pipeline::add_custom_lowering_pass(IRMutator *pass, std::function<void()> deleter) {
     user_assert(defined()) << "Pipeline is undefined\n";
     contents->invalidate_cache();
-    CustomLoweringPass p = {pass, deleter};
+    CustomLoweringPass p = {pass, std::move(deleter)};
     contents->custom_lowering_passes.push_back(p);
 }
 
@@ -756,7 +757,7 @@ Realization Pipeline::realize(const Target &target,
     return realize(vector<int32_t>(), target, param_map);
 }
 
-void Pipeline::add_requirement(Expr condition, std::vector<Expr> &error_args) {
+void Pipeline::add_requirement(const Expr &condition, std::vector<Expr> &error_args) {
     user_assert(defined()) << "Pipeline is undefined\n";
 
     // It is an error for a requirement to reference a Func or a Var
@@ -1299,10 +1300,10 @@ void Pipeline::invalidate_cache() {
 }
 
 JITExtern::JITExtern(Pipeline pipeline)
-    : pipeline_(pipeline) {
+    : pipeline_(std::move(pipeline)) {
 }
 
-JITExtern::JITExtern(Func func)
+JITExtern::JITExtern(const Func &func)
     : pipeline_(func) {
 }
 

@@ -138,7 +138,7 @@ public:
 
     Internal::IntrusivePtr<PipelineContents> contents;
 
-    std::vector<Argument> infer_arguments(Internal::Stmt body);
+    std::vector<Argument> infer_arguments(const Internal::Stmt &body);
 
     struct JITCallArgs;  // Opaque structure to optimize away dynamic allocation in this path.
 
@@ -166,7 +166,7 @@ public:
 
     /** Make a pipeline that computes the given Func. Schedules the
      * Func compute_root(). */
-    Pipeline(Func output);
+    Pipeline(const Func &output);
 
     /** Make a pipeline that computes the givens Funcs as
      * outputs. Schedules the Funcs compute_root(). */
@@ -186,7 +186,7 @@ public:
 
     /** Add a new the autoscheduler method with the given name. Does not affect the current default autoscheduler.
      * It is an error to call this with the same name multiple times. */
-    static void add_autoscheduler(const std::string &autoscheduler_name, const AutoSchedulerFn autoscheduler);
+    static void add_autoscheduler(const std::string &autoscheduler_name, const AutoSchedulerFn &autoscheduler);
 
     /** Globally set the default autoscheduler method to use whenever
      * autoscheduling any Pipeline when no name is specified. If the autoscheduler_name isn't in the
@@ -528,16 +528,16 @@ public:
      * with the remaining arguments, and return
      * halide_error_code_requirement_failed. Requirements are checked
      * in the order added. */
-    void add_requirement(Expr condition, std::vector<Expr> &error);
+    void add_requirement(const Expr &condition, std::vector<Expr> &error);
 
     /** Generate begin_pipeline and end_pipeline tracing calls for this pipeline. */
     void trace_pipeline();
 
     template<typename... Args>
-    inline HALIDE_NO_USER_CODE_INLINE void add_requirement(Expr condition, Args &&... args) {
+    inline HALIDE_NO_USER_CODE_INLINE void add_requirement(const Expr &condition, Args &&... args) {
         std::vector<Expr> collected_args;
         Internal::collect_print_args(collected_args, std::forward<Args>(args)...);
-        add_requirement(std::move(condition), collected_args);
+        add_requirement(condition, collected_args);
     }
 
 private:
@@ -615,7 +615,7 @@ private:
 
 public:
     JITExtern(Pipeline pipeline);
-    JITExtern(Func func);
+    JITExtern(const Func &func);
     JITExtern(const ExternCFunction &extern_c_function);
 
     template<typename RT, typename... Args>

@@ -15,75 +15,75 @@
 namespace Halide {
 namespace ConciseCasts {
 
-inline Expr f64(Expr e) {
+inline Expr f64(const Expr &e) {
     return cast(Float(64, e.type().lanes()), e);
 }
 
-inline Expr f32(Expr e) {
+inline Expr f32(const Expr &e) {
     return cast(Float(32, e.type().lanes()), e);
 }
 
-inline Expr i64(Expr e) {
+inline Expr i64(const Expr &e) {
     return cast(Int(64, e.type().lanes()), e);
 }
 
-inline Expr i32(Expr e) {
+inline Expr i32(const Expr &e) {
     return cast(Int(32, e.type().lanes()), e);
 }
 
-inline Expr i16(Expr e) {
+inline Expr i16(const Expr &e) {
     return cast(Int(16, e.type().lanes()), e);
 }
 
-inline Expr i8(Expr e) {
+inline Expr i8(const Expr &e) {
     return cast(Int(8, e.type().lanes()), e);
 }
 
-inline Expr u64(Expr e) {
+inline Expr u64(const Expr &e) {
     return cast(UInt(64, e.type().lanes()), e);
 }
 
-inline Expr u32(Expr e) {
+inline Expr u32(const Expr &e) {
     return cast(UInt(32, e.type().lanes()), e);
 }
 
-inline Expr u16(Expr e) {
+inline Expr u16(const Expr &e) {
     return cast(UInt(16, e.type().lanes()), e);
 }
 
-inline Expr u8(Expr e) {
+inline Expr u8(const Expr &e) {
     return cast(UInt(8, e.type().lanes()), e);
 }
 
-inline Expr i8_sat(Expr e) {
+inline Expr i8_sat(const Expr &e) {
     return saturating_cast(Int(8, e.type().lanes()), e);
 }
 
-inline Expr u8_sat(Expr e) {
+inline Expr u8_sat(const Expr &e) {
     return saturating_cast(UInt(8, e.type().lanes()), e);
 }
 
-inline Expr i16_sat(Expr e) {
+inline Expr i16_sat(const Expr &e) {
     return saturating_cast(Int(16, e.type().lanes()), e);
 }
 
-inline Expr u16_sat(Expr e) {
+inline Expr u16_sat(const Expr &e) {
     return saturating_cast(UInt(16, e.type().lanes()), e);
 }
 
-inline Expr i32_sat(Expr e) {
+inline Expr i32_sat(const Expr &e) {
     return saturating_cast(Int(32, e.type().lanes()), e);
 }
 
-inline Expr u32_sat(Expr e) {
+inline Expr u32_sat(const Expr &e) {
     return saturating_cast(UInt(32, e.type().lanes()), e);
 }
 
-inline Expr i64_sat(Expr e) {
+inline Expr i64_sat(const Expr &e) {
     return saturating_cast(Int(64, e.type().lanes()), e);
 }
 
-inline Expr u64_sat(Expr e) {
+inline Expr u64_sat(const Expr &e) {
     return saturating_cast(UInt(64, e.type().lanes()), e);
 }
 

@@ -5,6 +5,8 @@
  * Defines a method to determine if an expression depends on some variables.
  */
 
+#include <utility>
+
 #include "IR.h"
 #include "IRVisitor.h"
 #include "Scope.h"
@@ -119,7 +121,7 @@ inline bool stmt_or_expr_uses_var(StmtOrExpr e, const std::string &v,
  */
 inline bool expr_uses_var(Expr e, const std::string &v,
                           const Scope<Expr> &s = Scope<Expr>::empty_scope()) {
-    return stmt_or_expr_uses_var(e, v, s);
+    return stmt_or_expr_uses_var(std::move(e), v, s);
 }
 
 /** Test if a statement references or defines the given variable,
@@ -128,7 +130,7 @@ inline bool expr_uses_var(Expr e, const std::string &v,
  */
 inline bool stmt_uses_var(Stmt stmt, const std::string &v,
                           const Scope<Expr> &s = Scope<Expr>::empty_scope()) {
-    return stmt_or_expr_uses_var(stmt, v, s);
+    return stmt_or_expr_uses_var(std::move(stmt), v, s);
 }
 
 /** Test if an expression references or defines any of the variables

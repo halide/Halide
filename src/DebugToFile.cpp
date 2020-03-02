@@ -29,7 +29,7 @@ class DebugToFile : public IRMutator {
                 << "debug_to_file doesn't handle functions with multiple values yet\n";
 
             // The name of the file
-            args.push_back(f.debug_file());
+            args.emplace_back(f.debug_file());
 
             // Inject loads to the corners of the function so that any
             // passes doing further analysis of buffer use understand
@@ -65,7 +65,7 @@ class DebugToFile : public IRMutator {
             } else {
                 user_error << "Type " << t << " not supported for debug_to_file\n";
             }
-            args.push_back(type_code);
+            args.emplace_back(type_code);
 
             Expr buf = Variable::make(Handle(), f.name() + ".buffer");
             args.push_back(buf);
@@ -98,7 +98,7 @@ class RemoveDummyRealizations : public IRMutator {
     using IRMutator::visit;
 
     Stmt visit(const Realize *op) override {
-        for (Function f : outputs) {
+        for (const Function &f : outputs) {
             if (op->name == f.name()) {
                 return mutate(op->body);
             }
@@ -119,14 +119,14 @@ class AddDummyRealizations : public IRMutator {
 
     Stmt visit(const ProducerConsumer *op) override {
         Stmt s = IRMutator::visit(op);
-        for (Function out : outputs) {
+        for (const Function &out : outputs) {
             if (op->name == out.name()) {
                 std::vector<Range> output_bounds;
                 for (int i = 0; i < out.dimensions(); i++) {
                     string dim = std::to_string(i);
                     Expr min = Variable::make(Int(32), out.name() + ".min." + dim);
                     Expr extent = Variable::make(Int(32), out.name() + ".extent." + dim);
-                    output_bounds.push_back(Range(min, extent));
+                    output_bounds.emplace_back(min, extent);
                 }
                 return Realize::make(out.name(),
                                      out.output_types(),

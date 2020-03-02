@@ -1,12 +1,14 @@
 #include "Dimension.h"
+
 #include "IR.h"
 #include "IROperator.h"
+#include <utility>
 
 namespace Halide {
 namespace Internal {
 
 Dimension::Dimension(const Internal::Parameter &p, int d, Func f)
-    : param(p), d(d), f(f) {
+    : param(p), d(d), f(std::move(f)) {
     user_assert(param.defined())
         << "Can't access the dimensions of an undefined Parameter\n";
     user_assert(param.is_buffer())
@@ -48,7 +50,7 @@ Expr Dimension::stride() const {
     return Variable::make(Int(32), s.str(), param);
 }
 
-Dimension Dimension::set_extent(Expr extent) {
+Dimension Dimension::set_extent(const Expr &extent) {
     param.set_extent_constraint(d, extent);
     // Propagate constant bounds into estimates as well.
     if (is_const(extent)) {
@@ -57,7 +59,7 @@ Dimension Dimension::set_extent(Expr extent) {
     return *this;
 }
 
-Dimension Dimension::set_min(Expr min) {
+Dimension Dimension::set_min(const Expr &min) {
     param.set_min_constraint(d, min);
     // Propagate constant bounds into estimates as well.
     if (is_const(min)) {
@@ -67,15 +69,15 @@ Dimension Dimension::set_min(Expr min) {
 }
 
 Dimension Dimension::set_stride(Expr stride) {
-    param.set_stride_constraint(d, stride);
+    param.set_stride_constraint(d, std::move(stride));
     return *this;
 }
 
-Dimension Dimension::set_bounds(Expr min, Expr extent) {
+Dimension Dimension::set_bounds(const Expr &min, const Expr &extent) {
     return set_min(min).set_extent(extent);
 }
 
-Dimension Dimension::set_estimate(Expr min, Expr extent) {
+Dimension Dimension::set_estimate(const Expr &min, const Expr &extent) {
     param.set_min_constraint_estimate(d, min);
     param.set_extent_constraint_estimate(d, extent);
     // Update the estimates on the linked Func as well.

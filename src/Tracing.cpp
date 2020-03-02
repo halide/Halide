@@ -69,7 +69,7 @@ public:
 private:
     void add_trace_tags(const string &name, const vector<string> &t) {
         if (!t.empty() && !trace_tags_added.count(name)) {
-            trace_tags.push_back({name, t});
+            trace_tags.emplace_back(name, t);
             trace_tags_added.insert(name);
         }
     }
@@ -204,7 +204,7 @@ private:
             for (size_t i = 0; i < args.size(); i++) {
                 if (!args[i].as<Variable>() && !is_const(args[i])) {
                     string name = unique_name('t');
-                    lets.push_back({name, args[i]});
+                    lets.emplace_back(name, args[i]);
                     args[i] = Variable::make(args[i].type(), name);
                 }
             }
@@ -276,7 +276,7 @@ private:
             builder.parent_id = Variable::make(Int(32), op->name + ".trace_id");
 
             // Use the size of the pure step
-            const vector<string> f_args = f.args();
+            const vector<string> &f_args = f.args();
             for (int i = 0; i < f.dimensions(); i++) {
                 Expr min = Variable::make(Int(32), f.name() + ".s0." + f_args[i] + ".min");
                 Expr max = Variable::make(Int(32), f.name() + ".s0." + f_args[i] + ".max");
@@ -305,7 +305,7 @@ class RemoveRealizeOverOutput : public IRMutator {
     const vector<Function> &outputs;
 
     Stmt visit(const Realize *op) override {
-        for (Function f : outputs) {
+        for (const Function &f : outputs) {
             if (op->name == f.name()) {
                 return mutate(op->body);
             }
@@ -326,7 +326,7 @@ Stmt inject_tracing(Stmt s, const string &pipeline_name, bool trace_pipeline,
     InjectTracing tracing(env, t);
 
     // Add a dummy realize block for the output buffers
-    for (Function output : outputs) {
+    for (const Function &output : outputs) {
         Region output_region;
         Parameter output_buf = output.output_buffers()[0];
         internal_assert(output_buf.is_buffer());
@@ -406,22 +406,22 @@ Stmt inject_tracing(Stmt s, const string &pipeline_name, bool trace_pipeline,
             builder.func = func_name;
 
             vector<Expr> strings;
-            strings.push_back(Expr("func_type_and_dim:"));
+            strings.emplace_back("func_type_and_dim:");
             strings.push_back(space);
-            strings.push_back((int)func_types.size());
+            strings.emplace_back((int)func_types.size());
             for (const auto &func_type : func_types) {
                 strings.push_back(space);
-                strings.push_back(func_type.code());
+                strings.emplace_back(func_type.code());
                 strings.push_back(space);
-                strings.push_back(func_type.bits());
+                strings.emplace_back(func_type.bits());
                 strings.push_back(space);
-                strings.push_back(func_type.lanes());
+                strings.emplace_back(func_type.lanes());
             }
             auto it = bt.find(func_name);
             internal_assert(it != bt.end());
             const Box &box = it->second;
             strings.push_back(space);
-            strings.push_back(Expr((int)box.bounds.size()));
+            strings.emplace_back((int)box.bounds.size());
             for (const Interval &i : box.bounds) {
                 internal_assert(i.min.defined() && i.max.defined());
                 if (i.is_bounded()) {
@@ -435,9 +435,9 @@ Stmt inject_tracing(Stmt s, const string &pipeline_name, bool trace_pipeline,
                     // that we won't end up realizing, so we can just
                     // use any numeric values.
                     strings.push_back(space);
-                    strings.push_back(Expr(0));
+                    strings.emplace_back(0);
                     strings.push_back(space);
-                    strings.push_back(Expr(0));
+                    strings.emplace_back(0);
                 }
             }
             builder.trace_tag_expr =

@@ -340,7 +340,7 @@ struct ScopedValue {
     }
     // allow move but not copy
     ScopedValue(const ScopedValue &that) = delete;
-    ScopedValue(ScopedValue &&that) = default;
+    ScopedValue(ScopedValue &&that) noexcept = default;
 };
 
 // Wrappers for some C++14-isms that are useful and trivially implementable

@@ -90,7 +90,7 @@ string running_program_name() {
         path[len] = '\0';
 #endif
         string tmp = std::string(path);
-        program_name = tmp.substr(tmp.find_last_of("/") + 1);
+        program_name = tmp.substr(tmp.find_last_of('/') + 1);
     } else {
         return "";
     }
@@ -335,10 +335,10 @@ std::string get_windows_tmp_dir() {
 #endif
 
 std::string file_make_temp(const std::string &prefix, const std::string &suffix) {
-    internal_assert(prefix.find("/") == string::npos &&
-                    prefix.find("\\") == string::npos &&
-                    suffix.find("/") == string::npos &&
-                    suffix.find("\\") == string::npos);
+    internal_assert(prefix.find('/') == string::npos &&
+                    prefix.find('\\') == string::npos &&
+                    suffix.find('/') == string::npos &&
+                    suffix.find('\\') == string::npos);
 #ifdef _WIN32
     // Windows implementations of mkstemp() try to create the file in the root
     // directory, which is... problematic.
