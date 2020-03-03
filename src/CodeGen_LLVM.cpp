@@ -1401,25 +1401,25 @@ void CodeGen_LLVM::optimize_module() {
 
     // Run optimization passes
     function_pass_manager.doInitialization();
-    for (llvm::Module::iterator i = module->begin(); i != module->end(); i++) {
+    for (auto &fn : module) {
         if (get_target().has_feature(Target::ASAN)) {
-            i->addFnAttr(Attribute::SanitizeAddress);
+            fn.addFnAttr(Attribute::SanitizeAddress);
         }
         if (get_target().has_feature(Target::TSAN)) {
             // Do not annotate any of Halide's low-level synchronization code as it has
             // tsan interface calls to mark its behavior and is much faster if
             // it is not analyzed instruction by instruction.
-            if (!(i->getName().startswith("_ZN6Halide7Runtime8Internal15Synchronization") ||
+            if (!(fn.getName().startswith("_ZN6Halide7Runtime8Internal15Synchronization") ||
                   // TODO: this is a benign data race that re-initializes the detected features;
                   // we should really fix it properly inside the implementation, rather than disabling
                   // it here as a band-aid.
-                  i->getName().startswith("halide_default_can_use_target_features") ||
-                  i->getName().startswith("halide_mutex_") ||
-                  i->getName().startswith("halide_cond_"))) {
-                i->addFnAttr(Attribute::SanitizeThread);
+                  fn.getName().startswith("halide_default_can_use_target_features") ||
+                  fn.getName().startswith("halide_mutex_") ||
+                  fn.getName().startswith("halide_cond_"))) {
+                fn.addFnAttr(Attribute::SanitizeThread);
             }
         }
-        function_pass_manager.run(*i);
+        function_pass_manager.run(fn);
     }
     function_pass_manager.doFinalization();
     module_pass_manager.run(*module);
