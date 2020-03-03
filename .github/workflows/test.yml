@@ -132,11 +132,19 @@ jobs:
 
         echo CommandPromptType is ${CommandPromptType}
         echo 0PATH is ${PATH}
+        echo
+        echo
+        echo
 
-        (cd "${VSDEVCMD_DIR}" &&
-         cmd /c "vsdevcmd.bat --no_logo -arch=x64 -host_arch=x64 && bash -c 'printenv VSDEVCMD_PATH'")
+        echo calling script
+        echo
+        echo
+        VSDEVCMD_PATH = $(cd "${VSDEVCMD_DIR}" && \
+                 cmd /c "vsdevcmd.bat -arch=x64 -host_arch=x64 && bash -c 'printenv PATH'")
 
-        echo CommandPromptType is ${CommandPromptType}
+        echo
+        echo
+        echo
         echo VSDEVCMD_PATH is ${VSDEVCMD_PATH}
 
         #env
