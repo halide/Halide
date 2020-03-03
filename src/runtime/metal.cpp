@@ -230,7 +230,7 @@ inline mtl_device *get_default_mtl_device() {
     if (device == NULL) {
         objc_id devices = (objc_id)MTLCopyAllDevices();
         if (devices != NULL) {
-            device = (mtl_device *)nsarray_object_at_index(devices, 0); 
+            device = (mtl_device *)nsarray_object_at_index(devices, 0);
         }
     }
     return device;
