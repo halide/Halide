@@ -130,8 +130,7 @@ jobs:
 
         echo ::set-env name=VSDEVCMD::"${VSDEVCMD}"
 
-        echo CommandPromptType is ${CommandPromptType}
-        echo 0PATH is ${PATH}
+        # echo 0PATH is ${PATH}
         echo
         echo
         echo
@@ -143,10 +142,13 @@ jobs:
         fi
 
         echo calling script
+        echo BASH is $BASH
+        echo 0 is $0
+        CUR_BASH=$0
         echo
         echo
         VSDEVCMD_PATH=$(cd "${VSDEVCMD_DIR}" && \
-                        cmd /c "vsdevcmd.bat -no_logo -arch=${MSVC_TARGET_ARCH} -host_arch=x64 && ${BASH} -c 'printenv PATH'")
+                        cmd /c "vsdevcmd.bat -no_logo -arch=${MSVC_TARGET_ARCH} -host_arch=x64 && ${CUR_BASH} -c 'printenv PATH'")
 
         echo
         echo
