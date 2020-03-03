@@ -141,7 +141,7 @@ jobs:
         LLVM_OLD_COMMIT=bogus
         curl --fail --user llvm_user:${{secrets.LLVM_USER_PASSWORD}} --output ${_ROOT}/old_llvm.tgz ${LLVM_INSTALL_URL}
         if [ $? -eq 0 ]; then
-          LLVM_OLD_COMMIT=`tar ${TAR_CMD} -O -xf ${_ROOT}/old_llvm.tgz ./${LLVM_COMMIT_HASH_FILE}`
+          LLVM_OLD_COMMIT=`${TAR_CMD} -O -xf ${_ROOT}/old_llvm.tgz ./${LLVM_COMMIT_HASH_FILE}`
           if [ $? -ne 0 ]; then
             LLVM_OLD_COMMIT=bogus_2
           fi
