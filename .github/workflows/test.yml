@@ -116,6 +116,11 @@ jobs:
       if: startsWith(matrix.host_os, 'windows')
       shell: bash
       run: |
+        # When using the VC Project Files generator,
+        # CMake can figure out compiler and target based
+        # on the -T and -A arguments; if you want to use Ninja,
+        # it apparently cannot, and you have to configure it explicitly,
+        # via the vsdevcmd batch file.
         VS_INSTALL_DIR=`vswhere -latest -property installationPath`
         VSDEVCMD="${VS_INSTALL_DIR//\\//}/Common7/Tools/vsdevcmd.bat"
         echo VSDEVCMD is ${VSDEVCMD}
@@ -254,10 +259,18 @@ jobs:
           # things installed by vcpkg
           EXTRA_CMAKE_FLAGS="${EXTRA_CMAKE_FLAGS} \
             -D CMAKE_TOOLCHAIN_FILE=C:/vcpkg/scripts/buildsystems/vcpkg.cmake"
+
           # -T host=x64"
           # if [[ ${{matrix.target_bits}} == 64 ]]; then
           #   EXTRA_CMAKE_FLAGS="${EXTRA_CMAKE_FLAGS} -A x64"
           # fi
+
+          echo VSDEVCMD is ${VSDEVCMD}
+          if [[ ${{matrix.target_bits}} == 32 ]]; then
+            "${VSDEVCMD}" -arch=x86 -host_arch=x64
+          else
+            "${VSDEVCMD}" -arch=x64 -host_arch=x64
+          fi
         fi
 
         if [[ ${{matrix.target_arch}} == x86 && \
