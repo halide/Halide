@@ -141,14 +141,17 @@ jobs:
           export MSVC_TARGET_ARCH=x64
         fi
 
+        printenv PATH
+
+        VSDEVCMD_PATH0=$(cd "${VSDEVCMD_DIR}" && \
+                        cmd /c "/usr/bin/bash -c 'printenv PATH'")
+        echo VSDEVCMD_PATH0 is ${VSDEVCMD_PATH0}
+
         echo calling script
-        echo BASH is $BASH
-        echo 0 is $0
-        CUR_BASH=$0
         echo
         echo
         VSDEVCMD_PATH=$(cd "${VSDEVCMD_DIR}" && \
-                        cmd /c "vsdevcmd.bat -no_logo -arch=${MSVC_TARGET_ARCH} -host_arch=x64 && /usr/bin/bash -c 'printenv PATH'")
+                        cmd /c "vsdevcmd.bat -no_logo -arch=${MSVC_TARGET_ARCH} -host_arch=x64 && bash -c 'printenv PATH'")
 
         echo
         echo
@@ -156,7 +159,7 @@ jobs:
         echo VSDEVCMD_PATH is ${VSDEVCMD_PATH}
 
         #env
-        #exit 22
+        exit 22
 
         choco install ninja
 
