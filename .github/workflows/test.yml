@@ -139,8 +139,8 @@ jobs:
         echo calling script
         echo
         echo
-        VSDEVCMD_PATH = $(cd "${VSDEVCMD_DIR}" && \
-                 cmd /c "vsdevcmd.bat -arch=x64 -host_arch=x64 && bash -c 'printenv PATH'")
+        VSDEVCMD_PATH=$(cd "${VSDEVCMD_DIR}" && \
+                        cmd /c "vsdevcmd.bat -arch=x64 -host_arch=x64 && bash -c 'printenv PATH'")
 
         echo
         echo
