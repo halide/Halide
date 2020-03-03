@@ -65,6 +65,8 @@ public:
      */
     static std::vector<void *> instances_in_range(void *start, size_t size, Kind kind);
 
+    ObjectInstanceRegistry(ObjectInstanceRegistry &rhs) = delete;
+
 private:
     static ObjectInstanceRegistry &get_registry();
 
@@ -80,11 +82,10 @@ private:
         }
     };
 
+    ObjectInstanceRegistry() = default;
+
     std::mutex mutex;
     std::map<uintptr_t, InstanceInfo> instances;
-
-    ObjectInstanceRegistry() = default;
-    ObjectInstanceRegistry(ObjectInstanceRegistry &rhs) = delete;
 };
 
 }  // namespace Internal

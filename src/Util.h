@@ -302,11 +302,12 @@ public:
         do_unlink = false;
     }
 
+    TemporaryFile(const TemporaryFile &) = delete;
+    void operator=(const TemporaryFile &) = delete;
+
 private:
     const std::string temp_path;
     bool do_unlink;
-    TemporaryFile(const TemporaryFile &) = delete;
-    void operator=(const TemporaryFile &) = delete;
 };
 
 /** Routines to test if math would overflow for signed integers with

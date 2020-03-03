@@ -2299,9 +2299,10 @@ format:
 
 # Run clang-tidy on the core source files
 $(BUILD_DIR)/compile_commands.json:
+	mkdir -p $(@D)
 	echo '[' >> $@
-	BD=$(realpath $(BUILD_DIR)); \
-	SD=$(realpath $(SRC_DIR)); \
+	BD="$$(realpath $(BUILD_DIR))"; \
+	SD="$$(realpath $(SRC_DIR))"; \
 	for S in $(SOURCE_FILES); do \
 	echo "{ \"directory\": \"$${BD}\"," >> $@; \
 	echo "  \"command\": \"$(CXX) $(CXX_FLAGS) -c $$SD/$$S -o $$BD/$${S/cpp/o}\"," >> $@; \

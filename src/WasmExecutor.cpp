@@ -1611,8 +1611,8 @@ int WasmModuleContents::run(const void **args) {
     return -1;
 }
 
-WasmModuleContents::~WasmModuleContents() {
 #ifdef WITH_V8
+WasmModuleContents::~WasmModuleContents() {
     if (isolate != nullptr) {
         // TODO: Do we have to do this explicitly, or does disposing the Isolate handle it?
         {
@@ -1626,8 +1626,11 @@ WasmModuleContents::~WasmModuleContents() {
         isolate->Dispose();
     }
     delete array_buffer_allocator;
-#endif
 }
+#else
+WasmModuleContents::~WasmModuleContents() = default;
+#endif
+
 
 template<>
 RefCount &ref_count<WasmModuleContents>(const WasmModuleContents *p) noexcept {

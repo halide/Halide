@@ -170,7 +170,7 @@ vector<Func> Pipeline::outputs() const {
 }
 
 /* static */
-void Pipeline::auto_schedule_Mullapudi2016(Pipeline pipeline, const Target &target,
+void Pipeline::auto_schedule_Mullapudi2016(const Pipeline &pipeline, const Target &target,
                                            const MachineParams &arch_params, AutoSchedulerResults *outputs) {
     AutoSchedulerResults results;
     results.target = target;
@@ -913,14 +913,14 @@ struct Pipeline::JITCallArgs {
         }
     }
 
+    JITCallArgs(const JITCallArgs &) = delete;
+    JITCallArgs(JITCallArgs &&) = delete;
+    void operator=(const JITCallArgs &) = delete;
+
 private:
     static constexpr int kStoreSize = 64;
     using ConstVoidPtr = const void *;
     ConstVoidPtr fixed_store[kStoreSize];
-
-    JITCallArgs(const JITCallArgs &) = delete;
-    JITCallArgs(JITCallArgs &&) = delete;
-    void operator=(const JITCallArgs &) = delete;
 };
 
 // Make a vector of void *'s to pass to the jit call using the

@@ -1,7 +1,7 @@
 ---
-Checks: '-*,modernize-use-override,modernize-make-shared,modernize-use-emplace,performance-*,-performance-inefficient-string-concatenation'
+Checks: '-*,modernize-pass-by-value,modernize-use-equals-default,modernize-use-default-member-init,modernize-use-equals-delete,modernize-use-override,modernize-use-using,modernize-loop-convert,performance-implicit-conversion-in-loop,performance-inefficient-algorithm,performance-move-const-arg,performance-move-constructor-init,performance-inefficient-vector-operation,performance-noexcept-move-constructor,performance-trivially-destructible,performance-type-promotion-in-math-fn,performance-unnecessary-copy-initialization,performance-unnecessary-value-param'
 WarningsAsErrors: '*'
-HeaderFilterRegex: '.*'
+HeaderFilterRegex: 'src/[^/]*.h'
 AnalyzeTemporaryDtors: false
 FormatStyle: 'file'
 ...

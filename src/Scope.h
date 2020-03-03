@@ -92,17 +92,15 @@ class Scope {
 private:
     std::map<std::string, SmallStack<T>> table;
 
+    const Scope<T> *containing_scope{nullptr};
+
+public:
+    Scope() = default;
+
     // Copying a scope object copies a large table full of strings and
     // stacks. Bad idea.
     Scope(const Scope<T> &) = delete;
     Scope<T> &operator=(const Scope<T> &) = delete;
-
-    const Scope<T> *containing_scope;
-
-public:
-    Scope()
-        : containing_scope(nullptr) {
-    }
 
     /** Set the parent scope. If lookups fail in this scope, they
      * check the containing scope before returning an error. Caller is

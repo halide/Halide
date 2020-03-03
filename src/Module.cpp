@@ -104,11 +104,12 @@ public:
         return dir_files;
     }
 
+    TemporaryObjectFileDir(const TemporaryObjectFileDir &) = delete;
+    void operator=(const TemporaryObjectFileDir &) = delete;
+
 private:
     const std::string dir_path;
     std::vector<std::string> dir_files;
-    TemporaryObjectFileDir(const TemporaryObjectFileDir &) = delete;
-    void operator=(const TemporaryObjectFileDir &) = delete;
 };
 
 // Given a pathname of the form /path/to/name.ext, append suffix before ext to produce /path/to/namesuffix.ext

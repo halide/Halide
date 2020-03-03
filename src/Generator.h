@@ -434,6 +434,13 @@ public:
         set_from_string(std::string(new_value));
     }
 
+    // No copy
+    GeneratorParamBase(const GeneratorParamBase &) = delete;
+    void operator=(const GeneratorParamBase &) = delete;
+    // No move
+    GeneratorParamBase(GeneratorParamBase &&) = delete;
+    void operator=(GeneratorParamBase &&) = delete;
+
 protected:
     friend class GeneratorBase;
     friend class GeneratorParamInfo;
@@ -465,12 +472,6 @@ protected:
     void fail_wrong_type(const char *type);
 
 private:
-    // No copy
-    GeneratorParamBase(const GeneratorParamBase &) = delete;
-    void operator=(const GeneratorParamBase &) = delete;
-    // No move
-    GeneratorParamBase(GeneratorParamBase &&) = delete;
-    void operator=(GeneratorParamBase &&) = delete;
 
     // Generator which owns this GeneratorParam. Note that this will be null
     // initially; the GeneratorBase itself will set this field when it initially
@@ -1446,6 +1447,13 @@ public:
 
     virtual ~GIOBase();
 
+    // No copy
+    GIOBase(const GIOBase &) = delete;
+    void operator=(const GIOBase &) = delete;
+    // No move
+    GIOBase(GIOBase &&) = delete;
+    void operator=(GIOBase &&) = delete;
+
 protected:
     GIOBase(size_t array_size,
             std::string name,
@@ -1496,12 +1504,6 @@ private:
     template<typename T>
     friend class GeneratorParam_Synthetic;
 
-    // No copy
-    GIOBase(const GIOBase &) = delete;
-    void operator=(const GIOBase &) = delete;
-    // No move
-    GIOBase(GIOBase &&) = delete;
-    void operator=(GIOBase &&) = delete;
 };
 
 template<>
@@ -2892,6 +2894,13 @@ public:
         return t;
     }
 
+    // No copy
+    GeneratorContext(const GeneratorContext &) = delete;
+    void operator=(const GeneratorContext &) = delete;
+    // No move
+    GeneratorContext(GeneratorContext &&) = delete;
+    void operator=(GeneratorContext &&) = delete;
+
 protected:
     GeneratorParam<Target> target;
     GeneratorParam<bool> auto_schedule;
@@ -2909,12 +2918,6 @@ protected:
         return value_tracker;
     }
 
-    // No copy
-    GeneratorContext(const GeneratorContext &) = delete;
-    void operator=(const GeneratorContext &) = delete;
-    // No move
-    GeneratorContext(GeneratorContext &&) = delete;
-    void operator=(GeneratorContext &&) = delete;
 };
 
 class NamesInterface {
@@ -3196,6 +3199,13 @@ public:
         get_pipeline().trace_pipeline();
     }
 
+    // No copy
+    GeneratorBase(const GeneratorBase &) = delete;
+    void operator=(const GeneratorBase &) = delete;
+    // No move
+    GeneratorBase(GeneratorBase &&that) = delete;
+    void operator=(GeneratorBase &&that) = delete;
+
 protected:
     GeneratorBase(size_t size, const void *introspection_helper);
     void set_generator_names(const std::string &registered_name, const std::string &stub_name);
@@ -3439,12 +3449,6 @@ private:
         return {build_input(Indices, std::get<Indices>(t))...};
     }
 
-    // No copy
-    GeneratorBase(const GeneratorBase &) = delete;
-    void operator=(const GeneratorBase &) = delete;
-    // No move
-    GeneratorBase(GeneratorBase &&that) = delete;
-    void operator=(GeneratorBase &&that) = delete;
 };
 
 class GeneratorRegistry {
@@ -3457,6 +3461,8 @@ public:
     static std::unique_ptr<GeneratorBase> create(const std::string &name,
                                                  const Halide::GeneratorContext &context);
 
+    GeneratorRegistry(const GeneratorRegistry &) = delete;
+    void operator=(const GeneratorRegistry &) = delete;
 private:
     using GeneratorFactoryMap = std::map<const std::string, GeneratorFactory>;
 
@@ -3466,8 +3472,6 @@ private:
     static GeneratorRegistry &get_registry();
 
     GeneratorRegistry() = default;
-    GeneratorRegistry(const GeneratorRegistry &) = delete;
-    void operator=(const GeneratorRegistry &) = delete;
 };
 
 }  // namespace Internal
@@ -3514,6 +3518,13 @@ public:
         call_generate();
         call_schedule();
     }
+
+    // No copy
+    Generator(const Generator &) = delete;
+    void operator=(const Generator &) = delete;
+    // No move
+    Generator(Generator &&that) = delete;
+    void operator=(Generator &&that) = delete;
 
 private:
     // std::is_member_function_pointer will fail if there is no member of that name,
@@ -3666,12 +3677,6 @@ private:
     friend void ::Halide::Internal::generator_test();
     friend class ::Halide::GeneratorContext;
 
-    // No copy
-    Generator(const Generator &) = delete;
-    void operator=(const Generator &) = delete;
-    // No move
-    Generator(Generator &&that) = delete;
-    void operator=(Generator &&that) = delete;
 };
 
 namespace Internal {
