@@ -3,6 +3,7 @@ on:
   # Run every day at 1AM Pacific; GitHub uses UTC for cron, so that's 9AM
   schedule:
     - cron:  '0 9 * * *'
+  push:
   #
   # This is a webhook to allow forcing rebuilds. To use, do this:
   #
