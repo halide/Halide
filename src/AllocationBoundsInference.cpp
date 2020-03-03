@@ -53,8 +53,7 @@ class AllocationInference : public IRMutator {
         for (size_t i = 0; i < b.size(); i++) {
             // Get any applicable bound on this dimension
             Bound bound;
-            for (size_t j = 0; j < f.schedule().bounds().size(); j++) {
-                Bound b = f.schedule().bounds()[j];
+            for (const auto &b : f.schedule().bounds()) {
                 if (f_args[i] == b.var) {
                     bound = b;
                 }
@@ -124,13 +123,11 @@ public:
     AllocationInference(const map<string, Function> &e, const FuncValueBounds &fb)
         : env(e), func_bounds(fb) {
         // Figure out which buffers are touched by extern stages
-        for (map<string, Function>::const_iterator iter = e.begin();
-             iter != e.end(); ++iter) {
-            Function f = iter->second;
+        for (const auto &iter : e) {
+            Function f = iter.second;
             if (f.has_extern_definition()) {
                 touched_by_extern.insert(f.name());
-                for (size_t i = 0; i < f.extern_arguments().size(); i++) {
-                    ExternFuncArgument arg = f.extern_arguments()[i];
+                for (const auto &arg : f.extern_arguments()) {
                     if (!arg.is_func()) continue;
                     Function input(arg.func);
                     touched_by_extern.insert(input.name());

@@ -1,4 +1,5 @@
 #include <map>
+#include <utility>
 
 #include "CSE.h"
 #include "IREquality.h"
@@ -76,8 +77,8 @@ public:
         int use_count = 0;
         // All consumer Exprs for which this is the last child Expr.
         map<ExprWithCompareCache, int> uses;
-        Entry(const Expr &e)
-            : expr(e) {
+        Entry(Expr e)
+            : expr(std::move(e)) {
         }
     };
     vector<std::unique_ptr<Entry>> entries;
@@ -310,7 +311,7 @@ namespace {
 // Normalize all names in an expr so that expr compares can be done
 // without worrying about mere name differences.
 class NormalizeVarNames : public IRMutator {
-    int counter;
+    int counter{0};
 
     map<string, string> new_names;
 
@@ -334,9 +335,7 @@ class NormalizeVarNames : public IRMutator {
     }
 
 public:
-    NormalizeVarNames()
-        : counter(0) {
-    }
+    NormalizeVarNames() = default;
 };
 
 void check(const Expr &in, const Expr &correct) {

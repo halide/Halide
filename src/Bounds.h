@@ -6,6 +6,8 @@
  * and the regions of a function read or written by a statement.
  */
 
+#include <utility>
+
 #include "IROperator.h"
 #include "Interval.h"
 #include "Scope.h"
@@ -13,7 +15,7 @@
 namespace Halide {
 namespace Internal {
 
-typedef std::map<std::pair<std::string, int>, Interval> FuncValueBounds;
+using FuncValueBounds = std::map<std::pair<std::string, int>, Interval>;
 
 /** Given an expression in some variables, and a map from those
  * variables to their bounds (in the form of (minimum possible value,
@@ -58,8 +60,8 @@ struct Box {
     Box(size_t sz)
         : bounds(sz) {
     }
-    Box(const std::vector<Interval> &b)
-        : bounds(b) {
+    Box(std::vector<Interval> b)
+        : bounds(std::move(b)) {
     }
 
     size_t size() const {

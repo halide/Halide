@@ -27,8 +27,8 @@ bool extern_call_uses_buffer(const Call *op, const std::string &func) {
         if (starts_with(op->name, "halide_memoization")) {
             return false;
         }
-        for (size_t i = 0; i < op->args.size(); i++) {
-            const Variable *var = op->args[i].as<Variable>();
+        for (const auto &arg : op->args) {
+            const Variable *var = arg.as<Variable>();
             if (var &&
                 starts_with(var->name, func + ".") &&
                 ends_with(var->name, ".buffer")) {
@@ -44,9 +44,9 @@ bool extern_call_uses_buffer(const Call *op, const std::string &func) {
 class PredicateFinder : public IRVisitor {
 public:
     Expr predicate;
-    PredicateFinder(const string &b, bool s)
+    PredicateFinder(string b, bool s)
         : predicate(const_false()),
-          buffer(b),
+          buffer(std::move(b)),
           varies(false),
           treat_selects_as_guards(s),
           in_produce(false) {
@@ -251,8 +251,8 @@ private:
 
 class ProductionGuarder : public IRMutator {
 public:
-    ProductionGuarder(const string &b, Expr compute_p, Expr alloc_p)
-        : buffer(b), compute_predicate(std::move(compute_p)), alloc_predicate(std::move(alloc_p)) {
+    ProductionGuarder(string b, Expr compute_p, Expr alloc_p)
+        : buffer(std::move(b)), compute_predicate(std::move(compute_p)), alloc_predicate(std::move(alloc_p)) {
     }
 
 private:
@@ -265,8 +265,8 @@ private:
     bool memoize_call_uses_buffer(const Call *op) {
         internal_assert(op->call_type == Call::Extern);
         internal_assert(starts_with(op->name, "halide_memoization"));
-        for (size_t i = 0; i < op->args.size(); i++) {
-            const Variable *var = op->args[i].as<Variable>();
+        for (const auto &arg : op->args) {
+            const Variable *var = arg.as<Variable>();
             if (var &&
                 starts_with(var->name, buffer + ".") &&
                 ends_with(var->name, ".buffer")) {
@@ -321,8 +321,8 @@ private:
 
 class StageSkipper : public IRMutator {
 public:
-    StageSkipper(const string &f)
-        : func(f), in_vector_loop(false) {
+    StageSkipper(string f)
+        : func(std::move(f)), in_vector_loop(false) {
     }
 
 private:

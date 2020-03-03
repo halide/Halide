@@ -1,5 +1,6 @@
 #include <cmath>
 #include <sstream>
+#include <utility>
 
 #include "CanonicalizeGPUVars.h"
 #include "CodeGen_GPU_Dev.h"
@@ -69,8 +70,8 @@ class CountGPUBlocksThreads : public IRVisitor {
     }
 
 public:
-    CountGPUBlocksThreads(const string &p)
-        : prefix(p) {
+    CountGPUBlocksThreads(string p)
+        : prefix(std::move(p)) {
     }
     int nblocks = 0;
     int nthreads = 0;

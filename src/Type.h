@@ -7,6 +7,8 @@
 #include "runtime/HalideRuntime.h"
 #include <stdint.h>
 
+#include <utility>
+
 /** \file
  * Defines halide types
  */
@@ -50,8 +52,8 @@ struct halide_cplusplus_type_name {
 
     std::string name;
 
-    halide_cplusplus_type_name(CPPTypeType cpp_type_type, const std::string &name)
-        : cpp_type_type(cpp_type_type), name(name) {
+    halide_cplusplus_type_name(CPPTypeType cpp_type_type, std::string name)
+        : cpp_type_type(cpp_type_type), name(std::move(name)) {
     }
 
     bool operator==(const halide_cplusplus_type_name &rhs) const {
@@ -109,15 +111,15 @@ struct halide_handle_cplusplus_type {
     };
     ReferenceType reference_type;
 
-    halide_handle_cplusplus_type(const halide_cplusplus_type_name &inner_name,
-                                 const std::vector<std::string> &namespaces = {},
-                                 const std::vector<halide_cplusplus_type_name> &enclosing_types = {},
-                                 const std::vector<uint8_t> &modifiers = {},
+    halide_handle_cplusplus_type(halide_cplusplus_type_name inner_name,
+                                 std::vector<std::string> namespaces = {},
+                                 std::vector<halide_cplusplus_type_name> enclosing_types = {},
+                                 std::vector<uint8_t> modifiers = {},
                                  ReferenceType reference_type = NotReference)
-        : inner_name(inner_name),
-          namespaces(namespaces),
-          enclosing_types(enclosing_types),
-          cpp_type_modifiers(modifiers),
+        : inner_name(std::move(inner_name)),
+          namespaces(std::move(namespaces)),
+          enclosing_types(std::move(enclosing_types)),
+          cpp_type_modifiers(std::move(modifiers)),
           reference_type(reference_type) {
     }
 
@@ -285,7 +287,7 @@ public:
 
     // Default ctor initializes everything to predictable-but-unlikely values
     Type()
-        : type(Handle, 0, 0), handle_type(nullptr) {
+        : type(Handle, 0, 0) {
     }
 
     /** Construct a runtime representation of a Halide type from:
@@ -354,7 +356,7 @@ public:
     }
 
     /** Type to be printed when declaring handles of this type. */
-    const halide_handle_cplusplus_type *handle_type;
+    const halide_handle_cplusplus_type *handle_type{nullptr};
 
     /** Is this type boolean (represented as UInt(1))? */
     HALIDE_ALWAYS_INLINE

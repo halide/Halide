@@ -123,8 +123,7 @@ struct MatcherState {
     }
 
     HALIDE_ALWAYS_INLINE
-    MatcherState() noexcept {
-    }
+    MatcherState() = default;
 };
 
 template<typename T,

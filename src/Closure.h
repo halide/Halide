@@ -42,20 +42,18 @@ public:
         Type type;
 
         /** The dimensionality of the buffer. */
-        uint8_t dimensions;
+        uint8_t dimensions{0};
 
         /** The buffer is read from. */
-        bool read;
+        bool read{false};
 
         /** The buffer is written to. */
-        bool write;
+        bool write{false};
 
         /** The size of the buffer if known, otherwise zero. */
-        size_t size;
+        size_t size{0};
 
-        Buffer()
-            : dimensions(0), read(false), write(false), size(0) {
-        }
+        Buffer() = default;
     };
 
 protected:

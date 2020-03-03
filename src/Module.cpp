@@ -231,8 +231,7 @@ static Registerer registerer;
 std::string indent_string(const std::string &src, const std::string &indent) {
     std::ostringstream o;
     bool prev_was_newline = true;
-    for (size_t i = 0; i < src.size(); i++) {
-        const char c = src[i];
+    for (char c : src) {
         const bool is_newline = (c == '\n');
         if (prev_was_newline && !is_newline) {
             o << indent;
@@ -336,20 +335,20 @@ void destroy<ModuleContents>(const ModuleContents *t) {
     delete t;
 }
 
-LoweredFunc::LoweredFunc(const std::string &name,
-                         const std::vector<LoweredArgument> &args,
+LoweredFunc::LoweredFunc(std::string name,
+                         std::vector<LoweredArgument> args,
                          Stmt body,
                          LinkageType linkage,
                          NameMangling name_mangling)
-    : name(name), args(args), body(std::move(body)), linkage(linkage), name_mangling(name_mangling) {
+    : name(std::move(name)), args(std::move(args)), body(std::move(body)), linkage(linkage), name_mangling(name_mangling) {
 }
 
-LoweredFunc::LoweredFunc(const std::string &name,
+LoweredFunc::LoweredFunc(std::string name,
                          const std::vector<Argument> &args,
                          Stmt body,
                          LinkageType linkage,
                          NameMangling name_mangling)
-    : name(name), body(std::move(body)), linkage(linkage), name_mangling(name_mangling) {
+    : name(std::move(name)), body(std::move(body)), linkage(linkage), name_mangling(name_mangling) {
     for (const Argument &i : args) {
         this->args.emplace_back(i);
     }
@@ -439,9 +438,7 @@ void Module::append(const ExternalCode &external_code) {
 Module link_modules(const std::string &name, const std::vector<Module> &modules) {
     Module output(name, modules.front().target());
 
-    for (size_t i = 0; i < modules.size(); i++) {
-        const Module &input = modules[i];
-
+    for (const auto &input : modules) {
         if (output.target() != input.target()) {
             user_error << "Mismatched targets in modules to link ("
                        << output.name() << ", " << output.target().to_string()
@@ -814,8 +811,8 @@ void compile_multitarget(const std::string &fn_name,
         if (target != base_target) {
             std::vector<Expr> features_struct_args;
             features_struct_args.reserve(kFeaturesWordCount);
-            for (int i = 0; i < kFeaturesWordCount; ++i) {
-                features_struct_args.emplace_back(UIntImm::make(UInt(64), cur_target_features[i]));
+            for (unsigned long cur_target_feature : cur_target_features) {
+                features_struct_args.emplace_back(UIntImm::make(UInt(64), cur_target_feature));
             }
             can_use = Call::make(Int(32), "halide_can_use_target_features",
                                  {kFeaturesWordCount, Call::make(type_of<uint64_t *>(), Call::make_struct, features_struct_args, Call::Intrinsic)},

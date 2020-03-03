@@ -25,7 +25,7 @@ using std::pair;
 using std::string;
 using std::vector;
 
-typedef map<FunctionPtr, FunctionPtr> DeepCopyMap;
+using DeepCopyMap = map<FunctionPtr, FunctionPtr>;
 
 struct FunctionContents;
 
@@ -186,8 +186,8 @@ struct CheckVars : public IRGraphVisitor {
     const std::string name;
     bool unbound_reduction_vars_ok = false;
 
-    CheckVars(const std::string &n)
-        : name(n) {
+    CheckVars(std::string n)
+        : name(std::move(n)) {
     }
 
     using IRVisitor::visit;
@@ -222,8 +222,8 @@ struct CheckVars : public IRGraphVisitor {
         if (defined_internally.contains(var->name)) return;
 
         // Is it a pure argument?
-        for (size_t i = 0; i < pure_args.size(); i++) {
-            if (var->name == pure_args[i]) return;
+        for (auto &pure_arg : pure_args) {
+            if (var->name == pure_arg) return;
         }
 
         // Is it in a reduction domain?
@@ -278,8 +278,7 @@ namespace {
 static std::atomic<int> rand_counter;
 }
 
-Function::Function() {
-}
+Function::Function() = default;
 
 Function::Function(const FunctionPtr &ptr)
     : contents(ptr) {
@@ -386,8 +385,8 @@ void Function::define(const vector<string> &args, vector<Expr> values) {
         << "In pure definition of Func \"" << name() << "\":\n"
         << "Func with extern definition cannot be given a pure definition.\n";
     user_assert(!name().empty()) << "A Func may not have an empty name.\n";
-    for (size_t i = 0; i < values.size(); i++) {
-        user_assert(values[i].defined())
+    for (auto &value : values) {
+        user_assert(value.defined())
             << "In pure definition of Func \"" << name() << "\":\n"
             << "Undefined expression in right-hand-side of definition.\n";
     }
@@ -396,14 +395,14 @@ void Function::define(const vector<string> &args, vector<Expr> values) {
     // attached to some parameter
     CheckVars check(name());
     check.pure_args = args;
-    for (size_t i = 0; i < values.size(); i++) {
-        values[i].accept(&check);
+    for (auto &value : values) {
+        value.accept(&check);
     }
 
     // Freeze all called functions
     FreezeFunctions freezer(name());
-    for (size_t i = 0; i < values.size(); i++) {
-        values[i].accept(&freezer);
+    for (auto &value : values) {
+        value.accept(&freezer);
     }
 
     // Make sure all the vars in the args have unique non-empty names
@@ -421,14 +420,14 @@ void Function::define(const vector<string> &args, vector<Expr> values) {
         }
     }
 
-    for (size_t i = 0; i < values.size(); i++) {
-        values[i] = common_subexpression_elimination(values[i]);
+    for (auto &value : values) {
+        value = common_subexpression_elimination(value);
     }
 
     // Tag calls to random() with the free vars
     int tag = rand_counter++;
-    for (size_t i = 0; i < values.size(); i++) {
-        values[i] = lower_random(values[i], args, tag);
+    for (auto &value : values) {
+        value = lower_random(value, args, tag);
     }
 
     user_assert(!check.reduction_domain.defined())
@@ -457,10 +456,10 @@ void Function::define(const vector<string> &args, vector<Expr> values) {
     ReductionDomain rdom;
     contents->init_def = Definition(init_def_args, values, rdom, true);
 
-    for (size_t i = 0; i < args.size(); i++) {
-        Dim d = {args[i], ForType::Serial, DeviceAPI::None, Dim::Type::PureVar};
+    for (const auto &arg : args) {
+        Dim d = {arg, ForType::Serial, DeviceAPI::None, Dim::Type::PureVar};
         contents->init_def.schedule().dims().push_back(d);
-        StorageDim sd = {args[i]};
+        StorageDim sd = {arg};
         contents->func_schedule.storage_dims().push_back(sd);
     }
 
@@ -497,8 +496,8 @@ void Function::define_update(const vector<Expr> &_args, vector<Expr> values) {
         << "Func " << name() << " cannot be given a new update definition, "
         << "because it has already been realized or used in the definition of another Func.\n";
 
-    for (size_t i = 0; i < values.size(); i++) {
-        user_assert(values[i].defined())
+    for (auto &value : values) {
+        user_assert(value.defined())
             << "In update definition " << update_idx << " of Func \"" << name() << "\":\n"
             << "Undefined expression in right-hand-side of update.\n";
     }
@@ -568,11 +567,11 @@ void Function::define_update(const vector<Expr> &_args, vector<Expr> values) {
     // vars in the LHS in the correct places.
     CheckVars check(name());
     check.pure_args = pure_args;
-    for (size_t i = 0; i < args.size(); i++) {
-        args[i].accept(&check);
+    for (auto &arg : args) {
+        arg.accept(&check);
     }
-    for (size_t i = 0; i < values.size(); i++) {
-        values[i].accept(&check);
+    for (auto &value : values) {
+        value.accept(&check);
     }
     if (check.reduction_domain.defined()) {
         check.unbound_reduction_vars_ok = true;
@@ -581,11 +580,11 @@ void Function::define_update(const vector<Expr> &_args, vector<Expr> values) {
 
     // Freeze all called functions
     FreezeFunctions freezer(name());
-    for (size_t i = 0; i < args.size(); i++) {
-        args[i].accept(&freezer);
+    for (auto &arg : args) {
+        arg.accept(&freezer);
     }
-    for (size_t i = 0; i < values.size(); i++) {
-        values[i].accept(&freezer);
+    for (auto &value : values) {
+        value.accept(&freezer);
     }
 
     // Freeze the reduction domain if defined
@@ -596,23 +595,23 @@ void Function::define_update(const vector<Expr> &_args, vector<Expr> values) {
 
     // Tag calls to random() with the free vars
     vector<string> free_vars;
-    for (size_t i = 0; i < pure_args.size(); i++) {
-        if (!pure_args[i].empty()) {
-            free_vars.push_back(pure_args[i]);
+    for (auto &pure_arg : pure_args) {
+        if (!pure_arg.empty()) {
+            free_vars.push_back(pure_arg);
         }
     }
     if (check.reduction_domain.defined()) {
-        for (size_t i = 0; i < check.reduction_domain.domain().size(); i++) {
-            string rvar = check.reduction_domain.domain()[i].var;
+        for (const auto &i : check.reduction_domain.domain()) {
+            string rvar = i.var;
             free_vars.push_back(rvar);
         }
     }
     int tag = rand_counter++;
-    for (size_t i = 0; i < args.size(); i++) {
-        args[i] = lower_random(args[i], free_vars, tag);
+    for (auto &arg : args) {
+        arg = lower_random(arg, free_vars, tag);
     }
-    for (size_t i = 0; i < values.size(); i++) {
-        values[i] = lower_random(values[i], free_vars, tag);
+    for (auto &value : values) {
+        value = lower_random(value, free_vars, tag);
     }
     if (check.reduction_domain.defined()) {
         check.reduction_domain.set_predicate(lower_random(check.reduction_domain.predicate(), free_vars, tag));
@@ -622,11 +621,11 @@ void Function::define_update(const vector<Expr> &_args, vector<Expr> values) {
     // function itself, introducing circular references and hence
     // memory leaks. We need to break these cycles.
     WeakenFunctionPtrs weakener(contents.get());
-    for (size_t i = 0; i < args.size(); i++) {
-        args[i] = weakener.mutate(args[i]);
+    for (auto &arg : args) {
+        arg = weakener.mutate(arg);
     }
-    for (size_t i = 0; i < values.size(); i++) {
-        values[i] = weakener.mutate(values[i]);
+    for (auto &value : values) {
+        value = weakener.mutate(value);
     }
     if (check.reduction_domain.defined()) {
         check.reduction_domain.set_predicate(
@@ -638,12 +637,11 @@ void Function::define_update(const vector<Expr> &_args, vector<Expr> values) {
 
     // First add any reduction domain
     if (check.reduction_domain.defined()) {
-        for (size_t i = 0; i < check.reduction_domain.domain().size(); i++) {
+        for (const auto &rvar : check.reduction_domain.domain()) {
             // Is this RVar actually pure (safe to parallelize and
             // reorder)? It's pure if one value of the RVar can never
             // access from the same memory that another RVar is
             // writing to.
-            const ReductionVariable &rvar = check.reduction_domain.domain()[i];
             const string &v = rvar.var;
 
             bool pure = can_parallelize_rvar(v, name(), r);
@@ -654,9 +652,9 @@ void Function::define_update(const vector<Expr> &_args, vector<Expr> values) {
     }
 
     // Then add the pure args outside of that
-    for (size_t i = 0; i < pure_args.size(); i++) {
-        if (!pure_args[i].empty()) {
-            Dim d = {pure_args[i], ForType::Serial, DeviceAPI::None, Dim::Type::PureVar};
+    for (auto &pure_arg : pure_args) {
+        if (!pure_arg.empty()) {
+            Dim d = {pure_arg, ForType::Serial, DeviceAPI::None, Dim::Type::PureVar};
             r.schedule().dims().push_back(d);
         }
     }
@@ -701,9 +699,9 @@ void Function::define_extern(const std::string &function_name,
 
     std::vector<string> arg_names;
     std::vector<Expr> arg_exprs;
-    for (size_t i = 0; i < args.size(); i++) {
-        arg_names.push_back(args[i].name());
-        arg_exprs.push_back(args[i]);
+    for (const auto &arg : args) {
+        arg_names.push_back(arg.name());
+        arg_exprs.push_back(arg);
     }
     contents->args = arg_names;
     contents->extern_function_name = function_name;
@@ -1024,8 +1022,8 @@ class SubstituteCalls : public IRMutator {
     }
 
 public:
-    SubstituteCalls(const map<FunctionPtr, FunctionPtr> &substitutions)
-        : substitutions(substitutions) {
+    SubstituteCalls(map<FunctionPtr, FunctionPtr> substitutions)
+        : substitutions(std::move(substitutions)) {
     }
 };
 

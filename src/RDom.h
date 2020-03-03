@@ -36,8 +36,8 @@ public:
     }
 
     /** Construct an RVar with the given name */
-    explicit RVar(const std::string &n)
-        : _name(n) {
+    explicit RVar(std::string n)
+        : _name(std::move(n)) {
     }
 
     /** Construct a reduction variable with the given name and

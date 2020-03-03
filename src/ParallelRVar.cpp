@@ -32,9 +32,9 @@ class FindLoads : public IRVisitor {
 
     void visit(const Let *op) override {
         IRVisitor::visit(op);
-        for (size_t i = 0; i < loads.size(); i++) {
-            for (size_t j = 0; j < loads[i].size(); j++) {
-                loads[i][j] = graph_substitute(op->name, op->value, loads[i][j]);
+        for (auto &load : loads) {
+            for (auto &j : load) {
+                j = graph_substitute(op->name, op->value, j);
             }
         }
     }
@@ -96,8 +96,8 @@ bool can_parallelize_rvar(const string &v,
     const vector<ReductionVariable> &rvars = r.schedule().rvars();
 
     FindLoads find(f);
-    for (size_t i = 0; i < values.size(); i++) {
-        values[i].accept(&find);
+    for (const auto &value : values) {
+        value.accept(&find);
     }
 
     // Make an expr representing the store done by a different thread.
@@ -122,11 +122,11 @@ bool can_parallelize_rvar(const string &v,
 
     // Add expressions that are true if there's a collision between
     // the other thread's store and this thread's loads.
-    for (size_t i = 0; i < find.loads.size(); i++) {
-        internal_assert(find.loads[i].size() == other_store.size());
+    for (auto &load : find.loads) {
+        internal_assert(load.size() == other_store.size());
         Expr check = const_true();
-        for (size_t j = 0; j < find.loads[i].size(); j++) {
-            check = check && (distinct_v && (find.loads[i][j] == other_store[j]));
+        for (size_t j = 0; j < load.size(); j++) {
+            check = check && (distinct_v && (load[j] == other_store[j]));
         }
         hazard = hazard || check;
     }

@@ -80,9 +80,9 @@ string get_sanitized_name(string name) {
     if (isdigit(name[0])) {
         name = "_" + name;
     }
-    for (size_t i = 0; i < name.size(); ++i) {
-        if (!isalnum(name[i])) {
-            name[i] = '_';
+    for (char &i : name) {
+        if (!isalnum(i)) {
+            i = '_';
         }
     }
     return name;
@@ -157,9 +157,9 @@ struct DependenceAnalysis {
         set<string> prods;
         bool only_regions_computed;
 
-        RegionsRequiredQuery(const string &f, int stage, const set<string> &prods,
+        RegionsRequiredQuery(string f, int stage, set<string> prods,
                              bool only_regions_computed)
-            : f(f), stage(stage), prods(prods),
+            : f(std::move(f)), stage(stage), prods(std::move(prods)),
               only_regions_computed(only_regions_computed) {
         }
 
@@ -191,17 +191,17 @@ struct DependenceAnalysis {
         // Regions required to compute 'bounds' given a particular
         // RegionsRequiredQuery.
         map<string, Box> regions;
-        RegionsRequired(const DimBounds &b, const map<string, Box> &r)
-            : bounds(b), regions(r) {
+        RegionsRequired(DimBounds b, map<string, Box> r)
+            : bounds(std::move(b)), regions(std::move(r)) {
         }
     };
     // Cache for bounds queries (bound queries with the same parameters are
     // common during the grouping process).
     map<RegionsRequiredQuery, vector<RegionsRequired>> regions_required_cache;
 
-    DependenceAnalysis(const map<string, Function> &env, const vector<string> &order,
-                       const FuncValueBounds &func_val_bounds)
-        : env(env), order(order), func_val_bounds(func_val_bounds) {
+    DependenceAnalysis(map<string, Function> env, vector<string> order,
+                       FuncValueBounds func_val_bounds)
+        : env(std::move(env)), order(std::move(order)), func_val_bounds(std::move(func_val_bounds)) {
     }
 
     // Return the regions of the producers ('prods') required to compute the region
@@ -269,11 +269,11 @@ struct StageBounds {
     FStage f_stage;
     DimBounds bounds;
 
-    StageBounds(const FStage &fs, const DimBounds &b)
-        : f_stage(fs), bounds(b) {
+    StageBounds(FStage fs, DimBounds b)
+        : f_stage(std::move(fs)), bounds(std::move(b)) {
     }
-    StageBounds(Function func, uint32_t stage_num, const DimBounds &b)
-        : f_stage(FStage(std::move(func), stage_num)), bounds(b) {
+    StageBounds(Function func, uint32_t stage_num, DimBounds b)
+        : f_stage(FStage(std::move(func), stage_num)), bounds(std::move(b)) {
     }
 
     bool operator==(const StageBounds &other) const {
@@ -725,8 +725,8 @@ struct AutoSchedule {
         string function;
         size_t stage;
 
-        Stage(const string &f, size_t s)
-            : function(f), stage(s) {
+        Stage(string f, size_t s)
+            : function(std::move(f)), stage(s) {
         }
 
         bool operator==(const Stage &other) const {
@@ -825,8 +825,8 @@ struct AutoSchedule {
                 if (s.first > 0) {
                     schedule_ss << ".update(" << std::to_string(s.first - 1) << ")";
                 }
-                for (size_t i = 0; i < s.second.size(); ++i) {
-                    schedule_ss << "\n        ." << s.second[i];
+                for (const auto &i : s.second) {
+                    schedule_ss << "\n        ." << i;
                 }
                 schedule_ss << ";\n";
             }
@@ -868,8 +868,8 @@ struct Partitioner {
         string prod;
         FStage cons;
 
-        GroupingChoice(const string &prod, const FStage &cons)
-            : prod(prod), cons(cons) {
+        GroupingChoice(string prod, FStage cons)
+            : prod(std::move(prod)), cons(std::move(cons)) {
         }
 
         bool operator==(const GroupingChoice &other) const {
@@ -944,8 +944,8 @@ struct Partitioner {
         // Tile sizes along dimensions of the output function of the group.
         map<string, Expr> tile_sizes;
 
-        Group(const FStage &output, const vector<FStage> &members)
-            : output(output), members(members) {
+        Group(FStage output, vector<FStage> members)
+            : output(std::move(output)), members(std::move(members)) {
         }
 
         friend std::ostream &operator<<(std::ostream &stream, const Group &g) {
@@ -993,8 +993,8 @@ struct Partitioner {
         GroupAnalysis()
             : cost(Cost()), parallelism(Expr()) {
         }
-        GroupAnalysis(const Cost &c, Expr p)
-            : cost(c), parallelism(std::move(p)) {
+        GroupAnalysis(Cost c, Expr p)
+            : cost(std::move(c)), parallelism(std::move(p)) {
         }
 
         inline bool defined() const {
@@ -1022,8 +1022,8 @@ struct Partitioner {
     struct GroupConfig {
         map<string, Expr> tile_sizes;
         GroupAnalysis analysis;
-        GroupConfig(const map<string, Expr> &tile_sizes, const GroupAnalysis &analysis)
-            : tile_sizes(tile_sizes), analysis(analysis) {
+        GroupConfig(map<string, Expr> tile_sizes, GroupAnalysis analysis)
+            : tile_sizes(std::move(tile_sizes)), analysis(std::move(analysis)) {
         }
         GroupConfig()
             : tile_sizes(map<string, Expr>()), analysis(GroupAnalysis()) {
@@ -1690,8 +1690,8 @@ void Partitioner::group(Partitioner::Level level) {
         debug(3) << "\n============================" << '\n';
         debug(3) << "Current grouping candidates:" << '\n';
         debug(3) << "============================" << '\n';
-        for (size_t i = 0; i < cand.size(); ++i) {
-            debug(3) << "{" << cand[i].first << ", " << cand[i].second << "}" << '\n';
+        for (auto &i : cand) {
+            debug(3) << "{" << i.first << ", " << i.second << "}" << '\n';
         }
 
         vector<pair<GroupingChoice, GroupConfig>> best = choose_candidate_grouping(cand, level);
@@ -1920,8 +1920,8 @@ Partitioner::GroupAnalysis Partitioner::analyze_group(const Group &g, bool show_
     Box out_tile_extent;
     if (g.output.stage_num == 0) {
         const vector<string> &args = g.output.func.args();
-        for (size_t d = 0; d < args.size(); d++) {
-            const auto &iter = tile_bounds.find(args[d]);
+        for (const auto &arg : args) {
+            const auto &iter = tile_bounds.find(arg);
             if (iter != tile_bounds.end()) {
                 out_tile_extent.push_back(iter->second);
             } else {

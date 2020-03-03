@@ -19,8 +19,8 @@ class InferArguments : public IRGraphVisitor {
 public:
     vector<InferredArgument> &args;
 
-    InferArguments(vector<InferredArgument> &a, const vector<Function> &o, const Stmt &body)
-        : args(a), outputs(o) {
+    InferArguments(vector<InferredArgument> &a, vector<Function> o, const Stmt &body)
+        : args(a), outputs(std::move(o)) {
         args.clear();
         for (const Function &f : outputs) {
             visit_function(f);

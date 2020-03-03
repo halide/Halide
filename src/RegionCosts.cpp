@@ -1,10 +1,12 @@
 #include "RegionCosts.h"
+
 #include "FindCalls.h"
 #include "IRMutator.h"
 #include "IRVisitor.h"
 #include "PartitionLoops.h"
 #include "RealizationOrder.h"
 #include "Simplify.h"
+#include <utility>
 
 namespace Halide {
 namespace Internal {
@@ -47,8 +49,8 @@ class FindImageInputs : public IRVisitor {
                 }
             }
         }
-        for (size_t i = 0; i < call->args.size(); i++) {
-            call->args[i].accept(this);
+        for (const auto &arg : call->args) {
+            arg.accept(this);
         }
     }
 
@@ -236,8 +238,8 @@ class ExprCost : public IRVisitor {
             }
         }
 
-        for (size_t i = 0; i < call->args.size(); i++) {
-            call->args[i].accept(this);
+        for (const auto &arg : call->args) {
+            arg.accept(this);
         }
     }
 
@@ -299,15 +301,13 @@ class ExprCost : public IRVisitor {
     }
 
 public:
-    int64_t arith;
-    int64_t memory;
+    int64_t arith{0};
+    int64_t memory{0};
     // Detailed breakdown of bytes loaded by the allocation or function
     // they are loaded from.
     map<string, int64_t> detailed_byte_loads;
 
-    ExprCost()
-        : arith(0), memory(0) {
-    }
+    ExprCost() = default;
 };
 
 // Return the number of bytes required to store a single value of the
@@ -316,8 +316,8 @@ Expr get_func_value_size(const Function &f) {
     Expr size = 0;
     const vector<Type> &types = f.output_types();
     internal_assert(!types.empty());
-    for (size_t i = 0; i < types.size(); i++) {
-        size += types[i].bytes();
+    for (auto type : types) {
+        size += type.bytes();
     }
     return simplify(size);
 }
@@ -392,9 +392,9 @@ map<string, Expr> compute_expr_detailed_byte_loads(Expr expr) {
 
 }  // anonymous namespace
 
-RegionCosts::RegionCosts(const map<string, Function> &_env,
-                         const vector<string> &_order)
-    : env(_env), order(_order) {
+RegionCosts::RegionCosts(map<string, Function> _env,
+                         vector<string> _order)
+    : env(std::move(_env)), order(std::move(_order)) {
     for (const auto &kv : env) {
         // Pre-compute the function costs without any inlining.
         func_cost[kv.first] = get_func_cost(kv.second);

@@ -33,7 +33,7 @@ class FindLinearExpressions : public IRMutator {
 protected:
     using IRMutator::visit;
 
-    bool in_glsl_loops;
+    bool in_glsl_loops{false};
 
     Expr tag_linear_expression(Expr e, const std::string &name = unique_name('a')) {
 
@@ -401,18 +401,16 @@ public:
     unsigned int order;
     bool found;
 
-    unsigned int total_found;
+    unsigned int total_found{0};
 
     // This parameter controls the maximum number of linearly varying
     // expressions halide will pull out of the fragment shader and evaluate per
     // vertex, and allow the GPU to linearly interpolate across the domain. For
     // OpenGL ES 2.0 we can pass 16 vec4 varying attributes, or 64 scalars. Two
     // scalar slots are used by boilerplate code to pass pixel coordinates.
-    const unsigned int max_expressions;
+    const unsigned int max_expressions{62};
 
-    FindLinearExpressions()
-        : in_glsl_loops(false), total_found(0), max_expressions(62) {
-    }
+    FindLinearExpressions() = default;
 };
 
 Stmt find_linear_expressions(const Stmt &s) {
@@ -924,9 +922,9 @@ void IRFilter::visit(const Call *op) {
     }
 
     stmt = Stmt();
-    for (size_t i = 0; i < new_args.size(); ++i) {
-        if (new_args[i].defined()) {
-            stmt = make_block(new_args[i], stmt);
+    for (auto &new_arg : new_args) {
+        if (new_arg.defined()) {
+            stmt = make_block(new_arg, stmt);
         }
     }
 }
@@ -971,8 +969,8 @@ void IRFilter::visit(const Provide *op) {
 
 void IRFilter::visit(const Allocate *op) {
     stmt = Stmt();
-    for (size_t i = 0; i < op->extents.size(); i++) {
-        Stmt new_extent = mutate(op->extents[i]);
+    for (const auto &extent : op->extents) {
+        Stmt new_extent = mutate(extent);
         if (new_extent.defined())
             stmt = make_block(new_extent, stmt);
     }
@@ -993,9 +991,9 @@ void IRFilter::visit(const Realize *op) {
     stmt = Stmt();
 
     // Mutate the bounds
-    for (size_t i = 0; i < op->bounds.size(); i++) {
-        Expr old_min = op->bounds[i].min;
-        Expr old_extent = op->bounds[i].extent;
+    for (const auto &bound : op->bounds) {
+        Expr old_min = bound.min;
+        Expr old_extent = bound.extent;
         Stmt new_min = mutate(old_min);
         Stmt new_extent = mutate(old_extent);
 
@@ -1187,7 +1185,7 @@ public:
 
     // Expressions for the spatial values of each coordinate in the GPU scheduled
     // loop dimensions.
-    typedef std::map<std::string, std::vector<Expr>> DimsType;
+    using DimsType = std::map<std::string, std::vector<Expr>>;
     DimsType dims;
 
     // The channel of each varying attribute in the interleaved vertex buffer

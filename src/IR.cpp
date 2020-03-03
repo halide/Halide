@@ -375,11 +375,11 @@ Stmt Store::make(const std::string &name, Expr value, Expr index, Parameter para
 
 Stmt Provide::make(const std::string &name, const std::vector<Expr> &values, const std::vector<Expr> &args) {
     internal_assert(!values.empty()) << "Provide of no values\n";
-    for (size_t i = 0; i < values.size(); i++) {
-        internal_assert(values[i].defined()) << "Provide of undefined value\n";
+    for (const auto &value : values) {
+        internal_assert(value.defined()) << "Provide of undefined value\n";
     }
-    for (size_t i = 0; i < args.size(); i++) {
-        internal_assert(args[i].defined()) << "Provide to undefined location\n";
+    for (const auto &arg : args) {
+        internal_assert(arg.defined()) << "Provide to undefined location\n";
     }
 
     Provide *node = new Provide;
@@ -393,9 +393,9 @@ Stmt Allocate::make(const std::string &name, Type type, MemoryType memory_type,
                     const std::vector<Expr> &extents,
                     Expr condition, Stmt body,
                     Expr new_expr, const std::string &free_function) {
-    for (size_t i = 0; i < extents.size(); i++) {
-        internal_assert(extents[i].defined()) << "Allocate of undefined extent\n";
-        internal_assert(extents[i].type().is_scalar() == 1) << "Allocate of vector extent\n";
+    for (const auto &extent : extents) {
+        internal_assert(extent.defined()) << "Allocate of undefined extent\n";
+        internal_assert(extent.type().is_scalar() == 1) << "Allocate of vector extent\n";
     }
     internal_assert(body.defined()) << "Allocate of undefined\n";
     internal_assert(condition.defined()) << "Allocate with undefined condition\n";
@@ -416,8 +416,8 @@ Stmt Allocate::make(const std::string &name, Type type, MemoryType memory_type,
 int32_t Allocate::constant_allocation_size(const std::vector<Expr> &extents, const std::string &name) {
     int64_t result = 1;
 
-    for (size_t i = 0; i < extents.size(); i++) {
-        if (const IntImm *int_size = extents[i].as<IntImm>()) {
+    for (const auto &extent : extents) {
+        if (const IntImm *int_size = extent.as<IntImm>()) {
             // Check if the individual dimension is > 2^31 - 1. Not
             // currently necessary because it's an int32_t, which is
             // always smaller than 2^31 - 1. If we ever upgrade the
@@ -455,11 +455,11 @@ Stmt Free::make(const std::string &name) {
 }
 
 Stmt Realize::make(const std::string &name, const std::vector<Type> &types, MemoryType memory_type, const Region &bounds, Expr condition, Stmt body) {
-    for (size_t i = 0; i < bounds.size(); i++) {
-        internal_assert(bounds[i].min.defined()) << "Realize of undefined\n";
-        internal_assert(bounds[i].extent.defined()) << "Realize of undefined\n";
-        internal_assert(bounds[i].min.type().is_scalar()) << "Realize of vector size\n";
-        internal_assert(bounds[i].extent.type().is_scalar()) << "Realize of vector size\n";
+    for (const auto &bound : bounds) {
+        internal_assert(bound.min.defined()) << "Realize of undefined\n";
+        internal_assert(bound.extent.defined()) << "Realize of undefined\n";
+        internal_assert(bound.min.type().is_scalar()) << "Realize of vector size\n";
+        internal_assert(bound.extent.type().is_scalar()) << "Realize of vector size\n";
     }
     internal_assert(body.defined()) << "Realize of undefined\n";
     internal_assert(!types.empty()) << "Realize has empty type\n";
@@ -480,11 +480,11 @@ Stmt Prefetch::make(const std::string &name, const std::vector<Type> &types,
                     const Region &bounds,
                     const PrefetchDirective &prefetch,
                     const Expr &condition, const Stmt &body) {
-    for (size_t i = 0; i < bounds.size(); i++) {
-        internal_assert(bounds[i].min.defined()) << "Prefetch of undefined\n";
-        internal_assert(bounds[i].extent.defined()) << "Prefetch of undefined\n";
-        internal_assert(bounds[i].min.type().is_scalar()) << "Prefetch of vector size\n";
-        internal_assert(bounds[i].extent.type().is_scalar()) << "Prefetch of vector size\n";
+    for (const auto &bound : bounds) {
+        internal_assert(bound.min.defined()) << "Prefetch of undefined\n";
+        internal_assert(bound.extent.defined()) << "Prefetch of undefined\n";
+        internal_assert(bound.min.type().is_scalar()) << "Prefetch of vector size\n";
+        internal_assert(bound.extent.type().is_scalar()) << "Prefetch of vector size\n";
     }
     internal_assert(!types.empty()) << "Prefetch has empty type\n";
     internal_assert(body.defined()) << "Prefetch of undefined\n";
@@ -663,15 +663,15 @@ Expr Call::make(Type type, const std::string &name, const std::vector<Expr> &arg
         internal_assert(args[i].defined()) << "Call of " << name << " with argument " << i << " undefined.\n";
     }
     if (call_type == Halide) {
-        for (size_t i = 0; i < args.size(); i++) {
-            internal_assert(args[i].type() == Int(32))
+        for (const auto &arg : args) {
+            internal_assert(arg.type() == Int(32))
                 << "Args to call to halide function must be type Int(32)\n";
         }
     } else if (call_type == Image) {
         internal_assert((param.defined() || image.defined()))
             << "Call node to undefined image\n";
-        for (size_t i = 0; i < args.size(); i++) {
-            internal_assert(args[i].type() == Int(32))
+        for (const auto &arg : args) {
+            internal_assert(arg.type() == Int(32))
                 << "Args to load from image must be type Int(32)\n";
         }
     }
@@ -753,8 +753,8 @@ Expr Shuffle::make_concat(const std::vector<Expr> &vectors) {
 
     std::vector<int> indices;
     int lane = 0;
-    for (int i = 0; i < (int)vectors.size(); i++) {
-        for (int j = 0; j < vectors[i].type().lanes(); j++) {
+    for (const auto &vector : vectors) {
+        for (int j = 0; j < vector.type().lanes(); j++) {
             indices.push_back(lane++);
         }
     }

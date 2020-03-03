@@ -251,8 +251,8 @@ struct FuseLoopLevel {
     FuseLoopLevel()
         : level(LoopLevel::inlined().lock()) {
     }
-    FuseLoopLevel(const LoopLevel &level, const std::map<std::string, LoopAlignStrategy> &align)
-        : level(level), align(align) {
+    FuseLoopLevel(LoopLevel level, std::map<std::string, LoopAlignStrategy> align)
+        : level(std::move(level)), align(std::move(align)) {
     }
 };
 
@@ -351,9 +351,9 @@ struct FusedPair {
     std::string var_name;
 
     FusedPair() = default;
-    FusedPair(const std::string &f1, size_t s1, const std::string &f2,
-              size_t s2, const std::string &var)
-        : func_1(f1), func_2(f2), stage_1(s1), stage_2(s2), var_name(var) {
+    FusedPair(std::string f1, size_t s1, std::string f2,
+              size_t s2, std::string var)
+        : func_1(std::move(f1)), func_2(std::move(f2)), stage_1(s1), stage_2(s2), var_name(std::move(var)) {
     }
 
     bool operator==(const FusedPair &other) const {
@@ -402,9 +402,7 @@ public:
     FuncSchedule(IntrusivePtr<FuncScheduleContents> c)
         : contents(std::move(c)) {
     }
-    FuncSchedule(const FuncSchedule &other)
-        : contents(other.contents) {
-    }
+    FuncSchedule(const FuncSchedule &other) = default;
     FuncSchedule();
 
     /** Return a deep copy of this FuncSchedule. It recursively deep copies all
@@ -500,9 +498,7 @@ public:
     StageSchedule(IntrusivePtr<StageScheduleContents> c)
         : contents(std::move(c)) {
     }
-    StageSchedule(const StageSchedule &other)
-        : contents(other.contents) {
-    }
+    StageSchedule(const StageSchedule &other) = default;
     StageSchedule();
 
     /** Return a copy of this StageSchedule. */

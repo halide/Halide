@@ -282,15 +282,15 @@ std::string Stage::name() const {
 void Stage::set_dim_type(const VarOrRVar &var, ForType t) {
     bool found = false;
     vector<Dim> &dims = definition.schedule().dims();
-    for (size_t i = 0; i < dims.size(); i++) {
-        if (var_name_match(dims[i].var, var.name())) {
+    for (auto &dim : dims) {
+        if (var_name_match(dim.var, var.name())) {
             found = true;
-            dims[i].for_type = t;
+            dim.for_type = t;
 
             // If it's an rvar and the for type is parallel, we need to
             // validate that this doesn't introduce a race condition,
             // unless it is flagged explicitly or is a associative atomic operation.
-            if (!dims[i].is_pure() && var.is_rvar && is_parallel(t)) {
+            if (!dim.is_pure() && var.is_rvar && is_parallel(t)) {
                 if (!definition.schedule().allow_race_conditions() &&
                     definition.schedule().atomic()) {
                     if (!definition.schedule().override_atomic_associativity_test()) {
@@ -328,10 +328,10 @@ void Stage::set_dim_type(const VarOrRVar &var, ForType t) {
                     << " no race conditions, and that Halide is being too cautious.\n";
             }
         } else if (t == ForType::Vectorized) {
-            user_assert(dims[i].for_type != ForType::Vectorized)
+            user_assert(dim.for_type != ForType::Vectorized)
                 << "In schedule for " << name()
                 << ", can't vectorize across " << var.name()
-                << " because Func is already vectorized across " << dims[i].var << "\n";
+                << " because Func is already vectorized across " << dim.var << "\n";
         }
     }
 
@@ -348,10 +348,10 @@ void Stage::set_dim_type(const VarOrRVar &var, ForType t) {
 void Stage::set_dim_device_api(const VarOrRVar &var, DeviceAPI device_api) {
     bool found = false;
     vector<Dim> &dims = definition.schedule().dims();
-    for (size_t i = 0; i < dims.size(); i++) {
-        if (var_name_match(dims[i].var, var.name())) {
+    for (auto &dim : dims) {
+        if (var_name_match(dim.var, var.name())) {
             found = true;
-            dims[i].device_api = device_api;
+            dim.device_api = device_api;
         }
     }
 
@@ -368,8 +368,8 @@ void Stage::set_dim_device_api(const VarOrRVar &var, DeviceAPI device_api) {
 std::string Stage::dump_argument_list() const {
     std::ostringstream oss;
     oss << "Vars:";
-    for (size_t i = 0; i < definition.schedule().dims().size(); i++) {
-        oss << " " << definition.schedule().dims()[i].var;
+    for (const auto &i : definition.schedule().dims()) {
+        oss << " " << i.var;
     }
     oss << "\n";
     return oss.str();
@@ -401,9 +401,9 @@ class SubstituteSelfReference : public IRMutator {
     }
 
 public:
-    SubstituteSelfReference(const string &func, const Function &substitute,
-                            const vector<Var> &new_args)
-        : func(func), substitute(substitute), new_args(new_args) {
+    SubstituteSelfReference(string func, const Function &substitute,
+                            vector<Var> new_args)
+        : func(std::move(func)), substitute(substitute), new_args(std::move(new_args)) {
         internal_assert(substitute.get_contents().defined());
     }
 };
@@ -915,13 +915,13 @@ void Stage::split(const string &old, const string &outer, const string &inner, c
     vector<Dim> &dims = definition.schedule().dims();
 
     // Check that the new names aren't already in the dims list.
-    for (size_t i = 0; i < dims.size(); i++) {
+    for (auto &dim : dims) {
         string new_names[2] = {inner, outer};
-        for (int j = 0; j < 2; j++) {
-            if (var_name_match(dims[i].var, new_names[j]) && new_names[j] != old) {
+        for (auto &new_name : new_names) {
+            if (var_name_match(dim.var, new_name) && new_name != old) {
                 user_error << "In schedule for " << name()
-                           << ", can't create var " << new_names[j]
-                           << " using a split or tile, because " << new_names[j]
+                           << ", can't create var " << new_name
+                           << " using a split or tile, because " << new_name
                            << " is already used in this Func's schedule elsewhere.\n"
                            << dump_argument_list();
             }
@@ -2354,10 +2354,10 @@ Func &Func::shader(const Var &x, const Var &y, const Var &c, DeviceAPI device_ap
 
     bool constant_bounds = false;
     FuncSchedule &sched = func.schedule();
-    for (size_t i = 0; i < sched.bounds().size(); i++) {
-        if (c.name() == sched.bounds()[i].var) {
-            constant_bounds = is_const(sched.bounds()[i].min) &&
-                              is_const(sched.bounds()[i].extent);
+    for (auto &i : sched.bounds()) {
+        if (c.name() == i.var) {
+            constant_bounds = is_const(i.min) &&
+                              is_const(i.extent);
             break;
         }
     }
@@ -2430,9 +2430,9 @@ Func &Func::align_storage(const Var &dim, const Expr &alignment) {
     invalidate_cache();
 
     vector<StorageDim> &dims = func.schedule().storage_dims();
-    for (size_t i = 0; i < dims.size(); i++) {
-        if (var_name_match(dims[i].var, dim.name())) {
-            dims[i].alignment = alignment;
+    for (auto &i : dims) {
+        if (var_name_match(i.var, dim.name())) {
+            i.alignment = alignment;
             return *this;
         }
     }
@@ -2445,10 +2445,10 @@ Func &Func::fold_storage(const Var &dim, const Expr &factor, bool fold_forward) 
     invalidate_cache();
 
     vector<StorageDim> &dims = func.schedule().storage_dims();
-    for (size_t i = 0; i < dims.size(); i++) {
-        if (var_name_match(dims[i].var, dim.name())) {
-            dims[i].fold_factor = factor;
-            dims[i].fold_forward = fold_forward;
+    for (auto &i : dims) {
+        if (var_name_match(i.var, dim.name())) {
+            i.fold_factor = factor;
+            i.fold_forward = fold_forward;
             return *this;
         }
     }
@@ -2574,8 +2574,8 @@ public:
 
     CountImplicitVars(const vector<Expr> &e)
         : count(0) {
-        for (size_t i = 0; i < e.size(); i++) {
-            e[i].accept(this);
+        for (const auto &i : e) {
+            i.accept(this);
         }
     }
 
@@ -2590,9 +2590,9 @@ public:
 };
 }  // namespace
 
-FuncRef::FuncRef(const Internal::Function &f, const vector<Expr> &a, int placeholder_pos,
+FuncRef::FuncRef(const Internal::Function &f, vector<Expr> a, int placeholder_pos,
                  int count)
-    : func(f), implicit_count(count), args(a) {
+    : func(f), implicit_count(count), args(std::move(a)) {
     implicit_placeholder_pos = placeholder_pos;
     Internal::check_call_arg_types(f.name(), &args, args.size());
 }
@@ -2620,8 +2620,8 @@ vector<Expr> FuncRef::args_with_implicit_vars(const vector<Expr> &e) const {
     }
 
     CountImplicitVars count(e);
-    for (size_t i = 0; i < a.size(); i++) {
-        a[i].accept(&count);
+    for (auto &i : a) {
+        i.accept(&count);
     }
 
     if (count.count > 0) {
@@ -2651,8 +2651,8 @@ vector<Expr> FuncRef::args_with_implicit_vars(const vector<Expr> &e) const {
     for (int i = 0; i < count.count; i++) {
         Var v = Var::implicit(i);
         bool found = false;
-        for (size_t j = 0; j < a.size(); j++) {
-            if (const Variable *arg = a[j].as<Variable>()) {
+        for (auto &j : a) {
+            if (const Variable *arg = j.as<Variable>()) {
                 if (arg->name == v.name()) {
                     found = true;
                 }
@@ -2868,8 +2868,8 @@ size_t FuncRef::size() const {
 }
 
 FuncTupleElementRef::FuncTupleElementRef(
-    const FuncRef &ref, const std::vector<Expr> &args, int idx)
-    : func_ref(ref), args(args), idx(idx) {
+    const FuncRef &ref, std::vector<Expr> args, int idx)
+    : func_ref(ref), args(std::move(args)), idx(idx) {
     internal_assert(func_ref.size() > 1)
         << "Func " << ref.function().name() << " does not return a Tuple\n";
     internal_assert(idx >= 0 && idx < (int)func_ref.size());

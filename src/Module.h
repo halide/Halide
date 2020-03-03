@@ -89,12 +89,12 @@ struct LoweredFunc {
      * the Target. */
     NameMangling name_mangling;
 
-    LoweredFunc(const std::string &name,
-                const std::vector<LoweredArgument> &args,
+    LoweredFunc(std::string name,
+                std::vector<LoweredArgument> args,
                 Stmt body,
                 LinkageType linkage,
                 NameMangling mangling = NameMangling::Default);
-    LoweredFunc(const std::string &name,
+    LoweredFunc(std::string name,
                 const std::vector<Argument> &args,
                 Stmt body,
                 LinkageType linkage,
@@ -196,7 +196,7 @@ void compile_standalone_runtime(const std::string &object_filename, Target t);
  */
 std::map<Output, std::string> compile_standalone_runtime(const std::map<Output, std::string> &output_files, Target t);
 
-typedef std::function<Module(const std::string &, const Target &)> ModuleProducer;
+using ModuleProducer = std::function<Module(const std::string &, const Target &)>;
 
 void compile_multitarget(const std::string &fn_name,
                          const std::map<Output, std::string> &output_files,

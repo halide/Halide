@@ -85,8 +85,8 @@ private:
 
 public:
     Symbol() = default;
-    Symbol(const std::string &name)
-        : name(name) {
+    Symbol(std::string name)
+        : name(std::move(name)) {
     }
 
     /** Accesses the name of this symbol. */
@@ -239,12 +239,12 @@ public:
         SHF_MASKPROC = 0xf0000000,
     };
 
-    typedef std::vector<Relocation> RelocationList;
-    typedef RelocationList::iterator relocation_iterator;
-    typedef RelocationList::const_iterator const_relocation_iterator;
+    using RelocationList = std::vector<Relocation>;
+    using relocation_iterator = RelocationList::iterator;
+    using const_relocation_iterator = RelocationList::const_iterator;
 
-    typedef std::vector<char>::iterator contents_iterator;
-    typedef std::vector<char>::const_iterator const_contents_iterator;
+    using contents_iterator = std::vector<char>::iterator;
+    using const_contents_iterator = std::vector<char>::const_iterator;
 
 private:
     std::string name;
@@ -258,8 +258,8 @@ private:
 
 public:
     Section() = default;
-    Section(const std::string &name, Type type)
-        : name(name), type(type) {
+    Section(std::string name, Type type)
+        : name(std::move(name)), type(type) {
     }
 
     Section &set_name(const std::string &name) {
@@ -336,7 +336,7 @@ public:
     }
     template<typename It>
     Section &prepend_contents(It begin, It end) {
-        typedef typename std::iterator_traits<It>::value_type T;
+        using T = typename std::iterator_traits<It>::value_type;
         uint64_t size_bytes = std::distance(begin, end) * sizeof(T);
         this->contents.insert(this->contents.begin(), begin, end);
 
@@ -470,13 +470,13 @@ public:
 
     // We use lists for sections and symbols to avoid iterator
     // invalidation when we modify the containers.
-    typedef std::list<Section> SectionList;
-    typedef typename SectionList::iterator section_iterator;
-    typedef typename SectionList::const_iterator const_section_iterator;
+    using SectionList = std::list<Section>;
+    using section_iterator = typename SectionList::iterator;
+    using const_section_iterator = typename SectionList::const_iterator;
 
-    typedef std::list<Symbol> SymbolList;
-    typedef typename SymbolList::iterator symbol_iterator;
-    typedef typename SymbolList::const_iterator const_symbol_iterator;
+    using SymbolList = std::list<Symbol>;
+    using symbol_iterator = typename SymbolList::iterator;
+    using const_symbol_iterator = typename SymbolList::const_iterator;
 
 private:
     SectionList secs;

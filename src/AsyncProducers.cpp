@@ -1,8 +1,10 @@
 #include "AsyncProducers.h"
+
 #include "ExprUsesVar.h"
 #include "IREquality.h"
 #include "IRMutator.h"
 #include "IROperator.h"
+#include <utility>
 
 namespace Halide {
 namespace Internal {
@@ -193,8 +195,8 @@ class GenerateProducerBody : public NoOpCollapsingMutator {
     set<string> inner_semaphores;
 
 public:
-    GenerateProducerBody(const string &f, const vector<Expr> &s, map<string, string> &a)
-        : func(f), sema(s), cloned_acquires(a) {
+    GenerateProducerBody(const string &f, vector<Expr> s, map<string, string> &a)
+        : func(f), sema(std::move(s)), cloned_acquires(a) {
     }
 };
 
@@ -250,8 +252,8 @@ class GenerateConsumerBody : public NoOpCollapsingMutator {
     }
 
 public:
-    GenerateConsumerBody(const string &f, const vector<Expr> &s)
-        : func(f), sema(s) {
+    GenerateConsumerBody(const string &f, vector<Expr> s)
+        : func(f), sema(std::move(s)) {
     }
 };
 

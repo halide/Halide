@@ -209,10 +209,8 @@ bool function_takes_user_context(const std::string &name) {
         "_halide_buffer_retire_crop_after_extern_stage",
         "_halide_buffer_retire_crops_after_extern_stage",
     };
-    const int num_funcs = sizeof(user_context_runtime_funcs) /
-                          sizeof(user_context_runtime_funcs[0]);
-    for (int i = 0; i < num_funcs; ++i) {
-        if (name == user_context_runtime_funcs[i]) {
+    for (auto &user_context_runtime_func : user_context_runtime_funcs) {
+        if (name == user_context_runtime_func) {
             return true;
         }
     }

@@ -27,8 +27,8 @@ struct ParameterContents {
     Expr scalar_min, scalar_max, scalar_estimate;
     const bool is_buffer;
 
-    ParameterContents(Type t, bool b, int d, const std::string &n)
-        : type(t), dimensions(d), name(n), buffer(Buffer<>()), data(0),
+    ParameterContents(Type t, bool b, int d, std::string n)
+        : type(t), dimensions(d), name(std::move(n)), buffer(Buffer<>()), data(0),
           host_alignment(t.bytes()), buffer_constraints(dimensions), is_buffer(b) {
         // stride_constraint[0] defaults to 1. This is important for
         // dense vectorization. You can unset it by setting it to a

@@ -1,5 +1,7 @@
 #include "Deinterleave.h"
 
+#include <utility>
+
 #include "CSE.h"
 #include "Debug.h"
 #include "IREquality.h"
@@ -25,9 +27,9 @@ public:
     std::vector<Stmt> &let_stmts;
     std::vector<Stmt> &stores;
 
-    StoreCollector(const std::string &name, int stride, int ms,
+    StoreCollector(std::string name, int stride, int ms,
                    std::vector<Stmt> &lets, std::vector<Stmt> &ss)
-        : store_name(name), store_stride(stride), max_stores(ms),
+        : store_name(std::move(name)), store_stride(stride), max_stores(ms),
           let_stmts(lets), stores(ss), collecting(true) {
     }
 
@@ -385,7 +387,7 @@ class Interleaver : public IRMutator {
 
     using IRMutator::visit;
 
-    bool should_deinterleave;
+    bool should_deinterleave{false};
     int num_lanes;
 
     Expr deinterleave_expr(Expr e) {
@@ -742,9 +744,7 @@ class Interleaver : public IRMutator {
     }
 
 public:
-    Interleaver()
-        : should_deinterleave(false) {
-    }
+    Interleaver() = default;
 };
 
 }  // namespace

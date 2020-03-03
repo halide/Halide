@@ -466,14 +466,14 @@ struct Evaluate : public StmtNode<Evaluate> {
 struct Call : public ExprNode<Call> {
     std::string name;
     std::vector<Expr> args;
-    typedef enum { Image,            ///< A load from an input image
-                   Extern,           ///< A call to an external C-ABI function, possibly with side-effects
-                   ExternCPlusPlus,  ///< A call to an external C-ABI function, possibly with side-effects
-                   PureExtern,       ///< A call to a guaranteed-side-effect-free external function
-                   Halide,           ///< A call to a Func
-                   Intrinsic,        ///< A possibly-side-effecty compiler intrinsic, which has special handling during codegen
-                   PureIntrinsic     ///< A side-effect-free version of the above.
-    } CallType;
+    using CallType = enum { Image,            ///< A load from an input image
+                            Extern,           ///< A call to an external C-ABI function, possibly with side-effects
+                            ExternCPlusPlus,  ///< A call to an external C-ABI function, possibly with side-effects
+                            PureExtern,       ///< A call to a guaranteed-side-effect-free external function
+                            Halide,           ///< A call to a Func
+                            Intrinsic,        ///< A possibly-side-effecty compiler intrinsic, which has special handling during codegen
+                            PureIntrinsic     ///< A side-effect-free version of the above.
+    };
     CallType call_type;
 
     // Halide uses calls internally to represent certain operations
@@ -482,7 +482,7 @@ struct Call : public ExprNode<Call> {
     // they can be referenced at static-initialization time without
     // risking ambiguous initalization order; we use a typedef to simplify
     // declaration.
-    typedef const char *const ConstString;
+    using ConstString = const char *const;
 
     // enums for various well-known intrinsics. (It is not *required* that all
     // intrinsics have an enum entry here, but as a matter of style, it is recommended.)

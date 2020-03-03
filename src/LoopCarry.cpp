@@ -227,15 +227,15 @@ class LoopCarryOverLoop : public IRMutator {
 
         vector<Stmt> stores;
         vector<Stmt> result;
-        for (size_t i = 0; i < v.size(); i++) {
-            if (v[i].as<Store>()) {
-                stores.push_back(v[i]);
+        for (auto &i : v) {
+            if (i.as<Store>()) {
+                stores.push_back(i);
             } else {
                 if (!stores.empty()) {
                     result.push_back(lift_carried_values_out_of_stmt(Block::make(stores)));
                     stores.clear();
                 }
-                result.push_back(mutate(v[i]));
+                result.push_back(mutate(i));
             }
         }
         if (!stores.empty()) {

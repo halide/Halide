@@ -15,13 +15,13 @@ using std::string;
 
 static string sanitize_name(const string &name) {
     ostringstream oss;
-    for (size_t i = 0; i < name.size(); i++) {
-        if (name[i] == '.' || name[i] == '_') {
+    for (char i : name) {
+        if (i == '.' || i == '_') {
             oss << '_';
-        } else if (!isalnum(name[i])) {
-            oss << "_" << (int)name[i];
+        } else if (!isalnum(i)) {
+            oss << "_" << (int)i;
         } else {
-            oss << name[i];
+            oss << i;
         }
     }
     return oss.str();
@@ -307,8 +307,8 @@ void PythonExtensionGen::compile(const LoweredFunc &f) {
         dest << "    " << print_type(&args[i]).second << " py_" << arg_names[i] << ";\n";
     }
     dest << "    if (!PyArg_ParseTupleAndKeywords(args, kwargs, \"";
-    for (size_t i = 0; i < args.size(); i++) {
-        dest << print_type(&args[i]).first;
+    for (const auto &arg : args) {
+        dest << print_type(&arg).first;
     }
     dest << "\", (char**)kwlist";
     for (size_t i = 0; i < args.size(); i++) {

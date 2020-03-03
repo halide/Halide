@@ -85,13 +85,12 @@ Stmt add_parameter_checks(const vector<Stmt> &preconditions, Stmt s, const Targe
     s = substitute(replace_with_constrained, s);
 
     // Inject the let statements
-    for (size_t i = 0; i < lets.size(); i++) {
-        s = LetStmt::make(lets[i].first, lets[i].second, s);
+    for (auto &let : lets) {
+        s = LetStmt::make(let.first, let.second, s);
     }
 
     // Inject the assert statements
-    for (size_t i = 0; i < asserts.size(); i++) {
-        ParamAssert p = asserts[i];
+    for (auto p : asserts) {
         // Upgrade the types to 64-bit versions for the error call
         Type wider = p.value.type().with_bits(64);
         p.limit_value = cast(wider, p.limit_value);

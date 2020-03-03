@@ -17,7 +17,7 @@
 namespace Halide {
 namespace Internal {
 
-typedef std::map<std::string, Interval> DimBounds;
+using DimBounds = std::map<std::string, Interval>;
 
 const int64_t unknown = std::numeric_limits<int64_t>::min();
 
@@ -31,8 +31,8 @@ class FindAllCalls : public IRVisitor {
             funcs_called.insert(call->name);
             call_args.emplace_back(call->name, call->args);
         }
-        for (size_t i = 0; i < call->args.size(); i++) {
-            call->args[i].accept(this);
+        for (const auto &arg : call->args) {
+            arg.accept(this);
         }
     }
 

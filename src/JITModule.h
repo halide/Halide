@@ -94,7 +94,7 @@ struct JITModule {
      * be nullptr for a JITModule which has not yet been compiled or one
      * that is not a Halide Func compilation at all. */
     // @{
-    typedef int (*argv_wrapper)(const void **args);
+    using argv_wrapper = int (*)(const void **);
     argv_wrapper argv_function() const;
     // @}
 
@@ -134,7 +134,7 @@ struct JITModule {
     bool compiled() const;
 };
 
-typedef int (*halide_task)(void *user_context, int, uint8_t *);
+using halide_task = int (*)(void *, int, uint8_t *);
 
 struct JITHandlers {
     void (*custom_print)(void *, const char *){nullptr};

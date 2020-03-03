@@ -1,9 +1,11 @@
 #include "Schedule.h"
+
 #include "Func.h"
 #include "Function.h"
 #include "IR.h"
 #include "IRMutator.h"
 #include "Var.h"
+#include <utility>
 
 namespace {
 
@@ -31,12 +33,12 @@ struct LoopLevelContents {
     bool is_rvar;
     bool locked;
 
-    LoopLevelContents(const std::string &func_name,
-                      const std::string &var_name,
+    LoopLevelContents(std::string func_name,
+                      std::string var_name,
                       bool is_rvar,
                       int stage_index,
                       bool locked)
-        : func_name(func_name), stage_index(stage_index), var_name(var_name),
+        : func_name(std::move(func_name)), stage_index(stage_index), var_name(std::move(var_name)),
           is_rvar(is_rvar), locked(locked) {
     }
 };
@@ -206,7 +208,7 @@ bool LoopLevel::operator==(const LoopLevel &other) const {
 
 namespace Internal {
 
-typedef std::map<FunctionPtr, FunctionPtr> DeepCopyMap;
+using DeepCopyMap = std::map<FunctionPtr, FunctionPtr>;
 
 /** A schedule for a halide function, which defines where, when, and
  * how it should be evaluated. */
@@ -218,12 +220,11 @@ struct FuncScheduleContents {
     std::vector<Bound> bounds;
     std::vector<Bound> estimates;
     std::map<std::string, Internal::FunctionPtr> wrappers;
-    MemoryType memory_type;
-    bool memoized, async;
+    MemoryType memory_type{MemoryType::Auto};
+    bool memoized{false}, async{false};
 
     FuncScheduleContents()
-        : store_level(LoopLevel::inlined()), compute_level(LoopLevel::inlined()),
-          memory_type(MemoryType::Auto), memoized(false), async(false){};
+        : store_level(LoopLevel::inlined()), compute_level(LoopLevel::inlined()){};
 
     // Pass an IRMutator through to all Exprs referenced in the FuncScheduleContents
     void mutate(IRMutator *mutator) {
@@ -279,15 +280,13 @@ struct StageScheduleContents {
     std::vector<PrefetchDirective> prefetches;
     FuseLoopLevel fuse_level;
     std::vector<FusedPair> fused_pairs;
-    bool touched;
-    bool allow_race_conditions;
-    bool atomic;
-    bool override_atomic_associativity_test;
+    bool touched{false};
+    bool allow_race_conditions{false};
+    bool atomic{false};
+    bool override_atomic_associativity_test{false};
 
     StageScheduleContents()
-        : fuse_level(FuseLoopLevel()), touched(false),
-          allow_race_conditions(false), atomic(false),
-          override_atomic_associativity_test(false) {
+        : fuse_level(FuseLoopLevel()) {
     }
 
     // Pass an IRMutator through to all Exprs referenced in the StageScheduleContents

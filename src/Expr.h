@@ -395,7 +395,7 @@ struct Range {
 };
 
 /** A multi-dimensional box. The outer product of the elements */
-typedef std::vector<Range> Region;
+using Region = std::vector<Range>;
 
 /** An enum describing a type of device API. Used by schedules, and in
  * the For loop IR node. */

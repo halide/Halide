@@ -2,6 +2,7 @@
 #include <limits>
 #include <map>
 #include <string>
+#include <utility>
 
 #include "CodeGen_Internal.h"
 #include "IRMutator.h"
@@ -27,8 +28,8 @@ public:
 
     string pipeline_name;
 
-    InjectProfiling(const string &pipeline_name)
-        : pipeline_name(pipeline_name) {
+    InjectProfiling(string pipeline_name)
+        : pipeline_name(std::move(pipeline_name)) {
         indices["overhead"] = 0;
         stack.push_back(0);
     }

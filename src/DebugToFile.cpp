@@ -36,8 +36,8 @@ class DebugToFile : public IRMutator {
             // what we're doing (e.g. so we trigger a copy-back from a
             // device pointer).
             Expr num_elements = 1;
-            for (size_t i = 0; i < op->bounds.size(); i++) {
-                num_elements *= op->bounds[i].extent;
+            for (const auto &bound : op->bounds) {
+                num_elements *= bound.extent;
             }
 
             int type_code = 0;

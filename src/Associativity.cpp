@@ -537,7 +537,7 @@ void check_associativity(const string &f, const vector<Expr> &args, const vector
 }  // anonymous namespace
 
 void associativity_test() {
-    typedef AssociativeOp::Replacement Replacement;
+    using Replacement = AssociativeOp::Replacement;
 
     {
         // Tests for saturating addition

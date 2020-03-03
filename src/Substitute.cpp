@@ -1,7 +1,9 @@
 #include "Substitute.h"
+
 #include "IREquality.h"
 #include "IRMutator.h"
 #include "Scope.h"
+#include <utility>
 
 namespace Halide {
 namespace Internal {
@@ -161,8 +163,8 @@ class GraphSubstitute : public IRGraphMutator {
     }
 
 public:
-    GraphSubstitute(const string &var, const Expr &value)
-        : var(var), value(value) {
+    GraphSubstitute(string var, Expr value)
+        : var(std::move(var)), value(std::move(value)) {
     }
 };
 
@@ -182,8 +184,8 @@ public:
         }
     }
 
-    GraphSubstituteExpr(const Expr &find, const Expr &replace)
-        : find(find), replace(replace) {
+    GraphSubstituteExpr(Expr find, Expr replace)
+        : find(std::move(find)), replace(std::move(replace)) {
     }
 };
 

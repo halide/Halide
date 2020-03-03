@@ -8,6 +8,7 @@
 #include "Var.h"
 
 #include <map>
+#include <utility>
 
 namespace Halide {
 namespace Internal {
@@ -16,10 +17,8 @@ namespace {
 
 class FindParameterDependencies : public IRGraphVisitor {
 public:
-    FindParameterDependencies() {
-    }
-    ~FindParameterDependencies() override {
-    }
+    FindParameterDependencies() = default;
+    ~FindParameterDependencies() override = default;
 
     void visit_function(const Function &function) {
         function.accept(this);
@@ -27,14 +26,14 @@ public:
         if (function.has_extern_definition()) {
             const std::vector<ExternFuncArgument> &extern_args =
                 function.extern_arguments();
-            for (size_t i = 0; i < extern_args.size(); i++) {
-                if (extern_args[i].is_buffer()) {
+            for (const auto &extern_arg : extern_args) {
+                if (extern_arg.is_buffer()) {
                     // Function with an extern definition
-                    record(Halide::Internal::Parameter(extern_args[i].buffer.type(), true,
-                                                       extern_args[i].buffer.dimensions(),
-                                                       extern_args[i].buffer.name()));
-                } else if (extern_args[i].is_image_param()) {
-                    record(extern_args[i].image_param);
+                    record(Halide::Internal::Parameter(extern_arg.buffer.type(), true,
+                                                       extern_arg.buffer.dimensions(),
+                                                       extern_arg.buffer.name()));
+                } else if (extern_arg.is_image_param()) {
+                    record(extern_arg.image_param);
                 }
             }
         }
@@ -130,8 +129,8 @@ public:
             return false;
         }
 
-        DependencyKey(uint32_t size_arg, const std::string &name_arg)
-            : size(size_arg), name(name_arg) {
+        DependencyKey(uint32_t size_arg, std::string name_arg)
+            : size(size_arg), name(std::move(name_arg)) {
         }
     };
 
@@ -144,8 +143,8 @@ public:
     std::map<DependencyKey, DependencyInfo> dependency_info;
 };
 
-typedef std::pair<FindParameterDependencies::DependencyKey, FindParameterDependencies::DependencyInfo> DependencyKeyInfoPair;
-typedef std::pair<const FindParameterDependencies::DependencyKey, FindParameterDependencies::DependencyInfo> ConstDependencyKeyInfoPair;
+using DependencyKeyInfoPair = std::pair<FindParameterDependencies::DependencyKey, FindParameterDependencies::DependencyInfo>;
+using ConstDependencyKeyInfoPair = std::pair<const FindParameterDependencies::DependencyKey, FindParameterDependencies::DependencyInfo>;
 
 class KeyInfo {
     FindParameterDependencies dependencies;

@@ -173,8 +173,7 @@ private:
     void visit(const StringImm *op) override {
         stream << open_span("StringImm");
         stream << '"';
-        for (size_t i = 0; i < op->value.size(); i++) {
-            unsigned char c = op->value[i];
+        for (unsigned char c : op->value) {
             if (c >= ' ' && c <= '~' && c != '\\' && c != '"') {
                 stream << c;
             } else {
@@ -486,9 +485,9 @@ private:
         stream << op->type;
         stream << close_span();
 
-        for (size_t i = 0; i < op->extents.size(); i++) {
+        for (const auto &extent : op->extents) {
             stream << " * ";
-            print(op->extents[i]);
+            print(extent);
         }
         stream << matched("]");
         if (!is_one(op->condition)) {

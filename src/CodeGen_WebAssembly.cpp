@@ -76,9 +76,7 @@ void CodeGen_WebAssembly::visit(const Cast *op) {
         {Target::WasmSimd128, true, UInt(16, 8), 0, "llvm.wasm.sub.saturate.unsigned.v8i16", u16_sat(wild_i32x_ - wild_i32x_)},
     };
 
-    for (size_t i = 0; i < sizeof(patterns) / sizeof(patterns[0]); i++) {
-        const Pattern &pattern = patterns[i];
-
+    for (const auto &pattern : patterns) {
         if (!target.has_feature(pattern.feature)) {
             continue;
         }
@@ -91,9 +89,9 @@ void CodeGen_WebAssembly::visit(const Cast *op) {
             bool match = true;
             if (pattern.wide_op) {
                 // Try to narrow the matches to the target type.
-                for (size_t i = 0; i < matches.size(); i++) {
-                    matches[i] = lossless_cast(op->type, matches[i]);
-                    if (!matches[i].defined()) {
+                for (auto &m : matches) {
+                    m = lossless_cast(op->type, m);
+                    if (!m.defined()) {
                         match = false;
                     }
                 }

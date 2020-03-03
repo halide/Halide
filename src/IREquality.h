@@ -5,6 +5,8 @@
  * Methods to test Exprs and Stmts for equality of value
  */
 
+#include <utility>
+
 #include "IR.h"
 
 namespace Halide {
@@ -57,9 +59,9 @@ public:
     }
 
     void clear() {
-        for (size_t i = 0; i < entries.size(); i++) {
-            entries[i].a = Expr();
-            entries[i].b = Expr();
+        for (auto &entrie : entries) {
+            entrie.a = Expr();
+            entrie.b = Expr();
         }
     }
 
@@ -94,13 +96,11 @@ if (m.contains(ExprWithCompareCache(query, &cache))) {...}
  */
 struct ExprWithCompareCache {
     Expr expr;
-    mutable IRCompareCache *cache;
+    mutable IRCompareCache *cache{nullptr};
 
-    ExprWithCompareCache()
-        : cache(nullptr) {
-    }
-    ExprWithCompareCache(const Expr &e, IRCompareCache *c)
-        : expr(e), cache(c) {
+    ExprWithCompareCache() = default;
+    ExprWithCompareCache(Expr e, IRCompareCache *c)
+        : expr(std::move(e)), cache(c) {
     }
 
     /** The comparison uses (and updates) the cache */

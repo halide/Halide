@@ -141,8 +141,8 @@ struct RegionCosts {
     /** Construct a region cost object for the pipeline. 'env' is a map of all
      * functions in the pipeline. 'order' is the realization order of functions
      * in the pipeline. The first function to be realized comes first. */
-    RegionCosts(const std::map<std::string, Function> &env,
-                const std::vector<std::string> &order);
+    RegionCosts(std::map<std::string, Function> env,
+                std::vector<std::string> order);
 };
 
 /** Return true if the cost of inlining a function is equivalent to the

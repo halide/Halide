@@ -170,8 +170,8 @@ struct Pattern {
     int flags;
 
     Pattern() = default;
-    Pattern(const string &intrin, Expr p, int flags = 0)
-        : intrin(intrin), pattern(std::move(p)), flags(flags) {
+    Pattern(string intrin, Expr p, int flags = 0)
+        : intrin(std::move(intrin)), pattern(std::move(p)), flags(flags) {
     }
 };
 
@@ -343,7 +343,7 @@ Expr apply_commutative_patterns(const T *op, const vector<Pattern> &patterns, co
     return op;
 }
 
-typedef pair<Expr, Expr> MulExpr;
+using MulExpr = pair<Expr, Expr>;
 
 // If ty is scalar, and x is a vector, try to remove a broadcast
 // from x prior to using lossless_cast on it.
@@ -1790,7 +1790,7 @@ public:
 class VtmpyGenerator : public IRGraphMutator {
 private:
     using IRMutator::visit;
-    typedef pair<Expr, size_t> LoadIndex;
+    using LoadIndex = pair<Expr, size_t>;
 
     // Check if vectors a and b point to the same buffer with the base of a
     // shifted by diff i.e. base(a) = base(b) + diff.
@@ -1924,19 +1924,19 @@ private:
                     }
                 }
 
-                for (auto iter = loads.begin(); iter != loads.end(); iter++) {
+                for (auto &load : loads) {
                     // Sort the bucket and compare bases of 3 adjacent vectors
                     // at a time. If they differ by vector stride, we've
                     // found a vtmpy
-                    std::sort(iter->second.begin(), iter->second.end(), loads_comparator);
-                    size_t vec_size = iter->second.size();
+                    std::sort(load.second.begin(), load.second.end(), loads_comparator);
+                    size_t vec_size = load.second.size();
                     for (size_t i = 0; i + 2 < vec_size; i++) {
-                        Expr v0 = iter->second[i].first;
-                        Expr v1 = iter->second[i + 1].first;
-                        Expr v2 = iter->second[i + 2].first;
-                        size_t v0_idx = iter->second[i].second;
-                        size_t v1_idx = iter->second[i + 1].second;
-                        size_t v2_idx = iter->second[i + 2].second;
+                        Expr v0 = load.second[i].first;
+                        Expr v1 = load.second[i + 1].first;
+                        Expr v2 = load.second[i + 2].first;
+                        size_t v0_idx = load.second[i].second;
+                        size_t v1_idx = load.second[i + 1].second;
+                        size_t v2_idx = load.second[i + 2].second;
                         if (is_const(mpys[v2_idx].second, 1) &&
                             is_base_shifted(v2, v1, 1) &&
                             is_base_shifted(v1, v0, 1)) {
@@ -1967,8 +1967,8 @@ private:
                         Expr mpy_res = mpy_a * mpy_b;
                         new_expr = new_expr.defined() ? new_expr + mpy_res : mpy_res;
                     }
-                    for (size_t i = 0; i < vtmpy_exprs.size(); i++) {
-                        new_expr = new_expr.defined() ? new_expr + vtmpy_exprs[i] : vtmpy_exprs[i];
+                    for (auto &vtmpy_expr : vtmpy_exprs) {
+                        new_expr = new_expr.defined() ? new_expr + vtmpy_expr : vtmpy_expr;
                     }
                     if (rest.defined()) {
                         new_expr = new_expr + rest;
@@ -2103,8 +2103,8 @@ class ScatterGatherGenerator : public IRMutator {
         }
         // Calculate the size of the buffer lut in bytes.
         Expr size = ty.bytes();
-        for (size_t i = 0; i < alloc->extents.size(); i++) {
-            size *= alloc->extents[i];
+        for (const auto &extent : alloc->extents) {
+            size *= extent;
         }
         Expr src = Variable::make(Handle(), op->name);
         Expr new_index = mutate(cast(ty.with_code(Type::Int), index));
@@ -2161,8 +2161,8 @@ class ScatterGatherGenerator : public IRMutator {
         }
         // Calculate the size of the buffer in bytes.
         Expr size = ty.bytes();
-        for (size_t i = 0; i < alloc->extents.size(); i++) {
-            size *= alloc->extents[i];
+        for (const auto &extent : alloc->extents) {
+            size *= extent;
         }
         // Check for scatter-acc.
         Expr value = is_scatter_acc(op);

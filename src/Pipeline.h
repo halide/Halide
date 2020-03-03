@@ -8,6 +8,7 @@
  */
 
 #include <map>
+#include <utility>
 #include <vector>
 
 #include "ExternalCode.h"
@@ -553,10 +554,10 @@ private:
 public:
     ExternSignature() = default;
 
-    ExternSignature(const Type &ret_type, bool is_void_return, const std::vector<Type> &arg_types)
+    ExternSignature(const Type &ret_type, bool is_void_return, std::vector<Type> arg_types)
         : ret_type_(ret_type),
           is_void_return_(is_void_return),
-          arg_types_(arg_types) {
+          arg_types_(std::move(arg_types)) {
         internal_assert(!(is_void_return && ret_type != Type()));
     }
 
@@ -589,8 +590,8 @@ private:
 public:
     ExternCFunction() = default;
 
-    ExternCFunction(void *address, const ExternSignature &signature)
-        : address_(address), signature_(signature) {
+    ExternCFunction(void *address, ExternSignature signature)
+        : address_(address), signature_(std::move(signature)) {
     }
 
     template<typename RT, typename... Args>
@@ -616,7 +617,7 @@ private:
 public:
     JITExtern(Pipeline pipeline);
     JITExtern(const Func &func);
-    JITExtern(const ExternCFunction &extern_c_function);
+    JITExtern(ExternCFunction extern_c_function);
 
     template<typename RT, typename... Args>
     JITExtern(RT (*f)(Args... args))

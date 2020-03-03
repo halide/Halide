@@ -1,6 +1,7 @@
 #include "CPlusPlusMangle.h"
 
 #include <map>
+#include <utility>
 
 #include "IR.h"
 #include "IROperator.h"
@@ -138,8 +139,8 @@ struct QualsState {
 
     bool finished{false};
 
-    QualsState(const Type &type, const std::string &base_mode)
-        : type(type), base_mode(base_mode) {
+    QualsState(const Type &type, std::string base_mode)
+        : type(type), base_mode(std::move(base_mode)) {
     }
 
     void handle_modifier(uint8_t modifier) {

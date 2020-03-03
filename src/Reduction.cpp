@@ -95,10 +95,10 @@ struct ReductionDomainContents {
     mutable RefCount ref_count;
     std::vector<ReductionVariable> domain;
     Expr predicate;
-    bool frozen;
+    bool frozen{false};
 
     ReductionDomainContents()
-        : predicate(const_true()), frozen(false) {
+        : predicate(const_true()) {
     }
 
     // Pass an IRVisitor through to all Exprs referenced in the ReductionDomainContents

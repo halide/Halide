@@ -553,9 +553,9 @@ void link_modules(std::vector<std::unique_ptr<llvm::Module>> &modules, Target t,
 
     // Set the layout and triple on the modules before linking, so
     // llvm doesn't complain while combining them.
-    for (size_t i = 0; i < modules.size(); i++) {
-        modules[i]->setDataLayout(data_layout);
-        modules[i]->setTargetTriple(triple.str());
+    for (auto &module : modules) {
+        module->setDataLayout(data_layout);
+        module->setTargetTriple(triple.str());
     }
 
     // Link them all together
@@ -1199,9 +1199,7 @@ std::unique_ptr<llvm::Module> get_initial_module_for_ptx_device(Target target, l
 
     // For now, the PTX backend does not handle calling functions. So mark all functions
     // AvailableExternally to ensure they are inlined or deleted.
-    for (llvm::Module::iterator iter = modules[0]->begin(); iter != modules[0]->end(); iter++) {
-        llvm::Function &f = *iter;
-
+    for (auto &f : *modules[0]) {
         // This is intended to set all definitions (not extern declarations)
         // to "available externally" which should guarantee they do not exist
         // after the resulting module is finalized to code. That is they must

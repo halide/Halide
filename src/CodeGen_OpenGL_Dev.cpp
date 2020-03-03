@@ -859,11 +859,11 @@ void CodeGen_GLSL::add_kernel(const Stmt &stmt, const string &name,
 
     ostringstream header;
     header << "/// KERNEL " << name << "\n";
-    for (size_t i = 0; i < args.size(); i++) {
-        if (args[i].is_buffer) {
-            Type t = args[i].type.element_of();
+    for (const auto &arg : args) {
+        if (arg.is_buffer) {
+            Type t = arg.type.element_of();
 
-            user_assert(args[i].read != args[i].write) << "GLSL: buffers may only be read OR written inside a kernel loop.\n";
+            user_assert(arg.read != arg.write) << "GLSL: buffers may only be read OR written inside a kernel loop.\n";
             string type_name;
             if (t == UInt(8)) {
                 type_name = "uint8_t";
@@ -872,26 +872,26 @@ void CodeGen_GLSL::add_kernel(const Stmt &stmt, const string &name,
             } else if (t == Float(32)) {
                 type_name = "float";
             } else {
-                user_error << "GLSL: buffer " << args[i].name << " has invalid type " << t << ".\n";
+                user_error << "GLSL: buffer " << arg.name << " has invalid type " << t << ".\n";
             }
-            header << "/// " << (args[i].read ? "IN_BUFFER " : "OUT_BUFFER ")
-                   << type_name << " " << print_name(args[i].name) << "\n";
-        } else if (ends_with(args[i].name, ".varying")) {
+            header << "/// " << (arg.read ? "IN_BUFFER " : "OUT_BUFFER ")
+                   << type_name << " " << print_name(arg.name) << "\n";
+        } else if (ends_with(arg.name, ".varying")) {
             header << "/// VARYING "
                    // GLSL requires that varying attributes are float. Integer
                    // expressions for vertex attributes are cast to float during
                    // host codegen
-                   << "float " << print_name(args[i].name) << " varyingf" << args[i].packed_index / 4 << "[" << args[i].packed_index % 4 << "]\n";
+                   << "float " << print_name(arg.name) << " varyingf" << arg.packed_index / 4 << "[" << arg.packed_index % 4 << "]\n";
             ++num_varying_floats;
-        } else if (args[i].type.is_float()) {
+        } else if (arg.type.is_float()) {
             header << "/// UNIFORM "
-                   << CodeGen_C::print_type(args[i].type) << " "
-                   << print_name(args[i].name) << " uniformf" << args[i].packed_index / 4 << "[" << args[i].packed_index % 4 << "]\n";
+                   << CodeGen_C::print_type(arg.type) << " "
+                   << print_name(arg.name) << " uniformf" << arg.packed_index / 4 << "[" << arg.packed_index % 4 << "]\n";
             ++num_uniform_floats;
-        } else if (args[i].type.is_int()) {
+        } else if (arg.type.is_int()) {
             header << "/// UNIFORM "
-                   << CodeGen_C::print_type(args[i].type) << " "
-                   << print_name(args[i].name) << " uniformi" << args[i].packed_index / 4 << "[" << args[i].packed_index % 4 << "]\n";
+                   << CodeGen_C::print_type(arg.type) << " "
+                   << print_name(arg.name) << " uniformi" << arg.packed_index / 4 << "[" << arg.packed_index % 4 << "]\n";
             ++num_uniform_ints;
         }
     }
@@ -912,9 +912,9 @@ void CodeGen_GLSL::add_kernel(const Stmt &stmt, const string &name,
     }
 
     // Declare input textures and variables
-    for (size_t i = 0; i < args.size(); i++) {
-        if (args[i].is_buffer && args[i].read) {
-            stream << "uniform sampler2D " << print_name(args[i].name) << ";\n";
+    for (const auto &arg : args) {
+        if (arg.is_buffer && arg.read) {
+            stream << "uniform sampler2D " << print_name(arg.name) << ";\n";
         }
     }
 
@@ -939,23 +939,23 @@ void CodeGen_GLSL::add_kernel(const Stmt &stmt, const string &name,
     indent += 2;
 
     // Unpack the uniform and varying parameters
-    for (size_t i = 0; i < args.size(); i++) {
-        if (args[i].is_buffer) {
+    for (const auto &arg : args) {
+        if (arg.is_buffer) {
             continue;
-        } else if (ends_with(args[i].name, ".varying")) {
-            stream << get_indent() << "float " << print_name(args[i].name)
-                   << " = _varyingf" << args[i].packed_index / 4
-                   << "[" << args[i].packed_index % 4 << "];\n";
-        } else if (args[i].type.is_float()) {
-            stream << get_indent() << print_type(args[i].type) << " "
-                   << print_name(args[i].name)
-                   << " = _uniformf" << args[i].packed_index / 4
-                   << "[" << args[i].packed_index % 4 << "];\n";
-        } else if (args[i].type.is_int()) {
-            stream << get_indent() << print_type(args[i].type) << " "
-                   << print_name(args[i].name)
-                   << " = _uniformi" << args[i].packed_index / 4
-                   << "[" << args[i].packed_index % 4 << "];\n";
+        } else if (ends_with(arg.name, ".varying")) {
+            stream << get_indent() << "float " << print_name(arg.name)
+                   << " = _varyingf" << arg.packed_index / 4
+                   << "[" << arg.packed_index % 4 << "];\n";
+        } else if (arg.type.is_float()) {
+            stream << get_indent() << print_type(arg.type) << " "
+                   << print_name(arg.name)
+                   << " = _uniformf" << arg.packed_index / 4
+                   << "[" << arg.packed_index % 4 << "];\n";
+        } else if (arg.type.is_int()) {
+            stream << get_indent() << print_type(arg.type) << " "
+                   << print_name(arg.name)
+                   << " = _uniformi" << arg.packed_index / 4
+                   << "[" << arg.packed_index % 4 << "];\n";
         }
     }
 

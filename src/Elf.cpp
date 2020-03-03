@@ -77,14 +77,14 @@ struct Types;
 
 template<>
 struct Types<32> {
-    typedef uint32_t addr_t;
-    typedef int32_t addr_off_t;
+    using addr_t = uint32_t;
+    using addr_off_t = int32_t;
 };
 
 template<typename T>
 struct Ehdr {
-    typedef typename T::addr_t addr_t;
-    typedef typename T::addr_off_t addr_off_t;
+    using addr_t = typename T::addr_t;
+    using addr_off_t = typename T::addr_off_t;
 
     uint8_t e_ident[16];
     uint16_t e_type;
@@ -104,8 +104,8 @@ struct Ehdr {
 
 template<typename T>
 struct Phdr {
-    typedef typename T::addr_t addr_t;
-    typedef typename T::addr_off_t addr_off_t;
+    using addr_t = typename T::addr_t;
+    using addr_off_t = typename T::addr_off_t;
 
     uint32_t p_type;
     uint32_t p_offset;
@@ -119,8 +119,8 @@ struct Phdr {
 
 template<typename T>
 struct Shdr {
-    typedef typename T::addr_t addr_t;
-    typedef typename T::addr_off_t addr_off_t;
+    using addr_t = typename T::addr_t;
+    using addr_off_t = typename T::addr_off_t;
 
     uint32_t sh_name;
     uint32_t sh_type;
@@ -136,8 +136,8 @@ struct Shdr {
 
 template<typename T>
 struct Rel {
-    typedef typename T::addr_t addr_t;
-    typedef typename T::addr_off_t addr_off_t;
+    using addr_t = typename T::addr_t;
+    using addr_off_t = typename T::addr_off_t;
 
     addr_t r_offset;
     addr_t r_info;
@@ -185,8 +185,8 @@ struct Rel {
 
 template<typename T>
 struct Rela : public Rel<T> {
-    typedef typename T::addr_t addr_t;
-    typedef typename T::addr_off_t addr_off_t;
+    using addr_t = typename T::addr_t;
+    using addr_off_t = typename T::addr_off_t;
 
     addr_off_t r_addend;
 
@@ -232,8 +232,8 @@ struct Sym<Types<32>> {
 
 template<typename T>
 struct Dyn {
-    typedef typename T::addr_t addr_t;
-    typedef typename T::addr_off_t addr_off_t;
+    using addr_t = typename T::addr_t;
+    using addr_off_t = typename T::addr_off_t;
 
     uint32_t d_tag;
     union {
@@ -533,7 +533,7 @@ Object::section_iterator Object::merge_text_sections() {
 template<typename T>
 std::vector<char> write_shared_object_internal(Object &obj, Linker *linker, const std::vector<std::string> &dependencies,
                                                const std::string &soname) {
-    typedef typename T::addr_t addr_t;
+    using addr_t = typename T::addr_t;
 
     // The buffer we will be writing to.
     std::vector<char> output;

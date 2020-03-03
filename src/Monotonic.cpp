@@ -323,8 +323,8 @@ class MonotonicVisitor : public IRVisitor {
             return;
         }
 
-        for (size_t i = 0; i < op->args.size(); i++) {
-            op->args[i].accept(this);
+        for (const auto &arg : op->args) {
+            arg.accept(this);
             if (result != Monotonic::Constant) {
                 result = Monotonic::Unknown;
                 return;
@@ -348,8 +348,8 @@ class MonotonicVisitor : public IRVisitor {
     }
 
     void visit(const Shuffle *op) override {
-        for (size_t i = 0; i < op->vectors.size(); i++) {
-            op->vectors[i].accept(this);
+        for (const auto &vector : op->vectors) {
+            vector.accept(this);
             if (result != Monotonic::Constant) {
                 result = Monotonic::Unknown;
                 return;

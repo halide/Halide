@@ -17,7 +17,7 @@ using std::vector;
 
 struct DefinitionContents {
     mutable RefCount ref_count;
-    bool is_init;
+    bool is_init{true};
     Expr predicate;
     std::vector<Expr> values, args;
     StageSchedule stage_schedule;
@@ -25,7 +25,7 @@ struct DefinitionContents {
     std::string source_location;
 
     DefinitionContents()
-        : is_init(true), predicate(const_true()) {
+        : predicate(const_true()) {
     }
 
     void accept(IRVisitor *visitor) const {
@@ -55,11 +55,11 @@ struct DefinitionContents {
             predicate = mutator->mutate(predicate);
         }
 
-        for (size_t i = 0; i < values.size(); ++i) {
-            values[i] = mutator->mutate(values[i]);
+        for (auto &value : values) {
+            value = mutator->mutate(value);
         }
-        for (size_t i = 0; i < args.size(); ++i) {
-            args[i] = mutator->mutate(args[i]);
+        for (auto &arg : args) {
+            arg = mutator->mutate(arg);
         }
 
         stage_schedule.mutate(mutator);
@@ -102,8 +102,8 @@ Definition::Definition(const std::vector<Expr> &args, const std::vector<Expr> &v
     contents->source_location = Introspection::get_source_location();
     if (rdom.defined()) {
         contents->predicate = rdom.predicate();
-        for (size_t i = 0; i < rdom.domain().size(); i++) {
-            contents->stage_schedule.rvars().push_back(rdom.domain()[i]);
+        for (const auto &i : rdom.domain()) {
+            contents->stage_schedule.rvars().push_back(i);
         }
     }
 }

@@ -24,7 +24,7 @@ class raw_ostream;
 namespace Halide {
 
 namespace Internal {
-typedef llvm::raw_pwrite_stream LLVMOStream;
+using LLVMOStream = llvm::raw_pwrite_stream;
 }
 
 /** Generate an LLVM module. */

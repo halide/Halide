@@ -105,9 +105,7 @@ void CodeGen_PowerPC::visit(const Cast *op) {
          u32(((wild_u64x_ + wild_u64x_) + 1) / 2)},
     };
 
-    for (size_t i = 0; i < sizeof(patterns) / sizeof(patterns[0]); i++) {
-        const Pattern &pattern = patterns[i];
-
+    for (const auto &pattern : patterns) {
         if (!target.has_feature(Target::VSX) && pattern.needs_vsx) {
             continue;
         }
@@ -116,9 +114,9 @@ void CodeGen_PowerPC::visit(const Cast *op) {
             bool match = true;
             if (pattern.wide_op) {
                 // Try to narrow the matches to the target type.
-                for (size_t i = 0; i < matches.size(); i++) {
-                    matches[i] = lossless_cast(op->type, matches[i]);
-                    if (!matches[i].defined()) match = false;
+                for (auto &m : matches) {
+                    m = lossless_cast(op->type, m);
+                    if (!m.defined()) match = false;
                 }
             }
             if (match) {

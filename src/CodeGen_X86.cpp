@@ -316,9 +316,7 @@ void CodeGen_X86::visit(const Cast *op) {
         {Target::SSE41, false, UInt(16, 8), 0, "packusdwx8",
          u16_sat(wild_i32x_)}};
 
-    for (size_t i = 0; i < sizeof(patterns) / sizeof(patterns[0]); i++) {
-        const Pattern &pattern = patterns[i];
-
+    for (const auto &pattern : patterns) {
         if (!target.has_feature(pattern.feature)) {
             continue;
         }
@@ -331,9 +329,11 @@ void CodeGen_X86::visit(const Cast *op) {
             bool match = true;
             if (pattern.wide_op) {
                 // Try to narrow the matches to the target type.
-                for (size_t i = 0; i < matches.size(); i++) {
-                    matches[i] = lossless_cast(op->type, matches[i]);
-                    if (!matches[i].defined()) match = false;
+                for (auto &m : matches) {
+                    m = lossless_cast(op->type, m);
+                    if (!m.defined()) {
+                        match = false;
+                    }
                 }
             }
             if (match) {

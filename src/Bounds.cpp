@@ -1663,8 +1663,8 @@ public:
     string skipped_var;
     set<string> vars;
 
-    CollectVars(const string &v)
-        : skipped_var(v) {
+    CollectVars(string v)
+        : skipped_var(std::move(v)) {
     }
 
 private:
@@ -1692,8 +1692,8 @@ private:
     struct VarInstance {
         string var;
         int instance;
-        VarInstance(const string &v, int i)
-            : var(v), instance(i) {
+        VarInstance(string v, int i)
+            : var(std::move(v)), instance(i) {
         }
         VarInstance() = default;
 
@@ -1838,10 +1838,8 @@ private:
         }
 
     public:
-        int count;
-        CountVars()
-            : count(0) {
-        }
+        int count{0};
+        CountVars() = default;
     };
 
     // We get better simplification if we directly substitute mins
@@ -2033,8 +2031,8 @@ private:
 
     struct LetBound {
         string var, min_name, max_name;
-        LetBound(const string &v, const string &min, const string &max)
-            : var(v), min_name(min), max_name(max) {
+        LetBound(string v, string min, string max)
+            : var(std::move(v)), min_name(std::move(min)), max_name(std::move(max)) {
         }
     };
 
@@ -2337,11 +2335,11 @@ private:
         }
 
         if (consider_calls) {
-            for (size_t i = 0; i < op->args.size(); i++) {
-                op->args[i].accept(this);
+            for (const auto &arg : op->args) {
+                arg.accept(this);
             }
-            for (size_t i = 0; i < op->values.size(); i++) {
-                op->values[i].accept(this);
+            for (const auto &value : op->values) {
+                value.accept(this);
             }
         }
     }
@@ -2544,8 +2542,8 @@ FuncValueBounds compute_function_value_bounds(const vector<string> &order,
                                               const map<string, Function> &env) {
     FuncValueBounds fb;
 
-    for (size_t i = 0; i < order.size(); i++) {
-        Function f = env.find(order[i])->second;
+    for (const auto &i : order) {
+        Function f = env.find(i)->second;
         const vector<string> f_args = f.args();
         for (int j = 0; j < f.outputs(); j++) {
             pair<string, int> key = {f.name(), j};
@@ -2587,7 +2585,7 @@ FuncValueBounds compute_function_value_bounds(const vector<string> &order,
             }
 
             debug(2) << "Bounds on value " << j
-                     << " for func " << order[i]
+                     << " for func " << i
                      << " are: " << result.min << ", " << result.max << "\n";
         }
     }

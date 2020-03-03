@@ -201,11 +201,11 @@ private:
             // is traced before any loads in the index.
             vector<Expr> args = op->args;
             vector<pair<string, Expr>> lets;
-            for (size_t i = 0; i < args.size(); i++) {
-                if (!args[i].as<Variable>() && !is_const(args[i])) {
+            for (auto &arg : args) {
+                if (!arg.as<Variable>() && !is_const(arg)) {
                     string name = unique_name('t');
-                    lets.emplace_back(name, args[i]);
-                    args[i] = Variable::make(args[i].type(), name);
+                    lets.emplace_back(name, arg);
+                    arg = Variable::make(arg.type(), name);
                 }
             }
 
@@ -236,9 +236,9 @@ private:
             builder.func = op->name;
             builder.parent_id = Variable::make(Int(32), "pipeline.trace_id");
             builder.event = halide_trace_begin_realization;
-            for (size_t i = 0; i < op->bounds.size(); i++) {
-                builder.coordinates.push_back(op->bounds[i].min);
-                builder.coordinates.push_back(op->bounds[i].extent);
+            for (const auto &bound : op->bounds) {
+                builder.coordinates.push_back(bound.min);
+                builder.coordinates.push_back(bound.extent);
             }
 
             // Begin realization returns a unique token to pass to further trace calls affecting this buffer.

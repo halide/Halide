@@ -13,6 +13,7 @@
 #include <memory>
 #include <stdint.h>
 #include <string.h>
+#include <utility>
 #include <vector>
 
 #if defined(__has_feature)
@@ -200,8 +201,8 @@ private:
     // operation as well.
     struct DevRefCountCropped : DeviceRefCount {
         Buffer<T, D> cropped_from;
-        DevRefCountCropped(const Buffer<T, D> &cropped_from)
-            : cropped_from(cropped_from) {
+        DevRefCountCropped(Buffer<T, D> cropped_from)
+            : cropped_from(std::move(cropped_from)) {
             ownership = BufferDeviceOwnership::Cropped;
         }
     };
@@ -433,7 +434,7 @@ private:
     }
 
 public:
-    typedef T ElemType;
+    using ElemType = T;
 
     /** Read-only access to the shape */
     class Dimension {

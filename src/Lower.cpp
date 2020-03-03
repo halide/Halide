@@ -477,8 +477,8 @@ Module lower(const vector<Function> &output_funcs,
                 << ", which was not found in the argument list.\n";
 
             err << "\nArgument list specified: ";
-            for (size_t i = 0; i < args.size(); i++) {
-                err << args[i].name << " ";
+            for (const auto &arg : args) {
+                err << arg.name << " ";
             }
             err << "\n\nParameters referenced in generated code: ";
             for (const InferredArgument &ia : inferred_args) {

@@ -444,11 +444,9 @@ void CodeGen_Metal_Dev::add_kernel(Stmt s,
 namespace {
 struct BufferSize {
     string name;
-    size_t size;
+    size_t size{0};
 
-    BufferSize()
-        : size(0) {
-    }
+    BufferSize() = default;
     BufferSize(string name, size_t size)
         : name(std::move(name)), size(size) {
     }
@@ -475,11 +473,11 @@ void CodeGen_Metal_Dev::CodeGen_Metal_C::add_kernel(const Stmt &s,
     // The last condition is handled via the preprocessor in the kernel
     // declaration.
     vector<BufferSize> constants;
-    for (size_t i = 0; i < args.size(); i++) {
-        if (args[i].is_buffer &&
-            CodeGen_GPU_Dev::is_buffer_constant(s, args[i].name) &&
-            args[i].size > 0) {
-            constants.emplace_back(args[i].name, args[i].size);
+    for (const auto &arg : args) {
+        if (arg.is_buffer &&
+            CodeGen_GPU_Dev::is_buffer_constant(s, arg.name) &&
+            arg.size > 0) {
+            constants.emplace_back(arg.name, arg.size);
         }
     }
 
@@ -496,38 +494,38 @@ void CodeGen_Metal_Dev::CodeGen_Metal_C::add_kernel(const Stmt &s,
 
     // Create preprocessor replacements for the address spaces of all our buffers.
     stream << "// Address spaces for " << name << "\n";
-    for (size_t i = 0; i < args.size(); i++) {
-        if (args[i].is_buffer) {
+    for (const auto &arg : args) {
+        if (arg.is_buffer) {
             vector<BufferSize>::iterator constant = constants.begin();
             while (constant != constants.end() &&
-                   constant->name != args[i].name) {
+                   constant->name != arg.name) {
                 constant++;
             }
 
             if (constant != constants.end()) {
                 stream << "#if " << constant->size << " < MAX_CONSTANT_BUFFER_SIZE && "
                        << constant - constants.begin() << " < MAX_CONSTANT_ARGS\n";
-                stream << "#define " << get_memory_space(args[i].name) << " constant\n";
+                stream << "#define " << get_memory_space(arg.name) << " constant\n";
                 stream << "#else\n";
-                stream << "#define " << get_memory_space(args[i].name) << " device\n";
+                stream << "#define " << get_memory_space(arg.name) << " device\n";
                 stream << "#endif\n";
             } else {
-                stream << "#define " << get_memory_space(args[i].name) << " device\n";
+                stream << "#define " << get_memory_space(arg.name) << " device\n";
             }
         }
     }
 
     // Emit a struct to hold the scalar args of the kernel
     bool any_scalar_args = false;
-    for (size_t i = 0; i < args.size(); i++) {
-        if (!args[i].is_buffer) {
+    for (const auto &arg : args) {
+        if (!arg.is_buffer) {
             if (!any_scalar_args) {
                 stream << "struct " + name + "_args {\n";
                 any_scalar_args = true;
             }
-            stream << print_type(args[i].type)
+            stream << print_type(arg.type)
                    << " "
-                   << print_name(args[i].name)
+                   << print_name(arg.name)
                    << ";\n";
         }
     }
@@ -545,16 +543,16 @@ void CodeGen_Metal_Dev::CodeGen_Metal_C::add_kernel(const Stmt &s,
         buffer_index++;
     }
 
-    for (size_t i = 0; i < args.size(); i++) {
-        if (args[i].is_buffer) {
+    for (const auto &arg : args) {
+        if (arg.is_buffer) {
             stream << ",\n";
-            stream << " " << get_memory_space(args[i].name) << " ";
-            if (!args[i].write) stream << "const ";
-            stream << print_storage_type(args[i].type) << " *"
-                   << print_name(args[i].name) << " [[ buffer(" << buffer_index++ << ") ]]";
+            stream << " " << get_memory_space(arg.name) << " ";
+            if (!arg.write) stream << "const ";
+            stream << print_storage_type(arg.type) << " *"
+                   << print_name(arg.name) << " [[ buffer(" << buffer_index++ << ") ]]";
             Allocation alloc;
-            alloc.type = args[i].type;
-            allocations.push(args[i].name, alloc);
+            alloc.type = arg.type;
+            allocations.push(arg.name, alloc);
         }
     }
     stream << ",\n"
@@ -565,12 +563,12 @@ void CodeGen_Metal_Dev::CodeGen_Metal_C::add_kernel(const Stmt &s,
     open_scope();
 
     // Unpack args struct into local variables to match naming of generated code.
-    for (size_t i = 0; i < args.size(); i++) {
-        if (!args[i].is_buffer) {
-            stream << print_type(args[i].type)
+    for (const auto &arg : args) {
+        if (!arg.is_buffer) {
+            stream << print_type(arg.type)
                    << " "
-                   << print_name(args[i].name)
-                   << " = _scalar_args->" << print_name(args[i].name)
+                   << print_name(arg.name)
+                   << " = _scalar_args->" << print_name(arg.name)
                    << ";\n";
         }
     }
@@ -578,17 +576,17 @@ void CodeGen_Metal_Dev::CodeGen_Metal_C::add_kernel(const Stmt &s,
     print(s);
     close_scope("kernel " + name);
 
-    for (size_t i = 0; i < args.size(); i++) {
+    for (const auto &arg : args) {
         // Remove buffer arguments from allocation scope
-        if (args[i].is_buffer) {
-            allocations.pop(args[i].name);
+        if (arg.is_buffer) {
+            allocations.pop(arg.name);
         }
     }
 
     // Undef all the buffer address spaces, in case they're different in another kernel.
-    for (size_t i = 0; i < args.size(); i++) {
-        if (args[i].is_buffer) {
-            stream << "#undef " << get_memory_space(args[i].name) << "\n";
+    for (const auto &arg : args) {
+        if (arg.is_buffer) {
+            stream << "#undef " << get_memory_space(arg.name) << "\n";
         }
     }
 }

@@ -7,8 +7,8 @@ namespace Halide {
 
 using Internal::Dimension;
 
-OutputImageParam::OutputImageParam(const Internal::Parameter &p, Argument::Kind k, Func f)
-    : param(p), kind(k), func(std::move(f)) {
+OutputImageParam::OutputImageParam(Internal::Parameter p, Argument::Kind k, Func f)
+    : param(std::move(p)), kind(k), func(std::move(f)) {
 }
 
 const std::string &OutputImageParam::name() const {

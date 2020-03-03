@@ -661,11 +661,9 @@ void CodeGen_OpenCL_Dev::add_kernel(Stmt s,
 namespace {
 struct BufferSize {
     string name;
-    size_t size;
+    size_t size{0};
 
-    BufferSize()
-        : size(0) {
-    }
+    BufferSize() = default;
     BufferSize(string name, size_t size)
         : name(std::move(name)), size(size) {
     }
@@ -697,11 +695,11 @@ void CodeGen_OpenCL_Dev::CodeGen_OpenCL_C::add_kernel(Stmt s,
     // The last condition is handled via the preprocessor in the kernel
     // declaration.
     vector<BufferSize> constants;
-    for (size_t i = 0; i < args.size(); i++) {
-        if (args[i].is_buffer &&
-            CodeGen_GPU_Dev::is_buffer_constant(s, args[i].name) &&
-            args[i].size > 0) {
-            constants.emplace_back(args[i].name, args[i].size);
+    for (const auto &arg : args) {
+        if (arg.is_buffer &&
+            CodeGen_GPU_Dev::is_buffer_constant(s, arg.name) &&
+            arg.size > 0) {
+            constants.emplace_back(arg.name, arg.size);
         }
     }
 
@@ -718,23 +716,23 @@ void CodeGen_OpenCL_Dev::CodeGen_OpenCL_C::add_kernel(Stmt s,
 
     // Create preprocessor replacements for the address spaces of all our buffers.
     stream << "// Address spaces for " << name << "\n";
-    for (size_t i = 0; i < args.size(); i++) {
-        if (args[i].is_buffer) {
+    for (const auto &arg : args) {
+        if (arg.is_buffer) {
             vector<BufferSize>::iterator constant = constants.begin();
             while (constant != constants.end() &&
-                   constant->name != args[i].name) {
+                   constant->name != arg.name) {
                 constant++;
             }
 
             if (constant != constants.end()) {
                 stream << "#if " << constant->size << " <= MAX_CONSTANT_BUFFER_SIZE && "
                        << constant - constants.begin() << " < MAX_CONSTANT_ARGS\n";
-                stream << "#define " << get_memory_space(args[i].name) << " __constant\n";
+                stream << "#define " << get_memory_space(arg.name) << " __constant\n";
                 stream << "#else\n";
-                stream << "#define " << get_memory_space(args[i].name) << " __global\n";
+                stream << "#define " << get_memory_space(arg.name) << " __global\n";
                 stream << "#endif\n";
             } else {
-                stream << "#define " << get_memory_space(args[i].name) << " __global\n";
+                stream << "#define " << get_memory_space(arg.name) << " __global\n";
             }
         }
     }
@@ -776,30 +774,30 @@ void CodeGen_OpenCL_Dev::CodeGen_OpenCL_C::add_kernel(Stmt s,
     open_scope();
 
     // Reinterpret half args passed as uint16 back to half
-    for (size_t i = 0; i < args.size(); i++) {
-        if (!args[i].is_buffer &&
-            args[i].type.is_float() &&
-            args[i].type.bits() < 32) {
-            stream << " const " << print_type(args[i].type)
-                   << " " << print_name(args[i].name)
-                   << " = half_from_bits(" << print_name(args[i].name + "_bits") << ");\n";
+    for (const auto &arg : args) {
+        if (!arg.is_buffer &&
+            arg.type.is_float() &&
+            arg.type.bits() < 32) {
+            stream << " const " << print_type(arg.type)
+                   << " " << print_name(arg.name)
+                   << " = half_from_bits(" << print_name(arg.name + "_bits") << ");\n";
         }
     }
 
     print(s);
     close_scope("kernel " + name);
 
-    for (size_t i = 0; i < args.size(); i++) {
+    for (const auto &arg : args) {
         // Remove buffer arguments from allocation scope
-        if (args[i].is_buffer) {
-            allocations.pop(args[i].name);
+        if (arg.is_buffer) {
+            allocations.pop(arg.name);
         }
     }
 
     // Undef all the buffer address spaces, in case they're different in another kernel.
-    for (size_t i = 0; i < args.size(); i++) {
-        if (args[i].is_buffer) {
-            stream << "#undef " << get_memory_space(args[i].name) << "\n";
+    for (const auto &arg : args) {
+        if (arg.is_buffer) {
+            stream << "#undef " << get_memory_space(arg.name) << "\n";
         }
     }
 }

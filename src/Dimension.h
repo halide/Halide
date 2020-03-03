@@ -92,7 +92,7 @@ private:
     /** Construct a Dimension representing dimension d of some
      * Internal::Parameter p. Only friends may construct
      * these. */
-    Dimension(const Internal::Parameter &p, int d, Func f);
+    Dimension(Internal::Parameter p, int d, Func f);
 
     Parameter param;
     int d;

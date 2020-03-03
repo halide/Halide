@@ -276,8 +276,8 @@ class DetermineAllocStride : public IRVisitor {
     }
 
 public:
-    DetermineAllocStride(const string &alloc, const string &lane_var, const Expr &warp_size)
-        : alloc(alloc), lane_var(lane_var), warp_size(warp_size) {
+    DetermineAllocStride(const string &alloc, const string &lane_var, Expr warp_size)
+        : alloc(alloc), lane_var(lane_var), warp_size(std::move(warp_size)) {
         dependent_vars.push(lane_var, 1);
     }
 

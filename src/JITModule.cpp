@@ -2,6 +2,7 @@
 #include <set>
 #include <stdint.h>
 #include <string>
+#include <utility>
 
 #ifdef _WIN32
 #ifdef _MSC_VER
@@ -52,16 +53,14 @@ bool have_symbol(const char *s) {
     return get_symbol_address(s) != nullptr;
 }
 
-typedef struct CUctx_st *CUcontext;
+using CUcontext = struct CUctx_st *;
 
 struct SharedCudaContext {
-    CUctx_st *ptr;
-    volatile int lock;
+    CUctx_st *ptr{0};
+    volatile int lock{0};
 
     // Will be created on first use by a jitted kernel that uses it
-    SharedCudaContext()
-        : ptr(0), lock(0) {
-    }
+    SharedCudaContext() = default;
 
     // Note that we never free the context, because static destructor
     // order is unpredictable, and we can't free the context before
@@ -69,19 +68,17 @@ struct SharedCudaContext {
     // in globals, and these keep JITModules around.
 } cuda_ctx;
 
-typedef struct cl_context_st *cl_context;
-typedef struct cl_command_queue_st *cl_command_queue;
+using cl_context = struct cl_context_st *;
+using cl_command_queue = struct cl_command_queue_st *;
 
 // A single global OpenCL context and command queue to share between
 // jitted functions.
 struct SharedOpenCLContext {
-    cl_context context;
-    cl_command_queue command_queue;
-    volatile int lock;
+    cl_context context{nullptr};
+    cl_command_queue command_queue{nullptr};
+    volatile int lock{0};
 
-    SharedOpenCLContext()
-        : context(nullptr), command_queue(nullptr), lock(0) {
-    }
+    SharedOpenCLContext() = default;
 
     // We never free the context, for the same reason as above.
 } cl_ctx;
@@ -138,9 +135,7 @@ public:
     mutable RefCount ref_count;
 
     // Just construct a module with symbols to import into other modules.
-    JITModuleContents()
-        : execution_engine(nullptr) {
-    }
+    JITModuleContents() = default;
 
     ~JITModuleContents() {
         if (execution_engine != nullptr) {
@@ -151,7 +146,7 @@ public:
 
     std::map<std::string, JITModule::Symbol> exports;
     llvm::LLVMContext context;
-    ExecutionEngine *execution_engine;
+    ExecutionEngine *execution_engine{nullptr};
     std::vector<JITModule> dependencies;
     JITModule::Symbol entrypoint;
     JITModule::Symbol argv_entrypoint;
@@ -194,13 +189,12 @@ class HalideJITMemoryManager : public SectionMemoryManager {
     std::vector<std::pair<uint8_t *, size_t>> code_pages;
 
 public:
-    HalideJITMemoryManager(const std::vector<JITModule> &modules)
-        : modules(modules) {
+    HalideJITMemoryManager(std::vector<JITModule> modules)
+        : modules(std::move(modules)) {
     }
 
     uint64_t getSymbolAddress(const std::string &name) override {
-        for (size_t i = 0; i < modules.size(); i++) {
-            const JITModule &m = modules[i];
+        for (auto &m : modules) {
             std::map<std::string, JITModule::Symbol>::const_iterator iter = m.exports().find(name);
             if (iter == m.exports().end() && starts_with(name, "_")) {
                 iter = m.exports().find(name.substr(1));
@@ -314,8 +308,8 @@ void JITModule::compile_module(std::unique_ptr<llvm::Module> m, const string &fu
     // TODO: If this ever works in LLVM, this would allow profiling of JIT code with symbols with oprofile.
     //listeners.push_back(llvm::createOProfileJITEventListener());
 
-    for (size_t i = 0; i < listeners.size(); i++) {
-        ee->RegisterJITEventListener(listeners[i]);
+    for (auto &listener : listeners) {
+        ee->RegisterJITEventListener(listener);
     }
 
     // Retrieve function pointers from the compiled module (which also
@@ -334,16 +328,16 @@ void JITModule::compile_module(std::unique_ptr<llvm::Module> m, const string &fu
         exports[function_name + "_argv"] = argv_entrypoint;
     }
 
-    for (size_t i = 0; i < requested_exports.size(); i++) {
-        exports[requested_exports[i]] = compile_and_get_function(*ee, requested_exports[i]);
+    for (const auto &requested_export : requested_exports) {
+        exports[requested_export] = compile_and_get_function(*ee, requested_export);
     }
 
     debug(2) << "Finalizing object\n";
     ee->finalizeObject();
     // Do any target-specific post-compilation module meddling
-    for (size_t i = 0; i < listeners.size(); i++) {
-        ee->UnregisterJITEventListener(listeners[i]);
-        delete listeners[i];
+    for (auto &listener : listeners) {
+        ee->UnregisterJITEventListener(listener);
+        delete listener;
     }
     listeners.clear();
 

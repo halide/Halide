@@ -233,8 +233,7 @@ void ReverseAccumulationVisitor::propagate_adjoints(
     // functions extremely difficult.
     is_forward_overwrite_detection_phase = true;
     set<FuncKey> non_overwriting_scans;
-    for (int func_id = 0; func_id < (int)funcs.size(); func_id++) {
-        const Func &func = funcs[func_id];
+    for (auto &func : funcs) {
         current_func = func;
         // Precompute the left hand side intervals for each update
         // We use this to determine if there's overlaps between the updates
@@ -245,9 +244,9 @@ void ReverseAccumulationVisitor::propagate_adjoints(
             const vector<Expr> &args = func.update_args(update_id);
             vector<Interval> intervals;
             intervals.reserve(args.size());
-            for (int arg_id = 0; arg_id < (int)args.size(); arg_id++) {
+            for (const auto &arg : args) {
                 Scope<Interval> scope;
-                ReductionDomain rdom = extract_rdom(args[arg_id]);
+                ReductionDomain rdom = extract_rdom(arg);
                 if (rdom.defined()) {
                     const vector<ReductionVariable> &rvars = rdom.domain();
                     for (const auto &r : rvars) {
@@ -255,7 +254,7 @@ void ReverseAccumulationVisitor::propagate_adjoints(
                         scope.push(r.var, Interval(r.min, r_max));
                     }
                 }
-                Interval interval = bounds_of_expr_in_scope(args[arg_id], scope);
+                Interval interval = bounds_of_expr_in_scope(arg, scope);
                 intervals.push_back(interval);
             }
             boxes.emplace_back(intervals);
@@ -331,8 +330,7 @@ void ReverseAccumulationVisitor::propagate_adjoints(
             // Gather let variables
             let_var_mapping.clear();
             let_variables.clear();
-            for (auto it = expr_list.begin(); it != expr_list.end(); it++) {
-                Expr expr = *it;
+            for (const auto &expr : expr_list) {
                 if (expr.get()->node_type == IRNodeType::Let) {
                     const Let *op = expr.as<Let>();
                     // Assume Let variables are unique
@@ -345,8 +343,8 @@ void ReverseAccumulationVisitor::propagate_adjoints(
             // Set the output adjoint to 1
             // We're not really propagating adjoints, just checking if there's
             // self references
-            for (int i = 0; i < (int)output_exprs.size(); i++) {
-                expr_adjoints[output_exprs[i]] = 1.f;
+            for (auto &output_expr : output_exprs) {
+                expr_adjoints[output_expr] = 1.f;
             }
 
             // Traverse the expressions in reverse order
@@ -529,8 +527,7 @@ void ReverseAccumulationVisitor::propagate_adjoints(
     }
     // Also create stubs for buffers referenced by the functions
     map<string, BufferInfo> called_buffers_or_param;
-    for (int func_id = 0; func_id < (int)funcs.size(); func_id++) {
-        const Func &func = funcs[func_id];
+    for (auto &func : funcs) {
         map<string, BufferInfo> buffers = find_buffer_param_calls(func);
         called_buffers_or_param.insert(buffers.begin(), buffers.end());
     }
@@ -658,8 +655,7 @@ void ReverseAccumulationVisitor::propagate_adjoints(
             // Gather let variables
             let_var_mapping.clear();
             let_variables.clear();
-            for (auto it = expr_list.begin(); it != expr_list.end(); it++) {
-                Expr expr = *it;
+            for (const auto &expr : expr_list) {
                 if (expr.get()->node_type == IRNodeType::Let) {
                     const Let *op = expr.as<Let>();
                     // Assume Let variables are unique
@@ -1187,8 +1183,8 @@ void ReverseAccumulationVisitor::propagate_halide_function_call(
     // Add Let expressions
     adjoint = add_let_expression(adjoint, let_var_mapping, let_variables);
     vector<Expr> lhs = call_args;
-    for (int i = 0; i < (int)lhs.size(); i++) {
-        lhs[i] = add_let_expression(lhs[i], let_var_mapping, let_variables);
+    for (auto &lh : lhs) {
+        lh = add_let_expression(lh, let_var_mapping, let_variables);
     }
     Expr adjoint_before_canonicalize = adjoint;
     vector<Expr> lhs_before_canonicalize = lhs;
@@ -1202,8 +1198,8 @@ void ReverseAccumulationVisitor::propagate_halide_function_call(
             self_reference_adjoint[value_index] =
                 simplify(self_reference_adjoint[value_index] + adjoint);
             vector<Expr> args = call_args;
-            for (int i = 0; i < (int)args.size(); i++) {
-                args[i] = add_let_expression(args[i], let_var_mapping, let_variables);
+            for (auto &arg : args) {
+                arg = add_let_expression(arg, let_var_mapping, let_variables);
             }
             self_reference_args.push_back(args);
         }
@@ -1405,9 +1401,9 @@ void ReverseAccumulationVisitor::propagate_halide_function_call(
     // When we update d_f, the second n would be replaced by y.
     // We need to make sure we also update the call argument to g.
     // Adjoint is automatically handled in the loop above.
-    for (int i = 0; i < (int)lhs.size(); i++) {
+    for (auto &lh : lhs) {
         for (const auto &it : lhs_substitute_map) {
-            lhs[i] = substitute(it.first, it.second, lhs[i]);
+            lh = substitute(it.first, it.second, lh);
         }
     }
 
@@ -1429,9 +1425,9 @@ void ReverseAccumulationVisitor::propagate_halide_function_call(
             // For each variable found in lhs_arg, find the corresponding
             // bound (by looping through all variables) and substitute
             // with the bound reduction variable.
-            for (int var_id = 0; var_id < (int)variable_ids.size(); var_id++) {
+            for (int variable_id : variable_ids) {
                 for (int arg_id = 0; arg_id < (int)current_args.size(); arg_id++) {
-                    const string &variable = adjoint_args[variable_ids[var_id]];
+                    const string &variable = adjoint_args[variable_id];
                     if (current_args[arg_id].name() == variable &&
                         canonicalized_vars.find(
                             current_args[arg_id].name()) ==
@@ -1479,8 +1475,8 @@ void ReverseAccumulationVisitor::propagate_halide_function_call(
 
     // Simplify expressions
     adjoint = simplify(common_subexpression_elimination(adjoint));
-    for (int i = 0; i < (int)lhs.size(); i++) {
-        lhs[i] = simplify(common_subexpression_elimination(lhs[i]));
+    for (auto &lh : lhs) {
+        lh = simplify(common_subexpression_elimination(lh));
     }
 
     vector<Var> func_to_update_args = func_to_update.args();
@@ -1751,8 +1747,8 @@ void ReverseAccumulationVisitor::propagate_halide_function_call(
 
     // Simplify expressions
     adjoint = simplify(common_subexpression_elimination(adjoint));
-    for (int i = 0; i < (int)lhs.size(); i++) {
-        lhs[i] = simplify(common_subexpression_elimination(lhs[i]));
+    for (auto &lh : lhs) {
+        lh = simplify(common_subexpression_elimination(lh));
     }
 
     if (debug_flag) {

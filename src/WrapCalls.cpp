@@ -10,7 +10,7 @@ using std::map;
 using std::set;
 using std::string;
 
-typedef map<FunctionPtr, FunctionPtr> SubstitutionMap;
+using SubstitutionMap = map<FunctionPtr, FunctionPtr>;
 
 namespace {
 

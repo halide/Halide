@@ -43,9 +43,7 @@ CodeGen_ARM::CodeGen_ARM(Target target)
     Type types[] = {Int(8, 8), Int(8, 16), UInt(8, 8), UInt(8, 16),
                     Int(16, 4), Int(16, 8), UInt(16, 4), UInt(16, 8),
                     Int(32, 2), Int(32, 4), UInt(32, 2), UInt(32, 4)};
-    for (size_t i = 0; i < sizeof(types) / sizeof(types[0]); i++) {
-        Type t = types[i];
-
+    for (auto t : types) {
         int intrin_lanes = t.lanes();
         std::ostringstream oss;
         oss << ".v" << intrin_lanes << "i" << t.bits();
@@ -275,8 +273,7 @@ void CodeGen_ARM::visit(const Cast *op) {
 
     vector<Expr> matches;
 
-    for (size_t i = 0; i < casts.size(); i++) {
-        const Pattern &pattern = casts[i];
+    for (auto &pattern : casts) {
         //debug(4) << "Trying pattern: " << patterns[i].intrin << " " << patterns[i].pattern << "\n";
         if (expr_match(pattern.pattern, op, matches)) {
 
@@ -287,17 +284,17 @@ void CodeGen_ARM::visit(const Cast *op) {
             } else if (pattern.type == Pattern::NarrowArgs) {
                 // Try to narrow all of the args.
                 bool all_narrow = true;
-                for (size_t i = 0; i < matches.size(); i++) {
-                    internal_assert(matches[i].type().bits() == t.bits() * 2);
-                    internal_assert(matches[i].type().lanes() == t.lanes());
+                for (auto &m : matches) {
+                    internal_assert(m.type().bits() == t.bits() * 2);
+                    internal_assert(m.type().lanes() == t.lanes());
                     // debug(4) << "Attemping to narrow " << matches[i] << " to " << t << "\n";
-                    matches[i] = lossless_cast(t, matches[i]);
-                    if (!matches[i].defined()) {
+                    m = lossless_cast(t, m);
+                    if (!m.defined()) {
                         // debug(4) << "failed\n";
                         all_narrow = false;
                     } else {
                         // debug(4) << "success: " << matches[i] << "\n";
-                        internal_assert(matches[i].type() == t);
+                        internal_assert(m.type() == t);
                     }
                 }
 
@@ -392,8 +389,7 @@ void CodeGen_ARM::visit(const Mul *op) {
 
     // LLVM really struggles to generate mlal unless we generate mull intrinsics
     // for the multiplication part first.
-    for (size_t i = 0; i < multiplies.size(); i++) {
-        const Pattern &pattern = multiplies[i];
+    for (auto &pattern : multiplies) {
         //debug(4) << "Trying pattern: " << patterns[i].intrin << " " << patterns[i].pattern << "\n";
         if (expr_match(pattern.pattern, op, matches)) {
 
@@ -405,17 +401,17 @@ void CodeGen_ARM::visit(const Mul *op) {
                 Type narrow_t = t.with_bits(t.bits() / 2);
                 // Try to narrow all of the args.
                 bool all_narrow = true;
-                for (size_t i = 0; i < matches.size(); i++) {
-                    internal_assert(matches[i].type().bits() == t.bits());
-                    internal_assert(matches[i].type().lanes() == t.lanes());
-                    // debug(4) << "Attemping to narrow " << matches[i] << " to " << t << "\n";
-                    matches[i] = lossless_cast(narrow_t, matches[i]);
-                    if (!matches[i].defined()) {
+                for (auto &m : matches) {
+                    internal_assert(m.type().bits() == t.bits());
+                    internal_assert(m.type().lanes() == t.lanes());
+                    // debug(4) << "Attemping to narrow " << m << " to " << t << "\n";
+                    m = lossless_cast(narrow_t, m);
+                    if (!m.defined()) {
                         // debug(4) << "failed\n";
                         all_narrow = false;
                     } else {
-                        // debug(4) << "success: " << matches[i] << "\n";
-                        internal_assert(matches[i].type() == narrow_t);
+                        // debug(4) << "success: " << m << "\n";
+                        internal_assert(m.type() == narrow_t);
                     }
                 }
 
@@ -453,9 +449,9 @@ void CodeGen_ARM::visit(const Div *op) {
         op->type.is_vector() && is_two(op->b) &&
         (op->a.as<Add>() || op->a.as<Sub>())) {
         vector<Expr> matches;
-        for (size_t i = 0; i < averagings.size(); i++) {
-            if (expr_match(averagings[i].pattern, op->a, matches)) {
-                value = call_pattern(averagings[i], op->type, matches);
+        for (auto &averaging : averagings) {
+            if (expr_match(averaging.pattern, op->a, matches)) {
+                value = call_pattern(averaging, op->type, matches);
                 return;
             }
         }
@@ -474,10 +470,10 @@ void CodeGen_ARM::visit(const Sub *op) {
     }
 
     vector<Expr> matches;
-    for (size_t i = 0; i < negations.size(); i++) {
+    for (auto &negation : negations) {
         if (op->type.is_vector() &&
-            expr_match(negations[i].pattern, op, matches)) {
-            value = call_pattern(negations[i], op->type, matches);
+            expr_match(negation.pattern, op, matches)) {
+            value = call_pattern(negation, op->type, matches);
             return;
         }
     }
@@ -551,18 +547,18 @@ void CodeGen_ARM::visit(const Min *op) {
         {Int(32, 4), "v4i32"},
         {Float(32, 4), "v4f32"}};
 
-    for (size_t i = 0; i < sizeof(patterns) / sizeof(patterns[0]); i++) {
-        bool match = op->type == patterns[i].t;
+    for (auto &pattern : patterns) {
+        bool match = op->type == pattern.t;
 
         // The 128-bit versions are also used for other vector widths.
-        if (op->type.is_vector() && patterns[i].t.lanes() * patterns[i].t.bits() == 128) {
-            match = match || (op->type.element_of() == patterns[i].t.element_of());
+        if (op->type.is_vector() && pattern.t.lanes() * pattern.t.bits() == 128) {
+            match = match || (op->type.element_of() == pattern.t.element_of());
         }
 
         if (match) {
             string intrin;
             if (target.bits == 32) {
-                intrin = (string("llvm.arm.neon.") + (op->type.is_uint() ? "vminu." : "vmins.")) + patterns[i].op;
+                intrin = (string("llvm.arm.neon.") + (op->type.is_uint() ? "vminu." : "vmins.")) + pattern.op;
             } else {
                 intrin = "llvm.aarch64.neon.";
                 if (op->type.is_int()) {
@@ -572,9 +568,9 @@ void CodeGen_ARM::visit(const Min *op) {
                 } else {
                     intrin += "umin.";
                 }
-                intrin += patterns[i].op;
+                intrin += pattern.op;
             }
-            value = call_intrin(op->type, patterns[i].t.lanes(), intrin, {op->a, op->b});
+            value = call_intrin(op->type, pattern.t.lanes(), intrin, {op->a, op->b});
             return;
         }
     }
@@ -625,18 +621,18 @@ void CodeGen_ARM::visit(const Max *op) {
         {Int(32, 4), "v4i32"},
         {Float(32, 4), "v4f32"}};
 
-    for (size_t i = 0; i < sizeof(patterns) / sizeof(patterns[0]); i++) {
-        bool match = op->type == patterns[i].t;
+    for (auto &pattern : patterns) {
+        bool match = op->type == pattern.t;
 
         // The 128-bit versions are also used for other vector widths.
-        if (op->type.is_vector() && patterns[i].t.lanes() * patterns[i].t.bits() == 128) {
-            match = match || (op->type.element_of() == patterns[i].t.element_of());
+        if (op->type.is_vector() && pattern.t.lanes() * pattern.t.bits() == 128) {
+            match = match || (op->type.element_of() == pattern.t.element_of());
         }
 
         if (match) {
             string intrin;
             if (target.bits == 32) {
-                intrin = (string("llvm.arm.neon.") + (op->type.is_uint() ? "vmaxu." : "vmaxs.")) + patterns[i].op;
+                intrin = (string("llvm.arm.neon.") + (op->type.is_uint() ? "vmaxu." : "vmaxs.")) + pattern.op;
             } else {
                 intrin = "llvm.aarch64.neon.";
                 if (op->type.is_int()) {
@@ -646,9 +642,9 @@ void CodeGen_ARM::visit(const Max *op) {
                 } else {
                     intrin += "umax.";
                 }
-                intrin += patterns[i].op;
+                intrin += pattern.op;
             }
-            value = call_intrin(op->type, patterns[i].t.lanes(), intrin, {op->a, op->b});
+            value = call_intrin(op->type, pattern.t.lanes(), intrin, {op->a, op->b});
             return;
         }
     }
@@ -721,8 +717,8 @@ void CodeGen_ARM::visit(const Store *op) {
         int alignment = t.bytes();
 
         // Codegen the lets
-        for (size_t i = 0; i < lets.size(); i++) {
-            sym_push(lets[i].first, codegen(lets[i].second));
+        for (auto &let : lets) {
+            sym_push(let.first, codegen(let.second));
         }
 
         // Codegen all the vector args.
@@ -797,8 +793,8 @@ void CodeGen_ARM::visit(const Store *op) {
         }
 
         // pop the lets from the symbol table
-        for (size_t i = 0; i < lets.size(); i++) {
-            sym_pop(lets[i].first);
+        for (auto &let : lets) {
+            sym_pop(let.first);
         }
 
         return;

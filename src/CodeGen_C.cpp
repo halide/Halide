@@ -1640,9 +1640,9 @@ void CodeGen_C::compile(const LoweredFunc &f) {
     const std::vector<LoweredArgument> &args = f.args;
 
     have_user_context = false;
-    for (size_t i = 0; i < args.size(); i++) {
+    for (const auto &arg : args) {
         // TODO: check that its type is void *?
-        have_user_context |= (args[i].name == "__user_context");
+        have_user_context |= (arg.name == "__user_context");
     }
 
     NameMangling name_mangling = f.name_mangling;
@@ -2172,8 +2172,8 @@ void CodeGen_C::visit(const Call *op) {
 
             // Get the args
             vector<string> values;
-            for (size_t i = 0; i < op->args.size(); i++) {
-                values.push_back(print_expr(op->args[i]));
+            for (const auto &arg : op->args) {
+                values.push_back(print_expr(arg));
             }
 
             static_assert(sizeof(halide_dimension_t) == 4 * sizeof(int32_t),
@@ -2205,8 +2205,8 @@ void CodeGen_C::visit(const Call *op) {
 
             // Get the args
             vector<string> values;
-            for (size_t i = 0; i < op->args.size(); i++) {
-                values.push_back(print_expr(op->args[i]));
+            for (const auto &arg : op->args) {
+                values.push_back(print_expr(arg));
             }
             stream << get_indent() << "struct {\n";
             // List the types.

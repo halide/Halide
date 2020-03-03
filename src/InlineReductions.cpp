@@ -92,8 +92,8 @@ private:
             return expr;
         }
 
-        for (size_t i = 0; i < free_vars.size(); i++) {
-            if (var_name == free_vars[i].name()) {
+        for (auto &free_var : free_vars) {
+            if (var_name == free_var.name()) {
                 return expr;
             }
         }

@@ -37,14 +37,14 @@ public:
     Expr shared_mem_size;
 
     ExtractBounds()
-        : shared_mem_size(0), found_shared(false) {
+        : shared_mem_size(0) {
         for (int i = 0; i < 4; i++) {
             num_threads[i] = num_blocks[i] = 1;
         }
     }
 
 private:
-    bool found_shared;
+    bool found_shared{false};
 
     using IRVisitor::visit;
 
@@ -243,9 +243,9 @@ void CodeGen_GPU_Host<CodeGen_CPU>::visit(const For *loop) {
 
         // compile the kernel
         string kernel_name = unique_name("kernel_" + loop->name);
-        for (size_t i = 0; i < kernel_name.size(); i++) {
-            if (!isalnum(kernel_name[i])) {
-                kernel_name[i] = '_';
+        for (char &i : kernel_name) {
+            if (!isalnum(i)) {
+                i = '_';
             }
         }
 
@@ -308,22 +308,22 @@ void CodeGen_GPU_Host<CodeGen_CPU>::visit(const For *loop) {
             int num_uniform_ints = 0;
 
             // Pack scalar parameters into vec4
-            for (size_t i = 0; i < closure_args.size(); i++) {
-                if (closure_args[i].is_buffer) {
+            for (auto &closure_arg : closure_args) {
+                if (closure_arg.is_buffer) {
                     continue;
-                } else if (ends_with(closure_args[i].name, ".varying")) {
-                    closure_args[i].packed_index = num_varying_floats++;
-                } else if (closure_args[i].type.is_float()) {
-                    closure_args[i].packed_index = num_uniform_floats++;
-                } else if (closure_args[i].type.is_int()) {
-                    closure_args[i].packed_index = num_uniform_ints++;
+                } else if (ends_with(closure_arg.name, ".varying")) {
+                    closure_arg.packed_index = num_varying_floats++;
+                } else if (closure_arg.type.is_float()) {
+                    closure_arg.packed_index = num_uniform_floats++;
+                } else if (closure_arg.type.is_int()) {
+                    closure_arg.packed_index = num_uniform_ints++;
                 }
             }
         }
 
-        for (size_t i = 0; i < closure_args.size(); i++) {
-            if (closure_args[i].is_buffer && allocations.contains(closure_args[i].name)) {
-                closure_args[i].size = allocations.get(closure_args[i].name).constant_bytes;
+        for (auto &closure_arg : closure_args) {
+            if (closure_arg.is_buffer && allocations.contains(closure_arg.name)) {
+                closure_arg.size = allocations.get(closure_arg.name).constant_bytes;
             }
         }
 

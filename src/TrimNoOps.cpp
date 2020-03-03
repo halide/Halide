@@ -1,4 +1,5 @@
 #include <algorithm>
+#include <utility>
 
 #include "CSE.h"
 #include "CodeGen_GPU_Dev.h"
@@ -51,8 +52,8 @@ class LoadsFromBuffer : public IRVisitor {
 
 public:
     bool result = false;
-    LoadsFromBuffer(const string &b)
-        : buffer(b) {
+    LoadsFromBuffer(string b)
+        : buffer(std::move(b)) {
     }
 };
 

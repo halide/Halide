@@ -105,35 +105,35 @@ void CodeGen_PyTorch::compile(const LoweredFunc &f, bool is_cuda) {
     }
 
     stream << get_indent() << "// Check tensors have contiguous memory and are on the correct device\n";
-    for (size_t i = 0; i < buffer_args.size(); i++) {
+    for (auto &buffer_arg : buffer_args) {
         stream << get_indent();
         stream
             << "HLPT_CHECK_CONTIGUOUS("
-            << c_print_name(buffer_args[i].name)
+            << c_print_name(buffer_arg.name)
             << ");\n";
 
         if (is_cuda) {
             stream << get_indent();
             stream
                 << "HLPT_CHECK_DEVICE("
-                << c_print_name(buffer_args[i].name)
+                << c_print_name(buffer_arg.name)
                 << ", device_id);\n";
         }
     }
     stream << "\n";
 
     stream << get_indent() << "// Wrap tensors in Halide buffers\n";
-    for (size_t i = 0; i < buffer_args.size(); i++) {
-        if (!buffer_args[i].is_buffer())
+    for (auto &buffer_arg : buffer_args) {
+        if (!buffer_arg.is_buffer())
             continue;
 
         stream << get_indent();
-        std::string tp = type_to_c_type(buffer_args[i].type, false);
+        std::string tp = type_to_c_type(buffer_arg.type, false);
         stream
             << "Halide::Runtime::Buffer<" << tp << "> "
-            << c_print_name(buffer_args[i].name)
+            << c_print_name(buffer_arg.name)
             << "_buffer = Halide::PyTorch::wrap<" << tp << ">("
-            << c_print_name(buffer_args[i].name)
+            << c_print_name(buffer_arg.name)
             << ");\n";
     }
     stream << "\n";
@@ -160,19 +160,19 @@ void CodeGen_PyTorch::compile(const LoweredFunc &f, bool is_cuda) {
 
     if (is_cuda) {
         stream << get_indent() << "// Make sure data is on device\n";
-        for (size_t i = 0; i < buffer_args.size(); i++) {
-            if (buffer_args[i].is_buffer()) {
+        for (auto &buffer_arg : buffer_args) {
+            if (buffer_arg.is_buffer()) {
                 stream << get_indent();
                 stream
                     << "AT_ASSERTM(!"
-                    << c_print_name(buffer_args[i].name) << "_buffer.host_dirty(),"
+                    << c_print_name(buffer_arg.name) << "_buffer.host_dirty(),"
                     << "\"device not synchronized for buffer "
-                    << c_print_name(buffer_args[i].name)
+                    << c_print_name(buffer_arg.name)
                     << ", make sure all update stages are excplicitly computed on GPU."
                     << "\");\n";
                 stream << get_indent();
                 stream
-                    << c_print_name(buffer_args[i].name) << "_buffer"
+                    << c_print_name(buffer_arg.name) << "_buffer"
                     << ".device_detach_native();\n";
             }
         }

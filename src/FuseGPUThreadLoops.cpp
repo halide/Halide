@@ -30,7 +30,7 @@ string shared_mem_name = "__shared";
 }  // namespace
 
 class InjectThreadBarriers : public IRMutator {
-    bool in_threads;
+    bool in_threads{false};
 
     using IRMutator::visit;
 
@@ -68,8 +68,7 @@ class InjectThreadBarriers : public IRMutator {
     }
 
 public:
-    InjectThreadBarriers()
-        : in_threads(false) {
+    InjectThreadBarriers() {
         barrier =
             Evaluate::make(Call::make(Int(32), Call::gpu_thread_barrier,
                                       vector<Expr>(), Call::Intrinsic));
@@ -112,21 +111,21 @@ class ExtractBlockSize : public IRVisitor {
         Scope<Interval> scope;
         scope.push(op->name, Interval(op->min, simplify(op->min + op->extent - 1)));
         // For non-rectangular thread loops, use a bounding box. We'll inject if statements later.
-        for (int i = 0; i < 4; i++) {
-            if (block_extent[i].defined() &&
-                expr_uses_var(block_extent[i], op->name)) {
-                block_extent[i] = simplify(common_subexpression_elimination(block_extent[i]));
-                block_extent[i] = simplify(bounds_of_expr_in_scope(block_extent[i], scope).max);
+        for (auto &i : block_extent) {
+            if (i.defined() &&
+                expr_uses_var(i, op->name)) {
+                i = simplify(common_subexpression_elimination(i));
+                i = simplify(bounds_of_expr_in_scope(i, scope).max);
             }
         }
     }
 
     void visit(const LetStmt *op) override {
         IRVisitor::visit(op);
-        for (int i = 0; i < 4; i++) {
-            if (block_extent[i].defined() &&
-                expr_uses_var(block_extent[i], op->name)) {
-                block_extent[i] = simplify(Let::make(op->name, op->value, block_extent[i]));
+        for (auto &i : block_extent) {
+            if (i.defined() &&
+                expr_uses_var(i, op->name)) {
+                i = simplify(Let::make(op->name, op->value, i));
             }
         }
     }
@@ -417,8 +416,8 @@ class ExtractSharedAndHeapAllocations : public IRMutator {
         alloc.type = op->type;
         alloc.liveness = IntInterval(barrier_stage, barrier_stage);
         alloc.size = 1;
-        for (size_t i = 0; i < op->extents.size(); i++) {
-            alloc.size *= op->extents[i];
+        for (const auto &extent : op->extents) {
+            alloc.size *= extent;
         }
         alloc.size = simplify(alloc.size);
         alloc.memory_type = op->memory_type;
@@ -692,10 +691,10 @@ public:
 
                 Expr total_size_bytes = 0;
                 int max_type_bytes = 0;
-                for (int i = 0; i < (int)(mem_allocs.size()); i++) {
-                    if (mem_allocs[i].memory_type == memory_type) {
-                        total_size_bytes += mem_allocs[i].max_size_bytes;
-                        max_type_bytes = std::max(max_type_bytes, mem_allocs[i].max_type_bytes);
+                for (auto &mem_alloc : mem_allocs) {
+                    if (mem_alloc.memory_type == memory_type) {
+                        total_size_bytes += mem_alloc.max_size_bytes;
+                        max_type_bytes = std::max(max_type_bytes, mem_alloc.max_type_bytes);
                     }
                 }
 
@@ -941,8 +940,8 @@ class ExtractRegisterAllocations : public IRMutator {
         alloc.type = op->type;
         alloc.size = 1;
         alloc.loop_var = loop_var;
-        for (size_t i = 0; i < op->extents.size(); i++) {
-            alloc.size *= op->extents[i];
+        for (const auto &extent : op->extents) {
+            alloc.size *= extent;
         }
         alloc.size = simplify(mutate(alloc.size));
         alloc.memory_type = op->memory_type;
@@ -1150,7 +1149,7 @@ class FuseGPUThreadLoops : public IRMutator {
 };
 
 class ZeroGPULoopMins : public IRMutator {
-    bool in_non_glsl_gpu;
+    bool in_non_glsl_gpu{false};
     using IRMutator::visit;
 
     Stmt visit(const For *op) override {
@@ -1173,9 +1172,7 @@ class ZeroGPULoopMins : public IRMutator {
     }
 
 public:
-    ZeroGPULoopMins()
-        : in_non_glsl_gpu(false) {
-    }
+    ZeroGPULoopMins() = default;
 };
 
 class ValidateGPULoopNesting : public IRVisitor {

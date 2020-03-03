@@ -71,7 +71,7 @@ struct Argument {
     ArgumentEstimates argument_estimates;
 
     Argument() = default;
-    Argument(const std::string &_name, Kind _kind, const Type &_type, int _dimensions,
+    Argument(std::string _name, Kind _kind, const Type &_type, int _dimensions,
              const ArgumentEstimates &argument_estimates);
 
     // Not explicit, so that you can put Buffer in an argument list,

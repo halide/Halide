@@ -17,10 +17,10 @@ bool lookup_runtime_routine(const std::string &name,
     std::vector<JITModule> runtime(
         JITSharedRuntime::get(nullptr, target.with_feature(Target::JIT)));
 
-    for (size_t i = 0; i < runtime.size(); i++) {
+    for (auto &i : runtime) {
         std::map<std::string, JITModule::Symbol>::const_iterator f =
-            runtime[i].exports().find(name);
-        if (f != runtime[i].exports().end()) {
+            i.exports().find(name);
+        if (f != i.exports().end()) {
             result = reinterpret_bits<fn_type>(f->second.address);
             return true;
         }
