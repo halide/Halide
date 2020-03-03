@@ -141,7 +141,11 @@ jobs:
           export MSVC_TARGET_ARCH=x64
         fi
 
-        printenv PATH
+        #printenv PATH
+        cmd /c "echo %PATH%"
+        echo
+        echo
+        echo
 
         VSDEVCMD_PATH0=$(cd "${VSDEVCMD_DIR}" && \
                         cmd /c "echo %PATH%")
