@@ -146,7 +146,7 @@ jobs:
         echo
         echo
         VSDEVCMD_PATH=$(cd "${VSDEVCMD_DIR}" && \
-                        cmd /c "vsdevcmd.bat -no_logo -arch=${MSVC_TARGET_ARCH} -host_arch=x64 && bash -c 'printenv PATH'")
+                        cmd /c "vsdevcmd.bat -no_logo -arch=${MSVC_TARGET_ARCH} -host_arch=x64 && ${BASH} -c 'printenv PATH'")
 
         echo
         echo
