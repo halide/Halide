@@ -124,6 +124,9 @@ jobs:
         VS_INSTALL_DIR=`vswhere -latest -property installationPath`
         VSDEVCMD="${VS_INSTALL_DIR//\\//}/Common7/Tools/vsdevcmd.bat"
         echo VSDEVCMD is ${VSDEVCMD}
+        "${VSDEVCMD}" -help
+
+        cat "${VSDEVCMD}"
 
         echo ::set-env name=VSDEVCMD::"${VSDEVCMD}"
 
