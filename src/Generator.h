@@ -472,7 +472,6 @@ protected:
     void fail_wrong_type(const char *type);
 
 private:
-
     // Generator which owns this GeneratorParam. Note that this will be null
     // initially; the GeneratorBase itself will set this field when it initially
     // builds its info about params. However, since it (generally) isn't
@@ -1503,7 +1502,6 @@ protected:
 private:
     template<typename T>
     friend class GeneratorParam_Synthetic;
-
 };
 
 template<>
@@ -2917,7 +2915,6 @@ protected:
     inline std::shared_ptr<Internal::ValueTracker> get_value_tracker() const {
         return value_tracker;
     }
-
 };
 
 class NamesInterface {
@@ -3448,7 +3445,6 @@ private:
     std::vector<std::vector<StubInput>> build_inputs(const std::tuple<const Args &...> &t, index_sequence<Indices...>) {
         return {build_input(Indices, std::get<Indices>(t))...};
     }
-
 };
 
 class GeneratorRegistry {
@@ -3463,6 +3459,7 @@ public:
 
     GeneratorRegistry(const GeneratorRegistry &) = delete;
     void operator=(const GeneratorRegistry &) = delete;
+
 private:
     using GeneratorFactoryMap = std::map<const std::string, GeneratorFactory>;
 
@@ -3676,7 +3673,6 @@ private:
     friend class Internal::SimpleGeneratorFactory;
     friend void ::Halide::Internal::generator_test();
     friend class ::Halide::GeneratorContext;
-
 };
 
 namespace Internal {

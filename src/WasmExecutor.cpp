@@ -1631,7 +1631,6 @@ WasmModuleContents::~WasmModuleContents() {
 WasmModuleContents::~WasmModuleContents() = default;
 #endif
 
-
 template<>
 RefCount &ref_count<WasmModuleContents>(const WasmModuleContents *p) noexcept {
     return p->ref_count;
