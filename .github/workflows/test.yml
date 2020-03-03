@@ -122,17 +122,25 @@ jobs:
         # it apparently cannot, and you have to configure it explicitly,
         # via the vsdevcmd batch file.
         VS_INSTALL_DIR=`vswhere -latest -property installationPath`
-        VSDEVCMD="${VS_INSTALL_DIR//\\//}/Common7/Tools/vsdevcmd.bat"
+        VSDEVCMD_DIR="${VS_INSTALL_DIR//\\//}/Common7/Tools"
+        VSDEVCMD="${VSDEVCMD_DIR}/vsdevcmd.bat"
         echo VSDEVCMD is ${VSDEVCMD}
-        "${VSDEVCMD}" -help
-
-        cat "${VSDEVCMD}"
+        # "${VSDEVCMD}" -help
+        # cat "${VSDEVCMD}"
 
         echo ::set-env name=VSDEVCMD::"${VSDEVCMD}"
 
-        VSCMD_DEBUG=2 "${VSDEVCMD}" -arch=x64 -host_arch=x64
+        echo CommandPromptType is ${CommandPromptType}
+        echo 0PATH is ${PATH}
 
-        env
+        (cd "${VSDEVCMD_DIR}" &&
+         cmd /c "vsdevcmd.bat -arch=x64 -host_arch=x64 && bash -c 'printenv PATH'")
+        # "${VSDEVCMD}" -arch=x64 -host_arch=x64
+
+        echo CommandPromptType is ${CommandPromptType}
+        echo 1PATH is ${PATH}
+
+        #env
         exit 22
 
         choco install ninja
