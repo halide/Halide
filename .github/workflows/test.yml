@@ -134,11 +134,10 @@ jobs:
         echo 0PATH is ${PATH}
 
         (cd "${VSDEVCMD_DIR}" &&
-         cmd /c "vsdevcmd.bat -arch=x64 -host_arch=x64 && bash -c 'printenv PATH'")
-        # "${VSDEVCMD}" -arch=x64 -host_arch=x64
+         cmd /c "vsdevcmd.bat --no_logo -arch=x64 -host_arch=x64 && bash -c 'printenv VSDEVCMD_PATH'")
 
         echo CommandPromptType is ${CommandPromptType}
-        echo 1PATH is ${PATH}
+        echo VSDEVCMD_PATH is ${VSDEVCMD_PATH}
 
         #env
         exit 22
