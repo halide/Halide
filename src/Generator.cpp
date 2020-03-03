@@ -1077,8 +1077,8 @@ std::vector<std::string> GeneratorRegistry::enumerate() {
     GeneratorRegistry &registry = get_registry();
     std::lock_guard<std::mutex> lock(registry.mutex);
     std::vector<std::string> result;
-    for (const auto &i : registry.factories) {
-        result.push_back(i.first);
+    for (const auto &f : registry.factories) {
+        result.push_back(f.first);
     }
     return result;
 }

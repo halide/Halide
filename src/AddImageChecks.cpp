@@ -215,8 +215,8 @@ Stmt add_image_checks(Stmt s,
         if (param.defined()) {
             // Find the extern users.
             vector<string> extern_users;
-            for (const auto &i : order) {
-                Function f = env.find(i)->second;
+            for (const auto &name : order) {
+                Function f = env.find(name)->second;
                 if (f.has_extern_definition() &&
                     !f.extern_definition_proxy_expr().defined()) {
                     const vector<ExternFuncArgument> &args = f.extern_arguments();
@@ -225,7 +225,7 @@ Stmt add_image_checks(Stmt s,
                              arg.image_param.name() == param.name()) ||
                             (arg.buffer.defined() &&
                              arg.buffer.name() == param.name())) {
-                            extern_users.push_back(i);
+                            extern_users.push_back(name);
                         }
                     }
                 }

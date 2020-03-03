@@ -387,16 +387,16 @@ public:
             size_t last_dot = loop_level.rfind('.');
             string var = loop_level.substr(last_dot + 1);
 
-            for (const pair<const pair<string, int>, Box> &i : bounds) {
-                string func_name = i.first.first;
-                int func_stage_index = i.first.second;
+            for (const auto &p : bounds) {
+                string func_name = p.first.first;
+                int func_stage_index = p.first.second;
                 string stage_name = func_name + ".s" + std::to_string(func_stage_index);
                 if (stage_name == producing_stage_index ||
                     inner_productions.count(func_name) ||
                     is_fused_with_others(fused_groups, fused_pairs_in_groups,
                                          producing_func, producing_stage_index_index,
                                          func_name, func_stage_index, var)) {
-                    merge_boxes(b, i.second);
+                    merge_boxes(b, p.second);
                 }
             }
 
@@ -875,11 +875,11 @@ public:
                 for (const auto &cval : consumer.exprs) {
                     map<string, Box> new_boxes;
                     new_boxes = boxes_required(cval.value, scope, func_bounds);
-                    for (auto &i : new_boxes) {
+                    for (auto &p : new_boxes) {
                         // Add the condition on which this value is evaluated to the box before merging
-                        Box &box = i.second;
+                        Box &box = p.second;
                         box.used = cval.cond;
-                        merge_boxes(boxes[i.first], box);
+                        merge_boxes(boxes[p.first], box);
                     }
                 }
             }
@@ -1122,8 +1122,8 @@ public:
                         vars.push_back(rv.var);
                     }
                 }
-                for (const string &i : vars) {
-                    string var = s.stage_prefix + i;
+                for (const string &v : vars) {
+                    string var = s.stage_prefix + v;
                     Interval in = bounds_of_inner_var(var, body);
                     if (in.is_bounded()) {
                         // bounds_of_inner_var doesn't understand
@@ -1205,9 +1205,9 @@ Stmt bounds_inference(Stmt s,
                           f.definition().schedule().fused_pairs().end(),
                           std::inserter(pairs, pairs.end()));
 
-                for (const auto &i : f.updates()) {
-                    std::copy(i.schedule().fused_pairs().begin(),
-                              i.schedule().fused_pairs().end(),
+                for (const auto &u : f.updates()) {
+                    std::copy(u.schedule().fused_pairs().begin(),
+                              u.schedule().fused_pairs().end(),
                               std::inserter(pairs, pairs.end()));
                 }
             }

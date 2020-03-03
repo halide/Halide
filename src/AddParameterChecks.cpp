@@ -46,18 +46,18 @@ Stmt add_parameter_checks(const vector<Stmt> &preconditions, Stmt s, const Targe
     vector<ParamAssert> asserts;
 
     // Make constrained versions of the params
-    for (pair<const string, Parameter> &i : finder.params) {
-        Parameter param = i.second;
+    for (const auto &p : finder.params) {
+        Parameter param = p.second;
 
         if (!param.is_buffer() &&
             (param.min_value().defined() ||
              param.max_value().defined())) {
 
-            string constrained_name = i.first + ".constrained";
+            string constrained_name = p.first + ".constrained";
 
             Expr constrained_var = Variable::make(param.type(), constrained_name);
-            Expr constrained_value = Variable::make(param.type(), i.first, param);
-            replace_with_constrained[i.first] = constrained_var;
+            Expr constrained_value = Variable::make(param.type(), p.first, param);
+            replace_with_constrained[p.first] = constrained_var;
 
             if (param.min_value().defined()) {
                 ParamAssert p = {

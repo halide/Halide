@@ -111,21 +111,21 @@ class ExtractBlockSize : public IRVisitor {
         Scope<Interval> scope;
         scope.push(op->name, Interval(op->min, simplify(op->min + op->extent - 1)));
         // For non-rectangular thread loops, use a bounding box. We'll inject if statements later.
-        for (auto &i : block_extent) {
-            if (i.defined() &&
-                expr_uses_var(i, op->name)) {
-                i = simplify(common_subexpression_elimination(i));
-                i = simplify(bounds_of_expr_in_scope(i, scope).max);
+        for (auto &e : block_extent) {
+            if (e.defined() &&
+                expr_uses_var(e, op->name)) {
+                e = simplify(common_subexpression_elimination(e));
+                e = simplify(bounds_of_expr_in_scope(e, scope).max);
             }
         }
     }
 
     void visit(const LetStmt *op) override {
         IRVisitor::visit(op);
-        for (auto &i : block_extent) {
-            if (i.defined() &&
-                expr_uses_var(i, op->name)) {
-                i = simplify(Let::make(op->name, op->value, i));
+        for (auto &e : block_extent) {
+            if (e.defined() &&
+                expr_uses_var(e, op->name)) {
+                e = simplify(Let::make(op->name, op->value, e));
             }
         }
     }

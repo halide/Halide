@@ -271,8 +271,8 @@ std::string type_to_c_type(Type type, bool include_space, bool c_plus_plus) {
             if (!type.handle_type->namespaces.empty() ||
                 !type.handle_type->enclosing_types.empty()) {
                 oss << "::";
-                for (const auto &i : type.handle_type->namespaces) {
-                    oss << i << "::";
+                for (const auto &ns : type.handle_type->namespaces) {
+                    oss << ns << "::";
                 }
                 for (const auto &enclosing_type : type.handle_type->enclosing_types) {
                     oss << enclosing_type.name << "::";

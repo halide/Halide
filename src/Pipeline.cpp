@@ -515,9 +515,9 @@ std::string Pipeline::generate_function_name() const {
     user_assert(defined()) << "Pipeline is undefined\n";
     // Come up with a name for a generated function
     string name = contents->outputs[0].name();
-    for (char &i : name) {
-        if (!isalnum(i)) {
-            i = '_';
+    for (char &c : name) {
+        if (!isalnum(c)) {
+            c = '_';
         }
     }
     return name;

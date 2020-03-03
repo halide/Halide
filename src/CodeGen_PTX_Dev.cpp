@@ -476,8 +476,8 @@ vector<char> CodeGen_PTX_Dev::compile_to_src() {
 
     // Run optimization passes
     function_pass_manager.doInitialization();
-    for (auto &i : *module) {
-        function_pass_manager.run(i);
+    for (auto &fn : *module) {
+        function_pass_manager.run(fn);
     }
     function_pass_manager.doFinalization();
     module_pass_manager.run(*module);

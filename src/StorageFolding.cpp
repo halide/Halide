@@ -852,12 +852,10 @@ class StorageFolding : public IRMutator {
             Region bounds = op->bounds;
 
             // Collapse down the extent in the folded dimension
-            for (auto &i : folder.dims_folded) {
-                int d = i.dim;
-                Expr f = i.factor;
-                internal_assert(d >= 0 &&
-                                d < (int)bounds.size());
-                bounds[d] = Range(0, f);
+            for (const auto &d : folder.dims_folded) {
+                internal_assert(d.dim >= 0 &&
+                                d.dim < (int)bounds.size());
+                bounds[d.dim] = Range(0, d.factor);
             }
 
             Stmt stmt = Realize::make(op->name, op->types, op->memory_type, bounds, op->condition, body);

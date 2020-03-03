@@ -105,13 +105,13 @@ struct FunctionContents {
         }
 
         if (!extern_function_name.empty()) {
-            for (const ExternFuncArgument &i : extern_arguments) {
-                if (i.is_func()) {
-                    user_assert(i.func.get() != this)
+            for (const ExternFuncArgument &arg : extern_arguments) {
+                if (arg.is_func()) {
+                    user_assert(arg.func.get() != this)
                         << "Extern Func has itself as an argument";
-                    i.func->accept(visitor);
-                } else if (i.is_expr()) {
-                    i.expr.accept(visitor);
+                    arg.func->accept(visitor);
+                } else if (arg.is_expr()) {
+                    arg.expr.accept(visitor);
                 }
             }
             if (extern_proxy_expr.defined()) {
@@ -119,16 +119,16 @@ struct FunctionContents {
             }
         }
 
-        for (const Parameter &i : output_buffers) {
+        for (const Parameter &p : output_buffers) {
             for (size_t j = 0; j < args.size(); j++) {
-                if (i.min_constraint(j).defined()) {
-                    i.min_constraint(j).accept(visitor);
+                if (p.min_constraint(j).defined()) {
+                    p.min_constraint(j).accept(visitor);
                 }
-                if (i.stride_constraint(j).defined()) {
-                    i.stride_constraint(j).accept(visitor);
+                if (p.stride_constraint(j).defined()) {
+                    p.stride_constraint(j).accept(visitor);
                 }
-                if (i.extent_constraint(j).defined()) {
-                    i.extent_constraint(j).accept(visitor);
+                if (p.extent_constraint(j).defined()) {
+                    p.extent_constraint(j).accept(visitor);
                 }
             }
         }
@@ -146,9 +146,9 @@ struct FunctionContents {
         }
 
         if (!extern_function_name.empty()) {
-            for (ExternFuncArgument &i : extern_arguments) {
-                if (i.is_expr()) {
-                    i.expr = mutator->mutate(i.expr);
+            for (ExternFuncArgument &arg : extern_arguments) {
+                if (arg.is_expr()) {
+                    arg.expr = mutator->mutate(arg.expr);
                 }
             }
             extern_proxy_expr = mutator->mutate(extern_proxy_expr);
@@ -601,8 +601,8 @@ void Function::define_update(const vector<Expr> &_args, vector<Expr> values) {
         }
     }
     if (check.reduction_domain.defined()) {
-        for (const auto &i : check.reduction_domain.domain()) {
-            string rvar = i.var;
+        for (const auto &v : check.reduction_domain.domain()) {
+            string rvar = v.var;
             free_vars.push_back(rvar);
         }
     }

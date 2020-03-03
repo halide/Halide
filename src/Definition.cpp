@@ -102,8 +102,8 @@ Definition::Definition(const std::vector<Expr> &args, const std::vector<Expr> &v
     contents->source_location = Introspection::get_source_location();
     if (rdom.defined()) {
         contents->predicate = rdom.predicate();
-        for (const auto &i : rdom.domain()) {
-            contents->stage_schedule.rvars().push_back(i);
+        for (const auto &v : rdom.domain()) {
+            contents->stage_schedule.rvars().push_back(v);
         }
     }
 }

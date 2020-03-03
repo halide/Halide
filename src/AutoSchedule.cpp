@@ -80,9 +80,9 @@ string get_sanitized_name(string name) {
     if (isdigit(name[0])) {
         name = "_" + name;
     }
-    for (char &i : name) {
-        if (!isalnum(i)) {
-            i = '_';
+    for (char &c : name) {
+        if (!isalnum(c)) {
+            c = '_';
         }
     }
     return name;
@@ -825,8 +825,8 @@ struct AutoSchedule {
                 if (s.first > 0) {
                     schedule_ss << ".update(" << std::to_string(s.first - 1) << ")";
                 }
-                for (const auto &i : s.second) {
-                    schedule_ss << "\n        ." << i;
+                for (const auto &directive : s.second) {
+                    schedule_ss << "\n        ." << directive;
                 }
                 schedule_ss << ";\n";
             }
@@ -1690,8 +1690,8 @@ void Partitioner::group(Partitioner::Level level) {
         debug(3) << "\n============================" << '\n';
         debug(3) << "Current grouping candidates:" << '\n';
         debug(3) << "============================" << '\n';
-        for (auto &i : cand) {
-            debug(3) << "{" << i.first << ", " << i.second << "}" << '\n';
+        for (const auto &p : cand) {
+            debug(3) << "{" << p.first << ", " << p.second << "}" << '\n';
         }
 
         vector<pair<GroupingChoice, GroupConfig>> best = choose_candidate_grouping(cand, level);

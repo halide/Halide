@@ -54,40 +54,40 @@ void validate_schedule_inlined_function(Function f) {
         }
     }
 
-    for (const auto &i : stage_s.splits()) {
-        if (i.is_rename()) {
+    for (const auto &split : stage_s.splits()) {
+        if (split.is_rename()) {
             user_warning << "It is meaningless to rename variable "
-                         << i.old_var << " of function "
-                         << f.name() << " to " << i.outer
+                         << split.old_var << " of function "
+                         << f.name() << " to " << split.outer
                          << " because " << f.name() << " is scheduled inline.\n";
-        } else if (i.is_fuse()) {
+        } else if (split.is_fuse()) {
             user_warning << "It is meaningless to fuse variables "
-                         << i.inner << " and " << i.outer
+                         << split.inner << " and " << split.outer
                          << " because " << f.name() << " is scheduled inline.\n";
         } else {
             user_warning << "It is meaningless to split variable "
-                         << i.old_var << " of function "
+                         << split.old_var << " of function "
                          << f.name() << " into "
-                         << i.outer << " * "
-                         << i.factor << " + "
-                         << i.inner << " because "
+                         << split.outer << " * "
+                         << split.factor << " + "
+                         << split.inner << " because "
                          << f.name() << " is scheduled inline.\n";
         }
     }
 
-    for (const auto &i : func_s.bounds()) {
-        if (i.min.defined()) {
+    for (const auto &bound : func_s.bounds()) {
+        if (bound.min.defined()) {
             user_warning << "It is meaningless to bound dimension "
-                         << i.var << " of function "
+                         << bound.var << " of function "
                          << f.name() << " to be within ["
-                         << i.min << ", "
-                         << i.extent << "] because the function is scheduled inline.\n";
-        } else if (i.modulus.defined()) {
+                         << bound.min << ", "
+                         << bound.extent << "] because the function is scheduled inline.\n";
+        } else if (bound.modulus.defined()) {
             user_warning << "It is meaningless to align the bounds of dimension "
-                         << i.var << " of function "
+                         << bound.var << " of function "
                          << f.name() << " to have modulus/remainder ["
-                         << i.modulus << ", "
-                         << i.remainder << "] because the function is scheduled inline.\n";
+                         << bound.modulus << ", "
+                         << bound.remainder << "] because the function is scheduled inline.\n";
         }
     }
 }

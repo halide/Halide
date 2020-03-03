@@ -210,9 +210,9 @@ string make_entity_name(void *stack_ptr, const string &type, char prefix) {
         return unique_name(prefix);
     } else {
         // Halide names may not contain '.'
-        for (char &i : name) {
-            if (i == '.') {
-                i = ':';
+        for (char &c : name) {
+            if (c == '.') {
+                c = ':';
             }
         }
         return unique_name(name);

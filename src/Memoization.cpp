@@ -156,8 +156,8 @@ class KeyInfo {
     size_t parameters_alignment() {
         int32_t max_alignment = 0;
         // Find maximum natural alignment needed.
-        for (const ConstDependencyKeyInfoPair &i : dependencies.dependency_info) {
-            int alignment = i.second.type.bytes();
+        for (const ConstDependencyKeyInfoPair &p : dependencies.dependency_info) {
+            int alignment = p.second.type.bytes();
             if (alignment > max_alignment) {
                 max_alignment = alignment;
             }
@@ -199,8 +199,8 @@ public:
         }
         key_size_expr = (int32_t)size_so_far;
 
-        for (const ConstDependencyKeyInfoPair &i : dependencies.dependency_info) {
-            key_size_expr += i.second.size_expr;
+        for (const ConstDependencyKeyInfoPair &p : dependencies.dependency_info) {
+            key_size_expr += p.second.size_expr;
         }
     }
 
@@ -246,12 +246,12 @@ public:
             }
         }
 
-        for (const ConstDependencyKeyInfoPair &i : dependencies.dependency_info) {
+        for (const ConstDependencyKeyInfoPair &p : dependencies.dependency_info) {
             writes.push_back(Store::make(key_name,
-                                         i.second.value_expr,
-                                         (index / i.second.size_expr),
+                                         p.second.value_expr,
+                                         (index / p.second.size_expr),
                                          Parameter(), const_true(), ModulusRemainder()));
-            index += i.second.size_expr;
+            index += p.second.size_expr;
         }
         Stmt blocks = Block::make(writes);
 

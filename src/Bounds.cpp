@@ -1333,8 +1333,8 @@ private:
     void visit(const Shuffle *op) override {
         TRACK_BOUNDS_INTERVAL;
         Interval result = Interval::nothing();
-        for (const Expr &i : op->vectors) {
-            i.accept(this);
+        for (const Expr &e : op->vectors) {
+            e.accept(this);
             result.include(interval);
         }
         interval = result;
@@ -1972,8 +1972,8 @@ private:
                 // We made up new names for the bounds of the
                 // value, and need to rewrap any boxes we're
                 // returning with appropriate lets.
-                for (pair<const string, Box> &i : boxes) {
-                    Box &box = i.second;
+                for (pair<const string, Box> &p : boxes) {
+                    Box &box = p.second;
                     for (size_t i = 0; i < box.size(); i++) {
                         if (box[i].has_lower_bound()) {
                             if (expr_uses_var(box[i].min, it->max_name)) {
@@ -2059,8 +2059,8 @@ private:
 
             trim_scope_pop(l.var, let_bounds);
 
-            for (pair<const string, Box> &i : boxes) {
-                Box &box = i.second;
+            for (pair<const string, Box> &p : boxes) {
+                Box &box = p.second;
                 for (size_t i = 0; i < box.size(); i++) {
                     Interval v_bound;
                     if ((box[i].has_lower_bound() && (expr_uses_var(box[i].min, l.max_name) ||
@@ -2266,15 +2266,15 @@ private:
 
             // Make sure all the then boxes have an entry on the else
             // side so that the merge doesn't skip them.
-            for (pair<const string, Box> &i : then_boxes) {
-                else_boxes[i.first];
+            for (pair<const string, Box> &p : then_boxes) {
+                else_boxes[p.first];
             }
 
             // Merge
-            for (pair<const string, Box> &i : else_boxes) {
-                Box &else_box = i.second;
-                Box &then_box = then_boxes[i.first];
-                Box &orig_box = boxes[i.first];
+            for (pair<const string, Box> &p : else_boxes) {
+                Box &else_box = p.second;
+                Box &then_box = then_boxes[p.first];
+                Box &orig_box = boxes[p.first];
 
                 if (then_box.maybe_unused()) {
                     then_box.used = then_box.used && op->condition;
@@ -2451,8 +2451,8 @@ map<string, Box> boxes_touched(const Expr &e, Stmt s, bool consider_calls, bool 
     }
 
     // Combine the two maps.
-    for (pair<const string, Box> &i : provides.boxes) {
-        merge_boxes(calls.boxes[i.first], i.second);
+    for (pair<const string, Box> &p : provides.boxes) {
+        merge_boxes(calls.boxes[p.first], p.second);
     }
 
     // Make evaluating these boxes side-effect-free
@@ -2542,8 +2542,8 @@ FuncValueBounds compute_function_value_bounds(const vector<string> &order,
                                               const map<string, Function> &env) {
     FuncValueBounds fb;
 
-    for (const auto &i : order) {
-        Function f = env.find(i)->second;
+    for (const auto &name : order) {
+        Function f = env.find(name)->second;
         const vector<string> f_args = f.args();
         for (int j = 0; j < f.outputs(); j++) {
             pair<string, int> key = {f.name(), j};
@@ -2585,7 +2585,7 @@ FuncValueBounds compute_function_value_bounds(const vector<string> &order,
             }
 
             debug(2) << "Bounds on value " << j
-                     << " for func " << i
+                     << " for func " << name
                      << " are: " << result.min << ", " << result.max << "\n";
         }
     }

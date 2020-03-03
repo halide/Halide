@@ -901,8 +901,8 @@ class VectorSubs : public IRMutator {
         // The new expanded dimension is innermost.
         new_extents.emplace_back(lanes);
 
-        for (const auto &i : op->extents) {
-            Expr extent = mutate(i);
+        for (const auto &e : op->extents) {
+            Expr extent = mutate(e);
             // For vector sizes, take the max over the lanes. Note
             // that we haven't changed the strides, which also may
             // vary per lane. This is a bit weird, but the way we

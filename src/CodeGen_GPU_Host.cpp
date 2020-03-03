@@ -133,8 +133,8 @@ CodeGen_GPU_Host<CodeGen_CPU>::CodeGen_GPU_Host(Target target)
 
 template<typename CodeGen_CPU>
 CodeGen_GPU_Host<CodeGen_CPU>::~CodeGen_GPU_Host() {
-    for (pair<const DeviceAPI, CodeGen_GPU_Dev *> &i : cgdev) {
-        delete i.second;
+    for (auto &p : cgdev) {
+        delete p.second;
     }
 }
 
@@ -145,8 +145,8 @@ void CodeGen_GPU_Host<CodeGen_CPU>::compile_func(const LoweredFunc &f,
     function_name = simple_name;
 
     // Create a new module for all of the kernels we find in this function.
-    for (pair<const DeviceAPI, CodeGen_GPU_Dev *> &i : cgdev) {
-        i.second->init_module();
+    for (auto &p : cgdev) {
+        p.second->init_module();
     }
 
     // Call the base implementation to create the function.
@@ -175,9 +175,9 @@ void CodeGen_GPU_Host<CodeGen_CPU>::compile_func(const LoweredFunc &f,
     // Fill out the init kernels block
     builder->SetInsertPoint(init_kernels_bb);
 
-    for (pair<const DeviceAPI, CodeGen_GPU_Dev *> &i : cgdev) {
+    for (auto &p : cgdev) {
 
-        CodeGen_GPU_Dev *gpu_codegen = i.second;
+        CodeGen_GPU_Dev *gpu_codegen = p.second;
         std::string api_unique_name = gpu_codegen->api_unique_name();
 
         // If the module state for this API/function did not get created, there were
@@ -243,9 +243,9 @@ void CodeGen_GPU_Host<CodeGen_CPU>::visit(const For *loop) {
 
         // compile the kernel
         string kernel_name = unique_name("kernel_" + loop->name);
-        for (char &i : kernel_name) {
-            if (!isalnum(i)) {
-                i = '_';
+        for (char &c : kernel_name) {
+            if (!isalnum(c)) {
+                c = '_';
             }
         }
 

@@ -283,8 +283,8 @@ Expr apply_patterns(Expr x, const vector<Pattern> &patterns, const Target &targe
         if (expr_match(p.pattern, x, matches)) {
             debug(3) << "matched " << p.pattern << "\n";
             debug(3) << "matches:\n";
-            for (const Expr &i : matches) {
-                debug(3) << i << "\n";
+            for (const Expr &e : matches) {
+                debug(3) << e << "\n";
             }
 
             if (!process_match_flags(matches, p.flags)) {
@@ -837,9 +837,9 @@ private:
                 {"halide.hexagon.cls.vw", max(count_leading_zeros(wild_i32x), count_leading_zeros(~wild_i32x))},
             };
             vector<Expr> matches;
-            for (const auto &i : cl) {
-                if (expr_match(i.second, expr, matches) && equal(matches[0], matches[1])) {
-                    return Call::make(op->type, i.first, {matches[0]}, Call::PureExtern) + 1;
+            for (const auto &p : cl) {
+                if (expr_match(p.second, expr, matches) && equal(matches[0], matches[1])) {
+                    return Call::make(op->type, p.first, {matches[0]}, Call::PureExtern) + 1;
                 }
             }
         }
@@ -1061,10 +1061,10 @@ private:
 
             // If we didn't find a pattern, try using one of the
             // rewrites above.
-            for (const auto &i : cast_rewrites) {
-                if (expr_match(i.first, cast, matches)) {
-                    debug(3) << "rewriting cast to: " << i.first << " from " << cast << "\n";
-                    Expr replacement = with_lanes(i.second, op->type.lanes());
+            for (const auto &p : cast_rewrites) {
+                if (expr_match(p.first, cast, matches)) {
+                    debug(3) << "rewriting cast to: " << p.first << " from " << cast << "\n";
+                    Expr replacement = with_lanes(p.second, op->type.lanes());
                     Expr expr = substitute("*", matches[0], replacement);
                     return mutate(expr);
                 }
@@ -1156,10 +1156,10 @@ class EliminateInterleaves : public IRMutator {
     // be removed, and that all of the exprs can yield an interleave.
     bool yields_removable_interleave(const vector<Expr> &exprs) {
         bool any_is_interleave = false;
-        for (const Expr &i : exprs) {
-            if (yields_removable_interleave(i)) {
+        for (const Expr &e : exprs) {
+            if (yields_removable_interleave(e)) {
                 any_is_interleave = true;
-            } else if (!yields_interleave(i)) {
+            } else if (!yields_interleave(e)) {
                 return false;
             }
         }
@@ -1401,9 +1401,10 @@ class EliminateInterleaves : public IRMutator {
             // We assume that any hexagon intrinsic is interleavable
             // as long as all of the vector operands have the same
             // number of lanes and lane width as the return type.
-            for (const Expr &i : op->args) {
-                if (i.type().is_scalar()) continue;
-                if (i.type().bits() != op->type.bits() || i.type().lanes() != op->type.lanes()) {
+            for (const Expr &arg : op->args) {
+                if (arg.type().is_scalar()) continue;
+                if (arg.type().bits() != op->type.bits() ||
+                    arg.type().lanes() != op->type.lanes()) {
                     return false;
                 }
             }
@@ -1416,10 +1417,10 @@ class EliminateInterleaves : public IRMutator {
 
         // mutate all the args.
         bool changed = false;
-        for (Expr &i : args) {
-            Expr new_i = mutate(i);
-            changed = changed || !new_i.same_as(i);
-            i = new_i;
+        for (Expr &arg : args) {
+            Expr new_arg = mutate(arg);
+            changed = changed || !new_arg.same_as(arg);
+            arg = new_arg;
         }
 
         // For a few operations, we have a choice of several
@@ -1456,8 +1457,8 @@ class EliminateInterleaves : public IRMutator {
             // All the arguments yield interleaves (and one of
             // them is an interleave), create a new call with the
             // interleave removed from the arguments.
-            for (Expr &i : args) {
-                i = remove_interleave(i);
+            for (Expr &arg : args) {
+                arg = remove_interleave(arg);
             }
             Expr expr = Call::make(op->type, op->name, args, op->call_type,
                                    op->func, op->value_index, op->image, op->param);
@@ -1468,8 +1469,8 @@ class EliminateInterleaves : public IRMutator {
             // This call has a deinterleaving alternative, and the
             // arguments are interleaved, so we should use the
             // alternative instead.
-            for (Expr &i : args) {
-                i = remove_interleave(i);
+            for (Expr &arg : args) {
+                arg = remove_interleave(arg);
             }
             return Call::make(op->type, deinterleaving_alts[op->name], args, op->call_type);
         } else if (interleaving_alts.count(op->name) && is_native_deinterleave(args[0])) {
@@ -1645,13 +1646,13 @@ class FuseInterleaves : public IRMutator {
 
         if (is_native_interleave(op)) {
             if (const Call *arg = op->args[0].as<Call>()) {
-                for (const auto &i : non_deinterleaving_alts) {
-                    if (arg->name == i.first) {
+                for (const auto &p : non_deinterleaving_alts) {
+                    if (arg->name == p.first) {
                         std::vector<Expr> args = arg->args;
                         for (Expr &j : args) {
                             j = mutate(j);
                         }
-                        return Call::make(op->type, i.second, args, Call::PureExtern);
+                        return Call::make(op->type, p.second, args, Call::PureExtern);
                     }
                 }
             }

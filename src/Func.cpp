@@ -368,8 +368,8 @@ void Stage::set_dim_device_api(const VarOrRVar &var, DeviceAPI device_api) {
 std::string Stage::dump_argument_list() const {
     std::ostringstream oss;
     oss << "Vars:";
-    for (const auto &i : definition.schedule().dims()) {
-        oss << " " << i.var;
+    for (const auto &d : definition.schedule().dims()) {
+        oss << " " << d.var;
     }
     oss << "\n";
     return oss.str();
@@ -635,9 +635,9 @@ Func Stage::rfactor(vector<pair<RVar, Var>> preserved) {
     vector<string> rvars_removed;
 
     vector<bool> is_rfactored(dims.size(), false);
-    for (const pair<RVar, Var> &i : preserved) {
-        const RVar &rv = i.first;
-        const Var &v = i.second;
+    for (const pair<RVar, Var> &p : preserved) {
+        const RVar &rv = p.first;
+        const Var &v = p.second;
         {
             // Check that the RVar are in the dims list
             const auto &iter = std::find_if(dims.begin(), dims.end(),
@@ -2354,10 +2354,10 @@ Func &Func::shader(const Var &x, const Var &y, const Var &c, DeviceAPI device_ap
 
     bool constant_bounds = false;
     FuncSchedule &sched = func.schedule();
-    for (auto &i : sched.bounds()) {
-        if (c.name() == i.var) {
-            constant_bounds = is_const(i.min) &&
-                              is_const(i.extent);
+    for (const auto &b : sched.bounds()) {
+        if (c.name() == b.var) {
+            constant_bounds = is_const(b.min) &&
+                              is_const(b.extent);
             break;
         }
     }
@@ -2430,9 +2430,9 @@ Func &Func::align_storage(const Var &dim, const Expr &alignment) {
     invalidate_cache();
 
     vector<StorageDim> &dims = func.schedule().storage_dims();
-    for (auto &i : dims) {
-        if (var_name_match(i.var, dim.name())) {
-            i.alignment = alignment;
+    for (auto &d : dims) {
+        if (var_name_match(d.var, dim.name())) {
+            d.alignment = alignment;
             return *this;
         }
     }
@@ -2445,10 +2445,10 @@ Func &Func::fold_storage(const Var &dim, const Expr &factor, bool fold_forward) 
     invalidate_cache();
 
     vector<StorageDim> &dims = func.schedule().storage_dims();
-    for (auto &i : dims) {
-        if (var_name_match(i.var, dim.name())) {
-            i.fold_factor = factor;
-            i.fold_forward = fold_forward;
+    for (auto &d : dims) {
+        if (var_name_match(d.var, dim.name())) {
+            d.fold_factor = factor;
+            d.fold_forward = fold_forward;
             return *this;
         }
     }
@@ -2572,10 +2572,10 @@ class CountImplicitVars : public Internal::IRGraphVisitor {
 public:
     int count;
 
-    CountImplicitVars(const vector<Expr> &e)
+    CountImplicitVars(const vector<Expr> &exprs)
         : count(0) {
-        for (const auto &i : e) {
-            i.accept(this);
+        for (const auto &e : exprs) {
+            e.accept(this);
         }
     }
 
@@ -2620,8 +2620,8 @@ vector<Expr> FuncRef::args_with_implicit_vars(const vector<Expr> &e) const {
     }
 
     CountImplicitVars count(e);
-    for (auto &i : a) {
-        i.accept(&count);
+    for (auto &arg : a) {
+        arg.accept(&count);
     }
 
     if (count.count > 0) {

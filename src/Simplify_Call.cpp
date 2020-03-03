@@ -338,9 +338,9 @@ Expr Simplify::visit(const Call *op, ExprInfo *bounds) {
         bool changed = false;
         vector<Expr> new_args;
         const StringImm *last = nullptr;
-        for (const auto &i : op->args) {
-            Expr arg = mutate(i, nullptr);
-            if (!arg.same_as(i)) {
+        for (const auto &a : op->args) {
+            Expr arg = mutate(a, nullptr);
+            if (!arg.same_as(a)) {
                 changed = true;
             }
             const StringImm *string_imm = arg.as<StringImm>();

@@ -248,8 +248,8 @@ void IRVisitor::visit(const Evaluate *op) {
 }
 
 void IRVisitor::visit(const Shuffle *op) {
-    for (const Expr &i : op->vectors) {
-        i.accept(this);
+    for (const Expr &e : op->vectors) {
+        e.accept(this);
     }
 }
 
@@ -498,8 +498,8 @@ void IRGraphVisitor::visit(const Evaluate *op) {
 }
 
 void IRGraphVisitor::visit(const Shuffle *op) {
-    for (const Expr &i : op->vectors) {
-        include(i);
+    for (const Expr &e : op->vectors) {
+        include(e);
     }
 }
 

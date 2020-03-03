@@ -104,17 +104,17 @@ Stmt build_loop_nest(
     map<string, Expr> dim_extent_alignment;
 
     // First hunt through the bounds for them.
-    for (const Bound &i : func_s.bounds()) {
-        if (i.extent.defined()) {
-            dim_extent_alignment[i.var] = i.extent;
+    for (const Bound &b : func_s.bounds()) {
+        if (b.extent.defined()) {
+            dim_extent_alignment[b.var] = b.extent;
         }
-        if (i.modulus.defined()) {
-            dim_extent_alignment[i.var] = i.modulus;
+        if (b.modulus.defined()) {
+            dim_extent_alignment[b.var] = b.modulus;
         }
     }
     // Then use any reduction domain.
-    for (const ReductionVariable &i : stage_s.rvars()) {
-        dim_extent_alignment[i.var] = i.extent;
+    for (const ReductionVariable &v : stage_s.rvars()) {
+        dim_extent_alignment[v.var] = v.extent;
     }
 
     vector<Split> splits = stage_s.splits();
@@ -298,8 +298,8 @@ Stmt build_loop_nest(
     }
 
     // Define the loop mins and extents in terms of the mins and maxs produced by bounds inference
-    for (const std::string &i : dims) {
-        string var = prefix + i;
+    for (const std::string &d : dims) {
+        string var = prefix + d;
         Expr max = Variable::make(Int(32), var + ".max");
         Expr min = Variable::make(Int(32), var + ".min");  // Inject instance name here? (compute instance names during lowering)
         stmt = LetStmt::make(var + ".loop_extent",
@@ -1474,8 +1474,8 @@ private:
         producer = replace_parent_bound_with_union_bound(funcs.back(), producer, bounds);
 
         // Add the producer nodes.
-        for (const auto &i : funcs) {
-            producer = ProducerConsumer::make_produce(i.name(), producer);
+        for (const auto &f : funcs) {
+            producer = ProducerConsumer::make_produce(f.name(), producer);
         }
 
         // Add the consumer nodes.
@@ -1736,13 +1736,13 @@ bool validate_schedule(Function f, const Stmt &s, const Target &target, bool is_
         // for extern stages.
         const vector<Dim> &dims = f.definition().schedule().dims();
         bool is_extern = !dims.empty() ? dims.front().for_type == ForType::Extern : false;
-        for (const Dim &i : dims) {
-            switch (i.for_type) {
+        for (const Dim &d : dims) {
+            switch (d.for_type) {
             case ForType::Extern:
                 if (!is_extern) {
                     user_error
                         << "Externally defined Func " << f.name()
-                        << " cannot have extern loop " << i.var
+                        << " cannot have extern loop " << d.var
                         << " outside a non-extern loop.\n";
                 }
                 break;
@@ -1754,7 +1754,7 @@ bool validate_schedule(Function f, const Stmt &s, const Target &target, bool is_
             default:
                 user_error
                     << "Externally defined Func " << f.name()
-                    << " cannot have loop type " << i.for_type << " (" << i.var << ")\n";
+                    << " cannot have loop type " << d.for_type << " (" << d.var << ")\n";
             }
         }
     }

@@ -350,8 +350,8 @@ LoweredFunc::LoweredFunc(std::string name,
                          LinkageType linkage,
                          NameMangling name_mangling)
     : name(std::move(name)), body(std::move(body)), linkage(linkage), name_mangling(name_mangling) {
-    for (const Argument &i : args) {
-        this->args.emplace_back(i);
+    for (const Argument &arg : args) {
+        this->args.emplace_back(arg);
     }
 }
 

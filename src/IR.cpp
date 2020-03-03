@@ -705,9 +705,9 @@ Expr Shuffle::make(const std::vector<Expr> &vectors,
     internal_assert(!indices.empty()) << "Shufle with zero indices.\n";
     Type element_ty = vectors.front().type().element_of();
     int input_lanes = 0;
-    for (const Expr &i : vectors) {
-        internal_assert(i.type().element_of() == element_ty) << "Shuffle of vectors of mismatched types.\n";
-        input_lanes += i.type().lanes();
+    for (const Expr &e : vectors) {
+        internal_assert(e.type().element_of() == element_ty) << "Shuffle of vectors of mismatched types.\n";
+        input_lanes += e.type().lanes();
     }
     for (int i : indices) {
         internal_assert(0 <= i && i < input_lanes) << "Shuffle vector index out of range: " << i << "\n";
@@ -729,8 +729,8 @@ Expr Shuffle::make_interleave(const std::vector<Expr> &vectors) {
 
     int lanes = vectors.front().type().lanes();
 
-    for (const Expr &i : vectors) {
-        internal_assert(i.type().lanes() == lanes)
+    for (const Expr &e : vectors) {
+        internal_assert(e.type().lanes() == lanes)
             << "Interleave of vectors with different sizes.\n";
     }
 
@@ -788,8 +788,8 @@ bool Shuffle::is_interleave() const {
         return false;
     }
 
-    for (const Expr &i : vectors) {
-        if (i.type().lanes() != lanes) {
+    for (const Expr &e : vectors) {
+        if (e.type().lanes() != lanes) {
             return false;
         }
     }
@@ -838,8 +838,8 @@ bool is_ramp(const std::vector<int> &indices, int stride = 1) {
 
 bool Shuffle::is_concat() const {
     size_t input_lanes = 0;
-    for (const Expr &i : vectors) {
-        input_lanes += i.type().lanes();
+    for (const Expr &e : vectors) {
+        input_lanes += e.type().lanes();
     }
 
     // A concat is a ramp where the output has the same number of
@@ -849,8 +849,8 @@ bool Shuffle::is_concat() const {
 
 bool Shuffle::is_slice() const {
     size_t input_lanes = 0;
-    for (const Expr &i : vectors) {
-        input_lanes += i.type().lanes();
+    for (const Expr &e : vectors) {
+        input_lanes += e.type().lanes();
     }
 
     // A slice is a ramp where the output does not contain all of the

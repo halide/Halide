@@ -652,19 +652,19 @@ std::vector<char> write_shared_object_internal(Object &obj, Linker *linker, cons
         ctor_end_sym.set_binding(Symbol::STB_GLOBAL);
     }
 
-    for (const Symbol &i : obj.symbols()) {
-        if (i.get_name() == "_GLOBAL_OFFSET_TABLE_") {
-            symbols[&i] = &got_sym;
-        } else if (i.get_name() == "__DTOR_LIST__") {
+    for (const Symbol &s : obj.symbols()) {
+        if (s.get_name() == "_GLOBAL_OFFSET_TABLE_") {
+            symbols[&s] = &got_sym;
+        } else if (s.get_name() == "__DTOR_LIST__") {
             // It is our job to create this symbol. So, a defined __DTOR_LIST__
             // symbol shouldn't be present already.
-            internal_assert(!i.is_defined()) << "__DTOR_LIST__ already defined\n";
-            symbols[&i] = &dtor_list_sym;
-        } else if (i.get_name() == "__CTOR_END__") {
-            internal_assert(!i.is_defined()) << "__CTOR_END__ already defined\n";
-            symbols[&i] = &ctor_end_sym;
+            internal_assert(!s.is_defined()) << "__DTOR_LIST__ already defined\n";
+            symbols[&s] = &dtor_list_sym;
+        } else if (s.get_name() == "__CTOR_END__") {
+            internal_assert(!s.is_defined()) << "__CTOR_END__ already defined\n";
+            symbols[&s] = &ctor_end_sym;
         } else {
-            symbols[&i] = &i;
+            symbols[&s] = &s;
         }
     }
     // Get a symbol from a relocation, accounting for the symbol map
@@ -770,8 +770,8 @@ std::vector<char> write_shared_object_internal(Object &obj, Linker *linker, cons
     // will vary in ordering from run to tun.
     std::vector<std::pair<const Symbol *, const Symbol *>> sorted_symbols;
     sorted_symbols.reserve(symbols.size());
-    for (const auto &i : symbols) {
-        sorted_symbols.emplace_back(i);
+    for (const auto &s : symbols) {
+        sorted_symbols.emplace_back(s);
     }
     std::sort(sorted_symbols.begin(), sorted_symbols.end(),
               [&](const std::pair<const Symbol *, const Symbol *> &lhs, const std::pair<const Symbol *, const Symbol *> &rhs) {
@@ -781,8 +781,8 @@ std::vector<char> write_shared_object_internal(Object &obj, Linker *linker, cons
     std::map<const Symbol *, uint16_t> symbol_idxs;
     uint64_t local_count = 0;
     for (bool is_local : {true, false}) {
-        for (const auto &i : sorted_symbols) {
-            const Symbol *s = i.second;
+        for (const auto &p : sorted_symbols) {
+            const Symbol *s = p.second;
             if ((s->get_binding() == Symbol::STB_LOCAL) != is_local) continue;
 
             uint64_t value = s->get_offset();
@@ -914,8 +914,8 @@ std::vector<char> write_shared_object_internal(Object &obj, Linker *linker, cons
 
     // Add some strings we know we'll need in the string table after we write it.
     strings.get(soname);
-    for (const auto &i : dependencies) {
-        strings.get(i);
+    for (const auto &d : dependencies) {
+        strings.get(d);
     }
 
     Section dynamic(".dynamic", Section::SHT_DYNAMIC);
@@ -937,8 +937,8 @@ std::vector<char> write_shared_object_internal(Object &obj, Linker *linker, cons
     };
 
     dyn.reserve(dependencies.size());
-    for (const auto &i : dependencies) {
-        dyn.push_back(make_dyn(DT_NEEDED, strings.get(i)));
+    for (const auto &d : dependencies) {
+        dyn.push_back(make_dyn(DT_NEEDED, strings.get(d)));
     }
     if (!soname.empty()) {
         dyn.push_back(make_dyn(DT_SONAME, strings.get(soname)));
@@ -1014,8 +1014,8 @@ std::vector<char> write_shared_object_internal(Object &obj, Linker *linker, cons
     ehdr.e_shoff = output.size();
     ehdr.e_shnum = shdrs.size();
     ehdr.e_shentsize = sizeof(shdrs[0]);
-    for (auto &i : shdrs) {
-        append_object(output, i);
+    for (const auto &h : shdrs) {
+        append_object(output, h);
     }
 
     // Now go back and write the headers.
@@ -1035,10 +1035,10 @@ std::vector<char> write_shared_object_internal(Object &obj, Linker *linker, cons
     ehdr.e_shstrndx = strtab_idx;
 
     memcpy(output.data(), &ehdr, sizeof(ehdr));
-    for (auto &i : phdrs) {
-        i.p_vaddr = i.p_offset;
-        i.p_paddr = i.p_offset;
-        i.p_memsz = i.p_filesz;
+    for (auto &h : phdrs) {
+        h.p_vaddr = h.p_offset;
+        h.p_paddr = h.p_offset;
+        h.p_memsz = h.p_filesz;
     }
     memcpy(output.data() + ehdr.e_phoff, phdrs.data(), sizeof(phdrs));
 
