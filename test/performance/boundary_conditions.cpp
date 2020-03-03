@@ -21,7 +21,6 @@ Buffer<float> make_replicated_buffer(int w, int h) {
     buf.raw_buffer()->dim[1].extent = h;
     buf.raw_buffer()->dim[1].stride = 0;
     return buf;
-
 }
 
 struct Test {
