@@ -142,7 +142,7 @@ jobs:
         fi
 
         #printenv PATH
-        cmd /c "echo Path is: (%PATH%)"
+        cmd.exe -c "echo Path is: (%PATH%)"
         echo
         echo
         echo
