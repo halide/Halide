@@ -250,9 +250,9 @@ jobs:
           EXTRA_CMAKE_FLAGS="${EXTRA_CMAKE_FLAGS} \
             -D CMAKE_TOOLCHAIN_FILE=C:/vcpkg/scripts/buildsystems/vcpkg.cmake"
           # -T host=x64"
-          # if [[ ${{matrix.target_bits}} == 64 ]]; then
-          #   EXTRA_CMAKE_FLAGS="${EXTRA_CMAKE_FLAGS} -A x64"
-          # fi
+          if [[ ${{matrix.target_bits}} == 64 ]]; then
+            EXTRA_CMAKE_FLAGS="${EXTRA_CMAKE_FLAGS} -A x64"
+          fi
         fi
 
         if [[ ${{matrix.target_arch}} == x86 && \
