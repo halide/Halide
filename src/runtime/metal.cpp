@@ -10,6 +10,7 @@
 
 extern "C" {
 extern objc_id MTLCreateSystemDefaultDevice();
+extern objc_id MTLCopyAllDevices();
 extern struct ObjectiveCClass _NSConcreteGlobalBlock;
 }
 
@@ -214,6 +215,27 @@ WEAK void *buffer_contents(mtl_buffer *buffer) {
     return objc_msgSend(buffer, sel_getUid("contents"));
 }
 
+WEAK void *nsarray_object_at_index(objc_id arr, size_t index) {
+    typedef objc_id (*nsarray_object_at_index_method)(objc_id arr, objc_sel sel, size_t index);
+    nsarray_object_at_index_method method = (nsarray_object_at_index_method)&objc_msgSend;
+    return (*method)(arr, sel_getUid("objectAtIndex:"), index);
+}
+
+// MTLCopyAllDevices() is only available for macOS and is
+// intended for non-GUI apps.  Newer versions of macOS (10.15+)
+// will not return a valid device if MTLCreateSystemDefaultDevice()
+// is used from a non-GUI app.
+inline mtl_device *get_default_mtl_device() {
+    mtl_device *device = (mtl_device *)MTLCreateSystemDefaultDevice();
+    if (device == NULL) {
+        objc_id devices = (objc_id)MTLCopyAllDevices();
+        if (devices != NULL) {
+            device = (mtl_device *)nsarray_object_at_index(devices, 0);
+        }
+    }
+    return device;
+}
+
 extern WEAK halide_device_interface_t metal_device_interface;
 
 volatile int WEAK thread_lock = 0;
@@ -294,7 +316,7 @@ WEAK int halide_metal_acquire_context(void *user_context, mtl_device **device_re
 
     if (device == 0 && create) {
         debug(user_context) << "Metal - Allocating: MTLCreateSystemDefaultDevice\n";
-        device = (mtl_device *)MTLCreateSystemDefaultDevice();
+        device = get_default_mtl_device();
         if (device == 0) {
             error(user_context) << "Metal: cannot allocate system default device.\n";
             __sync_lock_release(&thread_lock);
