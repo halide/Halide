@@ -130,8 +130,8 @@ jobs:
 
         echo ::set-env name=VSDEVCMD::"${VSDEVCMD}"
 
-        "${VSDEVCMD}" -arch=x64 -host_arch=x64
-        which cl.exe
+        VSCMD_DEBUG=2 "${VSDEVCMD}" -arch=x64 -host_arch=x64
+
         env
         exit 22
 
