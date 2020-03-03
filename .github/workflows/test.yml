@@ -126,18 +126,18 @@ jobs:
         echo VSDEVCMD is ${VSDEVCMD}
 
         echo ::set-env name=VSDEVCMD::"${VSDEVCMD}"
-        echo VSDEVCMD is ${VSDEVCMD}
+        # echo VSDEVCMD is ${VSDEVCMD}
 
-        "${VSDEVCMD}" -arch=x64 -host_arch=x64
+        # "${VSDEVCMD}" -arch=x64 -host_arch=x64
 
         choco install ninja
 
         if [[ ${{matrix.target_bits}} == 32 ]]; then
           export VCPKG_DEFAULT_TRIPLET=x86-windows
-          "${VSDEVCMD}" -arch=x86 -host_arch=x64
+          # "${VSDEVCMD}" -arch=x86 -host_arch=x64
         else
           export VCPKG_DEFAULT_TRIPLET=x64-windows
-          "${VSDEVCMD}" -arch=x64 -host_arch=x64
+          # "${VSDEVCMD}" -arch=x64 -host_arch=x64
         fi
 
         vcpkg install zlib libpng libjpeg-turbo
@@ -242,7 +242,7 @@ jobs:
       shell: bash
       run: |
         # Configure CMake
-        set -eu
+        # set -eu
 
         echo `cmake --version`
 
@@ -266,6 +266,8 @@ jobs:
           # fi
 
           echo VSDEVCMD is ${VSDEVCMD}
+          unset CC
+          unset CXX
           if [[ ${{matrix.target_bits}} == 32 ]]; then
             "${VSDEVCMD}" -arch=x86 -host_arch=x64
           else
@@ -305,6 +307,8 @@ jobs:
           ${EXTRA_CMAKE_FLAGS} \
           -S "${HALIDE_SOURCE_DIR}" \
           -B "${HALIDE_BUILD_DIR}"
+
+        cat ${HALIDE_BUILD_DIR}/CMakeFiles/CMakeOutput.log
 
     - name: Build Halide (Make)
       if: startsWith(matrix.build_tool, 'make')
