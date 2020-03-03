@@ -123,7 +123,7 @@ jobs:
         echo ::set-env name=VSDEVCMD::"${VSDEVCMD}"
         echo VSDEVCMD is ${VSDEVCMD}
 
-        ${VSDEVCMD} -arch=x64 -host_arch=x64
+        "${VSDEVCMD}" -arch=x64 -host_arch=x64
         exit 22
 
         choco install ninja
