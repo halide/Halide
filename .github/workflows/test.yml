@@ -230,14 +230,16 @@ jobs:
         PARALLEL_JOBS=4  # GHA VMs have 2 cores
 
         if [[ ${{matrix.host_os}} == windows* ]]; then
-          CMAKE_GEN="Visual Studio 16"
+          CMAKE_GEN="Visual Studio 16 2019"
 
           # CMAKE_TOOLCHAIN_FILE is necessary for CMake to find
           # things installed by vcpkg
           EXTRA_CMAKE_FLAGS="${EXTRA_CMAKE_FLAGS} \
             -D CMAKE_TOOLCHAIN_FILE=C:/vcpkg/scripts/buildsystems/vcpkg.cmake \
             -T host=x64"
-          if [[ ${{matrix.target_bits}} == 64 ]]; then
+          if [[ ${{matrix.target_bits}} == 32 ]]; then
+            EXTRA_CMAKE_FLAGS="${EXTRA_CMAKE_FLAGS} -A Win32"
+          else
             EXTRA_CMAKE_FLAGS="${EXTRA_CMAKE_FLAGS} -A x64"
           fi
         fi
