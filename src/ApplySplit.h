@@ -31,11 +31,11 @@ struct ApplySplitResult {
                 Predicate };
     Type type;
 
-    ApplySplitResult(const std::string &n, Expr val, Type t)
-        : name(n), value(val), type(t) {
+    ApplySplitResult(std::string n, Expr val, Type t)
+        : name(std::move(n)), value(std::move(val)), type(t) {
     }
     ApplySplitResult(Expr val)
-        : name(""), value(val), type(Predicate) {
+        : name(), value(std::move(val)), type(Predicate) {
     }
 
     bool is_substitution() const {

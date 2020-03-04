@@ -1,6 +1,7 @@
 #include <algorithm>
 #include <iostream>
 #include <string.h>
+#include <utility>
 
 #ifdef _MSC_VER
 #include <intrin.h>
@@ -54,7 +55,7 @@ Func::Func(Expr e)
 }
 
 Func::Func(Function f)
-    : func(f) {
+    : func(std::move(f)) {
 }
 
 const string &Func::name() const {
@@ -379,9 +380,9 @@ namespace {
 class SubstituteSelfReference : public IRMutator {
     using IRMutator::visit;
 
-    const string func;
-    const Function substitute;
-    const vector<Var> new_args;
+    const string &func;
+    const Function &substitute;
+    const vector<Var> &new_args;
 
     Expr visit(const Call *c) override {
         Expr expr = IRMutator::visit(c);
@@ -400,7 +401,8 @@ class SubstituteSelfReference : public IRMutator {
     }
 
 public:
-    SubstituteSelfReference(const string &func, const Function &substitute,
+    SubstituteSelfReference(const string &func,
+                            const Function &substitute,
                             const vector<Var> &new_args)
         : func(func), substitute(substitute), new_args(new_args) {
         internal_assert(substitute.get_contents().defined());
@@ -2589,16 +2591,16 @@ public:
 };
 }  // namespace
 
-FuncRef::FuncRef(Internal::Function f, const vector<Expr> &a, int placeholder_pos,
+FuncRef::FuncRef(Internal::Function f, vector<Expr> a, int placeholder_pos,
                  int count)
-    : func(f), implicit_count(count), args(a) {
+    : func(f), implicit_count(count), args(std::move(a)) {
     implicit_placeholder_pos = placeholder_pos;
     Internal::check_call_arg_types(f.name(), &args, args.size());
 }
 
 FuncRef::FuncRef(Internal::Function f, const vector<Var> &a, int placeholder_pos,
                  int count)
-    : func(f), implicit_count(count) {
+    : func(std::move(f)), implicit_count(count) {
     implicit_placeholder_pos = placeholder_pos;
     args.resize(a.size());
     for (size_t i = 0; i < a.size(); i++) {
@@ -2867,8 +2869,8 @@ size_t FuncRef::size() const {
 }
 
 FuncTupleElementRef::FuncTupleElementRef(
-    const FuncRef &ref, const std::vector<Expr> &args, int idx)
-    : func_ref(ref), args(args), idx(idx) {
+    const FuncRef &ref, std::vector<Expr> args, int idx)
+    : func_ref(ref), args(std::move(args)), idx(idx) {
     internal_assert(func_ref.size() > 1)
         << "Func " << ref.function().name() << " does not return a Tuple\n";
     internal_assert(idx >= 0 && idx < (int)func_ref.size());

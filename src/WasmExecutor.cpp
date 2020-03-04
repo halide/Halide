@@ -14,6 +14,7 @@
 #include <cmath>
 #include <mutex>
 #include <sstream>
+#include <utility>
 #include <vector>
 
 // clang-format off
@@ -1314,7 +1315,7 @@ struct WasmModuleContents {
 
     WasmModuleContents(
         const Module &module,
-        const std::vector<Argument> &arguments,
+        std::vector<Argument> arguments,
         const std::string &fn_name,
         const JITExternMap &jit_externs,
         const std::vector<JITModule> &extern_deps);
@@ -1326,12 +1327,12 @@ struct WasmModuleContents {
 
 WasmModuleContents::WasmModuleContents(
     const Module &module,
-    const std::vector<Argument> &arguments,
+    std::vector<Argument> arguments,
     const std::string &fn_name,
     const JITExternMap &jit_externs,
     const std::vector<JITModule> &extern_deps)
     : target(module.target()),
-      arguments(arguments),
+      arguments(std::move(arguments)),
       jit_externs(jit_externs),
       extern_deps(extern_deps),
       trampolines(JITModule::make_trampolines_module(get_host_target(), jit_externs, kTrampolineSuffix, extern_deps)) {

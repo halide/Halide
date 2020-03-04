@@ -1,4 +1,5 @@
 #include "StorageFolding.h"
+
 #include "Bounds.h"
 #include "CSE.h"
 #include "Debug.h"
@@ -9,6 +10,7 @@
 #include "Monotonic.h"
 #include "Simplify.h"
 #include "Substitute.h"
+#include <utility>
 
 namespace Halide {
 namespace Internal {
@@ -151,7 +153,7 @@ class FoldStorageOfFunction : public IRMutator {
 
 public:
     FoldStorageOfFunction(string f, int d, Expr e, string p)
-        : func(f), dim(d), factor(e), dynamic_footprint(p) {
+        : func(std::move(f)), dim(d), factor(std::move(e)), dynamic_footprint(std::move(p)) {
     }
 };
 
@@ -390,8 +392,8 @@ public:
                        string head, string tail,
                        string loop_var, Expr sema_var,
                        int dim, const StorageDim &storage_dim)
-        : func(func),
-          head(head), tail(tail), loop_var(loop_var), sema_var(sema_var),
+        : func(std::move(func)),
+          head(std::move(head)), tail(std::move(tail)), loop_var(std::move(loop_var)), sema_var(std::move(sema_var)),
           dim(dim), storage_dim(storage_dim) {
     }
 };
@@ -817,7 +819,7 @@ public:
     vector<Fold> dims_folded;
 
     AttemptStorageFoldingOfFunction(Function f, bool explicit_only)
-        : func(f), explicit_only(explicit_only) {
+        : func(std::move(f)), explicit_only(explicit_only) {
     }
 };
 

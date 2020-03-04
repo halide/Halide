@@ -1,10 +1,12 @@
 #include "AddAtomicMutex.h"
+
 #include "ExprUsesVar.h"
 #include "Func.h"
 #include "IREquality.h"
 #include "IRMutator.h"
 #include "IROperator.h"
 #include "OutputImageParam.h"
+#include <utility>
 
 namespace Halide {
 namespace Internal {
@@ -248,7 +250,7 @@ protected:
 class ReplaceStoreIndexWithVar : public IRMutator {
 public:
     ReplaceStoreIndexWithVar(const std::string &producer_name, Expr var)
-        : producer_name(producer_name), var(var) {
+        : producer_name(producer_name), var(std::move(var)) {
     }
 
 protected:

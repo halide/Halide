@@ -20,6 +20,7 @@
 #include "Var.h"
 
 #include <map>
+#include <utility>
 
 namespace Halide {
 
@@ -32,11 +33,11 @@ struct VarOrRVar {
     VarOrRVar(const std::string &n, bool r)
         : var(n), rvar(n), is_rvar(r) {
     }
-    VarOrRVar(const Var &v)
-        : var(v), is_rvar(false) {
+    VarOrRVar(Var v)
+        : var(std::move(v)), is_rvar(false) {
     }
-    VarOrRVar(const RVar &r)
-        : rvar(r), is_rvar(true) {
+    VarOrRVar(RVar r)
+        : rvar(std::move(r)), is_rvar(true) {
     }
     VarOrRVar(const RDom &r)
         : rvar(RVar(r)), is_rvar(true) {
@@ -474,7 +475,7 @@ class FuncRef {
     Stage func_ref_update(Expr e, int init_val);
 
 public:
-    FuncRef(Internal::Function, const std::vector<Expr> &,
+    FuncRef(Internal::Function, std::vector<Expr>,
             int placeholder_pos = -1, int count = 0);
     FuncRef(Internal::Function, const std::vector<Var> &,
             int placeholder_pos = -1, int count = 0);
@@ -583,7 +584,7 @@ class FuncTupleElementRef {
     Tuple values_with_undefs(Expr e) const;
 
 public:
-    FuncTupleElementRef(const FuncRef &ref, const std::vector<Expr> &args, int idx);
+    FuncTupleElementRef(const FuncRef &ref, std::vector<Expr> args, int idx);
 
     /** Use this as the left-hand-side of an update definition of Tuple
      * component 'idx' of a Func (see \ref RDom). The function must

@@ -1,5 +1,6 @@
 #include <iostream>
 #include <map>
+#include <utility>
 
 #include "IREquality.h"
 #include "IRMatch.h"
@@ -57,10 +58,10 @@ public:
     Expr expr;
 
     IRMatch(Expr e, vector<Expr> &m)
-        : result(true), matches(&m), var_matches(nullptr), expr(e) {
+        : result(true), matches(&m), var_matches(nullptr), expr(std::move(e)) {
     }
     IRMatch(Expr e, map<string, Expr> &m)
-        : result(true), matches(nullptr), var_matches(&m), expr(e) {
+        : result(true), matches(nullptr), var_matches(&m), expr(std::move(e)) {
     }
 
     using IRVisitor::visit;

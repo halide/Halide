@@ -2,6 +2,7 @@
 #include <set>
 #include <stdint.h>
 #include <string>
+#include <utility>
 
 #ifdef _WIN32
 #ifdef _MSC_VER
@@ -194,8 +195,8 @@ class HalideJITMemoryManager : public SectionMemoryManager {
     std::vector<std::pair<uint8_t *, size_t>> code_pages;
 
 public:
-    HalideJITMemoryManager(const std::vector<JITModule> &modules)
-        : modules(modules) {
+    HalideJITMemoryManager(std::vector<JITModule> modules)
+        : modules(std::move(modules)) {
     }
 
     uint64_t getSymbolAddress(const std::string &name) override {

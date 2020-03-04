@@ -9,6 +9,7 @@
 
 #include <algorithm>
 #include <iterator>
+#include <utility>
 
 namespace Halide {
 namespace Internal {
@@ -78,7 +79,7 @@ public:
     }
 
 private:
-    string var;
+    const string &var;
     Scope<Interval> scope;
 
     using IRVisitor::visit;
@@ -108,7 +109,7 @@ private:
     }
 };
 
-Interval bounds_of_inner_var(string var, Stmt s) {
+Interval bounds_of_inner_var(const string &var, Stmt s) {
     BoundsOfInnerVar b(var);
     s.accept(&b);
     return b.result;
@@ -190,8 +191,8 @@ public:
         Expr cond;  // Condition on params only (can't depend on loop variable)
         Expr value;
 
-        CondValue(const Expr &c, const Expr &v)
-            : cond(c), value(v) {
+        CondValue(Expr c, Expr v)
+            : cond(std::move(c)), value(std::move(v)) {
         }
     };
 

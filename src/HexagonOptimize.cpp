@@ -13,6 +13,7 @@
 #include "Simplify.h"
 #include "Substitute.h"
 #include <unordered_map>
+#include <utility>
 
 namespace Halide {
 namespace Internal {
@@ -169,8 +170,8 @@ struct Pattern {
     int flags;
 
     Pattern() = default;
-    Pattern(const string &intrin, Expr p, int flags = 0)
-        : intrin(intrin), pattern(p), flags(flags) {
+    Pattern(string intrin, Expr p, int flags = 0)
+        : intrin(std::move(intrin)), pattern(std::move(p)), flags(flags) {
     }
 };
 

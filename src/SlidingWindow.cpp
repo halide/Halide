@@ -1,4 +1,5 @@
 #include "SlidingWindow.h"
+
 #include "Bounds.h"
 #include "Debug.h"
 #include "IRMutator.h"
@@ -8,6 +9,7 @@
 #include "Scope.h"
 #include "Simplify.h"
 #include "Substitute.h"
+#include <utility>
 
 namespace Halide {
 namespace Internal {
@@ -36,9 +38,9 @@ class ExprDependsOnVar : public IRVisitor {
 
 public:
     bool result;
-    string var;
+    const string &var;
 
-    ExprDependsOnVar(string v)
+    ExprDependsOnVar(const string &v)
         : result(false), var(v) {
     }
 };
@@ -83,7 +85,7 @@ Expr expand_expr(Expr e, const Scope<Expr> &scope) {
 // particular serial for loop
 class SlidingWindowOnFunctionAndLoop : public IRMutator {
     Function func;
-    string loop_var;
+    const string &loop_var;
     Expr loop_min;
     Scope<Expr> scope;
 
@@ -329,8 +331,8 @@ class SlidingWindowOnFunctionAndLoop : public IRMutator {
     }
 
 public:
-    SlidingWindowOnFunctionAndLoop(Function f, string v, Expr v_min)
-        : func(f), loop_var(v), loop_min(v_min) {
+    SlidingWindowOnFunctionAndLoop(Function f, const string &v, Expr v_min)
+        : func(std::move(f)), loop_var(v), loop_min(std::move(v_min)) {
     }
 };
 
@@ -361,7 +363,7 @@ class SlidingWindowOnFunction : public IRMutator {
 
 public:
     SlidingWindowOnFunction(Function f)
-        : func(f) {
+        : func(std::move(f)) {
     }
 };
 

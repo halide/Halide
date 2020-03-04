@@ -1,6 +1,7 @@
 #ifndef HALIDE_EXTERNAL_CODE_H
 #define HALIDE_EXTERNAL_CODE_H
 
+#include <utility>
 #include <vector>
 
 #include "Expr.h"
@@ -24,8 +25,8 @@ private:
     // Used for debugging and naming the module to llvm.
     std::string nametag;
 
-    ExternalCode(Kind kind, const Target &llvm_target, DeviceAPI device_api, const std::vector<uint8_t> &code, const std::string &name)
-        : kind(kind), llvm_target(llvm_target), device_code_kind(device_api), code(code), nametag(name) {
+    ExternalCode(Kind kind, const Target &llvm_target, DeviceAPI device_api, std::vector<uint8_t> code, std::string name)
+        : kind(kind), llvm_target(llvm_target), device_code_kind(device_api), code(std::move(code)), nametag(std::move(name)) {
     }
 
 public:

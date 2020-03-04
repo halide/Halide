@@ -1,5 +1,6 @@
 #include <algorithm>
 #include <regex>
+#include <utility>
 
 #include "AutoSchedule.h"
 #include "AutoScheduleUtils.h"
@@ -92,7 +93,7 @@ struct FStage {
     Function func;
     uint32_t stage_num;
     FStage(Function func, uint32_t stage_num)
-        : func(func), stage_num(stage_num) {
+        : func(std::move(func)), stage_num(stage_num) {
     }
 
     bool operator==(const FStage &other_stage) const {
@@ -156,9 +157,9 @@ struct DependenceAnalysis {
         set<string> prods;
         bool only_regions_computed;
 
-        RegionsRequiredQuery(const string &f, int stage, const set<string> &prods,
+        RegionsRequiredQuery(string f, int stage, set<string> prods,
                              bool only_regions_computed)
-            : f(f), stage(stage), prods(prods),
+            : f(std::move(f)), stage(stage), prods(std::move(prods)),
               only_regions_computed(only_regions_computed) {
         }
 
@@ -190,17 +191,17 @@ struct DependenceAnalysis {
         // Regions required to compute 'bounds' given a particular
         // RegionsRequiredQuery.
         map<string, Box> regions;
-        RegionsRequired(const DimBounds &b, const map<string, Box> &r)
-            : bounds(b), regions(r) {
+        RegionsRequired(DimBounds b, map<string, Box> r)
+            : bounds(std::move(b)), regions(std::move(r)) {
         }
     };
     // Cache for bounds queries (bound queries with the same parameters are
     // common during the grouping process).
     map<RegionsRequiredQuery, vector<RegionsRequired>> regions_required_cache;
 
-    DependenceAnalysis(const map<string, Function> &env, const vector<string> &order,
-                       const FuncValueBounds &func_val_bounds)
-        : env(env), order(order), func_val_bounds(func_val_bounds) {
+    DependenceAnalysis(map<string, Function> env, vector<string> order,
+                       FuncValueBounds func_val_bounds)
+        : env(std::move(env)), order(std::move(order)), func_val_bounds(std::move(func_val_bounds)) {
     }
 
     // Return the regions of the producers ('prods') required to compute the region
@@ -268,11 +269,11 @@ struct StageBounds {
     FStage f_stage;
     DimBounds bounds;
 
-    StageBounds(const FStage &fs, const DimBounds &b)
-        : f_stage(fs), bounds(b) {
+    StageBounds(FStage fs, DimBounds b)
+        : f_stage(std::move(fs)), bounds(std::move(b)) {
     }
-    StageBounds(Function func, uint32_t stage_num, const DimBounds &b)
-        : f_stage(FStage(func, stage_num)), bounds(b) {
+    StageBounds(Function func, uint32_t stage_num, DimBounds b)
+        : f_stage(FStage(func, stage_num)), bounds(std::move(b)) {
     }
 
     bool operator==(const StageBounds &other) const {
@@ -724,8 +725,8 @@ struct AutoSchedule {
         string function;
         size_t stage;
 
-        Stage(const string &f, size_t s)
-            : function(f), stage(s) {
+        Stage(string f, size_t s)
+            : function(std::move(f)), stage(s) {
         }
 
         bool operator==(const Stage &other) const {
@@ -867,8 +868,8 @@ struct Partitioner {
         string prod;
         FStage cons;
 
-        GroupingChoice(const string &prod, const FStage &cons)
-            : prod(prod), cons(cons) {
+        GroupingChoice(string prod, FStage cons)
+            : prod(std::move(prod)), cons(std::move(cons)) {
         }
 
         bool operator==(const GroupingChoice &other) const {
@@ -943,8 +944,8 @@ struct Partitioner {
         // Tile sizes along dimensions of the output function of the group.
         map<string, Expr> tile_sizes;
 
-        Group(const FStage &output, const vector<FStage> &members)
-            : output(output), members(members) {
+        Group(FStage output, vector<FStage> members)
+            : output(std::move(output)), members(std::move(members)) {
         }
 
         friend std::ostream &operator<<(std::ostream &stream, const Group &g) {
@@ -992,8 +993,8 @@ struct Partitioner {
         GroupAnalysis()
             : cost(Cost()), parallelism(Expr()) {
         }
-        GroupAnalysis(const Cost &c, Expr p)
-            : cost(c), parallelism(std::move(p)) {
+        GroupAnalysis(Cost c, Expr p)
+            : cost(std::move(c)), parallelism(std::move(p)) {
         }
 
         inline bool defined() const {
@@ -1021,8 +1022,8 @@ struct Partitioner {
     struct GroupConfig {
         map<string, Expr> tile_sizes;
         GroupAnalysis analysis;
-        GroupConfig(const map<string, Expr> &tile_sizes, const GroupAnalysis &analysis)
-            : tile_sizes(tile_sizes), analysis(analysis) {
+        GroupConfig(map<string, Expr> tile_sizes, GroupAnalysis analysis)
+            : tile_sizes(std::move(tile_sizes)), analysis(std::move(analysis)) {
         }
         GroupConfig()
             : tile_sizes(map<string, Expr>()), analysis(GroupAnalysis()) {

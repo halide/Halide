@@ -2,6 +2,7 @@
 #include <memory>
 #include <set>
 #include <stdlib.h>
+#include <utility>
 
 #include "CSE.h"
 #include "Function.h"
@@ -182,7 +183,7 @@ struct CheckVars : public IRGraphVisitor {
     vector<string> pure_args;
     ReductionDomain reduction_domain;
     Scope<> defined_internally;
-    const std::string name;
+    const std::string &name;
     bool unbound_reduction_vars_ok = false;
 
     CheckVars(const std::string &n)
@@ -1001,7 +1002,7 @@ namespace {
 class SubstituteCalls : public IRMutator {
     using IRMutator::visit;
 
-    map<FunctionPtr, FunctionPtr> substitutions;
+    const map<FunctionPtr, FunctionPtr> &substitutions;
 
     Expr visit(const Call *c) override {
         Expr expr = IRMutator::visit(c);
@@ -1011,8 +1012,10 @@ class SubstituteCalls : public IRMutator {
         if ((c->call_type == Call::Halide) &&
             c->func.defined() &&
             substitutions.count(c->func)) {
-            FunctionPtr subs = substitutions[c->func];
-            internal_assert(subs.defined()) << "Function not in environment: " << subs->name << "\n";
+            auto it = substitutions.find(c->func);
+            internal_assert(it != substitutions.end())
+                << "Function not in environment: " << c->func->name << "\n";
+            FunctionPtr subs = it->second;
             debug(4) << "...Replace call to Func \"" << c->name << "\" with "
                      << "\"" << subs->name << "\"\n";
             expr = Call::make(c->type, subs->name, c->args, c->call_type,

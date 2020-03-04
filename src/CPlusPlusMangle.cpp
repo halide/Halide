@@ -1,6 +1,7 @@
 #include "CPlusPlusMangle.h"
 
 #include <map>
+#include <utility>
 
 #include "IR.h"
 #include "IROperator.h"
@@ -133,7 +134,7 @@ struct QualsState {
     bool last_is_pointer{false};
 
     const Type &type;
-    const std::string base_mode;
+    const std::string &base_mode;
     std::string result;
 
     bool finished{false};

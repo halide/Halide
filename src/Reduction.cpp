@@ -1,4 +1,5 @@
 #include "Reduction.h"
+
 #include "IR.h"
 #include "IREquality.h"
 #include "IRMutator.h"
@@ -6,6 +7,7 @@
 #include "IRVisitor.h"
 #include "Simplify.h"
 #include "Var.h"
+#include <utility>
 
 namespace Halide {
 namespace Internal {
@@ -179,7 +181,7 @@ public:
     Expr predicate;
     const ReductionDomain &domain;
     DropSelfReferences(Expr p, const ReductionDomain &d)
-        : predicate(p), domain(d) {
+        : predicate(std::move(p)), domain(d) {
     }
 };
 }  // namespace

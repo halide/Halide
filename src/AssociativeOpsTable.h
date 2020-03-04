@@ -9,6 +9,7 @@
 #include "IROperator.h"
 
 #include <iostream>
+#include <utility>
 #include <vector>
 
 namespace Halide {
@@ -42,8 +43,8 @@ struct AssociativePattern {
     AssociativePattern(size_t size)
         : ops(size), identities(size), is_commutative(false) {
     }
-    AssociativePattern(const std::vector<Expr> &ops, const std::vector<Expr> &ids, bool is_commutative)
-        : ops(ops), identities(ids), is_commutative(is_commutative) {
+    AssociativePattern(std::vector<Expr> ops, std::vector<Expr> ids, bool is_commutative)
+        : ops(std::move(ops)), identities(std::move(ids)), is_commutative(is_commutative) {
     }
     AssociativePattern(Expr op, Expr id, bool is_commutative)
         : ops({op}), identities({id}), is_commutative(is_commutative) {

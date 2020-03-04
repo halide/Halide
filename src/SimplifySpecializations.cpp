@@ -7,6 +7,7 @@
 #include "Substitute.h"
 
 #include <set>
+#include <utility>
 
 namespace Halide {
 namespace Internal {
@@ -51,7 +52,7 @@ public:
 
     Expr fact;
     SimplifyUsingFact(Expr f)
-        : fact(f) {
+        : fact(std::move(f)) {
     }
 };
 

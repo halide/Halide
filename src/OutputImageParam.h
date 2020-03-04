@@ -37,7 +37,7 @@ protected:
                                           bool *placeholder_seen) const;
 
     /** Construct an OutputImageParam that wraps an Internal Parameter object. */
-    OutputImageParam(const Internal::Parameter &p, Argument::Kind k, Func f);
+    OutputImageParam(Internal::Parameter p, Argument::Kind k, Func f);
 
 public:
     /** Construct a null image parameter handle. */

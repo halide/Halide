@@ -1,4 +1,5 @@
 #include <algorithm>
+#include <utility>
 
 #include "Argument.h"
 #include "AutoSchedule.h"
@@ -1299,15 +1300,15 @@ void Pipeline::invalidate_cache() {
 }
 
 JITExtern::JITExtern(Pipeline pipeline)
-    : pipeline_(pipeline) {
+    : pipeline_(std::move(pipeline)) {
 }
 
 JITExtern::JITExtern(Func func)
     : pipeline_(func) {
 }
 
-JITExtern::JITExtern(const ExternCFunction &extern_c_function)
-    : extern_c_function_(extern_c_function) {
+JITExtern::JITExtern(ExternCFunction extern_c_function)
+    : extern_c_function_(std::move(extern_c_function)) {
 }
 
 MachineParams MachineParams::generic() {

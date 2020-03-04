@@ -2,6 +2,7 @@
 #include <limits>
 #include <map>
 #include <string>
+#include <utility>
 
 #include "CodeGen_Internal.h"
 #include "IRMutator.h"
@@ -25,7 +26,7 @@ public:
 
     vector<int> stack;  // What produce nodes are we currently inside of.
 
-    string pipeline_name;
+    const string &pipeline_name;
 
     InjectProfiling(const string &pipeline_name)
         : pipeline_name(pipeline_name) {
@@ -292,7 +293,7 @@ private:
     }
 };
 
-Stmt inject_profiling(Stmt s, string pipeline_name) {
+Stmt inject_profiling(Stmt s, const string &pipeline_name) {
     InjectProfiling profiling(pipeline_name);
     s = profiling.mutate(s);
 

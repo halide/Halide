@@ -19,7 +19,7 @@ class Var {
 
 public:
     /** Construct a Var with the given name */
-    Var(const std::string &n);
+    Var(std::string n);
 
     /** Construct a Var with an automatically-generated unique name. */
     Var();

@@ -16,6 +16,7 @@
 #include "Util.h"
 
 #include <map>
+#include <utility>
 
 namespace Halide {
 
@@ -36,7 +37,7 @@ struct ExternFuncArgument {
     Internal::Parameter image_param;
 
     ExternFuncArgument(Internal::FunctionPtr f)
-        : arg_type(FuncArg), func(f) {
+        : arg_type(FuncArg), func(std::move(f)) {
     }
 
     template<typename T>
@@ -44,7 +45,7 @@ struct ExternFuncArgument {
         : arg_type(BufferArg), buffer(b) {
     }
     ExternFuncArgument(Expr e)
-        : arg_type(ExprArg), expr(e) {
+        : arg_type(ExprArg), expr(std::move(e)) {
     }
     ExternFuncArgument(int e)
         : arg_type(ExprArg), expr(e) {

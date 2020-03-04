@@ -1,10 +1,12 @@
 #include "Var.h"
+
 #include "Util.h"
+#include <utility>
 
 namespace Halide {
 
-Var::Var(const std::string &n)
-    : _name(n) {
+Var::Var(std::string n)
+    : _name(std::move(n)) {
 }
 
 Var::Var()

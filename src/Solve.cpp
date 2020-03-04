@@ -1,4 +1,5 @@
 #include "Solve.h"
+
 #include "CSE.h"
 #include "ConciseCasts.h"
 #include "ExprUsesVar.h"
@@ -6,6 +7,7 @@
 #include "IRMutator.h"
 #include "Simplify.h"
 #include "Substitute.h"
+#include <utility>
 
 namespace Halide {
 namespace Internal {
@@ -65,7 +67,7 @@ public:
 
 private:
     // The variable we're solving for.
-    string var;
+    const string &var;
 
     // Whether or not the just-mutated expression uses the variable.
     bool uses_var;

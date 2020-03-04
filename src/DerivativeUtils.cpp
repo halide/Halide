@@ -2,6 +2,7 @@
 #include <map>
 #include <set>
 #include <string>
+#include <utility>
 #include <vector>
 
 #include "CSE.h"
@@ -540,7 +541,7 @@ bool is_calling_function(
 struct SubstituteCallArgWithPureArg : public IRMutator {
 public:
     SubstituteCallArgWithPureArg(Func f, int variable_id)
-        : f(f), variable_id(variable_id) {
+        : f(std::move(f)), variable_id(variable_id) {
     }
 
 protected:

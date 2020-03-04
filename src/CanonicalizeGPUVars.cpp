@@ -1,5 +1,6 @@
 #include <cmath>
 #include <sstream>
+#include <utility>
 
 #include "CanonicalizeGPUVars.h"
 #include "CodeGen_GPU_Dev.h"
@@ -29,7 +30,7 @@ string get_block_name(int index) {
 }
 
 class CountGPUBlocksThreads : public IRVisitor {
-    string prefix;  // Producer name + stage
+    const string &prefix;  // Producer name + stage
 
     using IRVisitor::visit;
 

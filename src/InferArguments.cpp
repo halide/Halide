@@ -1,5 +1,6 @@
 #include <set>
 #include <string>
+#include <utility>
 #include <vector>
 
 #include "IRVisitor.h"
@@ -30,7 +31,7 @@ public:
     }
 
 private:
-    vector<Function> outputs;
+    const vector<Function> &outputs;
     set<string> visited_functions;
 
     using IRGraphVisitor::visit;

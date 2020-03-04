@@ -1,7 +1,7 @@
 ---
-Checks: '-*,modernize-use-override'
+Checks: '-*,modernize-pass-by-value,modernize-use-override'
 WarningsAsErrors: '*'
-HeaderFilterRegex: '.*'
+HeaderFilterRegex: 'src/[^/]*.h'
 AnalyzeTemporaryDtors: false
 FormatStyle: 'file'
 ...

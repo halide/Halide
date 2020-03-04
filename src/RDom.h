@@ -8,6 +8,7 @@
 
 #include "IR.h"
 
+#include <utility>
 #include <vector>
 
 namespace Halide {
@@ -35,14 +36,14 @@ public:
     }
 
     /** Construct an RVar with the given name */
-    explicit RVar(const std::string &n)
-        : _name(n) {
+    explicit RVar(std::string n)
+        : _name(std::move(n)) {
     }
 
     /** Construct a reduction variable with the given name and
      * bounds. Must be a member of the given reduction domain. */
     RVar(Internal::ReductionDomain domain, int index)
-        : _domain(domain), _index(index) {
+        : _domain(std::move(domain)), _index(index) {
     }
 
     /** The minimum value that this variable will take on */

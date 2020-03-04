@@ -1,5 +1,6 @@
 #include <algorithm>
 #include <sstream>
+#include <utility>
 
 #include "CodeGen_Internal.h"
 #include "CodeGen_Metal_Dev.h"
@@ -449,7 +450,7 @@ struct BufferSize {
         : size(0) {
     }
     BufferSize(string name, size_t size)
-        : name(name), size(size) {
+        : name(std::move(name)), size(size) {
     }
 
     bool operator<(const BufferSize &r) const {

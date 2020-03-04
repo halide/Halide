@@ -263,13 +263,13 @@ struct ScopedBinding {
 
     ScopedBinding() = default;
 
-    ScopedBinding(Scope<T> &s, const std::string &n, const T &value)
-        : scope(&s), name(n) {
+    ScopedBinding(Scope<T> &s, std::string n, const T &value)
+        : scope(&s), name(std::move(n)) {
         scope->push(name, value);
     }
 
-    ScopedBinding(bool condition, Scope<T> &s, const std::string &n, const T &value)
-        : scope(condition ? &s : nullptr), name(n) {
+    ScopedBinding(bool condition, Scope<T> &s, std::string n, const T &value)
+        : scope(condition ? &s : nullptr), name(std::move(n)) {
         if (condition) {
             scope->push(name, value);
         }
@@ -302,12 +302,12 @@ template<>
 struct ScopedBinding<void> {
     Scope<> *scope;
     std::string name;
-    ScopedBinding(Scope<> &s, const std::string &n)
-        : scope(&s), name(n) {
+    ScopedBinding(Scope<> &s, std::string n)
+        : scope(&s), name(std::move(n)) {
         scope->push(name);
     }
-    ScopedBinding(bool condition, Scope<> &s, const std::string &n)
-        : scope(condition ? &s : nullptr), name(n) {
+    ScopedBinding(bool condition, Scope<> &s, std::string n)
+        : scope(condition ? &s : nullptr), name(std::move(n)) {
         if (condition) {
             scope->push(name);
         }

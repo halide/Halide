@@ -11,6 +11,7 @@
 #include "Substitute.h"
 
 #include <iterator>
+#include <utility>
 
 namespace Halide {
 namespace Internal {
@@ -53,7 +54,7 @@ public:
 
 private:
     using IRVisitor::visit;
-    string buffer;
+    const string &buffer;
     bool varies;
     bool treat_selects_as_guards;
     bool in_produce;
@@ -251,11 +252,11 @@ private:
 class ProductionGuarder : public IRMutator {
 public:
     ProductionGuarder(const string &b, Expr compute_p, Expr alloc_p)
-        : buffer(b), compute_predicate(compute_p), alloc_predicate(alloc_p) {
+        : buffer(b), compute_predicate(std::move(compute_p)), alloc_predicate(std::move(alloc_p)) {
     }
 
 private:
-    string buffer;
+    const string &buffer;
     Expr compute_predicate;
     Expr alloc_predicate;
 
@@ -325,7 +326,7 @@ public:
     }
 
 private:
-    string func;
+    const string &func;
     using IRMutator::visit;
 
     Scope<> vector_vars;

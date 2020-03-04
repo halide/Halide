@@ -85,8 +85,8 @@ private:
 
 public:
     Symbol() = default;
-    Symbol(const std::string &name)
-        : name(name) {
+    Symbol(std::string name)
+        : name(std::move(name)) {
     }
 
     /** Accesses the name of this symbol. */
@@ -258,8 +258,8 @@ private:
 
 public:
     Section() = default;
-    Section(const std::string &name, Type type)
-        : name(name), type(type) {
+    Section(std::string name, Type type)
+        : name(std::move(name)), type(type) {
     }
 
     Section &set_name(const std::string &name) {

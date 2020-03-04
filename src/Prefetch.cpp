@@ -1,6 +1,7 @@
 #include <algorithm>
 #include <map>
 #include <string>
+#include <utility>
 
 #include "Bounds.h"
 #include "ExprUsesVar.h"
@@ -335,7 +336,7 @@ class SplitPrefetch : public IRMutator {
 
 public:
     SplitPrefetch(Expr bytes)
-        : max_byte_size(bytes) {
+        : max_byte_size(std::move(bytes)) {
     }
 };
 

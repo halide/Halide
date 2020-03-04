@@ -1,7 +1,9 @@
 #include "Substitute.h"
+
 #include "IREquality.h"
 #include "IRMutator.h"
 #include "Scope.h"
+#include <utility>
 
 namespace Halide {
 namespace Internal {
@@ -138,8 +140,8 @@ Stmt substitute(const Expr &find, const Expr &replacement, const Stmt &stmt) {
 
 /** Substitute an expr for a var in a graph. */
 class GraphSubstitute : public IRGraphMutator {
-    string var;
-    Expr value;
+    const string &var;
+    const Expr &value;
 
     using IRGraphMutator::visit;
 
@@ -169,7 +171,7 @@ public:
 /** Substitute an Expr for another Expr in a graph. Unlike substitute,
  * this only checks for shallow equality. */
 class GraphSubstituteExpr : public IRGraphMutator {
-    Expr find, replace;
+    const Expr &find, &replace;
 
 public:
     using IRGraphMutator::mutate;

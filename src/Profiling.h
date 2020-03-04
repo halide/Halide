@@ -36,7 +36,7 @@ namespace Internal {
  * storage flattening, but after all bounds inference.
  *
  */
-Stmt inject_profiling(Stmt, std::string);
+Stmt inject_profiling(Stmt, const std::string &pipeline_name);
 
 }  // namespace Internal
 }  // namespace Halide

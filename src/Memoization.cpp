@@ -8,6 +8,7 @@
 #include "Var.h"
 
 #include <map>
+#include <utility>
 
 namespace Halide {
 namespace Internal {
@@ -130,8 +131,8 @@ public:
             return false;
         }
 
-        DependencyKey(uint32_t size_arg, const std::string &name_arg)
-            : size(size_arg), name(name_arg) {
+        DependencyKey(uint32_t size_arg, std::string name_arg)
+            : size(size_arg), name(std::move(name_arg)) {
         }
     };
 

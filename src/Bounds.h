@@ -6,6 +6,8 @@
  * and the regions of a function read or written by a statement.
  */
 
+#include <utility>
+
 #include "IROperator.h"
 #include "Interval.h"
 #include "Scope.h"
@@ -58,8 +60,8 @@ struct Box {
     Box(size_t sz)
         : bounds(sz) {
     }
-    Box(const std::vector<Interval> &b)
-        : bounds(b) {
+    Box(std::vector<Interval> b)
+        : bounds(std::move(b)) {
     }
 
     size_t size() const {

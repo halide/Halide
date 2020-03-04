@@ -1,5 +1,7 @@
 #include "AssociativeOpsTable.h"
+
 #include "IRPrinter.h"
+#include <utility>
 
 namespace Halide {
 namespace Internal {
@@ -93,8 +95,8 @@ struct TableKey {
     TableKey(ValType t, RootExpr r, size_t d)
         : types({t}), root(r), dim(d) {
     }
-    TableKey(const vector<ValType> &t, RootExpr r, size_t d)
-        : types(t), root(r), dim(d) {
+    TableKey(vector<ValType> t, RootExpr r, size_t d)
+        : types(std::move(t)), root(r), dim(d) {
     }
 
     bool operator==(const TableKey &other) const {

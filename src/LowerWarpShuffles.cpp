@@ -1,4 +1,5 @@
 #include "LowerWarpShuffles.h"
+
 #include "ExprUsesVar.h"
 #include "IREquality.h"
 #include "IRMatch.h"
@@ -8,6 +9,7 @@
 #include "Simplify.h"
 #include "Solve.h"
 #include "Substitute.h"
+#include <utility>
 
 // In CUDA, allocations stored in registers and shared across lanes
 // look like private per-lane allocations, even though communication
@@ -274,8 +276,8 @@ class DetermineAllocStride : public IRVisitor {
     }
 
 public:
-    DetermineAllocStride(const string &alloc, const string &lane_var, const Expr &warp_size)
-        : alloc(alloc), lane_var(lane_var), warp_size(warp_size) {
+    DetermineAllocStride(const string &alloc, const string &lane_var, Expr warp_size)
+        : alloc(alloc), lane_var(lane_var), warp_size(std::move(warp_size)) {
         dependent_vars.push(lane_var, 1);
     }
 
@@ -739,7 +741,7 @@ class MoveIfStatementInwards : public IRMutator {
 
 public:
     MoveIfStatementInwards(Expr c)
-        : condition(c) {
+        : condition(std::move(c)) {
     }
 };
 

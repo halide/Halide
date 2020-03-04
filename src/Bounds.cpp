@@ -1,4 +1,5 @@
 #include <iostream>
+#include <utility>
 
 #include "Bounds.h"
 #include "CSE.h"
@@ -1659,7 +1660,7 @@ class SolveIfThenElse : public IRMutator {
 // (excluding 'skipped_var')
 class CollectVars : public IRGraphVisitor {
 public:
-    string skipped_var;
+    const string &skipped_var;
     set<string> vars;
 
     CollectVars(const string &v)
@@ -1681,7 +1682,7 @@ class BoxesTouched : public IRGraphVisitor {
 
 public:
     BoxesTouched(bool calls, bool provides, string fn, const Scope<Interval> *s, const FuncValueBounds &fb)
-        : func(fn), consider_calls(calls), consider_provides(provides), func_bounds(fb) {
+        : func(std::move(fn)), consider_calls(calls), consider_provides(provides), func_bounds(fb) {
         scope.set_containing_scope(s);
     }
 
@@ -1691,8 +1692,8 @@ private:
     struct VarInstance {
         string var;
         int instance;
-        VarInstance(const string &v, int i)
-            : var(v), instance(i) {
+        VarInstance(string v, int i)
+            : var(std::move(v)), instance(i) {
         }
         VarInstance() = default;
 
@@ -2032,8 +2033,8 @@ private:
 
     struct LetBound {
         string var, min_name, max_name;
-        LetBound(const string &v, const string &min, const string &max)
-            : var(v), min_name(min), max_name(max) {
+        LetBound(string v, string min, string max)
+            : var(std::move(v)), min_name(std::move(min)), max_name(std::move(max)) {
         }
     };
 

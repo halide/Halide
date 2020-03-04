@@ -1,4 +1,5 @@
 #include <map>
+#include <utility>
 
 #include "EarlyFree.h"
 #include "ExprUsesVar.h"
@@ -18,7 +19,7 @@ public:
     Stmt last_use;
 
     FindLastUse(string s)
-        : func(s) {
+        : func(std::move(s)) {
     }
 
 private:

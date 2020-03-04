@@ -1,5 +1,7 @@
 #include "Deinterleave.h"
 
+#include <utility>
+
 #include "CSE.h"
 #include "Debug.h"
 #include "IREquality.h"
@@ -20,7 +22,7 @@ namespace {
 
 class StoreCollector : public IRMutator {
 public:
-    const std::string store_name;
+    const std::string &store_name;
     const int store_stride, max_stores;
     std::vector<Stmt> &let_stmts;
     std::vector<Stmt> &stores;

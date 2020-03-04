@@ -1,4 +1,5 @@
 #include <map>
+#include <utility>
 
 #include "CSE.h"
 #include "IREquality.h"
@@ -76,8 +77,8 @@ public:
         int use_count = 0;
         // All consumer Exprs for which this is the last child Expr.
         map<ExprWithCompareCache, int> uses;
-        Entry(const Expr &e)
-            : expr(e) {
+        Entry(Expr e)
+            : expr(std::move(e)) {
         }
     };
     vector<std::unique_ptr<Entry>> entries;

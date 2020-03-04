@@ -5,6 +5,8 @@
  * Defines helpers for passing arguments to separate devices, such as GPUs.
  */
 
+#include <utility>
+
 #include "Closure.h"
 #include "IR.h"
 #include "ModulusRemainder.h"
@@ -72,12 +74,12 @@ struct DeviceArgument {
           write(false) {
     }
 
-    DeviceArgument(const std::string &_name,
+    DeviceArgument(std::string _name,
                    bool _is_buffer,
                    Type _type,
                    uint8_t _dimensions,
                    size_t _size = 0)
-        : name(_name),
+        : name(std::move(_name)),
           is_buffer(_is_buffer),
           dimensions(_dimensions),
           type(_type),

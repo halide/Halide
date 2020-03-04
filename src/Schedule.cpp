@@ -1,9 +1,11 @@
 #include "Schedule.h"
+
 #include "Func.h"
 #include "Function.h"
 #include "IR.h"
 #include "IRMutator.h"
 #include "Var.h"
+#include <utility>
 
 namespace {
 
@@ -31,12 +33,12 @@ struct LoopLevelContents {
     bool is_rvar;
     bool locked;
 
-    LoopLevelContents(const std::string &func_name,
-                      const std::string &var_name,
+    LoopLevelContents(std::string func_name,
+                      std::string var_name,
                       bool is_rvar,
                       int stage_index,
                       bool locked)
-        : func_name(func_name), stage_index(stage_index), var_name(var_name),
+        : func_name(std::move(func_name)), stage_index(stage_index), var_name(std::move(var_name)),
           is_rvar(is_rvar), locked(locked) {
     }
 };

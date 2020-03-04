@@ -266,6 +266,7 @@
 #include <sstream>
 #include <string>
 #include <type_traits>
+#include <utility>
 #include <vector>
 
 #include "ExternalCode.h"
@@ -391,7 +392,7 @@ class GeneratorParamInfo;
 
 class GeneratorParamBase {
 public:
-    explicit GeneratorParamBase(const std::string &name);
+    explicit GeneratorParamBase(std::string name);
     virtual ~GeneratorParamBase();
 
     const std::string name;
@@ -498,8 +499,8 @@ class GeneratorParamImpl : public GeneratorParamBase {
 public:
     using type = T;
 
-    GeneratorParamImpl(const std::string &name, const T &value)
-        : GeneratorParamBase(name), value_(value) {
+    GeneratorParamImpl(const std::string &name, T value)
+        : GeneratorParamBase(name), value_(std::move(value)) {
     }
 
     T value() const {
@@ -1310,8 +1311,8 @@ protected:
     void check_scheduled(const char *m) const;
     Target get_target() const;
 
-    explicit StubOutputBufferBase(const Func &f, std::shared_ptr<GeneratorBase> generator)
-        : f(f), generator(generator) {
+    explicit StubOutputBufferBase(Func f, std::shared_ptr<GeneratorBase> generator)
+        : f(std::move(f)), generator(std::move(generator)) {
     }
     StubOutputBufferBase() = default;
 
@@ -1376,11 +1377,11 @@ public:
     StubInput(const StubInputBuffer<T2> &b)
         : kind_(IOKind::Buffer), parameter_(b.parameter_) {
     }
-    StubInput(const Func &f)
-        : kind_(IOKind::Function), parameter_(), func_(f) {
+    StubInput(Func f)
+        : kind_(IOKind::Function), parameter_(), func_(std::move(f)) {
     }
-    StubInput(const Expr &e)
-        : kind_(IOKind::Scalar), parameter_(), expr_(e) {
+    StubInput(Expr e)
+        : kind_(IOKind::Scalar), parameter_(), expr_(std::move(e)) {
     }
 
 private:
@@ -1447,9 +1448,9 @@ public:
 
 protected:
     GIOBase(size_t array_size,
-            const std::string &name,
+            std::string name,
             IOKind kind,
-            const std::vector<Type> &types,
+            std::vector<Type> types,
             int dims);
 
     friend class GeneratorBase;
@@ -2776,8 +2777,8 @@ private:
             new GeneratorParam_Synthetic<T>(gpname, gio, which, error_msg));
     }
 
-    GeneratorParam_Synthetic(const std::string &name, GIOBase &gio, SyntheticParamType which, const std::string &error_msg = "")
-        : GeneratorParamImpl<T>(name, T()), gio(gio), which(which), error_msg(error_msg) {
+    GeneratorParam_Synthetic(const std::string &name, GIOBase &gio, SyntheticParamType which, std::string error_msg = "")
+        : GeneratorParamImpl<T>(name, T()), gio(gio), which(which), error_msg(std::move(error_msg)) {
     }
 
     template<typename T2 = T, typename std::enable_if<std::is_same<T2, ::Halide::Type>::value>::type * = nullptr>
@@ -2993,11 +2994,11 @@ struct StringOrLoopLevel {
     /*not-explicit*/ StringOrLoopLevel(const char *s)
         : string_value(s) {
     }
-    /*not-explicit*/ StringOrLoopLevel(const std::string &s)
-        : string_value(s) {
+    /*not-explicit*/ StringOrLoopLevel(std::string s)
+        : string_value(std::move(s)) {
     }
-    /*not-explicit*/ StringOrLoopLevel(const LoopLevel &loop_level)
-        : loop_level(loop_level) {
+    /*not-explicit*/ StringOrLoopLevel(LoopLevel loop_level)
+        : loop_level(std::move(loop_level)) {
     }
 };
 using GeneratorParamsMap = std::map<std::string, StringOrLoopLevel>;

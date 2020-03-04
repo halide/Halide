@@ -1,4 +1,5 @@
 #include <algorithm>
+#include <utility>
 
 #include "CSE.h"
 #include "CodeGen_GPU_Dev.h"
@@ -47,7 +48,7 @@ class LoadsFromBuffer : public IRVisitor {
         }
     }
 
-    string buffer;
+    const string &buffer;
 
 public:
     bool result = false;

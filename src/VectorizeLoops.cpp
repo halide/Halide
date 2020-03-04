@@ -1,4 +1,5 @@
 #include <algorithm>
+#include <utility>
 
 #include "CSE.h"
 #include "CodeGen_GPU_Dev.h"
@@ -26,7 +27,7 @@ namespace {
 // For a given var, replace expressions like shuffle_vector(var, 4)
 // with var.lane.4
 class ReplaceShuffleVectors : public IRMutator {
-    string var;
+    const string &var;
 
     using IRMutator::visit;
 
@@ -190,7 +191,7 @@ Interval bounds_of_lanes(Expr e) {
 // rewritten slightly.
 class RewriteAccessToVectorAlloc : public IRMutator {
     Expr var;
-    string alloc;
+    const string &alloc;
     int lanes;
 
     using IRMutator::visit;
@@ -223,7 +224,7 @@ class RewriteAccessToVectorAlloc : public IRMutator {
     }
 
 public:
-    RewriteAccessToVectorAlloc(string v, string a, int l)
+    RewriteAccessToVectorAlloc(const string &v, const string &a, int l)
         : var(Variable::make(Int(32), v)), alloc(a), lanes(l) {
     }
 };
@@ -353,7 +354,7 @@ class PredicateLoadStore : public IRMutator {
 
 public:
     PredicateLoadStore(string v, Expr vpred, bool in_hexagon, const Target &t)
-        : var(v), vector_predicate(vpred), in_hexagon(in_hexagon), target(t),
+        : var(std::move(v)), vector_predicate(vpred), in_hexagon(in_hexagon), target(t),
           lanes(vpred.type().lanes()), valid(true), vectorized(false) {
         internal_assert(lanes > 1);
     }
@@ -990,7 +991,7 @@ class VectorSubs : public IRMutator {
 
 public:
     VectorSubs(string v, Expr r, bool in_hexagon, const Target &t)
-        : var(v), replacement(r), target(t), in_hexagon(in_hexagon) {
+        : var(std::move(v)), replacement(std::move(r)), target(t), in_hexagon(in_hexagon) {
         widening_suffix = ".x" + std::to_string(replacement.type().lanes());
     }
 };

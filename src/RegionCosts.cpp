@@ -1,10 +1,12 @@
 #include "RegionCosts.h"
+
 #include "FindCalls.h"
 #include "IRMutator.h"
 #include "IRVisitor.h"
 #include "PartitionLoops.h"
 #include "RealizationOrder.h"
 #include "Simplify.h"
+#include <utility>
 
 namespace Halide {
 namespace Internal {
@@ -392,9 +394,9 @@ map<string, Expr> compute_expr_detailed_byte_loads(Expr expr) {
 
 }  // anonymous namespace
 
-RegionCosts::RegionCosts(const map<string, Function> &_env,
-                         const vector<string> &_order)
-    : env(_env), order(_order) {
+RegionCosts::RegionCosts(map<string, Function> _env,
+                         vector<string> _order)
+    : env(std::move(_env)), order(std::move(_order)) {
     for (const auto &kv : env) {
         // Pre-compute the function costs without any inlining.
         func_cost[kv.first] = get_func_cost(kv.second);

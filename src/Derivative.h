@@ -11,6 +11,7 @@
 
 #include <map>
 #include <string>
+#include <utility>
 #include <vector>
 
 namespace Halide {
@@ -24,10 +25,7 @@ public:
     // function name & update_id, for initialization update_id == -1
     using FuncKey = std::pair<std::string, int>;
 
-    explicit Derivative(const std::map<FuncKey, Func> &adjoints_in)
-        : adjoints(adjoints_in) {
-    }
-    explicit Derivative(std::map<FuncKey, Func> &&adjoints_in)
+    explicit Derivative(std::map<FuncKey, Func> adjoints_in)
         : adjoints(std::move(adjoints_in)) {
     }
 

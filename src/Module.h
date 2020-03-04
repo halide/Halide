@@ -89,12 +89,12 @@ struct LoweredFunc {
      * the Target. */
     NameMangling name_mangling;
 
-    LoweredFunc(const std::string &name,
-                const std::vector<LoweredArgument> &args,
+    LoweredFunc(std::string name,
+                std::vector<LoweredArgument> args,
                 Stmt body,
                 LinkageType linkage,
                 NameMangling mangling = NameMangling::Default);
-    LoweredFunc(const std::string &name,
+    LoweredFunc(std::string name,
                 const std::vector<Argument> &args,
                 Stmt body,
                 LinkageType linkage,

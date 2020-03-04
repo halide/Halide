@@ -3,6 +3,7 @@
 #include <array>
 #include <fstream>
 #include <future>
+#include <utility>
 
 #include "CodeGen_C.h"
 #include "CodeGen_Internal.h"
@@ -335,20 +336,20 @@ void destroy<ModuleContents>(const ModuleContents *t) {
     delete t;
 }
 
-LoweredFunc::LoweredFunc(const std::string &name,
-                         const std::vector<LoweredArgument> &args,
+LoweredFunc::LoweredFunc(std::string name,
+                         std::vector<LoweredArgument> args,
                          Stmt body,
                          LinkageType linkage,
                          NameMangling name_mangling)
-    : name(name), args(args), body(body), linkage(linkage), name_mangling(name_mangling) {
+    : name(std::move(name)), args(std::move(args)), body(std::move(body)), linkage(linkage), name_mangling(name_mangling) {
 }
 
-LoweredFunc::LoweredFunc(const std::string &name,
+LoweredFunc::LoweredFunc(std::string name,
                          const std::vector<Argument> &args,
                          Stmt body,
                          LinkageType linkage,
                          NameMangling name_mangling)
-    : name(name), body(body), linkage(linkage), name_mangling(name_mangling) {
+    : name(std::move(name)), body(std::move(body)), linkage(linkage), name_mangling(name_mangling) {
     for (const Argument &i : args) {
         this->args.push_back(LoweredArgument(i));
     }

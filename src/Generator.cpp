@@ -1,6 +1,7 @@
 #include <cmath>
 #include <fstream>
 #include <unordered_map>
+#include <utility>
 
 #include "BoundaryConditions.h"
 #include "Derivative.h"
@@ -190,17 +191,17 @@ std::vector<Expr> parameter_constraints(const Parameter &p) {
 class StubEmitter {
 public:
     StubEmitter(std::ostream &dest,
-                const std::string &generator_registered_name,
+                std::string generator_registered_name,
                 const std::string &generator_stub_name,
                 const std::vector<Internal::GeneratorParamBase *> &generator_params,
-                const std::vector<Internal::GeneratorInputBase *> &inputs,
-                const std::vector<Internal::GeneratorOutputBase *> &outputs)
+                std::vector<Internal::GeneratorInputBase *> inputs,
+                std::vector<Internal::GeneratorOutputBase *> outputs)
         : stream(dest),
-          generator_registered_name(generator_registered_name),
+          generator_registered_name(std::move(generator_registered_name)),
           generator_stub_name(generator_stub_name),
           generator_params(select_generator_params(generator_params)),
-          inputs(inputs),
-          outputs(outputs) {
+          inputs(std::move(inputs)),
+          outputs(std::move(outputs)) {
         namespaces = split_string(generator_stub_name, "::");
         internal_assert(!namespaces.empty());
         if (namespaces[0].empty()) {
@@ -997,8 +998,8 @@ int generate_filter_main(int argc, char **argv, std::ostream &cerr) {
 }
 #endif
 
-GeneratorParamBase::GeneratorParamBase(const std::string &name)
-    : name(name) {
+GeneratorParamBase::GeneratorParamBase(std::string name)
+    : name(std::move(name)) {
     ObjectInstanceRegistry::register_instance(this, 0, ObjectInstanceRegistry::GeneratorParam,
                                               this, nullptr);
 }
@@ -1635,11 +1636,11 @@ void GeneratorBase::check_input_kind(Internal::GeneratorInputBase *in, Internal:
 }
 
 GIOBase::GIOBase(size_t array_size,
-                 const std::string &name,
+                 std::string name,
                  IOKind kind,
-                 const std::vector<Type> &types,
+                 std::vector<Type> types,
                  int dims)
-    : array_size_(array_size), name_(name), kind_(kind), types_(types), dims_(dims) {
+    : array_size_(array_size), name_(std::move(name)), kind_(kind), types_(std::move(types)), dims_(dims) {
 }
 
 GIOBase::~GIOBase() {
