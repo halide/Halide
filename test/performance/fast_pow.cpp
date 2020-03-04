@@ -19,6 +19,11 @@ extern "C" DLLEXPORT float pow_ref(float x, float y) {
 HalideExtern_2(float, pow_ref, float, float);
 
 int main(int argc, char **argv) {
+    Target host = get_host_target();
+    Target hl_target = get_target_from_environment();
+    printf("host is:      %s\n", host.to_string().c_str());
+    printf("HL_TARGET is: %s\n", hl_target.to_string().c_str());
+
     Func f, g, h;
     Var x, y;
 

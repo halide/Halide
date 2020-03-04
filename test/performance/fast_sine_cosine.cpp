@@ -9,6 +9,11 @@ using namespace Halide;
 using namespace Halide::Tools;
 
 int main(int argc, char **argv) {
+    Target host = get_host_target();
+    Target hl_target = get_target_from_environment();
+    printf("host is:      %s\n", host.to_string().c_str());
+    printf("HL_TARGET is: %s\n", hl_target.to_string().c_str());
+
     Func sin_f, cos_f, sin_ref, cos_ref;
     Var x;
     Expr t = x / 1000.f;
