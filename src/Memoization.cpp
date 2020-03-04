@@ -17,11 +17,6 @@ namespace {
 
 class FindParameterDependencies : public IRGraphVisitor {
 public:
-    FindParameterDependencies() {
-    }
-    ~FindParameterDependencies() override {
-    }
-
     void visit_function(const Function &function) {
         function.accept(this);
 

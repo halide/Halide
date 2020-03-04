@@ -21,7 +21,7 @@ public:
                      GreaterThan };
 
     /** The result of the comparison. Should be Equal, LessThan, or GreaterThan. */
-    CmpResult result;
+    CmpResult result{Equal};
 
     /** Compare two expressions or statements and return the
      * result. Returns the result immediately if it is already
@@ -36,7 +36,7 @@ public:
      * Currently this is only done in common-subexpression
      * elimination. */
     IRComparer(IRCompareCache *c = nullptr)
-        : result(Equal), cache(c) {
+        : cache(c) {
     }
 
 private:

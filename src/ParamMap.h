@@ -50,11 +50,9 @@ public:
 private:
     struct ParamArg {
         Internal::Parameter mapped_param;
-        Buffer<> *buf_out_param;
+        Buffer<> *buf_out_param{nullptr};
 
-        ParamArg()
-            : buf_out_param(nullptr) {
-        }
+        ParamArg() = default;
         ParamArg(const ParamMapping &pm)
             : mapped_param(pm.parameter->type(), false, 0, pm.parameter->name()),
               buf_out_param(nullptr) {
@@ -70,8 +68,7 @@ private:
     void set(const ImageParam &p, Buffer<> &buf, Buffer<> *buf_out_param);
 
 public:
-    ParamMap() {
-    }
+    ParamMap() = default;
 
     ParamMap(const std::initializer_list<ParamMapping> &init);
 

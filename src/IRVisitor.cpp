@@ -3,11 +3,9 @@
 namespace Halide {
 namespace Internal {
 
-IRVisitor::~IRVisitor() {
-}
+IRVisitor::~IRVisitor() = default;
 
-IRVisitor::IRVisitor() {
-}
+IRVisitor::IRVisitor() = default;
 
 void IRVisitor::visit(const IntImm *) {
 }

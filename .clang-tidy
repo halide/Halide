@@ -1,5 +1,5 @@
 ---
-Checks: '-*,modernize-pass-by-value,modernize-use-override'
+Checks: '-*,modernize-pass-by-value,modernize-use-override,modernize-use-equals-default,modernize-use-default-member-init'
 WarningsAsErrors: '*'
 HeaderFilterRegex: 'src/[^/]*.h'
 AnalyzeTemporaryDtors: false

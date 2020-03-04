@@ -402,9 +402,7 @@ public:
     FuncSchedule(IntrusivePtr<FuncScheduleContents> c)
         : contents(std::move(c)) {
     }
-    FuncSchedule(const FuncSchedule &other)
-        : contents(other.contents) {
-    }
+    FuncSchedule(const FuncSchedule &other) = default;
     FuncSchedule();
 
     /** Return a deep copy of this FuncSchedule. It recursively deep copies all
@@ -500,9 +498,7 @@ public:
     StageSchedule(IntrusivePtr<StageScheduleContents> c)
         : contents(std::move(c)) {
     }
-    StageSchedule(const StageSchedule &other)
-        : contents(other.contents) {
-    }
+    StageSchedule(const StageSchedule &other) = default;
     StageSchedule();
 
     /** Return a copy of this StageSchedule. */

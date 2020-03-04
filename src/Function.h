@@ -30,7 +30,7 @@ struct ExternFuncArgument {
                    BufferArg,
                    ExprArg,
                    ImageParamArg };
-    ArgType arg_type;
+    ArgType arg_type{UndefinedArg};
     Internal::FunctionPtr func;
     Buffer<> buffer;
     Expr expr;
@@ -59,9 +59,7 @@ struct ExternFuncArgument {
         // Scalar params come in via the Expr constructor.
         internal_assert(p.is_buffer());
     }
-    ExternFuncArgument()
-        : arg_type(UndefinedArg) {
-    }
+    ExternFuncArgument() = default;
 
     bool is_func() const {
         return arg_type == FuncArg;

@@ -167,8 +167,7 @@ ostream &operator<<(ostream &stream, const Target &target) {
 
 namespace Internal {
 
-IRPrinter::~IRPrinter() {
-}
+IRPrinter::~IRPrinter() = default;
 
 void IRPrinter::test() {
     Type i32 = Int(32);

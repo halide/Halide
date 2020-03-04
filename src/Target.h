@@ -33,7 +33,7 @@ struct Target {
         NoOS,
         Fuchsia,
         WebAssemblyRuntime
-    } os;
+    } os{OSUnknown};
 
     /** The architecture used by the target. Determines the
      * instruction set to use.
@@ -47,10 +47,10 @@ struct Target {
         POWERPC,
         WebAssembly,
         RISCV
-    } arch;
+    } arch{ArchUnknown};
 
     /** The bit-width of the target machine. Must be 0 for unknown, or 32 or 64. */
-    int bits;
+    int bits{0};
 
     /** Optional features a target can have.
      * Corresponds to feature_name_map in Target.cpp.
@@ -123,9 +123,7 @@ struct Target {
         SVE2 = halide_target_feature_sve2,
         FeatureEnd = halide_target_feature_end
     };
-    Target()
-        : os(OSUnknown), arch(ArchUnknown), bits(0) {
-    }
+    Target() = default;
     Target(OS o, Arch a, int b, const std::vector<Feature> &initial_features = std::vector<Feature>())
         : os(o), arch(a), bits(b) {
         for (const auto &f : initial_features) {

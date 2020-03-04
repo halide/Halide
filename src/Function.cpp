@@ -278,8 +278,7 @@ namespace {
 static std::atomic<int> rand_counter;
 }
 
-Function::Function() {
-}
+Function::Function() = default;
 
 Function::Function(const FunctionPtr &ptr)
     : contents(ptr) {

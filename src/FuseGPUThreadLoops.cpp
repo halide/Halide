@@ -29,7 +29,7 @@ string shared_mem_name = "__shared";
 }  // namespace
 
 class InjectThreadBarriers : public IRMutator {
-    bool in_threads;
+    bool in_threads{false};
 
     using IRMutator::visit;
 
@@ -67,8 +67,7 @@ class InjectThreadBarriers : public IRMutator {
     }
 
 public:
-    InjectThreadBarriers()
-        : in_threads(false) {
+    InjectThreadBarriers() {
         barrier =
             Evaluate::make(Call::make(Int(32), Call::gpu_thread_barrier,
                                       vector<Expr>(), Call::Intrinsic));
@@ -1149,7 +1148,7 @@ class FuseGPUThreadLoops : public IRMutator {
 };
 
 class ZeroGPULoopMins : public IRMutator {
-    bool in_non_glsl_gpu;
+    bool in_non_glsl_gpu{false};
     using IRMutator::visit;
 
     Stmt visit(const For *op) override {
@@ -1169,11 +1168,6 @@ class ZeroGPULoopMins : public IRMutator {
             stmt = For::make(op->name, 0, op->extent, op->for_type, op->device_api, body);
         }
         return stmt;
-    }
-
-public:
-    ZeroGPULoopMins()
-        : in_non_glsl_gpu(false) {
     }
 };
 

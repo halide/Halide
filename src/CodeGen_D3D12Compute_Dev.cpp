@@ -784,11 +784,9 @@ void CodeGen_D3D12Compute_Dev::add_kernel(Stmt s,
 namespace {
 struct BufferSize {
     string name;
-    size_t size;
+    size_t size{0};
 
-    BufferSize()
-        : size(0) {
-    }
+    BufferSize() = default;
     BufferSize(string name, size_t size)
         : name(std::move(name)), size(size) {
     }

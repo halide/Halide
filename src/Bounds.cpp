@@ -1838,10 +1838,7 @@ private:
         }
 
     public:
-        int count;
-        CountVars()
-            : count(0) {
-        }
+        int count{0};
     };
 
     // We get better simplification if we directly substitute mins

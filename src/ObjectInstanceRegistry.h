@@ -69,14 +69,12 @@ private:
     static ObjectInstanceRegistry &get_registry();
 
     struct InstanceInfo {
-        void *subject_ptr;  // May be different from the this_ptr in the key
-        size_t size;        // May be 0 for params
-        Kind kind;
-        bool registered_for_introspection;
+        void *subject_ptr{nullptr};  // May be different from the this_ptr in the key
+        size_t size{0};              // May be 0 for params
+        Kind kind{Invalid};
+        bool registered_for_introspection{false};
 
-        InstanceInfo()
-            : subject_ptr(nullptr), size(0), kind(Invalid), registered_for_introspection(false) {
-        }
+        InstanceInfo() = default;
         InstanceInfo(size_t size, Kind kind, void *subject_ptr, bool registered_for_introspection)
             : subject_ptr(subject_ptr), size(size), kind(kind), registered_for_introspection(registered_for_introspection) {
         }

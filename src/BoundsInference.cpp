@@ -49,10 +49,7 @@ class DependsOnBoundsInference : public IRVisitor {
     }
 
 public:
-    bool result;
-    DependsOnBoundsInference()
-        : result(false) {
-    }
+    bool result{false};
 };
 
 bool depends_on_bounds_inference(Expr e) {

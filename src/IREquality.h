@@ -96,11 +96,9 @@ if (m.contains(ExprWithCompareCache(query, &cache))) {...}
  */
 struct ExprWithCompareCache {
     Expr expr;
-    mutable IRCompareCache *cache;
+    mutable IRCompareCache *cache{nullptr};
 
-    ExprWithCompareCache()
-        : cache(nullptr) {
-    }
+    ExprWithCompareCache() = default;
     ExprWithCompareCache(Expr e, IRCompareCache *c)
         : expr(std::move(e)), cache(c) {
     }

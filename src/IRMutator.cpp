@@ -5,11 +5,9 @@ namespace Internal {
 
 using std::vector;
 
-IRMutator::IRMutator() {
-}
+IRMutator::IRMutator() = default;
 
-IRMutator::~IRMutator() {
-}
+IRMutator::~IRMutator() = default;
 
 Expr IRMutator::mutate(const Expr &e) {
     return e.defined() ? e.get()->mutate_expr(this) : Expr();

@@ -121,10 +121,6 @@ struct MatcherState {
         val = bound_const[i];
         type = bound_const_type[i];
     }
-
-    HALIDE_ALWAYS_INLINE
-    MatcherState() noexcept {
-    }
 };
 
 template<typename T,
