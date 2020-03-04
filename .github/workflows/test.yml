@@ -273,6 +273,7 @@ jobs:
               ${{matrix.target_bits}} == 32 ]]; then
           # Assume host_os is ubuntu*
           EXTRA_CMAKE_FLAGS="${EXTRA_CMAKE_FLAGS} \
+                             -D CMAKE_FIND_DEBUG_MODE=ON \
                              -D CMAKE_FIND_ROOT_PATH=/usr/lib/i386-linux-gnu \
                              -D CMAKE_FIND_ROOT_PATH_MODE_LIBRARY=ONLY"
           export CC="${CC} -m32"
