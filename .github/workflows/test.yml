@@ -92,12 +92,7 @@ jobs:
       run: |
         sudo apt-get update
 
-        # Install OpenGL
-        # TODO(srj): OpenGL is only needed to build the opengl tests (which we don't even run)...
-        sudo apt-get install libglu1-mesa-dev freeglut3-dev mesa-common-dev
-
         sudo apt-get install ninja-build
-        sudo apt-get install libjpeg-dev libpng-dev
         sudo apt-get --no-install-recommends install doxygen
 
     - name: Configure MacOS Host
@@ -121,6 +116,16 @@ jobs:
 
         # On Windows, it's just 'python', apparently
         echo ::set-env name=PYTHON::"python"
+
+    - name: Configure Ubuntu-64
+      if: matrix.target_os == 'linux' && matrix.target_bits == 64
+      shell: bash
+      run: |
+        set -eu
+
+        sudo apt-get install libjpeg-dev libpng-dev
+        # TODO(srj): OpenGL is only needed to build the opengl tests (which we don't even run)...
+        sudo apt-get install libglu1-mesa-dev freeglut3-dev mesa-common-dev
 
     - name: Configure Ubuntu-32
       if: matrix.target_os == 'linux' && matrix.target_bits == 32
