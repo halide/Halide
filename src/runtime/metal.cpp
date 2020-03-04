@@ -215,10 +215,10 @@ WEAK void *buffer_contents(mtl_buffer *buffer) {
     return objc_msgSend(buffer, sel_getUid("contents"));
 }
 
-WEAK void *nsarray_object_at_index(objc_id arr, size_t index) {
-    typedef objc_id (*nsarray_object_at_index_method)(objc_id arr, objc_sel sel, size_t index);
-    nsarray_object_at_index_method method = (nsarray_object_at_index_method)&objc_msgSend;
-    return (*method)(arr, sel_getUid("objectAtIndex:"), index);
+WEAK void *nsarray_first_object(objc_id arr) {
+    typedef objc_id (*nsarray_first_object_method)(objc_id arr, objc_sel sel);
+    nsarray_first_object_method method = (nsarray_first_object_method)&objc_msgSend;
+    return (*method)(arr, sel_getUid("firstObject"));
 }
 
 // MTLCopyAllDevices() is only available for macOS and is
@@ -230,7 +230,7 @@ inline mtl_device *get_default_mtl_device() {
     if (device == NULL) {
         objc_id devices = (objc_id)MTLCopyAllDevices();
         if (devices != NULL) {
-            device = (mtl_device *)nsarray_object_at_index(devices, 0);
+            device = (mtl_device *)nsarray_first_object(devices);
         }
     }
     return device;
