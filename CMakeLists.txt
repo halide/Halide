@@ -419,6 +419,14 @@ else()
   message(STATUS "Building utils disabled")
 endif()
 
+option(WITH_PYTHON_BINDINGS "Build Python bindings" OFF)
+if (WITH_PYTHON_BINDINGS)
+  message(STATUS "Building Python bindings enabled")
+  add_subdirectory(python_bindings)
+else()
+  message(STATUS "Building Python bindings disabled")
+endif()
+
 # ------------------------------------------------
 # install
 

@@ -1,15 +1,6 @@
-project(python_bindings)
-cmake_minimum_required(VERSION 3.1.3)
-
 find_package(pybind11 REQUIRED)
 
-#TODO: Remove after integrating it to the main cmake
-find_package(Threads QUIET)
-set(HALIDE_DISTRIB_DIR "${CMAKE_CURRENT_LIST_DIR}/../distrib")
-include("${HALIDE_DISTRIB_DIR}/halide.cmake")
-##
-
-pybind11_add_module(halide
+pybind11_add_module(halide_py
                     src/PyArgument.cpp            
                     src/PyBoundaryConditions.cpp  
                     src/PyBuffer.cpp              
@@ -38,9 +29,12 @@ pybind11_add_module(halide
                     src/PyType.cpp
                     src/PyVar.cpp
                     src/PyVarOrRVar.cpp)
-target_link_libraries(halide PRIVATE "${HALIDE_COMPILER_LIB}")
-target_include_directories(halide PRIVATE "${HALIDE_INCLUDE_DIR}" "${HALIDE_TOOLS_DIR}")
-install(TARGETS halide LIBRARY DESTINATION bin)
+set_target_properties(halide_py PROPERTIES OUTPUT_NAME "halide")
+target_link_libraries(halide_py PRIVATE "${HALIDE_COMPILER_LIB}")
+target_include_directories(halide_py PRIVATE "${HALIDE_INCLUDE_DIR}" "${HALIDE_TOOLS_DIR}")
+target_compile_options(halide_py PRIVATE "-Wno-cast-qual"
+                                         "-Wno-suggest-override")
+install(TARGETS halide_py LIBRARY DESTINATION bin)
 
 _halide_library_runtime(host HALIDE_TARGET)
 
@@ -51,36 +45,44 @@ function(test_correctness_generator BASENAME)
   set(oneValueArgs)
   set(multiValueArgs HALIDE_TARGET_FEATURES)
   cmake_parse_arguments(args "" "${oneValueArgs}" "${multiValueArgs}" ${ARGN})
-  halide_library("${BASENAME}"
+  halide_library("${BASENAME}_py"
                  SRCS "correctness/${BASENAME}_generator.cpp"
+                 GENERATOR_NAME "${BASENAME}"
+                 GENERATOR_ARGS "-n" "${BASENAME}_py"
+                 FUNCTION_NAME "${BASENAME}"
                  EXTRA_OUTPUTS python_extension
                  HALIDE_TARGET_FEATURES ${args_HALIDE_TARGET_FEATURES})
-  _halide_genfiles_dir("${BASENAME}" GENFILES_DIR)
-  add_library("ext_${BASENAME}" SHARED "${GENFILES_DIR}/${BASENAME}.py.cpp")
+  _halide_genfiles_dir("${BASENAME}_py" GENFILES_DIR)
+  add_library("ext_${BASENAME}" SHARED "${GENFILES_DIR}/${BASENAME}_py.py.cpp")
+  add_dependencies("ext_${BASENAME}" halide_py "${BASENAME}_py")
   set_target_properties("ext_${BASENAME}" PROPERTIES PREFIX ""
                                                      OUTPUT_NAME "${BASENAME}"
                                                      LINKER_LANGUAGE C)
-  target_link_libraries("ext_${BASENAME}" PRIVATE "${BASENAME}_cc" ${HALIDE_TARGET})
+  target_link_libraries("ext_${BASENAME}" PRIVATE "${BASENAME}_py_cc" ${HALIDE_TARGET})
   target_include_directories("ext_${BASENAME}" PRIVATE "${GENFILES_DIR}"
                                                        "${HALIDE_INCLUDE_DIR}"
                                                        "${HALIDE_TOOLS_DIR}"
                                                        "${PYTHON_INCLUDE_DIR}")
-  add_test(NAME "test_correctness_${BASENAME}_generator"
+  target_compile_options("ext_${BASENAME}" PRIVATE "-Wno-cast-qual"
+                                                   "-Wno-suggest-override")
+  add_test(NAME "python_bindings_correctness_${BASENAME}_generator"
            COMMAND "${PYTHON_EXECUTABLE}"
                    "${CMAKE_CURRENT_SOURCE_DIR}/correctness/${BASENAME}_test.py")
 
-  set_property(TEST "test_correctness_${BASENAME}_generator"
-               #PROPERTY ENVIRONMENT "PYTHONPATH=${CMAKE_LIBRARY_OUTPUT_DIRECTORY}"
-               PROPERTY ENVIRONMENT "PYTHONPATH=${CMAKE_CURRENT_BINARY_DIR}")
+  set_property(TEST "python_bindings_correctness_${BASENAME}_generator"
+               PROPERTY ENVIRONMENT "PYTHONPATH=${CMAKE_LIBRARY_OUTPUT_DIRECTORY}")
 endfunction()
 
 function(test_correctness_pystub BASENAME)
   add_library("${BASENAME}" SHARED "stub/PyStub.cpp"
                                    "stub/PyStubImpl.cpp"
                                    "correctness/${BASENAME}_generator.cpp")
+  add_dependencies("${BASENAME}" halide_py)
   set_target_properties("${BASENAME}" PROPERTIES PREFIX ""
                                                  OUTPUT_NAME "${BASENAME}"
                                                  LINKER_LANGUAGE C)
+  target_compile_options("${BASENAME}" PRIVATE "-Wno-cast-qual"
+                                               "-Wno-suggest-override")
   target_include_directories("${BASENAME}" PRIVATE "${HALIDE_INCLUDE_DIR}"
                                                    "${HALIDE_TOOLS_DIR}"
                                                    "${PYTHON_INCLUDE_DIR}")
@@ -93,12 +95,11 @@ test_correctness_pystub(partialbuildmethod)
 test_correctness_pystub(nobuildmethod)
 
 function(test_group GROUP BASENAME)
-  add_test(NAME "test_${GROUP}_${BASENAME}"
+  add_test(NAME "python_bindings_${GROUP}_${BASENAME}"
            COMMAND "${PYTHON_EXECUTABLE}"
                    "${CMAKE_CURRENT_SOURCE_DIR}/${GROUP}/${BASENAME}.py")
-  set_property(TEST "test_${GROUP}_${BASENAME}"
-               #PROPERTY ENVIRONMENT "PYTHONPATH=${CMAKE_LIBRARY_OUTPUT_DIRECTORY}"
-               PROPERTY ENVIRONMENT "PYTHONPATH=${CMAKE_CURRENT_BINARY_DIR}")
+  set_property(TEST "python_bindings_${GROUP}_${BASENAME}"
+               PROPERTY ENVIRONMENT "PYTHONPATH=${CMAKE_LIBRARY_OUTPUT_DIRECTORY}")
 endfunction()
 
 test_correctness_generator(addconstant)
@@ -138,12 +139,12 @@ test_group(tutorial lesson_08_scheduling_2)
 test_group(tutorial lesson_09_update_definitions)
 test_group(tutorial lesson_10_aot_compilation_generate)
 
-add_test(NAME "test_tutorial_lesson_10_halide"
+add_test(NAME "python_bindings_tutorial_lesson_10_halide"
          COMMAND "${CMAKE_CXX_COMPILER}"
                  "${CMAKE_SHARED_LIBRARY_CREATE_C_FLAGS}"
                  "${CMAKE_SHARED_LIBRARY_C_FLAGS}"
                  "-o"
-                 "lesson_10_halide${CMAKE_SHARED_LIBRARY_SUFFIX}"
+                 "${CMAKE_LIBRARY_OUTPUT_DIRECTORY}/lesson_10_halide${CMAKE_SHARED_LIBRARY_SUFFIX}"
                  "${CMAKE_CURRENT_BINARY_DIR}/lesson_10_halide.py.cpp"
                  "${CMAKE_CURRENT_BINARY_DIR}/lesson_10_halide.o"
                  "${CMAKE_INCLUDE_FLAG_C}${PYTHON_INCLUDE_DIR}"
@@ -155,7 +156,7 @@ test_group(tutorial lesson_12_using_the_gpu)
 test_group(tutorial lesson_13_tuples)
 test_group(tutorial lesson_14_types)
 
-set_property(TEST "test_tutorial_lesson_10_aot_compilation_run"
-             PROPERTY DEPENDS "test_tutorial_lesson_10_halide")
-set_property(TEST "test_tutorial_lesson_10_halide"
-             PROPERTY DEPENDS "lesson_10_aot_compilation_generate")
+set_property(TEST "python_bindings_tutorial_lesson_10_aot_compilation_run"
+             PROPERTY DEPENDS "python_bindings_tutorial_lesson_10_halide")
+set_property(TEST "python_bindings_tutorial_lesson_10_halide"
+             PROPERTY DEPENDS "python_bindings_tutorial_lesson_10_aot_compilation_generate")
