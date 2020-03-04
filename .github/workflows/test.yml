@@ -340,7 +340,7 @@ jobs:
 
         # Serial
         for t in ${TEST_GROUPS_SERIAL}; do
-          make -f ${HALIDE_SOURCE_DIR}/Makefile -j ${PARALLEL_JOBS} test_$t
+          make -f ${HALIDE_SOURCE_DIR}/Makefile test_$t
         done
 
     - name: Run Tests (CMake)
