@@ -92,15 +92,29 @@ jobs:
       run: |
         sudo apt-get update
 
-        sudo apt-get install ninja-build
-        sudo apt-get --no-install-recommends install doxygen
+        sudo apt-get install \
+          doxygen \
+          libjpeg-dev \
+          libpng-dev \
+          ninja-build
+
+        # TODO(srj): OpenGL is only needed to build the opengl tests (which we don't even run)...
+        sudo apt-get install \
+          freeglut3-dev \
+          libglu1-mesa-dev \
+          mesa-common-dev
 
     - name: Configure MacOS Host
       if: startsWith(matrix.host_os, 'macos')
       shell: bash
       run: |
         # coreutils is for gtimeout
-        brew install libpng jpeg doxygen coreutils ninja
+        brew install \
+          coreutils \
+          doxygen \
+          jpeg \
+          libpng \
+          ninja
 
     - name: Configure Windows Host
       if: startsWith(matrix.host_os, 'windows')
@@ -112,20 +126,13 @@ jobs:
           export VCPKG_DEFAULT_TRIPLET=x64-windows
         fi
 
-        vcpkg install zlib libpng libjpeg-turbo
+        vcpkg install \
+          libjpeg-turbo \
+          libpng \
+          zlib
 
         # On Windows, it's just 'python', apparently
         echo ::set-env name=PYTHON::"python"
-
-    - name: Configure Ubuntu-64
-      if: matrix.target_os == 'linux' && matrix.target_bits == 64
-      shell: bash
-      run: |
-        set -eu
-
-        sudo apt-get install libjpeg-dev libpng-dev
-        # TODO(srj): OpenGL is only needed to build the opengl tests (which we don't even run)...
-        sudo apt-get install libglu1-mesa-dev freeglut3-dev mesa-common-dev
 
     - name: Configure Ubuntu-32
       if: matrix.target_os == 'linux' && matrix.target_bits == 32
@@ -135,11 +142,23 @@ jobs:
 
         sudo dpkg --add-architecture i386
         sudo apt-get update
-        sudo apt-get install ${{matrix.cc}}-multilib ${{matrix.cxx}}-multilib
-        sudo apt-get install zlib1g-dev:i386 libjpeg-dev:i386 libpng-dev:i386
-        sudo apt-get install python3.7:i386 python3.7-dev:i386
+        sudo apt-get install \
+          ${{matrix.cc}}-multilib \
+          ${{matrix.cxx}}-multilib \
+          libjpeg-dev:i386 \
+          libpng-dev:i386 \
+          python3.7-dev:i386 \
+          python3.7:i386
+
         # TODO(srj): OpenGL is only needed to build the opengl tests (which we don't even run)...
-        sudo apt-get install libglu1-mesa-dev:i386 freeglut3-dev:i386 mesa-common-dev:i386
+        sudo apt-get install \
+          freeglut3-dev:i386 \
+          libglu1-mesa-dev:i386 \
+          mesa-common-dev:i386
+
+        sudo apt autoremove
+
+        ls -l /usr/lib/i386-linux-gnu/
 
         file $(which python3.7)
 
