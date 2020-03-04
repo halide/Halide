@@ -1401,7 +1401,7 @@ void CodeGen_LLVM::optimize_module() {
 
     // Run optimization passes
     function_pass_manager.doInitialization();
-    for (auto &fn : module) {
+    for (auto &fn : *module) {
         if (get_target().has_feature(Target::ASAN)) {
             fn.addFnAttr(Attribute::SanitizeAddress);
         }
