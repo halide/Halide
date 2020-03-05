@@ -141,11 +141,16 @@ jobs:
         set -eu
 
         which vcpkg
-        locate vcpkg.cmake
 
+        echo
+        ls -l $HOME
+        echo
         ls -l ${GITHUB_WORKSPACE}/../../vcpkg
+        echo
         ls -l ${GITHUB_WORKSPACE}/../../vcpkg/scripts
+        echo
         ls -l ${GITHUB_WORKSPACE}/../../vcpkg/scripts/buildsystems
+        echo
 
         sudo dpkg --add-architecture i386
         sudo apt-get update
