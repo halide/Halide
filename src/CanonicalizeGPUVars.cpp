@@ -30,7 +30,7 @@ string get_block_name(int index) {
 }
 
 class CountGPUBlocksThreads : public IRVisitor {
-    const string &prefix;  // Producer name + stage
+    const string prefix;  // Producer name + stage
 
     using IRVisitor::visit;
 
@@ -70,8 +70,8 @@ class CountGPUBlocksThreads : public IRVisitor {
     }
 
 public:
-    CountGPUBlocksThreads(const string &p)
-        : prefix(p) {
+    CountGPUBlocksThreads(string p)
+        : prefix(std::move(p)) {
     }
     int nblocks = 0;
     int nthreads = 0;

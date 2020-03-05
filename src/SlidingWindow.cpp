@@ -45,7 +45,7 @@ public:
     }
 };
 
-bool expr_depends_on_var(Expr e, string v) {
+bool expr_depends_on_var(Expr e, const string &v) {
     ExprDependsOnVar depends(v);
     e.accept(&depends);
     return depends.result;
