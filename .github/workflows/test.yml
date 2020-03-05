@@ -142,14 +142,14 @@ jobs:
 
         which vcpkg
 
-        echo
+        echo VCPKG_INSTALLATION_ROOT is $VCPKG_INSTALLATION_ROOT
         ls -l $HOME
         echo
-        ls -l ${GITHUB_WORKSPACE}/../../vcpkg
+        ls -l /usr/local/share/vcpkg
         echo
-        ls -l ${GITHUB_WORKSPACE}/../../vcpkg/scripts
+        ls -l /usr/local/share/vcpkg/scripts
         echo
-        ls -l ${GITHUB_WORKSPACE}/../../vcpkg/scripts/buildsystems
+        ls -l /usr/local/share/vcpkg/scripts/buildsystems
         echo
 
         sudo dpkg --add-architecture i386
@@ -290,7 +290,7 @@ jobs:
               ${{matrix.target_bits}} == 32 ]]; then
           # Assume host_os is ubuntu*
           EXTRA_CMAKE_FLAGS="${EXTRA_CMAKE_FLAGS} \
-                             -D CMAKE_TOOLCHAIN_FILE=${GITHUB_WORKSPACE}/../vcpkg/scripts/buildsystems/vcpkg.cmake \
+                             -D CMAKE_TOOLCHAIN_FILE=/usr/local/share/vcpkg/scripts/buildsystems/vcpkg.cmake \
                              -D CMAKE_FIND_ROOT_PATH=/usr/lib/i386-linux-gnu \
                              -D CMAKE_FIND_ROOT_PATH_MODE_LIBRARY=ONLY"
           export CC="${CC} -m32"
