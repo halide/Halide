@@ -134,12 +134,12 @@ struct QualsState {
     bool last_is_pointer{false};
 
     const Type &type;
-    const std::string &base_mode;
+    const std::string base_mode;
     std::string result;
 
     bool finished{false};
 
-    QualsState(const Type &type, const std::string &base_mode)
+    QualsState(const Type &type, const char *base_mode)
         : type(type), base_mode(base_mode) {
     }
 
