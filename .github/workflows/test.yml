@@ -158,8 +158,6 @@ jobs:
 
         sudo apt autoremove
 
-        ls -l /usr/lib/i386-linux-gnu/
-
         file $(which python3.7)
 
         # Verify that we have a 32-bit build
