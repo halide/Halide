@@ -223,7 +223,7 @@ jobs:
         fi
 
         mkdir ${LLVM_INSTALL_DIR}
-        ${TAR_CMD} -xvf ${HALIDE_TEMP_DIR}/llvm-prebuilt.tgz -C ${LLVM_INSTALL_DIR}
+        ${TAR_CMD} -xf ${HALIDE_TEMP_DIR}/llvm-prebuilt.tgz -C ${LLVM_INSTALL_DIR}
         rm -rf ${HALIDE_TEMP_DIR}/llvm-prebuilt.tgz
 
         LLVM_COMMIT_HASH=`cat ${LLVM_INSTALL_DIR}/.halide_builder_llvm_commit`
@@ -271,7 +271,7 @@ jobs:
               ${{matrix.target_bits}} == 32 ]]; then
           # Assume host_os is ubuntu*
           EXTRA_CMAKE_FLAGS="${EXTRA_CMAKE_FLAGS} \
-                             -D CMAKE_PREFIX_PATH=/usr/lib/i386-linux-gnu \
+                             -D CMAKE_FIND_LIBRARY_CUSTOM_LIB_SUFFIX=/i386-linux-gnu \
                              -D CMAKE_FIND_ROOT_PATH=/usr/lib/i386-linux-gnu \
                              -D CMAKE_FIND_ROOT_PATH_MODE_LIBRARY=ONLY"
           export CC="${CC} -m32"
