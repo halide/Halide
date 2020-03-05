@@ -140,13 +140,17 @@ jobs:
       run: |
         set -eu
 
+        which vcpkg
+
+        ls -l ${GITHUB_WORKSPACE}/../vcpkg
+        ls -l ${GITHUB_WORKSPACE}/../vcpkg/scripts
+        ls -l ${GITHUB_WORKSPACE}/../vcpkg/scripts/buildsystems
+
         sudo dpkg --add-architecture i386
         sudo apt-get update
         sudo apt-get install \
           ${{matrix.cc}}-multilib \
           ${{matrix.cxx}}-multilib \
-          libjpeg-dev:i386 \
-          libpng-dev:i386 \
           python3.7-dev:i386 \
           python3.7:i386
 
@@ -156,7 +160,16 @@ jobs:
           libglu1-mesa-dev:i386 \
           mesa-common-dev:i386
 
-        sudo apt autoremove
+        # In theory, we should be able to just install libjpeg-dev:i386 libpng-dev:i386;
+        # in practice, CMake is cranky about finding these, so we're just going to use
+        # vcpkg here to install and build them (they are small, it won't take long).
+        # TODO: if anyone knows how to make CMake reliably find the 32-bit versions on
+        # a 64-bit install, it will safe a bit of time to just install the packages above instead.
+        export VCPKG_DEFAULT_TRIPLET=x86-linux
+        vcpkg install \
+          libjpeg-turbo \
+          libpng \
+          zlib
 
         file $(which python3.7)
 
@@ -271,7 +284,7 @@ jobs:
               ${{matrix.target_bits}} == 32 ]]; then
           # Assume host_os is ubuntu*
           EXTRA_CMAKE_FLAGS="${EXTRA_CMAKE_FLAGS} \
-                             -D CMAKE_FIND_LIBRARY_CUSTOM_LIB_SUFFIX=/i386-linux-gnu \
+                             -D CMAKE_TOOLCHAIN_FILE=${GITHUB_WORKSPACE}/../vcpkg/scripts/buildsystems/vcpkg.cmake \
                              -D CMAKE_FIND_ROOT_PATH=/usr/lib/i386-linux-gnu \
                              -D CMAKE_FIND_ROOT_PATH_MODE_LIBRARY=ONLY"
           export CC="${CC} -m32"
