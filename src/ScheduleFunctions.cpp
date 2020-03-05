@@ -728,7 +728,7 @@ Stmt inject_explicit_bounds(Stmt body, Function func) {
 }
 
 class IsUsedInStmt : public IRVisitor {
-    const string &func;
+    const string func;
 
     using IRVisitor::visit;
 
@@ -761,7 +761,7 @@ bool function_is_used_in_stmt(const Function &f, const Stmt &s) {
 }
 
 class IsRealizedInStmt : public IRVisitor {
-    const string &func;
+    const string func;
 
     using IRVisitor::visit;
 
@@ -974,12 +974,12 @@ public:
 };
 
 struct PlaceholderPrefetch {
-    const string &name;
+    const string name;
     const vector<Type> &types;
     const PrefetchDirective &prefetch;
 
-    PlaceholderPrefetch(const string &name, const vector<Type> &types, const PrefetchDirective &prefetch)
-        : name(name),
+    PlaceholderPrefetch(string name, const vector<Type> &types, const PrefetchDirective &prefetch)
+        : name(std::move(name)),
           types(types),
           prefetch(prefetch) {
     }
@@ -1613,7 +1613,7 @@ string schedule_to_source(const Function &f, const LoopLevel &store_at, const Lo
 
 class StmtUsesFunc : public IRVisitor {
     using IRVisitor::visit;
-    const string &func;
+    const string func;
     void visit(const Call *op) override {
         if (op->name == func) {
             result = true;
@@ -1631,8 +1631,8 @@ class StmtUsesFunc : public IRVisitor {
 
 public:
     bool result = false;
-    explicit StmtUsesFunc(const string &f)
-        : func(f) {
+    explicit StmtUsesFunc(string f)
+        : func(std::move(f)) {
     }
 };
 

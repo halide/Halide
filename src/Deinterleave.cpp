@@ -22,14 +22,14 @@ namespace {
 
 class StoreCollector : public IRMutator {
 public:
-    const std::string &store_name;
+    const std::string store_name;
     const int store_stride, max_stores;
     std::vector<Stmt> &let_stmts;
     std::vector<Stmt> &stores;
 
-    StoreCollector(const std::string &name, int stride, int ms,
+    StoreCollector(std::string name, int stride, int ms,
                    std::vector<Stmt> &lets, std::vector<Stmt> &ss)
-        : store_name(name), store_stride(stride), max_stores(ms),
+        : store_name(std::move(name)), store_stride(stride), max_stores(ms),
           let_stmts(lets), stores(ss), collecting(true) {
     }
 

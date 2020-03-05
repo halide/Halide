@@ -1,10 +1,12 @@
 #include "InlineReductions.h"
+
 #include "CSE.h"
 #include "Debug.h"
 #include "Func.h"
 #include "IRMutator.h"
 #include "IROperator.h"
 #include "Scope.h"
+#include <utility>
 
 namespace Halide {
 
@@ -20,13 +22,13 @@ public:
     vector<Expr> call_args;
     RDom rdom;
 
-    FindFreeVars(RDom r, const string &n)
-        : rdom(r), explicit_rdom(r.defined()), name(n) {
+    FindFreeVars(RDom r, string n)
+        : rdom(r), explicit_rdom(r.defined()), name(std::move(n)) {
     }
 
 private:
     bool explicit_rdom;
-    const string &name;
+    const string name;
 
     Scope<> internal;
 

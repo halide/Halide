@@ -13,6 +13,7 @@
 
 #include <algorithm>
 #include <iterator>
+#include <utility>
 
 namespace Halide {
 namespace Internal {
@@ -40,7 +41,7 @@ vector<T> get_subvector(const vector<T> &v, const set<int> &indices) {
 class ConvertSelfRef : public IRGraphMutator {
     using IRGraphMutator::visit;
 
-    const string &func;
+    const string func;
     const vector<Expr> &args;
     // If that function has multiple values, which value does this
     // call node refer to?
@@ -82,9 +83,9 @@ class ConvertSelfRef : public IRGraphMutator {
     }
 
 public:
-    ConvertSelfRef(const string &f, const vector<Expr> &args, int idx,
+    ConvertSelfRef(string f, const vector<Expr> &args, int idx,
                    const vector<string> &x_names)
-        : func(f), args(args), value_index(idx), op_x_names(x_names) {
+        : func(std::move(f)), args(args), value_index(idx), op_x_names(x_names) {
     }
 
     bool is_solvable = true;

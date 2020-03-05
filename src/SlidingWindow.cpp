@@ -38,10 +38,10 @@ class ExprDependsOnVar : public IRVisitor {
 
 public:
     bool result;
-    const string &var;
+    const string var;
 
-    ExprDependsOnVar(const string &v)
-        : result(false), var(v) {
+    ExprDependsOnVar(string v)
+        : result(false), var(std::move(v)) {
     }
 };
 
@@ -85,7 +85,7 @@ Expr expand_expr(Expr e, const Scope<Expr> &scope) {
 // particular serial for loop
 class SlidingWindowOnFunctionAndLoop : public IRMutator {
     Function func;
-    const string &loop_var;
+    const string loop_var;
     Expr loop_min;
     Scope<Expr> scope;
 
@@ -331,8 +331,8 @@ class SlidingWindowOnFunctionAndLoop : public IRMutator {
     }
 
 public:
-    SlidingWindowOnFunctionAndLoop(Function f, const string &v, Expr v_min)
-        : func(std::move(f)), loop_var(v), loop_min(std::move(v_min)) {
+    SlidingWindowOnFunctionAndLoop(Function f, string v, Expr v_min)
+        : func(std::move(f)), loop_var(std::move(v)), loop_min(std::move(v_min)) {
     }
 };
 

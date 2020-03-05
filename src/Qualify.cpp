@@ -1,5 +1,7 @@
 #include "Qualify.h"
+
 #include "IRMutator.h"
+#include <utility>
 
 namespace Halide {
 namespace Internal {
@@ -10,7 +12,7 @@ using std::string;
 class QualifyExpr : public IRMutator {
     using IRMutator::visit;
 
-    const string &prefix;
+    const string prefix;
 
     Expr visit(const Variable *v) override {
         if (v->param.defined()) {
@@ -26,8 +28,8 @@ class QualifyExpr : public IRMutator {
     }
 
 public:
-    QualifyExpr(const string &p)
-        : prefix(p) {
+    QualifyExpr(string p)
+        : prefix(std::move(p)) {
     }
 };
 

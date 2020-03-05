@@ -380,7 +380,7 @@ namespace {
 class SubstituteSelfReference : public IRMutator {
     using IRMutator::visit;
 
-    const string &func;
+    const string func;
     const Function &substitute;
     const vector<Var> &new_args;
 
@@ -401,10 +401,10 @@ class SubstituteSelfReference : public IRMutator {
     }
 
 public:
-    SubstituteSelfReference(const string &func,
+    SubstituteSelfReference(string func,
                             const Function &substitute,
                             const vector<Var> &new_args)
-        : func(func), substitute(substitute), new_args(new_args) {
+        : func(std::move(func)), substitute(substitute), new_args(new_args) {
         internal_assert(substitute.get_contents().defined());
     }
 };

@@ -20,8 +20,8 @@ namespace {
 /** Collect names of all stores matching the producer name inside a statement. */
 class CollectProducerStoreNames : public IRGraphVisitor {
 public:
-    CollectProducerStoreNames(const std::string &producer_name)
-        : producer_name(producer_name) {
+    CollectProducerStoreNames(std::string producer_name)
+        : producer_name(std::move(producer_name)) {
     }
 
     Scope<void> store_names;
@@ -37,15 +37,15 @@ protected:
         }
     }
 
-    const std::string &producer_name;
+    const std::string producer_name;
 };
 
 /** Find Store inside of an Atomic node for the designated producer
  *  and return their indices. */
 class FindProducerStoreIndex : public IRGraphVisitor {
 public:
-    FindProducerStoreIndex(const std::string &producer_name)
-        : producer_name(producer_name) {
+    FindProducerStoreIndex(std::string producer_name)
+        : producer_name(std::move(producer_name)) {
     }
 
     Expr index;  // The returned index.
@@ -88,7 +88,7 @@ protected:
         }
     }
 
-    const std::string &producer_name;
+    const std::string producer_name;
 };
 
 /** Throws an assertion for cases where the indexing on left-hand-side of
@@ -249,8 +249,8 @@ protected:
 /** Replace the indices in the Store nodes with the specified variable. */
 class ReplaceStoreIndexWithVar : public IRMutator {
 public:
-    ReplaceStoreIndexWithVar(const std::string &producer_name, Expr var)
-        : producer_name(producer_name), var(std::move(var)) {
+    ReplaceStoreIndexWithVar(std::string producer_name, Expr var)
+        : producer_name(std::move(producer_name)), var(std::move(var)) {
     }
 
 protected:
@@ -267,7 +267,7 @@ protected:
                            op->alignment);
     }
 
-    const std::string &producer_name;
+    const std::string producer_name;
     Expr var;
 };
 

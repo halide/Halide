@@ -27,7 +27,7 @@ namespace {
 // For a given var, replace expressions like shuffle_vector(var, 4)
 // with var.lane.4
 class ReplaceShuffleVectors : public IRMutator {
-    const string &var;
+    const string var;
 
     using IRMutator::visit;
 
@@ -43,8 +43,8 @@ class ReplaceShuffleVectors : public IRMutator {
     }
 
 public:
-    ReplaceShuffleVectors(const string &v)
-        : var(v) {
+    ReplaceShuffleVectors(string v)
+        : var(std::move(v)) {
     }
 };
 
@@ -191,7 +191,7 @@ Interval bounds_of_lanes(Expr e) {
 // rewritten slightly.
 class RewriteAccessToVectorAlloc : public IRMutator {
     Expr var;
-    const string &alloc;
+    const string alloc;
     int lanes;
 
     using IRMutator::visit;
@@ -224,8 +224,8 @@ class RewriteAccessToVectorAlloc : public IRMutator {
     }
 
 public:
-    RewriteAccessToVectorAlloc(const string &v, const string &a, int l)
-        : var(Variable::make(Int(32), v)), alloc(a), lanes(l) {
+    RewriteAccessToVectorAlloc(const string &v, string a, int l)
+        : var(Variable::make(Int(32), v)), alloc(std::move(a)), lanes(l) {
     }
 };
 

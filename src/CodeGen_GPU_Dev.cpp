@@ -1,6 +1,8 @@
 #include "CodeGen_GPU_Dev.h"
+
 #include "Bounds.h"
 #include "IRVisitor.h"
+#include <utility>
 
 namespace Halide {
 namespace Internal {
@@ -82,10 +84,10 @@ class IsBufferConstant : public IRVisitor {
 
 public:
     bool result;
-    const std::string &buffer;
+    const std::string buffer;
 
-    IsBufferConstant(const std::string &b)
-        : result(true), buffer(b) {
+    IsBufferConstant(std::string b)
+        : result(true), buffer(std::move(b)) {
     }
 };
 }  // namespace

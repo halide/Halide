@@ -48,12 +48,12 @@ class LoadsFromBuffer : public IRVisitor {
         }
     }
 
-    const string &buffer;
+    const string buffer;
 
 public:
     bool result = false;
-    LoadsFromBuffer(const string &b)
-        : buffer(b) {
+    LoadsFromBuffer(string b)
+        : buffer(std::move(b)) {
     }
 };
 

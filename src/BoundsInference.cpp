@@ -74,12 +74,12 @@ bool depends_on_bounds_inference(Expr e) {
 class BoundsOfInnerVar : public IRVisitor {
 public:
     Interval result;
-    BoundsOfInnerVar(const string &v)
-        : var(v) {
+    BoundsOfInnerVar(string v)
+        : var(std::move(v)) {
     }
 
 private:
-    const string &var;
+    const string var;
     Scope<Interval> scope;
 
     using IRVisitor::visit;

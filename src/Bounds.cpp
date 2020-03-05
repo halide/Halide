@@ -1660,11 +1660,11 @@ class SolveIfThenElse : public IRMutator {
 // (excluding 'skipped_var')
 class CollectVars : public IRGraphVisitor {
 public:
-    const string &skipped_var;
+    const string skipped_var;
     set<string> vars;
 
-    CollectVars(const string &v)
-        : skipped_var(v) {
+    CollectVars(string v)
+        : skipped_var(std::move(v)) {
     }
 
 private:
@@ -2407,7 +2407,7 @@ map<string, Box> boxes_touched(Expr e, Stmt s, bool consider_calls, bool conside
                 }
             }
 
-            const string &fn;
+            const string fn;
             const string fn_buffer;
             Stmt no_op;
             Filter(const string &fn)

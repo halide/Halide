@@ -183,11 +183,11 @@ struct CheckVars : public IRGraphVisitor {
     vector<string> pure_args;
     ReductionDomain reduction_domain;
     Scope<> defined_internally;
-    const std::string &name;
+    const std::string name;
     bool unbound_reduction_vars_ok = false;
 
-    CheckVars(const std::string &n)
-        : name(n) {
+    CheckVars(std::string n)
+        : name(std::move(n)) {
     }
 
     using IRVisitor::visit;
@@ -255,7 +255,7 @@ struct CheckVars : public IRGraphVisitor {
 class FreezeFunctions : public IRGraphVisitor {
     using IRGraphVisitor::visit;
 
-    const string &func;
+    const string func;
 
     void visit(const Call *op) override {
         IRGraphVisitor::visit(op);
@@ -268,8 +268,8 @@ class FreezeFunctions : public IRGraphVisitor {
     }
 
 public:
-    FreezeFunctions(const string &f)
-        : func(f) {
+    FreezeFunctions(string f)
+        : func(std::move(f)) {
     }
 };
 

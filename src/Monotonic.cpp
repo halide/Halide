@@ -1,9 +1,11 @@
 #include "Monotonic.h"
+
 #include "IRMutator.h"
 #include "IROperator.h"
 #include "Scope.h"
 #include "Simplify.h"
 #include "Substitute.h"
+#include <utility>
 
 namespace Halide {
 namespace Internal {
@@ -29,7 +31,7 @@ std::ostream &operator<<(std::ostream &stream, const Monotonic &m) {
 using std::string;
 
 class MonotonicVisitor : public IRVisitor {
-    const string &var;
+    const string var;
 
     Scope<Monotonic> scope;
 
@@ -425,8 +427,8 @@ class MonotonicVisitor : public IRVisitor {
 public:
     Monotonic result;
 
-    MonotonicVisitor(const std::string &v, const Scope<Monotonic> &parent)
-        : var(v), result(Monotonic::Unknown) {
+    MonotonicVisitor(std::string v, const Scope<Monotonic> &parent)
+        : var(std::move(v)), result(Monotonic::Unknown) {
         scope.set_containing_scope(&parent);
     }
 };

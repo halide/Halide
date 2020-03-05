@@ -1,4 +1,5 @@
 #include "ParallelRVar.h"
+
 #include "CSE.h"
 #include "Debug.h"
 #include "IR.h"
@@ -7,6 +8,7 @@
 #include "IROperator.h"
 #include "Simplify.h"
 #include "Substitute.h"
+#include <utility>
 
 namespace Halide {
 namespace Internal {
@@ -21,7 +23,7 @@ namespace {
 class FindLoads : public IRVisitor {
     using IRVisitor::visit;
 
-    const string &func;
+    const string func;
 
     void visit(const Call *op) override {
         if (op->name == func && op->call_type == Call::Halide) {
@@ -40,8 +42,8 @@ class FindLoads : public IRVisitor {
     }
 
 public:
-    FindLoads(const string &f)
-        : func(f) {
+    FindLoads(string f)
+        : func(std::move(f)) {
     }
 
     vector<vector<Expr>> loads;

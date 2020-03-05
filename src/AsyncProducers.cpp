@@ -106,7 +106,7 @@ protected:
 };
 
 class GenerateProducerBody : public NoOpCollapsingMutator {
-    const string &func;
+    const string func;
     vector<Expr> sema;
 
     using NoOpCollapsingMutator::visit;
@@ -195,13 +195,13 @@ class GenerateProducerBody : public NoOpCollapsingMutator {
     set<string> inner_semaphores;
 
 public:
-    GenerateProducerBody(const string &f, vector<Expr> s, map<string, string> &a)
-        : func(f), sema(std::move(s)), cloned_acquires(a) {
+    GenerateProducerBody(string f, vector<Expr> s, map<string, string> &a)
+        : func(std::move(f)), sema(std::move(s)), cloned_acquires(a) {
     }
 };
 
 class GenerateConsumerBody : public NoOpCollapsingMutator {
-    const string &func;
+    const string func;
     vector<Expr> sema;
 
     using NoOpCollapsingMutator::visit;
@@ -252,15 +252,15 @@ class GenerateConsumerBody : public NoOpCollapsingMutator {
     }
 
 public:
-    GenerateConsumerBody(const string &f, vector<Expr> s)
-        : func(f), sema(std::move(s)) {
+    GenerateConsumerBody(string f, vector<Expr> s)
+        : func(std::move(f)), sema(std::move(s)) {
     }
 };
 
 class CloneAcquire : public IRMutator {
     using IRMutator::visit;
 
-    const string &old_name;
+    const string old_name;
     Expr new_var;
 
     Stmt visit(const Evaluate *op) override {
@@ -280,14 +280,14 @@ class CloneAcquire : public IRMutator {
     }
 
 public:
-    CloneAcquire(const string &o, const string &new_name)
-        : old_name(o) {
+    CloneAcquire(string o, const string &new_name)
+        : old_name(std::move(o)) {
         new_var = Variable::make(type_of<halide_semaphore_t *>(), new_name);
     }
 };
 
 class CountConsumeNodes : public IRVisitor {
-    const string &func;
+    const string func;
 
     using IRVisitor::visit;
 
@@ -299,8 +299,8 @@ class CountConsumeNodes : public IRVisitor {
     }
 
 public:
-    CountConsumeNodes(const string &f)
-        : func(f) {
+    CountConsumeNodes(string f)
+        : func(std::move(f)) {
     }
     int count = 0;
 };

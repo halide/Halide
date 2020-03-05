@@ -116,7 +116,7 @@ class FindBufferUsage : public IRVisitor {
         current_device_api = old;
     }
 
-    const string &buffer;
+    const string buffer;
     DeviceAPI current_device_api;
 
 public:
@@ -125,8 +125,8 @@ public:
     // bits and device allocation messed with.
     std::set<DeviceAPI> devices_touched_by_extern;
 
-    FindBufferUsage(const std::string &buf, DeviceAPI d)
-        : buffer(buf), current_device_api(d) {
+    FindBufferUsage(std::string buf, DeviceAPI d)
+        : buffer(std::move(buf)), current_device_api(d) {
     }
 };
 
@@ -140,7 +140,7 @@ class InjectBufferCopiesForSingleBuffer : public IRMutator {
     using IRMutator::visit;
 
     // The buffer being managed
-    const string &buffer;
+    const string buffer;
 
     bool is_external;
 
@@ -400,8 +400,8 @@ class InjectBufferCopiesForSingleBuffer : public IRMutator {
     }
 
 public:
-    InjectBufferCopiesForSingleBuffer(const std::string &b, bool e)
-        : buffer(b), is_external(e) {
+    InjectBufferCopiesForSingleBuffer(std::string b, bool e)
+        : buffer(std::move(b)), is_external(e) {
         if (is_external) {
             // The state of the buffer is totally unknown, which is
             // the default constructor for this->state
@@ -421,12 +421,12 @@ class FindLastUse : public IRVisitor {
 public:
     Stmt last_use;
 
-    FindLastUse(const string &b)
-        : buffer(b) {
+    FindLastUse(string b)
+        : buffer(std::move(b)) {
     }
 
 private:
-    const string &buffer;
+    const string buffer;
 
     using IRVisitor::visit;
 

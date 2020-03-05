@@ -29,7 +29,7 @@ using std::vector;
 
 // Count the number of producers of a particular func.
 class CountProducers : public IRVisitor {
-    const std::string &name;
+    const std::string name;
 
     void visit(const ProducerConsumer *op) override {
         if (op->is_producer && (op->name == name)) {
@@ -44,8 +44,8 @@ class CountProducers : public IRVisitor {
 public:
     int count = 0;
 
-    CountProducers(const std::string &name)
-        : name(name) {
+    CountProducers(std::string name)
+        : name(std::move(name)) {
     }
 };
 

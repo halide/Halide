@@ -44,9 +44,9 @@ bool extern_call_uses_buffer(const Call *op, const std::string &func) {
 class PredicateFinder : public IRVisitor {
 public:
     Expr predicate;
-    PredicateFinder(const string &b, bool s)
+    PredicateFinder(string b, bool s)
         : predicate(const_false()),
-          buffer(b),
+          buffer(std::move(b)),
           varies(false),
           treat_selects_as_guards(s),
           in_produce(false) {
@@ -54,7 +54,7 @@ public:
 
 private:
     using IRVisitor::visit;
-    const string &buffer;
+    const string buffer;
     bool varies;
     bool treat_selects_as_guards;
     bool in_produce;
@@ -251,12 +251,12 @@ private:
 
 class ProductionGuarder : public IRMutator {
 public:
-    ProductionGuarder(const string &b, Expr compute_p, Expr alloc_p)
-        : buffer(b), compute_predicate(std::move(compute_p)), alloc_predicate(std::move(alloc_p)) {
+    ProductionGuarder(string b, Expr compute_p, Expr alloc_p)
+        : buffer(std::move(b)), compute_predicate(std::move(compute_p)), alloc_predicate(std::move(alloc_p)) {
     }
 
 private:
-    const string &buffer;
+    const string buffer;
     Expr compute_predicate;
     Expr alloc_predicate;
 
@@ -321,12 +321,12 @@ private:
 
 class StageSkipper : public IRMutator {
 public:
-    StageSkipper(const string &f)
-        : func(f), in_vector_loop(false) {
+    StageSkipper(string f)
+        : func(std::move(f)), in_vector_loop(false) {
     }
 
 private:
-    const string &func;
+    const string func;
     using IRMutator::visit;
 
     Scope<> vector_vars;

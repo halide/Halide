@@ -151,8 +151,8 @@ typedef std::pair<const FindParameterDependencies::DependencyKey, FindParameterD
 class KeyInfo {
     FindParameterDependencies dependencies;
     Expr key_size_expr;
-    const std::string &top_level_name;
-    const std::string &function_name;
+    const std::string top_level_name;
+    const std::string function_name;
     int memoize_instance;
 
     size_t parameters_alignment() {
@@ -187,8 +187,8 @@ class KeyInfo {
     // It was deleted as part of the address_of intrinsic cleanup).
 
 public:
-    KeyInfo(const Function &function, const std::string &name, int memoize_instance)
-        : top_level_name(name),
+    KeyInfo(const Function &function, std::string name, int memoize_instance)
+        : top_level_name(std::move(name)),
           function_name(function.origin_name()),
           memoize_instance(memoize_instance) {
         dependencies.visit_function(function);
@@ -314,14 +314,14 @@ class InjectMemoization : public IRMutator {
 public:
     const std::map<std::string, Function> &env;
     int memoize_instance;
-    const std::string &top_level_name;
+    const std::string top_level_name;
     const std::vector<Function> &outputs;
 
     InjectMemoization(const std::map<std::string, Function> &e,
                       int memoize_instance,
-                      const std::string &name,
+                      std::string name,
                       const std::vector<Function> &outputs)
-        : env(e), memoize_instance(memoize_instance), top_level_name(name), outputs(outputs) {
+        : env(e), memoize_instance(memoize_instance), top_level_name(std::move(name)), outputs(outputs) {
     }
 
 private:

@@ -140,7 +140,7 @@ Stmt substitute(const Expr &find, const Expr &replacement, const Stmt &stmt) {
 
 /** Substitute an expr for a var in a graph. */
 class GraphSubstitute : public IRGraphMutator {
-    const string &var;
+    const string var;
     const Expr &value;
 
     using IRGraphMutator::visit;
@@ -163,8 +163,8 @@ class GraphSubstitute : public IRGraphMutator {
     }
 
 public:
-    GraphSubstitute(const string &var, const Expr &value)
-        : var(var), value(value) {
+    GraphSubstitute(string var, const Expr &value)
+        : var(std::move(var)), value(value) {
     }
 };
 

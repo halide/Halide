@@ -26,10 +26,10 @@ public:
 
     vector<int> stack;  // What produce nodes are we currently inside of.
 
-    const string &pipeline_name;
+    const string pipeline_name;
 
-    InjectProfiling(const string &pipeline_name)
-        : pipeline_name(pipeline_name) {
+    InjectProfiling(string pipeline_name)
+        : pipeline_name(std::move(pipeline_name)) {
         indices["overhead"] = 0;
         stack.push_back(0);
     }

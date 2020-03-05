@@ -163,14 +163,14 @@ private:
 
 class InjectPlaceholderPrefetch : public IRMutator {
 public:
-    InjectPlaceholderPrefetch(const map<string, Function> &e, const string &prefix,
+    InjectPlaceholderPrefetch(const map<string, Function> &e, string prefix,
                               const vector<PrefetchDirective> &prefetches)
-        : env(e), prefix(prefix), prefetch_list(prefetches) {
+        : env(e), prefix(std::move(prefix)), prefetch_list(prefetches) {
     }
 
 private:
     const map<string, Function> &env;
-    const string &prefix;
+    const string prefix;
     const vector<PrefetchDirective> &prefetch_list;
 
     using IRMutator::visit;
