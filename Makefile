@@ -305,7 +305,8 @@ TUTORIAL_CXX_FLAGS ?= -std=c++11 -g -fno-omit-frame-pointer $(RTTI_CXX_FLAGS) -I
 # Also allow tests, via conditional compilation, to use the entire
 # capability of the CPU being compiled on via -march=native. This
 # presumes tests are run on the same machine they are compiled on.
-TEST_CXX_FLAGS ?= $(TUTORIAL_CXX_FLAGS) $(CXX_WARNING_FLAGS) -march=native
+GCC_ARCH_FOR_TESTS ?= native
+TEST_CXX_FLAGS ?= $(TUTORIAL_CXX_FLAGS) $(CXX_WARNING_FLAGS) -march=${GCC_ARCH_FOR_TESTS}
 TEST_LD_FLAGS = -L$(BIN_DIR) -lHalide $(COMMON_LD_FLAGS)
 
 # gcc 4.8 fires a bogus warning on old versions of png.h
@@ -1594,7 +1595,7 @@ $(BIN_DIR)/$(TARGET)/generator_aotcpp_%: $(ROOT_DIR)/test/generator/%_aottest.cp
 
 ifneq ($(WITH_WEBASSEMBLY), )
 
-GEN_AOT_CXX_FLAGS_WASM := $(filter-out -march=native,$(GEN_AOT_CXX_FLAGS))
+GEN_AOT_CXX_FLAGS_WASM := $(filter-out -march=${GCC_ARCH_FOR_TESTS},$(GEN_AOT_CXX_FLAGS))
 
 GEN_AOT_LD_FLAGS_WASM := $(filter-out -lz,$(GEN_AOT_LD_FLAGS))
 GEN_AOT_LD_FLAGS_WASM := $(filter-out -ldl,$(GEN_AOT_LD_FLAGS_WASM))
