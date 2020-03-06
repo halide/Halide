@@ -71,10 +71,16 @@ function(test_correctness_generator BASENAME)
            COMMAND "${PYTHON_EXECUTABLE}"
                    "${CMAKE_CURRENT_SOURCE_DIR}/correctness/${BASENAME}_test.py")
   if (MSVC)
+    set(ENV_PATH "$<TARGET_FILE_DIR:${HALIDE_COMPILER_LIB}>" $ENV{PATH})
+    LIST(JOIN ENV_PATH "\;" TEST_PATH)
+    set(ENV_PYTHONPATH "$<TARGET_FILE_DIR:halide_py>"
+                       "$<TARGET_FILE_DIR:${HALIDE_COMPILER_LIB}>"
+                       $ENV{PYTHONPATH})
+    LIST(JOIN ENV_PYTHONPATH "\;" TEST_PYTHONPATH)
     target_link_libraries("ext_${BASENAME}" PRIVATE "${PYTHON_LIBRARY}")
     set_property(TEST "python_bindings_correctness_${BASENAME}_generator"
-                 PROPERTY ENVIRONMENT "PYTHONPATH=$<TARGET_FILE_DIR:halide_py>\;$<TARGET_FILE_DIR:${HALIDE_COMPILER_LIB}>"
-                                      "PATH=$<TARGET_FILE_DIR:${HALIDE_COMPILER_LIB}>\;%PATH%")
+                 PROPERTY ENVIRONMENT "PYTHONPATH=${TEST_PYTHON_PATH}"
+                                      "PATH=${TEST_PATH}")
   else()
     target_compile_options("ext_${BASENAME}" PRIVATE "-Wno-cast-qual"
                                                      "-Wno-suggest-override")
@@ -115,9 +121,15 @@ function(test_group GROUP BASENAME)
            COMMAND "${PYTHON_EXECUTABLE}"
                    "${CMAKE_CURRENT_SOURCE_DIR}/${GROUP}/${BASENAME}.py")
   if (MSVC)
+    set(ENV_PATH "$<TARGET_FILE_DIR:${HALIDE_COMPILER_LIB}>" $ENV{PATH})
+    LIST(JOIN ENV_PATH "\;" TEST_PATH)
+    set(ENV_PYTHONPATH "$<TARGET_FILE_DIR:halide_py>"
+                       "$<TARGET_FILE_DIR:${HALIDE_COMPILER_LIB}>"
+                       $ENV{PYTHONPATH})
+    LIST(JOIN ENV_PYTHONPATH "\;" TEST_PYTHONPATH)
     set_property(TEST "python_bindings_${GROUP}_${BASENAME}"
-                 PROPERTY ENVIRONMENT "PYTHONPATH=$<TARGET_FILE_DIR:halide_py>\;$<TARGET_FILE_DIR:${HALIDE_COMPILER_LIB}>"
-                                      "PATH=$<TARGET_FILE_DIR:${HALIDE_COMPILER_LIB}>\;%PATH%")
+                 PROPERTY ENVIRONMENT "PYTHONPATH=${TEST_PYTHON_PATH}"
+                                      "PATH=${TEST_PATH}")
   else()
     set_property(TEST "python_bindings_${GROUP}_${BASENAME}"
                  PROPERTY ENVIRONMENT "PYTHONPATH=$<TARGET_FILE_DIR:halide_py>")
