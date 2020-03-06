@@ -79,7 +79,7 @@ function(test_correctness_generator BASENAME)
     LIST(JOIN ENV_PYTHONPATH "\;" TEST_PYTHONPATH)
     target_link_libraries("ext_${BASENAME}" PRIVATE "${PYTHON_LIBRARY}")
     set_property(TEST "python_bindings_correctness_${BASENAME}_generator"
-                 PROPERTY ENVIRONMENT "PYTHONPATH=${TEST_PYTHON_PATH}"
+                 PROPERTY ENVIRONMENT "PYTHONPATH=${TEST_PYTHONPATH}"
                                       "PATH=${TEST_PATH}")
   else()
     target_compile_options("ext_${BASENAME}" PRIVATE "-Wno-cast-qual"
@@ -128,7 +128,7 @@ function(test_group GROUP BASENAME)
                        $ENV{PYTHONPATH})
     LIST(JOIN ENV_PYTHONPATH "\;" TEST_PYTHONPATH)
     set_property(TEST "python_bindings_${GROUP}_${BASENAME}"
-                 PROPERTY ENVIRONMENT "PYTHONPATH=${TEST_PYTHON_PATH}"
+                 PROPERTY ENVIRONMENT "PYTHONPATH=${TEST_PYTHONPATH}"
                                       "PATH=${TEST_PATH}")
   else()
     set_property(TEST "python_bindings_${GROUP}_${BASENAME}"
