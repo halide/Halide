@@ -74,7 +74,7 @@ function(test_correctness_generator BASENAME)
     target_link_libraries("ext_${BASENAME}" PRIVATE "${PYTHON_LIBRARY}")
     set_property(TEST "python_bindings_correctness_${BASENAME}_generator"
                  PROPERTY ENVIRONMENT "PYTHONPATH=$<TARGET_FILE_DIR:halide_py>\;$<TARGET_FILE_DIR:${HALIDE_COMPILER_LIB}>"
-                                      "PATH=$<TARGET_FILE_DIR:${HALIDE_COMPILER_LIB}>")
+                                      "PATH=$<TARGET_FILE_DIR:${HALIDE_COMPILER_LIB}>\;%PATH%")
   else()
     target_compile_options("ext_${BASENAME}" PRIVATE "-Wno-cast-qual"
                                                      "-Wno-suggest-override")
@@ -117,7 +117,7 @@ function(test_group GROUP BASENAME)
   if (MSVC)
     set_property(TEST "python_bindings_${GROUP}_${BASENAME}"
                  PROPERTY ENVIRONMENT "PYTHONPATH=$<TARGET_FILE_DIR:halide_py>\;$<TARGET_FILE_DIR:${HALIDE_COMPILER_LIB}>"
-                                      "PATH=$<TARGET_FILE_DIR:${HALIDE_COMPILER_LIB}>")
+                                      "PATH=$<TARGET_FILE_DIR:${HALIDE_COMPILER_LIB}>\;%PATH%")
   else()
     set_property(TEST "python_bindings_${GROUP}_${BASENAME}"
                  PROPERTY ENVIRONMENT "PYTHONPATH=$<TARGET_FILE_DIR:halide_py>")
