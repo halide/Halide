@@ -258,7 +258,7 @@ Expr Ramp::make(Expr base, Expr stride, int lanes) {
     node->type = base.type().with_lanes(lanes);
     node->base = std::move(base);
     node->stride = std::move(stride);
-    node->lanes = std::move(lanes);
+    node->lanes = lanes;
     return node;
 }
 

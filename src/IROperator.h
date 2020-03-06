@@ -580,8 +580,8 @@ Expr operator&&(Expr a, Expr b);
 /** Logical and of an Expr and a bool. Either returns the Expr or an
  * Expr representing false, depending on the bool. */
 // @{
-Expr operator&&(const Expr &a, bool b);
-Expr operator&&(bool a, const Expr &b);
+Expr operator&&(Expr a, bool b);
+Expr operator&&(bool a, Expr b);
 // @}
 
 /** Returns the logical or of the two arguments */
@@ -590,8 +590,8 @@ Expr operator||(Expr a, Expr b);
 /** Logical or of an Expr and a bool. Either returns the Expr or an
  * Expr representing true, depending on the bool. */
 // @{
-Expr operator||(const Expr &a, bool b);
-Expr operator||(bool a, const Expr &b);
+Expr operator||(Expr a, bool b);
+Expr operator||(bool a, Expr b);
 // @}
 
 /** Returns the logical not the argument */

@@ -360,7 +360,7 @@ Expr Simplify::visit(const LT *op, ExprInfo *bounds) {
                       c0 > 0 && (c3 % c0 == 0) &&
                       c1 * (lanes - 1) < c0 &&
                       c1 * (lanes - 1) >= 0)))) {
-            return mutate(std::move(rewrite.result), bounds);
+            return mutate(rewrite.result, bounds);
         }
         // clang-format on
     }
