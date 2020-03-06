@@ -123,7 +123,7 @@ Expr Simplify::visit(const Select *op, ExprInfo *bounds) {
                rewrite(select(x, y, true), !x || y) ||
                rewrite(select(x, false, y), !x && y) ||
                rewrite(select(x, true, y), x || y))))) {
-            return mutate(std::move(rewrite.result), bounds);
+            return mutate(rewrite.result, bounds);
         }
         // clang-format on
     }

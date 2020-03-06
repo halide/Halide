@@ -20,7 +20,7 @@ namespace Halide {
 // terms, which is the degree plus one.
 namespace {
 
-Expr evaluate_polynomial(const Expr &x, float *coeff, int n) {
+Expr evaluate_polynomial(Expr x, float *coeff, int n) {
     internal_assert(n >= 2);
 
     Expr x2 = x * x;
@@ -1201,7 +1201,7 @@ Expr operator*(Expr a, Expr b) {
     return Internal::Mul::make(std::move(a), std::move(b));
 }
 
-Expr operator*(const Expr &a, int b) {
+Expr operator*(Expr a, int b) {
     user_assert(a.defined()) << "operator* of undefined Expr\n";
     Type t = a.type();
     Internal::check_representable(t, b);
@@ -1262,7 +1262,7 @@ Expr operator%(Expr a, int b) {
     return Internal::Mod::make(std::move(a), Internal::make_const(t, b));
 }
 
-Expr operator%(int a, const Expr &b) {
+Expr operator%(int a, Expr b) {
     user_assert(b.defined()) << "operator% of undefined Expr\n";
     Type t = b.type();
     Internal::check_representable(t, a);
@@ -1394,7 +1394,7 @@ Expr operator&&(Expr a, Expr b) {
     return Internal::And::make(std::move(a), std::move(b));
 }
 
-Expr operator&&(const Expr &a, bool b) {
+Expr operator&&(Expr a, bool b) {
     internal_assert(a.defined()) << "operator&& of undefined Expr\n";
     internal_assert(a.type().is_bool()) << "operator&& of Expr of type " << a.type() << "\n";
     if (b) {
@@ -1404,7 +1404,7 @@ Expr operator&&(const Expr &a, bool b) {
     }
 }
 
-Expr operator&&(bool a, const Expr &b) {
+Expr operator&&(bool a, Expr b) {
     return std::move(b) && a;
 }
 
@@ -1413,7 +1413,7 @@ Expr operator||(Expr a, Expr b) {
     return Internal::Or::make(std::move(a), std::move(b));
 }
 
-Expr operator||(const Expr &a, bool b) {
+Expr operator||(Expr a, bool b) {
     internal_assert(a.defined()) << "operator|| of undefined Expr\n";
     internal_assert(a.type().is_bool()) << "operator|| of Expr of type " << a.type() << "\n";
     if (b) {
@@ -1423,8 +1423,8 @@ Expr operator||(const Expr &a, bool b) {
     }
 }
 
-Expr operator||(bool a, const Expr &b) {
-    return b || a;
+Expr operator||(bool a, Expr b) {
+    return std::move(b) || a;
 }
 
 Expr operator!(Expr a) {

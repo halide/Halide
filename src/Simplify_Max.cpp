@@ -205,7 +205,7 @@ Expr Simplify::visit(const Max *op, ExprInfo *bounds) {
 
                rewrite(max(c0 - x, c1), c0 - min(x, fold(c0 - c1))))))) {
 
-            return mutate(std::move(rewrite.result), bounds);
+            return mutate(rewrite.result, bounds);
         }
         // clang-format on
     }

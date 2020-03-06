@@ -601,7 +601,7 @@ Stmt add_image_checks(Stmt s,
     auto prepend_lets = [&](vector<pair<string, Expr>> *lets) {
         while (!lets->empty()) {
             auto &p = lets->back();
-            s = LetStmt::make(std::move(p.first), std::move(p.second), s);
+            s = LetStmt::make(p.first, std::move(p.second), s);
             lets->pop_back();
         }
     };

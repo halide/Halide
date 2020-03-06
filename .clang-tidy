@@ -1,5 +1,5 @@
 ---
-Checks: '-*,modernize-use-override'
+Checks: '-*,modernize-use-override,performance-move-const-arg,performance-noexcept-move-constructor'
 WarningsAsErrors: '*'
 HeaderFilterRegex: '.*'
 AnalyzeTemporaryDtors: false

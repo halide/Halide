@@ -2298,3 +2298,23 @@ $(BIN_DIR)/HalideTraceDump: $(ROOT_DIR)/util/HalideTraceDump.cpp $(ROOT_DIR)/uti
 format:
 	find "${ROOT_DIR}/apps" "${ROOT_DIR}/src" "${ROOT_DIR}/tools" "${ROOT_DIR}/test" "${ROOT_DIR}/util" "${ROOT_DIR}/python_bindings" -name *.cpp -o -name *.h -o -name *.c | xargs ${CLANG}-format -i -style=file
 
+# Run clang-tidy on the core source files
+$(BUILD_DIR)/compile_commands.json:
+	echo '[' >> $@
+	BD=$(realpath $(BUILD_DIR)); \
+	SD=$(realpath $(SRC_DIR)); \
+	for S in $(SOURCE_FILES); do \
+	echo "{ \"directory\": \"$${BD}\"," >> $@; \
+	echo "  \"command\": \"$(CXX) $(CXX_FLAGS) -c $$SD/$$S -o $$BD/$${S/cpp/o}\"," >> $@; \
+	echo "  \"file\": \"$$SD/$$S\" }," >> $@; \
+	done
+	echo ']' >> $@
+
+.PHONY: clang-tidy
+clang-tidy: $(BUILD_DIR)/compile_commands.json
+	${CLANG}-tidy -extra-arg=-Wno-unknown-warning-option -p $(BUILD_DIR) $(addprefix $(SRC_DIR)/,$(SOURCE_FILES))
+
+.PHONY: clang-tidy-fix
+clang-tidy-fix: $(BUILD_DIR)/compile_commands.json
+	${CLANG}-tidy -extra-arg=-Wno-unknown-warning-option -p $(BUILD_DIR) $(addprefix $(SRC_DIR)/,$(SOURCE_FILES)) -fix-errors
+
