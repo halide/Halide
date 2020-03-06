@@ -399,7 +399,7 @@ Expr operator*(Expr a, Expr b);
 /** Multiply an expression and a constant integer. Coerces the type of the
  * integer to match the type of the expression. Errors if the integer
  * cannot be represented in the type of the expression. */
-Expr operator*(const Expr &a, int b);
+Expr operator*(Expr a, int b);
 
 /** Multiply a constant integer and an expression. Coerces the type of
  * the integer to match the type of the expression. Errors if the
@@ -470,7 +470,7 @@ Expr operator%(Expr a, int b);
 /** Mods a constant integer by an expression. Coerces the type
  * of the integer to match the type of the expression. Errors if the
  * integer cannot be represented in the type of the expression. */
-Expr operator%(int a, const Expr &b);
+Expr operator%(int a, Expr b);
 
 /** Return a boolean expression that tests whether the first argument
  * is greater than the second, after doing any necessary type coercion
