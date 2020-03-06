@@ -12,6 +12,7 @@ import halide as hl
 
 import imageio
 import os.path
+import struct
 
 # Include a clock to do performance testing.
 from datetime import datetime
@@ -278,7 +279,9 @@ def find_gpu_target():
     features_to_try = []
     if target.os == hl.TargetOS.Windows:
         # Try D3D12 first; if that fails, try OpenCL.
-        features_to_try.append(hl.TargetFeature.D3D12Compute)
+        if struct.calcsize("P") == 8:
+            # D3D12Compute support is only available on 64-bit systems at present.
+            features_to_try.append(hl.TargetFeature.D3D12Compute)
         features_to_try.append(hl.TargetFeature.OpenCL)
     elif target.os == hl.TargetOS.OSX:
         # OS X doesn't update its OpenCL drivers, so they tend to be broken.

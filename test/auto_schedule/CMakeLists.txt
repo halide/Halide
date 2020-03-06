@@ -13,7 +13,6 @@ tests(GROUPS auto_schedule
         param.cpp
         reorder.cpp
         tile_vs_inline.cpp
-        unbounded_nonpure.cpp
         unused_func.cpp
         vectorize_var_in_update.cpp
         )
