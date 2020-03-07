@@ -1256,14 +1256,6 @@ class EliminateInterleaves : public IRMutator {
         }
     }
 
-    // Make overloads of stmt/expr uses var so we can use it in a template.
-    static bool uses_var(Stmt s, const string &var) {
-        return stmt_uses_var(std::move(s), var);
-    }
-    static bool uses_var(Expr e, const string &var) {
-        return expr_uses_var(std::move(e), var);
-    }
-
     template<typename NodeType, typename LetType>
     NodeType visit_let(const LetType *op) {
 
@@ -1301,8 +1293,8 @@ class EliminateInterleaves : public IRMutator {
         } else {
             // We need to rewrap the body with new lets.
             NodeType result = body;
-            bool deinterleaved_used = uses_var(result, deinterleaved_name);
-            bool interleaved_used = uses_var(result, op->name);
+            bool deinterleaved_used = stmt_or_expr_uses_var(result, deinterleaved_name);
+            bool interleaved_used = stmt_or_expr_uses_var(result, op->name);
             if (deinterleaved_used && interleaved_used) {
                 // The body uses both the interleaved and
                 // deinterleaved version of this let. Generate both
@@ -1328,7 +1320,8 @@ class EliminateInterleaves : public IRMutator {
                 return LetType::make(op->name, value, result);
             } else {
                 // The let must have been dead.
-                internal_assert(!uses_var(op->body, op->name)) << "EliminateInterleaves eliminated a non-dead let.\n";
+                internal_assert(!stmt_or_expr_uses_var(op->body, op->name))
+                                << "EliminateInterleaves eliminated a non-dead let.\n";
                 return NodeType();
             }
         }
