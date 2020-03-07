@@ -15,7 +15,9 @@ namespace Halide {
  * definition, or as an Expr. As an Expr, it always has type
  * Int(32). */
 class Var {
-    std::string _name;
+    /* The expression representing the Var. Guaranteed to be an
+     * Internal::Variable of type Int(32). */
+    Expr e;
 
 public:
     /** Construct a Var with the given name */
@@ -26,12 +28,12 @@ public:
 
     /** Get the name of a Var */
     const std::string &name() const {
-        return _name;
+        return e.as<Internal::Variable>()->name;
     }
 
     /** Test if two Vars are the same. This simply compares the names. */
     bool same_as(const Var &other) const {
-        return _name == other._name;
+        return name() == other.name();
     }
 
     /** Implicit var constructor. Implicit variables are injected
@@ -150,8 +152,8 @@ public:
     //}
 
     /** A Var can be treated as an Expr of type Int(32) */
-    operator Expr() const {
-        return Internal::Variable::make(Int(32), name());
+    operator const Expr &() const {
+        return e;
     }
 
     /** A Var that represents the location outside the outermost loop. */
