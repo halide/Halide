@@ -48,6 +48,7 @@ class DefaultCostModel : public CostModel {
     Buffer<double *> cost_ptrs;
     std::vector<std::vector<double>*> cost_per_stage_ptrs;
     int cursor, num_stages, num_cores;
+    int batch_id{0};
 
     const std::string weights_in_path, weights_out_path;
     const bool randomize_weights;
@@ -161,6 +162,7 @@ public:
         int result = train_cost_model(num_stages,
                                       cursor,
                                       num_cores,
+                                      batch_id,
                                       pipeline_feat_queue,
                                       schedule_feat_queue,
                                       weights.head1_filter, weights.head1_bias,
@@ -231,6 +233,7 @@ public:
         int result = cost_model(num_stages,
                                 cursor,
                                 num_cores,
+                                batch_id++,
                                 pipeline_feat_queue,
                                 schedule_feat_queue,
                                 weights.head1_filter, weights.head1_bias,

@@ -127,6 +127,10 @@ public:
     // Number of cores on the target machine. Used to reason about idle cores.
     Input<int> num_cores{"num_cores", 1};
 
+    Input<int> batch_id{"batch_id", 0};
+
+    GeneratorParam<bool> enable_debug_output{"enable_debug_output", false};
+
     // Algorithm-specific features
     Input<Buffer<float>> pipeline_features{"pipeline_features", 3};
 
@@ -179,6 +183,14 @@ public:
 
     Expr sigmoid(Expr e) {
         return 1 / (1 + exp(-e));
+    }
+
+    Expr print_wrap(Expr e, const std::string& out, const Var& n, const Var& w) {
+        if (training || !enable_debug_output) {
+            return e;
+        }
+
+        return print(e, "<-", out + ".", "batch_id =", batch_id, "pipeline_id =", n, "stage_id =", w);
     }
 
     void generate() {
@@ -330,23 +342,44 @@ public:
                                     num_scalars * relu1(1, w, n)),
                                    (vector_size * num_vectors * relu1(2, w, n) +
                                     num_scalars * relu1(3, w, n)));
+
+        compute_cost = print_wrap(compute_cost, "compute_cost_initial", n, w);
+
         compute_cost += select(inlined_calls == 0,
                                (num_warps_per_block * relu1(31, w, n)),
                                (num_warps_per_block * num_blocks * relu1(4, w, n)));
+
+        compute_cost = print_wrap(compute_cost, "compute_cost_after_warps", n, w);
 
         Expr num_tasks = max(1, inner_parallelism * outer_parallelism);
         Expr tasks_per_core = num_tasks / num_cores;
         Expr idle_core_wastage = ceil(tasks_per_core) / max(1, tasks_per_core);
         compute_cost *= idle_core_wastage;
+
+        compute_cost = print_wrap(compute_cost, "compute_cost_after_idle_core_wastage", n, w);
+
         // Ignore warp_lane_utilization and block_occupancy for inlined stages
         // Serial loops use a single thread
         compute_cost /= select(inlined_calls == 0, block_occupancy, 1.f);
+        compute_cost = print_wrap(compute_cost, "compute_cost_after_block_occupancy", n, w);
+
         compute_cost /= select(inlined_calls == 0, warp_lane_utilization, 1.f);
+        compute_cost = print_wrap(compute_cost, "compute_cost_after_warp_lane_utilization", n, w);
+
         compute_cost /= select(inlined_calls == 0, warp_lane_utilization_at_block, 1.f);
+        compute_cost = print_wrap(compute_cost, "compute_cost_after_warp_lane_utilization_at_block", n, w);
+
         compute_cost /= select(inlined_calls == 0, warp_lane_utilization_at_block_x, 1.f);
+        compute_cost = print_wrap(compute_cost, "compute_cost_after_warp_lane_utilization_at_block_x", n, w);
+
         compute_cost /= select(inlined_calls == 0, warp_lane_utilization_at_block_y, 1.f);
+        compute_cost = print_wrap(compute_cost, "compute_cost_after_warp_lane_utilization_at_block_y", n, w);
+
         compute_cost /= select(inlined_calls == 0, warp_lane_utilization_at_block_z, 1.f);
+        compute_cost = print_wrap(compute_cost, "compute_cost_after_warp_lane_utilization_at_block_z", n, w);
+
         compute_cost /= select(inlined_calls == 0, 1 - idle_lane_wastage, 1.f);
+        compute_cost = print_wrap(compute_cost, "compute_cost_after_idle_lane", n, w);
 
         // Next comes a long list of plausible terms to capture the cost of loads.
         Expr load_cost = (num_realizations * unique_lines_read_per_realization * relu1(5, w, n) +
@@ -362,11 +395,19 @@ public:
                           num_tasks * unique_lines_read_per_task * relu1(15, w, n) +
                           num_blocks * num_shared_mem_loads_per_block * relu1(27, w, n) +
                           num_blocks * num_global_mem_loads_per_block * relu1(28, w, n));
+        load_cost = print_wrap(load_cost, "load_cost_initial", n, w);
 
         load_cost /= shared_mem_load_efficiency;
+        load_cost = print_wrap(load_cost, "load_cost_after_shared_mem_load_efficiency", n, w);
+
         load_cost /= global_mem_load_efficiency;
+        load_cost = print_wrap(load_cost, "load_cost_after_global_mem_load_efficiency", n, w);
+
         load_cost /= global_mem_load_coalesce_efficiency;
+        load_cost = print_wrap(load_cost, "load_cost_after_global_mem_load_coalesce_efficiency", n, w);
+
         load_cost /= local_mem_load_efficiency;
+        load_cost = print_wrap(load_cost, "load_cost_after_local_mem_load_efficiency", n, w);
 
         // Next we have the cost of stores.
         Expr lines_written_per_realization = inner_parallelism * (bytes_at_task / max(1, innermost_bytes_at_task));
@@ -388,11 +429,19 @@ public:
                                               bytes_at_realization * beta) +
                           num_blocks * num_shared_mem_stores_per_block * relu1(29, w, n) +
                           num_blocks * num_global_mem_stores_per_block * relu1(30, w, n);
+        store_cost = print_wrap(store_cost, "store_cost_initial", n, w);
 
         store_cost /= shared_mem_store_efficiency;
+        store_cost = print_wrap(store_cost, "store_cost_after_shared_mem_store_efficiency", n, w);
+
         store_cost /= global_mem_store_efficiency;
+        store_cost = print_wrap(store_cost, "store_cost_after_global_mem_store_efficiency", n, w);
+
         store_cost /= global_mem_store_coalesce_efficiency;
+        store_cost = print_wrap(store_cost, "store_cost_after_global_mem_store_coalesce_efficiency", n, w);
+
         store_cost /= local_mem_store_efficiency;
+        store_cost = print_wrap(store_cost, "store_cost_after_local_mem_store_efficiency", n, w);
 
         // Now account for false sharing of cache lines. The
         // probability of a store hitting a cache line also hit by
@@ -405,11 +454,13 @@ public:
                    0.0f);
 
         store_cost += cost_of_false_sharing;
+        store_cost = print_wrap(store_cost, "store_cost_after_false_sharing", n, w);
 
         // Now add a term for false sharing of pages. The maximum
         // number of threads that could all fault on the same page at
         // the same time is:
         Expr max_threads_hitting_same_page_fault = min(inner_parallelism, 4096 / max(1, innermost_bytes_at_task));
+        max_threads_hitting_same_page_fault = print_wrap(max_threads_hitting_same_page_fault, "max_tasks_hitting_same_page_fault", n, w);
 
         // The total number of page faults is proportionate to the number of bytes allocated
         Expr num_page_faults = bytes_at_production;
@@ -419,6 +470,7 @@ public:
                                     inner_parallelism * outer_parallelism * relu1(23, w, n));
 
         store_cost += cost_of_page_faults;
+        store_cost = print_wrap(store_cost, "store_cost_after_page_faults", n, w);
 
         // Malloc is not free, so add a cost per allocation.
         Expr cost_of_malloc = relu1(24, w, n) * num_realizations;
@@ -441,12 +493,14 @@ public:
         // in order to not have to retrain.
         store_cost *= 2;
 
-        Expr cost = (compute_cost +
-                     store_cost +
-                     load_cost +
-                     cost_of_malloc +
-                     cost_of_parallelism +
-                     cost_of_working_set);
+        Expr cost = (print_wrap(compute_cost, "compute_cost_total", n, w) +
+                     print_wrap(store_cost, "store_cost_total", n, w) +
+                     print_wrap(load_cost, "load_cost_total", n, w) +
+                     print_wrap(cost_of_malloc, "cost_of_malloc_total", n, w) +
+                     print_wrap(cost_of_parallelism, "cost_of_parallelism_total", n, w) +
+                     print_wrap(cost_of_working_set, "cost_of_working_set_total", n, w));
+
+        cost = print_wrap(cost, "cost_total", n, w);
 
         for (int i = 0; i < conv1_channels; i++) {
             cost += 0.0f * relu1(i, w, n);
