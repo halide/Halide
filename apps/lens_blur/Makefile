@@ -34,7 +34,7 @@ $(BIN)/%/lens_blur_auto_schedule.a: $(GENERATOR_BIN)/lens_blur.generator $(AUTOS
 
 $(BIN)/%/lens_blur_gradient_auto_schedule.a: $(GENERATOR_BIN)/lens_blur.generator
 	@mkdir -p $(@D)
-	$^ -g lens_blur -e $(GENERATOR_OUTPUTS) -o $(@D) -f lens_blur_gradient_auto_schedule target=$*-no_runtime auto_schedule=true -p $(GRADIENT_AUTOSCHED_BIN)/libgradient_autoscheduler.so -s Li2018
+	$^ -g lens_blur -e $(GENERATOR_OUTPUTS),schedule -o $(@D) -f lens_blur_gradient_auto_schedule target=$*-no_runtime auto_schedule=true -p $(GRADIENT_AUTOSCHED_BIN)/libgradient_autoscheduler.so -s Li2018
 
 $(BIN)/%/process: process.cpp $(PROCESS_DEPS)
 	@mkdir -p $(@D)
@@ -42,7 +42,7 @@ $(BIN)/%/process: process.cpp $(PROCESS_DEPS)
 
 $(BIN)/%/out.png: $(BIN)/%/process
 	@mkdir -p $(@D)
-	$< $(IMAGES)/rgb_small.png 32 13 0.5 32 3 $@
+	$< $(IMAGES)/rgb.png 32 13 0.5 32 3 $@
 	rm $@
 
 clean:
