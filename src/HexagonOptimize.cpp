@@ -1321,7 +1321,7 @@ class EliminateInterleaves : public IRMutator {
             } else {
                 // The let must have been dead.
                 internal_assert(!stmt_or_expr_uses_var(op->body, op->name))
-                                << "EliminateInterleaves eliminated a non-dead let.\n";
+                    << "EliminateInterleaves eliminated a non-dead let.\n";
                 return NodeType();
             }
         }
