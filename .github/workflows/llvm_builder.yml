@@ -34,10 +34,8 @@ jobs:
         target_arch: [x86, arm]
         target_bits: [32, 64]
         target_os: [windows, linux, osx]
-        llvm_version: [8, 9, 10, 11]
+        llvm_version: [9, 10, 11]
         include:
-          - llvm_version: 8
-            llvm_branch: release/8.x
           - llvm_version: 9
             llvm_branch: release/9.x
           - llvm_version: 10
@@ -143,7 +141,7 @@ jobs:
         LLVM_OLD_COMMIT=bogus
         curl --fail --user llvm_user:${{secrets.LLVM_USER_PASSWORD}} --output ${_ROOT}/old_llvm.tgz ${LLVM_INSTALL_URL}
         if [ $? -eq 0 ]; then
-          LLVM_OLD_COMMIT=`tar ${TAR_CMD} -O -xf ${_ROOT}/old_llvm.tgz ./${LLVM_COMMIT_HASH_FILE}`
+          LLVM_OLD_COMMIT=`${TAR_CMD} -O -xf ${_ROOT}/old_llvm.tgz ./${LLVM_COMMIT_HASH_FILE}`
           if [ $? -ne 0 ]; then
             LLVM_OLD_COMMIT=bogus_2
           fi
@@ -201,8 +199,10 @@ jobs:
           if [[ ${{matrix.host_os}} == windows* ]]; then
             CMAKE_GEN="Visual Studio 16"
 
-            EXTRA_CMAKE_FLAGS="-T host=x64"
-            if [[ ${{matrix.target_bits}} == 64 ]]; then
+            EXTRA_CMAKE_FLAGS="${EXTRA_CMAKE_FLAGS} -T host=x64"
+            if [[ ${{matrix.target_bits}} == 32 ]]; then
+              EXTRA_CMAKE_FLAGS="${EXTRA_CMAKE_FLAGS} -A Win32"
+            else
               EXTRA_CMAKE_FLAGS="${EXTRA_CMAKE_FLAGS} -A x64"
             fi
 

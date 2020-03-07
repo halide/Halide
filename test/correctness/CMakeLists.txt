@@ -232,6 +232,7 @@ tests(GROUPS correctness travis
         predicated_store_load.cpp
         prefetch.cpp
         print.cpp
+        print_loop_nest.cpp
         process_some_tiles.cpp
         pseudostack_shares_slots.cpp
         python_extension_gen.cpp
