@@ -1,8 +1,6 @@
 #ifndef HALIDE_LAMBDA_H
 #define HALIDE_LAMBDA_H
 
-#include <utility>
-
 #include "Func.h"
 #include "Util.h"
 #include "Var.h"

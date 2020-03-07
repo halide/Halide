@@ -5,7 +5,6 @@
  * Support for imposing boundary conditions on Halide::Funcs.
  */
 
-#include <utility>
 #include <vector>
 
 #include "Expr.h"

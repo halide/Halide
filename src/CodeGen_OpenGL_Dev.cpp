@@ -9,7 +9,6 @@
 #include <iomanip>
 #include <limits>
 #include <map>
-#include <utility>
 
 namespace Halide {
 namespace Internal {

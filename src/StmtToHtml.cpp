@@ -8,7 +8,6 @@
 #include <iterator>
 #include <sstream>
 #include <stdio.h>
-#include <utility>
 
 namespace Halide {
 namespace Internal {

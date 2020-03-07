@@ -1,6 +1,5 @@
 #include <iostream>
 #include <limits>
-#include <utility>
 
 #include "CodeGen_C.h"
 #include "CodeGen_Internal.h"

@@ -1,7 +1,5 @@
 #include "BoundaryConditions.h"
 
-#include <utility>
-
 namespace Halide {
 
 namespace BoundaryConditions {

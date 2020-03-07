@@ -4,7 +4,6 @@
 #include "IROperator.h"
 #include "IRPrinter.h"
 #include "Simplify.h"
-#include <utility>
 
 namespace Halide {
 namespace Internal {
