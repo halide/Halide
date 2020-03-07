@@ -411,10 +411,9 @@ Expr Simplify::visit(const Call *op, ExprInfo *bounds) {
 
                 if (is_one(mutate(extent_0 * stride_0 == stride_1, nullptr))) {
                     Expr new_extent = mutate(extent_0 * extent_1, nullptr);
-                    Expr new_stride = stride_0;
                     args.erase(args.begin() + j, args.begin() + j + 2);
                     args[i] = new_extent;
-                    args[i + 1] = new_stride;
+                    args[i + 1] = stride_0;
                     i -= 2;
                     break;
                 }

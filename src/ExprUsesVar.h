@@ -5,6 +5,8 @@
  * Defines a method to determine if an expression depends on some variables.
  */
 
+#include <utility>
+
 #include "IR.h"
 #include "IRVisitor.h"
 #include "Scope.h"
@@ -94,7 +96,7 @@ public:
  *  Expr's in the scope provided in the final argument.
  */
 template<typename StmtOrExpr, typename T>
-inline bool stmt_or_expr_uses_vars(StmtOrExpr e, const Scope<T> &v,
+inline bool stmt_or_expr_uses_vars(const StmtOrExpr &e, const Scope<T> &v,
                                    const Scope<Expr> &s = Scope<Expr>::empty_scope()) {
     ExprUsesVars<T> uses(v, &s);
     e.accept(&uses);
@@ -106,7 +108,7 @@ inline bool stmt_or_expr_uses_vars(StmtOrExpr e, const Scope<T> &v,
  * scope provided in the final argument.
  */
 template<typename StmtOrExpr>
-inline bool stmt_or_expr_uses_var(StmtOrExpr e, const std::string &v,
+inline bool stmt_or_expr_uses_var(const StmtOrExpr &e, const std::string &v,
                                   const Scope<Expr> &s = Scope<Expr>::empty_scope()) {
     Scope<> vars;
     vars.push(v);
@@ -117,7 +119,7 @@ inline bool stmt_or_expr_uses_var(StmtOrExpr e, const std::string &v,
  *  additionally considering variables bound to Expr's in the scope
  *  provided in the final argument.
  */
-inline bool expr_uses_var(Expr e, const std::string &v,
+inline bool expr_uses_var(const Expr &e, const std::string &v,
                           const Scope<Expr> &s = Scope<Expr>::empty_scope()) {
     return stmt_or_expr_uses_var(e, v, s);
 }
@@ -126,7 +128,7 @@ inline bool expr_uses_var(Expr e, const std::string &v,
  *  additionally considering variables bound to Expr's in the scope
  *  provided in the final argument.
  */
-inline bool stmt_uses_var(Stmt stmt, const std::string &v,
+inline bool stmt_uses_var(const Stmt &stmt, const std::string &v,
                           const Scope<Expr> &s = Scope<Expr>::empty_scope()) {
     return stmt_or_expr_uses_var(stmt, v, s);
 }
@@ -136,7 +138,7 @@ inline bool stmt_uses_var(Stmt stmt, const std::string &v,
  *  the scope provided in the final argument.
  */
 template<typename T>
-inline bool expr_uses_vars(Expr e, const Scope<T> &v,
+inline bool expr_uses_vars(const Expr &e, const Scope<T> &v,
                            const Scope<Expr> &s = Scope<Expr>::empty_scope()) {
     return stmt_or_expr_uses_vars(e, v, s);
 }
@@ -146,7 +148,7 @@ inline bool expr_uses_vars(Expr e, const Scope<T> &v,
  *  scope provided in the final argument.
  */
 template<typename T>
-inline bool stmt_uses_vars(Stmt stmt, const Scope<T> &v,
+inline bool stmt_uses_vars(const Stmt &stmt, const Scope<T> &v,
                            const Scope<Expr> &s = Scope<Expr>::empty_scope()) {
     return stmt_or_expr_uses_vars(stmt, v, s);
 }

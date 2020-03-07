@@ -74,8 +74,8 @@ bool can_allocation_fit_on_stack(int64_t size);
  * Can introduce mulhi_shr and sorted_avg intrinsics as well as those from the
  * lower_euclidean_ operation -- div_round_to_zero or mod_round_to_zero. */
 ///@{
-Expr lower_int_uint_div(Expr a, Expr b);
-Expr lower_int_uint_mod(Expr a, Expr b);
+Expr lower_int_uint_div(const Expr &a, const Expr &b);
+Expr lower_int_uint_mod(const Expr &a, const Expr &b);
 ///@}
 
 /** Given a Halide Euclidean division/mod operation, define it in terms of
@@ -88,13 +88,13 @@ Expr lower_euclidean_mod(Expr a, Expr b);
 /** Given a Halide shift operation with a signed shift amount (may be negative), define
  * an equivalent expression using only shifts by unsigned amounts. */
 ///@{
-Expr lower_signed_shift_left(Expr a, Expr b);
-Expr lower_signed_shift_right(Expr a, Expr b);
+Expr lower_signed_shift_left(const Expr &a, const Expr &b);
+Expr lower_signed_shift_right(const Expr &a, const Expr &b);
 ///@}
 
 /** Replace predicated loads/stores with unpredicated equivalents
  * inside branches. */
-Stmt unpredicate_loads_stores(Stmt s);
+Stmt unpredicate_loads_stores(const Stmt &s);
 
 /** Given an llvm::Module, set llvm:TargetOptions, cpu and attr information */
 void get_target_options(const llvm::Module &module, llvm::TargetOptions &options, std::string &mcpu, std::string &mattrs);

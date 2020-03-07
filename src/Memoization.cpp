@@ -214,7 +214,7 @@ public:
     // Code to fill in the Allocation named key_name with the byte of
     // the key. The Allocation is guaranteed to be 1d, of type uint8_t
     // and of the size returned from key_size
-    Stmt generate_key(std::string key_name) {
+    Stmt generate_key(const std::string &key_name) {
         std::vector<Stmt> writes;
         Expr index = Expr(0);
 
@@ -263,8 +263,8 @@ public:
     // in which case the Allocation named by storage will be computed,
     // or false, in which case it will be assumed the buffer was populated
     // by the code in this call.
-    Expr generate_lookup(std::string key_allocation_name, std::string computed_bounds_name,
-                         int32_t tuple_count, std::string storage_base_name) {
+    Expr generate_lookup(const std::string &key_allocation_name, const std::string &computed_bounds_name,
+                         int32_t tuple_count, const std::string &storage_base_name) {
         std::vector<Expr> args;
         args.push_back(Variable::make(type_of<uint8_t *>(), key_allocation_name));
         args.push_back(key_size());
@@ -284,8 +284,8 @@ public:
     }
 
     // Returns a statement which will store the result of a computation under this key
-    Stmt store_computation(std::string key_allocation_name, std::string computed_bounds_name,
-                           int32_t tuple_count, std::string storage_base_name) {
+    Stmt store_computation(const std::string &key_allocation_name, const std::string &computed_bounds_name,
+                           int32_t tuple_count, const std::string &storage_base_name) {
         std::vector<Expr> args;
         args.push_back(Variable::make(type_of<uint8_t *>(), key_allocation_name));
         args.push_back(key_size());
@@ -431,7 +431,7 @@ private:
     }
 };
 
-Stmt inject_memoization(Stmt s, const std::map<std::string, Function> &env,
+Stmt inject_memoization(const Stmt &s, const std::map<std::string, Function> &env,
                         const std::string &name,
                         const std::vector<Function> &outputs) {
     // Cache keys use the addresses of names of Funcs. For JIT, a
@@ -533,7 +533,7 @@ private:
     }
 };
 
-Stmt rewrite_memoized_allocations(Stmt s, const std::map<std::string, Function> &env) {
+Stmt rewrite_memoized_allocations(const Stmt &s, const std::map<std::string, Function> &env) {
 
     RewriteMemoizedAllocations rewriter(env);
 

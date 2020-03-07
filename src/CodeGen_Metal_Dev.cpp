@@ -1,5 +1,6 @@
 #include <algorithm>
 #include <sstream>
+#include <utility>
 
 #include "CodeGen_Internal.h"
 #include "CodeGen_Metal_Dev.h"
@@ -85,7 +86,7 @@ string CodeGen_Metal_Dev::CodeGen_Metal_C::print_storage_type(Type type) {
     return print_type_maybe_storage(type, true, DoNotAppendSpace);
 }
 
-string CodeGen_Metal_Dev::CodeGen_Metal_C::print_reinterpret(Type type, Expr e) {
+string CodeGen_Metal_Dev::CodeGen_Metal_C::print_reinterpret(Type type, const Expr &e) {
     ostringstream oss;
 
     string temp = unique_name('V');
@@ -218,7 +219,7 @@ void CodeGen_Metal_Dev::CodeGen_Metal_C::visit(const Call *op) {
 namespace {
 
 // If e is a ramp expression with stride 1, return the base, otherwise undefined.
-Expr is_ramp_one(Expr e) {
+Expr is_ramp_one(const Expr &e) {
     const Ramp *r = e.as<Ramp>();
     if (r == nullptr) {
         return Expr();
@@ -449,7 +450,7 @@ struct BufferSize {
         : size(0) {
     }
     BufferSize(string name, size_t size)
-        : name(name), size(size) {
+        : name(std::move(name)), size(size) {
     }
 
     bool operator<(const BufferSize &r) const {
@@ -458,7 +459,7 @@ struct BufferSize {
 };
 }  // namespace
 
-void CodeGen_Metal_Dev::CodeGen_Metal_C::add_kernel(Stmt s,
+void CodeGen_Metal_Dev::CodeGen_Metal_C::add_kernel(const Stmt &s,
                                                     const string &name,
                                                     const vector<DeviceArgument> &args) {
 

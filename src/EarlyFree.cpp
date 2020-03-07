@@ -1,4 +1,5 @@
 #include <map>
+#include <utility>
 
 #include "EarlyFree.h"
 #include "ExprUsesVar.h"
@@ -18,7 +19,7 @@ public:
     Stmt last_use;
 
     FindLastUse(string s)
-        : func(s) {
+        : func(std::move(s)) {
     }
 
 private:
@@ -169,7 +170,7 @@ class InjectEarlyFrees : public IRMutator {
 
 }  // namespace
 
-Stmt inject_early_frees(Stmt s) {
+Stmt inject_early_frees(const Stmt &s) {
     InjectEarlyFrees early_frees;
     return early_frees.mutate(s);
 }

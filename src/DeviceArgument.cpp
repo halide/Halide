@@ -4,7 +4,7 @@
 namespace Halide {
 namespace Internal {
 
-HostClosure::HostClosure(Stmt s, const std::string &loop_variable) {
+HostClosure::HostClosure(const Stmt &s, const std::string &loop_variable) {
     if (!loop_variable.empty()) {
         ignore.push(loop_variable);
     }

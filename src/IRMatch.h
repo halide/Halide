@@ -33,7 +33,7 @@ namespace Internal {
  * should return true, and set result[0] to 3 and
  * result[1] to 2*k.
  */
-bool expr_match(Expr pattern, Expr expr, std::vector<Expr> &result);
+bool expr_match(const Expr &pattern, const Expr &expr, std::vector<Expr> &result);
 
 /** Does the first expression have the same structure as the second?
  * Variables are matched consistently. The first time a variable is
@@ -47,7 +47,7 @@ bool expr_match(Expr pattern, Expr expr, std::vector<Expr> &result);
  \endcode
  * should return true, and set result["x"] = a, and result["y"] = b.
  */
-bool expr_match(Expr pattern, Expr expr, std::map<std::string, Expr> &result);
+bool expr_match(const Expr &pattern, const Expr &expr, std::map<std::string, Expr> &result);
 
 void expr_match_test();
 
@@ -213,7 +213,7 @@ struct SpecificExpr {
     constexpr static bool foldable = false;
 };
 
-inline std::ostream &operator<<(std::ostream &s, SpecificExpr e) {
+inline std::ostream &operator<<(std::ostream &s, const SpecificExpr &e) {
     s << e.expr;
     return s;
 }

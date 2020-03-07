@@ -10,6 +10,7 @@
 #include "Parameter.h"
 
 #include <map>
+#include <utility>
 
 namespace Halide {
 
@@ -159,7 +160,7 @@ class LoopLevel {
     Internal::IntrusivePtr<Internal::LoopLevelContents> contents;
 
     explicit LoopLevel(Internal::IntrusivePtr<Internal::LoopLevelContents> c)
-        : contents(c) {
+        : contents(std::move(c)) {
     }
     LoopLevel(const std::string &func_name, const std::string &var_name,
               bool is_rvar, int stage_index, bool locked = false);
@@ -171,8 +172,8 @@ public:
 
     /** Identify the loop nest corresponding to some dimension of some function */
     // @{
-    LoopLevel(const Internal::Function &f, VarOrRVar v, int stage_index = -1);
-    LoopLevel(const Func &f, VarOrRVar v, int stage_index = -1);
+    LoopLevel(const Internal::Function &f, const VarOrRVar &v, int stage_index = -1);
+    LoopLevel(const Func &f, const VarOrRVar &v, int stage_index = -1);
     // @}
 
     /** Construct an undefined LoopLevel. Calling any method on an undefined
@@ -399,7 +400,7 @@ class FuncSchedule {
 
 public:
     FuncSchedule(IntrusivePtr<FuncScheduleContents> c)
-        : contents(c) {
+        : contents(std::move(c)) {
     }
     FuncSchedule(const FuncSchedule &other)
         : contents(other.contents) {
@@ -497,7 +498,7 @@ class StageSchedule {
 
 public:
     StageSchedule(IntrusivePtr<StageScheduleContents> c)
-        : contents(c) {
+        : contents(std::move(c)) {
     }
     StageSchedule(const StageSchedule &other)
         : contents(other.contents) {

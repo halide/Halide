@@ -221,7 +221,7 @@ Expr fast_integer_divide(Expr numerator, Expr denominator) {
     }
 
     // The tables don't work for denominator == 1
-    result = select(denominator == 1, numerator, result);
+    result = select(std::move(denominator) == 1, std::move(numerator), result);
 
     internal_assert(result.type() == t);
 
@@ -229,7 +229,8 @@ Expr fast_integer_divide(Expr numerator, Expr denominator) {
 }
 
 Expr fast_integer_modulo(Expr numerator, Expr denominator) {
-    return numerator - fast_integer_divide(numerator, denominator) * denominator;
+    Expr ratio = fast_integer_divide(numerator, denominator);
+    return std::move(numerator) - ratio * std::move(denominator);
 }
 
 }  // namespace Halide

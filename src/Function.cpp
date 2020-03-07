@@ -2,6 +2,7 @@
 #include <memory>
 #include <set>
 #include <stdlib.h>
+#include <utility>
 
 #include "CSE.h"
 #include "Function.h"
@@ -324,7 +325,7 @@ ExternFuncArgument deep_copy_extern_func_argument_helper(
     return copy;
 }
 
-void Function::deep_copy(FunctionPtr copy, DeepCopyMap &copied_map) const {
+void Function::deep_copy(const FunctionPtr &copy, DeepCopyMap &copied_map) const {
     internal_assert(copy.defined() && contents.defined())
         << "Cannot deep-copy undefined Function\n";
 
@@ -372,9 +373,9 @@ void Function::deep_copy(FunctionPtr copy, DeepCopyMap &copied_map) const {
     }
 }
 
-void Function::deep_copy(string name, FunctionPtr copy, DeepCopyMap &copied_map) const {
+void Function::deep_copy(string name, const FunctionPtr &copy, DeepCopyMap &copied_map) const {
     deep_copy(copy, copied_map);
-    copy->name = name;
+    copy->name = std::move(name);
 }
 
 void Function::define(const vector<string> &args, vector<Expr> values) {

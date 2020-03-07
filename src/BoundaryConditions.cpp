@@ -1,5 +1,7 @@
 #include "BoundaryConditions.h"
 
+#include <utility>
+
 namespace Halide {
 
 namespace BoundaryConditions {
@@ -76,7 +78,7 @@ Func constant_exterior(const Func &source, Tuple value,
     return bounded;
 }
 
-Func constant_exterior(const Func &source, Expr value,
+Func constant_exterior(const Func &source, const Expr &value,
                        const Region &bounds) {
     return constant_exterior(source, Tuple(value), bounds);
 }

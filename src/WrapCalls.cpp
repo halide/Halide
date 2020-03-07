@@ -15,9 +15,9 @@ typedef map<FunctionPtr, FunctionPtr> SubstitutionMap;
 namespace {
 
 void insert_func_wrapper_helper(map<FunctionPtr, SubstitutionMap> &func_wrappers_map,
-                                FunctionPtr in_func,
-                                FunctionPtr wrapped_func,
-                                FunctionPtr wrapper) {
+                                const FunctionPtr &in_func,
+                                const FunctionPtr &wrapped_func,
+                                const FunctionPtr &wrapper) {
     internal_assert(in_func.defined() &&
                     wrapped_func.defined() &&
                     wrapper.defined());
@@ -48,7 +48,7 @@ void insert_func_wrapper_helper(map<FunctionPtr, SubstitutionMap> &func_wrappers
     wrappers_map[wrapped_func] = wrapper;
 }
 
-void validate_custom_wrapper(Function in_func, Function wrapped, Function wrapper) {
+void validate_custom_wrapper(const Function &in_func, const Function &wrapped, const Function &wrapper) {
     map<string, Function> callees = find_direct_calls(in_func);
     if (!callees.count(wrapper.name())) {
         std::ostringstream callees_text;

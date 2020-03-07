@@ -225,7 +225,7 @@ bool can_allocation_fit_on_stack(int64_t size) {
     return (size <= 1024 * 16);
 }
 
-Expr lower_int_uint_div(Expr a, Expr b) {
+Expr lower_int_uint_div(const Expr &a, const Expr &b) {
     // Detect if it's a small int division
     const int64_t *const_int_divisor = as_const_int(b);
     const uint64_t *const_uint_divisor = as_const_uint(b);
@@ -298,7 +298,7 @@ Expr lower_int_uint_div(Expr a, Expr b) {
 
         internal_assert(method != 0)
             << "method 0 division is for powers of two and should have been handled elsewhere\n";
-        Expr num = a;
+        const Expr &num = a;
 
         // Widen, multiply, narrow
         Expr mult = make_const(num.type(), multiplier);
@@ -322,7 +322,7 @@ Expr lower_int_uint_div(Expr a, Expr b) {
     }
 }
 
-Expr lower_int_uint_mod(Expr a, Expr b) {
+Expr lower_int_uint_mod(const Expr &a, const Expr &b) {
     // Detect if it's a small int modulus
     const int64_t *const_int_divisor = as_const_int(b);
     const uint64_t *const_uint_divisor = as_const_uint(b);
@@ -475,7 +475,7 @@ Expr lower_euclidean_mod(Expr a, Expr b) {
     return q;
 }
 
-Expr lower_signed_shift_left(Expr a, Expr b) {
+Expr lower_signed_shift_left(const Expr &a, const Expr &b) {
     internal_assert(b.type().is_int());
     const int64_t *const_int_b = as_const_int(b);
     if (const_int_b) {
@@ -497,7 +497,7 @@ Expr lower_signed_shift_left(Expr a, Expr b) {
     }
 }
 
-Expr lower_signed_shift_right(Expr a, Expr b) {
+Expr lower_signed_shift_right(const Expr &a, const Expr &b) {
     internal_assert(b.type().is_int());
     const int64_t *const_int_b = as_const_int(b);
     if (const_int_b) {
@@ -600,7 +600,7 @@ class UnpredicateLoadsStores : public IRMutator {
 
 }  // namespace
 
-Stmt unpredicate_loads_stores(Stmt s) {
+Stmt unpredicate_loads_stores(const Stmt &s) {
     return UnpredicateLoadsStores().mutate(s);
 }
 
