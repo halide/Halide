@@ -16,7 +16,10 @@ namespace Halide {
  * Int(32). */
 class Var {
     /* The expression representing the Var. Guaranteed to be an
-     * Internal::Variable of type Int(32). */
+     * Internal::Variable of type Int(32). Created once on
+     * construction of the Var to avoid making a fresh Expr every time
+     * the Var is used in a context in which is will be converted to
+     * one. */
     Expr e;
 
 public:
