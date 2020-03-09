@@ -179,6 +179,7 @@ Expr Simplify::visit(const Div *op, ExprInfo *bounds) {
                        can_prove((x % c1 + c0 * (lanes - 1)) / c1 == 0, this)))) ||
              (no_overflow_scalar_int(op->type) &&
               (rewrite(x / -1, -x) ||
+               (denominator_non_zero && rewrite(c0 / y, select(y < 0, fold(-c0), c0), c0 == -1 )) ||
                rewrite((x * c0 + c1) / c2,
                        (x + fold(c1 / c0)) / fold(c2 / c0),
                        c2 > 0 && c0 > 0 && c2 % c0 == 0) ||
