@@ -1921,7 +1921,10 @@ private:
                     // Sort the bucket and compare bases of 3 adjacent vectors
                     // at a time. If they differ by vector stride, we've
                     // found a vtmpy
-                    std::sort(iter->second.begin(), iter->second.end(), loads_comparator);
+                    // It doesn't see to be easy to write a comparator function that'll implement a
+                    // strict weak ordering. So, we use stable_sort instead of sort so at the very least, the relative order
+                    // of tied elements in the vector to be sorted is not changed.
+                    std::stable_sort(iter->second.begin(), iter->second.end(), loads_comparator);
                     size_t vec_size = iter->second.size();
                     for (size_t i = 0; i + 2 < vec_size; i++) {
                         Expr v0 = iter->second[i].first;
@@ -1955,8 +1958,19 @@ private:
                         if (vtmpy_indices[i]) {
                             continue;
                         }
-                        Expr mpy_a = lossless_cast(op->type, mpys[i].first);
-                        Expr mpy_b = lossless_cast(op->type, mpys[i].second);
+                        // We put expressions in mpys after un-broadcasting them. So, first broadcast
+                        // then call lossless_cast.
+                        Expr a = mpys[i].first;
+                        Expr b = mpys[i].second;
+                        int lanes = op->type.lanes();
+
+                        if (a.type().is_scalar())
+                            a = Broadcast::make(a, lanes);
+                        if (b.type().is_scalar())
+                            b = Broadcast::make(b, lanes);
+
+                        Expr mpy_a = lossless_cast(op->type, a);
+                        Expr mpy_b = lossless_cast(op->type, b);
                         Expr mpy_res = mpy_a * mpy_b;
                         new_expr = new_expr.defined() ? new_expr + mpy_res : mpy_res;
                     }
