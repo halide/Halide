@@ -212,7 +212,7 @@ Expr Simplify::visit(const Div *op, ExprInfo *bounds) {
                        c2 > 0 && c0 % c2 == 0) ||
                // A very specific pattern that comes up in bounds in upsampling code.
                rewrite((x % 2 + c0) / 2, x % 2 + fold(c0 / 2), c0 % 2 == 1))))) {
-            return mutate(std::move(rewrite.result), bounds);
+            return mutate(rewrite.result, bounds);
         }
         // clang-format on
     }

@@ -1249,5 +1249,7 @@ int main(int argc, char **argv) {
     test_async(Backend::CPU);
     test_async(Backend::CPUVectorize);
     test_async_tuple(Backend::CPU);
+
+    printf("Success!\n");
     return 0;
 }

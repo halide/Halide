@@ -399,7 +399,7 @@ Expr operator*(Expr a, Expr b);
 /** Multiply an expression and a constant integer. Coerces the type of the
  * integer to match the type of the expression. Errors if the integer
  * cannot be represented in the type of the expression. */
-Expr operator*(const Expr &a, int b);
+Expr operator*(Expr a, int b);
 
 /** Multiply a constant integer and an expression. Coerces the type of
  * the integer to match the type of the expression. Errors if the
@@ -470,7 +470,7 @@ Expr operator%(Expr a, int b);
 /** Mods a constant integer by an expression. Coerces the type
  * of the integer to match the type of the expression. Errors if the
  * integer cannot be represented in the type of the expression. */
-Expr operator%(int a, const Expr &b);
+Expr operator%(int a, Expr b);
 
 /** Return a boolean expression that tests whether the first argument
  * is greater than the second, after doing any necessary type coercion
@@ -580,8 +580,8 @@ Expr operator&&(Expr a, Expr b);
 /** Logical and of an Expr and a bool. Either returns the Expr or an
  * Expr representing false, depending on the bool. */
 // @{
-Expr operator&&(const Expr &a, bool b);
-Expr operator&&(bool a, const Expr &b);
+Expr operator&&(Expr a, bool b);
+Expr operator&&(bool a, Expr b);
 // @}
 
 /** Returns the logical or of the two arguments */
@@ -590,8 +590,8 @@ Expr operator||(Expr a, Expr b);
 /** Logical or of an Expr and a bool. Either returns the Expr or an
  * Expr representing true, depending on the bool. */
 // @{
-Expr operator||(const Expr &a, bool b);
-Expr operator||(bool a, const Expr &b);
+Expr operator||(Expr a, bool b);
+Expr operator||(bool a, Expr b);
 // @}
 
 /** Returns the logical not the argument */
