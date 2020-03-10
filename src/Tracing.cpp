@@ -411,7 +411,7 @@ Stmt inject_tracing(Stmt s, const string &pipeline_name, bool trace_pipeline,
             strings.emplace_back((int)func_types.size());
             for (const auto &func_type : func_types) {
                 strings.push_back(space);
-                strings.emplace_back(func_type.code());
+                strings.emplace_back((int)func_type.code());
                 strings.push_back(space);
                 strings.emplace_back(func_type.bits());
                 strings.push_back(space);

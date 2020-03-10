@@ -541,7 +541,7 @@ void ReverseAccumulationVisitor::propagate_adjoints(
     for (const auto &it : called_buffers_or_param) {
         // Replace all the dots in the function names to make it legal.
         Func adjoint_func(replace_all(it.first, ".", "_") + "_d__");
-        vector<Var> args(it.second.dimension);;
+        vector<Var> args(it.second.dimension);
         adjoint_func(args) = make_zero(it.second.type);
         FuncKey func_key{it.first, -1};
         if (adjoint_funcs.find(func_key) != adjoint_funcs.end()) {
