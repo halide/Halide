@@ -1170,8 +1170,8 @@ private:
 
     // Compute the shift factor required to align iteration of
     // a function stage with its fused parent loop nest.
-    static void compute_shift_factor(const Function &f, const string &prefix, const Definition &def,
-                                     map<string, Expr> &bounds, map<string, Expr> &shifts) {
+    void compute_shift_factor(const Function &f, const string &prefix, const Definition &def,
+                              map<string, Expr> &bounds, map<string, Expr> &shifts) {
         if (!def.defined()) {
             return;
         }
@@ -1193,10 +1193,17 @@ private:
             internal_assert(iter != dims.end());
             start_fuse = (int)(iter - dims.begin());
         }
+
+        const auto &env_iter = env.find(fuse_level.func());
+        internal_assert(env_iter != env.end());
+        const auto &parent_func = env_iter->second;
+
+        const vector<Dim> &parent_dims = (fuse_level.stage_index() == 0) ? parent_func.definition().schedule().dims() : parent_func.update(fuse_level.stage_index() - 1).schedule().dims();
+        int fused_vars_num = dims.size() - start_fuse - 1;
+
         for (int i = start_fuse; i < (int)dims.size() - 1; ++i) {
             const string &var = dims[i].var;
             Expr shift_val;
-
             auto iter = align_strategy.begin();
             for (; iter != align_strategy.end(); ++iter) {
                 if (var_name_match(var, iter->first)) {
@@ -1211,17 +1218,19 @@ private:
             }
 
             string parent_prefix = fuse_level.func() + ".s" + std::to_string(fuse_level.stage_index()) + ".";
+            int parent_var_index = (i - start_fuse) + (int)parent_dims.size() - 1 - fused_vars_num;
+            string parent_var = parent_dims[parent_var_index].var;
 
             auto it_min = bounds.find(prefix + var + ".loop_min");
             auto it_max = bounds.find(prefix + var + ".loop_max");
             internal_assert((it_min != bounds.end()) && (it_max != bounds.end()));
 
             if (iter->second == LoopAlignStrategy::AlignStart) {
-                const auto &parent_min = bounds.find(parent_prefix + var + ".loop_min");
+                const auto &parent_min = bounds.find(parent_prefix + parent_var + ".loop_min");
                 internal_assert(parent_min != bounds.end());
                 shift_val = parent_min->second - it_min->second;
             } else {
-                const auto &parent_max = bounds.find(parent_prefix + var + ".loop_max");
+                const auto &parent_max = bounds.find(parent_prefix + parent_var + ".loop_max");
                 internal_assert(parent_max != bounds.end());
                 shift_val = parent_max->second - it_max->second;
             }
@@ -1449,6 +1458,9 @@ private:
         // The original bounds of the loop nests (without any loop-fusion)
         auto bounds = CollectBounds::collect_bounds(producer);
 
+        for (auto b : bounds) {
+            debug(0) << b.first << " " << b.second << "\n";
+        }
         // Compute the shift factors based on the alignment strategies
         // starting from the the parent (root loop) to the children. The root
         // loop bounds should remain unchanged.
