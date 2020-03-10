@@ -1,5 +1,6 @@
 
 #include "RDom.h"
+
 #include "Generator.h"
 #include "IREquality.h"
 #include "IROperator.h"
@@ -7,6 +8,7 @@
 #include "ImageParam.h"
 #include "Simplify.h"
 #include "Util.h"
+#include <utility>
 
 namespace Halide {
 
@@ -86,7 +88,7 @@ void RDom::init_vars(const string &name) {
     }
 }
 
-RDom::RDom(ReductionDomain d)
+RDom::RDom(const ReductionDomain &d)
     : dom(d) {
     if (d.defined()) {
         init_vars("");
@@ -125,30 +127,30 @@ public:
 };
 }  // namespace
 
-void RDom::initialize_from_ranges(const std::vector<std::pair<Expr, Expr>> &ranges, string name) {
+void RDom::initialize_from_region(const Region &region, string name) {
     if (name.empty()) {
         name = make_entity_name(this, "Halide:.*:RDom", 'r');
     }
 
     std::vector<ReductionVariable> vars;
-    for (size_t i = 0; i < ranges.size(); i++) {
+    for (size_t i = 0; i < region.size(); i++) {
         CheckRDomBounds checker;
-        user_assert(ranges[i].first.defined() && ranges[i].second.defined())
+        user_assert(region[i].min.defined() && region[i].extent.defined())
             << "The RDom " << name << " may not be constructed with undefined Exprs.\n";
-        ranges[i].first.accept(&checker);
-        ranges[i].second.accept(&checker);
+        region[i].min.accept(&checker);
+        region[i].extent.accept(&checker);
         user_assert(checker.offending_func.empty())
             << "The bounds of the RDom " << name
             << " in dimension " << i
             << " are:\n"
-            << "  " << ranges[i].first << " ... " << ranges[i].second << "\n"
+            << "  " << region[i].min << " ... " << region[i].extent << "\n"
             << "These depend on a call to the Func " << checker.offending_func << ".\n"
             << "The bounds of an RDom may not depend on a call to a Func.\n";
         user_assert(checker.offending_free_var.empty())
             << "The bounds of the RDom " << name
             << " in dimension " << i
             << " are:\n"
-            << "  " << ranges[i].first << " ... " << ranges[i].second << "\n"
+            << "  " << region[i].min << " ... " << region[i].extent << "\n"
             << "These depend on the variable " << checker.offending_free_var << ".\n"
             << "The bounds of an RDom may not depend on a free variable.\n";
 
@@ -172,8 +174,8 @@ void RDom::initialize_from_ranges(const std::vector<std::pair<Expr, Expr>> &rang
         }
         ReductionVariable rv;
         rv.var = name + "$" + rvar_uniquifier;
-        rv.min = cast<int32_t>(ranges[i].first);
-        rv.extent = cast<int32_t>(ranges[i].second);
+        rv.min = cast<int32_t>(region[i].min);
+        rv.extent = cast<int32_t>(region[i].extent);
         vars.push_back(rv);
     }
     dom = ReductionDomain(vars);
@@ -187,7 +189,7 @@ RDom::RDom(const Buffer<> &b) {
 }
 
 RDom::RDom(const OutputImageParam &p) {
-    std::string name = p.name();
+    const std::string &name = p.name();
     dom = make_dom_from_dimensions(p, name);
     init_vars(name);
 }
@@ -231,17 +233,17 @@ void RDom::where(Expr predicate) {
         << (*this) << " cannot be given a new predicate, because it has already"
         << " been used in the update definition of some function.\n";
     user_assert(dom.defined()) << "Error: Can't add predicate to undefined RDom.\n";
-    dom.where(predicate);
+    dom.where(std::move(predicate));
 }
 
 /** Emit an RVar in a human-readable form */
-std::ostream &operator<<(std::ostream &stream, RVar v) {
+std::ostream &operator<<(std::ostream &stream, const RVar &v) {
     stream << v.name() << "(" << v.min() << ", " << v.extent() << ")";
     return stream;
 }
 
 /** Emit an RDom in a human-readable form. */
-std::ostream &operator<<(std::ostream &stream, RDom dom) {
+std::ostream &operator<<(std::ostream &stream, const RDom &dom) {
     stream << "RDom(\n";
     for (int i = 0; i < dom.dimensions(); i++) {
         stream << "  " << dom[i] << "\n";

@@ -8,7 +8,7 @@ int main(int argc, char **argv) {
 
     g(x) = x;
     g(x) += 10;
-    h(x) = x*x;
+    h(x) = x * x;
     f(x) = select(false, g(x + 1), h(x + 1));
 
     f.set_estimates({{0, 256}});

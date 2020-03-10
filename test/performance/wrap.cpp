@@ -36,26 +36,26 @@ Func build(bool use_shared) {
     const int stages = 10;
     Func f[stages];
     for (int i = 0; i < stages; i++) {
-        Expr prev = (i == 0) ? Expr(0) : Expr(f[i-1](x, y));
+        Expr prev = (i == 0) ? Expr(0) : Expr(f[i - 1](x, y));
         Expr stencil = 0;
         for (int dy = -1; dy <= 1; dy++) {
             for (int dx = -1; dx <= 1; dx++) {
-                stencil += staged(select(prev > 0, x, x+dx),
-                                  select(prev > 0, y, y+dy));
+                stencil += staged(select(prev > 0, x, x + dx),
+                                  select(prev > 0, y, y + dy));
             }
         }
         if (i == 0) {
             f[i](x, y) = stencil;
         } else {
-            f[i](x, y) = f[i-1](x, y) + stencil;
+            f[i](x, y) = f[i - 1](x, y) + stencil;
         }
     }
 
-    Func final = f[stages-1];
+    Func final = f[stages - 1];
 
     Var xo, yo, xi, yi;
     final.compute_root().gpu_tile(x, y, xo, yo, xi, yi, 8, 8);
-    for (int i = 0; i < stages-1; i++) {
+    for (int i = 0; i < stages - 1; i++) {
         f[i].compute_at(final, xo).gpu_threads(x, y);
     }
 
@@ -69,7 +69,6 @@ Func build(bool use_shared) {
     return final;
 }
 
-
 // Same schedule as in 'build(true)', but with using a wrapper instead of a dummy Func.
 Func build_wrap() {
     Func host;
@@ -80,26 +79,26 @@ Func build_wrap() {
     const int stages = 10;
     Func f[stages];
     for (int i = 0; i < stages; i++) {
-        Expr prev = (i == 0) ? Expr(0) : Expr(f[i-1](x, y));
+        Expr prev = (i == 0) ? Expr(0) : Expr(f[i - 1](x, y));
         Expr stencil = 0;
         for (int dy = -1; dy <= 1; dy++) {
             for (int dx = -1; dx <= 1; dx++) {
-                stencil += host(select(prev > 0, x, x+dx),
-                                  select(prev > 0, y, y+dy));
+                stencil += host(select(prev > 0, x, x + dx),
+                                select(prev > 0, y, y + dy));
             }
         }
         if (i == 0) {
             f[i](x, y) = stencil;
         } else {
-            f[i](x, y) = f[i-1](x, y) + stencil;
+            f[i](x, y) = f[i - 1](x, y) + stencil;
         }
     }
 
-    Func final = f[stages-1];
+    Func final = f[stages - 1];
 
     Var xo, yo, xi, yi;
     final.compute_root().gpu_tile(x, y, xo, yo, xi, yi, 8, 8);
-    for (int i = 0; i < stages-1; i++) {
+    for (int i = 0; i < stages - 1; i++) {
         f[i].compute_at(final, xo).gpu_threads(x, y);
     }
 
@@ -130,19 +129,19 @@ int main(int argc, char **argv) {
     Buffer<int> out3(1000, 1000);
 
     double shared_time = benchmark([&]() {
-            use_shared.realize(out1);
-            out1.device_sync();
-        });
+        use_shared.realize(out1);
+        out1.device_sync();
+    });
 
     double l1_time = benchmark([&]() {
-            use_l1.realize(out2);
-            out2.device_sync();
-        });
+        use_l1.realize(out2);
+        out2.device_sync();
+    });
 
     double wrap_time = benchmark([&]() {
-            use_wrap_for_shared.realize(out3);
-            out3.device_sync();
-        });
+        use_wrap_for_shared.realize(out3);
+        out3.device_sync();
+    });
 
     out1.copy_to_host();
     out2.copy_to_host();

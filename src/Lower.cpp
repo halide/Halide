@@ -68,7 +68,6 @@
 #include "VaryingAttributes.h"
 #include "VectorizeLoops.h"
 #include "WrapCalls.h"
-#include "WrapExternStages.h"
 
 namespace Halide {
 namespace Internal {
@@ -157,10 +156,17 @@ Module lower(const vector<Function> &output_funcs,
     debug(1) << "Computing bounds of each function's value\n";
     FuncValueBounds func_bounds = compute_function_value_bounds(order, env);
 
+    bool will_inject_host_copies =
+        (t.has_gpu_feature() ||
+         t.has_feature(Target::OpenGLCompute) ||
+         t.has_feature(Target::OpenGL) ||
+         t.has_feature(Target::HexagonDma) ||
+         (t.arch != Target::Hexagon && (t.features_any_of({Target::HVX_64, Target::HVX_128}))));
+
     // The checks will be in terms of the symbols defined by bounds
     // inference.
     debug(1) << "Adding checks for images\n";
-    s = add_image_checks(s, outputs, t, order, env, func_bounds);
+    s = add_image_checks(s, outputs, t, order, env, func_bounds, will_inject_host_copies);
     debug(2) << "Lowering after injecting image checks:\n"
              << s << '\n';
 
@@ -275,11 +281,7 @@ Module lower(const vector<Function> &output_funcs,
         debug(1) << "Skipping rewriting memoized allocations...\n";
     }
 
-    if (t.has_gpu_feature() ||
-        t.has_feature(Target::OpenGLCompute) ||
-        t.has_feature(Target::OpenGL) ||
-        t.has_feature(Target::HexagonDma) ||
-        (t.arch != Target::Hexagon && (t.features_any_of({Target::HVX_64, Target::HVX_128})))) {
+    if (will_inject_host_copies) {
         debug(1) << "Selecting a GPU API for GPU loops...\n";
         s = select_gpu_api(s, t);
         debug(2) << "Lowering after selecting a GPU API:\n"
@@ -518,13 +520,6 @@ Module lower(const vector<Function> &output_funcs,
     }
 
     result_module.append(main_func);
-
-    // Append a wrapper for this pipeline that accepts old buffer_ts
-    // and upgrades them. It will use the same name, so it will
-    // require C++ linkage. We don't need it when jitting.
-    if (!t.has_feature(Target::JIT)) {
-        add_legacy_wrapper(result_module, main_func);
-    }
 
     return result_module;
 }

@@ -273,13 +273,13 @@ Simplify::ScopedFact::~ScopedFact() {
     }
 }
 
-Expr simplify(Expr e, bool remove_dead_lets,
+Expr simplify(const Expr &e, bool remove_dead_lets,
               const Scope<Interval> &bounds,
               const Scope<ModulusRemainder> &alignment) {
     return Simplify(remove_dead_lets, &bounds, &alignment).mutate(e, nullptr);
 }
 
-Stmt simplify(Stmt s, bool remove_dead_lets,
+Stmt simplify(const Stmt &s, bool remove_dead_lets,
               const Scope<Interval> &bounds,
               const Scope<ModulusRemainder> &alignment) {
     return Simplify(remove_dead_lets, &bounds, &alignment).mutate(s);
@@ -293,7 +293,7 @@ public:
     }
 };
 
-Stmt simplify_exprs(Stmt s) {
+Stmt simplify_exprs(const Stmt &s) {
     return SimplifyExprs().mutate(s);
 }
 

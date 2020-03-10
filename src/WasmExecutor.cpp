@@ -1,6 +1,8 @@
 #include "WasmExecutor.h"
 
+#include "CodeGen_WebAssembly.h"
 #include "Error.h"
+#include "Float16.h"
 #include "Func.h"
 #include "ImageParam.h"
 #include "JITModule.h"
@@ -14,10 +16,13 @@
 #include <sstream>
 #include <vector>
 
+// clang-format off
+// These includes are order-dependent, don't let clang-format reorder them
 #ifdef WITH_V8
 #include "v8.h"
 #include "libplatform/libplatform.h"
 #endif
+// clang-format on
 
 // ---------------------
 
@@ -247,8 +252,8 @@ using JITExternMap = std::map<std::string, Halide::JITExtern>;
 
 #define V8_API_VERSION ((V8_MAJOR_VERSION * 10) + V8_MINOR_VERSION)
 
-static_assert(V8_API_VERSION >= 73,
-              "Halide requires V8 v7.3 or later when compiling WITH_V8.");
+static_assert(V8_API_VERSION >= 75,
+              "Halide requires V8 v7.5 or later when compiling WITH_V8.");
 
 namespace Halide {
 namespace Internal {
@@ -1010,6 +1015,28 @@ void wasm_jit___cxa_atexit_callback(const v8::FunctionCallbackInfo<v8::Value> &a
     // nothing
 }
 
+void wasm_jit___extendhfsf2_callback(const v8::FunctionCallbackInfo<v8::Value> &args) {
+    Isolate *isolate = args.GetIsolate();
+    Local<Context> context = isolate->GetCurrentContext();
+    HandleScope scope(isolate);
+
+    const uint16_t in = args[0]->NumberValue(context).ToChecked();
+    const float out = (float)float16_t::make_from_bits(in);
+
+    args.GetReturnValue().Set(wrap_scalar(context, out));
+}
+
+void wasm_jit___truncsfhf2_callback(const v8::FunctionCallbackInfo<v8::Value> &args) {
+    Isolate *isolate = args.GetIsolate();
+    Local<Context> context = isolate->GetCurrentContext();
+    HandleScope scope(isolate);
+
+    const float in = args[0]->NumberValue(context).ToChecked();
+    const uint16_t out = float16_t(in).to_bits();
+
+    args.GetReturnValue().Set(wrap_scalar(context, out));
+}
+
 template<typename T, T some_func(T)>
 void wasm_jit_posix_math_callback(const v8::FunctionCallbackInfo<v8::Value> &args) {
     Isolate *isolate = args.GetIsolate();
@@ -1176,7 +1203,22 @@ std::vector<char> compile_to_wasm(const Module &module, const std::string &fn_na
     std::lock_guard<std::mutex> lock(link_lock);
 
     llvm::LLVMContext context;
-    std::unique_ptr<llvm::Module> fn_module(compile_module_to_llvm_module(module, context));
+    std::unique_ptr<llvm::Module> fn_module;
+
+    // Default wasm stack size is ~64k, but schedules with lots of
+    // alloca usage (heavily inlined, or tracing enabled) can blow thru
+    // this, which crashes in amusing ways, so ask for extra stack space
+    // for the alloca usage.
+    size_t stack_size = 65536;
+    {
+        std::unique_ptr<CodeGen_WebAssembly> cg(new CodeGen_WebAssembly(module.target()));
+        cg->set_context(context);
+        fn_module = cg->compile(module);
+        stack_size += cg->get_requested_alloca_total();
+    }
+
+    stack_size = align_up(stack_size);
+    wdebug(0) << "Requesting stack size of " << stack_size << "\n";
 
     std::unique_ptr<llvm::Module> llvm_module =
         link_with_wasm_jit_runtime(&context, module.target(), std::move(fn_module));
@@ -1205,6 +1247,7 @@ std::vector<char> compile_to_wasm(const Module &module, const std::string &fn_na
         "--export=__data_end",
         "--export=__heap_base",
         "--allow-undefined",
+        "-zstack-size=" + std::to_string(stack_size),
         obj_file.pathname(),
         "--entry=" + fn_name,
         "-o",
@@ -1215,12 +1258,25 @@ std::vector<char> compile_to_wasm(const Module &module, const std::string &fn_na
     for (int i = 0; i < c; ++i)
         lld_args[i] = lld_arg_strs[i].c_str();
 
+#if LLVM_VERSION >= 110
+    if (!lld::wasm::link(lld_args, /*CanExitEarly*/ false, llvm::outs(), llvm::errs())) {
+        internal_error << "lld::wasm::link failed\n";
+    }
+#elif LLVM_VERSION >= 100
+    std::string lld_errs_string;
+    llvm::raw_string_ostream lld_errs(lld_errs_string);
+
+    if (!lld::wasm::link(lld_args, /*CanExitEarly*/ false, llvm::outs(), llvm::errs())) {
+        internal_error << "lld::wasm::link failed: (" << lld_errs.str() << ")\n";
+    }
+#else
     std::string lld_errs_string;
     llvm::raw_string_ostream lld_errs(lld_errs_string);
 
     if (!lld::wasm::link(lld_args, /*CanExitEarly*/ false, lld_errs)) {
         internal_error << "lld::wasm::link failed: (" << lld_errs.str() << ")\n";
     }
+#endif
 
 #if WASM_DEBUG_LEVEL
     wasm_output.detach();
@@ -1282,15 +1338,6 @@ WasmModuleContents::WasmModuleContents(
 
     wdebug(0) << "Compiling wasm function " << fn_name << "\n";
 
-#if V8_API_VERSION < 75
-    // V8 v7.4 works fine for non-SIMD work, but has various SIMD-related issues
-    // that will make some of our self-tests fail (and thus probably cause user
-    // code to be flaky as well); issue a warning if someone tries to test in this way.
-    if (target.has_feature(Target::WasmSimd128)) {
-        user_warning << "Versions of V8 prior to v7.5 may not work correctly with wasm_simd128 enabled.\n";
-    }
-#endif
-
 #ifdef WITH_V8
     static std::once_flag init_v8_once;
     std::call_once(init_v8_once, []() {
@@ -1351,9 +1398,6 @@ WasmModuleContents::WasmModuleContents(
 
     std::vector<char> final_wasm = compile_to_wasm(module, fn_name);
 
-#if V8_API_VERSION < 74
-    using WasmModuleObject = WasmCompiledModule;
-#endif
     MaybeLocal<WasmModuleObject> maybe_compiled = WasmModuleObject::DeserializeOrCompile(isolate,
                                                                                          /* serialized_module */ {nullptr, 0},
                                                                                          /* wire_bytes */ {(const uint8_t *)final_wasm.data(), final_wasm.size()});
@@ -1404,6 +1448,8 @@ WasmModuleContents::WasmModuleContents(
     ADD_CALLBACK(memset)
     ADD_CALLBACK(strlen)
     ADD_CALLBACK(write)
+    ADD_CALLBACK(__extendhfsf2)
+    ADD_CALLBACK(__truncsfhf2)
 
 #undef ADD_CALLBACK
 

@@ -1,6 +1,7 @@
 #include <algorithm>
 #include <iostream>
 #include <string.h>
+#include <utility>
 
 #ifdef _MSC_VER
 #include <intrin.h>
@@ -48,13 +49,13 @@ Func::Func()
     : func(make_entity_name(this, "Halide:.*:Func", 'f')) {
 }
 
-Func::Func(Expr e)
+Func::Func(const Expr &e)
     : func(make_entity_name(this, "Halide:.*:Func", 'f')) {
     (*this)(_) = e;
 }
 
 Func::Func(Function f)
-    : func(f) {
+    : func(std::move(f)) {
 }
 
 const string &Func::name() const {
@@ -168,11 +169,7 @@ void Func::define_extern(const std::string &function_name,
                          const std::vector<Type> &types,
                          const std::vector<Var> &arguments,
                          NameMangling mangling, DeviceAPI device_api) {
-    vector<string> dim_names(arguments.size());
-    for (size_t i = 0; i < arguments.size(); i++) {
-        dim_names[i] = arguments[i].name();
-    }
-    func.define_extern(function_name, args, types, dim_names, mangling,
+    func.define_extern(function_name, args, types, arguments, mangling,
                        device_api);
 }
 
@@ -268,7 +265,7 @@ std::pair<int, int> Func::add_implicit_vars(vector<Expr> &args) const {
 }
 
 namespace {
-bool var_name_match(string candidate, string var) {
+bool var_name_match(const string &candidate, const string &var) {
     internal_assert(var.find('.') == string::npos)
         << "var_name_match expects unqualified names for the second argument. "
         << "Name passed: " << var << "\n";
@@ -282,7 +279,7 @@ std::string Stage::name() const {
     return stage_name;
 }
 
-void Stage::set_dim_type(VarOrRVar var, ForType t) {
+void Stage::set_dim_type(const VarOrRVar &var, ForType t) {
     bool found = false;
     vector<Dim> &dims = definition.schedule().dims();
     for (size_t i = 0; i < dims.size(); i++) {
@@ -348,7 +345,7 @@ void Stage::set_dim_type(VarOrRVar var, ForType t) {
     }
 }
 
-void Stage::set_dim_device_api(VarOrRVar var, DeviceAPI device_api) {
+void Stage::set_dim_device_api(const VarOrRVar &var, DeviceAPI device_api) {
     bool found = false;
     vector<Dim> &dims = definition.schedule().dims();
     for (size_t i = 0; i < dims.size(); i++) {
@@ -422,7 +419,7 @@ Expr substitute_self_reference(Expr val, const string &func, const Function &sub
 }
 
 // Substitute the occurrence of 'name' in 'exprs' with 'value'.
-void substitute_var_in_exprs(const string &name, Expr value, vector<Expr> &exprs) {
+void substitute_var_in_exprs(const string &name, const Expr &value, vector<Expr> &exprs) {
     for (auto &expr : exprs) {
         expr = substitute(name, value, expr);
     }
@@ -609,7 +606,7 @@ bool apply_split_directive(const Split &s, vector<ReductionVariable> &rvars,
 
 }  // anonymous namespace
 
-Func Stage::rfactor(RVar r, Var v) {
+Func Stage::rfactor(const RVar &r, const Var &v) {
     return rfactor({{r, v}});
 }
 
@@ -912,7 +909,7 @@ Func Stage::rfactor(vector<pair<RVar, Var>> preserved) {
     return intm;
 }
 
-void Stage::split(const string &old, const string &outer, const string &inner, Expr factor, bool exact, TailStrategy tail) {
+void Stage::split(const string &old, const string &outer, const string &inner, const Expr &factor, bool exact, TailStrategy tail) {
     debug(4) << "In schedule for " << name() << ", split " << old << " into "
              << outer << " and " << inner << " with factor of " << factor << "\n";
     vector<Dim> &dims = definition.schedule().dims();
@@ -1063,7 +1060,7 @@ void Stage::split(const string &old, const string &outer, const string &inner, E
     definition.schedule().splits().push_back(split);
 }
 
-Stage &Stage::split(VarOrRVar old, VarOrRVar outer, VarOrRVar inner, Expr factor, TailStrategy tail) {
+Stage &Stage::split(const VarOrRVar &old, const VarOrRVar &outer, const VarOrRVar &inner, const Expr &factor, TailStrategy tail) {
     if (old.is_rvar) {
         user_assert(outer.is_rvar) << "Can't split RVar " << old.name() << " into Var " << outer.name() << "\n";
         user_assert(inner.is_rvar) << "Can't split RVar " << old.name() << " into Var " << inner.name() << "\n";
@@ -1075,7 +1072,7 @@ Stage &Stage::split(VarOrRVar old, VarOrRVar outer, VarOrRVar inner, Expr factor
     return *this;
 }
 
-Stage &Stage::fuse(VarOrRVar inner, VarOrRVar outer, VarOrRVar fused) {
+Stage &Stage::fuse(const VarOrRVar &inner, const VarOrRVar &outer, const VarOrRVar &fused) {
     if (inner.is_rvar) {
         user_assert(outer.is_rvar) << "Can't fuse RVar " << inner.name()
                                    << " with Var " << outer.name() << "\n";
@@ -1160,7 +1157,7 @@ protected:
 };
 }  // namespace Internal
 
-Stage Stage::specialize(Expr condition) {
+Stage Stage::specialize(const Expr &condition) {
     user_assert(condition.type().is_bool()) << "Argument passed to specialize must be of type bool\n";
 
     // The condition may not depend on Vars or RVars
@@ -1199,7 +1196,7 @@ void Stage::specialize_fail(const std::string &message) {
     s.failure_message = message;
 }
 
-Stage &Stage::purify(VarOrRVar old_var, VarOrRVar new_var) {
+Stage &Stage::purify(const VarOrRVar &old_var, const VarOrRVar &new_var) {
     user_assert(old_var.is_rvar && !new_var.is_rvar)
         << "In schedule for " << name()
         << ", can't rename " << (old_var.is_rvar ? "RVar " : "Var ") << old_var.name()
@@ -1334,7 +1331,7 @@ void Stage::remove(const string &var) {
     splits.swap(temp);
 }
 
-Stage &Stage::rename(VarOrRVar old_var, VarOrRVar new_var) {
+Stage &Stage::rename(const VarOrRVar &old_var, const VarOrRVar &new_var) {
     if (old_var.is_rvar) {
         user_assert(new_var.is_rvar)
             << "In schedule for " << name()
@@ -1434,27 +1431,27 @@ Stage &Stage::atomic(bool override_associativity_test) {
     return *this;
 }
 
-Stage &Stage::serial(VarOrRVar var) {
+Stage &Stage::serial(const VarOrRVar &var) {
     set_dim_type(var, ForType::Serial);
     return *this;
 }
 
-Stage &Stage::parallel(VarOrRVar var) {
+Stage &Stage::parallel(const VarOrRVar &var) {
     set_dim_type(var, ForType::Parallel);
     return *this;
 }
 
-Stage &Stage::vectorize(VarOrRVar var) {
+Stage &Stage::vectorize(const VarOrRVar &var) {
     set_dim_type(var, ForType::Vectorized);
     return *this;
 }
 
-Stage &Stage::unroll(VarOrRVar var) {
+Stage &Stage::unroll(const VarOrRVar &var) {
     set_dim_type(var, ForType::Unrolled);
     return *this;
 }
 
-Stage &Stage::parallel(VarOrRVar var, Expr factor, TailStrategy tail) {
+Stage &Stage::parallel(const VarOrRVar &var, const Expr &factor, TailStrategy tail) {
     if (var.is_rvar) {
         RVar tmp;
         split(var.rvar, var.rvar, tmp, factor, tail);
@@ -1466,7 +1463,7 @@ Stage &Stage::parallel(VarOrRVar var, Expr factor, TailStrategy tail) {
     return *this;
 }
 
-Stage &Stage::vectorize(VarOrRVar var, Expr factor, TailStrategy tail) {
+Stage &Stage::vectorize(const VarOrRVar &var, const Expr &factor, TailStrategy tail) {
     if (var.is_rvar) {
         RVar tmp;
         split(var.rvar, var.rvar, tmp, factor, tail);
@@ -1479,7 +1476,7 @@ Stage &Stage::vectorize(VarOrRVar var, Expr factor, TailStrategy tail) {
     return *this;
 }
 
-Stage &Stage::unroll(VarOrRVar var, Expr factor, TailStrategy tail) {
+Stage &Stage::unroll(const VarOrRVar &var, const Expr &factor, TailStrategy tail) {
     if (var.is_rvar) {
         RVar tmp;
         split(var.rvar, var.rvar, tmp, factor, tail);
@@ -1493,10 +1490,10 @@ Stage &Stage::unroll(VarOrRVar var, Expr factor, TailStrategy tail) {
     return *this;
 }
 
-Stage &Stage::tile(VarOrRVar x, VarOrRVar y,
-                   VarOrRVar xo, VarOrRVar yo,
-                   VarOrRVar xi, VarOrRVar yi,
-                   Expr xfactor, Expr yfactor,
+Stage &Stage::tile(const VarOrRVar &x, const VarOrRVar &y,
+                   const VarOrRVar &xo, const VarOrRVar &yo,
+                   const VarOrRVar &xi, const VarOrRVar &yi,
+                   const Expr &xfactor, const Expr &yfactor,
                    TailStrategy tail) {
     split(x, xo, xi, xfactor, tail);
     split(y, yo, yi, yfactor, tail);
@@ -1504,9 +1501,9 @@ Stage &Stage::tile(VarOrRVar x, VarOrRVar y,
     return *this;
 }
 
-Stage &Stage::tile(VarOrRVar x, VarOrRVar y,
-                   VarOrRVar xi, VarOrRVar yi,
-                   Expr xfactor, Expr yfactor,
+Stage &Stage::tile(const VarOrRVar &x, const VarOrRVar &y,
+                   const VarOrRVar &xi, const VarOrRVar &yi,
+                   const Expr &xfactor, const Expr &yfactor,
                    TailStrategy tail) {
     split(x, x, xi, xfactor, tail);
     split(y, y, yi, yfactor, tail);
@@ -1576,13 +1573,13 @@ Stage &Stage::reorder(const std::vector<VarOrRVar> &vars) {
     return *this;
 }
 
-Stage &Stage::gpu_threads(VarOrRVar tx, DeviceAPI device_api) {
+Stage &Stage::gpu_threads(const VarOrRVar &tx, DeviceAPI device_api) {
     set_dim_device_api(tx, device_api);
     set_dim_type(tx, ForType::GPUThread);
     return *this;
 }
 
-Stage &Stage::gpu_threads(VarOrRVar tx, VarOrRVar ty, DeviceAPI device_api) {
+Stage &Stage::gpu_threads(const VarOrRVar &tx, const VarOrRVar &ty, DeviceAPI device_api) {
     set_dim_device_api(tx, device_api);
     set_dim_device_api(ty, device_api);
     set_dim_type(tx, ForType::GPUThread);
@@ -1590,7 +1587,7 @@ Stage &Stage::gpu_threads(VarOrRVar tx, VarOrRVar ty, DeviceAPI device_api) {
     return *this;
 }
 
-Stage &Stage::gpu_threads(VarOrRVar tx, VarOrRVar ty, VarOrRVar tz, DeviceAPI device_api) {
+Stage &Stage::gpu_threads(const VarOrRVar &tx, const VarOrRVar &ty, const VarOrRVar &tz, DeviceAPI device_api) {
     set_dim_device_api(tx, device_api);
     set_dim_device_api(ty, device_api);
     set_dim_device_api(tz, device_api);
@@ -1600,19 +1597,19 @@ Stage &Stage::gpu_threads(VarOrRVar tx, VarOrRVar ty, VarOrRVar tz, DeviceAPI de
     return *this;
 }
 
-Stage &Stage::gpu_lanes(VarOrRVar tx, DeviceAPI device_api) {
+Stage &Stage::gpu_lanes(const VarOrRVar &tx, DeviceAPI device_api) {
     set_dim_device_api(tx, device_api);
     set_dim_type(tx, ForType::GPULane);
     return *this;
 }
 
-Stage &Stage::gpu_blocks(VarOrRVar bx, DeviceAPI device_api) {
+Stage &Stage::gpu_blocks(const VarOrRVar &bx, DeviceAPI device_api) {
     set_dim_device_api(bx, device_api);
     set_dim_type(bx, ForType::GPUBlock);
     return *this;
 }
 
-Stage &Stage::gpu_blocks(VarOrRVar bx, VarOrRVar by, DeviceAPI device_api) {
+Stage &Stage::gpu_blocks(const VarOrRVar &bx, const VarOrRVar &by, DeviceAPI device_api) {
     set_dim_device_api(bx, device_api);
     set_dim_device_api(by, device_api);
     set_dim_type(bx, ForType::GPUBlock);
@@ -1620,7 +1617,7 @@ Stage &Stage::gpu_blocks(VarOrRVar bx, VarOrRVar by, DeviceAPI device_api) {
     return *this;
 }
 
-Stage &Stage::gpu_blocks(VarOrRVar bx, VarOrRVar by, VarOrRVar bz, DeviceAPI device_api) {
+Stage &Stage::gpu_blocks(const VarOrRVar &bx, const VarOrRVar &by, const VarOrRVar &bz, DeviceAPI device_api) {
     set_dim_device_api(bx, device_api);
     set_dim_device_api(by, device_api);
     set_dim_device_api(bz, device_api);
@@ -1638,22 +1635,22 @@ Stage &Stage::gpu_single_thread(DeviceAPI device_api) {
     return *this;
 }
 
-Stage &Stage::gpu(VarOrRVar bx, VarOrRVar tx, DeviceAPI device_api) {
+Stage &Stage::gpu(const VarOrRVar &bx, const VarOrRVar &tx, DeviceAPI device_api) {
     return gpu_blocks(bx).gpu_threads(tx);
 }
 
-Stage &Stage::gpu(VarOrRVar bx, VarOrRVar by,
-                  VarOrRVar tx, VarOrRVar ty, DeviceAPI device_api) {
+Stage &Stage::gpu(const VarOrRVar &bx, const VarOrRVar &by,
+                  const VarOrRVar &tx, const VarOrRVar &ty, DeviceAPI device_api) {
     return gpu_blocks(bx, by).gpu_threads(tx, ty);
 }
 
-Stage &Stage::gpu(VarOrRVar bx, VarOrRVar by, VarOrRVar bz,
-                  VarOrRVar tx, VarOrRVar ty, VarOrRVar tz,
+Stage &Stage::gpu(const VarOrRVar &bx, const VarOrRVar &by, const VarOrRVar &bz,
+                  const VarOrRVar &tx, const VarOrRVar &ty, const VarOrRVar &tz,
                   DeviceAPI device_api) {
     return gpu_blocks(bx, by, bz).gpu_threads(tx, ty, tz);
 }
 
-Stage &Stage::gpu_tile(VarOrRVar x, VarOrRVar bx, VarOrRVar tx, Expr x_size,
+Stage &Stage::gpu_tile(const VarOrRVar &x, const VarOrRVar &bx, const VarOrRVar &tx, const Expr &x_size,
                        TailStrategy tail, DeviceAPI device_api) {
     split(x, bx, tx, x_size, tail);
     set_dim_device_api(bx, device_api);
@@ -1663,7 +1660,7 @@ Stage &Stage::gpu_tile(VarOrRVar x, VarOrRVar bx, VarOrRVar tx, Expr x_size,
     return *this;
 }
 
-Stage &Stage::gpu_tile(VarOrRVar x, VarOrRVar tx, Expr x_size,
+Stage &Stage::gpu_tile(const VarOrRVar &x, const VarOrRVar &tx, const Expr &x_size,
                        TailStrategy tail, DeviceAPI device_api) {
     split(x, x, tx, x_size, tail);
     set_dim_device_api(x, device_api);
@@ -1673,10 +1670,10 @@ Stage &Stage::gpu_tile(VarOrRVar x, VarOrRVar tx, Expr x_size,
     return *this;
 }
 
-Stage &Stage::gpu_tile(VarOrRVar x, VarOrRVar y,
-                       VarOrRVar bx, VarOrRVar by,
-                       VarOrRVar tx, VarOrRVar ty,
-                       Expr x_size, Expr y_size,
+Stage &Stage::gpu_tile(const VarOrRVar &x, const VarOrRVar &y,
+                       const VarOrRVar &bx, const VarOrRVar &by,
+                       const VarOrRVar &tx, const VarOrRVar &ty,
+                       const Expr &x_size, const Expr &y_size,
                        TailStrategy tail,
                        DeviceAPI device_api) {
     tile(x, y, bx, by, tx, ty, x_size, y_size, tail);
@@ -1691,18 +1688,18 @@ Stage &Stage::gpu_tile(VarOrRVar x, VarOrRVar y,
     return *this;
 }
 
-Stage &Stage::gpu_tile(VarOrRVar x, VarOrRVar y,
-                       VarOrRVar tx, VarOrRVar ty,
-                       Expr x_size, Expr y_size,
+Stage &Stage::gpu_tile(const VarOrRVar &x, const VarOrRVar &y,
+                       const VarOrRVar &tx, const VarOrRVar &ty,
+                       const Expr &x_size, const Expr &y_size,
                        TailStrategy tail,
                        DeviceAPI device_api) {
     return gpu_tile(x, y, x, y, tx, ty, x_size, y_size, tail, device_api);
 }
 
-Stage &Stage::gpu_tile(VarOrRVar x, VarOrRVar y, VarOrRVar z,
-                       VarOrRVar bx, VarOrRVar by, VarOrRVar bz,
-                       VarOrRVar tx, VarOrRVar ty, VarOrRVar tz,
-                       Expr x_size, Expr y_size, Expr z_size,
+Stage &Stage::gpu_tile(const VarOrRVar &x, const VarOrRVar &y, const VarOrRVar &z,
+                       const VarOrRVar &bx, const VarOrRVar &by, const VarOrRVar &bz,
+                       const VarOrRVar &tx, const VarOrRVar &ty, const VarOrRVar &tz,
+                       const Expr &x_size, const Expr &y_size, const Expr &z_size,
                        TailStrategy tail,
                        DeviceAPI device_api) {
     split(x, bx, tx, x_size, tail);
@@ -1732,27 +1729,27 @@ Stage &Stage::gpu_tile(VarOrRVar x, VarOrRVar y, VarOrRVar z,
     return *this;
 }
 
-Stage &Stage::gpu_tile(VarOrRVar x, VarOrRVar y, VarOrRVar z,
-                       VarOrRVar tx, VarOrRVar ty, VarOrRVar tz,
-                       Expr x_size, Expr y_size, Expr z_size,
+Stage &Stage::gpu_tile(const VarOrRVar &x, const VarOrRVar &y, const VarOrRVar &z,
+                       const VarOrRVar &tx, const VarOrRVar &ty, const VarOrRVar &tz,
+                       const Expr &x_size, const Expr &y_size, const Expr &z_size,
                        TailStrategy tail,
                        DeviceAPI device_api) {
     return gpu_tile(x, y, z, x, y, z, tx, ty, tz, x_size, y_size, z_size, tail, device_api);
 }
 
-Stage &Stage::hexagon(VarOrRVar x) {
+Stage &Stage::hexagon(const VarOrRVar &x) {
     set_dim_device_api(x, DeviceAPI::Hexagon);
     return *this;
 }
 
-Stage &Stage::prefetch(const Func &f, VarOrRVar var, Expr offset, PrefetchBoundStrategy strategy) {
-    PrefetchDirective prefetch = {f.name(), var.name(), offset, strategy, Parameter()};
+Stage &Stage::prefetch(const Func &f, const VarOrRVar &var, Expr offset, PrefetchBoundStrategy strategy) {
+    PrefetchDirective prefetch = {f.name(), var.name(), std::move(offset), strategy, Parameter()};
     definition.schedule().prefetches().push_back(prefetch);
     return *this;
 }
 
-Stage &Stage::prefetch(const Internal::Parameter &param, VarOrRVar var, Expr offset, PrefetchBoundStrategy strategy) {
-    PrefetchDirective prefetch = {param.name(), var.name(), offset, strategy, param};
+Stage &Stage::prefetch(const Internal::Parameter &param, const VarOrRVar &var, Expr offset, PrefetchBoundStrategy strategy) {
+    PrefetchDirective prefetch = {param.name(), var.name(), std::move(offset), strategy, param};
     definition.schedule().prefetches().push_back(prefetch);
     return *this;
 }
@@ -1789,7 +1786,7 @@ Stage &Stage::compute_with(LoopLevel loop_level, const vector<pair<VarOrRVar, Lo
     for (const auto &iter : align) {
         align_str.emplace(iter.first.name(), iter.second);
     }
-    return compute_with(loop_level, align_str);
+    return compute_with(std::move(loop_level), align_str);
 }
 
 Stage &Stage::compute_with(LoopLevel loop_level, LoopAlignStrategy align) {
@@ -1797,11 +1794,11 @@ Stage &Stage::compute_with(LoopLevel loop_level, LoopAlignStrategy align) {
     return compute_with(loop_level, align_str);
 }
 
-Stage &Stage::compute_with(Stage s, VarOrRVar var, const vector<pair<VarOrRVar, LoopAlignStrategy>> &align) {
+Stage &Stage::compute_with(const Stage &s, const VarOrRVar &var, const vector<pair<VarOrRVar, LoopAlignStrategy>> &align) {
     return compute_with(LoopLevel(s.function, var, s.stage_index), align);
 }
 
-Stage &Stage::compute_with(Stage s, VarOrRVar var, LoopAlignStrategy align) {
+Stage &Stage::compute_with(const Stage &s, const VarOrRVar &var, LoopAlignStrategy align) {
     return compute_with(LoopLevel(s.function, var, s.stage_index), align);
 }
 
@@ -1848,17 +1845,22 @@ void validate_wrapper(const string &name, const map<string, FunctionPtr> &wrappe
     }
 }
 
-Func create_in_wrapper(Function wrapped_fn, string wrapper_name) {
+Func create_in_wrapper(Function wrapped_fn, const string &wrapper_name) {
     Func wrapper(wrapped_fn.new_function_in_same_group(wrapper_name));
     vector<Var> args = Func(wrapped_fn).args();
     wrapper(args) = Func(wrapped_fn)(args);
     return wrapper;
 }
 
-Func create_clone_wrapper(Function wrapped_fn, string wrapper_name) {
+Func create_clone_wrapper(Function wrapped_fn, const string &wrapper_name) {
     Func wrapper(wrapped_fn.new_function_in_same_group(wrapper_name));
-    std::map<FunctionPtr, FunctionPtr> empty;
-    wrapped_fn.deep_copy(wrapper.name(), wrapper.function().get_contents(), empty);
+    std::map<FunctionPtr, FunctionPtr> remapping;
+    wrapped_fn.deep_copy(wrapper.name(), wrapper.function().get_contents(), remapping);
+    // Fix up any self-references in the clone.
+    FunctionPtr self_reference = wrapper.function().get_contents();
+    self_reference.weaken();
+    remapping.emplace(wrapped_fn.get_contents(), self_reference);
+    wrapper.function().substitute_calls(remapping);
     return wrapper;
 }
 
@@ -1968,7 +1970,7 @@ Func Func::copy_to_device(DeviceAPI d) {
 
     ExternFuncArgument device_interface = make_device_interface_call(d);
     func.define_extern("halide_buffer_copy", {buffer, device_interface},
-                       {call->type}, func.args(),  // Reuse the existing dimension names
+                       {call->type}, args(),  // Reuse the existing dimension names
                        NameMangling::C, d);
     return *this;
 }
@@ -1985,19 +1987,19 @@ Func Func::copy_to_host() {
     return copy_to_device(DeviceAPI::Host);
 }
 
-Func &Func::split(VarOrRVar old, VarOrRVar outer, VarOrRVar inner, Expr factor, TailStrategy tail) {
+Func &Func::split(const VarOrRVar &old, const VarOrRVar &outer, const VarOrRVar &inner, const Expr &factor, TailStrategy tail) {
     invalidate_cache();
     Stage(func, func.definition(), 0).split(old, outer, inner, factor, tail);
     return *this;
 }
 
-Func &Func::fuse(VarOrRVar inner, VarOrRVar outer, VarOrRVar fused) {
+Func &Func::fuse(const VarOrRVar &inner, const VarOrRVar &outer, const VarOrRVar &fused) {
     invalidate_cache();
     Stage(func, func.definition(), 0).fuse(inner, outer, fused);
     return *this;
 }
 
-Func &Func::rename(VarOrRVar old_name, VarOrRVar new_name) {
+Func &Func::rename(const VarOrRVar &old_name, const VarOrRVar &new_name) {
     invalidate_cache();
     Stage(func, func.definition(), 0).rename(old_name, new_name);
     return *this;
@@ -2033,7 +2035,7 @@ Func &Func::async() {
     return *this;
 }
 
-Stage Func::specialize(Expr c) {
+Stage Func::specialize(const Expr &c) {
     invalidate_cache();
     return Stage(func, func.definition(), 0).specialize(c);
 }
@@ -2043,49 +2045,49 @@ void Func::specialize_fail(const std::string &message) {
     (void)Stage(func, func.definition(), 0).specialize_fail(message);
 }
 
-Func &Func::serial(VarOrRVar var) {
+Func &Func::serial(const VarOrRVar &var) {
     invalidate_cache();
     Stage(func, func.definition(), 0).serial(var);
     return *this;
 }
 
-Func &Func::parallel(VarOrRVar var) {
+Func &Func::parallel(const VarOrRVar &var) {
     invalidate_cache();
     Stage(func, func.definition(), 0).parallel(var);
     return *this;
 }
 
-Func &Func::vectorize(VarOrRVar var) {
+Func &Func::vectorize(const VarOrRVar &var) {
     invalidate_cache();
     Stage(func, func.definition(), 0).vectorize(var);
     return *this;
 }
 
-Func &Func::unroll(VarOrRVar var) {
+Func &Func::unroll(const VarOrRVar &var) {
     invalidate_cache();
     Stage(func, func.definition(), 0).unroll(var);
     return *this;
 }
 
-Func &Func::parallel(VarOrRVar var, Expr factor, TailStrategy tail) {
+Func &Func::parallel(const VarOrRVar &var, const Expr &factor, TailStrategy tail) {
     invalidate_cache();
     Stage(func, func.definition(), 0).parallel(var, factor, tail);
     return *this;
 }
 
-Func &Func::vectorize(VarOrRVar var, Expr factor, TailStrategy tail) {
+Func &Func::vectorize(const VarOrRVar &var, const Expr &factor, TailStrategy tail) {
     invalidate_cache();
     Stage(func, func.definition(), 0).vectorize(var, factor, tail);
     return *this;
 }
 
-Func &Func::unroll(VarOrRVar var, Expr factor, TailStrategy tail) {
+Func &Func::unroll(const VarOrRVar &var, const Expr &factor, TailStrategy tail) {
     invalidate_cache();
     Stage(func, func.definition(), 0).unroll(var, factor, tail);
     return *this;
 }
 
-Func &Func::bound(Var var, Expr min, Expr extent) {
+Func &Func::bound(const Var &var, Expr min, Expr extent) {
     user_assert(!min.defined() || Int(32).can_represent(min.type())) << "Can't represent min bound in int32\n";
     user_assert(extent.defined()) << "Extent bound of a Func can't be undefined\n";
     user_assert(Int(32).can_represent(extent.type())) << "Can't represent extent bound in int32\n";
@@ -2114,7 +2116,7 @@ Func &Func::bound(Var var, Expr min, Expr extent) {
     return *this;
 }
 
-Func &Func::set_estimate(Var var, Expr min, Expr extent) {
+Func &Func::set_estimate(const Var &var, const Expr &min, const Expr &extent) {
     invalidate_cache();
     bool found = func.is_pure_arg(var.name());
     user_assert(found)
@@ -2148,22 +2150,23 @@ Func &Func::set_estimate(Var var, Expr min, Expr extent) {
     return *this;
 }
 
-Func &Func::set_estimates(const std::vector<std::pair<Expr, Expr>> &estimates) {
+Func &Func::set_estimates(const Region &estimates) {
     const std::vector<Var> a = args();
     user_assert(estimates.size() == a.size())
         << "Func " << name() << " has " << a.size() << " dimensions, "
         << "but the estimates passed to set_estimates contains " << estimates.size() << " pairs.\n";
     for (size_t i = 0; i < a.size(); i++) {
-        set_estimate(a[i], estimates[i].first, estimates[i].second);
+        const Range &r = estimates[i];
+        set_estimate(a[i], r.min, r.extent);
     }
     return *this;
 }
 
-Func &Func::bound_extent(Var var, Expr extent) {
-    return bound(var, Expr(), extent);
+Func &Func::bound_extent(const Var &var, Expr extent) {
+    return bound(var, Expr(), std::move(extent));
 }
 
-Func &Func::align_bounds(Var var, Expr modulus, Expr remainder) {
+Func &Func::align_bounds(const Var &var, Expr modulus, Expr remainder) {
     user_assert(modulus.defined()) << "modulus is undefined\n";
     user_assert(remainder.defined()) << "remainder is undefined\n";
     user_assert(Int(32).can_represent(modulus.type())) << "Can't represent modulus as int32\n";
@@ -2189,19 +2192,19 @@ Func &Func::align_bounds(Var var, Expr modulus, Expr remainder) {
     return *this;
 }
 
-Func &Func::tile(VarOrRVar x, VarOrRVar y,
-                 VarOrRVar xo, VarOrRVar yo,
-                 VarOrRVar xi, VarOrRVar yi,
-                 Expr xfactor, Expr yfactor,
+Func &Func::tile(const VarOrRVar &x, const VarOrRVar &y,
+                 const VarOrRVar &xo, const VarOrRVar &yo,
+                 const VarOrRVar &xi, const VarOrRVar &yi,
+                 const Expr &xfactor, const Expr &yfactor,
                  TailStrategy tail) {
     invalidate_cache();
     Stage(func, func.definition(), 0).tile(x, y, xo, yo, xi, yi, xfactor, yfactor, tail);
     return *this;
 }
 
-Func &Func::tile(VarOrRVar x, VarOrRVar y,
-                 VarOrRVar xi, VarOrRVar yi,
-                 Expr xfactor, Expr yfactor,
+Func &Func::tile(const VarOrRVar &x, const VarOrRVar &y,
+                 const VarOrRVar &xi, const VarOrRVar &yi,
+                 const Expr &xfactor, const Expr &yfactor,
                  TailStrategy tail) {
     invalidate_cache();
     Stage(func, func.definition(), 0).tile(x, y, xi, yi, xfactor, yfactor, tail);
@@ -2214,43 +2217,43 @@ Func &Func::reorder(const std::vector<VarOrRVar> &vars) {
     return *this;
 }
 
-Func &Func::gpu_threads(VarOrRVar tx, DeviceAPI device_api) {
+Func &Func::gpu_threads(const VarOrRVar &tx, DeviceAPI device_api) {
     invalidate_cache();
     Stage(func, func.definition(), 0).gpu_threads(tx, device_api);
     return *this;
 }
 
-Func &Func::gpu_threads(VarOrRVar tx, VarOrRVar ty, DeviceAPI device_api) {
+Func &Func::gpu_threads(const VarOrRVar &tx, const VarOrRVar &ty, DeviceAPI device_api) {
     invalidate_cache();
     Stage(func, func.definition(), 0).gpu_threads(tx, ty, device_api);
     return *this;
 }
 
-Func &Func::gpu_threads(VarOrRVar tx, VarOrRVar ty, VarOrRVar tz, DeviceAPI device_api) {
+Func &Func::gpu_threads(const VarOrRVar &tx, const VarOrRVar &ty, const VarOrRVar &tz, DeviceAPI device_api) {
     invalidate_cache();
     Stage(func, func.definition(), 0).gpu_threads(tx, ty, tz, device_api);
     return *this;
 }
 
-Func &Func::gpu_lanes(VarOrRVar tx, DeviceAPI device_api) {
+Func &Func::gpu_lanes(const VarOrRVar &tx, DeviceAPI device_api) {
     invalidate_cache();
     Stage(func, func.definition(), 0).gpu_lanes(tx, device_api);
     return *this;
 }
 
-Func &Func::gpu_blocks(VarOrRVar bx, DeviceAPI device_api) {
+Func &Func::gpu_blocks(const VarOrRVar &bx, DeviceAPI device_api) {
     invalidate_cache();
     Stage(func, func.definition(), 0).gpu_blocks(bx, device_api);
     return *this;
 }
 
-Func &Func::gpu_blocks(VarOrRVar bx, VarOrRVar by, DeviceAPI device_api) {
+Func &Func::gpu_blocks(const VarOrRVar &bx, const VarOrRVar &by, DeviceAPI device_api) {
     invalidate_cache();
     Stage(func, func.definition(), 0).gpu_blocks(bx, by, device_api);
     return *this;
 }
 
-Func &Func::gpu_blocks(VarOrRVar bx, VarOrRVar by, VarOrRVar bz, DeviceAPI device_api) {
+Func &Func::gpu_blocks(const VarOrRVar &bx, const VarOrRVar &by, const VarOrRVar &bz, DeviceAPI device_api) {
     invalidate_cache();
     Stage(func, func.definition(), 0).gpu_blocks(bx, by, bz, device_api);
     return *this;
@@ -2262,40 +2265,40 @@ Func &Func::gpu_single_thread(DeviceAPI device_api) {
     return *this;
 }
 
-Func &Func::gpu(VarOrRVar bx, VarOrRVar tx, DeviceAPI device_api) {
+Func &Func::gpu(const VarOrRVar &bx, const VarOrRVar &tx, DeviceAPI device_api) {
     invalidate_cache();
     Stage(func, func.definition(), 0).gpu(bx, tx, device_api);
     return *this;
 }
 
-Func &Func::gpu(VarOrRVar bx, VarOrRVar by, VarOrRVar tx, VarOrRVar ty, DeviceAPI device_api) {
+Func &Func::gpu(const VarOrRVar &bx, const VarOrRVar &by, const VarOrRVar &tx, const VarOrRVar &ty, DeviceAPI device_api) {
     invalidate_cache();
     Stage(func, func.definition(), 0).gpu(bx, by, tx, ty, device_api);
     return *this;
 }
 
-Func &Func::gpu(VarOrRVar bx, VarOrRVar by, VarOrRVar bz, VarOrRVar tx, VarOrRVar ty, VarOrRVar tz, DeviceAPI device_api) {
+Func &Func::gpu(const VarOrRVar &bx, const VarOrRVar &by, const VarOrRVar &bz, const VarOrRVar &tx, const VarOrRVar &ty, const VarOrRVar &tz, DeviceAPI device_api) {
     invalidate_cache();
     Stage(func, func.definition(), 0).gpu(bx, by, bz, tx, ty, tz, device_api);
     return *this;
 }
 
-Func &Func::gpu_tile(VarOrRVar x, VarOrRVar bx, VarOrRVar tx, Expr x_size, TailStrategy tail, DeviceAPI device_api) {
+Func &Func::gpu_tile(const VarOrRVar &x, const VarOrRVar &bx, const VarOrRVar &tx, const Expr &x_size, TailStrategy tail, DeviceAPI device_api) {
     invalidate_cache();
     Stage(func, func.definition(), 0).gpu_tile(x, bx, tx, x_size, tail, device_api);
     return *this;
 }
 
-Func &Func::gpu_tile(VarOrRVar x, VarOrRVar tx, Expr x_size, TailStrategy tail, DeviceAPI device_api) {
+Func &Func::gpu_tile(const VarOrRVar &x, const VarOrRVar &tx, const Expr &x_size, TailStrategy tail, DeviceAPI device_api) {
     invalidate_cache();
     Stage(func, func.definition(), 0).gpu_tile(x, tx, x_size, tail, device_api);
     return *this;
 }
 
-Func &Func::gpu_tile(VarOrRVar x, VarOrRVar y,
-                     VarOrRVar bx, VarOrRVar by,
-                     VarOrRVar tx, VarOrRVar ty,
-                     Expr x_size, Expr y_size,
+Func &Func::gpu_tile(const VarOrRVar &x, const VarOrRVar &y,
+                     const VarOrRVar &bx, const VarOrRVar &by,
+                     const VarOrRVar &tx, const VarOrRVar &ty,
+                     const Expr &x_size, const Expr &y_size,
                      TailStrategy tail,
                      DeviceAPI device_api) {
     invalidate_cache();
@@ -2304,9 +2307,9 @@ Func &Func::gpu_tile(VarOrRVar x, VarOrRVar y,
     return *this;
 }
 
-Func &Func::gpu_tile(VarOrRVar x, VarOrRVar y,
-                     VarOrRVar tx, VarOrRVar ty,
-                     Expr x_size, Expr y_size,
+Func &Func::gpu_tile(const VarOrRVar &x, const VarOrRVar &y,
+                     const VarOrRVar &tx, const VarOrRVar &ty,
+                     const Expr &x_size, const Expr &y_size,
                      TailStrategy tail,
                      DeviceAPI device_api) {
     invalidate_cache();
@@ -2315,10 +2318,10 @@ Func &Func::gpu_tile(VarOrRVar x, VarOrRVar y,
     return *this;
 }
 
-Func &Func::gpu_tile(VarOrRVar x, VarOrRVar y, VarOrRVar z,
-                     VarOrRVar bx, VarOrRVar by, VarOrRVar bz,
-                     VarOrRVar tx, VarOrRVar ty, VarOrRVar tz,
-                     Expr x_size, Expr y_size, Expr z_size,
+Func &Func::gpu_tile(const VarOrRVar &x, const VarOrRVar &y, const VarOrRVar &z,
+                     const VarOrRVar &bx, const VarOrRVar &by, const VarOrRVar &bz,
+                     const VarOrRVar &tx, const VarOrRVar &ty, const VarOrRVar &tz,
+                     const Expr &x_size, const Expr &y_size, const Expr &z_size,
                      TailStrategy tail,
                      DeviceAPI device_api) {
     invalidate_cache();
@@ -2327,9 +2330,9 @@ Func &Func::gpu_tile(VarOrRVar x, VarOrRVar y, VarOrRVar z,
     return *this;
 }
 
-Func &Func::gpu_tile(VarOrRVar x, VarOrRVar y, VarOrRVar z,
-                     VarOrRVar tx, VarOrRVar ty, VarOrRVar tz,
-                     Expr x_size, Expr y_size, Expr z_size,
+Func &Func::gpu_tile(const VarOrRVar &x, const VarOrRVar &y, const VarOrRVar &z,
+                     const VarOrRVar &tx, const VarOrRVar &ty, const VarOrRVar &tz,
+                     const Expr &x_size, const Expr &y_size, const Expr &z_size,
                      TailStrategy tail,
                      DeviceAPI device_api) {
     invalidate_cache();
@@ -2338,7 +2341,7 @@ Func &Func::gpu_tile(VarOrRVar x, VarOrRVar y, VarOrRVar z,
     return *this;
 }
 
-Func &Func::shader(Var x, Var y, Var c, DeviceAPI device_api) {
+Func &Func::shader(const Var &x, const Var &y, const Var &c, DeviceAPI device_api) {
     invalidate_cache();
 
     reorder(c, x, y);
@@ -2363,29 +2366,29 @@ Func &Func::shader(Var x, Var y, Var c, DeviceAPI device_api) {
     return *this;
 }
 
-Func &Func::glsl(Var x, Var y, Var c) {
+Func &Func::glsl(const Var &x, const Var &y, const Var &c) {
     return shader(x, y, c, DeviceAPI::GLSL).vectorize(c);
 }
 
-Func &Func::hexagon(VarOrRVar x) {
+Func &Func::hexagon(const VarOrRVar &x) {
     invalidate_cache();
     Stage(func, func.definition(), 0).hexagon(x);
     return *this;
 }
 
-Func &Func::prefetch(const Func &f, VarOrRVar var, Expr offset, PrefetchBoundStrategy strategy) {
+Func &Func::prefetch(const Func &f, const VarOrRVar &var, Expr offset, PrefetchBoundStrategy strategy) {
     invalidate_cache();
-    Stage(func, func.definition(), 0).prefetch(f, var, offset, strategy);
+    Stage(func, func.definition(), 0).prefetch(f, var, std::move(offset), strategy);
     return *this;
 }
 
-Func &Func::prefetch(const Internal::Parameter &param, VarOrRVar var, Expr offset, PrefetchBoundStrategy strategy) {
+Func &Func::prefetch(const Internal::Parameter &param, const VarOrRVar &var, Expr offset, PrefetchBoundStrategy strategy) {
     invalidate_cache();
-    Stage(func, func.definition(), 0).prefetch(param, var, offset, strategy);
+    Stage(func, func.definition(), 0).prefetch(param, var, std::move(offset), strategy);
     return *this;
 }
 
-Func &Func::reorder_storage(Var x, Var y) {
+Func &Func::reorder_storage(const Var &x, const Var &y) {
     invalidate_cache();
 
     vector<StorageDim> &dims = func.schedule().storage_dims();
@@ -2423,7 +2426,7 @@ Func &Func::reorder_storage(const std::vector<Var> &dims) {
     return reorder_storage(dims, 0);
 }
 
-Func &Func::align_storage(Var dim, Expr alignment) {
+Func &Func::align_storage(const Var &dim, const Expr &alignment) {
     invalidate_cache();
 
     vector<StorageDim> &dims = func.schedule().storage_dims();
@@ -2438,7 +2441,7 @@ Func &Func::align_storage(Var dim, Expr alignment) {
     return *this;
 }
 
-Func &Func::fold_storage(Var dim, Expr factor, bool fold_forward) {
+Func &Func::fold_storage(const Var &dim, const Expr &factor, bool fold_forward) {
     invalidate_cache();
 
     vector<StorageDim> &dims = func.schedule().storage_dims();
@@ -2456,7 +2459,7 @@ Func &Func::fold_storage(Var dim, Expr factor, bool fold_forward) {
 
 Func &Func::compute_at(LoopLevel loop_level) {
     invalidate_cache();
-    func.schedule().compute_level() = loop_level;
+    func.schedule().compute_level() = std::move(loop_level);
     // We want to set store_level = compute_level iff store_level is inlined,
     // but we can't do that here, since the value in store_level could
     // be mutated at any time prior to lowering. Instead, we check at
@@ -2465,21 +2468,21 @@ Func &Func::compute_at(LoopLevel loop_level) {
     return *this;
 }
 
-Func &Func::compute_at(Func f, RVar var) {
+Func &Func::compute_at(const Func &f, const RVar &var) {
     return compute_at(LoopLevel(f, var));
 }
 
-Func &Func::compute_at(Func f, Var var) {
+Func &Func::compute_at(const Func &f, const Var &var) {
     return compute_at(LoopLevel(f, var));
 }
 
-Func &Func::compute_with(Stage s, VarOrRVar var, const vector<pair<VarOrRVar, LoopAlignStrategy>> &align) {
+Func &Func::compute_with(const Stage &s, const VarOrRVar &var, const vector<pair<VarOrRVar, LoopAlignStrategy>> &align) {
     invalidate_cache();
     Stage(func, func.definition(), 0).compute_with(s, var, align);
     return *this;
 }
 
-Func &Func::compute_with(Stage s, VarOrRVar var, LoopAlignStrategy align) {
+Func &Func::compute_with(const Stage &s, const VarOrRVar &var, LoopAlignStrategy align) {
     invalidate_cache();
     Stage(func, func.definition(), 0).compute_with(s, var, align);
     return *this;
@@ -2487,13 +2490,13 @@ Func &Func::compute_with(Stage s, VarOrRVar var, LoopAlignStrategy align) {
 
 Func &Func::compute_with(LoopLevel loop_level, const std::vector<std::pair<VarOrRVar, LoopAlignStrategy>> &align) {
     invalidate_cache();
-    Stage(func, func.definition(), 0).compute_with(loop_level, align);
+    Stage(func, func.definition(), 0).compute_with(std::move(loop_level), align);
     return *this;
 }
 
 Func &Func::compute_with(LoopLevel loop_level, LoopAlignStrategy align) {
     invalidate_cache();
-    Stage(func, func.definition(), 0).compute_with(loop_level, align);
+    Stage(func, func.definition(), 0).compute_with(std::move(loop_level), align);
     return *this;
 }
 
@@ -2503,15 +2506,15 @@ Func &Func::compute_root() {
 
 Func &Func::store_at(LoopLevel loop_level) {
     invalidate_cache();
-    func.schedule().store_level() = loop_level;
+    func.schedule().store_level() = std::move(loop_level);
     return *this;
 }
 
-Func &Func::store_at(Func f, RVar var) {
+Func &Func::store_at(const Func &f, const RVar &var) {
     return store_at(LoopLevel(f, var));
 }
 
-Func &Func::store_at(Func f, Var var) {
+Func &Func::store_at(const Func &f, const Var &var) {
     return store_at(LoopLevel(f, var));
 }
 
@@ -2587,7 +2590,7 @@ public:
 };
 }  // namespace
 
-FuncRef::FuncRef(Internal::Function f, const vector<Expr> &a, int placeholder_pos,
+FuncRef::FuncRef(const Internal::Function &f, const vector<Expr> &a, int placeholder_pos,
                  int count)
     : func(f), implicit_count(count), args(a) {
     implicit_placeholder_pos = placeholder_pos;
@@ -2596,7 +2599,7 @@ FuncRef::FuncRef(Internal::Function f, const vector<Expr> &a, int placeholder_po
 
 FuncRef::FuncRef(Internal::Function f, const vector<Var> &a, int placeholder_pos,
                  int count)
-    : func(f), implicit_count(count) {
+    : func(std::move(f)), implicit_count(count) {
     implicit_placeholder_pos = placeholder_pos;
     args.resize(a.size());
     for (size_t i = 0; i < a.size(); i++) {
@@ -2664,7 +2667,7 @@ vector<Expr> FuncRef::args_with_implicit_vars(const vector<Expr> &e) const {
     return a;
 }
 
-Stage FuncRef::operator=(Expr e) {
+Stage FuncRef::operator=(const Expr &e) {
     return (*this) = Tuple(e);
 }
 
@@ -2705,7 +2708,7 @@ Stage FuncRef::operator=(const FuncRef &e) {
 
 // Inject a suitable base-case definition given an update
 // definition. This is a helper for FuncRef::operator+= and co.
-Func define_base_case(Internal::Function func, const vector<Expr> &a, const Tuple &e) {
+Func define_base_case(const Internal::Function &func, const vector<Expr> &a, const Tuple &e) {
     Func f(func);
 
     if (func.has_pure_definition()) return f;
@@ -2726,7 +2729,7 @@ Func define_base_case(Internal::Function func, const vector<Expr> &a, const Tupl
     return f;
 }
 
-Func define_base_case(Internal::Function func, const vector<Expr> &a, Expr e) {
+Func define_base_case(const Internal::Function &func, const vector<Expr> &a, const Expr &e) {
     return define_base_case(func, a, Tuple(e));
 }
 
@@ -2756,7 +2759,7 @@ Stage FuncRef::func_ref_update(Expr e, int init_val) {
 }
 
 Stage FuncRef::operator+=(Expr e) {
-    return func_ref_update<std::plus<Expr>>(e, 0);
+    return func_ref_update<std::plus<Expr>>(std::move(e), 0);
 }
 
 Stage FuncRef::operator+=(const Tuple &e) {
@@ -2776,7 +2779,7 @@ Stage FuncRef::operator+=(const FuncRef &e) {
 }
 
 Stage FuncRef::operator*=(Expr e) {
-    return func_ref_update<std::multiplies<Expr>>(e, 1);
+    return func_ref_update<std::multiplies<Expr>>(std::move(e), 1);
 }
 
 Stage FuncRef::operator*=(const Tuple &e) {
@@ -2796,7 +2799,7 @@ Stage FuncRef::operator*=(const FuncRef &e) {
 }
 
 Stage FuncRef::operator-=(Expr e) {
-    return func_ref_update<std::minus<Expr>>(e, 0);
+    return func_ref_update<std::minus<Expr>>(std::move(e), 0);
 }
 
 Stage FuncRef::operator-=(const Tuple &e) {
@@ -2816,7 +2819,7 @@ Stage FuncRef::operator-=(const FuncRef &e) {
 }
 
 Stage FuncRef::operator/=(Expr e) {
-    return func_ref_update<std::divides<Expr>>(e, 1);
+    return func_ref_update<std::divides<Expr>>(std::move(e), 1);
 }
 
 Stage FuncRef::operator/=(const Tuple &e) {
@@ -2872,7 +2875,7 @@ FuncTupleElementRef::FuncTupleElementRef(
     internal_assert(idx >= 0 && idx < (int)func_ref.size());
 }
 
-Tuple FuncTupleElementRef::values_with_undefs(Expr e) const {
+Tuple FuncTupleElementRef::values_with_undefs(const Expr &e) const {
     vector<Expr> values(func_ref.size());
     for (int i = 0; i < (int)values.size(); ++i) {
         if (i == idx) {
@@ -2885,23 +2888,23 @@ Tuple FuncTupleElementRef::values_with_undefs(Expr e) const {
     return Tuple(values);
 }
 
-Stage FuncTupleElementRef::operator=(Expr e) {
+Stage FuncTupleElementRef::operator=(const Expr &e) {
     return func_ref = values_with_undefs(e);
 }
 
-Stage FuncTupleElementRef::operator+=(Expr e) {
+Stage FuncTupleElementRef::operator+=(const Expr &e) {
     return func_ref += values_with_undefs(e);
 }
 
-Stage FuncTupleElementRef::operator*=(Expr e) {
+Stage FuncTupleElementRef::operator*=(const Expr &e) {
     return func_ref *= values_with_undefs(e);
 }
 
-Stage FuncTupleElementRef::operator-=(Expr e) {
+Stage FuncTupleElementRef::operator-=(const Expr &e) {
     return func_ref -= values_with_undefs(e);
 }
 
-Stage FuncTupleElementRef::operator/=(Expr e) {
+Stage FuncTupleElementRef::operator/=(const Expr &e) {
     return func_ref /= values_with_undefs(e);
 }
 
@@ -2916,7 +2919,7 @@ FuncTupleElementRef::operator Expr() const {
 Realization Func::realize(std::vector<int32_t> sizes, const Target &target,
                           const ParamMap &param_map) {
     user_assert(defined()) << "Can't realize undefined Func.\n";
-    return pipeline().realize(sizes, target, param_map);
+    return pipeline().realize(std::move(sizes), target, param_map);
 }
 
 Realization Func::realize(int x_size, int y_size, int z_size, int w_size, const Target &target,
@@ -3117,7 +3120,7 @@ void Func::set_custom_print(void (*cust_print)(void *, const char *)) {
 }
 
 void Func::add_custom_lowering_pass(IRMutator *pass, std::function<void()> deleter) {
-    pipeline().add_custom_lowering_pass(pass, deleter);
+    pipeline().add_custom_lowering_pass(pass, std::move(deleter));
 }
 
 void Func::clear_custom_lowering_passes() {

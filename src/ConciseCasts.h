@@ -16,75 +16,93 @@ namespace Halide {
 namespace ConciseCasts {
 
 inline Expr f64(Expr e) {
-    return cast(Float(64, e.type().lanes()), e);
+    Type t = Float(64, e.type().lanes());
+    return cast(t, std::move(e));
 }
 
 inline Expr f32(Expr e) {
-    return cast(Float(32, e.type().lanes()), e);
+    Type t = Float(32, e.type().lanes());
+    return cast(t, std::move(e));
 }
 
 inline Expr i64(Expr e) {
-    return cast(Int(64, e.type().lanes()), e);
+    Type t = Int(64, e.type().lanes());
+    return cast(t, std::move(e));
 }
 
 inline Expr i32(Expr e) {
-    return cast(Int(32, e.type().lanes()), e);
+    Type t = Int(32, e.type().lanes());
+    return cast(t, std::move(e));
 }
 
 inline Expr i16(Expr e) {
-    return cast(Int(16, e.type().lanes()), e);
+    Type t = Int(16, e.type().lanes());
+    return cast(t, std::move(e));
 }
 
 inline Expr i8(Expr e) {
-    return cast(Int(8, e.type().lanes()), e);
+    Type t = Int(8, e.type().lanes());
+    return cast(t, std::move(e));
 }
 
 inline Expr u64(Expr e) {
-    return cast(UInt(64, e.type().lanes()), e);
+    Type t = UInt(64, e.type().lanes());
+    return cast(t, std::move(e));
 }
 
 inline Expr u32(Expr e) {
-    return cast(UInt(32, e.type().lanes()), e);
+    Type t = UInt(32, e.type().lanes());
+    return cast(t, std::move(e));
 }
 
 inline Expr u16(Expr e) {
-    return cast(UInt(16, e.type().lanes()), e);
+    Type t = UInt(16, e.type().lanes());
+    return cast(t, std::move(e));
 }
 
 inline Expr u8(Expr e) {
-    return cast(UInt(8, e.type().lanes()), e);
+    Type t = UInt(8, e.type().lanes());
+    return cast(t, std::move(e));
 }
 
 inline Expr i8_sat(Expr e) {
-    return saturating_cast(Int(8, e.type().lanes()), e);
+    Type t = Int(8, e.type().lanes());
+    return saturating_cast(t, std::move(e));
 }
 
 inline Expr u8_sat(Expr e) {
-    return saturating_cast(UInt(8, e.type().lanes()), e);
+    Type t = UInt(8, e.type().lanes());
+    return saturating_cast(t, std::move(e));
 }
 
 inline Expr i16_sat(Expr e) {
-    return saturating_cast(Int(16, e.type().lanes()), e);
+    Type t = Int(16, e.type().lanes());
+    return saturating_cast(t, std::move(e));
 }
 
 inline Expr u16_sat(Expr e) {
-    return saturating_cast(UInt(16, e.type().lanes()), e);
+    Type t = UInt(16, e.type().lanes());
+    return saturating_cast(t, std::move(e));
 }
 
 inline Expr i32_sat(Expr e) {
-    return saturating_cast(Int(32, e.type().lanes()), e);
+    Type t = Int(32, e.type().lanes());
+    return saturating_cast(t, std::move(e));
 }
 
 inline Expr u32_sat(Expr e) {
-    return saturating_cast(UInt(32, e.type().lanes()), e);
+    Type t = UInt(32, e.type().lanes());
+    return saturating_cast(t, std::move(e));
 }
 
 inline Expr i64_sat(Expr e) {
-    return saturating_cast(Int(64, e.type().lanes()), e);
+    Type t = Int(64, e.type().lanes());
+    return saturating_cast(t, std::move(e));
 }
 
 inline Expr u64_sat(Expr e) {
-    return saturating_cast(UInt(64, e.type().lanes()), e);
+    Type t = UInt(64, e.type().lanes());
+    return saturating_cast(t, std::move(e));
 }
 
 };  // namespace ConciseCasts

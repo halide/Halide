@@ -36,17 +36,6 @@ static const string remove_namespaces(const string &name) {
     }
 }
 
-static bool has_legacy_buffers(const LoweredFunc &func) {
-    const std::vector<LoweredArgument> &args = func.args;
-    auto legacy_buffer_type = type_of<buffer_t *>().handle_type;
-    for (size_t i = 0; i < args.size(); i++) {
-        if (args[i].type.is_handle() && args[i].type.handle_type == legacy_buffer_type) {
-            return true;
-        }
-    }
-    return false;
-}
-
 static bool can_convert(const LoweredArgument *arg) {
     if (arg->type.is_handle()) {
         if (arg->name == "__user_context") {
@@ -78,7 +67,7 @@ static bool can_convert(const LoweredArgument *arg) {
 
 std::pair<string, string> print_type(const LoweredArgument *arg) {
     // Excluded by can_convert() above:
-    assert(!arg->type.is_vector());
+    internal_assert(!arg->type.is_vector());
 
     if (arg->type.is_handle()) {
         /* Handles can be any pointer. However, from Python, all you can pass to
@@ -106,9 +95,9 @@ std::pair<string, string> print_type(const LoweredArgument *arg) {
     }
 }
 
-void PythonExtensionGen::convert_buffer(string name, const LoweredArgument *arg) {
-    assert(arg->is_buffer());
-    assert(arg->dimensions);
+void PythonExtensionGen::convert_buffer(const string &name, const LoweredArgument *arg) {
+    internal_assert(arg->is_buffer());
+    internal_assert(arg->dimensions);
     dest << "    halide_buffer_t buffer_" << name << ";\n";
     dest << "    halide_dimension_t dimensions_" << name << "[" << (int)arg->dimensions << "];\n";
     dest << "    if (_convert_py_buffer_to_halide(";
@@ -249,7 +238,7 @@ static __attribute__((unused)) int _convert_py_buffer_to_halide(
 )INLINE_CODE";
 
     for (auto &f : module.functions()) {
-        if (!has_legacy_buffers(f) && f.linkage == LinkageType::ExternalPlusMetadata) {
+        if (f.linkage == LinkageType::ExternalPlusMetadata) {
             compile(f);
         }
     }
@@ -257,9 +246,7 @@ static __attribute__((unused)) int _convert_py_buffer_to_halide(
     dest << "\n";
     dest << "static PyMethodDef _methods[] = {\n";
     for (auto &f : module.functions()) {
-        /* With the legacy_buffer_wrappers feature, Halide stores every function
-         * twice, once with new and once with old buffers. Ignore the latter. */
-        if (!has_legacy_buffers(f) && f.linkage == LinkageType::ExternalPlusMetadata) {
+        if (f.linkage == LinkageType::ExternalPlusMetadata) {
             const string basename = remove_namespaces(f.name);
             dest << "    {\"" << basename << "\", (PyCFunction)_f_" << basename
                  << ", METH_VARARGS|METH_KEYWORDS, NULL},\n";

@@ -171,20 +171,20 @@ class Inliner : public IRMutator {
 public:
     int found = 0;
 
-    Inliner(Function f)
+    Inliner(const Function &f)
         : func(f) {
         internal_assert(f.can_be_inlined()) << "Illegal to inline " << f.name() << "\n";
         validate_schedule_inlined_function(f);
     }
 };
 
-Stmt inline_function(Stmt s, Function f) {
+Stmt inline_function(Stmt s, const Function &f) {
     Inliner i(f);
     s = i.mutate(s);
     return s;
 }
 
-Expr inline_function(Expr e, Function f) {
+Expr inline_function(Expr e, const Function &f) {
     Inliner i(f);
     e = i.mutate(e);
     // TODO: making this > 1 should be desirable,
@@ -196,7 +196,7 @@ Expr inline_function(Expr e, Function f) {
 }
 
 // Inline all calls to 'f' inside 'caller'
-void inline_function(Function caller, Function f) {
+void inline_function(Function caller, const Function &f) {
     Inliner i(f);
     caller.mutate(&i);
     if (caller.has_extern_definition()) {

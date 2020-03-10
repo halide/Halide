@@ -1,4 +1,5 @@
 #include "ModulusRemainder.h"
+
 #include "IR.h"
 #include "IROperator.h"
 #include "IRPrinter.h"
@@ -8,16 +9,19 @@ namespace Halide {
 namespace Internal {
 
 namespace {
-// Mod, with mod by zero defined to be the identity for the convenience of the operators below.
-int64_t mod(int64_t a, int64_t m) {
-    if (m == 0) return a;
-    return mod_imp(a, m);
+// A version of mod where a % 0 == a
+int64_t mod(int64_t a, int64_t b) {
+    if (b == 0) {
+        return a;
+    } else {
+        return mod_imp(a, b);
+    }
 }
 }  // namespace
 
 class ComputeModulusRemainder : public IRVisitor {
 public:
-    ModulusRemainder analyze(Expr e);
+    ModulusRemainder analyze(const Expr &e);
 
     ModulusRemainder result;
     Scope<ModulusRemainder> scope;
@@ -73,17 +77,17 @@ public:
     void visit(const Atomic *) override;
 };
 
-ModulusRemainder modulus_remainder(Expr e) {
+ModulusRemainder modulus_remainder(const Expr &e) {
     ComputeModulusRemainder mr(nullptr);
     return mr.analyze(e);
 }
 
-ModulusRemainder modulus_remainder(Expr e, const Scope<ModulusRemainder> &scope) {
+ModulusRemainder modulus_remainder(const Expr &e, const Scope<ModulusRemainder> &scope) {
     ComputeModulusRemainder mr(&scope);
     return mr.analyze(e);
 }
 
-bool reduce_expr_modulo(Expr expr, int64_t modulus, int64_t *remainder) {
+bool reduce_expr_modulo(const Expr &expr, int64_t modulus, int64_t *remainder) {
     ModulusRemainder result = modulus_remainder(expr);
 
     /* As an example: If we asked for expr mod 8, and the analysis
@@ -100,7 +104,7 @@ bool reduce_expr_modulo(Expr expr, int64_t modulus, int64_t *remainder) {
         return false;
     }
 }
-bool reduce_expr_modulo(Expr expr, int64_t modulus, int64_t *remainder, const Scope<ModulusRemainder> &scope) {
+bool reduce_expr_modulo(const Expr &expr, int64_t modulus, int64_t *remainder, const Scope<ModulusRemainder> &scope) {
     ModulusRemainder result = modulus_remainder(expr, scope);
 
     if (mod(result.modulus, modulus) == 0) {
@@ -111,13 +115,13 @@ bool reduce_expr_modulo(Expr expr, int64_t modulus, int64_t *remainder, const Sc
     }
 }
 
-ModulusRemainder ComputeModulusRemainder::analyze(Expr e) {
+ModulusRemainder ComputeModulusRemainder::analyze(const Expr &e) {
     e.accept(this);
     return result;
 }
 
 namespace {
-void check(Expr e, int64_t m, int64_t r) {
+void check(const Expr &e, int64_t m, int64_t r) {
     ModulusRemainder result = modulus_remainder(e);
     if (result.modulus != m || result.remainder != r) {
         std::cerr << "Test failed for modulus_remainder:\n";
@@ -360,7 +364,8 @@ void ComputeModulusRemainder::visit(const Mod *op) {
 }
 
 ModulusRemainder operator%(const ModulusRemainder &a, const ModulusRemainder &b) {
-    // We can treat x mod y as x + z*y, where we know nothing about z.
+    // For non-zero y, we can treat x mod y as x + z*y, where we know
+    // nothing about z.
     // (ax + b) + z (cx + d) ->
     // ax + b + zcx + dz ->
     // gcd(a, c, d) * w + b
@@ -374,6 +379,18 @@ ModulusRemainder operator%(const ModulusRemainder &a, const ModulusRemainder &b)
     int64_t modulus = gcd(a.modulus, b.modulus);
     modulus = gcd(modulus, b.remainder);
     int64_t remainder = mod(a.remainder, modulus);
+
+    if (b.remainder == 0 && remainder != 0) {
+        // b could be zero, so the result could also just be zero.
+        if (modulus == 0) {
+            remainder = 0;
+        } else {
+            // This can no longer be expressed as ax + b
+            remainder = 0;
+            modulus = 1;
+        }
+    }
+
     return {modulus, remainder};
 }
 

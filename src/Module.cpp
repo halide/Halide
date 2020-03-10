@@ -3,6 +3,7 @@
 #include <array>
 #include <fstream>
 #include <future>
+#include <utility>
 
 #include "CodeGen_C.h"
 #include "CodeGen_Internal.h"
@@ -16,7 +17,6 @@
 #include "Pipeline.h"
 #include "PythonExtensionGen.h"
 #include "StmtToHtml.h"
-#include "WrapExternStages.h"
 
 using Halide::Internal::debug;
 
@@ -36,8 +36,7 @@ namespace Internal {
 // and in practice, it's extremely unlikely that anyone needs to rely on this
 // being pure C output (vs possibly C++).
 std::map<Output, OutputInfo> get_output_info(const Target &target) {
-    const bool is_windows_coff = target.os == Target::Windows &&
-                                 !target.has_feature(Target::MinGW);
+    const bool is_windows_coff = target.os == Target::Windows;
     std::map<Output, OutputInfo> ext = {
         {Output::assembly, {"assembly", ".s"}},
         {Output::bitcode, {"bitcode", ".bc"}},
@@ -77,7 +76,7 @@ public:
                                      const std::string &suffix,
                                      const Target &target,
                                      bool in_front = false) {
-        const char *ext = (target.os == Target::Windows && !target.has_feature(Target::MinGW)) ? ".obj" : ".o";
+        const char *ext = (target.os == Target::Windows) ? ".obj" : ".o";
         size_t slash_idx = base_path_name.rfind('/');
         size_t backslash_idx = base_path_name.rfind('\\');
         if (slash_idx == std::string::npos) {
@@ -280,7 +279,6 @@ $NAMESPACECLOSE$
     // certainly irrelevant to scheduling issues, to make for easier reading
     const Target::Feature irrelevant_features[] = {
         Target::CPlusPlusMangling,
-        Target::LegacyBufferWrappers,
         Target::NoRuntime,
         Target::UserContext,
     };
@@ -343,7 +341,7 @@ LoweredFunc::LoweredFunc(const std::string &name,
                          Stmt body,
                          LinkageType linkage,
                          NameMangling name_mangling)
-    : name(name), args(args), body(body), linkage(linkage), name_mangling(name_mangling) {
+    : name(name), args(args), body(std::move(body)), linkage(linkage), name_mangling(name_mangling) {
 }
 
 LoweredFunc::LoweredFunc(const std::string &name,
@@ -351,7 +349,7 @@ LoweredFunc::LoweredFunc(const std::string &name,
                          Stmt body,
                          LinkageType linkage,
                          NameMangling name_mangling)
-    : name(name), body(body), linkage(linkage), name_mangling(name_mangling) {
+    : name(name), body(std::move(body)), linkage(linkage), name_mangling(name_mangling) {
     for (const Argument &i : args) {
         this->args.push_back(LoweredArgument(i));
     }
@@ -703,7 +701,7 @@ void compile_standalone_runtime(const std::string &object_filename, Target t) {
 void compile_multitarget(const std::string &fn_name,
                          const std::map<Output, std::string> &output_files,
                          const std::vector<Target> &targets,
-                         ModuleProducer module_producer) {
+                         const ModuleProducer &module_producer) {
     validate_outputs(output_files);
 
     user_assert(!fn_name.empty()) << "Function name must be specified.\n";
@@ -759,9 +757,10 @@ void compile_multitarget(const std::string &fn_name,
             user_error << "All Targets must have matching arch-bits-os for compile_multitarget.\n";
         }
         // Some features must match across all targets.
-        static const std::array<Target::Feature, 8> must_match_features = {{
+        static const std::array<Target::Feature, 9> must_match_features = {{
             Target::ASAN,
             Target::CPlusPlusMangling,
+            Target::Debug,
             Target::JIT,
             Target::Matlab,
             Target::MSAN,
@@ -771,7 +770,7 @@ void compile_multitarget(const std::string &fn_name,
         }};
         for (auto f : must_match_features) {
             if (target.has_feature(f) != base_target.has_feature(f)) {
-                user_error << "All Targets must have feature " << f << " set identically for compile_multitarget.\n";
+                user_error << "All Targets must have feature '" << Target::feature_to_name(f) << "'' set identically for compile_multitarget.\n";
                 break;
             }
         }
@@ -867,10 +866,7 @@ void compile_multitarget(const std::string &fn_name,
         // Always build with NoBoundsQuery: underlying code will implement that (or not).
         //
         // Always build *without* NoAsserts (ie, with Asserts enabled): that's the
-        // only way to propagate a nonzero result code to our caller. (Note that this
-        // does mean we get redundant check-for-null tests in the wrapper code for buffer_t*
-        // arguments; this is regrettable but fairly minor in terms of both code size and speed,
-        // at least for real-world code.)
+        // only way to propagate a nonzero result code to our caller.
         Target wrapper_target = base_target
                                     .with_feature(Target::NoRuntime)
                                     .with_feature(Target::NoBoundsQuery)
@@ -885,9 +881,6 @@ void compile_multitarget(const std::string &fn_name,
         Module wrapper_module(fn_name, wrapper_target);
         wrapper_module.append(LoweredFunc(fn_name, base_target_args, wrapper_body, LinkageType::ExternalPlusMetadata));
 
-        // Add a wrapper to accept old buffer_ts
-        add_legacy_wrapper(wrapper_module, wrapper_module.functions().back());
-
         std::map<Output, std::string> wrapper_out = {{Output::object,
                                                       temp_dir.add_temp_object_file(output_files.at(Output::static_library), "_wrapper", base_target, /* in_front*/ true)}};
         debug(1) << "compile_multitarget: wrapper " << wrapper_out.at(Output::object) << "\n";
@@ -897,8 +890,6 @@ void compile_multitarget(const std::string &fn_name,
     if (contains(output_files, Output::c_header)) {
         Module header_module(fn_name, base_target);
         header_module.append(LoweredFunc(fn_name, base_target_args, {}, LinkageType::ExternalPlusMetadata));
-        // Add a wrapper to accept old buffer_ts
-        add_legacy_wrapper(header_module, header_module.functions().back());
         std::map<Output, std::string> header_out = {{Output::c_header, output_files.at(Output::c_header)}};
         debug(1) << "compile_multitarget: c_header " << header_out.at(Output::c_header) << "\n";
         header_module.compile(header_out);

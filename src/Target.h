@@ -89,7 +89,6 @@ struct Target {
         Profile = halide_target_feature_profile,
         NoRuntime = halide_target_feature_no_runtime,
         Metal = halide_target_feature_metal,
-        MinGW = halide_target_feature_mingw,
         CPlusPlusMangling = halide_target_feature_c_plus_plus_mangling,
         LargeBuffers = halide_target_feature_large_buffers,
         HexagonDma = halide_target_feature_hexagon_dma,
@@ -112,7 +111,6 @@ struct Target {
         TracePipeline = halide_target_feature_trace_pipeline,
         D3D12Compute = halide_target_feature_d3d12compute,
         StrictFloat = halide_target_feature_strict_float,
-        LegacyBufferWrappers = halide_target_feature_legacy_buffer_wrappers,
         TSAN = halide_target_feature_tsan,
         ASAN = halide_target_feature_asan,
         CheckUnsafePromises = halide_target_feature_check_unsafe_promises,
@@ -155,7 +153,7 @@ struct Target {
 
     void set_feature(Feature f, bool value = true);
 
-    void set_features(std::vector<Feature> features_to_set, bool value = true);
+    void set_features(const std::vector<Feature> &features_to_set, bool value = true);
 
     bool has_feature(Feature f) const;
 
@@ -163,9 +161,9 @@ struct Target {
         return has_feature((Feature)f);
     }
 
-    bool features_any_of(std::vector<Feature> test_features) const;
+    bool features_any_of(const std::vector<Feature> &test_features) const;
 
-    bool features_all_of(std::vector<Feature> test_features) const;
+    bool features_all_of(const std::vector<Feature> &test_features) const;
 
     /** Return a copy of the target with the given feature set.
      * This is convenient when enabling certain features (e.g. NoBoundsQuery)
@@ -203,6 +201,12 @@ struct Target {
     /** Returns whether a particular device API can be used with this
      * Target. */
     bool supports_device_api(DeviceAPI api) const;
+
+    /** If this Target (including all Features) requires a specific DeviceAPI,
+     * return it. If it doesn't, return DeviceAPI::None.  If the Target has
+     * features with multiple (different) DeviceAPI requirements, the result
+     * will be an arbitrary DeviceAPI. */
+    DeviceAPI get_required_device_api() const;
 
     bool operator==(const Target &other) const {
         return os == other.os &&

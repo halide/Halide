@@ -35,8 +35,7 @@ int main(int argc, char **argv) {
     Func consumer("consumer");
     consumer(x, y) = input(x, y) + tuple(x, y)[0];
 
-    input.dim(0).set_bounds(0, width)
-         .dim(1).set_bounds(0, height).set_stride(width);
+    input.dim(0).set_bounds(0, width).dim(1).set_bounds(0, height).set_stride(width);
 
     // Schedule
     consumer.compute_root()

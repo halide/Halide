@@ -98,7 +98,8 @@ Stmt add_image_checks(Stmt s,
                       const Target &t,
                       const vector<string> &order,
                       const map<string, Function> &env,
-                      const FuncValueBounds &fb) {
+                      const FuncValueBounds &fb,
+                      bool will_inject_host_copies) {
 
     bool no_asserts = t.has_feature(Target::NoAsserts);
     bool no_bounds_query = t.has_feature(Target::NoBoundsQuery);
@@ -142,7 +143,9 @@ Stmt add_image_checks(Stmt s,
     vector<Stmt> asserts_type_checks;
     vector<Stmt> asserts_host_alignment;
     vector<Stmt> asserts_host_non_null;
+    vector<Stmt> asserts_device_not_dirty;
     vector<Stmt> buffer_rewrites;
+    vector<Stmt> msan_checks;
 
     // Inject the code that conditionally returns if we're in inference mode
     Expr maybe_return_condition = const_false();
@@ -153,7 +156,7 @@ Stmt add_image_checks(Stmt s,
     // references to the required sizes.
     map<string, Expr> replace_with_required;
 
-    for (const pair<string, FindBuffers::Result> &buf : bufs) {
+    for (const pair<const string, FindBuffers::Result> &buf : bufs) {
         const string &name = buf.first;
 
         for (int i = 0; i < buf.second.dimensions; i++) {
@@ -248,7 +251,8 @@ Stmt add_image_checks(Stmt s,
         ReductionDomain rdom;
 
         // An expression returning whether or not we're in inference mode
-        Expr handle = Variable::make(type_of<buffer_t *>(), name + ".buffer",
+        string buf_name = name + ".buffer";
+        Expr handle = Variable::make(type_of<halide_buffer_t *>(), buf_name,
                                      image, param, rdom);
         Expr inference_mode = Call::make(Bool(), Call::buffer_is_bounds_query,
                                          {handle}, Call::Extern);
@@ -257,6 +261,13 @@ Stmt add_image_checks(Stmt s,
         // Come up with a name to refer to this buffer in the error messages
         string error_name = (is_output_buffer ? "Output" : "Input");
         error_name += " buffer " + name;
+
+        if (!is_output_buffer && t.has_feature(Target::MSAN)) {
+            Expr buffer = Variable::make(type_of<struct halide_buffer_t *>(), buf_name);
+            Stmt check_contents = Evaluate::make(
+                Call::make(Int(32), "halide_msan_check_buffer_is_initialized", {buffer, Expr(buf_name)}, Call::Extern));
+            msan_checks.push_back(check_contents);
+        }
 
         // Check the type matches the internally-understood type
         {
@@ -394,7 +405,7 @@ Stmt add_image_checks(Stmt s,
 
         // Create code that mutates the input buffers if we're in bounds inference mode.
         BufferBuilder builder;
-        builder.buffer_memory = Variable::make(type_of<struct halide_buffer_t *>(), name + ".buffer");
+        builder.buffer_memory = Variable::make(type_of<struct halide_buffer_t *>(), buf_name);
         builder.shape_memory = Call::make(type_of<struct halide_dimension_t *>(),
                                           Call::buffer_get_shape, {builder.buffer_memory},
                                           Call::Extern);
@@ -555,6 +566,18 @@ Stmt add_image_checks(Stmt s,
                 check = !touched.used || check;
             }
             asserts_host_non_null.push_back(AssertStmt::make(check, error));
+
+            if (!will_inject_host_copies) {
+                Expr device_dirty = Variable::make(Bool(), name + ".device_dirty",
+                                                   image, param, ReductionDomain());
+
+                Expr error = Call::make(Int(32), "halide_error_device_dirty_with_no_device_support",
+                                        {error_name}, Call::Extern);
+
+                // If we have no device support, we can't handle
+                // device_dirty, so every buffer touched needs checking.
+                asserts_device_not_dirty.push_back(AssertStmt::make(!device_dirty, error));
+            }
         }
 
         // and check alignment of the host field
@@ -568,25 +591,28 @@ Stmt add_image_checks(Stmt s,
         }
     }
 
-    // Inject the code that checks the host pointers.
-    if (!no_asserts) {
-        for (size_t i = asserts_host_non_null.size(); i > 0; i--) {
-            s = Block::make(asserts_host_non_null[i - 1], s);
+    auto prepend_stmts = [&](vector<Stmt> *stmts) {
+        while (!stmts->empty()) {
+            s = Block::make(std::move(stmts->back()), s);
+            stmts->pop_back();
         }
-        for (size_t i = asserts_host_alignment.size(); i > 0; i--) {
-            s = Block::make(asserts_host_alignment[i - 1], s);
-        }
-    }
-    // Inject the code that checks that no dimension math overflows
-    if (!no_asserts) {
-        for (size_t i = dims_no_overflow_asserts.size(); i > 0; i--) {
-            s = Block::make(dims_no_overflow_asserts[i - 1], s);
-        }
+    };
 
-        // Inject the code that defines the proposed sizes.
-        for (size_t i = lets_overflow.size(); i > 0; i--) {
-            s = LetStmt::make(lets_overflow[i - 1].first, lets_overflow[i - 1].second, s);
+    auto prepend_lets = [&](vector<pair<string, Expr>> *lets) {
+        while (!lets->empty()) {
+            auto &p = lets->back();
+            s = LetStmt::make(p.first, std::move(p.second), s);
+            lets->pop_back();
         }
+    };
+
+    if (!no_asserts) {
+        // Inject the code that checks the host pointers.
+        prepend_stmts(&asserts_host_non_null);
+        prepend_stmts(&asserts_host_alignment);
+        prepend_stmts(&asserts_device_not_dirty);
+        prepend_stmts(&dims_no_overflow_asserts);
+        prepend_lets(&lets_overflow);
     }
 
     // Replace uses of the var with the constrained versions in the
@@ -602,53 +628,34 @@ Stmt add_image_checks(Stmt s,
     // Inject the code that checks the constraints are correct. We
     // need these regardless of how NoAsserts is set, because they are
     // what gets Halide to actually exploit the constraint.
-    for (size_t i = asserts_constrained.size(); i > 0; i--) {
-        s = Block::make(asserts_constrained[i - 1], s);
-    }
+    prepend_stmts(&asserts_constrained);
 
     if (!no_asserts) {
-        // Inject the code that checks for out-of-bounds access to the buffers.
-        for (size_t i = asserts_required.size(); i > 0; i--) {
-            s = Block::make(asserts_required[i - 1], s);
-        }
-
-        // Inject the code that checks that elem_sizes are ok.
-        for (size_t i = asserts_type_checks.size(); i > 0; i--) {
-            s = Block::make(asserts_type_checks[i - 1], s);
-        }
+        prepend_stmts(&asserts_required);
+        prepend_stmts(&asserts_type_checks);
     }
 
     // Inject the code that returns early for inference mode.
     if (!no_bounds_query) {
         s = IfThenElse::make(!maybe_return_condition, s);
-
-        // Inject the code that does the buffer rewrites for inference mode.
-        for (size_t i = buffer_rewrites.size(); i > 0; i--) {
-            s = Block::make(buffer_rewrites[i - 1], s);
-        }
+        prepend_stmts(&buffer_rewrites);
     }
 
     if (!no_asserts) {
-        // Inject the code that checks the proposed sizes still pass the bounds checks
-        for (size_t i = asserts_proposed.size(); i > 0; i--) {
-            s = Block::make(asserts_proposed[i - 1], s);
-        }
+        prepend_stmts(&asserts_proposed);
     }
 
     // Inject the code that defines the proposed sizes.
-    for (size_t i = lets_proposed.size(); i > 0; i--) {
-        s = LetStmt::make(lets_proposed[i - 1].first, lets_proposed[i - 1].second, s);
-    }
+    prepend_lets(&lets_proposed);
 
     // Inject the code that defines the constrained sizes.
-    for (size_t i = lets_constrained.size(); i > 0; i--) {
-        s = LetStmt::make(lets_constrained[i - 1].first, lets_constrained[i - 1].second, s);
-    }
+    prepend_lets(&lets_constrained);
 
     // Inject the code that defines the required sizes produced by bounds inference.
-    for (size_t i = lets_required.size(); i > 0; i--) {
-        s = LetStmt::make(lets_required[i - 1].first, lets_required[i - 1].second, s);
-    }
+    prepend_lets(&lets_required);
+
+    // Inject the code that checks that does msan checks. (Note that this ignores no_asserts.)
+    prepend_stmts(&msan_checks);
 
     return s;
 }

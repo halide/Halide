@@ -218,10 +218,10 @@ void CodeGen_PTX_Dev::visit(const Allocate *alloc) {
         // meaningless, so we had better only be dealing with
         // constants here.
         int32_t size = alloc->constant_allocation_size();
-        user_assert(size > 0)
+        internal_assert(size > 0)
             << "Allocation " << alloc->name << " has a dynamic size. "
-            << "Only fixed-size allocations are supported on the gpu. "
-            << "Try storing into shared memory instead.";
+            << "This should have been moved to the heap by the "
+            << "fuse_gpu_thread_loops lowering pass.\n";
 
         BasicBlock *here = builder->GetInsertBlock();
 
@@ -275,7 +275,10 @@ void CodeGen_PTX_Dev::visit(const Store *op) {
         // Otherwise defer to the llvm codegen. For llvm version >= 90, atomicrmw support floats so we
         // can also refer to llvm.
         // Half atomics are supported by compute capability 7.x or higher.
-        if (op->value.type().is_float() && (op->value.type().bits() == 32 || (op->value.type().bits() == 64 && target.has_feature(Target::CUDACapability61)))) {
+        if (op->value.type().is_float() &&
+            (op->value.type().bits() == 32 ||
+             (op->value.type().bits() == 64 &&
+              target.has_feature(Target::CUDACapability61)))) {
             Expr val_expr = op->value;
             Expr equiv_load = Load::make(op->value.type(), op->name, op->index, Buffer<>(), op->param, op->predicate, op->alignment);
             Expr delta = simplify(common_subexpression_elimination(op->value - equiv_load));
@@ -461,7 +464,11 @@ vector<char> CodeGen_PTX_Dev::compile_to_src() {
 
     // Ask the target to add backend passes as necessary.
     bool fail = target_machine->addPassesToEmitFile(module_pass_manager, ostream, nullptr,
+#if LLVM_VERSION >= 100
+                                                    ::llvm::CGFT_AssemblyFile,
+#else
                                                     TargetMachine::CGFT_AssemblyFile,
+#endif
                                                     true);
     if (fail) {
         internal_error << "Failed to set up passes to emit PTX source\n";
@@ -533,7 +540,7 @@ int CodeGen_PTX_Dev::native_vector_bits() const {
 }
 
 string CodeGen_PTX_Dev::get_current_kernel_name() {
-    return function->getName();
+    return get_llvm_function_name(function);
 }
 
 void CodeGen_PTX_Dev::dump() {

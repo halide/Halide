@@ -9,11 +9,6 @@ BIN ?= $(ROOT_DIR)/bin
 PYTHON ?= python3
 TEST_TMP ?= $(BIN)/tmp
 
-ifeq ($(OS), Windows_NT)
-    # assume we are building for the MinGW environment
-    FPIC=
-    SHARED_EXT=dll
-else
     FPIC=-fPIC
 ifeq ($(UNAME), Darwin)
     SHARED_EXT=dylib
@@ -21,7 +16,6 @@ ifeq ($(UNAME), Darwin)
     SUFFIX=.so
 else
     SHARED_EXT=so
-endif
 endif
 
 ifeq ($(UNAME), Linux)
@@ -39,16 +33,7 @@ LIBHALIDE ?= $(HALIDE_DISTRIB_PATH)/bin/libHalide.$(SHARED_EXT)
 SUFFIX = $(shell $(PYTHON)-config --extension-suffix)
 
 # Discover PyBind path from `python3 -m pybind11 --includes`
-# if it is pip/conda installed, which is a common case.
-# Cf. https://github.com/pybind/pybind11/blob/master/docs/compiling.rst#building-manually
 PYBIND11_CFLAGS = $(shell $(PYTHON) -m pybind11 --includes)
-ifeq ($(PYBIND11_CFLAGS),)
-    ifndef PYBIND11_PATH
-        $(error PYBIND11_PATH is undefined)
-    endif
-    PYBIND11_PATH ?= /path/to/pybind11
-    PYBIND11_CFLAGS = -I $(PYBIND11_PATH)/include
-endif
 
 OPTIMIZE ?= -O3
 
@@ -62,7 +47,7 @@ CCFLAGS := $(filter-out -Wstrict-prototypes,$(CCFLAGS))
 
 # DON'T link libpython* - leave those symbols to lazily resolve at load time
 # Cf. https://github.com/pybind/pybind11/blob/master/docs/compiling.rst#building-manually
-LDFLAGS=-lz $(USE_EXPORT_DYNAMIC)
+LDFLAGS += -lz $(USE_EXPORT_DYNAMIC)
 
 PY_SRCS=$(shell ls $(ROOT_DIR)/src/*.cpp)
 PY_OBJS=$(PY_SRCS:$(ROOT_DIR)/src/%.cpp=$(BIN)/src/%.o)
@@ -120,9 +105,9 @@ $(BIN)/runtime.a: $(BIN)/runtime.gen
 	$< -r runtime -o $(BIN) target=host
 
 # Which target features to use for which test targets.
-target_features_addconstant=-legacy_buffer_wrappers-no_runtime
+target_features_addconstant=-no_runtime
 target_features_bit=-no_runtime
-target_features_user_context=-user_context-legacy_buffer_wrappers-no_runtime
+target_features_user_context=-user_context-no_runtime
 
 # Make the generator generate a Python extension:
 $(BIN)/%.py.cpp $(BIN)/%.halide_generated.cpp $(BIN)/%.h: $(BIN)/%.gen

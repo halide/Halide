@@ -19,12 +19,11 @@ struct ArgumentEstimates {
      * For buffer arguments, all should be undefined. */
     Expr scalar_def, scalar_min, scalar_max, scalar_estimate;
 
-    /** If this is a buffer argument, these are the estimated min and extent for each dimension.
-     * If there are no estimates, buffer_estimates.size() can be zero; otherwise, it must always equal the dimensions */
-    struct MinAndExtent {
-        Expr min, extent;
-    };
-    std::vector<MinAndExtent> buffer_estimates;
+    /** If this is a buffer argument, these are the estimated min and
+     * extent for each dimension.  If there are no estimates,
+     * buffer_estimates.size() can be zero; otherwise, it must always
+     * equal the dimensions */
+    Region buffer_estimates;
 
     bool operator==(const ArgumentEstimates &rhs) const;
 };

@@ -77,12 +77,12 @@ struct PreviousDeclarations {
         return check_and_enter(prev_types, mangled.full_name, mangled.with_substitutions);
     }
 
-    std::string check_and_enter_name(std::string name) {
+    std::string check_and_enter_name(const std::string &name) {
         return check_and_enter(prev_names, name, name + "@");
     }
 };
 
-std::string simple_type_to_mangle_char(const std::string type_name, const Target &target) {
+std::string simple_type_to_mangle_char(const std::string &type_name, const Target &target) {
     if (type_name == "void") {
         return "X";
     } else if (type_name == "bool") {
@@ -317,13 +317,13 @@ std::string cplusplus_function_mangled_name(const std::string &name, const std::
 
 namespace ItaniumABIMangling {
 
-std::string itanium_mangle_id(std::string id) {
+std::string itanium_mangle_id(const std::string &id) {
     std::ostringstream oss;
     oss << id.size() << id;
     return oss.str();
 }
 
-std::string simple_type_to_mangle_char(const std::string type_name, const Target &target) {
+std::string simple_type_to_mangle_char(const std::string &type_name, const Target &target) {
     if (type_name == "void") {
         return "v";
     } else if (type_name == "bool") {
@@ -346,8 +346,7 @@ std::string simple_type_to_mangle_char(const std::string type_name, const Target
     } else if (type_name == "int64_t") {
         if (target.os == Target::OSX ||
             target.os == Target::IOS ||
-            target.bits == 32 ||
-            target.has_feature(Target::MinGW)) {
+            target.bits == 32) {
             return "x";
         } else {
             return "l";
@@ -355,8 +354,7 @@ std::string simple_type_to_mangle_char(const std::string type_name, const Target
     } else if (type_name == "uint64_t") {
         if (target.os == Target::OSX ||
             target.os == Target::IOS ||
-            target.bits == 32 ||
-            target.has_feature(Target::MinGW)) {
+            target.bits == 32) {
             return "y";
         } else {
             return "m";
@@ -400,7 +398,7 @@ struct PrevPrefixes {
         return !place.second;
     }
 
-    bool extend_name_part(MangledNamePart &name_part, const std::string mangled) {
+    bool extend_name_part(MangledNamePart &name_part, const std::string &mangled) {
         std::string substitute;
         bool found = check_and_enter(name_part.with_substitutions + mangled, substitute);
         if (found) {
@@ -412,7 +410,7 @@ struct PrevPrefixes {
         return found;
     }
 
-    bool prepend_name_part(const std::string mangled, MangledNamePart &name_part) {
+    bool prepend_name_part(const std::string &mangled, MangledNamePart &name_part) {
         std::string substitute;
         bool found = check_and_enter(mangled + name_part.with_substitutions, substitute);
         if (found) {
@@ -467,7 +465,7 @@ MangledNamePart apply_indirection_and_cvr_quals(const Type &type, MangledNamePar
     return name_part;
 }
 
-MangledNamePart mangle_qualified_name(std::string name, const std::vector<std::string> &namespaces,
+MangledNamePart mangle_qualified_name(const std::string &name, const std::vector<std::string> &namespaces,
                                       const std::vector<halide_cplusplus_type_name> &enclosing_types,
                                       bool can_substitute, PrevPrefixes &prevs) {
     MangledNamePart result;
@@ -537,8 +535,7 @@ std::string mangle_type(const Type &type, const Target &target, PrevPrefixes &pr
         case 64:
             if (target.os == Target::OSX ||
                 target.os == Target::IOS ||
-                target.bits == 32 ||
-                target.has_feature(Target::MinGW)) {
+                target.bits == 32) {
                 return "x";
             } else {
                 return "l";
@@ -559,8 +556,7 @@ std::string mangle_type(const Type &type, const Target &target, PrevPrefixes &pr
         case 64:
             if (target.os == Target::OSX ||
                 target.os == Target::IOS ||
-                target.bits == 32 ||
-                target.has_feature(Target::MinGW)) {
+                target.bits == 32) {
                 return "y";
             } else {
                 return "m";
@@ -608,7 +604,7 @@ std::string cplusplus_function_mangled_name(const std::string &name, const std::
 std::string cplusplus_function_mangled_name(const std::string &name, const std::vector<std::string> &namespaces,
                                             Type return_type, const std::vector<ExternFuncArgument> &args,
                                             const Target &target) {
-    if (target.os == Target::Windows && !target.has_feature(Target::MinGW)) {
+    if (target.os == Target::Windows) {
         return WindowsMangling::cplusplus_function_mangled_name(name, namespaces, return_type, args, target);
     } else {
         return ItaniumABIMangling::cplusplus_function_mangled_name(name, namespaces, return_type, args, target);
@@ -943,14 +939,12 @@ void cplusplus_mangle_test() {
         Target(Target::IOS, Target::ARM, 32),
         Target(Target::IOS, Target::ARM, 64),
         Target(Target::Windows, Target::X86, 32),
-        Target(Target::Windows, Target::X86, 64)
-    };
+        Target(Target::Windows, Target::X86, 64)};
     MangleResult *expecteds[kTestTargetCount]{
         ItaniumABIMangling_main, ItaniumABIMangling_main,
         ItaniumABIMangling_main, ItaniumABIMangling_main,
         ItaniumABIMangling_main, ItaniumABIMangling_main,
-        win32_expecteds, win64_expecteds
-    };
+        win32_expecteds, win64_expecteds};
 
     size_t i = 0;
     for (const auto &target : targets) {

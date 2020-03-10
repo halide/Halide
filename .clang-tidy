@@ -1,0 +1,7 @@
+---
+Checks: '-*,modernize-use-override,performance-move-const-arg,performance-noexcept-move-constructor,performance-unnecessary-value-param,performance-unnecessary-copy-initialization'
+WarningsAsErrors: '*'
+HeaderFilterRegex: '.*'
+AnalyzeTemporaryDtors: false
+FormatStyle: 'file'
+...

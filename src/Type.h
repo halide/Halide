@@ -169,7 +169,6 @@ HALIDE_DECLARE_EXTERN_SIMPLE_TYPE(Halide::float16_t);
 HALIDE_DECLARE_EXTERN_SIMPLE_TYPE(Halide::bfloat16_t);
 HALIDE_DECLARE_EXTERN_SIMPLE_TYPE(float);
 HALIDE_DECLARE_EXTERN_SIMPLE_TYPE(double);
-HALIDE_DECLARE_EXTERN_STRUCT_TYPE(buffer_t);
 HALIDE_DECLARE_EXTERN_STRUCT_TYPE(halide_buffer_t);
 HALIDE_DECLARE_EXTERN_STRUCT_TYPE(halide_dimension_t);
 HALIDE_DECLARE_EXTERN_STRUCT_TYPE(halide_device_interface_t);
@@ -210,8 +209,8 @@ template<typename T>
         (is_volatile ? halide_handle_cplusplus_type::Volatile : 0));
     constexpr halide_handle_cplusplus_type::ReferenceType ref_type =
         (is_lvalue_reference ? halide_handle_cplusplus_type::LValueReference :
-         is_rvalue_reference ? halide_handle_cplusplus_type::RValueReference :
-         halide_handle_cplusplus_type::NotReference);
+                               is_rvalue_reference ? halide_handle_cplusplus_type::RValueReference :
+                                                     halide_handle_cplusplus_type::NotReference);
 
     using TNonCVBase = typename std::remove_cv<TBase>::type;
     constexpr bool known_type = halide_c_type_to_name<TNonCVBase>::known_type;

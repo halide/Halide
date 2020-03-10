@@ -1,7 +1,5 @@
 include(CMakeParseArguments)
 
-cmake_minimum_required(VERSION 3.3)
-
 # ----------------------- Public Functions.
 # These are all documented in README_cmake.md.
 #
@@ -15,18 +13,22 @@ cmake_minimum_required(VERSION 3.3)
 #
 
 # Add the include paths and link dependencies for halide_image_io.
-function(halide_use_image_io TARGET)
-  foreach(PKG PNG JPEG)
-    find_package(${PKG} QUIET)
-    if(${PKG}_FOUND)
-      target_compile_definitions(${TARGET} PRIVATE ${${PKG}_DEFINITIONS})
-      target_include_directories(${TARGET} PRIVATE ${${PKG}_INCLUDE_DIRS})
-      target_link_libraries(${TARGET} PRIVATE ${${PKG}_LIBRARIES})
+add_library(halide_image_io INTERFACE)
+foreach(LIB IN ITEMS PNG JPEG)
+  find_package(${LIB} QUIET)
+  if(${LIB}_FOUND)
+    message(STATUS "Found ${LIB} version ${${LIB}_VERSION}")
+    target_link_libraries(halide_image_io INTERFACE ${LIB}::${LIB})
     else()
-      message(STATUS "${PKG} not found for ${TARGET}; compiling with -DHALIDE_NO_${PKG}")
-      target_compile_definitions(${TARGET} PRIVATE -DHALIDE_NO_${PKG})
-    endif()
-  endforeach()
+    message(STATUS "${LIB} not found; compiling with -DHALIDE_NO_${LIB}")
+    target_compile_definitions(halide_image_io INTERFACE HALIDE_NO_${LIB})
+  endif()
+endforeach()
+add_library(Halide::ImageIO ALIAS halide_image_io)
+
+function(halide_use_image_io TARGET)
+  message(DEPRECATION "Use: target_link_libraries(${TARGET} PRIVATE Halide::ImageIO)")
+  target_link_libraries(${TARGET} PRIVATE Halide::ImageIO)
 endfunction()
 
 # Make a build target for a Generator.
@@ -110,7 +112,7 @@ endfunction()
 # Use a Generator target to emit a code library.
 function(halide_library_from_generator BASENAME)
   set(options )
-  set(oneValueArgs FUNCTION_NAME GENERATOR HALIDE_TARGET)
+  set(oneValueArgs FUNCTION_NAME GENERATOR HALIDE_TARGET GRADIENT_DESCENT)
   set(multiValueArgs EXTRA_OUTPUTS FILTER_DEPS GENERATOR_ARGS HALIDE_TARGET_FEATURES INCLUDES)
   cmake_parse_arguments(args "" "${oneValueArgs}" "${multiValueArgs}" ${ARGN})
 
@@ -122,6 +124,9 @@ function(halide_library_from_generator BASENAME)
   endif()
   if ("${args_HALIDE_TARGET}" STREQUAL "")
     set(args_HALIDE_TARGET "host")
+  endif()
+  if ("${args_GRADIENT_DESCENT}" STREQUAL "")
+    set(args_GRADIENT_DESCENT "0")
   endif()
   # It's fine for EXTRA_OUTPUTS, GENERATOR_ARGS, FILTER_DEPS, HALIDE_TARGET_FEATURES to be empty
 
@@ -195,6 +200,7 @@ function(halide_library_from_generator BASENAME)
   _halide_add_target_features("${TARGET_WITH_FEATURES}" "no_runtime" TARGET_WITH_FEATURES)
 
   set(GENERATOR_EXEC_ARGS "-o" "${GENFILES_DIR}")
+  list(APPEND GENERATOR_EXEC_ARGS "-d" "${args_GRADIENT_DESCENT}")
   list(APPEND GENERATOR_EXEC_ARGS "-g" "${GENERATOR_NAME}")
   list(APPEND GENERATOR_EXEC_ARGS "-f" "${args_FUNCTION_NAME}" )
   list(APPEND GENERATOR_EXEC_ARGS "target=${TARGET_WITH_FEATURES}")
@@ -305,16 +311,20 @@ function(halide_library NAME)
 endfunction()
 
 # ----------------------- Private Functions.
-# All functions, properties, variables, etc. that being with an underscore
+# All functions, properties, variables, etc. that begin with an underscore
 # should be assumed to be private implementation details; don't rely on them externally.
 
 # Set the C++ options necessary for using libHalide.
 function(_halide_set_cxx_options TARGET)
   if (MSVC)
-    target_compile_definitions("${TARGET}" PUBLIC "-D_CRT_SECURE_NO_WARNINGS" "-D_SCL_SECURE_NO_WARNINGS")
-    target_compile_options("${TARGET}" PRIVATE "/GR-")
-  else()
-    target_compile_options("${TARGET}" PRIVATE "-fno-rtti")
+    target_compile_definitions("${TARGET}" PRIVATE "-D_CRT_SECURE_NO_WARNINGS" "-D_SCL_SECURE_NO_WARNINGS")
+  endif()
+  if(NOT HALIDE_ENABLE_RTTI)
+    if(MSVC)
+      target_compile_options("${TARGET}" PRIVATE "/GR-")
+    else()
+      target_compile_options("${TARGET}" PRIVATE "-fno-rtti")
+    endif()
   endif()
 endfunction()
 
@@ -478,7 +488,6 @@ function(_halide_runtime_target_name HALIDE_TARGET OUTVAR)
         profile
         no_runtime
         metal
-        mingw
         c_plus_plus_name_mangling
         large_buffers
         hvx_64
@@ -499,7 +508,6 @@ function(_halide_runtime_target_name HALIDE_TARGET OUTVAR)
         trace_realizations
         d3d12compute
         strict_float
-        legacy_buffer_wrappers
         tsan
         asan
         check_unsafe_promises
@@ -734,6 +742,6 @@ define_property(TARGET PROPERTY _HALIDE_GENERATOR_NAME
 
 add_library(_halide_library_from_generator_rungen "${HALIDE_TOOLS_DIR}/RunGenMain.cpp")
 target_include_directories(_halide_library_from_generator_rungen PRIVATE "${HALIDE_INCLUDE_DIR}" "${HALIDE_TOOLS_DIR}")
-halide_use_image_io(_halide_library_from_generator_rungen)
+target_link_libraries(_halide_library_from_generator_rungen PRIVATE Halide::ImageIO)
 _halide_set_cxx_options(_halide_library_from_generator_rungen)
 set_target_properties(_halide_library_from_generator_rungen PROPERTIES EXCLUDE_FROM_ALL TRUE)

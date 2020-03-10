@@ -415,7 +415,7 @@ public:
     }
 };
 
-Stmt find_linear_expressions(Stmt s) {
+Stmt find_linear_expressions(const Stmt &s) {
 
     return FindLinearExpressions().mutate(s);
 }
@@ -456,7 +456,7 @@ public:
     }
 };
 
-Stmt remove_varying_attributes(Stmt s) {
+Stmt remove_varying_attributes(const Stmt &s) {
     return RemoveVaryingAttributeTags().mutate(s);
 }
 
@@ -483,7 +483,7 @@ public:
     }
 };
 
-Stmt replace_varying_attributes(Stmt s) {
+Stmt replace_varying_attributes(const Stmt &s) {
     return ReplaceVaryingAttributeTags().mutate(s);
 }
 
@@ -504,13 +504,13 @@ public:
 
 // Remove varying attributes from the varying's map if they do not appear in the
 // loop_stmt because they were simplified away.
-void prune_varying_attributes(Stmt loop_stmt, std::map<std::string, Expr> &varying) {
+void prune_varying_attributes(const Stmt &loop_stmt, std::map<std::string, Expr> &varying) {
     FindVaryingAttributeVars find;
     loop_stmt.accept(&find);
 
     std::vector<std::string> remove_list;
 
-    for (const std::pair<std::string, Expr> &i : varying) {
+    for (const std::pair<const std::string, Expr> &i : varying) {
         const std::string &name = i.first;
         if (find.variables.find(name) == find.variables.end()) {
             debug(2) << "Removed varying attribute " << name << "\n";
@@ -576,7 +576,7 @@ protected:
         }
     }
 
-    Type float_type(Expr e) {
+    Type float_type(const Expr &e) {
         return Float(e.type().bits(), e.type().lanes());
     }
 
@@ -1219,7 +1219,7 @@ public:
 // from removing the variables or substituting in their constant
 // values.
 
-Expr dont_simplify(Expr v_) {
+Expr dont_simplify(const Expr &v_) {
     return Internal::Call::make(v_.type(),
                                 Internal::Call::return_second,
                                 {0, v_},
@@ -1262,7 +1262,7 @@ public:
             attribute_order["__vertex_y"] = 1;
 
             int idx = 2;
-            for (const std::pair<std::string, Expr> &v : varyings) {
+            for (const std::pair<const std::string, Expr> &v : varyings) {
                 attribute_order[v.first] = idx++;
             }
 
@@ -1336,6 +1336,7 @@ public:
             // snap the value back to the integer grid.
             loop_stmt = CastVaryingVariables().mutate(loop_stmt);
 
+            // clang-format off
             // Insert two new for-loops for vertex buffer generation on the host
             // before the two GPU scheduled for-loops
             return LetStmt::make("glsl.num_coords_dim0", dont_simplify((int)(coords[0].size())),
@@ -1348,13 +1349,14 @@ public:
                    Block::make(used_in_codegen(Int(32), "glsl.num_coords_dim1"),
                    Block::make(used_in_codegen(Int(32), "glsl.num_padded_attributes"),
                    Free::make(vs.vertex_buffer_name))))))))));
+            // clang-format on
         } else {
             return IRMutator::visit(op);
         }
     }
 };
 
-Stmt setup_gpu_vertex_buffer(Stmt s) {
+Stmt setup_gpu_vertex_buffer(const Stmt &s) {
     CreateVertexBufferHostLoops vb;
     return vb.mutate(s);
 }

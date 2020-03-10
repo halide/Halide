@@ -23,18 +23,18 @@ class FindBufferSymbols : public IRVisitor {
 
     void visit_param(const string &ref_name, const Parameter &param) {
         if (param.defined() && param.is_buffer()) {
-            string name = param.name();
+            const string &name = param.name();
             buffers[name] =
-                BufferInfo{Variable::make(type_of<buffer_t *>(), name + ".buffer", param),
+                BufferInfo{Variable::make(type_of<halide_buffer_t *>(), name + ".buffer", param),
                            param.dimensions()};
         }
     }
 
     void visit_buffer(const string &ref_name, const Buffer<> &buffer) {
         if (buffer.defined()) {
-            string name = buffer.name();
+            const string &name = buffer.name();
             buffers[name] =
-                BufferInfo{Variable::make(type_of<buffer_t *>(), name + ".buffer", buffer),
+                BufferInfo{Variable::make(type_of<halide_buffer_t *>(), name + ".buffer", buffer),
                            buffer.dimensions()};
         }
     }

@@ -28,7 +28,7 @@ Expr Simplify::visit(const EQ *op, ExprInfo *bounds) {
         if (rewrite(x == 1, x)) {
             return rewrite.result;
         } else if (rewrite(x == 0, !x)) {
-            return mutate(std::move(rewrite.result), bounds);
+            return mutate(rewrite.result, bounds);
         } else if (rewrite(x == x, const_true(lanes))) {
             return rewrite.result;
         } else if (a.same_as(op->a) && b.same_as(op->b)) {
@@ -79,12 +79,21 @@ Expr Simplify::visit(const EQ *op, ExprInfo *bounds) {
         rewrite(y - min(y, x) == 0, y <= x) ||
         rewrite(max(x, c0) + c1 == 0, x == fold(-c1), c0 + c1 < 0) ||
         rewrite(min(x, c0) + c1 == 0, x == fold(-c1), c0 + c1 > 0) ||
+        rewrite(max(x, c0) + c1 == 0, false, c0 + c1 > 0) ||
+        rewrite(min(x, c0) + c1 == 0, false, c0 + c1 < 0) ||
         rewrite(max(x, c0) + c1 == 0, x <= c0, c0 + c1 == 0) ||
         rewrite(min(x, c0) + c1 == 0, c0 <= x, c0 + c1 == 0) ||
+        // Special case the above where c1 == 0
+        rewrite(max(x, c0) == 0, x == 0, c0 < 0) ||
+        rewrite(min(x, c0) == 0, x == 0, c0 > 0) ||
+        rewrite(max(x, c0) == 0, false, c0 > 0) ||
+        rewrite(min(x, c0) == 0, false, c0 < 0) ||
         rewrite(max(x, 0) == 0, x <= 0) ||
-        rewrite(min(x, 0) == 0, 0 <= x)) {
+        rewrite(min(x, 0) == 0, 0 <= x) ||
 
-        return mutate(std::move(rewrite.result), bounds);
+        false) {
+
+        return mutate(rewrite.result, bounds);
     }
 
     if (rewrite(c0 == 0, fold(c0 == 0)) ||

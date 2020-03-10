@@ -17,7 +17,7 @@ namespace {
 
 // Permute a 32-bit unsigned integer using a fixed psuedorandom
 // permutation.
-Expr rng32(Expr x) {
+Expr rng32(const Expr &x) {
     internal_assert(x.type() == UInt(32));
 
     // A polynomial P with coefficients C0 .. CN induces a permutation
@@ -126,7 +126,7 @@ public:
     }
 };
 
-Expr lower_random(Expr e, const vector<string> &free_vars, int tag) {
+Expr lower_random(const Expr &e, const vector<string> &free_vars, int tag) {
     LowerRandom r(free_vars, tag);
     return r.mutate(e);
 }

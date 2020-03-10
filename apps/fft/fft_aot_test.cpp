@@ -1,21 +1,21 @@
 #include <cmath>
-#include <iostream>
-#include <iomanip>
-#include <string.h>
 #include <cstdlib>
+#include <iomanip>
+#include <iostream>
+#include <string.h>
 
 #include "HalideBuffer.h"
 
-#include "fft_forward_r2c.h"
-#include "fft_inverse_c2r.h"
 #include "fft_forward_c2c.h"
+#include "fft_forward_r2c.h"
 #include "fft_inverse_c2c.h"
+#include "fft_inverse_c2r.h"
 
 namespace {
 const float kPi = 3.14159265358979310000f;
 
 const int32_t kSize = 16;
-}
+}  // namespace
 
 using Halide::Runtime::Buffer;
 
@@ -142,7 +142,7 @@ int main(int argc, char **argv) {
         im(in, 1, 0) = term_magnitude;
         // Negative frequencies count backward from end, no DC term
         re(in, kSize - 1, 0) = term_magnitude;
-        im(in, kSize - 1, 0) = -term_magnitude; // complex conjugate
+        im(in, kSize - 1, 0) = -term_magnitude;  // complex conjugate
 
         auto out = real_buffer();
 
@@ -234,8 +234,8 @@ int main(int argc, char **argv) {
                 // values. The input is chose so the mirrored negative
                 // frequency components are all zero due to
                 // interference of the real and complex parts.
-              if (!((j == 0 && (i > 0 && i < 5)) ||
-                    (i == 0 && j > 0 && j < 5))) {
+                if (!((j == 0 && (i > 0 && i < 5)) ||
+                      (i == 0 && j > 0 && j < 5))) {
                     float real = re(out, i, j);
                     float imaginary = im(out, i, j);
                     if (fabs(real) > .001) {
@@ -261,7 +261,7 @@ int main(int argc, char **argv) {
         re(in, 1, 0) = .5f;
         im(in, 1, 0) = .5f;
         re(in, kSize - 1, 0) = .5f;
-        im(in, kSize - 1, 0) = .5f; // Not conjugate. Result will not be real
+        im(in, kSize - 1, 0) = .5f;  // Not conjugate. Result will not be real
 
         auto out = complex_buffer();
 
@@ -277,7 +277,7 @@ int main(int argc, char **argv) {
                 float real_sample = re(out, i, j);
                 float imaginary_sample = im(out, i, j);
                 float real_expected = 1 / sqrt(2) * (cos(2 * kPi * (i / 16.0f + .125)) + cos(2 * kPi * (i * (kSize - 1) / 16.0f + .125)));
-                float imaginary_expected = 1 / sqrt(2) * (sin(2 * kPi * (i / 16.0f + .125)) +  sin(2 * kPi * (i * (kSize - 1) / 16.0f + .125)));
+                float imaginary_expected = 1 / sqrt(2) * (sin(2 * kPi * (i / 16.0f + .125)) + sin(2 * kPi * (i * (kSize - 1) / 16.0f + .125)));
 
                 if (fabs(real_sample - real_expected) > .001) {
                     std::cerr << "fft_inverse_c2c real mismatch at (" << i << ", " << j << ") " << real_sample << " vs. " << real_expected << std::endl;

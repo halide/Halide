@@ -17,10 +17,6 @@ CodeGen_PyTorch::CodeGen_PyTorch(std::ostream &s)
 void CodeGen_PyTorch::compile(const Module &module) {
     const Target target = module.target();
 
-    stream << "#include \"torch/extension.h\"\n";
-    stream << "#include \"HalideBuffer.h\"\n";
-    stream << "#include \"HalidePyTorchHelpers.h\"\n";
-
     if (target.has_feature(Target::CUDA)) {
         if (!target.has_feature(Target::UserContext)) {
             user_error << "Compile a PyTorch wrapper for a CUDA op requires the "
@@ -28,7 +24,14 @@ void CodeGen_PyTorch::compile(const Module &module) {
                           "Please add \"-user_context\" to the generator's target options.\n";
         }
         stream << "#include \"ATen/cuda/CUDAContext.h\"\n";
+        stream << "#include \"HalideBuffer.h\"\n";
         stream << "#include \"HalidePyTorchCudaHelpers.h\"\n";
+        stream << "#include \"HalidePyTorchHelpers.h\"\n";
+        stream << "#include \"torch/extension.h\"\n";
+    } else {
+        stream << "#include \"HalideBuffer.h\"\n";
+        stream << "#include \"HalidePyTorchHelpers.h\"\n";
+        stream << "#include \"torch/extension.h\"\n";
     }
 
     stream << "\n";
@@ -45,10 +48,6 @@ void CodeGen_PyTorch::compile(const Module &module) {
     }
 
     for (const auto &f : module.functions()) {
-        if (f.name.find("old_buffer_t") != std::string::npos) {
-            debug(1) << "ignoring " << f.name;
-            continue;
-        }
         if (target.has_feature(Target::CUDA)) {
             compile(f, true);
         } else {
@@ -71,6 +70,7 @@ void CodeGen_PyTorch::compile(const LoweredFunc &f, bool is_cuda) {
     const std::vector<LoweredArgument> &args = f.args;
     std::vector<LoweredArgument> buffer_args;
 
+    stream << "HALIDE_FUNCTION_ATTRS\n";
     stream << "inline int " << simple_name << "_th_(";
     for (size_t i = 0; i < args.size(); i++) {
         if (args[i].name == "__user_context") {
@@ -238,12 +238,26 @@ void CodeGen_PyTorch::test() {
 
     // The correct source concatenates CPU and GPU headers
     std::string correct_src =
-        R"GOLDEN_CODE(#include "torch/extension.h"
-#include "HalideBuffer.h"
+        R"GOLDEN_CODE(#include "HalideBuffer.h"
 #include "HalidePyTorchHelpers.h"
+#include "torch/extension.h"
 
 struct halide_buffer_t;
 struct halide_filter_metadata_t;
+
+#ifndef HALIDE_MUST_USE_RESULT
+#ifdef __has_attribute
+#if __has_attribute(nodiscard)
+#define HALIDE_MUST_USE_RESULT [[nodiscard]]
+#elif __has_attribute(warn_unused_result)
+#define HALIDE_MUST_USE_RESULT __attribute__((warn_unused_result))
+#else
+#define HALIDE_MUST_USE_RESULT
+#endif
+#else
+#define HALIDE_MUST_USE_RESULT
+#endif
+#endif
 
 #ifndef HALIDE_FUNCTION_ATTRS
 #define HALIDE_FUNCTION_ATTRS
@@ -255,12 +269,14 @@ struct halide_filter_metadata_t;
 extern "C" {
 #endif
 
-int test1(struct halide_buffer_t *_buf_buffer, float _alpha, int32_t _beta) HALIDE_FUNCTION_ATTRS;
+HALIDE_FUNCTION_ATTRS
+int test1(struct halide_buffer_t *_buf_buffer, float _alpha, int32_t _beta);
 
 #ifdef __cplusplus
 }  // extern "C"
 #endif
 
+HALIDE_FUNCTION_ATTRS
 inline int test1_th_(at::Tensor &_buf, float _alpha, int32_t _beta) {
     // Check tensors have contiguous memory and are on the correct device
     HLPT_CHECK_CONTIGUOUS(_buf);
@@ -275,14 +291,28 @@ inline int test1_th_(at::Tensor &_buf, float _alpha, int32_t _beta) {
     return 0;
 }
 
-#include "torch/extension.h"
-#include "HalideBuffer.h"
-#include "HalidePyTorchHelpers.h"
 #include "ATen/cuda/CUDAContext.h"
+#include "HalideBuffer.h"
 #include "HalidePyTorchCudaHelpers.h"
+#include "HalidePyTorchHelpers.h"
+#include "torch/extension.h"
 
 struct halide_buffer_t;
 struct halide_filter_metadata_t;
+
+#ifndef HALIDE_MUST_USE_RESULT
+#ifdef __has_attribute
+#if __has_attribute(nodiscard)
+#define HALIDE_MUST_USE_RESULT [[nodiscard]]
+#elif __has_attribute(warn_unused_result)
+#define HALIDE_MUST_USE_RESULT __attribute__((warn_unused_result))
+#else
+#define HALIDE_MUST_USE_RESULT
+#endif
+#else
+#define HALIDE_MUST_USE_RESULT
+#endif
+#endif
 
 #ifndef HALIDE_FUNCTION_ATTRS
 #define HALIDE_FUNCTION_ATTRS
@@ -294,12 +324,14 @@ struct halide_filter_metadata_t;
 extern "C" {
 #endif
 
-int test1(struct halide_buffer_t *_buf_buffer, float _alpha, int32_t _beta) HALIDE_FUNCTION_ATTRS;
+HALIDE_FUNCTION_ATTRS
+int test1(struct halide_buffer_t *_buf_buffer, float _alpha, int32_t _beta);
 
 #ifdef __cplusplus
 }  // extern "C"
 #endif
 
+HALIDE_FUNCTION_ATTRS
 inline int test1_th_(at::Tensor &_buf, float _alpha, int32_t _beta) {
     // Setup CUDA
     int device_id = at::cuda::current_device();

@@ -1,6 +1,6 @@
+#include <cassert>
 #include <cstdio>
 #include <cstdlib>
-#include <cassert>
 
 #include "linear_blur.h"
 #include "simple_blur.h"

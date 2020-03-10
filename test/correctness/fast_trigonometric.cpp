@@ -11,8 +11,8 @@ int main(int argc, char **argv) {
     Var x;
     Expr t = x / 1000.f;
     const float two_pi = 2.0f * static_cast<float>(M_PI);
-    sin_f(x) = fast_sin(-two_pi * t + (1-t) * two_pi);
-    cos_f(x) = fast_cos(-two_pi * t + (1-t) * two_pi);
+    sin_f(x) = fast_sin(-two_pi * t + (1 - t) * two_pi);
+    cos_f(x) = fast_cos(-two_pi * t + (1 - t) * two_pi);
     sin_f.vectorize(x, 8);
     cos_f.vectorize(x, 8);
 
@@ -26,11 +26,11 @@ int main(int argc, char **argv) {
         const float cos_x = cos_result(i);
         const float sin_x_ref = sin(x);
         const float cos_x_ref = cos(x);
-        if (abs(sin_x_ref - sin_x) > 1e-5) {
+        if (std::abs(sin_x_ref - sin_x) > 1e-5) {
             fprintf(stderr, "fast_sin(%.6f) = %.20f not equal to %.20f\n", x, sin_x, sin_x_ref);
             exit(1);
         }
-        if (abs(cos_x_ref - cos_x) > 1e-5) {
+        if (std::abs(cos_x_ref - cos_x) > 1e-5) {
             fprintf(stderr, "fast_cos(%.6f) = %.20f not equal to %.20f\n", x, cos_x, cos_x_ref);
             exit(1);
         }

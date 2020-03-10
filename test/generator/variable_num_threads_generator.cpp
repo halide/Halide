@@ -10,7 +10,7 @@ public:
         // A job with lots of nested parallelism
         Var x, y;
 
-        output(x, y) = sqrt(sqrt(x*y));
+        output(x, y) = sqrt(sqrt(x * y));
         output.parallel(x).parallel(y);
     }
 };

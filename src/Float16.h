@@ -12,7 +12,7 @@ namespace Halide {
  *
  *  This type is enforced to be 16-bits wide and maintains no state
  *  other than the raw IEEE754 binary16 bits so that it can passed
- *  to code that checks a type's size and used for buffer_t allocation.
+ *  to code that checks a type's size and used for halide_buffer_t allocation.
  * */
 struct float16_t {
 
@@ -138,7 +138,7 @@ namespace Halide {
  *
  *  This type is enforced to be 16-bits wide and maintains no state
  *  other than the raw bits so that it can passed to code that checks
- *  a type's size and used for buffer_t allocation. */
+ *  a type's size and used for halide_buffer_t allocation. */
 struct bfloat16_t {
 
     static const int mantissa_bits = 7;

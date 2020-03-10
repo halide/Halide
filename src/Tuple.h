@@ -39,13 +39,13 @@ public:
 
     /** Construct a Tuple of a single Expr */
     explicit Tuple(Expr e) {
-        exprs.push_back(e);
+        exprs.emplace_back(std::move(e));
     }
 
     /** Construct a Tuple from some Exprs. */
     //@{
     template<typename... Args>
-    Tuple(Expr a, Expr b, Args &&... args) {
+    Tuple(const Expr &a, const Expr &b, Args &&... args) {
         exprs = std::vector<Expr>{a, b, std::forward<Args>(args)...};
     }
     //@}

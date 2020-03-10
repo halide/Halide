@@ -1,4 +1,5 @@
 #include "LowerWarpShuffles.h"
+
 #include "ExprUsesVar.h"
 #include "IREquality.h"
 #include "IRMatch.h"
@@ -8,6 +9,7 @@
 #include "Simplify.h"
 #include "Solve.h"
 #include "Substitute.h"
+#include <utility>
 
 // In CUDA, allocations stored in registers and shared across lanes
 // look like private per-lane allocations, even though communication
@@ -49,7 +51,7 @@ namespace {
 // eliminating terms from nested affine expressions. This is much more
 // aggressive about eliminating terms than using % and then
 // calling the simplifier.
-Expr reduce_expr_helper(Expr e, Expr modulus) {
+Expr reduce_expr_helper(Expr e, const Expr &modulus) {
     if (is_one(modulus)) {
         return make_zero(e.type());
     } else if (is_const(e)) {
@@ -73,7 +75,7 @@ Expr reduce_expr_helper(Expr e, Expr modulus) {
     }
 }
 
-Expr reduce_expr(Expr e, Expr modulus, const Scope<Interval> &bounds) {
+Expr reduce_expr(Expr e, const Expr &modulus, const Scope<Interval> &bounds) {
     e = reduce_expr_helper(simplify(e, true, bounds), modulus);
     if (is_one(simplify(e >= 0 && e < modulus, true, bounds))) {
         return e;
@@ -141,7 +143,7 @@ class DetermineAllocStride : public IRVisitor {
 
     // Get the derivative of an integer expression w.r.t the warp
     // lane. Returns an undefined Expr if the result is non-trivial.
-    Expr warp_stride(Expr e) {
+    Expr warp_stride(const Expr &e) {
         if (is_const(e)) {
             return 0;
         } else if (const Variable *var = e.as<Variable>()) {
@@ -505,7 +507,7 @@ class LowerWarpShuffles : public IRMutator {
         }
     }
 
-    Expr make_warp_load(Type type, string name, Expr idx, Expr lane) {
+    Expr make_warp_load(Type type, const string &name, const Expr &idx, Expr lane) {
         // idx: The index of the value within the local allocation
         // lane: Which thread's value we want. If it's our own, we can just use a load.
 
@@ -739,7 +741,7 @@ class MoveIfStatementInwards : public IRMutator {
 
 public:
     MoveIfStatementInwards(Expr c)
-        : condition(c) {
+        : condition(std::move(c)) {
     }
 };
 
@@ -788,7 +790,7 @@ public:
     bool result = false;
 };
 
-bool has_lane_loop(Stmt s) {
+bool has_lane_loop(const Stmt &s) {
     HasLaneLoop l;
     s.accept(&l);
     return l.result;

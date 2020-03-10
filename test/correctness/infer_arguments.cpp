@@ -12,8 +12,11 @@ bool constant_expr_equals(Expr expr, T expected) {
 
 int main(int argc, char **argv) {
 
-#define EXPECT(expect, actual) \
-    if (expect != actual) { std::cout << "Failure, expected " << #expect << " for " << #actual << ", got " << actual << " instead.\n"; return -1; }
+#define EXPECT(expect, actual)                                                                                     \
+    if (expect != actual) {                                                                                        \
+        std::cout << "Failure, expected " << #expect << " for " << #actual << ", got " << actual << " instead.\n"; \
+        return -1;                                                                                                 \
+    }
 
     {
         ImageParam input1(UInt(8), 3, "input1");
@@ -30,7 +33,8 @@ int main(int argc, char **argv) {
 
         Func f("f");
         f(x, y, c) = frac * (input1(clamp(x, 0, height), clamp(y, 0, width), c) +
-                             min(thresh, input2(x, y))) + (0 * z_unsigned);
+                             min(thresh, input2(x, y))) +
+                     (0 * z_unsigned);
 
         std::vector<Argument> args = f.infer_arguments();
         EXPECT(7, args.size());
@@ -143,8 +147,6 @@ int main(int argc, char **argv) {
         EXPECT(8, thresh_arg.type.bits());
     }
 
-
     printf("Success!\n");
     return 0;
-
 }

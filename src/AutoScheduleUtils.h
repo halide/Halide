@@ -77,11 +77,11 @@ void combine_load_costs(std::map<std::string, Expr> &result,
 
 /** Return the required bounds of an intermediate stage (f, stage_num) of
  * function 'f' given the bounds of the pure dimensions. */
-DimBounds get_stage_bounds(Function f, int stage_num, const DimBounds &pure_bounds);
+DimBounds get_stage_bounds(const Function &f, int stage_num, const DimBounds &pure_bounds);
 
 /** Return the required bounds for all the stages of the function 'f'. Each entry
  * in the returned vector corresponds to a stage. */
-std::vector<DimBounds> get_stage_bounds(Function f, const DimBounds &pure_bounds);
+std::vector<DimBounds> get_stage_bounds(const Function &f, const DimBounds &pure_bounds);
 
 /** Recursively inline all the functions in the set 'inlines' into the
  * expression 'e' and return the resulting expression. If 'order' is
@@ -111,6 +111,24 @@ V &get_element(std::map<K, V> &m, const K &key) {
     return iter->second;
 }
 // @}
+
+/** If the cost of computing a Func is about the same as calling the Func,
+ * inline the Func. Return true of any of the Funcs is inlined. */
+bool inline_all_trivial_functions(const std::vector<Function> &outputs,
+                                  const std::vector<std::string> &order,
+                                  const std::map<std::string, Function> &env);
+
+/** Determine if a Func (order[index]) is only consumed by another single Func
+ * in element-wise manner. If it is, return the name of the consumer Func;
+ * otherwise, return an empty string. */
+std::string is_func_called_element_wise(const std::vector<std::string> &order, size_t index,
+                                        const std::map<std::string, Function> &env);
+
+/** Inline a Func if its values are only consumed by another single Func in
+ * element-wise manner. */
+bool inline_all_element_wise_functions(const std::vector<Function> &outputs,
+                                       const std::vector<std::string> &order,
+                                       const std::map<std::string, Function> &env);
 
 void propagate_estimate_test();
 

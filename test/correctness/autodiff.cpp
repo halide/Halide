@@ -22,7 +22,7 @@ inline void check(int line_number, float16_t x, float16_t target) {
 bool has_non_pure_update(const Func &func) {
     std::map<std::string, Function> env = find_transitive_calls(func.function());
     std::vector<std::string> order =
-        realization_order({ func.function() }, env).first;
+        realization_order({func.function()}, env).first;
     for (const auto &func_name : order) {
         Func func(env[func_name]);
         // For each update
@@ -475,7 +475,7 @@ void test_horner_polynomial() {
     for (int i = 0; i < 8; i++) {
         float d = 0.f;
         for (int j = 0; j < 1024; j++) {
-            d += std::pow(j / 1023.f, (float) (7 - i));
+            d += std::pow(j / 1023.f, (float)(7 - i));
         }
         d /= 1024.f;
         check(__LINE__, d_coeffs(i), d);
@@ -1316,17 +1316,10 @@ void test_input_bounds() {
     // d_input(x) += d_f(x) * input(x + 1)
     //            += d_f(x - 1) * input(x - 1)
     //            += d_g(x) * f(x)
-    check(__LINE__, d_input_buf(0), d_f_buf(0) * input(1) +
-                                    input(0) * input(1));
-    check(__LINE__, d_input_buf(1), d_f_buf(1) * input(2) +
-                                    d_f_buf(0) * input(0) +
-                                    input(1) * input(2));
-    check(__LINE__, d_input_buf(2), d_f_buf(2) * input(3) +
-                                    d_f_buf(1) * input(1) +
-                                    input(2) * input(3));
-    check(__LINE__, d_input_buf(3), d_f_buf(3) * input(4) +
-                                    d_f_buf(2) * input(2) +
-                                    input(3) * input(4));
+    check(__LINE__, d_input_buf(0), d_f_buf(0) * input(1) + input(0) * input(1));
+    check(__LINE__, d_input_buf(1), d_f_buf(1) * input(2) + d_f_buf(0) * input(0) + input(1) * input(2));
+    check(__LINE__, d_input_buf(2), d_f_buf(2) * input(3) + d_f_buf(1) * input(1) + input(2) * input(3));
+    check(__LINE__, d_input_buf(3), d_f_buf(3) * input(4) + d_f_buf(2) * input(2) + input(3) * input(4));
     check(__LINE__, d_input_buf(4), d_f_buf(3) * input(3));
 }
 
@@ -1336,7 +1329,7 @@ void test_select_guard() {
     input(0) = 0.f;
     input(1) = 1.f;
     Func f("f");
-    f(x) = select(input(x) > 0.f, (x+1) / input(x), input(x)) +
+    f(x) = select(input(x) > 0.f, (x + 1) / input(x), input(x)) +
            select(input(x) > 0.f, sqrt(input(x)), 1.f) +
            select(input(x) > 0.f, atan2(1.f, input(x)), 2.f * input(x)) +
            select(input(x) > 0.f, log(input(x)), 3.f * input(x));
@@ -1397,6 +1390,18 @@ void test_custom_adjoint_buffer() {
     check(__LINE__, d_input_buf(2), d_blur_buf(1));
 }
 
+void test_print() {
+    Buffer<float> input(1);
+    input(0) = rand();
+    RDom r(0, 1);
+    Func out;
+    out() += print(input(r));
+    Derivative d_out_d = propagate_adjoints(out);
+    Func d_out_d_input = d_out_d(input);
+    Buffer<float> d = d_out_d_input.realize(1);
+    check(__LINE__, d(0), 1.f);
+}
+
 int main(int argc, char **argv) {
     test_scalar<float>();
     test_scalar<double>();
@@ -1437,6 +1442,7 @@ int main(int argc, char **argv) {
     test_select_guard();
     test_param();
     test_custom_adjoint_buffer();
+    test_print();
     printf("[autodiff] Success!\n");
     return 0;
 }

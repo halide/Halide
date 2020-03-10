@@ -38,6 +38,9 @@
 #include <llvm/IR/Verifier.h>
 #include <llvm/Linker/Linker.h>
 #include <llvm/Passes/PassBuilder.h>
+#if LLVM_VERSION >= 100
+#include <llvm/Support/CodeGen.h>
+#endif
 #include <llvm/Support/DataExtractor.h>
 #include <llvm/Support/DynamicLibrary.h>
 #include <llvm/Support/FileSystem.h>
@@ -46,6 +49,7 @@
 #include <llvm/Support/TargetSelect.h>
 #include <llvm/Support/raw_os_ostream.h>
 #include <llvm/Support/raw_ostream.h>
+#include <llvm/Target/TargetMachine.h>
 #include <llvm/Transforms/IPO.h>
 #include <llvm/Transforms/IPO/Inliner.h>
 #include <llvm/Transforms/IPO/PassManagerBuilder.h>
@@ -73,6 +77,11 @@
 #include <llvm/IR/Function.h>
 #include <llvm/IR/IRBuilder.h>
 #include <llvm/IR/Intrinsics.h>
+#if LLVM_VERSION >= 100
+#ifdef WITH_HEXAGON
+#include <llvm/IR/IntrinsicsHexagon.h>
+#endif
+#endif
 #include <llvm/IR/MDBuilder.h>
 #include <llvm/IR/Module.h>
 #include <llvm/IR/Value.h>
@@ -91,9 +100,26 @@
 
 namespace Halide {
 namespace Internal {
+
 template<typename T>
 auto iterator_to_pointer(T iter) -> decltype(&*std::declval<T>()) {
     return &*iter;
+}
+
+inline std::string get_llvm_function_name(const llvm::Function *f) {
+#if LLVM_VERSION >= 110
+    return f->getName().str();
+#else
+    return f->getName();
+#endif
+}
+
+inline std::string get_llvm_function_name(const llvm::Function &f) {
+#if LLVM_VERSION >= 110
+    return f.getName().str();
+#else
+    return f.getName();
+#endif
 }
 
 }  // namespace Internal

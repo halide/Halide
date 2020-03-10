@@ -14,7 +14,7 @@
 
 namespace py = pybind11;
 
-using FactoryFunc = std::unique_ptr<Halide::Internal::GeneratorBase> (*)(const Halide::GeneratorContext& context);
+using FactoryFunc = std::unique_ptr<Halide::Internal::GeneratorBase> (*)(const Halide::GeneratorContext &context);
 
 namespace Halide {
 namespace PythonBindings {
@@ -39,11 +39,11 @@ void halide_python_print(void *, const char *msg) {
 
 class HalidePythonCompileTimeErrorReporter : public CompileTimeErrorReporter {
 public:
-    void warning(const char* msg) {
+    void warning(const char *msg) {
         py::print(msg, py::arg("end") = "");
     }
 
-    void error(const char* msg) {
+    void error(const char *msg) {
         throw Error(msg);
         // This method must not return!
     }
@@ -148,7 +148,7 @@ py::object generate_impl(FactoryFunc factory, const GeneratorContext &context, p
             << "Generator Input named '" << names.inputs[i] << "' was not specified.";
     }
 
-    const std::vector<std::vector<Func>> outputs =  stub.generate(generator_params, inputs);
+    const std::vector<std::vector<Func>> outputs = stub.generate(generator_params, inputs);
 
     py::tuple py_outputs(outputs.size());
     for (size_t i = 0; i < outputs.size(); i++) {
@@ -171,9 +171,11 @@ py::object generate_impl(FactoryFunc factory, const GeneratorContext &context, p
 }
 
 void pystub_init(pybind11::module &m, FactoryFunc factory) {
-    m.def("generate", [factory](const Halide::Target &target, py::args args, py::kwargs kwargs) -> py::object {
-        return generate_impl(factory, Halide::GeneratorContext(target), args, kwargs);
-    }, py::arg("target"));
+    m.def(
+        "generate", [factory](const Halide::Target &target, py::args args, py::kwargs kwargs) -> py::object {
+            return generate_impl(factory, Halide::GeneratorContext(target), args, kwargs);
+        },
+        py::arg("target"));
 }
 
 }  // namespace
@@ -189,7 +191,8 @@ extern "C" PyObject *_halide_pystub_impl(const char *module_name, FactoryFunc fa
         PyErr_Format(PyExc_ImportError,
                      "Python version mismatch: module was compiled for "
                      "version %i.%i, while the interpreter is running "
-                     "version %i.%i.", PY_MAJOR_VERSION, PY_MINOR_VERSION,
+                     "version %i.%i.",
+                     PY_MAJOR_VERSION, PY_MINOR_VERSION,
                      major, minor);
         return nullptr;
     }

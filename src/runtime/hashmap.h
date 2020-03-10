@@ -12,14 +12,16 @@
 // prior to including "hashmap.h":
 //
 #ifndef hashmap_malloc
-#define hashmap_malloc(user_context, size)  halide_malloc(user_context, size)
+#define hashmap_malloc(user_context, size) halide_malloc(user_context, size)
 #endif  // hashmap_malloc
 //
 #ifndef hashmap_free
-#define hashmap_free(user_context, memory)  halide_free(user_context, memory)
+#define hashmap_free(user_context, memory) halide_free(user_context, memory)
 #endif  // hashmap_free
 
-namespace Halide { namespace Runtime { namespace Internal {
+namespace Halide {
+namespace Runtime {
+namespace Internal {
 
 inline bool keys_equal(const uint8_t *key1, const uint8_t *key2, size_t key_size) {
     return memcmp(key1, key2, key_size) == 0;
@@ -28,13 +30,13 @@ inline bool keys_equal(const uint8_t *key1, const uint8_t *key2, size_t key_size
 inline uint32_t djb_hash(const uint8_t *key, size_t key_size) {
     uint32_t h = 5381;
     for (size_t i = 0; i < key_size; i++) {
-      h = (h << 5) + h + key[i];
+        h = (h << 5) + h + key[i];
     }
     return h;
 }
 
-typedef void(*copy_value_func)(uint8_t *dst, const uint8_t *src, size_t size);
-typedef void(*destroy_value_func)(uint8_t *value, size_t size);
+typedef void (*copy_value_func)(uint8_t *dst, const uint8_t *src, size_t size);
+typedef void (*destroy_value_func)(uint8_t *value, size_t size);
 
 struct CacheEntry {
     CacheEntry *next;
@@ -44,16 +46,16 @@ struct CacheEntry {
     size_t key_size;
     uint8_t *key;
     uint32_t hash;
-    uint32_t in_use_count; // 0 if none returned from halide_cache_lookup
+    uint32_t in_use_count;  // 0 if none returned from halide_cache_lookup
 
     // The actual stored data.
-    size_t   value_size;
-    uint8_t* value;
+    size_t value_size;
+    uint8_t *value;
 
     bool init(void *user_context,
               const uint8_t *cache_key, size_t cache_key_size,
               uint32_t key_hash,
-              const uint8_t* cache_value, size_t cache_value_size,
+              const uint8_t *cache_value, size_t cache_value_size,
               copy_value_func copy_value);
     void destroy(void *user_context,
                  destroy_value_func destroy_value);
@@ -62,7 +64,7 @@ struct CacheEntry {
 inline bool CacheEntry::init(void *user_context,
                              const uint8_t *cache_key, size_t cache_key_size,
                              uint32_t key_hash,
-                             const uint8_t* cache_value, size_t cache_value_size,
+                             const uint8_t *cache_value, size_t cache_value_size,
                              copy_value_func copy_value) {
     next = NULL;
     more_recent = NULL;
@@ -80,7 +82,7 @@ inline bool CacheEntry::init(void *user_context,
     // Enforce some alignment between value and key:
     const size_t alignment = 8;
     storage_bytes += (alignment - 1);
-    storage_bytes /= alignment;         // positive integer division (floor)
+    storage_bytes /= alignment;  // positive integer division (floor)
     storage_bytes *= alignment;
 
     // Then storage for the key, starting immediately after the (aligned) value:
@@ -140,7 +142,7 @@ struct HashMap {
     void prune();
     void set_size(int64_t size);
     int lookup(void *user_context, const uint8_t *cache_key, int32_t size, uint8_t *cache_value, size_t cache_value_size);
-    int store (void *user_context, const uint8_t *cache_key, int32_t size, const uint8_t *cache_value, size_t cache_value_size);
+    int store(void *user_context, const uint8_t *cache_key, int32_t size, const uint8_t *cache_value, size_t cache_value_size);
     void release(void *user_context, void *host);
     void cleanup();
 };
@@ -148,11 +150,11 @@ struct HashMap {
 inline bool HashMap::init(void *user_context, copy_value_func _copy_value, destroy_value_func _destroy_value) {
     memset(&memoization_lock, 0, sizeof(halide_mutex));
     halide_assert(NULL, !inited);
-    most_recently_used  = NULL;
+    most_recently_used = NULL;
     least_recently_used = NULL;
-    kDefaultCacheSize   = 1 << 20;
-    max_cache_size      = kDefaultCacheSize;
-    current_cache_size  = 0;
+    kDefaultCacheSize = 1 << 20;
+    max_cache_size = kDefaultCacheSize;
+    current_cache_size = 0;
     for (size_t i = 0; i < kHashTableSize; ++i) {
         cache_entries[i] = NULL;
     }
@@ -232,10 +234,9 @@ inline void HashMap::set_size(int64_t size) {
     prune();
 }
 
-
 inline int HashMap::lookup(void *user_context,
-                         const uint8_t *cache_key, int32_t size,
-                         uint8_t *cache_value, size_t cache_value_size) {
+                           const uint8_t *cache_key, int32_t size,
+                           uint8_t *cache_value, size_t cache_value_size) {
     uint32_t h = djb_hash(cache_key, size);
     uint32_t index = h % kHashTableSize;
 
@@ -259,31 +260,31 @@ inline int HashMap::lookup(void *user_context,
         if (entry->hash == h && entry->key_size == (size_t)size &&
             keys_equal(entry->key, cache_key, size)) {
 
-                if (entry != most_recently_used) {
-                    halide_assert(user_context, entry->more_recent != NULL);
-                    if (entry->less_recent != NULL) {
-                        entry->less_recent->more_recent = entry->more_recent;
-                    } else {
-                        halide_assert(user_context, least_recently_used == entry);
-                        least_recently_used = entry->more_recent;
-                    }
-                    halide_assert(user_context, entry->more_recent != NULL);
-                    entry->more_recent->less_recent = entry->less_recent;
-
-                    entry->more_recent = NULL;
-                    entry->less_recent = most_recently_used;
-                    if (most_recently_used != NULL) {
-                        most_recently_used->more_recent = entry;
-                    }
-                    most_recently_used = entry;
+            if (entry != most_recently_used) {
+                halide_assert(user_context, entry->more_recent != NULL);
+                if (entry->less_recent != NULL) {
+                    entry->less_recent->more_recent = entry->more_recent;
+                } else {
+                    halide_assert(user_context, least_recently_used == entry);
+                    least_recently_used = entry->more_recent;
                 }
+                halide_assert(user_context, entry->more_recent != NULL);
+                entry->more_recent->less_recent = entry->less_recent;
 
-                halide_assert(user_context, (cache_value_size == entry->value_size))
+                entry->more_recent = NULL;
+                entry->less_recent = most_recently_used;
+                if (most_recently_used != NULL) {
+                    most_recently_used->more_recent = entry;
+                }
+                most_recently_used = entry;
+            }
+
+            halide_assert(user_context, (cache_value_size == entry->value_size))
                 copy_value(cache_value, entry->value, entry->value_size);
 
-                entry->in_use_count += 1;
+            entry->in_use_count += 1;
 
-                return 0;
+            return 0;
         }
         entry = entry->next;
     }
@@ -296,8 +297,8 @@ inline int HashMap::lookup(void *user_context,
 }
 
 inline int HashMap::store(void *user_context,
-                        const uint8_t *cache_key, int32_t size,
-                        const uint8_t *cache_value, size_t cache_value_size) {
+                          const uint8_t *cache_key, int32_t size,
+                          const uint8_t *cache_value, size_t cache_value_size) {
     debug(user_context) << "halide_memoization_cache_store\n";
 
     uint32_t h = djb_hash(cache_key, size);
@@ -324,15 +325,15 @@ inline int HashMap::store(void *user_context,
          entry = entry->next) {
         if (entry->hash == h && entry->key_size == (size_t)size &&
             keys_equal(entry->key, cache_key, size)) {
-                halide_assert(user_context, (cache_value_size == entry->value_size));
-                destroy_value(entry->value, entry->value_size);
-                copy_value(entry->value, cache_value, entry->value_size);
-                return(0);
+            halide_assert(user_context, (cache_value_size == entry->value_size));
+            destroy_value(entry->value, entry->value_size);
+            copy_value(entry->value, cache_value, entry->value_size);
+            return (0);
         }
     }
 
     // key not found: create new entry
-    CacheEntry *new_entry = (CacheEntry*)hashmap_malloc(user_context, sizeof(CacheEntry));
+    CacheEntry *new_entry = (CacheEntry *)hashmap_malloc(user_context, sizeof(CacheEntry));
     bool inited = new_entry->init(user_context, cache_key, size, h, cache_value, cache_value_size, copy_value);
     halide_assert(user_context, inited);
 
@@ -385,7 +386,6 @@ inline void HashMap::cleanup() {
     least_recently_used = NULL;
 }
 
-
 // THashMap: a convenience class for using HashMap with actual types
 template<typename KeyType, typename ValueType>
 struct THashMap : public HashMap {
@@ -397,14 +397,14 @@ struct THashMap : public HashMap {
 
     static void copy_value_func(uint8_t *dst, const uint8_t *src, size_t size) {
         halide_assert(NULL, sizeof(ValueType) == size);
-        ValueType *D = reinterpret_cast<ValueType*>(dst);
-        const ValueType *S = reinterpret_cast<const ValueType*>(src);
+        ValueType *D = reinterpret_cast<ValueType *>(dst);
+        const ValueType *S = reinterpret_cast<const ValueType *>(src);
         *D = *S;
     }
 
     static void destroy_value_func(uint8_t *value, size_t size) {
         halide_assert(NULL, sizeof(ValueType) == size);
-        ValueType *V = reinterpret_cast<ValueType*>(value);
+        ValueType *V = reinterpret_cast<ValueType *>(value);
         V->~ValueType();
     }
 
@@ -413,15 +413,16 @@ struct THashMap : public HashMap {
     }
 
     int lookup(void *user_context, const uint8_t *cache_key, int32_t key_size, ValueType *cache_value) {
-        return HashMap::lookup(user_context, cache_key, key_size, (uint8_t*)cache_value, sizeof(ValueType));
+        return HashMap::lookup(user_context, cache_key, key_size, (uint8_t *)cache_value, sizeof(ValueType));
     }
 
     int store(void *user_context, const uint8_t *cache_key, int32_t key_size, const ValueType *cache_value) {
-        return HashMap::store(user_context, cache_key, key_size, (const uint8_t*)cache_value, sizeof(ValueType));
+        return HashMap::store(user_context, cache_key, key_size, (const uint8_t *)cache_value, sizeof(ValueType));
     }
-
 };
 
-}}}
+}  // namespace Internal
+}  // namespace Runtime
+}  // namespace Halide
 
-#endif//HALIDE_RUNTIME_HASHMAP_H
+#endif  //HALIDE_RUNTIME_HASHMAP_H

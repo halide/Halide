@@ -153,7 +153,7 @@ struct ExprNode : public BaseExprNode {
     ExprNode()
         : BaseExprNode(T::_node_type) {
     }
-    virtual ~ExprNode() = default;
+    ~ExprNode() override = default;
 };
 
 template<typename T>
@@ -163,7 +163,7 @@ struct StmtNode : public BaseStmtNode {
     StmtNode()
         : BaseStmtNode(T::_node_type) {
     }
-    virtual ~StmtNode() = default;
+    ~StmtNode() override = default;
 };
 
 /** IR nodes are passed around opaque handles to them. This is a
@@ -384,6 +384,18 @@ struct ExprCompare {
         return a.get() < b.get();
     }
 };
+
+/** A single-dimensional span. Includes all numbers between min and
+ * (min + extent - 1). */
+struct Range {
+    Expr min, extent;
+
+    Range() = default;
+    Range(const Expr &min_in, const Expr &extent_in);
+};
+
+/** A multi-dimensional box. The outer product of the elements */
+typedef std::vector<Range> Region;
 
 /** An enum describing a type of device API. Used by schedules, and in
  * the For loop IR node. */

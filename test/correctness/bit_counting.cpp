@@ -1,12 +1,12 @@
 
 #include "Halide.h"
-#include <stdio.h>
 #include <stdint.h>
+#include <stdio.h>
 #include <string>
 
 using namespace Halide;
 
-template <typename T>
+template<typename T>
 T local_popcount(T v) {
     T count = 0;
     while (v) {
@@ -16,9 +16,9 @@ T local_popcount(T v) {
     return count;
 }
 
-template <typename T>
+template<typename T>
 T local_count_trailing_zeros(T v) {
-    const int bits = sizeof(T)*8;
+    const int bits = sizeof(T) * 8;
     for (T b = 0; b < bits; ++b) {
         if (v & (1 << b)) {
             // found a set bit
@@ -28,9 +28,9 @@ T local_count_trailing_zeros(T v) {
     return 0;
 }
 
-template <typename T>
+template<typename T>
 T local_count_leading_zeros(T v) {
-    const int bits = sizeof(T)*8;
+    const int bits = sizeof(T) * 8;
     for (T b = 0; b < bits; ++b) {
         if (v & (1 << (bits - 1 - b))) {
             // found a set bit
@@ -40,9 +40,9 @@ T local_count_leading_zeros(T v) {
     return 0;
 }
 
-template <typename T>
+template<typename T>
 std::string as_bits(T v) {
-    const int bits = sizeof(T)*8;
+    const int bits = sizeof(T) * 8;
     std::string ret;
     for (int i = bits - 1; i >= 0; --i)
         ret += (v & (1 << i)) ? '1' : '0';
@@ -60,7 +60,7 @@ void schedule(Func f, const Target &t) {
     }
 }
 
-template <typename T>
+template<typename T>
 int test_bit_counting(const Target &target) {
     Buffer<T> input(256);
     for (int i = 0; i < 256; i++) {

@@ -18,7 +18,7 @@ void testCompileToOutput(Func j) {
     Internal::ensure_no_file_exists(expected_h);
 
     std::vector<Target> targets = {
-        Target("host-profile-debug"),
+        Target("host-profile-no_bounds_query"),
         Target("host-profile"),
     };
     j.compile_to_multitarget_static_library(fn_object, j.infer_arguments(), targets);
@@ -32,7 +32,7 @@ int main(int argc, char **argv) {
     Func f, g, h, j;
     Var x, y;
     f(x, y) = x + y;
-    g(x, y) = cast<float>(f(x, y) + f(x+1, y));
+    g(x, y) = cast<float>(f(x, y) + f(x + 1, y));
     h(x, y) = f(x, y) + g(x, y);
     j(x, y) = h(x, y) * 2 * factor;
 

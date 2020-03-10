@@ -256,10 +256,10 @@ public:
     template<typename T>
     Expr hoist_slice_vector(Expr e);
 
-    Stmt mutate_let_body(Stmt s, ExprInfo *) {
+    Stmt mutate_let_body(const Stmt &s, ExprInfo *) {
         return mutate(s);
     }
-    Expr mutate_let_body(Expr e, ExprInfo *bounds) {
+    Expr mutate_let_body(const Expr &e, ExprInfo *bounds) {
         return mutate(e, bounds);
     }
 

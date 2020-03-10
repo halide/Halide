@@ -37,8 +37,8 @@ vector<T> get_subvector(const vector<T> &v, const set<int> &indices) {
 
 // Replace self-references to 'func' with arguments 'args' at
 // 'value_index' in the Expr/Stmt with some Var
-class ConvertSelfRef : public IRMutator {
-    using IRMutator::visit;
+class ConvertSelfRef : public IRGraphMutator {
+    using IRGraphMutator::visit;
 
     const string &func;
     const vector<Expr> &args;
@@ -51,7 +51,7 @@ class ConvertSelfRef : public IRMutator {
         if (!is_solvable) {
             return op;
         }
-        Expr expr = IRMutator::visit(op);
+        Expr expr = IRGraphMutator::visit(op);
         op = expr.as<Call>();
         internal_assert(op);
 
@@ -92,7 +92,7 @@ public:
     Expr x_part;              // Undefined if there is no self-reference at value_index
 };
 
-bool associative_op_pattern_match(Expr e,
+bool associative_op_pattern_match(const Expr &e,
                                   const Expr &op,
                                   const vector<string> &x_names,
                                   const vector<string> &y_names,
@@ -227,7 +227,7 @@ bool find_match(const vector<AssociativePattern> &table, const vector<string> &o
 // Return a pair of booleans indicating if an operator is associative.
 // 'assoc_op' contains the the equivalent associative binary/unary operator
 // for that operator. If the operator is non-associative, 'assoc_op' is not valid.
-bool extract_associative_op(const vector<Expr> exprs, const vector<string> &op_x_names,
+bool extract_associative_op(const vector<Expr> &exprs, const vector<string> &op_x_names,
                             const vector<string> &op_y_names, const vector<Expr> &x_parts,
                             AssociativeOp &assoc_op) {
     if (exprs.size() == 1) {
@@ -483,7 +483,7 @@ std::string print_args(const string &f, const vector<Expr> &args, const vector<E
     return stream.str();
 }
 
-void check_associativity(const string &f, vector<Expr> args, vector<Expr> exprs,
+void check_associativity(const string &f, const vector<Expr> &args, const vector<Expr> &exprs,
                          const AssociativeOp &assoc_op) {
     auto result = prove_associativity(f, args, exprs);
     internal_assert(result.associative() == assoc_op.associative())

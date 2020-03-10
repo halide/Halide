@@ -6,6 +6,7 @@
  */
 
 #include <string>
+#include <utility>
 #include <vector>
 
 #include "Debug.h"
@@ -394,20 +395,6 @@ struct Free : public StmtNode<Free> {
     static const IRNodeType _node_type = IRNodeType::Free;
 };
 
-/** A single-dimensional span. Includes all numbers between min and
- * (min + extent - 1) */
-struct Range {
-    Expr min, extent;
-    Range() = default;
-    Range(Expr min, Expr extent)
-        : min(min), extent(extent) {
-        internal_assert(min.type() == extent.type()) << "Region min and extent must have same type\n";
-    }
-};
-
-/** A multi-dimensional box. The outer product of the elements */
-typedef std::vector<Range> Region;
-
 /** Allocate a multi-dimensional buffer of the given type and
  * size. Create some scratch memory that will back the function 'name'
  * over the range specified in 'bounds'. The bounds are a vector of
@@ -530,7 +517,6 @@ struct Call : public ExprNode<Call> {
         if_then_else_mask,
         image_load,
         image_store,
-        indeterminate_expression,
         lerp,
         likely,
         likely_if_innermost,
@@ -540,8 +526,6 @@ struct Call : public ExprNode<Call> {
         mulhi_shr,  // Compute high_half(arg[0] * arg[1]) >> arg[3]. Note that this is a shift in addition to taking the upper half of multiply result. arg[3] must be an unsigned integer immediate.
         popcount,
         prefetch,
-        quiet_div,
-        quiet_mod,
         random,
         register_destructor,
         reinterpret,
@@ -610,22 +594,22 @@ struct Call : public ExprNode<Call> {
 
     static Expr make(Type type, IntrinsicOp op, const std::vector<Expr> &args, CallType call_type,
                      FunctionPtr func = FunctionPtr(), int value_index = 0,
-                     Buffer<> image = Buffer<>(), Parameter param = Parameter());
+                     const Buffer<> &image = Buffer<>(), Parameter param = Parameter());
 
     static Expr make(Type type, const std::string &name, const std::vector<Expr> &args, CallType call_type,
                      FunctionPtr func = FunctionPtr(), int value_index = 0,
                      Buffer<> image = Buffer<>(), Parameter param = Parameter());
 
     /** Convenience constructor for calls to other halide functions */
-    static Expr make(Function func, const std::vector<Expr> &args, int idx = 0);
+    static Expr make(const Function &func, const std::vector<Expr> &args, int idx = 0);
 
     /** Convenience constructor for loads from concrete images */
-    static Expr make(Buffer<> image, const std::vector<Expr> &args) {
+    static Expr make(const Buffer<> &image, const std::vector<Expr> &args) {
         return make(image.type(), image.name(), args, Image, FunctionPtr(), 0, image, Parameter());
     }
 
     /** Convenience constructor for loads from images parameters */
-    static Expr make(Parameter param, const std::vector<Expr> &args) {
+    static Expr make(const Parameter &param, const std::vector<Expr> &args) {
         return make(param.type(), param.name(), args, Image, FunctionPtr(), 0, Buffer<>(), param);
     }
 
@@ -680,15 +664,15 @@ struct Variable : public ExprNode<Variable> {
     }
 
     static Expr make(Type type, const std::string &name, Parameter param) {
-        return make(type, name, Buffer<>(), param, ReductionDomain());
+        return make(type, name, Buffer<>(), std::move(param), ReductionDomain());
     }
 
-    static Expr make(Type type, const std::string &name, Buffer<> image) {
+    static Expr make(Type type, const std::string &name, const Buffer<> &image) {
         return make(type, name, image, Parameter(), ReductionDomain());
     }
 
     static Expr make(Type type, const std::string &name, ReductionDomain reduction_domain) {
-        return make(type, name, Buffer<>(), Parameter(), reduction_domain);
+        return make(type, name, Buffer<>(), Parameter(), std::move(reduction_domain));
     }
 
     static Expr make(Type type, const std::string &name, Buffer<> image,

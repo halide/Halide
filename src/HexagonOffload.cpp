@@ -36,8 +36,8 @@ enum {
     EF_HEXAGON_MACH_V4 = 0x3,
     EF_HEXAGON_MACH_V5 = 0x4,
     EF_HEXAGON_MACH_V55 = 0x5,
-    EF_HEXAGON_MACH_V60 = 0x60,
-    EF_HEXAGON_MACH_V61 = 0x61,
+    EF_HEXAGON_MACH_V60 = 0x60,  // Deprecated
+    EF_HEXAGON_MACH_V61 = 0x61,  // Deprecated?
     EF_HEXAGON_MACH_V62 = 0x62,
     EF_HEXAGON_MACH_V65 = 0x65,
     EF_HEXAGON_MACH_V66 = 0x66,
@@ -553,10 +553,8 @@ public:
             flags = Elf::EF_HEXAGON_MACH_V66;
         } else if (target.has_feature(Target::HVX_v65)) {
             flags = Elf::EF_HEXAGON_MACH_V65;
-        } else if (target.has_feature(Target::HVX_v62)) {
-            flags = Elf::EF_HEXAGON_MACH_V62;
         } else {
-            flags = Elf::EF_HEXAGON_MACH_V60;
+            flags = Elf::EF_HEXAGON_MACH_V62;
         }
     }
 
@@ -686,7 +684,7 @@ public:
     }
 };
 
-Stmt replace_params(Stmt s, const std::map<std::string, Parameter> &replacements) {
+Stmt replace_params(const Stmt &s, const std::map<std::string, Parameter> &replacements) {
     return ReplaceParams(replacements).mutate(s);
 }
 
@@ -856,7 +854,10 @@ class InjectHexagonRpc : public IRMutator {
 
         for (const auto &i : c.buffers) {
             // Buffers are passed to the hexagon host runtime as just device
-            // handles (uint64) and host (uint8*) fields.
+            // handles (uint64) and host (uint8*) fields. They correspond
+            // to the 'hexagon_device_pointer' struct declared elsewhere;
+            // we don't use that struct here because it's simple enough that
+            // just using `make_struct`() for it is simpler.
             if (i.first != scalars_buffer_name) {
                 // If this isn't the scalars buffer, assume it has a '.buffer'
                 // description in the IR.

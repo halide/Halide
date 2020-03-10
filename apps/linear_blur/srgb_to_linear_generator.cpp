@@ -3,7 +3,7 @@
 namespace {
 
 struct sRGBToLinear : public Halide::Generator<sRGBToLinear> {
-    Input<Func>  srgb{"srgb"};
+    Input<Func> srgb{"srgb"};
     Output<Func> linear{"linear"};
 
     Var x{"x"}, y{"y"};
@@ -27,7 +27,7 @@ struct sRGBToLinear : public Halide::Generator<sRGBToLinear> {
                 srgb.set_estimate(srgb.args()[i], 0, C);
             }
             linear.set_estimate(x, 0, W)
-                  .set_estimate(y, 0, H);
+                .set_estimate(y, 0, H);
             for (size_t i = 2; i < linear.args().size(); ++i) {
                 linear.set_estimate(linear.args()[i], 0, C);
             }

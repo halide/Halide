@@ -91,17 +91,17 @@ std::ostream &operator<<(std::ostream &stream, const Indentation &);
  */
 class IRPrinter : public IRVisitor {
 public:
-    virtual ~IRPrinter();
+    ~IRPrinter() override;
 
     /** Construct an IRPrinter pointed at a given output stream
      * (e.g. std::cout, or a std::ofstream) */
     IRPrinter(std::ostream &);
 
     /** emit an expression on the output stream */
-    void print(Expr);
+    void print(const Expr &);
 
     /** emit a statement on the output stream */
-    void print(Stmt);
+    void print(const Stmt &);
 
     /** emit a comma delimited list of exprs, without any leading or
      * trailing punctuation. */

@@ -2,6 +2,7 @@
 #include <memory>
 #include <set>
 #include <stdlib.h>
+#include <utility>
 
 #include "CSE.h"
 #include "Function.h"
@@ -324,7 +325,7 @@ ExternFuncArgument deep_copy_extern_func_argument_helper(
     return copy;
 }
 
-void Function::deep_copy(FunctionPtr copy, DeepCopyMap &copied_map) const {
+void Function::deep_copy(const FunctionPtr &copy, DeepCopyMap &copied_map) const {
     internal_assert(copy.defined() && contents.defined())
         << "Cannot deep-copy undefined Function\n";
 
@@ -372,9 +373,9 @@ void Function::deep_copy(FunctionPtr copy, DeepCopyMap &copied_map) const {
     }
 }
 
-void Function::deep_copy(string name, FunctionPtr copy, DeepCopyMap &copied_map) const {
+void Function::deep_copy(string name, const FunctionPtr &copy, DeepCopyMap &copied_map) const {
     deep_copy(copy, copied_map);
-    copy->name = name;
+    copy->name = std::move(name);
 }
 
 void Function::define(const vector<string> &args, vector<Expr> values) {
@@ -686,7 +687,7 @@ void Function::define_update(const vector<Expr> &_args, vector<Expr> values) {
 void Function::define_extern(const std::string &function_name,
                              const std::vector<ExternFuncArgument> &extern_args,
                              const std::vector<Type> &types,
-                             const std::vector<string> &args,
+                             const std::vector<Var> &args,
                              NameMangling mangling,
                              DeviceAPI device_api) {
 
@@ -698,7 +699,13 @@ void Function::define_extern(const std::string &function_name,
         << "In extern definition for Func \"" << name() << "\":\n"
         << "Func already has an extern definition.\n";
 
-    contents->args = args;
+    std::vector<string> arg_names;
+    std::vector<Expr> arg_exprs;
+    for (size_t i = 0; i < args.size(); i++) {
+        arg_names.push_back(args[i].name());
+        arg_exprs.push_back(args[i]);
+    }
+    contents->args = arg_names;
     contents->extern_function_name = function_name;
     contents->extern_arguments = extern_args;
     contents->output_types = types;
@@ -718,20 +725,15 @@ void Function::define_extern(const std::string &function_name,
         values.push_back(undef(types[i]));
     }
 
-    std::vector<Expr> arg_exprs;
-    for (size_t i = 0; i < args.size(); i++) {
-        arg_exprs.push_back(args[i]);
-    }
-
     contents->init_def = Definition(arg_exprs, values, ReductionDomain(), true);
 
     // Reset the storage dims to match the pure args
     contents->func_schedule.storage_dims().clear();
     contents->init_def.schedule().dims().clear();
     for (size_t i = 0; i < args.size(); i++) {
-        contents->func_schedule.storage_dims().push_back(StorageDim{args[i]});
+        contents->func_schedule.storage_dims().push_back(StorageDim{arg_names[i]});
         contents->init_def.schedule().dims().push_back(
-            Dim{args[i], ForType::Extern, DeviceAPI::None, Dim::Type::PureVar});
+            Dim{arg_names[i], ForType::Extern, DeviceAPI::None, Dim::Type::PureVar});
     }
     // Add the dummy outermost dim
     contents->init_def.schedule().dims().push_back(
@@ -1000,7 +1002,7 @@ namespace {
 class SubstituteCalls : public IRMutator {
     using IRMutator::visit;
 
-    map<FunctionPtr, FunctionPtr> substitutions;
+    const map<FunctionPtr, FunctionPtr> &substitutions;
 
     Expr visit(const Call *c) override {
         Expr expr = IRMutator::visit(c);
@@ -1010,8 +1012,10 @@ class SubstituteCalls : public IRMutator {
         if ((c->call_type == Call::Halide) &&
             c->func.defined() &&
             substitutions.count(c->func)) {
-            FunctionPtr subs = substitutions[c->func];
-            internal_assert(subs.defined()) << "Function not in environment: " << subs->name << "\n";
+            auto it = substitutions.find(c->func);
+            internal_assert(it != substitutions.end())
+                << "Function not in environment: " << c->func->name << "\n";
+            FunctionPtr subs = it->second;
             debug(4) << "...Replace call to Func \"" << c->name << "\" with "
                      << "\"" << subs->name << "\"\n";
             expr = Call::make(c->type, subs->name, c->args, c->call_type,
