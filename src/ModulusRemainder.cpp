@@ -1,4 +1,5 @@
 #include "ModulusRemainder.h"
+
 #include "IR.h"
 #include "IROperator.h"
 #include "IRPrinter.h"
@@ -20,7 +21,7 @@ int64_t mod(int64_t a, int64_t b) {
 
 class ComputeModulusRemainder : public IRVisitor {
 public:
-    ModulusRemainder analyze(Expr e);
+    ModulusRemainder analyze(const Expr &e);
 
     ModulusRemainder result;
     Scope<ModulusRemainder> scope;
@@ -76,17 +77,17 @@ public:
     void visit(const Atomic *) override;
 };
 
-ModulusRemainder modulus_remainder(Expr e) {
+ModulusRemainder modulus_remainder(const Expr &e) {
     ComputeModulusRemainder mr(nullptr);
     return mr.analyze(e);
 }
 
-ModulusRemainder modulus_remainder(Expr e, const Scope<ModulusRemainder> &scope) {
+ModulusRemainder modulus_remainder(const Expr &e, const Scope<ModulusRemainder> &scope) {
     ComputeModulusRemainder mr(&scope);
     return mr.analyze(e);
 }
 
-bool reduce_expr_modulo(Expr expr, int64_t modulus, int64_t *remainder) {
+bool reduce_expr_modulo(const Expr &expr, int64_t modulus, int64_t *remainder) {
     ModulusRemainder result = modulus_remainder(expr);
 
     /* As an example: If we asked for expr mod 8, and the analysis
@@ -103,7 +104,7 @@ bool reduce_expr_modulo(Expr expr, int64_t modulus, int64_t *remainder) {
         return false;
     }
 }
-bool reduce_expr_modulo(Expr expr, int64_t modulus, int64_t *remainder, const Scope<ModulusRemainder> &scope) {
+bool reduce_expr_modulo(const Expr &expr, int64_t modulus, int64_t *remainder, const Scope<ModulusRemainder> &scope) {
     ModulusRemainder result = modulus_remainder(expr, scope);
 
     if (mod(result.modulus, modulus) == 0) {
@@ -114,13 +115,13 @@ bool reduce_expr_modulo(Expr expr, int64_t modulus, int64_t *remainder, const Sc
     }
 }
 
-ModulusRemainder ComputeModulusRemainder::analyze(Expr e) {
+ModulusRemainder ComputeModulusRemainder::analyze(const Expr &e) {
     e.accept(this);
     return result;
 }
 
 namespace {
-void check(Expr e, int64_t m, int64_t r) {
+void check(const Expr &e, int64_t m, int64_t r) {
     ModulusRemainder result = modulus_remainder(e);
     if (result.modulus != m || result.remainder != r) {
         std::cerr << "Test failed for modulus_remainder:\n";

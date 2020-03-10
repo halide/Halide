@@ -410,6 +410,7 @@ void CodeGen_LLVM::initialize_llvm() {
 #define LLVM_ASM_PRINTER(target) \
     Initialize##target##AsmPrinter();
 #include <llvm/Config/AsmPrinters.def>
+#include <utility>
 #undef LLVM_ASM_PRINTER
     });
 }
@@ -961,7 +962,7 @@ void CodeGen_LLVM::compile_buffer(const Buffer<> &buf) {
     sym_push(buf.name() + ".buffer", global_ptr);
 }
 
-Constant *CodeGen_LLVM::embed_constant_scalar_value_t(Expr e) {
+Constant *CodeGen_LLVM::embed_constant_scalar_value_t(const Expr &e) {
     if (!e.defined()) {
         return Constant::getNullValue(scalar_value_t_type->getPointerTo());
     }
@@ -1465,7 +1466,7 @@ bool CodeGen_LLVM::sym_exists(const string &name) const {
     return symbol_table.contains(name);
 }
 
-Value *CodeGen_LLVM::codegen(Expr e) {
+Value *CodeGen_LLVM::codegen(const Expr &e) {
     internal_assert(e.defined());
     debug(4) << "Codegen: " << e.type() << ", " << e << "\n";
     value = nullptr;
@@ -1491,7 +1492,7 @@ Value *CodeGen_LLVM::codegen(Expr e) {
     return value;
 }
 
-void CodeGen_LLVM::codegen(Stmt s) {
+void CodeGen_LLVM::codegen(const Stmt &s) {
     internal_assert(s.defined());
     debug(3) << "Codegen: " << s << "\n";
     value = nullptr;
@@ -1869,7 +1870,7 @@ void CodeGen_LLVM::visit(const Select *op) {
 }
 
 namespace {
-Expr promote_64(Expr e) {
+Expr promote_64(const Expr &e) {
     if (const Add *a = e.as<Add>()) {
         return Add::make(promote_64(a->a), promote_64(a->b));
     } else if (const Sub *s = e.as<Sub>()) {
@@ -1886,10 +1887,10 @@ Expr promote_64(Expr e) {
 }
 }  // namespace
 
-Value *CodeGen_LLVM::codegen_buffer_pointer(string buffer, Halide::Type type, Expr index) {
+Value *CodeGen_LLVM::codegen_buffer_pointer(const string &buffer, Halide::Type type, Expr index) {
     // Find the base address from the symbol table
     Value *base_address = symbol_table.get(buffer);
-    return codegen_buffer_pointer(base_address, type, index);
+    return codegen_buffer_pointer(base_address, type, std::move(index));
 }
 
 Value *CodeGen_LLVM::codegen_buffer_pointer(Value *base_address, Halide::Type type, Expr index) {
@@ -1902,7 +1903,7 @@ Value *CodeGen_LLVM::codegen_buffer_pointer(Value *base_address, Halide::Type ty
     return codegen_buffer_pointer(base_address, type, codegen(index));
 }
 
-Value *CodeGen_LLVM::codegen_buffer_pointer(string buffer, Halide::Type type, Value *index) {
+Value *CodeGen_LLVM::codegen_buffer_pointer(const string &buffer, Halide::Type type, Value *index) {
     // Find the base address from the symbol table
     Value *base_address = symbol_table.get(buffer);
     return codegen_buffer_pointer(base_address, type, index);
@@ -1946,7 +1947,7 @@ int next_power_of_two(int x) {
 }
 }  // namespace
 
-void CodeGen_LLVM::add_tbaa_metadata(llvm::Instruction *inst, string buffer, Expr index) {
+void CodeGen_LLVM::add_tbaa_metadata(llvm::Instruction *inst, string buffer, const Expr &index) {
 
     // Get the unique name for the block of memory this allocate node
     // is using.
@@ -2272,7 +2273,7 @@ Value *CodeGen_LLVM::interleave_vectors(const std::vector<Value *> &vecs) {
     }
 }
 
-void CodeGen_LLVM::scalarize(Expr e) {
+void CodeGen_LLVM::scalarize(const Expr &e) {
     llvm::Type *result_type = llvm_type_of(e.type());
 
     Value *result = UndefValue::get(result_type);
@@ -3534,7 +3535,7 @@ Constant *CodeGen_LLVM::create_binary_blob(const vector<char> &data, const strin
     return ptr;
 }
 
-void CodeGen_LLVM::create_assertion(Value *cond, Expr message, llvm::Value *error_code) {
+void CodeGen_LLVM::create_assertion(Value *cond, const Expr &message, llvm::Value *error_code) {
 
     internal_assert(!message.defined() || message.type() == Int(32))
         << "Assertion result is not an int: " << message;
@@ -4002,7 +4003,7 @@ void add_suffix(std::pair<string, int> &prefix, const string &suffix) {
 
 }  // namespace
 
-void CodeGen_LLVM::get_parallel_tasks(Stmt s, vector<ParallelTask> &result, std::pair<string, int> prefix) {
+void CodeGen_LLVM::get_parallel_tasks(const Stmt &s, vector<ParallelTask> &result, std::pair<string, int> prefix) {
     const For *loop = s.as<For>();
     const Acquire *acquire = loop ? loop->body.as<Acquire>() : s.as<Acquire>();
     if (const Fork *f = s.as<Fork>()) {
@@ -4043,7 +4044,7 @@ void CodeGen_LLVM::get_parallel_tasks(Stmt s, vector<ParallelTask> &result, std:
     }
 }
 
-void CodeGen_LLVM::do_as_parallel_task(Stmt s) {
+void CodeGen_LLVM::do_as_parallel_task(const Stmt &s) {
     vector<ParallelTask> tasks;
     get_parallel_tasks(s, tasks, {function->getName().str(), 0});
     do_parallel_tasks(tasks);

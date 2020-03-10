@@ -413,7 +413,7 @@ RegionCosts::RegionCosts(const map<string, Function> &_env,
     }
 }
 
-Cost RegionCosts::stage_region_cost(string func, int stage, const DimBounds &bounds,
+Cost RegionCosts::stage_region_cost(const string &func, int stage, const DimBounds &bounds,
                                     const set<string> &inlines) {
     Function curr_f = get_element(env, func);
 
@@ -439,7 +439,7 @@ Cost RegionCosts::stage_region_cost(string func, int stage, const DimBounds &bou
     return Cost(simplify(size * cost.arith), simplify(size * cost.memory));
 }
 
-Cost RegionCosts::stage_region_cost(string func, int stage, const Box &region,
+Cost RegionCosts::stage_region_cost(const string &func, int stage, const Box &region,
                                     const set<string> &inlines) {
     Function curr_f = get_element(env, func);
 
@@ -454,7 +454,7 @@ Cost RegionCosts::stage_region_cost(string func, int stage, const Box &region,
     return stage_region_cost(func, stage, stage_bounds, inlines);
 }
 
-Cost RegionCosts::region_cost(string func, const Box &region, const set<string> &inlines) {
+Cost RegionCosts::region_cost(const string &func, const Box &region, const set<string> &inlines) {
     Function curr_f = get_element(env, func);
     Cost region_cost(0, 0);
 
@@ -499,7 +499,7 @@ Cost RegionCosts::region_cost(const map<string, Box> &regions, const set<string>
 }
 
 map<string, Expr>
-RegionCosts::stage_detailed_load_costs(string func, int stage,
+RegionCosts::stage_detailed_load_costs(const string &func, int stage,
                                        const set<string> &inlines) {
     map<string, Expr> load_costs;
     Function curr_f = get_element(env, func);
@@ -531,7 +531,7 @@ RegionCosts::stage_detailed_load_costs(string func, int stage,
 }
 
 map<string, Expr>
-RegionCosts::stage_detailed_load_costs(string func, int stage,
+RegionCosts::stage_detailed_load_costs(const string &func, int stage,
                                        DimBounds &bounds,
                                        const set<string> &inlines) {
     Function curr_f = get_element(env, func);
@@ -560,7 +560,7 @@ RegionCosts::stage_detailed_load_costs(string func, int stage,
 }
 
 map<string, Expr>
-RegionCosts::detailed_load_costs(string func, const Box &region,
+RegionCosts::detailed_load_costs(const string &func, const Box &region,
                                  const set<string> &inlines) {
     Function curr_f = get_element(env, func);
     map<string, Expr> load_costs;
@@ -675,7 +675,7 @@ vector<Cost> RegionCosts::get_func_cost(const Function &f, const set<string> &in
     return func_costs;
 }
 
-Expr RegionCosts::region_size(string func, const Box &region) {
+Expr RegionCosts::region_size(const string &func, const Box &region) {
     const Function &f = get_element(env, func);
     Expr size = box_size(region);
     if (!size.defined()) {
@@ -748,7 +748,7 @@ Expr RegionCosts::region_footprint(const map<string, Box> &regions,
     return simplify(working_set_size);
 }
 
-Expr RegionCosts::input_region_size(string input, const Box &region) {
+Expr RegionCosts::input_region_size(const string &input, const Box &region) {
     Expr size = box_size(region);
     if (!size.defined()) {
         return Expr();

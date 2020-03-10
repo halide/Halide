@@ -17,7 +17,7 @@ namespace Internal {
  * be aligned to instead load aligned vectors that cover the original
  * load, and then slice the original load out of the aligned
  * vectors. */
-Stmt align_loads(Stmt s, int alignment);
+Stmt align_loads(const Stmt &s, int alignment);
 
 }  // namespace Internal
 }  // namespace Halide

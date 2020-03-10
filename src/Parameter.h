@@ -111,7 +111,7 @@ public:
 
     /** If the parameter is a buffer parameter, set its current
      * value. Only relevant when jitting */
-    void set_buffer(Buffer<> b);
+    void set_buffer(const Buffer<> &b);
 
     /** Get the pointer to the current value of the scalar
      * parameter. For a given parameter, this address will never
@@ -144,9 +144,9 @@ public:
     /** Get and set constraints for scalar parameters. These are used
      * directly by Param, so they must be exported. */
     // @{
-    void set_min_value(Expr e);
+    void set_min_value(const Expr &e);
     Expr min_value() const;
-    void set_max_value(Expr e);
+    void set_max_value(const Expr &e);
     Expr max_value() const;
     void set_estimate(Expr e);
     Expr estimate() const;

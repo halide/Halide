@@ -1,6 +1,7 @@
 #include <algorithm>
 #include <map>
 #include <string>
+#include <utility>
 
 #include "Bounds.h"
 #include "ExprUsesVar.h"
@@ -27,7 +28,7 @@ public:
 
     using IRVisitor::visit;
 
-    void add_buffer_bounds(const string &name, Buffer<> image, Parameter param, int dims) {
+    void add_buffer_bounds(const string &name, const Buffer<> &image, const Parameter &param, int dims) {
         Box b;
         for (int i = 0; i < dims; ++i) {
             string dim_name = std::to_string(i);
@@ -67,7 +68,7 @@ private:
 private:
     using IRMutator::visit;
 
-    Box get_buffer_bounds(string name, int dims) {
+    Box get_buffer_bounds(const string &name, int dims) {
         if (buffer_bounds.contains(name)) {
             const Box &b = buffer_bounds.ref(name);
             internal_assert((int)b.size() == dims);
@@ -143,11 +144,11 @@ private:
                 condition = simplify(prefetch_box.used && condition);
             }
             internal_assert(!new_bounds.empty());
-            return Prefetch::make(op->name, op->types, new_bounds, op->prefetch, condition, std::move(body));
+            return Prefetch::make(op->name, op->types, new_bounds, op->prefetch, condition, body);
         }
 
         if (!body.same_as(op->body)) {
-            return Prefetch::make(op->name, op->types, op->bounds, op->prefetch, op->condition, std::move(body));
+            return Prefetch::make(op->name, op->types, op->bounds, op->prefetch, op->condition, body);
         } else if (op->bounds.empty()) {
             // Remove the Prefetch IR since it is prefetching an empty region
             user_warning << "Removing prefetch of " << p.name
@@ -174,7 +175,7 @@ private:
 
     using IRMutator::visit;
 
-    Stmt add_placeholder_prefetch(const string &loop_var, PrefetchDirective p, Stmt body) {
+    Stmt add_placeholder_prefetch(const string &loop_var, PrefetchDirective p, const Stmt &body) {
         debug(5) << "...Injecting placeholder prefetch for " << loop_var << "\n";
         p.var = loop_var;
         internal_assert(body.defined());
@@ -335,20 +336,20 @@ class SplitPrefetch : public IRMutator {
 
 public:
     SplitPrefetch(Expr bytes)
-        : max_byte_size(bytes) {
+        : max_byte_size(std::move(bytes)) {
     }
 };
 
 }  // anonymous namespace
 
-Stmt inject_placeholder_prefetch(Stmt s, const map<string, Function> &env,
+Stmt inject_placeholder_prefetch(const Stmt &s, const map<string, Function> &env,
                                  const string &prefix,
                                  const vector<PrefetchDirective> &prefetches) {
     Stmt stmt = InjectPlaceholderPrefetch(env, prefix, prefetches).mutate(s);
     return stmt;
 }
 
-Stmt inject_prefetch(Stmt s, const map<string, Function> &env) {
+Stmt inject_prefetch(const Stmt &s, const map<string, Function> &env) {
     CollectExternalBufferBounds finder;
     s.accept(&finder);
     return InjectPrefetch(env, finder.buffers).mutate(s);

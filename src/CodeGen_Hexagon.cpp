@@ -3,6 +3,7 @@
 #include <iostream>
 #include <mutex>
 #include <sstream>
+#include <utility>
 
 #include "AlignLoads.h"
 #include "CSE.h"
@@ -90,7 +91,7 @@ Stmt acquire_hvx_context(Stmt stmt, const Target &target) {
     stmt = Block::make(check_hvx_lock, stmt);
     return stmt;
 }
-bool is_dense_ramp(Expr x) {
+bool is_dense_ramp(const Expr &x) {
     const Ramp *r = x.as<Ramp>();
     if (!r) return false;
 
@@ -127,7 +128,7 @@ class SloppyUnpredicateLoads : public IRMutator {
     using IRMutator::visit;
 };
 
-Stmt sloppy_unpredicate_loads(Stmt s) {
+Stmt sloppy_unpredicate_loads(const Stmt &s) {
     return SloppyUnpredicateLoads().mutate(s);
 }
 
@@ -1247,7 +1248,7 @@ Value *CodeGen_Hexagon::call_intrin_cast(llvm::Type *ret_ty, int id,
                                          vector<Value *> Ops) {
     llvm::Function *intrin =
         Intrinsic::getDeclaration(module.get(), (llvm::Intrinsic::ID)id);
-    return call_intrin_cast(ret_ty, intrin, Ops);
+    return call_intrin_cast(ret_ty, intrin, std::move(Ops));
 }
 
 Value *CodeGen_Hexagon::interleave_vectors(const vector<llvm::Value *> &v) {
@@ -2013,11 +2014,11 @@ string type_suffix(Type type, bool signed_variants = true) {
     return "";
 }
 
-string type_suffix(Expr a, bool signed_variants = true) {
+string type_suffix(const Expr &a, bool signed_variants = true) {
     return type_suffix(a.type(), signed_variants);
 }
 
-string type_suffix(Expr a, Expr b, bool signed_variants = true) {
+string type_suffix(const Expr &a, const Expr &b, bool signed_variants = true) {
     return type_suffix(a, signed_variants) + type_suffix(b, signed_variants);
 }
 
@@ -2048,7 +2049,7 @@ Value *CodeGen_Hexagon::call_intrin(Type result_type, const string &name,
         }
     }
     return call_intrin(result_type, fn->getReturnType()->getVectorNumElements(),
-                       get_llvm_function_name(fn), args);
+                       get_llvm_function_name(fn), std::move(args));
 }
 
 Value *CodeGen_Hexagon::call_intrin(llvm::Type *result_type, const string &name,
@@ -2067,7 +2068,7 @@ Value *CodeGen_Hexagon::call_intrin(llvm::Type *result_type, const string &name,
         }
     }
     return call_intrin(result_type, fn->getReturnType()->getVectorNumElements(),
-                       get_llvm_function_name(fn), args);
+                       get_llvm_function_name(fn), std::move(args));
 }
 
 string CodeGen_Hexagon::mcpu() const {

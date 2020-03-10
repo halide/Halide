@@ -684,7 +684,7 @@ public:
     }
 };
 
-Stmt replace_params(Stmt s, const std::map<std::string, Parameter> &replacements) {
+Stmt replace_params(const Stmt &s, const std::map<std::string, Parameter> &replacements) {
     return ReplaceParams(replacements).mutate(s);
 }
 

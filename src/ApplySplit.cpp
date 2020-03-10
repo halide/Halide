@@ -9,7 +9,7 @@ using std::map;
 using std::string;
 using std::vector;
 
-vector<ApplySplitResult> apply_split(const Split &split, bool is_update, string prefix,
+vector<ApplySplitResult> apply_split(const Split &split, bool is_update, const string &prefix,
                                      map<string, Expr> &dim_extent_alignment) {
     vector<ApplySplitResult> result;
 
@@ -127,7 +127,7 @@ vector<ApplySplitResult> apply_split(const Split &split, bool is_update, string 
     return result;
 }
 
-vector<std::pair<string, Expr>> compute_loop_bounds_after_split(const Split &split, string prefix) {
+vector<std::pair<string, Expr>> compute_loop_bounds_after_split(const Split &split, const string &prefix) {
     // Define the bounds on the split dimensions using the bounds
     // on the function args. If it is a purify, we should use the bounds
     // from the dims instead.

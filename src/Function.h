@@ -16,6 +16,7 @@
 #include "Util.h"
 
 #include <map>
+#include <utility>
 
 namespace Halide {
 
@@ -36,7 +37,7 @@ struct ExternFuncArgument {
     Internal::Parameter image_param;
 
     ExternFuncArgument(Internal::FunctionPtr f)
-        : arg_type(FuncArg), func(f) {
+        : arg_type(FuncArg), func(std::move(f)) {
     }
 
     template<typename T>
@@ -44,7 +45,7 @@ struct ExternFuncArgument {
         : arg_type(BufferArg), buffer(b) {
     }
     ExternFuncArgument(Expr e)
-        : arg_type(ExprArg), expr(e) {
+        : arg_type(ExprArg), expr(std::move(e)) {
     }
     ExternFuncArgument(int e)
         : arg_type(ExprArg), expr(e) {
@@ -53,7 +54,7 @@ struct ExternFuncArgument {
         : arg_type(ExprArg), expr(e) {
     }
 
-    ExternFuncArgument(Internal::Parameter p)
+    ExternFuncArgument(const Internal::Parameter &p)
         : arg_type(ImageParamArg), image_param(p) {
         // Scalar params come in via the Expr constructor.
         internal_assert(p.is_buffer());
@@ -134,8 +135,8 @@ public:
      * multiple times. If 'name' is specified, copy's name will be set to that.
      */
     // @{
-    void deep_copy(FunctionPtr copy, std::map<FunctionPtr, FunctionPtr> &copied_map) const;
-    void deep_copy(std::string name, FunctionPtr copy,
+    void deep_copy(const FunctionPtr &copy, std::map<FunctionPtr, FunctionPtr> &copied_map) const;
+    void deep_copy(std::string name, const FunctionPtr &copy,
                    std::map<FunctionPtr, FunctionPtr> &copied_map) const;
     // @}
 

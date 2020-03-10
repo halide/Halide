@@ -534,7 +534,7 @@ public:
     /** Make an Expr that loads from this concrete buffer at a computed coordinate. */
     // @{
     template<typename... Args>
-    Expr operator()(Expr first, Args... rest) const {
+    Expr operator()(const Expr &first, Args... rest) const {
         std::vector<Expr> args = {first, rest...};
         return (*this)(args);
     };

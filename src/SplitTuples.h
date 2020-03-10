@@ -16,7 +16,7 @@ namespace Internal {
  * nodes into several scalar-valued ones, so that later lowering
  * passes only need to think about scalar-valued productions. */
 
-Stmt split_tuples(Stmt s, const std::map<std::string, Function> &env);
+Stmt split_tuples(const Stmt &s, const std::map<std::string, Function> &env);
 
 }  // namespace Internal
 }  // namespace Halide

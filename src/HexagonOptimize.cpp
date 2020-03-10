@@ -13,6 +13,7 @@
 #include "Simplify.h"
 #include "Substitute.h"
 #include <unordered_map>
+#include <utility>
 
 namespace Halide {
 namespace Internal {
@@ -24,7 +25,7 @@ using std::vector;
 
 using namespace Halide::ConciseCasts;
 
-Expr native_interleave(Expr x) {
+Expr native_interleave(const Expr &x) {
     string fn;
     switch (x.type().bits()) {
     case 8:
@@ -42,7 +43,7 @@ Expr native_interleave(Expr x) {
     return Call::make(x.type(), fn, {x}, Call::PureExtern);
 }
 
-Expr native_deinterleave(Expr x) {
+Expr native_deinterleave(const Expr &x) {
     string fn;
     switch (x.type().bits()) {
     case 8:
@@ -60,17 +61,17 @@ Expr native_deinterleave(Expr x) {
     return Call::make(x.type(), fn, {x}, Call::PureExtern);
 }
 
-bool is_native_interleave_op(Expr x, const char *name) {
+bool is_native_interleave_op(const Expr &x, const char *name) {
     const Call *c = x.as<Call>();
     if (!c || c->args.size() != 1) return false;
     return starts_with(c->name, name);
 }
 
-bool is_native_interleave(Expr x) {
+bool is_native_interleave(const Expr &x) {
     return is_native_interleave_op(x, "halide.hexagon.interleave");
 }
 
-bool is_native_deinterleave(Expr x) {
+bool is_native_deinterleave(const Expr &x) {
     return is_native_interleave_op(x, "halide.hexagon.deinterleave");
 }
 
@@ -78,7 +79,7 @@ namespace {
 
 // Broadcast to an unknown number of lanes, for making patterns.
 Expr bc(Expr x) {
-    return Broadcast::make(x, 0);
+    return Broadcast::make(std::move(x), 0);
 }
 
 // This mutator rewrites patterns with an unknown number of lanes to
@@ -122,7 +123,7 @@ public:
     }
 };
 
-Expr with_lanes(Expr x, int lanes) {
+Expr with_lanes(const Expr &x, int lanes) {
     return WithLanes(lanes).mutate(x);
 }
 
@@ -170,7 +171,7 @@ struct Pattern {
 
     Pattern() = default;
     Pattern(const string &intrin, Expr p, int flags = 0)
-        : intrin(intrin), pattern(p), flags(flags) {
+        : intrin(intrin), pattern(std::move(p)), flags(flags) {
     }
 };
 
@@ -262,7 +263,7 @@ Expr replace_pattern(Expr x, const vector<Expr> &matches, const Pattern &p) {
     return x;
 }
 
-bool is_double_vector(Expr x, const Target &target) {
+bool is_double_vector(const Expr &x, const Target &target) {
     int native_vector_lanes = target.natural_vector_size(x.type());
     return x.type().lanes() % (2 * native_vector_lanes) == 0;
 }
@@ -311,7 +312,7 @@ Expr apply_patterns(Expr x, const vector<Pattern> &patterns, const Target &targe
 
 // Replace x with a negated version of x, if it can be done without
 // overflow.
-Expr lossless_negate(Expr x) {
+Expr lossless_negate(const Expr &x) {
     const Mul *m = x.as<Mul>();
     if (m) {
         Expr a = lossless_negate(m->a);
@@ -363,7 +364,7 @@ Expr unbroadcast_lossless_cast(Type ty, Expr x) {
 // multiplies in 'mpys', added to 'rest'.
 // Difference in mpys.size() - return indicates the number of
 // expressions where we pretend the op to be multiplied by 1.
-int find_mpy_ops(Expr op, Type a_ty, Type b_ty, int max_mpy_count,
+int find_mpy_ops(const Expr &op, Type a_ty, Type b_ty, int max_mpy_count,
                  vector<MulExpr> &mpys, Expr &rest) {
     if ((int)mpys.size() >= max_mpy_count) {
         rest = rest.defined() ? Add::make(rest, op) : op;
@@ -505,17 +506,17 @@ private:
     }
 
     // Helpers to generate horizontally reducing multiply operations.
-    static Expr halide_hexagon_add_2mpy(Type result_type, string suffix, Expr v0, Expr v1, Expr c0, Expr c1) {
-        Expr call = Call::make(result_type, "halide.hexagon.add_2mpy" + suffix, {v0, v1, c0, c1}, Call::PureExtern);
+    static Expr halide_hexagon_add_2mpy(Type result_type, const string &suffix, Expr v0, Expr v1, Expr c0, Expr c1) {
+        Expr call = Call::make(result_type, "halide.hexagon.add_2mpy" + suffix, {std::move(v0), std::move(v1), std::move(c0), std::move(c1)}, Call::PureExtern);
         return native_interleave(call);
     }
 
-    static Expr halide_hexagon_add_2mpy(Type result_type, string suffix, Expr v01, Expr c01) {
-        return Call::make(result_type, "halide.hexagon.add_2mpy" + suffix, {v01, c01}, Call::PureExtern);
+    static Expr halide_hexagon_add_2mpy(Type result_type, const string &suffix, Expr v01, Expr c01) {
+        return Call::make(result_type, "halide.hexagon.add_2mpy" + suffix, {std::move(v01), std::move(c01)}, Call::PureExtern);
     }
 
-    static Expr halide_hexagon_add_4mpy(Type result_type, string suffix, Expr v01, Expr c01) {
-        return Call::make(result_type, "halide.hexagon.add_4mpy" + suffix, {v01, c01}, Call::PureExtern);
+    static Expr halide_hexagon_add_4mpy(Type result_type, const string &suffix, Expr v01, Expr c01) {
+        return Call::make(result_type, "halide.hexagon.add_4mpy" + suffix, {std::move(v01), std::move(c01)}, Call::PureExtern);
     }
     // We'll try to sort the mpys based my mpys.first.
     // But, for this all the mpy.first exprs should either be
@@ -1105,7 +1106,7 @@ class EliminateInterleaves : public IRMutator {
 
     // Check if x is an expression that is either an interleave, or
     // transitively is an interleave.
-    bool yields_removable_interleave(Expr x) {
+    bool yields_removable_interleave(const Expr &x) {
         if (is_native_interleave(x)) {
             return true;
         }
@@ -1124,7 +1125,7 @@ class EliminateInterleaves : public IRMutator {
 
     // Check if x either has a removable interleave, or it can pretend
     // to be an interleave at no cost (a scalar or a broadcast).
-    bool yields_interleave(Expr x) {
+    bool yields_interleave(const Expr &x) {
         if (yields_removable_interleave(x)) {
             return true;
         }
@@ -1255,14 +1256,6 @@ class EliminateInterleaves : public IRMutator {
         }
     }
 
-    // Make overloads of stmt/expr uses var so we can use it in a template.
-    static bool uses_var(Stmt s, const string &var) {
-        return stmt_uses_var(s, var);
-    }
-    static bool uses_var(Expr e, const string &var) {
-        return expr_uses_var(e, var);
-    }
-
     template<typename NodeType, typename LetType>
     NodeType visit_let(const LetType *op) {
 
@@ -1300,8 +1293,8 @@ class EliminateInterleaves : public IRMutator {
         } else {
             // We need to rewrap the body with new lets.
             NodeType result = body;
-            bool deinterleaved_used = uses_var(result, deinterleaved_name);
-            bool interleaved_used = uses_var(result, op->name);
+            bool deinterleaved_used = stmt_or_expr_uses_var(result, deinterleaved_name);
+            bool interleaved_used = stmt_or_expr_uses_var(result, op->name);
             if (deinterleaved_used && interleaved_used) {
                 // The body uses both the interleaved and
                 // deinterleaved version of this let. Generate both
@@ -1327,7 +1320,8 @@ class EliminateInterleaves : public IRMutator {
                 return LetType::make(op->name, value, result);
             } else {
                 // The let must have been dead.
-                internal_assert(!uses_var(op->body, op->name)) << "EliminateInterleaves eliminated a non-dead let.\n";
+                internal_assert(!stmt_or_expr_uses_var(op->body, op->name))
+                    << "EliminateInterleaves eliminated a non-dead let.\n";
                 return NodeType();
             }
         }
@@ -1663,7 +1657,7 @@ class FuseInterleaves : public IRMutator {
 };
 
 // Find an upper bound of bounds.max - bounds.min.
-Expr span_of_bounds(Interval bounds) {
+Expr span_of_bounds(const Interval &bounds) {
     internal_assert(bounds.is_bounded());
 
     const Min *min_min = bounds.min.as<Min>();
@@ -1812,7 +1806,7 @@ private:
 
     // Return the load expression of first vector if all vector in exprs are
     // contiguous vectors pointing to the same buffer.
-    Expr are_contiguous_vectors(const vector<Expr> exprs) {
+    Expr are_contiguous_vectors(const vector<Expr> &exprs) {
         if (exprs.empty()) {
             return Expr();
         }
@@ -1857,7 +1851,7 @@ private:
     }
 
     // Loads comparator for sorting Load Expr of the same buffer.
-    static bool loads_comparator(LoadIndex a, LoadIndex b) {
+    static bool loads_comparator(const LoadIndex &a, const LoadIndex &b) {
         if (a.first.defined() && b.first.defined()) {
             const Load *load_a = a.first.as<Load>();
             const Load *load_b = b.first.as<Load>();
@@ -1927,7 +1921,10 @@ private:
                     // Sort the bucket and compare bases of 3 adjacent vectors
                     // at a time. If they differ by vector stride, we've
                     // found a vtmpy
-                    std::sort(iter->second.begin(), iter->second.end(), loads_comparator);
+                    // It doesn't see to be easy to write a comparator function that'll implement a
+                    // strict weak ordering. So, we use stable_sort instead of sort so at the very least, the relative order
+                    // of tied elements in the vector to be sorted is not changed.
+                    std::stable_sort(iter->second.begin(), iter->second.end(), loads_comparator);
                     size_t vec_size = iter->second.size();
                     for (size_t i = 0; i + 2 < vec_size; i++) {
                         Expr v0 = iter->second[i].first;
@@ -1961,8 +1958,19 @@ private:
                         if (vtmpy_indices[i]) {
                             continue;
                         }
-                        Expr mpy_a = lossless_cast(op->type, mpys[i].first);
-                        Expr mpy_b = lossless_cast(op->type, mpys[i].second);
+                        // We put expressions in mpys after un-broadcasting them. So, first broadcast
+                        // then call lossless_cast.
+                        Expr a = mpys[i].first;
+                        Expr b = mpys[i].second;
+                        int lanes = op->type.lanes();
+
+                        if (a.type().is_scalar())
+                            a = Broadcast::make(a, lanes);
+                        if (b.type().is_scalar())
+                            b = Broadcast::make(b, lanes);
+
+                        Expr mpy_a = lossless_cast(op->type, a);
+                        Expr mpy_b = lossless_cast(op->type, b);
                         Expr mpy_res = mpy_a * mpy_b;
                         new_expr = new_expr.defined() ? new_expr + mpy_res : mpy_res;
                     }
@@ -2109,7 +2117,7 @@ class ScatterGatherGenerator : public IRMutator {
         Expr new_index = mutate(cast(ty.with_code(Type::Int), index));
         dst_index = mutate(dst_index);
 
-        return Call::make(ty, "gather", {dst_base, dst_index, src, size - 1, new_index},
+        return Call::make(ty, "gather", {std::move(dst_base), dst_index, src, size - 1, new_index},
                           Call::Intrinsic);
     }
 
@@ -2218,7 +2226,7 @@ class SyncronizationBarriers : public IRMutator {
 
     // Creates entry in sync map for the stmt requiring a
     // scatter-release instruction before it.
-    void check_hazard(string name) {
+    void check_hazard(const string &name) {
         if (in_flight.find(name) == in_flight.end()) {
             return;
         }
@@ -2272,7 +2280,7 @@ public:
 
 }  // namespace
 
-Stmt optimize_hexagon_shuffles(Stmt s, int lut_alignment) {
+Stmt optimize_hexagon_shuffles(const Stmt &s, int lut_alignment) {
     // Replace indirect and other complicated loads with
     // dynamic_shuffle (vlut) calls.
     return OptimizeShuffles(lut_alignment).mutate(s);

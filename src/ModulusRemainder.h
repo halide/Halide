@@ -69,18 +69,18 @@ ModulusRemainder operator%(const ModulusRemainder &a, int64_t b);
  * aligned load. If all else fails, we can just say that an integer is
  * congruent to zero modulo one.
  */
-ModulusRemainder modulus_remainder(Expr e);
+ModulusRemainder modulus_remainder(const Expr &e);
 
 /** If we have alignment information about external variables, we can
  * let the analysis know about that using this version of
  * modulus_remainder: */
-ModulusRemainder modulus_remainder(Expr e, const Scope<ModulusRemainder> &scope);
+ModulusRemainder modulus_remainder(const Expr &e, const Scope<ModulusRemainder> &scope);
 
 /** Reduce an expression modulo some integer. Returns true and assigns
  * to remainder if an answer could be found. */
 ///@{
-bool reduce_expr_modulo(Expr e, int64_t modulus, int64_t *remainder);
-bool reduce_expr_modulo(Expr e, int64_t modulus, int64_t *remainder, const Scope<ModulusRemainder> &scope);
+bool reduce_expr_modulo(const Expr &e, int64_t modulus, int64_t *remainder);
+bool reduce_expr_modulo(const Expr &e, int64_t modulus, int64_t *remainder, const Scope<ModulusRemainder> &scope);
 ///@}
 
 void modulus_remainder_test();

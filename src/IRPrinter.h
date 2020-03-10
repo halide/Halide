@@ -98,10 +98,10 @@ public:
     IRPrinter(std::ostream &);
 
     /** emit an expression on the output stream */
-    void print(Expr);
+    void print(const Expr &);
 
     /** emit a statement on the output stream */
-    void print(Stmt);
+    void print(const Stmt &);
 
     /** emit a comma delimited list of exprs, without any leading or
      * trailing punctuation. */

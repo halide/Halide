@@ -56,7 +56,7 @@ namespace {
 // i32(i16_a)*i32(i16_b) +/- i32(i16_c)*i32(i16_d) can be done by
 // interleaving a, c, and b, d, and then using pmaddwd. We
 // recognize it here, and implement it in the initial module.
-bool should_use_pmaddwd(Expr a, Expr b, vector<Expr> &result) {
+bool should_use_pmaddwd(const Expr &a, const Expr &b, vector<Expr> &result) {
     Type t = a.type();
     internal_assert(b.type() == t);
 

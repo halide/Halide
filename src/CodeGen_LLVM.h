@@ -257,13 +257,13 @@ protected:
 
     /** Emit code that evaluates an expression, and return the llvm
      * representation of the result of the expression. */
-    llvm::Value *codegen(Expr);
+    llvm::Value *codegen(const Expr &);
 
     /** Emit code that runs a statement. */
-    void codegen(Stmt);
+    void codegen(const Stmt &);
 
     /** Codegen a vector Expr by codegenning each lane and combining. */
-    void scalarize(Expr);
+    void scalarize(const Expr &);
 
     /** Some destructors should always be called. Others should only
      * be called if the pipeline is exiting with an error code. */
@@ -295,7 +295,7 @@ protected:
      * null), or evaluates and returns the message, which must be an
      * Int(32) expression. */
     // @{
-    void create_assertion(llvm::Value *condition, Expr message, llvm::Value *error_code = nullptr);
+    void create_assertion(llvm::Value *condition, const Expr &message, llvm::Value *error_code = nullptr);
     // @}
 
     /** Codegen a block of asserts with pure conditions */
@@ -315,9 +315,9 @@ protected:
         std::string name;
     };
     int task_depth;
-    void get_parallel_tasks(Stmt s, std::vector<ParallelTask> &tasks, std::pair<std::string, int> prefix);
+    void get_parallel_tasks(const Stmt &s, std::vector<ParallelTask> &tasks, std::pair<std::string, int> prefix);
     void do_parallel_tasks(const std::vector<ParallelTask> &tasks);
-    void do_as_parallel_task(Stmt s);
+    void do_as_parallel_task(const Stmt &s);
 
     /** Return the the pipeline with the given error code. Will run
      * the destructor block. */
@@ -336,8 +336,8 @@ protected:
      * given type. The index counts according to the scalar type of
      * the type passed in. */
     // @{
-    llvm::Value *codegen_buffer_pointer(std::string buffer, Type type, llvm::Value *index);
-    llvm::Value *codegen_buffer_pointer(std::string buffer, Type type, Expr index);
+    llvm::Value *codegen_buffer_pointer(const std::string &buffer, Type type, llvm::Value *index);
+    llvm::Value *codegen_buffer_pointer(const std::string &buffer, Type type, Expr index);
     llvm::Value *codegen_buffer_pointer(llvm::Value *base_address, Type type, Expr index);
     llvm::Value *codegen_buffer_pointer(llvm::Value *base_address, Type type, llvm::Value *index);
     // @}
@@ -348,7 +348,7 @@ protected:
     /** Mark a load or store with type-based-alias-analysis metadata
      * so that llvm knows it can reorder loads and stores across
      * different buffers */
-    void add_tbaa_metadata(llvm::Instruction *inst, std::string buffer, Expr index);
+    void add_tbaa_metadata(llvm::Instruction *inst, std::string buffer, const Expr &index);
 
     /** Get a unique name for the actual block of memory that an
      * allocate node uses. Used so that alias analysis understands
@@ -548,7 +548,7 @@ private:
 
     /** Embed a constant expression as a global variable. */
     llvm::Constant *embed_constant_expr(Expr e, llvm::Type *t);
-    llvm::Constant *embed_constant_scalar_value_t(Expr e);
+    llvm::Constant *embed_constant_scalar_value_t(const Expr &e);
 
     llvm::Function *add_argv_wrapper(llvm::Function *fn, const std::string &name, bool result_in_argv = false);
 
