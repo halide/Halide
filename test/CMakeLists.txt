@@ -18,7 +18,11 @@ else ()
     # Also allow tests, via conditional compilation, to use the entire
     # capability of the CPU being compiled on via -march=native. This
     # presumes tests are run on the same machine they are compiled on.
-    target_compile_options(halide_test INTERFACE "$<$<CONFIG:RELEASE>:-O0>" "-march=native")
+    set(ARCH_FOR_TESTS "$ENV{ARCH_FOR_TESTS}")
+    if ("${ARCH_FOR_TESTS}" STREQUAL "")
+      set(ARCH_FOR_TESTS "native")
+    endif()
+    target_compile_options(halide_test INTERFACE "$<$<CONFIG:RELEASE>:-O0>" "-march=${ARCH_FOR_TESTS}")
 endif ()
 
 function(tests)
