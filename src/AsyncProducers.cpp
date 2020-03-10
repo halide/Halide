@@ -452,7 +452,7 @@ class InitializeSemaphores : public IRMutator {
 class TightenProducerConsumerNodes : public IRMutator {
     using IRMutator::visit;
 
-    Stmt make_producer_consumer(string name, bool is_producer, Stmt body, const Scope<int> &scope) {
+    Stmt make_producer_consumer(const string &name, bool is_producer, Stmt body, const Scope<int> &scope) {
         if (const LetStmt *let = body.as<LetStmt>()) {
             if (expr_uses_vars(let->value, scope)) {
                 return ProducerConsumer::make(name, is_producer, body);
@@ -584,7 +584,7 @@ class ExpandAcquireNodes : public IRMutator {
 class TightenForkNodes : public IRMutator {
     using IRMutator::visit;
 
-    Stmt make_fork(Stmt first, Stmt rest) {
+    Stmt make_fork(const Stmt &first, const Stmt &rest) {
         const LetStmt *lf = first.as<LetStmt>();
         const LetStmt *lr = rest.as<LetStmt>();
         const Realize *rf = first.as<Realize>();

@@ -3,6 +3,7 @@
 #include <array>
 #include <fstream>
 #include <future>
+#include <utility>
 
 #include "CodeGen_C.h"
 #include "CodeGen_Internal.h"
@@ -340,7 +341,7 @@ LoweredFunc::LoweredFunc(const std::string &name,
                          Stmt body,
                          LinkageType linkage,
                          NameMangling name_mangling)
-    : name(name), args(args), body(body), linkage(linkage), name_mangling(name_mangling) {
+    : name(name), args(args), body(std::move(body)), linkage(linkage), name_mangling(name_mangling) {
 }
 
 LoweredFunc::LoweredFunc(const std::string &name,
@@ -348,7 +349,7 @@ LoweredFunc::LoweredFunc(const std::string &name,
                          Stmt body,
                          LinkageType linkage,
                          NameMangling name_mangling)
-    : name(name), body(body), linkage(linkage), name_mangling(name_mangling) {
+    : name(name), body(std::move(body)), linkage(linkage), name_mangling(name_mangling) {
     for (const Argument &i : args) {
         this->args.push_back(LoweredArgument(i));
     }
@@ -700,7 +701,7 @@ void compile_standalone_runtime(const std::string &object_filename, Target t) {
 void compile_multitarget(const std::string &fn_name,
                          const std::map<Output, std::string> &output_files,
                          const std::vector<Target> &targets,
-                         ModuleProducer module_producer) {
+                         const ModuleProducer &module_producer) {
     validate_outputs(output_files);
 
     user_assert(!fn_name.empty()) << "Function name must be specified.\n";

@@ -11,7 +11,7 @@ namespace Halide {
 namespace Internal {
 
 /** Removes placeholder loops for extern stages. */
-Stmt remove_extern_loops(Stmt s);
+Stmt remove_extern_loops(const Stmt &s);
 
 }  // namespace Internal
 }  // namespace Halide

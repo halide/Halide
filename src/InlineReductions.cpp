@@ -1,10 +1,12 @@
 #include "InlineReductions.h"
+
 #include "CSE.h"
 #include "Debug.h"
 #include "Func.h"
 #include "IRMutator.h"
 #include "IROperator.h"
 #include "Scope.h"
+#include <utility>
 
 namespace Halide {
 
@@ -20,7 +22,7 @@ public:
     vector<Expr> call_args;
     RDom rdom;
 
-    FindFreeVars(RDom r, const string &n)
+    FindFreeVars(const RDom &r, const string &n)
         : rdom(r), explicit_rdom(r.defined()), name(n) {
     }
 
@@ -104,10 +106,10 @@ private:
 }  // namespace Internal
 
 Expr sum(Expr e, const std::string &name) {
-    return sum(RDom(), e, name);
+    return sum(RDom(), std::move(e), name);
 }
 
-Expr sum(RDom r, Expr e, const std::string &name) {
+Expr sum(const RDom &r, Expr e, const std::string &name) {
     Internal::FindFreeVars v(r, name);
     e = v.mutate(common_subexpression_elimination(e));
 
@@ -119,10 +121,10 @@ Expr sum(RDom r, Expr e, const std::string &name) {
 }
 
 Expr product(Expr e, const std::string &name) {
-    return product(RDom(), e, name);
+    return product(RDom(), std::move(e), name);
 }
 
-Expr product(RDom r, Expr e, const std::string &name) {
+Expr product(const RDom &r, Expr e, const std::string &name) {
     Internal::FindFreeVars v(r, name);
     e = v.mutate(common_subexpression_elimination(e));
 
@@ -134,10 +136,10 @@ Expr product(RDom r, Expr e, const std::string &name) {
 }
 
 Expr maximum(Expr e, const std::string &name) {
-    return maximum(RDom(), e, name);
+    return maximum(RDom(), std::move(e), name);
 }
 
-Expr maximum(RDom r, Expr e, const std::string &name) {
+Expr maximum(const RDom &r, Expr e, const std::string &name) {
     Internal::FindFreeVars v(r, name);
     e = v.mutate(common_subexpression_elimination(e));
 
@@ -150,10 +152,10 @@ Expr maximum(RDom r, Expr e, const std::string &name) {
 }
 
 Expr minimum(Expr e, const std::string &name) {
-    return minimum(RDom(), e, name);
+    return minimum(RDom(), std::move(e), name);
 }
 
-Expr minimum(RDom r, Expr e, const std::string &name) {
+Expr minimum(const RDom &r, Expr e, const std::string &name) {
     Internal::FindFreeVars v(r, name);
     e = v.mutate(common_subexpression_elimination(e));
 
@@ -166,10 +168,10 @@ Expr minimum(RDom r, Expr e, const std::string &name) {
 }
 
 Tuple argmax(Expr e, const std::string &name) {
-    return argmax(RDom(), e, name);
+    return argmax(RDom(), std::move(e), name);
 }
 
-Tuple argmax(RDom r, Expr e, const std::string &name) {
+Tuple argmax(const RDom &r, Expr e, const std::string &name) {
     Internal::FindFreeVars v(r, name);
     e = v.mutate(common_subexpression_elimination(e));
 
@@ -195,10 +197,10 @@ Tuple argmax(RDom r, Expr e, const std::string &name) {
 }
 
 Tuple argmin(Expr e, const std::string &name) {
-    return argmin(RDom(), e, name);
+    return argmin(RDom(), std::move(e), name);
 }
 
-Tuple argmin(RDom r, Expr e, const std::string &name) {
+Tuple argmin(const RDom &r, Expr e, const std::string &name) {
     Internal::FindFreeVars v(r, name);
     e = v.mutate(common_subexpression_elimination(e));
 

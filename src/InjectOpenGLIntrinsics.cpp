@@ -92,7 +92,7 @@ private:
     }
 };
 
-Stmt inject_opengl_intrinsics(Stmt s) {
+Stmt inject_opengl_intrinsics(const Stmt &s) {
     InjectOpenGLIntrinsics gl;
     return gl.mutate(s);
 }

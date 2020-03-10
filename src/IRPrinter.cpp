@@ -341,11 +341,11 @@ IRPrinter::IRPrinter(ostream &s)
     s.setf(std::ios::fixed, std::ios::floatfield);
 }
 
-void IRPrinter::print(Expr ir) {
+void IRPrinter::print(const Expr &ir) {
     ir.accept(this);
 }
 
-void IRPrinter::print(Stmt ir) {
+void IRPrinter::print(const Stmt &ir) {
     ir.accept(this);
 }
 

@@ -188,12 +188,12 @@ void define_func(py::module &m) {
                 return func.reorder_storage(args_to_vector<Var>(args));
             })
 
-            .def("compute_at", (Func & (Func::*)(Func, Var)) & Func::compute_at, py::arg("f"), py::arg("var"))
-            .def("compute_at", (Func & (Func::*)(Func, RVar)) & Func::compute_at, py::arg("f"), py::arg("var"))
+            .def("compute_at", (Func & (Func::*)(const Func &, const Var &)) & Func::compute_at, py::arg("f"), py::arg("var"))
+            .def("compute_at", (Func & (Func::*)(const Func &, const RVar &)) & Func::compute_at, py::arg("f"), py::arg("var"))
             .def("compute_at", (Func & (Func::*)(LoopLevel)) & Func::compute_at, py::arg("loop_level"))
 
-            .def("store_at", (Func & (Func::*)(Func, Var)) & Func::store_at, py::arg("f"), py::arg("var"))
-            .def("store_at", (Func & (Func::*)(Func, RVar)) & Func::store_at, py::arg("f"), py::arg("var"))
+            .def("store_at", (Func & (Func::*)(const Func &, const Var &)) & Func::store_at, py::arg("f"), py::arg("var"))
+            .def("store_at", (Func & (Func::*)(const Func &, const RVar &)) & Func::store_at, py::arg("f"), py::arg("var"))
             .def("store_at", (Func & (Func::*)(LoopLevel)) & Func::store_at, py::arg("loop_level"))
 
             .def("memoize", &Func::memoize)

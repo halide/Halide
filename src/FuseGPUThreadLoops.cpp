@@ -1,5 +1,6 @@
 #include <algorithm>
 #include <cmath>
+#include <utility>
 
 #include "Bounds.h"
 #include "CSE.h"
@@ -81,7 +82,7 @@ class ExtractBlockSize : public IRVisitor {
 
     using IRVisitor::visit;
 
-    void found_thread_for(int dim, const string &name, Expr extent) {
+    void found_thread_for(int dim, const string &name, const Expr &extent) {
         internal_assert(dim >= 0 && dim < 4);
         if (!block_extent[dim].defined()) {
             block_extent[dim] = extent;
@@ -93,7 +94,7 @@ class ExtractBlockSize : public IRVisitor {
     void found_block_for(int dim, const string &name, Expr extent) {
         internal_assert(dim >= 0 && dim < 4);
         internal_assert(!block_count[dim].defined());
-        block_count[dim] = extent;
+        block_count[dim] = std::move(extent);
         block_var_name[dim] = name;
     }
 
@@ -1216,7 +1217,7 @@ class ValidateGPULoopNesting : public IRVisitor {
 };
 
 // Also used by InjectImageIntrinsics
-Stmt zero_gpu_loop_mins(Stmt s) {
+Stmt zero_gpu_loop_mins(const Stmt &s) {
     return ZeroGPULoopMins().mutate(s);
 }
 

@@ -32,10 +32,10 @@ struct ApplySplitResult {
     Type type;
 
     ApplySplitResult(const std::string &n, Expr val, Type t)
-        : name(n), value(val), type(t) {
+        : name(n), value(std::move(val)), type(t) {
     }
     ApplySplitResult(Expr val)
-        : name(""), value(val), type(Predicate) {
+        : name(""), value(std::move(val)), type(Predicate) {
     }
 
     bool is_substitution() const {
@@ -55,13 +55,13 @@ struct ApplySplitResult {
  * defined the values of variables referred by the predicates and substitutions
  * (ordered from innermost to outermost let). */
 std::vector<ApplySplitResult> apply_split(
-    const Split &split, bool is_update, std::string prefix,
+    const Split &split, bool is_update, const std::string &prefix,
     std::map<std::string, Expr> &dim_extent_alignment);
 
 /** Compute the loop bounds of the new dimensions resulting from applying the
  * split schedules using the loop bounds of the old dimensions. */
 std::vector<std::pair<std::string, Expr>> compute_loop_bounds_after_split(
-    const Split &split, std::string prefix);
+    const Split &split, const std::string &prefix);
 
 }  // namespace Internal
 }  // namespace Halide

@@ -9,7 +9,7 @@
 namespace Halide {
 namespace Internal {
 
-Expr lower_lerp(Expr zero_val, Expr one_val, Expr weight) {
+Expr lower_lerp(Expr zero_val, Expr one_val, const Expr &weight) {
 
     Expr result;
 

@@ -27,7 +27,7 @@ typedef std::map<std::pair<std::string, int>, Interval> FuncValueBounds;
  * This is for tasks such as deducing the region of a buffer
  * loaded by a chunk of code.
  */
-Interval bounds_of_expr_in_scope(Expr expr,
+Interval bounds_of_expr_in_scope(const Expr &expr,
                                  const Scope<Interval> &scope,
                                  const FuncValueBounds &func_bounds = FuncValueBounds(),
                                  bool const_bound = false);
@@ -119,7 +119,7 @@ bool box_contains(const Box &a, const Box &b);
  * expression. This is useful for figuring out what regions of things
  * to evaluate. */
 // @{
-std::map<std::string, Box> boxes_required(Expr e,
+std::map<std::string, Box> boxes_required(const Expr &e,
                                           const Scope<Interval> &scope = Scope<Interval>::empty_scope(),
                                           const FuncValueBounds &func_bounds = FuncValueBounds());
 std::map<std::string, Box> boxes_required(Stmt s,
@@ -131,7 +131,7 @@ std::map<std::string, Box> boxes_required(Stmt s,
  * 'Provides's to each function that occurs within a given statement
  * or expression. */
 // @{
-std::map<std::string, Box> boxes_provided(Expr e,
+std::map<std::string, Box> boxes_provided(const Expr &e,
                                           const Scope<Interval> &scope = Scope<Interval>::empty_scope(),
                                           const FuncValueBounds &func_bounds = FuncValueBounds());
 std::map<std::string, Box> boxes_provided(Stmt s,
@@ -143,7 +143,7 @@ std::map<std::string, Box> boxes_provided(Stmt s,
  * and 'Provides's to each function that occurs within a given
  * statement or expression. */
 // @{
-std::map<std::string, Box> boxes_touched(Expr e,
+std::map<std::string, Box> boxes_touched(const Expr &e,
                                          const Scope<Interval> &scope = Scope<Interval>::empty_scope(),
                                          const FuncValueBounds &func_bounds = FuncValueBounds());
 std::map<std::string, Box> boxes_touched(Stmt s,
@@ -153,24 +153,24 @@ std::map<std::string, Box> boxes_touched(Stmt s,
 
 /** Variants of the above that are only concerned with a single function. */
 // @{
-Box box_required(Expr e, std::string fn,
+Box box_required(const Expr &e, const std::string &fn,
                  const Scope<Interval> &scope = Scope<Interval>::empty_scope(),
                  const FuncValueBounds &func_bounds = FuncValueBounds());
-Box box_required(Stmt s, std::string fn,
-                 const Scope<Interval> &scope = Scope<Interval>::empty_scope(),
-                 const FuncValueBounds &func_bounds = FuncValueBounds());
-
-Box box_provided(Expr e, std::string fn,
-                 const Scope<Interval> &scope = Scope<Interval>::empty_scope(),
-                 const FuncValueBounds &func_bounds = FuncValueBounds());
-Box box_provided(Stmt s, std::string fn,
+Box box_required(Stmt s, const std::string &fn,
                  const Scope<Interval> &scope = Scope<Interval>::empty_scope(),
                  const FuncValueBounds &func_bounds = FuncValueBounds());
 
-Box box_touched(Expr e, std::string fn,
+Box box_provided(const Expr &e, const std::string &fn,
+                 const Scope<Interval> &scope = Scope<Interval>::empty_scope(),
+                 const FuncValueBounds &func_bounds = FuncValueBounds());
+Box box_provided(Stmt s, const std::string &fn,
+                 const Scope<Interval> &scope = Scope<Interval>::empty_scope(),
+                 const FuncValueBounds &func_bounds = FuncValueBounds());
+
+Box box_touched(const Expr &e, const std::string &fn,
                 const Scope<Interval> &scope = Scope<Interval>::empty_scope(),
                 const FuncValueBounds &func_bounds = FuncValueBounds());
-Box box_touched(Stmt s, std::string fn,
+Box box_touched(Stmt s, const std::string &fn,
                 const Scope<Interval> &scope = Scope<Interval>::empty_scope(),
                 const FuncValueBounds &func_bounds = FuncValueBounds());
 // @}

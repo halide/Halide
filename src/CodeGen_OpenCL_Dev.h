@@ -55,7 +55,7 @@ protected:
     protected:
         using CodeGen_C::visit;
         std::string print_type(Type type, AppendSpaceIfNeeded append_space = DoNotAppendSpace) override;
-        std::string print_reinterpret(Type type, Expr e) override;
+        std::string print_reinterpret(Type type, const Expr &e) override;
         std::string print_extern_call(const Call *op) override;
         std::string print_array_access(const std::string &name,
                                        const Type &type,

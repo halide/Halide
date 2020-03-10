@@ -769,7 +769,7 @@ void ReverseAccumulationVisitor::accumulate(const Expr &stub, Expr adjoint) {
     // select(c, x, 0) / y -> select(c, x / y, 0)
     if (adjoint.as<Mul>() != nullptr) {
         const Mul *mul_op = adjoint.as<Mul>();
-        auto mul_select_with_zero = [&](Expr sel, Expr other) {
+        auto mul_select_with_zero = [&](const Expr &sel, const Expr &other) {
             const Select *sel_op = sel.as<Select>();
             if (is_zero(sel_op->true_value)) {
                 return select(sel_op->condition,
@@ -789,7 +789,7 @@ void ReverseAccumulationVisitor::accumulate(const Expr &stub, Expr adjoint) {
     }
     if (adjoint.as<Div>() != nullptr) {
         const Div *div_op = adjoint.as<Div>();
-        auto div_select_with_zero = [&](Expr sel, Expr other) {
+        auto div_select_with_zero = [&](const Expr &sel, const Expr &other) {
             const Select *sel_op = sel.as<Select>();
             if (is_zero(sel_op->true_value)) {
                 return select(sel_op->condition,

@@ -276,7 +276,7 @@ private:
             builder.parent_id = Variable::make(Int(32), op->name + ".trace_id");
 
             // Use the size of the pure step
-            const vector<string> f_args = f.args();
+            const vector<string> &f_args = f.args();
             for (int i = 0; i < f.dimensions(); i++) {
                 Expr min = Variable::make(Int(32), f.name() + ".s0." + f_args[i] + ".min");
                 Expr max = Variable::make(Int(32), f.name() + ".s0." + f_args[i] + ".max");

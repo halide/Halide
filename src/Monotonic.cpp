@@ -185,7 +185,7 @@ class MonotonicVisitor : public IRVisitor {
         result = unify(ra, rb);
     }
 
-    void visit_eq(Expr a, Expr b) {
+    void visit_eq(const Expr &a, const Expr &b) {
         a.accept(this);
         Monotonic ra = result;
         b.accept(this);
@@ -205,7 +205,7 @@ class MonotonicVisitor : public IRVisitor {
         visit_eq(op->a, op->b);
     }
 
-    void visit_lt(Expr a, Expr b) {
+    void visit_lt(const Expr &a, const Expr &b) {
         a.accept(this);
         Monotonic ra = result;
         b.accept(this);
@@ -431,7 +431,7 @@ public:
     }
 };
 
-Monotonic is_monotonic(Expr e, const std::string &var, const Scope<Monotonic> &scope) {
+Monotonic is_monotonic(const Expr &e, const std::string &var, const Scope<Monotonic> &scope) {
     if (!e.defined()) return Monotonic::Unknown;
     MonotonicVisitor m(var, scope);
     e.accept(&m);
@@ -439,22 +439,22 @@ Monotonic is_monotonic(Expr e, const std::string &var, const Scope<Monotonic> &s
 }
 
 namespace {
-void check_increasing(Expr e) {
+void check_increasing(const Expr &e) {
     internal_assert(is_monotonic(e, "x") == Monotonic::Increasing)
         << "Was supposed to be increasing: " << e << "\n";
 }
 
-void check_decreasing(Expr e) {
+void check_decreasing(const Expr &e) {
     internal_assert(is_monotonic(e, "x") == Monotonic::Decreasing)
         << "Was supposed to be decreasing: " << e << "\n";
 }
 
-void check_constant(Expr e) {
+void check_constant(const Expr &e) {
     internal_assert(is_monotonic(e, "x") == Monotonic::Constant)
         << "Was supposed to be constant: " << e << "\n";
 }
 
-void check_unknown(Expr e) {
+void check_unknown(const Expr &e) {
     internal_assert(is_monotonic(e, "x") == Monotonic::Unknown)
         << "Was supposed to be unknown: " << e << "\n";
 }
