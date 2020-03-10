@@ -456,22 +456,6 @@ public:
         store_cost += cost_of_false_sharing;
         store_cost = print_wrap(store_cost, "store_cost_after_false_sharing", n, w);
 
-        // Now add a term for false sharing of pages. The maximum
-        // number of threads that could all fault on the same page at
-        // the same time is:
-        Expr max_threads_hitting_same_page_fault = min(inner_parallelism, 4096 / max(1, innermost_bytes_at_task));
-        max_threads_hitting_same_page_fault = print_wrap(max_threads_hitting_same_page_fault, "max_tasks_hitting_same_page_fault", n, w);
-
-        // The total number of page faults is proportionate to the number of bytes allocated
-        Expr num_page_faults = bytes_at_production;
-
-        // And page faults are serviced serially, so the total CPU time gets multiplied by the thread count again!
-        Expr cost_of_page_faults = (num_page_faults * max_threads_hitting_same_page_fault *
-                                    inner_parallelism * outer_parallelism * relu1(23, w, n));
-
-        store_cost += cost_of_page_faults;
-        store_cost = print_wrap(store_cost, "store_cost_after_page_faults", n, w);
-
         // Malloc is not free, so add a cost per allocation.
         Expr cost_of_malloc = relu1(24, w, n) * num_realizations;
 
