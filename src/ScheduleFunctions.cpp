@@ -1226,11 +1226,19 @@ private:
             internal_assert((it_min != bounds.end()) && (it_max != bounds.end()));
 
             if (iter->second == LoopAlignStrategy::AlignStart) {
-                const auto &parent_min = bounds.find(parent_prefix + parent_var + ".loop_min");
+                auto parent_min = bounds.find(parent_prefix + var + ".loop_min");
+                // Try to find under different parent name.
+                if (parent_min == bounds.end()) {
+                    parent_min = bounds.find(parent_prefix + parent_var + ".loop_min");
+                }
                 internal_assert(parent_min != bounds.end());
                 shift_val = parent_min->second - it_min->second;
             } else {
-                const auto &parent_max = bounds.find(parent_prefix + parent_var + ".loop_max");
+                auto parent_max = bounds.find(parent_prefix + var + ".loop_max");
+                // Try to find under different parent name.
+                if (parent_max == bounds.end()) {
+                    parent_max = bounds.find(parent_prefix + parent_var + ".loop_max");
+                }
                 internal_assert(parent_max != bounds.end());
                 shift_val = parent_max->second - it_max->second;
             }
@@ -1458,9 +1466,6 @@ private:
         // The original bounds of the loop nests (without any loop-fusion)
         auto bounds = CollectBounds::collect_bounds(producer);
 
-        for (auto b : bounds) {
-            debug(0) << b.first << " " << b.second << "\n";
-        }
         // Compute the shift factors based on the alignment strategies
         // starting from the the parent (root loop) to the children. The root
         // loop bounds should remain unchanged.
