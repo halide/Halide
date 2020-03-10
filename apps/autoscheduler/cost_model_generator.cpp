@@ -472,11 +472,6 @@ public:
         // multiplied by the working set.
         Expr cost_of_working_set = working_set * relu1(27, w, n);
 
-        // FIXME: For our best set of trained weights, store_cost was
-        // accidentally in the list below twice, so we double it here
-        // in order to not have to retrain.
-        store_cost *= 2;
-
         Expr cost = (print_wrap(compute_cost, "compute_cost_total", n, w) +
                      print_wrap(store_cost, "store_cost_total", n, w) +
                      print_wrap(load_cost, "load_cost_total", n, w) +
