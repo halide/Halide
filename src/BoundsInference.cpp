@@ -294,7 +294,7 @@ public:
                                  << "(" << val << ") are equal, combine them together\n";
                         internal_assert(val.defined());
                         vec.clear();
-                        vec.push_back(CondValue(const_true(), val));
+                        vec.emplace_back(const_true(), val);
                     }
                 }
             }
@@ -322,7 +322,7 @@ public:
             exprs = result[0];
 
             if (func.extern_definition_proxy_expr().defined()) {
-                exprs.push_back(CondValue(const_true(), func.extern_definition_proxy_expr()));
+                exprs.emplace_back(const_true(), func.extern_definition_proxy_expr());
             }
 
             exprs.insert(exprs.end(), result[1].begin(), result[1].end());
@@ -617,7 +617,7 @@ public:
                         builder.dimensions = input.dimensions();
                         Expr buf = builder.build();
 
-                        lets.push_back({name, buf});
+                        lets.emplace_back(name, buf);
                         bounds_inference_args.push_back(Variable::make(type_of<struct halide_buffer_t *>(), name));
                         buffers_to_annotate.emplace_back(bounds_inference_args.back(), input.dimensions());
                     }
@@ -640,7 +640,7 @@ public:
                     query_buf = Call::make(type_of<struct halide_buffer_t *>(), Call::buffer_init_from_buffer,
                                            {query_buf, query_shape, in_buf}, Call::Extern);
 
-                    lets.push_back({query_name, query_buf});
+                    lets.emplace_back(query_name, query_buf);
                     Expr buf = Variable::make(type_of<struct halide_buffer_t *>(), query_name, b, p, ReductionDomain());
                     bounds_inference_args.push_back(buf);
                     // Although we expect ImageParams to be properly initialized and sanitized by the caller,
@@ -663,7 +663,7 @@ public:
                     Expr max = Variable::make(Int(32), prefix + ".max");
                     builder.mins.push_back(min);
                     builder.extents.push_back(max + 1 - min);
-                    builder.strides.push_back(0);
+                    builder.strides.emplace_back(0);
                 }
                 Expr output_buffer_t = builder.build();
 
@@ -672,7 +672,7 @@ public:
                 // Since this is a temporary, internal-only buffer used for bounds inference,
                 // we need to mark it
                 buffers_to_annotate.emplace_back(bounds_inference_args.back(), func.dimensions());
-                lets.push_back({buf_name, output_buffer_t});
+                lets.emplace_back(buf_name, output_buffer_t);
             }
 
             Stmt annotate;
@@ -988,7 +988,7 @@ public:
             }
 
             body = let->body;
-            lets.push_back({let->name, let->value});
+            lets.emplace_back(let->name, let->value);
         }
 
         // If there are no pipelines at this loop level, we can skip

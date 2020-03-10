@@ -276,8 +276,8 @@ private:
                     args.push_back(extent);
                 }
                 for (size_t i = op->args.size(); i < 3; i++) {
-                    args.push_back(0);
-                    args.push_back(1);
+                    args.emplace_back(0);
+                    args.emplace_back(1);
                 }
 
                 return Call::make(op->type,

@@ -98,8 +98,8 @@ private:
             }
         }
 
-        free_vars.push_back(Var(var_name));
-        call_args.push_back(v);
+        free_vars.emplace_back(var_name);
+        call_args.emplace_back(v);
         return expr;
     }
 };

@@ -1705,7 +1705,7 @@ class OptimizeShuffles : public IRMutator {
     }
 
     Expr visit(const Let *op) override {
-        lets.push_back({op->name, op->value});
+        lets.emplace_back(op->name, op->value);
         Expr expr = visit_let<Expr>(op);
         lets.pop_back();
         return expr;

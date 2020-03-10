@@ -526,10 +526,10 @@ MangledNames get_mangled_names(const std::string &name,
         std::vector<ExternFuncArgument> mangle_args;
         for (const auto &arg : args) {
             if (arg.kind == Argument::InputScalar) {
-                mangle_args.push_back(ExternFuncArgument(make_zero(arg.type)));
+                mangle_args.emplace_back(make_zero(arg.type));
             } else if (arg.kind == Argument::InputBuffer ||
                        arg.kind == Argument::OutputBuffer) {
-                mangle_args.push_back(ExternFuncArgument(Buffer<>()));
+                mangle_args.emplace_back(Buffer<>());
             }
         }
         names.extern_name = cplusplus_function_mangled_name(names.simple_name, namespaces, type_of<int>(), mangle_args, target);
@@ -3348,7 +3348,7 @@ void CodeGen_LLVM::visit(const Call *op) {
             name = extract_namespaces(op->name, namespaces);
             std::vector<ExternFuncArgument> mangle_args;
             for (const auto &arg : op->args) {
-                mangle_args.push_back(ExternFuncArgument(arg));
+                mangle_args.emplace_back(arg);
             }
             name = cplusplus_function_mangled_name(name, namespaces, op->type, mangle_args, get_target());
         } else {

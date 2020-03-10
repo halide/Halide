@@ -638,7 +638,7 @@ class LowerWarpShuffles : public IRMutator {
             return IRMutator::visit(op);
         } else {
             // Pick up this allocation and deposit it inside the loop over lanes at reduced size.
-            allocations.push_back(Stmt(op));
+            allocations.emplace_back(op);
             return mutate(op->body);
         }
     }
@@ -659,7 +659,7 @@ class HoistWarpShufflesFromSingleIfStmt : public IRMutator {
         if (starts_with(op->name, "llvm.nvvm.shfl.") &&
             !expr_uses_vars(op, stored_to)) {
             string name = unique_name('t');
-            lifted_lets.push_back({name, op});
+            lifted_lets.emplace_back(name, op);
             return Variable::make(op->type, name);
         } else {
             return IRMutator::visit(op);

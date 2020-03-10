@@ -794,20 +794,20 @@ Expr BufferBuilder::build() const {
         if (i < mins.size()) {
             shape.push_back(mins[i]);
         } else {
-            shape.push_back(0);
+            shape.emplace_back(0);
         }
         if (i < extents.size()) {
             shape.push_back(extents[i]);
         } else {
-            shape.push_back(0);
+            shape.emplace_back(0);
         }
         if (i < strides.size()) {
             shape.push_back(strides[i]);
         } else {
-            shape.push_back(0);
+            shape.emplace_back(0);
         }
         // per-dimension flags, currently unused.
-        shape.push_back(0);
+        shape.emplace_back(0);
     }
     for (const Expr &e : shape) {
         internal_assert(e.type() == Int(32))
@@ -2132,7 +2132,7 @@ Expr random_float(Expr seed) {
             << seed << " of type " << seed.type() << "\n";
         args.push_back(std::move(seed));
     }
-    args.push_back(id);
+    args.emplace_back(id);
 
     // This is (surprisingly) pure - it's a fixed psuedo-random
     // function of its inputs.
@@ -2152,7 +2152,7 @@ Expr random_uint(Expr seed) {
             << seed << " of type " << seed.type() << "\n";
         args.push_back(std::move(seed));
     }
-    args.push_back(id);
+    args.emplace_back(id);
 
     return Internal::Call::make(UInt(32), Internal::Call::random,
                                 args, Internal::Call::PureIntrinsic);

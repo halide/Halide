@@ -1108,7 +1108,7 @@ void CodeGen_Hexagon::init_module() {
             if (a.bits == 0) {
                 break;
             }
-            arg_types.push_back(fix_lanes(a));
+            arg_types.emplace_back(fix_lanes(a));
         }
         define_hvx_intrinsic(intrin, ret_type, i.name, arg_types, i.flags);
     }
@@ -1943,7 +1943,7 @@ Value *CodeGen_Hexagon::vlut(Value *lut, Value *idx, int min_index, int max_inde
         int range_extent_i = std::min(max_index - min_index_i, 255);
         Value *range_i = vlut256(slice_vector(lut, min_index_i, range_extent_i),
                                  indices, 0, range_extent_i);
-        ranges.push_back({range_i, use_index});
+        ranges.emplace_back(range_i, use_index);
     }
 
     // TODO: This could be reduced hierarchically instead of in

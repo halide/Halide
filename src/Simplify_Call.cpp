@@ -358,7 +358,7 @@ Expr Simplify::visit(const Call *op, ExprInfo *bounds) {
                 if (last) {
                     new_args.back() = last->value + buf;
                 } else {
-                    new_args.push_back(string(buf));
+                    new_args.emplace_back(string(buf));
                 }
                 changed = true;
             } else if (last && float_imm) {
@@ -366,7 +366,7 @@ Expr Simplify::visit(const Call *op, ExprInfo *bounds) {
                 if (last) {
                     new_args.back() = last->value + buf;
                 } else {
-                    new_args.push_back(string(buf));
+                    new_args.emplace_back(string(buf));
                 }
                 changed = true;
             } else {

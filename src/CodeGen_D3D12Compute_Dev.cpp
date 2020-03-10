@@ -820,7 +820,7 @@ void CodeGen_D3D12Compute_Dev::CodeGen_D3D12Compute_C::add_kernel(Stmt s,
     };
     for (auto &arg : args) {
         if (isConstantBuffer(arg)) {
-            constants.push_back(BufferSize(arg.name, arg.size));
+            constants.emplace_back(arg.name, arg.size);
         }
     }
 

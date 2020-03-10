@@ -202,7 +202,7 @@ bool find_match(const vector<AssociativePattern> &table, const vector<string> &o
 
             assoc_op.xs[index] = {op_x_names[index], x_parts[index]};
             assoc_op.ys[index] = {op_y_names[index], y_part};
-            replacement.push_back({y_part, Variable::make(y_part.type(), op_y_names[index])});
+            replacement.emplace_back(y_part, Variable::make(y_part.type(), op_y_names[index]));
         }
         if (!matched) {
             continue;

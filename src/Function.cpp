@@ -1092,7 +1092,7 @@ pair<vector<Function>, map<string, Function>> deep_copy(
         if (iter != copied_map.end()) {
             FunctionPtr ptr = iter->second;
             debug(4) << "Adding deep-copied version to outputs: " << func.name() << "\n";
-            copy_outputs.push_back(Function(ptr));
+            copy_outputs.emplace_back(ptr);
         } else {
             debug(4) << "Adding original version to outputs: " << func.name() << "\n";
             copy_outputs.push_back(func);

@@ -234,7 +234,7 @@ public:
 
     uint8_t *allocateCodeSection(uintptr_t size, unsigned alignment, unsigned section_id, StringRef section_name) override {
         uint8_t *result = SectionMemoryManager::allocateCodeSection(size, alignment, section_id, section_name);
-        code_pages.push_back({result, size});
+        code_pages.emplace_back(result, size);
         return result;
     }
 };
@@ -376,7 +376,7 @@ JITModule JITModule::make_trampolines_module(const Target &target_arg,
         const ExternCFunction &extern_c = e.second.extern_c_function();
         result.add_extern_for_export(callee_name, extern_c);
         requested_exports.push_back(wrapper_name);
-        extern_signatures.push_back({callee_name, extern_c.signature()});
+        extern_signatures.emplace_back(callee_name, extern_c.signature());
     }
 
     std::unique_ptr<llvm::Module> llvm_module = CodeGen_LLVM::compile_trampolines(
