@@ -30,7 +30,7 @@ endif
 
 LIBHALIDE ?= $(HALIDE_DISTRIB_PATH)/bin/libHalide.$(SHARED_EXT)
 
-SUFFIX = $(shell $(PYTHON)-config --extension-suffix)
+SUFFIX = $(shell $(PYTHON)-config --extension-suffix) 
 
 # Discover PyBind path from `python3 -m pybind11 --includes`
 PYBIND11_CFLAGS = $(shell $(PYTHON) -m pybind11 --includes)
@@ -41,7 +41,7 @@ OPTIMIZE ?= -O3
 # OPTIMIZE ?= -g -DDEBUG=1 -UNDEBUG
 
 # Compiling with -fvisibility=hidden saves ~80k on optimized x64 builds
-CCFLAGS=$(shell $(PYTHON)-config --cflags) $(PYBIND11_CFLAGS) -I $(HALIDE_DISTRIB_PATH)/include -I $(ROOT_DIR) -std=c++11 $(FPIC) -fvisibility=hidden -fvisibility-inlines-hidden $(OPTIMIZE) $(CXXFLAGS)
+CCFLAGS= -I/scratch/ameerh/anaconda3/include/python3.7m -I/scratch/ameerh/anaconda3/include/python3.7m  -Wno-unused-result -Wsign-compare -march=nocona -mtune=haswell -ftree-vectorize -fPIC -fstack-protector-strong -O3 -ffunction-sections -pipe  -fdebug-prefix-map=/tmp/build/80754af9/python_1553721932202/work=/usr/local/src/conda/python-3.7.3 -fdebug-prefix-map=/scratch/ameerh/anaconda3=/usr/local/src/conda-prefix -fuse-linker-plugin -ffat-lto-objects -flto-partition=none -flto -DNDEBUG -fwrapv -O3 -Wall $(PYBIND11_CFLAGS) -I $(HALIDE_DISTRIB_PATH)/include -I $(ROOT_DIR) -std=c++11 $(FPIC) -fvisibility=hidden -fvisibility-inlines-hidden $(OPTIMIZE) $(CXXFLAGS)
 # Filter out a pointless warning present in some Python installs
 CCFLAGS := $(filter-out -Wstrict-prototypes,$(CCFLAGS))
 
