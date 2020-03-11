@@ -4,7 +4,7 @@
 #if LLVM_VERSION >= 90
 // We're good to go
 #else
-#error "Compiling Halide requires LLVM 8.0 or newer"
+#error "Compiling Halide requires LLVM 9.0 or newer"
 #endif
 
 // This seems to be required by some LLVM header, which is likely an LLVM bug.
