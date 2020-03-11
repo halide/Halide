@@ -278,7 +278,7 @@ public:
 };
 }  // namespace
 
-void CodeGen_OpenGLCompute_Dev::CodeGen_OpenGLCompute_C::add_kernel(Stmt s,
+void CodeGen_OpenGLCompute_Dev::CodeGen_OpenGLCompute_C::add_kernel(const Stmt &s,
                                                                     const string &name,
                                                                     const vector<DeviceArgument> &args) {
 

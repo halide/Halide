@@ -1,5 +1,6 @@
 #include <iostream>
 #include <map>
+#include <utility>
 
 #include "IREquality.h"
 #include "IRMatch.h"
@@ -57,10 +58,10 @@ public:
     Expr expr;
 
     IRMatch(Expr e, vector<Expr> &m)
-        : result(true), matches(&m), var_matches(nullptr), expr(e) {
+        : result(true), matches(&m), var_matches(nullptr), expr(std::move(e)) {
     }
     IRMatch(Expr e, map<string, Expr> &m)
-        : result(true), matches(nullptr), var_matches(&m), expr(e) {
+        : result(true), matches(nullptr), var_matches(&m), expr(std::move(e)) {
     }
 
     using IRVisitor::visit;
@@ -283,7 +284,7 @@ public:
     }
 };
 
-bool expr_match(Expr pattern, Expr expr, vector<Expr> &matches) {
+bool expr_match(const Expr &pattern, const Expr &expr, vector<Expr> &matches) {
     matches.clear();
     if (!pattern.defined() && !expr.defined()) return true;
     if (!pattern.defined() || !expr.defined()) return false;
@@ -298,7 +299,7 @@ bool expr_match(Expr pattern, Expr expr, vector<Expr> &matches) {
     }
 }
 
-bool expr_match(Expr pattern, Expr expr, map<string, Expr> &matches) {
+bool expr_match(const Expr &pattern, const Expr &expr, map<string, Expr> &matches) {
     // Explicitly don't clear matches. This allows usages to pre-match
     // some variables.
 

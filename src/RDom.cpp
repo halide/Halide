@@ -1,5 +1,6 @@
 
 #include "RDom.h"
+
 #include "Generator.h"
 #include "IREquality.h"
 #include "IROperator.h"
@@ -7,6 +8,7 @@
 #include "ImageParam.h"
 #include "Simplify.h"
 #include "Util.h"
+#include <utility>
 
 namespace Halide {
 
@@ -86,7 +88,7 @@ void RDom::init_vars(const string &name) {
     }
 }
 
-RDom::RDom(ReductionDomain d)
+RDom::RDom(const ReductionDomain &d)
     : dom(d) {
     if (d.defined()) {
         init_vars("");
@@ -187,7 +189,7 @@ RDom::RDom(const Buffer<> &b) {
 }
 
 RDom::RDom(const OutputImageParam &p) {
-    std::string name = p.name();
+    const std::string &name = p.name();
     dom = make_dom_from_dimensions(p, name);
     init_vars(name);
 }
@@ -231,17 +233,17 @@ void RDom::where(Expr predicate) {
         << (*this) << " cannot be given a new predicate, because it has already"
         << " been used in the update definition of some function.\n";
     user_assert(dom.defined()) << "Error: Can't add predicate to undefined RDom.\n";
-    dom.where(predicate);
+    dom.where(std::move(predicate));
 }
 
 /** Emit an RVar in a human-readable form */
-std::ostream &operator<<(std::ostream &stream, RVar v) {
+std::ostream &operator<<(std::ostream &stream, const RVar &v) {
     stream << v.name() << "(" << v.min() << ", " << v.extent() << ")";
     return stream;
 }
 
 /** Emit an RDom in a human-readable form. */
-std::ostream &operator<<(std::ostream &stream, RDom dom) {
+std::ostream &operator<<(std::ostream &stream, const RDom &dom) {
     stream << "RDom(\n";
     for (int i = 0; i < dom.dimensions(); i++) {
         stream << "  " << dom[i] << "\n";

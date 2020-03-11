@@ -13,7 +13,7 @@ namespace Internal {
 
 /** Replace indirect and other loads with simple loads + vlut
  * calls. */
-Stmt optimize_hexagon_shuffles(Stmt s, int lut_alignment);
+Stmt optimize_hexagon_shuffles(const Stmt &s, int lut_alignment);
 
 /** Generate vtmpy instruction if possible */
 Stmt vtmpy_generator(Stmt s);
@@ -35,10 +35,10 @@ Stmt optimize_hexagon_instructions(Stmt s, Target t);
 /** Generate deinterleave or interleave operations, operating on
  * groups of vectors at a time. */
 //@{
-Expr native_deinterleave(Expr x);
-Expr native_interleave(Expr x);
-bool is_native_deinterleave(Expr x);
-bool is_native_interleave(Expr x);
+Expr native_deinterleave(const Expr &x);
+Expr native_interleave(const Expr &x);
+bool is_native_deinterleave(const Expr &x);
+bool is_native_interleave(const Expr &x);
 //@}
 
 }  // namespace Internal

@@ -20,7 +20,7 @@ enum class Monotonic { Constant,
                        Increasing,
                        Decreasing,
                        Unknown };
-Monotonic is_monotonic(Expr e, const std::string &var,
+Monotonic is_monotonic(const Expr &e, const std::string &var,
                        const Scope<Monotonic> &scope = Scope<Monotonic>::empty_scope());
 
 /** Emit the monotonic class in human-readable form for debugging. */

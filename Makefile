@@ -305,7 +305,8 @@ TUTORIAL_CXX_FLAGS ?= -std=c++11 -g -fno-omit-frame-pointer $(RTTI_CXX_FLAGS) -I
 # Also allow tests, via conditional compilation, to use the entire
 # capability of the CPU being compiled on via -march=native. This
 # presumes tests are run on the same machine they are compiled on.
-TEST_CXX_FLAGS ?= $(TUTORIAL_CXX_FLAGS) $(CXX_WARNING_FLAGS) -march=native
+ARCH_FOR_TESTS ?= native
+TEST_CXX_FLAGS ?= $(TUTORIAL_CXX_FLAGS) $(CXX_WARNING_FLAGS) -march=${ARCH_FOR_TESTS}
 TEST_LD_FLAGS = -L$(BIN_DIR) -lHalide $(COMMON_LD_FLAGS)
 
 # gcc 4.8 fires a bogus warning on old versions of png.h
@@ -1594,7 +1595,7 @@ $(BIN_DIR)/$(TARGET)/generator_aotcpp_%: $(ROOT_DIR)/test/generator/%_aottest.cp
 
 ifneq ($(WITH_WEBASSEMBLY), )
 
-GEN_AOT_CXX_FLAGS_WASM := $(filter-out -march=native,$(GEN_AOT_CXX_FLAGS))
+GEN_AOT_CXX_FLAGS_WASM := $(filter-out -march=${ARCH_FOR_TESTS},$(GEN_AOT_CXX_FLAGS))
 
 GEN_AOT_LD_FLAGS_WASM := $(filter-out -lz,$(GEN_AOT_LD_FLAGS))
 GEN_AOT_LD_FLAGS_WASM := $(filter-out -ldl,$(GEN_AOT_LD_FLAGS_WASM))
@@ -2296,4 +2297,24 @@ $(BIN_DIR)/HalideTraceDump: $(ROOT_DIR)/util/HalideTraceDump.cpp $(ROOT_DIR)/uti
 .PHONY: format
 format:
 	find "${ROOT_DIR}/apps" "${ROOT_DIR}/src" "${ROOT_DIR}/tools" "${ROOT_DIR}/test" "${ROOT_DIR}/util" "${ROOT_DIR}/python_bindings" -name *.cpp -o -name *.h -o -name *.c | xargs ${CLANG}-format -i -style=file
+
+# Run clang-tidy on the core source files
+$(BUILD_DIR)/compile_commands.json:
+	echo '[' >> $@
+	BD=$(realpath $(BUILD_DIR)); \
+	SD=$(realpath $(SRC_DIR)); \
+	for S in $(SOURCE_FILES); do \
+	echo "{ \"directory\": \"$${BD}\"," >> $@; \
+	echo "  \"command\": \"$(CXX) $(CXX_FLAGS) -c $$SD/$$S -o $$BD/$${S/cpp/o}\"," >> $@; \
+	echo "  \"file\": \"$$SD/$$S\" }," >> $@; \
+	done
+	echo ']' >> $@
+
+.PHONY: clang-tidy
+clang-tidy: $(BUILD_DIR)/compile_commands.json
+	${CLANG}-tidy -extra-arg=-Wno-unknown-warning-option -p $(BUILD_DIR) $(addprefix $(SRC_DIR)/,$(SOURCE_FILES))
+
+.PHONY: clang-tidy-fix
+clang-tidy-fix: $(BUILD_DIR)/compile_commands.json
+	${CLANG}-tidy -extra-arg=-Wno-unknown-warning-option -p $(BUILD_DIR) $(addprefix $(SRC_DIR)/,$(SOURCE_FILES)) -fix-errors
 

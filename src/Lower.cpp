@@ -441,9 +441,9 @@ Module lower(const vector<Function> &output_funcs,
     vector<Argument> public_args = args;
     for (const auto &out : outputs) {
         for (Parameter buf : out.output_buffers()) {
-            public_args.push_back(Argument(buf.name(),
-                                           Argument::OutputBuffer,
-                                           buf.type(), buf.dimensions(), buf.get_argument_estimates()));
+            public_args.emplace_back(buf.name(),
+                                     Argument::OutputBuffer,
+                                     buf.type(), buf.dimensions(), buf.get_argument_estimates());
         }
     }
 

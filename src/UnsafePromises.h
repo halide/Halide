@@ -13,7 +13,7 @@ namespace Internal {
 
 /** Lower all unsafe promises into either assertions or unchecked
     code, depending on the target. */
-Stmt lower_unsafe_promises(Stmt s, const Target &t);
+Stmt lower_unsafe_promises(const Stmt &s, const Target &t);
 
 }  // namespace Internal
 }  // namespace Halide

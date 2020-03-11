@@ -318,7 +318,8 @@ Stmt IRMutator::visit(const Prefetch *op) {
         condition.same_as(op->condition)) {
         return op;
     }
-    return Prefetch::make(op->name, op->types, new_bounds, op->prefetch, std::move(condition), std::move(body));
+    return Prefetch::make(op->name, op->types, new_bounds, op->prefetch,
+                          std::move(condition), std::move(body));
 }
 
 Stmt IRMutator::visit(const Block *op) {

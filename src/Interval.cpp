@@ -81,7 +81,7 @@ void Interval::include(const Interval &i) {
     min = Interval::make_min(min, i.min);
 }
 
-void Interval::include(Expr e) {
+void Interval::include(const Expr &e) {
     max = Interval::make_max(max, e);
     min = Interval::make_min(min, e);
 }

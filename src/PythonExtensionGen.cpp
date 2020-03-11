@@ -95,7 +95,7 @@ std::pair<string, string> print_type(const LoweredArgument *arg) {
     }
 }
 
-void PythonExtensionGen::convert_buffer(string name, const LoweredArgument *arg) {
+void PythonExtensionGen::convert_buffer(const string &name, const LoweredArgument *arg) {
     internal_assert(arg->is_buffer());
     internal_assert(arg->dimensions);
     dest << "    halide_buffer_t buffer_" << name << ";\n";

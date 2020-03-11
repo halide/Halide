@@ -1,4 +1,5 @@
 #include <algorithm>
+#include <utility>
 
 #include "Argument.h"
 #include "AutoSchedule.h"
@@ -146,7 +147,7 @@ bool Pipeline::defined() const {
     return contents.defined();
 }
 
-Pipeline::Pipeline(Func output)
+Pipeline::Pipeline(const Func &output)
     : contents(new PipelineContents) {
     output.function().freeze();
     contents->outputs.push_back(output.function());
@@ -169,7 +170,7 @@ vector<Func> Pipeline::outputs() const {
 }
 
 /* static */
-void Pipeline::auto_schedule_Mullapudi2016(Pipeline pipeline, const Target &target,
+void Pipeline::auto_schedule_Mullapudi2016(const Pipeline &pipeline, const Target &target,
                                            const MachineParams &arch_params, AutoSchedulerResults *outputs) {
     AutoSchedulerResults results;
     results.target = target;
@@ -230,7 +231,7 @@ AutoSchedulerResults Pipeline::auto_schedule(const Target &target, const Machine
 }
 
 /* static */
-void Pipeline::add_autoscheduler(const std::string &autoscheduler_name, const AutoSchedulerFn autoscheduler) {
+void Pipeline::add_autoscheduler(const std::string &autoscheduler_name, const AutoSchedulerFn &autoscheduler) {
     auto &m = get_autoscheduler_map();
     user_assert(m.find(autoscheduler_name) == m.end()) << "'" << autoscheduler_name << "' is already registered as an autoscheduler.\n";
     m[autoscheduler_name] = autoscheduler;
@@ -358,7 +359,7 @@ void Pipeline::compile_to_file(const string &filename_prefix,
     m.compile(outputs);
 }
 
-vector<Argument> Pipeline::infer_arguments(Stmt body) {
+vector<Argument> Pipeline::infer_arguments(const Stmt &body) {
     Stmt s = body;
     if (!contents->requirements.empty()) {
         s = Block::make(contents->requirements);
@@ -666,7 +667,7 @@ const std::map<std::string, JITExtern> &Pipeline::get_jit_externs() {
 void Pipeline::add_custom_lowering_pass(IRMutator *pass, std::function<void()> deleter) {
     user_assert(defined()) << "Pipeline is undefined\n";
     contents->invalidate_cache();
-    CustomLoweringPass p = {pass, deleter};
+    CustomLoweringPass p = {pass, std::move(deleter)};
     contents->custom_lowering_passes.push_back(p);
 }
 
@@ -756,7 +757,7 @@ Realization Pipeline::realize(const Target &target,
     return realize(vector<int32_t>(), target, param_map);
 }
 
-void Pipeline::add_requirement(Expr condition, std::vector<Expr> &error_args) {
+void Pipeline::add_requirement(const Expr &condition, std::vector<Expr> &error_args) {
     user_assert(defined()) << "Pipeline is undefined\n";
 
     // It is an error for a requirement to reference a Func or a Var
@@ -1299,10 +1300,10 @@ void Pipeline::invalidate_cache() {
 }
 
 JITExtern::JITExtern(Pipeline pipeline)
-    : pipeline_(pipeline) {
+    : pipeline_(std::move(pipeline)) {
 }
 
-JITExtern::JITExtern(Func func)
+JITExtern::JITExtern(const Func &func)
     : pipeline_(func) {
 }
 

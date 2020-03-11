@@ -660,7 +660,7 @@ public:
     }
 
     /** Move constructor */
-    Buffer(Buffer<T, D> &&other)
+    Buffer(Buffer<T, D> &&other) noexcept
         : buf(other.buf),
           alloc(other.alloc),
           dev_ref_count(other.dev_ref_count) {
@@ -738,7 +738,7 @@ public:
     }
 
     /** Standard move-assignment operator */
-    Buffer<T, D> &operator=(Buffer<T, D> &&other) {
+    Buffer<T, D> &operator=(Buffer<T, D> &&other) noexcept {
         decref();
         alloc = other.alloc;
         other.alloc = nullptr;

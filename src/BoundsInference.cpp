@@ -21,7 +21,7 @@ using std::vector;
 
 namespace {
 
-bool var_name_match(string candidate, string var) {
+bool var_name_match(const string &candidate, const string &var) {
     internal_assert(var.find('.') == string::npos)
         << "var_name_match expects unqualified names for the second argument. "
         << "Name passed: " << var << "\n";
@@ -54,7 +54,7 @@ public:
     }
 };
 
-bool depends_on_bounds_inference(Expr e) {
+bool depends_on_bounds_inference(const Expr &e) {
     DependsOnBoundsInference d;
     e.accept(&d);
     return d.result;
@@ -108,7 +108,7 @@ private:
     }
 };
 
-Interval bounds_of_inner_var(string var, Stmt s) {
+Interval bounds_of_inner_var(const string &var, const Stmt &s) {
     BoundsOfInnerVar b(var);
     s.accept(&b);
     return b.result;
@@ -132,7 +132,7 @@ size_t find_fused_group_index(const Function &producing_func,
 bool is_fused_with_others(const vector<vector<Function>> &fused_groups,
                           const vector<set<FusedPair>> &fused_pairs_in_groups,
                           const Function &producing_func, int producing_stage_index,
-                          string consumer_name, int consumer_stage,
+                          const string &consumer_name, int consumer_stage,
                           string var) {
     if (producing_func.has_extern_definition()) {
         return false;
@@ -294,7 +294,7 @@ public:
                                  << "(" << val << ") are equal, combine them together\n";
                         internal_assert(val.defined());
                         vec.clear();
-                        vec.push_back(CondValue(const_true(), val));
+                        vec.emplace_back(const_true(), val);
                     }
                 }
             }
@@ -322,7 +322,7 @@ public:
             exprs = result[0];
 
             if (func.extern_definition_proxy_expr().defined()) {
-                exprs.push_back(CondValue(const_true(), func.extern_definition_proxy_expr()));
+                exprs.emplace_back(const_true(), func.extern_definition_proxy_expr());
             }
 
             exprs.insert(exprs.end(), result[1].begin(), result[1].end());
@@ -370,14 +370,14 @@ public:
 
         // Wrap a statement in let stmts defining the box
         Stmt define_bounds(Stmt s,
-                           Function producing_func,
-                           string producing_stage_index,
+                           const Function &producing_func,
+                           const string &producing_stage_index,
                            int producing_stage_index_index,
-                           string loop_level,
+                           const string &loop_level,
                            const vector<vector<Function>> &fused_groups,
                            const vector<set<FusedPair>> &fused_pairs_in_groups,
                            const set<string> &in_pipeline,
-                           const set<string> inner_productions,
+                           const set<string> &inner_productions,
                            const Target &target) {
 
             // Merge all the relevant boxes.
@@ -617,7 +617,7 @@ public:
                         builder.dimensions = input.dimensions();
                         Expr buf = builder.build();
 
-                        lets.push_back({name, buf});
+                        lets.emplace_back(name, buf);
                         bounds_inference_args.push_back(Variable::make(type_of<struct halide_buffer_t *>(), name));
                         buffers_to_annotate.emplace_back(bounds_inference_args.back(), input.dimensions());
                     }
@@ -640,7 +640,7 @@ public:
                     query_buf = Call::make(type_of<struct halide_buffer_t *>(), Call::buffer_init_from_buffer,
                                            {query_buf, query_shape, in_buf}, Call::Extern);
 
-                    lets.push_back({query_name, query_buf});
+                    lets.emplace_back(query_name, query_buf);
                     Expr buf = Variable::make(type_of<struct halide_buffer_t *>(), query_name, b, p, ReductionDomain());
                     bounds_inference_args.push_back(buf);
                     // Although we expect ImageParams to be properly initialized and sanitized by the caller,
@@ -663,7 +663,7 @@ public:
                     Expr max = Variable::make(Int(32), prefix + ".max");
                     builder.mins.push_back(min);
                     builder.extents.push_back(max + 1 - min);
-                    builder.strides.push_back(0);
+                    builder.strides.emplace_back(0);
                 }
                 Expr output_buffer_t = builder.build();
 
@@ -672,7 +672,7 @@ public:
                 // Since this is a temporary, internal-only buffer used for bounds inference,
                 // we need to mark it
                 buffers_to_annotate.emplace_back(bounds_inference_args.back(), func.dimensions());
-                lets.push_back({buf_name, output_buffer_t});
+                lets.emplace_back(buf_name, output_buffer_t);
             }
 
             Stmt annotate;
@@ -988,7 +988,7 @@ public:
             }
 
             body = let->body;
-            lets.push_back({let->name, let->value});
+            lets.emplace_back(let->name, let->value);
         }
 
         // If there are no pipelines at this loop level, we can skip
@@ -1096,7 +1096,7 @@ public:
             // Finally, define the production bounds for the thing
             // we're producing.
             if (producing >= 0 && !inner_productions.empty()) {
-                const vector<string> f_args = f.args();
+                const vector<string> &f_args = f.args();
                 for (const auto &b : boxes_for_fused_group) {
                     const auto &box = b.second;
                     for (size_t i = 0; i < box.size(); i++) {

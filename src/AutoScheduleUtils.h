@@ -29,7 +29,7 @@ class FindAllCalls : public IRVisitor {
     void visit(const Call *call) override {
         if (call->call_type == Call::Halide || call->call_type == Call::Image) {
             funcs_called.insert(call->name);
-            call_args.push_back(std::make_pair(call->name, call->args));
+            call_args.emplace_back(call->name, call->args);
         }
         for (size_t i = 0; i < call->args.size(); i++) {
             call->args[i].accept(this);
@@ -77,11 +77,11 @@ void combine_load_costs(std::map<std::string, Expr> &result,
 
 /** Return the required bounds of an intermediate stage (f, stage_num) of
  * function 'f' given the bounds of the pure dimensions. */
-DimBounds get_stage_bounds(Function f, int stage_num, const DimBounds &pure_bounds);
+DimBounds get_stage_bounds(const Function &f, int stage_num, const DimBounds &pure_bounds);
 
 /** Return the required bounds for all the stages of the function 'f'. Each entry
  * in the returned vector corresponds to a stage. */
-std::vector<DimBounds> get_stage_bounds(Function f, const DimBounds &pure_bounds);
+std::vector<DimBounds> get_stage_bounds(const Function &f, const DimBounds &pure_bounds);
 
 /** Recursively inline all the functions in the set 'inlines' into the
  * expression 'e' and return the resulting expression. If 'order' is

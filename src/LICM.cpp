@@ -250,7 +250,7 @@ class LICM : public IRMutator {
             // Peel off containing lets. These will be lifted.
             vector<pair<string, Expr>> lets;
             while (const Let *let = dummy_call.as<Let>()) {
-                lets.push_back({let->name, let->value});
+                lets.emplace_back(let->name, let->value);
                 dummy_call = let->body;
             }
 

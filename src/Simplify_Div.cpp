@@ -203,7 +203,7 @@ Expr Simplify::visit(const Div *op, ExprInfo *bounds) {
                        can_prove((x % c1 + c0 * (lanes - 1)) / c1 == 0, this)))) ||
              (no_overflow_scalar_int(op->type) &&
               (rewrite(x / -1, -x) ||
-               rewrite(c0 / y, select(y < 0, fold(-c0), c0), c0 == -1 ) ||
+               (denominator_non_zero && rewrite(c0 / y, select(y < 0, fold(-c0), c0), c0 == -1)) ||
                rewrite((x * c0 + c1) / c2,
                        (x + fold(c1 / c0)) / fold(c2 / c0),
                        c2 > 0 && c0 > 0 && c2 % c0 == 0) ||
@@ -212,7 +212,7 @@ Expr Simplify::visit(const Div *op, ExprInfo *bounds) {
                        c2 > 0 && c0 % c2 == 0) ||
                // A very specific pattern that comes up in bounds in upsampling code.
                rewrite((x % 2 + c0) / 2, x % 2 + fold(c0 / 2), c0 % 2 == 1))))) {
-            return mutate(std::move(rewrite.result), bounds);
+            return mutate(rewrite.result, bounds);
         }
         // clang-format on
     }

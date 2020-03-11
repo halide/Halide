@@ -41,7 +41,7 @@ struct Interval {
     }
 
     /** Construct an interval from a lower and upper bound. */
-    Interval(Expr min, Expr max)
+    Interval(const Expr &min, const Expr &max)
         : min(min), max(max) {
         internal_assert(min.defined() && max.defined());
     }
@@ -57,7 +57,7 @@ struct Interval {
     }
 
     /** Construct an interval representing a single point */
-    static Interval single_point(Expr e) {
+    static Interval single_point(const Expr &e) {
         return Interval(e, e);
     }
 
@@ -77,7 +77,7 @@ struct Interval {
     }
 
     /** Is the interval a particular single value */
-    bool is_single_point(Expr e) const {
+    bool is_single_point(const Expr &e) const {
         return min.same_as(e) && max.same_as(e);
     }
 
@@ -105,7 +105,7 @@ struct Interval {
     void include(const Interval &i);
 
     /** Expand the interval to include an Expr */
-    void include(Expr e);
+    void include(const Expr &e);
 
     /** Construct the smallest interval containing two intervals. */
     static Interval make_union(const Interval &a, const Interval &b);
