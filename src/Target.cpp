@@ -667,7 +667,7 @@ void Target::set_feature(Feature f, bool value) {
     features.set(f, value);
 }
 
-void Target::set_features(std::vector<Feature> features_to_set, bool value) {
+void Target::set_features(const std::vector<Feature> &features_to_set, bool value) {
     for (Feature f : features_to_set) {
         set_feature(f, value);
     }
@@ -679,7 +679,7 @@ bool Target::has_feature(Feature f) const {
     return features[f];
 }
 
-bool Target::features_any_of(std::vector<Feature> test_features) const {
+bool Target::features_any_of(const std::vector<Feature> &test_features) const {
     for (Feature f : test_features) {
         if (has_feature(f)) {
             return true;
@@ -688,7 +688,7 @@ bool Target::features_any_of(std::vector<Feature> test_features) const {
     return false;
 }
 
-bool Target::features_all_of(std::vector<Feature> test_features) const {
+bool Target::features_all_of(const std::vector<Feature> &test_features) const {
     for (Feature f : test_features) {
         if (!has_feature(f)) {
             return false;

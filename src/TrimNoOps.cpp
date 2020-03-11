@@ -56,7 +56,7 @@ public:
     }
 };
 
-bool loads_from_buffer(Expr e, string buf) {
+bool loads_from_buffer(const Expr &e, const string &buf) {
     LoadsFromBuffer l(buf);
     e.accept(&l);
     return l.result;

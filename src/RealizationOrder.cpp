@@ -18,7 +18,7 @@ using std::vector;
 
 namespace {
 
-void find_fused_groups_dfs(string current,
+void find_fused_groups_dfs(const string &current,
                            const map<string, set<string>> &fuse_adjacency_list,
                            set<string> &visited,
                            vector<string> &group) {
@@ -59,7 +59,7 @@ find_fused_groups(const map<string, Function> &env,
     return {fused_groups, group_name};
 }
 
-void realization_order_dfs(string current,
+void realization_order_dfs(const string &current,
                            const map<string, vector<string>> &graph,
                            set<string> &visited,
                            set<string> &result_set,

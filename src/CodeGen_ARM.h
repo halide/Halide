@@ -5,6 +5,8 @@
  * Defines the code-generator for producing ARM machine code
  */
 
+#include <utility>
+
 #include "CodeGen_Posix.h"
 
 namespace Halide {
@@ -51,7 +53,7 @@ protected:
         Pattern(const std::string &i32, const std::string &i64, int l, Expr p, PatternType t = Simple)
             : intrin32("llvm.arm.neon." + i32),
               intrin64("llvm.aarch64.neon." + i64),
-              intrin_lanes(l), pattern(p), type(t) {
+              intrin_lanes(l), pattern(std::move(p)), type(t) {
         }
     };
     std::vector<Pattern> casts, averagings, negations, multiplies;

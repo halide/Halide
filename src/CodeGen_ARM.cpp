@@ -147,106 +147,106 @@ CodeGen_ARM::CodeGen_ARM(Target target)
         }
     }
 
-    casts.push_back(Pattern("vqrdmulh.v4i16", "sqrdmulh.v4i16", 4,
-                            i16_sat((wild_i32x4 * wild_i32x4 + (1 << 14)) / (1 << 15)),
-                            Pattern::NarrowArgs));
-    casts.push_back(Pattern("vqrdmulh.v8i16", "sqrdmulh.v8i16", 8,
-                            i16_sat((wild_i32x_ * wild_i32x_ + (1 << 14)) / (1 << 15)),
-                            Pattern::NarrowArgs));
-    casts.push_back(Pattern("vqrdmulh.v2i32", "sqrdmulh.v2i32", 2,
-                            i32_sat((wild_i64x2 * wild_i64x2 + (1 << 30)) / Expr(int64_t(1) << 31)),
-                            Pattern::NarrowArgs));
-    casts.push_back(Pattern("vqrdmulh.v4i32", "sqrdmulh.v4i32", 4,
-                            i32_sat((wild_i64x_ * wild_i64x_ + (1 << 30)) / Expr(int64_t(1) << 31)),
-                            Pattern::NarrowArgs));
+    casts.emplace_back("vqrdmulh.v4i16", "sqrdmulh.v4i16", 4,
+                       i16_sat((wild_i32x4 * wild_i32x4 + (1 << 14)) / (1 << 15)),
+                       Pattern::NarrowArgs);
+    casts.emplace_back("vqrdmulh.v8i16", "sqrdmulh.v8i16", 8,
+                       i16_sat((wild_i32x_ * wild_i32x_ + (1 << 14)) / (1 << 15)),
+                       Pattern::NarrowArgs);
+    casts.emplace_back("vqrdmulh.v2i32", "sqrdmulh.v2i32", 2,
+                       i32_sat((wild_i64x2 * wild_i64x2 + (1 << 30)) / Expr(int64_t(1) << 31)),
+                       Pattern::NarrowArgs);
+    casts.emplace_back("vqrdmulh.v4i32", "sqrdmulh.v4i32", 4,
+                       i32_sat((wild_i64x_ * wild_i64x_ + (1 << 30)) / Expr(int64_t(1) << 31)),
+                       Pattern::NarrowArgs);
 
-    casts.push_back(Pattern("vqshiftns.v8i8", "sqshrn.v8i8", 8, i8_sat(wild_i16x_ / wild_i16x_), Pattern::RightShift));
-    casts.push_back(Pattern("vqshiftns.v4i16", "sqshrn.v4i16", 4, i16_sat(wild_i32x_ / wild_i32x_), Pattern::RightShift));
-    casts.push_back(Pattern("vqshiftns.v2i32", "sqshrn.v2i32", 2, i32_sat(wild_i64x_ / wild_i64x_), Pattern::RightShift));
-    casts.push_back(Pattern("vqshiftnu.v8i8", "uqshrn.v8i8", 8, u8_sat(wild_u16x_ / wild_u16x_), Pattern::RightShift));
-    casts.push_back(Pattern("vqshiftnu.v4i16", "uqshrn.v4i16", 4, u16_sat(wild_u32x_ / wild_u32x_), Pattern::RightShift));
-    casts.push_back(Pattern("vqshiftnu.v2i32", "uqshrn.v2i32", 2, u32_sat(wild_u64x_ / wild_u64x_), Pattern::RightShift));
-    casts.push_back(Pattern("vqshiftnsu.v8i8", "sqshrun.v8i8", 8, u8_sat(wild_i16x_ / wild_i16x_), Pattern::RightShift));
-    casts.push_back(Pattern("vqshiftnsu.v4i16", "sqshrun.v4i16", 4, u16_sat(wild_i32x_ / wild_i32x_), Pattern::RightShift));
-    casts.push_back(Pattern("vqshiftnsu.v2i32", "sqshrun.v2i32", 2, u32_sat(wild_i64x_ / wild_i64x_), Pattern::RightShift));
+    casts.emplace_back("vqshiftns.v8i8", "sqshrn.v8i8", 8, i8_sat(wild_i16x_ / wild_i16x_), Pattern::RightShift);
+    casts.emplace_back("vqshiftns.v4i16", "sqshrn.v4i16", 4, i16_sat(wild_i32x_ / wild_i32x_), Pattern::RightShift);
+    casts.emplace_back("vqshiftns.v2i32", "sqshrn.v2i32", 2, i32_sat(wild_i64x_ / wild_i64x_), Pattern::RightShift);
+    casts.emplace_back("vqshiftnu.v8i8", "uqshrn.v8i8", 8, u8_sat(wild_u16x_ / wild_u16x_), Pattern::RightShift);
+    casts.emplace_back("vqshiftnu.v4i16", "uqshrn.v4i16", 4, u16_sat(wild_u32x_ / wild_u32x_), Pattern::RightShift);
+    casts.emplace_back("vqshiftnu.v2i32", "uqshrn.v2i32", 2, u32_sat(wild_u64x_ / wild_u64x_), Pattern::RightShift);
+    casts.emplace_back("vqshiftnsu.v8i8", "sqshrun.v8i8", 8, u8_sat(wild_i16x_ / wild_i16x_), Pattern::RightShift);
+    casts.emplace_back("vqshiftnsu.v4i16", "sqshrun.v4i16", 4, u16_sat(wild_i32x_ / wild_i32x_), Pattern::RightShift);
+    casts.emplace_back("vqshiftnsu.v2i32", "sqshrun.v2i32", 2, u32_sat(wild_i64x_ / wild_i64x_), Pattern::RightShift);
 
     // Where a 64-bit and 128-bit version exist, we use the 64-bit
     // version only when the args are 64-bits wide.
-    casts.push_back(Pattern("vqshifts.v8i8", "sqshl.v8i8", 8, i8_sat(i16(wild_i8x8) * wild_i16x8), Pattern::LeftShift));
-    casts.push_back(Pattern("vqshifts.v4i16", "sqshl.v4i16", 4, i16_sat(i32(wild_i16x4) * wild_i32x4), Pattern::LeftShift));
-    casts.push_back(Pattern("vqshifts.v2i32", "sqshl.v2i32", 2, i32_sat(i64(wild_i32x2) * wild_i64x2), Pattern::LeftShift));
-    casts.push_back(Pattern("vqshiftu.v8i8", "uqshl.v8i8", 8, u8_sat(u16(wild_u8x8) * wild_u16x8), Pattern::LeftShift));
-    casts.push_back(Pattern("vqshiftu.v4i16", "uqshl.v4i16", 4, u16_sat(u32(wild_u16x4) * wild_u32x4), Pattern::LeftShift));
-    casts.push_back(Pattern("vqshiftu.v2i32", "uqshl.v2i32", 2, u32_sat(u64(wild_u32x2) * wild_u64x2), Pattern::LeftShift));
-    casts.push_back(Pattern("vqshiftsu.v8i8", "sqshlu.v8i8", 8, u8_sat(i16(wild_i8x8) * wild_i16x8), Pattern::LeftShift));
-    casts.push_back(Pattern("vqshiftsu.v4i16", "sqshlu.v4i16", 4, u16_sat(i32(wild_i16x4) * wild_i32x4), Pattern::LeftShift));
-    casts.push_back(Pattern("vqshiftsu.v2i32", "sqshlu.v2i32", 2, u32_sat(i64(wild_i32x2) * wild_i64x2), Pattern::LeftShift));
+    casts.emplace_back("vqshifts.v8i8", "sqshl.v8i8", 8, i8_sat(i16(wild_i8x8) * wild_i16x8), Pattern::LeftShift);
+    casts.emplace_back("vqshifts.v4i16", "sqshl.v4i16", 4, i16_sat(i32(wild_i16x4) * wild_i32x4), Pattern::LeftShift);
+    casts.emplace_back("vqshifts.v2i32", "sqshl.v2i32", 2, i32_sat(i64(wild_i32x2) * wild_i64x2), Pattern::LeftShift);
+    casts.emplace_back("vqshiftu.v8i8", "uqshl.v8i8", 8, u8_sat(u16(wild_u8x8) * wild_u16x8), Pattern::LeftShift);
+    casts.emplace_back("vqshiftu.v4i16", "uqshl.v4i16", 4, u16_sat(u32(wild_u16x4) * wild_u32x4), Pattern::LeftShift);
+    casts.emplace_back("vqshiftu.v2i32", "uqshl.v2i32", 2, u32_sat(u64(wild_u32x2) * wild_u64x2), Pattern::LeftShift);
+    casts.emplace_back("vqshiftsu.v8i8", "sqshlu.v8i8", 8, u8_sat(i16(wild_i8x8) * wild_i16x8), Pattern::LeftShift);
+    casts.emplace_back("vqshiftsu.v4i16", "sqshlu.v4i16", 4, u16_sat(i32(wild_i16x4) * wild_i32x4), Pattern::LeftShift);
+    casts.emplace_back("vqshiftsu.v2i32", "sqshlu.v2i32", 2, u32_sat(i64(wild_i32x2) * wild_i64x2), Pattern::LeftShift);
 
     // We use the 128-bit version for all other vector widths.
-    casts.push_back(Pattern("vqshifts.v16i8", "sqshl.v16i8", 16, i8_sat(i16(wild_i8x_) * wild_i16x_), Pattern::LeftShift));
-    casts.push_back(Pattern("vqshifts.v8i16", "sqshl.v8i16", 8, i16_sat(i32(wild_i16x_) * wild_i32x_), Pattern::LeftShift));
-    casts.push_back(Pattern("vqshifts.v4i32", "sqshl.v4i32", 4, i32_sat(i64(wild_i32x_) * wild_i64x_), Pattern::LeftShift));
-    casts.push_back(Pattern("vqshiftu.v16i8", "uqshl.v16i8", 16, u8_sat(u16(wild_u8x_) * wild_u16x_), Pattern::LeftShift));
-    casts.push_back(Pattern("vqshiftu.v8i16", "uqshl.v8i16", 8, u16_sat(u32(wild_u16x_) * wild_u32x_), Pattern::LeftShift));
-    casts.push_back(Pattern("vqshiftu.v4i32", "uqshl.v4i32", 4, u32_sat(u64(wild_u32x_) * wild_u64x_), Pattern::LeftShift));
-    casts.push_back(Pattern("vqshiftsu.v16i8", "sqshlu.v16i8", 16, u8_sat(i16(wild_i8x_) * wild_i16x_), Pattern::LeftShift));
-    casts.push_back(Pattern("vqshiftsu.v8i16", "sqshlu.v8i16", 8, u16_sat(i32(wild_i16x_) * wild_i32x_), Pattern::LeftShift));
-    casts.push_back(Pattern("vqshiftsu.v4i32", "sqshlu.v4i32", 4, u32_sat(i64(wild_i32x_) * wild_i64x_), Pattern::LeftShift));
+    casts.emplace_back("vqshifts.v16i8", "sqshl.v16i8", 16, i8_sat(i16(wild_i8x_) * wild_i16x_), Pattern::LeftShift);
+    casts.emplace_back("vqshifts.v8i16", "sqshl.v8i16", 8, i16_sat(i32(wild_i16x_) * wild_i32x_), Pattern::LeftShift);
+    casts.emplace_back("vqshifts.v4i32", "sqshl.v4i32", 4, i32_sat(i64(wild_i32x_) * wild_i64x_), Pattern::LeftShift);
+    casts.emplace_back("vqshiftu.v16i8", "uqshl.v16i8", 16, u8_sat(u16(wild_u8x_) * wild_u16x_), Pattern::LeftShift);
+    casts.emplace_back("vqshiftu.v8i16", "uqshl.v8i16", 8, u16_sat(u32(wild_u16x_) * wild_u32x_), Pattern::LeftShift);
+    casts.emplace_back("vqshiftu.v4i32", "uqshl.v4i32", 4, u32_sat(u64(wild_u32x_) * wild_u64x_), Pattern::LeftShift);
+    casts.emplace_back("vqshiftsu.v16i8", "sqshlu.v16i8", 16, u8_sat(i16(wild_i8x_) * wild_i16x_), Pattern::LeftShift);
+    casts.emplace_back("vqshiftsu.v8i16", "sqshlu.v8i16", 8, u16_sat(i32(wild_i16x_) * wild_i32x_), Pattern::LeftShift);
+    casts.emplace_back("vqshiftsu.v4i32", "sqshlu.v4i32", 4, u32_sat(i64(wild_i32x_) * wild_i64x_), Pattern::LeftShift);
 
-    casts.push_back(Pattern("vqmovns.v8i8", "sqxtn.v8i8", 8, i8_sat(wild_i16x_)));
-    casts.push_back(Pattern("vqmovns.v4i16", "sqxtn.v4i16", 4, i16_sat(wild_i32x_)));
-    casts.push_back(Pattern("vqmovns.v2i32", "sqxtn.v2i32", 2, i32_sat(wild_i64x_)));
-    casts.push_back(Pattern("vqmovnu.v8i8", "uqxtn.v8i8", 8, u8_sat(wild_u16x_)));
-    casts.push_back(Pattern("vqmovnu.v4i16", "uqxtn.v4i16", 4, u16_sat(wild_u32x_)));
-    casts.push_back(Pattern("vqmovnu.v2i32", "uqxtn.v2i32", 2, u32_sat(wild_u64x_)));
-    casts.push_back(Pattern("vqmovnsu.v8i8", "sqxtun.v8i8", 8, u8_sat(wild_i16x_)));
-    casts.push_back(Pattern("vqmovnsu.v4i16", "sqxtun.v4i16", 4, u16_sat(wild_i32x_)));
-    casts.push_back(Pattern("vqmovnsu.v2i32", "sqxtun.v2i32", 2, u32_sat(wild_i64x_)));
+    casts.emplace_back("vqmovns.v8i8", "sqxtn.v8i8", 8, i8_sat(wild_i16x_));
+    casts.emplace_back("vqmovns.v4i16", "sqxtn.v4i16", 4, i16_sat(wild_i32x_));
+    casts.emplace_back("vqmovns.v2i32", "sqxtn.v2i32", 2, i32_sat(wild_i64x_));
+    casts.emplace_back("vqmovnu.v8i8", "uqxtn.v8i8", 8, u8_sat(wild_u16x_));
+    casts.emplace_back("vqmovnu.v4i16", "uqxtn.v4i16", 4, u16_sat(wild_u32x_));
+    casts.emplace_back("vqmovnu.v2i32", "uqxtn.v2i32", 2, u32_sat(wild_u64x_));
+    casts.emplace_back("vqmovnsu.v8i8", "sqxtun.v8i8", 8, u8_sat(wild_i16x_));
+    casts.emplace_back("vqmovnsu.v4i16", "sqxtun.v4i16", 4, u16_sat(wild_i32x_));
+    casts.emplace_back("vqmovnsu.v2i32", "sqxtun.v2i32", 2, u32_sat(wild_i64x_));
 
     // Overflow for int32 is not defined by Halide, so for those we can take
     // advantage of special add-and-halve instructions.
     //
     // 64-bit averaging round-down
-    averagings.push_back(Pattern("vhadds.v2i32", "shadd.v2i32", 2, (wild_i32x2 + wild_i32x2)));
+    averagings.emplace_back("vhadds.v2i32", "shadd.v2i32", 2, (wild_i32x2 + wild_i32x2));
 
     // 128-bit
-    averagings.push_back(Pattern("vhadds.v4i32", "shadd.v4i32", 4, (wild_i32x_ + wild_i32x_)));
+    averagings.emplace_back("vhadds.v4i32", "shadd.v4i32", 4, (wild_i32x_ + wild_i32x_));
 
     // 64-bit halving subtract
-    averagings.push_back(Pattern("vhsubs.v2i32", "shsub.v2i32", 2, (wild_i32x2 - wild_i32x2)));
+    averagings.emplace_back("vhsubs.v2i32", "shsub.v2i32", 2, (wild_i32x2 - wild_i32x2));
 
     // 128-bit
-    averagings.push_back(Pattern("vhsubs.v4i32", "shsub.v4i32", 4, (wild_i32x_ - wild_i32x_)));
+    averagings.emplace_back("vhsubs.v4i32", "shsub.v4i32", 4, (wild_i32x_ - wild_i32x_));
 
     // 64-bit saturating negation
-    negations.push_back(Pattern("vqneg.v8i8", "sqneg.v8i8", 8, -max(wild_i8x8, -127)));
-    negations.push_back(Pattern("vqneg.v4i16", "sqneg.v4i16", 4, -max(wild_i16x4, -32767)));
-    negations.push_back(Pattern("vqneg.v2i32", "sqneg.v2i32", 2, -max(wild_i32x2, -(0x7fffffff))));
+    negations.emplace_back("vqneg.v8i8", "sqneg.v8i8", 8, -max(wild_i8x8, -127));
+    negations.emplace_back("vqneg.v4i16", "sqneg.v4i16", 4, -max(wild_i16x4, -32767));
+    negations.emplace_back("vqneg.v2i32", "sqneg.v2i32", 2, -max(wild_i32x2, -(0x7fffffff)));
 
     // 128-bit
-    negations.push_back(Pattern("vqneg.v16i8", "sqneg.v16i8", 16, -max(wild_i8x_, -127)));
-    negations.push_back(Pattern("vqneg.v8i16", "sqneg.v8i16", 8, -max(wild_i16x_, -32767)));
-    negations.push_back(Pattern("vqneg.v4i32", "sqneg.v4i32", 4, -max(wild_i32x_, -(0x7fffffff))));
+    negations.emplace_back("vqneg.v16i8", "sqneg.v16i8", 16, -max(wild_i8x_, -127));
+    negations.emplace_back("vqneg.v8i16", "sqneg.v8i16", 8, -max(wild_i16x_, -32767));
+    negations.emplace_back("vqneg.v4i32", "sqneg.v4i32", 4, -max(wild_i32x_, -(0x7fffffff)));
 
     // Widening multiplies.
-    multiplies.push_back(Pattern("vmulls.v2i64", "smull.v2i64", 2,
-                                 wild_i64x_ * wild_i64x_,
-                                 Pattern::NarrowArgs));
-    multiplies.push_back(Pattern("vmullu.v2i64", "umull.v2i64", 2,
-                                 wild_u64x_ * wild_u64x_,
-                                 Pattern::NarrowArgs));
-    multiplies.push_back(Pattern("vmulls.v4i32", "smull.v4i32", 4,
-                                 wild_i32x_ * wild_i32x_,
-                                 Pattern::NarrowArgs));
-    multiplies.push_back(Pattern("vmullu.v4i32", "umull.v4i32", 4,
-                                 wild_u32x_ * wild_u32x_,
-                                 Pattern::NarrowArgs));
-    multiplies.push_back(Pattern("vmulls.v8i16", "smull.v8i16", 8,
-                                 wild_i16x_ * wild_i16x_,
-                                 Pattern::NarrowArgs));
-    multiplies.push_back(Pattern("vmullu.v8i16", "umull.v8i16", 8,
-                                 wild_u16x_ * wild_u16x_,
-                                 Pattern::NarrowArgs));
+    multiplies.emplace_back("vmulls.v2i64", "smull.v2i64", 2,
+                            wild_i64x_ * wild_i64x_,
+                            Pattern::NarrowArgs);
+    multiplies.emplace_back("vmullu.v2i64", "umull.v2i64", 2,
+                            wild_u64x_ * wild_u64x_,
+                            Pattern::NarrowArgs);
+    multiplies.emplace_back("vmulls.v4i32", "smull.v4i32", 4,
+                            wild_i32x_ * wild_i32x_,
+                            Pattern::NarrowArgs);
+    multiplies.emplace_back("vmullu.v4i32", "umull.v4i32", 4,
+                            wild_u32x_ * wild_u32x_,
+                            Pattern::NarrowArgs);
+    multiplies.emplace_back("vmulls.v8i16", "smull.v8i16", 8,
+                            wild_i16x_ * wild_i16x_,
+                            Pattern::NarrowArgs);
+    multiplies.emplace_back("vmullu.v8i16", "umull.v8i16", 8,
+                            wild_u16x_ * wild_u16x_,
+                            Pattern::NarrowArgs);
 }
 
 Value *CodeGen_ARM::call_pattern(const Pattern &p, Type t, const vector<Expr> &args) {
@@ -682,7 +682,7 @@ void CodeGen_ARM::visit(const Store *op) {
     vector<pair<string, Expr>> lets;
     while (const Let *let = rhs.as<Let>()) {
         rhs = let->body;
-        lets.push_back({let->name, let->value});
+        lets.emplace_back(let->name, let->value);
     }
     const Shuffle *shuffle = rhs.as<Shuffle>();
 

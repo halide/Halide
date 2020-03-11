@@ -415,7 +415,7 @@ public:
     }
 };
 
-Stmt find_linear_expressions(Stmt s) {
+Stmt find_linear_expressions(const Stmt &s) {
 
     return FindLinearExpressions().mutate(s);
 }
@@ -456,7 +456,7 @@ public:
     }
 };
 
-Stmt remove_varying_attributes(Stmt s) {
+Stmt remove_varying_attributes(const Stmt &s) {
     return RemoveVaryingAttributeTags().mutate(s);
 }
 
@@ -483,7 +483,7 @@ public:
     }
 };
 
-Stmt replace_varying_attributes(Stmt s) {
+Stmt replace_varying_attributes(const Stmt &s) {
     return ReplaceVaryingAttributeTags().mutate(s);
 }
 
@@ -504,7 +504,7 @@ public:
 
 // Remove varying attributes from the varying's map if they do not appear in the
 // loop_stmt because they were simplified away.
-void prune_varying_attributes(Stmt loop_stmt, std::map<std::string, Expr> &varying) {
+void prune_varying_attributes(const Stmt &loop_stmt, std::map<std::string, Expr> &varying) {
     FindVaryingAttributeVars find;
     loop_stmt.accept(&find);
 
@@ -576,7 +576,7 @@ protected:
         }
     }
 
-    Type float_type(Expr e) {
+    Type float_type(const Expr &e) {
         return Float(e.type().bits(), e.type().lanes());
     }
 
@@ -1219,7 +1219,7 @@ public:
 // from removing the variables or substituting in their constant
 // values.
 
-Expr dont_simplify(Expr v_) {
+Expr dont_simplify(const Expr &v_) {
     return Internal::Call::make(v_.type(),
                                 Internal::Call::return_second,
                                 {0, v_},
@@ -1356,7 +1356,7 @@ public:
     }
 };
 
-Stmt setup_gpu_vertex_buffer(Stmt s) {
+Stmt setup_gpu_vertex_buffer(const Stmt &s) {
     CreateVertexBufferHostLoops vb;
     return vb.mutate(s);
 }

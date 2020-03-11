@@ -13,7 +13,7 @@ void define_stage(py::module &m) {
 
             .def("rfactor", (Func(Stage::*)(std::vector<std::pair<RVar, Var>>)) & Stage::rfactor,
                  py::arg("preserved"))
-            .def("rfactor", (Func(Stage::*)(RVar, Var)) & Stage::rfactor,
+            .def("rfactor", (Func(Stage::*)(const RVar &, const Var &)) & Stage::rfactor,
                  py::arg("r"), py::arg("v"))
 
             // These two variants of compute_with are specific to Stage

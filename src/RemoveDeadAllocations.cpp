@@ -83,7 +83,7 @@ class RemoveDeadAllocations : public IRMutator {
     }
 };
 
-Stmt remove_dead_allocations(Stmt s) {
+Stmt remove_dead_allocations(const Stmt &s) {
     return RemoveDeadAllocations().mutate(s);
 }
 

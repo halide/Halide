@@ -23,8 +23,8 @@ namespace Internal {
  * masks are converted to UInt(8) with a value of 0 or 1, which is our canonical
  * in-memory representation of a bool. */
 ///@{
-Stmt eliminate_bool_vectors(Stmt s);
-Expr eliminate_bool_vectors(Expr s);
+Stmt eliminate_bool_vectors(const Stmt &s);
+Expr eliminate_bool_vectors(const Expr &s);
 ///@}
 
 /** If a type is a boolean vector, find the type that it has been

@@ -526,7 +526,7 @@ void CodeGen_GLSL::visit(const Select *op) {
     id = id_value;
 }
 
-string CodeGen_GLSL::get_vector_suffix(Expr e) {
+string CodeGen_GLSL::get_vector_suffix(const Expr &e) {
     vector<Expr> matches;
     Expr w = Variable::make(Int(32), "*");
 
@@ -550,7 +550,7 @@ string CodeGen_GLSL::get_vector_suffix(Expr e) {
     }
 }
 
-vector<string> CodeGen_GLSL::print_lanes(Expr e) {
+vector<string> CodeGen_GLSL::print_lanes(const Expr &e) {
     int l = e.type().lanes();
     internal_assert(e.type().is_vector());
     vector<string> result(l);
@@ -832,7 +832,7 @@ void CodeGen_GLSL::visit(const Atomic *op) {
     user_assert(false) << "GLSL: atomics are not supported.\n";
 }
 
-void CodeGen_GLSL::add_kernel(Stmt stmt, string name,
+void CodeGen_GLSL::add_kernel(const Stmt &stmt, const string &name,
                               const vector<DeviceArgument> &args) {
 
     // This function produces fragment shader source for the halide statement.

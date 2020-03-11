@@ -266,6 +266,7 @@
 #include <sstream>
 #include <string>
 #include <type_traits>
+#include <utility>
 #include <vector>
 
 #include "ExternalCode.h"
@@ -1311,14 +1312,14 @@ protected:
     Target get_target() const;
 
     explicit StubOutputBufferBase(const Func &f, std::shared_ptr<GeneratorBase> generator)
-        : f(f), generator(generator) {
+        : f(f), generator(std::move(generator)) {
     }
     StubOutputBufferBase() = default;
 
 public:
     Realization realize(std::vector<int32_t> sizes) {
         check_scheduled("realize");
-        return f.realize(sizes, get_target());
+        return f.realize(std::move(sizes), get_target());
     }
 
     template<typename... Args>
@@ -1351,7 +1352,7 @@ class StubOutputBuffer : public StubOutputBufferBase {
     template<typename T2>
     friend class GeneratorOutput_Buffer;
     friend class GeneratorStub;
-    explicit StubOutputBuffer(const Func &f, std::shared_ptr<GeneratorBase> generator)
+    explicit StubOutputBuffer(const Func &f, const std::shared_ptr<GeneratorBase> &generator)
         : StubOutputBufferBase(f, generator) {
     }
 
@@ -1548,7 +1549,7 @@ protected:
         return "Input";
     }
 
-    void set_estimate_impl(Var var, Expr min, Expr extent);
+    void set_estimate_impl(const Var &var, const Expr &min, const Expr &extent);
     void set_estimates_impl(const Region &estimates);
 
 public:
@@ -1689,7 +1690,7 @@ public:
 
     Expr operator()(std::vector<Expr> args) const {
         this->check_gio_access();
-        return Func(*this)(args);
+        return Func(*this)(std::move(args));
     }
 
     template<typename T2>
@@ -1715,7 +1716,7 @@ public:
     }
 
     HALIDE_ATTRIBUTE_DEPRECATED("Use set_estimate() instead")
-    GeneratorInput_Buffer<T> &estimate(Var var, Expr min, Expr extent) {
+    GeneratorInput_Buffer<T> &estimate(const Var &var, const Expr &min, const Expr &extent) {
         return set_estimate(var, min, extent);
     }
 
@@ -1730,7 +1731,7 @@ public:
         return Func(*this).in();
     }
 
-    Func in(Func other) {
+    Func in(const Func &other) {
         this->check_gio_access();
         return Func(*this).in(other);
     }
@@ -1857,7 +1858,7 @@ public:
         return this->funcs().at(0)(std::forward<Args>(args)...);
     }
 
-    Expr operator()(std::vector<Expr> args) const {
+    Expr operator()(const std::vector<Expr> &args) const {
         this->check_gio_access();
         return this->funcs().at(0)(args);
     }
@@ -1879,7 +1880,7 @@ public:
     }
 
     HALIDE_ATTRIBUTE_DEPRECATED("Use set_estimate() instead")
-    GeneratorInput_Func<T> &estimate(Var var, Expr min, Expr extent) {
+    GeneratorInput_Func<T> &estimate(const Var &var, const Expr &min, const Expr &extent) {
         return set_estimate(var, min, extent);
     }
 
@@ -1894,7 +1895,7 @@ public:
         return Func(*this).in();
     }
 
-    Func in(Func other) {
+    Func in(const Func &other) {
         this->check_gio_access();
         return Func(*this).in(other);
     }
@@ -2193,7 +2194,7 @@ protected:
 
 public:
     HALIDE_ATTRIBUTE_DEPRECATED("Use set_estimate() instead")
-    GeneratorOutputBase &estimate(Var var, Expr min, Expr extent) {
+    GeneratorOutputBase &estimate(const Var &var, const Expr &min, const Expr &extent) {
         this->as<Func>().set_estimate(var, min, extent);
         return *this;
     }
@@ -2594,7 +2595,7 @@ public:
         return Super::operator[](i);
     }
 
-    GeneratorOutput_Func<T> &set_estimate(Var var, Expr min, Expr extent) {
+    GeneratorOutput_Func<T> &set_estimate(const Var &var, const Expr &min, const Expr &extent) {
         this->check_gio_access();
         internal_assert(this->exprs_.empty() && !this->funcs_.empty());
         for (Func &f : this->funcs_) {
@@ -2604,7 +2605,7 @@ public:
     }
 
     HALIDE_ATTRIBUTE_DEPRECATED("Use set_estimate() instead")
-    GeneratorOutput_Func<T> &estimate(Var var, Expr min, Expr extent) {
+    GeneratorOutput_Func<T> &estimate(const Var &var, const Expr &min, const Expr &extent) {
         return set_estimate(var, min, extent);
     }
 
@@ -2943,7 +2944,7 @@ protected:
         return Halide::cast<T>(e);
     }
     static inline Expr cast(Halide::Type t, Expr e) {
-        return Halide::cast(t, e);
+        return Halide::cast(t, std::move(e));
     }
     template<typename T>
     using GeneratorParam = Halide::GeneratorParam<T>;
@@ -3103,7 +3104,7 @@ public:
 
     Realization realize(std::vector<int32_t> sizes) {
         this->check_scheduled("realize");
-        return get_pipeline().realize(sizes, get_target());
+        return get_pipeline().realize(std::move(sizes), get_target());
     }
 
     // Only enable if none of the args are Realization; otherwise we can incorrectly
@@ -3360,7 +3361,7 @@ private:
         auto *in = param_info().inputs().at(i);
         check_input_kind(in, Internal::IOKind::Function);
         check_input_is_singular(in);
-        Halide::Func f = arg;
+        const Halide::Func &f = arg;
         StubInput si(f);
         return {si};
     }
@@ -3678,17 +3679,17 @@ namespace Internal {
 class RegisterGenerator {
 public:
     RegisterGenerator(const char *registered_name, GeneratorFactory generator_factory) {
-        Internal::GeneratorRegistry::register_factory(registered_name, generator_factory);
+        Internal::GeneratorRegistry::register_factory(registered_name, std::move(generator_factory));
     }
 };
 
 class GeneratorStub : public NamesInterface {
 public:
     GeneratorStub(const GeneratorContext &context,
-                  GeneratorFactory generator_factory);
+                  const GeneratorFactory &generator_factory);
 
     GeneratorStub(const GeneratorContext &context,
-                  GeneratorFactory generator_factory,
+                  const GeneratorFactory &generator_factory,
                   const GeneratorParamsMap &generator_params,
                   const std::vector<std::vector<Internal::StubInput>> &inputs);
     std::vector<std::vector<Func>> generate(const GeneratorParamsMap &generator_params,

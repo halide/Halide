@@ -39,7 +39,7 @@ private:
     Scope<> realizations, shader_scope_realizations;
     bool in_shader = false;
 
-    Expr make_shape_var(string name, string field, size_t dim,
+    Expr make_shape_var(string name, const string &field, size_t dim,
                         const Buffer<> &buf, const Parameter &param) {
         ReductionDomain rdom;
         name = name + "." + field + "." + std::to_string(dim);
@@ -276,8 +276,8 @@ private:
                     args.push_back(extent);
                 }
                 for (size_t i = op->args.size(); i < 3; i++) {
-                    args.push_back(0);
-                    args.push_back(1);
+                    args.emplace_back(0);
+                    args.emplace_back(1);
                 }
 
                 return Call::make(op->type,

@@ -31,7 +31,7 @@ public:
     }
 };
 
-Expr qualify(const string &prefix, Expr value) {
+Expr qualify(const string &prefix, const Expr &value) {
     QualifyExpr q(prefix);
     return q.mutate(value);
 }

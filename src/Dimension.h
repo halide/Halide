@@ -5,6 +5,8 @@
  * Defines the Dimension utility class for Halide pipelines
  */
 
+#include <utility>
+
 #include "Func.h"
 #include "Parameter.h"
 
@@ -72,7 +74,7 @@ public:
 
     HALIDE_ATTRIBUTE_DEPRECATED("Use set_estimate() instead")
     Dimension set_bounds_estimate(Expr min, Expr extent) {
-        return set_estimate(min, extent);
+        return set_estimate(std::move(min), std::move(extent));
     }
 
     Expr min_estimate() const;

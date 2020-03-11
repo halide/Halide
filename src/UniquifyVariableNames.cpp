@@ -15,7 +15,7 @@ class UniquifyVariableNames : public IRMutator {
 
     map<string, int> vars;
 
-    void push_name(string s) {
+    void push_name(const string &s) {
         if (vars.find(s) == vars.end()) {
             vars[s] = 0;
         } else {
@@ -35,7 +35,7 @@ class UniquifyVariableNames : public IRMutator {
         }
     }
 
-    void pop_name(string s) {
+    void pop_name(const string &s) {
         vars[s]--;
     }
 
@@ -109,7 +109,7 @@ class UniquifyVariableNames : public IRMutator {
     }
 };
 
-Stmt uniquify_variable_names(Stmt s) {
+Stmt uniquify_variable_names(const Stmt &s) {
     UniquifyVariableNames u;
     return u.mutate(s);
 }
