@@ -115,10 +115,10 @@ CodeGen_ARM::CodeGen_ARM(Target target)
 #if LLVM_VERSION >= 100
         if (t.is_int()) {
             p.intrin32 = "llvm.sadd.sat" + t_str;
-            p.intrin64 = "llvm.aarch64.neon.sqadd" + t_str;
+            p.intrin64 = "llvm.sadd.sat" + t_str;
         } else {
             p.intrin32 = "llvm.uadd.sat" + t_str;
-            p.intrin64 = "llvm.aarch64.neon.uqadd" + t_str;
+            p.intrin64 = "llvm.uadd.sat" + t_str;
         }
 #else
         if (t.is_int()) {
@@ -143,10 +143,10 @@ CodeGen_ARM::CodeGen_ARM(Target target)
 #if LLVM_VERSION >= 100
         if (t.is_int()) {
             p.intrin32 = "llvm.ssub.sat" + t_str;
-            p.intrin64 = "llvm.aarch64.neon.sqsub" + t_str;
+            p.intrin64 = "llvm.ssub.sat" + t_str;
         } else {
             p.intrin32 = "llvm.usub.sat" + t_str;
-            p.intrin64 = "llvm.aarch64.neon.uqsub" + t_str;
+            p.intrin64 = "llvm.usub.sat" + t_str;
         }
 #else
         if (t.is_int()) {
