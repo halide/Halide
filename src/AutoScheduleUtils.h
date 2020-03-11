@@ -29,7 +29,7 @@ class FindAllCalls : public IRVisitor {
     void visit(const Call *call) override {
         if (call->call_type == Call::Halide || call->call_type == Call::Image) {
             funcs_called.insert(call->name);
-            call_args.push_back(std::make_pair(call->name, call->args));
+            call_args.emplace_back(call->name, call->args);
         }
         for (size_t i = 0; i < call->args.size(); i++) {
             call->args[i].accept(this);

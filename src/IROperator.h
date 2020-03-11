@@ -321,7 +321,7 @@ inline HALIDE_NO_USER_CODE_INLINE void collect_print_args(std::vector<Expr> &arg
 
 template<typename... Args>
 inline HALIDE_NO_USER_CODE_INLINE void collect_print_args(std::vector<Expr> &args, const char *arg, Args &&... more_args) {
-    args.push_back(Expr(std::string(arg)));
+    args.emplace_back(std::string(arg));
     collect_print_args(args, std::forward<Args>(more_args)...);
 }
 

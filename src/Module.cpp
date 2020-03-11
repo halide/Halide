@@ -351,7 +351,7 @@ LoweredFunc::LoweredFunc(const std::string &name,
                          NameMangling name_mangling)
     : name(name), body(std::move(body)), linkage(linkage), name_mangling(name_mangling) {
     for (const Argument &i : args) {
-        this->args.push_back(LoweredArgument(i));
+        this->args.emplace_back(i);
     }
 }
 
@@ -814,7 +814,7 @@ void compile_multitarget(const std::string &fn_name,
         if (target != base_target) {
             std::vector<Expr> features_struct_args;
             for (int i = 0; i < kFeaturesWordCount; ++i) {
-                features_struct_args.push_back(UIntImm::make(UInt(64), cur_target_features[i]));
+                features_struct_args.emplace_back(UIntImm::make(UInt(64), cur_target_features[i]));
             }
             can_use = Call::make(Int(32), "halide_can_use_target_features",
                                  {kFeaturesWordCount, Call::make(type_of<uint64_t *>(), Call::make_struct, features_struct_args, Call::Intrinsic)},
@@ -828,7 +828,7 @@ void compile_multitarget(const std::string &fn_name,
         }
 
         wrapper_args.push_back(can_use != 0);
-        wrapper_args.push_back(sub_fn_name);
+        wrapper_args.emplace_back(sub_fn_name);
     }
 
     // If we haven't specified "no runtime", build a runtime with the base target

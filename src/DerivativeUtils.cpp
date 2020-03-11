@@ -303,7 +303,7 @@ vector<pair<Expr, Expr>> box_to_vector(const Box &bounds) {
     vector<pair<Expr, Expr>> ret;
     ret.reserve(bounds.size());
     for (const auto &b : bounds.bounds) {
-        ret.push_back({b.min, b.max - b.min + 1});
+        ret.emplace_back(b.min, b.max - b.min + 1);
     }
     return ret;
 }

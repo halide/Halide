@@ -280,7 +280,7 @@ Stmt Simplify::visit(const Evaluate *op) {
     // Rewrite Lets inside an evaluate as LetStmts outside the Evaluate.
     vector<pair<string, Expr>> lets;
     while (const Let *let = value.as<Let>()) {
-        lets.push_back({let->name, let->value});
+        lets.emplace_back(let->name, let->value);
         value = let->body;
     }
 

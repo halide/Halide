@@ -114,7 +114,7 @@ private:
         }
 
         // This store is good, collect it and replace with a no-op.
-        stores.push_back(op);
+        stores.emplace_back(op);
         stmt = Evaluate::make(0);
 
         // Because we collected this store, we need to save the
@@ -146,7 +146,7 @@ private:
         if (collecting) {
             Stmt body;
             do {
-                potential_lets.push_back(op);
+                potential_lets.emplace_back(op);
                 body = op->body;
             } while ((op = body.as<LetStmt>()));
         }
@@ -578,7 +578,7 @@ class Interleaver : public IRMutator {
         // Gather all the let stmts surrounding the first.
         std::vector<Stmt> let_stmts;
         while (let) {
-            let_stmts.push_back(let);
+            let_stmts.emplace_back(let);
             store = let->body.as<Store>();
             let = let->body.as<LetStmt>();
         }
@@ -602,7 +602,7 @@ class Interleaver : public IRMutator {
 
         // Collect the rest of the stores.
         std::vector<Stmt> stores;
-        stores.push_back(store);
+        stores.emplace_back(store);
         Stmt rest = collect_strided_stores(op->rest, store->name,
                                            stride, expected_stores,
                                            let_stmts, stores);

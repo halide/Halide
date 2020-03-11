@@ -676,18 +676,18 @@ private:
             print_list(symbol("interleave_vectors("), op->vectors, ")");
         } else if (op->is_extract_element()) {
             std::vector<Expr> args = op->vectors;
-            args.push_back(op->slice_begin());
+            args.emplace_back(op->slice_begin());
             print_list(symbol("extract_element("), args, ")");
         } else if (op->is_slice()) {
             std::vector<Expr> args = op->vectors;
-            args.push_back(op->slice_begin());
-            args.push_back(op->slice_stride());
-            args.push_back(static_cast<int>(op->indices.size()));
+            args.emplace_back(op->slice_begin());
+            args.emplace_back(op->slice_stride());
+            args.emplace_back(static_cast<int>(op->indices.size()));
             print_list(symbol("slice_vectors("), args, ")");
         } else {
             std::vector<Expr> args = op->vectors;
             for (int i : op->indices) {
-                args.push_back(i);
+                args.emplace_back(i);
             }
             print_list(symbol("shuffle("), args, ")");
         }

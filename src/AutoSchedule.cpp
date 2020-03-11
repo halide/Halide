@@ -1450,7 +1450,7 @@ Partitioner::choose_candidate_grouping(const vector<pair<string, string>> &cands
                 grouping_cache.emplace(cand_choice, best_config);
             }
 
-            grouping.push_back(make_pair(cand_choice, best_config));
+            grouping.emplace_back(cand_choice, best_config);
         }
 
         bool no_redundant_work = false;
@@ -1679,10 +1679,10 @@ void Partitioner::group(Partitioner::Level level) {
                 if ((num_children == 1) && (level == Partitioner::Level::FastMem)) {
                     const string &prod_name = prod_f.name();
                     const string &cons_name = (*child_groups.begin());
-                    cand.push_back(make_pair(prod_name, cons_name));
+                    cand.emplace_back(prod_name, cons_name);
                 } else if ((level == Partitioner::Level::Inline) && prod_f.is_pure()) {
                     const string &prod_name = prod_f.name();
-                    cand.push_back(make_pair(prod_name, ""));
+                    cand.emplace_back(prod_name, "");
                 }
             }
         }
@@ -2969,7 +2969,7 @@ Partitioner::analyze_spatial_locality(const FStage &stg,
     vector<pair<string, vector<Expr>>> &call_args = find.call_args;
     // Account for the spatial locality of the store. Add the access on the
     // left hand side to call_args.
-    call_args.push_back(make_pair(stg.func.name(), def.args()));
+    call_args.emplace_back(stg.func.name(), def.args());
 
     // Map for holding the strides across each dimension
     map<string, Expr> var_strides;

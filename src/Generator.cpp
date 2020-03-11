@@ -174,7 +174,7 @@ void ValueTracker::track_values(const std::string &name, const std::vector<Expr>
 std::vector<Expr> parameter_constraints(const Parameter &p) {
     internal_assert(p.defined());
     std::vector<Expr> values;
-    values.push_back(Expr(p.host_alignment()));
+    values.emplace_back(p.host_alignment());
     if (p.is_buffer()) {
         for (int i = 0; i < p.dimensions(); ++i) {
             values.push_back(p.min_constraint(i));
@@ -1976,7 +1976,7 @@ void GeneratorOutputBase::init_internals() {
     funcs_.clear();
     if (array_size_defined()) {
         for (size_t i = 0; i < array_size(); ++i) {
-            funcs_.push_back(Func(array_name(i)));
+            funcs_.emplace_back(array_name(i));
         }
     }
 }

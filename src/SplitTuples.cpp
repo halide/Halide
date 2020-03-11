@@ -173,7 +173,7 @@ class SplitTuples : public IRMutator {
             string var_name = name + ".value";
             Expr val = mutate(op->values[i]);
             if (!is_undef(val) && atomic) {
-                lets.push_back({var_name, val});
+                lets.emplace_back(var_name, val);
                 val = Variable::make(val.type(), var_name);
             }
             provides.push_back(Provide::make(name, {val}, args));

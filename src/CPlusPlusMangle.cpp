@@ -954,17 +954,17 @@ void cplusplus_mangle_test() {
     {
         // Test all primitive types.
         std::vector<ExternFuncArgument> args;
-        args.push_back(ExternFuncArgument(make_zero(Bool())));
-        args.push_back(ExternFuncArgument(make_zero(Int(8))));
-        args.push_back(ExternFuncArgument(make_zero(UInt(8))));
-        args.push_back(ExternFuncArgument(make_zero(Int(16))));
-        args.push_back(ExternFuncArgument(make_zero(UInt(16))));
-        args.push_back(ExternFuncArgument(make_zero(Int(32))));
-        args.push_back(ExternFuncArgument(make_zero(UInt(32))));
-        args.push_back(ExternFuncArgument(make_zero(Int(64))));
-        args.push_back(ExternFuncArgument(make_zero(UInt(64))));
-        args.push_back(ExternFuncArgument(make_zero(Float(32))));
-        args.push_back(ExternFuncArgument(make_zero(Float(64))));
+        args.emplace_back(make_zero(Bool()));
+        args.emplace_back(make_zero(Int(8)));
+        args.emplace_back(make_zero(UInt(8)));
+        args.emplace_back(make_zero(Int(16)));
+        args.emplace_back(make_zero(UInt(16)));
+        args.emplace_back(make_zero(Int(32)));
+        args.emplace_back(make_zero(UInt(32)));
+        args.emplace_back(make_zero(Int(64)));
+        args.emplace_back(make_zero(UInt(64)));
+        args.emplace_back(make_zero(Float(32)));
+        args.emplace_back(make_zero(Float(64)));
 
         size_t expecteds_index = 0;
         for (const auto &target : targets) {
@@ -989,7 +989,7 @@ void cplusplus_mangle_test() {
             type_info.push_back(t);
         }
         for (int i = 0; i < 200; i++) {
-            args.push_back(make_zero(Handle(1, &type_info[i % 100])));
+            args.emplace_back(make_zero(Handle(1, &type_info[i % 100])));
         }
 
         size_t expecteds_index = 0;
@@ -1015,7 +1015,7 @@ void cplusplus_mangle_test() {
             type_info.push_back(t);
         }
         for (int i = 0; i < 50; i++) {
-            args.push_back(make_zero(Handle(1, &type_info[i % 25])));
+            args.emplace_back(make_zero(Handle(1, &type_info[i % 25])));
         }
 
         size_t expecteds_index = 0;
@@ -1041,7 +1041,7 @@ void cplusplus_mangle_test() {
             type_info.push_back(t);
         }
         for (const auto &ti : type_info) {
-            args.push_back(ExternFuncArgument(make_zero(Handle(1, &ti))));
+            args.emplace_back(make_zero(Handle(1, &ti)));
         }
         size_t expecteds_index = 0;
         for (const auto &target : targets) {
@@ -1062,9 +1062,9 @@ void cplusplus_mangle_test() {
                 halide_handle_cplusplus_type t3(halide_handle_cplusplus_type(
                     halide_cplusplus_type_name(halide_cplusplus_type_name::Struct, "s"), {}, {}, {mods}, halide_handle_cplusplus_type::RValueReference));
                 std::vector<ExternFuncArgument> args;
-                args.push_back(make_zero(Handle(1, &t1)));
-                args.push_back(make_zero(Handle(1, &t2)));
-                args.push_back(make_zero(Handle(1, &t3)));
+                args.emplace_back(make_zero(Handle(1, &t1)));
+                args.emplace_back(make_zero(Handle(1, &t2)));
+                args.emplace_back(make_zero(Handle(1, &t3)));
 
                 MangleResult *expecteds = (target.os == Target::Windows) ? (target.bits == 64 ? all_mods_win64 : all_mods_win32) : all_mods_itanium;
                 check_result(expecteds, expecteds_index, target,
@@ -1079,8 +1079,8 @@ void cplusplus_mangle_test() {
         for (const auto &target : targets) {
             size_t expecteds_index = 0;
             std::vector<ExternFuncArgument> args;
-            args.push_back(make_zero(Handle(1, nullptr)));
-            args.push_back(make_zero(Handle(1, nullptr)));
+            args.emplace_back(make_zero(Handle(1, nullptr)));
+            args.emplace_back(make_zero(Handle(1, nullptr)));
 
             MangleResult *expecteds = (target.os == Target::Windows) ? (target.bits == 64 ? two_void_stars_win64 : two_void_stars_win32) : two_void_stars_itanium;
             check_result(expecteds, expecteds_index, target,

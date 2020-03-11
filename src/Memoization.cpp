@@ -269,7 +269,7 @@ public:
         args.push_back(Variable::make(type_of<uint8_t *>(), key_allocation_name));
         args.push_back(key_size());
         args.push_back(Variable::make(type_of<halide_buffer_t *>(), computed_bounds_name));
-        args.push_back(tuple_count);
+        args.emplace_back(tuple_count);
         std::vector<Expr> buffers;
         if (tuple_count == 1) {
             buffers.push_back(Variable::make(type_of<halide_buffer_t *>(), storage_base_name + ".buffer"));
@@ -290,7 +290,7 @@ public:
         args.push_back(Variable::make(type_of<uint8_t *>(), key_allocation_name));
         args.push_back(key_size());
         args.push_back(Variable::make(type_of<halide_buffer_t *>(), computed_bounds_name));
-        args.push_back(tuple_count);
+        args.emplace_back(tuple_count);
         std::vector<Expr> buffers;
         if (tuple_count == 1) {
             buffers.push_back(Variable::make(type_of<halide_buffer_t *>(), storage_base_name + ".buffer"));

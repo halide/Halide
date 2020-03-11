@@ -118,7 +118,7 @@ class LowerRandom : public IRMutator {
 
 public:
     LowerRandom(const vector<string> &free_vars, int tag) {
-        extra_args.push_back(tag);
+        extra_args.emplace_back(tag);
         for (size_t i = 0; i < free_vars.size(); i++) {
             internal_assert(!free_vars[i].empty());
             extra_args.push_back(Variable::make(Int(32), free_vars[i]));

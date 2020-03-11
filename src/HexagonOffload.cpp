@@ -801,10 +801,10 @@ class InjectHexagonRpc : public IRMutator {
         for (const auto &i : c.buffers) {
             if (i.second.write) {
                 Argument::Kind kind = Argument::OutputBuffer;
-                output_buffers.push_back(LoweredArgument(i.first, kind, i.second.type, i.second.dimensions, ArgumentEstimates{}));
+                output_buffers.emplace_back(i.first, kind, i.second.type, i.second.dimensions, ArgumentEstimates{});
             } else {
                 Argument::Kind kind = Argument::InputBuffer;
-                input_buffers.push_back(LoweredArgument(i.first, kind, i.second.type, i.second.dimensions, ArgumentEstimates{}));
+                input_buffers.emplace_back(i.first, kind, i.second.type, i.second.dimensions, ArgumentEstimates{});
             }
 
             // Build a parameter to replace.
@@ -866,7 +866,7 @@ class InjectHexagonRpc : public IRMutator {
                 Expr host = Call::make(Handle(), Call::buffer_get_host, {buf}, Call::Extern);
                 Expr pseudo_buffer = Call::make(Handle(), Call::make_struct, {device, host}, Call::Intrinsic);
                 arg_ptrs.push_back(pseudo_buffer);
-                arg_sizes.push_back(Expr((uint64_t)(pseudo_buffer.type().bytes())));
+                arg_sizes.emplace_back((uint64_t)(pseudo_buffer.type().bytes()));
             } else {
                 // If this is the scalars buffer, it doesn't have a .buffer
                 // field. Rather than make one, It's easier to just skip the
@@ -876,7 +876,7 @@ class InjectHexagonRpc : public IRMutator {
                 Expr host = Variable::make(Handle(), i.first);
                 Expr pseudo_buffer = Call::make(Handle(), Call::make_struct, {make_zero(UInt(64)), host}, Call::Intrinsic);
                 arg_ptrs.push_back(pseudo_buffer);
-                arg_sizes.push_back(Expr((uint64_t)scalars_buffer_extent * scalars_buffer_type.bytes()));
+                arg_sizes.emplace_back((uint64_t)scalars_buffer_extent * scalars_buffer_type.bytes());
             }
 
             // In the flags parameter, bit 0 set indicates the
@@ -885,23 +885,23 @@ class InjectHexagonRpc : public IRMutator {
             int flags = 0;
             if (i.second.read) flags |= 0x1;
             if (i.second.write) flags |= 0x2;
-            arg_flags.push_back(flags);
+            arg_flags.emplace_back(flags);
         }
         for (const auto &i : c.vars) {
             Expr arg = Variable::make(i.second, i.first);
             Expr arg_ptr = Call::make(type_of<void *>(), Call::make_struct, {arg}, Call::Intrinsic);
-            arg_sizes.push_back(Expr((uint64_t)i.second.bytes()));
+            arg_sizes.emplace_back((uint64_t)i.second.bytes());
             arg_ptrs.push_back(arg_ptr);
-            arg_flags.push_back(0x0);
+            arg_flags.emplace_back(0x0);
         }
 
         // The argument list is terminated with an argument of size 0.
-        arg_sizes.push_back(Expr((uint64_t)0));
+        arg_sizes.emplace_back((uint64_t)0);
 
         std::string pipeline_name = hex_name + "_argv";
         std::vector<Expr> params;
         params.push_back(module_state());
-        params.push_back(pipeline_name);
+        params.emplace_back(pipeline_name);
         params.push_back(state_var_ptr(hex_name, type_of<int>()));
         params.push_back(Call::make(type_of<uint64_t *>(), Call::make_struct, arg_sizes, Call::Intrinsic));
         params.push_back(Call::make(type_of<void **>(), Call::make_struct, arg_ptrs, Call::Intrinsic));

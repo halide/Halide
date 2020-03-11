@@ -770,7 +770,7 @@ std::vector<char> write_shared_object_internal(Object &obj, Linker *linker, cons
     // will vary in ordering from run to tun.
     std::vector<std::pair<const Symbol *, const Symbol *>> sorted_symbols;
     for (const auto &i : symbols) {
-        sorted_symbols.push_back(i);
+        sorted_symbols.emplace_back(i);
     }
     std::sort(sorted_symbols.begin(), sorted_symbols.end(),
               [&](const std::pair<const Symbol *, const Symbol *> &lhs, const std::pair<const Symbol *, const Symbol *> &rhs) {

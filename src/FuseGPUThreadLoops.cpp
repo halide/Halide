@@ -630,7 +630,7 @@ class ExtractSharedAndHeapAllocations : public IRMutator {
                         mem_allocs[free_spaces[free_idx]].insert(allocations[i]);
                         free_spaces.erase(free_spaces.begin() + free_idx);
                     } else {
-                        mem_allocs.push_back(AllocGroup(allocations[i]));
+                        mem_allocs.emplace_back(allocations[i]);
                     }
                 } else if (allocations[i].liveness.max == stage - 1) {  // Free
                     int free_idx = -1;
@@ -819,9 +819,9 @@ public:
         Expr buffer_var = Variable::make(type_of<halide_buffer_t *>(), buffer_name);
 
         BufferBuilder builder;
-        builder.mins.push_back(0);
+        builder.mins.emplace_back(0);
         builder.extents.push_back(total_size);
-        builder.strides.push_back(1);
+        builder.strides.emplace_back(1);
         builder.type = UInt(8);
         builder.dimensions = 1;
         Expr buffer = builder.build();

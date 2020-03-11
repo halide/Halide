@@ -15,7 +15,7 @@ std::vector<DeviceArgument> HostClosure::arguments() {
     std::vector<DeviceArgument> res;
     for (const auto &v : vars) {
         debug(2) << "var: " << v.first << "\n";
-        res.push_back(DeviceArgument(v.first, false, v.second, 0));
+        res.emplace_back(v.first, false, v.second, 0);
     }
     for (const auto &b : buffers) {
         debug(2) << "buffer: " << b.first << " " << b.second.size;

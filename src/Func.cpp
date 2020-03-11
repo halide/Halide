@@ -578,9 +578,9 @@ bool apply_split_directive(const Split &s, vector<ReductionVariable> &rvars,
 
     vector<pair<string, Expr>> rvar_bounds;
     for (const ReductionVariable &rv : rvars) {
-        rvar_bounds.push_back({rv.var + ".loop_min", rv.min});
-        rvar_bounds.push_back({rv.var + ".loop_max", simplify(rv.min + rv.extent - 1)});
-        rvar_bounds.push_back({rv.var + ".loop_extent", rv.extent});
+        rvar_bounds.emplace_back(rv.var + ".loop_min", rv.min);
+        rvar_bounds.emplace_back(rv.var + ".loop_max", simplify(rv.min + rv.extent - 1));
+        rvar_bounds.emplace_back(rv.var + ".loop_extent", rv.extent);
     }
 
     bool found = false;
