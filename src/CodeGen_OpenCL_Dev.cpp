@@ -645,7 +645,7 @@ void CodeGen_OpenCL_Dev::CodeGen_OpenCL_C::visit(const Atomic *op) {
 
     // Issue atomic stores.
     ScopedValue<bool> old_emit_atomic_stores(emit_atomic_stores, true);
-    IRVisitor::visit(op);
+    CodeGen_C::visit(op);
 }
 
 void CodeGen_OpenCL_Dev::add_kernel(Stmt s,
