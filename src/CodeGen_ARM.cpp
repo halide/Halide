@@ -112,6 +112,15 @@ CodeGen_ARM::CodeGen_ARM(Target target)
         casts.push_back(p);
 
         // Saturating add
+#if LLVM_VERSION >= 100
+        if (t.is_int()) {
+            p.intrin32 = "llvm.sadd.sat" + t_str;
+            p.intrin64 = "llvm.aarch64.neon.sqadd" + t_str;
+        } else {
+            p.intrin32 = "llvm.uadd.sat" + t_str;
+            p.intrin64 = "llvm.aarch64.neon.uqadd" + t_str;
+        }
+#else
         if (t.is_int()) {
             p.intrin32 = "llvm.arm.neon.vqadds" + t_str;
             p.intrin64 = "llvm.aarch64.neon.sqadd" + t_str;
@@ -119,6 +128,7 @@ CodeGen_ARM::CodeGen_ARM(Target target)
             p.intrin32 = "llvm.arm.neon.vqaddu" + t_str;
             p.intrin64 = "llvm.aarch64.neon.uqadd" + t_str;
         }
+#endif
         p.pattern = cast(t, clamp(w_vector + w_vector, tmin, tmax));
         casts.push_back(p);
 
@@ -130,6 +140,15 @@ CodeGen_ARM::CodeGen_ARM(Target target)
 
         // Saturating subtract
         // N.B. Saturating subtracts always widen to a signed type
+#if LLVM_VERSION >= 100
+        if (t.is_int()) {
+            p.intrin32 = "llvm.ssub.sat" + t_str;
+            p.intrin64 = "llvm.aarch64.neon.sqsub" + t_str;
+        } else {
+            p.intrin32 = "llvm.usub.sat" + t_str;
+            p.intrin64 = "llvm.aarch64.neon.uqsub" + t_str;
+        }
+#else
         if (t.is_int()) {
             p.intrin32 = "llvm.arm.neon.vqsubs" + t_str;
             p.intrin64 = "llvm.aarch64.neon.sqsub" + t_str;
@@ -137,6 +156,7 @@ CodeGen_ARM::CodeGen_ARM(Target target)
             p.intrin32 = "llvm.arm.neon.vqsubu" + t_str;
             p.intrin64 = "llvm.aarch64.neon.uqsub" + t_str;
         }
+#endif
         p.pattern = cast(t, clamp(ws_vector - ws_vector, tsmin, tsmax));
         casts.push_back(p);
 
