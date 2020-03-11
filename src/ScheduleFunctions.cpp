@@ -1200,9 +1200,8 @@ private:
         internal_assert(env_iter != env.end());
         const auto &parent_func = env_iter->second;
 
-        const vector<Dim> &parent_dims = (fuse_level.stage_index() == 0)
-            ? parent_func.definition().schedule().dims()
-            : parent_func.update(fuse_level.stage_index() - 1).schedule().dims();
+        const auto &parent_def = (fuse_level.stage_index() == 0) ? parent_func.definition() : parent_func.update(fuse_level.stage_index() - 1);
+        const vector<Dim> &parent_dims = parent_def.schedule().dims();
 
         for (int i = start_fuse; i < (int)dims.size() - 1; ++i) {
             const string &var = dims[i].var;
