@@ -1194,12 +1194,15 @@ private:
             start_fuse = (int)(iter - dims.begin());
         }
 
+        int fused_vars_num = dims.size() - start_fuse - 1;
+
         const auto &env_iter = env.find(fuse_level.func());
         internal_assert(env_iter != env.end());
         const auto &parent_func = env_iter->second;
 
-        const vector<Dim> &parent_dims = (fuse_level.stage_index() == 0) ? parent_func.definition().schedule().dims() : parent_func.update(fuse_level.stage_index() - 1).schedule().dims();
-        int fused_vars_num = dims.size() - start_fuse - 1;
+        const vector<Dim> &parent_dims = (fuse_level.stage_index() == 0)
+            ? parent_func.definition().schedule().dims()
+            : parent_func.update(fuse_level.stage_index() - 1).schedule().dims();
 
         for (int i = start_fuse; i < (int)dims.size() - 1; ++i) {
             const string &var = dims[i].var;
@@ -1219,6 +1222,7 @@ private:
 
             string parent_prefix = fuse_level.func() + ".s" + std::to_string(fuse_level.stage_index()) + ".";
             int parent_var_index = (i - start_fuse) + (int)parent_dims.size() - 1 - fused_vars_num;
+            internal_assert(parent_var_index >= 0);
             string parent_var = parent_dims[parent_var_index].var;
 
             auto it_min = bounds.find(prefix + var + ".loop_min");
