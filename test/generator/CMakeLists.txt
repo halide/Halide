@@ -64,21 +64,21 @@ add_custom_command(OUTPUT "${EC32}.bc"
         DEPENDS "${GEN_TEST_DIR}/external_code_extern.cpp"
         COMMAND ${CLANG} ${CXX_WARNING_FLAGS} -O3 -c -m32 -target le32-unknown-nacl-unknown -emit-llvm "${GEN_TEST_DIR}/external_code_extern.cpp" -o "${EC32}.bc")
 add_custom_command(OUTPUT "${EC32}.cpp"
-        DEPENDS "${EC32}.bc"
-        COMMAND binary2cpp external_code_extern_bitcode_32 < "${EC32}.bc" > "${EC32}.cpp")
+        DEPENDS "${EC32}.bc" binary2cpp
+        COMMAND $<TARGET_FILE:binary2cpp> external_code_extern_bitcode_32 < "${EC32}.bc" > "${EC32}.cpp")
 
 set(EC64 "${PROJECT_BINARY_DIR}/${PROJECT_NAME}.build/external_code_extern_bitcode_64")
 add_custom_command(OUTPUT "${EC64}.bc"
         DEPENDS "${GEN_TEST_DIR}/external_code_extern.cpp"
         COMMAND ${CLANG} ${CXX_WARNING_FLAGS} -O3 -c -m64 -target le64-unknown-unknown-unknown -emit-llvm "${GEN_TEST_DIR}/external_code_extern.cpp" -o "${EC64}.bc")
 add_custom_command(OUTPUT "${EC64}.cpp"
-        DEPENDS "${EC64}.bc"
-        COMMAND binary2cpp external_code_extern_bitcode_64 < "${EC64}.bc" > "${EC64}.cpp")
+        DEPENDS "${EC64}.bc" binary2cpp
+        COMMAND $<TARGET_FILE:binary2cpp> external_code_extern_bitcode_64 < "${EC64}.bc" > "${EC64}.cpp")
 
 set(ECCPP "${PROJECT_BINARY_DIR}/${PROJECT_NAME}.build/external_code_extern_cpp_source")
 add_custom_command(OUTPUT "${ECCPP}.cpp"
-        DEPENDS "${GEN_TEST_DIR}/external_code_extern.cpp"
-        COMMAND binary2cpp external_code_extern_cpp_source < "${GEN_TEST_DIR}/external_code_extern.cpp" > "${ECCPP}.cpp")
+        DEPENDS "${GEN_TEST_DIR}/external_code_extern.cpp" binary2cpp
+        COMMAND $<TARGET_FILE:binary2cpp> external_code_extern_cpp_source < "${GEN_TEST_DIR}/external_code_extern.cpp" > "${ECCPP}.cpp")
 
 add_library(external_code_generator_deps "${EC32}.cpp" "${EC64}.cpp" "${ECCPP}.cpp")
 
