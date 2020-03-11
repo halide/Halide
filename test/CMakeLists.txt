@@ -13,7 +13,7 @@ target_compile_definitions(halide_test INTERFACE "LLVM_VERSION=${LLVM_VERSION}")
 
 # Tests are built with the equivalent of OPTIMIZE_FOR_BUILD_TIME (-O0 or /Od).
 target_compile_options(halide_test INTERFACE $<$<CXX_COMPILER_ID:MSVC>:/Od>)
-target_compile_options(halide_test INTERFACE $<$<CONFIG:RELEASE>:-O0>)
+target_compile_options(halide_test INTERFACE $<$<CXX_COMPILER_ID:GNU,Clang,AppleClang>:-O0>)
 
 # Also allow tests, via conditional compilation, to use the entire
 # capability of the CPU being compiled on via -march=native. This
