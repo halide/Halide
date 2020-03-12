@@ -1859,7 +1859,7 @@ static Value *create_vector(llvm::Type *ty, int val) {
     llvm::Type *scalar_ty = ty->getScalarType();
     Constant *value = ConstantInt::get(scalar_ty, val);
 #if LLVM_VERSION >= 110
-    const llvm::ElementCount elem_count(ty->getVectorNumElements(), /*scalable*/false);
+    const llvm::ElementCount elem_count(ty->getVectorNumElements(), /*scalable*/ false);
 #else
     const int elem_count = ty->getVectorNumElements();
 #endif

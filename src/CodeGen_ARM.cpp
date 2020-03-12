@@ -520,7 +520,7 @@ void CodeGen_ARM::visit(const Sub *op) {
 
         if (op->type.lanes() > 1) {
 #if LLVM_VERSION >= 110
-            const llvm::ElementCount elem_count(op->type.lanes(), /*scalable*/false);
+            const llvm::ElementCount elem_count(op->type.lanes(), /*scalable*/ false);
 #else
             const int elem_count = op->type.lanes();
 #endif

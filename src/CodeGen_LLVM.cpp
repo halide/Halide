@@ -2194,7 +2194,7 @@ llvm::Value *CodeGen_LLVM::create_broadcast(llvm::Value *v, int lanes) {
     Constant *zero = ConstantInt::get(i32_t, 0);
     v = builder->CreateInsertElement(undef, v, zero);
 #if LLVM_VERSION >= 110
-    const llvm::ElementCount elem_count(lanes, /*scalable*/false);
+    const llvm::ElementCount elem_count(lanes, /*scalable*/ false);
 #else
     const int elem_count = lanes;
 #endif
