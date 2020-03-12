@@ -2193,7 +2193,12 @@ llvm::Value *CodeGen_LLVM::create_broadcast(llvm::Value *v, int lanes) {
     Constant *undef = UndefValue::get(VectorType::get(v->getType(), lanes));
     Constant *zero = ConstantInt::get(i32_t, 0);
     v = builder->CreateInsertElement(undef, v, zero);
-    Constant *zeros = ConstantVector::getSplat(lanes, zero);
+#if LLVM_VERSION >= 110
+    const llvm::ElementCount elem_count(lanes, /*scalable*/false);
+#else
+    const int elem_count = lanes;
+#endif
+    Constant *zeros = ConstantVector::getSplat(elem_count, zero);
     return builder->CreateShuffleVector(v, undef, zeros);
 }
 

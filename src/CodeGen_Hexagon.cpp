@@ -1858,7 +1858,12 @@ Value *CodeGen_Hexagon::vdelta(Value *lut, const vector<int> &indices) {
 static Value *create_vector(llvm::Type *ty, int val) {
     llvm::Type *scalar_ty = ty->getScalarType();
     Constant *value = ConstantInt::get(scalar_ty, val);
-    return ConstantVector::getSplat(ty->getVectorNumElements(), value);
+#if LLVM_VERSION >= 110
+    const llvm::ElementCount elem_count(ty->getVectorNumElements(), /*scalable*/false);
+#else
+    const int elem_count = ty->getVectorNumElements();
+#endif
+    return ConstantVector::getSplat(elem_count, value);
 }
 
 Value *CodeGen_Hexagon::vlut(Value *lut, Value *idx, int min_index, int max_index) {
