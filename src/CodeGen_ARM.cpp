@@ -116,6 +116,7 @@ CodeGen_ARM::CodeGen_ARM(Target target)
         if (t.is_int()) {
             p.intrin32 = "llvm.sadd.sat" + t_str;
             p.intrin64 = "llvm.sadd.sat" + t_str;
+
         } else {
             p.intrin32 = "llvm.uadd.sat" + t_str;
             p.intrin64 = "llvm.uadd.sat" + t_str;
