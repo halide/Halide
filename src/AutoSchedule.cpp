@@ -2743,7 +2743,7 @@ void Partitioner::generate_group_cpu_schedule(
     bool nested_parallelism = true;
     if (nested_parallelism) {
         int dim_start = dims.size() - 2;
-        string seq_var = "";
+        string seq_var;
         for (int d = dim_start; d >= 0; d--) {
             if (dims[d].for_type == ForType::Vectorized) {
                 break;
@@ -2755,7 +2755,7 @@ void Partitioner::generate_group_cpu_schedule(
             VarOrRVar v(var, is_rvar);
 
             if (is_rvar && !can_parallelize_rvar(var, g_out.name(), def)) {
-                if (seq_var == "") {
+                if (seq_var.empty()) {
                     seq_var = var;
                 }
                 continue;
@@ -2768,7 +2768,7 @@ void Partitioner::generate_group_cpu_schedule(
 
             const auto &iter = stg_estimates.find(var);
             if ((iter != stg_estimates.end()) && iter->second.defined()) {
-                if (seq_var != "") {
+                if (!seq_var.empty()) {
                     VarOrRVar seq(seq_var, (rvars.find(seq_var) != rvars.end()));
                     f_handle.reorder(seq, v);
                     sched.push_schedule(f_handle.name(), g.output.stage_num,
@@ -2791,7 +2791,7 @@ void Partitioner::generate_group_cpu_schedule(
 
     // Find the level at which group members will be computed.
     int tile_inner_index = dims.size() - outer_dims.size() - 1;
-    VarOrRVar tile_inner_var("", false);
+    VarOrRVar tile_inner_var(Var::outermost());
     if (!outer_dims.empty()) {
         string var_name = get_base_name(dims[tile_inner_index].var);
         bool is_rvar = (rvars.find(var_name) != rvars.end());
