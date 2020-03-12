@@ -1,14 +1,14 @@
-
-#include "RDom.h"
+#include <array>
+#include <utility>
 
 #include "Generator.h"
 #include "IREquality.h"
 #include "IROperator.h"
 #include "IRPrinter.h"
 #include "ImageParam.h"
+#include "RDom.h"
 #include "Simplify.h"
 #include "Util.h"
-#include <utility>
 
 namespace Halide {
 
