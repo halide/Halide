@@ -5,7 +5,7 @@ set(WF_CPP ${BASENAME_WF}.cpp)
 
 add_custom_command(OUTPUT ${WF_CPP}
                    DEPENDS ${WF} binary2cpp
-                   COMMAND binary2cpp ${BASENAME_WF}_weights < ${WF} > ${WF_CPP}
+                   COMMAND $<TARGET_FILE:binary2cpp> ${BASENAME_WF}_weights < ${WF} > ${WF_CPP}
                    COMMENT "${WF} -> ${WF_CPP}"
                    VERBATIM)
 
@@ -97,7 +97,7 @@ target_link_libraries(demo_apps_autoscheduler PRIVATE demo)
 add_dependencies(demo_apps_autoscheduler demo auto_schedule)
 
 add_custom_command(TARGET demo_apps_autoscheduler POST_BUILD
-                   COMMAND demo_apps_autoscheduler
+                   COMMAND $<TARGET_FILE:demo_apps_autoscheduler>
                            --benchmarks=all
                            --benchmark_min_time=1
                            --estimate_all
@@ -126,7 +126,7 @@ add_dependencies(demo_included_schedule_file included_schedule_file
                  auto_schedule)
 
 add_custom_command(TARGET demo_included_schedule_file POST_BUILD
-                   COMMAND demo_included_schedule_file
+                   COMMAND $<TARGET_FILE:demo_included_schedule_file>
                            --benchmarks=all
                            --benchmark_min_time=1
                            --estimate_all

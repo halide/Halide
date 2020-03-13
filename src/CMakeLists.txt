@@ -202,12 +202,12 @@ function(add_runtime_modules TARGET_RUNTIME_FILES TARGET_RUNTIME_DIR)
       add_custom_command(OUTPUT "${INITMOD_D}"
                          # COMMENT "${BC_D} -> ${INITMOD_D}"
                          DEPENDS "${BC_D}" binary2cpp
-                         COMMAND binary2cpp "halide_internal_initmod_${i}_${j}_debug" < "${BC_D}" > "${INITMOD_D}"
+                         COMMAND $<TARGET_FILE:binary2cpp> "halide_internal_initmod_${i}_${j}_debug" < "${BC_D}" > "${INITMOD_D}"
                          )
       add_custom_command(OUTPUT "${INITMOD}"
                          # COMMENT "${BC} -> ${INITMOD}"
                          DEPENDS "${BC}" binary2cpp
-                         COMMAND binary2cpp "halide_internal_initmod_${i}_${j}" < "${BC}" > "${INITMOD}"
+                         COMMAND $<TARGET_FILE:binary2cpp> "halide_internal_initmod_${i}_${j}" < "${BC}" > "${INITMOD}"
                          )
       list(APPEND INITIAL_MODULES ${INITMOD})
       list(APPEND INITIAL_MODULES ${INITMOD_D})
@@ -232,7 +232,7 @@ foreach (i ${RUNTIME_LL} )
   add_custom_command(OUTPUT "${INITMOD}"
                      # COMMENT "${BC} -> ${INITMOD}"
                      DEPENDS "${BC}" binary2cpp
-                     COMMAND binary2cpp "halide_internal_initmod_${i}_ll" < "${BC}" > "${INITMOD}"
+                     COMMAND $<TARGET_FILE:binary2cpp> "halide_internal_initmod_${i}_ll" < "${BC}" > "${INITMOD}"
                      )
   list(APPEND INITIAL_MODULES "${INITMOD}")
 endforeach()
@@ -241,7 +241,7 @@ foreach (i ${RUNTIME_BC} )
   add_custom_command(OUTPUT "${INITMOD}"
                      # COMMENT "Building initial module ptx_${i}..."
                      DEPENDS binary2cpp
-                     COMMAND binary2cpp "halide_internal_initmod_ptx_${i}_ll" < "${NATIVE_RUNTIME_DIR}nvidia_libdevice_bitcode/libdevice.${i}.10.bc" > "${INITMOD}"
+                     COMMAND $<TARGET_FILE:binary2cpp> "halide_internal_initmod_ptx_${i}_ll" < "${NATIVE_RUNTIME_DIR}nvidia_libdevice_bitcode/libdevice.${i}.10.bc" > "${INITMOD}"
                      VERBATIM)
   list(APPEND INITIAL_MODULES "${INITMOD}")
 endforeach()
@@ -249,7 +249,7 @@ endforeach()
 add_custom_command(OUTPUT "${INITMOD_PREFIX}inlined_c.cpp"
   # COMMENT "halide_buffer_t.cpp -> ${INITMOD_PREFIX}inlined_c.cpp"
   DEPENDS "${NATIVE_RUNTIME_DIR}halide_buffer_t.cpp" binary2cpp
-  COMMAND binary2cpp "halide_internal_initmod_inlined_c" < "${NATIVE_RUNTIME_DIR}halide_buffer_t.cpp" > "${INITMOD_PREFIX}inlined_c.cpp"
+  COMMAND $<TARGET_FILE:binary2cpp> "halide_internal_initmod_inlined_c" < "${NATIVE_RUNTIME_DIR}halide_buffer_t.cpp" > "${INITMOD_PREFIX}inlined_c.cpp"
   )
 list(APPEND INITIAL_MODULES "${INITMOD_PREFIX}inlined_c.cpp")
 
@@ -274,7 +274,7 @@ foreach (i ${RUNTIME_HEADER_FILES})
   add_custom_command(OUTPUT "${INITMOD_PREFIX}${SYM_NAME}.cpp"
     # COMMENT "${i} -> ${INITMOD_PREFIX}${SYM_NAME}.cpp"
     DEPENDS "${NATIVE_RUNTIME_DIR}${i}" binary2cpp
-    COMMAND binary2cpp "halide_internal_runtime_header_${SYM_NAME}" < "${NATIVE_RUNTIME_DIR}${i}" > "${INITMOD_PREFIX}${SYM_NAME}.cpp"
+    COMMAND $<TARGET_FILE:binary2cpp> "halide_internal_runtime_header_${SYM_NAME}" < "${NATIVE_RUNTIME_DIR}${i}" > "${INITMOD_PREFIX}${SYM_NAME}.cpp"
     )
   list(APPEND INITIAL_MODULES "${INITMOD_PREFIX}${SYM_NAME}.cpp")
 endforeach()
@@ -447,7 +447,7 @@ set(HEADER_FILES
 file(MAKE_DIRECTORY "${CMAKE_BINARY_DIR}/include")
 file(TO_NATIVE_PATH "${CMAKE_BINARY_DIR}/include/" NATIVE_INCLUDE_PATH)
 add_custom_command(OUTPUT "${CMAKE_BINARY_DIR}/include/Halide.h"
-  COMMAND build_halide_h "${CMAKE_CURRENT_SOURCE_DIR}/../LICENSE.txt" ${HEADER_FILES} > "${NATIVE_INCLUDE_PATH}Halide.h"
+  COMMAND $<TARGET_FILE:build_halide_h> "${CMAKE_CURRENT_SOURCE_DIR}/../LICENSE.txt" ${HEADER_FILES} > "${NATIVE_INCLUDE_PATH}Halide.h"
   WORKING_DIRECTORY "${CMAKE_CURRENT_LIST_DIR}"
   DEPENDS build_halide_h "${CMAKE_CURRENT_SOURCE_DIR}/../LICENSE.txt" ${HEADER_FILES})
 add_custom_target(
