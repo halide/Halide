@@ -747,6 +747,7 @@ struct State {
     WrapperState& operator = (const WrapperState& other);
 
     // whether or not this state is terminal (reached end)
+    // AHA: can be ignored as we limit the horizon to num_passes
     bool is_terminal() const {
         return numleft == 0;
     }
@@ -1540,7 +1541,7 @@ IntrusivePtr<State> optimal_mcts_schedule(FunctionDAG &dag,
     //int num_passes = (beam_size == 1) ? 1 : 5;
 
     // not sure why would I need num_passes, but keeping it just in case
-    int num_passes = 1;
+    int num_passes = 50;
 
     string cyos_str = get_env_variable("HL_CYOS");
     if (cyos_str == "1") {
@@ -1860,7 +1861,7 @@ struct RegisterAutoscheduler {
         for (Func f : p.outputs()) {
             outputs.push_back(f.function());
         }
-        Autoscheduler::generate_schedule(outputs, target, params, results);
+        Autoscheduler::generate_rl_schedule(outputs, target, params, results);
     }
 } register_auto_scheduler;
 

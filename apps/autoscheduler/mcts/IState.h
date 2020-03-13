@@ -13,28 +13,11 @@
 
 namespace msa {
 namespace mcts {
-    enum class ActionEnum {
-        Inline,
-        Retile,
-        Option,
-        Parallelize
-    };
-    struct Action {
-    public:
-        ActionEnum ae;
-        unsigned index;
-        unsigned option_var;
-        Action(ActionEnum ae_, unsigned index_) : ae(ae_), index(index_) {}
-        Action(ActionEnum ae_, unsigned index_, unsigned option_var_) : ae(ae_), index(index_), option_var(option_var_) {}
-        bool operator==(const Action& a) const {
-            return ae == a.ae && index == a.index && option_var == a.option_var;
-        }
-    };
 
 
-//struct Action {
+struct Action {
 
-//};
+};
 
 class State {
 
