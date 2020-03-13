@@ -72,7 +72,7 @@
 #include <unordered_map>
 #include <unordered_set>
 
-#include "mcts/IState.h"
+//#include "mcts/IState.h"
 #include "mcts/ofxMSAmcts.h"
 
 #include "ASLog.h"
@@ -712,19 +712,25 @@ struct State {
         Option,
         Parallelize
     };
-    struct Action {
+    class Action {
     public:
         ActionEnum ae;
         unsigned index;
         unsigned option_var;
+        //AHA: If this constructor is called then there is a bug in the MCTS
+        Action() {}
         Action(ActionEnum ae_, unsigned index_) : ae(ae_), index(index_) {}
         Action(ActionEnum ae_, unsigned index_, unsigned option_var_) : ae(ae_), index(index_), option_var(option_var_) {}
         bool operator==(const Action& a) const {
             return ae == a.ae && index == a.index && option_var == a.option_var;
         }
+        //AHA: this operator is to support comparison used in map.
+        bool operator<(const Action& a) const {
+            return index < a.index;
+        }
     };
 
-    struct WrapperState {
+    class WrapperState {
     public:
         IntrusivePtr<State> inner;
         unsigned numleft;
@@ -1552,13 +1558,13 @@ IntrusivePtr<State> optimal_mcts_schedule(FunctionDAG &dag,
     IntrusivePtr<State> initial{new State};
     initial->root = new LoopNest;
 
-    Halide::Internal::Autoscheduler::WrapperState state(initial, num_passes, dag, params, cost_model);
+    State::WrapperState state(initial, num_passes, dag, params, cost_model);
 
-    Halide::Internal::Autoscheduler::Action action;          // contains an action that can be applied to a State, and bring it to a new State
-    msa::mcts::UCT<Halide::Internal::Autoscheduler::WrapperState, Halide::Internal::Autoscheduler::Action> uct; // Templated class. Builds a partial decision tree and searches it with UCT MCTS
+    State::Action action;          // contains an action that can be applied to a State, and bring it to a new State
+    msa::mcts::UCT<State::WrapperState, State::Action> uct; // Templated class. Builds a partial decision tree and searches it with UCT MCTS
 
     // OPTIONAL init uct params
-    uct.uct_k = sqrt(2);
+    uct.uct_k = 1.41421356237;//sqrt(2);
     uct.max_millis = 0;
     uct.max_iterations = 100;
     uct.simulation_depth = num_passes;
