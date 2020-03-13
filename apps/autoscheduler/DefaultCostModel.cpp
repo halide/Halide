@@ -88,10 +88,10 @@ public:
             schedule_feat_queue.dim(2).extent() < max_num_stages) {
             assert(cursor == 0);
             schedule_feat_queue = Buffer<float>(batch_size, head2_w, max_num_stages);
+            costs_per_stage = Buffer<float>(batch_size, max_num_stages);
             if (!costs.data()) {
                 assert(!cost_ptrs.data());
                 costs = Buffer<float>(batch_size);
-                costs_per_stage = Buffer<float>(batch_size, max_num_stages);
                 cost_ptrs = Buffer<double *>(batch_size);
                 cost_per_stage_ptrs.resize(batch_size);
             }
