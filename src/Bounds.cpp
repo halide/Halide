@@ -499,6 +499,7 @@ private:
         op->b.accept(this);
         Interval b = interval;
 
+
         if (!b.is_bounded()) {
             // Integer division can only make things smaller in
             // magnitude (but can flip the sign).
@@ -552,7 +553,16 @@ private:
             int min_sign = static_sign(b.min);
             int max_sign = static_sign(b.max);
             if (min_sign != max_sign || min_sign == 0 || max_sign == 0) {
-                interval = Interval::everything();
+                if (op->type.is_float()) {
+                    interval = Interval::everything();
+                } else {
+                    // Division can't make integers larger
+                    interval = Interval::nothing();
+                    interval.include(a.min);
+                    interval.include(a.max);
+                    interval.include(-a.min);
+                    interval.include(-a.max);
+                }
             } else {
                 // Divisor is either strictly positive or strictly
                 // negative, so we can just take the extrema.
@@ -588,7 +598,7 @@ private:
 
         if (!b.is_bounded()) {
             if (a.has_lower_bound() && can_prove(a.min >= 0)) {
-                // Mod cannot positive values larger
+                // Mod cannot make positive values larger
                 interval.max = a.max;
             }
         } else {
@@ -1218,7 +1228,8 @@ private:
                 Call::make(t, op->name, {interval.max}, op->call_type,
                            op->func, op->value_index, op->image, op->param));
 
-        } else if (!const_bound &&
+        } else if (false &&
+                   !const_bound &&
                    (op->name == Call::buffer_get_min ||
                     op->name == Call::buffer_get_max)) {
             // Bounds query results should have perfect nesting. Their
@@ -1229,6 +1240,8 @@ private:
             //
             // TODO: There should be an assert injected in the inner
             // loop to check perfect nesting.
+
+            // TODO: This is a big problem!!!
             interval = Interval(Call::make(Int(32), Call::buffer_get_min, op->args, Call::Extern),
                                 Call::make(Int(32), Call::buffer_get_max, op->args, Call::Extern));
         } else if (op->is_intrinsic(Call::popcount) ||
@@ -1767,6 +1780,18 @@ private:
     }
 
     void visit(const Call *op) override {
+        if (op->is_intrinsic(Call::declare_box_touched)) {
+            internal_assert(!op->args.empty());
+            const Variable *handle = op->args[0].as<Variable>();
+            const string &func = handle->name;
+            Box b(op->args.size() / 2);
+            for (size_t i = 0; i < b.size(); i++) {
+                b[i].min = op->args[2*i + 1];
+                b[i].max = op->args[2*i + 2];
+            }
+            merge_boxes(boxes[func], b);
+        }
+
         if (consider_calls) {
             if (op->is_intrinsic(Call::if_then_else)) {
                 internal_assert(op->args.size() == 3);
@@ -2388,7 +2413,7 @@ map<string, Box> boxes_touched(const Expr &e, Stmt s, bool consider_calls, bool 
             }
 
             Expr visit(const Variable *op) override {
-                if (op->name == fn_buffer) {
+                if (op->name == fn_buffer || op->name == fn) {
                     relevant = true;
                 }
                 return op;

@@ -458,10 +458,8 @@ class AttemptStorageFoldingOfFunction : public IRMutator {
                 continue;
             }
 
-            // TODO: should call cse() here, but there can be duplicate names in the Expr.
-            // https://github.com/halide/Halide/issues/3793
-            Expr min = simplify(box[dim].min);
-            Expr max = simplify(box[dim].max);
+            Expr min = simplify(common_subexpression_elimination(box[dim].min));
+            Expr max = simplify(common_subexpression_elimination(box[dim].max));
 
             Expr min_provided, max_provided, min_required, max_required;
             if (func.schedule().async() && !explicit_only) {
@@ -489,9 +487,7 @@ class AttemptStorageFoldingOfFunction : public IRMutator {
             Expr extent_initial = simplify(substitute(loop_var, op->min, max_initial - min_initial + 1), true, bounds);
             Expr extent_steady = simplify(max_steady - min_steady + 1, true, steady_bounds);
             Expr extent = Max::make(extent_initial, extent_steady);
-            // TODO: should call cse() here, but there can be duplicate names in the Expr.
-            // https://github.com/halide/Halide/issues/3793
-            extent = simplify(extent, true, bounds);
+            extent = simplify(common_subexpression_elimination(extent), true, bounds);
 
             // Find the StorageDim corresponding to dim.
             const std::vector<StorageDim> &storage_dims = func.schedule().storage_dims();
@@ -500,19 +496,11 @@ class AttemptStorageFoldingOfFunction : public IRMutator {
             internal_assert(storage_dim_i != storage_dims.end());
             const StorageDim &storage_dim = *storage_dim_i;
 
-            Expr explicit_factor;
-            if (!is_pure(min) ||
-                !is_pure(max) ||
-                expr_uses_var(min, op->name) ||
-                expr_uses_var(max, op->name)) {
-                // We only use the explicit fold factor if the fold is
-                // relevant for this loop. If the fold isn't relevant
-                // for this loop, the added asserts will be too
-                // conservative.
-                explicit_factor = storage_dim.fold_factor;
-            }
+            Expr explicit_factor = storage_dim.fold_factor;
 
-            debug(3) << "\nConsidering folding " << func.name() << " over for loop over " << op->name << " dimension " << i - 1 << '\n'
+            debug(3) << "\nConsidering folding " << func.name()
+                     << " over for loop over " << op->name
+                     << " dimension " << i - 1 << '\n'
                      << "Min: " << min << '\n'
                      << "Max: " << max << '\n'
                      << "Extent: " << extent << '\n'

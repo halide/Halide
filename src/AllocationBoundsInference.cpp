@@ -31,19 +31,6 @@ class AllocationInference : public IRMutator {
 
         Scope<Interval> empty_scope;
         Box b = box_touched(op->body, op->name, empty_scope, func_bounds);
-        if (touched_by_extern.count(f.name())) {
-            // The region touched is at least the region required at this
-            // loop level of the first stage (this is important for inputs
-            // and outputs to extern stages).
-            Box required(op->bounds.size());
-            for (size_t i = 0; i < required.size(); i++) {
-                string prefix = op->name + ".s0." + f_args[i];
-                required[i] = Interval(Variable::make(Int(32), prefix + ".min"),
-                                       Variable::make(Int(32), prefix + ".max"));
-            }
-
-            merge_boxes(b, required);
-        }
 
         Stmt new_body = mutate(op->body);
         Stmt stmt = Realize::make(op->name, op->types, op->memory_type, op->bounds, op->condition, new_body);
@@ -140,11 +127,29 @@ public:
     }
 };
 
+// We can strip box_touched declarations here. We're done with
+// them. Reconsider this decision if we want to use
+// box_touched on extern stages later in lowering. Storage
+// folding currently does box_touched too, but it handles extern
+// stages specially already.
+class StripDeclareBoxTouched : public IRMutator {
+    using IRMutator::visit;
+
+    Expr visit(const Call *op) override {
+        if (op->is_intrinsic(Call::declare_box_touched)) {
+            return 0;
+        } else {
+            return IRMutator::visit(op);
+        }
+    }
+
+};
+
 Stmt allocation_bounds_inference(Stmt s,
                                  const map<string, Function> &env,
                                  const FuncValueBounds &fb) {
-    AllocationInference inf(env, fb);
-    s = inf.mutate(s);
+    s = AllocationInference(env, fb).mutate(s);
+    s = StripDeclareBoxTouched().mutate(s);
     return s;
 }
 

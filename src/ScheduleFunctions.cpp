@@ -1050,6 +1050,7 @@ protected:
 
             // If we're trying to inline an extern function, schedule it here and bail out
             debug(2) << "Injecting realization of " << funcs[0].name() << " around node " << Stmt(for_loop) << "\n";
+
             Stmt stmt = build_realize(build_pipeline_group(for_loop), funcs[0], is_output_list[0]);
             _found_store_level = _found_compute_level = true;
             return stmt;
@@ -1133,6 +1134,23 @@ private:
     const LoopLevel &store_level;
 
     Stmt build_realize(Stmt s, const Function &func, bool is_output) {
+        if (func.has_extern_definition()) {
+            // Add an annotation to let bounds inference know that
+            // this will write to the entire bounds required.
+            vector<Expr> args;
+            args.emplace_back(Variable::make(Handle(), func.name()));
+            for (int i = 0; i < func.dimensions(); i++) {
+                string prefix = func.name() + ".s0." + func.args()[i];
+                string min_name = prefix + ".min";
+                string max_name = prefix + ".max";
+
+                args.emplace_back(Variable::make(Int(32), min_name));
+                args.emplace_back(Variable::make(Int(32), max_name));
+            }
+            Expr decl = Call::make(Int(32), Call::declare_box_touched, args, Call::Intrinsic);
+            s = Block::make(Evaluate::make(decl), s);
+        }
+
         if (!is_output) {
             Region bounds;
             const string &name = func.name();

@@ -188,6 +188,19 @@ Module lower(const vector<Function> &output_funcs,
     debug(2) << "Lowering after sliding window:\n"
              << s << '\n';
 
+    // This uniquifies the variable names, so we're good to simplify
+    // after this point. This lets later passes assume syntactic
+    // equivalence means semantic equivalence.
+    debug(1) << "Uniquifying variable names...\n";
+    s = uniquify_variable_names(s);
+    debug(2) << "Lowering after uniquifying variable names:\n"
+             << s << "\n\n";
+
+    debug(1) << "Simplifying...\n";
+    s = simplify(s, false);  // Storage folding and allocation bounds inference needs .loop_max symbols
+    debug(2) << "Lowering after first simplification:\n"
+             << s << "\n\n";
+
     debug(1) << "Simplifying correlated differences...\n";
     s = simplify_correlated_differences(s);
     debug(2) << "Lowering after simplifying correlated differences:\n"
@@ -201,19 +214,6 @@ Module lower(const vector<Function> &output_funcs,
     debug(1) << "Removing code that depends on undef values...\n";
     s = remove_undef(s);
     debug(2) << "Lowering after removing code that depends on undef values:\n"
-             << s << "\n\n";
-
-    // This uniquifies the variable names, so we're good to simplify
-    // after this point. This lets later passes assume syntactic
-    // equivalence means semantic equivalence.
-    debug(1) << "Uniquifying variable names...\n";
-    s = uniquify_variable_names(s);
-    debug(2) << "Lowering after uniquifying variable names:\n"
-             << s << "\n\n";
-
-    debug(1) << "Simplifying...\n";
-    s = simplify(s, false);  // Storage folding needs .loop_max symbols
-    debug(2) << "Lowering after first simplification:\n"
              << s << "\n\n";
 
     debug(1) << "Performing storage folding optimization...\n";
