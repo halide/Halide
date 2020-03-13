@@ -519,7 +519,12 @@ void CodeGen_ARM::visit(const Sub *op) {
         Value *b = codegen(op->b);
 
         if (op->type.lanes() > 1) {
-            a = ConstantVector::getSplat(op->type.lanes(), a);
+#if LLVM_VERSION >= 110
+            const llvm::ElementCount elem_count(op->type.lanes(), /*scalable*/ false);
+#else
+            const int elem_count = op->type.lanes();
+#endif
+            a = ConstantVector::getSplat(elem_count, a);
         }
         value = builder->CreateFSub(a, b);
         return;

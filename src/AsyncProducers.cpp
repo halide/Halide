@@ -216,7 +216,7 @@ class GenerateConsumerBody : public NoOpCollapsingMutator {
                 return Acquire::make(acquire_sema, 1, op);
             }
         } else {
-            return IRMutator::visit(op);
+            return NoOpCollapsingMutator::visit(op);
         }
     }
 
@@ -225,7 +225,7 @@ class GenerateConsumerBody : public NoOpCollapsingMutator {
         if (starts_with(op->name, func + ".folding_semaphore.") && ends_with(op->name, ".head")) {
             return mutate(op->body);
         } else {
-            return IRMutator::visit(op);
+            return NoOpCollapsingMutator::visit(op);
         }
     }
 
@@ -233,7 +233,7 @@ class GenerateConsumerBody : public NoOpCollapsingMutator {
         if (starts_with(op->name, func + ".folding_semaphore.") && ends_with(op->name, ".head")) {
             return Evaluate::make(0);
         } else {
-            return IRMutator::visit(op);
+            return NoOpCollapsingMutator::visit(op);
         }
     }
 
@@ -245,7 +245,7 @@ class GenerateConsumerBody : public NoOpCollapsingMutator {
         if (starts_with(var->name, func + ".folding_semaphore.")) {
             return mutate(op->body);
         } else {
-            return IRMutator::visit(op);
+            return NoOpCollapsingMutator::visit(op);
         }
     }
 
