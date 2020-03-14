@@ -592,7 +592,6 @@ public:
                     s = LetStmt::make(arg + ".outer_min", Variable::make(Int(32), arg + ".min"), s);
                     s = LetStmt::make(arg + ".outer_max", Variable::make(Int(32), arg + ".max"), s);
                 }
-
             }
 
             if (stage > 0) {

@@ -408,15 +408,18 @@ class HasExternConsumer : public IRVisitor {
 
     using IRVisitor::visit;
 
-    void visit(const Variable *op) {
+    void visit(const Variable *op) override {
         if (op->name == func + ".buffer") {
             result = true;
         }
     }
 
     const std::string &func;
+
 public:
-    HasExternConsumer(const std::string &func) : func(func) {}
+    HasExternConsumer(const std::string &func)
+        : func(func) {
+    }
     bool result = false;
 };
 

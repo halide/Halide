@@ -499,7 +499,6 @@ private:
         op->b.accept(this);
         Interval b = interval;
 
-
         if (!b.is_bounded()) {
             // Integer division can only make things smaller in
             // magnitude (but can flip the sign).
@@ -1769,8 +1768,8 @@ private:
             const string &func = handle->name;
             Box b(op->args.size() / 2);
             for (size_t i = 0; i < b.size(); i++) {
-                b[i].min = op->args[2*i + 1];
-                b[i].max = op->args[2*i + 2];
+                b[i].min = op->args[2 * i + 1];
+                b[i].max = op->args[2 * i + 2];
             }
             merge_boxes(boxes[func], b);
         }

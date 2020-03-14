@@ -44,7 +44,7 @@ extern "C" DLLEXPORT int zigzag_buffer_copy(halide_buffer_t *in, halide_buffer_t
         auto coord_map =
             [](int y) {
                 // Reverse the bottom 8 bits
-                int new_y = y & ~255;;
+                int new_y = y & ~255;
                 for (int i = 0; i < 8; i++) {
                     if (y & (7 - i)) {
                         new_y |= (1 << i);

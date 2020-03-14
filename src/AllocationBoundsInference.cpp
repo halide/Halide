@@ -142,7 +142,6 @@ class StripDeclareBoxTouched : public IRMutator {
             return IRMutator::visit(op);
         }
     }
-
 };
 
 Stmt allocation_bounds_inference(Stmt s,
