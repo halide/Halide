@@ -252,9 +252,7 @@ Stmt build_loop_nest(
             internal_assert(nest[j + 1].value.defined());
 
             if (!expr_uses_var(nest[j + 1].value, nest[j].name) &&
-                (nest[j].type != Container::For) 
-                && (nest[j].type != Container::If)
-                ) {
+                (nest[j].type != Container::For) && (nest[j].type != Container::If)) {
                 std::swap(nest[j + 1], nest[j]);
             } else {
                 break;
