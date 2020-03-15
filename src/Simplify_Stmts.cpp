@@ -156,15 +156,9 @@ Stmt Simplify::visit(const For *op) {
     } else if (extent_bounds.max_defined &&
                extent_bounds.max == 0) {
         return Evaluate::make(0);
-    } else if (extent_bounds.max_defined &&
-               extent_bounds.max == 1 &&
-               op->device_api == DeviceAPI::None) {
+    } else if (is_one(new_extent)) {
         Stmt s = LetStmt::make(op->name, new_min, new_body);
-        if (extent_bounds.min_defined && extent_bounds.min == 1) {
-            return mutate(s);
-        } else {
-            return mutate(IfThenElse::make(new_extent > 0, s));
-        }
+        return mutate(s);
     } else if (op->min.same_as(new_min) &&
                op->extent.same_as(new_extent) &&
                op->body.same_as(new_body)) {
