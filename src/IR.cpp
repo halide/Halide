@@ -635,6 +635,7 @@ const char *const intrinsic_op_names[] = {
     "stringify",
     "undef",
     "unsafe_promise_clamped",
+    "promise_clamped",
 };
 
 static_assert(sizeof(intrinsic_op_names) / sizeof(intrinsic_op_names[0]) == Call::IntrinsicOpCount,

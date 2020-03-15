@@ -27,6 +27,9 @@ class LowerUnsafePromises : public IRMutator {
             } else {
                 return mutate(op->args[0]);
             }
+        } else if (op->is_intrinsic(Call::promise_clamped)) {
+            // This is also a good point to discard safe promises
+            return mutate(op->args[0]);
         } else {
             return IRMutator::visit(op);
         }
