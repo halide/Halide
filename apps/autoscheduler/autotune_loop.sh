@@ -130,6 +130,7 @@ make_featurization() {
     fi
 
     local -r shared_memory_limit=48
+    local -r shared_memory_sm_limit=96
 
     CMD="HL_SEED=${RANDOM_DROPOUT_SEED} \
         HL_WEIGHTS_DIR=${WEIGHTS} \
@@ -140,6 +141,7 @@ make_featurization() {
         HL_RANDOM_DROPOUT=${dropout} \
         HL_BEAM_SIZE=${beam} \
         HL_SHARED_MEMORY_LIMIT=${shared_memory_limit} \
+        HL_SHARED_MEMORY_SM_LIMIT=${shared_memory_sm_limit} \
         HL_MACHINE_PARAMS=${HL_MACHINE_PARAMS} \
         HL_DEBUG_AUTOSCHEDULE=1 \
         time -f 'Compile time (s): %e' ${TIMEOUT_CMD} -k ${COMPILATION_TIMEOUT} ${COMPILATION_TIMEOUT} \

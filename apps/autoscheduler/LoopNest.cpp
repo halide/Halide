@@ -63,6 +63,20 @@ int64_t get_shared_memory_limit() {
     return atoi(limit.c_str()) * 1024;  // Convert to bytes
 }
 
+int64_t get_shared_memory_sm_limit_helper() {
+    // HL_SHARED_MEMORY_SM_LIMIT is in KB
+    std::string limit = get_env_variable("HL_SHARED_MEMORY_SM_LIMIT");
+    if (limit.empty()) {
+        return 96 * 1024;
+    }
+    return atoi(limit.c_str()) * 1024;  // Convert to bytes
+}
+
+int64_t get_shared_memory_sm_limit() {
+    static int64_t limit = get_shared_memory_sm_limit_helper();
+    return limit;
+}
+
 int64_t get_active_block_hardware_limit() {
     std::string limit = get_env_variable("HL_ACTIVE_BLOCK_LIMIT");
     if (limit.empty()) {
@@ -1301,14 +1315,15 @@ void LoopNest::compute_shared_mem_occupancy(const Target &target, int64_t total_
         return;
     }
 
-    auto shared_mem_limit = get_shared_memory_limit();
-    auto active_block_hardware_limit = get_active_block_hardware_limit();
+    static auto shared_mem_limit = get_shared_memory_limit();
+    static auto shared_mem_sm_limit = get_shared_memory_sm_limit();
+    static auto active_block_hardware_limit = get_active_block_hardware_limit();
 
     feat.shared_mem_occupancy = (double)total_shared_mem_alloc_size / (double)shared_mem_limit;
     internal_assert(feat.shared_mem_occupancy <= 1) << "Invalid shared mem occupancy: " << feat.shared_mem_occupancy;
 
     if (total_shared_mem_alloc_size > 0) {
-        auto shared_mem_max_active_blocks = std::min(active_block_hardware_limit, shared_mem_limit / total_shared_mem_alloc_size);
+        auto shared_mem_max_active_blocks = std::min(active_block_hardware_limit, shared_mem_sm_limit / total_shared_mem_alloc_size);
         feat.shared_mem_block_limit_factor = (double)shared_mem_max_active_blocks / (double)active_block_hardware_limit;
 
         internal_assert(feat.shared_mem_block_limit_factor <= 1) << "Invalid shared mem block limit factor: " << feat.shared_mem_block_limit_factor;
