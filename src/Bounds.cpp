@@ -1041,8 +1041,15 @@ private:
             }
         } else if (op->is_intrinsic(Call::unsafe_promise_clamped) ||
                    op->is_intrinsic(Call::promise_clamped)) {
-            Expr full_clamp = clamp(op->args[0], op->args[1], op->args[2]);
-            full_clamp.accept(this);
+            // Unlike an explicit clamp, we are also permitted to
+            // assume the upper bound is greater than the lower bound.
+            op->args[1].accept(this);
+            Interval lower = interval;
+            op->args[2].accept(this);
+            Interval upper = interval;
+            op->args[0].accept(this);
+            interval.min = Interval::make_max(interval.min, lower.min);
+            interval.max = Interval::make_min(interval.max, upper.max);
         } else if (op->is_intrinsic(Call::likely) ||
                    op->is_intrinsic(Call::likely_if_innermost)) {
             internal_assert(op->args.size() == 1);
