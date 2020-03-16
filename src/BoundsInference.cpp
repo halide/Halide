@@ -1101,8 +1101,7 @@ public:
                     }
                     body = stages[i].define_bounds(
                         body, f, stage_name, stage_index, op->name, fused_groups,
-                        fused_pairs_in_groups, in_pipeline, inner_productions,
-                        has_extern_consumer, target);
+                        fused_pairs_in_groups, in_pipeline, inner_productions, target);
                 }
             }
 
