@@ -182,6 +182,12 @@ Stmt Simplify::visit(const For *op) {
                extent_bounds.max == 1 &&
                !in_vector_loop &&
                op->device_api == DeviceAPI::None) {
+        // If we're inside a vector loop we don't want to rewrite a
+        // for loop of extent at most one into an if, because the
+        // vectorization pass deals with those differently to an
+        // if. If the extent depends on the vectorized variable, the
+        // for loop gets an all-true vectorized case, but an if
+        // statement just gets scalarized.
         Stmt s = LetStmt::make(op->name, new_min, new_body);
         return mutate(IfThenElse::make(0 < new_extent, s));
     } else if (op->min.same_as(new_min) &&
