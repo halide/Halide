@@ -16,7 +16,7 @@ echo "Samples directory: ${SAMPLES_DIR}"
 
 GREEDY_SAMPLES=$(find ${SAMPLES_DIR} -regextype sed -regex ".*/.*/[1-9][0-9]*/compile_err.txt")
 
-echo "$GREEDY_SAMPLES" | xargs grep "Number of states added:" | awk -F" " '{sum += $5}; END{printf("Average number of states computed (greedy): %d\n", sum / NR);}'
+echo "$GREEDY_SAMPLES" | xargs grep "Number of states added:" | awk -F" " '{sum += $5}; END{printf("Average number of states added (greedy): %d\n", sum / NR);}'
 
 grep "Number of states added:" ${SAMPLES_DIR}/*/0/compile_err.txt | awk -F" " '{sum += $5}; END{printf("Average number of states added (beam search): %d\n", sum / NR);}'
 
