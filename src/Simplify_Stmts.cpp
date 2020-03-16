@@ -13,13 +13,22 @@ using std::vector;
 Stmt Simplify::visit(const IfThenElse *op) {
     Expr condition = mutate(op->condition, nullptr);
 
+    // If (likely(true)) ...
+    const Call *call = condition.as<Call>();
+    Expr unwrapped_condition = condition;
+    if (call &&
+        (call->is_intrinsic(Call::likely) ||
+         call->is_intrinsic(Call::likely_if_innermost))) {
+        unwrapped_condition = call->args[0];
+    }
+
     // If (true) ...
-    if (is_one(condition)) {
+    if (is_one(unwrapped_condition)) {
         return mutate(op->then_case);
     }
 
     // If (false) ...
-    if (is_zero(condition)) {
+    if (is_zero(unwrapped_condition)) {
         if (op->else_case.defined()) {
             return mutate(op->else_case);
         } else {
@@ -29,13 +38,13 @@ Stmt Simplify::visit(const IfThenElse *op) {
 
     Stmt then_case, else_case;
     {
-        auto f = scoped_truth(condition);
+        auto f = scoped_truth(unwrapped_condition);
         // Also substitute the entire condition
         then_case = substitute(op->condition, const_true(condition.type().lanes()), op->then_case);
         then_case = mutate(then_case);
     }
     {
-        auto f = scoped_falsehood(condition);
+        auto f = scoped_falsehood(unwrapped_condition);
         else_case = substitute(op->condition, const_false(condition.type().lanes()), op->else_case);
         else_case = mutate(else_case);
     }
@@ -55,6 +64,7 @@ Stmt Simplify::visit(const IfThenElse *op) {
     const ProducerConsumer *else_pc = else_case.as<ProducerConsumer>();
     const Block *then_block = then_case.as<Block>();
     const Block *else_block = else_case.as<Block>();
+    const For *then_for = then_case.as<For>();
     if (then_acquire &&
         else_acquire &&
         equal(then_acquire->semaphore, else_acquire->semaphore) &&
@@ -89,6 +99,11 @@ Stmt Simplify::visit(const IfThenElse *op) {
     } else if (else_block && equal(then_case, else_block->rest)) {
         return Block::make(mutate(IfThenElse::make(condition, Evaluate::make(0), else_block->first)),
                            then_case);
+    } else if (then_for &&
+               !else_case.defined() &&
+               equal(unwrapped_condition, 0 < then_for->extent)) {
+        // This guard is redundant
+        return then_case;
     } else if (condition.same_as(op->condition) &&
                then_case.same_as(op->then_case) &&
                else_case.same_as(op->else_case)) {
@@ -136,6 +151,10 @@ Stmt Simplify::visit(const For *op) {
     Expr new_min = mutate(op->min, &min_bounds);
     Expr new_extent = mutate(op->extent, &extent_bounds);
 
+    ScopedValue<bool> old_in_vector_loop(in_vector_loop,
+                                         (in_vector_loop ||
+                                          op->for_type == ForType::Vectorized));
+
     bool bounds_tracked = false;
     if (min_bounds.min_defined || (min_bounds.max_defined && extent_bounds.max_defined)) {
         min_bounds.max += extent_bounds.max - 1;
@@ -156,15 +175,15 @@ Stmt Simplify::visit(const For *op) {
     } else if (extent_bounds.max_defined &&
                extent_bounds.max == 0) {
         return Evaluate::make(0);
+    } else if (is_one(new_extent)) {
+        Stmt s = LetStmt::make(op->name, new_min, new_body);
+        return mutate(s);
     } else if (extent_bounds.max_defined &&
                extent_bounds.max == 1 &&
+               !in_vector_loop &&
                op->device_api == DeviceAPI::None) {
         Stmt s = LetStmt::make(op->name, new_min, new_body);
-        if (extent_bounds.min_defined && extent_bounds.min == 1) {
-            return mutate(s);
-        } else {
-            return mutate(IfThenElse::make(new_extent > 0, s));
-        }
+        return mutate(IfThenElse::make(0 < new_extent, s));
     } else if (op->min.same_as(new_min) &&
                op->extent.same_as(new_extent) &&
                op->body.same_as(new_body)) {
