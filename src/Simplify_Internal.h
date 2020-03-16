@@ -94,7 +94,6 @@ public:
     static int debug_indent;
 #endif
 
-
 #if LOG_EXPR_MUTATIONS
     Expr mutate(const Expr &e, ExprInfo *b) {
         const std::string spaces(debug_indent, ' ');
