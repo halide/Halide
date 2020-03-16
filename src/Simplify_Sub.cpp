@@ -50,6 +50,8 @@ Expr Simplify::visit(const Sub *op, ExprInfo *bounds) {
              rewrite(ramp(x, y) - broadcast(z), ramp(x - z, y, lanes)) ||
              rewrite(broadcast(x) - ramp(z, w), ramp(x - z, -w, lanes)) ||
              rewrite(broadcast(x) - broadcast(y), broadcast(x - y, lanes)) ||
+             rewrite((x - broadcast(y)) - broadcast(z), x - broadcast(y + z, lanes)) ||
+             rewrite((x + broadcast(y)) - broadcast(z), x + broadcast(y - z, lanes)) ||
              rewrite(select(x, y, z) - select(x, w, u), select(x, y - w, z - u)) ||
              rewrite(select(x, y, z) - y, select(x, 0, z - y)) ||
              rewrite(select(x, y, z) - z, select(x, y - z, 0)) ||
