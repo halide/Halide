@@ -231,6 +231,11 @@ Module lower(const vector<Function> &output_funcs,
     debug(2) << "Lowering after injecting prefetches:\n"
              << s << "\n\n";
 
+    debug(1) << "Discarding safe promises...\n";
+    s = lower_safe_promises(s);
+    debug(2) << "Lowering after discarding safe promises:\n"
+             << s << "\n\n";
+
     debug(1) << "Dynamically skipping stages...\n";
     s = skip_stages(s, order);
     debug(2) << "Lowering after dynamically skipping stages:\n"

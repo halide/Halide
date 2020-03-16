@@ -1372,6 +1372,14 @@ Expr strict_float(Expr e);
  */
 Expr unsafe_promise_clamped(const Expr &value, const Expr &min, const Expr &max);
 
+namespace Internal {
+/** An entirely unchecked version of unsafe_promise_clamped, used
+ * inside the compiler as an annotation of the known bounds of an
+ * Expr when it has proved something is bounded and wants to
+ * record that fact for later passes to exploit. */
+Expr promise_clamped(const Expr &value, const Expr &min, const Expr &max);
+}  // namespace Internal
+
 }  // namespace Halide
 
 #endif

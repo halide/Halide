@@ -1030,9 +1030,36 @@ private:
                     bounds_of_type(t);
                 }
             }
-        } else if (op->is_intrinsic(Call::unsafe_promise_clamped)) {
-            Expr full_clamp = clamp(op->args[0], op->args[1], op->args[2]);
-            full_clamp.accept(this);
+        } else if (op->is_intrinsic(Call::unsafe_promise_clamped) ||
+                   op->is_intrinsic(Call::promise_clamped)) {
+            // Unlike an explicit clamp, we are also permitted to
+            // assume the upper bound is greater than the lower bound.
+            op->args[1].accept(this);
+            Interval lower = interval;
+            op->args[2].accept(this);
+            Interval upper = interval;
+            op->args[0].accept(this);
+
+            if (interval.is_single_point()) {
+                // The thing being guarded doesn't vary, so we don't
+                // need the additional bounds. Our options are to
+                // return the full promise_clamped, or to just return
+                // the value. Both promise_clamped and unsafe_promise
+                // clamped assert that a clamp here would be a
+                // no-op. promise_clamped is context-dependent -
+                // something might be bounded inside a loop, but
+                // lifting the IR elsewhere would make it a lie, so we
+                // can't lift it without knowing where the expression
+                // is going. unsafe_promise_clamped is true for the
+                // entire program, so we can only lift that one.  For
+                // now, we lift neither and just return the interval
+                // for the first arg.
+            } else {
+                // The first arg varies, so use the other args as
+                // additional bounds.
+                interval.min = Interval::make_max(interval.min, lower.min);
+                interval.max = Interval::make_min(interval.max, upper.max);
+            }
         } else if (op->is_intrinsic(Call::likely) ||
                    op->is_intrinsic(Call::likely_if_innermost)) {
             internal_assert(op->args.size() == 1);
