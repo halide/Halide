@@ -1,14 +1,33 @@
+# Note: must use MODULE here (not SHARED) to get .so (instead of .dylib) on OSX.
+# This means that this can only be opened dynamically (not linked directly), but that's ok.
 add_library(gradient_autoscheduler
-            SHARED
+            MODULE
             GradientAutoscheduler.cpp
             ASLog.cpp)
 target_link_libraries(gradient_autoscheduler PRIVATE "${HALIDE_COMPILER_LIB}")
 target_include_directories(gradient_autoscheduler PRIVATE "${HALIDE_INCLUDE_DIR}" "${HALIDE_TOOLS_DIR}")
+
+if(NOT MSVC)
+  set_target_properties(gradient_autoscheduler PROPERTIES LINK_FLAGS "-rdynamic")
+elseif(APPLE)
+  set_target_properties(gradient_autoscheduler PROPERTIES LINK_FLAGS "-undefined dynamic_lookup")
+endif()
+
+if(NOT HALIDE_ENABLE_RTTI)
+  if(NOT MSVC)
+    target_compile_options(gradient_autoscheduler PRIVATE "-fno-rtti")
+  else()
+    target_compile_options(gradient_autoscheduler PRIVATE "/GR-")
+  endif()
+endif()
+
 install(TARGETS gradient_autoscheduler LIBRARY DESTINATION bin)
 
 add_executable(gradient_autoscheduler_test_cpp test.cpp)
-target_link_libraries(gradient_autoscheduler_test_cpp PRIVATE gradient_autoscheduler "${HALIDE_COMPILER_LIB}")
-target_include_directories(gradient_autoscheduler_test_cpp PRIVATE "${HALIDE_INCLUDE_DIR}" "${HALIDE_TOOLS_DIR}")
+target_link_libraries(gradient_autoscheduler_test_cpp PRIVATE Halide)
+target_include_directories(
+    gradient_autoscheduler_test_cpp
+    PRIVATE "${HALIDE_INCLUDE_DIR}" "${HALIDE_TOOLS_DIR}")
 
 halide_library(gradient_autoscheduler_demo
                SRCS demo_generator.cpp
