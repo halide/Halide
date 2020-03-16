@@ -185,6 +185,11 @@ public:
     IRMatcher::WildConst<2> c2;
     IRMatcher::WildConst<3> c3;
 
+    // Tracks whether or not we're inside a vector loop. Certain
+    // transformations are not a good idea if the code is to be
+    // vectorized.
+    bool in_vector_loop = false;
+
     // If we encounter a reference to a buffer (a Load, Store, Call,
     // or Provide), there's an implicit dependence on some associated
     // symbols.
