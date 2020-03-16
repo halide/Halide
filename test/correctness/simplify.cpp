@@ -520,7 +520,7 @@ void check_vectors() {
                 idx2 = rng() % (int)leaves.size();
             } while (idx2 == idx1);
 
-            switch(rng() % 4) {
+            switch (rng() % 4) {
             case 0:
                 leaves[idx1] += leaves[idx2];
                 break;
