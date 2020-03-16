@@ -552,15 +552,25 @@ private:
             int min_sign = static_sign(b.min);
             int max_sign = static_sign(b.max);
             if (min_sign != max_sign || min_sign == 0 || max_sign == 0) {
-                if (op->type.is_float()) {
-                    interval = Interval::everything();
-                } else {
-                    // Division can't make integers larger
+                if (op->type.is_int() && op->type.bits() >= 32) {
+                    // Division can't make signed integers larger
+                    // Restricted to 32-bits or greater to ensure the
+                    // negation can't overflow.
                     interval = Interval::nothing();
                     interval.include(a.min);
                     interval.include(a.max);
                     interval.include(-a.min);
                     interval.include(-a.max);
+                } else if (op->type.is_uint()) {
+                    // Division can't make unsigned integers large,
+                    // but could make them arbitrarily small.
+                    interval.min = make_zero(a.min.type());
+                    interval.max = a.max;
+                } else {
+                    // Division can make floats arbitrarily large, and
+                    // we can't easily negate narrow bit-width signed
+                    // integers because they just wrap.
+                    bounds_of_type(op->type);
                 }
             } else {
                 // Divisor is either strictly positive or strictly
