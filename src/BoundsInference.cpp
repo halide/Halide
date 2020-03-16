@@ -978,17 +978,29 @@ public:
 
         Stmt body = op->body;
 
-        // Walk inside of any let statements that don't depend on
+        // Walk inside of any let/if statements that don't depend on
         // bounds inference results so that we don't needlessly
         // complicate our bounds expressions.
-        vector<pair<string, Expr>> lets;
-        while (const LetStmt *let = body.as<LetStmt>()) {
-            if (depends_on_bounds_inference(let->value)) {
+        vector<pair<string, Expr>> wrappers;
+        while (1) {
+            if (const LetStmt *let = body.as<LetStmt>()) {
+                if (depends_on_bounds_inference(let->value)) {
+                    break;
+                }
+
+                body = let->body;
+                wrappers.emplace_back(let->name, let->value);
+            } else if (const IfThenElse *if_then_else = body.as<IfThenElse>()) {
+                if (depends_on_bounds_inference(if_then_else->condition) ||
+                    if_then_else->else_case.defined()) {
+                    break;
+                }
+
+                body = if_then_else->then_case;
+                wrappers.emplace_back(std::string(), if_then_else->condition);
+            } else {
                 break;
             }
-
-            body = let->body;
-            lets.emplace_back(let->name, let->value);
         }
 
         // If there are no pipelines at this loop level, we can skip
@@ -1089,7 +1101,8 @@ public:
                     }
                     body = stages[i].define_bounds(
                         body, f, stage_name, stage_index, op->name, fused_groups,
-                        fused_pairs_in_groups, in_pipeline, inner_productions, target);
+                        fused_pairs_in_groups, in_pipeline, inner_productions,
+                        has_extern_consumer, target);
                 }
             }
 
@@ -1157,9 +1170,14 @@ public:
         inner_productions.insert(old_inner_productions.begin(),
                                  old_inner_productions.end());
 
-        // Rewrap the let statements
-        for (size_t i = lets.size(); i > 0; i--) {
-            body = LetStmt::make(lets[i - 1].first, lets[i - 1].second, body);
+        // Rewrap the let/if statements
+        for (size_t i = wrappers.size(); i > 0; i--) {
+            const auto &p = wrappers[i - 1];
+            if (p.first.empty()) {
+                body = IfThenElse::make(p.second, body);
+            } else {
+                body = LetStmt::make(p.first, p.second, body);
+            }
         }
 
         return For::make(op->name, op->min, op->extent, op->for_type, op->device_api, body);
