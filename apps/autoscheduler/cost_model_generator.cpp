@@ -330,6 +330,9 @@ public:
         Expr max_warp_occupancy = schedule_features(n, idx++, w);
         Expr max_block_occupancy = schedule_features(n, idx++, w);
 
+        Expr num_threads = schedule_features(n, idx++, w);
+        Expr expr_branching = schedule_features(n, idx++, w);
+
         assert(idx == head2_w);
 
         num_blocks = max(1, num_blocks);
@@ -381,6 +384,13 @@ public:
         compute_cost /= select(inlined_calls == 0, 1 - idle_lane_wastage, 1.f);
         compute_cost = print_wrap(compute_cost, "compute_cost_after_idle_lane", n, w);
 
+        expr_branching = max(1, relu1(23, w, n) * expr_branching);
+        expr_branching = print_wrap(expr_branching, "expr_branching", n, w);
+
+        Expr register_block_occupancy = floor(65535.f / (num_threads * min(255.f, expr_branching))) / 32.f;
+        compute_cost *= select(inlined_calls == 0, max(1, relu1(32, w, n) * (1.f / register_block_occupancy)), 1.f);
+        compute_cost = print_wrap(compute_cost, "compute_cost_after_register_block_occupancy", n, w);
+
         // Next comes a long list of plausible terms to capture the cost of loads.
         Expr load_cost = (num_realizations * unique_lines_read_per_realization * relu1(5, w, n) +
                           num_realizations * unique_bytes_read_per_realization * relu1(6, w, n) +
@@ -408,6 +418,12 @@ public:
 
         load_cost /= local_mem_load_efficiency;
         load_cost = print_wrap(load_cost, "load_cost_after_local_mem_load_efficiency", n, w);
+
+        Expr num_registers_available_per_thread = min(255.f, 65535.f / num_threads);
+        Expr excess_registers_required = num_threads * expr_branching / num_registers_available_per_thread;
+        Expr spill_cost = max(1, relu1(33, w, n) * excess_registers_required);
+        load_cost *= spill_cost;
+        load_cost = print_wrap(load_cost, "load_cost_after_spill_cost", n, w);
 
         // Next we have the cost of stores.
         Expr lines_written_per_realization = inner_parallelism * (bytes_at_task / max(1, innermost_bytes_at_task));
@@ -442,6 +458,9 @@ public:
 
         store_cost /= local_mem_store_efficiency;
         store_cost = print_wrap(store_cost, "store_cost_after_local_mem_store_efficiency", n, w);
+
+        store_cost *= spill_cost;
+        store_cost = print_wrap(store_cost, "store_cost_after_spill_cost", n, w);
 
         // Now account for false sharing of cache lines. The
         // probability of a store hitting a cache line also hit by

@@ -1082,6 +1082,180 @@ std::ostream &FunctionDAG::dump(std::ostream &os) const {
     return os;
 }
 
+int ExprBranching::visit(const IntImm *op) {
+    return 1;
+}
+
+int ExprBranching::visit(const UIntImm *op) {
+    return 1;
+}
+
+int ExprBranching::visit(const FloatImm *op) {
+    return 1;
+}
+
+int ExprBranching::visit(const StringImm *op) {
+    return 1;
+}
+
+int ExprBranching::visit(const Broadcast *op) {
+    return Super::dispatch(op->value);
+}
+
+int ExprBranching::visit(const Cast *op) {
+    return Super::dispatch(op->value);
+}
+
+int ExprBranching::visit(const Variable *op) {
+    return 1;
+}
+
+int ExprBranching::visit_binary(const Expr &a, const Expr &b) {
+    int branching_a = Super::dispatch(a);
+    int branching_b = Super::dispatch(b);
+
+    if (branching_a == branching_b) {
+        return branching_a + 1;
+    }
+
+    return std::max(branching_a, branching_b);
+}
+
+int ExprBranching::visit(const Add *op) {
+    return visit_binary(op->a, op->b);
+}
+
+int ExprBranching::visit(const Sub *op) {
+    return visit_binary(op->a, op->b);
+}
+
+int ExprBranching::visit(const Mul *op) {
+    return visit_binary(op->a, op->b);
+}
+
+int ExprBranching::visit(const Div *op) {
+    return visit_binary(op->a, op->b);
+}
+
+int ExprBranching::visit(const Mod *op) {
+    return visit_binary(op->a, op->b);
+}
+
+int ExprBranching::visit(const Min *op) {
+    return visit_binary(op->a, op->b);
+}
+
+int ExprBranching::visit(const Max *op) {
+    return visit_binary(op->a, op->b);
+}
+
+int ExprBranching::visit(const EQ *op) {
+    return visit_binary(op->a, op->b);
+}
+
+int ExprBranching::visit(const NE *op) {
+    return visit_binary(op->a, op->b);
+}
+
+int ExprBranching::visit(const LT *op) {
+    return visit_binary(op->a, op->b);
+}
+
+int ExprBranching::visit(const LE *op) {
+    return visit_binary(op->a, op->b);
+}
+
+int ExprBranching::visit(const GT *op) {
+    return visit_binary(op->a, op->b);
+}
+
+int ExprBranching::visit(const GE *op) {
+    return visit_binary(op->a, op->b);
+}
+
+int ExprBranching::visit(const And *op) {
+    return visit_binary(op->a, op->b);
+}
+
+int ExprBranching::visit(const Or *op) {
+    return visit_binary(op->a, op->b);
+}
+
+int ExprBranching::visit(const Not *op) {
+    return Super::dispatch(op->a);
+}
+
+int ExprBranching::visit(const Select *op) {
+    int branching_true = visit_binary(op->condition, op->true_value);
+    int branching_false = visit_binary(op->condition, op->false_value);
+    return std::max(branching_true, branching_false);
+}
+
+int ExprBranching::visit(const Ramp *op) {
+    return visit_binary(op->base, op->stride);
+}
+
+int ExprBranching::visit(const Load *op) {
+    return visit_binary(op->predicate, op->index);
+}
+
+int ExprBranching::visit_nary(const std::vector<Expr>& exprs) {
+    int total_branching = 0;
+
+    for (Expr e : exprs) {
+        int branching = Super::dispatch(e);
+        if (branching == 0) {
+            continue;
+        }
+
+        if (branching == total_branching) {
+            ++total_branching;
+        } else {
+            total_branching = std::max(total_branching, branching);
+        }
+    }
+
+    return total_branching;
+}
+
+int ExprBranching::visit(const Call *op) {
+    for (const auto& i : inlined) {
+        if (op->name == i.first->func.name()) {
+            return compute(i.first->func);
+        }
+    }
+
+    return visit_nary(op->args);
+}
+
+int ExprBranching::visit(const Shuffle *op) {
+    return visit_nary(op->vectors);
+}
+
+int ExprBranching::visit(const Let *op) {
+    return visit_binary(op->value, op->body);
+}
+
+int ExprBranching::compute(const Function& f) {
+    Definition def = f.definition();
+
+    std::vector<Expr> values;
+    values.reserve(def.values().size());
+    for (auto v : def.values()) {
+        values.push_back(common_subexpression_elimination(simplify(v))); // Get things into canonical form
+    }
+
+    int branching = visit_nary(values);
+
+    std::vector<Expr> args;
+    args.reserve(def.args().size());
+    for (auto v : def.args()) {
+        args.push_back(common_subexpression_elimination(simplify(v))); // Get things into canonical form
+    }
+
+    return std::max(branching, visit_nary(args));
+}
+
 }  // namespace Autoscheduler
 }  // namespace Internal
 }  // namespace Halide

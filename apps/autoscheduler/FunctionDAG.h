@@ -14,6 +14,7 @@
 #include "Errors.h"
 #include "Featurization.h"
 #include "Halide.h"
+#include "PerfectHashMap.h"
 
 namespace Halide {
 namespace Internal {
@@ -581,6 +582,55 @@ private:
 
     template<typename OS>
     void dump_internal(OS &os) const;
+};
+
+template<typename T>
+using NodeMap = PerfectHashMap<FunctionDAG::Node, T>;
+
+class ExprBranching : public VariadicVisitor<ExprBranching, int, int> {
+    using Super = VariadicVisitor<ExprBranching, int, int>;
+
+private:
+    const NodeMap<int64_t>& inlined;
+
+public:
+    int visit(const IntImm *op);
+    int visit(const UIntImm *op);
+    int visit(const FloatImm *op);
+    int visit(const StringImm *op);
+    int visit(const Broadcast *op);
+    int visit(const Cast *op);
+    int visit(const Variable *op);
+    int visit(const Add *op);
+    int visit(const Sub *op);
+    int visit(const Mul *op);
+    int visit(const Div *op);
+    int visit(const Mod *op);
+    int visit(const Min *op);
+    int visit(const Max *op);
+    int visit(const EQ *op);
+    int visit(const NE *op);
+    int visit(const LT *op);
+    int visit(const LE *op);
+    int visit(const GT *op);
+    int visit(const GE *op);
+    int visit(const And *op);
+    int visit(const Or *op);
+    int visit(const Not *op);
+    int visit(const Select *op);
+    int visit(const Ramp *op);
+    int visit(const Load *op);
+    int visit(const Call *op);
+    int visit(const Shuffle *op);
+    int visit(const Let *op);
+    int visit_binary(const Expr &a, const Expr &b);
+    int visit_nary(const std::vector<Expr>& exprs);
+
+    ExprBranching(const NodeMap<int64_t>& inlined)
+        : inlined{inlined}
+    {}
+
+    int compute(const Function& f);
 };
 
 }  // namespace Autoscheduler

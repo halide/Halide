@@ -1277,6 +1277,7 @@ void LoopNest::compute_warp_features(ScheduleFeatures &features, const GPULoopIn
     features.num_warps_per_block = thread_info->num_warps_per_block;
     features.num_blocks = gpu_loop_info.num_blocks;
     features.block_occupancy = thread_info->block_occupancy();
+    features.num_threads = thread_info->num_threads;
 
     internal_assert(in_range_zero_one(features.block_occupancy)) << "Invalid block occupancy: " << features.block_occupancy;
     internal_assert(in_range_zero_one(features.warp_lane_utilization)) << "Invalid warp utilization: " << features.warp_lane_utilization;
@@ -2014,6 +2015,9 @@ void LoopNest::compute_features(const FunctionDAG &dag,
         } else {
             feat.unrolled_loop_extent = 1;
         }
+
+        ExprBranching branching{inlined};
+        feat.expr_branching = branching.compute(node->func);
     }
 
     *working_set += working_set_here;
