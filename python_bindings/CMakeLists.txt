@@ -1,5 +1,19 @@
 find_package(pybind11 REQUIRED)
 
+if (APPLE)
+  set(HALIDE_PY_LINK_FLAG "-Wl,-undefined,dynamic_lookup")
+elseif (NOT MSVC)
+  set(HALIDE_PY_LINK_FLAG "-rdynamic")
+endif()
+
+if (NOT HALIDE_ENABLE_RTTI)
+  if (NOT MSVC)
+    set(HALIDE_PY_RTTI_FLAG "-fno-rtti")
+  else()
+    set(HALIDE_PY_RTTI_FLAG "/GR-")
+  endif()
+endif()
+
 pybind11_add_module(halide_py
                     src/PyArgument.cpp            
                     src/PyBoundaryConditions.cpp  
@@ -29,14 +43,14 @@ pybind11_add_module(halide_py
                     src/PyType.cpp
                     src/PyVar.cpp
                     src/PyVarOrRVar.cpp)
-set_target_properties(halide_py PROPERTIES LIBRARY_OUTPUT_NAME "halide")
+set_target_properties(halide_py PROPERTIES LIBRARY_OUTPUT_NAME "halide"
+                                           LINK_FLAGS ${HALIDE_PY_LINK_FLAG})
 target_link_libraries(halide_py PRIVATE "${HALIDE_COMPILER_LIB}")
 target_include_directories(halide_py PRIVATE "${HALIDE_INCLUDE_DIR}" "${HALIDE_TOOLS_DIR}")
-if (NOT MSVC)
-  target_compile_options(halide_py PRIVATE "-Wno-cast-qual"
-                                           "-Wno-suggest-override")
-endif()
-get_target_property(HALIDE_PY_PATH halide_py LIBRARY_OUTPUT_DIRECTORY)
+target_compile_options(halide_py PRIVATE $<$<NOT:$<CXX_COMPILER_ID:MSVC>>:-Wno-cast-qual>
+                                         $<$<CXX_COMPILER_ID:GNU>:-Wno-suggest-override>
+                                         ${HALIDE_PY_RTTI_FLAG})
+
 install(TARGETS halide_py LIBRARY DESTINATION bin)
 
 _halide_library_runtime(host HALIDE_TARGET)
@@ -56,12 +70,13 @@ function(test_correctness_generator BASENAME)
                  EXTRA_OUTPUTS python_extension
                  HALIDE_TARGET_FEATURES ${args_HALIDE_TARGET_FEATURES})
   _halide_genfiles_dir("${BASENAME}_py" GENFILES_DIR)
-  add_library("ext_${BASENAME}" SHARED "${GENFILES_DIR}/${BASENAME}_py.py.cpp")
+  add_library("ext_${BASENAME}" MODULE "${GENFILES_DIR}/${BASENAME}_py.py.cpp")
   add_dependencies("ext_${BASENAME}" halide_py "${BASENAME}_py")
   set_target_properties("ext_${BASENAME}" PROPERTIES PREFIX ""
                                                      OUTPUT_NAME "${BASENAME}"
                                                      SUFFIX "${PYTHON_MODULE_EXTENSION}"
-                                                     LINKER_LANGUAGE C)
+                                                     LINKER_LANGUAGE C
+                                                     LINK_FLAGS ${HALIDE_PY_LINK_FLAG})
   target_link_libraries("ext_${BASENAME}" PRIVATE "${BASENAME}_py_cc" ${HALIDE_TARGET})
   target_include_directories("ext_${BASENAME}" PRIVATE "${GENFILES_DIR}"
                                                        "${HALIDE_INCLUDE_DIR}"
@@ -78,31 +93,35 @@ function(test_correctness_generator BASENAME)
                        $ENV{PYTHONPATH})
     LIST(JOIN ENV_PYTHONPATH "\;" TEST_PYTHONPATH)
     target_link_libraries("ext_${BASENAME}" PRIVATE "${PYTHON_LIBRARY}")
+    target_compile_options("ext_${BASENAME}" PRIVATE ${HALIDE_PY_RTTI_FLAG})
     set_property(TEST "python_bindings_correctness_${BASENAME}_generator"
                  PROPERTY ENVIRONMENT "PYTHONPATH=${TEST_PYTHONPATH}"
                                       "PATH=${TEST_PATH}")
   else()
-    target_compile_options("ext_${BASENAME}" PRIVATE "-Wno-cast-qual"
-                                                     "-Wno-suggest-override")
+    target_compile_options("ext_${BASENAME}" PRIVATE $<$<CXX_COMPILER_ID:GNU>:-Wno-suggest-override>
+                                                     -Wno-cast-qual
+                                                     ${HALIDE_PY_RTTI_FLAG})
     set_property(TEST "python_bindings_correctness_${BASENAME}_generator"
                  PROPERTY ENVIRONMENT "PYTHONPATH=$<TARGET_FILE_DIR:halide_py>")
   endif()
 endfunction()
 
 function(test_correctness_pystub BASENAME)
-  add_library("${BASENAME}" SHARED "stub/PyStub.cpp"
+  add_library("${BASENAME}" MODULE "stub/PyStub.cpp"
                                    "stub/PyStubImpl.cpp"
                                    "correctness/${BASENAME}_generator.cpp")
   add_dependencies("${BASENAME}" halide_py)
   set_target_properties("${BASENAME}" PROPERTIES PREFIX ""
                                                  OUTPUT_NAME "${BASENAME}"
-                                                 LINKER_LANGUAGE C)
+                                                 LINKER_LANGUAGE C
+                                                 LINK_FLAGS ${HALIDE_PY_LINK_FLAG})
   if (MSVC)
     target_link_libraries("${BASENAME}" PRIVATE "${PYTHON_LIBRARY}" "${HALIDE_COMPILER_LIB}")
-    target_compile_options("${BASENAME}" PRIVATE "-EHsc")
+    target_compile_options("${BASENAME}" PRIVATE "-EHsc" ${HALIDE_PY_RTTI_FLAG})
   else()
-    target_compile_options("${BASENAME}" PRIVATE "-Wno-cast-qual"
-                                                 "-Wno-suggest-override")
+    target_compile_options("${BASENAME}" PRIVATE $<$<CXX_COMPILER_ID:GNU>:-Wno-suggest-override>
+                                                 -Wno-cast-qual
+                                                 ${HALIDE_PY_RTTI_FLAG})
   endif()
   target_include_directories("${BASENAME}" PRIVATE "${HALIDE_INCLUDE_DIR}"
                                                    "${HALIDE_TOOLS_DIR}"
@@ -176,6 +195,7 @@ test_group(tutorial lesson_10_aot_compilation_generate)
 if (MSVC)
   add_test(NAME "python_bindings_tutorial_lesson_10_halide_compile"
            COMMAND "${CMAKE_CXX_COMPILER}"
+                   ${HALIDE_PY_RTTI_FLAG}
                    "/NOLOGO"
                    "/c"
                    "${CMAKE_CURRENT_BINARY_DIR}/lesson_10_halide.py.cpp"
@@ -183,6 +203,7 @@ if (MSVC)
                    "${CMAKE_INCLUDE_FLAG_C}${HALIDE_INCLUDE_DIR}")
   add_test(NAME "python_bindings_tutorial_lesson_10_halide"
            COMMAND "${CMAKE_LINKER}"
+                   ${HALIDE_PY_LINK_FLAG}
                    "/NOIMPLIB"
                    "/DLL"
                    "/NOLOGO"
@@ -195,12 +216,20 @@ if (MSVC)
   set_property(TEST "python_bindings_tutorial_lesson_10_halide_compile"
                PROPERTY DEPENDS "python_bindings_tutorial_lesson_10_aot_compilation_generate")
 else()
+  if (APPLE)
+    set(EXTRA_FLAG "-bundle" "-Wl,-headerpad_max_install_names"
+                   "${CMAKE_CXX_SYSROOT_FLAG}" "${CMAKE_OSX_SYSROOT}")
+  else()
+    set(EXTRA_FLAG "-shared")
+  endif()
   add_test(NAME "python_bindings_tutorial_lesson_10_halide"
            COMMAND "${CMAKE_CXX_COMPILER}"
-                   "${CMAKE_SHARED_LIBRARY_CREATE_C_FLAGS}"
-                   "${CMAKE_SHARED_LIBRARY_C_FLAGS}"
+                   ${EXTRA_FLAG}
+                   "${CMAKE_SHARED_MODULE_CXX_FLAGS}"
+                   ${HALIDE_PY_LINK_FLAG}
+                   ${HALIDE_PY_RTTI_FLAG}
                    "-o"
-                   "${CMAKE_LIBRARY_OUTPUT_DIRECTORY}/lesson_10_halide${CMAKE_SHARED_LIBRARY_SUFFIX}"
+                   "${CMAKE_LIBRARY_OUTPUT_DIRECTORY}/lesson_10_halide${CMAKE_SHARED_MODULE_SUFFIX}"
                    "${CMAKE_CURRENT_BINARY_DIR}/lesson_10_halide.py.cpp"
                    "${CMAKE_CURRENT_BINARY_DIR}/lesson_10_halide.o"
                    "${CMAKE_INCLUDE_FLAG_C}${PYTHON_INCLUDE_DIR}"
