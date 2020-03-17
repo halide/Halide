@@ -37,7 +37,10 @@ def main():
 
         f.compile_to_file(os.path.join(tmpdir, "f_all"), args)
         assert os.path.isfile(os.path.join(tmpdir, "f_all.h"))
-        assert os.path.isfile(os.path.join(tmpdir, "f_all.o"))
+        if hl.get_target_from_environment().os == hl.TargetOS.Windows:
+            assert os.path.isfile(os.path.join(tmpdir, "f_all.obj"))
+        else:
+            assert os.path.isfile(os.path.join(tmpdir, "f_all.o"))
 
         p = os.path.join(tmpdir, "f.html")
         f.compile_to({hl.Output.stmt_html: p}, args, "f")
