@@ -1011,11 +1011,11 @@ public:
  * Returns type of underlying operator+. */
 // @{
 template<typename Other, typename T>
-decltype((Other)0 + (T)0) operator+(const Other &a, const GeneratorParam<T> &b) {
+auto operator+(const Other &a, const GeneratorParam<T> &b) -> decltype(a + (T)b) {
     return a + (T)b;
 }
 template<typename Other, typename T>
-decltype((T)0 + (Other)0) operator+(const GeneratorParam<T> &a, const Other &b) {
+auto operator+(const GeneratorParam<T> &a, const Other &b) -> decltype((T)a + b) {
     return (T)a + b;
 }
 // @}
@@ -1024,11 +1024,11 @@ decltype((T)0 + (Other)0) operator+(const GeneratorParam<T> &a, const Other &b) 
  * Returns type of underlying operator-. */
 // @{
 template<typename Other, typename T>
-decltype((Other)0 - (T)0) operator-(const Other &a, const GeneratorParam<T> &b) {
+auto operator-(const Other &a, const GeneratorParam<T> &b) -> decltype(a - (T)b) {
     return a - (T)b;
 }
 template<typename Other, typename T>
-decltype((T)0 - (Other)0) operator-(const GeneratorParam<T> &a, const Other &b) {
+auto operator-(const GeneratorParam<T> &a, const Other &b) -> decltype((T)a - b) {
     return (T)a - b;
 }
 // @}
@@ -1037,11 +1037,11 @@ decltype((T)0 - (Other)0) operator-(const GeneratorParam<T> &a, const Other &b) 
  * Returns type of underlying operator*. */
 // @{
 template<typename Other, typename T>
-decltype((Other)0 * (T)0) operator*(const Other &a, const GeneratorParam<T> &b) {
+auto operator*(const Other &a, const GeneratorParam<T> &b) -> decltype(a * (T)b) {
     return a * (T)b;
 }
 template<typename Other, typename T>
-decltype((Other)0 * (T)0) operator*(const GeneratorParam<T> &a, const Other &b) {
+auto operator*(const GeneratorParam<T> &a, const Other &b) -> decltype((T)a * b) {
     return (T)a * b;
 }
 // @}
@@ -1050,11 +1050,11 @@ decltype((Other)0 * (T)0) operator*(const GeneratorParam<T> &a, const Other &b) 
  * Returns type of underlying operator/. */
 // @{
 template<typename Other, typename T>
-decltype((Other)0 / (T)1) operator/(const Other &a, const GeneratorParam<T> &b) {
+auto operator/(const Other &a, const GeneratorParam<T> &b) -> decltype(a / (T)b) {
     return a / (T)b;
 }
 template<typename Other, typename T>
-decltype((T)0 / (Other)1) operator/(const GeneratorParam<T> &a, const Other &b) {
+auto operator/(const GeneratorParam<T> &a, const Other &b) -> decltype((T)a / b) {
     return (T)a / b;
 }
 // @}
@@ -1063,11 +1063,11 @@ decltype((T)0 / (Other)1) operator/(const GeneratorParam<T> &a, const Other &b) 
  * Returns type of underlying operator%. */
 // @{
 template<typename Other, typename T>
-decltype((Other)0 % (T)1) operator%(const Other &a, const GeneratorParam<T> &b) {
+auto operator%(const Other &a, const GeneratorParam<T> &b) -> decltype(a % (T)b) {
     return a % (T)b;
 }
 template<typename Other, typename T>
-decltype((T)0 % (Other)1) operator%(const GeneratorParam<T> &a, const Other &b) {
+auto operator%(const GeneratorParam<T> &a, const Other &b) -> decltype((T)a % b) {
     return (T)a % b;
 }
 // @}
@@ -1076,11 +1076,11 @@ decltype((T)0 % (Other)1) operator%(const GeneratorParam<T> &a, const Other &b) 
  * Returns type of underlying operator>. */
 // @{
 template<typename Other, typename T>
-decltype((Other)0 > (T)1) operator>(const Other &a, const GeneratorParam<T> &b) {
+auto operator>(const Other &a, const GeneratorParam<T> &b) -> decltype(a > (T)b) {
     return a > (T)b;
 }
 template<typename Other, typename T>
-decltype((T)0 > (Other)1) operator>(const GeneratorParam<T> &a, const Other &b) {
+auto operator>(const GeneratorParam<T> &a, const Other &b) -> decltype((T)a > b) {
     return (T)a > b;
 }
 // @}
@@ -1089,11 +1089,11 @@ decltype((T)0 > (Other)1) operator>(const GeneratorParam<T> &a, const Other &b) 
  * Returns type of underlying operator<. */
 // @{
 template<typename Other, typename T>
-decltype((Other)0 < (T)1) operator<(const Other &a, const GeneratorParam<T> &b) {
+auto operator<(const Other &a, const GeneratorParam<T> &b) -> decltype(a < (T)b) {
     return a < (T)b;
 }
 template<typename Other, typename T>
-decltype((T)0 < (Other)1) operator<(const GeneratorParam<T> &a, const Other &b) {
+auto operator<(const GeneratorParam<T> &a, const Other &b) -> decltype((T)a < b) {
     return (T)a < b;
 }
 // @}
@@ -1102,11 +1102,11 @@ decltype((T)0 < (Other)1) operator<(const GeneratorParam<T> &a, const Other &b) 
  * Returns type of underlying operator>=. */
 // @{
 template<typename Other, typename T>
-decltype((Other)0 >= (T)1) operator>=(const Other &a, const GeneratorParam<T> &b) {
+auto operator>=(const Other &a, const GeneratorParam<T> &b) -> decltype(a >= (T)b) {
     return a >= (T)b;
 }
 template<typename Other, typename T>
-decltype((T)0 >= (Other)1) operator>=(const GeneratorParam<T> &a, const Other &b) {
+auto operator>=(const GeneratorParam<T> &a, const Other &b) -> decltype((T)a >= b) {
     return (T)a >= b;
 }
 // @}
@@ -1115,11 +1115,11 @@ decltype((T)0 >= (Other)1) operator>=(const GeneratorParam<T> &a, const Other &b
  * Returns type of underlying operator<=. */
 // @{
 template<typename Other, typename T>
-decltype((Other)0 <= (T)1) operator<=(const Other &a, const GeneratorParam<T> &b) {
+auto operator<=(const Other &a, const GeneratorParam<T> &b) -> decltype(a <= (T)b) {
     return a <= (T)b;
 }
 template<typename Other, typename T>
-decltype((T)0 <= (Other)1) operator<=(const GeneratorParam<T> &a, const Other &b) {
+auto operator<=(const GeneratorParam<T> &a, const Other &b) -> decltype((T)a <= b) {
     return (T)a <= b;
 }
 // @}
@@ -1128,11 +1128,11 @@ decltype((T)0 <= (Other)1) operator<=(const GeneratorParam<T> &a, const Other &b
  * Returns type of underlying operator==. */
 // @{
 template<typename Other, typename T>
-decltype((Other)0 == (T)1) operator==(const Other &a, const GeneratorParam<T> &b) {
+auto operator==(const Other &a, const GeneratorParam<T> &b) -> decltype(a == (T)b) {
     return a == (T)b;
 }
 template<typename Other, typename T>
-decltype((T)0 == (Other)1) operator==(const GeneratorParam<T> &a, const Other &b) {
+auto operator==(const GeneratorParam<T> &a, const Other &b) -> decltype((T)a == b) {
     return (T)a == b;
 }
 // @}
@@ -1141,11 +1141,11 @@ decltype((T)0 == (Other)1) operator==(const GeneratorParam<T> &a, const Other &b
  * Returns type of underlying operator!=. */
 // @{
 template<typename Other, typename T>
-decltype((Other)0 != (T)1) operator!=(const Other &a, const GeneratorParam<T> &b) {
+auto operator!=(const Other &a, const GeneratorParam<T> &b) -> decltype(a != (T)b) {
     return a != (T)b;
 }
 template<typename Other, typename T>
-decltype((T)0 != (Other)1) operator!=(const GeneratorParam<T> &a, const Other &b) {
+auto operator!=(const GeneratorParam<T> &a, const Other &b) -> decltype((T)a != b) {
     return (T)a != b;
 }
 // @}
@@ -1154,15 +1154,15 @@ decltype((T)0 != (Other)1) operator!=(const GeneratorParam<T> &a, const Other &b
  * Returns type of underlying operator&&. */
 // @{
 template<typename Other, typename T>
-decltype((Other)0 && (T)1) operator&&(const Other &a, const GeneratorParam<T> &b) {
+auto operator&&(const Other &a, const GeneratorParam<T> &b) -> decltype(a && (T)b) {
     return a && (T)b;
 }
 template<typename Other, typename T>
-decltype((T)0 && (Other)1) operator&&(const GeneratorParam<T> &a, const Other &b) {
+auto operator&&(const GeneratorParam<T> &a, const Other &b) -> decltype((T)a && b) {
     return (T)a && b;
 }
 template<typename T>
-decltype((T)0 && (T)1) operator&&(const GeneratorParam<T> &a, const GeneratorParam<T> &b) {
+auto operator&&(const GeneratorParam<T> &a, const GeneratorParam<T> &b) -> decltype((T)a && (T)b) {
     return (T)a && (T)b;
 }
 // @}
@@ -1171,15 +1171,15 @@ decltype((T)0 && (T)1) operator&&(const GeneratorParam<T> &a, const GeneratorPar
  * Returns type of underlying operator||. */
 // @{
 template<typename Other, typename T>
-decltype((Other)0 || (T)1) operator||(const Other &a, const GeneratorParam<T> &b) {
+auto operator||(const Other &a, const GeneratorParam<T> &b) -> decltype(a || (T)b) {
     return a || (T)b;
 }
 template<typename Other, typename T>
-decltype((T)0 || (Other)1) operator||(const GeneratorParam<T> &a, const Other &b) {
+auto operator||(const GeneratorParam<T> &a, const Other &b) -> decltype((T)a || b) {
     return (T)a || b;
 }
 template<typename T>
-decltype((T)0 || (T)1) operator||(const GeneratorParam<T> &a, const GeneratorParam<T> &b) {
+auto operator||(const GeneratorParam<T> &a, const GeneratorParam<T> &b) -> decltype((T)a || (T)b) {
     return (T)a || (T)b;
 }
 // @}
@@ -1195,20 +1195,20 @@ using std::max;
 using std::min;
 
 template<typename Other, typename T>
-decltype(min((Other)0, (T)1)) min_forward(const Other &a, const GeneratorParam<T> &b) {
+auto min_forward(const Other &a, const GeneratorParam<T> &b) -> decltype(min(a, (T)b)) {
     return min(a, (T)b);
 }
 template<typename Other, typename T>
-decltype(min((T)0, (Other)1)) min_forward(const GeneratorParam<T> &a, const Other &b) {
+auto min_forward(const GeneratorParam<T> &a, const Other &b) -> decltype(min((T)a, b)) {
     return min((T)a, b);
 }
 
 template<typename Other, typename T>
-decltype(max((Other)0, (T)1)) max_forward(const Other &a, const GeneratorParam<T> &b) {
+auto max_forward(const Other &a, const GeneratorParam<T> &b) -> decltype(max(a, (T)b)) {
     return max(a, (T)b);
 }
 template<typename Other, typename T>
-decltype(max((T)0, (Other)1)) max_forward(const GeneratorParam<T> &a, const Other &b) {
+auto max_forward(const GeneratorParam<T> &a, const Other &b) -> decltype(max((T)a, b)) {
     return max((T)a, b);
 }
 
@@ -1243,7 +1243,7 @@ auto max(const GeneratorParam<T> &a, const Other &b) -> decltype(Internal::Gener
 
 /** Not operator for GeneratorParam */
 template<typename T>
-decltype(!(T)0) operator!(const GeneratorParam<T> &a) {
+auto operator!(const GeneratorParam<T> &a) -> decltype(!(T)a) {
     return !(T)a;
 }
 

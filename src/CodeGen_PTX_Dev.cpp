@@ -328,7 +328,7 @@ void CodeGen_PTX_Dev::visit(const Atomic *op) {
 
     // Issue atomic stores.
     ScopedValue<bool> old_emit_atomic_stores(emit_atomic_stores, true);
-    IRVisitor::visit(op);
+    CodeGen_LLVM::visit(op);
 }
 
 string CodeGen_PTX_Dev::march() const {

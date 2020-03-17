@@ -1,14 +1,14 @@
-
-#include "RDom.h"
+#include <array>
+#include <utility>
 
 #include "Generator.h"
 #include "IREquality.h"
 #include "IROperator.h"
 #include "IRPrinter.h"
 #include "ImageParam.h"
+#include "RDom.h"
 #include "Simplify.h"
 #include "Util.h"
-#include <utility>
 
 namespace Halide {
 
@@ -77,9 +77,9 @@ ReductionDomain build_domain(ReductionVariable (&vars)[N]) {
 // This just initializes the predefined x, y, z, w members of RDom.
 void RDom::init_vars(const string &name) {
     const std::vector<ReductionVariable> &dom_vars = dom.domain();
-    RVar *vars[] = {&x, &y, &z, &w};
+    std::array<RVar *, 4> vars = {&x, &y, &z, &w};
 
-    for (size_t i = 0; i < sizeof(vars) / sizeof(vars[0]); i++) {
+    for (size_t i = 0; i < vars.size(); i++) {
         if (i < dom_vars.size()) {
             *(vars[i]) = RVar(dom, i);
         } else {
