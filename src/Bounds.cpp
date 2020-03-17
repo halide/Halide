@@ -552,7 +552,26 @@ private:
             int min_sign = static_sign(b.min);
             int max_sign = static_sign(b.max);
             if (min_sign != max_sign || min_sign == 0 || max_sign == 0) {
-                interval = Interval::everything();
+                if (op->type.is_int() && op->type.bits() >= 32) {
+                    // Division can't make signed integers larger
+                    // Restricted to 32-bits or greater to ensure the
+                    // negation can't overflow.
+                    interval = Interval::nothing();
+                    interval.include(a.min);
+                    interval.include(a.max);
+                    interval.include(-a.min);
+                    interval.include(-a.max);
+                } else if (op->type.is_uint()) {
+                    // Division can't make unsigned integers large,
+                    // but could make them arbitrarily small.
+                    interval.min = make_zero(a.min.type());
+                    interval.max = a.max;
+                } else {
+                    // Division can make floats arbitrarily large, and
+                    // we can't easily negate narrow bit-width signed
+                    // integers because they just wrap.
+                    bounds_of_type(op->type);
+                }
             } else {
                 // Divisor is either strictly positive or strictly
                 // negative, so we can just take the extrema.
@@ -588,7 +607,7 @@ private:
 
         if (!b.is_bounded()) {
             if (a.has_lower_bound() && can_prove(a.min >= 0)) {
-                // Mod cannot positive values larger
+                // Mod cannot make positive values larger
                 interval.max = a.max;
             }
         } else {
@@ -2807,12 +2826,12 @@ void bounds_test() {
     check(scope, Select::make(x < 4, x, x + 100), 0, 110);
     check(scope, x + y, y, y + 10);
     check(scope, x * y, min(y, 0) * 10, max(y, 0) * 10);
-    check(scope, x / (x + y), Interval::neg_inf(), Interval::pos_inf());
+    check(scope, x / (x + y), -10, 10);
     check(scope, 11 / (x + 1), 1, 11);
     check(scope, Load::make(Int(8), "buf", x, Buffer<>(), Parameter(), const_true(), ModulusRemainder()),
           i8(-128), i8(127));
     check(scope, y + (Let::make("y", x + 3, y - x + 10)), y + 3, y + 23);  // Once again, we don't know that y is correlated with x
-    check(scope, clamp(1 / (x - 2), x - 10, x + 10), -10, 20);
+    check(scope, clamp(1000 / (x - 2), x - 10, x + 10), -10, 20);
     check(scope, cast<uint16_t>(x / 2), u16(0), u16(5));
     check(scope, cast<uint16_t>((x + 10) / 2), u16(5), u16(10));
     check(scope, x < 20, make_bool(1), make_bool(1));
