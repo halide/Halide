@@ -44,7 +44,7 @@ pybind11_add_module(halide_py
                     src/PyVar.cpp
                     src/PyVarOrRVar.cpp)
 set_target_properties(halide_py PROPERTIES LIBRARY_OUTPUT_NAME "halide"
-                                           LINK_FLAGS ${HALIDE_PY_LINK_FLAG})
+                                           LINK_FLAGS "${HALIDE_PY_LINK_FLAG}")
 target_link_libraries(halide_py PRIVATE "${HALIDE_COMPILER_LIB}")
 target_include_directories(halide_py PRIVATE "${HALIDE_INCLUDE_DIR}" "${HALIDE_TOOLS_DIR}")
 target_compile_options(halide_py PRIVATE $<$<NOT:$<CXX_COMPILER_ID:MSVC>>:-Wno-cast-qual>
@@ -76,7 +76,7 @@ function(test_correctness_generator BASENAME)
                                                      OUTPUT_NAME "${BASENAME}"
                                                      SUFFIX "${PYTHON_MODULE_EXTENSION}"
                                                      LINKER_LANGUAGE C
-                                                     LINK_FLAGS ${HALIDE_PY_LINK_FLAG})
+                                                     LINK_FLAGS "${HALIDE_PY_LINK_FLAG}")
   target_link_libraries("ext_${BASENAME}" PRIVATE "${BASENAME}_py_cc" ${HALIDE_TARGET})
   target_include_directories("ext_${BASENAME}" PRIVATE "${GENFILES_DIR}"
                                                        "${HALIDE_INCLUDE_DIR}"
@@ -114,7 +114,7 @@ function(test_correctness_pystub BASENAME)
   set_target_properties("${BASENAME}" PROPERTIES PREFIX ""
                                                  OUTPUT_NAME "${BASENAME}"
                                                  LINKER_LANGUAGE C
-                                                 LINK_FLAGS ${HALIDE_PY_LINK_FLAG})
+                                                 LINK_FLAGS "${HALIDE_PY_LINK_FLAG}")
   if (MSVC)
     target_link_libraries("${BASENAME}" PRIVATE "${PYTHON_LIBRARY}" "${HALIDE_COMPILER_LIB}")
     target_compile_options("${BASENAME}" PRIVATE "-EHsc" ${HALIDE_PY_RTTI_FLAG})
