@@ -39,21 +39,30 @@ extern "C" DLLEXPORT int simple_buffer_copy(halide_buffer_t *in, halide_buffer_t
 extern "C" DLLEXPORT int zigzag_buffer_copy(halide_buffer_t *in, halide_buffer_t *out) {
     if (in->is_bounds_query()) {
         memcpy(in->dim, out->dim, out->dimensions * sizeof(halide_dimension_t));
-        int y_min = in->dim[1].min;
-        int y_max = y_min + in->dim[1].extent - 1;
-        y_min &= 63;
-        if (y_min >= 32) {
-            y_min = 63 - y_min;
+
+        // An intentionally nasty mapping from y coords of the output to y coords of the input:
+        auto coord_map =
+            [](int y) {
+                // Reverse the bottom 8 bits
+                int new_y = y & ~255;
+                for (int i = 0; i < 8; i++) {
+                    if (y & (7 - i)) {
+                        new_y |= (1 << i);
+                    }
+                }
+                return new_y;
+            };
+
+        // Just manually take a min/max over all scanlines of the output
+        int in_y_min = coord_map(out->dim[1].min);
+        int in_y_max = in_y_min;
+        for (int out_y = out->dim[1].min + 1; out_y < out->dim[1].min + out->dim[1].extent; out_y++) {
+            int in_y = coord_map(out_y);
+            in_y_min = std::min(in_y_min, in_y);
+            in_y_max = std::max(in_y_max, in_y);
         }
-        y_max &= 63;
-        if (y_max >= 32) {
-            y_max = 63 - y_max;
-        }
-        if (y_min > y_max) {
-            std::swap(y_min, y_max);
-        }
-        in->dim[1].min = y_min;
-        in->dim[1].extent = y_max - y_min + 1;
+        in->dim[1].min = in_y_min;
+        in->dim[1].extent = in_y_max - in_y_min + 1;
     } else {
         // This extern stage is only used to see if it produces an
         // expected bounds error, so just fill it with a sentinel value.
