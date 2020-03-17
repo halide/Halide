@@ -3,8 +3,6 @@ include ../support/Makefile.inc
 
 all: $(BIN)/$(HL_TARGET)/AveragePool $(BIN)/$(HL_TARGET)/Convolution $(BIN)/$(HL_TARGET)/DepthwiseConvolution $(BIN)/$(HL_TARGET)/Im2col $(BIN)/$(HL_TARGET)/MatrixMultiply $(BIN)/$(HL_TARGET)/MaxPool
 
-.PRECIOUS: bin/arm-64-android/AveragePool.o
-
 $(GENERATOR_BIN)/AveragePool.generator: AveragePool_generator.cpp common.cpp $(GENERATOR_DEPS)
 	@mkdir -p $(@D)
 	$(CXX) $(CXXFLAGS) $(filter-out %.h,$^) -o $@ $(LDFLAGS) $(HALIDE_SYSTEM_LIBS)
