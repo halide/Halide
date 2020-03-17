@@ -181,7 +181,7 @@ public:
      parallel for x:
        for y:
          for rxo = 0 to 11:
-           f(x, y) = max(f(x, y), f_intm(x, y, u))
+           f(x, y) = max(f(x, y), f_intm(x, y, rxo))
      \endcode
      *
      */
