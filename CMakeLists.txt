@@ -273,6 +273,7 @@ if (NOT MSVC)
           -Wignored-qualifiers
           $<$<COMPILE_LANGUAGE:CXX>:-Woverloaded-virtual>
           $<$<AND:$<COMPILE_LANGUAGE:CXX>,$<CXX_COMPILER_ID:GNU>,$<VERSION_GREATER:$<CXX_COMPILER_VERSION>,5.1>>:-Wsuggest-override>
+          -Wno-psabi
   )
   if (WARNINGS_AS_ERRORS)
     add_compile_options(-Werror)
