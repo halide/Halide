@@ -43,7 +43,7 @@ Build and test
 
 To build and run these benchmarks and tests:
 
-    HL_TARGET=host make run-host
+    HL_TARGET=host make run
 
 To build and run these benchmarks and tests on an ARM Android device:
 
