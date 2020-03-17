@@ -48,8 +48,7 @@ set_target_properties(halide_py PROPERTIES LIBRARY_OUTPUT_NAME "halide"
 target_link_libraries(halide_py PRIVATE "${HALIDE_COMPILER_LIB}")
 target_include_directories(halide_py PRIVATE "${HALIDE_INCLUDE_DIR}" "${HALIDE_TOOLS_DIR}")
 target_compile_options(halide_py PRIVATE $<$<NOT:$<CXX_COMPILER_ID:MSVC>>:-Wno-cast-qual>
-                                         $<$<CXX_COMPILER_ID:GNU>:-Wno-suggest-override>
-                                         ${HALIDE_PY_RTTI_FLAG})
+                                         $<$<CXX_COMPILER_ID:GNU>:-Wno-suggest-override>)
 
 install(TARGETS halide_py LIBRARY DESTINATION bin)
 
