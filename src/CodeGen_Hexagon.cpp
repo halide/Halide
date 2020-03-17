@@ -143,7 +143,7 @@ class SloppyUnpredicateLoads : public IRMutator {
         return {Expr(), Expr()};
     }
 
-    Expr visit(const Let *op) {
+    Expr visit(const Let *op) override {
         auto v = get_extreme_lanes(op->value);
         ScopedBinding<std::pair<Expr, Expr>> bind(op->value.type().is_vector() && v.first.defined(),
                                                   monotonic_vectors, op->name, v);
