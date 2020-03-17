@@ -387,7 +387,12 @@ public:
         expr_branching = max(1, relu1(23, w, n) * expr_branching);
         expr_branching = print_wrap(expr_branching, "expr_branching", n, w);
 
-        Expr register_block_occupancy = floor(65535.f / (num_threads * min(255.f, expr_branching))) / 32.f;
+        num_threads = print_wrap(num_threads, "num_threads", n, w);
+
+        Expr num_registers_available_per_thread = min(64.f, 65536.f / num_threads);
+        Expr num_registers_per_block = num_threads * min(num_registers_available_per_thread, expr_branching);
+
+        Expr register_block_occupancy = print_wrap(select(inlined_calls == 0, max(1.f, floor(65536.f / num_registers_per_block)) / 32.f, 1.f), "register_block_occupancy", n, w);
         compute_cost *= select(inlined_calls == 0, max(1, relu1(32, w, n) * (1.f / register_block_occupancy)), 1.f);
         compute_cost = print_wrap(compute_cost, "compute_cost_after_register_block_occupancy", n, w);
 
@@ -419,9 +424,9 @@ public:
         load_cost /= local_mem_load_efficiency;
         load_cost = print_wrap(load_cost, "load_cost_after_local_mem_load_efficiency", n, w);
 
-        Expr num_registers_available_per_thread = min(255.f, 65535.f / num_threads);
-        Expr excess_registers_required = num_threads * expr_branching / num_registers_available_per_thread;
-        Expr spill_cost = max(1, relu1(33, w, n) * excess_registers_required);
+        Expr excess_registers_required = expr_branching / num_registers_available_per_thread;
+        excess_registers_required = print_wrap(excess_registers_required, "excess_registers_required", n, w);
+        Expr spill_cost = select(inlined_calls == 0 && excess_registers_required > 1, max(1, relu1(33, w, n) * num_threads * excess_registers_required), 1);
         load_cost *= spill_cost;
         load_cost = print_wrap(load_cost, "load_cost_after_spill_cost", n, w);
 
