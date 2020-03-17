@@ -1246,6 +1246,16 @@ void check_boolean() {
     check(max(x, y) <= y, x <= y);
     check(min(x, y) >= y, y <= x);
 
+    check(max(x, y) < min(y, z), f);
+    check(max(x, y) < min(z, y), f);
+    check(max(y, x) < min(y, z), f);
+    check(max(y, x) < min(z, y), f);
+
+    check(max(x, y) >= min(y, z), t);
+    check(max(x, y) >= min(z, y), t);
+    check(max(y, x) >= min(y, z), t);
+    check(max(y, x) >= min(z, y), t);
+
     check((1 < y) && (2 < y), 2 < y);
 
     check(x * 5 < 4, x < 1);
