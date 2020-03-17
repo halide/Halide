@@ -743,8 +743,8 @@ struct State {
     cost_model(cost_model) {}
 
     // copy and assignment operators should perform a DEEP clone of the given state
-    WrapperState(const WrapperState& other);
-    WrapperState& operator = (const WrapperState& other);
+    //WrapperState(const WrapperState& other);
+    //WrapperState& operator = (const WrapperState& other);
 
     // whether or not this state is terminal (reached end)
     // AHA: can be ignored as we limit the horizon to num_passes
