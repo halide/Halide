@@ -472,7 +472,8 @@ bool merge_string(Target &t, const std::string &target) {
         !t.has_feature(Target::CUDACapability32) &&
         !t.has_feature(Target::CUDACapability35) &&
         !t.has_feature(Target::CUDACapability50) &&
-        !t.has_feature(Target::CUDACapability61)) {
+        !t.has_feature(Target::CUDACapability61) &&
+        Internal::get_env_variable("HL_DISABLE_DETECT_HOST_CUDA_CAPABILITY") != "1") {
         // Detect host cuda capability
         t.set_feature(get_host_cuda_capability(t));
     }
