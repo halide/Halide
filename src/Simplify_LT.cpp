@@ -42,6 +42,12 @@ Expr Simplify::visit(const LT *op, ExprInfo *bounds) {
              rewrite(x < min(x, y), false) ||
              rewrite(x < min(y, x), false) ||
 
+             // From the simplifier synthesis project
+             rewrite((max(y, z) < min(x, y)), false) ||
+             rewrite((max(y, z) < min(y, x)), false) ||
+             rewrite((max(z, y) < min(x, y)), false) ||
+             rewrite((max(z, y) < min(y, x)), false) ||
+
              // Comparisons of ramps and broadcasts. If the first
              // and last lanes are provably < or >= the broadcast
              // we can collapse the comparison.
