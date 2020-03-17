@@ -61,15 +61,16 @@ Then build it like so:
 
     % cd llvm-project
     % mkdir build
+    % mkdir install
     % cd build
-    % cmake -DLLVM_ENABLE_PROJECTS="clang;lld" -DLLVM_ENABLE_RTTI=ON -DLLVM_ENABLE_TERMINFO=OFF -DLLVM_TARGETS_TO_BUILD="X86;ARM;NVPTX;AArch64;Mips;PowerPC" -DLLVM_ENABLE_ASSERTIONS=ON -DCMAKE_BUILD_TYPE=Release -DLLVM_BUILD_32_BITS=OFF ../llvm
-    % make -j
+    % cmake -DLLVM_ENABLE_PROJECTS="clang;lld;clang-tools-extra" -DLLVM_ENABLE_RTTI=ON -DLLVM_ENABLE_TERMINFO=OFF -DLLVM_TARGETS_TO_BUILD="X86;ARM;NVPTX;AArch64;Mips;PowerPC;Hexagon" -DLLVM_ENABLE_ASSERTIONS=ON -DCMAKE_BUILD_TYPE=Release -DLLVM_BUILD_32_BITS=OFF -DCMAKE_INSTALL_PREFIX=../install ../llvm
+    % make install -j8
 
 then to point Halide to it:
 
-    export LLVM_CONFIG=<path to llvm>/build/bin/llvm-config
+    export LLVM_CONFIG=<path to llvm>/install/bin/llvm-config
 
-(Note that you *must* add `clang` to `LLVM_ENABLE_PROJECTS`; adding `lld` to `LLVM_ENABLE_PROJECTS` is only required when using WebAssembly, but we recommend enabling it in all cases, to simplify builds.)
+(Note that you *must* add `clang` to `LLVM_ENABLE_PROJECTS`; adding `lld` to `LLVM_ENABLE_PROJECTS` is only required when using WebAssembly, and adding `clang-tools-extra` is only necessary if you plan to contribute code to Halide (so that you can run clang-tidy on your pull requests). We recommend enabling both in all cases, to simplify builds.)
 
 #### Building Halide with make
 
@@ -98,7 +99,7 @@ If you wish to use cmake to build Halide, the build procedure is:
     % mkdir cmake_build
     % cd cmake_build
     % cmake -DLLVM_DIR=/path-to-llvm-build/lib/cmake/llvm -DCMAKE_BUILD_TYPE=Release /path/to/halide
-    % make -j
+    % make -j8
 
 `LLVM_DIR` should be the folder in the LLVM installation or build tree that contains `LLVMConfig.cmake`.
 
