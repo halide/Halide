@@ -148,11 +148,13 @@ void State::FeatureLoopNestMutator::split_compute_root_loops(LoopNest* loop_nest
         if (c->stage->index == 0) {
             vector<int64_t> tiling(c->node->dimensions, 1);
 
-            // Mark as 'parallelized' so this loop is split into blocks and threads
-            c->gpu_label = parallelized;
+            // Split into parallelized and serial
+            c = c->parallelize_in_tiles(params, tiling, loop_nest, target, true, false);
+
             if (vectorized_loop_index >= 0) {
                 tiling[vectorized_loop_index] = inner_extent;
             }
+            // Split parallelized into blocks and threads
             c = c->parallelize_in_tiles(params, tiling, loop_nest, target, true, false);
         } else {
             // An update stage may have more or fewer dimensions than
