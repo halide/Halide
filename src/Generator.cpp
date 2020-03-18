@@ -917,7 +917,7 @@ int generate_filter_main_inner(int argc, char **argv, std::ostream &cerr) {
                 for (auto iter = output_info.cbegin(); iter != end; ++iter) {
                     cerr << iter->second.name;
                     if (iter != last) {
-                        cerr << ' ';
+                        cerr << " ";
                     }
                 }
                 cerr << "], ignoring.\n";
@@ -937,7 +937,7 @@ int generate_filter_main_inner(int argc, char **argv, std::ostream &cerr) {
                 user_error << "Failed to find compatible runtime target for "
                            << gcd_target.to_string()
                            << " and "
-                           << targets[i].to_string() << '\n';
+                           << targets[i].to_string() << "\n";
             }
         }
 

@@ -42,7 +42,7 @@ inline void set_math_flags() {
             << std::setw(8) << std::to_string(N)        \
             << std::setw(20) << std::to_string(elapsed) \
             << std::setw(20) << L1GFLOPS(N)             \
-            << std::endl;                               \
+            << "\n";                                    \
     }
 
 #define L2GFLOPS(N) (2.0 + N) * N * 1e-3 / elapsed
@@ -64,7 +64,7 @@ inline void set_math_flags() {
             << std::setw(8) << std::to_string(N)        \
             << std::setw(20) << std::to_string(elapsed) \
             << std::setw(20) << L2GFLOPS(N)             \
-            << std::endl;                               \
+            << "\n";                                    \
     }
 
 #define L3GFLOPS(N) (3.0 + N) * N *N * 1e-3 / elapsed
@@ -84,5 +84,5 @@ inline void set_math_flags() {
             << std::setw(8) << std::to_string(N)        \
             << std::setw(20) << std::to_string(elapsed) \
             << std::setw(20) << L3GFLOPS(N)             \
-            << std::endl;                               \
+            << "\n";                                    \
     }

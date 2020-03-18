@@ -185,7 +185,7 @@ void ReverseAccumulationVisitor::propagate_adjoints(
         realization_order({output.function()}, env).first;
     vector<Func> funcs;
     funcs.reserve(order.size());
-    // Internal::debug(0) << "Sorted Func list:" << "\n";
+    // Internal::debug(0) << "Sorted Func list:\n";
     // for (const auto &func_name : order) {
     //     Internal::debug(0) << "  . " << func_name << "\n";
     // }

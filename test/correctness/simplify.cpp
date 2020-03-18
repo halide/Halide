@@ -11,8 +11,8 @@ void check_is_sio(const Expr &e) {
     if (!(call && call->is_intrinsic(Call::signed_integer_overflow))) {
         std::cerr
             << "\nSimplification failure:\n"
-            << "Input: " << e << '\n'
-            << "Output: " << simpler << '\n'
+            << "Input: " << e << "\n"
+            << "Output: " << simpler << "\n"
             << "Expected output: signed_integer_overflow(n)\n";
         abort();
     }
@@ -23,9 +23,9 @@ void check(const Expr &a, const Expr &b) {
     if (!equal(simpler, b)) {
         std::cerr
             << "\nSimplification failure:\n"
-            << "Input: " << a << '\n'
-            << "Output: " << simpler << '\n'
-            << "Expected output: " << b << '\n';
+            << "Input: " << a << "\n"
+            << "Output: " << simpler << "\n"
+            << "Expected output: " << b << "\n";
         abort();
     }
 }
@@ -36,11 +36,11 @@ void check(const Stmt &a, const Stmt &b) {
         std::cerr
             << "\nSimplification failure:\n"
             << "Input:\n"
-            << a << '\n'
+            << a << "\n"
             << "Output:\n"
-            << simpler << '\n'
+            << simpler << "\n"
             << "Expected output:\n"
-            << b << '\n';
+            << b << "\n";
         abort();
     }
 }
@@ -50,9 +50,9 @@ void check_in_bounds(const Expr &a, const Expr &b, const Scope<Interval> &bi) {
     if (!equal(simpler, b)) {
         std::cerr
             << "\nSimplification failure:\n"
-            << "Input: " << a << '\n'
-            << "Output: " << simpler << '\n'
-            << "Expected output: " << b << '\n';
+            << "Input: " << a << "\n"
+            << "Output: " << simpler << "\n"
+            << "Expected output: " << b << "\n";
         abort();
     }
 }

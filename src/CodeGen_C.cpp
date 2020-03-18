@@ -310,8 +310,8 @@ CodeGen_C::CodeGen_C(ostream &s, Target t, OutputKind output_kind, const std::st
 
     if (is_header()) {
         // If it's a header, emit an include guard.
-        stream << "#ifndef HALIDE_" << print_name(guard) << '\n'
-               << "#define HALIDE_" << print_name(guard) << '\n'
+        stream << "#ifndef HALIDE_" << print_name(guard) << "\n"
+               << "#define HALIDE_" << print_name(guard) << "\n"
                << "#include <stdint.h>\n"
                << "\n"
                << "// Forward declarations of the types used in the interface\n"
@@ -349,13 +349,13 @@ CodeGen_C::CodeGen_C(ostream &s, Target t, OutputKind output_kind, const std::st
         stream
             << headers
             << globals
-            << halide_internal_runtime_header_HalideRuntime_h << '\n'
-            << halide_internal_initmod_inlined_c << '\n';
+            << halide_internal_runtime_header_HalideRuntime_h << "\n"
+            << halide_internal_initmod_inlined_c << "\n";
         add_common_macros(stream);
-        stream << '\n';
+        stream << "\n";
     }
 
-    stream << kDefineMustUseResult << '\n';
+    stream << kDefineMustUseResult << "\n";
 
     // Throw in a default (empty) definition of HALIDE_FUNCTION_ATTRS
     // (some hosts may define this to e.g. __attribute__((warn_unused_result)))
@@ -396,28 +396,28 @@ CodeGen_C::~CodeGen_C() {
                    << "// use the -r flag with any Halide generator binary, e.g.:\n"
                    << "// $ ./my_generator -r halide_runtime -o . target=host\n"
                    << "\n"
-                   << halide_internal_runtime_header_HalideRuntime_h << '\n';
+                   << halide_internal_runtime_header_HalideRuntime_h << "\n";
             if (target.has_feature(Target::CUDA)) {
-                stream << halide_internal_runtime_header_HalideRuntimeCuda_h << '\n';
+                stream << halide_internal_runtime_header_HalideRuntimeCuda_h << "\n";
             }
             if (target.has_feature(Target::HVX_128) ||
                 target.has_feature(Target::HVX_64)) {
-                stream << halide_internal_runtime_header_HalideRuntimeHexagonHost_h << '\n';
+                stream << halide_internal_runtime_header_HalideRuntimeHexagonHost_h << "\n";
             }
             if (target.has_feature(Target::Metal)) {
-                stream << halide_internal_runtime_header_HalideRuntimeMetal_h << '\n';
+                stream << halide_internal_runtime_header_HalideRuntimeMetal_h << "\n";
             }
             if (target.has_feature(Target::OpenCL)) {
-                stream << halide_internal_runtime_header_HalideRuntimeOpenCL_h << '\n';
+                stream << halide_internal_runtime_header_HalideRuntimeOpenCL_h << "\n";
             }
             if (target.has_feature(Target::OpenGLCompute)) {
-                stream << halide_internal_runtime_header_HalideRuntimeOpenGLCompute_h << '\n';
+                stream << halide_internal_runtime_header_HalideRuntimeOpenGLCompute_h << "\n";
             }
             if (target.has_feature(Target::OpenGL)) {
-                stream << halide_internal_runtime_header_HalideRuntimeOpenGL_h << '\n';
+                stream << halide_internal_runtime_header_HalideRuntimeOpenGL_h << "\n";
             }
             if (target.has_feature(Target::D3D12Compute)) {
-                stream << halide_internal_runtime_header_HalideRuntimeD3D12Compute_h << '\n';
+                stream << halide_internal_runtime_header_HalideRuntimeD3D12Compute_h << "\n";
             }
         }
         stream << "#endif\n";
@@ -2308,7 +2308,7 @@ void CodeGen_C::visit(const Call *op) {
         rhs << "(" << arg0 << ")";
     } else if (op->is_intrinsic()) {
         // TODO: other intrinsics
-        internal_error << "Unhandled intrinsic in C backend: " << op->name << '\n';
+        internal_error << "Unhandled intrinsic in C backend: " << op->name << "\n";
     } else {
         // Generic extern calls
         rhs << print_extern_call(op);
@@ -2547,9 +2547,9 @@ void CodeGen_C::visit(const AssertStmt *op) {
 void CodeGen_C::visit(const ProducerConsumer *op) {
     stream << get_indent();
     if (op->is_producer) {
-        stream << "// produce " << op->name << '\n';
+        stream << "// produce " << op->name << "\n";
     } else {
-        stream << "// consume " << op->name << '\n';
+        stream << "// consume " << op->name << "\n";
     }
     print_stmt(op->body);
 }

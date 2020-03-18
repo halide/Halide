@@ -209,7 +209,7 @@ class ExprCost : public IRVisitor {
                 // There is no visibility into an extern stage so there is no
                 // way to know the cost of the call statically. Modeling the
                 // cost of an extern stage requires profiling or user annotation.
-                user_warning << "Unknown extern call " << call->name << '\n';
+                user_warning << "Unknown extern call " << call->name << "\n";
             }
         } else if (call->is_intrinsic()) {
             // TODO: Improve the cost model. In some architectures (e.g. ARM or
@@ -232,7 +232,7 @@ class ExprCost : public IRVisitor {
             } else {
                 // For other intrinsics, use 1 for the arithmetic cost.
                 arith += 1;
-                user_warning << "Unhandled intrinsic call " << call->name << '\n';
+                user_warning << "Unhandled intrinsic call " << call->name << "\n";
             }
         }
 
@@ -772,9 +772,9 @@ Expr RegionCosts::input_region_size(const map<string, Box> &input_regions) {
 }
 
 void RegionCosts::disp_func_costs() {
-    debug(0) << "===========================" << '\n';
-    debug(0) << "Pipeline per element costs:" << '\n';
-    debug(0) << "===========================" << '\n';
+    debug(0) << "===========================\n"
+             << "Pipeline per element costs:\n"
+             << "===========================\n";
     for (const auto &kv : env) {
         int stage = 0;
         for (const auto &cost : func_cost[kv.first]) {
@@ -783,15 +783,15 @@ void RegionCosts::disp_func_costs() {
             } else {
                 Definition def = get_stage_definition(kv.second, stage);
                 for (const auto &e : def.values()) {
-                    debug(0) << simplify(e) << '\n';
+                    debug(0) << simplify(e) << "\n";
                 }
             }
             debug(0) << "(" << kv.first << ", " << stage << ") -> ("
-                     << cost.arith << ", " << cost.memory << ")" << '\n';
+                     << cost.arith << ", " << cost.memory << ")\n";
             stage++;
         }
     }
-    debug(0) << "===========================" << '\n';
+    debug(0) << "===========================\n";
 }
 
 bool is_func_trivial_to_inline(const Function &func) {

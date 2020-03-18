@@ -379,7 +379,7 @@ void CodeGen_ARM::visit(const Cast *op) {
         if (c && c->is_intrinsic(Call::absd)) {
             ostringstream ss;
             int intrin_lanes = 128 / t.bits();
-            ss << "vabdl_" << (c->args[0].type().is_int() ? 'i' : 'u') << t.bits() / 2 << 'x' << intrin_lanes;
+            ss << "vabdl_" << (c->args[0].type().is_int() ? "i" : "u") << t.bits() / 2 << "x" << intrin_lanes;
             value = call_intrin(t, intrin_lanes, ss.str(), c->args);
             return;
         }
@@ -840,9 +840,9 @@ void CodeGen_ARM::visit(const Store *op) {
     if (target.bits != 64 /* Not yet implemented for aarch64 */) {
         ostringstream builtin;
         builtin << "strided_store_"
-                << (op->value.type().is_float() ? 'f' : 'i')
+                << (op->value.type().is_float() ? "f" : "i")
                 << op->value.type().bits()
-                << 'x' << op->value.type().lanes();
+                << "x" << op->value.type().lanes();
 
         llvm::Function *fn = module->getFunction(builtin.str());
         if (fn) {
@@ -975,9 +975,9 @@ void CodeGen_ARM::visit(const Load *op) {
     if (target.bits != 64 /* Not yet implemented for aarch64 */) {
         ostringstream builtin;
         builtin << "strided_load_"
-                << (op->type.is_float() ? 'f' : 'i')
+                << (op->type.is_float() ? "f" : "i")
                 << op->type.bits()
-                << 'x' << op->type.lanes();
+                << "x" << op->type.lanes();
 
         llvm::Function *fn = module->getFunction(builtin.str());
         if (fn) {

@@ -2623,13 +2623,13 @@ void check(const Scope<Interval> &scope, const Expr &e, const Expr &correct_min,
     result.max = simplify(result.max);
     if (!equal(result.min, correct_min)) {
         internal_error << "In bounds of " << e << ":\n"
-                       << "Incorrect min: " << result.min << '\n'
-                       << "Should have been: " << correct_min << '\n';
+                       << "Incorrect min: " << result.min << "\n"
+                       << "Should have been: " << correct_min << "\n";
     }
     if (!equal(result.max, correct_max)) {
         internal_error << "In bounds of " << e << ":\n"
-                       << "Incorrect max: " << result.max << '\n'
-                       << "Should have been: " << correct_max << '\n';
+                       << "Incorrect max: " << result.max << "\n"
+                       << "Should have been: " << correct_max << "\n";
     }
 }
 
@@ -2640,13 +2640,13 @@ void check_constant_bound(const Scope<Interval> &scope, const Expr &e, const Exp
     result.max = simplify(result.max);
     if (!equal(result.min, correct_min)) {
         internal_error << "In find constant bound of " << e << ":\n"
-                       << "Incorrect min constant bound: " << result.min << '\n'
-                       << "Should have been: " << correct_min << '\n';
+                       << "Incorrect min constant bound: " << result.min << "\n"
+                       << "Should have been: " << correct_min << "\n";
     }
     if (!equal(result.max, correct_max)) {
         internal_error << "In find constant bound of " << e << ":\n"
-                       << "Incorrect max constant bound: " << result.max << '\n'
-                       << "Should have been: " << correct_max << '\n';
+                       << "Incorrect max constant bound: " << result.max << "\n"
+                       << "Should have been: " << correct_max << "\n";
     }
 }
 
@@ -2795,13 +2795,13 @@ void boxes_touched_test() {
         b.max = simplify(b.max);
         if (!equal(correct.min, b.min)) {
             internal_error << "In bounds of dim " << i << ":\n"
-                           << "Incorrect min: " << b.min << '\n'
-                           << "Should have been: " << correct.min << '\n';
+                           << "Incorrect min: " << b.min << "\n"
+                           << "Should have been: " << correct.min << "\n";
         }
         if (!equal(correct.max, b.max)) {
             internal_error << "In bounds of dim " << i << ":\n"
-                           << "Incorrect max: " << b.max << '\n'
-                           << "Should have been: " << correct.max << '\n';
+                           << "Incorrect max: " << b.max << "\n"
+                           << "Should have been: " << correct.max << "\n";
         }
     }
 }
