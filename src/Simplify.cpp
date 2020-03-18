@@ -14,7 +14,7 @@ using std::pair;
 using std::string;
 using std::vector;
 
-#if LOG_EXPR_MUTATIONS || LOG_STMT_MUTATIONS
+#if (LOG_EXPR_MUTATIONS || LOG_STMT_MUTATIONS)
 int Simplify::debug_indent = 0;
 #endif
 
