@@ -46,6 +46,9 @@ CCFLAGS := $(filter-out -Wstrict-prototypes,$(CCFLAGS))
 # DON'T link libpython* - leave those symbols to lazily resolve at load time
 # Cf. https://github.com/pybind/pybind11/blob/master/docs/compiling.rst#building-manually
 LDFLAGS += -lz $(USE_EXPORT_DYNAMIC)
+ifeq ($(UNAME), Linux)
+  LDFLAGS += -Wl,-rpath=$(dir $(LIBHALIDE))
+endif
 
 PY_SRCS=$(shell ls $(ROOT_DIR)/src/*.cpp)
 PY_OBJS=$(PY_SRCS:$(ROOT_DIR)/src/%.cpp=$(BIN)/src/%.o)
