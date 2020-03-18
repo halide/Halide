@@ -884,12 +884,12 @@ void CodeGen_GLSL::add_kernel(const Stmt &stmt, const string &name,
             ++num_varying_floats;
         } else if (args[i].type.is_float()) {
             header << "/// UNIFORM "
-                   << CodeGen_C::print_type(args[i].type) << " "
+                   << CodeGen_GLSLBase::print_type(args[i].type) << " "
                    << print_name(args[i].name) << " uniformf" << args[i].packed_index / 4 << "[" << args[i].packed_index % 4 << "]\n";
             ++num_uniform_floats;
         } else if (args[i].type.is_int()) {
             header << "/// UNIFORM "
-                   << CodeGen_C::print_type(args[i].type) << " "
+                   << CodeGen_GLSLBase::print_type(args[i].type) << " "
                    << print_name(args[i].name) << " uniformi" << args[i].packed_index / 4 << "[" << args[i].packed_index % 4 << "]\n";
             ++num_uniform_ints;
         }
