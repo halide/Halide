@@ -1415,7 +1415,7 @@ ifneq ($(TEST_CUDA), )
 # run this code, just check for link errors.)
 $(FILTERS_DIR)/cxx_mangling_gpu.a: $(BIN_DIR)/cxx_mangling.generator $(FILTERS_DIR)/cxx_mangling_externs.o
 	@mkdir -p $(@D)
-	$(CURDIR)/$< -g cxx_mangling $(GEN_AOT_OUTPUTS) -o $(CURDIR)/$(FILTERS_DIR) target=$(TARGET)-no_runtime-c_plus_plus_name_mangling-cuda -f "HalideTest::cxx_mangling_gpu"
+	$(CURDIR)/$< -g cxx_mangling $(GEN_AOT_OUTPUTS) -o $(CURDIR)/$(FILTERS_DIR) target=$(TARGET)-no_runtime-c_plus_plus_name_mangling-cuda-cuda_capability_30 -f "HalideTest::cxx_mangling_gpu"
 	$(ROOT_DIR)/tools/makelib.sh $@ $@ $(FILTERS_DIR)/cxx_mangling_externs.o
 endif
 
@@ -2298,23 +2298,37 @@ $(BIN_DIR)/HalideTraceDump: $(ROOT_DIR)/util/HalideTraceDump.cpp $(ROOT_DIR)/uti
 format:
 	find "${ROOT_DIR}/apps" "${ROOT_DIR}/src" "${ROOT_DIR}/tools" "${ROOT_DIR}/test" "${ROOT_DIR}/util" "${ROOT_DIR}/python_bindings" -name *.cpp -o -name *.h -o -name *.c | xargs ${CLANG}-format -i -style=file
 
-# Run clang-tidy on the core source files
+# run-clang-tidy.py is a script that comes with LLVM for running clang
+# tidy in parallel. Assume it's in the standard install path relative to clang.
+RUN_CLANG_TIDY ?= $(shell dirname $(CLANG))/../share/clang/run-clang-tidy.py
+
+# Run clang-tidy on everything in src/. In future we may increase this
+# surface. Not doing it for now because things outside src are not
+# performance-critical.
+CLANG_TIDY_TARGETS= $(addprefix $(SRC_DIR)/,$(SOURCE_FILES))
+
+INVOKE_CLANG_TIDY ?= $(RUN_CLANG_TIDY) -p $(BUILD_DIR) $(CLANG_TIDY_TARGETS) -clang-tidy-binary $(CLANG)-tidy -clang-apply-replacements-binary $(CLANG)-apply-replacements -quiet
+
 $(BUILD_DIR)/compile_commands.json:
+	mkdir -p $(BUILD_DIR)
 	echo '[' >> $@
-	BD=$(realpath $(BUILD_DIR)); \
-	SD=$(realpath $(SRC_DIR)); \
+	BD=$$(realpath $(BUILD_DIR)); \
+	SD=$$(realpath $(SRC_DIR)); \
+	ID=$$(realpath $(INCLUDE_DIR)); \
 	for S in $(SOURCE_FILES); do \
 	echo "{ \"directory\": \"$${BD}\"," >> $@; \
-	echo "  \"command\": \"$(CXX) $(CXX_FLAGS) -c $$SD/$$S -o $$BD/$${S/cpp/o}\"," >> $@; \
+	echo "  \"command\": \"$(CXX) $(CXX_FLAGS) -c $$SD/$$S -o /dev/null\"," >> $@; \
 	echo "  \"file\": \"$$SD/$$S\" }," >> $@; \
 	done
-	echo ']' >> $@
+	# Add a sentinel to make it valid json (no trailing comma)
+	echo "{ \"directory\": \"$${BD}\"," >> $@; \
+	echo "  \"command\": \"$(CXX) -c /dev/null -o /dev/null\"," >> $@; \
+	echo "  \"file\": \"$$S\" }]" >> $@; \
 
 .PHONY: clang-tidy
 clang-tidy: $(BUILD_DIR)/compile_commands.json
-	${CLANG}-tidy -extra-arg=-Wno-unknown-warning-option -p $(BUILD_DIR) $(addprefix $(SRC_DIR)/,$(SOURCE_FILES))
+	@$(INVOKE_CLANG_TIDY) 2>&1 | grep -v "warnings generated" | grep -v '^$(CLANG)-tidy '
 
 .PHONY: clang-tidy-fix
 clang-tidy-fix: $(BUILD_DIR)/compile_commands.json
-	${CLANG}-tidy -extra-arg=-Wno-unknown-warning-option -p $(BUILD_DIR) $(addprefix $(SRC_DIR)/,$(SOURCE_FILES)) -fix-errors
-
+	@$(INVOKE_CLANG_TIDY) -fix 2>&1 | grep -v "warnings generated" | grep -v '^$(CLANG)-tidy '
