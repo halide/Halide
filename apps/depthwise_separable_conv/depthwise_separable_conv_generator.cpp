@@ -46,30 +46,30 @@ public:
 
         Expr channel_multiplier = depthwise_filter_.dim(0).extent();
 
-        // Do the convolution and apply the input stride.
-        // The case stride == 1 is written separately for performance reasons.
+        // Convolve the image depthwise -- for each input channel,
+        // generate channel_multiplier number of intermediate channels using convolution
         Func depthwise_convolved("depthwise_convolved");
         RDom depthwise_filter_dom(0, depthwise_filter_.dim(0).extent(),
                                   0, depthwise_filter_.dim(2).extent(),
                                   0, depthwise_filter_.dim(3).extent());
-        depthwise_convolved(d, x, y, b) = bias_(d);
         depthwise_convolved(d, x, y, b) +=
             depthwise_filter_(depthwise_filter_dom[0],
                               d,
                               depthwise_filter_dom[1],
                               depthwise_filter_dom[2]) *
             shifted_input_with_offset(
-                        d * channel_multiplier + depthwise_filter_dom[0],
+                        d / channel_multiplier,
                         x + depthwise_filter_dom[1],
                         y + depthwise_filter_dom[2],
                         b);
+        // Convolve the image point-wise: for each pixel we map from
+        // input_channels * channe_multiplier number of channels to output_channels
         Func pointwise_convolved("pointwise_convolved");
-        RDom pointwise_filter_dom(0, pointwise_filter_.dim(0).extent(),
-                                  0, pointwise_filter_.dim(1).extent());
+        RDom pointwise_filter_dom(0, pointwise_filter_.dim(1).extent());
+        pointwise_convolved(d, x, y, b) = bias_(d);
         pointwise_convolved(d, x, y, b) +=
-            pointwise_filter_(
-                pointwise_filter_dom.y * channel_multiplier + pointwise_filter_dom.x, d) *
-            depthwise_convolved(pointwise_filter_dom.y, x, y, b);
+            pointwise_filter_(d, pointwise_filter_dom) *
+            depthwise_convolved(pointwise_filter_dom, x, y, b);
         // ReLU
         output_(d, x, y, b) = max(pointwise_convolved(d, x, y, b), 0.f);
         
