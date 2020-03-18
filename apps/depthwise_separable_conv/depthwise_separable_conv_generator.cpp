@@ -74,7 +74,7 @@ public:
         output_(d, x, y, b) = max(pointwise_convolved(d, x, y, b), 0.f);
         
         // Second layer of MobileNet v2
-        const int N = 4, CI = 32, CO = 16, W = 112, H = 112;
+        const int N = 4, CI = 32, CO = 16, CM = 1, W = 112, H = 112;
         // The schedule.
         if (auto_schedule) {
             input_.dim(0).set_estimate(0, CI);
@@ -88,7 +88,7 @@ public:
             depthwise_filter_.dim(3).set_estimate(0, 3);
 
             pointwise_filter_.dim(0).set_estimate(0, CO);
-            pointwise_filter_.dim(1).set_estimate(0, CI * CI / CO);
+            pointwise_filter_.dim(1).set_estimate(0, CI * CM);
 
             bias_.dim(0).set_estimate(0, CO);
 

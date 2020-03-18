@@ -16,11 +16,11 @@ using namespace Halide::Runtime;
 
 int main(int argc, char **argv) {
     // Second layer of MobileNet v2
-    const int N = 4, CI = 32, CO = 16, W = 112, H = 112;
+    const int N = 4, CI = 32, CO = 16, CM = 1, W = 112, H = 112;
 
     Buffer<float> input(CI, W, H, N);
-    Buffer<float> depthwise_filter(CO / CI, CI, 3, 3);
-    Buffer<float> pointwise_filter(CO, CI * CI / CO);
+    Buffer<float> depthwise_filter(CM, CI, 3, 3);
+    Buffer<float> pointwise_filter(CO, CI * CM);
     Buffer<float> bias(CO);
 
     for (int c = 0; c < input.dim(3).extent(); c++) {
