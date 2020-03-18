@@ -1222,6 +1222,74 @@ int nested_compute_with_test() {
     return 0;
 }
 
+int update_stage_test() {
+    const int f_size = 128;
+    const int g_size = 128;
+    Buffer<int> f_im(f_size, f_size), g_im(g_size, g_size);
+    Buffer<int> f_im_ref(f_size, f_size), g_im_ref(g_size, g_size);
+
+    {
+        Var x("x"), y("y");
+        Func f("f"), g("g"), input("input");
+
+        input(x, y) = x;
+        f(x, y) = input(x, y) + x;
+        f(x, y) = f(x, y) + 1;
+
+        g(x, y) = input(x, y) + y;
+        g(x, y) = g(x, y) - 1;
+
+        f.compute_root();
+        g.compute_root();
+
+        g.bound(x, 0, g_size).bound(y, 0, g_size);
+        f.bound(x, 0, f_size).bound(y, 0, f_size);
+
+        Pipeline p({f, g});
+        p.realize({f_im_ref, g_im_ref});
+    }
+
+    {
+        Var x("x"), y("y");
+        Func f("f"), g("g"), input("input");
+
+        input(x, y) = x;
+        f(x, y) = input(x, y) + x;
+        f(x, y) = f(x, y) + 1;
+
+        g(x, y) = input(x, y) + y;
+        g(x, y) = g(x, y) - 1;
+
+        f.compute_root();
+        g.compute_root();
+
+        f.update().compute_with(g, y);
+
+        g.bound(x, 0, g_size).bound(y, 0, g_size);
+        f.bound(x, 0, f_size).bound(y, 0, f_size);
+
+        Pipeline p({f, g});
+        p.print_loop_nest();
+        p.realize({f_im, g_im});
+    }
+
+    auto f_func = [f_im_ref](int x, int y) {
+        return f_im_ref(x, y);
+    };
+    if (check_image(f_im, f_func)) {
+        return -1;
+    }
+
+    auto g_func = [g_im_ref](int x, int y) {
+        return g_im_ref(x, y);
+    };
+    if (check_image(g_im, g_func)) {
+        return -1;
+    }
+
+    return 0;
+}
+
 }  // namespace
 
 int main(int argc, char **argv) {
@@ -1302,6 +1370,11 @@ int main(int argc, char **argv) {
 
     printf("Running multi tile mixed tile factor test\n");
     if (multi_tile_mixed_tile_factor_test() != 0) {
+        return -1;
+    }
+
+    printf("Running update stage test\n");
+    if (update_stage_test() != 0) {
         return -1;
     }
 
