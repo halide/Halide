@@ -15,7 +15,7 @@
 # - GHA is occasionally flaky and some VMs just fail, but there isn't a way
 #   to restart just one of the jobs (it's currently all-or-none)
 
-name: Build+Test
+name: Build+Test [ ${{github.event.action}} ]
 on:
   # TODO: not sure if this is the best set of events/activity-types to use.
   pull_request:
@@ -28,7 +28,7 @@ on:
 
 jobs:
   test_halide:
-    name: Halide-${{matrix.llvm_version}}-${{matrix.target_arch}}-${{matrix.target_bits}}-${{matrix.target_os}}-${{matrix.build_tool}}
+    name: HL-${{matrix.llvm_version}}-${{matrix.target_arch}}-${{matrix.target_bits}}-${{matrix.target_os}}-${{matrix.build_tool}}
     runs-on: ${{matrix.host_os}}
     env:
       CC: ${{matrix.cc}}
@@ -264,6 +264,9 @@ jobs:
     - name: Configure Env Vars
       shell: bash
       run: |
+        echo "github.event_name is ${{github.event_name}}"  # should always be "pull_request"
+        echo "github.event.action is ${{github.event.action}}"
+
         # Demangle Windows names, to simplify CMake stuff later
         _ROOT=${GITHUB_WORKSPACE//\\//}
         _TEMP_RAW="${{runner.temp}}"
