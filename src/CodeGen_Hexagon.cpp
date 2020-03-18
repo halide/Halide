@@ -102,7 +102,7 @@ bool is_dense_ramp(const Expr &x) {
 // In Hexagon, we assume that we can read one vector past the end of
 // buffers. Using this assumption, this mutator replaces vector
 // predicated dense loads with scalar predicated dense loads.
-class SloppyUnpredicateLoads : public IRMutator {
+class SloppyUnpredicateLoadsAndStores : public IRMutator {
     using IRMutator::visit;
 
     // The first and last lanes of all monotonic vectors in scope
@@ -172,6 +172,9 @@ class SloppyUnpredicateLoads : public IRMutator {
             // them both together.
             auto v = get_extreme_lanes(predicate);
             if (v.first.defined()) {
+                internal_assert(v.first.type() == Bool() &&
+                                v.second.type() == Bool())
+                    << "The extreme lanes of a bool vector should be scalar bools\n";
                 condition = simplify(v.first || v.second);
             } else {
                 // Take an OR over all lanes. Consider replacing this
@@ -282,8 +285,8 @@ class SloppyUnpredicateLoads : public IRMutator {
     }
 };
 
-Stmt sloppy_unpredicate_loads(const Stmt &s) {
-    return SloppyUnpredicateLoads().mutate(s);
+Stmt sloppy_unpredicate_loads_and_stores(const Stmt &s) {
+    return SloppyUnpredicateLoadsAndStores().mutate(s);
 }
 
 class InjectHVXLocks : public IRMutator {
@@ -427,7 +430,7 @@ void CodeGen_Hexagon::compile_func(const LoweredFunc &f,
     debug(1) << "Unpredicating loads and stores...\n";
     // Replace dense vector predicated loads with sloppy scalarized
     // predicates, and scalarize predicated stores
-    body = sloppy_unpredicate_loads(body);
+    body = sloppy_unpredicate_loads_and_stores(body);
 
     debug(2) << "Lowering after unpredicating loads/stores:\n"
              << body << "\n\n";
