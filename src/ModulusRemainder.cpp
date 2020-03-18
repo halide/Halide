@@ -423,39 +423,39 @@ void ComputeModulusRemainder::visit(const Max *op) {
 }
 
 void ComputeModulusRemainder::visit(const EQ *) {
-    internal_assert(false) << "modulus_remainder of bool\n";
+    internal_error << "modulus_remainder of bool\n";
 }
 
 void ComputeModulusRemainder::visit(const NE *) {
-    internal_assert(false) << "modulus_remainder of bool\n";
+    internal_error << "modulus_remainder of bool\n";
 }
 
 void ComputeModulusRemainder::visit(const LT *) {
-    internal_assert(false) << "modulus_remainder of bool\n";
+    internal_error << "modulus_remainder of bool\n";
 }
 
 void ComputeModulusRemainder::visit(const LE *) {
-    internal_assert(false) << "modulus_remainder of bool\n";
+    internal_error << "modulus_remainder of bool\n";
 }
 
 void ComputeModulusRemainder::visit(const GT *) {
-    internal_assert(false) << "modulus_remainder of bool\n";
+    internal_error << "modulus_remainder of bool\n";
 }
 
 void ComputeModulusRemainder::visit(const GE *) {
-    internal_assert(false) << "modulus_remainder of bool\n";
+    internal_error << "modulus_remainder of bool\n";
 }
 
 void ComputeModulusRemainder::visit(const And *) {
-    internal_assert(false) << "modulus_remainder of bool\n";
+    internal_error << "modulus_remainder of bool\n";
 }
 
 void ComputeModulusRemainder::visit(const Or *) {
-    internal_assert(false) << "modulus_remainder of bool\n";
+    internal_error << "modulus_remainder of bool\n";
 }
 
 void ComputeModulusRemainder::visit(const Not *) {
-    internal_assert(false) << "modulus_remainder of bool\n";
+    internal_error << "modulus_remainder of bool\n";
 }
 
 void ComputeModulusRemainder::visit(const Select *op) {
@@ -468,11 +468,11 @@ void ComputeModulusRemainder::visit(const Load *) {
 }
 
 void ComputeModulusRemainder::visit(const Ramp *) {
-    internal_assert(false) << "modulus_remainder of vector\n";
+    internal_error << "modulus_remainder of vector\n";
 }
 
 void ComputeModulusRemainder::visit(const Broadcast *) {
-    internal_assert(false) << "modulus_remainder of vector\n";
+    internal_error << "modulus_remainder of vector\n";
 }
 
 void ComputeModulusRemainder::visit(const Call *) {
@@ -495,67 +495,67 @@ void ComputeModulusRemainder::visit(const Shuffle *op) {
 }
 
 void ComputeModulusRemainder::visit(const LetStmt *) {
-    internal_assert(false) << "modulus_remainder of statement\n";
+    internal_error << "modulus_remainder of statement\n";
 }
 
 void ComputeModulusRemainder::visit(const AssertStmt *) {
-    internal_assert(false) << "modulus_remainder of statement\n";
+    internal_error << "modulus_remainder of statement\n";
 }
 
 void ComputeModulusRemainder::visit(const ProducerConsumer *) {
-    internal_assert(false) << "modulus_remainder of statement\n";
+    internal_error << "modulus_remainder of statement\n";
 }
 
 void ComputeModulusRemainder::visit(const For *) {
-    internal_assert(false) << "modulus_remainder of statement\n";
+    internal_error << "modulus_remainder of statement\n";
 }
 
 void ComputeModulusRemainder::visit(const Acquire *) {
-    internal_assert(false) << "modulus_remainder of statement\n";
+    internal_error << "modulus_remainder of statement\n";
 }
 
 void ComputeModulusRemainder::visit(const Store *) {
-    internal_assert(false) << "modulus_remainder of statement\n";
+    internal_error << "modulus_remainder of statement\n";
 }
 
 void ComputeModulusRemainder::visit(const Provide *) {
-    internal_assert(false) << "modulus_remainder of statement\n";
+    internal_error << "modulus_remainder of statement\n";
 }
 
 void ComputeModulusRemainder::visit(const Allocate *) {
-    internal_assert(false) << "modulus_remainder of statement\n";
+    internal_error << "modulus_remainder of statement\n";
 }
 
 void ComputeModulusRemainder::visit(const Realize *) {
-    internal_assert(false) << "modulus_remainder of statement\n";
+    internal_error << "modulus_remainder of statement\n";
 }
 
 void ComputeModulusRemainder::visit(const Block *) {
-    internal_assert(false) << "modulus_remainder of statement\n";
+    internal_error << "modulus_remainder of statement\n";
 }
 
 void ComputeModulusRemainder::visit(const Fork *) {
-    internal_assert(false) << "modulus_remainder of statement\n";
+    internal_error << "modulus_remainder of statement\n";
 }
 
 void ComputeModulusRemainder::visit(const Free *) {
-    internal_assert(false) << "modulus_remainder of statement\n";
+    internal_error << "modulus_remainder of statement\n";
 }
 
 void ComputeModulusRemainder::visit(const IfThenElse *) {
-    internal_assert(false) << "modulus_remainder of statement\n";
+    internal_error << "modulus_remainder of statement\n";
 }
 
 void ComputeModulusRemainder::visit(const Evaluate *) {
-    internal_assert(false) << "modulus_remainder of statement\n";
+    internal_error << "modulus_remainder of statement\n";
 }
 
 void ComputeModulusRemainder::visit(const Prefetch *) {
-    internal_assert(false) << "modulus_remainder of statement\n";
+    internal_error << "modulus_remainder of statement\n";
 }
 
 void ComputeModulusRemainder::visit(const Atomic *) {
-    internal_assert(false) << "modulus_remainder of statement\n";
+    internal_error << "modulus_remainder of statement\n";
 }
 
 }  // namespace Internal
