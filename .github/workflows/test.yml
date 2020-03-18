@@ -15,7 +15,7 @@
 # - GHA is occasionally flaky and some VMs just fail, but there isn't a way
 #   to restart just one of the jobs (it's currently all-or-none)
 
-name: Build+Test [ ${{github.event.action}} ]
+name: Build+Test
 on:
   # TODO: not sure if this is the best set of events/activity-types to use.
   pull_request:
