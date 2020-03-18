@@ -178,7 +178,7 @@ if (TARGET_PTX)
     halide_library_from_generator(cxx_mangling_gpu
             GENERATOR cxx_mangling.generator
             FUNCTION_NAME HalideTest::cxx_mangling_gpu
-            HALIDE_TARGET_FEATURES c_plus_plus_name_mangling cuda)
+            HALIDE_TARGET_FEATURES c_plus_plus_name_mangling cuda cuda_capability_30)
     target_link_libraries(generator_aot_cxx_mangling PUBLIC cxx_mangling_gpu)
 endif ()
 
