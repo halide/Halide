@@ -2031,6 +2031,10 @@ Func &Func::store_in(MemoryType t) {
 
 Func &Func::async() {
     invalidate_cache();
+    const auto &stored_with = func.schedule().store_with().buffer;
+    user_assert(stored_with.empty())
+        << "Func " << name()
+        << " cannot be both async and store_with " << stored_with << "\n";
     func.schedule().async() = true;
     return *this;
 }
@@ -2497,6 +2501,59 @@ Func &Func::compute_with(LoopLevel loop_level, const std::vector<std::pair<VarOr
 Func &Func::compute_with(LoopLevel loop_level, LoopAlignStrategy align) {
     invalidate_cache();
     Stage(func, func.definition(), 0).compute_with(std::move(loop_level), align);
+    return *this;
+}
+
+Func &Func::store_with(Func other) {
+    vector<Expr> a;
+    for (Var var : args()) {
+        a.push_back(var);
+    }
+    return store_with(other, a);
+}
+
+Func &Func::store_with(Func other, const std::vector<Expr> &where) {
+    invalidate_cache();
+    auto my_types = output_types();
+    auto other_types = other.output_types();
+    user_assert(!func.schedule().async())
+        << "Func " << name()
+        << " cannot be both async and store_with " << other.name() << "\n";
+    user_assert(my_types.size() == other_types.size())
+        << "Cannot store " << name()
+        << " with " << other.name()
+        << " because tuple sizes do not match "
+        << "(" << my_types.size()
+        << " vs " << other_types.size() << ")\n";
+    for (size_t i = 0; i < my_types.size(); i++) {
+        std::string suffix;
+        if (my_types.size() > 1) {
+            suffix = " in tuple element " + std::to_string(i);
+        }
+        user_assert(my_types[i].bits() == other_types[i].bits())
+            << "Cannot store " << name()
+            << " with " << other.name()
+            << " because type bit widths do not match"
+            << suffix
+            << "(" << my_types[i]
+            << " vs " << other_types[i] << ")\n";
+    }
+    if ((int)where.size() != other.dimensions()) {
+        std::ostringstream err;
+        err << "Cannot store " << name() << " at site (";
+        string prefix;
+        for (const auto &e : where) {
+            err << prefix << e;
+            prefix = ", ";
+        }
+        err << ") in " << other.name()
+            << " because " << other.name()
+            << " has dimensionality " << other.dimensions()
+            << " and the requested coordinate to store at has dimensionality "
+            << where.size() << "\n";
+        user_error << err.str();
+    }
+    func.schedule().store_with() = {other.name(), where};
     return *this;
 }
 

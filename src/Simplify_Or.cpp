@@ -106,6 +106,8 @@ Expr Simplify::visit(const Or *op, ExprInfo *bounds) {
         rewrite((y && x) || (x && z), x && (y || z)) ||
         rewrite((y && x) || (z && x), x && (y || z)) ||
 
+        rewrite((x < y) || (x == y), x <= y) ||
+
         rewrite(x < y || x < z, x < max(y, z)) ||
         rewrite(y < x || z < x, min(y, z) < x) ||
         rewrite(x <= y || x <= z, x <= max(y, z)) ||

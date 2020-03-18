@@ -423,6 +423,7 @@ set(HEADER_FILES
   StmtToHtml.h
   StorageFlattening.h
   StorageFolding.h
+  StoreWith.h
   StrictifyFloat.h
   Substitute.h
   Target.h
@@ -609,6 +610,7 @@ add_library(Halide ${HALIDE_LIBRARY_TYPE}
   StmtToHtml.cpp
   StorageFlattening.cpp
   StorageFolding.cpp
+  StoreWith.cpp
   StrictifyFloat.cpp
   Substitute.cpp
   Target.cpp

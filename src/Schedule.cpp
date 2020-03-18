@@ -218,6 +218,7 @@ struct FuncScheduleContents {
     std::vector<Bound> bounds;
     std::vector<Bound> estimates;
     std::map<std::string, Internal::FunctionPtr> wrappers;
+    StoreWithDirective store_with;
     MemoryType memory_type;
     bool memoized, async;
 
@@ -337,6 +338,7 @@ FuncSchedule FuncSchedule::deep_copy(
     copy.contents->storage_dims = contents->storage_dims;
     copy.contents->bounds = contents->bounds;
     copy.contents->estimates = contents->estimates;
+    copy.contents->store_with = contents->store_with;
     copy.contents->memory_type = contents->memory_type;
     copy.contents->memoized = contents->memoized;
     copy.contents->async = contents->async;
@@ -365,6 +367,14 @@ bool &FuncSchedule::memoized() {
 
 bool FuncSchedule::memoized() const {
     return contents->memoized;
+}
+
+const StoreWithDirective &FuncSchedule::store_with() const {
+    return contents->store_with;
+}
+
+StoreWithDirective &FuncSchedule::store_with() {
+    return contents->store_with;
 }
 
 bool &FuncSchedule::async() {

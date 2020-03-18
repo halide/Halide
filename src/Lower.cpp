@@ -56,6 +56,7 @@
 #include "SplitTuples.h"
 #include "StorageFlattening.h"
 #include "StorageFolding.h"
+#include "StoreWith.h"
 #include "StrictifyFloat.h"
 #include "Substitute.h"
 #include "Tracing.h"
@@ -74,6 +75,7 @@ namespace Internal {
 
 using std::map;
 using std::ostringstream;
+using std::pair;
 using std::string;
 using std::vector;
 
@@ -191,6 +193,11 @@ Module lower(const vector<Function> &output_funcs,
     debug(1) << "Simplifying correlated differences...\n";
     s = simplify_correlated_differences(s);
     debug(2) << "Lowering after simplifying correlated differences:\n"
+             << s << '\n';
+
+    debug(1) << "Merging buffers using store_with directives...\n";
+    s = lower_store_with(s, outputs, env);
+    debug(2) << "Lowering after merging buffers:\n"
              << s << '\n';
 
     debug(1) << "Performing allocation bounds inference...\n";
