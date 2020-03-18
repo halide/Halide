@@ -6,7 +6,7 @@ test: $(BIN)/$(HL_TARGET)/out.png
 
 $(GENERATOR_BIN)/unsharp.generator: unsharp_generator.cpp $(GENERATOR_DEPS)
 	@mkdir -p $(@D)
-	$(CXX) $(CXXFLAGS) -g $(filter %.cpp,$^) -o $@ $(GENERATOR_LDFLAGS)
+	$(CXX) $(CXXFLAGS) -g $(filter %.cpp,$^) -o $@ $(LIBHALIDE_LDFLAGS)
 
 $(BIN)/%/unsharp.a: $(GENERATOR_BIN)/unsharp.generator
 	@mkdir -p $(@D)
