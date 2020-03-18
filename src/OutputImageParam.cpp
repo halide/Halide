@@ -1,12 +1,14 @@
 #include "OutputImageParam.h"
+
 #include "IROperator.h"
+#include <utility>
 
 namespace Halide {
 
 using Internal::Dimension;
 
-OutputImageParam::OutputImageParam(const Internal::Parameter &p, Argument::Kind k, Func f) :
-    param(p), kind(k), func(f) {
+OutputImageParam::OutputImageParam(const Internal::Parameter &p, Argument::Kind k, Func f)
+    : param(p), kind(k), func(std::move(f)) {
 }
 
 const std::string &OutputImageParam::name() const {
@@ -82,11 +84,22 @@ Internal::Parameter OutputImageParam::parameter() const {
 }
 
 OutputImageParam::operator Argument() const {
-    return Argument(name(), kind, type(), dimensions());
+    return Argument(name(), kind, type(), dimensions(), param.get_argument_estimates());
 }
 
 OutputImageParam::operator ExternFuncArgument() const {
     return param;
+}
+
+OutputImageParam &OutputImageParam::set_estimates(const Region &estimates) {
+    const int d = dimensions();
+    user_assert((int)estimates.size() == d)
+        << "ImageParam " << name() << " has " << d << " dimensions, "
+        << "but the estimates passed to set_estimates contains " << estimates.size() << " pairs.\n";
+    for (int i = 0; i < d; i++) {
+        dim(i).set_estimate(estimates[i].min, estimates[i].extent);
+    }
+    return *this;
 }
 
 }  // namespace Halide

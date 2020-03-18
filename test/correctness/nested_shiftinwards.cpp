@@ -19,23 +19,19 @@ int main(int argc, char **argv) {
     Var x("x"), y("y"), z("z"), c("c");
     Func f("f"), g("g");
     f(x, y, z, c) = (input(x, y, c) - input(x, z, c));
-    g(x, y, c) =  f(x, y, (x+y)%10, c)
-                + f(x, y+1, (x*y)%10, c)
-                + f(x, y+2, (x-y)%10, c)
-                + f(x+1, y, (x)%10, c)
-                + f(x+2, y, (y)%10, c);
+    g(x, y, c) = f(x, y, (x + y) % 10, c) + f(x, y + 1, (x * y) % 10, c) + f(x, y + 2, (x - y) % 10, c) + f(x + 1, y, (x) % 10, c) + f(x + 2, y, (y) % 10, c);
 
     Var x_o("x_o"), x_i("x_i"), y_o("y_o"), y_i("y_i"), c_o("c_o"), c_i("c_i"), x_o_vo("x_o_vo"), x_o_vi("x_o_vi");
 
     g.compute_root()
-       .split(x, x_o, x_i, 1)
-       .split(y, y_o, y_i, 1)
-       .split(c, c_o, c_i, 1)
-       .reorder(x_i, y_i, c_i, x_o, y_o, c_o)
-       .split(x_o, x_o_vo, x_o_vi, 16)
-       .vectorize(x_o_vi)
-       .parallel(c_o)
-       .parallel(y_o);
+        .split(x, x_o, x_i, 1)
+        .split(y, y_o, y_i, 1)
+        .split(c, c_o, c_i, 1)
+        .reorder(x_i, y_i, c_i, x_o, y_o, c_o)
+        .split(x_o, x_o_vo, x_o_vi, 16)
+        .vectorize(x_o_vi)
+        .parallel(c_o)
+        .parallel(y_o);
 
     // There used to be a bug where the outer splits (which are
     // no-ops!), caused the inner split to be roundup instead of

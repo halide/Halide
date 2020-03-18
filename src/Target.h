@@ -22,7 +22,18 @@ struct Target {
     /** The operating system used by the target. Determines which
      * system calls to generate.
      * Corresponds to os_name_map in Target.cpp. */
-    enum OS {OSUnknown = 0, Linux, Windows, OSX, Android, IOS, QuRT, NoOS} os;
+    enum OS {
+        OSUnknown = 0,
+        Linux,
+        Windows,
+        OSX,
+        Android,
+        IOS,
+        QuRT,
+        NoOS,
+        Fuchsia,
+        WebAssemblyRuntime
+    } os;
 
     /** The architecture used by the target. Determines the
      * instruction set to use.
@@ -34,6 +45,8 @@ struct Target {
         MIPS,
         Hexagon,
         POWERPC,
+        WebAssembly,
+        RISCV
     } arch;
 
     /** The bit-width of the target machine. Must be 0 for unknown, or 32 or 64. */
@@ -67,16 +80,18 @@ struct Target {
         OpenCL = halide_target_feature_opencl,
         CLDoubles = halide_target_feature_cl_doubles,
         CLHalf = halide_target_feature_cl_half,
+        CLAtomics64 = halide_target_feature_cl_atomic64,
         OpenGL = halide_target_feature_opengl,
         OpenGLCompute = halide_target_feature_openglcompute,
+        EGL = halide_target_feature_egl,
         UserContext = halide_target_feature_user_context,
         Matlab = halide_target_feature_matlab,
         Profile = halide_target_feature_profile,
         NoRuntime = halide_target_feature_no_runtime,
         Metal = halide_target_feature_metal,
-        MinGW = halide_target_feature_mingw,
         CPlusPlusMangling = halide_target_feature_c_plus_plus_mangling,
         LargeBuffers = halide_target_feature_large_buffers,
+        HexagonDma = halide_target_feature_hexagon_dma,
         HVX_64 = halide_target_feature_hvx_64,
         HVX_128 = halide_target_feature_hvx_128,
         HVX_v62 = halide_target_feature_hvx_v62,
@@ -93,18 +108,27 @@ struct Target {
         TraceLoads = halide_target_feature_trace_loads,
         TraceStores = halide_target_feature_trace_stores,
         TraceRealizations = halide_target_feature_trace_realizations,
+        TracePipeline = halide_target_feature_trace_pipeline,
         D3D12Compute = halide_target_feature_d3d12compute,
         StrictFloat = halide_target_feature_strict_float,
-        LegacyBufferWrappers = halide_target_feature_legacy_buffer_wrappers,
         TSAN = halide_target_feature_tsan,
         ASAN = halide_target_feature_asan,
         CheckUnsafePromises = halide_target_feature_check_unsafe_promises,
+        EmbedBitcode = halide_target_feature_embed_bitcode,
+        EnableLLVMLoopOpt = halide_target_feature_enable_llvm_loop_opt,
+        DisableLLVMLoopOpt = halide_target_feature_disable_llvm_loop_opt,
+        WasmSimd128 = halide_target_feature_wasm_simd128,
+        WasmSignExt = halide_target_feature_wasm_signext,
+        SVE = halide_target_feature_sve,
+        SVE2 = halide_target_feature_sve2,
         FeatureEnd = halide_target_feature_end
     };
-    Target() : os(OSUnknown), arch(ArchUnknown), bits(0) {}
-    Target(OS o, Arch a, int b, std::vector<Feature> initial_features = std::vector<Feature>())
+    Target()
+        : os(OSUnknown), arch(ArchUnknown), bits(0) {
+    }
+    Target(OS o, Arch a, int b, const std::vector<Feature> &initial_features = std::vector<Feature>())
         : os(o), arch(a), bits(b) {
-        for (const auto &f :initial_features) {
+        for (const auto &f : initial_features) {
             set_feature(f);
         }
     }
@@ -129,13 +153,17 @@ struct Target {
 
     void set_feature(Feature f, bool value = true);
 
-    void set_features(std::vector<Feature> features_to_set, bool value = true);
+    void set_features(const std::vector<Feature> &features_to_set, bool value = true);
 
     bool has_feature(Feature f) const;
 
-    bool features_any_of(std::vector<Feature> test_features) const;
+    inline bool has_feature(halide_target_feature_t f) const {
+        return has_feature((Feature)f);
+    }
 
-    bool features_all_of(std::vector<Feature> test_features) const;
+    bool features_any_of(const std::vector<Feature> &test_features) const;
+
+    bool features_all_of(const std::vector<Feature> &test_features) const;
 
     /** Return a copy of the target with the given feature set.
      * This is convenient when enabling certain features (e.g. NoBoundsQuery)
@@ -174,16 +202,33 @@ struct Target {
      * Target. */
     bool supports_device_api(DeviceAPI api) const;
 
+    /** If this Target (including all Features) requires a specific DeviceAPI,
+     * return it. If it doesn't, return DeviceAPI::None.  If the Target has
+     * features with multiple (different) DeviceAPI requirements, the result
+     * will be an arbitrary DeviceAPI. */
+    DeviceAPI get_required_device_api() const;
+
     bool operator==(const Target &other) const {
-      return os == other.os &&
-          arch == other.arch &&
-          bits == other.bits &&
-          features == other.features;
+        return os == other.os &&
+               arch == other.arch &&
+               bits == other.bits &&
+               features == other.features;
     }
 
     bool operator!=(const Target &other) const {
-      return !(*this == other);
+        return !(*this == other);
     }
+
+    /**
+     * Create a "greatest common denominator" runtime target that is compatible with
+     * both this target and \p other. Used by generators to conveniently select a suitable
+     * runtime when linking together multiple functions.
+     *
+     * @param other The other target from which we compute the gcd target.
+     * @param[out] result The gcd target if we return true, otherwise unmodified. Can be the same as *this.
+     * @return Whether it was possible to find a compatible target (true) or not.
+     */
+    bool get_runtime_compatible_target(const Target &other, Target &result);
 
     /** Convert the Target into a string form that can be reconstituted
      * by merge_string(), which will always be of the form
@@ -204,7 +249,7 @@ struct Target {
 
     /** Given a data type, return an estimate of the "natural" vector size
      * for that data type when compiling for this Target. */
-    template <typename data_t>
+    template<typename data_t>
     int natural_vector_size() const {
         return natural_vector_size(type_of<data_t>());
     }
@@ -227,6 +272,22 @@ struct Target {
 
     /** Was libHalide compiled with support for this target? */
     bool supported() const;
+
+    /** Return a bitset of the Featuress set in this Target (set = 1).
+     * Note that while this happens to be the current internal representation,
+     * that might not always be the case. */
+    const std::bitset<FeatureEnd> &get_features_bitset() const {
+        return features;
+    }
+
+    /** Return the name corresponding to a given Feature, in the form
+     * used to construct Target strings (e.g., Feature::Debug is "debug" and not "Debug"). */
+    static std::string feature_to_name(Target::Feature feature);
+
+    /** Return the feature corresponding to a given name, in the form
+     * used to construct Target strings (e.g., Feature::Debug is "debug" and not "Debug").
+     * If the string is not a known feature name, return FeatureEnd. */
+    static Target::Feature feature_from_name(const std::string &name);
 
 private:
     /** A bitmask that stores the active features. */

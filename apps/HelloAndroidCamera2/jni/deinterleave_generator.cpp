@@ -6,12 +6,12 @@ class Deinterleave : public Halide::Generator<Deinterleave> {
 public:
     Input<Buffer<uint8_t>> uvInterleaved{"uvInterleaved", 2};
     // There is no way to declare a Buffer<Tuple>, so we must use Output<Func> instead
-    Output<Func> result{"result", { UInt(8), UInt(8) }, 2};
+    Output<Func> result{"result", {UInt(8), UInt(8)}, 2};
 
     void generate() {
         Var x, y;
 
-        result(x, y) = { uvInterleaved(2 * x, y), uvInterleaved(2 * x + 1, y) };
+        result(x, y) = {uvInterleaved(2 * x, y), uvInterleaved(2 * x + 1, y)};
 
         // CPU schedule:
         //   Parallelize over scan lines, 4 scanlines per task.

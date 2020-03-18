@@ -18,7 +18,7 @@
 namespace Halide {
 namespace Internal {
 
-class IRMutator2;
+class IRMutator;
 class IRVisitor;
 
 /** All our IR node types get unique IDs for the purposes of RTTI */
@@ -58,15 +58,18 @@ enum class IRNodeType {
     AssertStmt,
     ProducerConsumer,
     For,
+    Acquire,
     Store,
     Provide,
     Allocate,
     Free,
     Realize,
     Block,
+    Fork,
     IfThenElse,
     Evaluate,
     Prefetch,
+    Atomic
 };
 
 /** The abstract base classes for a node in the Halide IR. */
@@ -77,8 +80,10 @@ struct IRNode {
      * visitors.
      */
     virtual void accept(IRVisitor *v) const = 0;
-    IRNode(IRNodeType t) : node_type(t) {}
-    virtual ~IRNode() {}
+    IRNode(IRNodeType t)
+        : node_type(t) {
+    }
+    virtual ~IRNode() = default;
 
     /** These classes are all managed with intrusive reference
      * counting, so we also track a reference count. It's mutable
@@ -101,10 +106,14 @@ struct IRNode {
 };
 
 template<>
-inline RefCount &ref_count<IRNode>(const IRNode *t) {return t->ref_count;}
+inline RefCount &ref_count<IRNode>(const IRNode *t) noexcept {
+    return t->ref_count;
+}
 
 template<>
-inline void destroy<IRNode>(const IRNode *t) {delete t;}
+inline void destroy<IRNode>(const IRNode *t) {
+    delete t;
+}
 
 /** IR nodes are split into expressions and statements. These are
    similar to expressions and statements in C - expressions
@@ -115,15 +124,19 @@ inline void destroy<IRNode>(const IRNode *t) {delete t;}
 /** A base class for statement nodes. They have no properties or
    methods beyond base IR nodes for now. */
 struct BaseStmtNode : public IRNode {
-    BaseStmtNode(IRNodeType t) : IRNode(t) {}
-    virtual Stmt mutate_stmt(IRMutator2 *v) const = 0;
+    BaseStmtNode(IRNodeType t)
+        : IRNode(t) {
+    }
+    virtual Stmt mutate_stmt(IRMutator *v) const = 0;
 };
 
 /** A base class for expression nodes. They all contain their types
  * (e.g. Int(32), Float(32)) */
 struct BaseExprNode : public IRNode {
-    BaseExprNode(IRNodeType t) : IRNode(t) {}
-    virtual Expr mutate_expr(IRMutator2 *v) const = 0;
+    BaseExprNode(IRNodeType t)
+        : IRNode(t) {
+    }
+    virtual Expr mutate_expr(IRMutator *v) const = 0;
     Type type;
 };
 
@@ -135,18 +148,22 @@ struct BaseExprNode : public IRNode {
    a concrete instantiation of a unique IRNodeType per class. */
 template<typename T>
 struct ExprNode : public BaseExprNode {
-    void accept(IRVisitor *v) const;
-    Expr mutate_expr(IRMutator2 *v) const;
-    ExprNode() : BaseExprNode(T::_node_type) {}
-    virtual ~ExprNode() {}
+    void accept(IRVisitor *v) const override;
+    Expr mutate_expr(IRMutator *v) const override;
+    ExprNode()
+        : BaseExprNode(T::_node_type) {
+    }
+    ~ExprNode() override = default;
 };
 
 template<typename T>
 struct StmtNode : public BaseStmtNode {
-    void accept(IRVisitor *v) const;
-    Stmt mutate_stmt(IRMutator2 *v) const;
-    StmtNode() : BaseStmtNode(T::_node_type) {}
-    virtual ~StmtNode() {}
+    void accept(IRVisitor *v) const override;
+    Stmt mutate_stmt(IRMutator *v) const override;
+    StmtNode()
+        : BaseStmtNode(T::_node_type) {
+    }
+    ~StmtNode() override = default;
 };
 
 /** IR nodes are passed around opaque handles to them. This is a
@@ -154,10 +171,12 @@ struct StmtNode : public BaseStmtNode {
    and dispatches visitors. */
 struct IRHandle : public IntrusivePtr<const IRNode> {
     HALIDE_ALWAYS_INLINE
-    IRHandle() : IntrusivePtr<const IRNode>() {}
+    IRHandle() = default;
 
     HALIDE_ALWAYS_INLINE
-    IRHandle(const IRNode *p) : IntrusivePtr<const IRNode>(p) {}
+    IRHandle(const IRNode *p)
+        : IntrusivePtr<const IRNode>(p) {
+    }
 
     /** Dispatch to the correct visitor method for this node. E.g. if
      * this node is actually an Add node, then this will call
@@ -174,7 +193,8 @@ struct IRHandle : public IntrusivePtr<const IRNode> {
      *   // This is an add node
      * }
      */
-    template<typename T> const T *as() const {
+    template<typename T>
+    const T *as() const {
         if (ptr && ptr->node_type == T::_node_type) {
             return (const T *)ptr;
         }
@@ -185,7 +205,6 @@ struct IRHandle : public IntrusivePtr<const IRNode> {
         return ptr->node_type;
     }
 };
-
 
 /** Integer constants */
 struct IntImm : public ExprNode<IntImm> {
@@ -200,7 +219,7 @@ struct IntImm : public ExprNode<IntImm> {
         // Normalize the value by dropping the high bits.
         // Since left-shift of negative value is UB in C++, cast to uint64 first;
         // it's unlikely any compilers we care about will misbehave, but UBSan will complain.
-        value = (int64_t) (((uint64_t) value) << (64 - t.bits()));
+        value = (int64_t)(((uint64_t)value) << (64 - t.bits()));
 
         // Then sign-extending to get them back
         value >>= (64 - t.bits());
@@ -248,7 +267,11 @@ struct FloatImm : public ExprNode<FloatImm> {
         node->type = t;
         switch (t.bits()) {
         case 16:
-            node->value = (double)((float16_t)value);
+            if (t.is_bfloat()) {
+                node->value = (double)((bfloat16_t)value);
+            } else {
+                node->value = (double)((float16_t)value);
+            }
             break;
         case 32:
             node->value = (float)value;
@@ -288,29 +311,58 @@ struct StringImm : public ExprNode<StringImm> {
 struct Expr : public Internal::IRHandle {
     /** Make an undefined expression */
     HALIDE_ALWAYS_INLINE
-    Expr() : Internal::IRHandle() {}
+    Expr() = default;
 
     /** Make an expression from a concrete expression node pointer (e.g. Add) */
     HALIDE_ALWAYS_INLINE
-    Expr(const Internal::BaseExprNode *n) : IRHandle(n) {}
+    Expr(const Internal::BaseExprNode *n)
+        : IRHandle(n) {
+    }
 
     /** Make an expression representing numeric constants of various types. */
     // @{
-    explicit Expr(int8_t x)    : IRHandle(Internal::IntImm::make(Int(8), x)) {}
-    explicit Expr(int16_t x)   : IRHandle(Internal::IntImm::make(Int(16), x)) {}
-             Expr(int32_t x)   : IRHandle(Internal::IntImm::make(Int(32), x)) {}
-    explicit Expr(int64_t x)   : IRHandle(Internal::IntImm::make(Int(64), x)) {}
-    explicit Expr(uint8_t x)   : IRHandle(Internal::UIntImm::make(UInt(8), x)) {}
-    explicit Expr(uint16_t x)  : IRHandle(Internal::UIntImm::make(UInt(16), x)) {}
-    explicit Expr(uint32_t x)  : IRHandle(Internal::UIntImm::make(UInt(32), x)) {}
-    explicit Expr(uint64_t x)  : IRHandle(Internal::UIntImm::make(UInt(64), x)) {}
-             Expr(float16_t x) : IRHandle(Internal::FloatImm::make(Float(16), (double)x)) {}
-             Expr(float x)     : IRHandle(Internal::FloatImm::make(Float(32), x)) {}
-    explicit Expr(double x)    : IRHandle(Internal::FloatImm::make(Float(64), x)) {}
+    explicit Expr(int8_t x)
+        : IRHandle(Internal::IntImm::make(Int(8), x)) {
+    }
+    explicit Expr(int16_t x)
+        : IRHandle(Internal::IntImm::make(Int(16), x)) {
+    }
+    Expr(int32_t x)
+        : IRHandle(Internal::IntImm::make(Int(32), x)) {
+    }
+    explicit Expr(int64_t x)
+        : IRHandle(Internal::IntImm::make(Int(64), x)) {
+    }
+    explicit Expr(uint8_t x)
+        : IRHandle(Internal::UIntImm::make(UInt(8), x)) {
+    }
+    explicit Expr(uint16_t x)
+        : IRHandle(Internal::UIntImm::make(UInt(16), x)) {
+    }
+    explicit Expr(uint32_t x)
+        : IRHandle(Internal::UIntImm::make(UInt(32), x)) {
+    }
+    explicit Expr(uint64_t x)
+        : IRHandle(Internal::UIntImm::make(UInt(64), x)) {
+    }
+    Expr(float16_t x)
+        : IRHandle(Internal::FloatImm::make(Float(16), (double)x)) {
+    }
+    Expr(bfloat16_t x)
+        : IRHandle(Internal::FloatImm::make(BFloat(16), (double)x)) {
+    }
+    Expr(float x)
+        : IRHandle(Internal::FloatImm::make(Float(32), x)) {
+    }
+    explicit Expr(double x)
+        : IRHandle(Internal::FloatImm::make(Float(64), x)) {
+    }
     // @}
 
     /** Make an expression representing a const string (i.e. a StringImm) */
-    Expr(const std::string &s) : IRHandle(Internal::StringImm::make(s)) {}
+    Expr(const std::string &s)
+        : IRHandle(Internal::StringImm::make(s)) {
+    }
 
     /** Override get() to return a BaseExprNode * instead of an IRNode * */
     HALIDE_ALWAYS_INLINE
@@ -333,10 +385,22 @@ struct ExprCompare {
     }
 };
 
+/** A single-dimensional span. Includes all numbers between min and
+ * (min + extent - 1). */
+struct Range {
+    Expr min, extent;
+
+    Range() = default;
+    Range(const Expr &min_in, const Expr &extent_in);
+};
+
+/** A multi-dimensional box. The outer product of the elements */
+typedef std::vector<Range> Region;
+
 /** An enum describing a type of device API. Used by schedules, and in
  * the For loop IR node. */
 enum class DeviceAPI {
-    None, /// Used to denote for loops that run on the same device as the containing code.
+    None,  /// Used to denote for loops that run on the same device as the containing code.
     Host,
     Default_GPU,
     CUDA,
@@ -345,6 +409,7 @@ enum class DeviceAPI {
     OpenGLCompute,
     Metal,
     Hexagon,
+    HexagonDma,
     D3D12Compute,
 };
 
@@ -359,6 +424,7 @@ const DeviceAPI all_device_apis[] = {DeviceAPI::None,
                                      DeviceAPI::OpenGLCompute,
                                      DeviceAPI::Metal,
                                      DeviceAPI::Hexagon,
+                                     DeviceAPI::HexagonDma,
                                      DeviceAPI::D3D12Compute};
 
 /** An enum describing different address spaces to be used with Func::store_in. */
@@ -386,6 +452,14 @@ enum class MemoryType {
      * "local" in OpenCL, and "threadgroup" in metal. Can be shared
      * across GPU threads within the same block. */
     GPUShared,
+
+    /** Allocate Locked Cache Memory to act as local memory */
+    LockedCache,
+    /** Vector Tightly Coupled Memory. HVX (Hexagon) local memory available on
+     * v65+. This memory has higher performance and lower power. Ideal for
+     * intermediate buffers. Necessary for vgather-vscatter instructions
+     * on Hexagon */
+    VTCM,
 };
 
 namespace Internal {
@@ -404,16 +478,32 @@ enum class ForType {
     Parallel,
     Vectorized,
     Unrolled,
+    Extern,
     GPUBlock,
     GPUThread,
-    GPULane
+    GPULane,
 };
 
+/** Check if for_type executes for loop iterations in parallel and unordered. */
+inline bool is_unordered_parallel(ForType for_type) {
+    return (for_type == ForType::Parallel ||
+            for_type == ForType::GPUBlock ||
+            for_type == ForType::GPUThread);
+}
+
+/** Returns true if for_type executes for loop iterations in parallel. */
+inline bool is_parallel(ForType for_type) {
+    return (is_unordered_parallel(for_type) ||
+            for_type == ForType::Vectorized ||
+            for_type == ForType::GPULane);
+}
 
 /** A reference-counted handle to a statement node. */
 struct Stmt : public IRHandle {
-    Stmt() : IRHandle() {}
-    Stmt(const BaseStmtNode *n) : IRHandle(n) {}
+    Stmt() = default;
+    Stmt(const BaseStmtNode *n)
+        : IRHandle(n) {
+    }
 
     /** Override get() to return a BaseStmtNode * instead of an IRNode * */
     HALIDE_ALWAYS_INLINE
@@ -429,7 +519,6 @@ struct Stmt : public IRHandle {
         }
     };
 };
-
 
 }  // namespace Internal
 }  // namespace Halide

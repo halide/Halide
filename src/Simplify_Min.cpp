@@ -3,8 +3,8 @@
 namespace Halide {
 namespace Internal {
 
-Expr Simplify::visit(const Min *op, ConstBounds *bounds) {
-    ConstBounds a_bounds, b_bounds;
+Expr Simplify::visit(const Min *op, ExprInfo *bounds) {
+    ExprInfo a_bounds, b_bounds;
     Expr a = mutate(op->a, &a_bounds);
     Expr b = mutate(op->b, &b_bounds);
 
@@ -19,6 +19,8 @@ Expr Simplify::visit(const Min *op, ConstBounds *bounds) {
         } else {
             bounds->max = b_bounds.max;
         }
+        bounds->alignment = ModulusRemainder::unify(a_bounds.alignment, b_bounds.alignment);
+        bounds->trim_bounds_using_alignment();
     }
 
     // Early out when the bounds tells us one side or the other is smaller
@@ -40,11 +42,10 @@ Expr Simplify::visit(const Min *op, ConstBounds *bounds) {
         int lanes = op->type.lanes();
         auto rewrite = IRMatcher::rewriter(IRMatcher::min(a, b), op->type);
 
+        // clang-format off
         if (EVAL_IN_LAMBDA
             (rewrite(min(x, x), x) ||
              rewrite(min(c0, c1), fold(min(c0, c1))) ||
-             rewrite(min(IRMatcher::Indeterminate(), x), a) ||
-             rewrite(min(x, IRMatcher::Indeterminate()), b) ||
              rewrite(min(IRMatcher::Overflow(), x), a) ||
              rewrite(min(x,IRMatcher::Overflow()), b) ||
              // Cases where one side dominates:
@@ -92,7 +93,9 @@ Expr Simplify::visit(const Min *op, ConstBounds *bounds) {
                rewrite(min(x, ((x + c0)/c1)*c1), b, c1 > 0 && c0 <= 0))))) {
             return rewrite.result;
         }
+        // clang-format on
 
+        // clang-format off
         if (EVAL_IN_LAMBDA
             (rewrite(min(min(x, c0), c1), min(x, fold(min(c0, c1)))) ||
              rewrite(min(min(x, c0), y), min(min(x, y), c0)) ||
@@ -116,7 +119,17 @@ Expr Simplify::visit(const Min *op, ConstBounds *bounds) {
              rewrite(min(max(x, c0), c1), max(min(x, c1), c0), c0 <= c1) ||
 
              (no_overflow(op->type) &&
-              (rewrite(min(x + c0, c1), min(x, fold(c1 - c0)) + c0) ||
+              (rewrite(min(min(x, y) + c0, x), min(x, y + c0), c0 > 0) ||
+               rewrite(min(min(x, y) + c0, x), min(x, y) + c0, c0 < 0) ||
+               rewrite(min(min(y, x) + c0, x), min(y + c0, x), c0 > 0) ||
+               rewrite(min(min(y, x) + c0, x), min(y, x) + c0, c0 < 0) ||
+
+               rewrite(min(x, min(x, y) + c0), min(x, y + c0), c0 > 0) ||
+               rewrite(min(x, min(x, y) + c0), min(x, y) + c0, c0 < 0) ||
+               rewrite(min(x, min(y, x) + c0), min(x, y + c0), c0 > 0) ||
+               rewrite(min(x, min(y, x) + c0), min(x, y) + c0, c0 < 0) ||
+
+               rewrite(min(x + c0, c1), min(x, fold(c1 - c0)) + c0) ||
 
                rewrite(min(x + c0, y + c1), min(x, y + fold(c1 - c0)) + c0, c1 > c0) ||
                rewrite(min(x + c0, y + c1), min(x + fold(c0 - c1), y) + c1, c0 > c1) ||
@@ -195,8 +208,9 @@ Expr Simplify::visit(const Min *op, ConstBounds *bounds) {
 
                rewrite(min(c0 - x, c1), c0 - max(x, fold(c0 - c1))))))) {
 
-            return mutate(std::move(rewrite.result), bounds);
+            return mutate(rewrite.result, bounds);
         }
+        // clang-format on
     }
 
     const Shuffle *shuffle_a = a.as<Shuffle>();
@@ -218,5 +232,5 @@ Expr Simplify::visit(const Min *op, ConstBounds *bounds) {
     }
 }
 
-}
-}
+}  // namespace Internal
+}  // namespace Halide

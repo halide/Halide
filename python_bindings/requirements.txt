@@ -8,3 +8,5 @@
 numpy
 scipy
 pillow
+imageio
+pybind11

@@ -3,29 +3,13 @@
 namespace Halide {
 namespace Internal {
 
-Expr Simplify::visit(const And *op, ConstBounds *bounds) {
+Expr Simplify::visit(const And *op, ExprInfo *bounds) {
     if (falsehoods.count(op)) {
         return const_false(op->type.lanes());
     }
 
-    // Exploit the assumed truth of the second side while mutating
-    // the first. Then assume the mutated first side while
-    // mutating the second.
-    Expr a, b;
-    {
-        auto fact = scoped_truth(op->b);
-        a = mutate(op->a, nullptr);
-    }
-    {
-        // Note that we assume the *mutated* a here. The transformation
-        // A && B == A && (B | A) is legal (where | means "given")
-        // As is
-        // A && B = (A | B) && B
-        // But the transformation
-        // A && B == (A | B) && (B | A) is not
-        auto fact = scoped_truth(a);
-        b = mutate(op->b, nullptr);
-    }
+    Expr a = mutate(op->a, nullptr);
+    Expr b = mutate(op->b, nullptr);
 
     // Order commutative operations by node type
     if (should_commute(a, b)) {
@@ -34,10 +18,31 @@ Expr Simplify::visit(const And *op, ConstBounds *bounds) {
 
     auto rewrite = IRMatcher::rewriter(IRMatcher::and_op(a, b), op->type);
 
+    // clang-format off
     if (EVAL_IN_LAMBDA
         (rewrite(x && true, a) ||
          rewrite(x && false, b) ||
          rewrite(x && x, a) ||
+
+         rewrite((x && y) && x, a) ||
+         rewrite(x && (x && y), b) ||
+         rewrite((x && y) && y, a) ||
+         rewrite(y && (x && y), b) ||
+
+         rewrite(((x && y) && z) && x, a) ||
+         rewrite(x && ((x && y) && z), b) ||
+         rewrite((z && (x && y)) && x, a) ||
+         rewrite(x && (z && (x && y)), b) ||
+         rewrite(((x && y) && z) && y, a) ||
+         rewrite(y && ((x && y) && z), b) ||
+         rewrite((z && (x && y)) && y, a) ||
+         rewrite(y && (z && (x && y)), b) ||
+
+         rewrite((x || y) && x, b) ||
+         rewrite(x && (x || y), a) ||
+         rewrite((x || y) && y, b) ||
+         rewrite(y && (x || y), a) ||
+
          rewrite(x != y && x == y, false) ||
          rewrite(x != y && y == x, false) ||
          rewrite((z && x != y) && x == y, false) ||
@@ -51,6 +56,7 @@ Expr Simplify::visit(const And *op, ConstBounds *bounds) {
          rewrite(x && !x, false) ||
          rewrite(!x && x, false) ||
          rewrite(y <= x && x < y, false) ||
+         rewrite(x != c0 && x == c1, b, c0 != c1) ||
          // Note: In the predicate below, if undefined overflow
          // occurs, the predicate counts as false. If well-defined
          // overflow occurs, the condition couldn't possibly
@@ -68,9 +74,41 @@ Expr Simplify::visit(const And *op, ConstBounds *bounds) {
          rewrite(x <= c0 && x <= c1, x <= fold(min(c0, c1))))) {
         return rewrite.result;
     }
+    // clang-format on
 
-    if (rewrite(broadcast(x) && broadcast(y), broadcast(x && y, op->type.lanes()))) {
-        return mutate(std::move(rewrite.result), bounds);
+    if (rewrite(broadcast(x) && broadcast(y), broadcast(x && y, op->type.lanes())) ||
+
+        rewrite((x || (y && z)) && y, (x || z) && y) ||
+        rewrite((x || (z && y)) && y, (x || z) && y) ||
+        rewrite(y && (x || (y && z)), y && (x || z)) ||
+        rewrite(y && (x || (z && y)), y && (x || z)) ||
+
+        rewrite(((y && z) || x) && y, (z || x) && y) ||
+        rewrite(((z && y) || x) && y, (z || x) && y) ||
+        rewrite(y && ((y && z) || x), y && (z || x)) ||
+        rewrite(y && ((z && y) || x), y && (z || x)) ||
+
+        rewrite((x && (y || z)) && y, x && y) ||
+        rewrite((x && (z || y)) && y, x && y) ||
+        rewrite(y && (x && (y || z)), y && x) ||
+        rewrite(y && (x && (z || y)), y && x) ||
+
+        rewrite(((y || z) && x) && y, x && y) ||
+        rewrite(((z || y) && x) && y, x && y) ||
+        rewrite(y && ((y || z) && x), y && x) ||
+        rewrite(y && ((z || y) && x), y && x) ||
+
+        rewrite((x || y) && (x || z), x || (y && z)) ||
+        rewrite((x || y) && (z || x), x || (y && z)) ||
+        rewrite((y || x) && (x || z), x || (y && z)) ||
+        rewrite((y || x) && (z || x), x || (y && z)) ||
+
+        rewrite(x < y && x < z, x < min(y, z)) ||
+        rewrite(y < x && z < x, max(y, z) < x) ||
+        rewrite(x <= y && x <= z, x <= min(y, z)) ||
+        rewrite(y <= x && z <= x, max(y, z) <= x)) {
+
+        return mutate(rewrite.result, bounds);
     }
 
     if (a.same_as(op->a) &&
@@ -81,5 +119,5 @@ Expr Simplify::visit(const And *op, ConstBounds *bounds) {
     }
 }
 
-}
-}
+}  // namespace Internal
+}  // namespace Halide

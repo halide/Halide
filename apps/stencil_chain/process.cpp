@@ -1,13 +1,13 @@
-#include <cstdio>
 #include <chrono>
+#include <cstdio>
 
 #include "stencil_chain.h"
 #ifndef NO_AUTO_SCHEDULE
 #include "stencil_chain_auto_schedule.h"
 #endif
 
-#include "halide_benchmark.h"
 #include "HalideBuffer.h"
+#include "halide_benchmark.h"
 #include "halide_image_io.h"
 
 using namespace Halide::Runtime;
@@ -35,16 +35,18 @@ int main(int argc, char **argv) {
     // Manually-tuned version
     double best_manual = benchmark(timing, 1, [&]() {
         stencil_chain(input, output);
+        output.device_sync();
     });
     printf("Manually-tuned time: %gms\n", best_manual * 1e3);
 
-    #ifndef NO_AUTO_SCHEDULE
+#ifndef NO_AUTO_SCHEDULE
     // Auto-scheduled version
     double best_auto = benchmark(timing, 1, [&]() {
         stencil_chain_auto_schedule(input, output);
+        output.device_sync();
     });
     printf("Auto-scheduled time: %gms\n", best_auto * 1e3);
-    #endif
+#endif
 
     convert_and_save_image(output, argv[3]);
 

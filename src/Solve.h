@@ -24,18 +24,18 @@ struct SolverResult {
  * in the result. If it is false, the expression has only been partially
  * solved, and there are still multiple instances of the variable. */
 SolverResult solve_expression(
-        Expr e, const std::string &variable,
-        const Scope<Expr> &scope = Scope<Expr>::empty_scope());
+    const Expr &e, const std::string &variable,
+    const Scope<Expr> &scope = Scope<Expr>::empty_scope());
 
 /** Find the smallest interval such that the condition is either true
  * or false inside of it, but definitely false outside of it. Never
  * returns undefined Exprs, instead it uses variables called "pos_inf"
  * and "neg_inf" to represent positive and negative infinity. */
-Interval solve_for_outer_interval(Expr c, const std::string &variable);
+Interval solve_for_outer_interval(const Expr &c, const std::string &variable);
 
 /** Find the largest interval such that the condition is definitely
  * true inside of it, and might be true or false outside of it. */
-Interval solve_for_inner_interval(Expr c, const std::string &variable);
+Interval solve_for_inner_interval(const Expr &c, const std::string &variable);
 
 /** Take a conditional that includes variables that vary over some
  * domain, and convert it to a more conservative (less frequently
@@ -44,7 +44,7 @@ Interval solve_for_inner_interval(Expr c, const std::string &variable);
  *
  * The condition may be a vector condition, in which case we also
  * 'and' over the vector lanes, and return a scalar result. */
-Expr and_condition_over_domain(Expr c, const Scope<Interval> &varying);
+Expr and_condition_over_domain(const Expr &c, const Scope<Interval> &varying);
 
 void solve_test();
 

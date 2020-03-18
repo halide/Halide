@@ -50,7 +50,7 @@ Then, using a Generator can be as simple as
     add_executable(my_app my_app.cpp)
     target_link_libraries(my_app PUBLIC coolness)
 
-For an example of "standalone" use of the CMake rules, see apps/wavelet.
+For an example of "standalone" use of the CMake rules, see [apps/wavelet](apps/wavelet).
 
 ## Build Rules
 
@@ -74,7 +74,7 @@ halide_target_features, includes)
     *   "assembly" (generate assembly listings for the generated functions)
     *   "bitcode" (emit the LLVM bitcode for generation functions)
     *   "stmt" (generate Halide .stmt files for generated functions)
-    *   "html" (like "stmt", but generated with HTML-formatted wrapping)
+    *   "stmt_html" (like "stmt", but generated with HTML-formatted wrapping)
 
 *   **filter_deps** *(List of CMake targets; optional)* optional list of
     dependencies needed by the Filter.
@@ -208,7 +208,7 @@ Process](#halide-compilation-process).
     *   "assembly" (generate assembly listings for the generated functions)
     *   "bitcode" (emit the LLVM bitcode for generation functions)
     *   "stmt" (generate Halide .stmt files for generated functions)
-    *   "html" (like "stmt", but generated with HTML-formatted wrapping)
+    *   "stmt_html" (like "stmt", but generated with HTML-formatted wrapping)
 
 *   **function_name** *(String; optional)* The name of the generated C function
     for the filter. If omitted, defaults to the CMake rule name.

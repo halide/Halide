@@ -33,15 +33,15 @@ typedef ptrdiff_t ssize_t;
 #define WEAK __attribute__((weak))
 
 #ifdef BITS_64
-#define INT64_C(c)  c ## L
-#define UINT64_C(c) c ## UL
+#define INT64_C(c) c##L
+#define UINT64_C(c) c##UL
 typedef uint64_t uintptr_t;
 typedef int64_t intptr_t;
 #endif
 
 #ifdef BITS_32
-#define INT64_C(c)  c ## LL
-#define UINT64_C(c) c ## ULL
+#define INT64_C(c) c##LL
+#define UINT64_C(c) c##ULL
 typedef uint32_t uintptr_t;
 typedef int32_t intptr_t;
 #endif
@@ -64,12 +64,12 @@ void free(void *);
 void *malloc(size_t);
 const char *strstr(const char *, const char *);
 int atoi(const char *);
-int strcmp(const char* s, const char* t);
-int strncmp(const char* s, const char* t, size_t n);
-size_t strlen(const char* s);
-const char *strchr(const char* s, int c);
-void* memcpy(void* s1, const void* s2, size_t n);
-int memcmp(const void* s1, const void* s2, size_t n);
+int strcmp(const char *s, const char *t);
+int strncmp(const char *s, const char *t, size_t n);
+size_t strlen(const char *s);
+const char *strchr(const char *s, int c);
+void *memcpy(void *s1, const void *s2, size_t n);
+int memcmp(const void *s1, const void *s2, size_t n);
 void *memset(void *s, int val, size_t n);
 // Use fopen+fileno+fclose instead of open+close - the value of the
 // flags passed to open are different on every platform
@@ -81,8 +81,6 @@ size_t fwrite(const void *, size_t, size_t, void *);
 ssize_t write(int fd, const void *buf, size_t bytes);
 int remove(const char *pathname);
 int ioctl(int fd, unsigned long request, ...);
-void exit(int);
-void abort();
 char *strncpy(char *dst, const char *src, size_t n);
 
 // Below are prototypes for various functions called by generated code
@@ -147,15 +145,6 @@ WEAK int halide_matlab_call_pipeline(void *user_context,
                                      int (*pipeline)(void **args), const halide_filter_metadata_t *metadata,
                                      int nlhs, mxArray **plhs, int nrhs, const mxArray **prhs);
 
-// Condition variables. Must be initialized with 0.
-struct halide_cond {
-    uintptr_t _private[1];
-};
-
-WEAK void halide_cond_signal(struct halide_cond *cond);
-WEAK void halide_cond_broadcast(struct halide_cond *cond);
-WEAK void halide_cond_wait(struct halide_cond *cond, struct halide_mutex *mutex);
-
 WEAK int halide_trace_helper(void *user_context,
                              const char *func,
                              void *value, int *coords,
@@ -164,44 +153,40 @@ WEAK int halide_trace_helper(void *user_context,
                              int parent_id, int value_index, int dimensions,
                              const char *trace_tag);
 
-}  // extern "C"
+struct halide_pseudostack_slot_t {
+    void *ptr;
+    size_t size;
+};
 
-/** A macro that calls halide_print if the supplied condition is
- * false, then aborts. Used for unrecoverable errors, or
- * should-never-happen errors. */
-#define _halide_stringify(x) #x
-#define _halide_expand_and_stringify(x) _halide_stringify(x)
-#define halide_assert(user_context, cond)                               \
-    if (!(cond)) {                                                      \
-        halide_print(user_context, __FILE__ ":" _halide_expand_and_stringify(__LINE__) " Assert failed: " #cond "\n"); \
-        abort();                                                        \
-    }
+}  // extern "C"
 
 // A convenient namespace for weak functions that are internal to the
 // halide runtime.
-namespace Halide { namespace Runtime { namespace Internal {
+namespace Halide {
+namespace Runtime {
+namespace Internal {
 
 extern WEAK void halide_use_jit_module();
 extern WEAK void halide_release_jit_module();
 
-template <typename T>
+template<typename T>
 __attribute__((always_inline)) void swap(T &a, T &b) {
     T t = a;
     a = b;
     b = t;
 }
 
-template <typename T>
+template<typename T>
 __attribute__((always_inline)) T max(const T &a, const T &b) {
     return a > b ? a : b;
 }
 
-template <typename T>
+template<typename T>
 __attribute__((always_inline)) T min(const T &a, const T &b) {
     return a < b ? a : b;
 }
 
-template <typename T, typename U>
+template<typename T, typename U>
 __attribute__((always_inline)) T reinterpret(const U &x) {
     T ret;
     memcpy(&ret, &x, min(sizeof(T), sizeof(U)));
@@ -210,9 +195,24 @@ __attribute__((always_inline)) T reinterpret(const U &x) {
 
 extern WEAK __attribute__((always_inline)) int halide_malloc_alignment();
 
+extern WEAK __attribute__((always_inline)) void halide_abort();
+
 void halide_thread_yield();
 
-}}}
+}  // namespace Internal
+}  // namespace Runtime
+}  // namespace Halide
+
+/** A macro that calls halide_print if the supplied condition is
+ * false, then aborts. Used for unrecoverable errors, or
+ * should-never-happen errors. */
+#define _halide_stringify(x) #x
+#define _halide_expand_and_stringify(x) _halide_stringify(x)
+#define halide_assert(user_context, cond)                                                                              \
+    if (!(cond)) {                                                                                                     \
+        halide_print(user_context, __FILE__ ":" _halide_expand_and_stringify(__LINE__) " Assert failed: " #cond "\n"); \
+        halide_abort();                                                                                                \
+    }
 
 using namespace Halide::Runtime::Internal;
 

@@ -28,7 +28,6 @@ die ( ) {
 
 # OS specific support (must be 'true' or 'false').
 cygwin=false
-msys=false
 darwin=false
 case "`uname`" in
   CYGWIN* )
@@ -36,9 +35,6 @@ case "`uname`" in
     ;;
   Darwin* )
     darwin=true
-    ;;
-  MINGW* )
-    msys=true
     ;;
 esac
 

@@ -6,15 +6,9 @@ ROOT_DIR = $(strip $(shell dirname $(THIS_MAKEFILE)))
 HALIDE_PATH ?= $(ROOT_DIR)/..
 HALIDE_DISTRIB_PATH ?= $(HALIDE_PATH)/distrib
 BIN ?= $(ROOT_DIR)/bin
-# 'python' or 'python3'
 PYTHON ?= python3
 TEST_TMP ?= $(BIN)/tmp
 
-ifeq ($(OS), Windows_NT)
-    # assume we are building for the MinGW environment
-    FPIC=
-    SHARED_EXT=dll
-else
     FPIC=-fPIC
 ifeq ($(UNAME), Darwin)
     SHARED_EXT=dylib
@@ -23,26 +17,23 @@ ifeq ($(UNAME), Darwin)
 else
     SHARED_EXT=so
 endif
+
+ifeq ($(UNAME), Linux)
+USE_EXPORT_DYNAMIC=-rdynamic
+else
+ifeq ($(UNAME), Darwin)
+USE_EXPORT_DYNAMIC=-undefined dynamic_lookup
+else
+USE_EXPORT_DYNAMIC=
+endif
 endif
 
 LIBHALIDE ?= $(HALIDE_DISTRIB_PATH)/bin/libHalide.$(SHARED_EXT)
 
-SUFFIX ?= .$(SHARED_EXT)
-ifeq ($(PYTHON), python3)
-    SUFFIX = $(shell $(PYTHON)-config --extension-suffix)
-endif
+SUFFIX = $(shell $(PYTHON)-config --extension-suffix)
 
 # Discover PyBind path from `python3 -m pybind11 --includes`
-# if it is pip/conda installed, which is a common case.
-# Cf. https://github.com/pybind/pybind11/blob/master/docs/compiling.rst#building-manually
 PYBIND11_CFLAGS = $(shell $(PYTHON) -m pybind11 --includes)
-ifeq ($(PYBIND11_CFLAGS),)
-    ifndef PYBIND11_PATH
-        $(error PYBIND11_PATH is undefined)
-    endif
-    PYBIND11_PATH ?= /path/to/pybind11
-    PYBIND11_CFLAGS = -I $(PYBIND11_PATH)/include
-endif
 
 OPTIMIZE ?= -O3
 
@@ -50,16 +41,15 @@ OPTIMIZE ?= -O3
 # OPTIMIZE ?= -g -DDEBUG=1 -UNDEBUG
 
 # Compiling with -fvisibility=hidden saves ~80k on optimized x64 builds
-CCFLAGS=$(shell $(PYTHON)-config --cflags) $(PYBIND11_CFLAGS) -I $(HALIDE_DISTRIB_PATH)/include -I $(ROOT_DIR) -std=c++11 $(FPIC) -fvisibility=hidden -fvisibility-inlines-hidden $(OPTIMIZE)
+CCFLAGS=$(shell $(PYTHON)-config --cflags) $(PYBIND11_CFLAGS) -I $(HALIDE_DISTRIB_PATH)/include -I $(ROOT_DIR) -std=c++11 $(FPIC) -fvisibility=hidden -fvisibility-inlines-hidden $(OPTIMIZE) $(CXXFLAGS)
 # Filter out a pointless warning present in some Python installs
 CCFLAGS := $(filter-out -Wstrict-prototypes,$(CCFLAGS))
 
 # DON'T link libpython* - leave those symbols to lazily resolve at load time
 # Cf. https://github.com/pybind/pybind11/blob/master/docs/compiling.rst#building-manually
-LDFLAGS=-lz
-ifeq ($(UNAME), Darwin)
-    # Keep OS X builds from complaining about missing libpython symbols
-    LDFLAGS += -undefined dynamic_lookup
+LDFLAGS += -lz $(USE_EXPORT_DYNAMIC)
+ifeq ($(UNAME), Linux)
+  LDFLAGS += -Wl,-rpath=$(dir $(LIBHALIDE))
 endif
 
 PY_SRCS=$(shell ls $(ROOT_DIR)/src/*.cpp)
@@ -118,20 +108,20 @@ $(BIN)/runtime.a: $(BIN)/runtime.gen
 	$< -r runtime -o $(BIN) target=host
 
 # Which target features to use for which test targets.
-target_features_addconstant=-legacy_buffer_wrappers-no_runtime
+target_features_addconstant=-no_runtime
 target_features_bit=-no_runtime
-target_features_user_context=-user_context-legacy_buffer_wrappers-no_runtime
+target_features_user_context=-user_context-no_runtime
 
 # Make the generator generate a Python extension:
-$(BIN)/%.py.c $(BIN)/%.cpp $(BIN)/%.h: $(BIN)/%.gen
-	LD_LIBRARY_PATH=$(HALIDE_DISTRIB_PATH)/bin $< -e h,cpp,py.c \
+$(BIN)/%.py.cpp $(BIN)/%.halide_generated.cpp $(BIN)/%.h: $(BIN)/%.gen
+	LD_LIBRARY_PATH=$(HALIDE_DISTRIB_PATH)/bin $< -e c_header,c_source,python_extension \
 	    -g $(notdir $(basename $<)) -o $(BIN) \
 	    target=host$(target_features_$(notdir $(basename $<)))
 
 # Compile the generated Python extension(s):
-$(BIN)/%.o: $(BIN)/%.cpp
+$(BIN)/%.o: $(BIN)/%.halide_generated.cpp
 	$(CXX) -c $(FPIC) $(CCFLAGS) $^ -o $@
-$(BIN)/%.py.o: $(BIN)/%.py.c
+$(BIN)/%.py.o: $(BIN)/%.py.cpp
 	$(CXX) -c $(FPIC) $(CCFLAGS) $^ -o $@
 
 # The Python extension of the generator is already in $(BIN), and is named
@@ -151,7 +141,7 @@ $(BIN)/ext/%.so: $(BIN)/%.py.o $(BIN)/%.o $(BIN)/runtime.a
 test_correctness_addconstant_test: addconstant.run ;
 test_correctness_bit_test: bit.run ;
 test_correctness_user_context_test: user_context.run ;
-test_correctness_pystub: $(BIN)/simplestub.so $(BIN)/complexstub.so $(BIN)/buildmethod.so $(BIN)/partialbuildmethod.so $(BIN)/nobuildmethod.so
+test_correctness_pystub: $(BIN)/simplestub.so $(BIN)/complexstub.so $(BIN)/partialbuildmethod.so $(BIN)/nobuildmethod.so
 
 APPS = $(shell ls $(ROOT_DIR)/apps/*.py)
 CORRECTNESS = $(shell ls $(ROOT_DIR)/correctness/*.py)
@@ -188,11 +178,18 @@ test_tutorial_lesson_10_aot_compilation_run: $(TEST_TMP)/lesson_10_halide.so
 
 $(TEST_TMP)/lesson_10_halide.so: test_tutorial_lesson_10_aot_compilation_generate
 	$(CXX) $(CCFLAGS) $(LDFLAGS) $(FPIC) -shared \
-		$(TEST_TMP)/lesson_10_halide.py.c \
+		$(TEST_TMP)/lesson_10_halide.py.cpp \
 		$(TEST_TMP)/lesson_10_halide.o \
 		-I $(TEST_TMP) -o $@
 
+.PHONY: clean
 clean:
 	rm -rf $(BIN)
 
+.PHONY: test
 test: test_correctness test_apps test_tutorial
+
+# TODO(srj): the python bindings need to be put into the distrib folders;
+# this is a hopefully-temporary workaround (https://github.com/halide/Halide/issues/4368)
+.PHONY: build_python_bindings
+build_python_bindings: $(MODULE)

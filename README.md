@@ -1,5 +1,7 @@
+# Halide
+
 Halide is a programming language designed to make it easier to write
-high-performance image processing code on modern machines. Halide
+high-performance image and array processing code on modern machines. Halide
 currently targets:
   * CPU architectures: X86, ARM, MIPS, Hexagon, PowerPC
   * Operating systems: Linux, Windows, Mac OS X, Android, iOS, Qualcomm QuRT
@@ -9,7 +11,7 @@ Rather than being a standalone programming language, Halide is
 embedded in C++. This means you write C++ code that builds an
 in-memory representation of a Halide pipeline using Halide's C++
 API. You can then compile this representation to an object file, or
-JIT-compile it and run it in the same process.
+JIT-compile it and run it in the same process. Halide also provides a Python binding that provides full support for writing Halide embedded in Python without C++.
 
 For more detail about what Halide is, see http://halide-lang.org.
 
@@ -35,46 +37,50 @@ Building Halide
 
 #### TL;DR
 
-Have llvm-5.0 or greater installed and run 'make' in the root
+Have llvm-8.0 (or greater) installed and run `make` in the root
 directory of the repository (where this README is).
 
 #### Acquiring LLVM
 
-Building halide requires at least llvm 5.0, along with the matching
-version of clang. llvm-config and clang must be somewhere in the
-path. If your OS does not have packages for llvm-5.0, you can find
-binaries for it at http://llvm.org/releases/download.html. Download an
-appropriate package and then either install it, or at least put the
-bin subdirectory in your path. (This works well on OS X and Ubuntu.)
+Building Halide requires at least LLVM 8.0, along with the matching
+version of Clang; we recommend using the most recent stable version of LLVM for
+most users (LLVM 9.0 at the time of this writing). `llvm-config` and `clang`
+must be somewhere in the path. If your OS does not have packages for llvm-8.0
+(or newer), you can find binaries for it at http://llvm.org/releases/download.html.
+Download an appropriate package and then either install it, or at least put the
+`bin` subdirectory in your path. (This works well on OS X and Ubuntu.)
 
-If you want to build it yourself, first check it out from subversion:
+If you want to build it yourself, first check it out from GitHub:
 
-    % svn co https://llvm.org/svn/llvm-project/llvm/branches/release_50 llvm5.0
-    % svn co https://llvm.org/svn/llvm-project/cfe/branches/release_50 llvm5.0/tools/clang
+    % git clone https://github.com/llvm/llvm-project.git
+    % git checkout release/9.x  # to build LLVM 9.x
+
+(If you want to build LLVM 9.x, use `git checkout release/9.x`; for LLVM 8.0, use `release 8.x`; for current trunk, use `git checkout master`)
 
 Then build it like so:
 
-    % cd llvm5.0
+    % cd llvm-project
     % mkdir build
+    % mkdir install
     % cd build
-    % cmake -DLLVM_ENABLE_TERMINFO=OFF -DLLVM_TARGETS_TO_BUILD="X86;ARM;NVPTX;AArch64;Mips;PowerPC" -DLLVM_ENABLE_ASSERTIONS=ON -DCMAKE_BUILD_TYPE=Release ..
-    % make -j8
+    % cmake -DLLVM_ENABLE_PROJECTS="clang;lld;clang-tools-extra" -DLLVM_ENABLE_RTTI=ON -DLLVM_ENABLE_TERMINFO=OFF -DLLVM_TARGETS_TO_BUILD="X86;ARM;NVPTX;AArch64;Mips;PowerPC;Hexagon" -DLLVM_ENABLE_ASSERTIONS=ON -DCMAKE_BUILD_TYPE=Release -DLLVM_BUILD_32_BITS=OFF -DCMAKE_INSTALL_PREFIX=../install ../llvm
+    % make install -j8
 
 then to point Halide to it:
 
-    export LLVM_CONFIG=<path to llvm>/build/bin/llvm-config
-    export CLANG=<path to llvm>/build/bin/clang
+    export LLVM_CONFIG=<path to llvm>/install/bin/llvm-config
+
+(Note that you *must* add `clang` to `LLVM_ENABLE_PROJECTS`; adding `lld` to `LLVM_ENABLE_PROJECTS` is only required when using WebAssembly, and adding `clang-tools-extra` is only necessary if you plan to contribute code to Halide (so that you can run clang-tidy on your pull requests). We recommend enabling both in all cases, to simplify builds.)
 
 #### Building Halide with make
 
-With LLVM_CONFIG and CLANG set (or llvm-config and clang in your
-path), you should be able to just run 'make' in the root directory of
-the Halide source tree. 'make run_tests' will run the JIT test suite,
-and 'make test_apps' will make sure all the apps compile and run (but
-won't check their output).
+With `LLVM_CONFIG` set (or `llvm-config` in your path), you should be
+able to just run `make` in the root directory of the Halide source tree.
+`make run_tests` will run the JIT test suite, and `make test_apps` will
+make sure all the apps compile and run (but won't check their output).
 
-There is no 'make install' yet. If you want to make an install
-package, run 'make distrib'.
+There is no `make install` yet. If you want to make an install
+package, run `make distrib`.
 
 #### Building Halide out-of-tree with make
 
@@ -95,29 +101,29 @@ If you wish to use cmake to build Halide, the build procedure is:
     % cmake -DLLVM_DIR=/path-to-llvm-build/lib/cmake/llvm -DCMAKE_BUILD_TYPE=Release /path/to/halide
     % make -j8
 
-LLVM_DIR should be the folder in the LLVM installation or build tree that contains LLVMConfig.cmake.
+`LLVM_DIR` should be the folder in the LLVM installation or build tree that contains `LLVMConfig.cmake`.
 
 #### Building Halide and LLVM on Windows
 
 Acquire MSVC 2015 Update 3 or newer. Earlier versions may work but are
 not part of our tests. MSBuild and cmake should also be in your
 path. The instructions below assume Halide is checked out under
-C:/Code/Halide, and llvm (and clang) is checked out under
-C:/Code/llvm.
+`C:\Code\Halide`, and LLVM and Clang are checked out under
+`C:\Code\llvm`.
 
     % mkdir C:\Code\llvm-build
     % cd C:\Code\llvm-build
-    % cmake -DCMAKE_INSTALL_PREFIX=../llvm-install -DLLVM_ENABLE_TERMINFO=OFF -DLLVM_TARGETS_TO_BUILD=X86;ARM;NVPTX;AArch64;Mips;Hexagon -DLLVM_ENABLE_ASSERTIONS=ON -DLLVM_BUILD_32_BITS=OFF -DCMAKE_BUILD_TYPE=Release ../llvm -G "Visual Studio 14 Win64"
+    % cmake -DCMAKE_INSTALL_PREFIX=../llvm-install -DLLVM_ENABLE_TERMINFO=OFF -DLLVM_TARGETS_TO_BUILD=X86;ARM;NVPTX;AArch64;Mips;Hexagon -DLLVM_ENABLE_ASSERTIONS=ON -DLLVM_BUILD_32_BITS=OFF -DCMAKE_BUILD_TYPE=Release ../llvm/llvm -G "Visual Studio 14 Win64"
 
 For a 32-bit build use:
 
-    % cmake -DCMAKE_INSTALL_PREFIX=../llvm-install -DLLVM_ENABLE_TERMINFO=OFF -DLLVM_TARGETS_TO_BUILD=X86;ARM;NVPTX;AArch64;Mips;Hexagon -DLLVM_ENABLE_ASSERTIONS=ON -DLLVM_BUILD_32_BITS=ON -DCMAKE_BUILD_TYPE=Release ../llvm -G "Visual Studio 14"
+    % cmake -DCMAKE_INSTALL_PREFIX=../llvm-install -DLLVM_ENABLE_TERMINFO=OFF -DLLVM_TARGETS_TO_BUILD=X86;ARM;NVPTX;AArch64;Mips;Hexagon -DLLVM_ENABLE_ASSERTIONS=ON -DLLVM_BUILD_32_BITS=ON -DCMAKE_BUILD_TYPE=Release ../llvm/llvm -G "Visual Studio 14"
 
-Then build it like so
+Then build it like so:
 
     % MSBuild.exe /m /t:Build /p:Configuration=Release .\INSTALL.vcxproj
 
-You can substitute "Debug" for "Release" in both commands if you want a debug build.
+You can substitute `Debug` for `Release` in both commands if you want a debug build.
 
 To configure and build Halide:
 
@@ -125,11 +131,6 @@ To configure and build Halide:
     % cd C:\Code\halide-build
     % cmake -DLLVM_DIR=../llvm-install/lib/cmake/llvm -DCMAKE_BUILD_TYPE=Release -G "Visual Studio 14 Win64" ../halide
     % MSBuild.exe /m /t:Build /p:Configuration=Release .\ALL_BUILD.vcxproj
-
-#### Building Halide and LLVM on Windows using mingw
-
-The makefile method above should work from inside a "mingw64" shell
-(not the default shell) in an msys2 installation.
 
 #### If all else fails...
 
@@ -143,20 +144,23 @@ run, and what the output was.
 Some useful environment variables
 =================================
 
-HL_TARGET=... will set Halide's AOT compilation target.
+`HL_TARGET=...` will set Halide's AOT compilation target.
 
-HL_JIT_TARGET=... will set Halide's JIT compilation target.
+`HL_JIT_TARGET=...` will set Halide's JIT compilation target.
 
-HL_DEBUG_CODEGEN=1 will print out pseudocode for what Halide is
+`HL_DEBUG_CODEGEN=1` will print out pseudocode for what Halide is
 compiling. Higher numbers will print more detail.
 
-HL_NUM_THREADS=... specifies the size of the thread pool. This has no
-effect on OS X or iOS, where we just use grand central dispatch.
+`HL_NUM_THREADS=...` specifies the number of threads to create for the
+thread pool. When the async scheduling directive is used, more threads
+than this number may be required and thus allocated. A maximum of 256
+threads is allowed. (By default, the number of cores on the host is
+used.)
 
-HL_TRACE_FILE=... specifies a binary target file to dump tracing data
-into (ignored unless at least one `trace_` feature is enabled in HL_TARGET or
-HL_JIT_TARGET). The output can be parsed programmatically by starting from the
-code in utils/HalideTraceViz.cpp
+`HL_TRACE_FILE=...` specifies a binary target file to dump tracing data
+into (ignored unless at least one `trace_` feature is enabled in `HL_TARGET` or
+`HL_JIT_TARGET`). The output can be parsed programmatically by starting from the
+code in `utils/HalideTraceViz.cpp`.
 
 
 Using Halide on OSX
@@ -167,10 +171,6 @@ tools with Apple clang 500.2.76. This means that we link against
 libc++ instead of libstdc++. You may need to adjust compiler options
 accordingly if you're using an older XCode which does not default to
 libc++.
-
-For parallelism, Halide automatically uses Apple's Grand Central
-Dispatch, so it is not possible to control the number of threads used
-without overriding the parallel runtime entirely.
 
 
 Halide OpenGL/GLSL backend
@@ -255,10 +255,11 @@ link implementations of the following two functions with your Halide code:
     }
 
 Halide allocates and deletes textures as necessary.  Applications may manage
-the textures by hand by setting the `buffer_t::dev` field; this is most useful
-for reusing image data that is already stored in textures. Some rudimentary
-checks are performed to ensure that externally allocated textures have the
-correct format, but in general that's the responsibility of the application.
+the textures by hand by setting the `halide_buffer_t::device` field; this is
+most useful for reusing image data that is already stored in textures. Some
+rudimentary checks are performed to ensure that externally allocated textures
+have the correct format, but in general that's the responsibility of the
+application.
 
 It is possible to let render directly to the current framebuffer; to do this,
 set the `dev` field of the output buffer to the value returned by
@@ -331,34 +332,20 @@ For examples of using the `hexagon` scheduling directive on both the simulator a
 Hexagon DSP, see the blur example app.
 
 To build and run an example app using the Hexagon target,
-  1. Obtain and build LLVM and Clang v5.0 or later from llvm.org
+  1. Obtain and build trunk LLVM and Clang. (Earlier versions of LLVM may work but are not actively tested and thus not recommended.)
   2. Download and install the Hexagon SDK and version 8.0 Hexagon Tools
   3. Build and run an example for Hexagon HVX
 
-#### 1. Obtain and build LLVM and clang v5.0 or later from llvm.org
-The Hexagon backend is currently under development. So it's best to use trunk llvm.
-These are the same instructions as above for building Clang/LLVM, but for trunk
-Clang/LLVM instead of 5.0.
+#### 1. Obtain and build trunk LLVM and Clang
 
-    cd <path to llvm>
-    svn co http://llvm.org/svn/llvm-project/llvm/trunk .
-    svn co http://llvm.org/svn/llvm-project/cfe/trunk ./tools/clang
-    # Or:
-    #    git clone http://llvm.org/git/llvm.git .
-    #    git clone http://llvm.org/git/clang.git llvm/tools
-    mkdir build
-    cd build
-    cmake -DLLVM_ENABLE_TERMINFO=OFF -DLLVM_TARGETS_TO_BUILD="X86;ARM;NVPTX;AArch64;Mips;PowerPC;Hexagon" -DLLVM_ENABLE_ASSERTIONS=ON -DCMAKE_BUILD_TYPE=Release ..
-    make -j8
-    export LLVM_CONFIG=<path to llvm>/build/bin/llvm-config
-    export CLANG=<path to llvm>/build/bin/clang
+(Instructions given previous, just be sure to check out the `master` branch.)
 
 #### 2. Download and install the Hexagon SDK and version 8.0 Hexagon Tools
 Go to https://developer.qualcomm.com/software/hexagon-dsp-sdk/tools
   1. Select the Hexagon Series 600 Software and download the 3.0 version for Linux.
   2. untar the installer
   3. Run the extracted installer to install the Hexagon SDK and Hexagon Tools, selecting
-  Installation of Hexagon SDK into /location/of/SDK/Hexagon\_SDK/3.0 and the Hexagon tools into /location/of/SDK/Hexagon\_Tools/8.0
+  Installation of Hexagon SDK into `/location/of/SDK/Hexagon_SDK/3.0` and the Hexagon tools into `/location/of/SDK/Hexagon_Tools/8.0`
   4. Set an environment variable to point to the SDK installation location
 
     export SDK_LOC=/location/of/SDK

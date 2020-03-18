@@ -14,27 +14,36 @@ using std::vector;
 using namespace Halide::ConciseCasts;
 using namespace llvm;
 
-CodeGen_PowerPC::CodeGen_PowerPC(Target t) : CodeGen_Posix(t) {
-    #if !(WITH_POWERPC)
+CodeGen_PowerPC::CodeGen_PowerPC(Target t)
+    : CodeGen_Posix(t) {
+#if !defined(WITH_POWERPC)
     user_error << "llvm build not configured with PowerPC target enabled.\n";
-    #endif
+#endif
     user_assert(llvm_PowerPC_enabled) << "llvm build not configured with PowerPC target enabled.\n";
 }
 
-const char* CodeGen_PowerPC::altivec_int_type_name(const Type& t) {
+const char *CodeGen_PowerPC::altivec_int_type_name(const Type &t) {
     if (t.is_int()) {
         switch (t.bits()) {
-        case  8: return "sb";
-        case 16: return "sh";
-        case 32: return "sw";
-        case 64: return "sd";
+        case 8:
+            return "sb";
+        case 16:
+            return "sh";
+        case 32:
+            return "sw";
+        case 64:
+            return "sd";
         }
     } else if (t.is_uint()) {
         switch (t.bits()) {
-        case  8: return "ub";
-        case 16: return "uh";
-        case 32: return "uw";
-        case 64: return "ud";
+        case 8:
+            return "ub";
+        case 16:
+            return "uh";
+        case 32:
+            return "uw";
+        case 64:
+            return "ud";
         }
     }
     return nullptr;  // not a recognized int type.
@@ -96,7 +105,7 @@ void CodeGen_PowerPC::visit(const Cast *op) {
          u32(((wild_u64x_ + wild_u64x_) + 1) / 2)},
     };
 
-    for (size_t i = 0; i < sizeof(patterns)/sizeof(patterns[0]); i++) {
+    for (size_t i = 0; i < sizeof(patterns) / sizeof(patterns[0]); i++) {
         const Pattern &pattern = patterns[i];
 
         if (!target.has_feature(Target::VSX) && pattern.needs_vsx) {
@@ -131,8 +140,8 @@ void CodeGen_PowerPC::visit(const Min *op) {
     bool vsx = target.has_feature(Target::VSX);
     bool arch_2_07 = target.has_feature(Target::POWER_ARCH_2_07);
 
-    const Type& element_type = op->type.element_of();
-    const char* element_type_name = altivec_int_type_name(element_type);
+    const Type &element_type = op->type.element_of();
+    const char *element_type_name = altivec_int_type_name(element_type);
 
     if (element_type_name != nullptr &&
         (element_type.bits() < 64 || arch_2_07)) {
@@ -157,8 +166,8 @@ void CodeGen_PowerPC::visit(const Max *op) {
     bool vsx = target.has_feature(Target::VSX);
     bool arch_2_07 = target.has_feature(Target::POWER_ARCH_2_07);
 
-    const Type& element_type = op->type.element_of();
-    const char* element_type_name = altivec_int_type_name(element_type);
+    const Type &element_type = op->type.element_of();
+    const char *element_type_name = altivec_int_type_name(element_type);
 
     if (element_type_name != nullptr &&
         (element_type.bits() < 64 || arch_2_07)) {

@@ -1,5 +1,5 @@
-#include <stdio.h>
 #include "Halide.h"
+#include <stdio.h>
 
 using namespace Halide;
 
@@ -11,8 +11,8 @@ int main(int argc, char **argv) {
 
     printf("Defining function...\n");
 
-    f(x, y) = cast<float>(x);
-    g(x, y) = f(x+1, y) + f(x-1, y);
+    f(x, y) = cast<int>(x);
+    g(x, y) = f(x + 1, y) + f(x - 1, y);
 
     Target target = get_jit_target_from_environment();
     if (target.has_gpu_feature() || target.has_feature(Target::OpenGLCompute)) {
@@ -23,12 +23,12 @@ int main(int argc, char **argv) {
 
     printf("Realizing function...\n");
 
-    Buffer<float> im = g.realize(32, 32, target);
+    Buffer<int> im = g.realize(32, 32, target);
 
     for (int i = 0; i < 32; i++) {
         for (int j = 0; j < 32; j++) {
-            if (im(i,j) != 2*i) {
-                printf("im[%d, %d] = %f (expected %d)\n", i, j, im(i,j), 2*i);
+            if (im(i, j) != 2 * i) {
+                printf("im[%d, %d] = %d (expected %d)\n", i, j, im(i, j), 2 * i);
                 return -1;
             }
         }

@@ -6,7 +6,7 @@ int main(int argc, char **argv) {
     Func f, g;
     Var x;
     f(x) = cast<int16_t>(-x);
-    g(x) = cast<int16_t>(x % 8);
+    g(x) = cast<uint16_t>(x % 8);
 
     f.compute_root();
     g.compute_root();

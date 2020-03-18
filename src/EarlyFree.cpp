@@ -1,4 +1,5 @@
 #include <map>
+#include <utility>
 
 #include "EarlyFree.h"
 #include "ExprUsesVar.h"
@@ -8,17 +9,18 @@
 
 namespace Halide {
 namespace Internal {
+namespace {
 
-using std::map;
 using std::string;
-using std::vector;
 
 class FindLastUse : public IRVisitor {
 public:
     string func;
     Stmt last_use;
 
-    FindLastUse(string s) : func(s) {}
+    FindLastUse(string s)
+        : func(std::move(s)) {
+    }
 
 private:
     bool in_loop = false;
@@ -26,35 +28,48 @@ private:
 
     using IRVisitor::visit;
 
-    void visit(const For *loop) {
+    void visit(const For *loop) override {
         loop->min.accept(this);
         loop->extent.accept(this);
         ScopedValue<bool> old_in_loop(in_loop, true);
         loop->body.accept(this);
     }
 
-    void visit(const Load *load) {
+    void visit(const Fork *fork) override {
+        ScopedValue<bool> old_in_loop(in_loop, true);
+        fork->first.accept(this);
+        fork->rest.accept(this);
+    }
+
+    void visit(const Acquire *acq) override {
+        acq->semaphore.accept(this);
+        acq->count.accept(this);
+        ScopedValue<bool> old_in_loop(in_loop, true);
+        acq->body.accept(this);
+    }
+
+    void visit(const Load *load) override {
         if (func == load->name) {
             last_use = containing_stmt;
         }
         IRVisitor::visit(load);
     }
 
-    void visit(const Call *call) {
+    void visit(const Call *call) override {
         if (call->name == func) {
             last_use = containing_stmt;
         }
         IRVisitor::visit(call);
     }
 
-    void visit(const Store *store) {
+    void visit(const Store *store) override {
         if (func == store->name) {
             last_use = containing_stmt;
         }
         IRVisitor::visit(store);
     }
 
-    void visit(const Variable *var) {
+    void visit(const Variable *var) override {
         if (var->name == func || var->name == func + ".buffer") {
             // Don't free the allocation while a buffer that may refer
             // to it is still in use.
@@ -62,7 +77,7 @@ private:
         }
     }
 
-    void visit(const IfThenElse *op) {
+    void visit(const IfThenElse *op) override {
         // It's a bad idea to inject it in either side of an
         // ifthenelse, so we treat this as being in a loop.
         op->condition.accept(this);
@@ -73,32 +88,36 @@ private:
         }
     }
 
-    void visit(const Block *block) {
+    void visit(const Block *block) override {
         if (in_loop) {
             IRVisitor::visit(block);
         } else {
-            Stmt old_containing_stmt = containing_stmt;
-            containing_stmt = block->first;
+            ScopedValue<Stmt> old_containing_stmt(containing_stmt, block->first);
             block->first.accept(this);
             if (block->rest.defined()) {
                 containing_stmt = block->rest;
                 block->rest.accept(this);
             }
-            containing_stmt = old_containing_stmt;
         }
+    }
+
+    void visit(const Atomic *op) override {
+        if (op->mutex_name == func) {
+            last_use = containing_stmt;
+        }
+        IRVisitor::visit(op);
     }
 };
 
-class InjectMarker : public IRMutator2 {
+class InjectMarker : public IRMutator {
 public:
     string func;
     Stmt last_use;
 
 private:
-
     bool injected = false;
 
-    using IRMutator2::visit;
+    using IRMutator::visit;
 
     Stmt inject_marker(Stmt s) {
         if (injected) return s;
@@ -123,11 +142,11 @@ private:
     }
 };
 
-class InjectEarlyFrees : public IRMutator2 {
-    using IRMutator2::visit;
+class InjectEarlyFrees : public IRMutator {
+    using IRMutator::visit;
 
     Stmt visit(const Allocate *alloc) override {
-        Stmt stmt = IRMutator2::visit(alloc);
+        Stmt stmt = IRMutator::visit(alloc);
         alloc = stmt.as<Allocate>();
         internal_assert(alloc);
 
@@ -146,11 +165,12 @@ class InjectEarlyFrees : public IRMutator2 {
                                   alloc->new_expr, alloc->free_function);
         }
         return stmt;
-
     }
 };
 
-Stmt inject_early_frees(Stmt s) {
+}  // namespace
+
+Stmt inject_early_frees(const Stmt &s) {
     InjectEarlyFrees early_frees;
     return early_frees.mutate(s);
 }

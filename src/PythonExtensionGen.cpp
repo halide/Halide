@@ -1,6 +1,7 @@
 #include <iostream>
 #include <string>
 
+#include "CodeGen_C.h"
 #include "Module.h"
 #include "PythonExtensionGen.h"
 #include "Util.h"
@@ -20,7 +21,7 @@ static string sanitize_name(const string &name) {
         } else if (!isalnum(name[i])) {
             oss << "_" << (int)name[i];
         } else {
-          oss << name[i];
+            oss << name[i];
         }
     }
     return oss.str();
@@ -35,49 +36,38 @@ static const string remove_namespaces(const string &name) {
     }
 }
 
-static bool has_legacy_buffers(const LoweredFunc& func) {
-    const std::vector<LoweredArgument> &args = func.args;
-    auto legacy_buffer_type = type_of<buffer_t *>().handle_type;
-    for (size_t i = 0; i < args.size(); i++) {
-        if (args[i].type.is_handle() && args[i].type.handle_type == legacy_buffer_type) {
+static bool can_convert(const LoweredArgument *arg) {
+    if (arg->type.is_handle()) {
+        if (arg->name == "__user_context") {
+            /* __user_context is a void* pointer to a user supplied memory region.
+           * We allow the Python callee to pass PyObject* pointers to that. */
             return true;
+        } else {
+            return false;
         }
     }
-    return false;
+    if (arg->type.is_vector()) {
+        return false;
+    }
+    if (arg->type.is_float() && arg->type.bits() != 32 && arg->type.bits() != 64) {
+        return false;
+    }
+    if (arg->is_buffer() && arg->type.bits() == 1) {
+        // The Python buffer API doesn't support bit arrays.
+        return false;
+    }
+    if ((arg->type.is_int() || arg->type.is_uint()) &&
+        arg->type.bits() != 1 &&
+        arg->type.bits() != 8 && arg->type.bits() != 16 &&
+        arg->type.bits() != 32 && arg->type.bits() != 64) {
+        return false;
+    }
+    return true;
 }
 
-static bool can_convert(const LoweredArgument* arg) {
-  if (arg->type.is_handle()) {
-      if (arg->name == "__user_context") {
-          /* __user_context is a void* pointer to a user supplied memory region.
-           * We allow the Python callee to pass PyObject* pointers to that. */
-          return true;
-      } else {
-          return false;
-      }
-  }
-  if (arg->type.is_vector()) {
-      return false;
-  }
-  if (arg->type.is_float() && arg->type.bits() != 32 && arg->type.bits() != 64) {
-      return false;
-  }
-  if (arg->is_buffer() && arg->type.bits() == 1) {
-      // The Python buffer API doesn't support bit arrays.
-      return false;
-  }
-  if ((arg->type.is_int() || arg->type.is_uint()) &&
-      arg->type.bits() != 1 &&
-      arg->type.bits() != 8 && arg->type.bits() != 16 &&
-      arg->type.bits() != 32 && arg->type.bits() != 64) {
-      return false;
-  }
-  return true;
-}
-
-std::pair<string, string> print_type(const LoweredArgument* arg) {
+std::pair<string, string> print_type(const LoweredArgument *arg) {
     // Excluded by can_convert() above:
-    assert(!arg->type.is_vector());
+    internal_assert(!arg->type.is_vector());
 
     if (arg->type.is_handle()) {
         /* Handles can be any pointer. However, from Python, all you can pass to
@@ -105,9 +95,9 @@ std::pair<string, string> print_type(const LoweredArgument* arg) {
     }
 }
 
-void PythonExtensionGen::convert_buffer(string name, const LoweredArgument* arg) {
-    assert(arg->is_buffer());
-    assert(arg->dimensions);
+void PythonExtensionGen::convert_buffer(const string &name, const LoweredArgument *arg) {
+    internal_assert(arg->is_buffer());
+    internal_assert(arg->dimensions);
     dest << "    halide_buffer_t buffer_" << name << ";\n";
     dest << "    halide_dimension_t dimensions_" << name << "[" << (int)arg->dimensions << "];\n";
     dest << "    if (_convert_py_buffer_to_halide(";
@@ -122,20 +112,30 @@ void PythonExtensionGen::convert_buffer(string name, const LoweredArgument* arg)
     dest << "    }\n";
 }
 
-PythonExtensionGen::PythonExtensionGen(std::ostream &dest, const std::string &header_name, Target target)
-    : dest(dest), header_name(header_name), target(target) {
+PythonExtensionGen::PythonExtensionGen(std::ostream &dest)
+    : dest(dest) {
 }
 
 void PythonExtensionGen::compile(const Module &module) {
-    dest << "#include \"" << header_name << "\"\n";
     dest << "#include \"Python.h\"\n";
     dest << "#include \"HalideRuntime.h\"\n\n";
+
+    // Emit extern decls of the Halide-generated functions we use directly
+    // into this file, so that we don't have to #include the relevant .h
+    // file directly; this simplifies certain compile/build setups (since
+    // we don't have to build files in tandem and/or get include paths right),
+    // and should be totally safe, since we are using the same codegen logic
+    // that would be in the .h file anyway.
+    {
+        CodeGen_C extern_decl_gen(dest, module.target(), CodeGen_C::CPlusPlusExternDecl);
+        extern_decl_gen.compile(module);
+    }
 
     dest << "#define MODULE_NAME \"" << module.name() << "\"\n";
 
     dest << R"INLINE_CODE(
 /* Older Python versions don't set up PyMODINIT_FUNC correctly. */
-#if defined(WIN32) || defined(_WIN32)
+#if defined(_MSC_VER)
 #    define HALIDE_PYTHON_EXPORT __declspec(dllexport)
 #else
 #    define HALIDE_PYTHON_EXPORT __attribute__((visibility("default")))
@@ -145,7 +145,11 @@ void PythonExtensionGen::compile(const Module &module) {
 extern "C" {
 #endif
 
-static __attribute__((unused)) int _convert_py_buffer_to_halide(
+static
+#if !defined(_MSC_VER)
+__attribute__((unused))
+#endif
+int _convert_py_buffer_to_halide(
         PyObject* pyobj, int dimensions, int flags,
         halide_dimension_t* dim,  // array of size `dimensions`
         halide_buffer_t* out, const char* name) {
@@ -198,7 +202,7 @@ static __attribute__((unused)) int _convert_py_buffer_to_halide(
                      buf.len, buf.shape[0] * buf.strides[0]);
         return -1;
     }
-    memset(out, 0, sizeof(*out));
+    *out = halide_buffer_t();
     if (!buf.format) {
         out->type.code = halide_type_uint;
         out->type.bits = 8;
@@ -221,7 +225,7 @@ static __attribute__((unused)) int _convert_py_buffer_to_halide(
         }
         const char* type_codes = "bB?hHiIlLqQfd";  // integers and floats
         if (strchr(type_codes, *p)) {
-            out->type.bits = buf.itemsize * 8;
+            out->type.bits = (uint8_t)buf.itemsize * 8;
         } else {
             // We don't handle 's' and 'p' (char[]) and 'P' (void*)
             PyErr_Format(PyExc_ValueError, "Invalid data type for %s: %s", name, buf.format);
@@ -238,7 +242,7 @@ static __attribute__((unused)) int _convert_py_buffer_to_halide(
 )INLINE_CODE";
 
     for (auto &f : module.functions()) {
-        if (!has_legacy_buffers(f)) {
+        if (f.linkage == LinkageType::ExternalPlusMetadata) {
             compile(f);
         }
     }
@@ -246,9 +250,7 @@ static __attribute__((unused)) int _convert_py_buffer_to_halide(
     dest << "\n";
     dest << "static PyMethodDef _methods[] = {\n";
     for (auto &f : module.functions()) {
-        /* With the legacy_buffer_wrappers feature, Halide stores every function
-         * twice, once with new and once with old buffers. Ignore the latter. */
-        if (!has_legacy_buffers(f)) {
+        if (f.linkage == LinkageType::ExternalPlusMetadata) {
             const string basename = remove_namespaces(f.name);
             dest << "    {\"" << basename << "\", (PyCFunction)_f_" << basename
                  << ", METH_VARARGS|METH_KEYWORDS, NULL},\n";
@@ -258,26 +260,21 @@ static __attribute__((unused)) int _convert_py_buffer_to_halide(
     dest << "};\n";
 
     dest << R"INLINE_CODE(
-#if PY_MAJOR_VERSION >= 3
+static_assert(PY_MAJOR_VERSION >= 3, "Python bindings for Halide require Python 3+");
 static struct PyModuleDef _moduledef = {
     PyModuleDef_HEAD_INIT,
-    .m_name=MODULE_NAME,
-    .m_doc=NULL,
-    .m_size=-1,
-    .m_methods=_methods,
+    MODULE_NAME,
+    NULL,
+    -1,
+    _methods,
 };
 HALIDE_PYTHON_EXPORT PyObject* PyInit_)INLINE_CODE";
+
     dest << module.name() << "(void) {";
+
     dest << R"INLINE_CODE(
     return PyModule_Create(&_moduledef);
 }
-#else
-HALIDE_PYTHON_EXPORT void init)INLINE_CODE";
-    dest << module.name() << "(void) {";
-    dest << R"INLINE_CODE(
-    Py_InitModule3(MODULE_NAME, _methods, NULL);
-}
-#endif
 
 #ifdef __cplusplus
 }
@@ -305,7 +302,7 @@ void PythonExtensionGen::compile(const LoweredFunc &f) {
             return;
         }
     }
-    dest << "    static const char* kwlist[] = {";
+    dest << "    static const char* const kwlist[] = {";
     for (size_t i = 0; i < args.size(); i++) {
         dest << "\"" << arg_names[i] << "\", ";
     }
@@ -358,5 +355,5 @@ void PythonExtensionGen::compile(const LoweredFunc &f) {
     dest << "}\n";
 }
 
-}
-}
+}  // namespace Internal
+}  // namespace Halide

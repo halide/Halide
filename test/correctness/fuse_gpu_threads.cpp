@@ -5,7 +5,7 @@ using namespace Halide::Internal;
 
 class CheckThreadExtent : public IRVisitor {
     using IRVisitor::visit;
-    void visit(const For *op) {
+    void visit(const For *op) override {
         if ((op->name == ".__thread_id_x") || (op->name == ".__thread_id_y")) {
             assert(op->for_type == ForType::GPUThread);
             // Assert the min and extent to be 0 and 16 for this particular test case
@@ -35,8 +35,7 @@ int main(int argc, char **argv) {
     Func consumer("consumer");
     consumer(x, y) = input(x, y) + tuple(x, y)[0];
 
-    input.dim(0).set_bounds(0, width)
-         .dim(1).set_bounds(0, height).set_stride(width);
+    input.dim(0).set_bounds(0, width).dim(1).set_bounds(0, height).set_stride(width);
 
     // Schedule
     consumer.compute_root()

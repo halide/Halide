@@ -171,6 +171,12 @@ void IRVisitor::visit(const For *op) {
     op->body.accept(this);
 }
 
+void IRVisitor::visit(const Acquire *op) {
+    op->semaphore.accept(this);
+    op->count.accept(this);
+    op->body.accept(this);
+}
+
 void IRVisitor::visit(const Store *op) {
     op->predicate.accept(this);
     op->value.accept(this);
@@ -225,6 +231,13 @@ void IRVisitor::visit(const Block *op) {
     }
 }
 
+void IRVisitor::visit(const Fork *op) {
+    op->first.accept(this);
+    if (op->rest.defined()) {
+        op->rest.accept(this);
+    }
+}
+
 void IRVisitor::visit(const IfThenElse *op) {
     op->condition.accept(this);
     op->then_case.accept(this);
@@ -241,6 +254,10 @@ void IRVisitor::visit(const Shuffle *op) {
     for (Expr i : op->vectors) {
         i.accept(this);
     }
+}
+
+void IRVisitor::visit(const Atomic *op) {
+    op->body.accept(this);
 }
 
 void IRGraphVisitor::include(const Expr &e) {
@@ -408,6 +425,12 @@ void IRGraphVisitor::visit(const For *op) {
     include(op->body);
 }
 
+void IRGraphVisitor::visit(const Acquire *op) {
+    include(op->semaphore);
+    include(op->count);
+    include(op->body);
+}
+
 void IRGraphVisitor::visit(const Store *op) {
     include(op->predicate);
     include(op->value);
@@ -457,7 +480,12 @@ void IRGraphVisitor::visit(const Prefetch *op) {
 
 void IRGraphVisitor::visit(const Block *op) {
     include(op->first);
-    if (op->rest.defined()) include(op->rest);
+    include(op->rest);
+}
+
+void IRGraphVisitor::visit(const Fork *op) {
+    include(op->first);
+    include(op->rest);
 }
 
 void IRGraphVisitor::visit(const IfThenElse *op) {
@@ -476,6 +504,10 @@ void IRGraphVisitor::visit(const Shuffle *op) {
     for (Expr i : op->vectors) {
         include(i);
     }
+}
+
+void IRGraphVisitor::visit(const Atomic *op) {
+    include(op->body);
 }
 
 }  // namespace Internal

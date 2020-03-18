@@ -27,14 +27,15 @@ class TargetMachine;
 class TargetOptions;
 class Type;
 class Value;
-template<typename, typename> class IRBuilder;
+template<typename, typename>
+class IRBuilder;
 }  // namespace llvm
 
 namespace Halide {
 namespace Internal {
 
 /** The llvm type of a struct containing all of the externally referenced state of a Closure. */
-llvm::StructType *build_closure_type(const Closure &closure, llvm::StructType *buffer_t, llvm::LLVMContext *context);
+llvm::StructType *build_closure_type(const Closure &closure, llvm::StructType *halide_buffer_t_type, llvm::LLVMContext *context);
 
 /** Emit code that builds a struct containing all the externally
  * referenced state. Requires you to pass it a type and struct to fill in,
@@ -44,7 +45,7 @@ void pack_closure(llvm::StructType *type,
                   llvm::Value *dst,
                   const Closure &closure,
                   const Scope<llvm::Value *> &src,
-                  llvm::StructType *buffer_t,
+                  llvm::StructType *halide_buffer_t_type,
                   llvm::IRBuilder<llvm::ConstantFolder, llvm::IRBuilderDefaultInserter> *builder);
 
 /** Emit code that unpacks a struct containing all the externally
@@ -68,6 +69,15 @@ bool function_takes_user_context(const std::string &name);
  * non-positive. */
 bool can_allocation_fit_on_stack(int64_t size);
 
+/** Given a Halide Euclidean division/mod operation, do constant optimizations
+ * and possibly call lower_euclidean_div/lower_euclidean_mod if necessary.
+ * Can introduce mulhi_shr and sorted_avg intrinsics as well as those from the
+ * lower_euclidean_ operation -- div_round_to_zero or mod_round_to_zero. */
+///@{
+Expr lower_int_uint_div(const Expr &a, const Expr &b);
+Expr lower_int_uint_mod(const Expr &a, const Expr &b);
+///@}
+
 /** Given a Halide Euclidean division/mod operation, define it in terms of
  * div_round_to_zero or mod_round_to_zero. */
 ///@{
@@ -75,9 +85,16 @@ Expr lower_euclidean_div(Expr a, Expr b);
 Expr lower_euclidean_mod(Expr a, Expr b);
 ///@}
 
+/** Given a Halide shift operation with a signed shift amount (may be negative), define
+ * an equivalent expression using only shifts by unsigned amounts. */
+///@{
+Expr lower_signed_shift_left(const Expr &a, const Expr &b);
+Expr lower_signed_shift_right(const Expr &a, const Expr &b);
+///@}
+
 /** Replace predicated loads/stores with unpredicated equivalents
  * inside branches. */
-Stmt unpredicate_loads_stores(Stmt s);
+Stmt unpredicate_loads_stores(const Stmt &s);
 
 /** Given an llvm::Module, set llvm:TargetOptions, cpu and attr information */
 void get_target_options(const llvm::Module &module, llvm::TargetOptions &options, std::string &mcpu, std::string &mattrs);
@@ -90,6 +107,12 @@ std::unique_ptr<llvm::TargetMachine> make_target_machine(const llvm::Module &mod
 
 /** Set the appropriate llvm Function attributes given a Target. */
 void set_function_attributes_for_target(llvm::Function *, Target);
+
+/** Save a copy of the llvm IR currently represented by the module as
+ * data in the __LLVM,__bitcode section. Emulates clang's
+ * -fembed-bitcode flag and is useful to satisfy Apple's bitcode
+ * inclusion requirements.  */
+void embed_bitcode(llvm::Module *M, const std::string &halide_command);
 
 }  // namespace Internal
 }  // namespace Halide

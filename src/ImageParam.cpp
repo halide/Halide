@@ -1,21 +1,23 @@
 #include "ImageParam.h"
 
+#include <utility>
+
 namespace Halide {
 
 ImageParam::ImageParam(Type t, int d)
-        : OutputImageParam(
-            Internal::Parameter(t, true, d, Internal::make_entity_name(this, "Halide:.*:ImageParam", 'p')),
-            Argument::InputBuffer,
-            Func()) {
+    : OutputImageParam(
+          Internal::Parameter(t, true, d, Internal::make_entity_name(this, "Halide:.*:ImageParam", 'p')),
+          Argument::InputBuffer,
+          Func()) {
     // We must call create_func() after the super-ctor has completed.
     func = create_func();
 }
 
 ImageParam::ImageParam(Type t, int d, const std::string &n)
-        : OutputImageParam(
-            Internal::Parameter(t, true, d, n, /* is_explicit_name */ true),
-            Argument::InputBuffer,
-            Func()) {
+    : OutputImageParam(
+          Internal::Parameter(t, true, d, n),
+          Argument::InputBuffer,
+          Func()) {
     // We must call create_func() after the super-ctor has completed.
     func = create_func();
 }
@@ -36,7 +38,7 @@ Func ImageParam::create_func() const {
     return f;
 }
 
-void ImageParam::set(Buffer<> b) {
+void ImageParam::set(const Buffer<> &b) {
     if (b.defined()) {
         user_assert(b.type() == type())
             << "Can't bind ImageParam " << name()
@@ -56,11 +58,11 @@ void ImageParam::reset() {
 }
 
 Expr ImageParam::operator()(std::vector<Expr> args_passed) const {
-    return func(args_passed);
+    return func(std::move(args_passed));
 }
 
 Expr ImageParam::operator()(std::vector<Var> args_passed) const {
-    return func(args_passed);
+    return func(std::move(args_passed));
 }
 
 ImageParam::operator Func() const {

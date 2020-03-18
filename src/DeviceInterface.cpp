@@ -1,6 +1,6 @@
 #include "DeviceInterface.h"
-#include "JITModule.h"
 #include "IROperator.h"
+#include "JITModule.h"
 #include "Target.h"
 
 using namespace Halide;
@@ -19,7 +19,7 @@ bool lookup_runtime_routine(const std::string &name,
 
     for (size_t i = 0; i < runtime.size(); i++) {
         std::map<std::string, JITModule::Symbol>::const_iterator f =
-          runtime[i].exports().find(name);
+            runtime[i].exports().find(name);
         if (f != runtime[i].exports().end()) {
             result = reinterpret_bits<fn_type>(f->second.address);
             return true;
@@ -30,15 +30,53 @@ bool lookup_runtime_routine(const std::string &name,
 
 }  // namespace
 
-const halide_device_interface_t *get_device_interface_for_device_api(DeviceAPI d, const Target &t,
+bool host_supports_target_device(const Target &t) {
+    const DeviceAPI d = t.get_required_device_api();
+    if (d == DeviceAPI::None) {
+        return true;
+    }
+
+    const struct halide_device_interface_t *i = get_device_interface_for_device_api(d, t);
+    if (!i) {
+        debug(1) << "host_supports_device_api: get_device_interface_for_device_api() failed for d=" << (int)d << " t=" << t << "\n";
+        return false;
+    }
+
+    Halide::Runtime::Buffer<uint8_t> temp(8, 8, 3);
+    temp.fill(0);
+    temp.set_host_dirty();
+
+    Halide::Internal::JITHandlers handlers;
+    handlers.custom_error = [](void *user_context, const char *msg) {
+        debug(1) << "host_supports_device_api: saw error (" << msg << ")\n";
+    };
+    Halide::Internal::JITHandlers old_handlers = Halide::Internal::JITSharedRuntime::set_default_handlers(handlers);
+
+    int result = temp.copy_to_device(i);
+
+    Halide::Internal::JITSharedRuntime::set_default_handlers(old_handlers);
+
+    if (result != 0) {
+        debug(1) << "host_supports_device_api: copy_to_device() failed for with result=" << result << " for d=" << (int)d << " t=" << t << "\n";
+        return false;
+    }
+    return true;
+}
+
+const halide_device_interface_t *get_device_interface_for_device_api(DeviceAPI d,
+                                                                     const Target &t,
                                                                      const char *error_site) {
 
-  if (d == DeviceAPI::Default_GPU) {
+    if (d == DeviceAPI::Default_GPU) {
         d = get_default_device_api_for_target(t);
         if (d == DeviceAPI::Host) {
             if (error_site) {
-                user_error << "get_device_interface_for_device_api called from " << error_site <<
-                  " requested a default GPU but no GPU feature is specified in target (" << t.to_string() << ").\n";
+                user_error
+                    << "get_device_interface_for_device_api called from "
+                    << error_site
+                    << " requested a default GPU but no GPU feature is specified in target ("
+                    << t.to_string()
+                    << ").\n";
             }
             return nullptr;
         }
@@ -56,20 +94,32 @@ const halide_device_interface_t *get_device_interface_for_device_api(DeviceAPI d
         name = "openglcompute";
     } else if (d == DeviceAPI::GLSL) {
         name = "opengl";
+    } else if (d == DeviceAPI::HexagonDma) {
+        name = "hexagon_dma";
     } else if (d == DeviceAPI::D3D12Compute) {
         name = "d3d12compute";
     } else {
         if (error_site) {
-            user_error << "get_device_interface_for_device_api called from " << error_site <<
-                " requested unknown DeviceAPI (" << (int)d << ").\n";
+            user_error
+                << "get_device_interface_for_device_api called from "
+                << error_site
+                << " requested unknown DeviceAPI ("
+                << (int)d
+                << ").\n";
         }
         return nullptr;
     }
 
     if (!t.supports_device_api(d)) {
         if (error_site) {
-            user_error << "get_device_interface_for_device_api called from " << error_site <<
-                " DeviceAPI (" << name << ") is not supported by target (" << t.to_string() << ").\n";
+            user_error
+                << "get_device_interface_for_device_api called from "
+                << error_site
+                << " DeviceAPI ("
+                << name
+                << ") is not supported by target ("
+                << t.to_string()
+                << ").\n";
         }
         return nullptr;
     }
@@ -78,8 +128,12 @@ const halide_device_interface_t *get_device_interface_for_device_api(DeviceAPI d
         return (*fn)();
     } else {
         if (error_site) {
-              user_error << "get_device_interface_for_device_api called from " << error_site <<
-                  " cannot find runtime or device interface symbol for " << name << ".\n";
+            user_error
+                << "get_device_interface_for_device_api called from "
+                << error_site
+                << " cannot find runtime or device interface symbol for "
+                << name
+                << ".\n";
         }
         return nullptr;
     }
@@ -96,6 +150,8 @@ DeviceAPI get_default_device_api_for_target(const Target &target) {
         return DeviceAPI::OpenGLCompute;
     } else if (target.has_feature(Target::OpenGL)) {
         return DeviceAPI::GLSL;
+    } else if (target.has_feature(Target::HexagonDma)) {
+        return DeviceAPI::HexagonDma;
     } else if (target.has_feature(Target::D3D12Compute)) {
         return DeviceAPI::D3D12Compute;
     } else {
@@ -128,6 +184,9 @@ Expr make_device_interface_call(DeviceAPI device_api) {
         break;
     case DeviceAPI::Hexagon:
         interface_name = "halide_hexagon_device_interface";
+        break;
+    case DeviceAPI::HexagonDma:
+        interface_name = "halide_hexagon_dma_device_interface";
         break;
     case DeviceAPI::D3D12Compute:
         interface_name = "halide_d3d12compute_device_interface";

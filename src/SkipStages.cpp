@@ -11,11 +11,11 @@
 #include "Substitute.h"
 
 #include <iterator>
+#include <utility>
 
 namespace Halide {
 namespace Internal {
 
-using std::map;
 using std::set;
 using std::string;
 using std::vector;
@@ -44,14 +44,15 @@ bool extern_call_uses_buffer(const Call *op, const std::string &func) {
 class PredicateFinder : public IRVisitor {
 public:
     Expr predicate;
-    PredicateFinder(const string &b, bool s) : predicate(const_false()),
-                                               buffer(b),
-                                               varies(false),
-                                               treat_selects_as_guards(s),
-                                               in_produce(false) {}
+    PredicateFinder(const string &b, bool s)
+        : predicate(const_false()),
+          buffer(b),
+          varies(false),
+          treat_selects_as_guards(s),
+          in_produce(false) {
+    }
 
 private:
-
     using IRVisitor::visit;
     string buffer;
     bool varies;
@@ -61,14 +62,13 @@ private:
     Scope<> in_pipeline;
     Scope<> local_buffers;
 
-
-    void visit(const Variable *op) {
+    void visit(const Variable *op) override {
         bool this_varies = varying.contains(op->name);
 
         varies |= this_varies;
     }
 
-    void visit(const For *op) {
+    void visit(const For *op) override {
         op->min.accept(this);
         bool min_varies = varies;
         op->extent.accept(this);
@@ -87,7 +87,7 @@ private:
     }
 
     template<typename T>
-    void visit_let(const std::string &name, Expr value, T body) {
+    void visit_let(const std::string &name, const Expr &value, T body) {
         bool old_varies = varies;
         varies = false;
         value.accept(this);
@@ -105,15 +105,15 @@ private:
         }
     }
 
-    void visit(const LetStmt *op) {
+    void visit(const LetStmt *op) override {
         visit_let(op->name, op->value, op->body);
     }
 
-    void visit(const Let *op) {
+    void visit(const Let *op) override {
         visit_let(op->name, op->value, op->body);
     }
 
-    void visit(const ProducerConsumer *op) {
+    void visit(const ProducerConsumer *op) override {
         ScopedBinding<> bind(in_pipeline, op->name);
         if (op->is_producer && op->name == buffer) {
             ScopedValue<bool> sv(in_produce, true);
@@ -148,7 +148,7 @@ private:
         }
     }
 
-    Expr make_select(Expr a, Expr b, Expr c) {
+    Expr make_select(const Expr &a, Expr b, Expr c) {
         if (is_one(a)) {
             return b;
         } else if (is_zero(a)) {
@@ -166,7 +166,7 @@ private:
         }
     }
 
-    Expr make_not(Expr a) {
+    Expr make_not(const Expr &a) {
         if (is_one(a)) {
             return make_zero(a.type());
         } else if (is_zero(a)) {
@@ -177,7 +177,7 @@ private:
     }
 
     template<typename T>
-    void visit_conditional(Expr condition, T true_case, T false_case) {
+    void visit_conditional(const Expr &condition, T true_case, T false_case) {
         Expr old_predicate = predicate;
 
         predicate = const_false();
@@ -203,7 +203,7 @@ private:
         varies = varies || old_varies;
     }
 
-    void visit(const Select *op) {
+    void visit(const Select *op) override {
         if (treat_selects_as_guards) {
             visit_conditional(op->condition, op->true_value, op->false_value);
         } else {
@@ -211,11 +211,11 @@ private:
         }
     }
 
-    void visit(const IfThenElse *op) {
+    void visit(const IfThenElse *op) override {
         visit_conditional(op->condition, op->then_case, op->else_case);
     }
 
-    void visit(const Call *op) {
+    void visit(const Call *op) override {
         varies |= in_pipeline.contains(op->name);
 
         IRVisitor::visit(op);
@@ -225,19 +225,19 @@ private:
         }
     }
 
-    void visit(const Provide *op) {
+    void visit(const Provide *op) override {
         IRVisitor::visit(op);
         if (in_produce && op->name != buffer && !local_buffers.contains(op->name)) {
             predicate = const_true();
         }
     }
 
-    void visit(const Realize *op) {
+    void visit(const Realize *op) override {
         ScopedBinding<> bind(local_buffers, op->name);
         IRVisitor::visit(op);
     }
 
-    void visit(const Allocate *op) {
+    void visit(const Allocate *op) override {
         // This code works to ensure expressions depending on an
         // allocation don't get moved outside the allocation and are
         // marked as varying if predicate depends on the value of the
@@ -249,16 +249,18 @@ private:
     }
 };
 
-class ProductionGuarder : public IRMutator2 {
+class ProductionGuarder : public IRMutator {
 public:
-    ProductionGuarder(const string &b, Expr compute_p, Expr alloc_p):
-        buffer(b), compute_predicate(compute_p), alloc_predicate(alloc_p) {}
+    ProductionGuarder(const string &b, Expr compute_p, Expr alloc_p)
+        : buffer(b), compute_predicate(std::move(compute_p)), alloc_predicate(std::move(alloc_p)) {
+    }
+
 private:
     string buffer;
     Expr compute_predicate;
     Expr alloc_predicate;
 
-    using IRMutator2::visit;
+    using IRMutator::visit;
 
     bool memoize_call_uses_buffer(const Call *op) {
         internal_assert(op->call_type == Call::Extern);
@@ -277,7 +279,7 @@ private:
     Expr visit(const Call *op) override {
 
         if ((op->name == "halide_memoization_cache_lookup") &&
-             memoize_call_uses_buffer(op)) {
+            memoize_call_uses_buffer(op)) {
             // We need to guard call to halide_memoization_cache_lookup to only
             // be executed if the corresponding buffer is allocated. We ignore
             // the compute_predicate since in the case that alloc_predicate is
@@ -289,21 +291,21 @@ private:
             return Call::make(op->type, Call::if_then_else,
                               {alloc_predicate, op, 0}, Call::PureIntrinsic);
         } else if ((op->name == "halide_memoization_cache_store") &&
-                    memoize_call_uses_buffer(op)) {
+                   memoize_call_uses_buffer(op)) {
             // We need to wrap the halide_memoization_cache_store with the
             // compute_predicate, since the data to be written is only valid if
             // the producer of the buffer is executed.
             return Call::make(op->type, Call::if_then_else,
                               {compute_predicate, op, 0}, Call::PureIntrinsic);
         } else {
-            return IRMutator2::visit(op);
+            return IRMutator::visit(op);
         }
     }
 
     Stmt visit(const ProducerConsumer *op) override {
         // If the compute_predicate at this stage depends on something
         // vectorized we should bail out.
-        Stmt stmt = IRMutator2::visit(op);
+        Stmt stmt = IRMutator::visit(op);
 
         if (op->is_producer) {
             op = stmt.as<ProducerConsumer>();
@@ -317,12 +319,15 @@ private:
     }
 };
 
-class StageSkipper : public IRMutator2 {
+class StageSkipper : public IRMutator {
 public:
-    StageSkipper(const string &f) : func(f), in_vector_loop(false) {}
+    StageSkipper(const string &f)
+        : func(f), in_vector_loop(false) {
+    }
+
 private:
     string func;
-    using IRMutator2::visit;
+    using IRMutator::visit;
 
     Scope<> vector_vars;
     bool in_vector_loop;
@@ -336,7 +341,7 @@ private:
             in_vector_loop = true;
         }
 
-        Stmt stmt = IRMutator2::visit(op);
+        Stmt stmt = IRMutator::visit(op);
 
         if (op->for_type == ForType::Vectorized) {
             vector_vars.pop(op->name);
@@ -413,10 +418,10 @@ private:
                 return Realize::make(op->name, op->types, op->memory_type, op->bounds,
                                      alloc_predicate, body);
             } else {
-                return IRMutator2::visit(op);
+                return IRMutator::visit(op);
             }
         } else {
-            return IRMutator2::visit(op);
+            return IRMutator::visit(op);
         }
     }
 };
@@ -430,14 +435,14 @@ class MightBeSkippable : public IRVisitor {
 
     bool in_conditional_stmt{false};
 
-    void visit(const Call *op) {
+    void visit(const Call *op) override {
         IRVisitor::visit(op);
         if (op->call_type == Call::Halide) {
             unconditionally_used.insert(op->name);
         }
     }
 
-    void visit(const IfThenElse *op) {
+    void visit(const IfThenElse *op) override {
         op->condition.accept(this);
 
         std::set<string> old;
@@ -460,7 +465,7 @@ class MightBeSkippable : public IRVisitor {
         unconditionally_used.swap(old);
     }
 
-    void visit(const Select *op) {
+    void visit(const Select *op) override {
         op->condition.accept(this);
 
         std::set<string> old;
@@ -480,7 +485,7 @@ class MightBeSkippable : public IRVisitor {
         unconditionally_used.swap(old);
     }
 
-    void visit(const ProducerConsumer *op) {
+    void visit(const ProducerConsumer *op) override {
         if (!op->is_producer) {
             op->body.accept(this);
             if (!unconditionally_used.count(op->name) || in_conditional_stmt) {
@@ -496,6 +501,7 @@ class MightBeSkippable : public IRVisitor {
     }
 
     set<string> unconditionally_used;
+
 public:
     set<string> candidates;
 };
@@ -505,11 +511,11 @@ Stmt skip_stages(Stmt stmt, const vector<string> &order) {
     // never skippable.
     MightBeSkippable check;
     stmt.accept(&check);
-    for (size_t i = order.size()-1; i > 0; i--) {
-        debug(2) << "skip_stages checking " << order[i-1] << "\n";
-        if (check.candidates.count(order[i-1])) {
-            debug(2) << "skip_stages can skip " << order[i-1] << "\n";
-            StageSkipper skipper(order[i-1]);
+    for (size_t i = order.size() - 1; i > 0; i--) {
+        debug(2) << "skip_stages checking " << order[i - 1] << "\n";
+        if (check.candidates.count(order[i - 1])) {
+            debug(2) << "skip_stages can skip " << order[i - 1] << "\n";
+            StageSkipper skipper(order[i - 1]);
             Stmt new_stmt = skipper.mutate(stmt);
             if (!new_stmt.same_as(stmt)) {
                 // Might have made earlier stages skippable too

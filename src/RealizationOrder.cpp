@@ -18,7 +18,7 @@ using std::vector;
 
 namespace {
 
-void find_fused_groups_dfs(string current,
+void find_fused_groups_dfs(const string &current,
                            const map<string, set<string>> &fuse_adjacency_list,
                            set<string> &visited,
                            vector<string> &group) {
@@ -59,7 +59,7 @@ find_fused_groups(const map<string, Function> &env,
     return {fused_groups, group_name};
 }
 
-void realization_order_dfs(string current,
+void realization_order_dfs(const string &current,
                            const map<string, vector<string>> &graph,
                            set<string> &visited,
                            set<string> &result_set,
@@ -76,7 +76,7 @@ void realization_order_dfs(string current,
         } else {
             internal_assert(result_set.find(fn) != result_set.end())
                 << "Stuck in a loop computing a realization order. "
-                << "Perhaps this pipeline has a loop?\n";
+                << "Perhaps this pipeline has a loop involving " << current << "?\n";
         }
     }
 
@@ -102,8 +102,8 @@ void validate_fused_pair(const string &fn, size_t stage_index,
         internal_assert(p.func_1 != p.func_2);
         const auto &iter = std::find(func_fused_pairs.begin(), func_fused_pairs.end(), p);
         internal_assert(iter == func_fused_pairs.end())
-             << "Found duplicates of fused pair (" << p.func_1 << ".s" << p.stage_1 << ", "
-             << p.func_2 << ".s" << p.stage_2 << ", " << p.var_name << ")\n";
+            << "Found duplicates of fused pair (" << p.func_1 << ".s" << p.stage_1 << ", "
+            << p.func_2 << ".s" << p.stage_2 << ", " << p.var_name << ")\n";
     }
 
     // Assert no dependencies among the functions that are computed_with.
@@ -165,7 +165,7 @@ void populate_fused_pairs_list(const string &func, const Definition &def,
         parent.definition().schedule().fused_pairs().push_back(pair);
     } else {
         internal_assert(fuse_level.stage_index() > 0);
-        parent.update(fuse_level.stage_index()-1).schedule().fused_pairs().push_back(pair);
+        parent.update(fuse_level.stage_index() - 1).schedule().fused_pairs().push_back(pair);
     }
 }
 
@@ -180,9 +180,9 @@ void check_no_cyclic_compute_with(const map<string, vector<FusedPair>> &fused_pa
                 continue;
             }
             const auto &it = std::find_if(o_iter->second.begin(), o_iter->second.end(),
-                [&pair](const FusedPair &other) {
-                    return (pair.func_1 == other.func_2) && (pair.func_2 == other.func_1);
-                });
+                                          [&pair](const FusedPair &other) {
+                                              return (pair.func_1 == other.func_2) && (pair.func_2 == other.func_1);
+                                          });
             user_assert(it == o_iter->second.end())
                 << "Found cyclic dependencies between compute_with of "
                 << pair.func_1 << " and " << pair.func_2 << "\n";
@@ -233,7 +233,7 @@ void check_func_stages_compute_with(const Function &f) {
 } // anonymous namespace
 
 pair<vector<string>, vector<vector<string>>> realization_order(
-        const vector<Function> &outputs, map<string, Function> &env) {
+    const vector<Function> &outputs, map<string, Function> &env) {
 
     // Populate the fused_pairs list of each function definition (i.e. list of
     // all function definitions that are to be computed with that function).
@@ -252,7 +252,7 @@ pair<vector<string>, vector<vector<string>>> realization_order(
 
     // Collect all indirect calls made by all the functions in "env".
     map<string, map<string, Function>> indirect_calls;
-    for (const pair<string, Function> &caller : env) {
+    for (const pair<const string, Function> &caller : env) {
         map<string, Function> more_funcs = find_transitive_calls(caller.second);
         indirect_calls.emplace(caller.first, more_funcs);
     }
@@ -267,11 +267,11 @@ pair<vector<string>, vector<vector<string>>> realization_order(
     map<string, vector<FusedPair>> fused_pairs_graph;
     map<string, set<string>> fuse_adjacency_list;
 
-    for (const pair<string, Function> &caller : env) {
+    for (const pair<const string, Function> &caller : env) {
         // Find all compute_with (fused) pairs. We have to look at the update
         // definitions as well since compute_with is defined per definition (stage).
         vector<FusedPair> &func_fused_pairs = fused_pairs_graph[caller.first];
-        fuse_adjacency_list[caller.first]; // Make sure every Func in 'env' is allocated a slot
+        fuse_adjacency_list[caller.first];  // Make sure every Func in 'env' is allocated a slot
         if (!caller.second.has_extern_definition()) {
             for (auto &p : caller.second.definition().schedule().fused_pairs()) {
                 validate_fused_pair(caller.first, 0, env, indirect_calls,
@@ -298,7 +298,7 @@ pair<vector<string>, vector<vector<string>>> realization_order(
     std::tie(fused_groups, group_name) = find_fused_groups(env, fuse_adjacency_list);
 
     // Compute the DAG representing the pipeline
-    for (const pair<string, Function> &caller : env) {
+    for (const pair<const string, Function> &caller : env) {
         const string &caller_rename = group_name.at(caller.first);
         // Create a dummy node representing the fused group and add input edge
         // dependencies from the nodes representing member of the fused group
@@ -307,8 +307,8 @@ pair<vector<string>, vector<vector<string>>> realization_order(
         // Direct the calls to calls from the dummy node. This forces all the
         // functions called by members of the fused group to be realized first.
         vector<string> &s = graph[caller_rename];
-        for (const pair<string, Function> &callee : find_direct_calls(caller.second)) {
-            if ((callee.first != caller.first) && // Skip calls to itself (i.e. update stages)
+        for (const pair<const string, Function> &callee : find_direct_calls(caller.second)) {
+            if ((callee.first != caller.first) &&  // Skip calls to itself (i.e. update stages)
                 (std::find(s.begin(), s.end(), callee.first) == s.end())) {
                 s.push_back(callee.first);
             }
@@ -339,12 +339,11 @@ pair<vector<string>, vector<vector<string>>> realization_order(
     // children).
     for (auto &group : group_order) {
         std::sort(group.begin(), group.end(),
-            [&](const string &lhs, const string &rhs){
-                const auto &iter_lhs = std::find(temp.begin(), temp.end(), lhs);
-                const auto &iter_rhs = std::find(temp.begin(), temp.end(), rhs);
-                return iter_lhs < iter_rhs;
-            }
-        );
+                  [&](const string &lhs, const string &rhs) {
+                      const auto &iter_lhs = std::find(temp.begin(), temp.end(), lhs);
+                      const auto &iter_rhs = std::find(temp.begin(), temp.end(), rhs);
+                      return iter_lhs < iter_rhs;
+                  });
     }
 
     // Collect the realization order of all functions within the pipeline.
@@ -365,10 +364,10 @@ vector<string> topological_order(const vector<Function> &outputs,
     // set describing its inputs.
     map<string, vector<string>> graph;
 
-    for (const pair<string, Function> &caller : env) {
+    for (const pair<const string, Function> &caller : env) {
         vector<string> s;
-        for (const pair<string, Function> &callee : find_direct_calls(caller.second)) {
-            if ((callee.first != caller.first) && // Skip calls to itself (i.e. update stages)
+        for (const pair<const string, Function> &callee : find_direct_calls(caller.second)) {
+            if ((callee.first != caller.first) &&  // Skip calls to itself (i.e. update stages)
                 (std::find(s.begin(), s.end(), callee.first) == s.end())) {
                 s.push_back(callee.first);
             }

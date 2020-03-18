@@ -1,5 +1,5 @@
-#include "HalideRuntime.h"
 #include "HalideBuffer.h"
+#include "HalideRuntime.h"
 
 // Grab the internal device_interface functions
 #define WEAK
@@ -24,7 +24,7 @@ void *my_halide_malloc(void *user_context, size_t x) {
     }
     successful_mallocs++;
 
-    void *orig = malloc(x+40);
+    void *orig = malloc(x + 40);
     // Round up to next multiple of 32. Should add at least 8 bytes so we can fit the original pointer.
     void *ptr = (void *)((((size_t)orig + 32) >> 5) << 5);
     ((void **)ptr)[-1] = orig;
@@ -34,7 +34,7 @@ void *my_halide_malloc(void *user_context, size_t x) {
 void my_halide_free(void *user_context, void *ptr) {
     if (!ptr) return;
     frees++;
-    free(((void**)ptr)[-1]);
+    free(((void **)ptr)[-1]);
 }
 
 void my_halide_error(void *user_context, const char *msg) {

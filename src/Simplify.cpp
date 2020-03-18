@@ -1,6 +1,7 @@
 #include "Simplify.h"
 #include "Simplify_Internal.h"
 
+#include "CSE.h"
 #include "IRMutator.h"
 #include "Substitute.h"
 
@@ -13,17 +14,16 @@ using std::pair;
 using std::string;
 using std::vector;
 
-#if LOG_EXPR_MUTATIONS || LOG_STMT_MUTATIONS
+#if (LOG_EXPR_MUTATIONS || LOG_STMT_MUTATIONS)
 int Simplify::debug_indent = 0;
 #endif
 
-Simplify::Simplify(bool r, const Scope<Interval> *bi, const Scope<ModulusRemainder> *ai) :
-    remove_dead_lets(r), no_float_simplify(false) {
-    alignment_info.set_containing_scope(ai);
+Simplify::Simplify(bool r, const Scope<Interval> *bi, const Scope<ModulusRemainder> *ai)
+    : remove_dead_lets(r), no_float_simplify(false) {
 
     // Only respect the constant bounds from the containing scope.
-    for (Scope<Interval>::const_iterator iter = bi->cbegin(); iter != bi->cend(); ++iter) {
-        ConstBounds bounds;
+    for (auto iter = bi->cbegin(); iter != bi->cend(); ++iter) {
+        ExprInfo bounds;
         if (const int64_t *i_min = as_const_int(iter.value().min)) {
             bounds.min_defined = true;
             bounds.min = *i_min;
@@ -33,11 +33,24 @@ Simplify::Simplify(bool r, const Scope<Interval> *bi, const Scope<ModulusRemaind
             bounds.max = *i_max;
         }
 
-        if (bounds.min_defined || bounds.max_defined) {
-            bounds_info.push(iter.name(), bounds);
+        if (ai->contains(iter.name())) {
+            bounds.alignment = ai->get(iter.name());
+        }
+
+        if (bounds.min_defined || bounds.max_defined || bounds.alignment.modulus != 1) {
+            bounds_and_alignment_info.push(iter.name(), bounds);
         }
     }
 
+    for (auto iter = ai->cbegin(); iter != ai->cend(); ++iter) {
+        if (bounds_and_alignment_info.contains(iter.name())) {
+            // Already handled
+            continue;
+        }
+        ExprInfo bounds;
+        bounds.alignment = iter.value();
+        bounds_and_alignment_info.push(iter.name(), bounds);
+    }
 }
 
 void Simplify::found_buffer_reference(const string &name, size_t dimensions) {
@@ -143,26 +156,24 @@ void Simplify::ScopedFact::learn_false(const Expr &fact) {
 }
 
 void Simplify::ScopedFact::learn_upper_bound(const Variable *v, int64_t val) {
-    ConstBounds b;
-    if (simplify->bounds_info.contains(v->name)) {
-        b = simplify->bounds_info.get(v->name);
-    }
-    if (b.max_defined && b.max < val) return;
+    ExprInfo b;
     b.max_defined = true;
     b.max = val;
-    simplify->bounds_info.push(v->name, b);
+    if (simplify->bounds_and_alignment_info.contains(v->name)) {
+        b.intersect(simplify->bounds_and_alignment_info.get(v->name));
+    }
+    simplify->bounds_and_alignment_info.push(v->name, b);
     bounds_pop_list.push_back(v);
 }
 
 void Simplify::ScopedFact::learn_lower_bound(const Variable *v, int64_t val) {
-    ConstBounds b;
-    if (simplify->bounds_info.contains(v->name)) {
-        b = simplify->bounds_info.get(v->name);
-    }
-    if (b.min_defined && b.min > val) return;
+    ExprInfo b;
     b.min_defined = true;
     b.min = val;
-    simplify->bounds_info.push(v->name, b);
+    if (simplify->bounds_and_alignment_info.contains(v->name)) {
+        b.intersect(simplify->bounds_and_alignment_info.get(v->name));
+    }
+    simplify->bounds_and_alignment_info.push(v->name, b);
     bounds_pop_list.push_back(v);
 }
 
@@ -175,10 +186,40 @@ void Simplify::ScopedFact::learn_true(const Expr &fact) {
         pop_list.push_back(v);
     } else if (const EQ *eq = fact.as<EQ>()) {
         const Variable *v = eq->a.as<Variable>();
-        if (v && is_const(eq->b)) {
-            info.replacement = eq->b;
-            simplify->var_info.push(v->name, info);
-            pop_list.push_back(v);
+        const Mod *m = eq->a.as<Mod>();
+        const int64_t *modulus = m ? as_const_int(m->b) : nullptr;
+        const int64_t *remainder = m ? as_const_int(eq->b) : nullptr;
+        if (v) {
+            if (is_const(eq->b) || eq->b.as<Variable>()) {
+                // TODO: consider other cases where we might want to entirely substitute
+                info.replacement = eq->b;
+                simplify->var_info.push(v->name, info);
+                pop_list.push_back(v);
+            } else if (v->type.is_int()) {
+                // Visit the rhs again to get bounds and alignment info to propagate to the LHS
+                // TODO: Visiting it again is inefficient
+                Simplify::ExprInfo expr_info;
+                simplify->mutate(eq->b, &expr_info);
+                if (simplify->bounds_and_alignment_info.contains(v->name)) {
+                    // We already know something about this variable and don't want to suppress it.
+                    auto existing_knowledge = simplify->bounds_and_alignment_info.get(v->name);
+                    expr_info.intersect(existing_knowledge);
+                }
+                simplify->bounds_and_alignment_info.push(v->name, expr_info);
+                bounds_pop_list.push_back(v);
+            }
+        } else if (modulus && remainder && (v = m->a.as<Variable>())) {
+            // Learn from expressions of the form x % 8 == 3
+            Simplify::ExprInfo expr_info;
+            expr_info.alignment.modulus = *modulus;
+            expr_info.alignment.remainder = *remainder;
+            if (simplify->bounds_and_alignment_info.contains(v->name)) {
+                // We already know something about this variable and don't want to suppress it.
+                auto existing_knowledge = simplify->bounds_and_alignment_info.get(v->name);
+                expr_info.intersect(existing_knowledge);
+            }
+            simplify->bounds_and_alignment_info.push(v->name, expr_info);
+            bounds_pop_list.push_back(v);
         }
     } else if (const LT *lt = fact.as<LT>()) {
         const Variable *v = lt->a.as<Variable>();
@@ -222,7 +263,7 @@ Simplify::ScopedFact::~ScopedFact() {
         simplify->var_info.pop(v->name);
     }
     for (auto v : bounds_pop_list) {
-        simplify->bounds_info.pop(v->name);
+        simplify->bounds_and_alignment_info.pop(v->name);
     }
     for (const auto &e : truths) {
         simplify->truths.erase(e);
@@ -232,27 +273,27 @@ Simplify::ScopedFact::~ScopedFact() {
     }
 }
 
-Expr simplify(Expr e, bool remove_dead_lets,
+Expr simplify(const Expr &e, bool remove_dead_lets,
               const Scope<Interval> &bounds,
               const Scope<ModulusRemainder> &alignment) {
     return Simplify(remove_dead_lets, &bounds, &alignment).mutate(e, nullptr);
 }
 
-Stmt simplify(Stmt s, bool remove_dead_lets,
+Stmt simplify(const Stmt &s, bool remove_dead_lets,
               const Scope<Interval> &bounds,
               const Scope<ModulusRemainder> &alignment) {
     return Simplify(remove_dead_lets, &bounds, &alignment).mutate(s);
 }
 
-class SimplifyExprs : public IRMutator2 {
+class SimplifyExprs : public IRMutator {
 public:
-    using IRMutator2::mutate;
+    using IRMutator::mutate;
     Expr mutate(const Expr &e) override {
         return simplify(e);
     }
 };
 
-Stmt simplify_exprs(Stmt s) {
+Stmt simplify_exprs(const Stmt &s) {
     return SimplifyExprs().mutate(s);
 }
 
@@ -260,29 +301,20 @@ bool can_prove(Expr e, const Scope<Interval> &bounds) {
     internal_assert(e.type().is_bool())
         << "Argument to can_prove is not a boolean Expr: " << e << "\n";
 
-    // Remove likelies
-    struct RemoveLikelies : public IRMutator2 {
-        using IRMutator2::visit;
-        Expr visit(const Call *op) override {
-            if (op->is_intrinsic(Call::likely) ||
-                op->is_intrinsic(Call::likely_if_innermost)) {
-                return mutate(op->args[0]);
-            } else {
-                return IRMutator2::visit(op);
-            }
-        }
-    };
-    e = RemoveLikelies().mutate(e);
+    e = remove_likelies(e);
+    e = common_subexpression_elimination(e);
+
+    Expr orig = e;
 
     e = simplify(e, true, bounds);
 
     // Take a closer look at all failed proof attempts to hunt for
     // simplifier weaknesses
     if (debug::debug_level() > 0 && !is_const(e)) {
-        struct RenameVariables : public IRMutator2 {
-            using IRMutator2::visit;
+        struct RenameVariables : public IRMutator {
+            using IRMutator::visit;
 
-            Expr visit(const Variable *op) {
+            Expr visit(const Variable *op) override {
                 auto it = vars.find(op->name);
                 if (lets.contains(op->name)) {
                     return Variable::make(op->type, lets.get(op->name));
@@ -296,7 +328,7 @@ bool can_prove(Expr e, const Scope<Interval> &bounds) {
                 }
             }
 
-            Expr visit(const Let *op) {
+            Expr visit(const Let *op) override {
                 std::string name = "v" + std::to_string(count++);
                 ScopedBinding<string> bind(lets, op->name, name);
                 return Let::make(name, mutate(op->value), mutate(op->body));
@@ -335,6 +367,8 @@ bool can_prove(Expr e, const Scope<Interval> &bounds) {
         }
 
         debug(0) << "Failed to prove, but could not find a counter-example:\n " << e << "\n";
+        debug(0) << "Original expression:\n"
+                 << orig << "\n";
         return false;
     }
 

@@ -3,8 +3,8 @@
 namespace Halide {
 namespace Internal {
 
-Expr Simplify::visit(const Sub *op, ConstBounds *bounds) {
-    ConstBounds a_bounds, b_bounds;
+Expr Simplify::visit(const Sub *op, ExprInfo *bounds) {
+    ExprInfo a_bounds, b_bounds;
     Expr a = mutate(op->a, &a_bounds);
     Expr b = mutate(op->b, &b_bounds);
 
@@ -14,8 +14,20 @@ Expr Simplify::visit(const Sub *op, ConstBounds *bounds) {
         // remutate to recalculate the bounds.
         bounds->min_defined = a_bounds.min_defined && b_bounds.max_defined;
         bounds->max_defined = a_bounds.max_defined && b_bounds.min_defined;
-        bounds->min = a_bounds.min - b_bounds.max;
-        bounds->max = a_bounds.max - b_bounds.min;
+        if (sub_would_overflow(64, a_bounds.min, b_bounds.max)) {
+            bounds->min_defined = false;
+            bounds->min = 0;
+        } else {
+            bounds->min = a_bounds.min - b_bounds.max;
+        }
+        if (sub_would_overflow(64, a_bounds.max, b_bounds.min)) {
+            bounds->max_defined = false;
+            bounds->max = 0;
+        } else {
+            bounds->max = a_bounds.max - b_bounds.min;
+        }
+        bounds->alignment = a_bounds.alignment - b_bounds.alignment;
+        bounds->trim_bounds_using_alignment();
     }
 
     if (may_simplify(op->type)) {
@@ -24,14 +36,13 @@ Expr Simplify::visit(const Sub *op, ConstBounds *bounds) {
         const int lanes = op->type.lanes();
 
         if (rewrite(c0 - c1, fold(c0 - c1)) ||
-            rewrite(IRMatcher::Indeterminate() - x, a) ||
-            rewrite(x - IRMatcher::Indeterminate(), b) ||
             rewrite(IRMatcher::Overflow() - x, a) ||
             rewrite(x - IRMatcher::Overflow(), b) ||
             rewrite(x - 0, x)) {
             return rewrite.result;
         }
 
+        // clang-format off
         if (EVAL_IN_LAMBDA
             ((!op->type.is_uint() && rewrite(x - c0, x + fold(-c0), !overflows(-c0))) ||
              rewrite(x - x, 0) || // We want to remutate this just to get better bounds
@@ -44,6 +55,16 @@ Expr Simplify::visit(const Sub *op, ConstBounds *bounds) {
              rewrite(select(x, y, z) - z, select(x, y - z, 0)) ||
              rewrite(y - select(x, y, z), select(x, 0, y - z)) ||
              rewrite(z - select(x, y, z), select(x, z - y, 0)) ||
+
+             rewrite(select(x, y + w, z) - y, select(x, w, z - y)) ||
+             rewrite(select(x, w + y, z) - y, select(x, w, z - y)) ||
+             rewrite(select(x, y, z + w) - z, select(x, y - z, w)) ||
+             rewrite(select(x, y, w + z) - z, select(x, y - z, w)) ||
+             rewrite(y - select(x, y + w, z), 0 - select(x, w, z - y)) ||
+             rewrite(y - select(x, w + y, z), 0 - select(x, w, z - y)) ||
+             rewrite(z - select(x, y, z + w), 0 - select(x, y - z, w)) ||
+             rewrite(z - select(x, y, w + z), 0 - select(x, y - z, w)) ||
+
              rewrite((x + y) - x, y) ||
              rewrite((x + y) - y, x) ||
              rewrite(x - (x + y), -y) ||
@@ -77,6 +98,10 @@ Expr Simplify::visit(const Sub *op, ConstBounds *bounds) {
              rewrite(((y + x) + z) - x, y + z) ||
              rewrite((z + (x + y)) - x, z + y) ||
              rewrite((z + (y + x)) - x, z + y) ||
+
+             rewrite((x - y) - (x + z), 0 - y - z) ||
+             rewrite((x - y) - (z + x), 0 - y - z) ||
+
              (no_overflow(op->type) &&
               (rewrite(max(x, y) - x, max(0, y - x)) ||
                rewrite(min(x, y) - x, min(0, y - x)) ||
@@ -248,9 +273,10 @@ Expr Simplify::visit(const Sub *op, ConstBounds *bounds) {
                rewrite((x + y)/c0 - x/c0, ((x % c0) + y)/c0, c0 > 0) ||
                rewrite(x/c0 - (x - y)/c0, ((y + fold(c0 - 1)) - (x % c0))/c0, c0 > 0) ||
                rewrite((x - y)/c0 - x/c0, ((x % c0) - y)/c0, c0 > 0))))) {
-            return mutate(std::move(rewrite.result), bounds);
+            return mutate(rewrite.result, bounds);
         }
     }
+    // clang-format on
 
     const Shuffle *shuffle_a = a.as<Shuffle>();
     const Shuffle *shuffle_b = b.as<Shuffle>();
@@ -271,6 +297,5 @@ Expr Simplify::visit(const Sub *op, ConstBounds *bounds) {
     }
 }
 
-
-}
-}
+}  // namespace Internal
+}  // namespace Halide

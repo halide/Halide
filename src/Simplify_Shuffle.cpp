@@ -5,13 +5,13 @@ namespace Internal {
 
 using std::vector;
 
-Expr Simplify::visit(const Shuffle *op, ConstBounds *bounds) {
+Expr Simplify::visit(const Shuffle *op, ExprInfo *bounds) {
     if (op->is_extract_element() &&
         (op->vectors[0].as<Ramp>() ||
          op->vectors[0].as<Broadcast>())) {
         // Extracting a single lane of a ramp or broadcast
         if (const Ramp *r = op->vectors[0].as<Ramp>()) {
-            return mutate(r->base + op->indices[0]*r->stride, bounds);
+            return mutate(r->base + op->indices[0] * r->stride, bounds);
         } else if (const Broadcast *b = op->vectors[0].as<Broadcast>()) {
             return mutate(b->value, bounds);
         } else {
@@ -24,7 +24,7 @@ Expr Simplify::visit(const Shuffle *op, ConstBounds *bounds) {
     vector<Expr> new_vectors;
     bool changed = false;
     for (Expr vector : op->vectors) {
-        ConstBounds v_bounds;
+        ExprInfo v_bounds;
         Expr new_vector = mutate(vector, &v_bounds);
         if (!vector.same_as(new_vector)) {
             changed = true;
@@ -37,6 +37,7 @@ Expr Simplify::visit(const Shuffle *op, ConstBounds *bounds) {
                 bounds->max_defined &= v_bounds.max_defined;
                 bounds->min = std::min(bounds->min, v_bounds.min);
                 bounds->max = std::max(bounds->max, v_bounds.max);
+                bounds->alignment = ModulusRemainder::unify(bounds->alignment, v_bounds.alignment);
             }
         }
         new_vectors.push_back(new_vector);
@@ -62,8 +63,17 @@ Expr Simplify::visit(const Shuffle *op, ConstBounds *bounds) {
         if (load_indices.size() == new_vectors.size()) {
             Type t = load_indices[0].type().with_lanes(op->indices.size());
             Expr shuffled_index = Shuffle::make(load_indices, op->indices);
-            shuffled_index = mutate(shuffled_index, nullptr);
+            ExprInfo shuffled_index_info;
+            shuffled_index = mutate(shuffled_index, &shuffled_index_info);
             if (shuffled_index.as<Ramp>()) {
+                ExprInfo base_info;
+                if (const Ramp *r = shuffled_index.as<Ramp>()) {
+                    mutate(r->base, &base_info);
+                }
+
+                ModulusRemainder alignment =
+                    ModulusRemainder::intersect(base_info.alignment, shuffled_index_info.alignment);
+
                 Expr shuffled_predicate;
                 if (unpredicated) {
                     shuffled_predicate = const_true(t.lanes());
@@ -74,7 +84,7 @@ Expr Simplify::visit(const Shuffle *op, ConstBounds *bounds) {
                 t = first_load->type;
                 t = t.with_lanes(op->indices.size());
                 return Load::make(t, first_load->name, shuffled_index, first_load->image,
-                                  first_load->param, shuffled_predicate);
+                                  first_load->param, shuffled_predicate, alignment);
             }
         }
     }
@@ -116,7 +126,7 @@ Expr Simplify::visit(const Shuffle *op, ConstBounds *bounds) {
                 // difference between two adjacent terms in the
                 // interleave needs to be a broadcast of the new
                 // stride.
-                Expr diff = mutate(new_vectors[i] - new_vectors[i-1], nullptr);
+                Expr diff = mutate(new_vectors[i] - new_vectors[i - 1], nullptr);
                 const Broadcast *b = diff.as<Broadcast>();
                 if (b) {
                     Expr check = mutate(b->value * terms - r->stride, nullptr);
@@ -177,13 +187,13 @@ Expr Simplify::visit(const Shuffle *op, ConstBounds *bounds) {
             bool can_collapse = true;
             for (size_t i = 1; i < new_vectors.size() && can_collapse; i++) {
                 Expr diff;
-                if (new_vectors[i].type().lanes() == new_vectors[i-1].type().lanes()) {
-                    diff = mutate(new_vectors[i] - new_vectors[i-1], nullptr);
+                if (new_vectors[i].type().lanes() == new_vectors[i - 1].type().lanes()) {
+                    diff = mutate(new_vectors[i] - new_vectors[i - 1], nullptr);
                 }
 
                 const Broadcast *b = diff.as<Broadcast>();
                 if (b) {
-                    Expr check = mutate(b->value - r->stride * new_vectors[i-1].type().lanes(), nullptr);
+                    Expr check = mutate(b->value - r->stride * new_vectors[i - 1].type().lanes(), nullptr);
                     can_collapse &= is_zero(check);
                 } else {
                     can_collapse = false;
@@ -223,7 +233,7 @@ Expr Simplify::visit(const Shuffle *op, ConstBounds *bounds) {
     }
 }
 
-template <typename T>
+template<typename T>
 Expr Simplify::hoist_slice_vector(Expr e) {
     const T *op = e.as<T>();
     internal_assert(op);
@@ -265,5 +275,5 @@ template Expr Simplify::hoist_slice_vector<Mul>(Expr);
 template Expr Simplify::hoist_slice_vector<Min>(Expr);
 template Expr Simplify::hoist_slice_vector<Max>(Expr);
 
-}
-}
+}  // namespace Internal
+}  // namespace Halide

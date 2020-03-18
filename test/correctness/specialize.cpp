@@ -51,16 +51,18 @@ void my_free(void *ctx, void *ptr) {
 // Custom lowering pass to count the number of IfThenElse statements found inside
 // ProducerConsumer nodes.
 int if_then_else_count = 0;
-class CountIfThenElse : public Internal::IRMutator2 {
+class CountIfThenElse : public Internal::IRMutator {
     int producer_consumers;
 
 public:
-    CountIfThenElse() : producer_consumers(0) {}
+    CountIfThenElse()
+        : producer_consumers(0) {
+    }
 
     Internal::Stmt visit(const Internal::ProducerConsumer *op) override {
         // Only count ifs found inside a pipeline.
         producer_consumers++;
-        Internal::Stmt stmt = IRMutator2::visit(op);
+        Internal::Stmt stmt = IRMutator::visit(op);
         producer_consumers--;
         return stmt;
     }
@@ -68,18 +70,23 @@ public:
         if (producer_consumers > 0) {
             if_then_else_count++;
         }
-        return Internal::IRMutator2::visit(op);
+        return Internal::IRMutator::visit(op);
     }
-    using Internal::IRMutator2::visit;
+    using Internal::IRMutator::visit;
 };
 
 int main(int argc, char **argv) {
+    if (get_jit_target_from_environment().arch == Target::WebAssembly) {
+        printf("Skipping test for WebAssembly as the wasm JIT cannot support set_custom_allocator.\n");
+        return 0;
+    }
+
     {
         Param<bool> param;
 
         Func f;
         Var x;
-        f(x) = select(param, x*3, x*17);
+        f(x) = select(param, x * 3, x * 17);
 
         // Vectorize when the output is large enough
         Expr cond = (f.output_buffer().width() >= 4);
@@ -105,7 +112,7 @@ int main(int argc, char **argv) {
         reset_trace();
         f.realize(out);
         for (int i = 0; i < out.width(); i++) {
-            int correct = i*3;
+            int correct = i * 3;
             if (out(i) != correct) {
                 printf("out(%d) was %d instead of %d\n",
                        i, out(i), correct);
@@ -114,7 +121,7 @@ int main(int argc, char **argv) {
         param.set(false);
         f.realize(out);
         for (int i = 0; i < out.width(); i++) {
-            int correct = i*17;
+            int correct = i * 17;
             if (out(i) != correct) {
                 printf("out(%d) was %d instead of %d\n",
                        i, out(i), correct);
@@ -122,7 +129,7 @@ int main(int argc, char **argv) {
         }
 
         // Should have used vector stores
-        if (!vector_store  || scalar_store) {
+        if (!vector_store || scalar_store) {
             printf("This was supposed to use vector stores\n");
             return -1;
         }
@@ -133,7 +140,7 @@ int main(int argc, char **argv) {
         reset_trace();
         f.realize(out);
         for (int i = 0; i < out.width(); i++) {
-            int correct = i*3;
+            int correct = i * 3;
             if (out(i) != correct) {
                 printf("out(%d) was %d instead of %d\n",
                        i, out(i), correct);
@@ -142,7 +149,7 @@ int main(int argc, char **argv) {
         param.set(false);
         f.realize(out);
         for (int i = 0; i < out.width(); i++) {
-            int correct = i*17;
+            int correct = i * 17;
             if (out(i) != correct) {
                 printf("out(%d) was %d instead of %d\n",
                        i, out(i), correct);
@@ -154,7 +161,6 @@ int main(int argc, char **argv) {
             printf("This was supposed to use scalar stores\n");
             return -1;
         }
-
     }
 
     {
@@ -212,7 +218,7 @@ int main(int argc, char **argv) {
     {
         // Specialize for interleaved vs planar inputs
         ImageParam im(Float(32), 1);
-        im.dim(0).set_stride(Expr()); // unconstrain the stride
+        im.dim(0).set_stride(Expr());  // unconstrain the stride
 
         Func f;
         Var x;
@@ -251,7 +257,6 @@ int main(int argc, char **argv) {
             printf("These stores were supposed to be vector.\n");
             return -1;
         }
-
     }
 
     {
@@ -279,7 +284,6 @@ int main(int argc, char **argv) {
             printf("min %d instead of -10\n", m);
             return -1;
         }
-
     }
 
     {
@@ -323,7 +327,6 @@ int main(int argc, char **argv) {
         // The image is too small, but that should be OK, because the
         // param is false so the image will never be used.
         f.realize(100);
-
     }
 
     {
@@ -357,7 +360,6 @@ int main(int argc, char **argv) {
             printf("extent(1) was supposed to be 2.\n");
             return -1;
         }
-
     }
 
     {
@@ -450,7 +452,7 @@ int main(int argc, char **argv) {
         // Check specialization on a more complex expression used in a select.
         ImageParam im(Int(32), 2);
         Param<int> p;
-        Expr test = (p > 73) || (p*p + p + 1 == 0);
+        Expr test = (p > 73) || (p * p + p + 1 == 0);
 
         Func f;
         Var x;
@@ -581,7 +583,7 @@ int main(int argc, char **argv) {
         // calls with the same Expr, but doesn't guarantee that all Exprs
         // that evaluate to the same value collapse. Use a deliberately-
         // different Expr here to check that we do elide these.
-        f.specialize(different_const_true);         // will be pruned
+        f.specialize(different_const_true);  // will be pruned
 
         _halide_user_assert(f.function().definition().specializations().size() == 5);
 
@@ -620,7 +622,7 @@ int main(int argc, char **argv) {
         // implicit compute/store_root required for outputs.
         Func f("foof");
         f(x) = x;
-        f.specialize(p == 0).vectorize(x, 32);      // will *not* be pruned
+        f.specialize(p == 0).vectorize(x, 32);  // will *not* be pruned
         f.specialize(const_true).vectorize(x, 16);
 
         f.set_custom_trace(&my_trace);

@@ -1,5 +1,3 @@
-from __future__ import print_function
-from __future__ import division
 
 import halide as hl
 import numpy as np
@@ -153,6 +151,38 @@ def test_basics3():
     left += 5
     left += ss
 
+def test_basics4():
+    # Test for f[g[r]] = ...
+    # See https://github.com/halide/Halide/issues/4285
+    x = hl.Var('x')
+    f = hl.Func('f')
+    g = hl.Func('g')
+    g[x] = 1
+    f[x] = 0.0
+    r = hl.RDom([(0, 100)])
+    f[g[r]] = 2.5
+    f.compute_root()
+    f.compile_jit()
+
+def test_basics5():
+    # Test Func.in_()
+    x, y = hl.Var('x'), hl.Var('y')
+    f = hl.Func('f')
+    g = hl.Func('g')
+    h = hl.Func('h')
+    f[x, y] = y
+    r = hl.RDom([(0, 100)])
+    g[x] = 0
+    g[x] += f[x, r]
+    h[x] = 0
+    h[x] += f[x, r]
+    f.in_(g).compute_at(g, x)
+    f.in_(h).compute_at(h, x)
+    g.compute_root()
+    h.compute_root()
+    p = hl.Pipeline([g, h])
+    p.compile_jit()
+
 def test_float_or_int():
     x = hl.Var('x')
     i32, f32 =  hl.Int(32), hl.Float(32)
@@ -204,6 +234,38 @@ def test_operator_order():
     hl.Expr(1) + f[x]
     1 + f[x]
 
+def _check_is_u16(e):
+    assert e.type() == hl.UInt(16), e.type()
+
+def test_int_promotion():
+    # Verify that (Exprlike op literal) correctly matches the type
+    # of the literal to the Exprlike (rather than promoting the result to int32).
+    # All types that use add_binary_operators() should be tested here.
+
+    x = hl.Var('x')
+    # All the binary ops are handled the same, so + is good enough
+
+    # Exprlike = FuncRef
+    f = hl.Func('f')
+    f[x] = hl.u16(x)
+    _check_is_u16(f[x] + 2)
+    _check_is_u16(2 + f[x])
+
+    # Exprlike = Expr
+    e = hl.Expr(f[x])
+    _check_is_u16(e + 2)
+    _check_is_u16(2 + e)
+
+    # Exprlike = Param
+    p = hl.Param(hl.UInt(16))
+    _check_is_u16(p + 2)
+    _check_is_u16(2 + p)
+
+    # Exprlike = RDom/RVar
+    # Exprlike = Var
+    # (skipped, since these can never have values of any type other than int32)
+
+
 if __name__ == "__main__":
     test_compiletime_error()
     test_runtime_error()
@@ -211,6 +273,9 @@ if __name__ == "__main__":
     test_misused_or()
     test_float_or_int()
     test_operator_order()
+    test_int_promotion()
     test_basics()
     test_basics2()
     test_basics3()
+    test_basics4()
+    test_basics5()

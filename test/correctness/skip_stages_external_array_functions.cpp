@@ -56,6 +56,8 @@ int main(int argc, char **argv) {
     Var x;
     Param<bool> toggle1, toggle2;
 
+    Buffer<uint8_t> out(10);
+
     {
         // Make a diamond-shaped graph where only one of the two
         // Side-lobes is used.
@@ -73,18 +75,18 @@ int main(int argc, char **argv) {
 
         reset_counts();
         toggle1.set(true);
-        Buffer<uint8_t> result1 = f4.realize(10);
+        f4.realize(out);
         for (int32_t i = 0; i < 10; i++) {
-            assert(result1(i) == i + 1);
+            assert(out(i) == i + 1);
         }
         check_queries(2, 2);
         check_counts(1, 0);
 
         reset_counts();
         toggle1.set(false);
-        Buffer<uint8_t> result2 = f4.realize(10);
+        f4.realize(out);
         for (int32_t i = 0; i < 10; i++) {
-            assert(result2(i) == i + 2);
+            assert(out(i) == i + 2);
         }
         check_queries(2, 2);
         check_counts(0, 1);
@@ -123,31 +125,30 @@ int main(int argc, char **argv) {
         reset_counts();
         toggle1.set(true);
         toggle2.set(true);
-        f4.realize(10);
+        f4.realize(out);
         check_queries(2, 2, 2);
         check_counts(1, 1, 1);
 
         reset_counts();
         toggle1.set(false);
         toggle2.set(true);
-        f4.realize(10);
+        f4.realize(out);
         check_queries(2, 2, 2);
         check_counts(1, 0, 1);
 
         reset_counts();
         toggle1.set(true);
         toggle2.set(false);
-        f4.realize(10);
+        f4.realize(out);
         check_queries(2, 2, 2);
         check_counts(1, 1, 0);
 
         reset_counts();
         toggle1.set(false);
         toggle2.set(false);
-        f4.realize(10);
+        f4.realize(out);
         check_queries(2, 2, 2);
         check_counts(0, 0, 0);
-
     }
 
     {
@@ -167,7 +168,7 @@ int main(int argc, char **argv) {
                               {identity, 1, 1},
                               UInt(8), 1);
 
-        f1(x) = Tuple(extern1(x), extern2(x+1));
+        f1(x) = Tuple(extern1(x), extern2(x + 1));
         f2(x) = select(toggle1, f1(x)[0], 0) + f1(x)[1];
 
         identity.compute_root();
@@ -180,13 +181,14 @@ int main(int argc, char **argv) {
 
         reset_counts();
         toggle1.set(true);
-        f2.realize(10);
+
+        f2.realize(out);
         check_queries(2, 2);
         check_counts(1, 1);
 
         reset_counts();
         toggle1.set(false);
-        f2.realize(10);
+        f2.realize(out);
         check_queries(2, 2);
         check_counts(1, 1);
     }
@@ -205,7 +207,7 @@ int main(int argc, char **argv) {
                               {identity, 1, 1},
                               UInt(8), 1);
 
-        f1(x) = Tuple(extern1(x), extern2(x+1));
+        f1(x) = Tuple(extern1(x), extern2(x + 1));
         f2(x) = select(toggle1, f1(x)[0], 0);
 
         identity.compute_root();
@@ -213,19 +215,19 @@ int main(int argc, char **argv) {
         extern2.compute_root();
 
         f1.compute_root();
-        f2.realize(10);
+        f2.realize(out);
 
         f2.compile_jit();
 
         reset_counts();
         toggle1.set(true);
-        f2.realize(10);
+        f2.realize(out);
         check_queries(2, 2);
         check_counts(1, 1);
 
         reset_counts();
         toggle1.set(false);
-        f2.realize(10);
+        f2.realize(out);
         check_queries(2, 2);
         check_counts(0, 0);
     }
@@ -267,33 +269,32 @@ int main(int argc, char **argv) {
         reset_counts();
         toggle1.set(true);
         toggle2.set(true);
-        f4.realize(10);
+        f4.realize(out);
         check_queries(2, 2, 2);
         check_counts(1, 1, 1);
 
         reset_counts();
         toggle1.set(false);
         toggle2.set(true);
-        f4.realize(10);
+        f4.realize(out);
         check_queries(2, 2, 2);
         check_counts(1, 0, 1);
 
         reset_counts();
         toggle1.set(true);
         toggle2.set(false);
-        f4.realize(10);
+        f4.realize(out);
         check_queries(2, 2, 2);
         check_counts(1, 1, 0);
 
         reset_counts();
         toggle1.set(false);
         toggle2.set(false);
-        f4.realize(10);
+        f4.realize(out);
         check_queries(2, 2, 2);
         check_counts(0, 0, 0);
     }
 
     printf("Success!\n");
     return 0;
-
 }

@@ -16,7 +16,7 @@ namespace Internal {
  * of calls to "mark buffer dead") after the last use of each
  * allocation. Targets may use this to free buffers earlier than the
  * close of their Allocate node. */
-Stmt inject_early_frees(Stmt s);
+Stmt inject_early_frees(const Stmt &s);
 
 }  // namespace Internal
 }  // namespace Halide

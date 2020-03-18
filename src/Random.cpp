@@ -17,7 +17,7 @@ namespace {
 
 // Permute a 32-bit unsigned integer using a fixed psuedorandom
 // permutation.
-Expr rng32(Expr x) {
+Expr rng32(const Expr &x) {
     internal_assert(x.type() == UInt(32));
 
     // A polynomial P with coefficients C0 .. CN induces a permutation
@@ -60,7 +60,7 @@ Expr rng32(Expr x) {
 
     return (((C2 * x) + C1) * x) + C0;
 }
-}
+}  // namespace
 
 Expr random_int(const vector<Expr> &e) {
     internal_assert(e.size());
@@ -92,8 +92,8 @@ Expr random_float(const vector<Expr> &e) {
     return clamp(reinterpret(Float(32), result) - 1.0f, 0.0f, 1.0f);
 }
 
-class LowerRandom : public IRMutator2 {
-    using IRMutator2::visit;
+class LowerRandom : public IRMutator {
+    using IRMutator::visit;
 
     Expr visit(const Call *op) override {
         if (op->is_intrinsic(Call::random)) {
@@ -110,7 +110,7 @@ class LowerRandom : public IRMutator2 {
                 return Expr();
             }
         } else {
-            return IRMutator2::visit(op);
+            return IRMutator::visit(op);
         }
     }
 
@@ -118,7 +118,7 @@ class LowerRandom : public IRMutator2 {
 
 public:
     LowerRandom(const vector<string> &free_vars, int tag) {
-        extra_args.push_back(tag);
+        extra_args.emplace_back(tag);
         for (size_t i = 0; i < free_vars.size(); i++) {
             internal_assert(!free_vars[i].empty());
             extra_args.push_back(Variable::make(Int(32), free_vars[i]));
@@ -126,7 +126,7 @@ public:
     }
 };
 
-Expr lower_random(Expr e, const vector<string> &free_vars, int tag) {
+Expr lower_random(const Expr &e, const vector<string> &free_vars, int tag) {
     LowerRandom r(free_vars, tag);
     return r.mutate(e);
 }

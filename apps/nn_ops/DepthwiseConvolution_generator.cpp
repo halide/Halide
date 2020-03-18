@@ -51,8 +51,8 @@ void SpecializeForFilterSizeAndInputStride(const RDom &filter_dom,
     if (filter) {
         filter->dim(1).set_min(0).dim(2).set_min(0);
     }
-    std::vector<std::pair<int, int>> filter_sizes = { { 3, 3 }, { 5, 5 } };
-    for (int other_stride : { 1, 2 }) {
+    std::vector<std::pair<int, int>> filter_sizes = {{3, 3}, {5, 5}};
+    for (int other_stride : {1, 2}) {
         for (const std::pair<int, int> &filter_size : filter_sizes) {
             Expr params_matched = (filter->dim(1).extent() == filter_size.first &&
                                    filter->dim(2).extent() == filter_size.second &&
@@ -74,7 +74,7 @@ class DepthwiseConvolution : public Generator<DepthwiseConvolution> {
 public:
     // The depth multiplier specifies the ratio between the output depth and the
     // input depth.
-    GeneratorParam<int> depth_multiplier_{ "depth_multiplier", 1, 1, 8 };
+    GeneratorParam<int> depth_multiplier_{"depth_multiplier", 1, 1, 8};
 
     // Unsigned 8-bit input tensor, indexed by depth, x, y, batch.
     Input<Buffer<uint8_t>> input_{"input", 4};
@@ -86,22 +86,22 @@ public:
     Input<Buffer<int32_t>> bias_{"bias", 1};
 
     // Offsets and multipliers for the input, filter, and output.
-    Input<int16_t> input_offset_{ "input_offset", 0, -255, 0 };
-    Input<int16_t> filter_offset_{ "filter_offset", 0, -255, 0 };
-    Input<int> output_multiplier_{ "output_multiplier" };
-    Input<int> output_shift_{ "output_shift" };
-    Input<int> output_offset_{ "output_offset", 0, 0, 255 };
+    Input<int16_t> input_offset_{"input_offset", 0, -255, 0};
+    Input<int16_t> filter_offset_{"filter_offset", 0, -255, 0};
+    Input<int> output_multiplier_{"output_multiplier"};
+    Input<int> output_shift_{"output_shift"};
+    Input<int> output_offset_{"output_offset", 0, 0, 255};
     // The stride specifies how the input [x, y] are sub-subsampled. For every
     // spatial location [x, y] in the output buffer, the input buffer is sampled
     // spatially at [x * stride, y * stride]. The caller should ensure that
     // [x * stride, y * stride] is a valid spatial location in the input buffer.
     // Generally, this means setting the output buffer's [width, height] to be
     // the input buffer's [width, height] / stride.
-    Input<int> stride_{ "stride", 1, 1, 2 };
-    Input<int> pad_width_{ "pad_width" };
-    Input<int> pad_height_{ "pad_height" };
-    Input<uint8_t> output_min_{ "output_min" };
-    Input<uint8_t> output_max_{ "output_max" };
+    Input<int> stride_{"stride", 1, 1, 2};
+    Input<int> pad_width_{"pad_width"};
+    Input<int> pad_height_{"pad_height"};
+    Input<uint8_t> output_min_{"output_min"};
+    Input<uint8_t> output_max_{"output_max"};
 
     Output<Buffer<uint8_t>> output_{"output", 4};
 
@@ -116,10 +116,10 @@ public:
         // safe.
         Func input_bounded =
             constant_exterior(input_, cast<uint8_t>(-input_offset_),
-                              { { Expr(), Expr() },
-                                { 0, input_.dim(1).extent() },
-                                { 0, input_.dim(2).extent() },
-                                { Expr(), Expr() } });
+                              {{Expr(), Expr()},
+                               {0, input_.dim(1).extent()},
+                               {0, input_.dim(2).extent()},
+                               {Expr(), Expr()}});
 
         // For the filter, add the offset and upcast to 16-bit.
         Func filter_with_offset("filter_with_offset");
@@ -173,7 +173,7 @@ public:
             vector_size_u8 = 128;
         }
         const bool use_hexagon =
-            get_target().features_any_of({ Target::HVX_64, Target::HVX_128 });
+            get_target().features_any_of({Target::HVX_64, Target::HVX_128});
 
         // Specifying .hexagon() on a Func will generate an RPC to run this stage
         // on Hexagon. If Hexagon is the host (that is, the architecture is

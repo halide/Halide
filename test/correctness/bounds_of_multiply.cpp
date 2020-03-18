@@ -1,12 +1,11 @@
-// See https://github.com/halide/Halide/issues/3070
-
+#include "Halide.h"
 #include <stdio.h>
 
-#include "Halide.h"
+// See https://github.com/halide/Halide/issues/3070
 
 using namespace Halide;
 
-template <typename T>
+template<typename T>
 void test() {
     Param<T> bound;
     ImageParam in(UInt(8), 1);

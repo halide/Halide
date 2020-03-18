@@ -16,8 +16,10 @@ namespace {
 
 class FindParameterDependencies : public IRGraphVisitor {
 public:
-    FindParameterDependencies() { }
-    ~FindParameterDependencies() { }
+    FindParameterDependencies() {
+    }
+    ~FindParameterDependencies() override {
+    }
 
     void visit_function(const Function &function) {
         function.accept(this);
@@ -40,7 +42,7 @@ public:
 
     using IRGraphVisitor::visit;
 
-    void visit(const Call *call) {
+    void visit(const Call *call) override {
         if (call->param.defined()) {
             record(call->param);
         }
@@ -64,15 +66,14 @@ public:
         }
     }
 
-
-    void visit(const Load *load) {
+    void visit(const Load *load) override {
         if (load->param.defined()) {
             record(load->param);
         }
         IRGraphVisitor::visit(load);
     }
 
-    void visit(const Variable *var) {
+    void visit(const Variable *var) override {
         if (var->param.defined()) {
             record(var->param);
         }
@@ -85,17 +86,19 @@ public:
         info.type = parameter.type();
 
         if (parameter.is_buffer()) {
-            internal_error << "Buffer parameter " << parameter.name() <<
-                " encountered in computed_cached computation.\n" <<
-                "Computations which depend on buffer parameters " <<
-                "cannot be scheduled compute_cached.\n" <<
-                "Use memoize_tag to provide cache key information for buffer.\n";
+            internal_error
+                << "Buffer parameter " << parameter.name()
+                << " encountered in computed_cached computation.\n"
+                << "Computations which depend on buffer parameters "
+                << "cannot be scheduled compute_cached.\n"
+                << "Use memoize_tag to provide cache key information for buffer.\n";
         } else if (info.type.is_handle()) {
-            internal_error << "Handle parameter " << parameter.name() <<
-                " encountered in computed_cached computation.\n" <<
-                "Computations which depend on handle parameters " <<
-                "cannot be scheduled compute_cached.\n" <<
-                "Use memoize_tag to provide cache key information for handle.\n";
+            internal_error
+                << "Handle parameter " << parameter.name()
+                << " encountered in computed_cached computation.\n"
+                << "Computations which depend on handle parameters "
+                << "cannot be scheduled compute_cached.\n"
+                << "Use memoize_tag to provide cache key information for handle.\n";
         } else {
             info.size_expr = info.type.bytes();
             info.value_expr = Internal::Variable::make(info.type, parameter.name(), parameter);
@@ -142,6 +145,7 @@ public:
 };
 
 typedef std::pair<FindParameterDependencies::DependencyKey, FindParameterDependencies::DependencyInfo> DependencyKeyInfoPair;
+typedef std::pair<const FindParameterDependencies::DependencyKey, FindParameterDependencies::DependencyInfo> ConstDependencyKeyInfoPair;
 
 class KeyInfo {
     FindParameterDependencies dependencies;
@@ -153,7 +157,7 @@ class KeyInfo {
     size_t parameters_alignment() {
         int32_t max_alignment = 0;
         // Find maximum natural alignment needed.
-        for (const DependencyKeyInfoPair &i : dependencies.dependency_info) {
+        for (const ConstDependencyKeyInfoPair &i : dependencies.dependency_info) {
             int alignment = i.second.type.bytes();
             if (alignment > max_alignment) {
                 max_alignment = alignment;
@@ -167,26 +171,25 @@ class KeyInfo {
         return size_t(1) << i;
     }
 
-// TODO: Using the full names in the key results in a (hopefully incredibly
-// slight) performance difference based on how one names filters and
-// functions. It is arguably a little easier to debug if something
-// goes wrong as one doesn't need to destructure the cache key by hand
-// in the debugger. Also, if a pointer is used, a counter must also be
-// put in the cache key to avoid aliasing on reuse of the address in
-// JIT situations where code is regenerated into the same region of
-// memory.
-//
-// There is a plan to change the hash function used in the cache and
-// after that happens, we'll measure performance again and maybe decide
-// to choose one path or the other (see Git history for the implementation.
-// It was deleted as part of the address_of intrinsic cleanup).
+    // TODO: Using the full names in the key results in a (hopefully incredibly
+    // slight) performance difference based on how one names filters and
+    // functions. It is arguably a little easier to debug if something
+    // goes wrong as one doesn't need to destructure the cache key by hand
+    // in the debugger. Also, if a pointer is used, a counter must also be
+    // put in the cache key to avoid aliasing on reuse of the address in
+    // JIT situations where code is regenerated into the same region of
+    // memory.
+    //
+    // There is a plan to change the hash function used in the cache and
+    // after that happens, we'll measure performance again and maybe decide
+    // to choose one path or the other (see Git history for the implementation.
+    // It was deleted as part of the address_of intrinsic cleanup).
 
 public:
     KeyInfo(const Function &function, const std::string &name, int memoize_instance)
         : top_level_name(name),
           function_name(function.origin_name()),
-          memoize_instance(memoize_instance)
-    {
+          memoize_instance(memoize_instance) {
         dependencies.visit_function(function);
         size_t size_so_far = 0;
         size_so_far += Handle().bytes() + 4;
@@ -197,19 +200,21 @@ public:
         }
         key_size_expr = (int32_t)size_so_far;
 
-        for (const DependencyKeyInfoPair &i : dependencies.dependency_info) {
+        for (const ConstDependencyKeyInfoPair &i : dependencies.dependency_info) {
             key_size_expr += i.second.size_expr;
         }
     }
 
     // Return the number of bytes needed to store the cache key
     // for the target function. Make sure it takes 4 bytes in cache key.
-    Expr key_size() { return cast<int32_t>(key_size_expr); };
+    Expr key_size() {
+        return cast<int32_t>(key_size_expr);
+    };
 
     // Code to fill in the Allocation named key_name with the byte of
     // the key. The Allocation is guaranteed to be 1d, of type uint8_t
     // and of the size returned from key_size
-    Stmt generate_key(std::string key_name) {
+    Stmt generate_key(const std::string &key_name) {
         std::vector<Stmt> writes;
         Expr index = Expr(0);
 
@@ -220,7 +225,7 @@ public:
         writes.push_back(Store::make(key_name,
                                      StringImm::make(std::to_string(top_level_name.size()) + ":" + top_level_name +
                                                      std::to_string(function_name.size()) + ":" + function_name),
-                                     (index / Handle().bytes()), Parameter(), const_true()));
+                                     (index / Handle().bytes()), Parameter(), const_true(), ModulusRemainder()));
         size_t alignment = Handle().bytes();
         index += Handle().bytes();
 
@@ -228,7 +233,7 @@ public:
         writes.push_back(Store::make(key_name,
                                      memoize_instance,
                                      (index / Int(32).bytes()),
-                                     Parameter(), const_true()));
+                                     Parameter(), const_true(), ModulusRemainder()));
         alignment += 4;
         index += 4;
 
@@ -236,17 +241,17 @@ public:
         if (needed_alignment > 1) {
             while (alignment % needed_alignment) {
                 writes.push_back(Store::make(key_name, Cast::make(UInt(8), 0),
-                                             index, Parameter(), const_true()));
+                                             index, Parameter(), const_true(), ModulusRemainder()));
                 index = index + 1;
                 alignment++;
             }
         }
 
-        for (const DependencyKeyInfoPair &i : dependencies.dependency_info) {
+        for (const ConstDependencyKeyInfoPair &i : dependencies.dependency_info) {
             writes.push_back(Store::make(key_name,
                                          i.second.value_expr,
                                          (index / i.second.size_expr),
-                                         Parameter(), const_true()));
+                                         Parameter(), const_true(), ModulusRemainder()));
             index += i.second.size_expr;
         }
         Stmt blocks = Block::make(writes);
@@ -258,13 +263,13 @@ public:
     // in which case the Allocation named by storage will be computed,
     // or false, in which case it will be assumed the buffer was populated
     // by the code in this call.
-    Expr generate_lookup(std::string key_allocation_name, std::string computed_bounds_name,
-                         int32_t tuple_count, std::string storage_base_name) {
+    Expr generate_lookup(const std::string &key_allocation_name, const std::string &computed_bounds_name,
+                         int32_t tuple_count, const std::string &storage_base_name) {
         std::vector<Expr> args;
         args.push_back(Variable::make(type_of<uint8_t *>(), key_allocation_name));
         args.push_back(key_size());
         args.push_back(Variable::make(type_of<halide_buffer_t *>(), computed_bounds_name));
-        args.push_back(tuple_count);
+        args.emplace_back(tuple_count);
         std::vector<Expr> buffers;
         if (tuple_count == 1) {
             buffers.push_back(Variable::make(type_of<halide_buffer_t *>(), storage_base_name + ".buffer"));
@@ -279,13 +284,13 @@ public:
     }
 
     // Returns a statement which will store the result of a computation under this key
-    Stmt store_computation(std::string key_allocation_name, std::string computed_bounds_name,
-                           int32_t tuple_count, std::string storage_base_name) {
+    Stmt store_computation(const std::string &key_allocation_name, const std::string &computed_bounds_name,
+                           int32_t tuple_count, const std::string &storage_base_name) {
         std::vector<Expr> args;
         args.push_back(Variable::make(type_of<uint8_t *>(), key_allocation_name));
         args.push_back(key_size());
         args.push_back(Variable::make(type_of<halide_buffer_t *>(), computed_bounds_name));
-        args.push_back(tuple_count);
+        args.emplace_back(tuple_count);
         std::vector<Expr> buffers;
         if (tuple_count == 1) {
             buffers.push_back(Variable::make(type_of<halide_buffer_t *>(), storage_base_name + ".buffer"));
@@ -301,10 +306,10 @@ public:
     }
 };
 
-}
+}  // namespace
 
 // Inject caching structure around memoized realizations.
-class InjectMemoization : public IRMutator2 {
+class InjectMemoization : public IRMutator {
 public:
     const std::map<std::string, Function> &env;
     int memoize_instance;
@@ -314,11 +319,12 @@ public:
     InjectMemoization(const std::map<std::string, Function> &e,
                       int memoize_instance,
                       const std::string &name,
-                      const std::vector<Function> &outputs) :
-        env(e), memoize_instance(memoize_instance), top_level_name(name), outputs(outputs) {}
-private:
+                      const std::vector<Function> &outputs)
+        : env(e), memoize_instance(memoize_instance), top_level_name(name), outputs(outputs) {
+    }
 
-    using IRMutator2::visit;
+private:
+    using IRMutator::visit;
 
     Stmt visit(const Realize *op) override {
         std::map<std::string, Function>::const_iterator iter = env.find(op->name);
@@ -358,18 +364,17 @@ private:
                                                    Cast::make(Bool(), Variable::make(Int(32), cache_result_name)),
                                                    mutated_body);
             Stmt cache_lookup_check = Block::make(AssertStmt::make(NE::make(Variable::make(Int(32), cache_result_name), -1),
-                                                                   Call::make(Int(32), "halide_error_out_of_memory", { }, Call::Extern)),
+                                                                   Call::make(Int(32), "halide_error_out_of_memory", {}, Call::Extern)),
                                                   cache_miss_marker);
 
             Stmt cache_lookup = LetStmt::make(cache_result_name,
                                               key_info.generate_lookup(cache_key_name, computed_bounds_name, f.outputs(), op->name),
                                               cache_lookup_check);
 
-
             BufferBuilder builder;
             builder.dimensions = f.dimensions();
             std::string max_stage_num = std::to_string(f.updates().size());
-            for (const std::string arg : f.args()) {
+            for (const std::string &arg : f.args()) {
                 std::string prefix = op->name + ".s" + max_stage_num + "." + arg;
                 Expr min = Variable::make(Int(32), prefix + ".min");
                 Expr max = Variable::make(Int(32), prefix + ".max");
@@ -387,7 +392,7 @@ private:
 
             return Realize::make(op->name, op->types, op->memory_type, op->bounds, op->condition, cache_key_alloc);
         } else {
-            return IRMutator2::visit(op);
+            return IRMutator::visit(op);
         }
     }
 
@@ -421,28 +426,30 @@ private:
                 return ProducerConsumer::make(op->name, op->is_producer, mutated_body);
             }
         } else {
-            return IRMutator2::visit(op);
+            return IRMutator::visit(op);
         }
     }
 };
 
-Stmt inject_memoization(Stmt s, const std::map<std::string, Function> &env,
+Stmt inject_memoization(const Stmt &s, const std::map<std::string, Function> &env,
                         const std::string &name,
                         const std::vector<Function> &outputs) {
     // Cache keys use the addresses of names of Funcs. For JIT, a
     // counter for the pipeline is needed as the address may be reused
     // across pipelines. This isn't a problem when using full names as
     // the function names already are uniquefied by a counter.
-    static std::atomic<int> memoize_instance {0};
+    static std::atomic<int> memoize_instance{0};
 
     InjectMemoization injector(env, memoize_instance++, name, outputs);
 
     return injector.mutate(s);
 }
 
-class RewriteMemoizedAllocations : public IRMutator2 {
+class RewriteMemoizedAllocations : public IRMutator {
 public:
-    RewriteMemoizedAllocations(const std::map<std::string, Function> &e) : env(e) {}
+    RewriteMemoizedAllocations(const std::map<std::string, Function> &e)
+        : env(e) {
+    }
 
 private:
     const std::map<std::string, Function> &env;
@@ -464,7 +471,7 @@ private:
         return realization_name;
     }
 
-    using IRMutator2::visit;
+    using IRMutator::visit;
 
     Stmt visit(const Allocate *allocation) override {
         std::string realization_name = get_realization_name(allocation->name);
@@ -475,7 +482,7 @@ private:
             pending_memoized_allocations[innermost_realization_name].push_back(allocation);
             return mutate(allocation->body);
         } else {
-            return IRMutator2::visit(allocation);
+            return IRMutator::visit(allocation);
         }
     }
 
@@ -497,7 +504,7 @@ private:
         }
 
         // If any part of the match failed, do default mutator action.
-        return IRMutator2::visit(call);
+        return IRMutator::visit(call);
     }
 
     Stmt visit(const LetStmt *let) override {
@@ -513,7 +520,7 @@ private:
                 // Make the allocation node
                 body = Allocate::make(allocation->name, allocation->type, allocation->memory_type, allocation->extents, allocation->condition, body,
                                       Call::make(Handle(), Call::buffer_get_host,
-                                                 { Variable::make(type_of<struct halide_buffer_t *>(), allocation->name + ".buffer") }, Call::Extern),
+                                                 {Variable::make(type_of<struct halide_buffer_t *>(), allocation->name + ".buffer")}, Call::Extern),
                                       "halide_memoization_cache_release");
             }
 
@@ -521,12 +528,12 @@ private:
 
             return LetStmt::make(let->name, value, body);
         } else {
-            return IRMutator2::visit(let);
+            return IRMutator::visit(let);
         }
     }
 };
 
-Stmt rewrite_memoized_allocations(Stmt s, const std::map<std::string, Function> &env) {
+Stmt rewrite_memoized_allocations(const Stmt &s, const std::map<std::string, Function> &env) {
 
     RewriteMemoizedAllocations rewriter(env);
 

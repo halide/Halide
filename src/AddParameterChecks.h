@@ -16,8 +16,9 @@ struct Target;
 namespace Internal {
 
 /** Insert checks to make sure that all referenced parameters meet
- * their constraints. */
-Stmt add_parameter_checks(Stmt s, const Target &t);
+ * their constraints. Also injects any custom requirements provided
+ * by the user. */
+Stmt add_parameter_checks(const std::vector<Stmt> &requirements, Stmt s, const Target &t);
 
 }  // namespace Internal
 }  // namespace Halide

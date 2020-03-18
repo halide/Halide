@@ -10,12 +10,12 @@ double run_test(bool auto_schedule) {
     RDom r(2, 298, "r");
 
     fib(x) = 1;
-    fib(r) = fib(r-2) + fib(r-1);
+    fib(r) = fib(r - 2) + fib(r - 1);
 
-    g(x) = fib(x+10);
+    g(x) = fib(x + 10);
 
     // Provide estimates on the pipeline output
-    g.estimate(x, 0, 300);
+    g.set_estimate(x, 0, 300);
 
     Target target = get_jit_target_from_environment();
     Pipeline p(g);
@@ -34,9 +34,8 @@ double run_test(bool auto_schedule) {
         p.realize(out);
     });
 
-    return t*1000;
+    return t * 1000;
 }
-
 
 int main(int argc, char **argv) {
     double manual_time = run_test(false);

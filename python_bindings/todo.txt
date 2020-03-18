@@ -27,7 +27,6 @@
     - LoopLevel
     - MachineParams
     - Module
-    - Outputs
     - OutputImageParam
     - Pipeline
     - RDom

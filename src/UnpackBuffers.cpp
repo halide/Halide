@@ -23,36 +23,36 @@ class FindBufferSymbols : public IRVisitor {
 
     void visit_param(const string &ref_name, const Parameter &param) {
         if (param.defined() && param.is_buffer()) {
-            string name = param.name();
+            const string &name = param.name();
             buffers[name] =
-                BufferInfo {Variable::make(type_of<buffer_t *>(), name + ".buffer", param),
-                            param.dimensions()};
+                BufferInfo{Variable::make(type_of<halide_buffer_t *>(), name + ".buffer", param),
+                           param.dimensions()};
         }
     }
 
     void visit_buffer(const string &ref_name, const Buffer<> &buffer) {
         if (buffer.defined()) {
-            string name = buffer.name();
+            const string &name = buffer.name();
             buffers[name] =
-                BufferInfo {Variable::make(type_of<buffer_t *>(), name + ".buffer", buffer),
-                            buffer.dimensions()};
+                BufferInfo{Variable::make(type_of<halide_buffer_t *>(), name + ".buffer", buffer),
+                           buffer.dimensions()};
         }
     }
 
-    void visit(const Variable *op) {
+    void visit(const Variable *op) override {
         visit_param(op->name, op->param);
         visit_buffer(op->name, op->image);
         symbols.insert(op->name);
     }
 
-    void visit(const Load *op) {
+    void visit(const Load *op) override {
         visit_param(op->name, op->param);
         visit_buffer(op->name, op->image);
         symbols.insert(op->name);
         IRVisitor::visit(op);
     }
 
-    void visit(const Store *op) {
+    void visit(const Store *op) override {
         visit_param(op->name, op->param);
         symbols.insert(op->name);
         IRVisitor::visit(op);
@@ -78,55 +78,47 @@ Stmt unpack_buffers(Stmt s) {
 
         string host_var = name;
         Expr host_val = Call::make(type_of<void *>(), Call::buffer_get_host, args, Call::Extern);
-        lets.push_back({host_var, host_val});
+        lets.emplace_back(host_var, host_val);
 
         string dev_var = name + ".device";
         Expr dev_val = Call::make(type_of<uint64_t>(), Call::buffer_get_device, args, Call::Extern);
-        lets.push_back({dev_var, dev_val});
+        lets.emplace_back(dev_var, dev_val);
 
         string dev_interface_var = name + ".device_interface";
         Expr dev_interface_val = Call::make(type_of<const halide_device_interface_t *>(),
                                             Call::buffer_get_device_interface, args, Call::Extern);
-        lets.push_back({dev_interface_var, dev_interface_val});
+        lets.emplace_back(dev_interface_var, dev_interface_val);
 
-        string type_code_var = name + ".type.code";
-        Expr type_code_val = Call::make(UInt(8), Call::buffer_get_type_code, args, Call::Extern);
-        lets.push_back({type_code_var, type_code_val});
-
-        string type_bits_var = name + ".type.bits";
-        Expr type_bits_val = Call::make(UInt(8), Call::buffer_get_type_bits, args, Call::Extern);
-        lets.push_back({type_bits_var, type_bits_val});
-
-        string type_lanes_var = name + ".type.lanes";
-        Expr type_lanes_val = Call::make(UInt(16), Call::buffer_get_type_lanes, args, Call::Extern);
-        lets.push_back({type_lanes_var, type_lanes_val});
+        string type_code_var = name + ".type";
+        Expr type_code_val = Call::make(UInt(32), Call::buffer_get_type, args, Call::Extern);
+        lets.emplace_back(type_code_var, type_code_val);
 
         string host_dirty_var = name + ".host_dirty";
         Expr host_dirty_val = Call::make(Bool(), Call::buffer_get_host_dirty, args, Call::Extern);
-        lets.push_back({host_dirty_var, host_dirty_val});
+        lets.emplace_back(host_dirty_var, host_dirty_val);
 
         string dev_dirty_var = name + ".device_dirty";
         Expr dev_dirty_val = Call::make(Bool(), Call::buffer_get_device_dirty, args, Call::Extern);
-        lets.push_back({dev_dirty_var, dev_dirty_val});
+        lets.emplace_back(dev_dirty_var, dev_dirty_val);
 
         string dimensions_var = name + ".dimensions";
         Expr dimensions_val = Call::make(Int(32), Call::buffer_get_dimensions, args, Call::Extern);
-        lets.push_back({dimensions_var, dimensions_val});
+        lets.emplace_back(dimensions_var, dimensions_val);
 
         for (int i = 0; i < info.dimensions; i++) {
             vector<Expr> args = {info.handle, i};
 
             string min_var = name + ".min." + std::to_string(i);
             Expr min_val = Call::make(Int(32), Call::buffer_get_min, args, Call::Extern);
-            lets.push_back({min_var, min_val});
+            lets.emplace_back(min_var, min_val);
 
             string extent_var = name + ".extent." + std::to_string(i);
             Expr extent_val = Call::make(Int(32), Call::buffer_get_extent, args, Call::Extern);
-            lets.push_back({extent_var, extent_val});
+            lets.emplace_back(extent_var, extent_val);
 
             string stride_var = name + ".stride." + std::to_string(i);
             Expr stride_val = Call::make(Int(32), Call::buffer_get_stride, args, Call::Extern);
-            lets.push_back({stride_var, stride_val});
+            lets.emplace_back(stride_var, stride_val);
         }
     }
 

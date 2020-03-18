@@ -10,6 +10,10 @@
 using namespace Halide;
 
 int main(int argc, char **argv) {
+    if (get_jit_target_from_environment().arch == Target::WebAssembly) {
+        printf("Skipping test for WebAssembly as the wasm JIT does not yet support debug_to_file().\n");
+        return 0;
+    }
 
     std::string f_mat = Internal::get_test_tmp_dir() + "f.mat";
     std::string g_mat = Internal::get_test_tmp_dir() + "g.mat";
@@ -23,7 +27,7 @@ int main(int argc, char **argv) {
         Func f, g, h, j;
         Var x, y, z;
         f(x, y, z) = cast<int32_t>(x + y + z);
-        g(x, y) = cast<float>(f(x, y, 0) + f(x+1, y, 1));
+        g(x, y) = cast<float>(f(x, y, 0) + f(x + 1, y, 1));
         h(x, y) = cast<int32_t>(f(x, y, -1) + g(x, y));
 
         Target target = get_jit_target_from_environment();
@@ -58,7 +62,7 @@ int main(int argc, char **argv) {
                     int32_t val = f(x, y, z);
                     // The min coord gets lost on debug_to_file, so f should be shifted up by one.
                     if (val != x + y + z - 1) {
-                        printf("f(%d, %d, %d) = %d instead of %d\n", x, y, z, val, x+y);
+                        printf("f(%d, %d, %d) = %d instead of %d\n", x, y, z, val, x + y);
                         return -1;
                     }
                 }
@@ -100,5 +104,4 @@ int main(int argc, char **argv) {
 
     printf("Success!\n");
     return 0;
-
 }

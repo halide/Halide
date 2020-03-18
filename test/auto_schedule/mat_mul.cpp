@@ -38,7 +38,7 @@ double run_test(bool auto_schedule) {
 
     if (auto_schedule) {
         // Provide estimates on the pipeline output
-        out.estimate(x, 0, size).estimate(y, 0, size);
+        out.set_estimate(x, 0, size).set_estimate(y, 0, size);
         // Auto-schedule the pipeline
         p.auto_schedule(target);
     } else if (target.has_gpu_feature()) {
@@ -71,9 +71,14 @@ double run_test(bool auto_schedule) {
 
         Var t;
         prod.update()
-            .tile(x, y, xi, yi, 2, 2).vectorize(xi).unroll(yi)
-            .tile(x, y, xii, yii, 2, 2).unroll(xii).unroll(yii)
-            .unroll(x).unroll(y);
+            .tile(x, y, xi, yi, 2, 2)
+            .vectorize(xi)
+            .unroll(yi)
+            .tile(x, y, xii, yii, 2, 2)
+            .unroll(xii)
+            .unroll(yii)
+            .unroll(x)
+            .unroll(y);
 
         // 36ms
 
@@ -113,7 +118,7 @@ double run_test(bool auto_schedule) {
         p.realize(result);
     });
 
-    return t*1000;
+    return t * 1000;
 }
 
 int main(int argc, char **argv) {
@@ -126,7 +131,7 @@ int main(int argc, char **argv) {
     std::cout << "======================" << std::endl;
 
     if (!get_jit_target_from_environment().has_gpu_feature() &&
-        (auto_time > manual_time * 3.5)) {
+        (auto_time > manual_time * 5.0)) {
         printf("Auto-scheduler is much much slower than it should be.\n");
         return -1;
     }

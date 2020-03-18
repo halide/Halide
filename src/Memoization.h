@@ -20,7 +20,7 @@ namespace Internal {
  *  the cache.
  *  Should leave non-memoized Funcs unchanged.
  */
-Stmt inject_memoization(Stmt s, const std::map<std::string, Function> &env,
+Stmt inject_memoization(const Stmt &s, const std::map<std::string, Function> &env,
                         const std::string &name,
                         const std::vector<Function> &outputs);
 
@@ -30,7 +30,7 @@ Stmt inject_memoization(Stmt s, const std::map<std::string, Function> &env,
  *  are released when no longer used.
  *  Should not affect allocations for non-memoized Funcs.
  */
-Stmt rewrite_memoized_allocations(Stmt s, const std::map<std::string, Function> &env);
+Stmt rewrite_memoized_allocations(const Stmt &s, const std::map<std::string, Function> &env);
 
 }  // namespace Internal
 }  // namespace Halide

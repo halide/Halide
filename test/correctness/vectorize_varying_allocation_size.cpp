@@ -7,7 +7,7 @@ int main(int argc, char **argv) {
     Var x, xo, xi;
 
     f(x) = x;
-    g(x) = f(x) + f(x*x-20);
+    g(x) = f(x) + f(x * x - 20);
 
     g.split(x, xo, xi, 4).vectorize(xi);
     f.compute_at(g, xi);
@@ -18,7 +18,7 @@ int main(int argc, char **argv) {
     Buffer<int> out = g.realize(100);
 
     for (int i = 0; i < 4; i++) {
-        int correct = i + i*i - 20;
+        int correct = i + i * i - 20;
         if (out(i) != correct) {
             printf("out(%d) = %d instead of %d\n",
                    i, out(i), correct);

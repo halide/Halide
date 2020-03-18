@@ -3,19 +3,19 @@
 namespace {
 
 enum class BlurGPUSchedule {
-    Inline,         // Fully inlining schedule.
-    Cache,          // Schedule caching intermedia result of blur_x.
-    Slide,          // Schedule enabling sliding window opt within each
-                    // work-item or cuda thread.
-    SlideVectorize, // The same as above plus vectorization per work-item.
+    Inline,          // Fully inlining schedule.
+    Cache,           // Schedule caching intermedia result of blur_x.
+    Slide,           // Schedule enabling sliding window opt within each
+                     // work-item or cuda thread.
+    SlideVectorize,  // The same as above plus vectorization per work-item.
 };
 
 std::map<std::string, BlurGPUSchedule> blurGPUScheduleEnumMap() {
     return {
-        {"inline",        BlurGPUSchedule::Inline},
-        {"cache",         BlurGPUSchedule::Cache},
-        {"slide",         BlurGPUSchedule::Slide},
-        {"slide_vector",  BlurGPUSchedule::SlideVectorize},
+        {"inline", BlurGPUSchedule::Inline},
+        {"cache", BlurGPUSchedule::Cache},
+        {"slide", BlurGPUSchedule::Slide},
+        {"slide_vector", BlurGPUSchedule::SlideVectorize},
     };
 };
 
@@ -24,12 +24,11 @@ public:
     GeneratorParam<BlurGPUSchedule> schedule{
         "schedule",
         BlurGPUSchedule::SlideVectorize,
-        blurGPUScheduleEnumMap()
-    };
-    GeneratorParam<int> tile_x{"tile_x", 32}; // X tile.
-    GeneratorParam<int> tile_y{"tile_y", 8};  // Y tile.
+        blurGPUScheduleEnumMap()};
+    GeneratorParam<int> tile_x{"tile_x", 32};  // X tile.
+    GeneratorParam<int> tile_y{"tile_y", 8};   // Y tile.
 
-    Input<Buffer<uint16_t>>  input{"input", 2};
+    Input<Buffer<uint16_t>> input{"input", 2};
     Output<Buffer<uint16_t>> blur_y{"blur_y", 2};
 
     void generate() {
@@ -37,8 +36,8 @@ public:
         Var x("x"), y("y"), xi("xi"), yi("yi");
 
         // The algorithm
-        blur_x(x, y) = (input(x, y) + input(x+1, y) + input(x+2, y))/3;
-        blur_y(x, y) = (blur_x(x, y) + blur_x(x, y+1) + blur_x(x, y+2))/3;
+        blur_x(x, y) = (input(x, y) + input(x + 1, y) + input(x + 2, y)) / 3;
+        blur_y(x, y) = (blur_x(x, y) + blur_x(x, y + 1) + blur_x(x, y + 2)) / 3;
 
         // How to schedule it
         if (get_target().has_gpu_feature()) {
@@ -60,16 +59,21 @@ public:
                 //   blur_x calculation is re-used implicitly. This achieves
                 //   the similar schedule of sliding window.
                 Var y_inner("y_inner");
-                blur_y.split(y, y, y_inner, tile_y).reorder(y_inner, x).unroll(y_inner)
+                blur_y
+                    .split(y, y, y_inner, tile_y)
+                    .reorder(y_inner, x)
+                    .unroll(y_inner)
                     .gpu_tile(x, y, xi, yi, tile_x, 1);
                 break;
             }
             case BlurGPUSchedule::SlideVectorize: {
                 // Vectorization factor.
-                int factor = sizeof(int)/sizeof(short);
+                int factor = sizeof(int) / sizeof(short);
                 Var y_inner("y_inner");
                 blur_y.vectorize(x, factor)
-                    .split(y, y, y_inner, tile_y).reorder(y_inner, x).unroll(y_inner)
+                    .split(y, y, y_inner, tile_y)
+                    .reorder(y_inner, x)
+                    .unroll(y_inner)
                     .gpu_tile(x, y, xi, yi, tile_x, 1);
                 break;
             }
@@ -83,7 +87,8 @@ public:
             blur_y.compute_root()
                 .hexagon()
                 .prefetch(input, y, 2)
-                .split(y, y, yi, 128).parallel(y)
+                .split(y, y, yi, 128)
+                .parallel(y)
                 .vectorize(x, vector_size * 2);
             blur_x
                 .store_at(blur_y, y)

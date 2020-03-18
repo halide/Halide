@@ -1,6 +1,6 @@
-#include <iostream>
-
 #include "Halide.h"
+
+#include <iostream>
 
 using namespace Halide;
 

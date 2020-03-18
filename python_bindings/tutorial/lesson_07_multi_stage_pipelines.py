@@ -1,32 +1,18 @@
 #!/usr/bin/python3
+
 # Halide tutorial lesson 7
 
 # This lesson demonstrates how express multi-stage pipelines.
 
 # This lesson can be built by invoking the command:
-# make tutorial_lesson_07_multi_stage_pipelines
-# in a shell with the current directory at the top of the halide source tree.
-# Otherwise, see the platform-specific compiler invocations below.
+#    make test_tutorial_lesson_07_multi_stage_pipelines
+# in a shell with the current directory at python_bindings/
 
-# On linux, you can compile and run it like so:
-# g++ lesson_07*.cpp -g -std=c++11 -I ../include -L ../bin -lHalide `libpng-config --cflags --ldflags` -lpthread -ldl -o lesson_07
-# LD_LIBRARY_PATH=../bin ./lesson_07
-
-# On os x:
-# g++ lesson_07*.cpp -g -std=c++11 -I ../include -L ../bin -lHalide `libpng-config --cflags --ldflags` -o lesson_07
-# DYLD_LIBRARY_PATH=../bin ./lesson_07
-
-#include "Halide.h"
-#include <stdio.h>
-
-#using namespace Halide
 import halide as hl
 
-# Support code for loading pngs.
-#include "image_io.h"
-from scipy.misc import imread, imsave
-
+import imageio
 import os.path
+
 
 def main():
     # First we'll declare some Vars to use below.
@@ -38,7 +24,7 @@ def main():
     # first horizontally, and then vertically.
     if True:
         # Take a color 8-bit input
-        input = hl.Buffer(imread(image_path))
+        input = hl.Buffer(imageio.imread(image_path))
         assert input.type() == hl.UInt(8)
 
         # Upgrade it to 16-bit, so we can do math without it overflowing.
@@ -47,11 +33,13 @@ def main():
 
         # Blur it horizontally:
         blur_x = hl.Func("blur_x")
-        blur_x[x, y, c] = (input_16[x - 1, y, c] + 2 * input_16[x, y, c] + input_16[x + 1, y, c]) / 4
+        blur_x[x, y, c] = (input_16[x - 1, y, c] + 2 *
+                           input_16[x, y, c] + input_16[x + 1, y, c]) / 4
 
         # Blur it vertically:
         blur_y = hl.Func("blur_y")
-        blur_y[x, y, c] = (blur_x[x, y - 1, c] + 2 * blur_x[x, y, c] + blur_x[x, y + 1, c]) / 4
+        blur_y[x, y, c] = (blur_x[x, y - 1, c] + 2 *
+                           blur_x[x, y, c] + blur_x[x, y + 1, c]) / 4
 
         # Convert back to 8-bit.
         output = hl.Func("output")
@@ -94,18 +82,17 @@ def main():
         # parrot, and it should be two pixels narrower and two pixels
         # shorter than the input image.
 
-        imsave("blurry_parrot_1.png", result)
+        imageio.imsave("blurry_parrot_1.png", result)
         print("Created blurry_parrot_1.png")
 
         # This is usually the fastest way to deal with boundaries:
         # don't write code that reads out of bounds :) The more
         # general solution is our next example.
 
-
     # The same pipeline, with a boundary condition on the input.
     if True:
         # Take a color 8-bit input
-        input = hl.Buffer(imread(image_path))
+        input = hl.Buffer(imageio.imread(image_path))
         assert input.type() == hl.UInt(8)
 
         # This time, we'll wrap the input in a hl.Func that prevents
@@ -145,11 +132,13 @@ def main():
 
         # Blur it horizontally:
         blur_x = hl.Func("blur_x")
-        blur_x[x, y, c] = (input_16[x - 1, y, c] + 2 * input_16[x, y, c] + input_16[x + 1, y, c]) / 4
+        blur_x[x, y, c] = (input_16[x - 1, y, c] + 2 *
+                           input_16[x, y, c] + input_16[x + 1, y, c]) / 4
 
         # Blur it vertically:
         blur_y = hl.Func("blur_y")
-        blur_y[x, y, c] = (blur_x[x, y - 1, c] + 2 * blur_x[x, y, c] + blur_x[x, y + 1, c]) / 4
+        blur_y[x, y, c] = (blur_x[x, y - 1, c] + 2 *
+                           blur_x[x, y, c] + blur_x[x, y + 1, c]) / 4
 
         # Convert back to 8-bit.
         output = hl.Func("output")
@@ -162,7 +151,7 @@ def main():
         # Save the result. It should look like a slightly blurry
         # parrot, but this time it will be the same size as the
         # input.
-        imsave("blurry_parrot_2.png", result)
+        imageio.imsave("blurry_parrot_2.png", result)
         print("Created blurry_parrot_2.png")
 
     print("Success!")

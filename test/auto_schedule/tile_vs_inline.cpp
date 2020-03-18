@@ -19,16 +19,14 @@ int main(int argc, char **argv) {
     Var x("x"), y("y"), z("z"), c("c");
     Func f("f"), g("g");
     f(x, y, z, c) = (input(x, y, c) - input(x, z, c));
-    g(x, y, c) =  f(x, y, (x+y)%10, c)
-                + f(x, y+1, (x*y)%10, c)
-                + f(x, y+2, (x-y)%10, c)
-                + f(x+1, y, (x)%10, c)
-                + f(x+2, y, (y)%10, c);
+    g(x, y, c) = f(x, y, (x + y) % 10, c) +
+                 f(x, y + 1, (x * y) % 10, c) +
+                 f(x, y + 2, (x - y) % 10, c) +
+                 f(x + 1, y, (x) % 10, c) +
+                 f(x + 2, y, (y) % 10, c);
 
     // Provide estimates on the pipeline output
-    g.estimate(x, 0, input.width() - 2)
-        .estimate(y, 0, input.height() - 2)
-        .estimate(c, 0, 3);
+    g.set_estimates({{0, input.width() - 2}, {0, input.height() - 2}, {0, 3}});
 
     // Auto-schedule the pipeline
     Target target = get_jit_target_from_environment();

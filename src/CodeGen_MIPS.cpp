@@ -6,14 +6,14 @@ namespace Halide {
 namespace Internal {
 
 using std::string;
-using std::vector;
 
 using namespace llvm;
 
-CodeGen_MIPS::CodeGen_MIPS(Target t) : CodeGen_Posix(t) {
-    #if !(WITH_MIPS)
+CodeGen_MIPS::CodeGen_MIPS(Target t)
+    : CodeGen_Posix(t) {
+#if !defined(WITH_MIPS)
     user_error << "llvm build not configured with MIPS target enabled.\n";
-    #endif
+#endif
     user_assert(llvm_Mips_enabled) << "llvm build not configured with MIPS target enabled.\n";
 }
 

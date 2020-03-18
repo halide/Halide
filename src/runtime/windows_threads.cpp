@@ -14,8 +14,7 @@ extern "C" {
 
 // These sizes are large enough for 32-bit and 64-bit
 typedef uint64_t ConditionVariable;
-typedef uint64_t InitOnce;
-typedef void * Thread;
+typedef void *Thread;
 typedef struct {
     uint64_t buf[5];
 } CriticalSection;
@@ -30,12 +29,14 @@ extern WIN32API void EnterCriticalSection(CriticalSection *);
 extern WIN32API void LeaveCriticalSection(CriticalSection *);
 extern WIN32API int32_t WaitForSingleObject(Thread, int32_t timeout);
 
-} // extern "C"
+}  // extern "C"
 
-namespace Halide { namespace Runtime { namespace Internal {
+namespace Halide {
+namespace Runtime {
+namespace Internal {
 
 struct spawned_thread {
-    void(*f)(void *);
+    void (*f)(void *);
     void *closure;
     Thread handle;
 };
@@ -45,7 +46,9 @@ WEAK void *spawn_thread_helper(void *arg) {
     return NULL;
 }
 
-}}} // namespace Halide::Runtime::Internal
+}  // namespace Internal
+}  // namespace Runtime
+}  // namespace Halide
 
 extern "C" {
 
@@ -59,7 +62,7 @@ WEAK int halide_host_cpu_count() {
     }
 }
 
-WEAK halide_thread *halide_spawn_thread(void(*f)(void *), void *closure) {
+WEAK halide_thread *halide_spawn_thread(void (*f)(void *), void *closure) {
     spawned_thread *t = (spawned_thread *)malloc(sizeof(spawned_thread));
     t->f = f;
     t->closure = closure;
@@ -73,9 +76,11 @@ WEAK void halide_join_thread(halide_thread *thread_arg) {
     free(thread);
 }
 
-} // extern "C"
+}  // extern "C"
 
-namespace Halide { namespace Runtime { namespace Internal {
+namespace Halide {
+namespace Runtime {
+namespace Internal {
 
 namespace Synchronization {
 
@@ -88,7 +93,8 @@ struct thread_parker {
     thread_parker(const thread_parker &) = delete;
 #endif
 
-    __attribute__((always_inline)) thread_parker() : should_park(false) {
+    __attribute__((always_inline)) thread_parker()
+        : should_park(false) {
         InitializeCriticalSection(&critical_section);
         InitializeConditionVariable(&condvar);
         should_park = false;
@@ -107,7 +113,7 @@ struct thread_parker {
         EnterCriticalSection(&critical_section);
         while (should_park) {
             SleepConditionVariableCS(&condvar, &critical_section, -1);
-        } 
+        }
         LeaveCriticalSection(&critical_section);
     }
 
@@ -125,7 +131,10 @@ struct thread_parker {
     }
 };
 
-}}}} // namespace Halide::Runtime::Internal::Synchronization
+}  // namespace Synchronization
+}  // namespace Internal
+}  // namespace Runtime
+}  // namespace Halide
 
 #include "synchronization_common.h"
 

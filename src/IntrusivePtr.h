@@ -7,8 +7,8 @@
  * pointers.
  */
 
-#include <stdlib.h>
 #include <atomic>
+#include <stdlib.h>
 
 #include "Util.h"
 
@@ -18,11 +18,20 @@ namespace Internal {
 /** A class representing a reference count to be used with IntrusivePtr */
 class RefCount {
     std::atomic<int> count;
+
 public:
-    RefCount() : count(0) {}
-    int increment() {return ++count;} // Increment and return new value
-    int decrement() {return --count;} // Decrement and return new value
-    bool is_zero() const {return count == 0;}
+    RefCount() noexcept
+        : count(0) {
+    }
+    int increment() {
+        return ++count;
+    }  // Increment and return new value
+    int decrement() {
+        return --count;
+    }  // Decrement and return new value
+    bool is_zero() const {
+        return count == 0;
+    }
 };
 
 /**
@@ -36,12 +45,14 @@ public:
  * define something like this in MyClass.cpp (assuming MyClass has
  * a field: mutable RefCount ref_count):
  *
- * template<> RefCount &ref_count<MyClass>(const MyClass *c) {return c->ref_count;}
+ * template<> RefCount &ref_count<MyClass>(const MyClass *c) noexcept {return c->ref_count;}
  * template<> void destroy<MyClass>(const MyClass *c) {delete c;}
  */
 // @{
-template<typename T> RefCount &ref_count(const T *t);
-template<typename T> void destroy(const T *t);
+template<typename T>
+RefCount &ref_count(const T *t) noexcept;
+template<typename T>
+void destroy(const T *t);
 // @}
 
 /** Intrusive shared pointers have a reference count (a
@@ -56,7 +67,6 @@ template<typename T> void destroy(const T *t);
 template<typename T>
 struct IntrusivePtr {
 private:
-
     void incref(T *p) {
         if (p) {
             ref_count(p).increment();
@@ -78,7 +88,7 @@ private:
     }
 
 protected:
-    T *ptr;
+    T *ptr = nullptr;
 
 public:
     /** Access the raw pointer in a variety of ways.
@@ -104,21 +114,23 @@ public:
     }
 
     HALIDE_ALWAYS_INLINE
-    IntrusivePtr() : ptr(nullptr) {
-    }
+    IntrusivePtr() = default;
 
     HALIDE_ALWAYS_INLINE
-    IntrusivePtr(T *p) : ptr(p) {
+    IntrusivePtr(T *p)
+        : ptr(p) {
         incref(ptr);
     }
 
     HALIDE_ALWAYS_INLINE
-    IntrusivePtr(const IntrusivePtr<T> &other) : ptr(other.ptr) {
+    IntrusivePtr(const IntrusivePtr<T> &other) noexcept
+        : ptr(other.ptr) {
         incref(ptr);
     }
 
     HALIDE_ALWAYS_INLINE
-    IntrusivePtr(IntrusivePtr<T> &&other) : ptr(other.ptr) {
+    IntrusivePtr(IntrusivePtr<T> &&other) noexcept
+        : ptr(other.ptr) {
         other.ptr = nullptr;
     }
 
@@ -134,7 +146,7 @@ public:
         return *this;
     }
 
-    IntrusivePtr<T> &operator=(IntrusivePtr<T> &&other) {
+    IntrusivePtr<T> &operator=(IntrusivePtr<T> &&other) noexcept {
         std::swap(ptr, other.ptr);
         return *this;
     }

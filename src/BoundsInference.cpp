@@ -21,7 +21,7 @@ using std::vector;
 
 namespace {
 
-bool var_name_match(string candidate, string var) {
+bool var_name_match(const string &candidate, const string &var) {
     internal_assert(var.find('.') == string::npos)
         << "var_name_match expects unqualified names for the second argument. "
         << "Name passed: " << var << "\n";
@@ -31,14 +31,14 @@ bool var_name_match(string candidate, string var) {
 class DependsOnBoundsInference : public IRVisitor {
     using IRVisitor::visit;
 
-    void visit(const Variable *var) {
+    void visit(const Variable *var) override {
         if (ends_with(var->name, ".max") ||
             ends_with(var->name, ".min")) {
             result = true;
         }
     }
 
-    void visit(const Call *op) {
+    void visit(const Call *op) override {
         if (op->name == Call::buffer_get_min ||
             op->name == Call::buffer_get_max) {
             result = true;
@@ -49,15 +49,16 @@ class DependsOnBoundsInference : public IRVisitor {
 
 public:
     bool result;
-    DependsOnBoundsInference() : result(false) {}
+    DependsOnBoundsInference()
+        : result(false) {
+    }
 };
 
-bool depends_on_bounds_inference(Expr e) {
+bool depends_on_bounds_inference(const Expr &e) {
     DependsOnBoundsInference d;
     e.accept(&d);
     return d.result;
 }
-
 
 /** Compute the bounds of the value of some variable defined by an
  * inner let stmt or for loop. E.g. for the stmt:
@@ -72,7 +73,9 @@ bool depends_on_bounds_inference(Expr e) {
 class BoundsOfInnerVar : public IRVisitor {
 public:
     Interval result;
-    BoundsOfInnerVar(const string &v) : var(v) {}
+    BoundsOfInnerVar(const string &v)
+        : var(v) {
+    }
 
 private:
     string var;
@@ -80,7 +83,7 @@ private:
 
     using IRVisitor::visit;
 
-    void visit(const LetStmt *op) {
+    void visit(const LetStmt *op) override {
         Interval in = bounds_of_expr_in_scope(op->value, scope);
         if (op->name == var) {
             result = in;
@@ -90,7 +93,7 @@ private:
         }
     }
 
-    void visit(const For *op) {
+    void visit(const For *op) override {
         // At this stage of lowering, loop_min and loop_max
         // conveniently exist in scope.
         Interval in(Variable::make(Int(32), op->name + ".loop_min"),
@@ -105,15 +108,72 @@ private:
     }
 };
 
-Interval bounds_of_inner_var(string var, Stmt s) {
+Interval bounds_of_inner_var(const string &var, const Stmt &s) {
     BoundsOfInnerVar b(var);
     s.accept(&b);
     return b.result;
 }
 
+size_t find_fused_group_index(const Function &producing_func,
+                              const vector<vector<Function>> &fused_groups) {
+    const auto &iter = std::find_if(fused_groups.begin(), fused_groups.end(),
+                                    [&producing_func](const vector<Function> &group) {
+                                        return std::any_of(group.begin(), group.end(),
+                                                           [&producing_func](const Function &f) {
+                                                               return (f.name() == producing_func.name());
+                                                           });
+                                    });
+    internal_assert(iter != fused_groups.end());
+    return iter - fused_groups.begin();
 }
 
-class BoundsInference : public IRMutator2 {
+// Determine if the current producing stage is fused with other
+// stage (i.e. the consumer stage) at dimension 'var'.
+bool is_fused_with_others(const vector<vector<Function>> &fused_groups,
+                          const vector<set<FusedPair>> &fused_pairs_in_groups,
+                          const Function &producing_func, int producing_stage_index,
+                          const string &consumer_name, int consumer_stage,
+                          string var) {
+    if (producing_func.has_extern_definition()) {
+        return false;
+    }
+
+    // Find the fused group this producing stage belongs to.
+    size_t index = find_fused_group_index(producing_func, fused_groups);
+
+    const vector<Dim> &dims = (producing_stage_index == 0) ? producing_func.definition().schedule().dims() : producing_func.update(producing_stage_index - 1).schedule().dims();
+
+    size_t var_index;
+    {
+        const auto &iter = std::find_if(dims.begin(), dims.end(),
+                                        [&var](const Dim &d) { return var_name_match(d.var, var); });
+        if (iter == dims.end()) {
+            return false;
+        }
+        var_index = iter - dims.begin();
+    }
+
+    // Iterate over the fused pair list to check if the producer stage
+    // is fused with the consumer stage at 'var'
+    for (const auto &pair : fused_pairs_in_groups[index]) {
+        if (((pair.func_1 == consumer_name) && ((int)pair.stage_1 == consumer_stage)) ||
+            ((pair.func_2 == consumer_name) && ((int)pair.stage_2 == consumer_stage))) {
+            const auto &iter = std::find_if(dims.begin(), dims.end(),
+                                            [&pair](const Dim &d) { return var_name_match(d.var, pair.var_name); });
+            if (iter == dims.end()) {
+                continue;
+            }
+            size_t idx = iter - dims.begin();
+            if (var_index >= idx) {
+                return true;
+            }
+        }
+    }
+    return false;
+}
+}  // namespace
+
+class BoundsInference : public IRMutator {
 public:
     const vector<Function> &funcs;
     // Each element in the list indicates a group of functions which loops
@@ -127,21 +187,24 @@ public:
     const Target target;
 
     struct CondValue {
-        Expr cond; // Condition on params only (can't depend on loop variable)
+        Expr cond;  // Condition on params only (can't depend on loop variable)
         Expr value;
 
-        CondValue(const Expr &c, const Expr &v) : cond(c), value(v) {}
+        CondValue(const Expr &c, const Expr &v)
+            : cond(c), value(v) {
+        }
     };
 
     struct Stage {
         Function func;
-        size_t stage; // 0 is the pure definition, 1 is the first update
+        size_t stage;  // 0 is the pure definition, 1 is the first update
         string name;
         vector<int> consumers;
         map<pair<string, int>, Box> bounds;
         vector<CondValue> exprs;
         set<ReductionVariable, ReductionVariable::Compare> rvars;
         string stage_prefix;
+        size_t fused_group_index;
 
         // Computed expressions on the left and right-hand sides.
         // Note that a function definition might have different LHS or reduction domain
@@ -149,8 +212,8 @@ public:
         // of an init definition should have the same LHS.
         // This also pushes all the reduction domains it encounters into the 'rvars'
         // set for later use.
-        vector<vector<CondValue>> compute_exprs_helper(const Definition& def, bool is_update) {
-            vector<vector<CondValue>> result(2); // <args, values>
+        vector<vector<CondValue>> compute_exprs_helper(const Definition &def, bool is_update) {
+            vector<vector<CondValue>> result(2);  // <args, values>
 
             if (!def.defined()) {
                 return result;
@@ -190,8 +253,8 @@ public:
 
             const vector<Specialization> &specializations = def.specializations();
             for (size_t i = specializations.size(); i > 0; i--) {
-                Expr s_cond = specializations[i-1].condition;
-                const Definition &s_def = specializations[i-1].definition;
+                Expr s_cond = specializations[i - 1].condition;
+                const Definition &s_def = specializations[i - 1].definition;
 
                 // Else case (i.e. specialization condition is false)
                 for (auto &vec : result) {
@@ -231,7 +294,7 @@ public:
                                  << "(" << val << ") are equal, combine them together\n";
                         internal_assert(val.defined());
                         vec.clear();
-                        vec.push_back(CondValue(const_true(), val));
+                        vec.emplace_back(const_true(), val);
                     }
                 }
             }
@@ -259,15 +322,38 @@ public:
             exprs = result[0];
 
             if (func.extern_definition_proxy_expr().defined()) {
-                exprs.push_back(CondValue(const_true(), func.extern_definition_proxy_expr()));
+                exprs.emplace_back(const_true(), func.extern_definition_proxy_expr());
             }
 
             exprs.insert(exprs.end(), result[1].begin(), result[1].end());
+
+            // For the purposes of computation bounds inference, we
+            // don't care what sites are loaded, just what sites need
+            // to have the correct value in them. So remap all selects
+            // to if_then_elses to get tighter bounds.
+            class SelectToIfThenElse : public IRMutator {
+                using IRMutator::visit;
+                Expr visit(const Select *op) override {
+                    if (is_pure(op->condition)) {
+                        return Call::make(op->type, Call::if_then_else,
+                                          {mutate(op->condition),
+                                           mutate(op->true_value),
+                                           mutate(op->false_value)},
+                                          Call::PureIntrinsic);
+                    } else {
+                        return IRMutator::visit(op);
+                    }
+                }
+            } select_to_if_then_else;
+
+            for (auto &e : exprs) {
+                e.value = select_to_if_then_else.mutate(e.value);
+            }
         }
 
         // Check if the dimension at index 'dim_idx' is always pure (i.e. equal to 'dim')
         // in the definition (including in its specializations)
-        bool is_dim_always_pure(const Definition &def, const string& dim, int dim_idx) {
+        bool is_dim_always_pure(const Definition &def, const string &dim, int dim_idx) {
             const Variable *var = def.args()[dim_idx].as<Variable>();
             if ((!var) || (var->name != dim)) {
                 return false;
@@ -282,70 +368,16 @@ public:
             return true;
         }
 
-        // Determine if the current producing stage is fused with other
-        // stage (i.e. the consumer stage) at dimension 'var'.
-        bool is_fused_with_others(const vector<vector<Function>> &fused_groups,
-                                  const vector<set<FusedPair>> &fused_pairs_in_groups,
-                                  const Function &producing_func, int producing_stage_index,
-                                  string consumer_name, int consumer_stage,
-                                  string var) {
-            if (producing_func.has_extern_definition()) {
-                return false;
-            }
-
-            // Find the fused group this producing stage belongs to.
-            size_t index;
-            {
-                const auto &iter = std::find_if(fused_groups.begin(), fused_groups.end(),
-                    [&producing_func](const vector<Function> &group) {
-                        return std::any_of(group.begin(), group.end(),
-                                    [&producing_func](const Function &f) {
-                                        return (f.name() == producing_func.name());
-                                    });
-                    });
-                internal_assert(iter != fused_groups.end());
-                index = iter - fused_groups.begin();
-            }
-
-            const vector<Dim> &dims = (producing_stage_index == 0) ?
-                producing_func.definition().schedule().dims() :
-                producing_func.update(producing_stage_index-1).schedule().dims();
-
-            size_t var_index;
-            {
-                const auto &iter = std::find_if(dims.begin(), dims.end(),
-                    [&var](const Dim &d) { return var_name_match(d.var, var); });
-                internal_assert(iter != dims.end());
-                var_index = iter - dims.begin();
-            }
-
-            // Iterate over the fused pair list to check if the producer stage
-            // is fused with the consumer stage at 'var'
-            for (const auto &pair : fused_pairs_in_groups[index]) {
-                if (((pair.func_1 == consumer_name) && ((int)pair.stage_1 == consumer_stage)) ||
-                    ((pair.func_2 == consumer_name) && ((int)pair.stage_2 == consumer_stage))) {
-                    const auto &iter = std::find_if(dims.begin(), dims.end(),
-                        [&pair](const Dim &d) { return var_name_match(d.var, pair.var_name); });
-                    internal_assert(iter != dims.end());
-                    size_t idx = iter - dims.begin();
-                    if (var_index >= idx) {
-                        return true;
-                    }
-                }
-            }
-            return false;
-        }
-
         // Wrap a statement in let stmts defining the box
         Stmt define_bounds(Stmt s,
-                           Function producing_func,
-                           string producing_stage_index,
+                           const Function &producing_func,
+                           const string &producing_stage_index,
                            int producing_stage_index_index,
-                           string loop_level,
+                           const string &loop_level,
                            const vector<vector<Function>> &fused_groups,
                            const vector<set<FusedPair>> &fused_pairs_in_groups,
                            const set<string> &in_pipeline,
-                           const set<string> inner_productions,
+                           const set<string> &inner_productions,
                            const Target &target) {
 
             // Merge all the relevant boxes.
@@ -356,7 +388,7 @@ public:
             size_t last_dot = loop_level.rfind('.');
             string var = loop_level.substr(last_dot + 1);
 
-            for (const pair<pair<string, int>, Box> &i : bounds) {
+            for (const pair<const pair<string, int>, Box> &i : bounds) {
                 string func_name = i.first.first;
                 int func_stage_index = i.first.second;
                 string stage_name = func_name + ".s" + std::to_string(func_stage_index);
@@ -478,9 +510,7 @@ public:
                     }
 
                     s = do_bounds_query(s, in_pipeline, target);
-
                 }
-
             }
 
             if (in_pipeline.count(name) == 0) {
@@ -568,12 +598,12 @@ public:
 
             // Iterate through all of the input args to the extern
             // function building a suitable argument list for the
-            // extern function call.  We need a query buffer_t per
-            // producer and a query buffer_t for the output
+            // extern function call.  We need a query halide_buffer_t per
+            // producer and a query halide_buffer_t for the output
 
             Expr null_handle = make_zero(Handle());
 
-            vector<Expr> buffers_to_annotate;
+            vector<pair<Expr, int>> buffers_to_annotate;
             for (size_t j = 0; j < args.size(); j++) {
                 if (args[j].is_expr()) {
                     bounds_inference_args.push_back(args[j].expr);
@@ -587,9 +617,9 @@ public:
                         builder.dimensions = input.dimensions();
                         Expr buf = builder.build();
 
-                        lets.push_back({ name, buf });
+                        lets.emplace_back(name, buf);
                         bounds_inference_args.push_back(Variable::make(type_of<struct halide_buffer_t *>(), name));
-                        buffers_to_annotate.push_back(bounds_inference_args.back());
+                        buffers_to_annotate.emplace_back(bounds_inference_args.back(), input.dimensions());
                     }
                 } else if (args[j].is_image_param() || args[j].is_buffer()) {
                     Parameter p = args[j].image_param;
@@ -610,12 +640,12 @@ public:
                     query_buf = Call::make(type_of<struct halide_buffer_t *>(), Call::buffer_init_from_buffer,
                                            {query_buf, query_shape, in_buf}, Call::Extern);
 
-                    lets.push_back({ query_name, query_buf });
+                    lets.emplace_back(query_name, query_buf);
                     Expr buf = Variable::make(type_of<struct halide_buffer_t *>(), query_name, b, p, ReductionDomain());
                     bounds_inference_args.push_back(buf);
                     // Although we expect ImageParams to be properly initialized and sanitized by the caller,
                     // we create a copy with copy_memory (not msan-aware), so we need to annotate it as initialized.
-                    buffers_to_annotate.push_back(bounds_inference_args.back());
+                    buffers_to_annotate.emplace_back(bounds_inference_args.back(), dims);
                 } else {
                     internal_error << "Bad ExternFuncArgument type";
                 }
@@ -627,13 +657,13 @@ public:
                 BufferBuilder builder;
                 builder.type = func.output_types()[j];
                 builder.dimensions = func.dimensions();
-                for (const string arg : func.args()) {
+                for (const string &arg : func.args()) {
                     string prefix = func.name() + ".s" + std::to_string(stage) + "." + arg;
                     Expr min = Variable::make(Int(32), prefix + ".min");
                     Expr max = Variable::make(Int(32), prefix + ".max");
                     builder.mins.push_back(min);
                     builder.extents.push_back(max + 1 - min);
-                    builder.strides.push_back(0);
+                    builder.strides.emplace_back(0);
                 }
                 Expr output_buffer_t = builder.build();
 
@@ -641,21 +671,31 @@ public:
                 bounds_inference_args.push_back(Variable::make(type_of<struct halide_buffer_t *>(), buf_name));
                 // Since this is a temporary, internal-only buffer used for bounds inference,
                 // we need to mark it
-                buffers_to_annotate.push_back(bounds_inference_args.back());
-                lets.push_back({ buf_name, output_buffer_t });
+                buffers_to_annotate.emplace_back(bounds_inference_args.back(), func.dimensions());
+                lets.emplace_back(buf_name, output_buffer_t);
             }
 
             Stmt annotate;
             if (target.has_feature(Target::MSAN)) {
                 // Mark the buffers as initialized before calling out.
-                for (const auto &buffer: buffers_to_annotate) {
+                for (const auto &p : buffers_to_annotate) {
+                    Expr buffer = p.first;
+                    int dimensions = p.second;
                     // Return type is really 'void', but no way to represent that in our IR.
                     // Precedent (from halide_print, etc) is to use Int(32) and ignore the result.
-                    Expr sizeof_buffer_t =
-                        cast<uint64_t>(Call::make(Int(32), Call::size_of_halide_buffer_t, {}, Call::Intrinsic));
+                    Expr sizeof_buffer_t = cast<uint64_t>(
+                        Call::make(Int(32), Call::size_of_halide_buffer_t, {}, Call::Intrinsic));
                     Stmt mark_buffer =
                         Evaluate::make(Call::make(Int(32), "halide_msan_annotate_memory_is_initialized",
                                                   {buffer, sizeof_buffer_t}, Call::Extern));
+                    Expr shape = Call::make(type_of<halide_dimension_t *>(), Call::buffer_get_shape, {buffer},
+                                            Call::Extern);
+                    Expr shape_size = Expr((uint64_t)(sizeof(halide_dimension_t) * dimensions));
+                    Stmt mark_shape =
+                        Evaluate::make(Call::make(Int(32), "halide_msan_annotate_memory_is_initialized",
+                                                  {shape, shape_size}, Call::Extern));
+
+                    mark_buffer = Block::make(mark_buffer, mark_shape);
                     if (annotate.defined()) {
                         annotate = Block::make(annotate, mark_buffer);
                     } else {
@@ -680,7 +720,7 @@ public:
                 check = Block::make(annotate, check);
             }
 
-            // Now inner code is free to extract the fields from the buffer_t
+            // Now inner code is free to extract the fields from the halide_buffer_t
             s = Block::make(check, s);
 
             // Wrap in let stmts defining the args
@@ -695,7 +735,7 @@ public:
         // We need to take into account specializations which may refer to
         // different reduction variables as well.
         void populate_scope(Scope<Interval> &result) {
-            for (const string farg : func.args()) {
+            for (const string &farg : func.args()) {
                 string arg = name + ".s" + std::to_string(stage) + "." + farg;
                 result.push(farg,
                             Interval(Variable::make(Int(32), arg + ".min"),
@@ -705,7 +745,7 @@ public:
                 for (const ReductionVariable &rv : rvars) {
                     string arg = name + ".s" + std::to_string(stage) + "." + rv.var;
                     result.push(rv.var, Interval(Variable::make(Int(32), arg + ".min"),
-                                                   Variable::make(Int(32), arg + ".max")));
+                                                 Variable::make(Int(32), arg + ".max")));
                 }
             }
 
@@ -713,9 +753,7 @@ public:
                 const Bound &b = func.definition().schedule().bounds()[i];
                 result.push(b.var, Interval(b.min, (b.min + b.extent) - 1));
             }*/
-
         }
-
     };
     vector<Stage> stages;
 
@@ -724,8 +762,8 @@ public:
                     const vector<set<FusedPair>> &fp,
                     const vector<Function> &outputs,
                     const FuncValueBounds &fb,
-                    const Target &target) :
-        funcs(f), fused_groups(fg), fused_pairs_in_groups(fp), func_bounds(fb), target(target) {
+                    const Target &target)
+        : funcs(f), fused_groups(fg), fused_pairs_in_groups(fp), func_bounds(fb), target(target) {
         internal_assert(!f.empty());
 
         // Compute the intrinsic relationships between the stages of
@@ -754,23 +792,23 @@ public:
             s.func = f[i];
             s.stage = 0;
             s.name = s.func.name();
+            s.fused_group_index = find_fused_group_index(s.func, fused_groups);
             s.compute_exprs();
             s.stage_prefix = s.name + ".s0.";
             stages.push_back(s);
 
             for (size_t j = 0; j < f[i].updates().size(); j++) {
-                s.stage = (int)(j+1);
+                s.stage = (int)(j + 1);
                 s.stage_prefix = s.name + ".s" + std::to_string(s.stage) + ".";
                 s.compute_exprs();
                 stages.push_back(s);
             }
-
         }
 
         // Do any pure inlining (TODO: This is currently slow)
         for (size_t i = f.size(); i > 0; i--) {
-            Function func = f[i-1];
-            if (inlined[i-1]) {
+            Function func = f[i - 1];
+            if (inlined[i - 1]) {
                 for (size_t j = 0; j < stages.size(); j++) {
                     Stage &s = stages[j];
                     for (size_t k = 0; k < s.exprs.size(); k++) {
@@ -818,7 +856,7 @@ public:
 
                 const vector<ExternFuncArgument> &args = consumer.func.extern_arguments();
                 // Stage::define_bounds is going to compute a query
-                // buffer_t per producer for bounds inference to
+                // halide_buffer_t per producer for bounds inference to
                 // use. We just need to extract those values.
                 for (size_t j = 0; j < args.size(); j++) {
                     if (args[j].is_func()) {
@@ -850,7 +888,8 @@ public:
                 }
             }
 
-            // Expand the bounds required of all the producers found.
+            // Expand the bounds required of all the producers found
+            // (and we are checking until i, because stages are topologically sorted).
             for (size_t j = 0; j < i; j++) {
                 Stage &producer = stages[j];
                 // A consumer depends on *all* stages of a producer, not just the last one.
@@ -864,7 +903,7 @@ public:
                             if (consumer.stage == 0) {
                                 err << "The pure definition ";
                             } else {
-                                err << "Update definition number " << (consumer.stage-1);
+                                err << "Update definition number " << (consumer.stage - 1);
                             }
                             err << " of Function " << consumer.name
                                 << " calls function " << producer.name
@@ -885,8 +924,7 @@ public:
                     debug(0) << "\n";
                     */
 
-
-                    producer.bounds[{ consumer.name, consumer.stage }] = b;
+                    producer.bounds[{consumer.name, consumer.stage}] = b;
                     producer.consumers.push_back((int)i);
                 }
             }
@@ -921,14 +959,20 @@ public:
             for (size_t i = 0; i < stages.size(); i++) {
                 Stage &s = stages[i];
                 if (!s.func.same_as(output)) continue;
-                s.bounds[{ s.name, s.stage }] = output_box;
+                s.bounds[{s.name, s.stage}] = output_box;
             }
         }
     }
 
-    using IRMutator2::visit;
+    using IRMutator::visit;
 
     Stmt visit(const For *op) override {
+        // Don't recurse inside loops marked 'Extern', they will be
+        // removed later.
+        if (op->for_type == ForType::Extern) {
+            return op;
+        }
+
         set<string> old_inner_productions;
         inner_productions.swap(old_inner_productions);
 
@@ -944,11 +988,15 @@ public:
             }
 
             body = let->body;
-            lets.push_back({ let->name, let->value });
+            lets.emplace_back(let->name, let->value);
         }
 
-        // If there are no pipelines at this loop level, we can skip most of the work.
-        bool no_pipelines = body.as<For>() != nullptr;
+        // If there are no pipelines at this loop level, we can skip
+        // most of the work.  Consider 'extern' for loops as pipelines
+        // (we aren't recursing into these loops above).
+        bool no_pipelines =
+            body.as<For>() != nullptr &&
+            body.as<For>()->for_type != ForType::Extern;
 
         // Figure out which stage of which function we're producing
         int producing = -1;
@@ -966,11 +1014,55 @@ public:
         }
 
         // Figure out how much of it we're producing
-        Box box;
-        if (!no_pipelines && producing >= 0) {
+
+        // Note: the case when functions are fused is a little bit tricky, so may need extra care:
+        // when we're producing some of a Func A, at every loop belonging to A
+        // you potentially need to define symbols for what box is being computed
+        // of A (A.x.min, A.x.max ...), because that any other producer Func P nested
+        // there is going to define its loop bounds in terms of these symbols, to ensure
+        // it computes enough of itself to satisfy the consumer.
+        // Now say we compute B with A, and say B consumes P, not A. Bounds inference
+        // will see the shared loop, and think it belongs to A only. It will define A.x.min and
+        // friends, but that's not very useful, because P's loops are in terms of B.x.min, B.x.max, etc.
+        // So without a local definition of those symbols, P will use the one in the outer scope, and
+        // compute way too much of itself. It'll still be correct, but it's massive over-compute.
+        // The fix is to realize that in this loop belonging to A, we also potentially need to define
+        // a box for B, because B belongs to the same fused group as A, so really this loop belongs to A and B.
+        // We'll get the box using boxes_provided and only filtering for A and B after the fact
+        // Note that even though the loops are fused, the boxes touched of A and B might be totally different,
+        // because e.g. B could be double-resolution (as happens when fusing yuv computations), so this
+        // is not just a matter of giving A's box B's name as an alias.
+        map<string, Box> boxes_for_fused_group;
+        if (!no_pipelines && producing >= 0 && !f.has_extern_definition()) {
             Scope<Interval> empty_scope;
-            box = box_provided(body, stages[producing].name, empty_scope, func_bounds);
-            internal_assert((int)box.size() == f.dimensions());
+            size_t last_dot = op->name.rfind('.');
+            string var = op->name.substr(last_dot + 1);
+
+            set<pair<string, int>> fused_with_f;
+            for (const auto &pair : fused_pairs_in_groups[stages[producing].fused_group_index]) {
+                if (!((pair.func_1 == stages[producing].name) && ((int)pair.stage_1 == stage_index)) && is_fused_with_others(fused_groups, fused_pairs_in_groups,
+                                                                                                                             f, stage_index,
+                                                                                                                             pair.func_1, pair.stage_1, var)) {
+                    fused_with_f.insert(make_pair(pair.func_1, pair.stage_1));
+                }
+                if (!((pair.func_2 == stages[producing].name) && ((int)pair.stage_2 == stage_index)) && is_fused_with_others(fused_groups, fused_pairs_in_groups,
+                                                                                                                             f, stage_index,
+                                                                                                                             pair.func_2, pair.stage_2, var)) {
+                    fused_with_f.insert(make_pair(pair.func_2, pair.stage_2));
+                }
+            }
+
+            if (fused_with_f.empty()) {
+                boxes_for_fused_group[stage_name] = box_provided(body, stages[producing].name, empty_scope, func_bounds);
+                internal_assert((int)boxes_for_fused_group[stage_name].size() == f.dimensions());
+            } else {
+                auto boxes = boxes_provided(body, empty_scope, func_bounds);
+                boxes_for_fused_group[stage_name] = boxes[stages[producing].name];
+
+                for (const auto &fused : fused_with_f) {
+                    boxes_for_fused_group[fused.first + ".s" + std::to_string(fused.second)] = boxes[fused.first];
+                }
+            }
         }
 
         // Recurse.
@@ -1004,28 +1096,50 @@ public:
             // Finally, define the production bounds for the thing
             // we're producing.
             if (producing >= 0 && !inner_productions.empty()) {
-                const vector<string> f_args = f.args();
-                for (size_t i = 0; i < box.size(); i++) {
-                    internal_assert(box[i].is_bounded());
-                    string var = stage_name + "." + f_args[i];
+                const vector<string> &f_args = f.args();
+                for (const auto &b : boxes_for_fused_group) {
+                    const auto &box = b.second;
+                    for (size_t i = 0; i < box.size(); i++) {
+                        internal_assert(box[i].is_bounded());
+                        string var = b.first + "." + f_args[i];
 
-                    if (box[i].is_single_point()) {
-                        body = LetStmt::make(var + ".max", Variable::make(Int(32), var + ".min"), body);
-                    } else {
-                        body = LetStmt::make(var + ".max", box[i].max, body);
+                        if (box[i].is_single_point()) {
+                            body = LetStmt::make(var + ".max", Variable::make(Int(32), var + ".min"), body);
+                        } else {
+                            body = LetStmt::make(var + ".max", box[i].max, body);
+                        }
+
+                        body = LetStmt::make(var + ".min", box[i].min, body);
                     }
-
-                    body = LetStmt::make(var + ".min", box[i].min, body);
                 }
             }
 
-            // And the current bounds on its reduction variables.
-            if (producing >= 0 && stages[producing].stage > 0) {
+            // And the current bounds on its reduction variables, and
+            // variables from extern for loops.
+            if (producing >= 0) {
                 const Stage &s = stages[producing];
-                for (const ReductionVariable &rv : s.rvars) {
-                    string var = s.stage_prefix + rv.var;
+                vector<string> vars;
+                if (s.func.has_extern_definition()) {
+                    vars = s.func.args();
+                }
+                if (stages[producing].stage > 0) {
+                    for (const ReductionVariable &rv : s.rvars) {
+                        vars.push_back(rv.var);
+                    }
+                }
+                for (const string &i : vars) {
+                    string var = s.stage_prefix + i;
                     Interval in = bounds_of_inner_var(var, body);
                     if (in.is_bounded()) {
+                        // bounds_of_inner_var doesn't understand
+                        // GuardWithIf, but we know split rvars never
+                        // have inner bounds that exceed the outer
+                        // ones.
+                        if (!s.rvars.empty()) {
+                            in.min = max(in.min, Variable::make(Int(32), var + ".min"));
+                            in.max = min(in.max, Variable::make(Int(32), var + ".max"));
+                        }
+
                         body = LetStmt::make(var + ".min", in.min, body);
                         body = LetStmt::make(var + ".max", in.max, body);
                     } else {
@@ -1045,7 +1159,7 @@ public:
 
         // Rewrap the let statements
         for (size_t i = lets.size(); i > 0; i--) {
-            body = LetStmt::make(lets[i-1].first, lets[i-1].second, body);
+            body = LetStmt::make(lets[i - 1].first, lets[i - 1].second, body);
         }
 
         return For::make(op->name, op->min, op->extent, op->for_type, op->device_api, body);
@@ -1053,15 +1167,12 @@ public:
 
     Stmt visit(const ProducerConsumer *p) override {
         in_pipeline.insert(p->name);
-        Stmt stmt = IRMutator2::visit(p);
+        Stmt stmt = IRMutator::visit(p);
         in_pipeline.erase(p->name);
         inner_productions.insert(p->name);
         return stmt;
     }
-
 };
-
-
 
 Stmt bounds_inference(Stmt s,
                       const vector<Function> &outputs,
@@ -1111,7 +1222,8 @@ Stmt bounds_inference(Stmt s,
     // Add an outermost bounds inference marker
     s = For::make("<outermost>", 0, 1, ForType::Serial, DeviceAPI::None, s);
     s = BoundsInference(funcs, fused_func_groups, fused_pairs_in_groups,
-                        outputs, func_bounds, target).mutate(s);
+                        outputs, func_bounds, target)
+            .mutate(s);
     return s.as<For>()->body;
 }
 

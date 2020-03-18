@@ -4,14 +4,12 @@
 # this is useful mainly for running test/error and other expected-to-fail tests.
 #
 
-echo Running $1
+echo Running "$1"
 
-"$1"
-if [[ "$?" -ne "0" ]]
-then
-  echo "Success"
-  exit 0
+if $1; then
+  echo "Expected Failure from '$1', but got Success"
+  exit 255
 fi
 
-echo "Expected Failure from '$1', but got Success"
-exit -1
+echo "Success"
+exit 0

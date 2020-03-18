@@ -19,14 +19,14 @@ int main(int argc, char **argv) {
     f(x, y) = input(x, y) * input(x, y);
 
     Func g("g");
-    g(x, y) = (f(x, y) + f(x + 1, y))/2;
+    g(x, y) = (f(x, y) + f(x + 1, y)) / 2;
 
     Func h("h");
-    h(x, y) = (f(x, y) + f(x, y+1))/2;
+    h(x, y) = (f(x, y) + f(x, y + 1)) / 2;
 
     // Provide estimates on the pipeline output
-    g.estimate(x, 0, 1000).estimate(y, 0, 1000);
-    h.estimate(x, 0, 1000).estimate(y, 0, 1000);
+    g.set_estimate(x, 0, 1000).set_estimate(y, 0, 1000);
+    h.set_estimate(x, 0, 1000).set_estimate(y, 0, 1000);
 
     // Auto-schedule the pipeline
     std::vector<Func> outs;

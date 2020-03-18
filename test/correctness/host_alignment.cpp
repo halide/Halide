@@ -1,22 +1,24 @@
 #include "Halide.h"
-#include <stdio.h>
 #include <map>
+#include <stdio.h>
 #include <string>
 
 namespace {
 
-using std::vector;
 using std::map;
 using std::string;
+using std::vector;
 using namespace Halide;
 using namespace Halide::Internal;
 
 class FindErrorHandler : public IRVisitor {
 public:
     bool result;
-    FindErrorHandler() : result(false) {}
+    FindErrorHandler()
+        : result(false) {
+    }
     using IRVisitor::visit;
-    void visit(const Call *op) {
+    void visit(const Call *op) override {
         if (op->name == "halide_error_unaligned_host_ptr" &&
             op->call_type == Call::Extern) {
             result = true;
@@ -24,7 +26,6 @@ public:
         }
         IRVisitor::visit(op);
     }
-
 };
 
 class ParseCondition : public IRVisitor {
@@ -32,7 +33,7 @@ public:
     Expr left, right;
 
     using IRVisitor::visit;
-    void visit(const Mod *op) {
+    void visit(const Mod *op) override {
         left = op->a;
         right = op->b;
         return;
@@ -42,12 +43,14 @@ class CountHostAlignmentAsserts : public IRVisitor {
 public:
     int count;
     std::map<string, int> alignments_needed;
-    CountHostAlignmentAsserts(std::map<string, int> m) : count(0),
-                                                        alignments_needed(m){}
+    CountHostAlignmentAsserts(std::map<string, int> m)
+        : count(0),
+          alignments_needed(m) {
+    }
 
     using IRVisitor::visit;
 
-    void visit(const AssertStmt *op) {
+    void visit(const AssertStmt *op) override {
         Expr m = op->message;
         FindErrorHandler f;
         m.accept(&f);
@@ -59,7 +62,7 @@ public:
                 const Call *reinterpret_call = p.left.as<Call>();
                 if (!reinterpret_call ||
                     !reinterpret_call->is_intrinsic(Call::reinterpret)) return;
-                Expr name =  reinterpret_call->args[0];
+                Expr name = reinterpret_call->args[0];
                 const Variable *V = name.as<Variable>();
                 string name_host_ptr = V->name;
                 int expected_alignment = alignments_needed[name_host_ptr];

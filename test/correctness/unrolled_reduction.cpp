@@ -1,5 +1,5 @@
-#include <stdio.h>
 #include "Halide.h"
+#include <stdio.h>
 
 using namespace Halide;
 
@@ -8,7 +8,7 @@ int main(int argc, char **argv) {
 
     Buffer<float> noise(32);
     for (int i = 0; i < 32; i++) {
-        noise(i) = (float)rand() / RAND_MAX;
+        noise(i) = (float)rand() / (float)RAND_MAX;
     }
 
     Func f("f");
@@ -18,7 +18,7 @@ int main(int argc, char **argv) {
     g(x, y) = 0.0f;
     g(r.x, y) += noise(r.x);
 
-    f(x, y, z) = g(x, y) + g(x+1, y);
+    f(x, y, z) = g(x, y) + g(x + 1, y);
 
     RVar rxo, rxi;
     g.compute_at(f, y).update().split(r.x, rxo, rxi, 2).unroll(rxi);

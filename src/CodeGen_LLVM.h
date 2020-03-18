@@ -11,9 +11,11 @@ namespace llvm {
 class Value;
 class Module;
 class Function;
+class FunctionType;
 class IRBuilderDefaultInserter;
 class ConstantFolder;
-template<typename, typename> class IRBuilder;
+template<typename, typename>
+class IRBuilder;
 class LLVMContext;
 class Type;
 class StructType;
@@ -42,6 +44,10 @@ class GlobalVariable;
 #include "Target.h"
 
 namespace Halide {
+struct ExternSignature;
+}  // namespace Halide
+
+namespace Halide {
 namespace Internal {
 
 /** A code generator abstract base class. Actual code generators
@@ -56,19 +62,31 @@ public:
     static CodeGen_LLVM *new_for_target(const Target &target,
                                         llvm::LLVMContext &context);
 
-    virtual ~CodeGen_LLVM();
+    ~CodeGen_LLVM() override;
 
     /** Takes a halide Module and compiles it to an llvm Module. */
     virtual std::unique_ptr<llvm::Module> compile(const Module &module);
 
     /** The target we're generating code for */
-    const Target &get_target() const { return target; }
+    const Target &get_target() const {
+        return target;
+    }
 
     /** Tell the code generator which LLVM context to use. */
     void set_context(llvm::LLVMContext &context);
 
     /** Initialize internal llvm state for the enabled targets. */
     static void initialize_llvm();
+
+    static std::unique_ptr<llvm::Module> compile_trampolines(
+        const Target &target,
+        llvm::LLVMContext &context,
+        const std::string &suffix,
+        const std::vector<std::pair<std::string, ExternSignature>> &externs);
+
+    size_t get_requested_alloca_total() const {
+        return requested_alloca_total;
+    }
 
 protected:
     CodeGen_LLVM(Target t);
@@ -98,20 +116,34 @@ protected:
     virtual std::string mcpu() const = 0;
     virtual std::string mattrs() const = 0;
     virtual bool use_soft_float_abi() const = 0;
+    virtual bool use_pic() const;
     // @}
 
     /** Should indexing math be promoted to 64-bit on platforms with
      * 64-bit pointers? */
-    virtual bool promote_indices() const {return true;}
+    virtual bool promote_indices() const {
+        return true;
+    }
 
     /** What's the natural vector bit-width to use for loads, stores, etc. */
     virtual int native_vector_bits() const = 0;
+
+    /** Return the type in which arithmetic should be done for the
+     * given storage type. */
+    virtual Type upgrade_type_for_arithmetic(const Type &) const;
+
+    /** Return the type that a given Halide type should be
+     * stored/loaded from memory as. */
+    virtual Type upgrade_type_for_storage(const Type &) const;
+
+    /** Return the type that a Halide type should be passed in and out
+     * of functions as. */
+    virtual Type upgrade_type_for_argument_passing(const Type &) const;
 
     /** State needed by llvm for code generation, including the
      * current module, function, context, builder, and most recently
      * generated llvm value. */
     //@{
-    static bool llvm_initialized;
     static bool llvm_X86_enabled;
     static bool llvm_ARM_enabled;
     static bool llvm_Hexagon_enabled;
@@ -120,8 +152,9 @@ protected:
     static bool llvm_Mips_enabled;
     static bool llvm_PowerPC_enabled;
     static bool llvm_AMDGPU_enabled;
+    static bool llvm_WebAssembly_enabled;
+    static bool llvm_RISCV_enabled;
 
-    const Module *input_module;
     std::unique_ptr<llvm::Module> module;
     llvm::Function *function;
     llvm::LLVMContext *context;
@@ -161,22 +194,30 @@ protected:
     /** Fetch an entry from the symbol table. If the symbol is not
      * found, it either errors out (if the second arg is true), or
      * returns nullptr. */
-    llvm::Value* sym_get(const std::string &name,
+    llvm::Value *sym_get(const std::string &name,
                          bool must_succeed = true) const;
 
     /** Test if an item exists in the symbol table. */
     bool sym_exists(const std::string &name) const;
 
+    /** Given a Halide ExternSignature, return the equivalent llvm::FunctionType. */
+    llvm::FunctionType *signature_to_type(const ExternSignature &signature);
+
     /** Some useful llvm types */
     // @{
     llvm::Type *void_t, *i1_t, *i8_t, *i16_t, *i32_t, *i64_t, *f16_t, *f32_t, *f64_t;
-    llvm::StructType *buffer_t_type,
+    llvm::StructType *halide_buffer_t_type,
         *type_t_type,
         *dimension_t_type,
         *metadata_t_type,
         *argument_t_type,
         *scalar_value_t_type,
-        *device_interface_t_type;
+        *device_interface_t_type,
+        *pseudostack_slot_t_type,
+        *semaphore_t_type,
+        *semaphore_acquire_t_type,
+        *parallel_task_t_type;
+
     // @}
 
     /** Some useful llvm types for subclasses */
@@ -192,16 +233,16 @@ protected:
     /** Some wildcard variables used for peephole optimizations in
      * subclasses */
     // @{
-    Expr wild_i8x8, wild_i16x4, wild_i32x2; // 64-bit signed ints
-    Expr wild_u8x8, wild_u16x4, wild_u32x2; // 64-bit unsigned ints
-    Expr wild_i8x16, wild_i16x8, wild_i32x4, wild_i64x2; // 128-bit signed ints
-    Expr wild_u8x16, wild_u16x8, wild_u32x4, wild_u64x2; // 128-bit unsigned ints
-    Expr wild_i8x32, wild_i16x16, wild_i32x8, wild_i64x4; // 256-bit signed ints
-    Expr wild_u8x32, wild_u16x16, wild_u32x8, wild_u64x4; // 256-bit unsigned ints
+    Expr wild_i8x8, wild_i16x4, wild_i32x2;                // 64-bit signed ints
+    Expr wild_u8x8, wild_u16x4, wild_u32x2;                // 64-bit unsigned ints
+    Expr wild_i8x16, wild_i16x8, wild_i32x4, wild_i64x2;   // 128-bit signed ints
+    Expr wild_u8x16, wild_u16x8, wild_u32x4, wild_u64x2;   // 128-bit unsigned ints
+    Expr wild_i8x32, wild_i16x16, wild_i32x8, wild_i64x4;  // 256-bit signed ints
+    Expr wild_u8x32, wild_u16x16, wild_u32x8, wild_u64x4;  // 256-bit unsigned ints
 
-    Expr wild_f32x2; // 64-bit floats
-    Expr wild_f32x4, wild_f64x2; // 128-bit floats
-    Expr wild_f32x8, wild_f64x4; // 256-bit floats
+    Expr wild_f32x2;              // 64-bit floats
+    Expr wild_f32x4, wild_f64x2;  // 128-bit floats
+    Expr wild_f32x8, wild_f64x4;  // 256-bit floats
 
     // Wildcards for a varying number of lanes.
     Expr wild_u1x_, wild_i8x_, wild_u8x_, wild_i16x_, wild_u16x_;
@@ -216,18 +257,19 @@ protected:
 
     /** Emit code that evaluates an expression, and return the llvm
      * representation of the result of the expression. */
-    llvm::Value *codegen(Expr);
-
+    llvm::Value *codegen(const Expr &);
 
     /** Emit code that runs a statement. */
-    void codegen(Stmt);
+    void codegen(const Stmt &);
 
     /** Codegen a vector Expr by codegenning each lane and combining. */
-    void scalarize(Expr);
+    void scalarize(const Expr &);
 
     /** Some destructors should always be called. Others should only
      * be called if the pipeline is exiting with an error code. */
-    enum DestructorType {Always, OnError, OnSuccess};
+    enum DestructorType { Always,
+                          OnError,
+                          OnSuccess };
 
     /* Call this at the location of object creation to register how an
      * object should be destroyed. This does three things:
@@ -253,8 +295,29 @@ protected:
      * null), or evaluates and returns the message, which must be an
      * Int(32) expression. */
     // @{
-    void create_assertion(llvm::Value *condition, Expr message, llvm::Value *error_code = nullptr);
+    void create_assertion(llvm::Value *condition, const Expr &message, llvm::Value *error_code = nullptr);
     // @}
+
+    /** Codegen a block of asserts with pure conditions */
+    void codegen_asserts(const std::vector<const AssertStmt *> &asserts);
+
+    /** Codegen a call to do_parallel_tasks */
+    struct ParallelTask {
+        Stmt body;
+        struct SemAcquire {
+            Expr semaphore;
+            Expr count;
+        };
+        std::vector<SemAcquire> semaphores;
+        std::string loop_var;
+        Expr min, extent;
+        Expr serial;
+        std::string name;
+    };
+    int task_depth;
+    void get_parallel_tasks(const Stmt &s, std::vector<ParallelTask> &tasks, std::pair<std::string, int> prefix);
+    void do_parallel_tasks(const std::vector<ParallelTask> &tasks);
+    void do_as_parallel_task(const Stmt &s);
 
     /** Return the the pipeline with the given error code. Will run
      * the destructor block. */
@@ -273,35 +336,26 @@ protected:
      * given type. The index counts according to the scalar type of
      * the type passed in. */
     // @{
-    llvm::Value *codegen_buffer_pointer(std::string buffer, Type type, llvm::Value *index);
-    llvm::Value *codegen_buffer_pointer(std::string buffer, Type type, Expr index);
+    llvm::Value *codegen_buffer_pointer(const std::string &buffer, Type type, llvm::Value *index);
+    llvm::Value *codegen_buffer_pointer(const std::string &buffer, Type type, Expr index);
     llvm::Value *codegen_buffer_pointer(llvm::Value *base_address, Type type, Expr index);
     llvm::Value *codegen_buffer_pointer(llvm::Value *base_address, Type type, llvm::Value *index);
     // @}
 
     /** Turn a Halide Type into an llvm::Value representing a constant halide_type_t */
-    llvm::Value *make_halide_type_t(Type);
+    llvm::Value *make_halide_type_t(const Type &);
 
     /** Mark a load or store with type-based-alias-analysis metadata
      * so that llvm knows it can reorder loads and stores across
      * different buffers */
-    void add_tbaa_metadata(llvm::Instruction *inst, std::string buffer, Expr index);
+    void add_tbaa_metadata(llvm::Instruction *inst, std::string buffer, const Expr &index);
 
     /** Get a unique name for the actual block of memory that an
      * allocate node uses. Used so that alias analysis understands
      * when multiple Allocate nodes shared the same memory. */
-    virtual std::string get_allocation_name(const std::string &n) {return n;}
-
-    /** Helpers for implementing fast integer division. */
-    // @{
-    // Compute high_half(a*b) >> shr. Note that this is a shift in
-    // addition to the implicit shift due to taking the upper half of
-    // the multiply result.
-    virtual Expr mulhi_shr(Expr a, Expr b, int shr);
-    // Compute (a+b)/2, assuming a < b.
-    virtual Expr sorted_avg(Expr a, Expr b);
-    // @}
-
+    virtual std::string get_allocation_name(const std::string &n) {
+        return n;
+    }
 
     using IRVisitor::visit;
 
@@ -309,76 +363,94 @@ protected:
      * architecture-specific code to perform peephole
      * optimizations. The result of each is stored in \ref value */
     // @{
-    virtual void visit(const IntImm *);
-    virtual void visit(const UIntImm *);
-    virtual void visit(const FloatImm *);
-    virtual void visit(const StringImm *);
-    virtual void visit(const Cast *);
-    virtual void visit(const Variable *);
-    virtual void visit(const Add *);
-    virtual void visit(const Sub *);
-    virtual void visit(const Mul *);
-    virtual void visit(const Div *);
-    virtual void visit(const Mod *);
-    virtual void visit(const Min *);
-    virtual void visit(const Max *);
-    virtual void visit(const EQ *);
-    virtual void visit(const NE *);
-    virtual void visit(const LT *);
-    virtual void visit(const LE *);
-    virtual void visit(const GT *);
-    virtual void visit(const GE *);
-    virtual void visit(const And *);
-    virtual void visit(const Or *);
-    virtual void visit(const Not *);
-    virtual void visit(const Select *);
-    virtual void visit(const Load *);
-    virtual void visit(const Ramp *);
-    virtual void visit(const Broadcast *);
-    virtual void visit(const Call *);
-    virtual void visit(const Let *);
-    virtual void visit(const LetStmt *);
-    virtual void visit(const AssertStmt *);
-    virtual void visit(const ProducerConsumer *);
-    virtual void visit(const For *);
-    virtual void visit(const Store *);
-    virtual void visit(const Block *);
-    virtual void visit(const IfThenElse *);
-    virtual void visit(const Evaluate *);
-    virtual void visit(const Shuffle *);
-    virtual void visit(const Prefetch *);
+    void visit(const IntImm *) override;
+    void visit(const UIntImm *) override;
+    void visit(const FloatImm *) override;
+    void visit(const StringImm *) override;
+    void visit(const Cast *) override;
+    void visit(const Variable *) override;
+    void visit(const Add *) override;
+    void visit(const Sub *) override;
+    void visit(const Mul *) override;
+    void visit(const Div *) override;
+    void visit(const Mod *) override;
+    void visit(const Min *) override;
+    void visit(const Max *) override;
+    void visit(const EQ *) override;
+    void visit(const NE *) override;
+    void visit(const LT *) override;
+    void visit(const LE *) override;
+    void visit(const GT *) override;
+    void visit(const GE *) override;
+    void visit(const And *) override;
+    void visit(const Or *) override;
+    void visit(const Not *) override;
+    void visit(const Select *) override;
+    void visit(const Load *) override;
+    void visit(const Ramp *) override;
+    void visit(const Broadcast *) override;
+    void visit(const Call *) override;
+    void visit(const Let *) override;
+    void visit(const LetStmt *) override;
+    void visit(const AssertStmt *) override;
+    void visit(const ProducerConsumer *) override;
+    void visit(const For *) override;
+    void visit(const Acquire *) override;
+    void visit(const Store *) override;
+    void visit(const Block *) override;
+    void visit(const Fork *) override;
+    void visit(const IfThenElse *) override;
+    void visit(const Evaluate *) override;
+    void visit(const Shuffle *) override;
+    void visit(const Prefetch *) override;
+    void visit(const Atomic *) override;
     // @}
 
     /** Generate code for an allocate node. It has no default
      * implementation - it must be handled in an architecture-specific
      * way. */
-    virtual void visit(const Allocate *) = 0;
+    void visit(const Allocate *) override = 0;
 
     /** Generate code for a free node. It has no default
      * implementation and must be handled in an architecture-specific
      * way. */
-    virtual void visit(const Free *) = 0;
+    void visit(const Free *) override = 0;
 
     /** These IR nodes should have been removed during
      * lowering. CodeGen_LLVM will error out if they are present */
     // @{
-    virtual void visit(const Provide *);
-    virtual void visit(const Realize *);
+    void visit(const Provide *) override;
+    void visit(const Realize *) override;
     // @}
 
     /** If we have to bail out of a pipeline midway, this should
      * inject the appropriate target-specific cleanup code. */
-    virtual void prepare_for_early_exit() {}
+    virtual void prepare_for_early_exit() {
+    }
 
     /** Get the llvm type equivalent to the given halide type in the
      * current context. */
-    llvm::Type *llvm_type_of(Type);
+    virtual llvm::Type *llvm_type_of(const Type &) const;
 
     /** Perform an alloca at the function entrypoint. Will be cleaned
      * on function exit. */
     llvm::Value *create_alloca_at_entry(llvm::Type *type, int n,
                                         bool zero_initialize = false,
                                         const std::string &name = "");
+
+    /** A (very) conservative guess at the size of all alloca() storage requested
+     * (including alignment padding). It's currently meant only to be used as
+     * a very coarse way to ensure there is enough stack space when testing
+     * on the WebAssembly backend.
+     *
+     * It is *not* meant to be a useful proxy for "stack space needed", for a
+     * number of reasons:
+     * - allocas with non-overlapping lifetimes will share space
+     * - on some backends, LLVM may promote register-sized allocas into registers
+     * - while this accounts for alloca() calls we know about, it doesn't attempt
+     *   to account for stack spills, function call overhead, etc.
+     */
+    size_t requested_alloca_total = 0;
 
     /** Which buffers came in from the outside world (and so we can't
      * guarantee their alignment) */
@@ -402,7 +474,7 @@ protected:
      * arguments must be specified explicitly as
      * 'called_lanes'. */
     // @{
-    llvm::Value *call_intrin(Type t, int intrin_lanes,
+    llvm::Value *call_intrin(const Type &t, int intrin_lanes,
                              const std::string &name, std::vector<Expr>);
     llvm::Value *call_intrin(llvm::Type *t, int intrin_lanes,
                              const std::string &name, std::vector<llvm::Value *>);
@@ -439,14 +511,16 @@ protected:
      */
     std::pair<llvm::Function *, int> find_vector_runtime_function(const std::string &name, int lanes);
 
-    /** Get the result of modulus-remainder analysis for a given expr. */
-    ModulusRemainder get_alignment_info(Expr e);
+    virtual bool supports_atomic_add(const Type &t) const;
 
-    /** Alignment info for Int(32) variables in scope. */
-    Scope<ModulusRemainder> alignment_info;
+    /** Are we inside an atomic node that uses mutex locks?
+        This is used for detecting deadlocks from nested atomics & illegal vectorization. */
+    bool inside_atomic_mutex_node;
+
+    /** Emit atomic store instructions? */
+    bool emit_atomic_stores;
 
 private:
-
     /** All the values in scope at the current code location during
      * codegen. Use sym_push and sym_pop to access. */
     Scope<llvm::Value *> symbol_table;
@@ -468,19 +542,25 @@ private:
      * as extern "C" linkage. Note that the return value is a function-returning-
      * pointer-to-constant-data.
      */
-    llvm::Function* embed_metadata_getter(const std::string &metadata_getter_name,
-        const std::string &function_name, const std::vector<LoweredArgument> &args,
-        const std::map<std::string, std::string> &metadata_name_map);
+    llvm::Function *embed_metadata_getter(const std::string &metadata_getter_name,
+                                          const std::string &function_name, const std::vector<LoweredArgument> &args,
+                                          const std::map<std::string, std::string> &metadata_name_map);
 
     /** Embed a constant expression as a global variable. */
-    llvm::Constant *embed_constant_expr(Expr e);
+    llvm::Constant *embed_constant_expr(Expr e, llvm::Type *t);
+    llvm::Constant *embed_constant_scalar_value_t(const Expr &e);
 
-    llvm::Function *add_argv_wrapper(const std::string &name);
+    llvm::Function *add_argv_wrapper(llvm::Function *fn, const std::string &name, bool result_in_argv = false);
 
     llvm::Value *codegen_dense_vector_load(const Load *load, llvm::Value *vpred = nullptr);
 
     virtual void codegen_predicated_vector_load(const Load *op);
     virtual void codegen_predicated_vector_store(const Store *op);
+
+    void codegen_atomic_store(const Store *op);
+
+    void init_codegen(const std::string &name, bool any_strict_float = false);
+    std::unique_ptr<llvm::Module> finish_codegen();
 };
 
 }  // namespace Internal

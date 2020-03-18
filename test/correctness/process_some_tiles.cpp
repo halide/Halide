@@ -1,6 +1,6 @@
 #include "Halide.h"
-#include <stdio.h>
 #include <math.h>
+#include <stdio.h>
 
 using namespace Halide;
 
@@ -32,7 +32,7 @@ int main(int argc, char **argv) {
 
     // Break the input into tiles.
     Func tiled("tiled");
-    tiled(xi, yi, x, y) = image(x*tile_size + xi, y*tile_size + yi);
+    tiled(xi, yi, x, y) = image(x * tile_size + xi, y * tile_size + yi);
 
     // Brighten each tile of the image
     Func brighter("brighter");
@@ -49,9 +49,9 @@ int main(int argc, char **argv) {
 
     // Compute the output in tiles of the appropriate size to simplify
     // the mod and div above. Not important for the stage skipping behavior.
-    output.bound(x, 0, (image.dim(0).extent()/tile_size)*tile_size)
-          .bound(y, 0, (image.dim(0).extent()/tile_size)*tile_size)
-          .tile(x, y, xi, yi, tile_size, tile_size);
+    output.bound(x, 0, (image.dim(0).extent() / tile_size) * tile_size)
+        .bound(y, 0, (image.dim(0).extent() / tile_size) * tile_size)
+        .tile(x, y, xi, yi, tile_size, tile_size);
 
     // Vectorize within tiles. We would also parallelize across tiles,
     // but that introduces a race condition in the call_count.
@@ -72,7 +72,7 @@ int main(int argc, char **argv) {
     bitmap_buf(5, 5) = true;
     bitmap.set(bitmap_buf);
 
-    Buffer<float> image_buf = lambda(x, y, (sin(x+y)+1)/2).realize(10 * tile_size, 10 * tile_size);
+    Buffer<float> image_buf = lambda(x, y, (sin(x + y) + 1) / 2).realize(10 * tile_size, 10 * tile_size);
     image.set(image_buf);
 
     call_count = 0;
@@ -83,7 +83,7 @@ int main(int argc, char **argv) {
     call_count--;
 
     // Check the right number of calls to powf occurred
-    if (call_count != tile_size*tile_size) {
+    if (call_count != tile_size * tile_size) {
         printf("call_count = %d instead of %d\n", call_count, tile_size * tile_size);
         return -1;
     }
@@ -91,7 +91,7 @@ int main(int argc, char **argv) {
     // Check the output is correct
     for (int y = 0; y < result.height(); y++) {
         for (int x = 0; x < result.width(); x++) {
-            bool active = bitmap_buf(x/tile_size, y/tile_size);
+            bool active = bitmap_buf(x / tile_size, y / tile_size);
             float correct = active ? my_powf(image_buf(x, y), 0.8f) : image_buf(x, y);
             if (fabs(correct - result(x, y)) > 0.001f) {
                 printf("result(%d, %d) = %f instead of %f\n",

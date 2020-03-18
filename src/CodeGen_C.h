@@ -28,6 +28,8 @@ public:
         CPlusPlusHeader,
         CImplementation,
         CPlusPlusImplementation,
+        CExternDecl,
+        CPlusPlusExternDecl,
     };
 
     /** Initialize a C code generator pointing at a particular output
@@ -36,18 +38,22 @@ public:
               Target target,
               OutputKind output_kind = CImplementation,
               const std::string &include_guard = "");
-    ~CodeGen_C();
+    ~CodeGen_C() override;
 
     /** Emit the declarations contained in the module as C code. */
     void compile(const Module &module);
 
     /** The target we're generating code for */
-    const Target &get_target() const { return target; }
+    const Target &get_target() const {
+        return target;
+    }
 
     static void test();
 
-protected:
+    /**  Add common macros to be shared across all backends */
+    void add_common_macros(std::ostream &dest);
 
+protected:
     /** Emit a declaration. */
     // @{
     virtual void compile(const LoweredFunc &func);
@@ -69,17 +75,17 @@ protected:
 
     /** Emit an expression as an assignment, then return the id of the
      * resulting var */
-    std::string print_expr(Expr);
+    std::string print_expr(const Expr &);
 
     /** Like print_expr, but cast the Expr to the given Type */
-    std::string print_cast_expr(const Type &, Expr);
+    std::string print_cast_expr(const Type &, const Expr &);
 
     /** Emit a statement */
-    void print_stmt(Stmt);
+    void print_stmt(const Stmt &);
 
     void create_assertion(const std::string &id_cond, const std::string &id_msg);
-    void create_assertion(const std::string &id_cond, Expr message);
-    void create_assertion(Expr cond, Expr message);
+    void create_assertion(const std::string &id_cond, const Expr &message);
+    void create_assertion(const Expr &cond, const Expr &message);
 
     enum AppendSpaceIfNeeded {
         DoNotAppendSpace,
@@ -94,7 +100,7 @@ protected:
     virtual std::string print_type(Type, AppendSpaceIfNeeded space_option = DoNotAppendSpace);
 
     /** Emit a statement to reinterpret an expression as another type */
-    virtual std::string print_reinterpret(Type, Expr);
+    virtual std::string print_reinterpret(Type, const Expr &);
 
     /** Emit a version of a string that is a valid identifier in C (. is replaced with _) */
     virtual std::string print_name(const std::string &);
@@ -107,7 +113,7 @@ protected:
     virtual std::string print_extern_call(const Call *op);
 
     /** Convert a vector Expr into a series of scalar Exprs, then reassemble into vector of original type.  */
-    std::string print_scalarized_expr(Expr e);
+    std::string print_scalarized_expr(const Expr &e);
 
     /** Emit an SSA-style assignment, and set id to the freshly generated name. Return id. */
     virtual std::string print_assignment(Type t, const std::string &rhs);
@@ -118,10 +124,22 @@ protected:
                output_kind == CPlusPlusHeader;
     }
 
+    /** Return true if only generating an interface, which may be extern "C" or C++ */
+    bool is_extern_decl() {
+        return output_kind == CExternDecl ||
+               output_kind == CPlusPlusExternDecl;
+    }
+
+    /** Return true if only generating an interface, which may be extern "C" or C++ */
+    bool is_header_or_extern_decl() {
+        return is_header() || is_extern_decl();
+    }
+
     /** Return true if generating C++ linkage. */
     bool is_c_plus_plus_interface() {
         return output_kind == CPlusPlusHeader ||
-               output_kind == CPlusPlusImplementation;
+               output_kind == CPlusPlusImplementation ||
+               output_kind == CPlusPlusExternDecl;
     }
 
     /** Open a new C scope (i.e. throw in a brace, increase the indent) */
@@ -160,49 +178,52 @@ protected:
 
     using IRPrinter::visit;
 
-    void visit(const Variable *);
-    void visit(const IntImm *);
-    void visit(const UIntImm *);
-    void visit(const StringImm *);
-    void visit(const FloatImm *);
-    void visit(const Cast *);
-    void visit(const Add *);
-    void visit(const Sub *);
-    void visit(const Mul *);
-    void visit(const Div *);
-    void visit(const Mod *);
-    void visit(const Max *);
-    void visit(const Min *);
-    void visit(const EQ *);
-    void visit(const NE *);
-    void visit(const LT *);
-    void visit(const LE *);
-    void visit(const GT *);
-    void visit(const GE *);
-    void visit(const And *);
-    void visit(const Or *);
-    void visit(const Not *);
-    void visit(const Call *);
-    void visit(const Select *);
-    void visit(const Load *);
-    void visit(const Store *);
-    void visit(const Let *);
-    void visit(const LetStmt *);
-    void visit(const AssertStmt *);
-    void visit(const ProducerConsumer *);
-    void visit(const For *);
-    void visit(const Ramp *);
-    void visit(const Broadcast *);
-    void visit(const Provide *);
-    void visit(const Allocate *);
-    void visit(const Free *);
-    void visit(const Realize *);
-    void visit(const IfThenElse *);
-    void visit(const Evaluate *);
-    void visit(const Shuffle *);
-    void visit(const Prefetch *);
+    void visit(const Variable *) override;
+    void visit(const IntImm *) override;
+    void visit(const UIntImm *) override;
+    void visit(const StringImm *) override;
+    void visit(const FloatImm *) override;
+    void visit(const Cast *) override;
+    void visit(const Add *) override;
+    void visit(const Sub *) override;
+    void visit(const Mul *) override;
+    void visit(const Div *) override;
+    void visit(const Mod *) override;
+    void visit(const Max *) override;
+    void visit(const Min *) override;
+    void visit(const EQ *) override;
+    void visit(const NE *) override;
+    void visit(const LT *) override;
+    void visit(const LE *) override;
+    void visit(const GT *) override;
+    void visit(const GE *) override;
+    void visit(const And *) override;
+    void visit(const Or *) override;
+    void visit(const Not *) override;
+    void visit(const Call *) override;
+    void visit(const Select *) override;
+    void visit(const Load *) override;
+    void visit(const Store *) override;
+    void visit(const Let *) override;
+    void visit(const LetStmt *) override;
+    void visit(const AssertStmt *) override;
+    void visit(const ProducerConsumer *) override;
+    void visit(const For *) override;
+    void visit(const Ramp *) override;
+    void visit(const Broadcast *) override;
+    void visit(const Provide *) override;
+    void visit(const Allocate *) override;
+    void visit(const Free *) override;
+    void visit(const Realize *) override;
+    void visit(const IfThenElse *) override;
+    void visit(const Evaluate *) override;
+    void visit(const Shuffle *) override;
+    void visit(const Prefetch *) override;
+    void visit(const Fork *) override;
+    void visit(const Acquire *) override;
+    void visit(const Atomic *) override;
 
-    void visit_binop(Type t, Expr a, Expr b, const char *op);
+    void visit_binop(Type t, const Expr &a, const Expr &b, const char *op);
 
     template<typename T>
     static std::string with_sep(const std::vector<T> &v, const std::string &sep) {
@@ -220,6 +241,13 @@ protected:
     static std::string with_commas(const std::vector<T> &v) {
         return with_sep<T>(v, ", ");
     }
+
+    /** Are we inside an atomic node that uses mutex locks?
+        This is used for detecting deadlocks from nested atomics. */
+    bool inside_atomic_mutex_node;
+
+    /** Emit atomic store instructions? */
+    bool emit_atomic_stores;
 };
 
 }  // namespace Internal

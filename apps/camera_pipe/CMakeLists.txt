@@ -5,7 +5,7 @@ if(WIN32)
 endif()
 
 add_executable(camera_pipe_process process.cpp)
-halide_use_image_io(camera_pipe_process)
+target_link_libraries(camera_pipe_process PRIVATE Halide::ImageIO)
 
 halide_generator(camera_pipe.generator SRCS camera_pipe_generator.cpp)
 

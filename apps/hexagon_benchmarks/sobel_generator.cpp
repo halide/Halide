@@ -16,11 +16,11 @@ public:
         Func input_16{"input_16"};
         input_16(x, y) = cast<uint16_t>(bounded_input(x, y));
 
-        sobel_x_avg(x,y) = input_16(x-1, y) + 2*input_16(x, y) + input_16(x+1, y);
-        sobel_x(x, y) = absd(sobel_x_avg(x, y-1), sobel_x_avg(x, y+1));
+        sobel_x_avg(x, y) = input_16(x - 1, y) + 2 * input_16(x, y) + input_16(x + 1, y);
+        sobel_x(x, y) = absd(sobel_x_avg(x, y - 1), sobel_x_avg(x, y + 1));
 
-        sobel_y_avg(x,y) = input_16(x, y-1) + 2*input_16(x, y) + input_16(x, y+1);
-        sobel_y(x, y) = absd(sobel_y_avg(x-1, y),  sobel_y_avg(x+1, y));
+        sobel_y_avg(x, y) = input_16(x, y - 1) + 2 * input_16(x, y) + input_16(x, y + 1);
+        sobel_y(x, y) = absd(sobel_y_avg(x - 1, y), sobel_y_avg(x + 1, y));
 
         // This sobel implementation is non-standard in that it doesn't take the square root
         // of the gradient.
@@ -36,10 +36,10 @@ public:
         if (get_target().features_any_of({Target::HVX_64, Target::HVX_128})) {
             const int vector_size = get_target().has_feature(Target::HVX_128) ? 128 : 64;
             Expr input_stride = input.dim(1).stride();
-            input.dim(1).set_stride((input_stride/vector_size) * vector_size);
+            input.dim(1).set_stride((input_stride / vector_size) * vector_size);
 
             Expr output_stride = output.dim(1).stride();
-            output.dim(1).set_stride((output_stride/vector_size) * vector_size);
+            output.dim(1).set_stride((output_stride / vector_size) * vector_size);
             bounded_input
                 .compute_at(Func(output), y)
                 .align_storage(x, 128)
@@ -63,6 +63,7 @@ public:
                 .parallel(y, 16);
         }
     }
+
 private:
     Var x{"x"}, y{"y"};
     Func sobel_x_avg{"sobel_x_avg"}, sobel_y_avg{"sobel_y_avg"};

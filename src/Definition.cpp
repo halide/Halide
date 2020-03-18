@@ -1,5 +1,7 @@
 #include <stdlib.h>
 
+#include <utility>
+
 #include "Definition.h"
 #include "IR.h"
 #include "IRMutator.h"
@@ -10,7 +12,6 @@
 namespace Halide {
 namespace Internal {
 
-using std::map;
 using std::string;
 using std::vector;
 
@@ -23,7 +24,9 @@ struct DefinitionContents {
     std::vector<Specialization> specializations;
     std::string source_location;
 
-    DefinitionContents() : is_init(true), predicate(const_true()) {}
+    DefinitionContents()
+        : is_init(true), predicate(const_true()) {
+    }
 
     void accept(IRVisitor *visitor) const {
         if (predicate.defined()) {
@@ -47,7 +50,7 @@ struct DefinitionContents {
         }
     }
 
-    void mutate(IRMutator2 *mutator) {
+    void mutate(IRMutator *mutator) {
         if (predicate.defined()) {
             predicate = mutator->mutate(predicate);
         }
@@ -71,7 +74,7 @@ struct DefinitionContents {
 };
 
 template<>
-RefCount &ref_count<DefinitionContents>(const DefinitionContents *d) {
+RefCount &ref_count<DefinitionContents>(const DefinitionContents *d) noexcept {
     return d->ref_count;
 }
 
@@ -80,16 +83,19 @@ void destroy<DefinitionContents>(const DefinitionContents *d) {
     delete d;
 }
 
-Definition::Definition() : contents(nullptr) {}
+Definition::Definition()
+    : contents(nullptr) {
+}
 
-Definition::Definition(const IntrusivePtr<DefinitionContents> &ptr) : contents(ptr) {
+Definition::Definition(const IntrusivePtr<DefinitionContents> &ptr)
+    : contents(ptr) {
     internal_assert(ptr.defined())
         << "Can't construct Function from undefined DefinitionContents ptr\n";
 }
 
 Definition::Definition(const std::vector<Expr> &args, const std::vector<Expr> &values,
                        const ReductionDomain &rdom, bool is_init)
-                       : contents(new DefinitionContents) {
+    : contents(new DefinitionContents) {
     contents->is_init = is_init;
     contents->values = values;
     contents->args = args;
@@ -136,7 +142,7 @@ void Definition::accept(IRVisitor *visitor) const {
     contents->accept(visitor);
 }
 
-void Definition::mutate(IRMutator2 *mutator) {
+void Definition::mutate(IRMutator *mutator) {
     contents->mutate(mutator);
 }
 
@@ -192,12 +198,12 @@ std::string Definition::source_location() const {
 
 const Specialization &Definition::add_specialization(Expr condition) {
     Specialization s;
-    s.condition = condition;
+    s.condition = std::move(condition);
     s.definition.contents = new DefinitionContents;
     s.definition.contents->is_init = contents->is_init;
     s.definition.contents->predicate = contents->predicate;
     s.definition.contents->values = contents->values;
-    s.definition.contents->args   = contents->args;
+    s.definition.contents->args = contents->args;
     s.definition.contents->source_location = contents->source_location;
 
     // The sub-schedule inherits everything about its parent except for its specializations.

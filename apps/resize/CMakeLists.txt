@@ -31,7 +31,7 @@ list(APPEND VARIANTS
     lanczos_uint8_down)
 
 add_executable(resize resize.cpp)
-halide_use_image_io(resize)
+target_link_libraries(resize PRIVATE Halide::ImageIO)
 
 halide_generator(resize.generator SRCS resize_generator.cpp)
 foreach(VARIANT ${VARIANTS})

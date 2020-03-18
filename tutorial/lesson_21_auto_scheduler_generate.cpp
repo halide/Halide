@@ -29,16 +29,16 @@ using namespace Halide;
 // We will define a generator to auto-schedule.
 class AutoScheduled : public Halide::Generator<AutoScheduled> {
 public:
-    Input<Buffer<float>>  input{"input", 3};
-    Input<float>          factor{"factor"};
+    Input<Buffer<float>> input{"input", 3};
+    Input<float> factor{"factor"};
 
     Output<Buffer<float>> output1{"output1", 2};
     Output<Buffer<float>> output2{"output2", 2};
 
     Expr sum3x3(Func f, Var x, Var y) {
-        return f(x-1, y-1) + f(x-1, y) + f(x-1, y+1) +
-               f(x, y-1)   + f(x, y)   + f(x, y+1) +
-               f(x+1, y-1) + f(x+1, y) + f(x+1, y+1);
+        return f(x - 1, y - 1) + f(x - 1, y) + f(x - 1, y + 1) +
+               f(x, y - 1) + f(x, y) + f(x, y + 1) +
+               f(x + 1, y - 1) + f(x + 1, y) + f(x + 1, y + 1);
     }
 
     void generate() {
@@ -47,13 +47,13 @@ public:
 
         gray(x, y) = 0.299f * in_b(x, y, 0) + 0.587f * in_b(x, y, 1) + 0.114f * in_b(x, y, 2);
 
-        Iy(x, y) = gray(x-1, y-1)*(-1.0f/12) + gray(x-1, y+1)*(1.0f/12) +
-                   gray(x, y-1)*(-2.0f/12) + gray(x, y+1)*(2.0f/12) +
-                   gray(x+1, y-1)*(-1.0f/12) + gray(x+1, y+1)*(1.0f/12);
+        Iy(x, y) = gray(x - 1, y - 1) * (-1.0f / 12) + gray(x - 1, y + 1) * (1.0f / 12) +
+                   gray(x, y - 1) * (-2.0f / 12) + gray(x, y + 1) * (2.0f / 12) +
+                   gray(x + 1, y - 1) * (-1.0f / 12) + gray(x + 1, y + 1) * (1.0f / 12);
 
-        Ix(x, y) = gray(x-1, y-1)*(-1.0f/12) + gray(x+1, y-1)*(1.0f/12) +
-                   gray(x-1, y)*(-2.0f/12) + gray(x+1, y)*(2.0f/12) +
-                   gray(x-1, y+1)*(-1.0f/12) + gray(x+1, y+1)*(1.0f/12);
+        Ix(x, y) = gray(x - 1, y - 1) * (-1.0f / 12) + gray(x + 1, y - 1) * (1.0f / 12) +
+                   gray(x - 1, y) * (-2.0f / 12) + gray(x + 1, y) * (2.0f / 12) +
+                   gray(x - 1, y + 1) * (-1.0f / 12) + gray(x + 1, y + 1) * (1.0f / 12);
 
         Ixx(x, y) = Ix(x, y) * Ix(x, y);
         Iyy(x, y) = Iy(x, y) * Iy(x, y);
@@ -76,24 +76,19 @@ public:
 
             // To provide estimates (min and extent values) for each dimension
             // of the input images ('input', 'filter', and 'bias'), we use the
-            // set_bounds_estimate() method. set_bounds_estimate() takes in
+            // set_estimates() method. set_estimates() takes in a list of
             // (min, extent) of the corresponding dimension as arguments.
-            input.dim(0).set_bounds_estimate(0, 1024);
-            input.dim(1).set_bounds_estimate(0, 1024);
-            input.dim(2).set_bounds_estimate(0, 3);
+            input.set_estimates({{0, 1024}, {0, 1024}, {0, 3}});
 
             // To provide estimates on the parameter values, we use the
             // set_estimate() method.
             factor.set_estimate(2.0f);
 
             // To provide estimates (min and extent values) for each dimension
-            // of pipeline outputs, we use the estimate() method. estimate()
-            // takes in (dim_name, min, extent) as arguments.
-            output1.estimate(x, 0, 1024)
-                   .estimate(y, 0, 1024);
-
-            output2.estimate(x, 0, 1024)
-                   .estimate(y, 0, 1024);
+            // of pipeline outputs, we use the set_estimates() method. set_estimates()
+            // takes in a list of (min, extent) for each dimension.
+            output1.set_estimates({{0, 1024}, {0, 1024}});
+            output2.set_estimates({{0, 1024}, {0, 1024}});
 
             // Technically, the estimate values can be anything, but the closer
             // they are to the actual use-case values, the better the generated
@@ -224,6 +219,7 @@ public:
             Ix.compute_root();
         }
     }
+
 private:
     Var x{"x"}, y{"y"}, c{"c"};
     Func gray, Iy, Ix, Ixx, Iyy, Ixy, Sxx, Syy, Sxy, det, trace, harris;

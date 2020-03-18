@@ -1,6 +1,6 @@
 #include "Halide.h"
-#include <stdio.h>
 #include <iostream>
+#include <stdio.h>
 
 using namespace Halide;
 using namespace Halide::ConciseCasts;
@@ -51,8 +51,8 @@ int main(int arch, char **argv) {
         // Run the pipeline and verify the results are correct.
         Buffer<uint8_t> out = f.realize(W, H, target);
 
-        for (int y = 1; y < H-1; y++) {
-            for (int x = 1; x < W-1; x++) {
+        for (int y = 1; y < H - 1; y++) {
+            for (int x = 1; x < W - 1; x++) {
                 int16_t correct = 0;
                 for (int ry = -1; ry <= 1; ry++) {
                     for (int rx = -1; rx <= 1; rx++) {
@@ -71,7 +71,7 @@ int main(int arch, char **argv) {
     // Test a tuple reduction with widening, followed by narrowing the result.
     {
         Func f;
-        f(x, y) = { i16(0), i8(0) };
+        f(x, y) = {i16(0), i8(0)};
         f(x, y) = {
             f(x, y)[0] + i16(input(x + r.x, y + r.y)) * kernel(r.x, r.y),
             f(x, y)[1] + kernel(r.x, r.y),
@@ -93,8 +93,8 @@ int main(int arch, char **argv) {
         // Run the pipeline and verify the results are correct.
         Buffer<uint8_t> out = g.realize(W, H, target);
 
-        for (int y = 1; y < H-1; y++) {
-            for (int x = 1; x < W-1; x++) {
+        for (int y = 1; y < H - 1; y++) {
+            for (int x = 1; x < W - 1; x++) {
                 int16_t correct = 0;
                 for (int ry = -1; ry <= 1; ry++) {
                     for (int rx = -1; rx <= 1; rx++) {
@@ -138,8 +138,8 @@ int main(int arch, char **argv) {
         // Run the pipeline and verify the results are correct.
         Buffer<uint8_t> out = g.realize(W - 2, H, target);
 
-        for (int y = 1; y < H-1; y++) {
-            for (int x = 0; x < W-3; x++) {
+        for (int y = 1; y < H - 1; y++) {
+            for (int x = 0; x < W - 3; x++) {
                 uint8_t correct = (static_cast<int16_t>(in(x, y)) + in(x + 1, y)) / 2;
                 if (correct != out(x, y)) {
                     std::cout << "out(" << x << ", " << y << ") = " << (int)out(x, y) << " instead of " << (int)correct << "\n";
@@ -148,7 +148,6 @@ int main(int arch, char **argv) {
             }
         }
     }
-
 
     std::cout << "Success!\n";
     return 0;

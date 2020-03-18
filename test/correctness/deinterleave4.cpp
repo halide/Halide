@@ -1,5 +1,5 @@
-#include <stdio.h>
 #include "Halide.h"
+#include <stdio.h>
 
 using namespace Halide;
 
@@ -7,7 +7,7 @@ Var x;
 
 Func upsample(Func f) {
     Func u;
-    u(x) = f(x/2+1);
+    u(x) = f(x / 2 + 1);
     return u;
 }
 

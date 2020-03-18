@@ -3,29 +3,29 @@
 
 using namespace Halide;
 
-const int kEdges[3] = { 128, 64, 32 };
+const int kEdges[3] = {128, 64, 32};
 
 Halide::Runtime::Buffer<int32_t> make_gpu_buffer(bool hexagon_rpc) {
-  Var x, y, c;
-  Func f;
-  f(x, y, c) = x + y * 256 + c * 256 * 256;
+    Var x, y, c;
+    Func f;
+    f(x, y, c) = x + y * 256 + c * 256 * 256;
 
-  if (hexagon_rpc) {
-      f.hexagon();
-  } else {
-      Var xi, yi;
-      f.gpu_tile(x, y, xi, yi, 8, 8);
-  }
+    if (hexagon_rpc) {
+        f.hexagon();
+    } else {
+        Var xi, yi;
+        f.gpu_tile(x, y, xi, yi, 8, 8);
+    }
 
-  Buffer<int32_t> result = f.realize(kEdges[0], kEdges[1], kEdges[2]);
-  return *result.get();
+    Buffer<int32_t> result = f.realize(kEdges[0], kEdges[1], kEdges[2]);
+    return *result.get();
 }
 
 int main(int argc, char **argv) {
     Target target = get_jit_target_from_environment();
 
     bool hexagon_rpc = (target.arch != Target::Hexagon) &&
-                       target.features_any_of({ Target::HVX_64, Target::HVX_128 });
+                       target.features_any_of({Target::HVX_64, Target::HVX_128});
 
     if (!hexagon_rpc && !target.has_gpu_feature()) {
         printf("This is a gpu-specific test. Skipping it.\n");
@@ -70,7 +70,7 @@ int main(int argc, char **argv) {
         sliced.copy_to_host();
         sliced.for_each_element([&](int y, int c) {
             const int x = slice_pos;
-            assert(sliced(y, c) ==  x + y * 256 + c * 256 * 256);
+            assert(sliced(y, c) == x + y * 256 + c * 256 * 256);
         });
 
         gpu_buf.copy_to_host();
@@ -142,7 +142,7 @@ int main(int argc, char **argv) {
         sliced.copy_to_host();
         sliced.for_each_element([&](int x, int c) {
             const int y = slice_pos;
-            assert(sliced(x, c) ==  x + y * 256 + c * 256 * 256);
+            assert(sliced(x, c) == x + y * 256 + c * 256 * 256);
         });
     }
 

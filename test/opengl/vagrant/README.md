@@ -2,7 +2,7 @@
 
 ## Overview
 
-This subdirectory (`Halide/test/opengl/vagrant`) provides the setup to build Halide and run the OpenGL tests headlessly on Ubuntu 14.04 and/or 16.04, running virtually under [vagrant](http://vagrantup.com) and [VirtualBox](https://www.virtualbox.org).  
+This subdirectory (`Halide/test/opengl/vagrant`) provides the setup to build Halide and run the OpenGL tests headlessly on Ubuntu 14.04 and/or 16.04, running virtually under [vagrant](http://vagrantup.com) and [VirtualBox](https://www.virtualbox.org).
 
 This is intended in particular for use by those who develop Halide's OpenGL back-end on OS X and need to test on Linux.
 
@@ -10,7 +10,7 @@ The `Vagrantfile` provisions with the necessary capabilities to build Halide and
 
 ## Quick instructions
 
-Presuming that you have [vagrant](http://vagrantup.com) and [VirtualBox](https://www.virtualbox.org) installed,  
+Presuming that you have [vagrant](http://vagrantup.com) and [VirtualBox](https://www.virtualbox.org) installed,
 
 ```
 $ cd Halide/test/opengl/vagrant
@@ -87,7 +87,7 @@ Nothing special here, just build normally, e.g.:
 vagrant@vagrant:~/halide_build$ make -j 3
 ```
 
-The machine is provisioned with environment variables `LLVM_CONFIG` and `CLANG` globally set appropriately.
+The machine is provisioned with environment variables `LLVM_CONFIG` globally set appropriately.
 
 #### 3. Build & run the OpenGL tests
 
@@ -105,4 +105,4 @@ vagrant@vagrant:~/halide_build$ make opengl_float_texture
 
 The machine is provisioned with environment variables `HL_TARGET` and `HL_JIT_TARGET` set to `host-opengl`.  You can of course override in your shell, e.g. if you want to use `host-opengl-debug`.
 
-The machine is provisioned with `lldb` installed in case you need to do some debugging.  Aside from that it's bare-bones; if you need anything else for your debugging or development you will need to `apt-get install` it.  
+The machine is provisioned with `lldb` installed in case you need to do some debugging.  Aside from that it's bare-bones; if you need anything else for your debugging or development you will need to `apt-get install` it.

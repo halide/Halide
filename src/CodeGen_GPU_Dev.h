@@ -48,7 +48,9 @@ struct CodeGen_GPU_Dev {
      * values to be passed to the kernel_run routine rather than just
      * argument type sizes.
      */
-    virtual bool kernel_run_takes_types() const { return false; }
+    virtual bool kernel_run_takes_types() const {
+        return false;
+    }
 
     static bool is_gpu_var(const std::string &name);
     static bool is_gpu_block_var(const std::string &name);
@@ -56,13 +58,13 @@ struct CodeGen_GPU_Dev {
 
     /** Checks if expr is block uniform, i.e. does not depend on a thread
      * var. */
-    static bool is_block_uniform(Expr expr);
+    static bool is_block_uniform(const Expr &expr);
     /** Checks if the buffer is a candidate for constant storage. Most
      * GPUs (APIs) support a constant memory storage class that cannot be
      * written to and performs well for block uniform accesses. A buffer is a
      * candidate for constant storage if it is never written to, and loads are
      * uniform within the workgroup. */
-    static bool is_buffer_constant(Stmt kernel, const std::string &buffer);
+    static bool is_buffer_constant(const Stmt &kernel, const std::string &buffer);
 };
 
 }  // namespace Internal

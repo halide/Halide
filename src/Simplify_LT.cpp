@@ -3,8 +3,8 @@
 namespace Halide {
 namespace Internal {
 
-Expr Simplify::visit(const LT *op, ConstBounds *bounds) {
-    ConstBounds a_bounds, b_bounds;
+Expr Simplify::visit(const LT *op, ExprInfo *bounds) {
+    ExprInfo a_bounds, b_bounds;
     Expr a = mutate(op->a, &a_bounds);
     Expr b = mutate(op->b, &b_bounds);
 
@@ -30,6 +30,7 @@ Expr Simplify::visit(const LT *op, ConstBounds *bounds) {
 
         auto rewrite = IRMatcher::rewriter(IRMatcher::lt(a, b), op->type, ty);
 
+        // clang-format off
         if (EVAL_IN_LAMBDA
             (rewrite(c0 < c1, fold(c0 < c1)) ||
              rewrite(x < x, false) ||
@@ -41,6 +42,12 @@ Expr Simplify::visit(const LT *op, ConstBounds *bounds) {
              rewrite(x < min(x, y), false) ||
              rewrite(x < min(y, x), false) ||
 
+             // From the simplifier synthesis project
+             rewrite((max(y, z) < min(x, y)), false) ||
+             rewrite((max(y, z) < min(y, x)), false) ||
+             rewrite((max(z, y) < min(x, y)), false) ||
+             rewrite((max(z, y) < min(y, x)), false) ||
+
              // Comparisons of ramps and broadcasts. If the first
              // and last lanes are provably < or >= the broadcast
              // we can collapse the comparison.
@@ -51,7 +58,9 @@ Expr Simplify::visit(const LT *op, ConstBounds *bounds) {
                rewrite(broadcast(z) < ramp(x, c1), false, can_prove(z >= x + fold(max(0, c1 * (lanes - 1))), this)))))) {
             return rewrite.result;
         }
+        // clang-format on
 
+        // clang-format off
         if (rewrite(broadcast(x) < broadcast(y), broadcast(x < y, lanes)) ||
             (no_overflow(ty) && EVAL_IN_LAMBDA
              (rewrite(ramp(x, y) < ramp(z, y), broadcast(x < z, lanes)) ||
@@ -83,9 +92,11 @@ Expr Simplify::visit(const LT *op, ConstBounds *bounds) {
               // Cancellations in linear expressions
               // 1 < 2
               rewrite(x < x + y, 0 < y) ||
+              rewrite(x < y + x, 0 < y) ||
 
               // 2 < 1
               rewrite(x + y < x, y < 0) ||
+              rewrite(y + x < x, y < 0) ||
 
               // 2 < 2
               rewrite(x + y < x + z, y < z) ||
@@ -337,6 +348,12 @@ Expr Simplify::visit(const LT *op, ConstBounds *bounds) {
               rewrite(max(y, (x + c2)/c0) < x/c0, false, c0 > 0 && c2 >= 0) ||
               rewrite(min(y, (x + c2)/c0) < x/c0, true, c0 > 0 && c2 + c0 <= 0) ||
 
+              // Comparison of two mins/maxes that don't cancel when subtracted
+              rewrite(min(x, c0) < min(x, c1), false, c0 >= c1) ||
+              rewrite(min(x, c0) < min(x, c1) + c2, false, c0 >= c1 + c2 && c2 <= 0) ||
+              rewrite(max(x, c0) < max(x, c1), false, c0 >= c1) ||
+              rewrite(max(x, c0) < max(x, c1) + c2, false, c0 >= c1 + c2 && c2 <= 0) ||
+
               // Comparison of aligned ramps can simplify to a comparison of the base
               rewrite(ramp(x * c3 + c2, c1) < broadcast(z * c0),
                       broadcast(x * fold(c3/c0) + fold(c2/c0) < z, lanes),
@@ -349,8 +366,9 @@ Expr Simplify::visit(const LT *op, ConstBounds *bounds) {
                       c0 > 0 && (c3 % c0 == 0) &&
                       c1 * (lanes - 1) < c0 &&
                       c1 * (lanes - 1) >= 0)))) {
-            return mutate(std::move(rewrite.result), bounds);
+            return mutate(rewrite.result, bounds);
         }
+        // clang-format on
     }
 
     if (a.same_as(op->a) && b.same_as(op->b)) {
@@ -360,9 +378,8 @@ Expr Simplify::visit(const LT *op, ConstBounds *bounds) {
     }
 }
 
-
 // The other comparison operators redirect to the less-than operator
-Expr Simplify::visit(const LE *op, ConstBounds *bounds) {
+Expr Simplify::visit(const LE *op, ExprInfo *bounds) {
     if (!may_simplify(op->a.type())) {
         Expr a = mutate(op->a, nullptr);
         Expr b = mutate(op->b, nullptr);
@@ -382,7 +399,7 @@ Expr Simplify::visit(const LE *op, ConstBounds *bounds) {
     return mutated;
 }
 
-Expr Simplify::visit(const GT *op, ConstBounds *bounds) {
+Expr Simplify::visit(const GT *op, ExprInfo *bounds) {
     if (!may_simplify(op->a.type())) {
         Expr a = mutate(op->a, nullptr);
         Expr b = mutate(op->b, nullptr);
@@ -396,7 +413,7 @@ Expr Simplify::visit(const GT *op, ConstBounds *bounds) {
     return mutate(op->b < op->a, bounds);
 }
 
-Expr Simplify::visit(const GE *op, ConstBounds *bounds) {
+Expr Simplify::visit(const GE *op, ExprInfo *bounds) {
     if (!may_simplify(op->a.type())) {
         Expr a = mutate(op->a, nullptr);
         Expr b = mutate(op->b, nullptr);
@@ -410,5 +427,5 @@ Expr Simplify::visit(const GE *op, ConstBounds *bounds) {
     return mutate(!(op->a < op->b), bounds);
 }
 
-}
-}
+}  // namespace Internal
+}  // namespace Halide
