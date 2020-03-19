@@ -5,6 +5,8 @@
 namespace Halide {
 namespace Internal {
 
+namespace {
+
 class LowerUnsafePromises : public IRMutator {
     using IRMutator::visit;
 
@@ -40,8 +42,26 @@ public:
     }
 };
 
+class LowerSafePromises : public IRMutator {
+    using IRMutator::visit;
+
+    Expr visit(const Call *op) override {
+        if (op->is_intrinsic(Call::promise_clamped)) {
+            return mutate(op->args[0]);
+        } else {
+            return IRMutator::visit(op);
+        }
+    }
+};
+
+}  // namespace
+
 Stmt lower_unsafe_promises(const Stmt &s, const Target &t) {
     return LowerUnsafePromises(t.has_feature(Target::CheckUnsafePromises)).mutate(s);
+}
+
+Stmt lower_safe_promises(const Stmt &s) {
+    return LowerSafePromises().mutate(s);
 }
 
 }  // namespace Internal
