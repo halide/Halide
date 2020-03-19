@@ -405,7 +405,7 @@ private:
         } else if (op->for_type == ForType::GPULane) {
             stream << keyword("gpu_lane");
         } else {
-            internal_assert(false) << "Unknown for type: " << ((int)op->for_type) << "\n";
+            internal_error << "Unknown for type: " << ((int)op->for_type) << "\n";
         }
         stream << " (";
         stream << close_span();
