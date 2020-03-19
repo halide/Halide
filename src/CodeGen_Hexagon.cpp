@@ -159,7 +159,7 @@ class SloppyUnpredicateLoadsAndStores : public IRMutator {
         Expr predicate = mutate(op->predicate);
         Expr index = mutate(op->index);
 
-        if (is_dense_ramp(index)) {
+        if (is_dense_ramp(index) || index.as<Broadcast>()) {
             // Make the predicate into a scalar that is true if any of the lanes are
             // true.
 
