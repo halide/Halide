@@ -489,7 +489,7 @@ struct FuncTypeAndDim {
         for (const auto &type : types) {
             os << " " << type_name[type.code & 3] << (int)type.bits;
             if (type.lanes > 1) {
-                os << 'x' << type.lanes;
+                os << "x" << type.lanes;
             }
         }
         os << "\n";

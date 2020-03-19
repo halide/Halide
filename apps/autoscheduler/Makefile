@@ -6,7 +6,7 @@ include ../support/autoscheduler.inc
 # autoscheduler can't find the libHalide symbols that it needs.
 $(GENERATOR_BIN)/demo.generator: demo_generator.cpp $(GENERATOR_DEPS)
 	@mkdir -p $(@D)
-	$(CXX) $(CXXFLAGS) $(USE_EXPORT_DYNAMIC) -g $(filter %.cpp,$^) -o $@ $(GENERATOR_LDFLAGS)
+	$(CXX) $(CXXFLAGS) $(USE_EXPORT_DYNAMIC) -g $(filter %.cpp,$^) -o $@ $(LIBHALIDE_LDFLAGS)
 
 # To use the autoscheduler, set a few environment variables and use the -p flag to the generator to load the autoscheduler as a plugin
 $(BIN)/%/demo.a: $(GENERATOR_BIN)/demo.generator $(AUTOSCHED_BIN)/libauto_schedule.so
@@ -40,12 +40,12 @@ $(BIN)/test_perfect_hash_map: test_perfect_hash_map.cpp PerfectHashMap.h
 
 $(BIN)/test_function_dag: test_function_dag.cpp FunctionDAG.h FunctionDAG.cpp ASLog.h ASLog.cpp
 	@mkdir -p $(@D)
-	$(CXX) $(CXXFLAGS) $(USE_EXPORT_DYNAMIC) $(filter-out %.h,$^) -o $@ $(LDFLAGS) $(LIB_HALIDE) $(HALIDE_SYSTEM_LIBS)
+	$(CXX) $(CXXFLAGS) $(USE_EXPORT_DYNAMIC) $(filter-out %.h,$^) -o $@ $(LIBHALIDE_LDFLAGS) $(HALIDE_SYSTEM_LIBS)
 
 # Simple jit-based test
 $(BIN)/%/test: test.cpp $(AUTOSCHED_BIN)/libauto_schedule.so
 	@mkdir -p $(@D)
-	$(CXX) $(CXXFLAGS) $(USE_EXPORT_DYNAMIC) $^ -o $@ $(LDFLAGS) $(LIB_HALIDE) $(HALIDE_SYSTEM_LIBS)
+	$(CXX) $(CXXFLAGS) $(USE_EXPORT_DYNAMIC) $^ -o $@ $(LIBHALIDE_LDFLAGS) $(HALIDE_SYSTEM_LIBS)
 
 test_perfect_hash_map: $(BIN)/test_perfect_hash_map
 	$^
@@ -94,7 +94,7 @@ clean:
 
 $(GENERATOR_BIN)/included_schedule_file_none.generator: included_schedule_file_generator.cpp $(GENERATOR_DEPS)
 	@mkdir -p $(@D)
-	$(CXX) $(CXXFLAGS) $(USE_EXPORT_DYNAMIC) -DGENERATING_SCHEDULE -g $(filter-out %.h,$^) -o $@ $(LDFLAGS) $(HALIDE_SYSTEM_LIBS)
+	$(CXX) $(CXXFLAGS) $(USE_EXPORT_DYNAMIC) -DGENERATING_SCHEDULE -g $(filter-out %.h,$^) -o $@ $(LIBHALIDE_LDFLAGS) $(HALIDE_SYSTEM_LIBS)
 
 # This is the target you build to (re)generate the schedule file.
 # (Note that we only need the schedule output, so we pass `-e schedule` to
@@ -112,7 +112,7 @@ $(BIN)/%/included_schedule_file.schedule.h: $(GENERATOR_BIN)/included_schedule_f
 #
 $(GENERATOR_BIN)/included_schedule_file.generator: included_schedule_file_generator.cpp included_schedule_file.schedule.h $(GENERATOR_DEPS)
 	@mkdir -p $(@D)
-	$(CXX) $(CXXFLAGS) $(USE_EXPORT_DYNAMIC) -g $(filter-out %.h,$^) -o $@ $(LDFLAGS) $(HALIDE_SYSTEM_LIBS)
+	$(CXX) $(CXXFLAGS) $(USE_EXPORT_DYNAMIC) -g $(filter-out %.h,$^) -o $@ $(LIBHALIDE_LDFLAGS) $(HALIDE_SYSTEM_LIBS)
 
 # Note that this does not depend on libauto_schedule nor does it call
 # the autoscheduler at build time; it includes the generated schedule (included_schedule_file.schedule.h),

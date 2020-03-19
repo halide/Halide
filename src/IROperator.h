@@ -1392,6 +1392,25 @@ Expr strict_float(Expr e);
  */
 Expr unsafe_promise_clamped(const Expr &value, const Expr &min, const Expr &max);
 
+namespace Internal {
+/**
+ * FOR INTERNAL USE ONLY.
+ *
+ * An entirely unchecked version of unsafe_promise_clamped, used
+ * inside the compiler as an annotation of the known bounds of an Expr
+ * when it has proved something is bounded and wants to record that
+ * fact for later passes (notably bounds inference) to exploit. This
+ * gets introduced by GuardWithIf tail strategies, because the bounds
+ * machinery has a hard time exploiting if statement conditions.
+ *
+ * Unlike unsafe_promise_clamped, this expression is
+ * context-dependent, because 'value' might be statically bounded at
+ * some point in the IR (e.g. due to a containing if statement), but
+ * not elsewhere.
+ **/
+Expr promise_clamped(const Expr &value, const Expr &min, const Expr &max);
+}  // namespace Internal
+
 }  // namespace Halide
 
 #endif

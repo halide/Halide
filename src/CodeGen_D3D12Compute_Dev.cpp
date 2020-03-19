@@ -66,7 +66,9 @@ string CodeGen_D3D12Compute_Dev::CodeGen_D3D12Compute_C::print_type_maybe_storag
         case 8:
         case 16:
         case 32:
-            if (type.is_uint()) oss << 'u';
+            if (type.is_uint()) {
+                oss << "u";
+            }
             oss << "int";
 #if DEBUG_TYPES
             oss << type.bits();
@@ -102,7 +104,7 @@ string CodeGen_D3D12Compute_Dev::CodeGen_D3D12Compute_C::print_type_maybe_storag
     }
 
     if (space == AppendSpace) {
-        oss << ' ';
+        oss << " ";
     }
 
     return oss.str();
@@ -591,7 +593,7 @@ void CodeGen_D3D12Compute_Dev::CodeGen_D3D12Compute_C::visit(const Allocate *op)
             << "Only fixed-size allocations are supported on the gpu. "
             << "Try storing into shared memory instead.";
 
-        stream << get_indent() << print_storage_type(op->type) << ' '
+        stream << get_indent() << print_storage_type(op->type) << " "
                << print_name(op->name) << "[" << size << "];\n";
         stream << get_indent();
 
@@ -1004,11 +1006,13 @@ void CodeGen_D3D12Compute_Dev::CodeGen_D3D12Compute_C::add_kernel(Stmt s,
     // Emit the kernel function prototype:
 
     stream << "void " << name << "(\n";
-    stream << ' ' << "uint3 tgroup_index  : SV_GroupID,\n"
-           << ' ' << "uint3 tid_in_tgroup : SV_GroupThreadID";
+    stream << " "
+           << "uint3 tgroup_index  : SV_GroupID,\n"
+           << " "
+           << "uint3 tid_in_tgroup : SV_GroupThreadID";
     for (auto &arg : args) {
         stream << ",\n";
-        stream << ' ';
+        stream << " ";
         if (arg.is_buffer) {
             // NOTE(marcos): Passing all buffers as RWBuffers in order to bind
             // all buffers as UAVs since there is no way the runtime can know
@@ -1128,7 +1132,7 @@ void CodeGen_D3D12Compute_Dev::init_module() {
         << "\n";
     //<< "}\n"; // close namespace
 
-    src_stream << '\n';
+    src_stream << "\n";
 
     d3d12compute_c.add_common_macros(src_stream);
 
@@ -1149,7 +1153,7 @@ string CodeGen_D3D12Compute_Dev::get_current_kernel_name() {
 }
 
 void CodeGen_D3D12Compute_Dev::dump() {
-    std::cerr << src_stream.str() << std::endl;
+    std::cerr << src_stream.str() << "\n";
 }
 
 std::string CodeGen_D3D12Compute_Dev::print_gpu_name(const std::string &name) {

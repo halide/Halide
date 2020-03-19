@@ -41,10 +41,10 @@ int main(int argc, char **argv) {
     double manual_time = run_test(false);
     double auto_time = run_test(true);
 
-    std::cout << "======================" << std::endl;
-    std::cout << "Manual time: " << manual_time << "ms" << std::endl;
-    std::cout << "Auto time: " << auto_time << "ms" << std::endl;
-    std::cout << "======================" << std::endl;
+    std::cout << "======================\n"
+              << "Manual time: " << manual_time << "ms\n"
+              << "Auto time: " << auto_time << "ms\n"
+              << "======================\n";
 
     printf("Success!\n");
     return 0;
