@@ -14,7 +14,6 @@ jobs:
     env:
       GITHUB_TOKEN: ${{secrets.GITHUB_TOKEN}}
     steps:
-      shell: bash
       - name: foo
         shell: bash
         run: |
