@@ -185,18 +185,15 @@ public:
         // Calculate both here and select() the right one;
         // we'll add specialize() paths in the schedule to
         // make this efficient.
-        Expr bgra = mux(c, {
-            cast<uint8_t>(B * 255),
-            cast<uint8_t>(G * 255),
-            cast<uint8_t>(R * 255),
-            cast<uint8_t>(A * 255)});
+        Expr bgra = mux(c, {cast<uint8_t>(B * 255),
+                            cast<uint8_t>(G * 255),
+                            cast<uint8_t>(R * 255),
+                            cast<uint8_t>(A * 255)});
 
-        Expr rgba = mux(c, {
-            cast<uint8_t>(R * 255),
-            cast<uint8_t>(G * 255),
-            cast<uint8_t>(B * 255),
-            cast<uint8_t>(A * 255)
-        });
+        Expr rgba = mux(c, {cast<uint8_t>(R * 255),
+                            cast<uint8_t>(G * 255),
+                            cast<uint8_t>(B * 255),
+                            cast<uint8_t>(A * 255)});
 
         render(x, y, c) = select(output_bgra == true, bgra, rgba);
     }

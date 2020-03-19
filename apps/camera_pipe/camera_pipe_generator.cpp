@@ -140,8 +140,7 @@ public:
         b = interleave_y(interleave_x(b_gr, b_r),
                          interleave_x(b_b, b_gb));
 
-        output(x, y, c) = mux(c,
-            {r(x, y), g(x, y), b(x, y)});
+        output(x, y, c) = mux(c, {r(x, y), g(x, y), b(x, y)});
 
         // These are the stencil stages we want to schedule
         // separately. Everything else we'll just inline.
@@ -256,10 +255,10 @@ Func CameraPipe::deinterleave(Func raw) {
     Func deinterleaved("deinterleaved");
 
     deinterleaved(x, y, c) = mux(c,
-        {raw(2 * x, 2 * y),
-         raw(2 * x + 1, 2 * y),
-         raw(2 * x, 2 * y + 1),
-         raw(2 * x + 1, 2 * y + 1)});
+                                 {raw(2 * x, 2 * y),
+                                  raw(2 * x + 1, 2 * y),
+                                  raw(2 * x, 2 * y + 1),
+                                  raw(2 * x + 1, 2 * y + 1)});
     return deinterleaved;
 }
 

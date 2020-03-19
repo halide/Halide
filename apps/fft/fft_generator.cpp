@@ -133,8 +133,7 @@ public:
                 output(x, y, c) = re(complex_result(x, y));
             }
         } else {
-            output(x, y, c) = mux(c,
-                {re(complex_result(x, y)), im(complex_result(x, y))});
+            output(x, y, c) = mux(c, {re(complex_result(x, y)), im(complex_result(x, y))});
         }
     }
 

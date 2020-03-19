@@ -100,11 +100,10 @@ public:
         }
 
         Func input_with_alpha;
-        input_with_alpha(x, y, c) = mux(c, {
-            cast<float>(left(x, y, 0)),
-            cast<float>(left(x, y, 1)),
-            cast<float>(left(x, y, 2)),
-            255.0f});
+        input_with_alpha(x, y, c) = mux(c, {cast<float>(left(x, y, 0)),
+                                            cast<float>(left(x, y, 1)),
+                                            cast<float>(left(x, y, 2)),
+                                            255.0f});
 
         // Render a blurred image
         Func output;
