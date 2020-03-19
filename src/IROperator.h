@@ -803,7 +803,7 @@ inline Tuple tuple_select(const Expr &c0, const Tuple &v0, const Expr &c1, const
  *                       c == 1, 50,  // Green
  *                               25); // Blue
  * This is tedious when the list is long. The following functions
- * provide convinent syntax that allows one to write:
+ * provide convinent syntax that allow one to write:
  * img(x, y, c) = select_by_id(c, 100, 50, 25);
  * or
  * img(x, y, c) = select_by_id(c, {100, 50, 25});
