@@ -2384,7 +2384,7 @@ pair<VarOrRVar, VarOrRVar> Partitioner::split_dim(
         oss << ")";
         break;
     default:
-        internal_assert(false);
+        internal_error;
     }
     sched.push_schedule(f_handle.name(), stage_num, oss.str(),
                         {arg_name, outer_name, inner_name});
