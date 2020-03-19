@@ -23,13 +23,11 @@
 
 #include "halide_benchmark.h"
 
-#define check_timing(faster, slower) \
-    do { \
-        if (!((faster) < (slower))) { \
-            fprintf(stderr, "Warning: expected " #faster " < " #slower " , " \
-                            "saw " #faster "=%f " #slower "=%f\n", (faster), (slower)); \
-        } \
-    } while (0)
+void check_timing(double faster, double slower) {
+    if (faster > slower) {
+        fprintf(stderr, "Warning: performance was worse than expected. %f should be less than %f\n", faster, slower);
+    }
+}
 
 int main(int argc, char **argv) {
 
