@@ -53,6 +53,8 @@ Expr Simplify::visit(const Add *op, ExprInfo *bounds) {
              rewrite(ramp(x, y) + ramp(z, w), ramp(x + z, y + w, lanes)) ||
              rewrite(ramp(x, y) + broadcast(z), ramp(x + z, y, lanes)) ||
              rewrite(broadcast(x) + broadcast(y), broadcast(x + y, lanes)) ||
+             rewrite((x + broadcast(y)) + broadcast(z), x + broadcast(y + z, lanes)) ||
+             rewrite((x - broadcast(y)) + broadcast(z), x + broadcast(z - y, lanes)) ||
              rewrite(select(x, y, z) + select(x, w, u), select(x, y + w, z + u)) ||
              rewrite(select(x, c0, c1) + c2, select(x, fold(c0 + c2), fold(c1 + c2))) ||
              rewrite(select(x, y, c1) + c2, select(x, y + c2, fold(c1 + c2))) ||
