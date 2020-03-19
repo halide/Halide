@@ -1,7 +1,7 @@
 import tensorflow as tf
 import time
 
-with tf.device('/device:cpu:0'):
+with tf.device('/GPU:0'):
     img = tf.random.uniform([4, 112, 112, 32])
     depthwise_filter = tf.random.uniform([3, 3, 32, 1])
     pointwise_filter = tf.random.uniform([1, 1, 32 * 1, 16])
