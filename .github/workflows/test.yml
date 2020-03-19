@@ -18,14 +18,16 @@
 
 name: Build+Test
 on:
+  repository_dispatch:
+
   # TODO: not sure if this is the best set of events/activity-types to use.
-  pull_request:
-    types: [opened, synchronize, reopened, edited, review_requested]
-    # TODO: do we want to limit this to certain filetypes?
-    # paths:
-    #   - '**.h'
-    #   - '**.c'
-    #   - '**.cpp'
+  # pull_request:
+  #   types: [opened, synchronize, reopened, edited, review_requested]
+  #   # TODO: do we want to limit this to certain filetypes?
+  #   # paths:
+  #   #   - '**.h'
+  #   #   - '**.c'
+  #   #   - '**.cpp'
 
 jobs:
   test_halide:
