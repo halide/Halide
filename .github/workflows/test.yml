@@ -71,6 +71,7 @@ jobs:
 
   test_halide:
     name: HL-${{matrix.llvm_version}}-${{matrix.target_arch}}-${{matrix.target_bits}}-${{matrix.target_os}}-${{matrix.build_tool}}
+    needs: cleanup-old-runs
     runs-on: ${{matrix.host_os}}
     env:
       CC: ${{matrix.cc}}

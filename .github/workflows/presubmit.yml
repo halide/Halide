@@ -53,6 +53,7 @@ jobs:
 
   check_clang_format:
     name: Check clang-format
+    needs: cleanup-old-runs
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v2
@@ -63,6 +64,7 @@ jobs:
           clangFormatVersion: 9
   check_clang_tidy:
     name: Check clang-tidy
+    needs: cleanup-old-runs
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v2
@@ -78,6 +80,7 @@ jobs:
           clang-tidy-9 --quiet -extra-arg=-Wno-unknown-warning-option -p build src/*.cpp
   check_cmake_file_lists:
     name: Check CMake file lists
+    needs: cleanup-old-runs
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v2
