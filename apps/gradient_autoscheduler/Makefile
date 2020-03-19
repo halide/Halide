@@ -7,12 +7,12 @@ $(BIN)/libgradient_autoscheduler.so: GradientAutoscheduler.cpp ASLog.cpp $(LIB_H
 # Demonstrate a JIT-based use of gradient autoscheuler
 $(BIN)/test: test.cpp $(BIN)/libgradient_autoscheduler.so
 	@mkdir -p $(@D)
-	$(CXX) $(CXXFLAGS) $(USE_EXPORT_DYNAMIC) test.cpp -o $@ $(LDFLAGS) $(LIB_HALIDE) $(HALIDE_SYSTEM_LIBS)
+	$(CXX) $(CXXFLAGS) $(USE_EXPORT_DYNAMIC) test.cpp -o $@ $(LIBHALIDE_LDFLAGS) $(HALIDE_SYSTEM_LIBS)
 
 # Demonstrate a generator-based use of gradient autoscheuler
 $(GENERATOR_BIN)/demo.generator: demo_generator.cpp $(GENERATOR_DEPS)
 	@mkdir -p $(@D)
-	$(CXX) $(CXXFLAGS) $(USE_EXPORT_DYNAMIC) -g $(filter-out %.h,$^) -o $@ $(LDFLAGS) $(HALIDE_SYSTEM_LIBS)
+	$(CXX) $(CXXFLAGS) $(USE_EXPORT_DYNAMIC) -g $(filter-out %.h,$^) -o $@ $(LIBHALIDE_LDFLAGS) $(HALIDE_SYSTEM_LIBS)
 
 # Use the -p flag to the generator to load the autoscheduler as a plugin
 $(BIN)/%/demo.a: $(GENERATOR_BIN)/demo.generator $(BIN)/libgradient_autoscheduler.so

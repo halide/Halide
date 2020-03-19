@@ -8,7 +8,7 @@ test: $(BIN)/$(HL_TARGET)/out.png
 
 $(GENERATOR_BIN)/max_filter.generator: max_filter_generator.cpp $(GENERATOR_DEPS)
 	@mkdir -p $(@D)
-	$(CXX) $(CXXFLAGS) -g $(filter %.cpp,$^) -o $@ $(GENERATOR_LDFLAGS)
+	$(CXX) $(CXXFLAGS) -g $(filter %.cpp,$^) -o $@ $(LIBHALIDE_LDFLAGS)
 
 $(BIN)/%/max_filter.a: $(GENERATOR_BIN)/max_filter.generator
 	@mkdir -p $(@D)
