@@ -23,6 +23,12 @@
 
 #include "halide_benchmark.h"
 
+void check_timing(double faster, double slower) {
+    if (faster > slower) {
+        fprintf(stderr, "Warning: performance was worse than expected. %f should be less than %f\n", faster, slower);
+    }
+}
+
 int main(int argc, char **argv) {
 
     // Let's make some images stored with interleaved and planar
@@ -69,7 +75,7 @@ int main(int argc, char **argv) {
 
     // Planar is generally faster than interleaved for most imaging
     // operations.
-    assert(planar_time < interleaved_time);
+    check_timing(planar_time, interleaved_time);
 
     // Either of these next two commented-out calls would throw an
     // error, because the stride is not what we promised it would be
@@ -87,13 +93,13 @@ int main(int argc, char **argv) {
         brighten_either(planar_input, 1, planar_output);
     });
     printf("brighten_either on planar images: %f msec\n", either_planar_time * 1000.f);
-    assert(planar_time < either_planar_time);
+    check_timing(planar_time, either_planar_time);
 
     double either_interleaved_time = Halide::Tools::benchmark(samples, iterations, [&]() {
         brighten_either(interleaved_input, 1, interleaved_output);
     });
     printf("brighten_either on interleaved images: %f msec\n", either_interleaved_time * 1000.f);
-    assert(interleaved_time < either_interleaved_time);
+    check_timing(interleaved_time, either_interleaved_time);
 
     // Run the specialized version of the code on each layout. It
     // should match the performance of the code compiled specifically
@@ -107,13 +113,13 @@ int main(int argc, char **argv) {
     // The cost of the if statement should be negligible, but we'll
     // allow a tolerance of 50% for this test to account for
     // measurement noise.
-    assert(specialized_planar_time < 1.5 * planar_time);
+    check_timing(specialized_planar_time, 1.5 * planar_time);
 
     double specialized_interleaved_time = Halide::Tools::benchmark(samples, iterations, [&]() {
         brighten_specialized(interleaved_input, 1, interleaved_output);
     });
     printf("brighten_specialized on interleaved images: %f msec\n", specialized_interleaved_time * 1000.f);
-    assert(specialized_interleaved_time < 2.0 * interleaved_time);
+    check_timing(specialized_interleaved_time, 2.0 * interleaved_time);
 
     return 0;
 }

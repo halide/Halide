@@ -150,8 +150,7 @@ int main(int argc, char **argv) {
                   << "======================\n";
 
         if (auto_time > manual_time * slowdown_factor) {
-            printf("Auto-scheduler is much much slower than it should be.\n");
-            return -1;
+            fprintf(stderr, "Warning: Auto-scheduler is much much slower than it should be.\n");
         }
     }
 
@@ -167,8 +166,7 @@ int main(int argc, char **argv) {
                   << "======================\n";
 
         if (auto_time > manual_time * slowdown_factor) {
-            printf("Auto-scheduler is much much slower than it should be.\n");
-            return -1;
+            fprintf(stderr, "Warning: Auto-scheduler is much much slower than it should be.\n");
         }
     }
 
@@ -183,8 +181,7 @@ int main(int argc, char **argv) {
                   << "======================\n";
 
         if (auto_time > manual_time * slowdown_factor) {
-            printf("Auto-scheduler is much much slower than it should be.\n");
-            return -1;
+            fprintf(stderr, "Warning: Auto-scheduler is much much slower than it should be.\n");
         }
     }
     return 0;
