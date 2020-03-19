@@ -743,7 +743,7 @@ struct State {
     cost_model(cost_model) {}
 
     // copy and assignment operators should perform a DEEP clone of the given state
-    //WrapperState(const WrapperState& other);
+    WrapperState(const WrapperState& other): inner(other.inner),numleft(other.numleft),dag(other.dag),params(other.params),cost_model(other.cost_model){}
     //WrapperState& operator = (const WrapperState& other);
 
     // whether or not this state is terminal (reached end)
@@ -1729,7 +1729,7 @@ void generate_rl_schedule(const std::vector<Function> &outputs,
     }
 
     if (auto_scheduler_results) {
-        auto_scheduler_results->scheduler_name = "AlphaHalide2020";
+        auto_scheduler_results->scheduler_name = "Adams2019";
         auto_scheduler_results->schedule_source = optimal->schedule_source;
         {
             std::ostringstream out;
@@ -1874,7 +1874,7 @@ void find_and_apply_schedule(FunctionDAG &dag,
                              StageMap<ScheduleFeatures> *schedule_features) {
 
     std::mt19937 rng(12345);
-    IntrusivePtr<State> optimal = optimal_schedule(dag, outputs, params, cost_model, rng, beam_size);
+    IntrusivePtr<State> optimal = optimal_mcts_schedule(dag, outputs, params, cost_model, rng, beam_size);
 
     // Apply the schedules
     optimal->apply_schedule(dag, params);
