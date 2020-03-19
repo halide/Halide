@@ -28,8 +28,51 @@ on:
     #   - '**.cpp'
 
 jobs:
+  cleanup-old-runs:
+    name: Kill Old Workflows
+    runs-on: ubuntu-latest
+    env:
+      GITHUB_TOKEN: ${{secrets.GITHUB_TOKEN}}
+    steps:
+      - name: foo
+        shell: bash
+        run: |
+          # set -eu
+
+          jq_run_ids=".workflow_runs | .[] | select(.head_branch==\"${BRANCH}\" and (.status==\"in_progress\" or .status==\"queued\")) | .id"
+
+          # get the github workflow ID
+
+          GITHUB_API=https://api.github.com
+
+          echo GITHUB_WORKFLOW is ${GITHUB_WORKFLOW}
+          echo GITHUB_REPOSITORY is ${GITHUB_REPOSITORY}
+          echo GITHUB_REF is ${GITHUB_REF}
+          BRANCH=${GITHUB_REF:11}
+          echo BRANCH is ${BRANCH}
+
+          auth_header="Authorization: token ${GITHUB_TOKEN}"
+
+          workflow_url=$(curl -s ${GITHUB_API}/repos/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID} -H "${auth_header}" | jq -r '.workflow_url' | cut -d/ -f2-)
+          echo "workflow_url id: "$workflow_url
+
+          workflow_id=${workflow_url##/*/}
+          echo "workflow id: "$workflow_id
+
+          # get the run ids
+          run_ids=$(curl -s ${GITHUB_API}/repos/${GITHUB_REPOSITORY}/actions/workflows/${workflow_id}/runs -H "${auth_header}" | jq -r "${jq_run_ids}" | sort -n | head -n-1)
+          echo "run ids: "$run_ids
+
+          # cancel the previous runs
+          for run_id in $run_ids
+          do
+            curl -s -X POST -H "${auth_header}" ${GITHUB_API}/repos/${GITHUB_REPOSITORY}/actions/runs/${run_id}/cancel
+            echo "Cancelled run $run_id"
+          done
+
   test_halide:
     name: HL-${{matrix.llvm_version}}-${{matrix.target_arch}}-${{matrix.target_bits}}-${{matrix.target_os}}-${{matrix.build_tool}}
+    needs: cleanup-old-runs
     runs-on: ${{matrix.host_os}}
     env:
       CC: ${{matrix.cc}}
