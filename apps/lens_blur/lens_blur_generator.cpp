@@ -53,7 +53,7 @@ public:
         // confidence.
         Func cost_pyramid_push[8];
         cost_pyramid_push[0](x, y, z, c) =
-            select(c == 0, cost(x, y, z) * cost_confidence(x, y), cost_confidence(x, y));
+            select_by_index(c, {cost(x, y, z) * cost_confidence(x, y), cost_confidence(x, y)});
 
         Expr w = left_im.dim(0).extent(), h = left_im.dim(1).extent();
         for (int i = 1; i < 8; i++) {
@@ -100,10 +100,11 @@ public:
         }
 
         Func input_with_alpha;
-        input_with_alpha(x, y, c) = select(c == 0, cast<float>(left(x, y, 0)),
-                                           c == 1, cast<float>(left(x, y, 1)),
-                                           c == 2, cast<float>(left(x, y, 2)),
-                                           255.0f);
+        input_with_alpha(x, y, c) = select_by_index(c, {
+            cast<float>(left(x, y, 0)),
+            cast<float>(left(x, y, 1)),
+            cast<float>(left(x, y, 2)),
+            255.0f});
 
         // Render a blurred image
         Func output;

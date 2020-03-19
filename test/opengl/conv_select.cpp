@@ -28,7 +28,7 @@ int main() {
 
     Expr R = select(f(x, y, c) > 9.0f, 1.0f, 0.0f);
     Expr G = select(f(x, y, c) > 9.0f, 0.f, 1.0f);
-    g(x, y, c) = select(c == 0, R, G);
+    g(x, y, c) = select_by_index(c, {R, G});
 
     // Schedule f and g to compute in separate passes on the GPU.
     g.bound(c, 0, 2).glsl(x, y, c);

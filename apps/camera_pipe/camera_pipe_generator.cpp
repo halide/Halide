@@ -140,9 +140,8 @@ public:
         b = interleave_y(interleave_x(b_gr, b_r),
                          interleave_x(b_b, b_gb));
 
-        output(x, y, c) = select(c == 0, r(x, y),
-                                 c == 1, g(x, y),
-                                 b(x, y));
+        output(x, y, c) = select_by_index(c,
+            {r(x, y), g(x, y), b(x, y)});
 
         // These are the stencil stages we want to schedule
         // separately. Everything else we'll just inline.
@@ -256,10 +255,11 @@ Func CameraPipe::deinterleave(Func raw) {
     // Deinterleave the color channels
     Func deinterleaved("deinterleaved");
 
-    deinterleaved(x, y, c) = select(c == 0, raw(2 * x, 2 * y),
-                                    c == 1, raw(2 * x + 1, 2 * y),
-                                    c == 2, raw(2 * x, 2 * y + 1),
-                                    raw(2 * x + 1, 2 * y + 1));
+    deinterleaved(x, y, c) = select_by_index(c,
+        {raw(2 * x, 2 * y),
+         raw(2 * x + 1, 2 * y),
+         raw(2 * x, 2 * y + 1),
+         raw(2 * x + 1, 2 * y + 1)});
     return deinterleaved;
 }
 
@@ -292,9 +292,7 @@ Func CameraPipe::color_correct(Func input) {
     r = cast<int16_t>(r / 256);
     g = cast<int16_t>(g / 256);
     b = cast<int16_t>(b / 256);
-    corrected(x, y, c) = select(c == 0, r,
-                                c == 1, g,
-                                b);
+    corrected(x, y, c) = select_by_index(c, {r, g, b});
 
     return corrected;
 }
