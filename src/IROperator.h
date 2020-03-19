@@ -809,7 +809,7 @@ inline Tuple tuple_select(const Expr &c0, const Tuple &v0, const Expr &c1, const
  * img(x, y, c) = select_by_id(c, {100, 50, 25});
  */
 // @{
-inline Expr select_by_id(Expr id, const std::vector<Expr> &values) {
+inline Expr select_by_id(const Expr &id, const std::vector<Expr> &values) {
     user_assert(values.size() > 0) << "select_by_id only accepts values with size > 0.\n";
     Expr result = values.back();
     for (int i = (int)values.size() - 2; i >= 0; i--) {
@@ -819,7 +819,7 @@ inline Expr select_by_id(Expr id, const std::vector<Expr> &values) {
 }
 template<typename... Args,
          typename std::enable_if<Halide::Internal::all_are_convertible<Expr, Args...>::value>::type * = nullptr>
-inline Expr select_by_id(Expr id, Args &&... values) {
+inline Expr select_by_id(const Expr &id, Args &&... values) {
     return select_by_id(id, {values...});
 }
 // @}
