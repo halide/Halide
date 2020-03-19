@@ -808,7 +808,12 @@ inline Tuple tuple_select(const Expr &c0, const Tuple &v0, const Expr &c1, const
  */
 // @{
 inline Expr mux(const Expr &id, const std::vector<Expr> &values) {
-    user_assert(values.size() >= 2) << "mux only accepts values with size >= 2.\n";
+    user_assert(values.size() >= 2) << "mux() only accepts values with size >= 2.\n";
+    // Check if all the values have the same type.
+    Type t = values[0].type();
+    for (int i = 1; i < values.size(); i++) {
+        user_assert(values[i].type() == t) << "mux() requires all the values to have the same type.";
+    }
     Expr result = values.back();
     for (int i = (int)values.size() - 2; i >= 0; i--) {
         result = select(id == i, values[i], result);
