@@ -494,6 +494,16 @@ Expr Simplify::visit(const Call *op, ExprInfo *bounds) {
                               {arg, lower, upper},
                               Call::Intrinsic);
         }
+    } else if (op->is_intrinsic(Call::likely) ||
+               op->is_intrinsic(Call::likely_if_innermost)) {
+        // The bounds of the result are the bounds of the arg
+        internal_assert(op->args.size() == 1);
+        Expr arg = mutate(op->args[0], bounds);
+        if (arg.same_as(op->args[0])) {
+            return op;
+        } else {
+            return Call::make(op->type, op->name, {arg}, op->call_type);
+        }
     } else if (op->call_type == Call::PureExtern) {
         // TODO: This could probably be simplified into a single map-lookup
         // with a bit more cleverness; not sure if the reduced lookup time

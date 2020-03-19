@@ -1263,20 +1263,6 @@ private:
                            op->func, op->value_index, op->image, op->param),
                 Call::make(t, op->name, {interval.max}, op->call_type,
                            op->func, op->value_index, op->image, op->param));
-
-        } else if (!const_bound &&
-                   (op->name == Call::buffer_get_min ||
-                    op->name == Call::buffer_get_max)) {
-            // Bounds query results should have perfect nesting. Their
-            // max over a loop is just the same bounds query call at
-            // an outer loop level. This requires that the query is
-            // also done at the outer loop level so that the buffer
-            // arg is still valid, which it is, so it is.
-            //
-            // TODO: There should be an assert injected in the inner
-            // loop to check perfect nesting.
-            interval = Interval(Call::make(Int(32), Call::buffer_get_min, op->args, Call::Extern),
-                                Call::make(Int(32), Call::buffer_get_max, op->args, Call::Extern));
         } else if (op->is_intrinsic(Call::popcount) ||
                    op->is_intrinsic(Call::count_leading_zeros) ||
                    op->is_intrinsic(Call::count_trailing_zeros)) {
@@ -1813,6 +1799,18 @@ private:
     }
 
     void visit(const Call *op) override {
+        if (op->is_intrinsic(Call::declare_box_touched)) {
+            internal_assert(!op->args.empty());
+            const Variable *handle = op->args[0].as<Variable>();
+            const string &func = handle->name;
+            Box b(op->args.size() / 2);
+            for (size_t i = 0; i < b.size(); i++) {
+                b[i].min = op->args[2 * i + 1];
+                b[i].max = op->args[2 * i + 2];
+            }
+            merge_boxes(boxes[func], b);
+        }
+
         if (consider_calls) {
             if (op->is_intrinsic(Call::if_then_else)) {
                 internal_assert(op->args.size() == 3);
@@ -2434,7 +2432,7 @@ map<string, Box> boxes_touched(const Expr &e, Stmt s, bool consider_calls, bool 
             }
 
             Expr visit(const Variable *op) override {
-                if (op->name == fn_buffer) {
+                if (op->name == fn_buffer || op->name == fn) {
                     relevant = true;
                 }
                 return op;

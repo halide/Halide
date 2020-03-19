@@ -92,12 +92,7 @@ vector<ApplySplitResult> apply_split(const Split &split, bool is_update, const s
         Expr outer_min = Variable::make(Int(32), prefix + split.outer + ".loop_min");
         Expr inner_extent = Variable::make(Int(32), prefix + split.inner + ".loop_extent");
 
-        // If the inner extent is zero, the loop will never be
-        // entered, but the bounds expressions lifted out might
-        // contain divides or mods by zero. In the cases where
-        // simplification of inner and outer matter, inner_extent
-        // is a constant, so the max will simplify away.
-        Expr factor = max(inner_extent, 1);
+        const Expr &factor = inner_extent;
         Expr inner = fused % factor + inner_min;
         Expr outer = fused / factor + outer_min;
 
