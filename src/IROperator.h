@@ -797,6 +797,33 @@ inline Tuple tuple_select(const Expr &c0, const Tuple &v0, const Expr &c1, const
 }
 // @}
 
+/** Oftentimes we want to pack a list of expressions with the same type
+ * into a channel dimension, e.g.,
+ * img(x, y, c) = select(c == 0, 100, // Red
+ *                       c == 1, 50,  // Green
+ *                               25); // Blue
+ * This is tedious when the list is long. The following functions
+ * provide convinent syntax that allows one to write:
+ * img(x, y, c) = select_by_id(c, 100, 50, 25);
+ * or
+ * img(x, y, c) = select_by_id(c, {100, 50, 25});
+ */
+// @{
+inline Expr select_by_id(Expr id, const std::vector<Expr> &values) {
+    user_assert(values.size() > 0) << "select_by_id only accepts values with size > 0.\n";
+    Expr result = values.back();
+    for (int i = (int)values.size() - 2; i >= 0; i--) {
+        result = select(id == i, values[i], result);
+    }
+    return result;
+}
+template<typename... Args,
+         typename std::enable_if<Halide::Internal::all_are_convertible<Expr, Args...>::value>::type * = nullptr>
+inline Expr select_by_id(Expr id, Args &&... values) {
+    return select_by_id(id, {values...});
+}
+// @}
+
 /** Return the sine of a floating-point expression. If the argument is
  * not floating-point, it is cast to Float(32). Does not vectorize
  * well. */
