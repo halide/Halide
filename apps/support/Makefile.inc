@@ -127,8 +127,8 @@ GENERATOR_DEPS ?= $(LIB_HALIDE) $(HALIDE_DISTRIB_PATH)/include/Halide.h $(HALIDE
 GENERATOR_DEPS_STATIC ?= $(LIB_HALIDE_STATIC) $(HALIDE_DISTRIB_PATH)/include/Halide.h $(HALIDE_DISTRIB_PATH)/tools/GenGen.cpp
 
 # Generators which use autoscheduler plugin need to specify the linker where to find libHalide.so required by the plugin.
-GENERATOR_LDFLAGS ?= -Wl,-rpath,$(dir $(LIB_HALIDE)) -L $(dir $(LIB_HALIDE)) -lHalide $(LDFLAGS)
-GENERATOR_LDFLAGS_STATIC ?=  -L $(dir $(LIB_HALIDE_STATIC)) -lHalide $(LDFLAGS)
+LIBHALIDE_LDFLAGS ?= -Wl,-rpath,$(dir $(LIB_HALIDE)) -L $(dir $(LIB_HALIDE)) -lHalide $(LDFLAGS)
+LIBHALIDE_LDFLAGS_STATIC ?=  -L $(dir $(LIB_HALIDE_STATIC)) -lHalide $(LDFLAGS)
 
 LIBPNG_LIBS_DEFAULT = $(shell libpng-config --ldflags)
 LIBPNG_CXX_FLAGS ?= $(shell libpng-config --cflags)

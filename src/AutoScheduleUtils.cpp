@@ -237,9 +237,10 @@ set<string> get_parents(Function f, int stage) {
 
 void disp_regions(const map<string, Box> &regions) {
     for (const auto &reg : regions) {
-        debug(0) << reg.first << " -> ";
-        debug(0) << reg.second;
-        debug(0) << "\n";
+        debug(0) << reg.first
+                 << " -> "
+                 << reg.second
+                 << "\n";
     }
 }
 
@@ -379,9 +380,9 @@ void check(const Expr &input, Expr expected) {
     if (!equal(result, expected)) {
         internal_error
             << "\nsubstitute_var_estimates() failure:\n"
-            << "Input: " << input << '\n'
-            << "Result: " << result << '\n'
-            << "Expected result: " << expected << '\n';
+            << "Input: " << input << "\n"
+            << "Result: " << result << "\n"
+            << "Expected result: " << expected << "\n";
     }
 }
 }  // anonymous namespace

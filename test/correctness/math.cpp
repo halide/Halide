@@ -57,16 +57,16 @@ bool relatively_equal(value_t a, value_t b, Target target) {
             if (relative_error < threshold) {
                 std::cout << "relatively_equal: relaxed threshold for (" << a << ", " << b << ") "
                           << "with relative error " << relative_error
-                          << " (shader fast trig)" << std::endl;
+                          << " (shader fast trig)\n";
                 return true;
             }
         }
 
         std::cerr
             << "relatively_equal failed for (" << a << ", " << b
-            << ") with relative error " << relative_error << std::endl;
+            << ") with relative error " << relative_error << "\n";
     } else {
-        std::cerr << "relatively_equal failed for (" << (double)a << ", " << (double)b << ")" << std::endl;
+        std::cerr << "relatively_equal failed for (" << (double)a << ", " << (double)b << ")\n";
     }
     return false;
 }
