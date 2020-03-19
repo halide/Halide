@@ -510,11 +510,11 @@ class AttemptStorageFoldingOfFunction : public IRMutator {
 
             debug(3) << "\nConsidering folding " << func.name()
                      << " over for loop over " << op->name
-                     << " dimension " << i - 1 << '\n'
-                     << "Min: " << min << '\n'
-                     << "Max: " << max << '\n'
-                     << "Extent: " << extent << '\n'
-                     << "explicit_factor: " << explicit_factor << '\n';
+                     << " dimension " << i - 1 << "\n"
+                     << "Min: " << min << "\n"
+                     << "Max: " << max << "\n"
+                     << "Extent: " << extent << "\n"
+                     << "explicit_factor: " << explicit_factor << "\n";
 
             // First, attempt to detect if the loop is monotonically
             // increasing or decreasing (if we allow automatic folding).

@@ -122,19 +122,21 @@ int main(int argc, char **argv) {
     printf("Skipping flaky test for auto_schedule/histogram (https://github.com/halide/Halide/issues/4589)\n");
     return 0;
 
-    // double manual_time = run_test(false);
-    // double auto_time = run_test(true);
+    /*
+    double manual_time = run_test(false);
+    double auto_time = run_test(true);
 
-    // std::cout << "======================" << std::endl;
-    // std::cout << "Manual time: " << manual_time << "ms" << std::endl;
-    // std::cout << "Auto time: " << auto_time << "ms" << std::endl;
-    // std::cout << "======================" << std::endl;
+    std::cout << "======================\n"
+              << "Manual time: " << manual_time << "ms\n"
+              << "Auto time: " << auto_time << "ms\n"
+              << "======================\n";
 
-    // if (auto_time > manual_time * 3) {
-    //     printf("Auto-scheduler is much much slower than it should be.\n");
-    //     return -1;
-    // }
+    if (auto_time > manual_time * 3) {
+        printf("Auto-scheduler is much much slower than it should be.\n");
+        return -1;
+    }
 
-    // printf("Success!\n");
-    // return 0;
+    printf("Success!\n");
+    return 0;
+    */
 }

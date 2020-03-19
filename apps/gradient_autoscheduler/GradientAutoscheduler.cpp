@@ -849,7 +849,7 @@ void generate_schedule(const std::vector<Function> &outputs,
 
     auto_scheduler_results->scheduler_name = "Li2018";
     auto_scheduler_results->schedule_source = schedule_source.str();
-    aslog(1) << schedule_source.str() << '\n';
+    aslog(1) << schedule_source.str() << "\n";
 }
 
 // Halide uses a plugin architecture for registering custom
