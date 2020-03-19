@@ -88,9 +88,9 @@ bool test0(const Target target, Var &x, Var &y, Var &c) {
     p.set(p_value);
 
     Func f0("f0");
-    f0(x, y, c) = mux(c, {4.0f,                      // Constant term
-                          p * 10.0f,                 // Linear expression not in terms of a loop parameter
-                          cast<float>(x) * 100.0f}); // Linear expression in terms of x
+    f0(x, y, c) = mux(c, {4.0f,                       // Constant term
+                          p * 10.0f,                  // Linear expression not in terms of a loop parameter
+                          cast<float>(x) * 100.0f});  // Linear expression in terms of x
 
     f0.bound(c, 0, 3);
     f0.glsl(x, y, c);

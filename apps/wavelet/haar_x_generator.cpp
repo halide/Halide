@@ -15,8 +15,8 @@ public:
         Func in = Halide::BoundaryConditions::repeat_edge(in_);
 
         out_(x, y, c) = mux(c,
-				            {(in(2 * x, y) + in(2 * x + 1, y)),
-				             (in(2 * x, y) - in(2 * x + 1, y))}) / 2;
+                            {(in(2 * x, y) + in(2 * x + 1, y)),
+                             (in(2 * x, y) - in(2 * x + 1, y))}) / 2;
         out_.unroll(c, 2);
     }
 };
