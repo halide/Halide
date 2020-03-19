@@ -253,49 +253,49 @@ class ExprCost : public IRVisitor {
     // None of the following IR nodes should be encountered when traversing the
     // IR at the level at which the auto scheduler operates.
     void visit(const Load *) override {
-        internal_assert(false);
+        internal_error;
     }
     void visit(const Ramp *) override {
-        internal_assert(false);
+        internal_error;
     }
     void visit(const Broadcast *) override {
-        internal_assert(false);
+        internal_error;
     }
     void visit(const LetStmt *) override {
-        internal_assert(false);
+        internal_error;
     }
     void visit(const AssertStmt *) override {
-        internal_assert(false);
+        internal_error;
     }
     void visit(const ProducerConsumer *) override {
-        internal_assert(false);
+        internal_error;
     }
     void visit(const For *) override {
-        internal_assert(false);
+        internal_error;
     }
     void visit(const Store *) override {
-        internal_assert(false);
+        internal_error;
     }
     void visit(const Provide *) override {
-        internal_assert(false);
+        internal_error;
     }
     void visit(const Allocate *) override {
-        internal_assert(false);
+        internal_error;
     }
     void visit(const Free *) override {
-        internal_assert(false);
+        internal_error;
     }
     void visit(const Realize *) override {
-        internal_assert(false);
+        internal_error;
     }
     void visit(const Block *) override {
-        internal_assert(false);
+        internal_error;
     }
     void visit(const IfThenElse *) override {
-        internal_assert(false);
+        internal_error;
     }
     void visit(const Evaluate *) override {
-        internal_assert(false);
+        internal_error;
     }
 
 public:

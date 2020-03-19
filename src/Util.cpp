@@ -395,7 +395,7 @@ std::string dir_make_temp() {
             break;
         }
     }
-    internal_assert(false) << "Unable to create temp directory in " << tmp_dir << "\n";
+    internal_error << "Unable to create temp directory in " << tmp_dir << "\n";
     return "";
 #else
     std::string templ = "/tmp/XXXXXX";
