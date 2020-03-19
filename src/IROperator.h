@@ -802,25 +802,18 @@ inline Tuple tuple_select(const Expr &c0, const Tuple &v0, const Expr &c1, const
  * img(x, y, c) = select(c == 0, 100, // Red
  *                       c == 1, 50,  // Green
  *                               25); // Blue
- * This is tedious when the list is long. The following functions
+ * This is tedious when the list is long. The following function
  * provide convinent syntax that allow one to write:
- * img(x, y, c) = select_by_id(c, 100, 50, 25);
- * or
- * img(x, y, c) = select_by_id(c, {100, 50, 25});
+ * img(x, y, c) = select_by_index(c, {100, 50, 25});
  */
 // @{
-inline Expr select_by_id(const Expr &id, const std::vector<Expr> &values) {
-    user_assert(values.size() > 0) << "select_by_id only accepts values with size > 0.\n";
+inline Expr select_by_index(const Expr &id, const std::vector<Expr> &values) {
+    user_assert(values.size() >= 2) << "select_by_index only accepts values with size >= 2.\n";
     Expr result = values.back();
     for (int i = (int)values.size() - 2; i >= 0; i--) {
         result = select(id == i, values[i], result);
     }
     return result;
-}
-template<typename... Args,
-         typename std::enable_if<Halide::Internal::all_are_convertible<Expr, Args...>::value>::type * = nullptr>
-inline Expr select_by_id(const Expr &id, Args &&... values) {
-    return select_by_id(id, {values...});
 }
 // @}
 
