@@ -79,7 +79,7 @@ public:
         G = clamp(G, 0.0f, 1.0f);
         B = clamp(B, 0.0f, 1.0f);
 
-        new_state(x, y, c) = select_by_index(c, {R, G, B});
+        new_state(x, y, c) = mux(c, {R, G, B});
 
         // Noise at the edges
         new_state(x, state.dim(1).min(), c) = random_float(frame) * 0.2f;
@@ -185,13 +185,13 @@ public:
         // Calculate both here and select() the right one;
         // we'll add specialize() paths in the schedule to
         // make this efficient.
-        Expr bgra = select_by_index(c, {
+        Expr bgra = mux(c, {
             cast<uint8_t>(B * 255),
             cast<uint8_t>(G * 255),
             cast<uint8_t>(R * 255),
             cast<uint8_t>(A * 255)});
 
-        Expr rgba = select_by_index(c, {
+        Expr rgba = mux(c, {
             cast<uint8_t>(R * 255),
             cast<uint8_t>(G * 255),
             cast<uint8_t>(B * 255),

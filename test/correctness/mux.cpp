@@ -8,7 +8,7 @@ int main(int argc, char **argv) {
     Var x("x"), c("c");
     Func f("f");
 
-    f(x, c) = select_by_index(c, {x, 456, 789});
+    f(x, c) = mux(c, {x, 456, 789});
 
     Buffer<int> result = f.realize(100, 4);
     for (int x = 0; x < result.width(); x++) {

@@ -50,7 +50,7 @@ public:
         Expr red = u8(clamp(eq(x, y) + (Cr(x, y) - 128) * 1.4f, 0, 255));
         Expr green = u8(clamp(eq(x, y) - 0.343f * (Cb(x, y) - 128) - 0.711f * (Cr(x, y) - 128), 0, 255));
         Expr blue = u8(clamp(eq(x, y) + 1.765f * (Cb(x, y) - 128), 0, 255));
-        output(x, y, c) = select_by_index(c, {red, green, blue});
+        output(x, y, c) = mux(c, {red, green, blue});
 
         // Estimates (for autoscheduler; ignored otherwise)
         {

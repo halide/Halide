@@ -50,7 +50,7 @@ public:
 
         // Add an alpha channel
         Func clamped_with_alpha("clamped_with_alpha");
-        clamped_with_alpha(x, y, c) = select_by_index(c,
+        clamped_with_alpha(x, y, c) = mux(c,
             {clamped(x, y, 0), clamped(x, y, 1), clamped(x, y, 2), 1.0f});
 
         // Define a reduction domain for the search area

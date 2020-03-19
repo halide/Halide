@@ -53,7 +53,7 @@ public:
         // confidence.
         Func cost_pyramid_push[8];
         cost_pyramid_push[0](x, y, z, c) =
-            select_by_index(c, {cost(x, y, z) * cost_confidence(x, y), cost_confidence(x, y)});
+            mux(c, {cost(x, y, z) * cost_confidence(x, y), cost_confidence(x, y)});
 
         Expr w = left_im.dim(0).extent(), h = left_im.dim(1).extent();
         for (int i = 1; i < 8; i++) {
@@ -100,7 +100,7 @@ public:
         }
 
         Func input_with_alpha;
-        input_with_alpha(x, y, c) = select_by_index(c, {
+        input_with_alpha(x, y, c) = mux(c, {
             cast<float>(left(x, y, 0)),
             cast<float>(left(x, y, 1)),
             cast<float>(left(x, y, 2)),

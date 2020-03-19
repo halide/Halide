@@ -252,7 +252,7 @@ tests(GROUPS correctness travis
         round.cpp
         saturating_casts.cpp
         scatter.cpp
-        select_by_index.cpp
+        mux.cpp
         set_custom_trace.cpp
         shared_self_references.cpp
         shifted_image.cpp

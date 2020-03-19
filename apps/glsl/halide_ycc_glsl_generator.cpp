@@ -25,7 +25,7 @@ public:
                                     -0.291f * input(x, y, 1) +
                                     0.439f * input(x, y, 2));
         out(x, y, c) = cast<uint8_t>(
-            select_by_index(c, {Y(x, y), Cb(x, y), Cr(x, y), 0.0f}) * 255.f);
+            mux(c, {Y(x, y), Cb(x, y), Cr(x, y), 0.0f}) * 255.f);
 
         // Schedule for GLSL
         input8.dim(2).set_bounds(0, 3);

@@ -27,7 +27,7 @@ public:
 
         Func histogram("histogram");
         histogram(x, y, z, c) = 0.0f;
-        histogram(x, y, zi, c) += select_by_index(c, {val, 1.0f});
+        histogram(x, y, zi, c) += mux(c, {val, 1.0f});
 
         // Blur the grid using a five-tap filter
         Func blurx("blurx"), blury("blury"), blurz("blurz");

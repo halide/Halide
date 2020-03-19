@@ -88,10 +88,10 @@ bool test0(const Target target, Var &x, Var &y, Var &c) {
     p.set(p_value);
 
     Func f0("f0");
-    f0(x, y, c) = select_by_index(c,
+    f0(x, y, c) = mux(c, {
         4.0f, // Constant term
         p * 10.0f, // Linear expression not in terms of a loop parameter
-        cast<float>(x) * 100.0f) // Linear expression in terms of x
+        cast<float>(x) * 100.0f}) // Linear expression in terms of x
 
     f0.bound(c, 0, 3);
     f0.glsl(x, y, c);
@@ -127,7 +127,7 @@ struct CoordXform {
 bool test1(const Target target, Var &x, Var &y, Var &c) {
     struct CoordXform m;
     Func f1("f1");
-    f1(x, y, c) = select_by_index(c, {
+    f1(x, y, c) = mux(c, {
         m.m0 * x + m.m1 * y + m.m2,
         m.m3 * x + m.m4 * y + m.m5,
         1.0f});
@@ -149,7 +149,7 @@ bool test1(const Target target, Var &x, Var &y, Var &c) {
 bool test2(const Target target, Var &x, Var &y, Var &c) {
     struct CoordXform m;
     Func f2("f2");
-    f2(x, y, c) = select_by_index(c, {
+    f2(x, y, c) = mux(c, {
         sqrt(m.m0 * x + m.m1 * y + m.m2),
         sqrt(m.m3 * x + m.m4 * y + m.m5),
         1.0f});
@@ -182,7 +182,7 @@ bool test3(const Target target, Var &x, Var &y, Var &c) {
     }
 
     Func f3("f3");
-    f3(x, y, c) = select_by_index(c, {foo, 1.0f, 2.0f});
+    f3(x, y, c) = mux(c, {foo, 1.0f, 2.0f});
 
     f3.bound(c, 0, 3);
     f3.glsl(x, y, c);

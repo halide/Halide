@@ -804,11 +804,11 @@ inline Tuple tuple_select(const Expr &c0, const Tuple &v0, const Expr &c1, const
  *                               25); // Blue
  * This is tedious when the list is long. The following function
  * provide convinent syntax that allow one to write:
- * img(x, y, c) = select_by_index(c, {100, 50, 25});
+ * img(x, y, c) = mux(c, {100, 50, 25});
  */
 // @{
-inline Expr select_by_index(const Expr &id, const std::vector<Expr> &values) {
-    user_assert(values.size() >= 2) << "select_by_index only accepts values with size >= 2.\n";
+inline Expr mux(const Expr &id, const std::vector<Expr> &values) {
+    user_assert(values.size() >= 2) << "mux only accepts values with size >= 2.\n";
     Expr result = values.back();
     for (int i = (int)values.size() - 2; i >= 0; i--) {
         result = select(id == i, values[i], result);
