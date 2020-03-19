@@ -811,7 +811,7 @@ inline Expr mux(const Expr &id, const std::vector<Expr> &values) {
     user_assert(values.size() >= 2) << "mux() only accepts values with size >= 2.\n";
     // Check if all the values have the same type.
     Type t = values[0].type();
-    for (int i = 1; i < values.size(); i++) {
+    for (int i = 1; i < (int)values.size(); i++) {
         user_assert(values[i].type() == t) << "mux() requires all the values to have the same type.";
     }
     Expr result = values.back();
