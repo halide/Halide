@@ -110,6 +110,18 @@ void define_operators(py::module &m) {
         return to_python_tuple(false_value);
     });
 
+    m.def("select_by_id", [](py::args args) -> Expr {
+        if (args.size() < 2) {
+            throw py::value_error("select_by_id() must have at least 2 arguments");
+        }
+        std::vector<Expr> values;
+        values.reserve(args.size());
+        for (int i = 1; i < (int)args.size(); i++) {
+            values.push_back(args[i].cast<Expr>());
+        }
+        return select_by_id(args[0].cast<Expr>(), values);
+    });
+
     m.def("sin", &sin);
     m.def("asin", &asin);
     m.def("cos", &cos);

@@ -51,6 +51,16 @@ def test_select():
     assert b[2] == 48
     assert b[3] == 3
 
+def test_select_by_id():
+    c = hl.Var()
+    f = hl.Func()
+    f[c] = hl.select_by_id(c, 123, 456, c)
+    b = f.realize(4)
+    assert b[0] == 123
+    assert b[1] == 456
+    assert b[2] == 2
+    assert b[3] == 3
+
 def test_minmax():
     x = hl.Var()
     f = hl.Func()
@@ -69,4 +79,5 @@ if __name__ == "__main__":
     test_print_expr()
     test_print_when()
     test_select()
+    test_select_by_id()
     test_minmax()
