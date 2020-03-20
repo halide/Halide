@@ -850,6 +850,9 @@ void check_bounds() {
     check(max(4, likely(5)), 5);
     check(max(7, likely(5)), 7);
 
+    check(select(x < y, x + y, x), select(x < y, y, 0) + x);
+    check(select(x < y, x, x + y), select(x < y, 0, y) + x);
+
     check(min(x + 1, y) - min(x, y - 1), 1);
     check(max(x + 1, y) - max(x, y - 1), 1);
     check(min(x + 1, y) - min(y - 1, x), 1);

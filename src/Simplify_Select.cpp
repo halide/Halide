@@ -101,6 +101,13 @@ Expr Simplify::visit(const Select *op, ExprInfo *bounds) {
              rewrite(select(x < 0, x * y, 0), min(x, 0) * y) ||
              rewrite(select(x < 0, 0, x * y), max(x, 0) * y) ||
 
+             // Note that in the rules below we know y is not a
+             // constant because it appears on the LHS of an
+             // addition. These rules therefore trade a non-constant
+             // for a constant.
+             rewrite(select(x, y + z, y), y + select(x, z, 0)) ||
+             rewrite(select(x, y, y + z), y + select(x, 0, z)) ||
+
              (no_overflow_int(op->type) &&
               (rewrite(select(x, y * c0, c1), select(x, y, fold(c1 / c0)) * c0, c1 % c0 == 0) ||
                rewrite(select(x, c0, y * c1), select(x, fold(c0 / c1), y) * c1, c0 % c1 == 0) ||
