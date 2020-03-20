@@ -66,7 +66,7 @@ def test_mux_tuple():
     x = hl.Var()
     c = hl.Var()
     g[x] = (123, 456, x)
-    f[x, c] = mux(c, g[x])
+    f[x, c] = hl.mux(c, g[x])
     b = f.realize(1, 4)
     assert b[0, 0] == 123
     assert b[0, 1] == 456
