@@ -28,12 +28,7 @@ int main(int argc, char **argv) {
     v += sin((kx + ky + time) / 2.0f);
     v += sin(sqrt(xx * xx + yy * yy + 1.0f) + time);
 
-    result(x, y, c) = cast<uint8_t>(
-        select(c == 0, 32,
-               select(c == 1, cos(pi * v),
-                      sin(pi * v)) *
-                       80 +
-                   (255 - 80)));
+    result(x, y, c) = cast<uint8_t>(selecy_by_index(c, {32, cos(pi * v), sin(pi * v)}) * 80 + (255 - 80));
 
     result.output_buffer().set_stride(0, 4);
     result.bound(c, 0, 4);

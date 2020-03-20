@@ -34,6 +34,11 @@ def main():
                                      c == 1, 42,  # Green value
                                      132)        # Blue value
 
+    # Since this pattern appears quite often, Halide provides a
+    # syntatic sugar to write the code above as the following,
+    # using the "mux" function.
+    # color_image[x, y, c] = hl.mux(c, [245, 42, 132]);
+
     # This method is often convenient because it makes it easy to
     # operate on this hl.Func in a way that treats each item in the
     # collection equally:
