@@ -391,8 +391,10 @@ public:
 
         Expr num_registers_available_per_thread = min(64.f, 65536.f / num_threads);
         Expr num_registers_per_block = num_threads * min(num_registers_available_per_thread, expr_branching);
+        Expr max_theoretical_active_blocks = max(1.f, floor(65536.f / num_registers_per_block));
+        Expr max_active_blocks = min(max_theoretical_active_blocks, 32.f);
 
-        Expr register_block_occupancy = print_wrap(select(inlined_calls == 0, max(1.f, floor(65536.f / num_registers_per_block)) / 32.f, 1.f), "register_block_occupancy", n, w);
+        Expr register_block_occupancy = print_wrap(select(inlined_calls == 0, max_active_blocks / 32.f, 1.f), "register_block_occupancy", n, w);
         compute_cost *= select(inlined_calls == 0, max(1, relu1(32, w, n) * (1.f / register_block_occupancy)), 1.f);
         compute_cost = print_wrap(compute_cost, "compute_cost_after_register_block_occupancy", n, w);
 
