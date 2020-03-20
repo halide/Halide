@@ -16,7 +16,7 @@ if (MSVC)
                    "/NOLOGO"
                    "/c"
                    "${CMAKE_CURRENT_BINARY_DIR}/lesson_10_halide.py.cpp"
-                   "${CMAKE_INCLUDE_FLAG_C}${PYTHON_INCLUDE_DIR}"
+                   "${CMAKE_INCLUDE_FLAG_C}${PYTHON_INCLUDE_DIRS}"
                    "${CMAKE_INCLUDE_FLAG_C}${HALIDE_INCLUDE_DIR}")
   add_test(NAME "python_bindings_tutorial_lesson_10_halide"
            COMMAND "${CMAKE_LINKER}"
@@ -27,7 +27,7 @@ if (MSVC)
                    "/OUT:$<TARGET_FILE_DIR:${HALIDE_COMPILER_LIB}>/lesson_10_halide${PYTHON_MODULE_EXTENSION}"
                    "${CMAKE_CURRENT_BINARY_DIR}/lesson_10_halide.py${CMAKE_CXX_OUTPUT_EXTENSION}"
                    "${CMAKE_CURRENT_BINARY_DIR}/lesson_10_halide.o"
-                   "${PYTHON_LIBRARY}")
+                   "${PYTHON_LIBRARIES}")
   set_property(TEST "python_bindings_tutorial_lesson_10_halide"
                PROPERTY DEPENDS "python_bindings_tutorial_lesson_10_halide_compile")
   set_property(TEST "python_bindings_tutorial_lesson_10_halide_compile"
@@ -49,7 +49,7 @@ else()
                    "${CMAKE_LIBRARY_OUTPUT_DIRECTORY}/lesson_10_halide${CMAKE_SHARED_MODULE_SUFFIX}"
                    "${CMAKE_CURRENT_BINARY_DIR}/lesson_10_halide.py.cpp"
                    "${CMAKE_CURRENT_BINARY_DIR}/lesson_10_halide.o"
-                   "${CMAKE_INCLUDE_FLAG_C}${PYTHON_INCLUDE_DIR}"
+                   "${CMAKE_INCLUDE_FLAG_C}${PYTHON_INCLUDE_DIRS}"
                    "${CMAKE_INCLUDE_FLAG_C}${HALIDE_INCLUDE_DIR}")
   set_property(TEST "python_bindings_tutorial_lesson_10_halide"
                PROPERTY DEPENDS "python_bindings_tutorial_lesson_10_aot_compilation_generate")

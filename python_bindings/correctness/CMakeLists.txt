@@ -23,7 +23,7 @@ function(test_correctness_generator BASENAME)
   target_include_directories("ext_${BASENAME}" PRIVATE "${GENFILES_DIR}"
                                                        "${HALIDE_INCLUDE_DIR}"
                                                        "${HALIDE_TOOLS_DIR}"
-                                                       "${PYTHON_INCLUDE_DIR}")
+                                                       "${PYTHON_INCLUDE_DIRS}")
   add_test(NAME "python_bindings_correctness_${BASENAME}_generator"
            COMMAND "${PYTHON_EXECUTABLE}"
                    "${CMAKE_CURRENT_SOURCE_DIR}/${BASENAME}_test.py")
@@ -34,7 +34,7 @@ function(test_correctness_generator BASENAME)
                        "$<TARGET_FILE_DIR:${HALIDE_COMPILER_LIB}>"
                        $ENV{PYTHONPATH})
     LIST(JOIN ENV_PYTHONPATH "\;" TEST_PYTHONPATH)
-    target_link_libraries("ext_${BASENAME}" PRIVATE "${PYTHON_LIBRARY}")
+    target_link_libraries("ext_${BASENAME}" PRIVATE "${PYTHON_LIBRARIES}")
     target_compile_options("ext_${BASENAME}" PRIVATE ${HALIDE_PY_RTTI_FLAG})
     set_property(TEST "python_bindings_correctness_${BASENAME}_generator"
                  PROPERTY ENVIRONMENT "PYTHONPATH=${TEST_PYTHONPATH}"
@@ -57,7 +57,7 @@ function(test_correctness_pystub BASENAME)
                                                  LINKER_LANGUAGE C
                                                  LINK_FLAGS "${HALIDE_PY_LINK_FLAG}")
   if (MSVC)
-    target_link_libraries("${BASENAME}" PRIVATE "${PYTHON_LIBRARY}" "${HALIDE_COMPILER_LIB}")
+    target_link_libraries("${BASENAME}" PRIVATE "${PYTHON_LIBRARIES}" "${HALIDE_COMPILER_LIB}")
     target_compile_options("${BASENAME}" PRIVATE "-EHsc" ${HALIDE_PY_RTTI_FLAG})
   else()
     target_compile_options("${BASENAME}" PRIVATE $<$<CXX_COMPILER_ID:GNU>:-Wno-suggest-override>
@@ -66,8 +66,8 @@ function(test_correctness_pystub BASENAME)
   endif()
   target_include_directories("${BASENAME}" PRIVATE "${HALIDE_INCLUDE_DIR}"
                                                    "${HALIDE_TOOLS_DIR}"
-                                                   "${pybind11_INCLUDE_DIRS}"
-                                                   "${PYTHON_INCLUDE_DIR}")
+                                                   "${PYBIND11_INCLUDE_DIR}"
+                                                   "${PYTHON_INCLUDE_DIRS}")
   target_compile_definitions("${BASENAME}" PRIVATE "HALIDE_PYSTUB_GENERATOR_NAME=${BASENAME}")
 endfunction()
 
