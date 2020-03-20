@@ -740,25 +740,31 @@ struct State {
        CostModel *cost_model;
 
     WrapperState(IntrusivePtr<State> inner, unsigned numleft, const FunctionDAG &dag, const MachineParams &params, CostModel* cost_model) : inner(inner), numleft(numleft), dag(dag), params(params),
-    cost_model(cost_model) {}
-
+    cost_model(cost_model) {
+    std::cout << "WrapperState(1)" <<inner->cost<<inner->num_decisions_made<<inner->cost_calculations<< std::endl;
+    }
     // copy and assignment operators should perform a DEEP clone of the given state
-    WrapperState(const WrapperState& other): inner(other.inner),numleft(other.numleft),dag(other.dag),params(other.params),cost_model(other.cost_model){}
-    //WrapperState& operator = (const WrapperState& other);
+    WrapperState(const WrapperState& other): inner(other.inner),numleft(other.numleft),dag(other.dag),params(other.params),cost_model(other.cost_model){
+    std::cout << "WrapperState(2)" <<inner->cost<<inner->num_decisions_made<< inner->cost_calculations<<std::endl;
+    }
+    WrapperState& operator = (const WrapperState& other) = delete;
 
     // whether or not this state is terminal (reached end)
     // AHA: can be ignored as we limit the horizon to num_passes
     bool is_terminal() const {
+        std::cout << "is_terminals()" << std::endl;
         return numleft == 0;
     }
 
     //  agent id (zero-based) for agent who is about to make a decision
     int agent_id() const {
+        std::cout << "agent_id()" << std::endl;
         return 0;
     }
 
     // apply action to state
     void apply_action(const Action& action) {
+        std::cout << "apply_action()" << std::endl;
         std::map<Action, IntrusivePtr<State>> actions;
         inner->generate_actions(dag, params, cost_model, actions);
         for(auto &pair : actions) {
@@ -771,6 +777,7 @@ struct State {
 
     // return possible actions from this state
     void get_actions(std::vector<Action>& vactions) const {
+        std::cout << "get_actions()" << std::endl;
         std::map<Action, IntrusivePtr<State>> actions;
         inner->generate_actions(dag, params, cost_model, actions);
         for(auto &pair : actions) {
@@ -780,6 +787,7 @@ struct State {
 
     // get a random action, return false if no actions found
     bool get_random_action(Action& action) const {
+        std::cout << "get_random_action()" << std::endl;
         std::vector<Action> actions;
         get_actions(actions);
         if (actions.size() == 0) return false;
@@ -790,6 +798,7 @@ struct State {
 
     // evaluate this state and return a vector of rewards (for each agent)
     const std::vector<float> evaluate() const {
+        std::cout << "evaluate()" << std::endl;
         inner->calculate_cost(dag, params, cost_model, false);
         cost_model->evaluate_costs();
         return { (float)(inner->cost)}; 
@@ -797,6 +806,7 @@ struct State {
 
     // return state as string (for debug purposes)
     std::string to_string() const {
+        std::cout << "to_string()" << std::endl;
         return "";
     }
     };
@@ -1035,14 +1045,14 @@ struct State {
                 // If none of the options were acceptable, don't
                 // parallelize. This tends to happen for things like
                 // compute_root color matrices.
-                if (options.empty()) {
+                /*if (options.empty()) {
                     num_children++;
                     auto child = make_child();
                     child->num_decisions_made++;
                     //WM: didn't create a new child here as didn't appear to be different from parent [thus consider illegal action, or could simply use identity action]
                     //accept_child(std::move(child));
                     return;
-                }
+                }*/
 
                 for (const auto &o : options) {
                     if (num_children >= 1 && (o.idle_core_wastage > 1.2 || !may_subtile())) {
@@ -1533,6 +1543,9 @@ IntrusivePtr<State> optimal_mcts_schedule(FunctionDAG &dag,
                                      std::mt19937 &rng,
                                      int beam_size) {
 
+    if (cost_model) {
+        configure_pipeline_features(dag, params, cost_model);
+    }
     IntrusivePtr<State> best;
 
     std::unordered_set<uint64_t> permitted_hashes;
@@ -1541,7 +1554,7 @@ IntrusivePtr<State> optimal_mcts_schedule(FunctionDAG &dag,
     //int num_passes = (beam_size == 1) ? 1 : 5;
 
     // not sure why would I need num_passes, but keeping it just in case
-    int num_passes = 50;
+    int num_passes = 5;
 
     string cyos_str = get_env_variable("HL_CYOS");
     if (cyos_str == "1") {
@@ -1571,12 +1584,33 @@ IntrusivePtr<State> optimal_mcts_schedule(FunctionDAG &dag,
     uct.simulation_depth = num_passes;
 
     for (int i = 0; i < num_passes; i++) {
+        ProgressBar tick;
+
         // run uct mcts on current state and get best action
         action = uct.run(state);
 
         // apply the action to the current state
         state.apply_action(action);
+        auto pass = state.inner; 
+        
+        tick.clear();
+
+        if (aslog::aslog_level() == 0) {
+            aslog(0) << "Pass " << i << " of " << num_passes << ", cost: " << pass->cost << "\n";
+        } else {
+            aslog(0) << "Pass " << i << " result: ";
+            pass->dump();
+        }
+
+        if (i == 0 || pass->cost < best->cost) {
+            // Track which pass produced the lowest-cost state. It's
+            // not necessarily the final one.
+            best = pass;
+        }
     }
+
+    aslog(0) << "Best cost: " << best->cost << "\n";
+    
 
     return state.inner;
 }
@@ -1862,6 +1896,7 @@ struct RegisterAutoscheduler {
             outputs.push_back(f.function());
         }
         Autoscheduler::generate_rl_schedule(outputs, target, params, results);
+        //Autoscheduler::generate_schedule(outputs, target, params, results);
     }
 } register_auto_scheduler;
 
@@ -1875,6 +1910,7 @@ void find_and_apply_schedule(FunctionDAG &dag,
 
     std::mt19937 rng(12345);
     IntrusivePtr<State> optimal = optimal_mcts_schedule(dag, outputs, params, cost_model, rng, beam_size);
+    //IntrusivePtr<State> optimal = optimal_schedule(dag, outputs, params, cost_model, rng, beam_size);
 
     // Apply the schedules
     optimal->apply_schedule(dag, params);
