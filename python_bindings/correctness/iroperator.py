@@ -60,6 +60,19 @@ def test_mux():
     assert b[2] == 2
     assert b[3] == 3
 
+def test_mux_tuple():
+    f = hl.Func()
+    g = hl.Func()
+    x = hl.Var()
+    c = hl.Var()
+    g[x] = (123, 456, x)
+    f[x, c] = mux(c, g[x])
+    b = f.realize(1, 4)
+    assert b[0, 0] == 123
+    assert b[0, 1] == 456
+    assert b[0, 2] == 0
+    assert b[0, 3] == 0
+
 def test_minmax():
     x = hl.Var()
     f = hl.Func()
