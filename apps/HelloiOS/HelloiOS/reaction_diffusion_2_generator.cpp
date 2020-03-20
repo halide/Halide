@@ -79,9 +79,7 @@ public:
         G = clamp(G, 0.0f, 1.0f);
         B = clamp(B, 0.0f, 1.0f);
 
-        new_state(x, y, c) = select(c == 0, R,
-                                    c == 1, G,
-                                    B);
+        new_state(x, y, c) = mux(c, {R, G, B});
 
         // Noise at the edges
         new_state(x, state.dim(1).min(), c) = random_float(frame) * 0.2f;
@@ -187,15 +185,15 @@ public:
         // Calculate both here and select() the right one;
         // we'll add specialize() paths in the schedule to
         // make this efficient.
-        Expr bgra = select(c == 0, cast<uint8_t>(B * 255),
-                           c == 1, cast<uint8_t>(G * 255),
-                           c == 2, cast<uint8_t>(R * 255),
-                           /*c==3*/ cast<uint8_t>(A * 255));
+        Expr bgra = mux(c, {cast<uint8_t>(B * 255),
+                            cast<uint8_t>(G * 255),
+                            cast<uint8_t>(R * 255),
+                            cast<uint8_t>(A * 255)});
 
-        Expr rgba = select(c == 0, cast<uint8_t>(R * 255),
-                           c == 1, cast<uint8_t>(G * 255),
-                           c == 2, cast<uint8_t>(B * 255),
-                           /*c==3*/ cast<uint8_t>(A * 255));
+        Expr rgba = mux(c, {cast<uint8_t>(R * 255),
+                            cast<uint8_t>(G * 255),
+                            cast<uint8_t>(B * 255),
+                            cast<uint8_t>(A * 255)});
 
         render(x, y, c) = select(output_bgra == true, bgra, rgba);
     }
