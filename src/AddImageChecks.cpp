@@ -101,7 +101,7 @@ class TrimStmtToPartsThatAccessBuffers : public IRMutator {
     using IRMutator::visit;
 
     Expr visit(const Call *op) override {
-        touches_buffer |= (buffers.find(op->name) != buffers.end());
+        touches_buffer |= (buffers.count(op->name) > 0);
         return IRMutator::visit(op);
     }
     Stmt visit(const Provide *op) override {
