@@ -797,6 +797,31 @@ inline Tuple tuple_select(const Expr &c0, const Tuple &v0, const Expr &c1, const
 }
 // @}
 
+/** Oftentimes we want to pack a list of expressions with the same type
+ * into a channel dimension, e.g.,
+ * img(x, y, c) = select(c == 0, 100, // Red
+ *                       c == 1, 50,  // Green
+ *                               25); // Blue
+ * This is tedious when the list is long. The following function
+ * provide convinent syntax that allow one to write:
+ * img(x, y, c) = mux(c, {100, 50, 25});
+ */
+// @{
+inline Expr mux(const Expr &id, const std::vector<Expr> &values) {
+    user_assert(values.size() >= 2) << "mux() only accepts values with size >= 2.\n";
+    // Check if all the values have the same type.
+    Type t = values[0].type();
+    for (int i = 1; i < (int)values.size(); i++) {
+        user_assert(values[i].type() == t) << "mux() requires all the values to have the same type.";
+    }
+    Expr result = values.back();
+    for (int i = (int)values.size() - 2; i >= 0; i--) {
+        result = select(id == i, values[i], result);
+    }
+    return result;
+}
+// @}
+
 /** Return the sine of a floating-point expression. If the argument is
  * not floating-point, it is cast to Float(32). Does not vectorize
  * well. */
@@ -1371,6 +1396,25 @@ Expr strict_float(Expr e);
  * Target::CheckUnsafePromises. This is intended for debugging only.
  */
 Expr unsafe_promise_clamped(const Expr &value, const Expr &min, const Expr &max);
+
+namespace Internal {
+/**
+ * FOR INTERNAL USE ONLY.
+ *
+ * An entirely unchecked version of unsafe_promise_clamped, used
+ * inside the compiler as an annotation of the known bounds of an Expr
+ * when it has proved something is bounded and wants to record that
+ * fact for later passes (notably bounds inference) to exploit. This
+ * gets introduced by GuardWithIf tail strategies, because the bounds
+ * machinery has a hard time exploiting if statement conditions.
+ *
+ * Unlike unsafe_promise_clamped, this expression is
+ * context-dependent, because 'value' might be statically bounded at
+ * some point in the IR (e.g. due to a containing if statement), but
+ * not elsewhere.
+ **/
+Expr promise_clamped(const Expr &value, const Expr &min, const Expr &max);
+}  // namespace Internal
 
 }  // namespace Halide
 

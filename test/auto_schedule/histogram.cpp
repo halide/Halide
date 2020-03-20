@@ -55,7 +55,7 @@ double run_test(bool auto_schedule) {
     Expr red = cast<uint8_t>(clamp(eq(x, y) + (Cr(x, y) - 128) * 1.4f, 0, 255));
     Expr green = cast<uint8_t>(clamp(eq(x, y) - 0.343f * (Cb(x, y) - 128) - 0.711f * (Cr(x, y) - 128), 0, 255));
     Expr blue = cast<uint8_t>(clamp(eq(x, y) + 1.765f * (Cb(x, y) - 128), 0, 255));
-    color(x, y, c) = select(c == 0, red, select(c == 1, green, blue));
+    color(x, y, c) = mux(c, {red, green, blue});
 
     Target target = get_jit_target_from_environment();
     Pipeline p(color);
@@ -119,22 +119,18 @@ double run_test(bool auto_schedule) {
 }
 
 int main(int argc, char **argv) {
-    printf("Skipping flaky test for auto_schedule/histogram (https://github.com/halide/Halide/issues/4589)\n");
+    double manual_time = run_test(false);
+    double auto_time = run_test(true);
+
+    std::cout << "======================" << std::endl;
+    std::cout << "Manual time: " << manual_time << "ms" << std::endl;
+    std::cout << "Auto time: " << auto_time << "ms" << std::endl;
+    std::cout << "======================" << std::endl;
+
+    if (auto_time > manual_time * 3) {
+        fprintf(stderr, "Warning: Auto-scheduler is much much slower than it should be.\n");
+    }
+
+    printf("Success!\n");
     return 0;
-
-    // double manual_time = run_test(false);
-    // double auto_time = run_test(true);
-
-    // std::cout << "======================" << std::endl;
-    // std::cout << "Manual time: " << manual_time << "ms" << std::endl;
-    // std::cout << "Auto time: " << auto_time << "ms" << std::endl;
-    // std::cout << "======================" << std::endl;
-
-    // if (auto_time > manual_time * 3) {
-    //     printf("Auto-scheduler is much much slower than it should be.\n");
-    //     return -1;
-    // }
-
-    // printf("Success!\n");
-    // return 0;
 }

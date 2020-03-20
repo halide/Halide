@@ -40,7 +40,9 @@ string CodeGen_Metal_Dev::CodeGen_Metal_C::print_type_maybe_storage(Type type, b
         }
 
     } else {
-        if (type.is_uint() && type.bits() > 1) oss << 'u';
+        if (type.is_uint() && type.bits() > 1) {
+            oss << "u";
+        }
         switch (type.bits()) {
         case 1:
             oss << "bool";
@@ -73,7 +75,7 @@ string CodeGen_Metal_Dev::CodeGen_Metal_C::print_type_maybe_storage(Type type, b
         }
     }
     if (space == AppendSpace) {
-        oss << ' ';
+        oss << " ";
     }
     return oss.str();
 }
@@ -393,7 +395,7 @@ void CodeGen_Metal_Dev::CodeGen_Metal_C::visit(const Allocate *op) {
             << "Only fixed-size allocations are supported on the gpu. "
             << "Try storing into shared memory instead.";
 
-        stream << get_indent() << print_storage_type(op->type) << ' '
+        stream << get_indent() << print_storage_type(op->type) << " "
                << print_name(op->name) << "[" << size << "];\n";
         stream << get_indent() << "#define " << get_memory_space(op->name) << " thread\n";
 
@@ -639,7 +641,7 @@ void CodeGen_Metal_Dev::init_module() {
     // __shared always has address space threadgroup.
     src_stream << "#define __address_space___shared threadgroup\n";
 
-    src_stream << '\n';
+    src_stream << "\n";
 
     cur_kernel_name = "";
 }
@@ -658,7 +660,7 @@ string CodeGen_Metal_Dev::get_current_kernel_name() {
 }
 
 void CodeGen_Metal_Dev::dump() {
-    std::cerr << src_stream.str() << std::endl;
+    std::cerr << src_stream.str() << "\n";
 }
 
 std::string CodeGen_Metal_Dev::print_gpu_name(const std::string &name) {

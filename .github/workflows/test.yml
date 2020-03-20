@@ -6,6 +6,7 @@
 # - python is skipped for arm-32, arm-64
 # - apps are skipped for x86-32, arm-32, arm-64
 # - build-and-test matrix is probably too large
+# - test_performance is skipped everywhere (too much flakiness)
 #
 # TODO (stuff that could be usefully added, perhaps)
 # - build + test of WASM
@@ -17,14 +18,16 @@
 
 name: Build+Test
 on:
+  repository_dispatch:
+
   # TODO: not sure if this is the best set of events/activity-types to use.
-  pull_request:
-    types: [opened, synchronize, reopened, edited, review_requested]
-    # TODO: do we want to limit this to certain filetypes?
-    # paths:
-    #   - '**.h'
-    #   - '**.c'
-    #   - '**.cpp'
+  # pull_request:
+  #   types: [opened, synchronize, reopened, edited, review_requested]
+  #   # TODO: do we want to limit this to certain filetypes?
+  #   # paths:
+  #   #   - '**.h'
+  #   #   - '**.c'
+  #   #   - '**.cpp'
 
 jobs:
   test_halide:
@@ -447,10 +450,12 @@ jobs:
         fi
 
         # tutorial has some performance measurements that can be flaky if we run them in parallel
-        TEST_GROUPS_SERIAL="performance tutorial"
+        TEST_GROUPS_SERIAL="tutorial"
 
-        # opengl won't work on the buildbots. auto_schedule is just flaky.
-        TEST_GROUPS_BROKEN="opengl auto_schedule"
+        # performance is never going to be reliable on VMs.
+        # opengl won't work on the buildbots.
+        # auto_schedule is just flaky.
+        TEST_GROUPS_BROKEN="performance opengl auto_schedule"
 
         if [[ ${{matrix.target_bits}} == 32 ]]; then
           # TODO: Skip testing apps on 32-bit systems for now;
@@ -484,10 +489,12 @@ jobs:
         # fi
 
         # tutorial has some performance measurements that can be flaky if we run them in parallel
-        TEST_GROUPS_SERIAL="performance|tutorial"
+        TEST_GROUPS_SERIAL="tutorial"
 
-        # opengl won't work on the buildbots. auto_schedule is just flaky.
-        TEST_GROUPS_BROKEN="opengl|auto_schedule"
+        # performance is never going to be reliable on VMs.
+        # opengl won't work on the buildbots.
+        # auto_schedule is just flaky.
+        TEST_GROUPS_BROKEN="performance|opengl|auto_schedule"
 
         export TEST_TMPDIR="${HALIDE_TEMP_DIR}"
         cd ${HALIDE_BUILD_DIR}

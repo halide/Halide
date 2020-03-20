@@ -11,7 +11,7 @@ all: $(BIN)/$(HL_TARGET)/runner
 
 $(GENERATOR_BIN)/mat_mul.generator: mat_mul_generator.cpp $(GENERATOR_DEPS)
 	@mkdir -p $(@D)
-	$(CXX) $(CXXFLAGS) $(filter-out %.h,$^) -o $@ $(LDFLAGS) $(HALIDE_SYSTEM_LIBS)
+	$(CXX) $(CXXFLAGS) $(filter-out %.h,$^) -o $@ $(LIBHALIDE_LDFLAGS) $(HALIDE_SYSTEM_LIBS)
 
 $(BIN)/%/mat_mul.a: $(GENERATOR_BIN)/mat_mul.generator
 	@mkdir -p $(@D)

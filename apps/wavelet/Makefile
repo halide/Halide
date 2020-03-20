@@ -11,7 +11,7 @@ clean:
 $(GENERATOR_BIN)/%.generator: %_generator.cpp $(GENERATOR_DEPS)
 	@echo Building Generator $(filter %_generator.cpp,$^)
 	@mkdir -p $(@D)
-	@$(CXX) $(CXXFLAGS) $(filter %.cpp,$^) $(GENERATOR_LDFLAGS) -o $@
+	@$(CXX) $(CXXFLAGS) $(filter %.cpp,$^) $(LIBHALIDE_LDFLAGS) -o $@
 
 # Can't have multiple wildcards in Make, so we'll use a macro
 # to stamp out all the rules we need

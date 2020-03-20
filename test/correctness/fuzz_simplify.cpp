@@ -208,14 +208,14 @@ bool test_simplification(Expr a, Expr b, Type T, const map<string, Expr> &vars) 
         }
         if (!equal(a_j_v, b_j_v)) {
             for (map<string, Expr>::const_iterator i = vars.begin(); i != vars.end(); i++) {
-                std::cout << i->first << " = " << i->second << '\n';
+                std::cout << i->first << " = " << i->second << "\n";
             }
 
-            std::cout << a << '\n';
-            std::cout << b << '\n';
+            std::cout << a << "\n";
+            std::cout << b << "\n";
             std::cout << "In vector lane " << j << ":\n";
-            std::cout << a_j << " -> " << a_j_v << '\n';
-            std::cout << b_j << " -> " << b_j_v << '\n';
+            std::cout << a_j << " -> " << a_j_v << "\n";
+            std::cout << b_j << " -> " << b_j_v << "\n";
             return false;
         }
     }
@@ -317,7 +317,7 @@ int main(int argc, char **argv) {
     // We also report the seed to enable reproducing failures.
     int fuzz_seed = argc > 1 ? atoi(argv[1]) : time(nullptr);
     rng.seed(fuzz_seed);
-    std::cout << "Simplify fuzz test seed: " << fuzz_seed << std::endl;
+    std::cout << "Simplify fuzz test seed: " << fuzz_seed << "\n";
 
     int max_fuzz_vector_width = 4;
 
@@ -334,6 +334,6 @@ int main(int argc, char **argv) {
             }
         }
     }
-    std::cout << "Success!" << std::endl;
+    std::cout << "Success!\n";
     return 0;
 }

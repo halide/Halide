@@ -17,7 +17,7 @@ static string sanitize_name(const string &name) {
     ostringstream oss;
     for (size_t i = 0; i < name.size(); i++) {
         if (name[i] == '.' || name[i] == '_') {
-            oss << '_';
+            oss << "_";
         } else if (!isalnum(name[i])) {
             oss << "_" << (int)name[i];
         } else {

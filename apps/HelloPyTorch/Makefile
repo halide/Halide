@@ -223,7 +223,7 @@ $(GENERATOR_BIN)/add.generator: src/add_generator.cpp $(GENERATOR_DEPS)
 	@echo Building Generator
 	@mkdir -p $(@D)
 	@$(CXX) $(CXXFLAGS) $(filter-out %.h,$^) \
-		-o $@ $(LDFLAGS) $(HALIDE_SYSTEM_LIBS)
+		-o $@ $(LIBHALIDE_LDFLAGS) $(HALIDE_SYSTEM_LIBS)
 
 clean:
 	rm -rf $(BIN) __pycache__

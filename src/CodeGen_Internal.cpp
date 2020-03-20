@@ -610,7 +610,7 @@ std::unique_ptr<llvm::TargetMachine> make_target_machine(const llvm::Module &mod
 
     const llvm::Target *llvm_target = llvm::TargetRegistry::lookupTarget(module.getTargetTriple(), error_string);
     if (!llvm_target) {
-        std::cout << error_string << std::endl;
+        std::cout << error_string << "\n";
         llvm::TargetRegistry::printRegisteredTargetsForVersion(llvm::outs());
     }
     auto triple = llvm::Triple(module.getTargetTriple());
