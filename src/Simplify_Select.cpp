@@ -31,10 +31,10 @@ Expr Simplify::visit(const Select *op, ExprInfo *bounds) {
              rewrite(select(1, x, y), x) ||
              rewrite(select(0, x, y), y) ||
              rewrite(select(x, y, y), y) ||
-             rewrite(select(x, intrin(Call::likely, y), y), true_value) ||
-             rewrite(select(x, y, intrin(Call::likely, y)), false_value) ||
-             rewrite(select(x, intrin(Call::likely_if_innermost, y), y), true_value) ||
-             rewrite(select(x, y, intrin(Call::likely_if_innermost, y)), false_value) ||
+             rewrite(select(x, intrin(Call::likely, y), y), false_value) ||
+             rewrite(select(x, y, intrin(Call::likely, y)), true_value) ||
+             rewrite(select(x, intrin(Call::likely_if_innermost, y), y), false_value) ||
+             rewrite(select(x, y, intrin(Call::likely_if_innermost, y)), true_value) ||
              false)) {
             return rewrite.result;
         }

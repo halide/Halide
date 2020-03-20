@@ -835,12 +835,20 @@ void check_bounds() {
     check(min((x / 8) * 8, x), (x / 8) * 8);
     check(min(x, (x / 8) * 8), (x / 8) * 8);
 
-    check(min(x, likely(x)), likely(x));
-    check(min(likely(x), x), likely(x));
-    check(max(x, likely(x)), likely(x));
-    check(max(likely(x), x), likely(x));
-    check(select(x > y, likely(x), x), likely(x));
-    check(select(x > y, x, likely(x)), likely(x));
+    // "likely" marks which side of a containing min/max/select is the
+    // one to optimize for, so if the min/max/select gets simplified
+    // away, the likely should be stripped too.
+    check(min(x, likely(x)), x);
+    check(min(likely(x), x), x);
+    check(max(x, likely(x)), x);
+    check(max(likely(x), x), x);
+    check(select(x > y, likely(x), x), x);
+    check(select(x > y, x, likely(x)), x);
+    // Check constant-bounds reasoning works through likelies
+    check(min(4, likely(5)), 4);
+    check(min(7, likely(5)), 5);
+    check(max(4, likely(5)), 5);
+    check(max(7, likely(5)), 7);
 
     check(min(x + 1, y) - min(x, y - 1), 1);
     check(max(x + 1, y) - max(x, y - 1), 1);
