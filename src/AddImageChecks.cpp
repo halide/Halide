@@ -1,4 +1,5 @@
 #include "AddImageChecks.h"
+#include "IRMutator.h"
 #include "IRVisitor.h"
 #include "Simplify.h"
 #include "Substitute.h"
@@ -93,6 +94,51 @@ public:
     }
 };
 
+class TrimStmtToPartsThatAccessBuffers : public IRMutator {
+    bool touches_buffer = false;
+    const map<string, FindBuffers::Result> &buffers;
+
+    using IRMutator::visit;
+
+    Expr visit(const Call *op) override {
+        touches_buffer |= (buffers.count(op->name) > 0);
+        return IRMutator::visit(op);
+    }
+    Stmt visit(const Provide *op) override {
+        touches_buffer |= (buffers.find(op->name) != buffers.end());
+        return IRMutator::visit(op);
+    }
+    Expr visit(const Variable *op) override {
+        if (op->param.defined() && op->param.is_buffer()) {
+            touches_buffer |= (buffers.find(op->param.name()) != buffers.end());
+        }
+        return IRMutator::visit(op);
+    }
+
+    Stmt visit(const Block *op) override {
+        bool old_touches_buffer = touches_buffer;
+        touches_buffer = false;
+        Stmt first = mutate(op->first);
+        old_touches_buffer |= touches_buffer;
+        if (!touches_buffer) {
+            first = Evaluate::make(0);
+        }
+        touches_buffer = false;
+        Stmt rest = mutate(op->rest);
+        old_touches_buffer |= touches_buffer;
+        if (!touches_buffer) {
+            rest = Evaluate::make(0);
+        }
+        touches_buffer = old_touches_buffer;
+        return Block::make(first, rest);
+    }
+
+public:
+    TrimStmtToPartsThatAccessBuffers(const map<string, FindBuffers::Result> &bufs)
+        : buffers(bufs) {
+    }
+};
+
 Stmt add_image_checks(Stmt s,
                       const vector<Function> &outputs,
                       const Target &t,
@@ -128,7 +174,8 @@ Stmt add_image_checks(Stmt s,
     s.accept(&finder);
 
     Scope<Interval> empty_scope;
-    map<string, Box> boxes = boxes_touched(s, empty_scope, fb);
+    Stmt sub_stmt = TrimStmtToPartsThatAccessBuffers(bufs).mutate(s);
+    map<string, Box> boxes = boxes_touched(sub_stmt, empty_scope, fb);
 
     // Now iterate through all the buffers, creating a list of lets
     // and a list of asserts.
