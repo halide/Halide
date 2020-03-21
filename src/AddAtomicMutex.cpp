@@ -235,7 +235,7 @@ protected:
 
     void visit(const Store *op) override {
         if (in_atomic_mutex) {
-            if (store_names.find(op->name) != store_names.end()) {
+            if (store_names.count(op->name)) {
                 found = true;
             }
         }
@@ -315,7 +315,7 @@ protected:
             return IRMutator::visit(op);
         }
 
-        if (allocated_mutexes.find(finder.mutex_name) != allocated_mutexes.end()) {
+        if (allocated_mutexes.count(finder.mutex_name)) {
             // We've already allocated a mutex.
             return IRMutator::visit(op);
         }
@@ -373,7 +373,7 @@ protected:
             return IRMutator::visit(op);
         }
 
-        if (allocated_mutexes.find(finder.mutex_name) != allocated_mutexes.end()) {
+        if (allocated_mutexes.count(finder.mutex_name)) {
             // We've already allocated a mutex.
             return IRMutator::visit(op);
         }

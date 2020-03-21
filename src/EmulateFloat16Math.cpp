@@ -141,7 +141,7 @@ const std::map<std::string, std::string> transcendental_remapping =
 }  // anonymous namespace
 
 bool is_float16_transcendental(const Call *op) {
-    return transcendental_remapping.find(op->name) != transcendental_remapping.end();
+    return transcendental_remapping.count(op->name);
 }
 
 Expr lower_float16_transcendental_to_float32_equivalent(const Call *op) {

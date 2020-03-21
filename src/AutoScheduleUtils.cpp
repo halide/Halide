@@ -188,7 +188,7 @@ Expr perform_inline(Expr e, const map<string, Function> &env,
         // Inline from the last function to be realized to avoid extra
         // inlining works.
         for (const auto &call : calls) {
-            if (inlines.find(call) != inlines.end()) {
+            if (inlines.count(call)) {
                 const Function &prod_func = env.at(call);
                 // Impure functions cannot be inlined.
                 internal_assert(prod_func.is_pure());

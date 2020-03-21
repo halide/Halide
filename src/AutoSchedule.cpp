@@ -313,7 +313,7 @@ void queue_func_regions(map<FStage, DimBounds> &fs_bounds,
     // Add all stages of a function into the queue.
     for (size_t prod_s = 0; prod_s < num_stages; prod_s++) {
         StageBounds sb(prod_func, prod_s, prod_bounds[prod_s]);
-        if (visited.find(sb) == visited.end()) {
+        if (!visited.count(sb)) {
             auto iter = fs_bounds.find(sb.f_stage);
             if (iter == fs_bounds.end()) {
                 fs_bounds.emplace(sb.f_stage, sb.bounds);
@@ -368,7 +368,7 @@ void merge_and_queue_regions(map<FStage, DimBounds> &fs_bounds,
 
         // Skip adding the current region into to the queue if the function
         // is not in 'prods'.
-        if (prods.find(reg.first) == prods.end()) {
+        if (!prods.count(reg.first)) {
             continue;
         }
 
@@ -641,7 +641,7 @@ DependenceAnalysis::redundant_regions(const Function &f, int stage_num, const st
         }
         // A function should appear once in the regions and therefore cannot
         // already be present in the overlaps map.
-        internal_assert(overlaps.find(reg.first) == overlaps.end());
+        internal_assert(!overlaps.count(reg.first));
         overlaps.emplace(reg.first, b_intersect);
     }
 
@@ -799,7 +799,7 @@ struct AutoSchedule {
             // Declare all the Vars and RVars that are actually used in the schedule
             const Function &func = get_element(sched.env, f.first);
             for (size_t i = 0; i < func.args().size(); ++i) {
-                if (sched.used_vars.at(func.name()).at(0).find(func.args()[i]) != sched.used_vars.at(func.name()).at(0).end()) {
+                if (sched.used_vars.at(func.name()).at(0).count(func.args()[i])) {
                     schedule_ss << "    Var " << func.args()[i] << " = "
                                 << fname << ".args()[" << i << "];\n";
                 }
@@ -809,8 +809,8 @@ struct AutoSchedule {
                 const vector<ReductionVariable> &rvars = func.updates()[i].schedule().rvars();
                 const set<string> &var_list = sched.used_vars.at(func.name()).at(i + 1);
                 for (size_t j = 0; j < rvars.size(); ++j) {
-                    if ((var_list.find(rvars[j].var) == var_list.end()) ||
-                        (declared_rvars.find(rvars[j].var) != declared_rvars.end())) {
+                    if (!var_list.count(rvars[j].var) ||
+                        declared_rvars.count(rvars[j].var)) {
                         continue;
                     }
                     declared_rvars.insert(rvars[j].var);
@@ -1870,11 +1870,11 @@ Partitioner::GroupAnalysis Partitioner::analyze_group(const Group &g, bool show_
     // Separating into regions that computed within the group and regions that
     // are input to the group
     for (const auto &reg : compute_regions) {
-        if ((group_members.find(reg.first) != group_members.end()) &&
+        if (group_members.count(reg.first) &&
             (reg.first != g.output.func.name())) {
             group_reg.emplace(reg.first, reg.second);
-        } else if (group_inputs.find(reg.first) != group_inputs.end()) {
-            if (dep_analysis.env.find(reg.first) != dep_analysis.env.end()) {
+        } else if (group_inputs.count(reg.first)) {
+            if (dep_analysis.env.count(reg.first)) {
                 prod_reg.emplace(reg.first, reg.second);
             } else {
                 input_reg.emplace(reg.first, reg.second);
@@ -1964,14 +1964,14 @@ Partitioner::GroupAnalysis Partitioner::analyze_group(const Group &g, bool show_
     // Linear dropoff
     float load_slope = arch_params.balance / arch_params.last_level_cache_size;
     for (const auto &f_load : group_load_costs) {
-        internal_assert(g.inlined.find(f_load.first) == g.inlined.end())
+        internal_assert(!g.inlined.count(f_load.first))
             << "Intermediates of inlined pure fuction \"" << f_load.first
             << "\" should not have been in the group_load_costs\n";
 
         const auto &alloc_reg = get_element(alloc_regions, f_load.first);
 
         Expr footprint;
-        bool is_group_member = (group_members.find(f_load.first) != group_members.end());
+        bool is_group_member = group_members.count(f_load.first);
         bool is_output = (f_load.first == g.output.func.name());
 
         // We use allocated region as conservative estimate of the footprint since
@@ -1983,7 +1983,7 @@ Partitioner::GroupAnalysis Partitioner::analyze_group(const Group &g, bool show_
             Expr initial_footprint;
             const auto &f_load_pipeline_bounds = get_element(pipeline_bounds, f_load.first);
 
-            bool is_function = (dep_analysis.env.find(f_load.first) != dep_analysis.env.end());
+            bool is_function = dep_analysis.env.count(f_load.first);
             if (!is_function) {  // It is a load to some input buffer
                 // Initial loads
                 initial_footprint = costs.input_region_size(f_load.first, f_load_pipeline_bounds);
@@ -2415,7 +2415,7 @@ void Partitioner::vectorize_stage(const Group &g, Stage f_handle, int stage_num,
     for (int d = 0; d < (int)dims.size() - 1; d++) {
         string dim_name = get_base_name(dims[d].var);
         bool can_vectorize = true;
-        if (rvars.find(dim_name) != rvars.end()) {
+        if (rvars.count(dim_name)) {
             can_vectorize = can_parallelize_rvar(dim_name, func.name(), def);
         }
         const auto &iter = estimates.find(dim_name);
@@ -2429,7 +2429,7 @@ void Partitioner::vectorize_stage(const Group &g, Stage f_handle, int stage_num,
 
     if (vec_dim_index >= 0) {
         string vec_dim_name = get_base_name(dims[vec_dim_index].var);
-        bool is_rvar = (rvars.find(vec_dim_name) != rvars.end());
+        bool is_rvar = rvars.count(vec_dim_name);
         internal_assert(is_rvar == dims[vec_dim_index].is_rvar());
 
         VarOrRVar vec_var(vec_dim_name, is_rvar);
@@ -2486,7 +2486,7 @@ void Partitioner::reorder_dims(Stage f_handle, int stage_num, Definition def,
     vector<pair<string, int>> order;
 
     for (int d = 0; d < (int)dims.size() - 1; d++) {
-        internal_assert(strides.find(dims[d].var) != strides.end());
+        internal_assert(strides.count(dims[d].var));
     }
 
     // Iterate until all the dimensions have been assigned an order
@@ -2673,7 +2673,7 @@ void Partitioner::generate_group_cpu_schedule(
 
     // Apply tiling to output of the group
     for (const auto &var : dim_vars) {
-        bool is_rvar = (rvars.find(var) != rvars.end());
+        bool is_rvar = rvars.count(var);
         VarOrRVar v(var, is_rvar);
 
         const auto &iter = g.tile_sizes.find(var);
@@ -2749,7 +2749,7 @@ void Partitioner::generate_group_cpu_schedule(
             }
 
             string var = get_base_name(dims[d].var);
-            bool is_rvar = (rvars.find(var) != rvars.end());
+            bool is_rvar = rvars.count(var);
             internal_assert(is_rvar == dims[d].is_rvar());
             VarOrRVar v(var, is_rvar);
 
@@ -2768,7 +2768,7 @@ void Partitioner::generate_group_cpu_schedule(
             const auto &iter = stg_estimates.find(var);
             if ((iter != stg_estimates.end()) && iter->second.defined()) {
                 if (!seq_var.empty()) {
-                    VarOrRVar seq(seq_var, (rvars.find(seq_var) != rvars.end()));
+                    VarOrRVar seq(seq_var, rvars.count(seq_var));
                     f_handle.reorder(seq, v);
                     sched.push_schedule(f_handle.name(), g.output.stage_num,
                                         "reorder(" + seq_var + ", " + var + ")",
@@ -2793,15 +2793,15 @@ void Partitioner::generate_group_cpu_schedule(
     VarOrRVar tile_inner_var(Var::outermost());
     if (!outer_dims.empty()) {
         string var_name = get_base_name(dims[tile_inner_index].var);
-        bool is_rvar = (rvars.find(var_name) != rvars.end());
+        bool is_rvar = rvars.count(var_name);
         tile_inner_var = VarOrRVar(var_name, is_rvar);
     }
 
     for (const FStage &mem : g.members) {
         // Skip member stages that have been inlined or stage that is the
         // output stage of the group
-        if ((g.inlined.find(mem.func.name()) != g.inlined.end()) ||
-            (mem.func.name() == g_out.name())) {
+        if (g.inlined.count(mem.func.name()) ||
+            mem.func.name() == g_out.name()) {
             continue;
         }
 

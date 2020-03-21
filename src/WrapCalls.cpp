@@ -98,8 +98,8 @@ map<string, Function> wrap_func_calls(const map<string, Function> &env) {
                 global_wrappers.insert(Function(wrapper).name());
                 for (const auto &wrapped_env_iter : wrapped_env) {
                     in_func = wrapped_env_iter.first;
-                    if ((wrapped_fname == in_func) ||
-                        (all_func_wrappers.find(in_func) != all_func_wrappers.end())) {
+                    if (wrapped_fname == in_func ||
+                        all_func_wrappers.count(in_func)) {
                         // The wrapper should still call the original function,
                         // so we don't want to rewrite the calls done by the
                         // wrapper. We also shouldn't rewrite the original
@@ -165,7 +165,7 @@ map<string, Function> wrap_func_calls(const map<string, Function> &env) {
     for (const auto &iter : wrapped_env) {
         const auto &substitutions = func_wrappers_map[iter.second.get_contents()];
         for (const auto &pair : substitutions) {
-            if (global_wrappers.find(Function(pair.second).name()) == global_wrappers.end()) {
+            if (!global_wrappers.count(Function(pair.second).name())) {
                 validate_custom_wrapper(iter.second, Function(pair.first), Function(pair.second));
             }
         }

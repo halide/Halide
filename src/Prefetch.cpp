@@ -76,7 +76,7 @@ private:
         }
 
         // It is an external buffer.
-        user_assert(env.find(name) == env.end())
+        user_assert(!env.count(name))
             << "Prefetch to buffer \"" << name << "\" which has not been allocated\n";
 
         const auto &iter = external_buffers.find(name);
@@ -197,7 +197,7 @@ private:
             set<string> seen;
             for (int i = prefetch_list.size() - 1; i >= 0; --i) {
                 const PrefetchDirective &p = prefetch_list[i];
-                if (!ends_with(op->name, "." + p.var) || (seen.find(p.name) != seen.end())) {
+                if (!ends_with(op->name, "." + p.var) || seen.count(p.name)) {
                     continue;
                 }
                 seen.insert(p.name);

@@ -134,7 +134,7 @@ void validate_outputs(const std::map<Output, std::string> &in) {
 }
 
 bool contains(const std::map<Output, std::string> &in, const Output &key) {
-    return in.find(key) != in.end();
+    return in.count(key);
 }
 
 std::map<Output, std::string> add_suffixes(const std::map<Output, std::string> &in, const std::string &suffix) {
@@ -536,8 +536,8 @@ Module Module::resolve_submodules() const {
 }
 
 void Module::remap_metadata_name(const std::string &from, const std::string &to) const {
-    internal_assert(contents->metadata_name_map.find(from) == contents->metadata_name_map.end());
-    internal_assert(contents->metadata_name_map.find(to) == contents->metadata_name_map.end());
+    internal_assert(!contents->metadata_name_map.count(from));
+    internal_assert(!contents->metadata_name_map.count(to));
     contents->metadata_name_map[from] = to;
 }
 

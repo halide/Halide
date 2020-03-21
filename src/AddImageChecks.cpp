@@ -79,7 +79,7 @@ public:
     void visit(const Variable *op) override {
         if (op->param.defined() &&
             op->param.is_buffer() &&
-            buffers.find(op->param.name()) == buffers.end()) {
+            !buffers.count(op->param.name())) {
             Result r;
             r.param = op->param;
             r.type = op->param.type();
@@ -105,12 +105,12 @@ class TrimStmtToPartsThatAccessBuffers : public IRMutator {
         return IRMutator::visit(op);
     }
     Stmt visit(const Provide *op) override {
-        touches_buffer |= (buffers.find(op->name) != buffers.end());
+        touches_buffer |= (buffers.count(op->name) > 0);
         return IRMutator::visit(op);
     }
     Expr visit(const Variable *op) override {
         if (op->param.defined() && op->param.is_buffer()) {
-            touches_buffer |= (buffers.find(op->param.name()) != buffers.end());
+            touches_buffer |= (buffers.count(op->param.name()) > 0);
         }
         return IRMutator::visit(op);
     }
@@ -510,14 +510,14 @@ Stmt add_image_checks(Stmt s,
                 }
 
                 std::string min0_name = buffer_name + ".0.min." + dim;
-                if (replace_with_constrained.count(min0_name) > 0) {
+                if (replace_with_constrained.count(min0_name)) {
                     min_constrained = replace_with_constrained[min0_name];
                 } else {
                     min_constrained = Variable::make(Int(32), min0_name);
                 }
 
                 std::string extent0_name = buffer_name + ".0.extent." + dim;
-                if (replace_with_constrained.count(extent0_name) > 0) {
+                if (replace_with_constrained.count(extent0_name)) {
                     extent_constrained = replace_with_constrained[extent0_name];
                 } else {
                     extent_constrained = Variable::make(Int(32), extent0_name);

@@ -2297,7 +2297,7 @@ void CodeGen_LLVM::codegen_predicated_vector_store(const Store *op) {
         Value *vpred = codegen(op->predicate);
         Halide::Type value_type = op->value.type();
         Value *val = codegen(op->value);
-        bool is_external = (external_buffer.find(op->name) != external_buffer.end());
+        bool is_external = external_buffer.count(op->name);
         int alignment = value_type.bytes();
         int native_bits = native_vector_bits();
         int native_bytes = native_bits / 8;
@@ -2383,7 +2383,7 @@ Value *CodeGen_LLVM::codegen_dense_vector_load(const Load *load, Value *vpred) {
     const Ramp *ramp = load->index.as<Ramp>();
     internal_assert(ramp && is_one(ramp->stride)) << "Should be dense vector load\n";
 
-    bool is_external = (external_buffer.find(load->name) != external_buffer.end());
+    bool is_external = external_buffer.count(load->name);
     int alignment = load->type.bytes();  // The size of a single element
 
     int native_bits = native_vector_bits();
@@ -4091,7 +4091,7 @@ void CodeGen_LLVM::visit(const Store *op) {
     }
 
     Value *val = codegen(op->value);
-    bool is_external = (external_buffer.find(op->name) != external_buffer.end());
+    bool is_external = external_buffer.count(op->name);
     // Scalar
     if (value_type.is_scalar()) {
         Value *ptr = codegen_buffer_pointer(op->name, value_type, op->index);

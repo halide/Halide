@@ -1456,7 +1456,7 @@ class EliminateInterleaves : public IRMutator {
                                    op->func, op->value_index, op->image, op->param);
             // Add the interleave back to the result of the call.
             return native_interleave(expr);
-        } else if (deinterleaving_alts.find(op->name) != deinterleaving_alts.end() &&
+        } else if (deinterleaving_alts.count(op->name) &&
                    yields_removable_interleave(args)) {
             // This call has a deinterleaving alternative, and the
             // arguments are interleaved, so we should use the
@@ -2227,7 +2227,7 @@ class SyncronizationBarriers : public IRMutator {
     // Creates entry in sync map for the stmt requiring a
     // scatter-release instruction before it.
     void check_hazard(const string &name) {
-        if (in_flight.find(name) == in_flight.end()) {
+        if (!in_flight.count(name)) {
             return;
         }
         // Sync Needed. Add the scatter-release before the first different For
@@ -2269,7 +2269,7 @@ public:
         curr = &s;
         Stmt new_s = IRMutator::mutate(s);
         // Wrap the stmt with scatter-release if any hazard was detected.
-        if (sync.find(&s) != sync.end()) {
+        if (sync.count(&s)) {
             Stmt scatter_sync = Evaluate::make(Call::make(Int(32), "scatter_release",
                                                           {sync[&s]}, Call::Intrinsic));
             return Block::make(scatter_sync, new_s);

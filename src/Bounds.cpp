@@ -3006,12 +3006,12 @@ void bounds_test() {
 
     map<string, Box> r;
     r = boxes_required(loop);
-    internal_assert(r.find("output") == r.end());
-    internal_assert(r.find("input") != r.end());
+    internal_assert(!r.count("output"));
+    internal_assert(r.count("input"));
     internal_assert(equal(simplify(r["input"][0].min), 6));
     internal_assert(equal(simplify(r["input"][0].max), 25));
     r = boxes_provided(loop);
-    internal_assert(r.find("output") != r.end());
+    internal_assert(r.count("output"));
     internal_assert(equal(simplify(r["output"][0].min), 4));
     internal_assert(equal(simplify(r["output"][0].max), 13));
 

@@ -336,7 +336,7 @@ void ReverseAccumulationVisitor::propagate_adjoints(
                 if (expr.get()->node_type == IRNodeType::Let) {
                     const Let *op = expr.as<Let>();
                     // Assume Let variables are unique
-                    internal_assert(let_var_mapping.find(op->name) == let_var_mapping.end());
+                    internal_assert(!let_var_mapping.count(op->name));
                     let_var_mapping[op->name] = op->value;
                     let_variables.push_back(op->name);
                 }
@@ -527,7 +527,7 @@ void ReverseAccumulationVisitor::propagate_adjoints(
                 }
             }
             FuncKey func_key{func.name(), update_id};
-            internal_assert(adjoint_funcs.find(func_key) == adjoint_funcs.end());
+            internal_assert(!adjoint_funcs.count(func_key));
             adjoint_funcs[func_key] = adjoint_func;
         }
     }
@@ -544,7 +544,7 @@ void ReverseAccumulationVisitor::propagate_adjoints(
         vector<Var> args(it.second.dimension);
         adjoint_func(args) = make_zero(it.second.type);
         FuncKey func_key{it.first, -1};
-        if (adjoint_funcs.find(func_key) != adjoint_funcs.end()) {
+        if (adjoint_funcs.count(func_key)) {
             user_error << "Naming conflict between buffer/parameters and function:" << it.first << "\n";
         }
         adjoint_funcs[func_key] = adjoint_func;
@@ -562,7 +562,7 @@ void ReverseAccumulationVisitor::propagate_adjoints(
             current_update_id = update_id;
             FuncKey func_key{func.name(), update_id};
             Func adjoint_func = adjoint_funcs[func_key];
-            internal_assert(func_bounds.find(func.name()) != func_bounds.end());
+            internal_assert(func_bounds.count(func.name()));
             // The propagation of adjoints to self reference goes to
             // current update instead of previous if it's a non overwriting scan
             is_current_non_overwriting_scan = false;
@@ -663,7 +663,7 @@ void ReverseAccumulationVisitor::propagate_adjoints(
                 if (expr.get()->node_type == IRNodeType::Let) {
                     const Let *op = expr.as<Let>();
                     // Assume Let variables are unique
-                    internal_assert(let_var_mapping.find(op->name) == let_var_mapping.end());
+                    internal_assert(!let_var_mapping.count(op->name));
                     let_var_mapping[op->name] = op->value;
                     let_variables.push_back(op->name);
                 }
@@ -803,7 +803,7 @@ void ReverseAccumulationVisitor::accumulate(const Expr &stub, Expr adjoint) {
         }
     }
 
-    if (expr_adjoints.find(stub_ptr) == expr_adjoints.end()) {
+    if (!expr_adjoints.count(stub_ptr)) {
         expr_adjoints[stub_ptr] = adjoint;
     } else {
         expr_adjoints[stub_ptr] = expr_adjoints[stub_ptr] + adjoint;
@@ -827,7 +827,7 @@ void ReverseAccumulationVisitor::visit(const StringImm *op) {
 }
 
 void ReverseAccumulationVisitor::visit(const Cast *op) {
-    internal_assert(expr_adjoints.find(op) != expr_adjoints.end());
+    internal_assert(expr_adjoints.count(op));
     Expr adjoint = expr_adjoints[op];
 
     // d/dx cast(x) = 1.f if op->type is float otherwise 0
@@ -839,7 +839,7 @@ void ReverseAccumulationVisitor::visit(const Cast *op) {
 }
 
 void ReverseAccumulationVisitor::visit(const Variable *op) {
-    internal_assert(expr_adjoints.find(op) != expr_adjoints.end());
+    internal_assert(expr_adjoints.count(op));
     Expr adjoint = expr_adjoints[op];
 
     if (op->param.defined()) {
@@ -856,7 +856,7 @@ void ReverseAccumulationVisitor::visit(const Variable *op) {
 }
 
 void ReverseAccumulationVisitor::visit(const Add *op) {
-    internal_assert(expr_adjoints.find(op) != expr_adjoints.end());
+    internal_assert(expr_adjoints.count(op));
     Expr adjoint = expr_adjoints[op];
 
     // d/da a + b = 1
@@ -866,7 +866,7 @@ void ReverseAccumulationVisitor::visit(const Add *op) {
 }
 
 void ReverseAccumulationVisitor::visit(const Sub *op) {
-    internal_assert(expr_adjoints.find(op) != expr_adjoints.end());
+    internal_assert(expr_adjoints.count(op));
     Expr adjoint = expr_adjoints[op];
 
     // d/da a - b = 1
@@ -876,7 +876,7 @@ void ReverseAccumulationVisitor::visit(const Sub *op) {
 }
 
 void ReverseAccumulationVisitor::visit(const Mul *op) {
-    internal_assert(expr_adjoints.find(op) != expr_adjoints.end());
+    internal_assert(expr_adjoints.count(op));
     Expr adjoint = expr_adjoints[op];
 
     // d/da a * b = b
@@ -886,7 +886,7 @@ void ReverseAccumulationVisitor::visit(const Mul *op) {
 }
 
 void ReverseAccumulationVisitor::visit(const Div *op) {
-    internal_assert(expr_adjoints.find(op) != expr_adjoints.end());
+    internal_assert(expr_adjoints.count(op));
     Expr adjoint = expr_adjoints[op];
 
     // Trick to avoid NaN in select() clauses: if adjoint is a select with an 0,
@@ -920,7 +920,7 @@ void ReverseAccumulationVisitor::visit(const Div *op) {
 }
 
 void ReverseAccumulationVisitor::visit(const Mod *op) {
-    internal_assert(expr_adjoints.find(op) != expr_adjoints.end());
+    internal_assert(expr_adjoints.count(op));
     Expr adjoint = expr_adjoints[op];
 
     // a % b = a - trunc(a/b) * b
@@ -931,7 +931,7 @@ void ReverseAccumulationVisitor::visit(const Mod *op) {
 }
 
 void ReverseAccumulationVisitor::visit(const Min *op) {
-    internal_assert(expr_adjoints.find(op) != expr_adjoints.end());
+    internal_assert(expr_adjoints.count(op));
     Expr adjoint = expr_adjoints[op];
 
     // d/da min(a, b) = a <= b ? 1 : 0
@@ -943,7 +943,7 @@ void ReverseAccumulationVisitor::visit(const Min *op) {
 }
 
 void ReverseAccumulationVisitor::visit(const Max *op) {
-    internal_assert(expr_adjoints.find(op) != expr_adjoints.end());
+    internal_assert(expr_adjoints.count(op));
     Expr adjoint = expr_adjoints[op];
 
     // d/da max(a, b) = a >= b ? 1 : 0
@@ -955,7 +955,7 @@ void ReverseAccumulationVisitor::visit(const Max *op) {
 }
 
 void ReverseAccumulationVisitor::visit(const EQ *op) {
-    internal_assert(expr_adjoints.find(op) != expr_adjoints.end());
+    internal_assert(expr_adjoints.count(op));
     // Expr adjoint = expr_adjoints[op];
 
     // output is a boolean, so we should propagate zero to the arguments
@@ -964,7 +964,7 @@ void ReverseAccumulationVisitor::visit(const EQ *op) {
 }
 
 void ReverseAccumulationVisitor::visit(const NE *op) {
-    internal_assert(expr_adjoints.find(op) != expr_adjoints.end());
+    internal_assert(expr_adjoints.count(op));
     // Expr adjoint = expr_adjoints[op];
 
     // output is a boolean, so we should propagate zero to the arguments
@@ -973,7 +973,7 @@ void ReverseAccumulationVisitor::visit(const NE *op) {
 }
 
 void ReverseAccumulationVisitor::visit(const LT *op) {
-    internal_assert(expr_adjoints.find(op) != expr_adjoints.end());
+    internal_assert(expr_adjoints.count(op));
     // Expr adjoint = expr_adjoints[op];
 
     // output is a boolean, so we should propagate zero to the arguments
@@ -982,7 +982,7 @@ void ReverseAccumulationVisitor::visit(const LT *op) {
 }
 
 void ReverseAccumulationVisitor::visit(const LE *op) {
-    internal_assert(expr_adjoints.find(op) != expr_adjoints.end());
+    internal_assert(expr_adjoints.count(op));
     // Expr adjoint = expr_adjoints[op];
 
     // output is a boolean, so we should propagate zero to the arguments
@@ -991,7 +991,7 @@ void ReverseAccumulationVisitor::visit(const LE *op) {
 }
 
 void ReverseAccumulationVisitor::visit(const GT *op) {
-    internal_assert(expr_adjoints.find(op) != expr_adjoints.end());
+    internal_assert(expr_adjoints.count(op));
     // Expr adjoint = expr_adjoints[op];
 
     // output is a boolean, so we should propagate zero to the arguments
@@ -1000,7 +1000,7 @@ void ReverseAccumulationVisitor::visit(const GT *op) {
 }
 
 void ReverseAccumulationVisitor::visit(const GE *op) {
-    internal_assert(expr_adjoints.find(op) != expr_adjoints.end());
+    internal_assert(expr_adjoints.count(op));
     // Expr adjoint = expr_adjoints[op];
 
     // output is a boolean, so we should propagate zero to the arguments
@@ -1009,7 +1009,7 @@ void ReverseAccumulationVisitor::visit(const GE *op) {
 }
 
 void ReverseAccumulationVisitor::visit(const And *op) {
-    internal_assert(expr_adjoints.find(op) != expr_adjoints.end());
+    internal_assert(expr_adjoints.count(op));
     // Expr adjoint = expr_adjoints[op];
 
     // output is a boolean, so we should propagate zero to the arguments
@@ -1018,7 +1018,7 @@ void ReverseAccumulationVisitor::visit(const And *op) {
 }
 
 void ReverseAccumulationVisitor::visit(const Or *op) {
-    internal_assert(expr_adjoints.find(op) != expr_adjoints.end());
+    internal_assert(expr_adjoints.count(op));
     // Expr adjoint = expr_adjoints[op];
 
     // output is a boolean, so we should propagate zero to the arguments
@@ -1027,7 +1027,7 @@ void ReverseAccumulationVisitor::visit(const Or *op) {
 }
 
 void ReverseAccumulationVisitor::visit(const Not *op) {
-    internal_assert(expr_adjoints.find(op) != expr_adjoints.end());
+    internal_assert(expr_adjoints.count(op));
     // Expr adjoint = expr_adjoints[op];
 
     // output is a boolean, so we should propagate zero to the argument
@@ -1035,14 +1035,14 @@ void ReverseAccumulationVisitor::visit(const Not *op) {
 }
 
 void ReverseAccumulationVisitor::visit(const Let *op) {
-    internal_assert(expr_adjoints.find(op) != expr_adjoints.end());
+    internal_assert(expr_adjoints.count(op));
     Expr adjoint = expr_adjoints[op];
 
     accumulate(op->body, adjoint);
 }
 
 void ReverseAccumulationVisitor::visit(const Select *op) {
-    internal_assert(expr_adjoints.find(op) != expr_adjoints.end());
+    internal_assert(expr_adjoints.count(op));
     Expr adjoint = expr_adjoints[op];
 
     // d/db select(a, b, c) = select(a, 1, 0)
@@ -1054,7 +1054,7 @@ void ReverseAccumulationVisitor::visit(const Select *op) {
 }
 
 void ReverseAccumulationVisitor::visit(const Call *op) {
-    internal_assert(expr_adjoints.find(op) != expr_adjoints.end());
+    internal_assert(expr_adjoints.count(op));
     Expr adjoint = expr_adjoints[op];
     if (op->is_extern()) {
         // Math functions
@@ -1260,7 +1260,7 @@ void ReverseAccumulationVisitor::propagate_halide_function_call(
     } else {
         func_key = FuncKey{name, -1};
     }
-    internal_assert(adjoint_funcs.find(func_key) != adjoint_funcs.end());
+    internal_assert(adjoint_funcs.count(func_key));
     Func &func_to_update = adjoint_funcs[func_key];
     internal_assert(func_to_update.dimensions() == (int)lhs.size());
 
@@ -1686,7 +1686,7 @@ void ReverseAccumulationVisitor::propagate_halide_function_call(
     // Order: newly introduced rvar -> original rvar
     vector<ReductionVariableInfo> new_rvar_vec, old_rvar_vec;
     for (const auto &it : rvar_maps) {
-        if (org_rvar_maps.find(it.first) == org_rvar_maps.end()) {
+        if (!org_rvar_maps.count(it.first)) {
             new_rvar_vec.push_back(it.second);
         } else {
             old_rvar_vec.push_back(it.second);

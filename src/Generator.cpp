@@ -869,7 +869,7 @@ int generate_filter_main_inner(int argc, char **argv, std::ostream &cerr) {
     const std::vector<std::string> emit_flags = split_string(flags_info["-e"], ",");
     const bool stub_only = (emit_flags.size() == 1 && emit_flags[0] == "cpp_stub");
     if (!stub_only) {
-        if (generator_args.find("target") == generator_args.end()) {
+        if (!generator_args.count("target")) {
             cerr << "Target missing\n";
             cerr << kUsage;
             return 1;
@@ -1039,7 +1039,7 @@ void GeneratorRegistry::register_factory(const std::string &name,
     user_assert(is_valid_name(name)) << "Invalid Generator name: " << name;
     GeneratorRegistry &registry = get_registry();
     std::lock_guard<std::mutex> lock(registry.mutex);
-    internal_assert(registry.factories.find(name) == registry.factories.end())
+    internal_assert(!registry.factories.count(name))
         << "Duplicate Generator name: " << name;
     registry.factories[name] = std::move(generator_factory);
 }
@@ -1048,7 +1048,7 @@ void GeneratorRegistry::register_factory(const std::string &name,
 void GeneratorRegistry::unregister_factory(const std::string &name) {
     GeneratorRegistry &registry = get_registry();
     std::lock_guard<std::mutex> lock(registry.mutex);
-    internal_assert(registry.factories.find(name) != registry.factories.end())
+    internal_assert(registry.factories.count(name))
         << "Generator not found: " << name;
     registry.factories.erase(name);
 }

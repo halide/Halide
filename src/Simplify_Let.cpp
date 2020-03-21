@@ -241,7 +241,7 @@ Body Simplify::simplify_let(const LetOrLetStmt *op, ExprInfo *bounds) {
         VarInfo info = var_info.get(it->op->name);
         var_info.pop(it->op->name);
 
-        if (it->new_value.defined() && (info.new_uses > 0 && vars_used.count(it->new_name) > 0)) {
+        if (it->new_value.defined() && (info.new_uses > 0 && vars_used.count(it->new_name))) {
             // The new name/value may be used
             result = LetOrLetStmt::make(it->new_name, it->new_value, result);
             count_var_uses(it->new_value, vars_used);

@@ -17,7 +17,7 @@ void ObjectInstanceRegistry::register_instance(void *this_ptr, size_t size, Kind
     ObjectInstanceRegistry &registry = get_registry();
     std::lock_guard<std::mutex> lock(registry.mutex);
     uintptr_t key = (uintptr_t)this_ptr;
-    internal_assert(registry.instances.find(key) == registry.instances.end());
+    internal_assert(!registry.instances.count(key));
     if (introspection_helper) {
         registry.instances[key] = InstanceInfo(size, kind, subject_ptr, true);
         Introspection::register_heap_object(this_ptr, size, introspection_helper);

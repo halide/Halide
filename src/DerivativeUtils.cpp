@@ -171,7 +171,7 @@ void ExpressionSorter::visit(const Call *op) {
 }
 
 void ExpressionSorter::visit(const Let *op) {
-    internal_assert(let_var_mapping.find(op->name) == let_var_mapping.end());
+    internal_assert(!let_var_mapping.count(op->name));
     let_var_mapping[op->name] = op->value;
 
     include(op->body);
@@ -245,7 +245,7 @@ map<string, Box> inference_bounds(const vector<Func> &funcs,
     for (auto it = order.rbegin(); it != order.rend(); it++) {
         Func func = Func(env[*it]);
         // We should already have the bounds of this function
-        internal_assert(bounds.find(*it) != bounds.end());
+        internal_assert(bounds.count(*it));
         const Box &current_bounds = bounds[*it];
         internal_assert(func.args().size() == current_bounds.size());
         // We know the range for each argument of this function

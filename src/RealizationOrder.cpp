@@ -29,7 +29,7 @@ void find_fused_groups_dfs(const string &current,
     internal_assert(iter != fuse_adjacency_list.end());
 
     for (const string &fn : iter->second) {
-        if (visited.find(fn) == visited.end()) {
+        if (!visited.count(fn)) {
             find_fused_groups_dfs(fn, fuse_adjacency_list, visited, group);
         }
     }
@@ -44,7 +44,7 @@ find_fused_groups(const map<string, Function> &env,
 
     for (const auto &iter : env) {
         const string &fn = iter.first;
-        if (visited.find(fn) == visited.end()) {
+        if (!visited.count(fn)) {
             vector<string> group;
             find_fused_groups_dfs(fn, fuse_adjacency_list, visited, group);
 
@@ -71,10 +71,10 @@ void realization_order_dfs(const string &current,
 
     for (const string &fn : iter->second) {
         internal_assert(fn != current);
-        if (visited.find(fn) == visited.end()) {
+        if (!visited.count(fn)) {
             realization_order_dfs(fn, graph, visited, result_set, order);
         } else {
-            internal_assert(result_set.find(fn) != result_set.end())
+            internal_assert(result_set.count(fn))
                 << "Stuck in a loop computing a realization order. "
                 << "Perhaps this pipeline has a loop involving " << current << "?\n";
         }
@@ -109,13 +109,13 @@ void validate_fused_pair(const string &fn, size_t stage_index,
     // Assert no dependencies among the functions that are computed_with.
     const auto &callees_1 = indirect_calls.find(p.func_1);
     if (callees_1 != indirect_calls.end()) {
-        user_assert(callees_1->second.find(p.func_2) == callees_1->second.end())
+        user_assert(!callees_1->second.count(p.func_2))
             << "Invalid compute_with: there is dependency between "
             << p.func_1 << " and " << p.func_2 << "\n";
     }
     const auto &callees_2 = indirect_calls.find(p.func_2);
     if (callees_2 != indirect_calls.end()) {
-        user_assert(callees_2->second.find(p.func_1) == callees_2->second.end())
+        user_assert(!callees_2->second.count(p.func_1))
             << "Invalid compute_with: there is dependency between "
             << p.func_1 << " and " << p.func_2 << "\n";
     }
@@ -279,7 +279,7 @@ pair<vector<string>, vector<vector<string>>> realization_order(
     set<string> result_set;
     set<string> visited;
     for (Function f : outputs) {
-        if (visited.find(f.name()) == visited.end()) {
+        if (!visited.count(f.name())) {
             realization_order_dfs(f.name(), graph, visited, result_set, temp);
         }
     }
@@ -337,7 +337,7 @@ vector<string> topological_order(const vector<Function> &outputs,
     set<string> result_set;
     set<string> visited;
     for (Function f : outputs) {
-        if (visited.find(f.name()) == visited.end()) {
+        if (!visited.count(f.name())) {
             realization_order_dfs(f.name(), graph, visited, result_set, order);
         }
     }

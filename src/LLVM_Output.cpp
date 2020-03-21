@@ -177,7 +177,7 @@ void write_symbol_table(std::ostream &out,
             auto err = sym.printName(symbols);
             internal_assert(!err);
             std::string name = symbols.str().str();
-            if (name_to_member_index.find(name) != name_to_member_index.end()) {
+            if (name_to_member_index.count(name)) {
                 user_warning << "Warning: symbol '" << name << "' seen multiple times in library.\n";
                 continue;
             }

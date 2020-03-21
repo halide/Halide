@@ -479,7 +479,7 @@ Cost RegionCosts::region_cost(const map<string, Box> &regions, const set<string>
     for (const auto &f : regions) {
         // The cost for pure inlined functions will be accounted in the
         // consumer of the inlined function so they should be skipped.
-        if (inlines.find(f.first) != inlines.end()) {
+        if (inlines.count(f.first)) {
             internal_assert(get_element(env, f.first).is_pure());
             continue;
         }
@@ -610,7 +610,7 @@ RegionCosts::detailed_load_costs(const map<string, Box> &regions,
     for (const auto &r : regions) {
         // The cost for pure inlined functions will be accounted in the
         // consumer of the inlined function so they should be skipped.
-        if (inlines.find(r.first) != inlines.end()) {
+        if (inlines.count(r.first)) {
             internal_assert(get_element(env, r.first).is_pure());
             continue;
         }
@@ -718,7 +718,7 @@ Expr RegionCosts::region_footprint(const map<string, Box> &regions,
 
     for (const auto &f : regions) {
         // Inlined functions do not have allocations
-        bool is_inlined = inlined.find(f.first) != inlined.end();
+        bool is_inlined = inlined.count(f.first);
         Expr size = is_inlined ? make_zero(Int(64)) : region_size(f.first, f.second);
         if (!size.defined()) {
             return Expr();
@@ -728,7 +728,7 @@ Expr RegionCosts::region_footprint(const map<string, Box> &regions,
     }
 
     for (const auto &f : top_order) {
-        if (regions.find(f) != regions.end()) {
+        if (regions.count(f)) {
             curr_size += get_element(func_sizes, f);
         }
         working_set_size = max(curr_size, working_set_size);

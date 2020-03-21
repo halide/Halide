@@ -1297,7 +1297,7 @@ private:
             internal_assert(iter != env.end());
             const Function &f = iter->second;
             string prefix_2 = pair.func_2 + ".s" + std::to_string(pair.stage_2) + "." + pair.var_name;
-            if (visited.find(prefix_2) == visited.end()) {
+            if (!visited.count(prefix_2)) {
                 const Definition &def_2 = (pair.stage_2 == 0) ? f.definition() : f.update((int)(pair.stage_2 - 1));
                 collect_all_dependence_helper(prefix_2, def_2, pair, dependence, visited);
             }
@@ -1314,7 +1314,7 @@ private:
             internal_assert(iter != env.end());
             const Function &f = iter->second;
             string prefix = pair.func_2 + ".s" + std::to_string(pair.stage_2) + "." + pair.var_name;
-            if (visited.find(prefix) == visited.end()) {
+            if (!visited.count(prefix)) {
                 const Definition &def_2 = (pair.stage_2 == 0) ? f.definition() : f.update((int)(pair.stage_2 - 1));
                 collect_all_dependence_helper(prefix, def_2, pair, dependence, visited);
             }

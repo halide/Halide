@@ -16,7 +16,7 @@ class UniquifyVariableNames : public IRMutator {
     map<string, int> vars;
 
     void push_name(const string &s) {
-        if (vars.find(s) == vars.end()) {
+        if (!vars.count(s)) {
             vars[s] = 0;
         } else {
             vars[s]++;
@@ -24,7 +24,7 @@ class UniquifyVariableNames : public IRMutator {
     }
 
     string get_name(string s) {
-        if (vars.find(s) == vars.end()) {
+        if (!vars.count(s)) {
             return s;
         } else if (vars[s] == 0) {
             return s;
