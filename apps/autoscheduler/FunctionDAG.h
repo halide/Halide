@@ -194,6 +194,7 @@ public:
         LoadJacobian result(producer_storage_dims(), other.consumer_loop_dims(), count() * other.count());
         for (size_t i = 0; i < producer_storage_dims(); i++) {
             for (size_t j = 0; j < other.consumer_loop_dims(); j++) {
+                result(i, j) = OptionalRational{0, 1};
                 for (size_t k = 0; k < consumer_loop_dims(); k++) {
                     result(i, j) += (*this)(i, k) * other(k, j);
                 }
