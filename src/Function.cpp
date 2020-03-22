@@ -431,7 +431,7 @@ void Function::define(const vector<string> &args, vector<Expr> values) {
     vector<VarOrRVar> free_vars;
     free_vars.reserve(args.size());
     for (size_t i = 0; i < args.size(); i++) {
-        free_vars.push_back(Var(args[i]));
+        free_vars.emplace_back(Var(args[i]));
     }
     for (size_t i = 0; i < values.size(); i++) {
         values[i] = lower_random(values[i], free_vars, tag);
@@ -609,12 +609,12 @@ void Function::define_update(const vector<Expr> &_args, vector<Expr> values) {
     free_vars.reserve(num_free_vars);
     for (size_t i = 0; i < pure_args.size(); i++) {
         if (!pure_args[i].empty()) {
-            free_vars.push_back(Var(pure_args[i]));
+            free_vars.emplace_back(Var(pure_args[i]));
         }
     }
     if (check.reduction_domain.defined()) {
         for (size_t i = 0; i < check.reduction_domain.domain().size(); i++) {
-            free_vars.push_back(RVar(check.reduction_domain, i));
+            free_vars.emplace_back(RVar(check.reduction_domain, i));
         }
     }
     int tag = rand_counter++;
