@@ -1402,6 +1402,21 @@ void test_print() {
     check(__LINE__, d(0), 1.f);
 }
 
+void test_random_float() {
+    Func input;
+    input() = 1.f;
+    Var x;
+    Func out;
+    RDom r(0, 1, "MY_R");
+    // Add r to test if the implicit capture of lower_random works fine with autodiff.
+    out(x) += random_float() * input() + r;
+    Derivative d_out_d = propagate_adjoints(out);
+    Func d_out_d_input = d_out_d(input);
+    Buffer<float> o = out.realize(1);
+    Buffer<float> d_input = d_out_d_input.realize();
+    check(__LINE__, d_input(), o(0));
+}
+
 int main(int argc, char **argv) {
     test_scalar<float>();
     test_scalar<double>();
@@ -1443,6 +1458,7 @@ int main(int argc, char **argv) {
     test_param();
     test_custom_adjoint_buffer();
     test_print();
+    test_random_float();
     printf("[autodiff] Success!\n");
     return 0;
 }
