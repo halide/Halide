@@ -404,6 +404,25 @@ struct Semaphore {
     Expr init;
 };
 
+class HasExternConsumer : public IRVisitor {
+
+    using IRVisitor::visit;
+
+    void visit(const Variable *op) override {
+        if (op->name == func + ".buffer") {
+            result = true;
+        }
+    }
+
+    const std::string &func;
+
+public:
+    HasExternConsumer(const std::string &func)
+        : func(func) {
+    }
+    bool result = false;
+};
+
 // Attempt to fold the storage of a particular function in a statement
 class AttemptStorageFoldingOfFunction : public IRMutator {
     Function func;
@@ -449,6 +468,9 @@ class AttemptStorageFoldingOfFunction : public IRMutator {
 
         Scope<Interval> steady_bounds;
         steady_bounds.push(op->name, Interval(simplify(op->min + 1), simplify(op->min + op->extent - 1)));
+
+        HasExternConsumer has_extern_consumer(func.name());
+        body.accept(&has_extern_consumer);
 
         // Try each dimension in turn from outermost in
         for (size_t i = box.size(); i > 0; i--) {
@@ -499,6 +521,7 @@ class AttemptStorageFoldingOfFunction : public IRMutator {
             Expr explicit_factor;
             if (!is_pure(min) ||
                 !is_pure(max) ||
+                has_extern_consumer.result ||
                 expr_uses_var(min, op->name) ||
                 expr_uses_var(max, op->name)) {
                 // We only use the explicit fold factor if the fold is

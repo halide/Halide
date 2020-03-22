@@ -1263,20 +1263,6 @@ private:
                            op->func, op->value_index, op->image, op->param),
                 Call::make(t, op->name, {interval.max}, op->call_type,
                            op->func, op->value_index, op->image, op->param));
-
-        } else if (!const_bound &&
-                   (op->name == Call::buffer_get_min ||
-                    op->name == Call::buffer_get_max)) {
-            // Bounds query results should have perfect nesting. Their
-            // max over a loop is just the same bounds query call at
-            // an outer loop level. This requires that the query is
-            // also done at the outer loop level so that the buffer
-            // arg is still valid, which it is, so it is.
-            //
-            // TODO: There should be an assert injected in the inner
-            // loop to check perfect nesting.
-            interval = Interval(Call::make(Int(32), Call::buffer_get_min, op->args, Call::Extern),
-                                Call::make(Int(32), Call::buffer_get_max, op->args, Call::Extern));
         } else if (op->is_intrinsic(Call::popcount) ||
                    op->is_intrinsic(Call::count_leading_zeros) ||
                    op->is_intrinsic(Call::count_trailing_zeros)) {
