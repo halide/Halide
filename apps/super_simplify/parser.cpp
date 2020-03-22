@@ -150,13 +150,8 @@ Expr parse_halide_expr(char **cursor, char *end, Type expected_type,
     consume_whitespace(cursor, end);
 
     if (precedence == 10) {
+        // type-cast
         for (auto t : typenames) {
-            // A type annotation for the token that follows
-            if (consume(cursor, end, t.constant_prefix)) {
-                return parse_halide_expr(cursor, end, t.type, 10, stack);
-            }
-
-            // type-cast
             if (consume(cursor, end, t.cast_prefix)) {
                 Expr a = cast(t.type, parse_halide_expr(cursor, end, Type{}, 0, stack));
                 expect(cursor, end, ")");
@@ -289,6 +284,19 @@ Expr parse_halide_expr(char **cursor, char *end, Type expected_type,
             expect(cursor, end, ")");
             return likely(a);
         }
+        // An expression in parens
+        if (consume(cursor, end, "(")) {
+            Expr e = parse_halide_expr(cursor, end, expected_type, 0, stack);
+            expect(cursor, end, ")");
+            return e;
+        }
+
+        for (auto t : typenames) {
+            // A type annotation for the token that follows
+            if (consume(cursor, end, t.constant_prefix)) {
+                expected_type = t.type;
+            }
+        }
 
         // Constants
         if ((**cursor >= '0' && **cursor <= '9') || **cursor == '-') {
@@ -305,7 +313,7 @@ Expr parse_halide_expr(char **cursor, char *end, Type expected_type,
             return const_false();
         }
 
-        // Variables
+        // Variables and loads
         if ((**cursor >= 'a' && **cursor <= 'z') || **cursor == '.') {
             char **tmp = cursor;
             string name = consume_token(tmp, end);
@@ -324,13 +332,6 @@ Expr parse_halide_expr(char **cursor, char *end, Type expected_type,
                 }
                 return Variable::make(expected_type, name);
             }
-        }
-
-        // An expression in parens
-        if (consume(cursor, end, "(")) {
-            Expr e = parse_halide_expr(cursor, end, expected_type, 0, stack);
-            expect(cursor, end, ")");
-            return e;
         }
 
         for (auto p : stack) {
