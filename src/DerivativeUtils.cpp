@@ -125,7 +125,9 @@ Expr fill_rvar_domain(const Expr &expr, const map<std::string, ReductionVariable
 
         const map<string, ReductionVariableInfo> &domain;
 
-        FillRVarDomain(const map<string, ReductionVariableInfo> &domain) : domain(domain) {}
+        FillRVarDomain(const map<string, ReductionVariableInfo> &domain)
+            : domain(domain) {
+        }
     } mutator(domain);
 
     return mutator.mutate(expr);
