@@ -1407,7 +1407,7 @@ void test_random_float() {
     input() = 1.f;
     Var x;
     Func out;
-    RDom r(0, 1, "MY_R");
+    RDom r(0, 1);
     // Add r to test if the implicit capture of lower_random works fine with autodiff.
     out(x) += random_float() * input() + r;
     Derivative d_out_d = propagate_adjoints(out);
