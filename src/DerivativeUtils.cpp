@@ -116,7 +116,7 @@ Expr fill_rvar_domain(const Expr &expr, const map<std::string, ReductionVariable
 
         Expr visit(const Variable *op) override {
             auto it = domain.find(op->name);
-            if (it != domain.end()) {
+            if (it != domain.end() && !op->reduction_domain.defined()) {
                 return Variable::make(op->type, op->name, op->image, op->param,
                                       it->second.domain);
             }
