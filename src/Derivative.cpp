@@ -1322,7 +1322,7 @@ void ReverseAccumulationVisitor::propagate_halide_function_call(
     // We reintroduce the missing reduction domain back here since the code below
     // assumes the domains are defined.
     if (current_update_id >= 0 &&
-            current_func.update(current_update_id).get_schedule().rvars().size() > 0) {
+        current_func.update(current_update_id).get_schedule().rvars().size() > 0) {
         std::map<std::string, ReductionVariableInfo> domain =
             gather_rvariables(current_func.update_values(current_update_id));
         adjoint = fill_rvar_domain(adjoint, domain);
