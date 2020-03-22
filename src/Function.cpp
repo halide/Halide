@@ -5,6 +5,7 @@
 #include <utility>
 
 #include "CSE.h"
+#include "Func.h"
 #include "Function.h"
 #include "IR.h"
 #include "IREquality.h"
@@ -427,8 +428,13 @@ void Function::define(const vector<string> &args, vector<Expr> values) {
 
     // Tag calls to random() with the free vars
     int tag = rand_counter++;
+    vector<VarOrRVar> free_vars;
+    free_vars.reserve(args.size());
+    for (size_t i = 0; i < args.size(); i++) {
+        free_vars.push_back(Var(args[i]));
+    }
     for (size_t i = 0; i < values.size(); i++) {
-        values[i] = lower_random(values[i], args, tag);
+        values[i] = lower_random(values[i], free_vars, tag);
     }
 
     user_assert(!check.reduction_domain.defined())
@@ -595,16 +601,20 @@ void Function::define_update(const vector<Expr> &_args, vector<Expr> values) {
     }
 
     // Tag calls to random() with the free vars
-    vector<string> free_vars;
+    vector<VarOrRVar> free_vars;
+    int num_free_vars = (int)pure_args.size();
+    if (check.reduction_domain.defined()) {
+        num_free_vars += (int)check.reduction_domain.domain().size();
+    }
+    free_vars.reserve(num_free_vars);
     for (size_t i = 0; i < pure_args.size(); i++) {
         if (!pure_args[i].empty()) {
-            free_vars.push_back(pure_args[i]);
+            free_vars.push_back(Var(pure_args[i]));
         }
     }
     if (check.reduction_domain.defined()) {
         for (size_t i = 0; i < check.reduction_domain.domain().size(); i++) {
-            string rvar = check.reduction_domain.domain()[i].var;
-            free_vars.push_back(rvar);
+            free_vars.push_back(RVar(check.reduction_domain, i));
         }
     }
     int tag = rand_counter++;

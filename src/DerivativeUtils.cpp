@@ -108,31 +108,6 @@ map<string, ReductionVariableInfo> gather_rvariables(const Expr &expr) {
     return gather_rvariables(Tuple(expr));
 }
 
-Expr fill_rvar_domain(const Expr &expr, const map<std::string, ReductionVariableInfo> &domain) {
-
-    class FillRVarDomain : public IRGraphMutator {
-    public:
-        using IRGraphMutator::visit;
-
-        Expr visit(const Variable *op) override {
-            auto it = domain.find(op->name);
-            if (it != domain.end() && !op->reduction_domain.defined()) {
-                return Variable::make(op->type, op->name, op->image, op->param,
-                                      it->second.domain);
-            }
-            return op;
-        }
-
-        const map<string, ReductionVariableInfo> &domain;
-
-        FillRVarDomain(const map<string, ReductionVariableInfo> &domain)
-            : domain(domain) {
-        }
-    } mutator(domain);
-
-    return mutator.mutate(expr);
-}
-
 Expr add_let_expression(const Expr &expr,
                         const map<string, Expr> &let_var_mapping,
                         const vector<string> &let_variables) {

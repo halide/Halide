@@ -38,11 +38,6 @@ struct ReductionVariableInfo {
 std::map<std::string, ReductionVariableInfo> gather_rvariables(const Expr &expr);
 std::map<std::string, ReductionVariableInfo> gather_rvariables(const Tuple &tuple);
 /**
- * Given an expression, if any of the referenced variable 
- * matches the provided reduction variable names, fill in the reduction domain.
- */
-Expr fill_rvar_domain(const Expr &expr, const std::map<std::string, ReductionVariableInfo> &domain);
-/**
  * Add necessary let expressions to expr
  */
 Expr add_let_expression(const Expr &expr,

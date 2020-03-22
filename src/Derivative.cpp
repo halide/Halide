@@ -1314,23 +1314,6 @@ void ReverseAccumulationVisitor::propagate_halide_function_call(
         }
     }
 
-    // adjoint & lhs may have reduction variables with undefined domains.
-    // This is due to calls to random_float or random_int.
-    // In lower_random, free variables including Function's pure variables and
-    // reduction variables are used to index random number generators.
-    // However the domains of the reduction variable are lost during the process.
-    // We reintroduce the missing reduction domain back here since the code below
-    // assumes the domains are defined.
-    if (current_update_id >= 0 &&
-        current_func.update(current_update_id).get_schedule().rvars().size() > 0) {
-        std::map<std::string, ReductionVariableInfo> domain =
-            gather_rvariables(current_func.update_values(current_update_id));
-        adjoint = fill_rvar_domain(adjoint, domain);
-        for (auto &arg : lhs) {
-            arg = fill_rvar_domain(arg, domain);
-        }
-    }
-
     // We want to do this:
     // func_to_update(call_args) += adjoint(current_update_args);
     // But call_args can be invalid lhs, need to canonicalize.
