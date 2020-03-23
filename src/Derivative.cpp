@@ -1171,15 +1171,14 @@ void ReverseAccumulationVisitor::visit(const Call *op) {
             accumulate(op->args[1], adjoint);
         } else if (op->is_intrinsic(Call::undef)) {
             // do nothing
-        } else if (op->is_intrinsic(Call::reinterpret)) {
-            for (const auto &arg : op->args) {
-                accumulate(arg, make_zero(op->type));
-            }
-        } else if (op->is_intrinsic(Call::bitwise_or)) {
-            for (const auto &arg : op->args) {
-                accumulate(arg, make_zero(op->type));
-            }
-        } else if (op->is_intrinsic(Call::shift_right)) {
+        } else if (op->is_intrinsic(Call::reinterpret) ||
+                   op->is_intrinsic(Call::bitwise_and) ||
+                   op->is_intrinsic(Call::bitwise_not) ||
+                   op->is_intrinsic(Call::bitwise_or) ||
+                   op->is_intrinsic(Call::bitwise_xor) ||
+                   op->is_intrinsic(Call::shift_right) ||
+                   op->is_intrinsic(Call::shift_left)) {
+            // bit manipulations -- these have zero derivatives.
             for (const auto &arg : op->args) {
                 accumulate(arg, make_zero(op->type));
             }
