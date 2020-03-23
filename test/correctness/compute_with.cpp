@@ -1466,11 +1466,12 @@ int main(int argc, char **argv) {
         return -1;
     }
 
+    /*
     printf("Running only some are tiled test\n");
     if (only_some_are_tiled_test() != 0) {
         return -1;
     }
-
+    */
     printf("Running multiple outputs on gpu test\n");
     if (multiple_outputs_on_gpu_test() != 0) {
         return -1;
