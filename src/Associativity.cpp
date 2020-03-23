@@ -37,8 +37,8 @@ vector<T> get_subvector(const vector<T> &v, const set<int> &indices) {
 
 // Replace self-references to 'func' with arguments 'args' at
 // 'value_index' in the Expr/Stmt with some Var
-class ConvertSelfRef : public IRGraphMutator {
-    using IRGraphMutator::visit;
+class ConvertSelfRef : public IRMutator {
+    using IRMutator::visit;
 
     const string &func;
     const vector<Expr> &args;
@@ -51,7 +51,7 @@ class ConvertSelfRef : public IRGraphMutator {
         if (!is_solvable) {
             return op;
         }
-        Expr expr = IRGraphMutator::visit(op);
+        Expr expr = IRMutator::visit(op);
         op = expr.as<Call>();
         internal_assert(op);
 
@@ -324,7 +324,6 @@ AssociativeOp prove_associativity(const string &f, vector<Expr> args, vector<Exp
     for (Expr &arg : args) {
         arg = common_subexpression_elimination(arg);
         arg = simplify(arg);
-        arg = substitute_in_all_lets(arg);
     }
 
     vector<string> op_x_names(exprs.size()), op_y_names(exprs.size());
@@ -342,9 +341,6 @@ AssociativeOp prove_associativity(const string &f, vector<Expr> args, vector<Exp
     for (int idx = exprs.size() - 1; idx >= 0; --idx) {
         exprs[idx] = simplify(exprs[idx]);
         exprs[idx] = common_subexpression_elimination(exprs[idx]);
-        // Calling Simplify or the original expr itself might have let exprs,
-        // so we should substitutes in all lets first
-        exprs[idx] = substitute_in_all_lets(exprs[idx]);
 
         // Replace any self-reference to Func 'f' with a Var
         ConvertSelfRef csr(f, args, idx, op_x_names);
