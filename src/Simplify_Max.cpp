@@ -25,9 +25,21 @@ Expr Simplify::visit(const Max *op, ExprInfo *bounds) {
 
     // Early out when the bounds tells us one side or the other is smaller
     if (a_bounds.max_defined && b_bounds.min_defined && a_bounds.max <= b_bounds.min) {
+        if (const Call *call = b.as<Call>()) {
+            if (call->is_intrinsic(Call::likely) ||
+                call->is_intrinsic(Call::likely_if_innermost)) {
+                return call->args[0];
+            }
+        }
         return b;
     }
     if (b_bounds.max_defined && a_bounds.min_defined && b_bounds.max <= a_bounds.min) {
+        if (const Call *call = a.as<Call>()) {
+            if (call->is_intrinsic(Call::likely) ||
+                call->is_intrinsic(Call::likely_if_innermost)) {
+                return call->args[0];
+            }
+        }
         return a;
     }
 
@@ -69,10 +81,10 @@ Expr Simplify::visit(const Max *op, ExprInfo *bounds) {
              rewrite(max(min(y, x), x), b) ||
              rewrite(max(min(x, c0), c1), b, c1 >= c0) ||
 
-             rewrite(max(intrin(Call::likely, x), x), a) ||
-             rewrite(max(x, intrin(Call::likely, x)), b) ||
-             rewrite(max(intrin(Call::likely_if_innermost, x), x), a) ||
-             rewrite(max(x, intrin(Call::likely_if_innermost, x)), b) ||
+             rewrite(max(intrin(Call::likely, x), x), b) ||
+             rewrite(max(x, intrin(Call::likely, x)), a) ||
+             rewrite(max(intrin(Call::likely_if_innermost, x), x), b) ||
+             rewrite(max(x, intrin(Call::likely_if_innermost, x)), a) ||
 
              (no_overflow(op->type) &&
               (rewrite(max(ramp(x, y), broadcast(z)), a, can_prove(x + y * (lanes - 1) >= z && x >= z, this)) ||
