@@ -491,6 +491,9 @@ void is_monotonic_test() {
     check_unknown(x != y);
     check_unknown(x * y);
 
+    // Not constant despite having constant args, because there's a side-effect.
+    check_unknown(Call::make(Int(32), "foo", {Expr(3)}, Call::Extern));
+
     check_increasing(select(y == 2, x, x + 4));
     check_decreasing(select(y == 2, -x, x * -4));
 
@@ -514,7 +517,7 @@ void is_monotonic_test() {
     check_constant(select(y > 3, y + 23, y - 65));
 
     std::cout << "is_monotonic test passed" << std::endl;
-}
+}  // namespace Internal
 
 }  // namespace Internal
 }  // namespace Halide
