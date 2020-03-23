@@ -1466,6 +1466,7 @@ int main(int argc, char **argv) {
         return -1;
     }
 
+    // NOTE: disabled because it generates OOB (see #4751 for discussion).
     /*
     printf("Running only some are tiled test\n");
     if (only_some_are_tiled_test() != 0) {
