@@ -323,9 +323,16 @@ class MonotonicVisitor : public IRVisitor {
             return;
         }
 
+        if (!op->is_pure()) {
+            // Even with constant args, the result could vary from one loop iteration to the next.
+            result = Monotonic::Unknown;
+            return;
+        }
+
         for (size_t i = 0; i < op->args.size(); i++) {
             op->args[i].accept(this);
             if (result != Monotonic::Constant) {
+                // One of the args is not constant.
                 result = Monotonic::Unknown;
                 return;
             }
