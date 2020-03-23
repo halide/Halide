@@ -124,7 +124,7 @@ void test_saturating() {
             std::cout << "Match failure at index " << i
                       << " got " << result(i)
                       << " expected " << correct_result
-                      << " for input " << in(i) << std::endl;
+                      << " for input " << in(i) << "\n";
         }
 
         assert(result(i) == correct_result);
@@ -218,8 +218,8 @@ void test_concise(cast_maker_t cast_maker, bool saturating) {
                     std::cout << "Simpler verification failed for index " << i
                               << " correct_result is " << correct_result
                               << " correct_result casted to int64_t is " << (int64_t)correct_result
-                              << " simpler_correct_result is " << simpler_correct_result << "\n";
-                    std::cout << "in(i) " << in(i)
+                              << " simpler_correct_result is " << simpler_correct_result << "\n"
+                              << "in(i) " << in(i)
                               << " target_min " << target_min
                               << " target_max " << target_max << "\n";
                 }
@@ -235,7 +235,7 @@ void test_concise(cast_maker_t cast_maker, bool saturating) {
                       << " got " << result(i)
                       << " expected " << correct_result
                       << " for input " << in(i)
-                      << (saturating ? " saturating" : " nonsaturating") << std::endl;
+                      << (saturating ? " saturating" : " nonsaturating") << "\n";
         }
 
         assert(result(i) == correct_result);

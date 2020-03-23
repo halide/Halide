@@ -118,7 +118,7 @@ ErrorReport::~ErrorReport()
 #endif
 {
     if (!msg.str().empty() && msg.str().back() != '\n') {
-        msg << '\n';
+        msg << "\n";
     }
 
     if (custom_error_reporter != nullptr) {

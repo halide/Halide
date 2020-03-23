@@ -11,8 +11,8 @@ void check_is_sio(const Expr &e) {
     if (!(call && call->is_intrinsic(Call::signed_integer_overflow))) {
         std::cerr
             << "\nSimplification failure:\n"
-            << "Input: " << e << '\n'
-            << "Output: " << simpler << '\n'
+            << "Input: " << e << "\n"
+            << "Output: " << simpler << "\n"
             << "Expected output: signed_integer_overflow(n)\n";
         abort();
     }
@@ -23,9 +23,9 @@ void check(const Expr &a, const Expr &b) {
     if (!equal(simpler, b)) {
         std::cerr
             << "\nSimplification failure:\n"
-            << "Input: " << a << '\n'
-            << "Output: " << simpler << '\n'
-            << "Expected output: " << b << '\n';
+            << "Input: " << a << "\n"
+            << "Output: " << simpler << "\n"
+            << "Expected output: " << b << "\n";
         abort();
     }
 }
@@ -36,11 +36,11 @@ void check(const Stmt &a, const Stmt &b) {
         std::cerr
             << "\nSimplification failure:\n"
             << "Input:\n"
-            << a << '\n'
+            << a << "\n"
             << "Output:\n"
-            << simpler << '\n'
+            << simpler << "\n"
             << "Expected output:\n"
-            << b << '\n';
+            << b << "\n";
         abort();
     }
 }
@@ -50,9 +50,9 @@ void check_in_bounds(const Expr &a, const Expr &b, const Scope<Interval> &bi) {
     if (!equal(simpler, b)) {
         std::cerr
             << "\nSimplification failure:\n"
-            << "Input: " << a << '\n'
-            << "Output: " << simpler << '\n'
-            << "Expected output: " << b << '\n';
+            << "Input: " << a << "\n"
+            << "Output: " << simpler << "\n"
+            << "Expected output: " << b << "\n";
         abort();
     }
 }
@@ -79,7 +79,7 @@ Expr broadcast(const Expr &base, int w) {
 }
 
 void check_casts() {
-    Expr x = Var("x");
+    Expr x = Var("x"), y = Var("y");
 
     check(cast(Int(32), cast(Int(32), x)), x);
     check(cast(Float(32), 3), 3.0f);
@@ -143,6 +143,19 @@ void check_casts() {
     // between zero-extending and sign-extending.
     check(cast(UInt(64), cast(UInt(32), cast(Int(8), -1))),
           UIntImm::make(UInt(64), 0xffffffffULL));
+
+    // It's a good idea to pull widening casts outside of shuffles
+    // when the shuffle reduces the lane count (e.g. a slice_vector).
+    Expr some_vector = ramp(y, 2, 8) * ramp(x, 1, 8);
+    check(slice(cast(UInt(64, 8), some_vector), 2, 1, 3),
+          cast(UInt(64, 3), slice(some_vector, 2, 1, 3)));
+
+    std::vector<int> indices(18);
+    for (int i = 0; i < 18; i++) {
+        indices[i] = i & 3;
+    }
+    check(Shuffle::make({cast(UInt(64, 8), some_vector)}, indices),
+          Shuffle::make({cast(UInt(64, 8), some_vector)}, indices));
 }
 
 void check_algebra() {
@@ -489,6 +502,49 @@ void check_vectors() {
     check(ramp(0, 1, 4) == broadcast(2, 4),
           ramp(-2, 1, 4) == broadcast(0, 4));
 
+    // Any linear combination of simple ramps and broadcasts should
+    // reduce to a single ramp or broadcast.
+    std::mt19937 rng(0);
+    for (int i = 0; i < 50; i++) {
+        std::vector<Expr> leaves =
+            {ramp(x, 1, 4),
+             ramp(x, y, 4),
+             ramp(z, x, 4),
+             broadcast(x, 4),
+             broadcast(y, 4),
+             broadcast(z, 4)};
+        while (leaves.size() > 1) {
+            int idx1 = rng() % (int)leaves.size();
+            int idx2 = 0;
+            do {
+                idx2 = rng() % (int)leaves.size();
+            } while (idx2 == idx1);
+
+            switch (rng() % 4) {
+            case 0:
+                leaves[idx1] += leaves[idx2];
+                break;
+            case 1:
+                leaves[idx1] -= leaves[idx2];
+                break;
+            case 2:
+                leaves[idx1] += (int)(rng() % 8) * leaves[idx2];
+                break;
+            case 3:
+                leaves[idx1] -= (int)(rng() % 8) * leaves[idx2];
+                break;
+            }
+            std::swap(leaves[idx2], leaves.back());
+            leaves.pop_back();
+        }
+        Expr simpler = simplify(leaves[0]);
+        if (!simpler.as<Ramp>() && !simpler.as<Broadcast>()) {
+            std::cerr << "A linear combination of ramps and broadcasts should be a single ramp or broadcast:\n"
+                      << simpler << "\n";
+            abort();
+        }
+    }
+
     {
         Expr test = select(ramp(const_true(), const_true(), 2),
                            ramp(const_false(), const_true(), 2),
@@ -779,12 +835,23 @@ void check_bounds() {
     check(min((x / 8) * 8, x), (x / 8) * 8);
     check(min(x, (x / 8) * 8), (x / 8) * 8);
 
-    check(min(x, likely(x)), likely(x));
-    check(min(likely(x), x), likely(x));
-    check(max(x, likely(x)), likely(x));
-    check(max(likely(x), x), likely(x));
-    check(select(x > y, likely(x), x), likely(x));
-    check(select(x > y, x, likely(x)), likely(x));
+    // "likely" marks which side of a containing min/max/select is the
+    // one to optimize for, so if the min/max/select gets simplified
+    // away, the likely should be stripped too.
+    check(min(x, likely(x)), x);
+    check(min(likely(x), x), x);
+    check(max(x, likely(x)), x);
+    check(max(likely(x), x), x);
+    check(select(x > y, likely(x), x), x);
+    check(select(x > y, x, likely(x)), x);
+    // Check constant-bounds reasoning works through likelies
+    check(min(4, likely(5)), 4);
+    check(min(7, likely(5)), 5);
+    check(max(4, likely(5)), 5);
+    check(max(7, likely(5)), 7);
+
+    check(select(x < y, x + y, x), select(x < y, y, 0) + x);
+    check(select(x < y, x, x + y), select(x < y, 0, y) + x);
 
     check(min(x + 1, y) - min(x, y - 1), 1);
     check(max(x + 1, y) - max(x, y - 1), 1);

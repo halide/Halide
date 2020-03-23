@@ -788,7 +788,9 @@ public:
         } else if (std::is_same<T, double>::value) {
             return "double";
         } else if (std::is_integral<T>::value) {
-            if (std::is_unsigned<T>::value) oss << 'u';
+            if (std::is_unsigned<T>::value) {
+                oss << "u";
+            }
             oss << "int" << (sizeof(T) * 8) << "_t";
             return oss.str();
         } else {

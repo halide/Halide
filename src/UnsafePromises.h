@@ -15,6 +15,11 @@ namespace Internal {
     code, depending on the target. */
 Stmt lower_unsafe_promises(const Stmt &s, const Target &t);
 
+/** Lower all safe promises by just stripping them. This is a good
+ * idea once no more lowering stages are going to use
+ * boxes_touched. */
+Stmt lower_safe_promises(const Stmt &s);
+
 }  // namespace Internal
 }  // namespace Halide
 

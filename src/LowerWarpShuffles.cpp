@@ -216,8 +216,10 @@ class DetermineAllocStride : public IRVisitor {
     }
 
     void visit(const IfThenElse *op) override {
-        // When things drop down to a single thread, we have different constraints, so notice that.
-        if (equal(op->condition, Variable::make(Int(32), lane_var) < 1)) {
+        // When things drop down to a single thread, we have different
+        // constraints, so notice that. Check if the condition implies
+        // the lane var is at most one.
+        if (can_prove(!op->condition || Variable::make(Int(32), lane_var) <= 1)) {
             bool old_single_thread = single_thread;
             single_thread = true;
             op->then_case.accept(this);

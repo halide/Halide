@@ -2164,16 +2164,16 @@ Stmt schedule_functions(const vector<Function> &outputs,
         }
 
         if (group_should_be_inlined(funcs)) {
-            debug(1) << "Inlining " << funcs[0].name() << '\n';
+            debug(1) << "Inlining " << funcs[0].name() << "\n";
             s = inline_function(s, funcs[0]);
         } else {
-            debug(1) << "Injecting realization of " << funcs << '\n';
+            debug(1) << "Injecting realization of " << funcs << "\n";
             InjectFunctionRealization injector(funcs, is_output_list, target, env);
             s = injector.mutate(s);
             internal_assert(injector.found_store_level() && injector.found_compute_level());
         }
 
-        debug(2) << s << '\n';
+        debug(2) << s << "\n";
     }
 
     // We can remove the loop over root now

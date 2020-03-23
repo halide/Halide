@@ -34,5 +34,6 @@ int main(int argc, char *argv[]) {
         assert(result(i) == c);
     }
 
-    std::cout << "Success!" << std::endl;
+    printf("Success!\n");
+    return 0;
 }
