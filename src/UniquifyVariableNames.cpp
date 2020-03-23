@@ -33,7 +33,10 @@ class UniquifyVariableNames : public IRMutator {
         for (size_t i = std::max((size_t)1, renaming.count(base));; i++) {
             string candidate = base + "_" + std::to_string(i);
             if (!renaming.contains(candidate)) {
+                // Reserve this name for this base name
                 renaming.push(base, candidate);
+                // And reserve the generated name forever more (will not be popped)
+                renaming.push(candidate, candidate);
                 return candidate;
             }
         }
@@ -45,15 +48,16 @@ class UniquifyVariableNames : public IRMutator {
             const LetOrLetStmt *op;
             Expr value;
             string new_name;
-            Frame(const LetOrLetStmt *op, Expr value, string new_name)
-                : op(op), value(std::move(value)), new_name(std::move(new_name)) {
-            }
         };
 
         vector<Frame> frames;
         decltype(op->body) result;
         while (op) {
-            frames.emplace_back(op, mutate(op->value), make_new_name(op->name));
+            frames.emplace_back();
+            auto &f = frames.back();
+            f.op = op;
+            f.value = mutate(op->value);
+            f.new_name = make_new_name(op->name);
             result = op->body;
             op = result.template as<LetOrLetStmt>();
         }
