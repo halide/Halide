@@ -1267,6 +1267,24 @@ void check_boolean() {
     check(max(y, x) >= min(y, z), t);
     check(max(y, x) >= min(z, y), t);
 
+    check(min(z, y) < min(x, y), z < min(x, y));
+    check(min(z, y) < min(y, x), z < min(x, y));
+    check(min(y, z) < min(x, y), z < min(x, y));
+    check(min(y, z) < min(y, x), z < min(x, y));
+    check(min(z, y) < min(x, y + 5), min(y, z) < x);
+    check(min(z, y) < min(y + 5, x), min(y, z) < x);
+    check(min(z, y - 5) < min(x, y), min(y + (-5), z) < x);
+    check(min(z, y - 5) < min(y, x), min(y + (-5), z) < x);
+
+    check(max(z, y) < max(x, y), max(y, z) < x);
+    check(max(z, y) < max(y, x), max(y, z) < x);
+    check(max(y, z) < max(x, y), max(y, z) < x);
+    check(max(y, z) < max(y, x), max(y, z) < x);
+    check(max(z, y) < max(x, y - 5), max(y, z) < x);
+    check(max(z, y) < max(y - 5, x), max(y, z) < x);
+    check(max(z, y + 5) < max(x, y), max(y + 5, z) < x);
+    check(max(z, y + 5) < max(y, x), max(y + 5, z) < x);
+
     check((1 < y) && (2 < y), 2 < y);
 
     check(x * 5 < 4, x < 1);
