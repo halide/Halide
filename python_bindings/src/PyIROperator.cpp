@@ -109,7 +109,7 @@ void define_operators(py::module &m) {
             << "tuple_select() may not mix Expr and Tuple for the condition elements.";
         return to_python_tuple(false_value);
     });
-    m.def("mux", &mux);
+    m.def("mux", (Expr(*)(const Expr &, const std::vector<Expr> &)) & mux);
 
     m.def("sin", &sin);
     m.def("asin", &asin);
