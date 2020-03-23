@@ -2031,17 +2031,20 @@ void validate_fused_group_schedule_helper(const string &fn,
                                                         << p.stage_1 << "(" << d1.var << ") and " << p.func_2
                                                         << ".s" << p.stage_2 << "(" << d2.var << ") do not match.\n";
             user_assert(d1.for_type == d2.for_type) << "Invalid compute_with: for types of dim "
-                                                    << i << " of " << p.func_1 << ".s"
-                                                    << p.stage_1 << "(" << d1.var << ") and " << p.func_2
-                                                    << ".s" << p.stage_2 << "(" << d2.var << ") do not match.\n";
+                                                    << i << " of " << p.func_1 << ".s" << p.stage_1 << "("
+                                                    << d1.var << " is " << d1.for_type << ") and " << p.func_2
+                                                    << ".s" << p.stage_2 << "(" << d2.var << " is " << d2.for_type
+                                                    << ") do not match.\n";
             user_assert(d1.device_api == d2.device_api) << "Invalid compute_with: device APIs of dim "
-                                                        << i << " of " << p.func_1 << ".s"
-                                                        << p.stage_1 << "(" << d1.var << ") and " << p.func_2
-                                                        << ".s" << p.stage_2 << "(" << d2.var << ") do not match.\n";
+                                                        << i << " of " << p.func_1 << ".s" << p.stage_1 << "("
+                                                        << d1.var << " is " << d1.device_api << ") and " << p.func_2
+                                                        << ".s" << p.stage_2 << "(" << d2.var << " is " << d2.device_api
+                                                        << ") do not match.\n";
             user_assert(d1.dim_type == d2.dim_type) << "Invalid compute_with: types of dim "
-                                                    << i << " of " << p.func_1 << ".s"
-                                                    << p.stage_1 << "(" << d1.var << ") and " << p.func_2
-                                                    << ".s" << p.stage_2 << "(" << d2.var << ") do not match.\n";
+                                                    << i << " of " << p.func_1 << ".s" << p.stage_1 << "("
+                                                    << d1.var << " is " << d1.dim_type << ") and " << p.func_2
+                                                    << ".s" << p.stage_2 << "(" << d2.var << " is " << d2.dim_type
+                                                    << ") do not match.\n";
         }
     }
 }
