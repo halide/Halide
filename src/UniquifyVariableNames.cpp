@@ -110,8 +110,8 @@ class UniquifyVariableNames : public IRMutator {
     }
 
 public:
-    UniquifyVariableNames(Scope<string> &&free_vars)
-        : renaming(std::move(free_vars)) {
+    UniquifyVariableNames(const Scope<string> *free_vars) {
+        renaming.set_containing_scope(free_vars);
     }
 };
 
@@ -160,7 +160,7 @@ public:
 Stmt uniquify_variable_names(const Stmt &s) {
     FindFreeVars finder;
     s.accept(&finder);
-    UniquifyVariableNames u(std::move(finder.free_vars));
+    UniquifyVariableNames u(&finder.free_vars);
     return u.mutate(s);
 }
 
