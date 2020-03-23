@@ -517,7 +517,7 @@ void is_monotonic_test() {
     check_constant(select(y > 3, y + 23, y - 65));
 
     std::cout << "is_monotonic test passed" << std::endl;
-}  // namespace Internal
+}
 
 }  // namespace Internal
 }  // namespace Halide
