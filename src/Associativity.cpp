@@ -59,7 +59,7 @@ class ConvertSelfRef : public IRGraphMutator {
             internal_assert(args.size() == op->args.size())
                 << "Self-reference should have the same number of args as the original\n";
             for (size_t i = 0; i < op->args.size(); i++) {
-                if (!equal(op->args[i], args[i])) {
+                if (!graph_equal(op->args[i], args[i])) {
                     debug(5) << "Self-reference of " << op->name
                              << " with different args from the LHS. Operation is not associative\n";
                     is_solvable = false;
