@@ -397,13 +397,13 @@ void Function::define(const vector<string> &args, vector<Expr> values) {
     // attached to some parameter
     CheckVars check(name());
     check.pure_args = args;
-    for (auto &value : values) {
+    for (const auto &value : values) {
         value.accept(&check);
     }
 
     // Freeze all called functions
     FreezeFunctions freezer(name());
-    for (auto &value : values) {
+    for (const auto &value : values) {
         value.accept(&freezer);
     }
 
@@ -574,10 +574,10 @@ void Function::define_update(const vector<Expr> &_args, vector<Expr> values) {
     // vars in the LHS in the correct places.
     CheckVars check(name());
     check.pure_args = pure_args;
-    for (auto &arg : args) {
+    for (const auto &arg : args) {
         arg.accept(&check);
     }
-    for (auto &value : values) {
+    for (const auto &value : values) {
         value.accept(&check);
     }
     if (check.reduction_domain.defined()) {
@@ -587,10 +587,10 @@ void Function::define_update(const vector<Expr> &_args, vector<Expr> values) {
 
     // Freeze all called functions
     FreezeFunctions freezer(name());
-    for (auto &arg : args) {
+    for (const auto &arg : args) {
         arg.accept(&freezer);
     }
-    for (auto &value : values) {
+    for (const auto &value : values) {
         value.accept(&freezer);
     }
 
