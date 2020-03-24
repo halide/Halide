@@ -198,7 +198,9 @@ class SimplifyCorrelatedDifferences : public IRMutator {
         if ((ma == Monotonic::Increasing && mb == Monotonic::Increasing && std::is_same<T, Sub>::value) ||
             (ma == Monotonic::Decreasing && mb == Monotonic::Decreasing && std::is_same<T, Sub>::value) ||
             (ma == Monotonic::Increasing && mb == Monotonic::Decreasing && std::is_same<T, Add>::value) ||
-            (ma == Monotonic::Decreasing && mb == Monotonic::Increasing && std::is_same<T, Add>::value)) {
+            (ma == Monotonic::Decreasing && mb == Monotonic::Increasing && std::is_same<T, Add>::value) ||
+            (ma == Monotonic::Unknown && mb != Monotonic::Constant) ||
+            (mb == Monotonic::Unknown && ma != Monotonic::Constant)) {
 
             for (auto it = lets.rbegin(); it != lets.rend(); it++) {
                 if (expr_uses_var(e, it->name)) {
