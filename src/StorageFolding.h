@@ -28,7 +28,7 @@ class Function;
  * We can store f as a circular buffer of size two, instead of
  * allocating space for all of it.
  */
-Stmt storage_folding(Stmt s, const std::map<std::string, Function> &env);
+Stmt storage_folding(const Stmt &s, const std::map<std::string, Function> &env);
 
 }  // namespace Internal
 }  // namespace Halide
