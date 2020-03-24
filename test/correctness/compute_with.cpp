@@ -1290,6 +1290,113 @@ int update_stage_test() {
     return 0;
 }
 
+int vectorize_inlined_test() {
+    const int f_size = 128;
+    const int g_size = 256;
+    Buffer<int> h_im(f_size, f_size, 5), g_im(g_size, g_size);
+    Buffer<int> h_im_ref(f_size, f_size, 5), g_im_ref(g_size, g_size);
+
+    uint64_t load_count_ref, store_count_ref;
+    {
+        Var x("x"), y("y"), c("c"), xi("xi"), yi("yi"), yii("yii"), yo("yo");
+        Func f("f"), g("g"), h("h"), input("input");
+
+        input(x, y) = x;
+        f(x, y, c) = c * input(x, y);
+        h(x, y, c) = f(x, y, c);
+
+        Func inl("inl");
+        inl(x, y) = f(x / 2, y / 2, 0);
+        inl(x, y) += f(x / 2, y / 2, 2);
+        g(x, y) = inl(x, y);
+
+        g.split(y, yo, y, 32 * 2, TailStrategy::RoundUp)
+            .split(y, y, yi, 2, TailStrategy::RoundUp)
+            .vectorize(x, 4, TailStrategy::GuardWithIf)
+            .compute_root();
+
+        h.reorder(x, c, y)
+            .split(y, yo, y, 32, TailStrategy::RoundUp)
+            .vectorize(x, 4, TailStrategy::GuardWithIf)
+            .compute_root();
+
+        g.bound(y, 0, g_size);
+        h.bound(y, 0, f_size).bound(c, 0, 5);
+
+        loads_total = 0;
+        stores_total = 0;
+        Pipeline p({h, g});
+        p.set_custom_trace(&my_trace);
+        p.realize({h_im_ref, g_im_ref}, get_jit_target_from_environment().with_feature(Target::TraceLoads).with_feature(Target::TraceStores));
+        load_count_ref = loads_total;
+        store_count_ref = stores_total;
+    }
+
+    {
+        Var x("x"), y("y"), c("c"), xi("xi"), yi("yi"), yii("yii"), yo("yo");
+        Func f("f"), g("g"), h("h"), input("input");
+
+        input(x, y) = x;
+        f(x, y, c) = c * input(x, y);
+        h(x, y, c) = f(x, y, c);
+
+        Func inl("inl");
+        inl(x, y) = f(x / 2, y / 2, 0);
+        inl(x, y) += f(x / 2, y / 2, 2);
+        g(x, y) = inl(x, y);
+
+        g.split(y, yo, y, 32 * 2, TailStrategy::RoundUp)
+            .split(y, y, yi, 2, TailStrategy::RoundUp)
+            .vectorize(x, 4, TailStrategy::GuardWithIf)
+            .compute_with(h, y, LoopAlignStrategy::AlignEnd);
+
+        h.reorder(x, c, y)
+            .split(y, yo, y, 32, TailStrategy::RoundUp)
+            .split(y, y, yi, 1, TailStrategy::RoundUp)
+            .vectorize(x, 4, TailStrategy::GuardWithIf)
+            .compute_root();
+
+        g.bound(y, 0, g_size);
+        h.bound(y, 0, f_size).bound(c, 0, 5);
+
+        loads_total = 0;
+        stores_total = 0;
+        Pipeline p({h, g});
+        p.set_custom_trace(&my_trace);
+        p.realize({h_im, g_im}, get_jit_target_from_environment().with_feature(Target::TraceLoads).with_feature(Target::TraceStores));
+
+        bool too_many_memops = false;
+        if (stores_total != store_count_ref) {
+            printf("Store count should be equal between compute_root and compute_with schedules\n");
+            too_many_memops = true;
+        }
+        if (loads_total != load_count_ref) {
+            printf("Load count should be equal between compute_root and compute_with schedules\n");
+            too_many_memops = true;
+        }
+
+        if (too_many_memops) {
+            return -1;
+        }
+    }
+
+    auto h_func = [h_im_ref](int x, int y, int c) {
+        return h_im_ref(x, y, c);
+    };
+    if (check_image(h_im, h_func)) {
+        return -1;
+    }
+
+    auto g_func = [g_im_ref](int x, int y) {
+        return g_im_ref(x, y);
+    };
+    if (check_image(g_im, g_func)) {
+        return -1;
+    }
+
+    return 0;
+}
+
 }  // namespace
 
 int main(int argc, char **argv) {
@@ -1375,6 +1482,11 @@ int main(int argc, char **argv) {
 
     printf("Running update stage test\n");
     if (update_stage_test() != 0) {
+        return -1;
+    }
+
+    printf("Running vectorize inlined test\n");
+    if (vectorize_inlined_test() != 0) {
         return -1;
     }
 

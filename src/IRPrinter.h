@@ -8,7 +8,7 @@
  * E.g:
  \code
  Expr foo = ...
- std::cout << "Foo is " << foo << std::endl;
+ std::cout << "Foo is " << foo << "\n";
  \endcode
  *
  * These operators are implemented using \ref Halide::Internal::IRPrinter

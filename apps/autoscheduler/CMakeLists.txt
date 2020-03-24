@@ -41,8 +41,10 @@ target_link_libraries(retrain_cost_model_process
 # =======================================================
 
 # libauto_schedule
+# Note: must use MODULE here (not SHARED) to get .so (instead of .dylib) on OSX.
+# This means that this can only be opened dynamically (not linked directly), but that's ok.
 add_library(auto_schedule
-            SHARED
+            MODULE
             ASLog.cpp
             AutoSchedule.cpp
             DefaultCostModel.cpp

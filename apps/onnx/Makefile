@@ -43,11 +43,11 @@ clean:
 
 # Simple unit test
 $(BIN)/%/onnx_converter_test: onnx_converter_test.cc $(BIN)/%/oclib.a
-	$(CXX) $(CXXFLAGS) $(USE_EXPORT_DYNAMIC) -I$(BIN)/$* $^ -o $@ $(LDFLAGS) $(LIB_HALIDE) $(HALIDE_SYSTEM_LIBS)
+	$(CXX) $(CXXFLAGS) $(USE_EXPORT_DYNAMIC) -I$(BIN)/$* $^ -o $@ $(LIBHALIDE_LDFLAGS) $(HALIDE_SYSTEM_LIBS)
 
 $(GENERATOR_BIN)/onnx_converter.generator : onnx_converter_generator.cc $(GENERATOR_DEPS) $(GENERATOR_BIN)/oclib.a
 	@mkdir -p $(@D)
-	$(CXX) $(CXXFLAGS) -I$(GENERATOR_BIN) -g -fno-rtti $(filter-out %.h,$^) -o $@ $(LDFLAGS) $(HALIDE_SYSTEM_LIBS)
+	$(CXX) $(CXXFLAGS) -I$(GENERATOR_BIN) -g -fno-rtti $(filter-out %.h,$^) -o $@ $(LIBHALIDE_LDFLAGS) $(HALIDE_SYSTEM_LIBS)
 
 # Convolution with autopad=SAME_UPPER isn't supported yet (Also deprecated). TODO Enable this.
 #$(BIN)/%/onnx_model_zoo/mnist/model.onnx:
@@ -89,7 +89,7 @@ PYCXXFLAGS =  $(CXXFLAGS) $(PYBIND11_CFLAGS) -Wno-deprecated-register -Wno-depre
 
 # Python extension for HalideModel
 $(BIN)/%/$(PY_MODEL_EXT): model.cpp $(BIN)/%/oclib.a
-	$(CXX) $(PYCXXFLAGS) -Wall -shared -fPIC -I$(BIN)/$* $^ $(LIB_HALIDE) -o $@ $(LDFLAGS)
+	$(CXX) $(PYCXXFLAGS) -Wall -shared -fPIC -I$(BIN)/$* $^ $(LIBHALIDE_LDFLAGS) -o $@ $(LDFLAGS)
 
 
 model_test: $(BIN)/$(HL_TARGET)/$(PY_MODEL_EXT)

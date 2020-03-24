@@ -614,6 +614,7 @@ const char *const intrinsic_op_names[] = {
     "mulhi_shr",
     "popcount",
     "prefetch",
+    "promise_clamped",
     "random",
     "register_destructor",
     "reinterpret",

@@ -159,7 +159,7 @@ void test_matmul(const MachineParams &params, const Target &target) {
     }
 
     std::cout << "with_extern:\n " << with_extern.str()
-              << "\n\nwithout_extern:\n " << without_extern.str() << std::endl;
+              << "\n\nwithout_extern:\n " << without_extern.str() << "\n";
 }
 
 int main(int argc, char **argv) {

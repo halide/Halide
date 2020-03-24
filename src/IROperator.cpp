@@ -1123,6 +1123,28 @@ Tuple tuple_select(const Expr &condition, const Tuple &true_value, const Tuple &
     return result;
 }
 
+Expr mux(const Expr &id, const std::vector<Expr> &values) {
+    user_assert(values.size() >= 2) << "mux() only accepts values with size >= 2.\n";
+    // Check if all the values have the same type.
+    Type t = values[0].type();
+    for (int i = 1; i < (int)values.size(); i++) {
+        user_assert(values[i].type() == t) << "mux() requires all the values to have the same type.";
+    }
+    Expr result = values.back();
+    for (int i = (int)values.size() - 2; i >= 0; i--) {
+        result = select(id == i, values[i], result);
+    }
+    return result;
+}
+
+Expr mux(const Expr &id, const Tuple &tup) {
+    return mux(id, tup.as_vector());
+}
+
+Expr mux(const Expr &id, const std::initializer_list<Expr> &values) {
+    return mux(id, std::vector<Expr>(values));
+}
+
 Expr unsafe_promise_clamped(const Expr &value, const Expr &min, const Expr &max) {
     user_assert(value.defined()) << "unsafe_promise_clamped with undefined value.\n";
     Expr n_min_val = min.defined() ? lossless_cast(value.type(), min) : value.type().min();
@@ -1135,6 +1157,20 @@ Expr unsafe_promise_clamped(const Expr &value, const Expr &min, const Expr &max)
                                 {value, n_min_val, n_max_val},
                                 Internal::Call::Intrinsic);
 }
+
+namespace Internal {
+Expr promise_clamped(const Expr &value, const Expr &min, const Expr &max) {
+    internal_assert(value.defined()) << "promise_clamped with undefined value.\n";
+    Expr n_min_val = min.defined() ? lossless_cast(value.type(), min) : value.type().min();
+    Expr n_max_val = max.defined() ? lossless_cast(value.type(), max) : value.type().max();
+
+    // Min and max are allowed to be undefined with the meaning of no bound on that side.
+    return Internal::Call::make(value.type(),
+                                Internal::Call::promise_clamped,
+                                {value, n_min_val, n_max_val},
+                                Internal::Call::Intrinsic);
+}
+}  // namespace Internal
 
 Expr operator+(Expr a, Expr b) {
     user_assert(a.defined() && b.defined()) << "operator+ of undefined Expr\n";

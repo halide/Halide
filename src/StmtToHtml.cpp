@@ -171,37 +171,37 @@ private:
 
     void visit(const StringImm *op) override {
         stream << open_span("StringImm");
-        stream << '"';
+        stream << "\"";
         for (size_t i = 0; i < op->value.size(); i++) {
             unsigned char c = op->value[i];
             if (c >= ' ' && c <= '~' && c != '\\' && c != '"') {
                 stream << c;
             } else {
-                stream << '\\';
+                stream << "\\";
                 switch (c) {
                 case '"':
-                    stream << '"';
+                    stream << "\"";
                     break;
                 case '\\':
-                    stream << '\\';
+                    stream << "\\";
                     break;
                 case '\t':
-                    stream << 't';
+                    stream << "t";
                     break;
                 case '\r':
-                    stream << 'r';
+                    stream << "r";
                     break;
                 case '\n':
-                    stream << 'n';
+                    stream << "n";
                     break;
                 default:
                     string hex_digits = "0123456789ABCDEF";
-                    stream << 'x' << hex_digits[c >> 4] << hex_digits[c & 0xf];
+                    stream << "x" << hex_digits[c >> 4] << hex_digits[c & 0xf];
                 }
             }
         }
-        stream << '"';
-        stream << close_span();
+        stream << "\""
+               << close_span();
     }
 
     void visit(const Variable *op) override {
@@ -285,7 +285,7 @@ private:
     }
     void visit(const Not *op) override {
         stream << open_span("Not");
-        stream << '!';
+        stream << "!";
         print(op->a);
         stream << close_span();
     }
@@ -405,7 +405,7 @@ private:
         } else if (op->for_type == ForType::GPULane) {
             stream << keyword("gpu_lane");
         } else {
-            internal_assert(false) << "Unknown for type: " << ((int)op->for_type) << "\n";
+            internal_error << "Unknown for type: " << ((int)op->for_type) << "\n";
         }
         stream << " (";
         stream << close_span();

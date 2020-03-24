@@ -77,64 +77,64 @@ protected:
     void visit(const Let *op) override;
     void visit(const Call *op) override;
     void visit(const Load *op) override {
-        internal_assert(false) << "Encounter unexpected statement \"Load\" when differentiating.";
+        internal_error << "Encounter unexpected expression \"Load\" when differentiating.";
     }
     void visit(const Ramp *op) override {
-        internal_assert(false) << "Encounter unexpected statement \"Ramp\" when differentiating.";
+        internal_error << "Encounter unexpected expression \"Ramp\" when differentiating.";
     }
     void visit(const Broadcast *op) override {
-        internal_assert(false) << "Encounter unexpected statement \"Broadcast\" when differentiating.";
-    }
-    void visit(const LetStmt *op) override {
-        internal_assert(false) << "Encounter unexpected statement \"LetStmt\" when differentiating.";
-    }
-    void visit(const AssertStmt *op) override {
-        internal_assert(false) << "Encounter unexpected statement \"AssertStmt\" when differentiating.";
-    }
-    void visit(const ProducerConsumer *op) override {
-        internal_assert(false) << "Encounter unexpected statement \"ProducerConsumer\" when differentiating.";
-    }
-    void visit(const For *op) override {
-        internal_assert(false) << "Encounter unexpected statement \"For\" when differentiating.";
-    }
-    void visit(const Store *op) override {
-        internal_assert(false) << "Encounter unexpected statement \"Store\" when differentiating.";
-    }
-    void visit(const Provide *op) override {
-        internal_assert(false) << "Encounter unexpected statement \"Provide\" when differentiating.";
-    }
-    void visit(const Allocate *op) override {
-        internal_assert(false) << "Encounter unexpected statement \"Allocate\" when differentiating.";
-    }
-    void visit(const Free *op) override {
-        internal_assert(false) << "Encounter unexpected statement \"Free\" when differentiating.";
-    }
-    void visit(const Realize *op) override {
-        internal_assert(false) << "Encounter unexpected statement \"Realize\" when differentiating.";
-    }
-    void visit(const Block *op) override {
-        internal_assert(false) << "Encounter unexpected statement \"Block\" when differentiating.";
-    }
-    void visit(const IfThenElse *op) override {
-        internal_assert(false) << "Encounter unexpected statement \"IfThenElse\" when differentiating.";
-    }
-    void visit(const Evaluate *op) override {
-        internal_assert(false) << "Encounter unexpected statement \"Evaluate\" when differentiating.";
+        internal_error << "Encounter unexpected expression \"Broadcast\" when differentiating.";
     }
     void visit(const Shuffle *op) override {
-        internal_assert(false) << "Encounter unexpected statement \"Shuffle\" when differentiating.";
+        internal_error << "Encounter unexpected expression \"Shuffle\" when differentiating.";
+    }
+    void visit(const LetStmt *op) override {
+        internal_error << "Encounter unexpected statement \"LetStmt\" when differentiating.";
+    }
+    void visit(const AssertStmt *op) override {
+        internal_error << "Encounter unexpected statement \"AssertStmt\" when differentiating.";
+    }
+    void visit(const ProducerConsumer *op) override {
+        internal_error << "Encounter unexpected statement \"ProducerConsumer\" when differentiating.";
+    }
+    void visit(const For *op) override {
+        internal_error << "Encounter unexpected statement \"For\" when differentiating.";
+    }
+    void visit(const Store *op) override {
+        internal_error << "Encounter unexpected statement \"Store\" when differentiating.";
+    }
+    void visit(const Provide *op) override {
+        internal_error << "Encounter unexpected statement \"Provide\" when differentiating.";
+    }
+    void visit(const Allocate *op) override {
+        internal_error << "Encounter unexpected statement \"Allocate\" when differentiating.";
+    }
+    void visit(const Free *op) override {
+        internal_error << "Encounter unexpected statement \"Free\" when differentiating.";
+    }
+    void visit(const Realize *op) override {
+        internal_error << "Encounter unexpected statement \"Realize\" when differentiating.";
+    }
+    void visit(const Block *op) override {
+        internal_error << "Encounter unexpected statement \"Block\" when differentiating.";
+    }
+    void visit(const IfThenElse *op) override {
+        internal_error << "Encounter unexpected statement \"IfThenElse\" when differentiating.";
+    }
+    void visit(const Evaluate *op) override {
+        internal_error << "Encounter unexpected statement \"Evaluate\" when differentiating.";
     }
     void visit(const Prefetch *op) override {
-        internal_assert(false) << "Encounter unexpected statement \"Prefetch\" when differentiating.";
+        internal_error << "Encounter unexpected statement \"Prefetch\" when differentiating.";
     }
     void visit(const Fork *op) override {
-        internal_assert(false) << "Encounter unexpected statement \"Fork\" when differentiating.";
+        internal_error << "Encounter unexpected statement \"Fork\" when differentiating.";
     }
     void visit(const Acquire *op) override {
-        internal_assert(false) << "Encounter unexpected statement \"Acquire\" when differentiating.";
+        internal_error << "Encounter unexpected statement \"Acquire\" when differentiating.";
     }
     void visit(const Atomic *op) override {
-        internal_assert(false) << "Encounter unexpected statement \"Atomic\" when differentiating.";
+        internal_error << "Encounter unexpected statement \"Atomic\" when differentiating.";
     }
 
 private:
@@ -185,7 +185,7 @@ void ReverseAccumulationVisitor::propagate_adjoints(
         realization_order({output.function()}, env).first;
     vector<Func> funcs;
     funcs.reserve(order.size());
-    // Internal::debug(0) << "Sorted Func list:" << "\n";
+    // Internal::debug(0) << "Sorted Func list:\n";
     // for (const auto &func_name : order) {
     //     Internal::debug(0) << "  . " << func_name << "\n";
     // }
@@ -1171,6 +1171,17 @@ void ReverseAccumulationVisitor::visit(const Call *op) {
             accumulate(op->args[1], adjoint);
         } else if (op->is_intrinsic(Call::undef)) {
             // do nothing
+        } else if (op->is_intrinsic(Call::reinterpret) ||
+                   op->is_intrinsic(Call::bitwise_and) ||
+                   op->is_intrinsic(Call::bitwise_not) ||
+                   op->is_intrinsic(Call::bitwise_or) ||
+                   op->is_intrinsic(Call::bitwise_xor) ||
+                   op->is_intrinsic(Call::shift_right) ||
+                   op->is_intrinsic(Call::shift_left)) {
+            // bit manipulations -- these have zero derivatives.
+            for (const auto &arg : op->args) {
+                accumulate(arg, make_zero(op->type));
+            }
         } else {
             user_warning << "Dropping gradients at call to " << op->name << "\n";
             for (const auto &arg : op->args) {
@@ -1435,7 +1446,6 @@ void ReverseAccumulationVisitor::propagate_halide_function_call(
             Expr lhs_arg = lhs[lhs_id];
             vector<string> adjoint_args = current_adjoint_func.function().args();
             vector<int> variable_ids = gather_variables(lhs_arg, adjoint_args);
-            RDom r(bounds);
             // For each variable found in lhs_arg, find the corresponding
             // bound (by looping through all variables) and substitute
             // with the bound reduction variable.
