@@ -19,6 +19,23 @@ using std::pair;
 using std::string;
 using std::vector;
 
+class NormalizeVarNames : public IRMutator {
+    using IRMutator::visit;
+
+    std::map<string, string> remapping;
+
+    Expr visit(const Variable *op) override {
+        const char *names = "xyzwuv";
+        size_t s = remapping.size();
+        string candidate =
+            (s < 6 ?
+                 string(names + s, names + s + 1) :
+                 (string("v") + std::to_string(s - 6)));
+        auto p = remapping.insert({op->name, candidate});
+        return Variable::make(op->type, p.first->second);
+    }
+};
+
 class SimplifyCorrelatedDifferences : public IRMutator {
     using IRMutator::visit;
 
