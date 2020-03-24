@@ -2044,15 +2044,25 @@ void validate_fused_group_schedule_helper(const string &fn,
         for (int i = 0; i < n_fused; ++i) {
             const Dim &d1 = dims_1[start_fuse_1 + i];
             const Dim &d2 = dims_2[start_fuse_2 + i];
-            bool equal = var_name_match(d1.var, d2.var) &&
-                         (d1.for_type == d2.for_type) &&
-                         (d1.device_api == d2.device_api) &&
-                         (d1.dim_type == d2.dim_type);
-            if (!equal) {
-                user_error << "Invalid compute_with: dims " << i << " of " << p.func_1 << ".s"
-                           << p.stage_1 << "(" << dims_1[start_fuse_1 + i].var << ") and " << p.func_2
-                           << ".s" << p.stage_2 << "(" << dims_2[start_fuse_2 + i].var << ") do not match.\n";
-            }
+            user_assert(var_name_match(d1.var, d2.var)) << "Invalid compute_with: names of dim "
+                                                        << i << " of " << p.func_1 << ".s"
+                                                        << p.stage_1 << "(" << d1.var << ") and " << p.func_2
+                                                        << ".s" << p.stage_2 << "(" << d2.var << ") do not match.\n";
+            user_assert(d1.for_type == d2.for_type) << "Invalid compute_with: for types of dim "
+                                                    << i << " of " << p.func_1 << ".s" << p.stage_1 << "("
+                                                    << d1.var << " is " << d1.for_type << ") and " << p.func_2
+                                                    << ".s" << p.stage_2 << "(" << d2.var << " is " << d2.for_type
+                                                    << ") do not match.\n";
+            user_assert(d1.device_api == d2.device_api) << "Invalid compute_with: device APIs of dim "
+                                                        << i << " of " << p.func_1 << ".s" << p.stage_1 << "("
+                                                        << d1.var << " is " << d1.device_api << ") and " << p.func_2
+                                                        << ".s" << p.stage_2 << "(" << d2.var << " is " << d2.device_api
+                                                        << ") do not match.\n";
+            user_assert(d1.dim_type == d2.dim_type) << "Invalid compute_with: types of dim "
+                                                    << i << " of " << p.func_1 << ".s" << p.stage_1 << "("
+                                                    << d1.var << " is " << d1.dim_type << ") and " << p.func_2
+                                                    << ".s" << p.stage_2 << "(" << d2.var << " is " << d2.dim_type
+                                                    << ") do not match.\n";
         }
     }
 }
