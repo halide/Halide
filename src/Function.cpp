@@ -5,6 +5,7 @@
 #include <utility>
 
 #include "CSE.h"
+#include "Func.h"
 #include "Function.h"
 #include "IR.h"
 #include "IREquality.h"
@@ -396,14 +397,14 @@ void Function::define(const vector<string> &args, vector<Expr> values) {
     // attached to some parameter
     CheckVars check(name());
     check.pure_args = args;
-    for (size_t i = 0; i < values.size(); i++) {
-        values[i].accept(&check);
+    for (const auto &value : values) {
+        value.accept(&check);
     }
 
     // Freeze all called functions
     FreezeFunctions freezer(name());
-    for (size_t i = 0; i < values.size(); i++) {
-        values[i].accept(&freezer);
+    for (const auto &value : values) {
+        value.accept(&freezer);
     }
 
     // Make sure all the vars in the args have unique non-empty names
@@ -421,14 +422,19 @@ void Function::define(const vector<string> &args, vector<Expr> values) {
         }
     }
 
-    for (size_t i = 0; i < values.size(); i++) {
-        values[i] = common_subexpression_elimination(values[i]);
+    for (auto &value : values) {
+        value = common_subexpression_elimination(value);
     }
 
     // Tag calls to random() with the free vars
     int tag = rand_counter++;
-    for (size_t i = 0; i < values.size(); i++) {
-        values[i] = lower_random(values[i], args, tag);
+    vector<VarOrRVar> free_vars;
+    free_vars.reserve(args.size());
+    for (const auto &arg : args) {
+        free_vars.emplace_back(Var(arg));
+    }
+    for (auto &value : values) {
+        value = lower_random(value, free_vars, tag);
     }
 
     user_assert(!check.reduction_domain.defined())
@@ -568,11 +574,11 @@ void Function::define_update(const vector<Expr> &_args, vector<Expr> values) {
     // vars in the LHS in the correct places.
     CheckVars check(name());
     check.pure_args = pure_args;
-    for (size_t i = 0; i < args.size(); i++) {
-        args[i].accept(&check);
+    for (const auto &arg : args) {
+        arg.accept(&check);
     }
-    for (size_t i = 0; i < values.size(); i++) {
-        values[i].accept(&check);
+    for (const auto &value : values) {
+        value.accept(&check);
     }
     if (check.reduction_domain.defined()) {
         check.unbound_reduction_vars_ok = true;
@@ -581,11 +587,11 @@ void Function::define_update(const vector<Expr> &_args, vector<Expr> values) {
 
     // Freeze all called functions
     FreezeFunctions freezer(name());
-    for (size_t i = 0; i < args.size(); i++) {
-        args[i].accept(&freezer);
+    for (const auto &arg : args) {
+        arg.accept(&freezer);
     }
-    for (size_t i = 0; i < values.size(); i++) {
-        values[i].accept(&freezer);
+    for (const auto &value : values) {
+        value.accept(&freezer);
     }
 
     // Freeze the reduction domain if defined
@@ -595,24 +601,28 @@ void Function::define_update(const vector<Expr> &_args, vector<Expr> values) {
     }
 
     // Tag calls to random() with the free vars
-    vector<string> free_vars;
-    for (size_t i = 0; i < pure_args.size(); i++) {
-        if (!pure_args[i].empty()) {
-            free_vars.push_back(pure_args[i]);
+    vector<VarOrRVar> free_vars;
+    int num_free_vars = (int)pure_args.size();
+    if (check.reduction_domain.defined()) {
+        num_free_vars += (int)check.reduction_domain.domain().size();
+    }
+    free_vars.reserve(num_free_vars);
+    for (const auto &pure_arg : pure_args) {
+        if (!pure_arg.empty()) {
+            free_vars.emplace_back(Var(pure_arg));
         }
     }
     if (check.reduction_domain.defined()) {
         for (size_t i = 0; i < check.reduction_domain.domain().size(); i++) {
-            string rvar = check.reduction_domain.domain()[i].var;
-            free_vars.push_back(rvar);
+            free_vars.emplace_back(RVar(check.reduction_domain, i));
         }
     }
     int tag = rand_counter++;
-    for (size_t i = 0; i < args.size(); i++) {
-        args[i] = lower_random(args[i], free_vars, tag);
+    for (auto &arg : args) {
+        arg = lower_random(arg, free_vars, tag);
     }
-    for (size_t i = 0; i < values.size(); i++) {
-        values[i] = lower_random(values[i], free_vars, tag);
+    for (auto &value : values) {
+        value = lower_random(value, free_vars, tag);
     }
     if (check.reduction_domain.defined()) {
         check.reduction_domain.set_predicate(lower_random(check.reduction_domain.predicate(), free_vars, tag));
@@ -622,11 +632,11 @@ void Function::define_update(const vector<Expr> &_args, vector<Expr> values) {
     // function itself, introducing circular references and hence
     // memory leaks. We need to break these cycles.
     WeakenFunctionPtrs weakener(contents.get());
-    for (size_t i = 0; i < args.size(); i++) {
-        args[i] = weakener.mutate(args[i]);
+    for (auto &arg : args) {
+        arg = weakener.mutate(arg);
     }
-    for (size_t i = 0; i < values.size(); i++) {
-        values[i] = weakener.mutate(values[i]);
+    for (auto &value : values) {
+        value = weakener.mutate(value);
     }
     if (check.reduction_domain.defined()) {
         check.reduction_domain.set_predicate(
@@ -654,9 +664,9 @@ void Function::define_update(const vector<Expr> &_args, vector<Expr> values) {
     }
 
     // Then add the pure args outside of that
-    for (size_t i = 0; i < pure_args.size(); i++) {
-        if (!pure_args[i].empty()) {
-            Dim d = {pure_args[i], ForType::Serial, DeviceAPI::None, Dim::Type::PureVar};
+    for (const auto &pure_arg : pure_args) {
+        if (!pure_arg.empty()) {
+            Dim d = {pure_arg, ForType::Serial, DeviceAPI::None, Dim::Type::PureVar};
             r.schedule().dims().push_back(d);
         }
     }

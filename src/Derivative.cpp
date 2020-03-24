@@ -1171,6 +1171,17 @@ void ReverseAccumulationVisitor::visit(const Call *op) {
             accumulate(op->args[1], adjoint);
         } else if (op->is_intrinsic(Call::undef)) {
             // do nothing
+        } else if (op->is_intrinsic(Call::reinterpret) ||
+                   op->is_intrinsic(Call::bitwise_and) ||
+                   op->is_intrinsic(Call::bitwise_not) ||
+                   op->is_intrinsic(Call::bitwise_or) ||
+                   op->is_intrinsic(Call::bitwise_xor) ||
+                   op->is_intrinsic(Call::shift_right) ||
+                   op->is_intrinsic(Call::shift_left)) {
+            // bit manipulations -- these have zero derivatives.
+            for (const auto &arg : op->args) {
+                accumulate(arg, make_zero(op->type));
+            }
         } else {
             user_warning << "Dropping gradients at call to " << op->name << "\n";
             for (const auto &arg : op->args) {
@@ -1435,7 +1446,6 @@ void ReverseAccumulationVisitor::propagate_halide_function_call(
             Expr lhs_arg = lhs[lhs_id];
             vector<string> adjoint_args = current_adjoint_func.function().args();
             vector<int> variable_ids = gather_variables(lhs_arg, adjoint_args);
-            RDom r(bounds);
             // For each variable found in lhs_arg, find the corresponding
             // bound (by looping through all variables) and substitute
             // with the bound reduction variable.

@@ -4,34 +4,38 @@
 using namespace Halide;
 using namespace Halide::Internal;
 
+void check(const Buffer<int> &result) {
+    for (int x = 0; x < result.width(); x++) {
+        int correct[] = {x, 456, 789, 789};
+        for (int c = 0; c < 4; c++) {
+            if (result(x, c) != correct[c]) {
+                printf("result(%d, 0) = %d instead of %d\n",
+                       x, result(x, c), correct[c]);
+                abort();
+            }
+        }
+    }
+}
+
 int main(int argc, char **argv) {
     Var x("x"), c("c");
-    Func f("f");
+    {
+        Func f("f");
 
-    f(x, c) = mux(c, {x, 456, 789});
+        f(x, c) = mux(c, {x, 456, 789});
 
-    Buffer<int> result = f.realize(100, 4);
-    for (int x = 0; x < result.width(); x++) {
-        if (result(x, 0) != x) {
-            printf("result(%d, 0) = %d instead of %d\n",
-                   x, result(x, 0), x);
-            return -1;
-        }
-        if (result(x, 1) != 456) {
-            printf("result(%d, 1) = %d instead of %d\n",
-                   x, result(x, 1), 456);
-            return -1;
-        }
-        if (result(x, 2) != 789) {
-            printf("result(%d, 2) = %d instead of %d\n",
-                   x, result(x, 2), 789);
-            return -1;
-        }
-        if (result(x, 3) != 789) {
-            printf("result(%d, 3) = %d instead of %d\n",
-                   x, result(x, 3), 789);
-            return -1;
-        }
+        Buffer<int> result = f.realize(100, 4);
+        check(result);
+    }
+
+    {
+        Func f;
+        f(x) = {x, 456, 789};
+        Func g;
+        g(x, c) = mux(c, f(x));
+
+        Buffer<int> result = g.realize(100, 4);
+        check(result);
     }
 
     printf("Success!\n");
