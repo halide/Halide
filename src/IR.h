@@ -493,6 +493,7 @@ struct Call : public ExprNode<Call> {
     enum IntrinsicOp {
         abs,
         absd,
+        add_image_checks_marker,
         alloca,
         bitwise_and,
         bitwise_not,
