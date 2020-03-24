@@ -1799,6 +1799,18 @@ private:
     }
 
     void visit(const Call *op) override {
+        if (op->is_intrinsic(Call::declare_box_touched)) {
+            internal_assert(!op->args.empty());
+            const Variable *handle = op->args[0].as<Variable>();
+            const string &func = handle->name;
+            Box b(op->args.size() / 2);
+            for (size_t i = 0; i < b.size(); i++) {
+                b[i].min = op->args[2 * i + 1];
+                b[i].max = op->args[2 * i + 2];
+            }
+            merge_boxes(boxes[func], b);
+        }
+
         if (consider_calls) {
             if (op->is_intrinsic(Call::if_then_else)) {
                 internal_assert(op->args.size() == 3);
@@ -2420,7 +2432,7 @@ map<string, Box> boxes_touched(const Expr &e, Stmt s, bool consider_calls, bool 
             }
 
             Expr visit(const Variable *op) override {
-                if (op->name == fn_buffer) {
+                if (op->name == fn_buffer || op->name == fn) {
                     relevant = true;
                 }
                 return op;

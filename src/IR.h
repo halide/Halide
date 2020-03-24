@@ -504,6 +504,7 @@ struct Call : public ExprNode<Call> {
         cast_mask,
         count_leading_zeros,
         count_trailing_zeros,
+        declare_box_touched,
         debug_to_file,
         div_round_to_zero,
         dynamic_shuffle,
