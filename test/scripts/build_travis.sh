@@ -30,6 +30,7 @@ if [ ${BUILD_SYSTEM} = 'CMAKE' ]; then
                  -DWITH_TEST_WARNING=OFF \
                  -DWITH_TUTORIALS=OFF \
                  -DWITH_DOCS=ON \
+                 -DWITH_PYTHON_BINDINGS=OFF \
                  -DCMAKE_BUILD_TYPE=Release \
                  -G "Unix Makefiles" \
                  ../
