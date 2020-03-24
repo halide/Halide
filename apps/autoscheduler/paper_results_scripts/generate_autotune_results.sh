@@ -1,7 +1,7 @@
 #!/bin/bash
 
-if [[ $# -ne 2 && $# -ne 3 ]]; then
-    echo "Usage: $0 max_iterations resume app"
+if [[ $# -ne 3 && $# -ne 4 ]]; then
+    echo "Usage: $0 max_iterations resume train_only app"
     exit
 fi
 
@@ -15,7 +15,8 @@ build_autoscheduler_tools ${HALIDE_ROOT}
 
 MAX_ITERATIONS=${1}
 RESUME=${2}
-APP=${3}
+TRAIN_ONLY=${3}
+APP=${4}
 
 export CXX="ccache c++"
 
@@ -92,7 +93,7 @@ for app in $APPS; do
     ITERATION=1
 
     while [[ DONE -ne 1 ]]; do
-        SAMPLES_DIR=${SAMPLES_DIR} make -C ${APP_DIR} autotune | tee -a ${OUTPUT_FILE}
+        TRAIN_ONLY=${TRAIN_ONLY} SAMPLES_DIR=${SAMPLES_DIR} make -C ${APP_DIR} autotune | tee -a ${OUTPUT_FILE}
 
         if [[ $ITERATION -ge $MAX_ITERATIONS ]]; then
             break
