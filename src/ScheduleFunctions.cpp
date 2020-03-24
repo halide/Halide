@@ -1229,19 +1229,11 @@ private:
             internal_assert((it_min != bounds.end()) && (it_max != bounds.end()));
 
             if (iter->second == LoopAlignStrategy::AlignStart) {
-                auto parent_min = bounds.find(parent_prefix + var + ".loop_min");
-                // Try to find under different parent name.
-                if (parent_min == bounds.end()) {
-                    parent_min = bounds.find(parent_prefix + parent_var + ".loop_min");
-                }
+                auto parent_min = bounds.find(parent_prefix + parent_var + ".loop_min");
                 internal_assert(parent_min != bounds.end());
                 shift_val = parent_min->second - it_min->second;
             } else {
-                auto parent_max = bounds.find(parent_prefix + var + ".loop_max");
-                // Try to find under different parent name.
-                if (parent_max == bounds.end()) {
-                    parent_max = bounds.find(parent_prefix + parent_var + ".loop_max");
-                }
+                auto parent_max = bounds.find(parent_prefix + parent_var + ".loop_max");
                 internal_assert(parent_max != bounds.end());
                 shift_val = parent_max->second - it_max->second;
             }
@@ -2164,16 +2156,16 @@ Stmt schedule_functions(const vector<Function> &outputs,
         }
 
         if (group_should_be_inlined(funcs)) {
-            debug(1) << "Inlining " << funcs[0].name() << '\n';
+            debug(1) << "Inlining " << funcs[0].name() << "\n";
             s = inline_function(s, funcs[0]);
         } else {
-            debug(1) << "Injecting realization of " << funcs << '\n';
+            debug(1) << "Injecting realization of " << funcs << "\n";
             InjectFunctionRealization injector(funcs, is_output_list, target, env);
             s = injector.mutate(s);
             internal_assert(injector.found_store_level() && injector.found_compute_level());
         }
 
-        debug(2) << s << '\n';
+        debug(2) << s << "\n";
     }
 
     // We can remove the loop over root now

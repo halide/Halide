@@ -13,7 +13,7 @@ $(BIN)/%/pytorch_weights/ok:
 
 $(GENERATOR_BIN)/resnet50.generator: Resnet50Generator.cpp $(GENERATOR_DEPS)
 	@mkdir -p $(@D)
-	$(CXX) $(CXXFLAGS) -g -fno-rtti $(filter %.cpp,$^) -o $@ $(GENERATOR_LDFLAGS) 
+	$(CXX) $(CXXFLAGS) -g -fno-rtti $(filter %.cpp,$^) -o $@ $(LIBHALIDE_LDFLAGS) 
 
 $(BIN)/%/resnet50.a: $(GENERATOR_BIN)/resnet50.generator
 	@mkdir -p $(@D)

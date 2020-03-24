@@ -45,7 +45,7 @@ size_t emit_padded(std::ostream &out, T data, size_t size) {
     size_t written = (size_t)out.tellp() - pos;
     internal_assert(written <= size);
     while (written < size) {
-        out << ' ';
+        out.put(' ');
         written++;
     }
     return pos;
@@ -105,13 +105,14 @@ std::map<std::string, size_t> write_string_table(std::ostream &out,
             start_offset = out.tellp();
         }
         string_to_offset_map[name] = (size_t)out.tellp() - start_offset;
-        out << name << '\0';
+        out << name;
+        out.put('\0');
     }
     // If all strings are short enough, we skip the string table entirely
     if (start_offset != 0) {
         size_t member_end = out.tellp();
         if (out.tellp() % 2) {
-            out << '\x0A';
+            out.put('\x0A');
         }
         size_t final_offset = out.tellp();
         out.seekp(start_offset - 12);
@@ -214,14 +215,15 @@ void write_symbol_table(std::ostream &out,
 
     // Symbol table goes at the end for both variants.
     for (auto &it : name_to_member_index) {
-        out << it.first << '\0';
+        out << it.first;
+        out.put('\0');
     }
 
     size_t member_end = out.tellp();
 
     // lib.exe pads to 2-byte align with 0x0a
     if (out.tellp() % 2) {
-        out << '\x0A';
+        out.put('\x0A');
     }
     size_t final_offset = out.tellp();
 
@@ -265,7 +267,7 @@ void write_coff_archive(std::ostream &out,
         std::string name = member_name(m);
         auto it = string_to_offset_map.find(name);
         if (it != string_to_offset_map.end()) {
-            out << '/';
+            out.put('/');
             emit_padded(out, it->second, 15);
         } else {
             emit_padded(out, name + "/", 16);
@@ -276,7 +278,7 @@ void write_coff_archive(std::ostream &out,
         out << m.Buf->getMemBufferRef().getBuffer().str();
 
         if (out.tellp() % 2) {
-            out << '\x0A';
+            out.put('\x0A');
         }
     }
 

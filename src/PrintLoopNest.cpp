@@ -84,7 +84,7 @@ private:
     void visit(const For *op) override {
         string simplified_loop_var_name = simplify_var_name(op->name);
 
-        out << get_indent() << op->for_type << ' ' << simplified_loop_var_name;
+        out << get_indent() << op->for_type << " " << simplified_loop_var_name;
 
         // If the min or extent are constants, print them. At this
         // stage they're all variables.

@@ -395,7 +395,7 @@ std::string dir_make_temp() {
             break;
         }
     }
-    internal_assert(false) << "Unable to create temp directory in " << tmp_dir << "\n";
+    internal_error << "Unable to create temp directory in " << tmp_dir << "\n";
     return "";
 #else
     std::string templ = "/tmp/XXXXXX";
@@ -496,12 +496,12 @@ std::string c_print_name(const std::string &name) {
 
     // Prefix an underscore to avoid reserved words (e.g. a variable named "while")
     if (isalpha(name[0])) {
-        oss << '_';
+        oss << "_";
     }
 
     for (size_t i = 0; i < name.size(); i++) {
         if (name[i] == '.') {
-            oss << '_';
+            oss << "_";
         } else if (name[i] == '$') {
             oss << "__";
         } else if (name[i] != '_' && !isalnum(name[i])) {

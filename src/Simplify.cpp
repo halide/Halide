@@ -14,7 +14,7 @@ using std::pair;
 using std::string;
 using std::vector;
 
-#if LOG_EXPR_MUTATIONS || LOG_STMT_MUTATIONS
+#if (LOG_EXPR_MUTATIONS || LOG_STMT_MUTATIONS)
 int Simplify::debug_indent = 0;
 #endif
 
@@ -273,16 +273,16 @@ Simplify::ScopedFact::~ScopedFact() {
     }
 }
 
-Expr simplify(const Expr &e, bool remove_dead_lets,
+Expr simplify(const Expr &e, bool remove_dead_let_stmts,
               const Scope<Interval> &bounds,
               const Scope<ModulusRemainder> &alignment) {
-    return Simplify(remove_dead_lets, &bounds, &alignment).mutate(e, nullptr);
+    return Simplify(remove_dead_let_stmts, &bounds, &alignment).mutate(e, nullptr);
 }
 
-Stmt simplify(const Stmt &s, bool remove_dead_lets,
+Stmt simplify(const Stmt &s, bool remove_dead_let_stmts,
               const Scope<Interval> &bounds,
               const Scope<ModulusRemainder> &alignment) {
-    return Simplify(remove_dead_lets, &bounds, &alignment).mutate(s);
+    return Simplify(remove_dead_let_stmts, &bounds, &alignment).mutate(s);
 }
 
 class SimplifyExprs : public IRMutator {

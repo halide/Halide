@@ -239,7 +239,7 @@ struct WildConstInt {
             halide_scalar_value_t val;
             halide_type_t type;
             state.get_bound_const(i, val, type);
-            return op->type == type && value == val.u.i64;
+            return e.type == type && value == val.u.i64;
         }
         state.set_bound_const(i, value, e.type);
         return true;
@@ -288,7 +288,7 @@ struct WildConstUInt {
             halide_scalar_value_t val;
             halide_type_t type;
             state.get_bound_const(i, val, type);
-            return op->type == type && value == val.u.u64;
+            return e.type == type && value == val.u.u64;
         }
         state.set_bound_const(i, value, e.type);
         return true;
@@ -325,7 +325,6 @@ struct WildConstFloat {
     template<uint32_t bound>
     HALIDE_ALWAYS_INLINE bool match(const BaseExprNode &e, MatcherState &state) const noexcept {
         static_assert(i >= 0 && i < max_wild, "Wild with out-of-range index");
-        halide_type_t ty = e.type;
         const BaseExprNode *op = &e;
         if (op->node_type == IRNodeType::Broadcast) {
             op = ((const Broadcast *)op)->value.get();
@@ -338,9 +337,9 @@ struct WildConstFloat {
             halide_scalar_value_t val;
             halide_type_t type;
             state.get_bound_const(i, val, type);
-            return op->type == type && value == val.u.f64;
+            return e.type == type && value == val.u.f64;
         }
-        state.set_bound_const(i, value, ty);
+        state.set_bound_const(i, value, e.type);
         return true;
     }
 

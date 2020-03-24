@@ -111,7 +111,7 @@ void CodeGen_OpenGL_Dev::init_module() {
 vector<char> CodeGen_OpenGL_Dev::compile_to_src() {
     string str = src_stream.str();
     debug(1) << "GLSL source:\n"
-             << str << '\n';
+             << str << "\n";
     vector<char> buffer(str.begin(), str.end());
     buffer.push_back(0);
     return buffer;
@@ -122,7 +122,7 @@ string CodeGen_OpenGL_Dev::get_current_kernel_name() {
 }
 
 void CodeGen_OpenGL_Dev::dump() {
-    std::cerr << src_stream.str() << std::endl;
+    std::cerr << src_stream.str() << "\n";
 }
 
 string CodeGen_OpenGL_Dev::print_gpu_name(const string &name) {

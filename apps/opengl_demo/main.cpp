@@ -100,7 +100,7 @@ std::string run_opengl_filter_from_texture_to_texture(GLuint input_texture_id, G
 
 int main(const int argc, const char *argv[]) {
     if (argc != 2) {
-        std::cerr << "Usage: " << argv[0] << " filename" << std::endl;
+        std::cerr << "Usage: " << argv[0] << " filename\n";
         exit(1);
     }
     const std::string filename = argv[1];

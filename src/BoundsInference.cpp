@@ -183,7 +183,7 @@ public:
     // The fused group is indexed in the same way as 'fused_groups'.
     const vector<set<FusedPair>> &fused_pairs_in_groups;
     const FuncValueBounds &func_bounds;
-    set<string> in_pipeline, inner_productions;
+    set<string> in_pipeline, inner_productions, has_extern_consumer;
     const Target target;
 
     struct CondValue {
@@ -378,6 +378,7 @@ public:
                            const vector<set<FusedPair>> &fused_pairs_in_groups,
                            const set<string> &in_pipeline,
                            const set<string> &inner_productions,
+                           const set<string> &has_extern_consumer,
                            const Target &target) {
 
             // Merge all the relevant boxes.
@@ -568,12 +569,29 @@ public:
             for (size_t d = 0; d < b.size(); d++) {
                 string arg = name + ".s" + std::to_string(stage) + "." + func_args[d];
 
+                const bool clamp_to_outer_bounds =
+                    !in_pipeline.empty() && has_extern_consumer.count(name);
+                if (clamp_to_outer_bounds) {
+                    // Allocation bounds inference is going to have a
+                    // bad time lifting the results of the bounds
+                    // queries outwards. Help it out by insisting that
+                    // the bounds are clamped to lie within the bounds
+                    // one loop level up.
+                    b[d].min = max(b[d].min, Variable::make(Int(32), arg + ".outer_min"));
+                    b[d].max = min(b[d].max, Variable::make(Int(32), arg + ".outer_max"));
+                }
+
                 if (b[d].is_single_point()) {
                     s = LetStmt::make(arg + ".min", Variable::make(Int(32), arg + ".max"), s);
                 } else {
                     s = LetStmt::make(arg + ".min", b[d].min, s);
                 }
                 s = LetStmt::make(arg + ".max", b[d].max, s);
+
+                if (clamp_to_outer_bounds) {
+                    s = LetStmt::make(arg + ".outer_min", Variable::make(Int(32), arg + ".min"), s);
+                    s = LetStmt::make(arg + ".outer_max", Variable::make(Int(32), arg + ".max"), s);
+                }
             }
 
             if (stage > 0) {
@@ -861,6 +879,7 @@ public:
                 for (size_t j = 0; j < args.size(); j++) {
                     if (args[j].is_func()) {
                         Function f(args[j].func);
+                        has_extern_consumer.insert(f.name());
                         string stage_name = f.name() + ".s" + std::to_string(f.updates().size());
                         Box b(f.dimensions());
                         for (int d = 0; d < f.dimensions(); d++) {
@@ -978,17 +997,29 @@ public:
 
         Stmt body = op->body;
 
-        // Walk inside of any let statements that don't depend on
+        // Walk inside of any let/if statements that don't depend on
         // bounds inference results so that we don't needlessly
         // complicate our bounds expressions.
-        vector<pair<string, Expr>> lets;
-        while (const LetStmt *let = body.as<LetStmt>()) {
-            if (depends_on_bounds_inference(let->value)) {
+        vector<pair<string, Expr>> wrappers;
+        while (1) {
+            if (const LetStmt *let = body.as<LetStmt>()) {
+                if (depends_on_bounds_inference(let->value)) {
+                    break;
+                }
+
+                body = let->body;
+                wrappers.emplace_back(let->name, let->value);
+            } else if (const IfThenElse *if_then_else = body.as<IfThenElse>()) {
+                if (depends_on_bounds_inference(if_then_else->condition) ||
+                    if_then_else->else_case.defined()) {
+                    break;
+                }
+
+                body = if_then_else->then_case;
+                wrappers.emplace_back(std::string(), if_then_else->condition);
+            } else {
                 break;
             }
-
-            body = let->body;
-            lets.emplace_back(let->name, let->value);
         }
 
         // If there are no pipelines at this loop level, we can skip
@@ -1089,7 +1120,8 @@ public:
                     }
                     body = stages[i].define_bounds(
                         body, f, stage_name, stage_index, op->name, fused_groups,
-                        fused_pairs_in_groups, in_pipeline, inner_productions, target);
+                        fused_pairs_in_groups, in_pipeline, inner_productions,
+                        has_extern_consumer, target);
                 }
             }
 
@@ -1157,9 +1189,14 @@ public:
         inner_productions.insert(old_inner_productions.begin(),
                                  old_inner_productions.end());
 
-        // Rewrap the let statements
-        for (size_t i = lets.size(); i > 0; i--) {
-            body = LetStmt::make(lets[i - 1].first, lets[i - 1].second, body);
+        // Rewrap the let/if statements
+        for (size_t i = wrappers.size(); i > 0; i--) {
+            const auto &p = wrappers[i - 1];
+            if (p.first.empty()) {
+                body = IfThenElse::make(p.second, body);
+            } else {
+                body = LetStmt::make(p.first, p.second, body);
+            }
         }
 
         return For::make(op->name, op->min, op->extent, op->for_type, op->device_api, body);
@@ -1221,6 +1258,7 @@ Stmt bounds_inference(Stmt s,
 
     // Add an outermost bounds inference marker
     s = For::make("<outermost>", 0, 1, ForType::Serial, DeviceAPI::None, s);
+
     s = BoundsInference(funcs, fused_func_groups, fused_pairs_in_groups,
                         outputs, func_bounds, target)
             .mutate(s);
