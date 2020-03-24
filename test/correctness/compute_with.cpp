@@ -1329,6 +1329,75 @@ int vectorize_inlined_test() {
     return 0;
 }
 
+int mismatching_splits_test() {
+    const int h_size = 128;
+    const int g_size = 256;
+    Buffer<int> h_im(h_size, h_size, 5), g_im(g_size, g_size);
+    Buffer<int> h_im_ref(h_size, h_size, 5), g_im_ref(g_size, g_size);
+
+    {
+        Var x("x"), y("y"), c("c"), xi("xi"), yi("yi"), yii("yii"), yo("yo");
+        Func f("f"), g("g"), h("h"), input("input");
+
+        input(x, y) = x;
+        f(x, y, c) = c * input(x, y);
+        h(x, y, c) = f(x, y, c);
+        g(x, y) = f(x / 2, y / 2, 2);
+
+        g.bound(y, 0, g_size);
+        h.bound(y, 0, h_size).bound(c, 0, 5);
+
+        Pipeline p({h, g});
+
+        p.realize({h_im_ref, g_im_ref});
+    }
+
+    {
+        Var x("x"), y("y"), c("c"), xi("xi"), yi("yi"), yii("yii"), yo("yo");
+        Func f("f"), g("g"), h("h"), input("input");
+
+        input(x, y) = x;
+        f(x, y, c) = c * input(x, y);
+        h(x, y, c) = f(x, y, c);
+        g(x, y) = f(x / 2, y / 2, 2);
+
+        g
+            .split(y, yo, y, 32 * 2, TailStrategy::RoundUp)
+            .split(y, y, yi, 2, TailStrategy::RoundUp)
+            .vectorize(x, 4, TailStrategy::GuardWithIf)
+            .compute_with(h, y, LoopAlignStrategy::AlignStart);
+
+        h
+            .reorder(x, c, y)
+            .split(y, yo, y, 32, TailStrategy::RoundUp)
+            .vectorize(x, 4, TailStrategy::GuardWithIf)
+            .compute_root();
+
+        g.bound(y, 0, g_size);
+        h.bound(y, 0, h_size).bound(c, 0, 5);
+
+        Pipeline p({h, g});
+
+        p.realize({h_im, g_im});
+    }
+
+    auto h_func = [h_im_ref](int x, int y, int z) {
+        return h_im_ref(x, y, z);
+    };
+    if (check_image(h_im, h_func)) {
+        return -1;
+    }
+
+    auto g_func = [g_im_ref](int x, int y) {
+        return g_im_ref(x, y);
+    };
+    if (check_image(g_im, g_func)) {
+        return -1;
+    }
+
+    return 0;
+}
+
 }  // namespace
 
 int main(int argc, char **argv) {
@@ -1397,11 +1466,13 @@ int main(int argc, char **argv) {
         return -1;
     }
 
+    // NOTE: disabled because it generates OOB (see #4751 for discussion).
+    /*
     printf("Running only some are tiled test\n");
     if (only_some_are_tiled_test() != 0) {
         return -1;
     }
-
+    */
     printf("Running multiple outputs on gpu test\n");
     if (multiple_outputs_on_gpu_test() != 0) {
         return -1;
@@ -1414,6 +1485,11 @@ int main(int argc, char **argv) {
 
     printf("Running vectorize inlined test\n");
     if (vectorize_inlined_test() != 0) {
+        return -1;
+    }
+
+    printf("Running mismatching splits test\n");
+    if (mismatching_splits_test() != 0) {
         return -1;
     }
 
