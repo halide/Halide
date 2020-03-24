@@ -16,22 +16,56 @@
 # - GHA is occasionally flaky and some VMs just fail, but there isn't a way
 #   to restart just one of the jobs (it's currently all-or-none)
 
-name: Build+Test
+name: Halide Presubmit Build + Test
 on:
-  repository_dispatch:
+  # repository_dispatch:
+
 
   # TODO: not sure if this is the best set of events/activity-types to use.
-  # pull_request:
-  #   types: [opened, synchronize, reopened, edited, review_requested]
-  #   # TODO: do we want to limit this to certain filetypes?
-  #   # paths:
-  #   #   - '**.h'
-  #   #   - '**.c'
-  #   #   - '**.cpp'
+  pull_request:
+    types: [opened, synchronize, reopened, edited, review_requested]
+    # TODO: do we want to limit this to certain filetypes?
+    # paths:
+    #   - '**.h'
+    #   - '**.c'
+    #   - '**.cpp'
 
 jobs:
+  cancel_previous_runs:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Clean up old stuff
+        shell: bash
+        run: |
+          ACTIONS_API=https://api.github.com/repos/${{github.repository}}/actions
+
+          AUTH_HEADER="-u ${{github.actor}}:${{secrets.GITHUB_TOKEN}}"
+          CURL="curl -s ${AUTH_HEADER}"
+
+          # Find our workflow ID
+          WORKFLOW_ID=$(${CURL} -X GET ${ACTIONS_API}/workflows | jq -r '.workflows | .[] | select(.name == "${{github.workflow}}") | .id')
+
+          # Find the branch corresponding to this pull request
+          BRANCH=$(${CURL} -X GET ${ACTIONS_API}/runs/${{github.run_id}} | jq -r '.head_branch')
+
+          # Get all the run ids for incomplete instances in this PR
+          EXTRACT_IDS='.workflow_runs | .[] | select(.head_branch=="'${BRANCH}'" and (.status=="in_progress" or .status=="queued")) | .id'
+          RUN_IDS=$(${CURL} -X GET ${ACTIONS_API}/workflows/${WORKFLOW_ID}/runs | jq -r "${EXTRACT_IDS}")
+
+          # cancel the previous runs
+          for R in $RUN_IDS
+          do
+            # Don't cancel ourself.
+            if [[ "${{github.run_id}}" != "${R}" ]]; then
+              ${CURL} -X POST ${ACTIONS_API}/runs/${R}/cancel
+              echo Cancelled $R
+            fi
+          done
+
   test_halide:
     name: HL-${{matrix.llvm_version}}-${{matrix.target_arch}}-${{matrix.target_bits}}-${{matrix.target_os}}-${{matrix.build_tool}}
+    # name: ${{matrix.llvm_version}}${{matrix.target_arch}}${{matrix.target_bits}}${{matrix.target_os}}${{matrix.build_tool}}
+    needs: cancel_previous_runs
     runs-on: ${{matrix.host_os}}
     env:
       CC: ${{matrix.cc}}
@@ -40,6 +74,7 @@ jobs:
 
     strategy:
       fail-fast: false  # Keep running other jobs even if one fails
+      max-parallel: 16
       matrix:
         # TODO: this matrix is probably overkill; we don't need to build every combination.
         # (Some combinations are nonsensical and excluded via the 'exclude:' section below.)
@@ -53,13 +88,6 @@ jobs:
         # each matrix entry, e.g. to map an llvm version number to the specific
         # git branch that is needed.
         include:
-          - llvm_version: 9
-            llvm_branch: release/9.x
-          - llvm_version: 10
-            llvm_branch: release/10.x
-          - llvm_version: 11
-            llvm_branch: master
-
           # map things to the necessary host cross-compiler host
           - target_os: osx
             host_os: macos-10.15
@@ -96,10 +124,6 @@ jobs:
             # it proves useful later.
             run_tests: false
 
-          - build_tool: cmake_shared
-            # TODO: revisit when CMake python builds are working
-            uses_python: false
-
         exclude:
           - target_os: osx
             target_arch: arm    # OSX is x86-only
@@ -107,10 +131,15 @@ jobs:
             target_bits: 32     # OSX is 64-bit only
           - target_os: windows
             target_arch: arm    # OSX is x86-only
+
           - target_os: windows
             build_tool: make    # Windows is CMake-only
           - target_arch: arm
-            build_tool: make    # All arm builds require CMake
+            build_tool: make    # Arm is CMake-only
+          - build_tool: make
+            llvm_version: 9     # Only test 'make' for llvm-trunk
+          - build_tool: make
+            llvm_version: 10    # Only test 'make' for llvm-trunk
 
     steps:
     - uses: actions/checkout@v2
@@ -400,6 +429,14 @@ jobs:
         REQUIRE_LLVM_VERSION="${{matrix.llvm_version}}0"
         SHARED_LIBRARY=$([ ${{matrix.build_tool}} == "cmake_shared" ] && echo "ON" || echo "OFF")
 
+        if [[ "${{matrix.uses_python}}" == "true" ]]; then
+          EXTRA_CMAKE_FLAGS="${EXTRA_CMAKE_FLAGS} \
+            -D WITH_PYTHON_BINDINGS=ON"
+        else
+          EXTRA_CMAKE_FLAGS="${EXTRA_CMAKE_FLAGS} \
+            -D WITH_PYTHON_BINDINGS=OFF"
+        fi
+
         cmake \
           -D CMAKE_BUILD_TYPE=${BUILD_TYPE} \
           -D LLVM_DIR="${LLVM_INSTALL_DIR}/lib/cmake/llvm" \
@@ -483,10 +520,9 @@ jobs:
         # Test Halide
         TEST_GROUPS_PARALLEL="internal|correctness|error|warning|generator"
 
-        # TODO: once CMake supports the python stuff
-        # if [[ "${{matrix.uses_python}}" == "true" ]]; then
-        #   TEST_GROUPS_PARALLEL="${TEST_GROUPS_PARALLEL}|python"
-        # fi
+        if [[ "${{matrix.uses_python}}" == "true" ]]; then
+          TEST_GROUPS_PARALLEL="${TEST_GROUPS_PARALLEL}|python"
+        fi
 
         # tutorial has some performance measurements that can be flaky if we run them in parallel
         TEST_GROUPS_SERIAL="tutorial"
