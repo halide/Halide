@@ -82,12 +82,15 @@ done
 BATCH_SIZE=32
 NUM_CORES=80
 EPOCHS=100
+NUM_GPUS=$(nvidia-smi --query-gpu=name --format=csv,noheader | wc -l)
 
 # Latest git hash
 GIT_HASH=$(git rev-parse --verify HEAD)
 
 if [[ $TRAIN_ONLY != 1 ]]; then
     get_timeout_cmd TIMEOUT_CMD
+else
+    echo "Train only mode ON"
 fi
 
 record_command() {
@@ -132,7 +135,8 @@ make_featurization() {
     local -r shared_memory_limit=48
     local -r shared_memory_sm_limit=96
 
-    CMD="HL_SEED=${RANDOM_DROPOUT_SEED} \
+    GPU=$((RANDOM % NUM_GPUS))
+    CMD="CUDA_VISIBLE_DEVICES=${GPU} HL_SEED=${RANDOM_DROPOUT_SEED} \
         HL_WEIGHTS_DIR=${WEIGHTS} \
         HL_USE_MEMOIZED_FEATURES=1 \
         HL_MEMOIZE_BLOCKS=1 \
@@ -194,12 +198,13 @@ benchmark_sample() {
     D=${1}
     BATCH=${3}
     SAMPLE_ID=${4}
+    GPU_INDEX=${8}
 
     if [[ ! -f ${D}/bench ]]; then
         return
     fi
 
-    CMD="HL_NUM_THREADS=${NUM_CORES} \
+    CMD="CUDA_VISIBLE_DEVICES=${GPU_INDEX} HL_NUM_THREADS=${NUM_CORES} \
         ${TIMEOUT_CMD} -k ${BENCHMARKING_TIMEOUT} ${BENCHMARKING_TIMEOUT} \
         ${D}/bench"
 
@@ -329,10 +334,14 @@ for ((BATCH_ID=$((FIRST+1));BATCH_ID<$((FIRST+1+NUM_BATCHES));BATCH_ID++)); do
             echo done.
 
             # benchmark them serially using rungen
-            for ((SAMPLE_ID=0;SAMPLE_ID<${BATCH_SIZE};SAMPLE_ID++)); do
-                S=$(printf "%04d%04d" $BATCH_ID $SAMPLE_ID)
-                FNAME=$(printf "%s_batch_%04d_sample_%04d" ${PIPELINE} $BATCH_ID $SAMPLE_ID)
-                benchmark_sample "${DIR}/${SAMPLE_ID}" $S $BATCH $SAMPLE_ID $EXTRA_ARGS_IDX $FNAME $BATCH_ID
+            for ((SAMPLE_ID=0;SAMPLE_ID<${BATCH_SIZE};SAMPLE_ID=SAMPLE_ID+NUM_GPUS)); do
+                for ((INDEX=0;INDEX<NUM_GPUS;INDEX++)); do
+                    SAMPLE_ID_GPU=$((SAMPLE_ID + INDEX))
+                    S=$(printf "%04d%04d" $BATCH_ID $SAMPLE_ID_GPU)
+                    FNAME=$(printf "%s_batch_%04d_sample_%04d" ${PIPELINE} $BATCH_ID $SAMPLE_ID_GPU)
+                    benchmark_sample "${DIR}/${SAMPLE_ID_GPU}" $S $BATCH $SAMPLE_ID_GPU $EXTRA_ARGS_IDX $FNAME $BATCH_ID $INDEX &
+                done
+                wait
             done
         done
     fi
