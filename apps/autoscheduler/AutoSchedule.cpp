@@ -106,29 +106,29 @@ struct ProgressBar {
         const int bits = 11;
         if (counter & ((1 << bits) - 1)) return;
         const int pos = (int)(progress * 78);
-        aslog(0) << '[';
+        aslog(0) << "[";
         for (int j = 0; j < 78; j++) {
             if (j < pos) {
-                aslog(0) << '.';
+                aslog(0) << ".";
             } else if (j - 1 < pos) {
                 aslog(0) << "/-\\|"[(counter >> bits) % 4];
             } else {
-                aslog(0) << ' ';
+                aslog(0) << " ";
             }
         }
-        aslog(0) << ']';
+        aslog(0) << "]";
         for (int j = 0; j < 80; j++) {
-            aslog(0) << '\b';
+            aslog(0) << "\b";
         }
     }
 
     void clear() {
         if (counter) {
             for (int j = 0; j < 80; j++) {
-                aslog(0) << ' ';
+                aslog(0) << " ";
             }
             for (int j = 0; j < 80; j++) {
-                aslog(0) << '\b';
+                aslog(0) << "\b";
             }
         }
     }
@@ -437,7 +437,7 @@ struct State {
                     aslog(0) << "  " << e2->producer->func.name() << "\n";
                 }
             }
-            internal_error << "Pipeline so far doesn't use next Func: " << node->func.name() << '\n';
+            internal_error << "Pipeline so far doesn't use next Func: " << node->func.name() << "\n";
         }
 
         int num_children = 0;
@@ -1202,7 +1202,7 @@ void generate_schedule(const std::vector<Function> &outputs,
     if (!seed_str.empty()) {
         seed = atoi(seed_str.c_str());
     }
-    aslog(1) << "Dropout seed = " << seed << '\n';
+    aslog(1) << "Dropout seed = " << seed << "\n";
     std::mt19937 rng((uint32_t)seed);
 
     // Get the beam size
@@ -1238,7 +1238,7 @@ void generate_schedule(const std::vector<Function> &outputs,
 
     HALIDE_TOC;
 
-    aslog(1) << "Cost evaluated this many times: " << State::cost_calculations << '\n';
+    aslog(1) << "Cost evaluated this many times: " << State::cost_calculations << "\n";
 
     // Dump the schedule found
     aslog(1) << "** Optimal schedule:\n";
@@ -1298,7 +1298,7 @@ struct RegisterAutoscheduler {
         Pipeline::add_autoscheduler("Adams2019", *this);
     }
 
-    void operator()(Pipeline p, const Target &target, const MachineParams &params, AutoSchedulerResults *results) {
+    void operator()(const Pipeline &p, const Target &target, const MachineParams &params, AutoSchedulerResults *results) {
         std::vector<Function> outputs;
         for (Func f : p.outputs()) {
             outputs.push_back(f.function());

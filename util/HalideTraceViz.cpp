@@ -52,7 +52,7 @@ struct info {
     ~info() {
         if (verbose) {
             if (msg.str().back() != '\n') {
-                msg << '\n';
+                msg << "\n";
             }
             std::cerr << msg.str();
         }
@@ -71,7 +71,7 @@ struct warn {
 
     ~warn() {
         if (msg.str().back() != '\n') {
-            msg << '\n';
+            msg << "\n";
         }
         std::cerr << "Warning: " << msg.str();
     }
@@ -93,7 +93,7 @@ struct fail {
 #endif
     ~fail() {
         if (msg.str().back() != '\n') {
-            msg << '\n';
+            msg << "\n";
         }
         std::cerr << msg.str();
         exit(1);

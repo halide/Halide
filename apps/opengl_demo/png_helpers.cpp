@@ -17,7 +17,7 @@ struct image_info PNGHelpers::load(const std::string &filepath) {
     png_byte header[8];
     fread(header, 1, 8, fp);
     if (png_sig_cmp(header, 0, 8)) {
-        std::cerr << "error: " << filepath << " is not a PNG file." << std::endl;
+        std::cerr << "error: " << filepath << " is not a PNG file.\n";
         exit(1);
     }
 

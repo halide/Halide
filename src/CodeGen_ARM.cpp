@@ -112,6 +112,15 @@ CodeGen_ARM::CodeGen_ARM(Target target)
         casts.push_back(p);
 
         // Saturating add
+#if LLVM_VERSION >= 100
+        if (t.is_int()) {
+            p.intrin32 = "llvm.sadd.sat" + t_str;
+            p.intrin64 = "llvm.sadd.sat" + t_str;
+        } else {
+            p.intrin32 = "llvm.uadd.sat" + t_str;
+            p.intrin64 = "llvm.uadd.sat" + t_str;
+        }
+#else
         if (t.is_int()) {
             p.intrin32 = "llvm.arm.neon.vqadds" + t_str;
             p.intrin64 = "llvm.aarch64.neon.sqadd" + t_str;
@@ -119,6 +128,7 @@ CodeGen_ARM::CodeGen_ARM(Target target)
             p.intrin32 = "llvm.arm.neon.vqaddu" + t_str;
             p.intrin64 = "llvm.aarch64.neon.uqadd" + t_str;
         }
+#endif
         p.pattern = cast(t, clamp(w_vector + w_vector, tmin, tmax));
         casts.push_back(p);
 
@@ -130,6 +140,15 @@ CodeGen_ARM::CodeGen_ARM(Target target)
 
         // Saturating subtract
         // N.B. Saturating subtracts always widen to a signed type
+#if LLVM_VERSION >= 100
+        if (t.is_int()) {
+            p.intrin32 = "llvm.ssub.sat" + t_str;
+            p.intrin64 = "llvm.ssub.sat" + t_str;
+        } else {
+            p.intrin32 = "llvm.usub.sat" + t_str;
+            p.intrin64 = "llvm.usub.sat" + t_str;
+        }
+#else
         if (t.is_int()) {
             p.intrin32 = "llvm.arm.neon.vqsubs" + t_str;
             p.intrin64 = "llvm.aarch64.neon.sqsub" + t_str;
@@ -137,6 +156,7 @@ CodeGen_ARM::CodeGen_ARM(Target target)
             p.intrin32 = "llvm.arm.neon.vqsubu" + t_str;
             p.intrin64 = "llvm.aarch64.neon.uqsub" + t_str;
         }
+#endif
         p.pattern = cast(t, clamp(ws_vector - ws_vector, tsmin, tsmax));
         casts.push_back(p);
 
@@ -359,7 +379,7 @@ void CodeGen_ARM::visit(const Cast *op) {
         if (c && c->is_intrinsic(Call::absd)) {
             ostringstream ss;
             int intrin_lanes = 128 / t.bits();
-            ss << "vabdl_" << (c->args[0].type().is_int() ? 'i' : 'u') << t.bits() / 2 << 'x' << intrin_lanes;
+            ss << "vabdl_" << (c->args[0].type().is_int() ? "i" : "u") << t.bits() / 2 << "x" << intrin_lanes;
             value = call_intrin(t, intrin_lanes, ss.str(), c->args);
             return;
         }
@@ -499,7 +519,12 @@ void CodeGen_ARM::visit(const Sub *op) {
         Value *b = codegen(op->b);
 
         if (op->type.lanes() > 1) {
-            a = ConstantVector::getSplat(op->type.lanes(), a);
+#if LLVM_VERSION >= 110
+            const llvm::ElementCount elem_count(op->type.lanes(), /*scalable*/ false);
+#else
+            const int elem_count = op->type.lanes();
+#endif
+            a = ConstantVector::getSplat(elem_count, a);
         }
         value = builder->CreateFSub(a, b);
         return;
@@ -811,9 +836,9 @@ void CodeGen_ARM::visit(const Store *op) {
     if (target.bits != 64 /* Not yet implemented for aarch64 */) {
         ostringstream builtin;
         builtin << "strided_store_"
-                << (op->value.type().is_float() ? 'f' : 'i')
+                << (op->value.type().is_float() ? "f" : "i")
                 << op->value.type().bits()
-                << 'x' << op->value.type().lanes();
+                << "x" << op->value.type().lanes();
 
         llvm::Function *fn = module->getFunction(builtin.str());
         if (fn) {
@@ -946,9 +971,9 @@ void CodeGen_ARM::visit(const Load *op) {
     if (target.bits != 64 /* Not yet implemented for aarch64 */) {
         ostringstream builtin;
         builtin << "strided_load_"
-                << (op->type.is_float() ? 'f' : 'i')
+                << (op->type.is_float() ? "f" : "i")
                 << op->type.bits()
-                << 'x' << op->type.lanes();
+                << "x" << op->type.lanes();
 
         llvm::Function *fn = module->getFunction(builtin.str());
         if (fn) {

@@ -1,4 +1,5 @@
 #include "Random.h"
+#include "Func.h"
 #include "IRMutator.h"
 #include "IROperator.h"
 
@@ -117,16 +118,19 @@ class LowerRandom : public IRMutator {
     vector<Expr> extra_args;
 
 public:
-    LowerRandom(const vector<string> &free_vars, int tag) {
+    LowerRandom(const vector<VarOrRVar> &free_vars, int tag) {
         extra_args.emplace_back(tag);
-        for (size_t i = 0; i < free_vars.size(); i++) {
-            internal_assert(!free_vars[i].empty());
-            extra_args.push_back(Variable::make(Int(32), free_vars[i]));
+        for (const VarOrRVar &v : free_vars) {
+            if (v.is_rvar) {
+                extra_args.push_back(v.rvar);
+            } else {
+                extra_args.push_back(v.var);
+            }
         }
     }
 };
 
-Expr lower_random(const Expr &e, const vector<string> &free_vars, int tag) {
+Expr lower_random(const Expr &e, const vector<VarOrRVar> &free_vars, int tag) {
     LowerRandom r(free_vars, tag);
     return r.mutate(e);
 }

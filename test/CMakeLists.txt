@@ -13,7 +13,9 @@ target_compile_definitions(halide_test INTERFACE "LLVM_VERSION=${LLVM_VERSION}")
 
 # Tests are built with the equivalent of OPTIMIZE_FOR_BUILD_TIME (-O0 or /Od).
 target_compile_options(halide_test INTERFACE $<$<CXX_COMPILER_ID:MSVC>:/Od>)
-target_compile_options(halide_test INTERFACE $<$<CXX_COMPILER_ID:GNU,Clang,AppleClang>:-O0>)
+target_compile_options(halide_test INTERFACE $<$<CXX_COMPILER_ID:GNU>:-O0>)
+target_compile_options(halide_test INTERFACE $<$<CXX_COMPILER_ID:Clang>:-O0>)
+target_compile_options(halide_test INTERFACE $<$<CXX_COMPILER_ID:AppleClang>:-O0>)
 
 # Also allow tests, via conditional compilation, to use the entire
 # capability of the CPU being compiled on via -march=native. This
@@ -22,7 +24,9 @@ set(ARCH_FOR_TESTS "$ENV{ARCH_FOR_TESTS}")
 if ("${ARCH_FOR_TESTS}" STREQUAL "")
   set(ARCH_FOR_TESTS "native")
 endif()
-target_compile_options(halide_test INTERFACE $<$<CXX_COMPILER_ID:GNU,Clang,AppleClang>:-march=${ARCH_FOR_TESTS}>)
+target_compile_options(halide_test INTERFACE $<$<CXX_COMPILER_ID:GNU>:-march=${ARCH_FOR_TESTS}>)
+target_compile_options(halide_test INTERFACE $<$<CXX_COMPILER_ID:Clang>:-march=${ARCH_FOR_TESTS}>)
+target_compile_options(halide_test INTERFACE $<$<CXX_COMPILER_ID:AppleClang>:-march=${ARCH_FOR_TESTS}>)
 
 function(tests)
     set(options EXPECT_FAILURE)

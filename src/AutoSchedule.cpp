@@ -881,7 +881,7 @@ struct Partitioner {
         }
 
         friend std::ostream &operator<<(std::ostream &stream, const GroupingChoice &choice) {
-            stream << "Choice: " << choice.prod << " -> " << choice.cons << '\n';
+            stream << "Choice: " << choice.prod << " -> " << choice.cons << "\n";
             return stream;
         }
     };
@@ -949,34 +949,33 @@ struct Partitioner {
         }
 
         friend std::ostream &operator<<(std::ostream &stream, const Group &g) {
-            stream << "Output FStage: " << g.output << '\n';
-            stream << "Members: " << '{';
+            stream << "Output FStage: " << g.output << "\n"
+                   << "Members: {";
             for (size_t i = 0; i < g.members.size(); ++i) {
                 if (i > 0) {
                     stream << ", ";
                 }
                 stream << g.members[i];
             }
-            stream << "}" << '\n';
+            stream << "}\n";
 
-            stream << "Inlined: " << '{';
+            stream << "Inlined: {";
             for (auto iter = g.inlined.begin(); iter != g.inlined.end(); ++iter) {
                 if (std::distance(g.inlined.begin(), iter) > 0) {
                     stream << ", ";
                 }
                 stream << *iter;
             }
-            stream << "}" << '\n';
+            stream << "}\n";
 
-            stream << "Tile sizes: "
-                   << "{";
+            stream << "Tile sizes: {";
             for (auto iter = g.tile_sizes.begin(); iter != g.tile_sizes.end(); ++iter) {
                 if (std::distance(g.tile_sizes.begin(), iter) > 0) {
                     stream << ", ";
                 }
                 stream << "(" << iter->first << ", " << iter->second << ")";
             }
-            stream << "}" << '\n';
+            stream << "}\n";
 
             return stream;
         }
@@ -1009,9 +1008,9 @@ struct Partitioner {
         }
 
         friend std::ostream &operator<<(std::ostream &stream, const GroupAnalysis &analysis) {
-            stream << "[arith cost:" << analysis.cost.arith << ", ";
-            stream << "memory cost:" << analysis.cost.memory << ", ";
-            stream << "parallelism:" << analysis.parallelism << "]\n";
+            stream << "[arith cost:" << analysis.cost.arith << ", "
+                   << "memory cost:" << analysis.cost.memory << ", "
+                   << "parallelism:" << analysis.parallelism << "]\n";
             return stream;
         }
     };
@@ -1224,19 +1223,19 @@ struct Partitioner {
 };
 
 void Partitioner::disp_grouping() {
-    debug(0) << "\n=========" << '\n';
-    debug(0) << "Grouping:" << '\n';
-    debug(0) << "=========" << '\n';
+    debug(0) << "\n=========\n"
+             << "Grouping:\n"
+             << "=========\n";
     for (const auto &g : groups) {
-        debug(0) << g.second << '\n';
+        debug(0) << g.second << "\n";
     }
-    debug(0) << "=========" << '\n';
+    debug(0) << "=========\n";
 }
 
 void Partitioner::disp_pipeline_graph() {
-    debug(0) << "\n================" << '\n';
-    debug(0) << "Pipeline graph:" << '\n';
-    debug(0) << "================" << '\n';
+    debug(0) << "\n================\n"
+             << "Pipeline graph:\n"
+             << "================\n";
     for (const auto &f : children) {
         debug(0) << f.first << ": {";
         for (auto iter = f.second.begin(); iter != f.second.end(); ++iter) {
@@ -1245,17 +1244,17 @@ void Partitioner::disp_pipeline_graph() {
             }
             debug(0) << *iter;
         }
-        debug(0) << "}" << '\n';
+        debug(0) << "}\n";
     }
-    debug(0) << "================" << '\n';
+    debug(0) << "================\n";
 }
 
 void Partitioner::disp_pipeline_bounds() {
-    debug(0) << "\n================" << '\n';
-    debug(0) << "Pipeline bounds:" << '\n';
-    debug(0) << "================" << '\n';
+    debug(0) << "\n================\n"
+             << "Pipeline bounds:\n"
+             << "================\n";
     disp_regions(pipeline_bounds);
-    debug(0) << "===============" << '\n';
+    debug(0) << "===============\n";
 }
 
 Cost Partitioner::get_pipeline_cost() {
@@ -1277,10 +1276,10 @@ Cost Partitioner::get_pipeline_cost() {
 void Partitioner::disp_pipeline_costs() {
     internal_assert(!group_costs.empty());
     Cost total_cost(0, 0);
-    debug(0) << "\n===============" << '\n';
-    debug(0) << "Pipeline costs:" << '\n';
-    debug(0) << "===============" << '\n';
-    debug(0) << "Group: (name) [arith cost, mem cost, parallelism]" << '\n';
+    debug(0) << "\n===============\n"
+             << "Pipeline costs:\n"
+             << "===============\n"
+             << "Group: (name) [arith cost, mem cost, parallelism]\n";
     for (const pair<const FStage, Group> &g : groups) {
         const GroupAnalysis &analysis = get_element(group_costs, g.first);
         if (!total_cost.arith.defined()) {
@@ -1304,9 +1303,9 @@ void Partitioner::disp_pipeline_costs() {
                  << ", " << analysis.parallelism << "]\n";
     }
     total_cost.simplify();
-    debug(0) << "Total arithmetic cost: " << total_cost.arith << '\n';
-    debug(0) << "Total memory cost: " << total_cost.memory << '\n';
-    debug(0) << "===============" << '\n';
+    debug(0) << "Total arithmetic cost: " << total_cost.arith << "\n"
+             << "Total memory cost: " << total_cost.memory << "\n"
+             << "===============\n";
 }
 
 // Construct a partitioner and build the pipeline graph on which the grouping
@@ -1460,7 +1459,7 @@ Partitioner::choose_candidate_grouping(const vector<pair<string, string>> &cands
         for (const auto &g : grouping) {
             debug(3) << "  " << g.first;
         }
-        debug(3) << "Candidate benefit: " << overall_benefit << '\n';
+        debug(3) << "Candidate benefit: " << overall_benefit << "\n";
         // TODO: The grouping process can be non-deterministic when the costs
         // of two choices are equal
         if (overall_benefit.defined() && can_prove(best_benefit < overall_benefit)) {
@@ -1474,7 +1473,7 @@ Partitioner::choose_candidate_grouping(const vector<pair<string, string>> &cands
         debug(3) << "  " << g.first;
     }
     if (!best_grouping.empty()) {
-        debug(3) << "Best benefit: " << best_benefit << '\n';
+        debug(3) << "Best benefit: " << best_benefit << "\n";
     }
 
     return best_grouping;
@@ -1617,12 +1616,12 @@ Partitioner::find_best_tile_config(const Group &g) {
                                         no_redundant_work, true);
 
         if (show_analysis) {
-            debug(0) << "Benefit relative to not tiling:" << benefit << '\n';
+            debug(0) << "Benefit relative to not tiling:" << benefit << "\n";
             debug(0) << "Best analysis:" << new_analysis;
             debug(0) << "No tile analysis:" << no_tile_analysis;
             debug(0)
                 << "arith cost:" << cast<float>(new_analysis.cost.arith / no_tile_analysis.cost.arith)
-                << ", mem cost:" << cast<float>(new_analysis.cost.memory / no_tile_analysis.cost.memory) << '\n';
+                << ", mem cost:" << cast<float>(new_analysis.cost.memory / no_tile_analysis.cost.memory) << "\n";
         }
 
         if (benefit.defined() && can_prove(benefit > 0)) {
@@ -1687,11 +1686,11 @@ void Partitioner::group(Partitioner::Level level) {
             }
         }
 
-        debug(3) << "\n============================" << '\n';
-        debug(3) << "Current grouping candidates:" << '\n';
-        debug(3) << "============================" << '\n';
+        debug(3) << "\n============================\n"
+                 << "Current grouping candidates:\n"
+                 << "============================\n";
         for (size_t i = 0; i < cand.size(); ++i) {
-            debug(3) << "{" << cand[i].first << ", " << cand[i].second << "}" << '\n';
+            debug(3) << "{" << cand[i].first << ", " << cand[i].second << "}\n";
         }
 
         vector<pair<GroupingChoice, GroupConfig>> best = choose_candidate_grouping(cand, level);
@@ -2026,10 +2025,10 @@ Partitioner::GroupAnalysis Partitioner::analyze_group(const Group &g, bool show_
         for (const auto &f_load : group_load_costs) {
             debug(0) << "(" << f_load.first << "," << f_load.second << ")";
         }
-        debug(0) << '\n';
+        debug(0) << "\n";
 
-        debug(0) << "\nPer tile memory cost:" << per_tile_cost.memory << '\n';
-        debug(0) << "Per tile arith cost:" << per_tile_cost.arith << '\n';
+        debug(0) << "\nPer tile memory cost:" << per_tile_cost.memory << "\n";
+        debug(0) << "Per tile arith cost:" << per_tile_cost.arith << "\n";
     }
 
     GroupAnalysis g_analysis(
@@ -2384,7 +2383,7 @@ pair<VarOrRVar, VarOrRVar> Partitioner::split_dim(
         oss << ")";
         break;
     default:
-        internal_assert(false);
+        internal_error;
     }
     sched.push_schedule(f_handle.name(), stage_num, oss.str(),
                         {arg_name, outer_name, inner_name});
@@ -2610,10 +2609,10 @@ void Partitioner::generate_group_cpu_schedule(
     string out_f_name = g.output.func.name();
     Function g_out = g.output.func;
 
-    debug(3) << "\n================\n";
-    debug(3) << "Scheduling group:\n";
-    debug(3) << "================\n";
-    debug(3) << g;
+    debug(3) << "\n================\n"
+             << "Scheduling group:\n"
+             << "================\n"
+             << g;
 
     if (g.output.func.has_extern_definition()) {
         internal_assert(g.members.size() == 1);
@@ -2743,7 +2742,7 @@ void Partitioner::generate_group_cpu_schedule(
     bool nested_parallelism = true;
     if (nested_parallelism) {
         int dim_start = dims.size() - 2;
-        string seq_var = "";
+        string seq_var;
         for (int d = dim_start; d >= 0; d--) {
             if (dims[d].for_type == ForType::Vectorized) {
                 break;
@@ -2755,7 +2754,7 @@ void Partitioner::generate_group_cpu_schedule(
             VarOrRVar v(var, is_rvar);
 
             if (is_rvar && !can_parallelize_rvar(var, g_out.name(), def)) {
-                if (seq_var == "") {
+                if (seq_var.empty()) {
                     seq_var = var;
                 }
                 continue;
@@ -2768,7 +2767,7 @@ void Partitioner::generate_group_cpu_schedule(
 
             const auto &iter = stg_estimates.find(var);
             if ((iter != stg_estimates.end()) && iter->second.defined()) {
-                if (seq_var != "") {
+                if (!seq_var.empty()) {
                     VarOrRVar seq(seq_var, (rvars.find(seq_var) != rvars.end()));
                     f_handle.reorder(seq, v);
                     sched.push_schedule(f_handle.name(), g.output.stage_num,
@@ -2786,12 +2785,12 @@ void Partitioner::generate_group_cpu_schedule(
     }
 
     if (can_prove(def_par < arch_params.parallelism)) {
-        user_warning << "Insufficient parallelism for " << f_handle.name() << '\n';
+        user_warning << "Insufficient parallelism for " << f_handle.name() << "\n";
     }
 
     // Find the level at which group members will be computed.
     int tile_inner_index = dims.size() - outer_dims.size() - 1;
-    VarOrRVar tile_inner_var("", false);
+    VarOrRVar tile_inner_var(Var::outermost());
     if (!outer_dims.empty()) {
         string var_name = get_base_name(dims[tile_inner_index].var);
         bool is_rvar = (rvars.find(var_name) != rvars.end());
@@ -2838,8 +2837,10 @@ void Partitioner::generate_group_cpu_schedule(
                                     "compute_at(" + sanitized_g_out + ", " + tile_inner_var.name() + ")",
                                     {sanitized_g_out, tile_inner_var.name()});
             } else {
-                user_warning << "Degenerate tiling. No dimensions are tiled" << '\n';
-                user_warning << "Computing \"" << mem.func.name() << "\" at root" << '\n';
+                user_warning << "Degenerate tiling. No dimensions are tiled"
+                             << "\n";
+                user_warning << "Computing \"" << mem.func.name() << "\" at root"
+                             << "\n";
                 Func(mem.func).compute_root();
                 sched.push_schedule(mem_handle.name(), mem.stage_num, "compute_root()", {});
             }
@@ -3320,11 +3321,11 @@ string generate_schedules(const vector<Function> &outputs, const Target &target,
         for (int s = 0; s < num_stages; s++) {
             FStage curr_s(f.second, s);
             map<string, Expr> reuse = part.evaluate_reuse(curr_s, find.funcs_called);
-            debug(0) << curr_s << '\n';
+            debug(0) << curr_s << "\n";
             for (const auto &dir : reuse) {
-                debug(0) << dir.first << " " << dir.second << ',';
+                debug(0) << dir.first << " " << dir.second << ",";
             }
-            debug(0) << '\n';
+            debug(0) << "\n";
         }
     }*/
 

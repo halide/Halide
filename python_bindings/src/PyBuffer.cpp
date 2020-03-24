@@ -20,7 +20,7 @@ std::ostream &operator<<(std::ostream &stream, const std::vector<halide_dimensio
     bool need_comma = false;
     for (auto &d : shape) {
         if (need_comma) {
-            stream << ',';
+            stream << ",";
         }
         stream << d;
         need_comma = true;

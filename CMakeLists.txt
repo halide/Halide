@@ -273,6 +273,7 @@ if (NOT MSVC)
           -Wignored-qualifiers
           $<$<COMPILE_LANGUAGE:CXX>:-Woverloaded-virtual>
           $<$<AND:$<COMPILE_LANGUAGE:CXX>,$<CXX_COMPILER_ID:GNU>,$<VERSION_GREATER:$<CXX_COMPILER_VERSION>,5.1>>:-Wsuggest-override>
+          $<$<CXX_COMPILER_ID:GNU>:-Wno-psabi>
   )
   if (WARNINGS_AS_ERRORS)
     add_compile_options(-Werror)
@@ -416,6 +417,18 @@ if (WITH_UTILS)
   add_subdirectory(util)
 else()
   message(STATUS "Building utils disabled")
+endif()
+
+if (WIN32)
+  option(WITH_PYTHON_BINDINGS "Build Python bindings" OFF)
+else()
+  option(WITH_PYTHON_BINDINGS "Build Python bindings" ON)
+endif()
+if (WITH_PYTHON_BINDINGS)
+  message(STATUS "Building Python bindings enabled")
+  add_subdirectory(python_bindings)
+else()
+  message(STATUS "Building Python bindings disabled")
 endif()
 
 # ------------------------------------------------

@@ -64,6 +64,10 @@ public:
     bool empty() const {
         return _empty;
     }
+
+    size_t size() const {
+        return _empty ? 0 : (_rest.size() + 1);
+    }
 };
 
 template<>
@@ -92,17 +96,17 @@ class Scope {
 private:
     std::map<std::string, SmallStack<T>> table;
 
-    // Copying a scope object copies a large table full of strings and
-    // stacks. Bad idea.
-    Scope(const Scope<T> &);
-    Scope<T> &operator=(const Scope<T> &);
-
-    const Scope<T> *containing_scope;
+    const Scope<T> *containing_scope = nullptr;
 
 public:
-    Scope()
-        : containing_scope(nullptr) {
-    }
+    Scope() = default;
+    Scope(Scope &&that) noexcept = default;
+    Scope &operator=(Scope &&that) noexcept = default;
+
+    // Copying a scope object copies a large table full of strings and
+    // stacks. Bad idea.
+    Scope(const Scope<T> &) = delete;
+    Scope<T> &operator=(const Scope<T> &) = delete;
 
     /** Set the parent scope. If lookups fail in this scope, they
      * check the containing scope before returning an error. Caller is
@@ -158,6 +162,16 @@ public:
             }
         }
         return true;
+    }
+
+    /** How many nested definitions of a single name exist? */
+    size_t count(const std::string &name) const {
+        auto it = table.find(name);
+        if (it == table.end()) {
+            return 0;
+        } else {
+            return it->second.size();
+        }
     }
 
     /** Add a new (name, value) pair to the current scope. Hide old

@@ -59,7 +59,7 @@ inline std::ostream &operator<<(std::ostream &stream, const Shape &shape) {
     bool need_comma = false;
     for (auto &d : shape) {
         if (need_comma) {
-            stream << ',';
+            stream << ",";
         }
         stream << d;
         need_comma = true;

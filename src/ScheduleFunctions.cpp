@@ -1050,6 +1050,7 @@ protected:
 
             // If we're trying to inline an extern function, schedule it here and bail out
             debug(2) << "Injecting realization of " << funcs[0].name() << " around node " << Stmt(for_loop) << "\n";
+
             Stmt stmt = build_realize(build_pipeline_group(for_loop), funcs[0], is_output_list[0]);
             _found_store_level = _found_compute_level = true;
             return stmt;
@@ -1133,6 +1134,23 @@ private:
     const LoopLevel &store_level;
 
     Stmt build_realize(Stmt s, const Function &func, bool is_output) {
+        if (func.has_extern_definition()) {
+            // Add an annotation to let bounds inference know that
+            // this will write to the entire bounds required.
+            vector<Expr> args;
+            args.emplace_back(Variable::make(Handle(), func.name()));
+            for (int i = 0; i < func.dimensions(); i++) {
+                string prefix = func.name() + ".s0." + func.args()[i];
+                string min_name = prefix + ".min";
+                string max_name = prefix + ".max";
+
+                args.emplace_back(Variable::make(Int(32), min_name));
+                args.emplace_back(Variable::make(Int(32), max_name));
+            }
+            Expr decl = Call::make(Int(32), Call::declare_box_touched, args, Call::Intrinsic);
+            s = Block::make(Evaluate::make(decl), s);
+        }
+
         if (!is_output) {
             Region bounds;
             const string &name = func.name();
@@ -2026,15 +2044,25 @@ void validate_fused_group_schedule_helper(const string &fn,
         for (int i = 0; i < n_fused; ++i) {
             const Dim &d1 = dims_1[start_fuse_1 + i];
             const Dim &d2 = dims_2[start_fuse_2 + i];
-            bool equal = var_name_match(d1.var, d2.var) &&
-                         (d1.for_type == d2.for_type) &&
-                         (d1.device_api == d2.device_api) &&
-                         (d1.dim_type == d2.dim_type);
-            if (!equal) {
-                user_error << "Invalid compute_with: dims " << i << " of " << p.func_1 << ".s"
-                           << p.stage_1 << "(" << dims_1[start_fuse_1 + i].var << ") and " << p.func_2
-                           << ".s" << p.stage_2 << "(" << dims_2[start_fuse_2 + i].var << ") do not match.\n";
-            }
+            user_assert(var_name_match(d1.var, d2.var)) << "Invalid compute_with: names of dim "
+                                                        << i << " of " << p.func_1 << ".s"
+                                                        << p.stage_1 << "(" << d1.var << ") and " << p.func_2
+                                                        << ".s" << p.stage_2 << "(" << d2.var << ") do not match.\n";
+            user_assert(d1.for_type == d2.for_type) << "Invalid compute_with: for types of dim "
+                                                    << i << " of " << p.func_1 << ".s" << p.stage_1 << "("
+                                                    << d1.var << " is " << d1.for_type << ") and " << p.func_2
+                                                    << ".s" << p.stage_2 << "(" << d2.var << " is " << d2.for_type
+                                                    << ") do not match.\n";
+            user_assert(d1.device_api == d2.device_api) << "Invalid compute_with: device APIs of dim "
+                                                        << i << " of " << p.func_1 << ".s" << p.stage_1 << "("
+                                                        << d1.var << " is " << d1.device_api << ") and " << p.func_2
+                                                        << ".s" << p.stage_2 << "(" << d2.var << " is " << d2.device_api
+                                                        << ") do not match.\n";
+            user_assert(d1.dim_type == d2.dim_type) << "Invalid compute_with: types of dim "
+                                                    << i << " of " << p.func_1 << ".s" << p.stage_1 << "("
+                                                    << d1.var << " is " << d1.dim_type << ") and " << p.func_2
+                                                    << ".s" << p.stage_2 << "(" << d2.var << " is " << d2.dim_type
+                                                    << ") do not match.\n";
         }
     }
 }
@@ -2144,16 +2172,16 @@ Stmt schedule_functions(const vector<Function> &outputs,
         }
 
         if (group_should_be_inlined(funcs)) {
-            debug(1) << "Inlining " << funcs[0].name() << '\n';
+            debug(1) << "Inlining " << funcs[0].name() << "\n";
             s = inline_function(s, funcs[0]);
         } else {
-            debug(1) << "Injecting realization of " << funcs << '\n';
+            debug(1) << "Injecting realization of " << funcs << "\n";
             InjectFunctionRealization injector(funcs, is_output_list, target, env);
             s = injector.mutate(s);
             internal_assert(injector.found_store_level() && injector.found_compute_level());
         }
 
-        debug(2) << s << '\n';
+        debug(2) << s << "\n";
     }
 
     // We can remove the loop over root now

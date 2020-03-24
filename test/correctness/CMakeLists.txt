@@ -204,6 +204,7 @@ tests(GROUPS correctness travis
         named_updates.cpp
         nested_shiftinwards.cpp
         newtons_method.cpp
+        non_nesting_extern_bounds_query.cpp
         non_vector_aligned_embeded_buffer.cpp
         obscure_image_references.cpp
         oddly_sized_output.cpp
@@ -252,6 +253,7 @@ tests(GROUPS correctness travis
         round.cpp
         saturating_casts.cpp
         scatter.cpp
+        mux.cpp
         set_custom_trace.cpp
         shared_self_references.cpp
         shifted_image.cpp

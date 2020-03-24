@@ -101,7 +101,7 @@ bool is_dense_ramp(const Expr &x) {
 // In Hexagon, we assume that we can read one vector past the end of
 // buffers. Using this assumption, this mutator replaces vector
 // predicated dense loads with scalar predicated dense loads.
-class SloppyUnpredicateLoads : public IRMutator {
+class SloppyUnpredicateLoadsAndStores : public IRMutator {
     Expr visit(const Load *op) override {
         // Don't handle loads with without predicates, scalar predicates, or
         // non-dense ramps.
@@ -128,8 +128,8 @@ class SloppyUnpredicateLoads : public IRMutator {
     using IRMutator::visit;
 };
 
-Stmt sloppy_unpredicate_loads(const Stmt &s) {
-    return SloppyUnpredicateLoads().mutate(s);
+Stmt sloppy_unpredicate_loads_and_stores(const Stmt &s) {
+    return SloppyUnpredicateLoadsAndStores().mutate(s);
 }
 
 class InjectHVXLocks : public IRMutator {
@@ -271,9 +271,11 @@ void CodeGen_Hexagon::compile_func(const LoweredFunc &f,
     Stmt body = f.body;
 
     debug(1) << "Unpredicating loads and stores...\n";
-    // Before running unpredicate_loads_stores, replace dense vector
-    // predicated loads with sloppy scalarized predicates.
-    body = sloppy_unpredicate_loads(body);
+    // Replace dense vector predicated loads and stores with
+    // scalarized versions. We can afford to be a little sloppy with
+    // the dense vector loads because on hexagon we can always read
+    // out of bounds by one vector.
+    body = sloppy_unpredicate_loads_and_stores(body);
     body = unpredicate_loads_stores(body);
     debug(2) << "Lowering after unpredicating loads/stores:\n"
              << body << "\n\n";
@@ -1858,7 +1860,12 @@ Value *CodeGen_Hexagon::vdelta(Value *lut, const vector<int> &indices) {
 static Value *create_vector(llvm::Type *ty, int val) {
     llvm::Type *scalar_ty = ty->getScalarType();
     Constant *value = ConstantInt::get(scalar_ty, val);
-    return ConstantVector::getSplat(ty->getVectorNumElements(), value);
+#if LLVM_VERSION >= 110
+    const llvm::ElementCount elem_count(ty->getVectorNumElements(), /*scalable*/ false);
+#else
+    const int elem_count = ty->getVectorNumElements();
+#endif
+    return ConstantVector::getSplat(elem_count, value);
 }
 
 Value *CodeGen_Hexagon::vlut(Value *lut, Value *idx, int min_index, int max_index) {

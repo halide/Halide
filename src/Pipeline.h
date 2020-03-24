@@ -90,7 +90,7 @@ struct AutoSchedulerResults {
 
 class Pipeline;
 
-using AutoSchedulerFn = std::function<void(Pipeline, const Target &, const MachineParams &, AutoSchedulerResults *outputs)>;
+using AutoSchedulerFn = std::function<void(const Pipeline &, const Target &, const MachineParams &, AutoSchedulerResults *outputs)>;
 
 /** A class representing a Halide pipeline. Constructed from the Func
  * or Funcs that it outputs. */

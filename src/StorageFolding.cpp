@@ -404,6 +404,25 @@ struct Semaphore {
     Expr init;
 };
 
+class HasExternConsumer : public IRVisitor {
+
+    using IRVisitor::visit;
+
+    void visit(const Variable *op) override {
+        if (op->name == func + ".buffer") {
+            result = true;
+        }
+    }
+
+    const std::string &func;
+
+public:
+    HasExternConsumer(const std::string &func)
+        : func(func) {
+    }
+    bool result = false;
+};
+
 // Attempt to fold the storage of a particular function in a statement
 class AttemptStorageFoldingOfFunction : public IRMutator {
     Function func;
@@ -450,6 +469,9 @@ class AttemptStorageFoldingOfFunction : public IRMutator {
         Scope<Interval> steady_bounds;
         steady_bounds.push(op->name, Interval(simplify(op->min + 1), simplify(op->min + op->extent - 1)));
 
+        HasExternConsumer has_extern_consumer(func.name());
+        body.accept(&has_extern_consumer);
+
         // Try each dimension in turn from outermost in
         for (size_t i = box.size(); i > 0; i--) {
             int dim = (int)(i - 1);
@@ -458,10 +480,8 @@ class AttemptStorageFoldingOfFunction : public IRMutator {
                 continue;
             }
 
-            // TODO: should call cse() here, but there can be duplicate names in the Expr.
-            // https://github.com/halide/Halide/issues/3793
-            Expr min = simplify(box[dim].min);
-            Expr max = simplify(box[dim].max);
+            Expr min = simplify(common_subexpression_elimination(box[dim].min));
+            Expr max = simplify(common_subexpression_elimination(box[dim].max));
 
             Expr min_provided, max_provided, min_required, max_required;
             if (func.schedule().async() && !explicit_only) {
@@ -489,9 +509,7 @@ class AttemptStorageFoldingOfFunction : public IRMutator {
             Expr extent_initial = simplify(substitute(loop_var, op->min, max_initial - min_initial + 1), true, bounds);
             Expr extent_steady = simplify(max_steady - min_steady + 1, true, steady_bounds);
             Expr extent = Max::make(extent_initial, extent_steady);
-            // TODO: should call cse() here, but there can be duplicate names in the Expr.
-            // https://github.com/halide/Halide/issues/3793
-            extent = simplify(extent, true, bounds);
+            extent = simplify(common_subexpression_elimination(extent), true, bounds);
 
             // Find the StorageDim corresponding to dim.
             const std::vector<StorageDim> &storage_dims = func.schedule().storage_dims();
@@ -503,6 +521,7 @@ class AttemptStorageFoldingOfFunction : public IRMutator {
             Expr explicit_factor;
             if (!is_pure(min) ||
                 !is_pure(max) ||
+                has_extern_consumer.result ||
                 expr_uses_var(min, op->name) ||
                 expr_uses_var(max, op->name)) {
                 // We only use the explicit fold factor if the fold is
@@ -512,11 +531,13 @@ class AttemptStorageFoldingOfFunction : public IRMutator {
                 explicit_factor = storage_dim.fold_factor;
             }
 
-            debug(3) << "\nConsidering folding " << func.name() << " over for loop over " << op->name << " dimension " << i - 1 << '\n'
-                     << "Min: " << min << '\n'
-                     << "Max: " << max << '\n'
-                     << "Extent: " << extent << '\n'
-                     << "explicit_factor: " << explicit_factor << '\n';
+            debug(3) << "\nConsidering folding " << func.name()
+                     << " over for loop over " << op->name
+                     << " dimension " << i - 1 << "\n"
+                     << "Min: " << min << "\n"
+                     << "Max: " << max << "\n"
+                     << "Extent: " << extent << "\n"
+                     << "explicit_factor: " << explicit_factor << "\n";
 
             // First, attempt to detect if the loop is monotonically
             // increasing or decreasing (if we allow automatic folding).

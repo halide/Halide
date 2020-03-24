@@ -17,7 +17,7 @@ static string sanitize_name(const string &name) {
     ostringstream oss;
     for (size_t i = 0; i < name.size(); i++) {
         if (name[i] == '.' || name[i] == '_') {
-            oss << '_';
+            oss << "_";
         } else if (!isalnum(name[i])) {
             oss << "_" << (int)name[i];
         } else {
@@ -135,7 +135,7 @@ void PythonExtensionGen::compile(const Module &module) {
 
     dest << R"INLINE_CODE(
 /* Older Python versions don't set up PyMODINIT_FUNC correctly. */
-#if defined(WIN32) || defined(_WIN32)
+#if defined(_MSC_VER)
 #    define HALIDE_PYTHON_EXPORT __declspec(dllexport)
 #else
 #    define HALIDE_PYTHON_EXPORT __attribute__((visibility("default")))
@@ -145,7 +145,11 @@ void PythonExtensionGen::compile(const Module &module) {
 extern "C" {
 #endif
 
-static __attribute__((unused)) int _convert_py_buffer_to_halide(
+static
+#if !defined(_MSC_VER)
+__attribute__((unused))
+#endif
+int _convert_py_buffer_to_halide(
         PyObject* pyobj, int dimensions, int flags,
         halide_dimension_t* dim,  // array of size `dimensions`
         halide_buffer_t* out, const char* name) {
@@ -221,7 +225,7 @@ static __attribute__((unused)) int _convert_py_buffer_to_halide(
         }
         const char* type_codes = "bB?hHiIlLqQfd";  // integers and floats
         if (strchr(type_codes, *p)) {
-            out->type.bits = buf.itemsize * 8;
+            out->type.bits = (uint8_t)buf.itemsize * 8;
         } else {
             // We don't handle 's' and 'p' (char[]) and 'P' (void*)
             PyErr_Format(PyExc_ValueError, "Invalid data type for %s: %s", name, buf.format);
@@ -259,10 +263,10 @@ static __attribute__((unused)) int _convert_py_buffer_to_halide(
 static_assert(PY_MAJOR_VERSION >= 3, "Python bindings for Halide require Python 3+");
 static struct PyModuleDef _moduledef = {
     PyModuleDef_HEAD_INIT,
-    .m_name=MODULE_NAME,
-    .m_doc=NULL,
-    .m_size=-1,
-    .m_methods=_methods,
+    MODULE_NAME,
+    NULL,
+    -1,
+    _methods,
 };
 HALIDE_PYTHON_EXPORT PyObject* PyInit_)INLINE_CODE";
 

@@ -864,13 +864,13 @@ struct JITFuncCallContext {
         }
         JITSharedRuntime::init_jit_user_context(jit_context, user_context, local_handlers);
 
-        debug(2) << "custom_print: " << (void *)jit_context.handlers.custom_print << '\n'
-                 << "custom_malloc: " << (void *)jit_context.handlers.custom_malloc << '\n'
-                 << "custom_free: " << (void *)jit_context.handlers.custom_free << '\n'
-                 << "custom_do_task: " << (void *)jit_context.handlers.custom_do_task << '\n'
-                 << "custom_do_par_for: " << (void *)jit_context.handlers.custom_do_par_for << '\n'
-                 << "custom_error: " << (void *)jit_context.handlers.custom_error << '\n'
-                 << "custom_trace: " << (void *)jit_context.handlers.custom_trace << '\n';
+        debug(2) << "custom_print: " << (void *)jit_context.handlers.custom_print << "\n"
+                 << "custom_malloc: " << (void *)jit_context.handlers.custom_malloc << "\n"
+                 << "custom_free: " << (void *)jit_context.handlers.custom_free << "\n"
+                 << "custom_do_task: " << (void *)jit_context.handlers.custom_do_task << "\n"
+                 << "custom_do_par_for: " << (void *)jit_context.handlers.custom_do_par_for << "\n"
+                 << "custom_error: " << (void *)jit_context.handlers.custom_error << "\n"
+                 << "custom_trace: " << (void *)jit_context.handlers.custom_trace << "\n";
     }
 
     void report_if_error(int exit_status) {
