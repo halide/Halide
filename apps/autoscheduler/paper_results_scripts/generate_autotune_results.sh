@@ -83,6 +83,7 @@ for app in $APPS; do
 
     OUTPUT_FILE="${SAMPLES_DIR}/autotune_out.txt"
     PREDICTIONS_FILE="${SAMPLES_DIR}/predictions"
+    PREDICTIONS_WITH_FILENAMES_FILE="${SAMPLES_DIR}/predictions_with_filenames"
     BEST_TIMES_FILE="${SAMPLES_DIR}/best_times"
 
     mkdir -p ${SAMPLES_DIR}
@@ -101,7 +102,9 @@ for app in $APPS; do
     done
 
     WEIGHTS_FILE="${SAMPLES_DIR}/updated.weights"
-    predict_all ${HALIDE_ROOT} ${SAMPLES_DIR} ${WEIGHTS_FILE} ${PREDICTIONS_FILE} 0
+    predict_all ${HALIDE_ROOT} ${SAMPLES_DIR} ${WEIGHTS_FILE} ${PREDICTIONS_WITH_FILENAMES_FILE} 1
+    awk -F", " '{printf("%f, %f\n", $2, $3);}' ${PREDICTIONS_WITH_FILENAMES_FILE} > ${PREDICTIONS_FILE}
+
     extract_best_times ${HALIDE_ROOT} ${SAMPLES_DIR} ${BEST_TIMES_FILE}
     echo "Computing average statistics..."
     bash $(dirname $0)/../scripts/average_times.sh ${SAMPLES_DIR} >> ${OUTPUT_FILE}
