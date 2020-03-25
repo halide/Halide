@@ -1436,6 +1436,246 @@ int update_stage3_test() {
     return 0;
 }
 
+int update_stage_pairwise_test() {
+    const int f_size = 128;
+    const int g_size = 128;
+
+    Buffer<int> f_im(f_size, f_size), g_im(g_size, g_size);
+    Buffer<int> f_im_ref(f_size, f_size), g_im_ref(g_size, g_size);
+
+    {
+        Var x("x"), y("y");
+        Func f("f"), g("g");
+
+        g(x, y) = 4;
+        g(x, y) = g(x, y) + 1;
+        g(x, y) = g(x, y) + 3;
+
+        f(x, y) = 5;
+        f(x, y) = f(x, y) + 1;
+        f(x, y) = f(x, y) + 3;
+
+        f.compute_root();
+        g.compute_root();
+
+        g.bound(x, 0, g_size).bound(y, 0, g_size);
+        f.bound(x, 0, f_size).bound(y, 0, f_size);
+
+        Pipeline p({f, g});
+        p.realize({f_im_ref, g_im_ref});
+    }
+
+    {
+        Var x("x"), y("y");
+        Func f("f"), g("g");
+
+        g(x, y) = 4;
+        g(x, y) = g(x, y) + 1;
+        g(x, y) = g(x, y) + 3;
+
+        f(x, y) = 5;
+        f(x, y) = f(x, y) + 1;
+        f(x, y) = f(x, y) + 3;
+
+        g.compute_root();
+        f.compute_root();
+
+        f.compute_with(g, y);
+        f.update(0).compute_with(g.update(0), y);
+        f.update(1).compute_with(g.update(1), y);
+
+        g.bound(x, 0, g_size).bound(y, 0, g_size);
+        f.bound(x, 0, f_size).bound(y, 0, f_size);
+
+        Pipeline p({f, g});
+        p.realize({f_im, g_im});
+    }
+
+    auto f_func = [f_im_ref](int x, int y) {
+        return f_im_ref(x, y);
+    };
+    if (check_image(f_im, f_func)) {
+        return -1;
+    }
+
+    auto g_func = [g_im_ref](int x, int y) {
+        return g_im_ref(x, y);
+    };
+    if (check_image(g_im, g_func)) {
+        return -1;
+    }
+
+    return 0;
+}
+
+int update_stage_pairwise_zigzag_test() {
+    const int f_size = 128;
+    const int g_size = 128;
+
+    Buffer<int> f_im(f_size, f_size), g_im(g_size, g_size);
+    Buffer<int> f_im_ref(f_size, f_size), g_im_ref(g_size, g_size);
+
+    {
+        Var x("x"), y("y");
+        Func f("f"), g("g");
+
+        g(x, y) = 4;
+        g(x, y) = g(x, y) + 1;
+        g(x, y) = g(x, y) + 3;
+        g(x, y) = g(x, y) + 7;
+
+        f(x, y) = 5;
+        f(x, y) = f(x, y) + 1;
+        f(x, y) = f(x, y) + 3;
+        f(x, y) = f(x, y) + 7;
+
+        f.compute_root();
+        g.compute_root();
+
+        g.bound(x, 0, g_size).bound(y, 0, g_size);
+        f.bound(x, 0, f_size).bound(y, 0, f_size);
+
+        Pipeline p({f, g});
+        p.realize({f_im_ref, g_im_ref});
+    }
+
+    {
+        Var x("x"), y("y");
+        Func f("f"), g("g");
+
+        g(x, y) = 4;
+        g(x, y) = g(x, y) + 1;
+        g(x, y) = g(x, y) + 3;
+        g(x, y) = g(x, y) + 7;
+
+        f(x, y) = 5;
+        f(x, y) = f(x, y) + 1;
+        f(x, y) = f(x, y) + 3;
+        f(x, y) = f(x, y) + 7;
+
+        g.compute_root();
+        f.compute_root();
+
+        f.compute_with(g, y);
+        g.update(0).compute_with(f.update(0), y);
+        f.update(1).compute_with(g.update(1), y);
+        g.update(2).compute_with(f.update(2), y);
+
+        g.bound(x, 0, g_size).bound(y, 0, g_size);
+        f.bound(x, 0, f_size).bound(y, 0, f_size);
+
+        Pipeline p({f, g});
+        p.realize({f_im, g_im});
+    }
+
+    auto f_func = [f_im_ref](int x, int y) {
+        return f_im_ref(x, y);
+    };
+    if (check_image(f_im, f_func)) {
+        return -1;
+    }
+
+    auto g_func = [g_im_ref](int x, int y) {
+        return g_im_ref(x, y);
+    };
+    if (check_image(g_im, g_func)) {
+        return -1;
+    }
+
+    return 0;
+}
+
+int update_stage_diagonal_test() {
+    const int f_size = 128;
+    const int g_size = 128;
+    const int h_size = 128;
+
+    Buffer<int> f_im(f_size, f_size), g_im(g_size, g_size), h_im(h_size, h_size);
+    Buffer<int> f_im_ref(f_size, f_size), g_im_ref(g_size, g_size), h_im_ref(h_size, h_size);
+
+    {
+        Var x("x"), y("y");
+        Func f("f"), g("g"), h("h");
+
+        g(x, y) = 4;
+        g(x, y) = g(x, y) + 1;
+        g(x, y) = g(x, y) + 3;
+
+        f(x, y) = 5;
+        f(x, y) = f(x, y) + 1;
+        f(x, y) = f(x, y) + 3;
+
+        h(x, y) = 6;
+        h(x, y) = h(x, y) + 1;
+        h(x, y) = h(x, y) + 3;
+
+        f.compute_root();
+        g.compute_root();
+        h.compute_root();
+
+        g.bound(x, 0, g_size).bound(y, 0, g_size);
+        f.bound(x, 0, f_size).bound(y, 0, f_size);
+        h.bound(x, 0, h_size).bound(y, 0, h_size);
+
+        Pipeline p({f, g, h});
+        p.realize({f_im_ref, g_im_ref, h_im_ref});
+    }
+
+    {
+        Var x("x"), y("y");
+        Func f("f"), g("g"), h("h");
+
+        g(x, y) = 4;
+        g(x, y) = g(x, y) + 1;
+        g(x, y) = g(x, y) + 3;
+
+        f(x, y) = 5;
+        f(x, y) = f(x, y) + 1;
+        f(x, y) = f(x, y) + 3;
+
+        h(x, y) = 6;
+        h(x, y) = h(x, y) + 1;
+        h(x, y) = h(x, y) + 3;
+
+        f.compute_root();
+        g.compute_root();
+        h.compute_root();
+
+        f.update(1).compute_with(g.update(0), y);
+        g.update(0).compute_with(h, y);
+
+        g.bound(x, 0, g_size).bound(y, 0, g_size);
+        f.bound(x, 0, f_size).bound(y, 0, f_size);
+        h.bound(x, 0, h_size).bound(y, 0, h_size);
+
+        Pipeline p({f, g, h});
+        p.realize({f_im, g_im, h_im});
+    }
+
+    auto f_func = [f_im_ref](int x, int y) {
+        return f_im_ref(x, y);
+    };
+    if (check_image(f_im, f_func)) {
+        return -1;
+    }
+
+    auto g_func = [g_im_ref](int x, int y) {
+        return g_im_ref(x, y);
+    };
+    if (check_image(g_im, g_func)) {
+        return -1;
+    }
+
+    auto h_func = [h_im_ref](int x, int y) {
+        return h_im_ref(x, y);
+    };
+    if (check_image(h_im, h_func)) {
+        return -1;
+    }
+
+    return 0;
+}
+
 int vectorize_inlined_test() {
     const int f_size = 128;
     const int g_size = 256;
@@ -1638,6 +1878,22 @@ int main(int argc, char **argv) {
 
     printf("Running update stage3 test\n");
     if (update_stage3_test() != 0) {
+        return -1;
+    }
+
+    printf("Running update stage pairwise test\n");
+    if (update_stage_pairwise_test() != 0) {
+        return -1;
+    }
+
+    // I think this should work, but there is an overzealous check somewhere.
+    // printf("Running update stage pairwise zigzag test\n");
+    // if (update_stage_pairwise_zigzag_test() != 0) {
+    //     return -1;
+    // }
+
+    printf("Running update stage diagonal test\n");
+    if (update_stage_diagonal_test() != 0) {
         return -1;
     }
 
