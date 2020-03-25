@@ -92,10 +92,6 @@ Expr lower_signed_shift_left(const Expr &a, const Expr &b);
 Expr lower_signed_shift_right(const Expr &a, const Expr &b);
 ///@}
 
-/** Replace predicated loads/stores with unpredicated equivalents
- * inside branches. */
-Stmt unpredicate_loads_stores(const Stmt &s);
-
 /** Given an llvm::Module, set llvm:TargetOptions, cpu and attr information */
 void get_target_options(const llvm::Module &module, llvm::TargetOptions &options, std::string &mcpu, std::string &mattrs);
 
