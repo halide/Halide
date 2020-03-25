@@ -419,7 +419,13 @@ else()
   message(STATUS "Building utils disabled")
 endif()
 
-option(WITH_PYTHON_BINDINGS "Build Python bindings" ON)
+# Default Python bindings to OFF for 32-bit Windows, ON everywhere else
+if (MSVC AND "${CMAKE_SIZEOF_VOID_P}" STREQUAL "4")
+  option(WITH_PYTHON_BINDINGS "Build Python bindings" OFF)
+else()
+  option(WITH_PYTHON_BINDINGS "Build Python bindings" ON)
+endif()
+
 if (WITH_PYTHON_BINDINGS)
   message(STATUS "Building Python bindings enabled")
   add_subdirectory(python_bindings)
