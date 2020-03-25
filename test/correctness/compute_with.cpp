@@ -1747,6 +1747,41 @@ int update_stage_diagonal_test() {
     return 0;
 }
 
+int update_stage_rfactor_test() {
+    Func f0, f1, cost;
+    Var x;
+    f0(x) = x;
+    f1(x) = x;
+
+    RDom r(0, 100);
+    cost() = 0;
+    cost() += f0(r.x);
+    cost() += f1(r.x);
+
+    f0.compute_root();
+    f1.compute_root();
+
+    // Move the reductions into their own Funcs
+    Func tmp1 = cost.update(0).rfactor({});
+    Func tmp2 = cost.update(1).rfactor({});
+
+    tmp1.compute_root();
+    tmp2.compute_root();
+
+    // Now that they're independent funcs, we can fuse the loops using compute_with
+    tmp1.update().compute_with(tmp2.update(), r.x);
+
+    Buffer<int> result = cost.realize();
+
+    const int reference = 9900;
+    if (result(0) != reference) {
+        printf("Wrong result: expected %d, got %d\n", reference, result(0));
+        return -1;
+    }
+
+    return 0;
+}
+
 int vectorize_inlined_test() {
     const int f_size = 128;
     const int g_size = 256;
@@ -1970,6 +2005,11 @@ int main(int argc, char **argv) {
 
     printf("Running update stage diagonal test\n");
     if (update_stage_diagonal_test() != 0) {
+        return -1;
+    }
+
+    printf("Running update stage rfactor test\n");
+    if (update_stage_rfactor_test() != 0) {
         return -1;
     }
 
