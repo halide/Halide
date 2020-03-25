@@ -1422,10 +1422,7 @@ private:
             adj_list[i].resize(1 + funcs[i].updates().size());
             func_name_to_index[funcs[i].name()] = i;
         }
-        // missing tests:
-        // two in row from the beginning with the same
-        // two in row in the middle with the same
-        // two with one in between with the same
+
         for (size_t i = 0; i < funcs.size(); i++) {
             auto prev_level = funcs[i].definition().schedule().fuse_level().level;
             {
