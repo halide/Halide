@@ -1414,15 +1414,19 @@ private:
 
         vector<pair<Function, int>> stage_order;
 #if 1
+        // Inverse map from function name to the index.
         map<string, int> func_name_to_index;
+        // This contains a number of dependencies for a given stage of the function
         vector<vector<int>> stage_dependencies(funcs.size());
+        // Adjacency list for dependencies.
         vector<vector<vector<pair<int, int>>>> adj_list(funcs.size());
+        // Initialize data structures.
         for (size_t i = 0; i < funcs.size(); i++) {
             stage_dependencies[i].resize(1 + funcs[i].updates().size(), 0);
             adj_list[i].resize(1 + funcs[i].updates().size());
             func_name_to_index[funcs[i].name()] = i;
         }
-
+        // Figure out dependencies between stages.
         for (size_t i = 0; i < funcs.size(); i++) {
             auto prev_level = funcs[i].definition().schedule().fuse_level().level;
             {
@@ -1440,10 +1444,15 @@ private:
                     stage_dependencies[i][j + 1]++;
                     adj_list[func_name_to_index[level.func()]][level.stage_index()].push_back({i, j + 1});
 
-                    // this special case for the case when
+                    // Let say that we have a stage f.update(p), which is scheduled to be computed_with
+                    // another stage g.update(q) (like so f.update(p).compute_with(g.update(q), var)).
+                    // Effectively, this means that loop for f.update(p) will be injected into loop
+                    // for g.update(q). Given that all, in order to be correct, all stages of f must come
+                    // before g.update(q).
+                    // However, there is a special case here when two or more consecutive stages are computed
+                    // with the same function. In this case, we won't be adding back edge, which will create
+                    // circular dependency.
                     if (!(prev_level.func() == level.func() && prev_level.stage_index() == level.stage_index())) {
-                        // debug(0) << "Adding all previous stages " << prev_level.to_string() << " " << level.to_string() << "\n";
-                        // Every stage before i.j has to go before fused.stage.
                         for (size_t k = 0; k < j + 1; k++) {
                             stage_dependencies[func_name_to_index[level.func()]][level.stage_index()]++;
                             adj_list[i][k].push_back({func_name_to_index[level.func()], level.stage_index()});
@@ -1456,12 +1465,17 @@ private:
 
         size_t complete_count = 0;
         vector<size_t> stage_index(funcs.size());
+        // This basically computes topologocal order, but exploits the fact that
+        // stages of a function form a linear order, so basically we have a set of funcs.size() indices
+        // which point to the current stages for each of the function and should be considered as a next
+        // stage in the general order.
         while (complete_count < funcs.size()) {
             bool progress_made = false;
             for (size_t i = 0; i < funcs.size(); i++) {
                 if (stage_index[i] == stage_dependencies[i].size()) {
                     continue;
                 }
+                // Proceed as far as we can, so stages of the same function are bundled together.
                 while (stage_index[i] < stage_dependencies[i].size()) {
                     // debug(0) << funcs[i].name() << " "
                     //          << stage_dependencies[i][stage_index[i]] << "\n";
