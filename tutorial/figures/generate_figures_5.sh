@@ -19,7 +19,11 @@ HL_JIT_TARGET=host-trace_all HL_TRACE_FILE=$(pwd)/tmp/trace.bin make -C ../.. tu
 ls tmp/trace.bin
 
 # row major
-cat tmp/trace.bin | ../../bin/HalideTraceViz --size 192 192 --timestep 1 -d 10000 -h 4 -f gradient 0 6 -1 0 32 2 32 32 1 0 0 1 | avconv -f rawvideo -pix_fmt bgr32 -s 192x192 -i /dev/stdin tmp/frames_%04d.tif
+cat tmp/trace.bin | \
+../../bin/HalideTraceViz --size 192 192 --timestep 1 --decay 256 256 --hold 4 \
+--strides 1 0 0 1 --zoom 32 --max 6 --gray --move 32 32 \
+--func gradient_row_major | \
+avconv -f rawvideo -pix_fmt bgr32 -s 192x192 -i /dev/stdin tmp/frames_%04d.tif
 
 make_gif lesson_05_row_major.gif 10
 
