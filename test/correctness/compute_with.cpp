@@ -1225,19 +1225,21 @@ int nested_compute_with_test() {
 int update_stage_test() {
     const int f_size = 128;
     const int g_size = 128;
+
     Buffer<int> f_im(f_size, f_size), g_im(g_size, g_size);
     Buffer<int> f_im_ref(f_size, f_size), g_im_ref(g_size, g_size);
 
     {
         Var x("x"), y("y");
-        Func f("f"), g("g"), input("input");
+        Func f("f"), g("g");
 
-        input(x, y) = x;
-        f(x, y) = input(x, y) + x;
+        g(x, y) = 4;
+        g(x, y) = g(x, y) + 1;
+        g(x, y) = g(x, y) + 3;
+
+        f(x, y) = 5;
         f(x, y) = f(x, y) + 1;
-
-        g(x, y) = input(x, y) + y;
-        g(x, y) = g(x, y) - 1;
+        f(x, y) = f(x, y) + 3;
 
         f.compute_root();
         g.compute_root();
@@ -1251,25 +1253,25 @@ int update_stage_test() {
 
     {
         Var x("x"), y("y");
-        Func f("f"), g("g"), input("input");
+        Func f("f"), g("g");
 
-        input(x, y) = x;
-        f(x, y) = input(x, y) + x;
+        g(x, y) = 4;
+        g(x, y) = g(x, y) + 1;
+        g(x, y) = g(x, y) + 3;
+
+        f(x, y) = 5;
         f(x, y) = f(x, y) + 1;
+        f(x, y) = f(x, y) + 3;
 
-        g(x, y) = input(x, y) + y;
-        g(x, y) = g(x, y) - 1;
-
-        f.compute_root();
         g.compute_root();
+        f.compute_root();
 
-        f.update().compute_with(g, y);
+        f.update(1).compute_with(g.update(0), y);
 
         g.bound(x, 0, g_size).bound(y, 0, g_size);
         f.bound(x, 0, f_size).bound(y, 0, f_size);
 
         Pipeline p({f, g});
-        p.print_loop_nest();
         p.realize({f_im, g_im});
     }
 

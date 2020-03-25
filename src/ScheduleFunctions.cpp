@@ -1412,30 +1412,120 @@ private:
 
         user_assert(num_skipped == 0) << "Fused groups must either be entirely used or unused\n";
 
+        vector<pair<Function, int>> stage_order;
+#if 1
+        map<string, int> func_name_to_index;
+        vector<vector<int>> stage_dependencies(funcs.size());
+        vector<vector<vector<pair<int, int>>>> adj_list(funcs.size());
+        for (size_t i = 0; i < funcs.size(); i++) {
+            stage_dependencies[i].resize(1 + funcs[i].updates().size(), 0);
+            adj_list[i].resize(1 + funcs[i].updates().size());
+            func_name_to_index[funcs[i].name()] = i;
+        }
+        // missing tests:
+        // two in row from the beginning with the same
+        // two in row in the middle with the same
+        // two with one in between with the same
+        for (size_t i = 0; i < funcs.size(); i++) {
+            auto prev_level = funcs[i].definition().schedule().fuse_level().level;
+            {
+                const auto &level = funcs[i].definition().schedule().fuse_level().level;
+                if (!level.is_root() && !level.is_inlined()) {
+                    // debug(0) << "Dependency [0]: " << level.func() << " " << level.stage_index() << "\n";
+                    stage_dependencies[i][0]++;
+                    adj_list[func_name_to_index[level.func()]][level.stage_index()].push_back({i, 0});
+                }
+            }
+            for (size_t j = 0; j < funcs[i].updates().size(); ++j) {
+                const auto &level = funcs[i].updates()[j].schedule().fuse_level().level;
+                if (!level.is_root() && !level.is_inlined()) {
+                    // debug(0) << "Dependency [k]: " << level.func() << " " << level.stage_index() << "\n";
+                    stage_dependencies[i][j + 1]++;
+                    adj_list[func_name_to_index[level.func()]][level.stage_index()].push_back({i, j + 1});
+
+                    // this special case for the case when
+                    if (!(prev_level.func() == level.func() && prev_level.stage_index() == level.stage_index())) {
+                        // debug(0) << "Adding all previous stages " << prev_level.to_string() << " " << level.to_string() << "\n";
+                        // Every stage before i.j has to go before fused.stage.
+                        for (size_t k = 0; k < j + 1; k++) {
+                            stage_dependencies[func_name_to_index[level.func()]][level.stage_index()]++;
+                            adj_list[i][k].push_back({func_name_to_index[level.func()], level.stage_index()});
+                        }
+                    }
+                    prev_level = level;
+                }
+            }
+        }
+
+        size_t complete_count = 0;
+        vector<size_t> stage_index(funcs.size());
+        while (complete_count < funcs.size()) {
+            bool progress_made = false;
+            for (size_t i = 0; i < funcs.size(); i++) {
+                if (stage_index[i] == stage_dependencies[i].size()) {
+                    continue;
+                }
+                while (stage_index[i] < stage_dependencies[i].size()) {
+                    // debug(0) << funcs[i].name() << " "
+                    //          << stage_dependencies[i][stage_index[i]] << "\n";
+
+                    if (stage_dependencies[i][stage_index[i]] > 0) {
+                        break;
+                    }
+                    progress_made = true;
+                    // debug(0) << "adj list size - " << adj_list[i][stage_index[i]].size() << "\n";
+                    for (size_t k = 0; k < adj_list[i][stage_index[i]].size(); k++) {
+                        const auto &edge = adj_list[i][stage_index[i]][k];
+                        internal_assert(stage_dependencies[edge.first][edge.second] > 0);
+                        stage_dependencies[edge.first][edge.second]--;
+                    }
+                    // debug(0) << "Next stage is - " << funcs[i].name() << " " << stage_index[i] << "\n";
+                    stage_order.push_back({funcs[i], stage_index[i]});
+                    stage_index[i]++;
+                }
+                if (stage_index[i] == stage_dependencies[i].size()) {
+                    complete_count++;
+                }
+            }
+            internal_assert(progress_made);
+        }
+
+#else
+        for (auto iter = funcs.rbegin(); iter != funcs.rend(); iter++) {
+            const auto &f = *iter;
+            stage_order.push_back({f, 0});
+            debug(0) << "Next stage is - " << f.name() << " " << 0 << "\n";
+            for (size_t j = 0; j < f.updates().size(); ++j) {
+                stage_order.push_back({f, j + 1});
+                debug(0) << "Next stage is - " << f.name() << " " << j + 1 << "\n";
+            }
+        }
+#endif
         // Build the loops.
         Stmt producer;
         map<string, Expr> replacements;
         vector<pair<string, Expr>> add_lets;
 
-        for (auto iter = funcs.rbegin(); iter != funcs.rend(); iter++) {
-            const auto &f = *iter;
+        for (const auto &func_stage : stage_order) {
+            const auto &f = func_stage.first;
 
-            if (f.has_extern_definition()) {
+            if (f.has_extern_definition() && (func_stage.second == 0)) {
                 const Stmt &produceDef = Internal::build_extern_produce(env, f, target);
                 producer = inject_stmt(producer, produceDef, LoopLevel::inlined().lock());
-            } else {
-                const Stmt &produceDef = build_produce_definition(f, f.name() + ".s0.", f.definition(), false,
-                                                                  replacements, add_lets);
-                producer = inject_stmt(producer, produceDef, f.definition().schedule().fuse_level().level);
+                continue;
             }
 
-            for (size_t j = 0; j < f.updates().size(); ++j) {
-                string defPrefix = f.name() + ".s" + std::to_string(j + 1) + ".";
-                const Definition &def = f.updates()[j];
-                const Stmt &updateDef = build_produce_definition(f, defPrefix, def, true,
-                                                                 replacements, add_lets);
-                producer = inject_stmt(producer, updateDef, def.schedule().fuse_level().level);
-            }
+            string def_prefix = f.name() + ".s" + std::to_string(func_stage.second) + ".";
+            const auto &def = (func_stage.second == 0) ? f.definition() : f.updates()[func_stage.second - 1];
+
+            // debug(0) << "build_pipeline_group - " << f.name() << " "
+            //          << func_stage.second << " "
+            //          << def.schedule().fuse_level().level.is_root() << " "
+            //          << def.schedule().fuse_level().level << "\n";
+
+            const Stmt &produceDef = build_produce_definition(f, def_prefix, def, func_stage.second > 0,
+                                                              replacements, add_lets);
+            producer = inject_stmt(producer, produceDef, def.schedule().fuse_level().level);
         }
 
         internal_assert(producer.defined());
