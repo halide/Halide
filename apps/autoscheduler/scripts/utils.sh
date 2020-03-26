@@ -363,3 +363,11 @@ function print_best_schedule_times() {
         echo "$app: $current_best_run_time ms"
     done
 }
+
+function find_outliers() {
+    local -r predictions_file=$1
+    local -r outliers_file=$2
+
+    awk -F", " '{printf("%s, %f\n", $1, $2/$3);}' ${predictions_file} | sort -n -k 2 > ${outliers_file}
+    echo "Outliers saved to: ${outliers_file}"
+}

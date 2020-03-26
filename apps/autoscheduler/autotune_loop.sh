@@ -90,7 +90,7 @@ GIT_HASH=$(git rev-parse --verify HEAD)
 if [[ $TRAIN_ONLY != 1 ]]; then
     get_timeout_cmd TIMEOUT_CMD
 else
-    echo "Train only mode ON"
+    echo "Train only mode: ON"
 fi
 
 record_command() {
