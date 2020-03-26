@@ -19,6 +19,7 @@
 #include "LICM.h"
 #include "LLVM_Headers.h"
 #include "LoopCarry.h"
+#include "Monotonic.h"
 #include "Simplify.h"
 #include "Substitute.h"
 #include "Target.h"
@@ -102,30 +103,186 @@ bool is_dense_ramp(const Expr &x) {
 // buffers. Using this assumption, this mutator replaces vector
 // predicated dense loads with scalar predicated dense loads.
 class SloppyUnpredicateLoadsAndStores : public IRMutator {
+    using IRMutator::visit;
+
+    // The first and last lanes of all monotonic vectors in scope
+    Scope<std::pair<Expr, Expr>> monotonic_vectors;
+
+    // If a vector monotonically increases or decreases across the
+    // lanes, return the first and last lane.
+    std::pair<Expr, Expr> get_extreme_lanes(const Expr &e) {
+        if (const Ramp *r = e.as<Ramp>()) {
+            return {r->base, r->base + r->stride * (r->lanes - 1)};
+        } else if (const Broadcast *b = e.as<Broadcast>()) {
+            return {b->value, b->value};
+        } else if (const LT *op = e.as<LT>()) {
+            if (!op->a.type().is_bool()) {
+                auto a = get_extreme_lanes(op->a);
+                auto b = get_extreme_lanes(op->b);
+                if (a.first.defined() && b.first.defined()) {
+                    return {a.first < b.first, a.second < b.second};
+                }
+            }
+        } else if (const LE *op = e.as<LE>()) {
+            if (!op->a.type().is_bool()) {
+                auto a = get_extreme_lanes(op->a);
+                auto b = get_extreme_lanes(op->b);
+                if (a.first.defined() && b.first.defined()) {
+                    return {a.first <= b.first, a.second <= b.second};
+                }
+            }
+        } else if (const Variable *op = e.as<Variable>()) {
+            if (monotonic_vectors.contains(op->name)) {
+                return monotonic_vectors.get(op->name);
+            }
+        } else if (const Let *op = e.as<Let>()) {
+            auto v = get_extreme_lanes(op->value);
+            ScopedBinding<std::pair<Expr, Expr>> bind(v.first.defined(), monotonic_vectors, op->name, v);
+            return get_extreme_lanes(op->body);
+        }
+        return {Expr(), Expr()};
+    }
+
+    Expr visit(const Let *op) override {
+        auto v = get_extreme_lanes(op->value);
+        ScopedBinding<std::pair<Expr, Expr>> bind(op->value.type().is_vector() && v.first.defined(),
+                                                  monotonic_vectors, op->name, v);
+        return IRMutator::visit(op);
+    }
+
     Expr visit(const Load *op) override {
-        // Don't handle loads with without predicates, scalar predicates, or
-        // non-dense ramps.
-        if (is_one(op->predicate) || op->predicate.as<Broadcast>() ||
-            !is_dense_ramp(op->index)) {
+        if (is_one(op->predicate)) {
+            // These are handled fine
             return IRMutator::visit(op);
         }
 
         Expr predicate = mutate(op->predicate);
         Expr index = mutate(op->index);
 
-        // Make the predicate into a scalar that is true if any of the lanes are
-        // true.
-        Expr condition = Shuffle::make({predicate}, {0});
-        for (int i = 1; i < op->type.lanes(); i++) {
-            condition = condition || Shuffle::make({predicate}, {i});
-        }
-        predicate = Broadcast::make(condition, predicate.type().lanes());
+        if (is_dense_ramp(index) || index.as<Broadcast>()) {
+            // Make the predicate into a scalar that is true if any of the lanes are
+            // true.
 
-        return Load::make(op->type, op->name, index, op->image, op->param,
-                          predicate, op->alignment);
+            Expr condition;
+
+            // If the predicate is monotonic increasing or decreasing
+            // over the vector lanes, we can just check the last or
+            // first lane, respectively. We won't bother to
+            // distinguish between the two cases though, so we just or
+            // them both together.
+            auto v = get_extreme_lanes(predicate);
+            if (v.first.defined()) {
+                internal_assert(v.first.type() == Bool() &&
+                                v.second.type() == Bool())
+                    << "The extreme lanes of a bool vector should be scalar bools\n";
+                condition = simplify(v.first || v.second);
+            } else {
+                // Take an OR over all lanes. Consider replacing this
+                // with a VectorReduce node once those are available
+                // and codegen to something useful on hexagon.
+                condition = Shuffle::make({predicate}, {0});
+                for (int i = 1; i < op->type.lanes(); i++) {
+                    condition = condition || Shuffle::make({predicate}, {i});
+                }
+                condition = simplify(condition);
+            }
+
+            Expr load = Load::make(op->type, op->name, index, op->image, op->param,
+                                   const_true(op->type.lanes()), op->alignment);
+
+            return Call::make(op->type, Call::if_then_else,
+                              {condition, load, make_zero(op->type)}, Call::Intrinsic);
+
+            return load;
+        } else {
+            // It's a predicated vector gather. Just scalarize. We'd
+            // prefer to keep it in a loop, but that would require
+            // some sort of loop Expr. Another option would be
+            // introducing a set of runtime functions to do predicated
+            // loads.
+            Expr load = Load::make(op->type, op->name, index, op->image, op->param,
+                                   const_true(op->type.lanes()), op->alignment);
+            return Call::make(op->type, Call::if_then_else,
+                              {predicate, load, make_zero(op->type)}, Call::Intrinsic);
+        }
     }
 
-    using IRMutator::visit;
+    Stmt visit(const Store *op) override {
+        if (is_one(op->predicate)) {
+            return IRMutator::visit(op);
+        }
+
+        Expr predicate = mutate(op->predicate);
+        Expr value = mutate(op->value);
+        Expr index = mutate(op->index);
+
+        int lanes = value.type().lanes();
+
+        if (const Broadcast *scalar_pred = predicate.as<Broadcast>()) {
+            Stmt unpredicated_store = Store::make(op->name, value, index, op->param, const_true(lanes), op->alignment);
+            return IfThenElse::make(scalar_pred->value, unpredicated_store);
+        } else {
+            string value_name = unique_name("scalarized_store_value");
+            string index_name = unique_name("scalarized_store_index");
+            string predicate_name = unique_name("scalarized_store_predicate");
+
+            const Ramp *index_ramp = index.as<Ramp>();
+
+            // Store entire vectors to the stack
+            vector<Stmt> stmts;
+            Expr predicate_mask = select(predicate, make_one(UInt(8, lanes)), make_zero(UInt(8, lanes)));
+            stmts.emplace_back(Store::make(predicate_name, predicate_mask, Ramp::make(0, 1, lanes),
+                                           Parameter(), const_true(lanes),
+                                           ModulusRemainder()));
+            stmts.emplace_back(Store::make(value_name, value, Ramp::make(0, 1, lanes),
+                                           Parameter(), const_true(lanes),
+                                           ModulusRemainder()));
+            if (!index_ramp) {
+                stmts.emplace_back(Store::make(index_name, index, Ramp::make(0, 1, lanes),
+                                               Parameter(), const_true(lanes),
+                                               ModulusRemainder()));
+            }
+
+            // Then load each element one by one in a loop and do a conditional scalar store
+            string lane_name = unique_name('t');
+            Expr lane_var = Variable::make(Int(32), lane_name);
+
+            Expr pred_i = Load::make(UInt(8), predicate_name, lane_var,
+                                     Buffer<>(), Parameter(), const_true(), ModulusRemainder());
+            Expr value_i = Load::make(value.type().element_of(), value_name, lane_var,
+                                      Buffer<>(), Parameter(), const_true(), ModulusRemainder());
+            Expr index_i;
+            if (index_ramp) {
+                index_i = index_ramp->base + lane_var * index_ramp->stride;
+            } else {
+                index_i = Load::make(Int(32), index_name, lane_var,
+                                     Buffer<>(), Parameter(), const_true(), ModulusRemainder());
+            }
+
+            Stmt store_lanes = Store::make(op->name, value_i, index_i,
+                                           op->param, const_true(),
+                                           ModulusRemainder());
+            store_lanes = IfThenElse::make(pred_i != 0, store_lanes);
+            store_lanes = For::make(lane_name, 0, lanes,
+                                    ForType::Serial, DeviceAPI::None, store_lanes);
+            stmts.emplace_back(std::move(store_lanes));
+
+            Stmt result = Block::make(stmts);
+
+            // Wrap with allocate nodes
+
+            result = Allocate::make(predicate_name, UInt(8), MemoryType::Stack,
+                                    {predicate.type().lanes()}, const_true(), result);
+            if (!index_ramp) {
+                result = Allocate::make(index_name, Int(32), MemoryType::Stack,
+                                        {index.type().lanes()}, const_true(), result);
+            }
+            result = Allocate::make(value_name, value.type().element_of(), MemoryType::Stack,
+                                    {value.type().lanes()}, const_true(), result);
+
+            return result;
+        }
+    }
 };
 
 Stmt sloppy_unpredicate_loads_and_stores(const Stmt &s) {
@@ -271,12 +428,10 @@ void CodeGen_Hexagon::compile_func(const LoweredFunc &f,
     Stmt body = f.body;
 
     debug(1) << "Unpredicating loads and stores...\n";
-    // Replace dense vector predicated loads and stores with
-    // scalarized versions. We can afford to be a little sloppy with
-    // the dense vector loads because on hexagon we can always read
-    // out of bounds by one vector.
+    // Replace dense vector predicated loads with sloppy scalarized
+    // predicates, and scalarize predicated stores
     body = sloppy_unpredicate_loads_and_stores(body);
-    body = unpredicate_loads_stores(body);
+
     debug(2) << "Lowering after unpredicating loads/stores:\n"
              << body << "\n\n";
 
