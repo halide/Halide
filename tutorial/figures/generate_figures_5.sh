@@ -22,7 +22,7 @@ ls tmp/trace.bin
 cat tmp/trace.bin | \
 ../../bin/HalideTraceViz --size 192 192 --timestep 1 --decay 256 256 --hold 4 \
 --strides 1 0 0 1 --zoom 32 --max 6 --gray --move 32 32 \
---func gradient_row_major | \
+--func gradient | \
 avconv -f rawvideo -pix_fmt bgr32 -s 192x192 -i /dev/stdin tmp/frames_%04d.tif
 
 make_gif lesson_05_row_major.gif 10
