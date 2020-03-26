@@ -41,9 +41,20 @@ enable_testing()
 add_test(NAME run_gradient_autoscheduler_test_cpp
          COMMAND gradient_autoscheduler_test_cpp)
 set_property(TEST run_gradient_autoscheduler_test_cpp
-             PROPERTY ENVIRONMENT "LD_LIBRARY_PATH=${CMAKE_LIBRARY_OUTPUT_DIRECTORY}")
+             PROPERTY ENVIRONMENT
+                      "$<$<NOT:$<PLATFORM_ID:Windows>>:LD_LIBRARY_PATH=${CMAKE_LIBRARY_OUTPUT_DIRECTORY}>"
+                      "$<$<PLATFORM_ID:Windows>:PATH=$<TARGET_FILE_DIR:${HALIDE_COMPILER_LIB}>\;$<TARGET_FILE_DIR:gradient_autoscheduler>>")
 
-#TODO: run_test_py: halide python binding is missing CMakeLists.txt
+if (WITH_PYTHON_BINDINGS)
+  add_test(NAME run_gradient_autoscheduler_test_py
+           COMMAND "${PYTHON_EXECUTABLE}"
+                   "${CMAKE_CURRENT_SOURCE_DIR}/test.py")
+  set_property(TEST run_gradient_autoscheduler_test_py
+               PROPERTY ENVIRONMENT
+                        "PYTHONPATH=$<TARGET_FILE_DIR:halide_py>"
+                        "$<$<NOT:$<PLATFORM_ID:Windows>>:LD_LIBRARY_PATH=${CMAKE_LIBRARY_OUTPUT_DIRECTORY}>"
+                        "$<$<PLATFORM_ID:Windows>:PATH=$<TARGET_FILE_DIR:${HALIDE_COMPILER_LIB}>\;$<TARGET_FILE_DIR:gradient_autoscheduler>>")
+endif()
 
 add_test(NAME test_gradient_autoscheduler_generator
          COMMAND gradient_autoscheduler_demo.rungen --benchmarks=all --benchmark_min_time=1 --estimate_all)
