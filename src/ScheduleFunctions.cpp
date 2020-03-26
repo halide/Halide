@@ -1491,7 +1491,7 @@ private:
                         stage_dependencies[edge.first][edge.second]--;
                     }
                     // debug(0) << "Next stage is - " << funcs[i].name() << " " << stage_index[i] << "\n";
-                    stage_order.push_back({funcs[i], stage_index[i]});
+                    stage_order.emplace_back(funcs[i], stage_index[i]);
                     stage_index[i]++;
                 }
                 if (stage_index[i] == stage_dependencies[i].size()) {
