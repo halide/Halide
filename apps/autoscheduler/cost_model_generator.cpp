@@ -395,7 +395,8 @@ public:
         Expr max_active_blocks = min(max_theoretical_active_blocks, 32.f);
 
         Expr register_block_occupancy = print_wrap(select(inlined_calls == 0, max_active_blocks / 32.f, 1.f), "register_block_occupancy", n, w);
-        compute_cost *= select(inlined_calls == 0, max(1, relu1(32, w, n) * (1.f / register_block_occupancy)), 1.f);
+
+        compute_cost *= select(inlined_calls == 0, 1.f / register_block_occupancy, 1.f);
         compute_cost = print_wrap(compute_cost, "compute_cost_after_register_block_occupancy", n, w);
 
         // Next comes a long list of plausible terms to capture the cost of loads.
@@ -432,25 +433,7 @@ public:
         load_cost *= spill_cost;
         load_cost = print_wrap(load_cost, "load_cost_after_spill_cost", n, w);
 
-        // Next we have the cost of stores.
-        Expr lines_written_per_realization = inner_parallelism * (bytes_at_task / max(1, innermost_bytes_at_task));
-
-        // Use separate coefficients for things with internal
-        // parallelism, because for stages with internal parallelism,
-        // most values of the values being stored will be consumed on
-        // another core, so they will get punted out to L3 no matter
-        // how small. Also use a separate term for the final stage, as
-        // we never pay the cost of loading from it.
-        Expr alpha = select(inner_parallelism > 1, relu1(16, w, n),
-                            w == 0, relu1(17, w, n),
-                            relu1(18, w, n));
-        Expr beta = select(inner_parallelism > 1, relu1(19, w, n),
-                           w == 0, relu1(20, w, n),
-                           relu1(21, w, n));
-
-        Expr store_cost = num_realizations * (lines_written_per_realization * alpha +
-                                              bytes_at_realization * beta) +
-                          num_blocks * num_shared_mem_stores_per_block * relu1(29, w, n) +
+        Expr store_cost = num_blocks * num_shared_mem_stores_per_block * relu1(29, w, n) +
                           num_blocks * num_global_mem_stores_per_block * relu1(30, w, n);
         store_cost = print_wrap(store_cost, "store_cost_initial", n, w);
 

@@ -73,8 +73,8 @@ $(BIN)/%/onnx_converter_generator_test: onnx_converter_generator_test.cc $(BIN)/
 	$(CXX) $(CXXFLAGS) $(USE_EXPORT_DYNAMIC) -I$(BIN)/$* $^ -o $@ $(LDFLAGS)
 
 test: $(BIN)/$(HL_TARGET)/onnx_converter_test $(BIN)/$(HL_TARGET)/onnx_converter_generator_test
-	LD_LIBRARY_PATH=$(BIN) $(BIN)/$(HL_TARGET)/onnx_converter_test
-	LD_LIBRARY_PATH=$(BIN) $(BIN)/$(HL_TARGET)/onnx_converter_generator_test
+	LD_LIBRARY_PATH="$(BIN);$(dir $(PROTOC))../lib" $(BIN)/$(HL_TARGET)/onnx_converter_test
+	LD_LIBRARY_PATH="$(BIN);$(dir $(PROTOC))../lib" $(BIN)/$(HL_TARGET)/onnx_converter_generator_test
 
 PYTHON ?= python3
 PYBIND11_CFLAGS = $(shell $(PYTHON)-config --includes) -frtti

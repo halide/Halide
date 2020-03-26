@@ -1,5 +1,6 @@
 #include "mat_mul.h"
 #ifndef NO_AUTO_SCHEDULE
+#include "mat_mul_auto_schedule.h"
 #include "mat_mul_gradient_auto_schedule.h"
 #endif
 #include "halide_benchmark.h"
@@ -49,6 +50,7 @@ int main(int argc, char **argv) {
         multi_way_bench({
             {"Manual", [&]() { mat_mul(A, B, C); C.device_sync(); }},
         #ifndef NO_AUTO_SCHEDULE
+            {"Auto-schedule", [&]() { mat_mul_auto_schedule(A, B, C); C.device_sync(); }},
             {"Gradient auto-schedule", [&]() { mat_mul_gradient_auto_schedule(A, B, C); C.device_sync(); }}
         #endif
         });
