@@ -57,6 +57,7 @@ def main():
             halide_outputs.append(b)
 
         model_name = os.path.splitext(os.path.basename(f))[0]
+
         # Compile the generators
         print('Compiling with the Li2018 autoscheduler')
         cmd = ('bin/host/onnx_converter.generator '
@@ -93,6 +94,24 @@ def main():
         end = time.time_ns()
         t = ((end - beg) / (10 ** 9)) / num_iter
         print('time for gradient autoscheduler: {}s'.format(t))
+
+        print('Running the autotuning loop for Anderson2020')
+        cmd = ('HL_MACHINE_PARAMS=80,1,1 '
+               'SAMPLES_DIR={}_autotuned_samples '
+               'HL_PERMIT_FAILED_UNROLL=1 '
+               'HL_SHARED_MEMORY_LIMIT=48 '
+               'bash ../autoscheduler/autotune_loop.sh '
+               'bin/host/onnx_converter.generator '
+               '{} '
+               'host-cuda '
+               '../autoscheduler/gpu.weights '
+               '../autoscheduler/bin '
+               '0 '
+               '0 '
+               'model_file_path={}').format(model_name, model_name, f)
+        print(cmd)
+        os.system(cmd)
+
 
 if __name__ == '__main__':
     main()
