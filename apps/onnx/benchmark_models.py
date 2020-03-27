@@ -2,12 +2,29 @@
 """
 import argparse
 import os
+os.environ['HL_JIT_TARGET'] = 'host-cuda'
 import sysconfig
+import sys
+import onnx
+sys.path.append('../../python_bindings/bin') # python binding
+import halide as hl
+sys.path.append('./bin/host-cuda')
+import time
 
 python_include_path = sysconfig.get_paths()['include']
 python_cflags = '-I' + python_include_path + ' '
 python_cflags += sysconfig.get_config_var('CFLAGS') + ' '
 python_cflags += '-fPIC '
+
+def get_model_inputs(onnx_model):
+    constants = {}
+    for c in onnx_model.graph.initializer:
+        constants[c.name] = True
+    inputs = []
+    for i in onnx_model.graph.input:
+        if i.name not in constants:
+            inputs.append(i)
+    return inputs
 
 def main():
     parser = argparse.ArgumentParser()
@@ -17,6 +34,28 @@ def main():
 
     for f in args.files:
         print('Processing', f)
+
+        print('Preparing inputs and outputs')
+        onnx_model = onnx.load(f)
+        inputs = get_model_inputs(onnx_model)
+        outputs = onnx_model.graph.output
+        halide_inputs = []
+        for i in inputs:
+            # TODO: check types
+            shape = [d.dim_value for d in (i.type.tensor_type.shape.dim)]
+            b = hl.Buffer(hl.Float(32), shape)
+            b.fill(0.5)
+            b.copy_to_device()
+            halide_inputs.append(b)
+        halide_outputs = []
+        for o in outputs:
+            # TODO: check types
+            shape = [d.dim_value for d in (o.type.tensor_type.shape.dim)]
+            b = hl.Buffer(hl.Float(32), shape)
+            b.fill(0.0)
+            b.copy_to_device()
+            halide_outputs.append(b)
+
         model_name = os.path.splitext(os.path.basename(f))[0]
         # Compile the generators
         print('Compiling with the Li2018 autoscheduler')
@@ -46,6 +85,14 @@ def main():
                       model_name, model_name)
         print(cmd)
         os.system(cmd)
+        from mobilenetv2_li2018 import mobilenetv2_li2018
+        num_iter = 20
+        beg = time.time_ns()
+        for i in range(num_iter):
+            mobilenetv2_li2018(*halide_inputs, *halide_outputs)
+        end = time.time_ns()
+        t = ((end - beg) / (10 ** 9)) / num_iter
+        print('time for gradient autoscheduler: {}s'.format(t))
 
 if __name__ == '__main__':
     main()
