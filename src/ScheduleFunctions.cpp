@@ -1412,27 +1412,28 @@ private:
 
         user_assert(num_skipped == 0) << "Fused groups must either be entirely used or unused\n";
 
+        // Order of the stages for building produce definitions.
         vector<pair<Function, int>> stage_order;
-#if 1
         // Inverse map from function name to the index.
         map<string, int> func_name_to_index;
-        // This contains a number of dependencies for a given stage of the function
+        // Contains a number of dependencies which need to go first for a given stage of the function.
         vector<vector<int>> stage_dependencies(funcs.size());
-        // Adjacency list for dependencies.
+        // Adjacency list of dependencies.
         vector<vector<vector<pair<int, int>>>> adj_list(funcs.size());
+
         // Initialize data structures.
         for (size_t i = 0; i < funcs.size(); i++) {
             stage_dependencies[i].resize(1 + funcs[i].updates().size(), 0);
             adj_list[i].resize(1 + funcs[i].updates().size());
             func_name_to_index[funcs[i].name()] = i;
         }
-        // Figure out dependencies between stages.
+
+        // Figure out dependencies between the stages.
         for (size_t i = 0; i < funcs.size(); i++) {
             auto prev_level = funcs[i].definition().schedule().fuse_level().level;
             {
                 const auto &level = funcs[i].definition().schedule().fuse_level().level;
                 if (!level.is_root() && !level.is_inlined()) {
-                    // debug(0) << "Dependency [0]: " << level.func() << " " << level.stage_index() << "\n";
                     stage_dependencies[i][0]++;
                     adj_list[func_name_to_index[level.func()]][level.stage_index()].push_back({i, 0});
                 }
@@ -1440,18 +1441,17 @@ private:
             for (size_t j = 0; j < funcs[i].updates().size(); ++j) {
                 const auto &level = funcs[i].updates()[j].schedule().fuse_level().level;
                 if (!level.is_root() && !level.is_inlined()) {
-                    // debug(0) << "Dependency [k]: " << level.func() << " " << level.stage_index() << "\n";
                     stage_dependencies[i][j + 1]++;
                     adj_list[func_name_to_index[level.func()]][level.stage_index()].push_back({i, j + 1});
 
                     // Let say that we have a stage f.update(p), which is scheduled to be computed_with
-                    // another stage g.update(q) (like so f.update(p).compute_with(g.update(q), var)).
-                    // Effectively, this means that loop for f.update(p) will be injected into loop
-                    // for g.update(q). Given that all, in order to be correct, all stages of f must come
+                    // another stage g.update(q) (like f.update(p).compute_with(g.update(q), var)).
+                    // This means that the loop for f.update(p) will be injected into the loop for g.update(q).
+                    // Given that, for this to be correct, all stages of f up until (p - 1) must come
                     // before g.update(q).
                     // However, there is a special case here when two or more consecutive stages are computed
-                    // with the same function. In this case, we won't be adding back edge, which will create
-                    // circular dependency.
+                    // with the same stage. In this case, we won't be adding back edge to avoid creating cyclic
+                    // dependency.
                     if (!(prev_level.func() == level.func() && prev_level.stage_index() == level.stage_index())) {
                         for (size_t k = 0; k < j + 1; k++) {
                             stage_dependencies[func_name_to_index[level.func()]][level.stage_index()]++;
@@ -1465,32 +1465,30 @@ private:
 
         size_t complete_count = 0;
         vector<size_t> stage_index(funcs.size());
-        // This basically computes topologocal order, but exploits the fact that
-        // stages of a function form a linear order, so basically we have a set of funcs.size() indices
-        // which point to the current stages for each of the function and should be considered as a next
-        // stage in the general order.
+        // This basically computes topologocal order, but exploits the fact that stages of the function
+        // form linear order. Basically, we have a set of indices that point to the current stages
+        // for each of the functions and should be considered as a next stage in the general order. They
+        // are added to the order, only if all of their dependencies have been added already.
         while (complete_count < funcs.size()) {
             bool progress_made = false;
             for (size_t i = 0; i < funcs.size(); i++) {
+                // We already added all stages of this function, so proceed to the next function.
                 if (stage_index[i] == stage_dependencies[i].size()) {
                     continue;
                 }
                 // Proceed as far as we can, so stages of the same function are bundled together.
                 while (stage_index[i] < stage_dependencies[i].size()) {
-                    // debug(0) << funcs[i].name() << " "
-                    //          << stage_dependencies[i][stage_index[i]] << "\n";
-
                     if (stage_dependencies[i][stage_index[i]] > 0) {
                         break;
                     }
                     progress_made = true;
-                    // debug(0) << "adj list size - " << adj_list[i][stage_index[i]].size() << "\n";
+                    // Now that we are going to add a stage to the order, go over dependent nodes
+                    // and decrease their dependency count.
                     for (size_t k = 0; k < adj_list[i][stage_index[i]].size(); k++) {
                         const auto &edge = adj_list[i][stage_index[i]][k];
                         internal_assert(stage_dependencies[edge.first][edge.second] > 0);
                         stage_dependencies[edge.first][edge.second]--;
                     }
-                    // debug(0) << "Next stage is - " << funcs[i].name() << " " << stage_index[i] << "\n";
                     stage_order.emplace_back(funcs[i], stage_index[i]);
                     stage_index[i]++;
                 }
@@ -1498,20 +1496,10 @@ private:
                     complete_count++;
                 }
             }
+            // Make sure that we made some progress, otherwise there is a cyclic dependency.
             internal_assert(progress_made);
         }
 
-#else
-        for (auto iter = funcs.rbegin(); iter != funcs.rend(); iter++) {
-            const auto &f = *iter;
-            stage_order.push_back({f, 0});
-            debug(0) << "Next stage is - " << f.name() << " " << 0 << "\n";
-            for (size_t j = 0; j < f.updates().size(); ++j) {
-                stage_order.push_back({f, j + 1});
-                debug(0) << "Next stage is - " << f.name() << " " << j + 1 << "\n";
-            }
-        }
-#endif
         // Build the loops.
         Stmt producer;
         map<string, Expr> replacements;
@@ -1528,11 +1516,6 @@ private:
 
             string def_prefix = f.name() + ".s" + std::to_string(func_stage.second) + ".";
             const auto &def = (func_stage.second == 0) ? f.definition() : f.updates()[func_stage.second - 1];
-
-            // debug(0) << "build_pipeline_group - " << f.name() << " "
-            //          << func_stage.second << " "
-            //          << def.schedule().fuse_level().level.is_root() << " "
-            //          << def.schedule().fuse_level().level << "\n";
 
             const Stmt &produceDef = build_produce_definition(f, def_prefix, def, func_stage.second > 0,
                                                               replacements, add_lets);
