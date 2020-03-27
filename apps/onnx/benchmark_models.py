@@ -20,6 +20,7 @@ def main():
                '-p ../gradient_autoscheduler/bin/libgradient_autoscheduler.so '
                '-s Li2018 '
                'target=host '
+               'auto_schedule=true '
                'model_file_path={}').format(model_name, f)
         print(cmd)
         os.system(cmd)
