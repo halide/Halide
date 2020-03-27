@@ -405,7 +405,6 @@ void save_predictions(const map<int, PipelineSample>& samples, const string& fil
         }
     }
 
-    std::cout << filename << "\n\n";
     std::ofstream file(filename, std::ios_base::trunc);
     file << out.str();
     file.close();

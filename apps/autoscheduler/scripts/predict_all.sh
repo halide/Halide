@@ -30,6 +30,5 @@ if [[ $INCLUDE_FILENAMES == 1 ]]; then
   exit
 fi
 
-RESULT=$(cat ${PREDICTIONS_FILE} | awk -F", " '{printf("%f, %f\n", $2, $3);}')
-> ${PREDICTIONS_FILE}
+RESULT=$(cat ${PREDICTIONS_FILE} | awk -F", " '{printf("%f, %f\n", $2, $3);}') > ${PREDICTIONS_FILE}
 echo "$RESULT" > ${PREDICTIONS_FILE}

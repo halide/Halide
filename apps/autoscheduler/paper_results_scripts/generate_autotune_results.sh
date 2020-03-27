@@ -1,8 +1,23 @@
 #!/bin/bash
 
-if [[ $# -ne 3 && $# -ne 4 ]]; then
-    echo "Usage: $0 max_iterations resume train_only app"
+if [[ $# -ne 4 && $# -ne 5 ]]; then
+    echo "Usage: $0 max_iterations resume train_only predict_only app"
     exit
+fi
+
+MAX_ITERATIONS=${1}
+RESUME=${2}
+TRAIN_ONLY=${3}
+PREDICT_ONLY=${4}
+APP=${5}
+
+if [[ $PREDICT_ONLY == 1 && $TRAIN_ONLY == 1 ]]; then
+    echo "At most one of train_only and predict_only can be set to 1."
+    exit
+fi
+
+if [[ $PREDICT_ONLY == 1 ]]; then
+    echo "Predict only mode: ON"
 fi
 
 source $(dirname $0)/../scripts/utils.sh
@@ -12,11 +27,6 @@ BEST_SCHEDULES_DIR=$(dirname $0)/best
 find_halide HALIDE_ROOT
 
 build_autoscheduler_tools ${HALIDE_ROOT}
-
-MAX_ITERATIONS=${1}
-RESUME=${2}
-TRAIN_ONLY=${3}
-APP=${4}
 
 export CXX="ccache c++"
 
@@ -66,6 +76,7 @@ NUM_APPS=0
 for app in $APPS; do
     NUM_APPS=$((NUM_APPS + 1))
 done
+
 echo "Autotuning on $APPS for $MAX_ITERATIONS iteration(s)"
 
 for app in $APPS; do
@@ -85,6 +96,7 @@ for app in $APPS; do
     OUTPUT_FILE="${SAMPLES_DIR}/autotune_out.txt"
     PREDICTIONS_FILE="${SAMPLES_DIR}/predictions"
     PREDICTIONS_WITH_FILENAMES_FILE="${SAMPLES_DIR}/predictions_with_filenames"
+    OUTLIERS_FILE="${SAMPLES_DIR}/outliers"
     BEST_TIMES_FILE="${SAMPLES_DIR}/best_times"
 
     mkdir -p ${SAMPLES_DIR}
@@ -92,19 +104,23 @@ for app in $APPS; do
 
     ITERATION=1
 
-    while [[ DONE -ne 1 ]]; do
-        TRAIN_ONLY=${TRAIN_ONLY} SAMPLES_DIR=${SAMPLES_DIR} make -C ${APP_DIR} autotune | tee -a ${OUTPUT_FILE}
+    if [[ $PREDICT_ONLY != 1 ]]; then
+        while [[ DONE -ne 1 ]]; do
+            TRAIN_ONLY=${TRAIN_ONLY} SAMPLES_DIR=${SAMPLES_DIR} make -C ${APP_DIR} autotune | tee -a ${OUTPUT_FILE}
 
-        if [[ $ITERATION -ge $MAX_ITERATIONS ]]; then
-            break
-        fi
+            if [[ $ITERATION -ge $MAX_ITERATIONS ]]; then
+                break
+            fi
 
-        ITERATION=$((ITERATION + 1))
-    done
+            ITERATION=$((ITERATION + 1))
+        done
+    fi
 
     WEIGHTS_FILE="${SAMPLES_DIR}/updated.weights"
     predict_all ${HALIDE_ROOT} ${SAMPLES_DIR} ${WEIGHTS_FILE} ${PREDICTIONS_WITH_FILENAMES_FILE} 1
     awk -F", " '{printf("%f, %f\n", $2, $3);}' ${PREDICTIONS_WITH_FILENAMES_FILE} > ${PREDICTIONS_FILE}
+
+    find_outliers ${PREDICTIONS_WITH_FILENAMES_FILE} ${OUTLIERS_FILE}
 
     extract_best_times ${HALIDE_ROOT} ${SAMPLES_DIR} ${BEST_TIMES_FILE}
     echo "Computing average statistics..."

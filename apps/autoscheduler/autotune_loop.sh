@@ -90,7 +90,7 @@ GIT_HASH=$(git rev-parse --verify HEAD)
 if [[ $TRAIN_ONLY != 1 ]]; then
     get_timeout_cmd TIMEOUT_CMD
 else
-    echo "Train only mode ON"
+    echo "Train only mode: ON"
 fi
 
 record_command() {
@@ -267,6 +267,14 @@ benchmark_sample() {
     FNAME=$6
 
     ${AUTOSCHED_BIN}/featurization_to_sample ${D}/${FNAME}.featurization $R $P $S ${D}/${FNAME}.sample || echo "featurization_to_sample failed for ${D} (probably because benchmarking failed)"
+
+    rm ${D}/${FNAME}.a
+    rm ${D}/${FNAME}.s
+    rm ${D}/${FNAME}.featurization
+    rm ${D}/${FNAME}.stmt
+    rm ${D}/${FNAME}.h
+    rm ${D}/${FNAME}.registration.cpp
+    rm ${D}/bench
 }
 
 if [[ $BATCH_ID == 0 ]]; then
