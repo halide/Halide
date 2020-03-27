@@ -9,10 +9,10 @@ int main(int argc, char **argv) {
 
     f(x, y) = x + y;
     f(x, y) += 1;
-  
+
     g(x, y) = x - y;
     g(x, y) += 1;
-  
+
     f.compute_root();
     g.compute_root();
 
