@@ -710,6 +710,7 @@ struct State {
         Inline,
         Retile,
         Option,
+        Input,
         Parallelize
     };
     class Action {
@@ -719,6 +720,7 @@ struct State {
         unsigned option_var;
         //AHA: If this constructor is called then there is a bug in the MCTS
         Action() {}
+        Action(const Action& a):ae(a.ae), index(a.index), option_var(a.option_var) {}
         Action(ActionEnum ae_, unsigned index_) : ae(ae_), index(index_) {}
         Action(ActionEnum ae_, unsigned index_, unsigned option_var_) : ae(ae_), index(index_), option_var(option_var_) {}
         bool operator==(const Action& a) const {
@@ -739,12 +741,27 @@ struct State {
         const MachineParams &params;
        CostModel *cost_model;
 
-    WrapperState(IntrusivePtr<State> inner, unsigned numleft, const FunctionDAG &dag, const MachineParams &params, CostModel* cost_model) : inner(inner), numleft(numleft), dag(dag), params(params),
+    WrapperState(IntrusivePtr<State> other_inner, unsigned numleft, const FunctionDAG &dag, const MachineParams &params, CostModel* cost_model) :  numleft(numleft), dag(dag), params(params),
     cost_model(cost_model) {
+        inner = new State;
+        inner->parent = other_inner->parent;
+        inner->root = other_inner->root;
+        inner->cost = other_inner->cost;
+        inner->num_decisions_made = other_inner->num_decisions_made;
+        //inner->ref_count = other.inner->ref_count;
+        inner->penalized = other_inner->penalized;
+
     std::cout << "WrapperState(1)" <<inner->cost<<inner->num_decisions_made<<inner->cost_calculations<< std::endl;
     }
     // copy and assignment operators should perform a DEEP clone of the given state
     WrapperState(const WrapperState& other): inner(other.inner),numleft(other.numleft),dag(other.dag),params(other.params),cost_model(other.cost_model){
+        inner = new State;
+        inner->parent = other.inner->parent;
+        inner->root = other.inner->root;
+        inner->cost = other.inner->cost;
+        inner->num_decisions_made = other.inner->num_decisions_made;
+        //inner->ref_count = other.inner->ref_count;
+        inner->penalized = other.inner->penalized;
     std::cout << "WrapperState(2)" <<inner->cost<<inner->num_decisions_made<< inner->cost_calculations<<std::endl;
     }
     WrapperState& operator = (const WrapperState& other) = delete;
@@ -772,7 +789,7 @@ struct State {
                 inner = pair.second;
             }
         }
-        internal_assert(0);
+        //internal_assert(0);
     }
 
     // return possible actions from this state
@@ -780,6 +797,7 @@ struct State {
         std::cout << "get_actions()" << std::endl;
         std::map<Action, IntrusivePtr<State>> actions;
         inner->generate_actions(dag, params, cost_model, actions);
+        std::cout << actions.size() << std::endl;
         for(auto &pair : actions) {
             vactions.push_back(pair.first);
         }
@@ -800,7 +818,10 @@ struct State {
     const std::vector<float> evaluate() const {
         std::cout << "evaluate()" << std::endl;
         inner->calculate_cost(dag, params, cost_model, false);
+        std::cout << "calculate_evaluate()" << std::endl;
         cost_model->evaluate_costs();
+        std::cout << "evaluate_costs()" << std::endl;
+        std::cout << inner->cost << std::endl;
         return { (float)(inner->cost)}; 
     }
 
@@ -814,15 +835,25 @@ struct State {
     void generate_actions(const FunctionDAG &dag,
                            const MachineParams &params,
                            CostModel *cost_model,
-                           std::map<Action, IntrusivePtr<State>> actions) const {
+                           std::map<Action, IntrusivePtr<State>> &actions) const {
         internal_assert(root.defined() && root->is_root());
-
+        std::cout << "in_generate_actions" << std::endl;
+        std::cout << num_decisions_made << std::endl;
+        std::cout << "-------------------" << std::endl;
+        std::cout << dag.nodes.size() << std::endl;
+        std::cout << "-------------------" << std::endl;
         if (num_decisions_made == 2*(int)dag.nodes.size()) {
             return;
         }
 
         int next_node = num_decisions_made / 2;
         int phase = num_decisions_made % 2;
+        std::cout << may_subtile() << std::endl;
+        std::cout << "-------------------" << std::endl;
+        std::cout << next_node << std::endl;
+        std::cout << "-------------------" << std::endl;
+        std::cout << phase << std::endl;
+        std::cout << "-------------------" << std::endl;
 
         if (!may_subtile()) {
             // When emulating the older search space, we do all
@@ -834,6 +865,7 @@ struct State {
 
         // Enumerate all legal ways to schedule the next Func
         const FunctionDAG::Node *node = &dag.nodes[next_node];
+        std::cout << node->is_input << std::endl;
         for (const auto *e : node->outgoing_edges) {
             internal_assert(root->computes(e->consumer->node))
                 << "Partially scheduled code doesn't compute " << e->consumer->name
@@ -844,9 +876,10 @@ struct State {
             // We don't need to schedule nodes that represent inputs,
             // and there are no other decisions to be made about them
             // at this time.
-            // debug(0) << "Skipping over scheduling input node: " << node->func.name() << "\n";
+            debug(0) << "Skipping over scheduling input node: " << node->func.name() << "\n";
             auto child = make_child();
             child->num_decisions_made++;
+            actions.emplace(Action(ActionEnum::Input,0), std::move(child));
             return;
         }
 
@@ -903,6 +936,8 @@ struct State {
                     return;
                 }
             }
+        std::cout << must_inline << std::endl;
+        std::cout << "------up is must inline-------------" << std::endl;
 
             // Construct a list of plausible dimensions to vectorize
             // over. Currently all of them. TODO: Pre-prune the list
@@ -924,6 +959,8 @@ struct State {
             if (vector_dims.empty()) {
                 vector_dims.push_back(0);
             }
+        std::cout << "------herere-------------" << std::endl;
+        std::cout << num_children << std::endl;
 
             // 2) Realize it somewhere
             for (int vector_dim : vector_dims) {
@@ -1045,14 +1082,16 @@ struct State {
                 // If none of the options were acceptable, don't
                 // parallelize. This tends to happen for things like
                 // compute_root color matrices.
-                /*if (options.empty()) {
+                if (options.empty()) {
                     num_children++;
                     auto child = make_child();
                     child->num_decisions_made++;
+                    //AHA: adding again maybe for sig fault?
+                    actions.emplace(Action(ActionEnum::Option,num_children-1), std::move(child));
                     //WM: didn't create a new child here as didn't appear to be different from parent [thus consider illegal action, or could simply use identity action]
                     //accept_child(std::move(child));
                     return;
-                }*/
+                }
 
                 for (const auto &o : options) {
                     if (num_children >= 1 && (o.idle_core_wastage > 1.2 || !may_subtile())) {
@@ -1100,8 +1139,9 @@ struct State {
             }
         }
 
-
-        if (num_children == 0) {
+        std::cout << "-------------------ac size" <<actions.size()<< std::endl;
+        
+        if (num_children == 0 || actions.size()==0) {
             debug(0) << "Warning: Found no legal way to schedule "
                      << node->func.name() << " in the following State:\n";
             dump();
@@ -1554,7 +1594,7 @@ IntrusivePtr<State> optimal_mcts_schedule(FunctionDAG &dag,
     //int num_passes = (beam_size == 1) ? 1 : 5;
 
     // not sure why would I need num_passes, but keeping it just in case
-    int num_passes = 5;
+    int num_passes = 3;
 
     string cyos_str = get_env_variable("HL_CYOS");
     if (cyos_str == "1") {
@@ -1580,7 +1620,7 @@ IntrusivePtr<State> optimal_mcts_schedule(FunctionDAG &dag,
     // OPTIONAL init uct params
     uct.uct_k = 1.41421356237;//sqrt(2);
     uct.max_millis = 0;
-    uct.max_iterations = 100;
+    uct.max_iterations = 10;
     uct.simulation_depth = num_passes;
 
     for (int i = 0; i < num_passes; i++) {
@@ -1588,11 +1628,13 @@ IntrusivePtr<State> optimal_mcts_schedule(FunctionDAG &dag,
 
         // run uct mcts on current state and get best action
         action = uct.run(state);
+        std::cout << "prefinsihed pass " << i << std::endl;
 
         // apply the action to the current state
         state.apply_action(action);
         auto pass = state.inner; 
-        
+        std::cout << "finsihed pass " << i << std::endl;
+         
         tick.clear();
 
         if (aslog::aslog_level() == 0) {
