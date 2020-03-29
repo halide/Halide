@@ -94,7 +94,8 @@ void parallelize_vars_and_rvars_gpu(
     const std::vector<RVar> &rvars,
     const std::vector<int> &rvar_bounds,
     TailStrategy tail,
-    std::ostringstream &schedule_source) {
+    std::ostringstream &schedule_source,
+    bool debug = false) {
     // Find the first variable that has bounds larger or equal than 64,
     // this is our GPU thread.
     // We use 64 since it's twice the warp size, so this launches enough
@@ -128,7 +129,7 @@ void parallelize_vars_and_rvars_gpu(
     std::vector<RVar> serial_rvars;
     std::vector<RVar> r_gpu_blocks;
     std::string r_gpu_threads;
-    if (!gpu_threads.empty()) {
+    if (gpu_threads.empty()) {
         // If we can't find any GPU threads, parallelize RVars to find more parallelism
         for (int i = 0; i < (int)rvars.size(); i++) {
             if (!r_gpu_threads.empty() && rvar_bounds[i] > split_size) {
@@ -154,6 +155,59 @@ void parallelize_vars_and_rvars_gpu(
         serial_rvars = rvars;
     }
 
+    if (gpu_threads.empty() && r_gpu_threads.empty()) {
+        // If we can't find any loop large enough for a GPU thread,
+        // use the largest loop as the GPU thread.
+        int loop_size = 0;
+        int largest_loop_id = -1;
+        for (int i = 0; i < (int)vars.size(); i++) {
+            if (var_bounds[i] > loop_size) {
+                loop_size = var_bounds[i];
+                largest_loop_id = i;
+            }
+        }
+        for (int i = 0; i < (int)rvars.size(); i++) {
+            if (rvar_bounds[i] > loop_size) {
+                loop_size = rvar_bounds[i];
+                largest_loop_id = i + (int)vars.size();
+            }
+        }
+        if (largest_loop_id != -1) {
+            if (largest_loop_id < (int)vars.size()) {
+                // The largest loop is a pure variable
+                const Var &v = vars[largest_loop_id];
+                Var inner;
+                func_or_stage.split(v,
+                        v,
+                        inner,
+                        32, // warp size
+                        TailStrategy::GuardWithIf);
+                schedule_source << "    .split("
+                    << v.name() << ","
+                    << v.name() << ","
+                    << inner.name() << ","
+                    << 32 << ","
+                    << TailStrategy::GuardWithIf << ")\n";
+                gpu_threads = inner.name();
+            } else {
+                // The largest loop is a reduction variable
+                const RVar &v = rvars[largest_loop_id - (int)vars.size()];
+                RVar inner;
+                func_or_stage.split(v,
+                        v,
+                        inner,
+                        32, // warp size
+                        TailStrategy::GuardWithIf);
+                schedule_source << "    .split("
+                    << v.name() << ","
+                    << v.name() << ","
+                    << inner.name() << ","
+                    << 32 << ","
+                    << TailStrategy::GuardWithIf << ")\n";
+                r_gpu_threads = inner.name();
+            }
+        }
+    }
     // Fuse all gpu blocks into a single variable
     std::string fused_var;
     if (!gpu_blocks.empty()) {
@@ -179,6 +233,18 @@ void parallelize_vars_and_rvars_gpu(
                             << fused_rvar << ")\n";
         }
     }
+    // CUDA places rather large restriction on the second dimension of the GPU blocks, so we
+    // want to split it if it is too large
+    int rdomain_size = 1;
+    for (int b : rvar_bounds) {
+        rdomain_size *= b;
+    }
+    std::string fused_rvar2;
+    if (rdomain_size >= 65536) {
+        RVar r;
+        fused_rvar2 = r.name();
+        func_or_stage.split(RVar(fused_rvar), RVar(fused_rvar), RVar(fused_rvar2), int(std::sqrt(double(rdomain_size))));
+    }
 
     // Reorder: the order is rvars -> gpu_threads -> gpu_blocks
     std::vector<VarOrRVar> all_vars;
@@ -197,6 +263,9 @@ void parallelize_vars_and_rvars_gpu(
     }
     if (!fused_rvar.empty()) {
         all_vars.emplace_back(RVar(fused_rvar));
+    }
+    if (!fused_rvar2.empty()) {
+        all_vars.emplace_back(RVar(fused_rvar2));
     }
     // Only reorder if there's more than one variables.
     if (all_vars.size() > 1) {
@@ -229,6 +298,11 @@ void parallelize_vars_and_rvars_gpu(
                 .gpu_blocks(RVar(fused_rvar));
             schedule_source << "    .atomic()\n";
             schedule_source << "    .gpu_blocks(" << fused_rvar << ")\n";
+        }
+        if (!fused_rvar2.empty()) {
+            internal_assert(!fused_rvar.empty());
+            func_or_stage.gpu_blocks(RVar(fused_rvar2));
+            schedule_source << "    .gpu_blocks(" << fused_rvar2 << ")\n";
         }
         // Assign inner loops to GPU threads
         if (!gpu_threads.empty()) {
@@ -462,7 +536,8 @@ void parallelize_vars_and_rvars(
     const std::vector<int> &rvar_bounds,
     TailStrategy tail,
     bool is_gpu,
-    std::ostringstream &schedule_source) {
+    std::ostringstream &schedule_source,
+    bool debug = false) {
     if (is_gpu) {
         return parallelize_vars_and_rvars_gpu(
             params,
@@ -473,7 +548,8 @@ void parallelize_vars_and_rvars(
             rvars,
             rvar_bounds,
             tail,
-            schedule_source);
+            schedule_source,
+            debug);
     } else {
         return parallelize_vars_and_rvars_cpu(
             params,
@@ -496,6 +572,7 @@ void apply_schedule(const MachineParams &params,
                     const std::vector<int> &var_bounds,
                     bool is_gpu,
                     std::ostringstream &schedule_source) {
+    bool debug = func.name() == "radius_lens_0_d_def__";
     if (update_id == -1) {
         func.compute_root();
         schedule_source << func.name() << ".compute_root()\n";
@@ -719,7 +796,8 @@ void apply_schedule(const MachineParams &params,
                     rvar_bounds,
                     TailStrategy::GuardWithIf,
                     is_gpu,
-                    schedule_source);
+                    schedule_source,
+                    debug);
             } else {
                 // Fall back to pure var parallelization
                 schedule_source << func.name() << ".update(" << update_id << ")\n";
