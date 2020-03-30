@@ -169,6 +169,7 @@ tests(GROUPS correctness travis
         inverse.cpp
         isnan.cpp
         issue_3926.cpp
+        issue_4297.cpp
         iterate_over_circle.cpp
         lambda.cpp
         lazy_convolution.cpp
