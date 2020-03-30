@@ -297,13 +297,15 @@ struct LoopNest {
 
     void compute_num_global_mem_accesses_per_block(const LoadJacobian& jac, const FunctionDAG::Node* node, const Bound& store_bounds, const ThreadInfo& thread_info, int innermost_dim, double serial_loop_extents, double access_count, GlobalMemInfo& global_mem_info, const LoopNest& root) const;
 
-    double compute_local_mem_store_features(const LoadJacobian& jac, int consumer_innermost_dim, const FunctionDAG::Node* node, const Bound& consumer_store_bounds, const LoopNest& root) const;
+    std::pair<double, double> compute_local_mem_store_features(const LoadJacobian& jac, int consumer_innermost_dim, const FunctionDAG::Node* node, const Bound& consumer_store_bounds, const LoopNest& root, double serial_loop_extents) const;
 
     GlobalMemInfo compute_global_mem_store_features(const LoadJacobian& jac, int consumer_innermost_dim, const FunctionDAG::Node* node, const Bound& consumer_store_bounds, const ThreadInfo& thread_info, double serial_loop_extents, double store_count, const LoopNest& root) const;
 
     void compute_global_mem_load_features(const LoadJacobian& jac, int producer_innermost_dim, const FunctionDAG::Node* node, const Bound& producer_store_bounds, bool producer_has_been_scheduled, const ThreadInfo& thread_info, GlobalMemInfo& global_mem_info, double serial_loop_extents, double load_count, const LoopNest& root) const;
 
-    void compute_local_mem_load_features(const LoadJacobian& jac, int producer_innermost_dim, const FunctionDAG::Node* node, const Bound& producer_store_bounds, bool producer_has_been_scheduled, LocalMemInfo& local_mem_info, const LoopNest& root) const;
+    double compute_local_mem_stride(double stride, double bytes) const;
+
+    void compute_local_mem_load_features(const LoadJacobian& jac, int producer_innermost_dim, const FunctionDAG::Node* node, const Bound& producer_store_bounds, bool producer_has_been_scheduled, LocalMemInfo& local_mem_info, const LoopNest& root, double serial_loop_extents) const;
 
     // Assumes block, serial, thread or block, thread nesting
     const LoopNest* get_enclosing_block(const LoopNest *parent, const LoopNest *grandparent) const;
