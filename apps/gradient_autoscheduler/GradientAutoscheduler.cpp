@@ -232,7 +232,7 @@ void parallelize_vars_and_rvars_gpu(
                             << fused_rvar << ")\n";
         }
     }
-    // CUDA places rather strict restriction on the second dimension of the GPU blocks (usually 65536), 
+    // CUDA places rather strict restriction on the second dimension of the GPU blocks (usually 65536),
     // so we want to split it if it is too large
     int rdomain_size = 1;
     for (int b : rvar_bounds) {
