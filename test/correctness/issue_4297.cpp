@@ -21,4 +21,3 @@ int main(int argc, char **argv) {
     Buffer<int> imf = f.realize(10, 10, 10, target);
     return 0;
 }
-
