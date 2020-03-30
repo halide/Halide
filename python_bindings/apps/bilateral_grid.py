@@ -9,14 +9,11 @@ import numpy as np
 import imageio
 import os.path
 
-def get_bilateral_grid(input, r_sigma, s_sigma):
+def get_bilateral_grid(input, r_sigma, s_sigma, aot=False):
     x = hl.Var('x')
     y = hl.Var('y')
     z = hl.Var('z')
     c = hl.Var('c')
-    xi = hl.Var("xi")
-    yi = hl.Var("yi")
-    zi = hl.Var("zi")
 
     # Add a boundary condition
     clamped = hl.BoundaryConditions.repeat_edge(input)
@@ -57,19 +54,25 @@ def get_bilateral_grid(input, r_sigma, s_sigma):
     bilateral_grid = hl.Func('bilateral_grid')
     bilateral_grid[x, y] = interpolated[x, y, 0] / interpolated[x, y, 1]
 
-    target = hl.get_target_from_environment()
+    if aot:
+        target = hl.get_target_from_environment()
+    else:
+        target = hl.get_jit_target_from_environment()
     if target.has_gpu_feature():
         # GPU schedule
         # Currently running this directly from the Python code is very slow.
         # Probably because of the dispatch time because generated code
         # is same speed as C++ generated code.
         print ("Compiling for GPU.")
-        histogram.compute_root().reorder(c, z, x, y).gpu_tile(x, y, 8, 8);
-        histogram.update().reorder(c, r.x, r.y, x, y).gpu_tile(x, y, xi, yi, 8, 8).unroll(c)
-        blurx.compute_root().gpu_tile(x, y, z, xi, yi, zi, 16, 16, 1)
-        blury.compute_root().gpu_tile(x, y, z, xi, yi, zi, 16, 16, 1)
-        blurz.compute_root().gpu_tile(x, y, z, xi, yi, zi, 8, 8, 4)
-        bilateral_grid.compute_root().gpu_tile(x, y, xi, yi, s_sigma, s_sigma)
+        xb = hl.Var('xb')
+        yb = hl.Var('yb')
+        zb = hl.Var('zb')
+        histogram.compute_root().reorder(c, z, x, y).gpu_tile(x, y, xb, yb, 8, 8);
+        histogram.update().reorder(c, r.x, r.y, x, y).gpu_tile(x, y, xb, yb, 8, 8).unroll(c)
+        blurx.compute_root().gpu_tile(x, y, z, xb, yb, zb, 16, 16, 1)
+        blury.compute_root().gpu_tile(x, y, z, xb, yb, zb, 16, 16, 1)
+        blurz.compute_root().gpu_tile(x, y, z, xb, yb, zb, 8, 8, 4)
+        bilateral_grid.compute_root().gpu_tile(x, y, xb, yb, s_sigma, s_sigma)
     else:
         # CPU schedule
         print ("Compiling for CPU.")
@@ -143,11 +146,12 @@ def main():
     r_sigma = hl.Param(hl.Float(32), 'r_sigma', 0.1) # Value needed if not generating an executable
     s_sigma = 8 # This is passed during code generation in the C++ version
 
-    bilateral_grid = get_bilateral_grid(input, r_sigma, s_sigma)
 
     # Set `generate` to False to run the jit immediately and get  instant gratification.
     #generate = True
     generate = False
+
+    bilateral_grid = get_bilateral_grid(input, r_sigma, s_sigma, aot=generate)
     if generate:
         generate_compiled_file(bilateral_grid)
     else:
