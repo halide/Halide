@@ -75,13 +75,9 @@ private:
 };
 
 struct LocalMemInfo {
-    void add_stride(double stride) {
-        if (stride == 0) {
-            return;
-        }
-
-        total_stride += std::min(32.0, std::max(1.0, stride));
-        ++num_entries;
+    void add_access(double num_accesses, double stride) {
+        total_accesses += num_accesses;
+        add_stride(stride);
     }
 
     double average_efficiency() const {
@@ -91,7 +87,18 @@ struct LocalMemInfo {
         return 1.0 / (total_stride / num_entries);
     }
 
+    double total_accesses = 0;
+
 private:
+    void add_stride(double stride) {
+        if (stride == 0) {
+            return;
+        }
+
+        total_stride += std::min(32.0, std::max(1.0, stride));
+        ++num_entries;
+    }
+
     int num_entries = 0;
     double total_stride = 0;
 };

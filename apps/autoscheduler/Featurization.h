@@ -326,9 +326,11 @@ struct ScheduleFeatures {
     double num_shared_mem_loads = 0;
     double num_shared_mem_loads_per_block = 0;
     double num_global_mem_loads_per_block = 0;
+    double num_local_mem_loads_per_thread = 0;
     double num_shared_mem_stores = 0;
     double num_shared_mem_stores_per_block = 0;
     double num_global_mem_stores_per_block = 0;
+    double num_local_mem_stores_per_thread = 0;
 
     double shared_mem_store_efficiency = 1;
     double shared_mem_load_efficiency = 1;
@@ -407,9 +409,11 @@ struct ScheduleFeatures {
             << "    num_shared_mem_loads:                  " << num_shared_mem_loads << '\n'
             << "    num_shared_mem_loads_per_block:        " << num_shared_mem_loads_per_block << '\n'
             << "    num_global_mem_loads_per_block:        " << num_global_mem_loads_per_block << '\n'
+            << "    num_local_mem_loads_per_thread:        " << num_local_mem_loads_per_thread << '\n'
             << "    num_shared_mem_stores:                 " << num_shared_mem_stores << '\n'
             << "    num_shared_mem_stores_per_block:       " << num_shared_mem_stores_per_block << '\n'
             << "    num_global_mem_stores_per_block:       " << num_global_mem_stores_per_block << '\n'
+            << "    num_local_mem_stores_per_thread:       " << num_local_mem_stores_per_thread << '\n'
             << "    shared_mem_store_efficiency:           " << shared_mem_store_efficiency << '\n'
             << "    shared_mem_load_efficiency:            " << shared_mem_load_efficiency << '\n'
             << "    global_mem_store_efficiency:           " << global_mem_store_efficiency << '\n'
@@ -486,9 +490,11 @@ struct ScheduleFeatures {
             && num_shared_mem_loads                  == other.num_shared_mem_loads
             && num_shared_mem_loads_per_block        == other.num_shared_mem_loads_per_block
             && num_global_mem_loads_per_block        == other.num_global_mem_loads_per_block
+            && num_local_mem_loads_per_thread        == other.num_local_mem_loads_per_thread
             && num_shared_mem_stores                 == other.num_shared_mem_stores
             && num_shared_mem_stores_per_block       == other.num_shared_mem_stores_per_block
             && num_global_mem_stores_per_block       == other.num_global_mem_stores_per_block
+            && num_local_mem_stores_per_thread       == other.num_local_mem_stores_per_thread
             && shared_mem_store_efficiency           == other.shared_mem_store_efficiency
             && shared_mem_load_efficiency            == other.shared_mem_load_efficiency
             && global_mem_store_efficiency           == other.global_mem_store_efficiency
