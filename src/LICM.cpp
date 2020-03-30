@@ -37,15 +37,22 @@ class CanLift : public IRVisitor {
         if (varying.contains(op->name)) {
             result = false;
         }
+        if (before_bounds_inference) {
+            if (ends_with(op->name, ".min") ||
+                    ends_with(op->name, ".max")) {
+                result = false;
+            }
+        }
     }
 
     const Scope<> &varying;
+    bool before_bounds_inference;
 
 public:
     bool result{true};
 
-    CanLift(const Scope<> &v)
-        : varying(v) {
+    CanLift(const Scope<> &v, bool before_bounds_inference)
+        : varying(v), before_bounds_inference(before_bounds_inference) {
     }
 };
 
@@ -54,10 +61,11 @@ public:
 class LiftLoopInvariants : public IRMutator {
     using IRMutator::visit;
 
+    const bool before_bounds_inference;
     Scope<> varying;
 
     bool can_lift(const Expr &e) {
-        CanLift check(varying);
+        CanLift check(varying, before_bounds_inference);
         e.accept(&check);
         return check.result;
     }
@@ -127,6 +135,9 @@ class LiftLoopInvariants : public IRMutator {
 public:
     using IRMutator::mutate;
 
+    LiftLoopInvariants(bool before_bounds_inference)
+        : before_bounds_inference(before_bounds_inference) {}
+
     Expr mutate(const Expr &e) override {
         if (should_lift(e)) {
             // Lift it in canonical form
@@ -173,7 +184,12 @@ class SubstituteTrivialLets : public IRMutator {
 class LICM : public IRMutator {
     using IRMutator::visit;
 
-    const bool always_lift;
+    // If before_bounds_inference==true, 
+    // do the following two things:
+    // 1) freeze the bound variables (with name ".min" & ".max")
+    // 2) don't substitute back variables based on the cost function,
+    //    always lift
+    const bool before_bounds_inference;
     bool in_gpu_loop{false};
 
     // Compute the cost of computing an expression inside the inner
@@ -223,7 +239,7 @@ class LICM : public IRMutator {
         } else {
 
             // Lift invariants
-            LiftLoopInvariants lifter;
+            LiftLoopInvariants lifter(before_bounds_inference);
             Stmt new_stmt = lifter.mutate(op);
             new_stmt = SubstituteTrivialLets().mutate(new_stmt);
 
@@ -255,7 +271,7 @@ class LICM : public IRMutator {
                 dummy_call = let->body;
             }
 
-            if (!always_lift) {
+            if (!before_bounds_inference) {
                 // Use a cost function to decide whether to substitute
                 // let variables back
 
@@ -339,8 +355,8 @@ class LICM : public IRMutator {
     }
 
 public:
-    LICM(bool always_lift)
-        : always_lift(always_lift) {
+    LICM(bool before_bounds_inference)
+        : before_bounds_inference(before_bounds_inference) {
     }
 };
 
@@ -525,10 +541,10 @@ class GroupLoopInvariants : public IRMutator {
     }
 };
 
-Stmt loop_invariant_code_motion(Stmt s, bool always_lift) {
+Stmt loop_invariant_code_motion(Stmt s, bool before_bounds_inference) {
     s = GroupLoopInvariants().mutate(s);
     s = common_subexpression_elimination(s);
-    s = LICM(always_lift).mutate(s);
+    s = LICM(before_bounds_inference).mutate(s);
     s = simplify_exprs(s);
     return s;
 }

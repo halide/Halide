@@ -14,9 +14,10 @@ namespace Internal {
  * This is especially important in cases where LLVM would not do it for us
  * automatically. For example, it hoists loop invariants out of cuda
  * kernels. By default it uses a heuristic cost function to decide
- * which variable to hoist out. If always_lift is set to false
- * all loop invariant variables are lifted out.*/
-Stmt loop_invariant_code_motion(Stmt, bool always_lift = false);
+ * which variable to hoist out. If before_bounds_inference is set to
+ * true, extra care is taken for bound inference variables that have
+ * dangling references. */
+Stmt loop_invariant_code_motion(Stmt, bool before_bounds_inference = false);
 
 }  // namespace Internal
 }  // namespace Halide
