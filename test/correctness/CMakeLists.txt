@@ -169,6 +169,7 @@ tests(GROUPS correctness travis
         inverse.cpp
         isnan.cpp
         issue_3926.cpp
+        issue_4297.cpp
         iterate_over_circle.cpp
         lambda.cpp
         lazy_convolution.cpp
@@ -177,6 +178,7 @@ tests(GROUPS correctness travis
         legal_race_condition.cpp
         lerp.cpp
         let_in_rdom_bound.cpp
+        lift_condition.cpp
         likely.cpp
         load_library.cpp
         logical.cpp
