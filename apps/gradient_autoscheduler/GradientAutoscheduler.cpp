@@ -99,7 +99,8 @@ void parallelize_vars_and_rvars_gpu(
     // this is our GPU thread.
     // We use 64 since it's twice the warp size, so this launches enough
     // GPU threads for a block to be work efficient.
-    constexpr int split_size = 64;
+    constexpr int warp_size = 32;
+    constexpr int split_size = 2 * warp_size;
     std::vector<Var> gpu_blocks;
     std::string gpu_threads;
     int gpu_thread_dim = -1;
@@ -155,8 +156,8 @@ void parallelize_vars_and_rvars_gpu(
     }
 
     if (gpu_threads.empty() && r_gpu_threads.empty()) {
-        // If we can't find any loop large enough for a GPU thread,
-        // use the largest loop as the GPU thread.
+        // If we didn't assign any GPU threads in the previous
+        // process, use the largest loop as the GPU thread.
         int loop_size = 0;
         int largest_loop_id = -1;
         for (int i = 0; i < (int)vars.size(); i++) {
@@ -179,13 +180,13 @@ void parallelize_vars_and_rvars_gpu(
                 func_or_stage.split(v,
                                     v,
                                     inner,
-                                    32,  // warp size
+                                    warp_size,
                                     TailStrategy::GuardWithIf);
                 schedule_source << "    .split("
                                 << v.name() << ","
                                 << v.name() << ","
                                 << inner.name() << ","
-                                << 32 << ","
+                                << warp_size << ","
                                 << TailStrategy::GuardWithIf << ")\n";
                 gpu_threads = inner.name();
             } else {
@@ -195,13 +196,13 @@ void parallelize_vars_and_rvars_gpu(
                 func_or_stage.split(v,
                                     v,
                                     inner,
-                                    32,  // warp size
+                                    warp_size,
                                     TailStrategy::GuardWithIf);
                 schedule_source << "    .split("
                                 << v.name() << ","
                                 << v.name() << ","
                                 << inner.name() << ","
-                                << 32 << ","
+                                << warp_size << ","
                                 << TailStrategy::GuardWithIf << ")\n";
                 r_gpu_threads = inner.name();
             }
@@ -239,7 +240,9 @@ void parallelize_vars_and_rvars_gpu(
         rdomain_size *= b;
     }
     std::string fused_rvar2;
-    if (rdomain_size >= 65536) {
+    // CUDA supports up to 65536 blocks in the second and third dimensions
+    constexpr int cuda_gpu_block_split = 65536;
+    if (rdomain_size >= cuda_gpu_block_split) {
         RVar r;
         fused_rvar2 = r.name();
         func_or_stage.split(RVar(fused_rvar), RVar(fused_rvar), RVar(fused_rvar2), int(std::sqrt(double(rdomain_size))));
