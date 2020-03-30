@@ -140,7 +140,7 @@ Stmt build_loop_nest(
     // Order the Ifs, Fors, and Lets for bounds inference
     // to generate tighter bounds and put the bound variables
     // in the right place.
-    
+
     // All containing lets and fors. Outermost first.
     vector<Container> nest;
     nest.reserve(stage_s.dims().size());
