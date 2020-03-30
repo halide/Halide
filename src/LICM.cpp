@@ -266,7 +266,7 @@ class LICM : public IRMutator {
                         vars.insert(op->name);
                     }
 
-                    public:
+                public:
                     set<string> vars;
                 } vars;
                 new_stmt.accept(&vars);
@@ -339,8 +339,9 @@ class LICM : public IRMutator {
     }
 
 public:
-
-    LICM(bool always_lift) : always_lift(always_lift) {}
+    LICM(bool always_lift)
+        : always_lift(always_lift) {
+    }
 };
 
 // Reassociate summations to group together the loop invariants. Useful to run before LICM.
