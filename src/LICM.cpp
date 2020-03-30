@@ -39,7 +39,7 @@ class CanLift : public IRVisitor {
         }
         if (before_bounds_inference) {
             if (ends_with(op->name, ".min") ||
-                    ends_with(op->name, ".max")) {
+                ends_with(op->name, ".max")) {
                 result = false;
             }
         }
@@ -136,7 +136,8 @@ public:
     using IRMutator::mutate;
 
     LiftLoopInvariants(bool before_bounds_inference)
-        : before_bounds_inference(before_bounds_inference) {}
+        : before_bounds_inference(before_bounds_inference) {
+    }
 
     Expr mutate(const Expr &e) override {
         if (should_lift(e)) {
@@ -184,7 +185,7 @@ class SubstituteTrivialLets : public IRMutator {
 class LICM : public IRMutator {
     using IRMutator::visit;
 
-    // If before_bounds_inference==true, 
+    // If before_bounds_inference==true,
     // do the following two things:
     // 1) freeze the bound variables (with name ".min" & ".max")
     // 2) don't substitute back variables based on the cost function,

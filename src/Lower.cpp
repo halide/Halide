@@ -133,7 +133,7 @@ Module lower(const vector<Function> &output_funcs,
              << s << "\n";
 
     debug(1) << "Lifting loop invariant variables and conditions outside of the initial loop nests...\n";
-    s = loop_invariant_code_motion(s, true /* always_lift */);
+    s = loop_invariant_code_motion(s, true /* before_bounds_inference */);
     debug(2) << "Lowering after lifting variables and conditions outside:\n"
              << s << "\n";
 
