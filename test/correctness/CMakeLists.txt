@@ -117,6 +117,7 @@ tests(GROUPS correctness travis
         gpu_allocation_cache.cpp
         gpu_assertion_in_kernel.cpp
         gpu_bounds_inference_failure.cpp
+        gpu_condition_lifting.cpp
         gpu_cpu_simultaneous_read.cpp
         gpu_data_flows.cpp
         gpu_different_blocks_threads_dimensions.cpp
@@ -169,7 +170,6 @@ tests(GROUPS correctness travis
         inverse.cpp
         isnan.cpp
         issue_3926.cpp
-        issue_4297.cpp
         iterate_over_circle.cpp
         lambda.cpp
         lazy_convolution.cpp
