@@ -130,6 +130,7 @@ def filter_test_image(bilateral_grid, input):
 
     # do the actual computation
     bilateral_grid.realize(output_image)
+    output_image.copy_to_host()
 
     # save results
     input_path = "bilateral_grid_input.png"
