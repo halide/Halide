@@ -173,6 +173,7 @@ class SubstituteTrivialLets : public IRMutator {
 class LICM : public IRMutator {
     using IRMutator::visit;
 
+    const bool always_lift;
     bool in_gpu_loop{false};
 
     // Compute the cost of computing an expression inside the inner
@@ -254,47 +255,71 @@ class LICM : public IRMutator {
                 dummy_call = let->body;
             }
 
-            // Track the set of variables used by the inner loop
-            class CollectVars : public IRVisitor {
-                using IRVisitor::visit;
-                void visit(const Variable *op) override {
-                    vars.insert(op->name);
-                }
+            if (!always_lift) {
+                // Use a cost function to decide whether to substitute
+                // let variables back
 
-            public:
-                set<string> vars;
-            } vars;
-            new_stmt.accept(&vars);
-
-            // Now consider substituting back in each use
-            const Call *call = dummy_call.as<Call>();
-            internal_assert(call);
-            bool converged;
-            do {
-                converged = true;
-                for (size_t i = 0; i < exprs.size(); i++) {
-                    if (!exprs[i].defined()) continue;
-                    Expr e = call->args[i];
-                    if (cost(e, vars.vars) <= 1) {
-                        // Just subs it back in - computing it is as cheap
-                        // as loading it.
-                        e.accept(&vars);
-                        new_stmt = substitute(names[i], e, new_stmt);
-                        names[i].clear();
-                        exprs[i] = Expr();
-                        converged = false;
-                    } else {
-                        exprs[i] = e;
+                // Track the set of variables used by the inner loop
+                class CollectVars : public IRVisitor {
+                    using IRVisitor::visit;
+                    void visit(const Variable *op) override {
+                        vars.insert(op->name);
                     }
-                }
-            } while (!converged);
+
+                    public:
+                    set<string> vars;
+                } vars;
+                new_stmt.accept(&vars);
+
+                // Now consider substituting back in each use
+                const Call *call = dummy_call.as<Call>();
+                internal_assert(call);
+                bool converged;
+                do {
+                    converged = true;
+                    for (size_t i = 0; i < exprs.size(); i++) {
+                        if (!exprs[i].defined()) continue;
+                        Expr e = call->args[i];
+                        if (cost(e, vars.vars) <= 1) {
+                            // Just subs it back in - computing it is as cheap
+                            // as loading it.
+                            e.accept(&vars);
+                            new_stmt = substitute(names[i], e, new_stmt);
+                            names[i].clear();
+                            exprs[i] = Expr();
+                            converged = false;
+                        } else {
+                            exprs[i] = e;
+                        }
+                    }
+                } while (!converged);
+            }
 
             // Recurse
             const For *loop = new_stmt.as<For>();
             internal_assert(loop);
+            Stmt new_body = mutate(loop->body);
+
+            // Lift loop invariant conditional statement without else clause outside of the loop
+            vector<Expr> if_conditions;
+            const IfThenElse *if_statement = new_body.as<IfThenElse>();
+            while (if_statement != nullptr) {
+                if (!if_statement->else_case.defined() && !expr_uses_var(if_statement->condition, loop->name)) {
+                    if_conditions.push_back(if_statement->condition);
+                    new_body = if_statement->then_case;
+                    if_statement = new_body.as<IfThenElse>();
+                } else {
+                    if_statement = nullptr;
+                }
+            }
 
             new_stmt = For::make(loop->name, loop->min, loop->extent,
-                                 loop->for_type, loop->device_api, mutate(loop->body));
+                                 loop->for_type, loop->device_api, new_body);
+
+            // Wrap the if statements back
+            for (auto it = if_conditions.rbegin(); it != if_conditions.rend(); it++) {
+                new_stmt = IfThenElse::make(*it, new_stmt, Stmt());
+            }
 
             // Wrap lets for the lifted invariants
             for (size_t i = 0; i < exprs.size(); i++) {
@@ -312,6 +337,10 @@ class LICM : public IRMutator {
             return new_stmt;
         }
     }
+
+public:
+
+    LICM(bool always_lift) : always_lift(always_lift) {}
 };
 
 // Reassociate summations to group together the loop invariants. Useful to run before LICM.
@@ -495,10 +524,10 @@ class GroupLoopInvariants : public IRMutator {
     }
 };
 
-Stmt loop_invariant_code_motion(Stmt s) {
+Stmt loop_invariant_code_motion(Stmt s, bool always_lift) {
     s = GroupLoopInvariants().mutate(s);
     s = common_subexpression_elimination(s);
-    s = LICM().mutate(s);
+    s = LICM(always_lift).mutate(s);
     s = simplify_exprs(s);
     return s;
 }

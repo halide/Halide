@@ -184,81 +184,8 @@ Stmt build_loop_nest(
         pred = qualify(prefix, pred);
         pred_container.emplace_back(Container::If, 0, "", likely(pred));
     }
-    int n_predicates = (int)(pred_container.size());
 
     nest.insert(nest.end(), pred_container.begin(), pred_container.end());
-
-    // Resort the containers vector so that lets are as far outwards
-    // as possible. Use reverse insertion sort. Start at the first letstmt.
-    for (int i = (int)stage_s.dims().size(); i < (int)nest.size() - n_predicates_inner - n_predicates; i++) {
-        // Only push up LetStmts.
-        internal_assert(nest[i].value.defined());
-        internal_assert(nest[i].type == Container::Let);
-
-        for (int j = i - 1; j >= 0; j--) {
-            // Try to push it up by one.
-            internal_assert(nest[j + 1].value.defined());
-            if (!expr_uses_var(nest[j + 1].value, nest[j].name)) {
-                std::swap(nest[j + 1], nest[j]);
-            } else {
-                break;
-            }
-        }
-    }
-
-    // Sort the predicate guards for the fused loops so they are as far outwards
-    // as possible. IfInnner should not be reordered to outside of a for loop.
-    for (int i = (int)nest.size() - n_predicates_inner - n_predicates; i < (int)nest.size() - n_predicates; i++) {
-        // Only push up IfThenElse.
-        internal_assert(nest[i].value.defined());
-        internal_assert(nest[i].type == Container::IfInner);
-
-        // Cannot lift out the predicate guard if it contains call to non-pure function
-        if (contains_impure_call(nest[i].value)) {
-            continue;
-        }
-
-        for (int j = i - 1; j >= 0; j--) {
-            // Try to push it up by one.
-            internal_assert(nest[j + 1].value.defined());
-
-            if (!expr_uses_var(nest[j + 1].value, nest[j].name) &&
-                (nest[j].type != Container::For)) {
-                std::swap(nest[j + 1], nest[j]);
-            } else {
-                break;
-            }
-        }
-    }
-
-    // Sort the ifs so they are as far outwards as possible.
-    // BoxesTouched trims the domain of a variable within a scope of if-then-else
-    // based on the likely condition. However, it doesn't do it transitively; it
-    // doesn't trim the domains of other variables that directly/indirectly
-    // depend on the original variable in the likely condition outside the scope
-    // of the if-then-else. That's why it's necessary to move the ifs as far
-    // outwards as possible, so that those variables can have tighter bounds.
-    for (int i = (int)nest.size() - n_predicates; i < (int)nest.size(); i++) {
-        // Only push up IfThenElse.
-        internal_assert(nest[i].value.defined());
-        internal_assert(nest[i].type == Container::If);
-
-        // Cannot lift out the 'if' if it contains call to non-pure function
-        if (contains_impure_call(nest[i].value)) {
-            continue;
-        }
-
-        for (int j = i - 1; j >= 0; j--) {
-            // Try to push it up by one.
-            internal_assert(nest[j + 1].value.defined());
-
-            if (!expr_uses_var(nest[j + 1].value, nest[j].name)) {
-                std::swap(nest[j + 1], nest[j]);
-            } else {
-                break;
-            }
-        }
-    }
 
     // Rewrap the statement in the containing lets and fors.
     for (int i = (int)nest.size() - 1; i >= 0; i--) {
