@@ -178,32 +178,32 @@ void parallelize_vars_and_rvars_gpu(
                 const Var &v = vars[largest_loop_id];
                 Var inner;
                 func_or_stage.split(v,
-                        v,
-                        inner,
-                        32, // warp size
-                        TailStrategy::GuardWithIf);
+                                    v,
+                                    inner,
+                                    32,  // warp size
+                                    TailStrategy::GuardWithIf);
                 schedule_source << "    .split("
-                    << v.name() << ","
-                    << v.name() << ","
-                    << inner.name() << ","
-                    << 32 << ","
-                    << TailStrategy::GuardWithIf << ")\n";
+                                << v.name() << ","
+                                << v.name() << ","
+                                << inner.name() << ","
+                                << 32 << ","
+                                << TailStrategy::GuardWithIf << ")\n";
                 gpu_threads = inner.name();
             } else {
                 // The largest loop is a reduction variable
                 const RVar &v = rvars[largest_loop_id - (int)vars.size()];
                 RVar inner;
                 func_or_stage.split(v,
-                        v,
-                        inner,
-                        32, // warp size
-                        TailStrategy::GuardWithIf);
+                                    v,
+                                    inner,
+                                    32,  // warp size
+                                    TailStrategy::GuardWithIf);
                 schedule_source << "    .split("
-                    << v.name() << ","
-                    << v.name() << ","
-                    << inner.name() << ","
-                    << 32 << ","
-                    << TailStrategy::GuardWithIf << ")\n";
+                                << v.name() << ","
+                                << v.name() << ","
+                                << inner.name() << ","
+                                << 32 << ","
+                                << TailStrategy::GuardWithIf << ")\n";
                 r_gpu_threads = inner.name();
             }
         }
