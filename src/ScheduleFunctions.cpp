@@ -165,7 +165,6 @@ Stmt build_loop_nest(
     // removed later anyway. These have to be added as outermost as possible as
     // some let stmts (e.g. the rebase let stmt) might depend on this vars;
     // otherwise, this may mess up the bounds_touched computation.
-    int n_predicates_inner = 0;
     for (int i = start_fuse; (i >= 0) && (i < (int)stage_s.dims().size() - 1); ++i) {
         string dim_var = prefix + stage_s.dims()[i].var;
         Expr var = Variable::make(Int(32), dim_var);
@@ -176,7 +175,6 @@ Stmt build_loop_nest(
         // value depends on 'var'.
         nest.emplace_back(Container::IfInner, 0, dim_var, likely(var >= min));
         nest.emplace_back(Container::IfInner, 0, dim_var, likely(var <= max));
-        n_predicates_inner += 2;
     }
 
     // Put all the reduction domain predicates into the containers vector.
