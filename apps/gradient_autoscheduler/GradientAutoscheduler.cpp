@@ -94,8 +94,7 @@ void parallelize_vars_and_rvars_gpu(
     const std::vector<RVar> &rvars,
     const std::vector<int> &rvar_bounds,
     TailStrategy tail,
-    std::ostringstream &schedule_source,
-    bool debug = false) {
+    std::ostringstream &schedule_source) {
     // Find the first variable that has bounds larger or equal than 64,
     // this is our GPU thread.
     // We use 64 since it's twice the warp size, so this launches enough
@@ -536,8 +535,7 @@ void parallelize_vars_and_rvars(
     const std::vector<int> &rvar_bounds,
     TailStrategy tail,
     bool is_gpu,
-    std::ostringstream &schedule_source,
-    bool debug = false) {
+    std::ostringstream &schedule_source) {
     if (is_gpu) {
         return parallelize_vars_and_rvars_gpu(
             params,
@@ -548,8 +546,7 @@ void parallelize_vars_and_rvars(
             rvars,
             rvar_bounds,
             tail,
-            schedule_source,
-            debug);
+            schedule_source);
     } else {
         return parallelize_vars_and_rvars_cpu(
             params,
@@ -572,7 +569,6 @@ void apply_schedule(const MachineParams &params,
                     const std::vector<int> &var_bounds,
                     bool is_gpu,
                     std::ostringstream &schedule_source) {
-    bool debug = func.name() == "radius_lens_0_d_def__";
     if (update_id == -1) {
         func.compute_root();
         schedule_source << func.name() << ".compute_root()\n";
@@ -796,8 +792,7 @@ void apply_schedule(const MachineParams &params,
                     rvar_bounds,
                     TailStrategy::GuardWithIf,
                     is_gpu,
-                    schedule_source,
-                    debug);
+                    schedule_source);
             } else {
                 // Fall back to pure var parallelization
                 schedule_source << func.name() << ".update(" << update_id << ")\n";
