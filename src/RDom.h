@@ -6,7 +6,9 @@
  * variables.
  */
 
-#include "IR.h"
+#include "Expr.h"
+#include "Reduction.h"
+#include "Util.h"
 
 #include <utility>
 #include <vector>

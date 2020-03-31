@@ -8,8 +8,8 @@
 
 #include <map>
 
-#include "IR.h"
-#include "Schedule.h"
+#include "Expr.h"
+#include "Schedule.h"  // for PrefetchDirective
 #include "Target.h"
 
 namespace Halide {

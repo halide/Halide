@@ -7,7 +7,7 @@
  * scalar parameters.
  */
 
-#include "IR.h"
+#include "Expr.h"  // IR.h
 
 namespace Halide {
 

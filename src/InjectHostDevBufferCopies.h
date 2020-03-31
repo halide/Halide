@@ -5,7 +5,7 @@
  * Defines the lowering passes that deal with host and device buffer flow.
  */
 
-#include "IR.h"
+#include "Expr.h"  // IR.h
 #include "Target.h"
 
 namespace Halide {

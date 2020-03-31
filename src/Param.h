@@ -4,7 +4,8 @@
 #include <type_traits>
 
 #include "Argument.h"
-#include "IR.h"
+#include "Expr.h"
+#include "Parameter.h"
 
 /** \file
  *

@@ -5,7 +5,7 @@
  * Methods to test Exprs and Stmts for equality of value
  */
 
-#include "IR.h"
+#include "Expr.h"  // IR.h
 
 namespace Halide {
 namespace Internal {

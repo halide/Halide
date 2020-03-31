@@ -6,7 +6,7 @@
  */
 
 #include "Bounds.h"
-#include "IR.h"
+#include "Expr.h"
 #include "ModulusRemainder.h"
 
 namespace Halide {

@@ -14,7 +14,7 @@
 #include "CodeGen_WebAssembly.h"
 #include "CodeGen_X86.h"
 
-#include "IR.h"
+#include "Expr.h"  // IR.h
 
 namespace Halide {
 namespace Internal {

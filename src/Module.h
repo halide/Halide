@@ -13,7 +13,7 @@
 
 #include "Argument.h"
 #include "ExternalCode.h"
-#include "IR.h"
+#include "Expr.h"
 #include "ModulusRemainder.h"
 #include "Target.h"
 

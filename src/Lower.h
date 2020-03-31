@@ -10,7 +10,7 @@
 #include <iterator>
 
 #include "Argument.h"
-#include "IR.h"
+#include "Expr.h"
 #include "Module.h"
 #include "Target.h"
 

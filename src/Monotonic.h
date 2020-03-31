@@ -6,7 +6,7 @@
  * Methods for computing whether expressions are monotonic
  */
 
-#include "IR.h"
+#include "Expr.h"
 #include "Scope.h"
 
 namespace Halide {

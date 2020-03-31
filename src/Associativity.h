@@ -8,7 +8,7 @@
  */
 
 #include "AssociativeOpsTable.h"
-#include "IR.h"
+#include "Expr.h"  // IR.h
 #include "IREquality.h"
 
 #include <functional>

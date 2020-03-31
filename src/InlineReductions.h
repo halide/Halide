@@ -1,7 +1,7 @@
 #ifndef HALIDE_INLINE_REDUCTIONS_H
 #define HALIDE_INLINE_REDUCTIONS_H
 
-#include "IR.h"
+#include "Expr.h"  // IR.h
 #include "RDom.h"
 #include "Tuple.h"
 

@@ -6,6 +6,7 @@
  * and the regions of a function read or written by a statement.
  */
 
+#include "Function.h"
 #include "IROperator.h"
 #include "Interval.h"
 #include "Scope.h"

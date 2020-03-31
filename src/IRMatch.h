@@ -5,7 +5,7 @@
  * Defines a method to match a fragment of IR against a pattern containing wildcards
  */
 
-#include "IR.h"
+#include "Expr.h"
 #include "IREquality.h"
 #include "IROperator.h"
 

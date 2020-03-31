@@ -8,7 +8,7 @@
 #include <map>
 
 #include "Bounds.h"
-#include "IR.h"
+#include "Expr.h"  // IR.h
 #include "Target.h"
 
 namespace Halide {

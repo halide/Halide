@@ -6,7 +6,7 @@
  * A simple function to get a C++ mangled function name for a function.
  */
 
-#include "IR.h"
+#include "Expr.h"  // IR.h
 #include "Target.h"
 #include <string>
 

@@ -5,7 +5,7 @@
  * Defines the lowering pass that coalesces redundant let statements
  */
 
-#include "IR.h"
+#include "Expr.h"
 
 namespace Halide {
 namespace Internal {

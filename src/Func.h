@@ -8,7 +8,7 @@
 
 #include "Argument.h"
 #include "Function.h"
-#include "IR.h"
+#include "Expr.h"  // IR.h
 #include "IROperator.h"
 #include "JITModule.h"
 #include "Module.h"

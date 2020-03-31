@@ -7,8 +7,10 @@
  */
 
 #include <map>
+#include <string>
 
-#include "IR.h"
+#include "Expr.h"
+#include "Function.h"
 #include "Target.h"
 
 namespace Halide {

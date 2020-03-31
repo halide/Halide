@@ -5,7 +5,10 @@
  * Defines the lowering pass that injects task parallelism for producers that are scheduled as async.
  */
 
-#include "IR.h"
+#include <map>
+
+#include "Expr.h"
+#include "Function.h"
 
 namespace Halide {
 namespace Internal {

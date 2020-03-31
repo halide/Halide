@@ -9,7 +9,7 @@
 
 #include "Expr.h"
 #include "Func.h"
-#include "IR.h"
+#include "Expr.h"  // IR.h
 #include "Lambda.h"
 
 namespace Halide {

@@ -24,7 +24,7 @@
  *   argmin:      0.027715ms (46%)   stack: 20
  */
 
-#include "IR.h"
+#include "Expr.h"
 
 namespace Halide {
 namespace Internal {

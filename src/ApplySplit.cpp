@@ -1,4 +1,5 @@
 #include "ApplySplit.h"
+#include "IR.h"
 #include "Simplify.h"
 #include "Substitute.h"
 

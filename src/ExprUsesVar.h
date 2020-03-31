@@ -5,7 +5,7 @@
  * Defines a method to determine if an expression depends on some variables.
  */
 
-#include "IR.h"
+#include "Expr.h"  // IR.h
 #include "IRVisitor.h"
 #include "Scope.h"
 

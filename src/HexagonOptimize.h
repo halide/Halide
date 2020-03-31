@@ -5,7 +5,7 @@
  * Tools for optimizing IR for Hexagon.
  */
 
-#include "IR.h"
+#include "Expr.h"  // IR.h
 #include "Scope.h"
 namespace Halide {
 namespace Internal {
