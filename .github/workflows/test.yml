@@ -38,7 +38,7 @@ jobs:
     strategy:
       fail-fast: false  # Keep running other jobs even if one fails
       # free-tier projects (like Halide) get 20 concurrent tasks.
-      # The build matrix here has only 12 tasks -- should we limit it to fewer
+      # The build matrix here has only 7 tasks -- should we limit it to fewer
       # than that? Need to experiment.
       # max-parallel: TBD   TODO
       matrix:
