@@ -557,26 +557,22 @@ struct ClearInlinedMutator {
 void SearchSpace::freeze_lowest_cost_stages(const IntrusivePtr<State> best) {
     std::vector<std::pair<int, double>> node_ids_and_costs;
     NodeMap<double> node_costs;
-    size_t num_stages = 0;
     size_t num_nodes = 0;
     for (const auto& n : dag.nodes) {
         if (n.is_input) {
             continue;
         }
-        num_stages += n.stages.size();
+
+        int i = 0;
+        for (const auto& s : n.stages) {
+            if (!node_costs.contains(dag.stage_id_to_node_map.at(s.id))) {
+                node_costs.get_or_create(dag.stage_id_to_node_map.at(s.id)) = 0;
+            }
+
+            node_costs.get(dag.stage_id_to_node_map.at(s.id)) += best->cost_per_stage[i++];
+        }
+
         ++num_nodes;
-    }
-
-    for (size_t i = 0; i < num_stages; ++i) {
-        if (dag.stage_id_to_node_map.at(i)->is_input) {
-            continue;
-        }
-
-        if (!node_costs.contains(dag.stage_id_to_node_map.at(i))) {
-            node_costs.get_or_create(dag.stage_id_to_node_map.at(i)) = 0;
-        }
-
-        node_costs.get(dag.stage_id_to_node_map.at(i)) += best->cost_per_stage[i];
     }
 
     for (auto it = node_costs.begin(); it != node_costs.end(); it++) {
