@@ -577,8 +577,10 @@ public:
                     // queries outwards. Help it out by insisting that
                     // the bounds are clamped to lie within the bounds
                     // one loop level up.
-                    b[d].min = max(b[d].min, Variable::make(Int(32), arg + ".outer_min"));
-                    b[d].max = min(b[d].max, Variable::make(Int(32), arg + ".outer_max"));
+                    Expr outer_min = Variable::make(Int(32), arg + ".outer_min");
+                    Expr outer_max = Variable::make(Int(32), arg + ".outer_max");
+                    b[d].min = clamp(b[d].min, outer_min, outer_max);
+                    b[d].max = clamp(b[d].max, outer_min, outer_max);
                 }
 
                 if (b[d].is_single_point()) {
