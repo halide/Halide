@@ -21,7 +21,6 @@
 #include "IROperator.h"
 #include "IRPrinter.h"
 #include "ImageParam.h"
-#include "LLVM_Headers.h"
 #include "LLVM_Output.h"
 #include "Lower.h"
 #include "Param.h"

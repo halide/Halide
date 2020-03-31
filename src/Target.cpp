@@ -7,7 +7,6 @@
 #include "Debug.h"
 #include "DeviceInterface.h"
 #include "Error.h"
-#include "LLVM_Headers.h"
 #include "Util.h"
 #include "WasmExecutor.h"
 
