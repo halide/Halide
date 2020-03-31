@@ -39,7 +39,6 @@ class GlobalVariable;
 
 #include "IRVisitor.h"
 #include "Module.h"
-#include "ModulusRemainder.h"
 #include "Scope.h"
 #include "Target.h"
 

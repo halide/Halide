@@ -7,7 +7,6 @@
  */
 
 #include "Buffer.h"
-#include "Error.h"
 #include "Expr.h"
 #include "Type.h"
 #include "runtime/HalideRuntime.h"
