@@ -54,10 +54,10 @@ add_library(auto_schedule
             ${WF_CPP})
 
 if(HALIDE_LIBRARY_TYPE STREQUAL STATIC)
-  target_link_libraries(auto_schedule PRIVATE cost_model train_cost_model)
+  target_link_libraries(auto_schedule PUBLIC cost_model train_cost_model)
 else()
   target_link_libraries(auto_schedule
-                        PRIVATE cost_model train_cost_model Halide)
+                        PUBLIC cost_model train_cost_model Halide)
 endif()
 
 if(NOT MSVC)
