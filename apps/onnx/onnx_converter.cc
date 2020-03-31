@@ -4716,7 +4716,7 @@ Model convert_model(
         // the autoscheduler.
         Halide::Func &f = t_out.rep;
         const std::vector<Halide::Var> &args = f.args();
-        const std::vector<Halide::Expr> &dims = t.shape;
+        const std::vector<Halide::Expr> &dims = t_out.shape;
 
         if (args.size() != dims.size()) {
             throw std::domain_error("Invalid dimensions for output " + output.name());
