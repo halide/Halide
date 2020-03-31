@@ -47,10 +47,10 @@ jobs:
         target_arch: [x86, arm]
         target_bits: [32, 64]
         target_os: [linux, osx, windows]
-        # llvm_version: [9, 10, 11]  # TODO
         llvm_version: [11]
-        # build_tool: [cmake_shared, make]  # TODO: add cmake_static
         build_tool: [cmake_shared]
+        # llvm_version: [9, 10, 11]  # TODO
+        # build_tool: [cmake_shared, make]  # TODO
 
         # This section basically allows us to define additional values for
         # each matrix entry, e.g. to map an llvm version number to the specific
