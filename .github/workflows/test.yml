@@ -3,10 +3,8 @@
 # - cmake static builds aren't handled yet.
 # - arm32 and arm64 is build-only, no testing (qemu is too slow).
 #   Perhaps some limited testing instead of none?
-# - python is skipped for arm-32, arm-64
+# - python is built+tested for x86-64 targets only (no arm or 32-bit)
 # - apps are skipped for x86-32, arm-32, arm-64
-# - build-and-test matrix is probably too large
-# - test_performance is skipped everywhere (too much flakiness)
 #
 # TODO (stuff that could be usefully added, perhaps)
 # - build + test of WASM
@@ -45,17 +43,18 @@ jobs:
         target_arch: [x86, arm]
         target_bits: [32, 64]
         target_os: [linux, osx, windows]
-        llvm_version: [9, 10, 11]
+        # llvm_version: [9, 10, 11]
+        llvm_version: [11]
         build_tool: [cmake_shared, make]  # TODO: add cmake_static
 
         # This section basically allows us to define additional values for
         # each matrix entry, e.g. to map an llvm version number to the specific
         # git branch that is needed.
         include:
-          - llvm_version: 9
-            llvm_branch: release/9.x
-          - llvm_version: 10
-            llvm_branch: release/10.x
+          # - llvm_version: 9
+          #   llvm_branch: release/9.x
+          # - llvm_version: 10
+          #   llvm_branch: release/10.x
           - llvm_version: 11
             llvm_branch: master
 
@@ -86,8 +85,12 @@ jobs:
             uses_python: true
             run_tests: true
 
+          - target_bits: 32
+            # We don't build/test Python bindings on any 32-bit targets
+            uses_python: false
+
           - target_arch: arm
-            # Don't bother building/testing Python bindings on arm targets (yet)
+            # We don't build/test Python bindings on any ARM targets
             uses_python: false
             # Running our test suite (via e.g. QEMU) is too slow to be useful
             # at present (> 5 hours on current GHA VMs). That said, we'll leave
@@ -105,26 +108,19 @@ jobs:
           - target_os: windows
             build_tool: make    # Windows is CMake-only
           - target_arch: arm
-            build_tool: make    # All arm builds require CMake
+            build_tool: make    # In this setup, all ARM builds require CMake
 
     steps:
     - uses: actions/checkout@v2
       with:
         path: 'halide'
 
-    - name: Configure Python (64-bit)
-      if: matrix.uses_python && matrix.target_bits == 64
+    - name: Configure Python
+      if: matrix.uses_python
       uses: actions/setup-python@v1
       with:
         python-version: '${{matrix.python_version}}'
-        architecture: 'x64' # N.B.: 'x86' is only available for Windows (Ubuntu is special-cased below)
-
-    - name: Configure Python (32-bit)
-      if: matrix.uses_python && matrix.target_os == 'windows' && matrix.target_bits == 32
-      uses: actions/setup-python@v1
-      with:
-        python-version: '${{matrix.python_version}}'
-        architecture: 'x86'
+        architecture: 'x64'
 
     - name: Configure Ubuntu Host
       if: startsWith(matrix.host_os, 'ubuntu')
@@ -175,8 +171,6 @@ jobs:
       if: matrix.target_os == 'linux' && matrix.target_arch == 'x86' && matrix.target_bits == 32
       shell: bash
       run: |
-        PYTHON=python${{matrix.python_version}}
-
         sudo dpkg --add-architecture i386
         sudo apt-get update
         sudo apt-get install \
@@ -184,21 +178,6 @@ jobs:
           ${{matrix.cxx}}-multilib \
           libjpeg-dev:i386 \
           libpng-dev:i386 \
-          ${PYTHON}-dev:i386 \
-          ${PYTHON}:i386
-
-        file $(which ${PYTHON})
-
-        # Verify that we have a 32-bit build
-        PYVERSION=`${PYTHON} - << EOF
-        import platform
-        print(platform.architecture()[0])
-        EOF`
-
-        if [[ $PYVERSION != 32bit ]]; then
-          echo Expected 32-bit version of Python ${{matrix.python_version}}, found ${PYVERSION}
-          exit 1
-        fi
 
         # TODO(srj): OpenGL is only needed to build the opengl tests (which we don't even run)...
         sudo apt-get install \
