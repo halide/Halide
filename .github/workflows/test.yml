@@ -37,15 +37,20 @@ jobs:
 
     strategy:
       fail-fast: false  # Keep running other jobs even if one fails
+      # free-tier projects (like Halide) get 20 concurrent tasks.
+      # The build matrix here has only 12 tasks -- should we limit it to fewer
+      # than that? Need to experiment.
+      # max-parallel: TBD   TODO
       matrix:
         # TODO: this matrix is probably overkill; we don't need to build every combination.
         # (Some combinations are nonsensical and excluded via the 'exclude:' section below.)
         target_arch: [x86, arm]
         target_bits: [32, 64]
         target_os: [linux, osx, windows]
-        # llvm_version: [9, 10, 11]
+        # llvm_version: [9, 10, 11]  # TODO
         llvm_version: [11]
-        build_tool: [cmake_shared, make]  # TODO: add cmake_static
+        # build_tool: [cmake_shared, make]  # TODO: add cmake_static
+        build_tool: [cmake_shared]
 
         # This section basically allows us to define additional values for
         # each matrix entry, e.g. to map an llvm version number to the specific
