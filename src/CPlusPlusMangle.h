@@ -5,10 +5,11 @@
  *
  * A simple function to get a C++ mangled function name for a function.
  */
-
-#include "Expr.h"  // IR.h
-#include "Target.h"
 #include <string>
+
+#include "Expr.h"
+#include "Function.h"
+#include "Target.h"
 
 namespace Halide {
 namespace Internal {

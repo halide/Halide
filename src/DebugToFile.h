@@ -7,7 +7,8 @@
 
 #include <map>
 
-#include "Expr.h"  // IR.h
+#include "Expr.h"
+#include "Function.h"
 
 namespace Halide {
 namespace Internal {

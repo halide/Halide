@@ -1,6 +1,7 @@
 #include "EmulateFloat16Math.h"
 #include "CSE.h"
 #include "IRMutator.h"
+#include "IR.h"
 #include "IROperator.h"
 #include "Lerp.h"
 #include "Simplify.h"

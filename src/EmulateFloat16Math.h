@@ -6,10 +6,13 @@
  * casting back and forth with bit tricks.
  */
 
-#include "Expr.h"  // IR.h
+#include "Expr.h"
 
 namespace Halide {
 namespace Internal {
+
+struct Call;
+struct Cast;
 
 /** Check if a call is a float16 transcendental (e.g. sqrt_f16) */
 bool is_float16_transcendental(const Call *);

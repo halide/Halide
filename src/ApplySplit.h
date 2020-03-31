@@ -11,7 +11,7 @@
 #include <utility>
 #include <vector>
 
-#include "Expr.h"  // IR.h
+#include "Expr.h"
 #include "Schedule.h"
 
 namespace Halide {
