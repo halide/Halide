@@ -422,7 +422,10 @@ jobs:
         if [[ ${{matrix.host_os}} == windows* ]]; then
           # -t:Clean,Build,Rebuild
           # -v:q[uiet], m[inimal], n[ormal], d[etailed], and diag[nostic]
-          MSBuild.exe -m:${PARALLEL_JOBS} -t:Build -v:d -p:Configuration=${BUILD_TYPE} ./ALL_BUILD.vcxproj
+          cmake \
+            --build ${HALIDE_BUILD_DIR} \
+            --config ${BUILD_TYPE} \
+            -j ${PARALLEL_JOBS} -- -v:d
         else
           cmake \
             --build ${HALIDE_BUILD_DIR} \
