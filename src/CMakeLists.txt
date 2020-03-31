@@ -450,10 +450,17 @@ add_custom_command(OUTPUT "${CMAKE_BINARY_DIR}/include/Halide.h"
   COMMAND $<TARGET_FILE:build_halide_h> "${CMAKE_CURRENT_SOURCE_DIR}/../LICENSE.txt" ${HEADER_FILES} > "${NATIVE_INCLUDE_PATH}Halide.h"
   WORKING_DIRECTORY "${CMAKE_CURRENT_LIST_DIR}"
   DEPENDS build_halide_h "${CMAKE_CURRENT_SOURCE_DIR}/../LICENSE.txt" ${HEADER_FILES})
+# HalideInternal.h is almost the same as Halide.h, but leaves in some internal-specific
+# stuff so that we can use it for a precompiled header. It should never be put into
+# a packaged build.
+add_custom_command(OUTPUT "${CMAKE_BINARY_DIR}/include/HalideInternal.h"
+  COMMAND $<TARGET_FILE:build_halide_h> "--internal" "${CMAKE_CURRENT_SOURCE_DIR}/../LICENSE.txt" ${HEADER_FILES} > "${NATIVE_INCLUDE_PATH}HalideInternal.h"
+  WORKING_DIRECTORY "${CMAKE_CURRENT_LIST_DIR}"
+  DEPENDS build_halide_h "${CMAKE_CURRENT_SOURCE_DIR}/../LICENSE.txt" ${HEADER_FILES})
 add_custom_target(
     HalideIncludes
     ALL
-    DEPENDS "${CMAKE_BINARY_DIR}/include/Halide.h")
+    DEPENDS "${CMAKE_BINARY_DIR}/include/Halide.h" "${CMAKE_BINARY_DIR}/include/HalideInternal.h")
 
 foreach (i ${RUNTIME_HEADER_FILES})
   configure_file(runtime/${i} "${CMAKE_BINARY_DIR}/include" COPYONLY)
@@ -653,6 +660,17 @@ list(APPEND LLVM_COMPONENTS passes)
 # that link against the Halide library inherit those options and definitions
 target_include_directories(Halide PRIVATE ${LLVM_INCLUDE_DIRS})
 target_include_directories(Halide INTERFACE "${CMAKE_BINARY_DIR}/include")
+
+# For CMake 3.16+, we can use precompiled headers: this automatically includes
+# the given PCH in each .cpp file. While ~no libHalide source files include HalideInternal.h
+# itself, this has the side effect of predefining everything necessary, and (due
+# to #define include guards) it should skip all of the 'normal' includes.
+if(COMMAND target_precompile_headers)
+  message(STATUS "Using precompiled headers for HalideInternal.h in libHalide")
+  target_precompile_headers(Halide PRIVATE "${CMAKE_BINARY_DIR}/include/HalideInternal.h")
+else()
+  message(STATUS "NOT using precompiled headers for HalideInternal.h in libHalide (old CMake version?")
+endif()
 
 # TODO: For targets we can link against even fewer libraries by specifying
 # only the components we **REALLY** need (e.g. x86asmprinter;x86codegen rather than x86)

@@ -13,7 +13,7 @@ using std::vector;
 
 namespace {
 
-struct BufferInfo {
+struct LocalBufferInfo {
     Expr handle;
     int dimensions;
 };
@@ -25,7 +25,7 @@ class FindBufferSymbols : public IRVisitor {
         if (param.defined() && param.is_buffer()) {
             const string &name = param.name();
             buffers[name] =
-                BufferInfo{Variable::make(type_of<halide_buffer_t *>(), name + ".buffer", param),
+                LocalBufferInfo{Variable::make(type_of<halide_buffer_t *>(), name + ".buffer", param),
                            param.dimensions()};
         }
     }
@@ -34,7 +34,7 @@ class FindBufferSymbols : public IRVisitor {
         if (buffer.defined()) {
             const string &name = buffer.name();
             buffers[name] =
-                BufferInfo{Variable::make(type_of<halide_buffer_t *>(), name + ".buffer", buffer),
+                LocalBufferInfo{Variable::make(type_of<halide_buffer_t *>(), name + ".buffer", buffer),
                            buffer.dimensions()};
         }
     }
@@ -60,7 +60,7 @@ class FindBufferSymbols : public IRVisitor {
 
 public:
     set<string> symbols;
-    map<string, BufferInfo> buffers;
+    map<string, LocalBufferInfo> buffers;
 };
 
 }  // namespace
@@ -73,7 +73,7 @@ Stmt unpack_buffers(Stmt s) {
 
     for (auto &p : finder.buffers) {
         const string &name = p.first;
-        const BufferInfo &info = p.second;
+        const LocalBufferInfo &info = p.second;
         vector<Expr> args = {info.handle};
 
         string host_var = name;

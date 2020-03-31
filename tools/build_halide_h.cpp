@@ -47,49 +47,68 @@ void dump_header(std::string header) {
     fclose(f);
 }
 
-int main(int argc, char **files) {
-
+int main(int argc, char **argv) {
     if (argc < 3) {
-        fprintf(stderr, "Usage: %s LICENSE.txt [headers...]\n", files[0]);
+        fprintf(stderr, "Usage: %s [--internal] LICENSE.txt [headers...]\n", argv[0]);
         exit(1);
     }
 
-    fprintf(stdout, "/* Halide.h -- interface for the 'Halide' library.\n\n");
+    char** argv_end = argv + argc;
 
-    {
-        FILE *f = fopen(files[1], "r");
-        if (f == nullptr) {
-            fprintf(stderr, "Could not open %s.\n", files[1]);
-            exit(1);
-        }
-
-        char line[1024];
-        while (fgets(line, sizeof(line), f)) {
-            fprintf(stdout, "   %s", line);
-        }
-
-        fclose(f);
+    argv++;
+    bool internal = false;
+    if (strcmp(*argv, "--internal") == 0) {
+        internal = true;
+        argv++;
     }
 
-    fprintf(stdout, "\n*/\n\n");
-    fprintf(stdout, "#ifndef HALIDE_H\n");
-    fprintf(stdout, "#define HALIDE_H\n\n");
+    if (internal) {
+        // For internal use only, skip the License stuff
+        argv++;
+        fprintf(stdout, "#ifndef HALIDE_INTERNAL_H\n");
+        fprintf(stdout, "#define HALIDE_INTERNAL_H\n\n");
+    } else {
+        fprintf(stdout, "/* Halide.h -- interface for the 'Halide' library.\n\n");
+        {
+            FILE *f = fopen(*argv, "r");
+            if (f == nullptr) {
+                fprintf(stderr, "Could not open %s.\n", *argv);
+                exit(1);
+            }
 
-    for (int i = 2; i < argc; i++) {
-        dump_header(files[i]);
+            char line[1024];
+            while (fgets(line, sizeof(line), f)) {
+                fprintf(stdout, "   %s", line);
+            }
+
+            fclose(f);
+        }
+        fprintf(stdout, "\n*/\n\n");
+        fprintf(stdout, "#ifndef HALIDE_H\n");
+        fprintf(stdout, "#define HALIDE_H\n\n");
+    }
+
+    while (argv < argv_end) {
+        dump_header(*argv++);
     }
 
     fprintf(stdout, "\n");
-    fprintf(stdout,
-            "// Clean up macros used inside Halide headers\n"
-            "#undef user_assert\n"
-            "#undef user_error\n"
-            "#undef user_warning\n"
-            "#undef internal_error\n"
-            "#undef internal_assert\n"
-            "#undef halide_runtime_error\n"
-            "#undef HALIDE_EXPORT\n\n"
-            "#endif  // HALIDE_H\n");
+
+    if (internal) {
+        fprintf(stdout,
+                "#endif  // HALIDE_INTERNAL_H\n");
+    } else {
+        fprintf(stdout,
+                "// Clean up macros used inside Halide headers\n"
+                "#undef user_assert\n"
+                "#undef user_error\n"
+                "#undef user_warning\n"
+                "#undef internal_error\n"
+                "#undef internal_assert\n"
+                "#undef halide_runtime_error\n"
+                "#undef HALIDE_EXPORT\n\n"
+                "#endif  // HALIDE_H\n");
+    }
 
     return 0;
 }
