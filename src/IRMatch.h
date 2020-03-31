@@ -8,7 +8,6 @@
 #include "IR.h"
 #include "IREquality.h"
 #include "IROperator.h"
-#include "ModulusRemainder.h"
 
 #include <random>
 #include <set>
