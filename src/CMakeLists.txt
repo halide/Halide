@@ -447,48 +447,48 @@ set(HEADER_FILES
 # Subset of HEADER_FILES that are used commonly enough to
 # warrant precompiling.
 set(HEADER_FILES_PCH
-  Argument.h
-  Bounds.h
-  BoundsInference.h
-  BoundSmallAllocations.h
-  Buffer.h
-  CanonicalizeGPUVars.h
-  Closure.h
-  ConciseCasts.h
+  # Argument.h
+  # Bounds.h
+  # BoundsInference.h
+  # BoundSmallAllocations.h
+  # Buffer.h
+  # CanonicalizeGPUVars.h
+  # Closure.h
+  # ConciseCasts.h
   Debug.h
-  Definition.h
-  Dimension.h
-  Error.h
+  # Definition.h
+  # Dimension.h
+  # Error.h
   Expr.h
-  Func.h
-  Function.h
-  FunctionPtr.h
-  ImageParam.h
-  Interval.h
-  IntrusivePtr.h
-  IR.h
-  IREquality.h
-  IRMatch.h
-  IRMutator.h
-  IROperator.h
-  IRPrinter.h
-  IRVisitor.h
-  Param.h
-  Parameter.h
-  ParamMap.h
-  Pipeline.h
-  RDom.h
-  Realization.h
-  runtime/HalideBuffer.h
+  # Func.h
+  # Function.h
+  # FunctionPtr.h
+  # ImageParam.h
+  # Interval.h
+  # IntrusivePtr.h
+  # IR.h
+  # IREquality.h
+  # IRMatch.h
+  # IRMutator.h
+  # IROperator.h
+  # IRPrinter.h
+  # IRVisitor.h
+  # Param.h
+  # Parameter.h
+  # ParamMap.h
+  # Pipeline.h
+  # RDom.h
+  # Realization.h
+  # runtime/HalideBuffer.h
   runtime/HalideRuntime.h
-  Schedule.h
-  Scope.h
-  Simplify.h
-  Target.h
-  Tuple.h
-  Type.h
-  Util.h
-  Var.h
+  # Schedule.h
+  # Scope.h
+  # Simplify.h
+  # Target.h
+  # Tuple.h
+  # Type.h
+  # Util.h
+  # Var.h
 )
 file(MAKE_DIRECTORY "${CMAKE_BINARY_DIR}/include")
 file(TO_NATIVE_PATH "${CMAKE_BINARY_DIR}/include/" NATIVE_INCLUDE_PATH)
