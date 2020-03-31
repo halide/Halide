@@ -1105,14 +1105,15 @@ void LoopNest::compute_num_global_mem_accesses_per_block(const LoadJacobian &jac
 
 std::pair<double, double> LoopNest::compute_local_mem_store_features(const LoadJacobian &jac, int consumer_innermost_dim, const FunctionDAG::Node *node, const Bound &consumer_store_bounds, const LoopNest &root, double serial_loop_extents) const {
     // Assume worst case serialized loads if the stride is unknown
-    double accesses = serial_loop_extents * jac.count();
     if (!all_strides_exist(jac, node, root)) {
         double stride = compute_local_mem_stride(32.0, node->bytes_per_point);
+        double accesses = jac.count() * std::ceil((stride * serial_loop_extents) / 8.0);
         return {accesses, stride};
     }
 
     double stride = storage_stride(jac, consumer_innermost_dim, node, consumer_store_bounds, root);
     stride = compute_local_mem_stride(stride, node->bytes_per_point);
+    double accesses = jac.count() * std::ceil((stride * serial_loop_extents) / 8.0);
     return {accesses, stride};
 }
 
@@ -1190,9 +1191,9 @@ double LoopNest::compute_local_mem_stride(double stride, double bytes) const {
 void LoopNest::compute_local_mem_load_features(const LoadJacobian &jac, int producer_innermost_dim, const FunctionDAG::Node *node, const Bound &producer_store_bounds, bool producer_has_been_scheduled, LocalMemInfo &local_mem_info, const LoopNest &root, double serial_loop_extents) const {
     // Assume worst case serialized loads if the stride
     // is unknown
-    double accesses = serial_loop_extents * jac.count();
     if (!all_strides_exist(jac, node, root)) {
         double stride = compute_local_mem_stride(32.0, node->bytes_per_point);
+        double accesses = jac.count() * std::ceil((stride * serial_loop_extents) / 8.0);
         local_mem_info.add_access(accesses, stride);
         return;
     }
@@ -1200,6 +1201,7 @@ void LoopNest::compute_local_mem_load_features(const LoadJacobian &jac, int prod
     if (producer_has_been_scheduled) {
         double stride = storage_stride(jac, producer_innermost_dim, node, producer_store_bounds, root);
         stride = compute_local_mem_stride(stride, node->bytes_per_point);
+        double accesses = jac.count() * std::ceil((stride * serial_loop_extents) / 8.0);
         local_mem_info.add_access(accesses, stride);
         return;
     }
@@ -1212,6 +1214,7 @@ void LoopNest::compute_local_mem_load_features(const LoadJacobian &jac, int prod
         min_stride = std::min(min_stride, storage_stride(jac, i, node, producer_store_bounds, root));
     }
 
+    double accesses = jac.count() * std::ceil((min_stride * serial_loop_extents) / 8.0);
     local_mem_info.add_access(accesses, compute_local_mem_stride(min_stride, node->bytes_per_point));
 }
 
