@@ -1108,13 +1108,13 @@ std::pair<double, double> LoopNest::compute_local_mem_store_features(const LoadJ
     if (!all_strides_exist(jac, node, root)) {
         double stride = compute_local_mem_stride(32.0, node->bytes_per_point);
         double accesses = jac.count() * std::ceil((stride * serial_loop_extents) / 8.0);
-        return {accesses, stride};
+        return {accesses, 1.0 / stride};
     }
 
     double stride = storage_stride(jac, consumer_innermost_dim, node, consumer_store_bounds, root);
     stride = compute_local_mem_stride(stride, node->bytes_per_point);
     double accesses = jac.count() * std::ceil((stride * serial_loop_extents) / 8.0);
-    return {accesses, stride};
+    return {accesses, 1.0 / stride};
 }
 
 GlobalMemInfo LoopNest::compute_global_mem_store_features(const LoadJacobian &jac, int consumer_innermost_dim, const FunctionDAG::Node *node, const Bound &consumer_store_bounds, const ThreadInfo &thread_info, double serial_loop_extents, double store_count, const LoopNest &root) const {
@@ -3164,21 +3164,6 @@ vector<IntrusivePtr<const LoopNest>> LoopNest::compute_in_tiles(const FunctionDA
             }
             child = i;
         }
-    }
-
-    bool skip_compute_here = false;
-    const auto &bounds_here = get_bounds(f);
-    const auto &p = bounds_here->region_computed(v);
-
-    if (p.extent() == 1) {
-        bool all_one = true;
-        for (int i = 0; i < f->dimensions; i++) {
-            all_one = all_one && bounds_here->region_computed(i).extent() == 1;
-        }
-
-        // Don't compute here if the vectorized dimension has extent
-        // 1 and there is some other dimension that does not have extent 1
-        skip_compute_here = !all_one || v != 0;
     }
 
     if (gpu_label == block) {
