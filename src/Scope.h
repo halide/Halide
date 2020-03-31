@@ -6,10 +6,10 @@
 #include <stack>
 #include <string>
 #include <utility>
+#include <vector>
 
 #include "Debug.h"
 #include "Error.h"
-#include "Util.h"
 
 /** \file
  * Defines the Scope class, which is used for keeping track of names in a scope while traversing IR

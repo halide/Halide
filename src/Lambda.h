@@ -2,7 +2,6 @@
 #define HALIDE_LAMBDA_H
 
 #include "Func.h"
-#include "Util.h"
 #include "Var.h"
 
 /** \file

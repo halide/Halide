@@ -18,7 +18,6 @@
 #include "Parameter.h"
 #include "Reduction.h"
 #include "Type.h"
-#include "Util.h"
 #include "runtime/HalideBuffer.h"
 
 namespace Halide {

@@ -2,7 +2,6 @@
 #define HALIDE_IR_VISITOR_H
 
 #include "IR.h"
-#include "Util.h"
 
 #include <map>
 #include <set>
