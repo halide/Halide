@@ -102,13 +102,13 @@ def main():
                'HL_SHARED_MEMORY_LIMIT=48 '
                'bash ../autoscheduler/autotune_loop.sh '
                'bin/host/onnx_converter.generator '
-               '{} '
+               'onnx_model_generator '
                'host-cuda '
                '../autoscheduler/gpu.weights '
                '../autoscheduler/bin '
                '0 '
                '0 '
-               'model_file_path={}').format(model_name, model_name, f)
+               'model_file_path={}').format(model_name, f)
         print(cmd)
         os.system(cmd)
 
