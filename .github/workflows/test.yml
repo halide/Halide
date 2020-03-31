@@ -20,11 +20,11 @@ on:
   # We don't want 'review_requested' (that's redundant to the ones below for our purposes)
   pull_request:
     types: [opened, synchronize, reopened]
-  #   # TODO: do we want to limit this to certain filetypes?
-  #   # paths:
-  #   #   - '**.h'
-  #   #   - '**.c'
-  #   #   - '**.cpp'
+    # TODO: do we want to limit this to certain filetypes?
+    # paths:
+    #   - '**.h'
+    #   - '**.c'
+    #   - '**.cpp'
 
 jobs:
   test_halide:
@@ -418,10 +418,17 @@ jobs:
       run: |
         # Build Halide
         cd ${HALIDE_BUILD_DIR}
-        cmake \
-          --build ${HALIDE_BUILD_DIR} \
-          --config ${BUILD_TYPE} \
-          -j ${PARALLEL_JOBS}
+
+        if [[ ${{matrix.host_os}} == windows* ]]; then
+          # -t:Clean,Build,Rebuild
+          # -v:q[uiet], m[inimal], n[ormal], d[etailed], and diag[nostic]
+          MSBuild.exe -m:${PARALLEL_JOBS} -t:Build -v:d -p:Configuration=${BUILD_TYPE} ./ALL_BUILD.vcxproj
+        else
+          cmake \
+            --build ${HALIDE_BUILD_DIR} \
+            --config ${BUILD_TYPE} \
+            -j ${PARALLEL_JOBS}
+        fi
 
     - name: Run Tests (Make)
       if: matrix.run_tests && startsWith(matrix.build_tool, 'make')
