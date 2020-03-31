@@ -13,6 +13,7 @@
 #include "Error.h"
 #include "Expr.h"
 #include "Function.h"
+#include "FunctionPtr.h"
 #include "IntrusivePtr.h"
 #include "ModulusRemainder.h"
 #include "Parameter.h"
