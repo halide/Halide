@@ -1,5 +1,7 @@
 include ../support/Makefile.inc
+include ../support/autoscheduler.inc
 
+HL_TARGET=host-cuda
 
 PROTOC := $(shell which protoc)
 
@@ -96,6 +98,24 @@ model_test: $(BIN)/$(HL_TARGET)/$(PY_MODEL_EXT)
 
 halide_as_onnx_backend_test: $(BIN)/$(HL_TARGET)/$(PY_MODEL_EXT)
 	PYTHONPATH="$(BIN)/$(HL_TARGET)/:$$PYTHONPATH" $(PYTHON) -m unittest halide_as_onnx_backend_test.py -v
+
+BATCH_ID ?= 0
+TRAIN_ONLY ?= 0
+SAMPLES_DIR ?= autotuned_samples
+autotune: $(GENERATOR_BIN)/onnx_converter.generator $(AUTOSCHED_BIN)/featurization_to_sample $(AUTOSCHED_BIN)/retrain_cost_model $(AUTOSCHED_BIN)/libauto_schedule.so $(AUTOSCHED_SRC)/autotune_loop.sh
+	HL_MACHINE_PARAMS=80,1,1 \
+	SAMPLES_DIR=$(SAMPLES_DIR) \
+	HL_PERMIT_FAILED_UNROLL=1 \
+	HL_SHARED_MEMORY_LIMIT=48 \
+	bash $(AUTOSCHED_SRC)/autotune_loop.sh \
+		$(GENERATOR_BIN)/onnx_converter.generator \
+		onnx_model_generator \
+		host-cuda \
+		$(AUTOSCHED_SRC)/gpu.weights \
+		$(AUTOSCHED_BIN) \
+		$(BATCH_ID) \
+		$(TRAIN_ONLY) \
+		'model_file_path=models/mobilenetv2.onnx'
 
 # No Protoc
 else
