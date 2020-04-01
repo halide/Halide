@@ -1694,7 +1694,7 @@ void LoopNest::compute_features(const FunctionDAG &dag,
             feat.innermost_bytes_at_realization = node->bytes_per_point * innermost_storage_extent;
 
             if (!is_root()) {
-                auto site = sites.get(&(node->stages[s]));
+                auto site = sites.get(&(node->stages[0]));
                 if (site.is_stored_in_global_mem()) {
                     feat.global_bytes_at_task = feat.bytes_at_realization;
                     feat.global_innermost_bytes_at_task = feat.innermost_bytes_at_realization;
@@ -1910,7 +1910,7 @@ void LoopNest::compute_features(const FunctionDAG &dag,
             innermost_bytes_at_task = std::min(bytes_at_task, feat.innermost_bytes_at_realization);
         }
 
-        const auto &site = sites.get(stage);
+        const auto &site = sites.get(&node->stages[0]);
         if (site.is_stored_in_global_mem()) {
             feat.global_bytes_at_task = bytes_at_task;
             feat.global_innermost_bytes_at_task = innermost_bytes_at_task;
@@ -2552,7 +2552,7 @@ void LoopNest::compute_features(const FunctionDAG &dag,
             // TODO: This overbills scatters, or writes to a sub-window.
             internal_assert(feat.bytes_at_production >= 0) << "Negative bytes at production: " << feat.bytes_at_production << "\n";
 
-            const auto &consumer_site = sites.get(stage);
+            const auto &consumer_site = sites.get(&node->stages[0]);
             if (consumer_site.is_stored_in_global_mem()) {
                 feat.unique_global_bytes_read_per_realization += feat.bytes_at_production;
                 feat.unique_global_lines_read_per_realization += feat.bytes_at_production / feat.innermost_bytes_at_production;
@@ -2561,7 +2561,7 @@ void LoopNest::compute_features(const FunctionDAG &dag,
                 feat.unique_shared_bytes_read_per_realization += feat.bytes_at_production;
                 feat.unique_shared_lines_read_per_realization += feat.bytes_at_production / feat.innermost_bytes_at_production;
                 feat.shared_allocation_bytes_read_per_realization += feat.bytes_at_production;
-            } else if (consumer_site.is_stored_in_shared_mem()) {
+            } else if (consumer_site.is_stored_in_local_mem()) {
                 feat.unique_local_bytes_read_per_realization += feat.bytes_at_production;
                 feat.unique_local_lines_read_per_realization += feat.bytes_at_production / feat.innermost_bytes_at_production;
                 feat.local_allocation_bytes_read_per_realization += feat.bytes_at_production;
