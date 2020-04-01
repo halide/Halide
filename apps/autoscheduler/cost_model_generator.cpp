@@ -286,8 +286,12 @@ public:
         Expr vector_loads_per_vector = schedule_features(n, idx++, w);
         Expr scalar_loads_per_vector = schedule_features(n, idx++, w);
         Expr scalar_loads_per_scalar = schedule_features(n, idx++, w);
-        Expr bytes_at_task = schedule_features(n, idx++, w);
-        Expr innermost_bytes_at_task = schedule_features(n, idx++, w);
+        Expr global_bytes_at_task = schedule_features(n, idx++, w);
+        Expr shared_bytes_at_task = schedule_features(n, idx++, w);
+        Expr local_bytes_at_task = schedule_features(n, idx++, w);
+        Expr global_innermost_bytes_at_task = schedule_features(n, idx++, w);
+        Expr shared_innermost_bytes_at_task = schedule_features(n, idx++, w);
+        Expr local_innermost_bytes_at_task = schedule_features(n, idx++, w);
         Expr unique_bytes_read_per_vector = schedule_features(n, idx++, w);
         Expr unique_lines_read_per_vector = schedule_features(n, idx++, w);
         Expr unique_bytes_read_per_task = schedule_features(n, idx++, w);
@@ -482,7 +486,7 @@ public:
         // store.
         Expr cost_of_false_sharing =
             select(inner_parallelism > 1,
-                   relu1(22, w, n) * (num_vectors + num_scalars) / max(1, innermost_bytes_at_task),
+                   relu1(22, w, n) * (num_vectors + num_scalars) / max(1, global_innermost_bytes_at_task),
                    0.0f);
 
         store_cost += cost_of_false_sharing;

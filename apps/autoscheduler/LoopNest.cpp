@@ -1694,8 +1694,19 @@ void LoopNest::compute_features(const FunctionDAG &dag,
             feat.innermost_bytes_at_realization = node->bytes_per_point * innermost_storage_extent;
 
             if (!is_root()) {
-                feat.bytes_at_task = feat.bytes_at_realization;
-                feat.innermost_bytes_at_task = feat.innermost_bytes_at_realization;
+                auto site = sites.get(&(node->stages[s]));
+                if (site.is_stored_in_global_mem()) {
+                    feat.global_bytes_at_task = feat.bytes_at_realization;
+                    feat.global_innermost_bytes_at_task = feat.innermost_bytes_at_realization;
+                } else if (site.is_stored_in_shared_mem()) {
+                    feat.shared_bytes_at_task = feat.bytes_at_realization;
+                    feat.shared_innermost_bytes_at_task = feat.innermost_bytes_at_realization;
+                } else if (site.is_stored_in_local_mem()) {
+                    feat.local_bytes_at_task = feat.bytes_at_realization;
+                    feat.local_innermost_bytes_at_task = feat.innermost_bytes_at_realization;
+                } else {
+                    internal_assert(false);
+                }
             }
         }
     }
@@ -1869,9 +1880,11 @@ void LoopNest::compute_features(const FunctionDAG &dag,
     const bool at_pure_production = at_production && stage->index == 0;
 
     if (at_task) {
+        double bytes_at_task = 0;
+        double innermost_bytes_at_task = 0;
         if (parallel) {
             const auto &bounds = get_bounds(node);
-            feat.bytes_at_task = node->bytes_per_point;
+            bytes_at_task = node->bytes_per_point;
             int64_t innermost_storage_extent = 1;
             for (int i = 0; i < node->dimensions; i++) {
                 int64_t outer = 1;
@@ -1884,17 +1897,31 @@ void LoopNest::compute_features(const FunctionDAG &dag,
                 const auto &p = bounds->region_computed(i);
                 int64_t extent = p.extent();
                 extent /= outer;
-                feat.bytes_at_task *= extent;
+                bytes_at_task *= extent;
                 if (i == vector_dim) {
                     innermost_storage_extent = extent;
                 }
             }
-            feat.innermost_bytes_at_task = node->bytes_per_point * innermost_storage_extent;
+            innermost_bytes_at_task = node->bytes_per_point * innermost_storage_extent;
         } else {
             // How this loop will be parallelized is not yet
             // determined. Use optimistic values for the features.
-            feat.bytes_at_task = (feat.bytes_at_realization + params.parallelism - 1) / params.parallelism;
-            feat.innermost_bytes_at_task = std::min(feat.bytes_at_task, feat.innermost_bytes_at_realization);
+            bytes_at_task = (feat.bytes_at_realization + params.parallelism - 1) / params.parallelism;
+            innermost_bytes_at_task = std::min(bytes_at_task, feat.innermost_bytes_at_realization);
+        }
+
+        const auto &site = sites.get(stage);
+        if (site.is_stored_in_global_mem()) {
+            feat.global_bytes_at_task = bytes_at_task;
+            feat.global_innermost_bytes_at_task = innermost_bytes_at_task;
+        } else if (site.is_stored_in_shared_mem()) {
+            feat.shared_bytes_at_task = bytes_at_task;
+            feat.shared_innermost_bytes_at_task = innermost_bytes_at_task;
+        } else if (site.is_stored_in_local_mem()) {
+            feat.local_bytes_at_task = bytes_at_task;
+            feat.local_innermost_bytes_at_task = innermost_bytes_at_task;
+        } else {
+            internal_assert(false);
         }
 
         feat.unique_bytes_read_per_task = 0;

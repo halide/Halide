@@ -299,8 +299,12 @@ struct ScheduleFeatures {
     // The memory footprint written over one per parallel task. The
     // union of the regions if the stage is computed at finer
     // granularity that one parallel task of some consumer.
-    double bytes_at_task = 0;
-    double innermost_bytes_at_task = 0;
+    double global_bytes_at_task = 0;
+    double shared_bytes_at_task = 0;
+    double local_bytes_at_task = 0;
+    double global_innermost_bytes_at_task = 0;
+    double shared_innermost_bytes_at_task = 0;
+    double local_innermost_bytes_at_task = 0;
 
     // The memory footprint accessed while computing a single vector.
     double unique_bytes_read_per_vector = 0;
@@ -399,8 +403,12 @@ struct ScheduleFeatures {
             << "    scalar_loads_per_vector:               " << scalar_loads_per_vector << '\n'
             << "    vector_loads_per_vector:               " << vector_loads_per_vector << '\n'
             << "    scalar_loads_per_scalar:               " << scalar_loads_per_scalar << '\n'
-            << "    bytes_at_task:                         " << bytes_at_task << '\n'
-            << "    innermost_bytes_at_task:               " << innermost_bytes_at_task << '\n'
+            << "    global_bytes_at_task:                  " << global_bytes_at_task << '\n'
+            << "    shared_bytes_at_task:                  " << shared_bytes_at_task << '\n'
+            << "    local_bytes_at_task:                   " << local_bytes_at_task << '\n'
+            << "    global_innermost_bytes_at_task:        " << global_innermost_bytes_at_task << '\n'
+            << "    shared_innermost_bytes_at_task:        " << shared_innermost_bytes_at_task << '\n'
+            << "    local_innermost_bytes_at_task:         " << local_innermost_bytes_at_task << '\n'
             << "    unique_bytes_read_per_vector:          " << unique_bytes_read_per_vector << '\n'
             << "    unique_lines_read_per_vector:          " << unique_lines_read_per_vector << '\n'
             << "    unique_bytes_read_per_task:            " << unique_bytes_read_per_task << '\n'
@@ -486,8 +494,12 @@ struct ScheduleFeatures {
             && scalar_loads_per_vector               == other.scalar_loads_per_vector
             && vector_loads_per_vector               == other.vector_loads_per_vector
             && scalar_loads_per_scalar               == other.scalar_loads_per_scalar
-            && bytes_at_task                         == other.bytes_at_task
-            && innermost_bytes_at_task               == other.innermost_bytes_at_task
+            && global_bytes_at_task                  == other.global_bytes_at_task
+            && shared_bytes_at_task                  == other.shared_bytes_at_task
+            && local_bytes_at_task                   == other.local_bytes_at_task
+            && global_innermost_bytes_at_task        == other.global_innermost_bytes_at_task
+            && shared_innermost_bytes_at_task        == other.shared_innermost_bytes_at_task
+            && local_innermost_bytes_at_task         == other.local_innermost_bytes_at_task
             && unique_bytes_read_per_vector          == other.unique_bytes_read_per_vector
             && unique_lines_read_per_vector          == other.unique_lines_read_per_vector
             && unique_bytes_read_per_task            == other.unique_bytes_read_per_task
