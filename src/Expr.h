@@ -13,7 +13,6 @@
 #include "Float16.h"
 #include "IntrusivePtr.h"
 #include "Type.h"
-#include "Util.h"
 
 namespace Halide {
 namespace Internal {

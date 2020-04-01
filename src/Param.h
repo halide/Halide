@@ -5,7 +5,6 @@
 
 #include "Argument.h"
 #include "IR.h"
-#include "Util.h"
 
 /** \file
  *

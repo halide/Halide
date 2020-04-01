@@ -7,7 +7,7 @@
  * definition across a reduction variable.
  */
 
-#include "Function.h"
+#include "Definition.h"
 
 namespace Halide {
 namespace Internal {

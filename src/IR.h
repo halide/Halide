@@ -13,11 +13,12 @@
 #include "Error.h"
 #include "Expr.h"
 #include "Function.h"
+#include "FunctionPtr.h"
 #include "IntrusivePtr.h"
 #include "ModulusRemainder.h"
 #include "Parameter.h"
+#include "Reduction.h"
 #include "Type.h"
-#include "Util.h"
 #include "runtime/HalideBuffer.h"
 
 namespace Halide {

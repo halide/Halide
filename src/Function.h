@@ -11,9 +11,7 @@
 #include "FunctionPtr.h"
 #include "IntrusivePtr.h"
 #include "Parameter.h"
-#include "Reduction.h"
 #include "Schedule.h"
-#include "Util.h"
 
 #include <map>
 #include <utility>

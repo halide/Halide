@@ -6,7 +6,6 @@
  */
 
 #include "IR.h"
-#include "ModulusRemainder.h"
 #include "Scope.h"
 
 namespace Halide {
