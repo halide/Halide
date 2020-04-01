@@ -1222,6 +1222,8 @@ Stmt zero_gpu_loop_mins(const Stmt &s) {
 }
 
 class FindInnermostGPUBlock : public IRVisitor {
+    using IRVisitor::visit;
+
     void visit(const For *op) override {
         if (CodeGen_GPU_Dev::is_gpu_block_var(op->name)) {
             // Set the last found GPU block to found_gpu_block.
@@ -1235,6 +1237,8 @@ public:
 };
 
 class AddConditionToALoop : public IRMutator {
+    using IRMutator::visit;
+
     Stmt visit(const For *op) override {
         if (op != loop) {
             return IRMutator::mutate(op);
@@ -1255,6 +1259,8 @@ public:
 // Push if statements between GPU blocks through all GPU blocks.
 // Throw error if the if statement has an else clause.
 class NormalizeIfStatements : public IRMutator {
+    using IRMutator::visit;
+
     bool inside_gpu_blocks = false;
 
     Stmt visit(const For *op) override {

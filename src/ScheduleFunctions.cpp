@@ -255,7 +255,6 @@ Stmt build_loop_nest(
             continue;
         }
 
-        int index = i;
         for (int j = i - 1; j >= 0; j--) {
             // Try to push it up by one.
             internal_assert(nest[j + 1].value.defined());
@@ -263,7 +262,6 @@ Stmt build_loop_nest(
             if (!expr_uses_var(nest[j + 1].value, nest[j].name)) {
                 std::swap(nest[j + 1], nest[j]);
             } else {
-                index = j + 1;
                 break;
             }
         }
