@@ -692,7 +692,7 @@ void LoopNest::get_sites(const Target &target,
 
     for (auto f : store_at) {
         for (const auto &s : f->stages) {
-            sites.get_or_create(&s).store = (in_block && !in_thread) ? task : this;
+            sites.get_or_create(&s).store = this;
             auto store_gpu_memory_type = get_gpu_memory_type(in_block, in_thread);
             sites.get_or_create(&s).gpu_store_memory_type = store_gpu_memory_type;
 
