@@ -352,7 +352,7 @@ public:
         Expr max_warp_occupancy = schedule_features(n, idx++, w);
         Expr max_block_occupancy = schedule_features(n, idx++, w);
 
-        Expr num_threads = schedule_features(n, idx++, w);
+        Expr num_threads_per_block = schedule_features(n, idx++, w);
         Expr expr_branching = schedule_features(n, idx++, w);
 
         assert(idx == head2_w);
@@ -409,10 +409,10 @@ public:
         expr_branching = max(1, relu1(23, w, n) * expr_branching);
         expr_branching = print_wrap(expr_branching, "expr_branching", n, w);
 
-        num_threads = print_wrap(num_threads, "num_threads", n, w);
+        num_threads_per_block = print_wrap(num_threads_per_block, "num_threads_per_block", n, w);
 
-        Expr num_registers_available_per_thread = min(64.f, 65536.f / num_threads);
-        Expr num_registers_per_block = num_threads * min(num_registers_available_per_thread, expr_branching);
+        Expr num_registers_available_per_thread = min(64.f, 65536.f / num_threads_per_block);
+        Expr num_registers_per_block = num_threads_per_block * min(num_registers_available_per_thread, expr_branching);
         Expr max_theoretical_active_blocks = max(1.f, floor(65536.f / num_registers_per_block));
         Expr max_active_blocks = min(max_theoretical_active_blocks, 32.f);
 
@@ -452,14 +452,14 @@ public:
         shared_mem_load_cost *= (1.f / shared_mem_load_efficiency);
         shared_mem_load_cost = print_wrap(shared_mem_load_cost, "shared_mem_load_cost_after_load_efficiency", n, w);
 
-        Expr local_mem_load_cost = num_blocks * num_threads * num_local_mem_loads_per_thread * relu1(18, w, n);
+        Expr local_mem_load_cost = num_blocks * num_threads_per_block * num_local_mem_loads_per_thread * relu1(18, w, n);
 
         local_mem_load_cost *= (1.f / local_mem_load_efficiency);
         local_mem_load_cost = print_wrap(local_mem_load_cost, "local_mem_load_cost_after_load_efficiency", n, w);
 
         Expr excess_registers_required = expr_branching / num_registers_available_per_thread;
         excess_registers_required = print_wrap(excess_registers_required, "excess_registers_required", n, w);
-        Expr spill_cost = select(inlined_calls == 0 && excess_registers_required > 1, max(1, relu1(33, w, n) * num_threads * excess_registers_required), 1);
+        Expr spill_cost = select(inlined_calls == 0 && excess_registers_required > 1, max(1, relu1(33, w, n) * num_threads_per_block * excess_registers_required), 1);
         local_mem_load_cost *= spill_cost;
         local_mem_load_cost = print_wrap(local_mem_load_cost, "local_mem_load_cost_after_spill_cost", n, w);
 
@@ -479,7 +479,7 @@ public:
         global_mem_store_cost *= (1.f / global_mem_store_coalesce_efficiency);
         global_mem_store_cost = print_wrap(global_mem_store_cost, "global_mem_store_cost_after_store_coalesce_efficiency", n, w);
 
-        Expr local_mem_store_cost = num_blocks * num_threads * num_local_mem_stores_per_thread * relu1(19, w, n);
+        Expr local_mem_store_cost = num_blocks * num_threads_per_block * num_local_mem_stores_per_thread * relu1(19, w, n);
 
         local_mem_store_cost *= (1.f / local_mem_store_efficiency);
         local_mem_store_cost = print_wrap(local_mem_store_cost, "local_mem_store_cost_after_store_efficiency", n, w);

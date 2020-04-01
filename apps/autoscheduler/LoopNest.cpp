@@ -1307,7 +1307,7 @@ void LoopNest::compute_warp_features(ScheduleFeatures &features, const GPULoopIn
     features.num_warps_per_block = thread_info->num_warps_per_block;
     features.num_blocks = gpu_loop_info.num_blocks;
     features.block_occupancy = thread_info->block_occupancy();
-    features.num_threads = thread_info->num_threads;
+    features.num_threads_per_block = thread_info->num_threads;
 
     internal_assert(in_range_zero_one(features.block_occupancy)) << "Invalid block occupancy: " << features.block_occupancy;
     internal_assert(in_range_zero_one(features.warp_lane_utilization)) << "Invalid warp utilization: " << features.warp_lane_utilization;

@@ -372,7 +372,7 @@ struct ScheduleFeatures {
     double max_warp_occupancy = 0;
     double max_block_occupancy = 0;
 
-    double num_threads = 0;
+    double num_threads_per_block = 0;
     double expr_branching = 0;
 
     template<typename OS>
@@ -465,7 +465,7 @@ struct ScheduleFeatures {
             << "    shared_mem_block_limit_factor:         " << shared_mem_block_limit_factor << '\n'
             << "    max_warp_occupancy:                    " << max_warp_occupancy << '\n'
             << "    max_block_occupancy:                   " << max_block_occupancy << '\n'
-            << "    num_threads:                           " << num_threads << '\n'
+            << "    num_threads_per_block:                 " << num_threads_per_block << '\n'
             << "    expr_branching:                        " << expr_branching << '\n';
     }
 
@@ -563,7 +563,7 @@ struct ScheduleFeatures {
             && shared_mem_block_limit_factor         == other.shared_mem_block_limit_factor
             && max_warp_occupancy                    == other.max_warp_occupancy
             && max_block_occupancy                   == other.max_block_occupancy
-            && num_threads                           == other.num_threads
+            && num_threads_per_block                 == other.num_threads_per_block
             && expr_branching                        == other.expr_branching;
     }
 };
