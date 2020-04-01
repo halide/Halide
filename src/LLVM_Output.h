@@ -10,7 +10,6 @@
 
 #include "Module.h"
 #include "Target.h"
-#include "Util.h"
 
 namespace llvm {
 class Module;
