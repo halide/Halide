@@ -9,6 +9,7 @@ MCTS Code Based on the Java (Simon Lucas - University of Essex) and Python (Pete
 #include "TreeNodeT.h"
 #include "MSALoopTimer.h"
 #include <cfloat>
+#include <assert.h>
 
 namespace msa {
     namespace mcts {
@@ -125,10 +126,11 @@ namespace msa {
 
                     // 3. SIMULATE (if not terminal)
                     if(!node->is_terminal()) {
-                        Action action;
                         for(int t = 0; t < simulation_depth; t++) {
                             if(state.is_terminal()) break;
 
+                            //Note, placeholder
+                            Action action(nullptr);
                             if(state.get_random_action(action))
                                 state.apply_action(action);
                             else
@@ -166,7 +168,8 @@ namespace msa {
                 if(best_node) return best_node->get_action();
 
                 // we shouldn't be here
-                return Action();
+                assert(0 && "Error: could not find any action");
+                exit(1);
             }
 
 

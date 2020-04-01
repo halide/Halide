@@ -719,9 +719,11 @@ struct State {
         unsigned index;
         unsigned option_var;
         //AHA: If this constructor is called then there is a bug in the MCTS
-        Action() {}
+        //Action() { assert(0 && "illegal construction"); }
+        Action(std::nullptr_t) : ae(ActionEnum::Inline), index(0), option_var(0) {
+        }
         Action(const Action& a):ae(a.ae), index(a.index), option_var(a.option_var) {}
-        Action(ActionEnum ae_, unsigned index_) : ae(ae_), index(index_) {}
+        Action(ActionEnum ae_, unsigned index_) : ae(ae_), index(index_), option_var(0) {}
         Action(ActionEnum ae_, unsigned index_, unsigned option_var_) : ae(ae_), index(index_), option_var(option_var_) {}
         bool operator==(const Action& a) const {
             return ae == a.ae && index == a.index && option_var == a.option_var;
@@ -748,22 +750,16 @@ struct State {
         inner->root = other_inner->root;
         inner->cost = other_inner->cost;
         inner->num_decisions_made = other_inner->num_decisions_made;
+        inner->cost_calculations = other_inner->cost_calculations;
         //inner->ref_count = other.inner->ref_count;
         inner->penalized = other_inner->penalized;
 
     std::cout << "WrapperState(1)" <<inner->cost<<inner->num_decisions_made<<inner->cost_calculations<< std::endl;
     }
     // copy and assignment operators should perform a DEEP clone of the given state
-    WrapperState(const WrapperState& other): inner(other.inner),numleft(other.numleft),dag(other.dag),params(other.params),cost_model(other.cost_model){
-        inner = new State;
-        inner->parent = other.inner->parent;
-        inner->root = other.inner->root;
-        inner->cost = other.inner->cost;
-        inner->num_decisions_made = other.inner->num_decisions_made;
-        //inner->ref_count = other.inner->ref_count;
-        inner->penalized = other.inner->penalized;
-    std::cout << "WrapperState(2)" <<inner->cost<<inner->num_decisions_made<< inner->cost_calculations<<std::endl;
-    }
+    WrapperState(const WrapperState& other) :
+        WrapperState(other.inner, other.numleft, other.dag, other.params, other.cost_model) {}
+    
     WrapperState& operator = (const WrapperState& other) = delete;
 
     // whether or not this state is terminal (reached end)
@@ -1614,7 +1610,6 @@ IntrusivePtr<State> optimal_mcts_schedule(FunctionDAG &dag,
 
     State::WrapperState state(initial, num_passes, dag, params, cost_model);
 
-    State::Action action;          // contains an action that can be applied to a State, and bring it to a new State
     msa::mcts::UCT<State::WrapperState, State::Action> uct; // Templated class. Builds a partial decision tree and searches it with UCT MCTS
 
     // OPTIONAL init uct params
@@ -1627,7 +1622,7 @@ IntrusivePtr<State> optimal_mcts_schedule(FunctionDAG &dag,
         ProgressBar tick;
 
         // run uct mcts on current state and get best action
-        action = uct.run(state);
+        State::Action action = uct.run(state);
         std::cout << "prefinsihed pass " << i << std::endl;
 
         // apply the action to the current state

@@ -23,7 +23,7 @@ namespace msa {
             //--------------------------------------------------------------
             TreeNodeT(const State& state, TreeNodeT* parent = NULL):
                 state(state),
-                action(),
+                action(nullptr),
                 parent(parent),
 				agent_id(state.agent_id()),
                 num_visits(0),
