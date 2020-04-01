@@ -155,6 +155,8 @@ struct LoopNest {
         double innermost_pure_loop_extent;
         double outer_parallelism;
         double num_warps_per_block;
+        double num_threads_per_block;
+        double points_computed_per_thread;
     };
 
     mutable std::map<uint64_t, StageMap<StageMap<FeatureIntermediates>>> feature_intermediates;

@@ -1570,6 +1570,9 @@ void LoopNest::recompute_inlined_features(const StageMap<Sites> &sites, StageMap
         inlined_feat.outer_parallelism = intermediate.outer_parallelism;
         inlined_feat.num_blocks = intermediate.outer_parallelism;
         inlined_feat.num_warps_per_block += intermediate.num_warps_per_block;
+
+        inlined_feat.num_threads_per_block += intermediate.num_threads_per_block;
+        inlined_feat.points_computed_per_thread += intermediate.points_computed_per_thread;
     }
 }
 
@@ -1817,6 +1820,8 @@ void LoopNest::compute_features(const FunctionDAG &dag,
                 feat.innermost_pure_loop_extent = 0;
                 feat.outer_parallelism = 0;
                 feat.num_warps_per_block = 0;
+                feat.num_threads_per_block = 0;
+                feat.points_computed_per_thread = 0;
             }
         }
 
@@ -2676,6 +2681,9 @@ void LoopNest::compute_features(const FunctionDAG &dag,
         internal_assert(gpu_loop_info.thread_info);
         auto num_warps = it.value() * gpu_loop_info.total_serial_extents() * gpu_loop_info.thread_info->num_warps_per_block * inlined_feat.num_blocks;
         inlined_feat.num_warps_per_block += num_warps;
+        inlined_feat.num_threads_per_block += gpu_loop_info.thread_info->num_threads;
+        double points_computed_per_thread = it.value() * feat.points_computed_per_thread;
+        inlined_feat.points_computed_per_thread += points_computed_per_thread;
 
         if (use_memoized_features) {
             const auto &block = sites.get(stage).task;
@@ -2690,6 +2698,9 @@ void LoopNest::compute_features(const FunctionDAG &dag,
             intermediate.innermost_pure_loop_extent = feat.innermost_pure_loop_extent;
             intermediate.outer_parallelism = parallelism;
             intermediate.num_warps_per_block = num_warps;
+
+            intermediate.num_threads_per_block = gpu_loop_info.thread_info->num_threads;
+            intermediate.points_computed_per_thread = points_computed_per_thread;
         }
     }
 
