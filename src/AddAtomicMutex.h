@@ -1,9 +1,9 @@
 #ifndef HALIDE_ADD_ATOMIC_MUTEX_H
 #define HALIDE_ADD_ATOMIC_MUTEX_H
 
-// #include "Expr.h"
-// #include "Function.h"
-// #include <map>
+#include "Expr.h"
+#include "Function.h"
+#include <map>
 
 /** \file
  * Defines the lowering pass that insert mutex allocation code & locks
