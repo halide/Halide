@@ -45,11 +45,9 @@ struct Container {
     int dim_idx;
     string name;
     Expr value;
-    // Only meaningful if type==For.
-    ForType for_type;
 
-    Container(Type type, int dim_idx, string name, Expr value, ForType for_type = ForType::Serial)
-        : type(type), dim_idx(dim_idx), name(std::move(name)), value(std::move(value)), for_type(for_type) {
+    Container(Type type, int dim_idx, string name, Expr value)
+        : type(type), dim_idx(dim_idx), name(std::move(name)), value(std::move(value)) {
     }
 };
 
@@ -140,6 +138,10 @@ Stmt build_loop_nest(
     // Order the Ifs, Fors, and Lets for bounds inference
     // to generate tighter bounds and put the bound variables
     // in the right place.
+    // This is not a generic loop invariant code motion step.
+    // In particular there are dangling references to bound
+    // variables that are not defined yet, so we can't rely
+    // the loop invariant code motion pass.
 
     // All containing lets and fors. Outermost first.
     vector<Container> nest;
@@ -148,7 +150,7 @@ Stmt build_loop_nest(
     // Put the desired loop nest into the containers vector.
     for (int i = (int)stage_s.dims().size() - 1; i >= 0; i--) {
         const Dim &dim = stage_s.dims()[i];
-        nest.emplace_back(Container::For, i, prefix + dim.var, Expr(), dim.for_type);
+        nest.emplace_back(Container::For, i, prefix + dim.var, Expr());
     }
 
     vector<Container> pred_container;
