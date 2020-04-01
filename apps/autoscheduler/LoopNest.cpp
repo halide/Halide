@@ -2124,8 +2124,6 @@ void LoopNest::compute_features(const FunctionDAG &dag,
                     consumer_site,
                     feat,
                     root);
-
-                feat.num_shared_mem_stores = gpu_loop_info.num_blocks * feat.num_shared_mem_stores_per_block;
             }
         }
 
@@ -2632,7 +2630,6 @@ void LoopNest::compute_features(const FunctionDAG &dag,
         feat.unique_lines_read_per_vector = global_lines_loaded + shared_lines_loaded + local_lines_loaded;
 
         feat.num_shared_mem_loads_per_block = num_shared_mem_loads_per_block;
-        feat.num_shared_mem_loads = gpu_loop_info.num_blocks * num_shared_mem_loads_per_block;
         if (min_num_shared_mem_loads_per_block > 0 && num_shared_mem_loads_per_block > 0) {
             feat.shared_mem_load_efficiency = min_num_shared_mem_loads_per_block / num_shared_mem_loads_per_block;
             internal_assert(in_range_zero_one(feat.shared_mem_load_efficiency)) << "Invalid shared mem load efficiency: " << feat.shared_mem_load_efficiency;

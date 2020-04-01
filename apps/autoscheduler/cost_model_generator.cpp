@@ -322,11 +322,9 @@ public:
         Expr warp_lane_utilization_at_block_z = schedule_features(n, idx++, w);
         Expr idle_lane_wastage = schedule_features(n, idx++, w);
 
-        Expr num_shared_mem_loads = schedule_features(n, idx++, w);
         Expr num_shared_mem_loads_per_block = schedule_features(n, idx++, w);
         Expr num_global_mem_loads_per_block = schedule_features(n, idx++, w);
         Expr num_local_mem_loads_per_thread = schedule_features(n, idx++, w);
-        Expr num_shared_mem_stores = schedule_features(n, idx++, w);
         Expr num_shared_mem_stores_per_block = schedule_features(n, idx++, w);
         Expr num_global_mem_stores_per_block = schedule_features(n, idx++, w);
         Expr num_local_mem_stores_per_thread = schedule_features(n, idx++, w);
