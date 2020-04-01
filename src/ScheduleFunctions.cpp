@@ -267,39 +267,6 @@ Stmt build_loop_nest(
                 break;
             }
         }
-
-        // If the If is in-between two GPUBlocks, this generates invalid code.
-        // We want to push the If back down through all GPUBlocks.
-        bool inside_gpu_blocks = false, outside_gpu_blocks = false;
-        for (int j = index - 1; j >= 0; j--) {
-            if (nest[j].for_type == ForType::GPUBlock) {
-                inside_gpu_blocks = true;
-                break;
-            }
-        }
-        for (int j = index + 1; j < (int)nest.size(); j++) {
-            if (nest[j].for_type == ForType::GPUBlock) {
-                outside_gpu_blocks = true;
-                break;
-            }
-        }
-        if (inside_gpu_blocks && outside_gpu_blocks) {
-            // Push the If through all GPUBlocks
-            int last_gpu_block_index = -1;
-            for (int j = (int)nest.size() - 1; j >= 0; j--) {
-                if (nest[j].for_type == ForType::GPUBlock) {
-                    last_gpu_block_index = j;
-                    break;
-                }
-            }
-            internal_assert(last_gpu_block_index >= 0);
-            for (int j = index + 1; j < (int)nest.size(); j++) {
-                std::swap(nest[j - 1], nest[j]);
-                if (j == last_gpu_block_index) {
-                    break;
-                }
-            }
-        }
     }
 
     // Rewrap the statement in the containing lets and fors.
