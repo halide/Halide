@@ -1299,7 +1299,6 @@ bool LoopNest::has_thread_loop_descendant() const {
 void LoopNest::compute_warp_features(ScheduleFeatures &features, const GPULoopInfo &gpu_loop_info) const {
     const ThreadInfo *thread_info = gpu_loop_info.thread_info;
     features.warp_lane_utilization = thread_info->warp_lane_utilization();
-    features.warp_lane_utilization_at_block = thread_info->total_warp_lane_utilization_at_block();
     features.warp_lane_utilization_at_block_x = thread_info->warp_lane_utilization_at_block_x();
     features.warp_lane_utilization_at_block_y = thread_info->warp_lane_utilization_at_block_y();
     features.warp_lane_utilization_at_block_z = thread_info->warp_lane_utilization_at_block_z();
@@ -1311,7 +1310,6 @@ void LoopNest::compute_warp_features(ScheduleFeatures &features, const GPULoopIn
 
     internal_assert(in_range_zero_one(features.block_occupancy)) << "Invalid block occupancy: " << features.block_occupancy;
     internal_assert(in_range_zero_one(features.warp_lane_utilization)) << "Invalid warp utilization: " << features.warp_lane_utilization;
-    internal_assert(in_range_zero_one(features.warp_lane_utilization_at_block)) << "Invalid warp utilization at block: " << features.warp_lane_utilization_at_block;
     internal_assert(in_range_zero_one(features.warp_lane_utilization_at_block_x)) << "Invalid warp utilization at block x: " << features.warp_lane_utilization_at_block_x;
     internal_assert(in_range_zero_one(features.warp_lane_utilization_at_block_y)) << "Invalid warp utilization at block y: " << features.warp_lane_utilization_at_block_y;
     internal_assert(in_range_zero_one(features.warp_lane_utilization_at_block_z)) << "Invalid warp utilization at block z: " << features.warp_lane_utilization_at_block_z;

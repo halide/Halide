@@ -316,7 +316,6 @@ public:
         Expr block_occupancy = schedule_features(n, idx++, w);
 
         Expr warp_lane_utilization = schedule_features(n, idx++, w);
-        Expr warp_lane_utilization_at_block = schedule_features(n, idx++, w);
         Expr warp_lane_utilization_at_block_x = schedule_features(n, idx++, w);
         Expr warp_lane_utilization_at_block_y = schedule_features(n, idx++, w);
         Expr warp_lane_utilization_at_block_z = schedule_features(n, idx++, w);
@@ -369,8 +368,8 @@ public:
         compute_cost = print_wrap(compute_cost, "compute_cost_initial", n, w);
 
         compute_cost += select(inlined_calls == 0,
-                               (num_warps_per_block * relu1(31, w, n)),
-                               (num_warps_per_block * num_blocks * relu1(4, w, n)));
+                               (num_blocks * num_threads_per_block * points_computed_per_thread * relu1(31, w, n)),
+                               (num_blocks * num_threads_per_block * points_computed_per_thread * relu1(4, w, n)));
 
         compute_cost = print_wrap(compute_cost, "compute_cost_after_warps", n, w);
 
@@ -383,14 +382,9 @@ public:
 
         // Ignore warp_lane_utilization and block_occupancy for inlined stages
         // Serial loops use a single thread
-        //compute_cost /= select(inlined_calls == 0, block_occupancy, 1.f);
-        //compute_cost = print_wrap(compute_cost, "compute_cost_after_block_occupancy", n, w);
 
         compute_cost /= select(inlined_calls == 0, warp_lane_utilization, 1.f);
         compute_cost = print_wrap(compute_cost, "compute_cost_after_warp_lane_utilization", n, w);
-
-        //compute_cost /= select(inlined_calls == 0, warp_lane_utilization_at_block, 1.f);
-        //compute_cost = print_wrap(compute_cost, "compute_cost_after_warp_lane_utilization_at_block", n, w);
 
         compute_cost /= select(inlined_calls == 0, warp_lane_utilization_at_block_x, 1.f);
         compute_cost = print_wrap(compute_cost, "compute_cost_after_warp_lane_utilization_at_block_x", n, w);
@@ -426,6 +420,12 @@ public:
                           num_realizations * unique_global_bytes_read_per_realization * relu1(6, w, n) +
                           num_realizations * unique_shared_bytes_read_per_realization * relu1(20, w, n) +
                           num_realizations * unique_local_bytes_read_per_realization * relu1(21, w, n) +
+                          num_blocks * num_threads_per_block * unique_global_lines_read_per_thread * relu1(32, w, n) +
+                          num_blocks * num_threads_per_block * unique_shared_lines_read_per_thread * relu1(33, w, n) +
+                          num_blocks * num_threads_per_block * unique_local_lines_read_per_thread * relu1(34, w, n) +
+                          num_blocks * num_threads_per_block * unique_global_bytes_read_per_thread * relu1(35, w, n) +
+                          num_blocks * num_threads_per_block * unique_shared_bytes_read_per_thread * relu1(36, w, n) +
+                          num_blocks * num_threads_per_block * unique_local_bytes_read_per_thread * relu1(37, w, n) +
                           num_vectors * vector_loads_per_vector * relu1(7, w, n) +
                           num_scalars * scalar_loads_per_scalar * relu1(8, w, n) +
                           num_vectors * scalar_loads_per_vector * relu1(9, w, n) +
@@ -439,20 +439,16 @@ public:
         load_cost = print_wrap(load_cost, "load_cost_initial", n, w);
 
         Expr global_mem_load_cost = num_blocks * num_global_mem_loads_per_block * relu1(28, w, n);
-        global_mem_load_cost *= (1.f / global_mem_load_efficiency);
         global_mem_load_cost = print_wrap(global_mem_load_cost, "global_mem_load_cost_after_load_efficiency", n, w);
 
-        global_mem_load_cost *= (1.f / global_mem_load_coalesce_efficiency);
         global_mem_load_cost = print_wrap(global_mem_load_cost, "global_mem_load_cost_after_load_coalesce_efficiency", n, w);
 
         Expr shared_mem_load_cost = num_blocks * num_shared_mem_loads_per_block * relu1(27, w, n);
 
-        shared_mem_load_cost *= (1.f / shared_mem_load_efficiency);
         shared_mem_load_cost = print_wrap(shared_mem_load_cost, "shared_mem_load_cost_after_load_efficiency", n, w);
 
         Expr local_mem_load_cost = num_blocks * num_threads_per_block * num_local_mem_loads_per_thread * relu1(18, w, n);
 
-        local_mem_load_cost *= (1.f / local_mem_load_efficiency);
         local_mem_load_cost = print_wrap(local_mem_load_cost, "local_mem_load_cost_after_load_efficiency", n, w);
 
         Expr excess_registers_required = expr_branching / num_registers_available_per_thread;
@@ -466,20 +462,16 @@ public:
         // Store costs
         Expr shared_mem_store_cost = num_blocks * num_shared_mem_stores_per_block * relu1(29, w, n);
 
-        shared_mem_store_cost *= (1.f / shared_mem_store_efficiency);
         shared_mem_store_cost = print_wrap(shared_mem_store_cost, "shared_mem_store_cost_after_store_efficiency", n, w);
 
         Expr global_mem_store_cost = num_blocks * num_global_mem_stores_per_block * relu1(30, w, n);
 
-        global_mem_store_cost *= (1.f / global_mem_store_efficiency);
         global_mem_store_cost = print_wrap(global_mem_store_cost, "global_mem_store_cost_after_store_efficiency", n, w);
 
-        global_mem_store_cost *= (1.f / global_mem_store_coalesce_efficiency);
         global_mem_store_cost = print_wrap(global_mem_store_cost, "global_mem_store_cost_after_store_coalesce_efficiency", n, w);
 
         Expr local_mem_store_cost = num_blocks * num_threads_per_block * num_local_mem_stores_per_thread * relu1(19, w, n);
 
-        local_mem_store_cost *= (1.f / local_mem_store_efficiency);
         local_mem_store_cost = print_wrap(local_mem_store_cost, "local_mem_store_cost_after_store_efficiency", n, w);
 
         local_mem_store_cost *= spill_cost;

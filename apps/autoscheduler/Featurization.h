@@ -301,8 +301,8 @@ struct ScheduleFeatures {
     // gathers count as a batch of scalar loads. These get amortized
     // across unrolled blocks if some loads can be reused across the
     // unrolled dimension.
-    double scalar_loads_per_vector = 0;
     double vector_loads_per_vector = 0;
+    double scalar_loads_per_vector = 0;
     double scalar_loads_per_scalar = 0;
 
     // The memory footprint written over one per parallel task. The
@@ -336,17 +336,14 @@ struct ScheduleFeatures {
     double block_occupancy = 1.0 / 1024.0;
 
     double warp_lane_utilization = 1.0 / 32.0;
-    double warp_lane_utilization_at_block = 1;
     double warp_lane_utilization_at_block_x = 1;
     double warp_lane_utilization_at_block_y = 1;
     double warp_lane_utilization_at_block_z = 1;
     double idle_lane_wastage = 0;
 
-    double num_shared_mem_loads = 0;
     double num_shared_mem_loads_per_block = 0;
     double num_global_mem_loads_per_block = 0;
     double num_local_mem_loads_per_thread = 0;
-    double num_shared_mem_stores = 0;
     double num_shared_mem_stores_per_block = 0;
     double num_global_mem_stores_per_block = 0;
     double num_local_mem_stores_per_thread = 0;
@@ -437,16 +434,13 @@ struct ScheduleFeatures {
             << "    num_warps_per_block:                   " << num_warps_per_block << '\n'
             << "    block_occupancy:                       " << block_occupancy << '\n'
             << "    warp_lane_utilization:                 " << warp_lane_utilization << '\n'
-            << "    warp_lane_utilization_at_block:        " << warp_lane_utilization_at_block << '\n'
             << "    warp_lane_utilization_at_block_x:      " << warp_lane_utilization_at_block_x << '\n'
             << "    warp_lane_utilization_at_block_y:      " << warp_lane_utilization_at_block_y << '\n'
             << "    warp_lane_utilization_at_block_z:      " << warp_lane_utilization_at_block_z << '\n'
             << "    idle_lane_wastage:                     " << idle_lane_wastage << '\n'
-            << "    num_shared_mem_loads:                  " << num_shared_mem_loads << '\n'
             << "    num_shared_mem_loads_per_block:        " << num_shared_mem_loads_per_block << '\n'
             << "    num_global_mem_loads_per_block:        " << num_global_mem_loads_per_block << '\n'
             << "    num_local_mem_loads_per_thread:        " << num_local_mem_loads_per_thread << '\n'
-            << "    num_shared_mem_stores:                 " << num_shared_mem_stores << '\n'
             << "    num_shared_mem_stores_per_block:       " << num_shared_mem_stores_per_block << '\n'
             << "    num_global_mem_stores_per_block:       " << num_global_mem_stores_per_block << '\n'
             << "    num_local_mem_stores_per_thread:       " << num_local_mem_stores_per_thread << '\n'
@@ -535,16 +529,13 @@ struct ScheduleFeatures {
             && num_warps_per_block                   == other.num_warps_per_block
             && block_occupancy                       == other.block_occupancy
             && warp_lane_utilization                 == other.warp_lane_utilization
-            && warp_lane_utilization_at_block        == other.warp_lane_utilization_at_block
             && warp_lane_utilization_at_block_x      == other.warp_lane_utilization_at_block_x
             && warp_lane_utilization_at_block_y      == other.warp_lane_utilization_at_block_y
             && warp_lane_utilization_at_block_z      == other.warp_lane_utilization_at_block_z
             && idle_lane_wastage                     == other.idle_lane_wastage
-            && num_shared_mem_loads                  == other.num_shared_mem_loads
             && num_shared_mem_loads_per_block        == other.num_shared_mem_loads_per_block
             && num_global_mem_loads_per_block        == other.num_global_mem_loads_per_block
             && num_local_mem_loads_per_thread        == other.num_local_mem_loads_per_thread
-            && num_shared_mem_stores                 == other.num_shared_mem_stores
             && num_shared_mem_stores_per_block       == other.num_shared_mem_stores_per_block
             && num_global_mem_stores_per_block       == other.num_global_mem_stores_per_block
             && num_local_mem_stores_per_thread       == other.num_local_mem_stores_per_thread
