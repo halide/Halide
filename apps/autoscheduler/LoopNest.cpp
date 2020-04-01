@@ -2086,6 +2086,8 @@ void LoopNest::compute_features(const FunctionDAG &dag,
     // things like vector gathers.
     int64_t global_bytes_loaded = 0, shared_bytes_loaded = 0, local_bytes_loaded = 0;
     int64_t global_lines_loaded = 0, shared_lines_loaded = 0, local_lines_loaded = 0;
+    int64_t global_bytes_loaded_per_thread = 0, shared_bytes_loaded_per_thread = 0, local_bytes_loaded_per_thread = 0;
+    int64_t global_lines_loaded_per_thread = 0, shared_lines_loaded_per_thread = 0, local_lines_loaded_per_thread = 0;
     int64_t global_allocation_bytes_loaded = 0, shared_allocation_bytes_loaded = 0, local_allocation_bytes_loaded = 0;
     double num_dense_loads = 0, num_broadcasts = 0,
            num_gathers = 0, num_stride_2_loads = 0,
@@ -2502,12 +2504,21 @@ void LoopNest::compute_features(const FunctionDAG &dag,
                         global_bytes_loaded += store_footprint;
                         // Due to folding, the actual buffer size is smaller than the bounds at the store level
                         global_lines_loaded += store_line_footprint;
+
+                        global_bytes_loaded_per_thread += store_footprint;
+                        global_lines_loaded_per_thread += store_line_footprint;
                     } else if (site.is_stored_in_shared_mem()) {
                         shared_bytes_loaded += store_footprint;
                         shared_lines_loaded += store_line_footprint;
+
+                        shared_bytes_loaded_per_thread += store_footprint;
+                        shared_lines_loaded_per_thread += store_line_footprint;
                     } else if (site.is_stored_in_local_mem()) {
                         local_bytes_loaded += store_footprint;
                         local_lines_loaded += store_line_footprint;
+
+                        local_bytes_loaded_per_thread += store_footprint;
+                        local_lines_loaded_per_thread += store_line_footprint;
                     } else {
                         internal_assert(false);
                     }
@@ -2517,12 +2528,21 @@ void LoopNest::compute_features(const FunctionDAG &dag,
                     if (site.is_stored_in_global_mem()) {
                         global_bytes_loaded += footprint;
                         global_lines_loaded += line_footprint;
+
+                        global_bytes_loaded_per_thread += thread_footprint;
+                        global_lines_loaded_per_thread += thread_line_footprint;
                     } else if (site.is_stored_in_shared_mem()) {
                         shared_bytes_loaded += footprint;
                         shared_lines_loaded += line_footprint;
+
+                        shared_bytes_loaded_per_thread += thread_footprint;
+                        shared_lines_loaded_per_thread += thread_line_footprint;
                     } else if (site.is_stored_in_local_mem()) {
                         local_bytes_loaded += footprint;
                         local_lines_loaded += line_footprint;
+
+                        local_bytes_loaded_per_thread += thread_footprint;
+                        local_lines_loaded_per_thread += thread_line_footprint;
                     } else {
                         internal_assert(false);
                     }
@@ -2581,18 +2601,16 @@ void LoopNest::compute_features(const FunctionDAG &dag,
         }
     }
 
-    if (is_gpu_thread(target)) {
-        feat.unique_global_bytes_read_per_thread = global_bytes_loaded;
-        feat.unique_shared_bytes_read_per_thread = shared_bytes_loaded;
-        feat.unique_local_bytes_read_per_thread = local_bytes_loaded;
-
-        feat.unique_global_lines_read_per_thread = global_lines_loaded;
-        feat.unique_shared_lines_read_per_thread = shared_lines_loaded;
-        feat.unique_local_lines_read_per_thread = local_lines_loaded;
-    }
-
     if (innermost) {
         feat.points_computed_per_thread = gpu_loop_info.total_serial_extents();
+
+        feat.unique_global_bytes_read_per_thread = global_bytes_loaded_per_thread;
+        feat.unique_shared_bytes_read_per_thread = shared_bytes_loaded_per_thread;
+        feat.unique_local_bytes_read_per_thread = local_bytes_loaded_per_thread;
+
+        feat.unique_global_lines_read_per_thread = global_lines_loaded_per_thread;
+        feat.unique_shared_lines_read_per_thread = shared_lines_loaded_per_thread;
+        feat.unique_local_lines_read_per_thread = local_lines_loaded_per_thread;
 
         feat.points_computed_per_production = subinstances / feat.num_productions;
         // Halide codegens strided loads for small strides as a
