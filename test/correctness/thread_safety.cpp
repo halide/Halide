@@ -1,6 +1,10 @@
-#include "Halide.h"
 #include <stdio.h>
+#include <algorithm>
 #include <thread>
+#include <type_traits>
+#include <vector>
+
+#include "Halide.h"
 
 using namespace Halide;
 

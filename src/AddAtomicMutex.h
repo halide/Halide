@@ -1,9 +1,10 @@
 #ifndef HALIDE_ADD_ATOMIC_MUTEX_H
 #define HALIDE_ADD_ATOMIC_MUTEX_H
 
-#include "Expr.h"
-#include "Function.h"
 #include <map>
+#include <string>
+
+#include "Expr.h"
 
 /** \file
  * Defines the lowering pass that insert mutex allocation code & locks
@@ -21,6 +22,7 @@
 
 namespace Halide {
 namespace Internal {
+class Function;
 
 Stmt add_atomic_mutex(Stmt s, const std::map<std::string, Function> &env);
 

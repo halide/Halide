@@ -1,6 +1,8 @@
 #include "CodeGen_RISCV.h"
-#include "LLVM_Headers.h"
-#include "Util.h"
+
+#include "CodeGen_LLVM.h"
+#include "Error.h"
+#include "Target.h"
 
 namespace Halide {
 namespace Internal {

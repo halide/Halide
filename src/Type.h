@@ -1,11 +1,18 @@
 #ifndef HALIDE_TYPE_H
 #define HALIDE_TYPE_H
 
-#include "Error.h"
-#include "Float16.h"
+#include <cstdint>
+#include <string>
+#include <type_traits>
+#include <vector>
+
 #include "Util.h"
 #include "runtime/HalideRuntime.h"
-#include <stdint.h>
+
+namespace Halide {
+struct bfloat16_t;
+struct float16_t;
+}  // namespace Halide
 
 /** \file
  * Defines halide types

@@ -1,12 +1,20 @@
 #include "CodeGen_WebAssembly.h"
 
+#include <ext/alloc_traits.h>
+#include <stddef.h>
+#include <memory>
+#include <sstream>
+#include <vector>
+
+#include "CodeGen_LLVM.h"
 #include "ConciseCasts.h"
+#include "Error.h"
+#include "Expr.h"
+#include "IR.h"
 #include "IRMatch.h"
 #include "IROperator.h"
-#include "LLVM_Headers.h"
-#include "Util.h"
-
-#include <sstream>
+#include "Target.h"
+#include "Type.h"
 
 namespace Halide {
 namespace Internal {

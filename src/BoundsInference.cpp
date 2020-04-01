@@ -1,14 +1,37 @@
 #include "BoundsInference.h"
+
+#include <ext/alloc_traits.h>
+#include <stddef.h>
+#include <stdint.h>
+#include <algorithm>
+#include <iterator>
+#include <memory>
+#include <set>
+#include <sstream>
+#include <type_traits>
+
 #include "Bounds.h"
+#include "Buffer.h"
+#include "Debug.h"
+#include "Definition.h"
+#include "Error.h"
+#include "Function.h"
+#include "IR.h"
 #include "IREquality.h"
 #include "IRMutator.h"
 #include "IROperator.h"
+#include "IRVisitor.h"
 #include "Inline.h"
+#include "Interval.h"
+#include "Parameter.h"
+#include "Reduction.h"
+#include "Schedule.h"
 #include "Scope.h"
 #include "Simplify.h"
-
-#include <algorithm>
-#include <iterator>
+#include "Target.h"
+#include "Type.h"
+#include "Util.h"
+#include "runtime/HalideRuntime.h"
 
 namespace Halide {
 namespace Internal {

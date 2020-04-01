@@ -1,8 +1,12 @@
-#include "Halide.h"
-#include "halide_benchmark.h"
+#include <stdlib.h>
+#include <time.h>
 #include <cstdint>
 #include <cstdio>
+#include <iostream>
 #include <random>
+
+#include "Halide.h"
+#include "halide_benchmark.h"
 
 using namespace Halide;
 using namespace Halide::Tools;

@@ -1,5 +1,12 @@
-#include "Halide.h"
+#include <assert.h>
+#include <stdio.h>
+#include <algorithm>
+#include <cstdint>
+#include <memory>
+#include <type_traits>
+#include <vector>
 
+#include "Halide.h"
 // Include the machine-generated .stub.h header file.
 #include "configure.stub.h"
 

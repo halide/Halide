@@ -257,31 +257,51 @@
  * more information.)
  */
 
+#include <stdint.h>
+#include <stdio.h>
 #include <algorithm>
+#include <functional>
 #include <iterator>
 #include <limits>
+#include <map>
 #include <memory>
 #include <mutex>
 #include <set>
 #include <sstream>
 #include <string>
+#include <tuple>
 #include <type_traits>
 #include <utility>
 #include <vector>
 
+#include "Buffer.h"
+#include "Error.h"
+#include "Expr.h"
 #include "ExternalCode.h"
 #include "Func.h"
+#include "Function.h"
+#include "IROperator.h"
 #include "ImageParam.h"
 #include "Introspection.h"
-#include "ObjectInstanceRegistry.h"
+#include "Module.h"
+#include "OutputImageParam.h"
+#include "Param.h"
+#include "Parameter.h"
+#include "Pipeline.h"
+#include "RDom.h"
+#include "Realization.h"
+#include "Schedule.h"
 #include "Target.h"
+#include "Tuple.h"
+#include "Type.h"
+#include "Util.h"
+#include "Var.h"
+#include "runtime/HalideRuntime.h"
 
 namespace Halide {
 
-template<typename T>
-class Buffer;
-
 namespace Internal {
+class GeneratorOutputBase;
 
 void generator_test();
 
@@ -388,7 +408,6 @@ template<typename First>
 struct select_type<First> { using type = typename std::conditional<First::value, typename First::type, void>::type; };
 
 class GeneratorBase;
-class GeneratorParamInfo;
 
 class GeneratorParamBase {
 public:
@@ -1251,8 +1270,6 @@ auto operator!(const GeneratorParam<T> &a) -> decltype(!(T)a) {
 
 namespace Internal {
 
-template<typename T2>
-class GeneratorInput_Buffer;
 
 enum class IOKind { Scalar,
                     Function,
@@ -2120,6 +2137,7 @@ protected:
     // since we can't use std::enable_if on ctors, define the argument to be one that
     // can only be properly resolved for TBase=Func.
     struct Unused;
+
     using IntIfNonScalar =
         typename Internal::select_type<
             Internal::cond<Internal::has_static_halide_type_method<TBase>::value, int>,
@@ -2805,7 +2823,6 @@ private:
     const std::string error_msg;
 };
 
-class GeneratorStub;
 
 }  // namespace Internal
 
@@ -2981,7 +2998,6 @@ struct NoRealizations<T, Args...> {
     static const bool value = !std::is_convertible<T, Realization>::value && NoRealizations<Args...>::value;
 };
 
-class GeneratorStub;
 class SimpleGeneratorFactory;
 
 // Note that these functions must never return null:
@@ -3753,13 +3769,6 @@ public:
 }  // namespace Internal
 
 }  // namespace Halide
-
-// Define this namespace at global scope so that anonymous namespaces won't
-// defeat our static_assert check; define a dummy type inside so we can
-// check for type aliasing injected by anonymous namespace usage
-namespace halide_register_generator {
-struct halide_global_ns;
-};
 
 #define _HALIDE_REGISTER_GENERATOR_IMPL(GEN_CLASS_NAME, GEN_REGISTRY_NAME, FULLY_QUALIFIED_STUB_NAME)                               \
     namespace halide_register_generator {                                                                                           \

@@ -1,10 +1,8 @@
-#include "HalideRuntime.h"
 #if defined(TEST_OPENCL)
 #include "HalideRuntimeOpenCL.h"
 #endif
 
 #include <cstdio>
-#include <string>
 
 int main(int argc, char **argv) {
 #if defined(TEST_OPENCL)

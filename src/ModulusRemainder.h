@@ -5,6 +5,9 @@
  * Routines for statically determining what expressions are divisible by.
  */
 
+#include <stdint.h>
+
+#include "Expr.h"
 #include "Scope.h"
 
 namespace Halide {

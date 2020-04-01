@@ -6,14 +6,18 @@
  * variables.
  */
 
-#include "IR.h"
-
+#include <iosfwd>
+#include <string>
 #include <utility>
 #include <vector>
 
-namespace Halide {
+#include "Buffer.h"
+#include "Expr.h"
+#include "Reduction.h"
+#include "Util.h"
 
-class ImageParam;
+namespace Halide {
+class OutputImageParam;
 
 /** A reduction variable represents a single dimension of a reduction
  * domain (RDom). Don't construct them directly, instead construct an

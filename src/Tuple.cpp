@@ -1,6 +1,10 @@
 #include "Tuple.h"
-#include "Debug.h"
+
+#include <ext/alloc_traits.h>
+#include <string>
+
 #include "Func.h"
+#include "Function.h"
 
 namespace Halide {
 

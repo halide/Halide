@@ -1,7 +1,15 @@
+#include <algorithm>
+#include <memory>
+#include <utility>
+#include <vector>
+
+#include "Error.h"
+#include "Expr.h"
+#include "IR.h"
 #include "IRMutator.h"
 #include "IROperator.h"
 #include "Scope.h"
-#include <algorithm>
+#include "Type.h"
 
 namespace Halide {
 namespace Internal {

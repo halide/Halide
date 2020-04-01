@@ -1,11 +1,10 @@
 #ifndef HALIDE_UNIFY_DUPLICATE_LETS_H
 #define HALIDE_UNIFY_DUPLICATE_LETS_H
 
+#include "Expr.h"
 /** \file
  * Defines the lowering pass that coalesces redundant let statements
  */
-
-#include "IR.h"
 
 namespace Halide {
 namespace Internal {

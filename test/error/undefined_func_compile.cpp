@@ -1,7 +1,7 @@
-#include "Halide.h"
-#include <assert.h>
 #include <stdio.h>
+#include <string>
 
+#include "Halide.h"
 #include "test/common/halide_test_dirs.h"
 
 using namespace Halide;

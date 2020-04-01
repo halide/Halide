@@ -1,4 +1,13 @@
+#include <memory>
+#include <string>
+#include <type_traits>
+#include <vector>
+
 #include "Halide.h"
+
+namespace halide_register_generator {
+struct halide_global_ns;
+}  // namespace halide_register_generator
 
 // By convention, Generators always go in a .cpp file, usually with no
 // corresponding .h file. They can be enclosed in any C++ namespaces

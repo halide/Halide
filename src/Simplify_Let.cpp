@@ -1,5 +1,22 @@
+#include <ext/alloc_traits.h>
+#include <algorithm>
+#include <map>
+#include <memory>
+#include <string>
+#include <type_traits>
+#include <vector>
+
+#include "Debug.h"
+#include "Error.h"
+#include "Expr.h"
+#include "IR.h"
+#include "IROperator.h"
+#include "IRVisitor.h"
+#include "ModulusRemainder.h"
+#include "Scope.h"
 #include "Simplify_Internal.h"
 #include "Substitute.h"
+#include "Type.h"
 
 namespace Halide {
 namespace Internal {

@@ -1,12 +1,13 @@
 #ifndef HALIDE_QUALIFY_H
 #define HALIDE_QUALIFY_H
 
+#include <string>
+
+#include "Expr.h"
 /** \file
  *
  * Defines methods for prefixing names in an expression with a prefix string.
  */
-
-#include "IR.h"
 
 namespace Halide {
 namespace Internal {

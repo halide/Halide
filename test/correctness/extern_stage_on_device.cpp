@@ -1,6 +1,12 @@
-#include "Halide.h"
-#include "HalideRuntime.h"
+#include <assert.h>
+#include <stdint.h>
 #include <stdio.h>
+#include <algorithm>
+#include <initializer_list>
+#include <type_traits>
+#include <vector>
+
+#include "Halide.h"
 
 using namespace Halide;
 

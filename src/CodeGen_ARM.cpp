@@ -1,16 +1,39 @@
-#include <iostream>
+#include <ext/alloc_traits.h>
+#include <stddef.h>
+#include <stdint.h>
+#include <algorithm>
+#include <memory>
 #include <sstream>
 
 #include "CodeGen_ARM.h"
+#include "CodeGen_LLVM.h"
 #include "ConciseCasts.h"
 #include "Debug.h"
-#include "IREquality.h"
+#include "Error.h"
+#include "IR.h"
 #include "IRMatch.h"
 #include "IROperator.h"
 #include "IRPrinter.h"
-#include "LLVM_Headers.h"
+#include "ModulusRemainder.h"
 #include "Simplify.h"
-#include "Util.h"
+#include "Type.h"
+#include "llvm/ADT/SmallVector.h"
+#include "llvm/IR/Constant.h"
+#include "llvm/IR/Constants.h"
+#include "llvm/IR/DerivedTypes.h"
+#include "llvm/IR/Function.h"
+#include "llvm/IR/IRBuilder.h"
+#include "llvm/IR/Instruction.h"
+#include "llvm/IR/Instructions.h"
+#include "llvm/IR/Module.h"
+#include "llvm/IR/Type.h"
+#include "llvm/Support/Alignment.h"
+#include "llvm/Support/Casting.h"
+#include "llvm/Support/TypeSize.h"
+
+namespace llvm {
+class Value;
+}  // namespace llvm
 
 namespace Halide {
 namespace Internal {

@@ -1,5 +1,19 @@
 #include "AssociativeOpsTable.h"
+
+#include <ext/alloc_traits.h>
+#include <algorithm>
+#include <cstdint>
+#include <iostream>
+#include <map>
+#include <memory>
+#include <string>
+
+#include "Debug.h"
+#include "Error.h"
+#include "IR.h"
+#include "IROperator.h"
 #include "IRPrinter.h"
+#include "Type.h"
 
 namespace Halide {
 namespace Internal {

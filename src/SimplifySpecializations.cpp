@@ -1,13 +1,24 @@
 #include "SimplifySpecializations.h"
+
+#include <stddef.h>
+#include <algorithm>
+#include <memory>
+#include <utility>
+#include <vector>
+
+#include "Debug.h"
 #include "Definition.h"
+#include "Error.h"
+#include "Expr.h"
+#include "Function.h"
+#include "IR.h"
 #include "IREquality.h"
 #include "IRMutator.h"
 #include "IROperator.h"
+#include "Schedule.h"
 #include "Simplify.h"
 #include "Substitute.h"
-
-#include <set>
-#include <utility>
+#include "Type.h"
 
 namespace Halide {
 namespace Internal {

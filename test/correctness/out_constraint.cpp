@@ -1,6 +1,10 @@
-#include "Halide.h"
-
+#include <stdlib.h>
+#include <cstdint>
 #include <iostream>
+#include <string>
+#include <type_traits>
+
+#include "Halide.h"
 
 // Verifies that constraints on the input ImageParam propagates to the output
 // function.

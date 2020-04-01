@@ -1,5 +1,9 @@
 #include "PyError.h"
 
+#include "Halide.h"
+#include "pybind11/cast.h"
+#include "pybind11/pybind11.h"
+
 namespace Halide {
 namespace PythonBindings {
 

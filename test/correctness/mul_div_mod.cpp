@@ -1,9 +1,15 @@
-#include "Halide.h"
-
-#include <algorithm>
-#include <future>
-#include <math.h>
+#include <assert.h>
 #include <stdio.h>
+#include <stdlib.h>
+#include <algorithm>
+#include <cstdint>
+#include <future>
+#include <iostream>
+#include <type_traits>
+#include <utility>
+#include <vector>
+
+#include "Halide.h"
 
 #ifdef _MSC_VER
 // Silence a warning that is obscure, harmless, and painful to work around

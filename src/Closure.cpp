@@ -1,5 +1,11 @@
 #include "Closure.h"
+
+#include <ext/alloc_traits.h>
+#include <memory>
+#include <vector>
+
 #include "Debug.h"
+#include "IR.h"
 
 namespace Halide {
 namespace Internal {

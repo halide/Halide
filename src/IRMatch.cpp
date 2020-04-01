@@ -1,3 +1,5 @@
+#include <ext/alloc_traits.h>
+#include <stddef.h>
 #include <iostream>
 #include <map>
 #include <utility>
@@ -6,6 +8,7 @@
 #include "IRMatch.h"
 #include "IROperator.h"
 #include "IRVisitor.h"
+#include "ModulusRemainder.h"
 
 namespace Halide {
 namespace Internal {

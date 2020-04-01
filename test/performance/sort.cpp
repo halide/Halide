@@ -1,7 +1,12 @@
-#include "Halide.h"
-#include "halide_benchmark.h"
+#include <assert.h>
+#include <stdlib.h>
 #include <algorithm>
 #include <cstdio>
+#include <type_traits>
+#include <vector>
+
+#include "Halide.h"
+#include "halide_benchmark.h"
 
 using namespace Halide;
 using namespace Halide::Tools;

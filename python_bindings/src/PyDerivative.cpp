@@ -1,5 +1,17 @@
 #include "PyDerivative.h"
 
+#include <initializer_list>
+#include <new>
+#include <tuple>
+#include <utility>
+#include <vector>
+
+#include "Halide.h"
+#include "pybind11/cast.h"
+#include "pybind11/detail/../pytypes.h"
+#include "pybind11/detail/descr.h"
+#include "pybind11/pybind11.h"
+
 namespace Halide {
 namespace PythonBindings {
 

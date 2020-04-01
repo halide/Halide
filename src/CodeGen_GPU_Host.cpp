@@ -1,21 +1,51 @@
-#include <sstream>
+#include <ctype.h>
+#include <ext/alloc_traits.h>
+#include <stddef.h>
+#include <algorithm>
+#include <memory>
+#include <utility>
+#include <vector>
 
+#include "CodeGen_ARM.h"
 #include "CodeGen_D3D12Compute_Dev.h"
+#include "CodeGen_GPU_Dev.h"
 #include "CodeGen_GPU_Host.h"
-#include "CodeGen_Internal.h"
+#include "CodeGen_LLVM.h"
+#include "CodeGen_MIPS.h"
 #include "CodeGen_Metal_Dev.h"
 #include "CodeGen_OpenCL_Dev.h"
 #include "CodeGen_OpenGLCompute_Dev.h"
 #include "CodeGen_OpenGL_Dev.h"
 #include "CodeGen_PTX_Dev.h"
+#include "CodeGen_PowerPC.h"
+#include "CodeGen_X86.h"
 #include "Debug.h"
+#include "DeviceArgument.h"
+#include "Error.h"
 #include "ExprUsesVar.h"
+#include "IR.h"
 #include "IROperator.h"
 #include "IRPrinter.h"
+#include "IRVisitor.h"
 #include "LLVM_Headers.h"
-#include "Simplify.h"
+#include "Module.h"
+#include "Target.h"
+#include "Type.h"
 #include "Util.h"
-#include "VaryingAttributes.h"
+#include "llvm/IR/BasicBlock.h"
+#include "llvm/IR/Constant.h"
+#include "llvm/IR/Constants.h"
+#include "llvm/IR/DerivedTypes.h"
+#include "llvm/IR/GlobalValue.h"
+#include "llvm/IR/GlobalVariable.h"
+#include "llvm/IR/Instruction.h"
+#include "llvm/IR/Type.h"
+#include "llvm/IR/Value.h"
+#include "runtime/HalideRuntime.h"
+
+namespace llvm {
+class Function;
+}  // namespace llvm
 
 namespace Halide {
 namespace Internal {

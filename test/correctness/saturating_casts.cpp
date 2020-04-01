@@ -1,7 +1,11 @@
-#include "Halide.h"
+#include <assert.h>
+#include <stdio.h>
+#include <algorithm>
+#include <cstdint>
 #include <iostream>
 #include <limits>
-#include <stdio.h>
+
+#include "Halide.h"
 
 // Disable a warning in MSVC that we know will be triggered here.
 #ifdef _MSC_VER

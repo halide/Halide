@@ -1,7 +1,7 @@
 #include <assert.h>
-#include <atomic>
-#include <math.h>
+#include <stdint.h>
 #include <stdio.h>
+#include <atomic>
 
 #include "HalideBuffer.h"
 #include "HalideRuntime.h"

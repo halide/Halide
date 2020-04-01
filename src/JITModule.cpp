@@ -1,7 +1,10 @@
+#include <stdint.h>
+#include <algorithm>
+#include <iostream>
 #include <mutex>
 #include <set>
-#include <stdint.h>
 #include <string>
+#include <utility>
 
 #ifdef _WIN32
 #ifdef _MSC_VER
@@ -10,20 +13,40 @@
 #include <windows.h>
 #else
 #include <dlfcn.h>
-#include <sys/mman.h>
 #endif
 
 #include "CodeGen_Internal.h"
 #include "CodeGen_LLVM.h"
 #include "Debug.h"
+#include "Error.h"
 #include "JITModule.h"
 #include "LLVM_Headers.h"
 #include "LLVM_Output.h"
 #include "LLVM_Runtime_Linker.h"
+#include "Module.h"
 #include "Pipeline.h"
+#include "Target.h"
+#include "Util.h"
+#include "llvm/ADT/StringRef.h"
+#include "llvm/ExecutionEngine/ExecutionEngine.h"
+#include "llvm/ExecutionEngine/JITEventListener.h"
+#include "llvm/ExecutionEngine/RTDyldMemoryManager.h"
+#include "llvm/ExecutionEngine/SectionMemoryManager.h"
+#include "llvm/IR/DataLayout.h"
+#include "llvm/IR/Function.h"
+#include "llvm/IR/LLVMContext.h"
+#include "llvm/IR/Module.h"
+#include "llvm/IR/PassTimingInfo.h"
+#include "llvm/Support/CodeGen.h"
+#include "llvm/Support/DynamicLibrary.h"
+#include "llvm/Target/TargetMachine.h"
+#include "llvm/Target/TargetOptions.h"
+
+struct halide_trace_event_t;
 
 namespace Halide {
 namespace Internal {
+namespace { struct CUctx_st; }
 
 using std::string;
 

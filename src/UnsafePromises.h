@@ -1,14 +1,14 @@
 #ifndef HALIDE_UNSAFE_PROMISES_H
 #define HALIDE_UNSAFE_PROMISES_H
 
+#include "Expr.h"
 /** \file
  * Defines the lowering pass that removes unsafe promises
  */
 
-#include "IR.h"
-#include "Target.h"
-
 namespace Halide {
+struct Target;
+
 namespace Internal {
 
 /** Lower all unsafe promises into either assertions or unchecked

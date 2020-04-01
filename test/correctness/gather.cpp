@@ -1,3 +1,10 @@
+#include <stdio.h>
+#include <stdlib.h>
+#include <time.h>
+#include <algorithm>
+#include <cstdint>
+#include <type_traits>
+
 #include "Halide.h"
 
 using namespace Halide;

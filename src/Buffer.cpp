@@ -1,4 +1,8 @@
 #include "Buffer.h"
+
+#include <algorithm>
+
+#include "IR.h"
 #include "IREquality.h"
 #include "IROperator.h"
 #include "Var.h"

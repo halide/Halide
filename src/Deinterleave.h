@@ -1,14 +1,13 @@
 #ifndef DEINTERLEAVE_H
 #define DEINTERLEAVE_H
 
+#include "Expr.h"
 /** \file
  *
  * Defines methods for splitting up a vector into the even lanes and
  * the odd lanes. Useful for optimizing expressions such as select(x %
  * 2, f(x/2), g(x/2))
  */
-
-#include "IR.h"
 
 namespace Halide {
 namespace Internal {

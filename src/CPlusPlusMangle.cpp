@@ -1,9 +1,20 @@
 #include "CPlusPlusMangle.h"
 
+#include <ext/alloc_traits.h>
+#include <stddef.h>
+#include <algorithm>
+#include <cstdint>
 #include <map>
+#include <memory>
+#include <ostream>
+#include <utility>
 
-#include "IR.h"
+#include "Buffer.h"
+#include "Error.h"
+#include "Expr.h"
+#include "Function.h"
 #include "IROperator.h"
+#include "Target.h"
 #include "Type.h"
 
 /** \file Support for creating C++ mangled function names from a type signature. */

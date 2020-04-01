@@ -1,6 +1,8 @@
+#include <stdio.h>
+#include <type_traits>
+
 #include "Halide.h"
 #include "halide_benchmark.h"
-#include <stdio.h>
 
 using namespace Halide;
 using namespace Halide::Tools;

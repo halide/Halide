@@ -1,13 +1,14 @@
 #ifndef HALIDE_INTERNAL_ADD_PARAMETER_CHECKS_H
 #define HALIDE_INTERNAL_ADD_PARAMETER_CHECKS_H
 
+#include <vector>
+
+#include "Expr.h"
 /** \file
  *
  * Defines the lowering pass that adds the assertions that validate
  * scalar parameters.
  */
-
-#include "IR.h"
 
 namespace Halide {
 

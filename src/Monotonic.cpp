@@ -1,9 +1,20 @@
 #include "Monotonic.h"
-#include "IRMutator.h"
+
+#include <ext/alloc_traits.h>
+#include <stddef.h>
+#include <algorithm>
+#include <iostream>
+#include <memory>
+#include <vector>
+
+#include "Error.h"
+#include "IR.h"
 #include "IROperator.h"
+#include "IRVisitor.h"
 #include "Scope.h"
 #include "Simplify.h"
-#include "Substitute.h"
+#include "Type.h"
+#include "Util.h"
 
 namespace Halide {
 namespace Internal {

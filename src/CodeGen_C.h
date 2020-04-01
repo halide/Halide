@@ -6,15 +6,66 @@
  * Defines an IRPrinter that emits C++ code equivalent to a halide stmt
  */
 
+#include <stddef.h>
+#include <map>
+#include <ostream>
+#include <set>
+#include <string>
+#include <vector>
+
+#include "Buffer.h"
+#include "Expr.h"
+#include "Function.h"
 #include "IRPrinter.h"
-#include "Module.h"
 #include "Scope.h"
+#include "Target.h"
+#include "Type.h"
 
 namespace Halide {
-
-struct Argument;
+class Module;
 
 namespace Internal {
+struct Acquire;
+struct Add;
+struct Allocate;
+struct And;
+struct AssertStmt;
+struct Atomic;
+struct Broadcast;
+struct Call;
+struct Cast;
+struct Div;
+struct EQ;
+struct Evaluate;
+struct For;
+struct Fork;
+struct Free;
+struct GE;
+struct GT;
+struct IfThenElse;
+struct LE;
+struct LT;
+struct Let;
+struct LetStmt;
+struct Load;
+struct LoweredFunc;
+struct Max;
+struct Min;
+struct Mod;
+struct Mul;
+struct NE;
+struct Not;
+struct Or;
+struct Prefetch;
+struct ProducerConsumer;
+struct Provide;
+struct Ramp;
+struct Realize;
+struct Select;
+struct Shuffle;
+struct Store;
+struct Sub;
+struct Variable;
 
 /** This class emits C++ code equivalent to a halide Stmt. It's
  * mostly the same as an IRPrinter, but it's wrapped in a function

@@ -5,9 +5,13 @@
  * Defines the code-generator for producing MIPS machine code.
  */
 
+#include <string>
+
 #include "CodeGen_Posix.h"
 
 namespace Halide {
+struct Target;
+
 namespace Internal {
 
 /** A code generator that emits mips code from a given Halide stmt. */

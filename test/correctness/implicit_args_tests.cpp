@@ -1,6 +1,10 @@
-#include "Halide.h"
-#include <functional>
+#include <ext/alloc_traits.h>
 #include <stdio.h>
+#include <functional>
+#include <type_traits>
+#include <vector>
+
+#include "Halide.h"
 
 using namespace Halide;
 using namespace Halide::Internal;

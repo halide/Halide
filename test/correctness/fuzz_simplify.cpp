@@ -1,7 +1,12 @@
-#include "Halide.h"
-#include <random>
-#include <stdio.h>
+#include <stdlib.h>
 #include <time.h>
+#include <iostream>
+#include <map>
+#include <random>
+#include <string>
+#include <utility>
+
+#include "Halide.h"
 
 // Test the simplifier in Halide by testing for equivalence of randomly generated expressions.
 namespace {

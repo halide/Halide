@@ -1,13 +1,24 @@
+#include <ext/alloc_traits.h>
+#include <stddef.h>
+#include <algorithm>
 #include <iostream>
+#include <memory>
 #include <sstream>
-
-#include "IRPrinter.h"
+#include <string>
 
 #include "AssociativeOpsTable.h"
 #include "Associativity.h"
+#include "Buffer.h"
+#include "Debug.h"
+#include "Error.h"
+#include "IR.h"
 #include "IROperator.h"
+#include "IRPrinter.h"
 #include "Module.h"
+#include "ModulusRemainder.h"
+#include "Parameter.h"
 #include "Target.h"
+#include "Type.h"
 
 namespace Halide {
 

@@ -6,8 +6,14 @@
  * to a JIT invocation.
  */
 
+#include <stddef.h>
+#include <initializer_list>
+#include <map>
+
+#include "Buffer.h"
 #include "Param.h"
 #include "Parameter.h"
+#include "runtime/HalideRuntime.h"
 
 namespace Halide {
 

@@ -1,8 +1,6 @@
 #ifndef HALIDE_INTERNAL_DEBUG_ARGUMENTS_H
 #define HALIDE_INTERNAL_DEBUG_ARGUMENTS_H
 
-#include "Target.h"
-
 /** \file
  *
  * Defines a lowering pass that injects debug statements inside a
@@ -10,6 +8,8 @@
  */
 
 namespace Halide {
+struct Target;
+
 namespace Internal {
 
 struct LoweredFunc;

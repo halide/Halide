@@ -1,8 +1,7 @@
-#include <assert.h>
-#include <cstdlib>
-#include <set>
 #include <stdio.h>
 #include <string.h>
+#include <cstdlib>
+#include <set>
 #include <string>
 
 std::set<std::string> done;

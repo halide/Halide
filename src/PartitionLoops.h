@@ -1,13 +1,12 @@
 #ifndef PARTITION_LOOPS_H
 #define PARTITION_LOOPS_H
 
+#include "Expr.h"
 /** \file
  * Defines a lowering pass that partitions loop bodies into three
  * to handle boundary conditions: A prologue, a simplified
  * steady-stage, and an epilogue.
  */
-
-#include "IR.h"
 
 namespace Halide {
 namespace Internal {

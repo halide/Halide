@@ -1,11 +1,9 @@
-#include "HalideBuffer.h"
-#include "HalideRuntime.h"
-
+#include <assert.h>
+#include <stdint.h>
+#include <stdio.h>
 #include <iostream>
-#include <limits>
-#include <type_traits>
-#include <vector>
 
+#include "HalideBuffer.h"
 #include "external_code.h"
 
 using namespace std;

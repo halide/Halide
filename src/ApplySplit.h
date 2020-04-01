@@ -8,14 +8,15 @@
  */
 
 #include <map>
+#include <string>
 #include <utility>
 #include <vector>
 
-#include "IR.h"
-#include "Schedule.h"
+#include "Expr.h"
 
 namespace Halide {
 namespace Internal {
+struct Split;
 
 struct ApplySplitResult {
     // If type is "Substitution", then this represents a substitution of

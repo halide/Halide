@@ -1,11 +1,10 @@
 #ifndef HALIDE_UNROLL_LOOPS_H
 #define HALIDE_UNROLL_LOOPS_H
 
+#include "Expr.h"
 /** \file
  * Defines the lowering pass that unrolls loops marked as such
  */
-
-#include "IR.h"
 
 namespace Halide {
 namespace Internal {

@@ -1,7 +1,9 @@
 #ifndef HALIDE_PYTHON_BINDINGS_PYEXPR_H
 #define HALIDE_PYTHON_BINDINGS_PYEXPR_H
 
-#include "PyHalide.h"
+namespace pybind11 {
+class module;
+}  // namespace pybind11
 
 namespace Halide {
 namespace PythonBindings {

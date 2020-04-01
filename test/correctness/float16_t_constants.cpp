@@ -1,6 +1,10 @@
-#include "Halide.h"
-#include <cmath>
+#include <stdint.h>
 #include <stdio.h>
+#include <stdlib.h>
+#include <cmath>
+#include <limits>
+
+#include "Halide.h"
 
 using namespace Halide;
 

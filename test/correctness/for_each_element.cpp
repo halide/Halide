@@ -1,6 +1,7 @@
-#include "HalideBuffer.h"
-
 #include <stdio.h>
+#include <stdlib.h>
+
+#include "HalideBuffer.h"
 
 using namespace Halide::Runtime;
 

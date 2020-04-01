@@ -1,6 +1,11 @@
-#include "Halide.h"
-
+#include <stdlib.h>
 #include <time.h>
+#include <algorithm>
+#include <iostream>
+#include <random>
+#include <vector>
+
+#include "Halide.h"
 
 using namespace Halide;
 using namespace Halide::Internal;

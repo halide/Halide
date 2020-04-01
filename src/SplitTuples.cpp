@@ -1,6 +1,23 @@
 #include "SplitTuples.h"
+
+#include <stddef.h>
+#include <algorithm>
+#include <set>
+#include <utility>
+#include <vector>
+
 #include "Bounds.h"
+#include "Error.h"
+#include "Function.h"
+#include "FunctionPtr.h"
+#include "IR.h"
 #include "IRMutator.h"
+#include "IROperator.h"
+#include "IRVisitor.h"
+#include "Parameter.h"
+#include "Schedule.h"
+#include "Scope.h"
+#include "Type.h"
 
 namespace Halide {
 namespace Internal {

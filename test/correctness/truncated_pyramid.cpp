@@ -1,3 +1,9 @@
+#include <ext/alloc_traits.h>
+#include <memory>
+#include <type_traits>
+#include <utility>
+#include <vector>
+
 #include "Halide.h"
 
 using namespace Halide;

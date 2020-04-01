@@ -1,5 +1,10 @@
 #include "Debug.h"
 
+#include <stdlib.h>
+#include <string>
+
+#include "Util.h"
+
 namespace Halide {
 namespace Internal {
 

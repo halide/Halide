@@ -1,4 +1,6 @@
 #include "RemoveExternLoops.h"
+
+#include "IR.h"
 #include "IRMutator.h"
 
 namespace Halide {

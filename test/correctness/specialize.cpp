@@ -1,5 +1,13 @@
-#include "Halide.h"
+#include <stdint.h>
 #include <stdio.h>
+#include <stdlib.h>
+#include <map>
+#include <memory>
+#include <string>
+#include <type_traits>
+#include <vector>
+
+#include "Halide.h"
 
 using namespace Halide;
 

@@ -1,10 +1,16 @@
 #include "Halide.h"
+
 // Avoid the need to link this test to libjpeg and libpng
 #define HALIDE_NO_JPEG
 #define HALIDE_NO_PNG
-#include "halide_image_io.h"
+#include <assert.h>
 #include <stdio.h>
+#include <cstdint>
+#include <map>
+#include <string>
+#include <type_traits>
 
+#include "halide_image_io.h"
 #include "test/common/halide_test_dirs.h"
 
 using namespace Halide;

@@ -1,3 +1,9 @@
+#include <stdint.h>
+#include <stdlib.h>
+#include <algorithm>
+#include <memory>
+#include <type_traits>
+
 #include "Halide.h"
 
 // This test demonstrates using tracing to give you something like a
@@ -8,8 +14,8 @@
 #if defined(__linux__) || defined(__APPLE__) || defined(__unix) || defined(__posix)
 
 #include <signal.h>
-#include <stack>
 #include <stdio.h>
+#include <stack>
 #include <string>
 
 using namespace Halide;

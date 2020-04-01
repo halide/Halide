@@ -6,7 +6,13 @@
  * Defines Tuple - the front-end handle on small arrays of expressions.
  */
 
-#include "IR.h"
+#include <stddef.h>
+#include <algorithm>
+#include <utility>
+#include <vector>
+
+#include "Error.h"
+#include "Expr.h"
 #include "Util.h"
 
 namespace Halide {

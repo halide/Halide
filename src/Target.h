@@ -5,14 +5,13 @@
  * Defines the structure that describes a Halide target.
  */
 
-#include <bitset>
 #include <stdint.h>
+#include <bitset>
 #include <string>
+#include <vector>
 
-#include "Error.h"
 #include "Expr.h"
 #include "Type.h"
-#include "Util.h"
 #include "runtime/HalideRuntime.h"
 
 namespace Halide {

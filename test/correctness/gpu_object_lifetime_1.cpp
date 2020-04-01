@@ -1,6 +1,9 @@
-#include "Halide.h"
+#include <stdint.h>
+#include <stdio.h>
 #include <iostream>
+#include <type_traits>
 
+#include "Halide.h"
 #include "test/common/gpu_object_lifetime_tracker.h"
 
 using namespace Halide;

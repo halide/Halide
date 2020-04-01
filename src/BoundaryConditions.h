@@ -5,13 +5,15 @@
  * Support for imposing boundary conditions on Halide::Funcs.
  */
 
-#include <vector>
+#include <type_traits>
+#include <utility>
 
 #include "Expr.h"
 #include "Func.h"
-#include "IR.h"
 #include "Lambda.h"
+#include "Tuple.h"
 #include "Util.h"
+#include "Var.h"
 
 namespace Halide {
 

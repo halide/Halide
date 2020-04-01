@@ -1,3 +1,8 @@
+#include <assert.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <iostream>
+
 #include "Halide.h"
 
 using namespace Halide;

@@ -1,23 +1,50 @@
+#include <ctype.h>
+#include <ext/alloc_traits.h>
+#include <stddef.h>
+#include <stdint.h>
 #include <algorithm>
-#include <regex>
+#include <iterator>
+#include <map>
+#include <memory>
+#include <ostream>
+#include <set>
+#include <type_traits>
 #include <utility>
 
 #include "AutoSchedule.h"
 #include "AutoScheduleUtils.h"
+#include "Bounds.h"
+#include "Buffer.h"
+#include "Debug.h"
+#include "Definition.h"
+#include "Error.h"
+#include "Expr.h"
 #include "ExprUsesVar.h"
 #include "FindCalls.h"
 #include "Func.h"
+#include "Function.h"
+#include "IR.h"
 #include "IREquality.h"
+#include "IROperator.h"
+#include "IRVisitor.h"
 #include "Inline.h"
+#include "Interval.h"
 #include "ParallelRVar.h"
+#include "Parameter.h"
+#include "Pipeline.h"
 #include "RealizationOrder.h"
 #include "RegionCosts.h"
+#include "Schedule.h"
 #include "Scope.h"
 #include "Simplify.h"
+#include "Target.h"
+#include "Type.h"
 #include "Util.h"
+#include "Var.h"
 
 namespace Halide {
 namespace Internal {
+struct ReductionVariable;
 
 using std::make_pair;
 using std::map;

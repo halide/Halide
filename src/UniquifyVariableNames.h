@@ -1,11 +1,10 @@
 #ifndef HALIDE_UNIQUIFY_VARIABLE_NAMES
 #define HALIDE_UNIQUIFY_VARIABLE_NAMES
 
+#include "Expr.h"
 /** \file
  * Defines the lowering pass that renames all variables to have unique names.
  */
-
-#include "IR.h"
 
 namespace Halide {
 namespace Internal {

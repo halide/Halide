@@ -1,5 +1,10 @@
+#include <assert.h>
+#include <stdio.h>
+#include <cstdint>
+#include <type_traits>
+#include <utility>
+
 #include "Halide.h"
-#include "HalideBuffer.h"
 
 using namespace Halide;
 

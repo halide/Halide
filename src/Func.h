@@ -6,26 +6,45 @@
  * Defines Func - the front-end handle on a halide function, and related classes.
  */
 
-#include "Argument.h"
+#include <stddef.h>
+#include <stdint.h>
+#include <algorithm>
+#include <functional>
+#include <map>
+#include <string>
+#include <type_traits>
+#include <utility>
+#include <vector>
+
+#include "Buffer.h"
+#include "Definition.h"
+#include "Error.h"
+#include "Expr.h"
 #include "Function.h"
-#include "IR.h"
 #include "IROperator.h"
-#include "JITModule.h"
+#include "IRPrinter.h"
 #include "Module.h"
-#include "Param.h"
+#include "ParamMap.h"
 #include "Pipeline.h"
 #include "RDom.h"
+#include "Realization.h"
+#include "Schedule.h"
 #include "Target.h"
 #include "Tuple.h"
+#include "Type.h"
+#include "Util.h"
 #include "Var.h"
-
-#include <map>
-#include <utility>
+#include "runtime/HalideRuntime.h"
 
 namespace Halide {
 
+class Func;
 class OutputImageParam;
-class ParamMap;
+namespace Internal {
+class Parameter;
+struct JITHandlers;
+}  // namespace Internal
+struct Argument;
 
 /** A class that can represent Vars or RVars. Used for reorder calls
  * which can accept a mix of either. */
@@ -59,12 +78,6 @@ struct VarOrRVar {
     bool is_rvar;
 };
 
-class ImageParam;
-
-namespace Internal {
-struct Split;
-struct StorageDim;
-}  // namespace Internal
 
 /** A single definition of a Func. May be a pure or update definition. */
 class Stage {

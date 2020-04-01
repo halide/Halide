@@ -1,18 +1,22 @@
+#include <ext/alloc_traits.h>
+#include <stddef.h>
 #include <algorithm>
 #include <atomic>
 #include <cmath>
-#include <iostream>
-#include <sstream>
+#include <memory>
 #include <utility>
 
+#include "Buffer.h"
 #include "CSE.h"
-#include "Debug.h"
-#include "IREquality.h"
+#include "Error.h"
+#include "IR.h"
 #include "IRMutator.h"
 #include "IROperator.h"
 #include "IRPrinter.h"
+#include "IRVisitor.h"
+#include "Parameter.h"
 #include "Util.h"
-#include "Var.h"
+#include "runtime/HalideRuntime.h"
 
 namespace Halide {
 

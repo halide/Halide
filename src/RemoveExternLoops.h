@@ -1,8 +1,7 @@
 #ifndef HALIDE_REMOVE_EXTERN_LOOPS
 #define HALIDE_REMOVE_EXTERN_LOOPS
 
-#include "IR.h"
-
+#include "Expr.h"
 /** \file
  * Defines a lowering pass that removes placeholder loops for extern stages.
  */

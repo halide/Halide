@@ -1,11 +1,10 @@
 #ifndef HALIDE_LICM_H
 #define HALIDE_LICM_H
 
+#include "Expr.h"
 /** \file
  * Methods for lifting loop invariants out of inner loops.
  */
-
-#include "IR.h"
 
 namespace Halide {
 namespace Internal {

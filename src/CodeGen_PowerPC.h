@@ -5,10 +5,18 @@
  * Defines the code-generator for producing POWERPC machine code.
  */
 
+#include <string>
+
 #include "CodeGen_Posix.h"
 
 namespace Halide {
+struct Target;
+struct Type;
+
 namespace Internal {
+struct Cast;
+struct Max;
+struct Min;
 
 /** A code generator that emits mips code from a given Halide stmt. */
 class CodeGen_PowerPC : public CodeGen_Posix {

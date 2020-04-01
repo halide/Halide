@@ -1,4 +1,14 @@
+#include <assert.h>
+#include <cstdint>
+#include <memory>
+#include <string>
+#include <vector>
+
 #include "Halide.h"
+
+namespace halide_register_generator {
+struct halide_global_ns;
+}  // namespace halide_register_generator
 
 // TODO: Add HalideExtern support for C++ mangling, hopefully using automatic argument type deduction
 Halide::Expr extract_value_global(Halide::Expr arg) {

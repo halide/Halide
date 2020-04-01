@@ -1,7 +1,9 @@
 #ifndef HALIDE_PYTHON_BINDINGS_PYFUNC_REF_H
 #define HALIDE_PYTHON_BINDINGS_PYFUNC_REF_H
 
-#include "PyHalide.h"
+namespace pybind11 {
+class module;
+}  // namespace pybind11
 
 namespace Halide {
 namespace PythonBindings {

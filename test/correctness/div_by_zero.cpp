@@ -1,3 +1,7 @@
+#include <string.h>
+#include <cstdint>
+#include <type_traits>
+
 #include "Halide.h"
 
 using namespace Halide;

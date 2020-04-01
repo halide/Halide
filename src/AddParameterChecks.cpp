@@ -1,8 +1,19 @@
 #include "AddParameterChecks.h"
+
+#include <stddef.h>
+#include <algorithm>
+#include <map>
+#include <memory>
+#include <string>
+#include <utility>
+
+#include "Error.h"
+#include "IR.h"
 #include "IROperator.h"
 #include "IRVisitor.h"
+#include "Parameter.h"
 #include "Substitute.h"
-#include "Target.h"
+#include "Type.h"
 
 namespace Halide {
 namespace Internal {

@@ -7,8 +7,9 @@
  * statements. */
 
 #include <map>
+#include <string>
 
-#include "IR.h"
+#include "Expr.h"
 
 namespace Halide {
 namespace Internal {

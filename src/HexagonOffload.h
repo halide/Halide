@@ -1,15 +1,20 @@
 #ifndef HALIDE_HEXAGON_OFFLOAD_H
 #define HALIDE_HEXAGON_OFFLOAD_H
 
+#include <stdint.h>
+
+#include "Buffer.h"
+#include "Expr.h"
 /** \file
  * Defines a lowering pass to pull loops marked with the
  * Hexagon device API to a separate module, and call them through the
  * Hexagon host runtime module.
  */
 
-#include "Module.h"
-
 namespace Halide {
+class Module;
+struct Target;
+
 namespace Internal {
 
 /** Pull loops marked with the Hexagon device API to a separate

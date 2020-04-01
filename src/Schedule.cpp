@@ -1,9 +1,18 @@
 #include "Schedule.h"
+
+#include "Error.h"
 #include "Func.h"
 #include "Function.h"
-#include "IR.h"
+#include "FunctionPtr.h"
 #include "IRMutator.h"
-#include "Var.h"
+#include "Reduction.h"
+#include "Util.h"
+
+namespace Halide {
+namespace Internal {
+class IRVisitor;
+}  // namespace Internal
+}  // namespace Halide
 
 namespace {
 

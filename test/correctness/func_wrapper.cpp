@@ -1,8 +1,14 @@
+#include <stdio.h>
+#include <algorithm>
+#include <iostream>
+#include <map>
+#include <memory>
+#include <string>
+#include <type_traits>
+#include <vector>
+
 #include "Halide.h"
 #include "test/common/check_call_graphs.h"
-
-#include <map>
-#include <stdio.h>
 
 namespace {
 

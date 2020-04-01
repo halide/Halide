@@ -1,20 +1,17 @@
 // Test doesn't build on windows, because OpenGL on windows is a nightmare.
 #ifdef _WIN32
 #include <stdio.h>
+
 int main() {
     printf("Skipping test on Windows\n");
     return 0;
 }
 #else
 
-#include <stddef.h>
 #include <stdint.h>
-#include <stdio.h>
-#include <stdlib.h>
+#include <type_traits>
 
 #include "Halide.h"
-#include "HalideRuntimeOpenGL.h"
-
 #include "runtime/mini_opengl.h"
 
 using namespace Halide;

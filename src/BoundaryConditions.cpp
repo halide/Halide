@@ -1,5 +1,14 @@
 #include "BoundaryConditions.h"
 
+#include <stddef.h>
+#include <algorithm>
+#include <memory>
+#include <string>
+#include <vector>
+
+#include "Error.h"
+#include "IROperator.h"
+
 namespace Halide {
 
 namespace BoundaryConditions {

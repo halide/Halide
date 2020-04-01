@@ -1,5 +1,11 @@
 #include "IRMutator.h"
 
+#include <algorithm>
+#include <tuple>
+#include <vector>
+
+#include "IR.h"
+
 namespace Halide {
 namespace Internal {
 

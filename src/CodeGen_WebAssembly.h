@@ -5,10 +5,15 @@
  * Defines the code-generator for producing WebAssembly machine code.
  */
 
+#include <string>
+
 #include "CodeGen_Posix.h"
 
 namespace Halide {
+struct Target;
+
 namespace Internal {
+struct Cast;
 
 /** A code generator that emits WebAssembly code from a given Halide stmt. */
 class CodeGen_WebAssembly : public CodeGen_Posix {

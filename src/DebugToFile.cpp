@@ -1,10 +1,19 @@
+#include <stddef.h>
+#include <algorithm>
 #include <map>
+#include <memory>
 #include <sstream>
+#include <utility>
 #include <vector>
 
 #include "DebugToFile.h"
+#include "Error.h"
+#include "Function.h"
+#include "IR.h"
 #include "IRMutator.h"
 #include "IROperator.h"
+#include "Type.h"
+#include "Util.h"
 
 namespace Halide {
 namespace Internal {

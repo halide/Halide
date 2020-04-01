@@ -7,10 +7,14 @@
 
 #include <utility>
 
+#include "Expr.h"
 #include "Func.h"
 #include "Parameter.h"
+#include "runtime/HalideRuntime.h"
 
 namespace Halide {
+class OutputImageParam;
+
 namespace Internal {
 
 class Dimension {

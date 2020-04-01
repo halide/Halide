@@ -1,6 +1,15 @@
 #include "PyInlineReductions.h"
 
+#include <initializer_list>
+#include <string>
+#include <utility>
+
+#include "Halide.h"
 #include "PyTuple.h"
+#include "pybind11/cast.h"
+#include "pybind11/detail/../pytypes.h"
+#include "pybind11/detail/descr.h"
+#include "pybind11/pybind11.h"
 
 namespace Halide {
 namespace PythonBindings {

@@ -1,12 +1,48 @@
 #include "LLVM_Output.h"
-#include "CodeGen_C.h"
+
+#include <stdlib.h>
+#include <algorithm>
+#include <cstdint>
+#include <fstream>
+#include <functional>
+#include <map>
+#include <system_error>
+#include <utility>
+
 #include "CodeGen_Internal.h"
 #include "CodeGen_LLVM.h"
-#include "LLVM_Headers.h"
+#include "Debug.h"
+#include "Error.h"
 #include "LLVM_Runtime_Linker.h"
-
-#include <fstream>
-#include <iostream>
+#include "llvm/ADT/SmallString.h"
+#include "llvm/ADT/SmallVector.h"
+#include "llvm/ADT/StringRef.h"
+#include "llvm/ADT/Triple.h"
+#include "llvm/Analysis/TargetLibraryInfo.h"
+#include "llvm/BinaryFormat/Magic.h"
+#include "llvm/Bitcode/BitcodeReader.h"
+#include "llvm/Bitcode/BitcodeWriter.h"
+#include "llvm/IR/DataLayout.h"
+#include "llvm/IR/LLVMContext.h"
+#include "llvm/IR/LegacyPassManager.h"
+#include "llvm/IR/Module.h"
+#include "llvm/IR/PassTimingInfo.h"
+#include "llvm/MC/MCTargetOptions.h"
+#include "llvm/Object/Archive.h"
+#include "llvm/Object/ArchiveWriter.h"
+#include "llvm/Object/ObjectFile.h"
+#include "llvm/Object/SymbolicFile.h"
+#include "llvm/Pass.h"
+#include "llvm/Support/CodeGen.h"
+#include "llvm/Support/Error.h"
+#include "llvm/Support/FileSystem.h"
+#include "llvm/Support/MemoryBuffer.h"
+#include "llvm/Support/raw_ostream.h"
+#include "llvm/Target/TargetMachine.h"
+#include "llvm/Target/TargetOptions.h"
+#include "llvm/Transforms/IPO.h"
+#include "llvm/Transforms/IPO/AlwaysInliner.h"
+#include "llvm/Transforms/Utils/SymbolRewriter.h"
 
 #ifdef _WIN32
 #ifndef NOMINMAX
@@ -15,11 +51,12 @@
 #include <windows.h>
 #else
 #include <stdio.h>
-#include <sys/stat.h>
 #include <unistd.h>
 #endif
 
 namespace Halide {
+class Module;
+struct Target;
 
 namespace Internal {
 namespace Archive {

@@ -1,14 +1,22 @@
-#include <cmath>
-#include <fstream>
+#include <ext/alloc_traits.h>
+#include <stddef.h>
+#include <cstdint>
+#include <iostream>
 #include <unordered_map>
 #include <utility>
 
+#include "Argument.h"
 #include "BoundaryConditions.h"
+#include "Debug.h"
 #include "Derivative.h"
+#include "Dimension.h"
 #include "Generator.h"
+#include "IR.h"
 #include "IRPrinter.h"
 #include "Module.h"
+#include "ObjectInstanceRegistry.h"
 #include "Simplify.h"
+#include "runtime/HalideBuffer.h"
 
 namespace Halide {
 

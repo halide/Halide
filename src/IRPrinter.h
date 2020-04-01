@@ -15,12 +15,60 @@
  */
 
 #include <ostream>
+#include <vector>
 
+#include "Expr.h"
+#include "Function.h"
 #include "IRVisitor.h"
 #include "Module.h"
+#include "Schedule.h"
 #include "Scope.h"
 
 namespace Halide {
+namespace Internal {
+struct Acquire;
+struct Add;
+struct Allocate;
+struct And;
+struct AssertStmt;
+struct Atomic;
+struct Block;
+struct Broadcast;
+struct Call;
+struct Cast;
+struct Div;
+struct EQ;
+struct Evaluate;
+struct For;
+struct Fork;
+struct Free;
+struct GE;
+struct GT;
+struct IfThenElse;
+struct LE;
+struct LT;
+struct Let;
+struct LetStmt;
+struct Load;
+struct Max;
+struct Min;
+struct Mod;
+struct Mul;
+struct NE;
+struct Not;
+struct Or;
+struct Prefetch;
+struct ProducerConsumer;
+struct Provide;
+struct Ramp;
+struct Realize;
+struct Select;
+struct Shuffle;
+struct Store;
+struct Sub;
+struct Variable;
+}  // namespace Internal
+struct Type;
 
 /** Emit an expression on an output stream (such as std::cout) in
  * human-readable form */
@@ -47,13 +95,14 @@ std::ostream &operator<<(std::ostream &stream, const TailStrategy &t);
 std::ostream &operator<<(std::ostream &stream, const LoopLevel &);
 
 struct Target;
+
 /** Emit a halide Target in a human readable form */
 std::ostream &operator<<(std::ostream &stream, const Target &);
 
 namespace Internal {
 
-struct AssociativePattern;
 struct AssociativeOp;
+struct AssociativePattern;
 
 /** Emit a halide associative pattern on an output stream (such as std::cout)
  * in a human-readable form */

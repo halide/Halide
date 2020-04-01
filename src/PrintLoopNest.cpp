@@ -1,14 +1,29 @@
 #include "PrintLoopNest.h"
+
+#include <stddef.h>
+#include <algorithm>
+#include <map>
+#include <ostream>
+#include <tuple>
+#include <utility>
+
 #include "AllocationBoundsInference.h"
+#include "Bounds.h"
 #include "BoundsInference.h"
+#include "Expr.h"
 #include "FindCalls.h"
 #include "Func.h"
 #include "Function.h"
+#include "IR.h"
+#include "IROperator.h"
 #include "IRPrinter.h"
+#include "IRVisitor.h"
 #include "RealizationOrder.h"
 #include "RemoveExternLoops.h"
 #include "RemoveUndef.h"
+#include "Schedule.h"
 #include "ScheduleFunctions.h"
+#include "Scope.h"
 #include "Simplify.h"
 #include "SimplifyCorrelatedDifferences.h"
 #include "SimplifySpecializations.h"
@@ -16,8 +31,6 @@
 #include "Target.h"
 #include "UniquifyVariableNames.h"
 #include "WrapCalls.h"
-
-#include <tuple>
 
 namespace Halide {
 namespace Internal {

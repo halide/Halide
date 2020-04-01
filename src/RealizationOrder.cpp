@@ -1,11 +1,17 @@
+#include <stddef.h>
 #include <algorithm>
+#include <memory>
 #include <set>
+#include <tuple>
 
+#include "Definition.h"
+#include "Error.h"
 #include "FindCalls.h"
 #include "Func.h"
-#include "IREquality.h"
-#include "IRVisitor.h"
+#include "Function.h"
 #include "RealizationOrder.h"
+#include "Schedule.h"
+#include "Util.h"
 
 namespace Halide {
 namespace Internal {

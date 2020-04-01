@@ -1,13 +1,30 @@
+#include <ext/alloc_traits.h>
+#include <stddef.h>
+#include <stdint.h>
 #include <algorithm>
 #include <iomanip>
+#include <iostream>
+#include <map>
+#include <memory>
 #include <sstream>
 #include <utility>
 
 #include "CodeGen_D3D12Compute_Dev.h"
 #include "CodeGen_Internal.h"
 #include "Debug.h"
+#include "DeviceArgument.h"
+#include "Error.h"
+#include "IR.h"
 #include "IRMutator.h"
 #include "IROperator.h"
+#include "IRPrinter.h"
+#include "IRVisitor.h"
+#include "ModulusRemainder.h"
+#include "Parameter.h"
+#include "Scope.h"
+#include "Type.h"
+#include "Util.h"
+#include "runtime/HalideRuntime.h"
 
 #define DEBUG_TYPES (0)
 

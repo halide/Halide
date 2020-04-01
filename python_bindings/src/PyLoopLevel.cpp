@@ -1,5 +1,16 @@
 #include "PyLoopLevel.h"
 
+#include <initializer_list>
+#include <new>
+#include <ostream>
+#include <string>
+#include <utility>
+
+#include "Halide.h"
+#include "pybind11/cast.h"
+#include "pybind11/detail/descr.h"
+#include "pybind11/pybind11.h"
+
 namespace Halide {
 namespace PythonBindings {
 

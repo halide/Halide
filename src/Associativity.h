@@ -7,12 +7,14 @@
  * if there is any and computing the identity of the associative operator.
  */
 
-#include "AssociativeOpsTable.h"
-#include "IR.h"
-#include "IREquality.h"
-
-#include <functional>
+#include <stddef.h>
+#include <string>
 #include <utility>
+#include <vector>
+
+#include "AssociativeOpsTable.h"
+#include "Expr.h"
+#include "IREquality.h"
 
 namespace Halide {
 namespace Internal {

@@ -1,14 +1,60 @@
 #ifndef HALIDE_IR_MUTATOR_H
 #define HALIDE_IR_MUTATOR_H
 
+#include <ext/alloc_traits.h>
+#include <stddef.h>
+#include <map>
+#include <memory>
+#include <utility>
+
+#include "Expr.h"
 /** \file
  * Defines a base class for passes over the IR that modify it
  */
 
-#include "IRVisitor.h"
-
 namespace Halide {
 namespace Internal {
+struct Acquire;
+struct Add;
+struct Allocate;
+struct And;
+struct AssertStmt;
+struct Atomic;
+struct Block;
+struct Broadcast;
+struct Call;
+struct Cast;
+struct Div;
+struct EQ;
+struct Evaluate;
+struct For;
+struct Fork;
+struct Free;
+struct GE;
+struct GT;
+struct IfThenElse;
+struct LE;
+struct LT;
+struct Let;
+struct LetStmt;
+struct Load;
+struct Max;
+struct Min;
+struct Mod;
+struct Mul;
+struct NE;
+struct Not;
+struct Or;
+struct Prefetch;
+struct ProducerConsumer;
+struct Provide;
+struct Ramp;
+struct Realize;
+struct Select;
+struct Shuffle;
+struct Store;
+struct Sub;
+struct Variable;
 
 /** A base class for passes over the IR which modify it
  * (e.g. replacing a variable with a value (Substitute.h), or

@@ -5,16 +5,34 @@
  * Defines the code-generator for producing CUDA host code
  */
 
+#include <string>
+#include <vector>
+
 #include "CodeGen_GPU_Dev.h"
-#include "CodeGen_GPU_Host.h"
 #include "CodeGen_LLVM.h"
+#include "Expr.h"
+#include "Type.h"
 
 namespace llvm {
 class BasicBlock;
 }
 
 namespace Halide {
+struct Target;
+
 namespace Internal {
+class CodeGen_ARM;
+class CodeGen_X86;
+struct Allocate;
+struct AssertStmt;
+struct Atomic;
+struct Call;
+struct DeviceArgument;
+struct For;
+struct Free;
+struct Load;
+struct Store;
+template <typename CodeGen_CPU> class CodeGen_GPU_Host;
 
 /** A code generator that emits GPU code from a given Halide stmt. */
 class CodeGen_PTX_Dev : public CodeGen_LLVM, public CodeGen_GPU_Dev {

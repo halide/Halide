@@ -5,15 +5,26 @@
  * Defines the code-generator for producing x86 machine code
  */
 
-#include "CodeGen_Posix.h"
-#include "Target.h"
+#include <string>
 
-namespace llvm {
-class JITEventListener;
-}
+#include "CodeGen_Posix.h"
 
 namespace Halide {
+struct Target;
+struct Type;
+
 namespace Internal {
+struct Add;
+struct Call;
+struct Cast;
+struct EQ;
+struct GE;
+struct GT;
+struct LE;
+struct LT;
+struct NE;
+struct Select;
+struct Sub;
 
 /** A code generator that emits x86 code from a given Halide stmt. */
 class CodeGen_X86 : public CodeGen_Posix {

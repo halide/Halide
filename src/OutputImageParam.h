@@ -6,11 +6,16 @@
  * Classes for declaring output image parameters to halide pipelines
  */
 
+#include <string>
+#include <vector>
+
 #include "Argument.h"
 #include "Dimension.h"
+#include "Expr.h"
 #include "Func.h"
-#include "Var.h"
-#include "runtime/HalideRuntime.h"
+#include "Function.h"
+#include "Parameter.h"
+#include "Type.h"
 
 namespace Halide {
 

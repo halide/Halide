@@ -1,6 +1,11 @@
-#include "Halide.h"
+#include <assert.h>
+#include <math.h>
+#include <cstdint>
+#include <iostream>
 #include <limits>
-#include <stdio.h>
+#include <type_traits>
+
+#include "Halide.h"
 
 #ifdef _MSC_VER
 #pragma warning(disable : 4800)  // forcing value to bool 'true' or 'false'

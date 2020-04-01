@@ -5,12 +5,15 @@
  * Defines the internal representation of the schedule for a function
  */
 
-#include "Expr.h"
-#include "FunctionPtr.h"
-#include "Parameter.h"
-
+#include <stddef.h>
 #include <map>
+#include <string>
 #include <utility>
+#include <vector>
+
+#include "Expr.h"
+#include "IntrusivePtr.h"
+#include "Parameter.h"
 
 namespace Halide {
 
@@ -19,7 +22,8 @@ struct VarOrRVar;
 
 namespace Internal {
 class Function;
-struct FunctionContents;
+class IRVisitor;
+struct FunctionPtr;
 struct LoopLevelContents;
 }  // namespace Internal
 
@@ -389,7 +393,6 @@ struct PrefetchDirective {
 
 struct FuncScheduleContents;
 struct StageScheduleContents;
-struct FunctionContents;
 
 /** A schedule for a Function of a Halide pipeline. This schedule is
  * applied to all stages of the Function. Right now this interface is

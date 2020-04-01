@@ -1,9 +1,30 @@
 #include "AddImageChecks.h"
+
+#include <stddef.h>
+#include <stdint.h>
+#include <algorithm>
+#include <iosfwd>
+#include <memory>
+#include <utility>
+
+#include "Buffer.h"
+#include "Debug.h"
+#include "Error.h"
+#include "Function.h"
+#include "IR.h"
 #include "IRMutator.h"
+#include "IROperator.h"
 #include "IRVisitor.h"
+#include "Interval.h"
+#include "Parameter.h"
+#include "Reduction.h"
+#include "Scope.h"
 #include "Simplify.h"
 #include "Substitute.h"
 #include "Target.h"
+#include "Type.h"
+#include "runtime/HalideBuffer.h"
+#include "runtime/HalideRuntime.h"
 
 namespace Halide {
 namespace Internal {

@@ -5,8 +5,9 @@
  * Defines the Interval class
  */
 
+#include "Error.h"
 #include "Expr.h"
-#include "Util.h"
+#include "runtime/HalideRuntime.h"
 
 namespace Halide {
 namespace Internal {

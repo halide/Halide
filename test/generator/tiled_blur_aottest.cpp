@@ -1,9 +1,9 @@
-#include "HalideBuffer.h"
-#include "HalideRuntime.h"
 #include <assert.h>
-#include <math.h>
+#include <stdint.h>
 #include <stdio.h>
 
+#include "HalideBuffer.h"
+#include "HalideRuntime.h"
 #include "tiled_blur.h"
 
 // defined away to avoid requiring libpng, libjpeg everywhere;

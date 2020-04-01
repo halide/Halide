@@ -1,9 +1,14 @@
-#include "HalideBuffer.h"
-#include "HalideRuntime.h"
-#include "multitarget.h"
+#include <stdint.h>
+#include <stdio.h>
+#include <stdlib.h>
 #include <atomic>
 #include <string>
 #include <tuple>
+#include <utility>
+
+#include "HalideBuffer.h"
+#include "HalideRuntime.h"
+#include "multitarget.h"
 
 using namespace Halide::Runtime;
 

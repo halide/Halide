@@ -1,8 +1,13 @@
-#include "Halide.h"
+#include <stdint.h>
+#include <stdlib.h>
 #include <algorithm>
-#include <future>
-
 #include <cstdio>
+#include <future>
+#include <iostream>
+#include <type_traits>
+#include <vector>
+
+#include "Halide.h"
 
 using namespace Halide;
 using namespace Halide::BoundaryConditions;

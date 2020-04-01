@@ -1,3 +1,10 @@
+#include <stdio.h>
+#include <cstdint>
+#include <iostream>
+#include <memory>
+#include <type_traits>
+#include <vector>
+
 #include "Halide.h"
 
 using namespace Halide;

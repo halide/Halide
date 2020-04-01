@@ -1,15 +1,17 @@
 #ifndef HALIDE_CODEGEN_GPU_DEV_H
 #define HALIDE_CODEGEN_GPU_DEV_H
 
+#include <string>
+#include <vector>
+
+#include "Expr.h"
 /** \file
  * Defines the code-generator interface for producing GPU device code
  */
 
-#include "DeviceArgument.h"
-#include "IR.h"
-
 namespace Halide {
 namespace Internal {
+struct DeviceArgument;
 
 /** A code generator that emits GPU code from a given Halide stmt. */
 struct CodeGen_GPU_Dev {

@@ -1,4 +1,11 @@
+#include <stdint.h>
+#include <memory>
+
 #include "Halide.h"
+
+namespace halide_register_generator {
+struct halide_global_ns;
+}  // namespace halide_register_generator
 
 namespace {
 

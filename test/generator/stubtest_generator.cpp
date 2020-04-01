@@ -1,4 +1,18 @@
+#include <assert.h>
+#include <ext/alloc_traits.h>
+#include <stddef.h>
+#include <stdint.h>
+#include <map>
+#include <memory>
+#include <string>
+#include <type_traits>
+#include <vector>
+
 #include "Halide.h"
+
+namespace halide_register_generator {
+struct halide_global_ns;
+}  // namespace halide_register_generator
 
 namespace {
 

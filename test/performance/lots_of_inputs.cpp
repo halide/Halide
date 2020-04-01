@@ -1,5 +1,9 @@
-#include "halide_benchmark.h"
 #include <Halide.h>
+#include <stdio.h>
+#include <algorithm>
+#include <vector>
+
+#include "halide_benchmark.h"
 
 using namespace Halide;
 using namespace Halide::Tools;

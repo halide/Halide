@@ -1,9 +1,8 @@
-#include "HalideBuffer.h"
-#include "HalideRuntime.h"
-
-#include <math.h>
+#include <assert.h>
+#include <stdint.h>
 #include <stdio.h>
 
+#include "HalideBuffer.h"
 #include "alias.h"
 #include "alias_with_offset_42.h"
 

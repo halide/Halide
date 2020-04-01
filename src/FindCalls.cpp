@@ -1,7 +1,14 @@
 #include "FindCalls.h"
 
-#include "IRVisitor.h"
 #include <utility>
+#include <vector>
+
+#include "Error.h"
+#include "Function.h"
+#include "FunctionPtr.h"
+#include "IR.h"
+#include "IRVisitor.h"
+#include "Schedule.h"
 
 namespace Halide {
 namespace Internal {

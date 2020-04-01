@@ -1,3 +1,5 @@
+#include <iostream>
+
 #include "Halide.h"
 
 int main(int argc, char **argv) {

@@ -1,6 +1,10 @@
+#include <stdlib.h>
+#include <cstdint>
+#include <cstdio>
+#include <type_traits>
+
 #include "Halide.h"
 #include "halide_benchmark.h"
-#include <cstdio>
 
 using namespace Halide;
 using namespace Halide::Tools;

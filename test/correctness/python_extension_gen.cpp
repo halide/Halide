@@ -1,8 +1,10 @@
-#include "Halide.h"
-
-#include <iostream>
 #include <stdio.h>
+#include <cstdint>
+#include <string>
+#include <type_traits>
+#include <vector>
 
+#include "Halide.h"
 #include "test/common/halide_test_dirs.h"
 
 using namespace Halide;

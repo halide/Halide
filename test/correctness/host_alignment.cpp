@@ -1,7 +1,11 @@
-#include "Halide.h"
-#include <map>
 #include <stdio.h>
+#include <map>
 #include <string>
+#include <type_traits>
+#include <utility>
+#include <vector>
+
+#include "Halide.h"
 
 namespace {
 

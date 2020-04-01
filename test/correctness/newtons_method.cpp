@@ -1,5 +1,8 @@
-#include "Halide.h"
+#include <math.h>
 #include <stdio.h>
+#include <type_traits>
+
+#include "Halide.h"
 
 #ifndef M_PI
 #define M_PI 3.14159265358979310000

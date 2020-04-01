@@ -5,13 +5,21 @@
  * Defines the internal representation of parameters to halide piplines
  */
 
+#include <string.h>
+#include <string>
+#include <vector>
+
 #include "Buffer.h"
+#include "Error.h"
 #include "Expr.h"
+#include "IntrusivePtr.h"
+#include "Type.h"
+#include "Util.h"
+#include "runtime/HalideRuntime.h"
 
 namespace Halide {
 
 struct ArgumentEstimates;
-class OutputImageParam;
 
 namespace Internal {
 

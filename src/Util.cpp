@@ -1,15 +1,13 @@
 #include "Util.h"
-#include "Debug.h"
-#include "Error.h"
-#include "Introspection.h"
+
 #include <atomic>
 #include <chrono>
 #include <fstream>
-#include <iomanip>
-#include <map>
-#include <mutex>
-#include <sstream>
 #include <string>
+
+#include "Debug.h"
+#include "Error.h"
+#include "Introspection.h"
 
 #ifdef _MSC_VER
 #include <io.h>
@@ -17,12 +15,12 @@
 #include <stdlib.h>
 #include <unistd.h>
 #endif
+#include <ctype.h>
+#include <limits.h>
 #include <sys/stat.h>
-#include <sys/types.h>
 
 #ifdef __linux__
 #define CAN_GET_RUNNING_PROGRAM_NAME
-#include <linux/limits.h>  // For PATH_MAX
 #endif
 #if defined(_MSC_VER) && !defined(NOMINMAX)
 #define NOMINMAX

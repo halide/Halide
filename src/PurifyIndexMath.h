@@ -1,11 +1,10 @@
 #ifndef HALIDE_PURIFY_INDEX_MATH_H
 #define HALIDE_PURIFY_INDEX_MATH_H
 
+#include "Expr.h"
 /** \file
  * Removes side-effects in integer math.
  */
-
-#include "IR.h"
 
 namespace Halide {
 namespace Internal {

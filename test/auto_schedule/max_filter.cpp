@@ -1,9 +1,14 @@
 // Circular-support max filter. Does some trickery to get O(r) per pixel for radius r, not O(r^2).
 
+#include <math.h>
+#include <stdint.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <iostream>
+#include <type_traits>
+
 #include "Halide.h"
 #include "halide_benchmark.h"
-#include <iostream>
-#include <limits>
 
 using namespace Halide;
 using namespace Halide::Tools;

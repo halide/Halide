@@ -1,16 +1,23 @@
 #ifndef HALIDE_INTERNAL_DERIVATIVE_UTILS_H
 #define HALIDE_INTERNAL_DERIVATIVE_UTILS_H
 
+#include <map>
 #include <set>
+#include <string>
+#include <utility>
+#include <vector>
 
 #include "Bounds.h"
-#include "Derivative.h"
 #include "Expr.h"
 #include "RDom.h"
-#include "Scope.h"
-#include "Var.h"
+#include "Reduction.h"
+#include "Tuple.h"
+#include "Type.h"
 
 namespace Halide {
+class Func;
+class Var;
+
 namespace Internal {
 
 /**

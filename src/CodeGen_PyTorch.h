@@ -13,11 +13,15 @@
  * the PyTorch input, when applicable.
  */
 
+#include <iosfwd>
+
 #include "IRPrinter.h"
-#include "Module.h"
 
 namespace Halide {
+class Module;
+
 namespace Internal {
+struct LoweredFunc;
 
 /** This class emits C++ code to wrap a Halide pipeline so that it can
  * be used as a C++ extension operator in PyTorch.

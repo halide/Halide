@@ -6,8 +6,10 @@
  * generated halide pipeline
  */
 
+#include <stdint.h>
+#include <string>
+
 #include "Buffer.h"
-#include "Error.h"
 #include "Expr.h"
 #include "Type.h"
 #include "runtime/HalideRuntime.h"

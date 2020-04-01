@@ -1,5 +1,8 @@
-#include "Halide.h"
 #include <stdio.h>
+#include <string>
+#include <type_traits>
+
+#include "Halide.h"
 
 using namespace Halide;
 

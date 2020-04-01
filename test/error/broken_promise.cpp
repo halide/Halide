@@ -1,4 +1,7 @@
+#include <math.h>
+#include <stdint.h>
 #include <iostream>
+#include <type_traits>
 
 #include "Halide.h"
 

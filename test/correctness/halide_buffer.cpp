@@ -1,8 +1,14 @@
-#include <iostream>
+#include <assert.h>
+#include <stdint.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <algorithm>
+#include <new>
+
 // Don't include Halide.h: it is not necessary for this test.
 #include "HalideBuffer.h"
-
-#include <stdio.h>
+#include "HalideRuntime.h"
 
 using namespace Halide::Runtime;
 

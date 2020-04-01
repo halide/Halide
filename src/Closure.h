@@ -6,13 +6,27 @@
  * Provides Closure class.
  */
 
+#include <stddef.h>
+#include <stdint.h>
+#include <map>
+#include <string>
+
 #include "Buffer.h"
-#include "IR.h"
+#include "Expr.h"
 #include "IRVisitor.h"
 #include "Scope.h"
+#include "Type.h"
 
 namespace Halide {
 namespace Internal {
+struct Allocate;
+struct Atomic;
+struct For;
+struct Let;
+struct LetStmt;
+struct Load;
+struct Store;
+struct Variable;
 
 /** A helper class to manage closures. Walks over a statement and
  * retrieves all the references within it to external symbols

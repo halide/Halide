@@ -5,10 +5,31 @@
  * Defines the code-generator for producing Hexagon machine code
  */
 
+#include <string>
+#include <vector>
+
+#include "CodeGen_LLVM.h"
 #include "CodeGen_Posix.h"
+#include "Type.h"
+
+namespace llvm {
+class Function;
+class Type;
+class Value;
+}  // namespace llvm
 
 namespace Halide {
+struct Expr;
+struct Target;
+
 namespace Internal {
+struct Allocate;
+struct Call;
+struct LoweredFunc;
+struct Max;
+struct Min;
+struct Mul;
+struct Select;
 
 /** A code generator that emits Hexagon code from a given Halide stmt. */
 class CodeGen_Hexagon : public CodeGen_Posix {

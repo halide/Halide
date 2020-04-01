@@ -1,11 +1,12 @@
-#include <stdio.h>
-
-#include "HalideBuffer.h"
-#include "HalideRuntime.h"
 #include <assert.h>
+#include <stdint.h>
+#include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 #include <string>
 
+#include "HalideBuffer.h"
+#include "HalideRuntime.h"
 #include "cxx_mangling.h"
 #ifdef TEST_CUDA
 #include "cxx_mangling_gpu.h"

@@ -1,11 +1,15 @@
 #ifndef HALIDE_IR_EQUALITY_H
 #define HALIDE_IR_EQUALITY_H
 
+#include <stddef.h>
+#include <stdint.h>
+#include <memory>
+#include <vector>
+
+#include "Expr.h"
 /** \file
  * Methods to test Exprs and Stmts for equality of value
  */
-
-#include "IR.h"
 
 namespace Halide {
 namespace Internal {

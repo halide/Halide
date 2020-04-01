@@ -1,10 +1,11 @@
-#include <math.h>
+#include <ext/alloc_traits.h>
 #include <stdio.h>
+#include <memory>
+#include <vector>
 
 #include "HalideBuffer.h"
 #include "pyramid.h"
 
-#include <vector>
 using std::vector;
 using namespace Halide::Runtime;
 

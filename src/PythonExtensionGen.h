@@ -1,16 +1,16 @@
 #ifndef HALIDE_PYTHON_EXTENSION_GEN_H_
 #define HALIDE_PYTHON_EXTENSION_GEN_H_
 
-#include "Module.h"
-#include "Target.h"
+#include <iosfwd>
 #include <string>
 
 namespace Halide {
 
 class Module;
-struct Target;
 
 namespace Internal {
+struct LoweredArgument;
+struct LoweredFunc;
 
 class PythonExtensionGen {
 public:

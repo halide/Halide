@@ -1,4 +1,8 @@
 #include "Var.h"
+
+#include <ext/alloc_traits.h>
+
+#include "Type.h"
 #include "Util.h"
 
 namespace Halide {

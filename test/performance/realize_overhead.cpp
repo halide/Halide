@@ -1,6 +1,10 @@
-#include "Halide.h"
+#include <stdint.h>
 #include <iostream>
+#include <string>
+#include <type_traits>
+#include <vector>
 
+#include "Halide.h"
 #include "halide_benchmark.h"
 
 using namespace Halide;

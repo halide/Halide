@@ -1,5 +1,9 @@
-#include "Halide.h"
 #include <stdio.h>
+#include <stdlib.h>
+#include <iostream>
+#include <type_traits>
+
+#include "Halide.h"
 
 // This file demonstrates two example custom lowering passes. The
 // first just makes sure the IR passes some test, and doesn't modify

@@ -6,12 +6,16 @@
  */
 
 #include <map>
+#include <string>
+#include <vector>
 
-#include "IR.h"
-#include "Target.h"
+#include "Expr.h"
 
 namespace Halide {
+struct Target;
+
 namespace Internal {
+class Function;
 
 /** Take a statement representing a halide pipeline, inject calls to
  * tracing functions at interesting points, such as

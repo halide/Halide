@@ -1,16 +1,21 @@
 #include "Reduction.h"
 
+#include <stddef.h>
+#include <algorithm>
+#include <iostream>
+#include <utility>
+
+#include "Debug.h"
 #include "IR.h"
 #include "IREquality.h"
 #include "IRMutator.h"
 #include "IROperator.h"
-#include "IRVisitor.h"
 #include "Simplify.h"
 #include "Var.h"
-#include <utility>
 
 namespace Halide {
 namespace Internal {
+class IRVisitor;
 
 namespace {
 

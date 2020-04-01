@@ -1,7 +1,12 @@
-#include "Halide.h"
-
-#include <map>
+#include <ext/alloc_traits.h>
 #include <stdio.h>
+#include <algorithm>
+#include <iostream>
+#include <memory>
+#include <type_traits>
+#include <vector>
+
+#include "Halide.h"
 
 namespace {
 

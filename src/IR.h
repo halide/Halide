@@ -5,23 +5,24 @@
  * Subtypes for Halide expressions (\ref Halide::Expr) and statements (\ref Halide::Internal::Stmt)
  */
 
+#include <stdint.h>
 #include <string>
 #include <utility>
 #include <vector>
 
-#include "Debug.h"
-#include "Error.h"
+#include "Buffer.h"
 #include "Expr.h"
-#include "Function.h"
-#include "IntrusivePtr.h"
+#include "FunctionPtr.h"
 #include "ModulusRemainder.h"
 #include "Parameter.h"
+#include "Reduction.h"
+#include "Schedule.h"
 #include "Type.h"
 #include "Util.h"
-#include "runtime/HalideBuffer.h"
 
 namespace Halide {
 namespace Internal {
+class Function;
 
 /** The actual IR nodes begin here. Remember that all the Expr
  * nodes also have a public "type" property */

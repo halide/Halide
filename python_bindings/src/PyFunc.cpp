@@ -1,13 +1,29 @@
 #include "PyFunc.h"
 
-#include "PyBuffer.h"
-#include "PyExpr.h"
+#include <stddef.h>
+#include <cstdint>
+#include <initializer_list>
+#include <map>
+#include <new>
+#include <ostream>
+#include <string>
+#include <type_traits>
+#include <utility>
+#include <vector>
+
+#include "Halide.h"
 #include "PyFuncRef.h"
+#include "PyHalide.h"
 #include "PyLoopLevel.h"
 #include "PyScheduleMethods.h"
 #include "PyStage.h"
 #include "PyTuple.h"
 #include "PyVarOrRVar.h"
+#include "pybind11/cast.h"
+#include "pybind11/detail/../pytypes.h"
+#include "pybind11/detail/descr.h"
+#include "pybind11/pybind11.h"
+#include "warnings.h"
 
 namespace Halide {
 namespace PythonBindings {

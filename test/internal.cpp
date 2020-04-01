@@ -5,20 +5,18 @@
 #include "CSE.h"
 #include "CodeGen_C.h"
 #include "CodeGen_PyTorch.h"
-#include "CodeGen_X86.h"
 #include "Deinterleave.h"
-#include "Func.h"
 #include "Generator.h"
-#include "IR.h"
 #include "IREquality.h"
 #include "IRMatch.h"
 #include "IRPrinter.h"
-#include "Interval.h"
 #include "ModulusRemainder.h"
 #include "Monotonic.h"
 #include "Reduction.h"
 #include "Solve.h"
+#include "Target.h"
 #include "UniquifyVariableNames.h"
+#include "Util.h"
 
 using namespace Halide;
 using namespace Halide::Internal;

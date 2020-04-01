@@ -2,6 +2,8 @@
 
 #include "cxx_mangling.h"
 
+struct halide_buffer_t;
+
 // These are the define_extern functions referenced by cxx_mangling_define_extern_generator.cpp
 namespace HalideTest {
 

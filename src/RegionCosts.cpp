@@ -1,13 +1,25 @@
 #include "RegionCosts.h"
+
+#include <ext/alloc_traits.h>
+#include <stddef.h>
+#include <algorithm>
+#include <memory>
+
+#include "Definition.h"
+#include "Error.h"
 #include "FindCalls.h"
-#include "IRMutator.h"
+#include "IR.h"
+#include "IROperator.h"
 #include "IRVisitor.h"
-#include "PartitionLoops.h"
+#include "Interval.h"
+#include "Parameter.h"
 #include "RealizationOrder.h"
 #include "Simplify.h"
+#include "Util.h"
 
 namespace Halide {
 namespace Internal {
+struct Dim;
 
 using std::map;
 using std::set;

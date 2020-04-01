@@ -7,15 +7,25 @@
  * computing some function regions.
  */
 
-#include <limits>
+#include <stdint.h>
+#include <map>
+#include <ostream>
 #include <set>
+#include <string>
+#include <utility>
+#include <vector>
 
 #include "AutoScheduleUtils.h"
-#include "Interval.h"
+#include "Bounds.h"
+#include "Debug.h"
+#include "Expr.h"
+#include "Function.h"
 #include "Scope.h"
+#include "Type.h"
 
 namespace Halide {
 namespace Internal {
+struct Interval;
 
 struct Cost {
     // Estimate of cycles spent doing arithmetic.

@@ -1,10 +1,15 @@
+#include <ext/alloc_traits.h>
+#include <algorithm>
+#include <cstdint>
 #include <iostream>
 #include <limits>
 #include <mutex>
 #include <sstream>
 
+#include "Argument.h"
 #include "CPlusPlusMangle.h"
 #include "CSE.h"
+#include "Closure.h"
 #include "CodeGen_ARM.h"
 #include "CodeGen_GPU_Host.h"
 #include "CodeGen_Hexagon.h"
@@ -18,18 +23,70 @@
 #include "Debug.h"
 #include "Deinterleave.h"
 #include "EmulateFloat16Math.h"
+#include "Error.h"
 #include "ExprUsesVar.h"
+#include "ExternalCode.h"
+#include "Float16.h"
+#include "Function.h"
+#include "IR.h"
 #include "IROperator.h"
 #include "IRPrinter.h"
-#include "IntegerDivisionTable.h"
-#include "JITModule.h"
 #include "LLVM_Headers.h"
 #include "LLVM_Runtime_Linker.h"
 #include "Lerp.h"
 #include "MatlabWrapper.h"
+#include "ModulusRemainder.h"
+#include "Parameter.h"
 #include "Pipeline.h"
 #include "Simplify.h"
 #include "Util.h"
+#include "llvm/ADT/ArrayRef.h"
+#include "llvm/ADT/SmallVector.h"
+#include "llvm/ADT/StringRef.h"
+#include "llvm/ADT/Twine.h"
+#include "llvm/ADT/ilist_iterator.h"
+#include "llvm/ADT/iterator_range.h"
+#include "llvm/Analysis/AliasAnalysis.h"
+#include "llvm/Analysis/CGSCCPassManager.h"
+#include "llvm/Analysis/LoopAnalysisManager.h"
+#include "llvm/IR/Argument.h"
+#include "llvm/IR/Attributes.h"
+#include "llvm/IR/BasicBlock.h"
+#include "llvm/IR/CallingConv.h"
+#include "llvm/IR/Constant.h"
+#include "llvm/IR/ConstantFolder.h"
+#include "llvm/IR/Constants.h"
+#include "llvm/IR/DataLayout.h"
+#include "llvm/IR/DerivedTypes.h"
+#include "llvm/IR/Function.h"
+#include "llvm/IR/GlobalValue.h"
+#include "llvm/IR/GlobalVariable.h"
+#include "llvm/IR/IRBuilder.h"
+#include "llvm/IR/Instruction.h"
+#include "llvm/IR/Instructions.h"
+#include "llvm/IR/IntrinsicEnums.inc"
+#include "llvm/IR/Intrinsics.h"
+#include "llvm/IR/MDBuilder.h"
+#include "llvm/IR/Metadata.h"
+#include "llvm/IR/Module.h"
+#include "llvm/IR/Operator.h"
+#include "llvm/IR/PassManager.h"
+#include "llvm/IR/Type.h"
+#include "llvm/IR/Value.h"
+#include "llvm/IR/Verifier.h"
+#include "llvm/Passes/PassBuilder.h"
+#include "llvm/Support/Alignment.h"
+#include "llvm/Support/AtomicOrdering.h"
+#include "llvm/Support/Casting.h"
+#include "llvm/Support/CommandLine.h"
+#include "llvm/Support/ErrorHandling.h"
+#include "llvm/Support/TargetSelect.h"
+#include "llvm/Support/TypeSize.h"
+#include "llvm/Support/raw_ostream.h"
+#include "llvm/Target/TargetMachine.h"
+#include "llvm/Transforms/Instrumentation/AddressSanitizer.h"
+#include "llvm/Transforms/Instrumentation/ThreadSanitizer.h"
+#include "runtime/HalideRuntime.h"
 
 #if !(__cplusplus > 199711L || _MSC_VER >= 1800)
 
@@ -61,18 +118,21 @@ using std::vector;
     inline void Initialize##target##Target() { \
     }
 #include <llvm/Config/Targets.def>
+
 #undef LLVM_TARGET
 
 #define LLVM_ASM_PARSER(target)                   \
     inline void Initialize##target##AsmParser() { \
     }
 #include <llvm/Config/AsmParsers.def>
+
 #undef LLVM_ASM_PARSER
 
 #define LLVM_ASM_PRINTER(target)                   \
     inline void Initialize##target##AsmPrinter() { \
     }
 #include <llvm/Config/AsmPrinters.def>
+
 #undef LLVM_ASM_PRINTER
 
 #define InitializeTarget(target)          \
@@ -400,17 +460,20 @@ void CodeGen_LLVM::initialize_llvm() {
 #define LLVM_TARGET(target) \
     Initialize##target##Target();
 #include <llvm/Config/Targets.def>
+
 #undef LLVM_TARGET
 
 #define LLVM_ASM_PARSER(target) \
     Initialize##target##AsmParser();
 #include <llvm/Config/AsmParsers.def>
+
 #undef LLVM_ASM_PARSER
 
 #define LLVM_ASM_PRINTER(target) \
     Initialize##target##AsmPrinter();
 #include <llvm/Config/AsmPrinters.def>
 #include <utility>
+
 #undef LLVM_ASM_PRINTER
     });
 }

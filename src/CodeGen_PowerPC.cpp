@@ -1,9 +1,19 @@
 #include "CodeGen_PowerPC.h"
+
+#include <ext/alloc_traits.h>
+#include <stddef.h>
+#include <memory>
+#include <vector>
+
+#include "CodeGen_LLVM.h"
 #include "ConciseCasts.h"
+#include "Error.h"
+#include "Expr.h"
+#include "IR.h"
 #include "IRMatch.h"
 #include "IROperator.h"
-#include "LLVM_Headers.h"
-#include "Util.h"
+#include "Target.h"
+#include "Type.h"
 
 namespace Halide {
 namespace Internal {

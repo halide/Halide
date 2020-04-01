@@ -1,7 +1,10 @@
+#include <assert.h>
+#include <stdint.h>
+#include <cstdio>
+#include <type_traits>
+
 #include "Halide.h"
 #include "halide_benchmark.h"
-#include <cstdio>
-#include <memory>
 
 using namespace Halide;
 using namespace Halide::Tools;

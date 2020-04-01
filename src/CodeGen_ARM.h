@@ -5,12 +5,35 @@
  * Defines the code-generator for producing ARM machine code
  */
 
+#include <string>
 #include <utility>
+#include <vector>
 
 #include "CodeGen_Posix.h"
+#include "Expr.h"
+#include "Target.h"
+
+namespace llvm {
+class Type;
+class Value;
+}  // namespace llvm
 
 namespace Halide {
+struct Type;
+
 namespace Internal {
+struct Add;
+struct Call;
+struct Cast;
+struct Div;
+struct LE;
+struct LT;
+struct Load;
+struct Max;
+struct Min;
+struct Mul;
+struct Store;
+struct Sub;
 
 /** A code generator that emits ARM code from a given Halide stmt. */
 class CodeGen_ARM : public CodeGen_Posix {

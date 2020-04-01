@@ -1,8 +1,15 @@
+#include <assert.h>
+#include <stdint.h>
+#include <algorithm>
+#include <cstdio>
+#include <cstdlib>
+#include <functional>
+#include <mutex>
+#include <thread>
+#include <type_traits>
+
 #include "Halide.h"
 #include "halide_benchmark.h"
-#include <cstdio>
-#include <functional>
-#include <thread>
 
 /** \file Test to demonstrate using JIT across multiple threads with
  * varying parameters passed to realizations. Performance is tested

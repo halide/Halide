@@ -1,5 +1,13 @@
 #include "PyConciseCasts.h"
 
+#include <stdint.h>
+#include <initializer_list>
+#include <utility>
+
+#include "Halide.h"
+#include "pybind11/detail/descr.h"
+#include "pybind11/pybind11.h"
+
 namespace Halide {
 namespace PythonBindings {
 

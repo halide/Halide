@@ -1,9 +1,22 @@
 #include "UniquifyVariableNames.h"
+
+#include <stddef.h>
+#include <algorithm>
+#include <iostream>
+#include <map>
+#include <set>
+#include <string>
+#include <utility>
+#include <vector>
+
+#include "Error.h"
+#include "IR.h"
 #include "IREquality.h"
 #include "IRMutator.h"
 #include "IROperator.h"
+#include "IRVisitor.h"
+#include "Scope.h"
 #include "Var.h"
-#include <sstream>
 
 namespace Halide {
 namespace Internal {

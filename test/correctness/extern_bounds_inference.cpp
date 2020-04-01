@@ -1,5 +1,11 @@
-#include "Halide.h"
+#include <ext/alloc_traits.h>
+#include <stdint.h>
 #include <stdio.h>
+#include <stdlib.h>
+#include <type_traits>
+#include <vector>
+
+#include "Halide.h"
 
 #ifdef _WIN32
 #define DLLEXPORT __declspec(dllexport)

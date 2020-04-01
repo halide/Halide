@@ -1,7 +1,11 @@
 
-#include "Halide.h"
+#include <stdint.h>
 #include <stdio.h>
+#include <algorithm>
+#include <limits>
+#include <type_traits>
 
+#include "Halide.h"
 #include "testing.h"
 
 using namespace Halide;

@@ -1,13 +1,12 @@
 #ifndef HALIDE_EARLY_FREE_H
 #define HALIDE_EARLY_FREE_H
 
+#include "Expr.h"
 /** \file
  * Defines the lowering pass that injects markers just after
  * the last use of each buffer so that they can potentially be freed
  * earlier.
  */
-
-#include "IR.h"
 
 namespace Halide {
 namespace Internal {

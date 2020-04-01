@@ -1,6 +1,10 @@
-#include "Halide.h"
+#include <stdlib.h>
+#include <algorithm>
+#include <cstdint>
 #include <iostream>
-#include <stdio.h>
+#include <type_traits>
+
+#include "Halide.h"
 
 using namespace Halide;
 using namespace Halide::ConciseCasts;

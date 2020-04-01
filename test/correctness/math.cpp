@@ -1,8 +1,13 @@
-#include "Halide.h"
+#include <stdio.h>
+#include <stdlib.h>
+#include <cmath>
+#include <cstdint>
 #include <iostream>
 #include <limits>
-#include <math.h>
-#include <stdio.h>
+#include <string>
+#include <type_traits>
+
+#include "Halide.h"
 
 using namespace Halide;
 

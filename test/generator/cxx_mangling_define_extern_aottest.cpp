@@ -1,11 +1,9 @@
+#include <stdint.h>
 #include <stdio.h>
-
-#include "HalideBuffer.h"
-#include "HalideRuntime.h"
-
-#include <assert.h>
+#include <stdlib.h>
 #include <string>
 
+#include "HalideBuffer.h"
 #include "cxx_mangling_define_extern.h"
 
 using namespace Halide::Runtime;

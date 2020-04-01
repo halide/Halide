@@ -1,4 +1,9 @@
+#include <math.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <cstdint>
 #include <type_traits>
+#include <utility>
 
 #include "Halide.h"
 

@@ -1,14 +1,27 @@
+#include <ext/alloc_traits.h>
+#include <stddef.h>
+#include <stdint.h>
 #include <algorithm>
+#include <iostream>
+#include <map>
+#include <memory>
 #include <sstream>
 #include <utility>
 
 #include "CodeGen_Internal.h"
 #include "CodeGen_Metal_Dev.h"
 #include "Debug.h"
+#include "Error.h"
+#include "IR.h"
 #include "IROperator.h"
+#include "IRPrinter.h"
+#include "Scope.h"
+#include "Type.h"
+#include "Util.h"
 
 namespace Halide {
 namespace Internal {
+struct DeviceArgument;
 
 using std::ostringstream;
 using std::sort;

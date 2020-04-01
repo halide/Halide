@@ -1,5 +1,7 @@
-#include "Halide.h"
+#include <stdint.h>
 #include <stdio.h>
+
+#include "Halide.h"
 
 // See https://github.com/halide/Halide/issues/3070
 

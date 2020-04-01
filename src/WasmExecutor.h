@@ -1,6 +1,11 @@
 #ifndef HALIDE_WASM_EXECUTOR_H
 #define HALIDE_WASM_EXECUTOR_H
 
+#include <map>
+#include <string>
+#include <vector>
+
+#include "IntrusivePtr.h"
 /** \file
  *
  * Support for running Halide-compiled Wasm code in-process.
@@ -10,15 +15,15 @@
  * Currently, V8 is supported, with SpiderMonkey intended to be included soon as well.
  */
 
-#include "Argument.h"
-#include "JITModule.h"
-#include "Parameter.h"
-#include "Target.h"
-#include "Type.h"
-
 namespace Halide {
+class Module;
+struct Argument;
+struct JITExtern;
+struct Target;
+
 namespace Internal {
 
+struct JITModule;
 struct WasmModuleContents;
 
 /** Handle to compiled wasm code which can be called later. */

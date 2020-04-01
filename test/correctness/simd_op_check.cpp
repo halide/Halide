@@ -1,9 +1,9 @@
 #include "simd_op_check.h"
-#include "Halide.h"
 
-#include <stdarg.h>
 #include <stdio.h>
-#include <string.h>
+#include <fstream>
+
+#include "Halide.h"
 
 using namespace Halide;
 using namespace Halide::ConciseCasts;

@@ -1,3 +1,17 @@
+#include <ext/alloc_traits.h>
+#include <math.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <algorithm>
+#include <cstdint>
+#include <initializer_list>
+#include <iostream>
+#include <limits>
+#include <random>
+#include <string>
+#include <utility>
+#include <vector>
+
 #include "Halide.h"
 
 using namespace Halide;

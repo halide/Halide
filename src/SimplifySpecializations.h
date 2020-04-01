@@ -8,11 +8,11 @@
  */
 
 #include <map>
-
-#include "IR.h"
+#include <string>
 
 namespace Halide {
 namespace Internal {
+class Function;
 
 /** Try to simplify the RHS/LHS of a function's definition based on its
  * specializations. */

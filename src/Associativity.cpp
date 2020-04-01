@@ -1,18 +1,30 @@
 #include "Associativity.h"
+
+#include <ext/alloc_traits.h>
+#include <algorithm>
+#include <iostream>
+#include <iterator>
+#include <map>
+#include <memory>
+#include <set>
+
 #include "CSE.h"
+#include "Debug.h"
+#include "Error.h"
 #include "ExprUsesVar.h"
+#include "FunctionPtr.h"
+#include "IR.h"
 #include "IREquality.h"
 #include "IRMatch.h"
 #include "IRMutator.h"
 #include "IROperator.h"
 #include "IRPrinter.h"
+#include "Scope.h"
 #include "Simplify.h"
 #include "Solve.h"
 #include "Substitute.h"
+#include "Type.h"
 #include "Util.h"
-
-#include <algorithm>
-#include <iterator>
 
 namespace Halide {
 namespace Internal {

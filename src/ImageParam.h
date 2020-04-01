@@ -6,18 +6,24 @@
  * Classes for declaring image parameters to halide pipelines
  */
 
+#include <string>
 #include <utility>
+#include <vector>
 
+#include "Argument.h"
+#include "Buffer.h"
+#include "Expr.h"
 #include "Func.h"
 #include "OutputImageParam.h"
-#include "Var.h"
+#include "Util.h"
 
 namespace Halide {
-
+class Var;
 namespace Internal {
-template<typename T2>
-class GeneratorInput_Buffer;
-}
+template<typename T2> class GeneratorInput_Buffer;
+class Parameter;
+}  // namespace Internal
+struct Type;
 
 /** An Image parameter to a halide pipeline. E.g., the input image. */
 class ImageParam : public OutputImageParam {

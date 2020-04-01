@@ -5,13 +5,29 @@
  * Defines a method to match a fragment of IR against a pattern containing wildcards
  */
 
-#include "IR.h"
-#include "IREquality.h"
-#include "IROperator.h"
-#include "ModulusRemainder.h"
-
+#include <stdint.h>
+#include <stdlib.h>
+#include <algorithm>
+#include <cmath>
+#include <map>
+#include <memory>
+#include <ostream>
 #include <random>
 #include <set>
+#include <string>
+#include <tuple>
+#include <type_traits>
+#include <utility>
+#include <vector>
+
+#include "Debug.h"
+#include "Error.h"
+#include "Expr.h"
+#include "IR.h"
+#include "IROperator.h"
+#include "Type.h"
+#include "Util.h"
+#include "runtime/HalideRuntime.h"
 
 namespace Halide {
 namespace Internal {

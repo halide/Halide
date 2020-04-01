@@ -1,14 +1,29 @@
-#include <iostream>
+#include <stdint.h>
+#include <algorithm>
+#include <memory>
 
 #include "CSE.h"
 #include "CodeGen_Internal.h"
 #include "CodeGen_Posix.h"
 #include "Debug.h"
+#include "Error.h"
 #include "IR.h"
 #include "IROperator.h"
 #include "IRPrinter.h"
-#include "LLVM_Headers.h"
 #include "Simplify.h"
+#include "Target.h"
+#include "llvm/IR/Argument.h"
+#include "llvm/IR/BasicBlock.h"
+#include "llvm/IR/Constant.h"
+#include "llvm/IR/Constants.h"
+#include "llvm/IR/DerivedTypes.h"
+#include "llvm/IR/Function.h"
+#include "llvm/IR/IRBuilder.h"
+#include "llvm/IR/Instructions.h"
+#include "llvm/IR/Module.h"
+#include "llvm/IR/Type.h"
+#include "llvm/IR/Value.h"
+#include "llvm/Support/Casting.h"
 
 namespace Halide {
 namespace Internal {

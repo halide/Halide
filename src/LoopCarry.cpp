@@ -1,13 +1,31 @@
 #include "LoopCarry.h"
+
+#include <ext/alloc_traits.h>
+#include <stddef.h>
+#include <algorithm>
+#include <memory>
+#include <set>
+#include <string>
+#include <utility>
+#include <vector>
+
+#include "Buffer.h"
 #include "CSE.h"
+#include "Debug.h"
+#include "Error.h"
 #include "ExprUsesVar.h"
+#include "IR.h"
 #include "IREquality.h"
 #include "IRMutator.h"
 #include "IROperator.h"
+#include "IRVisitor.h"
+#include "ModulusRemainder.h"
+#include "Parameter.h"
+#include "Scope.h"
 #include "Simplify.h"
 #include "Substitute.h"
-
-#include <algorithm>
+#include "Type.h"
+#include "Util.h"
 
 namespace Halide {
 namespace Internal {

@@ -2,10 +2,20 @@
 // templated such that it can be compiled in either forward or
 // backwards mode, for inference or training respectively.
 
-#include "Halide.h"
+#include <assert.h>
+#include <ext/alloc_traits.h>
+#include <memory>
+#include <string>
+#include <type_traits>
+#include <vector>
 
+#include "Halide.h"
 #include "NetworkSize.h"
 #include "cost_model_schedule.h"
+
+namespace halide_register_generator {
+struct halide_global_ns;
+}  // namespace halide_register_generator
 
 using namespace Halide;
 using Halide::Derivative;

@@ -5,6 +5,11 @@
  * Defines the Var - the front-end variable
  */
 
+#include <stdlib.h>
+#include <string>
+#include <vector>
+
+#include "Expr.h"
 #include "IR.h"
 
 namespace Halide {

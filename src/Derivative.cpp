@@ -1,23 +1,41 @@
-#include <cmath>
-#include <iostream>
+#include <ext/alloc_traits.h>
+#include <algorithm>
+#include <memory>
 #include <set>
+#include <tuple>
+#include <vector>
 
 #include "Associativity.h"
 #include "BoundaryConditions.h"
+#include "Bounds.h"
 #include "CSE.h"
 #include "Debug.h"
+#include "Definition.h"
 #include "Derivative.h"
 #include "DerivativeUtils.h"
 #include "Error.h"
 #include "ExprUsesVar.h"
 #include "FindCalls.h"
+#include "Function.h"
+#include "FunctionPtr.h"
+#include "IR.h"
 #include "IREquality.h"
-#include "IRMutator.h"
 #include "IROperator.h"
+#include "IRVisitor.h"
+#include "Interval.h"
+#include "Parameter.h"
+#include "RDom.h"
 #include "RealizationOrder.h"
+#include "Reduction.h"
+#include "Schedule.h"
+#include "Scope.h"
 #include "Simplify.h"
 #include "Solve.h"
 #include "Substitute.h"
+#include "Tuple.h"
+#include "Type.h"
+#include "Util.h"
+#include "Var.h"
 
 namespace Halide {
 

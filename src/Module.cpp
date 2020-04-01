@@ -1,22 +1,35 @@
 #include "Module.h"
 
+#include <string.h>
+#include <algorithm>
 #include <array>
+#include <bitset>
 #include <fstream>
-#include <future>
+#include <initializer_list>
+#include <memory>
 #include <utility>
 
 #include "CodeGen_C.h"
-#include "CodeGen_Internal.h"
 #include "CodeGen_PyTorch.h"
 #include "Debug.h"
+#include "Error.h"
+#include "ExternalCode.h"
 #include "HexagonOffload.h"
+#include "IR.h"
 #include "IROperator.h"
-#include "LLVM_Headers.h"
+#include "IRPrinter.h"
 #include "LLVM_Output.h"
-#include "LLVM_Runtime_Linker.h"
 #include "Pipeline.h"
 #include "PythonExtensionGen.h"
 #include "StmtToHtml.h"
+#include "Target.h"
+#include "Type.h"
+#include "Util.h"
+#include "llvm/ADT/SmallString.h"
+#include "llvm/ADT/SmallVector.h"
+#include "llvm/IR/LLVMContext.h"
+#include "llvm/IR/Module.h"
+#include "llvm/Support/raw_ostream.h"
 
 using Halide::Internal::debug;
 

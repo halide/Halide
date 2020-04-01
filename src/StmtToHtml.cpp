@@ -1,13 +1,22 @@
 #include "StmtToHtml.h"
+
+#include <ext/alloc_traits.h>
+#include <stdio.h>
+#include <algorithm>
+#include <fstream>
+#include <memory>
+#include <vector>
+
+#include "Buffer.h"
+#include "Debug.h"
+#include "Error.h"
+#include "IR.h"
 #include "IROperator.h"
 #include "IRVisitor.h"
+#include "Module.h"
 #include "Scope.h"
-
-#include <fstream>
-#include <iostream>
-#include <iterator>
-#include <sstream>
-#include <stdio.h>
+#include "Target.h"
+#include "Type.h"
 
 namespace Halide {
 namespace Internal {

@@ -5,16 +5,32 @@
  * Defines the code-generator for producing GLSL kernel code for OpenGL Compute.
  */
 
-#include <map>
 #include <sstream>
+#include <string>
+#include <vector>
 
 #include "CodeGen_C.h"
 #include "CodeGen_GPU_Dev.h"
 #include "CodeGen_OpenGL_Dev.h"
-#include "Target.h"
+#include "Expr.h"
 
 namespace Halide {
+struct Target;
+struct Type;
+
 namespace Internal {
+struct Allocate;
+struct Broadcast;
+struct Call;
+struct Cast;
+struct DeviceArgument;
+struct Evaluate;
+struct For;
+struct Free;
+struct Load;
+struct Ramp;
+struct Select;
+struct Store;
 
 class CodeGen_OpenGLCompute_Dev : public CodeGen_GPU_Dev {
 public:

@@ -1,20 +1,60 @@
 #include "CodeGen_PTX_Dev.h"
-#include "CSE.h"
+
+#include <stdint.h>
+#include <stdlib.h>
+#include <algorithm>
+#include <fstream>
+#include <memory>
+
 #include "CodeGen_Internal.h"
 #include "Debug.h"
-#include "ExprUsesVar.h"
-#include "IREquality.h"
-#include "IRMatch.h"
-#include "IRMutator.h"
+#include "Error.h"
+#include "IR.h"
 #include "IROperator.h"
-#include "IRPrinter.h"
 #include "LLVM_Headers.h"
 #include "LLVM_Runtime_Linker.h"
+#include "ModulusRemainder.h"
 #include "Simplify.h"
-#include "Solve.h"
 #include "Target.h"
+#include "Util.h"
+#include "llvm/ADT/SmallString.h"
+#include "llvm/ADT/SmallVector.h"
+#include "llvm/ADT/StringMap.h"
+#include "llvm/ADT/Triple.h"
+#include "llvm/ADT/Twine.h"
+#include "llvm/ADT/ilist_iterator.h"
+#include "llvm/ADT/iterator_range.h"
+#include "llvm/Analysis/CGSCCPassManager.h"
+#include "llvm/Analysis/TargetTransformInfo.h"
+#include "llvm/IR/Argument.h"
+#include "llvm/IR/Attributes.h"
+#include "llvm/IR/BasicBlock.h"
+#include "llvm/IR/Constant.h"
+#include "llvm/IR/Constants.h"
+#include "llvm/IR/DerivedTypes.h"
+#include "llvm/IR/Function.h"
+#include "llvm/IR/GlobalValue.h"
+#include "llvm/IR/IRBuilder.h"
+#include "llvm/IR/Instructions.h"
+#include "llvm/IR/LLVMContext.h"
+#include "llvm/IR/LegacyPassManager.h"
+#include "llvm/IR/Metadata.h"
+#include "llvm/IR/Module.h"
+#include "llvm/IR/Type.h"
+#include "llvm/IR/Verifier.h"
+#include "llvm/MC/MCTargetOptions.h"
+#include "llvm/Pass.h"
+#include "llvm/Support/CodeGen.h"
+#include "llvm/Support/TargetRegistry.h"
+#include "llvm/Support/raw_ostream.h"
+#include "llvm/Target/TargetMachine.h"
+#include "llvm/Target/TargetOptions.h"
+#include "llvm/Transforms/IPO.h"
+#include "llvm/Transforms/IPO/PassManagerBuilder.h"
 
-#include <fstream>
+namespace llvm {
+class Value;
+}  // namespace llvm
 
 // This is declared in NVPTX.h, which is not exported. Ugly, but seems better than
 // hardcoding a path to the .h file.
@@ -26,6 +66,7 @@ FunctionPass *createNVVMReflectPass(const StringMap<int> &Mapping);
 
 namespace Halide {
 namespace Internal {
+struct DeviceArgument;
 
 using std::string;
 using std::vector;

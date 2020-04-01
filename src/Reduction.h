@@ -5,12 +5,18 @@
  * Defines internal classes related to Reduction Domains
  */
 
+#include <string>
+#include <vector>
+
+#include "Error.h"
 #include "Expr.h"
+#include "IntrusivePtr.h"
 
 namespace Halide {
 namespace Internal {
 
 class IRMutator;
+class IRVisitor;
 
 /** A single named dimension of a reduction domain */
 struct ReductionVariable {

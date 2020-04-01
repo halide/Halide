@@ -1,5 +1,10 @@
 #include "Argument.h"
 
+#include <stddef.h>
+#include <memory>
+
+#include "Error.h"
+
 namespace Halide {
 
 bool ArgumentEstimates::operator==(const ArgumentEstimates &rhs) const {

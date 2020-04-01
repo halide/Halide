@@ -1,8 +1,7 @@
 #ifndef HALIDE_REMOVE_UNDEF
 #define HALIDE_REMOVE_UNDEF
 
-#include "IR.h"
-
+#include "Expr.h"
 /** \file
  * Defines a lowering pass that elides stores that depend on unitialized values.
  */

@@ -1,5 +1,8 @@
+#include <assert.h>
+#include <cstdint>
+#include <type_traits>
+
 #include "Halide.h"
-#include <stdio.h>
 
 using namespace Halide;
 

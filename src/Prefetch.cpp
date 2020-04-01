@@ -1,14 +1,30 @@
+#include <ext/alloc_traits.h>
+#include <stddef.h>
 #include <algorithm>
 #include <map>
+#include <memory>
+#include <set>
 #include <string>
 #include <utility>
 
 #include "Bounds.h"
-#include "ExprUsesVar.h"
+#include "Buffer.h"
+#include "Debug.h"
+#include "Error.h"
+#include "Function.h"
+#include "IR.h"
 #include "IRMutator.h"
+#include "IROperator.h"
+#include "IRVisitor.h"
+#include "Interval.h"
+#include "Parameter.h"
 #include "Prefetch.h"
+#include "Reduction.h"
+#include "Schedule.h"
 #include "Scope.h"
 #include "Simplify.h"
+#include "Target.h"
+#include "Type.h"
 #include "Util.h"
 
 namespace Halide {

@@ -1,6 +1,17 @@
 #include "IREquality.h"
+
+#include <ext/alloc_traits.h>
+#include <string>
+
+#include "Debug.h"
+#include "Error.h"
+#include "IR.h"
 #include "IROperator.h"
 #include "IRVisitor.h"
+#include "IntrusivePtr.h"
+#include "ModulusRemainder.h"
+#include "Type.h"
+#include "runtime/HalideRuntime.h"
 
 namespace Halide {
 namespace Internal {

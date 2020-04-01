@@ -1,4 +1,14 @@
 #include "RemoveUndef.h"
+
+#include <ext/alloc_traits.h>
+#include <stddef.h>
+#include <algorithm>
+#include <memory>
+#include <utility>
+#include <vector>
+
+#include "Error.h"
+#include "IR.h"
 #include "IREquality.h"
 #include "IRMutator.h"
 #include "IROperator.h"

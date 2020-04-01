@@ -1,10 +1,12 @@
-#include "Halide.h"
-#include <assert.h>
-#include <functional>
-#include <map>
-#include <numeric>
+#include <stdint.h>
 #include <stdio.h>
+#include <stdlib.h>
+#include <map>
+#include <string>
+#include <type_traits>
+#include <vector>
 
+#include "Halide.h"
 #include "test/common/check_call_graphs.h"
 
 namespace {

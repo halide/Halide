@@ -1,14 +1,26 @@
 #include "InjectHostDevBufferCopies.h"
 
-#include "CodeGen_GPU_Dev.h"
-#include "Debug.h"
+#include <ext/alloc_traits.h>
+#include <stddef.h>
+#include <algorithm>
+#include <memory>
+#include <set>
+#include <utility>
+
+#include "Buffer.h"
+#include "DeviceInterface.h"
+#include "Error.h"
+#include "Function.h"
+#include "FunctionPtr.h"
+#include "IR.h"
 #include "IRMutator.h"
 #include "IROperator.h"
-#include "IRPrinter.h"
+#include "IRVisitor.h"
+#include "Parameter.h"
 #include "Substitute.h"
-
-#include <map>
-#include <utility>
+#include "Target.h"
+#include "Type.h"
+#include "Util.h"
 
 namespace Halide {
 namespace Internal {

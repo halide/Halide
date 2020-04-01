@@ -1,5 +1,10 @@
-#include "Halide.h"
+#include <assert.h>
+#include <stdint.h>
 #include <stdio.h>
+#include <string.h>
+#include <type_traits>
+
+#include "Halide.h"
 
 namespace {
 

@@ -1,8 +1,12 @@
-#include "Halide.h"
-#include "HalideRuntime.h"
 #include <assert.h>
+#include <ext/alloc_traits.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <cstdint>
+#include <type_traits>
+#include <vector>
+
+#include "Halide.h"
 
 using namespace Halide;
 

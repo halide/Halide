@@ -1,4 +1,11 @@
+#include <stdio.h>
+#include <stdlib.h>
 #include <cmath>
+#include <map>
+#include <string>
+#include <type_traits>
+#include <utility>
+#include <vector>
 
 #include "Halide.h"
 

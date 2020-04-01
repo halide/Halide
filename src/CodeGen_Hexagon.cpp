@@ -1,29 +1,59 @@
 #include "CodeGen_Hexagon.h"
 
+#include <ext/alloc_traits.h>
+#include <stddef.h>
+#include <stdint.h>
+#include <algorithm>
+#include <initializer_list>
 #include <iostream>
-#include <mutex>
-#include <sstream>
+#include <limits>
+#include <map>
+#include <memory>
 #include <utility>
 
 #include "AlignLoads.h"
+#include "Buffer.h"
 #include "CSE.h"
-#include "CodeGen_Internal.h"
 #include "Debug.h"
-#include "EliminateBoolVectors.h"
+#include "Error.h"
+#include "Expr.h"
 #include "HexagonOptimize.h"
-#include "IREquality.h"
-#include "IRMatch.h"
+#include "IR.h"
 #include "IRMutator.h"
 #include "IROperator.h"
 #include "IRPrinter.h"
-#include "LICM.h"
 #include "LLVM_Headers.h"
 #include "LoopCarry.h"
-#include "Monotonic.h"
+#include "Module.h"
+#include "ModulusRemainder.h"
+#include "Parameter.h"
+#include "Scope.h"
 #include "Simplify.h"
 #include "Substitute.h"
 #include "Target.h"
 #include "Util.h"
+#include "llvm/ADT/ArrayRef.h"
+#include "llvm/ADT/iterator_range.h"
+#include "llvm/Analysis/TargetTransformInfo.h"
+#include "llvm/IR/Argument.h"
+#include "llvm/IR/Attributes.h"
+#include "llvm/IR/BasicBlock.h"
+#include "llvm/IR/Constant.h"
+#include "llvm/IR/Constants.h"
+#include "llvm/IR/DerivedTypes.h"
+#include "llvm/IR/Function.h"
+#include "llvm/IR/GlobalValue.h"
+#include "llvm/IR/IRBuilder.h"
+#include "llvm/IR/Instructions.h"
+#include "llvm/IR/Intrinsics.h"
+#include "llvm/IR/IntrinsicsHexagon.h"
+#include "llvm/IR/Module.h"
+#include "llvm/IR/Type.h"
+#include "llvm/IR/Value.h"
+#include "llvm/IR/Verifier.h"
+#include "llvm/Support/Casting.h"
+#include "llvm/Support/TypeSize.h"
+#include "runtime/HalideRuntime.h"
 
 namespace Halide {
 namespace Internal {

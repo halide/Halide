@@ -1,4 +1,12 @@
+#include <stdint.h>
+#include <cmath>
+
+#include "Expr.h"
+#include "IR.h"
+#include "IROperator.h"
 #include "Simplify_Internal.h"
+#include "Type.h"
+#include "Util.h"
 
 namespace Halide {
 namespace Internal {

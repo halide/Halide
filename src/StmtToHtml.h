@@ -1,13 +1,16 @@
 #ifndef HALIDE_STMT_TO_HTML
 #define HALIDE_STMT_TO_HTML
 
+#include <string>
+
+#include "Expr.h"
 /** \file
  * Defines a function to dump an HTML-formatted stmt to a file.
  */
 
-#include "Module.h"
-
 namespace Halide {
+class Module;
+
 namespace Internal {
 
 /**

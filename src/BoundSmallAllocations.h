@@ -1,8 +1,7 @@
 #ifndef HALIDE_BOUND_SMALL_ALLOCATIONS
 #define HALIDE_BOUND_SMALL_ALLOCATIONS
 
-#include "IR.h"
-
+#include "Expr.h"
 /** \file
  * Defines the lowering pass that attempts to rewrite small
  * allocations to have constant size.

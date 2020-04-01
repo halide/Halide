@@ -1,10 +1,12 @@
-#include "Halide.h"
-#include "halide_benchmark.h"
-
+#include <stdint.h>
+#include <stdio.h>
 #include <atomic>
 #include <chrono>
-#include <stdio.h>
 #include <thread>
+#include <type_traits>
+
+#include "Halide.h"
+#include "halide_benchmark.h"
 
 using namespace Halide;
 using namespace Halide::Tools;

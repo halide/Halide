@@ -1,6 +1,6 @@
-#include "Halide.h"
-#include <cmath>
 #include <stdio.h>
+
+#include "Halide.h"
 
 using namespace Halide;
 

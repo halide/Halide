@@ -1,11 +1,10 @@
 #ifndef HALIDE_CANONICALIZE_GPU_VARS_H
 #define HALIDE_CANONICALIZE_GPU_VARS_H
 
+#include "Expr.h"
 /** \file
  * Defines the lowering pass that canonicalize the GPU var names over.
  */
-
-#include "IR.h"
 
 namespace Halide {
 namespace Internal {

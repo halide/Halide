@@ -1,14 +1,14 @@
 #ifndef HALIDE_IR_HEXAGON_OPTIMIZE_H
 #define HALIDE_IR_HEXAGON_OPTIMIZE_H
 
+#include "Expr.h"
 /** \file
  * Tools for optimizing IR for Hexagon.
  */
 
-#include "IR.h"
-#include "ModulusRemainder.h"
-#include "Scope.h"
 namespace Halide {
+struct Target;
+
 namespace Internal {
 
 /** Replace indirect and other loads with simple loads + vlut

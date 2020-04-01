@@ -1,4 +1,11 @@
+#include <memory>
+#include <type_traits>
+
 #include "Halide.h"
+
+namespace halide_register_generator {
+struct halide_global_ns;
+}  // namespace halide_register_generator
 
 namespace Ext {
 HalideExtern_5(int, sleeper, int, int, int, int, int)

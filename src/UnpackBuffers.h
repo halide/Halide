@@ -1,11 +1,10 @@
 #ifndef HALIDE_UNPACK_BUFFERS_H
 #define HALIDE_UNPACK_BUFFERS_H
 
+#include "Expr.h"
 /** \file
  * Defines the lowering pass that unpacks buffer arguments onto the symbol table
  */
-
-#include "IR.h"
 
 namespace Halide {
 namespace Internal {

@@ -1,17 +1,31 @@
 #include "CodeGen_OpenGL_Dev.h"
-#include "Debug.h"
-#include "Deinterleave.h"
-#include "IRMatch.h"
-#include "IRMutator.h"
-#include "IROperator.h"
-#include "Simplify.h"
-#include "VaryingAttributes.h"
+
+#include <ctype.h>
+#include <ext/alloc_traits.h>
+#include <math.h>
+#include <stddef.h>
+#include <algorithm>
+#include <cstdint>
 #include <iomanip>
+#include <iostream>
 #include <limits>
 #include <map>
+#include <memory>
+
+#include "Debug.h"
+#include "Deinterleave.h"
+#include "Error.h"
+#include "IR.h"
+#include "IROperator.h"
+#include "IRPrinter.h"
+#include "IRVisitor.h"
+#include "Simplify.h"
+#include "Type.h"
+#include "Util.h"
 
 namespace Halide {
 namespace Internal {
+struct DeviceArgument;
 
 using std::ostringstream;
 using std::string;

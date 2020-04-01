@@ -5,14 +5,42 @@
  * Defines the code-generator for producing OpenCL C kernel code
  */
 
+#include <set>
 #include <sstream>
+#include <string>
+#include <vector>
 
 #include "CodeGen_C.h"
 #include "CodeGen_GPU_Dev.h"
+#include "Expr.h"
 #include "Target.h"
 
 namespace Halide {
+struct Type;
+
 namespace Internal {
+struct Allocate;
+struct AssertStmt;
+struct Atomic;
+struct Broadcast;
+struct Call;
+struct Cast;
+struct DeviceArgument;
+struct EQ;
+struct For;
+struct Free;
+struct GE;
+struct GT;
+struct LE;
+struct LT;
+struct Load;
+struct Max;
+struct Min;
+struct NE;
+struct Ramp;
+struct Select;
+struct Shuffle;
+struct Store;
 
 class CodeGen_OpenCL_Dev : public CodeGen_GPU_Dev {
 public:

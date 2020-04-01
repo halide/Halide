@@ -6,21 +6,22 @@
  */
 
 #include <map>
+#include <string>
 
-#include "CodeGen_ARM.h"
-#include "CodeGen_MIPS.h"
-#include "CodeGen_PowerPC.h"
-#include "CodeGen_RISCV.h"
-#include "CodeGen_WebAssembly.h"
-#include "CodeGen_X86.h"
+#include "Expr.h"
 
-#include "IR.h"
+namespace llvm {
+class Value;
+}  // namespace llvm
 
 namespace Halide {
+struct Target;
+
 namespace Internal {
 
 struct CodeGen_GPU_Dev;
-struct GPU_Argument;
+struct For;
+struct LoweredFunc;
 
 /** A code generator that emits GPU code from a given Halide stmt. */
 template<typename CodeGen_CPU>

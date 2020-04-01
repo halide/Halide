@@ -1,3 +1,8 @@
+#include <math.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <type_traits>
+
 #include "Halide.h"
 
 #ifndef M_PI

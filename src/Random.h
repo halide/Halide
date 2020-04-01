@@ -1,14 +1,17 @@
 #ifndef HALIDE_RANDOM_H
 #define HALIDE_RANDOM_H
 
+#include <vector>
+
+#include "Expr.h"
 /** \file
  *
  * Defines deterministic random functions, and methods to redirect
  * front-end calls to random_float and random_int to use them. */
 
-#include "IR.h"
-
 namespace Halide {
+struct VarOrRVar;
+
 namespace Internal {
 
 /** Return a random floating-point number between zero and one that

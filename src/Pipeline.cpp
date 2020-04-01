@@ -1,17 +1,24 @@
+#include <ctype.h>
+#include <string.h>
 #include <algorithm>
+#include <cstdlib>
+#include <sstream>
 #include <utility>
 
 #include "Argument.h"
 #include "AutoSchedule.h"
+#include "Debug.h"
 #include "FindCalls.h"
 #include "Func.h"
+#include "Function.h"
+#include "IR.h"
 #include "IRVisitor.h"
 #include "InferArguments.h"
-#include "LLVM_Headers.h"
-#include "LLVM_Output.h"
+#include "JITModule.h"
 #include "Lower.h"
 #include "Module.h"
 #include "ParamMap.h"
+#include "Parameter.h"
 #include "Pipeline.h"
 #include "PrintLoopNest.h"
 #include "RealizationOrder.h"

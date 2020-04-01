@@ -6,13 +6,34 @@
  */
 
 #include <sstream>
+#include <string>
+#include <vector>
 
 #include "CodeGen_C.h"
 #include "CodeGen_GPU_Dev.h"
+#include "Expr.h"
 #include "Target.h"
 
 namespace Halide {
+struct Type;
+
 namespace Internal {
+struct Allocate;
+struct Atomic;
+struct Broadcast;
+struct Call;
+struct Cast;
+struct DeviceArgument;
+struct Div;
+struct For;
+struct Free;
+struct Load;
+struct Max;
+struct Min;
+struct Mod;
+struct Ramp;
+struct Select;
+struct Store;
 
 class CodeGen_Metal_Dev : public CodeGen_GPU_Dev {
 public:

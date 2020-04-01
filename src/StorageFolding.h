@@ -1,15 +1,18 @@
 #ifndef HALIDE_STORAGE_FOLDING_H
 #define HALIDE_STORAGE_FOLDING_H
 
+#include <map>
+#include <string>
+
+#include "Expr.h"
 /** \file
  * Defines the lowering optimization pass that reduces large buffers
  * down to smaller circular buffers when possible
  */
 
-#include "IR.h"
-
 namespace Halide {
 namespace Internal {
+class Function;
 
 /** Fold storage of functions if possible. This means reducing one of
  * the dimensions module something for the purpose of storage, if we

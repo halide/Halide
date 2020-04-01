@@ -5,22 +5,29 @@
  * Defines the internal representation of a halide function and related classes
  */
 
+#include <map>
+#include <string>
+#include <utility>
+#include <vector>
+
 #include "Buffer.h"
-#include "Definition.h"
+#include "Error.h"
 #include "Expr.h"
 #include "FunctionPtr.h"
-#include "IntrusivePtr.h"
 #include "Parameter.h"
-#include "Reduction.h"
-#include "Schedule.h"
-#include "Util.h"
-
-#include <map>
-#include <utility>
 
 namespace Halide {
 
 class Var;
+namespace Internal {
+class Definition;
+class FuncSchedule;
+class IRMutator;
+class IRVisitor;
+class StageSchedule;
+}  // namespace Internal
+struct Target;
+struct Type;
 
 /** An argument to an extern-defined Func. May be a Function, Buffer,
  * ImageParam or Expr. */

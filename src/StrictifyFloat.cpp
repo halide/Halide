@@ -1,7 +1,15 @@
 #include "StrictifyFloat.h"
 
+#include <utility>
+
+#include "Expr.h"
+#include "Function.h"
+#include "IR.h"
 #include "IRMutator.h"
 #include "IROperator.h"
+#include "Target.h"
+#include "Type.h"
+#include "Util.h"
 
 namespace Halide {
 namespace Internal {

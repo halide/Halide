@@ -1,3 +1,9 @@
+#include <assert.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <initializer_list>
+#include <type_traits>
+
 #include "Halide.h"
 
 using namespace Halide;

@@ -10,11 +10,10 @@
 //    L3: gemm_notrans, gemm_trans_A, gemm_trans_B, gemm_trans_AB
 //
 
-#include "clock.h"
-#include <iomanip>
 #include <iostream>
 #include <random>
 #include <string>
+#include <vector>
 
 #if defined(USE_HALIDE)
 #define BLAS_NAME "halide"

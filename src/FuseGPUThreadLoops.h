@@ -1,12 +1,11 @@
 #ifndef HALIDE_FUSE_GPU_THREAD_LOOPS_H
 #define HALIDE_FUSE_GPU_THREAD_LOOPS_H
 
+#include "Expr.h"
 /** \file
  * Defines the lowering pass that fuses and normalizes loops over gpu
  * threads to target CUDA, OpenCL, and Metal.
  */
-
-#include "IR.h"
 
 namespace Halide {
 namespace Internal {

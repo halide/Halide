@@ -1,10 +1,18 @@
 #include "InjectOpenGLIntrinsics.h"
-#include "CodeGen_GPU_Dev.h"
-#include "FuseGPUThreadLoops.h"
+
+#include <ext/alloc_traits.h>
+#include <stddef.h>
+#include <string>
+#include <vector>
+
+#include "Error.h"
+#include "FunctionPtr.h"
+#include "IR.h"
 #include "IRMutator.h"
 #include "IROperator.h"
+#include "Parameter.h"
 #include "Scope.h"
-#include "Substitute.h"
+#include "Type.h"
 
 namespace Halide {
 namespace Internal {

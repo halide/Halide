@@ -1,4 +1,13 @@
-#include <fstream>
+#include <stdio.h>
+#include <stdlib.h>
+#include <algorithm>
+#include <cstdint>
+#include <iostream>
+#include <limits>
+#include <map>
+#include <string>
+#include <type_traits>
+#include <vector>
 
 #include "Halide.h"
 #include "halide_image_io.h"

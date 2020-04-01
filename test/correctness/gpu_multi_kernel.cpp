@@ -1,5 +1,10 @@
+#include <assert.h>
+#include <math.h>
+#include <stdint.h>
+#include <stdio.h>
+#include <type_traits>
+
 #include "Halide.h"
-#include <iostream>
 
 using namespace Halide;
 

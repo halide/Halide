@@ -1,4 +1,13 @@
+#include <stdint.h>
+#include <map>
+#include <memory>
+#include <vector>
+
 #include "Halide.h"
+
+namespace halide_register_generator {
+struct halide_global_ns;
+}  // namespace halide_register_generator
 
 extern "C" unsigned char external_code_extern_bitcode_32[];
 extern "C" int external_code_extern_bitcode_32_length;

@@ -1,15 +1,19 @@
 #ifndef HALIDE_ALLOCATION_BOUNDS_INFERENCE_H
 #define HALIDE_ALLOCATION_BOUNDS_INFERENCE_H
 
+#include <map>
+#include <string>
+#include <utility>
+
+#include "Expr.h"
 /** \file
  * Defines the lowering pass that determines how large internal allocations should be.
  */
 
-#include "Bounds.h"
-#include "IR.h"
-
 namespace Halide {
 namespace Internal {
+class Function;
+struct Interval;
 
 /** Take a partially statement with Realize nodes in terms of
  * variables, and define values for those variables. */

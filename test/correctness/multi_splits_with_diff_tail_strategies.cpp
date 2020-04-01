@@ -1,7 +1,7 @@
+#include <type_traits>
+
 #include "Halide.h"
 #include "test/common/check_call_graphs.h"
-
-#include <stdio.h>
 
 using namespace Halide;
 

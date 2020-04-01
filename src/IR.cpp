@@ -1,9 +1,16 @@
 #include "IR.h"
 
+#include <ext/alloc_traits.h>
+#include <stddef.h>
+#include <algorithm>
+#include <memory>
+#include <utility>
+
+#include "Error.h"
+#include "Function.h"
 #include "IRMutator.h"
 #include "IRPrinter.h"
 #include "IRVisitor.h"
-#include <utility>
 
 namespace Halide {
 namespace Internal {

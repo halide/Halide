@@ -1,3 +1,9 @@
+#include <stdio.h>
+#include <algorithm>
+#include <memory>
+#include <type_traits>
+#include <vector>
+
 #include "Halide.h"
 #include "halide_benchmark.h"
 

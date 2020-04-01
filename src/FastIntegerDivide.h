@@ -1,7 +1,10 @@
 #ifndef HALIDE_FAST_INTEGER_DIVIDE_H
 #define HALIDE_FAST_INTEGER_DIVIDE_H
 
-#include "IR.h"
+#include <stdint.h>
+
+#include "Buffer.h"
+#include "Expr.h"
 
 namespace Halide {
 

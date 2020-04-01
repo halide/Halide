@@ -7,11 +7,11 @@
  */
 
 #include <map>
-
-#include "IR.h"
+#include <string>
 
 namespace Halide {
 namespace Internal {
+class Function;
 
 /** Replace every call to wrapped Functions in the Functions' definitions with
   * call to their wrapper functions. */

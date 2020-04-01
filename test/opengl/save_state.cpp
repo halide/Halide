@@ -1,19 +1,19 @@
 // Test doesn't build on windows, because OpenGL on windows is a nightmare.
 #ifdef _WIN32
+#include <stdint.h>
 #include <stdio.h>
+
 int main() {
     printf("Skipping test on Windows\n");
     return 0;
 }
 #else
 
-#include <cstring>
-#include <stddef.h>
-#include <stdio.h>
 #include <stdlib.h>
+#include <cstring>
+#include <type_traits>
 
 #include "Halide.h"
-
 #include "runtime/mini_opengl.h"
 
 extern "C" void glGenTextures(GLsizei, GLuint *);

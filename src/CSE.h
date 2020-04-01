@@ -1,10 +1,9 @@
 #ifndef HALIDE_INTERNAL_CSE_H
 #define HALIDE_INTERNAL_CSE_H
 
+#include "Expr.h"
 /** \file
  * Defines a pass for introducing let expressions to wrap common sub-expressions. */
-
-#include "IR.h"
 
 namespace Halide {
 namespace Internal {

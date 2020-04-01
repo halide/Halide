@@ -1,12 +1,11 @@
 #ifndef TRIM_NO_OPS_H
 #define TRIM_NO_OPS_H
 
+#include "Expr.h"
 /** \file
  * Defines a lowering pass that truncates loops to the region over
  * which they actually do something.
  */
-
-#include "IR.h"
 
 namespace Halide {
 namespace Internal {

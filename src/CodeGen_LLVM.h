@@ -8,40 +8,38 @@
  */
 
 namespace llvm {
-class Value;
-class Module;
+class BasicBlock;
+class Constant;
+class ConstantFolder;
 class Function;
 class FunctionType;
 class IRBuilderDefaultInserter;
-class ConstantFolder;
+class Instruction;
+class LLVMContext;
+class MDNode;
+class Module;
+class StructType;
+class Type;
+class Value;
 template<typename, typename>
 class IRBuilder;
-class LLVMContext;
-class Type;
-class StructType;
-class Instruction;
-class CallInst;
-class ExecutionEngine;
-class AllocaInst;
-class Constant;
-class Triple;
-class MDNode;
-class NamedMDNode;
-class DataLayout;
-class BasicBlock;
-class GlobalVariable;
 }  // namespace llvm
 
+#include <stddef.h>
 #include <map>
 #include <memory>
+#include <set>
 #include <string>
+#include <utility>
 #include <vector>
 
+#include "Buffer.h"
+#include "Expr.h"
 #include "IRVisitor.h"
 #include "Module.h"
-#include "ModulusRemainder.h"
 #include "Scope.h"
 #include "Target.h"
+#include "Type.h"
 
 namespace Halide {
 struct ExternSignature;
@@ -49,6 +47,47 @@ struct ExternSignature;
 
 namespace Halide {
 namespace Internal {
+struct Acquire;
+struct Add;
+struct Allocate;
+struct And;
+struct AssertStmt;
+struct Atomic;
+struct Block;
+struct Broadcast;
+struct Call;
+struct Cast;
+struct Div;
+struct EQ;
+struct Evaluate;
+struct For;
+struct Fork;
+struct Free;
+struct GE;
+struct GT;
+struct IfThenElse;
+struct LE;
+struct LT;
+struct Let;
+struct LetStmt;
+struct Load;
+struct Max;
+struct Min;
+struct Mod;
+struct Mul;
+struct NE;
+struct Not;
+struct Or;
+struct Prefetch;
+struct ProducerConsumer;
+struct Provide;
+struct Ramp;
+struct Realize;
+struct Select;
+struct Shuffle;
+struct Store;
+struct Sub;
+struct Variable;
 
 /** A code generator abstract base class. Actual code generators
  * (e.g. CodeGen_X86) inherit from this. This class is responsible

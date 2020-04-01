@@ -1,8 +1,20 @@
 #include "BoundSmallAllocations.h"
+
+#include <stdint.h>
+#include <algorithm>
+#include <vector>
+
 #include "Bounds.h"
 #include "CodeGen_Internal.h"
+#include "Error.h"
+#include "IR.h"
 #include "IRMutator.h"
+#include "IROperator.h"
+#include "Interval.h"
+#include "Scope.h"
 #include "Simplify.h"
+#include "Type.h"
+#include "Util.h"
 
 namespace Halide {
 namespace Internal {

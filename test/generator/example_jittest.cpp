@@ -1,5 +1,8 @@
-#include "Halide.h"
+#include <assert.h>
+#include <stdint.h>
+#include <stdio.h>
 
+#include "Halide.h"
 // Include the machine-generated .stub.h header file.
 #include "example.stub.h"
 

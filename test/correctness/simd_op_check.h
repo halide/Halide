@@ -1,9 +1,21 @@
 #ifndef SIMD_OP_CHECK_H
 #define SIMD_OP_CHECK_H
 
+#include <assert.h>
+#include <ctype.h>
+#include <stddef.h>
+#include <stdint.h>
+#include <algorithm>
+#include <future>
+#include <initializer_list>
+#include <iostream>
+#include <random>
+#include <string>
+#include <type_traits>
+#include <vector>
+
 #include "Halide.h"
 #include "test/common/halide_test_dirs.h"
-#include <fstream>
 
 namespace Halide {
 struct TestResult {

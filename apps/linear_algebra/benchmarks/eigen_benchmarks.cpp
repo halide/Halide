@@ -10,12 +10,14 @@
 //    L3: gemm_notrans, gemm_trans_A, gemm_trans_B, gemm_trans_AB
 //
 
-#include "clock.h"
-#include "macros.h"
-#include <Eigen/Eigen>
-#include <iomanip>
+#include <Eigen/src/Core/GeneralProduct.h>
+#include <Eigen/src/Core/Random.h>
 #include <iostream>
 #include <string>
+
+#include "Core"
+#include "macros.h"
+#include "src/SparseCore/SparseMatrixBase.h"
 
 template<class T>
 std::string type_name();

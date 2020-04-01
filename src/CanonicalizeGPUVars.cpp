@@ -1,11 +1,21 @@
-#include <cmath>
+#include <ext/alloc_traits.h>
+#include <stddef.h>
+#include <algorithm>
+#include <map>
 #include <sstream>
+#include <string>
+#include <utility>
+#include <vector>
 
 #include "CanonicalizeGPUVars.h"
-#include "CodeGen_GPU_Dev.h"
+#include "Debug.h"
+#include "Error.h"
 #include "IR.h"
 #include "IRMutator.h"
+#include "IRVisitor.h"
 #include "Substitute.h"
+#include "Type.h"
+#include "Util.h"
 
 namespace Halide {
 namespace Internal {

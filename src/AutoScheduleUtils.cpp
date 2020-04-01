@@ -1,12 +1,24 @@
-#include <sstream>
+#include <stdio.h>
+#include <iostream>
 
 #include "AutoScheduleUtils.h"
+#include "Buffer.h"
+#include "Debug.h"
+#include "Dimension.h"
+#include "Function.h"
 #include "IREquality.h"
+#include "IRMutator.h"
+#include "IROperator.h"
 #include "ImageParam.h"
 #include "Inline.h"
 #include "Param.h"
+#include "Parameter.h"
+#include "Reduction.h"
 #include "RegionCosts.h"
+#include "Schedule.h"
 #include "Simplify.h"
+#include "Type.h"
+#include "Util.h"
 #include "Var.h"
 
 namespace Halide {

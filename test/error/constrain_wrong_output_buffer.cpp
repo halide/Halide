@@ -1,5 +1,8 @@
+#include <memory>
+#include <type_traits>
+#include <vector>
+
 #include "Halide.h"
-#include <stdio.h>
 
 using namespace Halide;
 

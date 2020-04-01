@@ -1,5 +1,13 @@
 #include "IRVisitor.h"
 
+#include <ext/alloc_traits.h>
+#include <stddef.h>
+#include <memory>
+#include <vector>
+
+#include "Function.h"
+#include "FunctionPtr.h"
+
 namespace Halide {
 namespace Internal {
 

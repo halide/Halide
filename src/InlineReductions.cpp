@@ -1,12 +1,24 @@
 #include "InlineReductions.h"
 
+#include <stddef.h>
+#include <algorithm>
+#include <iosfwd>
+#include <memory>
+#include <utility>
+#include <vector>
+
 #include "CSE.h"
-#include "Debug.h"
+#include "Error.h"
 #include "Func.h"
+#include "IR.h"
 #include "IRMutator.h"
 #include "IROperator.h"
+#include "Parameter.h"
+#include "Reduction.h"
 #include "Scope.h"
-#include <utility>
+#include "Type.h"
+#include "Util.h"
+#include "Var.h"
 
 namespace Halide {
 

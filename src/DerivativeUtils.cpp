@@ -1,23 +1,36 @@
+#include <ext/alloc_traits.h>
+#include <stddef.h>
+#include <stdint.h>
+#include <algorithm>
 #include <iterator>
 #include <map>
+#include <memory>
 #include <set>
 #include <string>
 #include <utility>
 #include <vector>
 
+#include "Buffer.h"
 #include "CSE.h"
 #include "DerivativeUtils.h"
+#include "Error.h"
 #include "ExprUsesVar.h"
 #include "FindCalls.h"
+#include "Func.h"
+#include "Function.h"
+#include "IR.h"
 #include "IREquality.h"
 #include "IRMutator.h"
 #include "IROperator.h"
 #include "IRVisitor.h"
-#include "Monotonic.h"
+#include "Interval.h"
+#include "Parameter.h"
 #include "RealizationOrder.h"
+#include "Scope.h"
 #include "Simplify.h"
 #include "Solve.h"
 #include "Substitute.h"
+#include "Var.h"
 
 namespace Halide {
 namespace Internal {

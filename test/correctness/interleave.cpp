@@ -1,6 +1,14 @@
-#include "Halide.h"
+#include <assert.h>
 #include <math.h>
 #include <stdio.h>
+#include <stdlib.h>
+#include <algorithm>
+#include <cstdint>
+#include <string>
+#include <type_traits>
+#include <vector>
+
+#include "Halide.h"
 
 using std::vector;
 using namespace Halide;

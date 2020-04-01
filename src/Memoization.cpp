@@ -1,13 +1,29 @@
 #include "Memoization.h"
+
+#include <ctype.h>
+#include <ext/alloc_traits.h>
+#include <stddef.h>
+#include <algorithm>
+#include <atomic>
+#include <cstdint>
+#include <map>
+#include <memory>
+#include <utility>
+
+#include "Buffer.h"
 #include "Error.h"
+#include "Function.h"
+#include "FunctionPtr.h"
+#include "IR.h"
 #include "IRMutator.h"
 #include "IROperator.h"
-#include "Param.h"
-#include "Scope.h"
+#include "IRVisitor.h"
+#include "ModulusRemainder.h"
+#include "Parameter.h"
+#include "Schedule.h"
+#include "Type.h"
 #include "Util.h"
-#include "Var.h"
-
-#include <map>
+#include "runtime/HalideRuntime.h"
 
 namespace Halide {
 namespace Internal {

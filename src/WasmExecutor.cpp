@@ -1,26 +1,23 @@
 #include "WasmExecutor.h"
 
-#include "CodeGen_WebAssembly.h"
-#include "Error.h"
-#include "Float16.h"
-#include "Func.h"
-#include "ImageParam.h"
-#include "JITModule.h"
-#include "LLVM_Headers.h"
-#include "LLVM_Output.h"
-#include "LLVM_Runtime_Linker.h"
-#include "Target.h"
-
-#include <cmath>
-#include <mutex>
-#include <sstream>
+#include <algorithm>
+#include <cstdint>
+#include <iterator>
+#include <utility>
 #include <vector>
+
+#include "Argument.h"
+#include "Error.h"
+#include "JITModule.h"
+#include "Module.h"
+#include "Pipeline.h"
+#include "Target.h"
 
 // clang-format off
 // These includes are order-dependent, don't let clang-format reorder them
 #ifdef WITH_V8
-#include "v8.h"
 #include "libplatform/libplatform.h"
+#include "v8.h"
 #endif
 // clang-format on
 

@@ -1,8 +1,13 @@
+#include <stdint.h>
+#include <stdlib.h>
+#include <algorithm>
+#include <cstdio>
+#include <string>
+#include <type_traits>
+
 #include "Halide.h"
 #include "halide_benchmark.h"
 #include "test/common/halide_test_dirs.h"
-#include <algorithm>
-#include <cstdio>
 
 using namespace Halide;
 using namespace Halide::Tools;

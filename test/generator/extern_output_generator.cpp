@@ -1,4 +1,12 @@
+#include <memory>
+#include <type_traits>
+#include <vector>
+
 #include "Halide.h"
+
+namespace halide_register_generator {
+struct halide_global_ns;
+}  // namespace halide_register_generator
 
 using namespace Halide;
 

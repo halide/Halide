@@ -1,6 +1,11 @@
-#include "Halide.h"
-#include <future>
 #include <stdio.h>
+#include <stdlib.h>
+#include <algorithm>
+#include <cstdint>
+#include <future>
+#include <vector>
+
+#include "Halide.h"
 
 using namespace Halide;
 

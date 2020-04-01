@@ -1,16 +1,25 @@
-#include <iostream>
+#include <ext/alloc_traits.h>
+#include <stddef.h>
+#include <algorithm>
+#include <memory>
+#include <vector>
 
+#include "CodeGen_LLVM.h"
 #include "CodeGen_X86.h"
 #include "ConciseCasts.h"
-#include "Debug.h"
+#include "Error.h"
+#include "Expr.h"
+#include "IR.h"
 #include "IRMatch.h"
-#include "IRMutator.h"
 #include "IROperator.h"
-#include "JITModule.h"
-#include "LLVM_Headers.h"
-#include "Param.h"
-#include "Util.h"
-#include "Var.h"
+#include "Target.h"
+#include "Type.h"
+#include "llvm/IR/IRBuilder.h"
+#include "runtime/HalideRuntime.h"
+
+namespace llvm {
+class Value;
+}  // namespace llvm
 
 namespace Halide {
 namespace Internal {

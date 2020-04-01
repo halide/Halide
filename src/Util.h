@@ -1,10 +1,11 @@
 // Always use assert, even if llvm-config defines NDEBUG
+#include <type_traits>
 #ifdef NDEBUG
 #undef NDEBUG
 #include <assert.h>
+
 #define NDEBUG
 #else
-#include <assert.h>
 #endif
 
 #ifndef HALIDE_UTIL_H
@@ -19,8 +20,6 @@
 #include <string>
 #include <utility>
 #include <vector>
-
-#include "runtime/HalideRuntime.h"
 
 #ifndef HALIDE_EXPORT
 #if defined(_MSC_VER)

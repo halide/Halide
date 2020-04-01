@@ -1,3 +1,10 @@
+#include <stdio.h>
+#include <initializer_list>
+#include <iostream>
+#include <limits>
+#include <string>
+#include <vector>
+
 #include "Halide.h"
 #include "simd_op_check.h"
 // simd_op_check is different from all/most other tests in the testsuite because

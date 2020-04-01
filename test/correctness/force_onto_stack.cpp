@@ -1,4 +1,10 @@
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <type_traits>
+
 #include "Halide.h"
+
 using namespace Halide;
 
 void *my_malloc(void *user_context, size_t x) {

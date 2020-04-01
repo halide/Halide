@@ -1,9 +1,10 @@
 #ifndef HALIDE_ELF_H
 #define HALIDE_ELF_H
 
+#include <stddef.h>
+#include <stdint.h>
 #include <algorithm>
 #include <iterator>
-#include <limits>
 #include <list>
 #include <memory>
 #include <string>
@@ -23,10 +24,7 @@ namespace Elf {
 // http://www.skyfree.org/linux/references/ELF_Format.pdf as a reference
 // for the ELF structs and constants.
 
-class Object;
-class Symbol;
 class Section;
-class Relocation;
 
 // Helpful wrapper to allow range-based for loops.
 template<typename T>

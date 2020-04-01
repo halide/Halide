@@ -1,13 +1,18 @@
 #include "Elf.h"
+
+#include <ext/alloc_traits.h>
+#include <string.h>
+#include <algorithm>
+#include <array>
+#include <cstdint>
+#include <initializer_list>
+#include <limits>
+#include <map>
+#include <memory>
+
 #include "Debug.h"
 #include "Error.h"
 #include "Util.h"
-
-#include <algorithm>
-#include <array>
-#include <iomanip>
-#include <map>
-#include <memory>
 
 namespace Halide {
 namespace Internal {

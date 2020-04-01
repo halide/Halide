@@ -1,3 +1,7 @@
+#include <stdio.h>
+#include <iostream>
+#include <type_traits>
+
 #include "Halide.h"
 #include "halide_benchmark.h"
 

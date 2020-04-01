@@ -1,13 +1,23 @@
+#include <stddef.h>
+#include <stdint.h>
+#include <algorithm>
 #include <array>
+#include <memory>
+#include <ostream>
 #include <utility>
 
-#include "Generator.h"
+#include "Error.h"
+#include "IR.h"
 #include "IREquality.h"
 #include "IROperator.h"
 #include "IRPrinter.h"
-#include "ImageParam.h"
+#include "IRVisitor.h"
+#include "OutputImageParam.h"
+#include "Parameter.h"
 #include "RDom.h"
+#include "Scope.h"
 #include "Simplify.h"
+#include "Type.h"
 #include "Util.h"
 
 namespace Halide {

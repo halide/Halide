@@ -1,5 +1,11 @@
 #include "PyHalide.h"
 
+#include <stdint.h>
+#include <initializer_list>
+#include <iostream>
+#include <string>
+#include <utility>
+
 #include "PyArgument.h"
 #include "PyBoundaryConditions.h"
 #include "PyBuffer.h"
@@ -23,6 +29,11 @@
 #include "PyTuple.h"
 #include "PyType.h"
 #include "PyVar.h"
+#include "pybind11/cast.h"
+#include "pybind11/detail/descr.h"
+#include "pybind11/pybind11.h"
+#include "pyerrors.h"
+#include "warnings.h"
 
 #ifndef HALIDE_PYBIND_MODULE_NAME
 #define HALIDE_PYBIND_MODULE_NAME halide

@@ -1,10 +1,14 @@
+#include <ext/alloc_traits.h>
+#include <stdlib.h>
+#include <algorithm>
 #include <atomic>
 #include <memory>
-#include <set>
-#include <stdlib.h>
+#include <sstream>
 #include <utility>
 
 #include "CSE.h"
+#include "Debug.h"
+#include "Definition.h"
 #include "Func.h"
 #include "Function.h"
 #include "IR.h"
@@ -12,10 +16,17 @@
 #include "IRMutator.h"
 #include "IROperator.h"
 #include "IRPrinter.h"
-#include "Introspection.h"
+#include "IRVisitor.h"
+#include "IntrusivePtr.h"
 #include "ParallelRVar.h"
+#include "RDom.h"
 #include "Random.h"
+#include "Reduction.h"
+#include "Schedule.h"
 #include "Scope.h"
+#include "Target.h"
+#include "Type.h"
+#include "Util.h"
 #include "Var.h"
 
 namespace Halide {

@@ -1,9 +1,14 @@
 #include "Error.h"
 
-#include <signal.h>
+#include <stdlib.h>
+#include <iostream>
+
+#include "Debug.h"
+#include "Introspection.h"
 
 #ifdef _MSC_VER
 #include <io.h>
+
 inline int isatty(int fd) {
     return _isatty(fd);
 }

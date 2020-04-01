@@ -1,13 +1,12 @@
 #ifndef __HALIDE_VARYING_ATTRIBUTES__H
 #define __HALIDE_VARYING_ATTRIBUTES__H
 
+#include "Expr.h"
 /** \file
  * This file contains functions that detect expressions in a GLSL scheduled
  * function that may be evaluated per vertex and interpolated across the domain
  * instead of being evaluated at each pixel location across the image.
  */
-
-#include "IR.h"
 
 namespace Halide {
 namespace Internal {

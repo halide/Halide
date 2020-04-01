@@ -1,12 +1,11 @@
 #ifndef HALIDE_REMOVE_DEAD_ALLOCATIONS_H
 #define HALIDE_REMOVE_DEAD_ALLOCATIONS_H
 
+#include "Expr.h"
 /** \file
  * Defines the lowering pass that removes allocate and free nodes that
  * are not used.
  */
-
-#include "IR.h"
 
 namespace Halide {
 namespace Internal {

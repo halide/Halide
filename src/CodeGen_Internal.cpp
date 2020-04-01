@@ -1,12 +1,46 @@
 #include "CodeGen_Internal.h"
+
+#include <stdlib.h>
+#include <algorithm>
+#include <iostream>
+#include <map>
+#include <utility>
+#include <vector>
+
 #include "CSE.h"
-#include "Debug.h"
-#include "IRMutator.h"
+#include "Closure.h"
+#include "Error.h"
+#include "IR.h"
 #include "IROperator.h"
 #include "IntegerDivisionTable.h"
-#include "LLVM_Headers.h"
 #include "Simplify.h"
-#include "Simplify_Internal.h"
+#include "Target.h"
+#include "Type.h"
+#include "Util.h"
+#include "llvm/ADT/ArrayRef.h"
+#include "llvm/ADT/SmallPtrSet.h"
+#include "llvm/ADT/SmallVector.h"
+#include "llvm/ADT/StringRef.h"
+#include "llvm/ADT/Triple.h"
+#include "llvm/ADT/Twine.h"
+#include "llvm/Bitcode/BitcodeWriter.h"
+#include "llvm/IR/Constant.h"
+#include "llvm/IR/Constants.h"
+#include "llvm/IR/DerivedTypes.h"
+#include "llvm/IR/Function.h"
+#include "llvm/IR/GlobalValue.h"
+#include "llvm/IR/GlobalVariable.h"
+#include "llvm/IR/IRBuilder.h"
+#include "llvm/IR/Instructions.h"
+#include "llvm/IR/Metadata.h"
+#include "llvm/IR/Module.h"
+#include "llvm/IR/Type.h"
+#include "llvm/Support/Casting.h"
+#include "llvm/Support/CodeGen.h"
+#include "llvm/Support/TargetRegistry.h"
+#include "llvm/Support/raw_ostream.h"
+#include "llvm/Target/TargetMachine.h"
+#include "llvm/Target/TargetOptions.h"
 
 namespace Halide {
 namespace Internal {

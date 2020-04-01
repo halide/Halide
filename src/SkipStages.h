@@ -1,8 +1,10 @@
 #ifndef HALIDE_SKIP_STAGES
 #define HALIDE_SKIP_STAGES
 
-#include "IR.h"
+#include <string>
+#include <vector>
 
+#include "Expr.h"
 /** \file
  * Defines a pass that dynamically avoids realizing unnecessary stages.
  */

@@ -1,4 +1,15 @@
+#include <assert.h>
+#include <stdint.h>
+#include <algorithm>
+#include <memory>
+#include <string>
+#include <vector>
+
 #include "Halide.h"
+
+namespace halide_register_generator {
+struct halide_global_ns;
+}  // namespace halide_register_generator
 
 namespace {
 

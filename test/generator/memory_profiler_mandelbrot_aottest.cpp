@@ -1,8 +1,9 @@
 #include <assert.h>
+#include <stdint.h>
+#include <stdio.h>
 #include <cmath>
 #include <cstring>
 #include <map>
-#include <stdio.h>
 #include <string>
 
 #include "HalideBuffer.h"

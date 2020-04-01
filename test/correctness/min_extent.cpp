@@ -1,7 +1,9 @@
 // Test whether min[] and extent[] of an ImageParam are correctly passed into
 // the filter.
-#include "Halide.h"
 #include <stdio.h>
+#include <type_traits>
+
+#include "Halide.h"
 
 using namespace Halide;
 

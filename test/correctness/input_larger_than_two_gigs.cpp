@@ -1,6 +1,10 @@
-#include "Halide.h"
-#include <memory>
+#include <assert.h>
+#include <stdint.h>
 #include <stdio.h>
+#include <string.h>
+#include <type_traits>
+
+#include "Halide.h"
 
 int error_occurred = false;
 void halide_error(void *ctx, const char *msg) {

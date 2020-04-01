@@ -1,8 +1,21 @@
 #include "AllocationBoundsInference.h"
+
+#include <ext/alloc_traits.h>
+#include <stddef.h>
+#include <set>
+#include <vector>
+
 #include "Bounds.h"
+#include "Error.h"
+#include "Function.h"
+#include "IR.h"
 #include "IRMutator.h"
 #include "IROperator.h"
+#include "Interval.h"
+#include "Schedule.h"
+#include "Scope.h"
 #include "Simplify.h"
+#include "Type.h"
 
 namespace Halide {
 namespace Internal {

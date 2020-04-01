@@ -1,6 +1,7 @@
-#include "Halide.h"
 #include <cstdio>
+#include <type_traits>
 
+#include "Halide.h"
 #include "halide_benchmark.h"
 
 const int W = 8000, H = 6000;

@@ -1,20 +1,35 @@
+#include <ext/alloc_traits.h>
+#include <stddef.h>
+#include <stdint.h>
 #include <algorithm>
+#include <iostream>
+#include <map>
+#include <memory>
 #include <sstream>
 #include <utility>
 
+#include "Buffer.h"
 #include "CSE.h"
 #include "CodeGen_Internal.h"
 #include "CodeGen_OpenCL_Dev.h"
 #include "Debug.h"
 #include "EliminateBoolVectors.h"
 #include "EmulateFloat16Math.h"
+#include "Error.h"
 #include "ExprUsesVar.h"
-#include "IRMutator.h"
+#include "IR.h"
 #include "IROperator.h"
+#include "IRPrinter.h"
+#include "ModulusRemainder.h"
+#include "Scope.h"
 #include "Simplify.h"
+#include "Type.h"
+#include "Util.h"
+#include "runtime/HalideRuntime.h"
 
 namespace Halide {
 namespace Internal {
+struct DeviceArgument;
 
 using std::ostringstream;
 using std::sort;
@@ -470,9 +485,6 @@ void CodeGen_OpenCL_Dev::CodeGen_OpenCL_C::visit(const Store *op) {
     }
 
     cache.clear();
-}
-
-namespace {
 }
 
 void CodeGen_OpenCL_Dev::CodeGen_OpenCL_C::visit(const EQ *op) {

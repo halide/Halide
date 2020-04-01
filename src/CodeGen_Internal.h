@@ -8,13 +8,12 @@
  * front-end-facing interface to CodeGen).
  */
 
+#include <stdint.h>
 #include <memory>
+#include <string>
 
-#include "Closure.h"
-#include "IR.h"
-#include "IRVisitor.h"
+#include "Expr.h"
 #include "Scope.h"
-#include "Target.h"
 
 namespace llvm {
 class ConstantFolder;
@@ -32,7 +31,11 @@ class IRBuilder;
 }  // namespace llvm
 
 namespace Halide {
+struct Target;
+struct Type;
+
 namespace Internal {
+class Closure;
 
 /** The llvm type of a struct containing all of the externally referenced state of a Closure. */
 llvm::StructType *build_closure_type(const Closure &closure, llvm::StructType *halide_buffer_t_type, llvm::LLVMContext *context);

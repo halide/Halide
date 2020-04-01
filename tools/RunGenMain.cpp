@@ -1,4 +1,20 @@
+#include <assert.h>
+#include <ext/alloc_traits.h>
+#include <stdint.h>
+#include <stdlib.h>
+#include <iostream>
+#include <map>
+#include <memory>
+#include <mutex>
+#include <set>
+#include <sstream>
+#include <string>
+#include <utility>
+#include <vector>
+
+#include "HalideRuntime.h"
 #include "RunGen.h"
+#include "halide_benchmark.h"
 
 using namespace Halide::RunGen;
 using Halide::Tools::BenchmarkConfig;

@@ -1,5 +1,8 @@
-#include "Halide.h"
+#include <stdint.h>
 #include <stdio.h>
+#include <type_traits>
+
+#include "Halide.h"
 
 using namespace Halide;
 Expr calc(Expr a) {

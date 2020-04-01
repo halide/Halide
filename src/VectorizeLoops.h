@@ -1,14 +1,14 @@
 #ifndef HALIDE_VECTORIZE_LOOPS_H
 #define HALIDE_VECTORIZE_LOOPS_H
 
+#include "Expr.h"
 /** \file
  * Defines the lowering pass that vectorizes loops marked as such
  */
 
-#include "IR.h"
-#include "Target.h"
-
 namespace Halide {
+struct Target;
+
 namespace Internal {
 
 /** Take a statement with for loops marked for vectorization, and turn

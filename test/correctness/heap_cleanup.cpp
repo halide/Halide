@@ -1,6 +1,10 @@
-#include "Halide.h"
-#include <atomic>
+#include <assert.h>
 #include <stdio.h>
+#include <stdlib.h>
+#include <atomic>
+#include <type_traits>
+
+#include "Halide.h"
 
 using namespace Halide;
 

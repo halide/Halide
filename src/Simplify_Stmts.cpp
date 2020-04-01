@@ -1,7 +1,24 @@
-#include "Simplify_Internal.h"
+#include <ext/alloc_traits.h>
+#include <stddef.h>
+#include <algorithm>
+#include <memory>
+#include <string>
+#include <tuple>
+#include <utility>
+#include <vector>
 
+#include "Error.h"
+#include "Expr.h"
+#include "IR.h"
+#include "IREquality.h"
 #include "IRMutator.h"
+#include "IROperator.h"
+#include "ModulusRemainder.h"
+#include "Scope.h"
+#include "Simplify_Internal.h"
 #include "Substitute.h"
+#include "Type.h"
+#include "Util.h"
 
 namespace Halide {
 namespace Internal {

@@ -1,11 +1,15 @@
 #include "Parameter.h"
 
+#include <ext/alloc_traits.h>
+#include <stddef.h>
+#include <cstdint>
+#include <memory>
+#include <utility>
+
 #include "Argument.h"
+#include "Float16.h"
 #include "IR.h"
 #include "IROperator.h"
-#include "ObjectInstanceRegistry.h"
-#include "Simplify.h"
-#include <utility>
 
 namespace Halide {
 namespace Internal {

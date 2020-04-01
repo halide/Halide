@@ -1,13 +1,20 @@
+#include <ext/alloc_traits.h>
+#include <cstdint>
 #include <iostream>
+#include <memory>
+#include <set>
+#include <type_traits>
 #include <utility>
 
 #include "Bounds.h"
+#include "Buffer.h"
 #include "CSE.h"
 #include "ConciseCasts.h"
 #include "Debug.h"
-#include "Deinterleave.h"
+#include "Definition.h"
+#include "Error.h"
 #include "ExprUsesVar.h"
-#include "Func.h"
+#include "Function.h"
 #include "IR.h"
 #include "IREquality.h"
 #include "IRMutator.h"
@@ -15,12 +22,17 @@
 #include "IRPrinter.h"
 #include "IRVisitor.h"
 #include "InlineReductions.h"
+#include "ModulusRemainder.h"
 #include "Param.h"
+#include "Parameter.h"
 #include "PurifyIndexMath.h"
+#include "RDom.h"
 #include "Simplify.h"
 #include "Solve.h"
+#include "Type.h"
 #include "Util.h"
 #include "Var.h"
+#include "runtime/HalideRuntime.h"
 
 namespace Halide {
 namespace Internal {

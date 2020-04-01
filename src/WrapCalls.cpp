@@ -1,7 +1,15 @@
 #include "WrapCalls.h"
-#include "FindCalls.h"
 
 #include <set>
+#include <sstream>
+#include <utility>
+
+#include "Debug.h"
+#include "Error.h"
+#include "FindCalls.h"
+#include "Function.h"
+#include "FunctionPtr.h"
+#include "Schedule.h"
 
 namespace Halide {
 namespace Internal {

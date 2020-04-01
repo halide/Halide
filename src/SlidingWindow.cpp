@@ -1,15 +1,29 @@
 #include "SlidingWindow.h"
 
+#include <ext/alloc_traits.h>
+#include <stddef.h>
+#include <algorithm>
+#include <memory>
+#include <utility>
+#include <vector>
+
 #include "Bounds.h"
 #include "Debug.h"
+#include "Definition.h"
+#include "Error.h"
+#include "Function.h"
+#include "IR.h"
 #include "IRMutator.h"
 #include "IROperator.h"
 #include "IRPrinter.h"
+#include "IRVisitor.h"
+#include "Interval.h"
 #include "Monotonic.h"
+#include "Schedule.h"
 #include "Scope.h"
 #include "Simplify.h"
 #include "Substitute.h"
-#include <utility>
+#include "Type.h"
 
 namespace Halide {
 namespace Internal {

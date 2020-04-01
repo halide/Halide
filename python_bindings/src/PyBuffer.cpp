@@ -1,7 +1,26 @@
 #include "PyBuffer.h"
 
-#include "PyFunc.h"
+#include <limits.h>
+#include <stddef.h>
+#include <sys/types.h>
+#include <array>
+#include <cstdint>
+#include <initializer_list>
+#include <new>
+#include <ostream>
+#include <string>
+#include <utility>
+#include <vector>
+
+#include "Halide.h"
 #include "PyType.h"
+#include "pybind11/buffer_info.h"
+#include "pybind11/cast.h"
+#include "pybind11/detail/../attr.h"
+#include "pybind11/detail/../pytypes.h"
+#include "pybind11/detail/common.h"
+#include "pybind11/detail/descr.h"
+#include "pybind11/pybind11.h"
 
 namespace Halide {
 namespace PythonBindings {

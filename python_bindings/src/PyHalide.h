@@ -1,18 +1,13 @@
 #ifndef HALIDE_PYTHON_BINDINGS_PYHALIDE_H
 #define HALIDE_PYTHON_BINDINGS_PYHALIDE_H
 
-#include <pybind11/numpy.h>
-#include <pybind11/operators.h>
-#include <pybind11/pybind11.h>
-#include <pybind11/stl.h>
-
-// Some very-commonly-used headers here, to simplify things.
-#include <iostream>
-#include <string>
+#include <stddef.h>
 #include <vector>
 
 // Everyone needs Halide.h
 #include "Halide.h"
+#include "pybind11/detail/../pytypes.h"
+#include "pybind11/detail/common.h"
 
 namespace Halide {
 namespace PythonBindings {

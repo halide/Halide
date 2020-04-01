@@ -1,9 +1,24 @@
+#include <ext/alloc_traits.h>
+#include <stddef.h>
+#include <algorithm>
 #include <iostream>
+#include <memory>
+#include <string>
+#include <vector>
 
+#include "Argument.h"
 #include "CodeGen_C.h"
 #include "CodeGen_PyTorch.h"
+#include "Error.h"
+#include "Expr.h"
+#include "IR.h"
 #include "IROperator.h"
+#include "Module.h"
+#include "ModulusRemainder.h"
 #include "Param.h"
+#include "Parameter.h"
+#include "Target.h"
+#include "Type.h"
 #include "Util.h"
 #include "Var.h"
 

@@ -1,11 +1,10 @@
 #ifndef HALIDE_LERP_H
 #define HALIDE_LERP_H
 
+#include "Expr.h"
 /** \file
  * Defines methods for converting a lerp intrinsic into Halide IR.
  */
-
-#include "IR.h"
 
 namespace Halide {
 namespace Internal {

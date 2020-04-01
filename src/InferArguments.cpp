@@ -1,9 +1,14 @@
+#include <algorithm>
 #include <set>
 #include <string>
 #include <vector>
 
+#include "Function.h"
+#include "FunctionPtr.h"
+#include "IR.h"
 #include "IRVisitor.h"
 #include "InferArguments.h"
+#include "Util.h"
 
 namespace Halide {
 namespace Internal {

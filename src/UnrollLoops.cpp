@@ -1,9 +1,25 @@
 #include "UnrollLoops.h"
-#include "CSE.h"
+
+#include <algorithm>
+#include <string>
+#include <utility>
+#include <vector>
+
+#include "Bounds.h"
+#include "Error.h"
+#include "IR.h"
 #include "IRMutator.h"
 #include "IROperator.h"
+#include "Scope.h"
 #include "Simplify.h"
 #include "Substitute.h"
+#include "Util.h"
+
+namespace Halide {
+namespace Internal {
+struct Interval;
+}  // namespace Internal
+}  // namespace Halide
 
 using std::pair;
 using std::vector;

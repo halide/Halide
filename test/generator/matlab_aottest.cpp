@@ -1,8 +1,6 @@
-#include "HalideRuntime.h"
-
-#include <cassert>
-#include <math.h>
+#include <stdint.h>
 #include <stdio.h>
+#include <cassert>
 #include <vector>
 
 // Provide a simple mock implementation of matlab's API so we can test the mexFunction.

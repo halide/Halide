@@ -1,15 +1,16 @@
 #ifndef HALIDE_EMULATE_FLOAT16_MATH_H
 #define HALIDE_EMULATE_FLOAT16_MATH_H
 
+#include "Expr.h"
 /** \file
  * Methods for dealing with float16 arithmetic using float32 math, by
  * casting back and forth with bit tricks.
  */
 
-#include "IR.h"
-
 namespace Halide {
 namespace Internal {
+struct Call;
+struct Cast;
 
 /** Check if a call is a float16 transcendental (e.g. sqrt_f16) */
 bool is_float16_transcendental(const Call *);

@@ -1,19 +1,21 @@
 #ifdef _WIN32
+#include <assert.h>
 #include <stdio.h>
+#include <stdio.h>
+#include <stdlib.h>
+
 // MSAN isn't supported for any Windows variant
 int main(int argc, char **argv) {
     printf("Skipping test on Windows\n");
     return 0;
 }
 #else
-#include "HalideBuffer.h"
-#include "HalideRuntime.h"
-
+#include <cstdint>
 #include <iostream>
-#include <limits>
-#include <type_traits>
 #include <vector>
 
+#include "HalideBuffer.h"
+#include "HalideRuntime.h"
 #include "msan.h"
 
 using namespace std;

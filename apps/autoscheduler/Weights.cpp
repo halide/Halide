@@ -1,10 +1,8 @@
-#include <fstream>
 #include <iostream>
 #include <random>
 
 #include "Featurization.h"
 #include "HalideBuffer.h"
-#include "NetworkSize.h"
 #include "Weights.h"
 
 namespace Halide {

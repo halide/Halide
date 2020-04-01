@@ -1,8 +1,16 @@
-#include "Halide.h"
-#include <limits>
+#include <assert.h>
+#include <ext/alloc_traits.h>
+#include <stdint.h>
 #include <stdio.h>
+#include <string.h>
+#include <algorithm>
+#include <limits>
+#include <memory>
 #include <string>
+#include <type_traits>
 #include <vector>
+
+#include "Halide.h"
 
 using namespace Halide;
 
