@@ -255,6 +255,7 @@ public:
         Expr num_productions = schedule_features(n, idx++, w);
         Expr points_computed_per_realization = schedule_features(n, idx++, w);
         Expr points_computed_per_production = schedule_features(n, idx++, w);
+        Expr points_computed_per_thread = schedule_features(n, idx++, w);
         Expr points_computed_total = schedule_features(n, idx++, w);
         Expr points_computed_minimum = schedule_features(n, idx++, w);
         Expr innermost_loop_extent = schedule_features(n, idx++, w);
@@ -269,12 +270,21 @@ public:
         Expr innermost_bytes_at_production = schedule_features(n, idx++, w);
         Expr innermost_bytes_at_root = schedule_features(n, idx++, w);
         Expr inlined_calls = schedule_features(n, idx++, w);
+
         Expr unique_global_bytes_read_per_realization = schedule_features(n, idx++, w);
         Expr unique_shared_bytes_read_per_realization = schedule_features(n, idx++, w);
         Expr unique_local_bytes_read_per_realization = schedule_features(n, idx++, w);
         Expr unique_global_lines_read_per_realization = schedule_features(n, idx++, w);
         Expr unique_shared_lines_read_per_realization = schedule_features(n, idx++, w);
         Expr unique_local_lines_read_per_realization = schedule_features(n, idx++, w);
+
+        Expr unique_global_bytes_read_per_thread = schedule_features(n, idx++, w);
+        Expr unique_shared_bytes_read_per_thread = schedule_features(n, idx++, w);
+        Expr unique_local_bytes_read_per_thread = schedule_features(n, idx++, w);
+        Expr unique_global_lines_read_per_thread = schedule_features(n, idx++, w);
+        Expr unique_shared_lines_read_per_thread = schedule_features(n, idx++, w);
+        Expr unique_local_lines_read_per_thread = schedule_features(n, idx++, w);
+
         Expr global_allocation_bytes_read_per_realization = schedule_features(n, idx++, w);
         Expr shared_allocation_bytes_read_per_realization = schedule_features(n, idx++, w);
         Expr local_allocation_bytes_read_per_realization = schedule_features(n, idx++, w);

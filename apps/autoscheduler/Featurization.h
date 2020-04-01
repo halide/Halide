@@ -194,6 +194,8 @@ struct ScheduleFeatures {
     // Number of times the innermost stmt happens per tile computed.
     double points_computed_per_production = 0;
 
+    double points_computed_per_thread = 0;
+
     // The total trip count of the innermost loop over the entire program.
     //  == num_realizations * points_computed_per_realization
     //  ~= num_productions * points_computed_per_production
@@ -261,6 +263,13 @@ struct ScheduleFeatures {
     double unique_global_lines_read_per_realization = 0;
     double unique_shared_lines_read_per_realization = 0;
     double unique_local_lines_read_per_realization = 0;
+
+    double unique_global_bytes_read_per_thread = 0;
+    double unique_shared_bytes_read_per_thread = 0;
+    double unique_local_bytes_read_per_thread = 0;
+    double unique_global_lines_read_per_thread = 0;
+    double unique_shared_lines_read_per_thread = 0;
+    double unique_local_lines_read_per_thread = 0;
 
     // The sum of the sizes of the allocations accessed at this
     // site. Gives a hint as to the likely locality of it.
@@ -372,6 +381,7 @@ struct ScheduleFeatures {
             << "    num_productions:                       " << num_productions << '\n'
             << "    points_computed_per_realization:       " << points_computed_per_realization << '\n'
             << "    points_computed_per_production:        " << points_computed_per_production << '\n'
+            << "    points_computed_per_thread:            " << points_computed_per_thread << '\n'
             << "    points_computed_total:                 " << points_computed_total << '\n'
             << "    points_computed_minimum:               " << points_computed_minimum << '\n'
             << "    innermost_loop_extent:                 " << innermost_loop_extent << '\n'
@@ -392,6 +402,12 @@ struct ScheduleFeatures {
             << " unique_global_lines_read_per_realization: " << unique_global_lines_read_per_realization << '\n'
             << " unique_shared_lines_read_per_realization: " << unique_shared_lines_read_per_realization << '\n'
             << " unique_local_lines_read_per_realization:  " << unique_local_lines_read_per_realization << '\n'
+            << " unique_global_bytes_read_per_thread:      " << unique_global_bytes_read_per_thread << '\n'
+            << " unique_shared_bytes_read_per_thread:      " << unique_shared_bytes_read_per_thread << '\n'
+            << " unique_local_bytes_read_per_thread:       " << unique_local_bytes_read_per_thread << '\n'
+            << " unique_global_lines_read_per_thread:      " << unique_global_lines_read_per_thread << '\n'
+            << " unique_shared_lines_read_per_thread:      " << unique_shared_lines_read_per_thread << '\n'
+            << " unique_local_lines_read_per_thread:       " << unique_local_lines_read_per_thread << '\n'
             << " global_allocation_bytes_read_per_realization: " << global_allocation_bytes_read_per_realization << '\n'
             << " shared_allocation_bytes_read_per_realization: " << shared_allocation_bytes_read_per_realization << '\n'
             << " local_allocation_bytes_read_per_realization: " << local_allocation_bytes_read_per_realization << '\n'
@@ -463,6 +479,7 @@ struct ScheduleFeatures {
             && num_productions                       == other.num_productions
             && points_computed_per_realization       == other.points_computed_per_realization
             && points_computed_per_production        == other.points_computed_per_production
+            && points_computed_per_thread            == other.points_computed_per_thread
             && points_computed_total                 == other.points_computed_total
             && points_computed_minimum               == other.points_computed_minimum
             && innermost_loop_extent                 == other.innermost_loop_extent
@@ -483,6 +500,12 @@ struct ScheduleFeatures {
             && unique_global_lines_read_per_realization     == other.unique_global_lines_read_per_realization
             && unique_shared_lines_read_per_realization     == other.unique_shared_lines_read_per_realization
             && unique_local_lines_read_per_realization     == other.unique_local_lines_read_per_realization
+            && unique_global_bytes_read_per_thread   == other.unique_global_bytes_read_per_thread
+            && unique_shared_bytes_read_per_thread   == other.unique_shared_bytes_read_per_thread
+            && unique_local_bytes_read_per_thread    == other.unique_local_bytes_read_per_thread
+            && unique_global_lines_read_per_thread   == other.unique_global_lines_read_per_thread
+            && unique_shared_lines_read_per_thread   == other.unique_shared_lines_read_per_thread
+            && unique_local_lines_read_per_thread    == other.unique_local_lines_read_per_thread
             && global_allocation_bytes_read_per_realization == other.global_allocation_bytes_read_per_realization
             && shared_allocation_bytes_read_per_realization == other.shared_allocation_bytes_read_per_realization
             && local_allocation_bytes_read_per_realization == other.local_allocation_bytes_read_per_realization

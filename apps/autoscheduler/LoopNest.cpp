@@ -2096,7 +2096,7 @@ void LoopNest::compute_features(const FunctionDAG &dag,
     double num_shared_mem_loads_per_block = 0;
     double min_num_shared_mem_loads_per_block = 0;
 
-    if (innermost || at_production) {  // These are the sites at which we compute load footprints
+    if (innermost || at_production || is_gpu_thread(target)) {  // These are the sites at which we compute load footprints
         // Pick the site at which we will compute the footprint relationship
         const auto &consumer_site = sites.get(stage);
 
@@ -2213,10 +2213,12 @@ void LoopNest::compute_features(const FunctionDAG &dag,
                 // number of contiguous lines, and the number of
                 // bytes.
                 int64_t footprint = e->producer->bytes_per_point;
+                int64_t thread_footprint = footprint;
                 int64_t compute_footprint = footprint;
                 int64_t store_footprint = footprint;
                 int64_t task_footprint = footprint;
                 int64_t line_footprint = 1;
+                int64_t thread_line_footprint = 1;
                 int64_t compute_line_footprint = 1;
                 int64_t store_line_footprint = 1;
                 int64_t task_line_footprint = 1;
@@ -2413,11 +2415,14 @@ void LoopNest::compute_features(const FunctionDAG &dag,
 
                 done.insert(e->producer);
 
+                const auto &thread_bounds = site.thread->get_bounds(e->producer);
+
                 // Now look at the shapes of the regions read from
                 // the producer at various sites.
-                int64_t max_extent = 1, max_compute_extent = 1, max_store_extent = 1, max_task_extent = 1;
+                int64_t max_extent = 1, max_thread_extent = 1, max_compute_extent = 1, max_store_extent = 1, max_task_extent = 1;
                 for (int i = 0; i < e->producer->dimensions; i++) {
                     auto p = bounds->region_required(i);
+                    auto thread_p = thread_bounds->region_required(i);
                     auto compute_p = producer_compute_bounds->region_computed(i);
                     auto store_p = producer_store_bounds->region_required(i);
                     auto task_p = task_bounds->region_required(i);
@@ -2428,16 +2433,19 @@ void LoopNest::compute_features(const FunctionDAG &dag,
                     internal_assert(task_p.min() <= task_p.max()) << task_p.min() << " " << task_p.max() << "\n";
 
                     int64_t extent = p.extent();
+                    int64_t thread_extent = thread_p.extent();
                     int64_t compute_extent = compute_p.extent();
                     int64_t store_extent = store_p.extent();
                     int64_t task_extent = task_p.extent();
 
                     max_extent = std::max(extent, max_extent);
+                    max_thread_extent = std::max(thread_extent, max_thread_extent);
                     max_compute_extent = std::max(compute_extent, max_compute_extent);
                     max_store_extent = std::max(store_extent, max_store_extent);
                     max_task_extent = std::max(task_extent, max_task_extent);
 
                     footprint *= extent;
+                    thread_footprint *= thread_extent;
                     compute_footprint *= compute_extent;
                     store_footprint *= store_extent;
                     task_footprint *= task_extent;
@@ -2446,6 +2454,7 @@ void LoopNest::compute_features(const FunctionDAG &dag,
                                   (site.produce != nullptr && i == site.produce->vector_dim));
                     if (!dense) {
                         line_footprint *= extent;
+                        thread_line_footprint *= thread_extent;
                         compute_line_footprint *= compute_extent;
                         store_line_footprint *= store_extent;
                         task_line_footprint *= task_extent;
@@ -2457,6 +2466,7 @@ void LoopNest::compute_features(const FunctionDAG &dag,
                     // along whatever dimension makes these
                     // numbers the smallest.
                     line_footprint /= max_extent;
+                    thread_line_footprint /= max_thread_extent;
                     compute_line_footprint /= max_compute_extent;
                     store_line_footprint /= max_store_extent;
                     task_line_footprint /= max_task_extent;
@@ -2571,7 +2581,19 @@ void LoopNest::compute_features(const FunctionDAG &dag,
         }
     }
 
+    if (is_gpu_thread(target)) {
+        feat.unique_global_bytes_read_per_thread = global_bytes_loaded;
+        feat.unique_shared_bytes_read_per_thread = shared_bytes_loaded;
+        feat.unique_local_bytes_read_per_thread = local_bytes_loaded;
+
+        feat.unique_global_lines_read_per_thread = global_lines_loaded;
+        feat.unique_shared_lines_read_per_thread = shared_lines_loaded;
+        feat.unique_local_lines_read_per_thread = local_lines_loaded;
+    }
+
     if (innermost) {
+        feat.points_computed_per_thread = gpu_loop_info.total_serial_extents();
+
         feat.points_computed_per_production = subinstances / feat.num_productions;
         // Halide codegens strided loads for small strides as a
         // large dense vector load and a cheap swizzle. ARM even
