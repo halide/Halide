@@ -255,12 +255,18 @@ struct ScheduleFeatures {
     // Number of unique bytes and unique continguous segments of
     // memory loaded from all inputs over a single trip of the loop
     // containing the allocation site.
-    double unique_bytes_read_per_realization = 0;
-    double unique_lines_read_per_realization = 0;
+    double unique_global_bytes_read_per_realization = 0;
+    double unique_shared_bytes_read_per_realization = 0;
+    double unique_local_bytes_read_per_realization = 0;
+    double unique_global_lines_read_per_realization = 0;
+    double unique_shared_lines_read_per_realization = 0;
+    double unique_local_lines_read_per_realization = 0;
 
     // The sum of the sizes of the allocations accessed at this
     // site. Gives a hint as to the likely locality of it.
-    double allocation_bytes_read_per_realization = 0;
+    double global_allocation_bytes_read_per_realization = 0;
+    double shared_allocation_bytes_read_per_realization = 0;
+    double local_allocation_bytes_read_per_realization = 0;
 
     // The sum of the sizes of the temporary allocations while
     // computing one tile of this Func. Probably a good thing if it
@@ -376,9 +382,15 @@ struct ScheduleFeatures {
             << "    innermost_bytes_at_production:         " << innermost_bytes_at_production << '\n'
             << "    innermost_bytes_at_root:               " << innermost_bytes_at_root << '\n'
             << "    inlined_calls:                         " << inlined_calls << '\n'
-            << "    unique_bytes_read_per_realization:     " << unique_bytes_read_per_realization << '\n'
-            << "    unique_lines_read_per_realization:     " << unique_lines_read_per_realization << '\n'
-            << "    allocation_bytes_read_per_realization: " << allocation_bytes_read_per_realization << '\n'
+            << " unique_global_bytes_read_per_realization: " << unique_global_bytes_read_per_realization << '\n'
+            << " unique_shared_bytes_read_per_realization: " << unique_shared_bytes_read_per_realization << '\n'
+            << " unique_local_bytes_read_per_realization:  " << unique_local_bytes_read_per_realization << '\n'
+            << " unique_global_lines_read_per_realization: " << unique_global_lines_read_per_realization << '\n'
+            << " unique_shared_lines_read_per_realization: " << unique_shared_lines_read_per_realization << '\n'
+            << " unique_local_lines_read_per_realization:  " << unique_local_lines_read_per_realization << '\n'
+            << " global_allocation_bytes_read_per_realization: " << global_allocation_bytes_read_per_realization << '\n'
+            << " shared_allocation_bytes_read_per_realization: " << shared_allocation_bytes_read_per_realization << '\n'
+            << " local_allocation_bytes_read_per_realization: " << local_allocation_bytes_read_per_realization << '\n'
             << "    working_set:                           " << working_set << '\n'
             << "    vector_size:                           " << vector_size << '\n'
             << "    native_vector_size:                    " << native_vector_size << '\n'
@@ -457,9 +469,15 @@ struct ScheduleFeatures {
             && innermost_bytes_at_production         == other.innermost_bytes_at_production
             && innermost_bytes_at_root               == other.innermost_bytes_at_root
             && inlined_calls                         == other.inlined_calls
-            && unique_bytes_read_per_realization     == other.unique_bytes_read_per_realization
-            && unique_lines_read_per_realization     == other.unique_lines_read_per_realization
-            && allocation_bytes_read_per_realization == other.allocation_bytes_read_per_realization
+            && unique_global_bytes_read_per_realization     == other.unique_global_bytes_read_per_realization
+            && unique_shared_bytes_read_per_realization     == other.unique_shared_bytes_read_per_realization
+            && unique_local_bytes_read_per_realization     == other.unique_local_bytes_read_per_realization
+            && unique_global_lines_read_per_realization     == other.unique_global_lines_read_per_realization
+            && unique_shared_lines_read_per_realization     == other.unique_shared_lines_read_per_realization
+            && unique_local_lines_read_per_realization     == other.unique_local_lines_read_per_realization
+            && global_allocation_bytes_read_per_realization == other.global_allocation_bytes_read_per_realization
+            && shared_allocation_bytes_read_per_realization == other.shared_allocation_bytes_read_per_realization
+            && local_allocation_bytes_read_per_realization == other.local_allocation_bytes_read_per_realization
             && working_set                           == other.working_set
             && vector_size                           == other.vector_size
             && native_vector_size                    == other.native_vector_size

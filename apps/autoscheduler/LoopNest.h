@@ -236,6 +236,10 @@ struct LoopNest {
         GPUMemoryType gpu_store_memory_type; // global, local, shared?
         bool inlined = false;                // Is the Func inlined?
         uint64_t hash_of_producers_stored_at_root;
+
+        bool is_stored_in_global_mem() const { return gpu_store_memory_type == GPUMemoryType::global; }
+        bool is_stored_in_shared_mem() const { return gpu_store_memory_type == GPUMemoryType::shared; }
+        bool is_stored_in_local_mem() const { return gpu_store_memory_type == GPUMemoryType::local; }
     };
 
     GPUMemoryType get_gpu_memory_type(bool in_block, bool in_thread, bool is_inlined=false) const;

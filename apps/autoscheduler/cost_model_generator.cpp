@@ -269,9 +269,15 @@ public:
         Expr innermost_bytes_at_production = schedule_features(n, idx++, w);
         Expr innermost_bytes_at_root = schedule_features(n, idx++, w);
         Expr inlined_calls = schedule_features(n, idx++, w);
-        Expr unique_bytes_read_per_realization = schedule_features(n, idx++, w);
-        Expr unique_lines_read_per_realization = schedule_features(n, idx++, w);
-        Expr allocation_bytes_read_per_realization = schedule_features(n, idx++, w);
+        Expr unique_global_bytes_read_per_realization = schedule_features(n, idx++, w);
+        Expr unique_shared_bytes_read_per_realization = schedule_features(n, idx++, w);
+        Expr unique_local_bytes_read_per_realization = schedule_features(n, idx++, w);
+        Expr unique_global_lines_read_per_realization = schedule_features(n, idx++, w);
+        Expr unique_shared_lines_read_per_realization = schedule_features(n, idx++, w);
+        Expr unique_local_lines_read_per_realization = schedule_features(n, idx++, w);
+        Expr global_allocation_bytes_read_per_realization = schedule_features(n, idx++, w);
+        Expr shared_allocation_bytes_read_per_realization = schedule_features(n, idx++, w);
+        Expr local_allocation_bytes_read_per_realization = schedule_features(n, idx++, w);
         Expr working_set = schedule_features(n, idx++, w);
         Expr vector_size = schedule_features(n, idx++, w);
         Expr native_vector_size = schedule_features(n, idx++, w);
@@ -402,8 +408,12 @@ public:
         compute_cost = print_wrap(compute_cost, "compute_cost_after_register_block_occupancy", n, w);
 
         // Next comes a long list of plausible terms to capture the cost of loads.
-        Expr load_cost = (num_realizations * unique_lines_read_per_realization * relu1(5, w, n) +
-                          num_realizations * unique_bytes_read_per_realization * relu1(6, w, n) +
+        Expr load_cost = (num_realizations * unique_global_lines_read_per_realization * relu1(5, w, n) +
+                          num_realizations * unique_shared_lines_read_per_realization * relu1(16, w, n) +
+                          num_realizations * unique_local_lines_read_per_realization * relu1(17, w, n) +
+                          num_realizations * unique_global_bytes_read_per_realization * relu1(6, w, n) +
+                          num_realizations * unique_shared_bytes_read_per_realization * relu1(20, w, n) +
+                          num_realizations * unique_local_bytes_read_per_realization * relu1(21, w, n) +
                           num_vectors * vector_loads_per_vector * relu1(7, w, n) +
                           num_scalars * scalar_loads_per_scalar * relu1(8, w, n) +
                           num_vectors * scalar_loads_per_vector * relu1(9, w, n) +

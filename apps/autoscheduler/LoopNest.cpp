@@ -2057,7 +2057,9 @@ void LoopNest::compute_features(const FunctionDAG &dag,
     // Analyze all memory dependencies of this stage, looking
     // through any Funcs inlined into it. This is where we track
     // things like vector gathers.
-    int64_t bytes_loaded = 0, lines_loaded = 0, allocation_bytes_loaded = 0;
+    int64_t global_bytes_loaded = 0, shared_bytes_loaded = 0, local_bytes_loaded = 0;
+    int64_t global_lines_loaded = 0, shared_lines_loaded = 0, local_lines_loaded = 0;
+    int64_t global_allocation_bytes_loaded = 0, shared_allocation_bytes_loaded = 0, local_allocation_bytes_loaded = 0;
     double num_dense_loads = 0, num_broadcasts = 0,
            num_gathers = 0, num_stride_2_loads = 0,
            num_stride_3_loads = 0, num_stride_4_loads = 0,
@@ -2447,17 +2449,46 @@ void LoopNest::compute_features(const FunctionDAG &dag,
                     }
                 }
 
-                allocation_bytes_loaded += compute_footprint;
+                if (site.is_stored_in_global_mem()) {
+                    global_allocation_bytes_loaded += compute_footprint;
+                } else if (site.is_stored_in_shared_mem()) {
+                    shared_allocation_bytes_loaded += compute_footprint;
+                } else if (site.is_stored_in_local_mem()) {
+                    local_allocation_bytes_loaded += compute_footprint;
+                } else {
+                    internal_assert(false);
+                }
 
                 if (store_instances_per_consumption > 1) {
-                    // The producer is nested inside the consumer
-                    bytes_loaded += store_footprint;
-                    // Due to folding, the actual buffer size is smaller than the bounds at the store level
-                    lines_loaded += store_line_footprint;
+                    if (site.is_stored_in_global_mem()) {
+                        // The producer is nested inside the consumer
+                        global_bytes_loaded += store_footprint;
+                        // Due to folding, the actual buffer size is smaller than the bounds at the store level
+                        global_lines_loaded += store_line_footprint;
+                    } else if (site.is_stored_in_shared_mem()) {
+                        shared_bytes_loaded += store_footprint;
+                        shared_lines_loaded += store_line_footprint;
+                    } else if (site.is_stored_in_local_mem()) {
+                        local_bytes_loaded += store_footprint;
+                        local_lines_loaded += store_line_footprint;
+                    } else {
+                        internal_assert(false);
+                    }
+
                 } else {
                     // The consumer is consuming some portion of a larger producer computed earlier
-                    bytes_loaded += footprint;
-                    lines_loaded += line_footprint;
+                    if (site.is_stored_in_global_mem()) {
+                        global_bytes_loaded += footprint;
+                        global_lines_loaded += line_footprint;
+                    } else if (site.is_stored_in_shared_mem()) {
+                        shared_bytes_loaded += footprint;
+                        shared_lines_loaded += line_footprint;
+                    } else if (site.is_stored_in_local_mem()) {
+                        local_bytes_loaded += footprint;
+                        local_lines_loaded += line_footprint;
+                    } else {
+                        internal_assert(false);
+                    }
                 }
 
                 // We compute (but never use) these; computing them is cheap,
@@ -2473,18 +2504,43 @@ void LoopNest::compute_features(const FunctionDAG &dag,
         // Properties of the realization, but the values are
         // computable at the production site because that's where
         // the consumers are.
-        internal_assert(bytes_loaded >= 0) << "Negative bytes loaded: " << bytes_loaded << "\n";
-        feat.allocation_bytes_read_per_realization = allocation_bytes_loaded;
-        feat.unique_bytes_read_per_realization = bytes_loaded;
-        feat.unique_lines_read_per_realization = lines_loaded;
+        internal_assert(global_bytes_loaded >= 0) << "Negative global bytes loaded: " << global_bytes_loaded << "\n";
+        internal_assert(shared_bytes_loaded >= 0) << "Negative shared bytes loaded: " << shared_bytes_loaded << "\n";
+        internal_assert(local_bytes_loaded >= 0) << "Negative local bytes loaded: " << local_bytes_loaded << "\n";
+
+        feat.global_allocation_bytes_read_per_realization = global_allocation_bytes_loaded;
+        feat.shared_allocation_bytes_read_per_realization = shared_allocation_bytes_loaded;
+        feat.local_allocation_bytes_read_per_realization = local_allocation_bytes_loaded;
+
+        feat.unique_global_bytes_read_per_realization = global_bytes_loaded;
+        feat.unique_shared_bytes_read_per_realization = shared_bytes_loaded;
+        feat.unique_local_bytes_read_per_realization = local_bytes_loaded;
+
+        feat.unique_global_lines_read_per_realization = global_lines_loaded;
+        feat.unique_shared_lines_read_per_realization = shared_lines_loaded;
+        feat.unique_local_lines_read_per_realization = local_lines_loaded;
 
         if (!at_pure_production) {
             // Also pessimistically assume this update definition relies on the entirety of the produced region so far.
             // TODO: This overbills scatters, or writes to a sub-window.
-            internal_assert(bytes_loaded >= 0) << "Negative bytes at production: " << feat.bytes_at_production << "\n";
-            feat.unique_bytes_read_per_realization += feat.bytes_at_production;
-            feat.unique_lines_read_per_realization += feat.bytes_at_production / feat.innermost_bytes_at_production;
-            feat.allocation_bytes_read_per_realization += feat.bytes_at_production;
+            internal_assert(feat.bytes_at_production >= 0) << "Negative bytes at production: " << feat.bytes_at_production << "\n";
+
+            const auto &consumer_site = sites.get(stage);
+            if (consumer_site.is_stored_in_global_mem()) {
+                feat.unique_global_bytes_read_per_realization += feat.bytes_at_production;
+                feat.unique_global_lines_read_per_realization += feat.bytes_at_production / feat.innermost_bytes_at_production;
+                feat.global_allocation_bytes_read_per_realization += feat.bytes_at_production;
+            } else if (consumer_site.is_stored_in_shared_mem()) {
+                feat.unique_shared_bytes_read_per_realization += feat.bytes_at_production;
+                feat.unique_shared_lines_read_per_realization += feat.bytes_at_production / feat.innermost_bytes_at_production;
+                feat.shared_allocation_bytes_read_per_realization += feat.bytes_at_production;
+            } else if (consumer_site.is_stored_in_shared_mem()) {
+                feat.unique_local_bytes_read_per_realization += feat.bytes_at_production;
+                feat.unique_local_lines_read_per_realization += feat.bytes_at_production / feat.innermost_bytes_at_production;
+                feat.local_allocation_bytes_read_per_realization += feat.bytes_at_production;
+            } else {
+                internal_assert(false);
+            }
         }
     }
 
@@ -2505,8 +2561,8 @@ void LoopNest::compute_features(const FunctionDAG &dag,
             feat.vector_loads_per_vector++;
             feat.scalar_loads_per_scalar++;
         }
-        feat.unique_bytes_read_per_vector = bytes_loaded;
-        feat.unique_lines_read_per_vector = lines_loaded;
+        feat.unique_bytes_read_per_vector = global_bytes_loaded + shared_bytes_loaded + local_bytes_loaded;
+        feat.unique_lines_read_per_vector = global_lines_loaded + shared_lines_loaded + local_lines_loaded;
 
         feat.num_shared_mem_loads_per_block = num_shared_mem_loads_per_block;
         feat.num_shared_mem_loads = gpu_loop_info.num_blocks * num_shared_mem_loads_per_block;
