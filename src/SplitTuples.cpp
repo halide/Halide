@@ -1,5 +1,6 @@
 #include "SplitTuples.h"
 #include "Bounds.h"
+#include "Function.h"
 #include "IRMutator.h"
 
 namespace Halide {

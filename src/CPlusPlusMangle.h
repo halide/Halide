@@ -9,10 +9,12 @@
 #include <vector>
 
 #include "Expr.h"
-#include "Function.h"  // for ExternFuncArgument
 #include "Target.h"
 
 namespace Halide {
+
+struct ExternFuncArgument;
+
 namespace Internal {
 
 /** Return the mangled C++ name for a function.

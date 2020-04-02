@@ -14,7 +14,7 @@
 #include "Argument.h"
 #include "Expr.h"
 #include "ExternalCode.h"
-#include "Function.h"
+#include "Function.h"  // for NameMangling
 #include "ModulusRemainder.h"
 #include "Target.h"
 

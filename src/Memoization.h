@@ -11,10 +11,11 @@
 #include <string>
 
 #include "Expr.h"
-#include "Function.h"
 
 namespace Halide {
 namespace Internal {
+
+class Function;
 
 /** Transform pipeline calls for Funcs scheduled with memoize to do a
  *  lookup call to the runtime cache implementation, and if there is a

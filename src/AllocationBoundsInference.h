@@ -9,11 +9,12 @@
 #include <utility>
 
 #include "Expr.h"
-#include "Function.h"
 #include "Interval.h"
 
 namespace Halide {
 namespace Internal {
+
+class Function;
 
 /** Take a partially statement with Realize nodes in terms of
  * variables, and define values for those variables. */

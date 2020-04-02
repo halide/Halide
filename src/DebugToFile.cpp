@@ -3,6 +3,7 @@
 #include <vector>
 
 #include "DebugToFile.h"
+#include "Function.h"
 #include "IRMutator.h"
 #include "IROperator.h"
 

@@ -9,10 +9,10 @@
 #include <string>
 #include <vector>
 
-#include "Function.h"
-
 namespace Halide {
 namespace Internal {
+
+class Function;
 
 /** Emit some simple pseudocode that shows the structure of the loop
  * nest specified by this pipeline's schedule, and the schedules of

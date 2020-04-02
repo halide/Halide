@@ -1,5 +1,6 @@
 #include "BoundsInference.h"
 #include "Bounds.h"
+#include "Function.h"
 #include "IREquality.h"
 #include "IRMutator.h"
 #include "IROperator.h"

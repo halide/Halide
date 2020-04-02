@@ -11,10 +11,11 @@
 #include <string>
 
 #include "Expr.h"
-#include "Function.h"
 
 namespace Halide {
 namespace Internal {
+
+class Function;
 
 /** Perform sliding window optimizations on a halide
  * statement. I.e. don't bother computing points in a function that

@@ -6,13 +6,14 @@
  * and the regions of a function read or written by a statement.
  */
 
-#include "Function.h"
 #include "IROperator.h"
 #include "Interval.h"
 #include "Scope.h"
 
 namespace Halide {
 namespace Internal {
+
+class Function;
 
 typedef std::map<std::pair<std::string, int>, Interval> FuncValueBounds;
 

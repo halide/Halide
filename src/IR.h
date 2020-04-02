@@ -12,17 +12,19 @@
 #include "Debug.h"
 #include "Error.h"
 #include "Expr.h"
-#include "Function.h"
 #include "FunctionPtr.h"
 #include "IntrusivePtr.h"
 #include "ModulusRemainder.h"
 #include "Parameter.h"
 #include "Reduction.h"
+#include "Schedule.h"  // for PrefetchDirective
 #include "Type.h"
 #include "runtime/HalideBuffer.h"
 
 namespace Halide {
 namespace Internal {
+
+class Function;
 
 /** The actual IR nodes begin here. Remember that all the Expr
  * nodes also have a public "type" property */

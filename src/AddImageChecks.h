@@ -12,7 +12,6 @@
 
 #include "Bounds.h"
 #include "Expr.h"
-#include "Function.h"
 
 #include <map>
 
@@ -21,6 +20,8 @@ namespace Halide {
 struct Target;
 
 namespace Internal {
+
+class Function;
 
 /** Insert checks to make sure a statement doesn't read out of bounds
  * on inputs or outputs, and that the inputs and outputs conform to

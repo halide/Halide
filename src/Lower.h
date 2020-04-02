@@ -12,13 +12,13 @@
 
 #include "Argument.h"
 #include "Expr.h"
-#include "Function.h"
 #include "Module.h"
 #include "Target.h"
 
 namespace Halide {
 namespace Internal {
 
+class Function;
 class IRMutator;
 
 /** Given a vector of scheduled halide functions, create a Module that

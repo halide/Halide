@@ -12,11 +12,12 @@
 #include <vector>
 
 #include "Expr.h"
-#include "Function.h"
 #include "Target.h"
 
 namespace Halide {
 namespace Internal {
+
+class Function;
 
 /** Build loop nests and inject Function realizations at the
  * appropriate places using the schedule. Returns a flag indicating

@@ -10,11 +10,12 @@
 #include <vector>
 
 #include "Expr.h"
-#include "Function.h"
 #include "Target.h"
 
 namespace Halide {
 namespace Internal {
+
+class Function;
 
 /** Take a statement representing a halide pipeline, inject calls to
  * tracing functions at interesting points, such as
