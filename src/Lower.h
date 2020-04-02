@@ -7,10 +7,12 @@
  * Halide function using its schedule.
  */
 
-#include <iterator>
+#include <string>
+#include <vector>
 
 #include "Argument.h"
-#include "IR.h"
+#include "Expr.h"
+#include "Function.h"
 #include "Module.h"
 #include "Target.h"
 

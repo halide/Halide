@@ -1,11 +1,11 @@
 #ifndef HALIDE_IR_VISITOR_H
 #define HALIDE_IR_VISITOR_H
 
-#include "IR.h"
-
 #include <map>
 #include <set>
 #include <string>
+
+#include "IR.h"
 
 /** \file
  * Defines the base class for things that recursively walk over the IR

@@ -1,7 +1,7 @@
 #ifndef HALIDE_SIMPLIFY_CORRELATED_DIFFERENCES
 #define HALIDE_SIMPLIFY_CORRELATED_DIFFERENCES
 
-#include "IR.h"
+#include "Expr.h"
 
 /** \file
  * Defines a simplification pass for handling differences of correlated expressions.

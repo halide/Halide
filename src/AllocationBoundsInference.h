@@ -4,9 +4,13 @@
 /** \file
  * Defines the lowering pass that determines how large internal allocations should be.
  */
+#include <map>
+#include <string>
+#include <utility>
 
-#include "Bounds.h"
-#include "IR.h"
+#include "Expr.h"
+#include "Function.h"
+#include "Interval.h"
 
 namespace Halide {
 namespace Internal {

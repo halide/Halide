@@ -6,9 +6,13 @@
  * Defines the lowering pass that adds the assertions that validate
  * input and output buffers.
  */
+#include <map>
+#include <string>
+#include <vector>
 
 #include "Bounds.h"
-#include "IR.h"
+#include "Expr.h"
+#include "Function.h"
 
 #include <map>
 

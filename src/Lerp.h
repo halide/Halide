@@ -5,7 +5,7 @@
  * Defines methods for converting a lerp intrinsic into Halide IR.
  */
 
-#include "IR.h"
+#include "Expr.h"
 
 namespace Halide {
 namespace Internal {

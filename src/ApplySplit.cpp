@@ -1,4 +1,6 @@
 #include "ApplySplit.h"
+#include "IR.h"
+#include "IROperator.h"
 #include "Simplify.h"
 #include "Substitute.h"
 

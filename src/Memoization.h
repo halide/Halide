@@ -8,8 +8,10 @@
  */
 
 #include <map>
+#include <string>
 
-#include "IR.h"
+#include "Expr.h"
+#include "Function.h"
 
 namespace Halide {
 namespace Internal {

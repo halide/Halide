@@ -5,7 +5,7 @@
  * Method to eliminate vectors of booleans from IR.
  */
 
-#include "IR.h"
+#include "Expr.h"
 
 namespace Halide {
 namespace Internal {

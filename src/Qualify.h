@@ -5,8 +5,9 @@
  *
  * Defines methods for prefixing names in an expression with a prefix string.
  */
+#include <string>
 
-#include "IR.h"
+#include "Expr.h"
 
 namespace Halide {
 namespace Internal {

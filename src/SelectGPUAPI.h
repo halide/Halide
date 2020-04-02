@@ -1,7 +1,7 @@
 #ifndef HALIDE_INTERNAL_SELECT_GPU_API_H
 #define HALIDE_INTERNAL_SELECT_GPU_API_H
 
-#include "IR.h"
+#include "Expr.h"
 #include "Target.h"
 
 /** \file
