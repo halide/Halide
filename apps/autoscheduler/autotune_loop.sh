@@ -91,6 +91,7 @@ if [[ $TRAIN_ONLY != 1 ]]; then
     get_timeout_cmd TIMEOUT_CMD
 else
     echo "Train only mode: ON"
+    EPOCHS=1000
 fi
 
 record_command() {
@@ -274,7 +275,6 @@ benchmark_sample() {
     rm ${D}/${FNAME}.stmt
     rm ${D}/${FNAME}.h
     rm ${D}/${FNAME}.registration.cpp
-    rm ${D}/bench
 }
 
 if [[ $BATCH_ID == 0 ]]; then
