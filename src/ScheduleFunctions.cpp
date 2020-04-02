@@ -135,8 +135,17 @@ Stmt build_loop_nest(
         }
     }
 
+    // Order the Ifs, Fors, and Lets for bounds inference
+    // to generate tighter bounds and put the bound variables
+    // in the right place.
+    // This is not a generic loop invariant code motion step.
+    // In particular there are dangling references to bound
+    // variables that are not defined yet, so we can't rely
+    // the loop invariant code motion pass.
+
     // All containing lets and fors. Outermost first.
     vector<Container> nest;
+    nest.reserve(stage_s.dims().size());
 
     // Put the desired loop nest into the containers vector.
     for (int i = (int)stage_s.dims().size() - 1; i >= 0; i--) {

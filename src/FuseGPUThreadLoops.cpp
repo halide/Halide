@@ -1221,9 +1221,80 @@ Stmt zero_gpu_loop_mins(const Stmt &s) {
     return ZeroGPULoopMins().mutate(s);
 }
 
+// Find the inner most GPU block of a statement.
+class FindInnermostGPUBlock : public IRVisitor {
+    using IRVisitor::visit;
+
+    void visit(const For *op) override {
+        if (CodeGen_GPU_Dev::is_gpu_block_var(op->name)) {
+            // Set the last found GPU block to found_gpu_block.
+            found_gpu_block = op;
+        }
+        IRVisitor::visit(op);
+    }
+
+public:
+    const For *found_gpu_block = nullptr;
+};
+
+// Given a condition and a loop, add the condition
+// to the loop body.
+class AddConditionToALoop : public IRMutator {
+    using IRMutator::visit;
+
+    Stmt visit(const For *op) override {
+        if (op != loop) {
+            return IRMutator::visit(op);
+        }
+
+        return For::make(op->name, op->min, op->extent, op->for_type, op->device_api,
+                         IfThenElse::make(condition, op->body, Stmt()));
+    }
+
+public:
+    AddConditionToALoop(const Expr &condition, const For *loop)
+        : condition(condition), loop(loop) {
+    }
+    const Expr &condition;
+    const For *loop;
+};
+
+// Push if statements between GPU blocks through all GPU blocks.
+// Throw error if the if statement has an else clause.
+class NormalizeIfStatements : public IRMutator {
+    using IRMutator::visit;
+
+    bool inside_gpu_blocks = false;
+
+    Stmt visit(const For *op) override {
+        if (!CodeGen_GPU_Dev::is_gpu_block_var(op->name)) {
+            return IRMutator::visit(op);
+        }
+        ScopedValue<bool> old_inside_gpu_blocks(inside_gpu_blocks, true);
+        return IRMutator::visit(op);
+    }
+
+    Stmt visit(const IfThenElse *op) override {
+        if (!inside_gpu_blocks) {
+            return IRMutator::visit(op);
+        }
+        FindInnermostGPUBlock find;
+        op->accept(&find);
+        if (find.found_gpu_block != nullptr) {
+            internal_assert(!op->else_case.defined()) << "Found an if statement with else case between two GPU blocks.\n";
+            return AddConditionToALoop(op->condition, find.found_gpu_block).mutate(op->then_case);
+        }
+        return IRMutator::visit(op);
+    }
+};
+
 Stmt fuse_gpu_thread_loops(Stmt s) {
     ValidateGPULoopNesting validate;
     s.accept(&validate);
+    // NormalizeIfStatements pushes the predicates between GPU blocks
+    // into the innermost GPU block. FuseGPUThreadLoops would then
+    // merge the predicate into the merged GPU thread.
+    s = NormalizeIfStatements().mutate(s);
     s = FuseGPUThreadLoops().mutate(s);
     s = ZeroGPULoopMins().mutate(s);
     return s;
