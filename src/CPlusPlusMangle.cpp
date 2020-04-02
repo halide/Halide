@@ -2,6 +2,7 @@
 
 #include <map>
 
+#include "ExternFuncArgument.h"
 #include "Function.h"
 #include "IR.h"
 #include "IROperator.h"

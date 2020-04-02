@@ -1,4 +1,5 @@
 #include "AddImageChecks.h"
+#include "ExternFuncArgument.h"
 #include "Function.h"
 #include "IRMutator.h"
 #include "IRVisitor.h"

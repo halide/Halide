@@ -2983,6 +2983,10 @@ vector<OutputImageParam> Func::output_buffers() const {
     return bufs;
 }
 
+Func::operator ExternFuncArgument() const {
+    return ExternFuncArgument(func);
+}
+
 Pipeline Func::pipeline() {
     if (!pipeline_.defined()) {
         pipeline_ = Pipeline(*this);
