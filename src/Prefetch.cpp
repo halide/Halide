@@ -4,8 +4,8 @@
 #include <utility>
 
 #include "Bounds.h"
-#include "Function.h"
 #include "ExprUsesVar.h"
+#include "Function.h"
 #include "IRMutator.h"
 #include "Prefetch.h"
 #include "Scope.h"
