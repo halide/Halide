@@ -8,13 +8,14 @@
 #include <string>
 #include <vector>
 
-#include "Debug.h"
-#include "Error.h"
-#include "Float16.h"
 #include "IntrusivePtr.h"
 #include "Type.h"
 
 namespace Halide {
+
+struct bfloat16_t;
+struct float16_t;
+
 namespace Internal {
 
 class IRMutator;

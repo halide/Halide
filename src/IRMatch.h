@@ -5,6 +5,7 @@
  * Defines a method to match a fragment of IR against a pattern containing wildcards
  */
 
+#include <map>
 #include <random>
 #include <set>
 #include <vector>

@@ -6,20 +6,15 @@
  */
 
 #include <string>
-#include <utility>
 #include <vector>
 
-#include "Debug.h"
-#include "Error.h"
 #include "Expr.h"
 #include "FunctionPtr.h"
-#include "IntrusivePtr.h"
 #include "ModulusRemainder.h"
 #include "Parameter.h"
+#include "PrefetchDirective.h"
 #include "Reduction.h"
-#include "Schedule.h"  // for PrefetchDirective
 #include "Type.h"
-#include "runtime/HalideBuffer.h"
 
 namespace Halide {
 namespace Internal {
