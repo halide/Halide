@@ -4,6 +4,7 @@
 /apps/HelloMatlab/blurred.png
 /apps/HelloMatlab/iir_blur.mex
 bin/*
+build/*
 python_bindings/bin/*
 build-64/*
 build-ios/*
