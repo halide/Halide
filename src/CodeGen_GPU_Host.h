@@ -6,6 +6,7 @@
  */
 
 #include <map>
+#include <string>
 
 #include "CodeGen_ARM.h"
 #include "CodeGen_MIPS.h"
@@ -13,7 +14,6 @@
 #include "CodeGen_RISCV.h"
 #include "CodeGen_WebAssembly.h"
 #include "CodeGen_X86.h"
-
 #include "IR.h"
 
 namespace Halide {

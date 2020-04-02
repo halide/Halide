@@ -6,6 +6,7 @@
 #include "CodeGen_D3D12Compute_Dev.h"
 #include "CodeGen_Internal.h"
 #include "Debug.h"
+#include "DeviceArgument.h"
 #include "IRMutator.h"
 #include "IROperator.h"
 

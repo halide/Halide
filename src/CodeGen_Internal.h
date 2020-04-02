@@ -9,10 +9,10 @@
  */
 
 #include <memory>
+#include <string>
 
 #include "Closure.h"
-#include "IR.h"
-#include "IRVisitor.h"
+#include "Expr.h"
 #include "Scope.h"
 #include "Target.h"
 

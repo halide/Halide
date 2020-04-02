@@ -6,13 +6,12 @@
  * Defines the lowering pass that adds the assertions that validate
  * scalar parameters.
  */
+#include <vector>
 
-#include "IR.h"
+#include "Expr.h"
+#include "Target.h"
 
 namespace Halide {
-
-struct Target;
-
 namespace Internal {
 
 /** Insert checks to make sure that all referenced parameters meet

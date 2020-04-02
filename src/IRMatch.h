@@ -5,12 +5,13 @@
  * Defines a method to match a fragment of IR against a pattern containing wildcards
  */
 
+#include <random>
+#include <set>
+#include <vector>
+
 #include "IR.h"
 #include "IREquality.h"
 #include "IROperator.h"
-
-#include <random>
-#include <set>
 
 namespace Halide {
 namespace Internal {

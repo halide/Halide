@@ -6,8 +6,10 @@
  * every realization to dump functions to a file for debugging.  */
 
 #include <map>
+#include <vector>
 
-#include "IR.h"
+#include "Expr.h"
+#include "Function.h"
 
 namespace Halide {
 namespace Internal {

@@ -6,7 +6,7 @@
  * threads to target CUDA, OpenCL, and Metal.
  */
 
-#include "IR.h"
+#include "Expr.h"
 
 namespace Halide {
 namespace Internal {

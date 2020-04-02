@@ -6,10 +6,6 @@
 #include <string>
 
 namespace Halide {
-
-class Module;
-struct Target;
-
 namespace Internal {
 
 class PythonExtensionGen {

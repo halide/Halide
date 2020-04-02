@@ -6,9 +6,12 @@
  */
 
 #include <map>
+#include <string>
+#include <vector>
 
-#include "Bounds.h"
-#include "IR.h"
+#include "Expr.h"
+#include "Function.h"
+#include "Interval.h"
 #include "Target.h"
 
 namespace Halide {

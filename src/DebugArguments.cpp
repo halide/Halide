@@ -1,4 +1,6 @@
 #include "DebugArguments.h"
+#include "Function.h"
+#include "IR.h"
 #include "IROperator.h"
 #include "Module.h"
 

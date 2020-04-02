@@ -5,7 +5,8 @@
  * Methods for replacing calls to functions with their definitions.
  */
 
-#include "IR.h"
+#include "Expr.h"
+#include "Function.h"
 
 namespace Halide {
 namespace Internal {

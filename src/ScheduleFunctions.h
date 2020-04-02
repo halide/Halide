@@ -8,16 +8,15 @@
  */
 
 #include <map>
+#include <string>
+#include <vector>
 
-#include "IR.h"
+#include "Expr.h"
+#include "Function.h"
+#include "Target.h"
 
 namespace Halide {
-
-struct Target;
-
 namespace Internal {
-
-class Function;
 
 /** Build loop nests and inject Function realizations at the
  * appropriate places using the schedule. Returns a flag indicating

@@ -6,7 +6,10 @@
  * Defines deterministic random functions, and methods to redirect
  * front-end calls to random_float and random_int to use them. */
 
-#include "IR.h"
+#include <vector>
+
+#include "Expr.h"
+#include "Func.h"
 
 namespace Halide {
 namespace Internal {

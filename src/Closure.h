@@ -5,6 +5,8 @@
  *
  * Provides Closure class.
  */
+#include <map>
+#include <string>
 
 #include "Buffer.h"
 #include "IR.h"

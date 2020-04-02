@@ -5,7 +5,7 @@
  * Defines the lowering pass that renames all variables to have unique names.
  */
 
-#include "IR.h"
+#include "Expr.h"
 
 namespace Halide {
 namespace Internal {

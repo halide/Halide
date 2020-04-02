@@ -5,8 +5,11 @@
  * Defines the lowering optimization pass that reduces large buffers
  * down to smaller circular buffers when possible
  */
+#include <map>
+#include <string>
 
-#include "IR.h"
+#include "Expr.h"
+#include "Function.h"
 
 namespace Halide {
 namespace Internal {

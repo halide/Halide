@@ -2,10 +2,11 @@
 
 #include <algorithm>
 
-#include "CodeGen_GPU_Dev.h"
-
 #include "CSE.h"
+#include "CodeGen_GPU_Dev.h"
+#include "IR.h"
 #include "IRMutator.h"
+#include "IROperator.h"
 #include "Simplify.h"
 
 namespace Halide {
