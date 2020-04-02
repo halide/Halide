@@ -1570,7 +1570,7 @@ public:
     // access. Must be inlined so it can be hoisted out of loops.
     HALIDE_ALWAYS_INLINE
     void set_host_dirty(bool v = true) {
-        assert((!v || !device_dirty()) && "Cannot set host dirty when device is already dirty.");
+        assert((!v || !device_dirty()) && "Cannot set host dirty when device is already dirty. Call copy_to_host before accessing the buffer from host.");
         buf.set_host_dirty(v);
     }
 
