@@ -25,7 +25,7 @@ struct ParameterContents;
 
 /** A reference-counted handle to a parameter to a halide
  * pipeline. May be a scalar parameter or a buffer */
-class Parameter final {
+class Parameter {
     void check_defined() const;
     void check_is_buffer() const;
     void check_is_scalar() const;
