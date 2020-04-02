@@ -2,7 +2,6 @@
 #define HALIDE_SPLIT_TUPLES_H
 
 #include "Expr.h"
-#include "Function.h"
 #include <map>
 
 /** \file
@@ -11,6 +10,8 @@
 
 namespace Halide {
 namespace Internal {
+
+class Function;
 
 /** Rewrite all tuple-valued Realizations, Provide nodes, and Call
  * nodes into several scalar-valued ones, so that later lowering

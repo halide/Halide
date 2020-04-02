@@ -2,6 +2,7 @@
 #include <string>
 #include <vector>
 
+#include "Function.h"
 #include "IRVisitor.h"
 #include "InferArguments.h"
 

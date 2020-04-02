@@ -1,5 +1,6 @@
 #include "SimplifySpecializations.h"
 #include "Definition.h"
+#include "Function.h"
 #include "IREquality.h"
 #include "IRMutator.h"
 #include "IROperator.h"

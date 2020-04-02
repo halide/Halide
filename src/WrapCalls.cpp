@@ -1,5 +1,7 @@
 #include "WrapCalls.h"
 #include "FindCalls.h"
+#include "Function.h"
+#include "FunctionPtr.h"
 
 #include <set>
 

@@ -9,10 +9,11 @@
 #include <string>
 
 #include "Expr.h"
-#include "Function.h"
 
 namespace Halide {
 namespace Internal {
+
+class Function;
 
 /** Fold storage of functions if possible. This means reducing one of
  * the dimensions module something for the purpose of storage, if we

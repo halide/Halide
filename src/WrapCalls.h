@@ -9,10 +9,10 @@
 #include <map>
 #include <string>
 
-#include "Function.h"
-
 namespace Halide {
 namespace Internal {
+
+class Function;
 
 /** Replace every call to wrapped Functions in the Functions' definitions with
   * call to their wrapper functions. */

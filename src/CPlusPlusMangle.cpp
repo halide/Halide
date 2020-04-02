@@ -2,6 +2,7 @@
 
 #include <map>
 
+#include "Function.h"
 #include "IR.h"
 #include "IROperator.h"
 #include "Type.h"

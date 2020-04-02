@@ -8,10 +8,11 @@
 #include <string>
 
 #include "Expr.h"
-#include "Function.h"
 
 namespace Halide {
 namespace Internal {
+
+class Function;
 
 Stmt fork_async_producers(Stmt s, const std::map<std::string, Function> &env);
 

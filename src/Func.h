@@ -8,7 +8,6 @@
 
 #include "Argument.h"
 #include "Expr.h"
-#include "Function.h"
 #include "JITModule.h"
 #include "Module.h"
 #include "Param.h"
@@ -61,6 +60,7 @@ struct VarOrRVar {
 class ImageParam;
 
 namespace Internal {
+class Function;
 struct Split;
 struct StorageDim;
 }  // namespace Internal

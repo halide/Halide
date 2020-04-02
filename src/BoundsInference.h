@@ -10,12 +10,13 @@
 #include <vector>
 
 #include "Expr.h"
-#include "Function.h"
 #include "Interval.h"
 #include "Target.h"
 
 namespace Halide {
 namespace Internal {
+
+class Function;
 
 /** Take a partially lowered statement that includes symbolic
  * representations of the bounds over which things should be realized,

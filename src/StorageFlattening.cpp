@@ -1,6 +1,7 @@
 #include "StorageFlattening.h"
 
 #include "Bounds.h"
+#include "Function.h"
 #include "FuseGPUThreadLoops.h"
 #include "IRMutator.h"
 #include "IROperator.h"

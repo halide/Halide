@@ -9,10 +9,11 @@
 #include <vector>
 
 #include "Expr.h"
-#include "Function.h"
 
 namespace Halide {
 namespace Internal {
+
+class Function;
 
 /** Takes a statement with Realize nodes still unlowered. If the
  * corresponding functions have a debug_file set, then inject code
