@@ -122,7 +122,7 @@ function retrain_cost_model() {
     find ${samples_dir} -name "*.sample" | \
         ${autosched_bin}/retrain_cost_model \
             --epochs=${num_epochs} \
-            --rates="0.0001" \
+            --rates="0.001" \
             --num_cores=${num_cores} \
             --initial_weights=${weights} \
             --weights_out=${weights} \
