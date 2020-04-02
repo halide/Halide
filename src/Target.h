@@ -12,7 +12,6 @@
 #include "Error.h"
 #include "Expr.h"
 #include "Type.h"
-#include "Util.h"
 #include "runtime/HalideRuntime.h"
 
 namespace Halide {

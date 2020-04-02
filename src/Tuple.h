@@ -7,7 +7,6 @@
  */
 
 #include "IR.h"
-#include "Util.h"
 
 namespace Halide {
 

@@ -10,8 +10,6 @@
 #include <atomic>
 #include <stdlib.h>
 
-#include "Util.h"
-
 namespace Halide {
 namespace Internal {
 

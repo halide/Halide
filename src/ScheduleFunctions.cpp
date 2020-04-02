@@ -45,11 +45,9 @@ struct Container {
     int dim_idx;
     string name;
     Expr value;
-    // Only meaningful if type==For.
-    ForType for_type;
 
-    Container(Type type, int dim_idx, string name, Expr value, ForType for_type = ForType::Serial)
-        : type(type), dim_idx(dim_idx), name(std::move(name)), value(std::move(value)), for_type(for_type) {
+    Container(Type type, int dim_idx, string name, Expr value)
+        : type(type), dim_idx(dim_idx), name(std::move(name)), value(std::move(value)) {
     }
 };
 
@@ -140,6 +138,10 @@ Stmt build_loop_nest(
     // Order the Ifs, Fors, and Lets for bounds inference
     // to generate tighter bounds and put the bound variables
     // in the right place.
+    // This is not a generic loop invariant code motion step.
+    // In particular there are dangling references to bound
+    // variables that are not defined yet, so we can't rely
+    // the loop invariant code motion pass.
 
     // All containing lets and fors. Outermost first.
     vector<Container> nest;
@@ -148,7 +150,7 @@ Stmt build_loop_nest(
     // Put the desired loop nest into the containers vector.
     for (int i = (int)stage_s.dims().size() - 1; i >= 0; i--) {
         const Dim &dim = stage_s.dims()[i];
-        nest.emplace_back(Container::For, i, prefix + dim.var, Expr(), dim.for_type);
+        nest.emplace_back(Container::For, i, prefix + dim.var, Expr());
     }
 
     vector<Container> pred_container;
@@ -255,7 +257,6 @@ Stmt build_loop_nest(
             continue;
         }
 
-        int index = i;
         for (int j = i - 1; j >= 0; j--) {
             // Try to push it up by one.
             internal_assert(nest[j + 1].value.defined());
@@ -263,41 +264,7 @@ Stmt build_loop_nest(
             if (!expr_uses_var(nest[j + 1].value, nest[j].name)) {
                 std::swap(nest[j + 1], nest[j]);
             } else {
-                index = j + 1;
                 break;
-            }
-        }
-
-        // If the If is in-between two GPUBlocks, this generates invalid code.
-        // We want to push the If back down through all GPUBlocks.
-        bool inside_gpu_blocks = false, outside_gpu_blocks = false;
-        for (int j = index - 1; j >= 0; j--) {
-            if (nest[j].for_type == ForType::GPUBlock) {
-                inside_gpu_blocks = true;
-                break;
-            }
-        }
-        for (int j = index + 1; j < (int)nest.size(); j++) {
-            if (nest[j].for_type == ForType::GPUBlock) {
-                outside_gpu_blocks = true;
-                break;
-            }
-        }
-        if (inside_gpu_blocks && outside_gpu_blocks) {
-            // Push the If through all GPUBlocks
-            int last_gpu_block_index = -1;
-            for (int j = (int)nest.size() - 1; j >= 0; j--) {
-                if (nest[j].for_type == ForType::GPUBlock) {
-                    last_gpu_block_index = j;
-                    break;
-                }
-            }
-            internal_assert(last_gpu_block_index >= 0);
-            for (int j = index + 1; j < (int)nest.size(); j++) {
-                std::swap(nest[j - 1], nest[j]);
-                if (j == last_gpu_block_index) {
-                    break;
-                }
             }
         }
     }
