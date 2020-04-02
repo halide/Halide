@@ -10,6 +10,8 @@
 #include <atomic>
 #include <stdlib.h>
 
+#include "runtime/HalideRuntime.h"  // for HALIDE_ALWAYS_INLINE
+
 namespace Halide {
 namespace Internal {
 

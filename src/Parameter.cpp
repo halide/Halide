@@ -1,11 +1,9 @@
 #include "Parameter.h"
 
 #include "Argument.h"
+#include "Float16.h"
 #include "IR.h"
 #include "IROperator.h"
-#include "ObjectInstanceRegistry.h"
-#include "Simplify.h"
-#include <utility>
 
 namespace Halide {
 namespace Internal {
@@ -68,12 +66,19 @@ void Parameter::check_dim_ok(int dim) const {
         << "Dimension " << dim << " is not in the range [0, " << dimensions() - 1 << "]\n";
 }
 
-Parameter::Parameter(Type t, bool is_buffer, int d)
+void Parameter::check_type(const Type &t) const {
+    // Allow set_scalar<uint64_t>() for all Handle types
+    user_assert(type() == t || (type().is_handle() && t == UInt(64)))
+        << "Param<" << type()
+        << "> cannot be accessed as scalar of type " << t << "\n";
+}
+
+Parameter::Parameter(const Type &t, bool is_buffer, int d)
     : contents(new ParameterContents(t, is_buffer, d, unique_name('p'))) {
     internal_assert(is_buffer || d == 0) << "Scalar parameters should be zero-dimensional";
 }
 
-Parameter::Parameter(Type t, bool is_buffer, int d, const std::string &name)
+Parameter::Parameter(const Type &t, bool is_buffer, int d, const std::string &name)
     : contents(new ParameterContents(t, is_buffer, d, name)) {
     internal_assert(is_buffer || d == 0) << "Scalar parameters should be zero-dimensional";
 }

@@ -9,6 +9,7 @@
 #include <utility>
 #include <vector>
 
+#include "Buffer.h"
 #include "Debug.h"
 #include "Error.h"
 #include "Expr.h"
