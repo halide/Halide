@@ -38,9 +38,9 @@ struct GlobalMemInfo {
         return total_coalesce_efficiency / num_coalesce_entries;
     }
 
-    void add_access_info(double required_accesses, double min_accesses, double stride, int N) {
+    void add_access_info(double required_accesses, double min_accesses, double stride, int N, double amortization) {
         for (int i = 0; i < N; ++i) {
-            add_access_info(required_accesses, min_accesses, stride);
+            add_access_info(required_accesses / amortization, min_accesses / amortization, stride);
         }
     }
 

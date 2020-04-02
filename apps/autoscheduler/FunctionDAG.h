@@ -147,6 +147,16 @@ public:
         return cols;
     }
 
+    bool is_constant() const {
+        for (const auto& c : coeffs) {
+            if (!c.exists() || !(c == 0)) {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
     OptionalRational operator()(int producer_storage_dim, int consumer_loop_dim) const {
         if (producer_storage_dims() == 0 || consumer_loop_dims() == 0) {
             // The producer or consumer is scalar, so all strides are zero.
