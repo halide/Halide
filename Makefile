@@ -547,6 +547,7 @@ SOURCE_FILES = \
   Qualify.cpp \
   Random.cpp \
   RDom.cpp \
+  Realization.cpp \
   RealizationOrder.cpp \
   Reduction.cpp \
   RegionCosts.cpp \
