@@ -342,6 +342,7 @@ set(HEADER_FILES
   Expr.h
   ExprUsesVar.h
   Extern.h
+  ExternFuncArgument.h
   FastIntegerDivide.h
   FindCalls.h
   Float16.h

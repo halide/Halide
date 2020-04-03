@@ -9,75 +9,16 @@
 #include <utility>
 #include <vector>
 
-#include "Buffer.h"
 #include "Definition.h"
 #include "Expr.h"
 #include "FunctionPtr.h"
-#include "IntrusivePtr.h"
-#include "Parameter.h"
 #include "Schedule.h"
 
 namespace Halide {
 
+struct ExternFuncArgument;
+
 class Var;
-
-/** An argument to an extern-defined Func. May be a Function, Buffer,
- * ImageParam or Expr. */
-struct ExternFuncArgument {
-    enum ArgType { UndefinedArg = 0,
-                   FuncArg,
-                   BufferArg,
-                   ExprArg,
-                   ImageParamArg };
-    ArgType arg_type;
-    Internal::FunctionPtr func;
-    Buffer<> buffer;
-    Expr expr;
-    Internal::Parameter image_param;
-
-    ExternFuncArgument(Internal::FunctionPtr f)
-        : arg_type(FuncArg), func(std::move(f)) {
-    }
-
-    template<typename T>
-    ExternFuncArgument(Buffer<T> b)
-        : arg_type(BufferArg), buffer(b) {
-    }
-    ExternFuncArgument(Expr e)
-        : arg_type(ExprArg), expr(std::move(e)) {
-    }
-    ExternFuncArgument(int e)
-        : arg_type(ExprArg), expr(e) {
-    }
-    ExternFuncArgument(float e)
-        : arg_type(ExprArg), expr(e) {
-    }
-
-    ExternFuncArgument(const Internal::Parameter &p)
-        : arg_type(ImageParamArg), image_param(p) {
-        // Scalar params come in via the Expr constructor.
-        internal_assert(p.is_buffer());
-    }
-    ExternFuncArgument()
-        : arg_type(UndefinedArg) {
-    }
-
-    bool is_func() const {
-        return arg_type == FuncArg;
-    }
-    bool is_expr() const {
-        return arg_type == ExprArg;
-    }
-    bool is_buffer() const {
-        return arg_type == BufferArg;
-    }
-    bool is_image_param() const {
-        return arg_type == ImageParamArg;
-    }
-    bool defined() const {
-        return arg_type != UndefinedArg;
-    }
-};
 
 /** An enum to specify calling convention for extern stages. */
 enum class NameMangling {
@@ -89,6 +30,7 @@ enum class NameMangling {
 namespace Internal {
 
 struct Call;
+class Parameter;
 
 /** A reference-counted handle to Halide's internal representation of
  * a function. Similar to a front-end Func object, but with no
@@ -290,9 +232,7 @@ public:
     std::string &debug_file();
 
     /** Use an an extern argument to another function. */
-    operator ExternFuncArgument() const {
-        return ExternFuncArgument(contents);
-    }
+    operator ExternFuncArgument() const;
 
     /** Tracing calls and accessors, passed down from the Func
      * equivalents. */

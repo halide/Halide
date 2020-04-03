@@ -1,5 +1,6 @@
 #include "IRVisitor.h"
 
+#include "ExternFuncArgument.h"
 #include "Function.h"
 
 namespace Halide {
