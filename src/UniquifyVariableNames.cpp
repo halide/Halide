@@ -2,6 +2,7 @@
 #include "IREquality.h"
 #include "IRMutator.h"
 #include "IROperator.h"
+#include "Scope.h"
 #include "Var.h"
 #include <sstream>
 

@@ -5,10 +5,16 @@
  * Routines for statically determining what expressions are divisible by.
  */
 
-#include "Scope.h"
+#include <stdint.h>
 
 namespace Halide {
+
+struct Expr;
+
 namespace Internal {
+
+template<typename T>
+class Scope;
 
 /** The result of modulus_remainder analysis. These represent strided
  * subsets of the integers. A ModulusRemainder object m represents all
