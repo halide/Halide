@@ -16,9 +16,9 @@ namespace msa {
 
 		// State must comply with State Interface (see IState.h)
 		// Action can be anything (which your State class knows how to handle)
-        template <class State, typename Action>
+        template <class State, typename Action, typename Eval>
         class UCT {
-            typedef TreeNodeT<State, Action> TreeNode;
+            typedef TreeNodeT<State, Action, Eval> TreeNode;
 
         private:
             LoopTimer timer;
@@ -29,14 +29,16 @@ namespace msa {
            /* unsigned*/int max_iterations;	// do a maximum of this many iterations (0 to run till end)
            /* unsigned*/ int max_millis;		// run for a maximum of this many milliseconds (0 to run till end)
            /* unsigned*/ int simulation_depth;	// how many ticks (frames) to run simulation for
+           Eval eval;
 
             //--------------------------------------------------------------
-            UCT() :
+            UCT(Eval eval) :
                 iterations(0),
                 uct_k( sqrt(2) ), 
                 max_iterations( 100 ),
                 max_millis( 0 ),
-                simulation_depth( 10 )
+                simulation_depth( 10 ),
+                eval(eval)
             {}
 
 
@@ -120,7 +122,7 @@ namespace msa {
                     }
 
                     // 2. EXPAND by adding a single child (if not terminal or not fully expanded)
-                    if(!node->is_fully_expanded() && !node->is_terminal()) node = node->expand();
+                    if(!node->is_fully_expanded() && !node->is_terminal()) node = node->expand(eval);
                     
                     State state(node->get_state());
 
@@ -131,15 +133,15 @@ namespace msa {
 
                             //Note, placeholder
                             Action action(nullptr);
-                            if(state.get_random_action(action))
-                                state.apply_action(action);
+                            if(state.get_random_action(action, eval))
+                                state.apply_action(action, eval);
                             else
                                 break;
                         }
                     }
 
                     // get rewards vector for all agents
-                    const std::vector<float> rewards = state.evaluate();
+                    const std::vector<float> rewards = state.evaluate(eval);
 
                     // add to history
                     if(explored_states) explored_states->push_back(state);

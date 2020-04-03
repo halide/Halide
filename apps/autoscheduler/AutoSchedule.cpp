@@ -741,10 +741,15 @@ struct State {
 
         const FunctionDAG &dag;
         const MachineParams &params;
-       CostModel *cost_model;
 
-    WrapperState(IntrusivePtr<State> other_inner, unsigned numleft, const FunctionDAG &dag, const MachineParams &params, CostModel* cost_model) :  numleft(numleft), dag(dag), params(params),
-    cost_model(cost_model) {
+    WrapperState(IntrusivePtr<State> other_inner, unsigned numleft, const FunctionDAG &dag, const MachineParams &params) :  numleft(numleft), dag(dag), params(params) {
+        operator=(other_inner);
+    }
+    // copy and assignment operators should perform a DEEP clone of the given state
+    WrapperState(const WrapperState& other) :
+        WrapperState(other.inner, other.numleft, other.dag, other.params) {}
+    
+    void operator =(const IntrusivePtr<State> other_inner) {
         inner = new State;
         inner->parent = other_inner->parent;
         inner->root = other_inner->root;
@@ -754,12 +759,9 @@ struct State {
         //inner->ref_count = other.inner->ref_count;
         inner->penalized = other_inner->penalized;
 
-    std::cout << "WrapperState(1)" <<inner->cost<<inner->num_decisions_made<<inner->cost_calculations<< std::endl;
+        //std::cout << "WrapperState(1)" <<inner->cost<<inner->num_decisions_made<<inner->cost_calculations<< std::endl;
     }
-    // copy and assignment operators should perform a DEEP clone of the given state
-    WrapperState(const WrapperState& other) :
-        WrapperState(other.inner, other.numleft, other.dag, other.params, other.cost_model) {}
-    
+
     WrapperState& operator = (const WrapperState& other) = delete;
 
     // whether or not this state is terminal (reached end)
@@ -776,7 +778,7 @@ struct State {
     }
 
     // apply action to state
-    void apply_action(const Action& action) {
+    void apply_action(const Action& action, CostModel* cost_model) {
         std::cout << "apply_action()" << std::endl;
         std::map<Action, IntrusivePtr<State>> actions;
         inner->generate_actions(dag, params, cost_model, actions);
@@ -789,7 +791,7 @@ struct State {
     }
 
     // return possible actions from this state
-    void get_actions(std::vector<Action>& vactions) const {
+    void get_actions(std::vector<Action>& vactions, CostModel* cost_model) const {
         std::cout << "get_actions()" << std::endl;
         std::map<Action, IntrusivePtr<State>> actions;
         inner->generate_actions(dag, params, cost_model, actions);
@@ -800,10 +802,10 @@ struct State {
     }
 
     // get a random action, return false if no actions found
-    bool get_random_action(Action& action) const {
+    bool get_random_action(Action& action, CostModel* cost_model) const {
         std::cout << "get_random_action()" << std::endl;
         std::vector<Action> actions;
-        get_actions(actions);
+        get_actions(actions, cost_model);
         if (actions.size() == 0) return false;
         //note rand isn't truly uniform random so should fix
         action = actions[rand() % actions.size()];
@@ -811,8 +813,9 @@ struct State {
     }
 
     // evaluate this state and return a vector of rewards (for each agent)
-    const std::vector<float> evaluate() const {
+    const std::vector<float> evaluate(CostModel* cost_model) const {
         std::cout << "evaluate()" << std::endl;
+        cost_model->reset();
         inner->calculate_cost(dag, params, cost_model, false);
         std::cout << "calculate_evaluate()" << std::endl;
         cost_model->evaluate_costs();
@@ -1582,7 +1585,6 @@ IntrusivePtr<State> optimal_mcts_schedule(FunctionDAG &dag,
     if (cost_model) {
         configure_pipeline_features(dag, params, cost_model);
     }
-    IntrusivePtr<State> best;
 
     std::unordered_set<uint64_t> permitted_hashes;
 
@@ -1608,9 +1610,11 @@ IntrusivePtr<State> optimal_mcts_schedule(FunctionDAG &dag,
     IntrusivePtr<State> initial{new State};
     initial->root = new LoopNest;
 
-    State::WrapperState state(initial, num_passes, dag, params, cost_model);
+    State::WrapperState state(initial, num_passes, dag, params);
 
-    msa::mcts::UCT<State::WrapperState, State::Action> uct; // Templated class. Builds a partial decision tree and searches it with UCT MCTS
+    State::WrapperState best(initial, num_passes, dag, params);
+    
+    msa::mcts::UCT<State::WrapperState, State::Action, CostModel*> uct(cost_model); // Templated class. Builds a partial decision tree and searches it with UCT MCTS
 
     // OPTIONAL init uct params
     uct.uct_k = 1.41421356237;//sqrt(2);
@@ -1626,7 +1630,7 @@ IntrusivePtr<State> optimal_mcts_schedule(FunctionDAG &dag,
         std::cout << "prefinsihed pass " << i << std::endl;
 
         // apply the action to the current state
-        state.apply_action(action);
+        state.apply_action(action, cost_model);
         auto pass = state.inner; 
         std::cout << "finsihed pass " << i << std::endl;
          
@@ -1639,14 +1643,14 @@ IntrusivePtr<State> optimal_mcts_schedule(FunctionDAG &dag,
             pass->dump();
         }
 
-        if (i == 0 || pass->cost < best->cost) {
+        if (i == 0 || pass->cost < best.inner->cost) {
             // Track which pass produced the lowest-cost state. It's
             // not necessarily the final one.
             best = pass;
         }
     }
 
-    aslog(0) << "Best cost: " << best->cost << "\n";
+    aslog(0) << "Best cost: " << best.inner->cost << "\n";
     
 
     return state.inner;
@@ -1918,6 +1922,8 @@ void generate_schedule(const std::vector<Function> &outputs,
     }
 }
 
+#define MCTS 1
+
 // Halide uses a plugin architecture for registering custom
 // autoschedulers. We register our autoscheduler using a static
 // constructor.
@@ -1932,8 +1938,11 @@ struct RegisterAutoscheduler {
         for (Func f : p.outputs()) {
             outputs.push_back(f.function());
         }
-        Autoscheduler::generate_rl_schedule(outputs, target, params, results);
-        //Autoscheduler::generate_schedule(outputs, target, params, results);
+        if (MCTS) {
+            Autoscheduler::generate_rl_schedule(outputs, target, params, results);
+        } else {
+            Autoscheduler::generate_schedule(outputs, target, params, results);
+        }
     }
 } register_auto_scheduler;
 
@@ -1946,8 +1955,12 @@ void find_and_apply_schedule(FunctionDAG &dag,
                              StageMap<ScheduleFeatures> *schedule_features) {
 
     std::mt19937 rng(12345);
+
+#if MCTS
     IntrusivePtr<State> optimal = optimal_mcts_schedule(dag, outputs, params, cost_model, rng, beam_size);
-    //IntrusivePtr<State> optimal = optimal_schedule(dag, outputs, params, cost_model, rng, beam_size);
+#else
+    IntrusivePtr<State> optimal = optimal_schedule(dag, outputs, params, cost_model, rng, beam_size);
+#endif
 
     // Apply the schedules
     optimal->apply_schedule(dag, params);
