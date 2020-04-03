@@ -12,7 +12,6 @@
 #include "IRMutator.h"
 #include "IROperator.h"
 #include "IRPrinter.h"
-#include "Introspection.h"
 #include "ParallelRVar.h"
 #include "Random.h"
 #include "Scope.h"

@@ -10,6 +10,7 @@
 #include "Prefetch.h"
 #include "Scope.h"
 #include "Simplify.h"
+#include "Target.h"
 #include "Util.h"
 
 namespace Halide {
