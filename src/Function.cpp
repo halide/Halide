@@ -902,6 +902,10 @@ std::string &Function::debug_file() {
     return contents->debug_file;
 }
 
+Function::operator ExternFuncArgument() const {
+    return ExternFuncArgument(contents);
+}
+
 void Function::trace_loads() {
     contents->trace_loads = true;
 }

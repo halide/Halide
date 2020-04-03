@@ -1,5 +1,6 @@
 #include "AllocationBoundsInference.h"
 #include "Bounds.h"
+#include "ExternFuncArgument.h"
 #include "Function.h"
 #include "IRMutator.h"
 #include "IROperator.h"

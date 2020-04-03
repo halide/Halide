@@ -5,6 +5,7 @@
  * Defines a collection of parameters to be passed as formal arguments
  * to a JIT invocation.
  */
+#include <map>
 
 #include "Param.h"
 #include "Parameter.h"
