@@ -35,7 +35,7 @@ public:
             _empty = true;
             _top = T();
         } else {
-            std::swap(_top, _rest.back());
+            _top = std::move(_rest.back());
             _rest.pop_back();
         }
     }
