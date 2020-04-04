@@ -8,6 +8,7 @@
 #include <string>
 #include <vector>
 
+#include "Buffer.h"
 #include "Expr.h"
 #include "FunctionPtr.h"
 #include "ModulusRemainder.h"
