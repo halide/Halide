@@ -49,6 +49,11 @@ int static_sign(const Expr &x) {
 }
 }  // anonymous namespace
 
+const FuncValueBounds &empty_func_value_bounds() {
+    static FuncValueBounds empty;
+    return empty;
+}
+
 Expr find_constant_bound(const Expr &e, Direction d, const Scope<Interval> &scope) {
     Interval interval = find_constant_bounds(e, scope);
     Expr bound;
@@ -71,6 +76,22 @@ Interval find_constant_bounds(const Expr &e, const Scope<Interval> &scope) {
     if (!is_const(interval.max)) interval.max = Interval::pos_inf();
 
     return interval;
+}
+
+bool Box::maybe_unused() const {
+    return used.defined() && !is_one(used);
+}
+
+std::ostream &operator<<(std::ostream &stream, const Box &b) {
+    stream << "{";
+    for (size_t dim = 0; dim < b.size(); dim++) {
+        if (dim > 0) {
+            stream << ", ";
+        }
+        stream << "[" << b[dim].min << ", " << b[dim].max << "]";
+    }
+    stream << "}";
+    return stream;
 }
 
 class Bounds : public IRVisitor {

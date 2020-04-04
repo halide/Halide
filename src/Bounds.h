@@ -6,7 +6,6 @@
  * and the regions of a function read or written by a statement.
  */
 
-#include "IROperator.h"
 #include "Interval.h"
 #include "Scope.h"
 
@@ -16,6 +15,8 @@ namespace Internal {
 class Function;
 
 typedef std::map<std::pair<std::string, int>, Interval> FuncValueBounds;
+
+const FuncValueBounds &empty_func_value_bounds();
 
 /** Given an expression in some variables, and a map from those
  * variables to their bounds (in the form of (minimum possible value,
@@ -31,7 +32,7 @@ typedef std::map<std::pair<std::string, int>, Interval> FuncValueBounds;
  */
 Interval bounds_of_expr_in_scope(const Expr &expr,
                                  const Scope<Interval> &scope,
-                                 const FuncValueBounds &func_bounds = FuncValueBounds(),
+                                 const FuncValueBounds &func_bounds = empty_func_value_bounds(),
                                  bool const_bound = false);
 
 /** Given a varying expression, try to find a constant that is either:
@@ -41,7 +42,7 @@ Interval bounds_of_expr_in_scope(const Expr &expr,
 enum class Direction { Upper,
                        Lower };
 Expr find_constant_bound(const Expr &e, Direction d,
-                         const Scope<Interval> &scope = Scope<Interval>());
+                         const Scope<Interval> &scope = Scope<Interval>::empty_scope());
 
 /** Find bounds for a varying expression that are either constants or
  * +/-inf. */
@@ -57,10 +58,10 @@ struct Box {
     std::vector<Interval> bounds;
 
     Box() = default;
-    Box(size_t sz)
+    explicit Box(size_t sz)
         : bounds(sz) {
     }
-    Box(const std::vector<Interval> &b)
+    explicit Box(const std::vector<Interval> &b)
         : bounds(b) {
     }
 
@@ -84,21 +85,9 @@ struct Box {
     }
 
     /** Check if the used condition is defined and not trivially true. */
-    bool maybe_unused() const {
-        return used.defined() && !is_one(used);
-    }
+    bool maybe_unused() const;
 
-    friend std::ostream &operator<<(std::ostream &stream, const Box &b) {
-        stream << "{";
-        for (size_t dim = 0; dim < b.size(); dim++) {
-            if (dim > 0) {
-                stream << ", ";
-            }
-            stream << "[" << b[dim].min << ", " << b[dim].max << "]";
-        }
-        stream << "}";
-        return stream;
-    }
+    friend std::ostream &operator<<(std::ostream &stream, const Box &b);
 };
 
 /** Expand box a to encompass box b */
@@ -123,10 +112,10 @@ bool box_contains(const Box &a, const Box &b);
 // @{
 std::map<std::string, Box> boxes_required(const Expr &e,
                                           const Scope<Interval> &scope = Scope<Interval>::empty_scope(),
-                                          const FuncValueBounds &func_bounds = FuncValueBounds());
+                                          const FuncValueBounds &func_bounds = empty_func_value_bounds());
 std::map<std::string, Box> boxes_required(Stmt s,
                                           const Scope<Interval> &scope = Scope<Interval>::empty_scope(),
-                                          const FuncValueBounds &func_bounds = FuncValueBounds());
+                                          const FuncValueBounds &func_bounds = empty_func_value_bounds());
 // @}
 
 /** Compute rectangular domains large enough to cover all the
@@ -135,10 +124,10 @@ std::map<std::string, Box> boxes_required(Stmt s,
 // @{
 std::map<std::string, Box> boxes_provided(const Expr &e,
                                           const Scope<Interval> &scope = Scope<Interval>::empty_scope(),
-                                          const FuncValueBounds &func_bounds = FuncValueBounds());
+                                          const FuncValueBounds &func_bounds = empty_func_value_bounds());
 std::map<std::string, Box> boxes_provided(Stmt s,
                                           const Scope<Interval> &scope = Scope<Interval>::empty_scope(),
-                                          const FuncValueBounds &func_bounds = FuncValueBounds());
+                                          const FuncValueBounds &func_bounds = empty_func_value_bounds());
 // @}
 
 /** Compute rectangular domains large enough to cover all the 'Call's
@@ -147,34 +136,34 @@ std::map<std::string, Box> boxes_provided(Stmt s,
 // @{
 std::map<std::string, Box> boxes_touched(const Expr &e,
                                          const Scope<Interval> &scope = Scope<Interval>::empty_scope(),
-                                         const FuncValueBounds &func_bounds = FuncValueBounds());
+                                         const FuncValueBounds &func_bounds = empty_func_value_bounds());
 std::map<std::string, Box> boxes_touched(Stmt s,
                                          const Scope<Interval> &scope = Scope<Interval>::empty_scope(),
-                                         const FuncValueBounds &func_bounds = FuncValueBounds());
+                                         const FuncValueBounds &func_bounds = empty_func_value_bounds());
 // @}
 
 /** Variants of the above that are only concerned with a single function. */
 // @{
 Box box_required(const Expr &e, const std::string &fn,
                  const Scope<Interval> &scope = Scope<Interval>::empty_scope(),
-                 const FuncValueBounds &func_bounds = FuncValueBounds());
+                 const FuncValueBounds &func_bounds = empty_func_value_bounds());
 Box box_required(Stmt s, const std::string &fn,
                  const Scope<Interval> &scope = Scope<Interval>::empty_scope(),
-                 const FuncValueBounds &func_bounds = FuncValueBounds());
+                 const FuncValueBounds &func_bounds = empty_func_value_bounds());
 
 Box box_provided(const Expr &e, const std::string &fn,
                  const Scope<Interval> &scope = Scope<Interval>::empty_scope(),
-                 const FuncValueBounds &func_bounds = FuncValueBounds());
+                 const FuncValueBounds &func_bounds = empty_func_value_bounds());
 Box box_provided(Stmt s, const std::string &fn,
                  const Scope<Interval> &scope = Scope<Interval>::empty_scope(),
-                 const FuncValueBounds &func_bounds = FuncValueBounds());
+                 const FuncValueBounds &func_bounds = empty_func_value_bounds());
 
 Box box_touched(const Expr &e, const std::string &fn,
                 const Scope<Interval> &scope = Scope<Interval>::empty_scope(),
-                const FuncValueBounds &func_bounds = FuncValueBounds());
+                const FuncValueBounds &func_bounds = empty_func_value_bounds());
 Box box_touched(Stmt s, const std::string &fn,
                 const Scope<Interval> &scope = Scope<Interval>::empty_scope(),
-                const FuncValueBounds &func_bounds = FuncValueBounds());
+                const FuncValueBounds &func_bounds = empty_func_value_bounds());
 // @}
 
 /** Compute the maximum and minimum possible value for each function

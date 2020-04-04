@@ -2,6 +2,7 @@
 #include "Bounds.h"
 #include "Function.h"
 #include "IRMutator.h"
+#include "IROperator.h"
 
 namespace Halide {
 namespace Internal {
