@@ -62,7 +62,7 @@ private:
         if (stride == 0) {
             total_coalesce_efficiency += max_coalesce_efficiency;
         } else {
-            total_coalesce_efficiency += max_coalesce_efficiency / std::min(32.0, std::max(1.0, stride));
+            total_coalesce_efficiency += max_coalesce_efficiency / std::min(8.0, std::max(1.0, stride));
         }
 
         ++num_coalesce_entries;
