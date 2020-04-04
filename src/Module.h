@@ -20,6 +20,9 @@
 
 namespace Halide {
 
+template<typename T>
+class Buffer;
+
 /** Enums specifying various kinds of outputs that can be produced from a Halide Pipeline. */
 enum class Output {
     assembly,
@@ -134,7 +137,7 @@ public:
 
     /** The declarations contained in this module. */
     // @{
-    const std::vector<Buffer<>> &buffers() const;
+    const std::vector<Buffer<void>> &buffers() const;
     const std::vector<Internal::LoweredFunc> &functions() const;
     std::vector<Internal::LoweredFunc> &functions();
     const std::vector<Module> &submodules() const;
@@ -147,7 +150,7 @@ public:
 
     /** Add a declaration to this module. */
     // @{
-    void append(const Buffer<> &buffer);
+    void append(const Buffer<void> &buffer);
     void append(const Internal::LoweredFunc &function);
     void append(const Module &module);
     void append(const ExternalCode &external_code);

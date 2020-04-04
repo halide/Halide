@@ -574,6 +574,7 @@ add_library(Halide ${HALIDE_LIBRARY_TYPE}
   Qualify.cpp
   Random.cpp
   RDom.cpp
+  Realization.cpp
   RealizationOrder.cpp
   Reduction.cpp
   RegionCosts.cpp
