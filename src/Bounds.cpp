@@ -78,6 +78,10 @@ Interval find_constant_bounds(const Expr &e, const Scope<Interval> &scope) {
     return interval;
 }
 
+bool Box::maybe_unused() const {
+    return used.defined() && !is_one(used);
+}
+
 std::ostream &operator<<(std::ostream &stream, const Box &b) {
     stream << "{";
     for (size_t dim = 0; dim < b.size(); dim++) {
