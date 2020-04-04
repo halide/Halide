@@ -3953,5 +3953,16 @@ void LoopNest::collect_nodes_that_should_be_inlined(const NodeMap<bool>& nodes_t
 }
 
 }  // namespace Autoscheduler
+
+template<>
+RefCount &ref_count<Autoscheduler::LoopNest>(const Autoscheduler::LoopNest *t) noexcept {
+    return t->ref_count;
+}
+
+template<>
+void destroy<Autoscheduler::LoopNest>(const Autoscheduler::LoopNest *t) {
+    delete t;
+}
+
 }  // namespace Internal
 }  // namespace Halide

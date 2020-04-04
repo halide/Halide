@@ -1022,5 +1022,16 @@ void State::apply_schedule(const FunctionDAG &dag, const MachineParams &params, 
 }
 
 }  // namespace Autoscheduler
+
+template<>
+RefCount &ref_count<Autoscheduler::State>(const Autoscheduler::State *t) noexcept {
+    return t->ref_count;
+}
+
+template<>
+void destroy<Autoscheduler::State>(const Autoscheduler::State *t) {
+    delete t;
+}
+
 }  // namespace Internal
 }  // namespace Halide
