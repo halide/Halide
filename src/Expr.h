@@ -336,36 +336,6 @@ struct Range {
 /** A multi-dimensional box. The outer product of the elements */
 typedef std::vector<Range> Region;
 
-/** An enum describing a type of device API. Used by schedules, and in
- * the For loop IR node. */
-enum class DeviceAPI {
-    None,  /// Used to denote for loops that run on the same device as the containing code.
-    Host,
-    Default_GPU,
-    CUDA,
-    OpenCL,
-    GLSL,
-    OpenGLCompute,
-    Metal,
-    Hexagon,
-    HexagonDma,
-    D3D12Compute,
-};
-
-/** An array containing all the device apis. Useful for iterating
- * through them. */
-const DeviceAPI all_device_apis[] = {DeviceAPI::None,
-                                     DeviceAPI::Host,
-                                     DeviceAPI::Default_GPU,
-                                     DeviceAPI::CUDA,
-                                     DeviceAPI::OpenCL,
-                                     DeviceAPI::GLSL,
-                                     DeviceAPI::OpenGLCompute,
-                                     DeviceAPI::Metal,
-                                     DeviceAPI::Hexagon,
-                                     DeviceAPI::HexagonDma,
-                                     DeviceAPI::D3D12Compute};
-
 /** An enum describing different address spaces to be used with Func::store_in. */
 enum class MemoryType {
     /** Let Halide select a storage type automatically */

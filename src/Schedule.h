@@ -10,6 +10,7 @@
 #include <utility>
 #include <vector>
 
+#include "DeviceAPI.h"
 #include "Expr.h"
 #include "FunctionPtr.h"
 #include "Parameter.h"

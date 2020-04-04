@@ -656,6 +656,7 @@ HEADER_FILES = \
   Deinterleave.h \
   Derivative.h \
   DerivativeUtils.h \
+  DeviceAPI.h \
   DeviceArgument.h \
   DeviceInterface.h \
   Dimension.h \

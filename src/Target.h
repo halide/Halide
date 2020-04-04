@@ -9,8 +9,7 @@
 #include <stdint.h>
 #include <string>
 
-#include "Error.h"
-#include "Expr.h"
+#include "DeviceAPI.h"
 #include "Type.h"
 #include "runtime/HalideRuntime.h"
 
