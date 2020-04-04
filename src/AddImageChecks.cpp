@@ -2,6 +2,7 @@
 #include "ExternFuncArgument.h"
 #include "Function.h"
 #include "IRMutator.h"
+#include "IROperator.h"
 #include "IRVisitor.h"
 #include "Simplify.h"
 #include "Substitute.h"

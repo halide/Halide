@@ -6,7 +6,6 @@
  * and the regions of a function read or written by a statement.
  */
 
-#include "IROperator.h"
 #include "Interval.h"
 #include "Scope.h"
 
@@ -86,9 +85,7 @@ struct Box {
     }
 
     /** Check if the used condition is defined and not trivially true. */
-    bool maybe_unused() const {
-        return used.defined() && !is_one(used);
-    }
+    bool maybe_unused() const;
 
     friend std::ostream &operator<<(std::ostream &stream, const Box &b);
 };
