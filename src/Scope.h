@@ -35,16 +35,16 @@ public:
             _empty = true;
             _top = T();
         } else {
-            _top = _rest.back();
+            std::swap(_top, _rest.back());
             _rest.pop_back();
         }
     }
 
-    void push(const T &t) {
+    void push(T t) {
         if (!_empty) {
             _rest.push_back(std::move(_top));
         }
-        _top = t;
+        _top = std::move(t);
         _empty = false;
     }
 
@@ -178,8 +178,8 @@ public:
      */
     template<typename T2 = T,
              typename = typename std::enable_if<!std::is_same<T2, void>::value>::type>
-    void push(const std::string &name, const T2 &value) {
-        table[name].push(value);
+    void push(const std::string &name, T2 &&value) {
+        table[name].push(std::forward<T2>(value));
     }
 
     template<typename T2 = T,
@@ -276,9 +276,9 @@ struct ScopedBinding {
 
     ScopedBinding() = default;
 
-    ScopedBinding(Scope<T> &s, const std::string &n, const T &value)
+    ScopedBinding(Scope<T> &s, const std::string &n, T value)
         : scope(&s), name(n) {
-        scope->push(name, value);
+        scope->push(name, std::move(value));
     }
 
     ScopedBinding(bool condition, Scope<T> &s, const std::string &n, const T &value)
