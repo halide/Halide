@@ -1055,9 +1055,7 @@ double LoopNest::min_global_mem_accesses(const FunctionDAG::Node *node, const Th
     // traverse at least one segment each iteration. Any stride larger than
     // 2 segments will just traverse empty segments so we reduce it here to
     // avoid potential overflow below
-    if (stride > 8.0) {
-        stride = 8.0 + std::fmod(stride, 8.0);
-    }
+    stride = std::min(8.0, std::max(1.0, stride));
 
     int num_accesses = serial_loop_extents * std::ceil(stride * thread_info.num_threads / 8.0);
     return num_accesses;
@@ -1091,9 +1089,7 @@ void LoopNest::compute_num_global_mem_accesses_per_block(const LoadJacobian &jac
     // traverse at least one segment each iteration. Any stride larger than
     // 2 segments will just traverse empty segments so we reduce it here to
     // avoid potential overflow below
-    if (stride > 8.0) {
-        stride = 8.0 + std::fmod(stride, 8.0);
-    }
+    stride = std::min(8.0, std::max(1.0, stride));
 
     double min_stride = std::min(stride, (double)words_per_access);
 
@@ -1186,9 +1182,7 @@ double LoopNest::compute_local_mem_stride(double stride, double bytes) const {
     int words_per_access = std::max(1.0, word_stride);
     stride *= words_per_access;
 
-    if (stride > 8.0) {
-        stride = 8.0 + std::fmod(stride, 8.0);
-    }
+    stride = std::min(8.0, std::max(1.0, stride));
 
     return stride;
 }
