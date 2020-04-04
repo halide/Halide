@@ -65,15 +65,6 @@ Expr make_min_helper(const Expr &a, const Expr &b) {
 
 }  // namespace
 
-Interval::Interval()
-    : min(neg_inf()), max(pos_inf()) {
-}
-
-Interval::Interval(const Expr &min, const Expr &max)
-    : min(min), max(max) {
-    internal_assert(min.defined() && max.defined());
-}
-
 Interval Interval::everything() {
     return Interval(neg_inf(), pos_inf());
 }

@@ -35,10 +35,15 @@ struct Interval {
     Expr min, max;
 
     /** A default-constructed Interval is everything */
-    Interval();
+    Interval()
+        : min(neg_inf()), max(pos_inf()) {
+    }
 
     /** Construct an interval from a lower and upper bound. */
-    Interval(const Expr &min, const Expr &max);
+    Interval(const Expr &min, const Expr &max)
+        : min(min), max(max) {
+        internal_assert(min.defined() && max.defined());
+    }
 
     /** The interval representing everything. */
     static Interval everything();
