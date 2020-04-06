@@ -112,7 +112,7 @@ class TrimStmtToPartsThatAccessBuffers : public IRMutator {
         return IRMutator::visit(op);
     }
     Expr visit(const Variable *op) override {
-        if (op->param.defined() && op->param.is_buffer()) {
+        if (op->type.is_handle() && op->param.defined() && op->param.is_buffer()) {
             touches_buffer |= (buffers.find(op->param.name()) != buffers.end());
         }
         return IRMutator::visit(op);
