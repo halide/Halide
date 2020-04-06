@@ -19,23 +19,6 @@ using std::pair;
 using std::string;
 using std::vector;
 
-class NormalizeVarNames : public IRMutator {
-    using IRMutator::visit;
-
-    std::map<string, string> remapping;
-
-    Expr visit(const Variable *op) override {
-        const char *names = "xyzwuv";
-        size_t s = remapping.size();
-        string candidate =
-            (s < 6 ?
-                 string(names + s, names + s + 1) :
-                 (string("v") + std::to_string(s - 6)));
-        auto p = remapping.insert({op->name, candidate});
-        return Variable::make(op->type, p.first->second);
-    }
-};
-
 class SimplifyCorrelatedDifferences : public IRMutator {
     using IRMutator::visit;
 
@@ -215,9 +198,7 @@ class SimplifyCorrelatedDifferences : public IRMutator {
         if ((ma == Monotonic::Increasing && mb == Monotonic::Increasing && std::is_same<T, Sub>::value) ||
             (ma == Monotonic::Decreasing && mb == Monotonic::Decreasing && std::is_same<T, Sub>::value) ||
             (ma == Monotonic::Increasing && mb == Monotonic::Decreasing && std::is_same<T, Add>::value) ||
-            (ma == Monotonic::Decreasing && mb == Monotonic::Increasing && std::is_same<T, Add>::value) ||
-            (ma == Monotonic::Unknown && mb != Monotonic::Constant) ||
-            (mb == Monotonic::Unknown && ma != Monotonic::Constant)) {
+            (ma == Monotonic::Decreasing && mb == Monotonic::Increasing && std::is_same<T, Add>::value)) {
 
             for (auto it = lets.rbegin(); it != lets.rend(); it++) {
                 if (expr_uses_var(e, it->name)) {

@@ -204,6 +204,7 @@ tests(GROUPS correctness travis
         multi_way_select.cpp
         named_updates.cpp
         nested_shiftinwards.cpp
+        nested_tail_strategies.cpp
         newtons_method.cpp
         non_nesting_extern_bounds_query.cpp
         non_vector_aligned_embeded_buffer.cpp
