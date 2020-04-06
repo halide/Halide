@@ -6,115 +6,98 @@
  * to a JIT invocation.
  */
 #include <map>
+#include <memory>
 
-#include "Param.h"
-#include "Parameter.h"
+#include "runtime/HalideRuntime.h"
 
 namespace Halide {
 
+template<typename T>
+class Buffer;
+template<typename T>
+class Param;
 class ImageParam;
+struct Type;
+
+namespace Internal {
+class Parameter;
+struct ParamMapContents;
+}  // namespace Internal
 
 class ParamMap {
 public:
     struct ParamMapping {
-        const Internal::Parameter *parameter{nullptr};
-        const ImageParam *image_param{nullptr};
-        halide_scalar_value_t value;
-        Buffer<> buf;
-        Buffer<> *buf_out_param;
+        const Internal::Parameter *parameter = nullptr;
+        const ImageParam *image_param = nullptr;
+        halide_scalar_value_t value;  // inits to all-zero
+        const Buffer<void> *buf_in_param = nullptr;
+        Buffer<void> *buf_out_param = nullptr;
 
         template<typename T>
         ParamMapping(const Param<T> &p, const T &val)
             : parameter(&p.parameter()) {
-            *((T *)&value) = val;
+            memcpy(&value.u, &val, sizeof(val));
         }
 
-        ParamMapping(const ImageParam &p, Buffer<> &buf)
-            : image_param(&p), buf(buf), buf_out_param(nullptr) {
+        ParamMapping(const ImageParam &p, const Buffer<void> &buf)
+            : image_param(&p), buf_in_param(&buf) {
         }
 
         template<typename T>
-        ParamMapping(const ImageParam &p, Buffer<T> &buf)
-            : image_param(&p), buf(buf), buf_out_param(nullptr) {
+        ParamMapping(const ImageParam &p, const Buffer<T> &buf)
+            : image_param(&p), buf_in_param((const Buffer<void> *)&buf) {
         }
 
-        ParamMapping(const ImageParam &p, Buffer<> *buf_ptr)
+        ParamMapping(const ImageParam &p, Buffer<void> *buf_ptr)
             : image_param(&p), buf_out_param(buf_ptr) {
         }
 
         template<typename T>
         ParamMapping(const ImageParam &p, Buffer<T> *buf_ptr)
-            : image_param(&p), buf_out_param((Buffer<> *)buf_ptr) {
+            : image_param(&p), buf_out_param((Buffer<void> *)buf_ptr) {
         }
     };
 
 private:
-    struct ParamArg {
-        Internal::Parameter mapped_param;
-        Buffer<> *buf_out_param;
+    std::unique_ptr<Internal::ParamMapContents> contents;
 
-        ParamArg()
-            : buf_out_param(nullptr) {
-        }
-        ParamArg(const ParamMapping &pm)
-            : mapped_param(pm.parameter->type(), false, 0, pm.parameter->name()),
-              buf_out_param(nullptr) {
-            mapped_param.set_scalar(pm.parameter->type(), pm.value);
-        }
-        ParamArg(Buffer<> *buf_ptr)
-            : buf_out_param(buf_ptr) {
-        }
-        ParamArg(const ParamArg &) = default;
-    };
-    mutable std::map<const Internal::Parameter, ParamArg> mapping;
-
-    void set(const ImageParam &p, Buffer<> &buf, Buffer<> *buf_out_param);
+    void set_input_buffer(const ImageParam &p, const Buffer<void> &buf_in_param);
+    void set_output_buffer(const ImageParam &p, Buffer<void> *buf_out_param);
+    void set_scalar(const Internal::Parameter &p, const Type &t, const halide_scalar_value_t &val);
 
 public:
-    ParamMap() {
-    }
-
+    ParamMap();
+    ~ParamMap();
     ParamMap(const std::initializer_list<ParamMapping> &init);
+
+    ParamMap(const ParamMap &) = delete;
+    ParamMap &operator=(const ParamMap &) = delete;
+    ParamMap(ParamMap &&) = delete;
+    ParamMap &operator=(ParamMap &&) = delete;
 
     template<typename T>
     void set(const Param<T> &p, T val) {
-        Internal::Parameter v(p.type(), false, 0, p.name());
-        v.set_scalar<T>(val);
-        ParamArg pa;
-        pa.mapped_param = v;
-        pa.buf_out_param = nullptr;
-        mapping[p.parameter()] = pa;
+        halide_scalar_value_t scalar;
+        static_assert(sizeof(val) <= sizeof(scalar), "Bad scalar");
+        memcpy(&scalar.u, &val, sizeof(val));
+        set_scalar(p.parameter(), p.type(), scalar);
     };
 
-    void set(const ImageParam &p, Buffer<> &buf) {
-        set(p, buf, nullptr);
-    }
+    void set(const ImageParam &p, const Buffer<void> &buf);
 
-    template<typename T>
-    void set(const ImageParam &p, Buffer<T> &buf) {
-        Buffer<> temp = buf;
-        set(p, temp, nullptr);
-    }
-
-    size_t size() const {
-        return mapping.size();
-    }
+    size_t size() const;
 
     /** If there is an entry in the ParamMap for this Parameter, return it.
      * Otherwise return the parameter itself. */
     // @{
-    const Internal::Parameter &map(const Internal::Parameter &p, Buffer<> *&buf_out_param) const;
-
-    Internal::Parameter &map(Internal::Parameter &p, Buffer<> *&buf_out_param) const;
+    const Internal::Parameter &map(const Internal::Parameter &p, Buffer<void> *&buf_out_param) const;
+    Internal::Parameter &map(Internal::Parameter &p, Buffer<void> *&buf_out_param) const;
     // @}
 
     /** A const ref to an empty ParamMap. Useful for default function
      * arguments, which would otherwise require a copy constructor
      * (with llvm in c++98 mode) */
-    static const ParamMap &empty_map() {
-        static ParamMap empty_param_map;
-        return empty_param_map;
-    }
+    static const ParamMap &empty_map();
 };
 
 }  // namespace Halide

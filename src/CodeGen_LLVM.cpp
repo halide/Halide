@@ -19,6 +19,7 @@
 #include "Deinterleave.h"
 #include "EmulateFloat16Math.h"
 #include "ExprUsesVar.h"
+#include "ExternFuncArgument.h"
 #include "IROperator.h"
 #include "IRPrinter.h"
 #include "IntegerDivisionTable.h"

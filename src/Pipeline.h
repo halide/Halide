@@ -10,6 +10,7 @@
 #include <map>
 #include <vector>
 
+#include "Buffer.h"
 #include "ExternalCode.h"
 #include "IROperator.h"
 #include "IntrusivePtr.h"
