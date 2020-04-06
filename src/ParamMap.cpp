@@ -12,6 +12,10 @@ namespace {
 struct ParamArg {
     Internal::Parameter mapped_param;
     Buffer<void> *buf_out_param = nullptr;
+    ParamArg() = default;
+    ParamArg(Internal::Parameter p, Buffer<> *buf_ptr)
+        : mapped_param(std::move(p)), buf_out_param(buf_ptr) {
+    }
 };
 
 }  // namespace
