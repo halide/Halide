@@ -1061,11 +1061,11 @@ class VectorizeLoops : public IRMutator {
                     // for (const auto &r : replacements) {
                     //     debug(0) << "Replacements " << ix << " " << r.first << " " << r.second << "\n";
                     // }
-
-                    // Replace the vars with a ramp within the body
-                    stmt = VectorSubs(replacements, in_hexagon, target).mutate(body);
-                    vectorized_vars.clear();
                 }
+
+                // Replace the vars with a ramp within the body
+                stmt = VectorSubs(replacements, in_hexagon, target).mutate(body);
+                vectorized_vars.clear();
             } else {
                 stmt = body;
             }
