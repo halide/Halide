@@ -1513,7 +1513,7 @@ struct RampOp {
             return false;
         }
         const Ramp &op = (const Ramp &)e;
-        if ((lanes == op.type.lanes() || !known_lanes) &&
+        if ((lanes == op.lanes || !known_lanes) &&
             a.template match<bound>(*op.base.get(), state) &&
             b.template match<bound | bindings<A>::mask>(*op.stride.get(), state)) {
             return true;

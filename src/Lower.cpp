@@ -334,6 +334,8 @@ Module lower(const vector<Function> &output_funcs,
 
     debug(1) << "Vectorizing...\n";
     s = vectorize_loops(s, t);
+    debug(2) << "Lowering after vectorizing, but before simplification:\n"
+             << s << "\n\n";
     s = simplify(s);
     debug(2) << "Lowering after vectorizing:\n"
              << s << "\n\n";
@@ -422,6 +424,48 @@ Module lower(const vector<Function> &output_funcs,
     s = remove_dead_allocations(s);
     s = simplify(s);
     s = loop_invariant_code_motion(s);
+
+    class FlattenRamps : public IRMutator {
+        using IRMutator::visit;
+
+        Expr visit(const Ramp *op) override {
+            if (op->base.type().is_vector()) {
+                Expr base = mutate(op->base);
+                Expr stride = mutate(op->stride);
+                std::vector<Expr> ramp_elems;
+                for (int ix = 0; ix < op->lanes; ix++) {
+                    ramp_elems.push_back(base + ix * stride);
+                }
+
+                return Shuffle::make_concat(ramp_elems);
+            }
+
+            return IRMutator::visit(op);
+        }
+
+        Expr visit(const Broadcast *op) override {
+            if (op->value.type().is_vector()) {
+                Expr value = mutate(op->value);
+                std::vector<Expr> broadcast_elems;
+                for (int ix = 0; ix < op->lanes; ix++) {
+                    broadcast_elems.push_back(value);
+                }
+
+                return Shuffle::make_concat(broadcast_elems);
+            }
+
+            return IRMutator::visit(op);
+        }
+
+    public:
+        FlattenRamps() {
+        }
+    };
+
+    FlattenRamps flatten_ramps;
+    s = flatten_ramps.mutate(s);
+    s = simplify(s);
+
     debug(1) << "Lowering after final simplification:\n"
              << s << "\n\n";
 

@@ -33,7 +33,7 @@ Expr Simplify::visit(const Sub *op, ExprInfo *bounds) {
     if (may_simplify(op->type)) {
 
         auto rewrite = IRMatcher::rewriter(IRMatcher::sub(a, b), op->type);
-        const int lanes = op->type.lanes();
+        // const int lanes = op->type.lanes();
 
         if (rewrite(c0 - c1, fold(c0 - c1)) ||
             rewrite(IRMatcher::Overflow() - x, a) ||
@@ -42,16 +42,31 @@ Expr Simplify::visit(const Sub *op, ExprInfo *bounds) {
             return rewrite.result;
         }
 
+        for (int ix = 2; ix < 64; ix++) {
+            // clang-format off
+            if (EVAL_IN_LAMBDA(
+                rewrite(ramp(x, y, ix) - ramp(z, w, ix), ramp(x - z, y - w, ix)) ||
+                rewrite(ramp(x, y, ix) - broadcast(z, ix), ramp(x - z, y, ix)) ||
+                rewrite(broadcast(x, ix) - ramp(z, w, ix), ramp(x - z, -w, ix)) ||
+                rewrite(broadcast(x, ix) - broadcast(y, ix), broadcast(x - y, ix)) ||
+                rewrite((x - broadcast(y, ix)) - broadcast(z, ix), x - broadcast(y + z, ix)) ||
+                rewrite((x + broadcast(y, ix)) - broadcast(z, ix), x + broadcast(y - z, ix))
+                )) {
+                return mutate(rewrite.result, bounds);
+            }
+            // clang-format on
+        }
+
         // clang-format off
         if (EVAL_IN_LAMBDA
             ((!op->type.is_uint() && rewrite(x - c0, x + fold(-c0), !overflows(-c0))) ||
              rewrite(x - x, 0) || // We want to remutate this just to get better bounds
-             rewrite(ramp(x, y) - ramp(z, w), ramp(x - z, y - w, lanes)) ||
-             rewrite(ramp(x, y) - broadcast(z), ramp(x - z, y, lanes)) ||
-             rewrite(broadcast(x) - ramp(z, w), ramp(x - z, -w, lanes)) ||
-             rewrite(broadcast(x) - broadcast(y), broadcast(x - y, lanes)) ||
-             rewrite((x - broadcast(y)) - broadcast(z), x - broadcast(y + z, lanes)) ||
-             rewrite((x + broadcast(y)) - broadcast(z), x + broadcast(y - z, lanes)) ||
+            //  rewrite(ramp(x, y) - ramp(z, w), ramp(x - z, y - w, lanes)) ||
+            //  rewrite(ramp(x, y) - broadcast(z), ramp(x - z, y, lanes)) ||
+            //  rewrite(broadcast(x) - ramp(z, w), ramp(x - z, -w, lanes)) ||
+            //  rewrite(broadcast(x) - broadcast(y), broadcast(x - y, lanes)) ||
+            //  rewrite((x - broadcast(y)) - broadcast(z), x - broadcast(y + z, lanes)) ||
+            //  rewrite((x + broadcast(y)) - broadcast(z), x + broadcast(y - z, lanes)) ||
              rewrite(select(x, y, z) - select(x, w, u), select(x, y - w, z - u)) ||
              rewrite(select(x, y, z) - y, select(x, 0, z - y)) ||
              rewrite(select(x, y, z) - z, select(x, y - z, 0)) ||

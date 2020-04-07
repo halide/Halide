@@ -327,11 +327,6 @@ void Stage::set_dim_type(const VarOrRVar &var, ForType t) {
                     << " the output, or you can prove that there are actually"
                     << " no race conditions, and that Halide is being too cautious.\n";
             }
-        } else if (t == ForType::Vectorized) {
-            user_assert(dims[i].for_type != ForType::Vectorized)
-                << "In schedule for " << name()
-                << ", can't vectorize across " << var.name()
-                << " because Func is already vectorized across " << dims[i].var << "\n";
         }
     }
 

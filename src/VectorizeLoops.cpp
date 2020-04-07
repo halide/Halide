@@ -371,7 +371,7 @@ class VectorSubs : public IRMutator {
     string var;
 
     // What we're replacing it with. Usually a ramp.
-    Expr replacement;
+    std::map<string, Expr> replacements;
 
     const Target &target;
 
@@ -392,10 +392,11 @@ class VectorSubs : public IRMutator {
     Expr widen(Expr e, int lanes) {
         if (e.type().lanes() == lanes) {
             return e;
-        } else if (e.type().lanes() == 1) {
-            return Broadcast::make(e, lanes);
+        } else if (lanes % e.type().lanes() == 0) {
+            return Broadcast::make(e, lanes / e.type().lanes());
         } else {
-            internal_error << "Mismatched vector lanes in VectorSubs\n";
+            internal_error << "Mismatched vector lanes in VectorSubs " << e.type().lanes()
+                           << " " << lanes << "\n";
         }
         return Expr();
     }
@@ -414,8 +415,8 @@ class VectorSubs : public IRMutator {
 
     Expr visit(const Variable *op) override {
         string widened_name = op->name + widening_suffix;
-        if (op->name == var) {
-            return replacement;
+        if (replacements.count(op->name) > 0) {
+            return replacements[op->name];
         } else if (scope.contains(op->name)) {
             // If the variable appears in scope then we previously widened
             // it and we use the new widened name for the variable.
@@ -895,7 +896,8 @@ class VectorSubs : public IRMutator {
     Stmt visit(const Allocate *op) override {
         std::vector<Expr> new_extents;
         Expr new_expr;
-
+        user_assert(replacements.size() == 1) << "Cannot handle Allocate node inside of the nested vectorization\n";
+        Expr replacement = replacements.begin()->second;
         int lanes = replacement.type().lanes();
 
         // The new expanded dimension is innermost.
@@ -945,6 +947,9 @@ class VectorSubs : public IRMutator {
         // Wrap a serial loop around it. Maybe LLVM will have
         // better luck vectorizing it.
 
+        user_assert(replacements.size() == 1) << "Cannot scalarize nested vectorization\n";
+        Expr replacement = replacements.begin()->second;
+
         // We'll need the original scalar versions of any containing lets.
         for (size_t i = containing_lets.size(); i > 0; i--) {
             const auto &l = containing_lets[i - 1];
@@ -959,6 +964,8 @@ class VectorSubs : public IRMutator {
     Expr scalarize(Expr e) {
         // This method returns a select tree that produces a vector lanes
         // result expression
+        user_assert(replacements.size() == 1) << "Cannot scalarize nested vectorization\n";
+        Expr replacement = replacements.begin()->second;
 
         Expr result;
         int lanes = replacement.type().lanes();
@@ -990,9 +997,9 @@ class VectorSubs : public IRMutator {
     }
 
 public:
-    VectorSubs(string v, Expr r, bool in_hexagon, const Target &t)
-        : var(std::move(v)), replacement(std::move(r)), target(t), in_hexagon(in_hexagon) {
-        widening_suffix = ".x" + std::to_string(replacement.type().lanes());
+    VectorSubs(const std::map<string, Expr> &rs, bool in_hexagon, const Target &t)
+        : replacements(rs), target(t), in_hexagon(in_hexagon) {
+        widening_suffix = ".x" + std::to_string(replacements.begin()->second.type().lanes());
     }
 };
 
@@ -1000,6 +1007,13 @@ public:
 class VectorizeLoops : public IRMutator {
     const Target &target;
     bool in_hexagon;
+
+    struct VectorizedVar {
+        string name;
+        Expr min;
+        int64_t lanes;
+    };
+    std::vector<VectorizedVar> vectorized_vars;
 
     using IRMutator::visit;
 
@@ -1019,10 +1033,42 @@ class VectorizeLoops : public IRMutator {
                            << "constant extent > 1\n";
             }
 
-            // Replace the var with a ramp within the body
-            Expr for_var = Variable::make(Int(32), for_loop->name);
-            Expr replacement = Ramp::make(for_loop->min, 1, extent->value);
-            stmt = VectorSubs(for_loop->name, replacement, in_hexagon, target).mutate(for_loop->body);
+            vectorized_vars.push_back({for_loop->name, for_loop->min, extent->value});
+            // debug(0) << "Vectorized var - " << for_loop->name << "\n";
+            Stmt body = mutate(for_loop->body);
+
+            // Not exactly correct, because doesn't handle a "tree" of loops.
+            if (vectorized_vars[0].name == for_loop->name) {
+                std::map<string, Expr> replacements;
+                for (const auto &var : vectorized_vars) {
+                    replacements[var.name] = var.min;
+                }
+                Expr stride = 1;
+                for (int ix = vectorized_vars.size() - 1; ix >= 0; ix--) {
+                    for (int ik = 0; ik < (int)vectorized_vars.size(); ik++) {
+                        if (ix == ik) {
+                            replacements[vectorized_vars[ik].name] = Ramp::make(replacements[vectorized_vars[ik].name],
+                                                                                stride,
+                                                                                vectorized_vars[ix].lanes);
+                        } else {
+                            replacements[vectorized_vars[ik].name] = Broadcast::make(replacements[vectorized_vars[ik].name],
+                                                                                     vectorized_vars[ix].lanes);
+                        }
+                    }
+
+                    stride = Broadcast::make(stride, vectorized_vars[ix].lanes);
+
+                    // for (const auto &r : replacements) {
+                    //     debug(0) << "Replacements " << ix << " " << r.first << " " << r.second << "\n";
+                    // }
+
+                    // Replace the vars with a ramp within the body
+                    stmt = VectorSubs(replacements, in_hexagon, target).mutate(body);
+                    vectorized_vars.clear();
+                }
+            } else {
+                stmt = body;
+            }
         } else {
             stmt = IRMutator::visit(for_loop);
         }

@@ -37,7 +37,7 @@ Expr Simplify::visit(const Add *op, ExprInfo *bounds) {
         }
 
         auto rewrite = IRMatcher::rewriter(IRMatcher::add(a, b), op->type);
-        const int lanes = op->type.lanes();
+        // const int lanes = op->type.lanes();
 
         if (rewrite(c0 + c1, fold(c0 + c1)) ||
             rewrite(IRMatcher::Overflow() + x, a) ||
@@ -46,15 +46,50 @@ Expr Simplify::visit(const Add *op, ExprInfo *bounds) {
             rewrite(0 + x, x)) {
             return rewrite.result;
         }
+        // debug(0) << "Simplify add: " << a << " " << b << "\n";
 
+        // const Ramp* a_ramp = a.as<Ramp>();
+        // const Ramp* b_ramp = b.as<Ramp>();
+        // const Broadcast* a_broadcast = a.as<Broadcast>();
+        // const Broadcast* b_broadcast = b.as<Broadcast>();
+
+        // if(a_ramp) {
+        //     if(b_ramp && a_ramp->lanes == b_ramp->lanes) {
+        //         return Ramp::make(a_ramp->base + b_ramp->base, a_ramp->stride + b_ramp->stride, a_ramp->lanes);
+        //     }
+        //     if(b_broadcast && a_ramp->lanes == b_broadcast->lanes) {
+        //         return Ramp::make(a_ramp->base + b_broadcast->value, a_ramp->stride, a_ramp->lanes);
+        //     }
+        // }
+
+        // if(a_broadcast) {
+        //     if(b_broadcast && a_broadcast->lanes == b_broadcast->lanes) {
+        //         return Broadcast::make(a_broadcast->value + b_broadcast->value, a_broadcast->lanes);
+        //     }
+        // }
+
+        for (int ix = 2; ix < 64; ix++) {
+            // clang-format off
+            if (EVAL_IN_LAMBDA
+                (rewrite(x + x, x * 2) ||
+                 rewrite(ramp(x, y, ix) + ramp(z, w, ix), ramp(x + z, y + w, ix)) ||
+                 rewrite(ramp(x, y, ix) + broadcast(z, ix), ramp(x + z, y, ix)) ||
+                 rewrite(broadcast(x, ix) + broadcast(y, ix), broadcast(x + y, ix)) ||
+                 rewrite((x + broadcast(y, ix)) + broadcast(z, ix), x + broadcast(y + z, ix)) ||
+                 rewrite((x - broadcast(y, ix)) + broadcast(z, ix), x + broadcast(z - y, ix)) 
+                )) {
+                return mutate(rewrite.result, bounds);
+            }
+            // clang-format on
+        }
         // clang-format off
         if (EVAL_IN_LAMBDA
             (rewrite(x + x, x * 2) ||
-             rewrite(ramp(x, y) + ramp(z, w), ramp(x + z, y + w, lanes)) ||
-             rewrite(ramp(x, y) + broadcast(z), ramp(x + z, y, lanes)) ||
-             rewrite(broadcast(x) + broadcast(y), broadcast(x + y, lanes)) ||
-             rewrite((x + broadcast(y)) + broadcast(z), x + broadcast(y + z, lanes)) ||
-             rewrite((x - broadcast(y)) + broadcast(z), x + broadcast(z - y, lanes)) ||
+            //  rewrite(ramp(x, y) + ramp(z, w), ramp(x + z, y + w, lanes)) ||
+            //  rewrite(ramp(x, y) + broadcast(z), ramp(x + z, y, lanes)) ||
+            //  rewrite(broadcast(x) + broadcast(y), broadcast(x + y, lanes)) ||
+            //  rewrite((x + broadcast(y)) + broadcast(z), x + broadcast(y + z, lanes)) ||
+            //  rewrite((x - broadcast(y)) + broadcast(z), x + broadcast(z - y, lanes)) ||
              rewrite(select(x, y, z) + select(x, w, u), select(x, y + w, z + u)) ||
              rewrite(select(x, c0, c1) + c2, select(x, fold(c0 + c2), fold(c1 + c2))) ||
              rewrite(select(x, y, c1) + c2, select(x, y + c2, fold(c1 + c2))) ||
