@@ -606,42 +606,15 @@ uint64_t constant_fold_bin_op(halide_type_t &, uint64_t, uint64_t) noexcept;
 template<typename Op>
 double constant_fold_bin_op(halide_type_t &, double, double) noexcept;
 
-template<typename T>
-constexpr bool commutative() {
-    return false;
-}
-
-template<>
-constexpr bool commutative<Add>() {
-    return true;
-}
-template<>
-constexpr bool commutative<Mul>() {
-    return true;
-}
-template<>
-constexpr bool commutative<And>() {
-    return true;
-}
-template<>
-constexpr bool commutative<Or>() {
-    return true;
-}
-template<>
-constexpr bool commutative<EQ>() {
-    return true;
-}
-template<>
-constexpr bool commutative<NE>() {
-    return true;
-}
-template<>
-constexpr bool commutative<Min>() {
-    return true;
-}
-template<>
-constexpr bool commutative<Max>() {
-    return true;
+constexpr bool commutative(IRNodeType t) {
+    return (t == IRNodeType::Add ||
+            t == IRNodeType::Mul ||
+            t == IRNodeType::And ||
+            t == IRNodeType::Or ||
+            t == IRNodeType::Min ||
+            t == IRNodeType::Max ||
+            t == IRNodeType::EQ ||
+            t == IRNodeType::NE);
 }
 
 // Matches one of the binary operators
@@ -660,7 +633,7 @@ struct BinOp {
     // the right. That is, for the rule to be canonical it must be
     // possible that A is at least as strong as B.
     constexpr static bool canonical =
-        A::canonical && B::canonical && (!commutative<Op>() || (A::max_node_type >= B::min_node_type));
+        A::canonical && B::canonical && (!commutative(Op::_node_type) || (A::max_node_type >= B::min_node_type));
 
     template<uint32_t bound>
     HALIDE_ALWAYS_INLINE bool match(const BaseExprNode &e, MatcherState &state) const noexcept {
@@ -768,7 +741,7 @@ struct CmpOp {
     constexpr static IRNodeType max_node_type = Op::_node_type;
     constexpr static bool canonical = (A::canonical &&
                                        B::canonical &&
-                                       (!commutative<Op>() || A::max_node_type >= B::min_node_type) &&
+                                       (!commutative(Op::_node_type) || A::max_node_type >= B::min_node_type) &&
                                        (Op::_node_type != IRNodeType::GE) &&
                                        (Op::_node_type != IRNodeType::GT));
 
