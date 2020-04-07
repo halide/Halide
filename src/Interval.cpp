@@ -18,20 +18,20 @@ Expr make_max_helper(const Expr &a, const Expr &b) {
 
     Expr pos_inf = Interval::pos_inf();
     Expr neg_inf = Interval::neg_inf();
-    if (rewrite(max(x, x), x) ||
-        rewrite(max(x, pos_inf), pos_inf) ||
-        rewrite(max(pos_inf, x), pos_inf) ||
-        rewrite(max(x, neg_inf), x) ||
-        rewrite(max(neg_inf, x), x) ||
-        rewrite(max(c0, c1), fold(max(c0, c1))) ||
-        rewrite(max(c0, x), max(x, c0)) ||
-        rewrite(max(max(x, c0), c1), max(x, fold(max(c0, c1)))) ||
-        rewrite(max(max(x, c0), y), max(max(x, y), c0)) ||
-        rewrite(max(x, max(y, c0)), max(max(x, y), c0)) ||
-        rewrite(max(max(x, y), x), a) ||
-        rewrite(max(max(x, y), y), a) ||
-        rewrite(max(x, max(x, y)), b) ||
-        rewrite(max(y, max(x, y)), b)) {
+    if (rewrite(max(x, x), x, "itvl21") ||
+        rewrite(max(x, pos_inf), pos_inf, "itvl22") ||
+        rewrite(max(pos_inf, x), pos_inf, "itvl23") ||
+        rewrite(max(x, neg_inf), x, "itvl24") ||
+        rewrite(max(neg_inf, x), x, "itvl25") ||
+        rewrite(max(c0, c1), fold(max(c0, c1)), "itvl26") ||
+        rewrite(max(c0, x), max(x, c0), "itvl27") ||
+        rewrite(max(max(x, c0), c1), max(x, fold(max(c0, c1))), "itvl28") ||
+        rewrite(max(max(x, c0), y), max(max(x, y), c0), "itvl29") ||
+        rewrite(max(x, max(y, c0)), max(max(x, y), c0), "itvl30") ||
+        rewrite(max(max(x, y), x), max(x, y), "itvl31") ||
+        rewrite(max(max(x, y), y), max(x, y), "itvl32") ||
+        rewrite(max(x, max(x, y)), max(x, y), "itvl33") ||
+        rewrite(max(y, max(x, y)), max(x, y), "itvl34")) {
         return rewrite.result;
     } else {
         return max(a, b);
@@ -43,20 +43,20 @@ Expr make_min_helper(const Expr &a, const Expr &b) {
 
     Expr pos_inf = Interval::pos_inf();
     Expr neg_inf = Interval::neg_inf();
-    if (rewrite(min(x, x), x) ||
-        rewrite(min(x, pos_inf), x) ||
-        rewrite(min(pos_inf, x), x) ||
-        rewrite(min(x, neg_inf), neg_inf) ||
-        rewrite(min(neg_inf, x), neg_inf) ||
-        rewrite(min(c0, c1), fold(min(c0, c1))) ||
-        rewrite(min(c0, x), min(x, c0)) ||
-        rewrite(min(min(x, c0), c1), min(x, fold(min(c0, c1)))) ||
-        rewrite(min(min(x, c0), y), min(min(x, y), c0)) ||
-        rewrite(min(x, min(y, c0)), min(min(x, y), c0)) ||
-        rewrite(min(min(x, y), x), a) ||
-        rewrite(min(min(x, y), y), a) ||
-        rewrite(min(x, min(x, y)), b) ||
-        rewrite(min(y, min(x, y)), b)) {
+    if (rewrite(min(x, x), x, "itvl46") ||
+        rewrite(min(x, pos_inf), x, "itvl47") ||
+        rewrite(min(pos_inf, x), x, "itvl48") ||
+        rewrite(min(x, neg_inf), neg_inf, "itvl49") ||
+        rewrite(min(neg_inf, x), neg_inf, "itvl50") ||
+        rewrite(min(c0, c1), fold(min(c0, c1)), "itvl51") ||
+        rewrite(min(c0, x), min(x, c0), "itvl52") ||
+        rewrite(min(min(x, c0), c1), min(x, fold(min(c0, c1))), "itvl53") ||
+        rewrite(min(min(x, c0), y), min(min(x, y), c0), "itvl54") ||
+        rewrite(min(x, min(y, c0)), min(min(x, y), c0), "itvl55") ||
+        rewrite(min(min(x, y), x), min(x, y), "itvl56") ||
+        rewrite(min(min(x, y), y), min(x, y), "itvl57") ||
+        rewrite(min(x, min(x, y)), min(x, y), "itvl58") ||
+        rewrite(min(y, min(x, y)), min(x, y), "itvl59")) {
         return rewrite.result;
     } else {
         return min(a, b);

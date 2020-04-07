@@ -111,108 +111,108 @@ Expr Simplify::visit(const Div *op, ExprInfo *bounds) {
 
         auto rewrite = IRMatcher::rewriter(IRMatcher::div(a, b), op->type);
 
-        if (rewrite(IRMatcher::Overflow() / x, a) ||
-            rewrite(x / IRMatcher::Overflow(), b) ||
-            rewrite(x / 1, x) ||
-            rewrite(c0 / c1, fold(c0 / c1)) ||
-            (!op->type.is_float() && rewrite(x / 0, 0)) ||
-            (!op->type.is_float() && denominator_non_zero && rewrite(x / x, 1)) ||
-            rewrite(0 / x, 0) ||
+        if ((rewrite(IRMatcher::Overflow() / x, IRMatcher::Overflow(), "div114")) ||
+            (rewrite(x / IRMatcher::Overflow(), IRMatcher::Overflow(), "div115")) ||
+            (rewrite(x / 1, x, "div116")) ||
+            (rewrite(c0 / c1, fold(c0 / c1), "div117")) ||
+            (!op->type.is_float() && (rewrite(x / 0, 0, "div118"))) ||
+            (!op->type.is_float() && denominator_non_zero && (rewrite(x / x, 1, "div119"))) ||
+            (rewrite(0 / x, 0, "div120")) ||
             false) {
             return rewrite.result;
         }
 
         // clang-format off
         if (EVAL_IN_LAMBDA
-            (rewrite(broadcast(x) / broadcast(y), broadcast(x / y, lanes)) ||
-             rewrite(select(x, c0, c1) / c2, select(x, fold(c0/c2), fold(c1/c2))) ||
+            ((rewrite(broadcast(x) / broadcast(y), broadcast(x / y, lanes), "div127")) ||
+             (rewrite(select(x, c0, c1) / c2, select(x, fold(c0/c2), fold(c1/c2)), "div128")) ||
              (!op->type.is_float() &&
-              rewrite(x / x, select(x == 0, 0, 1))) ||
+              (rewrite(x / x, select(x == 0, 0, 1), "div130"))) ||
              (no_overflow(op->type) &&
               (// Fold repeated division
-               rewrite((x / c0) / c2, x / fold(c0 * c2),                          c0 > 0 && c2 > 0 && !overflows(c0 * c2)) ||
-               rewrite((x / c0 + c1) / c2, (x + fold(c1 * c0)) / fold(c0 * c2),   c0 > 0 && c2 > 0 && !overflows(c0 * c2) && !overflows(c0 * c1)) ||
-               rewrite((x * c0) / c1, x / fold(c1 / c0),                          c1 % c0 == 0 && c0 > 0 && c1 / c0 != 0) ||
+               (rewrite((x / c0) / c2, x / fold(c0 * c2),                          c0 > 0 && c2 > 0 && !overflows(c0 * c2), "div133")) ||
+               (rewrite((x / c0 + c1) / c2, (x + fold(c1 * c0)) / fold(c0 * c2),   c0 > 0 && c2 > 0 && !overflows(c0 * c2) && !overflows(c0 * c1), "div134")) ||
+               (rewrite((x * c0) / c1, x / fold(c1 / c0),                          c1 % c0 == 0 && c0 > 0 && c1 / c0 != 0, "div135")) ||
                // Pull out terms that are a multiple of the denominator
-               rewrite((x * c0) / c1, x * fold(c0 / c1),                          c0 % c1 == 0 && c1 > 0) ||
+               (rewrite((x * c0) / c1, x * fold(c0 / c1),                          c0 % c1 == 0 && c1 > 0, "div137")) ||
 
-               rewrite((x * c0 + y) / c1, y / c1 + x * fold(c0 / c1),             c0 % c1 == 0 && c1 > 0) ||
-               rewrite((x * c0 - y) / c1, (-y) / c1 + x * fold(c0 / c1),          c0 % c1 == 0 && c1 > 0) ||
-               rewrite((y + x * c0) / c1, y / c1 + x * fold(c0 / c1),             c0 % c1 == 0 && c1 > 0) ||
-               rewrite((y - x * c0) / c1, y / c1 - x * fold(c0 / c1),             c0 % c1 == 0 && c1 > 0) ||
+               (rewrite((x * c0 + y) / c1, y / c1 + x * fold(c0 / c1),             c0 % c1 == 0 && c1 > 0, "div139")) ||
+               (rewrite((x * c0 - y) / c1, (-y) / c1 + x * fold(c0 / c1),          c0 % c1 == 0 && c1 > 0, "div140")) ||
+               (rewrite((y + x * c0) / c1, y / c1 + x * fold(c0 / c1),             c0 % c1 == 0 && c1 > 0, "div141")) ||
+               (rewrite((y - x * c0) / c1, y / c1 - x * fold(c0 / c1),             c0 % c1 == 0 && c1 > 0, "div142")) ||
 
-               rewrite(((x * c0 + y) + z) / c1, (y + z) / c1 + x * fold(c0 / c1), c0 % c1 == 0 && c1 > 0) ||
-               rewrite(((x * c0 - y) + z) / c1, (z - y) / c1 + x * fold(c0 / c1), c0 % c1 == 0 && c1 > 0) ||
-               rewrite(((x * c0 + y) - z) / c1, (y - z) / c1 + x * fold(c0 / c1), c0 % c1 == 0 && c1 > 0) ||
-               rewrite(((x * c0 - y) - z) / c1, (-y - z) / c1 + x * fold(c0 / c1), c0 % c1 == 0 && c1 > 0) ||
+               (rewrite(((x * c0 + y) + z) / c1, (y + z) / c1 + x * fold(c0 / c1), c0 % c1 == 0 && c1 > 0, "div144")) ||
+               (rewrite(((x * c0 - y) + z) / c1, (z - y) / c1 + x * fold(c0 / c1), c0 % c1 == 0 && c1 > 0, "div145")) ||
+               (rewrite(((x * c0 + y) - z) / c1, (y - z) / c1 + x * fold(c0 / c1), c0 % c1 == 0 && c1 > 0, "div146")) ||
+               (rewrite(((x * c0 - y) - z) / c1, (-y - z) / c1 + x * fold(c0 / c1), c0 % c1 == 0 && c1 > 0, "div147")) ||
 
-               rewrite(((y + x * c0) + z) / c1, (y + z) / c1 + x * fold(c0 / c1), c0 % c1 == 0 && c1 > 0) ||
-               rewrite(((y + x * c0) - z) / c1, (y - z) / c1 + x * fold(c0 / c1), c0 % c1 == 0 && c1 > 0) ||
-               rewrite(((y - x * c0) - z) / c1, (y - z) / c1 - x * fold(c0 / c1), c0 % c1 == 0 && c1 > 0) ||
-               rewrite(((y - x * c0) + z) / c1, (y + z) / c1 - x * fold(c0 / c1), c0 % c1 == 0 && c1 > 0) ||
+               (rewrite(((y + x * c0) + z) / c1, (y + z) / c1 + x * fold(c0 / c1), c0 % c1 == 0 && c1 > 0, "div149")) ||
+               (rewrite(((y + x * c0) - z) / c1, (y - z) / c1 + x * fold(c0 / c1), c0 % c1 == 0 && c1 > 0, "div150")) ||
+               (rewrite(((y - x * c0) - z) / c1, (y - z) / c1 - x * fold(c0 / c1), c0 % c1 == 0 && c1 > 0, "div151")) ||
+               (rewrite(((y - x * c0) + z) / c1, (y + z) / c1 - x * fold(c0 / c1), c0 % c1 == 0 && c1 > 0, "div152")) ||
 
-               rewrite((z + (x * c0 + y)) / c1, (z + y) / c1 + x * fold(c0 / c1), c0 % c1 == 0 && c1 > 0) ||
-               rewrite((z + (x * c0 - y)) / c1, (z - y) / c1 + x * fold(c0 / c1), c0 % c1 == 0 && c1 > 0) ||
-               rewrite((z - (x * c0 - y)) / c1, (z + y) / c1 - x * fold(c0 / c1), c0 % c1 == 0 && c1 > 0) ||
-               rewrite((z - (x * c0 + y)) / c1, (z - y) / c1 - x * fold(c0 / c1), c0 % c1 == 0 && c1 > 0) ||
+               (rewrite((z + (x * c0 + y)) / c1, (z + y) / c1 + x * fold(c0 / c1), c0 % c1 == 0 && c1 > 0, "div154")) ||
+               (rewrite((z + (x * c0 - y)) / c1, (z - y) / c1 + x * fold(c0 / c1), c0 % c1 == 0 && c1 > 0, "div155")) ||
+               (rewrite((z - (x * c0 - y)) / c1, (z + y) / c1 - x * fold(c0 / c1), c0 % c1 == 0 && c1 > 0, "div156")) ||
+               (rewrite((z - (x * c0 + y)) / c1, (z - y) / c1 - x * fold(c0 / c1), c0 % c1 == 0 && c1 > 0, "div157")) ||
 
-               rewrite((z + (y + x * c0)) / c1, (z + y) / c1 + x * fold(c0 / c1), c0 % c1 == 0 && c1 > 0) ||
-               rewrite((z - (y + x * c0)) / c1, (z - y) / c1 - x * fold(c0 / c1), c0 % c1 == 0 && c1 > 0) ||
-               rewrite((z + (y - x * c0)) / c1, (z + y) / c1 - x * fold(c0 / c1), c0 % c1 == 0 && c1 > 0) ||
-               rewrite((z - (y - x * c0)) / c1, (z - y) / c1 + x * fold(c0 / c1), c0 % c1 == 0 && c1 > 0) ||
+               (rewrite((z + (y + x * c0)) / c1, (z + y) / c1 + x * fold(c0 / c1), c0 % c1 == 0 && c1 > 0, "div159")) ||
+               (rewrite((z - (y + x * c0)) / c1, (z - y) / c1 - x * fold(c0 / c1), c0 % c1 == 0 && c1 > 0, "div160")) ||
+               (rewrite((z + (y - x * c0)) / c1, (z + y) / c1 - x * fold(c0 / c1), c0 % c1 == 0 && c1 > 0, "div161")) ||
+               (rewrite((z - (y - x * c0)) / c1, (z - y) / c1 + x * fold(c0 / c1), c0 % c1 == 0 && c1 > 0, "div162")) ||
 
                // For the next depth, stick to addition
-               rewrite((((x * c0 + y) + z) + w) / c1, (y + z + w) / c1 + x * fold(c0 / c1), c0 % c1 == 0 && c1 > 0) ||
-               rewrite((((y + x * c0) + z) + w) / c1, (y + z + w) / c1 + x * fold(c0 / c1), c0 % c1 == 0 && c1 > 0) ||
-               rewrite(((z + (x * c0 + y)) + w) / c1, (y + z + w) / c1 + x * fold(c0 / c1), c0 % c1 == 0 && c1 > 0) ||
-               rewrite(((z + (y + x * c0)) + w) / c1, (y + z + w) / c1 + x * fold(c0 / c1), c0 % c1 == 0 && c1 > 0) ||
-               rewrite((w + ((x * c0 + y) + z)) / c1, (y + z + w) / c1 + x * fold(c0 / c1), c0 % c1 == 0 && c1 > 0) ||
-               rewrite((w + ((y + x * c0) + z)) / c1, (y + z + w) / c1 + x * fold(c0 / c1), c0 % c1 == 0 && c1 > 0) ||
-               rewrite((w + (z + (x * c0 + y))) / c1, (y + z + w) / c1 + x * fold(c0 / c1), c0 % c1 == 0 && c1 > 0) ||
-               rewrite((w + (z + (y + x * c0))) / c1, (y + z + w) / c1 + x * fold(c0 / c1), c0 % c1 == 0 && c1 > 0) ||
+               (rewrite((((x * c0 + y) + z) + w) / c1, (y + z + w) / c1 + x * fold(c0 / c1), c0 % c1 == 0 && c1 > 0, "div165")) ||
+               (rewrite((((y + x * c0) + z) + w) / c1, (y + z + w) / c1 + x * fold(c0 / c1), c0 % c1 == 0 && c1 > 0, "div166")) ||
+               (rewrite(((z + (x * c0 + y)) + w) / c1, (y + z + w) / c1 + x * fold(c0 / c1), c0 % c1 == 0 && c1 > 0, "div167")) ||
+               (rewrite(((z + (y + x * c0)) + w) / c1, (y + z + w) / c1 + x * fold(c0 / c1), c0 % c1 == 0 && c1 > 0, "div168")) ||
+               (rewrite((w + ((x * c0 + y) + z)) / c1, (y + z + w) / c1 + x * fold(c0 / c1), c0 % c1 == 0 && c1 > 0, "div169")) ||
+               (rewrite((w + ((y + x * c0) + z)) / c1, (y + z + w) / c1 + x * fold(c0 / c1), c0 % c1 == 0 && c1 > 0, "div170")) ||
+               (rewrite((w + (z + (x * c0 + y))) / c1, (y + z + w) / c1 + x * fold(c0 / c1), c0 % c1 == 0 && c1 > 0, "div171")) ||
+               (rewrite((w + (z + (y + x * c0))) / c1, (y + z + w) / c1 + x * fold(c0 / c1), c0 % c1 == 0 && c1 > 0, "div172")) ||
 
                // Finally, pull out constant additions that are a multiple of the denominator
-               rewrite((x + c0) / c1, x / c1 + fold(c0 / c1), c0 % c1 == 0 && c1 > 0) ||
-               rewrite((c0 - y)/c1, fold(c0 / c1) - y / c1, (c0 + 1) % c1 == 0 && c1 > 0) ||
+               (rewrite((x + c0) / c1, x / c1 + fold(c0 / c1), c0 % c1 == 0 && c1 > 0, "div175")) ||
+               (rewrite((c0 - y)/c1, fold(c0 / c1) - y / c1, (c0 + 1) % c1 == 0 && c1 > 0, "div176")) ||
                (denominator_non_zero &&
-                (rewrite((x + y)/x, y/x + 1) ||
-                 rewrite((y + x)/x, y/x + 1) ||
-                 rewrite((x - y)/x, (-y)/x + 1) ||
-                 rewrite((y - x)/x, y/x - 1) ||
-                 rewrite(((x + y) + z)/x, (y + z)/x + 1) ||
-                 rewrite(((y + x) + z)/x, (y + z)/x + 1) ||
-                 rewrite((z + (x + y))/x, (z + y)/x + 1) ||
-                 rewrite((z + (y + x))/x, (z + y)/x + 1) ||
-                 rewrite((x*y)/x, y) ||
-                 rewrite((y*x)/x, y) ||
-                 rewrite((x*y + z)/x, y + z/x) ||
-                 rewrite((y*x + z)/x, y + z/x) ||
-                 rewrite((z + x*y)/x, z/x + y) ||
-                 rewrite((z + y*x)/x, z/x + y) ||
-                 rewrite((x*y - z)/x, y + (-z)/x) ||
-                 rewrite((y*x - z)/x, y + (-z)/x) ||
-                 rewrite((z - x*y)/x, z/x - y) ||
-                 rewrite((z - y*x)/x, z/x - y) ||
+                ((rewrite((x + y)/x, y/x + 1, "div178")) ||
+                 (rewrite((y + x)/x, y/x + 1, "div179")) ||
+                 (rewrite((x - y)/x, (-y)/x + 1, "div180")) ||
+                 (rewrite((y - x)/x, y/x - 1, "div181")) ||
+                 (rewrite(((x + y) + z)/x, (y + z)/x + 1, "div182")) ||
+                 (rewrite(((y + x) + z)/x, (y + z)/x + 1, "div183")) ||
+                 (rewrite((z + (x + y))/x, (z + y)/x + 1, "div184")) ||
+                 (rewrite((z + (y + x))/x, (z + y)/x + 1, "div185")) ||
+                 (rewrite((x*y)/x, y, "div186")) ||
+                 (rewrite((y*x)/x, y, "div187")) ||
+                 (rewrite((x*y + z)/x, y + z/x, "div188")) ||
+                 (rewrite((y*x + z)/x, y + z/x, "div189")) ||
+                 (rewrite((z + x*y)/x, z/x + y, "div190")) ||
+                 (rewrite((z + y*x)/x, z/x + y, "div191")) ||
+                 (rewrite((x*y - z)/x, y + (-z)/x, "div192")) ||
+                 (rewrite((y*x - z)/x, y + (-z)/x, "div193")) ||
+                 (rewrite((z - x*y)/x, z/x - y, "div194")) ||
+                 (rewrite((z - y*x)/x, z/x - y, "div195")) ||
                  false)) ||
 
-               (op->type.is_float() && rewrite(x/c0, x * fold(1/c0))))) ||
+               (op->type.is_float() && (rewrite(x/c0, x * fold(1/c0), "div198"))))) ||
              (no_overflow_int(op->type) &&
-              (rewrite(ramp(x, c0) / broadcast(c1), ramp(x / c1, fold(c0 / c1), lanes), c0 % c1 == 0) ||
-               rewrite(ramp(x, c0) / broadcast(c1), broadcast(x / c1, lanes),
+              ((rewrite(ramp(x, c0) / broadcast(c1), ramp(x / c1, fold(c0 / c1), lanes), c0 % c1 == 0, "div200")) ||
+               (rewrite(ramp(x, c0) / broadcast(c1), broadcast(x / c1, lanes),
                        // First and last lanes are the same when...
-                       can_prove((x % c1 + c0 * (lanes - 1)) / c1 == 0, this)))) ||
+                       can_prove((x % c1 + c0 * (lanes - 1)) / c1 == 0, this), "div201")))) ||
              (no_overflow_scalar_int(op->type) &&
-              (rewrite(x / -1, -x) ||
-               (denominator_non_zero && rewrite(c0 / y, select(y < 0, fold(-c0), c0), c0 == -1)) ||
-               rewrite((x * c0 + c1) / c2,
+              ((rewrite(x / -1, -x, "div205")) ||
+               (rewrite(c0 / y, select(y < 0, fold(-c0), c0), c0 == -1, "div206" )) ||
+               (rewrite((x * c0 + c1) / c2,
                        (x + fold(c1 / c0)) / fold(c2 / c0),
-                       c2 > 0 && c0 > 0 && c2 % c0 == 0) ||
-               rewrite((x * c0 + c1) / c2,
+                       c2 > 0 && c0 > 0 && c2 % c0 == 0, "div207")) ||
+               (rewrite((x * c0 + c1) / c2,
                        x * fold(c0 / c2) + fold(c1 / c2),
-                       c2 > 0 && c0 % c2 == 0) ||
+                       c2 > 0 && c0 % c2 == 0, "div210")) ||
                // A very specific pattern that comes up in bounds in upsampling code.
-               rewrite((x % 2 + c0) / 2, x % 2 + fold(c0 / 2), c0 % 2 == 1))))) {
-            return mutate(rewrite.result, bounds);
+               (rewrite((x % 2 + c0) / 2, x % 2 + fold(c0 / 2), c0 % 2 == 1, "div214")))))) {
+            return mutate(std::move(rewrite.result), bounds);
         }
         // clang-format on
     }

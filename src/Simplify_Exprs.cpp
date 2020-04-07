@@ -111,7 +111,7 @@ Expr Simplify::visit(const Ramp *op, ExprInfo *bounds) {
     // formal rewrites, so that they can be formally verified,
     // etc.
     auto rewrite = IRMatcher::rewriter(IRMatcher::ramp(base, stride, lanes), op->type);
-    if (rewrite(ramp(x, 0), broadcast(x, lanes))) {
+    if ((rewrite(ramp(x, 0), broadcast(x, lanes), "expr114"))) {
         return rewrite.result;
     }
 

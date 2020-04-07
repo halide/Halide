@@ -71,26 +71,26 @@ Expr Simplify::visit(const Mul *op, ExprInfo *bounds) {
         }
 
         auto rewrite = IRMatcher::rewriter(IRMatcher::mul(a, b), op->type);
-        if (rewrite(c0 * c1, fold(c0 * c1)) ||
-            rewrite(IRMatcher::Overflow() * x, a) ||
-            rewrite(x * IRMatcher::Overflow(), b) ||
-            rewrite(0 * x, 0) ||
-            rewrite(1 * x, x) ||
-            rewrite(x * 0, 0) ||
-            rewrite(x * 1, x)) {
+        if ((rewrite(c0 * c1, fold(c0 * c1), "mul74")) ||
+            (rewrite(IRMatcher::Overflow() * x, IRMatcher::Overflow(), "mul75")) ||
+            (rewrite(x * IRMatcher::Overflow(), IRMatcher::Overflow(), "mul76")) ||
+            (rewrite(0 * x, 0, "mul77")) ||
+            (rewrite(1 * x, x, "mul78")) ||
+            (rewrite(x * 0, 0, "mul79")) ||
+            (rewrite(x * 1, x, "mul80"))) {
             return rewrite.result;
         }
 
-        if (rewrite((x + c0) * c1, x * c1 + fold(c0 * c1), !overflows(c0 * c1)) ||
-            rewrite((x - y) * c0, (y - x) * fold(-c0), c0 < 0 && -c0 > 0) ||
-            rewrite((x * c0) * c1, x * fold(c0 * c1), !overflows(c0 * c1)) ||
-            rewrite((x * c0) * y, (x * y) * c0, !is_const(y)) ||
-            rewrite(x * (y * c0), (x * y) * c0) ||
-            rewrite(max(x, y) * min(x, y), x * y) ||
-            rewrite(max(x, y) * min(y, x), y * x) ||
-            rewrite(broadcast(x) * broadcast(y), broadcast(x * y, op->type.lanes())) ||
-            rewrite(ramp(x, y) * broadcast(z), ramp(x * z, y * z, op->type.lanes()))) {
-            return mutate(rewrite.result, bounds);
+        if ((rewrite((x + c0) * c1, x * c1 + fold(c0 * c1), !overflows(c0 * c1), "mul84")) ||
+            (rewrite((x - y) * c0, (y - x) * fold(-c0), c0 < 0 && -c0 > 0, "mul85")) ||
+            (rewrite((x * c0) * c1, x * fold(c0 * c1), !overflows(c0 * c1), "mul86")) ||
+            (rewrite((x * c0) * y, (x * y) * c0, !is_const(y), "mul87")) ||
+            (rewrite(x * (y * c0), (x * y) * c0, "mul88")) ||
+            (rewrite(max(x, y) * min(x, y), x * y, "mul89")) ||
+            (rewrite(max(x, y) * min(y, x), y * x, "mul90")) ||
+            (rewrite(broadcast(x) * broadcast(y), broadcast(x * y, op->type.lanes()), "mul91")) ||
+            (rewrite(ramp(x, y) * broadcast(z), ramp(x * z, y * z, op->type.lanes()), "mul92"))) {
+            return mutate(std::move(rewrite.result), bounds);
         }
     }
 
