@@ -158,37 +158,37 @@ Expr Simplify::visit(const LT *op, ExprInfo *bounds) {
               // We want to break max(x, y) < z into x < z && y <
               // z in cases where one of those two terms is going
               // to fold.
-              rewrite(min(x + c0, y) < x + c1, fold(c0 < c1) || y < x + c1) ||
-              rewrite(min(y, x + c0) < x + c1, fold(c0 < c1) || y < x + c1) ||
-              rewrite(max(x + c0, y) < x + c1, fold(c0 < c1) && y < x + c1) ||
-              rewrite(max(y, x + c0) < x + c1, fold(c0 < c1) && y < x + c1) ||
+              rewrite(min(x + c0, y) < x + c1, y < x + c1 || fold(c0 < c1)) ||
+              rewrite(min(y, x + c0) < x + c1, y < x + c1 || fold(c0 < c1)) ||
+              rewrite(max(x + c0, y) < x + c1, y < x + c1 && fold(c0 < c1)) ||
+              rewrite(max(y, x + c0) < x + c1, y < x + c1 && fold(c0 < c1)) ||
 
-              rewrite(x < min(x + c0, y) + c1, fold(0 < c0 + c1) && x < y + c1) ||
-              rewrite(x < min(y, x + c0) + c1, fold(0 < c0 + c1) && x < y + c1) ||
-              rewrite(x < max(x + c0, y) + c1, fold(0 < c0 + c1) || x < y + c1) ||
-              rewrite(x < max(y, x + c0) + c1, fold(0 < c0 + c1) || x < y + c1) ||
+              rewrite(x < min(x + c0, y) + c1, x < y + c1 && fold(0 < c0 + c1)) ||
+              rewrite(x < min(y, x + c0) + c1, x < y + c1 && fold(0 < c0 + c1)) ||
+              rewrite(x < max(x + c0, y) + c1, x < y + c1 || fold(0 < c0 + c1)) ||
+              rewrite(x < max(y, x + c0) + c1, x < y + c1 || fold(0 < c0 + c1)) ||
 
               // Special cases where c0 == 0
-              rewrite(min(x, y) < x + c1, fold(0 < c1) || y < x + c1) ||
-              rewrite(min(y, x) < x + c1, fold(0 < c1) || y < x + c1) ||
-              rewrite(max(x, y) < x + c1, fold(0 < c1) && y < x + c1) ||
-              rewrite(max(y, x) < x + c1, fold(0 < c1) && y < x + c1) ||
+              rewrite(min(x, y) < x + c1, y < x + c1 || fold(0 < c1)) ||
+              rewrite(min(y, x) < x + c1, y < x + c1 || fold(0 < c1)) ||
+              rewrite(max(x, y) < x + c1, y < x + c1 && fold(0 < c1)) ||
+              rewrite(max(y, x) < x + c1, y < x + c1 && fold(0 < c1)) ||
 
-              rewrite(x < min(x, y) + c1, fold(0 < c1) && x < y + c1) ||
-              rewrite(x < min(y, x) + c1, fold(0 < c1) && x < y + c1) ||
-              rewrite(x < max(x, y) + c1, fold(0 < c1) || x < y + c1) ||
-              rewrite(x < max(y, x) + c1, fold(0 < c1) || x < y + c1) ||
+              rewrite(x < min(x, y) + c1, x < y + c1 && fold(0 < c1)) ||
+              rewrite(x < min(y, x) + c1, x < y + c1 && fold(0 < c1)) ||
+              rewrite(x < max(x, y) + c1, x < y + c1 || fold(0 < c1)) ||
+              rewrite(x < max(y, x) + c1, x < y + c1 || fold(0 < c1)) ||
 
               // Special cases where c1 == 0
-              rewrite(min(x + c0, y) < x, fold(c0 < 0) || y < x) ||
-              rewrite(min(y, x + c0) < x, fold(c0 < 0) || y < x) ||
-              rewrite(max(x + c0, y) < x, fold(c0 < 0) && y < x) ||
-              rewrite(max(y, x + c0) < x, fold(c0 < 0) && y < x) ||
+              rewrite(min(x + c0, y) < x, y < x || fold(c0 < 0)) ||
+              rewrite(min(y, x + c0) < x, y < x || fold(c0 < 0)) ||
+              rewrite(max(x + c0, y) < x, y < x && fold(c0 < 0)) ||
+              rewrite(max(y, x + c0) < x, y < x && fold(c0 < 0)) ||
 
-              rewrite(x < min(x + c0, y), fold(0 < c0) && x < y) ||
-              rewrite(x < min(y, x + c0), fold(0 < c0) && x < y) ||
-              rewrite(x < max(x + c0, y), fold(0 < c0) || x < y) ||
-              rewrite(x < max(y, x + c0), fold(0 < c0) || x < y) ||
+              rewrite(x < min(x + c0, y), x < y && fold(0 < c0)) ||
+              rewrite(x < min(y, x + c0), x < y && fold(0 < c0)) ||
+              rewrite(x < max(x + c0, y), x < y || fold(0 < c0)) ||
+              rewrite(x < max(y, x + c0), x < y || fold(0 < c0)) ||
 
               // Special cases where c0 == c1 == 0
               rewrite(min(x, y) < x, y < x) ||
@@ -197,10 +197,10 @@ Expr Simplify::visit(const LT *op, ExprInfo *bounds) {
               rewrite(x < max(y, x), x < y) ||
 
               // Special case where x is constant
-              rewrite(min(y, c0) < c1, fold(c0 < c1) || y < c1) ||
-              rewrite(max(y, c0) < c1, fold(c0 < c1) && y < c1) ||
-              rewrite(c1 < min(y, c0), fold(c1 < c0) && c1 < y) ||
-              rewrite(c1 < max(y, c0), fold(c1 < c0) || c1 < y) ||
+              rewrite(min(y, c0) < c1, y < c1 || fold(c0 < c1)) ||
+              rewrite(max(y, c0) < c1, y < c1 && fold(c0 < c1)) ||
+              rewrite(c1 < min(y, c0), c1 < y && fold(c1 < c0)) ||
+              rewrite(c1 < max(y, c0), c1 < y || fold(c1 < c0)) ||
 
               // Cases where we can remove a min on one side because
               // one term dominates another. These rules were

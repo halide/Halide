@@ -23,6 +23,9 @@ Expr Simplify::visit(const EQ *op, ExprInfo *bounds) {
     if (op->a.type().is_bool()) {
         Expr a = mutate(op->a, nullptr);
         Expr b = mutate(op->b, nullptr);
+        if (should_commute(a, b)) {
+            std::swap(a, b);
+        }
         const int lanes = op->type.lanes();
         auto rewrite = IRMatcher::rewriter(IRMatcher::eq(a, b), op->type);
         if (rewrite(x == 1, x)) {
@@ -104,10 +107,14 @@ Expr Simplify::visit(const EQ *op, ExprInfo *bounds) {
     }
 
     if (const Sub *s = delta.as<Sub>()) {
-        if (s->a.same_as(op->a) && s->b.same_as(op->b)) {
+        Expr a = s->a, b = s->b;
+        if (should_commute(a, b)) {
+            std::swap(a, b);
+        }
+        if (a.same_as(op->a) && b.same_as(op->b)) {
             return op;
         } else {
-            return EQ::make(s->a, s->b);
+            return EQ::make(a, b);
         }
     }
 
