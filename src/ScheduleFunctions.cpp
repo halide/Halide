@@ -1457,8 +1457,16 @@ private:
         map<string, int> func_name_to_index;
         // Contains a number of dependencies which need to go first for a given stage of the function.
         vector<vector<int>> stage_dependencies(funcs.size());
-        // Adjacency list of dependencies.
-        vector<vector<vector<pair<int, int>>>> adj_list(funcs.size());
+
+        // Holds the index of the function stage.
+        struct FuncStageIndex {
+            int func_index;
+            int stage_index;
+        };
+
+        // Adjacency list of dependencies. The structure is [func_index, stage_index, vector of the edges],
+        // where edge is the index of the other function stage.
+        vector<vector<vector<FuncStageIndex>>> adj_list(funcs.size());
 
         // Initialize data structures.
         for (size_t i = 0; i < funcs.size(); i++) {
@@ -1474,14 +1482,14 @@ private:
                 const auto &level = funcs[i].definition().schedule().fuse_level().level;
                 if (!level.is_root() && !level.is_inlined()) {
                     stage_dependencies[i][0]++;
-                    adj_list[func_name_to_index[level.func()]][level.stage_index()].push_back({i, 0});
+                    adj_list[func_name_to_index[level.func()]][level.stage_index()].push_back({(int)i, 0});
                 }
             }
             for (size_t j = 0; j < funcs[i].updates().size(); ++j) {
                 const auto &level = funcs[i].updates()[j].schedule().fuse_level().level;
                 if (!level.is_root() && !level.is_inlined()) {
                     stage_dependencies[i][j + 1]++;
-                    adj_list[func_name_to_index[level.func()]][level.stage_index()].push_back({i, j + 1});
+                    adj_list[func_name_to_index[level.func()]][level.stage_index()].push_back({(int)i, (int)j + 1});
 
                     // Let say that we have a stage f.update(p), which is scheduled to be computed_with
                     // another stage g.update(q) (like f.update(p).compute_with(g.update(q), var)).
@@ -1525,8 +1533,8 @@ private:
                     // and decrease their dependency count.
                     for (size_t k = 0; k < adj_list[i][stage_index[i]].size(); k++) {
                         const auto &edge = adj_list[i][stage_index[i]][k];
-                        internal_assert(stage_dependencies[edge.first][edge.second] > 0);
-                        stage_dependencies[edge.first][edge.second]--;
+                        internal_assert(stage_dependencies[edge.func_index][edge.stage_index] > 0);
+                        stage_dependencies[edge.func_index][edge.stage_index]--;
                     }
                     stage_order.emplace_back(funcs[i], stage_index[i]);
                     stage_index[i]++;
