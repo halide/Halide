@@ -1463,7 +1463,8 @@ struct BroadcastOp {
     Expr make(MatcherState &state, halide_type_t type_hint) const {
         const int l = known_lanes ? lanes : type_hint.lanes;
         type_hint.lanes = 1;
-        return Broadcast::make(a.make(state, type_hint), l);
+        Expr ae = a.make(state, type_hint);
+        return Broadcast::make(a.make(state, type_hint), l / ae.type().lanes());
     }
 
     constexpr static bool foldable = false;
@@ -1541,7 +1542,7 @@ struct RampOp {
             ea = a.make(state, type_hint);
             eb = b.make(state, ea.type());
         }
-        return Ramp::make(ea, eb, l);
+        return Ramp::make(ea, eb, l / ea.type().lanes());
     }
 
     constexpr static bool foldable = false;
@@ -1874,6 +1875,39 @@ HALIDE_ALWAYS_INLINE auto is_float(A a) noexcept -> IsFloat<decltype(pattern_arg
 template<typename A>
 std::ostream &operator<<(std::ostream &s, const IsFloat<A> &op) {
     s << "is_float(" << op.a << ")";
+    return s;
+}
+
+template<typename A, typename B>
+struct IsSameLanesNum {
+    struct pattern_tag {};
+    A a;
+    B b;
+
+    constexpr static uint32_t binds = bindings<A>::mask | bindings<B>::mask;
+
+    constexpr static bool foldable = true;
+
+    HALIDE_ALWAYS_INLINE
+    void make_folded_const(halide_scalar_value_t &val, halide_type_t &ty, MatcherState &state) const {
+        // a is almost certainly a very simple pattern (e.g. a wild), so just inline the make method.
+        Expr ta = a.make(state, {});
+        Expr tb = b.make(state, {});
+        val.u.u64 = (ta.type().lanes() == tb.type().lanes());
+        ty.code = halide_type_uint;
+        ty.bits = 1;
+        ty.lanes = ta.type().lanes();
+    };
+};
+
+template<typename A, typename B>
+HALIDE_ALWAYS_INLINE auto is_same_lane_num(A a, B b) noexcept -> IsSameLanesNum<decltype(pattern_arg(a)), decltype(pattern_arg(b))> {
+    return {pattern_arg(a), pattern_arg(b)};
+}
+
+template<typename A, typename B>
+std::ostream &operator<<(std::ostream &s, const IsSameLanesNum<A, B> &op) {
+    s << "is_same_lane_num(" << op.a << " " << op.b << ")";
     return s;
 }
 
