@@ -1504,7 +1504,7 @@ private:
 
         size_t complete_count = 0;
         vector<size_t> stage_index(funcs.size());
-        // This basically computes topologocal order, but exploits the fact that stages of the function
+        // This basically computes topological order, but exploits the fact that stages of the function
         // form linear order. Basically, we have a set of indices that point to the current stages
         // for each of the functions and should be considered as a next stage in the general order. They
         // are added to the order, only if all of their dependencies have been added already.
