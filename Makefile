@@ -494,6 +494,7 @@ SOURCE_FILES = \
   Error.cpp \
   FastIntegerDivide.cpp \
   FindCalls.cpp \
+  FlattenNestedRamps.cpp \
   Float16.cpp \
   Func.cpp \
   Function.cpp \
@@ -668,6 +669,7 @@ HEADER_FILES = \
   Extern.h \
   FastIntegerDivide.h \
   FindCalls.h \
+  FlattenNestedRamps.h \
   Float16.h \
   Func.h \
   Function.h \

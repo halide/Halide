@@ -21,6 +21,7 @@
 #include "Deinterleave.h"
 #include "EarlyFree.h"
 #include "FindCalls.h"
+#include "FlattenNestedRamps.h"
 #include "Func.h"
 #include "Function.h"
 #include "FuseGPUThreadLoops.h"
@@ -425,45 +426,8 @@ Module lower(const vector<Function> &output_funcs,
     s = simplify(s);
     s = loop_invariant_code_motion(s);
 
-    class FlattenRamps : public IRMutator {
-        using IRMutator::visit;
-
-        Expr visit(const Ramp *op) override {
-            if (op->base.type().is_vector()) {
-                Expr base = mutate(op->base);
-                Expr stride = mutate(op->stride);
-                std::vector<Expr> ramp_elems;
-                for (int ix = 0; ix < op->lanes; ix++) {
-                    ramp_elems.push_back(base + ix * stride);
-                }
-
-                return Shuffle::make_concat(ramp_elems);
-            }
-
-            return IRMutator::visit(op);
-        }
-
-        Expr visit(const Broadcast *op) override {
-            if (op->value.type().is_vector()) {
-                Expr value = mutate(op->value);
-                std::vector<Expr> broadcast_elems;
-                for (int ix = 0; ix < op->lanes; ix++) {
-                    broadcast_elems.push_back(value);
-                }
-
-                return Shuffle::make_concat(broadcast_elems);
-            }
-
-            return IRMutator::visit(op);
-        }
-
-    public:
-        FlattenRamps() {
-        }
-    };
-
-    FlattenRamps flatten_ramps;
-    s = flatten_ramps.mutate(s);
+    debug(1) << "Flattening nested ramps...\n";
+    s = flatten_nested_ramps(s);
     s = simplify(s);
 
     debug(1) << "Lowering after final simplification:\n"
