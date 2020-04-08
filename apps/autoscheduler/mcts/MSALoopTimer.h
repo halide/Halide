@@ -3,6 +3,7 @@
 #include <chrono>
 #include <ctime>
 #include <iostream>
+#include <thread>
 #include <cstdlib>
 
 
@@ -81,7 +82,6 @@ namespace msa {
         //--------------------------------------------------------------
         //--------------------------------------------------------------
         // Example usage (and for testing)
-        /*
         static void test(unsigned int max_millis) {
             LoopTimer timer;
             timer.verbose = true;
@@ -106,7 +106,7 @@ namespace msa {
             std::cout << "total run time: " << timer.run_duration_micros() << ", ";
             std::cout << "avg_loop_duration: " << timer.avg_loop_duration_micros() << ", ";
             std::cout << std::endl;
-        }*/
+        }
 
     private:
         unsigned int iterations;

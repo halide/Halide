@@ -15,9 +15,9 @@ Only contains information / methods related to State, Action, Parent, Children e
 namespace msa {
     namespace mcts {
 
-        template <class State, typename Action, typename Eval>
+        template <class State, typename Action>
         class TreeNodeT {
-            typedef std::shared_ptr< TreeNodeT<State, Action, Eval> > Ptr;
+            typedef std::shared_ptr< TreeNodeT<State, Action> > Ptr;
 
         public:
             //--------------------------------------------------------------
@@ -35,7 +35,7 @@ namespace msa {
 
             //--------------------------------------------------------------
             // expand by adding a single child
-            TreeNodeT* expand(Eval eval) {
+            TreeNodeT* expand() {
                 // sanity check that we're not already fully expanded
                 if(is_fully_expanded()) return NULL;
 
@@ -45,14 +45,14 @@ namespace msa {
                 // if this is the first expansion and we haven't yet got all of the possible actions
                 if(actions.empty()) {
                     // retrieve list of actions from the state
-                    state.get_actions(actions, eval);
+                    state.get_actions(actions);
 
                     // randomize the order
                     std::random_shuffle(actions.begin(), actions.end());
                 }
 
                 // add the next action in queue as a child
-                return add_child_with_action( actions[children.size()], eval );
+                return add_child_with_action( actions[children.size()] );
             }
 
 
@@ -111,7 +111,7 @@ namespace msa {
 
             //--------------------------------------------------------------
             // create a clone of the current state, apply action, and add as child
-            TreeNodeT* add_child_with_action(const Action& new_action, Eval eval) {
+            TreeNodeT* add_child_with_action(const Action& new_action) {
                 // create a new TreeNode with the same state (will get cloned) as this TreeNode
                 TreeNodeT* child_node = new TreeNodeT(state, this);
 
@@ -119,7 +119,7 @@ namespace msa {
                 child_node->action = new_action;
 
                 // apply the new action to the state of the child TreeNode
-                child_node->state.apply_action(new_action, eval);
+                child_node->state.apply_action(new_action);
 
                 // add to children
                 children.push_back(Ptr(child_node));
