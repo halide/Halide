@@ -331,7 +331,7 @@ struct State {
         }
     }
 
-    bool calculate_cost(const FunctionDAG &dag, const MachineParams &params, CostModel *cost_model, bool verbose = false) {
+    bool calculate_cost(const FunctionDAG &dag, const MachineParams &params, CostModel *cost_model, bool verbose = false, bool enq = false) {
         StageMap<ScheduleFeatures> features;
         compute_featurization(dag, params, &features);
 
@@ -369,8 +369,9 @@ struct State {
         // evaluate it until we call evaluate_costs (or if it runs out
         // of internal buffer space), so that the evaluations can be
         // batched.
-        cost_model->enqueue(dag, features, &cost);
-
+        if(enq) {
+            cost_model->enqueue(dag, features, &cost);
+        }
         cost_calculations++;
         return true;
     }
@@ -754,7 +755,7 @@ struct State {
         //inner->ref_count = other.inner->ref_count;
         inner->penalized = other_inner->penalized;
 
-    std::cout << "WrapperState(1)" <<inner->cost<<inner->num_decisions_made<<inner->cost_calculations<< std::endl;
+    //std::cout << "WrapperState(1) cost: " <<inner->cost<< " num decisions made: "<<inner->num_decisions_made<<" cost calc: " <<inner->cost_calculations<< std::endl;
     }
     // copy and assignment operators should perform a DEEP clone of the given state
     WrapperState(const WrapperState& other) :
@@ -765,21 +766,26 @@ struct State {
     // whether or not this state is terminal (reached end)
     // AHA: can be ignored as we limit the horizon to num_passes
     bool is_terminal() const {
-        std::cout << "is_terminals()" << std::endl;
-        return numleft == 0;
+        //std::cout << "is_terminal()" << std::endl;
+        std::vector<Action> actions;
+        get_actions(actions);
+      //  std::cout << "action size in is terminal " <<actions.size() << std::endl;
+        if (actions.size() ==0) return true;
+        return false;
     }
 
     //  agent id (zero-based) for agent who is about to make a decision
     int agent_id() const {
-        std::cout << "agent_id()" << std::endl;
+        //std::cout << "agent_id()" << std::endl;
         return 0;
     }
 
     // apply action to state
     void apply_action(const Action& action) {
-        std::cout << "apply_action()" << std::endl;
+        //std::cout << "apply_action()" << std::endl;
         std::map<Action, IntrusivePtr<State>> actions;
         inner->generate_actions(dag, params, cost_model, actions);
+        //std::cout << "action size in apply action " <<actions.size() << std::endl;
         for(auto &pair : actions) {
             if (pair.first == action) {
                 inner = pair.second;
@@ -790,10 +796,10 @@ struct State {
 
     // return possible actions from this state
     void get_actions(std::vector<Action>& vactions) const {
-        std::cout << "get_actions()" << std::endl;
+        //std::cout << "get_actions()" << std::endl;
         std::map<Action, IntrusivePtr<State>> actions;
         inner->generate_actions(dag, params, cost_model, actions);
-        std::cout << actions.size() << std::endl;
+        //std::cout << "action size in get actions " <<actions.size() << std::endl;
         for(auto &pair : actions) {
             vactions.push_back(pair.first);
         }
@@ -801,9 +807,10 @@ struct State {
 
     // get a random action, return false if no actions found
     bool get_random_action(Action& action) const {
-        std::cout << "get_random_action()" << std::endl;
+        //std::cout << "get_random_action()" << std::endl;
         std::vector<Action> actions;
         get_actions(actions);
+        //std::cout << "action size in get random actions " <<actions.size() << std::endl;
         if (actions.size() == 0) return false;
         //note rand isn't truly uniform random so should fix
         action = actions[rand() % actions.size()];
@@ -812,18 +819,18 @@ struct State {
 
     // evaluate this state and return a vector of rewards (for each agent)
     const std::vector<float> evaluate() const {
-        std::cout << "evaluate()" << std::endl;
-        inner->calculate_cost(dag, params, cost_model, false);
-        std::cout << "calculate_evaluate()" << std::endl;
+        //std::cout << "evaluate()" << std::endl;
+        inner->calculate_cost(dag, params, cost_model, false, true);
+        //std::cout << "calculate_cost()" << std::endl;
         cost_model->evaluate_costs();
-        std::cout << "evaluate_costs()" << std::endl;
-        std::cout << inner->cost << std::endl;
+        //std::cout << "evaluate_costs()" << std::endl;
+        //std::cout << "inner cost "<<inner->cost << std::endl;
         return { (float)(inner->cost)}; 
     }
 
     // return state as string (for debug purposes)
     std::string to_string() const {
-        std::cout << "to_string()" << std::endl;
+        //std::cout << "to_string()" << std::endl;
         return "";
     }
     };
@@ -833,24 +840,25 @@ struct State {
                            CostModel *cost_model,
                            std::map<Action, IntrusivePtr<State>> &actions) const {
         internal_assert(root.defined() && root->is_root());
-        std::cout << "in_generate_actions" << std::endl;
+        /*std::cout << "in_generate_actions" << std::endl;
         std::cout << num_decisions_made << std::endl;
         std::cout << "-------------------" << std::endl;
         std::cout << dag.nodes.size() << std::endl;
-        std::cout << "-------------------" << std::endl;
+        std::cout << "-------------------" << std::endl;*/
         if (num_decisions_made == 2*(int)dag.nodes.size()) {
             return;
         }
 
         int next_node = num_decisions_made / 2;
         int phase = num_decisions_made % 2;
+        /*    
         std::cout << may_subtile() << std::endl;
         std::cout << "-------------------" << std::endl;
         std::cout << next_node << std::endl;
         std::cout << "-------------------" << std::endl;
         std::cout << phase << std::endl;
         std::cout << "-------------------" << std::endl;
-
+        */
         if (!may_subtile()) {
             // When emulating the older search space, we do all
             // parallelizing last, so that it is independent of the
@@ -861,7 +869,7 @@ struct State {
 
         // Enumerate all legal ways to schedule the next Func
         const FunctionDAG::Node *node = &dag.nodes[next_node];
-        std::cout << node->is_input << std::endl;
+        //std::cout << "is input? " << node->is_input << std::endl;
         for (const auto *e : node->outgoing_edges) {
             internal_assert(root->computes(e->consumer->node))
                 << "Partially scheduled code doesn't compute " << e->consumer->name
@@ -932,8 +940,8 @@ struct State {
                     return;
                 }
             }
-        std::cout << must_inline << std::endl;
-        std::cout << "------up is must inline-------------" << std::endl;
+        //std::cout << must_inline << std::endl;
+        //std::cout << "------up is must inline-------------" << std::endl;
 
             // Construct a list of plausible dimensions to vectorize
             // over. Currently all of them. TODO: Pre-prune the list
@@ -955,8 +963,8 @@ struct State {
             if (vector_dims.empty()) {
                 vector_dims.push_back(0);
             }
-        std::cout << "------herere-------------" << std::endl;
-        std::cout << num_children << std::endl;
+        //std::cout << "------herere-------------" << std::endl;
+        //std::cout << num_children << std::endl;
 
             // 2) Realize it somewhere
             for (int vector_dim : vector_dims) {
@@ -1135,7 +1143,7 @@ struct State {
             }
         }
 
-        std::cout << "-------------------ac size" <<actions.size()<< std::endl;
+        //std::cout << "-------------------ac size" <<actions.size()<< std::endl;
         
         if (num_children == 0 || actions.size()==0) {
             debug(0) << "Warning: Found no legal way to schedule "
@@ -1590,7 +1598,7 @@ IntrusivePtr<State> optimal_mcts_schedule(FunctionDAG &dag,
     //int num_passes = (beam_size == 1) ? 1 : 5;
 
     // not sure why would I need num_passes, but keeping it just in case
-    int num_passes = 3;
+    int num_passes = 5;
 
     string cyos_str = get_env_variable("HL_CYOS");
     if (cyos_str == "1") {
@@ -1615,7 +1623,7 @@ IntrusivePtr<State> optimal_mcts_schedule(FunctionDAG &dag,
     // OPTIONAL init uct params
     uct.uct_k = 1.41421356237;//sqrt(2);
     uct.max_millis = 0;
-    uct.max_iterations = 10;
+    uct.max_iterations = 100;
     uct.simulation_depth = num_passes;
 
     for (int i = 0; i < num_passes; i++) {
@@ -1623,12 +1631,14 @@ IntrusivePtr<State> optimal_mcts_schedule(FunctionDAG &dag,
 
         // run uct mcts on current state and get best action
         State::Action action = uct.run(state);
-        std::cout << "prefinsihed pass " << i << std::endl;
+        //std::cout << "prefinished pass " << i << std::endl;
 
         // apply the action to the current state
         state.apply_action(action);
+        state.evaluate();
         auto pass = state.inner; 
-        std::cout << "finsihed pass " << i << std::endl;
+        //std::cout << "finished pass " << i << std::endl;
+        //std::cout << "Pass " << i << " of " << num_passes << ", cost: " << pass->cost << std::endl;
          
         tick.clear();
 
@@ -1638,8 +1648,14 @@ IntrusivePtr<State> optimal_mcts_schedule(FunctionDAG &dag,
             aslog(0) << "Pass " << i << " result: ";
             pass->dump();
         }
-
-        if (i == 0 || pass->cost < best->cost) {
+        
+        if (i == 0) {
+            // Track which pass produced the lowest-cost state. It's
+            // not necessarily the final one.
+            best = pass;
+            continue;
+        }
+        if (pass->cost < best->cost) {
             // Track which pass produced the lowest-cost state. It's
             // not necessarily the final one.
             best = pass;
