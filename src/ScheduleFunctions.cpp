@@ -1544,7 +1544,18 @@ private:
                 }
             }
             // Make sure that we made some progress, otherwise there is a cyclic dependency.
-            internal_assert(progress_made);
+            if (!progress_made) {
+                std::stringstream ss;
+                ss << "There is a cycle inside of the fused group: \n";
+                for (size_t i = 0; i < funcs.size(); i++) {
+                    if (stage_index[i] == stage_dependencies[i].size()) {
+                        continue;
+                    }
+                    ss << funcs[i].name() << ".s" << stage_index[i] << "has " << stage_dependencies[i][stage_index[i]]
+                       << "unsatisfied dependencies; \n";
+                }
+                user_assert(progress_made) << ss.str();
+            }
         }
 
         // Build the loops.
