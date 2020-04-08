@@ -9,7 +9,7 @@
 
 #include <cmath>
 
-#include "IR.h"
+#include "Expr.h"
 #include "Tuple.h"
 
 namespace Halide {

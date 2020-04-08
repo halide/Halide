@@ -4,7 +4,6 @@
 
 #include "Debug.h"
 #include "Error.h"
-#include "LLVM_Headers.h"
 
 #include <iostream>
 #include <sstream>
@@ -966,7 +965,6 @@ private:
             iter->getName(name);
 #endif
             debug(2) << "Section: " << name.str() << "\n";
-#if LLVM_VERSION >= 90
             // ignore errors, just leave strings empty
             auto e = iter->getContents();
             if (e) {
@@ -982,19 +980,6 @@ private:
                     debug_ranges = *e;
                 }
             }
-#else
-            if (name == prefix + "debug_info") {
-                iter->getContents(debug_info);
-            } else if (name == prefix + "debug_abbrev") {
-                iter->getContents(debug_abbrev);
-            } else if (name == prefix + "debug_str") {
-                iter->getContents(debug_str);
-            } else if (name == prefix + "debug_line") {
-                iter->getContents(debug_line);
-            } else if (name == prefix + "debug_ranges") {
-                iter->getContents(debug_ranges);
-            }
-#endif
         }
 
         if (debug_info.empty() ||

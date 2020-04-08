@@ -6,7 +6,9 @@
 #include "Func.h"
 #include "ImageParam.h"
 #include "JITModule.h"
+#ifdef WITH_V8
 #include "LLVM_Headers.h"
+#endif
 #include "LLVM_Output.h"
 #include "LLVM_Runtime_Linker.h"
 #include "Target.h"
@@ -21,7 +23,7 @@
 #ifdef WITH_V8
 #include "v8.h"
 #include "libplatform/libplatform.h"
-#endif
+#endif  // WITH_V8
 // clang-format on
 
 // ---------------------

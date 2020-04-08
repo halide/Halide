@@ -1237,12 +1237,12 @@ int main(int argc, char **argv) {
         test_all<int64_t>(Backend::CUDA);
         test_all<double>(Backend::CUDA);
         // TODO: Broken currently; commented out until https://github.com/halide/Halide/pull/4628 lands
-        //test_all<uint32_t>(Backend::CUDAVectorize);
-        //test_all<int32_t>(Backend::CUDAVectorize);
-        //test_all<float>(Backend::CUDAVectorize);
-        //test_all<uint64_t>(Backend::CUDAVectorize);
-        //test_all<int64_t>(Backend::CUDAVectorize);
-        //test_all<double>(Backend::CUDAVectorize);
+        // test_all<uint32_t>(Backend::CUDAVectorize);
+        // test_all<int32_t>(Backend::CUDAVectorize);
+        // test_all<float>(Backend::CUDAVectorize);
+        // test_all<uint64_t>(Backend::CUDAVectorize);
+        // test_all<int64_t>(Backend::CUDAVectorize);
+        // test_all<double>(Backend::CUDAVectorize);
     }
     test_extern_func(Backend::CPU);
     test_extern_func(Backend::CPUVectorize);

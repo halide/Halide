@@ -6,9 +6,12 @@
  * Defines the lowering pass that adds the assertions that validate
  * input and output buffers.
  */
+#include <map>
+#include <string>
+#include <vector>
 
 #include "Bounds.h"
-#include "IR.h"
+#include "Expr.h"
 
 #include <map>
 
@@ -17,6 +20,8 @@ namespace Halide {
 struct Target;
 
 namespace Internal {
+
+class Function;
 
 /** Insert checks to make sure a statement doesn't read out of bounds
  * on inputs or outputs, and that the inputs and outputs conform to

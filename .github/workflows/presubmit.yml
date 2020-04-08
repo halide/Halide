@@ -1,7 +1,9 @@
 name: Halide Presubmit Checks
 on:
+  # We don't want 'edited' (that's basically just the description, title, etc)
+  # We don't want 'review_requested' (that's redundant to the ones below for our purposes)
   pull_request:
-    types: [opened, synchronize, reopened, edited, review_requested]
+    types: [opened, synchronize, reopened]
     paths:
       - '**.h'
       - '**.c'
@@ -25,10 +27,10 @@ jobs:
       - uses: actions/checkout@v2
       - name: Install clang-tidy
         run: |
-          sudo apt-get install clang-tidy-9
+          sudo apt-get install llvm-9 clang-tidy-9
       - name: Build Compilation DB
         run: |
-          cmake -DCMAKE_BUILD_TYPE=Debug -DCMAKE_EXPORT_COMPILE_COMMANDS=ON -S . -B build
+          cmake -DCMAKE_BUILD_TYPE=Debug -DCMAKE_EXPORT_COMPILE_COMMANDS=ON -DHALIDE_REQUIRE_LLVM_VERSION=90 -S . -B build
           [ -a build/compile_commands.json ]
       - name: Run clang-tidy
         run: |

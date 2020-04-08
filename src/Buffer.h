@@ -4,7 +4,6 @@
 #include "DeviceInterface.h"
 #include "Expr.h"
 #include "IntrusivePtr.h"
-#include "Util.h"
 #include "runtime/HalideBuffer.h"
 
 namespace Halide {

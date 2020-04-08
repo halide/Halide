@@ -2,6 +2,7 @@
 #include <cmath>
 
 #include "CSE.h"
+#include "IR.h"
 #include "IROperator.h"
 #include "Lerp.h"
 #include "Simplify.h"

@@ -135,8 +135,17 @@ Stmt build_loop_nest(
         }
     }
 
+    // Order the Ifs, Fors, and Lets for bounds inference
+    // to generate tighter bounds and put the bound variables
+    // in the right place.
+    // This is not a generic loop invariant code motion step.
+    // In particular there are dangling references to bound
+    // variables that are not defined yet, so we can't rely
+    // the loop invariant code motion pass.
+
     // All containing lets and fors. Outermost first.
     vector<Container> nest;
+    nest.reserve(stage_s.dims().size());
 
     // Put the desired loop nest into the containers vector.
     for (int i = (int)stage_s.dims().size() - 1; i >= 0; i--) {
@@ -1050,6 +1059,7 @@ protected:
 
             // If we're trying to inline an extern function, schedule it here and bail out
             debug(2) << "Injecting realization of " << funcs[0].name() << " around node " << Stmt(for_loop) << "\n";
+
             Stmt stmt = build_realize(build_pipeline_group(for_loop), funcs[0], is_output_list[0]);
             _found_store_level = _found_compute_level = true;
             return stmt;
@@ -1133,6 +1143,23 @@ private:
     const LoopLevel &store_level;
 
     Stmt build_realize(Stmt s, const Function &func, bool is_output) {
+        if (func.has_extern_definition()) {
+            // Add an annotation to let bounds inference know that
+            // this will write to the entire bounds required.
+            vector<Expr> args;
+            args.emplace_back(Variable::make(Handle(), func.name()));
+            for (int i = 0; i < func.dimensions(); i++) {
+                string prefix = func.name() + ".s0." + func.args()[i];
+                string min_name = prefix + ".min";
+                string max_name = prefix + ".max";
+
+                args.emplace_back(Variable::make(Int(32), min_name));
+                args.emplace_back(Variable::make(Int(32), max_name));
+            }
+            Expr decl = Call::make(Int(32), Call::declare_box_touched, args, Call::Intrinsic);
+            s = Block::make(Evaluate::make(decl), s);
+        }
+
         if (!is_output) {
             Region bounds;
             const string &name = func.name();
@@ -1170,8 +1197,8 @@ private:
 
     // Compute the shift factor required to align iteration of
     // a function stage with its fused parent loop nest.
-    static void compute_shift_factor(const Function &f, const string &prefix, const Definition &def,
-                                     map<string, Expr> &bounds, map<string, Expr> &shifts) {
+    void compute_shift_factor(const Function &f, const string &prefix, const Definition &def,
+                              map<string, Expr> &bounds, map<string, Expr> &shifts) {
         if (!def.defined()) {
             return;
         }
@@ -1193,10 +1220,19 @@ private:
             internal_assert(iter != dims.end());
             start_fuse = (int)(iter - dims.begin());
         }
+
+        int fused_vars_num = dims.size() - start_fuse - 1;
+
+        const auto &env_iter = env.find(fuse_level.func());
+        internal_assert(env_iter != env.end());
+        const auto &parent_func = env_iter->second;
+
+        const auto &parent_def = (fuse_level.stage_index() == 0) ? parent_func.definition() : parent_func.update(fuse_level.stage_index() - 1);
+        const vector<Dim> &parent_dims = parent_def.schedule().dims();
+
         for (int i = start_fuse; i < (int)dims.size() - 1; ++i) {
             const string &var = dims[i].var;
             Expr shift_val;
-
             auto iter = align_strategy.begin();
             for (; iter != align_strategy.end(); ++iter) {
                 if (var_name_match(var, iter->first)) {
@@ -1211,17 +1247,20 @@ private:
             }
 
             string parent_prefix = fuse_level.func() + ".s" + std::to_string(fuse_level.stage_index()) + ".";
+            int parent_var_index = (i - start_fuse) + (int)parent_dims.size() - 1 - fused_vars_num;
+            internal_assert(parent_var_index >= 0);
+            string parent_var = parent_dims[parent_var_index].var;
 
             auto it_min = bounds.find(prefix + var + ".loop_min");
             auto it_max = bounds.find(prefix + var + ".loop_max");
             internal_assert((it_min != bounds.end()) && (it_max != bounds.end()));
 
             if (iter->second == LoopAlignStrategy::AlignStart) {
-                const auto &parent_min = bounds.find(parent_prefix + var + ".loop_min");
+                auto parent_min = bounds.find(parent_prefix + parent_var + ".loop_min");
                 internal_assert(parent_min != bounds.end());
                 shift_val = parent_min->second - it_min->second;
             } else {
-                const auto &parent_max = bounds.find(parent_prefix + var + ".loop_max");
+                auto parent_max = bounds.find(parent_prefix + parent_var + ".loop_max");
                 internal_assert(parent_max != bounds.end());
                 shift_val = parent_max->second - it_max->second;
             }
@@ -2110,15 +2149,25 @@ void validate_fused_group_schedule_helper(const string &fn,
         for (int i = 0; i < n_fused; ++i) {
             const Dim &d1 = dims_1[start_fuse_1 + i];
             const Dim &d2 = dims_2[start_fuse_2 + i];
-            bool equal = var_name_match(d1.var, d2.var) &&
-                         (d1.for_type == d2.for_type) &&
-                         (d1.device_api == d2.device_api) &&
-                         (d1.dim_type == d2.dim_type);
-            if (!equal) {
-                user_error << "Invalid compute_with: dims " << i << " of " << p.func_1 << ".s"
-                           << p.stage_1 << "(" << dims_1[start_fuse_1 + i].var << ") and " << p.func_2
-                           << ".s" << p.stage_2 << "(" << dims_2[start_fuse_2 + i].var << ") do not match.\n";
-            }
+            user_assert(var_name_match(d1.var, d2.var)) << "Invalid compute_with: names of dim "
+                                                        << i << " of " << p.func_1 << ".s"
+                                                        << p.stage_1 << "(" << d1.var << ") and " << p.func_2
+                                                        << ".s" << p.stage_2 << "(" << d2.var << ") do not match.\n";
+            user_assert(d1.for_type == d2.for_type) << "Invalid compute_with: for types of dim "
+                                                    << i << " of " << p.func_1 << ".s" << p.stage_1 << "("
+                                                    << d1.var << " is " << d1.for_type << ") and " << p.func_2
+                                                    << ".s" << p.stage_2 << "(" << d2.var << " is " << d2.for_type
+                                                    << ") do not match.\n";
+            user_assert(d1.device_api == d2.device_api) << "Invalid compute_with: device APIs of dim "
+                                                        << i << " of " << p.func_1 << ".s" << p.stage_1 << "("
+                                                        << d1.var << " is " << d1.device_api << ") and " << p.func_2
+                                                        << ".s" << p.stage_2 << "(" << d2.var << " is " << d2.device_api
+                                                        << ") do not match.\n";
+            user_assert(d1.dim_type == d2.dim_type) << "Invalid compute_with: types of dim "
+                                                    << i << " of " << p.func_1 << ".s" << p.stage_1 << "("
+                                                    << d1.var << " is " << d1.dim_type << ") and " << p.func_2
+                                                    << ".s" << p.stage_2 << "(" << d2.var << " is " << d2.dim_type
+                                                    << ") do not match.\n";
         }
     }
 }

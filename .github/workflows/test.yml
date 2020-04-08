@@ -96,10 +96,6 @@ jobs:
             # it proves useful later.
             run_tests: false
 
-          - build_tool: cmake_shared
-            # TODO: revisit when CMake python builds are working
-            uses_python: false
-
         exclude:
           - target_os: osx
             target_arch: arm    # OSX is x86-only
@@ -400,6 +396,14 @@ jobs:
         REQUIRE_LLVM_VERSION="${{matrix.llvm_version}}0"
         SHARED_LIBRARY=$([ ${{matrix.build_tool}} == "cmake_shared" ] && echo "ON" || echo "OFF")
 
+        if [[ "${{matrix.uses_python}}" == "true" ]]; then
+          EXTRA_CMAKE_FLAGS="${EXTRA_CMAKE_FLAGS} \
+            -D WITH_PYTHON_BINDINGS=ON"
+        else
+          EXTRA_CMAKE_FLAGS="${EXTRA_CMAKE_FLAGS} \
+            -D WITH_PYTHON_BINDINGS=OFF"
+        fi
+
         cmake \
           -D CMAKE_BUILD_TYPE=${BUILD_TYPE} \
           -D LLVM_DIR="${LLVM_INSTALL_DIR}/lib/cmake/llvm" \
@@ -483,10 +487,9 @@ jobs:
         # Test Halide
         TEST_GROUPS_PARALLEL="internal|correctness|error|warning|generator"
 
-        # TODO: once CMake supports the python stuff
-        # if [[ "${{matrix.uses_python}}" == "true" ]]; then
-        #   TEST_GROUPS_PARALLEL="${TEST_GROUPS_PARALLEL}|python"
-        # fi
+        if [[ "${{matrix.uses_python}}" == "true" ]]; then
+          TEST_GROUPS_PARALLEL="${TEST_GROUPS_PARALLEL}|python"
+        fi
 
         # tutorial has some performance measurements that can be flaky if we run them in parallel
         TEST_GROUPS_SERIAL="tutorial"

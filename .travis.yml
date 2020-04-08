@@ -14,7 +14,7 @@ addons:
       - doxygen    # For generating docs
 env:
   global:
-    # The Travis Ubuntu Xenial environment we run in currently promises 2 cores.
+    # The Travis Ubuntu Bionic environment we run in currently promises 2 cores.
     # We'll run at -j4 on the assumption that there's enough I/O bound work
     # for that to be profitable.
     - MAKEFLAGS=-j4
@@ -27,19 +27,24 @@ env:
     # Test a mix of llvm versions, a mix of build systems, and a mix of shared vs static library
     # Don't build as a static library with cmake. It risks exceeding the travis memory limit.
     #
-    # Note that gcc5.4 is the default install on Travis Xenial, so we'll just use that.
-    - LLVM_VERSION=9.0.0 BUILD_SYSTEM=MAKE
-    - LLVM_VERSION=9.0.0 BUILD_SYSTEM=CMAKE HALIDE_SHARED_LIBRARY=ON
-    - LLVM_VERSION=9.0.0 BUILD_SYSTEM=CMAKE HALIDE_SHARED_LIBRARY=OFF
+    # Note that gcc7.4 is the default install on Travis Bionic, so we'll just use that.
+    #
+    # TODO: Repeating these env vars on each line is ugly but AFAICT Travis doesn't
+    # allow a simple way to avoid this. If the built matrix ever gets more complex
+    # this will definitely need improvement, but for now, it's simpler to just
+    - LLVM_VERSION=10.0.0 BUILD_SYSTEM=MAKE LLVM_URL_ROOT=https://github.com/llvm/llvm-project/releases/download/llvmorg-10.0.0
+    - LLVM_VERSION=10.0.0 BUILD_SYSTEM=CMAKE HALIDE_SHARED_LIBRARY=ON LLVM_URL_ROOT=https://github.com/llvm/llvm-project/releases/download/llvmorg-10.0.0
 
-    # Just one version of LLVM8 should suffice.
-    - LLVM_VERSION=8.0.0 BUILD_SYSTEM=MAKE
+    # Just one version of LLVM9 should suffice.
+    # (Note that there is a build of LLVM9.0.1 on the github releases site,
+    # but only for ubuntu-16.)
+    - LLVM_VERSION=9.0.0 BUILD_SYSTEM=MAKE LLVM_URL_ROOT=https://releases.llvm.org/9.0.0
 
 cache: ccache
 dist: bionic
 install:
   # Download the right llvm release.
-  - wget https://releases.llvm.org/${LLVM_VERSION}/clang+llvm-${LLVM_VERSION}-x86_64-linux-gnu-ubuntu-18.04.tar.xz
+  - wget ${LLVM_URL_ROOT}/clang+llvm-${LLVM_VERSION}-x86_64-linux-gnu-ubuntu-18.04.tar.xz
   - tar xvf clang+llvm-${LLVM_VERSION}-x86_64-linux-gnu-ubuntu-18.04.tar.xz
   - sudo mv clang+llvm-${LLVM_VERSION}-x86_64-linux-gnu-ubuntu-18.04 /usr/local/llvm
 script:

@@ -463,15 +463,18 @@ class LowerWarpShuffles : public IRMutator {
         // Consider lane-masking if-then-elses when determining the
         // active bounds of the lane index.
         //
-        // FuseGPULoopNests always injects conditionals of the form
-        // lane < limit_val when portions parts of the kernel to
-        // certain threads, so we just need to match that pattern.
+        // FuseGPULoopNests injects conditionals of the form lane <
+        // limit_val when portions parts of the kernel to certain
+        // threads, so we need to match that pattern. Things that come
+        // from GuardWithIf can also inject <=.
         const LT *lt = op->condition.as<LT>();
-        if (lt && equal(lt->a, this_lane) && is_const(lt->b)) {
+        const LE *le = op->condition.as<LE>();
+        if ((lt && equal(lt->a, this_lane) && is_const(lt->b)) ||
+            (le && equal(le->a, this_lane) && is_const(le->b))) {
             Expr condition = mutate(op->condition);
             internal_assert(bounds.contains(this_lane_name));
             Interval interval = bounds.get(this_lane_name);
-            interval.max = simplify(lt->b - 1);
+            interval.max = lt ? simplify(lt->b - 1) : le->b;
             ScopedBinding<Interval> bind(bounds, this_lane_name, interval);
             Stmt then_case = mutate(op->then_case);
             Stmt else_case = mutate(op->else_case);

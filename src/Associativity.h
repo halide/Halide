@@ -6,13 +6,13 @@
  * Methods for extracting an associative operator from a Func's update definition
  * if there is any and computing the identity of the associative operator.
  */
+#include <functional>
+#include <string>
+#include <utility>
+#include <vector>
 
 #include "AssociativeOpsTable.h"
-#include "IR.h"
-#include "IREquality.h"
-
-#include <functional>
-#include <utility>
+#include "Expr.h"
 
 namespace Halide {
 namespace Internal {

@@ -1,5 +1,6 @@
 #include "AsyncProducers.h"
 #include "ExprUsesVar.h"
+#include "Function.h"
 #include "IREquality.h"
 #include "IRMutator.h"
 #include "IROperator.h"

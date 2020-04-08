@@ -492,6 +492,7 @@ SOURCE_FILES = \
   EliminateBoolVectors.cpp \
   EmulateFloat16Math.cpp \
   Error.cpp \
+  Expr.cpp \
   FastIntegerDivide.cpp \
   FindCalls.cpp \
   Float16.cpp \
@@ -546,6 +547,7 @@ SOURCE_FILES = \
   Qualify.cpp \
   Random.cpp \
   RDom.cpp \
+  Realization.cpp \
   RealizationOrder.cpp \
   Reduction.cpp \
   RegionCosts.cpp \
@@ -655,6 +657,7 @@ HEADER_FILES = \
   Deinterleave.h \
   Derivative.h \
   DerivativeUtils.h \
+  DeviceAPI.h \
   DeviceArgument.h \
   DeviceInterface.h \
   Dimension.h \
@@ -666,6 +669,7 @@ HEADER_FILES = \
   Expr.h \
   ExprUsesVar.h \
   Extern.h \
+  ExternFuncArgument.h \
   FastIntegerDivide.h \
   FindCalls.h \
   Float16.h \
@@ -2133,7 +2137,7 @@ $(BUILD_DIR)/clang_ok:
 	@exit 1
 endif
 
-ifneq (,$(findstring $(LLVM_VERSION_TIMES_10), 80 90 100 110))
+ifneq (,$(findstring $(LLVM_VERSION_TIMES_10), 90 100 110))
 LLVM_OK=yes
 endif
 

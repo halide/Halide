@@ -6,14 +6,20 @@
  * variables.
  */
 
-#include "IR.h"
-
+#include <iostream>
+#include <string>
 #include <utility>
 #include <vector>
 
+#include "Expr.h"
+#include "Reduction.h"
+#include "Util.h"
+
 namespace Halide {
 
-class ImageParam;
+template<typename T>
+class Buffer;
+class OutputImageParam;
 
 /** A reduction variable represents a single dimension of a reduction
  * domain (RDom). Don't construct them directly, instead construct an
@@ -219,11 +225,11 @@ public:
      * a given Buffer or ImageParam. Has the same dimensionality as
      * the argument. */
     // @{
-    RDom(const Buffer<> &);
+    RDom(const Buffer<void> &);
     RDom(const OutputImageParam &);
     template<typename T>
     HALIDE_NO_USER_CODE_INLINE RDom(const Buffer<T> &im)
-        : RDom(Buffer<>(im)) {
+        : RDom(Buffer<void>(im)) {
     }
     // @}
 

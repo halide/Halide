@@ -1,6 +1,8 @@
 #include "RegionCosts.h"
 #include "FindCalls.h"
+#include "Function.h"
 #include "IRMutator.h"
+#include "IROperator.h"
 #include "IRVisitor.h"
 #include "PartitionLoops.h"
 #include "RealizationOrder.h"

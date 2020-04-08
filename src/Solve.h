@@ -4,7 +4,8 @@
 /** Defines methods for manipulating and analyzing boolean expressions. */
 
 #include "Bounds.h"
-#include "IR.h"
+#include "Expr.h"
+#include "Interval.h"
 #include "Scope.h"
 
 namespace Halide {

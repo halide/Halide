@@ -7,7 +7,7 @@
  * steady-stage, and an epilogue.
  */
 
-#include "IR.h"
+#include "Expr.h"
 
 namespace Halide {
 namespace Internal {

@@ -1,5 +1,6 @@
 #include "Memoization.h"
 #include "Error.h"
+#include "Function.h"
 #include "IRMutator.h"
 #include "IROperator.h"
 #include "Param.h"

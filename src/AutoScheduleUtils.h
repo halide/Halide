@@ -10,6 +10,7 @@
 #include <set>
 
 #include "Bounds.h"
+#include "Definition.h"
 #include "IRMutator.h"
 #include "IRVisitor.h"
 #include "Interval.h"

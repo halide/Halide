@@ -6,22 +6,21 @@
  */
 
 #include <string>
-#include <utility>
 #include <vector>
 
-#include "Debug.h"
-#include "Error.h"
+#include "Buffer.h"
 #include "Expr.h"
-#include "Function.h"
-#include "IntrusivePtr.h"
+#include "FunctionPtr.h"
 #include "ModulusRemainder.h"
 #include "Parameter.h"
+#include "PrefetchDirective.h"
+#include "Reduction.h"
 #include "Type.h"
-#include "Util.h"
-#include "runtime/HalideBuffer.h"
 
 namespace Halide {
 namespace Internal {
+
+class Function;
 
 /** The actual IR nodes begin here. Remember that all the Expr
  * nodes also have a public "type" property */
@@ -504,6 +503,7 @@ struct Call : public ExprNode<Call> {
         cast_mask,
         count_leading_zeros,
         count_trailing_zeros,
+        declare_box_touched,
         debug_to_file,
         div_round_to_zero,
         dynamic_shuffle,
