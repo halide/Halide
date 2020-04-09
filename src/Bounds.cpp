@@ -2104,9 +2104,12 @@ private:
     };
 
     void trim_scope_push(const string &name, const Interval &bound, vector<LetBound> &let_bounds) {
-        // We want to do a topological traversal of the dependent
-        // lets. I.e. we visit a var before all the vars that use it
-        // in their definition.
+        // We want to add all the children of 'name' to 'let_bounds',
+        // but avoiding duplicates (in some cases the dupes can
+        // explode the list size by ~80x); note that the exact order
+        // isn't important, as long as children are still visited
+        // after parents. So we want to do a topological traversal of
+        // the dependent lets.
 
         // A recursive version of a topological traversal looks like:
         // 1) if node already visited, return
@@ -2128,16 +2131,20 @@ private:
         // different senses of 'visited' to check for cycles, but we
         // don't need that here. We'll assume there are no cycles.
 
-        // We're going to do it non-recursively with an explicit stack
-        // of Task structs instead. Note that there's work to do (step
-        // 4) after the recursive step (step 3), so we can't just
-        // discard nodes at the same time as we enqueue their
-        // children. We need to consider every node in the stack twice
-        // - once just before pushing its children, and once again
-        // when we reach it again after dealing with all children and
-        // it's time to pop it. As a minor optimization we'll also do
-        // the visited insert/check (steps 1 and 2) before pushing, so
-        // that already-visited nodes don't even make it into the
+        // There could be many dependent lets, so we're going to do it
+        // non-recursively with an explicit stack of Task structs
+        // instead. Note that there's work to do (step 4) after the
+        // recursive step (step 3), so we can't just discard nodes at
+        // the same time as we enqueue their children. We need to
+        // consider every node in the stack twice - once just before
+        // pushing its children, and once again when we reach it again
+        // after dealing with all children and it's time to pop it
+        // (our pending stack is effectively a stack frame from the
+        // recursive version).
+
+        // As a minor optimization we'll also do the visited
+        // insert/check (steps 1 and 2) before pushing, so that
+        // already-visited nodes don't even make it into the
         // stack. Finally, we'll append nodes to the output instead of
         // prepending, and reverse the output at the end.
 
