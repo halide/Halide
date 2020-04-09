@@ -2103,19 +2103,41 @@ private:
         }
     };
 
-    void trim_scope_push(const string &name, const Interval &bound, vector<LetBound> &let_bounds) {
+    // Build an ordered list of the unique children of 'name', such that every
+    // parent in the list comes before all its children, but without duplicates.
+    void unique_ordered_children(const string &name, set<string> &unique,
+                                 vector<string> &ordered) {
+        auto result = unique.insert(name);
+        if (result.second) {
+            ordered.push_back(name);
+        }
+        for (const auto &v : children[get_var_instance(name)]) {
+            unique_ordered_children(v.var, unique, ordered);
+        }
+    }
+
+    void trim_scope_push(const string &name, const Interval &bound,
+                         vector<LetBound> &let_bounds) {
         scope.push(name, bound);
 
-        for (const auto &v : children[get_var_instance(name)]) {
+        vector<string> ordered;
+        {
+            set<string> unique;
+            for (const auto &v : children[get_var_instance(name)]) {
+                unique_ordered_children(v.var, unique, ordered);
+            }
+        }
+        for (const string &v : ordered) {
             string max_name = unique_name('t');
             string min_name = unique_name('t');
 
-            let_bounds.insert(let_bounds.begin(), LetBound(v.var, min_name, max_name));
+            let_bounds.insert(let_bounds.begin(), LetBound(v, min_name, max_name));
 
-            internal_assert(let_stmts.contains(v.var));
-            Type t = let_stmts.get(v.var).type();
-            Interval b = Interval(Variable::make(t, min_name), Variable::make(t, max_name));
-            trim_scope_push(v.var, b, let_bounds);
+            internal_assert(let_stmts.contains(v));
+            Type t = let_stmts.get(v).type();
+            Interval b =
+                Interval(Variable::make(t, min_name), Variable::make(t, max_name));
+            scope.push(v, b);
         }
     }
 
