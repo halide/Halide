@@ -2120,12 +2120,8 @@ private:
     }
 
     void trim_scope_pop(const string &name, vector<LetBound> &let_bounds) {
-        while (!let_bounds.empty()) {
-            LetBound l = let_bounds.back();
-            let_bounds.pop_back();
-
-            trim_scope_pop(l.var, let_bounds);
-
+        for (const LetBound l : let_bounds) {
+            scope.pop(l.var);
             for (pair<const string, Box> &i : boxes) {
                 Box &box = i.second;
                 for (size_t i = 0; i < box.size(); i++) {
@@ -2167,6 +2163,7 @@ private:
             }
         }
         scope.pop(name);
+        let_bounds.clear();
     }
 
     vector<const Variable *> find_free_vars(const Expr &e) {
