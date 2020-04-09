@@ -2132,7 +2132,6 @@ private:
         }
     }
 
-
     void trim_scope_pop(const string &name, vector<LetBound> &let_bounds) {
         while (!let_bounds.empty()) {
             LetBound l = let_bounds.back();
