@@ -2135,8 +2135,7 @@ private:
 
             internal_assert(let_stmts.contains(v));
             Type t = let_stmts.get(v).type();
-            Interval b =
-                Interval(Variable::make(t, min_name), Variable::make(t, max_name));
+            Interval b = Interval(Variable::make(t, min_name), Variable::make(t, max_name));
             scope.push(v, b);
         }
     }
