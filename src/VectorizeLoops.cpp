@@ -367,9 +367,6 @@ public:
 // Substitutes a vector for a scalar var in a Stmt. Used on the
 // body of every vectorized loop.
 class VectorSubs : public IRMutator {
-    // The var we're vectorizing
-    string var;
-
     // What we're replacing it with. Usually a ramp.
     std::map<string, Expr> replacements;
 
@@ -755,6 +752,8 @@ class VectorSubs : public IRMutator {
     Stmt visit(const IfThenElse *op) override {
         Expr cond = mutate(op->condition);
         int lanes = cond.type().lanes();
+        user_assert(replacements.size() == 1) << "Cannot handle IfThenElse node inside of the nested vectorization\n";
+        string var = replacements.begin()->first;
         debug(3) << "Vectorizing over " << var << "\n"
                  << "Old: " << op->condition << "\n"
                  << "New: " << cond << "\n";
@@ -851,9 +850,10 @@ class VectorSubs : public IRMutator {
 
     Stmt visit(const For *op) override {
         ForType for_type = op->for_type;
+
         if (for_type == ForType::Vectorized) {
             user_warning << "Warning: Encountered vector for loop over " << op->name
-                         << " inside vector for loop over " << var << "."
+                        //  << " inside vector for loop over " << var << "."
                          << " Ignoring the vectorize directive for the inner for loop.\n";
             for_type = ForType::Serial;
         }
@@ -897,6 +897,7 @@ class VectorSubs : public IRMutator {
         std::vector<Expr> new_extents;
         Expr new_expr;
         user_assert(replacements.size() == 1) << "Cannot handle Allocate node inside of the nested vectorization\n";
+        string var = replacements.begin()->first;
         Expr replacement = replacements.begin()->second;
         int lanes = replacement.type().lanes();
 
@@ -948,6 +949,7 @@ class VectorSubs : public IRMutator {
         // better luck vectorizing it.
 
         user_assert(replacements.size() == 1) << "Cannot scalarize nested vectorization\n";
+        string var = replacements.begin()->first;
         Expr replacement = replacements.begin()->second;
 
         // We'll need the original scalar versions of any containing lets.
@@ -965,6 +967,7 @@ class VectorSubs : public IRMutator {
         // This method returns a select tree that produces a vector lanes
         // result expression
         user_assert(replacements.size() == 1) << "Cannot scalarize nested vectorization\n";
+        string var = replacements.begin()->first;
         Expr replacement = replacements.begin()->second;
 
         Expr result;
