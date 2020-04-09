@@ -2106,6 +2106,9 @@ private:
     void trim_scope_push(const string &name, const Interval &bound, vector<LetBound> &let_bounds) {
         scope.push(name, bound);
 
+        // Note that we want to add all the children, but avoiding duplicates (in some cases the dupes
+        // can explode the list size by ~80x); note that the exact order isn't important, as long as
+        // children are still visited after parents.
         vector<string> pending;
         set<string> unique;
         pending.push_back(name);
