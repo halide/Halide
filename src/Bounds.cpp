@@ -2105,8 +2105,7 @@ private:
 
     // Build an ordered list of the unique children of 'name', such that every
     // parent in the list comes before all its children, but without duplicates.
-    void unique_ordered_children(const string &name, set<string> &unique,
-                                 vector<string> &ordered) {
+    void unique_ordered_children(const string &name, set<string> &unique, vector<string> &ordered) {
         auto result = unique.insert(name);
         if (result.second) {
             ordered.push_back(name);
@@ -2116,8 +2115,7 @@ private:
         }
     }
 
-    void trim_scope_push(const string &name, const Interval &bound,
-                         vector<LetBound> &let_bounds) {
+    void trim_scope_push(const string &name, const Interval &bound, vector<LetBound> &let_bounds) {
         scope.push(name, bound);
 
         vector<string> ordered;
