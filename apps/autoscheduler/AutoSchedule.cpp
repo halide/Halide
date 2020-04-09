@@ -822,6 +822,7 @@ struct State {
         //std::cout << "evaluate()" << std::endl;
         inner->calculate_cost(dag, params, cost_model, false, true);
         //std::cout << "calculate_cost()" << std::endl;
+        internal_assert(cost_model && "bug, cost model not defined");
         cost_model->evaluate_costs();
         //std::cout << "evaluate_costs()" << std::endl;
         //std::cout << "inner cost "<<inner->cost << std::endl;
