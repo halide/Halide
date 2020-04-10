@@ -2187,7 +2187,7 @@ private:
     }
 
     void trim_scope_pop(const string &name, vector<LetBound> &let_bounds) {
-        for (const LetBound l : let_bounds) {
+        for (const LetBound &l : let_bounds) {
             scope.pop(l.var);
             for (pair<const string, Box> &i : boxes) {
                 Box &box = i.second;
