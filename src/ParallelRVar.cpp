@@ -1,6 +1,7 @@
 #include "ParallelRVar.h"
 #include "CSE.h"
 #include "Debug.h"
+#include "ExprUsesVar.h"
 #include "IR.h"
 #include "IREquality.h"
 #include "IRMutator.h"
@@ -96,8 +97,32 @@ bool can_parallelize_rvar(const string &v,
     const vector<ReductionVariable> &rvars = r.schedule().rvars();
 
     FindLoads find(f);
-    for (size_t i = 0; i < values.size(); i++) {
-        values[i].accept(&find);
+    for (const Expr &v : values) {
+        v.accept(&find);
+    }
+
+    // Early out if any race would be a race to store the same value
+    // to the same site. Clearly a constant qualifies. I.e. we can
+    // safely parallelize/split/reorder:
+    // f(g(r)) = 4;
+
+    // More generally, any value that does not recursively load the
+    // func or use the rvar is also fine, because there can never be
+    // races between two distinct values of the pure var by
+    // construction (because the pure var must appear as one of the
+    // args) e.g:
+    // f(g(r, x), x) = h(x);
+
+    if (find.loads.empty()) {
+        bool uses_rvar_on_rhs = false;
+        for (const auto &r : rvars) {
+            for (const Expr &v : values) {
+                uses_rvar_on_rhs |= expr_uses_var(v, r.var);
+            }
+        }
+        if (!uses_rvar_on_rhs) {
+            return true;
+        }
     }
 
     // Make an expr representing the store done by a different thread.

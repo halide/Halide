@@ -221,6 +221,7 @@ tests(GROUPS correctness travis
         parallel_nested.cpp
         parallel_reductions.cpp
         parallel_rvar.cpp
+        parallel_scatter.cpp
         param.cpp
         parameter_constraints.cpp
         param_map.cpp
