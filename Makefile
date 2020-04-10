@@ -332,6 +332,7 @@ ifneq (,$(findstring cuda,$(HL_TARGET)))
 TEST_CUDA = 1
 endif
 endif
+TEST_CUDA = 0
 
 ifneq ($(WITH_OPENCL), )
 ifneq (,$(findstring opencl,$(HL_TARGET)))
