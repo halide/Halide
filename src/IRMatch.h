@@ -443,7 +443,7 @@ struct Wild {
     constexpr static uint32_t binds = 1 << (i + 16);
 
     constexpr static IRNodeType min_node_type = IRNodeType::IntImm;
-    constexpr static IRNodeType max_node_type = IRNodeType::Shuffle;
+    constexpr static IRNodeType max_node_type = StrongestExprNodeType;
     constexpr static bool canonical = true;
 
     template<uint32_t bound>
@@ -1829,6 +1829,8 @@ struct Overflows {
 
     constexpr static uint32_t binds = bindings<A>::mask;
 
+    // This rule is a predicate, so it always evaluates to a boolean,
+    // which has IRNodeType UIntImm
     constexpr static IRNodeType min_node_type = IRNodeType::UIntImm;
     constexpr static IRNodeType max_node_type = IRNodeType::UIntImm;
     constexpr static bool canonical = true;
@@ -1861,6 +1863,7 @@ struct Overflow {
 
     constexpr static uint32_t binds = 0;
 
+    // Overflow is an intrinsic, represented as a Call node
     constexpr static IRNodeType min_node_type = IRNodeType::Call;
     constexpr static IRNodeType max_node_type = IRNodeType::Call;
     constexpr static bool canonical = true;
@@ -1900,6 +1903,7 @@ struct IsConst {
 
     constexpr static uint32_t binds = bindings<A>::mask;
 
+    // This rule is a boolean-valued predicate. Bools have type UIntImm.
     constexpr static IRNodeType min_node_type = IRNodeType::UIntImm;
     constexpr static IRNodeType max_node_type = IRNodeType::UIntImm;
     constexpr static bool canonical = true;
@@ -1937,6 +1941,7 @@ struct CanProve {
 
     constexpr static uint32_t binds = bindings<A>::mask;
 
+    // This rule is a boolean-valued predicate. Bools have type UIntImm.
     constexpr static IRNodeType min_node_type = IRNodeType::UIntImm;
     constexpr static IRNodeType max_node_type = IRNodeType::UIntImm;
     constexpr static bool canonical = true;
@@ -1972,6 +1977,7 @@ struct IsFloat {
 
     constexpr static uint32_t binds = bindings<A>::mask;
 
+    // This rule is a boolean-valued predicate. Bools have type UIntImm.
     constexpr static IRNodeType min_node_type = IRNodeType::UIntImm;
     constexpr static IRNodeType max_node_type = IRNodeType::UIntImm;
     constexpr static bool canonical = true;

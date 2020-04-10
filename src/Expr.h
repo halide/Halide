@@ -23,7 +23,10 @@ class IRVisitor;
 
 /** All our IR node types get unique IDs for the purposes of RTTI */
 enum class IRNodeType {
-    // Exprs, in order of strength
+    // Exprs, in order of strength. Code in IRMatch.h and the
+    // simplifier relies on this order for canonicalization of
+    // expressions, so you may need to update those modules if you
+    // change this list.
     IntImm,
     UIntImm,
     FloatImm,
@@ -71,6 +74,8 @@ enum class IRNodeType {
     Prefetch,
     Atomic
 };
+
+constexpr IRNodeType StrongestExprNodeType = IRNodeType::Shuffle;
 
 /** The abstract base classes for a node in the Halide IR. */
 struct IRNode {
