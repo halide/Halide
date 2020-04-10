@@ -23,6 +23,9 @@ def test_rdom():
             else:
                 assert output[ix, iy] == 1
 
+    assert r.x.name() == r[0].name()
+    assert r.y.name() == r[1].name()
+
     return 0
 
 if __name__ == "__main__":

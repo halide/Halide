@@ -34,6 +34,9 @@ void define_rdom(py::module &m) {
             .def("same_as", &RDom::same_as)
             .def("dimensions", &RDom::dimensions)
             .def("where", &RDom::where, py::arg("predicate"))
+            .def("__getitem__", [](RDom &r, const int i) -> RVar {
+                return r[i];
+            })
             .def_readonly("x", &RDom::x)
             .def_readonly("y", &RDom::y)
             .def_readonly("z", &RDom::z)
