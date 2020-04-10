@@ -274,7 +274,34 @@ Expr Simplify::visit(const Sub *op, ExprInfo *bounds) {
                rewrite(x/c0 - (x + y)/c0, ((fold(c0 - 1) - y) - (x % c0))/c0, c0 > 0) ||
                rewrite((x + y)/c0 - x/c0, ((x % c0) + y)/c0, c0 > 0) ||
                rewrite(x/c0 - (x - y)/c0, ((y + fold(c0 - 1)) - (x % c0))/c0, c0 > 0) ||
-               rewrite((x - y)/c0 - x/c0, ((x % c0) - y)/c0, c0 > 0))))) {
+               rewrite((x - y)/c0 - x/c0, ((x % c0) - y)/c0, c0 > 0) ||
+
+               // Simplification of bounds code for various tail
+               // strategies requires cancellations of the form:
+               // min(f(x), y) - g(x)
+
+               // There are many potential variants of these rules if
+               // we start adding commutative/associative rewritings
+               // of them, or consider max as well as min. We
+               // explicitly only include the ones necessary to get
+               // correctness_nested_tail_strategies to pass.
+               rewrite((min(x + y, z) + w) - x, min(z - x, y) + w) ||
+               rewrite(min((x + y) + w, z) - x, min(z - x, y + w)) ||
+               rewrite(min(min(x + z, y), w) - x, min(min(y, w) - x, z)) ||
+               rewrite(min(min(y, x + z), w) - x, min(min(y, w) - x, z)) ||
+
+               rewrite(min((x + y)*u + z, w) - x*u, min(w - x*u, y*u + z)) ||
+               rewrite(min((y + x)*u + z, w) - x*u, min(w - x*u, y*u + z)) ||
+
+               // Splits can introduce confounding divisions
+               rewrite(min(x*c0 + y, z) / c1 - x*c2, min(y, z - x*c0) / c1, c0 == c1 * c2) ||
+               rewrite(min(z, x*c0 + y) / c1 - x*c2, min(y, z - x*c0) / c1, c0 == c1 * c2) ||
+
+               // There could also be an addition inside the division (e.g. if it's division rounding up)
+               rewrite((min(x*c0 + y, z) + w) / c1 - x*c2, (min(y, z - x*c0) + w) / c1, c0 == c1 * c2) ||
+               rewrite((min(z, x*c0 + y) + w) / c1 - x*c2, (min(z - x*c0, y) + w) / c1, c0 == c1 * c2) ||
+
+               false)))) {
             return mutate(rewrite.result, bounds);
         }
     }

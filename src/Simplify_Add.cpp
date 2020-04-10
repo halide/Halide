@@ -143,7 +143,9 @@ Expr Simplify::visit(const Add *op, ExprInfo *bounds) {
 
                rewrite(x + ((c0 - x)/c1)*c1, c0 - ((c0 - x) % c1), c1 > 0) ||
                rewrite(x + ((c0 - x)/c1 + y)*c1, y * c1 - ((c0 - x) % c1) + c0, c1 > 0) ||
-               rewrite(x + (y + (c0 - x)/c1)*c1, y * c1 - ((c0 - x) % c1) + c0, c1 > 0))))) {
+               rewrite(x + (y + (c0 - x)/c1)*c1, y * c1 - ((c0 - x) % c1) + c0, c1 > 0) ||
+
+               false)))) {
             return mutate(rewrite.result, bounds);
         }
         // clang-format on

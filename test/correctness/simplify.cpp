@@ -926,6 +926,24 @@ void check_bounds() {
     check(max((y + x * 32) * 4, x * 128 + 127), max(y * 4, 127) + x * 128);
     check(max((y + x * 32) * 4, x * 128 + 4), (max(y, 1) + x * 32) * 4);
 
+    check((min(x + y, z) + w) - x, min(z - x, y) + w);
+    check(min((x + y) + w, z) - x, min(z - x, w + y));
+
+    check(min(min(x + z, y), w) - x, min(min(w, y) - x, z));
+    check(min(min(y, x + z), w) - x, min(min(w, y) - x, z));
+
+    check(min((x + y) * 7 + z, w) - x * 7, min(w - x * 7, y * 7 + z));
+    check(min((y + x) * 7 + z, w) - x * 7, min(w - x * 7, y * 7 + z));
+
+    check(min(x * 12 + y, z) / 4 - x * 3, min(z - x * 12, y) / 4);
+    check(min(z, x * 12 + y) / 4 - x * 3, min(z - x * 12, y) / 4);
+
+    check((min(x * 12 + y, z) + w) / 4 - x * 3, (min(z - x * 12, y) + w) / 4);
+    check((min(z, x * 12 + y) + w) / 4 - x * 3, (min(z - x * 12, y) + w) / 4);
+
+    check(min((min(((y + 5) / 2), x) * 2), y + 3), min(x * 2, y + 3));
+    check(min((min(((y + 1) / 3), x) * 3) + 1, y), min(x * 3 + 1, y));
+
     {
         Expr one = 1;
         Expr three = 3;
