@@ -1,5 +1,6 @@
 import halide as hl
 
+
 def test_rdom():
     x = hl.Var("x")
     y = hl.Var("y")
@@ -15,7 +16,7 @@ def test_rdom():
 
     diagonal[r.x, r.y] += 2
     output = diagonal.realize(domain_width, domain_height)
-    
+
     for iy in range(domain_height):
         for ix in range(domain_width):
             if ix <= iy:
@@ -27,14 +28,17 @@ def test_rdom():
     assert r.y.name() == r[1].name()
     try:
         r[-1].name()
+        raise Exception("underflowing index should raise KeyError")
     except KeyError:
         pass
     try:
         r[2].name()
+        raise Exception("overflowing index should raise KeyError")
     except KeyError:
         pass
     try:
         r["foo"].name()
+        raise Exception("bad index type should raise TypeError")
     except TypeError:
         pass
 
