@@ -2,6 +2,7 @@
 
 #include "CSE.h"
 #include "ExprUsesVar.h"
+#include "IRMatch.h"
 #include "IRMutator.h"
 #include "IROperator.h"
 #include "Monotonic.h"
@@ -25,7 +26,12 @@ class SimplifyCorrelatedDifferences : public IRMutator {
 
     Scope<Monotonic> monotonic;
 
-    vector<pair<string, Expr>> lets;
+    struct OuterLet {
+        string name;
+        Expr value;
+        bool may_substitute;
+    };
+    vector<OuterLet> lets;
 
     template<typename LetStmtOrLet, typename StmtOrExpr>
     StmtOrExpr visit_let(const LetStmtOrLet *op) {
@@ -45,14 +51,33 @@ class SimplifyCorrelatedDifferences : public IRMutator {
         std::vector<Frame> frames;
         StmtOrExpr result;
 
+        // Note that we must add *everything* that depends on the loop
+        // var to the monotonic scope and the list of lets, even
+        // things which we can never substitute in (e.g. impure
+        // things). This is for two reasons. First this pass could be
+        // used at a time when we still have nested lets under the
+        // same name. If we decide not to add an inner let, but do add
+        // the outer one, then later references to it will be
+        // incorrect. Second, if we don't add something that happens
+        // to be non-monotonic, then is_monotonic finds a variable
+        // that references it in a later let, it will think it's a
+        // constant, not an unknown.
         do {
             result = op->body;
-            if (op->value.type() == Int(32) && is_pure(op->value)) {
+            if (loop_var.empty()) {
+                frames.emplace_back(op);
+                continue;
+            }
+
+            bool pure = is_pure(op->value);
+            if (!pure || expr_uses_vars(op->value, monotonic)) {
                 frames.emplace_back(op, loop_var, monotonic);
                 Expr new_value = mutate(op->value);
-                lets.emplace_back(op->name, new_value);
+                bool may_substitute_in = new_value.type() == Int(32) && pure;
+                lets.emplace_back(OuterLet{op->name, new_value, may_substitute_in});
                 frames.back().new_value = std::move(new_value);
             } else {
+                // Pure and constant w.r.t the loop var
                 frames.emplace_back(op);
             }
         } while ((op = result.template as<LetStmtOrLet>()));
@@ -101,7 +126,10 @@ class SimplifyCorrelatedDifferences : public IRMutator {
             tmp_monotonic.swap(monotonic);
             tmp_lets.swap(lets);
             loop_var = op->name;
-            s = IRMutator::visit(op);
+            {
+                ScopedBinding<Monotonic> bind(monotonic, loop_var, Monotonic::Increasing);
+                s = IRMutator::visit(op);
+            }
             loop_var.clear();
             tmp_monotonic.swap(monotonic);
             tmp_lets.swap(lets);
@@ -110,31 +138,91 @@ class SimplifyCorrelatedDifferences : public IRMutator {
         return s;
     }
 
+    class PartiallyCancelDifferences : public IRMutator {
+        using IRMutator::visit;
+
+        // Symbols used by rewrite rules
+        IRMatcher::Wild<0> x;
+        IRMatcher::Wild<1> y;
+        IRMatcher::Wild<2> z;
+        IRMatcher::WildConst<0> c0;
+        IRMatcher::WildConst<1> c1;
+
+        Expr visit(const Sub *op) override {
+
+            Expr a = mutate(op->a), b = mutate(op->b);
+
+            // Partially cancel terms in correlated differences of
+            // various kinds to get tighter bounds.  We assume any
+            // correlated term has already been pulled leftmost by
+            // solve_expression.
+            if (op->type == Int(32)) {
+                auto rewrite = IRMatcher::rewriter(IRMatcher::sub(a, b), op->type);
+                if (
+                    // Differences of quasi-affine functions
+                    rewrite((x + y) / c0 - (x + z) / c0, ((x % c0) + y) / c0 - ((x % c0) + z) / c0) ||
+                    rewrite(x / c0 - (x + z) / c0, 0 - ((x % c0) + z) / c0) ||
+                    rewrite((x + y) / c0 - x / c0, ((x % c0) + y) / c0) ||
+
+                    // truncated cones have a constant upper or lower
+                    // bound that isn't apparent when expressed in the
+                    // form in the LHS below
+                    rewrite(min(x, c0) - max(x, c1), min(min(c0 - x, x - c1), fold(min(0, c0 - c1)))) ||
+                    rewrite(max(x, c0) - min(x, c1), max(max(c0 - x, x - c1), fold(max(0, c0 - c1)))) ||
+                    rewrite(min(x, y) - max(x, z), min(min(x, y) - max(x, z), 0)) ||
+                    rewrite(max(x, y) - min(x, z), max(max(x, y) - min(x, z), 0)) ||
+
+                    false) {
+                    return rewrite.result;
+                }
+            }
+            return a - b;
+        }
+    };
+
     template<typename T>
     Expr visit_add_or_sub(const T *op) {
-        if (op->type != Int(32)) {
+        if (op->type != Int(32) || loop_var.empty()) {
             return IRMutator::visit(op);
         }
         Expr e = IRMutator::visit(op);
+        op = e.as<T>();
+        if (!op) {
+            return e;
+        }
         auto ma = is_monotonic(op->a, loop_var, monotonic);
         auto mb = is_monotonic(op->b, loop_var, monotonic);
 
         if ((ma == Monotonic::Increasing && mb == Monotonic::Increasing && std::is_same<T, Sub>::value) ||
             (ma == Monotonic::Decreasing && mb == Monotonic::Decreasing && std::is_same<T, Sub>::value) ||
             (ma == Monotonic::Increasing && mb == Monotonic::Decreasing && std::is_same<T, Add>::value) ||
-            (ma == Monotonic::Decreasing && mb == Monotonic::Increasing && std::is_same<T, Add>::value)) {
+            (ma == Monotonic::Decreasing && mb == Monotonic::Increasing && std::is_same<T, Add>::value) ||
+            (ma == Monotonic::Unknown && mb != Monotonic::Constant) ||
+            (mb == Monotonic::Unknown && ma != Monotonic::Constant)) {
 
             for (auto it = lets.rbegin(); it != lets.rend(); it++) {
-                e = Let::make(it->first, it->second, e);
+                if (expr_uses_var(e, it->name)) {
+                    if (!it->may_substitute) {
+                        // We have to stop here. Can't continue
+                        // because there might be an outer let with
+                        // the same name that we *can* substitute in,
+                        // and then inner uses will get the wrong
+                        // value.
+                        break;
+                    }
+                }
+                e = Let::make(it->name, it->value, e);
             }
             e = common_subexpression_elimination(e);
             e = solve_expression(e, loop_var).result;
+            e = PartiallyCancelDifferences().mutate(e);
             e = simplify(e);
 
             if ((debug::debug_level() > 0) &&
                 is_monotonic(e, loop_var, monotonic) == Monotonic::Unknown) {
                 // Might be a missed simplification opportunity. Log to help improve the simplifier.
-                debug(1) << "Warning: expression is non-monotonic in loop variable " << loop_var << ": " << e << "\n";
+                debug(1) << "Warning: expression is non-monotonic in loop variable "
+                         << loop_var << ": " << e << "\n";
             }
         }
         return e;
@@ -151,8 +239,8 @@ class SimplifyCorrelatedDifferences : public IRMutator {
 
 }  // namespace
 
-Stmt simplify_correlated_differences(const Stmt &s) {
-    return SimplifyCorrelatedDifferences().mutate(s);
+Stmt simplify_correlated_differences(const Stmt &stmt) {
+    return SimplifyCorrelatedDifferences().mutate(stmt);
 }
 
 }  // namespace Internal
