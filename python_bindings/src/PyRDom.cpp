@@ -35,6 +35,8 @@ void define_rdom(py::module &m) {
             .def("dimensions", &RDom::dimensions)
             .def("where", &RDom::where, py::arg("predicate"))
             .def("__getitem__", [](RDom &r, const int i) -> RVar {
+                if(i < 0 || i >= r.dimensions())
+                    throw pybind11::key_error();
                 return r[i];
             })
             .def_readonly("x", &RDom::x)

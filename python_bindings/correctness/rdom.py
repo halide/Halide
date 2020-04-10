@@ -25,6 +25,18 @@ def test_rdom():
 
     assert r.x.name() == r[0].name()
     assert r.y.name() == r[1].name()
+    try:
+        r[-1].name()
+    except KeyError:
+        pass
+    try:
+        r[2].name()
+    except KeyError:
+        pass
+    try:
+        r["foo"].name()
+    except TypeError:
+        pass
 
     return 0
 
