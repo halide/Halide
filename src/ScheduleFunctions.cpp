@@ -1528,7 +1528,6 @@ private:
                     if (stage_dependencies[i][stage_index[i]] > 0) {
                         break;
                     }
-                    progress_made = true;
                     // Now that we are going to add a stage to the order, go over dependent nodes
                     // and decrease their dependency count.
                     for (size_t k = 0; k < adj_list[i][stage_index[i]].size(); k++) {
@@ -1538,6 +1537,7 @@ private:
                     }
                     stage_order.emplace_back(funcs[i], stage_index[i]);
                     stage_index[i]++;
+                    progress_made = true;
                 }
                 if (stage_index[i] == stage_dependencies[i].size()) {
                     complete_count++;

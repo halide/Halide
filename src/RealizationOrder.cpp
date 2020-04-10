@@ -190,7 +190,8 @@ void check_no_cyclic_compute_with(const map<string, vector<FusedPair>> &fused_pa
     }
 }
 
-// Check that stages backward compute_with.
+// Check that stages are scheduled in the correct order with no compute_with
+// edge going back across other compute_with edge.
 // For example, some illegal cases include:
 //   f.compute_with(g.update(0), var)
 //   f.update(0).compute_with(g, var)
