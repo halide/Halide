@@ -1,0 +1,36 @@
+#!/usr/bin/env python3
+
+# apps="bilateral_grid local_laplacian nl_means lens_blur camera_pipe stencil_chain harris hist max_filter unsharp interpolate_generator conv_layer mat_mul_generator iir_blur_generator resnet_50_blockwise bgu".split(" ")
+apps="bilateral_grid local_laplacian nl_means lens_blur camera_pipe stencil_chain harris hist max_filter unsharp interpolate conv_layer iir_blur bgu".split(" ") # Missing mat_mul_generator and resnet_50_blockwise
+
+def strip_non_digits(s):
+    return "".join([c for c in s if c.isdigit() or c == "."])
+
+print("test,greedy,beam,manual,mcts")
+
+for app in apps:
+    # Get manual, greedy, and mcts results
+    manual = 0
+    greedy = 0
+    with open(f"../greedy/{app}.txt") as f:
+        for line in f:
+            if line.startswith("Manually-tuned time: ") or "schedule_type=manual" in line:
+                manual += float(strip_non_digits(line)) / 1000
+            elif line.startswith("Auto-scheduled time: ") or "schedule_type=auto_schedule" in line:
+                greedy += float(strip_non_digits(line)) / 1000
+
+    # Get beam results
+    beam = 0
+    with open(f"../beam/{app}.txt") as f:
+        for line in f:
+            if line.startswith("Auto-scheduled time: ") or "schedule_type=auto_schedule" in line:
+                beam += float(strip_non_digits(line)) / 1000
+
+    mcts = 0
+    with open(f"../mcts/{app}.txt") as f:
+        for line in f:
+            if line.startswith("Auto-scheduled time: ") or "schedule_type=auto_schedule" in line:
+                mcts += float(strip_non_digits(line)) / 1000
+
+    print(f"{app},{greedy},{beam},{manual},{mcts}")
+
