@@ -1225,6 +1225,7 @@ int nested_compute_with_test() {
 int update_stage_test() {
     const int f_size = 128;
     const int g_size = 128;
+    const int base = 31;
 
     Buffer<int> f_im(f_size, f_size), g_im(g_size, g_size);
     Buffer<int> f_im_ref(f_size, f_size), g_im_ref(g_size, g_size);
@@ -1234,12 +1235,12 @@ int update_stage_test() {
         Func f("f"), g("g");
 
         g(x, y) = 1;
-        g(x, y) = 2 + 0 * g(x, y);
-        g(x, y) = 3 + 0 * g(x, y);
+        g(x, y) = 2 + base * g(x, y);
+        g(x, y) = 3 + base * g(x, y);
 
         f(x, y) = 5;
-        f(x, y) = 6 + 0 * f(x, y);
-        f(x, y) = 7 + 0 * f(x, y);
+        f(x, y) = 6 + base * f(x, y);
+        f(x, y) = 7 + base * f(x, y);
 
         f.compute_root();
         g.compute_root();
@@ -1256,12 +1257,12 @@ int update_stage_test() {
         Func f("f"), g("g");
 
         g(x, y) = 1;
-        g(x, y) = 2 + 0 * g(x, y);
-        g(x, y) = 3 + 0 * g(x, y);
+        g(x, y) = 2 + base * g(x, y);
+        g(x, y) = 3 + base * g(x, y);
 
         f(x, y) = 5;
-        f(x, y) = 6 + 0 * f(x, y);
-        f(x, y) = 7 + 0 * f(x, y);
+        f(x, y) = 6 + base * f(x, y);
+        f(x, y) = 7 + base * f(x, y);
 
         g.compute_root();
         f.compute_root();
@@ -1296,6 +1297,7 @@ int update_stage_test() {
 int update_stage2_test() {
     const int f_size = 128;
     const int g_size = 128;
+    const int base = 31;
 
     Buffer<int> f_im(f_size, f_size), g_im(g_size, g_size);
     Buffer<int> f_im_ref(f_size, f_size), g_im_ref(g_size, g_size);
@@ -1305,12 +1307,12 @@ int update_stage2_test() {
         Func f("f"), g("g");
 
         g(x, y) = 1;
-        g(x, y) = 2 + 0 * g(x, y);
-        g(x, y) = 3 + 0 * g(x, y);
+        g(x, y) = 2 + base * g(x, y);
+        g(x, y) = 3 + base * g(x, y);
 
         f(x, y) = 5;
-        f(x, y) = 6 + 0 * f(x, y);
-        f(x, y) = 7 + 0 * f(x, y);
+        f(x, y) = 6 + base * f(x, y);
+        f(x, y) = 7 + base * f(x, y);
 
         f.compute_root();
         g.compute_root();
@@ -1327,12 +1329,12 @@ int update_stage2_test() {
         Func f("f"), g("g");
 
         g(x, y) = 1;
-        g(x, y) = 2 + 0 * g(x, y);
-        g(x, y) = 3 + 0 * g(x, y);
+        g(x, y) = 2 + base * g(x, y);
+        g(x, y) = 3 + base * g(x, y);
 
         f(x, y) = 5;
-        f(x, y) = 6 + 0 * f(x, y);
-        f(x, y) = 7 + 0 * f(x, y);
+        f(x, y) = 6 + base * f(x, y);
+        f(x, y) = 7 + base * f(x, y);
 
         g.compute_root();
         f.compute_root();
@@ -1367,6 +1369,7 @@ int update_stage2_test() {
 int update_stage3_test() {
     const int f_size = 128;
     const int g_size = 128;
+    const int base = 31;
 
     Buffer<int> f_im(f_size, f_size), g_im(g_size, g_size);
     Buffer<int> f_im_ref(f_size, f_size), g_im_ref(g_size, g_size);
@@ -1376,12 +1379,12 @@ int update_stage3_test() {
         Func f("f"), g("g");
 
         g(x, y) = 1;
-        g(x, y) = 2 + 0 * g(x, y);
-        g(x, y) = 3 + 0 * g(x, y);
+        g(x, y) = 2 + base * g(x, y);
+        g(x, y) = 3 + base * g(x, y);
 
         f(x, y) = 5;
-        f(x, y) = 6 + 0 * f(x, y);
-        f(x, y) = 7 + 0 * f(x, y);
+        f(x, y) = 6 + base * f(x, y);
+        f(x, y) = 7 + base * f(x, y);
 
         f.compute_root();
         g.compute_root();
@@ -1398,12 +1401,12 @@ int update_stage3_test() {
         Func f("f"), g("g");
 
         g(x, y) = 1;
-        g(x, y) = 2 + 0 * g(x, y);
-        g(x, y) = 3 + 0 * g(x, y);
+        g(x, y) = 2 + base * g(x, y);
+        g(x, y) = 3 + base * g(x, y);
 
         f(x, y) = 5;
-        f(x, y) = 6 + 0 * f(x, y);
-        f(x, y) = 7 + 0 * f(x, y);
+        f(x, y) = 6 + base * f(x, y);
+        f(x, y) = 7 + base * f(x, y);
 
         g.compute_root();
         f.compute_root();
@@ -1439,6 +1442,7 @@ int update_stage3_test() {
 int update_stage_pairwise_test() {
     const int f_size = 128;
     const int g_size = 128;
+    const int base = 31;
 
     Buffer<int> f_im(f_size, f_size), g_im(g_size, g_size);
     Buffer<int> f_im_ref(f_size, f_size), g_im_ref(g_size, g_size);
@@ -1448,12 +1452,12 @@ int update_stage_pairwise_test() {
         Func f("f"), g("g");
 
         g(x, y) = 1;
-        g(x, y) = 2 + 0 * g(x, y);
-        g(x, y) = 3 + 0 * g(x, y);
+        g(x, y) = 2 + base * g(x, y);
+        g(x, y) = 3 + base * g(x, y);
 
         f(x, y) = 5;
-        f(x, y) = 6 + 0 * f(x, y);
-        f(x, y) = 7 + 0 * f(x, y);
+        f(x, y) = 6 + base * f(x, y);
+        f(x, y) = 7 + base * f(x, y);
 
         f.compute_root();
         g.compute_root();
@@ -1470,12 +1474,12 @@ int update_stage_pairwise_test() {
         Func f("f"), g("g");
 
         g(x, y) = 1;
-        g(x, y) = 2 + 0 * g(x, y);
-        g(x, y) = 3 + 0 * g(x, y);
+        g(x, y) = 2 + base * g(x, y);
+        g(x, y) = 3 + base * g(x, y);
 
         f(x, y) = 5;
-        f(x, y) = 6 + 0 * f(x, y);
-        f(x, y) = 7 + 0 * f(x, y);
+        f(x, y) = 6 + base * f(x, y);
+        f(x, y) = 7 + base * f(x, y);
 
         g.compute_root();
         f.compute_root();
@@ -1511,6 +1515,7 @@ int update_stage_pairwise_test() {
 int update_stage_pairwise_zigzag_test() {
     const int f_size = 128;
     const int g_size = 128;
+    const int base = 31;
 
     Buffer<int> f_im(f_size, f_size), g_im(g_size, g_size);
     Buffer<int> f_im_ref(f_size, f_size), g_im_ref(g_size, g_size);
@@ -1520,14 +1525,14 @@ int update_stage_pairwise_zigzag_test() {
         Func f("f"), g("g");
 
         g(x, y) = 1;
-        g(x, y) = 2 + 0 * g(x, y);
-        g(x, y) = 3 + 0 * g(x, y);
-        g(x, y) = 4 + 0 * g(x, y);
+        g(x, y) = 2 + base * g(x, y);
+        g(x, y) = 3 + base * g(x, y);
+        g(x, y) = 4 + base * g(x, y);
 
         f(x, y) = 5;
-        f(x, y) = 6 + 0 * f(x, y);
-        f(x, y) = 7 + 0 * f(x, y);
-        f(x, y) = 8 + 0 * f(x, y);
+        f(x, y) = 6 + base * f(x, y);
+        f(x, y) = 7 + base * f(x, y);
+        f(x, y) = 8 + base * f(x, y);
 
         f.compute_root();
         g.compute_root();
@@ -1544,14 +1549,14 @@ int update_stage_pairwise_zigzag_test() {
         Func f("f"), g("g");
 
         g(x, y) = 1;
-        g(x, y) = 2 + 0 * g(x, y);
-        g(x, y) = 3 + 0 * g(x, y);
-        g(x, y) = 4 + 0 * g(x, y);
+        g(x, y) = 2 + base * g(x, y);
+        g(x, y) = 3 + base * g(x, y);
+        g(x, y) = 4 + base * g(x, y);
 
         f(x, y) = 5;
-        f(x, y) = 6 + 0 * f(x, y);
-        f(x, y) = 7 + 0 * f(x, y);
-        f(x, y) = 8 + 0 * f(x, y);
+        f(x, y) = 6 + base * f(x, y);
+        f(x, y) = 7 + base * f(x, y);
+        f(x, y) = 8 + base * f(x, y);
 
         g.compute_root();
         f.compute_root();
@@ -1589,6 +1594,7 @@ int update_stage_diagonal_test() {
     const int f_size = 128;
     const int g_size = 128;
     const int h_size = 128;
+    const int base = 31;
 
     Buffer<int> f_im(f_size, f_size), g_im(g_size, g_size), h_im(h_size, h_size);
     Buffer<int> f_im_ref(f_size, f_size), g_im_ref(g_size, g_size), h_im_ref(h_size, h_size);
@@ -1598,16 +1604,16 @@ int update_stage_diagonal_test() {
         Func f("f"), g("g"), h("h");
 
         g(x, y) = 1;
-        g(x, y) = 2 + 0 * g(x, y);
-        g(x, y) = 3 + 0 * g(x, y);
+        g(x, y) = 2 + base * g(x, y);
+        g(x, y) = 3 + base * g(x, y);
 
         f(x, y) = 5;
-        f(x, y) = 6 + 0 * f(x, y);
-        f(x, y) = 7 + 0 * f(x, y);
+        f(x, y) = 6 + base * f(x, y);
+        f(x, y) = 7 + base * f(x, y);
 
         h(x, y) = 10;
-        h(x, y) = 11 + 0 * h(x, y);
-        h(x, y) = 12 + 0 * h(x, y);
+        h(x, y) = 11 + base * h(x, y);
+        h(x, y) = 12 + base * h(x, y);
 
         f.compute_root();
         g.compute_root();
@@ -1626,16 +1632,16 @@ int update_stage_diagonal_test() {
         Func f("f"), g("g"), h("h");
 
         g(x, y) = 1;
-        g(x, y) = 2 + 0 * g(x, y);
-        g(x, y) = 3 + 0 * g(x, y);
+        g(x, y) = 2 + base * g(x, y);
+        g(x, y) = 3 + base * g(x, y);
 
         f(x, y) = 5;
-        f(x, y) = 6 + 0 * f(x, y);
-        f(x, y) = 7 + 0 * f(x, y);
+        f(x, y) = 6 + base * f(x, y);
+        f(x, y) = 7 + base * f(x, y);
 
         h(x, y) = 10;
-        h(x, y) = 11 + 0 * h(x, y);
-        h(x, y) = 12 + 0 * h(x, y);
+        h(x, y) = 11 + base * h(x, y);
+        h(x, y) = 12 + base * h(x, y);
 
         f.compute_root();
         g.compute_root();
