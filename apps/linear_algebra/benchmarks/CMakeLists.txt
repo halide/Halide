@@ -34,19 +34,25 @@ target_compile_definitions(halide_benchmarks PRIVATE -DUSE_HALIDE ${MISC_DEFINIT
 target_link_libraries(halide_benchmarks PRIVATE halide_blas)
 list(APPEND BLAS_NAMES halide)
 
-find_package(Eigen3 QUIET)
-if (NOT Eigen3_FOUND)
+find_package(PkgConfig)
+if (PkgConfig-NOTFOUND)
+  find_package(Eigen3 QUIET)
+  set(EIGEN3_FOUND NOT Eigen3-NOTFOUND)
+  if (EIGEN3_FOUND)
+    set(EIGEN3_LDFLAGS Eigen3::Eigen)
+  endif()
+else()
+  pkg_check_modules(EIGEN3 eigen3)
+endif()
+if (NOT EIGEN3_FOUND)
   message(STATUS "linear_algebra: Eigen3 Missing, skipping Eigen3 benchmarks")
 else()
   add_executable(eigen_benchmarks
     eigen_benchmarks.cpp
   )
   target_compile_definitions(eigen_benchmarks PRIVATE -DEIGEN_DONT_PARALLELIZE ${MISC_DEFINITIONS})
-  target_compile_options(eigen_benchmarks PRIVATE -Wno-error=unused-variable)
-  target_link_libraries(eigen_benchmarks
-    PRIVATE
-      Eigen3::Eigen
-  )
+  target_compile_options(eigen_benchmarks PRIVATE -Wno-error=unused-variable ${EIGEN3_CFLAGS})
+  target_link_libraries(eigen_benchmarks PRIVATE ${EIGEN3_LDFLAGS})
   list(APPEND BLAS_NAMES eigen)
 endif()
 
