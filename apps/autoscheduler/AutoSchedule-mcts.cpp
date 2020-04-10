@@ -1599,7 +1599,7 @@ IntrusivePtr<State> optimal_mcts_schedule(FunctionDAG &dag,
     //int num_passes = (beam_size == 1) ? 1 : 5;
 
     // not sure why would I need num_passes, but keeping it just in case
-    int num_passes = 100;
+    int num_passes = 10;
 
     string cyos_str = get_env_variable("HL_CYOS");
     if (cyos_str == "1") {

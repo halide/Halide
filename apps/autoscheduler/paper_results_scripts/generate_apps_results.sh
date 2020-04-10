@@ -36,8 +36,8 @@ elif [ "$autoscheduler" == "mcts" ]; then
 
     # mcts
     export MCTS_MAX_MILLIS=0
-    export MCTS_MAX_ITERATIONS=10000
-    export MCTS_SIMULATION_DEPTH=100
+    export MCTS_MAX_ITERATIONS=10
+    export MCTS_SIMULATION_DEPTH=10
     results="mcts"
 else
     echo "usage: $0 [greedy|beam|mcts]"
@@ -51,9 +51,19 @@ fi
 # export HL_BEAM_SIZE=160
 # export HL_NUM_PASSES=1
 
+# Build the autoscheduler
+cd ..
+make bin/libauto_schedule.so
+if [ $? -ne 0 ]; then
+    exit 1
+fi
+cd -
+
 # APPS="bilateral_grid local_laplacian nl_means lens_blur camera_pipe stencil_chain harris hist max_filter unsharp interpolate_generator conv_layer mat_mul_generator iir_blur_generator resnet_50_blockwise bgu"
 
 APPS="bilateral_grid local_laplacian nl_means lens_blur camera_pipe stencil_chain harris hist max_filter unsharp interpolate conv_layer iir_blur bgu" # Missing mat_mul_generator and resnet_50_blockwise
+
+APPS="bilateral_grid" # Missing mat_mul_generator and resnet_50_blockwise
 
 # Uncomment when there's a change that wouldn't be picked up by the Makefiles (e.g. new weights)
 for app in ${APPS}; do make -C ${HALIDE}/apps/${app} clean; done
