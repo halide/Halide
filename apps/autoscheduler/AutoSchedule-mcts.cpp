@@ -1599,7 +1599,7 @@ IntrusivePtr<State> optimal_mcts_schedule(FunctionDAG &dag,
     //int num_passes = (beam_size == 1) ? 1 : 5;
 
     // not sure why would I need num_passes, but keeping it just in case
-    int num_passes = 20; // 5;
+    int num_passes = 100;
 
     string cyos_str = get_env_variable("HL_CYOS");
     if (cyos_str == "1") {
@@ -1624,8 +1624,8 @@ IntrusivePtr<State> optimal_mcts_schedule(FunctionDAG &dag,
     // OPTIONAL init uct params
     uct.uct_k = 1.41421356237;//sqrt(2);
     uct.max_millis = 0;
-    uct.max_iterations = 500; // 100;
-    uct.simulation_depth = 50; // num_passes;
+    uct.max_iterations = 500;
+    uct.simulation_depth = 50;
 
     // Get the max_millis for the mcts
     string max_millis_str = get_env_variable("MCTS_MAX_MILLIS");

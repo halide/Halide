@@ -21,7 +21,7 @@ export HL_RANDOM_DROPOUT=100
 
 # APPS="bilateral_grid local_laplacian nl_means lens_blur camera_pipe stencil_chain harris hist max_filter unsharp interpolate conv_layer iir_blur bgu" # Missing mat_mul_generator and resnet_50_blockwise
 
-APPS="local_laplacian bgu"
+APPS="bilateral_grid"
 
 #while [ 1 ]; do
     for app in $APPS; do

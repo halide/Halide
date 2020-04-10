@@ -72,7 +72,8 @@ int main(int argc, char **argv) {
                     output);
         output.device_sync();
     });
-    fprintf(stderr, "Halide (manual):\t%gus\n", best * 1e6);
+    // fprintf(stderr, "Halide (manual):\t%gus\n", best * 1e6);
+    fprintf(stderr, "Manually-tuned time:\t%gus\n", best * 1e6);
 
 #ifndef NO_AUTO_SCHEDULE
     best = benchmark(timing_iterations, 1, [&]() {
@@ -81,7 +82,8 @@ int main(int argc, char **argv) {
                                   output);
         output.device_sync();
     });
-    fprintf(stderr, "Halide (auto):\t%gus\n", best * 1e6);
+    // fprintf(stderr, "Halide (auto):\t%gus\n", best * 1e6);
+    fprintf(stderr, "Auto-scheduled time:\t%gus\n", best * 1e6);
 #endif
 
     fprintf(stderr, "output: %s\n", argv[7]);

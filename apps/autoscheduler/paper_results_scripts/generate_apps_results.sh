@@ -1,3 +1,5 @@
+autoscheduler="$1"
+
 HALIDE=$(dirname $0)/../../..
 echo "Using Halide in " $HALIDE
 
@@ -15,18 +17,32 @@ export HL_TARGET="host" # x86-64-avx2
 # no random dropout
 export HL_RANDOM_DROPOUT=100
 
-# greedy
-# export HL_BEAM_SIZE=1
-# export HL_NUM_PASSES=1
-# results="greedy"
+if [ "$autoscheduler" == "greedy" ]; then
+    cp ../AutoSchedule-master.cpp ../AutoSchedule.cpp
 
-# beam search
-# export HL_BEAM_SIZE=32
-# export HL_NUM_PASSES=5
-# results="beam"
+    # greedy
+    export HL_BEAM_SIZE=1
+    export HL_NUM_PASSES=1
+    results="greedy"
+elif [ "$autoscheduler" == "beam" ]; then
+    cp ../AutoSchedule-master.cpp ../AutoSchedule.cpp
 
-# mcts
-results="mcts"
+    # beam search
+    export HL_BEAM_SIZE=32
+    export HL_NUM_PASSES=5
+    results="beam"
+elif [ "$autoscheduler" == "mcts" ]; then
+    cp ../AutoSchedule-mcts.cpp ../AutoSchedule.cpp
+
+    # mcts
+    export MCTS_MAX_MILLIS=0
+    export MCTS_MAX_ITERATIONS=10000
+    export MCTS_SIMULATION_DEPTH=100
+    results="mcts"
+else
+    echo "usage: $0 [greedy|beam|mcts]"
+    exit 1
+fi
 
 # ablation where we restrict to old space
 # export HL_NO_SUBTILING=1
