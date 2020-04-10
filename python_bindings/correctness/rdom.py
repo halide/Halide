@@ -27,14 +27,17 @@ def test_rdom():
     assert r.y.name() == r[1].name()
     try:
         r[-1].name()
+        raise Exception("underflowing index should raise KeyError")
     except KeyError:
         pass
     try:
         r[2].name()
+        raise Exception("overflowing index should raise KeyError")
     except KeyError:
         pass
     try:
         r["foo"].name()
+        raise Exception("bad index type should raise TypeError")
     except TypeError:
         pass
 
