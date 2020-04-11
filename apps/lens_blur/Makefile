@@ -1,5 +1,7 @@
 include ../support/Makefile.inc
 
+AUTOSCHED_SRC = $(realpath ../autoscheduler)
+AUTOSCHED_BIN = $(realpath ../autoscheduler/bin)
 
 .PHONY: build clean test
 
@@ -15,7 +17,8 @@ $(BIN)/%/lens_blur.a: $(GENERATOR_BIN)/lens_blur.generator
 
 $(BIN)/%/lens_blur_auto_schedule.a: $(GENERATOR_BIN)/lens_blur.generator
 	@mkdir -p $(@D)
-	$^ -g lens_blur -e $(GENERATOR_OUTPUTS) -o $(@D) -f lens_blur_auto_schedule target=$*-no_runtime auto_schedule=true
+	HL_WEIGHTS_DIR=$(AUTOSCHED_SRC)/baseline.weights \
+	$^ -g lens_blur -e $(GENERATOR_OUTPUTS) -o $(@D) -f lens_blur_auto_schedule target=$*-no_runtime auto_schedule=true -p $(AUTOSCHED_BIN)/libauto_schedule.so -s Adams2019
 
 $(BIN)/%/process: process.cpp $(BIN)/%/lens_blur.a $(BIN)/%/lens_blur_auto_schedule.a
 	@mkdir -p $(@D)

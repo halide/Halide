@@ -1,5 +1,8 @@
 include ../support/Makefile.inc
 
+AUTOSCHED_SRC = $(realpath ../autoscheduler)
+AUTOSCHED_BIN = $(realpath ../autoscheduler/bin)
+
 all: $(BIN)/$(HL_TARGET)/filter
 
 test: $(BIN)/$(HL_TARGET)/out.png
@@ -14,7 +17,8 @@ $(BIN)/%/harris.a: $(GENERATOR_BIN)/harris.generator
 
 $(BIN)/%/harris_auto_schedule.a: $(GENERATOR_BIN)/harris.generator
 	@mkdir -p $(@D)
-	$< -g harris -f harris_auto_schedule -o $(BIN)/$* target=$*-no_runtime auto_schedule=true
+	HL_WEIGHTS_DIR=$(AUTOSCHED_SRC)/baseline.weights \
+	$< -g harris -f harris_auto_schedule -o $(BIN)/$* target=$*-no_runtime auto_schedule=true -p $(AUTOSCHED_BIN)/libauto_schedule.so -s Adams2019
 
 $(BIN)/%/runtime.a: $(GENERATOR_BIN)/harris.generator
 	@mkdir -p $(@D)

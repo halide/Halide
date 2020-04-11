@@ -1,5 +1,8 @@
 include ../support/Makefile.inc
 
+AUTOSCHED_SRC = $(realpath ../autoscheduler)
+AUTOSCHED_BIN = $(realpath ../autoscheduler/bin)
+
 .PHONY: build clean test
 
 build: $(BIN)/$(HL_TARGET)/process
@@ -16,7 +19,8 @@ $(BIN)/%/camera_pipe.a: $(GENERATOR_BIN)/camera_pipe.generator
 
 $(BIN)/%/camera_pipe_auto_schedule.a: $(GENERATOR_BIN)/camera_pipe.generator
 	@mkdir -p $(@D)
-	$^ -g camera_pipe -e $(GENERATOR_OUTPUTS) -o $(@D) -f camera_pipe_auto_schedule target=$*-no_runtime auto_schedule=true
+	HL_WEIGHTS_DIR=$(AUTOSCHED_SRC)/baseline.weights \
+	$^ -g camera_pipe -e $(GENERATOR_OUTPUTS) -o $(@D) -f camera_pipe_auto_schedule target=$*-no_runtime auto_schedule=true -p $(AUTOSCHED_BIN)/libauto_schedule.so -s Adams2019
 
 $(BIN)/%/process: process.cpp $(BIN)/%/camera_pipe.a $(BIN)/%/camera_pipe_auto_schedule.a
 	@mkdir -p $(@D)

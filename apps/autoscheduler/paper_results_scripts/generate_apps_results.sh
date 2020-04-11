@@ -55,6 +55,7 @@ fi
 cd ..
 make bin/libauto_schedule.so
 if [ $? -ne 0 ]; then
+    echo "Failed to build autoscheduler library"
     exit 1
 fi
 cd -
@@ -63,32 +64,31 @@ cd -
 
 APPS="bilateral_grid local_laplacian nl_means lens_blur camera_pipe stencil_chain harris hist max_filter unsharp interpolate conv_layer iir_blur bgu" # Missing mat_mul_generator and resnet_50_blockwise
 
-APPS="bilateral_grid" # Missing mat_mul_generator and resnet_50_blockwise
-
 # Uncomment when there's a change that wouldn't be picked up by the Makefiles (e.g. new weights)
 for app in ${APPS}; do make -C ${HALIDE}/apps/${app} clean; done
 
-# make -j -C ${HALIDE}/apps/bilateral_grid bin/filter
-# make -j -C ${HALIDE}/apps/local_laplacian bin/process
-# make -j -C ${HALIDE}/apps/nl_means bin/process
-# make -j -C ${HALIDE}/apps/lens_blur bin/process 
-# make -j -C ${HALIDE}/apps/camera_pipe bin/process 
-# make -j -C ${HALIDE}/apps/stencil_chain bin/process 
-# make -j -C ${HALIDE}/apps/harris bin/filter
-# make -j -C ${HALIDE}/apps/hist bin/filter
-# make -j -C ${HALIDE}/apps/max_filter bin/filter
-# make -j -C ${HALIDE}/apps/unsharp bin/filter
-# make -j -C ${HALIDE}/apps/interpolate_generator bin/filter
-# make -j -C ${HALIDE}/apps/conv_layer bin/process
-# make -j -C ${HALIDE}/apps/mat_mul_generator bin/filter
-# make -j -C ${HALIDE}/apps/iir_blur_generator bin/process
-# make -j -C ${HALIDE}/apps/resnet_50_blockwise test &> $results/resnet_50_blockwise.txt
-# make -j -C ${HALIDE}/apps/bgu bin/process
+for app in ${APPS}; do
+    if [ "$app" != "iir_blur" ]; then
+        make -C ${HALIDE}/apps/${app} build
+    else
+        make -C ${HALIDE}/apps/${app} all
+    fi
 
-for app in ${APPS}; do make -C ${HALIDE}/apps/${app} build; done
+    if [ $? -ne 0 ]; then
+        echo "Failed to build $app"
+        exit 1
+    fi
+done
 
 mkdir $results 2>/dev/null
 
 # benchmark everything
-for app in ${APPS}; do make -C ${HALIDE}/apps/${app} test &> $results/$app.txt; done
+for app in ${APPS}; do
+    make -C ${HALIDE}/apps/${app} test &> $results/$app.txt
+
+    if [ $? -ne 0 ]; then
+        echo "Failed to benchmark $app"
+        exit 1
+    fi
+done
 

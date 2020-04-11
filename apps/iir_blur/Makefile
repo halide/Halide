@@ -1,5 +1,8 @@
 include ../support/Makefile.inc
 
+AUTOSCHED_SRC = $(realpath ../autoscheduler)
+AUTOSCHED_BIN = $(realpath ../autoscheduler/bin)
+
 all: $(BIN)/$(HL_TARGET)/filter
 
 test: $(BIN)/$(HL_TARGET)/out.png
@@ -14,7 +17,8 @@ $(BIN)/%/iir_blur.a: $(GENERATOR_BIN)/iir_blur.generator
 
 $(BIN)/%/iir_blur_auto_schedule.a: $(GENERATOR_BIN)/iir_blur.generator
 	@mkdir -p $(@D)
-	$< -g iir_blur -f iir_blur_auto_schedule -o $(BIN)/$* target=$*-no_runtime auto_schedule=true
+	HL_WEIGHTS_DIR=$(AUTOSCHED_SRC)/baseline.weights \
+	$< -g iir_blur -f iir_blur_auto_schedule -o $(BIN)/$* target=$*-no_runtime auto_schedule=true -p $(AUTOSCHED_BIN)/libauto_schedule.so -s Adams2019
 
 $(BIN)/%/runtime.a: $(GENERATOR_BIN)/iir_blur.generator
 	@mkdir -p $(@D)

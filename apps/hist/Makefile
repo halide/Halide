@@ -1,5 +1,8 @@
 include ../support/Makefile.inc
 
+AUTOSCHED_SRC = $(realpath ../autoscheduler)
+AUTOSCHED_BIN = $(realpath ../autoscheduler/bin)
+
 .PHONY: build clean test
 
 build: $(BIN)/$(HL_TARGET)/filter
@@ -16,6 +19,7 @@ $(BIN)/%/hist.a: $(GENERATOR_BIN)/hist.generator
 
 $(BIN)/%/hist_auto_schedule.a: $(GENERATOR_BIN)/hist.generator
 	@mkdir -p $(@D)
+	HL_WEIGHTS_DIR=$(AUTOSCHED_SRC)/baseline.weights \
 	$< -g hist -f hist_auto_schedule -o $(BIN)/$* target=$*-no_runtime auto_schedule=true
 
 $(BIN)/%/runtime.a: $(GENERATOR_BIN)/hist.generator
