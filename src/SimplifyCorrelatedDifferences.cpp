@@ -196,9 +196,7 @@ class SimplifyCorrelatedDifferences : public IRMutator {
         if ((ma == Monotonic::Increasing && mb == Monotonic::Increasing && std::is_same<T, Sub>::value) ||
             (ma == Monotonic::Decreasing && mb == Monotonic::Decreasing && std::is_same<T, Sub>::value) ||
             (ma == Monotonic::Increasing && mb == Monotonic::Decreasing && std::is_same<T, Add>::value) ||
-            (ma == Monotonic::Decreasing && mb == Monotonic::Increasing && std::is_same<T, Add>::value) ||
-            (ma == Monotonic::Unknown && mb != Monotonic::Constant) ||
-            (mb == Monotonic::Unknown && ma != Monotonic::Constant)) {
+            (ma == Monotonic::Decreasing && mb == Monotonic::Increasing && std::is_same<T, Add>::value)) {
 
             for (auto it = lets.rbegin(); it != lets.rend(); it++) {
                 if (expr_uses_var(e, it->name)) {
@@ -219,7 +217,7 @@ class SimplifyCorrelatedDifferences : public IRMutator {
             e = simplify(e);
 
             if ((debug::debug_level() > 0) &&
-                is_monotonic(e, loop_var, monotonic) == Monotonic::Unknown) {
+                is_monotonic(e, loop_var) == Monotonic::Unknown) {
                 // Might be a missed simplification opportunity. Log to help improve the simplifier.
                 debug(1) << "Warning: expression is non-monotonic in loop variable "
                          << loop_var << ": " << e << "\n";
