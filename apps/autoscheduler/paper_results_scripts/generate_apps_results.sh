@@ -68,7 +68,7 @@ APPS="bilateral_grid local_laplacian nl_means lens_blur camera_pipe stencil_chai
 for app in ${APPS}; do make -C ${HALIDE}/apps/${app} clean; done
 
 for app in ${APPS}; do
-    if [ "$app" != "iir_blur" ]; then
+    if [ "$app" != "iir_blur" ] && [ "$app" != "harris" ] && [ "$app" != "unsharp" ] ; then
         make -C ${HALIDE}/apps/${app} build
     else
         make -C ${HALIDE}/apps/${app} all
