@@ -1480,7 +1480,7 @@ void check_boolean() {
     check(IfThenElse::make(x == 1, loop), IfThenElse::make(x == 1, body));
 
     // A for loop where the extent is at most one can just be an if statement
-    check(IfThenElse::make(x == y % 2, loop), IfThenElse::make(x == y % 2, IfThenElse::make(0 < x, body)));
+    check(IfThenElse::make(y % 2 == x, loop), IfThenElse::make(y % 2 == x, IfThenElse::make(0 < x, body)));
 
     // Simplifications of selects
     check(select(x == 3, 5, 7) + 7, select(x == 3, 12, 14));
