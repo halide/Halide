@@ -206,7 +206,7 @@ void CodeGen_GPU_Host<CodeGen_CPU>::compile_func(const LoweredFunc &f,
         Value *user_context = get_user_context();
         Value *kernel_size = ConstantInt::get(i32_t, kernel_src.size());
         std::string init_kernels_name = "halide_" + api_unique_name + "_initialize_kernels";
-        Value *init = module->getFunction(init_kernels_name);
+        llvm::Function *init = module->getFunction(init_kernels_name);
         internal_assert(init) << "Could not find function " + init_kernels_name + " in initial module\n";
         vector<Value *> init_kernels_args = {user_context, module_state, kernel_src_ptr, kernel_size};
         Value *result = builder->CreateCall(init, init_kernels_args);

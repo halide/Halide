@@ -208,6 +208,22 @@ void Simplify::ScopedFact::learn_true(const Expr &fact) {
                 simplify->bounds_and_alignment_info.push(v->name, expr_info);
                 bounds_pop_list.push_back(v);
             }
+        } else if (const Variable *vb = eq->b.as<Variable>()) {
+            // y % 2 == x
+            // We know that LHS is not a const due to
+            // canonicalization, and that the LHS is not a variable or
+            // the case above would have triggered. Learn from the
+            // bounds and alignment of the LHS.
+            // TODO: Visiting it again is inefficient
+            Simplify::ExprInfo expr_info;
+            simplify->mutate(eq->a, &expr_info);
+            if (simplify->bounds_and_alignment_info.contains(vb->name)) {
+                // We already know something about this variable and don't want to suppress it.
+                auto existing_knowledge = simplify->bounds_and_alignment_info.get(vb->name);
+                expr_info.intersect(existing_knowledge);
+            }
+            simplify->bounds_and_alignment_info.push(vb->name, expr_info);
+            bounds_pop_list.push_back(vb);
         } else if (modulus && remainder && (v = m->a.as<Variable>())) {
             // Learn from expressions of the form x % 8 == 3
             Simplify::ExprInfo expr_info;
