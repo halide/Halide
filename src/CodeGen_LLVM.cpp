@@ -2186,7 +2186,7 @@ void CodeGen_LLVM::scalarize(const Expr &e) {
 
 void CodeGen_LLVM::codegen_predicated_vector_store(const Store *op) {
     const Ramp *ramp = op->index.as<Ramp>();
-    if (ramp && is_one(ramp->stride)) {  // Dense vector store
+    if (ramp && is_one(ramp->stride) && !emit_atomic_stores) {  // Dense vector store
         debug(4) << "Predicated dense vector store\n\t" << Stmt(op) << "\n";
         Value *vpred = codegen(op->predicate);
         Halide::Type value_type = op->value.type();
@@ -2230,13 +2230,13 @@ void CodeGen_LLVM::codegen_predicated_vector_store(const Store *op) {
 
             Value *slice_mask = slice_vector(vpred, i, slice_lanes);
 #if LLVM_VERSION >= 110
-            Instruction *store_inst =
+            Instruction *store =
                 builder->CreateMaskedStore(slice_val, vec_ptr, make_alignment(alignment), slice_mask);
 #else
-            Instruction *store_inst =
+            Instruction *store =
                 builder->CreateMaskedStore(slice_val, vec_ptr, alignment, slice_mask);
 #endif
-            add_tbaa_metadata(store_inst, op->name, slice_index);
+            add_tbaa_metadata(store, op->name, slice_index);
         }
     } else {  // It's not dense vector store, we need to scalarize it
         debug(4) << "Scalarize predicated vector store\n";
@@ -2263,7 +2263,10 @@ void CodeGen_LLVM::codegen_predicated_vector_store(const Store *op) {
 
             // Scalar
             Value *ptr = codegen_buffer_pointer(op->name, value_type, idx);
-            builder->CreateAlignedStore(v, ptr, make_alignment(value_type.bytes()));
+            StoreInst *store = builder->CreateAlignedStore(v, ptr, make_alignment(value_type.bytes()));
+            if (emit_atomic_stores) {
+                store->setAtomic(AtomicOrdering::Monotonic);
+            }
 
             builder->CreateBr(after_bb);
             builder->SetInsertPoint(after_bb);
