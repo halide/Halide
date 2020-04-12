@@ -3951,11 +3951,14 @@ void CodeGen_LLVM::visit(const Fork *op) {
 }
 
 void CodeGen_LLVM::visit(const Store *op) {
-    // Peel lets off the index
-    if (const Let *let = op->index.as<Let>()) {
-        Stmt s = Store::make(op->name, op->value, let->body, op->param, op->predicate, op->alignment);
-        codegen(LetStmt::make(let->name, let->value, s));
-        return;
+    if (!emit_atomic_stores) {
+        // Peel lets off the index to make us more likely to pattern
+        // match a ramp.
+        if (const Let *let = op->index.as<Let>()) {
+            Stmt s = Store::make(op->name, op->value, let->body, op->param, op->predicate, op->alignment);
+            codegen(LetStmt::make(let->name, let->value, s));
+            return;
+        }
     }
 
     // Fix up the type
