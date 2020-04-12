@@ -2384,7 +2384,7 @@ void CodeGen_LLVM::codegen_predicated_vector_load(const Load *op) {
     }
 }
 
-void CodeGen_LLVM::codegen_atomic_store(const Store *op) {
+void CodeGen_LLVM::codegen_atomic_rmw(const Store *op) {
     // TODO: predicated store (see https://github.com/halide/Halide/issues/4298).
     user_assert(is_one(op->predicate)) << "Atomic predicated store is not supported.\n";
 
@@ -2393,6 +2393,7 @@ void CodeGen_LLVM::codegen_atomic_store(const Store *op) {
     // Currently we only test for atomicAdd.
     Expr val_expr = op->value;
     Halide::Type value_type = op->value.type();
+
     // For atomicAdd, we check if op->value - store[index] is independent of store.
     // For llvm version < 9, the atomicRMW operations only support integers so we also check that.
     Expr equiv_load = Load::make(value_type, op->name,
@@ -3950,6 +3951,14 @@ void CodeGen_LLVM::visit(const Fork *op) {
 }
 
 void CodeGen_LLVM::visit(const Store *op) {
+    // Peel lets off the index
+    if (const Let *let = op->index.as<Let>()) {
+        Stmt s = Store::make(op->name, op->value, let->body, op->param, op->predicate, op->alignment);
+        codegen(LetStmt::make(let->name, let->value, s));
+        return;
+    }
+
+    // Fix up the type
     Halide::Type value_type = op->value.type();
     Halide::Type storage_type = upgrade_type_for_storage(value_type);
     if (value_type != storage_type) {
@@ -3964,9 +3973,11 @@ void CodeGen_LLVM::visit(const Store *op) {
             << " is lowered into a mutex lock, which does not support vectorization.\n";
     }
 
+    bool recursive = (expr_uses_var(op->index, op->name) ||
+                      expr_uses_var(op->value, op->name));
     // Issue atomic store if we are inside an atomic node.
-    if (emit_atomic_stores) {
-        codegen_atomic_store(op);
+    if (emit_atomic_stores && recursive) {
+        codegen_atomic_rmw(op);
         return;
     }
 
@@ -3976,94 +3987,98 @@ void CodeGen_LLVM::visit(const Store *op) {
         return;
     }
 
+    auto annotate_store = [&](StoreInst *store, const Expr &index) {
+        add_tbaa_metadata(store, op->name, index);
+        if (emit_atomic_stores) {
+            store->setAtomic(AtomicOrdering::Monotonic);
+        }
+    };
+
     Value *val = codegen(op->value);
     bool is_external = (external_buffer.find(op->name) != external_buffer.end());
-    // Scalar
+    int alignment = value_type.bytes();
+    const Ramp *ramp = op->index.as<Ramp>();
+
     if (value_type.is_scalar()) {
+        // Scalar
         Value *ptr = codegen_buffer_pointer(op->name, value_type, op->index);
-        StoreInst *store = builder->CreateAlignedStore(val, ptr, make_alignment(value_type.bytes()));
-        add_tbaa_metadata(store, op->name, op->index);
-    } else if (const Let *let = op->index.as<Let>()) {
-        Stmt s = Store::make(op->name, op->value, let->body, op->param, op->predicate, op->alignment);
-        codegen(LetStmt::make(let->name, let->value, s));
+        StoreInst *store = builder->CreateAlignedStore(val, ptr, make_alignment(alignment));
+        annotate_store(store, op->index);
+    } else if (ramp && is_one(ramp->stride)) {
+        // Dense vector
+        int native_bits = native_vector_bits();
+        int native_bytes = native_bits / 8;
+
+        // Boost the alignment if possible, up to the native vector width.
+        ModulusRemainder mod_rem = op->alignment;
+        while ((mod_rem.remainder & 1) == 0 &&
+               (mod_rem.modulus & 1) == 0 &&
+               alignment < native_bytes) {
+            mod_rem.modulus /= 2;
+            mod_rem.remainder /= 2;
+            alignment *= 2;
+        }
+
+        // If it is an external buffer, then we cannot assume that the host pointer
+        // is aligned to at least the native vector width. However, we may be able to do
+        // better than just assuming that it is unaligned.
+        if (is_external && op->param.defined()) {
+            int host_alignment = op->param.host_alignment();
+            alignment = gcd(alignment, host_alignment);
+        }
+
+        // For dense vector stores wider than the native vector
+        // width, bust them up into native vectors.
+        int store_lanes = value_type.lanes();
+        int native_lanes = native_bits / value_type.bits();
+
+        for (int i = 0; i < store_lanes; i += native_lanes) {
+            int slice_lanes = std::min(native_lanes, store_lanes - i);
+            Expr slice_base = simplify(ramp->base + i);
+            Expr slice_stride = make_one(slice_base.type());
+            Expr slice_index = slice_lanes == 1 ? slice_base : Ramp::make(slice_base, slice_stride, slice_lanes);
+            Value *slice_val = slice_vector(val, i, slice_lanes);
+            Value *elt_ptr = codegen_buffer_pointer(op->name, value_type.element_of(), slice_base);
+            Value *vec_ptr = builder->CreatePointerCast(elt_ptr, slice_val->getType()->getPointerTo());
+            StoreInst *store = builder->CreateAlignedStore(slice_val, vec_ptr, make_alignment(alignment));
+            annotate_store(store, slice_index);
+        }
+    } else if (ramp) {
+        // Strided vector
+        Type ptr_type = value_type.element_of();
+        Value *ptr = codegen_buffer_pointer(op->name, ptr_type, ramp->base);
+        const IntImm *const_stride = ramp->stride.as<IntImm>();
+        Value *stride = codegen(ramp->stride);
+        // Scatter without generating the indices as a vector
+        for (int i = 0; i < ramp->lanes; i++) {
+            Constant *lane = ConstantInt::get(i32_t, i);
+            Value *v = builder->CreateExtractElement(val, lane);
+            StoreInst *store = nullptr;
+            if (const_stride) {
+                // Use a constant offset from the base pointer
+                Value *p =
+                    builder->CreateConstInBoundsGEP1_32(
+                        llvm_type_of(ptr_type),
+                        ptr,
+                        const_stride->value * i);
+                store = builder->CreateAlignedStore(v, p, make_alignment(alignment));
+            } else {
+                // Increment the pointer by the stride for each element
+                store = builder->CreateAlignedStore(v, ptr, make_alignment(alignment));
+                ptr = builder->CreateInBoundsGEP(ptr, stride);
+            }
+            annotate_store(store, op->index);
+        }
     } else {
-        int alignment = value_type.bytes();
-        const Ramp *ramp = op->index.as<Ramp>();
-        if (ramp && is_one(ramp->stride)) {
-
-            int native_bits = native_vector_bits();
-            int native_bytes = native_bits / 8;
-
-            // Boost the alignment if possible, up to the native vector width.
-            ModulusRemainder mod_rem = op->alignment;
-            while ((mod_rem.remainder & 1) == 0 &&
-                   (mod_rem.modulus & 1) == 0 &&
-                   alignment < native_bytes) {
-                mod_rem.modulus /= 2;
-                mod_rem.remainder /= 2;
-                alignment *= 2;
-            }
-
-            // If it is an external buffer, then we cannot assume that the host pointer
-            // is aligned to at least the native vector width. However, we may be able to do
-            // better than just assuming that it is unaligned.
-            if (is_external && op->param.defined()) {
-                int host_alignment = op->param.host_alignment();
-                alignment = gcd(alignment, host_alignment);
-            }
-
-            // For dense vector stores wider than the native vector
-            // width, bust them up into native vectors.
-            int store_lanes = value_type.lanes();
-            int native_lanes = native_bits / value_type.bits();
-
-            for (int i = 0; i < store_lanes; i += native_lanes) {
-                int slice_lanes = std::min(native_lanes, store_lanes - i);
-                Expr slice_base = simplify(ramp->base + i);
-                Expr slice_stride = make_one(slice_base.type());
-                Expr slice_index = slice_lanes == 1 ? slice_base : Ramp::make(slice_base, slice_stride, slice_lanes);
-                Value *slice_val = slice_vector(val, i, slice_lanes);
-                Value *elt_ptr = codegen_buffer_pointer(op->name, value_type.element_of(), slice_base);
-                Value *vec_ptr = builder->CreatePointerCast(elt_ptr, slice_val->getType()->getPointerTo());
-                StoreInst *store = builder->CreateAlignedStore(slice_val, vec_ptr, make_alignment(alignment));
-                add_tbaa_metadata(store, op->name, slice_index);
-            }
-        } else if (ramp) {
-            Type ptr_type = value_type.element_of();
-            Value *ptr = codegen_buffer_pointer(op->name, ptr_type, ramp->base);
-            const IntImm *const_stride = ramp->stride.as<IntImm>();
-            Value *stride = codegen(ramp->stride);
-            // Scatter without generating the indices as a vector
-            for (int i = 0; i < ramp->lanes; i++) {
-                Constant *lane = ConstantInt::get(i32_t, i);
-                Value *v = builder->CreateExtractElement(val, lane);
-                if (const_stride) {
-                    // Use a constant offset from the base pointer
-                    Value *p =
-                        builder->CreateConstInBoundsGEP1_32(
-                            llvm_type_of(ptr_type),
-                            ptr,
-                            const_stride->value * i);
-                    StoreInst *store = builder->CreateStore(v, p);
-                    add_tbaa_metadata(store, op->name, op->index);
-                } else {
-                    // Increment the pointer by the stride for each element
-                    StoreInst *store = builder->CreateStore(v, ptr);
-                    add_tbaa_metadata(store, op->name, op->index);
-                    ptr = builder->CreateInBoundsGEP(ptr, stride);
-                }
-            }
-        } else {
-            // Scatter
-            Value *index = codegen(op->index);
-            for (int i = 0; i < value_type.lanes(); i++) {
-                Value *lane = ConstantInt::get(i32_t, i);
-                Value *idx = builder->CreateExtractElement(index, lane);
-                Value *v = builder->CreateExtractElement(val, lane);
-                Value *ptr = codegen_buffer_pointer(op->name, value_type.element_of(), idx);
-                StoreInst *store = builder->CreateStore(v, ptr);
-                add_tbaa_metadata(store, op->name, op->index);
-            }
+        // Scatter
+        Value *index = codegen(op->index);
+        for (int i = 0; i < value_type.lanes(); i++) {
+            Value *lane = ConstantInt::get(i32_t, i);
+            Value *idx = builder->CreateExtractElement(index, lane);
+            Value *v = builder->CreateExtractElement(val, lane);
+            Value *ptr = codegen_buffer_pointer(op->name, value_type.element_of(), idx);
+            StoreInst *store = builder->CreateAlignedStore(v, ptr, make_alignment(alignment));
+            annotate_store(store, op->index);
         }
     }
 }

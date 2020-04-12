@@ -278,6 +278,53 @@ std::string Stage::name() const {
     return stage_name;
 }
 
+namespace {
+bool is_const_assignment(const string &func_name, const vector<Expr> &args, const vector<Expr> &values) {
+    // Check if an update definition is a non-recursive and just
+    // scatters a value that doesn't depend on the reduction
+    // domain. Such definitions can be treated the same as
+    // associative/commutative ones. I.e. we can safely split/reorder:
+    // f(g(r)) = 4;
+
+    // More generally, any value that does not recursively load the
+    // func or use the rvar on the RHS is also fine, because there can
+    // never be races between two distinct values of the pure var by
+    // construction (because the pure var must appear as one of the
+    // args) e.g: f(g(r, x), x) = h(x);
+    class Checker : public IRVisitor {
+        using IRVisitor::visit;
+
+        void visit(const Variable *op) override {
+            has_rvar |= op->reduction_domain.defined();
+        }
+
+        void visit(const Call *op) override {
+            has_self_reference |= (op->call_type == Call::Halide && op->name == func_name);
+            IRVisitor::visit(op);
+        }
+
+        const string &func_name;
+
+    public:
+        Checker(const string &func_name)
+            : func_name(func_name) {
+        }
+
+        bool has_self_reference = false;
+        bool has_rvar = false;
+    } lhs_checker(func_name), rhs_checker(func_name);
+    for (const Expr &v : args) {
+        v.accept(&lhs_checker);
+    }
+    for (const Expr &v : values) {
+        v.accept(&rhs_checker);
+    }
+    return !(lhs_checker.has_self_reference ||
+             rhs_checker.has_self_reference ||
+             rhs_checker.has_rvar);
+}
+}  // namespace
+
 void Stage::set_dim_type(const VarOrRVar &var, ForType t) {
     bool found = false;
     vector<Dim> &dims = definition.schedule().dims();
@@ -298,14 +345,16 @@ void Stage::set_dim_type(const VarOrRVar &var, ForType t) {
                         vector<Expr> &args = definition.args();
                         vector<Expr> &values = definition.values();
 
-                        // Check whether the operator is associative and determine the operator and
-                        // its identity for each value in the definition if it is a Tuple
-                        const auto &prover_result = prove_associativity(func_name, args, values);
+                        if (!is_const_assignment(func_name, args, values)) {
+                            // Check whether the operator is associative and determine the operator and
+                            // its identity for each value in the definition if it is a Tuple
+                            const auto &prover_result = prove_associativity(func_name, args, values);
 
-                        user_assert(prover_result.associative())
-                            << "Failed to call atomic() on " << name()
-                            << " since it can't prove associativity of the operator.\n";
-                        internal_assert(prover_result.size() == values.size());
+                            user_assert(prover_result.associative())
+                                << "Failed to call atomic() on " << name()
+                                << " since it can't prove associativity of the operator.\n";
+                            internal_assert(prover_result.size() == values.size());
+                        }
                     }
                 }
                 user_assert(definition.schedule().allow_race_conditions() ||
@@ -1537,16 +1586,16 @@ Stage &Stage::reorder(const std::vector<VarOrRVar> &vars) {
     // It is illegal to reorder RVars if the stage is not associative
     // or not commutative. Look for RVar reorderings and try to do the
     // necessary proof if any are found.
-    bool associativity_proven = false;
-    for (size_t i = 0; !associativity_proven && i < idx.size(); i++) {
+    bool safe_to_reorder = is_const_assignment(func_name, args, values);
+    for (size_t i = 0; !safe_to_reorder && i < idx.size(); i++) {
         if (!dims[idx[i]].is_pure()) {
-            for (size_t j = i + 1; !associativity_proven && j < idx.size(); j++) {
+            for (size_t j = i + 1; !safe_to_reorder && j < idx.size(); j++) {
                 if (!dims[idx[j]].is_pure() && (idx[i] > idx[j])) {
                     // Generate an error if the operator is not both associative and commutative.
                     const auto &prover_result = prove_associativity(func_name, args, values);
-                    associativity_proven = prover_result.associative() &&
-                                           prover_result.commutative();
-                    if (!associativity_proven) {
+                    safe_to_reorder = prover_result.associative() &&
+                                      prover_result.commutative();
+                    if (!safe_to_reorder) {
                         user_error
                             << "In schedule for " << name()
                             << ", can't reorder RVars " << vars[i].name()
