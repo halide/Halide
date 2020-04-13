@@ -1010,8 +1010,32 @@ class VectorSubs : public IRMutator {
     }
 
 public:
-    VectorSubs(const std::vector<VectorizedVar> &vv, const std::map<string, Expr> &rs, bool in_hexagon, const Target &t)
-        : vectorized_vars(vv), replacements(rs), target(t), in_hexagon(in_hexagon) {
+    VectorSubs(const std::vector<VectorizedVar> &vv, bool in_hexagon, const Target &t)
+        : vectorized_vars(vv), target(t), in_hexagon(in_hexagon) {
+        for (const auto &var : vectorized_vars) {
+            replacements[var.name] = var.min;
+        }
+
+        Expr stride = 1;
+        for (int ix = vectorized_vars.size() - 1; ix >= 0; ix--) {
+            for (int ik = 0; ik < (int)vectorized_vars.size(); ik++) {
+                if (ix == ik) {
+                    replacements[vectorized_vars[ik].name] = Ramp::make(replacements[vectorized_vars[ik].name],
+                                                                        stride,
+                                                                        vectorized_vars[ix].lanes);
+                } else {
+                    replacements[vectorized_vars[ik].name] = Broadcast::make(replacements[vectorized_vars[ik].name],
+                                                                                vectorized_vars[ix].lanes);
+                }
+            }
+
+            stride = Broadcast::make(stride, vectorized_vars[ix].lanes);
+
+            // for (const auto &r : replacements) {
+            //     debug(0) << "Replacements " << ix << " " << r.first << " " << r.second << "\n";
+            // }
+        }
+
         widening_suffix = ".x" + std::to_string(replacements.begin()->second.type().lanes());
     }
 };
@@ -1047,32 +1071,8 @@ class VectorizeLoops : public IRMutator {
 
             // Not exactly correct, because doesn't handle a "tree" of loops.
             if (vectorized_vars[0].name == for_loop->name) {
-                std::map<string, Expr> replacements;
-                for (const auto &var : vectorized_vars) {
-                    replacements[var.name] = var.min;
-                }
-                Expr stride = 1;
-                for (int ix = vectorized_vars.size() - 1; ix >= 0; ix--) {
-                    for (int ik = 0; ik < (int)vectorized_vars.size(); ik++) {
-                        if (ix == ik) {
-                            replacements[vectorized_vars[ik].name] = Ramp::make(replacements[vectorized_vars[ik].name],
-                                                                                stride,
-                                                                                vectorized_vars[ix].lanes);
-                        } else {
-                            replacements[vectorized_vars[ik].name] = Broadcast::make(replacements[vectorized_vars[ik].name],
-                                                                                     vectorized_vars[ix].lanes);
-                        }
-                    }
-
-                    stride = Broadcast::make(stride, vectorized_vars[ix].lanes);
-
-                    // for (const auto &r : replacements) {
-                    //     debug(0) << "Replacements " << ix << " " << r.first << " " << r.second << "\n";
-                    // }
-                }
-
                 // Replace the vars with a ramp within the body
-                stmt = VectorSubs(vectorized_vars, replacements, in_hexagon, target).mutate(body);
+                stmt = VectorSubs(vectorized_vars, in_hexagon, target).mutate(body);
                 vectorized_vars.clear();
             } else {
                 stmt = body;
