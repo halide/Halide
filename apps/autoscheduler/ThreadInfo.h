@@ -44,12 +44,13 @@ struct ThreadInfo {
     ThreadInfo(int vectorized_loop_index, const std::vector<int64_t>& size, const std::vector<int64_t>& max_thread_counts) {
         init_threads_in_this_block(max_thread_counts);
 
-        int num_thread_loops = 0;
+        std::size_t num_thread_loops = 0;
 
         if (vectorized_loop_index != -1 && size[vectorized_loop_index] != 1) {
             threads[num_thread_loops] = size[vectorized_loop_index];
             num_threads *= size[vectorized_loop_index];
             num_thread_loops = 1;
+            loop_indices.push_back(vectorized_loop_index);
         }
 
         for (std::size_t i = 0; i < size.size() && num_thread_loops < 3; i++) {
@@ -64,9 +65,13 @@ struct ThreadInfo {
             threads[num_thread_loops] = size[i];
             num_threads *= size[i];
             ++num_thread_loops;
+            loop_indices.push_back(i);
         }
 
         internal_assert(num_threads <= num_threads_in_this_block);
+        internal_assert(loop_indices.size() == num_thread_loops);
+        internal_assert(loop_indices.size() > 0 && loop_indices.size() <= 3);
+
         count_num_active_warps_per_block();
     }
 
@@ -89,6 +94,35 @@ struct ThreadInfo {
 
                     fn(thread_id, active, thread_id == num_threads_in_this_block - 1);
                     ++thread_id;
+                }
+            }
+        }
+    }
+
+    template <typename Fn>
+    void for_each_thread_id_in_first_warp(const Fn& fn) const {
+        int thread_id = 0;
+        for (int z = 0; z < threads_in_this_block[2]; z++) {
+            for (int y = 0; y < threads_in_this_block[1]; y++) {
+                for (int x = 0; x < threads_in_this_block[0]; x++) {
+                    // Skip any threads in this loop nest with extent less than the
+                    // extents of the largest thread loops in this block
+                    // for thread.x in [0, 10]:
+                    //   ...
+                    // for thread.x in [0, 5]:
+                    //   ...
+                    // For the 2nd loop, skip threads with x id >= 5
+                    bool active = x < threads[0]
+                        && y < threads[1]
+                        && z < threads[2];
+
+                    bool last_thread = thread_id == 31;
+                    fn(thread_id, x, y, z, active, last_thread);
+                    ++thread_id;
+
+                    if (last_thread) {
+                        return;
+                    }
                 }
             }
         }
@@ -145,6 +179,8 @@ struct ThreadInfo {
 
     int threads[3] = {1, 1, 1};
     int64_t num_threads = 1;
+
+    std::vector<int> loop_indices;
 
 private:
     void init_threads_in_this_block(const std::vector<int64_t>& max_thread_counts) {

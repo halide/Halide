@@ -357,9 +357,6 @@ struct ScheduleFeatures {
     double local_mem_store_efficiency = 1;
     double local_mem_load_efficiency = 1;
 
-    double global_mem_store_coalesce_efficiency = 1;
-    double global_mem_load_coalesce_efficiency = 1;
-
     double working_set_at_thread = 0;
     double working_set_local_constant = 0;
     double working_set_local_dynamic = 0;
@@ -450,8 +447,6 @@ struct ScheduleFeatures {
             << "    global_mem_load_efficiency:            " << global_mem_load_efficiency << '\n'
             << "    local_mem_store_efficiency:            " << local_mem_store_efficiency << '\n'
             << "    local_mem_load_efficiency:             " << local_mem_load_efficiency << '\n'
-            << "    global_mem_store_coalesce_efficiency:  " << global_mem_store_coalesce_efficiency << '\n'
-            << "    global_mem_load_coalesce_efficiency:   " << global_mem_load_coalesce_efficiency << '\n'
             << "    working_set_at_thread:                 " << working_set_at_thread << '\n'
             << "    working_set_local_constant:            " << working_set_local_constant << '\n'
             << "    working_set_local_dynamic:             " << working_set_local_dynamic << '\n'
@@ -545,8 +540,6 @@ struct ScheduleFeatures {
             && global_mem_load_efficiency            == other.global_mem_load_efficiency
             && local_mem_store_efficiency            == other.local_mem_store_efficiency
             && local_mem_load_efficiency             == other.local_mem_load_efficiency
-            && global_mem_store_coalesce_efficiency  == other.global_mem_store_coalesce_efficiency
-            && global_mem_load_coalesce_efficiency   == other.global_mem_load_coalesce_efficiency
             && working_set_at_thread                 == other.working_set_at_thread
             && working_set_local_constant            == other.working_set_local_constant
             && working_set_local_dynamic             == other.working_set_local_dynamic

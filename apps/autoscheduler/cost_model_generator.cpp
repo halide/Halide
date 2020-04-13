@@ -337,9 +337,6 @@ public:
         Expr local_mem_store_efficiency = schedule_features(n, idx++, w);
         Expr local_mem_load_efficiency = schedule_features(n, idx++, w);
 
-        Expr global_mem_store_coalesce_efficiency = schedule_features(n, idx++, w);
-        Expr global_mem_load_coalesce_efficiency = schedule_features(n, idx++, w);
-
         Expr working_set_at_thread = schedule_features(n, idx++, w);
         Expr working_set_local_constant = schedule_features(n, idx++, w);
         Expr working_set_local_dynamic = schedule_features(n, idx++, w);
@@ -383,6 +380,8 @@ public:
         // Ignore warp_lane_utilization and block_occupancy for inlined stages
         // Serial loops use a single thread
 
+        //compute_cost *= select(inlined_calls == 0, pow((1.f / block_occupancy), relu1(38, w, n)), 1.f);
+
         compute_cost /= select(inlined_calls == 0, warp_lane_utilization, 1.f);
         compute_cost = print_wrap(compute_cost, "compute_cost_after_warp_lane_utilization", n, w);
 
@@ -410,7 +409,7 @@ public:
 
         Expr register_block_occupancy = print_wrap(select(inlined_calls == 0, max_active_blocks / 32.f, 1.f), "register_block_occupancy", n, w);
 
-        compute_cost *= select(inlined_calls == 0, 1.f / register_block_occupancy, 1.f);
+        //compute_cost *= select(inlined_calls == 0, 1.f / register_block_occupancy, 1.f);
         compute_cost = print_wrap(compute_cost, "compute_cost_after_register_block_occupancy", n, w);
 
         // Next comes a long list of plausible terms to capture the cost of loads.
@@ -439,25 +438,28 @@ public:
         load_cost = print_wrap(load_cost, "load_cost_initial", n, w);
 
         Expr global_mem_load_cost = num_blocks * num_global_mem_loads_per_block * relu1(28, w, n);
+        global_mem_load_cost = print_wrap(global_mem_load_cost, "global_mem_load_cost", n, w);
+
+        global_mem_load_cost /= select(inlined_calls == 0, 1.f / global_mem_load_efficiency, 1);
         global_mem_load_cost = print_wrap(global_mem_load_cost, "global_mem_load_cost_after_load_efficiency", n, w);
 
-        global_mem_load_cost = print_wrap(global_mem_load_cost, "global_mem_load_cost_after_load_coalesce_efficiency", n, w);
 
         Expr shared_mem_load_cost = num_blocks * num_shared_mem_loads_per_block * relu1(27, w, n);
 
         shared_mem_load_cost = print_wrap(shared_mem_load_cost, "shared_mem_load_cost_after_load_efficiency", n, w);
 
-        Expr local_mem_load_cost = num_blocks * num_threads_per_block * num_local_mem_loads_per_thread * relu1(18, w, n);
+        //Expr local_mem_load_cost = num_blocks * num_threads_per_block * num_local_mem_loads_per_thread * relu1(18, w, n);
 
-        local_mem_load_cost = print_wrap(local_mem_load_cost, "local_mem_load_cost_after_load_efficiency", n, w);
+        //local_mem_load_cost = print_wrap(local_mem_load_cost, "local_mem_load_cost_after_load_efficiency", n, w);
 
         Expr excess_registers_required = expr_branching / num_registers_available_per_thread;
         excess_registers_required = print_wrap(excess_registers_required, "excess_registers_required", n, w);
         Expr spill_cost = select(inlined_calls == 0 && excess_registers_required > 1, max(1, relu1(33, w, n) * num_threads_per_block * excess_registers_required), 1);
-        local_mem_load_cost *= spill_cost;
-        local_mem_load_cost = print_wrap(local_mem_load_cost, "local_mem_load_cost_after_spill_cost", n, w);
+        //local_mem_load_cost *= spill_cost;
+        //local_mem_load_cost = print_wrap(local_mem_load_cost, "local_mem_load_cost_after_spill_cost", n, w);
 
-        load_cost += global_mem_load_cost + shared_mem_load_cost + local_mem_load_cost;
+        load_cost += global_mem_load_cost + shared_mem_load_cost;
+        //load_cost += global_mem_load_cost + shared_mem_load_cost + local_mem_load_cost;
 
         // Store costs
         Expr shared_mem_store_cost = num_blocks * num_shared_mem_stores_per_block * relu1(29, w, n);
@@ -465,10 +467,9 @@ public:
         shared_mem_store_cost = print_wrap(shared_mem_store_cost, "shared_mem_store_cost_after_store_efficiency", n, w);
 
         Expr global_mem_store_cost = num_blocks * num_global_mem_stores_per_block * relu1(30, w, n);
+        global_mem_store_cost /= select(inlined_calls == 0, 1.f / global_mem_store_efficiency, 1);
 
         global_mem_store_cost = print_wrap(global_mem_store_cost, "global_mem_store_cost_after_store_efficiency", n, w);
-
-        global_mem_store_cost = print_wrap(global_mem_store_cost, "global_mem_store_cost_after_store_coalesce_efficiency", n, w);
 
         Expr local_mem_store_cost = num_blocks * num_threads_per_block * num_local_mem_stores_per_thread * relu1(19, w, n);
 
@@ -600,11 +601,13 @@ public:
         // itself!). We do that offline and check in the generated
         // schedule source, so that bugs in our autoscheduler don't
         // cause build nightmares due to the circular dependency.
+        batch_id.set_estimate(0);
         num_cores.set_estimate(80);
         reference.set_estimate(0);
         batch_size.set_estimate(80);
         num_stages.set_estimate(13);
         prediction_output.set_estimates({{0, 80}});
+        cost_per_stage_output.set_estimates({{0, 80}, {0, 13}});
         learning_rate.set_estimate(0.001f);
         timestep.set_estimate(37);
         pipeline_features.set_estimates({{0, head1_w}, {0, head1_h}, {0, 13}});
