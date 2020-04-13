@@ -2145,8 +2145,8 @@ private:
         // As a minor optimization we'll also do the visited
         // insert/check (steps 1 and 2) before pushing, so that
         // already-visited nodes don't even make it into the
-        // stack. Finally, we'll append nodes to the output instead of
-        // prepending, and reverse the output at the end.
+        // stack. Finally, we actually want reverse topological order,
+        // so we'll append nodes to the output instead of prepending.
 
         struct Task {
             string var;
@@ -2182,8 +2182,6 @@ private:
                 pending.pop_back();
             }
         } while (pending.size() > 1);
-
-        std::reverse(let_bounds.begin(), let_bounds.end());
     }
 
     void trim_scope_pop(const string &name, vector<LetBound> &let_bounds) {
