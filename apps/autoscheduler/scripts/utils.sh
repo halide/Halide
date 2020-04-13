@@ -371,3 +371,60 @@ function find_outliers() {
     awk -F", " '{printf("%s, %f\n", $1, $2/$3);}' ${predictions_file} | sort -n -k 2 > ${outliers_file}
     echo "Outliers saved to: ${outliers_file}"
 }
+
+function format_metrics() {
+    local -r dir=$1
+
+    local -r stages=$(grep "features" ${dir}/compile_err.txt | cut -d" " -f 4)
+
+    local -r metrics_file="${dir}/metrics.log"
+    local -r formatted_metrics_file="${dir}/formatted_metrics.txt"
+
+    if [ ! -f ${metrics_file} ]; then
+        echo "Collecting metrics for ${dir}..."
+        bash "${dir}/metrics_command.txt"
+    fi
+
+    if [ -f "${formatted_metrics_file}" ]; then
+        rm "${formatted_metrics_file}"
+    fi
+
+    for stage in ${stages}; do
+        grep -A 158 "kernel_${stage}" "${metrics_file}" | tail -n +2 | awk -v s="${stage}" '{printf("%s %s %f\n", s, $2, $NF);}' >> "${formatted_metrics_file}"
+    done
+
+    echo "Formatted metrics saved to ${formatted_metrics_file}"
+}
+
+function format_features() {
+    local -r halide_root=$1
+    local -r dir=$2
+
+    get_autoscheduler_dir ${HALIDE_ROOT} autoscheduler_dir
+    local -r num_features=$(grep head2_w "${autoscheduler_dir}"/NetworkSize.h | cut -d" " -f 8 | cut -d";" -f 1)
+
+    local -r compile_err_file="${dir}/compile_err.txt"
+    local -r stages=$(grep "features" "${compile_err_file}" | cut -d" " -f 4)
+    local -r formatted_features_file="${dir}/formatted_features.txt"
+
+    if [ -f "${formatted_features_file}" ]; then
+        rm "${formatted_features_file}"
+    fi
+
+    for stage in ${stages}; do
+        grep -A ${num_features} "features for ${stage}" "${compile_err_file}" | tail -n +2 | sed -e 's/://g' | awk -v s="${stage}" '{printf("%s %s %f\n", s, $1, $2);}' >> "${formatted_features_file}"
+    done
+
+    echo "Formatted features saved to ${formatted_features_file}"
+}
+
+function compare_with_profiler() {
+    local -r halide_root=$1
+    local -r dir=$2
+
+    format_metrics "${dir}"
+    format_features "${halide_root}" "${dir}"
+
+    python3 scripts/compare.py --formatted_metrics "${dir}/formatted_metrics.txt" --formatted_features "${dir}/formatted_features.txt"
+}
+
