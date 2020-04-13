@@ -196,8 +196,20 @@ private:
 
     Expr visit(const Broadcast *op) override {
         if (new_lanes == 1) {
-            return op->value;
+            if (op->value.type().lanes() == 1) {
+                return op->value;
+            } else {
+                int old_starting_lane = starting_lane;
+                int old_lane_stride = lane_stride;
+                starting_lane = starting_lane % op->value.type().lanes();
+                lane_stride = op->value.type().lanes();
+                Expr e = mutate(op->value);
+                starting_lane = old_starting_lane;
+                lane_stride = old_lane_stride;
+                return e;
+            }
         }
+        assert(op->value.type().lanes() == 1);
         return Broadcast::make(op->value, new_lanes);
     }
 
@@ -216,6 +228,22 @@ private:
     }
 
     Expr visit(const Ramp *op) override {
+        int base_lanes = op->base.type().lanes();
+        if (base_lanes > 1) {
+            assert(new_lanes == 1);
+            int index = starting_lane / base_lanes;
+            Expr expr = op->base + index * op->stride;
+
+            int old_starting_lane = starting_lane;
+            int old_lane_stride = lane_stride;
+            starting_lane = starting_lane % base_lanes;
+            lane_stride = base_lanes;
+            expr = mutate(expr);
+            starting_lane = old_starting_lane;
+            lane_stride = old_lane_stride;
+
+            return expr;
+        }
         Expr expr = op->base + starting_lane * op->stride;
         internal_assert(expr.type() == op->base.type());
         if (new_lanes > 1) {

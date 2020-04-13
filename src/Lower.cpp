@@ -330,7 +330,7 @@ Module lower(const vector<Function> &output_funcs,
     debug(1) << "Unrolling...\n";
     s = unroll_loops(s);
     s = simplify(s);
-    debug(2) << "Lowering after unrolling:\n"
+    debug(0) << "Lowering after unrolling:\n"
              << s << "\n\n";
 
     debug(1) << "Vectorizing...\n";

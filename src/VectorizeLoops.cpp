@@ -364,9 +364,17 @@ public:
     }
 };
 
+struct VectorizedVar {
+    string name;
+    Expr min;
+    int lanes;
+};
+
 // Substitutes a vector for a scalar var in a Stmt. Used on the
 // body of every vectorized loop.
 class VectorSubs : public IRMutator {
+    std::vector<VectorizedVar> vectorized_vars;
+
     // What we're replacing it with. Usually a ramp.
     std::map<string, Expr> replacements;
 
@@ -752,9 +760,8 @@ class VectorSubs : public IRMutator {
     Stmt visit(const IfThenElse *op) override {
         Expr cond = mutate(op->condition);
         int lanes = cond.type().lanes();
-        user_assert(replacements.size() == 1) << "Cannot handle IfThenElse node inside of the nested vectorization\n";
-        string var = replacements.begin()->first;
-        debug(3) << "Vectorizing over " << var << "\n"
+
+        debug(3) << "Vectorizing \n"
                  << "Old: " << op->condition << "\n"
                  << "New: " << cond << "\n";
 
@@ -766,20 +773,22 @@ class VectorSubs : public IRMutator {
             // which would mean control flow divergence within the
             // SIMD lanes.
 
-            bool vectorize_predicate = !uses_gpu_vars(cond);
+            bool vectorize_predicate = !(uses_gpu_vars(cond) || replacements.size() > 1);
+
             Stmt predicated_stmt;
             if (vectorize_predicate) {
-                PredicateLoadStore p(var, cond, in_hexagon, target);
+                PredicateLoadStore p(replacements.begin()->first, cond, in_hexagon, target);
                 predicated_stmt = p.mutate(then_case);
                 vectorize_predicate = p.is_vectorized();
             }
             if (vectorize_predicate && else_case.defined()) {
-                PredicateLoadStore p(var, !cond, in_hexagon, target);
+                PredicateLoadStore p(replacements.begin()->first, !cond, in_hexagon, target);
                 predicated_stmt = Block::make(predicated_stmt, p.mutate(else_case));
                 vectorize_predicate = p.is_vectorized();
             }
 
-            debug(4) << "IfThenElse should vectorize predicate over var " << var << "? " << vectorize_predicate << "; cond: " << cond << "\n";
+            debug(4) << "IfThenElse should vectorize predicate "
+                     << "? " << vectorize_predicate << "; cond: " << cond << "\n";
             debug(4) << "Predicated stmt:\n"
                      << predicated_stmt << "\n";
 
@@ -794,7 +803,7 @@ class VectorSubs : public IRMutator {
                 // generating a scalar condition that checks if
                 // the least-true lane is true.
                 Expr all_true = bounds_of_lanes(c->args[0]).min;
-
+            
                 // Wrap it in the same flavor of likely
                 all_true = Call::make(Bool(), c->name,
                                       {all_true}, Call::PureIntrinsic);
@@ -851,9 +860,11 @@ class VectorSubs : public IRMutator {
     Stmt visit(const For *op) override {
         ForType for_type = op->for_type;
 
+        user_assert(replacements.size() == 1) << "Cannot handle For node inside of the nested vectorization\n";
+
         if (for_type == ForType::Vectorized) {
             user_warning << "Warning: Encountered vector for loop over " << op->name
-                        //  << " inside vector for loop over " << var << "."
+                         //  << " inside vector for loop over " << var << "."
                          << " Ignoring the vectorize directive for the inner for loop.\n";
             for_type = ForType::Serial;
         }
@@ -948,19 +959,18 @@ class VectorSubs : public IRMutator {
         // Wrap a serial loop around it. Maybe LLVM will have
         // better luck vectorizing it.
 
-        user_assert(replacements.size() == 1) << "Cannot scalarize nested vectorization\n";
-        string var = replacements.begin()->first;
-        Expr replacement = replacements.begin()->second;
-
         // We'll need the original scalar versions of any containing lets.
         for (size_t i = containing_lets.size(); i > 0; i--) {
             const auto &l = containing_lets[i - 1];
             s = LetStmt::make(l.first, l.second, s);
         }
 
-        const Ramp *r = replacement.as<Ramp>();
-        internal_assert(r) << "Expected replacement in VectorSubs to be a ramp\n";
-        return For::make(var, r->base, r->lanes, ForType::Serial, DeviceAPI::None, s);
+        for (int ix = vectorized_vars.size() - 1; ix >= 0; ix--) {
+            s = For::make(vectorized_vars[ix].name, vectorized_vars[ix].min,
+                          vectorized_vars[ix].lanes, ForType::Serial, DeviceAPI::None, s);
+        }
+
+        return s;
     }
 
     Expr scalarize(Expr e) {
@@ -1000,8 +1010,8 @@ class VectorSubs : public IRMutator {
     }
 
 public:
-    VectorSubs(const std::map<string, Expr> &rs, bool in_hexagon, const Target &t)
-        : replacements(rs), target(t), in_hexagon(in_hexagon) {
+    VectorSubs(const std::vector<VectorizedVar> &vv, const std::map<string, Expr> &rs, bool in_hexagon, const Target &t)
+        : vectorized_vars(vv), replacements(rs), target(t), in_hexagon(in_hexagon) {
         widening_suffix = ".x" + std::to_string(replacements.begin()->second.type().lanes());
     }
 };
@@ -1011,11 +1021,6 @@ class VectorizeLoops : public IRMutator {
     const Target &target;
     bool in_hexagon;
 
-    struct VectorizedVar {
-        string name;
-        Expr min;
-        int64_t lanes;
-    };
     std::vector<VectorizedVar> vectorized_vars;
 
     using IRMutator::visit;
@@ -1036,7 +1041,7 @@ class VectorizeLoops : public IRMutator {
                            << "constant extent > 1\n";
             }
 
-            vectorized_vars.push_back({for_loop->name, for_loop->min, extent->value});
+            vectorized_vars.push_back({for_loop->name, for_loop->min, (int)extent->value});
             // debug(0) << "Vectorized var - " << for_loop->name << "\n";
             Stmt body = mutate(for_loop->body);
 
@@ -1067,7 +1072,7 @@ class VectorizeLoops : public IRMutator {
                 }
 
                 // Replace the vars with a ramp within the body
-                stmt = VectorSubs(replacements, in_hexagon, target).mutate(body);
+                stmt = VectorSubs(vectorized_vars, replacements, in_hexagon, target).mutate(body);
                 vectorized_vars.clear();
             } else {
                 stmt = body;

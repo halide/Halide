@@ -4,24 +4,24 @@
 using namespace Halide;
 
 int main(int argc, char **argv) {
+    const int width = 37;
+    const int height = 22;
+
     Func f("f");
     Var x("x"), y("y"), xi("xi"), yi("yi");
 
     f(x, y) = x + y;
 
     f.compute_root()
-        .tile(x, y, x, y, xi, yi, 4, 2, TailStrategy::RoundUp)
+        .tile(x, y, x, y, xi, yi, 8, 4, TailStrategy::GuardWithIf)
         .vectorize(xi)
         .vectorize(yi);
 
-    f.bound(x, 0, 24).bound(y, 0, 20);
+    Buffer<int> result = f.realize(width, height);
 
-    f.compile_to_c("/Users/vksnk/Work/Halide/test.cc", {});
-    Buffer<int> result = f.realize(24, 20);
-
-    for (int iy = 0; iy < 20; iy++) {
-        for (int ix = 0; ix < 24; ix++) {
-            printf("%2d ", result(ix, iy));  //(result(ix, iy) == 14) ? result(ix, iy) : 99);
+    for (int iy = 0; iy < height; iy++) {
+        for (int ix = 0; ix < width; ix++) {
+            printf("%2d ", result(ix, iy));
         }
         printf("\n");
     }
