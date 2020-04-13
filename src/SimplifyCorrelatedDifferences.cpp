@@ -70,14 +70,16 @@ class SimplifyCorrelatedDifferences : public IRMutator {
             }
 
             bool pure = is_pure(op->value);
-            if (!pure || expr_uses_vars(op->value, monotonic)) {
+            if (!pure || expr_uses_vars(op->value, monotonic) || monotonic.contains(op->name)) {
                 frames.emplace_back(op, loop_var, monotonic);
                 Expr new_value = mutate(op->value);
                 bool may_substitute_in = new_value.type() == Int(32) && pure;
                 lets.emplace_back(OuterLet{op->name, new_value, may_substitute_in});
                 frames.back().new_value = std::move(new_value);
             } else {
-                // Pure and constant w.r.t the loop var
+                // Pure and constant w.r.t the loop var. Doesn't
+                // shadow any outer thing already in the monotonic
+                // scope.
                 frames.emplace_back(op);
             }
         } while ((op = result.template as<LetStmtOrLet>()));
