@@ -506,7 +506,7 @@ void generate_schedule(const std::vector<Function> &outputs,
 
     Statistics stats;
     std::mt19937 rng{(uint32_t)seed};
-    SearchSpace search_space{dag, params, target, rng, cost_model.get(), stats};
+    SearchSpace search_space{dag, params, target, get_env_variable("HL_SEARCH_SPACE_OPTIONS"), rng, cost_model.get(), stats};
     AutoSchedule autoschedule{dag, params, target, outputs, rng, cost_model.get(), stats, search_space};
 
     // Run beam search
@@ -616,7 +616,7 @@ void find_and_apply_schedule(FunctionDAG &dag,
 
     Statistics stats;
     std::mt19937 rng{(uint32_t)12345};
-    SearchSpace search_space{dag, params, target, rng, cost_model, stats};
+    SearchSpace search_space{dag, params, target, get_env_variable("HL_SEARCH_SPACE_OPTIONS"), rng, cost_model, stats};
     AutoSchedule autoschedule{dag, params, target, outputs, rng, cost_model, stats, search_space};
 
     IntrusivePtr<State> optimal = autoschedule.optimal_schedule(beam_size);

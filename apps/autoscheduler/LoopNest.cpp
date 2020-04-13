@@ -3282,6 +3282,7 @@ vector<IntrusivePtr<const LoopNest>> LoopNest::compute_in_tiles(const FunctionDA
                                                                 const LoopNest *parent,
                                                                 const MachineParams &params,
                                                                 const Target &target,
+                                                                const SearchSpaceOptions &search_space_options,
                                                                 int v,
                                                                 bool in_realization,
                                                                 bool in_threads_loop,
@@ -3361,7 +3362,7 @@ vector<IntrusivePtr<const LoopNest>> LoopNest::compute_in_tiles(const FunctionDA
         }
     }
 
-    if (f->is_output || is_pre_pass) {
+    if (search_space_options.compute_root_only() || f->is_output || is_pre_pass) {
         // Outputs must be compute_root, so we're done.
         return result;
     }
@@ -3468,7 +3469,7 @@ vector<IntrusivePtr<const LoopNest>> LoopNest::compute_in_tiles(const FunctionDA
                 // don't have to worry about the constraints this
                 // places on parallelism, as we forced all the
                 // parallelism to the outer loop.
-                auto opts = inner->compute_in_tiles(f, outer.get(), params, target, v, true, in_threads_loop, false);
+                auto opts = inner->compute_in_tiles(f, outer.get(), params, target, search_space_options, v, true, in_threads_loop, false);
                 for (IntrusivePtr<const LoopNest> &n : opts) {
                     LoopNest *store_at_outer_compute_further_in = new LoopNest;
                     store_at_outer_compute_further_in->copy_from(*outer);
@@ -3605,7 +3606,7 @@ vector<IntrusivePtr<const LoopNest>> LoopNest::compute_in_tiles(const FunctionDA
 
             in_threads_loop |= (children[child]->gpu_label == thread);
             // we must pass down union thread count constraints computed at block level when computing further in
-            auto opts = children[child]->compute_in_tiles(f, this, params, target, v, store_here, in_threads_loop, false, union_counts);
+            auto opts = children[child]->compute_in_tiles(f, this, params, target, search_space_options, v, store_here, in_threads_loop, false, union_counts);
             for (IntrusivePtr<const LoopNest> &n : opts) {
                 // (Only valid if one child calls f) Push the
                 // computation into the child. Possibly leaving

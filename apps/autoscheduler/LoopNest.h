@@ -10,6 +10,7 @@
 #include "GlobalMemInfo.h"
 #include "GPULoopInfo.h"
 #include "PerfectHashMap.h"
+#include "SearchSpaceOptions.h"
 #include "Statistics.h"
 #include "ThreadInfo.h"
 #include "ASLog.h"
@@ -479,6 +480,7 @@ struct LoopNest {
                                                           const LoopNest *parent,
                                                           const MachineParams &params,
                                                           const Target &target,
+                                                          const SearchSpaceOptions &search_space_options,
                                                           int v,
                                                           bool in_realization,
                                                           bool in_threads_loop,

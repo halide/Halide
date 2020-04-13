@@ -8,6 +8,7 @@
 #include "LoopNest.h"
 #include "PerfectHashMap.h"
 #include "ASLog.h"
+#include "SearchSpaceOptions.h"
 #include "State.h"
 #include <set>
 #include <unordered_set>
@@ -23,6 +24,7 @@ struct SearchSpace {
     const FunctionDAG &dag;
     const MachineParams &params;
     const Target &target;
+    SearchSpaceOptions search_space_options;
     std::mt19937 &rng;
     CostModel *cost_model;
     Statistics &stats;
@@ -35,6 +37,7 @@ struct SearchSpace {
     SearchSpace(const FunctionDAG &dag,
                 const MachineParams &params,
                 const Target &target,
+                const std::string &search_space_options,
                 std::mt19937 &rng,
                 CostModel *cost_model,
                 Statistics &stats);

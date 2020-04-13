@@ -15,12 +15,14 @@ bool use_randomized_tilings() {
 SearchSpace::SearchSpace(const FunctionDAG &dag,
                          const MachineParams &params,
                          const Target &target,
+                         const std::string &search_space_options,
                          std::mt19937 &rng,
                          CostModel *cost_model,
                          Statistics &stats)
     : dag{dag}
     , params{params}
     , target{target}
+    , search_space_options{search_space_options}
     , rng{rng}
     , cost_model{cost_model}
     , stats{stats}
@@ -294,7 +296,7 @@ void SearchSpace::generate_children(IntrusivePtr<State> state,
         // Injecting realizations
         {
             // 1) Inline it
-            if (node->stages.size() == 1 && !node->is_output && !must_compute_root) {
+            if (search_space_options.compute_inline() && node->stages.size() == 1 && !node->is_output && !must_compute_root) {
                 LoopNest *new_root = new LoopNest;
                 new_root->copy_from(*root);
                 new_root->inline_func(node);
@@ -373,7 +375,7 @@ void SearchSpace::generate_children(IntrusivePtr<State> state,
         std::unordered_map<uint64_t, StateVector> secondary_options;
         for (int vector_dim : vector_dims) {
             Timer timer;
-            auto tile_options = root->compute_in_tiles(node, nullptr, params, target, vector_dim, false, false, is_pre_pass);
+            auto tile_options = root->compute_in_tiles(node, nullptr, params, target, search_space_options, vector_dim, false, false, is_pre_pass);
             stats.compute_in_tiles_time += timer.elapsed();
 
             timer.restart();

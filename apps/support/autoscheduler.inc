@@ -68,6 +68,7 @@ $(AUTOSCHED_BIN)/libauto_schedule.so: $(AUTOSCHED_SRC)/AutoSchedule.cpp \
 										$(AUTOSCHED_SRC)/PerfectHashMap.h \
 										$(AUTOSCHED_SRC)/SearchSpace.h \
 										$(AUTOSCHED_SRC)/SearchSpace.cpp \
+										$(AUTOSCHED_SRC)/SearchSpaceOptions.h \
 										$(AUTOSCHED_SRC)/State.h \
 										$(AUTOSCHED_SRC)/State.cpp \
 										$(AUTOSCHED_SRC)/Statistics.h \

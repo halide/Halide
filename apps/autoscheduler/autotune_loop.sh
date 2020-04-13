@@ -56,6 +56,11 @@ if [ -z ${PIPELINE} ]; then
 PIPELINE=demo
 fi
 
+if [ -z ${SEARCH_SPACE_OPTIONS} ]; then
+SEARCH_SPACE_OPTIONS="1111"
+fi
+
+
 SAMPLES=${SAMPLES_DIR}
 mkdir -p ${SAMPLES}
 
@@ -91,7 +96,7 @@ if [[ $TRAIN_ONLY != 1 ]]; then
     get_timeout_cmd TIMEOUT_CMD
 else
     echo "Train only mode: ON"
-    EPOCHS=1000
+    EPOCHS=100000
 fi
 
 record_command() {
@@ -137,9 +142,11 @@ make_featurization() {
     local -r shared_memory_sm_limit=96
 
     GPU=$((RANDOM % NUM_GPUS))
-    CMD="CUDA_VISIBLE_DEVICES=${GPU} HL_SEED=${RANDOM_DROPOUT_SEED} \
-        HL_WEIGHTS_DIR=${WEIGHTS} \
+    CMD="CUDA_VISIBLE_DEVICES=${GPU} \
         HL_USE_MEMOIZED_FEATURES=1 \
+        HL_SEARCH_SPACE_OPTIONS=${SEARCH_SPACE_OPTIONS}
+        HL_SEED=${RANDOM_DROPOUT_SEED} \
+        HL_WEIGHTS_DIR=${WEIGHTS} \
         HL_MEMOIZE_BLOCKS=1 \
         HL_RANDOMIZE_TILINGS=1 \
         HL_FREEZE_INLINE_COMPUTE_ROOT=1 \
@@ -253,6 +260,18 @@ benchmark_sample() {
 
     NVPROF_CMD="${NVPROF_TIMELINE_CMD} && ${NVPROF_METRICS_CMD}"
     record_command $BATCH $SAMPLE_ID "$NVPROF_CMD" "nvprof_command" $FAILED
+
+    METRICS_CMD="HL_NUM_THREADS=${NUM_CORES} \
+        ${TIMEOUT_CMD} -k ${BENCHMARKING_TIMEOUT} ${BENCHMARKING_TIMEOUT} \
+        nvprof --metrics all
+        --log-file ${D}/metrics.log \
+        ${D}/bench \
+        --output_extents=estimate \
+        --default_input_buffers=random:0:estimate_then_auto \
+        --default_input_scalars=estimate \
+        --benchmarks=all"
+
+    record_command $BATCH $SAMPLE_ID "$METRICS_CMD" "metrics_command" $FAILED
 
     if [[ ${FAILED} == 1 ]]; then
         return
