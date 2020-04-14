@@ -117,6 +117,7 @@ Expr Simplify::visit(const Sub *op, ExprInfo *bounds) {
                rewrite(x*y - y, (x - 1)*y) ||
                rewrite(x - x*y, x*(1 - y)) ||
                rewrite(x - y*x, (1 - y)*x) ||
+
                rewrite(x - min(x + y, z), max(-y, x - z)) ||
                rewrite(x - min(y + x, z), max(-y, x - z)) ||
                rewrite(x - min(z, x + y), max(x - z, -y)) ||
@@ -125,6 +126,16 @@ Expr Simplify::visit(const Sub *op, ExprInfo *bounds) {
                rewrite(min(y + x, z) - x, min(y, z - x)) ||
                rewrite(min(z, x + y) - x, min(z - x, y)) ||
                rewrite(min(z, y + x) - x, min(z - x, y)) ||
+
+               rewrite((min(x, (w + (y + z))) - z), min(x - z, w + y)) ||
+               rewrite((min(x, (w + (z + y))) - z), min(x - z, w + y)) ||
+               rewrite((min(x, ((y + z) + w)) - z), min(x - z, y + w)) ||
+               rewrite((min(x, ((z + y) + w)) - z), min(x - z, y + w)) ||
+               rewrite((min((w + (y + z)), x) - z), min(x - z, w + y)) ||
+               rewrite((min((w + (z + y)), x) - z), min(x - z, w + y)) ||
+               rewrite((min(((y + z) + w), x) - z), min(x - z, y + w)) ||
+               rewrite((min(((z + y) + w), x) - z), min(x - z, y + w)) ||
+
                rewrite(min(x, y) - min(y, x), 0) ||
                rewrite(min(x, y) - min(z, w), y - w, can_prove(x - y == z - w, this)) ||
                rewrite(min(x, y) - min(w, z), y - w, can_prove(x - y == z - w, this)) ||
@@ -137,6 +148,16 @@ Expr Simplify::visit(const Sub *op, ExprInfo *bounds) {
                rewrite(max(y + x, z) - x, max(y, z - x)) ||
                rewrite(max(z, x + y) - x, max(z - x, y)) ||
                rewrite(max(z, y + x) - x, max(z - x, y)) ||
+
+               rewrite((max(x, (w + (y + z))) - z), max(x - z, w + y)) ||
+               rewrite((max(x, (w + (z + y))) - z), max(x - z, w + y)) ||
+               rewrite((max(x, ((y + z) + w)) - z), max(x - z, y + w)) ||
+               rewrite((max(x, ((z + y) + w)) - z), max(x - z, y + w)) ||
+               rewrite((max((w + (y + z)), x) - z), max(x - z, w + y)) ||
+               rewrite((max((w + (z + y)), x) - z), max(x - z, w + y)) ||
+               rewrite((max(((y + z) + w), x) - z), max(x - z, y + w)) ||
+               rewrite((max(((z + y) + w), x) - z), max(x - z, y + w)) ||
+
                rewrite(max(x, y) - max(y, x), 0) ||
                rewrite(max(x, y) - max(z, w), y - w, can_prove(x - y == z - w, this)) ||
                rewrite(max(x, y) - max(w, z), y - w, can_prove(x - y == z - w, this)) ||

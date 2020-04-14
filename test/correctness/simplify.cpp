@@ -932,6 +932,24 @@ void check_bounds() {
     check(min(min(x + z, y), w) - x, min(min(w, y) - x, z));
     check(min(min(y, x + z), w) - x, min(min(w, y) - x, z));
 
+    // More deeply-nested cancellations
+    check((min(x, (w + (y + z))) - z), min(x - z, w + y));
+    check((min(x, (w + (z + y))) - z), min(x - z, w + y));
+    check((min(x, ((y + z) + w)) - z), min(x - z, w + y));
+    check((min(x, ((z + y) + w)) - z), min(x - z, w + y));
+    check((min((w + (y + z)), x) - z), min(x - z, w + y));
+    check((min((w + (z + y)), x) - z), min(x - z, w + y));
+    check((min(((y + z) + w), x) - z), min(x - z, w + y));
+    check((min(((z + y) + w), x) - z), min(x - z, w + y));
+    check((max(x, (w + (y + z))) - z), max(x - z, w + y));
+    check((max(x, (w + (z + y))) - z), max(x - z, w + y));
+    check((max(x, ((y + z) + w)) - z), max(x - z, w + y));
+    check((max(x, ((z + y) + w)) - z), max(x - z, w + y));
+    check((max((w + (y + z)), x) - z), max(x - z, w + y));
+    check((max((w + (z + y)), x) - z), max(x - z, w + y));
+    check((max(((y + z) + w), x) - z), max(x - z, w + y));
+    check((max(((z + y) + w), x) - z), max(x - z, w + y));
+
     check(min((x + y) * 7 + z, w) - x * 7, min(w - x * 7, y * 7 + z));
     check(min((y + x) * 7 + z, w) - x * 7, min(w - x * 7, y * 7 + z));
 
