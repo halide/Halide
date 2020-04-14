@@ -599,7 +599,7 @@ bool State::calculate_cost(const FunctionDAG &dag, const MachineParams &params, 
         for (auto it = features.begin(); it != features.end(); it++) {
             auto &stage = *(it.key());
             const auto &feat = it.value();
-            aslog(0) << "Schedule features for " << stage.stage.name() << "\n";
+            aslog(0) << "Schedule features for " << stage.node->func.name() << "_s" << stage.index << "\n";
             feat.dump();
         }
     }
@@ -947,7 +947,16 @@ void State::apply_schedule(const FunctionDAG &dag, const MachineParams &params, 
                     }
                 }
 
-                if (!mark_gpu_threads(p.second.get(), stage, new_serial_vars) || has_enclosing_parallel) {
+                bool thread_loop_exists = mark_gpu_threads(p.second.get(), stage, new_serial_vars);
+                // The stage has no threads and no blocks. This is likely an update
+                // stage where the reduction is a serial loop
+                if (!thread_loop_exists && !has_enclosing_parallel) {
+                    stage.gpu_single_thread();
+                    p.second->schedule_source << "\n    .gpu_single_thread()";
+                    continue;
+                }
+
+                if (!thread_loop_exists || has_enclosing_parallel) {
                     continue;
                 }
 
