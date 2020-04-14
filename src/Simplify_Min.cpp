@@ -217,7 +217,13 @@ Expr Simplify::visit(const Min *op, ExprInfo *bounds) {
 
                rewrite(min(select(x, y, z), select(x, w, u)), select(x, min(y, w), min(z, u))) ||
 
-               rewrite(min(c0 - x, c1), c0 - max(x, fold(c0 - c1))))))) {
+               rewrite(min(c0 - x, c1), c0 - max(x, fold(c0 - c1))) ||
+
+               // Required for nested GuardWithIf tilings
+               rewrite(min((min(((y + c0)/c1), x)*c1), y + c2), min(x * c1, y + c2), c1 > 0 && c1 + c2 <= c0 + 1) ||
+               rewrite(min((min(((y + c0)/c1), x)*c1) + c2, y), min(x * c1 + c2, y), c1 > 0 && c1 <= c0 + c2 + 1) ||
+
+               false )))) {
 
             return mutate(rewrite.result, bounds);
         }

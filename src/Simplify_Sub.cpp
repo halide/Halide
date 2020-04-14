@@ -109,34 +109,85 @@ Expr Simplify::visit(const Sub *op, ExprInfo *bounds) {
                rewrite(min(x, y) - x, min(y - x, 0)) ||
                rewrite(max(x, y) - y, max(x - y, 0)) ||
                rewrite(min(x, y) - y, min(x - y, 0)) ||
+
                rewrite(x - max(x, y), min(x - y, 0), !is_const(x)) ||
                rewrite(x - min(x, y), max(x - y, 0), !is_const(x)) ||
                rewrite(y - max(x, y), min(y - x, 0), !is_const(y)) ||
                rewrite(y - min(x, y), max(y - x, 0), !is_const(y)) ||
+
+               // Negate a clamped subtract
+               rewrite(0 - max(x - y, c0), min(y - x, fold(-c0))) ||
+               rewrite(0 - min(x - y, c0), max(y - x, fold(-c0))) ||
+               rewrite(0 - max(min(x - y, c0), c1), min(max(y - x, fold(-c0)), fold(-c1))) ||
+               rewrite(0 - min(max(x - y, c0), c1), max(min(y - x, fold(-c0)), fold(-c1))) ||
+
                rewrite(x*y - x, x*(y - 1)) ||
                rewrite(x*y - y, (x - 1)*y) ||
                rewrite(x - x*y, x*(1 - y)) ||
                rewrite(x - y*x, (1 - y)*x) ||
-               rewrite(x - min(x + y, z), max(-y, x - z)) ||
-               rewrite(x - min(y + x, z), max(-y, x - z)) ||
-               rewrite(x - min(z, x + y), max(x - z, -y)) ||
-               rewrite(x - min(z, y + x), max(x - z, -y)) ||
-               rewrite(min(x + y, z) - x, min(y, z - x)) ||
-               rewrite(min(y + x, z) - x, min(y, z - x)) ||
+
+               // Cancel a term from one side of a min or max. Some of
+               // these rules introduce a new constant zero, so we require
+               // that the cancelled term is not a constant. This way
+               // there can't be a cycle. For some rules we know by
+               // context that the cancelled term is not a constant
+               // (e.g. it appears on the LHS of an addition).
+               rewrite((x - min(z, (x + y))), (0 - min(z - x, y)), !is_const(x)) ||
+               rewrite((x - min(z, (y + x))), (0 - min(z - x, y)), !is_const(x)) ||
+               rewrite((x - min((x + y), z)), (0 - min(z - x, y)), !is_const(x)) ||
+               rewrite((x - min((y + x), z)), (0 - min(z - x, y)), !is_const(x)) ||
+               rewrite((x - min(y, (w + (x + z)))), (0 - min(y - x, w + z)), !is_const(x)) ||
+               rewrite((x - min(y, (w + (z + x)))), (0 - min(y - x, z + w)), !is_const(x)) ||
+               rewrite((x - min(y, ((x + z) + w))), (0 - min(y - x, z + w)), !is_const(x)) ||
+               rewrite((x - min(y, ((z + x) + w))), (0 - min(y - x, z + w)), !is_const(x)) ||
+               rewrite((x - min((w + (x + z)), y)), (0 - min(y - x, w + z)), !is_const(x)) ||
+               rewrite((x - min((w + (z + x)), y)), (0 - min(y - x, z + w)), !is_const(x)) ||
+               rewrite((x - min(((x + z) + w), y)), (0 - min(y - x, w + z)), !is_const(x)) ||
+               rewrite((x - min(((z + x) + w), y)), (0 - min(y - x, w + z)), !is_const(x)) ||
+
+               rewrite(min(x + y, z) - x, min(z - x, y)) ||
+               rewrite(min(y + x, z) - x, min(z - x, y)) ||
                rewrite(min(z, x + y) - x, min(z - x, y)) ||
                rewrite(min(z, y + x) - x, min(z - x, y)) ||
+               rewrite((min(x, (w + (y + z))) - z), min(x - z, w + y)) ||
+               rewrite((min(x, (w + (z + y))) - z), min(x - z, w + y)) ||
+               rewrite((min(x, ((y + z) + w)) - z), min(x - z, y + w)) ||
+               rewrite((min(x, ((z + y) + w)) - z), min(x - z, y + w)) ||
+               rewrite((min((w + (y + z)), x) - z), min(x - z, w + y)) ||
+               rewrite((min((w + (z + y)), x) - z), min(x - z, w + y)) ||
+               rewrite((min(((y + z) + w), x) - z), min(x - z, y + w)) ||
+               rewrite((min(((z + y) + w), x) - z), min(x - z, y + w)) ||
+
                rewrite(min(x, y) - min(y, x), 0) ||
                rewrite(min(x, y) - min(z, w), y - w, can_prove(x - y == z - w, this)) ||
                rewrite(min(x, y) - min(w, z), y - w, can_prove(x - y == z - w, this)) ||
 
-               rewrite(x - max(x + y, z), min(-y, x - z)) ||
-               rewrite(x - max(y + x, z), min(-y, x - z)) ||
-               rewrite(x - max(z, x + y), min(x - z, -y)) ||
-               rewrite(x - max(z, y + x), min(x - z, -y)) ||
-               rewrite(max(x + y, z) - x, max(y, z - x)) ||
-               rewrite(max(y + x, z) - x, max(y, z - x)) ||
+               rewrite((x - max(z, (x + y))), (0 - max(z - x, y)), !is_const(x)) ||
+               rewrite((x - max(z, (y + x))), (0 - max(z - x, y)), !is_const(x)) ||
+               rewrite((x - max((x + y), z)), (0 - max(z - x, y)), !is_const(x)) ||
+               rewrite((x - max((y + x), z)), (0 - max(z - x, y)), !is_const(x)) ||
+               rewrite((x - max(y, (w + (x + z)))), (0 - max(y - x, w + z)), !is_const(x)) ||
+               rewrite((x - max(y, (w + (z + x)))), (0 - max(y - x, z + w)), !is_const(x)) ||
+               rewrite((x - max(y, ((x + z) + w))), (0 - max(y - x, z + w)), !is_const(x)) ||
+               rewrite((x - max(y, ((z + x) + w))), (0 - max(y - x, z + w)), !is_const(x)) ||
+               rewrite((x - max((w + (x + z)), y)), (0 - max(y - x, w + z)), !is_const(x)) ||
+               rewrite((x - max((w + (z + x)), y)), (0 - max(y - x, z + w)), !is_const(x)) ||
+               rewrite((x - max(((x + z) + w), y)), (0 - max(y - x, w + z)), !is_const(x)) ||
+               rewrite((x - max(((z + x) + w), y)), (0 - max(y - x, w + z)), !is_const(x)) ||
+
+               rewrite(max(x + y, z) - x, max(z - x, y)) ||
+               rewrite(max(y + x, z) - x, max(z - x, y)) ||
                rewrite(max(z, x + y) - x, max(z - x, y)) ||
                rewrite(max(z, y + x) - x, max(z - x, y)) ||
+               rewrite((max(x, (w + (y + z))) - z), max(x - z, w + y)) ||
+               rewrite((max(x, (w + (z + y))) - z), max(x - z, w + y)) ||
+               rewrite((max(x, ((y + z) + w)) - z), max(x - z, y + w)) ||
+               rewrite((max(x, ((z + y) + w)) - z), max(x - z, y + w)) ||
+               rewrite((max((w + (y + z)), x) - z), max(x - z, w + y)) ||
+               rewrite((max((w + (z + y)), x) - z), max(x - z, w + y)) ||
+               rewrite((max(((y + z) + w), x) - z), max(x - z, y + w)) ||
+               rewrite((max(((z + y) + w), x) - z), max(x - z, y + w)) ||
+
                rewrite(max(x, y) - max(y, x), 0) ||
                rewrite(max(x, y) - max(z, w), y - w, can_prove(x - y == z - w, this)) ||
                rewrite(max(x, y) - max(w, z), y - w, can_prove(x - y == z - w, this)) ||
@@ -274,7 +325,34 @@ Expr Simplify::visit(const Sub *op, ExprInfo *bounds) {
                rewrite(x/c0 - (x + y)/c0, ((fold(c0 - 1) - y) - (x % c0))/c0, c0 > 0) ||
                rewrite((x + y)/c0 - x/c0, ((x % c0) + y)/c0, c0 > 0) ||
                rewrite(x/c0 - (x - y)/c0, ((y + fold(c0 - 1)) - (x % c0))/c0, c0 > 0) ||
-               rewrite((x - y)/c0 - x/c0, ((x % c0) - y)/c0, c0 > 0))))) {
+               rewrite((x - y)/c0 - x/c0, ((x % c0) - y)/c0, c0 > 0) ||
+
+               // Simplification of bounds code for various tail
+               // strategies requires cancellations of the form:
+               // min(f(x), y) - g(x)
+
+               // There are many potential variants of these rules if
+               // we start adding commutative/associative rewritings
+               // of them, or consider max as well as min. We
+               // explicitly only include the ones necessary to get
+               // correctness_nested_tail_strategies to pass.
+               rewrite((min(x + y, z) + w) - x, min(z - x, y) + w) ||
+               rewrite(min((x + y) + w, z) - x, min(z - x, y + w)) ||
+               rewrite(min(min(x + z, y), w) - x, min(min(y, w) - x, z)) ||
+               rewrite(min(min(y, x + z), w) - x, min(min(y, w) - x, z)) ||
+
+               rewrite(min((x + y)*u + z, w) - x*u, min(w - x*u, y*u + z)) ||
+               rewrite(min((y + x)*u + z, w) - x*u, min(w - x*u, y*u + z)) ||
+
+               // Splits can introduce confounding divisions
+               rewrite(min(x*c0 + y, z) / c1 - x*c2, min(y, z - x*c0) / c1, c0 == c1 * c2) ||
+               rewrite(min(z, x*c0 + y) / c1 - x*c2, min(y, z - x*c0) / c1, c0 == c1 * c2) ||
+
+               // There could also be an addition inside the division (e.g. if it's division rounding up)
+               rewrite((min(x*c0 + y, z) + w) / c1 - x*c2, (min(y, z - x*c0) + w) / c1, c0 == c1 * c2) ||
+               rewrite((min(z, x*c0 + y) + w) / c1 - x*c2, (min(z - x*c0, y) + w) / c1, c0 == c1 * c2) ||
+
+               false)))) {
             return mutate(rewrite.result, bounds);
         }
     }
