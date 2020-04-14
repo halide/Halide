@@ -328,7 +328,7 @@ struct LoopNest {
 
     std::pair<double, double> compute_shared_mem_load_features(const LoadJacobian& jac, int producer_innermost_dim, const FunctionDAG::Node* node, const Bound& producer_store_bounds, bool producer_has_been_scheduled, const ThreadInfo& thread_info, const LoopNest& root, double serial_loop_extents) const;
 
-    void compute_gpu_store_features(const LoadJacobian& jac, int consumer_innermost_dim, const FunctionDAG::Node* node, const Bound& consumer_store_bounds, const ThreadInfo& thread_info, double serial_loop_extents, const vector<int64_t>& inner_serial_loop_extents, const Sites& consumer_site, ScheduleFeatures& feat, const LoopNest& root) const;
+    void compute_gpu_store_features(const LoadJacobian &jac, int consumer_innermost_dim, const FunctionDAG::Node *node, const Bound &consumer_store_bounds, const GPULoopInfo &gpu_loop_info, const std::vector<int64_t> &inner_serial_loop_extents, const Sites &consumer_site, ScheduleFeatures &feat, const LoopNest *parent, const LoopNest &root) const;
 
     int word_stride(const FunctionDAG::Node* node) const;
 

@@ -68,6 +68,12 @@ struct ThreadInfo {
             loop_indices.push_back(i);
         }
 
+        if (loop_indices.size() == 0) {
+            internal_assert(size.size() > 0);
+            ++num_thread_loops;
+            loop_indices.push_back(0);
+        }
+
         internal_assert(num_threads <= num_threads_in_this_block);
         internal_assert(loop_indices.size() == num_thread_loops);
         internal_assert(loop_indices.size() > 0 && loop_indices.size() <= 3);

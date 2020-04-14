@@ -1025,7 +1025,27 @@ std::pair<double, double> LoopNest::compute_shared_mem_load_features(const LoadJ
     return {num_accesses, min_accesses};
 }
 
-void LoopNest::compute_gpu_store_features(const LoadJacobian &jac, int consumer_innermost_dim, const FunctionDAG::Node *node, const Bound &consumer_store_bounds, const ThreadInfo &thread_info, double total_serial_loop_extents, const std::vector<int64_t> &inner_serial_loop_extents, const Sites &consumer_site, ScheduleFeatures &feat, const LoopNest &root) const {
+void LoopNest::compute_gpu_store_features(const LoadJacobian &jac, int consumer_innermost_dim, const FunctionDAG::Node *node, const Bound &consumer_store_bounds, const GPULoopInfo &gpu_loop_info, const std::vector<int64_t> &inner_serial_loop_extents, const Sites &consumer_site, ScheduleFeatures &feat, const LoopNest *parent, const LoopNest &root) const {
+    const ThreadInfo &thread_info = *gpu_loop_info.thread_info;
+
+    // If any of the store dimensions are constant over all the loop dimensions,
+    // then the value to be stored will likely be held in a register and stored
+    // once instead of on every iteration
+    double total_serial_loop_extents = gpu_loop_info.total_serial_extents();
+    for (size_t loop_index = 0; loop_index < stage->loop.size(); ++loop_index) {
+        bool constant = true;
+        for (int i = 0; i < node->dimensions; ++i) {
+            if (!(jac(i, loop_index) == 0)) {
+                constant = false;
+                break;
+            }
+        }
+
+        if (constant) {
+            total_serial_loop_extents /= parent->size[loop_index];
+        }
+    }
+
     if (consumer_site.gpu_store_memory_type == GPUMemoryType::shared) {
         auto store_jac = jac * inner_serial_loop_extents;
         auto shared_mem_features = compute_shared_mem_stores(
@@ -2153,11 +2173,11 @@ void LoopNest::compute_features(const FunctionDAG &dag,
                     vector_dim,
                     stage->node,
                     bounds,
-                    *gpu_loop_info.thread_info,
-                    gpu_loop_info.total_serial_extents(),
+                    gpu_loop_info,
                     inner_serial_loop_extents,
                     consumer_site,
                     feat,
+                    parent,
                     root);
             }
         }
