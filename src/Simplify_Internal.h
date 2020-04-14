@@ -143,7 +143,7 @@ public:
     bool no_float_simplify;
 
     HALIDE_ALWAYS_INLINE
-    bool may_simplify(const Type &t) {
+    bool may_simplify(const Type &t) const {
         return !no_float_simplify || !t.is_float();
     }
 
