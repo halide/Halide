@@ -57,8 +57,6 @@ Expr Simplify::visit(const Add *op, ExprInfo *bounds) {
              rewrite((x - broadcast(y)) + broadcast(z), x + broadcast(z - y, lanes)) ||
              rewrite(select(x, y, z) + select(x, w, u), select(x, y + w, z + u)) ||
              rewrite(select(x, c0, c1) + c2, select(x, fold(c0 + c2), fold(c1 + c2))) ||
-             rewrite(select(x, y, c1) + c2, select(x, y + c2, fold(c1 + c2))) ||
-             rewrite(select(x, c0, y) + c2, select(x, fold(c0 + c2), y + c2)) ||
 
              rewrite(select(x, y, z) + (select(x, u, v) + w), select(x, y + u, z + v) + w) ||
              rewrite(select(x, y, z) + (w + select(x, u, v)), select(x, y + u, z + v) + w) ||
@@ -82,12 +80,7 @@ Expr Simplify::visit(const Add *op, ExprInfo *bounds) {
              rewrite(x + (c0 - y), (x - y) + c0) ||
              rewrite((x - y) + (y - z), x - z) ||
              rewrite((x - y) + (z - x), z - y) ||
-             rewrite(x + y*c0, x - y*(-c0), c0 < 0 && -c0 > 0) ||
 
-             rewrite(x + (y*c0 - z), x - y*(-c0) - z, c0 < 0 && -c0 > 0) ||
-             rewrite((y*c0 - z) + x, x - y*(-c0) - z, c0 < 0 && -c0 > 0) ||
-
-             rewrite(x*c0 + y, y - x*(-c0), c0 < 0 && -c0 > 0 && !is_const(y)) ||
              rewrite(x*y + z*y, (x + z)*y) ||
              rewrite(x*y + y*z, (x + z)*y) ||
              rewrite(y*x + z*y, y*(x + z)) ||

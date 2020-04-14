@@ -68,10 +68,17 @@ Expr Simplify::visit(const EQ *op, ExprInfo *bounds) {
 
     if (rewrite(broadcast(x) == 0, broadcast(x == 0, lanes)) ||
         (no_overflow(delta.type()) && rewrite(x * y == 0, (x == 0) || (y == 0))) ||
+
         rewrite(select(x, 0, y) == 0, x || (y == 0)) ||
         rewrite(select(x, c0, y) == 0, !x && (y == 0), c0 != 0) ||
         rewrite(select(x, y, 0) == 0, !x || (y == 0)) ||
         rewrite(select(x, y, c0) == 0, x && (y == 0), c0 != 0) ||
+
+        rewrite(select(x, c0, y) + c1 == 0, x || (y == fold(-c1)), c0 + c1 == 0) ||
+        rewrite(select(x, y, c0) + c1 == 0, !x || (y == fold(-c1)), c0 + c1 == 0) ||
+        rewrite(select(x, c0, y) + c1 == 0, !x && (y == fold(-c1)), c0 + c1 != 0) ||
+        rewrite(select(x, y, c0) + c1 == 0, x && (y == fold(-c1)), c0 + c1 != 0) ||
+
         rewrite(max(x, y) - y == 0, x <= y) ||
         rewrite(min(x, y) - y == 0, y <= x) ||
         rewrite(max(y, x) - y == 0, x <= y) ||
