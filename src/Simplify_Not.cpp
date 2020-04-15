@@ -11,8 +11,6 @@ Expr Simplify::visit(const Not *op, ExprInfo *bounds) {
     if (rewrite(!c0, fold(!c0)) ||
         rewrite(!(x < y), y <= x) ||
         rewrite(!(x <= y), y < x) ||
-        rewrite(!(x > y), y >= x) ||
-        rewrite(!(x >= y), y > x) ||
         rewrite(!(x == y), x != y) ||
         rewrite(!(x != y), x == y) ||
         rewrite(!!x, x)) {

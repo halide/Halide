@@ -256,6 +256,7 @@ tests(GROUPS correctness travis
         scatter.cpp
         mux.cpp
         set_custom_trace.cpp
+        shadowed_bound.cpp
         shared_self_references.cpp
         shifted_image.cpp
         side_effects.cpp

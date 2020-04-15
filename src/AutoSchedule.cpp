@@ -1142,12 +1142,12 @@ struct Partitioner {
     // the arithmetic benefit is negative, we will treat it as no benefits and we
     // should not perform the new grouping.
     Expr estimate_benefit(const GroupAnalysis &old_grouping, const GroupAnalysis &new_grouping,
-                          bool no_redundant_work, bool ensure_parallelism);
+                          bool no_redundant_work, bool ensure_parallelism) const;
 
     // Same as above; however, 'new_grouping' is a vector of function pairs that
     // are to be grouped together.
     Expr estimate_benefit(const vector<pair<GroupingChoice, GroupConfig>> &new_grouping,
-                          bool no_redundant_work, bool ensure_parallelism);
+                          bool no_redundant_work, bool ensure_parallelism) const;
 
     // Return the total estimate on arithmetic and memory costs of computing all
     // groups within the pipeline.
@@ -2155,7 +2155,7 @@ Partitioner::GroupConfig Partitioner::evaluate_choice(const GroupingChoice &choi
 Expr Partitioner::estimate_benefit(const GroupAnalysis &old_grouping,
                                    const GroupAnalysis &new_grouping,
                                    bool no_redundant_work,
-                                   bool ensure_parallelism) {
+                                   bool ensure_parallelism) const {
     // TODO: Instead of having a hard parallelism constraint, it may be better
     // to consider other metric, such as arith_cost/parallelism
     if (ensure_parallelism &&
@@ -2178,7 +2178,7 @@ Expr Partitioner::estimate_benefit(const GroupAnalysis &old_grouping,
 
 Expr Partitioner::estimate_benefit(
     const vector<pair<GroupingChoice, GroupConfig>> &new_grouping,
-    bool no_redundant_work, bool ensure_parallelism) {
+    bool no_redundant_work, bool ensure_parallelism) const {
 
     set<FStage> old_groups;
 
