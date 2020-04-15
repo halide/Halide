@@ -16,10 +16,10 @@ namespace Halide {
  * */
 struct float16_t {
 
-    static const int mantissa_bits = 10;
-    static const uint16_t sign_mask = 0x8000;
-    static const uint16_t exponent_mask = 0x7c00;
-    static const uint16_t mantissa_mask = 0x03ff;
+    HALIDE_STATIC_CONSTEXPR int mantissa_bits = 10;
+    HALIDE_STATIC_CONSTEXPR uint16_t sign_mask = 0x8000;
+    HALIDE_STATIC_CONSTEXPR uint16_t exponent_mask = 0x7c00;
+    HALIDE_STATIC_CONSTEXPR uint16_t mantissa_mask = 0x03ff;
 
     /// \name Constructors
     /// @{
@@ -141,10 +141,10 @@ namespace Halide {
  *  a type's size and used for halide_buffer_t allocation. */
 struct bfloat16_t {
 
-    static const int mantissa_bits = 7;
-    static const uint16_t sign_mask = 0x8000;
-    static const uint16_t exponent_mask = 0x7f80;
-    static const uint16_t mantissa_mask = 0x007f;
+    HALIDE_STATIC_CONSTEXPR int mantissa_bits = 7;
+    HALIDE_STATIC_CONSTEXPR uint16_t sign_mask = 0x8000;
+    HALIDE_STATIC_CONSTEXPR uint16_t exponent_mask = 0x7f80;
+    HALIDE_STATIC_CONSTEXPR uint16_t mantissa_mask = 0x007f;
 
     static const bfloat16_t zero, negative_zero, infinity, negative_infinity, nan;
 

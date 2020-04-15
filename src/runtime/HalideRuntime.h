@@ -47,6 +47,17 @@ extern "C" {
 #endif
 #endif
 
+#if __cplusplus >= 201703L
+// In C++17, it's preferable to declare static members that have
+// initial values as 'constexpr' instead of 'const' (where possible, mainly
+// for integral-ish types). Among other things, this allows the constants to be
+// passed into functions and function templates that accept arguments by reference.
+// Without this change, such functions would cause linker errors.
+#define HALIDE_STATIC_CONSTEXPR static constexpr
+#else
+#define HALIDE_STATIC_CONSTEXPR static const
+#endif
+
 /** \file
  *
  * This file declares the routines used by Halide internally in its

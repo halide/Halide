@@ -2978,7 +2978,7 @@ struct NoRealizations<> : std::true_type {};
 
 template<typename T, typename... Args>
 struct NoRealizations<T, Args...> {
-    static const bool value = !std::is_convertible<T, Realization>::value && NoRealizations<Args...>::value;
+    HALIDE_STATIC_CONSTEXPR bool value = !std::is_convertible<T, Realization>::value && NoRealizations<Args...>::value;
 };
 
 class GeneratorStub;

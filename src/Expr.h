@@ -217,7 +217,7 @@ struct IntImm : public ExprNode<IntImm> {
 
     static const IntImm *make(Type t, int64_t value);
 
-    static const IRNodeType _node_type = IRNodeType::IntImm;
+    HALIDE_STATIC_CONSTEXPR IRNodeType _node_type = IRNodeType::IntImm;
 };
 
 /** Unsigned integer constants */
@@ -226,7 +226,7 @@ struct UIntImm : public ExprNode<UIntImm> {
 
     static const UIntImm *make(Type t, uint64_t value);
 
-    static const IRNodeType _node_type = IRNodeType::UIntImm;
+    HALIDE_STATIC_CONSTEXPR IRNodeType _node_type = IRNodeType::UIntImm;
 };
 
 /** Floating point constants */
@@ -235,7 +235,7 @@ struct FloatImm : public ExprNode<FloatImm> {
 
     static const FloatImm *make(Type t, double value);
 
-    static const IRNodeType _node_type = IRNodeType::FloatImm;
+    HALIDE_STATIC_CONSTEXPR IRNodeType _node_type = IRNodeType::FloatImm;
 };
 
 /** String constants */
@@ -244,7 +244,7 @@ struct StringImm : public ExprNode<StringImm> {
 
     static const StringImm *make(const std::string &val);
 
-    static const IRNodeType _node_type = IRNodeType::StringImm;
+    HALIDE_STATIC_CONSTEXPR IRNodeType _node_type = IRNodeType::StringImm;
 };
 
 }  // namespace Internal
