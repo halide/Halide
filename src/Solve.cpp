@@ -843,7 +843,7 @@ class SolveForInterval : public IRVisitor {
         }
     }
 
-    Interval interval_union(Interval ia, Interval ib) {
+    Interval interval_union(Interval ia, Interval ib) const {
         if (outer) {
             // The regular union is already conservative in the right direction
             return Interval::make_union(ia, ib);
@@ -1177,7 +1177,7 @@ class AndConditionOverDomain : public IRMutator {
         return mutate(op->value);
     }
 
-    Expr fail() {
+    Expr fail() const {
         if (flipped) {
             // True is a necessary condition for anything. Any
             // predicate implies true.
