@@ -625,7 +625,7 @@ RegionCosts::detailed_load_costs(const map<string, Box> &regions,
 }
 
 Cost RegionCosts::get_func_stage_cost(const Function &f, int stage,
-                                      const set<string> &inlines) {
+                                      const set<string> &inlines) const {
     if (f.has_extern_definition()) {
         return Cost();
     }

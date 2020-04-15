@@ -60,13 +60,9 @@ Expr Simplify::visit(const Add *op, ExprInfo *bounds) {
              rewrite(select(x, y, c1) + c2, select(x, y + c2, fold(c1 + c2))) ||
              rewrite(select(x, c0, y) + c2, select(x, fold(c0 + c2), y + c2)) ||
 
-             rewrite((select(x, y, z) + w) + select(x, u, v), select(x, y + u, z + v) + w) ||
-             rewrite((w + select(x, y, z)) + select(x, u, v), select(x, y + u, z + v) + w) ||
              rewrite(select(x, y, z) + (select(x, u, v) + w), select(x, y + u, z + v) + w) ||
              rewrite(select(x, y, z) + (w + select(x, u, v)), select(x, y + u, z + v) + w) ||
-             rewrite((select(x, y, z) - w) + select(x, u, v), select(x, y + u, z + v) - w) ||
              rewrite(select(x, y, z) + (select(x, u, v) - w), select(x, y + u, z + v) - w) ||
-             rewrite((w - select(x, y, z)) + select(x, u, v), select(x, u - y, v - z) + w) ||
              rewrite(select(x, y, z) + (w - select(x, u, v)), select(x, y - u, z - v) + w) ||
 
              rewrite((x + c0) + c1, x + fold(c0 + c1)) ||
@@ -143,7 +139,9 @@ Expr Simplify::visit(const Add *op, ExprInfo *bounds) {
 
                rewrite(x + ((c0 - x)/c1)*c1, c0 - ((c0 - x) % c1), c1 > 0) ||
                rewrite(x + ((c0 - x)/c1 + y)*c1, y * c1 - ((c0 - x) % c1) + c0, c1 > 0) ||
-               rewrite(x + (y + (c0 - x)/c1)*c1, y * c1 - ((c0 - x) % c1) + c0, c1 > 0))))) {
+               rewrite(x + (y + (c0 - x)/c1)*c1, y * c1 - ((c0 - x) % c1) + c0, c1 > 0) ||
+
+               false)))) {
             return mutate(rewrite.result, bounds);
         }
         // clang-format on
