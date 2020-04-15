@@ -86,7 +86,7 @@ struct RegionCosts {
     /** Compute the cost of producing a single value by one stage of 'f'.
      * 'inlines' specifies names of all the inlined functions. */
     Cost get_func_stage_cost(const Function &f, int stage,
-                             const std::set<std::string> &inlines = std::set<std::string>());
+                             const std::set<std::string> &inlines = std::set<std::string>()) const;
 
     /** Compute the cost of producing a single value by all stages of 'f'.
      * 'inlines' specifies names of all the inlined functions. This returns a
