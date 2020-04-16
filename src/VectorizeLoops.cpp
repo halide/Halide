@@ -377,6 +377,7 @@ class VectorSubs : public IRMutator {
 
     // What we're replacing it with. Usually a ramp.
     std::map<string, Expr> replacements;
+    Expr ramp_for_allocate;
 
     const Target &target;
 
@@ -898,7 +899,6 @@ class VectorSubs : public IRMutator {
     Stmt visit(const Allocate *op) override {
         std::vector<Expr> new_extents;
         Expr new_expr;
-        user_assert(replacements.size() == 1) << "Cannot handle Allocate node inside of the nested vectorization\n";
         string var = replacements.begin()->first;
         Expr replacement = replacements.begin()->second;
         int lanes = replacement.type().lanes();
@@ -932,13 +932,13 @@ class VectorSubs : public IRMutator {
         string v = unique_name('v');
         body = RewriteAccessToVectorAlloc(v, op->name, lanes).mutate(body);
 
-        scope.push(v, Ramp::make(0, 1, lanes));
+        scope.push(v, ramp_for_allocate);
         body = mutate(body);
         scope.pop(v);
 
         // Replace the widened 'v' with the actual ramp
-        // foo[x*lanes + widened_v] -> foo[x*lanes + ramp(0, 1, lanes)]
-        body = substitute(v + widening_suffix, Ramp::make(0, 1, lanes), body);
+        // foo[x*lanes + widened_v] -> foo[x*lanes + ramp(...)]
+        body = substitute(v + widening_suffix, ramp_for_allocate, body);
 
         // The variable itself could still exist inside an inner scalarized block.
         body = substitute(v, Variable::make(Int(32), var), body);
@@ -1007,12 +1007,14 @@ public:
             replacements[var.name] = var.min;
         }
 
+        Expr strided_ones = 1;
         Expr stride = 1;
+        ramp_for_allocate = 0;
         for (int ix = vectorized_vars.size() - 1; ix >= 0; ix--) {
             for (int ik = 0; ik < (int)vectorized_vars.size(); ik++) {
                 if (ix == ik) {
                     replacements[vectorized_vars[ik].name] = Ramp::make(replacements[vectorized_vars[ik].name],
-                                                                        stride,
+                                                                        strided_ones,
                                                                         vectorized_vars[ix].lanes);
                 } else {
                     replacements[vectorized_vars[ik].name] = Broadcast::make(replacements[vectorized_vars[ik].name],
@@ -1020,7 +1022,9 @@ public:
                 }
             }
 
-            stride = Broadcast::make(stride, vectorized_vars[ix].lanes);
+            ramp_for_allocate = Ramp::make(ramp_for_allocate, stride, vectorized_vars[ix].lanes);
+            strided_ones = Broadcast::make(strided_ones, vectorized_vars[ix].lanes);
+            stride = Broadcast::make(stride * vectorized_vars[ix].lanes, vectorized_vars[ix].lanes);
 
             // for (const auto &r : replacements) {
             //     debug(0) << "Replacements " << ix << " " << r.first << " " << r.second << "\n";

@@ -7,6 +7,7 @@ int main(int argc, char **argv) {
     const int width = 16;
     const int height = 16;
 
+    // Type of the test: if only
     // Func f("f");
     // Var x("x"), y("y"), xi("xi"), yi("yi");
 
@@ -17,7 +18,7 @@ int main(int argc, char **argv) {
     //     .vectorize(xi)
     //     .vectorize(yi);
 
-    // Allocate
+    // Type of the test: Allocate
     // Func f, g;
     // Var x, y;
     // f(x, y) = x + y;
@@ -30,59 +31,59 @@ int main(int argc, char **argv) {
 
     // Buffer<int> result = g.realize(width, height);
 
-    // Allocate + for
-    // Func f, inlined;
-    // Var x("x"), y("y"), xi("xi"), yi("yi");
-    // RDom r(0, 10, "r");
-    // inlined(x) = x;
-    // inlined(x) += r;
-    // f(x, y) = inlined(x);
-
-    // f.compute_root()
-    //     .tile(x, y, x, y, xi, yi, 8, 4, TailStrategy::GuardWithIf)
-    //     .vectorize(xi)
-    //     .vectorize(yi);
-
-    // Buffer<int> result = f.realize(width, height);
-
-    Func f;
-    Var x("x"), y("y"), c("c"), xi("xi"), yi("yi");
-    f(x, y, c) = x + y + c;
+    // Type of the test: Allocate + for
+    Func f, inlined;
+    Var x("x"), y("y"), xi("xi"), yi("yi");
+    RDom r(0, 10, "r");
+    inlined(x) = x;
+    inlined(x) += r;
+    f(x, y) = inlined(x) + y;
 
     f.compute_root()
-        .tile(x, y, x, y, xi, yi, 8, 4, TailStrategy::GuardWithIf)
-        .reorder(c, xi, yi, x, y)
+        .tile(x, y, x, y, xi, yi, 8, 4, TailStrategy::RoundUp)
         .vectorize(xi)
         .vectorize(yi);
 
-    Buffer<int> result = f.realize(width, height, 3);
+    Buffer<int> result = f.realize(width, height);
 
-    for (int ic = 0; ic < 3; ic++) {
-        for (int iy = 0; iy < height; iy++) {
-            for (int ix = 0; ix < width; ix++) {
-                printf("%2d ", result(ix, iy, ic));
-            }
-            printf("\n");
+    for (int iy = 0; iy < height; iy++) {
+        for (int ix = 0; ix < width; ix++) {
+            printf("%2d ", result(ix, iy));
         }
         printf("\n");
     }
 
-    auto cmp_func = [](int x, int y, int c) {
-        return x + y + c;
+    auto cmp_func = [](int x, int y) {
+        return x + y + 45;
     };
     if (check_image(result, cmp_func)) {
         return -1;
     }
+    // Type of the test: For only
+    // Func f;
+    // Var x("x"), y("y"), c("c"), xi("xi"), yi("yi");
+    // f(x, y, c) = x + y + c;
 
-    // for (int iy = 0; iy < height; iy++) {
-    //     for (int ix = 0; ix < width; ix++) {
-    //         printf("%2d ", result(ix, iy));
+    // f.compute_root()
+    //     .tile(x, y, x, y, xi, yi, 8, 4, TailStrategy::GuardWithIf)
+    //     .reorder(c, xi, yi, x, y)
+    //     .vectorize(xi)
+    //     .vectorize(yi);
+
+    // Buffer<int> result = f.realize(width, height, 3);
+
+    // for (int ic = 0; ic < 3; ic++) {
+    //     for (int iy = 0; iy < height; iy++) {
+    //         for (int ix = 0; ix < width; ix++) {
+    //             printf("%2d ", result(ix, iy, ic));
+    //         }
+    //         printf("\n");
     //     }
     //     printf("\n");
     // }
 
-    // auto cmp_func = [](int x, int y) {
-    //     return x + y;
+    // auto cmp_func = [](int x, int y, int c) {
+    //     return x + y + c;
     // };
     // if (check_image(result, cmp_func)) {
     //     return -1;
