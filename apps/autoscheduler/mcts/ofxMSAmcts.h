@@ -166,7 +166,8 @@ namespace msa {
 
                 // return best node's action
                 if(best_node) return best_node->get_action();
-
+                else return NULL;
+                    
                 // we shouldn't be here
                 assert(0 && "Error: could not find any action");
                 exit(1);

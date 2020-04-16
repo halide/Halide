@@ -789,8 +789,10 @@ struct State {
         for(auto &pair : actions) {
             if (pair.first == action) {
                 inner = pair.second;
+                inner->num_decisions_made++;
+                std::cout << "num_decisions_made "<< inner->num_decisions_made << std::endl;
                 if (pair.first.ae == ActionEnum::Inline) 
-                std::cout << "applying Inline, Index "<< pair.first.index  << std::endl;
+                std::cout << "applying inline, index "<< pair.first.index  << std::endl;
                 if (pair.first.ae == ActionEnum::Retile) 
                 std::cout << "applying Retile, Index " <<pair.first.index << std::endl;
                 if (pair.first.ae == ActionEnum::Option) 
@@ -834,7 +836,7 @@ struct State {
         //std::cout << "calculate_cost()" << std::endl;
         internal_assert(cost_model && "bug, cost model not defined");
         cost_model->evaluate_costs();
-        //std::cout << "evaluate_costs()" << std::endl;
+        std::cout << "---------- evaluate_costs() ---------- " << std::endl;
         //std::cout << "inner cost "<<inner->cost <<"parent cost "<<inner->parent->cost<< std::endl;
         std::cout << "inner cost "<<inner->cost << std::endl;
         return { (float)(-1 * inner->cost)}; 
@@ -925,7 +927,7 @@ struct State {
                     new_root->copy_from(*root);
                     new_root->inline_func(node);
                     child->root = new_root;
-                    child->num_decisions_made++;
+                    //child->num_decisions_made++;
                     if (child->calculate_cost(dag, params, cost_model)) {
                         num_children++;
                         actions.emplace(Action(ActionEnum::Inline,num_children-1), std::move(child));
@@ -984,7 +986,7 @@ struct State {
                 for (IntrusivePtr<const LoopNest> &n : tile_options) {
                     auto child = make_child();
                     child->root = std::move(n);
-                    child->num_decisions_made++;
+                    //child->num_decisions_made++;
                     if (child->calculate_cost(dag, params, cost_model)) {
                         num_children++;
                         // AHA: shouldn't the index (num_children-1) fix the hash issue?
@@ -1017,7 +1019,7 @@ struct State {
                 // return a copy of the parent state
                 num_children++;
                 auto child = make_child();
-                child->num_decisions_made++;
+                //child->num_decisions_made++;
                 actions.emplace(Action(ActionEnum::Parallelize,num_children-1), std::move(child));
             } else {
                 internal_assert(pure_size);
@@ -1101,7 +1103,7 @@ struct State {
                 if (options.empty()) {
                     num_children++;
                     auto child = make_child();
-                    child->num_decisions_made++;
+                    //child->num_decisions_made++;
                     //AHA: adding again maybe for sig fault?
                     actions.emplace(Action(ActionEnum::Option,num_children-1), std::move(child));
                     //WM: didn't create a new child here as didn't appear to be different from parent [thus consider illegal action, or could simply use identity action]
@@ -1146,7 +1148,7 @@ struct State {
                         }
                     }
                     child->root = new_root;
-                    child->num_decisions_made++;
+                    //child->num_decisions_made++;
                     if (child->calculate_cost(dag, params, cost_model)) {
                         num_children++;
                         actions.emplace(Action(ActionEnum::Option,num_children-1, o.hash()), std::move(child));

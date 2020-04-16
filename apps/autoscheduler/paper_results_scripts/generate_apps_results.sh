@@ -35,9 +35,11 @@ elif [ "$autoscheduler" == "mcts" ]; then
     cp ../AutoSchedule-mcts.cpp ../AutoSchedule.cpp
 
     # mcts
+    export HL_NUM_PASSES=1
     export MCTS_MAX_MILLIS=0
-    export MCTS_MAX_ITERATIONS=10
-    export MCTS_SIMULATION_DEPTH=10
+    export MCTS_MAX_ITERATIONS=16
+    export MCTS_SIMULATION_DEPTH=5
+    export MCTS_DEPTH=16
     results="mcts"
 else
     echo "usage: $0 [greedy|beam|mcts]"
@@ -60,10 +62,12 @@ if [ $? -ne 0 ]; then
 fi
 cd -
 
-# APPS="bilateral_grid local_laplacian nl_means lens_blur camera_pipe stencil_chain harris hist max_filter unsharp interpolate_generator conv_layer mat_mul_generator iir_blur_generator resnet_50_blockwise bgu"
 
-APPS="bilateral_grid local_laplacian nl_means lens_blur camera_pipe stencil_chain harris hist max_filter unsharp interpolate conv_layer iir_blur bgu" # Missing mat_mul_generator and resnet_50_blockwise
+#APPS="bilateral_grid local_laplacian nl_means lens_blur camera_pipe stencil_chain harris hist max_filter unsharp interpolate_generator conv_layer mat_mul_generator iir_blur_generator resnet_50_blockwise bgu"
+ 
+#APPS="bilateral_grid local_laplacian nl_means lens_blur camera_pipe stencil_chain harris hist max_filter unsharp interpolate conv_layer iir_blur bgu" # Missing mat_mul_generator and resnet_50_blockwise
 
+APPS="local_laplacian"
 # Uncomment when there's a change that wouldn't be picked up by the Makefiles (e.g. new weights)
 for app in ${APPS}; do make -C ${HALIDE}/apps/${app} clean; done
 
@@ -76,7 +80,7 @@ for app in ${APPS}; do
 
     if [ $? -ne 0 ]; then
         echo "Failed to build $app"
-        exit 1
+        #exit 1
     fi
 done
 
@@ -84,11 +88,11 @@ mkdir $results 2>/dev/null
 
 # benchmark everything
 for app in ${APPS}; do
-    make -C ${HALIDE}/apps/${app} test &> $results/$app.txt
+    timeout 20s make -C ${HALIDE}/apps/${app} test &> $results/$app.txt
 
     if [ $? -ne 0 ]; then
         echo "Failed to benchmark $app"
-        exit 1
+#        exit 1
     fi
 done
 
