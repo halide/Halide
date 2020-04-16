@@ -11,7 +11,8 @@ export CXX="c++"
 # export HL_MACHINE_PARAMS=32,24000000,160
 
 export HL_PERMIT_FAILED_UNROLL=1
-export HL_WEIGHTS_DIR=${HALIDE}/apps/autoscheduler/weights
+# export HL_WEIGHTS_DIR=${HALIDE}/apps/autoscheduler/weights
+export HL_WEIGHTS_DIR=$PWD/../baseline.weights
 export HL_TARGET="host" # x86-64-avx2
 
 # no random dropout
@@ -39,8 +40,14 @@ elif [ "$autoscheduler" == "mcts" ]; then
     export MCTS_MAX_ITERATIONS=10
     export MCTS_SIMULATION_DEPTH=10
     results="mcts"
+elif [ "$autoscheduler" == "master" ]; then
+    # master
+    export HL_BEAM_SIZE=1
+    export HL_NUM_PASSES=1
+    export HL_CUSTOM_AUTOSCHEDULER=""
+    results="master"
 else
-    echo "usage: $0 [greedy|beam|mcts]"
+    echo "usage: $0 [master|greedy|beam|mcts]"
     exit 1
 fi
 
@@ -52,13 +59,15 @@ fi
 # export HL_NUM_PASSES=1
 
 # Build the autoscheduler
-cd ..
-make bin/libauto_schedule.so
-if [ $? -ne 0 ]; then
-    echo "Failed to build autoscheduler library"
-    exit 1
+if [ "$autoscheduler" != "master" ]; then
+    cd ..
+    make bin/libauto_schedule.so
+    if [ $? -ne 0 ]; then
+        echo "Failed to build autoscheduler library"
+        exit 1
+    fi
+    cd -
 fi
-cd -
 
 # APPS="bilateral_grid local_laplacian nl_means lens_blur camera_pipe stencil_chain harris hist max_filter unsharp interpolate_generator conv_layer mat_mul_generator iir_blur_generator resnet_50_blockwise bgu"
 
@@ -76,7 +85,8 @@ for app in ${APPS}; do
 
     if [ $? -ne 0 ]; then
         echo "Failed to build $app"
-        exit 1
+        echo "Failed to build $app (autoscheduler == $autoscheduler)" >> errors
+        # exit 1
     fi
 done
 
@@ -88,7 +98,8 @@ for app in ${APPS}; do
 
     if [ $? -ne 0 ]; then
         echo "Failed to benchmark $app"
-        exit 1
+        echo "Failed to benchmark $app (autoscheduler == $autoscheduler)" >> errors
+        # exit 1
     fi
 done
 

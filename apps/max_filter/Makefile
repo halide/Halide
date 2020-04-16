@@ -19,8 +19,7 @@ $(BIN)/%/max_filter.a: $(GENERATOR_BIN)/max_filter.generator
 
 $(BIN)/%/max_filter_auto_schedule.a: $(GENERATOR_BIN)/max_filter.generator
 	@mkdir -p $(@D)
-	HL_WEIGHTS_DIR=$(AUTOSCHED_SRC)/baseline.weights \
-	$< -g max_filter -f max_filter_auto_schedule -o $(BIN)/$* target=$*-no_runtime auto_schedule=true -p $(AUTOSCHED_BIN)/libauto_schedule.so -s Adams2019
+	$< -g max_filter -f max_filter_auto_schedule -o $(BIN)/$* target=$*-no_runtime auto_schedule=true $(HL_CUSTOM_AUTOSCHEDULER)
 
 $(BIN)/%/runtime.a: $(GENERATOR_BIN)/max_filter.generator
 	@mkdir -p $(@D)

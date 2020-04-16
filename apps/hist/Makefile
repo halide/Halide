@@ -19,7 +19,6 @@ $(BIN)/%/hist.a: $(GENERATOR_BIN)/hist.generator
 
 $(BIN)/%/hist_auto_schedule.a: $(GENERATOR_BIN)/hist.generator
 	@mkdir -p $(@D)
-	HL_WEIGHTS_DIR=$(AUTOSCHED_SRC)/baseline.weights \
 	$< -g hist -f hist_auto_schedule -o $(BIN)/$* target=$*-no_runtime auto_schedule=true
 
 $(BIN)/%/runtime.a: $(GENERATOR_BIN)/hist.generator

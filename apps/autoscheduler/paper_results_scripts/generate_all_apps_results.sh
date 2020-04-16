@@ -1,4 +1,4 @@
-autoschedulers="greedy beam mcts"
+autoschedulers="master greedy beam mcts"
 
 echo > progress
 

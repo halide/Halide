@@ -17,8 +17,7 @@ $(BIN)/%/nl_means.a: $(GENERATOR_BIN)/nl_means.generator
 
 $(BIN)/%/nl_means_auto_schedule.a: $(GENERATOR_BIN)/nl_means.generator
 	@mkdir -p $(@D)
-	HL_WEIGHTS_DIR=$(AUTOSCHED_SRC)/baseline.weights \
-	$^ -g nl_means -e $(GENERATOR_OUTPUTS) -o $(@D) -f nl_means_auto_schedule target=$*-no_runtime auto_schedule=true -p $(AUTOSCHED_BIN)/libauto_schedule.so -s Adams2019
+	$^ -g nl_means -e $(GENERATOR_OUTPUTS) -o $(@D) -f nl_means_auto_schedule target=$*-no_runtime auto_schedule=true $(HL_CUSTOM_AUTOSCHEDULER)
 
 $(BIN)/%/process: process.cpp $(BIN)/%/nl_means.a $(BIN)/%/nl_means_auto_schedule.a
 	@mkdir -p $(@D)

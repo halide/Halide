@@ -6,10 +6,10 @@ apps="bilateral_grid local_laplacian nl_means lens_blur camera_pipe stencil_chai
 def strip_non_digits(s):
     return "".join([c for c in s if c.isdigit() or c == "."])
 
-print("test,greedy,beam,manual,mcts")
+print("test,master,greedy,beam,manual,mcts")
 
 for app in apps:
-    # Get manual, greedy, and mcts results
+    # Get manual and greedy results
     manual = 0
     greedy = 0
     with open(f"../greedy/{app}.txt") as f:
@@ -26,11 +26,19 @@ for app in apps:
             if line.startswith("Auto-scheduled time:") or "schedule_type=auto_schedule" in line:
                 beam += float(strip_non_digits(line)) / 1000
 
+    # Get mcts results
     mcts = 0
     with open(f"../mcts/{app}.txt") as f:
         for line in f:
             if line.startswith("Auto-scheduled time:") or "schedule_type=auto_schedule" in line:
                 mcts += float(strip_non_digits(line)) / 1000
 
-    print(f"{app},{greedy},{beam},{manual},{mcts}")
+    # Get master results
+    master = 0
+    with open(f"../master/{app}.txt") as f:
+        for line in f:
+            if line.startswith("Auto-scheduled time:") or "schedule_type=auto_schedule" in line:
+                master += float(strip_non_digits(line)) / 1000
+
+    print(f"{app},{master},{greedy},{beam},{manual},{mcts}")
 

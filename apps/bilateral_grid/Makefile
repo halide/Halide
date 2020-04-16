@@ -17,8 +17,7 @@ $(BIN)/%/bilateral_grid.a: $(GENERATOR_BIN)/bilateral_grid.generator
 
 $(BIN)/%/bilateral_grid_auto_schedule.a: $(GENERATOR_BIN)/bilateral_grid.generator
 	@mkdir -p $(@D)
-	HL_WEIGHTS_DIR=$(AUTOSCHED_SRC)/baseline.weights \
-	$^ -g bilateral_grid -e $(GENERATOR_OUTPUTS) -o $(@D) -f bilateral_grid_auto_schedule target=$*-no_runtime auto_schedule=true -e static_library,c_header,schedule -p $(AUTOSCHED_BIN)/libauto_schedule.so -s Adams2019
+	$^ -g bilateral_grid -e $(GENERATOR_OUTPUTS) -o $(@D) -f bilateral_grid_auto_schedule target=$*-no_runtime auto_schedule=true -e static_library,c_header,schedule $(HL_CUSTOM_AUTOSCHEDULER)
 
 $(BIN)/%/filter: filter.cpp $(BIN)/%/bilateral_grid.a $(BIN)/%/bilateral_grid_auto_schedule.a
 	@mkdir -p $(@D)
