@@ -27,6 +27,8 @@ tests(GROUPS error travis
         broken_promise.cpp
         buffer_larger_than_two_gigs.cpp
         clamp_out_of_range.cpp
+        compute_with_crossing_edges1.cpp
+        compute_with_crossing_edges2.cpp
         constraint_uses_non_param.cpp
         constrain_wrong_output_buffer.cpp
         define_after_realize.cpp
