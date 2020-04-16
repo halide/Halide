@@ -205,12 +205,6 @@ void check_algebra() {
     check(x * y - z * x, (y - z) * x);
     check(y * x - x * z, (y - z) * x);
     check(y * x - z * x, (y - z) * x);
-    check(x - y * -2, y * 2 + x);
-    check(x + y * -2, x - y * 2);
-    check(x * -2 + y, y - x * 2);
-    check(xf - yf * -2.0f, y * 2.0f + xf);
-    check(xf + yf * -2.0f, xf - y * 2.0f);
-    check(xf * -2.0f + yf, yf - x * 2.0f);
 
     check((x * 8) - (y * 4), (x * 2 - y) * 4);
     check((x * 4) - (y * 8), (x - y * 2) * 4);
@@ -415,9 +409,9 @@ void check_algebra() {
     check((w + x) - ((w + x) - y * z) / -3, (w + x) - ((w + x) - y * z) / -3);
     check(x - (y + x) / -2, x - (x + y) / -2);
     check(x - (y - x) / -6, x - (y - x) / -6);
-    check((x + y) / 3 - x, (y - x * 2) / 3);
+    check((x + y) / 3 - x, (x * -2 + y) / 3);
     check((x * y - w) / 4 - x * y, (x * y * (-3) - w) / 4);
-    check((y + x) / 5 - x, (y - x * 4) / 5);
+    check((y + x) / 5 - x, (x * -4 + y) / 5);
     check((y - x) / 6 - x, (y - x * 7) / 6);
     check(1 - (1 + y) / 2 - 1, (0 - y) / 2);
     check(1 - (-y + 1) / 2 - 1, y / 2);
