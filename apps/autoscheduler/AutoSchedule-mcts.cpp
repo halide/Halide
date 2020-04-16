@@ -789,6 +789,16 @@ struct State {
         for(auto &pair : actions) {
             if (pair.first == action) {
                 inner = pair.second;
+                if (pair.first.ae == ActionEnum::Inline) 
+                std::cout << "applying Inline, Index "<< pair.first.index  << std::endl;
+                if (pair.first.ae == ActionEnum::Retile) 
+                std::cout << "applying Retile, Index " <<pair.first.index << std::endl;
+                if (pair.first.ae == ActionEnum::Option) 
+                std::cout << "applying Option, Index " <<pair.first.index << std::endl;
+                if (pair.first.ae == ActionEnum::Input) 
+                std::cout << "applying Input, Index "  <<pair.first.index<< std::endl;
+                if (pair.first.ae == ActionEnum::Parallelize) 
+                std::cout << "applying Parallelize, Index "  << pair.first.index<<std::endl;
             }
         }
         //internal_assert(0);
@@ -825,8 +835,9 @@ struct State {
         internal_assert(cost_model && "bug, cost model not defined");
         cost_model->evaluate_costs();
         //std::cout << "evaluate_costs()" << std::endl;
-        //std::cout << "inner cost "<<inner->cost << std::endl;
-        return { (float)(inner->cost)}; 
+        //std::cout << "inner cost "<<inner->cost <<"parent cost "<<inner->parent->cost<< std::endl;
+        std::cout << "inner cost "<<inner->cost << std::endl;
+        return { (float)(-1 * inner->cost)}; 
     }
 
     // return state as string (for debug purposes)
@@ -881,10 +892,10 @@ struct State {
             // We don't need to schedule nodes that represent inputs,
             // and there are no other decisions to be made about them
             // at this time.
-            debug(0) << "Skipping over scheduling input node: " << node->func.name() << "\n";
-            auto child = make_child();
-            child->num_decisions_made++;
-            actions.emplace(Action(ActionEnum::Input,0), std::move(child));
+            //debug(0) << "Skipping over scheduling input node: " << node->func.name() << "\n";
+            //auto child = make_child();
+            //child->num_decisions_made++;
+            //actions.emplace(Action(ActionEnum::Input,0), std::move(child));
             return;
         }
 
@@ -1617,8 +1628,6 @@ IntrusivePtr<State> optimal_mcts_schedule(FunctionDAG &dag,
     IntrusivePtr<State> initial{new State};
     initial->root = new LoopNest;
 
-    State::WrapperState state(initial, num_passes, dag, params, cost_model);
-
     msa::mcts::UCT<State::WrapperState, State::Action> uct; // Templated class. Builds a partial decision tree and searches it with UCT MCTS
 
     // OPTIONAL init uct params
@@ -1626,7 +1635,7 @@ IntrusivePtr<State> optimal_mcts_schedule(FunctionDAG &dag,
     uct.max_millis = 0;
     uct.max_iterations = 500;
     uct.simulation_depth = 50;
-
+    int mcts_depth = 32;
     // Get the max_millis for the mcts
     string max_millis_str = get_env_variable("MCTS_MAX_MILLIS");
     if (!max_millis_str.empty()) {
@@ -1643,47 +1652,60 @@ IntrusivePtr<State> optimal_mcts_schedule(FunctionDAG &dag,
     if (!simulation_depth_str.empty()) {
         uct.simulation_depth = atoi(simulation_depth_str.c_str());
     }
+    // Get the mcts_depth for the mcts
+    string mcts_depth_str = get_env_variable("MCTS_DEPTH");
+    if (!mcts_depth_str.empty()) {
+        mcts_depth = atoi(mcts_depth_str.c_str());
+    }
+    for (int i = 0; i < num_passes;i++) {
+        IntrusivePtr<State> initial{new State};
+        initial->root = new LoopNest;
+        State::WrapperState state(initial, num_passes, dag, params, cost_model);
+        for (int j = 0; j < mcts_depth; j++) {
+            ProgressBar tick;
 
-    for (int i = 0; i < num_passes; i++) {
-        ProgressBar tick;
-
-        // run uct mcts on current state and get best action
-        State::Action action = uct.run(state);
-        //std::cout << "prefinished pass " << i << std::endl;
-
-        // apply the action to the current state
-        state.apply_action(action);
-        state.evaluate();
-        auto pass = state.inner; 
-        //std::cout << "finished pass " << i << std::endl;
-        //std::cout << "Pass " << i << " of " << num_passes << ", cost: " << pass->cost << std::endl;
-         
-        tick.clear();
-
-        if (aslog::aslog_level() == 0) {
-            aslog(0) << "Pass " << i << " of " << num_passes << ", cost: " << pass->cost << "\n";
-        } else {
-            aslog(0) << "Pass " << i << " result: ";
-            pass->dump();
-        }
-        
-        if (i == 0) {
-            // Track which pass produced the lowest-cost state. It's
-            // not necessarily the final one.
-            best = pass;
-            continue;
-        }
-        if (pass->cost < best->cost) {
-            // Track which pass produced the lowest-cost state. It's
-            // not necessarily the final one.
-            best = pass;
+            // run uct mcts on current state and get best action
+            State::Action action = uct.run(state);
+            //std::cout << "prefinished pass " << i << std::endl;
+            if (action == NULL) break;
+            // apply the action to the current state
+            state.apply_action(action);
+            state.evaluate();
+            auto pass = state.inner; 
+            //std::cout << "finished pass " << i << std::endl;
+            //std::cout << "Pass " << i << " of " << num_passes << ", cost: " << pass->cost << std::endl;
+             
+            tick.clear();
+    
+            if (aslog::aslog_level() == 0) {
+                aslog(0) << "Pass " << i << " of " << num_passes << ", cost: " << pass->cost << "\n";
+            } else {
+                aslog(0) << "Pass " << i << " result: ";
+                pass->dump();
+            }
+            
+            if (j == 0 && i == 0) {
+                // Track which pass produced the lowest-cost state. It's
+                // not necessarily the final one.
+                best = pass;
+                continue;
+            }
+            if (pass->cost < best->cost) {
+                // Track which pass produced the lowest-cost state. It's
+                // not necessarily the final one.
+                best = pass;
+            }
+            //std::cout << "prefinished pass " << i << std::endl;
+            if (state.inner->num_decisions_made == 2 * (int)dag.nodes.size()) {
+                std::cout << "breaking.. with num decisions made " <<state.inner->num_decisions_made << std::endl;
+                 break;
+            }
         }
     }
-
     aslog(0) << "Best cost: " << best->cost << "\n";
     
 
-    return state.inner;
+    return best;
 }
 // Performance coarse-to-fine beam search and return the best state found.
 IntrusivePtr<State> optimal_schedule(FunctionDAG &dag,
@@ -1794,10 +1816,10 @@ void generate_rl_schedule(const std::vector<Function> &outputs,
 
     HALIDE_TOC;
 
-    aslog(1) << "Cost evaluated this many times: " << State::cost_calculations << '\n';
+    aslog(0) << "Cost evaluated this many times: " << State::cost_calculations << '\n';
 
     // Dump the schedule found
-    aslog(1) << "** Optimal schedule:\n";
+    aslog(0) << "** Optimal schedule:\n";
 
     // Just to get the debugging prints to fire
     optimal->calculate_cost(dag, params, cost_model.get(), aslog::aslog_level() > 0);
@@ -1813,7 +1835,7 @@ void generate_rl_schedule(const std::vector<Function> &outputs,
     string schedule_file = get_env_variable("HL_SCHEDULE_FILE");
     if (!schedule_file.empty()) {
         user_warning << "HL_SCHEDULE_FILE is deprecated; use the schedule output from Generator instead\n";
-        aslog(1) << "Writing schedule to " << schedule_file << "...\n";
+        aslog(0) << "Writing schedule to " << schedule_file << "...\n";
         std::ofstream f(schedule_file);
         f << "// --- BEGIN machine-generated schedule\n"
           << optimal->schedule_source
