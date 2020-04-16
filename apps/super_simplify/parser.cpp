@@ -8,7 +8,6 @@ using std::string;
 using std::vector;
 using namespace Halide;
 using namespace Halide::Internal;
-
 bool is_whitespace(char c) {
     return c == ' ' || c == '\n' || c == '\t';
 }
@@ -98,10 +97,14 @@ Expr consume_float(char **cursor, char *end) {
 }
 
 Expr reparse_as_bool(const Expr &e) {
+    const Call *op = e.as<Call>();
     if (e.type().is_bool()) {
         return e;
     } else if (const Variable *var = e.as<Variable>()) {
         return Variable::make(Bool(), var->name);
+    } else if (op->is_intrinsic(Call::likely) ||
+               op->is_intrinsic(Call::likely_if_innermost)) {
+        return Call::make(Bool(), op->name, { reparse_as_bool(op->args[0]) }, op->call_type);
     } else {
         std::cerr << "Expected bool Expr: " << e << "\n";
         abort();
@@ -109,8 +112,8 @@ Expr reparse_as_bool(const Expr &e) {
     }
 }
 
-Expr parse_halide_expr(char **cursor, char *end, Type expected_type,
-                       int precedence, std::vector<std::pair<Expr, int>> &stack) {
+Expr parse_halide_expr(char **cursor, char *end, int precedence,
+                       std::vector<std::pair<Expr, int>> &stack) {
 
     if (!stack.empty() && stack.back().second <= precedence) {
         Expr a = stack.back().first;
@@ -153,7 +156,7 @@ Expr parse_halide_expr(char **cursor, char *end, Type expected_type,
         // type-cast
         for (auto t : typenames) {
             if (consume(cursor, end, t.cast_prefix)) {
-                Expr a = cast(t.type, parse_halide_expr(cursor, end, Type{}, 0, stack));
+                Expr a = cast(t.type, parse_halide_expr(cursor, end, 0, stack));
                 expect(cursor, end, ")");
                 return a;
             }
@@ -166,49 +169,49 @@ Expr parse_halide_expr(char **cursor, char *end, Type expected_type,
             expect(cursor, end, "=");
             consume_whitespace(cursor, end);
 
-            Expr value = parse_halide_expr(cursor, end, Type{}, 0, stack);
+            Expr value = parse_halide_expr(cursor, end, 0, stack);
 
             consume_whitespace(cursor, end);
             expect(cursor, end, "in");
             consume_whitespace(cursor, end);
 
-            Expr body = parse_halide_expr(cursor, end, expected_type, 0, stack);
+            Expr body = parse_halide_expr(cursor, end, 0, stack);
 
             Expr a = Let::make(name, value, body);
             expect(cursor, end, ")");
             return a;
         }
         if (consume(cursor, end, "min(")) {
-            Expr a = parse_halide_expr(cursor, end, expected_type, 0, stack);
+            Expr a = parse_halide_expr(cursor, end, 0, stack);
             expect(cursor, end, ",");
-            Expr b = parse_halide_expr(cursor, end, expected_type, 0, stack);
+            Expr b = parse_halide_expr(cursor, end, 0, stack);
             consume_whitespace(cursor, end);
             expect(cursor, end, ")");
             return min(a, b);
         }
         if (consume(cursor, end, "max(")) {
-            Expr a = parse_halide_expr(cursor, end, expected_type, 0, stack);
+            Expr a = parse_halide_expr(cursor, end, 0, stack);
             expect(cursor, end, ",");
-            Expr b = parse_halide_expr(cursor, end, expected_type, 0, stack);
+            Expr b = parse_halide_expr(cursor, end, 0, stack);
             consume_whitespace(cursor, end);
             expect(cursor, end, ")");
             return max(a, b);
         }
         if (consume(cursor, end, "select(")) {
-            Expr a = parse_halide_expr(cursor, end, Bool(), 0, stack);
+            Expr a = parse_halide_expr(cursor, end, 0, stack);
+            a = reparse_as_bool(a);
             expect(cursor, end, ",");
-            char *mark1 = *cursor;
-            Expr b = parse_halide_expr(cursor, end, expected_type, 0, stack);
+            Expr b = parse_halide_expr(cursor, end, 0, stack);
             expect(cursor, end, ",");
-            Expr c = parse_halide_expr(cursor, end, b.type(), 0, stack);
-            if (c.type() != b.type()) {
-                char *mark2 = *cursor;
-                *cursor = mark1;
-                b = parse_halide_expr(cursor, end, c.type(), 0, stack);
-                *cursor = mark2;
-            }
+            Expr c = parse_halide_expr(cursor, end, 0, stack);
             consume_whitespace(cursor, end);
             expect(cursor, end, ")");
+            if (b.type().is_bool() && !c.type().is_bool()) {
+                c = reparse_as_bool(c);
+            } else if (!b.type().is_bool() && c.type().is_bool()) {
+                b = reparse_as_bool(b);
+            }
+
             return select(a, b, c);
         }
         Call::ConstString binary_intrinsics[] = { Call::bitwise_and,
@@ -218,9 +221,9 @@ Expr parse_halide_expr(char **cursor, char *end, Type expected_type,
         for (auto intrin : binary_intrinsics) {
             if (consume(cursor, end, intrin)) {
                 expect(cursor, end, "(");
-                Expr a = parse_halide_expr(cursor, end, expected_type, 0, stack);
+                Expr a = parse_halide_expr(cursor, end, 0, stack);
                 expect(cursor, end, ",");
-                Expr b = parse_halide_expr(cursor, end, expected_type, 0, stack);
+                Expr b = parse_halide_expr(cursor, end, 0, stack);
                 consume_whitespace(cursor, end);
                 expect(cursor, end, ")");
                 return Call::make(a.type(), intrin, { a, b }, Call::PureIntrinsic);
@@ -229,68 +232,70 @@ Expr parse_halide_expr(char **cursor, char *end, Type expected_type,
 
         if (consume(cursor, end, "fold(")) {
             // strip folds
-            Expr e = parse_halide_expr(cursor, end, expected_type, 0, stack);
+            Expr e = parse_halide_expr(cursor, end, 0, stack);
             expect(cursor, end, ")");
             return e;
         }
 
         if (consume(cursor, end, "!")) {
-            Expr e = parse_halide_expr(cursor, end, Bool(), 0, stack);
+            Expr e = parse_halide_expr(cursor, end, precedence, stack);
+            e = reparse_as_bool(e);
             return !e;
         }
 
         // Parse entire rewrite rules as exprs
         if (consume(cursor, end, "rewrite(")) {
-            Expr lhs = parse_halide_expr(cursor, end, expected_type, 0, stack);
+            Expr lhs = parse_halide_expr(cursor, end, 0, stack);
             expect(cursor, end, ",");
-            Expr rhs = parse_halide_expr(cursor, end, expected_type, 0, stack);
+            Expr rhs = parse_halide_expr(cursor, end, 0, stack);
             Expr predicate = const_true();
             consume_whitespace(cursor, end);
             if (consume(cursor, end, ",")) {
-                predicate = parse_halide_expr(cursor, end, Bool(), 0, stack);
+                predicate = parse_halide_expr(cursor, end, 0, stack);
             }
             expect(cursor, end, ")");
             return Call::make(Bool(), "rewrite", { lhs, rhs, predicate }, Call::Extern);
         }
 
         if (consume(cursor, end, "indeterminate_expression(")) {
-            Expr a = parse_halide_expr(cursor, end, Int(32), 0, stack);
+            Expr a = parse_halide_expr(cursor, end, 0, stack);
             expect(cursor, end, ")");
             return make_indeterminate_expression(Int(32));
         }
 
         if (consume(cursor, end, "round_f32(")) {
-            Expr a = parse_halide_expr(cursor, end, Float(32), 0, stack);
+            Expr a = parse_halide_expr(cursor, end, 0, stack);
             expect(cursor, end, ")");
             return round(a);
         }
         if (consume(cursor, end, "ceil_f32(")) {
-            Expr a = parse_halide_expr(cursor, end, Float(32), 0, stack);
+            Expr a = parse_halide_expr(cursor, end, 0, stack);
             expect(cursor, end, ")");
             return ceil(a);
         }
         if (consume(cursor, end, "floor_f32(")) {
-            Expr a = parse_halide_expr(cursor, end, Float(32), 0, stack);
+            Expr a = parse_halide_expr(cursor, end, 0, stack);
             expect(cursor, end, ")");
             return floor(a);
         }
         if (consume(cursor, end, "likely(")) {
-            Expr a = parse_halide_expr(cursor, end, expected_type, 0, stack);
+            Expr a = parse_halide_expr(cursor, end, 0, stack);
             expect(cursor, end, ")");
             return likely(a);
         }
         if (consume(cursor, end, "likely_if_innermost(")) {
-            Expr a = parse_halide_expr(cursor, end, expected_type, 0, stack);
+            Expr a = parse_halide_expr(cursor, end, 0, stack);
             expect(cursor, end, ")");
             return likely(a);
         }
         // An expression in parens
         if (consume(cursor, end, "(")) {
-            Expr e = parse_halide_expr(cursor, end, expected_type, 0, stack);
+            Expr e = parse_halide_expr(cursor, end, 0, stack);
             expect(cursor, end, ")");
             return e;
         }
 
+        Type expected_type = Int(32);
         for (auto t : typenames) {
             // A type annotation for the token that follows
             if (consume(cursor, end, t.constant_prefix)) {
@@ -319,14 +324,13 @@ Expr parse_halide_expr(char **cursor, char *end, Type expected_type,
             string name = consume_token(tmp, end);
             if (consume(tmp, end, "[")) {
                 *cursor = *tmp;
-                Expr index = parse_halide_expr(cursor, end, Int(32), 0, stack);
+                Expr index = parse_halide_expr(cursor, end, 0, stack);
                 expect(cursor, end, "]");
                 if (expected_type == Type{}) {
                     expected_type = Int(32);
                 }
                 return Load::make(expected_type, name, index, Buffer<>(), Parameter(), const_true(), ModulusRemainder());
             } else {
-                std::cout << "Making var: " << expected_type << " " << name << "\n";
                 if (expected_type == Type{}) {
                     expected_type = Int(32);
                 }
@@ -345,81 +349,88 @@ Expr parse_halide_expr(char **cursor, char *end, Type expected_type,
     } else if (precedence == 9) {
         // Multiplicative things
 
-        Expr a = parse_halide_expr(cursor, end, expected_type, 10, stack);
+        Expr a = parse_halide_expr(cursor, end, precedence + 1, stack);
         Expr result;
         consume_whitespace(cursor, end);
         if (consume(cursor, end, "*")) {
-            return a * parse_halide_expr(cursor, end, a.type(), 9, stack);
+            return a * parse_halide_expr(cursor, end, precedence, stack);
         } else if (consume(cursor, end, "/")) {
-            return a / parse_halide_expr(cursor, end, a.type(), 9, stack);
+            return a / parse_halide_expr(cursor, end, precedence, stack);
         } else if (consume(cursor, end, "%")) {
-            return a % parse_halide_expr(cursor, end, a.type(), 9, stack);
+            return a % parse_halide_expr(cursor, end, precedence, stack);
         } else {
             stack.emplace_back(a, 10);
         }
     } else if (precedence == 8) {
         // Additive things
 
-        Expr a = parse_halide_expr(cursor, end, expected_type, 9, stack);
+        Expr a = parse_halide_expr(cursor, end, precedence + 1, stack);
         Expr result;
         consume_whitespace(cursor, end);
         if (consume(cursor, end, "+")) {
-            return a + parse_halide_expr(cursor, end, a.type(), 8, stack);
+            return a + parse_halide_expr(cursor, end, precedence, stack);
         } else if (consume(cursor, end, "-")) {
-            return a - parse_halide_expr(cursor, end, a.type(), 8, stack);
+            return a - parse_halide_expr(cursor, end, precedence, stack);
         } else {
             stack.emplace_back(a, 9);
         }
     } else if (precedence == 7) {
         // Comparisons
 
-        Expr a = parse_halide_expr(cursor, end, expected_type, 8, stack);
+        Expr a = parse_halide_expr(cursor, end, precedence + 1, stack);
         Expr result;
         consume_whitespace(cursor, end);
         if (consume(cursor, end, "<=")) {
-            return a <= parse_halide_expr(cursor, end, a.type(), 8, stack);
+            return a <= parse_halide_expr(cursor, end, precedence, stack);
         } else if (consume(cursor, end, ">=")) {
-            return a >= parse_halide_expr(cursor, end, a.type(), 8, stack);
+            return a >= parse_halide_expr(cursor, end, precedence, stack);
         } else if (consume(cursor, end, "<")) {
-            return a < parse_halide_expr(cursor, end, a.type(), 8, stack);
+            return a < parse_halide_expr(cursor, end, precedence, stack);
         } else if (consume(cursor, end, ">")) {
-            return a > parse_halide_expr(cursor, end, a.type(), 8, stack);
+            return a > parse_halide_expr(cursor, end, precedence, stack);
         } else if (consume(cursor, end, "==")) {
-            return a == parse_halide_expr(cursor, end, a.type(), 8, stack);
+            return a == parse_halide_expr(cursor, end, precedence, stack);
         } else if (consume(cursor, end, "!=")) {
-            return a != parse_halide_expr(cursor, end, a.type(), 8, stack);
+            return a != parse_halide_expr(cursor, end, precedence, stack);
         } else {
             stack.emplace_back(a, 8);
         }
     } else if (precedence == 6) {
         // Logical and
-        Expr a = parse_halide_expr(cursor, end, expected_type, 7, stack);
+        Expr a = parse_halide_expr(cursor, end, precedence + 1, stack);
         Expr result;
         if (consume(cursor, end, "&&")) {
+            Expr b = parse_halide_expr(cursor, end, precedence, stack);
             a = reparse_as_bool(a);
-            return a && parse_halide_expr(cursor, end, Bool(), 6, stack);
+            b = reparse_as_bool(b);
+            return a && b;
         } else {
             stack.emplace_back(a, 7);
         }
     } else if (precedence == 5) {
         // Logical or
-        Expr a = parse_halide_expr(cursor, end, expected_type, 6, stack);
+        Expr a = parse_halide_expr(cursor, end, precedence + 1, stack);
         Expr result;
         if (consume(cursor, end, "||")) {
+            Expr b = parse_halide_expr(cursor, end, precedence, stack);
             a = reparse_as_bool(a);
-            return a && parse_halide_expr(cursor, end, Bool(), 5, stack);
+            b = reparse_as_bool(b);
+            return a || b;
         } else {
             stack.emplace_back(a, 6);
         }
     }
 
     // Try increasing precedence
-    return parse_halide_expr(cursor, end, expected_type, precedence + 1, stack);
+    return parse_halide_expr(cursor, end, precedence + 1, stack);
 }
 
 Expr parse_halide_expr(char **cursor, char *end, Type expected_type) {
     std::vector<std::pair<Expr, int>> stack;
-    Expr result = parse_halide_expr(cursor, end, expected_type, 0, stack);
+    Expr result = parse_halide_expr(cursor, end, 0, stack);
+    if (expected_type.is_bool()) {
+        result = reparse_as_bool(result);
+    }
     _halide_user_assert(stack.empty());
     return result;
 }

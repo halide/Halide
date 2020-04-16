@@ -1,40 +1,40 @@
-#include "expr_util.h"
 #include "Halide.h"
+#include "expr_util.h"
 
 using namespace Halide;
 using namespace Halide::Internal;
 
-using std::set;
 using std::map;
-using std::string;
 using std::ostringstream;
+using std::set;
+using std::string;
 
-IRNodeType node_ordering[18] = {IRNodeType::Ramp,IRNodeType::Broadcast,IRNodeType::Select,IRNodeType::Div,IRNodeType::Mul,IRNodeType::Mod,IRNodeType::Sub,IRNodeType::Add,IRNodeType::Min,IRNodeType::Not,IRNodeType::Or,IRNodeType::And,IRNodeType::GE,IRNodeType::GT,IRNodeType::LE,IRNodeType::LT,IRNodeType::NE,IRNodeType::EQ};
+IRNodeType node_ordering[18] = { IRNodeType::Ramp, IRNodeType::Broadcast, IRNodeType::Select, IRNodeType::Div, IRNodeType::Mul, IRNodeType::Mod, IRNodeType::Sub, IRNodeType::Add, IRNodeType::Min, IRNodeType::Not, IRNodeType::Or, IRNodeType::And, IRNodeType::GE, IRNodeType::GT, IRNodeType::LE, IRNodeType::LT, IRNodeType::NE, IRNodeType::EQ };
 
 std::map<IRNodeType, int> nto = {
-    {IRNodeType::Ramp,23},
-    {IRNodeType::Broadcast,22},
-    {IRNodeType::Select,21},
-    {IRNodeType::Div,20},
-    {IRNodeType::Mul,19},
-    {IRNodeType::Mod,18},
-    {IRNodeType::Sub,17}, // add and sub have the same weight
-    {IRNodeType::Add,17},
-    {IRNodeType::Max,14}, // max and min have same weight
-    {IRNodeType::Min,14},
-    {IRNodeType::Not,13},
-    {IRNodeType::Or,12},
-    {IRNodeType::And,11},
-    {IRNodeType::GE,10},
-    {IRNodeType::GT,9},
-    {IRNodeType::LE,8},
-    {IRNodeType::LT,7},
-    {IRNodeType::NE,6},
-    {IRNodeType::EQ,5},
-    {IRNodeType::Cast,4},
-    {IRNodeType::FloatImm,2},
-    {IRNodeType::UIntImm,1},
-    {IRNodeType::IntImm,0}
+    { IRNodeType::Ramp, 23 },
+    { IRNodeType::Broadcast, 22 },
+    { IRNodeType::Select, 21 },
+    { IRNodeType::Div, 20 },
+    { IRNodeType::Mul, 19 },
+    { IRNodeType::Mod, 18 },
+    { IRNodeType::Sub, 17 },
+    { IRNodeType::Add, 16 },
+    { IRNodeType::Max, 14 },  // max and min have same weight
+    { IRNodeType::Min, 14 },
+    { IRNodeType::Not, 13 },
+    { IRNodeType::Or, 12 },
+    { IRNodeType::And, 11 },
+    { IRNodeType::GE, 10 },
+    { IRNodeType::GT, 9 },
+    { IRNodeType::LE, 8 },
+    { IRNodeType::LT, 7 },
+    { IRNodeType::NE, 6 },
+    { IRNodeType::EQ, 5 },
+    { IRNodeType::Cast, 4 },
+    { IRNodeType::FloatImm, 2 },
+    { IRNodeType::UIntImm, 1 },
+    { IRNodeType::IntImm, 0 }
 };
 
 class DivisorSet : public IRVisitor {
@@ -55,6 +55,7 @@ class DivisorSet : public IRVisitor {
         op->a.accept(this);
         op->b.accept(this);
     }
+
 public:
     std::set<std::string> divisors;
 };
@@ -72,6 +73,7 @@ class VectorOpCount : public IRVisitor {
     void visit(const Broadcast *op) override {
         counter += 1;
     }
+
 public:
     int counter = 0;
 };
@@ -86,7 +88,7 @@ bool check_divisors(const Expr &LHS, const Expr &RHS) {
     // check that all divisors on RHS appear as divisors on LHS
     std::set<std::string> lhs_divisors = find_divisors(LHS);
     std::set<std::string> rhs_divisors = find_divisors(RHS);
-    for (auto const& rhs_term : rhs_divisors) {
+    for (auto const &rhs_term : rhs_divisors) {
         if (lhs_divisors.count(rhs_term) == 0) {
             return false;
         }
@@ -110,6 +112,7 @@ class NonlinearOpsCount : public IRVisitor {
         op->a.accept(this);
         op->b.accept(this);
     }
+
 public:
     int counter = 0;
 };
@@ -199,7 +202,7 @@ class NodeHistogram : public IRVisitor {
     }
 
     void visit(const Sub *op) override {
-        increment_histo(IRNodeType::Add); // Put Sub counts in the Add bucket
+        increment_histo(IRNodeType::Add);  // Put Sub counts in the Add bucket
         op->a.accept(this);
         op->b.accept(this);
     }
@@ -259,7 +262,7 @@ class NodeHistogram : public IRVisitor {
     }
 
     void visit(const Max *op) override {
-        increment_histo(IRNodeType::Min); // put max counts into min bucket so we count them the same
+        increment_histo(IRNodeType::Min);  // put max counts into min bucket so we count them the same
         op->a.accept(this);
         op->b.accept(this);
     }
@@ -288,6 +291,7 @@ class NodeHistogram : public IRVisitor {
             op->body.accept(this);
         }
     }
+
 public:
     std::map<IRNodeType, int> histogram;
     void increment_histo(IRNodeType node_type) {
@@ -305,10 +309,40 @@ std::map<IRNodeType, int> build_histogram(const Expr &e) {
     return histo.histogram;
 }
 
+int get_total_leaf_count(const Expr &e) {
+    class CountLeaves : public IRVisitor {
+        using IRVisitor::visit;
+        void visit(const IntImm *op) override {
+            count++;
+        }
+        void visit(const UIntImm *op) override {
+            count++;
+        }
+        void visit(const FloatImm *op) override {
+            count++;
+        }
+        void visit(const Variable *op) override {
+            count++;
+        }
+        void visit(const Call *op) override {
+            if (op->name == "fold") {
+                count++;
+            } else {
+                IRVisitor::visit(op);
+            }
+        }
+
+    public:
+        int count = 0;
+    } counter;
+    e.accept(&counter);
+    return counter.count;
+}
+
 int get_total_op_count(const Expr &e) {
     std::map<IRNodeType, int> histo = build_histogram(e);
     int counter = 0;
-    for (auto const& node : histo) {
+    for (auto const &node : histo) {
         counter += node.second;
     }
     return counter;
@@ -319,7 +353,7 @@ int compare_histograms(const Expr &LHS, const Expr &RHS) {
     std::map<IRNodeType, int> lhs_histo = build_histogram(LHS);
     std::map<IRNodeType, int> rhs_histo = build_histogram(RHS);
     int lhs_node_count, rhs_node_count;
-    for (auto const& node : node_ordering) {
+    for (auto const &node : node_ordering) {
         lhs_node_count = 0;
         rhs_node_count = 0;
         if (lhs_histo.count(node) == 1) {
@@ -355,7 +389,7 @@ bool valid_reduction_order(const Expr &LHS, const Expr &RHS) {
     // if any variable has more occurrences in RHS than it does on LHS, then the next several orders are invalid
     auto lhs_vars = find_vars(LHS);
     auto rhs_vars = find_vars(RHS);
-    for (auto const& varcount : rhs_vars) {
+    for (auto const &varcount : rhs_vars) {
         // constant wildcards don't count bc they can't match terms so can't cause reduction order failures
         if (varcount.first.front() != 'c' &&
             (lhs_vars.count(varcount.first) == 0 ||
@@ -365,7 +399,7 @@ bool valid_reduction_order(const Expr &LHS, const Expr &RHS) {
     }
 
     // accept rule if LHS has strictly more occurrences of at least 1 variable
-    for (auto const& lhsv : lhs_vars) {
+    for (auto const &lhsv : lhs_vars) {
         if ((lhsv.first.front() != 'c') &&
             ((rhs_vars.count(lhsv.first) == 0) || (lhsv.second.second > rhs_vars[lhsv.first].second))) {
             return true;
@@ -376,6 +410,13 @@ bool valid_reduction_order(const Expr &LHS, const Expr &RHS) {
     if (get_nonlinear_op_count(LHS) > get_nonlinear_op_count(RHS)) {
         return true;
     } else if (get_nonlinear_op_count(LHS) < get_nonlinear_op_count(RHS)) {
+        return false;
+    }
+
+    // LHS should have more total ops than RHS (if var occurrences are >=)
+    if (get_total_leaf_count(LHS) > get_total_leaf_count(RHS)) {
+        return true;
+    } else if (get_total_leaf_count(LHS) < get_total_leaf_count(RHS)) {
         return false;
     }
 
@@ -429,5 +470,4 @@ bool valid_reduction_order(const Expr &LHS, const Expr &RHS) {
 
     // It's a tie. No good.
     return false;
-
 }

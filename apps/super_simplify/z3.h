@@ -13,14 +13,14 @@ inline std::ostream &operator<<(std::ostream &s, Z3Result r) {
     switch (r) {
     case Z3Result::Sat:
         s << "Sat";
-        return s;
+        break;
     case Z3Result::Unsat:
         s << "Unsat";
-        return s;
+        break;
     case Z3Result::Unknown:
         s << "Unknown";
-        return s;
     }
+    return s;
 }
 
 Z3Result satisfy(Halide::Expr constraint, std::map<std::string, Halide::Expr> *result, const std::string &comment = "");

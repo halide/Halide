@@ -1,8 +1,9 @@
 #include "Halide.h"
-#include "parser.h"
 #include "expr_util.h"
-#include "synthesize_predicate.h"
+#include "parser.h"
 #include "reduction_order.h"
+#include "synthesize_predicate.h"
+#include "z3.h"
 
 #include <fstream>
 
@@ -21,15 +22,16 @@ using std::map;
 using std::string;
 using std::vector;
 
-
 // Levenshtein distance algorithm copied from wikipedia
-unsigned int edit_distance(const std::string& s1, const std::string& s2) {
+unsigned int edit_distance(const std::string &s1, const std::string &s2) {
     const std::size_t len1 = s1.size(), len2 = s2.size();
     std::vector<std::vector<unsigned int>> d(len1 + 1, std::vector<unsigned int>(len2 + 1));
 
     d[0][0] = 0;
-    for (unsigned int i = 1; i <= len1; ++i) d[i][0] = i;
-    for (unsigned int i = 1; i <= len2; ++i) d[0][i] = i;
+    for (unsigned int i = 1; i <= len1; ++i)
+        d[i][0] = i;
+    for (unsigned int i = 1; i <= len2; ++i)
+        d[0][i] = i;
 
     for (unsigned int i = 1; i <= len1; ++i)
         for (unsigned int j = 1; j <= len2; ++j)
@@ -41,7 +43,6 @@ unsigned int edit_distance(const std::string& s1, const std::string& s2) {
                            d[i - 1][j - 1] + (s1[i - 1] == s2[j - 1] ? 0 : 1) });
     return d[len1][len2];
 }
-
 
 std::string expr_to_rpn_string(const Expr &e) {
     std::ostringstream ss;
@@ -162,7 +163,7 @@ Expr inject_folds(const Expr &e) {
                 if (is_const(e) || e.as<Variable>()) {
                     return e;
                 } else {
-                    return Call::make(e.type(), "fold", {e}, Call::PureExtern);
+                    return Call::make(e.type(), "fold", { e }, Call::PureExtern);
                 }
             } else {
                 constant = constant && old;
@@ -173,6 +174,32 @@ Expr inject_folds(const Expr &e) {
 
     return InjectFolds().mutate(e);
 }
+
+class ImplicitPredicate : public IRVisitor {
+    using IRVisitor::visit;
+
+    void visit(const Div *op) {
+        const Variable *v = op->b.as<Variable>();
+        if (v && v->name[0] == 'c') {
+            result = result && (op->b != 0);
+        }
+        IRVisitor::visit(op);
+    }
+
+    void visit(const Mul *op) {
+        const Variable *v = op->b.as<Variable>();
+        if (v && v->name[0] == 'c') {
+            result = result && (op->b != 0);
+        }
+        IRVisitor::visit(op);
+    }
+
+public:
+    ImplicitPredicate()
+        : result(const_true()) {
+    }
+    Expr result;
+};
 
 int main(int argc, char **argv) {
     if (argc < 2) {
@@ -195,7 +222,7 @@ int main(int argc, char **argv) {
                 return -1;
             }
             _halide_user_assert(call->args.size() == 3);
-            rules.emplace_back(Rule{call->args[0], call->args[1], call->args[2], e});
+            rules.emplace_back(Rule{ call->args[0], call->args[1], call->args[2], e });
         } else {
             std::cerr << "Expr is not a rewrite rule: " << e << "\n";
             return -1;
@@ -204,22 +231,54 @@ int main(int argc, char **argv) {
 
     // Re-synthesize the predicates if you don't currently trust them
     for (Rule &r : rules) {
-        vector<map<string, Expr>> examples;
-        map<string, Expr> binding;
-        if (is_zero(r.predicate)) {
-            std::cout << "Re-synthesizing predicate for " << r.orig << " with a larger beam size\n";
-            int bs = 16;
-            while (bs <= 256 && is_zero(r.predicate)) {
-                binding.clear();
-                r.predicate = synthesize_predicate(r.lhs, r.rhs, examples, &binding, bs);
-                bs *= 2;
+        // Check the rules with Z3
+        map<string, Expr> mapping;
+        ImplicitPredicate imp;
+        r.lhs.accept(&imp);
+        auto result = satisfy(r.predicate && imp.result && r.lhs != r.rhs, &mapping);
+        if (result == Z3Result::Unsat) {
+            debug(0) << "Verified with SMT: rewrite("
+                     << r.lhs << ", " << r.rhs << ", " << r.predicate << ")\n";
+            continue;
+        } else if (result == Z3Result::Sat) {
+            debug(0) << "Incorrect rule: rewrite("
+                     << r.lhs << ", " << r.rhs << ", " << r.predicate << ")\n"
+                     << "Counterexample is: ";
+            for (auto p : mapping) {
+                debug(0) << p.first << " = " << p.second << "\n";
             }
-            r.lhs = substitute(binding, r.lhs);
+            debug(0) << "For counterexample, LHS = " << simplify(substitute(mapping, r.lhs))
+                     << " RHS = " << simplify(substitute(mapping, r.rhs)) << "\n";
+        } else if (result == Z3Result::Unknown) {
+            debug(0) << "Z3 returned unknown/timeout for: rewrite("
+                     << r.lhs << ", " << r.rhs << ", " << r.predicate << ")\n";
+        }
 
-            for (auto &it: binding) {
-                it.second = Call::make(it.second.type(), "fold", {it.second}, Call::PureExtern);
+        if (1) {
+
+            vector<map<string, Expr>> examples;
+            map<string, Expr> binding;
+            if (true || is_zero(r.predicate)) {
+                std::cout << "Re-synthesizing predicate for " << r.orig << " with a larger beam size\n";
+                int bs = 1;
+                Expr new_predicate = const_false();
+                while (bs <= 16 && is_zero(new_predicate)) {
+                    std::cout << "Trying with beam size: " << bs << "\n";
+                    binding.clear();
+                    new_predicate = synthesize_predicate(r.lhs, r.rhs, examples, &binding, bs);
+                    bs *= 2;
+                }
+                if (!can_prove(r.predicate == new_predicate)) {
+                    std::cout << "Rewrote predicate: " << r.predicate << " -> " << new_predicate << "\n";
+                    r.predicate = new_predicate;
+                }
+                r.lhs = substitute(binding, r.lhs);
+
+                for (auto &it : binding) {
+                    it.second = Call::make(it.second.type(), "fold", { it.second }, Call::PureExtern);
+                }
+                r.rhs = substitute(binding, r.rhs);
             }
-            r.rhs = substitute(binding, r.rhs);
         }
     }
 
@@ -302,11 +361,11 @@ int main(int argc, char **argv) {
     }
     rules.swap(expanded);
 
-
     std::map<IRNodeType, vector<Rule>> good_ones;
 
     class TopLevelNodeTypes : public IRMutator {
         int depth = 0;
+
     public:
         using IRMutator::mutate;
         Expr mutate(const Expr &e) {
@@ -399,15 +458,22 @@ int main(int argc, char **argv) {
         // Check if this rule is dominated by another rule
         for (const Rule &r2 : rules) {
             map<string, Expr> binding;
+            if (equal(r2.lhs, r.lhs) &&
+                equal(r2.predicate, r.predicate)) {
+                // It's a straight-up duplicate. Don't bother printing anything.
+                bad = &r < &r2;  // Arbitrarily pick the one with the lower memory address.
+                break;
+            }
             if (more_general_than(r2.lhs, r.lhs, binding) &&
                 can_prove(r2.predicate || substitute(binding, !r.predicate))) {
-                std::cout << "Too specific: " << r.orig << "\n variant " << r.lhs << "\n vs " << r2.orig << "\n variant " << r2.lhs << "\n";;
+                std::cout << "Too specific: " << r.orig << "\n variant " << r.lhs << "\n vs " << r2.orig << "\n variant " << r2.lhs << "\n";
+                ;
 
                 // Would they also annihilate in the other order?
                 binding.clear();
                 if (more_general_than(r.lhs, r2.lhs, binding) &&
                     can_prove(r.predicate || substitute(binding, !r2.predicate))) {
-                    bad = &r < &r2; // Arbitrarily pick the one with the lower memory address.
+                    bad = &r < &r2;  // Arbitrarily pick the one with the lower memory address.
                 } else {
                     bad = true;
                     break;
@@ -434,7 +500,7 @@ int main(int argc, char **argv) {
         std::ostringstream os;
         IRNodeType last_a_type = IRNodeType::Variable, last_b_type = IRNodeType::Variable;
         bool first_line = true;
-        (void)first_line;
+        (void) first_line;
         for (auto r : it.second) {
             TopLevelNodeTypes t;
             t.mutate(r.lhs);
@@ -468,7 +534,7 @@ int main(int argc, char **argv) {
             last_a_type = a_type;
             last_b_type = b_type;
 
-            vector<Expr> args = {r.lhs, r.rhs};
+            vector<Expr> args = { r.lhs, r.rhs };
             if (!is_one(r.predicate)) {
                 args.push_back(r.predicate);
             }

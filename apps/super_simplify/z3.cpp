@@ -5,8 +5,8 @@
 using namespace Halide;
 using namespace Halide::Internal;
 
-using std::string;
 using std::map;
+using std::string;
 
 bool parse_model(char **cursor, char *end, map<string, Expr> *bindings) {
     consume_whitespace(cursor, end);
@@ -20,7 +20,7 @@ bool parse_model(char **cursor, char *end, map<string, Expr> *bindings) {
         consume_whitespace(cursor, end);
         if (consume(cursor, end, "Bool")) {
             consume_whitespace(cursor, end);
-            bool interesting = !starts_with(name, "z3name!");
+            bool interesting = !starts_with(name, "z3name!") && name[0] != 't';
             if (consume(cursor, end, "true)")) {
                 if (interesting) {
                     (*bindings)[name] = const_true();
@@ -32,29 +32,62 @@ bool parse_model(char **cursor, char *end, map<string, Expr> *bindings) {
             } else {
                 return false;
             }
-            consume_whitespace(cursor, end);
-        } else {
-            if (!consume(cursor, end, "Int")) return false;
+        } else if (consume(cursor, end, "Int")) {
             consume_whitespace(cursor, end);
             if (consume(cursor, end, "(- ")) {
                 string val = consume_token(cursor, end);
-                if (!starts_with(name, "z3name!")) {
+                if (!starts_with(name, "z3name!") && name[0] != 't') {
                     (*bindings)[name] = -std::atoi(val.c_str());
                 }
                 consume(cursor, end, ")");
             } else {
                 string val = consume_token(cursor, end);
-                if (!starts_with(name, "z3name!")) {
+                if (!starts_with(name, "z3name!") && name[0] != 't') {
                     (*bindings)[name] = std::atoi(val.c_str());
                 }
             }
             consume_whitespace(cursor, end);
             consume(cursor, end, ")");
+        } else if (consume(cursor, end, "(_ BitVec ")) {
+            int64_t bits = consume_int(cursor, end);
+            if (!consume(cursor, end, ")")) {
+                return false;
+            }
             consume_whitespace(cursor, end);
+            if (!consume(cursor, end, "#x")) {
+                return false;
+            }
+            int64_t result = 0;
+            for (int i = 0; i < bits; i += 4) {
+                result *= 16;
+                char next = (**cursor);
+                if (next >= '0' && next <= '9') {
+                    result += next - '0';
+                } else if (next >= 'a' && next <= 'f') {
+                    result += 10 + next - 'a';
+                } else {
+                    std::cerr << "Bad hex literal char: '" << next << "'\n";
+                    abort();
+                }
+                (*cursor)++;
+            }
+            // We only deal in signed
+            if (result >= (1 << (bits - 1))) {
+                result -= (1 << bits);
+            }
+            if (!starts_with(name, "z3name!") && name[0] != 't') {
+                (*bindings)[name] = (int) result;
+            }
+            consume(cursor, end, ")");
+        } else {
+            return false;
         }
+        consume_whitespace(cursor, end);
     }
     consume_whitespace(cursor, end);
-    if (!consume(cursor, end, ")")) return false;
+    if (!consume(cursor, end, ")")) {
+        return false;
+    }
     return true;
 }
 
@@ -65,9 +98,19 @@ string expr_to_smt2(const Expr &e) {
         std::ostringstream formula;
 
     protected:
+        bool use_bitvector(Type t) {
+            return (t.is_int() && t.bits() < 32) || t.is_uint();
+        }
 
         void visit(const IntImm *imm) override {
-            formula << imm->value;
+            if (imm->type.bits() >= 32) {
+                formula << imm->value;
+            } else {
+                formula << "#b";
+                for (int i = imm->type.bits() - 1; i >= 0; i--) {
+                    formula << (int((imm->value >> i) & 1));
+                }
+            }
         }
 
         void visit(const UIntImm *imm) override {
@@ -78,7 +121,10 @@ string expr_to_smt2(const Expr &e) {
                     formula << "false";
                 }
             } else {
-                formula << imm->value;
+                formula << "#b";
+                for (int i = imm->type.bits() - 1; i >= 0; i--) {
+                    formula << (int(imm->value >> i) & 1);
+                }
             }
         }
 
@@ -95,7 +141,11 @@ string expr_to_smt2(const Expr &e) {
         }
 
         void visit(const Add *op) override {
-            formula << "(+ ";
+            if (use_bitvector(op->type)) {
+                formula << "(bvadd ";
+            } else {
+                formula << "(+ ";
+            }
             op->a.accept(this);
             formula << " ";
             op->b.accept(this);
@@ -103,7 +153,11 @@ string expr_to_smt2(const Expr &e) {
         }
 
         void visit(const Sub *op) override {
-            formula << "(- ";
+            if (use_bitvector(op->type)) {
+                formula << "(bvsub ";
+            } else {
+                formula << "(- ";
+            }
             op->a.accept(this);
             formula << " ";
             op->b.accept(this);
@@ -111,7 +165,11 @@ string expr_to_smt2(const Expr &e) {
         }
 
         void visit(const Mul *op) override {
-            formula << "(* ";
+            if (use_bitvector(op->type)) {
+                formula << "(bvmul ";
+            } else {
+                formula << "(* ";
+            }
             op->a.accept(this);
             formula << " ";
             op->b.accept(this);
@@ -119,7 +177,13 @@ string expr_to_smt2(const Expr &e) {
         }
 
         void visit(const Div *op) override {
-            formula << "(div ";
+            if (op->type.is_int() && op->type.bits() < 32) {
+                formula << "(my_bvsdiv ";
+            } else if (op->type.is_uint()) {
+                formula << "(bvudiv ";
+            } else {
+                formula << "(div ";
+            }
             op->a.accept(this);
             formula << " ";
             op->b.accept(this);
@@ -127,7 +191,13 @@ string expr_to_smt2(const Expr &e) {
         }
 
         void visit(const Mod *op) override {
-            formula << "(mod ";
+            if (op->type.is_int() && op->type.bits() < 32) {
+                formula << "(bvsmod ";
+            } else if (op->type.is_uint()) {
+                formula << "(bvumod ";
+            } else {
+                formula << "(mod ";
+            }
             op->a.accept(this);
             formula << " ";
             op->b.accept(this);
@@ -135,7 +205,13 @@ string expr_to_smt2(const Expr &e) {
         }
 
         void visit(const Min *op) override {
-            formula << "(my_min ";
+            if (op->type.is_int() && op->type.bits() < 32) {
+                formula << "(my_bvsmin ";
+            } else if (op->type.is_uint()) {
+                formula << "(my_bvumin ";
+            } else {
+                formula << "(my_min ";
+            }
             op->a.accept(this);
             formula << " ";
             op->b.accept(this);
@@ -143,7 +219,13 @@ string expr_to_smt2(const Expr &e) {
         }
 
         void visit(const Max *op) override {
-            formula << "(my_max ";
+            if (op->type.is_int() && op->type.bits() < 32) {
+                formula << "(my_bvsmax ";
+            } else if (op->type.is_uint()) {
+                formula << "(my_bvumax ";
+            } else {
+                formula << "(my_max ";
+            }
             op->a.accept(this);
             formula << " ";
             op->b.accept(this);
@@ -167,7 +249,13 @@ string expr_to_smt2(const Expr &e) {
         }
 
         void visit(const LT *op) override {
-            formula << "(< ";
+            if (op->a.type().is_int() && op->a.type().bits() < 32) {
+                formula << "(bvslt ";
+            } else if (op->a.type().is_uint()) {
+                formula << "(bvult ";
+            } else {
+                formula << "(< ";
+            }
             op->a.accept(this);
             formula << " ";
             op->b.accept(this);
@@ -175,7 +263,13 @@ string expr_to_smt2(const Expr &e) {
         }
 
         void visit(const LE *op) override {
-            formula << "(<= ";
+            if (op->a.type().is_int() && op->a.type().bits() < 32) {
+                formula << "(bvsle ";
+            } else if (op->a.type().is_uint()) {
+                formula << "(bvule ";
+            } else {
+                formula << "(<= ";
+            }
             op->a.accept(this);
             formula << " ";
             op->b.accept(this);
@@ -183,7 +277,13 @@ string expr_to_smt2(const Expr &e) {
         }
 
         void visit(const GT *op) override {
-            formula << "(> ";
+            if (op->a.type().is_int() && op->a.type().bits() < 32) {
+                formula << "(bvsgt ";
+            } else if (op->a.type().is_uint()) {
+                formula << "(bvugt ";
+            } else {
+                formula << "(> ";
+            }
             op->a.accept(this);
             formula << " ";
             op->b.accept(this);
@@ -191,7 +291,13 @@ string expr_to_smt2(const Expr &e) {
         }
 
         void visit(const GE *op) override {
-            formula << "(>= ";
+            if (op->a.type().is_int() && op->a.type().bits() < 32) {
+                formula << "(bvsge ";
+            } else if (op->a.type().is_uint()) {
+                formula << "(bvuge ";
+            } else {
+                formula << "(>= ";
+            }
             op->a.accept(this);
             formula << " ";
             op->b.accept(this);
@@ -237,10 +343,19 @@ string expr_to_smt2(const Expr &e) {
                 equiv.accept(this);
             } else {
                 std::cerr << "Unhandled IR node for SMT2: " << Expr(op) << "\n";
-                // assert(false && "unhandled");
+                assert(false && "unhandled");
             }
         }
 
+        void visit(const Call *op) override {
+            if (op->is_intrinsic(Call::signed_integer_overflow)) {
+                // Hrm. Just generate invalid SMT2 so we can fail in peace.
+                formula << "<SIGNED_INTEGER_OVERFLOW>";
+            } else {
+                std::cerr << "Unhandled IR node for SMT2: " << Expr(op) << "\n";
+                assert(false && "unhandled");
+            }
+        }
 
         void visit(const Ramp *op) override {
             /*
@@ -261,15 +376,14 @@ string expr_to_smt2(const Expr &e) {
         void visit(const Broadcast *op) override {
             op->value.accept(this);
         }
-
     } to_smt2;
 
     e.accept(&to_smt2);
     return to_smt2.formula.str();
 }
 
-
-Z3Result satisfy(Expr e, map<string, Expr> *bindings, const string &comment) {
+Z3Result
+satisfy(Expr e, map<string, Expr> *bindings, const string &comment) {
 
     e = simplify(common_subexpression_elimination(e));
 
@@ -291,13 +405,23 @@ Z3Result satisfy(Expr e, map<string, Expr> *bindings, const string &comment) {
     for (const auto &v : find_vars(e)) {
         if (v.second.first.type().is_bool()) {
             z3_source << "(declare-const " << v.first << " Bool)\n";
-        } else {
+        } else if (v.second.first.type() == Int(32)) {
             z3_source << "(declare-const " << v.first << " Int)\n";
+        } else {
+            z3_source << "(declare-const " << v.first << " (_ BitVec " << v.second.first.type().bits() << "))\n";
         }
     }
 
     z3_source << "(define-fun my_min ((x Int) (y Int)) Int (ite (< x y) x y))\n"
               << "(define-fun my_max ((x Int) (y Int)) Int (ite (< x y) y x))\n";
+
+    for (int i = 8; i <= 32; i *= 2) {
+        z3_source << "(define-fun my_bvsmin ((x (_ BitVec " << i << ")) (y (_ BitVec " << i << "))) (_ BitVec " << i << ") (ite (bvslt x y) x y))\n"
+                  << "(define-fun my_bvsmax ((x (_ BitVec " << i << ")) (y (_ BitVec " << i << "))) (_ BitVec " << i << ") (ite (bvslt x y) y x))\n"
+                  << "(define-fun my_bvumin ((x (_ BitVec " << i << ")) (y (_ BitVec " << i << "))) (_ BitVec " << i << ") (ite (bvult x y) x y))\n"
+                  << "(define-fun my_bvumax ((x (_ BitVec " << i << ")) (y (_ BitVec " << i << "))) (_ BitVec " << i << ") (ite (bvult x y) y x))\n"
+                  << "(define-fun my_bvsdiv ((x (_ BitVec " << i << ")) (y (_ BitVec " << i << "))) (_ BitVec " << i << ") (bvsdiv (bvsub x (bvsmod x y)) y))\n";
+    }
 
     Expr orig = e;
     while (const Let *l = e.as<Let>()) {
@@ -316,8 +440,10 @@ Z3Result satisfy(Expr e, map<string, Expr> *bindings, const string &comment) {
               << "(check-sat)\n"
               << "(get-model)\n";
 
-    // std::cout << "z3 query:\n" << z3_source.str() << "\n";
-
+    /*
+    std::cout << "z3 query:\n"
+              << z3_source.str() << "\n";
+    */
 
     string src = z3_source.str();
 
@@ -333,15 +459,20 @@ Z3Result satisfy(Expr e, map<string, Expr> *bindings, const string &comment) {
     auto result_vec = read_entire_file(z3_output.pathname());
     string result(result_vec.begin(), result_vec.end());
 
+    //std::cout << "z3 produced: " << result << "\n";
+
     if (starts_with(result, "unknown") || starts_with(result, "timeout")) {
-        // std::cout << "z3 produced: " << result << "\n";
         return Z3Result::Unknown;
     }
 
     if (ret && !starts_with(result, "unsat")) {
         std::cout << "** z3 query failed with exit code " << ret << "\n"
-                  << "** query was:\n" << src << "\n"
-                  << "** output was:\n" << result << "\n";
+                  << "** query was:\n"
+                  << src << "\n"
+                  << "** output was:\n"
+                  << result << "\n"
+                  << "** Expr was:\n"
+                  << orig << "\n";
         return Z3Result::Unknown;
     }
 
@@ -382,7 +513,7 @@ Expr z3_simplify(const Expr &may_assume, const Expr &e) {
     std::string cmd = "z3 -T:60 " + z3_file.pathname() + " > " + z3_output.pathname();
 
     int ret = pclose(popen(cmd.c_str(), "r"));
-    (void)ret;
+    (void) ret;
 
     auto result_vec = read_entire_file(z3_output.pathname());
     string result(result_vec.begin(), result_vec.end());

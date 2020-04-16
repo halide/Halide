@@ -4,19 +4,19 @@
 
 #include "expr_util.h"
 #include "parser.h"
-#include "synthesize_predicate.h"
 #include "super_simplify.h"
+#include "synthesize_predicate.h"
 
 using namespace Halide;
 using namespace Halide::Internal;
 
-using std::string;
-using std::vector;
 using std::map;
-using std::set;
-using std::pair;
 using std::ostringstream;
+using std::pair;
+using std::set;
+using std::string;
 using std::tuple;
+using std::vector;
 
 Var v0("x"), v1("y"), v2("z"), v3("w"), v4("u"), v5("v5"), v6("v6"), v7("v7"), v8("v8"), v9("v9");
 Var v10("v10"), v11("v11"), v12("v12"), v13("v13"), v14("v14"), v15("v15"), v16("v16"), v17("v17"), v18("v18"), v19("v19");
@@ -28,14 +28,13 @@ vector<Expr> all_possible_lhs_patterns(const Expr &e) {
     // Convert the expression to a DAG
     class DAGConverter : public IRMutator {
     public:
-
         using IRMutator::mutate;
 
         int current_parent = -1;
 
         Expr mutate(const Expr &e) override {
             if (building.empty()) {
-                int current_id = (int)id_for_expr.size();
+                int current_id = (int) id_for_expr.size();
                 auto it = id_for_expr.emplace(e, current_id);
                 bool unseen = it.second;
                 current_id = it.first->second;
@@ -64,10 +63,10 @@ vector<Expr> all_possible_lhs_patterns(const Expr &e) {
                 if (building.count(it->second)) {
                     return IRMutator::mutate(e);
                 } else {
-                    int new_id = (int)renumbering.size();
+                    int new_id = (int) renumbering.size();
                     new_id = renumbering.emplace(it->second, new_id).first->second;
                     // We're after end
-                    const char *names[] = {"x", "y", "z", "w", "u", "v"};
+                    const char *names[] = { "x", "y", "z", "w", "u", "v" };
                     string name = "v" + std::to_string(new_id);
                     if (new_id >= 0 && new_id < 6) {
                         name = names[new_id];
@@ -100,7 +99,7 @@ vector<Expr> all_possible_lhs_patterns(const Expr &e) {
         // Generate all subgraphs of a directed graph
         void generate_subgraphs(const set<int> &rejected,
                                 const set<int> &current,
-                                const set<int> &frontier)  {
+                                const set<int> &frontier) {
             // Pick an arbitrary frontier node to consider
             int v = -1;
             for (auto n : frontier) {
@@ -116,7 +115,7 @@ vector<Expr> all_possible_lhs_patterns(const Expr &e) {
                     renumbering.clear();
                     Expr pat = mutate(expr_for_id[*(building.begin())]);
                     // Apply some rejection rules
-                    if (building.size() <= 1 || renumbering.size() > 6) {
+                    if (building.size() <= 0 || renumbering.size() > 6) {
                         // Too few inner nodes or too many wildcards
                     } else {
                         result.push_back(pat);
@@ -131,8 +130,8 @@ vector<Expr> all_possible_lhs_patterns(const Expr &e) {
 
             f.erase(v);
 
-            bool must_include = false; //is_const(expr_for_id[v]);
-            bool may_include = true; //!is_const(expr_for_id[v]);
+            bool must_include = false;  //is_const(expr_for_id[v]);
+            bool may_include = true;  //!is_const(expr_for_id[v]);
             if (!must_include) {
                 // Generate all subgraphs with this frontier node not
                 // included (replaced with a variable).
@@ -143,7 +142,7 @@ vector<Expr> all_possible_lhs_patterns(const Expr &e) {
             }
 
             // Generate all subgraphs with this frontier node included
-            if (may_include && (must_include || c.size() < 12)) { // Max out at some number of unique nodes
+            if (may_include && (must_include || c.size() < 12)) {  // Max out at some number of unique nodes
                 c.insert(v);
                 for (auto n : ch) {
                     if (may_add_to_frontier(rejected, current, n)) {
@@ -161,7 +160,7 @@ vector<Expr> all_possible_lhs_patterns(const Expr &e) {
     // Enumerate all sub-dags
     set<int> rejected, current, frontier;
     frontier.insert(0);
-    for (int i = 0; i < (int)all_subexprs.children.size(); i++) {
+    for (int i = 0; i < (int) all_subexprs.children.size(); i++) {
         // Don't consider leaves for roots. We can't simplify "x" or
         // "3".
         if (all_subexprs.children[i].empty()) continue;
@@ -176,8 +175,8 @@ vector<Expr> all_possible_lhs_patterns(const Expr &e) {
 // Compute some basic information about an Expr: op counts, variables
 // used, etc.
 class CountOps : public IRGraphVisitor {
-    using IRGraphVisitor::visit;
     using IRGraphVisitor::include;
+    using IRGraphVisitor::visit;
 
     void visit(const Variable *op) override {
         if (op->type != Int(32) && op->type != Bool()) {
@@ -225,7 +224,6 @@ class CountOps : public IRGraphVisitor {
     set<Expr, IRDeepCompare> unique_exprs;
 
 public:
-
     void include(const Expr &e) override {
         if (is_const(e)) {
             num_constants++;
@@ -236,7 +234,7 @@ public:
     }
 
     int count() {
-        return unique_exprs.size() - (int)vars_used.size();
+        return unique_exprs.size() - (int) vars_used.size();
     }
 
     int num_constants = 0;
@@ -279,7 +277,6 @@ public:
     map<string, Expr> binding;
     set<string> free_vars;
 };
-
 
 int main(int argc, char **argv) {
     if (argc < 2) {
@@ -366,7 +363,7 @@ int main(int argc, char **argv) {
 
     {
         std::lock_guard<std::mutex> lock(mutex);
-        for (int lhs_ops = 1; lhs_ops < 6; lhs_ops++) {
+        for (int lhs_ops = 1; lhs_ops < 8; lhs_ops++) {
             for (auto p : patterns) {
                 CountOps count_ops;
                 count_ops.include(p);
@@ -383,71 +380,75 @@ int main(int argc, char **argv) {
 
                 std::cout << "PATTERN " << lhs_ops << " : " << p << "\n";
                 futures.emplace_back(pool.async([=, &mutex, &rules, &futures, &done]() {
-                            Expr e;
-                            // Try something dumb first before using the CEGIS hammer
-                            for (Expr r : generate_reassociated_variants(p)) {
-                                // Is there already a simplifier rule that handles some
-                                // reassociation of this expression?
-                                Expr simpler_r = simplify(r);
-                                CountOps counter;
-                                counter.include(simpler_r);
-                                if (counter.count() < lhs_ops) {
-                                    std::lock_guard<std::mutex> lock(mutex);
-                                    std::cout << "Skipping CEGIS - we managed to simplify a reassociation: "
-                                              << p << " -> "
-                                              << r << " -> "
-                                              << simpler_r << "\n";
-                                    e = simpler_r;
+                    Expr e;
+                    if (true) {
+                        // Try something dumb first before using the CEGIS hammer
+                        for (Expr r : generate_reassociated_variants(p)) {
+                            // Is there already a simplifier rule that handles some
+                            // reassociation of this expression?
+                            Expr simpler_r = simplify(r);
+                            CountOps counter;
+                            counter.include(simpler_r);
+                            if (counter.count() < lhs_ops) {
+                                std::lock_guard<std::mutex> lock(mutex);
+                                std::cout << "Skipping CEGIS - we managed to simplify a reassociation: "
+                                          << p << " -> "
+                                          << r << " -> "
+                                          << simpler_r << "\n";
+                                e = simpler_r;
+                                break;
+                            }
+                        }
+                    }
+
+                    debug(0) << "Super simplifying: " << p << " with lhs_ops " << lhs_ops << "\n";
+                    for (int budget = 0; !e.defined() && budget <= lhs_ops; budget++) {
+                        debug(0) << "Super simplifying: " << p << " with budget " << budget << "\n";
+                        e = super_simplify(p, budget);
+                    }
+                    bool success = false;
+                    {
+                        std::lock_guard<std::mutex> lock(mutex);
+                        if (e.defined()) {
+                            bool suppressed = false;
+                            for (auto &r : rules) {
+                                if (more_general_than(r.first, p)) {
+                                    std::cout << "Ignoring specialization of earlier rule\n";
+                                    suppressed = true;
+                                    break;
+                                }
+                                if (more_general_than(p, r.first)) {
+                                    std::cout << "Replacing earlier rule with this more general form:\n"
+                                              << "{" << p << ", " << e << "},\n";
+                                    r.first = p;
+                                    r.second = e;
+                                    suppressed = true;
                                     break;
                                 }
                             }
-
-                            for (int budget = 0; !e.defined() && budget < lhs_ops && budget <= 8 - lhs_ops; budget++) {
-                                e = super_simplify(p, budget);
+                            if (!suppressed) {
+                                std::cout << "RULE: " << p << " = " << e << "\n";
+                                rules.emplace_back(p, e);
+                                success = true;
                             }
-                            bool success = false;
-                            {
-                                std::lock_guard<std::mutex> lock(mutex);
-                                if (e.defined()) {
-                                    bool suppressed = false;
-                                    for (auto &r : rules) {
-                                        if (more_general_than(r.first, p)) {
-                                            std::cout << "Ignoring specialization of earlier rule\n";
-                                            suppressed = true;
-                                            break;
-                                        }
-                                        if (more_general_than(p, r.first)) {
-                                            std::cout << "Replacing earlier rule with this more general form:\n"
-                                                      << "{" << p << ", " << e << "},\n";
-                                            r.first = p;
-                                            r.second = e;
-                                            suppressed = true;
-                                            break;
-                                        }
-                                    }
-                                    if (!suppressed) {
-                                        std::cout << "RULE: " << p << " = " << e << "\n";
-                                        rules.emplace_back(p, e);
-                                        success = true;
-                                    }
-                                }
-                                done++;
-                                if (done % 100 == 0) {
-                                    std::cout << done << " / " << futures.size() << "\n";
-                                }
-                                if (!success) {
-                                    // Add it to the blacklist so we
-                                    // don't waste time on this
-                                    // pattern again. Delete the
-                                    // blacklist whenever you make a
-                                    // change that might make things
-                                    // work for new patterns.
-                                    std::ofstream b;
-                                    b.open("blacklist.txt", std::ofstream::out | std::ofstream::app);
-                                    b << p << "\n";
-                                }
-                            }
-                        }));
+                        }
+                        done++;
+                        if (done % 100 == 0) {
+                            std::cout << done << " / " << futures.size() << "\n";
+                        }
+                        if (!success) {
+                            // Add it to the blacklist so we
+                            // don't waste time on this
+                            // pattern again. Delete the
+                            // blacklist whenever you make a
+                            // change that might make things
+                            // work for new patterns.
+                            std::ofstream b;
+                            b.open("blacklist.txt", std::ofstream::out | std::ofstream::app);
+                            b << p << "\n";
+                        }
+                    }
+                }));
             }
         }
     }
@@ -477,8 +478,8 @@ int main(int argc, char **argv) {
     }
 
     std::sort(filtered.begin(), filtered.end(), [](const pair<Expr, Expr> &r1, const pair<Expr, Expr> &r2) {
-            return IRDeepCompare{}(r1.first, r2.first);
-        });
+        return IRDeepCompare{}(r1.first, r2.first);
+    });
 
     // Now try to generalize rules involving constants by replacing constants with wildcards and synthesizing a predicate.
 
@@ -507,55 +508,55 @@ int main(int argc, char **argv) {
 
     for (auto it : generalized) {
         futures.emplace_back(pool.async([=, &mutex, &predicated_rules, &failed_predicated_rules]() {
-                    const EQ *eq = it.first.as<EQ>();
-                    assert(eq);
-                    Expr lhs = eq->a, rhs = eq->b;
-                    map<string, Expr> binding;
-                    Expr predicate = synthesize_predicate(lhs, rhs, it.second, &binding);
+            const EQ *eq = it.first.as<EQ>();
+            assert(eq);
+            Expr lhs = eq->a, rhs = eq->b;
+            map<string, Expr> binding;
+            Expr predicate = synthesize_predicate(lhs, rhs, it.second, &binding);
 
-                    if (!predicate.defined()) {
-                        std::lock_guard<std::mutex> lock(mutex);
-                        failed_predicated_rules.emplace_back(lhs, rhs);
-                        return;
-                    }
+            if (!predicate.defined()) {
+                std::lock_guard<std::mutex> lock(mutex);
+                failed_predicated_rules.emplace_back(lhs, rhs);
+                return;
+            }
 
-                    lhs = substitute(binding, lhs);
+            lhs = substitute(binding, lhs);
 
-                    // In the RHS, we want to wrap fold() around computed combinations of the constants
-                    for (auto &it : binding) {
-                        if (!is_const(it.second) && !it.second.as<Variable>()) {
-                            it.second = Call::make(it.second.type(), "fold", {it.second}, Call::PureExtern);
+            // In the RHS, we want to wrap fold() around computed combinations of the constants
+            for (auto &it : binding) {
+                if (!is_const(it.second) && !it.second.as<Variable>()) {
+                    it.second = Call::make(it.second.type(), "fold", { it.second }, Call::PureExtern);
+                }
+            }
+
+            rhs = substitute(binding, rhs);
+
+            // After doing the substitution we might be able
+            // to statically fold (e.g. we may get c0 + 0).
+            class SimplifyFolds : public IRMutator {
+                using IRMutator::visit;
+
+                Expr visit(const Call *op) override {
+                    if (op->name == "fold") {
+                        Expr e = simplify(op->args[0]);
+                        if (is_const(e) || e.as<Variable>()) {
+                            return e;
+                        } else {
+                            return Call::make(op->type, "fold", { e }, Call::PureExtern);
                         }
+                    } else {
+                        return IRMutator::visit(op);
                     }
+                }
+            } simplify_folds;
+            rhs = simplify_folds.mutate(rhs);
 
-                    rhs = substitute(binding, rhs);
-
-                    // After doing the substitution we might be able
-                    // to statically fold (e.g. we may get c0 + 0).
-                    class SimplifyFolds : public IRMutator {
-                        using IRMutator::visit;
-
-                        Expr visit(const Call *op) override {
-                            if (op->name == "fold") {
-                                Expr e = simplify(op->args[0]);
-                                if (is_const(e) || e.as<Variable>()) {
-                                    return e;
-                                } else {
-                                    return Call::make(op->type, "fold", {e}, Call::PureExtern);
-                                }
-                            } else {
-                                return IRMutator::visit(op);
-                            }
-                        }
-                    } simplify_folds;
-                    rhs = simplify_folds.mutate(rhs);
-
-                    {
-                        std::lock_guard<std::mutex> lock(mutex);
-                        predicated_rules.emplace_back(lhs, rhs, predicate);
-                        std::cout << "PREDICATED RULE: " << predicate << " => " << lhs << " = " << rhs << "\n";
-                    }
-                }));
+            {
+                std::lock_guard<std::mutex> lock(mutex);
+                predicated_rules.emplace_back(lhs, rhs, predicate);
+                std::cout << "PREDICATED RULE: " << predicate << " => " << lhs << " = " << rhs << "\n";
+            }
+        }));
     }
 
     for (auto &f : futures) {
@@ -616,7 +617,6 @@ int main(int argc, char **argv) {
             std::cout << "    rewrite(" << lhs << ", " << rhs << ", " << predicate << ") ||\n";
         }
     }
-
 
     return 0;
 }

@@ -27,6 +27,7 @@ class FindVars : public IRVisitor {
             op->body.accept(this);
         }
     }
+
 public:
     std::map<std::string, std::pair<Expr, int>> vars;
 };
@@ -36,7 +37,6 @@ std::map<std::string, std::pair<Expr, int>> find_vars(const Expr &e) {
     e.accept(&f);
     return f.vars;
 }
-
 
 template<typename Op>
 bool more_general_than(const Expr &a, const Op *b, map<string, Expr> &bindings, bool entered_a) {
@@ -58,9 +58,7 @@ bool more_general_than(const Expr &a, const Op *b, map<string, Expr> &bindings, 
                 more_general_than(op_a->b, b->b, bindings, true));
     }
     return false;
-
 }
-
 
 bool more_general_than(const Expr &a, const Expr &b, map<string, Expr> &bindings, bool entered_a) {
     if (const Variable *var = a.as<Variable>()) {
@@ -85,7 +83,6 @@ bool more_general_than(const Expr &a, const Expr &b, map<string, Expr> &bindings
     if (is_const(a) && is_const(b)) {
         return equal(a, b);
     }
-
 
     if (const And *op = b.as<And>()) {
         return more_general_than(a, op, bindings, entered_a);
@@ -178,7 +175,6 @@ bool more_general_than(const Expr &a, const Expr &b, map<string, Expr> &bindings
     return false;
 }
 
-
 class FindCommutativeOps : public IRVisitor {
     template<typename Op>
     void visit_commutative_op(const Op *op) {
@@ -257,8 +253,11 @@ class Commute : public IRMutator {
     }
 
     Expr to_commute;
+
 public:
-    Commute(Expr c) : to_commute(c) {}
+    Commute(Expr c)
+        : to_commute(c) {
+    }
 };
 
 vector<Expr> generate_commuted_variants(const Expr &expr) {
@@ -286,7 +285,6 @@ struct LinearTerm {
     Expr e;
 };
 
-
 // This function is very very exponential
 void all_possible_exprs_that_compute_sum(const vector<LinearTerm> &terms, vector<Expr> *result) {
     if (terms.size() == 1) {
@@ -297,7 +295,7 @@ void all_possible_exprs_that_compute_sum(const vector<LinearTerm> &terms, vector
         return;
     }
 
-    for (size_t i = 1; i < (1 << terms.size()) - 1; i++) {
+    for (size_t i = 1; i < (size_t)((1 << terms.size()) - 1); i++) {
         vector<LinearTerm> left, right;
         for (size_t j = 0; j < terms.size(); j++) {
             if (i & (1 << j)) {
@@ -362,6 +360,12 @@ void all_possible_exprs_that_compute_associative_op_helper(const Expr &e,
         all_possible_exprs_that_compute_associative_op_helper<Op>(pack_binary_op<Op>(right), &right_exprs);
         for (auto &l : left_exprs) {
             for (auto &r : right_exprs) {
+                // Skip non-canonical ones
+                if (!l.as<Variable>() &&
+                    !r.as<Variable>() &&
+                    r.node_type() > l.node_type()) {
+                    continue;
+                }
                 result->push_back(Op::make(l, r));
             }
         }
@@ -387,16 +391,16 @@ void all_possible_exprs_that_compute_non_associative_op(const Op *op,
 vector<Expr> generate_reassociated_variants(const Expr &e) {
     if (e.as<Add>() || e.as<Sub>()) {
         vector<LinearTerm> terms, pending;
-        pending.emplace_back(LinearTerm {true, e});
+        pending.emplace_back(LinearTerm{ true, e });
         while (!pending.empty()) {
             auto next = pending.back();
             pending.pop_back();
             if (const Add *add = next.e.as<Add>()) {
-                pending.emplace_back(LinearTerm {next.positive, add->a});
-                pending.emplace_back(LinearTerm {next.positive, add->b});
+                pending.emplace_back(LinearTerm{ next.positive, add->a });
+                pending.emplace_back(LinearTerm{ next.positive, add->b });
             } else if (const Sub *sub = next.e.as<Sub>()) {
-                pending.emplace_back(LinearTerm {next.positive, sub->a});
-                pending.emplace_back(LinearTerm {!next.positive, sub->b});
+                pending.emplace_back(LinearTerm{ next.positive, sub->a });
+                pending.emplace_back(LinearTerm{ !next.positive, sub->b });
             } else {
                 terms.push_back(next);
             }
@@ -476,5 +480,5 @@ vector<Expr> generate_reassociated_variants(const Expr &e) {
         }
     }
 
-    return {e};
+    return { e };
 }

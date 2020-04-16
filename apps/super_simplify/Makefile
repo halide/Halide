@@ -6,7 +6,7 @@ all: $(BIN)/find_rules $(BIN)/synthesize_predicates $(BIN)/filter_rewrite_rules 
 
 CXXFLAGS += -g
 
-LDFLAGS += -L ../../distrib/bin -L ../../distrib/lib -rpath ../../distrib/bin 
+LDFLAGS += -L ../../distrib/bin -L ../../distrib/lib -Wl,-rpath ../../distrib/bin 
 
 STATIC_LDFLAGS = $(filter-out -lpthread,$(LDFLAGS)) -pthread -Wl,--whole-archive -lpthread -Wl,--no-whole-archive
 

@@ -1219,7 +1219,7 @@ bool can_disprove(Expr e, int beam_size, std::set<Expr, IRDeepCompare> *implicat
     std::set<uint64_t> visited;
     std::deque<std::unique_ptr<System>> beam;
     beam.emplace_back(std::move(system));
-    float last_complexity = 0;
+    //float last_complexity = 0;
     while (!beam.empty()) {
         // Take the best thing
         std::unique_ptr<System> next = std::move(beam.front());
@@ -1241,7 +1241,7 @@ bool can_disprove(Expr e, int beam_size, std::set<Expr, IRDeepCompare> *implicat
         }
 
         //if (next->complexity() == last_complexity) continue;
-        last_complexity = next->complexity();
+        //last_complexity = next->complexity();
 
           debug(1) << "Top of beam: " << next->complexity() << "\n";
           next->dump();
