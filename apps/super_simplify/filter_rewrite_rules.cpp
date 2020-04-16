@@ -352,6 +352,53 @@ int main(int argc, char **argv) {
         r.rhs = inject_folds(r.rhs);
     }
 
+    // Any constant wildcard not used in a fold and not used in the
+    // predicate can just be a regular wildcard.
+    for (Rule &r : rules) {
+        class FindConstants : public IRVisitor {
+            using IRVisitor::visit;
+            void visit(const Call *op) override {
+                if (op->name == "fold") {
+                    ScopedValue<bool> old_in_fold(in_fold, true);
+                    op->args[0].accept(this);
+                } else {
+                    IRVisitor::visit(op);
+                }
+            }
+            void visit(const Variable *op) override {
+                all.insert(op->name);
+                if (in_fold) {
+                    used_in_fold.insert(op->name);
+                }
+            }
+            bool in_fold = false;
+
+        public:
+            std::set<string> all, used_in_fold;
+        } finder;
+
+        Expr e = Call::make(Int(32), "dummy", { r.lhs, r.rhs, Call::make(Bool(), "fold", { r.predicate }, Call::Intrinsic) }, Call::Intrinsic);
+        e.accept(&finder);
+
+        for (const auto &v : finder.all) {
+            if (finder.used_in_fold.count(v)) {
+                continue;
+            }
+            if (v[0] == 'c') {
+                // Find a free wildcard var to replace it with
+                const char *names[] = { "x", "y", "z", "w", "u", "v" };
+                for (const char *n : names) {
+                    if (!expr_uses_var(e, n)) {
+                        Expr var = Variable::make(Int(32), n);
+                        r.lhs = substitute(v, var, r.lhs);
+                        r.rhs = substitute(v, var, r.rhs);
+                        break;
+                    }
+                }
+            }
+        }
+    }
+
     // Generate all commutations
     vector<Rule> expanded;
     for (const Rule &r : rules) {
@@ -439,7 +486,8 @@ int main(int argc, char **argv) {
             continue;
         }
         if (valid_reduction_order(r.rhs, r.lhs)) {
-            std::cerr << "Rule would be valid reduction order in either direction. There must be a bug in the reduction order:\n"
+            std::cerr << "Rule would be valid reduction order in either direction. "
+                      << "There must be a bug in the reduction order:\n"
                       << r.lhs << " -> " << r.rhs << "\n";
             abort();
         }
@@ -466,8 +514,10 @@ int main(int argc, char **argv) {
             }
             if (more_general_than(r2.lhs, r.lhs, binding) &&
                 can_prove(r2.predicate || substitute(binding, !r.predicate))) {
-                std::cout << "Too specific: " << r.orig << "\n variant " << r.lhs << "\n vs " << r2.orig << "\n variant " << r2.lhs << "\n";
-                ;
+                std::cout << "Too specific: " << r.orig
+                          << "\n variant " << r.lhs
+                          << "\n vs " << r2.orig
+                          << "\n variant " << r2.lhs << "\n";
 
                 // Would they also annihilate in the other order?
                 binding.clear();
