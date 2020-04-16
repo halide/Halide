@@ -138,6 +138,35 @@ int vectorize_2d_with_compute_at() {
     return 0;
 }
 
+int vectorize_all_d() {
+    const int width = 12;
+    const int height = 10;
+
+    Func f("f");
+    Var x("x"), y("y"), xi("xi"), yi("yi");
+
+    f(x, y) = x + y;
+
+    f.compute_root()
+        .tile(x, y, x, y, xi, yi, 4, 2, TailStrategy::GuardWithIf)
+        .vectorize(x)
+        .vectorize(y)
+        .vectorize(xi)
+        .vectorize(yi);
+
+    f.bound(x, 0, width).bound(y, 0, height);
+    Buffer<int> result = f.realize(width, height);
+
+    auto cmp_func = [](int x, int y) {
+        return x + y;
+    };
+    if (check_image(result, cmp_func)) {
+        return -1;
+    }
+
+    return 0;
+}
+
 int main(int argc, char **argv) {
     if(vectorize_2d_round_up()) {
         printf("vectorize_2d_round_up failed\n");
@@ -161,6 +190,11 @@ int main(int argc, char **argv) {
 
     if(vectorize_2d_with_compute_at()) {
         printf("vectorize_2d_with_compute_at failed\n");
+        return -1;
+    }
+
+    if(vectorize_all_d()) {
+        printf("vectorize_all_d failed\n");
         return -1;
     }
 
