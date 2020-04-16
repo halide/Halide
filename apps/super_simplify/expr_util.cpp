@@ -180,8 +180,11 @@ class FindCommutativeOps : public IRVisitor {
     void visit_commutative_op(const Op *op) {
         const Variable *var_a = op->a.template as<Variable>();
         const Variable *var_b = op->b.template as<Variable>();
-        if (var_b && var_b->name[0] == 'c') return;
-        if (is_const(op->b)) return;
+        if ((var_b && var_b->name[0] == 'c') ||
+            is_const(op->b)) {
+            op->a.accept(this);
+            return;
+        }
         if (var_a || var_b) {
             commutative_ops.push_back(Expr(op));
         }
