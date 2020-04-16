@@ -21,10 +21,12 @@ export HL_RANDOM_DROPOUT=100
 
 # APPS="bilateral_grid local_laplacian nl_means lens_blur camera_pipe stencil_chain harris hist max_filter unsharp interpolate conv_layer iir_blur bgu" # Missing mat_mul_generator and resnet_50_blockwise
 
-APPS="bilateral_grid"
+APPS="bilateral_grid local_laplacian"
 
 #while [ 1 ]; do
     for app in $APPS; do
+        echo $app >> autoprogress
+
         SECONDS=0
         # 15 mins of autotuning per app, round robin
         # while [[ SECONDS -lt 900 ]]; do

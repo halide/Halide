@@ -1,7 +1,8 @@
 HALIDE=$(dirname $0)/../../..
 echo "Using Halide in " $HALIDE
 
-APPS="bilateral_grid local_laplacian nl_means lens_blur camera_pipe stencil_chain harris hist max_filter unsharp interpolate_generator conv_layer mat_mul_generator iir_blur_generator bgu"
+# APPS="bilateral_grid local_laplacian nl_means lens_blur camera_pipe stencil_chain harris hist max_filter unsharp interpolate_generator conv_layer mat_mul_generator iir_blur_generator bgu"
+APPS="bilateral_grid local_laplacian nl_means lens_blur camera_pipe stencil_chain harris hist max_filter unsharp interpolate conv_layer iir_blur bgu" # Missing mat_mul_generator and resnet_50_blockwise
 
 echo "Best time including all random samples"
 
@@ -12,11 +13,11 @@ for app in ${APPS}; do
 done
 
 # For resnet we need to sum over the blocks
-echo resnet_50
-S=$(for ((block=0;block<16;block++)); do
-        cat ${HALIDE}/apps/resnet_50/samples/batch_*_${block}/*/bench.txt | cut -d' ' -f8 | sort -n | head -n1
-    done | paste -sd+ | bc)
-echo "$S * 1000" | bc
+# echo resnet_50
+# S=$(for ((block=0;block<16;block++)); do
+#         cat ${HALIDE}/apps/resnet_50/samples/batch_*_${block}/*/bench.txt | cut -d' ' -f8 | sort -n | head -n1
+#     done | paste -sd+ | bc)
+# echo "$S * 1000" | bc
 
 
 echo "Beam search on final set of weights"
@@ -28,8 +29,8 @@ for app in ${APPS}; do
 done
 
 # For resnet we need to sum over the blocks
-echo resnet_50
-S=$(for ((block=0;block<16;block++)); do
-        ls -t ${HALIDE}/apps/resnet_50/samples/batch_*_${block}/0/bench.txt | head -n1 | xargs cat | cut -d' ' -f8
-    done | paste -sd+ | bc)
-echo "$S * 1000" | bc
+# echo resnet_50
+# S=$(for ((block=0;block<16;block++)); do
+#         ls -t ${HALIDE}/apps/resnet_50/samples/batch_*_${block}/0/bench.txt | head -n1 | xargs cat | cut -d' ' -f8
+#     done | paste -sd+ | bc)
+# echo "$S * 1000" | bc

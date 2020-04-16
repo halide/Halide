@@ -19,8 +19,7 @@ $(BIN)/%/bgu.a: $(GENERATOR_BIN)/bgu.generator
 
 $(BIN)/%/bgu_auto_schedule.a: $(GENERATOR_BIN)/bgu.generator
 	@mkdir -p $(@D)
-	HL_WEIGHTS_DIR=$(AUTOSCHED_SRC)/baseline.weights \
-	$< -g bgu -f bgu_auto_schedule -o $(BIN)/$* target=$*-no_runtime auto_schedule=true -p $(AUTOSCHED_BIN)/libauto_schedule.so -s Adams2019
+	$< -g bgu -f bgu_auto_schedule -o $(BIN)/$* target=$*-no_runtime auto_schedule=true $(HL_CUSTOM_AUTOSCHEDULER)
 
 $(BIN)/%/runtime.a: $(GENERATOR_BIN)/bgu.generator
 	@mkdir -p $(@D)
