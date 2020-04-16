@@ -371,7 +371,7 @@ int main(int argc, char **argv) {
                 if (count_ops.count() != lhs_ops ||
                     count_ops.has_unsupported_ir ||
                     !(count_ops.has_repeated_var ||
-                      count_ops.num_constants > 2)) {
+                      count_ops.num_constants > 1)) {
                     continue;
                 }
 
@@ -401,36 +401,16 @@ int main(int argc, char **argv) {
                         }
                     }
 
-                    debug(0) << "Super simplifying: " << p << " with lhs_ops " << lhs_ops << "\n";
                     for (int budget = 0; !e.defined() && budget <= lhs_ops; budget++) {
-                        debug(0) << "Super simplifying: " << p << " with budget " << budget << "\n";
                         e = super_simplify(p, budget);
                     }
                     bool success = false;
                     {
                         std::lock_guard<std::mutex> lock(mutex);
                         if (e.defined()) {
-                            bool suppressed = false;
-                            for (auto &r : rules) {
-                                if (more_general_than(r.first, p)) {
-                                    std::cout << "Ignoring specialization of earlier rule\n";
-                                    suppressed = true;
-                                    break;
-                                }
-                                if (more_general_than(p, r.first)) {
-                                    std::cout << "Replacing earlier rule with this more general form:\n"
-                                              << "{" << p << ", " << e << "},\n";
-                                    r.first = p;
-                                    r.second = e;
-                                    suppressed = true;
-                                    break;
-                                }
-                            }
-                            if (!suppressed) {
-                                std::cout << "RULE: " << p << " = " << e << "\n";
-                                rules.emplace_back(p, e);
-                                success = true;
-                            }
+                            std::cout << "RULE: " << p << " = " << e << "\n";
+                            rules.emplace_back(p, e);
+                            success = true;
                         }
                         done++;
                         if (done % 100 == 0) {
@@ -458,26 +438,7 @@ int main(int argc, char **argv) {
     }
 
     // Filter rules, though specialization should not have snuck through the filtering above
-    vector<pair<Expr, Expr>> filtered;
-
-    for (auto r1 : rules) {
-        bool duplicate = false;
-        pair<Expr, Expr> suppressed_by;
-        for (auto r2 : rules) {
-            bool g = more_general_than(r2.first, r1.first) && !equal(r1.first, r2.first);
-            if (g) {
-                suppressed_by = r2;
-            }
-            duplicate |= g;
-        }
-        if (!duplicate) {
-            filtered.push_back(r1);
-        } else {
-            // std::cout << "This LHS: " << r1.first << " was suppressed by this LHS: " << suppressed_by.first << "\n";
-        }
-    }
-
-    std::sort(filtered.begin(), filtered.end(), [](const pair<Expr, Expr> &r1, const pair<Expr, Expr> &r2) {
+    std::sort(rules.begin(), rules.end(), [](const pair<Expr, Expr> &r1, const pair<Expr, Expr> &r2) {
         return IRDeepCompare{}(r1.first, r2.first);
     });
 
@@ -489,7 +450,7 @@ int main(int argc, char **argv) {
     // Abstract away the constants and cluster the rules by LHS structure
     map<Expr, vector<map<string, Expr>>, IRDeepCompare> generalized;
 
-    for (auto r : filtered) {
+    for (auto r : rules) {
         std::cout << "Trying to generalize " << r.first << " -> " << r.second << "\n";
         Expr orig = r.first == r.second;
         ReplaceConstants replacer;
@@ -574,35 +535,13 @@ int main(int argc, char **argv) {
         }
     }
 
-    // Filter again, now that constants are gone.
-    vector<tuple<Expr, Expr, Expr>> predicated_filtered;
-
-    for (auto r1 : predicated_rules) {
-        bool duplicate = false;
-        tuple<Expr, Expr, Expr> suppressed_by;
-        Expr lhs1 = std::get<0>(r1);
-        for (auto r2 : predicated_rules) {
-            Expr lhs2 = std::get<0>(r2);
-            bool g = more_general_than(lhs2, lhs1) && !equal(lhs1, lhs2);
-            if (g) {
-                suppressed_by = r2;
-            }
-            duplicate |= g;
-        }
-        if (!duplicate) {
-            predicated_filtered.push_back(r1);
-        } else {
-            // std::cout << "This LHS: " << r1.first << " was suppressed by this LHS: " << suppressed_by.first << "\n";
-        }
-    }
-
-    std::sort(predicated_filtered.begin(), predicated_filtered.end(),
+    std::sort(predicated_rules.begin(), predicated_rules.end(),
               [](const tuple<Expr, Expr, Expr> &r1, const tuple<Expr, Expr, Expr> &r2) {
                   return IRDeepCompare{}(std::get<0>(r1), std::get<0>(r2));
               });
 
     IRNodeType old = IRNodeType::IntImm;
-    for (auto r : predicated_filtered) {
+    for (auto r : predicated_rules) {
         Expr lhs = std::get<0>(r);
         Expr rhs = std::get<1>(r);
         Expr predicate = std::get<2>(r);
