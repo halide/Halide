@@ -15,7 +15,7 @@ using std::vector;
 // integer opcodes. Not all possible programs are valid (e.g. due to
 // type errors), so also returns an Expr on the inputs opcodes that
 // encodes whether or not the program is well-formed.
-pair<Expr, Expr> interpreter_expr(vector<Expr> terms, vector<Expr> use_counts, vector<Expr> opcodes, Type desired_type, Type int_type) {
+pair<Expr, Expr> interpreter_expr(vector<Expr> terms, vector<Expr> use_counts, vector<Expr> opcodes, Type desired_type, Type int_type, int max_leaves) {
     // Each opcode is an enum identifying the op, followed by the indices of the three args.
     assert(opcodes.size() % 4 == 0);
     assert(terms.size() == use_counts.size());
@@ -36,6 +36,12 @@ pair<Expr, Expr> interpreter_expr(vector<Expr> terms, vector<Expr> use_counts, v
             assert(false && "Unhandled wildcard type");
         }
     }
+
+    // TODO: bound constants to be within the ranges of the constants in the input
+
+    Expr leaves_used = cast(int_type, 0);
+
+    int initial_terms = (int) terms.size();
 
     for (size_t i = 0; i < opcodes.size(); i += 4) {
         Expr op = opcodes[i];
@@ -70,16 +76,27 @@ pair<Expr, Expr> interpreter_expr(vector<Expr> terms, vector<Expr> use_counts, v
         }
 
         // Perform the op.
-        Expr result_int = 0;
+        Expr result_int = cast(int_type, 0);
         Expr result_bool = const_false();
+
+        Expr arg1_used = const_true();
+        Expr arg2_used = op != 0 && op != 10 && op != 11;
+        Expr arg3_used = op == 12;
+
+        Expr arg1_leaf = arg1_idx < initial_terms || arg1_idx >= s;
+        Expr arg2_leaf = arg2_idx < initial_terms || arg2_idx >= s;
+        Expr arg3_leaf = arg3_idx < initial_terms || arg3_idx >= s;
 
         for (int j = 0; j < (int) use_counts.size(); j++) {
             // We've potentially soaked up one allowed use of each original term
-            use_counts[j] -= select(((arg1_idx == j) ||
-                                     (arg2_idx == j && op != 0 && op != 10 && op != 11) ||
-                                     (arg3_idx == j && op == 12)),
-                                    cast(int_type, 1), cast(int_type, 0));
+            use_counts[j] -= select(arg1_idx == j && arg1_used, cast(int_type, 1), cast(int_type, 0));
+            use_counts[j] -= select(arg2_idx == j && arg2_used, cast(int_type, 1), cast(int_type, 0));
+            use_counts[j] -= select(arg3_idx == j && arg3_used, cast(int_type, 1), cast(int_type, 0));
         }
+
+        leaves_used += select(arg1_leaf && arg1_used, cast(int_type, 1), cast(int_type, 0));
+        leaves_used += select(arg2_leaf && arg2_used, cast(int_type, 1), cast(int_type, 0));
+        leaves_used += select(arg3_leaf && arg3_used, cast(int_type, 1), cast(int_type, 0));
 
         result_int = select(op == 0, arg1_int, result_int);
         result_bool = select(op == 0, arg1_bool, result_bool);
@@ -111,19 +128,43 @@ pair<Expr, Expr> interpreter_expr(vector<Expr> terms, vector<Expr> use_counts, v
         terms_bool.push_back(result_bool);
     }
 
-    Expr total_use_count = 0;
+    Expr remaining_use_count = 0;
     for (auto u : use_counts) {
         program_is_valid = program_is_valid && (u >= 0);
-        total_use_count += u;
+        remaining_use_count += u;
     }
-    // Require that the use count strictly decreases, and that it
-    // decreases or stays constant for every variable.
-    program_is_valid = program_is_valid && (total_use_count > 0);
+    // Require that:
+    // We don't duplicate any wildcards and we strictly reduce the number of leaf nodes.
+    // More precise filtering will be done later.
+    program_is_valid = program_is_valid && (leaves_used < max_leaves);
 
     Expr result = (desired_type.is_bool()) ? terms_bool.back() : terms_int.back();
 
     return { result, program_is_valid };
 }
+
+class CountLeaves : public IRVisitor {
+    using IRVisitor::visit;
+
+    void visit(const Variable *op) override {
+        result++;
+    }
+
+    void visit(const IntImm *op) override {
+        result++;
+    }
+
+    void visit(const UIntImm *op) override {
+        result++;
+    }
+
+    void visit(const FloatImm *op) override {
+        result++;
+    }
+
+public:
+    int result = 0;
+};
 
 // Use CEGIS to construct an equivalent expression to the input of the given size.
 Expr super_simplify(Expr e, int size) {
@@ -155,6 +196,9 @@ Expr super_simplify(Expr e, int size) {
     } ub_checker;
     e.accept(&ub_checker);
 
+    CountLeaves leaf_counter;
+    e.accept(&leaf_counter);
+
     auto vars = find_vars(e);
     vector<Expr> leaves, leaves8, use_counts, use_counts8;
     for (auto v : vars) {
@@ -185,7 +229,7 @@ Expr super_simplify(Expr e, int size) {
 
     Expr program, program_works;
     {
-        auto p = interpreter_expr(leaves, use_counts, symbolic_opcodes, e.type(), Int(32));
+        auto p = interpreter_expr(leaves, use_counts, symbolic_opcodes, e.type(), Int(32), leaf_counter.result);
         program = p.first;
         program_works = (e == program) && p.second;
         program = simplify(common_subexpression_elimination(program));
@@ -195,7 +239,7 @@ Expr super_simplify(Expr e, int size) {
     // Make an 8-bit version of the interpreter too so that we can use SAT solvers.
     Expr program8, program8_works;
     {
-        auto p = interpreter_expr(leaves8, use_counts8, symbolic_opcodes8, e.type(), Int(8));
+        auto p = interpreter_expr(leaves8, use_counts8, symbolic_opcodes8, e.type(), Int(8), leaf_counter.result);
         program8 = p.first;
         if (e.type().is_bool()) {
             program8_works = (e == program8) && p.second;
