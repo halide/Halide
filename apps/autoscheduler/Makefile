@@ -34,6 +34,8 @@ autotune: $(GENERATOR_BIN)/demo.generator $(AUTOSCHED_BIN)/featurization_to_samp
 		$(HALIDE_DISTRIB_PATH) \
 		$(AUTOSCHED_SAMPLES_OUT)
 
+autotune_deps: $(AUTOSCHED_BIN)/featurization_to_sample $(AUTOSCHED_BIN)/get_host_target $(AUTOSCHED_BIN)/retrain_cost_model $(AUTOSCHED_BIN)/libauto_schedule.so
+
 $(BIN)/test_perfect_hash_map: test_perfect_hash_map.cpp PerfectHashMap.h
 	@mkdir -p $(@D)
 	$(CXX) $(CXXFLAGS) $< -o $@

@@ -19,6 +19,11 @@ AUTOSCHED_BIN=${5}
 HALIDE_DISTRIB_PATH=${6}
 SAMPLES=${7}
 
+if [ "$RETRAIN" != "true" ] && [ "$RETRAIN" != "false" ]; then
+    echo You must set RETRAIN env variable to \"true\" or \"false\"
+    exit 1
+fi
+
 # Read the generator-arg sets into an array. Each set is delimited
 # by space; multiple values within each set are are delimited with ;
 # e.g. "set1arg1=1;set1arg2=foo set2=bar set3arg1=3.14;set4arg2=42"
@@ -215,17 +220,20 @@ for ((BATCH_ID=$((FIRST+1));BATCH_ID<$((FIRST+1+NUM_BATCHES));BATCH_ID++)); do
         done
 
         # retrain model weights on all samples seen so far
-        echo Retraining model...
-
-        find ${SAMPLES} -name "*.sample" | \
-            ${AUTOSCHED_BIN}/retrain_cost_model \
-                --epochs=${BATCH_SIZE} \
-                --rates="0.0001" \
-                --num_cores=32 \
-                --initial_weights=${WEIGHTS} \
-                --weights_out=${WEIGHTS} \
-                --best_benchmark=${SAMPLES}/best.${PIPELINE}.benchmark.txt \
-                --best_schedule=${SAMPLES}/best.${PIPELINE}.schedule.h
+        if [ "$RETRAIN" == "true" ]; then
+            echo Retraining model...
+            find ${SAMPLES} -name "*.sample" | \
+                ${AUTOSCHED_BIN}/retrain_cost_model \
+                    --epochs=${BATCH_SIZE} \
+                    --rates="0.0001" \
+                    --num_cores=32 \
+                    --initial_weights=${WEIGHTS} \
+                    --weights_out=${WEIGHTS} \
+                    --best_benchmark=${SAMPLES}/best.${PIPELINE}.benchmark.txt \
+                    --best_schedule=${SAMPLES}/best.${PIPELINE}.schedule.h
+        else
+            echo "Skipping retraining model..."
+        fi
     done
 
     echo Batch ${BATCH_ID} took ${SECONDS} seconds to compile, benchmark, and retrain

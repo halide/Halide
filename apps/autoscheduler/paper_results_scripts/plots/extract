@@ -9,36 +9,50 @@ def strip_non_digits(s):
 print("test,master,greedy,beam,manual,mcts")
 
 for app in apps:
+    scale = 1000 if app != "camera_pipe" else 1000000
+
     # Get manual and greedy results
     manual = 0
     greedy = 0
-    with open(f"../greedy/{app}.txt") as f:
-        for line in f:
-            if line.startswith("Manually-tuned time:") or "schedule_type=manual" in line:
-                manual += float(strip_non_digits(line)) / 1000
-            elif line.startswith("Auto-scheduled time:") or "schedule_type=auto_schedule" in line:
-                greedy += float(strip_non_digits(line)) / 1000
+    try:
+        with open(f"../greedy/{app}.txt") as f:
+            for line in f:
+                if line.startswith("Manually-tuned time:") or "schedule_type=manual" in line:
+                    manual += float(strip_non_digits(line)) / scale
+                elif line.startswith("Auto-scheduled time:") or "schedule_type=auto_schedule" in line:
+                    greedy += float(strip_non_digits(line)) / scale
+    except FileNotFoundError:
+        pass
 
     # Get beam results
     beam = 0
-    with open(f"../beam/{app}.txt") as f:
-        for line in f:
-            if line.startswith("Auto-scheduled time:") or "schedule_type=auto_schedule" in line:
-                beam += float(strip_non_digits(line)) / 1000
+    try:
+        with open(f"../beam/{app}.txt") as f:
+            for line in f:
+                if line.startswith("Auto-scheduled time:") or "schedule_type=auto_schedule" in line:
+                    beam += float(strip_non_digits(line)) / scale
+    except FileNotFoundError:
+        pass
 
     # Get mcts results
     mcts = 0
-    with open(f"../mcts/{app}.txt") as f:
-        for line in f:
-            if line.startswith("Auto-scheduled time:") or "schedule_type=auto_schedule" in line:
-                mcts += float(strip_non_digits(line)) / 1000
+    try:
+        with open(f"../mcts/{app}.txt") as f:
+            for line in f:
+                if line.startswith("Auto-scheduled time:") or "schedule_type=auto_schedule" in line:
+                    mcts += float(strip_non_digits(line)) / scale
+    except FileNotFoundError:
+        pass
 
     # Get master results
     master = 0
-    with open(f"../master/{app}.txt") as f:
-        for line in f:
-            if line.startswith("Auto-scheduled time:") or "schedule_type=auto_schedule" in line:
-                master += float(strip_non_digits(line)) / 1000
+    try:
+        with open(f"../master/{app}.txt") as f:
+            for line in f:
+                if line.startswith("Auto-scheduled time:") or "schedule_type=auto_schedule" in line:
+                    master += float(strip_non_digits(line)) / scale
+    except FileNotFoundError:
+        pass
 
     print(f"{app},{master},{greedy},{beam},{manual},{mcts}")
 

@@ -19,21 +19,33 @@ export HL_TARGET="host" # x86-64-avx2
 export HL_RANDOM_DROPOUT=100
 
 if [ "$autoscheduler" == "greedy" ]; then
-    cp ../AutoSchedule-master.cpp ../AutoSchedule.cpp
+    if diff ../AutoSchedule-master.cpp ../AutoSchedule.cpp > /dev/null ; then
+        echo "No need to copy AutoSchedule-master.cpp"
+    else
+        cp ../AutoSchedule-master.cpp ../AutoSchedule.cpp
+    fi
 
     # greedy
     export HL_BEAM_SIZE=1
     export HL_NUM_PASSES=1
     results="greedy"
 elif [ "$autoscheduler" == "beam" ]; then
-    cp ../AutoSchedule-master.cpp ../AutoSchedule.cpp
+    if diff ../AutoSchedule-master.cpp ../AutoSchedule.cpp > /dev/null ; then
+        echo "No need to copy AutoSchedule-master.cpp"
+    else
+        cp ../AutoSchedule-master.cpp ../AutoSchedule.cpp
+    fi
 
     # beam search
     export HL_BEAM_SIZE=32
     export HL_NUM_PASSES=5
     results="beam"
 elif [ "$autoscheduler" == "mcts" ]; then
-    cp ../AutoSchedule-mcts.cpp ../AutoSchedule.cpp
+    if diff ../AutoSchedule-mcts.cpp ../AutoSchedule.cpp > /dev/null ; then
+        echo "No need to copy AutoSchedule-master.cpp"
+    else
+        cp ../AutoSchedule-mcts.cpp ../AutoSchedule.cpp
+    fi
 
     # mcts
     export HL_NUM_PASSES=1
@@ -74,9 +86,8 @@ fi
 
 #APPS="bilateral_grid local_laplacian nl_means lens_blur camera_pipe stencil_chain harris hist max_filter unsharp interpolate_generator conv_layer mat_mul_generator iir_blur_generator resnet_50_blockwise bgu"
  
-#APPS="bilateral_grid local_laplacian nl_means lens_blur camera_pipe stencil_chain harris hist max_filter unsharp interpolate conv_layer iir_blur bgu" # Missing mat_mul_generator and resnet_50_blockwise
+APPS="bilateral_grid local_laplacian nl_means lens_blur camera_pipe stencil_chain harris hist max_filter unsharp interpolate conv_layer iir_blur bgu" # Missing mat_mul_generator and resnet_50_blockwise
 
-APPS="local_laplacian"
 # Uncomment when there's a change that wouldn't be picked up by the Makefiles (e.g. new weights)
 for app in ${APPS}; do make -C ${HALIDE}/apps/${app} clean; done
 
@@ -90,6 +101,7 @@ for app in ${APPS}; do
     if [ $? -ne 0 ]; then
         echo "Failed to build $app"
         echo "Failed to build $app (autoscheduler == $autoscheduler)" >> errors
+        # exit 1
     fi
 done
 

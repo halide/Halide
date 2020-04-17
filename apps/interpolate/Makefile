@@ -34,3 +34,14 @@ $(BIN)/%/out.png: $(BIN)/%/filter
 
 clean:
 	rm -rf $(BIN)
+
+autotune: # We assume here that our scripts have already built the autotuning binaries
+	bash $(AUTOSCHED_SRC)/autotune_loop.sh \
+		$(BIN)/$(HL_TARGET)/interpolate.generator \
+		interpolate \
+		"host" \
+		$(HL_WEIGHTS_DIR) \
+		$(AUTOSCHED_BIN) \
+		$(HALIDE_DISTRIB_PATH) \
+		samples/
+
