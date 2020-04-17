@@ -87,7 +87,12 @@ for app in $APPS; do
     echo "$app ($autoscheduler) (retrain=$RETRAIN)" >> autoprogress
 
     # Build app
-    make -C ${HALIDE}/apps/${app} build
+    if [ "$app" != "iir_blur" ] && [ "$app" != "harris" ] && [ "$app" != "unsharp" ] ; then
+        make -C ${HALIDE}/apps/${app} build
+    else
+        make -C ${HALIDE}/apps/${app} all
+    fi
+
     if [ $? -ne 0 ]; then
         echo "Failed to build $app"
         echo "Failed to build $app ($autoscheduler) (retrain=$RETRAIN)" >> autoerrors
