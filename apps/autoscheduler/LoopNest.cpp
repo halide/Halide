@@ -1134,14 +1134,9 @@ double LoopNest::min_global_mem_accesses(const FunctionDAG::Node *node, const Th
 void LoopNest::compute_num_global_mem_accesses_per_block(const LoadJacobian &jac, const FunctionDAG::Node *node, const Bound &store_bounds, const ThreadInfo &thread_info, int innermost_dim, double serial_loop_extents, double access_count, GlobalMemInfo &global_mem_info, const LoopNest &root, double amortization) const {
     StorageStrides strides = storage_strides(jac, innermost_dim, node, store_bounds, root, thread_info);
 
-    double bytes = node->bytes_per_point;
+    int bytes_per_access = node->bytes_per_point;
 
-    // Each word is 4 bytes so adjust the stride based
-    // on width of data being accessed
-    double word_stride = (bytes / 4);
-    int words_per_access = std::max(1.0, word_stride);
-
-    strides.multiply_by_scalar(words_per_access);
+    strides.multiply_by_scalar(bytes_per_access);
 
     std::unordered_map<int64_t, std::unordered_set<int64_t>> sectors_accessed;
     int unknown_sectors = 0;
@@ -1151,33 +1146,35 @@ void LoopNest::compute_num_global_mem_accesses_per_block(const LoadJacobian &jac
         }
 
         int thread_ids[3] = {x, y, z};
-        int64_t word = 0;
+        int64_t byte = 0;
         for (size_t i = 0; i < thread_info.loop_indices.size(); ++i) {
             if (!strides.valid(i)) {
                 ++unknown_sectors;
                 return;
             }
-            word += thread_ids[i] * strides[i];
+            byte += thread_ids[i] * strides[i];
         }
 
-        int64_t sector = word / 8;
-        sectors_accessed[sector].insert(word);
+        int64_t sector = byte / 32;
+        for (int i = 0; i < bytes_per_access; ++i) {
+            sectors_accessed[sector].insert(byte + i);
+        }
     });
 
     int num_transactions_per_request = sectors_accessed.size() + unknown_sectors;
 
-    int num_words_used_per_request = 0;
+    int num_bytes_used_per_request = 0;
     for (const auto& sector : sectors_accessed) {
-        num_words_used_per_request += sector.second.size() * words_per_access;
+        num_bytes_used_per_request += sector.second.size();
     }
 
-    num_words_used_per_request += unknown_sectors * words_per_access;
+    num_bytes_used_per_request += unknown_sectors * bytes_per_access;
     int num_requests = thread_info.num_active_warps_per_block * serial_loop_extents;
 
     global_mem_info.add_access_info(
         num_requests,
         num_transactions_per_request,
-        num_words_used_per_request,
+        num_bytes_used_per_request,
         access_count,
         amortization
     );
