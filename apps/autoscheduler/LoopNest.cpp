@@ -2358,22 +2358,22 @@ void LoopNest::compute_features(const FunctionDAG &dag,
                         // important to capture it in the
                         // featurization.
                         int64_t amortization = 1;
-                        if (feat.unrolled_loop_extent > 1) {
-                            for (size_t idx = 0; idx < stage->loop.size(); idx++) {
-                                if (!stage->loop[idx].rvar) {
-                                    bool loop_invariant = true;
-                                    for (int i = 0; i < e->producer->dimensions; i++) {
-                                        if (!(jac.first(i, idx) == 0)) {
-                                            loop_invariant = false;
-                                            break;
-                                        }
-                                    }
-                                    if (loop_invariant) {
-                                        amortization *= parent->size[idx];
-                                    }
-                                }
-                            }
-                        }
+                        //if (feat.unrolled_loop_extent > 1) {
+                            //for (size_t idx = 0; idx < stage->loop.size(); idx++) {
+                                //if (!stage->loop[idx].rvar) {
+                                    //bool loop_invariant = true;
+                                    //for (int i = 0; i < e->producer->dimensions; i++) {
+                                        //if (!(jac.first(i, idx) == 0)) {
+                                            //loop_invariant = false;
+                                            //break;
+                                        //}
+                                    //}
+                                    //if (loop_invariant) {
+                                        //amortization *= parent->size[idx];
+                                    //}
+                                //}
+                            //}
+                        //}
                         n /= amortization;
 
                         num_loads += n;
@@ -2409,7 +2409,7 @@ void LoopNest::compute_features(const FunctionDAG &dag,
                             if (jac.second != e->producer) continue;
                             double n = jac.first.count();
 
-                            double amortization = compute_licm_amortization(this, parent, feat, jac.first, e->producer->dimensions);
+                            double amortization = 1;
 
                             if (is_shared_mem && get_compute_shared_mem_load_features()) {
                                 auto shared_mem_features = compute_shared_mem_load_features(
