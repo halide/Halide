@@ -455,21 +455,21 @@ function reautoschedule() {
     done
     wait
 
-    #files=$(echo "${files}" | sed 's/autoschedule_command/compile_command/g')
-    #for file in $(echo "${files}"); do
-        #while [[ 1 ]]; do
-            #RUNNING=$(jobs -r | wc -l)
-            #if [[ RUNNING -ge num_local_cores ]]; then
-                #sleep 1
-            #else
-                #break
-            #fi
-        #done
+    files=$(echo "${files}" | sed 's/autoschedule_command/compile_command/g')
+    for file in $(echo "${files}"); do
+        while [[ 1 ]]; do
+            RUNNING=$(jobs -r | wc -l)
+            if [[ RUNNING -ge num_local_cores ]]; then
+                sleep 1
+            else
+                break
+            fi
+        done
 
-        #echo "Compile: ${file}"
-        #bash "${file}" &
-    #done
-    #wait
+        echo "Compile: ${file}"
+        bash "${file}" &
+    done
+    wait
 
     files=$(echo "${files}" | sed 's/compile_command/benchmark_command/g')
     for file in $(echo "${files}"); do
