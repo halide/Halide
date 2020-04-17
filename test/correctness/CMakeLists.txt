@@ -64,6 +64,7 @@ tests(GROUPS correctness travis
         custom_auto_scheduler.cpp
         custom_error_reporter.cpp
         custom_lowering_pass.cpp
+        dead_realization_in_specialization.cpp
         debug_to_file.cpp
         debug_to_file_multiple_outputs.cpp
         debug_to_file_reorder.cpp
