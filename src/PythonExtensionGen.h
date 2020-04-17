@@ -16,9 +16,11 @@ public:
 
 private:
     std::ostream &dest;
+    std::vector<std::string> buffer_refs;
 
     void compile(const LoweredFunc &f);
     void convert_buffer(const std::string &name, const LoweredArgument *arg);
+    void release_buffers(const std::string &prefix);
 };
 
 }  // namespace Internal
