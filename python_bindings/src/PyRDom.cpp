@@ -33,6 +33,7 @@ void define_rdom(py::module &m) {
             .def("defined", &RDom::defined)
             .def("same_as", &RDom::same_as)
             .def("dimensions", &RDom::dimensions)
+            .def("__len__", &RDom::dimensions)
             .def("where", &RDom::where, py::arg("predicate"))
             .def("__getitem__", [](RDom &r, const int i) -> RVar {
                 if (i < 0 || i >= r.dimensions())
