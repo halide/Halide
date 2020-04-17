@@ -46,6 +46,7 @@ tests(GROUPS correctness travis
         compile_to.cpp
         compile_to_lowered_stmt.cpp
         compile_to_multitarget.cpp
+        compute_inside_guard.cpp
         compute_at_reordered_update_stage.cpp
         compute_at_split_rvar.cpp
         computed_index.cpp
