@@ -16,51 +16,51 @@ struct GlobalMemInfo {
         return total_num_transactions;
     }
 
-    void add_access_info(double num_requests, double num_transactions_per_request, double num_words_used_per_request, int N, double amortization) {
-        internal_assert(num_words_used_per_request > 0);
+    void add_access_info(double num_requests, double num_transactions_per_request, double num_bytes_used_per_request, int N, double amortization) {
+        internal_assert(num_bytes_used_per_request > 0);
 
         num_requests /= amortization;
 
         double total_transactions = num_requests * num_transactions_per_request;
-        double total_words = total_transactions * 8.0;
-        double total_words_used = num_requests * num_words_used_per_request;
+        double total_bytes = total_transactions * 32.0;
+        double total_bytes_used = num_requests * num_bytes_used_per_request;
 
-        internal_assert(total_words_used <= total_words);
+        internal_assert(total_bytes_used <= total_bytes);
 
         for (int i = 0; i < N; ++i) {
-            add_access_info(num_requests, total_transactions, total_words_used, total_words);
+            add_access_info(num_requests, total_transactions, total_bytes_used, total_bytes);
         }
     }
 
     void add(const GlobalMemInfo& other) {
         total_num_requests += other.total_num_requests;
         total_num_transactions += other.total_num_transactions;
-        total_num_words_used += other.total_num_words_used;
-        total_num_words += other.total_num_words;
+        total_num_bytes_used += other.total_num_bytes_used;
+        total_num_bytes += other.total_num_bytes;
     }
 
     double efficiency() const {
-        if (total_num_words == 0) {
+        if (total_num_bytes == 0) {
             return 1;
         }
 
-        double result = total_num_words_used / total_num_words;
+        double result = total_num_bytes_used / total_num_bytes;
         internal_assert(result <= 1);
         return result;
     }
 
 private:
-    void add_access_info(double num_requests, double num_transactions, double num_words_used, double num_words) {
+    void add_access_info(double num_requests, double num_transactions, double num_bytes_used, double num_bytes) {
         total_num_requests += num_requests;
         total_num_transactions += num_transactions;
-        total_num_words_used += num_words_used;
-        total_num_words += num_words;
+        total_num_bytes_used += num_bytes_used;
+        total_num_bytes += num_bytes;
     }
 
     double total_num_requests = 0;
     double total_num_transactions = 0;
-    double total_num_words_used = 0;
-    double total_num_words = 0;
+    double total_num_bytes_used = 0;
+    double total_num_bytes = 0;
 };
 
 struct LocalMemInfo {
