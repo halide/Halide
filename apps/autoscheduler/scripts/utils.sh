@@ -423,6 +423,67 @@ function compare_with_profiler() {
     format_metrics "${dir}"
     format_features "${halide_root}" "${dir}"
 
-    python3 scripts/compare.py --formatted_metrics "${dir}/formatted_metrics.txt" --formatted_features "${dir}/formatted_features.txt"
+    python3 scripts/compare_with_metrics.py --formatted_metrics "${dir}/formatted_metrics.txt" --formatted_features "${dir}/formatted_features.txt"
 }
 
+function reautoschedule() {
+    local -r samples_dir=$1
+    local -r num=$2
+
+    files=$(find ${samples_dir} -name "autoschedule_command.txt")
+
+    if [[ $num != 0 ]]; then
+        files=$(echo "${files}" | head -n "${num}")
+    fi
+
+    get_num_local_cores num_local_cores
+
+    echo "Using num cores: ${num_local_cores}"
+
+    for file in $(echo "${files}"); do
+        while [[ 1 ]]; do
+            RUNNING=$(jobs -r | wc -l)
+            if [[ RUNNING -ge ${num_local_cores} ]]; then
+                sleep 1
+            else
+                break
+            fi
+        done
+
+        echo "Autoschedule: ${file}"
+        bash "${file}" &
+    done
+    wait
+
+    #files=$(echo "${files}" | sed 's/autoschedule_command/compile_command/g')
+    #for file in $(echo "${files}"); do
+        #while [[ 1 ]]; do
+            #RUNNING=$(jobs -r | wc -l)
+            #if [[ RUNNING -ge num_local_cores ]]; then
+                #sleep 1
+            #else
+                #break
+            #fi
+        #done
+
+        #echo "Compile: ${file}"
+        #bash "${file}" &
+    #done
+    #wait
+
+    files=$(echo "${files}" | sed 's/compile_command/benchmark_command/g')
+    for file in $(echo "${files}"); do
+        echo "Benchmark: ${file}"
+        bash "${file}"
+    done
+}
+
+function get_num_local_cores() {
+    local -n num_local_cores_ref=$1
+
+    if [ $(uname -s) = "Darwin" ]; then
+        num_local_cores_ref=$(sysctl -n hw.ncpu)
+    else
+        num_local_cores_ref=$(nproc)
+    fi
+}
