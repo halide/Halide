@@ -119,7 +119,8 @@ function retrain_cost_model() {
 
     get_absolute_autoscheduler_bin_dir ${halide_root} autosched_bin
 
-    find ${samples_dir} -name "*.sample" | \
+    cat /root/code/Halide_gpu/apps/cuda_mat_mul/autotuned_samples-2020-04-16-22-46-36/large_samples |
+    #find ${samples_dir} -name "*.sample" | \
         ${autosched_bin}/retrain_cost_model \
             --epochs=${num_epochs} \
             --rates="0.001" \
@@ -135,12 +136,12 @@ function retrain_cost_model() {
 
 function find_equal_predicted_pairs() {
     local -r limit=$1
-    sort ${2} -k2 -n | awk -F', ' -f find_equal_predicted_pairs.awk | sort -k6 -n -r | head -n ${limit}
+    sort ${2} -k2 -n | awk -F', ' -f $(dirname $0)/find_equal_predicted_pairs.awk | sort -k6 -n -r | head -n ${limit}
 }
 
 function find_similar_predicted_pairs() {
     local -r limit=$1
-    sort ${2} -k2 -n | awk -F', ' -f find_similar_predicted_pairs.awk | sort -k9 -n -r | head -n ${limit}
+    sort ${2} -k2 -n | awk -F', ' -f $(dirname $0)/find_similar_predicted_pairs.awk | sort -k9 -n -r | head -n ${limit}
 }
 
 function get_timeout_cmd() {
