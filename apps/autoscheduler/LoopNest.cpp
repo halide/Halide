@@ -3836,7 +3836,11 @@ void LoopNest::apply(LoopLevel here,
 
                         auto tail_strategy = pure_var_tail_strategy;
                         // If it's an RVar, or not the outermost split and we're in an update, we need a guard with if instead.
-                        if (parent.var.is_rvar || (stage->index != 0 && !parent.outermost)) {
+
+                        // If the factor evenly divides the parent extent, then
+                        // no tail strategy is needed
+                        bool evenly_divides = size[parent.index] >= factor && size[parent.index] % factor == 0;
+                        if (parent.var.is_rvar || (stage->index != 0 && !parent.outermost && !evenly_divides)) {
                             tail_strategy = TailStrategy::GuardWithIf;
                         }
 
@@ -3855,7 +3859,7 @@ void LoopNest::apply(LoopLevel here,
                             << "TailStrategy::" << tail_strategy << ")";
                         v = parent;
                         parent.extent = size[parent.index];
-                        v.constant_extent = (tail_strategy != TailStrategy::GuardWithIf);
+                        v.constant_extent = (tail_strategy != TailStrategy::GuardWithIf || (!parent.var.is_rvar && evenly_divides));
                         v.var = inner;
                         v.accessor.clear();
                         v.extent = factor;
