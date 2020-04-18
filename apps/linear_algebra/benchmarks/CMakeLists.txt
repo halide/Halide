@@ -34,6 +34,7 @@ target_compile_definitions(halide_benchmarks PRIVATE -DUSE_HALIDE ${MISC_DEFINIT
 target_link_libraries(halide_benchmarks PRIVATE halide_blas)
 list(APPEND BLAS_NAMES halide)
 
+# We prefer to use CMake's modules over pkg-config (which might be Linux only).
 find_package(Eigen3 QUIET NO_MODULE)
 set(Eigen3 Eigen3::Eigen)
 if (NOT TARGET ${Eigen3})
@@ -51,6 +52,10 @@ else()
   )
   target_compile_definitions(eigen_benchmarks PRIVATE -DEIGEN_DONT_PARALLELIZE ${MISC_DEFINITIONS})
   target_compile_options(eigen_benchmarks PRIVATE -Wno-error=unused-variable)
+  # Even though Eigen doesn't link anything, link_libraries are used for
+  # everything else (-I, -L, compiler flags...). (ask alexreinking for more)
+  # Even though on Linux Eigen exports EIGEN_INCLUDE_DIR which is usable with
+  # target_include_directories, other platforms apparently look differently.
   target_link_libraries(eigen_benchmarks PRIVATE "${Eigen3}")
   list(APPEND BLAS_NAMES eigen)
 endif()
