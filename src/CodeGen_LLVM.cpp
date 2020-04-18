@@ -2106,7 +2106,7 @@ Value *CodeGen_LLVM::interleave_vectors(const std::vector<Value *> &vecs) {
     for (size_t i = 1; i < vecs.size(); i++) {
         internal_assert(vecs[0]->getType() == vecs[i]->getType());
     }
-    int vec_elements = vecs[0]->getType()->getVectorNumElements();
+    int vec_elements = get_vector_num_elements(vecs[0]->getType());
 
     if (vecs.size() == 1) {
         return vecs[0];
@@ -4256,7 +4256,7 @@ Value *CodeGen_LLVM::call_intrin(llvm::Type *result_type, int intrin_lanes,
                                  const string &name, vector<Value *> arg_values) {
     internal_assert(result_type->isVectorTy()) << "call_intrin is for vector intrinsics only\n";
 
-    int arg_lanes = (int)(result_type->getVectorNumElements());
+    int arg_lanes = get_vector_num_elements(result_type);
 
     if (intrin_lanes != arg_lanes) {
         // Cut up each arg into appropriately-sized pieces, call the
@@ -4266,7 +4266,7 @@ Value *CodeGen_LLVM::call_intrin(llvm::Type *result_type, int intrin_lanes,
             vector<Value *> args;
             for (size_t i = 0; i < arg_values.size(); i++) {
                 if (arg_values[i]->getType()->isVectorTy()) {
-                    int arg_i_lanes = (int)arg_values[i]->getType()->getVectorNumElements();
+                    int arg_i_lanes = get_vector_num_elements(arg_values[i]->getType());
                     internal_assert(arg_i_lanes >= arg_lanes);
                     // Horizontally reducing intrinsics may have
                     // arguments that have more lanes than the
@@ -4311,7 +4311,7 @@ Value *CodeGen_LLVM::call_intrin(llvm::Type *result_type, int intrin_lanes,
 }
 
 Value *CodeGen_LLVM::slice_vector(Value *vec, int start, int size) {
-    int vec_lanes = vec->getType()->getVectorNumElements();
+    int vec_lanes = get_vector_num_elements(vec->getType());
 
     if (start == 0 && size == vec_lanes) {
         return vec;
@@ -4350,8 +4350,8 @@ Value *CodeGen_LLVM::concat_vectors(const vector<Value *> &v) {
             Value *v1 = vecs[i];
             Value *v2 = vecs[i + 1];
 
-            int w1 = v1->getType()->getVectorNumElements();
-            int w2 = v2->getType()->getVectorNumElements();
+            int w1 = get_vector_num_elements(v1->getType());
+            int w2 = get_vector_num_elements(v2->getType());
 
             // Possibly pad one of the vectors to match widths.
             if (w1 < w2) {
@@ -4394,7 +4394,7 @@ Value *CodeGen_LLVM::shuffle_vectors(Value *a, Value *b,
     vector<Constant *> llvm_indices(indices.size());
     for (size_t i = 0; i < llvm_indices.size(); i++) {
         if (indices[i] >= 0) {
-            internal_assert(indices[i] < (int)a->getType()->getVectorNumElements() * 2);
+            internal_assert(indices[i] < get_vector_num_elements(a->getType()) * 2);
             llvm_indices[i] = ConstantInt::get(i32_t, indices[i]);
         } else {
             // Only let -1 be undef.
