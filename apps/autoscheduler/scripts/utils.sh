@@ -423,8 +423,6 @@ function compare_with_profiler() {
 
     format_metrics "${dir}"
     format_features "${halide_root}" "${dir}"
-
-    python3 scripts/compare_with_metrics.py --formatted_metrics "${dir}/formatted_metrics.txt" --formatted_features "${dir}/formatted_features.txt"
 }
 
 function reautoschedule() {
