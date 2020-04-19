@@ -111,7 +111,7 @@ for app in $APPS; do
     if [ "$RETRAIN" == "true" ]; then
         MAX_SECONDS=10800 # 3 hours
     else
-        MAX_SECONDS=900 # 15 minutes
+        MAX_SECONDS=600 # 10 minutes
     fi
 
     first_autotune="true"
@@ -124,8 +124,7 @@ for app in $APPS; do
             first_autotune="false"
         else
             # TODO I don't think the actual scripts are doing this, so I've commented it out for now...
-            # export HL_WEIGHTS_DIR="$PWD/../../${app}/samples/updated.weights"
-            true
+            export HL_WEIGHTS_DIR="$PWD/../../${app}/samples/updated.weights"
         fi
 
         # Run the autotuning script
