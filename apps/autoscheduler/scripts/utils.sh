@@ -119,8 +119,7 @@ function retrain_cost_model() {
 
     get_absolute_autoscheduler_bin_dir ${halide_root} autosched_bin
 
-    cat /root/code/Halide_gpu/apps/cuda_mat_mul/autotuned_samples-2020-04-16-22-46-36/large_samples |
-    #find ${samples_dir} -name "*.sample" | \
+    find ${samples_dir} -name "*.sample" | \
         ${autosched_bin}/retrain_cost_model \
             --epochs=${num_epochs} \
             --rates="0.001" \
