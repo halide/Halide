@@ -922,59 +922,8 @@ public:
     }
 };
 
-// Because storage folding runs before simplification, it's useful to
-// at least substitute in constants before running it, and also simplify the RHS of Let Stmts.
-class SubstituteInConstants : public IRMutator {
-    using IRMutator::visit;
-
-    Scope<Expr> scope;
-
-    Stmt visit(const LetStmt *op) override {
-        // Visit an entire chain of lets in a single method to conserve stack space.
-        Stmt result;
-        struct Frame {
-            const LetStmt *op;
-            Expr new_value;
-            ScopedBinding<Expr> binding;
-            Frame(const LetStmt *op, Expr v, Scope<Expr> &scope)
-                : op(op),
-                  new_value(std::move(v)),
-                  binding(is_const(new_value), scope, op->name, new_value) {
-            }
-        };
-        std::vector<Frame> frames;
-
-        do {
-            result = op->body;
-            frames.emplace_back(op, simplify(mutate(op->value)), scope);
-        } while ((op = result.as<LetStmt>()));
-
-        result = mutate(result);
-
-        for (auto it = frames.rbegin(); it != frames.rend(); it++) {
-            if (it->new_value.same_as(it->op->value) && result.same_as(it->op->body)) {
-                result = it->op;
-            } else {
-                result = LetStmt::make(it->op->name, it->new_value, result);
-            }
-        }
-
-        return result;
-    }
-
-    Expr visit(const Variable *op) override {
-        if (scope.contains(op->name)) {
-            return scope.get(op->name);
-        } else {
-            return op;
-        }
-    }
-};
-
-Stmt storage_folding(Stmt s, const std::map<std::string, Function> &env) {
-    s = SubstituteInConstants().mutate(s);
-    s = StorageFolding(env).mutate(s);
-    return s;
+Stmt storage_folding(const Stmt &s, const std::map<std::string, Function> &env) {
+    return StorageFolding(env).mutate(s);
 }
 
 }  // namespace Internal

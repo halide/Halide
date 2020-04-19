@@ -1032,21 +1032,37 @@ protected:
             body = p->body;
         }
 
-        // Dig through any let statements
-        vector<pair<string, Expr>> lets;
-        while (const auto *l = body.as<LetStmt>()) {
-            if (!is_pure(l->value)) {
-                // The consumer of the Func we're injecting may be an
-                // extern stage, which shows up in the IR as a let
-                // stmt with a side-effecty RHS. We need to take care
-                // not to blow past it and risk injecting the producer
-                // *after* the consumer. In general it seems unwise to
-                // reorder the computation of a Func past something
-                // side-effecty, so we stop here.
+        // Dig through any let/if statements
+        vector<pair<string, Expr>> containers;
+        while (1) {
+            if (const LetStmt *l = body.as<LetStmt>()) {
+                const Call *call = l->value.as<Call>();
+                if (!(call && call->is_intrinsic(Call::promise_clamped)) &&
+                    !is_pure(l->value)) {
+                    // The consumer of the Func we're injecting may be an
+                    // extern stage, which shows up in the IR as a let
+                    // stmt with a side-effecty RHS. We need to take care
+                    // not to blow past it and risk injecting the producer
+                    // *after* the consumer. In general it seems unwise to
+                    // reorder the computation of a Func past something
+                    // side-effecty, so we stop here.
+                    //
+                    // An exception is that it's good to walk inside a
+                    // promise_clamped intrinsic due to a GuardWithIf
+                    // split. It's safe and produces cleaner IR.
+                    break;
+                }
+                containers.emplace_back(l->name, l->value);
+                body = l->body;
+            } else if (const IfThenElse *i = body.as<IfThenElse>()) {
+                if (!is_pure(i->condition) || i->else_case.defined()) {
+                    break;
+                }
+                containers.emplace_back(std::string{}, i->condition);
+                body = i->then_case;
+            } else {
                 break;
             }
-            lets.emplace_back(l->name, l->value);
-            body = l->body;
         }
 
         // Fused pairs (compute_with) cannot have extern definitions. Thus this condition is only true when funcs
@@ -1079,9 +1095,14 @@ protected:
             _found_store_level = true;
         }
 
-        // Reinstate the let statements
-        for (size_t i = lets.size(); i > 0; i--) {
-            body = LetStmt::make(lets[i - 1].first, lets[i - 1].second, body);
+        // Reinstate the let/if statements
+        for (size_t i = containers.size(); i > 0; i--) {
+            auto p = containers[i - 1];
+            if (p.first.empty()) {
+                body = IfThenElse::make(p.second, body);
+            } else {
+                body = LetStmt::make(p.first, p.second, body);
+            }
         }
 
         // Reinstate the placeholder prefetches
