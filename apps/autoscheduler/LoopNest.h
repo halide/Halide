@@ -567,6 +567,8 @@ struct LoopNest {
     bool has_valid_thread_extents() const;
 
     void collect_nodes_that_should_be_inlined(const NodeMap<bool>& nodes_to_freeze, NodeMap<bool>& inlined_nodes) const;
+
+    int64_t product_of_descendants(int loop_index) const;
 };
 
 }  // namespace Autoscheduler

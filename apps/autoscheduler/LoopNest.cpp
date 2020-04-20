@@ -289,6 +289,9 @@ vector<vector<int64_t>> generate_gpu_tilings(const vector<vector<int64_t>> &stag
 
             for (int64_t threads_ext = min_threads; threads_ext <= max_threads_extent; threads_ext *= factor) {
                 full_extent_considered |= threads_ext == stage_sizes[0][d];
+                if (threads_ext > stage_sizes[0][d]) {
+                    break;
+                }
                 // reject if inner exceeds hardware thread limit
                 if ((d == vectorized_indices[0] && threads_ext > max_threads_extent) || (d != vectorized_indices[0] && threads_ext > 16)) {
                     break;
@@ -312,6 +315,18 @@ vector<vector<int64_t>> generate_gpu_tilings(const vector<vector<int64_t>> &stag
 
                 if (threads_ext >= stage_sizes[0][d]) {
                     break;
+                }
+            }
+
+            if (!full_extent_considered && stage_sizes[0][d] < max_threads_extent) {
+                t.back() = stage_sizes[0][d];
+                validity valid_result = is_valid_tiling();
+                if (valid_result == serial_count_err) {
+                    continue;
+                } else if (valid_result == thread_count_err) {
+                    break;
+                } else {
+                    result.push_back(t);
                 }
             }
         }
@@ -3642,6 +3657,28 @@ vector<IntrusivePtr<const LoopNest>> LoopNest::compute_in_tiles(const FunctionDA
     return result;
 }
 
+int64_t LoopNest::product_of_descendants(int loop_index) const {
+    int64_t prod = 1;
+    const LoopNest* cur = this;
+    while (!cur->innermost) {
+        bool found = false;
+        for (const auto &c : cur->children) {
+            if (c->stage != stage) {
+                continue;
+            }
+
+            prod *= c->size[loop_index];
+            found = true;
+            cur = c.get();
+            break;
+        }
+
+        internal_assert(found);
+    }
+
+    return prod;
+}
+
 // Apply the schedule represented by this loop nest to a Halide pipeline.
 void LoopNest::apply(LoopLevel here,
                      StageMap<std::unique_ptr<StageScheduleState>> &state_map,
@@ -3800,15 +3837,9 @@ void LoopNest::apply(LoopLevel here,
 
                     parent.gpu_threads = gpu_label == thread && symbolic_loop[i].pure;
 
-                    int64_t factor = (parent.extent + size[parent.index] - 1) / size[parent.index];
-                    int64_t innermost_size = innermost_loop->size[parent.index];
+                    int64_t factor = product_of_descendants(parent.index);
 
-                    if (child && parent.innermost_pure_dim) {
-                        // Ensure the split is a multiple of the
-                        // vector size. With all these rounded
-                        // divs going on it can drift.
-                        factor = ((factor + innermost_size - 1) / innermost_size) * innermost_size;
-                    }
+                    int64_t innermost_size = innermost_loop->size[parent.index];
 
                     if (child && innermost_size > factor) {
                         factor = innermost_size;
