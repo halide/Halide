@@ -1623,8 +1623,9 @@ Value *CodeGen_Hexagon::shuffle_vectors(Value *a, Value *b,
                 native_ty, MAKE_ID_PAIR(Intrinsic::hexagon_V6_hi).get(is_128B), {a});
             a = call_intrin_cast(
                 native_ty, MAKE_ID_PAIR(Intrinsic::hexagon_V6_lo).get(is_128B), {a});
-            a_ty = a->getType();
-            b_ty = b->getType();
+            a_ty = cast<llvm::VectorType>(a->getType());
+            b_ty = cast<llvm::VectorType>(b->getType());
+            internal_assert(a_ty && b_ty);
             a_elements = get_vector_num_elements(a_ty);
         }
         if (start == 0 && result_ty == a_ty) {
