@@ -67,7 +67,7 @@ int vectorize_2d_inlined_with_update() {
     f(x, y) = inlined(x) + y;
 
     f.compute_root()
-        .tile(x, y, x, y, xi, yi, 8, 4, TailStrategy::GuardWitIf)
+        .tile(x, y, x, y, xi, yi, 8, 4, TailStrategy::GuardWithIf)
         .vectorize(xi)
         .vectorize(yi);
 
@@ -106,15 +106,15 @@ int vectorize_2d_with_inner_for() {
 
     Buffer<int> result = f.realize(width, height, 3);
 
-    for (int ic = 0; ic < 3; ic++) {
-        for (int iy = 0; iy < height; iy++) {
-            for (int ix = 0; ix < width; ix++) {
-                printf("%2d ", result(ix, iy, ic));
-            }
-            printf("\n");
-        }
-        printf("\n");
-    }
+    // for (int ic = 0; ic < 3; ic++) {
+    //     for (int iy = 0; iy < height; iy++) {
+    //         for (int ix = 0; ix < width; ix++) {
+    //             printf("%2d ", result(ix, iy, ic));
+    //         }
+    //         printf("\n");
+    //     }
+    //     printf("\n");
+    // }
 
     auto cmp_func = [](int x, int y, int c) {
         return x + y + c;
@@ -126,7 +126,7 @@ int vectorize_2d_with_inner_for() {
     return 0;
 }
 
-int vectorize_2d_with_compute_at() {
+int vectorize_2d_with_compute_at_vectorized() {
     const int width = 16;
     const int height = 16;
 
@@ -139,7 +139,7 @@ int vectorize_2d_with_compute_at() {
     Var xi("xi"), xii("xii");
     g.split(x, x, xi, 8).vectorize(xi);
     f.compute_at(g, xi).vectorize(x);
-    g.bound(x, 0, width).bound(y, 0, height);
+
     Buffer<int> result = g.realize(width, height);
 
     // for (int iy = 0; iy < height; iy++) {
@@ -208,8 +208,8 @@ int main(int argc, char **argv) {
         return -1;
     }
 
-    if(vectorize_2d_with_compute_at()) {
-        printf("vectorize_2d_with_compute_at failed\n");
+    if(vectorize_2d_with_compute_at_vectorized()) {
+        printf("vectorize_2d_with_compute_at_vectorized failed\n");
         return -1;
     }
 
