@@ -426,6 +426,9 @@ Module lower(const vector<Function> &output_funcs,
     s = simplify(s);
     s = loop_invariant_code_motion(s);
 
+    debug(2) << "Lowering after LICM:\n"
+             << s << "\n\n";
+
     debug(1) << "Flattening nested ramps...\n";
     s = flatten_nested_ramps(s);
     s = simplify(s);

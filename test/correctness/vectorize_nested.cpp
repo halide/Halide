@@ -67,11 +67,18 @@ int vectorize_2d_inlined_with_update() {
     f(x, y) = inlined(x) + y;
 
     f.compute_root()
-        .tile(x, y, x, y, xi, yi, 8, 4, TailStrategy::RoundUp)
+        .tile(x, y, x, y, xi, yi, 8, 4, TailStrategy::GuardWitIf)
         .vectorize(xi)
         .vectorize(yi);
 
     Buffer<int> result = f.realize(width, height);
+
+    // for (int iy = 0; iy < height; iy++) {
+    //     for (int ix = 0; ix < width; ix++) {
+    //         printf("%2d/%2d ", result(ix, iy), ix + iy + 45);
+    //     }
+    //     printf("\n");
+    // }
 
     auto cmp_func = [](int x, int y) {
         return x + y + 45;
@@ -123,17 +130,30 @@ int vectorize_2d_with_compute_at() {
     const int width = 16;
     const int height = 16;
 
-    Func f, g;
-    Var x, y;
+    Func f("f"), g("g");
+    Var x("x"), y("y");
     f(x, y) = x + y;
     g(x, y) = f(x, y) + f(x + 1, y);
 
     // Nested vectorization should cause a warning.
-    Var xi;
+    Var xi("xi"), xii("xii");
     g.split(x, x, xi, 8).vectorize(xi);
     f.compute_at(g, xi).vectorize(x);
-
+    g.bound(x, 0, width).bound(y, 0, height);
     Buffer<int> result = g.realize(width, height);
+
+    // for (int iy = 0; iy < height; iy++) {
+    //     for (int ix = 0; ix < width; ix++) {
+    //         printf("%2d/%2d ", result(ix, iy), 2 * ix + 1 + 2 * iy);
+    //     }
+    //     printf("\n");
+    // }
+    auto cmp_func = [](int x, int y) {
+        return 2 * x + 1 + 2 * y;
+    };
+    if (check_image(result, cmp_func)) {
+        return -1;
+    }
 
     return 0;
 }

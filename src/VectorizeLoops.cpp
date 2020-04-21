@@ -249,6 +249,17 @@ bool uses_gpu_vars(const Expr &s) {
     return uses.uses_gpu;
 }
 
+class SerializeLoops : public IRMutator {
+    Stmt visit(const For *op) override {
+        if (op->for_type == ForType::Vectorized) {
+            return For::make(op->name, mutate(op->min), mutate(op->extent),
+                                ForType::Serial, op->device_api, mutate(op->body));
+        }
+
+        return IRMutator::visit(op);
+    }
+};
+
 // Wrap a vectorized predicate around a Load/Store node.
 class PredicateLoadStore : public IRMutator {
     string var;
@@ -377,6 +388,10 @@ class VectorSubs : public IRMutator {
 
     // What we're replacing it with. Usually a ramp.
     std::map<string, Expr> replacements;
+    std::map<string, Expr> replacements_from_zero;
+
+    std::map<string, int> alloc_vars;
+
     Expr ramp_for_allocate;
 
     const Target &target;
@@ -421,11 +436,23 @@ class VectorSubs : public IRMutator {
 
     Expr visit(const Variable *op) override {
         string widened_name = op->name + widening_suffix;
+        // debug(0) << "var - " << op->name << " " <<  widened_name << "\n";
         if (replacements.count(op->name) > 0) {
+            // debug(0) << "Replacement! " << replacements[op->name] << "\n";
             return replacements[op->name];
+        } else if (alloc_vars.count(op->name)) {
+            Expr e = 0;
+            int stride = 1;
+            for (int ix = 0; ix < alloc_vars[op->name]; ix++) {
+                e = e + stride * replacements_from_zero[vectorized_vars[ix].name];
+                stride *= vectorized_vars[ix].lanes;
+            }
+            // debug(0) << "Replacement alloc! " << op->name << " " << e << "\n";
+            return e;
         } else if (scope.contains(op->name)) {
             // If the variable appears in scope then we previously widened
             // it and we use the new widened name for the variable.
+            // debug(0) << "Widened!\n";
             return Variable::make(scope.get(op->name).type(), widened_name);
         } else {
             return op;
@@ -487,6 +514,13 @@ class VectorSubs : public IRMutator {
     }
     Expr visit(const Or *op) override {
         return mutate_binary_operator(op);
+    }
+
+    Expr visit(const Ramp* op) override {
+        Expr base = mutate(op->base);
+        Expr stride = mutate(op->stride);
+        // debug(0) << "Ramp - " << base << " " << stride << " " << op->lanes << "\n";
+        return Ramp::make(base, stride, op->lanes);
     }
 
     Expr visit(const Select *op) override {
@@ -884,15 +918,35 @@ class VectorSubs : public IRMutator {
             body = IfThenElse::make(likely(var < op->min + op->extent), body);
         }
 
-        body = mutate(body);
+        // debug(0) << "for loop - " << op->name << " " << for_type << "\n";
+        // debug(0) << body << "\n";
+        if (op->for_type == ForType::Vectorized) {
+            const IntImm *extent_int = extent.as<IntImm>();
+            if (!extent_int || extent_int->value <= 1) {
+                user_error << "Loop over " << op->name
+                           << " has extent " << extent
+                           << ". Can only vectorize loops over a "
+                           << "constant extent > 1\n";
+            }
 
-        if (min.same_as(op->min) &&
-            extent.same_as(op->extent) &&
-            body.same_as(op->body) &&
-            for_type == op->for_type) {
-            return op;
+            vectorized_vars.push_back({op->name, min, (int)extent_int->value});
+            update_replacements();
+            body = mutate(body);
+            vectorized_vars.pop_back();
+            update_replacements();
+            // debug(0) << "after mutation - \n" << body << "\n";
+            return body;
         } else {
-            return For::make(op->name, min, extent, for_type, op->device_api, body);
+            body = mutate(body);
+
+            if (min.same_as(op->min) &&
+                extent.same_as(op->extent) &&
+                body.same_as(op->body) &&
+                for_type == op->for_type) {
+                return op;
+            } else {
+                return For::make(op->name, min, extent, for_type, op->device_api, body);
+            }
         }
     }
 
@@ -932,9 +986,16 @@ class VectorSubs : public IRMutator {
         string v = unique_name('v');
         body = RewriteAccessToVectorAlloc(v, op->name, lanes).mutate(body);
 
-        scope.push(v, ramp_for_allocate);
+        // debug(0) << "Allocate before - " << ramp_for_allocate << "\n";
+        // debug(0) << body << "\n";
+        // scope.push(v, ramp_for_allocate);
+        alloc_vars[v] = vectorized_vars.size(   );
         body = mutate(body);
-        scope.pop(v);
+        alloc_vars.erase(v);
+        // scope.pop(v);
+
+        // debug(0) << "Allocate end - \n";
+        // debug(0) << body << "\n";
 
         // Replace the widened 'v' with the actual ramp
         // foo[x*lanes + widened_v] -> foo[x*lanes + ramp(...)]
@@ -950,6 +1011,9 @@ class VectorSubs : public IRMutator {
         // Wrap a serial loop around it. Maybe LLVM will have
         // better luck vectorizing it.
 
+        // debug(0) << "scalarize - \n" << s << "\n";
+
+        s = SerializeLoops().mutate(s);
         // We'll need the original scalar versions of any containing lets.
         for (size_t i = containing_lets.size(); i > 0; i--) {
             const auto &l = containing_lets[i - 1];
@@ -1000,24 +1064,35 @@ class VectorSubs : public IRMutator {
         return result;
     }
 
-public:
-    VectorSubs(const std::vector<VectorizedVar> &vv, bool in_hexagon, const Target &t)
-        : vectorized_vars(vv), target(t), in_hexagon(in_hexagon) {
+    void update_replacements() {
+        replacements.clear();
+        replacements_from_zero.clear();
+        ramp_for_allocate = 0;
+
         for (const auto &var : vectorized_vars) {
             replacements[var.name] = var.min;
+            replacements_from_zero[var.name] = 0;
         }
+
+        // for (const auto &r : replacements) {
+        //     debug(0) << "Replacements - init " << r.first << " " << r.second << "\n";
+        // }
 
         Expr strided_ones = 1;
         Expr stride = 1;
-        ramp_for_allocate = 0;
         for (int ix = vectorized_vars.size() - 1; ix >= 0; ix--) {
             for (int ik = 0; ik < (int)vectorized_vars.size(); ik++) {
                 if (ix == ik) {
                     replacements[vectorized_vars[ik].name] = Ramp::make(replacements[vectorized_vars[ik].name],
                                                                         strided_ones,
                                                                         vectorized_vars[ix].lanes);
+                    replacements_from_zero[vectorized_vars[ik].name] = Ramp::make(replacements_from_zero[vectorized_vars[ik].name],
+                                                                        strided_ones,
+                                                                        vectorized_vars[ix].lanes);
                 } else {
                     replacements[vectorized_vars[ik].name] = Broadcast::make(replacements[vectorized_vars[ik].name],
+                                                                                vectorized_vars[ix].lanes);
+                    replacements_from_zero[vectorized_vars[ik].name] = Broadcast::make(replacements_from_zero[vectorized_vars[ik].name],
                                                                                 vectorized_vars[ix].lanes);
                 }
             }
@@ -1029,8 +1104,18 @@ public:
             // for (const auto &r : replacements) {
             //     debug(0) << "Replacements " << ix << " " << r.first << " " << r.second << "\n";
             // }
-        }
+            // for (const auto &r : replacements_from_zero) {
+            //     debug(0) << "Replacements " << ix << " " << r.first << " " << r.second << "\n";
+            // }
 
+            // debug(0) << "Total ramp - " << ramp_for_allocate << "\n";
+        }
+    }
+public:
+    VectorSubs(const std::vector<VectorizedVar> &vv, bool in_hexagon, const Target &t)
+        : vectorized_vars(vv), target(t), in_hexagon(in_hexagon) {
+
+        update_replacements();
         widening_suffix = ".x" + std::to_string(replacements.begin()->second.type().lanes());
     }
 };
@@ -1062,16 +1147,16 @@ class VectorizeLoops : public IRMutator {
 
             vectorized_vars.push_back({for_loop->name, for_loop->min, (int)extent->value});
             // debug(0) << "Vectorized var - " << for_loop->name << "\n";
-            Stmt body = mutate(for_loop->body);
+            // Stmt body = mutate(for_loop->body);
 
             // Not exactly correct, because doesn't handle a "tree" of loops.
-            if (vectorized_vars[0].name == for_loop->name) {
+            // if (vectorized_vars[0].name == for_loop->name) {
                 // Replace the vars with a ramp within the body
-                stmt = VectorSubs(vectorized_vars, in_hexagon, target).mutate(body);
-                vectorized_vars.clear();
-            } else {
-                stmt = body;
-            }
+            stmt = VectorSubs(vectorized_vars, in_hexagon, target).mutate(for_loop->body);
+            vectorized_vars.clear();
+            // } else {
+            //     stmt = body;
+            // }
         } else {
             stmt = IRMutator::visit(for_loop);
         }
