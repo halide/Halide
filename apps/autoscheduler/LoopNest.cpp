@@ -1448,6 +1448,15 @@ std::pair<const LoopNest *, const LoopNest *> LoopNest::find_innermost_and_paren
     return {child, parent};
 }
 
+int64_t LoopNest::points_accessed_per_thread(const GPULoopInfo &gpu_loop_info, const FunctionDAG::Node*producer) const {
+    const auto& bounds = gpu_loop_info.current_thread_loop->get_bounds(producer);
+    int64_t num_points = 1;
+    for (int i = 0; i < producer->dimensions; i++) {
+        num_points *= bounds->region_required(i).extent();
+    }
+    return num_points;
+}
+
 int64_t LoopNest::compute_licm_amortization(const LoopNest *innermost, const LoopNest *parent, const ScheduleFeatures &feat, const LoadJacobian &jac, int producer_dims) const {
     // Is this load loop-invariant over an
     // unrolled block? If so, we amortize the
@@ -2439,6 +2448,7 @@ void LoopNest::compute_features(const FunctionDAG &dag,
                                 min_num_shared_mem_loads_per_block += n * shared_mem_features.second / amortization;
                             } else if (is_global_mem && get_compute_global_mem_load_features()) {
 
+                                int64_t points = points_accessed_per_thread(gpu_loop_info, e->producer);
                                 compute_global_mem_load_features(
                                     jac.first,
                                     producer_innermost_dim,
@@ -2447,10 +2457,10 @@ void LoopNest::compute_features(const FunctionDAG &dag,
                                     producer_has_been_scheduled,
                                     *gpu_loop_info.thread_info,
                                     global_mem_loads,
-                                    gpu_loop_info.total_serial_extents(),
-                                    n,
+                                    points * gpu_loop_info.total_outer_serial_extents,
+                                    1,
                                     root,
-                                    amortization
+                                    1
                                 );
                             }
                         }

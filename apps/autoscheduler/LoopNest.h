@@ -366,6 +366,7 @@ struct LoopNest {
 
     std::pair<const LoopNest*, const LoopNest*> find_innermost_and_parent() const;
 
+    int64_t points_accessed_per_thread(const GPULoopInfo &gpu_loop_info, const FunctionDAG::Node *producer) const;
     int64_t compute_licm_amortization(const LoopNest* innermost, const LoopNest* parent, const ScheduleFeatures& feat, const LoadJacobian& jac, int producer_dims) const;
 
     void memoize_points_computed_minimum(StageMap<ScheduleFeatures>& memoized_features, const StageMap<ScheduleFeatures> *features) const;
