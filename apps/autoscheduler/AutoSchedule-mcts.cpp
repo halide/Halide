@@ -371,8 +371,8 @@ struct State {
         // batched.
         if(enq) {
             cost_model->enqueue(dag, features, &cost);
+            cost_calculations++;
         }
-        cost_calculations++;
         return true;
     }
 
@@ -1821,18 +1821,21 @@ void generate_rl_schedule(const std::vector<Function> &outputs,
     aslog(0) << "Cost evaluated this many times: " << State::cost_calculations << '\n';
 
     // Dump the schedule found
-    aslog(0) << "** Optimal schedule:\n";
+    aslog(0) << "** optimal schedule:\n";
 
     // Just to get the debugging prints to fire
-    optimal->calculate_cost(dag, params, cost_model.get(), aslog::aslog_level() > 0);
+    optimal->calculate_cost(dag, params, cost_model.get(), aslog::aslog_level() > 0,true);
+    aslog(0) << "** Optimal schedule:1\n";
 
     // Apply the schedules to the pipeline
     optimal->apply_schedule(dag, params);
+    aslog(0) << "** optimal schedule:2\n";
 
     // Print out the schedule
     if (aslog::aslog_level() > 0) {
         optimal->dump();
     }
+    aslog(0) << "** Optimal schedule:3\n";
 
     string schedule_file = get_env_variable("HL_SCHEDULE_FILE");
     if (!schedule_file.empty()) {
