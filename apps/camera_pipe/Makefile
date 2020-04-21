@@ -53,3 +53,14 @@ $(BIN)/%/viz_auto.mp4: $(BIN)/%/process_viz ../support/viz_auto.sh ../../bin/Hal
 
 viz_auto: $(BIN)/$(HL_TARGET)/viz_auto.mp4
 	$(HL_VIDEOPLAYER) $^
+
+autotune: # We assume here that our scripts have already built the autotuning binaries
+	bash $(AUTOSCHED_SRC)/autotune_loop.sh \
+		$(BIN)/$(HL_TARGET)/camera_pipe.generator \
+		camera_pipe \
+		"host" \
+		$(HL_WEIGHTS_DIR) \
+		$(AUTOSCHED_BIN) \
+		$(HALIDE_DISTRIB_PATH) \
+		samples/
+

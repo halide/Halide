@@ -54,5 +54,15 @@ $(BIN)/%/viz_auto.mp4: $(BIN)/%/filter_viz ../support/viz_auto.sh ../../bin/Hali
 	@mkdir -p $(@D)
 	HL_AVCONV=$(HL_AVCONV) bash ../support/viz_auto.sh "$(BIN)/$*/filter_viz $(IMAGES)/gray_small.png $(BIN)/$*/out_small.png 0.2 0" ../../bin/HalideTraceViz $@
 
+autotune: # We assume here that our scripts have already built the autotuning binaries
+	bash $(AUTOSCHED_SRC)/autotune_loop.sh \
+		$(BIN)/$(HL_TARGET)/bilateral_grid.generator \
+		bilateral_grid \
+		"host" \
+		$(HL_WEIGHTS_DIR) \
+		$(AUTOSCHED_BIN) \
+		$(HALIDE_DISTRIB_PATH) \
+		samples/
+
 viz_auto: $(BIN)/$(HL_TARGET)/viz_auto.mp4
 	$(HL_VIDEOPLAYER) $^

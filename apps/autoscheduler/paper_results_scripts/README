@@ -1,0 +1,15 @@
+To generate results for master, greedy, beam, and mcts:
+    $ ./generate_all_apps_results.sh
+
+You can also edit line 1 of ./generate_all_apps_results.sh if you only want to run a subset of the tests.
+
+To get the autotuning results (without retraining):
+    $ RETRAIN=false ./generate_autotune_results.sh beam
+
+To get the autotuning results with retraining:
+    $ RETRAIN=true ./generate_autotune_results.sh beam
+
+The commands above will run autotuning using the "beam" autotuner, which is what the original code in the "standalone_autoscheduler" branch appeared to do. However, if you want to use another autoscheduler while doing autotuning, you can, by replacing "beam" in the command above with "greedy", or "mcts". We have not yet added the ability to autotune with "master".
+
+Afterwards, you can just run through the Jupyter notebook in "plots/" to get the charts. You can select in the notebook whether you want to plot the autotuning results as well, in the very first cell of the notebook.
+
