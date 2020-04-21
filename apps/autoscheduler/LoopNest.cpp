@@ -1151,8 +1151,6 @@ void LoopNest::compute_num_global_mem_accesses_per_block(const LoadJacobian &jac
 
     int bytes_per_access = node->bytes_per_point;
 
-    strides.multiply_by_scalar(bytes_per_access);
-
     std::unordered_map<int64_t, std::unordered_set<int64_t>> sectors_accessed;
     int unknown_sectors = 0;
     thread_info.for_each_thread_id_in_first_warp([&](int thread_id, int x, int y, int z, int active, bool last_thread) {
@@ -1167,7 +1165,7 @@ void LoopNest::compute_num_global_mem_accesses_per_block(const LoadJacobian &jac
                 ++unknown_sectors;
                 return;
             }
-            byte += thread_ids[i] * strides[i];
+            byte += bytes_per_access * (int)(thread_ids[i] * strides[i]);
         }
 
         int64_t sector = byte / 32;
