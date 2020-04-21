@@ -41,7 +41,7 @@ class Sample:
     self.comparisons["global load efficiency"] = self.global_load_efficiency
     self.comparisons["global store efficiency"] = self.global_store_efficiency
 
-    self.compare_metrics_and_features()
+    self.success = self.compare_metrics_and_features()
 
   def parse_formatted(self, filename):
     result = {}
@@ -87,7 +87,11 @@ class Sample:
     for stage in self.features:
       self.results[stage] = {}
       for label in self.comparisons:
+        if not stage in self.metrics:
+          return False
+
         self.results[stage][label] = self.comparisons[label](self.metrics[stage], self.features[stage])
+    return True
 
   def max_ratio(self):
     ratios = []
@@ -139,7 +143,11 @@ def compare_metrics_and_features(outliers_filename, N):
       print("Features file not found: {}".format(features_path))
       continue
 
-    samples.append(Sample(sample_path, metrics_path, features_path))
+    sample = Sample(sample_path, metrics_path, features_path)
+    if sample.success:
+      samples.append(sample)
+    else:
+      print("Metrics failed: {}".format(sample_path))
 
   samples.sort(key=lambda s: s.max_ratio())
   for s in samples:
