@@ -1,5 +1,7 @@
 #include "FindCalls.h"
 
+#include "ExternFuncArgument.h"
+#include "Function.h"
 #include "IRVisitor.h"
 #include <utility>
 

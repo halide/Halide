@@ -1,4 +1,5 @@
 #include "Buffer.h"
+#include "IR.h"
 #include "IREquality.h"
 #include "IROperator.h"
 #include "Var.h"

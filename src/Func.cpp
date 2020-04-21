@@ -21,7 +21,6 @@
 #include "IROperator.h"
 #include "IRPrinter.h"
 #include "ImageParam.h"
-#include "LLVM_Headers.h"
 #include "LLVM_Output.h"
 #include "Lower.h"
 #include "Param.h"
@@ -2977,6 +2976,10 @@ vector<OutputImageParam> Func::output_buffers() const {
         bufs[i] = OutputImageParam(func.output_buffers()[i], Argument::OutputBuffer, *this);
     }
     return bufs;
+}
+
+Func::operator ExternFuncArgument() const {
+    return ExternFuncArgument(func);
 }
 
 Pipeline Func::pipeline() {

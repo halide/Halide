@@ -6,13 +6,13 @@
  * Defines the method that does automatic scheduling of Funcs within a pipeline.
  */
 
-#include "Function.h"
 #include "Pipeline.h"
 #include "Target.h"
 
 namespace Halide {
-
 namespace Internal {
+
+class Function;
 
 /** Generate schedules for Funcs within a pipeline. The Funcs should not already
  * have specializations or schedules as the current auto-scheduler does not take

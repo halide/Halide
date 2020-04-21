@@ -100,20 +100,29 @@ void PythonExtensionGen::convert_buffer(const string &name, const LoweredArgumen
     internal_assert(arg->dimensions);
     dest << "    halide_buffer_t buffer_" << name << ";\n";
     dest << "    halide_dimension_t dimensions_" << name << "[" << (int)arg->dimensions << "];\n";
+    dest << "    Py_buffer view_" << name << ";\n";
     dest << "    if (_convert_py_buffer_to_halide(";
     dest << /*pyobj*/ "py_" << name << ", ";
     dest << /*dimensions*/ (int)arg->dimensions << ", ";
     dest << /*flags*/ (arg->is_output() ? "PyBUF_WRITABLE" : "0") << ", ";
     dest << /*dim*/ "dimensions_" << name << ", ";
     dest << /*out*/ "&buffer_" << name << ", ";
+    dest << /*buf*/ "view_" << name << ", ";
     dest << /*name*/ "\"" << name << "\"";
     dest << ") < 0) {\n";
+    release_buffers("        ");
     dest << "        return NULL;\n";
     dest << "    }\n";
 }
 
 PythonExtensionGen::PythonExtensionGen(std::ostream &dest)
     : dest(dest) {
+}
+
+void PythonExtensionGen::release_buffers(const string &prefix = "    ") {
+    for (size_t i = 0; i < buffer_refs.size(); i++) {
+        dest << prefix << "PyBuffer_Release(&" << buffer_refs[i] << ");\n";
+    }
 }
 
 void PythonExtensionGen::compile(const Module &module) {
@@ -152,8 +161,7 @@ __attribute__((unused))
 int _convert_py_buffer_to_halide(
         PyObject* pyobj, int dimensions, int flags,
         halide_dimension_t* dim,  // array of size `dimensions`
-        halide_buffer_t* out, const char* name) {
-    Py_buffer buf;
+        halide_buffer_t* out, Py_buffer &buf, const char* name) {
     int ret = PyObject_GetBuffer(
       pyobj, &buf, PyBUF_FORMAT | PyBUF_STRIDED_RO | PyBUF_ANY_CONTIGUOUS | flags);
     if (ret < 0) {
@@ -162,6 +170,7 @@ int _convert_py_buffer_to_halide(
     if (dimensions && buf.ndim != dimensions) {
       PyErr_Format(PyExc_ValueError, "Invalid argument %s: Expected %d dimensions, got %d",
                    name, dimensions, buf.ndim);
+      PyBuffer_Release(&buf);
       return -1;
     }
     /* We'll get a buffer that's either:
@@ -183,6 +192,7 @@ int _convert_py_buffer_to_halide(
       /* Python checks all dimensions and strides, so this typically indicates
        * a bug in the array's buffer protocol. */
       PyErr_Format(PyExc_ValueError, "Invalid buffer: neither C nor Fortran contiguous");
+      PyBuffer_Release(&buf);
       return -1;
     }
     for (i = 0; i < buf.ndim; ++i, j += j_step) {
@@ -194,12 +204,14 @@ int _convert_py_buffer_to_halide(
             // Halide doesn't support arrays of pointers. But we should never see this
             // anyway, since we specified PyBUF_STRIDED.
             PyErr_Format(PyExc_ValueError, "Invalid buffer: suboffsets not supported");
+            PyBuffer_Release(&buf);
             return -1;
         }
     }
     if (dim[buf.ndim - 1].extent * dim[buf.ndim - 1].stride * buf.itemsize != buf.len) {
         PyErr_Format(PyExc_ValueError, "Invalid buffer: length %ld, but computed length %ld",
                      buf.len, buf.shape[0] * buf.strides[0]);
+        PyBuffer_Release(&buf);
         return -1;
     }
     *out = halide_buffer_t();
@@ -229,6 +241,7 @@ int _convert_py_buffer_to_halide(
         } else {
             // We don't handle 's' and 'p' (char[]) and 'P' (void*)
             PyErr_Format(PyExc_ValueError, "Invalid data type for %s: %s", name, buf.format);
+            PyBuffer_Release(&buf);
             return -1;
         }
     }
@@ -325,6 +338,7 @@ void PythonExtensionGen::compile(const LoweredFunc &f) {
     for (size_t i = 0; i < args.size(); i++) {
         if (args[i].is_buffer()) {
             convert_buffer(arg_names[i], &args[i]);
+            buffer_refs.push_back("view_" + arg_names[i]);
         } else {
             // Python already converted this.
         }
@@ -340,7 +354,8 @@ void PythonExtensionGen::compile(const LoweredFunc &f) {
             dest << "py_" << arg_names[i];
         }
     }
-    dest << ");";
+    dest << ");\n";
+    release_buffers();
     dest << R"INLINE_CODE(
     if (result != 0) {
         /* In the optimal case, we'd be generating an exception declared

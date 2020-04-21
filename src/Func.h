@@ -7,9 +7,7 @@
  */
 
 #include "Argument.h"
-#include "Function.h"
-#include "IR.h"
-#include "IROperator.h"
+#include "Expr.h"
 #include "JITModule.h"
 #include "Module.h"
 #include "Param.h"
@@ -62,6 +60,7 @@ struct VarOrRVar {
 class ImageParam;
 
 namespace Internal {
+class Function;
 struct Split;
 struct StorageDim;
 }  // namespace Internal
@@ -2357,9 +2356,7 @@ public:
     // @}
 
     /** Use a Func as an argument to an external stage. */
-    operator ExternFuncArgument() const {
-        return ExternFuncArgument(func);
-    }
+    operator ExternFuncArgument() const;
 
     /** Infer the arguments to the Func, sorted into a canonical order:
      * all buffers (sorted alphabetically by name), followed by all non-buffers

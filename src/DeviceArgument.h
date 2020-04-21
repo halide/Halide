@@ -4,9 +4,10 @@
 /** \file
  * Defines helpers for passing arguments to separate devices, such as GPUs.
  */
+#include <string>
 
 #include "Closure.h"
-#include "IR.h"
+#include "Expr.h"
 #include "ModulusRemainder.h"
 
 namespace Halide {

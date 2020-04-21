@@ -5,7 +5,7 @@
  * Defines the lowering pass that unrolls loops marked as such
  */
 
-#include "IR.h"
+#include "Expr.h"
 
 namespace Halide {
 namespace Internal {

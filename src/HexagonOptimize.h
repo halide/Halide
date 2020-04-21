@@ -5,9 +5,9 @@
  * Tools for optimizing IR for Hexagon.
  */
 
-#include "IR.h"
-#include "ModulusRemainder.h"
-#include "Scope.h"
+#include "Expr.h"
+#include "Target.h"
+
 namespace Halide {
 namespace Internal {
 

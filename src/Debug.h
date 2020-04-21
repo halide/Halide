@@ -9,8 +9,6 @@
 #include <stdlib.h>
 #include <string>
 
-#include "Introspection.h"
-
 namespace Halide {
 
 struct Expr;

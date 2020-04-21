@@ -7,13 +7,18 @@
  */
 
 #include <map>
-
-#include "IR.h"
-#include "Schedule.h"
-#include "Target.h"
+#include <string>
+#include <vector>
 
 namespace Halide {
+
+struct Target;
+
 namespace Internal {
+
+class Function;
+struct PrefetchDirective;
+struct Stmt;
 
 /** Inject placeholder prefetches to 's'. This placholder prefetch
   * does not have explicit region to be prefetched yet. It will be computed

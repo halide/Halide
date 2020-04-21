@@ -492,6 +492,7 @@ SOURCE_FILES = \
   EliminateBoolVectors.cpp \
   EmulateFloat16Math.cpp \
   Error.cpp \
+  Expr.cpp \
   FastIntegerDivide.cpp \
   FindCalls.cpp \
   FlattenNestedRamps.cpp \
@@ -547,6 +548,7 @@ SOURCE_FILES = \
   Qualify.cpp \
   Random.cpp \
   RDom.cpp \
+  Realization.cpp \
   RealizationOrder.cpp \
   Reduction.cpp \
   RegionCosts.cpp \
@@ -656,6 +658,7 @@ HEADER_FILES = \
   Deinterleave.h \
   Derivative.h \
   DerivativeUtils.h \
+  DeviceAPI.h \
   DeviceArgument.h \
   DeviceInterface.h \
   Dimension.h \
@@ -667,6 +670,7 @@ HEADER_FILES = \
   Expr.h \
   ExprUsesVar.h \
   Extern.h \
+  ExternFuncArgument.h \
   FastIntegerDivide.h \
   FindCalls.h \
   FlattenNestedRamps.h \

@@ -1,5 +1,7 @@
 #include "BoundsInference.h"
 #include "Bounds.h"
+#include "ExternFuncArgument.h"
+#include "Function.h"
 #include "IREquality.h"
 #include "IRMutator.h"
 #include "IROperator.h"
@@ -1258,7 +1260,12 @@ Stmt bounds_inference(Stmt s,
         fused_pairs_in_groups.push_back(pairs);
     }
 
-    // Add an outermost bounds inference marker
+    // Add a note in the IR for where assertions on input images
+    // should go. Those are handled by a later lowering pass.
+    Expr marker = Call::make(Int(32), Call::add_image_checks_marker, {}, Call::Intrinsic);
+    s = Block::make(Evaluate::make(marker), s);
+
+    // Add a synthetic outermost loop to act as 'root'.
     s = For::make("<outermost>", 0, 1, ForType::Serial, DeviceAPI::None, s);
 
     s = BoundsInference(funcs, fused_func_groups, fused_pairs_in_groups,

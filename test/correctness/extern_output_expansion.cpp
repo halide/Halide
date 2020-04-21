@@ -24,10 +24,10 @@ extern "C" DLLEXPORT int extern_stage(halide_buffer_t *in, halide_buffer_t *out)
         }
 
     } else {
-        assert(out->dim[0].extent % 17 == 0);
         printf("in: %d %d, out: %d %d\n",
                in->dim[0].min, in->dim[0].extent,
                out->dim[0].min, out->dim[0].extent);
+        assert(out->dim[0].extent % 17 == 0);
         int32_t *in_origin = (int32_t *)in->host - in->dim[0].min;
         int32_t *out_origin = (int32_t *)out->host - out->dim[0].min;
         for (int i = out->dim[0].min; i < out->dim[0].min + out->dim[0].extent; i++) {

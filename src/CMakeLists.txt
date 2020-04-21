@@ -331,6 +331,7 @@ set(HEADER_FILES
   Deinterleave.h
   Derivative.h
   DerivativeUtils.h
+  DeviceAPI.h
   DeviceArgument.h
   DeviceInterface.h
   Dimension.h
@@ -342,6 +343,7 @@ set(HEADER_FILES
   Expr.h
   ExprUsesVar.h
   Extern.h
+  ExternFuncArgument.h
   FastIntegerDivide.h
   FindCalls.h
   Float16.h
@@ -517,6 +519,7 @@ add_library(Halide ${HALIDE_LIBRARY_TYPE}
   EliminateBoolVectors.cpp
   EmulateFloat16Math.cpp
   Error.cpp
+  Expr.cpp
   FastIntegerDivide.cpp
   FindCalls.cpp
   Float16.cpp
@@ -571,6 +574,7 @@ add_library(Halide ${HALIDE_LIBRARY_TYPE}
   Qualify.cpp
   Random.cpp
   RDom.cpp
+  Realization.cpp
   RealizationOrder.cpp
   Reduction.cpp
   RegionCosts.cpp

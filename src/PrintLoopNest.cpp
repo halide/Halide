@@ -1,5 +1,6 @@
 #include "PrintLoopNest.h"
 #include "AllocationBoundsInference.h"
+#include "Bounds.h"
 #include "BoundsInference.h"
 #include "FindCalls.h"
 #include "Func.h"

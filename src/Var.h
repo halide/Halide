@@ -4,8 +4,10 @@
 /** \file
  * Defines the Var - the front-end variable
  */
+#include <string>
+#include <vector>
 
-#include "IR.h"
+#include "Expr.h"
 
 namespace Halide {
 
@@ -30,9 +32,7 @@ public:
     Var();
 
     /** Get the name of a Var */
-    const std::string &name() const {
-        return e.as<Internal::Variable>()->name;
-    }
+    const std::string &name() const;
 
     /** Test if two Vars are the same. This simply compares the names. */
     bool same_as(const Var &other) const {

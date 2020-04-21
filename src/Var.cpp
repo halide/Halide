@@ -1,4 +1,5 @@
 #include "Var.h"
+#include "IR.h"
 #include "Util.h"
 
 namespace Halide {
@@ -18,6 +19,10 @@ Var Var::implicit(int n) {
 bool Var::is_implicit(const std::string &name) {
     return Internal::starts_with(name, "_") &&
            name.find_first_not_of("0123456789", 1) == std::string::npos;
+}
+
+const std::string &Var::name() const {
+    return e.as<Internal::Variable>()->name;
 }
 
 namespace Internal {

@@ -4,9 +4,11 @@
 /** \file
  * Defines the code-generator interface for producing GPU device code
  */
+#include <string>
+#include <vector>
 
 #include "DeviceArgument.h"
-#include "IR.h"
+#include "Expr.h"
 
 namespace Halide {
 namespace Internal {

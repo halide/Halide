@@ -7,7 +7,7 @@
  * instead of being evaluated at each pixel location across the image.
  */
 
-#include "IR.h"
+#include "Expr.h"
 
 namespace Halide {
 namespace Internal {

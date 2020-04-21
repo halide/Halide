@@ -8,7 +8,7 @@
  * 2, f(x/2), g(x/2))
  */
 
-#include "IR.h"
+#include "Expr.h"
 
 namespace Halide {
 namespace Internal {

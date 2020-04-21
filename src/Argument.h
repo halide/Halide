@@ -6,13 +6,14 @@
  * generated halide pipeline
  */
 
-#include "Buffer.h"
-#include "Error.h"
 #include "Expr.h"
 #include "Type.h"
 #include "runtime/HalideRuntime.h"
 
 namespace Halide {
+
+template<typename T>
+class Buffer;
 
 struct ArgumentEstimates {
     /** If this is a scalar argument, then these are its default, min, max, and estimated values.

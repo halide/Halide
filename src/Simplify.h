@@ -5,9 +5,10 @@
  * Methods for simplifying halide statements and expressions
  */
 
-#include "Bounds.h"
-#include "IR.h"
+#include "Expr.h"
+#include "Interval.h"
 #include "ModulusRemainder.h"
+#include "Scope.h"
 
 namespace Halide {
 namespace Internal {
