@@ -50,5 +50,10 @@ Stmt flatten_nested_ramps(const Stmt &s) {
     return flatten_ramps.mutate(s);
 }
 
+Expr flatten_nested_ramps(const Expr &e) {
+    FlattenRamps flatten_ramps;
+    return flatten_ramps.mutate(e);
+}
+
 }  // namespace Internal
 }  // namespace Halide
