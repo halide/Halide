@@ -390,7 +390,7 @@ class VectorSubs : public IRMutator {
     std::map<string, Expr> replacements;
     std::map<string, Expr> replacements_from_zero;
 
-    std::map<string, int> alloc_vars;
+    std::map<string, string> alloc_vars;
 
     Expr ramp_for_allocate;
 
@@ -441,14 +441,8 @@ class VectorSubs : public IRMutator {
             // debug(0) << "Replacement! " << replacements[op->name] << "\n";
             return replacements[op->name];
         } else if (alloc_vars.count(op->name)) {
-            Expr e = 0;
-            int stride = 1;
-            for (int ix = 0; ix < alloc_vars[op->name]; ix++) {
-                e = e + stride * replacements_from_zero[vectorized_vars[ix].name];
-                stride *= vectorized_vars[ix].lanes;
-            }
-            // debug(0) << "Replacement alloc! " << op->name << " " << e << "\n";
-            return e;
+            // debug(0) << "Replacement alloc! " << op->name << " " << alloc_vars[op->name] << "\n";
+            return replacements_from_zero[alloc_vars[op->name]];
         } else if (scope.contains(op->name)) {
             // If the variable appears in scope then we previously widened
             // it and we use the new widened name for the variable.
@@ -905,6 +899,7 @@ class VectorSubs : public IRMutator {
             Expr var = Variable::make(Int(32), op->name);
             Stmt body = substitute(op->name, var + op->min, op->body);
             Stmt transformed = For::make(op->name, 0, op->extent, for_type, op->device_api, body);
+            // transformed = simplify(transformed);
             return mutate(transformed);
         }
 
@@ -953,12 +948,11 @@ class VectorSubs : public IRMutator {
     Stmt visit(const Allocate *op) override {
         std::vector<Expr> new_extents;
         Expr new_expr;
-        string var = replacements.begin()->first;
-        Expr replacement = replacements.begin()->second;
-        int lanes = replacement.type().lanes();
 
-        // The new expanded dimension is innermost.
-        new_extents.emplace_back(lanes);
+        // The new expanded dimensions are innermost.
+        for (const auto& vv: vectorized_vars) {
+            new_extents.emplace_back(vv.lanes);
+        }
 
         for (size_t i = 0; i < op->extents.size(); i++) {
             Expr extent = mutate(op->extents[i]);
@@ -983,15 +977,22 @@ class VectorSubs : public IRMutator {
 
         // Rewrite loads and stores to this allocation like so:
         // foo[x] -> foo[x*lanes + v]
-        string v = unique_name('v');
-        body = RewriteAccessToVectorAlloc(v, op->name, lanes).mutate(body);
+        vector<string> vs;
+        for (const auto& vv: vectorized_vars) {
+            string v = unique_name('v');
+            body = RewriteAccessToVectorAlloc(v, op->name, vv.lanes).mutate(body);
+            vs.push_back(v);
+            alloc_vars[v] = vv.name;
+        }
 
         // debug(0) << "Allocate before - " << ramp_for_allocate << "\n";
         // debug(0) << body << "\n";
         // scope.push(v, ramp_for_allocate);
-        alloc_vars[v] = vectorized_vars.size(   );
         body = mutate(body);
-        alloc_vars.erase(v);
+        for (const auto& v: vs) {
+            alloc_vars.erase(v);
+        }
+
         // scope.pop(v);
 
         // debug(0) << "Allocate end - \n";
@@ -999,10 +1000,12 @@ class VectorSubs : public IRMutator {
 
         // Replace the widened 'v' with the actual ramp
         // foo[x*lanes + widened_v] -> foo[x*lanes + ramp(...)]
-        body = substitute(v + widening_suffix, ramp_for_allocate, body);
+        for (size_t ix = 0; ix < vectorized_vars.size(); ix++) {
+            body = substitute(vs[ix] + widening_suffix, ramp_for_allocate, body);
 
-        // The variable itself could still exist inside an inner scalarized block.
-        body = substitute(v, Variable::make(Int(32), var), body);
+            // The variable itself could still exist inside an inner scalarized block.
+            body = substitute(vs[ix], Variable::make(Int(32), vectorized_vars[ix].name), body);
+        }
 
         return Allocate::make(op->name, op->type, op->memory_type, new_extents, op->condition, body, new_expr, op->free_function);
     }
