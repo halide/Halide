@@ -390,16 +390,13 @@ class VectorSubs : public IRMutator {
     std::map<string, Expr> replacements;
     std::map<string, Expr> replacements_from_zero;
 
-    std::map<string, string> alloc_vars;
+    std::map<string, std::map<string, Expr>> widened_vars;
 
     Expr ramp_for_allocate;
 
     const Target &target;
 
     bool in_hexagon;  // Are we inside the hexagon loop?
-
-    // A suffix to attach to widened variables.
-    string widening_suffix;
 
     // A scope containing lets and letstmts whose values became
     // vectors.
@@ -435,19 +432,20 @@ class VectorSubs : public IRMutator {
     }
 
     Expr visit(const Variable *op) override {
-        string widened_name = op->name + widening_suffix;
-        // debug(0) << "var - " << op->name << " " <<  widened_name << "\n";
         if (replacements.count(op->name) > 0) {
-            // debug(0) << "Replacement! " << replacements[op->name] << "\n";
             return replacements[op->name];
-        } else if (alloc_vars.count(op->name)) {
-            // debug(0) << "Replacement alloc! " << op->name << " " << alloc_vars[op->name] << "\n";
-            return replacements_from_zero[alloc_vars[op->name]];
         } else if (scope.contains(op->name)) {
+            string widened_name = op->name + ".widened." + vectorized_vars.back().name;
+            Expr mutated;
+            if (widened_vars[op->name].count(widened_name) > 0) {
+                mutated = widened_vars[op->name][widened_name];
+            } else {
+                mutated = mutate(scope.get(op->name));
+                widened_vars[op->name][widened_name] = mutated;
+            }
             // If the variable appears in scope then we previously widened
             // it and we use the new widened name for the variable.
-            // debug(0) << "Widened!\n";
-            return Variable::make(scope.get(op->name).type(), widened_name);
+            return Variable::make(mutated.type(), widened_name);
         } else {
             return op;
         }
@@ -638,46 +636,45 @@ class VectorSubs : public IRMutator {
     }
 
     Expr visit(const Let *op) override {
-
         // Vectorize the let value and check to see if it was vectorized by
         // this mutator. The type of the expression might already be vector
         // width.
-        Expr mutated_value = mutate(op->value);
+        Expr new_value = mutate(op->value);
         bool was_vectorized = (!op->value.type().is_vector() &&
-                               mutated_value.type().is_vector());
+                               new_value.type().is_vector());
 
         // If the value was vectorized by this mutator, add a new name to
         // the scope for the vectorized value expression.
-        std::string vectorized_name;
         if (was_vectorized) {
-            vectorized_name = op->name + widening_suffix;
-            scope.push(op->name, mutated_value);
+            scope.push(op->name, op->value);
         }
 
         Expr mutated_body = mutate(op->body);
 
-        if (mutated_value.same_as(op->value) &&
+        if (new_value.same_as(op->value) &&
             mutated_body.same_as(op->body)) {
             return op;
         } else if (was_vectorized) {
             scope.pop(op->name);
-            return Let::make(vectorized_name, mutated_value, mutated_body);
+            for (const auto& widened_var: widened_vars[op->name]) {
+                mutated_body = Let::make(widened_var.first, widened_var.second, mutated_body);
+            }
+
+            return mutated_body;
         } else {
-            return Let::make(op->name, mutated_value, mutated_body);
+            return Let::make(op->name, new_value, mutated_body);
         }
     }
 
     Stmt visit(const LetStmt *op) override {
-        Expr mutated_value = mutate(op->value);
-        std::string mutated_name = op->name;
+        Expr new_value = mutate(op->value);
 
         // Check if the value was vectorized by this mutator.
         bool was_vectorized = (!op->value.type().is_vector() &&
-                               mutated_value.type().is_vector());
+                               new_value.type().is_vector());
 
         if (was_vectorized) {
-            mutated_name += widening_suffix;
-            scope.push(op->name, mutated_value);
+            scope.push(op->name, op->value);
             // Also keep track of the original let, in case inner code scalarizes.
             containing_lets.emplace_back(op->name, op->value);
         }
@@ -688,46 +685,55 @@ class VectorSubs : public IRMutator {
             containing_lets.pop_back();
             scope.pop(op->name);
 
-            // Inner code might have extracted my lanes using
-            // extract_lane, which introduces a shuffle_vector. If
-            // so we should define separate lets for the lanes and
-            // get it to use those instead.
-            mutated_body = ReplaceShuffleVectors(mutated_name).mutate(mutated_body);
+            for (const auto& widened_var: widened_vars[op->name]) {
+                const string& widened_name = widened_var.first;
+                const Expr& widened_value = widened_var.second;
 
-            // Check if inner code wants my individual lanes.
-            Type t = mutated_value.type();
-            for (int i = 0; i < t.lanes(); i++) {
-                string lane_name = mutated_name + ".lane." + std::to_string(i);
-                if (stmt_uses_var(mutated_body, lane_name)) {
-                    mutated_body =
-                        LetStmt::make(lane_name, extract_lane(mutated_value, i), mutated_body);
-                }
-            }
+                // Inner code might have extracted my lanes using
+                // extract_lane, which introduces a shuffle_vector. If
+                // so we should define separate lets for the lanes and
+                // get it to use those instead.
+                mutated_body = ReplaceShuffleVectors(widened_name).mutate(mutated_body);
 
-            // Inner code may also have wanted my max or min lane
-            bool uses_min_lane = stmt_uses_var(mutated_body, mutated_name + ".min_lane");
-            bool uses_max_lane = stmt_uses_var(mutated_body, mutated_name + ".max_lane");
-
-            if (uses_min_lane || uses_max_lane) {
-                Interval i = bounds_of_lanes(mutated_value);
-
-                if (uses_min_lane) {
-                    mutated_body =
-                        LetStmt::make(mutated_name + ".min_lane", i.min, mutated_body);
+                // Check if inner code wants my individual lanes.
+                Type t = widened_value.type();
+                for (int i = 0; i < t.lanes(); i++) {
+                    string lane_name = widened_name + ".lane." + std::to_string(i);
+                    if (stmt_uses_var(mutated_body, lane_name)) {
+                        mutated_body =
+                            LetStmt::make(lane_name, extract_lane(widened_value, i), mutated_body);
+                    }
                 }
 
-                if (uses_max_lane) {
-                    mutated_body =
-                        LetStmt::make(mutated_name + ".max_lane", i.max, mutated_body);
+                // Inner code may also have wanted my max or min lane
+                bool uses_min_lane = stmt_uses_var(mutated_body, widened_name + ".min_lane");
+                bool uses_max_lane = stmt_uses_var(mutated_body, widened_name + ".max_lane");
+
+                if (uses_min_lane || uses_max_lane) {
+                    Interval i = bounds_of_lanes(widened_value);
+
+                    if (uses_min_lane) {
+                        mutated_body =
+                            LetStmt::make(widened_name + ".min_lane", i.min, mutated_body);
+                    }
+
+                    if (uses_max_lane) {
+                        mutated_body =
+                            LetStmt::make(widened_name + ".max_lane", i.max, mutated_body);
+                    }
                 }
+
+                mutated_body = LetStmt::make(widened_name, widened_value, mutated_body);
             }
         }
 
-        if (mutated_value.same_as(op->value) &&
+        if (new_value.same_as(op->value) &&
             mutated_body.same_as(op->body)) {
             return op;
+        } else if (was_vectorized) {
+            return mutated_body;
         } else {
-            return LetStmt::make(mutated_name, mutated_value, mutated_body);
+            return LetStmt::make(op->name, new_value, mutated_body);
         }
     }
 
@@ -899,7 +905,6 @@ class VectorSubs : public IRMutator {
             Expr var = Variable::make(Int(32), op->name);
             Stmt body = substitute(op->name, var + op->min, op->body);
             Stmt transformed = For::make(op->name, 0, op->extent, for_type, op->device_api, body);
-            // transformed = simplify(transformed);
             return mutate(transformed);
         }
 
@@ -913,8 +918,6 @@ class VectorSubs : public IRMutator {
             body = IfThenElse::make(likely(var < op->min + op->extent), body);
         }
 
-        // debug(0) << "for loop - " << op->name << " " << for_type << "\n";
-        // debug(0) << body << "\n";
         if (op->for_type == ForType::Vectorized) {
             const IntImm *extent_int = extent.as<IntImm>();
             if (!extent_int || extent_int->value <= 1) {
@@ -929,7 +932,6 @@ class VectorSubs : public IRMutator {
             body = mutate(body);
             vectorized_vars.pop_back();
             update_replacements();
-            // debug(0) << "after mutation - \n" << body << "\n";
             return body;
         } else {
             body = mutate(body);
@@ -982,26 +984,21 @@ class VectorSubs : public IRMutator {
             string v = unique_name('v');
             body = RewriteAccessToVectorAlloc(v, op->name, vv.lanes).mutate(body);
             vs.push_back(v);
-            alloc_vars[v] = vv.name;
+            scope.push(v, Variable::make(Int(32), vv.name));
         }
 
-        // debug(0) << "Allocate before - " << ramp_for_allocate << "\n";
-        // debug(0) << body << "\n";
-        // scope.push(v, ramp_for_allocate);
         body = mutate(body);
         for (const auto& v: vs) {
-            alloc_vars.erase(v);
+            scope.pop(v);
         }
 
-        // scope.pop(v);
-
-        // debug(0) << "Allocate end - \n";
-        // debug(0) << body << "\n";
 
         // Replace the widened 'v' with the actual ramp
         // foo[x*lanes + widened_v] -> foo[x*lanes + ramp(...)]
         for (size_t ix = 0; ix < vectorized_vars.size(); ix++) {
-            body = substitute(vs[ix] + widening_suffix, ramp_for_allocate, body);
+            for (const auto& widened_var: widened_vars[vs[ix]]) {
+                body = substitute(widened_var.first, widened_var.second, body);
+            }
 
             // The variable itself could still exist inside an inner scalarized block.
             body = substitute(vs[ix], Variable::make(Int(32), vectorized_vars[ix].name), body);
@@ -1013,8 +1010,6 @@ class VectorSubs : public IRMutator {
     Stmt scalarize(Stmt s) {
         // Wrap a serial loop around it. Maybe LLVM will have
         // better luck vectorizing it.
-
-        // debug(0) << "scalarize - \n" << s << "\n";
 
         s = SerializeLoops().mutate(s);
         // We'll need the original scalar versions of any containing lets.
@@ -1117,9 +1112,7 @@ class VectorSubs : public IRMutator {
 public:
     VectorSubs(const std::vector<VectorizedVar> &vv, bool in_hexagon, const Target &t)
         : vectorized_vars(vv), target(t), in_hexagon(in_hexagon) {
-
         update_replacements();
-        widening_suffix = ".x" + std::to_string(replacements.begin()->second.type().lanes());
     }
 };
 
