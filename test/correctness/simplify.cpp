@@ -1761,13 +1761,13 @@ void check_bitwise() {
     check(cast(Int(16), x) << 10, cast(Int(16), x) * 1024);
     check(cast(Int(16), x) >> 10, cast(Int(16), x) / 1024);
 
-    // Correctly triggers an error (shift by negative amount).
-    // check(cast(Int(16), x) << -10, 0);
-    // check(cast(Int(16), x) >> -10, 0);
+    // Shift by negative amount is a shift in the opposite direction
+    check(cast(Int(16), x) << -10, cast(Int(16), x) / 1024);
+    check(cast(Int(16), x) >> -10, cast(Int(16), x) * 1024);
 
-    // Correctly triggers an error (shift by >= type size).
-    // check(cast(Int(16), x) << 20, 0);
-    // check(cast(Int(16), x) >> 20, 0);
+    // Shift by >= type size is an overflow
+    check_is_sio(cast(Int(16), x) << 20);
+    check_is_sio(cast(Int(16), x) >> 20);
 
     // Check bitwise_and. (Added as result of a bug.)
     // TODO: more coverage of bitwise_and and bitwise_or.
