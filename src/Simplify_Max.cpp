@@ -183,14 +183,14 @@ Expr Simplify::visit(const Max *op, ExprInfo *bounds) {
                (rewrite(max(y - x, z - x), max(y, z) - x, "max171")) ||
                (rewrite(max(x - y, x - z), x - min(y, z), "max172")) ||
 
-               (rewrite(max(x, x - y), x - min(0, y), "max174")) ||
-               (rewrite(max(x - y, x), x - min(0, y), "max175")) ||
-               (rewrite(max(x, (x - y) + z), x + max(0, z - y), "max176")) ||
-               (rewrite(max(x, z + (x - y)), x + max(0, z - y), "max177")) ||
-               (rewrite(max(x, (x - y) - z), x - min(0, y + z), "max178")) ||
-               (rewrite(max((x - y) + z, x), max(0, z - y) + x, "max179")) ||
-               (rewrite(max(z + (x - y), x), max(0, z - y) + x, "max180")) ||
-               (rewrite(max((x - y) - z, x), x - min(0, y + z), "max181")) ||
+               (rewrite(max(x, x - y), x - min(y, 0), "max174")) ||
+               (rewrite(max(x - y, x), x - min(y, 0), "max175")) ||
+               (rewrite(max(x, (x - y) + z), x + max(z - y, 0), "max176")) ||
+               (rewrite(max(x, z + (x - y)), x + max(z - y, 0), "max177")) ||
+               (rewrite(max(x, (x - y) - z), x - min(y + z, 0), "max178")) ||
+               (rewrite(max((x - y) + z, x), max(z - y, 0) + x, "max179")) ||
+               (rewrite(max(z + (x - y), x), max(z - y, 0) + x, "max180")) ||
+               (rewrite(max((x - y) - z, x), x - min(y + z, 0), "max181")) ||
 
                (rewrite(max(x * c0, c1), max(x, fold(c1 / c0)) * c0, c0 > 0 && c1 % c0 == 0, "max183")) ||
                (rewrite(max(x * c0, c1), min(x, fold(c1 / c0)) * c0, c0 < 0 && c1 % c0 == 0, "max184")) ||

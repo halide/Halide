@@ -46,6 +46,7 @@ tests(GROUPS correctness travis
         compile_to.cpp
         compile_to_lowered_stmt.cpp
         compile_to_multitarget.cpp
+        compute_inside_guard.cpp
         compute_at_reordered_update_stage.cpp
         compute_at_split_rvar.cpp
         computed_index.cpp
@@ -64,6 +65,7 @@ tests(GROUPS correctness travis
         custom_auto_scheduler.cpp
         custom_error_reporter.cpp
         custom_lowering_pass.cpp
+        dead_realization_in_specialization.cpp
         debug_to_file.cpp
         debug_to_file_multiple_outputs.cpp
         debug_to_file_reorder.cpp
@@ -204,6 +206,7 @@ tests(GROUPS correctness travis
         multi_way_select.cpp
         named_updates.cpp
         nested_shiftinwards.cpp
+        nested_tail_strategies.cpp
         newtons_method.cpp
         non_nesting_extern_bounds_query.cpp
         non_vector_aligned_embeded_buffer.cpp
@@ -256,6 +259,7 @@ tests(GROUPS correctness travis
         scatter.cpp
         mux.cpp
         set_custom_trace.cpp
+        shadowed_bound.cpp
         shared_self_references.cpp
         shifted_image.cpp
         side_effects.cpp

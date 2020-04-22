@@ -8,14 +8,12 @@ Expr Simplify::visit(const Not *op, ExprInfo *bounds) {
 
     auto rewrite = IRMatcher::rewriter(IRMatcher::not_op(a), op->type);
 
-    if ((rewrite(!c0, fold(!c0), "not11")) ||
-        (rewrite(!(x < y), y <= x, "not12")) ||
-        (rewrite(!(x <= y), y < x, "not13")) ||
-        (rewrite(!(x > y), y >= x, "not14")) ||
-        (rewrite(!(x >= y), y > x, "not15")) ||
-        (rewrite(!(x == y), x != y, "not16")) ||
-        (rewrite(!(x != y), x == y, "not17")) ||
-        (rewrite(!!x, x, "not18"))) {
+    if (rewrite(!c0, fold(!c0), "not11") ||
+        rewrite(!(x < y), y <= x, "not12") ||
+        rewrite(!(x <= y), y < x, "not13") ||
+        rewrite(!(x == y), x != y, "not16") ||
+        rewrite(!(x != y), x == y, "not17") ||
+        rewrite(!!x, x, "not18")) {
         return rewrite.result;
     }
 

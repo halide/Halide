@@ -56,10 +56,12 @@ vector<ApplySplitResult> apply_split(const Split &split, bool is_update, const s
 
             // Bounds inference has trouble exploiting an if
             // condition. We'll directly tell it that the loop
-            // variable is bounded by the original loop bounds by
+            // variable is bounded above by the original loop max by
             // replacing the variable with a promise-clamped version
-            // of it.
-            Expr guarded = promise_clamped(old_var, old_min, old_max);
+            // of it. We don't also use the original loop min because
+            // it needlessly complicates the expressions and doesn't
+            // actually communicate anything new.
+            Expr guarded = promise_clamped(old_var, old_var, old_max);
             string guarded_var_name = prefix + split.old_var + ".guarded";
             Expr guarded_var = Variable::make(Int(32), guarded_var_name);
             result.emplace_back(prefix + split.old_var, guarded_var, ApplySplitResult::Substitution);
@@ -94,12 +96,7 @@ vector<ApplySplitResult> apply_split(const Split &split, bool is_update, const s
         Expr outer_min = Variable::make(Int(32), prefix + split.outer + ".loop_min");
         Expr inner_extent = Variable::make(Int(32), prefix + split.inner + ".loop_extent");
 
-        // If the inner extent is zero, the loop will never be
-        // entered, but the bounds expressions lifted out might
-        // contain divides or mods by zero. In the cases where
-        // simplification of inner and outer matter, inner_extent
-        // is a constant, so the max will simplify away.
-        Expr factor = max(inner_extent, 1);
+        const Expr &factor = inner_extent;
         Expr inner = fused % factor + inner_min;
         Expr outer = fused / factor + outer_min;
 

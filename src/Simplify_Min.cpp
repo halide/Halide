@@ -186,17 +186,19 @@ Expr Simplify::visit(const Min *op, ExprInfo *bounds) {
                (rewrite(min(y - x, z - x), min(y, z) - x, "min174")) ||
                (rewrite(min(x - y, x - z), x - max(y, z), "min175")) ||
 
-               (rewrite(min(x, x - y), x - max(0, y), "min177")) ||
-               (rewrite(min(x - y, x), x - max(0, y), "min178")) ||
-               (rewrite(min(x, (x - y) + z), x + min(0, z - y), "min179")) ||
-               (rewrite(min(x, z + (x - y)), x + min(0, z - y), "min180")) ||
-               (rewrite(min(x, (x - y) - z), x - max(0, y + z), "min181")) ||
-               (rewrite(min((x - y) + z, x), min(0, z - y) + x, "min182")) ||
-               (rewrite(min(z + (x - y), x), min(0, z - y) + x, "min183")) ||
-               (rewrite(min((x - y) - z, x), x - max(0, y + z), "min184")) ||
+               rewrite(min(x, x - y), x - max(y, 0), "min177") ||
+               rewrite(min(x - y, x), x - max(y, 0), "min178") ||
+               rewrite(min(x, (x - y) + z), x + min(z - y, 0), "min179") ||
+               rewrite(min(x, z + (x - y)), x + min(z - y, 0), "min180") ||
+               rewrite(min(x, (x - y) - z), x - max(y + z, 0), "min181") ||
+               rewrite(min((x - y) + z, x), min(z - y, 0) + x, "min182") ||
+               rewrite(min(z + (x - y), x), min(z - y, 0) + x, "min183") ||
+               rewrite(min((x - y) - z, x), x - max(y + z, 0), "min184") ||
 
                (rewrite(min(x * c0, c1), min(x, fold(c1 / c0)) * c0, c0 > 0 && c1 % c0 == 0, "min186")) ||
                (rewrite(min(x * c0, c1), max(x, fold(c1 / c0)) * c0, c0 < 0 && c1 % c0 == 0, "min187")) ||
+               rewrite(min(x * c0, c1), min(x, fold(c1 / c0)) * c0, c0 > 0 && c1 % c0 == 0) ||
+               rewrite(min(x * c0, c1), max(x, fold(c1 / c0)) * c0, c0 < 0 && c1 % c0 == 0) ||
 
                (rewrite(min(x * c0, y * c1), min(x, y * fold(c1 / c0)) * c0, c0 > 0 && c1 % c0 == 0, "min189")) ||
                (rewrite(min(x * c0, y * c1), max(x, y * fold(c1 / c0)) * c0, c0 < 0 && c1 % c0 == 0, "min190")) ||
@@ -218,7 +220,12 @@ Expr Simplify::visit(const Min *op, ExprInfo *bounds) {
 
                (rewrite(min(select(x, y, z), select(x, w, u)), select(x, min(y, w), min(z, u)), "min207")) ||
 
-               (rewrite(min(c0 - x, c1), c0 - max(x, fold(c0 - c1)), "min209")))))) {
+               (rewrite(min(c0 - x, c1), c0 - max(x, fold(c0 - c1)), "min209")) ||
+
+               // Required for nested GuardWithIf tilings
+               rewrite(min((min(((y + c0)/c1), x)*c1), y + c2), min(x * c1, y + c2), c1 > 0 && c1 + c2 <= c0 + 1, "min210") ||
+               rewrite(min((min(((y + c0)/c1), x)*c1) + c2, y), min(x * c1 + c2, y), c1 > 0 && c1 <= c0 + c2 + 1, "min211") ||
+               false )))) {
 
             return mutate(std::move(rewrite.result), bounds);
         }

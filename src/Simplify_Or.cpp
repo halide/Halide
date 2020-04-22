@@ -19,40 +19,42 @@ Expr Simplify::visit(const Or *op, ExprInfo *bounds) {
 
     // clang-format off
     if (EVAL_IN_LAMBDA
-        ((rewrite(x || true, true, "or22")) ||
-         (rewrite(x || false, x, "or23")) ||
-         (rewrite(x || x, x, "or24")) ||
+<<<<<<< HEAD
+        ((rewrite(x || true, b, "or22")) ||
+         (rewrite(x || false, a, "or23")) ||
+         (rewrite(x || x, a, "or24")) ||
 
-         (rewrite((x || y) || x, (x || y), "or26")) ||
-         (rewrite(x || (x || y), (x || y), "or27")) ||
-         (rewrite((x || y) || y, (x || y), "or28")) ||
-         (rewrite(y || (x || y), (x || y), "or29")) ||
+         (rewrite((x || y) || x, a, "or26")) ||
+         (rewrite(x || (x || y), b, "or27")) ||
+         (rewrite((x || y) || y, a, "or28")) ||
+         (rewrite(y || (x || y), b, "or29")) ||
 
-         (rewrite(((x || y) || z) || x, ((x || y) || z), "or31")) ||
-         (rewrite(x || ((x || y) || z), ((x || y) || z), "or32")) ||
-         (rewrite((z || (x || y)) || x, (z || (x || y)), "or33")) ||
-         (rewrite(x || (z || (x || y)), (z || (x || y)), "or34")) ||
-         (rewrite(((x || y) || z) || y, ((x || y) || z), "or35")) ||
-         (rewrite(y || ((x || y) || z), ((x || y) || z), "or36")) ||
-         (rewrite((z || (x || y)) || y, (z || (x || y)), "or37")) ||
-         (rewrite(y || (z || (x || y)), (z || (x || y)), "or38")) ||
+         (rewrite(((x || y) || z) || x, a, "or31")) ||
+         (rewrite(x || ((x || y) || z), b, "or32")) ||
+         (rewrite((z || (x || y)) || x, a, "or33")) ||
+         (rewrite(x || (z || (x || y)), b, "or34")) ||
+         (rewrite(((x || y) || z) || y, a, "or35")) ||
+         (rewrite(y || ((x || y) || z), b, "or36")) ||
+         (rewrite((z || (x || y)) || y, a, "or37")) ||
+         (rewrite(y || (z || (x || y)), b, "or38")) ||
 
-         (rewrite((x && y) || x, x, "or40")) ||
-         (rewrite(x || (x && y), x, "or41")) ||
-         (rewrite((x && y) || y, y, "or42")) ||
-         (rewrite(y || (x && y), y, "or43")) ||
+         (rewrite((x && y) || x, b, "or40")) ||
+         (rewrite(x || (x && y), a, "or41")) ||
+         (rewrite((x && y) || y, b, "or42")) ||
+         (rewrite(y || (x && y), a, "or43")) ||
 
-         (rewrite(((x || y) || z) || x, ((x || y) || z), "or45")) ||
-         (rewrite(x || ((x || y) || z), ((x || y) || z), "or46")) ||
-         (rewrite((z || (x || y)) || x, (z || (x || y)), "or47")) ||
-         (rewrite(x || (z || (x || y)), (z || (x || y)), "or48")) ||
-         (rewrite(((x || y) || z) || y, ((x || y) || z), "or49")) ||
-         (rewrite(y || ((x || y) || z), ((x || y) || z), "or50")) ||
-         (rewrite((z || (x || y)) || y, (z || (x || y)), "or51")) ||
-         (rewrite(y || (z || (x || y)), (z || (x || y)), "or52")) ||
+         (rewrite(((x || y) || z) || x, a, "or45")) ||
+         (rewrite(x || ((x || y) || z), b, "or46")) ||
+         (rewrite((z || (x || y)) || x, a, "or47")) ||
+         (rewrite(x || (z || (x || y)), b, "or48")) ||
+         (rewrite(((x || y) || z) || y, a, "or49")) ||
+         (rewrite(y || ((x || y) || z), b, "or50")) ||
+         (rewrite((z || (x || y)) || y, a, "or51")) ||
+         (rewrite(y || (z || (x || y)), b, "or52")) ||
 
          (rewrite(x != y || x == y, true, "or54")) ||
          (rewrite(x != y || y == x, true, "or55")) ||
+
          (rewrite((z || x != y) || x == y, true, "or56")) ||
          (rewrite((z || x != y) || y == x, true, "or57")) ||
          (rewrite((x != y || z) || x == y, true, "or58")) ||
@@ -61,10 +63,11 @@ Expr Simplify::visit(const Or *op, ExprInfo *bounds) {
          (rewrite((z || x == y) || y != x, true, "or61")) ||
          (rewrite((x == y || z) || x != y, true, "or62")) ||
          (rewrite((x == y || z) || y != x, true, "or63")) ||
+
          (rewrite(x || !x, true, "or64")) ||
          (rewrite(!x || x, true, "or65")) ||
          (rewrite(y <= x || x < y, true, "or66")) ||
-         (rewrite(x != c0 || x == c1, x != c0, c0 != c1, "or67")) ||
+         (rewrite(x != c0 || x == c1, a, c0 != c1, "or67")) ||
          (rewrite(x <= c0 || c1 <= x, true, !is_float(x) && c1 <= c0 + 1, "or68")) ||
          (rewrite(c1 <= x || x <= c0, true, !is_float(x) && c1 <= c0 + 1, "or69")) ||
          (rewrite(x <= c0 || c1 < x, true, c1 <= c0, "or70")) ||

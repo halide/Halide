@@ -1080,26 +1080,8 @@ private:
             Interval upper = interval;
             op->args[0].accept(this);
 
-            if (interval.is_single_point()) {
-                // The thing being guarded doesn't vary, so we don't
-                // need the additional bounds. Our options are to
-                // return the full promise_clamped, or to just return
-                // the value. Both promise_clamped and unsafe_promise
-                // clamped assert that a clamp here would be a
-                // no-op. promise_clamped is context-dependent -
-                // something might be bounded inside a loop, but
-                // lifting the IR elsewhere would make it a lie, so we
-                // can't lift it without knowing where the expression
-                // is going. unsafe_promise_clamped is true for the
-                // entire program, so we can only lift that one.  For
-                // now, we lift neither and just return the interval
-                // for the first arg.
-            } else {
-                // The first arg varies, so use the other args as
-                // additional bounds.
-                interval.min = Interval::make_max(interval.min, lower.min);
-                interval.max = Interval::make_min(interval.max, upper.max);
-            }
+            interval.min = Interval::make_max(interval.min, lower.min);
+            interval.max = Interval::make_min(interval.max, upper.max);
         } else if (op->is_intrinsic(Call::likely) ||
                    op->is_intrinsic(Call::likely_if_innermost)) {
             internal_assert(op->args.size() == 1);
@@ -2104,28 +2086,89 @@ private:
     };
 
     void trim_scope_push(const string &name, const Interval &bound, vector<LetBound> &let_bounds) {
+        // We want to add all the children of 'name' to 'let_bounds',
+        // but avoiding duplicates (in some cases the dupes can
+        // explode the list size by ~80x); note that the exact order
+        // isn't important, as long as children are still visited
+        // after parents. So we want to do a topological traversal of
+        // the dependent lets.
+
+        // A recursive version of a topological traversal looks like:
+        // 1) if node already visited, return
+        // 2) mark node as visited
+        // 3) recursively visit children
+        // 4) prepend node to output list.
+
+        // Step 4 means that the node is the first thing in the output
+        // list, and step 3 means all of the children have been
+        // visited for sure and are in the output list somewhere
+        // else. No future operations after this recursive step
+        // returns ever move things around in the output list - we
+        // only ever prepend things. This means we have the
+        // topological sort property that every node is guaranteed to
+        // be before all of its children.
+
+        // For an example of doing this the recursive way, see
+        // realization_order_dfs in RealizationOrder.cpp. It uses two
+        // different senses of 'visited' to check for cycles, but we
+        // don't need that here. We'll assume there are no cycles.
+
+        // There could be many dependent lets, so we're going to do it
+        // non-recursively with an explicit stack of Task structs
+        // instead. Note that there's work to do (step 4) after the
+        // recursive step (step 3), so we can't just discard nodes at
+        // the same time as we enqueue their children. We need to
+        // consider every node in the stack twice - once just before
+        // pushing its children, and once again when we reach it again
+        // after dealing with all children and it's time to pop it
+        // (our pending stack is effectively a stack frame from the
+        // recursive version).
+
+        // As a minor optimization we'll also do the visited
+        // insert/check (steps 1 and 2) before pushing, so that
+        // already-visited nodes don't even make it into the
+        // stack. Finally, we actually want reverse topological order,
+        // so we'll append nodes to the output instead of prepending.
+
+        struct Task {
+            string var;
+            bool visited_children_already;
+        };
+        vector<Task> pending;
+        set<string> visited;
+
         scope.push(name, bound);
+        visited.insert(name);
+        pending.push_back(Task{name, false});
 
-        for (const auto &v : children[get_var_instance(name)]) {
-            string max_name = unique_name('t');
-            string min_name = unique_name('t');
-
-            let_bounds.insert(let_bounds.begin(), LetBound(v.var, min_name, max_name));
-
-            internal_assert(let_stmts.contains(v.var));
-            Type t = let_stmts.get(v.var).type();
-            Interval b = Interval(Variable::make(t, min_name), Variable::make(t, max_name));
-            trim_scope_push(v.var, b, let_bounds);
-        }
+        // We don't want our root node 'name' in the let_bounds list,
+        // so we'll stop when there's only one thing left in the
+        // pending stack.
+        do {
+            Task &next = pending.back();
+            if (!next.visited_children_already) {
+                next.visited_children_already = true;
+                // Note that pushing may invalidate the reference to next.
+                for (const auto &v : children[get_var_instance(next.var)]) {
+                    if (visited.insert(v.var).second) {
+                        pending.push_back(Task{v.var, false});
+                    }
+                }
+            } else {
+                string max_name = unique_name('t');
+                string min_name = unique_name('t');
+                let_bounds.emplace_back(next.var, min_name, max_name);
+                Type t = let_stmts.get(next.var).type();
+                Interval b = Interval(Variable::make(t, min_name), Variable::make(t, max_name));
+                scope.push(next.var, b);
+                pending.pop_back();
+            }
+        } while (pending.size() > 1);
     }
 
     void trim_scope_pop(const string &name, vector<LetBound> &let_bounds) {
-        while (!let_bounds.empty()) {
-            LetBound l = let_bounds.back();
-            let_bounds.pop_back();
-
-            trim_scope_pop(l.var, let_bounds);
-
+        for (const LetBound &l : let_bounds) {
+            scope.pop(l.var);
             for (pair<const string, Box> &i : boxes) {
                 Box &box = i.second;
                 for (size_t i = 0; i < box.size(); i++) {
@@ -2167,6 +2210,7 @@ private:
             }
         }
         scope.pop(name);
+        let_bounds.clear();
     }
 
     vector<const Variable *> find_free_vars(const Expr &e) {

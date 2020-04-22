@@ -112,7 +112,7 @@ class TrimStmtToPartsThatAccessBuffers : public IRMutator {
         return IRMutator::visit(op);
     }
     Expr visit(const Variable *op) override {
-        if (op->param.defined() && op->param.is_buffer()) {
+        if (op->type.is_handle() && op->param.defined() && op->param.is_buffer()) {
             touches_buffer |= (buffers.find(op->param.name()) != buffers.end());
         }
         return IRMutator::visit(op);
@@ -142,13 +142,13 @@ public:
     }
 };
 
-Stmt add_image_checks(Stmt s,
-                      const vector<Function> &outputs,
-                      const Target &t,
-                      const vector<string> &order,
-                      const map<string, Function> &env,
-                      const FuncValueBounds &fb,
-                      bool will_inject_host_copies) {
+Stmt add_image_checks_inner(Stmt s,
+                            const vector<Function> &outputs,
+                            const Target &t,
+                            const vector<string> &order,
+                            const map<string, Function> &env,
+                            const FuncValueBounds &fb,
+                            bool will_inject_host_copies) {
 
     bool no_asserts = t.has_feature(Target::NoAsserts);
     bool no_bounds_query = t.has_feature(Target::NoBoundsQuery);
@@ -708,6 +708,52 @@ Stmt add_image_checks(Stmt s,
     prepend_stmts(&msan_checks);
 
     return s;
+}
+
+// The following function repeats the arguments list it just passes
+// through six times. Surely there is a better way?
+Stmt add_image_checks(const Stmt &s,
+                      const vector<Function> &outputs,
+                      const Target &t,
+                      const vector<string> &order,
+                      const map<string, Function> &env,
+                      const FuncValueBounds &fb,
+                      bool will_inject_host_copies) {
+
+    // Checks for images go at the marker deposited by computation
+    // bounds inference.
+    class Injector : public IRMutator {
+        using IRMutator::visit;
+
+        Stmt visit(const Block *op) override {
+            const Evaluate *e = op->first.as<Evaluate>();
+            const Call *c = e ? e->value.as<Call>() : nullptr;
+            if (c && c->is_intrinsic(Call::add_image_checks_marker)) {
+                return add_image_checks_inner(op->rest, outputs, t, order, env, fb, will_inject_host_copies);
+            } else {
+                return IRMutator::visit(op);
+            }
+        }
+
+        const vector<Function> &outputs;
+        const Target &t;
+        const vector<string> &order;
+        const map<string, Function> &env;
+        const FuncValueBounds &fb;
+        bool will_inject_host_copies;
+
+    public:
+        Injector(const vector<Function> &outputs,
+                 const Target &t,
+                 const vector<string> &order,
+                 const map<string, Function> &env,
+                 const FuncValueBounds &fb,
+                 bool will_inject_host_copies)
+            : outputs(outputs), t(t), order(order), env(env), fb(fb), will_inject_host_copies(will_inject_host_copies) {
+        }
+    } injector(outputs, t, order, env, fb, will_inject_host_copies);
+
+    return injector.mutate(s);
 }
 
 }  // namespace Internal

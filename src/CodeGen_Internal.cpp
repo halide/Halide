@@ -136,6 +136,22 @@ llvm::Type *llvm_type_of(LLVMContext *c, Halide::Type t) {
     }
 }
 
+int get_vector_num_elements(llvm::Type *t) {
+    if (t->isVectorTy()) {
+        return dyn_cast<llvm::VectorType>(t)->getNumElements();
+    } else {
+        return 1;
+    }
+}
+
+llvm::Type *get_vector_element_type(llvm::Type *t) {
+    if (t->isVectorTy()) {
+        return dyn_cast<llvm::VectorType>(t)->getElementType();
+    } else {
+        return t;
+    }
+}
+
 // Returns true if the given function name is one of the Halide runtime
 // functions that takes a user_context pointer as its first parameter.
 bool function_takes_user_context(const std::string &name) {

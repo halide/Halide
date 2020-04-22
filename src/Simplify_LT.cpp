@@ -158,37 +158,37 @@ Expr Simplify::visit(const LT *op, ExprInfo *bounds) {
               // We want to break max(x, y) < z into x < z && y <
               // z in cases where one of those two terms is going
               // to fold.
-              (rewrite(min(x + c0, y) < x + c1, fold(c0 < c1) || y < x + c1, "lt155")) ||
-              (rewrite(min(y, x + c0) < x + c1, fold(c0 < c1) || y < x + c1, "lt156")) ||
-              (rewrite(max(x + c0, y) < x + c1, fold(c0 < c1) && y < x + c1, "lt157")) ||
-              (rewrite(max(y, x + c0) < x + c1, fold(c0 < c1) && y < x + c1, "lt158")) ||
+              (rewrite(min(x + c0, y) < x + c1, y < x + c1 || fold(c0 < c1), "lt155")) ||
+              (rewrite(min(y, x + c0) < x + c1, y < x + c1 || fold(c0 < c1), "lt156")) ||
+              (rewrite(max(x + c0, y) < x + c1, y < x + c1 && fold(c0 < c1), "lt157")) ||
+              (rewrite(max(y, x + c0) < x + c1, y < x + c1 && fold(c0 < c1), "lt158")) ||
 
-              (rewrite(x < min(x + c0, y) + c1, fold(0 < c0 + c1) && x < y + c1, "lt160")) ||
-              (rewrite(x < min(y, x + c0) + c1, fold(0 < c0 + c1) && x < y + c1, "lt161")) ||
-              (rewrite(x < max(x + c0, y) + c1, fold(0 < c0 + c1) || x < y + c1, "lt162")) ||
-              (rewrite(x < max(y, x + c0) + c1, fold(0 < c0 + c1) || x < y + c1, "lt163")) ||
+              (rewrite(x < min(x + c0, y) + c1, x < y + c1 && fold(0 < c0 + c1), "lt160")) ||
+              (rewrite(x < min(y, x + c0) + c1, x < y + c1 && fold(0 < c0 + c1), "lt161")) ||
+              (rewrite(x < max(x + c0, y) + c1, x < y + c1 || fold(0 < c0 + c1), "lt162")) ||
+              (rewrite(x < max(y, x + c0) + c1, x < y + c1 || fold(0 < c0 + c1), "lt163")) ||
 
               // Special cases where c0 == 0
-              (rewrite(min(x, y) < x + c1, fold(0 < c1) || y < x + c1, "lt166")) ||
-              (rewrite(min(y, x) < x + c1, fold(0 < c1) || y < x + c1, "lt167")) ||
-              (rewrite(max(x, y) < x + c1, fold(0 < c1) && y < x + c1, "lt168")) ||
-              (rewrite(max(y, x) < x + c1, fold(0 < c1) && y < x + c1, "lt169")) ||
+              (rewrite(min(x, y) < x + c1, y < x + c1 || fold(0 < c1), "lt166")) ||
+              (rewrite(min(y, x) < x + c1, y < x + c1 || fold(0 < c1), "lt167")) ||
+              (rewrite(max(x, y) < x + c1, y < x + c1 && fold(0 < c1), "lt168")) ||
+              (rewrite(max(y, x) < x + c1, y < x + c1 && fold(0 < c1), "lt169")) ||
 
-              (rewrite(x < min(x, y) + c1, fold(0 < c1) && x < y + c1, "lt171")) ||
-              (rewrite(x < min(y, x) + c1, fold(0 < c1) && x < y + c1, "lt172")) ||
-              (rewrite(x < max(x, y) + c1, fold(0 < c1) || x < y + c1, "lt173")) ||
-              (rewrite(x < max(y, x) + c1, fold(0 < c1) || x < y + c1, "lt174")) ||
+              (rewrite(x < min(x, y) + c1, x < y + c1 && fold(0 < c1), "lt171")) ||
+              (rewrite(x < min(y, x) + c1, x < y + c1 && fold(0 < c1), "lt172")) ||
+              (rewrite(x < max(x, y) + c1, x < y + c1 || fold(0 < c1), "lt173")) ||
+              (rewrite(x < max(y, x) + c1, x < y + c1 || fold(0 < c1), "lt174")) ||
 
               // Special cases where c1 == 0
-              (rewrite(min(x + c0, y) < x, fold(c0 < 0) || y < x, "lt177")) ||
-              (rewrite(min(y, x + c0) < x, fold(c0 < 0) || y < x, "lt178")) ||
-              (rewrite(max(x + c0, y) < x, fold(c0 < 0) && y < x, "lt179")) ||
-              (rewrite(max(y, x + c0) < x, fold(c0 < 0) && y < x, "lt180")) ||
+              (rewrite(min(x + c0, y) < x, y < x || fold(c0 < 0), "lt177")) ||
+              (rewrite(min(y, x + c0) < x, y < x || fold(c0 < 0), "lt178")) ||
+              (rewrite(max(x + c0, y) < x, y < x && fold(c0 < 0), "lt179")) ||
+              (rewrite(max(y, x + c0) < x, y < x && fold(c0 < 0), "lt180")) ||
 
-              (rewrite(x < min(x + c0, y), fold(0 < c0) && x < y, "lt182")) ||
-              (rewrite(x < min(y, x + c0), fold(0 < c0) && x < y, "lt183")) ||
-              (rewrite(x < max(x + c0, y), fold(0 < c0) || x < y, "lt184")) ||
-              (rewrite(x < max(y, x + c0), fold(0 < c0) || x < y, "lt185")) ||
+              (rewrite(x < min(x + c0, y), x < y && fold(0 < c0), "lt182")) ||
+              (rewrite(x < min(y, x + c0), x < y && fold(0 < c0), "lt183")) ||
+              (rewrite(x < max(x + c0, y), x < y || fold(0 < c0), "lt184")) ||
+              (rewrite(x < max(y, x + c0), x < y || fold(0 < c0), "lt185")) ||
 
               // Special cases where c0 == c1 == 0
               (rewrite(min(x, y) < x, y < x, "lt188")) ||
@@ -197,10 +197,10 @@ Expr Simplify::visit(const LT *op, ExprInfo *bounds) {
               (rewrite(x < max(y, x), x < y, "lt191")) ||
 
               // Special case where x is constant
-              (rewrite(min(y, c0) < c1, fold(c0 < c1) || y < c1, "lt194")) ||
-              (rewrite(max(y, c0) < c1, fold(c0 < c1) && y < c1, "lt195")) ||
-              (rewrite(c1 < min(y, c0), fold(c1 < c0) && c1 < y, "lt196")) ||
-              (rewrite(c1 < max(y, c0), fold(c1 < c0) || c1 < y, "lt197")) ||
+              (rewrite(min(y, c0) < c1, y < c1 || fold(c0 < c1), "lt194")) ||
+              (rewrite(max(y, c0) < c1, y < c1 && fold(c0 < c1), "lt195")) ||
+              (rewrite(c1 < min(y, c0), c1 < y && fold(c1 < c0), "lt196")) ||
+              (rewrite(c1 < max(y, c0), c1 < y || fold(c1 < c0), "lt197")) ||
 
               // Cases where we can remove a min on one side because
               // one term dominates another. These rules were

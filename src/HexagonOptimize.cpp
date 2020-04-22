@@ -89,7 +89,7 @@ class WithLanes : public IRMutator {
 
     int lanes;
 
-    Type with_lanes(Type t) {
+    Type with_lanes(Type t) const {
         return t.with_lanes(lanes);
     }
 
