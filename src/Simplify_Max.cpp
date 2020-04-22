@@ -117,7 +117,6 @@ Expr Simplify::visit(const Max *op, ExprInfo *bounds) {
              (rewrite(max(max(y, x), max(z, x)), max(max(y, z), x), "max105")) ||
              (rewrite(max(max(x, y), max(z, w)), max(max(max(x, y), z), w), "max106")) ||
              (rewrite(max(broadcast(x), broadcast(y)), broadcast(max(x, y), lanes), "max107")) ||
-             (rewrite(max(broadcast(x), ramp(y, z)), max(ramp(y, z), broadcast(x)), "max108")) ||
              (rewrite(max(max(x, broadcast(y)), broadcast(z)), max(x, broadcast(max(y, z), lanes)), "max109")) ||
              (rewrite(max(min(x, y), min(x, z)), min(x, max(y, z)), "max110")) ||
              (rewrite(max(min(x, y), min(z, x)), min(x, max(y, z)), "max111")) ||

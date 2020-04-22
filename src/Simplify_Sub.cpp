@@ -334,7 +334,7 @@ Expr Simplify::visit(const Sub *op, ExprInfo *bounds) {
                // explicitly only include the ones necessary to get
                // correctness_nested_tail_strategies to pass.
                rewrite((min(x + y, z) + w) - x, min(z - x, y) + w, "sub340") ||
-               rewrite(min((x + y) + w, z) - x, min(z - x, y + w, "sub341")) ||
+               rewrite(min((x + y) + w, z) - x, min(z - x, y + w), "sub341")) ||
                rewrite(min(min(x + z, y), w) - x, min(min(y, w) - x, z), "sub342") ||
                rewrite(min(min(y, x + z), w) - x, min(min(y, w) - x, z), "sub343") ||
 
@@ -349,7 +349,7 @@ Expr Simplify::visit(const Sub *op, ExprInfo *bounds) {
                rewrite((min(x*c0 + y, z) + w) / c1 - x*c2, (min(y, z - x*c0) + w) / c1, c0 == c1 * c2, "sub348") ||
                rewrite((min(z, x*c0 + y) + w) / c1 - x*c2, (min(z - x*c0, y) + w) / c1, c0 == c1 * c2, "sub349") ||
 
-               false)))) {
+               false))) {
             return mutate(std::move(rewrite.result), bounds);
         }
     }

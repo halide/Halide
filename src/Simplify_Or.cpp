@@ -19,7 +19,6 @@ Expr Simplify::visit(const Or *op, ExprInfo *bounds) {
 
     // clang-format off
     if (EVAL_IN_LAMBDA
-<<<<<<< HEAD
         ((rewrite(x || true, b, "or22")) ||
          (rewrite(x || false, a, "or23")) ||
          (rewrite(x || x, a, "or24")) ||

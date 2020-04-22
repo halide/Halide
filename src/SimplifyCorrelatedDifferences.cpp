@@ -162,17 +162,17 @@ class SimplifyCorrelatedDifferences : public IRMutator {
                 auto rewrite = IRMatcher::rewriter(IRMatcher::sub(a, b), op->type);
                 if (
                     // Differences of quasi-affine functions
-                    rewrite((x + y) / c0 - (x + z) / c0, ((x % c0) + y) / c0 - ((x % c0) + z) / c0) ||
-                    rewrite(x / c0 - (x + z) / c0, 0 - ((x % c0) + z) / c0) ||
-                    rewrite((x + y) / c0 - x / c0, ((x % c0) + y) / c0) ||
+                    rewrite((x + y) / c0 - (x + z) / c0, ((x % c0) + y) / c0 - ((x % c0) + z) / c0, "cor165") ||
+                    rewrite(x / c0 - (x + z) / c0, 0 - ((x % c0) + z) / c0, "cor166") ||
+                    rewrite((x + y) / c0 - x / c0, ((x % c0) + y) / c0, "cor167") ||
 
                     // truncated cones have a constant upper or lower
                     // bound that isn't apparent when expressed in the
                     // form in the LHS below
-                    rewrite(min(x, c0) - max(x, c1), min(min(c0 - x, x - c1), fold(min(0, c0 - c1)))) ||
-                    rewrite(max(x, c0) - min(x, c1), max(max(c0 - x, x - c1), fold(max(0, c0 - c1)))) ||
-                    rewrite(min(x, y) - max(x, z), min(min(x, y) - max(x, z), 0)) ||
-                    rewrite(max(x, y) - min(x, z), max(max(x, y) - min(x, z), 0)) ||
+                    rewrite(min(x, c0) - max(x, c1), min(min(c0 - x, x - c1), fold(min(0, c0 - c1))), "cor172") ||
+                    rewrite(max(x, c0) - min(x, c1), max(max(c0 - x, x - c1), fold(max(0, c0 - c1))), "cor173") ||
+                    rewrite(min(x, y) - max(x, z), min(min(x, y) - max(x, z), 0), "cor174") ||
+                    rewrite(max(x, y) - min(x, z), max(max(x, y) - min(x, z), 0), "cor175") ||
 
                     false) {
                     return rewrite.result;

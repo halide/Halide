@@ -2211,12 +2211,8 @@ struct Rewriter {
 
     template<typename Before,
              typename = typename enable_if_pattern<Before>::type>
-<<<<<<< HEAD
     HALIDE_ALWAYS_INLINE bool operator()(Before before, const Expr &after, const char *rulename) noexcept {
-=======
-    HALIDE_ALWAYS_INLINE bool operator()(Before before, const Expr &after) noexcept {
         static_assert(Before::canonical, "LHS of rewrite rule should be in canonical form");
->>>>>>> master
         if (before.template match<0>(instance, state)) {
             LOG_MATCHED_RULE;
             result = after;
@@ -2234,12 +2230,8 @@ struct Rewriter {
 
     template<typename Before,
              typename = typename enable_if_pattern<Before>::type>
-<<<<<<< HEAD
     HALIDE_ALWAYS_INLINE bool operator()(Before before, int64_t after, const char *rulename) noexcept {
-=======
-    HALIDE_ALWAYS_INLINE bool operator()(Before before, int64_t after) noexcept {
         static_assert(Before::canonical, "LHS of rewrite rule should be in canonical form");
->>>>>>> master
 #if HALIDE_FUZZ_TEST_RULES
         fuzz_test_rule(before, Const(after), true, wildcard_type, output_type);
 #endif

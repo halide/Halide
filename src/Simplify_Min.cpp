@@ -117,7 +117,6 @@ Expr Simplify::visit(const Min *op, ExprInfo *bounds) {
              (rewrite(min(min(y, x), min(z, x)), min(min(y, z), x), "min105")) ||
              (rewrite(min(min(x, y), min(z, w)), min(min(min(x, y), z), w), "min106")) ||
              (rewrite(min(broadcast(x), broadcast(y)), broadcast(min(x, y), lanes), "min107")) ||
-             (rewrite(min(broadcast(x), ramp(y, z)), min(ramp(y, z), broadcast(x)), "min108")) ||
              (rewrite(min(min(x, broadcast(y)), broadcast(z)), min(x, broadcast(min(y, z), lanes)), "min109")) ||
              (rewrite(min(max(x, y), max(x, z)), max(x, min(y, z)), "min110")) ||
              (rewrite(min(max(x, y), max(z, x)), max(x, min(y, z)), "min111")) ||
@@ -197,8 +196,6 @@ Expr Simplify::visit(const Min *op, ExprInfo *bounds) {
 
                (rewrite(min(x * c0, c1), min(x, fold(c1 / c0)) * c0, c0 > 0 && c1 % c0 == 0, "min186")) ||
                (rewrite(min(x * c0, c1), max(x, fold(c1 / c0)) * c0, c0 < 0 && c1 % c0 == 0, "min187")) ||
-               rewrite(min(x * c0, c1), min(x, fold(c1 / c0)) * c0, c0 > 0 && c1 % c0 == 0) ||
-               rewrite(min(x * c0, c1), max(x, fold(c1 / c0)) * c0, c0 < 0 && c1 % c0 == 0) ||
 
                (rewrite(min(x * c0, y * c1), min(x, y * fold(c1 / c0)) * c0, c0 > 0 && c1 % c0 == 0, "min189")) ||
                (rewrite(min(x * c0, y * c1), max(x, y * fold(c1 / c0)) * c0, c0 < 0 && c1 % c0 == 0, "min190")) ||
