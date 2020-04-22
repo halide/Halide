@@ -292,7 +292,7 @@ Expr Simplify::visit(const Sub *op, ExprInfo *bounds) {
                (rewrite(max(y, x + c0) - max(x + c1, w), max(y - max(x + c1, w), fold(c0 - c1)), can_prove(y + c1 >= w + c0, this), "sub241")) ||
                (rewrite(max(y, x + c0) - max(x + c1, w), min(max(x + c0, y) - w, fold(c0 - c1)), can_prove(y + c1 <= w + c0, this), "sub242")))) ||
 
-             (no_overflow_int(op->type) &&
+             ((no_overflow_int(op->type)) &&
               ((rewrite(c0 - (c1 - x)/c2, (fold(c0*c2 - c1 + c2 - 1) + x)/c2, c2 > 0, "sub245")) ||
                (rewrite(c0 - (x + c1)/c2, (fold(c0*c2 - c1 + c2 - 1) - x)/c2, c2 > 0, "sub246")) ||
                (rewrite(x - (x + y)/c0, (x*fold(c0 - 1) - y + fold(c0 - 1))/c0, c0 > 0, "sub247")) ||
@@ -334,7 +334,7 @@ Expr Simplify::visit(const Sub *op, ExprInfo *bounds) {
                // explicitly only include the ones necessary to get
                // correctness_nested_tail_strategies to pass.
                rewrite((min(x + y, z) + w) - x, min(z - x, y) + w, "sub340") ||
-               rewrite(min((x + y) + w, z) - x, min(z - x, y + w), "sub341")) ||
+               rewrite(min((x + y) + w, z) - x, min(z - x, y + w), "sub341") ||
                rewrite(min(min(x + z, y), w) - x, min(min(y, w) - x, z), "sub342") ||
                rewrite(min(min(y, x + z), w) - x, min(min(y, w) - x, z), "sub343") ||
 
@@ -349,7 +349,7 @@ Expr Simplify::visit(const Sub *op, ExprInfo *bounds) {
                rewrite((min(x*c0 + y, z) + w) / c1 - x*c2, (min(y, z - x*c0) + w) / c1, c0 == c1 * c2, "sub348") ||
                rewrite((min(z, x*c0 + y) + w) / c1 - x*c2, (min(z - x*c0, y) + w) / c1, c0 == c1 * c2, "sub349") ||
 
-               false))) {
+               false)))) {
             return mutate(std::move(rewrite.result), bounds);
         }
     }
