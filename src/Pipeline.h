@@ -126,7 +126,7 @@ public:
         }
         RealizationArg(RealizationArg &&from) = default;
 
-        size_t size() {
+        size_t size() const {
             if (r != nullptr) {
                 return r->size();
             } else if (buffer_list) {

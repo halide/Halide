@@ -156,7 +156,15 @@ void write_symbol_table(std::ostream &out,
         }
         llvm::object::SymbolicFile &obj = *obj_or_err.get();
         for (const auto &sym : obj.symbols()) {
+#if LLVM_VERSION >= 110
+            auto flags = sym.getFlags();
+            if (!flags) {
+                internal_error << llvm::toString(flags.takeError()) << "\n";
+            }
+            const uint32_t sym_flags = flags.get();
+#else
             const uint32_t sym_flags = sym.getFlags();
+#endif
             if (sym_flags & llvm::object::SymbolRef::SF_FormatSpecific) {
                 continue;
             }

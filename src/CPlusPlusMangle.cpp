@@ -183,7 +183,7 @@ struct QualsState {
         }
     }
 
-    const std::string &get_result() {
+    const std::string &get_result() const {
         return result;
     }
 };

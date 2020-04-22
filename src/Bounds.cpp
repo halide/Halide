@@ -1080,26 +1080,8 @@ private:
             Interval upper = interval;
             op->args[0].accept(this);
 
-            if (interval.is_single_point()) {
-                // The thing being guarded doesn't vary, so we don't
-                // need the additional bounds. Our options are to
-                // return the full promise_clamped, or to just return
-                // the value. Both promise_clamped and unsafe_promise
-                // clamped assert that a clamp here would be a
-                // no-op. promise_clamped is context-dependent -
-                // something might be bounded inside a loop, but
-                // lifting the IR elsewhere would make it a lie, so we
-                // can't lift it without knowing where the expression
-                // is going. unsafe_promise_clamped is true for the
-                // entire program, so we can only lift that one.  For
-                // now, we lift neither and just return the interval
-                // for the first arg.
-            } else {
-                // The first arg varies, so use the other args as
-                // additional bounds.
-                interval.min = Interval::make_max(interval.min, lower.min);
-                interval.max = Interval::make_min(interval.max, upper.max);
-            }
+            interval.min = Interval::make_max(interval.min, lower.min);
+            interval.max = Interval::make_min(interval.max, upper.max);
         } else if (op->is_intrinsic(Call::likely) ||
                    op->is_intrinsic(Call::likely_if_innermost)) {
             internal_assert(op->args.size() == 1);
@@ -2145,8 +2127,8 @@ private:
         // As a minor optimization we'll also do the visited
         // insert/check (steps 1 and 2) before pushing, so that
         // already-visited nodes don't even make it into the
-        // stack. Finally, we'll append nodes to the output instead of
-        // prepending, and reverse the output at the end.
+        // stack. Finally, we actually want reverse topological order,
+        // so we'll append nodes to the output instead of prepending.
 
         struct Task {
             string var;
@@ -2182,12 +2164,10 @@ private:
                 pending.pop_back();
             }
         } while (pending.size() > 1);
-
-        std::reverse(let_bounds.begin(), let_bounds.end());
     }
 
     void trim_scope_pop(const string &name, vector<LetBound> &let_bounds) {
-        for (const LetBound l : let_bounds) {
+        for (const LetBound &l : let_bounds) {
             scope.pop(l.var);
             for (pair<const string, Box> &i : boxes) {
                 Box &box = i.second;
