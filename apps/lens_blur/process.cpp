@@ -1,5 +1,6 @@
 #include <chrono>
 #include <cstdio>
+#include <iostream>
 
 #include "lens_blur.h"
 #include "lens_blur_auto_schedule.h"
@@ -12,10 +13,17 @@ using namespace Halide::Runtime;
 using namespace Halide::Tools;
 
 int main(int argc, char **argv) {
+    // char default_args[8][256] = {"bin/host/process", "../images/rgb.png", "32", "13", "0.5", "32", "3", "bin/host/out.png"};
+    // char * default_ptrs[8];
+    // for (int i = 0; i < 8; i++) default_ptrs[i] = &default_args[i][0];
+    // char ** defaults = &default_ptrs[0];
+
     if (argc < 7) {
         printf("Usage: ./process input.png slices focus_depth blur_radius_scale aperture_samples timing_iterations output.png\n"
                "e.g.: ./process input.png 32 13 0.5 32 3 output.png\n");
         return 0;
+
+        // argv = defaults;
     }
 
     // Let the Halide runtime hold onto GPU allocations for
@@ -32,13 +40,15 @@ int main(int argc, char **argv) {
     Buffer<float> output(left_im.width(), left_im.height(), 3);
     int timing_iterations = atoi(argv[6]);
 
+    std::cout << "output width: " << output.width() << "; output height: " << output.height() << std::endl;
+
     lens_blur(left_im, right_im, slices, focus_depth, blur_radius_scale,
               aperture_samples, output);
 
     // Timing code
 
     // Manually-tuned version
-    double min_t_manual = benchmark(timing_iterations, 10, [&]() {
+    double min_t_manual = benchmark(timing_iterations, 20, [&]() {
         lens_blur(left_im, right_im, slices, focus_depth, blur_radius_scale,
                   aperture_samples, output);
         output.device_sync();
@@ -46,7 +56,7 @@ int main(int argc, char **argv) {
     printf("Manually-tuned time: %gms\n", min_t_manual * 1e3);
 
     // Auto-scheduled version
-    double min_t_auto = benchmark(timing_iterations, 10, [&]() {
+    double min_t_auto = benchmark(timing_iterations, 20, [&]() {
         lens_blur_auto_schedule(left_im, right_im, slices, focus_depth,
                                 blur_radius_scale, aperture_samples, output);
         output.device_sync();
