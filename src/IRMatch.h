@@ -2008,12 +2008,17 @@ std::ostream &operator<<(std::ostream &s, const IsFloat<A> &op) {
 }
 
 template<typename A, typename B>
-struct IsSameLanesNum {
+struct IsSameType {
     struct pattern_tag {};
     A a;
     B b;
 
     constexpr static uint32_t binds = bindings<A>::mask | bindings<B>::mask;
+
+    // This rule is a boolean-valued predicate. Bools have type UIntImm.
+    constexpr static IRNodeType min_node_type = IRNodeType::UIntImm;
+    constexpr static IRNodeType max_node_type = IRNodeType::UIntImm;
+    constexpr static bool canonical = true;
 
     constexpr static bool foldable = true;
 
@@ -2022,7 +2027,7 @@ struct IsSameLanesNum {
         // a is almost certainly a very simple pattern (e.g. a wild), so just inline the make method.
         Expr ta = a.make(state, {});
         Expr tb = b.make(state, {});
-        val.u.u64 = (ta.type().lanes() == tb.type().lanes());
+        val.u.u64 = (ta.type() == tb.type());
         ty.code = halide_type_uint;
         ty.bits = 1;
         ty.lanes = ta.type().lanes();
@@ -2030,13 +2035,13 @@ struct IsSameLanesNum {
 };
 
 template<typename A, typename B>
-HALIDE_ALWAYS_INLINE auto is_same_lane_num(A a, B b) noexcept -> IsSameLanesNum<decltype(pattern_arg(a)), decltype(pattern_arg(b))> {
+HALIDE_ALWAYS_INLINE auto is_same_type(A a, B b) noexcept -> IsSameType<decltype(pattern_arg(a)), decltype(pattern_arg(b))> {
     return {pattern_arg(a), pattern_arg(b)};
 }
 
 template<typename A, typename B>
-std::ostream &operator<<(std::ostream &s, const IsSameLanesNum<A, B> &op) {
-    s << "is_same_lane_num(" << op.a << " " << op.b << ")";
+std::ostream &operator<<(std::ostream &s, const IsSameType<A, B> &op) {
+    s << "is_same_type(" << op.a << " " << op.b << ")";
     return s;
 }
 
