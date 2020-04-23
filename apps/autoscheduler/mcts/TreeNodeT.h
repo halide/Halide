@@ -75,7 +75,7 @@ namespace msa {
             bool is_fully_expanded() const { return children.empty() == false && children.size() == actions.size(); }
 
             // does this TreeNode end the search (i.e. the game)
-            bool is_terminal() const { return state.is_terminal(); }
+            bool is_terminal() { return state.is_terminal(); }
 
             // number of times the TreeNode has been visited
             int get_num_visits() const { return num_visits; }

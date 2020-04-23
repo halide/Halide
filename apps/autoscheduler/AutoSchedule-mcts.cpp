@@ -736,7 +736,7 @@ struct State {
             return index < a.index;
         }
     };
-    std::vector<Action> * restored_actions=NULL;
+    std::vector<Action> restored_actions;
 
     class WrapperState {
     public:
@@ -755,6 +755,9 @@ struct State {
         inner->num_decisions_made = other_inner->num_decisions_made;
         inner->cost_calculations = other_inner->cost_calculations;
         inner->restored_actions = other_inner->restored_actions;
+        if (inner->restored_actions.size()>0 && other_inner->restored_actions.size()==0) 
+            for(auto & a : inner->restored_actions)
+                other_inner->restored_actions.push_back(a);
         //inner->ref_count = other.inner->ref_count;
         inner->penalized = other_inner->penalized;
     //std::cout << "WrapperState(1) cost: " <<inner->cost<< " num decisions made: "<<inner->num_decisions_made<<" cost calc: " <<inner->cost_calculations<< std::endl;
@@ -768,12 +771,17 @@ struct State {
 
     // whether or not this state is terminal (reached end)
     // AHA: can be ignored as we limit the horizon to num_passes
-    bool is_terminal() const {
+    bool is_terminal() {
         if(inner->num_decisions_made > 30){
         //    std::cout << "---------is_terminal() -------- " << std::endl;
             return true;
         }
-        //std::cout << "is_terminal()" << std::endl;
+        /*std::vector<Action> actions;
+        get_actions(actions);
+        if (actions.size() ==0){
+            std::cout << "is_terminal()" << std::endl;
+            return true;
+        } */
         //std::vector<Action> actions;
         //get_actions(actions);
       //  std::cout << "action size in is terminal " <<actions.size() << std::endl;
@@ -795,6 +803,16 @@ struct State {
         //std::cout << "action size in apply action " <<actions.size() << std::endl;
         inner = action.state;
         inner->num_decisions_made++;
+                if (action.ae == ActionEnum::Inline) 
+                std::cout << "applying inline, index "<< action.index  << std::endl;
+                if (action.ae == ActionEnum::Retile) 
+                std::cout << "applying Retile, Index " <<action.index << std::endl;
+                if (action.ae == ActionEnum::Option) 
+                std::cout << "applying Option, Index " <<action.index << std::endl;
+                if (action.ae == ActionEnum::Input) 
+                std::cout << "applying Input, Index "  <<action.index<< std::endl;
+                if (action.ae == ActionEnum::Parallelize) 
+                std::cout << "applying Parallelize, Index "  << action.index<<std::endl;
         /*
         for(auto &pair : actions) {
             if (pair.first == action) {
@@ -819,17 +837,30 @@ struct State {
     void get_actions(std::vector<Action>& vactions){
         //std::cout << "get_actions()" << std::endl;
         //std::vector<Action> actions;
-        if (inner->restored_actions==NULL) {
-                inner->generate_actions(dag, params, cost_model, vactions);
-                inner->restored_actions = &vactions;
+        if (inner->restored_actions.size()==0) {
+            inner->generate_actions(dag, params, cost_model, vactions);
+            for(auto & a : vactions)
+                inner->restored_actions.push_back(a);
         }
-        else {
-                vactions = *(inner->restored_actions);
-            }
+        else
+            for(auto & a : inner->restored_actions)
+                vactions.push_back(a);
+
         std::cout << "action size in get actions " <<vactions.size() << std::endl;
-        //for(auto &a : actions) {
-       //     vactions.push_back(a);
-       // }
+        /*if (vactions.size() ==1 )
+        for(auto &action : vactions) {
+                if (action.ae == ActionEnum::Inline) 
+                std::cout << "applying inline, index "<< action.index  << std::endl;
+                if (action.ae == ActionEnum::Retile) 
+                std::cout << "applying Retile, Index " <<action.index << std::endl;
+                if (action.ae == ActionEnum::Option) 
+                std::cout << "applying Option, Index " <<action.index << std::endl;
+                if (action.ae == ActionEnum::Input) 
+                std::cout << "applying Input, Index "  <<action.index<< std::endl;
+                if (action.ae == ActionEnum::Parallelize) 
+                std::cout << "applying Parallelize, Index "  << action.index<<std::endl;
+             
+        }*/
     }
 
     // get a random action, return false if no actions found
@@ -880,14 +911,14 @@ struct State {
 
         int next_node = num_decisions_made / 2;
         int phase = num_decisions_made % 2;
-        /*    
+            
         std::cout << may_subtile() << std::endl;
         std::cout << "-------------------" << std::endl;
         std::cout << next_node << std::endl;
         std::cout << "-------------------" << std::endl;
         std::cout << phase << std::endl;
         std::cout << "-------------------" << std::endl;
-        */
+        
         if (!may_subtile()) {
             // When emulating the older search space, we do all
             // parallelizing last, so that it is independent of the
@@ -898,7 +929,6 @@ struct State {
 
         // Enumerate all legal ways to schedule the next Func
         const FunctionDAG::Node *node = &dag.nodes[next_node];
-        //std::cout << "is input? " << node->is_input << std::endl;
         for (const auto *e : node->outgoing_edges) {
             internal_assert(root->computes(e->consumer->node))
                 << "Partially scheduled code doesn't compute " << e->consumer->name
