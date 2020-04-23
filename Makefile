@@ -127,6 +127,7 @@ WITH_OPENCL ?= not-empty
 WITH_METAL ?= not-empty
 WITH_OPENGL ?= not-empty
 WITH_D3D12 ?= not-empty
+WITH_INTROSPECTION ?= not-empty
 WITH_EXCEPTIONS ?=
 WITH_LLVM_INSIDE_SHARED_LIBHALIDE ?= not-empty
 
