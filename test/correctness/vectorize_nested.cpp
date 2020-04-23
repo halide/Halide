@@ -135,10 +135,43 @@ int vectorize_2d_with_compute_at_vectorized() {
     f(x, y) = x + y;
     g(x, y) = f(x, y) + f(x + 1, y);
 
-    // Nested vectorization should cause a warning.
-    Var xi("xi"), xii("xii");
+    Var xi("xi");
     g.split(x, x, xi, 8).vectorize(xi);
     f.compute_at(g, xi).vectorize(x);
+
+    Buffer<int> result = g.realize(width, height);
+
+    // for (int iy = 0; iy < height; iy++) {
+    //     for (int ix = 0; ix < width; ix++) {
+    //         printf("%2d/%2d ", result(ix, iy), 2 * ix + 1 + 2 * iy);
+    //     }
+    //     printf("\n");
+    // }
+    auto cmp_func = [](int x, int y) {
+        return 2 * x + 1 + 2 * y;
+    };
+    if (check_image(result, cmp_func)) {
+        return -1;
+    }
+
+    return 0;
+}
+
+int vectorize_2d_with_compute_at() {
+    const int width = 35;
+    const int height = 17;
+
+    Func f("f"), g("g");
+    Var x("x"), y("y");
+    f(x, y) = x + y;
+    g(x, y) = f(x, y) + f(x + 1, y);
+
+    Var xi("xi"), xii("xii");
+    g.split(x, x, xi, 8)
+        .split(xi, xi, xii, 2)
+        .vectorize(xi)
+        .vectorize(xii);
+    f.compute_at(g, xii).vectorize(x);
 
     Buffer<int> result = g.realize(width, height);
 
@@ -205,6 +238,11 @@ int main(int argc, char **argv) {
 
     if(vectorize_2d_with_inner_for()) {
         printf("vectorize_2d_with_inner_for failed\n");
+        return -1;
+    }
+
+    if(vectorize_2d_with_compute_at()) {
+        printf("vectorize_2d_with_compute_at failed\n");
         return -1;
     }
 
