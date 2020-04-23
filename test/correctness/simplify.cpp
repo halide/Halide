@@ -255,7 +255,7 @@ void check_algebra() {
     check((x * (-4)) / 2, x * (-2));
     check((x * 4 + y) / 2, y / 2 + x * 2);
     check((y + x * 4) / 2, y / 2 + x * 2);
-    check((x * 4 - y) / 2, (0 - y) / 2 + x * 2);
+    check((x * 2 - y) / 2, (0 - y) / 2 + x);
     check((y - x * 4) / 2, y / 2 - x * 2);
     check((x + 3) / 2 + 7, (x + 17) / 2);
     check((x / 2 + 3) / 5, (x + 6) / 10);
@@ -271,11 +271,11 @@ void check_algebra() {
     check(((x * 4 + y) + z) / 2, (y + z) / 2 + x * 2);
     check(((x * 4 - y) + z) / 2, (z - y) / 2 + x * 2);
     check(((x * 4 + y) - z) / 2, (y - z) / 2 + x * 2);
-    check(((x * 4 - y) - z) / 2, (0 - y - z) / 2 + x * 2);
+    check(((x * 2 - y) - z) / 2, (0 - y - z) / 2 + x);
     check((x + (y * 4 + z)) / 2, (x + z) / 2 + y * 2);
     check(((x + y * 4) + z) / 2, (x + z) / 2 + y * 2);
     check((x + (y * 4 - z)) / 2, (x - z) / 2 + y * 2);
-    check((x - (y * 4 + z)) / 2, (x - z) / 2 - y * 2);
+    check((x - (y * 4 + z)) / 2, (x - z) / 2 + y * -2);
     check((x - (y * 4 - z)) / 2, (x + z) / 2 - y * 2);
 
     // Pull out the gcd of the numerator and divisor
