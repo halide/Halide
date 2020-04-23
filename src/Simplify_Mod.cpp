@@ -76,7 +76,7 @@ Expr Simplify::visit(const Mod *op, ExprInfo *bounds) {
 
         // clang-format off
         if (EVAL_IN_LAMBDA
-            (rewrite(broadcast(x) % broadcast(y), broadcast(x % y, lanes)) ||
+            (rewrite(broadcast(x) % broadcast(y), broadcast(x % y), is_same_type(x, y)) ||
              (no_overflow_int(op->type) &&
               (rewrite((x * c0) % c1, (x * fold(c0 % c1)) % c1, c1 > 0 && (c0 >= c1 || c0 < 0)) ||
                rewrite((x + c0) % c1, (x + fold(c0 % c1)) % c1, c1 > 0 && (c0 >= c1 || c0 < 0)) ||

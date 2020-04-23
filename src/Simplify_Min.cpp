@@ -51,7 +51,7 @@ Expr Simplify::visit(const Min *op, ExprInfo *bounds) {
             std::swap(a_bounds, b_bounds);
         }
 
-        int lanes = op->type.lanes();
+        // int lanes = op->type.lanes();
         auto rewrite = IRMatcher::rewriter(IRMatcher::min(a, b), op->type);
 
         // clang-format off
@@ -87,8 +87,9 @@ Expr Simplify::visit(const Min *op, ExprInfo *bounds) {
              rewrite(min(x, intrin(Call::likely_if_innermost, x)), a) ||
 
              (no_overflow(op->type) &&
-              (rewrite(min(ramp(x, y), broadcast(z)), a, can_prove(x + y * (lanes - 1) <= z && x <= z, this)) ||
-               rewrite(min(ramp(x, y), broadcast(z)), b, can_prove(x + y * (lanes - 1) >= z && x >= z, this)) ||
+              (
+            //    rewrite(min(ramp(x, y), broadcast(z)), a, is_same_type(x, z) && can_prove(x + y * (lanes - 1) <= z && x <= z, this)) ||
+            //    rewrite(min(ramp(x, y), broadcast(z)), b, is_same_type(x, z) && can_prove(x + y * (lanes - 1) >= z && x >= z, this)) ||
                // Compare x to a stair-step function in x
                rewrite(min(((x + c0)/c1)*c1 + c2, x), b, c1 > 0 && c0 + c2 >= c1 - 1) ||
                rewrite(min(x, ((x + c0)/c1)*c1 + c2), a, c1 > 0 && c0 + c2 >= c1 - 1) ||
@@ -116,8 +117,8 @@ Expr Simplify::visit(const Min *op, ExprInfo *bounds) {
              rewrite(min(min(x, y), min(z, x)), min(min(y, z), x)) ||
              rewrite(min(min(y, x), min(z, x)), min(min(y, z), x)) ||
              rewrite(min(min(x, y), min(z, w)), min(min(min(x, y), z), w)) ||
-             rewrite(min(broadcast(x), broadcast(y)), broadcast(min(x, y), lanes)) ||
-             rewrite(min(min(x, broadcast(y)), broadcast(z)), min(x, broadcast(min(y, z), lanes))) ||
+             rewrite(min(broadcast(x), broadcast(y)), broadcast(min(x, y)), is_same_type(x, y)) ||
+             rewrite(min(min(x, broadcast(y)), broadcast(z)), min(x, broadcast(min(y, z))), is_same_type(y, z)) ||
              rewrite(min(max(x, y), max(x, z)), max(x, min(y, z))) ||
              rewrite(min(max(x, y), max(z, x)), max(x, min(y, z))) ||
              rewrite(min(max(y, x), max(x, z)), max(min(y, z), x)) ||

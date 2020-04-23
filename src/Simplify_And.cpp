@@ -76,8 +76,7 @@ Expr Simplify::visit(const And *op, ExprInfo *bounds) {
     }
     // clang-format on
 
-    if (rewrite(broadcast(x) && broadcast(y), broadcast(x && y), is_same_lane_num(x, y)) ||
-
+    if (rewrite(broadcast(x) && broadcast(y), broadcast(x && y), is_same_type(x, y)) ||
         rewrite((x || (y && z)) && y, (x || z) && y) ||
         rewrite((x || (z && y)) && y, (x || z) && y) ||
         rewrite(y && (x || (y && z)), y && (x || z)) ||

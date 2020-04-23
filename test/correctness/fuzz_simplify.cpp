@@ -16,7 +16,7 @@ const int fuzz_var_count = 5;
 // use std::mt19937 instead of rand() to ensure consistent behavior on all systems
 std::mt19937 rng(0);
 
-Type fuzz_types[] = {UInt(1), UInt(8), UInt(16), UInt(32), Int(8), Int(16), Int(32)};
+Type fuzz_types[] = {/*UInt(1),*/ UInt(8), UInt(16), UInt(32), Int(8), Int(16), Int(32)};
 const int fuzz_type_count = sizeof(fuzz_types) / sizeof(fuzz_types[0]);
 
 std::string fuzz_var(int i) {
@@ -34,6 +34,17 @@ Type random_type(int width) {
         T = T.with_lanes(width);
     }
     return T;
+}
+
+int get_random_divisor(int lanes) {
+    std::vector<int> divisors = {lanes};
+    for (int dd = 2; dd < lanes; dd++) {
+        if (lanes % dd == 0) {
+            divisors.push_back(dd);
+        }
+    }
+
+    return divisors[rng() % divisors.size()];
 }
 
 Expr random_leaf(Type T, bool overflow_undef = false, bool imm_only = false) {
@@ -56,13 +67,14 @@ Expr random_leaf(Type T, bool overflow_undef = false, bool imm_only = false) {
             }
         }
     } else {
+        int lanes = get_random_divisor(T.lanes());
         if (rng() % 2 == 0) {
-            auto e1 = random_leaf(T.element_of(), overflow_undef);
-            auto e2 = random_leaf(T.element_of(), overflow_undef);
-            return Ramp::make(e1, e2, T.lanes());
+            auto e1 = random_leaf(T.with_lanes(T.lanes() / lanes), overflow_undef);
+            auto e2 = random_leaf(T.with_lanes(T.lanes() / lanes), overflow_undef);
+            return Ramp::make(e1, e2, lanes);
         } else {
-            auto e1 = random_leaf(T.element_of(), overflow_undef);
-            return Broadcast::make(e1, T.lanes());
+            auto e1 = random_leaf(T.with_lanes(T.lanes() / lanes), overflow_undef);
+            return Broadcast::make(e1, lanes);
         }
     }
 }
@@ -242,61 +254,6 @@ bool test_expression(Expr test, int samples) {
     return true;
 }
 
-Expr ramp(Expr b, Expr s, int w) {
-    return Ramp::make(b, s, w);
-}
-Expr x1(Expr x) {
-    return Broadcast::make(x, 2);
-}
-Expr x2(Expr x) {
-    return Broadcast::make(x, 2);
-}
-Expr x4(Expr x) {
-    return Broadcast::make(x, 2);
-}
-Expr uint1(Expr x) {
-    return Cast::make(UInt(1), x);
-}
-Expr uint8(Expr x) {
-    return Cast::make(UInt(8), x);
-}
-Expr uint16(Expr x) {
-    return Cast::make(UInt(16), x);
-}
-Expr uint32(Expr x) {
-    return Cast::make(UInt(32), x);
-}
-Expr int8(Expr x) {
-    return Cast::make(Int(8), x);
-}
-Expr int16(Expr x) {
-    return Cast::make(Int(16), x);
-}
-Expr int32(Expr x) {
-    return Cast::make(Int(32), x);
-}
-Expr uint1x2(Expr x) {
-    return Cast::make(UInt(1).with_lanes(2), x);
-}
-Expr uint8x2(Expr x) {
-    return Cast::make(UInt(8).with_lanes(2), x);
-}
-Expr uint16x2(Expr x) {
-    return Cast::make(UInt(16).with_lanes(2), x);
-}
-Expr uint32x2(Expr x) {
-    return Cast::make(UInt(32).with_lanes(2), x);
-}
-Expr int8x2(Expr x) {
-    return Cast::make(Int(8).with_lanes(2), x);
-}
-Expr int16x2(Expr x) {
-    return Cast::make(Int(16).with_lanes(2), x);
-}
-Expr int32x2(Expr x) {
-    return Cast::make(Int(32).with_lanes(2), x);
-}
-
 Expr a(Variable::make(Int(0), fuzz_var(0)));
 Expr b(Variable::make(Int(0), fuzz_var(1)));
 Expr c(Variable::make(Int(0), fuzz_var(2)));
@@ -307,7 +264,7 @@ Expr e(Variable::make(Int(0), fuzz_var(4)));
 
 int main(int argc, char **argv) {
     // Number of random expressions to test.
-    const int count = 1000;
+    const int count = 10000;
     // Depth of the randomly generated expression trees.
     const int depth = 5;
     // Number of samples to test the generated expressions for.
@@ -319,15 +276,16 @@ int main(int argc, char **argv) {
     rng.seed(fuzz_seed);
     std::cout << "Simplify fuzz test seed: " << fuzz_seed << "\n";
 
-    int max_fuzz_vector_width = 4;
+    int max_fuzz_vector_width = 16;
 
     for (int i = 0; i < fuzz_type_count; i++) {
         Type T = fuzz_types[i];
-        for (int w = 1; w < max_fuzz_vector_width; w *= 2) {
+        for (int w = 1; w <= max_fuzz_vector_width; w *= 2) {
             Type VT = T.with_lanes(w);
             for (int n = 0; n < count; n++) {
                 // Generate a random expr...
                 Expr test = random_expr(VT, depth);
+                // debug(0) << fuzz_seed << "\n" << test << "\n\n";
                 if (!test_expression(test, samples)) {
                     return -1;
                 }

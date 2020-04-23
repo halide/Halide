@@ -88,8 +88,8 @@ Expr Simplify::visit(const Mul *op, ExprInfo *bounds) {
             rewrite(x * (y * c0), (x * y) * c0) ||
             rewrite(max(x, y) * min(x, y), x * y) ||
             rewrite(max(x, y) * min(y, x), y * x) ||
-            rewrite(broadcast(x) * broadcast(y), broadcast(x * y), is_same_lane_num(x, y)) ||
-            rewrite(ramp(x, y) * broadcast(z), ramp(x * z, y * z), is_same_lane_num(x, z))) {
+            rewrite(broadcast(x) * broadcast(y), broadcast(x * y), is_same_type(x, y)) ||
+            rewrite(ramp(x, y) * broadcast(z), ramp(x * z, y * z), is_same_type(x, z))) {
             return mutate(rewrite.result, bounds);
         }
     }

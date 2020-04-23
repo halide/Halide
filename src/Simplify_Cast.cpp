@@ -82,13 +82,13 @@ Expr Simplify::visit(const Cast *op, ExprInfo *bounds) {
             return mutate(Cast::make(op->type, cast->value), bounds);
         } else if (broadcast_value) {
             // cast(broadcast(x)) -> broadcast(cast(x))
-            return mutate(Broadcast::make(Cast::make(op->type.element_of(), broadcast_value->value), broadcast_value->lanes), bounds);
+            return mutate(Broadcast::make(Cast::make(op->type.with_lanes(broadcast_value->value.type().lanes()), broadcast_value->value), broadcast_value->lanes), bounds);
         } else if (ramp_value &&
                    op->type.element_of() == Int(64) &&
                    op->value.type().element_of() == Int(32)) {
             // cast(ramp(a, b, w)) -> ramp(cast(a), cast(b), w)
-            return mutate(Ramp::make(Cast::make(op->type.element_of(), ramp_value->base),
-                                     Cast::make(op->type.element_of(), ramp_value->stride),
+            return mutate(Ramp::make(Cast::make(op->type.with_lanes(ramp_value->base.type().lanes()), ramp_value->base),
+                                     Cast::make(op->type.with_lanes(ramp_value->stride.type().lanes()), ramp_value->stride),
                                      ramp_value->lanes),
                           bounds);
         }

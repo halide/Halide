@@ -45,12 +45,12 @@ Expr Simplify::visit(const Sub *op, ExprInfo *bounds) {
         if (EVAL_IN_LAMBDA
             ((!op->type.is_uint() && rewrite(x - c0, x + fold(-c0), !overflows(-c0))) ||
              rewrite(x - x, 0) || // We want to remutate this just to get better bounds
-             rewrite(ramp(x, y) - ramp(z, w), ramp(x - z, y - w), is_same_lane_num(x, z)) ||
-             rewrite(ramp(x, y) - broadcast(z), ramp(x - z, y), is_same_lane_num(x, z)) ||
-             rewrite(broadcast(x) - ramp(z, w), ramp(x - z, -w), is_same_lane_num(x, z)) ||
-             rewrite(broadcast(x) - broadcast(y), broadcast(x - y), is_same_lane_num(x, y)) ||
-             rewrite((x - broadcast(y)) - broadcast(z), x - broadcast(y + z), is_same_lane_num(y, z)) ||
-             rewrite((x + broadcast(y)) - broadcast(z), x + broadcast(y - z), is_same_lane_num(y, z)) ||
+             rewrite(ramp(x, y) - ramp(z, w), ramp(x - z, y - w), is_same_type(x, z)) ||
+             rewrite(ramp(x, y) - broadcast(z), ramp(x - z, y), is_same_type(x, z)) ||
+             rewrite(broadcast(x) - ramp(z, w), ramp(x - z, -w), is_same_type(x, z)) ||
+             rewrite(broadcast(x) - broadcast(y), broadcast(x - y), is_same_type(x, y)) ||
+             rewrite((x - broadcast(y)) - broadcast(z), x - broadcast(y + z), is_same_type(y, z)) ||
+             rewrite((x + broadcast(y)) - broadcast(z), x + broadcast(y - z), is_same_type(y, z)) ||
              rewrite(select(x, y, z) - select(x, w, u), select(x, y - w, z - u)) ||
              rewrite(select(x, y, z) - y, select(x, 0, z - y)) ||
              rewrite(select(x, y, z) - z, select(x, y - z, 0)) ||
