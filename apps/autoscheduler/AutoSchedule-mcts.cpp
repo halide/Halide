@@ -719,13 +719,15 @@ struct State {
         ActionEnum ae;
         unsigned index;
         unsigned option_var;
+        IntrusivePtr<State> state;
         //AHA: If this constructor is called then there is a bug in the MCTS
-        //Action() { assert(0 && "illegal construction"); }
+        Action() { assert(0 && "illegal construction"); }
         Action(std::nullptr_t) : ae(ActionEnum::Inline), index(0), option_var(0) {
+            //assert(0 && "illegal construction"); 
         }
-        Action(const Action& a):ae(a.ae), index(a.index), option_var(a.option_var) {}
-        Action(ActionEnum ae_, unsigned index_) : ae(ae_), index(index_), option_var(0) {}
-        Action(ActionEnum ae_, unsigned index_, unsigned option_var_) : ae(ae_), index(index_), option_var(option_var_) {}
+        Action(const Action& a):ae(a.ae), index(a.index), option_var(a.option_var),state(a.state) {}
+        Action(ActionEnum ae_, unsigned index_,IntrusivePtr<State> state) : ae(ae_), index(index_), option_var(0),state(state) {}
+        Action(ActionEnum ae_, unsigned index_, unsigned option_var_, IntrusivePtr<State> state) : ae(ae_), index(index_), option_var(option_var_),state(state) {}
         bool operator==(const Action& a) const {
             return ae == a.ae && index == a.index && option_var == a.option_var;
         }
@@ -734,6 +736,7 @@ struct State {
             return index < a.index;
         }
     };
+    std::vector<Action> * restored_actions=NULL;
 
     class WrapperState {
     public:
@@ -743,7 +746,6 @@ struct State {
         const FunctionDAG &dag;
         const MachineParams &params;
        CostModel *cost_model;
-
     WrapperState(IntrusivePtr<State> other_inner, unsigned numleft, const FunctionDAG &dag, const MachineParams &params, CostModel* cost_model) :  numleft(numleft), dag(dag), params(params),
     cost_model(cost_model) {
         inner = new State;
@@ -752,25 +754,30 @@ struct State {
         inner->cost = other_inner->cost;
         inner->num_decisions_made = other_inner->num_decisions_made;
         inner->cost_calculations = other_inner->cost_calculations;
+        inner->restored_actions = other_inner->restored_actions;
         //inner->ref_count = other.inner->ref_count;
         inner->penalized = other_inner->penalized;
-
     //std::cout << "WrapperState(1) cost: " <<inner->cost<< " num decisions made: "<<inner->num_decisions_made<<" cost calc: " <<inner->cost_calculations<< std::endl;
     }
     // copy and assignment operators should perform a DEEP clone of the given state
     WrapperState(const WrapperState& other) :
-        WrapperState(other.inner, other.numleft, other.dag, other.params, other.cost_model) {}
+        WrapperState(other.inner, other.numleft, other.dag, other.params, other.cost_model) {
+        }
     
     WrapperState& operator = (const WrapperState& other) = delete;
 
     // whether or not this state is terminal (reached end)
     // AHA: can be ignored as we limit the horizon to num_passes
     bool is_terminal() const {
+        if(inner->num_decisions_made > 30){
+        //    std::cout << "---------is_terminal() -------- " << std::endl;
+            return true;
+        }
         //std::cout << "is_terminal()" << std::endl;
-        std::vector<Action> actions;
-        get_actions(actions);
+        //std::vector<Action> actions;
+        //get_actions(actions);
       //  std::cout << "action size in is terminal " <<actions.size() << std::endl;
-        if (actions.size() ==0) return true;
+        //if (actions.size() ==0) return true;
         return false;
     }
 
@@ -783,42 +790,50 @@ struct State {
     // apply action to state
     void apply_action(const Action& action) {
         //std::cout << "apply_action()" << std::endl;
-        std::map<Action, IntrusivePtr<State>> actions;
-        inner->generate_actions(dag, params, cost_model, actions);
+        //std::map<Action, IntrusivePtr<State>> actions;
+        //inner->generate_actions(dag, params, cost_model, actions);
         //std::cout << "action size in apply action " <<actions.size() << std::endl;
+        inner = action.state;
+        inner->num_decisions_made++;
+        /*
         for(auto &pair : actions) {
             if (pair.first == action) {
                 inner = pair.second;
-                inner->num_decisions_made++;
                 std::cout << "num_decisions_made "<< inner->num_decisions_made << std::endl;
-                if (pair.first.ae == ActionEnum::Inline) 
-                std::cout << "applying inline, index "<< pair.first.index  << std::endl;
-                if (pair.first.ae == ActionEnum::Retile) 
-                std::cout << "applying Retile, Index " <<pair.first.index << std::endl;
-                if (pair.first.ae == ActionEnum::Option) 
-                std::cout << "applying Option, Index " <<pair.first.index << std::endl;
-                if (pair.first.ae == ActionEnum::Input) 
-                std::cout << "applying Input, Index "  <<pair.first.index<< std::endl;
-                if (pair.first.ae == ActionEnum::Parallelize) 
-                std::cout << "applying Parallelize, Index "  << pair.first.index<<std::endl;
+                if (action.ae == ActionEnum::Inline) 
+                std::cout << "applying inline, index "<< action.index  << std::endl;
+                if (action.ae == ActionEnum::Retile) 
+                std::cout << "applying Retile, Index " <<action.index << std::endl;
+                if (action.ae == ActionEnum::Option) 
+                std::cout << "applying Option, Index " <<action.index << std::endl;
+                if (action.ae == ActionEnum::Input) 
+                std::cout << "applying Input, Index "  <<action.index<< std::endl;
+                if (action.ae == ActionEnum::Parallelize) 
+                std::cout << "applying Parallelize, Index "  << action.index<<std::endl;
             }
-        }
+        }*/
         //internal_assert(0);
     }
 
     // return possible actions from this state
-    void get_actions(std::vector<Action>& vactions) const {
+    void get_actions(std::vector<Action>& vactions){
         //std::cout << "get_actions()" << std::endl;
-        std::map<Action, IntrusivePtr<State>> actions;
-        inner->generate_actions(dag, params, cost_model, actions);
-        //std::cout << "action size in get actions " <<actions.size() << std::endl;
-        for(auto &pair : actions) {
-            vactions.push_back(pair.first);
+        //std::vector<Action> actions;
+        if (inner->restored_actions==NULL) {
+                inner->generate_actions(dag, params, cost_model, vactions);
+                inner->restored_actions = &vactions;
         }
+        else {
+                vactions = *(inner->restored_actions);
+            }
+        std::cout << "action size in get actions " <<vactions.size() << std::endl;
+        //for(auto &a : actions) {
+       //     vactions.push_back(a);
+       // }
     }
 
     // get a random action, return false if no actions found
-    bool get_random_action(Action& action) const {
+    bool get_random_action(Action& action) {
         //std::cout << "get_random_action()" << std::endl;
         std::vector<Action> actions;
         get_actions(actions);
@@ -836,7 +851,7 @@ struct State {
         //std::cout << "calculate_cost()" << std::endl;
         internal_assert(cost_model && "bug, cost model not defined");
         cost_model->evaluate_costs();
-        std::cout << "---------- evaluate_costs() ---------- " << std::endl;
+        //std::cout << "---------- evaluate_costs() ---------- " << std::endl;
         //std::cout << "inner cost "<<inner->cost <<"parent cost "<<inner->parent->cost<< std::endl;
         std::cout << "inner cost "<<inner->cost << std::endl;
         return { (float)(-1 * inner->cost)}; 
@@ -852,7 +867,7 @@ struct State {
     void generate_actions(const FunctionDAG &dag,
                            const MachineParams &params,
                            CostModel *cost_model,
-                           std::map<Action, IntrusivePtr<State>> &actions) const {
+                           std::vector<Action> &actions) const {
         internal_assert(root.defined() && root->is_root());
         /*std::cout << "in_generate_actions" << std::endl;
         std::cout << num_decisions_made << std::endl;
@@ -930,7 +945,7 @@ struct State {
                     //child->num_decisions_made++;
                     if (child->calculate_cost(dag, params, cost_model)) {
                         num_children++;
-                        actions.emplace(Action(ActionEnum::Inline,num_children-1), std::move(child));
+                        actions.emplace_back(Action(ActionEnum::Inline,num_children-1, std::move(child)));
                     }
                 }
             }
@@ -993,7 +1008,7 @@ struct State {
                         unsigned hash = vector_dim;
                         //child->structural_hash(hash, /*depth*/10);
                         child->structural_hash(/*depth*/hash); // AHA:hash being depth seems ambiguous
-                        actions.emplace(Action(ActionEnum::Retile,num_children-1, hash), std::move(child));
+                        actions.emplace_back(Action(ActionEnum::Retile,num_children-1, hash, std::move(child)));
                     }
                 }
             }
@@ -1020,7 +1035,7 @@ struct State {
                 num_children++;
                 auto child = make_child();
                 //child->num_decisions_made++;
-                actions.emplace(Action(ActionEnum::Parallelize,num_children-1), std::move(child));
+                actions.emplace_back(Action(ActionEnum::Parallelize,num_children-1, std::move(child)));
             } else {
                 internal_assert(pure_size);
 
@@ -1105,7 +1120,7 @@ struct State {
                     auto child = make_child();
                     //child->num_decisions_made++;
                     //AHA: adding again maybe for sig fault?
-                    actions.emplace(Action(ActionEnum::Option,num_children-1), std::move(child));
+                    actions.emplace_back(Action(ActionEnum::Option,num_children-1, std::move(child)));
                     //WM: didn't create a new child here as didn't appear to be different from parent [thus consider illegal action, or could simply use identity action]
                     //accept_child(std::move(child));
                     return;
@@ -1151,7 +1166,7 @@ struct State {
                     //child->num_decisions_made++;
                     if (child->calculate_cost(dag, params, cost_model)) {
                         num_children++;
-                        actions.emplace(Action(ActionEnum::Option,num_children-1, o.hash()), std::move(child));
+                        actions.emplace_back(Action(ActionEnum::Option,num_children-1, o.hash(), std::move(child)));
                     }
                 }
             }
@@ -1663,8 +1678,9 @@ IntrusivePtr<State> optimal_mcts_schedule(FunctionDAG &dag,
         IntrusivePtr<State> initial{new State};
         initial->root = new LoopNest;
         State::WrapperState state(initial, num_passes, dag, params, cost_model);
+        //std::cout << state.inner->cost<<std::endl;
         for (int j = 0; j < mcts_depth; j++) {
-            ProgressBar tick;
+            //ProgressBar tick;
 
             // run uct mcts on current state and get best action
             State::Action action = uct.run(state);
@@ -1672,15 +1688,16 @@ IntrusivePtr<State> optimal_mcts_schedule(FunctionDAG &dag,
             if (action == NULL) break;
             // apply the action to the current state
             state.apply_action(action);
-            state.evaluate();
-            auto pass = state.inner; 
+            //state.evaluate();
+            //auto pass = state.inner; 
             //std::cout << "finished pass " << i << std::endl;
             //std::cout << "Pass " << i << " of " << num_passes << ", cost: " << pass->cost << std::endl;
              
-            tick.clear();
-    
+            //tick.clear();
+            /*
             if (aslog::aslog_level() == 0) {
-                aslog(0) << "Pass " << i << " of " << num_passes << ", cost: " << pass->cost << "\n";
+                aslog(0) << "Pass " << i << " of " << num_passes <<" depth " << j << ", cost: " << pass->cost << "\n";
+                //aslog(0) << "Pass " << i << " of " << num_passes << ", cost: " << pass->cost << "\n";
             } else {
                 aslog(0) << "Pass " << i << " result: ";
                 pass->dump();
@@ -1697,12 +1714,21 @@ IntrusivePtr<State> optimal_mcts_schedule(FunctionDAG &dag,
                 // not necessarily the final one.
                 best = pass;
             }
+            */
             //std::cout << "prefinished pass " << i << std::endl;
             if (state.inner->num_decisions_made == 2 * (int)dag.nodes.size()) {
                 std::cout << "breaking.. with num decisions made " <<state.inner->num_decisions_made << std::endl;
                  break;
             }
         }
+        state.evaluate();
+        auto pass = state.inner; 
+        if(i==0) best = pass;
+        else if(pass->cost < best->cost) best = pass;
+        
+        std::cout << "Pass " << i << " of " << num_passes << ", cost: " << pass->cost << std::endl;
+        std::cout << "Pass " << i << " of " << num_passes << ", best so far cost: " << best->cost << std::endl;
+        uct.uct_k = 2*uct.uct_k;//sqrt(2);
     }
     aslog(0) << "Best cost: " << best->cost << "\n";
     
