@@ -511,7 +511,6 @@ class VectorSubs : public IRMutator {
     Expr visit(const Ramp* op) override {
         Expr base = mutate(op->base);
         Expr stride = mutate(op->stride);
-        // debug(0) << "Ramp - " << base << " " << stride << " " << op->lanes << "\n";
         return Ramp::make(base, stride, op->lanes);
     }
 
@@ -1029,6 +1028,7 @@ class VectorSubs : public IRMutator {
     Expr scalarize(Expr e) {
         // This method returns a select tree that produces a vector lanes
         // result expression
+        // Q: How do I trigger this?
         user_assert(replacements.size() == 1) << "Cannot scalarize nested vectorization\n";
         string var = replacements.begin()->first;
         Expr replacement = replacements.begin()->second;
@@ -1072,10 +1072,6 @@ class VectorSubs : public IRMutator {
             replacements_from_zero[var.name] = 0;
         }
 
-        // for (const auto &r : replacements) {
-        //     debug(0) << "Replacements - init " << r.first << " " << r.second << "\n";
-        // }
-
         Expr strided_ones = 1;
         Expr stride = 1;
         for (int ix = vectorized_vars.size() - 1; ix >= 0; ix--) {
@@ -1098,15 +1094,6 @@ class VectorSubs : public IRMutator {
             ramp_for_allocate = Ramp::make(ramp_for_allocate, stride, vectorized_vars[ix].lanes);
             strided_ones = Broadcast::make(strided_ones, vectorized_vars[ix].lanes);
             stride = Broadcast::make(stride * vectorized_vars[ix].lanes, vectorized_vars[ix].lanes);
-
-            // for (const auto &r : replacements) {
-            //     debug(0) << "Replacements " << ix << " " << r.first << " " << r.second << "\n";
-            // }
-            // for (const auto &r : replacements_from_zero) {
-            //     debug(0) << "Replacements " << ix << " " << r.first << " " << r.second << "\n";
-            // }
-
-            // debug(0) << "Total ramp - " << ramp_for_allocate << "\n";
         }
     }
 public:
@@ -1142,17 +1129,8 @@ class VectorizeLoops : public IRMutator {
             }
 
             vectorized_vars.push_back({for_loop->name, for_loop->min, (int)extent->value});
-            // debug(0) << "Vectorized var - " << for_loop->name << "\n";
-            // Stmt body = mutate(for_loop->body);
-
-            // Not exactly correct, because doesn't handle a "tree" of loops.
-            // if (vectorized_vars[0].name == for_loop->name) {
-                // Replace the vars with a ramp within the body
             stmt = VectorSubs(vectorized_vars, in_hexagon, target).mutate(for_loop->body);
             vectorized_vars.clear();
-            // } else {
-            //     stmt = body;
-            // }
         } else {
             stmt = IRMutator::visit(for_loop);
         }

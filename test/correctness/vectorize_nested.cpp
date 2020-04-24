@@ -167,8 +167,8 @@ int vectorize_2d_with_compute_at() {
     g(x, y) = f(x, y) + f(x + 1, y);
 
     Var xi("xi"), xii("xii");
-    g.split(x, x, xi, 8)
-        .split(xi, xi, xii, 2)
+    g.split(x, x, xi, 8, TailStrategy::GuardWithIf)
+        .split(xi, xi, xii, 2, TailStrategy::GuardWithIf)
         .vectorize(xi)
         .vectorize(xii);
     f.compute_at(g, xii).vectorize(x);
