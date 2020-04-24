@@ -255,6 +255,7 @@ bool test_expression(Expr test, int samples) {
     return true;
 }
 
+// These are here to enable copy of failed output expressions and pasting them into the test for debugging.
 Expr ramp(Expr b, Expr s, int w) {
     return Ramp::make(b, s, w);
 }
