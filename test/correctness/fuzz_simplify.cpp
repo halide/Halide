@@ -265,7 +265,7 @@ Expr e(Variable::make(Int(0), fuzz_var(4)));
 
 int main(int argc, char **argv) {
     // Number of random expressions to test.
-    const int count = 500;
+    const int count = 1000;
     // Depth of the randomly generated expression trees.
     const int depth = 5;
     // Number of samples to test the generated expressions for.

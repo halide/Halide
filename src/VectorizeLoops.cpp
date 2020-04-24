@@ -392,8 +392,6 @@ class VectorSubs : public IRMutator {
 
     std::map<string, std::map<string, Expr>> widened_vars;
 
-    Expr ramp_for_allocate;
-
     const Target &target;
 
     bool in_hexagon;  // Are we inside the hexagon loop?
@@ -437,14 +435,14 @@ class VectorSubs : public IRMutator {
         } else if (scope.contains(op->name)) {
             string widened_name = op->name + ".widened." + vectorized_vars.back().name;
             Expr mutated;
+            // Depending on the current loop level, we may need to
+            // widen variable differently.
             if (widened_vars[op->name].count(widened_name) > 0) {
                 mutated = widened_vars[op->name][widened_name];
             } else {
                 mutated = mutate(scope.get(op->name));
                 widened_vars[op->name][widened_name] = mutated;
             }
-            // If the variable appears in scope then we previously widened
-            // it and we use the new widened name for the variable.
             return Variable::make(mutated.type(), widened_name);
         } else {
             return op;
@@ -807,16 +805,16 @@ class VectorSubs : public IRMutator {
             // which would mean control flow divergence within the
             // SIMD lanes.
 
-            bool vectorize_predicate = !(uses_gpu_vars(cond) || replacements.size() > 1);
+            bool vectorize_predicate = !(uses_gpu_vars(cond) || (vectorized_vars.size() > 1));
 
             Stmt predicated_stmt;
             if (vectorize_predicate) {
-                PredicateLoadStore p(replacements.begin()->first, cond, in_hexagon, target);
+                PredicateLoadStore p(vectorized_vars.front().name, cond, in_hexagon, target);
                 predicated_stmt = p.mutate(then_case);
                 vectorize_predicate = p.is_vectorized();
             }
             if (vectorize_predicate && else_case.defined()) {
-                PredicateLoadStore p(replacements.begin()->first, !cond, in_hexagon, target);
+                PredicateLoadStore p(vectorized_vars.front().name, !cond, in_hexagon, target);
                 predicated_stmt = Block::make(predicated_stmt, p.mutate(else_case));
                 vectorize_predicate = p.is_vectorized();
             }
@@ -837,7 +835,6 @@ class VectorSubs : public IRMutator {
                 // generating a scalar condition that checks if
                 // the least-true lane is true.
                 Expr all_true = bounds_of_lanes(c->args[0]).min;
-            
                 // Wrap it in the same flavor of likely
                 all_true = Call::make(Bool(), c->name,
                                       {all_true}, Call::PureIntrinsic);
@@ -1065,7 +1062,6 @@ class VectorSubs : public IRMutator {
     void update_replacements() {
         replacements.clear();
         replacements_from_zero.clear();
-        ramp_for_allocate = 0;
 
         for (const auto &var : vectorized_vars) {
             replacements[var.name] = var.min;
@@ -1073,27 +1069,28 @@ class VectorSubs : public IRMutator {
         }
 
         Expr strided_ones = 1;
-        Expr stride = 1;
         for (int ix = vectorized_vars.size() - 1; ix >= 0; ix--) {
             for (int ik = 0; ik < (int)vectorized_vars.size(); ik++) {
                 if (ix == ik) {
-                    replacements[vectorized_vars[ik].name] = Ramp::make(replacements[vectorized_vars[ik].name],
-                                                                        strided_ones,
-                                                                        vectorized_vars[ix].lanes);
-                    replacements_from_zero[vectorized_vars[ik].name] = Ramp::make(replacements_from_zero[vectorized_vars[ik].name],
-                                                                        strided_ones,
-                                                                        vectorized_vars[ix].lanes);
+                    replacements[vectorized_vars[ik].name] =
+                        Ramp::make(replacements[vectorized_vars[ik].name],
+                                    strided_ones,
+                                    vectorized_vars[ix].lanes);
+                    replacements_from_zero[vectorized_vars[ik].name] =
+                        Ramp::make(replacements_from_zero[vectorized_vars[ik].name],
+                                    strided_ones,
+                                    vectorized_vars[ix].lanes);
                 } else {
-                    replacements[vectorized_vars[ik].name] = Broadcast::make(replacements[vectorized_vars[ik].name],
-                                                                                vectorized_vars[ix].lanes);
-                    replacements_from_zero[vectorized_vars[ik].name] = Broadcast::make(replacements_from_zero[vectorized_vars[ik].name],
-                                                                                vectorized_vars[ix].lanes);
+                    replacements[vectorized_vars[ik].name] =
+                        Broadcast::make(replacements[vectorized_vars[ik].name],
+                                            vectorized_vars[ix].lanes);
+                    replacements_from_zero[vectorized_vars[ik].name] =
+                        Broadcast::make(replacements_from_zero[vectorized_vars[ik].name],
+                                            vectorized_vars[ix].lanes);
                 }
             }
 
-            ramp_for_allocate = Ramp::make(ramp_for_allocate, stride, vectorized_vars[ix].lanes);
             strided_ones = Broadcast::make(strided_ones, vectorized_vars[ix].lanes);
-            stride = Broadcast::make(stride * vectorized_vars[ix].lanes, vectorized_vars[ix].lanes);
         }
     }
 public:

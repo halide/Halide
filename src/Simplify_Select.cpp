@@ -42,9 +42,7 @@ Expr Simplify::visit(const Select *op, ExprInfo *bounds) {
 
         // clang-format off
         if (EVAL_IN_LAMBDA
-            (
-            // this doesn't work for nested broadcasts right now.
-             rewrite(select(broadcast(x), y, z), select(x, y, z), is_scalar(x)) ||
+            (rewrite(select(broadcast(x), y, z), select(x, y, z), is_scalar(x)) ||
              rewrite(select(x != y, z, w), select(x == y, w, z)) ||
              rewrite(select(x <= y, z, w), select(y < x, w, z)) ||
              rewrite(select(x, select(y, z, w), z), select(x && !y, w, z)) ||

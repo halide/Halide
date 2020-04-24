@@ -87,8 +87,7 @@ Expr Simplify::visit(const Min *op, ExprInfo *bounds) {
              rewrite(min(x, intrin(Call::likely_if_innermost, x)), a) ||
 
              (no_overflow(op->type) &&
-              (
-               rewrite(min(ramp(x, y), broadcast(z)), a, is_scalar(x) && is_same_type(x, z) && can_prove(x + y * (lanes - 1) <= z && x <= z, this)) ||
+              (rewrite(min(ramp(x, y), broadcast(z)), a, is_scalar(x) && is_same_type(x, z) && can_prove(x + y * (lanes - 1) <= z && x <= z, this)) ||
                rewrite(min(ramp(x, y), broadcast(z)), b, is_scalar(x) && is_same_type(x, z) && can_prove(x + y * (lanes - 1) >= z && x >= z, this)) ||
                // Compare x to a stair-step function in x
                rewrite(min(((x + c0)/c1)*c1 + c2, x), b, c1 > 0 && c0 + c2 >= c1 - 1) ||

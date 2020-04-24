@@ -87,8 +87,10 @@ Expr Simplify::visit(const Cast *op, ExprInfo *bounds) {
                    op->type.element_of() == Int(64) &&
                    op->value.type().element_of() == Int(32)) {
             // cast(ramp(a, b, w)) -> ramp(cast(a), cast(b), w)
-            return mutate(Ramp::make(Cast::make(op->type.with_lanes(ramp_value->base.type().lanes()), ramp_value->base),
-                                     Cast::make(op->type.with_lanes(ramp_value->stride.type().lanes()), ramp_value->stride),
+            return mutate(Ramp::make(Cast::make(op->type.with_lanes(ramp_value->base.type().lanes()),
+                                                ramp_value->base),
+                                     Cast::make(op->type.with_lanes(ramp_value->stride.type().lanes()),
+                                                ramp_value->stride),
                                      ramp_value->lanes),
                           bounds);
         }

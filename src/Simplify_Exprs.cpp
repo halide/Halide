@@ -85,7 +85,7 @@ Expr Simplify::visit(const Ramp *op, ExprInfo *bounds) {
     ExprInfo base_bounds, stride_bounds;
     Expr base = mutate(op->base, &base_bounds);
     Expr stride = mutate(op->stride, &stride_bounds);
-    const int lanes = op->lanes;  //type.lanes();
+    const int lanes = op->lanes;
 
     if (bounds && no_overflow_int(op->type)) {
         bounds->min_defined = base_bounds.min_defined && stride_bounds.min_defined;
