@@ -255,6 +255,61 @@ bool test_expression(Expr test, int samples) {
     return true;
 }
 
+Expr ramp(Expr b, Expr s, int w) {
+    return Ramp::make(b, s, w);
+}
+Expr x1(Expr x) {
+    return Broadcast::make(x, 2);
+}
+Expr x2(Expr x) {
+    return Broadcast::make(x, 2);
+}
+Expr x4(Expr x) {
+    return Broadcast::make(x, 2);
+}
+Expr uint1(Expr x) {
+    return Cast::make(UInt(1), x);
+}
+Expr uint8(Expr x) {
+    return Cast::make(UInt(8), x);
+}
+Expr uint16(Expr x) {
+    return Cast::make(UInt(16), x);
+}
+Expr uint32(Expr x) {
+    return Cast::make(UInt(32), x);
+}
+Expr int8(Expr x) {
+    return Cast::make(Int(8), x);
+}
+Expr int16(Expr x) {
+    return Cast::make(Int(16), x);
+}
+Expr int32(Expr x) {
+    return Cast::make(Int(32), x);
+}
+Expr uint1x2(Expr x) {
+    return Cast::make(UInt(1).with_lanes(2), x);
+}
+Expr uint8x2(Expr x) {
+    return Cast::make(UInt(8).with_lanes(2), x);
+}
+Expr uint16x2(Expr x) {
+    return Cast::make(UInt(16).with_lanes(2), x);
+}
+Expr uint32x2(Expr x) {
+    return Cast::make(UInt(32).with_lanes(2), x);
+}
+Expr int8x2(Expr x) {
+    return Cast::make(Int(8).with_lanes(2), x);
+}
+Expr int16x2(Expr x) {
+    return Cast::make(Int(16).with_lanes(2), x);
+}
+Expr int32x2(Expr x) {
+    return Cast::make(Int(32).with_lanes(2), x);
+}
+
 Expr a(Variable::make(Int(0), fuzz_var(0)));
 Expr b(Variable::make(Int(0), fuzz_var(1)));
 Expr c(Variable::make(Int(0), fuzz_var(2)));
