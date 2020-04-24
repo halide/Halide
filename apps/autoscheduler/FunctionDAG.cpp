@@ -346,11 +346,9 @@ void BoundContents::validate() const {
 }
 
 BoundContents::Layout::~Layout() {
-    //internal_assert(num_live == 0)
-    if (num_live != 0) {
-        std::cerr  << "Destroying a Layout without returning all the BoundContents. "
-                   << num_live << " are still live\n";
-    }
+    internal_assert(num_live == 0)
+        << "Destroying a Layout without returning all the BoundContents. "
+        << num_live << " are still live\n";
     for (auto *b : pool) {
         b->~BoundContents();
     }
