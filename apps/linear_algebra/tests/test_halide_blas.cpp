@@ -303,7 +303,7 @@ int main(int argc, char *argv[]) {
             d.run_tests(size);
         }
     } else {
-        int size = 64 * 7;
+        int size = 768;
         std::cout << "Testing halide_blas with N = " << size << ":\n";
         s.run_tests(size);
         d.run_tests(size);

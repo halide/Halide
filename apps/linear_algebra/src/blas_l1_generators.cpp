@@ -46,7 +46,6 @@ public:
     }
 
     void generate() {
-        assert(get_target().has_feature(Target::NoAsserts));
         assert(get_target().has_feature(Target::NoBoundsQuery));
 
         const int vec_size = vectorize_ ? natural_vector_size(type_of<T>()) : 1;
@@ -97,7 +96,6 @@ public:
     Output<Buffer<T>> result_ = {"result", 1};
 
     void generate() {
-        assert(get_target().has_feature(Target::NoAsserts));
         assert(get_target().has_feature(Target::NoBoundsQuery));
 
         const int vec_size = vectorize_ ? natural_vector_size(type_of<T>()) : 1;
@@ -153,7 +151,6 @@ public:
     Output<Buffer<T>> result_ = {"result", 1};
 
     void generate() {
-        assert(get_target().has_feature(Target::NoAsserts));
         assert(get_target().has_feature(Target::NoBoundsQuery));
 
         const int vec_size = vectorize_ ? natural_vector_size(type_of<T>()) : 1;
