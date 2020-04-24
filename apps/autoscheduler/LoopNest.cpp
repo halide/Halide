@@ -3878,7 +3878,7 @@ void LoopNest::apply(LoopLevel here,
 
                         // If the factor evenly divides the parent extent, then
                         // no tail strategy is needed
-                        bool evenly_divides = size[parent.index] >= factor && size[parent.index] % factor == 0;
+                        bool evenly_divides = parent.extent >= factor && parent.extent % factor == 0;
                         if (parent.var.is_rvar || (stage->index != 0 && !parent.outermost && !evenly_divides)) {
                             tail_strategy = TailStrategy::GuardWithIf;
                         }
