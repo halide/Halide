@@ -738,6 +738,10 @@ struct State {
     };
     std::vector<Action> restored_actions;
     bool cached = false;
+    void freeCache() {
+        restored_actions.clear();
+        cached = false;
+    }
     class WrapperState {
     public:
         IntrusivePtr<State> inner;
@@ -803,7 +807,9 @@ struct State {
         //inner->generate_actions(dag, params, cost_model, actions);
         //std::cout << "action size in apply action " <<action.state->restored_actions.size() << std::endl;
         internal_assert(inner->num_decisions_made+1 == action.state->num_decisions_made);
+        inner->freeCache();
         inner = action.state;
+
         //inner->num_decisions_made++;
         /*        if (action.ae == ActionEnum::Inline) 
                 std::cout << "applying inline, index "<< action.index  << std::endl;
