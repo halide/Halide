@@ -2281,7 +2281,6 @@ void deregister_heap_object(const void *obj, size_t size) {
 bool saves_frame_pointer(void *fn) {
     // On x86-64, if we save the frame pointer, the first two instructions should be pushing the stack pointer and the frame pointer:
     const uint8_t *ptr = (const uint8_t *)(fn);
-    debug(5) << (int)ptr[0] << " " << (int)ptr[1] << "\n";
     // Skip over a valid-branch-target marker (endbr64), if there is
     // one. These sometimes start functions to help detect control flow
     // violations.
