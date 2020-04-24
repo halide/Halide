@@ -247,12 +247,11 @@ private:
                 starting_lane = old_starting_lane;
                 lane_stride = old_lane_stride;
 
-                return expr;                
+                return expr;
             } else {
                 // There is probably a more efficient way to this.
                 return mutate(flatten_nested_ramps(op));
             }
-
         }
         Expr expr = op->base + starting_lane * op->stride;
         internal_assert(expr.type() == op->base.type());

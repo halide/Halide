@@ -221,37 +221,37 @@ int vectorize_all_d() {
 }
 
 int main(int argc, char **argv) {
-    if(vectorize_2d_round_up()) {
+    if (vectorize_2d_round_up()) {
         printf("vectorize_2d_round_up failed\n");
         return -1;
     }
 
-    if(vectorize_2d_guard_with_if()) {
+    if (vectorize_2d_guard_with_if()) {
         printf("vectorize_2d_guard_with_if failed\n");
         return -1;
     }
 
-    if(vectorize_2d_inlined_with_update()) {
+    if (vectorize_2d_inlined_with_update()) {
         printf("vectorize_2d_inlined_with_update failed\n");
         return -1;
     }
 
-    if(vectorize_2d_with_inner_for()) {
+    if (vectorize_2d_with_inner_for()) {
         printf("vectorize_2d_with_inner_for failed\n");
         return -1;
     }
 
-    if(vectorize_2d_with_compute_at()) {
+    if (vectorize_2d_with_compute_at()) {
         printf("vectorize_2d_with_compute_at failed\n");
         return -1;
     }
 
-    if(vectorize_2d_with_compute_at_vectorized()) {
+    if (vectorize_2d_with_compute_at_vectorized()) {
         printf("vectorize_2d_with_compute_at_vectorized failed\n");
         return -1;
     }
 
-    if(vectorize_all_d()) {
+    if (vectorize_all_d()) {
         printf("vectorize_all_d failed\n");
         return -1;
     }
