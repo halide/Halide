@@ -92,6 +92,8 @@ APPS="bilateral_grid local_laplacian nl_means lens_blur camera_pipe stencil_chai
 for app in ${APPS}; do make -C ${HALIDE}/apps/${app} clean; done
 
 for app in ${APPS}; do
+    echo "building $app (autoscheduler == $autoscheduler)" >> progress
+
     if [ "$app" != "iir_blur" ] && [ "$app" != "harris" ] && [ "$app" != "unsharp" ] ; then
         make -C ${HALIDE}/apps/${app} build
     else
@@ -109,6 +111,7 @@ mkdir $results 2>/dev/null
 
 # benchmark everything
 for app in ${APPS}; do
+    echo "running $app (autoscheduler == $autoscheduler)" >> progress
     timeout 20s make -C ${HALIDE}/apps/${app} test &> $results/$app.txt
 
     if [ $? -ne 0 ]; then
