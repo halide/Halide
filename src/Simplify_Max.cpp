@@ -51,7 +51,7 @@ Expr Simplify::visit(const Max *op, ExprInfo *bounds) {
             std::swap(a_bounds, b_bounds);
         }
 
-        // int lanes = op->type.lanes();
+        int lanes = op->type.lanes();
         auto rewrite = IRMatcher::rewriter(IRMatcher::max(a, b), op->type);
 
         // clang-format off
@@ -88,8 +88,8 @@ Expr Simplify::visit(const Max *op, ExprInfo *bounds) {
 
              (no_overflow(op->type) &&
               (
-            //    rewrite(max(ramp(x, y), broadcast(z)), a, is_same_type(x, z) && can_prove(x + y * (lanes - 1) >= z && x >= z, this)) ||
-            //    rewrite(max(ramp(x, y), broadcast(z)), b, is_same_type(x, z) && can_prove(x + y * (lanes - 1) <= z && x <= z, this)) ||
+               rewrite(max(ramp(x, y), broadcast(z)), a, is_scalar(x) && is_same_type(x, z) && can_prove(x + y * (lanes - 1) >= z && x >= z, this)) ||
+               rewrite(max(ramp(x, y), broadcast(z)), b, is_scalar(x) && is_same_type(x, z) && can_prove(x + y * (lanes - 1) <= z && x <= z, this)) ||
                // Compare x to a stair-step function in x
                rewrite(max(((x + c0)/c1)*c1 + c2, x), a, c1 > 0 && c0 + c2 >= c1 - 1) ||
                rewrite(max(x, ((x + c0)/c1)*c1 + c2), b, c1 > 0 && c0 + c2 >= c1 - 1) ||

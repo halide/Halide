@@ -16,6 +16,7 @@ const int fuzz_var_count = 5;
 // use std::mt19937 instead of rand() to ensure consistent behavior on all systems
 std::mt19937 rng(0);
 
+// Q: UInt(1) fails with some error for width > 2.
 Type fuzz_types[] = {/*UInt(1),*/ UInt(8), UInt(16), UInt(32), Int(8), Int(16), Int(32)};
 const int fuzz_type_count = sizeof(fuzz_types) / sizeof(fuzz_types[0]);
 
@@ -264,7 +265,7 @@ Expr e(Variable::make(Int(0), fuzz_var(4)));
 
 int main(int argc, char **argv) {
     // Number of random expressions to test.
-    const int count = 10000;
+    const int count = 500;
     // Depth of the randomly generated expression trees.
     const int depth = 5;
     // Number of samples to test the generated expressions for.
@@ -276,7 +277,7 @@ int main(int argc, char **argv) {
     rng.seed(fuzz_seed);
     std::cout << "Simplify fuzz test seed: " << fuzz_seed << "\n";
 
-    int max_fuzz_vector_width = 16;
+    int max_fuzz_vector_width = 8;
 
     for (int i = 0; i < fuzz_type_count; i++) {
         Type T = fuzz_types[i];
@@ -285,7 +286,6 @@ int main(int argc, char **argv) {
             for (int n = 0; n < count; n++) {
                 // Generate a random expr...
                 Expr test = random_expr(VT, depth);
-                // debug(0) << fuzz_seed << "\n" << test << "\n\n";
                 if (!test_expression(test, samples)) {
                     return -1;
                 }

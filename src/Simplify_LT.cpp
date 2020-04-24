@@ -46,16 +46,16 @@ Expr Simplify::visit(const LT *op, ExprInfo *bounds) {
              rewrite((max(y, z) < min(x, y)), false) ||
              rewrite((max(y, z) < min(y, x)), false) ||
              rewrite((max(z, y) < min(x, y)), false) ||
-             rewrite((max(z, y) < min(y, x)), false) //||
+             rewrite((max(z, y) < min(y, x)), false) ||
 
              // Comparisons of ramps and broadcasts. If the first
              // and last lanes are provably < or >= the broadcast
              // we can collapse the comparison.
-            //  (no_overflow(op->type) &&
-            //   (rewrite(ramp(x, c1) < broadcast(z), true, is_same_type(x, z) && can_prove(x + fold(max(0, c1 * (lanes - 1))) < z, this)) ||
-            //    rewrite(ramp(x, c1) < broadcast(z), false, is_same_type(x, z) && can_prove(x + fold(min(0, c1 * (lanes - 1))) >= z, this)) ||
-            //    rewrite(broadcast(z) < ramp(x, c1), true, is_same_type(x, z) && can_prove(z < x + fold(min(0, c1 * (lanes - 1))), this)) ||
-            //    rewrite(broadcast(z) < ramp(x, c1), false, is_same_type(x, z) && can_prove(z >= x + fold(max(0, c1 * (lanes - 1))), this))))
+             (no_overflow(op->type) &&
+              (rewrite(ramp(x, c1) < broadcast(z), true, is_scalar(x) && is_same_type(x, z) && can_prove(x + fold(max(0, c1 * (lanes - 1))) < z, this)) ||
+               rewrite(ramp(x, c1) < broadcast(z), false, is_scalar(x) && is_same_type(x, z) && can_prove(x + fold(min(0, c1 * (lanes - 1))) >= z, this)) ||
+               rewrite(broadcast(z) < ramp(x, c1), true, is_scalar(x) && is_same_type(x, z) && can_prove(z < x + fold(min(0, c1 * (lanes - 1))), this)) ||
+               rewrite(broadcast(z) < ramp(x, c1), false, is_scalar(x) && is_same_type(x, z) && can_prove(z >= x + fold(max(0, c1 * (lanes - 1))), this))))
                )) {
             return rewrite.result;
         }
@@ -260,7 +260,8 @@ Expr Simplify::visit(const LT *op, ExprInfo *bounds) {
               rewrite(select(y, z, x + c0) < x + c1, !y || (z < x + c1), c0 < c1) ||
 
               // Normalize comparison of ramps to a comparison of a ramp and a broadacst
-              rewrite(ramp(x, y) < ramp(z, w), ramp(x - z, y - w, lanes) < 0, is_same_type(x, z)))) ||
+              // Q: For some reason this needs explicit lanes?
+              rewrite(ramp(x, y) < ramp(z, w), ramp(x - z, y - w, lanes) < 0, is_scalar(x) && is_same_type(x, z)))) ||
 
             (no_overflow_int(ty) && EVAL_IN_LAMBDA
              (rewrite(x * c0 < y * c1, x < y * fold(c1 / c0), c1 % c0 == 0 && c0 > 0) ||
@@ -386,22 +387,23 @@ Expr Simplify::visit(const LT *op, ExprInfo *bounds) {
               rewrite(min(x, c0) < min(x, c1), false, c0 >= c1) ||
               rewrite(min(x, c0) < min(x, c1) + c2, false, c0 >= c1 + c2 && c2 <= 0) ||
               rewrite(max(x, c0) < max(x, c1), false, c0 >= c1) ||
-              rewrite(max(x, c0) < max(x, c1) + c2, false, c0 >= c1 + c2 && c2 <= 0) //||
+              rewrite(max(x, c0) < max(x, c1) + c2, false, c0 >= c1 + c2 && c2 <= 0) ||
 
               // Comparison of aligned ramps can simplify to a comparison of the base
-            //   rewrite(ramp(x * c3 + c2, c1) < broadcast(z * c0),
-            //           broadcast(x * fold(c3/c0) + fold(c2/c0) < z),
-            //           is_same_type(x, z) && 
-            //           c0 > 0 && (c3 % c0 == 0) &&
-            //           (c2 % c0) + c1 * (lanes - 1) < c0 &&
-            //           (c2 % c0) + c1 * (lanes - 1) >= 0) ||
+              rewrite(ramp(x * c3 + c2, c1) < broadcast(z * c0),
+                      broadcast(x * fold(c3/c0) + fold(c2/c0) < z),
+                      is_scalar(x) &&
+                      is_same_type(x, z) &&
+                      c0 > 0 && (c3 % c0 == 0) &&
+                      (c2 % c0) + c1 * (lanes - 1) < c0 &&
+                      (c2 % c0) + c1 * (lanes - 1) >= 0) ||
               // c2 = 0
-            //   rewrite(ramp(x * c3, c1) < broadcast(z * c0),
-            //           broadcast(x * fold(c3/c0) < z),
-            //           is_same_type(x, z) && 
-            //           c0 > 0 && (c3 % c0 == 0) &&
-            //           c1 * (lanes - 1) < c0 &&
-            //           c1 * (lanes - 1) >= 0)
+              rewrite(ramp(x * c3, c1) < broadcast(z * c0),
+                      broadcast(x * fold(c3/c0) < z),
+                      is_scalar(x) && is_same_type(x, z) &&
+                      c0 > 0 && (c3 % c0 == 0) &&
+                      c1 * (lanes - 1) < c0 &&
+                      c1 * (lanes - 1) >= 0)
                       ))) {
             return mutate(rewrite.result, bounds);
         }

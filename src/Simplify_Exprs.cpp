@@ -85,42 +85,42 @@ Expr Simplify::visit(const Ramp *op, ExprInfo *bounds) {
     ExprInfo base_bounds, stride_bounds;
     Expr base = mutate(op->base, &base_bounds);
     Expr stride = mutate(op->stride, &stride_bounds);
-    // const int lanes = op->lanes;  //type.lanes();
+    const int lanes = op->lanes;  //type.lanes();
 
-    // if (bounds && no_overflow_int(op->type)) {
-    //     bounds->min_defined = base_bounds.min_defined && stride_bounds.min_defined;
-    //     bounds->max_defined = base_bounds.max_defined && stride_bounds.max_defined;
-    //     bounds->min = std::min(base_bounds.min, base_bounds.min + (lanes - 1) * stride_bounds.min);
-    //     bounds->max = std::max(base_bounds.max, base_bounds.max + (lanes - 1) * stride_bounds.max);
-    //     // A ramp lane is b + l * s. Expanding b into mb * x + rb and s into ms * y + rs, we get:
-    //     //   mb * x + rb + l * (ms * y + rs)
-    //     // = mb * x + ms * l * y + rs * l + rb
-    //     // = gcd(rs, ms, mb) * z + rb
-    //     int64_t m = stride_bounds.alignment.modulus;
-    //     m = gcd(m, stride_bounds.alignment.remainder);
-    //     m = gcd(m, base_bounds.alignment.modulus);
-    //     int64_t r = base_bounds.alignment.remainder;
-    //     if (m != 0) {
-    //         r = mod_imp(base_bounds.alignment.remainder, m);
-    //     }
-    //     bounds->alignment = {m, r};
-    // }
+    if (bounds && no_overflow_int(op->type)) {
+        bounds->min_defined = base_bounds.min_defined && stride_bounds.min_defined;
+        bounds->max_defined = base_bounds.max_defined && stride_bounds.max_defined;
+        bounds->min = std::min(base_bounds.min, base_bounds.min + (lanes - 1) * stride_bounds.min);
+        bounds->max = std::max(base_bounds.max, base_bounds.max + (lanes - 1) * stride_bounds.max);
+        // A ramp lane is b + l * s. Expanding b into mb * x + rb and s into ms * y + rs, we get:
+        //   mb * x + rb + l * (ms * y + rs)
+        // = mb * x + ms * l * y + rs * l + rb
+        // = gcd(rs, ms, mb) * z + rb
+        int64_t m = stride_bounds.alignment.modulus;
+        m = gcd(m, stride_bounds.alignment.remainder);
+        m = gcd(m, base_bounds.alignment.modulus);
+        int64_t r = base_bounds.alignment.remainder;
+        if (m != 0) {
+            r = mod_imp(base_bounds.alignment.remainder, m);
+        }
+        bounds->alignment = {m, r};
+    }
 
-    // // A somewhat torturous way to check if the stride is zero,
-    // // but it helps to have as many rules as possible written as
-    // // formal rewrites, so that they can be formally verified,
-    // // etc.
-    // auto rewrite = IRMatcher::rewriter(IRMatcher::ramp(base, stride, lanes), op->type);
-    // if (rewrite(ramp(x, 0), broadcast(x, lanes))) {
-    //     return rewrite.result;
-    // }
+    // A somewhat torturous way to check if the stride is zero,
+    // but it helps to have as many rules as possible written as
+    // formal rewrites, so that they can be formally verified,
+    // etc.
+    auto rewrite = IRMatcher::rewriter(IRMatcher::ramp(base, stride), op->type);
+    if (rewrite(ramp(x, 0), broadcast(x))) {
+        return rewrite.result;
+    }
 
-    // if (base.same_as(op->base) &&
-    //     stride.same_as(op->stride)) {
-    //     return op;
-    // } else {
+    if (base.same_as(op->base) &&
+        stride.same_as(op->stride)) {
+        return op;
+    } else {
         return Ramp::make(base, stride, op->lanes);
-    // }
+    }
 }
 
 Expr Simplify::visit(const Load *op, ExprInfo *bounds) {
