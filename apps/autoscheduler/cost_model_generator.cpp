@@ -440,7 +440,7 @@ public:
         Expr global_mem_load_cost = num_blocks * num_global_mem_loads_per_block * relu1(28, w, n);
         global_mem_load_cost = print_wrap(global_mem_load_cost, "global_mem_load_cost", n, w);
 
-        global_mem_load_cost /= select(inlined_calls == 0, 1.f / global_mem_load_efficiency, 1);
+        global_mem_load_cost *= select(inlined_calls == 0, 1.f / global_mem_load_efficiency, 1);
         global_mem_load_cost = print_wrap(global_mem_load_cost, "global_mem_load_cost_after_load_efficiency", n, w);
 
 
@@ -467,7 +467,7 @@ public:
         shared_mem_store_cost = print_wrap(shared_mem_store_cost, "shared_mem_store_cost_after_store_efficiency", n, w);
 
         Expr global_mem_store_cost = num_blocks * num_global_mem_stores_per_block * relu1(30, w, n);
-        global_mem_store_cost /= select(inlined_calls == 0, 1.f / global_mem_store_efficiency, 1);
+        global_mem_store_cost *= select(inlined_calls == 0, 1.f / global_mem_store_efficiency, 1);
 
         global_mem_store_cost = print_wrap(global_mem_store_cost, "global_mem_store_cost_after_store_efficiency", n, w);
 
