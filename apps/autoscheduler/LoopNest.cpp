@@ -2449,6 +2449,7 @@ void LoopNest::compute_features(const FunctionDAG &dag,
                             } else if (is_global_mem && get_compute_global_mem_load_features()) {
 
                                 int64_t points = points_accessed_per_thread(gpu_loop_info, e->producer);
+                                int64_t serial_loop_accesses = std::min(points, gpu_loop_info.total_inner_serial_extents) * gpu_loop_info.total_outer_serial_extents;
                                 compute_global_mem_load_features(
                                     jac.first,
                                     producer_innermost_dim,
@@ -2457,7 +2458,7 @@ void LoopNest::compute_features(const FunctionDAG &dag,
                                     producer_has_been_scheduled,
                                     *gpu_loop_info.thread_info,
                                     global_mem_loads,
-                                    points * gpu_loop_info.total_outer_serial_extents,
+                                    serial_loop_accesses,
                                     1,
                                     root,
                                     1
