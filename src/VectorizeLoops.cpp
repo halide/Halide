@@ -253,7 +253,7 @@ class SerializeLoops : public IRMutator {
     Stmt visit(const For *op) override {
         if (op->for_type == ForType::Vectorized) {
             return For::make(op->name, mutate(op->min), mutate(op->extent),
-                                ForType::Serial, op->device_api, mutate(op->body));
+                             ForType::Serial, op->device_api, mutate(op->body));
         }
 
         return IRMutator::visit(op);
@@ -506,7 +506,7 @@ class VectorSubs : public IRMutator {
         return mutate_binary_operator(op);
     }
 
-    Expr visit(const Ramp* op) override {
+    Expr visit(const Ramp *op) override {
         Expr base = mutate(op->base);
         Expr stride = mutate(op->stride);
         return Ramp::make(base, stride, op->lanes);
@@ -653,7 +653,7 @@ class VectorSubs : public IRMutator {
             return op;
         } else if (was_vectorized) {
             scope.pop(op->name);
-            for (const auto& widened_var: widened_vars[op->name]) {
+            for (const auto &widened_var : widened_vars[op->name]) {
                 mutated_body = Let::make(widened_var.first, widened_var.second, mutated_body);
             }
 
@@ -682,9 +682,9 @@ class VectorSubs : public IRMutator {
             containing_lets.pop_back();
             scope.pop(op->name);
 
-            for (const auto& widened_var: widened_vars[op->name]) {
-                const string& widened_name = widened_var.first;
-                const Expr& widened_value = widened_var.second;
+            for (const auto &widened_var : widened_vars[op->name]) {
+                const string &widened_name = widened_var.first;
+                const Expr &widened_value = widened_var.second;
 
                 // Inner code might have extracted my lanes using
                 // extract_lane, which introduces a shuffle_vector. If
@@ -948,7 +948,7 @@ class VectorSubs : public IRMutator {
         Expr new_expr;
 
         // The new expanded dimensions are innermost.
-        for (const auto& vv: vectorized_vars) {
+        for (const auto &vv : vectorized_vars) {
             new_extents.emplace_back(vv.lanes);
         }
 
@@ -976,7 +976,7 @@ class VectorSubs : public IRMutator {
         // Rewrite loads and stores to this allocation like so:
         // foo[x] -> foo[x*lanes + v]
         vector<string> vs;
-        for (const auto& vv: vectorized_vars) {
+        for (const auto &vv : vectorized_vars) {
             string v = unique_name('v');
             body = RewriteAccessToVectorAlloc(v, op->name, vv.lanes).mutate(body);
             vs.push_back(v);
@@ -984,15 +984,14 @@ class VectorSubs : public IRMutator {
         }
 
         body = mutate(body);
-        for (const auto& v: vs) {
+        for (const auto &v : vs) {
             scope.pop(v);
         }
-
 
         // Replace the widened 'v' with the actual ramp
         // foo[x*lanes + widened_v] -> foo[x*lanes + ramp(...)]
         for (size_t ix = 0; ix < vectorized_vars.size(); ix++) {
-            for (const auto& widened_var: widened_vars[vs[ix]]) {
+            for (const auto &widened_var : widened_vars[vs[ix]]) {
                 body = substitute(widened_var.first, widened_var.second, body);
             }
 
@@ -1074,25 +1073,26 @@ class VectorSubs : public IRMutator {
                 if (ix == ik) {
                     replacements[vectorized_vars[ik].name] =
                         Ramp::make(replacements[vectorized_vars[ik].name],
-                                    strided_ones,
-                                    vectorized_vars[ix].lanes);
+                                   strided_ones,
+                                   vectorized_vars[ix].lanes);
                     replacements_from_zero[vectorized_vars[ik].name] =
                         Ramp::make(replacements_from_zero[vectorized_vars[ik].name],
-                                    strided_ones,
-                                    vectorized_vars[ix].lanes);
+                                   strided_ones,
+                                   vectorized_vars[ix].lanes);
                 } else {
                     replacements[vectorized_vars[ik].name] =
                         Broadcast::make(replacements[vectorized_vars[ik].name],
-                                            vectorized_vars[ix].lanes);
+                                        vectorized_vars[ix].lanes);
                     replacements_from_zero[vectorized_vars[ik].name] =
                         Broadcast::make(replacements_from_zero[vectorized_vars[ik].name],
-                                            vectorized_vars[ix].lanes);
+                                        vectorized_vars[ix].lanes);
                 }
             }
 
             strided_ones = Broadcast::make(strided_ones, vectorized_vars[ix].lanes);
         }
     }
+
 public:
     VectorSubs(const std::vector<VectorizedVar> &vv, bool in_hexagon, const Target &t)
         : vectorized_vars(vv), target(t), in_hexagon(in_hexagon) {
