@@ -346,6 +346,7 @@ set(HEADER_FILES
   ExternFuncArgument.h
   FastIntegerDivide.h
   FindCalls.h
+  FlattenNestedRamps.h
   Float16.h
   Func.h
   Function.h
@@ -522,6 +523,7 @@ add_library(Halide ${HALIDE_LIBRARY_TYPE}
   Expr.cpp
   FastIntegerDivide.cpp
   FindCalls.cpp
+  FlattenNestedRamps.cpp
   Float16.cpp
   Func.cpp
   Function.cpp

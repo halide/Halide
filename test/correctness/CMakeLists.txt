@@ -322,6 +322,7 @@ tests(GROUPS correctness travis
         vectorized_reduction_bug.cpp
         vectorize_guard_with_if.cpp
         vectorize_mixed_widths.cpp
+        vectorize_nested.cpp
         vectorize_varying_allocation_size.cpp
         vector_math.cpp
         vector_print_bug.cpp
