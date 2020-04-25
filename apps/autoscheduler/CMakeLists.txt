@@ -40,6 +40,10 @@ target_link_libraries(retrain_cost_model_process
 
 # =======================================================
 
+find_package(OpenMP REQUIRED)
+set(CMAKE_C_FLAGS "${CLANG_C_FLAGS} ${OpenMP_C_FLAGS}")
+set(CMAKE_CXX_FLAGS "${CLANG_CXX_FLAGS} ${OpenMP_CXX_FLAGS}")
+message(STATUS "cxx flags ${CMAKE_CXX_FLAGS}")
 # libauto_schedule
 # Note: must use MODULE here (not SHARED) to get .so (instead of .dylib) on OSX.
 # This means that this can only be opened dynamically (not linked directly), but that's ok.
@@ -51,7 +55,8 @@ add_library(auto_schedule
             FunctionDAG.cpp
             LoopNest.cpp
             Weights.cpp
-            ${WF_CPP})
+            ${WF_CPP}
+            OpenMP::OpenMP_CXX)
 
 if(HALIDE_LIBRARY_TYPE STREQUAL STATIC)
   target_link_libraries(auto_schedule PRIVATE cost_model train_cost_model)
