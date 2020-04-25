@@ -1705,8 +1705,8 @@ IntrusivePtr<State> optimal_mcts_schedule(FunctionDAG &dag,
         uct.simulation_depth = atoi(simulation_depth_str.c_str());
     }
     // Get the mcts_depth for the mcts
-    string mcts_depth_str = get_env_variable("MCTS_DEPTH");
-    /*if (!mcts_depth_str.empty()) {
+    /*string mcts_depth_str = get_env_variable("MCTS_DEPTH");
+    if (!mcts_depth_str.empty()) {
         mcts_depth = atoi(mcts_depth_str.c_str());
     }
     std::cout << "mcts_depth/num nodes: " << mcts_depth << std::endl;
