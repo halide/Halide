@@ -141,7 +141,7 @@ namespace msa {
                     if(!node->is_terminal()) {
                         //for(int t = 0; t < simulation_depth-current_depth; t++) {
                         //    if(state.is_terminal()) break;
-                        while(!state.is_terminal()){
+                        while(true){
                             //Note, placeholder
                             Action action(nullptr);
                             if(state.get_random_action(action))
