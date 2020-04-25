@@ -777,10 +777,10 @@ struct State {
     // whether or not this state is terminal (reached end)
     // AHA: can be ignored as we limit the horizon to num_passes
     bool is_terminal() {
-        if(inner->num_decisions_made > 30){
+        //if(inner->num_decisions_made > 30){
         //    std::cout << "---------is_terminal() -------- " << std::endl;
-            return true;
-        }
+        //    return true;
+        //}
         std::vector<Action> actions;
         get_actions(actions);
         if (actions.size() ==0){
@@ -1711,12 +1711,12 @@ IntrusivePtr<State> optimal_mcts_schedule(FunctionDAG &dag,
         uct.simulation_depth = atoi(simulation_depth_str.c_str());
     }
     // Get the mcts_depth for the mcts
-    /*string mcts_depth_str = get_env_variable("MCTS_DEPTH");
-    if (!mcts_depth_str.empty()) {
+    string mcts_depth_str = get_env_variable("MCTS_DEPTH");
+    /*if (!mcts_depth_str.empty()) {
         mcts_depth = atoi(mcts_depth_str.c_str());
-    }*/
+    }
     std::cout << "mcts_depth/num nodes: " << mcts_depth << std::endl;
-
+    */
     for (int i = 0; i < num_passes;i++) {
         IntrusivePtr<State> initial{new State};
         initial->root = new LoopNest;
@@ -1729,7 +1729,11 @@ IntrusivePtr<State> optimal_mcts_schedule(FunctionDAG &dag,
             
             State::Action action = uct.run(state);
             std::cout << "prefinished depth " << j << std::endl;
-            if (action == NULL) break;
+            if (action == NULL) {
+                std::cout << "due to NULL action breaking at " << j << std::endl;
+
+            break;
+            }
             // apply the action to the current state
             //AH: FIXEs A MAJOR BUG, DO NOT CALL apply_action
             state.apply_action(action);
