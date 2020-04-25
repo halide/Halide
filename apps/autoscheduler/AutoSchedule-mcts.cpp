@@ -1712,11 +1712,11 @@ IntrusivePtr<State> optimal_mcts_schedule(FunctionDAG &dag,
     }
     // Get the mcts_depth for the mcts
     string mcts_depth_str = get_env_variable("MCTS_DEPTH");
-    if (!mcts_depth_str.empty()) {
+    /*if (!mcts_depth_str.empty()) {
         mcts_depth = atoi(mcts_depth_str.c_str());
     }
     std::cout << "mcts_depth/num nodes: " << mcts_depth << std::endl;
-
+    */
     for (int i = 0; i < num_passes;i++) {
         IntrusivePtr<State> initial{new State};
         initial->root = new LoopNest;
