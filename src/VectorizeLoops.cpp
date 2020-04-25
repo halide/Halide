@@ -388,7 +388,6 @@ class VectorSubs : public IRMutator {
 
     // What we're replacing it with. Usually a ramp.
     std::map<string, Expr> replacements;
-    std::map<string, Expr> replacements_from_zero;
 
     std::map<string, std::map<string, Expr>> widened_vars;
 
@@ -980,7 +979,7 @@ class VectorSubs : public IRMutator {
             string v = unique_name('v');
             body = RewriteAccessToVectorAlloc(v, op->name, vv.lanes).mutate(body);
             vs.push_back(v);
-            scope.push(v, Variable::make(Int(32), vv.name));
+            scope.push(v, Variable::make(Int(32), vv.name + ".from_zero"));
         }
 
         body = mutate(body);
@@ -1060,11 +1059,10 @@ class VectorSubs : public IRMutator {
 
     void update_replacements() {
         replacements.clear();
-        replacements_from_zero.clear();
 
         for (const auto &var : vectorized_vars) {
             replacements[var.name] = var.min;
-            replacements_from_zero[var.name] = 0;
+            replacements[var.name + ".from_zero"] = 0;
         }
 
         Expr strided_ones = 1;
@@ -1075,16 +1073,16 @@ class VectorSubs : public IRMutator {
                         Ramp::make(replacements[vectorized_vars[ik].name],
                                    strided_ones,
                                    vectorized_vars[ix].lanes);
-                    replacements_from_zero[vectorized_vars[ik].name] =
-                        Ramp::make(replacements_from_zero[vectorized_vars[ik].name],
+                    replacements[vectorized_vars[ik].name + ".from_zero"] =
+                        Ramp::make(replacements[vectorized_vars[ik].name + ".from_zero"],
                                    strided_ones,
                                    vectorized_vars[ix].lanes);
                 } else {
                     replacements[vectorized_vars[ik].name] =
                         Broadcast::make(replacements[vectorized_vars[ik].name],
                                         vectorized_vars[ix].lanes);
-                    replacements_from_zero[vectorized_vars[ik].name] =
-                        Broadcast::make(replacements_from_zero[vectorized_vars[ik].name],
+                    replacements[vectorized_vars[ik].name + ".from_zero"] =
+                        Broadcast::make(replacements[vectorized_vars[ik].name + ".from_zero"],
                                         vectorized_vars[ix].lanes);
                 }
             }
