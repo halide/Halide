@@ -736,12 +736,12 @@ struct State {
             return index < a.index;
         }
     };
-    std::vector<Action> restored_actions;
+    /*std::vector<Action> restored_actions;
     bool cached = false;
     void freeCache() {
         restored_actions.clear();
         cached = false;
-    }
+    }*/
     class WrapperState {
     public:
         IntrusivePtr<State> inner;
@@ -758,13 +758,13 @@ struct State {
         inner->cost = other_inner->cost;
         inner->num_decisions_made = other_inner->num_decisions_made;
         inner->cost_calculations = other_inner->cost_calculations;
-        if (other_inner->cached) { 
-            for(auto & a : other_inner->restored_actions)
-                inner->restored_actions.push_back(a);
-        }
+        //if (other_inner->cached) { 
+        //    for(auto & a : other_inner->restored_actions)
+        //        inner->restored_actions.push_back(a);
+        //}
         //inner->ref_count = other.inner->ref_count;
-        inner->cached = other_inner->cached;
-        inner->penalized = other_inner->penalized;
+        //inner->cached = other_inner->cached;
+        //inner->penalized = other_inner->penalized;
     //std::cout << "WrapperState(1) cost: " <<inner->cost<< " num decisions made: "<<inner->num_decisions_made<<" cost calc: " <<inner->cost_calculations<< std::endl;
     }
     // copy and assignment operators should perform a DEEP clone of the given state
@@ -776,24 +776,19 @@ struct State {
 
     // whether or not this state is terminal (reached end)
     // AHA: can be ignored as we limit the horizon to num_passes
-    bool is_terminal() {
+    bool is_terminal() const{
         //if(inner->num_decisions_made > 30){
         //    std::cout << "---------is_terminal() -------- " << std::endl;
         //    return true;
         //}
         std::vector<Action> actions;
         get_actions(actions);
-        if (actions.size() ==0){
+        if ( actions.size()== 0){
             //std::cout << "is_terminal()" << std::endl;
             return true;
         } 
-        //std::vector<Action> actions;
-        //get_actions(actions);
-      //  std::cout << "action size in is terminal " <<actions.size() << std::endl;
-        //if (actions.size() ==0) return true;
         return false;
     }
-
     //  agent id (zero-based) for agent who is about to make a decision
     int agent_id() const {
         //std::cout << "agent_id()" << std::endl;
@@ -807,8 +802,8 @@ struct State {
         //inner->generate_actions(dag, params, cost_model, actions);
         //std::cout << "action size in apply action " <<action.state->restored_actions.size() << std::endl;
         internal_assert(inner->num_decisions_made+1 == action.state->num_decisions_made);
-        inner->freeCache();
-        inner = action.state;
+        //inner->freeCache();
+        inner = std::move(action.state);
 
         //inner->num_decisions_made++;
         /*        if (action.ae == ActionEnum::Inline) 
@@ -842,20 +837,20 @@ struct State {
     }
 
     // return possible actions from this state
-    void get_actions(std::vector<Action>& vactions){
+    void get_actions(std::vector<Action>& vactions) const{
         //std::cout << "get_actions()" << std::endl;
         //std::cout << "getting_cactions inner: " << inner.get() << " cached:" << inner->cached << " num: " << inner->restored_actions.size() << "\n";        
 //std::vector<Action> actions;
-        if (!inner->cached) {
-            inner->cached = true;
+        //if (!inner->cached) {
+            //inner->cached = true;
             inner->generate_actions(dag, params, cost_model, vactions);
-            for(auto & a : vactions)
-                inner->restored_actions.push_back(a);
-        }
-        else
-            for(auto & a : inner->restored_actions)
-                vactions.push_back(a);
-
+            //for(auto & a : vactions)
+            //    inner->restored_actions.push_back(a);
+        //}
+        //else
+            //for(auto & a : inner->restored_actions)
+            //    vactions.push_back(a);
+            //vactions = inner->restored_actions; 
         //std::cout << "action size in get actions " <<vactions.size() << std::endl;
         /*if (vactions.size() ==1 )
         for(auto &action : vactions) {
@@ -872,7 +867,6 @@ struct State {
              
         }*/
     }
-
     // get a random action, return false if no actions found
     bool get_random_action(Action& action) {
         //std::cout << "get_random_action()" << std::endl;

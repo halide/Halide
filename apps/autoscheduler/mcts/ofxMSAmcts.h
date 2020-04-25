@@ -105,20 +105,33 @@ namespace msa {
                 TreeNode root_node(current_state);
 
                 TreeNode* best_node = NULL;
-
                 // iterate
                 iterations = 0;
-                while(true) {
+                std::vector<Action> root_actions;
+               
+                
+                //checking if terminal or has singule child
+                current_state.get_actions(root_actions);
+                // is terminal
+                if(root_actions.size()== 0) return NULL;
+                // has one child
+                else if(root_actions.size() == 1) return root_actions[0];
+                else while(true) {
                     // indicate start of loop
                     timer.loop_start();
+                    //int current_depth = 0;
 
                     // 1. SELECT. Start at root, dig down into tree using UCT on all fully expanded nodes
                     TreeNode* node = &root_node;
                     while(!node->is_terminal() && node->is_fully_expanded()) {
+                        //int num_childrens = node->get_num_children();
+                        //std::cout << "num_childres:  " << num_childrens <<std::endl;
                         node = get_best_uct_child(node, uct_k);
+                        //std::cout<<node->get_state().inner.get() << std::endl;
+                        //current_depth++;
 //						assert(node);	// sanity check
                     }
-
+                    //std::cout << "operating at current_depth: " << current_depth <<std::endl;
                     // 2. EXPAND by adding a single child (if not terminal or not fully expanded)
                     if(!node->is_fully_expanded() && !node->is_terminal()) node = node->expand();
                     
@@ -126,9 +139,9 @@ namespace msa {
 
                     // 3. SIMULATE (if not terminal)
                     if(!node->is_terminal()) {
-                        for(int t = 0; t < simulation_depth; t++) {
-                            if(state.is_terminal()) break;
-
+                        //for(int t = 0; t < simulation_depth-current_depth; t++) {
+                        //    if(state.is_terminal()) break;
+                        while(!state.is_terminal()){
                             //Note, placeholder
                             Action action(nullptr);
                             if(state.get_random_action(action))
@@ -140,7 +153,7 @@ namespace msa {
 
                     // get rewards vector for all agents
                     const std::vector<float> rewards = state.evaluate();
-
+                    
                     // add to history
                     if(explored_states) explored_states->push_back(state);
 
