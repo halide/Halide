@@ -123,7 +123,7 @@ namespace msa {
 
                     // 1. SELECT. Start at root, dig down into tree using UCT on all fully expanded nodes
                     TreeNode* node = &root_node;
-                    while(!node->is_terminal() && node->is_fully_expanded()) {
+                    while(node->is_fully_expanded()) {
                         //int num_childrens = node->get_num_children();
                         //std::cout << "num_childres:  " << num_childrens <<std::endl;
                         node = get_best_uct_child(node, uct_k);
