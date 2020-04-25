@@ -655,7 +655,7 @@ class VectorSubs : public IRMutator {
             for (const auto &widened_var : widened_vars[op->name]) {
                 mutated_body = Let::make(widened_var.first, widened_var.second, mutated_body);
             }
-
+            widened_vars[op->name].clear();
             return mutated_body;
         } else {
             return Let::make(op->name, new_value, mutated_body);
@@ -721,6 +721,7 @@ class VectorSubs : public IRMutator {
 
                 mutated_body = LetStmt::make(widened_name, widened_value, mutated_body);
             }
+            widened_vars[op->name].clear();
         }
 
         if (new_value.same_as(op->value) &&
@@ -996,6 +997,7 @@ class VectorSubs : public IRMutator {
 
             // The variable itself could still exist inside an inner scalarized block.
             body = substitute(vs[ix], Variable::make(Int(32), vectorized_vars[ix].name), body);
+            widened_vars[vs[ix]].clear();
         }
 
         return Allocate::make(op->name, op->type, op->memory_type, new_extents, op->condition, body, new_expr, op->free_function);
