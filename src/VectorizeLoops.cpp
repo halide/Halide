@@ -250,6 +250,8 @@ bool uses_gpu_vars(const Expr &s) {
 }
 
 class SerializeLoops : public IRMutator {
+    using IRMutator::visit;
+
     Stmt visit(const For *op) override {
         if (op->for_type == ForType::Vectorized) {
             return For::make(op->name, mutate(op->min), mutate(op->extent),
