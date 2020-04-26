@@ -8,7 +8,7 @@
 namespace Halide {
 
 class DefaultCostModel : public CostModel {
-private:
+public:
     Internal::Weights weights;
     Runtime::Buffer<float> schedule_feat_queue, pipeline_feat_queue, costs;
     Runtime::Buffer<double *> cost_ptrs;

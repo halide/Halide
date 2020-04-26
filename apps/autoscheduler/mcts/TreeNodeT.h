@@ -1,7 +1,7 @@
 /*
 A TreeNode in the decision tree.
 I tried to keep this independent of UCT/MCTS.
-Only contains information / methods related to State, Action, Parent, Children etc. 
+Only contains information / methods related to State, Action, Parent, Children etc.
 
 */
 
@@ -25,7 +25,6 @@ namespace msa {
                 state(state),
                 action(nullptr),
                 parent(parent),
-				agent_id(state.agent_id()),
                 num_visits(0),
                 value(0),
                 depth(parent ? parent->depth + 1 : 0)
@@ -57,11 +56,10 @@ namespace msa {
 
 
             //--------------------------------------------------------------
-            void update(const std::vector<float>& rewards) {
-                this->value += rewards[agent_id];
+            void update(const double reward) {
+                value += reward;
                 num_visits++;
             }
-
 
             //--------------------------------------------------------------
             // GETTERS
@@ -75,13 +73,13 @@ namespace msa {
             bool is_fully_expanded() const { return children.empty() == false && children.size() == actions.size(); }
 
             // does this TreeNode end the search (i.e. the game)
-            bool is_terminal() { return state.is_terminal(); }
+            bool is_terminal() const{ return state.is_terminal(); }
 
             // number of times the TreeNode has been visited
             int get_num_visits() const { return num_visits; }
 
             // accumulated value (wins)
-            float get_value() const { return value; }
+            double get_value() const { return value; }
 
             // how deep the TreeNode is in the tree
             int get_depth() const { return depth; }
@@ -99,10 +97,9 @@ namespace msa {
             State state;			// the state of this TreeNode
             Action action;			// the action which led to the state of this TreeNode
             TreeNodeT* parent;		// parent of this TreeNode
-			int agent_id;			// agent who made the decision
 
             int num_visits;			// number of times TreeNode has been visited
-            float value;			// value of this TreeNode
+            double value;			// value of this TreeNode
             int depth;
 
             std::vector< Ptr > children;	// all current children

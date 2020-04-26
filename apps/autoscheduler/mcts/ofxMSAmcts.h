@@ -1,5 +1,5 @@
 /*
-A very simple C++11 Templated MCTS (Monte Carlo Tree Search) implementation with examples for openFrameworks. 
+A very simple C++11 Templated MCTS (Monte Carlo Tree Search) implementation with examples for openFrameworks.
 
 MCTS Code Based on the Java (Simon Lucas - University of Essex) and Python (Peter Cowling, Ed Powley, Daniel Whitehouse - University of York) impelementations at http://mcts.ai/code/index.html
 */
@@ -22,18 +22,16 @@ namespace msa {
 
         private:
             LoopTimer timer;
-            int iterations;
 
         public:
             float uct_k;					// k value in UCT function. default = sqrt(2)
-           /* unsigned*/int max_iterations;	// do a maximum of this many iterations (0 to run till end)
-           /* unsigned*/ int max_millis;		// run for a maximum of this many milliseconds (0 to run till end)
+            unsigned max_iterations;	// do a maximum of this many iterations (0 to run till end)
+            unsigned max_millis;		// run for a maximum of this many milliseconds (0 to run till end)
            /* unsigned*/ int simulation_depth;	// how many ticks (frames) to run simulation for
 
             //--------------------------------------------------------------
             UCT() :
-                iterations(0),
-                uct_k( sqrt(2) ), 
+                uct_k( sqrt(2) ),
                 max_iterations( 100 ),
                 max_millis( 0 ),
                 simulation_depth( 10 )
@@ -43,10 +41,6 @@ namespace msa {
             //--------------------------------------------------------------
             const LoopTimer & get_timer() const {
                 return timer;
-            }
-
-            int get_iterations() {//const {
-                return iterations;
             }
 
             //--------------------------------------------------------------
@@ -98,79 +92,82 @@ namespace msa {
 
             //--------------------------------------------------------------
             Action run(const State& current_state, unsigned int seed = 1, std::vector<State>* explored_states = nullptr) {
-                // initialize timer
-                timer.init();
+                std::vector<Action> root_actions;
 
-                // initialize root TreeNode with current state
-                TreeNode root_node(current_state);
+                //checking if terminal or has singule child
+                current_state.get_actions(root_actions);
+                // is terminal
+                if(root_actions.size()== 0) return NULL;
+                // has one child
+                else if(root_actions.size() == 1) return root_actions[0];
+                else {
+                    // initialize timer
+                    timer.init();
 
-                TreeNode* best_node = NULL;
+                    // initialize root TreeNode with current state
+                    TreeNode root_node(current_state);
 
-                // iterate
-                iterations = 0;
-                while(true) {
-                    // indicate start of loop
-                    timer.loop_start();
+                    TreeNode* best_node = NULL;
 
-                    // 1. SELECT. Start at root, dig down into tree using UCT on all fully expanded nodes
-                    TreeNode* node = &root_node;
-                    while(!node->is_terminal() && node->is_fully_expanded()) {
-                        node = get_best_uct_child(node, uct_k);
-//						assert(node);	// sanity check
-                    }
+                    for(unsigned iterations=0;
+                        (max_iterations == 0 || iterations < max_iterations) &&
+                        (max_millis == 0 || timer.check_duration(max_millis))
+                                               ; iterations++) {
 
-                    // 2. EXPAND by adding a single child (if not terminal or not fully expanded)
-                    if(!node->is_fully_expanded() && !node->is_terminal()) node = node->expand();
-                    
-                    State state(node->get_state());
+                        // indicate start of loop
+                        timer.loop_start();
+                        //int current_depth = 0;
 
-                    // 3. SIMULATE (if not terminal)
-                    if(!node->is_terminal()) {
-                        for(int t = 0; t < simulation_depth; t++) {
-                            if(state.is_terminal()) break;
-
-                            //Note, placeholder
-                            Action action(nullptr);
-                            if(state.get_random_action(action))
-                                state.apply_action(action);
-                            else
-                                break;
+                        // 1. SELECT. Start at root, dig down into tree using UCT on all fully expanded nodes
+                        TreeNode* node = &root_node;
+                        while(node->is_fully_expanded()) {
+                            //int num_childrens = node->get_num_children();
+                            //std::cout << "num_childres:  " << num_childrens <<std::endl;
+                            node = get_best_uct_child(node, uct_k);
+                            //std::cout<<node->get_state().inner.get() << std::endl;
+                            //current_depth++;
+    //						assert(node);	// sanity check
                         }
+                        //std::cout << "operating at current_depth: " << current_depth <<std::endl;
+                        // 2. EXPAND by adding a single child (if not terminal or not fully expanded)
+                        if(!node->is_fully_expanded() && !node->is_terminal()) node = node->expand();
+
+                        State state(node->get_state());
+
+                        double bestReward;
+
+                        // 3. SIMULATE
+                        while(true) {
+                            bool finished = state.apply_best_action(bestReward);
+                            if (finished) break;
+                        }
+
+                        // add to history
+                        if(explored_states) explored_states->push_back(state);
+
+                        // 4. BACK PROPAGATION
+                        while(node) {
+                            node->update(-1.0 * bestReward);
+                            node = node->get_parent();
+                        }
+
+                        // find most visited child
+                        best_node = get_most_visited_child(&root_node);
+
+                        // indicate end of loop for timer
+                        timer.loop_end();
                     }
 
-                    // get rewards vector for all agents
-                    const std::vector<float> rewards = state.evaluate();
+                    // return best node's action
+                    if(best_node) return best_node->get_action();
+                    else return NULL;
 
-                    // add to history
-                    if(explored_states) explored_states->push_back(state);
+                    // we shouldn't be here
+                    assert(0 && "Error: could not find any action");
+                    exit(1);
 
-                    // 4. BACK PROPAGATION
-                    while(node) {
-                        node->update(rewards);
-                        node = node->get_parent();
-                    }
-
-                    // find most visited child
-                    best_node = get_most_visited_child(&root_node);
-
-                    // indicate end of loop for timer
-                    timer.loop_end();
-
-                    // exit loop if current total run duration (since init) exceeds max_millis
-                    if(max_millis > 0 && timer.check_duration(max_millis)) break;
-
-                    // exit loop if current iterations exceeds max_iterations
-                    if(max_iterations > 0 && iterations > max_iterations) break;
-                    iterations++;
                 }
 
-                // return best node's action
-                if(best_node) return best_node->get_action();
-                else return NULL;
-                    
-                // we shouldn't be here
-                assert(0 && "Error: could not find any action");
-                exit(1);
             }
 
 

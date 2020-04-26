@@ -723,7 +723,7 @@ struct State {
         //AHA: If this constructor is called then there is a bug in the MCTS
         Action() { assert(0 && "illegal construction"); }
         Action(std::nullptr_t) : ae(ActionEnum::Inline), index(0), option_var(0) {
-            //assert(0 && "illegal construction"); 
+            //assert(0 && "illegal construction");
         }
         Action(const Action& a):ae(a.ae), index(a.index), option_var(a.option_var),state(a.state) {}
         Action(ActionEnum ae_, unsigned index_,IntrusivePtr<State> state) : ae(ae_), index(index_), option_var(0),state(state) {}
@@ -736,12 +736,12 @@ struct State {
             return index < a.index;
         }
     };
-    std::vector<Action> restored_actions;
+    /*std::vector<Action> restored_actions;
     bool cached = false;
     void freeCache() {
         restored_actions.clear();
         cached = false;
-    }
+    }*/
     class WrapperState {
     public:
         IntrusivePtr<State> inner;
@@ -758,46 +758,36 @@ struct State {
         inner->cost = other_inner->cost;
         inner->num_decisions_made = other_inner->num_decisions_made;
         inner->cost_calculations = other_inner->cost_calculations;
-        if (other_inner->cached) { 
-            for(auto & a : other_inner->restored_actions)
-                inner->restored_actions.push_back(a);
-        }
+        //if (other_inner->cached) {
+        //    for(auto & a : other_inner->restored_actions)
+        //        inner->restored_actions.push_back(a);
+        //}
         //inner->ref_count = other.inner->ref_count;
-        inner->cached = other_inner->cached;
-        inner->penalized = other_inner->penalized;
+        //inner->cached = other_inner->cached;
+        //inner->penalized = other_inner->penalized;
     //std::cout << "WrapperState(1) cost: " <<inner->cost<< " num decisions made: "<<inner->num_decisions_made<<" cost calc: " <<inner->cost_calculations<< std::endl;
     }
     // copy and assignment operators should perform a DEEP clone of the given state
     WrapperState(const WrapperState& other) :
         WrapperState(other.inner, other.numleft, other.dag, other.params, other.cost_model) {
         }
-    
+
     WrapperState& operator = (const WrapperState& other) = delete;
 
     // whether or not this state is terminal (reached end)
     // AHA: can be ignored as we limit the horizon to num_passes
-    bool is_terminal() {
+    bool is_terminal() const{
         //if(inner->num_decisions_made > 30){
         //    std::cout << "---------is_terminal() -------- " << std::endl;
         //    return true;
         //}
         std::vector<Action> actions;
         get_actions(actions);
-        if (actions.size() ==0){
+        if ( actions.size()== 0){
             //std::cout << "is_terminal()" << std::endl;
             return true;
-        } 
-        //std::vector<Action> actions;
-        //get_actions(actions);
-      //  std::cout << "action size in is terminal " <<actions.size() << std::endl;
-        //if (actions.size() ==0) return true;
+        }
         return false;
-    }
-
-    //  agent id (zero-based) for agent who is about to make a decision
-    int agent_id() const {
-        //std::cout << "agent_id()" << std::endl;
-        return 0;
     }
 
     // apply action to state
@@ -807,34 +797,34 @@ struct State {
         //inner->generate_actions(dag, params, cost_model, actions);
         //std::cout << "action size in apply action " <<action.state->restored_actions.size() << std::endl;
         internal_assert(inner->num_decisions_made+1 == action.state->num_decisions_made);
-        inner->freeCache();
-        inner = action.state;
+        //inner->freeCache();
+        inner = std::move(action.state);
 
         //inner->num_decisions_made++;
-        /*        if (action.ae == ActionEnum::Inline) 
+        /*        if (action.ae == ActionEnum::Inline)
                 std::cout << "applying inline, index "<< action.index  << std::endl;
-                if (action.ae == ActionEnum::Retile) 
+                if (action.ae == ActionEnum::Retile)
                 std::cout << "applying Retile, Index " <<action.index << "num d made "<<inner->num_decisions_made<<std::endl;
-                if (action.ae == ActionEnum::Option) 
+                if (action.ae == ActionEnum::Option)
                 std::cout << "applying Option, Index " <<action.index << std::endl;
-                if (action.ae == ActionEnum::Input) 
+                if (action.ae == ActionEnum::Input)
                 std::cout << "applying Input, Index "  <<action.index<< std::endl;
-                if (action.ae == ActionEnum::Parallelize) 
+                if (action.ae == ActionEnum::Parallelize)
                 std::cout << "applying Parallelize, Index "  << action.index<<std::endl;
-        
+
         for(auto &pair : actions) {
             if (pair.first == action) {
                 inner = pair.second;
                 std::cout << "num_decisions_made "<< inner->num_decisions_made << std::endl;
-                if (action.ae == ActionEnum::Inline) 
+                if (action.ae == ActionEnum::Inline)
                 std::cout << "applying inline, index "<< action.index  << std::endl;
-                if (action.ae == ActionEnum::Retile) 
+                if (action.ae == ActionEnum::Retile)
                 std::cout << "applying Retile, Index " <<action.index << std::endl;
-                if (action.ae == ActionEnum::Option) 
+                if (action.ae == ActionEnum::Option)
                 std::cout << "applying Option, Index " <<action.index << std::endl;
-                if (action.ae == ActionEnum::Input) 
+                if (action.ae == ActionEnum::Input)
                 std::cout << "applying Input, Index "  <<action.index<< std::endl;
-                if (action.ae == ActionEnum::Parallelize) 
+                if (action.ae == ActionEnum::Parallelize)
                 std::cout << "applying Parallelize, Index "  << action.index<<std::endl;
             }
         }*/
@@ -842,46 +832,62 @@ struct State {
     }
 
     // return possible actions from this state
-    void get_actions(std::vector<Action>& vactions){
+    void get_actions(std::vector<Action>& vactions) const{
         //std::cout << "get_actions()" << std::endl;
-        //std::cout << "getting_cactions inner: " << inner.get() << " cached:" << inner->cached << " num: " << inner->restored_actions.size() << "\n";        
+        //std::cout << "getting_cactions inner: " << inner.get() << " cached:" << inner->cached << " num: " << inner->restored_actions.size() << "\n";
 //std::vector<Action> actions;
-        if (!inner->cached) {
-            inner->cached = true;
+        //if (!inner->cached) {
+            //inner->cached = true;
             inner->generate_actions(dag, params, cost_model, vactions);
-            for(auto & a : vactions)
-                inner->restored_actions.push_back(a);
-        }
-        else
-            for(auto & a : inner->restored_actions)
-                vactions.push_back(a);
-
+            //for(auto & a : vactions)
+            //    inner->restored_actions.push_back(a);
+        //}
+        //else
+            //for(auto & a : inner->restored_actions)
+            //    vactions.push_back(a);
+            //vactions = inner->restored_actions;
         //std::cout << "action size in get actions " <<vactions.size() << std::endl;
         /*if (vactions.size() ==1 )
         for(auto &action : vactions) {
-                if (action.ae == ActionEnum::Inline) 
+                if (action.ae == ActionEnum::Inline)
                 std::cout << "applying inline, index "<< action.index  << std::endl;
-                if (action.ae == ActionEnum::Retile) 
+                if (action.ae == ActionEnum::Retile)
                 std::cout << "applying Retile, Index " <<action.index << std::endl;
-                if (action.ae == ActionEnum::Option) 
+                if (action.ae == ActionEnum::Option)
                 std::cout << "applying Option, Index " <<action.index << std::endl;
-                if (action.ae == ActionEnum::Input) 
+                if (action.ae == ActionEnum::Input)
                 std::cout << "applying Input, Index "  <<action.index<< std::endl;
-                if (action.ae == ActionEnum::Parallelize) 
+                if (action.ae == ActionEnum::Parallelize)
                 std::cout << "applying Parallelize, Index "  << action.index<<std::endl;
-             
+
         }*/
     }
 
-    // get a random action, return false if no actions found
-    bool get_random_action(Action& action) {
+    bool apply_best_action(double& bestReward) {
         //std::cout << "get_random_action()" << std::endl;
         std::vector<Action> actions;
         get_actions(actions);
         //std::cout << "action size in get random actions " <<actions.size() << std::endl;
         if (actions.size() == 0) return false;
-        //note rand isn't truly uniform random so should fix
-        action = actions[rand() % actions.size()];
+
+
+        internal_assert(cost_model && "bug, cost model not defined");
+        for(auto& act : actions) {
+            act.state->calculate_cost(dag, params, cost_model, false, true);
+        }
+        cost_model->evaluate_costs();
+
+        unsigned best = 0;
+        for(unsigned i=1; i<actions.size(); i++) {
+            if (actions[i].state->cost < actions[best].state->cost) {
+                best = i;
+            }
+        }
+
+        internal_assert(inner->num_decisions_made+1 == actions[best].state->num_decisions_made);
+        //inner->freeCache();
+        inner = std::move(actions[best].state);
+        bestReward = inner->cost;
         return true;
     }
 
@@ -895,7 +901,7 @@ struct State {
         //std::cout << "---------- evaluate_costs() ---------- " << std::endl;
         //std::cout << "inner cost "<<inner->cost <<"parent cost "<<inner->parent->cost<< std::endl;
         //std::cout << "inner cost "<<inner->cost << std::endl;
-        return { (float)(-1 * inner->cost)}; 
+        return { (float)(-1 * inner->cost)};
     }
 
     // return state as string (for debug purposes)
@@ -921,7 +927,7 @@ struct State {
 
         int next_node = num_decisions_made / 2;
         int phase = num_decisions_made % 2;
-            
+
         /*std::cout << may_subtile() << std::endl;
         std::cout << "-------------------" << std::endl;
         std::cout << next_node << std::endl;
@@ -1213,7 +1219,7 @@ struct State {
         }
 
         //std::cout << "-------------------ac size" <<actions.size()<< std::endl;
-        
+
         if (num_children == 0 || actions.size()==0) {
             debug(0) << "Warning: Found no legal way to schedule "
                      << node->func.name() << " in the following State:\n";
@@ -1649,19 +1655,12 @@ IntrusivePtr<State> optimal_schedule_pass(FunctionDAG &dag,
     }
 }
 
-IntrusivePtr<State> optimal_mcts_schedule(FunctionDAG &dag,
-                                     vector<Function> outputs,
-                                     const MachineParams &params,
-                                     CostModel *cost_model,
-                                     std::mt19937 &rng,
-                                     int beam_size) {
+IntrusivePtr<State> optimal_mcts_schedule(
+                                     const std::vector<Function> &outputs, const MachineParams &params, const Target &target,
+                                     std::string weights_in_path, std::string weights_out_path, bool randomize_weights
+                                     ) {
 
-    if (cost_model) {
-        configure_pipeline_features(dag, params, cost_model);
-    }
-    IntrusivePtr<State> best;
-
-    std::unordered_set<uint64_t> permitted_hashes;
+    IntrusivePtr<State> best = nullptr;
 
     // If the beam size is one, it's pointless doing multiple passes.
     //int num_passes = (beam_size == 1) ? 1 : 5;
@@ -1682,51 +1681,62 @@ IntrusivePtr<State> optimal_mcts_schedule(FunctionDAG &dag,
         num_passes = std::atoi(num_passes_str.c_str());
     }
 
-    IntrusivePtr<State> initial{new State};
-    initial->root = new LoopNest;
-
-    msa::mcts::UCT<State::WrapperState, State::Action> uct; // Templated class. Builds a partial decision tree and searches it with UCT MCTS
+    msa::mcts::UCT<State::WrapperState, State::Action> meta_uct; // Templated class. Builds a partial decision tree and searches it with UCT MCTS
 
     // OPTIONAL init uct params
-    uct.uct_k = 1.41421356237;//sqrt(2);
-    uct.max_millis = 0;
-    uct.max_iterations = 500;
-    uct.simulation_depth = 50;
+    meta_uct.uct_k = ::sqrt(2);
+    meta_uct.max_millis = 0;
+    meta_uct.max_iterations = 500;
+    meta_uct.simulation_depth = 50;
     // mcts_depth cannot be larger than dag.nodes.size()
-    int mcts_depth = 2 * (int)dag.nodes.size();
     // Get the max_millis for the mcts
     string max_millis_str = get_env_variable("MCTS_MAX_MILLIS");
     if (!max_millis_str.empty()) {
-        uct.max_millis = atoi(max_millis_str.c_str());
+        meta_uct.max_millis = atoi(max_millis_str.c_str());
     }
 
     // Get the max_iterations for the mcts
     string max_iterations_str = get_env_variable("MCTS_MAX_ITERATIONS");
     if (!max_iterations_str.empty()) {
-        uct.max_iterations = atoi(max_iterations_str.c_str());
+        meta_uct.max_iterations = atoi(max_iterations_str.c_str());
     }
     // Get the simulation_depth for the mcts
     string simulation_depth_str = get_env_variable("MCTS_SIMULATION_DEPTH");
     if (!simulation_depth_str.empty()) {
-        uct.simulation_depth = atoi(simulation_depth_str.c_str());
+        meta_uct.simulation_depth = atoi(simulation_depth_str.c_str());
     }
     // Get the mcts_depth for the mcts
-    string mcts_depth_str = get_env_variable("MCTS_DEPTH");
-    /*if (!mcts_depth_str.empty()) {
+    /*string mcts_depth_str = get_env_variable("MCTS_DEPTH");
+    if (!mcts_depth_str.empty()) {
         mcts_depth = atoi(mcts_depth_str.c_str());
     }
     std::cout << "mcts_depth/num nodes: " << mcts_depth << std::endl;
     */
-    for (int i = 0; i < num_passes;i++) {
+
+
+    #pragma omp parallel for
+    for (int i = 0; i < num_passes; i++) {
+        FunctionDAG dag(outputs, params, target);
+        int mcts_depth = 2 * (int)dag.nodes.size();
+        // Construct a cost model to use to evaluate states. Currently we
+        // just have the one, but it's an abstract interface, so others
+        // can be slotted in for experimentation.
+        std::unique_ptr<CostModel> cost_model = make_default_cost_model(weights_in_path, weights_out_path, randomize_weights);
+        internal_assert(cost_model != nullptr);
+        configure_pipeline_features(dag, params, cost_model.get());
+
+        auto uct = meta_uct;
+        //uct.uct_k = (1 << i) * ::sqrt(2);
+
         IntrusivePtr<State> initial{new State};
         initial->root = new LoopNest;
-        State::WrapperState state(initial, num_passes, dag, params, cost_model);
+        State::WrapperState state(initial, num_passes, dag, params, cost_model.get());
         //std::cout << state.inner->cost<<std::endl;
         for (int j = 0; j < mcts_depth; j++) {
             //ProgressBar tick;
 
             // run uct mcts on current state and get best action
-            
+
             State::Action action = uct.run(state);
             std::cout << "prefinished depth " << j << std::endl;
             if (action == NULL) {
@@ -1738,21 +1748,21 @@ IntrusivePtr<State> optimal_mcts_schedule(FunctionDAG &dag,
             //AH: FIXEs A MAJOR BUG, DO NOT CALL apply_action
             state.apply_action(action);
             //State::WrapperState state(action.state, num_passes, dag, params, cost_model);
-                if (action.ae == State::ActionEnum::Inline) 
+                if (action.ae == State::ActionEnum::Inline)
                 std::cout << "applying inline, index "<< action.index  << std::endl;
-                if (action.ae == State::ActionEnum::Retile) 
+                if (action.ae == State::ActionEnum::Retile)
                 std::cout << "applying Retile, Index " <<action.index << std::endl;
-                if (action.ae == State::ActionEnum::Option) 
+                if (action.ae == State::ActionEnum::Option)
                 std::cout << "applying Option, Index " <<action.index << std::endl;
-                if (action.ae == State::ActionEnum::Input) 
+                if (action.ae == State::ActionEnum::Input)
                 std::cout << "applying Input, Index "  <<action.index<< std::endl;
-                if (action.ae == State::ActionEnum::Parallelize) 
+                if (action.ae == State::ActionEnum::Parallelize)
                 std::cout << "applying Parallelize, Index "  << action.index<<std::endl;
             //state.evaluate();
-            //auto pass = state.inner; 
+            //auto pass = state.inner;
             //std::cout << "finished pass " << i << std::endl;
             //std::cout << "Pass " << i << " of " << num_passes << ", cost: " << pass->cost << std::endl;
-             
+
             //tick.clear();
             /*
             if (aslog::aslog_level() == 0) {
@@ -1762,7 +1772,7 @@ IntrusivePtr<State> optimal_mcts_schedule(FunctionDAG &dag,
                 aslog(0) << "Pass " << i << " result: ";
                 pass->dump();
             }
-            
+
             if (j == 0 && i == 0) {
                 // Track which pass produced the lowest-cost state. It's
                 // not necessarily the final one.
@@ -1782,17 +1792,20 @@ IntrusivePtr<State> optimal_mcts_schedule(FunctionDAG &dag,
             }
         }
         state.evaluate();
-        auto pass = state.inner; 
-        if(i==0) best = pass;
+        auto pass = state.inner;
+
+        #pragma omp critical
+        {
+        if (best.get() == nullptr) best = pass;
         else if(pass->cost < best->cost) best = pass;
-        
+
         std::cout << "Pass " << i << " of " << num_passes << ", cost: " << pass->cost << std::endl;
         std::cout << "Pass " << i << " of " << num_passes << ", best so far cost: " << best->cost << std::endl;
         aslog(0) << "Cost evaluated this many times: " << State::cost_calculations << '\n';
-        uct.uct_k = 2*uct.uct_k;//sqrt(2);
+        }
     }
     aslog(0) << "Best cost: " << best->cost << "\n";
-    
+
 
     return best;
 }
@@ -1872,36 +1885,17 @@ void generate_rl_schedule(const std::vector<Function> &outputs,
     aslog(1) << "Dropout seed = " << seed << '\n';
     std::mt19937 rng((uint32_t)seed);
 
-    // Get the beam size
-    string beam_size_str = get_env_variable("HL_BEAM_SIZE");
-    // Defaults to 32
-    size_t beam_size = 32;
-    if (!beam_size_str.empty()) {
-        beam_size = atoi(beam_size_str.c_str());
-    }
-
     string weights_in_path = get_env_variable("HL_WEIGHTS_DIR");
     string weights_out_path;  // deliberately empty
 
     string randomize_weights_str = get_env_variable("HL_RANDOMIZE_WEIGHTS");
     bool randomize_weights = randomize_weights_str == "1";
 
-    // Analyse the Halide algorithm and construct our abstract representation of it
-    FunctionDAG dag(outputs, params, target);
-    if (aslog::aslog_level() > 0) {
-        dag.dump();
-    }
-
-    // Construct a cost model to use to evaluate states. Currently we
-    // just have the one, but it's an abstract interface, so others
-    // can be slotted in for experimentation.
-    std::unique_ptr<CostModel> cost_model = make_default_cost_model(weights_in_path, weights_out_path, randomize_weights);
-    internal_assert(cost_model != nullptr);
 
     IntrusivePtr<State> optimal;
 
     // Run beam search
-    optimal = optimal_mcts_schedule(dag, outputs, params, cost_model.get(), rng, beam_size);
+    optimal = optimal_mcts_schedule(outputs, params, target, weights_in_path, weights_out_path, randomize_weights);
 
     HALIDE_TOC;
 
@@ -1909,6 +1903,10 @@ void generate_rl_schedule(const std::vector<Function> &outputs,
 
     // Dump the schedule found
     aslog(0) << "** optimal schedule:\n";
+    FunctionDAG dag(outputs, params, target);
+    std::unique_ptr<CostModel> cost_model = make_default_cost_model(weights_in_path, weights_out_path, randomize_weights);
+    internal_assert(cost_model != nullptr);
+
 
     // Just to get the debugging prints to fire
     optimal->calculate_cost(dag, params, cost_model.get(), aslog::aslog_level() > 0,true);
@@ -2092,9 +2090,8 @@ void find_and_apply_schedule(FunctionDAG &dag,
                              CostModel *cost_model,
                              int beam_size,
                              StageMap<ScheduleFeatures> *schedule_features) {
-
-    std::mt19937 rng(12345);
-    IntrusivePtr<State> optimal = optimal_mcts_schedule(dag, outputs, params, cost_model, rng, beam_size);
+    assert(0 && "THIS IS NOT LEGAL -- NOTE REWRITE THIS TO CALL MCTS_SCHEDUE LIKE IN OTHER LOCATION");
+    IntrusivePtr<State> optimal;// = optimal_mcts_schedule(outputs, params, cost_model, rng, beam_size);
     //IntrusivePtr<State> optimal = optimal_schedule(dag, outputs, params, cost_model, rng, beam_size);
 
     // Apply the schedules
