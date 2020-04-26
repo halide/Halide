@@ -758,14 +758,6 @@ struct State {
         inner->cost = other_inner->cost;
         inner->num_decisions_made = other_inner->num_decisions_made;
         inner->cost_calculations = other_inner->cost_calculations;
-        //if (other_inner->cached) {
-        //    for(auto & a : other_inner->restored_actions)
-        //        inner->restored_actions.push_back(a);
-        //}
-        //inner->ref_count = other.inner->ref_count;
-        //inner->cached = other_inner->cached;
-        //inner->penalized = other_inner->penalized;
-    //std::cout << "WrapperState(1) cost: " <<inner->cost<< " num decisions made: "<<inner->num_decisions_made<<" cost calc: " <<inner->cost_calculations<< std::endl;
     }
     // copy and assignment operators should perform a DEEP clone of the given state
     WrapperState(const WrapperState& other) :
@@ -777,14 +769,9 @@ struct State {
     // whether or not this state is terminal (reached end)
     // AHA: can be ignored as we limit the horizon to num_passes
     bool is_terminal() const{
-        //if(inner->num_decisions_made > 30){
-        //    std::cout << "---------is_terminal() -------- " << std::endl;
-        //    return true;
-        //}
         std::vector<Action> actions;
         get_actions(actions);
         if ( actions.size()== 0){
-            //std::cout << "is_terminal()" << std::endl;
             return true;
         }
         return false;
@@ -792,82 +779,18 @@ struct State {
 
     // apply action to state
     void apply_action(const Action& action) {
-        //std::cout << "apply_action()" << std::endl;
-        //std::map<Action, IntrusivePtr<State>> actions;
-        //inner->generate_actions(dag, params, cost_model, actions);
-        //std::cout << "action size in apply action " <<action.state->restored_actions.size() << std::endl;
         internal_assert(inner->num_decisions_made+1 == action.state->num_decisions_made);
-        //inner->freeCache();
         inner = std::move(action.state);
-
-        //inner->num_decisions_made++;
-        /*        if (action.ae == ActionEnum::Inline)
-                std::cout << "applying inline, index "<< action.index  << std::endl;
-                if (action.ae == ActionEnum::Retile)
-                std::cout << "applying Retile, Index " <<action.index << "num d made "<<inner->num_decisions_made<<std::endl;
-                if (action.ae == ActionEnum::Option)
-                std::cout << "applying Option, Index " <<action.index << std::endl;
-                if (action.ae == ActionEnum::Input)
-                std::cout << "applying Input, Index "  <<action.index<< std::endl;
-                if (action.ae == ActionEnum::Parallelize)
-                std::cout << "applying Parallelize, Index "  << action.index<<std::endl;
-
-        for(auto &pair : actions) {
-            if (pair.first == action) {
-                inner = pair.second;
-                std::cout << "num_decisions_made "<< inner->num_decisions_made << std::endl;
-                if (action.ae == ActionEnum::Inline)
-                std::cout << "applying inline, index "<< action.index  << std::endl;
-                if (action.ae == ActionEnum::Retile)
-                std::cout << "applying Retile, Index " <<action.index << std::endl;
-                if (action.ae == ActionEnum::Option)
-                std::cout << "applying Option, Index " <<action.index << std::endl;
-                if (action.ae == ActionEnum::Input)
-                std::cout << "applying Input, Index "  <<action.index<< std::endl;
-                if (action.ae == ActionEnum::Parallelize)
-                std::cout << "applying Parallelize, Index "  << action.index<<std::endl;
-            }
-        }*/
-        //internal_assert(0);
     }
 
     // return possible actions from this state
     void get_actions(std::vector<Action>& vactions) const{
-        //std::cout << "get_actions()" << std::endl;
-        //std::cout << "getting_cactions inner: " << inner.get() << " cached:" << inner->cached << " num: " << inner->restored_actions.size() << "\n";
-//std::vector<Action> actions;
-        //if (!inner->cached) {
-            //inner->cached = true;
             inner->generate_actions(dag, params, cost_model, vactions);
-            //for(auto & a : vactions)
-            //    inner->restored_actions.push_back(a);
-        //}
-        //else
-            //for(auto & a : inner->restored_actions)
-            //    vactions.push_back(a);
-            //vactions = inner->restored_actions;
-        //std::cout << "action size in get actions " <<vactions.size() << std::endl;
-        /*if (vactions.size() ==1 )
-        for(auto &action : vactions) {
-                if (action.ae == ActionEnum::Inline)
-                std::cout << "applying inline, index "<< action.index  << std::endl;
-                if (action.ae == ActionEnum::Retile)
-                std::cout << "applying Retile, Index " <<action.index << std::endl;
-                if (action.ae == ActionEnum::Option)
-                std::cout << "applying Option, Index " <<action.index << std::endl;
-                if (action.ae == ActionEnum::Input)
-                std::cout << "applying Input, Index "  <<action.index<< std::endl;
-                if (action.ae == ActionEnum::Parallelize)
-                std::cout << "applying Parallelize, Index "  << action.index<<std::endl;
-
-        }*/
     }
-
+    // find best action to apply next, used during simulation to improve the estimate over random
     bool apply_best_action(double& bestReward) {
-        //std::cout << "get_random_action()" << std::endl;
         std::vector<Action> actions;
         get_actions(actions);
-        //std::cout << "action size in get random actions " <<actions.size() << std::endl;
         if (actions.size() == 0) return false;
 
 
@@ -885,7 +808,6 @@ struct State {
         }
 
         internal_assert(inner->num_decisions_made+1 == actions[best].state->num_decisions_made);
-        //inner->freeCache();
         inner = std::move(actions[best].state);
         bestReward = inner->cost;
         return true;
@@ -893,20 +815,14 @@ struct State {
 
     // evaluate this state and return a vector of rewards (for each agent)
     const std::vector<float> evaluate() const {
-        //std::cout << "evaluate()" << std::endl;
         inner->calculate_cost(dag, params, cost_model, false, true);
-        //std::cout << "calculate_cost()" << std::endl;
         internal_assert(cost_model && "bug, cost model not defined");
         cost_model->evaluate_costs();
-        //std::cout << "---------- evaluate_costs() ---------- " << std::endl;
-        //std::cout << "inner cost "<<inner->cost <<"parent cost "<<inner->parent->cost<< std::endl;
-        //std::cout << "inner cost "<<inner->cost << std::endl;
         return { (float)(-1 * inner->cost)};
     }
 
     // return state as string (for debug purposes)
     std::string to_string() const {
-        //std::cout << "to_string()" << std::endl;
         return "";
     }
     };
@@ -916,11 +832,6 @@ struct State {
                            CostModel *cost_model,
                            std::vector<Action> &actions) const {
         internal_assert(root.defined() && root->is_root());
-        /*std::cout << "in_generate_actions" << std::endl;
-        std::cout << num_decisions_made << std::endl;
-        std::cout << "-------------------" << std::endl;
-        std::cout << dag.nodes.size() << std::endl;
-        std::cout << "-------------------" << std::endl;*/
         if (num_decisions_made == 2*(int)dag.nodes.size()) {
             return;
         }
@@ -928,13 +839,6 @@ struct State {
         int next_node = num_decisions_made / 2;
         int phase = num_decisions_made % 2;
 
-        /*std::cout << may_subtile() << std::endl;
-        std::cout << "-------------------" << std::endl;
-        std::cout << next_node << std::endl;
-        std::cout << "-------------------" << std::endl;
-        std::cout << phase << std::endl;
-        std::cout << "-------------------" << std::endl;
-        */
         if (!may_subtile()) {
             // When emulating the older search space, we do all
             // parallelizing last, so that it is independent of the
@@ -1015,8 +919,6 @@ struct State {
                     return;
                 }
             }
-        //std::cout << must_inline << std::endl;
-        //std::cout << "------up is must inline-------------" << std::endl;
 
             // Construct a list of plausible dimensions to vectorize
             // over. Currently all of them. TODO: Pre-prune the list
@@ -1038,8 +940,6 @@ struct State {
             if (vector_dims.empty()) {
                 vector_dims.push_back(0);
             }
-        //std::cout << "------herere-------------" << std::endl;
-        //std::cout << num_children << std::endl;
 
             // 2) Realize it somewhere
             for (int vector_dim : vector_dims) {
@@ -1218,7 +1118,6 @@ struct State {
             }
         }
 
-        //std::cout << "-------------------ac size" <<actions.size()<< std::endl;
 
         if (num_children == 0 || actions.size()==0) {
             debug(0) << "Warning: Found no legal way to schedule "
@@ -1688,7 +1587,7 @@ IntrusivePtr<State> optimal_mcts_schedule(
     meta_uct.max_millis = 0;
     meta_uct.max_iterations = 500;
     meta_uct.simulation_depth = 50;
-    // mcts_depth cannot be larger than dag.nodes.size()
+    // mcts_depth cannot be larger than 2*dag.nodes.size()
     // Get the max_millis for the mcts
     string max_millis_str = get_env_variable("MCTS_MAX_MILLIS");
     if (!max_millis_str.empty()) {
@@ -1745,47 +1644,17 @@ IntrusivePtr<State> optimal_mcts_schedule(
             break;
             }
             // apply the action to the current state
-            //AH: FIXEs A MAJOR BUG, DO NOT CALL apply_action
             state.apply_action(action);
-            //State::WrapperState state(action.state, num_passes, dag, params, cost_model);
-                if (action.ae == State::ActionEnum::Inline)
-                std::cout << "applying inline, index "<< action.index  << std::endl;
-                if (action.ae == State::ActionEnum::Retile)
-                std::cout << "applying Retile, Index " <<action.index << std::endl;
-                if (action.ae == State::ActionEnum::Option)
-                std::cout << "applying Option, Index " <<action.index << std::endl;
-                if (action.ae == State::ActionEnum::Input)
-                std::cout << "applying Input, Index "  <<action.index<< std::endl;
-                if (action.ae == State::ActionEnum::Parallelize)
-                std::cout << "applying Parallelize, Index "  << action.index<<std::endl;
-            //state.evaluate();
-            //auto pass = state.inner;
-            //std::cout << "finished pass " << i << std::endl;
-            //std::cout << "Pass " << i << " of " << num_passes << ", cost: " << pass->cost << std::endl;
-
-            //tick.clear();
-            /*
-            if (aslog::aslog_level() == 0) {
-                aslog(0) << "Pass " << i << " of " << num_passes <<" depth " << j << ", cost: " << pass->cost << "\n";
-                //aslog(0) << "Pass " << i << " of " << num_passes << ", cost: " << pass->cost << "\n";
-            } else {
-                aslog(0) << "Pass " << i << " result: ";
-                pass->dump();
-            }
-
-            if (j == 0 && i == 0) {
-                // Track which pass produced the lowest-cost state. It's
-                // not necessarily the final one.
-                best = pass;
-                continue;
-            }
-            if (pass->cost < best->cost) {
-                // Track which pass produced the lowest-cost state. It's
-                // not necessarily the final one.
-                best = pass;
-            }
-            */
-            //std::cout << "prefinished pass " << i << std::endl;
+            if (action.ae == State::ActionEnum::Inline)
+            std::cout << "applying inline, index "<< action.index  << std::endl;
+            if (action.ae == State::ActionEnum::Retile)
+            std::cout << "applying Retile, Index " <<action.index << std::endl;
+            if (action.ae == State::ActionEnum::Option)
+            std::cout << "applying Option, Index " <<action.index << std::endl;
+            if (action.ae == State::ActionEnum::Input)
+            std::cout << "applying Input, Index "  <<action.index<< std::endl;
+            if (action.ae == State::ActionEnum::Parallelize)
+            std::cout << "applying Parallelize, Index "  << action.index<<std::endl;
             if (state.inner->num_decisions_made == 2 * (int)dag.nodes.size()) {
                 std::cout << "breaking.. with num decisions made " <<state.inner->num_decisions_made << std::endl;
                  break;
@@ -1894,7 +1763,7 @@ void generate_rl_schedule(const std::vector<Function> &outputs,
 
     IntrusivePtr<State> optimal;
 
-    // Run beam search
+    // Run MCTS
     optimal = optimal_mcts_schedule(outputs, params, target, weights_in_path, weights_out_path, randomize_weights);
 
     HALIDE_TOC;
@@ -1910,17 +1779,14 @@ void generate_rl_schedule(const std::vector<Function> &outputs,
 
     // Just to get the debugging prints to fire
     optimal->calculate_cost(dag, params, cost_model.get(), aslog::aslog_level() > 0,true);
-    aslog(0) << "** Optimal schedule:1\n";
 
     // Apply the schedules to the pipeline
     optimal->apply_schedule(dag, params);
-    aslog(0) << "** optimal schedule:2\n";
 
     // Print out the schedule
     if (aslog::aslog_level() > 0) {
         optimal->dump();
     }
-    aslog(0) << "** Optimal schedule:3\n";
 
     string schedule_file = get_env_variable("HL_SCHEDULE_FILE");
     if (!schedule_file.empty()) {
