@@ -37,7 +37,9 @@ class Sample:
 
     self.comparisons = {}
     self.comparisons["global load transactions"] = self.global_load_transactions
+    self.comparisons["global load transactions (pure licm)"] = self.global_load_transactions_with_pure_licm
     self.comparisons["global store transactions"] = self.global_store_transactions
+    self.comparisons["global store transactions (pure licm)"] = self.global_store_transactions_with_pure_licm
     self.comparisons["global load efficiency"] = self.global_load_efficiency
     self.comparisons["global store efficiency"] = self.global_store_efficiency
 
@@ -81,6 +83,16 @@ class Sample:
   def global_store_transactions(self, metrics, features):
     actual = metrics["gst_transactions"]
     predicted = features["num_global_mem_stores_per_block"] * features["num_blocks"]
+    return IntResult(actual, predicted)
+
+  def global_store_transactions_with_pure_licm(self, metrics, features):
+    actual = metrics["gst_transactions"]
+    predicted = features["num_global_mem_stores_with_pure_licm_per_block"] * features["num_blocks"]
+    return IntResult(actual, predicted)
+
+  def global_load_transactions_with_pure_licm(self, metrics, features):
+    actual = metrics["gld_transactions"]
+    predicted = features["num_global_mem_loads_with_pure_licm_per_block"] * features["num_blocks"]
     return IntResult(actual, predicted)
 
   def compare_metrics_and_features(self):

@@ -343,9 +343,11 @@ struct ScheduleFeatures {
 
     double num_shared_mem_loads_per_block = 0;
     double num_global_mem_loads_per_block = 0;
+    double num_global_mem_loads_with_pure_licm_per_block = 0;
     double num_local_mem_loads_per_thread = 0;
     double num_shared_mem_stores_per_block = 0;
     double num_global_mem_stores_per_block = 0;
+    double num_global_mem_stores_with_pure_licm_per_block = 0;
     double num_local_mem_stores_per_thread = 0;
 
     double shared_mem_store_efficiency = 1;
@@ -437,9 +439,11 @@ struct ScheduleFeatures {
             << "    idle_lane_wastage:                     " << idle_lane_wastage << '\n'
             << "    num_shared_mem_loads_per_block:        " << num_shared_mem_loads_per_block << '\n'
             << "    num_global_mem_loads_per_block:        " << num_global_mem_loads_per_block << '\n'
+            << "    num_global_mem_loads_with_pure_licm_per_block:       " << num_global_mem_loads_with_pure_licm_per_block << '\n'
             << "    num_local_mem_loads_per_thread:        " << num_local_mem_loads_per_thread << '\n'
             << "    num_shared_mem_stores_per_block:       " << num_shared_mem_stores_per_block << '\n'
             << "    num_global_mem_stores_per_block:       " << num_global_mem_stores_per_block << '\n'
+            << "    num_global_mem_stores_with_pure_licm_per_block:       " << num_global_mem_stores_with_pure_licm_per_block << '\n'
             << "    num_local_mem_stores_per_thread:       " << num_local_mem_stores_per_thread << '\n'
             << "    shared_mem_store_efficiency:           " << shared_mem_store_efficiency << '\n'
             << "    shared_mem_load_efficiency:            " << shared_mem_load_efficiency << '\n'
@@ -530,9 +534,11 @@ struct ScheduleFeatures {
             && idle_lane_wastage                     == other.idle_lane_wastage
             && num_shared_mem_loads_per_block        == other.num_shared_mem_loads_per_block
             && num_global_mem_loads_per_block        == other.num_global_mem_loads_per_block
+            && num_global_mem_loads_with_pure_licm_per_block == other.num_global_mem_loads_with_pure_licm_per_block
             && num_local_mem_loads_per_thread        == other.num_local_mem_loads_per_thread
             && num_shared_mem_stores_per_block       == other.num_shared_mem_stores_per_block
             && num_global_mem_stores_per_block       == other.num_global_mem_stores_per_block
+            && num_global_mem_stores_with_pure_licm_per_block == other.num_global_mem_stores_with_pure_licm_per_block
             && num_local_mem_stores_per_thread       == other.num_local_mem_stores_per_thread
             && shared_mem_store_efficiency           == other.shared_mem_store_efficiency
             && shared_mem_load_efficiency            == other.shared_mem_load_efficiency
