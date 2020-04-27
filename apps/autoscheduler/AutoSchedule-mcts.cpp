@@ -1616,10 +1616,10 @@ IntrusivePtr<State> optimal_mcts_schedule(
     FunctionDAG* dags[num_passes];
     int idx = -1;
 
-    dags[0] = new FunctionDAG(outputs, params, target);
-    //#pragma omp parallel for
+    //dags[0] = new FunctionDAG(outputs, params, target);
+    #pragma omp parallel for
     for (int i = 0; i < num_passes; i++) {
-        dags[i] = dags[0];//new FunctionDAG(outputs, params, target);
+        dags[i] = new FunctionDAG(outputs, params, target);
         auto& dag = *dags[i];
         int mcts_depth = 2 * (int)dag.nodes.size();
         // Construct a cost model to use to evaluate states. Currently we
