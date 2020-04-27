@@ -17,7 +17,7 @@ const int fuzz_var_count = 5;
 std::mt19937 rng(0);
 
 // Q: UInt(1) fails with some error for width > 2.
-Type fuzz_types[] = {/*UInt(1),*/ UInt(8), UInt(16), UInt(32), Int(8), Int(16), Int(32)};
+Type fuzz_types[] = {UInt(1), UInt(8), UInt(16), UInt(32), Int(8), Int(16), Int(32)};
 const int fuzz_type_count = sizeof(fuzz_types) / sizeof(fuzz_types[0]);
 
 std::string fuzz_var(int i) {
@@ -37,10 +37,14 @@ Type random_type(int width) {
     return T;
 }
 
-int get_random_divisor(int lanes) {
-    std::vector<int> divisors = {lanes};
-    for (int dd = 2; dd < lanes; dd++) {
-        if (lanes % dd == 0) {
+int get_random_divisor(Type t) {
+    // extract_lane won't work on the ramp of boolean type with width > 2.
+    if (t.is_bool()) {
+        return 2;
+    }
+    std::vector<int> divisors = {t.lanes()};
+    for (int dd = 2; dd < t.lanes(); dd++) {
+        if (t.lanes() % dd == 0) {
             divisors.push_back(dd);
         }
     }
@@ -68,7 +72,7 @@ Expr random_leaf(Type T, bool overflow_undef = false, bool imm_only = false) {
             }
         }
     } else {
-        int lanes = get_random_divisor(T.lanes());
+        int lanes = get_random_divisor(T);
         if (rng() % 2 == 0) {
             auto e1 = random_leaf(T.with_lanes(T.lanes() / lanes), overflow_undef);
             auto e2 = random_leaf(T.with_lanes(T.lanes() / lanes), overflow_undef);
@@ -152,15 +156,17 @@ Expr random_expr(Type T, int depth, bool overflow_undef) {
     }
     case 2:
         if (T.lanes() != 1) {
-            auto e1 = random_expr(T.element_of(), depth, overflow_undef);
-            return Broadcast::make(e1, T.lanes());
+            int lanes = get_random_divisor(T);
+            auto e1 = random_expr(T.with_lanes(T.lanes() / lanes), depth, overflow_undef);
+            return Broadcast::make(e1, lanes);
         }
         break;
     case 3:
         if (T.lanes() != 1) {
-            auto e1 = random_expr(T.element_of(), depth, overflow_undef);
-            auto e2 = random_expr(T.element_of(), depth, overflow_undef);
-            return Ramp::make(e1, e2, T.lanes());
+            int lanes = get_random_divisor(T);
+            auto e1 = random_expr(T.with_lanes(T.lanes() / lanes), depth, overflow_undef);
+            auto e2 = random_expr(T.with_lanes(T.lanes() / lanes), depth, overflow_undef);
+            return Ramp::make(e1, e2, lanes);
         }
         break;
 
