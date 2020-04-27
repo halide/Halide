@@ -134,7 +134,7 @@ namespace msa {
 
                         State state(node->get_state());
 
-                        double bestReward;
+                        double bestReward = 0;
 
                         // 3. SIMULATE
                         while(true) {
