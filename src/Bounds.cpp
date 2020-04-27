@@ -1080,6 +1080,23 @@ private:
             Interval upper = interval;
             op->args[0].accept(this);
 
+            if (op->is_intrinsic(Call::promise_clamped) &&
+                interval.is_single_point()) {
+                // It's not safe to lift a promise_clamped
+                // intrinsic. They make a claim that holds true at
+                // that specific point in the IR. Just drop the
+                // annotation and return the bounds of the first arg.
+                return;
+            }
+
+            if (op->is_intrinsic(Call::unsafe_promise_clamped) &&
+                interval.is_single_point(op->args[0]) &&
+                lower.is_single_point(op->args[1]) &&
+                upper.is_single_point(op->args[2])) {
+                // unsafe_promise_clamp holds globally, so we can lift the entire intrinsic.
+                interval = Interval::single_point(op);
+            }
+
             interval.min = Interval::make_max(interval.min, lower.min);
             interval.max = Interval::make_min(interval.max, upper.max);
         } else if (op->is_intrinsic(Call::likely) ||
