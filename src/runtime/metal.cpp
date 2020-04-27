@@ -10,7 +10,6 @@
 
 extern "C" {
 extern objc_id MTLCreateSystemDefaultDevice();
-extern objc_id MTLCopyAllDevices();
 extern struct ObjectiveCClass _NSConcreteGlobalBlock;
 }
 
@@ -228,9 +227,15 @@ WEAK void *nsarray_first_object(objc_id arr) {
 inline mtl_device *get_default_mtl_device() {
     mtl_device *device = (mtl_device *)MTLCreateSystemDefaultDevice();
     if (device == NULL) {
-        objc_id devices = (objc_id)MTLCopyAllDevices();
-        if (devices != NULL) {
-            device = (mtl_device *)nsarray_first_object(devices);
+        // We assume Metal.framework is already loaded
+        void* handle = halide_get_symbol("MTLCopyAllDevices");
+        if (handle != NULL) {
+            typedef objc_id (*mtl_copy_all_devices_method)(void);
+            mtl_copy_all_devices_method method = (mtl_copy_all_devices_method)handle;
+            objc_id devices = (objc_id)(*method)();
+            if (devices != NULL) {
+                device = (mtl_device *)nsarray_first_object(devices);
+            }
         }
     }
     return device;
