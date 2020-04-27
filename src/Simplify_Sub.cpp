@@ -352,7 +352,21 @@ Expr Simplify::visit(const Sub *op, ExprInfo *bounds) {
                rewrite((min(x*c0 + y, z) + w) / c1 - x*c2, (min(y, z - x*c0) + w) / c1, c0 == c1 * c2) ||
                rewrite((min(z, x*c0 + y) + w) / c1 - x*c2, (min(z - x*c0, y) + w) / c1, c0 == c1 * c2) ||
 
+               // Temp while debugging things for Dillon
+               rewrite(((min(x, (y + z))/2) - (y/2)), ((min(z, (x - y)) + (y % 2))/2)) ||
+               rewrite(((min(x, (y + z))/2) - (z/2)), ((min(y, (x - z)) + (z % 2))/2)) ||
+               rewrite(((min((x + y), z)/2) - (x/2)), ((min((z - x), y) + (x % 2))/2)) ||
+               rewrite(((min((x + y), z)/2) - (y/2)), ((min((z - y), x) + (y % 2))/2)) ||
+
                false)))) {
+            return mutate(rewrite.result, bounds);
+        }
+
+        if (no_overflow_int(op->type) &&
+            use_synthesized_rules &&
+            (
+#include "Simplify_Sub.inc"
+                )) {
             return mutate(rewrite.result, bounds);
         }
     }
