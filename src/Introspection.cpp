@@ -205,7 +205,7 @@ class DebugSections {
 public:
     bool working;
 
-    DebugSections(const std::string& binary)
+    DebugSections(const std::string &binary)
         : calibrated(false), working(false) {
 #ifdef __APPLE__
         size_t last_slash = binary.rfind('/');
