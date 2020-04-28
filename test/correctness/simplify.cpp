@@ -822,7 +822,7 @@ void check_bounds() {
     // "likely" marks which side of a containing min/max/select is the
     // one to optimize for, so if the min/max/select gets simplified
     // away, the likely should be stripped too.
-   /* check(min(x, likely(x)), x);
+    /* check(min(x, likely(x)), x);
    check(min(likely(x), x), x);
    check(max(x, likely(x)), x);
    check(max(likely(x), x), x);
@@ -1278,8 +1278,8 @@ void check_boolean() {
     check(x >= 20 || x <= 18, 20 <= x || x <= 18);
     check(x <= 18 && x >= 19, f);
     check(x >= 19 && x <= 18, f);
-    check(x <= 20 && x >= 20, x <= 20 && 20 <= x);
-    check(x >= 20 && x <= 20, 20 <= x && x <= 20);
+    check(x <= 20 && x >= 20, x == 20);
+    check(x >= 20 && x <= 20, x == 20);
 
     check(min(x, 20) < min(x, 19), const_false());
     check(min(x, 23) < min(x, 18) - 3, const_false());

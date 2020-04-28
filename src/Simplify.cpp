@@ -184,6 +184,19 @@ void learn_true_helper(const Expr &fact, Simplify *simplify, Simplify::ScopedFac
             expr_info.alignment.modulus = *modulus;
             expr_info.alignment.remainder = *remainder;
         }
+
+        const Variable *var_b = eq->b.as<Variable>();
+        if (var_b && var_b->type.is_int()) {
+            // Learn from x % 8 == y
+            Simplify::ExprInfo i;
+            simplify->mutate(eq->a, &i);
+            if (scoped) {
+                scoped->learn_info(var_b, i);
+            } else {
+                simplify->learn_info(var_b, i);
+            }
+        }
+
     } else if (const LT *lt = fact.as<LT>()) {
         v = lt->a.as<Variable>();
         const int64_t *i = as_const_int(lt->b);
@@ -259,6 +272,19 @@ void learn_false_helper(const Expr &fact, Simplify *simplify, Simplify::ScopedFa
                 scoped->pop_list.push_back(v);
             }
         }
+
+        const Variable *var_b = ne->b.as<Variable>();
+        if (var_b && var_b->type.is_int()) {
+            // Learn from !(x % 8 != y)
+            Simplify::ExprInfo i;
+            simplify->mutate(ne->a, &i);
+            if (scoped) {
+                scoped->learn_info(var_b, i);
+            } else {
+                simplify->learn_info(var_b, i);
+            }
+        }
+
     } else if (const LT *lt = fact.as<LT>()) {
         v = lt->a.as<Variable>();
         const int64_t *i = as_const_int(lt->b);
