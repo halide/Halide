@@ -159,7 +159,7 @@ function(halide_library_from_generator BASENAME)
     endif()
   endforeach()
 
-  set(OUTPUTS static_library c_header registration)
+  set(OUTPUTS static_library c_header registration compiler_log)
   foreach(E ${args_EXTRA_OUTPUTS})
     # Convert legacy aliases
     set(cpp_current "c_source")
@@ -220,6 +220,7 @@ function(halide_library_from_generator BASENAME)
   set(static_library_ext ${CMAKE_STATIC_LIBRARY_SUFFIX})
   set(stmt_ext ".stmt")
   set(stmt_html_ext ".stmt.html")
+  set(compiler_log_ext ".halide_compiler_log")
 
   set(OUTPUT_FILES )
   foreach(OUTPUT ${OUTPUTS})
