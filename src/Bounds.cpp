@@ -1084,8 +1084,12 @@ private:
                 interval.is_single_point()) {
                 // It's not safe to lift a promise_clamped
                 // intrinsic. They make a claim that holds true at
-                // that specific point in the IR. Just drop the
-                // annotation and return the bounds of the first arg.
+                // that specific point in the IR. But if it's a single
+                // point we're probably inside the scope over which
+                // the thing varies, so we don't want to needlessly
+                // complicate the IR by injecting the min/max. For now
+                // we just drop the annotation and return the bounds
+                // of the first arg.
                 return;
             }
 
@@ -1093,8 +1097,15 @@ private:
                 interval.is_single_point(op->args[0]) &&
                 lower.is_single_point(op->args[1]) &&
                 upper.is_single_point(op->args[2])) {
-                // unsafe_promise_clamp holds globally, so we can lift the entire intrinsic.
+                // It *is* safe to lift an
+                // unsafe_promise_clamped. Those are injected by the
+                // user and represent a promise that holds globally
+                // across the entire program. So in the case that
+                // nothing varies we return the full Expr, not just
+                // the first arg. In the case where things are varying
+                // we resolve to min/max (i.e. we exploit the promise).
                 interval = Interval::single_point(op);
+                return;
             }
 
             interval.min = Interval::make_max(interval.min, lower.min);
