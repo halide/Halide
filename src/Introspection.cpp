@@ -205,7 +205,7 @@ class DebugSections {
 public:
     bool working;
 
-    DebugSections(std::string binary)
+    DebugSections(const std::string& binary)
         : calibrated(false), working(false) {
 #ifdef __APPLE__
         size_t last_slash = binary.rfind('/');
@@ -1610,7 +1610,7 @@ private:
 
                 } else if (fmt.tag == tag_function) {
                     if (fmt.has_children) {
-                        func_stack.push_back({func, stack_depth});
+                        func_stack.emplace_back(func, stack_depth);
                     } else {
                         functions.push_back(func);
                     }
@@ -1619,7 +1619,7 @@ private:
                            fmt.tag == tag_array_type ||
                            fmt.tag == tag_base_type) {
                     if (fmt.has_children) {
-                        type_stack.push_back({type_info, stack_depth});
+                        type_stack.emplace_back(type_info, stack_depth);
                     } else {
                         types.push_back(type_info);
                     }
@@ -1633,11 +1633,11 @@ private:
                     if (namespace_name.empty()) {
                         namespace_name = "_";
                     }
-                    namespace_stack.push_back({namespace_name, stack_depth});
+                    namespace_stack.emplace_back(namespace_name, stack_depth);
                 } else if ((fmt.tag == tag_inlined_subroutine ||
                             fmt.tag == tag_lexical_block) &&
                            live_ranges.size() && fmt.has_children) {
-                    live_range_stack.push_back({live_ranges, stack_depth});
+                    live_range_stack.emplace_back(live_ranges, stack_depth);
                 }
             }
         }
@@ -1747,15 +1747,15 @@ private:
             TypeInfo *t = &types[i];
             while (t) {
                 if (t->type == TypeInfo::Pointer) {
-                    suffix.push_back("*");
+                    suffix.emplace_back("*");
                     internal_assert(t->members.size() == 1);
                     t = t->members[0].type;
                 } else if (t->type == TypeInfo::Reference) {
-                    suffix.push_back("&");
+                    suffix.emplace_back("&");
                     internal_assert(t->members.size() == 1);
                     t = t->members[0].type;
                 } else if (t->type == TypeInfo::Const) {
-                    suffix.push_back("const");
+                    suffix.emplace_back("const");
                     internal_assert(t->members.size() == 1);
                     t = t->members[0].type;
                 } else if (t->type == TypeInfo::Array) {
@@ -1765,7 +1765,7 @@ private:
                         oss << "[" << t->size << "]";
                         suffix.push_back(oss.str());
                     } else {
-                        suffix.push_back("[]");
+                        suffix.emplace_back("[]");
                     }
                     internal_assert(t->members.size() == 1);
                     t = t->members[0].type;
@@ -1955,11 +1955,11 @@ private:
 
             vector<std::string> include_dirs;
             // The current directory is implicitly the first dir.
-            include_dirs.push_back(".");
+            include_dirs.emplace_back(".");
             while (off < end_header_off) {
                 const char *s = e.getCStr(&off);
                 if (s && s[0]) {
-                    include_dirs.push_back(s);
+                    include_dirs.emplace_back(s);
                 } else {
                     break;
                 }
