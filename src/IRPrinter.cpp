@@ -169,9 +169,6 @@ ostream &operator<<(ostream &stream, const Target &target) {
 
 namespace Internal {
 
-IRPrinter::~IRPrinter() {
-}
-
 void IRPrinter::test() {
     Type i32 = Int(32);
     Type f32 = Float(32);
@@ -934,7 +931,7 @@ void IRPrinter::visit(const Shuffle *op) {
 }
 
 void IRPrinter::visit(const Atomic *op) {
-    if (op->mutex_name == "") {
+    if (op->mutex_name.empty()) {
         stream << get_indent() << "atomic {\n";
     } else {
         stream << get_indent() << "atomic (";
