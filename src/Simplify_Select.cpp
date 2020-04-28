@@ -133,6 +133,15 @@ Expr Simplify::visit(const Select *op, ExprInfo *bounds) {
             return mutate(rewrite.result, bounds);
         }
         // clang-format on
+
+        Expr a = condition, b = true_value;
+        if (no_overflow_int(op->type) &&
+            use_synthesized_rules &&
+            (
+#include "Simplify_Select.inc"
+                )) {
+            return mutate(rewrite.result, bounds);
+        }
     }
 
     if (condition.same_as(op->condition) &&

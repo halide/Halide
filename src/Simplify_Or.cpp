@@ -62,46 +62,58 @@ Expr Simplify::visit(const Or *op, ExprInfo *bounds) {
          rewrite(c1 <= x || x < c0, true, c1 <= c0) ||
          rewrite(x < c0 || c1 < x, true, c1 < c0) ||
          rewrite(c1 < x || x < c0, true, c1 < c0) ||
+
+         rewrite(c0 <= x || x <= c1, x != fold(c0 + 1), c0 == c1 + 2) ||
+         rewrite(x <= c1 || c0 <= x, x != fold(c0 + 1), c0 == c1 + 2) ||
+
          rewrite(c0 < x || c1 < x, fold(min(c0, c1)) < x) ||
          rewrite(c0 <= x || c1 <= x, fold(min(c0, c1)) <= x) ||
          rewrite(x < c0 || x < c1, x < fold(max(c0, c1))) ||
          rewrite(x <= c0 || x <= c1, x <= fold(max(c0, c1))))) {
         return rewrite.result;
     }
+
+    if (EVAL_IN_LAMBDA
+        (rewrite(broadcast(x) || broadcast(y), broadcast(x || y, op->type.lanes())) ||
+
+         rewrite((x && (y || z)) || y, (x && z) || y) ||
+         rewrite((x && (z || y)) || y, (x && z) || y) ||
+         rewrite(y || (x && (y || z)), y || (x && z)) ||
+         rewrite(y || (x && (z || y)), y || (x && z)) ||
+
+         rewrite(((y || z) && x) || y, (z && x) || y) ||
+         rewrite(((z || y) && x) || y, (z && x) || y) ||
+         rewrite(y || ((y || z) && x), y || (z && x)) ||
+         rewrite(y || ((z || y) && x), y || (z && x)) ||
+
+         rewrite((x || (y && z)) || y, x || y) ||
+         rewrite((x || (z && y)) || y, x || y) ||
+         rewrite(y || (x || (y && z)), y || x) ||
+         rewrite(y || (x || (z && y)), y || x) ||
+
+         rewrite(((y && z) || x) || y, x || y) ||
+         rewrite(((z && y) || x) || y, x || y) ||
+         rewrite(y || ((y && z) || x), y || x) ||
+         rewrite(y || ((z && y) || x), y || x) ||
+
+         rewrite((x && y) || (x && z), x && (y || z)) ||
+         rewrite((x && y) || (z && x), x && (y || z)) ||
+         rewrite((y && x) || (x && z), x && (y || z)) ||
+         rewrite((y && x) || (z && x), x && (y || z)) ||
+
+         rewrite(x < y || x < z, x < max(y, z)) ||
+         rewrite(y < x || z < x, min(y, z) < x) ||
+         rewrite(x <= y || x <= z, x <= max(y, z)) ||
+         rewrite(y <= x || z <= x, min(y, z) <= x))) {
+
+        return mutate(rewrite.result, bounds);
+    }
     // clang-format on
 
-    if (rewrite(broadcast(x) || broadcast(y), broadcast(x || y, op->type.lanes())) ||
-
-        rewrite((x && (y || z)) || y, (x && z) || y) ||
-        rewrite((x && (z || y)) || y, (x && z) || y) ||
-        rewrite(y || (x && (y || z)), y || (x && z)) ||
-        rewrite(y || (x && (z || y)), y || (x && z)) ||
-
-        rewrite(((y || z) && x) || y, (z && x) || y) ||
-        rewrite(((z || y) && x) || y, (z && x) || y) ||
-        rewrite(y || ((y || z) && x), y || (z && x)) ||
-        rewrite(y || ((z || y) && x), y || (z && x)) ||
-
-        rewrite((x || (y && z)) || y, x || y) ||
-        rewrite((x || (z && y)) || y, x || y) ||
-        rewrite(y || (x || (y && z)), y || x) ||
-        rewrite(y || (x || (z && y)), y || x) ||
-
-        rewrite(((y && z) || x) || y, x || y) ||
-        rewrite(((z && y) || x) || y, x || y) ||
-        rewrite(y || ((y && z) || x), y || x) ||
-        rewrite(y || ((z && y) || x), y || x) ||
-
-        rewrite((x && y) || (x && z), x && (y || z)) ||
-        rewrite((x && y) || (z && x), x && (y || z)) ||
-        rewrite((y && x) || (x && z), x && (y || z)) ||
-        rewrite((y && x) || (z && x), x && (y || z)) ||
-
-        rewrite(x < y || x < z, x < max(y, z)) ||
-        rewrite(y < x || z < x, min(y, z) < x) ||
-        rewrite(x <= y || x <= z, x <= max(y, z)) ||
-        rewrite(y <= x || z <= x, min(y, z) <= x)) {
-
+    if (use_synthesized_rules &&
+        (
+#include "Simplify_Or.inc"
+            )) {
         return mutate(rewrite.result, bounds);
     }
 

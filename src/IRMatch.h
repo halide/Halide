@@ -2163,6 +2163,12 @@ HALIDE_ALWAYS_INLINE bool evaluate_predicate(Pattern p, MatcherState &state) {
 // correctness_simplify with this on.
 #define HALIDE_FUZZ_TEST_RULES 0
 
+// Assume that a human has successfully proved all the "prove_me" rules on paper.
+template<typename A>
+HALIDE_ALWAYS_INLINE A prove_me(A a) noexcept {
+    return a;
+}
+
 template<typename Instance>
 struct Rewriter {
     Instance instance;
@@ -2170,6 +2176,10 @@ struct Rewriter {
     MatcherState state;
     halide_type_t output_type, wildcard_type;
     bool validate;
+
+#if HALIDE_DEBUG_MATCHED_RULES
+    bool d = false;
+#endif
 
     HALIDE_ALWAYS_INLINE
     Rewriter(Instance &&instance, halide_type_t ot, halide_type_t wt)
@@ -2195,7 +2205,9 @@ struct Rewriter {
         if (before.template match<0>(instance, state)) {
             build_replacement(after);
 #if HALIDE_DEBUG_MATCHED_RULES
-            debug(0) << instance << " -> " << result << " via " << before << " -> " << after << "\n";
+            if (d) {
+                debug(0) << instance << " -> " << result << " via " << before << " -> " << after << "\n";
+            }
 #endif
             return true;
         } else {
@@ -2213,7 +2225,9 @@ struct Rewriter {
         if (before.template match<0>(instance, state)) {
             result = after;
 #if HALIDE_DEBUG_MATCHED_RULES
-            debug(0) << instance << " -> " << result << " via " << before << " -> " << after << "\n";
+            if (d) {
+                debug(0) << instance << " -> " << result << " via " << before << " -> " << after << "\n";
+            }
 #endif
             return true;
         } else {
@@ -2234,7 +2248,9 @@ struct Rewriter {
         if (before.template match<0>(instance, state)) {
             result = make_const(output_type, after);
 #if HALIDE_DEBUG_MATCHED_RULES
-            debug(0) << instance << " -> " << result << " via " << before << " -> " << after << "\n";
+            if (d) {
+                debug(0) << instance << " -> " << result << " via " << before << " -> " << after << "\n";
+            }
 #endif
             return true;
         } else {
@@ -2265,7 +2281,9 @@ struct Rewriter {
             evaluate_predicate(pred, state)) {
             build_replacement(after);
 #if HALIDE_DEBUG_MATCHED_RULES
-            debug(0) << instance << " -> " << result << " via " << before << " -> " << after << " when " << pred << "\n";
+            if (d) {
+                debug(0) << instance << " -> " << result << " via " << before << " -> " << after << " when " << pred << "\n";
+            }
 #endif
             return true;
         } else {
@@ -2287,7 +2305,9 @@ struct Rewriter {
             evaluate_predicate(pred, state)) {
             result = after;
 #if HALIDE_DEBUG_MATCHED_RULES
-            debug(0) << instance << " -> " << result << " via " << before << " -> " << after << " when " << pred << "\n";
+            if (d) {
+                debug(0) << instance << " -> " << result << " via " << before << " -> " << after << " when " << pred << "\n";
+            }
 #endif
             return true;
         } else {
@@ -2312,7 +2332,9 @@ struct Rewriter {
             evaluate_predicate(pred, state)) {
             result = make_const(output_type, after);
 #if HALIDE_DEBUG_MATCHED_RULES
-            debug(0) << instance << " -> " << result << " via " << before << " -> " << after << " when " << pred << "\n";
+            if (d) {
+                debug(0) << instance << " -> " << result << " via " << before << " -> " << after << " when " << pred << "\n";
+            }
 #endif
             return true;
         } else {

@@ -85,6 +85,9 @@ Module lower(const vector<Function> &output_funcs,
              const vector<Stmt> &requirements,
              bool trace_pipeline,
              const vector<IRMutator *> &custom_passes) {
+
+    HALIDE_TIC;
+
     std::vector<std::string> namespaces;
     std::string simple_pipeline_name = extract_namespaces(pipeline_name, namespaces);
 
@@ -523,6 +526,8 @@ Module lower(const vector<Function> &output_funcs,
     }
 
     result_module.append(main_func);
+
+    HALIDE_TOC;
 
     return result_module;
 }

@@ -31,6 +31,8 @@ namespace Internal {
 class Simplify : public VariadicVisitor<Simplify, Expr, Stmt> {
     using Super = VariadicVisitor<Simplify, Expr, Stmt>;
 
+    bool use_synthesized_rules = false;
+
 public:
     Simplify(bool r, const Scope<Interval> *bi, const Scope<ModulusRemainder> *ai);
 
@@ -231,8 +233,7 @@ public:
 
         void learn_false(const Expr &fact);
         void learn_true(const Expr &fact);
-        void learn_upper_bound(const Variable *v, int64_t val);
-        void learn_lower_bound(const Variable *v, int64_t val);
+        void learn_info(const Variable *v, const ExprInfo &);
 
         ScopedFact(Simplify *s)
             : simplify(s) {
@@ -259,6 +260,11 @@ public:
         f.learn_false(fact);
         return f;
     }
+
+    // Learn some facts permanently, with no scoping.
+    void learn_false(const Expr &fact);
+    void learn_true(const Expr &fact);
+    void learn_info(const Variable *v, const ExprInfo &);
 
     template<typename T>
     Expr hoist_slice_vector(Expr e);
