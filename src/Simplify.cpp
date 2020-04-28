@@ -2,6 +2,7 @@
 #include "Simplify_Internal.h"
 
 #include "CSE.h"
+#include "CompilerLogger.h"
 #include "IRMutator.h"
 #include "Substitute.h"
 
@@ -407,7 +408,8 @@ bool can_prove(Expr e, const Scope<Interval> &bounds) {
 
     // Take a closer look at all failed proof attempts to hunt for
     // simplifier weaknesses
-    if (debug::debug_level() > 0 && !is_const(e)) {
+    const bool check_failed_proofs = debug::debug_level() > 0 || get_compiler_logger() != nullptr;
+    if (check_failed_proofs && !is_const(e)) {
         struct RenameVariables : public IRMutator {
             using IRMutator::visit;
 
@@ -470,7 +472,12 @@ bool can_prove(Expr e, const Scope<Interval> &bounds) {
                 return false;
             }
         }
-        debug(0) << "Failed to prove, but could not find a counter-example:\n "
+
+        if (get_compiler_logger()) {
+            get_compiler_logger()->record_failed_to_prove(e, orig);
+        }
+
+        debug(1) << "Failed to prove, but could not find a counter-example:\n "
                  << e << "\n"
                  << "Original expression:\n"
                  << orig << "\n";

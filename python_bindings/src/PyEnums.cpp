@@ -165,7 +165,8 @@ void define_enums(py::module &m) {
         .value("schedule", Output::schedule)
         .value("static_library", Output::static_library)
         .value("stmt", Output::stmt)
-        .value("stmt_html", Output::stmt_html);
+        .value("stmt_html", Output::stmt_html)
+        .value("compiler_log", Output::compiler_log);
 }
 
 }  // namespace PythonBindings

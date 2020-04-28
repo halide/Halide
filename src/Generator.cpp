@@ -4,6 +4,7 @@
 #include <utility>
 
 #include "BoundaryConditions.h"
+#include "CompilerLogger.h"
 #include "Derivative.h"
 #include "Generator.h"
 #include "IRPrinter.h"
@@ -753,9 +754,10 @@ int generate_filter_main_inner(int argc, char **argv, std::ostream &cerr) {
         "     in TensorFlow or PyTorch. See Generator::build_gradient_module() documentation.\n"
         "\n"
         " -e  A comma separated list of files to emit. Accepted values are:\n"
-        "     [assembly, bitcode, cpp, h, html, o, static_library,\n"
-        "      stmt, cpp_stub, schedule, registration, featurization, python_extension, pytorch_wrapper].\n"
-        "     If omitted, default value is [static_library, h, registration].\n"
+        "     [assembly, bitcode, c_header, c_source, cpp_stub, featurization,\n"
+        "      llvm_assembly, object, python_extension, pytorch_wrapper, registration,\n"
+        "      schedule, static_library, stmt, stmt_html, compiler_log].\n"
+        "     If omitted, default value is [c_header, static_library, registration].\n"
         "\n"
         " -p  A comma-separated list of shared libraries that will be loaded before the\n"
         "     generator is run. Useful for custom auto-schedulers. The generator must\n"
@@ -853,6 +855,7 @@ int generate_filter_main_inner(int argc, char **argv, std::ostream &cerr) {
         }
         return 1;
     }
+
     std::string function_name = flags_info["-f"];
     if (function_name.empty()) {
         // If -f isn't specified, assume function name = generator name.
@@ -928,6 +931,42 @@ int generate_filter_main_inner(int argc, char **argv, std::ostream &cerr) {
         }
     }
 
+    // Allow quick-n-dirty use of compiler logging via HL_DEBUG_COMPILER_LOGGER env var
+    const bool do_compiler_logging = outputs.count(Output::compiler_log) ||
+                                     (get_env_variable("HL_DEBUG_COMPILER_LOGGER") == "1");
+
+    const bool obfuscate_compiler_logging = get_env_variable("HL_OBFUSCATE_COMPILER_LOGGER") == "1";
+
+    const CompilerLoggerFactory no_compiler_logger_factory =
+        [](const std::string &, const Target &) -> std::unique_ptr<CompilerLogger> {
+        return nullptr;
+    };
+
+    const CompilerLoggerFactory json_compiler_logger_factory =
+        [&](const std::string &function_name, const Target &target) -> std::unique_ptr<CompilerLogger> {
+        // rebuild generator_args from the map so that they are always canonical
+        std::string generator_args_string;
+        std::string sep;
+        for (const auto &it : generator_args) {
+            if (it.first == "target") continue;
+            std::string quote = it.second.string_value.find(" ") != std::string::npos ? "\\\"" : "";
+            generator_args_string += sep + it.first + "=" + quote + it.second.string_value + quote;
+            sep = " ";
+        }
+        std::unique_ptr<JSONCompilerLogger> t(new JSONCompilerLogger(
+            obfuscate_compiler_logging ? "" : generator_name,
+            obfuscate_compiler_logging ? "" : function_name,
+            obfuscate_compiler_logging ? "" : autoscheduler_name,
+            obfuscate_compiler_logging ? Target() : target,
+            obfuscate_compiler_logging ? "" : generator_args_string,
+            obfuscate_compiler_logging));
+        return t;
+    };
+
+    const CompilerLoggerFactory compiler_logger_factory = do_compiler_logging ?
+                                                              json_compiler_logger_factory :
+                                                              no_compiler_logger_factory;
+
     if (!runtime_name.empty()) {
         std::string base_path = compute_base_path(output_dir, runtime_name, "");
 
@@ -946,6 +985,7 @@ int generate_filter_main_inner(int argc, char **argv, std::ostream &cerr) {
         }
 
         auto output_files = compute_output_files(gcd_target, base_path, outputs);
+        // Runtime doesn't get to participate in the CompilerLogger party
         compile_standalone_runtime(output_files, gcd_target);
     }
 
@@ -954,6 +994,7 @@ int generate_filter_main_inner(int argc, char **argv, std::ostream &cerr) {
         debug(1) << "Generator " << generator_name << " has base_path " << base_path << "\n";
         if (outputs.count(Output::cpp_stub)) {
             // When generating cpp_stub, we ignore all generator args passed in, and supply a fake Target.
+            // (CompilerLogger is never enabled for cpp_stub, for now anyway.)
             auto gen = GeneratorRegistry::create(generator_name, GeneratorContext(Target()));
             auto stub_file_path = base_path + output_info[Output::cpp_stub].extension;
             gen->emit_cpp_stub(stub_file_path);
@@ -962,7 +1003,7 @@ int generate_filter_main_inner(int argc, char **argv, std::ostream &cerr) {
         // Don't bother with this if we're just emitting a cpp_stub.
         if (!stub_only) {
             auto output_files = compute_output_files(targets[0], base_path, outputs);
-            auto module_producer = [&generator_name, &generator_args, build_gradient_module](const std::string &name, const Target &target) -> Module {
+            auto module_factory = [&generator_name, &generator_args, build_gradient_module](const std::string &name, const Target &target) -> Module {
                 auto sub_generator_args = generator_args;
                 sub_generator_args.erase("target");
                 // Must re-create each time since each instance will have a different Target.
@@ -970,13 +1011,7 @@ int generate_filter_main_inner(int argc, char **argv, std::ostream &cerr) {
                 gen->set_generator_param_values(sub_generator_args);
                 return build_gradient_module ? gen->build_gradient_module(name) : gen->build_module(name);
             };
-            if (targets.size() > 1) {
-                compile_multitarget(function_name, output_files, targets, module_producer);
-            } else {
-                // compile_multitarget() will fail if we request anything but library and/or header,
-                // so defer directly to Module::compile if there is a single target.
-                module_producer(function_name, targets[0]).compile(output_files);
-            }
+            compile_multitarget(function_name, output_files, targets, module_factory, compiler_logger_factory);
         }
     }
 

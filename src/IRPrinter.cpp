@@ -170,56 +170,98 @@ ostream &operator<<(ostream &stream, const Target &target) {
 namespace Internal {
 
 std::ostream &operator<<(std::ostream &s, const IRNodeType &t) {
-    switch(t) {
-    case IRNodeType::IntImm: return (s << "IntImm");
-    case IRNodeType::UIntImm: return (s << "UIntImm");
-    case IRNodeType::FloatImm: return (s << "FloatImm");
-    case IRNodeType::StringImm: return (s << "StringImm");
-    case IRNodeType::Broadcast: return (s << "Broadcast");
-    case IRNodeType::Cast: return (s << "Cast");
-    case IRNodeType::Variable: return (s << "Variable");
-    case IRNodeType::Add: return (s << "Add");
-    case IRNodeType::Sub: return (s << "Sub");
-    case IRNodeType::Mod: return (s << "Mod");
-    case IRNodeType::Mul: return (s << "Mul");
-    case IRNodeType::Div: return (s << "Div");
-    case IRNodeType::Min: return (s << "Min");
-    case IRNodeType::Max: return (s << "Max");
-    case IRNodeType::EQ: return (s << "EQ");
-    case IRNodeType::NE: return (s << "NE");
-    case IRNodeType::LT: return (s << "LT");
-    case IRNodeType::LE: return (s << "LE");
-    case IRNodeType::GT: return (s << "GT");
-    case IRNodeType::GE: return (s << "GE");
-    case IRNodeType::And: return (s << "And");
-    case IRNodeType::Or: return (s << "Or");
-    case IRNodeType::Not: return (s << "Not");
-    case IRNodeType::Select: return (s << "Select");
-    case IRNodeType::Load: return (s << "Load");
-    case IRNodeType::Ramp: return (s << "Ramp");
-    case IRNodeType::Call: return (s << "Call");
-    case IRNodeType::Let: return (s << "Let");
-    case IRNodeType::Shuffle: return (s << "Shuffle");
-    case IRNodeType::LetStmt: return (s << "LetStmt");
-    case IRNodeType::AssertStmt: return (s << "AssertStmt");
-    case IRNodeType::ProducerConsumer: return (s << "ProducerConsumer");
-    case IRNodeType::For: return (s << "For");
-    case IRNodeType::Acquire: return (s << "Acquire");
-    case IRNodeType::Store: return (s << "Store");
-    case IRNodeType::Provide: return (s << "Provide");
-    case IRNodeType::Allocate: return (s << "Allocate");
-    case IRNodeType::Free: return (s << "Free");
-    case IRNodeType::Realize: return (s << "Realize");
-    case IRNodeType::Block: return (s << "Block");
-    case IRNodeType::Fork: return (s << "Fork");
-    case IRNodeType::IfThenElse: return (s << "IfThenElse");
-    case IRNodeType::Evaluate: return (s << "Evaluate");
-    case IRNodeType::Prefetch: return (s << "Prefetch");
-    default: return s;
+    switch (t) {
+    case IRNodeType::IntImm:
+        return (s << "IntImm");
+    case IRNodeType::UIntImm:
+        return (s << "UIntImm");
+    case IRNodeType::FloatImm:
+        return (s << "FloatImm");
+    case IRNodeType::StringImm:
+        return (s << "StringImm");
+    case IRNodeType::Broadcast:
+        return (s << "Broadcast");
+    case IRNodeType::Cast:
+        return (s << "Cast");
+    case IRNodeType::Variable:
+        return (s << "Variable");
+    case IRNodeType::Add:
+        return (s << "Add");
+    case IRNodeType::Sub:
+        return (s << "Sub");
+    case IRNodeType::Mod:
+        return (s << "Mod");
+    case IRNodeType::Mul:
+        return (s << "Mul");
+    case IRNodeType::Div:
+        return (s << "Div");
+    case IRNodeType::Min:
+        return (s << "Min");
+    case IRNodeType::Max:
+        return (s << "Max");
+    case IRNodeType::EQ:
+        return (s << "EQ");
+    case IRNodeType::NE:
+        return (s << "NE");
+    case IRNodeType::LT:
+        return (s << "LT");
+    case IRNodeType::LE:
+        return (s << "LE");
+    case IRNodeType::GT:
+        return (s << "GT");
+    case IRNodeType::GE:
+        return (s << "GE");
+    case IRNodeType::And:
+        return (s << "And");
+    case IRNodeType::Or:
+        return (s << "Or");
+    case IRNodeType::Not:
+        return (s << "Not");
+    case IRNodeType::Select:
+        return (s << "Select");
+    case IRNodeType::Load:
+        return (s << "Load");
+    case IRNodeType::Ramp:
+        return (s << "Ramp");
+    case IRNodeType::Call:
+        return (s << "Call");
+    case IRNodeType::Let:
+        return (s << "Let");
+    case IRNodeType::Shuffle:
+        return (s << "Shuffle");
+    case IRNodeType::LetStmt:
+        return (s << "LetStmt");
+    case IRNodeType::AssertStmt:
+        return (s << "AssertStmt");
+    case IRNodeType::ProducerConsumer:
+        return (s << "ProducerConsumer");
+    case IRNodeType::For:
+        return (s << "For");
+    case IRNodeType::Acquire:
+        return (s << "Acquire");
+    case IRNodeType::Store:
+        return (s << "Store");
+    case IRNodeType::Provide:
+        return (s << "Provide");
+    case IRNodeType::Allocate:
+        return (s << "Allocate");
+    case IRNodeType::Free:
+        return (s << "Free");
+    case IRNodeType::Realize:
+        return (s << "Realize");
+    case IRNodeType::Block:
+        return (s << "Block");
+    case IRNodeType::Fork:
+        return (s << "Fork");
+    case IRNodeType::IfThenElse:
+        return (s << "IfThenElse");
+    case IRNodeType::Evaluate:
+        return (s << "Evaluate");
+    case IRNodeType::Prefetch:
+        return (s << "Prefetch");
+    default:
+        return s;
     }
-}
-
-IRPrinter::~IRPrinter() {
 }
 
 void IRPrinter::test() {
@@ -984,7 +1026,7 @@ void IRPrinter::visit(const Shuffle *op) {
 }
 
 void IRPrinter::visit(const Atomic *op) {
-    if (op->mutex_name == "") {
+    if (op->mutex_name.empty()) {
         stream << get_indent() << "atomic {\n";
     } else {
         stream << get_indent() << "atomic (";
