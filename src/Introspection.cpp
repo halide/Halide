@@ -207,21 +207,22 @@ public:
 
     DebugSections(const std::string &binary)
         : calibrated(false), working(false) {
+        std::string binary_path = binary;
 #ifdef __APPLE__
-        size_t last_slash = binary.rfind('/');
+        size_t last_slash = binary_path.rfind('/');
         if (last_slash == std::string::npos ||
-            last_slash >= binary.size() - 1) {
+            last_slash >= binary_path.size() - 1) {
             last_slash = 0;
         } else {
             last_slash++;
         }
-        std::string file_only = binary.substr(last_slash, binary.size() - last_slash);
-        binary += ".dSYM/Contents/Resources/DWARF/" + file_only;
+        std::string file_only = binary_path.substr(last_slash, binary_path.size() - last_slash);
+        binary_path += ".dSYM/Contents/Resources/DWARF/" + file_only;
 #endif
 
-        debug(5) << "Loading " << binary << "\n";
+        debug(5) << "Loading " << binary_path << "\n";
 
-        load_and_parse_object_file(binary);
+        load_and_parse_object_file(binary_path);
     }
 
     int count_trailing_zeros(int64_t x) {
