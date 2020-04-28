@@ -228,7 +228,7 @@ inline mtl_device *get_default_mtl_device() {
     mtl_device *device = (mtl_device *)MTLCreateSystemDefaultDevice();
     if (device == NULL) {
         // We assume Metal.framework is already loaded
-        void* handle = halide_get_symbol("MTLCopyAllDevices");
+        void *handle = halide_get_symbol("MTLCopyAllDevices");
         if (handle != NULL) {
             typedef objc_id (*mtl_copy_all_devices_method)(void);
             mtl_copy_all_devices_method method = (mtl_copy_all_devices_method)handle;
