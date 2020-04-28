@@ -1,4 +1,5 @@
 #include "Halide.h"
+#include <array>
 #include <random>
 #include <stdio.h>
 #include <time.h>
@@ -16,7 +17,6 @@ const int fuzz_var_count = 5;
 // use std::mt19937 instead of rand() to ensure consistent behavior on all systems
 std::mt19937 rng(0);
 
-// Q: UInt(1) fails with some error for width > 2.
 Type fuzz_types[] = {UInt(1), UInt(8), UInt(16), UInt(32), Int(8), Int(16), Int(32)};
 const int fuzz_type_count = sizeof(fuzz_types) / sizeof(fuzz_types[0]);
 
@@ -30,7 +30,14 @@ Expr random_var() {
 }
 
 Type random_type(int width) {
-    Type T = fuzz_types[rng() % fuzz_type_count];
+    Type T;
+    // Skip UInt(1), if width is not power of two.
+    if (width == 1 || (width & (width - 1)) == 0) {
+        T = fuzz_types[rng() % fuzz_type_count];
+    } else {
+        T = fuzz_types[(rng() % (fuzz_type_count - 1)) + 1];
+    }
+
     if (width > 1) {
         T = T.with_lanes(width);
     }
@@ -40,6 +47,7 @@ Type random_type(int width) {
 int get_random_divisor(Type t) {
     // extract_lane won't work on the ramp of boolean type with width > 2.
     if (t.is_bool()) {
+        assert(t.lanes() % 2 == 0);
         return 2;
     }
     std::vector<int> divisors = {t.lanes()};
@@ -327,7 +335,7 @@ Expr e(Variable::make(Int(0), fuzz_var(4)));
 
 int main(int argc, char **argv) {
     // Number of random expressions to test.
-    const int count = 1000;
+    const int count = 10000;
     // Depth of the randomly generated expression trees.
     const int depth = 5;
     // Number of samples to test the generated expressions for.
@@ -339,21 +347,17 @@ int main(int argc, char **argv) {
     rng.seed(fuzz_seed);
     std::cout << "Simplify fuzz test seed: " << fuzz_seed << "\n";
 
-    int max_fuzz_vector_width = 8;
-
-    for (int i = 0; i < fuzz_type_count; i++) {
-        Type T = fuzz_types[i];
-        for (int w = 1; w <= max_fuzz_vector_width; w *= 2) {
-            Type VT = T.with_lanes(w);
-            for (int n = 0; n < count; n++) {
-                // Generate a random expr...
-                Expr test = random_expr(VT, depth);
-                if (!test_expression(test, samples)) {
-                    return -1;
-                }
-            }
+    std::array<int, 6> vector_widths = {1, 2, 3, 4, 6, 8};
+    for (int n = 0; n < count; n++) {
+        int width = vector_widths[rng() % vector_widths.size()];
+        Type VT = random_type(width);
+        // Generate a random expr...
+        Expr test = random_expr(VT, depth);
+        if (!test_expression(test, samples)) {
+            return -1;
         }
     }
+
     std::cout << "Success!\n";
     return 0;
 }
