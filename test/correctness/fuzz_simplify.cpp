@@ -30,13 +30,7 @@ Expr random_var() {
 }
 
 Type random_type(int width) {
-    Type T;
-    // Skip UInt(1), if width is not power of two.
-    if (width == 1 || (width & (width - 1)) == 0) {
-        T = fuzz_types[rng() % fuzz_type_count];
-    } else {
-        T = fuzz_types[(rng() % (fuzz_type_count - 1)) + 1];
-    }
+    Type T = fuzz_types[rng() % fuzz_type_count];
 
     if (width > 1) {
         T = T.with_lanes(width);
@@ -45,11 +39,6 @@ Type random_type(int width) {
 }
 
 int get_random_divisor(Type t) {
-    // extract_lane won't work on the ramp of boolean type with width > 2.
-    if (t.is_bool()) {
-        assert(t.lanes() % 2 == 0);
-        return 2;
-    }
     std::vector<int> divisors = {t.lanes()};
     for (int dd = 2; dd < t.lanes(); dd++) {
         if (t.lanes() % dd == 0) {
@@ -279,8 +268,17 @@ Expr x1(Expr x) {
 Expr x2(Expr x) {
     return Broadcast::make(x, 2);
 }
+Expr x3(Expr x) {
+    return Broadcast::make(x, 3);
+}
 Expr x4(Expr x) {
     return Broadcast::make(x, 2);
+}
+Expr x6(Expr x) {
+    return Broadcast::make(x, 6);
+}
+Expr x8(Expr x) {
+    return Broadcast::make(x, 8);
 }
 Expr uint1(Expr x) {
     return Cast::make(UInt(1), x);

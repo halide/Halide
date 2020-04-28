@@ -237,7 +237,7 @@ private:
         if (base_lanes > 1) {
             if (new_lanes == 1) {
                 int index = starting_lane / base_lanes;
-                Expr expr = op->base + index * op->stride;
+                Expr expr = op->base + cast(op->base.type(), index) * op->stride;
 
                 int old_starting_lane = starting_lane;
                 int old_lane_stride = lane_stride;
@@ -253,7 +253,7 @@ private:
                 return mutate(flatten_nested_ramps(op));
             }
         }
-        Expr expr = op->base + starting_lane * op->stride;
+        Expr expr = op->base + cast(op->base.type(), starting_lane) * op->stride;
         internal_assert(expr.type() == op->base.type());
         if (new_lanes > 1) {
             expr = Ramp::make(expr, op->stride * lane_stride, new_lanes);
