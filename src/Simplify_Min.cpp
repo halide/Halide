@@ -227,6 +227,14 @@ Expr Simplify::visit(const Min *op, ExprInfo *bounds) {
             return mutate(std::move(rewrite.result), bounds);
         }
         // clang-format on
+
+        if (no_overflow_int(op->type) &&
+            use_synthesized_rules &&
+            (
+#include "Simplify_Min.inc"
+                )) {
+            return mutate(rewrite.result, bounds);
+        }
     }
 
     const Shuffle *shuffle_a = a.as<Shuffle>();

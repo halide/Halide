@@ -349,8 +349,17 @@ Expr Simplify::visit(const Sub *op, ExprInfo *bounds) {
                rewrite((min(x*c0 + y, z) + w) / c1 - x*c2, (min(y, z - x*c0) + w) / c1, c0 == c1 * c2, "sub348") ||
                rewrite((min(z, x*c0 + y) + w) / c1 - x*c2, (min(z - x*c0, y) + w) / c1, c0 == c1 * c2, "sub349") ||
 
+
                false)))) {
             return mutate(std::move(rewrite.result), bounds);
+        }
+
+        if (no_overflow_int(op->type) &&
+            use_synthesized_rules &&
+            (
+#include "Simplify_Sub.inc"
+                )) {
+            return mutate(rewrite.result, bounds);
         }
     }
     // clang-format on

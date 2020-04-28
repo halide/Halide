@@ -470,24 +470,31 @@ struct TickStackEntry {
     int line;
 };
 
-vector<TickStackEntry> tick_stack;
+__thread vector<TickStackEntry> *tick_stack = nullptr;
 
 void halide_tic_impl(const char *file, int line) {
-    string f = file;
-    f = split_string(f, "/").back();
-    tick_stack.push_back({std::chrono::high_resolution_clock::now(), f, line});
+    if (!tick_stack) {
+        tick_stack = new vector<TickStackEntry>();
+    }
+    string f;
+    if (file) {
+        f = split_string(file, "/").back();
+    }
+    tick_stack->push_back({std::chrono::high_resolution_clock::now(), f, line});
 }
 
 void halide_toc_impl(const char *file, int line) {
-    auto t1 = tick_stack.back();
+    auto t1 = tick_stack->back();
     auto t2 = std::chrono::high_resolution_clock::now();
     std::chrono::duration<double> diff = t2 - t1.time;
-    tick_stack.pop_back();
-    for (size_t i = 0; i < tick_stack.size(); i++) {
+    tick_stack->pop_back();
+    for (size_t i = 0; i < tick_stack->size(); i++) {
         debug(1) << "  ";
     }
-    string f = file;
-    f = split_string(f, "/").back();
+    string f;
+    if (file) {
+        f = split_string(file, "/").back();
+    }
     debug(1) << t1.file << ":" << t1.line << " ... " << f << ":" << line << " : " << diff.count() * 1000 << " ms\n";
 }
 

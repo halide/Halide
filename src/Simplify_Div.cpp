@@ -215,6 +215,14 @@ Expr Simplify::visit(const Div *op, ExprInfo *bounds) {
             return mutate(std::move(rewrite.result), bounds);
         }
         // clang-format on
+
+        if (no_overflow_int(op->type) &&
+            use_synthesized_rules &&
+            (
+#include "Simplify_Div.inc"
+                )) {
+            return mutate(rewrite.result, bounds);
+        }
     }
 
     if (a.same_as(op->a) && b.same_as(op->b)) {

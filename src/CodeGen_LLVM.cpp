@@ -1212,6 +1212,8 @@ llvm::Type *CodeGen_LLVM::llvm_type_of(const Type &t) const {
 void CodeGen_LLVM::optimize_module() {
     debug(3) << "Optimizing module\n";
 
+    HALIDE_TIC;
+
     if (debug::debug_level() >= 3) {
         module->print(dbgs(), nullptr, false, true);
     }
@@ -1323,6 +1325,8 @@ void CodeGen_LLVM::optimize_module() {
     if (debug::debug_level() >= 2) {
         module->print(dbgs(), nullptr, false, true);
     }
+
+    HALIDE_TOC;
 }
 
 void CodeGen_LLVM::sym_push(const string &name, llvm::Value *value) {

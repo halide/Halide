@@ -106,9 +106,18 @@ Expr Simplify::visit(const And *op, ExprInfo *bounds) {
         (rewrite(x < y && x < z, x < min(y, z), "and106")) ||
         (rewrite(y < x && z < x, max(y, z) < x, "and107")) ||
         (rewrite(x <= y && x <= z, x <= min(y, z), "and108")) ||
-        (rewrite(y <= x && z <= x, max(y, z) <= x, "and109"))) {
+        (rewrite(y <= x && z <= x, max(y, z) <= x, "and109")) ||
+        (rewrite(x <= y && y <= x, x == y, "and110")) ||
+        false) {
 
         return mutate(std::move(rewrite.result), bounds);
+    }
+
+    if (use_synthesized_rules &&
+        (
+#include "Simplify_And.inc"
+            )) {
+        return mutate(rewrite.result, bounds);
     }
 
     if (a.same_as(op->a) &&

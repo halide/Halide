@@ -114,14 +114,24 @@ Expr Simplify::visit(const EQ *op, ExprInfo *bounds) {
     }
 
     if (const Sub *s = delta.as<Sub>()) {
-        Expr a = s->a, b = s->b;
+        Expr a = s->a;
+        Expr b = s->b;
         if (should_commute(a, b)) {
             std::swap(a, b);
         }
         if (a.same_as(op->a) && b.same_as(op->b)) {
             return op;
         } else {
-            return EQ::make(a, b);
+            auto rewrite = IRMatcher::rewriter(IRMatcher::eq(a, b), op->type, delta.type());
+            if (no_overflow_int(op->a.type()) &&
+                use_synthesized_rules &&
+                (
+#include "Simplify_EQ.inc"
+                    )) {
+                return mutate(rewrite.result, bounds);
+            } else {
+                return EQ::make(a, b);
+            }
         }
     }
 

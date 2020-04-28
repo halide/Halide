@@ -92,6 +92,14 @@ Expr Simplify::visit(const Mul *op, ExprInfo *bounds) {
             (rewrite(ramp(x, y) * broadcast(z), ramp(x * z, y * z, op->type.lanes()), "mul92"))) {
             return mutate(std::move(rewrite.result), bounds);
         }
+
+        if (no_overflow_int(op->type) &&
+            use_synthesized_rules &&
+            (
+#include "Simplify_Mul.inc"
+                )) {
+            return mutate(rewrite.result, bounds);
+        }
     }
 
     const Shuffle *shuffle_a = a.as<Shuffle>();

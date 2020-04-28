@@ -131,6 +131,10 @@ Expr Simplify::visit(const Add *op, ExprInfo *bounds) {
                (rewrite(x + ((c0 - x)/c1)*c1, c0 - ((c0 - x) % c1), c1 > 0, "add142")) ||
                (rewrite(x + ((c0 - x)/c1 + y)*c1, y * c1 - ((c0 - x) % c1) + c0, c1 > 0, "add143")) ||
                (rewrite(x + (y + (c0 - x)/c1)*c1, y * c1 - ((c0 - x) % c1) + c0, c1 > 0, "add144")) ||
+
+               rewrite(x + y*-1, x - y, "add145") ||
+               rewrite(x*-1 + y, y - x, "add146") ||
+
                false)))) {
             return mutate(std::move(rewrite.result), bounds);
         }
@@ -146,6 +150,14 @@ Expr Simplify::visit(const Add *op, ExprInfo *bounds) {
             } else {
                 return hoist_slice_vector<Add>(Add::make(a, b));
             }
+        }
+
+        if (no_overflow_int(op->type) &&
+            use_synthesized_rules &&
+            (
+#include "Simplify_Add.inc"
+                )) {
+            return mutate(rewrite.result, bounds);
         }
     }
 

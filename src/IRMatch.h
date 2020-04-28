@@ -2165,6 +2165,12 @@ HALIDE_ALWAYS_INLINE bool evaluate_predicate(Pattern p, MatcherState &state) {
 
 #define LOG_MATCHED_RULE (debug(0) << "MATCH: " << rulename << "\n")
 
+// Assume that a human has successfully proved all the "prove_me" rules on paper.
+template<typename A>
+HALIDE_ALWAYS_INLINE A prove_me(A a) noexcept {
+    return a;
+}
+
 template<typename Instance>
 struct Rewriter {
     Instance instance;
@@ -2187,7 +2193,7 @@ struct Rewriter {
              typename After,
              typename = typename enable_if_pattern<Before>::type,
              typename = typename enable_if_pattern<After>::type>
-    HALIDE_ALWAYS_INLINE bool operator()(Before before, After after, const char *rulename) {
+    HALIDE_ALWAYS_INLINE bool operator()(Before before, After after, const char *rulename = "none") {
         static_assert((Before::binds & After::binds) == After::binds, "Rule result uses unbound values");
         static_assert(Before::canonical, "LHS of rewrite rule should be in canonical form");
         static_assert(After::canonical, "RHS of rewrite rule should be in canonical form");
@@ -2211,7 +2217,7 @@ struct Rewriter {
 
     template<typename Before,
              typename = typename enable_if_pattern<Before>::type>
-    HALIDE_ALWAYS_INLINE bool operator()(Before before, const Expr &after, const char *rulename) noexcept {
+    HALIDE_ALWAYS_INLINE bool operator()(Before before, const Expr &after, const char *rulename = "none") noexcept {
         static_assert(Before::canonical, "LHS of rewrite rule should be in canonical form");
         if (before.template match<0>(instance, state)) {
             LOG_MATCHED_RULE;
@@ -2230,7 +2236,7 @@ struct Rewriter {
 
     template<typename Before,
              typename = typename enable_if_pattern<Before>::type>
-    HALIDE_ALWAYS_INLINE bool operator()(Before before, int64_t after, const char *rulename) noexcept {
+    HALIDE_ALWAYS_INLINE bool operator()(Before before, int64_t after, const char *rulename = "none") noexcept {
         static_assert(Before::canonical, "LHS of rewrite rule should be in canonical form");
 #if HALIDE_FUZZ_TEST_RULES
         fuzz_test_rule(before, Const(after), true, wildcard_type, output_type);
@@ -2256,7 +2262,7 @@ struct Rewriter {
              typename = typename enable_if_pattern<Before>::type,
              typename = typename enable_if_pattern<After>::type,
              typename = typename enable_if_pattern<Predicate>::type>
-    HALIDE_ALWAYS_INLINE bool operator()(Before before, After after, Predicate pred, const char *rulename) {
+    HALIDE_ALWAYS_INLINE bool operator()(Before before, After after, Predicate pred, const char *rulename = "none") {
         static_assert(Predicate::foldable, "Predicates must consist only of operations that can constant-fold");
         static_assert((Before::binds & After::binds) == After::binds, "Rule result uses unbound values");
         static_assert((Before::binds & Predicate::binds) == Predicate::binds, "Rule predicate uses unbound values");
@@ -2286,7 +2292,7 @@ struct Rewriter {
              typename Predicate,
              typename = typename enable_if_pattern<Before>::type,
              typename = typename enable_if_pattern<Predicate>::type>
-    HALIDE_ALWAYS_INLINE bool operator()(Before before, const Expr &after, Predicate pred, const char *rulename) {
+    HALIDE_ALWAYS_INLINE bool operator()(Before before, const Expr &after, Predicate pred, const char *rulename = "none") {
         static_assert(Predicate::foldable, "Predicates must consist only of operations that can constant-fold");
         static_assert(Before::canonical, "LHS of rewrite rule should be in canonical form");
         if (before.template match<0>(instance, state) &&
@@ -2309,7 +2315,7 @@ struct Rewriter {
              typename Predicate,
              typename = typename enable_if_pattern<Before>::type,
              typename = typename enable_if_pattern<Predicate>::type>
-    HALIDE_ALWAYS_INLINE bool operator()(Before before, int64_t after, Predicate pred, const char *rulename) {
+    HALIDE_ALWAYS_INLINE bool operator()(Before before, int64_t after, Predicate pred, const char *rulename = "none") {
         static_assert(Predicate::foldable, "Predicates must consist only of operations that can constant-fold");
         static_assert(Before::canonical, "LHS of rewrite rule should be in canonical form");
 #if HALIDE_FUZZ_TEST_RULES
