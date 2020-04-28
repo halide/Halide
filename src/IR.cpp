@@ -3,6 +3,7 @@
 #include "IRMutator.h"
 #include "IRPrinter.h"
 #include "IRVisitor.h"
+#include <numeric>
 #include <utility>
 
 namespace Halide {
@@ -760,6 +761,16 @@ Expr Shuffle::make_concat(const std::vector<Expr> &vectors) {
     }
 
     return make(vectors, indices);
+}
+
+Expr Shuffle::make_broadcast(Expr vector, int lanes) {
+    std::vector<int> indices(lanes * vector.type().lanes());
+    for (int ix = 0; ix < lanes; ix++) {
+        std::iota(indices.begin() + ix * vector.type().lanes(),
+                  indices.begin() + (ix + 1) * vector.type().lanes(), 0);
+    }
+
+    return make({vector}, indices);
 }
 
 Expr Shuffle::make_slice(Expr vector, int begin, int stride, int size) {

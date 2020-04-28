@@ -2,8 +2,6 @@
 #include "IRMutator.h"
 #include "IROperator.h"
 
-#include <numeric>
-
 namespace Halide {
 namespace Internal {
 namespace {
@@ -29,13 +27,7 @@ class FlattenRamps : public IRMutator {
     Expr visit(const Broadcast *op) override {
         if (op->value.type().is_vector()) {
             Expr value = mutate(op->value);
-            std::vector<int> indices(op->lanes * value.type().lanes());
-            for (int ix = 0; ix < op->lanes; ix++) {
-                std::iota(indices.begin() + ix * value.type().lanes(),
-                          indices.begin() + (ix + 1) * value.type().lanes(), 0);
-            }
-
-            return Shuffle::make({value}, indices);
+            return Shuffle::make_broadcast(value, op->lanes);
         }
 
         return IRMutator::visit(op);
