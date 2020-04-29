@@ -271,6 +271,7 @@ tests(GROUPS correctness travis
         skip_stages_external_array_functions.cpp
         skip_stages_memoize.cpp
         sliding_backwards.cpp
+        sliding_over_guard_with_if.cpp
         sliding_reduction.cpp
         sliding_window.cpp
         sort_exprs.cpp
