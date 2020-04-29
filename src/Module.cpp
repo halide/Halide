@@ -581,6 +581,7 @@ void Module::compile(const std::map<Output, std::string> &output_files) const {
         return;
     }
 
+    auto *logger = get_compiler_logger();
     if (contains(output_files, Output::object) || contains(output_files, Output::assembly) ||
         contains(output_files, Output::bitcode) || contains(output_files, Output::llvm_assembly) ||
         contains(output_files, Output::static_library)) {
@@ -588,9 +589,14 @@ void Module::compile(const std::map<Output, std::string> &output_files) const {
         std::unique_ptr<llvm::Module> llvm_module(compile_module_to_llvm_module(*this, context));
 
         if (contains(output_files, Output::object)) {
-            debug(1) << "Module.compile(): object " << output_files.at(Output::object) << "\n";
-            auto out = make_raw_fd_ostream(output_files.at(Output::object));
+            const auto &f = output_files.at(Output::object);
+            debug(1) << "Module.compile(): object " << f << "\n";
+            auto out = make_raw_fd_ostream(f);
             compile_llvm_module_to_object(*llvm_module, *out);
+            if (logger) {
+                out->flush();
+                logger->record_object_code_size(file_stat(f).file_size);
+            }
         }
         if (contains(output_files, Output::static_library)) {
             // To simplify the code, we always create a temporary object output
@@ -605,6 +611,10 @@ void Module::compile(const std::map<Output, std::string> &output_files) const {
                 auto out = make_raw_fd_ostream(object);
                 compile_llvm_module_to_object(*llvm_module, *out);
                 out->flush();  // create_static_library() is happier if we do this
+                if (logger && !contains(output_files, Output::object)) {
+                    // Don't double-record object-code size if we already recorded it for object
+                    logger->record_object_code_size(file_stat(object).file_size);
+                }
             }
             debug(1) << "Module.compile(): static_library " << output_files.at(Output::static_library) << "\n";
             Target base_target(target().os, target().arch, target().bits);
