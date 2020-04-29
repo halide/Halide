@@ -269,7 +269,10 @@ std::ostream &JSONCompilerLogger::emit_to_stream(std::ostream &o) {
     emit_optional_key_value(o, indent, "autoscheduler_name", autoscheduler_name);
     emit_optional_key_value(o, indent, "target", target == Target() ? "" : target.to_string());
     emit_optional_key_value(o, indent, "generator_args", generator_args);
-    emit_optional_key_value(o, indent, "object_code_size", object_code_size == 0 ? "" : std::to_string(object_code_size));
+
+    if (object_code_size) {
+        emit_key_value(o, indent, "object_code_size", object_code_size);
+    }
 
     // If these are present, emit them, even if value is zero
     if (compilation_time.count(Phase::HalideLowering)) {
