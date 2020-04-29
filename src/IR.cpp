@@ -770,7 +770,7 @@ Expr Shuffle::make_broadcast(Expr vector, int lanes) {
                   indices.begin() + (ix + 1) * vector.type().lanes(), 0);
     }
 
-    return make({vector}, indices);
+    return make({std::move(vector)}, indices);
 }
 
 Expr Shuffle::make_slice(Expr vector, int begin, int stride, int size) {
