@@ -116,6 +116,10 @@ bool more_general_than(const Expr &a, const Expr &b, map<string, Expr> &bindings
         return more_general_than(a, op, bindings, entered_a);
     }
 
+    if (const Mod *op = b.as<Mod>()) {
+        return more_general_than(a, op, bindings, entered_a);
+    }
+
     if (const LE *op = b.as<LE>()) {
         return more_general_than(a, op, bindings, entered_a);
     }
