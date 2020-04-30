@@ -791,7 +791,7 @@ struct State {
     bool apply_best_action(double& bestReward) {
         std::vector<Action> actions;
         get_actions(actions);
-        if (actions.size() == 0) return false;
+        if (actions.size() == 0) return true;
 
 
         internal_assert(cost_model && "bug, cost model not defined");
@@ -810,7 +810,7 @@ struct State {
         internal_assert(inner->num_decisions_made+1 == actions[best].state->num_decisions_made);
         inner = std::move(actions[best].state);
         bestReward = inner->cost;
-        return true;
+        return false;
     }
 
     // evaluate this state and return a vector of rewards (for each agent)
@@ -1556,7 +1556,8 @@ IntrusivePtr<State> optimal_schedule_pass(FunctionDAG &dag,
 
 IntrusivePtr<State> optimal_mcts_schedule(
                                      const std::vector<Function> &outputs, const MachineParams &params, const Target &target,
-                                     std::string weights_in_path, std::string weights_out_path, bool randomize_weights
+                                     std::string weights_in_path, std::string weights_out_path, bool randomize_weights,
+                                     FunctionDAG*& outdag
                                      ) {
 
     IntrusivePtr<State> best = nullptr;
@@ -1612,10 +1613,14 @@ IntrusivePtr<State> optimal_mcts_schedule(
     std::cout << "mcts_depth/num nodes: " << mcts_depth << std::endl;
     */
 
+    FunctionDAG* dags[num_passes];
+    int idx = -1;
 
+    //dags[0] = new FunctionDAG(outputs, params, target);
     #pragma omp parallel for
     for (int i = 0; i < num_passes; i++) {
-        FunctionDAG dag(outputs, params, target);
+        dags[i] = new FunctionDAG(outputs, params, target);
+        auto& dag = *dags[i];
         int mcts_depth = 2 * (int)dag.nodes.size();
         // Construct a cost model to use to evaluate states. Currently we
         // just have the one, but it's an abstract interface, so others
@@ -1665,16 +1670,30 @@ IntrusivePtr<State> optimal_mcts_schedule(
 
         #pragma omp critical
         {
-        if (best.get() == nullptr) best = pass;
-        else if(pass->cost < best->cost) best = pass;
+
+        if (best.get() == nullptr) {
+            best = pass;
+            idx = i;
+        } else if(pass->cost < best->cost) {
+            best = pass;
+            idx = i;
+        }
 
         std::cout << "Pass " << i << " of " << num_passes << ", cost: " << pass->cost << std::endl;
         std::cout << "Pass " << i << " of " << num_passes << ", best so far cost: " << best->cost << std::endl;
         aslog(0) << "Cost evaluated this many times: " << State::cost_calculations << '\n';
         }
     }
+    
     aslog(0) << "Best cost: " << best->cost << "\n";
+    
+    best->apply_schedule(*dags[idx], params);
+    aslog(0) << "** applied schedule:\n";
 
+
+    //delete dags[0];
+    //for(auto z : dags) delete z;
+    outdag = dags[idx];
 
     return best;
 }
@@ -1762,26 +1781,31 @@ void generate_rl_schedule(const std::vector<Function> &outputs,
 
 
     IntrusivePtr<State> optimal;
+    FunctionDAG *dag = nullptr;
 
     // Run MCTS
-    optimal = optimal_mcts_schedule(outputs, params, target, weights_in_path, weights_out_path, randomize_weights);
+    optimal = optimal_mcts_schedule(outputs, params, target, weights_in_path, weights_out_path, randomize_weights, dag);
 
     HALIDE_TOC;
 
     aslog(0) << "Cost evaluated this many times: " << State::cost_calculations << '\n';
 
     // Dump the schedule found
-    aslog(0) << "** optimal schedule:\n";
-    FunctionDAG dag(outputs, params, target);
-    std::unique_ptr<CostModel> cost_model = make_default_cost_model(weights_in_path, weights_out_path, randomize_weights);
-    internal_assert(cost_model != nullptr);
+    aslog(0) << "** optimal schedule " << optimal.get() << ":\n";
+    //FunctionDAG dag(outputs, params, target);
+    aslog(0) << "** made dag:\n";
+    //std::unique_ptr<CostModel> cost_model = make_default_cost_model(weights_in_path, weights_out_path, randomize_weights);
+    aslog(0) << "** made cost model:\n";
+    //internal_assert(cost_model != nullptr);
+    //configure_pipeline_features(dag, params, cost_model.get());
 
 
     // Just to get the debugging prints to fire
-    optimal->calculate_cost(dag, params, cost_model.get(), aslog::aslog_level() > 0,true);
+    aslog(0) << "** calculating cost:\n";
+    //optimal->calculate_cost(dag, params, cost_model.get(), aslog::aslog_level() > 0,true);
+    aslog(0) << "** calculated cost:\n";
 
     // Apply the schedules to the pipeline
-    optimal->apply_schedule(dag, params);
 
     // Print out the schedule
     if (aslog::aslog_level() > 0) {
@@ -1806,7 +1830,7 @@ void generate_rl_schedule(const std::vector<Function> &outputs,
     if (!feature_file.empty()) {
         user_warning << "HL_FEATURE_FILE is deprecated; use the featurization output from Generator instead\n";
         std::ofstream binfile(feature_file, std::ios::binary | std::ios_base::trunc);
-        optimal->save_featurization(dag, params, binfile);
+        optimal->save_featurization(*dag, params, binfile);
         binfile.close();
         internal_assert(!binfile.fail()) << "Failed to write " << feature_file;
     }
@@ -1816,7 +1840,7 @@ void generate_rl_schedule(const std::vector<Function> &outputs,
         auto_scheduler_results->schedule_source = optimal->schedule_source;
         {
             std::ostringstream out;
-            optimal->save_featurization(dag, params, out);
+            optimal->save_featurization(*dag, params, out);
             auto_scheduler_results->featurization.resize(out.str().size());
             memcpy(auto_scheduler_results->featurization.data(), out.str().data(), out.str().size());
         }
