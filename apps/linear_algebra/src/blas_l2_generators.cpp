@@ -36,7 +36,7 @@ public:
         assert(get_target().has_feature(Target::NoBoundsQuery));
 
         const int vec_size = vectorize_ ? natural_vector_size(type_of<T>()) : 1;
-        const int unroll_size = 4;
+        const int unroll_size = std::min(vec_size, 4);
 
         Var i("i"), j("j");
         Func result("result");
