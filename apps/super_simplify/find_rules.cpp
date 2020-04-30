@@ -292,8 +292,8 @@ public:
 };
 
 int main(int argc, char **argv) {
-    if (argc < 2) {
-        std::cout << "Usage: ./find_rules halide_exprs.txt\n";
+    if (argc < 3) {
+        std::cout << "Usage: ./find_rules input_exprs.txt output_rules.txt\n";
         return 0;
     }
 
@@ -385,7 +385,7 @@ int main(int argc, char **argv) {
                 if (count_ops.count_leaves() != (lhs_ops + 1) ||
                     count_ops.has_unsupported_ir ||
                     !(count_ops.has_repeated_var ||
-                      count_ops.num_constants > 999)) {  // HACK while testing something for Dillon
+                      (lhs_ops < 4 && count_ops.num_constants > 0))) {
                     continue;
                 }
 
@@ -455,24 +455,20 @@ int main(int argc, char **argv) {
         f.get();
     }
 
-    // Filter rules, though specialization should not have snuck through the filtering above
+    // Sort generated rules
     std::sort(rules.begin(), rules.end(), [](const pair<Expr, Expr> &r1, const pair<Expr, Expr> &r2) {
         return IRDeepCompare{}(r1.first, r2.first);
     });
 
-    // Now try to generalize rules involving constants by replacing constants with wildcards
-    vector<tuple<Expr, Expr, Expr>> predicated_rules;
-    vector<pair<Expr, Expr>> failed_predicated_rules;
-
-    // Abstract away the constants and cluster the rules by LHS structure
-    map<Expr, vector<map<string, Expr>>, IRDeepCompare> generalized;
-
+    std::ofstream of;
+    of.open(argv[2]);
     for (auto r : rules) {
         ReplaceConstants replacer;
         r.first = replacer.mutate(r.first);
         r.second = replacer.mutate(r.second);
-        std::cout << "rewrite(" << r.first << ", " << r.second << ")\n";
+        of << "rewrite(" << r.first << ", " << r.second << ")\n";
     }
+    of.close();
 
     futures.clear();
     return 0;
