@@ -125,6 +125,10 @@ for app in $APPS; do
     extract_best_times ${HALIDE_ROOT} ${SAMPLES_DIR} ${BEST_TIMES_FILE}
     echo "Computing average statistics..."
     bash $(dirname $0)/../scripts/average_times.sh ${SAMPLES_DIR} >> ${OUTPUT_FILE}
+
+    SCRIPTS_DIR="$(dirname $0)/../scripts"
+    r_squared=$(python3 ${SCRIPTS_DIR}/rsquared.py --predictions ${PREDICTIONS_FILE})
+    echo "r-squared = ${r_squared}" >> ${OUTPUT_FILE}
     echo "Total autotune time (s): ${SECONDS}" >> ${OUTPUT_FILE}
 
     save_best_schedule_result ${BEST_SCHEDULES_DIR} ${SAMPLES_DIR}
