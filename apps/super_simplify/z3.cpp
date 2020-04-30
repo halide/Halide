@@ -8,7 +8,7 @@ using namespace Halide::Internal;
 using std::map;
 using std::string;
 
-bool parse_model(char **cursor, char *end, map<string, Expr> *bindings) {
+bool parse_model(const char **cursor, const char *end, map<string, Expr> *bindings) {
     consume_whitespace(cursor, end);
     if (!consume(cursor, end, "(model")) return false;
     consume_whitespace(cursor, end);
@@ -484,8 +484,8 @@ satisfy(Expr e, map<string, Expr> *bindings, const string &comment) {
     if (starts_with(result, "unsat")) {
         return Z3Result::Unsat;
     } else {
-        char *cursor = &(result[0]);
-        char *end = &(result[result.size()]);
+        const char *cursor = &(result[0]);
+        const char *end = &(result[result.size()]);
         if (!consume(&cursor, end, "sat")) {
             return Z3Result::Unknown;
         }
