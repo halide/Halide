@@ -2,6 +2,7 @@
 #include "CodeGen_C.h"
 #include "CodeGen_Internal.h"
 #include "CodeGen_LLVM.h"
+#include "CompilerLogger.h"
 #include "LLVM_Headers.h"
 #include "LLVM_Runtime_Linker.h"
 
@@ -346,6 +347,7 @@ void emit_file(const llvm::Module &module_in, Internal::LLVMOStream &out,
     Internal::debug(2) << "Target triple: " << module_in.getTargetTriple() << "\n";
 
     HALIDE_TIC;
+    auto time_start = std::chrono::high_resolution_clock::now();
 
     // Work on a copy of the module to avoid modifying the original.
     std::unique_ptr<llvm::Module> module = clone_module(module_in);
@@ -385,6 +387,14 @@ void emit_file(const llvm::Module &module_in, Internal::LLVMOStream &out,
     target_machine->addPassesToEmitFile(pass_manager, out, nullptr, file_type);
 
     pass_manager.run(*module);
+
+    auto *logger = Internal::get_compiler_logger();
+    if (logger) {
+        auto time_end = std::chrono::high_resolution_clock::now();
+        std::chrono::duration<double> diff = time_end - time_start;
+        logger->record_compilation_time(Internal::CompilerLogger::Phase::LLVM, diff.count());
+    }
+
     // If -time-passes is in HL_LLVM_ARGS, this will print llvm passes time statstics otherwise its no-op.
     llvm::reportAndResetTimings();
 

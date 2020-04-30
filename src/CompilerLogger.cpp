@@ -111,6 +111,14 @@ void JSONCompilerLogger::record_failed_to_prove(Expr failed_to_prove, Expr origi
     failed_to_prove_exprs.emplace_back(failed_to_prove, original_expr);
 }
 
+void JSONCompilerLogger::record_object_code_size(uint64_t bytes) {
+    object_code_size += bytes;
+}
+
+void JSONCompilerLogger::record_compilation_time(Phase phase, double duration) {
+    compilation_time[phase] += duration;
+}
+
 void JSONCompilerLogger::obfuscate() {
     {
         std::map<std::string, std::vector<Expr>> n;
@@ -261,6 +269,18 @@ std::ostream &JSONCompilerLogger::emit_to_stream(std::ostream &o) {
     emit_optional_key_value(o, indent, "autoscheduler_name", autoscheduler_name);
     emit_optional_key_value(o, indent, "target", target == Target() ? "" : target.to_string());
     emit_optional_key_value(o, indent, "generator_args", generator_args);
+
+    if (object_code_size) {
+        emit_key_value(o, indent, "object_code_size", object_code_size);
+    }
+
+    // If these are present, emit them, even if value is zero
+    if (compilation_time.count(Phase::HalideLowering)) {
+        emit_key_value(o, indent, "compilation_time_halide_lowering", compilation_time[Phase::HalideLowering]);
+    }
+    if (compilation_time.count(Phase::LLVM)) {
+        emit_key_value(o, indent, "compilation_time_llvm", compilation_time[Phase::LLVM]);
+    }
 
     if (!matched_simplifier_rules.empty()) {
         using P = std::pair<std::string, int64_t>;
