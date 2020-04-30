@@ -1792,7 +1792,7 @@ class ConvertRoundingToMod : public IRMutator {
 
 // Take a boolean expression with min/max/select in it, and reduce it
 // to a big disjunction of inequalities intead.
-vector<Expr> remove_min_max_select(Expr e) {
+set<Expr, IRDeepCompare> remove_min_max_select(Expr e) {
     // First turn min/max into select
     e = RemoveMinMax().mutate(e);
     vector<Expr> pieces{e};
@@ -1861,11 +1861,11 @@ bool can_disprove_nonconvex(Expr e, int beam_size, Expr *implication) {
     // Break it into convex pieces, and disprove every piece
     debug(1) << "Simplified: " << e << "\n";
 
-    auto pieces = remove_min_max_select(e);
-
-    for (auto &p : pieces) {
+    auto pieces_set = remove_min_max_select(e);
+    vector<Expr> pieces;
+    for (const auto &p : pieces_set) {
         // Distribute and over or.
-        p = ToDNF().mutate(p);
+        pieces.push_back(ToDNF().mutate(p));
     }
     e = pack_binary_op<Or>(pieces);
     pieces = unpack_binary_op<Or>(e);
@@ -2688,7 +2688,7 @@ Expr synthesize_predicate(const Expr &lhs,
         Expr new_lhs = substitute(*binding, lhs);
         Expr new_rhs = substitute(*binding, rhs);
         map<string, Expr> b;
-        precondition = synthesize_predicate(new_lhs, new_rhs, examples, &b);
+        precondition = synthesize_predicate(new_lhs, new_rhs, &b);
         binding->insert(b.begin(), b.end());
     }
 

@@ -1,0 +1,49 @@
+0) Check the expected build of z3 is in the path
+
+which z3
+
+1) Build Halide
+
+make -C ../../ distrib -j32
+
+2) Build find_rules and filter_rewrite_rules:
+
+make bin/find_rules bin/filter_rewrite_rules -j32
+
+3) Mine initial set of rules from exprs. Trial it on a small set
+(e.g. 10 exprs) first. Set the HL_USE_SYNTHESIZED_RULES env var
+depending on whether or not you want to build on top of any
+already-synthesized rules from a previous run. If you set it to 1,
+make sure to include those previous rules in step 4.
+
+HL_USE_SYNTHESIZED_RULES=0 ./bin/find_rules input_exprs.txt output_rules.txt
+
+Note: This writes all exprs not found useful to a file 'blacklist.txt'
+to avoid wasting time checking them again. If you do something like
+increase the z3 timeout or fix a bug you may want to delete this file
+and rerun.
+
+4) Filter and generalize the generated rules. If you have synthesized
+rules from other earlier runs, you want to cat them all into one file
+to combine the rules or you will lose them. Make sure to turn off any
+currently-installed synthesized rules:
+
+HL_USE_SYNTHESIZED_RULES=0 ./bin/filter_rewrite output_rules.txt
+
+5) Stash everything somewhere to avoid clobbering them later. E.g:
+
+mkdir experiment1
+cp input_exprs.txt output_rules.txt *.inc experiment1/
+
+6) Copy the rules into the compiler proper
+
+cp *.inc ../../src
+
+7) See how these new rules do on the apps. This gives each app a
+results/ and a results_baseline/ pair of folders.
+
+bash run_all_experiments.sh
+
+8) Generate csv files if you want to look at the results in a spreadsheet
+
+bash generate_results.sh
