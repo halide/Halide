@@ -778,6 +778,15 @@ struct State {
         }
 
     WrapperState& operator = (const WrapperState& other) = delete;
+    WrapperState& operator=(IntrusivePtr<State> other_inner) {
+        inner = new State;
+        inner->parent = other_inner->parent;
+        inner->root = other_inner->root;
+        inner->cost = other_inner->cost;
+        inner->num_decisions_made = other_inner->num_decisions_made;
+        inner->cost_calculations = other_inner->cost_calculations;
+        return *this;
+    };
 
     // whether or not this state is terminal (reached end)
     // AHA: can be ignored as we limit the horizon to num_passes
@@ -1640,50 +1649,91 @@ IntrusivePtr<State> optimal_mcts_schedule(
     */
 
     FunctionDAG* dags[num_passes];
+    std::unique_ptr<CostModel> cost_models[num_passes];
+    msa::mcts::UCT<State::WrapperState, State::Action> ucts[num_passes]; // Templated class. Builds a partial decision tree and searches it with UCT MCTS
+    std::vector<State::WrapperState> states;
+    for(int i=0; i<num_passes; i++) {
+        dags[i] = new FunctionDAG(outputs, params, target);
+        cost_models[i] = make_default_cost_model(weights_in_path, weights_out_path, randomize_weights);
+        internal_assert(cost_models[i] != nullptr);
+        configure_pipeline_features(*dags[i], params, cost_models[i].get());
+        ucts[i] = meta_uct;
+        states.emplace_back(new State, num_passes, *dags[i], params, cost_models[i].get());
+        states[i].inner->root = new LoopNest;
+    }
+    int mcts_depth = 2 * (int)dags[0]->nodes.size();
+
     int idx = -1;
 
-    //dags[0] = new FunctionDAG(outputs, params, target);
-    #pragma omp parallel for
-    for (int i = 0; i < num_passes; i++) {
-        dags[i] = new FunctionDAG(outputs, params, target);
-        auto& dag = *dags[i];
-        int mcts_depth = 2 * (int)dag.nodes.size();
-        // Construct a cost model to use to evaluate states. Currently we
-        // just have the one, but it's an abstract interface, so others
-        // can be slotted in for experimentation.
-        std::unique_ptr<CostModel> cost_model = make_default_cost_model(weights_in_path, weights_out_path, randomize_weights);
-        internal_assert(cost_model != nullptr);
-        configure_pipeline_features(dag, params, cost_model.get());
+    bool done[mcts_depth] = { false };
 
-        auto uct = meta_uct;
-        //uct.uct_k = (1 << i) * ::sqrt(2);
+    for (int j = 0; j < mcts_depth; j++) {
+        
+        #pragma omp parallel for
+        for (int i = 0; i < num_passes; i++) {
+            if (done[i]) continue;
 
-        IntrusivePtr<State> initial{new State};
-        initial->root = new LoopNest;
-        State::WrapperState state(initial, num_passes, dag, params, cost_model.get());
-        //std::cout << state.inner->cost<<std::endl;
-        for (int j = 0; j < mcts_depth; j++) {
             //ProgressBar tick;
 
             // run uct mcts on current state and get best action
 
-            State::Action action = uct.run(state);
+            State::Action action = ucts[i].run(states[i]);
             std::cout << "prefinished depth " << j << std::endl;
             if (action == NULL) {
                 std::cout << "due to NULL action breaking at " << j << std::endl;
-
-            break;
+                done[i] = true;
+                continue;
             }
             // apply the action to the current state
-            state.apply_action(action);
+            states[i].apply_action(action);
             action.print();
-            if (state.inner->num_decisions_made == 2 * (int)dag.nodes.size()) {
-                std::cout << "breaking.. with num decisions made " <<state.inner->num_decisions_made << std::endl;
-                 break;
+            if (states[i].inner->num_decisions_made == 2 * (int)dags[i]->nodes.size()) {
+                std::cout << "breaking.. with num decisions made " <<states[i].inner->num_decisions_made << std::endl;
+                done[i] = true;
+                continue;
             }
         }
-        state.evaluate();
-        auto pass = state.inner;
+        best = nullptr;
+        idx = -1;
+        #pragma omp parallel for
+        for (int i = 0; i < num_passes; i++) {
+            states[i].evaluate();
+            auto pass = states[i].inner;
+
+            #pragma omp critical
+            {
+
+            if (best.get() == nullptr) {
+                best = pass;
+                idx = i;
+            } else if(pass->cost < best->cost) {
+                best = pass;
+                idx = i;
+            }
+            }
+            std::cout << "Pass " << i << " of " << num_passes << ", cost: " << pass->cost << std::endl;
+        }
+        if (j+1 < mcts_depth) {
+            #pragma omp parallel for
+            for (int i = 0; i < num_passes; i++) {
+                if (i == idx) continue;
+                /*
+                states[i] = states[idx].inner;
+                LoopNest *new_root = new LoopNest;
+                new_root->copy_from(*states[idx].inner->root);
+                states[i].inner->root = new_root;
+                */
+            }
+        }
+        std::cout << "best so far cost: " << best->cost << std::endl;
+        aslog(0) << "Cost evaluated this many times: " << State::cost_calculations << '\n';
+    }
+
+
+    #pragma omp parallel for
+    for (int i = 0; i < num_passes; i++) {
+        states[i].evaluate();
+        auto pass = states[i].inner;
 
         #pragma omp critical
         {
@@ -1696,9 +1746,6 @@ IntrusivePtr<State> optimal_mcts_schedule(
             idx = i;
         }
 
-        std::cout << "Pass " << i << " of " << num_passes << ", cost: " << pass->cost << std::endl;
-        std::cout << "Pass " << i << " of " << num_passes << ", best so far cost: " << best->cost << std::endl;
-        aslog(0) << "Cost evaluated this many times: " << State::cost_calculations << '\n';
         }
     }
     
