@@ -735,6 +735,19 @@ struct State {
         bool operator<(const Action& a) const {
             return index < a.index;
         }
+        void print() {
+            if (ae == State::ActionEnum::Inline)
+            std::cout << "applying inline, index "<< index  << std::endl;
+            if (ae == State::ActionEnum::Retile)
+            std::cout << "applying Retile, Index " <<index << std::endl;
+            if (ae == State::ActionEnum::Option)
+            std::cout << "applying Option, Index " <<index << std::endl;
+            if (ae == State::ActionEnum::Input)
+            std::cout << "applying Input, Index "  <<index<< std::endl;
+            if (ae == State::ActionEnum::Parallelize)
+            std::cout << "applying Parallelize, Index "  << index<<std::endl;
+
+        }
     };
     /*std::vector<Action> restored_actions;
     bool cached = false;
@@ -785,16 +798,21 @@ struct State {
 
     // return possible actions from this state
     void get_actions(std::vector<Action>& vactions) const{
-            inner->generate_actions(dag, params, cost_model, vactions);
+            inner->generate_actions(dag, params, cost_model,vactions);
     }
     // find best action to apply next, used during simulation to improve the estimate over random
     bool apply_best_action(double& bestReward) {
         std::vector<Action> actions;
         get_actions(actions);
-        if (actions.size() == 0) return true;
-
-
-        internal_assert(cost_model && "bug, cost model not defined");
+        //std::cout << "action size: " <<actions.size() << std::endl;
+        if (actions.size() == 0){// return true;
+        inner->calculate_cost(dag, params, cost_model, false, true);
+        cost_model->evaluate_costs();    
+        bestReward = inner->cost;
+        //std::cout << "reward "<< bestReward << std::endl;
+        return true;
+        }
+        /*internal_assert(cost_model && "bug, cost model not defined");
         for(auto& act : actions) {
             act.state->calculate_cost(dag, params, cost_model, false, true);
         }
@@ -806,10 +824,15 @@ struct State {
                 best = i;
             }
         }
-
-        internal_assert(inner->num_decisions_made+1 == actions[best].state->num_decisions_made);
-        inner = std::move(actions[best].state);
+        */
+        Action & random_action = actions[rand() % actions.size()];
+        internal_assert(inner->num_decisions_made+1 == random_action.state->num_decisions_made);
+        inner = std::move(random_action.state);
+        inner->calculate_cost(dag, params, cost_model, false, true);
+        cost_model->evaluate_costs();    
         bestReward = inner->cost;
+        //random_action.print();
+        //std::cout << "reward "<< bestReward << std::endl;
         return false;
     }
 
@@ -928,6 +951,7 @@ struct State {
             if (!node->is_input && !node->is_output) {
                 for (int v = 0; v < node->dimensions; v++) {
                     const auto &p = root->get_bounds(node)->region_computed(v);
+                    //std::cout << "vector value: " <<v <<" p.extent: "<< p.extent()<<" vector size: "<<node->vector_size<< std::endl;
                     if (p.extent() >= node->vector_size) {
                         vector_dims.push_back(v);
                     }
@@ -942,8 +966,10 @@ struct State {
             }
 
             // 2) Realize it somewhere
+            //std::cout << "vector_dims: " <<vector_dims.size() << std::endl;
             for (int vector_dim : vector_dims) {
                 auto tile_options = root->compute_in_tiles(node, nullptr, params, vector_dim, false);
+                //std::cout << "vector value: " <<vector_dim <<" tile_options size: "<< tile_options.size()<< std::endl;
                 for (IntrusivePtr<const LoopNest> &n : tile_options) {
                     auto child = make_child();
                     child->root = std::move(n);
@@ -953,7 +979,7 @@ struct State {
                         // AHA: shouldn't the index (num_children-1) fix the hash issue?
                         unsigned hash = vector_dim;
                         //child->structural_hash(hash, /*depth*/10);
-                        child->structural_hash(/*depth*/hash); // AHA:hash being depth seems ambiguous
+                        //child->structural_hash(/*depth*/hash); // AHA:hash being depth seems ambiguous
                         actions.emplace_back(Action(ActionEnum::Retile,num_children-1, hash, std::move(child)));
                     }
                 }
@@ -1650,16 +1676,7 @@ IntrusivePtr<State> optimal_mcts_schedule(
             }
             // apply the action to the current state
             state.apply_action(action);
-            if (action.ae == State::ActionEnum::Inline)
-            std::cout << "applying inline, index "<< action.index  << std::endl;
-            if (action.ae == State::ActionEnum::Retile)
-            std::cout << "applying Retile, Index " <<action.index << std::endl;
-            if (action.ae == State::ActionEnum::Option)
-            std::cout << "applying Option, Index " <<action.index << std::endl;
-            if (action.ae == State::ActionEnum::Input)
-            std::cout << "applying Input, Index "  <<action.index<< std::endl;
-            if (action.ae == State::ActionEnum::Parallelize)
-            std::cout << "applying Parallelize, Index "  << action.index<<std::endl;
+            action.print();
             if (state.inner->num_decisions_made == 2 * (int)dag.nodes.size()) {
                 std::cout << "breaking.. with num decisions made " <<state.inner->num_decisions_made << std::endl;
                  break;
