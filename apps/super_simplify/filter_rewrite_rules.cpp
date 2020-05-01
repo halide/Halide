@@ -544,7 +544,7 @@ int main(int argc, char **argv) {
 
     // Re-synthesize the predicates if you don't currently trust them
     vector<std::future<void>> futures;
-    ThreadPool<void> pool(1);
+    ThreadPool<void> pool;
 
     for (Rule &r : rules) {
         futures.emplace_back(pool.async([=, &r]() { check_rule(r); }));
