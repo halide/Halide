@@ -348,9 +348,12 @@ public:
 
             // Constants
             if ((peek() >= '0' && peek() <= '9') || peek() == '-') {
+                const char *tmp = cursor;
                 Expr e = make_const(Int(32), consume_int());
                 if (peek() == '.') {
-                    e += consume_float();
+                    // Rewind and parse as float instead
+                    cursor = tmp;
+                    e = consume_float();
                 }
                 return e;
             }
