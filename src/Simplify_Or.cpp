@@ -63,9 +63,6 @@ Expr Simplify::visit(const Or *op, ExprInfo *bounds) {
          rewrite(x < c0 || c1 < x, true, c1 < c0) ||
          rewrite(c1 < x || x < c0, true, c1 < c0) ||
 
-         rewrite(c0 <= x || x <= c1, x != fold(c0 + 1), c0 == c1 + 2) ||
-         rewrite(x <= c1 || c0 <= x, x != fold(c0 + 1), c0 == c1 + 2) ||
-
          rewrite(c0 < x || c1 < x, fold(min(c0, c1)) < x) ||
          rewrite(c0 <= x || c1 <= x, fold(min(c0, c1)) <= x) ||
          rewrite(x < c0 || x < c1, x < fold(max(c0, c1))) ||
