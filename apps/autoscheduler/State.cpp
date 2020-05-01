@@ -314,7 +314,7 @@ void State::set_gpu_store_site(const map<const LoopNest *, pair<const LoopNest *
     internal_assert(type_has_been_set);
 }
 
-void State::compute_featurization(const FunctionDAG &dag, const MachineParams &params, const Target& target, StageMap<ScheduleFeatures> *features, Statistics& stats) const {
+void State::compute_featurization(const FunctionDAG &dag, const MachineParams &params, const Target& target, StageMap<ScheduleFeatures> *features, Statistics& stats, bool verbose) const {
     auto feature_root = get_root_for_features(params, target);
 
     StageMap<LoopNest::Sites> sites;
@@ -387,11 +387,11 @@ void State::compute_featurization(const FunctionDAG &dag, const MachineParams &p
     if (verify_memoized_features()) {
         StageMap<ScheduleFeatures> base_features;
         base_features.make_large(dag.nodes[0].stages[0].max_id);
-        feature_root->compute_features(dag, params, target, sites, 1, 1, nullptr, nullptr, *feature_root, nullptr, nullptr, nullptr, &base_features, {feature_root.get()}, false, total_shared_mem_alloc_sizes, stats);
+        feature_root->compute_features(dag, params, target, sites, 1, 1, nullptr, nullptr, *feature_root, nullptr, nullptr, nullptr, &base_features, {feature_root.get()}, false, total_shared_mem_alloc_sizes, stats, verbose);
 
         StageMap<ScheduleFeatures> verification_features;
         verification_features.make_large(dag.nodes[0].stages[0].max_id);
-        feature_root->compute_features(dag, params, target, sites, 1, 1, nullptr, nullptr, *feature_root, nullptr, nullptr, nullptr, &verification_features, {feature_root.get()}, true, total_shared_mem_alloc_sizes, stats);
+        feature_root->compute_features(dag, params, target, sites, 1, 1, nullptr, nullptr, *feature_root, nullptr, nullptr, nullptr, &verification_features, {feature_root.get()}, true, total_shared_mem_alloc_sizes, stats, false);
 
         for (auto it = base_features.begin(); it != base_features.end(); it++) {
             auto &stage = *(it.key());
@@ -411,7 +411,7 @@ void State::compute_featurization(const FunctionDAG &dag, const MachineParams &p
     }
 
     Timer timer;
-    feature_root->compute_features(dag, params, target, sites, 1, 1, nullptr, nullptr, *feature_root, nullptr, nullptr, nullptr, features, {feature_root.get()}, use_memoized_features(), total_shared_mem_alloc_sizes, stats);
+    feature_root->compute_features(dag, params, target, sites, 1, 1, nullptr, nullptr, *feature_root, nullptr, nullptr, nullptr, features, {feature_root.get()}, use_memoized_features() && !verbose, total_shared_mem_alloc_sizes, stats, verbose);
 
     stats.featurization_time += timer.elapsed();
     ++stats.num_featurizations;
@@ -591,7 +591,7 @@ bool State::calculate_cost(const FunctionDAG &dag, const MachineParams &params, 
 
     StageMap<ScheduleFeatures> features;
 
-    compute_featurization(dag, params, target, &features, stats);
+    compute_featurization(dag, params, target, &features, stats, verbose);
 
     cost = 0;
 

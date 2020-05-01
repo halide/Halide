@@ -336,13 +336,13 @@ struct LoopNest {
 
     double min_global_mem_accesses(const FunctionDAG::Node* node, const ThreadInfo& thread_info, double serial_loop_extents, double stride) const;
 
-    void compute_num_global_mem_accesses_per_block(const LoadJacobian &jac, const FunctionDAG::Node *node, const Bound &store_bounds, const ThreadInfo &thread_info, int innermost_dim, double serial_loop_extents, double serial_loop_extents_with_pure_licm, double access_count, GlobalMemInfo &global_mem_info, const LoopNest &root, double amortization) const;
+    void compute_num_global_mem_accesses_per_block(const LoadJacobian &jac, const FunctionDAG::Node *node, const Bound &store_bounds, const ThreadInfo &thread_info, int innermost_dim, double serial_loop_extents, double serial_loop_extents_with_pure_licm, double access_count, GlobalMemInfo &global_mem_info, const LoopNest &root, double amortization, bool verbose=false) const;
 
     std::pair<double, double> compute_local_mem_store_features(const LoadJacobian& jac, int consumer_innermost_dim, const FunctionDAG::Node* node, const Bound& consumer_store_bounds, const LoopNest& root, double serial_loop_extents) const;
 
-    GlobalMemInfo compute_global_mem_store_features(const LoadJacobian& jac, int consumer_innermost_dim, const FunctionDAG::Node* node, const Bound& consumer_store_bounds, const ThreadInfo& thread_info, double serial_loop_extents, double serial_loop_extents_with_pure_licm, double store_count, const LoopNest& root) const;
+    GlobalMemInfo compute_global_mem_store_features(const LoadJacobian& jac, int consumer_innermost_dim, const FunctionDAG::Node* node, const Bound& consumer_store_bounds, const ThreadInfo& thread_info, double serial_loop_extents, double serial_loop_extents_with_pure_licm, double store_count, const LoopNest& root, bool verbose=false) const;
 
-    void compute_global_mem_load_features(const LoadJacobian& jac, int producer_innermost_dim, const FunctionDAG::Node* node, const Bound& producer_store_bounds, bool producer_has_been_scheduled, const ThreadInfo& thread_info, GlobalMemInfo& global_mem_info, double serial_loop_extents, double load_count, const LoopNest& root, double amortization) const;
+    void compute_global_mem_load_features(const LoadJacobian& jac, int producer_innermost_dim, const FunctionDAG::Node* node, const Bound& producer_store_bounds, bool producer_has_been_scheduled, const ThreadInfo& thread_info, GlobalMemInfo& global_mem_info, double serial_loop_extents, double load_count, const LoopNest& root, double amortization, bool verbose=false) const;
 
     double compute_local_mem_stride(double stride, double bytes) const;
 
@@ -403,7 +403,8 @@ struct LoopNest {
                           GPULoopInfo gpu_loop_info,
                           bool use_memoized_features,
                           const StageMap<int64_t> &total_shared_mem_alloc_sizes,
-                          Statistics& stats) const;
+                          Statistics& stats,
+                          bool verbose=false) const;
 
     bool is_root() const {
         // The root is the sole node without a Func associated with
