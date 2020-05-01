@@ -385,7 +385,7 @@ int main(int argc, char **argv) {
                 if (count_ops.count_leaves() != (lhs_ops + 1) ||
                     count_ops.has_unsupported_ir ||
                     !(count_ops.has_repeated_var ||
-                      (lhs_ops < 4 && count_ops.num_constants > 0))) {
+                      (lhs_ops < 7 && count_ops.num_constants > 0))) {
                     continue;
                 }
 

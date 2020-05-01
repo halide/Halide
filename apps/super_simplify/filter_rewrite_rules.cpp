@@ -911,6 +911,7 @@ int main(int argc, char **argv) {
         string s = os.str();
         replace_all(s, "(uint1)0", "false");
         replace_all(s, "(uint1)1", "true");
+        replace_all(s, "prove_me(true)", "prove_me(IRMatcher::Const(1))");
         replace_all(s, "(uint1)", "");
         of << s;
         of.close();

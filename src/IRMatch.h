@@ -2178,7 +2178,7 @@ struct Rewriter {
     bool validate;
 
 #if HALIDE_DEBUG_MATCHED_RULES
-    bool d = false;
+    bool d = true;
 #endif
 
     HALIDE_ALWAYS_INLINE
