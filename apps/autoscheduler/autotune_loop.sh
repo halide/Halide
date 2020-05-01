@@ -108,24 +108,47 @@ make_featurization() {
         dropout=1  # 1% chance of operating entirely greedily
         beam=1
     fi
-    HL_SEED=${SEED} \
-        HL_WEIGHTS_DIR=${WEIGHTS} \
-        HL_RANDOM_DROPOUT=${dropout} \
-        HL_BEAM_SIZE=${beam} \
-        HL_MACHINE_PARAMS=32,24000000,40 \
-        ${TIMEOUT_CMD} -k ${COMPILATION_TIMEOUT} ${COMPILATION_TIMEOUT} \
-        ${GENERATOR} \
-        -g ${PIPELINE} \
-        -f ${FNAME} \
-        -o ${D} \
-        -e stmt,assembly,static_library,c_header,registration,schedule,featurization \
-        target=${HL_TARGET} \
-        auto_schedule=true \
-        ${EXTRA_GENERATOR_ARGS} \
-        -p ${AUTOSCHED_BIN}/libauto_schedule.so \
-        -s Adams2019 \
-          2> ${D}/compile_log.txt || echo "Compilation failed or timed out for ${D}"
 
+    # TODO can we avoid the code duplication here?
+    if [ "$PIPELINE" == "random_pipeline" ]; then
+        HL_SEED=${SEED} \
+            HL_WEIGHTS_DIR=${WEIGHTS} \
+            HL_RANDOM_DROPOUT=${dropout} \
+            HL_BEAM_SIZE=${beam} \
+            HL_MACHINE_PARAMS=32,24000000,40 \
+            ${TIMEOUT_CMD} -k ${COMPILATION_TIMEOUT} ${COMPILATION_TIMEOUT} \
+            ${GENERATOR} \
+            -g ${PIPELINE} \
+            -f ${FNAME} \
+            -o ${D} \
+            -e stmt,assembly,static_library,c_header,registration,schedule,featurization \
+            target=${HL_TARGET} \
+            auto_schedule=true \
+            seed=${SEED} \
+            max_stages=12 \
+            ${EXTRA_GENERATOR_ARGS} \
+            -p ${AUTOSCHED_BIN}/libauto_schedule.so \
+            -s Adams2019 \
+              2> ${D}/compile_log.txt || echo "Compilation failed or timed out for ${D}"
+    else
+        HL_SEED=${SEED} \
+            HL_WEIGHTS_DIR=${WEIGHTS} \
+            HL_RANDOM_DROPOUT=${dropout} \
+            HL_BEAM_SIZE=${beam} \
+            HL_MACHINE_PARAMS=32,24000000,40 \
+            ${TIMEOUT_CMD} -k ${COMPILATION_TIMEOUT} ${COMPILATION_TIMEOUT} \
+            ${GENERATOR} \
+            -g ${PIPELINE} \
+            -f ${FNAME} \
+            -o ${D} \
+            -e stmt,assembly,static_library,c_header,registration,schedule,featurization \
+            target=${HL_TARGET} \
+            auto_schedule=true \
+            ${EXTRA_GENERATOR_ARGS} \
+            -p ${AUTOSCHED_BIN}/libauto_schedule.so \
+            -s Adams2019 \
+              2> ${D}/compile_log.txt || echo "Compilation failed or timed out for ${D}"
+    fi
 
     # We don't need image I/O for this purpose,
     # so leave out libpng and libjpeg
@@ -230,7 +253,8 @@ for ((BATCH_ID=$((FIRST+1));BATCH_ID<$((FIRST+1+NUM_BATCHES));BATCH_ID++)); do
                     --initial_weights=${WEIGHTS} \
                     --weights_out=${WEIGHTS} \
                     --best_benchmark=${SAMPLES}/best.${PIPELINE}.benchmark.txt \
-                    --best_schedule=${SAMPLES}/best.${PIPELINE}.schedule.h
+                    --best_schedule=${SAMPLES}/best.${PIPELINE}.schedule.h | \
+            tee ${DIR}/training_output.txt
         else
             echo "Skipping retraining model..."
         fi

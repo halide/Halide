@@ -13,3 +13,8 @@ The commands above will run autotuning using the "beam" autotuner, which is what
 
 Afterwards, you can just run through the Jupyter notebook in "plots/" to get the charts. You can select in the notebook whether you want to plot the autotuning results as well, in the very first cell of the notebook.
 
+To retrain the cost model on the random pipelines, run the following command:
+    $ ./train_cost_model.sh beam
+
+Afterwards, the updated weights will be found in apps/random_pipeline/samples.
+
