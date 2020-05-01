@@ -263,7 +263,7 @@ public:
 class ReplaceConstants : public IRMutator {
     using IRMutator::visit;
     Expr visit(const IntImm *op) override {
-        auto it = bound_values.find(op->value);
+        auto it = bound_values.find(op);
         // Assume repeated instance of the same var is the same
         // wildcard var. If we have rules where that isn't true we'll
         // need to see examples where the values differ.
@@ -271,7 +271,7 @@ class ReplaceConstants : public IRMutator {
             string name = "c" + std::to_string(counter++);
             binding[name] = op;
             Expr v = Variable::make(op->type, name);
-            bound_values[op->value] = v;
+            bound_values[op] = v;
             return v;
         } else {
             return it->second;
@@ -282,7 +282,7 @@ class ReplaceConstants : public IRMutator {
         return op;
     }
 
-    map<int64_t, Expr> bound_values;
+    map<Expr, Expr, IRDeepCompare> bound_values;
     // TODO: float constants
 
 public:
