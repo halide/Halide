@@ -451,6 +451,8 @@ int main(int argc, char **argv) {
                             std::cout << done << " / " << futures.size() << "\n";
                         }
                         if (!success) {
+                            debug(0) << "BLACKLISTING: " << p << "\n";
+
                             // Add it to the blacklist so we
                             // don't waste time on this
                             // pattern again. Delete the
