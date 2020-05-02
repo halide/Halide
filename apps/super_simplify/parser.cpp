@@ -512,6 +512,10 @@ vector<Expr> parse_halide_exprs_from_file(const std::string &filename) {
     vector<Expr> exprs;
     std::ifstream input;
     input.open(filename);
+    if (input.fail()) {
+        debug(0) << "parse_halide_exprs_from_file: Unable to open " << filename;
+        assert(false);
+    }
     for (string line; std::getline(input, line);) {
         if (line.empty()) continue;
         // It's possible to comment out lines for debugging

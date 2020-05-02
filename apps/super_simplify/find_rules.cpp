@@ -292,22 +292,38 @@ public:
 };
 
 int main(int argc, char **argv) {
-    if (argc < 3) {
-        std::cout << "Usage: ./find_rules input_exprs.txt output_rules.txt\n";
+    if (argc < 4) {
+        std::cout << "Usage: ./find_rules input_exprs.txt output_rules.txt blacklist.txt\n";
         return 0;
     }
 
+    const string input_exprs_path = argv[1];
+    const string output_rules_path = argv[2];
+    const string blacklist_path = argv[3];
+
     // Generate LHS patterns from raw exprs
-    vector<Expr> exprs = parse_halide_exprs_from_file(argv[1]);
+    vector<Expr> exprs = parse_halide_exprs_from_file(input_exprs_path);
 
     // Try to load a blacklist of patterns to skip over that are known
     // to fail. Delete the blacklist whenever you make a change that
     // might make things work for more expressions.
     set<Expr, IRDeepCompare> blacklist;
-    if (file_exists("blacklist.txt")) {
-        auto b = parse_halide_exprs_from_file("blacklist.txt");
+    if (file_exists(blacklist_path)) {
+        auto b = parse_halide_exprs_from_file(blacklist_path);
         blacklist.insert(b.begin(), b.end());
     }
+    {
+        // Whether or not it already exists, ensure that blacklist file
+        // can be opened for appending (so we don't unexpectedly fail after
+        // hours of work)
+        std::ofstream b;
+        b.open(blacklist_path, std::ofstream::out | std::ofstream::app);
+        if (b.fail()) {
+            debug(0) << "Unable to open blacklist: " << blacklist_path;
+            assert(false);
+        }
+    }
+
     std::cout << blacklist.size() << " blacklisted patterns\n";
 
     map<Expr, int, IRDeepCompare> patterns_without_constants;
@@ -442,7 +458,11 @@ int main(int argc, char **argv) {
                             // change that might make things
                             // work for new patterns.
                             std::ofstream b;
-                            b.open("blacklist.txt", std::ofstream::out | std::ofstream::app);
+                            b.open(blacklist_path, std::ofstream::out | std::ofstream::app);
+                            if (b.fail()) {
+                                debug(0) << "Unable to open blacklist: " << blacklist_path;
+                                assert(false);
+                            }
                             b << p << "\n";
                         }
                     }
@@ -460,15 +480,21 @@ int main(int argc, char **argv) {
         return IRDeepCompare{}(r1.first, r2.first);
     });
 
-    std::ofstream of;
-    of.open(argv[2]);
-    for (auto r : rules) {
-        ReplaceConstants replacer;
-        r.first = replacer.mutate(r.first);
-        r.second = replacer.mutate(r.second);
-        of << "rewrite(" << r.first << ", " << r.second << ")\n";
+    {
+        std::ofstream of;
+        of.open(output_rules_path);
+        if (of.fail()) {
+            debug(0) << "Unable to open output: " << output_rules_path;
+            assert(false);
+        }
+        for (auto r : rules) {
+            ReplaceConstants replacer;
+            r.first = replacer.mutate(r.first);
+            r.second = replacer.mutate(r.second);
+            of << "rewrite(" << r.first << ", " << r.second << ")\n";
+        }
+        of.close();
     }
-    of.close();
 
     futures.clear();
     return 0;
