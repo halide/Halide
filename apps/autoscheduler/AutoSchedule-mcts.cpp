@@ -719,13 +719,14 @@ struct State {
         ActionEnum ae;
         unsigned index;
         unsigned option_var;
+        double value;
         IntrusivePtr<State> state;
         //AHA: If this constructor is called then there is a bug in the MCTS
         Action() { assert(0 && "illegal construction"); }
         Action(std::nullptr_t) : ae(ActionEnum::Inline), index(0), option_var(0) {
             //assert(0 && "illegal construction");
         }
-        Action(const Action& a):ae(a.ae), index(a.index), option_var(a.option_var),state(a.state) {}
+        Action(const Action& a):ae(a.ae), index(a.index), option_var(a.option_var),value(a.value),state(a.state) {}
         Action(ActionEnum ae_, unsigned index_,IntrusivePtr<State> state) : ae(ae_), index(index_), option_var(0),state(state) {}
         Action(ActionEnum ae_, unsigned index_, unsigned option_var_, IntrusivePtr<State> state) : ae(ae_), index(index_), option_var(option_var_),state(state) {}
         bool operator==(const Action& a) const {
@@ -778,7 +779,7 @@ struct State {
         }
 
     WrapperState& operator = (const WrapperState& other) = delete;
-    WrapperState& operator=(IntrusivePtr<State> other_inner) {
+    /*WrapperState& operator=(IntrusivePtr<State> other_inner) {
         inner = new State;
         inner->parent = other_inner->parent;
         inner->root = other_inner->root;
@@ -786,7 +787,7 @@ struct State {
         inner->num_decisions_made = other_inner->num_decisions_made;
         inner->cost_calculations = other_inner->cost_calculations;
         return *this;
-    };
+    }*/;
 
     // whether or not this state is terminal (reached end)
     // AHA: can be ignored as we limit the horizon to num_passes
@@ -837,22 +838,29 @@ struct State {
         Action & random_action = actions[rand() % actions.size()];
         internal_assert(inner->num_decisions_made+1 == random_action.state->num_decisions_made);
         inner = std::move(random_action.state);
-        inner->calculate_cost(dag, params, cost_model, false, true);
-        cost_model->evaluate_costs();    
-        bestReward = inner->cost;
+        //inner->calculate_cost(dag, params, cost_model, false, true);
+        //cost_model->evaluate_costs();    
+        //bestReward = inner->cost;
         //random_action.print();
         //std::cout << "reward "<< bestReward << std::endl;
         return false;
     }
 
     // evaluate this state and return a vector of rewards (for each agent)
-    const std::vector<float> evaluate() const {
+    double evaluate() const {
         inner->calculate_cost(dag, params, cost_model, false, true);
         internal_assert(cost_model && "bug, cost model not defined");
         cost_model->evaluate_costs();
-        return { (float)(-1 * inner->cost)};
+        return inner->cost;
     }
-
+    double evaluate(IntrusivePtr<State> state) const {
+        state->calculate_cost(dag, params, cost_model, false, true);
+        internal_assert(cost_model && "bug, cost model not defined");
+        cost_model->evaluate_costs();
+        return state->cost;
+    }
+    
+    
     // return state as string (for debug purposes)
     std::string to_string() const {
         return "";
@@ -1652,6 +1660,7 @@ IntrusivePtr<State> optimal_mcts_schedule(
     std::unique_ptr<CostModel> cost_models[num_passes];
     msa::mcts::UCT<State::WrapperState, State::Action> ucts[num_passes]; // Templated class. Builds a partial decision tree and searches it with UCT MCTS
     std::vector<State::WrapperState> states;
+    std::vector<State::Action> actions;
     for(int i=0; i<num_passes; i++) {
         dags[i] = new FunctionDAG(outputs, params, target);
         cost_models[i] = make_default_cost_model(weights_in_path, weights_out_path, randomize_weights);
@@ -1660,14 +1669,14 @@ IntrusivePtr<State> optimal_mcts_schedule(
         ucts[i] = meta_uct;
         states.emplace_back(new State, num_passes, *dags[i], params, cost_models[i].get());
         states[i].inner->root = new LoopNest;
+        actions.emplace_back(State::Action(nullptr));
     }
     int mcts_depth = 2 * (int)dags[0]->nodes.size();
 
-    int idx = -1;
 
     bool done[mcts_depth] = { false };
 
-    for (int j = 0; j < mcts_depth; j++) {
+    for (int j = 0; j < mcts_depth-1; j++) {
         
         #pragma omp parallel for
         for (int i = 0; i < num_passes; i++) {
@@ -1677,87 +1686,62 @@ IntrusivePtr<State> optimal_mcts_schedule(
 
             // run uct mcts on current state and get best action
 
-            State::Action action = ucts[i].run(states[i]);
+            actions[i] = ucts[i].run(states[i]);
             std::cout << "prefinished depth " << j << std::endl;
-            if (action == NULL) {
+            if (actions[i] == NULL) {
                 std::cout << "due to NULL action breaking at " << j << std::endl;
+//                assert(0 && "Error444: NULL ACTION!");
                 done[i] = true;
-                continue;
+                
             }
-            // apply the action to the current state
-            states[i].apply_action(action);
-            action.print();
+            // evaluate the best actions 
+            //states[i].evaluate(actions[i].state);
+            actions[i].print();
             if (states[i].inner->num_decisions_made == 2 * (int)dags[i]->nodes.size()) {
+//                assert(0 && "Error: WTF HOW DID WE GET HERE");
                 std::cout << "breaking.. with num decisions made " <<states[i].inner->num_decisions_made << std::endl;
                 done[i] = true;
-                continue;
             }
         }
-        best = nullptr;
-        idx = -1;
+        if (done[0]) break;
+        // get the best action from all
+        int idx = 0;
+        double best_value = actions[0].value;
+        std::cout << "Pass " << 0 << " of " << num_passes << ", value: " << actions[0].value << std::endl;
+        for (int i = 1; i <num_passes; i++) {
+            if(best_value < actions[i].value) {
+                best_value = actions[i].value;
+                idx = i;
+            }
+            std::cout << "Pass " << i << " of " << num_passes << ", value: " << actions[i].value << std::endl;
+        }
+            // real best action
+            actions[idx].print();
+            std::cout << "best value " << best_value << std::endl; 
+        // get the index of the best acton from the original vector of possible actions.
+        int best_action_idx = actions[idx].index;
+        // apply this action globally
         #pragma omp parallel for
         for (int i = 0; i < num_passes; i++) {
-            states[i].evaluate();
-            auto pass = states[i].inner;
-
-            #pragma omp critical
-            {
-
-            if (best.get() == nullptr) {
-                best = pass;
-                idx = i;
-            } else if(pass->cost < best->cost) {
-                best = pass;
-                idx = i;
-            }
-            }
-            std::cout << "Pass " << i << " of " << num_passes << ", cost: " << pass->cost << std::endl;
+            std::vector<State::Action> vactions;
+            states[i].get_actions(vactions);
+            states[i].apply_action(vactions[best_action_idx]);
         }
-        if (j+1 < mcts_depth) {
-            #pragma omp parallel for
-            for (int i = 0; i < num_passes; i++) {
-                if (i == idx) continue;
-                /*
-                states[i] = states[idx].inner;
-                LoopNest *new_root = new LoopNest;
-                new_root->copy_from(*states[idx].inner->root);
-                states[i].inner->root = new_root;
-                */
-            }
-        }
-        std::cout << "best so far cost: " << best->cost << std::endl;
         aslog(0) << "Cost evaluated this many times: " << State::cost_calculations << '\n';
     }
-
-
-    #pragma omp parallel for
-    for (int i = 0; i < num_passes; i++) {
-        states[i].evaluate();
-        auto pass = states[i].inner;
-
-        #pragma omp critical
-        {
-
-        if (best.get() == nullptr) {
-            best = pass;
-            idx = i;
-        } else if(pass->cost < best->cost) {
-            best = pass;
-            idx = i;
-        }
-
-        }
-    }
+    //we are supposed to get to the same final result
+    states[0].evaluate();
+    best = states[0].inner;
     
     aslog(0) << "Best cost: " << best->cost << "\n";
     
-    best->apply_schedule(*dags[idx], params);
+    best->apply_schedule(*dags[0], params);
     aslog(0) << "** applied schedule:\n";
 
 
     //delete dags[0];
     //for(auto z : dags) delete z;
-    outdag = dags[idx];
+    outdag = dags[0];
 
     return best;
 }

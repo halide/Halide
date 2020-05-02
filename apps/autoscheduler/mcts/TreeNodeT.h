@@ -57,7 +57,10 @@ namespace msa {
 
             //--------------------------------------------------------------
             void update(const double reward) {
-                value += reward;
+                if (value < reward || value == 0){
+                    value = reward;
+                }
+                //value += reward
                 num_visits++;
             }
 
