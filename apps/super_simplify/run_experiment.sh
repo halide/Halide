@@ -61,7 +61,7 @@ for ((SEED=${FIRST_SEED};SEED<${LAST_SEED};SEED++)); do
     HL_RANDOM_DROPOUT=1 \
     HL_BEAM_SIZE=1 \
     HL_DEBUG_CODEGEN=1 \
-    ./bin/host/${APP}.generator -g ${APP} -e stmt,static_library,h,assembly,registration -o results/${SEED} -p ../autoscheduler/bin/libauto_schedule.so target=host-no_runtime auto_schedule=true -s Adams2019  > results/${SEED}/stdout.txt 2> results/${SEED}/stderr.txt  &
+    ./bin/host/${APP}.generator -g ${APP} -e stmt,static_library,h,assembly,registration,compiler_log -o results/${SEED} -p ../autoscheduler/bin/libauto_schedule.so target=host-no_runtime auto_schedule=true -s Adams2019  > results/${SEED}/stdout.txt 2> results/${SEED}/stderr.txt  &
 
     HL_USE_SYNTHESIZED_RULES=0 \
     HL_PERMIT_FAILED_UNROLL=1 \
@@ -69,7 +69,7 @@ for ((SEED=${FIRST_SEED};SEED<${LAST_SEED};SEED++)); do
     HL_RANDOM_DROPOUT=1 \
     HL_BEAM_SIZE=1 \
     HL_DEBUG_CODEGEN=1 \
-    ./bin/host/${APP}.generator -g ${APP} -e stmt,static_library,h,assembly,registration -o results_baseline/${SEED} -p ../autoscheduler/bin/libauto_schedule.so target=host-no_runtime auto_schedule=true -s Adams2019 > results_baseline/${SEED}/stdout.txt 2> results_baseline/${SEED}/stderr.txt    &
+    ./bin/host/${APP}.generator -g ${APP} -e stmt,static_library,h,assembly,registration,compiler_log -o results_baseline/${SEED} -p ../autoscheduler/bin/libauto_schedule.so target=host-no_runtime auto_schedule=true -s Adams2019 > results_baseline/${SEED}/stdout.txt 2> results_baseline/${SEED}/stderr.txt    &
 done
 echo "Waiting for generators to finish..."
 wait
@@ -96,7 +96,7 @@ for ((SEED=${FIRST_SEED};SEED<${LAST_SEED};SEED++)); do
         # Let things cool down before benchmarking
         sleep 2
         # Most of the autoschedules do better at 16 threads on my machine. Probably due to avx-512 use
-        HL_NUM_THREADS=16 ${r}/${SEED}/benchmark --benchmark_min_time=2 --benchmarks=all --default_input_buffers=random:0:auto --default_input_scalars --output_extents=estimate --parsable_output > ${r}/${SEED}/benchmark_stdout.txt 2> ${r}/${SEED}/benchmark_stderr.txt
+        HL_NUM_THREADS=16 ${r}/${SEED}/benchmark --benchmark_min_time=1 --benchmarks=all --default_input_buffers=random:0:auto --default_input_scalars --output_extents=estimate --parsable_output > ${r}/${SEED}/benchmark_stdout.txt 2> ${r}/${SEED}/benchmark_stderr.txt
         ${r}/${SEED}/benchmark --benchmark_min_time=0 --track_memory --benchmarks=all --default_input_buffers=random:0:auto --default_input_scalars --output_extents=estimate --parsable_output > ${r}/${SEED}/memory_stdout.txt 2> ${r}/${SEED}/memory_stderr.txt
     done
 done

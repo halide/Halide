@@ -217,19 +217,23 @@ public:
             }
         }
 
-        // TODO: Actually schedule this.
-        conv1.f.compute_root();
-        scaled1.f.compute_root();
-        relu1.f.compute_root();
-        pool1.f.compute_root();
-        for (int i = 0; i < 16; i++) {
-            br2a_relu[i].f.compute_root().vectorize(c, 8).parallel(j);
-            br2b_relu[i].f.compute_root().vectorize(c, 8).parallel(j);
-            resunit_relu[i].f.compute_root().vectorize(c, 8).parallel(j);
+        if (auto_schedule) {
+            final_output.set_estimates({{0, 1000}});
+        } else {
+            // TODO: Actually schedule this.
+            conv1.f.compute_root();
+            scaled1.f.compute_root();
+            relu1.f.compute_root();
+            pool1.f.compute_root();
+            for (int i = 0; i < 16; i++) {
+                br2a_relu[i].f.compute_root().vectorize(c, 8).parallel(j);
+                br2b_relu[i].f.compute_root().vectorize(c, 8).parallel(j);
+                resunit_relu[i].f.compute_root().vectorize(c, 8).parallel(j);
+            }
+            pool5.f.compute_root();
+            fc1000.f.compute_root();
+            softmax.f.compute_root();
         }
-        pool5.f.compute_root();
-        fc1000.f.compute_root();
-        softmax.f.compute_root();
     }
 
 private:
@@ -380,4 +384,4 @@ private:
 };
 }  //namespace
 
-HALIDE_REGISTER_GENERATOR(Resnet50Generator, resnet50)
+HALIDE_REGISTER_GENERATOR(Resnet50Generator, resnet_50)

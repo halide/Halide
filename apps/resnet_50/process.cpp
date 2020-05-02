@@ -1,6 +1,6 @@
 #include "halide_benchmark.h"
 
-#include "resnet50.h"
+#include "resnet_50.h"
 
 #include "HalideBuffer.h"
 #include "halide_image_io.h"
@@ -245,35 +245,35 @@ int main(int argc, char **argv) {
     });
     printf("Running Resnet50 for %d iterations....\n", iterations);
     double best = benchmark(iterations, 1, [&]() {
-        resnet50(input,
-                 conv1_gamma,
-                 unroll_array_of_4_buffers(br1_gamma),
-                 unroll_array_of_16_buffers(br2a_gamma),
-                 unroll_array_of_16_buffers(br2b_gamma),
-                 unroll_array_of_16_buffers(br2c_gamma),
-                 conv1_beta,
-                 unroll_array_of_4_buffers(br1_beta),
-                 unroll_array_of_16_buffers(br2a_beta),
-                 unroll_array_of_16_buffers(br2b_beta),
-                 unroll_array_of_16_buffers(br2c_beta),
-                 conv1_mu,
-                 unroll_array_of_4_buffers(br1_mu),
-                 unroll_array_of_16_buffers(br2a_mu),
-                 unroll_array_of_16_buffers(br2b_mu),
-                 unroll_array_of_16_buffers(br2c_mu),
-                 conv1_sig,
-                 unroll_array_of_4_buffers(br1_sig),
-                 unroll_array_of_16_buffers(br2a_sig),
-                 unroll_array_of_16_buffers(br2b_sig),
-                 unroll_array_of_16_buffers(br2c_sig),
-                 conv1_weights,
-                 unroll_array_of_4_buffers(br1_conv_weights),
-                 unroll_array_of_16_buffers(br2a_conv_weights),
-                 unroll_array_of_16_buffers(br2b_conv_weights),
-                 unroll_array_of_16_buffers(br2c_conv_weights),
-                 fc1000_weights,
-                 fc1000_bias,
-                 output);
+        resnet_50(input,
+                  conv1_gamma,
+                  unroll_array_of_4_buffers(br1_gamma),
+                  unroll_array_of_16_buffers(br2a_gamma),
+                  unroll_array_of_16_buffers(br2b_gamma),
+                  unroll_array_of_16_buffers(br2c_gamma),
+                  conv1_beta,
+                  unroll_array_of_4_buffers(br1_beta),
+                  unroll_array_of_16_buffers(br2a_beta),
+                  unroll_array_of_16_buffers(br2b_beta),
+                  unroll_array_of_16_buffers(br2c_beta),
+                  conv1_mu,
+                  unroll_array_of_4_buffers(br1_mu),
+                  unroll_array_of_16_buffers(br2a_mu),
+                  unroll_array_of_16_buffers(br2b_mu),
+                  unroll_array_of_16_buffers(br2c_mu),
+                  conv1_sig,
+                  unroll_array_of_4_buffers(br1_sig),
+                  unroll_array_of_16_buffers(br2a_sig),
+                  unroll_array_of_16_buffers(br2b_sig),
+                  unroll_array_of_16_buffers(br2c_sig),
+                  conv1_weights,
+                  unroll_array_of_4_buffers(br1_conv_weights),
+                  unroll_array_of_16_buffers(br2a_conv_weights),
+                  unroll_array_of_16_buffers(br2b_conv_weights),
+                  unroll_array_of_16_buffers(br2c_conv_weights),
+                  fc1000_weights,
+                  fc1000_bias,
+                  output);
     });
     printf("*************************** Please note ******************************\n"
            "This code hasn't been scheduled properly yet so this runtime \n"

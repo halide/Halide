@@ -63,9 +63,9 @@ public:
     // resample in x and in y).
     GeneratorParam<bool> upsample{"upsample", false};
 
-    Input<Buffer<>> input{"input", 3};
+    Input<Buffer<uint8_t>> input{"input", 3};
     Input<float> scale_factor{"scale_factor"};
-    Output<Buffer<>> output{"output", 3};
+    Output<Buffer<uint8_t>> output{"output", 3};
 
     // Common Vars
     Var x, y, c, k;
@@ -138,6 +138,13 @@ public:
     }
 
     void schedule() {
+        if (auto_schedule) {
+            output.set_estimates({{0, 4000}, {0, 3000}, {0, 3}});
+            input.set_estimates({{0, 1024}, {0, 768}, {0, 3}});
+            scale_factor.set_estimate(4000.0f / 1024);
+            return;
+        }
+
         Var xi, yi;
         unnormalized_kernel_x
             .compute_at(kernel_x, x)

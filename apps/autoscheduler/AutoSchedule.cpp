@@ -144,7 +144,7 @@ uint32_t get_dropout_threshold() {
     if (!random_dropout_str.empty()) {
         return atoi(random_dropout_str.c_str());
     } else {
-        return 100;
+        return 1000000;
     }
 }
 
@@ -153,17 +153,17 @@ uint32_t get_dropout_threshold() {
 // training data.
 bool random_dropout(std::mt19937 &rng, size_t num_decisions) {
     static double random_dropout_threshold = get_dropout_threshold();
-    if (random_dropout_threshold >= 100) return false;
+    if (random_dropout_threshold >= 10000) return false;
 
     // The random dropout threshold is the chance that we operate
     // entirely greedily and never discard anything.
     double t = random_dropout_threshold;
-    t /= 100;
+    t /= 1000000;
     t = std::pow(t, 1.0f / num_decisions);
-    t *= 100;
+    t *= 1000000;
 
     uint32_t r = rng();
-    bool drop_it = (r % 100) >= t;
+    bool drop_it = (r % 1000000) >= t;
     return drop_it;
 }
 
