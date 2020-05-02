@@ -477,6 +477,8 @@ int main(int argc, char **argv) {
         f.get();
     }
 
+    debug(0) << "Final rules length: " << rules.size() << " (sorting now)...\n";
+
     // Sort generated rules
     std::sort(rules.begin(), rules.end(), [](const pair<Expr, Expr> &r1, const pair<Expr, Expr> &r2) {
         return IRDeepCompare{}(r1.first, r2.first);
