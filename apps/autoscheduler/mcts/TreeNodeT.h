@@ -26,6 +26,7 @@ namespace msa {
                 action(nullptr),
                 parent(parent),
                 num_visits(0),
+                initialized(false),
                 value(0),
                 depth(parent ? parent->depth + 1 : 0)
             {
@@ -57,8 +58,9 @@ namespace msa {
 
             //--------------------------------------------------------------
             void update(const double reward) {
-                if (value < reward || value == 0){
+                if (value < reward || !initialized){
                     value = reward;
+                    initialized = true;
                 }
                 //value += reward
                 num_visits++;
@@ -102,6 +104,7 @@ namespace msa {
             TreeNodeT* parent;		// parent of this TreeNode
 
             int num_visits;			// number of times TreeNode has been visited
+            bool initialized;       // whether value was initialized/updated or not
             double value;			// value of this TreeNode
             int depth;
 

@@ -719,7 +719,7 @@ struct State {
         ActionEnum ae;
         unsigned index;
         unsigned option_var;
-        double value;
+        double value = -111111111111;
         IntrusivePtr<State> state;
         //AHA: If this constructor is called then there is a bug in the MCTS
         Action() { assert(0 && "illegal construction"); }
