@@ -9,33 +9,32 @@ using std::ostringstream;
 using std::set;
 using std::string;
 
-IRNodeType node_ordering[18] = { IRNodeType::Ramp, IRNodeType::Broadcast, IRNodeType::Select, IRNodeType::Div, IRNodeType::Mul, IRNodeType::Mod, IRNodeType::Sub, IRNodeType::Add, IRNodeType::Min, IRNodeType::Not, IRNodeType::Or, IRNodeType::And, IRNodeType::GE, IRNodeType::GT, IRNodeType::LE, IRNodeType::LT, IRNodeType::NE, IRNodeType::EQ };
+IRNodeType node_ordering[18] = {IRNodeType::Ramp, IRNodeType::Broadcast, IRNodeType::Select, IRNodeType::Div, IRNodeType::Mul, IRNodeType::Mod, IRNodeType::Sub, IRNodeType::Add, IRNodeType::Min, IRNodeType::Not, IRNodeType::Or, IRNodeType::And, IRNodeType::GE, IRNodeType::GT, IRNodeType::LE, IRNodeType::LT, IRNodeType::NE, IRNodeType::EQ};
 
 std::map<IRNodeType, int> nto = {
-    { IRNodeType::Ramp, 23 },
-    { IRNodeType::Broadcast, 22 },
-    { IRNodeType::Select, 21 },
-    { IRNodeType::Div, 20 },
-    { IRNodeType::Mul, 19 },
-    { IRNodeType::Mod, 18 },
-    { IRNodeType::Sub, 17 },
-    { IRNodeType::Add, 16 },
-    { IRNodeType::Max, 14 },  // max and min have same weight
-    { IRNodeType::Min, 14 },
-    { IRNodeType::Not, 13 },
-    { IRNodeType::Or, 12 },
-    { IRNodeType::And, 11 },
-    { IRNodeType::GE, 10 },
-    { IRNodeType::GT, 9 },
-    { IRNodeType::LE, 8 },
-    { IRNodeType::LT, 7 },
-    { IRNodeType::NE, 6 },
-    { IRNodeType::EQ, 5 },
-    { IRNodeType::Cast, 4 },
-    { IRNodeType::FloatImm, 2 },
-    { IRNodeType::UIntImm, 1 },
-    { IRNodeType::IntImm, 0 }
-};
+    {IRNodeType::Ramp, 23},
+    {IRNodeType::Broadcast, 22},
+    {IRNodeType::Select, 21},
+    {IRNodeType::Div, 20},
+    {IRNodeType::Mul, 19},
+    {IRNodeType::Mod, 18},
+    {IRNodeType::Sub, 17},
+    {IRNodeType::Add, 16},
+    {IRNodeType::Max, 14},  // max and min have same weight
+    {IRNodeType::Min, 14},
+    {IRNodeType::Not, 13},
+    {IRNodeType::Or, 12},
+    {IRNodeType::And, 11},
+    {IRNodeType::GE, 10},
+    {IRNodeType::GT, 9},
+    {IRNodeType::LE, 8},
+    {IRNodeType::LT, 7},
+    {IRNodeType::NE, 6},
+    {IRNodeType::EQ, 5},
+    {IRNodeType::Cast, 4},
+    {IRNodeType::FloatImm, 2},
+    {IRNodeType::UIntImm, 1},
+    {IRNodeType::IntImm, 0}};
 
 class DivisorSet : public IRVisitor {
     Scope<> lets;
@@ -141,6 +140,8 @@ Expr get_right_child(const Expr &e) {
     } else if (const Mod *op = e.as<Mod>()) {
         return op->b;
     } else if (const Div *op = e.as<Div>()) {
+        return op->b;
+    } else if (const Mul *op = e.as<Mul>()) {
         return op->b;
     } else if (const Min *op = e.as<Min>()) {
         return op->b;
