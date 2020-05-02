@@ -1,12 +1,5 @@
 ((b.node_type() == IRNodeType::Add) && (
  rewrite(max(x, (max(y, c0) + ((z*c1) + (w - z)))), max(x, (max(y, c0) + (z + w))), (max((1 - max(c0, 0)), c1) == 2)))) ||
-((b.node_type() == IRNodeType::Div) && (
- rewrite(max(x, ((y + (z + (w - (u*c0))))/c0)), max(x, (((y + (z + w))/c0) - u)), prove_me((((0 - c0)/c0) <= 0))) ||
- rewrite(max(x, ((y + ((z - (w*c0)) + u))/c0)), max(x, (((y + (z + u))/c0) - w)), prove_me((((0 - c0)/c0) <= 0))) ||
- rewrite(max(x, (((y + (z - (w*c0))) + c1)/c0)), max(x, (((y + (z + c1))/c0) - w)), prove_me((max(((c1 - c0)/c0), 0) == (max((c1/c0), 1) + -1)))) ||
- rewrite(max(x, (((y + (z - (w*c0))) + u)/c0)), max(x, (((y + (z + u))/c0) - w)), prove_me((((0 - c0)/c0) <= 0))) ||
- rewrite(max(x, ((((y - (z*c0)) + w) + c1)/c0)), max(x, ((((y + c1) + w)/c0) - z)), prove_me((max(((c1 - c0)/c0), 0) == (max((c1/c0), 1) + -1)))) ||
- rewrite(max(x, ((((y - (z*c0)) + w) + u)/c0)), max(x, ((((y + u) + w)/c0) - z)), prove_me((((0 - c0)/c0) <= 0))))) ||
 ((a.node_type() == IRNodeType::Add) && EVAL_IN_LAMBDA(
  rewrite(max((max(x, c0) + ((y*c1) + (z - y))), w), max((max(x, c0) + (y + z)), w), (max((1 - max(c0, 0)), c1) == 2)) ||
 ((b.node_type() == IRNodeType::Add) && (
@@ -30,8 +23,6 @@
  rewrite(max((x + (y + (z + w))), ((w + z) + u)), (max((x + y), u) + (w + z))) ||
  rewrite(max((x + (y + (z - w))), (u + z)), (max((x + (y - w)), u) + z)) ||
  rewrite(max((x + (y + (z - w))), (z + u)), (max((x + (y - w)), u) + z)) ||
- rewrite(max((x + (y + (z*w))), (u + (w*z))), (max((x + y), u) + (w*z))) ||
- rewrite(max((x + (y + (z*w))), ((w*z) + u)), (max(u, (y + x)) + (w*z))) ||
  rewrite(max((x + ((y + z) + w)), (u + y)), (max((x + (z + w)), u) + y)) ||
  rewrite(max((x + ((y + z) + w)), (u + z)), (max((x + (y + w)), u) + z)) ||
  rewrite(max((x + ((y + z) + w)), (u + (z + y))), (max((x + w), u) + (z + y))) ||
@@ -40,8 +31,6 @@
  rewrite(max((x + ((y + z) + w)), ((z + y) + u)), (max((x + w), u) + (z + y))) ||
  rewrite(max((x + ((y - z) + w)), (u + y)), (max(u, ((x - z) + w)) + y)) ||
  rewrite(max((x + ((y - z) + w)), (y + u)), (max(u, ((x - z) + w)) + y)) ||
- rewrite(max((x + ((y*z) + w)), (u + (z*y))), (max((x + w), u) + (z*y))) ||
- rewrite(max((x + ((y*z) + w)), ((z*y) + u)), (max((x + w), u) + (z*y))) ||
  rewrite(max((x + (y - z)), (w + y)), (max((x - z), w) + y)) ||
  rewrite(max((x + (y - z)), (w + (u - z))), (max((x + y), (w + u)) - z)) ||
  rewrite(max((x + (y - z)), (y + w)), (max((x - z), w) + y)) ||
@@ -66,8 +55,6 @@
  rewrite(max(((x + (y + z)) + w), ((z + y) + u)), (max(u, (x + w)) + (z + y))) ||
  rewrite(max(((x + (y - z)) + w), (u + y)), (max(((x - z) + w), u) + y)) ||
  rewrite(max(((x + (y - z)) + w), (y + u)), (max(((x - z) + w), u) + y)) ||
- rewrite(max(((x + (y*z)) + w), (u + (z*y))), (max((x + w), u) + (z*y))) ||
- rewrite(max(((x + (y*z)) + w), ((z*y) + u)), (max((x + w), u) + (z*y))) ||
  rewrite(max((((x + y) + z) + w), (u + x)), (max(((y + z) + w), u) + x)) ||
  rewrite(max((((x + y) + z) + w), (u + y)), (max(((x + z) + w), u) + y)) ||
  rewrite(max((((x + y) + z) + w), (u + (y + x))), (max((z + w), u) + (y + x))) ||
@@ -76,8 +63,6 @@
  rewrite(max((((x + y) + z) + w), ((y + x) + u)), (max((z + w), u) + (y + x))) ||
  rewrite(max((((x - y) + z) + w), (u + x)), (max(((z - y) + w), u) + x)) ||
  rewrite(max((((x - y) + z) + w), (x + u)), (max(((z - y) + w), u) + x)) ||
- rewrite(max((((x*y) + z) + w), (u + (y*x))), (max((z + w), u) + (y*x))) ||
- rewrite(max((((x*y) + z) + w), ((y*x) + u)), (max((w + z), u) + (y*x))) ||
  rewrite(max(((x - y) + z), (w + x)), (max((z - y), w) + x)) ||
  rewrite(max(((x - y) + z), (w + (u - y))), (max((x + z), (w + u)) - y)) ||
  rewrite(max(((x - y) + z), (x + w)), (max((z - y), w) + x)) ||
@@ -86,15 +71,6 @@
 ((b.node_type() == IRNodeType::Add) && (
  rewrite(max((x - y), (z + (w - y))), (max(x, (z + w)) - y)) ||
  rewrite(max((x - y), ((z - y) + w)), (max((z + w), x) - y)))))) ||
-((a.node_type() == IRNodeType::Div) && EVAL_IN_LAMBDA(
-((b.node_type() == IRNodeType::IntImm) && (
- rewrite(max((x/c0), 0), (max(x, 1)/c0), (2 <= c0)))) ||
- rewrite(max(((x + (y + (z - (w*c0))))/c0), u), max((((x + (y + z))/c0) - w), u), prove_me((((0 - c0)/c0) <= 0))) ||
- rewrite(max(((x + ((y - (z*c0)) + w))/c0), u), max((((x + (y + w))/c0) - z), u), prove_me((((0 - c0)/c0) <= 0))) ||
- rewrite(max((((x + (y - (z*c0))) + c1)/c0), w), max((((x + (y + c1))/c0) - z), w), prove_me((max(((c1 - c0)/c0), 0) == (max((c1/c0), 1) + -1)))) ||
- rewrite(max((((x + (y - (z*c0))) + w)/c0), u), max((((x + (y + w))/c0) - z), u), prove_me((((0 - c0)/c0) <= 0))) ||
- rewrite(max(((((x - (y*c0)) + z) + c1)/c0), w), max(((((x + c1) + z)/c0) - y), w), prove_me((max(((c1 - c0)/c0), 0) == (max((c1/c0), 1) + -1)))) ||
- rewrite(max(((((x - (y*c0)) + z) + w)/c0), u), max(((((x + w) + z)/c0) - y), u), prove_me((((0 - c0)/c0) <= 0))))) ||
 ((a.node_type() == IRNodeType::Max) && EVAL_IN_LAMBDA(
 ((b.node_type() == IRNodeType::Add) && (
  rewrite(max(max(x, (y + z)), (w + (u + y))), max(x, (y + max((w + u), z)))) ||
@@ -134,19 +110,19 @@
  rewrite(max(max(x, max((y + z), w)), (y + u)), max(x, max((y + max(z, u)), w))) ||
  rewrite(max(max(x, max((y + z), w)), (z + u)), max(max(x, (max(y, u) + z)), w)) ||
  rewrite(max(max((x + y), z), (w + (u + x))), max(z, (x + max(y, (w + u))))) ||
- rewrite(max(max((x + y), z), (w + (u + y))), max((max((u + w), x) + y), z)) ||
+ rewrite(max(max((x + y), z), (w + (u + y))), max((max((w + u), x) + y), z)) ||
  rewrite(max(max((x + y), z), (w + (x + u))), max((max((u + w), y) + x), z)) ||
- rewrite(max(max((x + y), z), (w + (y + u))), max((max((w + u), x) + y), z)) ||
- rewrite(max(max((x + y), z), ((w + x) + u)), max((max((w + u), y) + x), z)) ||
+ rewrite(max(max((x + y), z), (w + (y + u))), max((max((u + w), x) + y), z)) ||
+ rewrite(max(max((x + y), z), ((w + x) + u)), max((max((u + w), y) + x), z)) ||
  rewrite(max(max((x + y), z), ((w + y) + u)), max((max((w + u), x) + y), z)) ||
- rewrite(max(max((x + y), z), ((x + w) + u)), max((max((u + w), y) + x), z)) ||
+ rewrite(max(max((x + y), z), ((x + w) + u)), max((max((w + u), y) + x), z)) ||
  rewrite(max(max((x + y), z), ((y + w) + u)), max((max((w + u), x) + y), z)) ||
  rewrite(max(max((x + (y + z)), w), (u + (v + y))), max((max((x + z), (u + v)) + y), w)) ||
  rewrite(max(max((x + (y + z)), w), (u + (v + z))), max((max((x + y), (u + v)) + z), w)) ||
  rewrite(max(max((x + (y + z)), w), (u + (y + v))), max((max((x + z), (u + v)) + y), w)) ||
  rewrite(max(max((x + (y + z)), w), (u + (z + v))), max((max((x + y), (u + v)) + z), w)) ||
  rewrite(max(max((x + (y + z)), w), ((u + y) + v)), max(w, (max((x + z), (u + v)) + y))) ||
- rewrite(max(max((x + (y + z)), w), ((u + z) + v)), max(w, (max((x + y), (u + v)) + z))) ||
+ rewrite(max(max((x + (y + z)), w), ((u + z) + v)), max(w, (max((y + x), (u + v)) + z))) ||
  rewrite(max(max((x + (y + z)), w), ((y + u) + v)), max(w, (max((x + z), (v + u)) + y))) ||
  rewrite(max(max((x + (y + z)), w), ((z + u) + v)), max(w, (max((x + y), (v + u)) + z))) ||
  rewrite(max(max(((x + y) + z), w), (u + (v + x))), max(w, (x + max((z + y), (u + v))))) ||

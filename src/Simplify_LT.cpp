@@ -397,7 +397,26 @@ Expr Simplify::visit(const LT *op, ExprInfo *bounds) {
                       broadcast(x * fold(c3/c0) < z, lanes),
                       c0 > 0 && (c3 % c0 == 0) &&
                       c1 * (lanes - 1) < c0 &&
-                      c1 * (lanes - 1) >= 0)))) {
+                      c1 * (lanes - 1) >= 0) ||
+
+              /*
+              rewrite(c0/x < c1, x < 1 || fold(c0/c1) < x, c0 > 0 && c1 > 0) ||
+              rewrite(c0/x < c1, x < fold(c0/(c1 - 1) + 1) || -1 < x, c0 < 0 && c1 > 1) ||
+              rewrite(c0/x < c1, fold(c0/(c1 - 1) - 1) < x && x < 0, c0 > 0 && c1 <= 0) ||
+              rewrite(c0/x < c1, 0 < x && x < fold(c0/c1), c0 < 0 && c1 < 0) ||
+              rewrite(c0/x < 1, -1 < x, c0 < 0) ||
+              rewrite(c0/x < 0,  0 < x, c0 < 0) ||
+              rewrite(c1 < c0/x, fold(c1 + 1) <= c0/x) ||
+              rewrite(min(c0/x, c1) < c2/x, c0/x < c2/x || c1 < c2/x) ||
+              rewrite(c0/x < min(c1/x, c2), c0/x < c1/x && c0/x < c2) ||
+
+              rewrite(c0/x < c1/x, 0 < x, c0 < 0 && c1 > 0) ||
+              rewrite(c0/x < c1/x, fold(-c0-1) < x && x < 0, c0 >= c1 * 2 && c1 > 0) ||
+              rewrite(c0/x < c1/x, 0 < x && x < fold(-c0), c0 < (c1 + 1) * 2 && c1 < 0) ||
+              rewrite(c0/x < c1/x, x < 0, c0 >= 0 && c1 < 0) ||
+              */
+
+              false))) {
             return mutate(rewrite.result, bounds);
         }
         // clang-format on

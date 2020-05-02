@@ -822,13 +822,18 @@ int main(int argc, char **argv) {
         }
         if (bad) continue;
 
-        /*
-        // Add the additional extreme constraint that at least one var is entirely eliminated
-        if (find_vars(r.rhs).size() >= find_vars(r.lhs).size()) {
+        // Add the constraint that at least one use of var is entirely eliminated
+        bool good = false;
+        auto lhs_vars = find_vars(r.lhs);
+        auto rhs_vars = find_vars(r.rhs);
+        for (auto p : lhs_vars) {
+            if (p.first[0] == 'c') continue;
+            if (rhs_vars[p.first].second < p.second.second) good = true;
+        }
+        if (!good) {
             std::cout << "Doesn't eliminate a var: " << r.lhs << " -> " << r.rhs << "\n";
             continue;
         }
-        */
 
         // We have a reasonable rule
         std::cout << "Good rule: rewrite(" << r.lhs << ", " << r.rhs << ", " << r.predicate << ")\n";

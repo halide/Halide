@@ -102,7 +102,6 @@ Expr Simplify::visit(const EQ *op, ExprInfo *bounds) {
         rewrite(min(x, 0) == 0, 0 <= x) ||
 
         false) {
-
         return mutate(rewrite.result, bounds);
     }
 
