@@ -69,7 +69,7 @@ void reorder_storage(Func func,
     schedule_source << ")\n";
 }
 
-void reorder_storage(const Stage& stage,
+void reorder_storage(const Stage &stage,
                      const std::vector<Var> &all_vars,
                      std::ostringstream &schedule_source) {
     internal_error << "Can't reorder storage of a stage.";

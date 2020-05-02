@@ -6,7 +6,6 @@
 #include <fstream>
 #include <utility>
 
-
 namespace Halide {
 struct TestResult {
     std::string op;
@@ -128,7 +127,7 @@ public:
         return wildcard_match("*" + p + "*", str);
     }
 
-    TestResult check_one(const std::string &op, const std::string &name, int vector_width, const Expr& e) {
+    TestResult check_one(const std::string &op, const std::string &name, int vector_width, const Expr &e) {
         std::ostringstream error_msg;
 
         // Define a vectorized Halide::Func that uses the pattern.
@@ -243,7 +242,7 @@ public:
         return {op, error_msg.str()};
     }
 
-    void check(const std::string& op, int vector_width, Expr e) {
+    void check(const std::string &op, int vector_width, Expr e) {
         // Make a name for the test by uniquing then sanitizing the op name
         std::string name = "op_" + op;
         for (size_t i = 0; i < name.size(); i++) {

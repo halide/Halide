@@ -1,8 +1,6 @@
 #include "PyIROperator.h"
 
-
 #include <utility>
-
 
 #include "PyTuple.h"
 

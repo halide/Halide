@@ -15,7 +15,7 @@ double square(double x) {
 }
 
 template<typename T>
-void test_function(const Expr& e, Buffer<T> &cpu_result, Buffer<T> &gpu_result) {
+void test_function(const Expr &e, Buffer<T> &cpu_result, Buffer<T> &gpu_result) {
     Func cpu("cpu"), gpu("gpu");
 
     Target cpu_target = get_host_target();

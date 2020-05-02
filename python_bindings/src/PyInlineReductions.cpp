@@ -1,8 +1,6 @@
 #include "PyInlineReductions.h"
 
-
 #include <utility>
-
 
 #include "PyTuple.h"
 

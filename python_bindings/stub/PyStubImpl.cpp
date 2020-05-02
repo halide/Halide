@@ -63,11 +63,11 @@ void install_error_handlers(py::module &m) {
 
 // Anything that defines __getitem__ looks sequencelike to pybind,
 // so also check for __len_ to avoid things like Buffer and Func here.
-bool is_real_sequence(const py::object& o) {
+bool is_real_sequence(const py::object &o) {
     return py::isinstance<py::sequence>(o) && py::hasattr(o, "__len__");
 }
 
-StubInput to_stub_input(const py::object& o) {
+StubInput to_stub_input(const py::object &o) {
     // Don't use isinstance: we want to get things that
     // can be implicitly converted as well (eg ImageParam -> Func)
     try {
@@ -85,7 +85,7 @@ StubInput to_stub_input(const py::object& o) {
     return StubInput(o.cast<Expr>());
 }
 
-void append_input(const py::object& value, std::vector<StubInput> &v) {
+void append_input(const py::object &value, std::vector<StubInput> &v) {
     if (is_real_sequence(value)) {
         for (auto o : py::reinterpret_borrow<py::sequence>(value)) {
             v.push_back(to_stub_input(o));
@@ -95,7 +95,7 @@ void append_input(const py::object& value, std::vector<StubInput> &v) {
     }
 }
 
-py::object generate_impl(FactoryFunc factory, const GeneratorContext &context, const py::args& args, const py::kwargs& kwargs) {
+py::object generate_impl(FactoryFunc factory, const GeneratorContext &context, const py::args &args, const py::kwargs &kwargs) {
     Stub stub(context, [factory](const GeneratorContext &context) -> std::unique_ptr<Halide::Internal::GeneratorBase> {
         return factory(context);
     });

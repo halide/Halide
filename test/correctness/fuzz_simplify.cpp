@@ -192,7 +192,7 @@ Expr random_expr(Type T, int depth, bool overflow_undef) {
     return random_expr(T, depth, overflow_undef);
 }
 
-bool test_simplification(const Expr& a, const Expr& b, Type T, const map<string, Expr> &vars) {
+bool test_simplification(const Expr &a, const Expr &b, Type T, const map<string, Expr> &vars) {
     for (int j = 0; j < T.lanes(); j++) {
         Expr a_j = a;
         Expr b_j = b;
@@ -224,7 +224,7 @@ bool test_simplification(const Expr& a, const Expr& b, Type T, const map<string,
     return true;
 }
 
-bool test_expression(const Expr& test, int samples) {
+bool test_expression(const Expr &test, int samples) {
     Expr simplified = simplify(test);
 
     map<string, Expr> vars;

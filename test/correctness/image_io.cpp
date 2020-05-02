@@ -116,7 +116,7 @@ void test_convert_image_s2d(Buffer<T> buf) {
 
 // dynamic -> dynamic conversion test
 template<typename T>
-void test_convert_image_d2d(const Buffer<>& buf_d) {
+void test_convert_image_d2d(const Buffer<> &buf_d) {
     std::cout << "Testing dynamic -> dynamic image conversion for " << halide_type_of<T>() << "\n";
 
     // convert to float

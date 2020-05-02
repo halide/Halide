@@ -1,8 +1,6 @@
 #include "PyPipeline.h"
 
-
 #include <utility>
-
 
 #include "PyTuple.h"
 

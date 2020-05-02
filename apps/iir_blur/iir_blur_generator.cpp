@@ -10,7 +10,7 @@ Var x, y, c;
 
 // Defines a func to blur the columns of an input with a first order low
 // pass IIR filter, followed by a transpose.
-Func blur_cols_transpose(const Func& input, const Expr& height, const Expr& alpha, bool skip_schedule, Target target) {
+Func blur_cols_transpose(const Func &input, const Expr &height, const Expr &alpha, bool skip_schedule, Target target) {
     Func blur("blur");
 
     const int vec = target.natural_vector_size<float>();

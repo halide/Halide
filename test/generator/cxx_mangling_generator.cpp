@@ -1,7 +1,5 @@
 #include <utility>
 
-
-
 #include "Halide.h"
 
 // TODO: Add HalideExtern support for C++ mangling, hopefully using automatic argument type deduction

@@ -1,9 +1,7 @@
 #include "Halide.h"
 #include <stdio.h>
 
-
 #include <utility>
-
 
 using namespace Halide;
 
@@ -12,7 +10,7 @@ Expr u8(Expr a) {
 }
 
 /* Do n unrolled iterations of game of life on a torus */
-Func gameOfLife(const ImageParam& input, int n) {
+Func gameOfLife(const ImageParam &input, int n) {
     Var x, y;
     Func in;
     if (n == 1) {

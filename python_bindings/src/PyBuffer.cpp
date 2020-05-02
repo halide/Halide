@@ -1,8 +1,6 @@
 #include "PyBuffer.h"
 
-
 #include <utility>
-
 
 #include "PyFunc.h"
 #include "PyType.h"
@@ -69,7 +67,7 @@ inline std::string format_descriptor<float16_t>() {
     return "e";
 }
 
-void call_fill(Buffer<> &b, const py::object& value) {
+void call_fill(Buffer<> &b, const py::object &value) {
 
 #define HANDLE_BUFFER_TYPE(TYPE)                    \
     if (b.type() == type_of<TYPE>()) {              \
@@ -95,7 +93,7 @@ void call_fill(Buffer<> &b, const py::object& value) {
     throw py::value_error("Unsupported Buffer<> type.");
 }
 
-bool call_all_equal(Buffer<> &b, const py::object& value) {
+bool call_all_equal(Buffer<> &b, const py::object &value) {
 
 #define HANDLE_BUFFER_TYPE(TYPE)                                \
     if (b.type() == type_of<TYPE>()) {                          \
@@ -204,7 +202,7 @@ py::object buffer_getitem_operator(Buffer<> &buf, const std::vector<int> &pos) {
     return py::object();
 }
 
-py::object buffer_setitem_operator(Buffer<> &buf, const std::vector<int> &pos, const py::object& value) {
+py::object buffer_setitem_operator(Buffer<> &buf, const std::vector<int> &pos, const py::object &value) {
     if ((size_t)pos.size() != (size_t)buf.dimensions()) {
         throw py::value_error("Incorrect number of dimensions.");
     }
@@ -270,7 +268,7 @@ public:
         : Buffer<>(b), info() {
     }
 
-    PyBuffer(const py::buffer& buffer, const std::string &name)
+    PyBuffer(const py::buffer &buffer, const std::string &name)
         : PyBuffer(buffer.request(/*writable*/ true), name) {
         // Default to setting host-dirty on any PyBuffer we create from an existing py::buffer;
         // this allows (e.g.) code like

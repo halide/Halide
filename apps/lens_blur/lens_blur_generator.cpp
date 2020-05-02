@@ -277,7 +277,7 @@ private:
     Var x, y, z, c;
 
     // Downsample with a 1 3 3 1 filter
-    Func downsample(const Func& f) {
+    Func downsample(const Func &f) {
         using Halide::_;
         Func downx, downy;
         downx(x, y, _) = (f(2 * x - 1, y, _) + 3.0f * (f(2 * x, y, _) + f(2 * x + 1, y, _)) + f(2 * x + 2, y, _)) / 8.0f;
@@ -286,7 +286,7 @@ private:
     }
 
     // Upsample using bilinear interpolation
-    Func upsample(const Func& f) {
+    Func upsample(const Func &f) {
         using Halide::_;
         Func upx, upy;
         upx(x, y, _) = 0.25f * f((x / 2) - 1 + 2 * (x % 2), y, _) + 0.75f * f(x / 2, y, _);

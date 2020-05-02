@@ -30,7 +30,7 @@ public:
 
     Output<Buffer<T>> result_ = {"result", 1};
 
-    void Schedule(const Func& result, const Expr& width) {
+    void Schedule(const Func &result, const Expr &width) {
         Var i("i"), o("o");
     }
 

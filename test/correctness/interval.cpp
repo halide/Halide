@@ -3,7 +3,7 @@
 using namespace Halide;
 using namespace Halide::Internal;
 
-void check(const Interval& result, const Interval& expected, int line) {
+void check(const Interval &result, const Interval &expected, int line) {
     if (!(equal(result.min, expected.min) &&
           equal(result.max, expected.max))) {
         std::cerr << "Interval test on line " << line << " failed\n"

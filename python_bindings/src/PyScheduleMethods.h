@@ -38,7 +38,7 @@ HALIDE_NEVER_INLINE void add_schedule_methods(PythonClass &class_instance) {
              py::arg("x"), py::arg("y"), py::arg("xi"), py::arg("yi"), py::arg("xfactor"), py::arg("yfactor"), py::arg("tail") = TailStrategy::Auto)
 
         .def("reorder", (T & (T::*)(const std::vector<VarOrRVar> &)) & T::reorder, py::arg("vars"))
-        .def("reorder", [](T &t, const py::args& args) -> T & {
+        .def("reorder", [](T &t, const py::args &args) -> T & {
             return t.reorder(args_to_vector<VarOrRVar>(args));
         })
 

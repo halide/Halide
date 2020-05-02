@@ -1,8 +1,6 @@
 #include "PyFunc.h"
 
-
 #include <utility>
-
 
 #include "PyBuffer.h"
 #include "PyExpr.h"

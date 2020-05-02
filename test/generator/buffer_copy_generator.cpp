@@ -11,7 +11,7 @@ public:
     Func dev_1, host_1, dev_2;
     Var x, y;
 
-    Expr check_eq(const Expr& a, const Expr& b, const char *name) {
+    Expr check_eq(const Expr &a, const Expr &b, const char *name) {
         return require(a == b, a, "!=", b, "@", name, "(", x, ",", y, ")");
     }
 

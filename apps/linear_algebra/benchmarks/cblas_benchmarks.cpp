@@ -17,7 +17,6 @@
 #include <string>
 #include <utility>
 
-
 #if defined(USE_HALIDE)
 #define BLAS_NAME "halide"
 #include "Halide.h"
@@ -76,7 +75,7 @@ struct BenchmarksBase {
         : name(std::move(n)) {
     }
 
-    void run(const std::string& benchmark, int size) {
+    void run(const std::string &benchmark, int size) {
         if (benchmark == "copy") {
             bench_copy(size);
         } else if (benchmark == "scal") {

@@ -8,7 +8,7 @@ struct MultiDevicePipeline {
     Func stage[5];
     size_t current_stage;
 
-    MultiDevicePipeline(const Func& input) {
+    MultiDevicePipeline(const Func &input) {
         current_stage = 0;
 
         stage[current_stage](x, y, c) = input(x, y, c);

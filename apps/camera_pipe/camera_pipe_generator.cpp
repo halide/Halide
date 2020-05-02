@@ -2,9 +2,7 @@
 #include "halide_trace_config.h"
 #include <stdint.h>
 
-
 #include <utility>
-
 
 namespace {
 
@@ -17,7 +15,7 @@ using namespace Halide::ConciseCasts;
 Var x, y, c, yi, yo, yii, xi;
 
 // Average two positive values rounding up
-Expr avg(const Expr& a, Expr b) {
+Expr avg(const Expr &a, Expr b) {
     Type wider = a.type().with_bits(a.type().bits() * 2);
     return cast(a.type(), (cast(wider, a) + std::move(b) + 1) / 2);
 }
@@ -26,13 +24,13 @@ Expr blur121(Expr a, Expr b, Expr c) {
     return avg(avg(std::move(a), std::move(c)), std::move(b));
 }
 
-Func interleave_x(const Func& a, const Func& b) {
+Func interleave_x(const Func &a, const Func &b) {
     Func out;
     out(x, y) = select((x % 2) == 0, a(x / 2, y), b(x / 2, y));
     return out;
 }
 
-Func interleave_y(const Func& a, const Func& b) {
+Func interleave_y(const Func &a, const Func &b) {
     Func out;
     out(x, y) = select((y % 2) == 0, a(x, y / 2), b(x, y / 2));
     return out;
@@ -236,14 +234,14 @@ public:
     void generate();
 
 private:
-    Func hot_pixel_suppression(const Func& input);
-    Func deinterleave(const Func& raw);
-    Func apply_curve(const Func& input);
-    Func color_correct(const Func& input);
-    Func sharpen(const Func& input);
+    Func hot_pixel_suppression(const Func &input);
+    Func deinterleave(const Func &raw);
+    Func apply_curve(const Func &input);
+    Func color_correct(const Func &input);
+    Func sharpen(const Func &input);
 };
 
-Func CameraPipe::hot_pixel_suppression(const Func& input) {
+Func CameraPipe::hot_pixel_suppression(const Func &input) {
 
     Expr a = max(input(x - 2, y), input(x + 2, y),
                  input(x, y - 2), input(x, y + 2));
@@ -254,7 +252,7 @@ Func CameraPipe::hot_pixel_suppression(const Func& input) {
     return denoised;
 }
 
-Func CameraPipe::deinterleave(const Func& raw) {
+Func CameraPipe::deinterleave(const Func &raw) {
     // Deinterleave the color channels
     Func deinterleaved("deinterleaved");
 
@@ -266,7 +264,7 @@ Func CameraPipe::deinterleave(const Func& raw) {
     return deinterleaved;
 }
 
-Func CameraPipe::color_correct(const Func& input) {
+Func CameraPipe::color_correct(const Func &input) {
     // Get a color matrix by linearly interpolating between two
     // calibrated matrices using inverse kelvin.
     Expr kelvin = color_temp;
@@ -300,7 +298,7 @@ Func CameraPipe::color_correct(const Func& input) {
     return corrected;
 }
 
-Func CameraPipe::apply_curve(const Func& input) {
+Func CameraPipe::apply_curve(const Func &input) {
     // copied from FCam
     Func curve("curve");
 
@@ -372,7 +370,7 @@ Func CameraPipe::apply_curve(const Func& input) {
     return curved;
 }
 
-Func CameraPipe::sharpen(const Func& input) {
+Func CameraPipe::sharpen(const Func &input) {
     // Convert the sharpening strength to 2.5 fixed point. This allows sharpening in the range [0, 4].
     Func sharpen_strength_x32("sharpen_strength_x32");
     sharpen_strength_x32() = u8_sat(sharpen_strength * 32);

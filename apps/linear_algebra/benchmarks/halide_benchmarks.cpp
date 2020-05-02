@@ -20,7 +20,6 @@
 #include <string>
 #include <utility>
 
-
 template<class T>
 struct BenchmarksBase {
     typedef T Scalar;
@@ -59,7 +58,7 @@ struct BenchmarksBase {
         : name(std::move(n)) {
     }
 
-    void run(const std::string& benchmark, int size) {
+    void run(const std::string &benchmark, int size) {
         if (benchmark == "copy") {
             bench_copy(size);
         } else if (benchmark == "scal") {

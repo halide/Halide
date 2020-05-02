@@ -4,7 +4,7 @@
 using namespace Halide;
 using namespace Halide::Tools;
 
-Func inlined(const Func& in) {
+Func inlined(const Func &in) {
     Var x("x"), y("y");
 
     Func f("f");

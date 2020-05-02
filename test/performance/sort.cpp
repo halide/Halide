@@ -4,7 +4,6 @@
 #include <cstdio>
 #include <utility>
 
-
 using namespace Halide;
 using namespace Halide::Tools;
 
@@ -54,7 +53,7 @@ Func bitonic_sort(Func input, int size) {
 }
 
 // Merge sort contiguous chunks of size s in a 1d func.
-Func merge_sort(const Func& input, int total_size) {
+Func merge_sort(const Func &input, int total_size) {
     std::vector<Func> stages;
     Func result;
 

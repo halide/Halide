@@ -1,7 +1,5 @@
 #include <utility>
 
-
-
 #include "Halide.h"
 
 using namespace Halide;
@@ -12,13 +10,13 @@ class Complex {
     Tuple t;
 
 public:
-    Complex(const Expr& real, const Expr& imag)
+    Complex(const Expr &real, const Expr &imag)
         : t(real, imag) {
     }
     Complex(Tuple tup)
         : t(std::move(tup)) {
     }
-    Complex(const FuncRef& f)
+    Complex(const FuncRef &f)
         : t(Tuple(f)) {
     }
     Expr real() const {
@@ -47,7 +45,7 @@ Complex conjugate(const Complex &a) {
     return Complex(a.real(), -a.imag());
 }
 
-Expr magnitude(const Complex& a) {
+Expr magnitude(const Complex &a) {
     return (a * conjugate(a)).real();
 }
 

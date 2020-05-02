@@ -4,7 +4,6 @@
 #include <string>
 #include <utility>
 
-
 namespace {
 
 using std::map;

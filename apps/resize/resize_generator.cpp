@@ -1,7 +1,5 @@
 #include <utility>
 
-
-
 #include "Halide.h"
 
 using namespace Halide;

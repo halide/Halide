@@ -74,7 +74,7 @@ inline double benchmark_duration_seconds(double start, double end) {
 // for real-world use. For now, callers using this to benchmark GPU
 // code should measure with extreme caution.
 
-inline double benchmark(uint64_t samples, uint64_t iterations, const std::function<void()>& op) {
+inline double benchmark(uint64_t samples, uint64_t iterations, const std::function<void()> &op) {
     double best = std::numeric_limits<double>::infinity();
     for (uint64_t i = 0; i < samples; i++) {
         auto start = benchmark_now();
@@ -145,7 +145,7 @@ struct BenchmarkResult {
     }
 };
 
-inline BenchmarkResult benchmark(const std::function<void()>& op, const BenchmarkConfig &config = {}) {
+inline BenchmarkResult benchmark(const std::function<void()> &op, const BenchmarkConfig &config = {}) {
     BenchmarkResult result{0, 0, 0};
 
     const double min_time = std::max(10 * 1e-6, config.min_time);

@@ -1,9 +1,7 @@
 #include "Halide.h"
 #include <stdio.h>
 
-
 #include <utility>
-
 
 #include "testing.h"
 

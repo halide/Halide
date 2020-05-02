@@ -774,7 +774,7 @@ struct ArgData {
         }
     }
 
-    Buffer<> load_buffer(const Shape& shape, const halide_filter_argument_t *argument_metadata) {
+    Buffer<> load_buffer(const Shape &shape, const halide_filter_argument_t *argument_metadata) {
         ShapePromise promise = [shape]() -> Shape { return shape; };
         return load_buffer(promise, argument_metadata);
     }

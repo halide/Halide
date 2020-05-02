@@ -1276,7 +1276,7 @@ IntrusivePtr<const LoopNest> LoopNest::parallelize_in_tiles(const MachineParams 
     auto b = inner->get_bounds(node)->make_copy();
 
     // Then move factors from the outer loop to the inner loop
-    const auto& parent_bounds = parent->get_bounds(node);
+    const auto &parent_bounds = parent->get_bounds(node);
 
     for (size_t i = 0; i < stage->loop.size(); i++) {
         int l = stage->loop[i].pure_dim;
@@ -1441,7 +1441,7 @@ vector<IntrusivePtr<const LoopNest>> LoopNest::compute_in_tiles(const FunctionDA
                 auto b = inner->get_bounds(node)->make_copy();
 
                 // Then move factors from the outer loop to the inner loop
-                const auto& parent_bounds = parent->get_bounds(node);
+                const auto &parent_bounds = parent->get_bounds(node);
 
                 for (size_t i = 0; i < t.size(); i++) {
                     int64_t outer_extent = t[i];
