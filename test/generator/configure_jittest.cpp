@@ -26,7 +26,7 @@ int main(int argc, char **argv) {
     std::vector<Buffer<uint8_t>> extras;
     int extra_value = 0;
     for (int i = 0; i < 3; ++i) {
-        extras.push_back(Buffer<uint8_t>(kSize, kSize));
+        extras.emplace_back(kSize, kSize);
         extras.back().fill((uint8_t)i);
         extra_value += i;
     }

@@ -3,7 +3,7 @@
 
 using namespace Halide;
 
-Func add2(Func in) {
+Func add2(const Func& in) {
     Func a("ext");
     a(_) = in(_) + 2;
     return a;

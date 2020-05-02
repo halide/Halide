@@ -1,5 +1,7 @@
 #include "Halide.h"
 #include <random>
+#include <utility>
+
 #include <stdio.h>
 #include <time.h>
 
@@ -94,7 +96,7 @@ Expr random_condition(Type T, int depth, bool maybe_scalar) {
 Expr make_absd(Expr a, Expr b) {
     // random_expr() assumes that the result type is the same as the input type,
     // which isn't true for all absd variants, so force the issue.
-    return cast(a.type(), absd(a, b));
+    return cast(a.type(), absd(a, std::move(b)));
 }
 
 Expr random_expr(Type T, int depth, bool overflow_undef) {
@@ -190,7 +192,7 @@ Expr random_expr(Type T, int depth, bool overflow_undef) {
     return random_expr(T, depth, overflow_undef);
 }
 
-bool test_simplification(Expr a, Expr b, Type T, const map<string, Expr> &vars) {
+bool test_simplification(const Expr& a, const Expr& b, Type T, const map<string, Expr> &vars) {
     for (int j = 0; j < T.lanes(); j++) {
         Expr a_j = a;
         Expr b_j = b;
@@ -222,7 +224,7 @@ bool test_simplification(Expr a, Expr b, Type T, const map<string, Expr> &vars) 
     return true;
 }
 
-bool test_expression(Expr test, int samples) {
+bool test_expression(const Expr& test, int samples) {
     Expr simplified = simplify(test);
 
     map<string, Expr> vars;
@@ -243,58 +245,58 @@ bool test_expression(Expr test, int samples) {
 }
 
 Expr ramp(Expr b, Expr s, int w) {
-    return Ramp::make(b, s, w);
+    return Ramp::make(std::move(b), std::move(s), w);
 }
 Expr x1(Expr x) {
-    return Broadcast::make(x, 2);
+    return Broadcast::make(std::move(x), 2);
 }
 Expr x2(Expr x) {
-    return Broadcast::make(x, 2);
+    return Broadcast::make(std::move(x), 2);
 }
 Expr x4(Expr x) {
-    return Broadcast::make(x, 2);
+    return Broadcast::make(std::move(x), 2);
 }
 Expr uint1(Expr x) {
-    return Cast::make(UInt(1), x);
+    return Cast::make(UInt(1), std::move(x));
 }
 Expr uint8(Expr x) {
-    return Cast::make(UInt(8), x);
+    return Cast::make(UInt(8), std::move(x));
 }
 Expr uint16(Expr x) {
-    return Cast::make(UInt(16), x);
+    return Cast::make(UInt(16), std::move(x));
 }
 Expr uint32(Expr x) {
-    return Cast::make(UInt(32), x);
+    return Cast::make(UInt(32), std::move(x));
 }
 Expr int8(Expr x) {
-    return Cast::make(Int(8), x);
+    return Cast::make(Int(8), std::move(x));
 }
 Expr int16(Expr x) {
-    return Cast::make(Int(16), x);
+    return Cast::make(Int(16), std::move(x));
 }
 Expr int32(Expr x) {
-    return Cast::make(Int(32), x);
+    return Cast::make(Int(32), std::move(x));
 }
 Expr uint1x2(Expr x) {
-    return Cast::make(UInt(1).with_lanes(2), x);
+    return Cast::make(UInt(1).with_lanes(2), std::move(x));
 }
 Expr uint8x2(Expr x) {
-    return Cast::make(UInt(8).with_lanes(2), x);
+    return Cast::make(UInt(8).with_lanes(2), std::move(x));
 }
 Expr uint16x2(Expr x) {
-    return Cast::make(UInt(16).with_lanes(2), x);
+    return Cast::make(UInt(16).with_lanes(2), std::move(x));
 }
 Expr uint32x2(Expr x) {
-    return Cast::make(UInt(32).with_lanes(2), x);
+    return Cast::make(UInt(32).with_lanes(2), std::move(x));
 }
 Expr int8x2(Expr x) {
-    return Cast::make(Int(8).with_lanes(2), x);
+    return Cast::make(Int(8).with_lanes(2), std::move(x));
 }
 Expr int16x2(Expr x) {
-    return Cast::make(Int(16).with_lanes(2), x);
+    return Cast::make(Int(16).with_lanes(2), std::move(x));
 }
 Expr int32x2(Expr x) {
-    return Cast::make(Int(32).with_lanes(2), x);
+    return Cast::make(Int(32).with_lanes(2), std::move(x));
 }
 
 Expr a(Variable::make(Int(0), fuzz_var(0)));

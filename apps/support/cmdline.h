@@ -458,7 +458,7 @@ public:
             if (arg[i] == '\\') {
                 i++;
                 if (i >= arg.length()) {
-                    errors.push_back("unexpected occurrence of '\\' at end of string");
+                    errors.emplace_back("unexpected occurrence of '\\' at end of string");
                     return false;
                 }
             }
@@ -467,7 +467,7 @@ public:
         }
 
         if (in_quote) {
-            errors.push_back("quote is not closed");
+            errors.emplace_back("quote is not closed");
             return false;
         }
 
@@ -495,7 +495,7 @@ public:
         others.clear();
 
         if (argc < 1) {
-            errors.push_back("argument number must be longer than 0");
+            errors.emplace_back("argument number must be longer than 0");
             return false;
         }
         if (prog_name == "")
@@ -573,7 +573,7 @@ public:
                     set_option(lookup[last]);
                 }
             } else {
-                others.push_back(argv[i]);
+                others.emplace_back(argv[i]);
             }
         }
 
@@ -705,7 +705,7 @@ private:
                              const std::string &desc)
             : nam(name), snam(short_name), desc(desc), has(false) {
         }
-        ~option_without_value() {
+        ~option_without_value() override {
         }
 
         bool has_value() const override {
@@ -767,7 +767,7 @@ private:
             : nam(name), snam(short_name), need(need), has(false), def(def), actual(def) {
             this->desc = full_description(desc);
         }
-        ~option_with_value() {
+        ~option_with_value() override {
         }
 
         const T &get() const {

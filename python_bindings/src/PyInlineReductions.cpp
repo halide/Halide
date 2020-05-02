@@ -1,5 +1,9 @@
 #include "PyInlineReductions.h"
 
+
+#include <utility>
+
+
 #include "PyTuple.h"
 
 namespace Halide {
@@ -28,23 +32,23 @@ void define_inline_reductions(py::module &m) {
 
     m.def(
         "argmax", [](Expr e, const std::string &s) -> py::tuple {
-            return to_python_tuple(argmax(e, s));
+            return to_python_tuple(argmax(std::move(e), s));
         },
         py::arg("expr"), py::arg("name") = "argmax");
     m.def(
         "argmax", [](const RDom &r, Expr e, const std::string &s) -> py::tuple {
-            return to_python_tuple(argmax(r, e, s));
+            return to_python_tuple(argmax(r, std::move(e), s));
         },
         py::arg("rdom"), py::arg("expr"), py::arg("name") = "argmax");
 
     m.def(
         "argmin", [](Expr e, const std::string &s) -> py::tuple {
-            return to_python_tuple(argmin(e, s));
+            return to_python_tuple(argmin(std::move(e), s));
         },
         py::arg("expr"), py::arg("name") = "argmin");
     m.def(
         "argmin", [](const RDom &r, Expr e, const std::string &s) -> py::tuple {
-            return to_python_tuple(argmin(r, e, s));
+            return to_python_tuple(argmin(r, std::move(e), s));
         },
         py::arg("rdom"), py::arg("expr"), py::arg("name") = "argmin");
 }

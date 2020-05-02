@@ -10,7 +10,7 @@ std::vector<std::string> messages;
 
 extern "C" void halide_print(void *user_context, const char *message) {
     //printf("%s", message);
-    messages.push_back(message);
+    messages.emplace_back(message);
 }
 
 #ifdef _MSC_VER

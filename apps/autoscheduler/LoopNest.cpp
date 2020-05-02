@@ -35,7 +35,7 @@ bool may_subtile() {
 vector<vector<int64_t>> generate_tilings(const vector<int64_t> &s, int d, int factor, bool allow_splits) {
     vector<vector<int64_t>> result;
     if (d == -1) {
-        result.push_back(vector<int64_t>());
+        result.emplace_back();
     } else {
         vector<vector<int64_t>> v = generate_tilings(s, d - 1, factor, allow_splits);
         // If we're already generated too many tiling configurations
@@ -1221,7 +1221,7 @@ void LoopNest::compute_here(const FunctionDAG::Node *f, bool tileable, int v) {
         }
 
         // Leave region required blank inside the computation of a Func
-        node->set_bounds(f, std::move(single_point));
+        node->set_bounds(f, single_point);
         node->vector_dim = v;
 
         if (node->vectorized_loop_index >= 0) {
@@ -1276,7 +1276,7 @@ IntrusivePtr<const LoopNest> LoopNest::parallelize_in_tiles(const MachineParams 
     auto b = inner->get_bounds(node)->make_copy();
 
     // Then move factors from the outer loop to the inner loop
-    auto parent_bounds = parent->get_bounds(node);
+    const auto& parent_bounds = parent->get_bounds(node);
 
     for (size_t i = 0; i < stage->loop.size(); i++) {
         int l = stage->loop[i].pure_dim;
@@ -1441,7 +1441,7 @@ vector<IntrusivePtr<const LoopNest>> LoopNest::compute_in_tiles(const FunctionDA
                 auto b = inner->get_bounds(node)->make_copy();
 
                 // Then move factors from the outer loop to the inner loop
-                auto parent_bounds = parent->get_bounds(node);
+                const auto& parent_bounds = parent->get_bounds(node);
 
                 for (size_t i = 0; i < t.size(); i++) {
                     int64_t outer_extent = t[i];

@@ -1,3 +1,7 @@
+#include <utility>
+
+
+
 #include "Halide.h"
 
 namespace {
@@ -8,41 +12,41 @@ using Internal::Call;
 // TODO: this is using Halide::Internal, which is naughty for apps outside of Halide proper.
 // We should find (or add) a way to do this properly, or move this apps into internal tests.
 Expr make_call_cpp_extern_toplevel(Expr arg1, Expr arg2) {
-    return Call::make(type_of<int>(), "cpp_extern_toplevel", {cast<int>(arg1), cast<float>(arg2)}, Call::ExternCPlusPlus);
+    return Call::make(type_of<int>(), "cpp_extern_toplevel", {cast<int>(std::move(arg1)), cast<float>(std::move(arg2))}, Call::ExternCPlusPlus);
 }
 
 Expr make_call_cpp_extern_namespace(Expr arg1, Expr arg2) {
-    return Call::make(type_of<int>(), "namespace1::cpp_extern", {cast<int>(arg1), cast<float>(arg2)}, Call::ExternCPlusPlus);
+    return Call::make(type_of<int>(), "namespace1::cpp_extern", {cast<int>(std::move(arg1)), cast<float>(std::move(arg2))}, Call::ExternCPlusPlus);
 }
 
 Expr make_call_cpp_extern_shared_namespace_1(Expr arg1, Expr arg2) {
-    return Call::make(type_of<int>(), "namespace2::cpp_extern_1", {cast<int>(arg1), cast<float>(arg2)}, Call::ExternCPlusPlus);
+    return Call::make(type_of<int>(), "namespace2::cpp_extern_1", {cast<int>(std::move(arg1)), cast<float>(std::move(arg2))}, Call::ExternCPlusPlus);
 }
 Expr make_call_cpp_extern_shared_namespace_2(Expr arg1, Expr arg2) {
-    return Call::make(type_of<int>(), "namespace2::cpp_extern_2", {cast<int>(arg1), cast<float>(arg2)}, Call::ExternCPlusPlus);
+    return Call::make(type_of<int>(), "namespace2::cpp_extern_2", {cast<int>(std::move(arg1)), cast<float>(std::move(arg2))}, Call::ExternCPlusPlus);
 }
 Expr make_call_cpp_extern_shared_namespace_3(Expr arg1, Expr arg2) {
-    return Call::make(type_of<int>(), "namespace2::cpp_extern_3", {cast<int>(arg1), cast<float>(arg2)}, Call::ExternCPlusPlus);
+    return Call::make(type_of<int>(), "namespace2::cpp_extern_3", {cast<int>(std::move(arg1)), cast<float>(std::move(arg2))}, Call::ExternCPlusPlus);
 }
 
 Expr make_call_cpp_extern_nested_namespace_outer(Expr arg1, Expr arg2) {
-    return Call::make(type_of<int>(), "namespace_outer::cpp_extern", {cast<int>(arg1), cast<float>(arg2)}, Call::ExternCPlusPlus);
+    return Call::make(type_of<int>(), "namespace_outer::cpp_extern", {cast<int>(std::move(arg1)), cast<float>(std::move(arg2))}, Call::ExternCPlusPlus);
 }
 Expr make_call_cpp_extern_nested_namespace_inner(Expr arg1, Expr arg2) {
-    return Call::make(type_of<int>(), "namespace_outer::namespace_inner::cpp_extern", {cast<int>(arg1), cast<float>(arg2)}, Call::ExternCPlusPlus);
+    return Call::make(type_of<int>(), "namespace_outer::namespace_inner::cpp_extern", {cast<int>(std::move(arg1)), cast<float>(std::move(arg2))}, Call::ExternCPlusPlus);
 }
 
 Expr make_call_cpp_extern_shared_nested_1(Expr arg1, Expr arg2) {
-    return Call::make(type_of<int>(), "namespace_shared_outer::cpp_extern_1", {cast<int>(arg1), cast<float>(arg2)}, Call::ExternCPlusPlus);
+    return Call::make(type_of<int>(), "namespace_shared_outer::cpp_extern_1", {cast<int>(std::move(arg1)), cast<float>(std::move(arg2))}, Call::ExternCPlusPlus);
 }
 Expr make_call_cpp_extern_shared_nested_2(Expr arg1, Expr arg2) {
-    return Call::make(type_of<int>(), "namespace_shared_outer::cpp_extern_2", {cast<int>(arg1), cast<float>(arg2)}, Call::ExternCPlusPlus);
+    return Call::make(type_of<int>(), "namespace_shared_outer::cpp_extern_2", {cast<int>(std::move(arg1)), cast<float>(std::move(arg2))}, Call::ExternCPlusPlus);
 }
 Expr make_call_cpp_extern_shared_nested_3(Expr arg1, Expr arg2) {
-    return Call::make(type_of<int>(), "namespace_shared_outer::inner::cpp_extern_1", {cast<int>(arg1), cast<float>(arg2)}, Call::ExternCPlusPlus);
+    return Call::make(type_of<int>(), "namespace_shared_outer::inner::cpp_extern_1", {cast<int>(std::move(arg1)), cast<float>(std::move(arg2))}, Call::ExternCPlusPlus);
 }
 Expr make_call_cpp_extern_shared_nested_4(Expr arg1, Expr arg2) {
-    return Call::make(type_of<int>(), "namespace_shared_outer::inner::cpp_extern_2", {cast<int>(arg1), cast<float>(arg2)}, Call::ExternCPlusPlus);
+    return Call::make(type_of<int>(), "namespace_shared_outer::inner::cpp_extern_2", {cast<int>(std::move(arg1)), cast<float>(std::move(arg2))}, Call::ExternCPlusPlus);
 }
 
 // Make sure extern "C" works

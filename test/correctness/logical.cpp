@@ -1,14 +1,18 @@
 #include "Halide.h"
 #include <stdio.h>
 
+
+#include <utility>
+
+
 using namespace Halide;
 
 Expr u8(Expr a) {
-    return cast<uint8_t>(a);
+    return cast<uint8_t>(std::move(a));
 }
 
 Expr u16(Expr a) {
-    return cast<uint16_t>(a);
+    return cast<uint16_t>(std::move(a));
 }
 
 int main(int argc, char **argv) {

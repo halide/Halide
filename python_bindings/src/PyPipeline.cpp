@@ -1,5 +1,9 @@
 #include "PyPipeline.h"
 
+
+#include <utility>
+
+
 #include "PyTuple.h"
 
 namespace Halide {
@@ -105,7 +109,7 @@ void define_pipeline(py::module &m) {
 
             .def(
                 "realize", [](Pipeline &p, std::vector<int32_t> sizes, const Target &target) -> py::object {
-                    return realization_to_object(p.realize(sizes, target));
+                    return realization_to_object(p.realize(std::move(sizes), target));
                 },
                 py::arg("sizes") = std::vector<int32_t>{}, py::arg("target") = Target())
 

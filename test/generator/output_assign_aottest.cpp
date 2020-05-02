@@ -15,7 +15,7 @@ Buffer<int32_t> expected(int extra) {
     return b;
 }
 
-void compare(Buffer<int32_t> expected, Buffer<int32_t> actual) {
+void compare(Buffer<int32_t> expected, const Buffer<int32_t>& actual) {
     expected.for_each_element([expected, actual](int x, int y) {
         if (expected(x, y) != actual(x, y)) {
             printf("expected(%d, %d) = %d, actual(%d, %d) = %d\n",

@@ -3,7 +3,7 @@
 
 using namespace Halide;
 
-void check_pure(Func f) {
+void check_pure(const Func& f) {
     if (f.has_update_definition()) {
         std::cout << "f's reduction definition was supposed to fail!\n";
         exit(-1);

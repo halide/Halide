@@ -15,6 +15,8 @@
 #include <iostream>
 #include <random>
 #include <string>
+#include <utility>
+
 
 #if defined(USE_HALIDE)
 #define BLAS_NAME "halide"
@@ -71,10 +73,10 @@ struct BenchmarksBase {
     }
 
     BenchmarksBase(std::string n)
-        : name(n) {
+        : name(std::move(n)) {
     }
 
-    void run(std::string benchmark, int size) {
+    void run(const std::string& benchmark, int size) {
         if (benchmark == "copy") {
             bench_copy(size);
         } else if (benchmark == "scal") {
@@ -118,7 +120,7 @@ struct BenchmarksBase {
 
 struct BenchmarksFloat : public BenchmarksBase<float> {
     BenchmarksFloat(std::string n)
-        : BenchmarksBase(n) {
+        : BenchmarksBase(std::move(n)) {
     }
 
     Scalar result;
@@ -146,7 +148,7 @@ struct BenchmarksFloat : public BenchmarksBase<float> {
 
 struct BenchmarksDouble : public BenchmarksBase<double> {
     BenchmarksDouble(std::string n)
-        : BenchmarksBase(n) {
+        : BenchmarksBase(std::move(n)) {
     }
 
     Scalar result;

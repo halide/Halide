@@ -35,7 +35,7 @@ int count_interleaves(Func f) {
     return i.result;
 }
 
-void check_interleave_count(Func f, int correct) {
+void check_interleave_count(const Func& f, int correct) {
     int c = count_interleaves(f);
     if (c < correct) {
         printf("Func %s should have interleaved >= %d times but interleaved %d times instead.\n",
@@ -52,7 +52,7 @@ void define(FuncRef f, std::vector<Expr> values) {
     }
 }
 
-void define(FuncRef f, Expr value, int count) {
+void define(const FuncRef& f, const Expr& value, int count) {
     std::vector<Expr> values;
     for (int i = 0; i < count; i++) {
         values.push_back(value);
@@ -60,7 +60,7 @@ void define(FuncRef f, Expr value, int count) {
     define(f, values);
 }
 
-Expr element(FuncRef f, int i) {
+Expr element(const FuncRef& f, int i) {
     if (f.size() == 1) {
         assert(i == 0);
         return f;

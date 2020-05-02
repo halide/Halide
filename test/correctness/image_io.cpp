@@ -116,7 +116,7 @@ void test_convert_image_s2d(Buffer<T> buf) {
 
 // dynamic -> dynamic conversion test
 template<typename T>
-void test_convert_image_d2d(Buffer<> buf_d) {
+void test_convert_image_d2d(const Buffer<>& buf_d) {
     std::cout << "Testing dynamic -> dynamic image conversion for " << halide_type_of<T>() << "\n";
 
     // convert to float
@@ -187,10 +187,10 @@ void do_test() {
 
     std::vector<std::string> formats = {"ppm", "pgm", "tmp", "mat", "tiff"};
 #ifndef HALIDE_NO_JPEG
-    formats.push_back("jpg");
+    formats.emplace_back("jpg");
 #endif
 #ifndef HALIDE_NO_PNG
-    formats.push_back("png");
+    formats.emplace_back("png");
 #endif
     for (std::string format : formats) {
         if (format == "jpg" && halide_type_of<T>() != halide_type_t(halide_type_uint, 8)) {

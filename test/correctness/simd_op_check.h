@@ -4,6 +4,8 @@
 #include "Halide.h"
 #include "test/common/halide_test_dirs.h"
 #include <fstream>
+#include <utility>
+
 
 namespace Halide {
 struct TestResult {
@@ -126,7 +128,7 @@ public:
         return wildcard_match("*" + p + "*", str);
     }
 
-    TestResult check_one(const std::string &op, const std::string &name, int vector_width, Expr e) {
+    TestResult check_one(const std::string &op, const std::string &name, int vector_width, const Expr& e) {
         std::ostringstream error_msg;
 
         // Define a vectorized Halide::Func that uses the pattern.
@@ -241,7 +243,7 @@ public:
         return {op, error_msg.str()};
     }
 
-    void check(std::string op, int vector_width, Expr e) {
+    void check(const std::string& op, int vector_width, Expr e) {
         // Make a name for the test by uniquing then sanitizing the op name
         std::string name = "op_" + op;
         for (size_t i = 0; i < name.size(); i++) {
@@ -255,7 +257,7 @@ public:
         // settings.
         if (!wildcard_match(filter, op)) return;
 
-        tasks.emplace_back(Task{op, name, vector_width, e});
+        tasks.emplace_back(Task{op, name, vector_width, std::move(e)});
     }
     virtual void add_tests() = 0;
     virtual void setup_images() {

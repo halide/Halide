@@ -934,7 +934,7 @@ void configure_pipeline_features(const FunctionDAG &dag,
 
 // A single pass of coarse-to-fine beam search.
 IntrusivePtr<State> optimal_schedule_pass(FunctionDAG &dag,
-                                          vector<Function> outputs,
+                                          const vector<Function>& outputs,
                                           const MachineParams &params,
                                           CostModel *cost_model,
                                           std::mt19937 &rng,
@@ -1130,7 +1130,7 @@ IntrusivePtr<State> optimal_schedule_pass(FunctionDAG &dag,
 
 // Performance coarse-to-fine beam search and return the best state found.
 IntrusivePtr<State> optimal_schedule(FunctionDAG &dag,
-                                     vector<Function> outputs,
+                                     const vector<Function>& outputs,
                                      const MachineParams &params,
                                      CostModel *cost_model,
                                      std::mt19937 &rng,

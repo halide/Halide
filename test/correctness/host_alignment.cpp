@@ -2,6 +2,8 @@
 #include <map>
 #include <stdio.h>
 #include <string>
+#include <utility>
+
 
 namespace {
 
@@ -45,7 +47,7 @@ public:
     std::map<string, int> alignments_needed;
     CountHostAlignmentAsserts(std::map<string, int> m)
         : count(0),
-          alignments_needed(m) {
+          alignments_needed(std::move(m)) {
     }
 
     using IRVisitor::visit;
@@ -85,7 +87,7 @@ int count_host_alignment_asserts(Func f, std::map<string, int> m) {
     t.set_feature(Target::NoBoundsQuery);
     f.compute_root();
     Stmt s = Internal::lower_main_stmt({f.function()}, f.name(), t);
-    CountHostAlignmentAsserts c(m);
+    CountHostAlignmentAsserts c(std::move(m));
     s.accept(&c);
     return c.count;
 }

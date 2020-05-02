@@ -1,14 +1,18 @@
 #include "Halide.h"
 #include <stdio.h>
 
+
+#include <utility>
+
+
 using namespace Halide;
 
 Expr u8(Expr a) {
-    return cast<uint8_t>(a);
+    return cast<uint8_t>(std::move(a));
 }
 
 /* Do n unrolled iterations of game of life on a torus */
-Func gameOfLife(ImageParam input, int n) {
+Func gameOfLife(const ImageParam& input, int n) {
     Var x, y;
     Func in;
     if (n == 1) {

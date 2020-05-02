@@ -16,6 +16,8 @@
 #include <iomanip>
 #include <iostream>
 #include <string>
+#include <utility>
+
 
 template<class T>
 std::string type_name();
@@ -70,10 +72,10 @@ struct Benchmarks : BenchmarksBase {
     }
 
     Benchmarks(std::string n)
-        : name(n) {
+        : name(std::move(n)) {
     }
 
-    void run(std::string benchmark, int size) {
+    void run(const std::string& benchmark, int size) {
         if (benchmark == "copy") {
             bench_copy(size);
         } else if (benchmark == "scal") {

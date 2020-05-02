@@ -805,7 +805,7 @@ FunctionDAG::FunctionDAG(const vector<Function> &outputs, const MachineParams &p
                 int leaves = 0;
                 Type narrowest_type;
                 map<string, int> calls;
-                CheckTypes(Function f)
+                CheckTypes(const Function& f)
                     : func(f) {
                 }
             };

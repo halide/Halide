@@ -15,7 +15,7 @@ bool bit_flip(T a) {
 }
 
 template<typename T>
-bool scalar_from_constant_expr(Expr e, T *val) {
+bool scalar_from_constant_expr(const Expr& e, T *val) {
     if (type_of<T>().is_int()) {
         const int64_t *i = as_const_int(e);
         if (!i) return false;

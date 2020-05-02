@@ -25,7 +25,7 @@ int main(int argc, char **argv) {
     }
 
     std::vector<ExternFuncArgument> args;
-    args.push_back(user_context_value());
+    args.emplace_back(user_context_value());
 
     Var x, y;
     Func monitor;

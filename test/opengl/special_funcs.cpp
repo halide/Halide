@@ -1,6 +1,8 @@
 #include "Halide.h"
 #include <algorithm>
 #include <iostream>
+#include <utility>
+
 #include <stdio.h>
 #include <stdlib.h>
 
@@ -13,7 +15,7 @@ double square(double x) {
 }
 
 template<typename T>
-void test_function(Expr e, Buffer<T> &cpu_result, Buffer<T> &gpu_result) {
+void test_function(const Expr& e, Buffer<T> &cpu_result, Buffer<T> &gpu_result) {
     Func cpu("cpu"), gpu("gpu");
 
     Target cpu_target = get_host_target();
@@ -30,7 +32,7 @@ void test_function(Expr e, Buffer<T> &cpu_result, Buffer<T> &gpu_result) {
 
 template<typename T>
 bool test_exact(Expr r, Expr g, Expr b) {
-    Expr e = cast<T>(mux(c, {r, g, b}));
+    Expr e = cast<T>(mux(c, {std::move(r), std::move(g), std::move(b)}));
     const int W = 256, H = 256;
     Buffer<T> cpu_result(W, H, 3);
     Buffer<T> gpu_result(W, H, 3);
@@ -59,7 +61,7 @@ bool test_exact(Expr r, Expr g, Expr b) {
 
 template<typename T>
 bool test_approx(Expr r, Expr g, Expr b, double rms_error) {
-    Expr e = cast<T>(mux(c, {r, g, b}));
+    Expr e = cast<T>(mux(c, {std::move(r), std::move(g), std::move(b)}));
     const int W = 256, H = 256;
     Buffer<T> cpu_result(W, H, 3);
     Buffer<T> gpu_result(W, H, 3);

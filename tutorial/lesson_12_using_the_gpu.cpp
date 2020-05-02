@@ -42,7 +42,7 @@ public:
     Func lut, padded, padded16, sharpen, curved;
     Buffer<uint8_t> input;
 
-    MyPipeline(Buffer<uint8_t> in)
+    MyPipeline(const Buffer<uint8_t>& in)
         : input(in) {
         // For this lesson, we'll use a two-stage pipeline that sharpens
         // and then applies a look-up-table (LUT).

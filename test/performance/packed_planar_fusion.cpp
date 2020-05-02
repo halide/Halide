@@ -7,7 +7,7 @@
 using namespace Halide;
 using namespace Halide::Tools;
 
-double test_copy(Buffer<uint8_t> src, Buffer<uint8_t> dst) {
+double test_copy(const Buffer<uint8_t>& src, Buffer<uint8_t> dst) {
     Var x, y, c;
     Func f;
     f(x, y, c) = src(x, y, c);

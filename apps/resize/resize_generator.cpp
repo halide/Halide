@@ -1,3 +1,7 @@
+#include <utility>
+
+
+
 #include "Halide.h"
 
 using namespace Halide;
@@ -10,17 +14,17 @@ enum InterpolationType {
 };
 
 Expr kernel_box(Expr x) {
-    Expr xx = abs(x);
+    Expr xx = abs(std::move(x));
     return select(xx <= 0.5f, 1.0f, 0.0f);
 }
 
 Expr kernel_linear(Expr x) {
-    Expr xx = abs(x);
+    Expr xx = abs(std::move(x));
     return select(xx < 1.0f, 1.0f - xx, 0.0f);
 }
 
 Expr kernel_cubic(Expr x) {
-    Expr xx = abs(x);
+    Expr xx = abs(std::move(x));
     Expr xx2 = xx * xx;
     Expr xx3 = xx2 * xx;
     float a = -0.5f;

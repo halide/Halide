@@ -1,5 +1,7 @@
 #include "Halide.h"
 #include <iostream>
+#include <utility>
+
 
 using namespace Halide;
 
@@ -8,8 +10,8 @@ using namespace Halide;
 // Then across rows, we find the maximum minimum, the minimum maximum, and the middle middle.
 // Then we take the middle of those three results.
 
-Expr mid3(Expr a, Expr b, Expr c) {
-    return max(min(max(a, b), c), min(a, b));
+Expr mid3(const Expr& a, const Expr& b, Expr c) {
+    return max(min(max(a, b), std::move(c)), min(a, b));
 }
 
 int main(int arch, char **argv) {

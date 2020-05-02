@@ -54,7 +54,7 @@ std::vector<Expr> bitonic_sort_inner(std::vector<Expr> v, bool flipped) {
 std::vector<Expr> bitonic_sort(std::vector<Expr> v) {
     // Bulk up the vector to a power of two using infinities
     while (v.size() & (v.size() - 1)) {
-        v.push_back(Expr());
+        v.emplace_back();
     }
 
     v = bitonic_sort_inner(v, false);

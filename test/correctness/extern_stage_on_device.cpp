@@ -62,8 +62,8 @@ int main(int argc, char **argv) {
         for (int sink_on_device : {0, 1}) {
             Func source("source");
             std::vector<ExternFuncArgument> args;
-            args.push_back(extern_on_device);
-            args.push_back(sink_on_device);
+            args.emplace_back(extern_on_device);
+            args.emplace_back(sink_on_device);
             source.define_extern("extern_stage",
                                  args,
                                  Int(32),

@@ -9,6 +9,8 @@
 #include <map>
 #include <stdint.h>
 #include <string>
+#include <utility>
+
 #include <vector>
 
 #include "Errors.h"
@@ -459,7 +461,7 @@ struct FunctionDAG {
             };
 
             Stage(Halide::Stage s)
-                : stage(s) {
+                : stage(std::move(s)) {
             }
         };
         vector<Stage> stages;

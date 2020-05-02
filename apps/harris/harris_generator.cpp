@@ -4,7 +4,7 @@ namespace {
 
 using namespace Halide;
 
-Expr sum3x3(Func f, Var x, Var y) {
+Expr sum3x3(const Func& f, const Var& x, const Var& y) {
     return f(x - 1, y - 1) + f(x - 1, y) + f(x - 1, y + 1) +
            f(x, y - 1) + f(x, y) + f(x, y + 1) +
            f(x + 1, y - 1) + f(x + 1, y) + f(x + 1, y + 1);

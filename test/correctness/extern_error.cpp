@@ -28,7 +28,7 @@ int main(int argc, char **argv) {
     }
 
     std::vector<ExternFuncArgument> args;
-    args.push_back(user_context_value());
+    args.emplace_back(user_context_value());
 
     Func f;
     f.define_extern("extern_error", args, Float(32), 1);

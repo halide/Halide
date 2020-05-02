@@ -1,5 +1,9 @@
 #include "PyIROperator.h"
 
+
+#include <utility>
+
+
 #include "PyTuple.h"
 
 namespace Halide {
@@ -19,7 +23,7 @@ std::vector<Expr> args_to_vector_for_print(const py::args &args, size_t start_of
         // and fail. Normally we don't want string to be convertible
         // to Expr, but in this unusual case we do.
         try {
-            v.push_back(args[i].cast<std::string>());
+            v.emplace_back(args[i].cast<std::string>());
         } catch (...) {
             v.push_back(args[i].cast<Expr>());
         }
@@ -151,14 +155,14 @@ void define_operators(py::module &m) {
     });
     m.def(
         "print_when", [](Expr condition, py::args args) -> Expr {
-            return print_when(condition, args_to_vector_for_print(args));
+            return print_when(std::move(condition), args_to_vector_for_print(args));
         },
         py::arg("condition"));
     m.def(
         "require", [](Expr condition, Expr value, py::args args) -> Expr {
             auto v = args_to_vector<Expr>(args);
             v.insert(v.begin(), value);
-            return require(condition, v);
+            return require(std::move(condition), v);
         },
         py::arg("condition"), py::arg("value"));
     m.def("lerp", &lerp);
@@ -176,7 +180,7 @@ void define_operators(py::module &m) {
     m.def("undef", (Expr(*)(Type)) & undef);
     m.def(
         "memoize_tag", [](Expr result, py::args cache_key_values) -> Expr {
-            return Internal::memoize_tag_helper(result, args_to_vector<Expr>(cache_key_values));
+            return Internal::memoize_tag_helper(std::move(result), args_to_vector<Expr>(cache_key_values));
         },
         py::arg("result"));
     m.def("likely", &likely);

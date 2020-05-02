@@ -1,15 +1,19 @@
+#include <utility>
+
+
+
 #include "Halide.h"
 
 // TODO: Add HalideExtern support for C++ mangling, hopefully using automatic argument type deduction
 Halide::Expr extract_value_global(Halide::Expr arg) {
     return Halide::Internal::Call::make(Halide::type_of<int>(),
-                                        "extract_value_global", {arg},
+                                        "extract_value_global", {std::move(arg)},
                                         Halide::Internal::Call::ExternCPlusPlus);
 }
 
 Halide::Expr extract_value_ns(Halide::Expr arg) {
     return Halide::Internal::Call::make(Halide::type_of<int>(),
-                                        "HalideTest::extract_value_ns", {arg},
+                                        "HalideTest::extract_value_ns", {std::move(arg)},
                                         Halide::Internal::Call::ExternCPlusPlus);
 }
 

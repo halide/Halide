@@ -1,3 +1,7 @@
+#include <utility>
+
+
+
 #include "Halide.h"
 
 using namespace Halide;
@@ -432,10 +436,10 @@ void check_algebra() {
           ((x * (int32_t)0x80000000) + (z * (int32_t)0x80000000 + y)));
 
     // Use a require with no error message to test chains of reasoning
-    auto require = [](Expr cond, Expr val) {
+    auto require = [](Expr cond, const Expr& val) {
         return Internal::Call::make(val.type(),
                                     Internal::Call::require,
-                                    {cond, val, 0},
+                                    {std::move(cond), val, 0},
                                     Internal::Call::PureIntrinsic);
     };
 
@@ -1837,7 +1841,7 @@ void check_lets() {
           LetStmt::make("x", Call::make(Int(32), "dummy", {3, x, 4}, Call::Extern), Evaluate::make(x + 12)));
 }
 
-void check_inv(Expr before) {
+void check_inv(const Expr& before) {
     Expr after = simplify(before);
     internal_assert(before.same_as(after))
         << "Expressions should be equal by value and by identity: "

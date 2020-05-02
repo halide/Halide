@@ -6,7 +6,7 @@ using namespace Halide;
 Var x, y;
 Param<int> divisor;
 
-Func blur(Func in, std::string n) {
+Func blur(const Func& in, const std::string& n) {
     Func blurry(n);
     blurry(x) = (in(x) + in(x + 1)) / divisor;
     return blurry;

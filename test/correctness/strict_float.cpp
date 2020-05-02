@@ -86,7 +86,7 @@ Buffer<float> one_million_rando_floats() {
 
 ImageParam in(Float(32), 1);
 
-Expr term(Expr index) {
+Expr term(const Expr& index) {
     return in(index)*in(index);
 }
 

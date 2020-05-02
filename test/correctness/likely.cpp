@@ -1,6 +1,10 @@
 #include "Halide.h"
 #include <stdio.h>
 
+
+#include <utility>
+
+
 namespace {
 
 using namespace Halide;
@@ -30,7 +34,7 @@ class Counter : public IRVisitor {
 public:
     int store_count, sin_count;
     Counter(string f)
-        : func(f), store_count(0), sin_count(0) {
+        : func(std::move(f)), store_count(0), sin_count(0) {
     }
 };
 
@@ -75,7 +79,7 @@ public:
     }
 
     CheckStoreCount(string f, int c)
-        : func(f), correct(c) {
+        : func(std::move(f)), correct(c) {
     }
 };
 

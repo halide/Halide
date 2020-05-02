@@ -1,5 +1,9 @@
 #include "PyFunc.h"
 
+
+#include <utility>
+
+
 #include "PyBuffer.h"
 #include "PyExpr.h"
 #include "PyFuncRef.h"
@@ -130,7 +134,7 @@ void define_func(py::module &m) {
             .def(
                 "realize",
                 [](Func &f, std::vector<int32_t> sizes, const Target &target) -> py::object {
-                    return realization_to_object(f.realize(sizes, target));
+                    return realization_to_object(f.realize(std::move(sizes), target));
                 },
                 py::arg("sizes") = std::vector<int32_t>{}, py::arg("target") = Target())
 

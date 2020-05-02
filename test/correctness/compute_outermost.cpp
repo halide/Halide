@@ -3,7 +3,7 @@
 
 using namespace Halide;
 
-Func blur(Func in) {
+Func blur(const Func& in) {
     Func blurx, blury;
     Var x, y;
     blurx(x, y) = in(x - 1, y) + in(x, y) + in(x + 1, y);

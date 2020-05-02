@@ -1,6 +1,10 @@
 #include "Halide.h"
 #include <stdio.h>
 
+
+#include <utility>
+
+
 #include "testing.h"
 
 using namespace Halide;
@@ -72,7 +76,7 @@ bool perform_test(const char *label, const Target target, Func f, int expected_n
     // Check for correct result values
     out.copy_to_host();
 
-    if (!Testing::check_result<float>(out, tol, expected_val)) {
+    if (!Testing::check_result<float>(out, tol, std::move(expected_val))) {
         return false;
     }
 

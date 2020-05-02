@@ -6,7 +6,7 @@ using namespace Halide;
 Var x;
 
 template<class T>
-bool test(Expr e, const char *funcname, int vector_width, int N, Buffer<T> &input, T *result) {
+bool test(const Expr& e, const char *funcname, int vector_width, int N, Buffer<T> &input, T *result) {
     Func f;
     f(x) = e;
     if (vector_width > 1) {

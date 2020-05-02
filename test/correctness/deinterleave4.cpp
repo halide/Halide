@@ -5,7 +5,7 @@ using namespace Halide;
 
 Var x;
 
-Func upsample(Func f) {
+Func upsample(const Func& f) {
     Func u;
     u(x) = f(x / 2 + 1);
     return u;

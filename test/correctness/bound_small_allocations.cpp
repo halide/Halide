@@ -2,7 +2,7 @@
 #include <stdio.h>
 
 using namespace Halide;
-Expr calc(Expr a) {
+Expr calc(const Expr& a) {
     Expr prod = cast<int64_t>(a) * cast<int64_t>(a);
     Expr scaled = (prod + (1 << 30)) >> 31;
     Expr clamped = clamp(scaled, Int(32).min(), Int(32).max());

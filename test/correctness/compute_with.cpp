@@ -46,7 +46,7 @@ std::mutex stores_mutex, loads_mutex;
 
 // Return true if the coordinate values in 'coordinates' are within the bound 'b'
 bool check_coordinates(const Bound &b, const int32_t *coordinates, int32_t dims, int32_t lanes,
-                       string event, string fname) {
+                       const string& event, const string& fname) {
     for (int32_t idx = 0; idx < dims; ++idx) {
         int32_t i = idx / lanes;
         if ((coordinates[idx] < b.min[i]) || (coordinates[idx] > b.max[i])) {

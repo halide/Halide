@@ -18,6 +18,8 @@
 #include <iostream>
 #include <random>
 #include <string>
+#include <utility>
+
 
 template<class T>
 struct BenchmarksBase {
@@ -54,10 +56,10 @@ struct BenchmarksBase {
     }
 
     BenchmarksBase(std::string n)
-        : name(n) {
+        : name(std::move(n)) {
     }
 
-    void run(std::string benchmark, int size) {
+    void run(const std::string& benchmark, int size) {
         if (benchmark == "copy") {
             bench_copy(size);
         } else if (benchmark == "scal") {
@@ -101,7 +103,7 @@ struct BenchmarksBase {
 
 struct BenchmarksFloat : public BenchmarksBase<float> {
     BenchmarksFloat(std::string n)
-        : BenchmarksBase(n),
+        : BenchmarksBase(std::move(n)),
           result(1) {
     }
 
@@ -130,7 +132,7 @@ struct BenchmarksFloat : public BenchmarksBase<float> {
 
 struct BenchmarksDouble : public BenchmarksBase<double> {
     BenchmarksDouble(std::string n)
-        : BenchmarksBase(n),
+        : BenchmarksBase(std::move(n)),
           result(1) {
     }
 

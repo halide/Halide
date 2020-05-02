@@ -316,7 +316,7 @@ struct FuncConfig {
 
     FuncConfig() = default;
 
-    explicit FuncConfig(const std::string &trace_tag, ErrorFunc error = default_error) {
+    explicit FuncConfig(const std::string &trace_tag, const ErrorFunc& error = default_error) {
         std::istringstream is(trace_tag);
         is >> *this;
         if (is.fail() || is.get() != EOF) {
@@ -440,7 +440,7 @@ struct GlobalConfig {
 
     GlobalConfig() = default;
 
-    explicit GlobalConfig(const std::string &trace_tag, ErrorFunc error = default_error) {
+    explicit GlobalConfig(const std::string &trace_tag, const ErrorFunc& error = default_error) {
         std::istringstream is(trace_tag);
         is >> *this;
         if (is.fail() || is.get() != EOF) {
@@ -520,7 +520,7 @@ struct FuncTypeAndDim {
 
     FuncTypeAndDim() = default;
 
-    explicit FuncTypeAndDim(const std::string &trace_tag, ErrorFunc error = default_error) {
+    explicit FuncTypeAndDim(const std::string &trace_tag, const ErrorFunc& error = default_error) {
         std::istringstream is(trace_tag);
         is >> *this;
         if (is.fail() || is.get() != EOF) {

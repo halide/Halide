@@ -4,7 +4,7 @@
 using namespace Halide;
 
 // Return zero, slowly
-Expr expensive_zero(Expr x, Expr y, Expr t, int n) {
+Expr expensive_zero(const Expr& x, const Expr& y, const Expr& t, int n) {
     // Count how many Fermat's last theorem counterexamples we can find using n trials.
     RDom r(0, n);
     Func a, b, c;
