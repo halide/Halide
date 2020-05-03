@@ -24,17 +24,17 @@ void define_boundary_conditions(py::module &m) {
     // ----- constant_exterior
 
     bc.def(
-        "constant_exterior", [](ImageParam im, Expr exterior) -> Func {
+        "constant_exterior", [](const ImageParam &im, const Expr &exterior) -> Func {
             return constant_exterior(im, exterior);
         },
         py::arg("f"), py::arg("exterior"));
     bc.def(
-        "constant_exterior", [](Buffer<> b, Expr exterior) -> Func {
+        "constant_exterior", [](const Buffer<> &b, const Expr &exterior) -> Func {
             return constant_exterior(b, exterior);
         },
         py::arg("f"), py::arg("exterior"));
     bc.def(
-        "constant_exterior", [](py::object target, Expr exterior, Region bounds) -> Func {
+        "constant_exterior", [](const py::object &target, const Expr &exterior, const Region &bounds) -> Func {
             try {
                 return constant_exterior(target.cast<Func>(), exterior, bounds);
             } catch (...) {
@@ -52,17 +52,17 @@ void define_boundary_conditions(py::module &m) {
 
     // ----- repeat_edge
     bc.def(
-        "repeat_edge", [](ImageParam im) -> Func {
+        "repeat_edge", [](const ImageParam &im) -> Func {
             return repeat_edge(im);
         },
         py::arg("f"));
     bc.def(
-        "repeat_edge", [](Buffer<> b) -> Func {
+        "repeat_edge", [](const Buffer<> &b) -> Func {
             return repeat_edge(b);
         },
         py::arg("f"));
     bc.def(
-        "repeat_edge", [](py::object target, Region bounds) -> Func {
+        "repeat_edge", [](const py::object &target, const Region &bounds) -> Func {
             try {
                 return repeat_edge(target.cast<Func>(), bounds);
             } catch (...) {
@@ -80,17 +80,17 @@ void define_boundary_conditions(py::module &m) {
 
     // ----- repeat_image
     bc.def(
-        "repeat_image", [](ImageParam im) -> Func {
+        "repeat_image", [](const ImageParam &im) -> Func {
             return repeat_image(im);
         },
         py::arg("f"));
     bc.def(
-        "repeat_image", [](Buffer<> b) -> Func {
+        "repeat_image", [](const Buffer<> &b) -> Func {
             return repeat_image(b);
         },
         py::arg("f"));
     bc.def(
-        "repeat_image", [](py::object target, Region bounds) -> Func {
+        "repeat_image", [](const py::object &target, const Region &bounds) -> Func {
             try {
                 return repeat_image(target.cast<Func>(), bounds);
             } catch (...) {
@@ -108,17 +108,17 @@ void define_boundary_conditions(py::module &m) {
 
     // ----- mirror_image
     bc.def(
-        "mirror_image", [](ImageParam im) -> Func {
+        "mirror_image", [](const ImageParam &im) -> Func {
             return mirror_image(im);
         },
         py::arg("f"));
     bc.def(
-        "mirror_image", [](Buffer<> b) -> Func {
+        "mirror_image", [](const Buffer<> &b) -> Func {
             return mirror_image(b);
         },
         py::arg("f"));
     bc.def(
-        "mirror_image", [](py::object target, Region bounds) -> Func {
+        "mirror_image", [](const py::object &target, const Region &bounds) -> Func {
             try {
                 return mirror_image(target.cast<Func>(), bounds);
             } catch (...) {
@@ -136,17 +136,17 @@ void define_boundary_conditions(py::module &m) {
 
     // ----- mirror_interior
     bc.def(
-        "mirror_interior", [](ImageParam im) -> Func {
+        "mirror_interior", [](const ImageParam &im) -> Func {
             return mirror_interior(im);
         },
         py::arg("f"));
     bc.def(
-        "mirror_interior", [](Buffer<> b) -> Func {
+        "mirror_interior", [](const Buffer<> &b) -> Func {
             return mirror_interior(b);
         },
         py::arg("f"));
     bc.def(
-        "mirror_interior", [](py::object target, Region bounds) -> Func {
+        "mirror_interior", [](const py::object &target, const Region &bounds) -> Func {
             try {
                 return mirror_interior(target.cast<Func>(), bounds);
             } catch (...) {

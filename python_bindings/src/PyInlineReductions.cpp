@@ -27,23 +27,23 @@ void define_inline_reductions(py::module &m) {
           py::arg("rdom"), py::arg("expr"), py::arg("name") = "minimum");
 
     m.def(
-        "argmax", [](Expr e, const std::string &s) -> py::tuple {
+        "argmax", [](const Expr &e, const std::string &s) -> py::tuple {
             return to_python_tuple(argmax(e, s));
         },
         py::arg("expr"), py::arg("name") = "argmax");
     m.def(
-        "argmax", [](const RDom &r, Expr e, const std::string &s) -> py::tuple {
+        "argmax", [](const RDom &r, const Expr &e, const std::string &s) -> py::tuple {
             return to_python_tuple(argmax(r, e, s));
         },
         py::arg("rdom"), py::arg("expr"), py::arg("name") = "argmax");
 
     m.def(
-        "argmin", [](Expr e, const std::string &s) -> py::tuple {
+        "argmin", [](const Expr &e, const std::string &s) -> py::tuple {
             return to_python_tuple(argmin(e, s));
         },
         py::arg("expr"), py::arg("name") = "argmin");
     m.def(
-        "argmin", [](const RDom &r, Expr e, const std::string &s) -> py::tuple {
+        "argmin", [](const RDom &r, const Expr &e, const std::string &s) -> py::tuple {
             return to_python_tuple(argmin(r, e, s));
         },
         py::arg("rdom"), py::arg("expr"), py::arg("name") = "argmin");
