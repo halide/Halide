@@ -1674,7 +1674,7 @@ IntrusivePtr<State> optimal_mcts_schedule(
     int mcts_depth = 2 * (int)dags[0]->nodes.size();
 
 
-    bool done[mcts_depth] = { false };
+    bool done[num_passes] = { false };
 
     for (int j = 0; j < mcts_depth-1; j++) {
         
@@ -1703,7 +1703,12 @@ IntrusivePtr<State> optimal_mcts_schedule(
                 done[i] = true;
             }
         }
-        if (done[0]) break;
+        if (done[0]) {
+            for(int i = 0; i<num_passes; i++){
+                if(!done[i])  assert(0 && "Error2: WTF HOW DID WE GET HERE, all should be done");
+            }
+            break;
+        }
         // get the best action from all
         int idx = 0;
         double best_value = actions[0].value;
