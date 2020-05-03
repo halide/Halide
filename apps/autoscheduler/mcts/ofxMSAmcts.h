@@ -138,12 +138,14 @@ namespace msa {
                         double bestReward = 0;
 
                         // 3. SIMULATE
+                        std::vector<Action> backup_actions; 
+                        backup_actions.clear(); 
                         while(true) {
-                            bool finished = state.apply_best_action(bestReward);
+                            bool finished = state.apply_best_action(bestReward,backup_actions);
   //                          depth++;
                             if (finished) break;
                         }
-
+                        state.apply_best_greedily(bestReward,backup_actions);
                         // add to history
                         if(explored_states) explored_states->push_back(state);
 

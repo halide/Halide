@@ -812,7 +812,7 @@ struct State {
             inner->generate_actions(dag, params, cost_model,vactions);
     }
     // find best action to apply next, used during simulation to improve the estimate over random
-    bool apply_best_action(double& bestReward) {
+    bool apply_best_action(double& bestReward, std::vector<Action>& backup_actions) {
         std::vector<Action> actions;
         get_actions(actions);
         //std::cout << "action size: " <<actions.size() << std::endl;
@@ -836,15 +836,63 @@ struct State {
             }
         }
         */
+        // AHA: an optimization to keep last actions when node had more than 1 child to pick best later
         Action & random_action = actions[rand() % actions.size()];
         internal_assert(inner->num_decisions_made+1 == random_action.state->num_decisions_made);
         inner = std::move(random_action.state);
+        if(random_action.ae == ActionEnum::Inline ||
+            random_action.ae == ActionEnum::Retile|| 
+            random_action.ae == ActionEnum::Option) 
+           backup_actions = actions;
         //inner->calculate_cost(dag, params, cost_model, false, true);
         //cost_model->evaluate_costs();    
         //bestReward = inner->cost;
         //random_action.print();
         //std::cout << "reward "<< bestReward << std::endl;
         return false;
+    }
+    //AHA: it is ok to do this if the next states are all of size 1
+    void apply_best_greedily(double & bestReward, std::vector<Action>& actions){
+        //std::cout << "greedily action size: " <<actions.size() << std::endl;
+        
+        internal_assert(cost_model && "bug, cost model not defined");
+        for(auto& act : actions) {
+            act.state->calculate_cost(dag, params, cost_model, false, true);
+        }
+        cost_model->evaluate_costs();
+
+        unsigned best = 0;
+        for(unsigned i=1; i<actions.size(); i++) {
+            if (actions[i].state->cost < actions[best].state->cost) {
+                best = i;
+            }
+        }
+        //actions[best].print();
+        inner = std::move(actions[best].state);
+        std::vector<Action> new_actions;
+        while(true){
+            new_actions.clear();
+            get_actions(new_actions);        
+            //std::cout << "backup action size: " <<new_actions.size() << std::endl;
+            internal_assert(new_actions.size() <= 1 && "bug, should have a single output here");
+            if (new_actions.size()==0) break;
+            /*
+            best = 0;
+            for(unsigned i=1; i<new_actions.size(); i++) {
+                if (new_actions[i].state->cost < new_actions[best].state->cost) {
+                    best = i;
+                }
+            }
+            inner = std::move(actions[best].state);
+            */
+            internal_assert(inner->num_decisions_made+1 == new_actions[0].state->num_decisions_made);
+            inner = new_actions[0].state;
+        }  
+ 
+        inner->calculate_cost(dag, params, cost_model, false, true);
+        cost_model->evaluate_costs();    
+        bestReward = inner->cost;
+        
     }
 
     // evaluate this state and return a vector of rewards (for each agent)
@@ -869,9 +917,9 @@ struct State {
     };
 
     void generate_actions(const FunctionDAG &dag,
-                           const MachineParams &params,
-                           CostModel *cost_model,
-                           std::vector<Action> &actions) const {
+                          const MachineParams &params,
+                          CostModel *cost_model,
+                          std::vector<Action> &actions) const {
         internal_assert(root.defined() && root->is_root());
         if (num_decisions_made == 2*(int)dag.nodes.size()) {
             return;
