@@ -1,4 +1,9 @@
 autoscheduler="$1"
+if [ "$#" -lt 2 ] || [ "$2" != "--improved" ]; then
+    improved=0
+else
+    improved=1
+fi
 
 HALIDE=$(dirname $0)/../../..
 echo "Using Halide in " $HALIDE
@@ -12,7 +17,11 @@ export CXX="c++ -fopenmp"
 
 export HL_PERMIT_FAILED_UNROLL=1
 # export HL_WEIGHTS_DIR=${HALIDE}/apps/autoscheduler/weights
-export HL_WEIGHTS_DIR=$PWD/../baseline.weights
+if [ "$improved" -ne 1 ]; then
+    export HL_WEIGHTS_DIR="$PWD/../baseline.weights"
+else
+    export HL_WEIGHTS_DIR="$PWD/../improved.weights"
+fi
 export HL_TARGET="host" # x86-64-avx2
 
 # no random dropout

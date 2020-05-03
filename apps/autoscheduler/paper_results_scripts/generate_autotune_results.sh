@@ -1,4 +1,9 @@
 autoscheduler="$1"
+if [ "$#" -lt 2 ] || [ "$2" != "--improved" ]; then
+    improved=0
+else
+    improved=1
+fi
 
 HALIDE=$(dirname $0)/../../..
 
@@ -9,7 +14,12 @@ export CXX="c++"
 
 export HL_MACHINE_PARAMS=32,24000000,160
 export HL_PERMIT_FAILED_UNROLL=1
-export HL_WEIGHTS_DIR=$PWD/../baseline.weights
+if [ "$improved" -ne 1 ]; then
+    export HL_WEIGHTS_DIR="$PWD/../baseline.weights"
+else
+    echo Using improved weights
+    export HL_WEIGHTS_DIR="$PWD/../improved.weights"
+fi
 # export HL_TARGET=x86-64-avx2
 export HL_TARGET="host"
 
@@ -81,7 +91,9 @@ fi
 
 # APPS="resnet_50_blockwise bgu bilateral_grid local_laplacian nl_means lens_blur camera_pipe stencil_chain harris hist max_filter unsharp interpolate_generator conv_layer mat_mul_generator iir_blur_generator"
 
-APPS="bilateral_grid local_laplacian nl_means lens_blur camera_pipe stencil_chain harris hist max_filter unsharp interpolate conv_layer iir_blur bgu" # Missing mat_mul_generator and resnet_50_blockwise
+# APPS="bilateral_grid local_laplacian nl_means lens_blur camera_pipe stencil_chain harris hist max_filter unsharp interpolate conv_layer iir_blur bgu" # Missing mat_mul_generator and resnet_50_blockwise
+
+APPS="harris" # Missing mat_mul_generator and resnet_50_blockwise
 
 for app in $APPS; do
     echo "$app ($autoscheduler) (retrain=$RETRAIN)" >> autoprogress
@@ -120,10 +132,13 @@ for app in $APPS; do
     while [[ SECONDS -lt $MAX_SECONDS ]]; do
         # Use the correct weights
         if [ "$first_autotune" == "true" ] || [ "$RETRAIN" == "false" ]; then
-            export HL_WEIGHTS_DIR="$PWD/../baseline.weights"
+            if [ "$improved" -ne 1 ]; then
+                export HL_WEIGHTS_DIR="$PWD/../baseline.weights"
+            else
+                export HL_WEIGHTS_DIR="$PWD/../improved.weights"
+            fi
             first_autotune="false"
         else
-            # TODO I don't think the actual scripts are doing this, so I've commented it out for now...
             export HL_WEIGHTS_DIR="$PWD/../../${app}/samples/updated.weights"
         fi
 

@@ -9,7 +9,7 @@ export CXX="c++"
 
 export HL_MACHINE_PARAMS=32,24000000,160
 export HL_PERMIT_FAILED_UNROLL=1
-export HL_WEIGHTS_DIR=$PWD/../baseline.weights
+export HL_WEIGHTS_DIR="$PWD/../baseline.weights"
 # export HL_TARGET=x86-64-avx2
 export HL_TARGET="host"
 

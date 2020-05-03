@@ -367,6 +367,8 @@ int main(int argc, char **argv) {
 
     auto samples = load_samples(flags);
 
+    std::cout << "HASAN: size of samples = " << samples.size() << std::endl;
+
     // Iterate through the pipelines
     vector<std::unique_ptr<DefaultCostModel>> tpp;
     for (int i = 0; i < kModels; i++) {
@@ -401,10 +403,12 @@ int main(int argc, char **argv) {
         }
     }
 
+    std::cout << "HASAN: size of validation set = " << validation_set.size() << std::endl;
+
     std::cout << "Number of unique schedules: " << unique_schedules << "\n";
 
     for (float learning_rate : flags.rates) {
-        float loss_sum[kModels] = {0}, loss_sum_counter[kModels] = {0};
+        float loss_sum[kModels] = {0}, loss_sum_counter[kModels] = {0}, loss_sum_total_schedules[kModels] = {0};
         float correct_ordering_rate_sum[kModels] = {0};
         float correct_ordering_rate_count[kModels] = {0};
         float v_correct_ordering_rate_sum[kModels] = {0};
@@ -433,6 +437,11 @@ int main(int argc, char **argv) {
                     auto &tp = tpp[model];
 
                     for (auto &p : train ? samples : validation_set) {
+                        std::cout << "HASAN: train = " << train << std::endl;
+                        std::cout << "HASAN: p.pipeline_id = " << p.second.pipeline_id << std::endl;
+                        std::cout << "HASAN: p.num_stages = " << p.second.num_stages << std::endl;
+                        std::cout << "HASAN: p.schedules.size() = " << p.second.schedules.size() << std::endl;
+
                         if (kModels > 1 && rng() & 1) continue;  // If we are training multiple kModels, allow them to diverge.
                         if (p.second.schedules.size() < 8) {
                             continue;
@@ -470,6 +479,7 @@ int main(int argc, char **argv) {
                             assert(!std::isnan(loss));
                             loss_sum[model] += loss;
                             loss_sum_counter[model]++;
+                            loss_sum_total_schedules[model] += p.second.schedules.size();
 
                             auto it = p.second.schedules.begin();
                             std::advance(it, first);
@@ -535,6 +545,15 @@ int main(int argc, char **argv) {
                 loss_sum[model] *= 0.9f;
                 loss_sum_counter[model] *= 0.9f;
             }
+            std::cout << "\n";
+
+            std::cout << "HASAN Hoss: ";
+            for (int model = 0; model < kModels; model++) {
+                std::cout << loss_sum[model] / loss_sum_total_schedules[model] << " ";
+                loss_sum[model] *= 0.9f;
+                loss_sum_total_schedules[model] *= 0.9f;
+            }
+
             if (kModels > 1) std::cout << "\n";
             std::cout << " Rate: ";
             int best_model = 0;
