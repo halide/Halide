@@ -57,10 +57,12 @@ namespace msa {
 
 
             //--------------------------------------------------------------
-            void update(const double reward) {
+            void update(const double reward, const State& best_state) {
+        
                 if (value < reward || !initialized){
                     value = reward;
                     initialized = true;
+                    action.best_state=best_state.inner;
                 }
                 //value += reward
                 num_visits++;

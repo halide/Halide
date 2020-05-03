@@ -721,12 +721,13 @@ struct State {
         unsigned option_var;
         double value = -111111111111;
         IntrusivePtr<State> state;
+        IntrusivePtr<State> best_state;
         //AHA: If this constructor is called then there is a bug in the MCTS
         Action() { assert(0 && "illegal construction"); }
         Action(std::nullptr_t) : ae(ActionEnum::Inline), index(0), option_var(0) {
             //assert(0 && "illegal construction");
         }
-        Action(const Action& a):ae(a.ae), index(a.index), option_var(a.option_var),value(a.value),state(a.state) {}
+        Action(const Action& a):ae(a.ae), index(a.index), option_var(a.option_var),value(a.value),state(a.state),best_state(a.best_state) {}
         Action(ActionEnum ae_, unsigned index_,IntrusivePtr<State> state) : ae(ae_), index(index_), option_var(0),state(state) {}
         Action(ActionEnum ae_, unsigned index_, unsigned option_var_, IntrusivePtr<State> state) : ae(ae_), index(index_), option_var(option_var_),state(state) {}
         bool operator==(const Action& a) const {
@@ -816,11 +817,11 @@ struct State {
         get_actions(actions);
         //std::cout << "action size: " <<actions.size() << std::endl;
         if (actions.size() == 0){// return true;
-        inner->calculate_cost(dag, params, cost_model, false, true);
-        cost_model->evaluate_costs();    
-        bestReward = inner->cost;
+            inner->calculate_cost(dag, params, cost_model, false, true);
+            cost_model->evaluate_costs();    
+            bestReward = inner->cost;
         //std::cout << "reward "<< bestReward << std::endl;
-        return true;
+            return true;
         }
         /*internal_assert(cost_model && "bug, cost model not defined");
         for(auto& act : actions) {
@@ -1661,6 +1662,9 @@ IntrusivePtr<State> optimal_mcts_schedule(
     msa::mcts::UCT<State::WrapperState, State::Action> ucts[num_passes]; // Templated class. Builds a partial decision tree and searches it with UCT MCTS
     std::vector<State::WrapperState> states;
     std::vector<State::Action> actions;
+    IntrusivePtr<State> global_best_state = nullptr;
+    int global_dag_best_idx = 0;
+    double global_best_value = 0;
     for(int i=0; i<num_passes; i++) {
         dags[i] = new FunctionDAG(outputs, params, target);
         cost_models[i] = make_default_cost_model(weights_in_path, weights_out_path, randomize_weights);
@@ -1703,13 +1707,14 @@ IntrusivePtr<State> optimal_mcts_schedule(
                 done[i] = true;
             }
         }
+        // break if done
         if (done[0]) {
             for(int i = 0; i<num_passes; i++){
                 if(!done[i])  assert(0 && "Error2: WTF HOW DID WE GET HERE, all should be done");
             }
             break;
         }
-        // get the best action from all
+        // get the best action from all runs
         int idx = 0;
         double best_value = actions[0].value;
         std::cout << "Pass " << 0 << " of " << num_passes << ", value: " << actions[0].value << std::endl;
@@ -1722,7 +1727,14 @@ IntrusivePtr<State> optimal_mcts_schedule(
         }
             // real best action
             actions[idx].print();
-            std::cout << "best value " << best_value << std::endl; 
+            std::cout << "best value " << best_value << std::endl;
+    
+        //updating the global best
+        if(global_best_value < best_value || j == 0) {
+            global_best_value = best_value;
+            global_dag_best_idx = idx;
+            global_best_state = actions[idx].best_state;
+        }
         // get the index of the best acton from the original vector of possible actions.
         int best_action_idx = actions[idx].index;
         // apply this action globally
@@ -1739,14 +1751,20 @@ IntrusivePtr<State> optimal_mcts_schedule(
     best = states[0].inner;
     
     aslog(0) << "Best cost: " << best->cost << "\n";
+    best = global_best_state;
     
-    best->apply_schedule(*dags[0], params);
+    aslog(0) << "global best: " << global_best_value << "\n";
+    aslog(0) << "** global schedule " << global_best_state.get() << ":\n";
+    
+    best->apply_schedule(*dags[global_dag_best_idx], params);
+    //best->apply_schedule(*dags[0], params);
     aslog(0) << "** applied schedule:\n";
 
 
     //delete dags[0];
     //for(auto z : dags) delete z;
-    outdag = dags[0];
+    //outdag = dags[0];
+    outdag = dags[global_dag_best_idx];
 
     return best;
 }

@@ -149,7 +149,7 @@ namespace msa {
 
                         // 4. BACK PROPAGATION
                         while(node) {
-                            node->update(-1.0 * bestReward);
+                            node->update(-1.0 * bestReward,state);
                             node = node->get_parent();
                         }
 
@@ -161,11 +161,10 @@ namespace msa {
                     }
 
                     // return best node's action
-                    if(best_node) {
-                    
-                    Action  best_action =  best_node->get_action();
-                    best_action.value = best_node->get_value(); 
-                    return best_action;
+                    if(best_node) {        
+                        Action  best_action =  best_node->get_action();
+                        best_action.value = best_node->get_value(); 
+                        return best_action;
                     }
 
                     else return NULL;
