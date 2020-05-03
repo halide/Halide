@@ -739,7 +739,7 @@ struct State {
         }
         void print() {
             if (ae == State::ActionEnum::Inline)
-            std::cout << "applying inline, index "<< index  << std::endl;
+            std::cout << "applying Inline, index "<< index  << std::endl;
             if (ae == State::ActionEnum::Retile)
             std::cout << "applying Retile, Index " <<index << std::endl;
             if (ae == State::ActionEnum::Option)
@@ -1696,16 +1696,17 @@ IntrusivePtr<State> optimal_mcts_schedule(
                 std::cout << "due to NULL action breaking at " << j << std::endl;
 //                assert(0 && "Error444: NULL ACTION!");
                 done[i] = true;
-                
+                continue;
             }
             // evaluate the best actions 
             //states[i].evaluate(actions[i].state);
-            actions[i].print();
             if (states[i].inner->num_decisions_made == 2 * (int)dags[i]->nodes.size()) {
 //                assert(0 && "Error: WTF HOW DID WE GET HERE");
                 std::cout << "breaking.. with num decisions made " <<states[i].inner->num_decisions_made << std::endl;
                 done[i] = true;
+                continue;
             }
+            actions[i].print();
         }
         // break if done
         if (done[0]) {
