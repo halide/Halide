@@ -113,7 +113,7 @@ namespace msa {
                         (max_iterations == 0 || iterations < max_iterations) &&
                         (max_millis == 0 || timer.check_duration(max_millis))
                                                ; iterations++) {
-
+                        //int depth = 0;
                         // indicate start of loop
                         timer.loop_start();
                         //int current_depth = 0;
@@ -124,6 +124,7 @@ namespace msa {
                             //int num_childrens = node->get_num_children();
                             //std::cout << "num_childres:  " << num_childrens <<std::endl;
                             node = get_best_uct_child(node, uct_k);
+//                            depth++;
                             //std::cout<<node->get_state().inner.get() << std::endl;
                             //current_depth++;
     //						assert(node);	// sanity check
@@ -137,17 +138,20 @@ namespace msa {
                         double bestReward = 0;
 
                         // 3. SIMULATE
+                        std::vector<Action> backup_actions; 
+                        backup_actions.clear(); 
                         while(true) {
-                            bool finished = state.apply_best_action(bestReward);
+                            bool finished = state.apply_best_action(bestReward,backup_actions);
+  //                          depth++;
                             if (finished) break;
                         }
-
+                        state.apply_best_greedily(bestReward,backup_actions);
                         // add to history
                         if(explored_states) explored_states->push_back(state);
 
                         // 4. BACK PROPAGATION
                         while(node) {
-                            node->update(-1.0 * bestReward);
+                            node->update(-1.0 * bestReward,state);
                             node = node->get_parent();
                         }
 
@@ -159,7 +163,12 @@ namespace msa {
                     }
 
                     // return best node's action
-                    if(best_node) return best_node->get_action();
+                    if(best_node) {        
+                        Action  best_action =  best_node->get_action();
+                        best_action.value = best_node->get_value(); 
+                        return best_action;
+                    }
+
                     else return NULL;
 
                     // we shouldn't be here

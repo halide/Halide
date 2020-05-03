@@ -1377,6 +1377,7 @@ vector<IntrusivePtr<const LoopNest>> LoopNest::compute_in_tiles(const FunctionDA
             r->tileable = false;
         }
         result.emplace_back(r.release());
+        //if(result.size()>50) return result;
     }
 
     if (f->is_output) {
@@ -1390,7 +1391,6 @@ vector<IntrusivePtr<const LoopNest>> LoopNest::compute_in_tiles(const FunctionDA
 
         // Generate a list of tile sizes to try
         auto tilings = generate_tilings(size, (int)(size.size() - 1), 2, !in_realization);
-
         if (tilings.size() > 10000) {
             aslog(0) << "Warning: lots of tilings: " << tilings.size() << "\n";
         }
@@ -1487,6 +1487,7 @@ vector<IntrusivePtr<const LoopNest>> LoopNest::compute_in_tiles(const FunctionDA
                     store_at_outer_compute_further_in->children.pop_back();
                     store_at_outer_compute_further_in->children.emplace_back(std::move(n));
                     result.emplace_back(store_at_outer_compute_further_in);
+                    //if(result.size()>50) return result;
                 }
             }
 
@@ -1494,6 +1495,7 @@ vector<IntrusivePtr<const LoopNest>> LoopNest::compute_in_tiles(const FunctionDA
             outer->compute_here(f, true, v);
             outer->tileable &= !in_realization;
             result.emplace_back(outer);
+            //if(result.size()>50) return result;
         }
     }
 
@@ -1546,6 +1548,7 @@ vector<IntrusivePtr<const LoopNest>> LoopNest::compute_in_tiles(const FunctionDA
                 }
                 r->children[child] = n;
                 result.emplace_back(r);
+                //if(result.size()>50) return result;
             }
         }
     }
