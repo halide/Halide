@@ -515,11 +515,21 @@ void check_rule(Rule &r) {
 
 int main(int argc, char **argv) {
     if (argc < 2) {
-        std::cout << "Usage: ./filter_rewrite_rules rewrite_rules.txt\n";
+        std::cout << "Usage: ./filter_rewrite_rules rewrite_rules.txt [output_dir]\n";
         return 0;
     }
 
-    vector<Expr> exprs_vec = parse_halide_exprs_from_file(argv[1]);
+    const string rewrite_rules_path = argv[1];
+    string output_dir_path = argc >= 3 ? argv[2] : "";
+    if (output_dir_path.empty()) {
+        output_dir_path = ".";
+    }
+    if (output_dir_path[output_dir_path.size() - 1] != '/') {
+        output_dir_path += "/";
+    }
+    debug(0) << "output path is " << output_dir_path << "\n";
+
+    vector<Expr> exprs_vec = parse_halide_exprs_from_file(rewrite_rules_path);
 
     // De-dup
     std::set<Expr, IRDeepCompare> exprs;
@@ -908,9 +918,13 @@ int main(int argc, char **argv) {
         std::cout << os.str();
 
         std::ostringstream filename;
-        filename << "Simplify_" << it.first << ".inc";
+        filename << output_dir_path << "Simplify_" << it.first << ".inc";
         std::ofstream of;
-        of.open(filename.str().c_str());
+        of.open(filename.str());
+        if (of.fail()) {
+            debug(0) << "Unable to open " << filename.str();
+            assert(false);
+        }
 
         // Clean up bool terms that aren't valid C++ in the simplifier
         string s = os.str();
@@ -940,9 +954,13 @@ int main(int argc, char **argv) {
              IRNodeType::Sub}) {
         if (good_ones.count(t) == 0) {
             std::ostringstream filename;
-            filename << "Simplify_" << t << ".inc";
+            filename << output_dir_path << "Simplify_" << t << ".inc";
             std::ofstream of;
-            of.open(filename.str().c_str());
+            of.open(filename.str());
+            if (of.fail()) {
+                debug(0) << "Unable to open " << filename.str();
+                assert(false);
+            }
             of << "false";
             of.close();
         }
