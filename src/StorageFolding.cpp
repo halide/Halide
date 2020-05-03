@@ -423,6 +423,65 @@ public:
     bool result = false;
 };
 
+class VectorAccessOfFoldedDim : public IRVisitor {
+    using IRVisitor::visit;
+
+    void visit(const Provide *op) override {
+        if (op->name == func) {
+            internal_assert(dim < (int)op->args.size());
+            if (expr_uses_vars(op->args[dim], vector_vars)) {
+                result = true;
+            }
+        } else {
+            IRVisitor::visit(op);
+        }
+    }
+
+    void visit(const Call *op) override {
+        if (op->name == func &&
+            op->call_type == Call::Halide) {
+            internal_assert(dim < (int)op->args.size());
+            if (expr_uses_vars(op->args[dim], vector_vars)) {
+                result = true;
+            }
+        } else {
+            IRVisitor::visit(op);
+        }
+    }
+
+    template<typename LetOrLetStmt>
+    void visit_let(const LetOrLetStmt *op) {
+        op->value.accept(this);
+        bool is_vec = expr_uses_vars(op->value, vector_vars);
+        ScopedBinding<> bind(is_vec, vector_vars, op->name);
+        op->body.accept(this);
+    }
+
+    void visit(const Let *op) override {
+        visit_let(op);
+    }
+
+    void visit(const LetStmt *op) override {
+        visit_let(op);
+    }
+
+    void visit(const For *op) override {
+        ScopedBinding<> bind(op->for_type == ForType::Vectorized,
+                             vector_vars, op->name);
+        IRVisitor::visit(op);
+    }
+
+    Scope<> vector_vars;
+    const string &func;
+    int dim;
+
+public:
+    bool result = false;
+    VectorAccessOfFoldedDim(const string &func, int dim)
+        : func(func), dim(dim) {
+    }
+};
+
 // Attempt to fold the storage of a particular function in a statement
 class AttemptStorageFoldingOfFunction : public IRMutator {
     Function func;
@@ -670,6 +729,23 @@ class AttemptStorageFoldingOfFunction : public IRMutator {
             }
 
             internal_assert(factor.defined());
+
+            if (!explicit_factor.defined()) {
+                VectorAccessOfFoldedDim vector_access_of_folded_dim{func.name(), dim};
+                body.accept(&vector_access_of_folded_dim);
+                if (vector_access_of_folded_dim.result) {
+                    user_warning
+                        << "Not folding Func " << func.name() << " along dimension " << func.args()[dim]
+                        << " because there is vectorized access to that Func in that dimension and "
+                        << "storage folding was not explicitly requested in the schedule. In previous "
+                        << "versions of Halide this would have folded with factor " << factor
+                        << ". To restore the old behavior add " << func.name()
+                        << ".fold_storage(" << func.args()[dim] << ", " << factor
+                        << ") to your schedule.\n";
+                    // Try the next dimension
+                    continue;
+                }
+            }
 
             debug(3) << "Proceeding with factor " << factor << "\n";
 
