@@ -6,7 +6,9 @@
 // Wrapper to use Z3 to do satisfiability queries on Halide Exprs
 
 enum class Z3Result {
-    Sat, Unsat, Unknown
+    Sat,
+    Unsat,
+    Unknown
 };
 
 inline std::ostream &operator<<(std::ostream &s, Z3Result r) {
@@ -23,7 +25,7 @@ inline std::ostream &operator<<(std::ostream &s, Z3Result r) {
     return s;
 }
 
-Z3Result satisfy(Halide::Expr constraint, std::map<std::string, Halide::Expr> *result, const std::string &comment = "");
+Z3Result satisfy(Halide::Expr constraint, std::map<std::string, Halide::Expr> *result, const std::string &comment = "", int timeout = 6);
 
 Halide::Expr z3_simplify(const Halide::Expr &may_assume, const Halide::Expr &e);
 
