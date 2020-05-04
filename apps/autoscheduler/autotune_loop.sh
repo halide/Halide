@@ -173,12 +173,21 @@ make_featurization() {
 # Benchmark one of the random samples
 benchmark_sample() {
     sleep 1 # Give CPU clocks a chance to spin back up if we're thermally throttling
+
+    if [ "$PIPELINE" == "harris" ]; then
+        output_extents="--output_extents=[1530,2556]"
+    else
+        # Fall back on the default of letting RunGen choose
+        output_extents=""
+    fi
+
     D=${1}
     HL_NUM_THREADS=32 \
         ${TIMEOUT_CMD} -k ${BENCHMARKING_TIMEOUT} ${BENCHMARKING_TIMEOUT} \
         ${D}/bench \
         --estimate_all \
         --benchmarks=all \
+        $output_extents \
             | tee ${D}/bench.txt || echo "Benchmarking failed or timed out for ${D}"
 
     # Add the runtime, pipeline id, and schedule id to the feature file
