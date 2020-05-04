@@ -4,7 +4,7 @@ OBJECTS = $(BIN)/parser.o $(BIN)/z3.o $(BIN)/expr_util.o $(BIN)/reduction_order.
 
 all: $(BIN)/find_rules $(BIN)/synthesize_predicates $(BIN)/filter_rewrite_rules $(BIN)/super_simplify 
 
-CXXFLAGS += -g
+CXXFLAGS += -O3 -g
 
 LDFLAGS += -L ../../distrib/bin -L ../../distrib/lib -Wl,-rpath ../../distrib/bin 
 
