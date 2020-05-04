@@ -1,7 +1,9 @@
 #!/bin/bash
 
+APPS="harris local_laplacian unsharp bilateral_grid camera_pipe nl_means stencil_chain iir_blur interpolate max_filter lens_blur resnet_50"
+
 # Assumes that run_all_experiments.sh has run
-for app in harris local_laplacian unsharp bilateral_grid camera_pipe nl_means stencil_chain iir_blur interpolate max_filter lens_blur resnet_50 resize; do
+for app in $APPS; do
     echo $app ...
     echo "ours,baseline,ratio" > ${app}_runtime.csv
     echo "ours,baseline,ratio" > ${app}_peak_memory.csv
@@ -58,13 +60,21 @@ for app in harris local_laplacian unsharp bilateral_grid camera_pipe nl_means st
     echo
 done
 
-echo harris,,,local_laplacian,,,unsharp,,,bilateral_grid,,,camera_pipe,,,nl_means,,,stencil_chain,,,iir_blur,,,interpolate,,,max_filter,,,lens_blur,,,resnet_50,,,resize,, > header.csv
+echo $APPS | sed 's/ /,,,/g' > header.csv
 
 cp header.csv results.csv
 
-for sheet in runtime peak_memory halide_compile_time llvm_optimization_time llvm_backend_time proof_failures non_monotonic code_size; do
+STATS="runtime peak_memory halide_compile_time llvm_optimization_time llvm_backend_time proof_failures non_monotonic code_size"
+
+for sheet in $STATS; do
     echo ${sheet} > results_${sheet}.csv
     cat header.csv >> results_${sheet}.csv
-    paste -d, harris_${sheet}.csv local_laplacian_${sheet}.csv unsharp_${sheet}.csv bilateral_grid_${sheet}.csv camera_pipe_${sheet}.csv nl_means_${sheet}.csv stencil_chain_${sheet}.csv iir_blur_${sheet}.csv interpolate_${sheet}.csv max_filter_${sheet}.csv lens_blur_${sheet}.csv resnet_50_${sheet}.csv resize_${sheet}.csv >> results_${sheet}.csv
+    ARGS=$(for app in $APPS; do echo ${app}_${sheet}.csv; done)
+    paste -d, $ARGS >> results_${sheet}.csv
+
+    # Get the ratios alone in a standalone sheet
+    for app in $APPS; do cut -d, -f3 ${app}_${sheet}.csv | grep -v ratio; done > ratios_${sheet}.csv
 done
 
+echo $STATS | sed 's/ /,/g' > ratios.csv
+paste -d, $(for sheet in $STATS; do echo ratios_${sheet}.csv; done) >> ratios.csv
