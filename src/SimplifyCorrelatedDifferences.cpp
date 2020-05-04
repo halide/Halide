@@ -218,10 +218,10 @@ class SimplifyCorrelatedDifferences : public IRMutator {
             e = PartiallyCancelDifferences().mutate(e);
             e = simplify(e);
 
-            if ((debug::debug_level() > 0) &&
+            if (/*(debug::debug_level() > 0) &&*/
                 is_monotonic(e, loop_var) == Monotonic::Unknown) {
                 // Might be a missed simplification opportunity. Log to help improve the simplifier.
-                debug(1) << "Warning: expression is non-monotonic in loop variable "
+                std::cerr << "Warning: expression is non-monotonic in loop variable "
                          << loop_var << ": " << e << "\n";
             }
         }

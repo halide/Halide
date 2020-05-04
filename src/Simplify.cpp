@@ -407,7 +407,7 @@ bool can_prove(Expr e, const Scope<Interval> &bounds) {
 
     // Take a closer look at all failed proof attempts to hunt for
     // simplifier weaknesses
-    if (debug::debug_level() > 0 && !is_const(e)) {
+    if (/*debug::debug_level() > 0 &&*/ !is_const(e)) {
         struct RenameVariables : public IRMutator {
             using IRMutator::visit;
 
@@ -470,7 +470,7 @@ bool can_prove(Expr e, const Scope<Interval> &bounds) {
                 return false;
             }
         }
-        debug(0) << "Failed to prove, but could not find a counter-example:\n "
+        std::cerr << "Failed to prove, but could not find a counter-example:\n "
                  << e << "\n"
                  << "Original expression:\n"
                  << orig << "\n";
