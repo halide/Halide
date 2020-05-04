@@ -11,6 +11,7 @@
 #include "Substitute.h"
 
 #include <iterator>
+#include <utility>
 
 namespace Halide {
 namespace Internal {
@@ -86,7 +87,7 @@ private:
     }
 
     template<typename T>
-    void visit_let(const std::string &name, Expr value, T body) {
+    void visit_let(const std::string &name, const Expr &value, T body) {
         bool old_varies = varies;
         varies = false;
         value.accept(this);
@@ -147,7 +148,7 @@ private:
         }
     }
 
-    Expr make_select(Expr a, Expr b, Expr c) {
+    Expr make_select(const Expr &a, Expr b, Expr c) {
         if (is_one(a)) {
             return b;
         } else if (is_zero(a)) {
@@ -165,7 +166,7 @@ private:
         }
     }
 
-    Expr make_not(Expr a) {
+    Expr make_not(const Expr &a) {
         if (is_one(a)) {
             return make_zero(a.type());
         } else if (is_zero(a)) {
@@ -176,7 +177,7 @@ private:
     }
 
     template<typename T>
-    void visit_conditional(Expr condition, T true_case, T false_case) {
+    void visit_conditional(const Expr &condition, T true_case, T false_case) {
         Expr old_predicate = predicate;
 
         predicate = const_false();
@@ -251,7 +252,7 @@ private:
 class ProductionGuarder : public IRMutator {
 public:
     ProductionGuarder(const string &b, Expr compute_p, Expr alloc_p)
-        : buffer(b), compute_predicate(compute_p), alloc_predicate(alloc_p) {
+        : buffer(b), compute_predicate(std::move(compute_p)), alloc_predicate(std::move(alloc_p)) {
     }
 
 private:

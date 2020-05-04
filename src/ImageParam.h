@@ -6,6 +6,8 @@
  * Classes for declaring image parameters to halide pipelines
  */
 
+#include <utility>
+
 #include "Func.h"
 #include "OutputImageParam.h"
 #include "Var.h"
@@ -24,7 +26,7 @@ class ImageParam : public OutputImageParam {
 
     // Only for use of Generator
     ImageParam(const Internal::Parameter &p, Func f)
-        : OutputImageParam(p, Argument::InputBuffer, f) {
+        : OutputImageParam(p, Argument::InputBuffer, std::move(f)) {
     }
 
     /** Helper function to initialize the Func representation of this ImageParam. */
@@ -44,7 +46,7 @@ public:
 
     /** Bind an Image to this ImageParam. Only relevant for jitting */
     // @{
-    void set(Buffer<> im);
+    void set(const Buffer<> &im);
     // @}
 
     /** Get a reference to the Buffer bound to this ImageParam. Only relevant for jitting. */

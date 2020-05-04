@@ -5,11 +5,11 @@ all: $(BIN)/$(HL_TARGET)/AveragePool $(BIN)/$(HL_TARGET)/Convolution $(BIN)/$(HL
 
 $(GENERATOR_BIN)/AveragePool.generator: AveragePool_generator.cpp common.cpp $(GENERATOR_DEPS)
 	@mkdir -p $(@D)
-	$(CXX) $(CXXFLAGS) $(filter-out %.h,$^) -o $@ $(LDFLAGS) $(HALIDE_SYSTEM_LIBS)
+	$(CXX) $(CXXFLAGS) $(filter-out %.h,$^) -o $@ $(LIBHALIDE_LDFLAGS) $(HALIDE_SYSTEM_LIBS)
 
 $(BIN)/%/AveragePool.o: $(GENERATOR_BIN)/AveragePool.generator
 	@mkdir -p $(@D)
-	$^ -g AveragePool -o $(@D) -e object,c_header,-f AveragePool target=$*
+	$^ -g AveragePool -o $(@D) -e object,c_header -f AveragePool target=$*
 
 $(BIN)/%/AveragePool: AveragePool.cpp $(BIN)/%/AveragePool.o
 	@mkdir -p $(@D)
@@ -17,11 +17,11 @@ $(BIN)/%/AveragePool: AveragePool.cpp $(BIN)/%/AveragePool.o
 
 $(GENERATOR_BIN)/Convolution.generator: Convolution_generator.cpp common.cpp $(GENERATOR_DEPS)
 	@mkdir -p $(@D)
-	$(CXX) $(CXXFLAGS) $(filter-out %.h,$^) -o $@ $(LDFLAGS) $(HALIDE_SYSTEM_LIBS)
+	$(CXX) $(CXXFLAGS) $(filter-out %.h,$^) -o $@ $(LIBHALIDE_LDFLAGS) $(HALIDE_SYSTEM_LIBS)
 
 $(BIN)/%/Convolution.o: $(GENERATOR_BIN)/Convolution.generator
 	@mkdir -p $(@D)
-	$^ -g Convolution -o $(@D) -e object,c_header,-f Convolution target=$*
+	$^ -g Convolution -o $(@D) -e object,c_header -f Convolution target=$*
 
 $(BIN)/%/Convolution: Convolution.cpp common_reference.cpp $(BIN)/%/Convolution.o
 	@mkdir -p $(@D)
@@ -29,7 +29,7 @@ $(BIN)/%/Convolution: Convolution.cpp common_reference.cpp $(BIN)/%/Convolution.
 
 $(GENERATOR_BIN)/DepthwiseConvolution.generator: DepthwiseConvolution_generator.cpp common.cpp $(GENERATOR_DEPS)
 	@mkdir -p $(@D)
-	$(CXX) $(CXXFLAGS) $(filter-out %.h,$^) -o $@ $(LDFLAGS) $(HALIDE_SYSTEM_LIBS)
+	$(CXX) $(CXXFLAGS) $(filter-out %.h,$^) -o $@ $(LIBHALIDE_LDFLAGS) $(HALIDE_SYSTEM_LIBS)
 
 $(BIN)/%/runtime.a: $(GENERATOR_BIN)/DepthwiseConvolution.generator
 	@mkdir -p $(@D)
@@ -37,19 +37,19 @@ $(BIN)/%/runtime.a: $(GENERATOR_BIN)/DepthwiseConvolution.generator
 
 $(BIN)/%/DepthwiseConvolution_1.o: $(GENERATOR_BIN)/DepthwiseConvolution.generator
 	@mkdir -p $(@D)
-	$^ -g DepthwiseConvolution -o $(@D) -e object,c_header,-f DepthwiseConvolution_1 target=$*-no_runtime depth_multiplier=1
+	$^ -g DepthwiseConvolution -o $(@D) -e object,c_header -f DepthwiseConvolution_1 target=$*-no_runtime depth_multiplier=1
 
 $(BIN)/%/DepthwiseConvolution_2.o: $(GENERATOR_BIN)/DepthwiseConvolution.generator
 	@mkdir -p $(@D)
-	$^ -g DepthwiseConvolution -o $(@D) -e object,c_header,-f DepthwiseConvolution_2 target=$*-no_runtime depth_multiplier=2
+	$^ -g DepthwiseConvolution -o $(@D) -e object,c_header -f DepthwiseConvolution_2 target=$*-no_runtime depth_multiplier=2
 
 $(BIN)/%/DepthwiseConvolution_4.o: $(GENERATOR_BIN)/DepthwiseConvolution.generator
 	@mkdir -p $(@D)
-	$^ -g DepthwiseConvolution -o $(@D) -e object,c_header,-f DepthwiseConvolution_4 target=$*-no_runtime depth_multiplier=4
+	$^ -g DepthwiseConvolution -o $(@D) -e object,c_header -f DepthwiseConvolution_4 target=$*-no_runtime depth_multiplier=4
 
 $(BIN)/%/DepthwiseConvolution_8.o: $(GENERATOR_BIN)/DepthwiseConvolution.generator
 	@mkdir -p $(@D)
-	$^ -g DepthwiseConvolution -o $(@D) -e object,c_header,-f DepthwiseConvolution_8 target=$*-no_runtime depth_multiplier=8
+	$^ -g DepthwiseConvolution -o $(@D) -e object,c_header -f DepthwiseConvolution_8 target=$*-no_runtime depth_multiplier=8
 
 $(BIN)/%/DepthwiseConvolution: DepthwiseConvolution.cpp common_reference.cpp $(BIN)/%/DepthwiseConvolution_1.o $(BIN)/%/DepthwiseConvolution_2.o $(BIN)/%/DepthwiseConvolution_4.o $(BIN)/%/DepthwiseConvolution_8.o $(BIN)/%/runtime.a
 	@mkdir -p $(@D)
@@ -57,11 +57,11 @@ $(BIN)/%/DepthwiseConvolution: DepthwiseConvolution.cpp common_reference.cpp $(B
 
 $(GENERATOR_BIN)/Im2col.generator: Im2col_generator.cpp common.cpp $(GENERATOR_DEPS)
 	@mkdir -p $(@D)
-	$(CXX) $(CXXFLAGS) $(filter-out %.h,$^) -o $@ $(LDFLAGS) $(HALIDE_SYSTEM_LIBS)
+	$(CXX) $(CXXFLAGS) $(filter-out %.h,$^) -o $@ $(LIBHALIDE_LDFLAGS) $(HALIDE_SYSTEM_LIBS)
 
 $(BIN)/%/Im2col.o: $(GENERATOR_BIN)/Im2col.generator
 	@mkdir -p $(@D)
-	$^ -g Im2col -o $(@D) -e object,c_header,-f Im2col target=$*
+	$^ -g Im2col -o $(@D) -e object,c_header -f Im2col target=$*
 
 $(BIN)/%/Im2col: Im2col.cpp $(BIN)/%/Im2col.o
 	@mkdir -p $(@D)
@@ -69,11 +69,11 @@ $(BIN)/%/Im2col: Im2col.cpp $(BIN)/%/Im2col.o
 
 $(GENERATOR_BIN)/MatrixMultiply.generator: MatrixMultiply_generator.cpp common.cpp $(GENERATOR_DEPS)
 	@mkdir -p $(@D)
-	$(CXX) $(CXXFLAGS) $(filter-out %.h,$^) -o $@ $(LDFLAGS) $(HALIDE_SYSTEM_LIBS)
+	$(CXX) $(CXXFLAGS) $(filter-out %.h,$^) -o $@ $(LIBHALIDE_LDFLAGS) $(HALIDE_SYSTEM_LIBS)
 
 $(BIN)/%/MatrixMultiply.o: $(GENERATOR_BIN)/MatrixMultiply.generator
 	@mkdir -p $(@D)
-	$^ -g MatrixMultiply -o $(@D) -e object,c_header,-f MatrixMultiply target=$*
+	$^ -g MatrixMultiply -o $(@D) -e object,c_header -f MatrixMultiply target=$*
 
 $(BIN)/%/MatrixMultiply: MatrixMultiply.cpp common_reference.cpp $(BIN)/%/MatrixMultiply.o
 	@mkdir -p $(@D)
@@ -81,11 +81,11 @@ $(BIN)/%/MatrixMultiply: MatrixMultiply.cpp common_reference.cpp $(BIN)/%/Matrix
 
 $(GENERATOR_BIN)/MaxPool.generator: MaxPool_generator.cpp common.cpp $(GENERATOR_DEPS)
 	@mkdir -p $(@D)
-	$(CXX) $(CXXFLAGS) $(filter-out %.h,$^) -o $@ $(LDFLAGS) $(HALIDE_SYSTEM_LIBS)
+	$(CXX) $(CXXFLAGS) $(filter-out %.h,$^) -o $@ $(LIBHALIDE_LDFLAGS) $(HALIDE_SYSTEM_LIBS)
 
 $(BIN)/%/MaxPool.o: $(GENERATOR_BIN)/MaxPool.generator
 	@mkdir -p $(@D)
-	$^ -g MaxPool -o $(@D) -e object,c_header,-f MaxPool target=$*
+	$^ -g MaxPool -o $(@D) -e object,c_header -f MaxPool target=$*
 
 $(BIN)/%/MaxPool: MaxPool.cpp $(BIN)/%/MaxPool.o
 	@mkdir -p $(@D)

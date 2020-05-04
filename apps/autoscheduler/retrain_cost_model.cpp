@@ -11,7 +11,6 @@
 
 #include "cmdline.h"
 
-#include "CostModel.h"
 #include "DefaultCostModel.h"
 #include "HalideBuffer.h"
 #include "NetworkSize.h"
@@ -442,7 +441,7 @@ int main(int argc, char **argv) {
     Flags flags(argc, argv);
 
     // Iterate through the pipelines
-    vector<std::unique_ptr<CostModel>> tpp;
+    vector<std::unique_ptr<DefaultCostModel>> tpp;
     for (int i = 0; i < kModels; i++) {
         tpp.emplace_back(make_default_cost_model(flags.initial_weights_path, flags.weights_out_path, flags.randomize_weights || flags.reset_weights));
     }
@@ -517,7 +516,7 @@ int main(int argc, char **argv) {
                         size_t batch_size = std::min(max_batch_size, p.second.schedules.size());
 
                         size_t fastest_idx = 0;
-                        Buffer<float> runtimes(batch_size);
+                        Halide::Runtime::Buffer<float> runtimes(batch_size);
 
                         size_t first = 0;
                         if (p.second.schedules.size() > max_batch_size) {
@@ -530,7 +529,7 @@ int main(int argc, char **argv) {
                         cost_per_stage.resize(batch_size);
                         for (size_t j = 0; j < batch_size; j++) {
                             auto &sched = it->second;
-                            Buffer<float> buf;
+                            Halide::Runtime::Buffer<float> buf;
                             tp->enqueue(pipeline.num_stages, &buf, &sched.prediction[model], &cost_per_stage[j]);
                             runtimes(j) = sched.runtimes[0];
                             if (runtimes(j) < runtimes(fastest_idx)) {

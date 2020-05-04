@@ -1,9 +1,9 @@
 #include "Parameter.h"
+
 #include "Argument.h"
+#include "Float16.h"
 #include "IR.h"
 #include "IROperator.h"
-#include "ObjectInstanceRegistry.h"
-#include "Simplify.h"
 
 namespace Halide {
 namespace Internal {
@@ -66,12 +66,19 @@ void Parameter::check_dim_ok(int dim) const {
         << "Dimension " << dim << " is not in the range [0, " << dimensions() - 1 << "]\n";
 }
 
-Parameter::Parameter(Type t, bool is_buffer, int d)
+void Parameter::check_type(const Type &t) const {
+    // Allow set_scalar<uint64_t>() for all Handle types
+    user_assert(type() == t || (type().is_handle() && t == UInt(64)))
+        << "Param<" << type()
+        << "> cannot be accessed as scalar of type " << t << "\n";
+}
+
+Parameter::Parameter(const Type &t, bool is_buffer, int d)
     : contents(new ParameterContents(t, is_buffer, d, unique_name('p'))) {
     internal_assert(is_buffer || d == 0) << "Scalar parameters should be zero-dimensional";
 }
 
-Parameter::Parameter(Type t, bool is_buffer, int d, const std::string &name)
+Parameter::Parameter(const Type &t, bool is_buffer, int d, const std::string &name)
     : contents(new ParameterContents(t, is_buffer, d, name)) {
     internal_assert(is_buffer || d == 0) << "Scalar parameters should be zero-dimensional";
 }
@@ -157,7 +164,7 @@ const halide_buffer_t *Parameter::raw_buffer() const {
     return contents->buffer.raw_buffer();
 }
 
-void Parameter::set_buffer(Buffer<> b) {
+void Parameter::set_buffer(const Buffer<> &b) {
     check_is_buffer();
     if (b.defined()) {
         user_assert(contents->type == b.type())
@@ -187,31 +194,31 @@ bool Parameter::defined() const {
 void Parameter::set_min_constraint(int dim, Expr e) {
     check_is_buffer();
     check_dim_ok(dim);
-    contents->buffer_constraints[dim].min = e;
+    contents->buffer_constraints[dim].min = std::move(e);
 }
 
 void Parameter::set_extent_constraint(int dim, Expr e) {
     check_is_buffer();
     check_dim_ok(dim);
-    contents->buffer_constraints[dim].extent = e;
+    contents->buffer_constraints[dim].extent = std::move(e);
 }
 
 void Parameter::set_stride_constraint(int dim, Expr e) {
     check_is_buffer();
     check_dim_ok(dim);
-    contents->buffer_constraints[dim].stride = e;
+    contents->buffer_constraints[dim].stride = std::move(e);
 }
 
 void Parameter::set_min_constraint_estimate(int dim, Expr min) {
     check_is_buffer();
     check_dim_ok(dim);
-    contents->buffer_constraints[dim].min_estimate = min;
+    contents->buffer_constraints[dim].min_estimate = std::move(min);
 }
 
 void Parameter::set_extent_constraint_estimate(int dim, Expr extent) {
     check_is_buffer();
     check_dim_ok(dim);
-    contents->buffer_constraints[dim].extent_estimate = extent;
+    contents->buffer_constraints[dim].extent_estimate = std::move(extent);
 }
 
 void Parameter::set_host_alignment(int bytes) {
@@ -253,7 +260,7 @@ int Parameter::host_alignment() const {
     check_is_buffer();
     return contents->host_alignment;
 }
-void Parameter::set_min_value(Expr e) {
+void Parameter::set_min_value(const Expr &e) {
     check_is_scalar();
     if (e.defined()) {
         user_assert(e.type() == contents->type)
@@ -274,7 +281,7 @@ Expr Parameter::min_value() const {
     return contents->scalar_min;
 }
 
-void Parameter::set_max_value(Expr e) {
+void Parameter::set_max_value(const Expr &e) {
     check_is_scalar();
     if (e.defined()) {
         user_assert(e.type() == contents->type)
@@ -297,7 +304,7 @@ Expr Parameter::max_value() const {
 
 void Parameter::set_estimate(Expr e) {
     check_is_scalar();
-    contents->scalar_estimate = e;
+    contents->scalar_estimate = std::move(e);
 }
 
 Expr Parameter::estimate() const {

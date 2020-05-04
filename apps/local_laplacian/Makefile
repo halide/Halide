@@ -14,11 +14,13 @@ else
 	CXXFLAGS += -DNO_AUTO_SCHEDULE
 endif
 
-all: $(BIN)/$(HL_TARGET)/process
+.PHONY: build clean test
+
+build: $(BIN)/$(HL_TARGET)/process
 
 $(GENERATOR_BIN)/local_laplacian.generator: local_laplacian_generator.cpp $(GENERATOR_DEPS)
 	@mkdir -p $(@D)
-	$(CXX) $(CXXFLAGS) $(filter %.cpp,$^) -o $@ $(GENERATOR_LDFLAGS)
+	$(CXX) $(CXXFLAGS) $(filter %.cpp,$^) -o $@ $(LIBHALIDE_LDFLAGS)
 
 $(BIN)/%/local_laplacian.a: $(GENERATOR_BIN)/local_laplacian.generator
 	@mkdir -p $(@D)

@@ -623,51 +623,7 @@ bool State::calculate_cost(const FunctionDAG &dag, const MachineParams &params, 
         return false;
     }
 
-    int num_stages = (int)features.size();
-
-    Runtime::Buffer<float> schedule_features;
-
-    // Tell the cost model about this state. It won't actually
-    // evaluate it until we call evaluate_costs (or if it runs out
-    // of internal buffer space), so that the evaluations can be
-    // batched.
-    timer.restart();
-    cost_model->enqueue(num_stages, &schedule_features, &cost, &cost_per_stage);
-    stats.enqueue_time += timer.elapsed();
-    ++stats.num_schedules_enqueued;
-
-    timer.restart();
-    // index of current stage whose features we are reading
-    int stage = 0;
-    // load schedule features into input buffer
-    for (const auto &n : dag.nodes) {
-
-        // Inputs are computed outside of the pipeline and don't count.
-        if (n.is_input) continue;
-
-        // The remaining stage are not yet
-        // scheduled. Optimistically assume their internal costs
-        // will not depend on the decisions made already, so
-        // there's no point adding it on to the total because it's
-        // the same across all states.  An underestimate of the
-        // cost for loading from these unscheduled stages is
-        // already baked into the scheduled stages that consume
-        // them.
-        if (stage >= num_stages) break;
-
-        // Load up the schedule features for all stages of this Func.
-        for (auto it = n.stages.rbegin(); it != n.stages.rend(); it++) {
-            internal_assert(features.contains(&*it)) << n.func.name() << "\n";
-            const auto &feat = features.get(&*it);
-            for (size_t i = 0; i < ScheduleFeatures::num_features(); i++) {
-                schedule_features(i, stage) = feat[i];
-            }
-            stage += 1;
-        }
-    }
-    stats.feature_write_time += timer.elapsed();
-    // Check we considered everything we were supposed to.
-    internal_assert(stage == num_stages);
+    cost_model->enqueue(dag, features, &cost, &cost_per_stage);
 
     return true;
 }

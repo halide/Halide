@@ -34,8 +34,17 @@ target_compile_definitions(halide_benchmarks PRIVATE -DUSE_HALIDE ${MISC_DEFINIT
 target_link_libraries(halide_benchmarks PRIVATE halide_blas)
 list(APPEND BLAS_NAMES halide)
 
-find_package(Eigen3 QUIET)
-if (NOT Eigen3_FOUND)
+# We prefer to use CMake's modules over pkg-config (which might be Linux only).
+find_package(Eigen3 QUIET NO_MODULE)
+set(Eigen3 Eigen3::Eigen)
+if (NOT TARGET ${Eigen3})
+  find_package(PkgConfig)
+  pkg_check_modules(Eigen3 QUIET IMPORTED_TARGET eigen3)
+  if (TARGET PkgConfig::Eigen3)
+    set(Eigen3 PkgConfig::Eigen3)
+  endif()
+endif()
+if (NOT TARGET ${Eigen3})
   message(STATUS "linear_algebra: Eigen3 Missing, skipping Eigen3 benchmarks")
 else()
   add_executable(eigen_benchmarks
@@ -43,10 +52,11 @@ else()
   )
   target_compile_definitions(eigen_benchmarks PRIVATE -DEIGEN_DONT_PARALLELIZE ${MISC_DEFINITIONS})
   target_compile_options(eigen_benchmarks PRIVATE -Wno-error=unused-variable)
-  target_link_libraries(eigen_benchmarks
-    PRIVATE
-      Eigen3::Eigen
-  )
+  # Even though Eigen doesn't link anything, link_libraries are used for
+  # everything else (-I, -L, compiler flags...). (ask alexreinking for more)
+  # Even though on Linux Eigen exports EIGEN_INCLUDE_DIR which is usable with
+  # target_include_directories, other platforms apparently look differently.
+  target_link_libraries(eigen_benchmarks PRIVATE "${Eigen3}")
   list(APPEND BLAS_NAMES eigen)
 endif()
 
@@ -87,9 +97,7 @@ endif()
 list(APPEND BLAS_LEVELS l1)
 list(APPEND BLAS_LEVELS l2)
 list(APPEND BLAS_LEVELS l3)
-list(APPEND L1_BENCHMARK_SIZES 16 64 288 1056 2080)
-list(APPEND L2_BENCHMARK_SIZES 32 64 128 288 544 1056 2080)
-list(APPEND L3_BENCHMARK_SIZES 32 64 128 288 544 1056 2080)
+list(APPEND BENCHMARK_SIZES 64 128 256 512 1280 2560)
 list(APPEND L1_BENCHMARKS scopy dcopy sscal dscal saxpy daxpy sdot ddot sasum dasum)
 list(APPEND L2_BENCHMARKS sgemv_notrans dgemv_notrans sgemv_trans dgemv_trans sger dger)
 list(APPEND L3_BENCHMARKS sgemm_notrans dgemm_notrans sgemm_transA dgemm_transA sgemm_transB dgemm_transB sgemm_transAB dgemm_transAB)
@@ -108,7 +116,7 @@ list(APPEND L3_BENCHMARKS sgemm_notrans dgemm_notrans sgemm_transA dgemm_transA 
 # XXX unfortunately, the output is noisy. good solution?
 foreach(BLAS_LEVEL ${BLAS_LEVELS})
   string(TOUPPER ${BLAS_LEVEL}_BENCHMARKS BENCHMARKS_VAR)
-  string(TOUPPER ${BLAS_LEVEL}_BENCHMARK_SIZES BENCHMARK_SIZES_VAR)
+  string(TOUPPER BENCHMARK_SIZES BENCHMARK_SIZES_VAR)
   set(TARGETS)
   set(BLAS_LEVEL_TARGET ${BLAS_LEVEL}_benchmarks)
   #message(STATUS "adding target ${BLAS_LEVEL_TARGET}")

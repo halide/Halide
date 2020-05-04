@@ -30,7 +30,7 @@ protected:
 
     int vector_lanes_for_slice(const Type &t) const;
 
-    virtual llvm::Type *llvm_type_of(const Type &t) const override;
+    llvm::Type *llvm_type_of(const Type &t) const override;
 
     using CodeGen_Posix::visit;
 

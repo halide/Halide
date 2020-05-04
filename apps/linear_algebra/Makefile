@@ -33,7 +33,12 @@ ATLAS_LIBS ?= -lcblas
 # this provides a slight build speed increase (since we don't have to redundantly
 # include the runtime code in each generator) with the extra complication that we
 # must explicitly build and link the halide runtime separately.
-HL_TARGET_NR = $(HL_TARGET)-no_runtime-no_asserts-no_bounds_query
+HL_TARGET_NR = $(HL_TARGET)-no_runtime-no_bounds_query
+
+# The L1 blas kernels are a small number of floating point ops each,
+# so the asserts make a difference. They are scheduled to work for any
+# size input so we'll just omit the asserts.
+HL_TARGET_NR_NA = $(HL_TARGET_NR)-no_asserts
 
 KERNELS = \
 	scopy_impl \
@@ -68,17 +73,18 @@ BENCHMARKS = \
 	$(BIN)/eigen_benchmarks \
 	$(BIN)/halide_benchmarks
 
-.PHONY: clean run_benchmarks
-all: $(BENCHMARKS)
-	make run_benchmarks
+.PHONY: build clean run_benchmarks test
+all: build
+	make run_benchmarks 
 
-.PHONY: test
 ifneq ("$(wildcard /usr/include/cblas.h /usr/include/*/cblas.h)","")
+build: $(BENCHMARKS) $(BIN)/test_halide_blas
 test: $(BIN)/test_halide_blas
 	$(BIN)/test_halide_blas
 else
-test:
+build:
 	@echo /usr/include/cblas.h not found: skipping linear_algebra tests...
+test: build
 endif
 
 clean:
@@ -100,27 +106,25 @@ $(BIN)/test_halide_blas: tests/test_halide_blas.cpp $(LIBHALIDE_BLAS)
 
 # Large powers of two are a pathological case for the cache, so avoid
 # them for the benchmarks.
-L1_BENCHMARK_SIZES = 16 64 288 1056 2080
-L2_BENCHMARK_SIZES = 32 64 128 288 544 1056 2080
-L3_BENCHMARK_SIZES = 32 64 128 288 544 1056 2080
+BENCHMARK_SIZES = 64 128 256 512 1280 2560
 L1_BENCHMARKS = scopy dcopy sscal dscal saxpy daxpy sdot ddot sasum dasum
 L2_BENCHMARKS = sgemv_notrans dgemv_notrans sgemv_trans dgemv_trans sger dger
 L3_BENCHMARKS = sgemm_notrans dgemm_notrans sgemm_transA dgemm_transA sgemm_transB dgemm_transB sgemm_transAB dgemm_transAB
 
 cblas_l1_benchmark_%: $(BIN)/cblas_benchmarks
-	@$(foreach size,$(L1_BENCHMARK_SIZES),$(BIN)/cblas_benchmarks $(@:cblas_l1_benchmark_%=%) $(size);)
+	@$(foreach size,$(BENCHMARK_SIZES),$(BIN)/cblas_benchmarks $(@:cblas_l1_benchmark_%=%) $(size);)
 
 atlas_l1_benchmark_%: $(BIN)/atlas_benchmarks
-	@$(foreach size,$(L1_BENCHMARK_SIZES),$(BIN)/atlas_benchmarks $(@:atlas_l1_benchmark_%=%) $(size);)
+	@$(foreach size,$(BENCHMARK_SIZES),$(BIN)/atlas_benchmarks $(@:atlas_l1_benchmark_%=%) $(size);)
 
 openblas_l1_benchmark_%: $(BIN)/openblas_benchmarks
-	@$(foreach size,$(L1_BENCHMARK_SIZES),$(BIN)/openblas_benchmarks $(@:openblas_l1_benchmark_%=%) $(size);)
+	@$(foreach size,$(BENCHMARK_SIZES),$(BIN)/openblas_benchmarks $(@:openblas_l1_benchmark_%=%) $(size);)
 
 eigen_l1_benchmark_%: $(BIN)/eigen_benchmarks
-	@$(foreach size,$(L1_BENCHMARK_SIZES),$(BIN)/eigen_benchmarks $(@:eigen_l1_benchmark_%=%) $(size);)
+	@$(foreach size,$(BENCHMARK_SIZES),$(BIN)/eigen_benchmarks $(@:eigen_l1_benchmark_%=%) $(size);)
 
 halide_l1_benchmark_%: $(BIN)/halide_benchmarks
-	@$(foreach size,$(L1_BENCHMARK_SIZES),$(BIN)/halide_benchmarks $(@:halide_l1_benchmark_%=%) $(size);)
+	@$(foreach size,$(BENCHMARK_SIZES),$(BIN)/halide_benchmarks $(@:halide_l1_benchmark_%=%) $(size);)
 
 l1_benchmarks: \
 	$(L1_BENCHMARKS:%=cblas_l1_benchmark_%) \
@@ -130,19 +134,19 @@ l1_benchmarks: \
 	$(L1_BENCHMARKS:%=halide_l1_benchmark_%)
 
 cblas_l2_benchmark_%: $(BIN)/cblas_benchmarks
-	@$(foreach size,$(L2_BENCHMARK_SIZES),$(BIN)/cblas_benchmarks $(@:cblas_l2_benchmark_%=%) $(size);)
+	@$(foreach size,$(BENCHMARK_SIZES),$(BIN)/cblas_benchmarks $(@:cblas_l2_benchmark_%=%) $(size);)
 
 atlas_l2_benchmark_%: $(BIN)/atlas_benchmarks
-	@$(foreach size,$(L2_BENCHMARK_SIZES),$(BIN)/atlas_benchmarks $(@:atlas_l2_benchmark_%=%) $(size);)
+	@$(foreach size,$(BENCHMARK_SIZES),$(BIN)/atlas_benchmarks $(@:atlas_l2_benchmark_%=%) $(size);)
 
 openblas_l2_benchmark_%: $(BIN)/openblas_benchmarks
-	@$(foreach size,$(L2_BENCHMARK_SIZES),$(BIN)/openblas_benchmarks $(@:openblas_l2_benchmark_%=%) $(size);)
+	@$(foreach size,$(BENCHMARK_SIZES),$(BIN)/openblas_benchmarks $(@:openblas_l2_benchmark_%=%) $(size);)
 
 eigen_l2_benchmark_%: $(BIN)/eigen_benchmarks
-	@$(foreach size,$(L2_BENCHMARK_SIZES),$(BIN)/eigen_benchmarks $(@:eigen_l2_benchmark_%=%) $(size);)
+	@$(foreach size,$(BENCHMARK_SIZES),$(BIN)/eigen_benchmarks $(@:eigen_l2_benchmark_%=%) $(size);)
 
 halide_l2_benchmark_%: $(BIN)/halide_benchmarks
-	@$(foreach size,$(L2_BENCHMARK_SIZES),$(BIN)/halide_benchmarks $(@:halide_l2_benchmark_%=%) $(size);)
+	@$(foreach size,$(BENCHMARK_SIZES),$(BIN)/halide_benchmarks $(@:halide_l2_benchmark_%=%) $(size);)
 
 l2_benchmarks: \
 	$(L2_BENCHMARKS:%=cblas_l2_benchmark_%) \
@@ -152,19 +156,19 @@ l2_benchmarks: \
 	$(L2_BENCHMARKS:%=halide_l2_benchmark_%)
 
 cblas_l3_benchmark_%: $(BIN)/cblas_benchmarks
-	@$(foreach size,$(L3_BENCHMARK_SIZES),$(BIN)/cblas_benchmarks $(@:cblas_l3_benchmark_%=%) $(size);)
+	@$(foreach size,$(BENCHMARK_SIZES),$(BIN)/cblas_benchmarks $(@:cblas_l3_benchmark_%=%) $(size);)
 
 atlas_l3_benchmark_%: $(BIN)/atlas_benchmarks
-	@$(foreach size,$(L3_BENCHMARK_SIZES),$(BIN)/atlas_benchmarks $(@:atlas_l3_benchmark_%=%) $(size);)
+	@$(foreach size,$(BENCHMARK_SIZES),$(BIN)/atlas_benchmarks $(@:atlas_l3_benchmark_%=%) $(size);)
 
 openblas_l3_benchmark_%: $(BIN)/openblas_benchmarks
-	@$(foreach size,$(L3_BENCHMARK_SIZES),$(BIN)/openblas_benchmarks $(@:openblas_l3_benchmark_%=%) $(size);)
+	@$(foreach size,$(BENCHMARK_SIZES),$(BIN)/openblas_benchmarks $(@:openblas_l3_benchmark_%=%) $(size);)
 
 eigen_l3_benchmark_%: $(BIN)/eigen_benchmarks
-	@$(foreach size,$(L3_BENCHMARK_SIZES),$(BIN)/eigen_benchmarks $(@:eigen_l3_benchmark_%=%) $(size);)
+	@$(foreach size,$(BENCHMARK_SIZES),$(BIN)/eigen_benchmarks $(@:eigen_l3_benchmark_%=%) $(size);)
 
 halide_l3_benchmark_%: $(BIN)/halide_benchmarks
-	@$(foreach size,$(L3_BENCHMARK_SIZES),$(BIN)/halide_benchmarks $(@:halide_l3_benchmark_%=%) $(size);)
+	@$(foreach size,$(BENCHMARK_SIZES),$(BIN)/halide_benchmarks $(@:halide_l3_benchmark_%=%) $(size);)
 
 l3_benchmarks: \
 	$(L3_BENCHMARKS:%=cblas_l3_benchmark_%) \
@@ -205,7 +209,7 @@ $(BIN)/halide_benchmarks: benchmarks/halide_benchmarks.cpp benchmarks/clock.h be
 
 $(BUILD)/%.generator: src/%_generators.cpp $(GENERATOR_DEPS)
 	@mkdir -p $(@D)
-	$(CXX) $(CXXFLAGS) $(filter %.cpp,$^) $(GENERATOR_LDFLAGS) -o $@
+	$(CXX) $(CXXFLAGS) $(filter %.cpp,$^) $(LIBHALIDE_LDFLAGS) -o $@
 
 # This can use any of the generators; pick an arbitrary one
 $(BUILD)/halide_runtime.o: $(BUILD)/blas_l1.generator
@@ -213,43 +217,43 @@ $(BUILD)/halide_runtime.o: $(BUILD)/blas_l1.generator
 
 $(BUILD)/halide_scopy_impl.o $(BUILD)/halide_scopy_impl.h: $(BUILD)/blas_l1.generator
 	$< -g saxpy -f halide_scopy_impl -o $(BUILD) -e $(EMIT_OPTIONS) \
-	target=$(HL_TARGET_NR) vectorize=true scale_x=false add_to_y=false
+	target=$(HL_TARGET_NR_NA) vectorize=true scale_x=false add_to_y=false
 
 $(BUILD)/halide_dcopy_impl.o $(BUILD)/halide_dcopy_impl.h: $(BUILD)/blas_l1.generator
 	$< -g daxpy -f halide_dcopy_impl -o $(BUILD) -e $(EMIT_OPTIONS) \
-	target=$(HL_TARGET_NR) vectorize=true scale_x=false add_to_y=false
+	target=$(HL_TARGET_NR_NA) vectorize=true scale_x=false add_to_y=false
 
 $(BUILD)/halide_sscal_impl.o $(BUILD)/halide_sscal_impl.h: $(BUILD)/blas_l1.generator
 	$< -g saxpy -f halide_sscal_impl -o $(BUILD) -e $(EMIT_OPTIONS) \
-	target=$(HL_TARGET_NR) vectorize=true scale_x=true add_to_y=false
+	target=$(HL_TARGET_NR_NA) vectorize=true scale_x=true add_to_y=false
 
 $(BUILD)/halide_dscal_impl.o $(BUILD)/halide_dscal_impl.h: $(BUILD)/blas_l1.generator
 	$< -g daxpy -f halide_dscal_impl -o $(BUILD) -e $(EMIT_OPTIONS) \
-	target=$(HL_TARGET_NR) vectorize=true scale_x=true add_to_y=false
+	target=$(HL_TARGET_NR_NA) vectorize=true scale_x=true add_to_y=false
 
 $(BUILD)/halide_saxpy_impl.o $(BUILD)/halide_saxpy_impl.h: $(BUILD)/blas_l1.generator
 	$< -g saxpy -f halide_saxpy_impl -o $(BUILD) -e $(EMIT_OPTIONS) \
-	target=$(HL_TARGET_NR) vectorize=true scale_x=true add_to_y=true
+	target=$(HL_TARGET_NR_NA) vectorize=true scale_x=true add_to_y=true
 
 $(BUILD)/halide_daxpy_impl.o $(BUILD)/halide_daxpy_impl.h: $(BUILD)/blas_l1.generator
 	$< -g daxpy -f halide_daxpy_impl -o $(BUILD) -e $(EMIT_OPTIONS) \
-	target=$(HL_TARGET_NR) vectorize=true scale_x=true add_to_y=true
+	target=$(HL_TARGET_NR_NA) vectorize=true scale_x=true add_to_y=true
 
 $(BUILD)/halide_sdot.o $(BUILD)/halide_sdot.h: $(BUILD)/blas_l1.generator
 	$< -g sdot -f halide_sdot -o $(BUILD) -e $(EMIT_OPTIONS) \
-	target=$(HL_TARGET_NR) vectorize=true
+	target=$(HL_TARGET_NR_NA) vectorize=true
 
 $(BUILD)/halide_ddot.o $(BUILD)/halide_ddot.h: $(BUILD)/blas_l1.generator
 	$< -g ddot -f halide_ddot -o $(BUILD) -e $(EMIT_OPTIONS) \
-	target=$(HL_TARGET_NR) vectorize=true
+	target=$(HL_TARGET_NR_NA) vectorize=true
 
 $(BUILD)/halide_sasum.o $(BUILD)/halide_sasum.h: $(BUILD)/blas_l1.generator
 	$< -g sasum -f halide_sasum -o $(BUILD) -e $(EMIT_OPTIONS) \
-	target=$(HL_TARGET_NR) vectorize=true
+	target=$(HL_TARGET_NR_NA) vectorize=true
 
 $(BUILD)/halide_dasum.o $(BUILD)/halide_dasum.h: $(BUILD)/blas_l1.generator
 	$< -g dasum -f halide_dasum -o $(BUILD) -e $(EMIT_OPTIONS) \
-	target=$(HL_TARGET_NR) vectorize=true
+	target=$(HL_TARGET_NR_NA) vectorize=true
 
 $(BUILD)/halide_sgemv_notrans.o $(BUILD)/halide_sgemv_notrans.h: $(BUILD)/blas_l2.generator
 	$< -g sgemv -f halide_sgemv_notrans -o $(BUILD) -e $(EMIT_OPTIONS) \

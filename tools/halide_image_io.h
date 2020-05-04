@@ -21,6 +21,12 @@
 #endif
 
 #ifndef HALIDE_NO_JPEG
+#ifdef _WIN32
+#ifndef NOMINMAX
+#define NOMINMAX
+#endif
+#include <windows.h>
+#endif
 #include "jpeglib.h"
 #endif
 

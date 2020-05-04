@@ -39,7 +39,6 @@ class GlobalVariable;
 
 #include "IRVisitor.h"
 #include "Module.h"
-#include "ModulusRemainder.h"
 #include "Scope.h"
 #include "Target.h"
 
@@ -62,7 +61,7 @@ public:
     static CodeGen_LLVM *new_for_target(const Target &target,
                                         llvm::LLVMContext &context);
 
-    virtual ~CodeGen_LLVM();
+    ~CodeGen_LLVM() override;
 
     /** Takes a halide Module and compiles it to an llvm Module. */
     virtual std::unique_ptr<llvm::Module> compile(const Module &module);
@@ -83,6 +82,10 @@ public:
         llvm::LLVMContext &context,
         const std::string &suffix,
         const std::vector<std::pair<std::string, ExternSignature>> &externs);
+
+    size_t get_requested_alloca_total() const {
+        return requested_alloca_total;
+    }
 
 protected:
     CodeGen_LLVM(Target t);
@@ -202,7 +205,7 @@ protected:
     /** Some useful llvm types */
     // @{
     llvm::Type *void_t, *i1_t, *i8_t, *i16_t, *i32_t, *i64_t, *f16_t, *f32_t, *f64_t;
-    llvm::StructType *buffer_t_type,
+    llvm::StructType *halide_buffer_t_type,
         *type_t_type,
         *dimension_t_type,
         *metadata_t_type,
@@ -253,13 +256,13 @@ protected:
 
     /** Emit code that evaluates an expression, and return the llvm
      * representation of the result of the expression. */
-    llvm::Value *codegen(Expr);
+    llvm::Value *codegen(const Expr &);
 
     /** Emit code that runs a statement. */
-    void codegen(Stmt);
+    void codegen(const Stmt &);
 
     /** Codegen a vector Expr by codegenning each lane and combining. */
-    void scalarize(Expr);
+    void scalarize(const Expr &);
 
     /** Some destructors should always be called. Others should only
      * be called if the pipeline is exiting with an error code. */
@@ -291,7 +294,7 @@ protected:
      * null), or evaluates and returns the message, which must be an
      * Int(32) expression. */
     // @{
-    void create_assertion(llvm::Value *condition, Expr message, llvm::Value *error_code = nullptr);
+    void create_assertion(llvm::Value *condition, const Expr &message, llvm::Value *error_code = nullptr);
     // @}
 
     /** Codegen a block of asserts with pure conditions */
@@ -311,9 +314,9 @@ protected:
         std::string name;
     };
     int task_depth;
-    void get_parallel_tasks(Stmt s, std::vector<ParallelTask> &tasks, std::pair<std::string, int> prefix);
+    void get_parallel_tasks(const Stmt &s, std::vector<ParallelTask> &tasks, std::pair<std::string, int> prefix);
     void do_parallel_tasks(const std::vector<ParallelTask> &tasks);
-    void do_as_parallel_task(Stmt s);
+    void do_as_parallel_task(const Stmt &s);
 
     /** Return the the pipeline with the given error code. Will run
      * the destructor block. */
@@ -332,8 +335,8 @@ protected:
      * given type. The index counts according to the scalar type of
      * the type passed in. */
     // @{
-    llvm::Value *codegen_buffer_pointer(std::string buffer, Type type, llvm::Value *index);
-    llvm::Value *codegen_buffer_pointer(std::string buffer, Type type, Expr index);
+    llvm::Value *codegen_buffer_pointer(const std::string &buffer, Type type, llvm::Value *index);
+    llvm::Value *codegen_buffer_pointer(const std::string &buffer, Type type, Expr index);
     llvm::Value *codegen_buffer_pointer(llvm::Value *base_address, Type type, Expr index);
     llvm::Value *codegen_buffer_pointer(llvm::Value *base_address, Type type, llvm::Value *index);
     // @}
@@ -344,7 +347,7 @@ protected:
     /** Mark a load or store with type-based-alias-analysis metadata
      * so that llvm knows it can reorder loads and stores across
      * different buffers */
-    void add_tbaa_metadata(llvm::Instruction *inst, std::string buffer, Expr index);
+    void add_tbaa_metadata(llvm::Instruction *inst, std::string buffer, const Expr &index);
 
     /** Get a unique name for the actual block of memory that an
      * allocate node uses. Used so that alias analysis understands
@@ -433,6 +436,20 @@ protected:
     llvm::Value *create_alloca_at_entry(llvm::Type *type, int n,
                                         bool zero_initialize = false,
                                         const std::string &name = "");
+
+    /** A (very) conservative guess at the size of all alloca() storage requested
+     * (including alignment padding). It's currently meant only to be used as
+     * a very coarse way to ensure there is enough stack space when testing
+     * on the WebAssembly backend.
+     *
+     * It is *not* meant to be a useful proxy for "stack space needed", for a
+     * number of reasons:
+     * - allocas with non-overlapping lifetimes will share space
+     * - on some backends, LLVM may promote register-sized allocas into registers
+     * - while this accounts for alloca() calls we know about, it doesn't attempt
+     *   to account for stack spills, function call overhead, etc.
+     */
+    size_t requested_alloca_total = 0;
 
     /** Which buffers came in from the outside world (and so we can't
      * guarantee their alignment) */
@@ -530,7 +547,7 @@ private:
 
     /** Embed a constant expression as a global variable. */
     llvm::Constant *embed_constant_expr(Expr e, llvm::Type *t);
-    llvm::Constant *embed_constant_scalar_value_t(Expr e);
+    llvm::Constant *embed_constant_scalar_value_t(const Expr &e);
 
     llvm::Function *add_argv_wrapper(llvm::Function *fn, const std::string &name, bool result_in_argv = false);
 

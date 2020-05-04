@@ -78,7 +78,6 @@ extern "C" {
 
 // Forward-declare to suppress warnings if compiling as C.
 struct halide_buffer_t;
-struct buffer_t;
 
 /** Print a message to stderr. Main use is to support tracing
  * functionality, print, and print_when calls. Also called by the default
@@ -847,17 +846,6 @@ extern int halide_device_wrap_native(void *user_context,
 extern int halide_device_detach_native(void *user_context, struct halide_buffer_t *buf);
 // @}
 
-/** Versions of the above functions that accept legacy buffer_t structs. */
-// @{
-extern int halide_copy_to_host_legacy(void *user_context, struct buffer_t *buf);
-extern int halide_copy_to_device_legacy(void *user_context, struct buffer_t *buf,
-                                        const struct halide_device_interface_t *device_interface);
-extern int halide_device_sync_legacy(void *user_context, struct buffer_t *buf);
-extern int halide_device_malloc_legacy(void *user_context, struct buffer_t *buf,
-                                       const struct halide_device_interface_t *device_interface);
-extern int halide_device_free_legacy(void *user_context, struct buffer_t *buf);
-// @}
-
 /** Selects which gpu device to use. 0 is usually the display
  * device. If never called, Halide uses the environment variable
  * HL_GPU_DEVICE. If that variable is unset, Halide uses the last
@@ -947,7 +935,7 @@ extern void halide_memoization_cache_cleanup();
  *
  * The return value should always be zero.
  */
-extern int halide_msan_check_memory_is_initialized(void *user_context, const void *ptr, uint64_t len);
+extern int halide_msan_check_memory_is_initialized(void *user_context, const void *ptr, uint64_t len, const char *name);
 
 /** Verify that the data pointed to by the halide_buffer_t is initialized (but *not* the halide_buffer_t itself),
  * using halide_msan_check_memory_is_initialized() for checking.
@@ -960,7 +948,7 @@ extern int halide_msan_check_memory_is_initialized(void *user_context, const voi
  *
  * The return value should always be zero.
  */
-extern int halide_msan_check_buffer_is_initialized(void *user_context, struct halide_buffer_t *buffer);
+extern int halide_msan_check_buffer_is_initialized(void *user_context, struct halide_buffer_t *buffer, const char *buf_name);
 
 /** Annotate that a given range of memory has been initialized;
  * only used when Target::MSAN is enabled.
@@ -1104,14 +1092,9 @@ enum halide_error_code_t {
     /** At least one of the buffer's extents are negative. */
     halide_error_code_buffer_extents_negative = -28,
 
-    /** A compiled pipeline was passed the old deprecated buffer_t
-     * struct, and it could not be upgraded to a halide_buffer_t. */
-    halide_error_code_failed_to_upgrade_buffer_t = -29,
+    halide_error_code_unused_29 = -29,
 
-    /** A compiled pipeline was passed the old deprecated buffer_t
-     * struct in bounds inference mode, but the returned information
-     * can't be expressed in the old buffer_t. */
-    halide_error_code_failed_to_downgrade_buffer_t = -30,
+    halide_error_code_unused_30 = -30,
 
     /** A specialize_fail() schedule branch was selected at runtime. */
     halide_error_code_specialize_fail = -31,
@@ -1172,7 +1155,7 @@ enum halide_error_code_t {
 
     /** An expression that would perform an integer division or modulo
      * by zero was evaluated. */
-    halide_error_code_integer_division_by_zero = -44,
+    halide_error_code_device_dirty_with_no_device_support = -44,
 
 };
 
@@ -1231,12 +1214,6 @@ extern int halide_error_debug_to_file_failed(void *user_context, const char *fun
                                              const char *filename, int error_code);
 extern int halide_error_unaligned_host_ptr(void *user_context, const char *func_name, int alignment);
 extern int halide_error_host_is_null(void *user_context, const char *func_name);
-extern int halide_error_failed_to_upgrade_buffer_t(void *user_context,
-                                                   const char *input_name,
-                                                   const char *reason);
-extern int halide_error_failed_to_downgrade_buffer_t(void *user_context,
-                                                     const char *input_name,
-                                                     const char *reason);
 extern int halide_error_bad_fold(void *user_context, const char *func_name, const char *var_name,
                                  const char *loop_name);
 extern int halide_error_bad_extern_fold(void *user_context, const char *func_name,
@@ -1250,7 +1227,7 @@ extern int halide_error_no_device_interface(void *user_context);
 extern int halide_error_device_interface_no_device(void *user_context);
 extern int halide_error_host_and_device_dirty(void *user_context);
 extern int halide_error_buffer_is_null(void *user_context, const char *routine);
-extern int halide_error_integer_division_by_zero(void *user_context);
+extern int halide_error_device_dirty_with_no_device_support(void *user_context, const char *buffer_name);
 // @}
 
 /** Optional features a compilation Target can have.
@@ -1297,46 +1274,44 @@ typedef enum halide_target_feature_t {
     halide_target_feature_no_runtime,  ///< Do not include a copy of the Halide runtime in any generated object file or assembly
 
     halide_target_feature_metal,  ///< Enable the (Apple) Metal runtime.
-    halide_target_feature_mingw,  ///< For Windows compile to MinGW toolset rather then Visual Studio
 
     halide_target_feature_c_plus_plus_mangling,  ///< Generate C++ mangled names for result function, et al
 
     halide_target_feature_large_buffers,  ///< Enable 64-bit buffer indexing to support buffers > 2GB. Ignored if bits != 64.
 
-    halide_target_feature_hvx_64,                  ///< Enable HVX 64 byte mode.
-    halide_target_feature_hvx_128,                 ///< Enable HVX 128 byte mode.
-    halide_target_feature_hvx_v62,                 ///< Enable Hexagon v62 architecture.
-    halide_target_feature_fuzz_float_stores,       ///< On every floating point store, set the last bit of the mantissa to zero. Pipelines for which the output is very different with this feature enabled may also produce very different output on different processors.
-    halide_target_feature_soft_float_abi,          ///< Enable soft float ABI. This only enables the soft float ABI calling convention, which does not necessarily use soft floats.
-    halide_target_feature_msan,                    ///< Enable hooks for MSAN support.
-    halide_target_feature_avx512,                  ///< Enable the base AVX512 subset supported by all AVX512 architectures. The specific feature sets are AVX-512F and AVX512-CD. See https://en.wikipedia.org/wiki/AVX-512 for a description of each AVX subset.
-    halide_target_feature_avx512_knl,              ///< Enable the AVX512 features supported by Knight's Landing chips, such as the Xeon Phi x200. This includes the base AVX512 set, and also AVX512-CD and AVX512-ER.
-    halide_target_feature_avx512_skylake,          ///< Enable the AVX512 features supported by Skylake Xeon server processors. This adds AVX512-VL, AVX512-BW, and AVX512-DQ to the base set. The main difference from the base AVX512 set is better support for small integer ops. Note that this does not include the Knight's Landing features. Note also that these features are not available on Skylake desktop and mobile processors.
-    halide_target_feature_avx512_cannonlake,       ///< Enable the AVX512 features expected to be supported by future Cannonlake processors. This includes all of the Skylake features, plus AVX512-IFMA and AVX512-VBMI.
-    halide_target_feature_hvx_use_shared_object,   ///< Deprecated
-    halide_target_feature_trace_loads,             ///< Trace all loads done by the pipeline. Equivalent to calling Func::trace_loads on every non-inlined Func.
-    halide_target_feature_trace_stores,            ///< Trace all stores done by the pipeline. Equivalent to calling Func::trace_stores on every non-inlined Func.
-    halide_target_feature_trace_realizations,      ///< Trace all realizations done by the pipeline. Equivalent to calling Func::trace_realizations on every non-inlined Func.
-    halide_target_feature_trace_pipeline,          ///< Trace the pipeline.
-    halide_target_feature_cuda_capability61,       ///< Enable CUDA compute capability 6.1 (Pascal)
-    halide_target_feature_hvx_v65,                 ///< Enable Hexagon v65 architecture.
-    halide_target_feature_hvx_v66,                 ///< Enable Hexagon v66 architecture.
-    halide_target_feature_cl_half,                 ///< Enable half support on OpenCL targets
-    halide_target_feature_strict_float,            ///< Turn off all non-IEEE floating-point optimization. Currently applies only to LLVM targets.
-    halide_target_feature_legacy_buffer_wrappers,  ///< Emit legacy wrapper code for buffer_t (vs halide_buffer_t) when AOT-compiled.
-    halide_target_feature_tsan,                    ///< Enable hooks for TSAN support.
-    halide_target_feature_asan,                    ///< Enable hooks for ASAN support.
-    halide_target_feature_d3d12compute,            ///< Enable Direct3D 12 Compute runtime.
-    halide_target_feature_check_unsafe_promises,   ///< Insert assertions for promises.
-    halide_target_feature_hexagon_dma,             ///< Enable Hexagon DMA buffers.
-    halide_target_feature_embed_bitcode,           ///< Emulate clang -fembed-bitcode flag.
-    halide_target_feature_enable_llvm_loop_opt,    ///< Enable loop vectorization + unrolling in LLVM. Overrides halide_target_feature_disable_llvm_loop_opt. (Ignored for non-LLVM targets.)
-    halide_target_feature_disable_llvm_loop_opt,   ///< Disable loop vectorization + unrolling in LLVM. (Ignored for non-LLVM targets.)
-    halide_target_feature_wasm_simd128,            ///< Enable +simd128 instructions for WebAssembly codegen.
-    halide_target_feature_wasm_signext,            ///< Enable +sign-ext instructions for WebAssembly codegen.
-    halide_target_feature_sve,                     ///< Enable ARM Scalable Vector Extensions
-    halide_target_feature_sve2,                    ///< Enable ARM Scalable Vector Extensions v2
-    halide_target_feature_egl,                     ///< Force use of EGL support.
+    halide_target_feature_hvx_64,                 ///< Enable HVX 64 byte mode.
+    halide_target_feature_hvx_128,                ///< Enable HVX 128 byte mode.
+    halide_target_feature_hvx_v62,                ///< Enable Hexagon v62 architecture.
+    halide_target_feature_fuzz_float_stores,      ///< On every floating point store, set the last bit of the mantissa to zero. Pipelines for which the output is very different with this feature enabled may also produce very different output on different processors.
+    halide_target_feature_soft_float_abi,         ///< Enable soft float ABI. This only enables the soft float ABI calling convention, which does not necessarily use soft floats.
+    halide_target_feature_msan,                   ///< Enable hooks for MSAN support.
+    halide_target_feature_avx512,                 ///< Enable the base AVX512 subset supported by all AVX512 architectures. The specific feature sets are AVX-512F and AVX512-CD. See https://en.wikipedia.org/wiki/AVX-512 for a description of each AVX subset.
+    halide_target_feature_avx512_knl,             ///< Enable the AVX512 features supported by Knight's Landing chips, such as the Xeon Phi x200. This includes the base AVX512 set, and also AVX512-CD and AVX512-ER.
+    halide_target_feature_avx512_skylake,         ///< Enable the AVX512 features supported by Skylake Xeon server processors. This adds AVX512-VL, AVX512-BW, and AVX512-DQ to the base set. The main difference from the base AVX512 set is better support for small integer ops. Note that this does not include the Knight's Landing features. Note also that these features are not available on Skylake desktop and mobile processors.
+    halide_target_feature_avx512_cannonlake,      ///< Enable the AVX512 features expected to be supported by future Cannonlake processors. This includes all of the Skylake features, plus AVX512-IFMA and AVX512-VBMI.
+    halide_target_feature_hvx_use_shared_object,  ///< Deprecated
+    halide_target_feature_trace_loads,            ///< Trace all loads done by the pipeline. Equivalent to calling Func::trace_loads on every non-inlined Func.
+    halide_target_feature_trace_stores,           ///< Trace all stores done by the pipeline. Equivalent to calling Func::trace_stores on every non-inlined Func.
+    halide_target_feature_trace_realizations,     ///< Trace all realizations done by the pipeline. Equivalent to calling Func::trace_realizations on every non-inlined Func.
+    halide_target_feature_trace_pipeline,         ///< Trace the pipeline.
+    halide_target_feature_cuda_capability61,      ///< Enable CUDA compute capability 6.1 (Pascal)
+    halide_target_feature_hvx_v65,                ///< Enable Hexagon v65 architecture.
+    halide_target_feature_hvx_v66,                ///< Enable Hexagon v66 architecture.
+    halide_target_feature_cl_half,                ///< Enable half support on OpenCL targets
+    halide_target_feature_strict_float,           ///< Turn off all non-IEEE floating-point optimization. Currently applies only to LLVM targets.
+    halide_target_feature_tsan,                   ///< Enable hooks for TSAN support.
+    halide_target_feature_asan,                   ///< Enable hooks for ASAN support.
+    halide_target_feature_d3d12compute,           ///< Enable Direct3D 12 Compute runtime.
+    halide_target_feature_check_unsafe_promises,  ///< Insert assertions for promises.
+    halide_target_feature_hexagon_dma,            ///< Enable Hexagon DMA buffers.
+    halide_target_feature_embed_bitcode,          ///< Emulate clang -fembed-bitcode flag.
+    halide_target_feature_enable_llvm_loop_opt,   ///< Enable loop vectorization + unrolling in LLVM. Overrides halide_target_feature_disable_llvm_loop_opt. (Ignored for non-LLVM targets.)
+    halide_target_feature_disable_llvm_loop_opt,  ///< Disable loop vectorization + unrolling in LLVM. (Ignored for non-LLVM targets.)
+    halide_target_feature_wasm_simd128,           ///< Enable +simd128 instructions for WebAssembly codegen.
+    halide_target_feature_wasm_signext,           ///< Enable +sign-ext instructions for WebAssembly codegen.
+    halide_target_feature_sve,                    ///< Enable ARM Scalable Vector Extensions
+    halide_target_feature_sve2,                   ///< Enable ARM Scalable Vector Extensions v2
+    halide_target_feature_egl,                    ///< Force use of EGL support.
 
     halide_target_feature_end  ///< A sentinel. Every target is considered to have this feature, and setting this feature does nothing.
 } halide_target_feature_t;
@@ -1563,47 +1538,6 @@ extern "C" {
 #endif
 #endif
 #endif
-
-/** The old buffer_t, included for compatibility with old code. Don't
- * use it. */
-#ifndef BUFFER_T_DEFINED
-#define BUFFER_T_DEFINED
-typedef struct buffer_t {
-    uint64_t dev;
-    uint8_t *host;
-    int32_t extent[4];
-    int32_t stride[4];
-    int32_t min[4];
-    int32_t elem_size;
-    HALIDE_ATTRIBUTE_ALIGN(1)
-    bool host_dirty;
-    HALIDE_ATTRIBUTE_ALIGN(1)
-    bool dev_dirty;
-    HALIDE_ATTRIBUTE_ALIGN(1)
-    uint8_t _padding[10 - sizeof(void *)];
-} buffer_t;
-#endif  // BUFFER_T_DEFINED
-
-/** Copies host pointer, mins, extents, strides, and device state from
- * an old-style buffer_t into a new-style halide_buffer_t. If bounds_query_only is nonzero,
- * the copy is only done if the old_buf has null host and dev (ie, a bounds query is being
- * performed); otherwise new_buf is left untouched. (This is used for input buffers to avoid
- * benign data races.) The dimensions and type fields of the new buffer_t should already be
- * set. Returns an error code if the upgrade could not be performed. */
-extern int halide_upgrade_buffer_t(void *user_context, const char *name,
-                                   const buffer_t *old_buf, halide_buffer_t *new_buf,
-                                   int bounds_query_only);
-
-/** Copies the host pointer, mins, extents, strides, and device state
- * from a halide_buffer_t to a buffer_t. Also sets elem_size. Useful
- * for backporting the results of bounds inference. */
-extern int halide_downgrade_buffer_t(void *user_context, const char *name,
-                                     const halide_buffer_t *new_buf, buffer_t *old_buf);
-
-/** Copies the dirty flags and device allocation state from a new
- * buffer_t back to a legacy buffer_t. */
-extern int halide_downgrade_buffer_t_device_fields(void *user_context, const char *name,
-                                                   const halide_buffer_t *new_buf, buffer_t *old_buf);
 
 /** halide_scalar_value_t is a simple union able to represent all the well-known
  * scalar values in a filter argument. Note that it isn't tagged with a type;

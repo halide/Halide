@@ -8,7 +8,7 @@ extern "C" int32_t gpu_input(halide_buffer_t *input, halide_buffer_t *output) {
     return 0;
 }
 
-// OpenCL headers/libs are not properly setup yet for minGW.
+// OpenCL headers/libs are not properly setup yet for windows.
 int main(int argc, char **argv) {
     printf("Skipping test on windows\n");
     return 0;

@@ -1,4 +1,5 @@
 #include "LowerWarpShuffles.h"
+
 #include "ExprUsesVar.h"
 #include "IREquality.h"
 #include "IRMatch.h"
@@ -8,6 +9,7 @@
 #include "Simplify.h"
 #include "Solve.h"
 #include "Substitute.h"
+#include <utility>
 
 // In CUDA, allocations stored in registers and shared across lanes
 // look like private per-lane allocations, even though communication
@@ -49,7 +51,7 @@ namespace {
 // eliminating terms from nested affine expressions. This is much more
 // aggressive about eliminating terms than using % and then
 // calling the simplifier.
-Expr reduce_expr_helper(Expr e, Expr modulus) {
+Expr reduce_expr_helper(Expr e, const Expr &modulus) {
     if (is_one(modulus)) {
         return make_zero(e.type());
     } else if (is_const(e)) {
@@ -73,7 +75,7 @@ Expr reduce_expr_helper(Expr e, Expr modulus) {
     }
 }
 
-Expr reduce_expr(Expr e, Expr modulus, const Scope<Interval> &bounds) {
+Expr reduce_expr(Expr e, const Expr &modulus, const Scope<Interval> &bounds) {
     e = reduce_expr_helper(simplify(e, true, bounds), modulus);
     if (is_one(simplify(e >= 0 && e < modulus, true, bounds))) {
         return e;
@@ -141,7 +143,7 @@ class DetermineAllocStride : public IRVisitor {
 
     // Get the derivative of an integer expression w.r.t the warp
     // lane. Returns an undefined Expr if the result is non-trivial.
-    Expr warp_stride(Expr e) {
+    Expr warp_stride(const Expr &e) {
         if (is_const(e)) {
             return 0;
         } else if (const Variable *var = e.as<Variable>()) {
@@ -214,8 +216,10 @@ class DetermineAllocStride : public IRVisitor {
     }
 
     void visit(const IfThenElse *op) override {
-        // When things drop down to a single thread, we have different constraints, so notice that.
-        if (equal(op->condition, Variable::make(Int(32), lane_var) < 1)) {
+        // When things drop down to a single thread, we have different
+        // constraints, so notice that. Check if the condition implies
+        // the lane var is at most one.
+        if (can_prove(!op->condition || Variable::make(Int(32), lane_var) <= 1)) {
             bool old_single_thread = single_thread;
             single_thread = true;
             op->then_case.accept(this);
@@ -459,15 +463,18 @@ class LowerWarpShuffles : public IRMutator {
         // Consider lane-masking if-then-elses when determining the
         // active bounds of the lane index.
         //
-        // FuseGPULoopNests always injects conditionals of the form
-        // lane < limit_val when portions parts of the kernel to
-        // certain threads, so we just need to match that pattern.
+        // FuseGPULoopNests injects conditionals of the form lane <
+        // limit_val when portions parts of the kernel to certain
+        // threads, so we need to match that pattern. Things that come
+        // from GuardWithIf can also inject <=.
         const LT *lt = op->condition.as<LT>();
-        if (lt && equal(lt->a, this_lane) && is_const(lt->b)) {
+        const LE *le = op->condition.as<LE>();
+        if ((lt && equal(lt->a, this_lane) && is_const(lt->b)) ||
+            (le && equal(le->a, this_lane) && is_const(le->b))) {
             Expr condition = mutate(op->condition);
             internal_assert(bounds.contains(this_lane_name));
             Interval interval = bounds.get(this_lane_name);
-            interval.max = simplify(lt->b - 1);
+            interval.max = lt ? simplify(lt->b - 1) : le->b;
             ScopedBinding<Interval> bind(bounds, this_lane_name, interval);
             Stmt then_case = mutate(op->then_case);
             Stmt else_case = mutate(op->else_case);
@@ -505,7 +512,7 @@ class LowerWarpShuffles : public IRMutator {
         }
     }
 
-    Expr make_warp_load(Type type, string name, Expr idx, Expr lane) {
+    Expr make_warp_load(Type type, const string &name, const Expr &idx, Expr lane) {
         // idx: The index of the value within the local allocation
         // lane: Which thread's value we want. If it's our own, we can just use a load.
 
@@ -636,7 +643,7 @@ class LowerWarpShuffles : public IRMutator {
             return IRMutator::visit(op);
         } else {
             // Pick up this allocation and deposit it inside the loop over lanes at reduced size.
-            allocations.push_back(Stmt(op));
+            allocations.emplace_back(op);
             return mutate(op->body);
         }
     }
@@ -657,7 +664,7 @@ class HoistWarpShufflesFromSingleIfStmt : public IRMutator {
         if (starts_with(op->name, "llvm.nvvm.shfl.") &&
             !expr_uses_vars(op, stored_to)) {
             string name = unique_name('t');
-            lifted_lets.push_back({name, op});
+            lifted_lets.emplace_back(name, op);
             return Variable::make(op->type, name);
         } else {
             return IRMutator::visit(op);
@@ -739,7 +746,7 @@ class MoveIfStatementInwards : public IRMutator {
 
 public:
     MoveIfStatementInwards(Expr c)
-        : condition(c) {
+        : condition(std::move(c)) {
     }
 };
 
@@ -788,7 +795,7 @@ public:
     bool result = false;
 };
 
-bool has_lane_loop(Stmt s) {
+bool has_lane_loop(const Stmt &s) {
     HasLaneLoop l;
     s.accept(&l);
     return l.result;

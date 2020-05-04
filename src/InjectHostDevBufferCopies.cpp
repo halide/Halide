@@ -2,12 +2,14 @@
 
 #include "CodeGen_GPU_Dev.h"
 #include "Debug.h"
+#include "ExternFuncArgument.h"
 #include "IRMutator.h"
 #include "IROperator.h"
 #include "IRPrinter.h"
 #include "Substitute.h"
 
 #include <map>
+#include <utility>
 
 namespace Halide {
 namespace Internal {
@@ -44,7 +46,7 @@ class FindBufferUsage : public IRVisitor {
         }
     }
 
-    bool is_buffer_var(Expr e) {
+    bool is_buffer_var(const Expr &e) {
         const Variable *var = e.as<Variable>();
         return var && (var->name == buffer + ".buffer");
     }
@@ -429,7 +431,7 @@ private:
 
     using IRVisitor::visit;
 
-    void check_and_record_last_use(Stmt s) {
+    void check_and_record_last_use(const Stmt &s) {
         // Sniff what happens to the buffer inside the stmt
         FindBufferUsage finder(buffer, DeviceAPI::Host);
         s.accept(&finder);
@@ -508,7 +510,7 @@ class InjectBufferCopies : public IRMutator {
 
     public:
         InjectDeviceDestructor(string b)
-            : buffer(b) {
+            : buffer(std::move(b)) {
         }
     };
 
@@ -563,7 +565,7 @@ class InjectBufferCopies : public IRMutator {
 
     public:
         InjectCombinedAllocation(string b, Type t, vector<Expr> e, Expr c, DeviceAPI d)
-            : buffer(b), type(t), extents(e), condition(c), device_api(d) {
+            : buffer(std::move(b)), type(t), extents(std::move(e)), condition(std::move(c)), device_api(d) {
         }
     };
 
@@ -586,7 +588,7 @@ class InjectBufferCopies : public IRMutator {
         }
 
         FreeAfterLastUse(Stmt s, Stmt f)
-            : last_use(s), free_stmt(f) {
+            : last_use(std::move(s)), free_stmt(std::move(f)) {
         }
     };
 
@@ -767,7 +769,7 @@ public:
     }
 
     InjectBufferCopiesForInputsAndOutputs(Stmt s)
-        : site(s) {
+        : site(std::move(s)) {
     }
 };
 

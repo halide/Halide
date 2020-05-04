@@ -42,6 +42,12 @@ Expr Simplify::visit(const LT *op, ExprInfo *bounds) {
              rewrite(x < min(x, y), false) ||
              rewrite(x < min(y, x), false) ||
 
+             // From the simplifier synthesis project
+             rewrite((max(y, z) < min(x, y)), false) ||
+             rewrite((max(y, z) < min(y, x)), false) ||
+             rewrite((max(z, y) < min(x, y)), false) ||
+             rewrite((max(z, y) < min(y, x)), false) ||
+
              // Comparisons of ramps and broadcasts. If the first
              // and last lanes are provably < or >= the broadcast
              // we can collapse the comparison.
@@ -152,37 +158,37 @@ Expr Simplify::visit(const LT *op, ExprInfo *bounds) {
               // We want to break max(x, y) < z into x < z && y <
               // z in cases where one of those two terms is going
               // to fold.
-              rewrite(min(x + c0, y) < x + c1, fold(c0 < c1) || y < x + c1) ||
-              rewrite(min(y, x + c0) < x + c1, fold(c0 < c1) || y < x + c1) ||
-              rewrite(max(x + c0, y) < x + c1, fold(c0 < c1) && y < x + c1) ||
-              rewrite(max(y, x + c0) < x + c1, fold(c0 < c1) && y < x + c1) ||
+              rewrite(min(x + c0, y) < x + c1, y < x + c1 || fold(c0 < c1)) ||
+              rewrite(min(y, x + c0) < x + c1, y < x + c1 || fold(c0 < c1)) ||
+              rewrite(max(x + c0, y) < x + c1, y < x + c1 && fold(c0 < c1)) ||
+              rewrite(max(y, x + c0) < x + c1, y < x + c1 && fold(c0 < c1)) ||
 
-              rewrite(x < min(x + c0, y) + c1, fold(0 < c0 + c1) && x < y + c1) ||
-              rewrite(x < min(y, x + c0) + c1, fold(0 < c0 + c1) && x < y + c1) ||
-              rewrite(x < max(x + c0, y) + c1, fold(0 < c0 + c1) || x < y + c1) ||
-              rewrite(x < max(y, x + c0) + c1, fold(0 < c0 + c1) || x < y + c1) ||
+              rewrite(x < min(x + c0, y) + c1, x < y + c1 && fold(0 < c0 + c1)) ||
+              rewrite(x < min(y, x + c0) + c1, x < y + c1 && fold(0 < c0 + c1)) ||
+              rewrite(x < max(x + c0, y) + c1, x < y + c1 || fold(0 < c0 + c1)) ||
+              rewrite(x < max(y, x + c0) + c1, x < y + c1 || fold(0 < c0 + c1)) ||
 
               // Special cases where c0 == 0
-              rewrite(min(x, y) < x + c1, fold(0 < c1) || y < x + c1) ||
-              rewrite(min(y, x) < x + c1, fold(0 < c1) || y < x + c1) ||
-              rewrite(max(x, y) < x + c1, fold(0 < c1) && y < x + c1) ||
-              rewrite(max(y, x) < x + c1, fold(0 < c1) && y < x + c1) ||
+              rewrite(min(x, y) < x + c1, y < x + c1 || fold(0 < c1)) ||
+              rewrite(min(y, x) < x + c1, y < x + c1 || fold(0 < c1)) ||
+              rewrite(max(x, y) < x + c1, y < x + c1 && fold(0 < c1)) ||
+              rewrite(max(y, x) < x + c1, y < x + c1 && fold(0 < c1)) ||
 
-              rewrite(x < min(x, y) + c1, fold(0 < c1) && x < y + c1) ||
-              rewrite(x < min(y, x) + c1, fold(0 < c1) && x < y + c1) ||
-              rewrite(x < max(x, y) + c1, fold(0 < c1) || x < y + c1) ||
-              rewrite(x < max(y, x) + c1, fold(0 < c1) || x < y + c1) ||
+              rewrite(x < min(x, y) + c1, x < y + c1 && fold(0 < c1)) ||
+              rewrite(x < min(y, x) + c1, x < y + c1 && fold(0 < c1)) ||
+              rewrite(x < max(x, y) + c1, x < y + c1 || fold(0 < c1)) ||
+              rewrite(x < max(y, x) + c1, x < y + c1 || fold(0 < c1)) ||
 
               // Special cases where c1 == 0
-              rewrite(min(x + c0, y) < x, fold(c0 < 0) || y < x) ||
-              rewrite(min(y, x + c0) < x, fold(c0 < 0) || y < x) ||
-              rewrite(max(x + c0, y) < x, fold(c0 < 0) && y < x) ||
-              rewrite(max(y, x + c0) < x, fold(c0 < 0) && y < x) ||
+              rewrite(min(x + c0, y) < x, y < x || fold(c0 < 0)) ||
+              rewrite(min(y, x + c0) < x, y < x || fold(c0 < 0)) ||
+              rewrite(max(x + c0, y) < x, y < x && fold(c0 < 0)) ||
+              rewrite(max(y, x + c0) < x, y < x && fold(c0 < 0)) ||
 
-              rewrite(x < min(x + c0, y), fold(0 < c0) && x < y) ||
-              rewrite(x < min(y, x + c0), fold(0 < c0) && x < y) ||
-              rewrite(x < max(x + c0, y), fold(0 < c0) || x < y) ||
-              rewrite(x < max(y, x + c0), fold(0 < c0) || x < y) ||
+              rewrite(x < min(x + c0, y), x < y && fold(0 < c0)) ||
+              rewrite(x < min(y, x + c0), x < y && fold(0 < c0)) ||
+              rewrite(x < max(x + c0, y), x < y || fold(0 < c0)) ||
+              rewrite(x < max(y, x + c0), x < y || fold(0 < c0)) ||
 
               // Special cases where c0 == c1 == 0
               rewrite(min(x, y) < x, y < x) ||
@@ -191,10 +197,42 @@ Expr Simplify::visit(const LT *op, ExprInfo *bounds) {
               rewrite(x < max(y, x), x < y) ||
 
               // Special case where x is constant
-              rewrite(min(y, c0) < c1, fold(c0 < c1) || y < c1) ||
-              rewrite(max(y, c0) < c1, fold(c0 < c1) && y < c1) ||
-              rewrite(c1 < min(y, c0), fold(c1 < c0) && c1 < y) ||
-              rewrite(c1 < max(y, c0), fold(c1 < c0) || c1 < y) ||
+              rewrite(min(y, c0) < c1, y < c1 || fold(c0 < c1)) ||
+              rewrite(max(y, c0) < c1, y < c1 && fold(c0 < c1)) ||
+              rewrite(c1 < min(y, c0), c1 < y && fold(c1 < c0)) ||
+              rewrite(c1 < max(y, c0), c1 < y || fold(c1 < c0)) ||
+
+              // Cases where we can remove a min on one side because
+              // one term dominates another. These rules were
+              // synthesized then extended by hand.
+              rewrite(min(z, y) < min(x, y), z < min(x, y)) ||
+              rewrite(min(z, y) < min(y, x), z < min(y, x)) ||
+              rewrite(min(z, y) < min(x, y + c0), min(z, y) < x, c0 > 0) ||
+              rewrite(min(z, y) < min(y + c0, x), min(z, y) < x, c0 > 0) ||
+              rewrite(min(z, y + c0) < min(x, y), min(z, y + c0) < x, c0 < 0) ||
+              rewrite(min(z, y + c0) < min(y, x), min(z, y + c0) < x, c0 < 0) ||
+
+              rewrite(min(y, z) < min(x, y), z < min(x, y)) ||
+              rewrite(min(y, z) < min(y, x), z < min(y, x)) ||
+              rewrite(min(y, z) < min(x, y + c0), min(z, y) < x, c0 > 0) ||
+              rewrite(min(y, z) < min(y + c0, x), min(z, y) < x, c0 > 0) ||
+              rewrite(min(y + c0, z) < min(x, y), min(z, y + c0) < x, c0 < 0) ||
+              rewrite(min(y + c0, z) < min(y, x), min(z, y + c0) < x, c0 < 0) ||
+
+              // Equivalents with max
+              rewrite(max(z, y) < max(x, y), max(z, y) < x) ||
+              rewrite(max(z, y) < max(y, x), max(z, y) < x) ||
+              rewrite(max(z, y) < max(x, y + c0), max(z, y) < x, c0 < 0) ||
+              rewrite(max(z, y) < max(y + c0, x), max(z, y) < x, c0 < 0) ||
+              rewrite(max(z, y + c0) < max(x, y), max(z, y + c0) < x, c0 > 0) ||
+              rewrite(max(z, y + c0) < max(y, x), max(z, y + c0) < x, c0 > 0) ||
+
+              rewrite(max(y, z) < max(x, y), max(z, y) < x) ||
+              rewrite(max(y, z) < max(y, x), max(z, y) < x) ||
+              rewrite(max(y, z) < max(x, y + c0), max(z, y) < x, c0 < 0) ||
+              rewrite(max(y, z) < max(y + c0, x), max(z, y) < x, c0 < 0) ||
+              rewrite(max(y + c0, z) < max(x, y), max(z, y + c0) < x, c0 > 0) ||
+              rewrite(max(y + c0, z) < max(y, x), max(z, y + c0) < x, c0 > 0) ||
 
               // Comparisons with selects:
               // x < select(c, t, f) == c && (x < t) || !c && (x < f)
@@ -359,31 +397,8 @@ Expr Simplify::visit(const LT *op, ExprInfo *bounds) {
                       broadcast(x * fold(c3/c0) < z, lanes),
                       c0 > 0 && (c3 % c0 == 0) &&
                       c1 * (lanes - 1) < c0 &&
-                      c1 * (lanes - 1) >= 0) ||
-
-              // Synthesized
-              #if USE_SYNTHESIZED_RULES
-              rewrite((x < ((x + y) + z)), (0 < (y + z))) ||
-
-              rewrite((x < max(y, (max(z, x) + c0))), true, (0 < c0)) ||
-              rewrite((x < max((max(y, x) + c0), z)), true, (0 < c0)) ||
-              rewrite((min(x, y) < min(z, (x + c0))), (min(x, y) < z), (0 < c0)) ||
-              rewrite((max(x, c0) < max(y, 0)), (x < max(y, 0)), (c0 < 0)) ||
-
-              rewrite(((min(x, c0) + y) < min(z, y)), ((min(x, c0) + y) < z), (c0 < 0)) ||
-
-              rewrite((((c0 - x)/c1) < y), ((y*fold((0 - c1))) < x), (((0 < c1) && (c1 < 16)) && (c0 == 0))) || // < 16
-              rewrite(((((c0 - x)/c1)*c2) < x), true, (((c0 == (c1 + 1)) && ((c1 + c2) == 0)) && ((0 < c1) && (c1 < 16)))) || // Predicate too specific
-              rewrite(((x*c0) < ((y*c1) + c2)), ((x*fold((c0/c1))) < y), (((((c1 < 16) && (0 < c1)) && ((c1 != 0) && ((c0 % c1) == 0))) && (c2 <= 0)) && (0 < (c1 + c2)))) || // < 16. Some unnecessary constraints.
-
-              rewrite((max(min((x + c0), y), z) < x), (max(y, z) < x), (0 <= c0)) ||
-
-              // From Google list
-              rewrite((x < (y + 1)), (x <= y)) ||
-              #endif
-
-              false))) {
-            return mutate(std::move(rewrite.result), bounds);
+                      c1 * (lanes - 1) >= 0)))) {
+            return mutate(rewrite.result, bounds);
         }
         // clang-format on
     }
@@ -428,7 +443,7 @@ Expr Simplify::visit(const LE *op, ExprInfo *bounds) {
                 rewrite(((x + y) <= max(z, (w + y))), (x <= max((z - y), w))) ||
                 rewrite(((x + y) <= max((z + y), w)), (x <= max((w - y), z))) ||
                 rewrite(((x + y) <= (max(z, (w + y)) + u)), (x <= (max((z - y), w) + u))) ||
-                rewrite(((x + (y*z)) <= (w*z)), (x <= ((w - y)*z))) ||
+                rewrite(((x + (y * z)) <= (w * z)), (x <= ((w - y) * z))) ||
                 rewrite((((x + y) + z) <= y), ((x + z) <= 0)) ||
                 rewrite((min(x, y) <= min(x, z)), (min(x, y) <= z)) ||
                 rewrite((min(x, y) <= min(z, y)), (min(x, y) <= z)) ||
@@ -454,7 +469,7 @@ Expr Simplify::visit(const LE *op, ExprInfo *bounds) {
                 rewrite((((x + y) + z) <= max((y + w), u)), ((x + z) <= max((u - y), w))) ||
                 rewrite(((((x + y) + z) + w) <= (y + u)), (((x + w) + z) <= u)) ||
                 rewrite(((min(x, y) + z) <= (min(z, w) + x)), (z <= (max((x - y), 0) + w))) ||
-                rewrite(((x*y) <= ((y*z) + w)), (((x - z)*y) <= w)) ||
+                rewrite(((x * y) <= ((y * z) + w)), (((x - z) * y) <= w)) ||
                 rewrite((min(x, y) <= min(y, z)), (min(x, y) <= z)) ||
                 rewrite((min(x, y) <= min(min(x, z), w)), (min(x, y) <= min(z, w))) ||
                 rewrite((min(x, y) <= max(x, y)), true) ||
@@ -464,14 +479,14 @@ Expr Simplify::visit(const LE *op, ExprInfo *bounds) {
 
                 rewrite((((x + (y + z)) + c0) <= (w + z)), (((x + y) + c0) <= w)) ||
                 rewrite(((min((min(x, c0) + y), z) + c1) <= y), true, ((c0 + c1) == 0)) ||
-                rewrite((((x + y)*c1) <= (z + (x*c1))), ((y*c1) <= z)) ||
-                rewrite((((x + y)*z) <= (w + (y*z))), ((x*z) <= w)) ||
+                rewrite((((x + y) * c1) <= (z + (x * c1))), ((y * c1) <= z)) ||
+                rewrite((((x + y) * z) <= (w + (y * z))), ((x * z) <= w)) ||
                 rewrite((min(x, y) <= max(y, x)), true) ||
-                rewrite((min((x*y), c0) <= (min(x, c1)*y)), true, ((0 <= c1) && (c0 <= 0))) ||
+                rewrite((min((x * y), c0) <= (min(x, c1) * y)), true, ((0 <= c1) && (c0 <= 0))) ||
                 rewrite((max(x, c0) <= max(y, 0)), (x <= max(y, 0)), (c0 <= 0)) ||
                 rewrite((select((x < y), max(z, w), z) <= max(z, w)), true) ||
 
-                rewrite((min((min(x, y)*c1), z) <= (x*c1)), true, (0 <= c1)) ||
+                rewrite((min((min(x, y) * c1), z) <= (x * c1)), true, (0 <= c1)) ||
                 rewrite((min(min((min(x, c0) + y), z), w) <= y), true, (c0 <= 0)) ||
                 rewrite(((min((min(x, y) + c0), z) + c1) <= y), true, ((c0 + c1) <= 0)) ||
 
@@ -480,29 +495,29 @@ Expr Simplify::visit(const LE *op, ExprInfo *bounds) {
                 // c0 unbound. Shouldn't have eq constraints
                 // rewrite((((max(x, 0) + y) + c1) <= x), (y < (min(x, c0) + 2)), ((c0 == 0) && (c1 == -1))) ||
                 rewrite((((max(x, 0) + y) + z) <= x), ((y + z) <= min(x, 0))) ||
-                rewrite(((max(x, c0) + c1) <= max(y, c2)), ((x + c1) <= max(y, c2)), (((c0 != 0) && ((c1/c0) == 0)) && ((c0 <= 0) && (0 <= c2)))) || // weird one
-                rewrite(((x*c1) <= ((y*c1) + z)), (((x - y)*c1) <= z)) ||
+                rewrite(((max(x, c0) + c1) <= max(y, c2)), ((x + c1) <= max(y, c2)), (((c0 != 0) && ((c1 / c0) == 0)) && ((c0 <= 0) && (0 <= c2)))) ||  // weird one
+                rewrite(((x * c1) <= ((y * c1) + z)), (((x - y) * c1) <= z)) ||
                 rewrite((min(x, y) <= min(min(y, z), c0)), (min(x, y) <= min(z, c0))) ||
                 rewrite((min((x + y), z) <= (w + x)), (min((z - x), y) <= w)) ||
-                rewrite((min(((x*c0) + y), z) <= y), ((z <= y) || (x < 1)), (0 < c0)) ||
-                rewrite((min(((x*c0) + y), z) <= y), (select((y < z), 1, 0) <= select((0 < x), 0, 1)), (0 < c0)) || // crappy form
+                rewrite((min(((x * c0) + y), z) <= y), ((z <= y) || (x < 1)), (0 < c0)) ||
+                rewrite((min(((x * c0) + y), z) <= y), (select((y < z), 1, 0) <= select((0 < x), 0, 1)), (0 < c0)) ||  // crappy form
 
-                rewrite(((x + (y*z)) <= ((w + z)*y)), (x <= (w*y))) ||
-                rewrite(((max(x, 0) + min(y, 1)) <= y), (x < max(y, 1))) || // Too specific?
+                rewrite(((x + (y * z)) <= ((w + z) * y)), (x <= (w * y))) ||
+                rewrite(((max(x, 0) + min(y, 1)) <= y), (x < max(y, 1))) ||  // Too specific?
 
-                rewrite((((x + c0)/c1) <= y), (x <= (y*c1)), (((0 < c1) && (c1 < 16)) && (c0 == (c1 + -1)))) ||
-                rewrite((((c0 - x)/c3) <= ((c2 - x)/c3)), true, (((0 < c3) && (c3 < 16)) && (c0 <= c2))) ||
-                rewrite(((min(x, y)/c0) <= (y/c1)), true, ((((c1 != 0) && ((c0 % c1) == 0)) && (c0 <= c1)) && ((((0 < c0) && (c0 < 16)) && (0 < c1)) && (c1 < 16)))) || // Crazy predicate. c0 % c1 == 0 && c0 <= c1 should just be c0 == c1. TODO: throw all the predicates into the system too
+                rewrite((((x + c0) / c1) <= y), (x <= (y * c1)), (((0 < c1) && (c1 < 16)) && (c0 == (c1 + -1)))) ||
+                rewrite((((c0 - x) / c3) <= ((c2 - x) / c3)), true, (((0 < c3) && (c3 < 16)) && (c0 <= c2))) ||
+                rewrite(((min(x, y) / c0) <= (y / c1)), true, ((((c1 != 0) && ((c0 % c1) == 0)) && (c0 <= c1)) && ((((0 < c0) && (c0 < 16)) && (0 < c1)) && (c1 < 16)))) ||  // Crazy predicate. c0 % c1 == 0 && c0 <= c1 should just be c0 == c1. TODO: throw all the predicates into the system too
                 rewrite((min(x, y) <= max(x, z)), true) ||
                 rewrite((min(x, y) <= max(y, z)), true) ||
                 rewrite((min((min(x, c0) + y), z) <= y), true, (c0 <= 0)) ||
-                rewrite((min((x*y), c0) <= (min(x, c1)*y)), true, ((c0 <= c1) && (0 <= c0))) ||
+                rewrite((min((x * y), c0) <= (min(x, c1) * y)), true, ((c0 <= c1) && (0 <= c0))) ||
 
-                rewrite((x <= ((y + c0)/c1)), ((x*c1) < y), (((-1 <= c0) && (c0 < 0)) && ((0 < c1) && (c1 < 16)))) || // Predicate implies c0 == 1
-                rewrite(((x*c1) <= max((y*c1), c2)), (x <= max(y, fold((c2/c1)))), ((c1 < 16) && (0 < c1))) || // < 16
-                rewrite((min((x*c2), c1) <= (y*c2)), (min(x, fold((((c1 + -1)/c2) + 1))) <= y), ((c2 < 16) && (0 < c2))) || // < 16
+                rewrite((x <= ((y + c0) / c1)), ((x * c1) < y), (((-1 <= c0) && (c0 < 0)) && ((0 < c1) && (c1 < 16)))) ||          // Predicate implies c0 == 1
+                rewrite(((x * c1) <= max((y * c1), c2)), (x <= max(y, fold((c2 / c1)))), ((c1 < 16) && (0 < c1))) ||               // < 16
+                rewrite((min((x * c2), c1) <= (y * c2)), (min(x, fold((((c1 + -1) / c2) + 1))) <= y), ((c2 < 16) && (0 < c2))) ||  // < 16
 
-                rewrite(((min(x, c0) + c1) <= min(y, 0)), (min(x, c0) < (y + fold((c0 - c1)))), ((c1 < 0) && (c0 == 1))) || // Should have subs'd in c0
+                rewrite(((min(x, c0) + c1) <= min(y, 0)), (min(x, c0) < (y + fold((c0 - c1)))), ((c1 < 0) && (c0 == 1))) ||  // Should have subs'd in c0
                 rewrite(((max(x, c0) + c1) <= max(y, c0)), ((x + c1) <= max(y, c0)), (c1 <= 0)) ||
 
                 // From google list

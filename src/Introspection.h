@@ -5,8 +5,6 @@
 #include <stdint.h>
 #include <string>
 
-#include "Util.h"
-
 /** \file
  *
  * Defines methods for introspecting in C++. Relies on DWARF debugging

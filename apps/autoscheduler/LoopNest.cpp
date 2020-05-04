@@ -1885,7 +1885,7 @@ void LoopNest::compute_features(const FunctionDAG &dag,
                 // Extent of the innermost dimension in the storage layout
                 int64_t innermost_storage_extent = 1;
                 int v = p->vector_dim;
-                if (v >= 0 && node->dimensions > 0) {
+                if (v >= 0 && v < node->dimensions) {
                     innermost_storage_extent = root_bounds->region_computed(v).extent();
                 }
                 feat.innermost_bytes_at_root = node->bytes_per_point * innermost_storage_extent;
@@ -2861,7 +2861,7 @@ const Bound &LoopNest::get_bounds(const FunctionDAG::Node *f) const {
     } else {
         internal_assert(!f->outgoing_edges.empty())
             << "No consumers of " << f->func.name()
-            << " at loop over " << (is_root() ? "root" : node->func.name()) << '\n';
+            << " at loop over " << (is_root() ? "root" : node->func.name()) << "\n";
         auto init = Span::empty_span();
         for (int i = 0; i < f->dimensions; i++) {
             bound->region_required(i) = init;
@@ -2917,12 +2917,12 @@ void LoopNest::dump(string prefix, const LoopNest *parent) const {
             aslog(0) << " " << size[i];
             // The vectorized loop gets a 'v' suffix
             if (innermost && i == (size_t)vectorized_loop_index) {
-                aslog(0) << 'v';
+                aslog(0) << "v";
             }
             // Loops that have a known constant size get a
             // 'c'. Useful for knowing what we can unroll.
             if (parent->get_bounds(node)->loops(stage->index, i).constant_extent()) {
-                aslog(0) << 'c';
+                aslog(0) << "c";
             }
         }
 
@@ -2958,7 +2958,7 @@ void LoopNest::dump(string prefix, const LoopNest *parent) const {
     } else if (parallel) {
         aslog(0) << " p\n";
     } else {
-        aslog(0) << '\n';
+        aslog(0) << "\n";
     }
     for (auto p : store_at) {
         aslog(0) << prefix << "realize: " << p->func.name() << " [";
@@ -2978,7 +2978,7 @@ void LoopNest::dump(string prefix, const LoopNest *parent) const {
         children[i - 1]->dump(prefix, this);
     }
     for (auto it = inlined.begin(); it != inlined.end(); it++) {
-        aslog(0) << prefix << "inlined: " << it.key()->func.name() << " " << it.value() << '\n';
+        aslog(0) << prefix << "inlined: " << it.key()->func.name() << " " << it.value() << "\n";
     }
 }
 

@@ -278,7 +278,7 @@ public:
 };
 }  // namespace
 
-void CodeGen_OpenGLCompute_Dev::CodeGen_OpenGLCompute_C::add_kernel(Stmt s,
+void CodeGen_OpenGLCompute_Dev::CodeGen_OpenGLCompute_C::add_kernel(const Stmt &s,
                                                                     const string &name,
                                                                     const vector<DeviceArgument> &args) {
 
@@ -409,7 +409,7 @@ void CodeGen_OpenGLCompute_Dev::CodeGen_OpenGLCompute_C::visit(const IntImm *op)
 vector<char> CodeGen_OpenGLCompute_Dev::compile_to_src() {
     string str = src_stream.str();
     debug(1) << "GLSL Compute source:\n"
-             << str << '\n';
+             << str << "\n";
     vector<char> buffer(str.begin(), str.end());
     buffer.push_back(0);
     return buffer;
@@ -420,7 +420,7 @@ string CodeGen_OpenGLCompute_Dev::get_current_kernel_name() {
 }
 
 void CodeGen_OpenGLCompute_Dev::dump() {
-    std::cerr << src_stream.str() << std::endl;
+    std::cerr << src_stream.str() << "\n";
 }
 
 std::string CodeGen_OpenGLCompute_Dev::print_gpu_name(const std::string &name) {

@@ -4,9 +4,10 @@
 /** \file
  * Defines helpers for passing arguments to separate devices, such as GPUs.
  */
+#include <string>
 
 #include "Closure.h"
-#include "IR.h"
+#include "Expr.h"
 #include "ModulusRemainder.h"
 
 namespace Halide {
@@ -42,7 +43,7 @@ struct DeviceArgument {
     /** If this is a scalar parameter, then this is its type.
      *
      * If this is a buffer parameter, this is used to determine elem_size
-     * of the buffer_t.
+     * of the halide_buffer_t.
      *
      * Note that type.lanes() should always be 1 here. */
     Type type;
@@ -92,7 +93,7 @@ struct DeviceArgument {
  * produce a vector of DeviceArgument objects. */
 class HostClosure : public Closure {
 public:
-    HostClosure(Stmt s, const std::string &loop_variable = "");
+    HostClosure(const Stmt &s, const std::string &loop_variable = "");
 
     /** Get a description of the captured arguments. */
     std::vector<DeviceArgument> arguments();

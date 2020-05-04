@@ -3,25 +3,14 @@
 # This lesson demonstrates how to pass in input images.
 
 # This lesson can be built by invoking the command:
-#    make tutorial_lesson_02_input_image
-# in a shell with the current directory at the top of the halide source tree.
-# Otherwise, see the platform-specific compiler invocations below.
-
-# On linux, you can compile and run it like so:
-# g++ lesson_02*.cpp -g -I ../include -L ../bin -lHalide `libpng-config --cflags --ldflags` -lpthread -ldl -o lesson_02 -std=c++11
-# LD_LIBRARY_PATH=../bin ./lesson_02
-
-# On os x:
-# g++ lesson_02*.cpp -g -I ../include -L ../bin -lHalide `libpng-config --cflags --ldflags` -o lesson_02 -std=c++11
-# DYLD_LIBRARY_PATH=../bin ./lesson_02
-
-# The only Halide header file you need is Halide.h. It includes all of Halide.
-#include "Halide.h"
+#    make test_tutorial_lesson_02_input_image
+# in a shell with the current directory at python_bindings/
 
 import halide as hl
 import numpy as np
 import imageio
 import os.path
+
 
 def main():
 

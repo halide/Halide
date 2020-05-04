@@ -29,10 +29,6 @@ CodeGen_WebAssembly::CodeGen_WebAssembly(Target t)
 #endif
     user_assert(llvm_WebAssembly_enabled) << "llvm build not configured with WebAssembly target enabled.\n";
     user_assert(target.bits == 32) << "Only wasm32 is supported.";
-#if LLVM_VERSION >= 90
-#else
-    user_error << "WebAssembly output is only support in LLVM 9.0+";
-#endif
 }
 
 void CodeGen_WebAssembly::visit(const Cast *op) {

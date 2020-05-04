@@ -6,12 +6,13 @@
  * Methods for extracting an associative operator from a Func's update definition
  * if there is any and computing the identity of the associative operator.
  */
+#include <functional>
+#include <string>
+#include <utility>
+#include <vector>
 
 #include "AssociativeOpsTable.h"
-#include "IR.h"
-#include "IREquality.h"
-
-#include <functional>
+#include "Expr.h"
 
 namespace Halide {
 namespace Internal {
@@ -67,7 +68,7 @@ struct AssociativeOp {
 
         Replacement() = default;
         Replacement(const std::string &var, Expr expr)
-            : var(var), expr(expr) {
+            : var(var), expr(std::move(expr)) {
         }
 
         bool operator==(const Replacement &other) const {

@@ -31,10 +31,10 @@ std::pair<std::string, bool> get_env_variable(char const *env_var_name) {
     return {"", false};
 }
 
-bool use_debug_feature() {
+bool use_noboundsquery_feature() {
     std::string value;
     bool read;
-    std::tie(value, read) = get_env_variable("HL_MULTITARGET_TEST_USE_DEBUG_FEATURE");
+    std::tie(value, read) = get_env_variable("HL_MULTITARGET_TEST_USE_NOBOUNDSQUERY_FEATURE");
     if (!read) {
         return false;
     }
@@ -45,10 +45,10 @@ static std::atomic<int> can_use_count;
 
 int my_can_use_target_features(int count, const uint64_t *features) {
     can_use_count += 1;
-    const int word = halide_target_feature_debug / 64;
-    const int bit = halide_target_feature_debug % 64;
+    const int word = halide_target_feature_no_bounds_query / 64;
+    const int bit = halide_target_feature_no_bounds_query % 64;
     if (features[word] & (1ULL << bit)) {
-        if (use_debug_feature()) {
+        if (use_noboundsquery_feature()) {
             return 1;
         } else {
             return 0;
@@ -72,7 +72,7 @@ int main(int argc, char **argv) {
     // Verify output.
     for (int y = 0; y < H; y++) {
         for (int x = 0; x < W; x++) {
-            const uint32_t expected = use_debug_feature() ? 0xdeadbeef : 0xf00dcafe;
+            const uint32_t expected = use_noboundsquery_feature() ? 0xdeadbeef : 0xf00dcafe;
             const uint32_t actual = output(x, y);
             if (actual != expected) {
                 printf("Error at %d, %d: expected %x, got %x\n", x, y, expected, actual);
@@ -105,7 +105,7 @@ int main(int argc, char **argv) {
         }
     }
 
-    printf("Success: Saw %x for debug=%d\n", output(0, 0), use_debug_feature());
+    printf("Success: Saw %x for no_bounds_query=%d\n", output(0, 0), use_noboundsquery_feature());
 
     return 0;
 }

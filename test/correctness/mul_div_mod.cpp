@@ -271,9 +271,9 @@ enum ScheduleVariant {
 template<typename T1, typename T2, typename RT, typename BIG>
 bool mul(int vector_width, ScheduleVariant scheduling, const Target &target) {
     // std::cout << "Test multiplication of "
-    //           << type_of<T1>() << 'x' << vector_width << '*'
-    //           << type_of<T2>() << 'x' << vector_width << "->"
-    //           << type_of<RT>() << 'x' << vector_width << '\n';
+    //           << type_of<T1>() << "x" << vector_width << "*"
+    //           << type_of<T2>() << "x" << vector_width << "->"
+    //           << type_of<RT>() << "x" << vector_width << "\n";
 
     int i, j;
     Type t1 = type_of<T1>();
@@ -345,7 +345,7 @@ bool mul(int vector_width, ScheduleVariant scheduling, const Target &target) {
 // T should be a type known to Halide.
 template<typename T, typename BIG>
 bool div_mod(int vector_width, ScheduleVariant scheduling, const Target &target) {
-    // std::cout << "Test division of " << type_of<T>() << 'x' << vector_width << '\n';
+    // std::cout << "Test division of " << type_of<T>() << "x" << vector_width << "\n";
 
     int i, j;
     Type t = type_of<T>();
@@ -447,7 +447,7 @@ bool div_mod(int vector_width, ScheduleVariant scheduling, const Target &target)
 // T should be a type known to Halide.
 template<typename T, typename BIG>
 bool f_mod() {
-    // std::cout << "Test mod of " << type_of<T>() << '\n';
+    // std::cout << "Test mod of " << type_of<T>() << "\n";
 
     int i, j;
     Type t = type_of<T>();

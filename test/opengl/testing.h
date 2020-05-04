@@ -42,7 +42,7 @@ auto check_result(const Halide::Buffer<T> &buf, T tol, F f) -> decltype(std::dec
                     err::vector(result);
                     std::cerr << ") should be (";
                     err::vector(expected);
-                    std::cerr << ") at x=" << x << " y=" << y << std::endl;
+                    std::cerr << ") at x=" << x << " y=" << y << "\n";
                     throw err();
                 }
             }
@@ -66,7 +66,7 @@ auto check_result(const Halide::Buffer<T> &buf, T tol, F f) -> decltype(std::dec
                 std::cerr << +result;
                 std::cerr << ") should be (";
                 std::cerr << +expected;
-                std::cerr << ") at x=" << x << " y=" << y << std::endl;
+                std::cerr << ") at x=" << x << " y=" << y << "\n";
                 throw err();
             }
         });

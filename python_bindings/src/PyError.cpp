@@ -15,11 +15,11 @@ void halide_python_print(void *, const char *msg) {
 
 class HalidePythonCompileTimeErrorReporter : public CompileTimeErrorReporter {
 public:
-    void warning(const char *msg) {
+    void warning(const char *msg) override {
         py::print(msg, py::arg("end") = "");
     }
 
-    void error(const char *msg) {
+    void error(const char *msg) override {
         throw Error(msg);
         // This method must not return!
     }

@@ -3,6 +3,10 @@ include ../support/autoscheduler.inc
 
 HL_TARGET=host-cuda
 
+.PHONY: build clean test
+
+build: $(BIN)/$(HL_TARGET)/filter
+
 GRADIENT_AUTOSCHED_BIN=../gradient_autoscheduler/bin
 CXXFLAGS += -I../support/
 
@@ -18,7 +22,7 @@ endif
 
 $(GENERATOR_BIN)/bgu.generator: bgu_generator.cpp $(GENERATOR_DEPS)
 	@mkdir -p $(@D)
-	$(CXX) $(CXXFLAGS) -g $(filter-out %.h,$^) -o $@ $(LDFLAGS) $(HALIDE_SYSTEM_LIBS) $(USE_EXPORT_DYNAMIC)
+	$(CXX) $(CXXFLAGS) -g $(filter %.cpp,$^) -o $@ $(LIBHALIDE_LDFLAGS)
 
 $(BIN)/%/bgu.a: $(GENERATOR_BIN)/bgu.generator
 	@mkdir -p $(@D)

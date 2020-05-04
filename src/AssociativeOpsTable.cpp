@@ -138,22 +138,22 @@ static map<TableKey, vector<AssociativePattern>> pattern_tables;
 
 void populate_ops_table_single_general_add(const vector<Type> &types, vector<AssociativePattern> &table) {
     declare_vars_single(types);
-    table.push_back({x0 + y0, zero_0, true});
+    table.emplace_back(x0 + y0, zero_0, true);
 }
 
 void populate_ops_table_single_general_mul(const vector<Type> &types, vector<AssociativePattern> &table) {
     declare_vars_single(types);
-    table.push_back({x0 * y0, one_0, true});
+    table.emplace_back(x0 * y0, one_0, true);
 }
 
 void populate_ops_table_single_general_max(const vector<Type> &types, vector<AssociativePattern> &table) {
     declare_vars_single(types);
-    table.push_back({max(x0, y0), tmin_0, true});
+    table.emplace_back(max(x0, y0), tmin_0, true);
 }
 
 void populate_ops_table_single_general_min(const vector<Type> &types, vector<AssociativePattern> &table) {
     declare_vars_single(types);
-    table.push_back({min(x0, y0), tmax_0, true});
+    table.emplace_back(min(x0, y0), tmax_0, true);
 }
 
 void populate_ops_table_single_general_sub(const vector<Type> &types, vector<AssociativePattern> &table) {
@@ -199,12 +199,12 @@ void populate_ops_table_double_general_select(const vector<Type> &types, vector<
 
 void populate_ops_table_single_uint1_and(const vector<Type> &types, vector<AssociativePattern> &table) {
     declare_vars_single(types);
-    table.push_back({x0 && y0, one_0, true});
+    table.emplace_back(x0 && y0, one_0, true);
 }
 
 void populate_ops_table_single_uint1_or(const vector<Type> &types, vector<AssociativePattern> &table) {
     declare_vars_single(types);
-    table.push_back({x0 || y0, zero_0, true});
+    table.emplace_back(x0 || y0, zero_0, true);
 }
 
 void populate_ops_table_single_uint8_cast(const vector<Type> &types, vector<AssociativePattern> &table) {
@@ -212,41 +212,41 @@ void populate_ops_table_single_uint8_cast(const vector<Type> &types, vector<Asso
     Expr k0_uint16 = Variable::make(UInt(16), "k0");
     Expr k0_uint32 = Variable::make(UInt(32), "k0");
     Expr k0_uint64 = Variable::make(UInt(64), "k0");
-    table.push_back({cast<uint8_t>(min(cast<uint16_t>(x0 + y0), k0_uint16)), zero_0, true});
-    table.push_back({cast<uint8_t>(min(cast<uint32_t>(x0 + y0), k0_uint32)), zero_0, true});
-    table.push_back({cast<uint8_t>(min(cast<uint64_t>(x0 + y0), k0_uint64)), zero_0, true});
+    table.emplace_back(cast<uint8_t>(min(cast<uint16_t>(x0 + y0), k0_uint16)), zero_0, true);
+    table.emplace_back(cast<uint8_t>(min(cast<uint32_t>(x0 + y0), k0_uint32)), zero_0, true);
+    table.emplace_back(cast<uint8_t>(min(cast<uint64_t>(x0 + y0), k0_uint64)), zero_0, true);
 }
 
 void populate_ops_table_single_uint8_select(const vector<Type> &types, vector<AssociativePattern> &table) {
     declare_vars_single(types);
-    table.push_back({select(x0 > tmax_0 - y0, tmax_0, y0), zero_0, true});  // Saturating add
-    table.push_back({select(x0 < -y0, y0, tmax_0), zero_0, true});          // Saturating add
+    table.emplace_back(select(x0 > tmax_0 - y0, tmax_0, y0), zero_0, true);  // Saturating add
+    table.emplace_back(select(x0 < -y0, y0, tmax_0), zero_0, true);          // Saturating add
 }
 
 void populate_ops_table_single_uint16_cast(const vector<Type> &types, vector<AssociativePattern> &table) {
     declare_vars_single(types);
     Expr k0_uint32 = Variable::make(UInt(32), "k0");
     Expr k0_uint64 = Variable::make(UInt(64), "k0");
-    table.push_back({cast<uint16_t>(min(cast<uint32_t>(x0 + y0), k0_uint32)), zero_0, true});
-    table.push_back({cast<uint16_t>(min(cast<uint64_t>(x0 + y0), k0_uint64)), zero_0, true});
+    table.emplace_back(cast<uint16_t>(min(cast<uint32_t>(x0 + y0), k0_uint32)), zero_0, true);
+    table.emplace_back(cast<uint16_t>(min(cast<uint64_t>(x0 + y0), k0_uint64)), zero_0, true);
 }
 
 void populate_ops_table_single_uint16_select(const vector<Type> &types, vector<AssociativePattern> &table) {
     declare_vars_single(types);
-    table.push_back({select(x0 > tmax_0 - y0, tmax_0, y0), zero_0, true});  // Saturating add
-    table.push_back({select(x0 < -y0, y0, tmax_0), zero_0, true});          // Saturating add
+    table.emplace_back(select(x0 > tmax_0 - y0, tmax_0, y0), zero_0, true);  // Saturating add
+    table.emplace_back(select(x0 < -y0, y0, tmax_0), zero_0, true);          // Saturating add
 }
 
 void populate_ops_table_single_uint32_cast(const vector<Type> &types, vector<AssociativePattern> &table) {
     declare_vars_single(types);
     Expr k0_uint64 = Variable::make(UInt(64), "k0");
-    table.push_back({cast<uint32_t>(min(cast<uint64_t>(x0 + y0), k0_uint64)), zero_0, true});
+    table.emplace_back(cast<uint32_t>(min(cast<uint64_t>(x0 + y0), k0_uint64)), zero_0, true);
 }
 
 void populate_ops_table_single_uint32_select(const vector<Type> &types, vector<AssociativePattern> &table) {
     declare_vars_single(types);
-    table.push_back({select(x0 > tmax_0 - y0, tmax_0, y0), zero_0, true});  // Saturating add
-    table.push_back({select(x0 < -y0, y0, tmax_0), zero_0, true});          // Saturating add
+    table.emplace_back(select(x0 > tmax_0 - y0, tmax_0, y0), zero_0, true);  // Saturating add
+    table.emplace_back(select(x0 < -y0, y0, tmax_0), zero_0, true);          // Saturating add
 }
 
 static const map<TableKey, void (*)(const vector<Type> &types, vector<AssociativePattern> &)> val_type_to_populate_luts_fn = {

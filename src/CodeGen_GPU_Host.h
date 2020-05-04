@@ -6,6 +6,7 @@
  */
 
 #include <map>
+#include <string>
 
 #include "CodeGen_ARM.h"
 #include "CodeGen_MIPS.h"
@@ -13,7 +14,6 @@
 #include "CodeGen_RISCV.h"
 #include "CodeGen_WebAssembly.h"
 #include "CodeGen_X86.h"
-
 #include "IR.h"
 
 namespace Halide {
@@ -31,7 +31,7 @@ public:
      * appropriate flags from Target */
     CodeGen_GPU_Host(Target);
 
-    virtual ~CodeGen_GPU_Host();
+    ~CodeGen_GPU_Host() override;
 
 protected:
     void compile_func(const LoweredFunc &func, const std::string &simple_name, const std::string &extern_name) override;
@@ -41,13 +41,13 @@ protected:
      * compiler doesn't know that CodeGen_CPU will in fact inherit
      * from CodeGen for every instantiation of this template. */
     using CodeGen_CPU::allocations;
-    using CodeGen_CPU::buffer_t_type;
     using CodeGen_CPU::builder;
     using CodeGen_CPU::codegen;
     using CodeGen_CPU::context;
     using CodeGen_CPU::create_alloca_at_entry;
     using CodeGen_CPU::function;
     using CodeGen_CPU::get_user_context;
+    using CodeGen_CPU::halide_buffer_t_type;
     using CodeGen_CPU::i16_t;
     using CodeGen_CPU::i32_t;
     using CodeGen_CPU::i64_t;

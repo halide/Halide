@@ -1,6 +1,6 @@
 include(CMakeParseArguments)
 
-# Detect if we need supress -Wunused-but-set-variable warning.  This warning
+# Detect if we need to suppress -Wunused-but-set-variable warning. This warning
 # might be emitted by gcc for the tutorials as they don't always use a result
 # when showing a demonstration of a computation in C code.
 check_cxx_compiler_flag("-Wno-unused-but-set-variable" SUPPORT_NO_UNUSED_BUT_SET_VARIABLE)
@@ -17,24 +17,23 @@ function(add_tutorial source_file)
   set(multiValueArgs SRCS )
   cmake_parse_arguments(args "${options}" "${oneValueArgs}" "${multiValueArgs}" ${ARGN})
 
-  string(REPLACE ".cpp" "" name ${source_file})
+  get_filename_component(name "${source_file}" NAME_WE)
   halide_project(${name} "tutorials" ${source_file})
   add_halide_test("${name}"
-           GROUPS test_tutorial
+           GROUPS tutorial
            WORKING_DIRECTORY ${CMAKE_RUNTIME_OUTPUT_DIRECTORY})
   target_include_directories(${name} PRIVATE "${HALIDE_TOOLS_DIR}")
   if (SUPPORT_NO_UNUSED_BUT_SET_VARIABLE)
     target_compile_options(${name} PRIVATE "-Wno-unused-but-set-variable")
   endif()
   if (${args_WITH_IMAGE_IO})
-    halide_use_image_io(${name})
+    target_link_libraries(${name} PRIVATE Halide::ImageIO)
   endif()
   if (${args_WITH_OPENMP})
-    if (OPENMP_FOUND)
-      target_compile_options(${name} PRIVATE ${OpenMP_CXX_FLAGS})
-      target_link_libraries(${name} PRIVATE ${OpenMP_CXX_FLAGS})
+    if (TARGET OpenMP::OpenMP_CXX)
+      target_link_libraries(${name} PRIVATE OpenMP::OpenMP_CXX)
     else()
-      # Compile anyway but supress warnings about unrecognised pragmas
+      # Compile anyway but suppress warnings about unrecognised pragmas
       if (NOT MSVC)
         target_compile_options(${name} PRIVATE -Wno-unknown-pragmas)
       else()

@@ -226,6 +226,18 @@ Expr Simplify::visit(const Shuffle *op, ExprInfo *bounds) {
         }
     }
 
+    // Pull a widening cast outside of a slice
+    if (new_vectors.size() == 1 &&
+        op->type.lanes() < new_vectors[0].type().lanes()) {
+        if (const Cast *cast = new_vectors[0].as<Cast>()) {
+            if (cast->type.bits() > cast->value.type().bits()) {
+                return mutate(Cast::make(cast->type.with_lanes(op->type.lanes()),
+                                         Shuffle::make({cast->value}, op->indices)),
+                              bounds);
+            }
+        }
+    }
+
     if (!changed) {
         return op;
     } else {

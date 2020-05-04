@@ -1,4 +1,5 @@
 #include <algorithm>
+#include <utility>
 
 #include "CSE.h"
 #include "CodeGen_GPU_Dev.h"
@@ -52,7 +53,7 @@ public:
  * common node types where it can be exact. Assumes any vector
  * variables defined externally also have .min_lane and .max_lane
  * versions in scope. */
-Interval bounds_of_lanes(Expr e) {
+Interval bounds_of_lanes(const Expr &e) {
     if (const Add *add = e.as<Add>()) {
         if (const Broadcast *b = add->b.as<Broadcast>()) {
             Interval ia = bounds_of_lanes(add->a);
@@ -223,8 +224,8 @@ class RewriteAccessToVectorAlloc : public IRMutator {
     }
 
 public:
-    RewriteAccessToVectorAlloc(string v, string a, int l)
-        : var(Variable::make(Int(32), v)), alloc(a), lanes(l) {
+    RewriteAccessToVectorAlloc(const string &v, string a, int l)
+        : var(Variable::make(Int(32), v)), alloc(std::move(a)), lanes(l) {
     }
 };
 
@@ -242,7 +243,7 @@ public:
     bool uses_gpu = false;
 };
 
-bool uses_gpu_vars(Expr s) {
+bool uses_gpu_vars(const Expr &s) {
     UsesGPUVars uses;
     s.accept(&uses);
     return uses.uses_gpu;
@@ -277,7 +278,7 @@ class PredicateLoadStore : public IRMutator {
         return false;
     }
 
-    Expr merge_predicate(Expr pred, Expr new_pred) {
+    Expr merge_predicate(Expr pred, const Expr &new_pred) {
         if (pred.type().lanes() == new_pred.type().lanes()) {
             Expr res = simplify(pred && new_pred);
             return res;
@@ -352,8 +353,8 @@ class PredicateLoadStore : public IRMutator {
     }
 
 public:
-    PredicateLoadStore(string v, Expr vpred, bool in_hexagon, const Target &t)
-        : var(v), vector_predicate(vpred), in_hexagon(in_hexagon), target(t),
+    PredicateLoadStore(string v, const Expr &vpred, bool in_hexagon, const Target &t)
+        : var(std::move(v)), vector_predicate(vpred), in_hexagon(in_hexagon), target(t),
           lanes(vpred.type().lanes()), valid(true), vectorized(false) {
         internal_assert(lanes > 1);
     }
@@ -643,7 +644,7 @@ class VectorSubs : public IRMutator {
             mutated_name += widening_suffix;
             scope.push(op->name, mutated_value);
             // Also keep track of the original let, in case inner code scalarizes.
-            containing_lets.push_back({op->name, op->value});
+            containing_lets.emplace_back(op->name, op->value);
         }
 
         Stmt mutated_body = mutate(op->body);
@@ -898,7 +899,7 @@ class VectorSubs : public IRMutator {
         int lanes = replacement.type().lanes();
 
         // The new expanded dimension is innermost.
-        new_extents.push_back(lanes);
+        new_extents.emplace_back(lanes);
 
         for (size_t i = 0; i < op->extents.size(); i++) {
             Expr extent = mutate(op->extents[i]);
@@ -990,7 +991,7 @@ class VectorSubs : public IRMutator {
 
 public:
     VectorSubs(string v, Expr r, bool in_hexagon, const Target &t)
-        : var(v), replacement(r), target(t), in_hexagon(in_hexagon) {
+        : var(std::move(v)), replacement(std::move(r)), target(t), in_hexagon(in_hexagon) {
         widening_suffix = ".x" + std::to_string(replacement.type().lanes());
     }
 };
@@ -1041,7 +1042,7 @@ public:
 
 }  // Anonymous namespace
 
-Stmt vectorize_loops(Stmt s, const Target &t) {
+Stmt vectorize_loops(const Stmt &s, const Target &t) {
     return VectorizeLoops(t).mutate(s);
 }
 

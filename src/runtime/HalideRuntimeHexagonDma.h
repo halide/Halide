@@ -5,8 +5,19 @@
  *  Routines specific to the Halide Hexagon DMA host-side runtime.
  */
 
+// Don't include HalideRuntime.h if the contents of it were already pasted into a generated header above this one
+#ifndef HALIDE_HALIDERUNTIME_H
+
 #include "HalideRuntime.h"
+
+#endif
+
+// Don't include HalideRuntimeHexagonHost.h if the contents of it were already pasted into a generated header above this one
+#ifndef HALIDE_HALIDERUNTIMEHEXAGONHOST_H
+
 #include "HalideRuntimeHexagonHost.h"
+
+#endif
 
 #ifdef __cplusplus
 extern "C" {
@@ -64,7 +75,8 @@ extern int halide_hexagon_dma_prepare_for_copy_to_host(void *user_context, struc
  * Will also make necessary adjustments to the DMA frame parameters based on Image format provided.
  */
 extern int halide_hexagon_dma_prepare_for_copy_to_device(void *user_context, struct halide_buffer_t *buf,
-                                                         void *dma_engine, bool is_ubwc, halide_hexagon_image_fmt_t fmt);
+                                                         void *dma_engine, bool is_ubwc,
+                                                         halide_hexagon_image_fmt_t fmt);
 
 /** This API is used to frees up the DMA Resources associated with the buffer. 
  * TODO: Currently this API is a dummy as all the necessary freeing is done in an another API.

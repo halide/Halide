@@ -325,7 +325,7 @@ std::string type_to_c_type(Type type, bool include_space, bool c_plus_plus) {
         case 32:
         case 64:
             if (type.is_uint()) {
-                oss << 'u';
+                oss << "u";
             }
             oss << "int" << type.bits();
             if (type.is_vector()) {

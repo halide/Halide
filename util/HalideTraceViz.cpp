@@ -52,7 +52,7 @@ struct info {
     ~info() {
         if (verbose) {
             if (msg.str().back() != '\n') {
-                msg << '\n';
+                msg << "\n";
             }
             std::cerr << msg.str();
         }
@@ -71,7 +71,7 @@ struct warn {
 
     ~warn() {
         if (msg.str().back() != '\n') {
-            msg << '\n';
+            msg << "\n";
         }
         std::cerr << "Warning: " << msg.str();
     }
@@ -93,7 +93,7 @@ struct fail {
 #endif
     ~fail() {
         if (msg.str().back() != '\n') {
-            msg << '\n';
+            msg << "\n";
         }
         std::cerr << msg.str();
         exit(1);
@@ -520,7 +520,7 @@ void do_auto_layout(const GlobalConfig &globals, const std::string &func_name, F
             fi.config.strides = {{1, 0}, {0, 1}};
         }
         while (fi.config.strides.size() < fi.type_and_dim.dims.size()) {
-            fi.config.strides.push_back({0, 0});
+            fi.config.strides.emplace_back(0, 0);
         }
 
         // Calc the 2d size that this would render at (including stride-stretching) for zoom=1
@@ -735,7 +735,7 @@ void process_args(int argc, char **argv, VizState *state) {
                 expect(i + 2 < argc, i);
                 int x = parse_int(argv[++i]);
                 int y = parse_int(argv[++i]);
-                config.strides.push_back({x, y});
+                config.strides.emplace_back(x, y);
             }
         } else if (next == "--label") {
             expect(i + 3 < argc, i);
@@ -754,7 +754,7 @@ void process_args(int argc, char **argv, VizState *state) {
                 fi.config.labels.clear();
                 labels_seen.insert(func);
             }
-            fi.config.labels.push_back({text, offset, n});
+            fi.config.labels.emplace_back(text, offset, n);
         } else if (next == "--rlabel") {
             expect(i + 5 < argc, i);
             char *func = argv[++i];
@@ -771,7 +771,7 @@ void process_args(int argc, char **argv, VizState *state) {
                 fi.config.labels.clear();
                 labels_seen.insert(func);
             }
-            fi.config.labels.push_back({text, offset, n});
+            fi.config.labels.emplace_back(text, offset, n);
         } else if (next == "--timestep") {
             expect(i + 1 < argc, i);
             globals.timestep = parse_int(argv[++i]);
@@ -1248,7 +1248,7 @@ int run(bool ignore_trace_tags, FlagProcessor flag_processor) {
                 Label l = label;
                 l.pos.x += fi.config.pos.x;
                 l.pos.y += fi.config.pos.y;
-                labels_being_drawn.push_back({l, halide_clock});
+                labels_being_drawn.emplace_back(l, halide_clock);
             }
         }
 

@@ -91,68 +91,68 @@ void define_pipeline(py::module &m) {
             .def("compile_jit", &Pipeline::compile_jit, py::arg("target") = get_jit_target_from_environment())
 
             .def(
-                "realize", [](Pipeline &p, Buffer<> buffer, const Target &target, const ParamMap &param_map) -> void {
+                "realize", [](Pipeline &p, Buffer<> buffer, const Target &target) -> void {
                     p.realize(Realization(buffer), target);
                 },
-                py::arg("dst"), py::arg("target") = Target(), py::arg("param_map") = ParamMap())
+                py::arg("dst"), py::arg("target") = Target())
 
             // This will actually allow a list-of-buffers as well as a tuple-of-buffers, but that's OK.
             .def(
-                "realize", [](Pipeline &p, std::vector<Buffer<>> buffers, const Target &t, const ParamMap &param_map) -> void {
+                "realize", [](Pipeline &p, std::vector<Buffer<>> buffers, const Target &t) -> void {
                     p.realize(Realization(buffers), t);
                 },
-                py::arg("dst"), py::arg("target") = Target(), py::arg("param_map") = ParamMap())
+                py::arg("dst"), py::arg("target") = Target())
 
             .def(
-                "realize", [](Pipeline &p, std::vector<int32_t> sizes, const Target &target, const ParamMap &param_map) -> py::object {
-                    return realization_to_object(p.realize(sizes, target, param_map));
+                "realize", [](Pipeline &p, std::vector<int32_t> sizes, const Target &target) -> py::object {
+                    return realization_to_object(p.realize(sizes, target));
                 },
-                py::arg("sizes") = std::vector<int32_t>{}, py::arg("target") = Target(), py::arg("param_map") = ParamMap())
-
-            // TODO: deprecate in favor of std::vector<int32_t> size version?
-            .def(
-                "realize", [](Pipeline &p, int x_size, const Target &target, const ParamMap &param_map) -> py::object {
-                    return realization_to_object(p.realize(x_size, target, param_map));
-                },
-                py::arg("x_size"), py::arg("target") = Target(), py::arg("param_map") = ParamMap())
+                py::arg("sizes") = std::vector<int32_t>{}, py::arg("target") = Target())
 
             // TODO: deprecate in favor of std::vector<int32_t> size version?
             .def(
-                "realize", [](Pipeline &p, int x_size, int y_size, const Target &target, const ParamMap &param_map) -> py::object {
-                    return realization_to_object(p.realize(x_size, y_size, target, param_map));
+                "realize", [](Pipeline &p, int x_size, const Target &target) -> py::object {
+                    return realization_to_object(p.realize(x_size, target));
                 },
-                py::arg("x_size"), py::arg("y_size"), py::arg("target") = Target(), py::arg("param_map") = ParamMap())
+                py::arg("x_size"), py::arg("target") = Target())
 
             // TODO: deprecate in favor of std::vector<int32_t> size version?
             .def(
-                "realize", [](Pipeline &p, int x_size, int y_size, int z_size, const Target &target, const ParamMap &param_map) -> py::object {
-                    return realization_to_object(p.realize(x_size, y_size, z_size, target, param_map));
+                "realize", [](Pipeline &p, int x_size, int y_size, const Target &target) -> py::object {
+                    return realization_to_object(p.realize(x_size, y_size, target));
                 },
-                py::arg("x_size"), py::arg("y_size"), py::arg("z_size"), py::arg("target") = Target(), py::arg("param_map") = ParamMap())
+                py::arg("x_size"), py::arg("y_size"), py::arg("target") = Target())
 
             // TODO: deprecate in favor of std::vector<int32_t> size version?
             .def(
-                "realize", [](Pipeline &p, int x_size, int y_size, int z_size, int w_size, const Target &target, const ParamMap &param_map) -> py::object {
-                    return realization_to_object(p.realize(x_size, y_size, z_size, w_size, target, param_map));
+                "realize", [](Pipeline &p, int x_size, int y_size, int z_size, const Target &target) -> py::object {
+                    return realization_to_object(p.realize(x_size, y_size, z_size, target));
                 },
-                py::arg("x_size"), py::arg("y_size"), py::arg("z_size"), py::arg("w_size"), py::arg("target") = Target(), py::arg("param_map") = ParamMap())
+                py::arg("x_size"), py::arg("y_size"), py::arg("z_size"), py::arg("target") = Target())
+
+            // TODO: deprecate in favor of std::vector<int32_t> size version?
+            .def(
+                "realize", [](Pipeline &p, int x_size, int y_size, int z_size, int w_size, const Target &target) -> py::object {
+                    return realization_to_object(p.realize(x_size, y_size, z_size, w_size, target));
+                },
+                py::arg("x_size"), py::arg("y_size"), py::arg("z_size"), py::arg("w_size"), py::arg("target") = Target())
 
             .def(
-                "infer_input_bounds", [](Pipeline &p, int x_size, int y_size, int z_size, int w_size, const ParamMap &param_map) -> void {
-                    p.infer_input_bounds(x_size, y_size, z_size, w_size, param_map);
+                "infer_input_bounds", [](Pipeline &p, int x_size, int y_size, int z_size, int w_size) -> void {
+                    p.infer_input_bounds(x_size, y_size, z_size, w_size);
                 },
-                py::arg("x_size") = 0, py::arg("y_size") = 0, py::arg("z_size") = 0, py::arg("w_size") = 0, py::arg("param_map") = ParamMap())
+                py::arg("x_size") = 0, py::arg("y_size") = 0, py::arg("z_size") = 0, py::arg("w_size") = 0)
 
             .def(
-                "infer_input_bounds", [](Pipeline &p, Buffer<> buffer, const ParamMap &param_map) -> void {
-                    p.infer_input_bounds(Realization(buffer), param_map);
+                "infer_input_bounds", [](Pipeline &p, Buffer<> buffer) -> void {
+                    p.infer_input_bounds(Realization(buffer));
                 },
-                py::arg("dst"), py::arg("param_map") = ParamMap())
+                py::arg("dst"))
             .def(
-                "infer_input_bounds", [](Pipeline &p, std::vector<Buffer<>> buffers, const ParamMap &param_map) -> void {
-                    p.infer_input_bounds(Realization(buffers), param_map);
+                "infer_input_bounds", [](Pipeline &p, std::vector<Buffer<>> buffers) -> void {
+                    p.infer_input_bounds(Realization(buffers));
                 },
-                py::arg("dst"), py::arg("param_map") = ParamMap())
+                py::arg("dst"))
 
             .def("infer_arguments", [](Pipeline &p) -> std::vector<Argument> {
                 return p.infer_arguments();

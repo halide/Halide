@@ -5,13 +5,14 @@
  * Defines a method to match a fragment of IR against a pattern containing wildcards
  */
 
+#include <map>
+#include <random>
+#include <set>
+#include <vector>
+
 #include "IR.h"
 #include "IREquality.h"
 #include "IROperator.h"
-#include "ModulusRemainder.h"
-
-#include <random>
-#include <set>
 
 namespace Halide {
 namespace Internal {
@@ -33,7 +34,7 @@ namespace Internal {
  * should return true, and set result[0] to 3 and
  * result[1] to 2*k.
  */
-bool expr_match(Expr pattern, Expr expr, std::vector<Expr> &result);
+bool expr_match(const Expr &pattern, const Expr &expr, std::vector<Expr> &result);
 
 /** Does the first expression have the same structure as the second?
  * Variables are matched consistently. The first time a variable is
@@ -47,7 +48,7 @@ bool expr_match(Expr pattern, Expr expr, std::vector<Expr> &result);
  \endcode
  * should return true, and set result["x"] = a, and result["y"] = b.
  */
-bool expr_match(Expr pattern, Expr expr, std::map<std::string, Expr> &result);
+bool expr_match(const Expr &pattern, const Expr &expr, std::map<std::string, Expr> &result);
 
 void expr_match_test();
 
@@ -198,6 +199,11 @@ struct SpecificExpr {
 
     constexpr static uint32_t binds = 0;
 
+    // What is the weakest and strongest IR node this could possibly be
+    constexpr static IRNodeType min_node_type = IRNodeType::IntImm;
+    constexpr static IRNodeType max_node_type = IRNodeType::Shuffle;
+    constexpr static bool canonical = true;
+
     Expr expr;
 
     template<uint32_t bound>
@@ -213,7 +219,7 @@ struct SpecificExpr {
     constexpr static bool foldable = false;
 };
 
-inline std::ostream &operator<<(std::ostream &s, SpecificExpr e) {
+inline std::ostream &operator<<(std::ostream &s, const SpecificExpr &e) {
     s << e.expr;
     return s;
 }
@@ -223,6 +229,10 @@ struct WildConstInt {
     struct pattern_tag {};
 
     constexpr static uint32_t binds = 1 << i;
+
+    constexpr static IRNodeType min_node_type = IRNodeType::IntImm;
+    constexpr static IRNodeType max_node_type = IRNodeType::IntImm;
+    constexpr static bool canonical = true;
 
     template<uint32_t bound>
     HALIDE_ALWAYS_INLINE bool match(const BaseExprNode &e, MatcherState &state) const noexcept {
@@ -239,7 +249,7 @@ struct WildConstInt {
             halide_scalar_value_t val;
             halide_type_t type;
             state.get_bound_const(i, val, type);
-            return op->type == type && value == val.u.i64;
+            return e.type == type && value == val.u.i64;
         }
         state.set_bound_const(i, value, e.type);
         return true;
@@ -273,6 +283,10 @@ struct WildConstUInt {
 
     constexpr static uint32_t binds = 1 << i;
 
+    constexpr static IRNodeType min_node_type = IRNodeType::UIntImm;
+    constexpr static IRNodeType max_node_type = IRNodeType::UIntImm;
+    constexpr static bool canonical = true;
+
     template<uint32_t bound>
     HALIDE_ALWAYS_INLINE bool match(const BaseExprNode &e, MatcherState &state) const noexcept {
         static_assert(i >= 0 && i < max_wild, "Wild with out-of-range index");
@@ -288,7 +302,7 @@ struct WildConstUInt {
             halide_scalar_value_t val;
             halide_type_t type;
             state.get_bound_const(i, val, type);
-            return op->type == type && value == val.u.u64;
+            return e.type == type && value == val.u.u64;
         }
         state.set_bound_const(i, value, e.type);
         return true;
@@ -322,10 +336,13 @@ struct WildConstFloat {
 
     constexpr static uint32_t binds = 1 << i;
 
+    constexpr static IRNodeType min_node_type = IRNodeType::FloatImm;
+    constexpr static IRNodeType max_node_type = IRNodeType::FloatImm;
+    constexpr static bool canonical = true;
+
     template<uint32_t bound>
     HALIDE_ALWAYS_INLINE bool match(const BaseExprNode &e, MatcherState &state) const noexcept {
         static_assert(i >= 0 && i < max_wild, "Wild with out-of-range index");
-        halide_type_t ty = e.type;
         const BaseExprNode *op = &e;
         if (op->node_type == IRNodeType::Broadcast) {
             op = ((const Broadcast *)op)->value.get();
@@ -338,9 +355,9 @@ struct WildConstFloat {
             halide_scalar_value_t val;
             halide_type_t type;
             state.get_bound_const(i, val, type);
-            return op->type == type && value == val.u.f64;
+            return e.type == type && value == val.u.f64;
         }
-        state.set_bound_const(i, value, ty);
+        state.set_bound_const(i, value, e.type);
         return true;
     }
 
@@ -372,6 +389,10 @@ struct WildConst {
     struct pattern_tag {};
 
     constexpr static uint32_t binds = 1 << i;
+
+    constexpr static IRNodeType min_node_type = IRNodeType::IntImm;
+    constexpr static IRNodeType max_node_type = IRNodeType::FloatImm;
+    constexpr static bool canonical = true;
 
     template<uint32_t bound>
     HALIDE_ALWAYS_INLINE bool match(const BaseExprNode &e, MatcherState &state) const noexcept {
@@ -420,6 +441,10 @@ struct Wild {
     struct pattern_tag {};
 
     constexpr static uint32_t binds = 1 << (i + 16);
+
+    constexpr static IRNodeType min_node_type = IRNodeType::IntImm;
+    constexpr static IRNodeType max_node_type = StrongestExprNodeType;
+    constexpr static bool canonical = true;
 
     template<uint32_t bound>
     HALIDE_ALWAYS_INLINE bool match(const BaseExprNode &e, MatcherState &state) const noexcept {
@@ -474,6 +499,10 @@ struct Const {
     int64_t v;
 
     constexpr static uint32_t binds = 0;
+
+    constexpr static IRNodeType min_node_type = IRNodeType::IntImm;
+    constexpr static IRNodeType max_node_type = IRNodeType::FloatImm;
+    constexpr static bool canonical = true;
 
     HALIDE_ALWAYS_INLINE
     Const(int64_t v)
@@ -577,6 +606,17 @@ uint64_t constant_fold_bin_op(halide_type_t &, uint64_t, uint64_t) noexcept;
 template<typename Op>
 double constant_fold_bin_op(halide_type_t &, double, double) noexcept;
 
+constexpr bool commutative(IRNodeType t) {
+    return (t == IRNodeType::Add ||
+            t == IRNodeType::Mul ||
+            t == IRNodeType::And ||
+            t == IRNodeType::Or ||
+            t == IRNodeType::Min ||
+            t == IRNodeType::Max ||
+            t == IRNodeType::EQ ||
+            t == IRNodeType::NE);
+}
+
 // Matches one of the binary operators
 template<typename Op, typename A, typename B>
 struct BinOp {
@@ -585,6 +625,15 @@ struct BinOp {
     B b;
 
     constexpr static uint32_t binds = bindings<A>::mask | bindings<B>::mask;
+
+    constexpr static IRNodeType min_node_type = Op::_node_type;
+    constexpr static IRNodeType max_node_type = Op::_node_type;
+
+    // For commutative bin ops, we expect the weaker IR node type on
+    // the right. That is, for the rule to be canonical it must be
+    // possible that A is at least as strong as B.
+    constexpr static bool canonical =
+        A::canonical && B::canonical && (!commutative(Op::_node_type) || (A::max_node_type >= B::min_node_type));
 
     template<uint32_t bound>
     HALIDE_ALWAYS_INLINE bool match(const BaseExprNode &e, MatcherState &state) const noexcept {
@@ -687,6 +736,14 @@ struct CmpOp {
     B b;
 
     constexpr static uint32_t binds = bindings<A>::mask | bindings<B>::mask;
+
+    constexpr static IRNodeType min_node_type = Op::_node_type;
+    constexpr static IRNodeType max_node_type = Op::_node_type;
+    constexpr static bool canonical = (A::canonical &&
+                                       B::canonical &&
+                                       (!commutative(Op::_node_type) || A::max_node_type >= B::min_node_type) &&
+                                       (Op::_node_type != IRNodeType::GE) &&
+                                       (Op::_node_type != IRNodeType::GT));
 
     template<uint32_t bound>
     HALIDE_ALWAYS_INLINE bool match(const BaseExprNode &e, MatcherState &state) const noexcept {
@@ -1242,6 +1299,15 @@ constexpr uint32_t bitwise_or_reduce(uint32_t first, Args... rest) {
     return first | bitwise_or_reduce(rest...);
 }
 
+constexpr inline bool and_reduce() {
+    return true;
+}
+
+template<typename... Args>
+constexpr bool and_reduce(bool first, Args... rest) {
+    return first && and_reduce(rest...);
+}
+
 template<typename... Args>
 struct Intrin {
     struct pattern_tag {};
@@ -1249,6 +1315,10 @@ struct Intrin {
     std::tuple<Args...> args;
 
     static constexpr uint32_t binds = bitwise_or_reduce((bindings<Args>::mask)...);
+
+    constexpr static IRNodeType min_node_type = IRNodeType::Call;
+    constexpr static IRNodeType max_node_type = IRNodeType::Call;
+    constexpr static bool canonical = and_reduce((Args::canonical)...);
 
     template<int i,
              uint32_t bound,
@@ -1349,6 +1419,10 @@ struct NotOp {
 
     constexpr static uint32_t binds = bindings<A>::mask;
 
+    constexpr static IRNodeType min_node_type = IRNodeType::Not;
+    constexpr static IRNodeType max_node_type = IRNodeType::Not;
+    constexpr static bool canonical = A::canonical;
+
     template<uint32_t bound>
     HALIDE_ALWAYS_INLINE bool match(const BaseExprNode &e, MatcherState &state) const noexcept {
         if (e.node_type != IRNodeType::Not) {
@@ -1402,6 +1476,11 @@ struct SelectOp {
     F f;
 
     constexpr static uint32_t binds = bindings<C>::mask | bindings<T>::mask | bindings<F>::mask;
+
+    constexpr static IRNodeType min_node_type = IRNodeType::Select;
+    constexpr static IRNodeType max_node_type = IRNodeType::Select;
+
+    constexpr static bool canonical = C::canonical && T::canonical && F::canonical;
 
     template<uint32_t bound>
     HALIDE_ALWAYS_INLINE bool match(const BaseExprNode &e, MatcherState &state) const noexcept {
@@ -1459,6 +1538,11 @@ struct BroadcastOp {
     int lanes;
 
     constexpr static uint32_t binds = bindings<A>::mask;
+
+    constexpr static IRNodeType min_node_type = IRNodeType::Broadcast;
+    constexpr static IRNodeType max_node_type = IRNodeType::Broadcast;
+
+    constexpr static bool canonical = A::canonical;
 
     template<uint32_t bound>
     HALIDE_ALWAYS_INLINE bool match(const BaseExprNode &e, MatcherState &state) const noexcept {
@@ -1525,6 +1609,11 @@ struct RampOp {
     int lanes;
 
     constexpr static uint32_t binds = bindings<A>::mask | bindings<B>::mask;
+
+    constexpr static IRNodeType min_node_type = IRNodeType::Ramp;
+    constexpr static IRNodeType max_node_type = IRNodeType::Ramp;
+
+    constexpr static bool canonical = A::canonical && B::canonical;
 
     template<uint32_t bound>
     HALIDE_ALWAYS_INLINE bool match(const BaseExprNode &e, MatcherState &state) const noexcept {
@@ -1594,6 +1683,11 @@ struct NegateOp {
     A a;
 
     constexpr static uint32_t binds = bindings<A>::mask;
+
+    constexpr static IRNodeType min_node_type = IRNodeType::Sub;
+    constexpr static IRNodeType max_node_type = IRNodeType::Sub;
+
+    constexpr static bool canonical = A::canonical;
 
     template<uint32_t bound>
     HALIDE_ALWAYS_INLINE bool match(const BaseExprNode &e, MatcherState &state) const noexcept {
@@ -1671,6 +1765,10 @@ struct CastOp {
 
     constexpr static uint32_t binds = bindings<A>::mask;
 
+    constexpr static IRNodeType min_node_type = IRNodeType::Cast;
+    constexpr static IRNodeType max_node_type = IRNodeType::Cast;
+    constexpr static bool canonical = A::canonical;
+
     template<uint32_t bound>
     HALIDE_ALWAYS_INLINE bool match(const BaseExprNode &e, MatcherState &state) const noexcept {
         if (e.node_type != Cast::_node_type) {
@@ -1711,6 +1809,10 @@ struct Fold {
 
     constexpr static uint32_t binds = bindings<A>::mask;
 
+    constexpr static IRNodeType min_node_type = IRNodeType::IntImm;
+    constexpr static IRNodeType max_node_type = IRNodeType::FloatImm;
+    constexpr static bool canonical = true;
+
     HALIDE_ALWAYS_INLINE
     Expr make(MatcherState &state, halide_type_t type_hint) const noexcept {
         halide_scalar_value_t c;
@@ -1745,6 +1847,12 @@ struct Overflows {
 
     constexpr static uint32_t binds = bindings<A>::mask;
 
+    // This rule is a predicate, so it always evaluates to a boolean,
+    // which has IRNodeType UIntImm
+    constexpr static IRNodeType min_node_type = IRNodeType::UIntImm;
+    constexpr static IRNodeType max_node_type = IRNodeType::UIntImm;
+    constexpr static bool canonical = true;
+
     constexpr static bool foldable = A::foldable;
 
     template<typename A1 = A>
@@ -1772,6 +1880,11 @@ struct Overflow {
     struct pattern_tag {};
 
     constexpr static uint32_t binds = 0;
+
+    // Overflow is an intrinsic, represented as a Call node
+    constexpr static IRNodeType min_node_type = IRNodeType::Call;
+    constexpr static IRNodeType max_node_type = IRNodeType::Call;
+    constexpr static bool canonical = true;
 
     template<uint32_t bound>
     HALIDE_ALWAYS_INLINE bool match(const BaseExprNode &e, MatcherState &state) const noexcept {
@@ -1808,6 +1921,11 @@ struct IsConst {
 
     constexpr static uint32_t binds = bindings<A>::mask;
 
+    // This rule is a boolean-valued predicate. Bools have type UIntImm.
+    constexpr static IRNodeType min_node_type = IRNodeType::UIntImm;
+    constexpr static IRNodeType max_node_type = IRNodeType::UIntImm;
+    constexpr static bool canonical = true;
+
     A a;
 
     constexpr static bool foldable = true;
@@ -1841,6 +1959,11 @@ struct CanProve {
 
     constexpr static uint32_t binds = bindings<A>::mask;
 
+    // This rule is a boolean-valued predicate. Bools have type UIntImm.
+    constexpr static IRNodeType min_node_type = IRNodeType::UIntImm;
+    constexpr static IRNodeType max_node_type = IRNodeType::UIntImm;
+    constexpr static bool canonical = true;
+
     constexpr static bool foldable = true;
 
     // Includes a raw call to an inlined make method, so don't inline.
@@ -1871,6 +1994,11 @@ struct IsFloat {
     A a;
 
     constexpr static uint32_t binds = bindings<A>::mask;
+
+    // This rule is a boolean-valued predicate. Bools have type UIntImm.
+    constexpr static IRNodeType min_node_type = IRNodeType::UIntImm;
+    constexpr static IRNodeType max_node_type = IRNodeType::UIntImm;
+    constexpr static bool canonical = true;
 
     constexpr static bool foldable = true;
 
@@ -2109,6 +2237,8 @@ struct Rewriter {
              typename = typename enable_if_pattern<After>::type>
     HALIDE_ALWAYS_INLINE bool operator()(Before before, After after) {
         static_assert((Before::binds & After::binds) == After::binds, "Rule result uses unbound values");
+        static_assert(Before::canonical, "LHS of rewrite rule should be in canonical form");
+        static_assert(After::canonical, "RHS of rewrite rule should be in canonical form");
 #if HALIDE_FUZZ_TEST_RULES
         fuzz_test_rule(before, after, true, wildcard_type, output_type);
 #endif
@@ -2129,6 +2259,7 @@ struct Rewriter {
     template<typename Before,
              typename = typename enable_if_pattern<Before>::type>
     HALIDE_ALWAYS_INLINE bool operator()(Before before, const Expr &after) noexcept {
+        static_assert(Before::canonical, "LHS of rewrite rule should be in canonical form");
         if (before.template match<0>(instance, state)) {
             result = after;
 #if HALIDE_DEBUG_MATCHED_RULES
@@ -2146,6 +2277,7 @@ struct Rewriter {
     template<typename Before,
              typename = typename enable_if_pattern<Before>::type>
     HALIDE_ALWAYS_INLINE bool operator()(Before before, int64_t after) noexcept {
+        static_assert(Before::canonical, "LHS of rewrite rule should be in canonical form");
 #if HALIDE_FUZZ_TEST_RULES
         fuzz_test_rule(before, Const(after), true, wildcard_type, output_type);
 #endif
@@ -2173,6 +2305,9 @@ struct Rewriter {
         static_assert(Predicate::foldable, "Predicates must consist only of operations that can constant-fold");
         static_assert((Before::binds & After::binds) == After::binds, "Rule result uses unbound values");
         static_assert((Before::binds & Predicate::binds) == Predicate::binds, "Rule predicate uses unbound values");
+        static_assert(Before::canonical, "LHS of rewrite rule should be in canonical form");
+        static_assert(After::canonical, "RHS of rewrite rule should be in canonical form");
+
 #if HALIDE_FUZZ_TEST_RULES
         fuzz_test_rule(before, after, pred, wildcard_type, output_type);
 #endif
@@ -2197,6 +2332,7 @@ struct Rewriter {
              typename = typename enable_if_pattern<Predicate>::type>
     HALIDE_ALWAYS_INLINE bool operator()(Before before, const Expr &after, Predicate pred) {
         static_assert(Predicate::foldable, "Predicates must consist only of operations that can constant-fold");
+        static_assert(Before::canonical, "LHS of rewrite rule should be in canonical form");
         if (before.template match<0>(instance, state) &&
             evaluate_predicate(pred, state)) {
             result = after;
@@ -2218,6 +2354,7 @@ struct Rewriter {
              typename = typename enable_if_pattern<Predicate>::type>
     HALIDE_ALWAYS_INLINE bool operator()(Before before, int64_t after, Predicate pred) {
         static_assert(Predicate::foldable, "Predicates must consist only of operations that can constant-fold");
+        static_assert(Before::canonical, "LHS of rewrite rule should be in canonical form");
 #if HALIDE_FUZZ_TEST_RULES
         fuzz_test_rule(before, Const(after), pred, wildcard_type, output_type);
 #endif

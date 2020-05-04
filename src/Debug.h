@@ -9,8 +9,6 @@
 #include <stdlib.h>
 #include <string>
 
-#include "Introspection.h"
-
 namespace Halide {
 
 struct Expr;
@@ -38,7 +36,7 @@ std::ostream &operator<<(std::ostream &, const LoweredFunc &);
  * follows:
  *
  \code
- debug(verbosity) << "The expression is " << expr << std::endl;
+ debug(verbosity) << "The expression is " << expr << "\n";
  \endcode
  *
  * verbosity of 0 always prints, 1 should print after every major

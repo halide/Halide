@@ -111,7 +111,7 @@ void CodeGen_OpenGL_Dev::init_module() {
 vector<char> CodeGen_OpenGL_Dev::compile_to_src() {
     string str = src_stream.str();
     debug(1) << "GLSL source:\n"
-             << str << '\n';
+             << str << "\n";
     vector<char> buffer(str.begin(), str.end());
     buffer.push_back(0);
     return buffer;
@@ -122,7 +122,7 @@ string CodeGen_OpenGL_Dev::get_current_kernel_name() {
 }
 
 void CodeGen_OpenGL_Dev::dump() {
-    std::cerr << src_stream.str() << std::endl;
+    std::cerr << src_stream.str() << "\n";
 }
 
 string CodeGen_OpenGL_Dev::print_gpu_name(const string &name) {
@@ -526,7 +526,7 @@ void CodeGen_GLSL::visit(const Select *op) {
     id = id_value;
 }
 
-string CodeGen_GLSL::get_vector_suffix(Expr e) {
+string CodeGen_GLSL::get_vector_suffix(const Expr &e) {
     vector<Expr> matches;
     Expr w = Variable::make(Int(32), "*");
 
@@ -550,7 +550,7 @@ string CodeGen_GLSL::get_vector_suffix(Expr e) {
     }
 }
 
-vector<string> CodeGen_GLSL::print_lanes(Expr e) {
+vector<string> CodeGen_GLSL::print_lanes(const Expr &e) {
     int l = e.type().lanes();
     internal_assert(e.type().is_vector());
     vector<string> result(l);
@@ -832,7 +832,7 @@ void CodeGen_GLSL::visit(const Atomic *op) {
     user_assert(false) << "GLSL: atomics are not supported.\n";
 }
 
-void CodeGen_GLSL::add_kernel(Stmt stmt, string name,
+void CodeGen_GLSL::add_kernel(const Stmt &stmt, const string &name,
                               const vector<DeviceArgument> &args) {
 
     // This function produces fragment shader source for the halide statement.
@@ -884,12 +884,12 @@ void CodeGen_GLSL::add_kernel(Stmt stmt, string name,
             ++num_varying_floats;
         } else if (args[i].type.is_float()) {
             header << "/// UNIFORM "
-                   << CodeGen_C::print_type(args[i].type) << " "
+                   << CodeGen_GLSLBase::print_type(args[i].type) << " "
                    << print_name(args[i].name) << " uniformf" << args[i].packed_index / 4 << "[" << args[i].packed_index % 4 << "]\n";
             ++num_uniform_floats;
         } else if (args[i].type.is_int()) {
             header << "/// UNIFORM "
-                   << CodeGen_C::print_type(args[i].type) << " "
+                   << CodeGen_GLSLBase::print_type(args[i].type) << " "
                    << print_name(args[i].name) << " uniformi" << args[i].packed_index / 4 << "[" << args[i].packed_index % 4 << "]\n";
             ++num_uniform_ints;
         }

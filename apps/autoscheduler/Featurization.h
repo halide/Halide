@@ -106,53 +106,53 @@ struct PipelineFeatures {
             // Skip printing for types not used
             if (!types_in_use[i]) continue;
 
-            os << "    Featurization for type " << type_names[i] << '\n'
+            os << "    Featurization for type " << type_names[i] << "\n"
                << "     Op histogram:\n"
-               << "      Constant:   " << op_histogram[(int)OpType::Const][i] << '\n'
-               << "      Cast:       " << op_histogram[(int)OpType::Cast][i] << '\n'
-               << "      Variable:   " << op_histogram[(int)OpType::Variable][i] << '\n'
-               << "      Param:      " << op_histogram[(int)OpType::Param][i] << '\n'
-               << "      Add:        " << op_histogram[(int)OpType::Add][i] << '\n'
-               << "      Sub:        " << op_histogram[(int)OpType::Sub][i] << '\n'
-               << "      Mod:        " << op_histogram[(int)OpType::Mod][i] << '\n'
-               << "      Mul:        " << op_histogram[(int)OpType::Mul][i] << '\n'
-               << "      Div:        " << op_histogram[(int)OpType::Div][i] << '\n'
-               << "      Min:        " << op_histogram[(int)OpType::Min][i] << '\n'
-               << "      Max:        " << op_histogram[(int)OpType::Max][i] << '\n'
-               << "      EQ:         " << op_histogram[(int)OpType::EQ][i] << '\n'
-               << "      NE:         " << op_histogram[(int)OpType::NE][i] << '\n'
-               << "      LT:         " << op_histogram[(int)OpType::LT][i] << '\n'
-               << "      LE:         " << op_histogram[(int)OpType::LE][i] << '\n'
-               << "      And:        " << op_histogram[(int)OpType::And][i] << '\n'
-               << "      Or:         " << op_histogram[(int)OpType::Or][i] << '\n'
-               << "      Not:        " << op_histogram[(int)OpType::Not][i] << '\n'
-               << "      Select:     " << op_histogram[(int)OpType::Select][i] << '\n'
-               << "      ImageCall:  " << op_histogram[(int)OpType::ImageCall][i] << '\n'
-               << "      FuncCall:   " << op_histogram[(int)OpType::FuncCall][i] << '\n'
-               << "      SelfCall:   " << op_histogram[(int)OpType::SelfCall][i] << '\n'
-               << "      ExternCall: " << op_histogram[(int)OpType::ExternCall][i] << '\n'
-               << "      Let:        " << op_histogram[(int)OpType::Let][i] << '\n'
+               << "      Constant:   " << op_histogram[(int)OpType::Const][i] << "\n"
+               << "      Cast:       " << op_histogram[(int)OpType::Cast][i] << "\n"
+               << "      Variable:   " << op_histogram[(int)OpType::Variable][i] << "\n"
+               << "      Param:      " << op_histogram[(int)OpType::Param][i] << "\n"
+               << "      Add:        " << op_histogram[(int)OpType::Add][i] << "\n"
+               << "      Sub:        " << op_histogram[(int)OpType::Sub][i] << "\n"
+               << "      Mod:        " << op_histogram[(int)OpType::Mod][i] << "\n"
+               << "      Mul:        " << op_histogram[(int)OpType::Mul][i] << "\n"
+               << "      Div:        " << op_histogram[(int)OpType::Div][i] << "\n"
+               << "      Min:        " << op_histogram[(int)OpType::Min][i] << "\n"
+               << "      Max:        " << op_histogram[(int)OpType::Max][i] << "\n"
+               << "      EQ:         " << op_histogram[(int)OpType::EQ][i] << "\n"
+               << "      NE:         " << op_histogram[(int)OpType::NE][i] << "\n"
+               << "      LT:         " << op_histogram[(int)OpType::LT][i] << "\n"
+               << "      LE:         " << op_histogram[(int)OpType::LE][i] << "\n"
+               << "      And:        " << op_histogram[(int)OpType::And][i] << "\n"
+               << "      Or:         " << op_histogram[(int)OpType::Or][i] << "\n"
+               << "      Not:        " << op_histogram[(int)OpType::Not][i] << "\n"
+               << "      Select:     " << op_histogram[(int)OpType::Select][i] << "\n"
+               << "      ImageCall:  " << op_histogram[(int)OpType::ImageCall][i] << "\n"
+               << "      FuncCall:   " << op_histogram[(int)OpType::FuncCall][i] << "\n"
+               << "      SelfCall:   " << op_histogram[(int)OpType::SelfCall][i] << "\n"
+               << "      ExternCall: " << op_histogram[(int)OpType::ExternCall][i] << "\n"
+               << "      Let:        " << op_histogram[(int)OpType::Let][i] << "\n"
                << "     Memory access patterns. Columns are calls to other Funcs, self-calls, input image access, and stores\n"
                << "      Pointwise:      "
-               << pointwise_accesses[0][i] << ' '
-               << pointwise_accesses[1][i] << ' '
-               << pointwise_accesses[2][i] << ' '
-               << pointwise_accesses[3][i] << '\n'
+               << pointwise_accesses[0][i] << " "
+               << pointwise_accesses[1][i] << " "
+               << pointwise_accesses[2][i] << " "
+               << pointwise_accesses[3][i] << "\n"
                << "      Transpose:      "
-               << transpose_accesses[0][i] << ' '
-               << transpose_accesses[1][i] << ' '
-               << transpose_accesses[2][i] << ' '
-               << transpose_accesses[3][i] << '\n'
+               << transpose_accesses[0][i] << " "
+               << transpose_accesses[1][i] << " "
+               << transpose_accesses[2][i] << " "
+               << transpose_accesses[3][i] << "\n"
                << "      Broadcast:      "
-               << broadcast_accesses[0][i] << ' '
-               << broadcast_accesses[1][i] << ' '
-               << broadcast_accesses[2][i] << ' '
-               << broadcast_accesses[3][i] << '\n'
+               << broadcast_accesses[0][i] << " "
+               << broadcast_accesses[1][i] << " "
+               << broadcast_accesses[2][i] << " "
+               << broadcast_accesses[3][i] << "\n"
                << "      Slice:          "
-               << slice_accesses[0][i] << ' '
-               << slice_accesses[1][i] << ' '
-               << slice_accesses[2][i] << ' '
-               << slice_accesses[3][i] << '\n';
+               << slice_accesses[0][i] << " "
+               << slice_accesses[1][i] << " "
+               << slice_accesses[2][i] << " "
+               << slice_accesses[3][i] << "\n";
         }
     }
     void dump() const {
@@ -373,93 +373,93 @@ struct ScheduleFeatures {
 
     template<typename OS>
     void dump(OS &os) const {
-        os  << "    num_realizations:                      " << num_realizations << '\n'
-            << "    num_productions:                       " << num_productions << '\n'
-            << "    points_computed_per_realization:       " << points_computed_per_realization << '\n'
-            << "    points_computed_per_production:        " << points_computed_per_production << '\n'
-            << "    points_computed_per_thread:            " << points_computed_per_thread << '\n'
-            << "    points_computed_total:                 " << points_computed_total << '\n'
-            << "    points_computed_minimum:               " << points_computed_minimum << '\n'
-            << "    innermost_loop_extent:                 " << innermost_loop_extent << '\n'
-            << "    innermost_pure_loop_extent:            " << innermost_pure_loop_extent << '\n'
-            << "    unrolled_loop_extent:                  " << unrolled_loop_extent << '\n'
-            << "    inner_parallelism:                     " << inner_parallelism << '\n'
-            << "    outer_parallelism:                     " << outer_parallelism << '\n'
-            << "    bytes_at_realization:                  " << bytes_at_realization << '\n'
-            << "    bytes_at_production:                   " << bytes_at_production << '\n'
-            << "    bytes_at_root:                         " << bytes_at_root << '\n'
-            << "    innermost_bytes_at_realization:        " << innermost_bytes_at_realization << '\n'
-            << "    innermost_bytes_at_production:         " << innermost_bytes_at_production << '\n'
-            << "    innermost_bytes_at_root:               " << innermost_bytes_at_root << '\n'
-            << "    inlined_calls:                         " << inlined_calls << '\n'
-            << " unique_global_bytes_read_per_realization: " << unique_global_bytes_read_per_realization << '\n'
-            << " unique_shared_bytes_read_per_realization: " << unique_shared_bytes_read_per_realization << '\n'
-            << " unique_local_bytes_read_per_realization:  " << unique_local_bytes_read_per_realization << '\n'
-            << " unique_global_lines_read_per_realization: " << unique_global_lines_read_per_realization << '\n'
-            << " unique_shared_lines_read_per_realization: " << unique_shared_lines_read_per_realization << '\n'
-            << " unique_local_lines_read_per_realization:  " << unique_local_lines_read_per_realization << '\n'
-            << " unique_global_bytes_read_per_thread:      " << unique_global_bytes_read_per_thread << '\n'
-            << " unique_shared_bytes_read_per_thread:      " << unique_shared_bytes_read_per_thread << '\n'
-            << " unique_local_bytes_read_per_thread:       " << unique_local_bytes_read_per_thread << '\n'
-            << " unique_global_lines_read_per_thread:      " << unique_global_lines_read_per_thread << '\n'
-            << " unique_shared_lines_read_per_thread:      " << unique_shared_lines_read_per_thread << '\n'
-            << " unique_local_lines_read_per_thread:       " << unique_local_lines_read_per_thread << '\n'
-            << " global_allocation_bytes_read_per_realization: " << global_allocation_bytes_read_per_realization << '\n'
-            << " shared_allocation_bytes_read_per_realization: " << shared_allocation_bytes_read_per_realization << '\n'
-            << " local_allocation_bytes_read_per_realization: " << local_allocation_bytes_read_per_realization << '\n'
-            << "    working_set:                           " << working_set << '\n'
-            << "    vector_size:                           " << vector_size << '\n'
-            << "    native_vector_size:                    " << native_vector_size << '\n'
-            << "    num_vectors:                           " << num_vectors << '\n'
-            << "    num_scalars:                           " << num_scalars << '\n'
-            << "    scalar_loads_per_vector:               " << scalar_loads_per_vector << '\n'
-            << "    vector_loads_per_vector:               " << vector_loads_per_vector << '\n'
-            << "    scalar_loads_per_scalar:               " << scalar_loads_per_scalar << '\n'
-            << "    global_bytes_at_task:                  " << global_bytes_at_task << '\n'
-            << "    shared_bytes_at_task:                  " << shared_bytes_at_task << '\n'
-            << "    local_bytes_at_task:                   " << local_bytes_at_task << '\n'
-            << "    global_innermost_bytes_at_task:        " << global_innermost_bytes_at_task << '\n'
-            << "    shared_innermost_bytes_at_task:        " << shared_innermost_bytes_at_task << '\n'
-            << "    local_innermost_bytes_at_task:         " << local_innermost_bytes_at_task << '\n'
-            << "    unique_bytes_read_per_vector:          " << unique_bytes_read_per_vector << '\n'
-            << "    unique_lines_read_per_vector:          " << unique_lines_read_per_vector << '\n'
-            << "    unique_bytes_read_per_task:            " << unique_bytes_read_per_task << '\n'
-            << "    unique_lines_read_per_task:            " << unique_lines_read_per_task << '\n'
-            << "    working_set_at_task:                   " << working_set_at_task << '\n'
-            << "    working_set_at_production:             " << working_set_at_production << '\n'
-            << "    working_set_at_realization:            " << working_set_at_realization << '\n'
-            << "    working_set_at_root:                   " << working_set_at_root << '\n'
-            << "    num_blocks:                            " << num_blocks << '\n'
-            << "    num_warps_per_block:                   " << num_warps_per_block << '\n'
-            << "    block_occupancy:                       " << block_occupancy << '\n'
-            << "    warp_lane_utilization:                 " << warp_lane_utilization << '\n'
-            << "    warp_lane_utilization_at_block_x:      " << warp_lane_utilization_at_block_x << '\n'
-            << "    warp_lane_utilization_at_block_y:      " << warp_lane_utilization_at_block_y << '\n'
-            << "    warp_lane_utilization_at_block_z:      " << warp_lane_utilization_at_block_z << '\n'
-            << "    idle_lane_wastage:                     " << idle_lane_wastage << '\n'
-            << "    num_shared_mem_loads_per_block:        " << num_shared_mem_loads_per_block << '\n'
-            << "    num_global_mem_loads_per_block:        " << num_global_mem_loads_per_block << '\n'
-            << "    num_global_mem_loads_with_pure_licm_per_block:       " << num_global_mem_loads_with_pure_licm_per_block << '\n'
-            << "    num_local_mem_loads_per_thread:        " << num_local_mem_loads_per_thread << '\n'
-            << "    num_shared_mem_stores_per_block:       " << num_shared_mem_stores_per_block << '\n'
-            << "    num_global_mem_stores_per_block:       " << num_global_mem_stores_per_block << '\n'
-            << "    num_global_mem_stores_with_pure_licm_per_block:       " << num_global_mem_stores_with_pure_licm_per_block << '\n'
-            << "    num_local_mem_stores_per_thread:       " << num_local_mem_stores_per_thread << '\n'
-            << "    shared_mem_store_efficiency:           " << shared_mem_store_efficiency << '\n'
-            << "    shared_mem_load_efficiency:            " << shared_mem_load_efficiency << '\n'
-            << "    global_mem_store_efficiency:           " << global_mem_store_efficiency << '\n'
-            << "    global_mem_load_efficiency:            " << global_mem_load_efficiency << '\n'
-            << "    local_mem_store_efficiency:            " << local_mem_store_efficiency << '\n'
-            << "    local_mem_load_efficiency:             " << local_mem_load_efficiency << '\n'
-            << "    working_set_at_thread:                 " << working_set_at_thread << '\n'
-            << "    working_set_local_constant:            " << working_set_local_constant << '\n'
-            << "    working_set_local_dynamic:             " << working_set_local_dynamic << '\n'
-            << "    shared_mem_occupancy:                  " << shared_mem_occupancy << '\n'
-            << "    shared_mem_block_limit_factor:         " << shared_mem_block_limit_factor << '\n'
-            << "    max_warp_occupancy:                    " << max_warp_occupancy << '\n'
-            << "    max_block_occupancy:                   " << max_block_occupancy << '\n'
-            << "    num_threads_per_block:                 " << num_threads_per_block << '\n'
-            << "    expr_branching:                        " << expr_branching << '\n';
+        os  << "    num_realizations:                      " << num_realizations << "\n"
+            << "    num_productions:                       " << num_productions << "\n"
+            << "    points_computed_per_realization:       " << points_computed_per_realization << "\n"
+            << "    points_computed_per_production:        " << points_computed_per_production << "\n"
+            << "    points_computed_per_thread:            " << points_computed_per_thread << "\n"
+            << "    points_computed_total:                 " << points_computed_total << "\n"
+            << "    points_computed_minimum:               " << points_computed_minimum << "\n"
+            << "    innermost_loop_extent:                 " << innermost_loop_extent << "\n"
+            << "    innermost_pure_loop_extent:            " << innermost_pure_loop_extent << "\n"
+            << "    unrolled_loop_extent:                  " << unrolled_loop_extent << "\n"
+            << "    inner_parallelism:                     " << inner_parallelism << "\n"
+            << "    outer_parallelism:                     " << outer_parallelism << "\n"
+            << "    bytes_at_realization:                  " << bytes_at_realization << "\n"
+            << "    bytes_at_production:                   " << bytes_at_production << "\n"
+            << "    bytes_at_root:                         " << bytes_at_root << "\n"
+            << "    innermost_bytes_at_realization:        " << innermost_bytes_at_realization << "\n"
+            << "    innermost_bytes_at_production:         " << innermost_bytes_at_production << "\n"
+            << "    innermost_bytes_at_root:               " << innermost_bytes_at_root << "\n"
+            << "    inlined_calls:                         " << inlined_calls << "\n"
+            << " unique_global_bytes_read_per_realization: " << unique_global_bytes_read_per_realization << "\n"
+            << " unique_shared_bytes_read_per_realization: " << unique_shared_bytes_read_per_realization << "\n"
+            << " unique_local_bytes_read_per_realization:  " << unique_local_bytes_read_per_realization << "\n"
+            << " unique_global_lines_read_per_realization: " << unique_global_lines_read_per_realization << "\n"
+            << " unique_shared_lines_read_per_realization: " << unique_shared_lines_read_per_realization << "\n"
+            << " unique_local_lines_read_per_realization:  " << unique_local_lines_read_per_realization << "\n"
+            << " unique_global_bytes_read_per_thread:      " << unique_global_bytes_read_per_thread << "\n"
+            << " unique_shared_bytes_read_per_thread:      " << unique_shared_bytes_read_per_thread << "\n"
+            << " unique_local_bytes_read_per_thread:       " << unique_local_bytes_read_per_thread << "\n"
+            << " unique_global_lines_read_per_thread:      " << unique_global_lines_read_per_thread << "\n"
+            << " unique_shared_lines_read_per_thread:      " << unique_shared_lines_read_per_thread << "\n"
+            << " unique_local_lines_read_per_thread:       " << unique_local_lines_read_per_thread << "\n"
+            << " global_allocation_bytes_read_per_realization: " << global_allocation_bytes_read_per_realization << "\n"
+            << " shared_allocation_bytes_read_per_realization: " << shared_allocation_bytes_read_per_realization << "\n"
+            << " local_allocation_bytes_read_per_realization: " << local_allocation_bytes_read_per_realization << "\n"
+            << "    working_set:                           " << working_set << "\n"
+            << "    vector_size:                           " << vector_size << "\n"
+            << "    native_vector_size:                    " << native_vector_size << "\n"
+            << "    num_vectors:                           " << num_vectors << "\n"
+            << "    num_scalars:                           " << num_scalars << "\n"
+            << "    scalar_loads_per_vector:               " << scalar_loads_per_vector << "\n"
+            << "    vector_loads_per_vector:               " << vector_loads_per_vector << "\n"
+            << "    scalar_loads_per_scalar:               " << scalar_loads_per_scalar << "\n"
+            << "    global_bytes_at_task:                  " << global_bytes_at_task << "\n"
+            << "    shared_bytes_at_task:                  " << shared_bytes_at_task << "\n"
+            << "    local_bytes_at_task:                   " << local_bytes_at_task << "\n"
+            << "    global_innermost_bytes_at_task:        " << global_innermost_bytes_at_task << "\n"
+            << "    shared_innermost_bytes_at_task:        " << shared_innermost_bytes_at_task << "\n"
+            << "    local_innermost_bytes_at_task:         " << local_innermost_bytes_at_task << "\n"
+            << "    unique_bytes_read_per_vector:          " << unique_bytes_read_per_vector << "\n"
+            << "    unique_lines_read_per_vector:          " << unique_lines_read_per_vector << "\n"
+            << "    unique_bytes_read_per_task:            " << unique_bytes_read_per_task << "\n"
+            << "    unique_lines_read_per_task:            " << unique_lines_read_per_task << "\n"
+            << "    working_set_at_task:                   " << working_set_at_task << "\n"
+            << "    working_set_at_production:             " << working_set_at_production << "\n"
+            << "    working_set_at_realization:            " << working_set_at_realization << "\n"
+            << "    working_set_at_root:                   " << working_set_at_root << "\n"
+            << "    num_blocks:                            " << num_blocks << "\n"
+            << "    num_warps_per_block:                   " << num_warps_per_block << "\n"
+            << "    block_occupancy:                       " << block_occupancy << "\n"
+            << "    warp_lane_utilization:                 " << warp_lane_utilization << "\n"
+            << "    warp_lane_utilization_at_block_x:      " << warp_lane_utilization_at_block_x << "\n"
+            << "    warp_lane_utilization_at_block_y:      " << warp_lane_utilization_at_block_y << "\n"
+            << "    warp_lane_utilization_at_block_z:      " << warp_lane_utilization_at_block_z << "\n"
+            << "    idle_lane_wastage:                     " << idle_lane_wastage << "\n"
+            << "    num_shared_mem_loads_per_block:        " << num_shared_mem_loads_per_block << "\n"
+            << "    num_global_mem_loads_per_block:        " << num_global_mem_loads_per_block << "\n"
+            << "    num_global_mem_loads_with_pure_licm_per_block:       " << num_global_mem_loads_with_pure_licm_per_block << "\n"
+            << "    num_local_mem_loads_per_thread:        " << num_local_mem_loads_per_thread << "\n"
+            << "    num_shared_mem_stores_per_block:       " << num_shared_mem_stores_per_block << "\n"
+            << "    num_global_mem_stores_per_block:       " << num_global_mem_stores_per_block << "\n"
+            << "    num_global_mem_stores_with_pure_licm_per_block:       " << num_global_mem_stores_with_pure_licm_per_block << "\n"
+            << "    num_local_mem_stores_per_thread:       " << num_local_mem_stores_per_thread << "\n"
+            << "    shared_mem_store_efficiency:           " << shared_mem_store_efficiency << "\n"
+            << "    shared_mem_load_efficiency:            " << shared_mem_load_efficiency << "\n"
+            << "    global_mem_store_efficiency:           " << global_mem_store_efficiency << "\n"
+            << "    global_mem_load_efficiency:            " << global_mem_load_efficiency << "\n"
+            << "    local_mem_store_efficiency:            " << local_mem_store_efficiency << "\n"
+            << "    local_mem_load_efficiency:             " << local_mem_load_efficiency << "\n"
+            << "    working_set_at_thread:                 " << working_set_at_thread << "\n"
+            << "    working_set_local_constant:            " << working_set_local_constant << "\n"
+            << "    working_set_local_dynamic:             " << working_set_local_dynamic << "\n"
+            << "    shared_mem_occupancy:                  " << shared_mem_occupancy << "\n"
+            << "    shared_mem_block_limit_factor:         " << shared_mem_block_limit_factor << "\n"
+            << "    max_warp_occupancy:                    " << max_warp_occupancy << "\n"
+            << "    max_block_occupancy:                   " << max_block_occupancy << "\n"
+            << "    num_threads_per_block:                 " << num_threads_per_block << "\n"
+            << "    expr_branching:                        " << expr_branching << "\n";
     }
 
     void dump() const {
