@@ -2163,11 +2163,21 @@ HALIDE_ALWAYS_INLINE bool evaluate_predicate(Pattern p, MatcherState &state) {
 // correctness_simplify with this on.
 #define HALIDE_FUZZ_TEST_RULES 0
 
+#define HALIDE_INCLUDE_UNPROVEN_RULES 0
+
 // Assume that a human has successfully proved all the "prove_me" rules on paper.
+#if HALIDE_INCLUDE_UNPROVEN_RULES
 template<typename A>
 HALIDE_ALWAYS_INLINE A prove_me(A a) noexcept {
     return a;
 }
+#else
+// Assume that all prove_me rules are false
+template<typename A>
+HALIDE_ALWAYS_INLINE Const prove_me(A a) noexcept {
+    return Const(0);
+}
+#endif
 
 template<typename Instance>
 struct Rewriter {
