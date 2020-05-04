@@ -69,8 +69,11 @@ Expr Simplify::visit(const Mod *op, ExprInfo *bounds) {
             rewrite(0 % x, 0) ||
             rewrite(x % x, 0) ||
             rewrite(x % 0, 0) ||
+            rewrite((x * y) % x, 0) ||
+            rewrite((y * x) % x, 0) ||
             (!op->type.is_float() &&
-             rewrite(x % 1, 0))) {
+             (rewrite(x % 1, 0) ||
+              rewrite(x % -1, 0)))) {
             return rewrite.result;
         }
 

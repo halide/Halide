@@ -230,7 +230,7 @@ class ImplicitPredicate : public IRVisitor {
         const Variable *v = op->b.as<Variable>();
         if (v && v->name[0] == 'c') {
             // Legal, but would have folded
-            result = result && (op->b != 0);
+            result = result && (op->b != 0) && (op->b != 1) && (op->b != -1);
         }
         IRVisitor::visit(op);
     }
@@ -239,7 +239,16 @@ class ImplicitPredicate : public IRVisitor {
         const Variable *v = op->b.as<Variable>();
         if (v && v->name[0] == 'c') {
             // Would have folded
-            result = result && (op->b != 0);
+            result = result && (op->b != 0) && (op->b != 1);
+        }
+        IRVisitor::visit(op);
+    }
+
+    void visit(const Mod *op) {
+        const Variable *v = op->b.as<Variable>();
+        if (v && v->name[0] == 'c') {
+            // Would have folded
+            result = result && (op->b != 0) && (op->b != 1) && (op->b != -1);
         }
         IRVisitor::visit(op);
     }
@@ -404,7 +413,27 @@ void check_rule(Rule &r) {
             }
 
             new_predicate = pack_binary_op<And>(terms);
-            new_predicate = simplify(new_predicate);
+
+            // Exploit the implicit predicate to clean some terms up
+            {
+                Simplify simplifier(true, nullptr, nullptr);
+                simplifier.learn_true(imp.result);
+                for (auto p : find_vars(new_predicate)) {
+                    if (p.first[0] == 'c') {
+                        Expr v = p.second.first;
+                        if (is_zero(simplifier.mutate(v == -1 || v == 0 || v == 1, nullptr))) {
+                            // This var appears on the RHS of a div or mod
+                            new_predicate = substitute(1 % v, 1, new_predicate);
+                            new_predicate = substitute(1 / v, 0, new_predicate);
+                        }
+                        new_predicate = substitute(-1 / v == 0, v == 0, new_predicate);
+                        new_predicate = substitute(-1 / v == -1, 0 < v, new_predicate);
+                        new_predicate = substitute(-1 / v == 1, v < 0, new_predicate);
+                    }
+                }
+                new_predicate = simplifier.mutate(new_predicate, nullptr);
+            }
+
             debug(0) << "Initial guess at predicate: " << new_predicate << "\n";
             for (int terms = 0;; terms++) {
                 if (terms > 4) {
@@ -451,7 +480,7 @@ void check_rule(Rule &r) {
                         debug(0) << c << "\n";
 
                         map<string, Expr> binding;
-                        auto z3_result = satisfy(imp.result && c && !rule_holds, &binding);
+                        auto z3_result = satisfy(imp.result && c && !rule_holds, &binding, "checking one clause in DNF", 30);
                         if (z3_result == Z3Result::Sat) continue;
                         any_timeouts |= (z3_result != Z3Result::Unsat);
                         trimmed_clauses.insert(c);
@@ -466,7 +495,7 @@ void check_rule(Rule &r) {
                 }
                 Expr there_is_a_failure = simplify(imp.result && new_predicate && !rule_holds);
                 map<string, Expr> binding;
-                auto z3_result = satisfy(there_is_a_failure, &binding);
+                auto z3_result = satisfy(there_is_a_failure, &binding, "checking a predicate for failures", 30);
                 if (z3_result == Z3Result::Unsat) {
                     // Woo. No failures exist.
                     break;
@@ -490,6 +519,7 @@ void check_rule(Rule &r) {
                     if (false && can_disprove_nonconvex(there_is_a_failure, 256, nullptr)) {
                         debug(0) << "Verified using beam search\n";
                     } else {
+                        // A human will have to prove this by hand
                         new_predicate = Call::make(Bool(), "prove_me", {new_predicate}, Call::Extern);
                     }
                     break;
@@ -497,6 +527,15 @@ void check_rule(Rule &r) {
             }
             if (!is_zero(new_predicate)) {
                 debug(0) << "\n\nNew predicate synthesis algorithm produced: " << new_predicate << "\n\n\n";
+            }
+        }
+
+        // Save human attention for things small enough to be tractable - one clause only please.
+        if (const Call *c = new_predicate.as<Call>()) {
+            if (c->name == "prove_me") {
+                if (c->args[0].as<And>()) {
+                    new_predicate = const_false();
+                }
             }
         }
 
