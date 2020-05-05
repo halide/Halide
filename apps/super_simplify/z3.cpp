@@ -8,7 +8,7 @@ using namespace Halide::Internal;
 using std::map;
 using std::string;
 
-bool parse_model(char **cursor, char *end, map<string, Expr> *bindings) {
+bool parse_model(const char **cursor, const char *end, map<string, Expr> *bindings) {
     consume_whitespace(cursor, end);
     if (!consume(cursor, end, "(model")) return false;
     consume_whitespace(cursor, end);
@@ -386,7 +386,7 @@ string expr_to_smt2(const Expr &e) {
 }
 
 Z3Result
-satisfy(Expr e, map<string, Expr> *bindings, const string &comment) {
+satisfy(Expr e, map<string, Expr> *bindings, const string &comment, int timeout) {
 
     e = simplify(common_subexpression_elimination(e));
 
@@ -456,7 +456,7 @@ satisfy(Expr e, map<string, Expr> *bindings, const string &comment) {
     TemporaryFile z3_output("output", "txt");
     write_entire_file(z3_file.pathname(), &src[0], src.size());
 
-    std::string cmd = "z3 -T:6 " + z3_file.pathname() + " > " + z3_output.pathname();
+    std::string cmd = "z3 -T:" + std::to_string(timeout) + " " + z3_file.pathname() + " > " + z3_output.pathname();
 
     //int ret = system(cmd.c_str());
     int ret = pclose(popen(cmd.c_str(), "r"));
@@ -484,8 +484,8 @@ satisfy(Expr e, map<string, Expr> *bindings, const string &comment) {
     if (starts_with(result, "unsat")) {
         return Z3Result::Unsat;
     } else {
-        char *cursor = &(result[0]);
-        char *end = &(result[result.size()]);
+        const char *cursor = &(result[0]);
+        const char *end = &(result[result.size()]);
         if (!consume(&cursor, end, "sat")) {
             return Z3Result::Unknown;
         }

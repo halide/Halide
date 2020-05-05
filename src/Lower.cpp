@@ -1,4 +1,5 @@
 #include <algorithm>
+#include <chrono>
 #include <iostream>
 #include <set>
 #include <sstream>
@@ -15,6 +16,7 @@
 #include "BoundsInference.h"
 #include "CSE.h"
 #include "CanonicalizeGPUVars.h"
+#include "CompilerLogger.h"
 #include "Debug.h"
 #include "DebugArguments.h"
 #include "DebugToFile.h"
@@ -87,6 +89,8 @@ Module lower(const vector<Function> &output_funcs,
              const vector<IRMutator *> &custom_passes) {
 
     HALIDE_TIC;
+
+    auto time_start = std::chrono::high_resolution_clock::now();
 
     std::vector<std::string> namespaces;
     std::string simple_pipeline_name = extract_namespaces(pipeline_name, namespaces);
@@ -528,6 +532,13 @@ Module lower(const vector<Function> &output_funcs,
     result_module.append(main_func);
 
     HALIDE_TOC;
+
+    auto *logger = get_compiler_logger();
+    if (logger) {
+        auto time_end = std::chrono::high_resolution_clock::now();
+        std::chrono::duration<double> diff = time_end - time_start;
+        logger->record_compilation_time(CompilerLogger::Phase::HalideLowering, diff.count());
+    }
 
     return result_module;
 }

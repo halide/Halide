@@ -11,15 +11,15 @@ $(BIN)/%/pytorch_weights/ok:
 	python3 load_weights.py $(@D)
 	echo "ok" > $@
 
-$(GENERATOR_BIN)/resnet50.generator: Resnet50Generator.cpp $(GENERATOR_DEPS)
+$(GENERATOR_BIN)/resnet_50.generator: Resnet50Generator.cpp $(GENERATOR_DEPS)
 	@mkdir -p $(@D)
 	$(CXX) $(CXXFLAGS) -g -fno-rtti $(filter %.cpp,$^) -o $@ $(LIBHALIDE_LDFLAGS) 
 
-$(BIN)/%/resnet50.a: $(GENERATOR_BIN)/resnet50.generator
+$(BIN)/%/resnet_50.a: $(GENERATOR_BIN)/resnet_50.generator
 	@mkdir -p $(@D)
-	$^ -g resnet50 -o $(@D) -f resnet50 target=$* auto_schedule=false
+	$^ -g resnet_50 -o $(@D) -f resnet_50 target=$* auto_schedule=false
 
-$(BIN)/%/process: process.cpp $(BIN)/%/resnet50.a
+$(BIN)/%/process: process.cpp $(BIN)/%/resnet_50.a
 	@mkdir -p $(@D)
 	$(CXX) $(CXXFLAGS) -I$(BIN)/$* -Wall $^ -o $@ $(LDFLAGS) $(IMAGE_IO_FLAGS) $(CUDA_LDFLAGS) $(OPENCL_LDFLAGS) $(OPENGL_LDFLAGS)
 

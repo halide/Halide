@@ -35,12 +35,6 @@ Expr Simplify::visit(const Or *op, ExprInfo *bounds) {
          (rewrite(((x || y) || z) || y, a, "or35")) ||
          (rewrite(y || ((x || y) || z), b, "or36")) ||
          (rewrite((z || (x || y)) || y, a, "or37")) ||
-         (rewrite(y || (z || (x || y)), b, "or38")) ||
-
-         (rewrite((x && y) || x, b, "or40")) ||
-         (rewrite(x || (x && y), a, "or41")) ||
-         (rewrite((x && y) || y, b, "or42")) ||
-         (rewrite(y || (x && y), a, "or43")) ||
 
          (rewrite(((x || y) || z) || x, a, "or45")) ||
          (rewrite(x || ((x || y) || z), b, "or46")) ||
@@ -50,6 +44,13 @@ Expr Simplify::visit(const Or *op, ExprInfo *bounds) {
          (rewrite(y || ((x || y) || z), b, "or50")) ||
          (rewrite((z || (x || y)) || y, a, "or51")) ||
          (rewrite(y || (z || (x || y)), b, "or52")) ||
+
+        (rewrite(y || (z || (x || y)), b, "or38")) ||
+
+         (rewrite((x && y) || x, b, "or40")) ||
+         (rewrite(x || (x && y), a, "or41")) ||
+         (rewrite((x && y) || y, b, "or42")) ||
+         (rewrite(y || (x && y), a, "or43")) ||
 
          (rewrite(x != y || x == y, true, "or54")) ||
          (rewrite(x != y || y == x, true, "or55")) ||
@@ -77,6 +78,7 @@ Expr Simplify::visit(const Or *op, ExprInfo *bounds) {
          (rewrite(c0 <= x || c1 <= x, fold(min(c0, c1)) <= x, "or75")) ||
          (rewrite(x < c0 || x < c1, x < fold(max(c0, c1)), "or76")) ||
          (rewrite(x <= c0 || x <= c1, x <= fold(max(c0, c1)), "or77")))) {
+
         return rewrite.result;
     }
     // clang-format on

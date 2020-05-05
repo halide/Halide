@@ -15,6 +15,7 @@
 #include "CodeGen_RISCV.h"
 #include "CodeGen_WebAssembly.h"
 #include "CodeGen_X86.h"
+#include "CompilerLogger.h"
 #include "Debug.h"
 #include "Deinterleave.h"
 #include "EmulateFloat16Math.h"
@@ -1214,6 +1215,8 @@ void CodeGen_LLVM::optimize_module() {
 
     HALIDE_TIC;
 
+    auto time_start = std::chrono::high_resolution_clock::now();
+
     if (debug::debug_level() >= 3) {
         module->print(dbgs(), nullptr, false, true);
     }
@@ -1327,6 +1330,13 @@ void CodeGen_LLVM::optimize_module() {
     }
 
     HALIDE_TOC;
+
+    auto *logger = get_compiler_logger();
+    if (logger) {
+        auto time_end = std::chrono::high_resolution_clock::now();
+        std::chrono::duration<double> diff = time_end - time_start;
+        logger->record_compilation_time(CompilerLogger::Phase::LLVM, diff.count());
+    }
 }
 
 void CodeGen_LLVM::sym_push(const string &name, llvm::Value *value) {

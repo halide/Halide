@@ -19,6 +19,7 @@ struct Rule {
 };
 
 using std::map;
+using std::set;
 using std::string;
 using std::vector;
 
@@ -229,7 +230,7 @@ class ImplicitPredicate : public IRVisitor {
         const Variable *v = op->b.as<Variable>();
         if (v && v->name[0] == 'c') {
             // Legal, but would have folded
-            result = result && (op->b != 0);
+            result = result && (op->b != 0) && (op->b != 1) && (op->b != -1);
         }
         IRVisitor::visit(op);
     }
@@ -238,7 +239,16 @@ class ImplicitPredicate : public IRVisitor {
         const Variable *v = op->b.as<Variable>();
         if (v && v->name[0] == 'c') {
             // Would have folded
-            result = result && (op->b != 0);
+            result = result && (op->b != 0) && (op->b != 1);
+        }
+        IRVisitor::visit(op);
+    }
+
+    void visit(const Mod *op) {
+        const Variable *v = op->b.as<Variable>();
+        if (v && v->name[0] == 'c') {
+            // Would have folded
+            result = result && (op->b != 0) && (op->b != 1) && (op->b != -1);
         }
         IRVisitor::visit(op);
     }
@@ -248,6 +258,53 @@ public:
         : result(const_true()) {
     }
     Expr result;
+};
+
+class MoveNegationInnermost : public IRMutator {
+    using IRMutator::visit;
+
+    Expr visit(const Not *op) override {
+        if (const And *and_a = op->a.as<And>()) {
+            return mutate(!and_a->a) || mutate(!and_a->b);
+        } else if (const Or *or_a = op->a.as<Or>()) {
+            return mutate(!or_a->a) && mutate(!or_a->b);
+        } else if (const Not *not_a = op->a.as<Not>()) {
+            return mutate(not_a->a);
+        } else if (const LT *lt = op->a.as<LT>()) {
+            return mutate(lt->b <= lt->a);
+        } else if (const LE *le = op->a.as<LE>()) {
+            return mutate(le->b < le->a);
+        } else if (const EQ *eq = op->a.as<EQ>()) {
+            return mutate(eq->a != eq->b);
+        } else if (const NE *ne = op->a.as<NE>()) {
+            return mutate(ne->a == ne->b);
+        } else {
+            return IRMutator::visit(op);
+        }
+    }
+};
+
+class ToDNF : public IRMutator {
+    using IRMutator::visit;
+
+    Expr visit(const And *op) override {
+        Expr a = mutate(op->a);
+        Expr b = mutate(op->b);
+        vector<Expr> as = unpack_binary_op<Or>(a);
+        vector<Expr> bs = unpack_binary_op<Or>(b);
+        set<Expr, IRDeepCompare> result;
+        for (Expr a1 : as) {
+            for (Expr b1 : bs) {
+                auto a_clauses = unpack_binary_op<And>(a1);
+                auto b_clauses = unpack_binary_op<And>(b1);
+                set<Expr, IRDeepCompare> both;
+                both.insert(a_clauses.begin(), a_clauses.end());
+                both.insert(b_clauses.begin(), b_clauses.end());
+                result.insert(pack_binary_op<And>(both));
+            }
+        }
+        return pack_binary_op<Or>(result);
+    }
 };
 
 // Make the first wildcard found x, the second y, etc.
@@ -279,6 +336,14 @@ class CanonicalizeVariableNames : public IRMutator {
     }
 };
 
+void replace_all(string &str, const string &from, const string &to) {
+    size_t start_pos = 0;
+    while ((start_pos = str.find(from, start_pos)) != std::string::npos) {
+        str.replace(start_pos, from.length(), to);
+        start_pos += to.length();
+    }
+}
+
 void check_rule(Rule &r) {
     // Check the rules with Z3
     map<string, Expr> mapping;
@@ -305,17 +370,16 @@ void check_rule(Rule &r) {
         }
     }
 
-    vector<map<string, Expr>> examples;
     map<string, Expr> binding;
     if (true || is_zero(r.predicate)) {
         std::cout << "Re-synthesizing predicate for " << r.orig << " with a larger beam size\n";
-        int bs = 1;
         Expr new_predicate = const_false();
         if (false) {
+            int bs = 1;
             while (bs <= 16 && is_zero(new_predicate)) {
                 std::cout << "Trying with beam size: " << bs << "\n";
                 binding.clear();
-                new_predicate = synthesize_predicate(r.lhs, r.rhs, examples, &binding, bs);
+                new_predicate = synthesize_predicate(r.lhs, r.rhs, &binding, bs);
                 bs *= 4;
             }
         }
@@ -325,84 +389,118 @@ void check_rule(Rule &r) {
             // alternative algorithm for predicate synthesis.
             new_predicate = const_true();
 
-            // We can substitute in any old values for the
-            // non-constant variables to get a candidate constraint.
+            Expr rule_holds = simplify(r.lhs == r.rhs);
+            debug(0) << "Rule holds: " << rule_holds << "\n";
 
-            auto vars = find_vars(r.lhs);
+            // We can substitute in any old values for the
+            // non-constant variables to get a candidate
+            // constraint. Let's start with 0/1
+
+            auto vars = find_vars(rule_holds);
+
             map<string, Expr> all_vars_zero;
             for (const auto &p : vars) {
+                if (p.first[0] == 'c') continue;
                 all_vars_zero.emplace(p.first, cast(p.second.first.type(), 0));
             }
-            new_predicate = substitute(all_vars_zero, r.lhs == r.rhs);
+            vector<Expr> terms;
+            terms.push_back(substitute(all_vars_zero, rule_holds));
             for (const auto &p : vars) {
+                if (p.first[0] == 'c') continue;
                 all_vars_zero[p.first] = cast(p.second.first.type(), 1);
-                new_predicate = new_predicate && substitute(all_vars_zero, r.lhs == r.rhs);
-
-                if (p.second.first.type().is_int()) {
-                    all_vars_zero[p.first] = -1;
-                    new_predicate = new_predicate && substitute(all_vars_zero, r.lhs == r.rhs);
-                }
-
+                terms.push_back(simplify(substitute(all_vars_zero, rule_holds)));
                 all_vars_zero[p.first] = cast(p.second.first.type(), 0);
             }
-            new_predicate = simplify(new_predicate);
 
-            class RemoveVariables : public IRMutator {
-                using IRMutator::visit;
-                map<string, Expr> replacements;
-                Expr visit(const Variable *op) override {
-                    if (op->name[0] == 'c') {
-                        return op;
-                    } else {
-                        auto p = replacements.emplace(op->name, cast(op->type, 0));
-                        return p.first->second;
-                    }
-                }
+            new_predicate = pack_binary_op<And>(terms);
 
-                Expr visit(const Mul *op) override {
-                    if (const Variable *var_a = op->a.as<Variable>()) {
-                        if (var_a->name[0] == 'c') {
-                            return op->a * mutate(op->b);
-                        } else {
-                            auto p = replacements.emplace(var_a->name, cast(op->type, 1));
-                            return p.first->second * mutate(op->b);
+            // Exploit the implicit predicate to clean some terms up
+            {
+                Simplify simplifier(true, nullptr, nullptr);
+                simplifier.learn_true(imp.result);
+                for (auto p : find_vars(new_predicate)) {
+                    if (p.first[0] == 'c') {
+                        Expr v = p.second.first;
+                        if (is_zero(simplifier.mutate(v == -1 || v == 0 || v == 1, nullptr))) {
+                            // This var appears on the RHS of a div or mod
+                            new_predicate = substitute(1 % v, 1, new_predicate);
+                            new_predicate = substitute(1 / v, 0, new_predicate);
                         }
-                    } else {
-                        return IRMutator::visit(op);
+                        new_predicate = substitute(-1 / v == 0, v == 0, new_predicate);
+                        new_predicate = substitute(-1 / v == -1, 0 < v, new_predicate);
+                        new_predicate = substitute(-1 / v == 1, v < 0, new_predicate);
                     }
                 }
+                new_predicate = simplifier.mutate(new_predicate, nullptr);
+            }
 
-                Expr visit(const Div *op) override {
-                    if (const Variable *var_a = op->a.as<Variable>()) {
-                        if (var_a->name[0] == 'c') {
-                            return op->a / mutate(op->b);
-                        } else {
-                            auto p = replacements.emplace(var_a->name, cast(op->type, 1));
-                            return p.first->second / mutate(op->b);
-                        }
-                    } else {
-                        return IRMutator::visit(op);
-                    }
-                }
-            } remove_variables;
-            new_predicate = simplify(remove_variables.mutate(r.lhs == r.rhs));
-
-            debug(0) << new_predicate << "\n";
-
+            debug(0) << "Initial guess at predicate: " << new_predicate << "\n";
             for (int terms = 0;; terms++) {
-                if (terms > 10) {
+                if (terms > 4) {
                     // May be trying to handle an infinite number of cases one term at a time
-                    new_predicate = const_false();
+                    debug(0) << "Giving up. Accumulating too many terms\n";
+
+                    new_predicate = MoveNegationInnermost().mutate(new_predicate);
+                    new_predicate = ToDNF().mutate(new_predicate);
+                    set<Expr, IRDeepCompare> clauses;
+                    for (auto clause : unpack_binary_op<Or>(new_predicate)) {
+                        clause = simplify(clause);
+                        if (is_zero(clause)) continue;
+                        clauses.insert(clause);
+                    }
+
+                    debug(0) << "Predicate in DNF form:\n";
+                    for (auto c : clauses) {
+                        debug(0) << " " << c << "\n";
+                    }
+
+                    // Right now we have a necessary condition which
+                    // is a disjunction (i.e. union) of a bunch of
+                    // clauses. Try to find a subset of the clauses
+                    // which we can prove are sufficient conditions,
+                    // and just keep those.
+                    set<Expr, IRDeepCompare> trimmed_clauses;
+                    bool any_timeouts = false;
+                    for (auto c : clauses) {
+
+                        // Aggressively simplify the clause
+                        debug(0) << c << " -> ";
+                        auto terms = unpack_binary_op<And>(c);
+                        for (size_t i = 0; i < terms.size(); i++) {
+                            Simplify simplifier(true, nullptr, nullptr);
+                            simplifier.learn_true(imp.result);
+                            simplifier.learn_true(terms[i]);
+                            for (size_t j = 0; j < terms.size(); j++) {
+                                if (i == j) continue;
+                                Simplify::ExprInfo info;
+                                terms[j] = simplifier.mutate(terms[j], &info);
+                            }
+                        }
+                        c = pack_binary_op<And>(terms);
+                        debug(0) << c << "\n";
+
+                        map<string, Expr> binding;
+                        auto z3_result = satisfy(imp.result && c && !rule_holds, &binding, "checking one clause in DNF", 30);
+                        if (z3_result == Z3Result::Sat) continue;
+                        any_timeouts |= (z3_result != Z3Result::Unsat);
+                        trimmed_clauses.insert(c);
+                    }
+                    trimmed_clauses.insert(const_false());
+
+                    new_predicate = simplify(pack_binary_op<Or>(trimmed_clauses));
+                    if (any_timeouts && !is_zero(new_predicate)) {
+                        new_predicate = Call::make(Bool(), "prove_me", {new_predicate}, Call::Extern);
+                    }
                     break;
                 }
-                Expr there_is_a_failure = simplify(imp.result && new_predicate && (r.lhs != r.rhs));
+                Expr there_is_a_failure = simplify(imp.result && new_predicate && !rule_holds);
                 map<string, Expr> binding;
-                auto z3_result = satisfy(there_is_a_failure, &binding);
+                auto z3_result = satisfy(there_is_a_failure, &binding, "checking a predicate for failures", 30);
                 if (z3_result == Z3Result::Unsat) {
                     // Woo. No failures exist.
                     break;
                 } else if (z3_result == Z3Result::Sat) {
-                    Expr new_term = r.lhs == r.rhs;
+                    Expr new_term = rule_holds;
                     for (auto p : binding) {
                         if (p.first[0] != 'c') {
                             new_term = substitute(p.first, p.second, new_term);
@@ -417,14 +515,27 @@ void check_rule(Rule &r) {
                     // Couldn't find a failure, so hopefully
                     // there aren't any. Would Require human
                     // checking though.
-                    debug(0) << "Timeout\n";
-                    new_predicate = Call::make(Bool(), "prove_me", {new_predicate}, Call::Extern);
-                    //new_predicate = const_false();
+                    debug(0) << "Z3 Timeout\n";
+                    if (false && can_disprove_nonconvex(there_is_a_failure, 256, nullptr)) {
+                        debug(0) << "Verified using beam search\n";
+                    } else {
+                        // A human will have to prove this by hand
+                        new_predicate = Call::make(Bool(), "prove_me", {new_predicate}, Call::Extern);
+                    }
                     break;
                 }
             }
             if (!is_zero(new_predicate)) {
                 debug(0) << "\n\nNew predicate synthesis algorithm produced: " << new_predicate << "\n\n\n";
+            }
+        }
+
+        // Save human attention for things small enough to be tractable - one clause only please.
+        if (const Call *c = new_predicate.as<Call>()) {
+            if (c->name == "prove_me") {
+                if (c->args[0].as<And>()) {
+                    new_predicate = const_false();
+                }
             }
         }
 
@@ -443,11 +554,21 @@ void check_rule(Rule &r) {
 
 int main(int argc, char **argv) {
     if (argc < 2) {
-        std::cout << "Usage: ./filter_rewrite_rules rewrite_rules.txt\n";
+        std::cout << "Usage: ./filter_rewrite_rules rewrite_rules.txt [output_dir]\n";
         return 0;
     }
 
-    vector<Expr> exprs_vec = parse_halide_exprs_from_file(argv[1]);
+    const string rewrite_rules_path = argv[1];
+    string output_dir_path = argc >= 3 ? argv[2] : "";
+    if (output_dir_path.empty()) {
+        output_dir_path = ".";
+    }
+    if (output_dir_path[output_dir_path.size() - 1] != '/') {
+        output_dir_path += "/";
+    }
+    debug(0) << "output path is " << output_dir_path << "\n";
+
+    vector<Expr> exprs_vec = parse_halide_exprs_from_file(rewrite_rules_path);
 
     // De-dup
     std::set<Expr, IRDeepCompare> exprs;
@@ -472,7 +593,7 @@ int main(int argc, char **argv) {
 
     // Re-synthesize the predicates if you don't currently trust them
     vector<std::future<void>> futures;
-    ThreadPool<void> pool(1);
+    ThreadPool<void> pool;
 
     for (Rule &r : rules) {
         futures.emplace_back(pool.async([=, &r]() { check_rule(r); }));
@@ -720,8 +841,18 @@ int main(int argc, char **argv) {
                 bad = &r < &r2;  // Arbitrarily pick the one with the lower memory address.
                 break;
             }
+            Expr p1 = r.predicate;
+            Expr p2 = r2.predicate;
+            const Call *c1 = p1.as<Call>();
+            const Call *c2 = p2.as<Call>();
+            if (c1 && c1->name == "prove_me") {
+                p1 = c1->args[0];
+            }
+            if (c2 && c2->name == "prove_me") {
+                p2 = c2->args[0];
+            }
             if (more_general_than(r2.lhs, r.lhs, binding) &&
-                can_prove(r2.predicate || substitute(binding, !r.predicate))) {
+                can_prove(p2 || substitute(binding, !p1))) {
                 std::cout << "Too specific: " << r.orig
                           << "\n variant " << r.lhs
                           << "\n vs " << r2.orig
@@ -730,7 +861,7 @@ int main(int argc, char **argv) {
                 // Would they also annihilate in the other order?
                 binding.clear();
                 if (more_general_than(r.lhs, r2.lhs, binding) &&
-                    can_prove(r.predicate || substitute(binding, !r2.predicate))) {
+                    can_prove(p1 || substitute(binding, !p2))) {
                     bad = &r < &r2;  // Arbitrarily pick the one with the lower memory address.
                 } else {
                     bad = true;
@@ -740,13 +871,18 @@ int main(int argc, char **argv) {
         }
         if (bad) continue;
 
-        /*
-        // Add the additional extreme constraint that at least one var is entirely eliminated
-        if (find_vars(r.rhs).size() >= find_vars(r.lhs).size()) {
+        // Add the constraint that at least one use of var is entirely eliminated
+        bool good = false;
+        auto lhs_vars = find_vars(r.lhs);
+        auto rhs_vars = find_vars(r.rhs);
+        for (auto p : lhs_vars) {
+            if (p.first[0] == 'c') continue;
+            if (rhs_vars[p.first].second < p.second.second) good = true;
+        }
+        if (!good) {
             std::cout << "Doesn't eliminate a var: " << r.lhs << " -> " << r.rhs << "\n";
             continue;
         }
-        */
 
         // We have a reasonable rule
         std::cout << "Good rule: rewrite(" << r.lhs << ", " << r.rhs << ", " << r.predicate << ")\n";
@@ -755,6 +891,7 @@ int main(int argc, char **argv) {
 
     std::cout << "Generated rules:\n";
     for (auto it : good_ones) {
+        std::cout << "Simplify_" << it.first << ".inc:\n";
         std::ostringstream os;
         IRNodeType last_a_type = IRNodeType::Variable, last_b_type = IRNodeType::Variable;
         bool first_line = true;
@@ -787,7 +924,7 @@ int main(int argc, char **argv) {
 
             if (a_type != last_a_type && a_type != IRNodeType::Variable) {
                 // Open a new a bucket
-                os << "((a.node_type() == IRNodeType::" << a_type << ") && (\n";
+                os << "((a.node_type() == IRNodeType::" << a_type << ") && EVAL_IN_LAMBDA(\n";
             }
 
             if (b_type != last_b_type && b_type != IRNodeType::Variable) {
@@ -820,12 +957,52 @@ int main(int argc, char **argv) {
         std::cout << os.str();
 
         std::ostringstream filename;
-        filename << "Simplify_" << it.first << ".inc";
-        std::cout << it.first << "\n";
+        filename << output_dir_path << "Simplify_" << it.first << ".inc";
         std::ofstream of;
-        of.open(filename.str().c_str());
-        of << os.str();
+        of.open(filename.str());
+        if (of.fail()) {
+            debug(0) << "Unable to open " << filename.str();
+            assert(false);
+        }
+
+        // Clean up bool terms that aren't valid C++ in the simplifier
+        string s = os.str();
+        replace_all(s, "(uint1)0", "false");
+        replace_all(s, "(uint1)1", "true");
+        replace_all(s, "prove_me(true)", "prove_me(IRMatcher::Const(1))");
+        replace_all(s, "(uint1)", "");
+        of << s;
         of.close();
+    }
+
+    // Make sure we write a complete set of .inc files, to avoid
+    // accidentally mixing and matching between experiments.
+    for (IRNodeType t : {
+             IRNodeType::Add,
+             IRNodeType::And,
+             IRNodeType::Div,
+             IRNodeType::EQ,
+             IRNodeType::LE,
+             IRNodeType::LT,
+             IRNodeType::Max,
+             IRNodeType::Min,
+             IRNodeType::Mod,
+             IRNodeType::Mul,
+             IRNodeType::Or,
+             IRNodeType::Select,
+             IRNodeType::Sub}) {
+        if (good_ones.count(t) == 0) {
+            std::ostringstream filename;
+            filename << output_dir_path << "Simplify_" << t << ".inc";
+            std::ofstream of;
+            of.open(filename.str());
+            if (of.fail()) {
+                debug(0) << "Unable to open " << filename.str();
+                assert(false);
+            }
+            of << "false";
+            of.close();
+        }
     }
 
     return 0;

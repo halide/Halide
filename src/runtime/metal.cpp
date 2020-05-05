@@ -10,8 +10,9 @@
 
 extern "C" {
 extern objc_id MTLCreateSystemDefaultDevice();
-extern objc_id MTLCopyAllDevices();
 extern struct ObjectiveCClass _NSConcreteGlobalBlock;
+void *dlsym(void *, const char *);
+#define RTLD_DEFAULT ((void *)-2)
 }
 
 namespace Halide {
@@ -228,9 +229,17 @@ WEAK void *nsarray_first_object(objc_id arr) {
 inline mtl_device *get_default_mtl_device() {
     mtl_device *device = (mtl_device *)MTLCreateSystemDefaultDevice();
     if (device == NULL) {
-        objc_id devices = (objc_id)MTLCopyAllDevices();
-        if (devices != NULL) {
-            device = (mtl_device *)nsarray_first_object(devices);
+        // We assume Metal.framework is already loaded
+        // (call dlsym directly, rather than halide_get_symbol, as we
+        // currently don't provide halide_get_symbol for iOS, only OSX)
+        void *handle = dlsym(RTLD_DEFAULT, "MTLCopyAllDevices");
+        if (handle != NULL) {
+            typedef objc_id (*mtl_copy_all_devices_method)(void);
+            mtl_copy_all_devices_method method = (mtl_copy_all_devices_method)handle;
+            objc_id devices = (objc_id)(*method)();
+            if (devices != NULL) {
+                device = (mtl_device *)nsarray_first_object(devices);
+            }
         }
     }
     return device;

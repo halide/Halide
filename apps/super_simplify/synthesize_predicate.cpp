@@ -269,7 +269,6 @@ struct System {
     }
 
     void add_term(const Expr &e) {
-        _halide_user_assert(e.defined()) << "Attempted to add undefined term to system\n";
         const EQ *eq = e.as<EQ>();
         const LT *lt = e.as<LT>();
         const LE *le = e.as<LE>();
@@ -552,6 +551,7 @@ struct System {
                 } else if (div) {
                     lhs = div->a;
                     rhs = div->b;
+                    is_div = true;
                 } else if (mul) {
                     lhs = mul->a;
                     rhs = mul->b;
@@ -569,7 +569,6 @@ struct System {
                     if (div) {
                         lhs = div->a;
                         rhs = div->b;
-                        is_div = true;
                     }
                     if (starts_with(v->name, "c") && (mod || div)) {
                         // We need to know the sign of the rhs to
@@ -1163,8 +1162,7 @@ uint64_t System::id_counter = 0;
 // Attempt to disprove a boolean expr by constructing a constraint
 // system and performing a backtracking search over substitutions
 // using beam search.
-bool can_disprove(Expr e, int beam_size, std::set<Expr, IRDeepCompare> *implications) {
-    _halide_user_assert(e.defined());
+bool can_disprove(Expr e, int beam_size, std::set<Expr, IRDeepCompare> *implications = nullptr) {
     // e = common_subexpression_elimination(simplify(remove_likelies(e)));
 
     debug(1) << "*** Attempting disproof " << e << "\n";
@@ -1796,6 +1794,7 @@ class ConvertRoundingToMod : public IRMutator {
 // to a big disjunction of inequalities intead.
 set<Expr, IRDeepCompare> remove_min_max_select(Expr e) {
     // First turn min/max into select
+    e = RemoveMinMax().mutate(e);
     vector<Expr> pieces{e};
     // Then find all the select conditions
     FindAllSelectConditions finder;
@@ -1862,18 +1861,14 @@ bool can_disprove_nonconvex(Expr e, int beam_size, Expr *implication) {
     // Break it into convex pieces, and disprove every piece
     debug(1) << "Simplified: " << e << "\n";
 
-    auto pieces = remove_min_max_select(e);
-
-    {
-        set<Expr, IRDeepCompare> tmp;
-        for (Expr p : pieces) {
-            // Distribute and over or.
-            p = ToDNF().mutate(p);
-            auto v = unpack_binary_op<Or>(p);
-            tmp.insert(v.begin(), v.end());
-        }
-        tmp.swap(pieces);
+    auto pieces_set = remove_min_max_select(e);
+    vector<Expr> pieces;
+    for (const auto &p : pieces_set) {
+        // Distribute and over or.
+        pieces.push_back(ToDNF().mutate(p));
     }
+    e = pack_binary_op<Or>(pieces);
+    pieces = unpack_binary_op<Or>(e);
 
     debug(0) << "Broken into " << pieces.size() << " pieces\n";
 
@@ -1894,9 +1889,6 @@ bool can_disprove_nonconvex(Expr e, int beam_size, Expr *implication) {
         for (Expr c : clauses) {
             // debug(0) << "Clause: " << c << "\n";
             c = simplifier.mutate(c, nullptr);
-            if (is_one(c)) {
-                continue;
-            }
             simplifier.learn_true(c);
             if (is_zero(c)) {
                 simplified_clauses.clear();
@@ -1964,7 +1956,6 @@ bool can_disprove_nonconvex(Expr e, int beam_size, Expr *implication) {
 
 Expr synthesize_predicate(const Expr &lhs,
                           const Expr &rhs,
-                          const vector<map<string, Expr>> &examples,
                           map<string, Expr> *binding,
                           int beam_size) {
 
@@ -2697,7 +2688,7 @@ Expr synthesize_predicate(const Expr &lhs,
         Expr new_lhs = substitute(*binding, lhs);
         Expr new_rhs = substitute(*binding, rhs);
         map<string, Expr> b;
-        precondition = synthesize_predicate(new_lhs, new_rhs, examples, &b);
+        precondition = synthesize_predicate(new_lhs, new_rhs, &b);
         binding->insert(b.begin(), b.end());
     }
 

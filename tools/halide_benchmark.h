@@ -119,7 +119,7 @@ struct BenchmarkConfig {
     // seen and the third-best runtime seen is no more than
     // this. Controls accuracy. The closer to zero this gets the more
     // reliable the answer, but the longer it may take to run.
-    double accuracy{0.03};
+    double accuracy{0.01};
 };
 
 struct BenchmarkResult {
@@ -156,7 +156,7 @@ inline BenchmarkResult benchmark(std::function<void()> op, const BenchmarkConfig
     // We will do (at least) kMinSamples samples; we will do additional
     // samples until the best the kMinSamples'th results are within the
     // accuracy tolerance (or we run out of iterations).
-    constexpr int kMinSamples = 3;
+    constexpr int kMinSamples = 10;
     double times[kMinSamples + 1] = {0};
 
     double total_time = 0;
@@ -195,7 +195,7 @@ inline BenchmarkResult benchmark(std::function<void()> op, const BenchmarkConfig
         std::sort(times, times + kMinSamples + 1);
     }
     result.wall_time = times[0];
-    result.accuracy = (times[kMinSamples - 1] / times[0]) - 1.0;
+    result.accuracy = (times[1] / times[0]) - 1.0;
 
     return result;
 }

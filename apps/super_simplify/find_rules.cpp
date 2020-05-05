@@ -263,7 +263,7 @@ public:
 class ReplaceConstants : public IRMutator {
     using IRMutator::visit;
     Expr visit(const IntImm *op) override {
-        auto it = bound_values.find(op->value);
+        auto it = bound_values.find(op);
         // Assume repeated instance of the same var is the same
         // wildcard var. If we have rules where that isn't true we'll
         // need to see examples where the values differ.
@@ -271,7 +271,7 @@ class ReplaceConstants : public IRMutator {
             string name = "c" + std::to_string(counter++);
             binding[name] = op;
             Expr v = Variable::make(op->type, name);
-            bound_values[op->value] = v;
+            bound_values[op] = v;
             return v;
         } else {
             return it->second;
@@ -282,7 +282,7 @@ class ReplaceConstants : public IRMutator {
         return op;
     }
 
-    map<int64_t, Expr> bound_values;
+    map<Expr, Expr, IRDeepCompare> bound_values;
     // TODO: float constants
 
 public:
@@ -292,22 +292,38 @@ public:
 };
 
 int main(int argc, char **argv) {
-    if (argc < 2) {
-        std::cout << "Usage: ./find_rules halide_exprs.txt\n";
+    if (argc < 4) {
+        std::cout << "Usage: ./find_rules input_exprs.txt output_rules.txt blacklist.txt\n";
         return 0;
     }
 
+    const string input_exprs_path = argv[1];
+    const string output_rules_path = argv[2];
+    const string blacklist_path = argv[3];
+
     // Generate LHS patterns from raw exprs
-    vector<Expr> exprs = parse_halide_exprs_from_file(argv[1]);
+    vector<Expr> exprs = parse_halide_exprs_from_file(input_exprs_path);
 
     // Try to load a blacklist of patterns to skip over that are known
     // to fail. Delete the blacklist whenever you make a change that
     // might make things work for more expressions.
     set<Expr, IRDeepCompare> blacklist;
-    if (file_exists("blacklist.txt")) {
-        auto b = parse_halide_exprs_from_file("blacklist.txt");
+    if (file_exists(blacklist_path)) {
+        auto b = parse_halide_exprs_from_file(blacklist_path);
         blacklist.insert(b.begin(), b.end());
     }
+    {
+        // Whether or not it already exists, ensure that blacklist file
+        // can be opened for appending (so we don't unexpectedly fail after
+        // hours of work)
+        std::ofstream b;
+        b.open(blacklist_path, std::ofstream::out | std::ofstream::app);
+        if (b.fail()) {
+            debug(0) << "Unable to open blacklist: " << blacklist_path;
+            assert(false);
+        }
+    }
+
     std::cout << blacklist.size() << " blacklisted patterns\n";
 
     map<Expr, int, IRDeepCompare> patterns_without_constants;
@@ -385,7 +401,7 @@ int main(int argc, char **argv) {
                 if (count_ops.count_leaves() != (lhs_ops + 1) ||
                     count_ops.has_unsupported_ir ||
                     !(count_ops.has_repeated_var ||
-                      count_ops.num_constants > 999)) {  // HACK while testing something for Dillon
+                      (lhs_ops < 7 && count_ops.num_constants > 0))) {
                     continue;
                 }
 
@@ -404,7 +420,6 @@ int main(int argc, char **argv) {
                             CountOps counter;
                             counter.mutate(simpler_r);
                             if (counter.count_leaves() < lhs_ops + 1) {
-                                std::lock_guard<std::mutex> lock(mutex);
                                 e = simpler_r;
                                 break;
                             }
@@ -435,6 +450,8 @@ int main(int argc, char **argv) {
                             std::cout << done << " / " << futures.size() << "\n";
                         }
                         if (!success) {
+                            debug(1) << "BLACKLISTING: " << p << "\n";
+
                             // Add it to the blacklist so we
                             // don't waste time on this
                             // pattern again. Delete the
@@ -442,7 +459,11 @@ int main(int argc, char **argv) {
                             // change that might make things
                             // work for new patterns.
                             std::ofstream b;
-                            b.open("blacklist.txt", std::ofstream::out | std::ofstream::app);
+                            b.open(blacklist_path, std::ofstream::out | std::ofstream::app);
+                            if (b.fail()) {
+                                debug(0) << "Unable to open blacklist: " << blacklist_path;
+                                assert(false);
+                            }
                             b << p << "\n";
                         }
                     }
@@ -455,23 +476,27 @@ int main(int argc, char **argv) {
         f.get();
     }
 
-    // Filter rules, though specialization should not have snuck through the filtering above
+    debug(0) << "Final rules length: " << rules.size() << " (sorting now)...\n";
+
+    // Sort generated rules
     std::sort(rules.begin(), rules.end(), [](const pair<Expr, Expr> &r1, const pair<Expr, Expr> &r2) {
         return IRDeepCompare{}(r1.first, r2.first);
     });
 
-    // Now try to generalize rules involving constants by replacing constants with wildcards
-    vector<tuple<Expr, Expr, Expr>> predicated_rules;
-    vector<pair<Expr, Expr>> failed_predicated_rules;
-
-    // Abstract away the constants and cluster the rules by LHS structure
-    map<Expr, vector<map<string, Expr>>, IRDeepCompare> generalized;
-
-    for (auto r : rules) {
-        ReplaceConstants replacer;
-        r.first = replacer.mutate(r.first);
-        r.second = replacer.mutate(r.second);
-        std::cout << "rewrite(" << r.first << ", " << r.second << ")\n";
+    {
+        std::ofstream of;
+        of.open(output_rules_path);
+        if (of.fail()) {
+            debug(0) << "Unable to open output: " << output_rules_path;
+            assert(false);
+        }
+        for (auto r : rules) {
+            ReplaceConstants replacer;
+            r.first = replacer.mutate(r.first);
+            r.second = replacer.mutate(r.second);
+            of << "rewrite(" << r.first << ", " << r.second << ")\n";
+        }
+        of.close();
     }
 
     futures.clear();

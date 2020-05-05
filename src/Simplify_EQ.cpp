@@ -102,8 +102,7 @@ Expr Simplify::visit(const EQ *op, ExprInfo *bounds) {
         (rewrite(min(x, 0) == 0, 0 <= x, "eq92")) ||
 
         false) {
-
-        return mutate(std::move(rewrite.result), bounds);
+        return mutate(rewrite.result, bounds);
     }
 
     if ((rewrite(c0 == 0, fold(c0 == 0), "eq99")) ||

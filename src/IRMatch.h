@@ -2168,12 +2168,21 @@ HALIDE_ALWAYS_INLINE bool evaluate_predicate(Pattern p, MatcherState &state) {
 
 //#define EXCLUDE_RULE_FOR_EXPERIMENTS if (rulename[0] == '*') { debug(0) << "Excluded rule: " << rulename <<"\n"; return false; }
 #define EXCLUDE_RULE_FOR_EXPERIMENTS if (rulename[0] == '*') { debug(2) << "Excluded rule: " << rulename <<"\n"; return false; }
+#define HALIDE_INCLUDE_UNPROVEN_RULES 0
 
 // Assume that a human has successfully proved all the "prove_me" rules on paper.
+#if HALIDE_INCLUDE_UNPROVEN_RULES
 template<typename A>
 HALIDE_ALWAYS_INLINE A prove_me(A a) noexcept {
     return a;
 }
+#else
+// Assume that all prove_me rules are false
+template<typename A>
+HALIDE_ALWAYS_INLINE Const prove_me(A a) noexcept {
+    return Const(0);
+}
+#endif
 
 template<typename Instance>
 struct Rewriter {
@@ -2182,6 +2191,10 @@ struct Rewriter {
     MatcherState state;
     halide_type_t output_type, wildcard_type;
     bool validate;
+
+#if HALIDE_DEBUG_MATCHED_RULES
+    bool d = true;
+#endif
 
     HALIDE_ALWAYS_INLINE
     Rewriter(Instance &&instance, halide_type_t ot, halide_type_t wt)
