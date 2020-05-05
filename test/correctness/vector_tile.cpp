@@ -48,7 +48,6 @@ int main(int argc, char **argv) {
         f.realize(128, 128);
     }
 
-
     printf("Success!\n");
     return 0;
 }
