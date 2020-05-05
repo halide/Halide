@@ -1515,7 +1515,7 @@ Stage &Stage::tile(const std::vector<VarOrRVar> &previous,
                    const std::vector<VarOrRVar> &inners,
                    const std::vector<Expr> &factors,
                    const std::vector<TailStrategy> &tails) {
-    if(previous.size() != outers.size() || previous.size() != inners.size() || previous.size() != factors.size() || previous.size() != tails.size())
+    if (previous.size() != outers.size() || previous.size() != inners.size() || previous.size() != factors.size() || previous.size() != tails.size())
         user_error << "Vectors passed to Stage::tile must all be the same length.\n";
     for (unsigned int i = 0; i < previous.size(); i++) {
         split(previous[i], outers[i], inners[i], factors[i], tails[i]);
