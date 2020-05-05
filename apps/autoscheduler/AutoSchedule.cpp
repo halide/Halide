@@ -1793,8 +1793,8 @@ IntrusivePtr<State> optimal_mcts_schedule(
         //    std::cout << "Pass " << i << " of " << num_passes << ", value: " << actions[i].value << std::endl;
         }
             // real best action
-            actions[idx].print();
-            std::cout << "best value " << best_value << std::endl;
+            //actions[idx].print();
+            std::cout << "best intermediate value " << best_value << std::endl;
     
         // get the index of the best acton from the original vector of possible actions.
         int best_action_idx = actions[idx].index;
