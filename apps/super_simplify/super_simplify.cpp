@@ -252,6 +252,11 @@ Expr super_simplify(Expr e, int size) {
     std::uniform_int_distribution<int> random_int(-3, 3);
 
     while (1) {
+        if (counterexamples.size() > 100) {
+          debug(0) << "TOO MANY COUNTEREXAMPLES, bailing for size=" << size << "\ne="<<e<<"\n";
+          return Expr();
+        }
+
         // First sythesize a counterexample to the current program.
         Expr current_program_works = substitute(current_program, program_works);
         map<string, Expr> counterexample = all_vars_zero;

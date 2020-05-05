@@ -420,7 +420,6 @@ int main(int argc, char **argv) {
                             CountOps counter;
                             counter.mutate(simpler_r);
                             if (counter.count_leaves() < lhs_ops + 1) {
-                                std::lock_guard<std::mutex> lock(mutex);
                                 e = simpler_r;
                                 break;
                             }
@@ -451,7 +450,7 @@ int main(int argc, char **argv) {
                             std::cout << done << " / " << futures.size() << "\n";
                         }
                         if (!success) {
-                            debug(0) << "BLACKLISTING: " << p << "\n";
+                            debug(1) << "BLACKLISTING: " << p << "\n";
 
                             // Add it to the blacklist so we
                             // don't waste time on this
