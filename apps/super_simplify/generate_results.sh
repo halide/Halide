@@ -1,6 +1,6 @@
 #!/bin/bash
 
-APPS="harris local_laplacian unsharp bilateral_grid camera_pipe nl_means stencil_chain iir_blur interpolate max_filter lens_blur resnet_50"
+APPS="harris local_laplacian unsharp bilateral_grid camera_pipe nl_means stencil_chain iir_blur interpolate max_filter lens_blur resnet_50 resize"
 
 # Assumes that run_all_experiments.sh has run
 for app in $APPS; do
