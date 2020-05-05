@@ -7,10 +7,10 @@
  rewrite(select(x, (y + (z + w)), ((u + z) + v)), (select(x, (y + w), (u + v)) + z)) ||
  rewrite(select(x, (y + (z + w)), ((w + u) + v)), (select(x, (y + z), (v + u)) + w)) ||
  rewrite(select(x, (y + (z + w)), ((z + u) + v)), (select(x, (y + w), (v + u)) + z)) ||
- rewrite(select(x, (y + (z + (w + u))), (u + w)), (select(x, (y + (z + w)), w) + u)) ||
- rewrite(select(x, (y + (z + (w + u))), (w + u)), (select(x, (y + (z + u)), u) + w)) ||
- rewrite(select(x, (y + ((z + w) + u)), (w + z)), (select(x, (y + (w + u)), w) + z)) ||
- rewrite(select(x, (y + ((z + w) + u)), (z + w)), (select(x, (y + (z + u)), z) + w)) ||
+ rewrite(select(x, (y + (z + (w + u))), (u + w)), (select(x, (y + (z + u)), u) + w)) ||
+ rewrite(select(x, (y + (z + (w + u))), (w + u)), (select(x, (y + (z + w)), w) + u)) ||
+ rewrite(select(x, (y + ((z + w) + u)), (w + z)), (select(x, (y + (z + u)), z) + w)) ||
+ rewrite(select(x, (y + ((z + w) + u)), (z + w)), (select(x, (y + (w + u)), w) + z)) ||
  rewrite(select(x, ((y + z) + w), (u + (v + y))), (select(x, (z + w), (u + v)) + y)) ||
  rewrite(select(x, ((y + z) + w), (u + (v + z))), (select(x, (y + w), (u + v)) + z)) ||
  rewrite(select(x, ((y + z) + w), (u + (y + v))), (select(x, (z + w), (u + v)) + y)) ||
@@ -22,7 +22,7 @@
  rewrite(select(x, ((y + (z + w)) + u), (w + z)), (select(x, ((y + w) + u), w) + z)) ||
  rewrite(select(x, ((y + (z + w)) + u), (z + w)), (select(x, ((y + z) + u), z) + w)) ||
  rewrite(select(x, (((y + z) + w) + u), (y + z)), (select(x, ((y + w) + u), y) + z)) ||
- rewrite(select(x, (((y + z) + w) + u), (z + y)), (select(x, ((z + w) + u), z) + y)) ||
+ rewrite(select(x, (((y + z) + w) + u), (z + y)), (select(x, ((y + w) + u), y) + z)) ||
  rewrite(select(x, (y + (z - w)), (u - w)), (select(x, (y + z), u) - w)) ||
  rewrite(select(x, ((y - z) + w), (u - z)), (select(x, (y + w), u) - z)) ||
  rewrite(select(x, ((y/c0) + c1), ((y + z)/c0)), ((select(x, c0, z) + y)/c0), prove_me((c1 == 1))) ||

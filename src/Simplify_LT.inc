@@ -88,7 +88,24 @@
  rewrite(((((x + y) + z) + w) < (u + y)), (((x + z) + w) < u)) ||
  rewrite(((((x + y) + z) + w) < (x + u)), (((y + z) + w) < u)) ||
  rewrite(((((x + y) + z) + w) < (y + u)), (((x + z) + w) < u)) ||
- rewrite((((((x - y)/c0)*c0) + y) < (x + c1)), false, ((c1 <= -1) && ((c1 + -1) <= ((-1/c0)*c0)))))))) ||
+ rewrite((((((x - y)/c0)*c0) + y) < (x + c1)), false, ((c1 <= -1) && ((c1 + -1) <= ((-1/c0)*c0)))))) ||
+((b.node_type() == IRNodeType::Mul) && (
+ rewrite(((x + (y*z)) < (y*(w + z))), (x < (y*w))) ||
+ rewrite(((x + (y*z)) < (y*(z + w))), (x < (y*w))) ||
+ rewrite(((x + (y*z)) < (z*(w + y))), (x < (z*w))) ||
+ rewrite(((x + (y*z)) < (z*(y + w))), (x < (z*w))) ||
+ rewrite(((x + (y*z)) < ((w + y)*z)), (x < (w*z))) ||
+ rewrite(((x + (y*z)) < ((w + z)*y)), (x < (w*y))) ||
+ rewrite(((x + (y*z)) < ((y + w)*z)), (x < (w*z))) ||
+ rewrite(((x + (y*z)) < ((z + w)*y)), (x < (w*y))) ||
+ rewrite((((x*y) + z) < (x*(w + y))), (z < (x*w))) ||
+ rewrite((((x*y) + z) < (x*(y + w))), (z < (x*w))) ||
+ rewrite((((x*y) + z) < (y*(w + x))), (z < (y*w))) ||
+ rewrite((((x*y) + z) < (y*(x + w))), (z < (y*w))) ||
+ rewrite((((x*y) + z) < ((w + x)*y)), (z < (w*y))) ||
+ rewrite((((x*y) + z) < ((w + y)*x)), (z < (w*x))) ||
+ rewrite((((x*y) + z) < ((x + w)*y)), (z < (w*y))) ||
+ rewrite((((x*y) + z) < ((y + w)*x)), (z < (w*x))))))) ||
 ((a.node_type() == IRNodeType::Mul) && EVAL_IN_LAMBDA(
  rewrite(((x*x) < c0), false, (c0 <= 0)) ||
 ((b.node_type() == IRNodeType::Add) && (
@@ -140,7 +157,7 @@
  rewrite((min(x, min(y, z)) < min(z, w)), (min(x, y) < min(z, w))) ||
  rewrite((min(x, min(y, min(z, w))) < min(u, min(w, z))), (min(x, min(y, z)) < min(u, min(w, z)))) ||
  rewrite((min(x, min(y, min(z, w))) < min(min(w, z), u)), (min(x, min(y, z)) < min(min(w, z), u))) ||
- rewrite((min(x, min(min(y, z), w)) < min(u, min(z, y))), (min(x, min(y, w)) < min(u, min(z, y)))) ||
+ rewrite((min(x, min(min(y, z), w)) < min(u, min(z, y))), (min(x, min(z, w)) < min(u, min(z, y)))) ||
  rewrite((min(x, min(min(y, z), w)) < min(min(z, y), u)), (min(x, min(y, w)) < min(min(z, y), u))) ||
  rewrite((min((x + y), z) < min(w, min(u, (y + x)))), (z < min(w, min(u, (y + x))))) ||
  rewrite((min((x + y), z) < min(w, min((y + x), u))), (z < min(w, min((y + x), u)))) ||
@@ -150,10 +167,10 @@
  rewrite((min(min(x, y), z) < min(w, y)), (min(x, z) < min(w, y))) ||
  rewrite((min(min(x, y), z) < min(x, w)), (min(y, z) < min(x, w))) ||
  rewrite((min(min(x, y), z) < min(y, w)), (min(x, z) < min(y, w))) ||
- rewrite((min(min(x, min(y, z)), w) < min(u, min(z, y))), (min(min(x, y), w) < min(u, min(z, y)))) ||
- rewrite((min(min(x, min(y, z)), w) < min(min(z, y), u)), (min(min(x, y), w) < min(min(z, y), u))) ||
- rewrite((min(min(min(x, y), z), w) < min(u, min(y, x))), (min(min(y, z), w) < min(u, min(y, x)))) ||
- rewrite((min(min(min(x, y), z), w) < min(min(y, x), u)), (min(min(y, z), w) < min(min(y, x), u))))))) ||
+ rewrite((min(min(x, min(y, z)), w) < min(u, min(z, y))), (min(min(x, z), w) < min(u, min(z, y)))) ||
+ rewrite((min(min(x, min(y, z)), w) < min(min(z, y), u)), (min(min(x, z), w) < min(min(z, y), u))) ||
+ rewrite((min(min(min(x, y), z), w) < min(u, min(y, x))), (min(min(x, z), w) < min(u, min(y, x)))) ||
+ rewrite((min(min(min(x, y), z), w) < min(min(y, x), u)), (min(min(x, z), w) < min(min(y, x), u))))))) ||
 ((a.node_type() == IRNodeType::Max) && EVAL_IN_LAMBDA(
  rewrite((max(x, (y*y)) < c0), false, (c0 <= 0)) ||
  rewrite((max(x, max(y, (z*z))) < c0), false, (c0 <= 0)) ||
@@ -235,8 +252,11 @@
 ((b.node_type() == IRNodeType::Max) && (
  rewrite((max(((x + c0)/c1), c2) < max((x/c1), c3)), false, prove_me((max(c3, 0) <= max(min((c0/c1), ((c0 + 1)/c1)), c2)))))))) ||
 ((a.node_type() == IRNodeType::Select) && EVAL_IN_LAMBDA(
+ rewrite((select(x, y, min(y, z)) < y), (select(x, y, z) < y)) ||
+ rewrite((select(x, y, min(z, y)) < y), (select(x, y, z) < y)) ||
 ((b.node_type() == IRNodeType::Min) && (
  rewrite((select(x, c0, y) < min(select(x, c1, y), c2)), false, (min(c1, c2) <= c0)) ||
+ rewrite((select(x, y, z) < min(select(x, c0, z), c1)), (select(x, y, c0) < c1), ((c1 <= c0) && ((min(c0, c1) <= 0) == (c1 <= 0)))) ||
  rewrite((select(x, max(y, z), min(w, y)) < min(w, y)), false) ||
  rewrite((select(x, max(y, z), min(w, y)) < min(y, w)), false) ||
  rewrite((select(x, max(y, z), min(w, z)) < min(w, z)), false) ||
