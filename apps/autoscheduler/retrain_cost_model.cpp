@@ -123,7 +123,7 @@ struct Sample {
     Buffer<float>   schedule_features;
 };
 
-struct Pipeline {
+struct PipelineData {
     int32_t                 pipeline_id;
     int32_t                 num_stages;
     Buffer<float>           pipeline_features;
@@ -171,7 +171,7 @@ string leaf(const string &path) {
 }
 
 // Load all the samples, reading filenames from stdin
-void load_samples(map<int, PipelineSample>& training_set, map<int, PipelineSample>& validation_set, map<int, Pipeline>& pipelines, const Flags& flags, bool predict_only) {
+void load_samples(map<int, PipelineSample>& training_set, map<int, PipelineSample>& validation_set, map<int, PipelineData>& pipelines, const Flags& flags, bool predict_only) {
     vector<float> scratch(10 * 1024 * 1024);
 
     int best = -1;
@@ -229,7 +229,7 @@ void load_samples(map<int, PipelineSample>& training_set, map<int, PipelineSampl
             best_path = s;
         }
 
-        Pipeline &p = pipelines[pipeline_id];
+        PipelineData &p = pipelines[pipeline_id];
 
         if (p.pipeline_features.data() == nullptr) {
             p.pipeline_id = pipeline_id;
@@ -442,8 +442,9 @@ int main(int argc, char **argv) {
 
     // Iterate through the pipelines
     vector<std::unique_ptr<DefaultCostModel>> tpp;
+    Internal::Autoscheduler::Statistics stats;
     for (int i = 0; i < kModels; i++) {
-        tpp.emplace_back(make_default_cost_model(flags.initial_weights_path, flags.weights_out_path, flags.randomize_weights || flags.reset_weights));
+        tpp.emplace_back(make_default_cost_model(stats, flags.initial_weights_path, flags.weights_out_path, flags.randomize_weights || flags.reset_weights));
     }
 
     if (flags.reset_weights) {
@@ -456,7 +457,7 @@ int main(int argc, char **argv) {
 
     map<int, PipelineSample> samples;
     map<int, PipelineSample> validation_set;
-    map<int, Pipeline> pipelines;
+    map<int, PipelineData> pipelines;
     bool predict_only = !flags.predictions_file.empty();
     load_samples(samples, validation_set, pipelines, flags, predict_only);
     print_statistics(samples, validation_set);
