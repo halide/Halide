@@ -188,6 +188,8 @@ public:
     IRMatcher::WildConst<1> c1;
     IRMatcher::WildConst<2> c2;
     IRMatcher::WildConst<3> c3;
+    IRMatcher::WildConst<4> c4;
+    IRMatcher::WildConst<5> c5;
 
     // Tracks whether or not we're inside a vector loop. Certain
     // transformations are not a good idea if the code is to be
