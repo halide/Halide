@@ -708,6 +708,7 @@ struct State {
         }
     }
     enum class ActionEnum {
+        Illegal,
         Inline,
         Retile,
         Option,
@@ -717,22 +718,25 @@ struct State {
     class Action {
     public:
         ActionEnum ae;
-        unsigned index;
+        int index;
         unsigned option_var;
         double value = -111111111111;
-        IntrusivePtr<State> state;
-        IntrusivePtr<State> best_state;
+        IntrusivePtr<State> state=nullptr;
+        IntrusivePtr<State> best_state=nullptr;
+        bool best_state_updated = false;
         //AHA: If this constructor is called then there is a bug in the MCTS
         Action() { assert(0 && "illegal construction"); }
-        Action(std::nullptr_t) : ae(ActionEnum::Inline), index(0), option_var(0) {
-            //assert(0 && "illegal construction");
-        }
-        Action(const Action& a):ae(a.ae), index(a.index), option_var(a.option_var),value(a.value),state(a.state),best_state(a.best_state) {}
-        Action(ActionEnum ae_, unsigned index_,IntrusivePtr<State> state) : ae(ae_), index(index_), option_var(0),state(state) {}
-        Action(ActionEnum ae_, unsigned index_, unsigned option_var_, IntrusivePtr<State> state) : ae(ae_), index(index_), option_var(option_var_),state(state) {}
+        /*Action(std::nullptr_t) : ae(ActionEnum::Inline), index(0), option_var(0) {
+            assert(0 && "illegal construction");
+        }*/
+        Action(const ActionEnum ae_) : ae(ae_){}
+        Action(const Action& a):ae(a.ae), index(a.index), option_var(a.option_var),value(a.value),state(a.state),best_state(a.best_state),best_state_updated(a.best_state_updated) {}
+        Action(ActionEnum ae_, unsigned index_,IntrusivePtr<State> state) : ae(ae_), index(index_), option_var(0),value(-111111111111), state(state),best_state(nullptr),best_state_updated(false) {}
+        Action(ActionEnum ae_, unsigned index_, unsigned option_var_, IntrusivePtr<State> state) : ae(ae_), index(index_), option_var(option_var_),value(-111111111111), state(state),best_state(nullptr),best_state_updated(false) {}
         bool operator==(const Action& a) const {
             return ae == a.ae && index == a.index && option_var == a.option_var;
         }
+        Action(const int index_) : index(index_){}
         //AHA: this operator is to support comparison used in map.
         bool operator<(const Action& a) const {
             return index < a.index;
@@ -748,6 +752,8 @@ struct State {
             std::cout << "applying Input, Index "  <<index<< std::endl;
             if (ae == State::ActionEnum::Parallelize)
             std::cout << "applying Parallelize, Index "  << index<<std::endl;
+            if(ae == State::ActionEnum::Illegal)
+            std::cout << "applying Illegal, Index "  << index<<std::endl;
 
         }
     };
@@ -812,11 +818,11 @@ struct State {
             inner->generate_actions(dag, params, cost_model,vactions);
     }
     // find best action to apply next, used during simulation to improve the estimate over random
-    bool apply_best_action(double& bestReward, std::vector<Action>& backup_actions) {
+    bool apply_best_action(double& bestReward){//, std::vector<Action>& backup_actions) {
         std::vector<Action> actions;
         get_actions(actions);
         //std::cout << "action size: " <<actions.size() << std::endl;
-        if (actions.size() == 0){// return true;
+        if (actions.size() == 0 || inner->num_decisions_made == 2 * (int)dag.nodes.size()){// return true;
             inner->calculate_cost(dag, params, cost_model, false, true);
             cost_model->evaluate_costs();    
             bestReward = inner->cost;
@@ -840,10 +846,10 @@ struct State {
         Action & random_action = actions[rand() % actions.size()];
         internal_assert(inner->num_decisions_made+1 == random_action.state->num_decisions_made);
         inner = std::move(random_action.state);
-        if(random_action.ae == ActionEnum::Inline ||
-            random_action.ae == ActionEnum::Retile|| 
-            random_action.ae == ActionEnum::Option) 
-           backup_actions = actions;
+        //if(random_action.ae == ActionEnum::Inline ||
+        //    random_action.ae == ActionEnum::Retile|| 
+        //    random_action.ae == ActionEnum::Option) 
+        //   backup_actions = actions;
         //inner->calculate_cost(dag, params, cost_model, false, true);
         //cost_model->evaluate_costs();    
         //bestReward = inner->cost;
@@ -875,7 +881,7 @@ struct State {
             get_actions(new_actions);        
             //std::cout << "backup action size: " <<new_actions.size() << std::endl;
             internal_assert(new_actions.size() <= 1 && "bug, should have a single output here");
-            if (new_actions.size()==0) break;
+            if (new_actions.size()==0||inner->num_decisions_made == 2*(int)dag.nodes.size())  break;
             /*
             best = 0;
             for(unsigned i=1; i<new_actions.size(); i++) {
@@ -886,7 +892,7 @@ struct State {
             inner = std::move(actions[best].state);
             */
             internal_assert(inner->num_decisions_made+1 == new_actions[0].state->num_decisions_made);
-            inner = new_actions[0].state;
+            inner = std::move(new_actions[0].state);
         }  
  
         inner->calculate_cost(dag, params, cost_model, false, true);
@@ -1676,26 +1682,26 @@ IntrusivePtr<State> optimal_mcts_schedule(
     msa::mcts::UCT<State::WrapperState, State::Action> meta_uct; // Templated class. Builds a partial decision tree and searches it with UCT MCTS
 
     // OPTIONAL init uct params
-    meta_uct.uct_k = ::sqrt(2);
-    meta_uct.max_millis = 0;
-    meta_uct.max_iterations = 500;
-    meta_uct.simulation_depth = 50;
+    double uct_k = ::sqrt(2);
+    int max_millis = 0;
+    int max_iterations = 500;
+    int simulation_depth = 50;
     // mcts_depth cannot be larger than 2*dag.nodes.size()
     // Get the max_millis for the mcts
     string max_millis_str = get_env_variable("MCTS_MAX_MILLIS");
     if (!max_millis_str.empty()) {
-        meta_uct.max_millis = atoi(max_millis_str.c_str());
+        max_millis = atoi(max_millis_str.c_str());
     }
 
     // Get the max_iterations for the mcts
     string max_iterations_str = get_env_variable("MCTS_MAX_ITERATIONS");
     if (!max_iterations_str.empty()) {
-        meta_uct.max_iterations = atoi(max_iterations_str.c_str());
+        max_iterations = atoi(max_iterations_str.c_str());
     }
     // Get the simulation_depth for the mcts
     string simulation_depth_str = get_env_variable("MCTS_SIMULATION_DEPTH");
     if (!simulation_depth_str.empty()) {
-        meta_uct.simulation_depth = atoi(simulation_depth_str.c_str());
+        simulation_depth = atoi(simulation_depth_str.c_str());
     }
     // Get the mcts_depth for the mcts
     /*string mcts_depth_str = get_env_variable("MCTS_DEPTH");
@@ -1707,24 +1713,25 @@ IntrusivePtr<State> optimal_mcts_schedule(
 
     FunctionDAG* dags[num_passes];
     std::unique_ptr<CostModel> cost_models[num_passes];
-    msa::mcts::UCT<State::WrapperState, State::Action> ucts[num_passes]; // Templated class. Builds a partial decision tree and searches it with UCT MCTS
+    //msa::mcts::UCT<State::WrapperState, State::Action> ucts[num_passes]; // Templated class. Builds a partial decision tree and searches it with UCT MCTS
     std::vector<State::WrapperState> states;
     std::vector<State::Action> actions;
     IntrusivePtr<State> global_best_state = nullptr;
     int global_dag_best_idx = 0;
     double global_best_value = 0;
+    bool initialized = false;
     for(int i=0; i<num_passes; i++) {
         dags[i] = new FunctionDAG(outputs, params, target);
         cost_models[i] = make_default_cost_model(weights_in_path, weights_out_path, randomize_weights);
         internal_assert(cost_models[i] != nullptr);
         configure_pipeline_features(*dags[i], params, cost_models[i].get());
-        ucts[i] = meta_uct;
+        //ucts[i] = meta_uct;
         states.emplace_back(new State, num_passes, *dags[i], params, cost_models[i].get());
         states[i].inner->root = new LoopNest;
-        actions.emplace_back(State::Action(nullptr));
+        actions.emplace_back(State::Action(State::ActionEnum::Illegal));//&State::Action(State::ActionEnum::Inline,0,0));
     }
     int mcts_depth = 2 * (int)dags[0]->nodes.size();
-
+    std::cout << "mcts_depth " << mcts_depth << std::endl;
 
     bool done[num_passes] = { false };
 
@@ -1732,19 +1739,29 @@ IntrusivePtr<State> optimal_mcts_schedule(
         
         #pragma omp parallel for
         for (int i = 0; i < num_passes; i++) {
-            if (done[i]) continue;
+            //if (done[i]) continue;
 
             //ProgressBar tick;
 
             // run uct mcts on current state and get best action
 
-            actions[i] = ucts[i].run(states[i]);
-            std::cout << "prefinished depth " << j << std::endl;
-            if (actions[i] == NULL) {
-                std::cout << "due to NULL action breaking at " << j << std::endl;
+            msa::mcts::UCT<State::WrapperState, State::Action> meta_uct;
+            meta_uct.uct_k = uct_k; 
+            meta_uct.max_millis = max_millis;
+            meta_uct.max_iterations = max_iterations;
+            meta_uct.simulation_depth = simulation_depth;
+            bool valid = false;
+            actions[i] = meta_uct.run(states[i],valid);
+            // make sure actions[i] gets updated
+            assert(actions[i].ae !=State::ActionEnum::Illegal && "Got Illegal Action.");
+            // make sure that it is not empty action constructed in TreeNode
+            assert(actions[i].index !=-1 && "Got Empty TreeNode Action");
+            
+            if (!valid) {
+                std::cout << "due to terminal action breaking at " << j << std::endl;
 //                assert(0 && "Error444: NULL ACTION!");
                 done[i] = true;
-                continue;
+                //continue;
             }
             // evaluate the best actions 
             //states[i].evaluate(actions[i].state);
@@ -1752,38 +1769,33 @@ IntrusivePtr<State> optimal_mcts_schedule(
 //                assert(0 && "Error: WTF HOW DID WE GET HERE");
                 std::cout << "breaking.. with num decisions made " <<states[i].inner->num_decisions_made << std::endl;
                 done[i] = true;
-                continue;
+                //continue;
             }
-            actions[i].print();
+            //actions[i].print();
         }
         // break if done
-        if (done[0]) {
-            for(int i = 0; i<num_passes; i++){
-                if(!done[i])  assert(0 && "Error2: WTF HOW DID WE GET HERE, all should be done");
-            }
-            break;
+        int cnt = 0;
+        for(int i = 0; i < num_passes; ++i){
+            if (done[i]) cnt++;
         }
+        if(cnt == num_passes) break;
+        assert(cnt == 0 && "Error2: WTF HOW DID WE GET HERE, all should be done or not");
+        
         // get the best action from all runs
         int idx = 0;
         double best_value = actions[0].value;
-        std::cout << "Pass " << 0 << " of " << num_passes << ", value: " << actions[0].value << std::endl;
+        //std::cout << "Pass " << 0 << " of " << num_passes << ", value: " << actions[0].value << std::endl;
         for (int i = 1; i <num_passes; i++) {
             if(best_value < actions[i].value) {
                 best_value = actions[i].value;
                 idx = i;
             }
-            std::cout << "Pass " << i << " of " << num_passes << ", value: " << actions[i].value << std::endl;
+        //    std::cout << "Pass " << i << " of " << num_passes << ", value: " << actions[i].value << std::endl;
         }
             // real best action
-            actions[idx].print();
-            std::cout << "best value " << best_value << std::endl;
+            //actions[idx].print();
+            std::cout << "best intermediate value " << best_value << std::endl;
     
-        //updating the global best
-        if(global_best_value < best_value || j == 0) {
-            global_best_value = best_value;
-            global_dag_best_idx = idx;
-            global_best_state = actions[idx].best_state;
-        }
         // get the index of the best acton from the original vector of possible actions.
         int best_action_idx = actions[idx].index;
         // apply this action globally
@@ -1792,7 +1804,21 @@ IntrusivePtr<State> optimal_mcts_schedule(
             std::vector<State::Action> vactions;
             states[i].get_actions(vactions);
             states[i].apply_action(vactions[best_action_idx]);
+            //std::cout << "------" << std::endl;
+            //vactions[best_action_idx].print();
+            //std::cout << "num decisions made: " <<states[i].inner->num_decisions_made <<std::endl;
         }
+        
+        //updating the global best
+        if((global_best_value < best_value || !initialized) 
+          &&actions[idx].best_state_updated) {
+                global_best_value = best_value;
+                global_dag_best_idx = idx;
+                global_best_state = std::move(actions[idx].best_state);
+                initialized=true;
+            }
+        std::cout << "finished depth " << j << " best value so far "<< global_best_value << std::endl;
+    
         aslog(0) << "Cost evaluated this many times: " << State::cost_calculations << '\n';
     }
     //we are supposed to get to the same final result
@@ -1800,9 +1826,10 @@ IntrusivePtr<State> optimal_mcts_schedule(
     best = states[0].inner;
     
     aslog(0) << "Best cost: " << best->cost << "\n";
-    best = global_best_state;
-    
-    aslog(0) << "global best: " << global_best_value << "\n";
+    if (global_best_value>-1*best->cost){
+        best = global_best_state;
+    }    
+    aslog(0) << "global best cost: " << -1*global_best_value << "\n";
     aslog(0) << "** global schedule " << global_best_state.get() << ":\n";
     
     best->apply_schedule(*dags[global_dag_best_idx], params);
