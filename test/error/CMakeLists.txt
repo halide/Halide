@@ -83,6 +83,7 @@ tests(GROUPS error travis
         vectorize_dynamic.cpp
         vectorize_too_little.cpp
         vectorize_too_much.cpp
+        vector_tile.cpp
         wrap_custom_after_shared.cpp
         wrap_frozen.cpp
         wrapper_never_used.cpp

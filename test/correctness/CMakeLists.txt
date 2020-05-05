@@ -317,6 +317,7 @@ tests(GROUPS correctness travis
         vector_bounds_inference.cpp
         vector_cast.cpp
         vector_extern.cpp
+        vector_tile.cpp
         vectorized_gpu_allocation.cpp
         vectorized_initialization.cpp
         vectorized_load_from_vectorized_allocation.cpp

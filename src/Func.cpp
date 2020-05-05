@@ -1510,6 +1510,38 @@ Stage &Stage::tile(const VarOrRVar &x, const VarOrRVar &y,
     return *this;
 }
 
+Stage &Stage::tile(const std::vector<VarOrRVar> &previous,
+                   const std::vector<VarOrRVar> &outers,
+                   const std::vector<VarOrRVar> &inners,
+                   const std::vector<Expr> &factors,
+                   const std::vector<TailStrategy> &tails) {
+    if(previous.size() != outers.size()
+    || previous.size() != inners.size()
+    || previous.size() != factors.size()
+    || previous.size() != tails.size())
+        user_error << "Vectors passed to Stage::tile must all be the same length.\n";
+    for(unsigned int i = 0; i < previous.size(); i++) {
+        split(previous[i], outers[i], inners[i], factors[i], tails[i]);
+    }
+    std::vector<VarOrRVar> new_order;
+    new_order.insert(new_order.end(), inners.begin(), inners.end());
+    new_order.insert(new_order.end(), outers.begin(), outers.end());
+    reorder(new_order);
+    return *this;
+}
+
+Stage &Stage::tile(const std::vector<VarOrRVar> &previous,
+                   const std::vector<VarOrRVar> &outers,
+                   const std::vector<VarOrRVar> &inners,
+                   const std::vector<Expr> &factors,
+                   TailStrategy tail) {
+    std::vector<TailStrategy> tails;
+    for(unsigned int i = 0; i < previous.size(); i++) {
+        tails.push_back(tail);
+    }
+    return tile(previous, outers, inners, factors, tails);
+}
+
 Stage &Stage::reorder(const std::vector<VarOrRVar> &vars) {
     const string &func_name = function.name();
     vector<Expr> &args = definition.args();
@@ -2207,6 +2239,24 @@ Func &Func::tile(const VarOrRVar &x, const VarOrRVar &y,
                  TailStrategy tail) {
     invalidate_cache();
     Stage(func, func.definition(), 0).tile(x, y, xi, yi, xfactor, yfactor, tail);
+    return *this;
+}
+
+Func &Func::tile(const std::vector<VarOrRVar> &previous,
+                 const std::vector<VarOrRVar> &outers,
+                 const std::vector<VarOrRVar> &inners,
+                 const std::vector<Expr> &factors,
+                 TailStrategy tail) {
+    Stage(func, func.definition(), 0).tile(previous, outers, inners, factors, tail);
+    return *this;
+}
+
+Func &Func::tile(const std::vector<VarOrRVar> &previous,
+                 const std::vector<VarOrRVar> &outers,
+                 const std::vector<VarOrRVar> &inners,
+                 const std::vector<Expr> &factors,
+                 const std::vector<TailStrategy> &tails) {
+    Stage(func, func.definition(), 0).tile(previous, outers, inners, factors, tails);
     return *this;
 }
 
