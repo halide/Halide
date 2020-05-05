@@ -4,41 +4,51 @@ using namespace Halide;
 
 int main(int argc, char **argv) {
     Target t(get_jit_target_from_environment());
-    if (!t.has_gpu_feature()) {
+    if (!t.has_gpu_feature() || t.has_feature(Target::OpenGLCompute)) {
         printf("Not running test because no gpu target enabled\n");
         return 0;
     }
 
-    Func f, g;
+    Func f1, f2, f3, f4, f5, f6, g;
     Var x, y;
     Param<int> p;
 
-    f(x, y) = x + y;
-    g(x, y) = f(x, y) + f(x + p, y + p);
+    f1(x, y) = cast<float>(x + y);
+    f2(x, y) = cast<int>(f1(x, y) + f1(x + 1, y + 1));
+    f3(x, y) = cast<float>(f2(x, y) + f2(x + 1, y + 1));
+    f4(x, y) = cast<int>(f3(x, y) + f3(x + 1, y + 1));
+    f5(x, y) = cast<int>(f4(x, y) + f4(x + 1, y + 1));
+    f6(x, y) = cast<float>(f5(x, y) + f5(x + 1, y + 1));
+    g(x, y) = f6(x, y) + f6(x + p, y + p);
+
+    // All of the f's have a dynamic size required (it depends on p),
+    // so we'll store them in global memory ("Heap"). On cuda we get
+    // one big heap allocation. On openglcompute/d3d we should get one
+    // allocation per coalesced group, and groups can only be
+    // coalesced if the types match, so we get an allocation for
+    // [f1,f3,f6], another for [f2,f4], and a third for f5.
 
     Var xi, yi;
     g.gpu_tile(x, y, xi, yi, 32, 16);
-    f.compute_at(g, xi);
-
-    g.specialize(p == 3);
-    // For the p == 3 case, f's allocation is statically sized, so it
-    // will go in local memory. For all other cases the allocation is
-    // dynamically sized and per-thread so it will go in global memory
-    // by default. It would also be legal to schedule it into shared,
-    // but for p > 3 there isn't enough shared memory.
+    f1.compute_at(g, x).store_in(MemoryType::Heap);
+    f2.compute_at(g, x).store_in(MemoryType::Heap);
+    f3.compute_at(g, x).store_in(MemoryType::Heap);
+    f4.compute_at(g, x).store_in(MemoryType::Heap);
+    f5.compute_at(g, x).store_in(MemoryType::Heap);
+    f6.compute_at(g, xi);
 
     constexpr int W = 128, H = 128;
 
     for (int i = 0; i < 10; i++) {
         p.set(i);
-        Buffer<int> result = g.realize(W, H);
+        Buffer<float> result = g.realize(W, H);
         result.copy_to_host();
         for (int y = 0; y < H; y++) {
             for (int x = 0; x < W; x++) {
-                int correct = x + y + (x + i) + (y + i);
-                int actual = result(x, y);
+                float correct = 64 * x + 64 * y + 64 * i + 320;
+                float actual = result(x, y);
                 if (correct != actual) {
-                    printf("result(%d, %d) = %d instead of %d\n",
+                    printf("result(%d, %d) = %f instead of %f\n",
                            x, y, actual, correct);
                     return -1;
                 }
