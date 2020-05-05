@@ -33,6 +33,12 @@ else
     declare -a GENERATOR_ARGS_SETS_ARRAY=
 fi
 
+# Make sure we're not using extra args with "random_pipeline"
+if [ "$PIPELINE" == "random_pipeline" ] && [ "$GENERATOR_ARGS_SETS_ARRAY" != "" ]; then
+    echo "Cannot train random pipeline with GENERATOR_ARGS"
+    exit 1
+fi
+
 # Ensure the length is at least 1
 if [ ${#GENERATOR_ARGS_SETS_ARRAY[@]} -eq 0 ]; then
     GENERATOR_ARGS_SETS_ARRAY=( '' )
@@ -79,6 +85,7 @@ done
 # A batch of this many samples is built in parallel, and then
 # benchmarked serially.
 BATCH_SIZE=32
+# BATCH_SIZE=64
 
 TIMEOUT_CMD="timeout"
 if [ $(uname -s) = "Darwin" ] && ! which $TIMEOUT_CMD 2>&1 >/dev/null; then
@@ -124,8 +131,8 @@ make_featurization() {
             -e stmt,assembly,static_library,c_header,registration,schedule,featurization \
             target=${HL_TARGET} \
             auto_schedule=true \
-            seed=${SEED} \
-            max_stages=12 \
+            seed=${BATCH_ID} \
+            max_stages=$((10 + ${BATCH_ID} % 5)) \
             ${EXTRA_GENERATOR_ARGS} \
             -p ${AUTOSCHED_BIN}/libauto_schedule.so \
             -s Adams2019 \
@@ -166,12 +173,21 @@ make_featurization() {
 # Benchmark one of the random samples
 benchmark_sample() {
     sleep 1 # Give CPU clocks a chance to spin back up if we're thermally throttling
+
+    if [ "$PIPELINE" == "harris" ]; then
+        output_extents="--output_extents=[1530,2556]"
+    else
+        # Fall back on the default of letting RunGen choose
+        output_extents=""
+    fi
+
     D=${1}
     HL_NUM_THREADS=32 \
         ${TIMEOUT_CMD} -k ${BENCHMARKING_TIMEOUT} ${BENCHMARKING_TIMEOUT} \
         ${D}/bench \
         --estimate_all \
         --benchmarks=all \
+        $output_extents \
             | tee ${D}/bench.txt || echo "Benchmarking failed or timed out for ${D}"
 
     # Add the runtime, pipeline id, and schedule id to the feature file
@@ -179,7 +195,13 @@ benchmark_sample() {
     P=$3
     S=$2
     FNAME=$4
-    ${AUTOSCHED_BIN}/featurization_to_sample ${D}/${FNAME}.featurization $R $P $S ${D}/${FNAME}.sample || echo "featurization_to_sample failed for ${D} (probably because benchmarking failed)"
+    ${AUTOSCHED_BIN}/featurization_to_sample ${D}/${FNAME}.featurization $R $P $S ${D}/${FNAME}.sample
+
+    result=$?
+    if [ $result -ne 0 ]; then
+        echo "featurization_to_sample failed for ${D} (probably because benchmarking failed)"
+    fi
+    return $result
 }
 
 # Don't clobber existing samples
@@ -193,6 +215,44 @@ fi
 echo Local number of cores detected as ${LOCAL_CORES}
 
 NUM_BATCHES=1
+
+if [ "$PIPELINE" == "random_pipeline" ] && [ $NUM_BATCHES != 1 ] ; then
+    echo Only one batch at a time
+fi
+
+# Loop through possible pipeline seeds until we find one that works
+if [ "$PIPELINE" == "random_pipeline" ]; then
+    set +e
+    FIRST=$((FIRST+1))
+fi
+while [ "$PIPELINE" == "random_pipeline" ]; do
+    rm -rf tmp
+    mkdir tmp
+    DIR=tmp
+    FNAME=$(printf "%s_batch_%04d_sample_%04d" ${PIPELINE} $FIRST $FIRST)
+    BATCH_ID=$FIRST
+
+    make_featurization $DIR 0 $FNAME ""
+
+    if [ $? -ne 0 ]; then
+        FIRST=$((FIRST+1))
+        continue
+    fi
+
+    benchmark_sample "$DIR" 0 $FIRST $FNAME
+
+    if [ $? -ne 0 ]; then
+        echo $FIRST doesn\'t work
+        FIRST=$((FIRST+1))
+    else
+        FIRST=$((FIRST-1))
+        break
+    fi
+done
+if [ "$PIPELINE" == "random_pipeline" ]; then
+    set -e
+    echo First is $FIRST
+fi
 
 for ((BATCH_ID=$((FIRST+1));BATCH_ID<$((FIRST+1+NUM_BATCHES));BATCH_ID++)); do
 
@@ -239,7 +299,11 @@ for ((BATCH_ID=$((FIRST+1));BATCH_ID<$((FIRST+1+NUM_BATCHES));BATCH_ID++)); do
         for ((SAMPLE_ID=0;SAMPLE_ID<${BATCH_SIZE};SAMPLE_ID++)); do
             S=$(printf "%04d%04d" $BATCH_ID $SAMPLE_ID)
             FNAME=$(printf "%s_batch_%04d_sample_%04d" ${PIPELINE} $BATCH_ID $SAMPLE_ID)
-            benchmark_sample "${DIR}/${SAMPLE_ID}" $S $EXTRA_ARGS_IDX $FNAME
+            if [ "$PIPELINE" == "random_pipeline" ]; then
+                benchmark_sample "${DIR}/${SAMPLE_ID}" $S $BATCH_ID $FNAME
+            else
+                benchmark_sample "${DIR}/${SAMPLE_ID}" $S $EXTRA_ARGS_IDX $FNAME
+            fi
         done
 
         # retrain model weights on all samples seen so far

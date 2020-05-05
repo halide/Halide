@@ -1,0 +1,11 @@
+#!/bin/bash
+
+i=1
+# while [ -f samples/batch_${i}_0/training_output.txt ]; do
+while [ $i -lt 100 ]; do
+    if [ -f samples/batch_${i}_0/training_output.txt ]; then 
+        grep Rate samples/batch_${i}_0/training_output.txt | tail -n1 | sed 's/^.*\(Rate: \<\S*\> \<\S*\>\).*/\1/'
+    fi
+    i=$((i+1))
+done
+
