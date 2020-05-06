@@ -61,15 +61,16 @@ Then build it like so:
 
     % cd llvm-project
     % mkdir build
+    % mkdir install
     % cd build
-    % cmake -DLLVM_ENABLE_PROJECTS="clang;lld" -DLLVM_ENABLE_RTTI=ON -DLLVM_ENABLE_TERMINFO=OFF -DLLVM_TARGETS_TO_BUILD="X86;ARM;NVPTX;AArch64;Mips;PowerPC" -DLLVM_ENABLE_ASSERTIONS=ON -DCMAKE_BUILD_TYPE=Release -DLLVM_BUILD_32_BITS=OFF ../llvm
-    % make -j
+    % cmake -DLLVM_ENABLE_PROJECTS="clang;lld;clang-tools-extra" -DLLVM_ENABLE_RTTI=ON -DLLVM_ENABLE_TERMINFO=OFF -DLLVM_TARGETS_TO_BUILD="X86;ARM;NVPTX;AArch64;Mips;PowerPC;Hexagon" -DLLVM_ENABLE_ASSERTIONS=ON -DCMAKE_BUILD_TYPE=Release -DLLVM_BUILD_32_BITS=OFF -DCMAKE_INSTALL_PREFIX=../install ../llvm
+    % make install -j8
 
 then to point Halide to it:
 
-    export LLVM_CONFIG=<path to llvm>/build/bin/llvm-config
+    export LLVM_CONFIG=<path to llvm>/install/bin/llvm-config
 
-(Note that you *must* add `clang` to `LLVM_ENABLE_PROJECTS`; adding `lld` to `LLVM_ENABLE_PROJECTS` is only required when using WebAssembly, but we recommend enabling it in all cases, to simplify builds.)
+(Note that you *must* add `clang` to `LLVM_ENABLE_PROJECTS`; adding `lld` to `LLVM_ENABLE_PROJECTS` is only required when using WebAssembly, and adding `clang-tools-extra` is only necessary if you plan to contribute code to Halide (so that you can run clang-tidy on your pull requests). We recommend enabling both in all cases, to simplify builds.)
 
 #### Building Halide with make
 
@@ -98,7 +99,7 @@ If you wish to use cmake to build Halide, the build procedure is:
     % mkdir cmake_build
     % cd cmake_build
     % cmake -DLLVM_DIR=/path-to-llvm-build/lib/cmake/llvm -DCMAKE_BUILD_TYPE=Release /path/to/halide
-    % make -j
+    % make -j8
 
 `LLVM_DIR` should be the folder in the LLVM installation or build tree that contains `LLVMConfig.cmake`.
 
@@ -112,11 +113,11 @@ path. The instructions below assume Halide is checked out under
 
     % mkdir C:\Code\llvm-build
     % cd C:\Code\llvm-build
-    % cmake -DCMAKE_INSTALL_PREFIX=../llvm-install -DLLVM_ENABLE_TERMINFO=OFF -DLLVM_TARGETS_TO_BUILD=X86;ARM;NVPTX;AArch64;Mips;Hexagon -DLLVM_ENABLE_ASSERTIONS=ON -DLLVM_BUILD_32_BITS=OFF -DCMAKE_BUILD_TYPE=Release ../llvm/llvm -G "Visual Studio 14 Win64"
+    % cmake -DLLVM_ENABLE_PROJECTS="clang;lld;clang-tools-extra" -DCMAKE_INSTALL_PREFIX=../llvm-install -DLLVM_ENABLE_TERMINFO=OFF -DLLVM_TARGETS_TO_BUILD=X86;ARM;NVPTX;AArch64;Mips;Hexagon -DLLVM_ENABLE_ASSERTIONS=ON -DLLVM_BUILD_32_BITS=OFF -DCMAKE_BUILD_TYPE=Release ../llvm/llvm -G "Visual Studio 14" -A x64
 
 For a 32-bit build use:
 
-    % cmake -DCMAKE_INSTALL_PREFIX=../llvm-install -DLLVM_ENABLE_TERMINFO=OFF -DLLVM_TARGETS_TO_BUILD=X86;ARM;NVPTX;AArch64;Mips;Hexagon -DLLVM_ENABLE_ASSERTIONS=ON -DLLVM_BUILD_32_BITS=ON -DCMAKE_BUILD_TYPE=Release ../llvm/llvm -G "Visual Studio 14"
+    % cmake -DLLVM_ENABLE_PROJECTS="clang;lld;clang-tools-extra" -DCMAKE_INSTALL_PREFIX=../llvm-install -DLLVM_ENABLE_TERMINFO=OFF -DLLVM_TARGETS_TO_BUILD=X86;ARM;NVPTX;AArch64;Mips;Hexagon -DLLVM_ENABLE_ASSERTIONS=ON -DLLVM_BUILD_32_BITS=ON -DCMAKE_BUILD_TYPE=Release ../llvm/llvm -G "Visual Studio 14" -A Win32
 
 Then build it like so:
 
@@ -130,11 +131,6 @@ To configure and build Halide:
     % cd C:\Code\halide-build
     % cmake -DLLVM_DIR=../llvm-install/lib/cmake/llvm -DCMAKE_BUILD_TYPE=Release -G "Visual Studio 14 Win64" ../halide
     % MSBuild.exe /m /t:Build /p:Configuration=Release .\ALL_BUILD.vcxproj
-
-#### Building Halide and LLVM on Windows using mingw
-
-The makefile method above should work from inside a "mingw64" shell
-(not the default shell) in an msys2 installation.
 
 #### If all else fails...
 
@@ -259,10 +255,11 @@ link implementations of the following two functions with your Halide code:
     }
 
 Halide allocates and deletes textures as necessary.  Applications may manage
-the textures by hand by setting the `buffer_t::dev` field; this is most useful
-for reusing image data that is already stored in textures. Some rudimentary
-checks are performed to ensure that externally allocated textures have the
-correct format, but in general that's the responsibility of the application.
+the textures by hand by setting the `halide_buffer_t::device` field; this is
+most useful for reusing image data that is already stored in textures. Some
+rudimentary checks are performed to ensure that externally allocated textures
+have the correct format, but in general that's the responsibility of the
+application.
 
 It is possible to let render directly to the current framebuffer; to do this,
 set the `dev` field of the output buffer to the value returned by

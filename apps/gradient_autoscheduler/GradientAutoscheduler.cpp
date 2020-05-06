@@ -99,12 +99,13 @@ void parallelize_vars_and_rvars_gpu(
     // this is our GPU thread.
     // We use 64 since it's twice the warp size, so this launches enough
     // GPU threads for a block to be work efficient.
-    constexpr int split_size = 64;
+    constexpr int warp_size = 32;
+    constexpr int split_size = 2 * warp_size;
     std::vector<Var> gpu_blocks;
-    Var gpu_threads("");
+    std::string gpu_threads;
     int gpu_thread_dim = -1;
     for (int i = 0; i < (int)vars.size(); i++) {
-        if (gpu_threads.name().empty() && var_bounds[i] >= split_size) {
+        if (gpu_threads.empty() && var_bounds[i] >= split_size) {
             gpu_thread_dim = i;
             Var outer, inner;
             func_or_stage.split(vars[i],
@@ -119,7 +120,7 @@ void parallelize_vars_and_rvars_gpu(
                             << split_size << ","
                             << tail << ")\n";
             gpu_blocks.push_back(outer);
-            gpu_threads = inner;
+            gpu_threads = inner.name();
         } else {
             gpu_blocks.push_back(vars[i]);
         }
@@ -127,11 +128,11 @@ void parallelize_vars_and_rvars_gpu(
 
     std::vector<RVar> serial_rvars;
     std::vector<RVar> r_gpu_blocks;
-    RVar r_gpu_threads("");
-    if (!gpu_threads.name().empty()) {
+    std::string r_gpu_threads;
+    if (gpu_threads.empty()) {
         // If we can't find any GPU threads, parallelize RVars to find more parallelism
         for (int i = 0; i < (int)rvars.size(); i++) {
-            if (!r_gpu_threads.name().empty() && rvar_bounds[i] > split_size) {
+            if (!r_gpu_threads.empty() && rvar_bounds[i] > split_size) {
                 RVar outer, inner;
                 func_or_stage.split(rvars[i],
                                     outer,
@@ -145,7 +146,7 @@ void parallelize_vars_and_rvars_gpu(
                                 << split_size << ","
                                 << tail << ")\n";
                 r_gpu_blocks.push_back(outer);
-                r_gpu_threads = inner;
+                r_gpu_threads = inner.name();
             } else {
                 r_gpu_blocks.push_back(rvars[i]);
             }
@@ -154,30 +155,97 @@ void parallelize_vars_and_rvars_gpu(
         serial_rvars = rvars;
     }
 
-    // Fuse all gpu blocks into a single variable
-    Var fused_var("");
-    if (!gpu_blocks.empty()) {
-        fused_var = gpu_blocks[0];
-        // inner to outer
-        for (int i = 1; i < (int)gpu_blocks.size(); i++) {
-            func_or_stage.fuse(fused_var, gpu_blocks[i], fused_var);
-            schedule_source << "    .fuse("
-                            << fused_var.name() << ","
-                            << gpu_blocks[i].name() << ","
-                            << fused_var.name() << ")\n";
+    if (gpu_threads.empty() && r_gpu_threads.empty()) {
+        // If we didn't assign any GPU threads in the previous
+        // process, use the largest loop as the GPU thread.
+        int loop_size = 0;
+        int largest_loop_id = -1;
+        for (int i = 0; i < (int)vars.size(); i++) {
+            if (var_bounds[i] > loop_size) {
+                loop_size = var_bounds[i];
+                largest_loop_id = i;
+            }
+        }
+        for (int i = 0; i < (int)rvars.size(); i++) {
+            if (rvar_bounds[i] > loop_size) {
+                loop_size = rvar_bounds[i];
+                largest_loop_id = i + (int)vars.size();
+            }
+        }
+        if (largest_loop_id != -1) {
+            if (largest_loop_id < (int)vars.size()) {
+                // The largest loop is a pure variable
+                const Var &v = vars[largest_loop_id];
+                Var inner;
+                func_or_stage.split(v,
+                                    v,
+                                    inner,
+                                    warp_size,
+                                    TailStrategy::GuardWithIf);
+                schedule_source << "    .split("
+                                << v.name() << ","
+                                << v.name() << ","
+                                << inner.name() << ","
+                                << warp_size << ","
+                                << TailStrategy::GuardWithIf << ")\n";
+                gpu_threads = inner.name();
+            } else {
+                // The largest loop is a reduction variable
+                const RVar &v = rvars[largest_loop_id - (int)vars.size()];
+                RVar inner;
+                func_or_stage.split(v,
+                                    v,
+                                    inner,
+                                    warp_size,
+                                    TailStrategy::GuardWithIf);
+                schedule_source << "    .split("
+                                << v.name() << ","
+                                << v.name() << ","
+                                << inner.name() << ","
+                                << warp_size << ","
+                                << TailStrategy::GuardWithIf << ")\n";
+                r_gpu_threads = inner.name();
+            }
         }
     }
-    RVar fused_rvar("");
+    // Fuse all gpu blocks into a single variable
+    std::string fused_var;
+    if (!gpu_blocks.empty()) {
+        fused_var = gpu_blocks[0].name();
+        // inner to outer
+        for (int i = 1; i < (int)gpu_blocks.size(); i++) {
+            func_or_stage.fuse(Var(fused_var), gpu_blocks[i], Var(fused_var));
+            schedule_source << "    .fuse("
+                            << fused_var << ","
+                            << gpu_blocks[i].name() << ","
+                            << fused_var << ")\n";
+        }
+    }
+    std::string fused_rvar;
     if (!r_gpu_blocks.empty()) {
-        fused_rvar = r_gpu_blocks[0];
+        fused_rvar = r_gpu_blocks[0].name();
         // inner to outer
         for (int i = 1; i < (int)r_gpu_blocks.size(); i++) {
-            func_or_stage.fuse(fused_rvar, r_gpu_blocks[i], fused_rvar);
+            func_or_stage.fuse(RVar(fused_rvar), r_gpu_blocks[i], RVar(fused_rvar));
             schedule_source << "    .fuse("
-                            << fused_rvar.name() << ","
+                            << fused_rvar << ","
                             << r_gpu_blocks[i].name() << ","
-                            << fused_rvar.name() << ")\n";
+                            << fused_rvar << ")\n";
         }
+    }
+    // CUDA places rather strict restriction on the second dimension of the GPU blocks (usually 65536),
+    // so we want to split it if it is too large
+    int rdomain_size = 1;
+    for (int b : rvar_bounds) {
+        rdomain_size *= b;
+    }
+    std::string fused_rvar2;
+    // CUDA supports up to 65536 blocks in the second and third dimensions
+    constexpr int cuda_gpu_block_split = 65536;
+    if (rdomain_size >= cuda_gpu_block_split) {
+        RVar r;
+        fused_rvar2 = r.name();
+        func_or_stage.split(RVar(fused_rvar), RVar(fused_rvar), RVar(fused_rvar2), int(std::sqrt(double(rdomain_size))));
     }
 
     // Reorder: the order is rvars -> gpu_threads -> gpu_blocks
@@ -186,17 +254,20 @@ void parallelize_vars_and_rvars_gpu(
     for (RVar v : serial_rvars) {
         all_vars.push_back(v);
     }
-    if (!r_gpu_threads.name().empty()) {
-        all_vars.push_back(r_gpu_threads);
+    if (!r_gpu_threads.empty()) {
+        all_vars.emplace_back(RVar(r_gpu_threads));
     }
-    if (!gpu_threads.name().empty()) {
-        all_vars.push_back(gpu_threads);
+    if (!gpu_threads.empty()) {
+        all_vars.emplace_back(Var(gpu_threads));
     }
-    if (!fused_var.name().empty()) {
-        all_vars.push_back(fused_var);
+    if (!fused_var.empty()) {
+        all_vars.emplace_back(Var(fused_var));
     }
-    if (!fused_rvar.name().empty()) {
-        all_vars.push_back(fused_rvar);
+    if (!fused_rvar.empty()) {
+        all_vars.emplace_back(RVar(fused_rvar));
+    }
+    if (!fused_rvar2.empty()) {
+        all_vars.emplace_back(RVar(fused_rvar2));
     }
     // Only reorder if there's more than one variables.
     if (all_vars.size() > 1) {
@@ -220,24 +291,29 @@ void parallelize_vars_and_rvars_gpu(
 
     if (!gpu_blocks.empty() || !r_gpu_blocks.empty()) {
         // Assign outer loops to GPU blocks
-        if (!fused_var.name().empty()) {
-            func_or_stage.gpu_blocks(fused_var);
-            schedule_source << "    .gpu_blocks(" << fused_var.name() << ")\n";
+        if (!fused_var.empty()) {
+            func_or_stage.gpu_blocks(Var(fused_var));
+            schedule_source << "    .gpu_blocks(" << fused_var << ")\n";
         }
-        if (!fused_rvar.name().empty()) {
+        if (!fused_rvar.empty()) {
             func_or_stage.atomic()
-                .gpu_blocks(fused_rvar);
+                .gpu_blocks(RVar(fused_rvar));
             schedule_source << "    .atomic()\n";
-            schedule_source << "    .gpu_blocks(" << fused_rvar.name() << ")\n";
+            schedule_source << "    .gpu_blocks(" << fused_rvar << ")\n";
+        }
+        if (!fused_rvar2.empty()) {
+            internal_assert(!fused_rvar.empty());
+            func_or_stage.gpu_blocks(RVar(fused_rvar2));
+            schedule_source << "    .gpu_blocks(" << fused_rvar2 << ")\n";
         }
         // Assign inner loops to GPU threads
-        if (!gpu_threads.name().empty()) {
-            func_or_stage.gpu_threads(gpu_threads);
-            schedule_source << "    .gpu_threads(" << gpu_threads.name() << ")\n";
+        if (!gpu_threads.empty()) {
+            func_or_stage.gpu_threads(Var(gpu_threads));
+            schedule_source << "    .gpu_threads(" << gpu_threads << ")\n";
         }
-        if (!r_gpu_threads.name().empty()) {
-            func_or_stage.gpu_threads(r_gpu_threads);
-            schedule_source << "    .r_gpu_threads(" << r_gpu_threads.name() << ")\n";
+        if (!r_gpu_threads.empty()) {
+            func_or_stage.gpu_threads(RVar(r_gpu_threads));
+            schedule_source << "    .r_gpu_threads(" << r_gpu_threads << ")\n";
         }
     } else {
         // Not enough parallelism, use a single GPU thread
@@ -262,11 +338,11 @@ void parallelize_vars_and_rvars_cpu(
     // this is our vectorized dimension
     const int split_size = natural_vector_size;
     std::vector<Var> parallel_vars;
-    Var vectorized_var("");
+    std::string vectorized_var;
     int num_threads_var = 1;
     int vectorized_dim = -1;
     for (int i = 0; i < (int)vars.size(); i++) {
-        if (vectorized_var.name().empty() && var_bounds[i] >= split_size) {
+        if (vectorized_var.empty() && var_bounds[i] >= split_size) {
             vectorized_dim = i;
             Var outer, inner;
             func_or_stage.split(vars[i],
@@ -281,7 +357,7 @@ void parallelize_vars_and_rvars_cpu(
                             << split_size << ","
                             << tail << ")\n";
             parallel_vars.push_back(outer);
-            vectorized_var = inner;
+            vectorized_var = inner.name();
             int b = var_bounds[i] / split_size;
             if (var_bounds[i] % split_size == 0) {
                 b++;
@@ -297,10 +373,10 @@ void parallelize_vars_and_rvars_cpu(
     // Two cases: 1) not enough threads 2) no vectorized dimension
     std::vector<RVar> serial_rvars;
     std::vector<RVar> parallel_rvars;
-    RVar vectorized_rvar("");
+    std::string vectorized_rvar;
     int num_threads_rvar = 1;
     for (int i = 0; i < (int)rvars.size(); i++) {
-        if (vectorized_var.name().empty() && vectorized_rvar.name().empty() &&
+        if (vectorized_var.empty() && vectorized_rvar.empty() &&
             rvar_bounds[i] >= split_size) {
             RVar outer, inner;
             func_or_stage.split(rvars[i],
@@ -324,7 +400,7 @@ void parallelize_vars_and_rvars_cpu(
             } else {
                 serial_rvars.push_back(outer);
             }
-            vectorized_rvar = inner;
+            vectorized_rvar = inner.name();
         } else {
             if (num_threads_var * num_threads_rvar < params.parallelism) {
                 num_threads_rvar *= rvar_bounds[i];
@@ -336,30 +412,30 @@ void parallelize_vars_and_rvars_cpu(
     }
 
     // Fuse all parallel vars into a single variable for parallelism
-    Var fused_var("");
+    std::string fused_var;
     if (!parallel_vars.empty()) {
-        fused_var = parallel_vars[0];
+        fused_var = parallel_vars[0].name();
         // inner to outer
         for (int i = 1; i < (int)parallel_vars.size(); i++) {
-            func_or_stage.fuse(fused_var, parallel_vars[i], fused_var);
+            func_or_stage.fuse(Var(fused_var), parallel_vars[i], Var(fused_var));
             schedule_source << "    .fuse("
-                            << fused_var.name() << ","
+                            << fused_var << ","
                             << parallel_vars[i].name() << ","
-                            << fused_var.name() << ")\n";
+                            << fused_var << ")\n";
         }
     }
 
     // Fuse all parallel rvars into a single variable for parallelism
-    RVar fused_rvar("");
+    std::string fused_rvar;
     if (!parallel_rvars.empty()) {
-        fused_rvar = parallel_rvars[0];
+        fused_rvar = parallel_rvars[0].name();
         // inner to outer
         for (int i = 1; i < (int)parallel_rvars.size(); i++) {
-            func_or_stage.fuse(fused_rvar, parallel_rvars[i], fused_rvar);
+            func_or_stage.fuse(RVar(fused_rvar), parallel_rvars[i], RVar(fused_rvar));
             schedule_source << "    .fuse("
-                            << fused_rvar.name() << ","
+                            << fused_rvar << ","
                             << parallel_rvars[i].name() << ","
-                            << fused_rvar.name() << ")\n";
+                            << fused_rvar << ")\n";
         }
     }
 
@@ -370,17 +446,17 @@ void parallelize_vars_and_rvars_cpu(
     for (RVar v : serial_rvars) {
         all_vars.push_back(v);
     }
-    if (!vectorized_rvar.name().empty()) {
-        all_vars.push_back(vectorized_rvar);
+    if (!vectorized_rvar.empty()) {
+        all_vars.emplace_back(RVar(vectorized_rvar));
     }
-    if (!vectorized_var.name().empty()) {
-        all_vars.push_back(vectorized_var);
+    if (!vectorized_var.empty()) {
+        all_vars.emplace_back(Var(vectorized_var));
     }
-    if (!fused_rvar.name().empty()) {
-        all_vars.push_back(fused_rvar);
+    if (!fused_rvar.empty()) {
+        all_vars.emplace_back(RVar(fused_rvar));
     }
-    if (!fused_var.name().empty()) {
-        all_vars.push_back(fused_var);
+    if (!fused_var.empty()) {
+        all_vars.emplace_back(Var(fused_var));
     }
     // Only reorder if there's more than one variables.
     if (all_vars.size() > 1) {
@@ -402,51 +478,51 @@ void parallelize_vars_and_rvars_cpu(
         }
     }
 
-    if (!fused_var.name().empty()) {
+    if (!fused_var.empty()) {
         // Parallelize vars
         if (num_threads_var > params.parallelism * 8) {
-            func_or_stage.parallel(fused_var,
+            func_or_stage.parallel(Var(fused_var),
                                    num_threads_var / (params.parallelism * 8),
                                    tail);
             schedule_source << "    .parallel("
-                            << fused_var.name() << ","
+                            << fused_var << ","
                             << num_threads_var / (params.parallelism * 8) << ","
                             << tail << ")\n";
         } else {
-            func_or_stage.parallel(fused_var);
-            schedule_source << "    .parallel(" << fused_var.name() << ")\n";
+            func_or_stage.parallel(Var(fused_var));
+            schedule_source << "    .parallel(" << fused_var << ")\n";
         }
     }
-    if (!fused_rvar.name().empty()) {
+    if (!fused_rvar.empty()) {
         // Parallelize rvars
         if (num_threads_rvar > params.parallelism * 8) {
             func_or_stage.atomic()
-                .parallel(fused_rvar,
+                .parallel(RVar(fused_rvar),
                           num_threads_rvar / (params.parallelism * 8),
                           tail);
             schedule_source << "    .atomic()\n";
             schedule_source << "    .parallel("
-                            << fused_rvar.name() << ","
+                            << fused_rvar << ","
                             << num_threads_rvar / (params.parallelism * 8) << ","
                             << tail << ")\n";
         } else {
             func_or_stage.atomic()
-                .parallel(fused_rvar);
+                .parallel(RVar(fused_rvar));
             schedule_source << "    .atomic()\n";
             schedule_source << "    .parallel("
-                            << fused_rvar.name() << ")\n";
+                            << fused_rvar << ")\n";
         }
     }
-    if (!vectorized_var.name().empty()) {
-        func_or_stage.vectorize(vectorized_var);
+    if (!vectorized_var.empty()) {
+        func_or_stage.vectorize(Var(vectorized_var));
         schedule_source << "    .vectorize("
-                        << vectorized_var.name() << ")\n";
+                        << vectorized_var << ")\n";
     }
-    if (!vectorized_rvar.name().empty()) {
-        func_or_stage.atomic().vectorize(vectorized_rvar);
+    if (!vectorized_rvar.empty()) {
+        func_or_stage.atomic().vectorize(RVar(vectorized_rvar));
         schedule_source << "    .atomic()\n";
         schedule_source << "    .vectorize("
-                        << vectorized_rvar.name() << ")\n";
+                        << vectorized_rvar << ")\n";
     }
 }
 
@@ -849,7 +925,7 @@ void generate_schedule(const std::vector<Function> &outputs,
 
     auto_scheduler_results->scheduler_name = "Li2018";
     auto_scheduler_results->schedule_source = schedule_source.str();
-    aslog(1) << schedule_source.str() << '\n';
+    aslog(1) << schedule_source.str() << "\n";
 }
 
 // Halide uses a plugin architecture for registering custom
@@ -861,7 +937,7 @@ struct RegisterGradientAutoscheduler {
         Pipeline::add_autoscheduler("Li2018", *this);
     }
 
-    void operator()(Pipeline p, const Target &target, const MachineParams &params, AutoSchedulerResults *results) {
+    void operator()(const Pipeline &p, const Target &target, const MachineParams &params, AutoSchedulerResults *results) {
         std::vector<Function> outputs;
         for (Func f : p.outputs()) {
             outputs.push_back(f.function());

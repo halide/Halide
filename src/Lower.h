@@ -7,16 +7,18 @@
  * Halide function using its schedule.
  */
 
-#include <iterator>
+#include <string>
+#include <vector>
 
 #include "Argument.h"
-#include "IR.h"
+#include "Expr.h"
 #include "Module.h"
 #include "Target.h"
 
 namespace Halide {
 namespace Internal {
 
+class Function;
 class IRMutator;
 
 /** Given a vector of scheduled halide functions, create a Module that
@@ -24,8 +26,7 @@ class IRMutator;
  * on. Some stages of lowering may be target-specific. The Module may
  * contain submodules for computation offloaded to another execution
  * engine or API as well as buffers that are used in the passed in
- * Stmt. Multiple LoweredFuncs are added to support legacy buffer_t
- * calling convention. */
+ * Stmt. */
 Module lower(const std::vector<Function> &output_funcs,
              const std::string &pipeline_name,
              const Target &t,

@@ -18,14 +18,14 @@ using namespace llvm;
 
 namespace {
 
-vector<llvm::Type *> llvm_types(const Closure &closure, llvm::StructType *buffer_t, LLVMContext &context) {
+vector<llvm::Type *> llvm_types(const Closure &closure, llvm::StructType *halide_buffer_t_type, LLVMContext &context) {
     vector<llvm::Type *> res;
     for (const auto &v : closure.vars) {
         res.push_back(llvm_type_of(&context, v.second));
     }
     for (const auto &b : closure.buffers) {
         res.push_back(llvm_type_of(&context, b.second.type)->getPointerTo());
-        res.push_back(buffer_t->getPointerTo());
+        res.push_back(halide_buffer_t_type->getPointerTo());
     }
     return res;
 }
@@ -33,10 +33,10 @@ vector<llvm::Type *> llvm_types(const Closure &closure, llvm::StructType *buffer
 }  // namespace
 
 StructType *build_closure_type(const Closure &closure,
-                               llvm::StructType *buffer_t,
+                               llvm::StructType *halide_buffer_t_type,
                                LLVMContext *context) {
     StructType *struct_t = StructType::create(*context, "closure_t");
-    struct_t->setBody(llvm_types(closure, buffer_t, *context), false);
+    struct_t->setBody(llvm_types(closure, halide_buffer_t_type, *context), false);
     return struct_t;
 }
 
@@ -44,7 +44,7 @@ void pack_closure(llvm::StructType *type,
                   Value *dst,
                   const Closure &closure,
                   const Scope<Value *> &src,
-                  llvm::StructType *buffer_t,
+                  llvm::StructType *halide_buffer_t_type,
                   IRBuilder<> *builder) {
     // type, type of dst should be a pointer to a struct of the type returned by build_type
     int idx = 0;
@@ -68,7 +68,7 @@ void pack_closure(llvm::StructType *type,
             builder->CreateStore(val, ptr);
         }
         {
-            llvm::PointerType *t = buffer_t->getPointerTo();
+            llvm::PointerType *t = halide_buffer_t_type->getPointerTo();
             Value *ptr = builder->CreateConstInBoundsGEP2_32(type, dst, 0, idx++);
             Value *val = nullptr;
             if (src.contains(b.first + ".buffer")) {
@@ -133,6 +133,22 @@ llvm::Type *llvm_type_of(LLVMContext *c, Halide::Type t) {
     } else {
         llvm::Type *element_type = llvm_type_of(c, t.element_of());
         return VectorType::get(element_type, t.lanes());
+    }
+}
+
+int get_vector_num_elements(llvm::Type *t) {
+    if (t->isVectorTy()) {
+        return dyn_cast<llvm::VectorType>(t)->getNumElements();
+    } else {
+        return 1;
+    }
+}
+
+llvm::Type *get_vector_element_type(llvm::Type *t) {
+    if (t->isVectorTy()) {
+        return dyn_cast<llvm::VectorType>(t)->getElementType();
+    } else {
+        return t;
     }
 }
 
@@ -205,9 +221,6 @@ bool function_takes_user_context(const std::string &name) {
         "halide_metal_initialize_kernels",
         "halide_d3d12compute_initialize_kernels",
         "halide_get_gpu_device",
-        "halide_upgrade_buffer_t",
-        "halide_downgrade_buffer_t",
-        "halide_downgrade_buffer_t_device_fields",
         "_halide_buffer_crop",
         "_halide_buffer_retire_crop_after_extern_stage",
         "_halide_buffer_retire_crops_after_extern_stage",
@@ -228,7 +241,7 @@ bool can_allocation_fit_on_stack(int64_t size) {
     return (size <= 1024 * 16);
 }
 
-Expr lower_int_uint_div(Expr a, Expr b) {
+Expr lower_int_uint_div(const Expr &a, const Expr &b) {
     // Detect if it's a small int division
     const int64_t *const_int_divisor = as_const_int(b);
     const uint64_t *const_uint_divisor = as_const_uint(b);
@@ -301,7 +314,7 @@ Expr lower_int_uint_div(Expr a, Expr b) {
 
         internal_assert(method != 0)
             << "method 0 division is for powers of two and should have been handled elsewhere\n";
-        Expr num = a;
+        const Expr &num = a;
 
         // Widen, multiply, narrow
         Expr mult = make_const(num.type(), multiplier);
@@ -325,7 +338,7 @@ Expr lower_int_uint_div(Expr a, Expr b) {
     }
 }
 
-Expr lower_int_uint_mod(Expr a, Expr b) {
+Expr lower_int_uint_mod(const Expr &a, const Expr &b) {
     // Detect if it's a small int modulus
     const int64_t *const_int_divisor = as_const_int(b);
     const uint64_t *const_uint_divisor = as_const_uint(b);
@@ -478,8 +491,8 @@ Expr lower_euclidean_mod(Expr a, Expr b) {
     return q;
 }
 
-Expr lower_signed_shift_left(Expr a, Expr b) {
-    assert(b.type().is_int());
+Expr lower_signed_shift_left(const Expr &a, const Expr &b) {
+    internal_assert(b.type().is_int());
     const int64_t *const_int_b = as_const_int(b);
     if (const_int_b) {
         Type t = UInt(a.type().bits(), a.type().lanes());
@@ -500,8 +513,8 @@ Expr lower_signed_shift_left(Expr a, Expr b) {
     }
 }
 
-Expr lower_signed_shift_right(Expr a, Expr b) {
-    assert(b.type().is_int());
+Expr lower_signed_shift_right(const Expr &a, const Expr &b) {
+    internal_assert(b.type().is_int());
     const int64_t *const_int_b = as_const_int(b);
     if (const_int_b) {
         Type t = UInt(a.type().bits(), a.type().lanes());
@@ -520,91 +533,6 @@ Expr lower_signed_shift_right(Expr a, Expr b) {
         Expr val = select(b >= 0, a >> b_unsigned, a << b_unsigned);
         return simplify(common_subexpression_elimination(val));
     }
-}
-
-namespace {
-
-// This mutator rewrites predicated loads and stores as unpredicated
-// loads/stores with explicit conditions, scalarizing if necessary.
-class UnpredicateLoadsStores : public IRMutator {
-    Expr visit(const Load *op) override {
-        if (is_one(op->predicate)) {
-            return IRMutator::visit(op);
-        }
-
-        Expr predicate = mutate(op->predicate);
-        Expr index = mutate(op->index);
-        Expr condition;
-
-        if (const Broadcast *scalar_pred = predicate.as<Broadcast>()) {
-            Expr unpredicated_load = Load::make(op->type, op->name, index, op->image, op->param,
-                                                const_true(op->type.lanes()), op->alignment);
-            return Call::make(op->type, Call::if_then_else, {scalar_pred->value, unpredicated_load, make_zero(op->type)},
-                              Call::PureIntrinsic);
-        } else {
-            string index_name = "scalarized_load_index";
-            Expr index_var = Variable::make(index.type(), index_name);
-            string predicate_name = "scalarized_load_predicate";
-            Expr predicate_var = Variable::make(predicate.type(), predicate_name);
-
-            vector<Expr> lanes;
-            vector<int> ramp;
-            for (int i = 0; i < op->type.lanes(); i++) {
-                Expr idx_i = Shuffle::make({index_var}, {i});
-                Expr pred_i = Shuffle::make({predicate_var}, {i});
-                Expr unpredicated_load = Load::make(op->type.element_of(), op->name, idx_i, op->image, op->param,
-                                                    const_true(), ModulusRemainder());
-                lanes.push_back(Call::make(op->type.element_of(), Call::if_then_else, {pred_i, unpredicated_load, make_zero(unpredicated_load.type())}, Call::PureIntrinsic));
-                ramp.push_back(i);
-            }
-            Expr expr = Shuffle::make(lanes, ramp);
-            expr = Let::make(predicate_name, predicate, expr);
-            return Let::make(index_name, index, expr);
-        }
-    }
-
-    Stmt visit(const Store *op) override {
-        if (is_one(op->predicate)) {
-            return IRMutator::visit(op);
-        }
-
-        Expr predicate = mutate(op->predicate);
-        Expr value = mutate(op->value);
-        Expr index = mutate(op->index);
-
-        if (const Broadcast *scalar_pred = predicate.as<Broadcast>()) {
-            Stmt unpredicated_store = Store::make(op->name, value, index, op->param, const_true(value.type().lanes()), op->alignment);
-            return IfThenElse::make(scalar_pred->value, unpredicated_store);
-        } else {
-            string value_name = "scalarized_store_value";
-            Expr value_var = Variable::make(value.type(), value_name);
-            string index_name = "scalarized_store_index";
-            Expr index_var = Variable::make(index.type(), index_name);
-            string predicate_name = "scalarized_store_predicate";
-            Expr predicate_var = Variable::make(predicate.type(), predicate_name);
-
-            vector<Stmt> lanes;
-            for (int i = 0; i < predicate.type().lanes(); i++) {
-                Expr pred_i = Shuffle::make({predicate_var}, {i});
-                Expr value_i = Shuffle::make({value_var}, {i});
-                Expr index_i = Shuffle::make({index_var}, {i});
-                Stmt lane = IfThenElse::make(pred_i, Store::make(op->name, value_i, index_i, op->param, const_true(), ModulusRemainder()));
-                lanes.push_back(lane);
-            }
-            Stmt stmt = Block::make(lanes);
-            stmt = LetStmt::make(predicate_name, predicate, stmt);
-            stmt = LetStmt::make(value_name, value, stmt);
-            return LetStmt::make(index_name, index, stmt);
-        }
-    }
-
-    using IRMutator::visit;
-};
-
-}  // namespace
-
-Stmt unpredicate_loads_stores(Stmt s) {
-    return UnpredicateLoadsStores().mutate(s);
 }
 
 bool get_md_bool(llvm::Metadata *value, bool &result) {
@@ -630,7 +558,11 @@ bool get_md_string(llvm::Metadata *value, std::string &result) {
     }
     llvm::MDString *c = llvm::dyn_cast<llvm::MDString>(value);
     if (c) {
+#if LLVM_VERSION >= 110
+        result = c->getString().str();
+#else
         result = c->getString();
+#endif
         return true;
     }
     return false;
@@ -694,7 +626,7 @@ std::unique_ptr<llvm::TargetMachine> make_target_machine(const llvm::Module &mod
 
     const llvm::Target *llvm_target = llvm::TargetRegistry::lookupTarget(module.getTargetTriple(), error_string);
     if (!llvm_target) {
-        std::cout << error_string << std::endl;
+        std::cout << error_string << "\n";
         llvm::TargetRegistry::printRegisteredTargetsForVersion(llvm::outs());
     }
     auto triple = llvm::Triple(module.getTargetTriple());

@@ -4,6 +4,7 @@
 /apps/HelloMatlab/blurred.png
 /apps/HelloMatlab/iir_blur.mex
 bin/*
+build/*
 python_bindings/bin/*
 build-64/*
 build-ios/*
@@ -86,3 +87,5 @@ test/*.lowered
 src/.tags
 src/.tags_sorted_by_file
 
+/.vs
+/CMakeSettings.json

@@ -7,7 +7,6 @@
 #include "Debug.h"
 #include "DeviceInterface.h"
 #include "Error.h"
-#include "LLVM_Headers.h"
 #include "Util.h"
 #include "WasmExecutor.h"
 
@@ -158,12 +157,6 @@ Target calculate_host_target() {
             }
         }
     }
-#ifdef _WIN32
-#ifndef _MSC_VER
-    initial_features.push_back(Target::MinGW);
-#endif
-#endif
-
 #endif
 #endif
 #endif
@@ -335,7 +328,6 @@ const std::map<std::string, Target::Feature> feature_name_map = {
     {"profile", Target::Profile},
     {"no_runtime", Target::NoRuntime},
     {"metal", Target::Metal},
-    {"mingw", Target::MinGW},
     {"c_plus_plus_name_mangling", Target::CPlusPlusMangling},
     {"large_buffers", Target::LargeBuffers},
     {"hvx_64", Target::HVX_64},
@@ -357,7 +349,6 @@ const std::map<std::string, Target::Feature> feature_name_map = {
     {"trace_pipeline", Target::TracePipeline},
     {"d3d12compute", Target::D3D12Compute},
     {"strict_float", Target::StrictFloat},
-    {"legacy_buffer_wrappers", Target::LegacyBufferWrappers},
     {"tsan", Target::TSAN},
     {"asan", Target::ASAN},
     {"check_unsafe_promises", Target::CheckUnsafePromises},
@@ -584,7 +575,7 @@ std::string Target::feature_to_name(Target::Feature feature) {
             return feature_entry.first;
         }
     }
-    internal_assert(false);
+    internal_error;
     return "";
 }
 
@@ -645,10 +636,7 @@ bool Target::supported() const {
 #if !defined(WITH_HEXAGON)
     bad |= arch == Target::Hexagon;
 #endif
-#if !defined(WITH_WEBASSEMBLY) || !(LLVM_VERSION >= 90)
-    // LLVM8 supports wasm, but there are fixes and improvements
-    // in trunk that may not be in 8 (or that we haven't tested with),
-    // so, for now, declare that wasm with LLVM < 9.0 is unsupported.
+#if !defined(WITH_WEBASSEMBLY)
     bad |= arch == Target::WebAssembly;
 #endif
 #if !defined(WITH_RISCV)
@@ -678,7 +666,7 @@ void Target::set_feature(Feature f, bool value) {
     features.set(f, value);
 }
 
-void Target::set_features(std::vector<Feature> features_to_set, bool value) {
+void Target::set_features(const std::vector<Feature> &features_to_set, bool value) {
     for (Feature f : features_to_set) {
         set_feature(f, value);
     }
@@ -690,7 +678,7 @@ bool Target::has_feature(Feature f) const {
     return features[f];
 }
 
-bool Target::features_any_of(std::vector<Feature> test_features) const {
+bool Target::features_any_of(const std::vector<Feature> &test_features) const {
     for (Feature f : test_features) {
         if (has_feature(f)) {
             return true;
@@ -699,7 +687,7 @@ bool Target::features_any_of(std::vector<Feature> test_features) const {
     return false;
 }
 
-bool Target::features_all_of(std::vector<Feature> test_features) const {
+bool Target::features_all_of(const std::vector<Feature> &test_features) const {
     for (Feature f : test_features) {
         if (!has_feature(f)) {
             return false;
@@ -782,6 +770,18 @@ bool Target::supports_device_api(DeviceAPI api) const {
     default:
         return has_feature(target_feature_for_device_api(api));
     }
+}
+
+DeviceAPI Target::get_required_device_api() const {
+    if (has_feature(Target::CUDA)) return DeviceAPI::CUDA;
+    if (has_feature(Target::D3D12Compute)) return DeviceAPI::D3D12Compute;
+    if (has_feature(Target::HVX_128)) return DeviceAPI::Hexagon;
+    if (has_feature(Target::HexagonDma)) return DeviceAPI::HexagonDma;
+    if (has_feature(Target::Metal)) return DeviceAPI::Metal;
+    if (has_feature(Target::OpenCL)) return DeviceAPI::OpenCL;
+    if (has_feature(Target::OpenGL)) return DeviceAPI::GLSL;
+    if (has_feature(Target::OpenGLCompute)) return DeviceAPI::OpenGLCompute;
+    return DeviceAPI::None;
 }
 
 Target::Feature target_feature_for_device_api(DeviceAPI api) {
@@ -882,7 +882,7 @@ bool Target::get_runtime_compatible_target(const Target &other, Target &result) 
 
     const std::array<Feature, 12> intersection_features = {{SSE41, AVX, AVX2, FMA, FMA4, F16C, ARMv7s, VSX, AVX512, AVX512_KNL, AVX512_Skylake, AVX512_Cannonlake}};
 
-    const std::array<Feature, 10> matching_features = {{SoftFloatABI, Debug, TSAN, ASAN, MSAN, HVX_64, HVX_128, MinGW, HexagonDma, HVX_shared_object}};
+    const std::array<Feature, 10> matching_features = {{SoftFloatABI, Debug, TSAN, ASAN, MSAN, HVX_64, HVX_128, HexagonDma, HVX_shared_object}};
 
     // bitsets need to be the same width.
     decltype(result.features) union_mask;
@@ -909,7 +909,7 @@ bool Target::get_runtime_compatible_target(const Target &other, Target &result) 
     }
 
     if ((features & matching_mask) != (other.features & matching_mask)) {
-        Internal::debug(1) << "runtime targets must agree on SoftFloatABI, Debug, TSAN, ASAN, MSAN, HVX_64, HVX_128, MinGW, HexagonDma, and HVX_shared_object\n"
+        Internal::debug(1) << "runtime targets must agree on SoftFloatABI, Debug, TSAN, ASAN, MSAN, HVX_64, HVX_128, HexagonDma, and HVX_shared_object\n"
                            << "  this:  " << *this << "\n"
                            << "  other: " << other << "\n";
         return false;

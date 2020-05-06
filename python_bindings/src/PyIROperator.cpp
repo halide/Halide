@@ -1,5 +1,7 @@
 #include "PyIROperator.h"
 
+#include <utility>
+
 #include "PyTuple.h"
 
 namespace Halide {
@@ -19,7 +21,7 @@ std::vector<Expr> args_to_vector_for_print(const py::args &args, size_t start_of
         // and fail. Normally we don't want string to be convertible
         // to Expr, but in this unusual case we do.
         try {
-            v.push_back(args[i].cast<std::string>());
+            v.emplace_back(args[i].cast<std::string>());
         } catch (...) {
             v.push_back(args[i].cast<Expr>());
         }
@@ -30,7 +32,7 @@ std::vector<Expr> args_to_vector_for_print(const py::args &args, size_t start_of
 }  // namespace
 
 void define_operators(py::module &m) {
-    m.def("max", [](py::args args) -> Expr {
+    m.def("max", [](const py::args &args) -> Expr {
         if (args.size() < 2) {
             throw py::value_error("max() must have at least 2 arguments");
         }
@@ -42,7 +44,7 @@ void define_operators(py::module &m) {
         return value;
     });
 
-    m.def("min", [](py::args args) -> Expr {
+    m.def("min", [](const py::args &args) -> Expr {
         if (args.size() < 2) {
             throw py::value_error("min() must have at least 2 arguments");
         }
@@ -58,7 +60,7 @@ void define_operators(py::module &m) {
     m.def("abs", &abs);
     m.def("absd", &absd);
 
-    m.def("select", [](py::args args) -> Expr {
+    m.def("select", [](const py::args &args) -> Expr {
         if (args.size() < 3) {
             throw py::value_error("select() must have at least 3 arguments");
         }
@@ -75,7 +77,7 @@ void define_operators(py::module &m) {
         return false_value;
     });
 
-    m.def("tuple_select", [](py::args args) -> py::tuple {
+    m.def("tuple_select", [](const py::args &args) -> py::tuple {
         _halide_user_assert(args.size() >= 3)
             << "tuple_select() must have at least 3 arguments";
         _halide_user_assert((args.size() % 2) != 0)
@@ -109,6 +111,7 @@ void define_operators(py::module &m) {
             << "tuple_select() may not mix Expr and Tuple for the condition elements.";
         return to_python_tuple(false_value);
     });
+    m.def("mux", (Expr(*)(const Expr &, const std::vector<Expr> &)) & mux);
 
     m.def("sin", &sin);
     m.def("asin", &asin);
@@ -145,16 +148,16 @@ void define_operators(py::module &m) {
     m.def("is_finite", &is_finite);
     m.def("reinterpret", (Expr(*)(Type, Expr)) & reinterpret);
     m.def("cast", (Expr(*)(Type, Expr)) & cast);
-    m.def("print", [](py::args args) -> Expr {
+    m.def("print", [](const py::args &args) -> Expr {
         return print(args_to_vector_for_print(args));
     });
     m.def(
-        "print_when", [](Expr condition, py::args args) -> Expr {
+        "print_when", [](const Expr &condition, const py::args &args) -> Expr {
             return print_when(condition, args_to_vector_for_print(args));
         },
         py::arg("condition"));
     m.def(
-        "require", [](Expr condition, Expr value, py::args args) -> Expr {
+        "require", [](const Expr &condition, const Expr &value, const py::args &args) -> Expr {
             auto v = args_to_vector<Expr>(args);
             v.insert(v.begin(), value);
             return require(condition, v);
@@ -174,7 +177,7 @@ void define_operators(py::module &m) {
     m.def("random_int", (Expr(*)(Expr)) & random_int, py::arg("seed"));
     m.def("undef", (Expr(*)(Type)) & undef);
     m.def(
-        "memoize_tag", [](Expr result, py::args cache_key_values) -> Expr {
+        "memoize_tag", [](const Expr &result, const py::args &cache_key_values) -> Expr {
             return Internal::memoize_tag_helper(result, args_to_vector<Expr>(cache_key_values));
         },
         py::arg("result"));

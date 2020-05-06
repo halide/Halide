@@ -1,7 +1,9 @@
 #include "IR.h"
+
 #include "IRMutator.h"
 #include "IRPrinter.h"
 #include "IRVisitor.h"
+#include <utility>
 
 namespace Halide {
 namespace Internal {
@@ -258,7 +260,7 @@ Expr Ramp::make(Expr base, Expr stride, int lanes) {
     node->type = base.type().with_lanes(lanes);
     node->base = std::move(base);
     node->stride = std::move(stride);
-    node->lanes = std::move(lanes);
+    node->lanes = lanes;
     return node;
 }
 
@@ -494,8 +496,8 @@ Stmt Prefetch::make(const std::string &name, const std::vector<Type> &types,
     node->types = types;
     node->bounds = bounds;
     node->prefetch = prefetch;
-    node->condition = condition;
-    node->body = body;
+    node->condition = std::move(condition);
+    node->body = std::move(body);
     return node;
 }
 
@@ -565,7 +567,7 @@ Stmt Evaluate::make(Expr v) {
     return node;
 }
 
-Expr Call::make(Function func, const std::vector<Expr> &args, int idx) {
+Expr Call::make(const Function &func, const std::vector<Expr> &args, int idx) {
     internal_assert(idx >= 0 &&
                     idx < func.outputs())
         << "Value index out of range in call to halide function\n";
@@ -580,6 +582,7 @@ namespace {
 const char *const intrinsic_op_names[] = {
     "abs",
     "absd",
+    "add_image_checks_marker",
     "alloca",
     "bitwise_and",
     "bitwise_not",
@@ -590,6 +593,7 @@ const char *const intrinsic_op_names[] = {
     "cast_mask",
     "count_leading_zeros",
     "count_trailing_zeros",
+    "declare_box_touched",
     "debug_to_file",
     "div_round_to_zero",
     "dynamic_shuffle",
@@ -612,6 +616,7 @@ const char *const intrinsic_op_names[] = {
     "mulhi_shr",
     "popcount",
     "prefetch",
+    "promise_clamped",
     "random",
     "register_destructor",
     "reinterpret",
@@ -645,9 +650,9 @@ const char *Call::get_intrinsic_name(IntrinsicOp op) {
 
 Expr Call::make(Type type, Call::IntrinsicOp op, const std::vector<Expr> &args, CallType call_type,
                 FunctionPtr func, int value_index,
-                Buffer<> image, Parameter param) {
+                const Buffer<> &image, Parameter param) {
     internal_assert(call_type == Call::Intrinsic || call_type == Call::PureIntrinsic);
-    return Call::make(type, intrinsic_op_names[op], args, call_type, func, value_index, image, param);
+    return Call::make(type, intrinsic_op_names[op], args, call_type, std::move(func), value_index, image, std::move(param));
 }
 
 Expr Call::make(Type type, const std::string &name, const std::vector<Expr> &args, CallType call_type,

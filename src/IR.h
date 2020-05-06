@@ -8,19 +8,19 @@
 #include <string>
 #include <vector>
 
-#include "Debug.h"
-#include "Error.h"
+#include "Buffer.h"
 #include "Expr.h"
-#include "Function.h"
-#include "IntrusivePtr.h"
+#include "FunctionPtr.h"
 #include "ModulusRemainder.h"
 #include "Parameter.h"
+#include "PrefetchDirective.h"
+#include "Reduction.h"
 #include "Type.h"
-#include "Util.h"
-#include "runtime/HalideBuffer.h"
 
 namespace Halide {
 namespace Internal {
+
+class Function;
 
 /** The actual IR nodes begin here. Remember that all the Expr
  * nodes also have a public "type" property */
@@ -493,6 +493,7 @@ struct Call : public ExprNode<Call> {
     enum IntrinsicOp {
         abs,
         absd,
+        add_image_checks_marker,
         alloca,
         bitwise_and,
         bitwise_not,
@@ -503,6 +504,7 @@ struct Call : public ExprNode<Call> {
         cast_mask,
         count_leading_zeros,
         count_trailing_zeros,
+        declare_box_touched,
         debug_to_file,
         div_round_to_zero,
         dynamic_shuffle,
@@ -525,6 +527,7 @@ struct Call : public ExprNode<Call> {
         mulhi_shr,  // Compute high_half(arg[0] * arg[1]) >> arg[3]. Note that this is a shift in addition to taking the upper half of multiply result. arg[3] must be an unsigned integer immediate.
         popcount,
         prefetch,
+        promise_clamped,
         random,
         register_destructor,
         reinterpret,
@@ -593,22 +596,22 @@ struct Call : public ExprNode<Call> {
 
     static Expr make(Type type, IntrinsicOp op, const std::vector<Expr> &args, CallType call_type,
                      FunctionPtr func = FunctionPtr(), int value_index = 0,
-                     Buffer<> image = Buffer<>(), Parameter param = Parameter());
+                     const Buffer<> &image = Buffer<>(), Parameter param = Parameter());
 
     static Expr make(Type type, const std::string &name, const std::vector<Expr> &args, CallType call_type,
                      FunctionPtr func = FunctionPtr(), int value_index = 0,
                      Buffer<> image = Buffer<>(), Parameter param = Parameter());
 
     /** Convenience constructor for calls to other halide functions */
-    static Expr make(Function func, const std::vector<Expr> &args, int idx = 0);
+    static Expr make(const Function &func, const std::vector<Expr> &args, int idx = 0);
 
     /** Convenience constructor for loads from concrete images */
-    static Expr make(Buffer<> image, const std::vector<Expr> &args) {
+    static Expr make(const Buffer<> &image, const std::vector<Expr> &args) {
         return make(image.type(), image.name(), args, Image, FunctionPtr(), 0, image, Parameter());
     }
 
     /** Convenience constructor for loads from images parameters */
-    static Expr make(Parameter param, const std::vector<Expr> &args) {
+    static Expr make(const Parameter &param, const std::vector<Expr> &args) {
         return make(param.type(), param.name(), args, Image, FunctionPtr(), 0, Buffer<>(), param);
     }
 
@@ -663,15 +666,15 @@ struct Variable : public ExprNode<Variable> {
     }
 
     static Expr make(Type type, const std::string &name, Parameter param) {
-        return make(type, name, Buffer<>(), param, ReductionDomain());
+        return make(type, name, Buffer<>(), std::move(param), ReductionDomain());
     }
 
-    static Expr make(Type type, const std::string &name, Buffer<> image) {
+    static Expr make(Type type, const std::string &name, const Buffer<> &image) {
         return make(type, name, image, Parameter(), ReductionDomain());
     }
 
     static Expr make(Type type, const std::string &name, ReductionDomain reduction_domain) {
-        return make(type, name, Buffer<>(), Parameter(), reduction_domain);
+        return make(type, name, Buffer<>(), Parameter(), std::move(reduction_domain));
     }
 
     static Expr make(Type type, const std::string &name, Buffer<> image,

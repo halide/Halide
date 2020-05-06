@@ -317,8 +317,14 @@ WEAK int map_arguments(void *user_context, int arg_count,
         if ((arg_flags[i] & flag_mask) != flag_value) continue;
         remote_buffer &mapped_arg = mapped_args[mapped_count++];
         if (arg_flags[i] != 0) {
-            uint64_t device = *(uint64_t *)args[i];
-            uint8_t *host = *(uint8_t **)((uint8_t *)args[i] + sizeof(uint64_t));
+            // This is the way that HexagonOffload packages arguments for us.
+            struct hexagon_device_pointer {
+                uint64_t dev;
+                uint8_t *host;
+            };
+            const hexagon_device_pointer *b = (hexagon_device_pointer *)args[i];
+            uint64_t device = b->dev;
+            uint8_t *host = b->host;
             if (device) {
                 // This argument has a device handle.
                 ion_device_handle *ion_handle = reinterpret<ion_device_handle *>(device);

@@ -80,7 +80,7 @@ public:
     Expr predicate() const;
 
     /** Set the predicate, replacing any previously set predicate. */
-    void set_predicate(Expr);
+    void set_predicate(const Expr &);
 
     /** Split predicate into vector of ANDs. If there is no predicate (i.e. all
      * iteration domain in this reduction domain is valid), this returns an

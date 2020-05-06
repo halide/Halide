@@ -5,11 +5,16 @@
  * Defines the internal representation of the schedule for a function
  */
 
+#include <map>
+#include <string>
+#include <utility>
+#include <vector>
+
+#include "DeviceAPI.h"
 #include "Expr.h"
 #include "FunctionPtr.h"
 #include "Parameter.h"
-
-#include <map>
+#include "PrefetchDirective.h"
 
 namespace Halide {
 
@@ -84,26 +89,6 @@ enum class LoopAlignStrategy {
     Auto
 };
 
-/** Different ways to handle accesses outside the original extents in a prefetch. */
-enum class PrefetchBoundStrategy {
-    /** Clamp the prefetched exprs by intersecting the prefetched region with
-     * the original extents. This may make the exprs of the prefetched region
-     * more complicated. */
-    Clamp,
-
-    /** Guard the prefetch with if-guards that ignores the prefetch if
-     * any of the prefetched region ever goes beyond the original extents
-     * (i.e. all or nothing). */
-    GuardWithIf,
-
-    /** Leave the prefetched exprs as are (no if-guards around the prefetch
-     * and no intersecting with the original extents). This makes the prefetch
-     * exprs simpler but this may cause prefetching of region outside the original
-     * extents. This is good if prefetch won't fault when accessing region
-     * outside the original extents. */
-    NonFaulting
-};
-
 /** A reference to a site in a Halide statement at the top of the
  * body of a particular for loop. Evaluating a region of a halide
  * function is done by generating a loop nest that spans its
@@ -159,7 +144,7 @@ class LoopLevel {
     Internal::IntrusivePtr<Internal::LoopLevelContents> contents;
 
     explicit LoopLevel(Internal::IntrusivePtr<Internal::LoopLevelContents> c)
-        : contents(c) {
+        : contents(std::move(c)) {
     }
     LoopLevel(const std::string &func_name, const std::string &var_name,
               bool is_rvar, int stage_index, bool locked = false);
@@ -171,8 +156,8 @@ public:
 
     /** Identify the loop nest corresponding to some dimension of some function */
     // @{
-    LoopLevel(const Internal::Function &f, VarOrRVar v, int stage_index = -1);
-    LoopLevel(const Func &f, VarOrRVar v, int stage_index = -1);
+    LoopLevel(const Internal::Function &f, const VarOrRVar &v, int stage_index = -1);
+    LoopLevel(const Func &f, const VarOrRVar &v, int stage_index = -1);
     // @}
 
     /** Construct an undefined LoopLevel. Calling any method on an undefined
@@ -377,15 +362,6 @@ struct FusedPair {
     }
 };
 
-struct PrefetchDirective {
-    std::string name;
-    std::string var;
-    Expr offset;
-    PrefetchBoundStrategy strategy;
-    // If it's a prefetch load from an image parameter, this points to that.
-    Parameter param;
-};
-
 struct FuncScheduleContents;
 struct StageScheduleContents;
 struct FunctionContents;
@@ -399,7 +375,7 @@ class FuncSchedule {
 
 public:
     FuncSchedule(IntrusivePtr<FuncScheduleContents> c)
-        : contents(c) {
+        : contents(std::move(c)) {
     }
     FuncSchedule(const FuncSchedule &other)
         : contents(other.contents) {
@@ -497,7 +473,7 @@ class StageSchedule {
 
 public:
     StageSchedule(IntrusivePtr<StageScheduleContents> c)
-        : contents(c) {
+        : contents(std::move(c)) {
     }
     StageSchedule(const StageSchedule &other)
         : contents(other.contents) {

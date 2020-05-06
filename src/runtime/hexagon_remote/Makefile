@@ -3,13 +3,13 @@
 # in the Halide repo; this is intended to allow end users to compile for
 # Hexagon targets without requiring the Hexagon SDK to be present on the build
 # system. (The Hexagon SDK is of course required to build the glue code itself.)
-# At present, only Linux systems are supported for building and testing; this
-# could probably be made to work on Windows (via MinGW) with a little effort.
+# At present, only Linux systems are supported for building and testing.
 #
 # In order to build this, you'll need to ensure that the following
 # env vars are set correctly:
 #
-# HEXAGON_SDK_ROOT   : path to Qualcom Hexagon SDK
+# SDK_ROOT           : path to Qualcomm SDK storage
+# HEXAGON_SDK_ROOT   : path to Qualcomm Hexagon SDK
 # HEXAGON_TOOLS_ROOT : path to Qualcomm Hexagon Tools
 # HEXAGON_QAIC       : path to Qualcomm qaic compiler
 #
@@ -23,7 +23,8 @@
 # from the SDK that cannot be redistributed with Halide).
 #
 
-HEXAGON_SDK_ROOT ?= ${HOME}/Qualcomm/Hexagon_SDK/3.3.3
+SDK_ROOT ?= ${HOME}/Qualcomm
+HEXAGON_SDK_ROOT ?= ${SDK_ROOT}/Hexagon_SDK/3.3.3
 HEXAGON_TOOLS_ROOT ?= ${HEXAGON_SDK_ROOT}/tools/HEXAGON_Tools/8.1.05
 
 ANDROID_NDK_ROOT ?= ${HEXAGON_SDK_ROOT}/tools/android-ndk-r10d

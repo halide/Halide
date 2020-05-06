@@ -322,7 +322,7 @@ bool mul_would_overflow(int bits, int64_t a, int64_t b);
 template<typename T>
 struct ScopedValue {
     T &var;
-    const T old_value;
+    T old_value;
     /** Preserve the old value, restored at dtor time */
     ScopedValue(T &var)
         : var(var), old_value(var) {
@@ -340,7 +340,7 @@ struct ScopedValue {
     }
     // allow move but not copy
     ScopedValue(const ScopedValue &that) = delete;
-    ScopedValue(ScopedValue &&that) = default;
+    ScopedValue(ScopedValue &&that) noexcept = default;
 };
 
 // Wrappers for some C++14-isms that are useful and trivially implementable

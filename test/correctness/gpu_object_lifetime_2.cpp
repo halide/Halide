@@ -52,6 +52,6 @@ int main(int argc, char *argv[]) {
         return ret;
     }
 
-    std::cout << "Success!" << std::endl;
+    printf("Success!\n");
     return 0;
 }

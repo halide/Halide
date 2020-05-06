@@ -1,6 +1,7 @@
 #include "PyFunc.h"
 
-#include "PyBinaryOperators.h"
+#include <utility>
+
 #include "PyBuffer.h"
 #include "PyExpr.h"
 #include "PyFuncRef.h"
@@ -86,10 +87,7 @@ void define_func(py::module &m) {
     define_var_or_rvar(m);
     define_loop_level(m);
 
-    // TODO: ParamMap to its own file?
-    auto param_map_class =
-        py::class_<ParamMap>(m, "ParamMap")
-            .def(py::init<>());
+    // TODO: add ParamMap support.
 
     // Deliberately not supported, because they don't seem to make sense for Python:
     // - set_custom_allocator()
@@ -118,57 +116,57 @@ void define_func(py::module &m) {
 
             .def(
                 "realize",
-                [](Func &f, Buffer<> buffer, const Target &target, const ParamMap &param_map) -> void {
+                [](Func &f, Buffer<> buffer, const Target &target) -> void {
                     f.realize(buffer, target);
                 },
-                py::arg("dst"), py::arg("target") = Target(), py::arg("param_map") = ParamMap())
+                py::arg("dst"), py::arg("target") = Target())
 
             // This will actually allow a list-of-buffers as well as a tuple-of-buffers, but that's OK.
             .def(
                 "realize",
-                [](Func &f, std::vector<Buffer<>> buffers, const Target &t, const ParamMap &param_map) -> void {
+                [](Func &f, std::vector<Buffer<>> buffers, const Target &t) -> void {
                     f.realize(Realization(buffers), t);
                 },
-                py::arg("dst"), py::arg("target") = Target(), py::arg("param_map") = ParamMap())
+                py::arg("dst"), py::arg("target") = Target())
 
             .def(
                 "realize",
-                [](Func &f, std::vector<int32_t> sizes, const Target &target, const ParamMap &param_map) -> py::object {
-                    return realization_to_object(f.realize(sizes, target, param_map));
+                [](Func &f, const std::vector<int32_t> &sizes, const Target &target) -> py::object {
+                    return realization_to_object(f.realize(sizes, target));
                 },
-                py::arg("sizes") = std::vector<int32_t>{}, py::arg("target") = Target(), py::arg("param_map") = ParamMap())
-
-            // TODO: deprecate in favor of std::vector<int32_t> size version?
-            .def(
-                "realize",
-                [](Func &f, int x_size, const Target &target, const ParamMap &param_map) -> py::object {
-                    return realization_to_object(f.realize(x_size, target, param_map));
-                },
-                py::arg("x_size"), py::arg("target") = Target(), py::arg("param_map") = ParamMap())
+                py::arg("sizes") = std::vector<int32_t>{}, py::arg("target") = Target())
 
             // TODO: deprecate in favor of std::vector<int32_t> size version?
             .def(
                 "realize",
-                [](Func &f, int x_size, int y_size, const Target &target, const ParamMap &param_map) -> py::object {
-                    return realization_to_object(f.realize(x_size, y_size, target, param_map));
+                [](Func &f, int x_size, const Target &target) -> py::object {
+                    return realization_to_object(f.realize(x_size, target));
                 },
-                py::arg("x_size"), py::arg("y_size"), py::arg("target") = Target(), py::arg("param_map") = ParamMap())
+                py::arg("x_size"), py::arg("target") = Target())
 
             // TODO: deprecate in favor of std::vector<int32_t> size version?
             .def(
                 "realize",
-                [](Func &f, int x_size, int y_size, int z_size, const Target &target, const ParamMap &param_map) -> py::object {
-                    return realization_to_object(f.realize(x_size, y_size, z_size, target, param_map));
+                [](Func &f, int x_size, int y_size, const Target &target) -> py::object {
+                    return realization_to_object(f.realize(x_size, y_size, target));
                 },
-                py::arg("x_size"), py::arg("y_size"), py::arg("z_size"), py::arg("target") = Target(), py::arg("param_map") = ParamMap())
+                py::arg("x_size"), py::arg("y_size"), py::arg("target") = Target())
 
             // TODO: deprecate in favor of std::vector<int32_t> size version?
             .def(
                 "realize",
-                [](Func &f, int x_size, int y_size, int z_size, int w_size, const Target &target, const ParamMap &param_map) -> py::object {
-                    return realization_to_object(f.realize(x_size, y_size, z_size, w_size, target, param_map));
+                [](Func &f, int x_size, int y_size, int z_size, const Target &target) -> py::object {
+                    return realization_to_object(f.realize(x_size, y_size, z_size, target));
                 },
-                py::arg("x_size"), py::arg("y_size"), py::arg("z_size"), py::arg("w_size"), py::arg("target") = Target(), py::arg("param_map") = ParamMap())
+                py::arg("x_size"), py::arg("y_size"), py::arg("z_size"), py::arg("target") = Target())
+
+            // TODO: deprecate in favor of std::vector<int32_t> size version?
+            .def(
+                "realize",
+                [](Func &f, int x_size, int y_size, int z_size, int w_size, const Target &target) -> py::object {
+                    return realization_to_object(f.realize(x_size, y_size, z_size, w_size, target));
+                },
+                py::arg("x_size"), py::arg("y_size"), py::arg("z_size"), py::arg("w_size"), py::arg("target") = Target())
 
             .def("defined", &Func::defined)
             .def("name", &Func::name)
@@ -185,16 +183,16 @@ void define_func(py::module &m) {
             .def("bound", &Func::bound, py::arg("var"), py::arg("min"), py::arg("extent"))
 
             .def("reorder_storage", (Func & (Func::*)(const std::vector<Var> &)) & Func::reorder_storage, py::arg("dims"))
-            .def("reorder_storage", [](Func &func, py::args args) -> Func & {
+            .def("reorder_storage", [](Func &func, const py::args &args) -> Func & {
                 return func.reorder_storage(args_to_vector<Var>(args));
             })
 
-            .def("compute_at", (Func & (Func::*)(Func, Var)) & Func::compute_at, py::arg("f"), py::arg("var"))
-            .def("compute_at", (Func & (Func::*)(Func, RVar)) & Func::compute_at, py::arg("f"), py::arg("var"))
+            .def("compute_at", (Func & (Func::*)(const Func &, const Var &)) & Func::compute_at, py::arg("f"), py::arg("var"))
+            .def("compute_at", (Func & (Func::*)(const Func &, const RVar &)) & Func::compute_at, py::arg("f"), py::arg("var"))
             .def("compute_at", (Func & (Func::*)(LoopLevel)) & Func::compute_at, py::arg("loop_level"))
 
-            .def("store_at", (Func & (Func::*)(Func, Var)) & Func::store_at, py::arg("f"), py::arg("var"))
-            .def("store_at", (Func & (Func::*)(Func, RVar)) & Func::store_at, py::arg("f"), py::arg("var"))
+            .def("store_at", (Func & (Func::*)(const Func &, const Var &)) & Func::store_at, py::arg("f"), py::arg("var"))
+            .def("store_at", (Func & (Func::*)(const Func &, const RVar &)) & Func::store_at, py::arg("f"), py::arg("var"))
             .def("store_at", (Func & (Func::*)(LoopLevel)) & Func::store_at, py::arg("loop_level"))
 
             .def("memoize", &Func::memoize)
@@ -272,19 +270,23 @@ void define_func(py::module &m) {
             .def("output_buffer", &Func::output_buffer)
             .def("output_buffers", &Func::output_buffers)
 
-            .def("infer_input_bounds", (void (Func::*)(int, int, int, int, const ParamMap &)) & Func::infer_input_bounds, py::arg("x_size") = 0, py::arg("y_size") = 0, py::arg("z_size") = 0, py::arg("w_size") = 0, py::arg("param_map") = ParamMap())
+            .def(
+                "infer_input_bounds", [](Func &f, int x_size, int y_size, int z_size, int w_size) -> void {
+                    f.infer_input_bounds(x_size, y_size, z_size, w_size);
+                },
+                py::arg("x_size") = 0, py::arg("y_size") = 0, py::arg("z_size") = 0, py::arg("w_size") = 0)
 
             .def(
-                "infer_input_bounds", [](Func &f, Buffer<> buffer, const ParamMap &param_map) -> void {
-                    f.infer_input_bounds(buffer, param_map);
+                "infer_input_bounds", [](Func &f, Buffer<> buffer) -> void {
+                    f.infer_input_bounds(buffer);
                 },
-                py::arg("dst"), py::arg("param_map") = ParamMap())
+                py::arg("dst"))
 
             .def(
-                "infer_input_bounds", [](Func &f, std::vector<Buffer<>> buffer, const ParamMap &param_map) -> void {
-                    f.infer_input_bounds(Realization(buffer), param_map);
+                "infer_input_bounds", [](Func &f, std::vector<Buffer<>> buffer) -> void {
+                    f.infer_input_bounds(Realization(buffer));
                 },
-                py::arg("dst"), py::arg("param_map") = ParamMap())
+                py::arg("dst"))
 
             .def("in_", (Func(Func::*)(const Func &)) & Func::in, py::arg("f"))
             .def("in_", (Func(Func::*)(const std::vector<Func> &fs)) & Func::in, py::arg("fs"))

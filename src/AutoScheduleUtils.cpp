@@ -125,7 +125,7 @@ vector<Dim> &get_stage_dims(const Function &f, int stage_num) {
     return def.schedule().dims();
 }
 
-DimBounds get_stage_bounds(Function f, int stage_num, const DimBounds &pure_bounds) {
+DimBounds get_stage_bounds(const Function &f, int stage_num, const DimBounds &pure_bounds) {
     DimBounds bounds;
     // Assume that the domain of the pure vars across all the update
     // definitions is the same. This may not be true and can result in
@@ -146,7 +146,7 @@ DimBounds get_stage_bounds(Function f, int stage_num, const DimBounds &pure_boun
     return bounds;
 }
 
-vector<DimBounds> get_stage_bounds(Function f, const DimBounds &pure_bounds) {
+vector<DimBounds> get_stage_bounds(const Function &f, const DimBounds &pure_bounds) {
     vector<DimBounds> stage_bounds;
     size_t num_stages = f.updates().size() + 1;
     for (size_t s = 0; s < num_stages; s++) {
@@ -189,7 +189,7 @@ Expr perform_inline(Expr e, const map<string, Function> &env,
         // inlining works.
         for (const auto &call : calls) {
             if (inlines.find(call) != inlines.end()) {
-                Function prod_func = env.at(call);
+                const Function &prod_func = env.at(call);
                 // Impure functions cannot be inlined.
                 internal_assert(prod_func.is_pure());
                 // Inline the function call and set the flag to check for
@@ -237,9 +237,10 @@ set<string> get_parents(Function f, int stage) {
 
 void disp_regions(const map<string, Box> &regions) {
     for (const auto &reg : regions) {
-        debug(0) << reg.first << " -> ";
-        debug(0) << reg.second;
-        debug(0) << "\n";
+        debug(0) << reg.first
+                 << " -> "
+                 << reg.second
+                 << "\n";
     }
 }
 
@@ -264,13 +265,13 @@ bool inline_all_trivial_functions(const vector<Function> &outputs,
             debug(5) << "Skip inlining " << order[i] << " since it is an output\n";
             continue;
         }
-        Function f1 = env.at(order[i]);
+        const Function &f1 = env.at(order[i]);
         if (is_func_trivial_to_inline(f1)) {
             inlined = true;
             debug(4) << "Function \"" << order[i] << "\" is trivial to inline\n";
             for (int j = i + 1; j < (int)order.size() - (int)outputs.size(); ++j) {
                 internal_assert(order[i] != order[j]);
-                Function f2 = env.at(order[j]);
+                const Function &f2 = env.at(order[j]);
 
                 if (f2.has_extern_definition() && !f1.is_wrapper()) {
                     debug(5) << "Skip inlining of function \"" << f1.name()
@@ -293,7 +294,7 @@ bool inline_all_trivial_functions(const vector<Function> &outputs,
 // otherwise, return an empty string.
 string is_func_called_element_wise(const vector<string> &order, size_t index,
                                    const map<string, Function> &env) {
-    Function f1 = env.at(order[index]);
+    const Function &f1 = env.at(order[index]);
     if (f1.has_extern_definition() || !f1.can_be_inlined()) {
         return "";
     }
@@ -301,7 +302,7 @@ string is_func_called_element_wise(const vector<string> &order, size_t index,
 
     string caller = "";
     for (size_t i = index + 1; i < order.size(); ++i) {
-        Function f2 = env.at(order[i]);
+        const Function &f2 = env.at(order[i]);
         if (f2.has_extern_definition()) {
             continue;
         }
@@ -373,15 +374,15 @@ bool inline_all_element_wise_functions(const vector<Function> &outputs,
 }
 
 namespace {
-void check(Expr input, Expr expected) {
+void check(const Expr &input, Expr expected) {
     Expr result = simplify(substitute_var_estimates(input));
     expected = simplify(expected);
     if (!equal(result, expected)) {
         internal_error
             << "\nsubstitute_var_estimates() failure:\n"
-            << "Input: " << input << '\n'
-            << "Result: " << result << '\n'
-            << "Expected result: " << expected << '\n';
+            << "Input: " << input << "\n"
+            << "Result: " << result << "\n"
+            << "Expected result: " << expected << "\n";
     }
 }
 }  // anonymous namespace

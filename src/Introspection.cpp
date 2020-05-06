@@ -5,6 +5,7 @@
 #include "Debug.h"
 #include "Error.h"
 #include "LLVM_Headers.h"
+#include "Util.h"
 
 #include <iostream>
 #include <sstream>
@@ -204,23 +205,24 @@ class DebugSections {
 public:
     bool working;
 
-    DebugSections(std::string binary)
+    DebugSections(const std::string &binary)
         : calibrated(false), working(false) {
+        std::string binary_path = binary;
 #ifdef __APPLE__
-        size_t last_slash = binary.rfind('/');
+        size_t last_slash = binary_path.rfind('/');
         if (last_slash == std::string::npos ||
-            last_slash >= binary.size() - 1) {
+            last_slash >= binary_path.size() - 1) {
             last_slash = 0;
         } else {
             last_slash++;
         }
-        std::string file_only = binary.substr(last_slash, binary.size() - last_slash);
-        binary += ".dSYM/Contents/Resources/DWARF/" + file_only;
+        std::string file_only = binary_path.substr(last_slash, binary_path.size() - last_slash);
+        binary_path += ".dSYM/Contents/Resources/DWARF/" + file_only;
 #endif
 
-        debug(5) << "Loading " << binary << "\n";
+        debug(5) << "Loading " << binary_path << "\n";
 
-        load_and_parse_object_file(binary);
+        load_and_parse_object_file(binary_path);
     }
 
     int count_trailing_zeros(int64_t x) {
@@ -398,7 +400,7 @@ public:
                     pos_bytes < array_size_bytes &&
                     pos_bytes % elem_type->size == 0) {
                     std::ostringstream oss;
-                    oss << v.name << '[' << (pos_bytes / elem_type->size) << ']';
+                    oss << v.name << "[" << (pos_bytes / elem_type->size) << "]";
                     debug(5) << "Successful match to array element\n";
                     return oss.str();
                 } else {
@@ -576,7 +578,7 @@ public:
                     addr -= containing_elem * elem_type->size;
                     debug(5) << "Query belongs to this array. Adjusting query address backwards to "
                              << std::hex << addr << std::dec << "\n";
-                    name << obj.members[i].name << '[' << containing_elem << ']';
+                    name << obj.members[i].name << "[" << containing_elem << "]";
                 }
             } else if (t->type == TypeInfo::Struct ||
                        t->type == TypeInfo::Class ||
@@ -586,7 +588,7 @@ public:
                 uint64_t struct_end_addr = struct_start_addr + t->size;
                 debug(5) << "Struct runs from " << std::hex << struct_start_addr << " to " << struct_end_addr << "\n";
                 if (addr >= struct_start_addr && addr < struct_end_addr) {
-                    name << obj.members[i].name << '.';
+                    name << obj.members[i].name << ".";
                 }
             }
         }
@@ -733,7 +735,7 @@ public:
                     pos_bytes < array_size_bytes &&
                     pos_bytes % elem_type->size == 0) {
                     std::ostringstream oss;
-                    oss << var.name << '[' << (pos_bytes / elem_type->size) << ']';
+                    oss << var.name << "[" << (pos_bytes / elem_type->size) << "]";
                     debug(5) << "Successful match to array element\n";
                     return oss.str();
                 } else {
@@ -966,7 +968,6 @@ private:
             iter->getName(name);
 #endif
             debug(2) << "Section: " << name.str() << "\n";
-#if LLVM_VERSION >= 90
             // ignore errors, just leave strings empty
             auto e = iter->getContents();
             if (e) {
@@ -982,19 +983,6 @@ private:
                     debug_ranges = *e;
                 }
             }
-#else
-            if (name == prefix + "debug_info") {
-                iter->getContents(debug_info);
-            } else if (name == prefix + "debug_abbrev") {
-                iter->getContents(debug_abbrev);
-            } else if (name == prefix + "debug_str") {
-                iter->getContents(debug_str);
-            } else if (name == prefix + "debug_line") {
-                iter->getContents(debug_line);
-            } else if (name == prefix + "debug_ranges") {
-                iter->getContents(debug_ranges);
-            }
-#endif
         }
 
         if (debug_info.empty() ||
@@ -1169,9 +1157,9 @@ private:
                     continue;
                 }
 
-                assert(abbrev_code <= entry_formats.size());
+                internal_assert(abbrev_code <= entry_formats.size());
                 const EntryFormat &fmt = entry_formats[abbrev_code - 1];
-                assert(fmt.code == abbrev_code);
+                internal_assert(fmt.code == abbrev_code);
 
                 LocalVariable var;
                 GlobalVariable gvar;
@@ -1225,7 +1213,7 @@ private:
                     }
                     case 2:  // There is no case 2
                     {
-                        assert(false && "What's form 2?");
+                        internal_error << "What's form 2?";
                         break;
                     }
                     case 3:  // block2 (2 byte length followed by payload)
@@ -1348,7 +1336,7 @@ private:
                     }
                     case 22:  // indirect
                     {
-                        assert(false && "Can't handle indirect form");
+                        internal_error << "Can't handle indirect form";
                         break;
                     }
                     case 23:  // sec_offset
@@ -1382,7 +1370,7 @@ private:
                         break;
                     }
                     default:
-                        assert(false && "Unknown form");
+                        internal_error << "Unknown form";
                         break;
                     }
 
@@ -1623,7 +1611,7 @@ private:
 
                 } else if (fmt.tag == tag_function) {
                     if (fmt.has_children) {
-                        func_stack.push_back({func, stack_depth});
+                        func_stack.emplace_back(func, stack_depth);
                     } else {
                         functions.push_back(func);
                     }
@@ -1632,7 +1620,7 @@ private:
                            fmt.tag == tag_array_type ||
                            fmt.tag == tag_base_type) {
                     if (fmt.has_children) {
-                        type_stack.push_back({type_info, stack_depth});
+                        type_stack.emplace_back(type_info, stack_depth);
                     } else {
                         types.push_back(type_info);
                     }
@@ -1646,11 +1634,11 @@ private:
                     if (namespace_name.empty()) {
                         namespace_name = "_";
                     }
-                    namespace_stack.push_back({namespace_name, stack_depth});
+                    namespace_stack.emplace_back(namespace_name, stack_depth);
                 } else if ((fmt.tag == tag_inlined_subroutine ||
                             fmt.tag == tag_lexical_block) &&
                            live_ranges.size() && fmt.has_children) {
-                    live_range_stack.push_back({live_ranges, stack_depth});
+                    live_range_stack.emplace_back(live_ranges, stack_depth);
                 }
             }
         }
@@ -1760,27 +1748,27 @@ private:
             TypeInfo *t = &types[i];
             while (t) {
                 if (t->type == TypeInfo::Pointer) {
-                    suffix.push_back("*");
-                    assert(t->members.size() == 1);
+                    suffix.emplace_back("*");
+                    internal_assert(t->members.size() == 1);
                     t = t->members[0].type;
                 } else if (t->type == TypeInfo::Reference) {
-                    suffix.push_back("&");
-                    assert(t->members.size() == 1);
+                    suffix.emplace_back("&");
+                    internal_assert(t->members.size() == 1);
                     t = t->members[0].type;
                 } else if (t->type == TypeInfo::Const) {
-                    suffix.push_back("const");
-                    assert(t->members.size() == 1);
+                    suffix.emplace_back("const");
+                    internal_assert(t->members.size() == 1);
                     t = t->members[0].type;
                 } else if (t->type == TypeInfo::Array) {
                     // Do we know the size?
                     if (t->size != 0) {
                         std::ostringstream oss;
-                        oss << '[' << t->size << ']';
+                        oss << "[" << t->size << "]";
                         suffix.push_back(oss.str());
                     } else {
-                        suffix.push_back("[]");
+                        suffix.emplace_back("[]");
                     }
-                    assert(t->members.size() == 1);
+                    internal_assert(t->members.size() == 1);
                     t = t->members[0].type;
                 } else {
                     break;
@@ -1945,7 +1933,7 @@ private:
             debug(5) << "Parsing compilation unit from " << off << " to " << unit_end << "\n";
 
             uint16_t version = e.getU16(&off);
-            assert(version >= 2);
+            internal_assert(version >= 2);
 
             uint32_t header_length = e.getU32(&off);
             llvm_offset_t end_header_off = off + header_length;
@@ -1968,11 +1956,11 @@ private:
 
             vector<std::string> include_dirs;
             // The current directory is implicitly the first dir.
-            include_dirs.push_back(".");
+            include_dirs.emplace_back(".");
             while (off < end_header_off) {
                 const char *s = e.getCStr(&off);
                 if (s && s[0]) {
-                    include_dirs.push_back(s);
+                    include_dirs.emplace_back(s);
                 } else {
                     break;
                 }
@@ -1989,14 +1977,14 @@ private:
                     uint64_t length = e.getULEB128(&off);
                     (void)mod_time;
                     (void)length;
-                    assert(dir <= include_dirs.size());
+                    internal_assert(dir <= include_dirs.size());
                     source_files.push_back(include_dirs[dir] + "/" + name);
                 } else {
                     break;
                 }
             }
 
-            assert(off == end_header_off && "Failed parsing section .debug_line");
+            internal_assert(off == end_header_off) << "Failed parsing section .debug_line";
 
             // Now parse the table. It uses a state machine with the following fields:
             struct {
@@ -2064,7 +2052,7 @@ private:
                         uint64_t length = e.getULEB128(&off);
                         (void)mod_time;
                         (void)length;
-                        assert(dir_index < include_dirs.size());
+                        internal_assert(dir_index < include_dirs.size());
                         source_files.push_back(include_dirs[dir_index] + "/" + name);
                         break;
                     }
@@ -2209,7 +2197,7 @@ private:
         uint8_t byte = 0;
 
         while (1) {
-            assert(shift < 57);
+            internal_assert(shift < 57);
             byte = *ptr++;
             result |= (uint64_t)(byte & 0x7f) << shift;
             shift += 7;
@@ -2233,7 +2221,7 @@ private:
         uint8_t byte = 0;
 
         while (1) {
-            assert(shift < 57);
+            internal_assert(shift < 57);
             byte = *ptr++;
             result |= (uint64_t)(byte & 0x7f) << shift;
             shift += 7;
@@ -2294,6 +2282,12 @@ void deregister_heap_object(const void *obj, size_t size) {
 bool saves_frame_pointer(void *fn) {
     // On x86-64, if we save the frame pointer, the first two instructions should be pushing the stack pointer and the frame pointer:
     const uint8_t *ptr = (const uint8_t *)(fn);
+    // Skip over a valid-branch-target marker (endbr64), if there is
+    // one. These sometimes start functions to help detect control flow
+    // violations.
+    if (ptr[0] == 0xf3 && ptr[1] == 0x0f && ptr[2] == 0x1e && ptr[3] == 0xfa) {
+        ptr += 4;
+    }
     return ptr[0] == 0x55;  // push %rbp
 }
 

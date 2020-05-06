@@ -1,4 +1,6 @@
 #include "Error.h"
+#include "Introspection.h"
+#include "Util.h"  // for get_env_variable
 
 #include <signal.h>
 
@@ -118,7 +120,7 @@ ErrorReport::~ErrorReport()
 #endif
 {
     if (!msg.str().empty() && msg.str().back() != '\n') {
-        msg << '\n';
+        msg << "\n";
     }
 
     if (custom_error_reporter != nullptr) {

@@ -1,0 +1,5 @@
+test_group(apps bilateral_grid)
+test_group(apps blur)
+test_group(apps erode)
+test_group(apps interpolate)
+test_group(apps local_laplacian)

@@ -12,7 +12,7 @@ int main(int argc, char **argv) {
     Buffer<float> noise(size, size);
     for (int i = 0; i < size; i++) {
         for (int j = 0; j < size; j++) {
-            noise(j, i) = (float)rand() / RAND_MAX;
+            noise(j, i) = (float)rand() / (float)RAND_MAX;
         }
     }
 

@@ -1,8 +1,10 @@
 #include <cmath>
 #include <fstream>
 #include <unordered_map>
+#include <utility>
 
 #include "BoundaryConditions.h"
+#include "CompilerLogger.h"
 #include "Derivative.h"
 #include "Generator.h"
 #include "IRPrinter.h"
@@ -173,7 +175,7 @@ void ValueTracker::track_values(const std::string &name, const std::vector<Expr>
 std::vector<Expr> parameter_constraints(const Parameter &p) {
     internal_assert(p.defined());
     std::vector<Expr> values;
-    values.push_back(Expr(p.host_alignment()));
+    values.emplace_back(p.host_alignment());
     if (p.is_buffer()) {
         for (int i = 0; i < p.dimensions(); ++i) {
             values.push_back(p.min_constraint(i));
@@ -637,12 +639,12 @@ void StubEmitter::emit() {
 }
 
 GeneratorStub::GeneratorStub(const GeneratorContext &context,
-                             GeneratorFactory generator_factory)
+                             const GeneratorFactory &generator_factory)
     : generator(generator_factory(context)) {
 }
 
 GeneratorStub::GeneratorStub(const GeneratorContext &context,
-                             GeneratorFactory generator_factory,
+                             const GeneratorFactory &generator_factory,
                              const GeneratorParamsMap &generator_params,
                              const std::vector<std::vector<Internal::StubInput>> &inputs)
     : GeneratorStub(context, generator_factory) {
@@ -752,9 +754,10 @@ int generate_filter_main_inner(int argc, char **argv, std::ostream &cerr) {
         "     in TensorFlow or PyTorch. See Generator::build_gradient_module() documentation.\n"
         "\n"
         " -e  A comma separated list of files to emit. Accepted values are:\n"
-        "     [assembly, bitcode, cpp, h, html, o, static_library,\n"
-        "      stmt, cpp_stub, schedule, registration, featurization, pytorch_wrapper].\n"
-        "     If omitted, default value is [static_library, h, registration].\n"
+        "     [assembly, bitcode, c_header, c_source, cpp_stub, featurization,\n"
+        "      llvm_assembly, object, python_extension, pytorch_wrapper, registration,\n"
+        "      schedule, static_library, stmt, stmt_html, compiler_log].\n"
+        "     If omitted, default value is [c_header, static_library, registration].\n"
         "\n"
         " -p  A comma-separated list of shared libraries that will be loaded before the\n"
         "     generator is run. Useful for custom auto-schedulers. The generator must\n"
@@ -852,6 +855,7 @@ int generate_filter_main_inner(int argc, char **argv, std::ostream &cerr) {
         }
         return 1;
     }
+
     std::string function_name = flags_info["-f"];
     if (function_name.empty()) {
         // If -f isn't specified, assume function name = generator name.
@@ -916,7 +920,7 @@ int generate_filter_main_inner(int argc, char **argv, std::ostream &cerr) {
                 for (auto iter = output_info.cbegin(); iter != end; ++iter) {
                     cerr << iter->second.name;
                     if (iter != last) {
-                        cerr << ' ';
+                        cerr << " ";
                     }
                 }
                 cerr << "], ignoring.\n";
@@ -927,6 +931,42 @@ int generate_filter_main_inner(int argc, char **argv, std::ostream &cerr) {
         }
     }
 
+    // Allow quick-n-dirty use of compiler logging via HL_DEBUG_COMPILER_LOGGER env var
+    const bool do_compiler_logging = outputs.count(Output::compiler_log) ||
+                                     (get_env_variable("HL_DEBUG_COMPILER_LOGGER") == "1");
+
+    const bool obfuscate_compiler_logging = get_env_variable("HL_OBFUSCATE_COMPILER_LOGGER") == "1";
+
+    const CompilerLoggerFactory no_compiler_logger_factory =
+        [](const std::string &, const Target &) -> std::unique_ptr<CompilerLogger> {
+        return nullptr;
+    };
+
+    const CompilerLoggerFactory json_compiler_logger_factory =
+        [&](const std::string &function_name, const Target &target) -> std::unique_ptr<CompilerLogger> {
+        // rebuild generator_args from the map so that they are always canonical
+        std::string generator_args_string;
+        std::string sep;
+        for (const auto &it : generator_args) {
+            if (it.first == "target") continue;
+            std::string quote = it.second.string_value.find(" ") != std::string::npos ? "\\\"" : "";
+            generator_args_string += sep + it.first + "=" + quote + it.second.string_value + quote;
+            sep = " ";
+        }
+        std::unique_ptr<JSONCompilerLogger> t(new JSONCompilerLogger(
+            obfuscate_compiler_logging ? "" : generator_name,
+            obfuscate_compiler_logging ? "" : function_name,
+            obfuscate_compiler_logging ? "" : autoscheduler_name,
+            obfuscate_compiler_logging ? Target() : target,
+            obfuscate_compiler_logging ? "" : generator_args_string,
+            obfuscate_compiler_logging));
+        return t;
+    };
+
+    const CompilerLoggerFactory compiler_logger_factory = do_compiler_logging ?
+                                                              json_compiler_logger_factory :
+                                                              no_compiler_logger_factory;
+
     if (!runtime_name.empty()) {
         std::string base_path = compute_base_path(output_dir, runtime_name, "");
 
@@ -936,7 +976,7 @@ int generate_filter_main_inner(int argc, char **argv, std::ostream &cerr) {
                 user_error << "Failed to find compatible runtime target for "
                            << gcd_target.to_string()
                            << " and "
-                           << targets[i].to_string() << '\n';
+                           << targets[i].to_string() << "\n";
             }
         }
 
@@ -945,6 +985,7 @@ int generate_filter_main_inner(int argc, char **argv, std::ostream &cerr) {
         }
 
         auto output_files = compute_output_files(gcd_target, base_path, outputs);
+        // Runtime doesn't get to participate in the CompilerLogger party
         compile_standalone_runtime(output_files, gcd_target);
     }
 
@@ -953,6 +994,7 @@ int generate_filter_main_inner(int argc, char **argv, std::ostream &cerr) {
         debug(1) << "Generator " << generator_name << " has base_path " << base_path << "\n";
         if (outputs.count(Output::cpp_stub)) {
             // When generating cpp_stub, we ignore all generator args passed in, and supply a fake Target.
+            // (CompilerLogger is never enabled for cpp_stub, for now anyway.)
             auto gen = GeneratorRegistry::create(generator_name, GeneratorContext(Target()));
             auto stub_file_path = base_path + output_info[Output::cpp_stub].extension;
             gen->emit_cpp_stub(stub_file_path);
@@ -961,7 +1003,7 @@ int generate_filter_main_inner(int argc, char **argv, std::ostream &cerr) {
         // Don't bother with this if we're just emitting a cpp_stub.
         if (!stub_only) {
             auto output_files = compute_output_files(targets[0], base_path, outputs);
-            auto module_producer = [&generator_name, &generator_args, build_gradient_module](const std::string &name, const Target &target) -> Module {
+            auto module_factory = [&generator_name, &generator_args, build_gradient_module](const std::string &name, const Target &target) -> Module {
                 auto sub_generator_args = generator_args;
                 sub_generator_args.erase("target");
                 // Must re-create each time since each instance will have a different Target.
@@ -969,13 +1011,7 @@ int generate_filter_main_inner(int argc, char **argv, std::ostream &cerr) {
                 gen->set_generator_param_values(sub_generator_args);
                 return build_gradient_module ? gen->build_gradient_module(name) : gen->build_module(name);
             };
-            if (targets.size() > 1) {
-                compile_multitarget(function_name, output_files, targets, module_producer);
-            } else {
-                // compile_multitarget() will fail if we request anything but library and/or header,
-                // so defer directly to Module::compile if there is a single target.
-                module_producer(function_name, targets[0]).compile(output_files);
-            }
+            compile_multitarget(function_name, output_files, targets, module_factory, compiler_logger_factory);
         }
     }
 
@@ -1040,7 +1076,7 @@ void GeneratorRegistry::register_factory(const std::string &name,
     std::lock_guard<std::mutex> lock(registry.mutex);
     internal_assert(registry.factories.find(name) == registry.factories.end())
         << "Duplicate Generator name: " << name;
-    registry.factories[name] = generator_factory;
+    registry.factories[name] = std::move(generator_factory);
 }
 
 /* static */
@@ -1539,7 +1575,7 @@ Module GeneratorBase::build_gradient_module(const std::string &function_name) {
         Func adjoint_func = BoundaryConditions::constant_exterior(d_output, make_zero(d_output.type()));
         Derivative d = propagate_adjoints(original_output, adjoint_func, bounds);
 
-        const std::string output_name = original_output.name();
+        const std::string &output_name = original_output.name();
         for (const auto *input : pi.inputs()) {
             for (size_t i = 0; i < input->funcs_.size(); ++i) {
                 const std::string input_name = input->array_name(i);
@@ -1911,7 +1947,7 @@ void GeneratorInputBase::set_inputs(const std::vector<StubInput> &inputs) {
     verify_internals();
 }
 
-void GeneratorInputBase::set_estimate_impl(Var var, Expr min, Expr extent) {
+void GeneratorInputBase::set_estimate_impl(const Var &var, const Expr &min, const Expr &extent) {
     internal_assert(exprs_.empty() && !funcs_.empty() && parameters_.size() == funcs_.size());
     for (size_t i = 0; i < funcs_.size(); ++i) {
         Func &f = funcs_[i];
@@ -1975,7 +2011,7 @@ void GeneratorOutputBase::init_internals() {
     funcs_.clear();
     if (array_size_defined()) {
         for (size_t i = 0; i < array_size(); ++i) {
-            funcs_.push_back(Func(array_name(i)));
+            funcs_.emplace_back(array_name(i));
         }
     }
 }

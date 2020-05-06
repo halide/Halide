@@ -1,9 +1,11 @@
 #include <algorithm>
 #include <cmath>
+#include <utility>
 
 #include "Bounds.h"
 #include "CSE.h"
 #include "CodeGen_GPU_Dev.h"
+#include "CompilerLogger.h"
 #include "ExprUsesVar.h"
 #include "FuseGPUThreadLoops.h"
 #include "IR.h"
@@ -83,7 +85,7 @@ class ExtractBlockSize : public IRVisitor {
 
     using IRVisitor::visit;
 
-    void found_thread_for(int dim, const string &name, Expr extent) {
+    void found_thread_for(int dim, const string &name, const Expr &extent) {
         internal_assert(dim >= 0 && dim < 4);
         if (!block_extent[dim].defined()) {
             block_extent[dim] = extent;
@@ -95,7 +97,7 @@ class ExtractBlockSize : public IRVisitor {
     void found_block_for(int dim, const string &name, Expr extent) {
         internal_assert(dim >= 0 && dim < 4);
         internal_assert(!block_count[dim].defined());
-        block_count[dim] = extent;
+        block_count[dim] = std::move(extent);
         block_var_name_[dim] = name;
     }
 
@@ -364,7 +366,7 @@ class ExtractSharedAndHeapAllocations : public IRMutator {
         vector<SharedAllocation> old;
         old.swap(allocations);
 
-        // Any any preamble
+        // And any preamble
         Stmt old_preamble = host_side_preamble;
         host_side_preamble = Stmt();
 
@@ -389,6 +391,9 @@ class ExtractSharedAndHeapAllocations : public IRMutator {
                         << "Shared allocation for " << s.name
                         << " has a size that is non-monontonic in the gpu block variable " << op->name
                         << ": " << s.size << "\n";
+                    if (get_compiler_logger()) {
+                        get_compiler_logger()->record_non_monotonic_loop_var(op->name, s.size);
+                    }
                     precompute_allocation_size(s);
                 } else {
                     auto interval_bounds = bounds_of_expr_in_scope(s.size, scope);
@@ -727,7 +732,7 @@ class ExtractSharedAndHeapAllocations : public IRMutator {
                         mem_allocs[free_spaces[free_idx]].insert(allocations[i]);
                         free_spaces.erase(free_spaces.begin() + free_idx);
                     } else {
-                        mem_allocs.push_back(AllocGroup(allocations[i]));
+                        mem_allocs.emplace_back(allocations[i]);
                     }
                 } else if (allocations[i].liveness.max == stage - 1) {  // Free
                     int free_idx = -1;
@@ -1353,13 +1358,84 @@ class ValidateGPULoopNesting : public IRVisitor {
 };
 
 // Also used by InjectImageIntrinsics
-Stmt zero_gpu_loop_mins(Stmt s) {
+Stmt zero_gpu_loop_mins(const Stmt &s) {
     return ZeroGPULoopMins().mutate(s);
 }
+
+// Find the inner most GPU block of a statement.
+class FindInnermostGPUBlock : public IRVisitor {
+    using IRVisitor::visit;
+
+    void visit(const For *op) override {
+        if (CodeGen_GPU_Dev::is_gpu_block_var(op->name)) {
+            // Set the last found GPU block to found_gpu_block.
+            found_gpu_block = op;
+        }
+        IRVisitor::visit(op);
+    }
+
+public:
+    const For *found_gpu_block = nullptr;
+};
+
+// Given a condition and a loop, add the condition
+// to the loop body.
+class AddConditionToALoop : public IRMutator {
+    using IRMutator::visit;
+
+    Stmt visit(const For *op) override {
+        if (op != loop) {
+            return IRMutator::visit(op);
+        }
+
+        return For::make(op->name, op->min, op->extent, op->for_type, op->device_api,
+                         IfThenElse::make(condition, op->body, Stmt()));
+    }
+
+public:
+    AddConditionToALoop(const Expr &condition, const For *loop)
+        : condition(condition), loop(loop) {
+    }
+    const Expr &condition;
+    const For *loop;
+};
+
+// Push if statements between GPU blocks through all GPU blocks.
+// Throw error if the if statement has an else clause.
+class NormalizeIfStatements : public IRMutator {
+    using IRMutator::visit;
+
+    bool inside_gpu_blocks = false;
+
+    Stmt visit(const For *op) override {
+        if (!CodeGen_GPU_Dev::is_gpu_block_var(op->name)) {
+            return IRMutator::visit(op);
+        }
+        ScopedValue<bool> old_inside_gpu_blocks(inside_gpu_blocks, true);
+        return IRMutator::visit(op);
+    }
+
+    Stmt visit(const IfThenElse *op) override {
+        if (!inside_gpu_blocks) {
+            return IRMutator::visit(op);
+        }
+        FindInnermostGPUBlock find;
+        op->accept(&find);
+        if (find.found_gpu_block != nullptr) {
+            internal_assert(!op->else_case.defined()) << "Found an if statement with else case between two GPU blocks.\n";
+            return AddConditionToALoop(op->condition, find.found_gpu_block).mutate(op->then_case);
+        }
+        return IRMutator::visit(op);
+    }
+};
 
 Stmt fuse_gpu_thread_loops(Stmt s) {
     ValidateGPULoopNesting validate;
     s.accept(&validate);
+    // NormalizeIfStatements pushes the predicates between GPU blocks
+    // into the innermost GPU block. FuseGPUThreadLoops would then
+    // merge the predicate into the merged GPU thread.
+    s = NormalizeIfStatements().mutate(s);
     s = FuseGPUThreadLoops().mutate(s);
     s = ZeroGPULoopMins().mutate(s);
     return s;

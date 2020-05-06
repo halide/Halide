@@ -111,7 +111,6 @@ void define_enums(py::module &m) {
         .value("Profile", Target::Feature::Profile)
         .value("NoRuntime", Target::Feature::NoRuntime)
         .value("Metal", Target::Feature::Metal)
-        .value("MinGW", Target::Feature::MinGW)
         .value("CPlusPlusMangling", Target::Feature::CPlusPlusMangling)
         .value("LargeBuffers", Target::Feature::LargeBuffers)
         .value("HVX_64", Target::Feature::HVX_64)
@@ -132,7 +131,6 @@ void define_enums(py::module &m) {
         .value("TraceRealizations", Target::Feature::TraceRealizations)
         .value("D3D12Compute", Target::Feature::D3D12Compute)
         .value("StrictFloat", Target::Feature::StrictFloat)
-        .value("LegacyBufferWrappers", Target::Feature::LegacyBufferWrappers)
         .value("TSAN", Target::Feature::TSAN)
         .value("ASAN", Target::Feature::ASAN)
         .value("CheckUnsafePromises", Target::Feature::CheckUnsafePromises)
@@ -167,7 +165,8 @@ void define_enums(py::module &m) {
         .value("schedule", Output::schedule)
         .value("static_library", Output::static_library)
         .value("stmt", Output::stmt)
-        .value("stmt_html", Output::stmt_html);
+        .value("stmt_html", Output::stmt_html)
+        .value("compiler_log", Output::compiler_log);
 }
 
 }  // namespace PythonBindings

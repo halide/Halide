@@ -47,7 +47,7 @@ int main(int argc, char **argv) {
     // and then have an update step that loads the existing value and
     // stores it again unchanged at those pixels you don't want to
     // modify. However, this exists if you really need it. E.g. if one
-    // page in the middle of your buffer_t is memprotected as read
+    // page in the middle of your halide_buffer_t is memprotected as read
     // only and you can't store to it safely, or if you have some
     // weird memory mapping or race condition for which loading then
     // storing the same value has undesireable side-effects.

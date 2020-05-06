@@ -15,7 +15,7 @@ void define_argument(py::module &m) {
                      return im;
                  }),
                  py::arg("im"))
-            .def(py::init([](Param<> param) -> Argument {
+            .def(py::init([](const Param<> &param) -> Argument {
                      return param;
                  }),
                  py::arg("param"))

@@ -314,11 +314,11 @@ private:
     }
 };
 
-Stmt eliminate_bool_vectors(Stmt s) {
+Stmt eliminate_bool_vectors(const Stmt &s) {
     return EliminateBoolVectors().mutate(s);
 }
 
-Expr eliminate_bool_vectors(Expr e) {
+Expr eliminate_bool_vectors(const Expr &e) {
     return EliminateBoolVectors().mutate(e);
 }
 

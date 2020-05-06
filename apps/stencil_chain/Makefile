@@ -15,11 +15,13 @@ else
 	CXXFLAGS += -DNO_AUTO_SCHEDULE
 endif
 
-all: $(BIN)/$(HL_TARGET)/process
+.PHONY: build clean test
+
+build: $(BIN)/$(HL_TARGET)/process
 
 $(GENERATOR_BIN)/stencil_chain.generator: stencil_chain_generator.cpp $(GENERATOR_DEPS)
 	@mkdir -p $(@D)
-	$(CXX) $(CXXFLAGS) $(filter %.cpp,$^) -o $@ $(GENERATOR_LDFLAGS) 
+	$(CXX) $(CXXFLAGS) $(filter %.cpp,$^) -o $@ $(LIBHALIDE_LDFLAGS) 
 
 $(BIN)/%/stencil_chain.a: $(GENERATOR_BIN)/stencil_chain.generator
 	@mkdir -p $(@D)

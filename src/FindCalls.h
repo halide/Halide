@@ -7,11 +7,14 @@
  */
 
 #include <map>
+#include <string>
 
-#include "IR.h"
+#include "Expr.h"
 
 namespace Halide {
 namespace Internal {
+
+class Function;
 
 /** Construct a map from name to Function definition object for all Halide
  *  functions called directly in the definition of the Function f, including

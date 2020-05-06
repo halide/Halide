@@ -17,7 +17,7 @@ private:
     }
 };
 
-Stmt remove_extern_loops(Stmt s) {
+Stmt remove_extern_loops(const Stmt &s) {
     return RemoveExternLoops().mutate(s);
 }
 

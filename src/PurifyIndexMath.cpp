@@ -21,7 +21,7 @@ class PurifyIndexMath : public IRMutator {
     }
 };
 
-Expr purify_index_math(Expr s) {
+Expr purify_index_math(const Expr &s) {
     return PurifyIndexMath().mutate(s);
 }
 

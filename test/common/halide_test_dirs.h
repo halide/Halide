@@ -4,7 +4,9 @@
 // This file may be used by AOT tests, so it deliberately does not
 // include Halide.h
 
+#include <cassert>
 #include <string>
+
 #ifdef _WIN32
 #ifndef NOMINMAX
 #define NOMINMAX

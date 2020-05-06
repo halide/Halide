@@ -1,5 +1,6 @@
 #include "SimplifySpecializations.h"
 #include "Definition.h"
+#include "Function.h"
 #include "IREquality.h"
 #include "IRMutator.h"
 #include "IROperator.h"
@@ -7,6 +8,7 @@
 #include "Substitute.h"
 
 #include <set>
+#include <utility>
 
 namespace Halide {
 namespace Internal {
@@ -17,7 +19,7 @@ using std::vector;
 
 namespace {
 
-void substitute_value_in_var(const string &var, Expr value, vector<Definition> &definitions) {
+void substitute_value_in_var(const string &var, const Expr &value, vector<Definition> &definitions) {
     for (Definition &def : definitions) {
         for (auto &def_arg : def.args()) {
             def_arg = simplify(substitute(var, value, def_arg));
@@ -51,11 +53,11 @@ public:
 
     Expr fact;
     SimplifyUsingFact(Expr f)
-        : fact(f) {
+        : fact(std::move(f)) {
     }
 };
 
-void simplify_using_fact(Expr fact, vector<Definition> &definitions) {
+void simplify_using_fact(const Expr &fact, vector<Definition> &definitions) {
     for (Definition &def : definitions) {
         for (auto &def_arg : def.args()) {
             def_arg = simplify(SimplifyUsingFact(fact).mutate(def_arg));

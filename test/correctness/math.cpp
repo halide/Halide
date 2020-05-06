@@ -43,7 +43,7 @@ bool relatively_equal(value_t a, value_t b, Target target) {
             relative_error = fabs((db - da) / db);
         }
 
-        if (relative_error < .000001) {
+        if (relative_error < .00000125) {
             return true;
         }
 
@@ -57,16 +57,16 @@ bool relatively_equal(value_t a, value_t b, Target target) {
             if (relative_error < threshold) {
                 std::cout << "relatively_equal: relaxed threshold for (" << a << ", " << b << ") "
                           << "with relative error " << relative_error
-                          << " (shader fast trig)" << std::endl;
+                          << " (shader fast trig)\n";
                 return true;
             }
         }
 
         std::cerr
             << "relatively_equal failed for (" << a << ", " << b
-            << ") with relative error " << relative_error << std::endl;
+            << ") with relative error " << relative_error << "\n";
     } else {
-        std::cerr << "relatively_equal failed for (" << (double)a << ", " << (double)b << ")" << std::endl;
+        std::cerr << "relatively_equal failed for (" << (double)a << ", " << (double)b << ")\n";
     }
     return false;
 }
@@ -268,6 +268,9 @@ fun_2(uint32_t, uint32_t, absd, absd)
 }  // namespace
 
 int main(int argc, char **argv) {
+    printf("host is:      %s\n", get_host_target().to_string().c_str());
+    printf("HL_JIT_TARGET is: %s\n", get_jit_target_from_environment().to_string().c_str());
+
     call_1_float_types(abs, 256, -1000, 1000);
     call_1_float_types(sqrt, 256, 0, 1000000);
 

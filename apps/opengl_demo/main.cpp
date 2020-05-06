@@ -13,7 +13,7 @@
 #include <HalideRuntimeOpenGL.h>
 
 /*
- * Initializes a halide buffer_t object for 8-bit RGBA data stored
+ * Initializes a halide_buffer_t object for 8-bit RGBA data stored
  * interleaved as rgbargba... in row-major order.
  */
 Halide::Runtime::Buffer<uint8_t> create_buffer(uint8_t *data, int width, int height) {
@@ -100,7 +100,7 @@ std::string run_opengl_filter_from_texture_to_texture(GLuint input_texture_id, G
 
 int main(const int argc, const char *argv[]) {
     if (argc != 2) {
-        std::cerr << "Usage: " << argv[0] << " filename" << std::endl;
+        std::cerr << "Usage: " << argv[0] << " filename\n";
         exit(1);
     }
     const std::string filename = argv[1];

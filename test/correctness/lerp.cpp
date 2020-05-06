@@ -64,7 +64,7 @@ bool relatively_equal(value_t a, value_t b) {
         if (relative_error < .0000002)
             return true;
         std::cerr << "relatively_equal failed for (" << a << ", " << b << ") "
-                  << "with relative error " << relative_error << std::endl;
+                  << "with relative error " << relative_error << "\n";
     }
     return false;
 }
@@ -119,7 +119,7 @@ void check_range(int32_t zero_min, int32_t zero_extent, value_t zero_offset, val
                               << " for lerp(" << (typename promote_if_char<value_t>::promoted)(zero_verify)
                               << ", " << (typename promote_if_char<value_t>::promoted)(one_verify)
                               << ", " << (typename promote_if_char<weight_t>::promoted)(weight_verify)
-                              << ") " << actual_weight << ". " << name << std::endl;
+                              << ") " << actual_weight << ". " << name << "\n";
                     assert(false);
                 }
             }
@@ -229,8 +229,9 @@ int main(int argc, char **argv) {
     Buffer<uint32_t> result = lerp_constants.realize();
 
     uint32_t expected = evaluate<uint32_t>(cast<uint32_t>(lerp(0, cast<uint16_t>(1023), .5f)));
-    if (result(0) != expected)
-        std::cerr << "Expected " << expected << " got " << result(0) << std::endl;
+    if (result(0) != expected) {
+        std::cerr << "Expected " << expected << " got " << result(0) << "\n";
+    }
     assert(result(0) == expected);
 
     // Add a little more coverage for uint32_t as this was failing
@@ -270,5 +271,5 @@ int main(int argc, char **argv) {
         }
     }
 
-    std::cout << "Success!" << std::endl;
+    std::cout << "Success!\n";
 }

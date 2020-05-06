@@ -108,7 +108,7 @@ Expr Simplify::visit(const And *op, ExprInfo *bounds) {
         rewrite(x <= y && x <= z, x <= min(y, z)) ||
         rewrite(y <= x && z <= x, max(y, z) <= x)) {
 
-        return mutate(std::move(rewrite.result), bounds);
+        return mutate(rewrite.result, bounds);
     }
 
     #if USE_SYNTHESIZED_RULES

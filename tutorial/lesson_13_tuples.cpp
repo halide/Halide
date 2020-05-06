@@ -41,6 +41,11 @@ int main(int argc, char **argv) {
                                   c == 1, 42,   // Green value
                                   132);         // Blue value
 
+    // Since this pattern appears quite often, Halide provides a
+    // syntatic sugar to write the code above as the following,
+    // using the "mux" function.
+    // color_image(x, y, c) = mux(c, {245, 42, 132});
+
     // This method is often convenient because it makes it easy to
     // operate on this Func in a way that treats each item in the
     // collection equally:
@@ -109,10 +114,10 @@ int main(int argc, char **argv) {
     }
 
     // When compiling ahead-of-time, a Tuple-valued Func evaluates
-    // into multiple distinct output buffer_t structs. These appear in
+    // into multiple distinct output halide_buffer_t structs. These appear in
     // order at the end of the function signature:
     // int multi_valued(...input buffers and params...,
-    //                  buffer_t *output_1, buffer_t *output_2);
+    //                  halide_buffer_t *output_1, halide_buffer_t *output_2);
 
     // You can construct a Tuple by passing multiple Exprs to the
     // Tuple constructor as we did above. Perhaps more elegantly, you

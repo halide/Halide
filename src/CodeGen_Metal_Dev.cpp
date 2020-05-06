@@ -1,5 +1,6 @@
 #include <algorithm>
 #include <sstream>
+#include <utility>
 
 #include "CodeGen_Internal.h"
 #include "CodeGen_Metal_Dev.h"
@@ -39,7 +40,9 @@ string CodeGen_Metal_Dev::CodeGen_Metal_C::print_type_maybe_storage(Type type, b
         }
 
     } else {
-        if (type.is_uint() && type.bits() > 1) oss << 'u';
+        if (type.is_uint() && type.bits() > 1) {
+            oss << "u";
+        }
         switch (type.bits()) {
         case 1:
             oss << "bool";
@@ -72,7 +75,7 @@ string CodeGen_Metal_Dev::CodeGen_Metal_C::print_type_maybe_storage(Type type, b
         }
     }
     if (space == AppendSpace) {
-        oss << ' ';
+        oss << " ";
     }
     return oss.str();
 }
@@ -85,7 +88,7 @@ string CodeGen_Metal_Dev::CodeGen_Metal_C::print_storage_type(Type type) {
     return print_type_maybe_storage(type, true, DoNotAppendSpace);
 }
 
-string CodeGen_Metal_Dev::CodeGen_Metal_C::print_reinterpret(Type type, Expr e) {
+string CodeGen_Metal_Dev::CodeGen_Metal_C::print_reinterpret(Type type, const Expr &e) {
     ostringstream oss;
 
     string temp = unique_name('V');
@@ -218,7 +221,7 @@ void CodeGen_Metal_Dev::CodeGen_Metal_C::visit(const Call *op) {
 namespace {
 
 // If e is a ramp expression with stride 1, return the base, otherwise undefined.
-Expr is_ramp_one(Expr e) {
+Expr is_ramp_one(const Expr &e) {
     const Ramp *r = e.as<Ramp>();
     if (r == nullptr) {
         return Expr();
@@ -392,7 +395,7 @@ void CodeGen_Metal_Dev::CodeGen_Metal_C::visit(const Allocate *op) {
             << "Only fixed-size allocations are supported on the gpu. "
             << "Try storing into shared memory instead.";
 
-        stream << get_indent() << print_storage_type(op->type) << ' '
+        stream << get_indent() << print_storage_type(op->type) << " "
                << print_name(op->name) << "[" << size << "];\n";
         stream << get_indent() << "#define " << get_memory_space(op->name) << " thread\n";
 
@@ -449,7 +452,7 @@ struct BufferSize {
         : size(0) {
     }
     BufferSize(string name, size_t size)
-        : name(name), size(size) {
+        : name(std::move(name)), size(size) {
     }
 
     bool operator<(const BufferSize &r) const {
@@ -458,7 +461,7 @@ struct BufferSize {
 };
 }  // namespace
 
-void CodeGen_Metal_Dev::CodeGen_Metal_C::add_kernel(Stmt s,
+void CodeGen_Metal_Dev::CodeGen_Metal_C::add_kernel(const Stmt &s,
                                                     const string &name,
                                                     const vector<DeviceArgument> &args) {
 
@@ -478,7 +481,7 @@ void CodeGen_Metal_Dev::CodeGen_Metal_C::add_kernel(Stmt s,
         if (args[i].is_buffer &&
             CodeGen_GPU_Dev::is_buffer_constant(s, args[i].name) &&
             args[i].size > 0) {
-            constants.push_back(BufferSize(args[i].name, args[i].size));
+            constants.emplace_back(args[i].name, args[i].size);
         }
     }
 
@@ -638,7 +641,7 @@ void CodeGen_Metal_Dev::init_module() {
     // __shared always has address space threadgroup.
     src_stream << "#define __address_space___shared threadgroup\n";
 
-    src_stream << '\n';
+    src_stream << "\n";
 
     cur_kernel_name = "";
 }
@@ -657,7 +660,7 @@ string CodeGen_Metal_Dev::get_current_kernel_name() {
 }
 
 void CodeGen_Metal_Dev::dump() {
-    std::cerr << src_stream.str() << std::endl;
+    std::cerr << src_stream.str() << "\n";
 }
 
 std::string CodeGen_Metal_Dev::print_gpu_name(const std::string &name) {

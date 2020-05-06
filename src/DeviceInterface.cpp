@@ -1,7 +1,9 @@
 #include "DeviceInterface.h"
+#include "IR.h"
 #include "IROperator.h"
 #include "JITModule.h"
 #include "Target.h"
+#include "runtime/HalideBuffer.h"
 
 using namespace Halide;
 using namespace Halide::Internal;
@@ -29,6 +31,39 @@ bool lookup_runtime_routine(const std::string &name,
 }
 
 }  // namespace
+
+bool host_supports_target_device(const Target &t) {
+    const DeviceAPI d = t.get_required_device_api();
+    if (d == DeviceAPI::None) {
+        return true;
+    }
+
+    const struct halide_device_interface_t *i = get_device_interface_for_device_api(d, t);
+    if (!i) {
+        debug(1) << "host_supports_device_api: get_device_interface_for_device_api() failed for d=" << (int)d << " t=" << t << "\n";
+        return false;
+    }
+
+    Halide::Runtime::Buffer<uint8_t> temp(8, 8, 3);
+    temp.fill(0);
+    temp.set_host_dirty();
+
+    Halide::Internal::JITHandlers handlers;
+    handlers.custom_error = [](void *user_context, const char *msg) {
+        debug(1) << "host_supports_device_api: saw error (" << msg << ")\n";
+    };
+    Halide::Internal::JITHandlers old_handlers = Halide::Internal::JITSharedRuntime::set_default_handlers(handlers);
+
+    int result = temp.copy_to_device(i);
+
+    Halide::Internal::JITSharedRuntime::set_default_handlers(old_handlers);
+
+    if (result != 0) {
+        debug(1) << "host_supports_device_api: copy_to_device() failed for with result=" << result << " for d=" << (int)d << " t=" << t << "\n";
+        return false;
+    }
+    return true;
+}
 
 const halide_device_interface_t *get_device_interface_for_device_api(DeviceAPI d,
                                                                      const Target &t,

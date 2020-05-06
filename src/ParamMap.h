@@ -5,6 +5,7 @@
  * Defines a collection of parameters to be passed as formal arguments
  * to a JIT invocation.
  */
+#include <map>
 
 #include "Param.h"
 #include "Parameter.h"
@@ -67,7 +68,7 @@ private:
     };
     mutable std::map<const Internal::Parameter, ParamArg> mapping;
 
-    void set(const ImageParam &p, Buffer<> &buf, Buffer<> *buf_out_param);
+    void set(const ImageParam &p, const Buffer<> &buf, Buffer<> *buf_out_param);
 
 public:
     ParamMap() {
@@ -85,14 +86,8 @@ public:
         mapping[p.parameter()] = pa;
     };
 
-    void set(const ImageParam &p, Buffer<> &buf) {
+    void set(const ImageParam &p, const Buffer<> &buf) {
         set(p, buf, nullptr);
-    }
-
-    template<typename T>
-    void set(const ImageParam &p, Buffer<T> &buf) {
-        Buffer<> temp = buf;
-        set(p, temp, nullptr);
     }
 
     size_t size() const {

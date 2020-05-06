@@ -5,7 +5,7 @@
  * Defines the lowering pass that unpacks buffer arguments onto the symbol table
  */
 
-#include "IR.h"
+#include "Expr.h"
 
 namespace Halide {
 namespace Internal {

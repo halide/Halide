@@ -2,6 +2,8 @@
 #include <string>
 #include <vector>
 
+#include "ExternFuncArgument.h"
+#include "Function.h"
 #include "IRVisitor.h"
 #include "InferArguments.h"
 
@@ -18,7 +20,7 @@ class InferArguments : public IRGraphVisitor {
 public:
     vector<InferredArgument> &args;
 
-    InferArguments(vector<InferredArgument> &a, const vector<Function> &o, Stmt body)
+    InferArguments(vector<InferredArgument> &a, const vector<Function> &o, const Stmt &body)
         : args(a), outputs(o) {
         args.clear();
         for (const Function &f : outputs) {
@@ -56,7 +58,7 @@ private:
         }
     }
 
-    void visit_expr(Expr e) {
+    void visit_expr(const Expr &e) {
         if (!e.defined()) return;
         e.accept(this);
     }
@@ -83,7 +85,7 @@ private:
         }
     }
 
-    void include_parameter(Parameter p) {
+    void include_parameter(const Parameter &p) {
         if (!p.defined()) return;
         if (already_have(p.name())) return;
 
@@ -122,7 +124,7 @@ private:
         }
     }
 
-    void include_buffer(Buffer<> b) {
+    void include_buffer(const Buffer<> &b) {
         if (!b.defined()) return;
         if (already_have(b.name())) return;
 
@@ -158,7 +160,7 @@ private:
 
 }  // namespace
 
-vector<InferredArgument> infer_arguments(Stmt body, const vector<Function> &outputs) {
+vector<InferredArgument> infer_arguments(const Stmt &body, const vector<Function> &outputs) {
     vector<InferredArgument> inferred_args;
     // Infer an arguments vector by walking the IR
     InferArguments infer_args(inferred_args,

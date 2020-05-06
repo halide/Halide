@@ -11,6 +11,8 @@
 extern "C" {
 extern objc_id MTLCreateSystemDefaultDevice();
 extern struct ObjectiveCClass _NSConcreteGlobalBlock;
+void *dlsym(void *, const char *);
+#define RTLD_DEFAULT ((void *)-2)
 }
 
 namespace Halide {
@@ -214,6 +216,35 @@ WEAK void *buffer_contents(mtl_buffer *buffer) {
     return objc_msgSend(buffer, sel_getUid("contents"));
 }
 
+WEAK void *nsarray_first_object(objc_id arr) {
+    typedef objc_id (*nsarray_first_object_method)(objc_id arr, objc_sel sel);
+    nsarray_first_object_method method = (nsarray_first_object_method)&objc_msgSend;
+    return (*method)(arr, sel_getUid("firstObject"));
+}
+
+// MTLCopyAllDevices() is only available for macOS and is
+// intended for non-GUI apps.  Newer versions of macOS (10.15+)
+// will not return a valid device if MTLCreateSystemDefaultDevice()
+// is used from a non-GUI app.
+inline mtl_device *get_default_mtl_device() {
+    mtl_device *device = (mtl_device *)MTLCreateSystemDefaultDevice();
+    if (device == NULL) {
+        // We assume Metal.framework is already loaded
+        // (call dlsym directly, rather than halide_get_symbol, as we
+        // currently don't provide halide_get_symbol for iOS, only OSX)
+        void *handle = dlsym(RTLD_DEFAULT, "MTLCopyAllDevices");
+        if (handle != NULL) {
+            typedef objc_id (*mtl_copy_all_devices_method)(void);
+            mtl_copy_all_devices_method method = (mtl_copy_all_devices_method)handle;
+            objc_id devices = (objc_id)(*method)();
+            if (devices != NULL) {
+                device = (mtl_device *)nsarray_first_object(devices);
+            }
+        }
+    }
+    return device;
+}
+
 extern WEAK halide_device_interface_t metal_device_interface;
 
 volatile int WEAK thread_lock = 0;
@@ -294,7 +325,7 @@ WEAK int halide_metal_acquire_context(void *user_context, mtl_device **device_re
 
     if (device == 0 && create) {
         debug(user_context) << "Metal - Allocating: MTLCreateSystemDefaultDevice\n";
-        device = (mtl_device *)MTLCreateSystemDefaultDevice();
+        device = get_default_mtl_device();
         if (device == 0) {
             error(user_context) << "Metal: cannot allocate system default device.\n";
             __sync_lock_release(&thread_lock);

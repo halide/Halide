@@ -11,7 +11,6 @@
 
 #include "cmdline.h"
 
-#include "CostModel.h"
 #include "DefaultCostModel.h"
 #include "HalideBuffer.h"
 #include "NetworkSize.h"
@@ -124,7 +123,7 @@ struct Sample {
     Buffer<float>   schedule_features;
 };
 
-struct Pipeline {
+struct PipelineData {
     int32_t                 pipeline_id;
     int32_t                 num_stages;
     Buffer<float>           pipeline_features;
@@ -172,7 +171,7 @@ string leaf(const string &path) {
 }
 
 // Load all the samples, reading filenames from stdin
-void load_samples(map<int, PipelineSample>& training_set, map<int, PipelineSample>& validation_set, map<int, Pipeline>& pipelines, const Flags& flags, bool predict_only) {
+void load_samples(map<int, PipelineSample>& training_set, map<int, PipelineSample>& validation_set, map<int, PipelineData>& pipelines, const Flags& flags, bool predict_only) {
     vector<float> scratch(10 * 1024 * 1024);
 
     int best = -1;
@@ -230,7 +229,7 @@ void load_samples(map<int, PipelineSample>& training_set, map<int, PipelineSampl
             best_path = s;
         }
 
-        Pipeline &p = pipelines[pipeline_id];
+        PipelineData &p = pipelines[pipeline_id];
 
         if (p.pipeline_features.data() == nullptr) {
             p.pipeline_id = pipeline_id;
@@ -442,9 +441,10 @@ int main(int argc, char **argv) {
     Flags flags(argc, argv);
 
     // Iterate through the pipelines
-    vector<std::unique_ptr<CostModel>> tpp;
+    vector<std::unique_ptr<DefaultCostModel>> tpp;
+    Internal::Autoscheduler::Statistics stats;
     for (int i = 0; i < kModels; i++) {
-        tpp.emplace_back(make_default_cost_model(flags.initial_weights_path, flags.weights_out_path, flags.randomize_weights || flags.reset_weights));
+        tpp.emplace_back(make_default_cost_model(stats, flags.initial_weights_path, flags.weights_out_path, flags.randomize_weights || flags.reset_weights));
     }
 
     if (flags.reset_weights) {
@@ -457,7 +457,7 @@ int main(int argc, char **argv) {
 
     map<int, PipelineSample> samples;
     map<int, PipelineSample> validation_set;
-    map<int, Pipeline> pipelines;
+    map<int, PipelineData> pipelines;
     bool predict_only = !flags.predictions_file.empty();
     load_samples(samples, validation_set, pipelines, flags, predict_only);
     print_statistics(samples, validation_set);
@@ -517,7 +517,7 @@ int main(int argc, char **argv) {
                         size_t batch_size = std::min(max_batch_size, p.second.schedules.size());
 
                         size_t fastest_idx = 0;
-                        Buffer<float> runtimes(batch_size);
+                        Halide::Runtime::Buffer<float> runtimes(batch_size);
 
                         size_t first = 0;
                         if (p.second.schedules.size() > max_batch_size) {
@@ -530,7 +530,7 @@ int main(int argc, char **argv) {
                         cost_per_stage.resize(batch_size);
                         for (size_t j = 0; j < batch_size; j++) {
                             auto &sched = it->second;
-                            Buffer<float> buf;
+                            Halide::Runtime::Buffer<float> buf;
                             tp->enqueue(pipeline.num_stages, &buf, &sched.prediction[model], &cost_per_stage[j]);
                             runtimes(j) = sched.runtimes[0];
                             if (runtimes(j) < runtimes(fastest_idx)) {

@@ -135,34 +135,7 @@ void configure_pipeline_features(const FunctionDAG &dag,
                                  const MachineParams &params,
                                  CostModel *cost_model) {
     cost_model->reset();
-    const int pipeline_feat_size = head1_w * head1_h;
-    // We ignore the first seven pipeline features in the cost
-    // model. It's just a mask of which types are in use.
-    static_assert(sizeof(PipelineFeatures) - 7 * sizeof(int) ==
-                      sizeof(int) * pipeline_feat_size,
-                  "Incorrect size for pipeline features");
-    int num_stages = 0;
-    for (const auto &n : dag.nodes) {
-        if (!n.is_input) num_stages += (int)n.stages.size();
-    }
-    Runtime::Buffer<float> pipeline_features(head1_w, head1_h, num_stages);
-    int stage = 0;
-    for (const auto &n : dag.nodes) {
-        if (n.is_input) continue;
-        for (auto it = n.stages.rbegin(); it != n.stages.rend(); it++) {
-            const auto &s = *it;
-            const int *pipeline_feats = (const int *)(&(s.features)) + 7;
-            // skip the first 7 features
-            for (int i = 0; i < pipeline_feat_size; i++) {
-                int x = i / 7;
-                int y = i % 7;
-                pipeline_features(x, y, stage) = pipeline_feats[i];
-            }
-            stage += 1;
-        }
-    }
-    internal_assert(stage == num_stages);
-    cost_model->set_pipeline_features(pipeline_features, params.parallelism);
+    cost_model->set_pipeline_features(dag, params);
 }
 
 AutoSchedule::AutoSchedule(const FunctionDAG &dag,
@@ -474,7 +447,8 @@ void generate_schedule(const std::vector<Function> &outputs,
     if (!seed_str.empty()) {
         seed = atoi(seed_str.c_str());
     }
-    aslog(1) << "Dropout seed = " << seed << '\n';
+
+    aslog(1) << "Dropout seed = " << seed << "\n";
 
     // Get the beam size
     string beam_size_str = get_env_variable("HL_BEAM_SIZE");
@@ -496,15 +470,16 @@ void generate_schedule(const std::vector<Function> &outputs,
         dag.dump();
     }
 
+    Statistics stats;
+
     // Construct a cost model to use to evaluate states. Currently we
     // just have the one, but it's an abstract interface, so others
     // can be slotted in for experimentation.
-    std::unique_ptr<CostModel> cost_model = make_default_cost_model(weights_in_path, weights_out_path, randomize_weights);
+    std::unique_ptr<CostModel> cost_model = make_default_cost_model(stats, weights_in_path, weights_out_path, randomize_weights);
     internal_assert(cost_model != nullptr);
 
     IntrusivePtr<State> optimal;
 
-    Statistics stats;
     std::mt19937 rng{(uint32_t)seed};
     SearchSpace search_space{dag, params, target, get_env_variable("HL_SEARCH_SPACE_OPTIONS"), rng, cost_model.get(), stats};
     AutoSchedule autoschedule{dag, params, target, outputs, rng, cost_model.get(), stats, search_space};
@@ -596,7 +571,7 @@ struct RegisterAutoscheduler {
         Pipeline::add_autoscheduler("Adams2019", *this);
     }
 
-    void operator()(Pipeline p, const Target &target, const MachineParams &params, AutoSchedulerResults *results) {
+    void operator()(const Pipeline &p, const Target &target, const MachineParams &params, AutoSchedulerResults *results) {
         std::vector<Function> outputs;
         for (Func f : p.outputs()) {
             outputs.push_back(f.function());

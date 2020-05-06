@@ -5,14 +5,11 @@
  * Support for imposing boundary conditions on Halide::Funcs.
  */
 
-#include <utility>
 #include <vector>
 
 #include "Expr.h"
 #include "Func.h"
-#include "IR.h"
 #include "Lambda.h"
-#include "Util.h"
 
 namespace Halide {
 
@@ -97,7 +94,7 @@ inline HALIDE_NO_USER_CODE_INLINE Func func_like_to_func(const T &func_like) {
 // @{
 Func constant_exterior(const Func &source, Tuple value,
                        const Region &bounds);
-Func constant_exterior(const Func &source, Expr value,
+Func constant_exterior(const Func &source, const Expr &value,
                        const Region &bounds);
 
 template<typename T>
@@ -110,7 +107,7 @@ inline HALIDE_NO_USER_CODE_INLINE Func constant_exterior(const T &func_like, Tup
     return constant_exterior(Internal::func_like_to_func(func_like), value, object_bounds);
 }
 template<typename T>
-inline HALIDE_NO_USER_CODE_INLINE Func constant_exterior(const T &func_like, Expr value) {
+inline HALIDE_NO_USER_CODE_INLINE Func constant_exterior(const T &func_like, const Expr &value) {
     return constant_exterior(func_like, Tuple(value));
 }
 
@@ -124,7 +121,7 @@ inline HALIDE_NO_USER_CODE_INLINE Func constant_exterior(const T &func_like, Tup
 }
 template<typename T, typename... Bounds,
          typename std::enable_if<Halide::Internal::all_are_convertible<Expr, Bounds...>::value>::type * = nullptr>
-inline HALIDE_NO_USER_CODE_INLINE Func constant_exterior(const T &func_like, Expr value,
+inline HALIDE_NO_USER_CODE_INLINE Func constant_exterior(const T &func_like, const Expr &value,
                                                          Bounds &&... bounds) {
     return constant_exterior(func_like, Tuple(value), std::forward<Bounds>(bounds)...);
 }

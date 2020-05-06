@@ -328,7 +328,7 @@ void CodeGen_PTX_Dev::visit(const Atomic *op) {
 
     // Issue atomic stores.
     ScopedValue<bool> old_emit_atomic_stores(emit_atomic_stores, true);
-    IRVisitor::visit(op);
+    CodeGen_LLVM::visit(op);
 }
 
 string CodeGen_PTX_Dev::march() const {
@@ -540,7 +540,7 @@ int CodeGen_PTX_Dev::native_vector_bits() const {
 }
 
 string CodeGen_PTX_Dev::get_current_kernel_name() {
-    return function->getName();
+    return get_llvm_function_name(function);
 }
 
 void CodeGen_PTX_Dev::dump() {

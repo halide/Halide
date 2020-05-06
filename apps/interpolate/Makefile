@@ -1,12 +1,14 @@
 include ../support/Makefile.inc
 
-all: $(BIN)/$(HL_TARGET)/filter
+.PHONY: build clean test
+
+build: $(BIN)/$(HL_TARGET)/filter
 
 test: $(BIN)/$(HL_TARGET)/out.png
 
 $(GENERATOR_BIN)/interpolate.generator: interpolate_generator.cpp $(GENERATOR_DEPS)
 	@mkdir -p $(@D)
-	$(CXX) $(CXXFLAGS) -g $(filter %.cpp,$^) -o $@ $(GENERATOR_LDFLAGS)
+	$(CXX) $(CXXFLAGS) -g $(filter %.cpp,$^) -o $@ $(LIBHALIDE_LDFLAGS)
 
 $(BIN)/%/interpolate.a: $(GENERATOR_BIN)/interpolate.generator
 	@mkdir -p $(@D)

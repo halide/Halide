@@ -42,15 +42,6 @@ Expr Simplify::visit(const Or *op, ExprInfo *bounds) {
          rewrite((x && y) || y, b) ||
          rewrite(y || (x && y), a) ||
 
-         rewrite(((x || y) || z) || x, a) ||
-         rewrite(x || ((x || y) || z), b) ||
-         rewrite((z || (x || y)) || x, a) ||
-         rewrite(x || (z || (x || y)), b) ||
-         rewrite(((x || y) || z) || y, a) ||
-         rewrite(y || ((x || y) || z), b) ||
-         rewrite((z || (x || y)) || y, a) ||
-         rewrite(y || (z || (x || y)), b) ||
-
          rewrite(x != y || x == y, true) ||
          rewrite(x != y || y == x, true) ||
          rewrite((z || x != y) || x == y, true) ||
@@ -111,7 +102,7 @@ Expr Simplify::visit(const Or *op, ExprInfo *bounds) {
         rewrite(x <= y || x <= z, x <= max(y, z)) ||
         rewrite(y <= x || z <= x, min(y, z) <= x)) {
 
-        return mutate(std::move(rewrite.result), bounds);
+        return mutate(rewrite.result, bounds);
     }
 
     #if USE_SYNTHESIZED_RULES

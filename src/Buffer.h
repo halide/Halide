@@ -4,7 +4,6 @@
 #include "DeviceInterface.h"
 #include "Expr.h"
 #include "IntrusivePtr.h"
-#include "Util.h"
 #include "runtime/HalideBuffer.h"
 
 namespace Halide {
@@ -128,6 +127,9 @@ public:
     /** Trivial copy assignment operator. */
     Buffer &operator=(const Buffer &that) = default;
 
+    /** Trivial move assignment operator. */
+    Buffer &operator=(Buffer &&) noexcept = default;
+
     /** Make a Buffer from a Buffer of a different type */
     template<typename T2>
     Buffer(const Buffer<T2> &other)
@@ -137,7 +139,7 @@ public:
 
     /** Move construct from a Buffer of a different type */
     template<typename T2>
-    Buffer(Buffer<T2> &&other) {
+    Buffer(Buffer<T2> &&other) noexcept {
         assert_can_convert_from(other);
         contents = std::move(other.contents);
     }
@@ -168,11 +170,6 @@ public:
     }
 
     explicit Buffer(const halide_buffer_t &buf,
-                    const std::string &name = "")
-        : Buffer(Runtime::Buffer<T>(buf), name) {
-    }
-
-    explicit Buffer(const buffer_t &buf,
                     const std::string &name = "")
         : Buffer(Runtime::Buffer<T>(buf), name) {
     }
@@ -421,7 +418,7 @@ public:
     HALIDE_BUFFER_FORWARD(translate)
     HALIDE_BUFFER_FORWARD_INITIALIZER_LIST(translate, std::vector<int>)
     HALIDE_BUFFER_FORWARD(transpose)
-    HALIDE_BUFFER_FORWARD(transposed)
+    HALIDE_BUFFER_FORWARD_CONST(transposed)
     HALIDE_BUFFER_FORWARD(add_dimension)
     HALIDE_BUFFER_FORWARD(copy_to_host)
     HALIDE_BUFFER_FORWARD(copy_to_device)
@@ -536,7 +533,7 @@ public:
     /** Make an Expr that loads from this concrete buffer at a computed coordinate. */
     // @{
     template<typename... Args>
-    Expr operator()(Expr first, Args... rest) const {
+    Expr operator()(const Expr &first, Args... rest) const {
         std::vector<Expr> args = {first, rest...};
         return (*this)(args);
     };

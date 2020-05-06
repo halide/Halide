@@ -8,7 +8,7 @@
  * E.g:
  \code
  Expr foo = ...
- std::cout << "Foo is " << foo << std::endl;
+ std::cout << "Foo is " << foo << "\n";
  \endcode
  *
  * These operators are implemented using \ref Halide::Internal::IRPrinter
@@ -91,17 +91,15 @@ std::ostream &operator<<(std::ostream &stream, const Indentation &);
  */
 class IRPrinter : public IRVisitor {
 public:
-    virtual ~IRPrinter();
-
     /** Construct an IRPrinter pointed at a given output stream
      * (e.g. std::cout, or a std::ofstream) */
-    IRPrinter(std::ostream &);
+    explicit IRPrinter(std::ostream &);
 
     /** emit an expression on the output stream */
-    void print(Expr);
+    void print(const Expr &);
 
     /** emit a statement on the output stream */
-    void print(Stmt);
+    void print(const Stmt &);
 
     /** emit a comma delimited list of exprs, without any leading or
      * trailing punctuation. */

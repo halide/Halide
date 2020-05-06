@@ -1,7 +1,12 @@
 #ifndef HALIDE_HALIDERUNTIMEHEXAGONHOST_H
 #define HALIDE_HALIDERUNTIMEHEXAGONHOST_H
 
+// Don't include HalideRuntime.h if the contents of it were already pasted into a generated header above this one
+#ifndef HALIDE_HALIDERUNTIME_H
+
 #include "HalideRuntime.h"
+
+#endif
 
 #ifdef __cplusplus
 extern "C" {
@@ -22,9 +27,9 @@ extern const struct halide_device_interface_t *halide_hexagon_device_interface()
 extern bool halide_is_hexagon_available(void *user_context);
 
 /** The device handle for Hexagon is simply a pointer and size, stored
- * in the dev field of the buffer_t. If the buffer is allocated in a
+ * in the dev field of the halide_buffer_t. If the buffer is allocated in a
  * particular way (ion_alloc), the buffer will be shared with Hexagon
- * (not copied). The device field of the buffer_t must be NULL when this
+ * (not copied). The device field of the halide_buffer_t must be NULL when this
  * routine is called. This call can fail due to running out of memory
  * or being passed an invalid device handle. The device and host
  * dirty bits are left unmodified. */
@@ -40,7 +45,7 @@ extern int halide_hexagon_wrap_device_handle(void *user_context, struct halide_b
  * on return. */
 extern int halide_hexagon_detach_device_handle(void *user_context, struct halide_buffer_t *buf);
 
-/** Return the underlying device handle for a buffer_t. If there is
+/** Return the underlying device handle for a halide_buffer_t. If there is
  * no device memory (dev field is NULL), this returns 0. */
 extern void *halide_hexagon_get_device_handle(void *user_context, struct halide_buffer_t *buf);
 extern uint64_t halide_hexagon_get_device_size(void *user_context, struct halide_buffer_t *buf);
