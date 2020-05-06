@@ -54,18 +54,28 @@ namespace msa {
 
                 // iterate all immediate children and find best UTC score
                 int num_children = node->get_num_children();
-                for(int i = 0; i < num_children; i++) {
-                    TreeNode* child = node->get_child(i);
-                    float uct_exploitation = (float)child->get_value() / (child->get_num_visits() + FLT_EPSILON);
-                    float uct_exploration = sqrt( log((float)node->get_num_visits() + 1) / (child->get_num_visits() + FLT_EPSILON) );
-                    float uct_score = uct_exploitation + uct_k * uct_exploration;
-
-                    if(uct_score > best_utc_score) {
-                        best_utc_score = uct_score;
-                        best_node = child;
-                    }
+                //int best = 0;
+                
+                /*if (rand() % 20==0){
+                    //with 1/10 chance pick randomly 
+                    best_node = node->get_child(rand()%num_children);
                 }
+                else {*/
+                    for(int i = 0; i < num_children; i++) {
+                        TreeNode* child = node->get_child(i);
+                        float uct_exploitation = (float)child->get_average_value() / (child->get_num_visits() + FLT_EPSILON);
+                        float uct_exploration = sqrt( log((float)node->get_num_visits() + 1) / (child->get_num_visits() + FLT_EPSILON) );
+                        float uct_score = uct_exploitation + uct_k * uct_exploration;
 
+                        if(uct_score > best_utc_score) {
+                            best_utc_score = uct_score;
+                            best_node = child;
+                       //     best = i;
+                        }
+                    }
+                    //std::cout << "uct_score of child: "<< i << " is "<<uct_score  << std::endl;
+                //}
+                //std::cout << "picking "<<best<<"/"<<num_children << std::endl; 
                 return best_node;
             }
 
@@ -75,12 +85,13 @@ namespace msa {
                 int num_children = node->get_num_children();
                 for(int i = 1; i < num_children; i++) {
                     TreeNode* child = node->get_child(i);
-                    if(child->get_value()>best_node->get_value()) {
+                    if(child->get_best_value()>best_node->get_best_value()) {
                         best_node = child;
                     }
+                    //std::cout << "child "<<i<<" best "<<child->get_best_value() << " average " << child->get_average_value()/(child->get_num_visits()+FLT_EPSILON) << std::endl;
                 }
                 /*if (best_node->get_action() == ){
-                    std::cout << "NULL most visited "<<num_children << std::endl;
+                    std::cout << "null most visited "<<num_children << std::endl;
                 }*/
                 return best_node;
             }

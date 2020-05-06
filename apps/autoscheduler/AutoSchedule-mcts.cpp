@@ -107,7 +107,7 @@ struct ProgressBar {
         if (!draw_progress_bar) return;
         counter++;
         const int bits = 11;
-        if (counter & ((1 << bits) - 1)) return;
+        //if (counter & ((1 << bits) - 1)) return;
         const int pos = (int)(progress * 78);
         aslog(0) << "[";
         for (int j = 0; j < 78; j++) {
@@ -741,7 +741,7 @@ struct State {
         bool operator<(const Action& a) const {
             return index < a.index;
         }
-        void print() {
+        void print() const {
             if (ae == State::ActionEnum::Inline)
             std::cout << "applying Inline, index "<< index  << std::endl;
             if (ae == State::ActionEnum::Retile)
@@ -1741,7 +1741,10 @@ IntrusivePtr<State> optimal_mcts_schedule(
 
     bool done[num_passes] = { false };
 
+    ProgressBar tick;
     for (int j = 0; j < mcts_depth-1; j++) {
+            // Update the progress bar
+        tick.set(double(j) / (mcts_depth-1));
         
         #pragma omp parallel for
         for (int i = 0; i < num_passes; i++) {
@@ -1752,7 +1755,8 @@ IntrusivePtr<State> optimal_mcts_schedule(
             // run uct mcts on current state and get best action
 
             msa::mcts::UCT<State::WrapperState, State::Action> meta_uct;
-            meta_uct.uct_k = uct_k; 
+            double uct_factor = 1+(i%2);
+            meta_uct.uct_k = uct_k*uct_factor; 
             meta_uct.max_millis = max_millis;
             meta_uct.max_iterations = max_iterations;
             meta_uct.simulation_depth = simulation_depth;
@@ -1827,6 +1831,7 @@ IntrusivePtr<State> optimal_mcts_schedule(
     
         aslog(0) << "Cost evaluated this many times: " << State::cost_calculations << '\n';
     }
+    tick.clear();
     //we are supposed to get to the same final result
     states[0].evaluate();
     best = states[0].inner;
@@ -1836,11 +1841,11 @@ IntrusivePtr<State> optimal_mcts_schedule(
         best = global_best_state;
     }    
     aslog(0) << "global best cost: " << -1*global_best_value << "\n";
-    aslog(0) << "** global schedule " << global_best_state.get() << ":\n";
+    //aslog(0) << "** global schedule " << global_best_state.get() << ":\n";
     
     best->apply_schedule(*dags[global_dag_best_idx], params);
     //best->apply_schedule(*dags[0], params);
-    aslog(0) << "** applied schedule:\n";
+    //aslog(0) << "** applied schedule:\n";
 
 
     //delete dags[0];
@@ -1944,19 +1949,19 @@ void generate_rl_schedule(const std::vector<Function> &outputs,
     aslog(0) << "Cost evaluated this many times: " << State::cost_calculations << '\n';
 
     // Dump the schedule found
-    aslog(0) << "** optimal schedule " << optimal.get() << ":\n";
+    //aslog(0) << "** optimal schedule " << optimal.get() << ":\n";
     //FunctionDAG dag(outputs, params, target);
-    aslog(0) << "** made dag:\n";
+    //aslog(0) << "** made dag:\n";
     //std::unique_ptr<CostModel> cost_model = make_default_cost_model(weights_in_path, weights_out_path, randomize_weights);
-    aslog(0) << "** made cost model:\n";
+    //aslog(0) << "** made cost model:\n";
     //internal_assert(cost_model != nullptr);
     //configure_pipeline_features(dag, params, cost_model.get());
 
 
     // Just to get the debugging prints to fire
-    aslog(0) << "** calculating cost:\n";
+    //aslog(0) << "** calculating cost:\n";
     //optimal->calculate_cost(dag, params, cost_model.get(), aslog::aslog_level() > 0,true);
-    aslog(0) << "** calculated cost:\n";
+    //aslog(0) << "** calculated cost:\n";
 
     // Apply the schedules to the pipeline
 

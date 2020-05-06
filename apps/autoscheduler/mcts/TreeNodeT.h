@@ -27,7 +27,8 @@ namespace msa {
                 parent(parent),
                 num_visits(0),
                 initialized(false),
-                value(0),
+                best_value(0),
+                average_value(0),
                 depth(parent ? parent->depth + 1 : 0)
             {
             }
@@ -59,14 +60,14 @@ namespace msa {
             //--------------------------------------------------------------
             void update(const double reward, const State& best_state) {
         
-                if (value < reward || !initialized){
-                    value = reward;
+                if (best_value < reward || !initialized){
+                    best_value = reward;
                     initialized = true;
                     action.best_state=std::move(best_state.inner);
                     action.best_state_updated = true;
-                    action.value = value;
+                    action.value = best_value;
                 }
-                //value += reward
+                average_value += reward;
                 num_visits++;
             }
 
@@ -87,8 +88,10 @@ namespace msa {
             // number of times the TreeNode has been visited
             int get_num_visits() const { return num_visits; }
 
-            // accumulated value (wins)
-            double get_value() const { return value; }
+            // best value (wins)
+            double get_best_value() const { return best_value; }
+            //average value (wins)
+            double get_average_value() const { return average_value; }
 
             // how deep the TreeNode is in the tree
             int get_depth() const { return depth; }
@@ -109,7 +112,8 @@ namespace msa {
 
             int num_visits;			// number of times TreeNode has been visited
             bool initialized;       // whether value was initialized/updated or not
-            double value;			// value of this TreeNode
+            double best_value;			// best value of this TreeNode
+            double average_value;			// average value of this TreeNode
             int depth;
 
             std::vector< Ptr > children;	// all current children
@@ -124,7 +128,6 @@ namespace msa {
 
                 // set the action of the child to be the new action
                 child_node->action = new_action;
-
                 // apply the new action to the state of the child TreeNode
                 child_node->state.apply_action(new_action);
 
