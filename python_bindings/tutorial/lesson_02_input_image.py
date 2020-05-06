@@ -86,7 +86,7 @@ def main():
     assert output_image.type() == hl.UInt(8)
 
     # Save the output for inspection. It should look like a bright parrot.
-    imageio.imsave("brighter.png", output_image)
+    imageio.imsave("brighter.png", np.asanyarray(output_image))
     print("Created brighter.png result file.")
 
     print("Success!")
