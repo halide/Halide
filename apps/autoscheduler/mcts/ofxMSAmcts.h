@@ -69,6 +69,21 @@ namespace msa {
                 return best_node;
             }
 
+            TreeNode* get_best_value_child(TreeNode* node) const {
+                TreeNode* best_node =node->get_child(0);
+                // iterate all immediate children and find best
+                int num_children = node->get_num_children();
+                for(int i = 1; i < num_children; i++) {
+                    TreeNode* child = node->get_child(i);
+                    if(child->get_value()>best_node->get_value()) {
+                        best_node = child;
+                    }
+                }
+                /*if (best_node->get_action() == ){
+                    std::cout << "NULL most visited "<<num_children << std::endl;
+                }*/
+                return best_node;
+            }
 
             //--------------------------------------------------------------
             TreeNode* get_most_visited_child(TreeNode* node) const {
@@ -84,23 +99,29 @@ namespace msa {
                         best_node = child;
                     }
                 }
-
+                /*if (best_node->get_action() == ){
+                    std::cout << "NULL most visited "<<num_children << std::endl;
+                }*/
                 return best_node;
             }
 
 
 
             //--------------------------------------------------------------
-            Action run(const State& current_state, unsigned int seed = 1, std::vector<State>* explored_states = nullptr) {
+            Action run(const State& current_state, bool& valid, unsigned int seed = 1, std::vector<State>* explored_states = nullptr) {
                 std::vector<Action> root_actions;
 
                 //checking if terminal or has singule child
                 current_state.get_actions(root_actions);
                 // is terminal
-                if(root_actions.size()== 0) return NULL;
+                if(root_actions.size()== 0) return Action(-1);
                 // has one child
-                else if(root_actions.size() == 1) return root_actions[0];
+                else if(root_actions.size() == 1) {
+                    valid = true;
+                    return root_actions[0];
+                    }
                 else {
+                    valid = true;
                     // initialize timer
                     timer.init();
 
@@ -138,14 +159,14 @@ namespace msa {
                         double bestReward = 0;
 
                         // 3. SIMULATE
-                        std::vector<Action> backup_actions; 
-                        backup_actions.clear(); 
+  //                      std::vector<Action> backup_actions; 
+  //                      backup_actions.clear(); 
                         while(true) {
-                            bool finished = state.apply_best_action(bestReward,backup_actions);
+                            bool finished = state.apply_best_action(bestReward);
   //                          depth++;
                             if (finished) break;
                         }
-                        state.apply_best_greedily(bestReward,backup_actions);
+//                        state.apply_best_greedily(bestReward,backup_actions);
                         // add to history
                         if(explored_states) explored_states->push_back(state);
 
@@ -156,20 +177,17 @@ namespace msa {
                         }
 
                         // find most visited child
-                        best_node = get_most_visited_child(&root_node);
+                        best_node = get_best_value_child(&root_node);
 
                         // indicate end of loop for timer
                         timer.loop_end();
                     }
 
                     // return best node's action
-                    if(best_node) {        
-                        Action  best_action =  best_node->get_action();
-                        best_action.value = best_node->get_value(); 
-                        return best_action;
-                    }
+                    if(best_node) return best_node->get_action();
+                    
 
-                    else return NULL;
+//                    else return NULL;
 
                     // we shouldn't be here
                     assert(0 && "Error: could not find any action");

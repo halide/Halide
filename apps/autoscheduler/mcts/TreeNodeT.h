@@ -23,7 +23,7 @@ namespace msa {
             //--------------------------------------------------------------
             TreeNodeT(const State& state, TreeNodeT* parent = NULL):
                 state(state),
-                action(nullptr),
+                action(-1),
                 parent(parent),
                 num_visits(0),
                 initialized(false),
@@ -62,7 +62,9 @@ namespace msa {
                 if (value < reward || !initialized){
                     value = reward;
                     initialized = true;
-                    action.best_state=best_state.inner;
+                    action.best_state=std::move(best_state.inner);
+                    action.best_state_updated = true;
+                    action.value = value;
                 }
                 //value += reward
                 num_visits++;
