@@ -829,21 +829,27 @@ struct State {
         //std::cout << "reward "<< bestReward << std::endl;
             return true;
         }
-        /*internal_assert(cost_model && "bug, cost model not defined");
-        for(auto& act : actions) {
-            act.state->calculate_cost(dag, params, cost_model, false, true);
-        }
-        cost_model->evaluate_costs();
-
         unsigned best = 0;
-        for(unsigned i=1; i<actions.size(); i++) {
-            if (actions[i].state->cost < actions[best].state->cost) {
-                best = i;
+        if(actions.size()==1) best = 0; 
+        // with 50% probabality pick best
+        else if(rand()%2 ==0) {
+                for(auto& act : actions) {
+                    act.state->calculate_cost(dag, params, cost_model, false, true);
+                }
+                internal_assert(cost_model && "bug, cost model not defined");
+                cost_model->evaluate_costs();
+
+                best = 0;
+                for(unsigned i=1; i<actions.size(); i++) {
+                    if (actions[i].state->cost < actions[best].state->cost) {
+                        best = i;
+                    }
+                }
             }
-        }
-        */
+        // otherwise random
+        else best = rand() % actions.size();
         // AHA: an optimization to keep last actions when node had more than 1 child to pick best later
-        Action & random_action = actions[rand() % actions.size()];
+        Action & random_action = actions[best];
         internal_assert(inner->num_decisions_made+1 == random_action.state->num_decisions_made);
         inner = std::move(random_action.state);
         //if(random_action.ae == ActionEnum::Inline ||
