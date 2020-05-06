@@ -8,5 +8,5 @@
 numpy
 scipy
 pillow
-imageio
-pybind11
+imageio==2.4.1
+pybind11==2.4.3
