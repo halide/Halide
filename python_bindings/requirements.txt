@@ -8,5 +8,8 @@
 numpy
 scipy
 pillow
+
+# Keep versions of these requirements equal to the versions in Ubuntu 20.04 LTS
+# because newer versions fix bugs we work around.
 imageio==2.4.1
 pybind11==2.4.3

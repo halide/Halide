@@ -83,6 +83,7 @@ def main():
         # parrot, and it should be two pixels narrower and two pixels
         # shorter than the input image.
 
+        # python3-imageio versions <2.5 expect a numpy array
         imageio.imsave("blurry_parrot_1.png", np.asanyarray(result))
         print("Created blurry_parrot_1.png")
 
@@ -152,6 +153,8 @@ def main():
         # Save the result. It should look like a slightly blurry
         # parrot, but this time it will be the same size as the
         # input.
+
+        # python3-imageio versions <2.5 expect a numpy array
         imageio.imsave("blurry_parrot_2.png", np.asanyarray(result))
         print("Created blurry_parrot_2.png")
 
