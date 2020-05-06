@@ -1160,6 +1160,15 @@ double LoopNest::min_global_mem_accesses(const FunctionDAG::Node *node, const Th
 void LoopNest::compute_num_global_mem_accesses_per_block(const LoadJacobian &jac, const FunctionDAG::Node *node, const Bound &store_bounds, const ThreadInfo &thread_info, int innermost_dim, double serial_loop_extents, double serial_loop_extents_with_pure_licm, double access_count, GlobalMemInfo &global_mem_info, const LoopNest &root, double amortization, bool verbose) const {
     StorageStrides strides = storage_strides(jac, innermost_dim, node, store_bounds, root, thread_info);
 
+    if (verbose) {
+        for (size_t i = 0; i < thread_info.loop_indices.size(); ++i) {
+            if (!strides.valid(i)) {
+                aslog(0) << "stride " << i << ": invalid\n";
+            }
+            aslog(0) << "stride " << i << ": " << strides[i] << "\n";
+        }
+    }
+
     int bytes_per_access = node->bytes_per_point;
 
     std::unordered_map<int64_t, std::unordered_set<int64_t>> sectors_accessed;
