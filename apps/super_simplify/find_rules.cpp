@@ -193,6 +193,11 @@ class CountOps : public IRMutator {
         return op;
     }
 
+    Expr visit(const FloatImm *op) override {
+        has_unsupported_ir = true;
+        return op;
+    }
+
     Expr visit(const Div *op) override {
         has_div_mod = true;
         if (!is_const(op->b)) {
@@ -232,7 +237,7 @@ public:
     using IRMutator::mutate;
 
     Expr mutate(const Expr &e) override {
-        if (is_const(e)) {
+        if (e.type() == Int(32) && is_const(e)) {
             num_constants++;
         } else {
             unique_exprs.insert(e);
@@ -331,7 +336,6 @@ int main(int argc, char **argv) {
     set<Expr, IRDeepCompare> patterns;
     size_t handled = 0, total = 0;
     for (auto &e : exprs) {
-        debug(0) << e << "\n";
         e = substitute_in_all_lets(e);
         Expr orig = e;
         e = simplify(e);
@@ -386,7 +390,7 @@ int main(int argc, char **argv) {
 
     // Generate rules from patterns
     vector<std::future<void>> futures;
-    ThreadPool<void> pool;
+    ThreadPool<void> pool(1);
     std::mutex mutex;
     vector<pair<Expr, Expr>> rules;
     int done = 0;
