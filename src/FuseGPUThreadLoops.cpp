@@ -682,7 +682,7 @@ class ExtractSharedAndHeapAllocations : public IRMutator {
         return block_id;
     }
 
-    Expr max_over_blocks(Expr e, const ExtractBlockSize &bs) const {
+    Expr max_over_blocks(const Expr &e, const ExtractBlockSize &bs) const {
         Scope<Interval> scope;
         for (int d = 0; d < bs.blocks_dimensions(); d++) {
             scope.push(bs.block_var(d).as<Variable>()->name,
