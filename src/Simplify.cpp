@@ -200,34 +200,44 @@ void learn_true_helper(const Expr &fact, Simplify *simplify, Simplify::ScopedFac
 
     } else if (const LT *lt = fact.as<LT>()) {
         v = lt->a.as<Variable>();
-        const int64_t *i = as_const_int(lt->b);
-        if (v && i) {
+        Simplify::ExprInfo i;
+        if (v) {
+            simplify->mutate(lt->b, &i);
+        }
+        if (v && v->type.is_int() && v->type.bits() >= 32 && i.max_defined) {
             // v < i
             expr_info.max_defined = true;
-            expr_info.max = *i - 1;
+            expr_info.max = i.max - 1;
         } else {
             v = lt->b.as<Variable>();
-            i = as_const_int(lt->a);
-            if (v && i) {
+            if (v) {
+                simplify->mutate(lt->a, &i);
+            }
+            if (v && v->type.is_int() && v->type.bits() >= 32 && i.min_defined) {
                 // i < v
                 expr_info.min_defined = true;
-                expr_info.min = *i + 1;
+                expr_info.min = i.min + 1;
             }
         }
     } else if (const LE *le = fact.as<LE>()) {
         v = le->a.as<Variable>();
-        const int64_t *i = as_const_int(le->b);
-        if (v && i) {
-            // v <= i
+        Simplify::ExprInfo i;
+        if (v) {
+            simplify->mutate(le->b, &i);
+        }
+        if (v && i.max_defined) {
+            // If v <= i then v has the same upper bound as i
             expr_info.max_defined = true;
-            expr_info.max = *i;
+            expr_info.max = i.max;
         } else {
             v = le->b.as<Variable>();
-            i = as_const_int(le->a);
-            if (v && i) {
+            if (v) {
+                simplify->mutate(le->a, &i);
+            }
+            if (v && i.min_defined) {
                 // i <= v
                 expr_info.min_defined = true;
-                expr_info.min = *i;
+                expr_info.min = i.min;
             }
         }
     } else if (const And *a = fact.as<And>()) {
@@ -288,33 +298,43 @@ void learn_false_helper(const Expr &fact, Simplify *simplify, Simplify::ScopedFa
 
     } else if (const LT *lt = fact.as<LT>()) {
         v = lt->a.as<Variable>();
-        const int64_t *i = as_const_int(lt->b);
-        if (v && i) {
+        Simplify::ExprInfo i;
+        if (v) {
+            simplify->mutate(lt->b, &i);
+        }
+        if (v && i.min_defined) {
             // !(v < i)
             expr_info.min_defined = true;
-            expr_info.min = *i;
+            expr_info.min = i.min;
         }
         v = lt->b.as<Variable>();
-        i = as_const_int(lt->a);
-        if (v && i) {
+        if (v) {
+            simplify->mutate(lt->a, &i);
+        }
+        if (v && i.max_defined) {
             // !(i < v)
             expr_info.max_defined = true;
-            expr_info.max = *i;
+            expr_info.max = i.max;
         }
     } else if (const LE *le = fact.as<LE>()) {
         v = le->a.as<Variable>();
-        const int64_t *i = as_const_int(le->b);
-        if (v && i) {
+        Simplify::ExprInfo i;
+        if (v) {
+            simplify->mutate(le->b, &i);
+        }
+        if (v && v->type.is_int() && v->type.bits() >= 32 && i.min_defined) {
             // !(v <= i)
             expr_info.min_defined = true;
-            expr_info.min = *i + 1;
+            expr_info.min = i.min + 1;
         }
         v = le->b.as<Variable>();
-        i = as_const_int(le->a);
-        if (v && i) {
+        if (v) {
+            simplify->mutate(le->a, &i);
+        }
+        if (v && v->type.is_int() && v->type.bits() >= 32 && i.max_defined) {
             // !(i <= v)
             expr_info.max_defined = true;
-            expr_info.max = *i - 1;
+            expr_info.max = i.max - 1;
         }
     } else if (const Or *o = fact.as<Or>()) {
         // Both must be false
