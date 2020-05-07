@@ -25,7 +25,7 @@ function(add_halide_blas_library)
   cmake_parse_arguments(args "" "${oneValueArgs}" "${multiValueArgs}" ${ARGN})
   halide_library_from_generator(${args_TARGET}
       GENERATOR ${args_NAME}.generator
-      HALIDE_TARGET_FEATURES no_asserts no_bounds_query
+      HALIDE_TARGET_FEATURES no_bounds_query
       ${args_UNPARSED_ARGUMENTS}
   )
   target_link_libraries(halide_blas PUBLIC ${args_TARGET})

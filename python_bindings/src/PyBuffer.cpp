@@ -1,5 +1,7 @@
 #include "PyBuffer.h"
 
+#include <utility>
+
 #include "PyFunc.h"
 #include "PyType.h"
 
@@ -46,12 +48,12 @@ std::vector<halide_dimension_t> get_buffer_shape(const Buffer<> &b) {
 // PyBind11 doesn't have baked-in support for float16, so add just
 // enough special-case wrapping to support it.
 template<typename T>
-inline T value_cast(py::object value) {
+inline T value_cast(const py::object &value) {
     return value.cast<T>();
 }
 
 template<>
-inline float16_t value_cast<float16_t>(py::object value) {
+inline float16_t value_cast<float16_t>(const py::object &value) {
     return float16_t(value.cast<double>());
 }
 
@@ -65,7 +67,7 @@ inline std::string format_descriptor<float16_t>() {
     return "e";
 }
 
-void call_fill(Buffer<> &b, py::object value) {
+void call_fill(Buffer<> &b, const py::object &value) {
 
 #define HANDLE_BUFFER_TYPE(TYPE)                    \
     if (b.type() == type_of<TYPE>()) {              \
@@ -91,7 +93,7 @@ void call_fill(Buffer<> &b, py::object value) {
     throw py::value_error("Unsupported Buffer<> type.");
 }
 
-bool call_all_equal(Buffer<> &b, py::object value) {
+bool call_all_equal(Buffer<> &b, const py::object &value) {
 
 #define HANDLE_BUFFER_TYPE(TYPE)                                \
     if (b.type() == type_of<TYPE>()) {                          \
@@ -200,7 +202,7 @@ py::object buffer_getitem_operator(Buffer<> &buf, const std::vector<int> &pos) {
     return py::object();
 }
 
-py::object buffer_setitem_operator(Buffer<> &buf, const std::vector<int> &pos, py::object value) {
+py::object buffer_setitem_operator(Buffer<> &buf, const std::vector<int> &pos, const py::object &value) {
     if ((size_t)pos.size() != (size_t)buf.dimensions()) {
         throw py::value_error("Incorrect number of dimensions.");
     }
@@ -242,7 +244,7 @@ class PyBuffer : public Buffer<> {
             if (INT_MAX < info.shape[i] || INT_MAX < (info.strides[i] / t.bytes())) {
                 throw py::value_error("Out of range arguments to make_dim_vec.");
             }
-            dims.push_back({0, (int32_t)info.shape[i], (int32_t)(info.strides[i] / t.bytes())});
+            dims.emplace_back(0, (int32_t)info.shape[i], (int32_t)(info.strides[i] / t.bytes()));
         }
         return dims;
     }
@@ -266,7 +268,7 @@ public:
         : Buffer<>(b), info() {
     }
 
-    PyBuffer(py::buffer buffer, const std::string &name)
+    PyBuffer(const py::buffer &buffer, const std::string &name)
         : PyBuffer(buffer.request(/*writable*/ true), name) {
         // Default to setting host-dirty on any PyBuffer we create from an existing py::buffer;
         // this allows (e.g.) code like
@@ -284,7 +286,7 @@ public:
         this->set_host_dirty();
     }
 
-    virtual ~PyBuffer() {
+    ~PyBuffer() override {
     }
 };
 
@@ -354,7 +356,7 @@ void define_buffer(py::module &m) {
             .def_static("make_scalar", (Buffer<>(*)(Type, const std::string &))Buffer<>::make_scalar, py::arg("type"), py::arg("name") = "")
             .def_static("make_interleaved", (Buffer<>(*)(Type, int, int, int, const std::string &))Buffer<>::make_interleaved, py::arg("type"), py::arg("width"), py::arg("height"), py::arg("channels"), py::arg("name") = "")
             .def_static(
-                "make_with_shape_of", [](Buffer<> buffer, const std::string &name) -> Buffer<> {
+                "make_with_shape_of", [](const Buffer<> &buffer, const std::string &name) -> Buffer<> {
                     return Buffer<>::make_with_shape_of(buffer, nullptr, nullptr, name);
                 },
                 py::arg("src"), py::arg("name") = "")
@@ -558,7 +560,7 @@ void define_buffer(py::module &m) {
             .def("device_malloc", (int (Buffer<>::*)(const DeviceAPI &, const Target &)) & Buffer<>::device_malloc, py::arg("device_api"), py::arg("target") = get_jit_target_from_environment())
 
             .def(
-                "set_min", [](Buffer<> &b, const std::vector<int> mins) -> void {
+                "set_min", [](Buffer<> &b, const std::vector<int> &mins) -> void {
                     if (mins.size() > (size_t)b.dimensions()) {
                         throw py::value_error("Too many arguments");
                     }
@@ -567,7 +569,7 @@ void define_buffer(py::module &m) {
                 py::arg("mins"))
 
             .def(
-                "contains", [](Buffer<> &b, const std::vector<int> coords) -> bool {
+                "contains", [](Buffer<> &b, const std::vector<int> &coords) -> bool {
                     if (coords.size() > (size_t)b.dimensions()) {
                         throw py::value_error("Too many arguments");
                     }
@@ -589,10 +591,10 @@ void define_buffer(py::module &m) {
                 return buf(pos);
             })
 
-            .def("__setitem__", [](Buffer<> &buf, const int &pos, py::object value) -> py::object {
+            .def("__setitem__", [](Buffer<> &buf, const int &pos, const py::object &value) -> py::object {
                 return buffer_setitem_operator(buf, {pos}, value);
             })
-            .def("__setitem__", [](Buffer<> &buf, const std::vector<int> &pos, py::object value) -> py::object {
+            .def("__setitem__", [](Buffer<> &buf, const std::vector<int> &pos, const py::object &value) -> py::object {
                 return buffer_setitem_operator(buf, pos, value);
             })
 

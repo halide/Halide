@@ -7,7 +7,7 @@
 
 std::set<std::string> done;
 
-void dump_header(std::string header) {
+void dump_header(const std::string &header) {
     if (done.find(header) != done.end()) return;
     done.insert(header);
 
