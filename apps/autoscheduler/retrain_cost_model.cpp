@@ -437,10 +437,10 @@ int main(int argc, char **argv) {
                     auto &tp = tpp[model];
 
                     for (auto &p : train ? samples : validation_set) {
-                        std::cout << "HASAN: train = " << train << std::endl;
-                        std::cout << "HASAN: p.pipeline_id = " << p.second.pipeline_id << std::endl;
-                        std::cout << "HASAN: p.num_stages = " << p.second.num_stages << std::endl;
-                        std::cout << "HASAN: p.schedules.size() = " << p.second.schedules.size() << std::endl;
+                        // std::cout << "HASAN: train = " << train << std::endl;
+                        // std::cout << "HASAN: p.pipeline_id = " << p.second.pipeline_id << std::endl;
+                        // std::cout << "HASAN: p.num_stages = " << p.second.num_stages << std::endl;
+                        // std::cout << "HASAN: p.schedules.size() = " << p.second.schedules.size() << std::endl;
 
                         if (kModels > 1 && rng() & 1) continue;  // If we are training multiple kModels, allow them to diverge.
                         if (p.second.schedules.size() < 8) {
