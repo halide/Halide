@@ -29,6 +29,7 @@ namespace msa {
                 initialized(false),
                 best_value(0),
                 average_value(0),
+                num_wins(0),
                 depth(parent ? parent->depth + 1 : 0)
             {
             }
@@ -58,7 +59,7 @@ namespace msa {
 
 
             //--------------------------------------------------------------
-            void update(const double reward, const State& best_state) {
+            void update(const double reward, const State& best_state,const double father_value) {
         
                 if (best_value < reward || !initialized){
                     best_value = reward;
@@ -68,6 +69,9 @@ namespace msa {
                     action.value = best_value;
                 }
                 average_value += reward;
+                if (reward >= father_value) {
+                    num_wins += 1;
+                }
                 num_visits++;
             }
 
@@ -90,8 +94,12 @@ namespace msa {
 
             // best value (wins)
             double get_best_value() const { return best_value; }
+            
             //average value (wins)
             double get_average_value() const { return average_value; }
+            
+            //number of wins
+            int get_num_wins() const { return num_wins; }
 
             // how deep the TreeNode is in the tree
             int get_depth() const { return depth; }
@@ -114,6 +122,7 @@ namespace msa {
             bool initialized;       // whether value was initialized/updated or not
             double best_value;			// best value of this TreeNode
             double average_value;			// average value of this TreeNode
+            int num_wins;
             int depth;
 
             std::vector< Ptr > children;	// all current children

@@ -1691,7 +1691,7 @@ IntrusivePtr<State> optimal_mcts_schedule(
     double uct_k = ::sqrt(2);
     int max_millis = 0;
     int max_iterations = 500;
-    int simulation_depth = 50;
+    //int simulation_depth = 50;
     // mcts_depth cannot be larger than 2*dag.nodes.size()
     // Get the max_millis for the mcts
     string max_millis_str = get_env_variable("MCTS_MAX_MILLIS");
@@ -1705,10 +1705,10 @@ IntrusivePtr<State> optimal_mcts_schedule(
         max_iterations = atoi(max_iterations_str.c_str());
     }
     // Get the simulation_depth for the mcts
-    string simulation_depth_str = get_env_variable("MCTS_SIMULATION_DEPTH");
+    /*string simulation_depth_str = get_env_variable("MCTS_SIMULATION_DEPTH");
     if (!simulation_depth_str.empty()) {
         simulation_depth = atoi(simulation_depth_str.c_str());
-    }
+    }*/
     // Get the mcts_depth for the mcts
     /*string mcts_depth_str = get_env_variable("MCTS_DEPTH");
     if (!mcts_depth_str.empty()) {
@@ -1755,11 +1755,12 @@ IntrusivePtr<State> optimal_mcts_schedule(
             // run uct mcts on current state and get best action
 
             msa::mcts::UCT<State::WrapperState, State::Action> meta_uct;
-            double uct_factor = 1+(i%2);
-            meta_uct.uct_k = uct_k*uct_factor; 
+            //double uct_factor = 1+(i%2);
+            meta_uct.uct_k = uct_k;//*uct_factor; 
             meta_uct.max_millis = max_millis;
             meta_uct.max_iterations = max_iterations;
-            meta_uct.simulation_depth = simulation_depth;
+            meta_uct.father_value = global_best_value;
+            if (initialized) meta_uct.use_father_value = false;
             bool valid = false;
             actions[i] = meta_uct.run(states[i],valid);
             // make sure actions[i] gets updated

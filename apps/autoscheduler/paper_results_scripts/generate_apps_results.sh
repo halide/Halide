@@ -57,9 +57,9 @@ elif [ "$autoscheduler" == "mcts" ]; then
     fi
 
     # mcts
-    export HL_NUM_PASSES=16
+    export HL_NUM_PASSES=20
     export MCTS_MAX_MILLIS=0
-    export MCTS_MAX_ITERATIONS=512
+    export MCTS_MAX_ITERATIONS=1000
     results="mcts"
 elif [ "$autoscheduler" == "master" ]; then
     # master
@@ -119,7 +119,7 @@ mkdir $results 2>/dev/null
 # benchmark everything
 for app in ${APPS}; do
     echo "running $app (autoscheduler == $autoscheduler)" >> progress
-    timeout 20s make -C ${HALIDE}/apps/${app} test &> $results/$app.txt
+    make -C ${HALIDE}/apps/${app} test &> $results/$app.txt
 
     if [ $? -ne 0 ]; then
         echo "Failed to benchmark $app"

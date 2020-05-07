@@ -1472,9 +1472,9 @@ vector<IntrusivePtr<const LoopNest>> LoopNest::compute_in_tiles(const FunctionDA
             outer->children.emplace_back(inner);
 
             // HACK
-            // bool may_slide = false;
-            bool may_slide = (!in_realization &&
-                              f->stages.size() == 1);
+            bool may_slide = false;
+            //bool may_slide = (!in_realization &&
+            //                  f->stages.size() == 1);
             if (may_slide) {
                 // Store here, but compute further in. Currently
                 // don't have to worry about the constraints this
