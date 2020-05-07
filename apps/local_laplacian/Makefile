@@ -1,8 +1,6 @@
 include ../support/Makefile.inc
 include ../support/autoscheduler.inc
 
-HL_TARGET=host-cuda
-
 GRADIENT_AUTOSCHED_BIN=../gradient_autoscheduler/bin
 CXXFLAGS += -I../support/
 
@@ -91,7 +89,7 @@ autotune: $(GENERATOR_BIN)/local_laplacian.generator $(AUTOSCHED_BIN)/featurizat
 	bash $(AUTOSCHED_SRC)/autotune_loop.sh \
 		$(GENERATOR_BIN)/local_laplacian.generator \
 		local_laplacian \
-		host-cuda \
+		$(HL_TARGET) \
 		$(AUTOSCHED_SRC)/gpu.weights \
 		$(AUTOSCHED_BIN) \
 		$(BATCH_ID) \

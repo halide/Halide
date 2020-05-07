@@ -3,8 +3,6 @@ include ../support/autoscheduler.inc
 
 BIN ?= bin
 
-HL_TARGET=host-cuda
-
 GRADIENT_AUTOSCHED_BIN=../gradient_autoscheduler/bin
 CXXFLAGS += -I../support/
 
@@ -59,7 +57,7 @@ autotune: $(GENERATOR_BIN)/iir_blur.generator $(AUTOSCHED_BIN)/featurization_to_
 	bash $(AUTOSCHED_SRC)/autotune_loop.sh \
 		$(GENERATOR_BIN)/iir_blur.generator \
 		iir_blur \
-		host-cuda \
+		$(HL_TARGET) \
 		$(AUTOSCHED_SRC)/gpu.weights \
 		$(AUTOSCHED_BIN) \
 		$(BATCH_ID) \

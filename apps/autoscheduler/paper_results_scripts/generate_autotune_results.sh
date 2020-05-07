@@ -33,7 +33,12 @@ export CXX="ccache c++"
 export HL_MACHINE_PARAMS=80,24000000,160
 
 export HL_PERMIT_FAILED_UNROLL=1
-export HL_TARGET=host-cuda
+
+if [ -z ${HL_TARGET} ]; then
+    HL_TARGET=host-cuda
+fi
+
+export HL_TARGET=${HL_TARGET}
 
 if [ -z ${SAMPLES_DIR} ]; then
     DEFAULT_SAMPLES_DIR_NAME=autotuned_samples

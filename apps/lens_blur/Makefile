@@ -1,8 +1,6 @@
 include ../support/Makefile.inc
 include ../support/autoscheduler.inc
 
-HL_TARGET=host-cuda
-
 GRADIENT_AUTOSCHED_BIN=../gradient_autoscheduler/bin
 CXXFLAGS += -I../support/
 
@@ -64,7 +62,7 @@ autotune: $(GENERATOR_BIN)/lens_blur.generator $(AUTOSCHED_BIN)/featurization_to
 	bash $(AUTOSCHED_SRC)/autotune_loop.sh \
 		$(GENERATOR_BIN)/lens_blur.generator \
 		lens_blur \
-		host-cuda-large_buffers \
+		$(HL_TARGET)-large_buffers \
 		$(AUTOSCHED_SRC)/gpu.weights \
 		$(AUTOSCHED_BIN) \
 		$(BATCH_ID) \

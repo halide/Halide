@@ -8,7 +8,7 @@ CUDA_SDK ?= /usr/local/cuda-8.0
 CXXFLAGS += -I $(CUDA_SDK)/include -I../support/
 LDFLAGS += -L $(CUDA_SDK)/lib64
 
-HL_TARGET = host-cuda-cuda_capability_50
+HL_TARGET := $(HL_TARGET)-cuda-cuda_capability_50
 
 GRADIENT_AUTOSCHED_BIN=../gradient_autoscheduler/bin
 

@@ -9,8 +9,6 @@ HL_RANDOM_DROPOUT ?= 100
 HL_SEED ?= 0
 HL_BEAM_SIZE ?= 1
 
-HL_TARGET=host-cuda
-
 GRADIENT_AUTOSCHED_BIN=../gradient_autoscheduler/bin
 
 ifeq ($(NEW_AUTOSCHEDULER),1)
@@ -79,7 +77,7 @@ autotune: $(GENERATOR_BIN)/random_pipeline.generator $(AUTOSCHED_BIN)/featurizat
 	bash $(AUTOSCHED_SRC)/autotune_loop.sh \
 		$(GENERATOR_BIN)/random_pipeline.generator \
 		random_pipeline \
-		host-cuda \
+		$(HL_TARGET) \
 		$(AUTOSCHED_SRC)/gpu.weights \
 		$(AUTOSCHED_BIN) \
 		$(BATCH_ID) \

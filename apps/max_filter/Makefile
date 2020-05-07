@@ -1,8 +1,6 @@
 include ../support/Makefile.inc
 include ../support/autoscheduler.inc
 
-HL_TARGET=host-cuda
-
 .PHONY: build clean test
 
 build: $(BIN)/$(HL_TARGET)/filter
@@ -68,7 +66,7 @@ autotune: $(GENERATOR_BIN)/max_filter.generator $(AUTOSCHED_BIN)/featurization_t
 	bash $(AUTOSCHED_SRC)/autotune_loop.sh \
 		$(GENERATOR_BIN)/max_filter.generator \
 		max_filter \
-		host-cuda \
+		$(HL_TARGET) \
 		$(AUTOSCHED_SRC)/gpu.weights \
 		$(AUTOSCHED_BIN) \
 		$(BATCH_ID) \
