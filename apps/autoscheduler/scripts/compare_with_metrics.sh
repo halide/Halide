@@ -1,7 +1,7 @@
 #!/bin/bash
 
-if [ $# -ne 2 ]; then
-    echo "Usage: $0 outliers_file num"
+if [ $# -ne 3 ]; then
+    echo "Usage: $0 app timestamp num"
     exit
 fi
 
@@ -11,8 +11,16 @@ find_halide HALIDE_ROOT
 
 trap exit INT
 
-OUTLIERS_FILE=${1}
-NUM=${2}
+APP=${1}
+TIMESTAMP=${2}
+NUM=${3}
+
+OUTLIERS_FILE="${HALIDE_ROOT}/apps/${APP}/autotuned_samples-${TIMESTAMP}/outliers"
+
+if [ ! -f ${OUTLIERS_FILE} ]; then
+    echo "${OUTLIERS_FILE} not found."
+    exit
+fi
 
 if [[ $NUM == 0 ]]; then
     FILES=$(cat "${OUTLIERS_FILE}" | awk -F", " '{print $1}')
