@@ -272,8 +272,8 @@ public:
             }
 
             if (consume("fold(")) {
-                // strip folds
                 Expr e = parse_halide_expr(0);
+                e = Call::make(e.type(), "fold", {e}, Call::PureIntrinsic);
                 expect(")");
                 return e;
             }

@@ -31,13 +31,26 @@ class Canonicalizer : public IRMutator {
     Expr visit_commutative_op(const Op *op) {
         Expr a = mutate(op->a);
         Expr b = mutate(op->b);
+        IRNodeType a_node_type = a.node_type();
+        IRNodeType b_node_type = b.node_type();
         const Call *call_a = a.as<Call>();
+        const Call *call_b = b.as<Call>();
         const Variable *var_a = a.as<Variable>();
         const Variable *var_b = b.as<Variable>();
         bool a_is_const = (is_const(a) ||
                            (var_a && var_a->name[0] == 'c') ||
                            (call_a && call_a->name == "fold"));
-        bool should_commute = a_is_const || (!var_a && !var_b && a.node_type() < b.node_type());
+        if (a_is_const) {
+            a_node_type = IRNodeType::IntImm;
+        }
+        bool b_is_const = (is_const(b) ||
+                           (var_b && var_b->name[0] == 'c') ||
+                           (call_b && call_b->name == "fold"));
+        if (b_is_const) {
+            b_node_type = IRNodeType::IntImm;
+        }
+        bool should_commute = ((a_is_const && !b_is_const) ||
+                               (!var_a && !var_b && a_node_type < b_node_type));
         if (should_commute) {
             return Op::make(b, a);
         } else {
@@ -91,54 +104,30 @@ unsigned int edit_distance(const std::string &s1, const std::string &s2) {
 }
 
 std::string expr_to_rpn_string(const Expr &e) {
-    std::ostringstream ss;
-    ss << e;
-    return ss.str();
-    /*
+    class VisitLeaves : public IRMutator {
+        using IRMutator::visit;
+        Expr visit(const Variable *op) override {
+            ss << op->name;
+            return op;
+        }
 
-    class RPNPrinter : public IRMutator {
     public:
+        using IRMutator::mutate;
         Expr mutate(const Expr &e) override {
-            IRMutator::mutate(e);
-            if (e.as<Variable>() || is_const(e)) {
-                ss << e << ' ';
-            } else if (e.as<Add>()) {
-                ss << "+ ";
-            } else if (e.as<Sub>()) {
-                ss << "- ";
-            } else if (e.as<Min>()) {
-                ss << "_ ";
-            } else if (e.as<Max>()) {
-                ss << "^ ";
-            } else if (e.as<Mul>()) {
-                ss << "* ";
-            } else if (e.as<Div>()) {
-                ss << "/ ";
-            } else if (e.as<Select>()) {
-                ss << "s ";
-            } else if (e.as<And>()) {
-                ss << "& ";
-            } else if (e.as<Or>()) {
-                ss << "| ";
-            } else if (e.as<EQ>()) {
-                ss << "= ";
-            } else if (e.as<NE>()) {
-                ss << "! ";
-            } else if (e.as<LT>()) {
-                ss << "< ";
-            } else if (e.as<LE>()) {
-                ss << "> ";
+            if (is_const(e) || e.as<Variable>()) {
+                IRMutator::mutate(e);
             } else {
-                ss << e.node_type() << ' ';
+                ss << "(";
+                IRMutator::mutate(e);
+                ss << ")";
             }
             return e;
-        };
+        }
 
-        std::ostringstream ss;
-    } rpn_printer;
-    rpn_printer.mutate(e);
-    return rpn_printer.ss.str();
-    */
+        std::stringstream ss;
+    } visit_leaves;
+    visit_leaves.mutate(e);
+    return visit_leaves.ss.str();
 }
 
 vector<Rule> generate_commuted_variants(const Rule &rule) {
@@ -434,8 +423,29 @@ void check_rule(Rule &r) {
                 new_predicate = simplifier.mutate(new_predicate, nullptr);
             }
 
-            debug(0) << "Initial guess at predicate: " << new_predicate << "\n";
+            auto lhs_vars = find_vars(r.lhs);
             for (int terms = 0;; terms++) {
+                // Try to eliminate constant vars that only occur on the RHS
+                {
+                    for (auto v : find_vars(r.rhs)) {
+                        if (lhs_vars.count(v.first)) continue;
+                        for (Expr t : unpack_binary_op<And>(new_predicate)) {
+                            auto result = solve_expression(t, v.first);
+                            if (result.fully_solved) {
+                                if (const EQ *eq = result.result.as<EQ>()) {
+                                    if (equal(eq->a, Variable::make(Int(32), v.first))) {
+                                        Expr replacement = simplify(eq->b);
+                                        new_predicate = simplify(substitute(v.first, replacement, new_predicate));
+                                        r.rhs = substitute(v.first, replacement, r.rhs);
+                                        rule_holds = simplify(substitute(v.first, replacement, rule_holds));
+                                        break;
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+
                 if (terms > 4) {
                     // May be trying to handle an infinite number of cases one term at a time
                     debug(0) << "Giving up. Accumulating too many terms\n";
@@ -464,7 +474,6 @@ void check_rule(Rule &r) {
                     for (auto c : clauses) {
 
                         // Aggressively simplify the clause
-                        debug(0) << c << " -> ";
                         auto terms = unpack_binary_op<And>(c);
                         for (size_t i = 0; i < terms.size(); i++) {
                             Simplify simplifier(true, nullptr, nullptr);
@@ -477,7 +486,6 @@ void check_rule(Rule &r) {
                             }
                         }
                         c = pack_binary_op<And>(terms);
-                        debug(0) << c << "\n";
 
                         map<string, Expr> binding;
                         auto z3_result = satisfy(imp.result && c && !rule_holds, &binding, "checking one clause in DNF", 30);
@@ -552,6 +560,28 @@ void check_rule(Rule &r) {
     }
 }
 
+class UniqueConstantVars : public IRMutator {
+    using IRMutator::visit;
+
+    int next = 0;
+
+    Expr visit(const Variable *op) override {
+        if (op->name[0] == 'c') {
+            return Variable::make(op->type, "c" + std::to_string(next++));
+        } else {
+            return op;
+        }
+    }
+
+    Expr visit(const Call *op) override {
+        if (op->name == "fold") {
+            return Variable::make(op->type, "c" + std::to_string(next++));
+        } else {
+            return IRMutator::visit(op);
+        }
+    }
+};
+
 int main(int argc, char **argv) {
     if (argc < 2) {
         std::cout << "Usage: ./filter_rewrite_rules rewrite_rules.txt [output_dir]\n";
@@ -576,15 +606,45 @@ int main(int argc, char **argv) {
 
     vector<Rule> rules;
 
-    for (const Expr &e : exprs) {
+    for (Expr e : exprs) {
+        // Make constant vars unique. Maybe they were equal by
+        // coincidence in the original rule.
+        e = UniqueConstantVars().mutate(e);
+
         if (const Call *call = e.as<Call>()) {
             if (call->name != "rewrite") {
                 std::cerr << "Expr is not a rewrite rule: " << e << "\n";
                 return -1;
             }
             _halide_user_assert(call->args.size() == 3);
-            // Get the RHS in canonical form
-            rules.emplace_back(Rule{call->args[0], call->args[1], call->args[2], e});
+
+#if 0
+            // Add the constraint that at least one use of a non-const var is entirely eliminated
+            bool good = false;
+            Expr lhs = call->args[0];
+            Expr rhs = call->args[1];
+            auto lhs_vars = find_vars(lhs);
+            auto rhs_vars = find_vars(rhs);
+            int total = 0;
+            for (auto p : lhs_vars) {
+                total += p.second.second;
+                if (p.first[0] == 'c') continue;
+                if (rhs_vars[p.first].second < p.second.second) good = true;
+            }
+            if (!good) {
+                std::cout << "Doesn't eliminate a var: " << lhs << " -> " << rhs << "\n";
+                continue;
+            }
+
+            // Also add the constraint that the total number of leaves is at most 6.
+            if (total > 6) {
+                std::cout << "Too many leaves on LHS: " << total << "\n";
+                continue;
+            }
+#endif
+
+            // Get the RHS in canonical form. Ditch any existing predicate.
+            rules.emplace_back(Rule{call->args[0], call->args[1], const_true(), e});
         } else {
             std::cerr << "Expr is not a rewrite rule: " << e << "\n";
             return -1;
@@ -614,7 +674,6 @@ int main(int argc, char **argv) {
         if (const LE *lhs = r.lhs.as<LE>()) {
             if (is_const(r.rhs)) {
                 r.lhs = (lhs->b < lhs->a);
-                debug(0) << r.rhs << "\n";
                 r.rhs = simplify(!r.rhs);
             } else if (const LE *rhs = r.rhs.as<LE>()) {
                 r.lhs = (lhs->b < lhs->a);
@@ -636,7 +695,6 @@ int main(int argc, char **argv) {
         if (const NE *lhs = r.lhs.as<NE>()) {
             if (is_const(r.rhs)) {
                 r.lhs = (lhs->b == lhs->a);
-                debug(0) << r.rhs << "\n";
                 r.rhs = simplify(!r.rhs);
             } else if (const LE *rhs = r.rhs.as<LE>()) {
                 r.lhs = (lhs->b == lhs->a);
@@ -870,19 +928,6 @@ int main(int argc, char **argv) {
             }
         }
         if (bad) continue;
-
-        // Add the constraint that at least one use of var is entirely eliminated
-        bool good = false;
-        auto lhs_vars = find_vars(r.lhs);
-        auto rhs_vars = find_vars(r.rhs);
-        for (auto p : lhs_vars) {
-            if (p.first[0] == 'c') continue;
-            if (rhs_vars[p.first].second < p.second.second) good = true;
-        }
-        if (!good) {
-            std::cout << "Doesn't eliminate a var: " << r.lhs << " -> " << r.rhs << "\n";
-            continue;
-        }
 
         // We have a reasonable rule
         std::cout << "Good rule: rewrite(" << r.lhs << ", " << r.rhs << ", " << r.predicate << ")\n";

@@ -390,7 +390,7 @@ int main(int argc, char **argv) {
 
     // Generate rules from patterns
     vector<std::future<void>> futures;
-    ThreadPool<void> pool(1);
+    ThreadPool<void> pool;
     std::mutex mutex;
     vector<pair<Expr, Expr>> rules;
     int done = 0;

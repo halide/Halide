@@ -338,6 +338,8 @@ class GroupLoopInvariants : public IRMutator {
     };
 
     int expr_depth(const Expr &e) {
+        // We want to keep constants outermost
+        if (is_const(e)) return 100000;
         ExprDepth depth(var_depth);
         e.accept(&depth);
         return depth.result;
@@ -496,8 +498,8 @@ class GroupLoopInvariants : public IRMutator {
 };
 
 Stmt loop_invariant_code_motion(Stmt s) {
-    s = GroupLoopInvariants().mutate(s);
     s = common_subexpression_elimination(s);
+    s = GroupLoopInvariants().mutate(s);
     s = LICM().mutate(s);
     s = simplify_exprs(s);
     return s;
