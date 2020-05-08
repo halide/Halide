@@ -1519,6 +1519,45 @@ void check_boolean() {
     // A for loop where the extent is at most one can just be an if statement
     check(IfThenElse::make(y % 2 == x, loop), IfThenElse::make(y % 2 == x, IfThenElse::make(0 < x, body)));
 
+    // Check we can learn from bounds on variables
+    check(IfThenElse::make(x < 5, Evaluate::make(min(x, 17))),
+          IfThenElse::make(x < 5, Evaluate::make(x)));
+
+    check(IfThenElse::make(x < min(y, 5), Evaluate::make(min(x, 17))),
+          IfThenElse::make(x < min(y, 5), Evaluate::make(x)));
+
+    check(IfThenElse::make(5 < x, Evaluate::make(max(x, 2))),
+          IfThenElse::make(5 < x, Evaluate::make(x)));
+
+    check(IfThenElse::make(max(y, 5) < x, Evaluate::make(max(x, 2))),
+          IfThenElse::make(max(y, 5) < x, Evaluate::make(x)));
+
+    check(IfThenElse::make(x <= 5, Evaluate::make(min(x, 17))),
+          IfThenElse::make(x <= 5, Evaluate::make(x)));
+
+    check(IfThenElse::make(x <= min(y, 5), Evaluate::make(min(x, 17))),
+          IfThenElse::make(x <= min(y, 5), Evaluate::make(x)));
+
+    check(IfThenElse::make(5 <= x, Evaluate::make(max(x, 2))),
+          IfThenElse::make(5 <= x, Evaluate::make(x)));
+
+    check(IfThenElse::make(max(y, 5) <= x, Evaluate::make(max(x, 2))),
+          IfThenElse::make(max(y, 5) <= x, Evaluate::make(x)));
+
+    // Concretely, this lets us skip some redundant assertions
+    check(Block::make(AssertStmt::make(max(y, 3) < x, x),
+                      AssertStmt::make(0 < x, x)),
+          Block::make(AssertStmt::make(max(y, 3) < x, x),
+                      Evaluate::make(0)));
+
+    // Check it works transitively
+    check(IfThenElse::make(0 < x,
+                           IfThenElse::make(x < y,
+                                            IfThenElse::make(y < z,
+                                                             Evaluate::make(z == 2)))),
+          // z can't possibly be two, because x is at least one, so y
+          // is at least two, so z must be at least three.
+          Evaluate::make(const_false()));
     // Simplifications of selects
     check(select(x == 3, 5, 7) + 7, select(x == 3, 12, 14));
     check(select(x == 3, 5, 7) - 7, select(x == 3, -2, 0));
@@ -1561,7 +1600,6 @@ void check_boolean() {
     check(select(cond, x % y, z % y), select(cond, x, z) % y);
 
     {
-
         Expr b[12];
         for (int i = 0; i < 12; i++) {
             b[i] = Variable::make(Bool(), unique_name('b'));
