@@ -177,25 +177,35 @@ public:
                 type = t;
             }
         };
-        static TypePattern typenames[] = {{UInt(1)},
-                                          {Int(8)},
-                                          {UInt(8)},
-                                          {Int(16)},
-                                          {UInt(16)},
-                                          {Int(32)},
-                                          {UInt(32)},
-                                          {Int(64)},
-                                          {UInt(64)},
-                                          {Float(64)},
-                                          {Float(32)}};
+        static vector<std::unique_ptr<TypePattern>> typenames =
+            []() {
+                Type scalar_types[] = {UInt(1),
+                                       Int(8),
+                                       UInt(8),
+                                       Int(16),
+                                       UInt(16),
+                                       Int(32),
+                                       UInt(32),
+                                       Int(64),
+                                       UInt(64),
+                                       Float(64),
+                                       Float(32)};
+                vector<std::unique_ptr<TypePattern>> vec;
+                for (int v : {1, 2, 4, 8, 16, 32, 64, 128}) {
+                    for (Type t : scalar_types) {
+                        vec.emplace_back(new TypePattern(t.with_lanes(v)));
+                    }
+                }
+                return vec;
+            }();
 
         consume_whitespace();
 
         if (precedence == 10) {
             // type-cast
-            for (auto t : typenames) {
-                if (consume(t.cast_prefix)) {
-                    Expr a = cast(t.type, parse_halide_expr(0));
+            for (const auto &t : typenames) {
+                if (consume(t->cast_prefix)) {
+                    Expr a = cast(t->type, parse_halide_expr(0));
                     expect(")");
                     return a;
                 }
@@ -332,10 +342,10 @@ public:
             }
 
             Type expected_type = Int(32);
-            for (auto t : typenames) {
+            for (const auto &t : typenames) {
                 // A type annotation for the token that follows
-                if (consume(t.constant_prefix)) {
-                    expected_type = t.type;
+                if (consume(t->constant_prefix)) {
+                    expected_type = t->type;
                 }
             }
 
@@ -373,6 +383,14 @@ public:
                 string name = consume_token();
                 if (consume("[")) {
                     Expr index = parse_halide_expr(0);
+                    // eat an alignment specifier
+                    consume_whitespace();
+                    if (consume("aligned(")) {
+                        consume_int();
+                        expect(", ");
+                        consume_int();
+                        expect(")");
+                    }
                     expect("]");
                     if (expected_type == Type{}) {
                         expected_type = Int(32);
