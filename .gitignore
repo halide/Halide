@@ -1,4 +1,6 @@
 /tutorial/figures/tmp/trace.bin
+/apps/*/results
+/apps/*/results_baseline
 /apps/*/bin
 /apps/*/cmake_build
 /apps/HelloMatlab/blurred.png
