@@ -10,6 +10,7 @@
 #include <set>
 #include <vector>
 
+#include "CompilerLogger.h"
 #include "IR.h"
 #include "IREquality.h"
 #include "IROperator.h"
@@ -488,7 +489,11 @@ struct Wild {
 
 template<int i>
 std::ostream &operator<<(std::ostream &s, const Wild<i> &op) {
-    s << "_" << i;
+    if (i >= 0 && i < 6) {
+        s << ("xyzwuv"[i]);
+    } else {
+        s << "_" << i;
+    }
     return s;
 }
 
@@ -2186,19 +2191,26 @@ struct Rewriter {
     MatcherState state;
     halide_type_t output_type, wildcard_type;
     bool validate;
-
-#if HALIDE_DEBUG_MATCHED_RULES
-    bool d = true;
-#endif
+    CompilerLogger *logger = nullptr;
 
     HALIDE_ALWAYS_INLINE
     Rewriter(Instance &&instance, halide_type_t ot, halide_type_t wt)
-        : instance(std::forward<Instance>(instance)), output_type(ot), wildcard_type(wt) {
+        : instance(std::forward<Instance>(instance)), output_type(ot), wildcard_type(wt), logger(get_compiler_logger()) {
     }
 
     template<typename After>
     HALIDE_NEVER_INLINE void build_replacement(After after) {
         result = after.make(state, output_type);
+    }
+
+    template<typename Before,
+             typename After,
+             typename Predicate>
+    HALIDE_NEVER_INLINE void log_match(Before before, After after, Predicate pred) {
+        std::ostringstream rule_name;
+        rule_name << "rewrite(" << before << ", " << after << ", " << pred << ")";
+        Expr input = instance.make(state, output_type);
+        logger->record_matched_simplifier_rule(rule_name.str(), input);
     }
 
     template<typename Before,
@@ -2215,8 +2227,8 @@ struct Rewriter {
         if (before.template match<0>(instance, state)) {
             build_replacement(after);
 #if HALIDE_DEBUG_MATCHED_RULES
-            if (d) {
-                debug(0) << instance << " -> " << result << " via " << before << " -> " << after << "\n";
+            if (logger) {
+                log_match(before, after, Const(1));
             }
 #endif
             return true;
@@ -2235,8 +2247,12 @@ struct Rewriter {
         if (before.template match<0>(instance, state)) {
             result = after;
 #if HALIDE_DEBUG_MATCHED_RULES
-            if (d) {
-                debug(0) << instance << " -> " << result << " via " << before << " -> " << after << "\n";
+            if (logger) {
+                // We don't want to encode some random Expr into the
+                // rule name, but we don't have a good way of
+                // identifying the RHS of the rule symbolically. Just
+                // emit a '?' character.
+                log_match(before, Variable::make(Int(32), "?"), Const(1));
             }
 #endif
             return true;
@@ -2258,8 +2274,8 @@ struct Rewriter {
         if (before.template match<0>(instance, state)) {
             result = make_const(output_type, after);
 #if HALIDE_DEBUG_MATCHED_RULES
-            if (d) {
-                debug(0) << instance << " -> " << result << " via " << before << " -> " << after << "\n";
+            if (logger) {
+                log_match(before, Const(after), Const(1));
             }
 #endif
             return true;
@@ -2291,8 +2307,8 @@ struct Rewriter {
             evaluate_predicate(pred, state)) {
             build_replacement(after);
 #if HALIDE_DEBUG_MATCHED_RULES
-            if (d) {
-                debug(0) << instance << " -> " << result << " via " << before << " -> " << after << " when " << pred << "\n";
+            if (logger) {
+                log_match(before, after, pred);
             }
 #endif
             return true;
@@ -2315,8 +2331,8 @@ struct Rewriter {
             evaluate_predicate(pred, state)) {
             result = after;
 #if HALIDE_DEBUG_MATCHED_RULES
-            if (d) {
-                debug(0) << instance << " -> " << result << " via " << before << " -> " << after << " when " << pred << "\n";
+            if (logger) {
+                log_match(before, Variable::make(Int(32), "?"), pred);
             }
 #endif
             return true;
@@ -2342,8 +2358,8 @@ struct Rewriter {
             evaluate_predicate(pred, state)) {
             result = make_const(output_type, after);
 #if HALIDE_DEBUG_MATCHED_RULES
-            if (d) {
-                debug(0) << instance << " -> " << result << " via " << before << " -> " << after << " when " << pred << "\n";
+            if (logger) {
+                log_match(before, Const(after), pred);
             }
 #endif
             return true;
