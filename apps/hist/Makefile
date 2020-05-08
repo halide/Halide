@@ -19,7 +19,7 @@ $(BIN)/%/hist.a: $(GENERATOR_BIN)/hist.generator
 
 $(BIN)/%/hist_auto_schedule.a: $(GENERATOR_BIN)/hist.generator
 	@mkdir -p $(@D)
-	$< -g hist -f hist_auto_schedule -o $(BIN)/$* target=$*-no_runtime auto_schedule=true
+	$< -g hist -f hist_auto_schedule -o $(BIN)/$* target=$*-no_runtime auto_schedule=true -e static_library,c_header,schedule $(HL_CUSTOM_AUTOSCHEDULER)
 
 $(BIN)/%/runtime.a: $(GENERATOR_BIN)/hist.generator
 	@mkdir -p $(@D)
