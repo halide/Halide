@@ -52,7 +52,7 @@ elif [ "$autoscheduler" == "beam" ]; then
     export HL_NUM_PASSES=5
 elif [ "$autoscheduler" == "mcts" ]; then
     if diff ../AutoSchedule-mcts.cpp ../AutoSchedule.cpp > /dev/null ; then
-        echo "No need to copy AutoSchedule-master.cpp"
+        echo "No need to copy AutoSchedule-mcts.cpp"
     else
         cp ../AutoSchedule-mcts.cpp ../AutoSchedule.cpp
     fi
