@@ -1,0 +1,5 @@
+make: Entering directory '/scratch/ameerh/Halide/apps/bgu'
+bin/host/filter ../images/rgb.png bin/host/out.png
+Manually-tuned time: 9.98457ms
+Auto-scheduled time: 7.62538ms
+make: Leaving directory '/scratch/ameerh/Halide/apps/bgu'

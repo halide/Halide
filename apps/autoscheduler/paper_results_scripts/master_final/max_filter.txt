@@ -1,0 +1,5 @@
+make: Entering directory '/scratch/ameerh/Halide/apps/max_filter'
+bin/host/filter ../images/rgba.png bin/host/out.png
+Manually-tuned time: 74.5106ms
+Auto-scheduled time: 76.6512ms
+make: Leaving directory '/scratch/ameerh/Halide/apps/max_filter'

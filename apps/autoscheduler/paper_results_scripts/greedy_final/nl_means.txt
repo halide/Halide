@@ -1,0 +1,6 @@
+make: Entering directory '/scratch/ameerh/Halide/apps/nl_means'
+bin/host/process ../images/rgb.png 7 7 0.12 10 bin/host/out.png
+Input size: 1536 by 2560, patch size: 7, search area: 7, sigma: 0.120000
+Manually-tuned time: 106.138ms
+Auto-scheduled time: 211.507ms
+make: Leaving directory '/scratch/ameerh/Halide/apps/nl_means'

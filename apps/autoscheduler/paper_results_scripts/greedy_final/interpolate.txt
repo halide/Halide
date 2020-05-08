@@ -1,0 +1,5 @@
+make: Entering directory '/scratch/ameerh/Halide/apps/interpolate'
+bin/host/filter ../images/rgba.png bin/host/out.png
+Manually-tuned time: 8.41385ms
+Auto-scheduled time: 13.8921ms
+make: Leaving directory '/scratch/ameerh/Halide/apps/interpolate'

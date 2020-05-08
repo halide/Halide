@@ -1,0 +1,8 @@
+make: Entering directory '/scratch/ameerh/Halide/apps/local_laplacian'
+bin/host/process ../images/rgb.png 8 1 1 10 bin/host/out.png
+Manually-tuned time: 32.1602ms
+Auto-scheduled time: 81.1678ms
+bin/host/process ../images/rgb.png 8 1 1 10 bin/host/out.tiff
+Manually-tuned time: 33.4136ms
+Auto-scheduled time: 81.36ms
+make: Leaving directory '/scratch/ameerh/Halide/apps/local_laplacian'

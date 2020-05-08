@@ -1,0 +1,106 @@
+mcts_depth 28
+best intermediate value -1.11111e+11                                           ]
+finished depth 0 best value so far 0
+Cost evaluated this many times: 0
+best intermediate value -12.8171                                               ]
+finished depth 1 best value so far -12.8171
+Cost evaluated this many times: 42196749
+best intermediate value -14.7376                                               ]
+finished depth 2 best value so far -12.8171
+Cost evaluated this many times: 75120768
+best intermediate value -1.11111e+11                                           ]
+finished depth 3 best value so far -12.8171
+Cost evaluated this many times: 75120768
+best intermediate value -14.5415                                               ]
+finished depth 4 best value so far -12.8171
+Cost evaluated this many times: 103773763
+best intermediate value -1.11111e+11                                           ]
+finished depth 5 best value so far -12.8171
+Cost evaluated this many times: 103773763
+best intermediate value -13.6021                                               ]
+finished depth 6 best value so far -12.8171
+Cost evaluated this many times: 130593428
+best intermediate value -1.11111e+11                                           ]
+finished depth 7 best value so far -12.8171
+Cost evaluated this many times: 130593428
+best intermediate value -14.9955                                               ]
+finished depth 8 best value so far -12.8171
+Cost evaluated this many times: 151438424
+best intermediate value -1.11111e+11                                           ]
+finished depth 9 best value so far -12.8171
+Cost evaluated this many times: 151438424
+best intermediate value -12.7764                                               ]
+finished depth 10 best value so far -12.7764
+Cost evaluated this many times: 168860097
+best intermediate value -1.11111e+11                                           ]
+finished depth 11 best value so far -12.7764
+Cost evaluated this many times: 168860097
+best intermediate value -12.7349.../                                           ]
+finished depth 12 best value so far -12.7349
+Cost evaluated this many times: 179426402
+best intermediate value -1.11111e+11../                                        ]
+finished depth 13 best value so far -12.7349
+Cost evaluated this many times: 179426402
+best intermediate value -12.7349........./                                     ]
+finished depth 14 best value so far -12.7349
+Cost evaluated this many times: 186707321
+best intermediate value -1.11111e+11......../                                  ]
+finished depth 15 best value so far -12.7349
+Cost evaluated this many times: 186707321
+best intermediate value -12.7349.............../                               ]
+finished depth 16 best value so far -12.7349
+Cost evaluated this many times: 189156346
+best intermediate value -1.11111e+11............../                            ]
+finished depth 17 best value so far -12.7349
+Cost evaluated this many times: 189156346
+best intermediate value -12.7349...................../                         ]
+finished depth 18 best value so far -12.7349
+Cost evaluated this many times: 189693823
+best intermediate value -1.11111e+11.................../                       ]
+finished depth 19 best value so far -12.7349
+Cost evaluated this many times: 189693823
+best intermediate value -12.7349........................../                    ]
+finished depth 20 best value so far -12.7349
+Cost evaluated this many times: 189774731
+best intermediate value -1.11111e+11........................./                 ]
+finished depth 21 best value so far -12.7349
+Cost evaluated this many times: 189774731
+best intermediate value -12.7349................................/              ]
+finished depth 22 best value so far -12.7349
+Cost evaluated this many times: 189804051
+best intermediate value -1.11111e+11.............................../           ]
+finished depth 23 best value so far -12.7349
+Cost evaluated this many times: 189804051
+best intermediate value -1.11111e+11................................../        ]
+finished depth 24 best value so far -12.7349
+Cost evaluated this many times: 189804051
+best intermediate value -1.11111e+11...................................../     ]
+finished depth 25 best value so far -12.7349
+Cost evaluated this many times: 189804051
+best intermediate value -1.11111e+11......................................../  ]
+finished depth 26 best value so far -12.7349
+Cost evaluated this many times: 189804051
+Best cost: 12.7349                                                              
+global best cost: 12.7349
+Cost evaluated this many times: 189804052
+Warning:
+HL_PERMIT_FAILED_UNROLL is allowing us to unroll a non-constant loop into a serial loop. Did you mean to do this?
+Warning:
+HL_PERMIT_FAILED_UNROLL is allowing us to unroll a non-constant loop into a serial loop. Did you mean to do this?
+Warning:
+HL_PERMIT_FAILED_UNROLL is allowing us to unroll a non-constant loop into a serial loop. Did you mean to do this?
+Warning:
+HL_PERMIT_FAILED_UNROLL is allowing us to unroll a non-constant loop into a serial loop. Did you mean to do this?
+c++ -fopenmp -O3 -std=c++11 -I /scratch/ameerh/Halide/distrib/include/ -I /scratch/ameerh/Halide/distrib/tools/  -Wall -Werror -Wno-unused-function -Wcast-qual -Wignored-qualifiers -Wno-comment -Wsign-compare -Wno-unknown-warning-option -Wno-psabi -Ibin/host -Wall process.cpp bin/host/nl_means.a bin/host/nl_means_auto_schedule.a -o bin/host/process  -ldl -lpthread -lz -lpng12  -ljpeg -I/usr/include/libpng12 -I/usr/include/libpng12/..   
+rm bin/host/nl_means.a bin/host/nl_means_auto_schedule.a
+make: Leaving directory '/scratch/ameerh/Halide/apps/nl_means'
+
+real    46m28.835s
+user    971m47.960s
+sys     10m37.436s
+(halide) [ameerh@a8:/scratch/ameerh/Halide/apps/autoscheduler/paper_results_scripts]$ cat mcts/nl_means.txt 
+make: Entering directory '/scratch/ameerh/Halide/apps/nl_means'
+bin/host/process ../images/rgb.png 7 7 0.12 10 bin/host/out.png
+Input size: 1536 by 2560, patch size: 7, search area: 7, sigma: 0.120000
+Manually-tuned time: 101.419ms
+

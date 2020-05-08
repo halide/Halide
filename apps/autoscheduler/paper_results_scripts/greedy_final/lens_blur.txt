@@ -1,0 +1,7 @@
+make: Entering directory '/scratch/ameerh/Halide/apps/lens_blur'
+bin/host/process ../images/rgb_small.png 32 13 0.5 32 3 bin/host/out.png
+Error: Output buffer final is accessed at -576, which is before the min (0) in dimension 0
+Manually-tuned time: 6.00038ms
+Makefile:28: recipe for target 'bin/host/out.png' failed
+make: *** [bin/host/out.png] Aborted (core dumped)
+make: Leaving directory '/scratch/ameerh/Halide/apps/lens_blur'

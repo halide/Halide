@@ -1,0 +1,5 @@
+make: Entering directory '/scratch/ameerh/Halide/apps/iir_blur'
+bin/host/filter ../images/rgba.png bin/host/out.png
+Manually-tuned time: 14.5625ms
+Auto-scheduled time: 95.6907ms
+make: Leaving directory '/scratch/ameerh/Halide/apps/iir_blur'

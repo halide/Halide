@@ -1,0 +1,5 @@
+make: Entering directory '/scratch/ameerh/Halide/apps/stencil_chain'
+bin/host/process ../images/rgb.png 10 bin/host/out.png
+Manually-tuned time: 19.2193ms
+Auto-scheduled time: 41.1115ms
+make: Leaving directory '/scratch/ameerh/Halide/apps/stencil_chain'
