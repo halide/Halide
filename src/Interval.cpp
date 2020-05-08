@@ -18,11 +18,16 @@ Expr make_max_helper(const Expr &a, const Expr &b) {
 
     Expr pos_inf = Interval::pos_inf();
     Expr neg_inf = Interval::neg_inf();
+    // Avoid trying to generate incorrectly-typed IR in the rewriter
+    if (a.same_as(pos_inf) || b.same_as(pos_inf)) {
+        return pos_inf;
+    } else if (a.same_as(neg_inf)) {
+        return b;
+    } else if (b.same_as(neg_inf)) {
+        return a;
+    }
+
     if (rewrite(max(x, x), x) ||
-        rewrite(max(x, pos_inf), pos_inf) ||
-        rewrite(max(pos_inf, x), pos_inf) ||
-        rewrite(max(x, neg_inf), x) ||
-        rewrite(max(neg_inf, x), x) ||
         rewrite(max(c0, c1), fold(max(c0, c1))) ||
         rewrite(max(c0, x), max(x, c0)) ||
         rewrite(max(max(x, c0), c1), max(x, fold(max(c0, c1)))) ||
@@ -43,11 +48,16 @@ Expr make_min_helper(const Expr &a, const Expr &b) {
 
     Expr pos_inf = Interval::pos_inf();
     Expr neg_inf = Interval::neg_inf();
+    // Avoid trying to generate incorrectly-typed IR in the rewriter
+    if (a.same_as(neg_inf) || b.same_as(neg_inf)) {
+        return neg_inf;
+    } else if (a.same_as(pos_inf)) {
+        return b;
+    } else if (b.same_as(pos_inf)) {
+        return a;
+    }
+
     if (rewrite(min(x, x), x) ||
-        rewrite(min(x, pos_inf), x) ||
-        rewrite(min(pos_inf, x), x) ||
-        rewrite(min(x, neg_inf), neg_inf) ||
-        rewrite(min(neg_inf, x), neg_inf) ||
         rewrite(min(c0, c1), fold(min(c0, c1))) ||
         rewrite(min(c0, x), min(x, c0)) ||
         rewrite(min(min(x, c0), c1), min(x, fold(min(c0, c1)))) ||
