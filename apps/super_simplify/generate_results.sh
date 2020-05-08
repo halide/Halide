@@ -7,38 +7,38 @@ for app in $APPS; do
     echo $app ...
     echo "ours,baseline,ratio" > ${app}_runtime.csv
     echo "ours,baseline,ratio" > ${app}_peak_memory.csv
-    echo "ours,baseline,ratio" > ${app}_halide_compile_time.csv
-    echo "ours,baseline,ratio" > ${app}_llvm_optimization_time.csv
-    echo "ours,baseline,ratio" > ${app}_llvm_backend_time.csv
+    echo "ours,baseline,ratio" > ${app}_compile_time.csv
     echo "ours,baseline,ratio" > ${app}_proof_failures.csv
     echo "ours,baseline,ratio" > ${app}_non_monotonic.csv
     echo "ours,baseline,ratio" > ${app}_code_size.csv
-    for ((i=0;i<64;i++)); do
+    for ((i=0;i<256;i++)); do
         echo -n .
         A=$(grep BEST ../${app}/results/${i}/benchmark_stdout.txt | cut -d' ' -f5)
         B=$(grep BEST ../${app}/results_baseline/${i}/benchmark_stdout.txt | cut -d' ' -f5)        
+        # If the baseline crashes we get a pass
+        if [ -z $B ]; then A=0; B=0; fi
         R=$(echo "scale=3; ${A}00001/${B}00001" | bc)
         echo "$A,$B,$R" >> ${app}_runtime.csv
         
         A=$(grep memory ../${app}/results/${i}/memory_stdout.txt | cut -d' ' -f4)
         B=$(grep memory ../${app}/results_baseline/${i}/memory_stdout.txt | cut -d' ' -f4)        
+        if [ -z $B ]; then A=0; B=0; fi
         R=$(echo "scale=3; ${A}.00001/${B}.00001" | bc)
         echo "${A}.0,${B}.0,${R}" >> ${app}_peak_memory.csv
         
-        A=$(grep Lower.cpp ../${app}/results/${i}/stderr.txt | cut -d' ' -f5)
-        B=$(grep Lower.cpp ../${app}/results_baseline/${i}/stderr.txt | cut -d' ' -f5)        
-        R=$(echo "scale=3; ${A}00001/${B}00001" | bc)
-        echo "$A,$B,$R" >> ${app}_halide_compile_time.csv
+        A1=$(grep Lower.cpp ../${app}/results/${i}/stderr.txt | cut -d' ' -f5)
+        B1=$(grep Lower.cpp ../${app}/results_baseline/${i}/stderr.txt | cut -d' ' -f5)        
         
-        A=$(grep CodeGen_LLVM.cpp ../${app}/results/${i}/stderr.txt | cut -d' ' -f5)
-        B=$(grep CodeGen_LLVM.cpp ../${app}/results_baseline/${i}/stderr.txt | cut -d' ' -f5)        
-        R=$(echo "scale=3; ${A}00001/${B}00001" | bc)
-        echo "$A,$B,$R" >> ${app}_llvm_optimization_time.csv
+        A2=$(grep CodeGen_LLVM.cpp ../${app}/results/${i}/stderr.txt | cut -d' ' -f5)
+        B2=$(grep CodeGen_LLVM.cpp ../${app}/results_baseline/${i}/stderr.txt | cut -d' ' -f5)        
         
-        A=$(grep LLVM_Output.cpp ../${app}/results/${i}/stderr.txt | cut -d' ' -f5 | head -n1)
-        B=$(grep LLVM_Output.cpp ../${app}/results_baseline/${i}/stderr.txt | cut -d' ' -f5 | head -n1)        
+        A3=$(grep LLVM_Output.cpp ../${app}/results/${i}/stderr.txt | cut -d' ' -f5 | head -n1)
+        B3=$(grep LLVM_Output.cpp ../${app}/results_baseline/${i}/stderr.txt | cut -d' ' -f5 | head -n1)        
+        A=$(echo "$A1 + $A2 + $A3" | bc)
+        B=$(echo "$B1 + $B2 + $B3" | bc)        
+
         R=$(echo "scale=3; ${A}00001/${B}00001" | bc)
-        echo "$A,$B,$R" >> ${app}_llvm_backend_time.csv
+        echo "$A,$B,$R" >> ${app}_compile_time.csv
         
         A=$(grep 'Failed to prove' -A1 ../${app}/results/${i}/stderr.txt | grep '(' | sort | uniq | wc -l)
         B=$(grep 'Failed to prove' -A1 ../${app}/results_baseline/${i}/stderr.txt | grep '(' | sort | uniq | wc -l)        
@@ -64,7 +64,7 @@ echo $APPS | sed 's/ /,,,/g' > header.csv
 
 cp header.csv results.csv
 
-STATS="runtime peak_memory halide_compile_time llvm_optimization_time llvm_backend_time proof_failures non_monotonic code_size"
+STATS="runtime peak_memory compile_time proof_failures non_monotonic code_size"
 
 for sheet in $STATS; do
     echo ${sheet} > results_${sheet}.csv
