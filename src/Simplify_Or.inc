@@ -4,7 +4,7 @@
 ((a.node_type() == IRNodeType::And) && EVAL_IN_LAMBDA(
 ((b.node_type() == IRNodeType::NE) && (
  rewrite(((x && (y == z)) || (y != z)), (x || (z != y))) ||
- rewrite(((x && (y == z)) || (z != y)), (x || (z != y))) ||
+ rewrite(((x && (y == z)) || (z != y)), (x || (y != z))) ||
  rewrite((((x == y) && z) || (x != y)), (z || (y != x))) ||
  rewrite((((x == y) && z) || (y != x)), ((x != y) || z)))))) ||
 ((a.node_type() == IRNodeType::Or) && EVAL_IN_LAMBDA(
@@ -41,5 +41,5 @@
 ((b.node_type() == IRNodeType::NE) && (
  rewrite((!(x && (y == z)) || (y != z)), !(x && (z == y))) ||
  rewrite((!(x && (y == z)) || (z != y)), !(x && (z == y))) ||
- rewrite((!((x == y) && z) || (x != y)), !((y == x) && z)) ||
+ rewrite((!((x == y) && z) || (x != y)), !((x == y) && z)) ||
  rewrite((!((x == y) && z) || (y != x)), !((y == x) && z))))))
