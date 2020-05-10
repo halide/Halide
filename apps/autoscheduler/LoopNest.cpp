@@ -3956,7 +3956,7 @@ void LoopNest::apply(LoopLevel here,
                             << "TailStrategy::" << tail_strategy << ")";
                         v = parent;
                         parent.extent = size[parent.index];
-                        v.constant_extent = (tail_strategy != TailStrategy::GuardWithIf || (!parent.var.is_rvar && evenly_divides));
+                        v.constant_extent = (!parent.var.is_rvar && parent.exists);
                         v.var = inner;
                         v.accessor.clear();
                         v.extent = factor;
