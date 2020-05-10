@@ -4,7 +4,6 @@
 #make -C ../../ distrib -j32
 
 for app in harris local_laplacian unsharp bilateral_grid camera_pipe nl_means stencil_chain iir_blur interpolate max_filter lens_blur resnet_50 resize; do
-#for app in lens_blur; do
     echo 
     echo '***********' $app
     echo
