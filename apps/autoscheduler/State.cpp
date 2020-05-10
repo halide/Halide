@@ -663,6 +663,11 @@ void State::fuse_gpu_blocks(LoopNest::StageScheduleState* state, Stage& stage, c
         for (; i >= 0 && parallel_extents[i] * block_extents[block_i] <= max_blocks[block_i]; --i) {
             block_extents[block_i] *= parallel_extents[i];
             block_var_assignments[block_i].push_back(i);
+
+            if ((size_t)i > parallel_vars.size() - 3) {
+                --i;
+                break;
+            }
         }
     }
 
