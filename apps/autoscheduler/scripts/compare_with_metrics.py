@@ -37,9 +37,9 @@ class Sample:
 
     self.comparisons = {}
     self.comparisons["global load transactions"] = self.global_load_transactions
-    self.comparisons["global load transactions (pure licm)"] = self.global_load_transactions_with_pure_licm
+    #self.comparisons["global load transactions (pure licm)"] = self.global_load_transactions_with_pure_licm
     self.comparisons["global store transactions"] = self.global_store_transactions
-    self.comparisons["global store transactions (pure licm)"] = self.global_store_transactions_with_pure_licm
+    #self.comparisons["global store transactions (pure licm)"] = self.global_store_transactions_with_pure_licm
     self.comparisons["global load efficiency"] = self.global_load_efficiency
     self.comparisons["global store efficiency"] = self.global_store_efficiency
 
@@ -49,7 +49,10 @@ class Sample:
     result = {}
     with open(filename) as file:
       for line in file:
-        stage, key, value = line.split()
+        try:
+          stage, key, value = line.split()
+        except:
+          continue
         if not stage in result:
           result[stage] = {}
 
