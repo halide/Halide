@@ -2,6 +2,9 @@
 
 APPS="harris local_laplacian unsharp bilateral_grid camera_pipe nl_means stencil_chain iir_blur interpolate max_filter lens_blur resnet_50 resize"
 
+rm names.csv
+touch names.csv
+
 # Assumes that run_all_experiments.sh has run
 for app in $APPS; do
     echo $app ...
@@ -55,7 +58,7 @@ for app in $APPS; do
         R=$(echo "scale=3; ${A}.00001/${B}.00001" | bc)
         echo "${A}.0,${B}.0,$R" >> ${app}_code_size.csv
 
-        
+        echo ${app}_${i} >> names.csv
     done
     echo
 done
@@ -76,5 +79,7 @@ for sheet in $STATS; do
     for app in $APPS; do cut -d, -f3 ${app}_${sheet}.csv | grep -v ratio; done > ratios_${sheet}.csv
 done
 
-echo $STATS | sed 's/ /,/g' > ratios.csv
-paste -d, $(for sheet in $STATS; do echo ratios_${sheet}.csv; done) >> ratios.csv
+
+
+echo names $STATS | sed 's/ /,/g' > ratios.csv
+paste -d, names.csv $(for sheet in $STATS; do echo ratios_${sheet}.csv; done) >> ratios.csv
