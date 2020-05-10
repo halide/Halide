@@ -38,7 +38,7 @@ SANITIZER_FLAGS ?=
 # outputs for the apps, since it makes casual inspection of the Generator output
 # easier to inspect and experiment with. (Production build systems wouldn't
 # normally do this, as it would just waste cycles and storage.)
-GENERATOR_OUTPUTS ?= static_library,h,registration,stmt,assembly
+GENERATOR_OUTPUTS ?= static_library,h,registration,stmt,assembly,compiler_log
 
 # This pulls in the definition of HALIDE_SYSTEM_LIBS and HALIDE_RTTI
 include $(HALIDE_DISTRIB_PATH)/halide_config.make
