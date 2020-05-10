@@ -339,7 +339,9 @@ class GroupLoopInvariants : public IRMutator {
 
     int expr_depth(const Expr &e) {
         // We want to keep constants outermost
-        if (is_const(e)) return 100000;
+        if (is_const(e)) {
+            return std::numeric_limits<int>::max();
+        }
         ExprDepth depth(var_depth);
         e.accept(&depth);
         return depth.result;
